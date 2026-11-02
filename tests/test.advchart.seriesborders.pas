@@ -27,7 +27,8 @@ unit test.advchart.seriesborders;
   a rect's box -- compared with the elements' shapes; `fills` the set of the
   part's fills (a transparent one, the pictorial bar's rect, not compared);
   `hits` what zr's findHover finds at a point (the part, '' another path,
-  '-' nothing), compared with HitTestAt; `at` the frame at T0 + at with the
+  '-' nothing), compared with HitTestAt; `clip` a line group's clip rect,
+  compared with the elements' ClipRect; `at` the frame at T0 + at with the
   animation running instead of the settled one. A part is also held to its
   path count where it has shapes, and every element of a gauge's progress
   (its round caps too) or track is of the part, with or without a datum.
@@ -68,6 +69,7 @@ type
     procedure TestThePensAsUpstream;
     procedure TestARoundCappedArcStrokesOneOutline;
     procedure TestThePenNumbersAsTheCanvasTakesThem;
+    procedure TestAPictorialGlyphStrokesInItsOwnFrame;
   end;
 
 implementation
@@ -288,7 +290,7 @@ var
   i, k, seen, n, nBad, nCases, nParts, hitEl: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
-  got, shapes, fills: TStringList;
+  got, shapes, fills, clips: TStringList;
   want, have, id, bad, part, p, s: string;
   act, more: TJSONData;
   arr: TJSONArray;
@@ -322,6 +324,11 @@ begin
   shapes.CaseSensitive := True;
   shapes.Sorted := True;
   shapes.Duplicates := dupAccept;
+  clips := TStringList.Create;
+  clips.UseLocale := False;
+  clips.CaseSensitive := True;
+  clips.Sorted := True;
+  clips.Duplicates := dupIgnore;
   fills := TStringList.Create;
   fills.UseLocale := False;
   fills.CaseSensitive := True;
@@ -370,6 +377,7 @@ begin
       got.Clear;
       shapes.Clear;
       fills.Clear;
+      clips.Clear;
       seen := 0;
       n := 0;
       for k := 0 to lst.Count - 1 do
@@ -392,6 +400,10 @@ begin
         shapes.Add(ShapeText(el));
         s := FillText(el);
         if s <> '' then fills.Add(s);
+        if el.HasClip then
+          clips.Add('rect|' + RoundText(el.ClipRect.Left, 2) + '|' + RoundText(el.ClipRect.Top, 2) + '|'
+            + RoundText(el.ClipRect.Right - el.ClipRect.Left, 2) + '|'
+            + RoundText(el.ClipRect.Bottom - el.ClipRect.Top, 2));
         if not (el.Style.StrokeWidthLogical > 0) then Continue;
         if ((el.Style.StrokeColor shr 24) = 0) and (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
         Inc(n);
@@ -427,6 +439,12 @@ begin
         want := want + ' fills' + ArrText(arr, True);
         have := have + ' fills' + SetText(fills);
       end;
+      arr := c.Find('clip') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' clip' + ArrText(arr, False);
+        have := have + ' clip' + SetText(clips);
+      end;
       arr := c.Find('hits') as TJSONArray;
       if arr <> nil then
       begin
@@ -453,6 +471,7 @@ begin
     got.Free;
     shapes.Free;
     fills.Free;
+    clips.Free;
     fix.Free;
   end;
   AssertTrue('cases', nCases >= 40);
@@ -513,6 +532,42 @@ begin
       Dark(cx + Cos(a) * (dr - 1), cy + Sin(a) * (dr - 1)) or Dark(cx + Cos(a) * dr, cy + Sin(a) * dr)
       or Dark(cx + Cos(a) * (dr + 1), cy + Sin(a) * (dr + 1)));
   end;
+end;
+
+{ [R6-E] A PICTORIAL GLYPH'S PEN, DRAWN: built at the pattern size (400)
+  and scaled to its 20 px box, a borderWidth of 40 is 2 px on the screen --
+  five pixels outside the glyph is ground, inside its edge is the fill }
+procedure TAdvChartSeriesBordersTest.TestAPictorialGlyphStrokesInItsOwnFrame;
+var
+  k: Integer;
+  el, glyph: TTyChartElement;
+  b: TTyRectF;
+  c: TBGRAPixel;
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"xAxis":{"type":"category","data":["a"],"show":false},'
+    + '"yAxis":{"show":false},"series":[{"type":"pictorialBar","symbol":"rect","symbolSize":[20,20],'
+    + '"itemStyle":{"color":"#ff0000","borderColor":"#000","borderWidth":40},"data":[5]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  glyph := Default(TTyChartElement);
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if el.Anim.Role in [carPictorialGlyph, carPictorialClip] then glyph := el;
+  end;
+  AssertTrue('the glyph', glyph.Anim.Role in [carPictorialGlyph, carPictorialClip]);
+  AssertEquals('its pen in its frame', 0.05, glyph.Style.PenScale, 1e-9);
+  b := TyShapeBounds(glyph.Shape);
+  c := FBmp.GetPixel(Round(b.Right + 5), Round((b.Top + b.Bottom) / 2));
+  AssertTrue(Format('ground beside it (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red > 200) and (c.green > 200) and (c.blue > 200));
+  c := FBmp.GetPixel(Round(b.Right - 4), Round((b.Top + b.Bottom) / 2));
+  AssertTrue(Format('fill inside its edge (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red > 200) and (c.green < 60) and (c.blue < 60));
 end;
 
 { [R6-E] A PEN'S NUMBERS: a numeric string is its number (the canvas

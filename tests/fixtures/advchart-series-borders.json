@@ -1,6 +1,6 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
- "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones. R6-E: a pen whose path scales with it (no strokeNoScale, a scaling transform: a pictorial glyph) as drawn, its width, dash and offset times sqrt|det| to four places; the offset as the canvas takes it (Number); part track: the bands of a gauge axis line; `shapes` each path of the part as type|cx|cy|r0|r|clockwise start|sweep (sector, sausage), circle|cx|cy|r, rect|x|y|w|h (canvas frame); `fills` the fills of the part; `hits` [x, y, the part findHover finds there, empty another path, - none]; `at`: sampled at T0 + at, animating.",
+ "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones. R6-E: a pen whose path scales with it (no strokeNoScale, a scaling transform: a pictorial glyph) as drawn, its width, dash and offset times sqrt|det| to four places; the offset as the canvas takes it (Number); part track: the bands of a gauge axis line; `shapes` each path of the part as type|cx|cy|r0|r|clockwise start|sweep (sector, sausage), circle|cx|cy|r, rect|x|y|w|h (canvas frame); `fills` the fills of the part; `hits` [x, y, the part findHover finds there, empty another path, - none]; `at`: sampled at T0 + at, animating; `clip` the clip rects of the view (a line group, createGridClipPath).",
  "W": 400,
  "H": 300,
  "charts": [
@@ -6913,6 +6913,320 @@
     "#00000000",
     "#00ff00ff",
     "#5470c6ff"
+   ]
+  },
+  {
+   "id": "gauge.flat",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "sector|200|150|98.5|112.5|2.3562|1.885"
+   ]
+  },
+  {
+   "id": "bar.abc-no-colour",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderWidth": "abc"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|175.5|65|69|155",
+    "rect|75.5|127|69|93"
+   ]
+  },
+  {
+   "id": "bar.emphasis-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 1
+      },
+      "emphasis": {
+       "itemStyle": {
+        "borderWidth": "6",
+        "borderDashOffset": "3",
+        "borderType": "dashed"
+       }
+      },
+      "data": [
+       3
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": {
+    "type": "highlight",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|6|24,12|3|butt/miter/10"
+   ]
+  },
+  {
+   "id": "bar.item-offset-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3,
+       "borderType": "dashed",
+       "borderDashOffset": 2
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderDashOffset": "5"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/10",
+    "#000000ff|3|12,6|5|butt/miter/10"
+   ]
+  },
+  {
+   "id": "line.clip",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "none",
+      "areaStyle": {},
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 1,
+   "pens": [
+    "#5470c6ff|2|solid|0|butt/bevel/10"
+   ],
+   "clip": [
+    "rect|59|64|302|157"
+   ]
+  },
+  {
+   "id": "line.w0-clip",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "none",
+      "areaStyle": {},
+      "lineStyle": {
+       "width": 0
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "clip": [
+    "rect|60|65|300|155"
+   ]
+  },
+  {
+   "id": "line.w4-clip",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "none",
+      "lineStyle": {
+       "width": 4
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#5470c6ff|4|solid|0|butt/bevel/10"
+   ],
+   "clip": [
+    "rect|58|63|304|159"
    ]
   }
  ]

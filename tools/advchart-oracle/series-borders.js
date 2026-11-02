@@ -301,6 +301,17 @@ function cases() {
       emphasis: { itemStyle: { borderColor: '#00f', borderWidth: 60 } }, data: [3, 5] }), '', HL, { fills: true }],
     ['pict.empty-item', cart({ type: 'pictorialBar', symbol: 'emptyTriangle', symbolSize: [20, 20],
       data: [3, { value: 5, itemStyle: { color: '#0f0', borderColor: '#f00', borderWidth: 20 } }] }), '', null, { fills: true }],
+    // ---- the mutation round's follow-ups ----
+    ['gauge.flat', gauge({ progress: { show: true, width: 14, itemStyle: { borderColor: '#000', borderWidth: 3 } } }), 'progress', null,
+      { shapes: true }],
+    ['bar.abc-no-colour', cart({ type: 'bar', itemStyle: { borderWidth: 'abc' }, data: [3, 5] }), '', null, { shapes: true }],
+    ['bar.emphasis-str', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+      emphasis: { itemStyle: { borderWidth: '6', borderDashOffset: '3', borderType: 'dashed' } }, data: [3] }), '', HL],
+    ['bar.item-offset-str', cart({ type: 'bar', itemStyle: IS, data: [3, { value: 5, itemStyle: { borderDashOffset: '5' } }] }), ''],
+    ['line.clip', cart({ type: 'line', symbol: 'none', areaStyle: {}, data: [3, 5, 2] }), '', null, { clip: true }],
+    ['line.w0-clip', cart({ type: 'line', symbol: 'none', areaStyle: {}, lineStyle: { width: 0 }, data: [3, 5, 2] }), '', null,
+      { clip: true }],
+    ['line.w4-clip', cart({ type: 'line', symbol: 'none', lineStyle: { width: 4 }, data: [3, 5, 2] }), '', null, { clip: true }],
   ];
 }
 
@@ -452,6 +463,14 @@ function run(id, option, part, action, more) {
     if (more.at != null) rec.at = more.at;
     if (more.shapes) rec.shapes = shapes.sort();
     if (more.fills) rec.fills = Array.from(fills).sort();
+    // the clip path of a line's group (createGridClipPath), x|y|w|h
+    if (more.clip) {
+      rec.clip = [];
+      (chart._chartsViews || []).forEach(v => v.group.traverse(e => {
+        const c = e.getClipPath && e.getClipPath();
+        if (c && c.shape) rec.clip.push(['rect', r2(+c.shape.x), r2(+c.shape.y), r2(+c.shape.width), r2(+c.shape.height)].join('|'));
+      }));
+    }
     if (more.hits) {
       const handler = chart.getZr().handler;
       rec.hits = [];
@@ -501,6 +520,8 @@ function generate() {
   // a pictorial glyph: no setColor (an empty one filled in the colour), its pen in the glyph's frame
   must(by('pict.empty').n === 0 && by('pict.empty').fills.includes('#5470c6ff'), 'pict.empty: ' + by('pict.empty').fills);
   must(pens('pict.empty-size') === '#000000ff|2|1,0.5|0.5|butt/miter/10', 'pict.empty-size: ' + pens('pict.empty-size'));
+  // a line written at nought: its clip is not grown (lineStyle.width || 0); the default 2 grows it by 1 a side
+  must(by('line.w0-clip').clip[0] !== by('line.clip').clip[0], 'line clips: ' + by('line.w0-clip').clip + ' ' + by('line.clip').clip);
   // R6-E: a bar whose border width is a word: getLineWidth's Math.min is NaN, the layout NaN -- no bar
   const NO_PATH = ['bar.w"abc"'];
   must(charts.every(c => c.seen > 0 || NO_PATH.includes(c.id)), 'a case has no path: '
@@ -515,7 +536,7 @@ function generate() {
       + 'offset times sqrt|det| to four places; the offset as the canvas takes it (Number); part track: the bands of a gauge axis line; '
       + '`shapes` each path of the part as type|cx|cy|r0|r|clockwise start|sweep (sector, sausage), circle|cx|cy|r, rect|x|y|w|h '
       + '(canvas frame); `fills` the fills of the part; `hits` [x, y, the part findHover finds there, empty another path, - none]; `at`: '
-      + 'sampled at T0 + at, animating.', W, H, charts };
+      + 'sampled at T0 + at, animating; `clip` the clip rects of the view (a line group, createGridClipPath).', W, H, charts };
 }
 
 let j1, j2;
