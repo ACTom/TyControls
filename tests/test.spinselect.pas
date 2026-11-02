@@ -29,6 +29,9 @@ type
     procedure TestAClickInTheFieldKeepsTheValue;
     procedure TestMovingTheCaretLetsTheSelectionGo;
     procedure TestAKeyTheFieldRefusesLeavesTheSelection;
+    procedure TestTheCaretOfTheSelectedValueIsAtItsEnd;
+    procedure TestCodePlacingTheCaretLetsTheSelectionGo;
+    procedure TestAClickInTheFieldLetsTheSelectionGo;
     procedure TestTheSelectedValueIsDrawnSelected;
   end;
 
@@ -164,6 +167,47 @@ begin
   AssertEquals('still selected: the digit replaces it', '9', TSpinCrack(s).FEditText);
 end;
 
+procedure TSpinSelectTest.TestTheCaretOfTheSelectedValueIsAtItsEnd;
+var
+  s: TTySpinEdit;
+begin
+  s := NewSpin;
+  s.CaretPos := 0;
+  TSpinCrack(s).DoEnter;
+  AssertEquals('at the end, as in an edit', 2, s.CaretPos);
+  Press(s, VK_RIGHT);
+  TypeIn(s, '1');
+  AssertEquals('so Right from it goes to the end', '421', TSpinCrack(s).FEditText);
+end;
+
+procedure TSpinSelectTest.TestCodePlacingTheCaretLetsTheSelectionGo;
+var
+  s: TTySpinEdit;
+begin
+  s := NewSpin;
+  TSpinCrack(s).DoEnter;
+  s.CaretPos := 1;
+  TypeIn(s, '7');
+  AssertEquals('typed at the caret, as after SelStart in an edit', '472', TSpinCrack(s).FEditText);
+  s.Value := 42;
+  TSpinCrack(s).DoEnter;
+  s.CaretPos := 2;   // where it is already
+  TypeIn(s, '7');
+  AssertEquals('still let go', '427', TSpinCrack(s).FEditText);
+end;
+
+procedure TSpinSelectTest.TestAClickInTheFieldLetsTheSelectionGo;
+var
+  s: TTySpinEdit;
+begin
+  s := NewSpin;
+  TSpinCrack(s).DoEnter;   // selected by Tab, then clicked
+  TSpinCrack(s).MouseDown(mbLeft, [], 10, 13);
+  TSpinCrack(s).MouseUp(mbLeft, [], 10, 13);
+  TypeIn(s, '7');
+  AssertEquals('typed at the caret', '427', TSpinCrack(s).FEditText);
+end;
+
 { Green ink anywhere in a render of S. }
 function GreenIn(S: TTySpinEdit): Boolean;
 var
@@ -198,7 +242,7 @@ end;
 
 procedure TSpinSelectTest.TestTheSelectedValueIsDrawnSelected;
 var
-  s: TTySpinEdit;
+  s, t: TTySpinEdit;
   c: TTyStyleController;
 begin
   { shown, off screen: the band is drawn only for the field that has the focus }
@@ -211,10 +255,18 @@ begin
     s := NewSpin;
     s.Controller := c;
     s.Font.PixelsPerInch := 96;
+    t := NewSpin;
+    t.Top := 40;
     s.SetFocus;
     Forms.Application.ProcessMessages;
     AssertTrue('setup: it has the focus', s.Focused);
     AssertTrue('the selected value has the selection band', GreenIn(s));
+    t.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertFalse('the focus gone, the band goes with it', GreenIn(s));
+    s.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: selected again', GreenIn(s));
     Press(s, VK_END);
     AssertFalse('let go, it has none', GreenIn(s));
   finally
