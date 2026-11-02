@@ -33,7 +33,7 @@ const
     retunes each through the named theme metric beside it (the v3/C convention); these are
     only what a theme that sets none of them falls back to. Every one is scaled to device px
     at its call site. }
-  TyNotificationWidth     = 340;  // the card's fixed width — the message wraps at line breaks, not by measure
+  TyNotificationWidth     = 340;  // the card's fixed width — the message wraps to it (#178: the docs said it did not)
   TyNotificationIconSize  = 24;   // the semantic mark's square slot (TyDrawGlyph pads it, so the mark reads ~16px)
   TyNotificationCloseSize = 14;   // the close (x) slot; matches TyTagCloseSize / TyTabCloseSize so every x reads alike
   TyNotificationGap       = 8;    // mark<->text column, and title<->message
@@ -331,8 +331,8 @@ type
     { The headline, drawn in the card font at --notification-title-weight. Empty = no title:
       the message then takes the whole text column. }
     property Title: TCaption read FTitle write SetTitle;
-    { The body. Split on line breaks only — the card is a fixed themed width and does NOT
-      auto-wrap, so the author owns the line ends. }
+    { The body. Its own line breaks are kept, and a line wider than the card's text column
+      wraps -- at spaces, and between CJK glyphs (WrapMessage). }
     property Message: TCaption read FMessage write SetMessage;
     { The semantic kind: picks the mark and, through 'TyNotification.<type>', its ink. }
     property NotificationType: TTyNotificationType read FNotificationType
@@ -1010,8 +1010,7 @@ begin
     FWin.Color := TyColorToLCL(S.Background.Color);
   PlaceWindow;
   TyRaisePopupWindow(FWin);   // macOS: above a modal dialog on screen (#104)
-  FWin.Show;
-  FWin.BringToFront;
+  TyShowPassive(FWin, True);  // #178: a toast does not take the focus from the app's work
   PlaceWindow;   // a bsNone form can be re-placed by the WM on show (TTyBalloonHint re-sets too)
   FWin.Invalidate;
   EnsureTimer;

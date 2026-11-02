@@ -24,7 +24,10 @@ type
     no configuration and reads the app-wide default theme (TyDefaultController). }
   TTyHintWindow = class(THintWindow)
   private
+    FHintPPI: Integer;     { #178: the DPI of the monitor the hint shows on, set by CalcHintRect }
+    FWrapPx: Integer;      { #178: the text's width when MaxWidth wraps it, 0 = no wrap }
     procedure ApplyRoundRegion;
+    function HintPPI: Integer;
   protected
     procedure Paint; override;
   public
@@ -109,10 +112,11 @@ end;
 // height px, and line height, measured with the themed font at APPI.
 // ---------------------------------------------------------------------------
 procedure MeasureHint(const AHint: string; const AStyle: TTyStyleSet; APPI: Integer;
-  ALines: TStrings; out AWidthPx, AHeightPx, ALineHPx: Integer);
+  ALines: TStrings; out AWidthPx, AHeightPx, ALineHPx: Integer; AWrapPx: Integer = 0);
 var
   Meas: TBitmap;
   i, w, fs: Integer;
+  src, part: TStringList;
 begin
   ALines.Text := AHint;              // splits on CR/LF
   if ALines.Count = 0 then ALines.Add('');
@@ -124,6 +128,30 @@ begin
     TyConfigureMeasureFont(Meas.Canvas, AStyle.FontName, fs, AStyle.FontWeight, APPI);
     ALineHPx := Meas.Canvas.TextHeight('Ag');
     if ALineHPx < 1 then ALineHPx := 1;
+    { #178: MaxWidth wraps a line wider than it, at spaces and between CJK glyphs, as LCL's hint
+      does -- it was ignored, and a long hint ran across the screen. }
+    if AWrapPx > 0 then
+    begin
+      src := TStringList.Create;
+      part := TStringList.Create;
+      try
+        src.Assign(ALines);
+        ALines.Clear;
+        for i := 0 to src.Count - 1 do
+          if Meas.Canvas.TextWidth(src[i]) <= AWrapPx then
+            ALines.Add(src[i])
+          else
+          begin
+            part.Clear;
+            TyWrapTextCJK(src[i], AWrapPx, Meas.Canvas, part);
+            ALines.AddStrings(part);
+          end;
+        if ALines.Count = 0 then ALines.Add('');
+      finally
+        part.Free;
+        src.Free;
+      end;
+    end;
     for i := 0 to ALines.Count - 1 do
     begin
       w := Meas.Canvas.TextWidth(ALines[i]);
@@ -143,24 +171,45 @@ end;
 // ---------------------------------------------------------------------------
 // TTyHintWindow
 // ---------------------------------------------------------------------------
+{ #178: the DPI of the monitor under the pointer, where LCL puts the hint -- the hint window's
+  own font PPI is the primary screen's, so on a second monitor of another DPI the hint was
+  measured and drawn at the wrong size. Paint uses the same value CalcHintRect sized it with. }
+function TTyHintWindow.HintPPI: Integer;
+begin
+  Result := FHintPPI;
+  if Result <= 0 then Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
 function TTyHintWindow.CalcHintRect(MaxWidth: Integer; const AHint: string;
   AData: Pointer): TRect;
 var
   S: TTyStyleSet;
   Lines: TStringList;
-  ppi, tw, th, lh: Integer;
+  ppi, tw, th, lh, padL, padR: Integer;
+  mon: TMonitor;
 begin
   S := HintStyle;
-  ppi := Font.PixelsPerInch; if ppi <= 0 then ppi := 96;
+  mon := Screen.MonitorFromPoint(Mouse.CursorPos);
+  if mon <> nil then FHintPPI := mon.PixelsPerInch else FHintPPI := 0;
+  ppi := HintPPI;
+  padL := MulDiv(S.Padding.Left, ppi, 96);
+  padR := MulDiv(S.Padding.Right, ppi, 96);
+  FWrapPx := 0;
+  if MaxWidth > 0 then
+  begin
+    FWrapPx := MaxWidth - padL - padR;
+    if FWrapPx < 1 then FWrapPx := 1;
+  end;
   Lines := TStringList.Create;
   try
-    MeasureHint(AHint, S, ppi, Lines, tw, th, lh);
+    MeasureHint(AHint, S, ppi, Lines, tw, th, lh, FWrapPx);
   finally
     Lines.Free;
   end;
   Result := TyHintContentRect(tw, th,
-    MulDiv(S.Padding.Left,   ppi, 96), MulDiv(S.Padding.Top,    ppi, 96),
-    MulDiv(S.Padding.Right,  ppi, 96), MulDiv(S.Padding.Bottom, ppi, 96));
+    padL, MulDiv(S.Padding.Top, ppi, 96),
+    padR, MulDiv(S.Padding.Bottom, ppi, 96));
 end;
 
 procedure TTyHintWindow.Paint;
@@ -172,7 +221,7 @@ var
   ppi, fs, tw, th, lh, i, cW, cH, yOff: Integer;
 begin
   S := HintStyle;
-  ppi := Font.PixelsPerInch; if ppi <= 0 then ppi := 96;
+  ppi := HintPPI;   { #178: what CalcHintRect sized it with }
   fs := S.FontSize; if fs <= 0 then fs := 9;
   R := ClientRect;
   cW := R.Right - R.Left;
@@ -189,7 +238,7 @@ begin
       P.FillBackground(Rect(0, 0, cW, cH), S.Background, S.BorderRadius);
     if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
       P.StrokeBorder(Rect(0, 0, cW, cH), S.BorderRadius, S.BorderWidth, S.BorderColor);
-    MeasureHint(Caption, S, ppi, Lines, tw, th, lh);
+    MeasureHint(Caption, S, ppi, Lines, tw, th, lh, FWrapPx);
     yOff := P.Scale(S.Padding.Top);
     for i := 0 to Lines.Count - 1 do
     begin
@@ -220,7 +269,7 @@ begin
   if not HandleAllocated then Exit;
   if TyIsWayland then Exit;
   S := HintStyle;
-  d := MulDiv(S.BorderRadius, Font.PixelsPerInch, 96) * 2;
+  d := MulDiv(S.BorderRadius, HintPPI, 96) * 2;
   if d <= 0 then
   begin
     SetWindowRgn(Handle, 0, True);
