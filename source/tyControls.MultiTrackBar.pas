@@ -327,6 +327,10 @@ type
     procedure BeginFollowThumbs;
     procedure EndFollowThumbs;
     procedure SnapThumbKeys;
+    { #182: a thumb disabled meanwhile is no longer dragged, hovered or (DropDisabledThumbs)
+      selected; the final class calls this when an item's Enabled changes. }
+    procedure DropDisabledPointer;
+    procedure DropDisabledThumbs;
     { #182: around a rebuild of the thumbs from the items, OnChange waits for the end. Fired in
       the middle, a handler's add, delete or value was swallowed by the rebuild still running:
       the thumbs fell out of step with the items, and a later removal raised EListError. }
@@ -469,7 +473,8 @@ type
     property ThumbCount: Integer read GetThumbCount;
     { Read-only here: a thumb moves through SetThumbValue or the final class's collection. }
     property ThumbValues[AIndex: Integer]: Integer read GetThumbValue;
-    { The thumb the keyboard acts on; -1 = none. Kept within 0..ThumbCount - 1. A change fires
+    { The thumb the keyboard acts on; -1 = none. Kept within 0..ThumbCount - 1 and on an enabled
+      thumb (a disabled one reads -1, and a thumb disabled while selected drops it). A change fires
       OnThumbSelect. }
     property SelectedThumb: Integer read FSelectedThumb write SetSelectedThumb default -1;
     { The thumb being dragged while it is off the track far enough to be removed on release
@@ -1289,7 +1294,28 @@ begin
   if FDragSpan >= 0 then FDragSpan := IndexOf(FHeldSpan);
   if FHoverThumb >= 0 then FHoverThumb := IndexOf(FHeldHover);
   if FDragThumb < 0 then FRemoving := False;
+  DropDisabledPointer;
   SnapThumbKeys;
+end;
+
+procedure TTyMultiTrackBarBase.DropDisabledPointer;
+begin
+  if (FDragThumb >= 0) and not ThumbEnabled(FDragThumb) then
+  begin
+    FDragThumb := -1;
+    FRemoving := False;
+  end;
+  if (FDragSpan >= 0) and not (ThumbEnabled(FDragSpan) and ThumbEnabled(FDragSpan + 1)) then
+    FDragSpan := -1;
+  if (FHoverThumb >= 0) and not ThumbEnabled(FHoverThumb) then FHoverThumb := -1;
+end;
+
+procedure TTyMultiTrackBarBase.DropDisabledThumbs;
+begin
+  DropDisabledPointer;
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+     and not ThumbEnabled(FSelectedThumb) then
+    SelectedThumb := -1;
 end;
 
 procedure TTyMultiTrackBarBase.BeginDeferChange;
@@ -1870,6 +1896,9 @@ end;
 procedure TTyMultiTrackBarBase.SetSelectedThumb(AValue: Integer);
 begin
   if (AValue < 0) or (AValue >= Length(FValues)) then AValue := -1;
+  { #182: a disabled thumb cannot be selected (from code either). }
+  if (AValue >= 0) and not (csLoading in ComponentState) and not ThumbEnabled(AValue) then
+    AValue := -1;
   if FSelectedThumb = AValue then Exit;
   FSelectedThumb := AValue;
   Invalidate;
@@ -3310,8 +3339,13 @@ procedure TTyTrackThumbs.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
   if not (Owner is TTyCustomMultiTrackBar) then Exit;
-  { One item's look changed: repaint. The collection changed shape: rebuild the thumbs. }
-  if Item <> nil then TTyCustomMultiTrackBar(Owner).Invalidate
+  { One item's look changed: repaint -- and a thumb disabled now is dropped from the drag, the
+    hover and the selection. The collection changed shape: rebuild the thumbs. }
+  if Item <> nil then
+  begin
+    TTyCustomMultiTrackBar(Owner).DropDisabledThumbs;
+    TTyCustomMultiTrackBar(Owner).Invalidate;
+  end
   else TTyCustomMultiTrackBar(Owner).ThumbsChanged;
 end;
 
@@ -3481,7 +3515,7 @@ begin
     it := nil;
     if selID >= 0 then it := FThumbs.FindItemID(selID);
     if it <> nil then sel := it.Index;
-    if sel >= ThumbCount then sel := -1;
+    if (sel >= ThumbCount) or ((sel >= 0) and not ThumbEnabled(sel)) then sel := -1;
     FSelectedThumb := sel;
     EndFollowThumbs;
   finally

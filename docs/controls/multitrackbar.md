@@ -112,7 +112,7 @@ uses tyControls.MultiTrackBar;
 | `Value` | 新加在末尾时为 `Max` | 滑块的值，赋值与 `SetThumbValue` 相同。 |
 | `Color` | `clDefault` | `clDefault` 跟主题走；其他颜色在所有状态下替换主题给的背景色。颜色在这里是**数据**（就像取色器选出来的那个颜色），不是界面样式。用户加的滑块是 `clDefault`。 |
 | `Hint` | `''` | 指针停在这个滑块上时控件显示的提示（需要 `ShowHint`）；空串时用控件自己的 `Hint`。 |
-| `Enabled` | `True` | `False`：照常画出来，但不能按、不能拖、不能选，键盘和 Tab 都跳过它。 |
+| `Enabled` | `True` | `False`：照常画出来，但不能按、不能拖、不能选，键盘和 Tab 都跳过它。选中的滑块设成 `False` 就不再选中（触发 `OnThumbSelect(-1)`），正在拖的就停下，`SelectedThumb` 也不接受不可用的滑块（读出 -1）。 |
 | `StyleClass` | `''` | 按 `TyTrackThumb.<类>` 解析这个滑块的样式。 |
 
 分段：第 0 段从轨道 `Min` 端到第一个滑块，第 i 段在滑块 i−1 和滑块 i 之间，最后一段从最后一个滑块到 `Max` 端。`Segments[i]` 的 `StyleClass` 不为空时，这一段用 `TyTrackSegment.<类>` 解析出的 `background` 填充；类为空或者 `Segments` 项数不够，这一段就不画，露出凹槽。默认主题带 `success`、`warning`、`danger` 三个类：

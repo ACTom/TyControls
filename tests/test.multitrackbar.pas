@@ -294,6 +294,9 @@ type
     procedure TestAThumbsStyleClassIsResolved;
     procedure TestAThumbsHintIsShownOverIt;
     procedure TestADisabledThumbIsInert;
+    { #182: a thumb disabled while it is selected, hovered or dragged leaves all three, and
+      SelectedThumb does not take a disabled thumb. }
+    procedure TestDisablingAThumbDropsItsSelectionHoverAndDrag;
     procedure TestAnItemChangeRepaints;
     procedure TestSegmentsStyleTheirStretchOnly;
     procedure TestAFormsThumbsAreSortedWhenRead;
@@ -3163,6 +3166,37 @@ begin
   finally
     a.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarTest.TestDisablingAThumbDropsItsSelectionHoverAndDrag;
+var
+  p: TPoint;
+begin
+  FBar.Thumbs[1].Enabled := False;
+  FBar.SelectedThumb := 1;
+  AssertEquals('a disabled thumb is not selected', -1, FBar.SelectedThumb);
+  FBar.Thumbs[1].Enabled := True;
+  FBar.SelectedThumb := 1;
+  FBar.OnThumbSelect := @Selected;
+  FLog := '';
+  FBar.Thumbs[1].Enabled := False;
+  AssertEquals('disabled, it leaves the selection', -1, FBar.SelectedThumb);
+  AssertEquals('reported', 'S-1 ', FLog);
+  FBar.Thumbs[1].Enabled := True;
+  { Hovered. }
+  p := Centre(1);
+  TMultiAccess(FBar).MouseMove([], p.X, p.Y);
+  AssertEquals('setup: hovered', 1, TMultiAccess(FBar).FHoverThumb);
+  FBar.Thumbs[1].Enabled := False;
+  AssertEquals('disabled, it is no longer drawn hovered', -1, TMultiAccess(FBar).FHoverThumb);
+  FBar.Thumbs[1].Enabled := True;
+  { Dragged. }
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Thumbs[1].Enabled := False;
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 40, p.Y);
+  AssertEquals('disabled mid-drag, it stops following the pointer', '25,50,75', Values);
+  AssertEquals('no longer drawn active', -1, TMultiAccess(FBar).FDragThumb);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 40, p.Y);
 end;
 
 procedure TTyMultiTrackBarTest.TestAnItemChangeRepaints;
@@ -6364,9 +6398,11 @@ begin
   AssertEquals('at MinThumbs: kept, unasked', '', FLog);
   FBar.MinThumbs := 0;
   FBar.Thumbs[0].Enabled := False;
-  AssertEquals('a disabled thumb: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  AssertEquals('a disabled thumb: not selected (#182)', -1, FBar.SelectedThumb);
+  AssertEquals('so not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
   AssertEquals('25,75', Values);
   FBar.Thumbs[0].Enabled := True;
+  FBar.SelectedThumb := 0;
   FBar.AllowUserThumbs := False;
   AssertEquals('off: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
   FBar.AllowUserThumbs := True;
