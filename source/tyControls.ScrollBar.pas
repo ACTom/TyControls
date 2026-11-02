@@ -30,6 +30,20 @@ type
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
+    { #180: a held arrow button or a held track repeats its step. FRepeatTrack: the press was
+      on the track, at FRepeatAt along it -- the paging stops when the thumb reaches it. }
+    FRepeatTimer: TTimer;
+    FRepeatCode: TScrollCode;
+    FRepeatStep: Integer;
+    FRepeatTrack: Boolean;
+    FRepeatAt: TPoint;
+    { #180: something scrolled since the press / the key went down -- the release ends it
+      with scEndScroll, as a native scroll bar's does. }
+    FPressScrolled, FKeyScrolled: Boolean;
+    procedure RepeatTimerFire(Sender: TObject);
+    procedure StartRepeat(ACode: TScrollCode; AStep: Integer; ATrack: Boolean; const AAt: TPoint);
+    procedure StopRepeat;
+    procedure EndScroll;
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
@@ -61,6 +75,10 @@ type
     { #147: the mouse capture taken away mid-drag ends the drag. }
     procedure CaptureChanged; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #180: the key's release ends a keyboard scroll with scEndScroll. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    { #180: one repeat of a held button or track -- the timer's, and a test's. }
+    procedure RepeatStep;
     { Where the focus goes after a click on the bar: see the implementation (#55). }
     procedure FocusAfterClick;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
@@ -498,14 +516,24 @@ procedure TTyScrollBar.SetKind(const AValue: TTyScrollBarKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
+  { #180: the bar turns, as LCL's TScrollBar.SetKind turns it -- its thickness was left lying
+    along the new axis. The .lfm holds the right size already. }
+  if not (csLoading in ComponentState) then
+    SetBounds(Left, Top, Height, Width);
   Invalidate;
 end;
 
+{ #180: a Min or a Max that moves Position does it through the setter, so OnChange says so; the
+  field was written straight. While the form is read the values only arrive. }
 procedure TTyScrollBar.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
-  if FPosition < FMin then FPosition := FMin;
+  if FPosition < FMin then
+  begin
+    if csLoading in ComponentState then FPosition := FMin
+    else Position := FMin;
+  end;
   Invalidate;
 end;
 
@@ -513,7 +541,11 @@ procedure TTyScrollBar.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
-  if FPosition > FMax then FPosition := FMax;
+  if FPosition > FMax then
+  begin
+    if csLoading in ComponentState then FPosition := FMax
+    else Position := FMax;
+  end;
   Invalidate;
 end;
 
@@ -650,8 +682,72 @@ begin
   if not IsEnabled then Exit;
   // Convention: wheel-up (WheelDelta > 0) scrolls content up -> Position
   // DECREASES by SmallChange; wheel-down increases it. (Standard scrollbar.)
-  Position := Position - Sign(WheelDelta) * FSmallChange;
+  { #180: through OnScroll, a line and its end, as a button press -- it went round it. }
+  if WheelDelta > 0 then
+    ScrollTo(scLineUp, Position - FSmallChange)
+  else
+    ScrollTo(scLineDown, Position + FSmallChange);
+  EndScroll;
   Result := True;
+end;
+
+{ #180: what a native scroll bar sends when a scroll gesture ends. The handler may still move the
+  value, as it may for every other code. }
+procedure TTyScrollBar.EndScroll;
+var
+  P: Integer;
+begin
+  P := FPosition;
+  DoScroll(scEndScroll, P);
+  if P <> FPosition then Position := P;
+end;
+
+procedure TTyScrollBar.StartRepeat(ACode: TScrollCode; AStep: Integer; ATrack: Boolean;
+  const AAt: TPoint);
+begin
+  FRepeatCode := ACode;
+  FRepeatStep := AStep;
+  FRepeatTrack := ATrack;
+  FRepeatAt := AAt;
+  if FRepeatTimer = nil then
+  begin
+    FRepeatTimer := TTimer.Create(Self);
+    FRepeatTimer.OnTimer := @RepeatTimerFire;
+  end;
+  FRepeatTimer.Enabled := False;
+  FRepeatTimer.Interval := 400;   // the first repeat waits, as the OS's does
+  FRepeatTimer.Enabled := True;
+end;
+
+procedure TTyScrollBar.StopRepeat;
+begin
+  if FRepeatTimer <> nil then FRepeatTimer.Enabled := False;
+  FRepeatStep := 0;
+end;
+
+procedure TTyScrollBar.RepeatTimerFire(Sender: TObject);
+begin
+  if FRepeatTimer <> nil then FRepeatTimer.Interval := 50;
+  RepeatStep;
+end;
+
+procedure TTyScrollBar.RepeatStep;
+var
+  ThumbR: TRect;
+begin
+  if FRepeatStep = 0 then Exit;
+  if FRepeatTrack then
+  begin
+    { Paging stops once the thumb is under the press, as a native track's does. }
+    ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize, Mirrored);
+    if PtInRect(ThumbR, FRepeatAt) then
+    begin
+      StopRepeat;
+      Exit;
+    end;
+  end;
+  ScrollTo(FRepeatCode, Position + FRepeatStep);
+  FPressScrolled := True;
 end;
 
 procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -920,12 +1016,18 @@ begin
     if PtInRect(LoR, Point(X, Y)) then
     begin
       ScrollTo(Back, Position + BackSign * FSmallChange);
+      FPressScrolled := True;
+      StartRepeat(Back, BackSign * FSmallChange, False, Point(X, Y));   { #180: held, it repeats }
+      if HandleAllocated then MouseCapture := True;
       FocusAfterClick;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
       ScrollTo(Fwd, Position - BackSign * FSmallChange);
+      FPressScrolled := True;
+      StartRepeat(Fwd, -BackSign * FSmallChange, False, Point(X, Y));
+      if HandleAllocated then MouseCapture := True;
       FocusAfterClick;
       Exit;
     end;
@@ -949,13 +1051,27 @@ begin
     begin
       // click on the track: page one PageSize toward the click
       if (FKind = sbVertical) and (Y < ThumbR.Top) then
-        ScrollTo(scPageUp, Position - EffectiveLargeChange)
+      begin
+        ScrollTo(scPageUp, Position - EffectiveLargeChange);
+        StartRepeat(scPageUp, -EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
-        ScrollTo(scPageDown, Position + EffectiveLargeChange)
+      begin
+        ScrollTo(scPageDown, Position + EffectiveLargeChange);
+        StartRepeat(scPageDown, EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
-        ScrollTo(Back, Position + BackSign * EffectiveLargeChange)
+      begin
+        ScrollTo(Back, Position + BackSign * EffectiveLargeChange);
+        StartRepeat(Back, BackSign * EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
+      begin
         ScrollTo(Fwd, Position - BackSign * EffectiveLargeChange);
+        StartRepeat(Fwd, -BackSign * EffectiveLargeChange, True, Point(X, Y));
+      end;
+      FPressScrolled := True;
+      if HandleAllocated then MouseCapture := True;
     end;
     FocusAfterClick;
   end;
@@ -1020,6 +1136,12 @@ begin
     another window, another control taking it: the button-up goes elsewhere, so the drag ends
     here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
   if FDragging then EndThumbDrag;   { as MouseUp: the position reached, scEndScroll }
+  StopRepeat;
+  if FPressScrolled then
+  begin
+    FPressScrolled := False;
+    EndScroll;
+  end;
 end;
 
 procedure TTyScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1028,13 +1150,30 @@ begin
   if Button = mbLeft then
   begin
     EndThumbDrag;
+    StopRepeat;
+    if FPressScrolled then
+    begin
+      FPressScrolled := False;
+      EndScroll;   { #180: a button or track press ends, as a drag does }
+    end;
     MouseCapture := False;
+  end;
+end;
+
+procedure TTyScrollBar.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if FKeyScrolled then
+  begin
+    FKeyScrolled := False;
+    EndScroll;
   end;
 end;
 
 procedure TTyScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
-  Dec1, Inc1: Word;
+  Dec1, Inc1, Dec2, Inc2: Word;
+  k0: Word;
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -1058,12 +1197,25 @@ begin
     Dec1 := VK_LEFT;
     Inc1 := VK_RIGHT;
   end;
-  if Key = Dec1 then
+  { #180: the arrows across the bar step it too, as a native scroll bar's do (left and up are
+    the line up) -- they went on to the form and took the focus away. }
+  if FKind = sbVertical then
+  begin
+    Dec2 := VK_LEFT;
+    Inc2 := VK_RIGHT;
+  end
+  else
+  begin
+    Dec2 := VK_UP;
+    Inc2 := VK_DOWN;
+  end;
+  k0 := Key;
+  if (Key = Dec1) or (Key = Dec2) then
   begin
     ScrollTo(scLineUp, Position - FSmallChange);
     Key := 0;
   end
-  else if Key = Inc1 then
+  else if (Key = Inc1) or (Key = Inc2) then
   begin
     ScrollTo(scLineDown, Position + FSmallChange);
     Key := 0;
@@ -1075,6 +1227,7 @@ begin
       VK_HOME:  begin ScrollTo(scTop, FMin); Key := 0; end;
       VK_END:   begin ScrollTo(scBottom, FMax); Key := 0; end;
     end;
+  if (Key = 0) and (k0 <> 0) then FKeyScrolled := True;
 end;
 
 end.

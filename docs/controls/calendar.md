@@ -31,8 +31,8 @@ uses tyControls.Calendar;
 |------|------|--------|------|
 | `Date` | `TDateTime` | 构造时为 `DateOf(Now)`（今天） | 当前选中日期，取 `DateOf`（丢弃时间部分）；仅当日期实际变化时更新并 `Invalidate`。**写入越界值抛 `ETyInvalidDate`**，原日期保持不变（详见第 7 节）。**无 `default`，始终写入 DFM/LFM。** |
 | `DateTime` | `TDateTime` | 同 `Date` | LCL 同名访问器的别名，同一份存储、同一套越界检查。`stored False`（`Date` 才是被序列化的那个）。 |
-| `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后把当前 `Date` **夹紧**到新区间（改的是规则不是值，所以不抛），并始终重绘（越界格子的灰显外观会变化）。 |
-| `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后同样夹紧当前 `Date` 并重绘。 |
+| `MinDate` | `TDateTime` | `0`（无下界） | 可选日期下界。`0` 表示不限制。写入后把当前 `Date` **夹紧**到新区间（改的是规则不是值，所以不抛），并始终重绘（越界格子的灰显外观会变化）。写入的值晚于 `MaxDate` 时，`MaxDate` 跟着移到同一天，两界不会交叉。 |
+| `MaxDate` | `TDateTime` | `0`（无上界） | 可选日期上界。`0` 表示不限制。写入后同样夹紧当前 `Date` 并重绘。写入的值早于 `MinDate` 时，`MinDate` 跟着移到同一天。 |
 | `FirstDayOfWeek` | `TTyWeekDay` | `wdLocaleDefault` | 每周第一列的星期。除 `wdSunday`..`wdSaturday` 外新增 `wdLocaleDefault`（= LCL 的 `dowDefault`）：跟随操作系统区域设置。**3.0 起这是默认值**（原为写死的 `wdSunday`）——见第 7 节的破坏性变更说明。另提供 `dowMonday`..`dowSunday` / `dowDefault` 常量别名，方便从 LCL 移植的代码原样编译。 |
 | `DisplaySettings` | `TTyCalDisplaySettings` | `[dsShowHeadings, dsShowDayNames]` | 控制画哪些"外围装饰"，与 LCL 的 `TDisplaySettings` 同名同成员：`dsShowHeadings`（表头带）、`dsShowDayNames`（星期名行）、`dsNoMonthChange`（点击相邻月格子**不**翻页）、`dsShowWeekNumbers`（周数列）。去掉某个标志时，让出的空间**归日期网格**，不会留空洞。 |
 | `WeekNumbers` | `Boolean` | `False` | `DisplaySettings` 中 `dsShowWeekNumbers` 的布尔视图——**同一份存储**，两者不可能不一致。`stored False`（序列化走 `DisplaySettings`）；旧 `.lfm` 里的 `WeekNumbers = True` 仍能正常加载。 |
@@ -207,7 +207,7 @@ Cal.ReadOnly := True;   // 禁止选择；表头翻页/下钻仍可用
 - **点击语义：** Days 视图点标题 → 下钻到 Months；点日期格 → 选中该日（`OnChange` + `OnAccept`）。Months/Years/Decades 视图点标题 → 再上一层，点格子 → 选定并下钻一层。越界（`MinDate`/`MaxDate` 之外）格子点击被忽略。
 - **点相邻月的灰格会翻页（3.0 起的行为变更）：** 以前这一击被直接丢掉——灰格是死的，也没有任何提示。现在默认**选中那一天并把视图翻到它所属的月**，与 LCL 的默认一致（`dsNoMonthChange` 不在 `DefaultDisplaySettings` 里）。**要恢复旧行为，把 `dsNoMonthChange` 放进 `DisplaySettings`。**
 - **`FirstDayOfWeek` 默认改为跟随系统（3.0 起的行为变更）：** 原来写死 `wdSunday`，于是周一开头的区域（欧洲 / 亚洲大部分）开箱即得一个美式周布局，而且**没有**任何取值能表达"跟随系统"——只能硬写 `wdMonday`，应用换语言后又错了。现在默认 `wdLocaleDefault`。**依赖原来周日开头的窗体请显式写 `FirstDayOfWeek := wdSunday`。**（几何相关的测试同理：断言里的列坐标必须自己钉住 `wdSunday`，否则那是在测开发机的控制面板。）
-- **键盘导航：** 方向键移动一天 / 一周（越界自动夹紧），`PageUp`/`PageDown` 换上 / 下月（保留日、月末夹紧），`Home`/`End` 跳到当月首 / 末个可选日，`Enter`/`Space` 触发 `OnAccept`。这些键在 Days 视图 + 非 `ReadOnly` 时生效。
+- **键盘导航：** 方向键移动一天 / 一周（越界自动夹紧），`PageUp`/`PageDown` 换上 / 下月（保留日、月末夹紧），`Home`/`End` 跳到当月首 / 末个可选日，`Enter`/`Space` 触发 `OnAccept`。这些键在 Days 视图 + 非 `ReadOnly` 时生效。Months / Years / Decades 视图里，方向键在那张 4×3 的格子上走：`←`/`→` 一格（一个月 / 一年 / 十年），`↑`/`↓` 一行（四格），选中日期随之移动、日不变（越界同样夹紧）。
 - **主体无成员状态字段：** 与 CheckBox 等不同，本控件不缓存 `FHover`/`FPressed`；格子的 `:selected`/`:disabled`/`:hover` 由渲染时逐格向 `ActiveController.Model.ResolveStyle` 查询决定。
 - **视觉由主题令牌驱动：** 颜色 / 字体 / 圆角一律来自 `.tycss` 令牌（`--accent`、`--muted`、`--surface-hover` 等），不在控件代码写死；可通过 `StyleClass` 或覆盖上述子部件 typeKey 规则定制外观。
 

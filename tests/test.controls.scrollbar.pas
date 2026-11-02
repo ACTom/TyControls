@@ -5,7 +5,9 @@ uses
   Classes, SysUtils, Types, TypInfo, fpcunit, testregistry,
   Forms, Controls, Graphics, LCLType, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar,
+  DateUtils, tyControls.Edit, tyControls.Button, tyControls.TrackBar, tyControls.Calendar, tyControls.LColorPicker,
+  tyControls.Calculator;
 type
   TTyScrollGeometryTest = class(TTestCase)
   published
@@ -1365,7 +1367,277 @@ begin
   AssertEquals('拖完之后两者又相等', FBar.Position, FBar.TrackPosition);
 end;
 
+
+type
+  { #180: scroll bars, track bars, the calendar, the colour bar and the calculator. }
+  TInput180Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FCodes: string;
+    FChanges: Integer;
+    procedure Scrolled(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: Integer);
+    procedure Changed(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheArrowsAcrossTheBarStepIt;
+    procedure TestTheArrowsAcrossTheTrackBarMoveIt;
+    procedure TestTurningTheBarTurnsItsBounds;
+    procedure TestMinAndMaxMovingPositionAreTold;
+    procedure TestAHeldButtonRepeats;
+    procedure TestEveryScrollEndsWithEndScroll;
+    procedure TestTheCalendarsArrowsWalkTheMonthsView;
+    procedure TestMinDateAndMaxDateCannotCross;
+    procedure TestTheColourBarKeepsHueAndSatInRange;
+    procedure TestAClickOnAKeyFocusesTheCalculator;
+  end;
+
+var
+  Input180WidgetSet: Boolean = False;
+
+type
+  TScroll180 = class(TTyScrollBar);
+  TTrack180 = class(TTyTrackBar);
+  TCal180 = class(TTyCalendar);
+
+procedure TInput180Test.Scrolled(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: Integer);
+begin
+  FCodes := FCodes + IntToStr(Ord(ScrollCode)) + ',';
+end;
+
+procedure TInput180Test.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TInput180Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FCodes := '';
+  FChanges := 0;
+end;
+
+procedure TInput180Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TInput180Test.TestTheArrowsAcrossTheBarStepIt;
+var sb: TScroll180; k: Word;
+begin
+  sb := TScroll180.Create(FForm);
+  sb.Kind := sbVertical;
+  sb.Max := 100;
+  sb.Position := 50;
+  k := VK_RIGHT;
+  sb.KeyDown(k, []);
+  AssertEquals('Right on a vertical bar is a line down', 51, sb.Position);
+  AssertEquals('and the key is taken', 0, k);
+  k := VK_LEFT;
+  sb.KeyDown(k, []);
+  AssertEquals('Left a line up', 50, sb.Position);
+  sb.Kind := sbHorizontal;
+  k := VK_DOWN;
+  sb.KeyDown(k, []);
+  AssertEquals('Down on a horizontal bar is a line down', 51, sb.Position);
+  k := VK_UP;
+  sb.KeyDown(k, []);
+  AssertEquals('Up a line up', 50, sb.Position);
+end;
+
+procedure TInput180Test.TestTheArrowsAcrossTheTrackBarMoveIt;
+var tb: TTrack180; k: Word;
+begin
+  tb := TTrack180.Create(FForm);
+  tb.Max := 10;
+  tb.Position := 5;
+  k := VK_UP;
+  tb.KeyDown(k, []);
+  AssertEquals('Up on a horizontal track bar is more', 6, tb.Position);
+  AssertEquals('and the key is taken', 0, k);
+  k := VK_DOWN;
+  tb.KeyDown(k, []);
+  AssertEquals('Down is less', 5, tb.Position);
+  tb.Orientation := toVertical;
+  k := VK_RIGHT;
+  tb.KeyDown(k, []);
+  AssertEquals('Right on a vertical one is more', 6, tb.Position);
+  k := VK_LEFT;
+  tb.KeyDown(k, []);
+  AssertEquals('Left is less', 5, tb.Position);
+end;
+
+procedure TInput180Test.TestTurningTheBarTurnsItsBounds;
+var sb: TTyScrollBar;
+begin
+  sb := TTyScrollBar.Create(FForm);
+  sb.Kind := sbHorizontal;
+  sb.SetBounds(0, 0, 200, 17);
+  sb.Kind := sbVertical;
+  AssertEquals('the thickness goes across', 17, sb.Width);
+  AssertEquals('and the length along', 200, sb.Height);
+end;
+
+procedure TInput180Test.TestMinAndMaxMovingPositionAreTold;
+var sb: TTyScrollBar;
+begin
+  sb := TTyScrollBar.Create(FForm);
+  sb.Max := 100;
+  sb.Position := 80;
+  sb.OnChange := @Changed;
+  sb.Max := 50;
+  AssertEquals('a lower Max moves Position', 50, sb.Position);
+  AssertEquals('and says so', 1, FChanges);
+  sb.Position := 10;
+  FChanges := 0;
+  sb.Min := 20;
+  AssertEquals('a higher Min too', 20, sb.Position);
+  AssertEquals('told', 1, FChanges);
+end;
+
+procedure TInput180Test.TestAHeldButtonRepeats;
+var sb: TScroll180;
+begin
+  sb := TScroll180.Create(FForm);
+  sb.Kind := sbVertical;
+  sb.SetBounds(0, 0, 17, 200);
+  sb.Max := 100;
+  sb.Position := 50;
+  sb.MouseDown(mbLeft, [], 8, sb.Height - 3);   // the down button
+  AssertEquals('the press steps once', 51, sb.Position);
+  sb.RepeatStep;
+  sb.RepeatStep;
+  AssertEquals('held, it goes on', 53, sb.Position);
+  sb.MouseUp(mbLeft, [], 8, sb.Height - 3);
+  sb.RepeatStep;
+  AssertEquals('released, it stops', 53, sb.Position);
+  sb.Position := 0;
+  sb.MouseDown(mbLeft, [], 8, 120);   // the track below the thumb, mid-way
+  AssertTrue('the track pages', sb.Position > 0);
+  sb.RepeatStep; sb.RepeatStep; sb.RepeatStep; sb.RepeatStep; sb.RepeatStep;
+  sb.RepeatStep; sb.RepeatStep; sb.RepeatStep; sb.RepeatStep; sb.RepeatStep;
+  AssertTrue(Format('and stops when the thumb reaches the press (%d)', [sb.Position]),
+    sb.Position < 100);
+  sb.MouseUp(mbLeft, [], 8, 120);
+end;
+
+procedure TInput180Test.TestEveryScrollEndsWithEndScroll;
+var sb: TScroll180; k: Word; e: string;
+begin
+  sb := TScroll180.Create(FForm);
+  sb.Kind := sbVertical;
+  sb.SetBounds(0, 0, 17, 200);
+  sb.Max := 100;
+  sb.Position := 50;
+  sb.OnScroll := @Scrolled;
+  e := IntToStr(Ord(scEndScroll)) + ',';
+  sb.MouseDown(mbLeft, [], 8, sb.Height - 3);
+  sb.MouseUp(mbLeft, [], 8, sb.Height - 3);
+  AssertEquals('a button press: a line, then its end',
+    IntToStr(Ord(scLineDown)) + ',' + e, FCodes);
+  FCodes := '';
+  k := VK_DOWN;
+  sb.KeyDown(k, []);
+  k := VK_DOWN;
+  sb.KeyUp(k, []);
+  AssertEquals('a key: a line, then its end on the release',
+    IntToStr(Ord(scLineDown)) + ',' + e, FCodes);
+  FCodes := '';
+  AssertTrue('setup: the wheel is taken', sb.DoMouseWheel([], -120, Point(5, 5)));
+  AssertEquals('the wheel goes through OnScroll too',
+    IntToStr(Ord(scLineDown)) + ',' + e, FCodes);
+end;
+
+procedure TInput180Test.TestTheCalendarsArrowsWalkTheMonthsView;
+var c: TCal180; k: Word;
+begin
+  c := TCal180.Create(FForm);
+  c.SetBounds(0, 0, 260, 240);
+  c.DateTime := EncodeDate(2026, 5, 15);
+  c.MouseDown(mbLeft, [], c.Width div 2, 4);   // the title zooms out
+  AssertTrue('setup: the months view', c.ViewMode = cvmMonths);
+  k := VK_RIGHT;
+  c.KeyDown(k, []);
+  AssertEquals('Right in the months view is the next month', 6, MonthOf(c.DateTime));
+  AssertEquals('the day stays', 15, DayOf(c.DateTime));
+  k := VK_DOWN;
+  c.KeyDown(k, []);
+  AssertEquals('Down is four months on', 10, MonthOf(c.DateTime));
+  c.MouseDown(mbLeft, [], c.Width div 2, 4);
+  AssertTrue('setup: the years view', c.ViewMode = cvmYears);
+  k := VK_LEFT;
+  c.KeyDown(k, []);
+  AssertEquals('Left in the years view is a year back', 2025, YearOf(c.DateTime));
+  c.MouseDown(mbLeft, [], c.Width div 2, 4);
+  AssertTrue('setup: the decades view', c.ViewMode = cvmDecades);
+  k := VK_RIGHT;
+  c.KeyDown(k, []);
+  AssertEquals('Right in the decades view is a decade on', 2035, YearOf(c.DateTime));
+end;
+
+procedure TInput180Test.TestMinDateAndMaxDateCannotCross;
+var c: TTyCalendar;
+begin
+  c := TTyCalendar.Create(FForm);
+  c.MaxDate := EncodeDate(2026, 1, 1);
+  c.MinDate := EncodeDate(2026, 6, 1);
+  AssertTrue('a MinDate past MaxDate takes MaxDate with it',
+    c.MaxDate >= c.MinDate);
+  c.MinDate := EncodeDate(2026, 6, 1);
+  c.MaxDate := EncodeDate(2025, 1, 1);
+  AssertTrue('a MaxDate before MinDate takes MinDate with it', c.MinDate <= c.MaxDate);
+end;
+
+procedure TInput180Test.TestAClickOnAKeyFocusesTheCalculator;
+var calc: TTyCalculator; ed: TTyEdit; i: Integer; key: TTyButton;
+begin
+  if not Input180WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    Input180WidgetSet := True;
+  end;
+  FForm.SetBounds(-4000, -4000, 500, 400);
+  FForm.Visible := True;
+  ed := TTyEdit.Create(FForm);
+  ed.Parent := FForm;
+  ed.SetBounds(300, 10, 100, 24);
+  calc := TTyCalculator.Create(FForm);
+  calc.Parent := FForm;
+  calc.SetBounds(0, 0, 224, 320);
+  FForm.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  ed.SetFocus;
+  Forms.Application.ProcessMessages;
+  key := nil;
+  for i := 0 to calc.ControlCount - 1 do
+    if calc.Controls[i] is TTyButton then
+    begin
+      key := TTyButton(calc.Controls[i]);
+      Break;
+    end;
+  AssertNotNull('setup: a key', key);
+  key.Click;
+  Forms.Application.ProcessMessages;
+  AssertSame('a click on a key focuses the calculator', TWinControl(calc), FForm.ActiveControl);
+end;
+
+procedure TInput180Test.TestTheColourBarKeepsHueAndSatInRange;
+var cp: TTyLColorPicker;
+begin
+  cp := TTyLColorPicker.Create(FForm);
+  cp.Hue := 500;
+  AssertEquals('Hue at most 360', 360, cp.Hue, 0.001);
+  cp.Hue := -5;
+  AssertEquals('at least 0', 0, cp.Hue, 0.001);
+  cp.Sat := 3;
+  AssertEquals('Sat at most 1', 1, cp.Sat, 0.001);
+  cp.Sat := -1;
+  AssertEquals('at least 0', 0, cp.Sat, 0.001);
+end;
+
 initialization
+  RegisterTest(TInput180Test);
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
   RegisterTest(TTyScrollBarThumbColorTest);

@@ -680,6 +680,10 @@ procedure TTyCalendar.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
+  { #180: a MinDate past MaxDate takes MaxDate with it -- the two crossed, every date was out of
+    range and the calendar could not be used. }
+  if (FMinDate <> 0) and (FMaxDate <> 0) and (DateOf(FMinDate) > DateOf(FMaxDate)) then
+    FMaxDate := FMinDate;
   StoreDate(TyCalendarClampDate(FDate, FMinDate, FMaxDate));
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
@@ -688,6 +692,8 @@ procedure TTyCalendar.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
+  if (FMaxDate <> 0) and (FMinDate <> 0) and (DateOf(FMaxDate) < DateOf(FMinDate)) then
+    FMinDate := FMaxDate;   { #180: and the other way round }
   StoreDate(TyCalendarClampDate(FDate, FMinDate, FMaxDate));
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
@@ -1628,6 +1634,27 @@ begin
 
   curDate := DateOf(FDate);
   newDate := curDate;
+
+  { #180: in the months, years and decades views the arrows walk that grid -- four across, three
+    down -- a month, a year or a decade at a time. They moved the day underneath it. }
+  if (FViewMode <> cvmDays) and ((Key = VK_LEFT) or (Key = VK_RIGHT) or (Key = VK_UP)
+     or (Key = VK_DOWN)) then
+  begin
+    case Key of
+      VK_LEFT:  i := -1;
+      VK_RIGHT: i := 1;
+      VK_UP:    i := -4;
+    else        i := 4;
+    end;
+    case FViewMode of
+      cvmMonths: newDate := IncMonth(curDate, i);
+      cvmYears:  newDate := IncYear(curDate, i);
+    else         newDate := IncYear(curDate, 10 * i);
+    end;
+    SelectDate(TyCalendarClampDate(newDate, FMinDate, FMaxDate));
+    Key := 0;
+    Exit;
+  end;
 
   case Key of
 
