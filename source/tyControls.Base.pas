@@ -64,6 +64,44 @@ type
     function ChromeSignature: string;
   end;
 
+  { #172: a control whose Checked (a speed button's Down) and GroupIndex an action drives --
+    TTyCheckBox, TTyRadioButton, TTyToggleSwitch and TTySpeedButton, of different lineages, so
+    the link asks through this. LCL does the same with TButtonActionLink and
+    TSpeedButtonActionLink. }
+  ITyActionCheckable = interface
+    ['{3C8E5B2A-7F14-4D6B-A0E9-5B71C2D84F36}']
+    { Whether its Checked follows the action at all: a speed button only when it can stay
+      down and come up again (GroupIndex <> 0 and AllowAllUp), as LCL's. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    { Sets it as the action says, without a click: the action is not run again by the state it
+      pushed itself. }
+    procedure SetActionChecked(AValue: Boolean);
+    { False for a control with no GroupIndex. }
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+  end;
+
+  { #172: the action link of an ITyActionCheckable. The action's Checked reaches the control while
+    the control still agrees with the action, as LCL's; its GroupIndex always does -- LCL's
+    TCustomAction.SetGroupIndex stores the new value before it tells the links, so the agreeing
+    test LCL's TSpeedButtonActionLink makes can never pass. }
+  TTyCheckActionLink = class(TWinControlActionLink)
+  protected
+    procedure SetChecked(Value: Boolean); override;
+    procedure SetGroupIndex(Value: Integer); override;
+  public
+    function IsCheckedLinked: Boolean; override;
+    function IsGroupIndexLinked: Boolean; override;
+  end;
+
+{ #172: what ActionChange does for an ITyActionCheckable -- takes the action's GroupIndex and then
+  its Checked; while the form is read (ACheckDefaults) only into a control still at its default. }
+procedure TyApplyActionChecked(AControl: TControl; AAction: TObject; ACheckDefaults: Boolean);
+
+type
+
   { Implemented by TTyForm: lets a child resolve the form's THEMED background colour
     (the TyForm token) instead of the un-themed LCL Color. ApplyChromeTheme only sets
     the LCL Color at RUNTIME, so without this a child's corner-gaps / transparent body
@@ -860,7 +898,59 @@ function TyFrameChromeSignature(AControl: TControl; const AStyle: TTyStyleSet;
 
 implementation
 
+uses
+  ActnList;
+
 procedure TyParentChainFontChanged(AControl: TControl); forward;
+
+{ TTyCheckActionLink }
+
+function TTyCheckActionLink.IsCheckedLinked: Boolean;
+var
+  c: ITyActionCheckable;
+begin
+  Result := inherited IsCheckedLinked and Supports(FClient, ITyActionCheckable, c)
+    and c.ActionCheckable and (c.GetActionChecked = TCustomAction(Action).Checked);
+end;
+
+function TTyCheckActionLink.IsGroupIndexLinked: Boolean;
+var
+  c: ITyActionCheckable;
+begin
+  Result := inherited IsGroupIndexLinked and Supports(FClient, ITyActionCheckable, c)
+    and c.HasActionGroupIndex;
+end;
+
+procedure TTyCheckActionLink.SetChecked(Value: Boolean);
+var
+  c: ITyActionCheckable;
+begin
+  if IsCheckedLinked and Supports(FClient, ITyActionCheckable, c) then
+    c.SetActionChecked(Value);
+end;
+
+procedure TTyCheckActionLink.SetGroupIndex(Value: Integer);
+var
+  c: ITyActionCheckable;
+begin
+  if IsGroupIndexLinked and Supports(FClient, ITyActionCheckable, c) then
+    c.SetActionGroupIndex(Value);
+end;
+
+procedure TyApplyActionChecked(AControl: TControl; AAction: TObject; ACheckDefaults: Boolean);
+var
+  c: ITyActionCheckable;
+  a: TCustomAction;
+begin
+  if not (AAction is TCustomAction) then Exit;
+  if not Supports(AControl, ITyActionCheckable, c) then Exit;
+  a := TCustomAction(AAction);
+  { GroupIndex first: a speed button follows Checked only once it is in a group. }
+  if c.HasActionGroupIndex and (not ACheckDefaults or (c.GetActionGroupIndex = 0)) then
+    c.SetActionGroupIndex(a.GroupIndex);
+  if c.ActionCheckable and (not ACheckDefaults or not c.GetActionChecked) then
+    c.SetActionChecked(a.Checked);
+end;
 procedure TyApplyControlFontInk(var AStyle: TTyStyleSet; AControl: TControl;
   const AStates: TTyStateSet; AInk: Boolean); forward;
 
