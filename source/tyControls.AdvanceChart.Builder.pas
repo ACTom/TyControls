@@ -672,8 +672,8 @@ procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray
   AStore: TTyDataStore);
 { [spec 255] What the encode decides about a store before it is filled:
   which column names a row with no name (an itemName list takes the
-  category's away -- AFromSource only, a dataset's; an extra category column
-  first in the source names it) and, when an extra column shares a category
+  category's away -- AFromSource only, a dataset's; the category column
+  first in the source names it, an extra one or not [spec 264]) and, when an extra column shares a category
   list, the order a row's columns are parsed in -- the source's. }
 procedure TyEncodeStoreOrder(const AEnc: TTySeriesEncode;
   const ADims: TTySeriesDimArray; AStore: TTyDataStore; AFromSource: Boolean);
@@ -2797,7 +2797,6 @@ begin
   if AStore = nil then Exit;
   if AFromSource and AEnc.Given and AEnc.HasNameEncode then
     AStore.NameFallback := -1;
-  if Length(AEnc.ExtraDim) = 0 then Exit;
   { where each column reads in the source }
   SetLength(pos, Length(ADims));
   for k := 0 to High(ADims) do
@@ -2821,6 +2820,9 @@ begin
         and ((best < 0) or (pos[k] < pos[best])) then best := k;
     if best >= 0 then AStore.NameFallback := best + 1;
   end;
+  { [spec 264] (with no list too: x 1, y 0 on two category lists names the
+    rows by element 0, y's [was: only past a list, so x's]) }
+  if Length(AEnc.ExtraDim) = 0 then Exit;
   { TWO COLUMNS ON ONE CATEGORY LIST collect its names column by column in
     the source's order }
   shared := False;

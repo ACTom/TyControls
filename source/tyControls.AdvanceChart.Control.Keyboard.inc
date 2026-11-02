@@ -80,7 +80,8 @@ begin
   begin
     slot := SlotOfSeries(si);
     if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
-      or (FStores[slot] = nil) or FBindings[slot].Hidden then Continue;
+      or (FStores[slot] = nil) or FBindings[slot].Hidden
+      or SeriesRefusedAt(slot) then Continue;
     n := Length(Result);
     SetLength(Result, n + 1);
     Result[n].SeriesIndex := si;
@@ -130,7 +131,7 @@ begin
   if (FKbSeries < 0) or (FKbRow < 0) then Exit;
   slot := SlotOfSeries(FKbSeries);
   if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
-    or (FStores[slot] = nil) or FBindings[slot].Hidden then Exit;
+    or (FStores[slot] = nil) or FBindings[slot].Hidden or SeriesRefusedAt(slot) then Exit;
   if FKbEdge then Exit(KbEdgeOf(FKbSeries, FKbRow) >= 0);
   Result := FKbRow < FStores[slot].Count;
 end;
@@ -443,7 +444,7 @@ begin
   Result := False;
   slot := SlotOfSeries(ASeriesIndex);
   if (slot < 0) or (slot > High(FBindings)) or (slot > High(FStores))
-    or (FStores[slot] = nil) or FBindings[slot].Hidden then Exit;
+    or (FStores[slot] = nil) or FBindings[slot].Hidden or SeriesRefusedAt(slot) then Exit;
   { [F5] an edge by its raw index }
   if AEdge then
   begin

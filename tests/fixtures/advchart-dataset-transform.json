@@ -62296,6 +62296,717 @@
      ]
     }
    ]
+  },
+  {
+   "id": "r-own-matrix-swap",
+   "group": "render",
+   "note": "own data, matrix scatter x 1, y 0: the points by the elements written",
+   "option": {
+    "animation": false,
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "4072c00000000000",
+        "4069000000000001"
+       ],
+       [
+        "407cc00000000000",
+        "40732aaaaaaaaaab"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-heat-swap",
+   "group": "render",
+   "note": "own data, matrix heatmap x 1, y 0, value 2",
+   "option": {
+    "animation": false,
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0,
+       "value": 2
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "heatmap",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "5"
+       },
+       {
+        "d": 1,
+        "text": "6"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-x",
+   "group": "render",
+   "note": "own data, matrix heatmap x [0, 3]: the collecting x header takes A, B, then Z",
+   "option": {
+    "animation": false,
+    "matrix": {},
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        0,
+        3
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "Z"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "A"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "heatmap",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "5"
+       },
+       {
+        "d": 1,
+        "text": "6"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B",
+      "Z"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-x-rev",
+   "group": "render",
+   "note": "own data, matrix scatter x [3, 0]: still A, B, Z; the points on element 3",
+   "option": {
+    "animation": false,
+    "matrix": {},
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        3,
+        0
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "Z"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "A"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "407e000000000000",
+        "4069000000000001"
+       ],
+       [
+        "406e000000000000",
+        "40732aaaaaaaaaab"
+       ]
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "5"
+       },
+       {
+        "d": 1,
+        "text": "6"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B",
+      "Z"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-y",
+   "group": "render",
+   "note": "own data, matrix scatter y [1, 3]: U, V, Z, A",
+   "option": {
+    "animation": false,
+    "matrix": {},
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        3
+       ],
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "Z"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "A"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "4072c00000000000",
+        "4061000000000000"
+       ],
+       [
+        "407cc00000000000",
+        "4069000000000000"
+       ]
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "5"
+       },
+       {
+        "d": 1,
+        "text": "6"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B"
+     ],
+     "y": [
+      "U",
+      "V",
+      "Z",
+      "A"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-gap",
+   "group": "render",
+   "note": "own data, matrix scatter x ['nope', 0]: place 0 a gap -- nothing drawn",
+   "option": {
+    "animation": false,
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        "nope",
+        0
+       ],
+       "y": 1
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "Z"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "A"
+       ]
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "7ff8000000000000",
+        "4069000000000001"
+       ],
+       [
+        "7ff8000000000000",
+        "40732aaaaaaaaaab"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      false,
+      false
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
+   "id": "r-own-matrix-fill",
+   "group": "render",
+   "note": "own data, matrix scatter y 0 alone: x takes element 1, the first nobody holds",
+   "option": {
+    "animation": false,
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2,
+     "seriesIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "y": 0
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "4072c00000000000",
+        "4069000000000001"
+       ],
+       [
+        "407cc00000000000",
+        "40732aaaaaaaaaab"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "matrix": [
+    {
+     "index": 0,
+     "x": [
+      "A",
+      "B"
+     ],
+     "y": [
+      "U",
+      "V"
+     ]
+    }
+   ],
+   "datasets": []
   }
  ],
  "guards": [
@@ -62733,6 +63444,10 @@
   },
   {
    "name": "matrix: x [3, 0] collects A, B, Z",
+   "ok": true
+  },
+  {
+   "name": "own matrix: x [3, 0] collects A, B, Z; a gap at place 0 draws nothing",
    "ok": true
   },
   {

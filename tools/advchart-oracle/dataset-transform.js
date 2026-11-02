@@ -881,6 +881,32 @@ L('r-list-matrix-y', 'matrix scatter y [1, 3]', mxc({ x: 0, y: [1, 3], value: 2 
 L('r-list-funnel-vw', 'funnel value [v, w]: the trapezoids are v',
   { dataset: { source: clone(PVGW) }, series: [{ type: 'funnel', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true } }] });
 
+// ---- [spec 264] a matrix series on its own data reads its encode too: the
+// coordinates as written, a list's later x or y entries parsed -- and
+// collected -- by the header's category list
+const MXD = [['A', 'U', 5, 'Z'], ['B', 'V', 6, 'A']];
+const mxd = (encode, type, data, fixed) => ({
+  matrix: fixed ? { x: { data: ['A', 'B'] }, y: { data: ['U', 'V'] } } : {},
+  visualMap: { show: false, min: 0, max: 10, dimension: 2, seriesIndex: 0 },
+  series: [{ type: type || 'scatter', coordinateSystem: 'matrix', encode, data: clone(data || MXD),
+    // (a scatter whose value is not written has no default label text:
+    // upstream's label element holds undefined and paints nothing)
+    label: { show: encode.value !== undefined } }] });
+const MXD_SWAP = [['U', 'A', 5, 9], ['V', 'B', 6, 4]];
+L('r-own-matrix-swap', 'own data, matrix scatter x 1, y 0: the points by the elements written', mxd({ x: 1, y: 0 }, 'scatter', MXD_SWAP, true),
+  { matrix: true, drawn: true });
+L('r-own-matrix-heat-swap', 'own data, matrix heatmap x 1, y 0, value 2', mxd({ x: 1, y: 0, value: 2 }, 'heatmap', MXD_SWAP, true),
+  { matrix: true, drawn: true });
+L('r-own-matrix-x', 'own data, matrix heatmap x [0, 3]: the collecting x header takes A, B, then Z', mxd({ x: [0, 3], y: 1, value: 2 }, 'heatmap'),
+  { matrix: true, drawn: true });
+L('r-own-matrix-x-rev', 'own data, matrix scatter x [3, 0]: still A, B, Z; the points on element 3', mxd({ x: [3, 0], y: 1, value: 2 }),
+  { matrix: true, drawn: true });
+L('r-own-matrix-y', 'own data, matrix scatter y [1, 3]: U, V, Z, A', mxd({ x: 0, y: [1, 3], value: 2 }), { matrix: true, drawn: true });
+L('r-own-matrix-gap', "own data, matrix scatter x ['nope', 0]: place 0 a gap -- nothing drawn", mxd({ x: ['nope', 0], y: 1 }, 'scatter', null, true),
+  { matrix: true, drawn: true });
+L('r-own-matrix-fill', 'own data, matrix scatter y 0 alone: x takes element 1, the first nobody holds', mxd({ y: 0 }, 'scatter', MXD_SWAP, true),
+  { matrix: true, drawn: true });
+
 // ---------------------------------------------------------------------------
 // guards: expectations read off the source
 // ---------------------------------------------------------------------------
@@ -995,6 +1021,9 @@ function guards(o) {
   guard('list: the stack spans the totals of v and w', ext('r-list-stack-second', 'y') === '0,12');
   guard('matrix: x [3, 0] collects A, B, Z', JSON.stringify(cs('r-list-matrix-x-rev').matrix[0].x) === JSON.stringify(['A', 'B', 'Z'])
     && JSON.stringify(cs('r-list-matrix-y').matrix[0].y) === JSON.stringify(['U', 'V', 'Z', 'A']));
+  guard('own matrix: x [3, 0] collects A, B, Z; a gap at place 0 draws nothing', JSON.stringify(cs('r-own-matrix-x-rev').matrix[0].x) === JSON.stringify(['A', 'B', 'Z'])
+    && JSON.stringify(cs('r-own-matrix-y').matrix[0].y) === JSON.stringify(['U', 'V', 'Z', 'A'])
+    && cs('r-own-matrix-gap').drawn[0].els.every(e => !e) && cs('r-own-matrix-swap').drawn[0].els.every(e => e));
   const thrown = id => cs(id).render.error;
   guard('dataZoom: a gap at place 0 filters by w; a slider throws', ext('r-list-dz-gap-filter', 'x') === '1.8,5.4'
     && cs('r-list-dz-gap-filter').render.series[0].count === 2 && /reading '0'/.test(thrown('r-list-dz-gap-slider') || ''));

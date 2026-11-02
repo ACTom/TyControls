@@ -4087,6 +4087,8 @@ begin
   s := Trunc(d.AsFloat);
   slot := SlotOfSeries(s);
   if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  { [spec 264] a refused series has no point, as no series has }
+  if SeriesRefusedAt(slot) then Exit;
   st := FStores[slot];
   row := -1;
   { queryDataIndex: dataIndexInside, else dataIndex (a raw index), else
@@ -4782,7 +4784,8 @@ begin
           sIdx := Trunc(APayload.Find('seriesIndex').AsFloat);
           raw := Trunc(d.AsFloat);
           { [R5-D] [item, series, coordinate system] over the global }
-          if SlotOfSeries(sIdx) >= 0 then
+          { [spec 264] (not for a refused series: it is no series here) }
+          if (SlotOfSeries(sIdx) >= 0) and not SeriesRefusedAt(SlotOfSeries(sIdx)) then
             isAxis := TyTooltipSpecOf(FOption, sIdx, raw,
               TipCoordNode(sIdx)).Trigger = tttAxis;
         end;

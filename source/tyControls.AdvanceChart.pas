@@ -3541,6 +3541,21 @@ type
       AStore: TTyDataStore);
     procedure RefuseShortWhisker(ASlot: Integer; const AEnc: TTySeriesEncode;
       const ADims: TTySeriesDimArray; const ACoord: TTyCoordDimArray; ABound: Integer);
+    { [spec 264] the series in slot ASlot was refused (RefuseShortWhisker):
+      it is in the model -- the legend, the axes' extents, dataZoom, the
+      option read back -- and out of the drawing: nothing addresses its
+      items, as if its index named no series (actions, showTip, the
+      keyboard, aria, brushSelected, selectchanged). False for a slot out of
+      range. }
+    function SeriesRefusedAt(ASlot: Integer): Boolean;
+    { [spec 264] a series on a matrix: its label and tooltip dimensions --
+      `encode.label` / `encode.tooltip`, else a written value's last entry a
+      label suits; a scatter with neither shows every element }
+    procedure MatrixTextDims(ASlot: Integer; const AEnc: TTySeriesEncode;
+      const ASource: TTyChartSource; AStore: TTyDataStore);
+    { [spec 264] a list's later x or y entries on a matrix parse -- and a
+      collecting tree collects -- by that tree's category list }
+    procedure MatrixExtraMeta(ASlot: Integer; AStore: TTyDataStore);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
     procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore;
