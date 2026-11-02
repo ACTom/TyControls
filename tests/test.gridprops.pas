@@ -32,6 +32,7 @@ type
     procedure TestAutoSizeIndexCountsAFrozenColumnOnce;
     procedure TestAutoSizeIndexLeavesRoomForTheVerticalBar;
     procedure TestIndicatorWidthUpdatesTheScrollBars;
+    procedure TestShowIndicatorUpdatesTheScrollBars;
     procedure TestHeaderGroupLevelAndAlignmentRepaint;
     procedure TestGroupRowFormatRepaints;
     procedure TestANewColumnTakesDefaultColWidth;
@@ -128,6 +129,24 @@ begin
     AssertEquals('setup: no horizontal bar', g.ClientHeight, g.ViewH);
     g.IndicatorWidth := 60;
     AssertTrue('a wider row-header slot brings the bar', g.ViewH < g.ClientHeight);
+  finally
+    g.Free;
+  end;
+end;
+
+{ #127: the row-header slot turned on or off changes how wide the content is, as its width does. }
+procedure TGridPropsTest.TestShowIndicatorUpdatesTheScrollBars;
+var
+  g: TGridProbe;
+begin
+  g := NewGrid([90, 90, 90]);   // 270: it all fits without the slot
+  try
+    g.IndicatorWidth := 60;
+    AssertEquals('setup: no horizontal bar', g.ClientHeight, g.ViewH);
+    g.ShowIndicator := True;    // 60 + 270 = 330
+    AssertTrue('turning the slot on brings the bar', g.ViewH < g.ClientHeight);
+    g.ShowIndicator := False;
+    AssertEquals('turning it off takes the bar away', g.ClientHeight, g.ViewH);
   finally
     g.Free;
   end;
