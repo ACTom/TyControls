@@ -257,6 +257,34 @@ function cases() {
       lineStyle: { color: '#aa0002' }, label: { show: false }, controlStyle: { show: false },
       checkpointStyle: { symbol: 'circle', symbolSize: [10, 24], color: '#fff', borderColor: '#aa0003', borderWidth: 2,
         animation: false } } }, options: [{}, {}, {}] }],
+    // ---- [R7-R] a strokeNoScale graphic element scaled 2 and turned a third
+    // of a half turn: its transform's diagonal holds a one (cos 60 * 2), so
+    // getLineScale is 1 and the pen 2 wide on the canvas (round: a turn and a
+    // uniform scale); beside it a stretched one, the case's own ----
+    ['graphic-quirk', { animation: false, graphic: [
+      { type: 'polyline', x: 150, y: 120, scaleX: 2, scaleY: 2, rotation: Math.PI / 3,
+        shape: { points: [[0, 0], [40, 0], [40, 30]] }, style: { fill: null, stroke: '#a90007', lineWidth: 1.5, strokeNoScale: true } },
+      { type: 'polyline', x: 60, y: 200, scaleX: 1, scaleY: 3, shape: { points: [[0, 0], [30, 10], [60, 0]] },
+        style: { fill: null, stroke: '#a90008', lineWidth: 2, strokeNoScale: true } },
+    ] }],
+    // ---- [R7-R] a lines series' effect symbol: createSymbol(type, -0.5,
+    // -0.5, 1, 1) scaled by effect.symbolSize, not strokeNoScale -- its pen
+    // (effect.borderColor / borderWidth / borderType, or symbolPathSetColor's
+    // two for an empty one, the colour for a 'line') stretched by that scale
+    // and turned along the line, where its clip's first step put it ----
+    ['lines-effect', { animation: false, xAxis: { show: false, type: 'value', min: 0, max: 10 },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { color: '#999', opacity: 1 },
+        effect: { show: true, trailLength: 0, delay: 0, period: 4 },
+        data: [
+          { coords: [[1, 8], [9, 8]], effect: { symbol: 'rect', symbolSize: [12, 6], color: '#ddd',
+            borderColor: '#ac0001', borderWidth: 0.5, borderType: 'dashed' } },
+          { coords: [[1, 5], [8, 2]], effect: { symbol: 'emptyCircle', symbolSize: [10, 4], color: '#ac0002',
+            borderColor: '#000', borderWidth: 0.1 } },
+          { coords: [[2, 1], [2, 9]], effect: { symbol: 'line', symbolSize: [3, 9], color: '#ac0003', borderWidth: 0.4 } },
+          { coords: [[6, 6], [9, 3]], lineStyle: { curveness: 0.3 }, effect: { symbol: 'triangle', symbolSize: [8, 14],
+            color: '#ddd', borderColor: '#ac0004', borderWidth: 0.25, borderType: [2, 1], borderDashOffset: 1 } },
+        ] }] }, { step: true }],
   ];
 }
 
@@ -274,12 +302,16 @@ function boxCentre(el) {
   return [(x0 + x1) / 2, (y0 + y1) / 2];
 }
 
-function run(id, option) {
+function run(id, option, more) {
   STROKES = [];
   CUR = null;
+  NOW = T_BASE;
   const dom = fakeCanvas(W, H);
   const chart = echarts.init(dom, null, { renderer: 'canvas', width: W, height: H, devicePixelRatio: 1 });
   chart.setOption(option);
+  // [R7-R] a case that steps its clips once at T0: an effect symbol is
+  // ignored until its clip's first step places it
+  if (more && more.step) chart.getZr().animation.update();
   chart.getZr().refreshImmediately();
   const out = [];
   for (const s of STROKES) {
@@ -310,7 +342,7 @@ function aniso(s) {
 }
 
 function generate() {
-  const charts = cases().map(([id, o]) => run(id, o));
+  const charts = cases().map(([id, o, more]) => run(id, o, more));
   // every case has a stretched pen somewhere
   charts.forEach(c => must(c.strokes.some(aniso), c.id + ': no stretched pen'));
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node, zrender canvas painter on a recording context',

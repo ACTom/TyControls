@@ -34,7 +34,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Legend,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Lines,
-     tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart;
 type
   TLnProbe = class(TTyAdvanceChart)
   public
@@ -81,6 +81,10 @@ type
     procedure CheckSeries(ARec: TJSONObject);
     procedure CheckItem(ASeries: Integer; const ASol: TTyLinesSolved; AItem: TJSONObject);
     procedure CheckFrame(AFrame: TJSONObject);
+    { [R7-R] the effect symbol's pen as upstream's style holds it, in its
+      own frame (ARot, ASX, ASY: its rotation and scale there) }
+    procedure CheckEffPen(const AWhat: string; const AEl: TTyChartElement; APen: TJSONObject;
+      ARot, ASX, ASY: Double);
     procedure CheckStep(AStep: TJSONObject; ALegend: Boolean);
     procedure CheckLegend(AWant: TJSONArray);
     procedure Finish(ACount: Integer);
@@ -118,6 +122,7 @@ type
     procedure TestTheLinesArePainted;
     procedure TestAnUpdateKeepsTheEffectRunning;
     procedure TestALabelOffsetIsInCssPx;
+    procedure TestTheEffectPenIsInCssPx;
   end;
 
 implementation
@@ -820,6 +825,106 @@ begin
   if not IsNan(HexNum(eff.Find('x'))) then
     SameHex(what + ' effect rotation at 0', runSt.Rotation, eff.Find('rotation'));
   SameHex(what + ' effect scaleY at 0', runSt.ScaleY, eff.Find('scaleY'));
+  if eff.Find('pen') is TJSONObject then
+    CheckEffPen(what + ' effect', el, eff.Objects['pen'], HexNum(eff.Find('rotation')),
+      HexNum(eff.Find('scaleX')), HexNum(eff.Find('scaleY')));
+end;
+
+procedure TAdvChartLinesOracleTest.CheckEffPen(const AWhat: string; const AEl: TTyChartElement;
+  APen: TJSONObject; ARot, ASX, ASY: Double);
+var
+  m, E: TTyMat2D;
+  lw, w, ps, n: Double;
+  gu, gp: array[0..2] of Double;
+  d: TJSONData;
+  k: Integer;
+  word: string;
+
+  procedure Gram(const A: TTyMat2D; AW: Double; var G: array of Double);
+  begin
+    G[0] := (A[0] * A[0] + A[2] * A[2]) * AW * AW;
+    G[1] := (A[0] * A[1] + A[2] * A[3]) * AW * AW;
+    G[2] := (A[1] * A[1] + A[3] * A[3]) * AW * AW;
+  end;
+
+begin
+  { the fill zrender's hasFill() sees, in its colour }
+  SameBool(AWhat + ' fills', AEl.Style.HasFill, APen.Booleans['hasFill']);
+  if APen.Booleans['hasFill'] and (APen.Find('fill') is TJSONArray) then
+    SameColour(AWhat + ' fill colour', AEl.Style.FillColor, APen.Find('fill'));
+  SameBool(AWhat + ' strokes', AEl.Style.StrokeWidthLogical > 0, APen.Booleans['hasStroke']);
+  SameHex(AWhat + ' opacity', AEl.Style.Alpha, APen.Find('opacity'));
+  { the shadow, its colour the effect's unless written }
+  SameHex(AWhat + ' shadowBlur', AEl.Style.ShadowBlur, APen.Find('shadowBlur'));
+  SameHex(AWhat + ' shadowOffsetX', AEl.Style.ShadowOffsetX, APen.Find('shadowOffsetX'));
+  SameHex(AWhat + ' shadowOffsetY', AEl.Style.ShadowOffsetY, APen.Find('shadowOffsetY'));
+  if (HexNum(APen.Find('shadowBlur')) <> 0) or (HexNum(APen.Find('shadowOffsetX')) <> 0)
+    or (HexNum(APen.Find('shadowOffsetY')) <> 0) then
+    SameColour(AWhat + ' shadowColor', AEl.Style.ShadowColor, APen.Find('shadowColor'));
+  if not APen.Booleans['hasStroke'] then Exit;
+  SameColour(AWhat + ' stroke colour', AEl.Style.StrokeColor, APen.Find('stroke'));
+  { the width in the symbol's own frame, as written }
+  lw := HexNum(APen.Find('lineWidth'));
+  SameHex(AWhat + ' lineWidth', AEl.Style.StrokeWidthLogical, APen.Find('lineWidth'));
+  { THE PEN ON THE CANVAS: the symbol's local transform (its scale, then its
+    turn) times a round pen of lineWidth -- the same ellipse as the
+    renderer's (TyStylePenOf, else the width times PenScale) }
+  m := TyZrLocal(ASX, ASY, ARot, 0, 0);
+  Gram(m, lw, gu);
+  if TyStylePenOf(AEl.Style, E) then
+    w := AEl.Style.StrokeWidthLogical
+  else
+  begin
+    E := Default(TTyMat2D);
+    E[0] := 1;
+    E[3] := 1;
+    ps := AEl.Style.PenScale;
+    if (ps <= 0) or IsNan(ps) or IsInfinite(ps) then ps := 1;
+    w := AEl.Style.StrokeWidthLogical * ps;
+  end;
+  Gram(E, w, gp);
+  n := Max(Abs(gu[0]), Abs(gu[2]));
+  Inc(FCompared);
+  if (Abs(gu[0] - gp[0]) > 1e-9 * n) or (Abs(gu[1] - gp[1]) > 1e-9 * n)
+    or (Abs(gu[2] - gp[2]) > 1e-9 * n) then
+    Miss(Format('%s pen E E^T %.6g %.6g %.6g, upstream %.6g %.6g %.6g',
+      [AWhat, gp[0], gp[1], gp[2], gu[0], gu[1], gu[2]]));
+  { the dash: a word kept as one (normalised against the width it strokes
+    at), or the lengths in the symbol's frame; its phase }
+  d := APen.Find('lineDash');
+  if d is TJSONArray then
+  begin
+    SameInt(AWhat + ' dash count', Length(AEl.Style.DashLogical), d.Count);
+    if Length(AEl.Style.DashLogical) = d.Count then
+      for k := 0 to d.Count - 1 do
+        SameHex(AWhat + ' dash ' + IntToStr(k), AEl.Style.DashLogical[k], TJSONArray(d).Items[k]);
+  end
+  else if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    word := d.AsString;
+    if word = 'dashed' then SameInt(AWhat + ' dash word', AEl.Style.DashWord, 1)
+    else if word = 'dotted' then SameInt(AWhat + ' dash word', AEl.Style.DashWord, 2)
+    else SameInt(AWhat + ' no dash', Length(AEl.Style.DashLogical), 0);
+  end
+  else
+    SameInt(AWhat + ' no dash', Length(AEl.Style.DashLogical) + AEl.Style.DashWord, 0);
+  SameHex(AWhat + ' dash offset', AEl.Style.DashOffsetLogical, APen.Find('lineDashOffset'));
+  { cap, join, miter as the canvas takes them (null: its default) }
+  if APen.Find('lineCap').JSONType = jtString then
+    SameInt(AWhat + ' cap', AEl.Style.LineCap, TyCapOfWord(APen.Strings['lineCap']))
+  else
+    SameInt(AWhat + ' cap', AEl.Style.LineCap, 0);
+  if APen.Find('lineJoin').JSONType = jtString then
+    SameInt(AWhat + ' join', AEl.Style.LineJoin, TyJoinOfWord(APen.Strings['lineJoin']))
+  else
+    SameInt(AWhat + ' join', AEl.Style.LineJoin, 0);
+  if APen.Find('miterLimit').JSONType <> jtNull then
+  begin
+    if AEl.Style.MiterLimit = 0 then
+      SameHex(AWhat + ' miter', 10, APen.Find('miterLimit'))
+    else
+      SameHex(AWhat + ' miter', AEl.Style.MiterLimit, APen.Find('miterLimit'));
+  end;
 end;
 
 procedure TAdvChartLinesOracleTest.CheckSeries(ARec: TJSONObject);
@@ -1120,6 +1225,29 @@ begin
         SameHex(what + ' effect rotation', runSt.Rotation, eff.Find('rotation'));
       SameHex(what + ' effect scaleX', runSt.ScaleX, eff.Find('scaleX'));
       SameHex(what + ' effect scaleY', runSt.ScaleY, eff.Find('scaleY'));
+      { [R7-R] the pen the frame draws it with, at this scale and turn }
+      if (eff.Find('pen') is TJSONObject) and not eff.Booleans['ignore'] then
+      begin
+        idx := -1;
+        if FChart.Frame <> nil then
+        begin
+          for e := 0 to FChart.Frame.Count - 1 do
+            if (FChart.Frame.Element(e).Anim.Role = carLinesEffect)
+              and (FChart.Frame.Element(e).Anim.Series = s)
+              and (FChart.Frame.Element(e).Anim.Index = k) then idx := e;
+          if idx >= 0 then el := FChart.Frame.Element(idx);
+        end
+        else
+        begin
+          { no frame drawn yet: the list at rest is the first step's }
+          idx := ElOf(s, k, carLinesEffect);
+          if idx >= 0 then el := FChart.List.Element(idx);
+        end;
+        if idx < 0 then Miss(what + ': no effect in the frame')
+        else
+          CheckEffPen(what + ' frame effect', el, eff.Objects['pen'],
+            HexNum(eff.Find('rotation')), HexNum(eff.Find('scaleX')), HexNum(eff.Find('scaleY')));
+      end;
     end;
   end;
 end;
@@ -1812,6 +1940,41 @@ end;
   from where __t was (delay -period * __t) }
 { [spec 242] a label's offset is CSS px: on a 192 PPI screen it moves the
   label twice the device px it does at 96 }
+{ [R7-R] THE EFFECT SYMBOL'S PEN IN ITS OWN FRAME, css px: createSymbol's
+  unit box scaled by effect.symbolSize [12, 6] -- the pen's size the root of
+  12 x 6 at any PPI (the frame's scale in device px over the device's), its
+  shape that scale over the root, turned along the line }
+procedure TAdvChartLinesTest.TestTheEffectPenIsInCssPx;
+var
+  p, k, idx: Integer;
+  el: TTyChartElement;
+  opt: string;
+  E: TTyMat2D;
+begin
+  opt := cBase + '"series":[{"type":"lines","coordinateSystem":"cartesian2d",'
+    + '"effect":{"show":true,"symbol":"rect","symbolSize":[12,6],"borderColor":"#000",'
+    + '"borderWidth":0.5,"delay":0,"trailLength":0},'
+    + '"data":[{"coords":[[10,50],[80,50]]}]}]}';
+  Show(opt, camOff);
+  for p := 0 to 1 do
+  begin
+    FChart.SetOption(opt, True);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96 * (p + 1));
+    idx := -1;
+    for k := 0 to FChart.List.Count - 1 do
+      if FChart.List.Element(k).Anim.Role = carLinesEffect then idx := k;
+    AssertTrue('the effect', idx >= 0);
+    el := FChart.List.Element(idx);
+    AssertEquals(Format('%d: the border in its frame', [p]), 0.5, el.Style.StrokeWidthLogical, 1e-12);
+    AssertEquals(Format('%d: the pen''s size', [p]), Sqrt(72), el.Style.PenScale, 1e-9);
+    { the frame's x axis 12 long, its y axis 6, turned along the line }
+    AssertTrue(Format('%d: a stretched pen', [p]), TyStylePenOf(el.Style, E));
+    AssertEquals(Format('%d: its x axis', [p]), 12, Sqrt(E[0] * E[0] + E[1] * E[1]), 1e-9);
+    AssertEquals(Format('%d: its y axis', [p]), 6, Sqrt(E[2] * E[2] + E[3] * E[3]), 1e-9);
+  end;
+end;
+
 procedure TAdvChartLinesTest.TestALabelOffsetIsInCssPx;
 var
   d: array[0..1] of TTyPointF;

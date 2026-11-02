@@ -384,8 +384,9 @@ begin
   AssertTrue(Format('labels a state turned (%d)', [FTurned]), FTurned >= 2);
   { graph.edge.squash: two labels at rest, then after each of three steps;
     [R7-O] graph.edge.squash.sym four at rest and after each of seven,
-    graph.edge.squash.tall three at rest and after each of five }
-  AssertEquals('labels compared under a squashed map', 8 + 32 + 18, FSquashed);
+    graph.edge.squash.tall three at rest and after each of five; [R7-R]
+    graph.edge.squash.oblong three at rest and after each of five }
+  AssertEquals('labels compared under a squashed map', 8 + 32 + 18 + 18, FSquashed);
 end;
 
 initialization
