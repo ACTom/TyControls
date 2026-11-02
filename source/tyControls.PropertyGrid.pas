@@ -453,6 +453,8 @@ type
     procedure MenuDeleteClick(Sender: TObject);
     procedure MenuUpClick(Sender: TObject);
     procedure MenuDownClick(Sender: TObject);
+    { Loaded's second look at the selection, once the message loop runs again (#183). }
+    procedure RefreshAfterLoad(Data: PtrInt);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); override;
@@ -2298,6 +2300,15 @@ begin
   { A list read from the form file was saved with the categories closed that it leaves out. }
   if NamesCategory(FExpanded) then FCategoriesGiven := True;
   RebuildRows(False);
+  { #183: the component inspected may be read after the grid, so its own Loaded has not run yet,
+    and the form has not been laid out (an alClient panel still has its designed size). What it
+    holds is read again once loading is over. }
+  if Length(FSelected) > 0 then Application.QueueAsyncCall(@RefreshAfterLoad, 0);
+end;
+
+procedure TTyCustomPropertyGrid.RefreshAfterLoad(Data: PtrInt);
+begin
+  if not (csDestroying in ComponentState) then Refresh;
 end;
 
 function TTyCustomPropertyGrid.GetStyleTypeKey: string;

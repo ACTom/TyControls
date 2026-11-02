@@ -88,6 +88,7 @@ type
     procedure TestASetterThatRebuildsTheRowsEndsTheWrite;
     procedure TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
     procedure TestAWriteThatChangesTheStructureRebuildsTheRows;
+    procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
   end;
 
 implementation
@@ -98,6 +99,13 @@ type
   published
     Grid: TTyPropertyGrid;
     Button1: TTyButton;
+  end;
+
+  { The grid read before the component it inspects, whose Loaded comes after the grid's. }
+  TPGLoadedHostForm = class(TForm)
+  published
+    Grid: TTyPropertyGrid;
+    Comp: TPGLoadedComp;
   end;
 
 procedure TPropertyGridControlTest.SetUp;
@@ -754,6 +762,44 @@ begin
   finally
     FGrid.SelectedObject := nil;
     c.Free;
+  end;
+end;
+
+{ The grid comes before the component in the form file, so its Loaded -- the first build -- runs
+  before the component's own Loaded sets Level. Once loading is over the rows read it again. }
+procedure TPropertyGridControlTest.TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
+var
+  src, dst: TPGLoadedHostForm;
+  ms: TMemoryStream;
+  i: Integer;
+  level: TTyValueRow;
+begin
+  RegisterClasses([TTyPropertyGrid, TPGLoadedComp]);
+  src := TPGLoadedHostForm.CreateNew(nil);
+  dst := TPGLoadedHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    src.Name := 'PGLoadedHostForm1';
+    src.Grid := TTyPropertyGrid.Create(src);
+    src.Grid.Name := 'Grid';
+    src.Grid.Parent := src;
+    src.Comp := TPGLoadedComp.Create(src);
+    src.Comp.Name := 'Comp';
+    src.Grid.SelectedComponent := src.Comp;
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    AssertEquals('the component set itself up', 99, dst.Comp.Level);
+    Forms.Application.ProcessMessages;
+    level := nil;
+    for i := 0 to dst.Grid.RowCount - 1 do
+      if dst.Grid.Row(i).Key = 'Level' then level := dst.Grid.Row(i);
+    AssertNotNull('Level listed', level);
+    AssertEquals('and the row reads what it holds now', '99', level.Value);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
   end;
 end;
 

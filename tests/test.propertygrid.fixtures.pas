@@ -292,6 +292,16 @@ type
     property Items: TOwnedCollection read FItems;
   end;
 
+  { Sets Level in its Loaded, as a control that finishes setting itself up once it is read. }
+  TPGLoadedComp = class(TComponent)
+  private
+    FLevel: Integer;
+  protected
+    procedure Loaded; override;
+  published
+    property Level: Integer read FLevel write FLevel;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -586,6 +596,12 @@ begin
     it.Caption := 'item' + IntToStr(it.Index);
   end;
   while FItems.Count > AValue do FItems.Delete(FItems.Count - 1);
+end;
+
+procedure TPGLoadedComp.Loaded;
+begin
+  inherited Loaded;
+  FLevel := 99;
 end;
 
 { ---- TPGEditAccess ---- }
