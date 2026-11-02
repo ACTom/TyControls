@@ -134,6 +134,9 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
+    { #170: tells the owner a property of this column changed, so a descendant's setter can
+      repaint it -- Changed(False) reaches no one (TTyColumns has no Update of its own). }
+    procedure ColumnChanged;
     { #70. A move through Index -- the IDE's collection editor moves columns this way --
       went unheard: TCollectionItem.SetIndex calls Changed, which reaches an Update that
       TTyColumns does not override. See the implementation. }
@@ -647,6 +650,11 @@ procedure TTyColumn.NotifyOwner;
 begin
   if Collection <> nil then
     GetOwnerColumns.DoChange;
+end;
+
+procedure TTyColumn.ColumnChanged;
+begin
+  NotifyOwner;
 end;
 
 procedure TTyColumn.SetIndex(Value: Integer);
