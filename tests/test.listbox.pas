@@ -1167,51 +1167,59 @@ end;
 procedure TListBoxGestureTest.TestTheMultiSelectCaretRowIsDrawn;
 var
   l: TGestureProbe;
-  a, b: TBitmap;
-  ba, bb: TBGRABitmap;
-  r1, r2: TRect;
-  x, y, d1, d2: Integer;
+
+  { Row ARow's band, rendered with the caret on ACaret, focused or not. }
+  function Band(ACaret: Integer; AFocused: Boolean): TBGRABitmap;
+  var bmp: TBitmap;
+  begin
+    while l.ItemIndex < ACaret do l.Key(VK_DOWN);
+    while l.ItemIndex > ACaret do l.Key(VK_UP);
+    l.FocusedForTest := AFocused;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(160, 120);
+      l.Render(bmp.Canvas, Rect(0, 0, 160, 120));
+      Result := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+  function Diff(A, B: TBGRABitmap; ARow: Integer): Integer;
+  var r: TRect; x, y: Integer;
+  begin
+    Result := 0;
+    r := l.ItemRect(ARow);
+    for x := 12 to 148 do
+      for y := r.Top to r.Bottom - 1 do
+        if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+  end;
+
+var
+  on1, on3, off1, off3: TBGRABitmap;
 begin
   l := NewProbe(FForm, 4);
   l.MultiSelect := True;
   l.ExtendedSelect := False;   // the arrows move the caret alone
   l.Key(VK_DOWN);
-  l.Key(VK_DOWN);
-  AssertEquals('setup: the caret on row 1', 1, l.ItemIndex);
   AssertEquals('setup: nothing selected', 0, l.SelCount);
-  a := TBitmap.Create;
-  b := TBitmap.Create;
+  on1 := Band(1, True);
+  on3 := Band(3, True);
+  off1 := Band(1, False);
+  off3 := Band(3, False);
   try
-    a.PixelFormat := pf32bit; a.SetSize(160, 120);
-    b.PixelFormat := pf32bit; b.SetSize(160, 120);
-    l.FocusedForTest := True;
-    l.Render(a.Canvas, Rect(0, 0, 160, 120));
-    l.FocusedForTest := False;
-    l.Render(b.Canvas, Rect(0, 0, 160, 120));
-    ba := TBGRABitmap.Create(a);
-    bb := TBGRABitmap.Create(b);
-    try
-      r1 := l.ItemRect(1);
-      r2 := l.ItemRect(2);
-      d1 := 0;
-      d2 := 0;
-      for x := 12 to 148 do
-      begin
-        for y := r1.Top to r1.Bottom - 1 do
-          if ba.GetPixel(x, y) <> bb.GetPixel(x, y) then Inc(d1);
-        for y := r2.Top + 1 to r2.Bottom - 1 do
-          if ba.GetPixel(x, y) <> bb.GetPixel(x, y) then Inc(d2);
-      end;
-    finally
-      ba.Free;
-      bb.Free;
-    end;
+    AssertEquals('setup: still nothing selected', 0, l.SelCount);
+    AssertTrue(Format('focused, the caret row is outlined (%d px)', [Diff(on1, on3, 1)]),
+      Diff(on1, on3, 1) > 100);
+    AssertEquals('a row the caret is not on is not', 0, Diff(on1, on3, 2));
+    AssertEquals('unfocused, no caret is drawn', 0, Diff(off1, off3, 1));
   finally
-    a.Free;
-    b.Free;
+    on1.Free;
+    on3.Free;
+    off1.Free;
+    off3.Free;
   end;
-  AssertTrue(Format('focused, the caret row is outlined (%d px)', [d1]), d1 > 100);
-  AssertEquals('and no other row is', 0, d2);
 end;
 
 procedure TListBoxGestureTest.TestTypingFindsARow;
