@@ -234,6 +234,7 @@ uses
   test.advchart.multiline, test.bgrarandompin,
   test.advchart.jsregexp,
   test.advchart.graphictip,
+  test.advchart.rendergaps,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,
