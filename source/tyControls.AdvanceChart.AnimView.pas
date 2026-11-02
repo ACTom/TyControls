@@ -6820,6 +6820,9 @@ begin
           AEl.Caption.RotationRad := AEl.Caption.RotationRad + (rot - rot1);
         AEl.Caption.AnchorH := ah;
         AEl.Caption.AnchorV := av;
+        { [R7-N] squashed, at this frame's place and turn [was: the map of
+          the rest drawn all along] }
+        TyCaptionAffineSync(AEl.Caption);
       end;
   end;
 end;

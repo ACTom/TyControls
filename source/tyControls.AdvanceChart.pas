@@ -5068,6 +5068,10 @@ type
     { [R5-I] a continuous visual map's handle label's opacity as drawn now
       (its blur's fade) }
     function VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
+    { [R7-N] a continuous visual map's words' own opacity (textStyle's,
+      else the root textStyle's, else 1): a handle label's normal state, which
+      its blur leaves and comes back to }
+    function VmLabelOwnOpacity(AIndex: Integer): Double;
     { what the pointer at (AX, AY) is over of a visualMap, as zrender would
       find it: 'vm0.inRange', 'vm0.outOfRange', 'vm0.handle1', 'vm0.label0',
       'vm0.text1', 'vm0.item3.symbol', 'vm0.item3.label', 'vm0.ends0'; ''

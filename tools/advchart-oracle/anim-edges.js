@@ -652,6 +652,13 @@ add('vmap', 'vm-blur', "the pointer over a continuous visualMap's bar shows the 
   ['vmlab'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'move', x: 38, y: 209 }, ...after([0, 1, 50, 100, 199, 200, 201], T1),
     { t: T1 + 1000, do: 'move', x: 300, y: 50 }, ...after([0, 1, 100, 201], T1 + 1000)]);
+add('vmap', 'vm-blur-own', "[R7-N] the same with textStyle.opacity 0.6: the handle labels rest at 0.6, fade to the blur's 0.1 and back to 0.6 (the normal state's own opacity, not 1)",
+  { animation: true, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+    visualMap: { type: 'continuous', min: 0, max: 100, calculable: true, left: 10, bottom: 20, itemHeight: 100, itemWidth: 20, textStyle: { opacity: 0.6 } },
+    series: [{ type: 'scatter', data: [[1, 10], [2, 50], [3, 90]] }] },
+  ['vmlab'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'move', x: 38, y: 209 }, ...after([0, 1, 50, 100, 199, 200, 201], T1),
+    { t: T1 + 1000, do: 'move', x: 300, y: 50 }, ...after([0, 1, 100, 201], T1 + 1000)]);
 
 // ---- stateAnimation's forms ----
 const SA = sa => ({ animation: true, animationDuration: 10, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },

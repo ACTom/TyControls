@@ -75,6 +75,7 @@ type
     function HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function HDur300(ADataIndex: Integer; AHasIndex: Boolean): Double;
     procedure ProbeTmWords(ARec: TJSONObject);
+    procedure ProbeTmBox(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -1162,6 +1163,112 @@ begin
   end;
 end;
 
+{ [R7-N] A CONTENT LABEL'S PLATE IN THIS FRAME: the content rect as it is
+  now, less the padding (TreemapView's beforeUpdate, every frame) -- the
+  frame's label of that row (a deleted one: the label right after its ghost
+  rect), its block's whole box on the canvas and its first text }
+procedure TAdvChartAnimUpdate4OracleTest.ProbeTmBox(ARec: TJSONObject);
+var
+  i, k, s, row, slash, at: Integer;
+  name, rest: string;
+  leaf: TJSONObject;
+  l: TTyPaintList;
+  e, lab: TTyChartElement;
+  found, del: Boolean;
+  d: TTyRtDrawn;
+  gx, gy, gx2, gy2: Double;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'tb' then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, slash - 3));
+    rest := Copy(name, slash + 1, MaxInt);
+    del := Copy(rest, 1, 1) = 'd';
+    if del then row := StrToInt(Copy(rest, 2, MaxInt)) else row := StrToInt(rest);
+    l := FChart.Frame;
+    if (l = nil) or (l.Count = 0) then l := FChart.List;
+    found := False;
+    lab := Default(TTyChartElement);
+    if l <> nil then
+      if del then
+      begin
+        at := -1;
+        for k := 0 to l.Count - 1 do
+        begin
+          e := l.Element(k);
+          if (e.Anim.Role = carTmRect) and (e.Anim.Series = s) and (e.Anim.Index = row)
+            and (e.Anim.Sub = 1) then at := k;
+        end;
+        if (at >= 0) and (at + 1 < l.Count) and (l.Element(at + 1).Anim.Role = carLabel) then
+        begin
+          lab := l.Element(at + 1);
+          found := True;
+        end;
+      end
+      else
+        for k := 0 to l.Count - 1 do
+        begin
+          e := l.Element(k);
+          if (e.Anim.Role = carLabel) and (e.Datum.SeriesIndex = s) and (e.Anim.Index = row)
+            and (e.Caption.ItemSpec = row + 1) then
+          begin
+            lab := e;
+            found := True;
+            Break;
+          end;
+        end;
+    Inc(FCompared);
+    if ARec.Items[i].JSONType = jtNull then
+    begin
+      if found and not lab.Ignore then Bad(name + ': a label drawn here, none upstream');
+      Continue;
+    end;
+    leaf := TJSONObject(ARec.Items[i]);
+    if not found or lab.Ignore or (Length(lab.Caption.RtPieces) = 0)
+      or (lab.Caption.RtPieces[0].Kind <> rpkRect) then
+    begin
+      Bad(name + ': upstream draws the plate, the port no block');
+      Continue;
+    end;
+    d := Default(TTyRtDrawn);
+    d.Pieces := lab.Caption.RtPieces;
+    d.X := lab.Caption.X;
+    d.Y := lab.Caption.Y;
+    d.RotationRad := lab.Caption.RotationRad;
+    d.Scale := lab.Caption.RtScale;
+    if d.Scale <= 0 then d.Scale := 1;
+    if leaf.Find('box') is TJSONArray then
+    begin
+      TyRtDrawnPoint(d, d.Pieces[0].X, d.Pieces[0].Y, gx, gy);
+      TyRtDrawnPoint(d, d.Pieces[0].X + d.Pieces[0].W, d.Pieces[0].Y + d.Pieces[0].H, gx2, gy2);
+      NearNum(name + ' plate left', gx, leaf.Arrays['box'].Items[0], 1e-6);
+      NearNum(name + ' plate top', gy, leaf.Arrays['box'].Items[1], 1e-6);
+      NearNum(name + ' plate right', gx2, leaf.Arrays['box'].Items[2], 1e-6);
+      NearNum(name + ' plate bottom', gy2, leaf.Arrays['box'].Items[3], 1e-6);
+    end;
+    if leaf.Find('span') is TJSONArray then
+    begin
+      at := -1;
+      for k := 0 to High(d.Pieces) do
+        if (at < 0) and (d.Pieces[k].Kind = rpkText) and (d.Pieces[k].Text <> '') then at := k;
+      Inc(FCompared);
+      if at < 0 then
+      begin
+        Bad(name + ': upstream draws words, the port none');
+        Continue;
+      end;
+      if d.Pieces[at].Text <> leaf.Strings['text'] then
+        Bad(Format('%s: the words "%s", upstream "%s"', [name, d.Pieces[at].Text,
+          leaf.Strings['text']]));
+      TyRtDrawnPoint(d, d.Pieces[at].X, d.Pieces[at].Y, gx, gy);
+      NearNum(name + ' words x', gx, leaf.Arrays['span'].Items[0], 1e-6);
+      NearNum(name + ' words y', gy, leaf.Arrays['span'].Items[1], 1e-6);
+    end;
+  end;
+end;
+
 procedure TAdvChartAnimUpdate4OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -1172,6 +1279,7 @@ begin
     else if AProbes.Strings[i] = 'sun' then ProbeSun(ARec)
     else if AProbes.Strings[i] = 'tm' then ProbeTm(ARec)
     else if AProbes.Strings[i] = 'tmw' then ProbeTmWords(ARec)
+    else if AProbes.Strings[i] = 'tmb' then ProbeTmBox(ARec)
     else if AProbes.Strings[i] = 'geo' then ProbeGeo(ARec)
     else if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
     else if AProbes.Strings[i] = 'radar' then ProbeRadar(ARec)

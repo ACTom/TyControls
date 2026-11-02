@@ -194,6 +194,14 @@ const CASES = [
       edgeLabel: { show: true }, emphasis: { edgeLabel: { position: 'insideBottomRight' } },
       data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 260 }], links: [{ source: 'a', target: 'b' }] }] },
     steps: [EHL(0)] },
+  // [R7-N] under a view whose scaleY is not its scaleX (400 x 200 over a 100 x 100 extent): the state's label, laid out by its
+  // textConfig, is still squashed by scaleY / scaleX before its turn
+  { id: 'graph.edge.squash', edges: true, note: "[R7-N] layout none, scaleX 4, scaleY 2; emphasis.edgeLabel rotate 30, offset [4, 2] and position top on a slanted and a level edge",
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, edgeLabel: { show: true, formatter: 'edge' },
+      emphasis: { edgeLabel: { rotate: 30, offset: [4, 2] } },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'a', target: 'c', emphasis: { label: { position: 'top' } } }] }] },
+    steps: [EHL(0), EDP(0), EHL(1)] },
   // ---- a normal position zrender does not know: the rect's top-left (calculateTextPosition has no default) ----
   { id: 'normal.word.bar', note: "label.position 'foo' on bars: each bar's rect top-left, aligned left / top",
     option: bar({ label: { show: true, position: 'foo' } }), steps: [] },

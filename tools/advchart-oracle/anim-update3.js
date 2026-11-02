@@ -336,6 +336,23 @@ const PROBES = {
       });
     });
   },
+  // [R7-N] an edge label's whole global transform (six numbers): under a
+  // view whose scaleY is not its scaleX, Line.beforeUpdate's 1 / scaleX
+  // leaves the words squashed by scaleY / scaleX before their turn
+  gl(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        const label = g.getTextContent();
+        if (!label || label.ignore) return;
+        const m = label.transform || [1, 0, 0, 1, label.x, label.y];
+        rec['g' + sm.seriesIndex + '/edge' + i + '/lm'] = { m: arr(m), op: hx(label.style.opacity) };
+      });
+    });
+  },
   tree(chart, rec) {
     chart.getModel().eachSeries(sm => {
       if (sm.subType !== 'tree') return;
@@ -461,6 +478,17 @@ add('graph', 'graph-legend', "layout none on a view with two categories, arrows 
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1),
     { t: T1 + 2000, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1 + 2000)]);
+
+add('graph', 'graph-squash', "[R7-N] layout none, 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): a merge moves two nodes (1000 ms linear) -- in every frame the edge labels stay squashed by scaleY / scaleX before their turn, at the place and the turn the line has then",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeLabel: { show: true, formatter: 'edge' },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }, { source: 'd', target: 'c', label: { position: 'insideEndTop' } }] }, LIN)] },
+  ['graph', 'gl'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 60 },
+      { name: 'd', x: 30, y: 100 }] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
   { animation: true,

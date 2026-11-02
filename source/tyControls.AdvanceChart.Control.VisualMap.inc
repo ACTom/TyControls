@@ -596,6 +596,7 @@ procedure TTyCustomAdvanceChart.VmBuilt(AIndex: Integer);
 var
   L: TTyVisualMapLayout;
   h: Integer;
+  op: Double;
 begin
   if (AIndex < 0) or (AIndex > High(FVmLive)) then Exit;
   Inc(FVmLive[AIndex].Gen);
@@ -656,8 +657,10 @@ begin
   { [R5-I] the handle labels' opacity, for their blur's fade }
   FVmBlurBag[AIndex] := TTyAnimBag.Create;
   FVmBlurBag[AIndex].Animation := FVmAnim;
-  FVmBlurBag[AIndex].Attr(TyAnimProps([TyAnimProp('h0', TyAnimNum(1)),
-    TyAnimProp('h1', TyAnimNum(1))]));
+  { [R7-N] at the words' own opacity [was: 1] }
+  op := VmLabelOwnOpacity(AIndex);
+  FVmBlurBag[AIndex].Attr(TyAnimProps([TyAnimProp('h0', TyAnimNum(op)),
+    TyAnimProp('h1', TyAnimNum(op))]));
 end;
 
 { ContinuousView.dispose: _clearHoverLinkToSeries dispatches its downplay
@@ -1490,10 +1493,11 @@ begin
         anyChange := True;
         { [R5-I] the label's stateTransition ({duration: 200}, no easing):
           its opacity to the blur's 0.1, or back to its own, from where it
-          is [was: switched at once] }
+          is [was: switched at once]; [R7-N] its own is the normal state's,
+          textStyle's opacity [was: 1] }
         if (k <= High(FVmBlurBag)) and (FVmBlurBag[k] <> nil) then
         begin
-          if want then o := 0.1 else o := 1;
+          if want then o := 0.1 else o := VmLabelOwnOpacity(k);
           if AnimAllowed then
           begin
             { the next frame applies it }
@@ -1805,10 +1809,21 @@ begin
     end;
 end;
 
+function TTyCustomAdvanceChart.VmLabelOwnOpacity(AIndex: Integer): Double;
+var ink: TTyVisualMapInk;
+begin
+  Result := 1;
+  if (AIndex < 0) or (AIndex > High(FVisualViews)) then Exit;
+  ink := VisualMapInk(FVisualViews[AIndex]);
+  if ink.HasOpacity then Result := ink.Opacity;
+end;
+
 function TTyCustomAdvanceChart.VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
 begin
   Result := 1;
   if (AIndex < 0) or (AIndex > High(FVmLive)) or (AHandle < 0) or (AHandle > 1) then Exit;
+  { [R7-N] at rest its own [was: 1] }
+  Result := VmLabelOwnOpacity(AIndex);
   if FVmLive[AIndex].LabelBlurOn[AHandle] then Result := 0.1;
   { [R5-I] where its fade has got to }
   if (AIndex <= High(FVmBlurBag)) and (FVmBlurBag[AIndex] <> nil)
