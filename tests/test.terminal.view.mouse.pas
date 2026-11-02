@@ -78,6 +78,7 @@ type
     { #185 }
     procedure TestAMoveWithTheButtonUpFinishesThePress;
     procedure TestTheDragTimerStopsWhenTheButtonIsUp;
+    procedure TestPrimaryOutlivesTheSelection;
   end;
 
 implementation
@@ -1017,6 +1018,31 @@ begin
   AssertFalse('the button is up: the timer stopped', V.DragTimerOn);
   AssertTrue('the route is free', V.MouseRoute = mrNone);
   AssertEquals('and that tick did not scroll', y, V.Core.Buffer.YDisp);
+end;
+
+{ #185: X11 keeps the selected text in PRIMARY until a new selection is made (xterm, VTE,
+  Konsole). Typing, a plain click or a screen switch clears the selection; PRIMARY still
+  answers with the text last selected. }
+procedure TTyTerminalViewMouseTests.TestPrimaryOutlivesTheSelection;
+begin
+  V.WriteSync('hello world');
+  V.SetPrimaryPlatform(True);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  V.Up(mbLeft, [], V.CellLeft(4, 0));
+  AssertEquals('offered', 'hell', V.PrimaryNow);
+  V.Input('x');
+  AssertFalse('typing cleared the selection', V.HasSelection);
+  AssertEquals('PRIMARY keeps it', 'hell', V.PrimaryNow);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(6, 0));
+  V.MoveTo([ssLeft], V.CellLeft(9, 0));
+  V.Up(mbLeft, [], V.CellLeft(9, 0));
+  AssertEquals('a new selection takes PRIMARY', 'wor', V.PrimaryNow);
+  V.ClickAt(mbLeft, [], V.CellCenter(2, 2));
+  AssertFalse('a plain click cleared it', V.HasSelection);
+  AssertEquals('PRIMARY still has it', 'wor', V.PrimaryNow);
+  V.WriteSync(#27'[?1049h');
+  AssertEquals('the other screen too', 'wor', V.PrimaryNow);
 end;
 
 initialization

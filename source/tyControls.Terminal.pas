@@ -491,12 +491,19 @@ type
     FIsMac, FIsWindows: Boolean;
     { 用不用 X11 的 PRIMARY(TyTerminalUsesPrimary);测试可以改 }
     FUsesPrimary: Boolean;
+    { #185: PRIMARY 答的是此刻的选区(FPrimaryLive),还是选区没了以后留下的那段文字
+      (FPrimaryKept / FPrimaryKeptText) }
+    FPrimaryLive, FPrimaryKept: Boolean;
+    FPrimaryKeptText: string;
     function ReadPrimaryText: string; virtual;
     { 选区成了 PRIMARY:只登记「有、是文字」,文字等有人要时才取(PrimaryRequestText);默认
       走 LCL 的 PrimarySelection.OnRequest(SynEdit 的做法) }
     procedure OfferPrimary; virtual;
-    { 有人要 PRIMARY 时给的:此刻的选区文字 }
+    { 有人要 PRIMARY 时给的:此刻的选区文字;选区已经没了，就是它没之前的文字 }
     function PrimaryRequestText: string;
+    { 选区要被清掉或换掉了:PRIMARY 正答着它，就先把文字留下(X11 惯例：新的选区来之前
+      PRIMARY 不变) }
+    procedure KeepPrimary;
     { 剪贴板里有没有文字(弹菜单时判「粘贴」,不读整段);默认 TyClipboardHasText }
     function ClipboardHasText: Boolean; virtual;
     { 此刻实际按着的鼠标键(ssLeft / ssMiddle / ssRight);默认按 GetKeyState 问 }
@@ -3273,8 +3280,20 @@ end;
 
 function TTyCustomTerminalView.PrimaryRequestText: string;
 begin
+  if FPrimaryKept then
+    Exit(FPrimaryKeptText);
   SyncSelectionTrim;
   Result := FSelection.Text(LineEnding);
+end;
+
+procedure TTyCustomTerminalView.KeepPrimary;
+begin
+  if not FPrimaryLive then Exit;
+  SyncSelectionTrim;
+  if not FSelection.HasSelection then Exit;
+  FPrimaryKeptText := FSelection.Text(LineEnding);
+  FPrimaryKept := True;
+  FPrimaryLive := False;
 end;
 
 procedure TTyCustomTerminalView.PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);

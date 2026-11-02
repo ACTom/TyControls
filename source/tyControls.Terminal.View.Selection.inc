@@ -109,6 +109,8 @@ begin
     if LinkAt(cell.X, cell.Y, link) then
       lp := @link.Range;
   end;
+  { 单击会清掉选区:PRIMARY 留着原来的文字，等这次选完再换 }
+  KeepPrimary;
   { Shift 扩展只在程序没接管鼠标时(上游 _enabled && shiftKey);程序接管时 Shift 是覆盖键 }
   FSelection.Press(SelPointAt(X, Y), clicks, not Reporting and (ssShift in Shift), ColumnWanted(Shift), lp);
   if FSelection.Dragging then
@@ -142,7 +144,12 @@ begin
   { PRIMARY 只登记,文字等有人要时再取(一万行的选区松手时不必拼一遍);CopyOnSelect 才
     现在就要文字 }
   if FUsesPrimary then
+  begin
     OfferPrimary;
+    FPrimaryLive := True;
+    FPrimaryKept := False;
+    FPrimaryKeptText := '';
+  end;
   if FCopyOnSelect then
     WriteClipboardText(FSelection.Text(LineEnding));
 end;
@@ -203,6 +210,7 @@ end;
 
 procedure TTyCustomTerminalView.ClearSelection;
 begin
+  KeepPrimary;
   StopDragTimer;
   FSelection.Clear;
 end;
