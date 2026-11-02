@@ -138,7 +138,7 @@ end;
 - **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
 - **剪贴板**:`Ctrl+C` / `Ctrl+X` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘。`ReadOnly` 下 `Ctrl+V` 被拒、`Ctrl+C` 照常、`Ctrl+X` 退化为复制(剪贴板照拿选区,表里一格不清);剪切一片 = 一条撤销记录
-- **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`;**只统计筛选后可见的行**,非数值格跳过
+- **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`,`gagNone` 关掉(压过列的 `Aggregate`);运行时改列的 `Aggregate` 页脚立刻跟着变;**只统计筛选后可见的行**,空格和非数值格跳过
 - **列头筛选**:`ShowFilterButtons := True` 后列头出现 ▾,点开是 Excel 式的下拉:
   搜索框 + 逐值行数 + `(全选)` + `(空白)` + 确定/取消。候选与计数都取自**全部数据行**
   (不受本列自身筛选影响,否则勾掉一个值它的计数变 0、就再也判断不出该不该勾回来)。
@@ -172,7 +172,7 @@ end;
   (被筛掉的行一起搬 = 数据损坏;虚拟源下控件根本不持有数据)。
   物理排序**是可撤销的**,一次 Ctrl+Z 退回排序前 —— 这也是它必须建立在撤销之上的原因
 - **撤销 / 重做**:`Undo` / `Redo` / `CanUndo` / `CanRedo` / `ClearUndo` / `UndoLimit`
-  (默认 100 条,0 = 关掉)。Ctrl+Z / Ctrl+Y 已接在键盘上。
+  (默认 100 条,0 = 关掉;调低时当场丢掉最老的几条)。Ctrl+Z / Ctrl+Y 已接在键盘上。
   **退回来的不只是文字**:底色、文字色、只读、合并跨度、行高、整表清空
   都一起退回原状 —— 否则撤销之后会得到一个**从未存在过的状态**
   (文字回来了、涂的颜色留在别处)。
@@ -198,22 +198,24 @@ end;
   合并块记的是一段**数据行**,只在这段行连续升序显示时成立;排序打散它时它自动失效,排回来又恢复。
   列同理:跨的是一段列下标,这几列被拖开或换了先后就失效,拖回来又恢复
 - **合并**:`MergeCells(列, 行, 跨列, 跨行)`;基准格跨满整区,被覆盖格无矩形,点区内任意处都归基准格
-- **行列增删**:`InsertRow` / `DeleteRow` / `InsertColumn` / `DeleteColumn`,内容随之整体搬移
+- **行列增删**:`InsertRow` / `DeleteRow` / `InsertColumn` / `DeleteColumn`,内容随之整体搬移。增删列时,按列号记的状态跟着各自的列走 —— 排序键、分组列、`TreeColumn`、`HeaderGroups`、`AutoSizeIndex`、光标与选区锚点;删掉的那一列上的排序和分组随之取消
 - **清空**:分**结构**与**内容**两类,名字必须分得开 ——
   `ClearRows` / `ClearCols`(无参,返回是否真清了什么)删掉全部行/列,与 LCL 同义;
   `ClearRowContents(起, 几行)` / `ClearColContents(起, 几列)` 只把一片格子写空,行列还在
   (它们从前叫 `ClearRows` / `ClearCols` —— 同名反义)
 - **自动适宽**:`AutoFitColumn(列)` 取表头与**已写入**单元格里最宽的;只量写过的格,百万行空表也不扫全表
-- **查找/替换**:`FindNext` / `ReplaceCells`,按**显示序**从光标之后**环绕**查找;替换跳过只读列
+- **查找/替换**:`FindNext` / `ReplaceCells`,按**显示序**从光标之后**环绕**查找,隐藏列不查不换;替换跳过只读格,`ReadOnly` 的表一格不换。单次替换(`AAll = False`)换的是光标之后的下一处,光标随之移过去,连着调用就一处处往下换
 - **HTML 导出**:`SaveToHTMLText/File`,特殊字符转义,同样走显示序
 - **CSV**:`SaveToCSVText/File/Stream`、`LoadFromCSVText/File/Stream`。含分隔符/引号/换行的字段自动加引号。
   表头行**两边都可关**(`AWriteTitles` / `AUseTitles`,默认开)—— 对应 LCL 的
-  `WriteTitles` / `UseTitles`,无表头的分片文件不会再被吃掉第一条记录
+  `WriteTitles` / `UseTitles`,无表头的分片文件不会再被吃掉第一条记录。
+  替换载入(`AAppend = False`)换掉的是整张表:旧的合并、只读格、隐藏行、行高一并清掉,
+  多出 CSV 字段数的列删掉(与 LCL 相同);追加载入什么都不动
 - **全状态流**:`SaveToStream` / `LoadFromStream` 存的是**整张表** —— 结构(行数、
   列宽/可见性/列序、冻结数)+ 内容(按数据行序,被筛掉的行也在里面)+ 位置
   (光标、滚动、选区)。**不含**逐格颜色/批注/只读/合并(与 LCL 默认的
   `SaveOptions` 一致)。喂进来的流认不出格式会**抛异常**而不是回退去当 CSV 读
-- **编辑**:`F2` 或双击进入;`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**。编辑器自己不用的 `↑`/`↓`(单行文本框就不用)提交并移到上一行/下一行,焦点回到网格;校验没过就留在编辑器里。下拉选取格在列表收起时也是这样,不会拿 `↑`/`↓` 去换选项(`Alt+↓` 或 `F4` 展开列表,展开后 `↑`/`↓` 归列表);选中即提交,焦点同样回到网格
+- **编辑**:`F2` 或双击进入;`Delete` / `Backspace` 也进入,但先把格子清空(与 LCL 相同,`Esc` 还原原文);`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**。编辑器自己不用的 `↑`/`↓`(单行文本框就不用)提交并移到上一行/下一行,焦点回到网格;校验没过就留在编辑器里。下拉选取格在列表收起时也是这样,不会拿 `↑`/`↓` 去换选项(`Alt+↓` 或 `F4` 展开列表,展开后 `↑`/`↓` 归列表);选中即提交,焦点同样回到网格
 - 光标走出视口时视口自动跟随(最小移动量)
 
 ## 主题 token
@@ -316,13 +318,15 @@ TyGridButton                按钮单元格(:hover / :active)
 - 多列排序:`SortByColumn` 单列、`AddSortColumn` 追加次级列(Shift+点列头)
 - 排序方式**跟着列走**(`TTyGridColumn.SortKind`:文本 / 数值 / 日期)
 - 排序细则:`BlanksPosition`(空值排前/后,**翻方向时位置不变**)、
-  `SortIgnoreCase`、`OnCanSort`(接服务端排序)
+  `SortIgnoreCase`、`OnCanSort`(接服务端排序)。`SortKind`、`BlanksPosition`、`SortIgnoreCase`
+  和列的 `SortKind` 改了,当前的排序立刻按新规则重排
 - 过滤:条件类型化(包含 / 等于 / 开头是 / 结尾是 / > >= < <=)
   `SetColumnFilterEx`;`ColumnIsFiltered` / `FilteredRowCount`
 - 分组:`GroupByColumn` + `ExpandAllGroups` / `CollapseAllGroups`,
   分组行文本走可配的 `GroupRowFormat`
 - **列**的显式隐藏 `HideColumn` / `ShowColumn` / `IsHiddenColumn`
-  —— 隐藏列不占宽度、不被绘制、光标也不会停上去
+  —— 隐藏列不占宽度、不被绘制、光标也不会停上去;藏起光标所在的列(或正在编辑的列)时,
+  编辑先提交,光标移到右边下一个可见列,右边没有就移到左边
 - 行的显式隐藏 `HideRow` / `UnHideRow` / `NumHiddenRows`
   —— 与过滤是**两回事**:过滤是条件,隐藏是事实,`ClearFilters` 不会把它放出来
 - 批量:`InsertRows` / `RemoveRows` / `InsertCols` / `RemoveCols` /
