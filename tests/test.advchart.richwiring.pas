@@ -122,6 +122,7 @@ type
     procedure TestARadiusArrayIsTruthy;
     procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
     procedure TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+    procedure TestATreemapStateLabelStaysOnItsCell;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -1855,6 +1856,62 @@ begin
       and (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top < 11));
   end;
   AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A TREEMAP LABEL UNDER A STATE'S PLACE IS STILL ON ITS CELL:
+  TreemapView's beforeUpdate gives the label the cell's width and height
+  whatever its position, so the emphasis twin (laid out at
+  'insideBottomRight') has the same plate as the normal label (at the
+  centre): the whole content rect, its corner at the cell's. Upstream's
+  highlight does not reach a treemap's labels in node, so this is held to
+  the normal label's plate, which the oracle cases hold to upstream. }
+procedure TAdvChartRichWiringOracleTest.TestATreemapStateLabelStaysOnItsCell;
+var
+  k, t, q: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+  nx, ny, tx, ty: Double;
+  np, tp: TTyRtPiece;
+begin
+  FChart.Option := '{"animation":false,"series":[{"type":"treemap","top":10,'
+    + '"bottom":60,"breadcrumb":{"show":false},"label":{"color":"#333333",'
+    + '"backgroundColor":"#eeeeee"},"emphasis":{"label":{"position":"insideBottomRight"}},'
+    + '"data":[{"name":"Alpha","value":3},{"name":"Beta","value":4}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'Beta') or (e.Caption.LmKind = 0) then Continue;
+    AssertTrue('the normal label is a block', Length(e.Caption.RtPieces) > 0);
+    np := e.Caption.RtPieces[0];
+    AssertTrue('its first piece the plate', np.Kind = rpkRect);
+    for t := 0 to High(e.EmphTwin) do
+    begin
+      if e.EmphTwin[t].State <> TyTwinEmphasis then Continue;
+      AssertTrue('the twin is a block', Length(e.EmphTwin[t].Caption.RtPieces) > 0);
+      tp := e.EmphTwin[t].Caption.RtPieces[0];
+      AssertTrue('its first piece the plate', tp.Kind = rpkRect);
+      seen := True;
+      AssertEquals('the plate as wide as the cell', np.W, tp.W, 1e-9);
+      AssertEquals('the plate as tall as the cell', np.H, tp.H, 1e-9);
+      { the plate's corner, on the canvas, is the cell's either way }
+      nx := e.Caption.X + np.X * e.Caption.RtScale;
+      ny := e.Caption.Y + np.Y * e.Caption.RtScale;
+      tx := e.EmphTwin[t].Caption.X + tp.X * e.EmphTwin[t].Caption.RtScale;
+      ty := e.EmphTwin[t].Caption.Y + tp.Y * e.EmphTwin[t].Caption.RtScale;
+      AssertEquals('the corner x', nx, tx, 1e-6);
+      AssertEquals('the corner y', ny, ty, 1e-6);
+      { and the words in the bottom right corner, not the centre }
+      for q := 0 to High(e.EmphTwin[t].Caption.RtPieces) do
+        if e.EmphTwin[t].Caption.RtPieces[q].Kind = rpkText then
+          AssertTrue('the words at the right',
+            e.EmphTwin[t].Caption.X + e.EmphTwin[t].Caption.RtPieces[q].X
+            * e.EmphTwin[t].Caption.RtScale > nx + np.W * e.Caption.RtScale * 0.75);
+    end;
+  end;
+  AssertTrue('the emphasis twin is there', seen);
 end;
 
 initialization
