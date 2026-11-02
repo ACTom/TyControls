@@ -504,7 +504,7 @@ const GAUGE_CASES = [
   // on; only the reading's is parsePercent of the radius), and a reading's
   // width null is parsePercent(null) = NaN, which the code turns into no
   // width at all
-  { name: 'gauge-title-width-percent', looks: true, note: "title width '50%': a plain plate, a truncated name, a rich one -- none of the radius",
+  { name: 'gauge-title-width-percent', looks: true, note: "title width '50%': a plain plate, a truncated name, a rich one with a left token in a centred block -- none of the radius",
     record: ['chartText'], match: 'Speed|long|now',
     option: gauge([
       Object.assign({ center: ['20%', '50%'], radius: '30%', data: [{ value: 37, name: 'Speed' }], detail: { show: false },
@@ -512,8 +512,8 @@ const GAUGE_CASES = [
       Object.assign({ center: ['50%', '50%'], radius: '30%', data: [{ value: 37, name: 'A rather long gauge name' }], detail: { show: false },
         title: { color: '#123456', width: '50%', overflow: 'truncate', backgroundColor: '#eeeeee' } }, NO_AXIS),
       Object.assign({ center: ['80%', '50%'], radius: '30%', data: [{ value: 37, name: '{n|Speed} now' }], detail: { show: false },
-        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', rich: { n: { color: '#aa0000', fontSize: 14 } } } }, NO_AXIS)]) },
-  { name: 'gauge-axislabel-width-percent', looks: true, note: "axis labels width '50%': no plates; a truncation keeps nothing; rich labels are not drawn",
+        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', rich: { n: { color: '#aa0000', fontSize: 14, align: 'left' } } } }, NO_AXIS)]) },
+  { name: 'gauge-axislabel-width-percent', looks: true, note: "axis labels width '50%': no plates; a truncation keeps nothing; a rich label only its left group when left-aligned, up to a percentage token or a right one",
     record: ['chartText'],
     option: gauge([
       { center: ['20%', '50%'], radius: '30%', min: 0, max: 40, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
@@ -524,7 +524,10 @@ const GAUGE_CASES = [
         axisLabel: { color: '#334455', width: 'auto', formatter: '{a|{value}}', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' } } } },
       { center: ['80%', '75%'], radius: '20%', min: 300, max: 340, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 337 }],
         axisLabel: { color: '#334455', width: '50%', formatter: '{p|{value}}{b|.}{c|r}',
-          rich: { p: { width: '50%', backgroundColor: '#dddddd', color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } }]) },
+          rich: { p: { width: '50%', backgroundColor: '#dddddd', color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } },
+      { center: ['20%', '85%'], radius: '12%', min: 400, max: 440, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 437 }],
+        axisLabel: { color: '#334455', width: '50%', formatter: '{b|.}{c|r}{a|{value}}',
+          rich: { a: { color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } }]) },
   { name: 'gauge-detail-null-defaults', looks: true, note: "detail lineHeight null and padding null: no line height, no padding (not the defaults 30 and [5, 10])",
     record: ['chartText'], match: '^37$',
     option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },

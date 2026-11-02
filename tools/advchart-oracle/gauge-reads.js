@@ -146,7 +146,7 @@ function cases() {
       opt(g(Object.assign({ dimensions: [{ name: 'v', type: 'number' }, 'w'], data: [['abc', 3], [5, 6]] }, PROG)))],
     ['ds-null-inherit', "the reading's 'inherit' over two bands: a null cell is 0 (the first band), a word NaN (the last)",
       opt(g({ min: -50, max: 50, axisLine: { show: false, lineStyle: { color: [[0.5, '#ff0000'], [1, '#0000ff']] } },
-        detail: { color: 'inherit' } }), { dataset: { source: [['v'], [null], ['Rate'], [30]] } }), { inks: true }],
+        detail: { color: 'inherit', formatter: '{value}x' } }), { dataset: { source: [['v'], [null], ['Rate'], [30]] } }), { inks: true }],
     ['ds-count-words', "valueAnimation over cells that are words: no count, the words throughout (sampled at 300 ms)",
       Object.assign(opt(g({ detail: { valueAnimation: true, formatter: '{value} %' } }), { dataset: { source: [['v'], ['Rate'], ['7'], [40]] } }),
         { animation: true }), { at: 300 }],

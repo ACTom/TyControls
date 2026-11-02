@@ -2198,7 +2198,8 @@
       "min": -50,
       "max": 50,
       "detail": {
-       "color": "inherit"
+       "color": "inherit",
+       "formatter": "{value}x"
       }
      }
     ],
@@ -2243,9 +2244,9 @@
       ""
      ],
      "details": [
-      "",
-      "Rate",
-      "30"
+      "x",
+      "Ratex",
+      "30x"
      ],
      "pointers": [
       {
