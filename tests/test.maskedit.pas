@@ -26,6 +26,7 @@ type
     procedure TestSpaceCharChangesTheSkeleton;
     procedure TestValidateEdit;
     procedure TestOptionalSlotsNeedNotBeFilled;
+    procedure TestTheHashSlotTakesASign;
     procedure TestCaseForcingRegions;
     procedure TestEscapeMakesTheNextCharALiteral;
     procedure TestReadOnlyMaskedFieldTakesNoDictation;
@@ -252,7 +253,7 @@ procedure TMaskEditTest.TestOptionalSlotsNeedNotBeFilled;
 { The lower-case codes are OPTIONAL, and that is the only thing that distinguishes them.
   A control that treated them as required would make every ported '99/99/00' unsubmittable;
   one that treated the upper-case codes as optional would make every required field pass
-  validation while empty -- which is exactly why '#' is refused rather than reinterpreted. }
+  validation while empty. }
 var
   m: TAccessMask;
   raised: Boolean;
@@ -276,6 +277,43 @@ begin
     m.Key('3');
     AssertEquals('the optional slot still accepts input', '12-3_', m.Text);
     AssertEquals('and it is part of the value', '123', m.MaskedValue);
+  finally m.Free; end;
+end;
+
+procedure TMaskEditTest.TestTheHashSlotTakesASign;
+{ '#' is LCL's optional digit-or-sign (#193): typing puts a sign or a digit in it, a
+  letter is refused, and a field of nothing but '#' validates while empty. }
+var
+  m: TAccessMask;
+  raised: Boolean;
+begin
+  m := TAccessMask.Create(nil);
+  try
+    m.Mask := '#00';
+    m.Key('x');
+    AssertEquals('a letter is refused', '___', m.Text);
+    m.Key('-');
+    AssertEquals('a minus lands in the hash', '-__', m.Text);
+    m.Key('1'); m.Key('2');
+    AssertEquals('and the digits after it', '-12', m.Text);
+    AssertEquals('the sign is part of the value', '-12', m.MaskedValue);
+
+    m.Text := '';
+    m.Key('+');
+    AssertEquals('so is a plus', '+__', m.Text);
+    m.Text := '';
+    m.Key(' ');
+    AssertEquals('and a space, as LCL and Delphi take one', ' __', m.Text);
+    m.Text := '';
+    m.Key('7');
+    AssertEquals('a digit is a digit', '7__', m.Text);
+
+    m.Mask := '###';
+    m.Text := '';
+    AssertTrue('every slot optional: an empty field is complete', m.IsComplete);
+    raised := False;
+    try m.ValidateEdit; except on ETyMaskError do raised := True; end;
+    AssertFalse('and it validates', raised);
   finally m.Free; end;
 end;
 
@@ -318,8 +356,7 @@ begin
     AssertEquals('and the literals are not part of the value', '12', m.MaskedValue);
   finally m.Free; end;
 
-  { '\#' is the documented way to keep a literal '#', and the only one -- a bare '#'
-    is refused. }
+  { '\#' is the way to keep a literal '#' -- a bare '#' is a slot. }
   m := TAccessMask.Create(nil);
   try
     m.Mask := '\#000';
