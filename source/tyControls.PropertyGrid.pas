@@ -388,6 +388,10 @@ type
     FMenuPath: string;
     { The category headings shown so far ('@Layout'): one shown for the first time opens. }
     FSeenCategories: TStringList;
+    { ExpandedProperties was given whole -- assigned, or read from a form file -- and names a
+      category: then it decides for every category, and one it leaves out is not opened when it
+      is first shown (#183). }
+    FCategoriesGiven: Boolean;
     { ExpandedProperties as it was before FilterText was set, given back when it is cleared. }
     FPreFilterExpanded: TStringList;
     FFiltering: Boolean;
@@ -558,7 +562,8 @@ type
       the name for an open category heading ('@Layout'). Kept when the selection moves to
       another object, so a row expanded on one button is expanded on the next; adding a path
       expands that row. A category heading the grid shows for the first time is open (its path
-      is added); take it off the list to close it. }
+      is added); take it off the list to close it. A list assigned whole, or read from a form
+      file, that names some category decides for all of them: one it leaves out stays closed. }
     property ExpandedProperties: TStrings read GetExpandedProperties write SetExpandedProperties;
     { Group the top-level properties by category, each group under a heading row that is not
       edited and opens and closes (Enter, or its triangle). Built-in categories by name: Layout
@@ -2157,6 +2162,15 @@ end;
 
 { ---- TTyCustomPropertyGrid ---- }
 
+{ Does AList name a category heading ('@Layout')? }
+function NamesCategory(AList: TStrings): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to AList.Count - 1 do
+    if Copy(AList[i], 1, 1) = '@' then Exit(True);
+end;
+
 constructor TTyCustomPropertyGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -2281,6 +2295,8 @@ end;
 procedure TTyCustomPropertyGrid.Loaded;
 begin
   inherited Loaded;
+  { A list read from the form file was saved with the categories closed that it leaves out. }
+  if NamesCategory(FExpanded) then FCategoriesGiven := True;
   RebuildRows(False);
 end;
 
@@ -2391,6 +2407,7 @@ end;
 procedure TTyCustomPropertyGrid.SetExpandedProperties(AValue: TStrings);
 begin
   FExpanded.Assign(AValue);   // OnChange applies
+  FCategoriesGiven := NamesCategory(FExpanded);
 end;
 
 procedure TTyCustomPropertyGrid.ExpandedChanged(Sender: TObject);
@@ -2524,6 +2541,7 @@ begin
     p := nd.Path;
     if FSeenCategories.IndexOf(p) >= 0 then Continue;
     FSeenCategories.Add(p);
+    if FCategoriesGiven then Continue;   // the list given says closed
     FHarvesting := True;
     try
       FExpanded.Add(p);
