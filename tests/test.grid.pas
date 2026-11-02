@@ -12938,6 +12938,7 @@ type
     procedure TestDeleteColumnShiftsAndDropsTheColumnState;
     procedure TestGroupColumnsFollowTheirColumn;
     procedure TestHidingTheCursorsColumnMovesTheCursor;
+    procedure TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
     procedure TestTheSortSettingsRedoTheSort;
     procedure TestAColumnsSortKindRedoesTheSort;
     procedure TestFooterAggregates;
@@ -13095,6 +13096,24 @@ begin
   AssertEquals('with none to the right, to the one before', 0, FG.Col);
 end;
 
+procedure TGrid169Test.TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
+begin
+  Columns(3);
+  FG.RowCount := 2;
+  FG.ForceUpdateScrollBars;
+  FG.MoveCursor(2, 0);
+  FG.AnchorSelection;
+  FG.DeleteColumn(2);
+  AssertEquals('the last column deleted: the cursor comes back inside', 1, FG.Col);
+  AssertTrue('and the anchor with it: one cell selected',
+    FG.IsCellSelected(1, 0) and not FG.IsCellSelected(0, 0));
+  FG.InsertColumn(2);
+  FG.HideColumn(2);
+  FG.MoveCursor(1, 0);
+  FG.DeleteColumn(1);
+  AssertEquals('the column taking its place is hidden: the cursor moves off it', 0, FG.Col);
+end;
+
 procedure TGrid169Test.TestTheSortSettingsRedoTheSort;
 begin
   Columns(2);
@@ -13194,6 +13213,13 @@ begin
   AssertEquals('in a read-only grid', 'a', FG.Cells[0, 0]);
   AssertEquals('one replace neither', 0, FG.ReplaceCells('a', 'b', True, True, False));
   AssertEquals('same', 'a', FG.Cells[0, 0]);
+  FG.ReadOnly := False;
+  FG.CellReadOnly[0, 0] := True;
+  FG.Cells[0, 1] := 'a';
+  FG.MoveCursor(1, 1);
+  AssertEquals('one replace', 1, FG.ReplaceCells('a', 'b', True, True, False));
+  AssertEquals('passes over a read-only cell', 'a', FG.Cells[0, 0]);
+  AssertEquals('to the next it can change', 'b', FG.Cells[0, 1]);
 end;
 
 procedure TGrid169Test.TestReplacingByCsvDropsTheOldStructure;
