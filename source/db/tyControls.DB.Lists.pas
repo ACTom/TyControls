@@ -447,6 +447,9 @@ type
     procedure DoSelectionChange(AUser: Boolean); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Loaded; override;
+    { #192: MultiSelect and ExtendedSelect -- a lookup list holds one key, and LCL does not publish
+      them either. 4.0 does not publish them; a value a form saved by 3.x holds is read past. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create(AOwner: TComponent); override;
     property KeyValue: Variant read GetKeyValue write SetKeyValue;
@@ -517,8 +520,6 @@ type
     property Controller;
     property Items;
     property ItemIndex;
-    property MultiSelect;
-    property ExtendedSelect;
     property Sorted;
     property ItemHeight;
     property ScrollWidth;
@@ -545,7 +546,7 @@ type
 implementation
 
 uses
-  tyControls.StyleModel;
+  tyControls.StyleModel, tyControls.Types;
 
 { NullValueKey: AKey with AShift is the shortcut. Clears the field (for a lookup field, its key
   fields) when editing can begin -- what LCL's TDBLookup.HandleNullKey does, which it keeps
@@ -1128,6 +1129,12 @@ begin
 end;
 
 { ============================================================= TTyCustomDBLookupListBox == }
+
+procedure TTyCustomDBLookupListBox.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['MultiSelect', 'ExtendedSelect']);
+end;
 
 constructor TTyCustomDBLookupListBox.Create(AOwner: TComponent);
 begin

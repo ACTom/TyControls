@@ -285,6 +285,9 @@ type
     { True while ActionChange runs; RealSetText ignores the write then. Read by descendants
       that route Caption through a setter of their own (TTyCustomMaskEdit). }
     property InActionChange: Boolean read FInActionChange;
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   protected
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -485,7 +488,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -552,6 +554,18 @@ begin
   if AReserve <= 0 then Exit(Rect(0, 0, 0, 0));
   Result := Rect(ABox.Right - AReserve, ABox.Top + APadTop,
                  ABox.Right, ABox.Bottom - APadBottom);
+end;
+
+procedure TTyCustomEdit.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
 end;
 
 constructor TTyCustomEdit.Create(AOwner: TComponent);

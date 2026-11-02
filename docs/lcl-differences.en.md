@@ -48,5 +48,11 @@ These properties can never act on the control that publishes them, and from 4.0 
 | `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox`, `TTyColorComboBox`, `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still published on `TTyStringGrid` |
 | A grid's `Header` | `MainColumn` | A grid has no main column; still published on the headers of `TTyListView` and `TTyTreeView` |
+| `TTyShellListView` | `OwnerData`, `ItemCount`, `Items`, `OnGetItemText`, `OnGetItemImage`, `OnGetItemGroup` | It lists the folder itself; still published on `TTyListView` |
+| `TTyShellTreeView` | `NodeDataSize`, `RootNodeCount`, `Items`, `OnInitChildren` | It builds its nodes from the file system; still published on `TTyTreeView` |
+| `TTyDBLookupListBox` | `MultiSelect`, `ExtendedSelect` | A lookup list holds one key (LCL does not publish them either); still published on `TTyDBListBox` |
+| The text inputs: `TTyEdit`, `TTyMaskEdit`, `TTyComboEdit`, `TTyURLEdit`, the numeric edits, `TTyMemo`, `TTySpinEdit`, `TTyDateTimePicker` and their DB versions | `ChildSizing` | No children to size |
+| `TTyMultiTrackBar`, `TTyGradientTrackBar` | `ChildSizing` | No children to size |
+| `TTyTerminalView` | `ChildSizing` | The terminal places its scroll bar itself; with it set, the bar covered the last columns |
 
 The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.

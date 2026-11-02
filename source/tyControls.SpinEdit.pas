@@ -155,6 +155,9 @@ type
       form author's. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -252,7 +255,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -508,6 +510,18 @@ begin
 end;
 
 { TTyCustomSpinEdit }
+
+procedure TTyCustomSpinEdit.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 constructor TTyCustomSpinEdit.Create(AOwner: TComponent);
 begin

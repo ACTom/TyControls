@@ -531,6 +531,9 @@ type
       popup isn't immediately deactivated by the mouse-up that follows MouseDown. }
     procedure Click; override;
 
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -658,7 +661,6 @@ type
       130px width could not do. }
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -1393,6 +1395,18 @@ begin
 end;
 
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
+
+procedure TTyCustomDateTimePicker.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 procedure TTyCustomDateTimePicker.SetOptions(const AValue: TTyDateTimePickerOptions);
 begin

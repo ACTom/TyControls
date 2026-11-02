@@ -151,6 +151,9 @@ type
     procedure Loaded; override;
     { #108: the value the constructor sets, so the designer can store the other ones. }
     property SortColumn default 0;
+    { #192: OwnerData, ItemCount, Items and the owner-data hooks -- the view lists the folder
+      itself. 4.0 does not publish them; a value a form saved by 3.x holds is read past. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -312,9 +315,6 @@ type
     property Controller;
     property ViewStyle;
     property RowHeight;
-    property OwnerData;
-    property ItemCount;
-    property Items;
     property Header;
     property ShowColumnHeaders;
     property GridLines;
@@ -332,8 +332,6 @@ type
     property GroupView;
     property Groups;
     property ScrollBarAutoHide;
-    property OnGetItemText;
-    property OnGetItemImage;
     property OnGetItemState;
     property OnCompare;
     property OnColumnClick;
@@ -346,7 +344,6 @@ type
     property OnDeletion;
     property OnEditing;
     property OnEdited;
-    property OnGetItemGroup;
     property OnGroupCollapsed;
     property Align;
     property Anchors;
@@ -371,6 +368,9 @@ type
 function TyFormatFileSize(ABytes: Int64): string;
 
 implementation
+
+uses
+  tyControls.Types;
 
 { ---------------------------------------------------------------------------
   Local helpers -- size formatter + kind classification
@@ -452,6 +452,13 @@ end;
 { ---------------------------------------------------------------------------
   Lifecycle
   --------------------------------------------------------------------------- }
+
+procedure TTyCustomShellListView.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['OwnerData', 'ItemCount', 'Items',
+    'OnGetItemText', 'OnGetItemImage', 'OnGetItemGroup']);
+end;
 
 constructor TTyCustomShellListView.Create(AOwner: TComponent);
 begin

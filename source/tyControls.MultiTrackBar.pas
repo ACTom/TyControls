@@ -818,6 +818,9 @@ type
     function ThumbStyleClass(AIndex: Integer): string; override;
     function ThumbHint(AIndex: Integer): string; override;
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
+    { #192: a track bar has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -849,7 +852,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -1003,7 +1005,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3260,6 +3261,18 @@ begin
 end;
 
 { TTyCustomMultiTrackBar }
+
+procedure TTyCustomMultiTrackBar.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 constructor TTyCustomMultiTrackBar.Create(AOwner: TComponent);
 const

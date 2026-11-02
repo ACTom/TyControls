@@ -279,6 +279,27 @@ var
   where it stopped the load with "Unknown property". Nothing is written back. }
 procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
 
+type
+  { #192: the same for a property LCL saves as sub-properties -- ChildSizing goes into a form
+    file as 'ChildSizing.LeftRightSpacing = 6' and so on. DefineProperties cannot read past one
+    of those: the reader looks the first name up itself, and an unknown one stops the load. A
+    class that no longer publishes such a property creates one of these around its inherited
+    ReadState and frees it after: while it lives, each such line of AInstance's is read past and
+    dropped, and every other unknown property still goes to the reader's own handler (the IDE
+    asks the user about it). }
+  TTyRetiredPaths = class
+  private
+    FReader: TReader;
+    FInstance: TPersistent;
+    FNames: array of string;
+    FOuter: TPropertyNotFoundEvent;
+    procedure PropertyNotFound(Reader: TReader; Instance: TPersistent; var PropName: string;
+      IsPath: Boolean; var Handled, Skip: Boolean);
+  public
+    constructor Create(AReader: TReader; AInstance: TPersistent; const ANames: array of string);
+    destructor Destroy; override;
+  end;
+
 { #153: AR reflected across a box AWidth wide whose left edge is 0 -- the one move that
   mirrors a slot already laid out for reading order. Paint and hit test reflect the same
   finished layout, so they cannot disagree. An empty rect is returned as it is. }
@@ -316,6 +337,44 @@ begin
   if GRetiredSink = nil then GRetiredSink := TTyRetiredPropertySink.Create;
   for i := 0 to High(ANames) do
     AFiler.DefineProperty(ANames[i], @GRetiredSink.Skip, nil, False);
+end;
+
+constructor TTyRetiredPaths.Create(AReader: TReader; AInstance: TPersistent;
+  const ANames: array of string);
+var
+  i: Integer;
+begin
+  inherited Create;
+  FReader := AReader;
+  FInstance := AInstance;
+  SetLength(FNames, Length(ANames));
+  for i := 0 to High(ANames) do
+    FNames[i] := ANames[i];
+  FOuter := AReader.OnPropertyNotFound;
+  AReader.OnPropertyNotFound := @PropertyNotFound;
+end;
+
+destructor TTyRetiredPaths.Destroy;
+begin
+  FReader.OnPropertyNotFound := FOuter;
+  inherited Destroy;
+end;
+
+procedure TTyRetiredPaths.PropertyNotFound(Reader: TReader; Instance: TPersistent;
+  var PropName: string; IsPath: Boolean; var Handled, Skip: Boolean);
+var
+  i: Integer;
+begin
+  if Instance = FInstance then
+    for i := 0 to High(FNames) do
+      if SameText(PropName, FNames[i]) then
+      begin
+        Handled := True;
+        Skip := True;   // the reader skips the value
+        Exit;
+      end;
+  if Assigned(FOuter) then
+    FOuter(Reader, Instance, PropName, IsPath, Handled, Skip);
 end;
 
 function TyRGB(R, G, B: Byte): TTyColor;

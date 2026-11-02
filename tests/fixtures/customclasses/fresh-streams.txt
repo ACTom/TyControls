@@ -1121,7 +1121,6 @@
     Top = 0
     Width = 280
     TabOrder = 0
-    Items = <>
     Header.Columns = <    
       item
         Width = 320
@@ -1160,7 +1159,6 @@
     TabOrder = 0
     Header.Columns = <>
     Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
-    Items = <>
     DefaultNodeHeight = 22
   end
 # TTySizeBox

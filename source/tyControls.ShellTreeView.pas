@@ -221,6 +221,10 @@ type
       GetPathFromNode is the public, LCL-shaped one. Protected so a subclass/test
       can observe the node<->path mapping. }
     function  NodePath(Node: PTyTreeNode): string;
+    { #192: Items, NodeDataSize, RootNodeCount and OnInitChildren -- the tree builds its nodes from
+      the file system itself. 4.0 does not publish them; a value a form saved by 3.x holds is read
+      past. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -455,10 +459,7 @@ type
     property Controller;
     property Options;
     property Header;
-    property Items;
-    property NodeDataSize;
     property DefaultNodeHeight;
-    property RootNodeCount;
     property Indent;
     property Images;
     property EmptyListMessage;
@@ -478,7 +479,6 @@ type
     property Anchors;
     property OnFreeNode;
     property OnInitNode;
-    property OnInitChildren;
     property OnExpanding;
     property OnExpanded;
     property OnCollapsing;
@@ -524,9 +524,18 @@ type
 
 implementation
 
+uses
+  tyControls.Types;
+
 { ---------------------------------------------------------------------------
   Lifecycle
   --------------------------------------------------------------------------- }
+
+procedure TTyCustomShellTreeView.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['Items', 'NodeDataSize', 'RootNodeCount', 'OnInitChildren']);
+end;
 
 constructor TTyCustomShellTreeView.Create(AOwner: TComponent);
 begin

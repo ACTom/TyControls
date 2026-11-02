@@ -83,6 +83,9 @@ type
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
     function TextStartX(APPI: Integer): Integer;
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   private
     // Logical text model: one TStrings line per logical line. Exposed (read-only
     // direction) via the published Lines:TStrings; writes go through SetLines.
@@ -1005,7 +1008,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -1129,6 +1131,18 @@ begin
     if brk <> '' then LineBreak := brk;
   finally
     EndUpdate;
+  end;
+end;
+
+procedure TTyCustomMemo.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
   end;
 end;
 
