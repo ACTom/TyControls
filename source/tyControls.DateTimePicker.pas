@@ -434,7 +434,10 @@ type
     { TTyCalendar.OnChange handler: writes the date part back to FDateTime +
       fires OnChange (via SetDateTime).  Does NOT close the popup so that
       arrow-key navigation inside the calendar does not dismiss it. }
-    procedure CalendarChange(Sender: TObject);
+    { #160: AValue inside [MinDate, MaxDate] by its DATE, as LCL's (which keeps them as
+      Int(date)): any time on the MaxDate day is in range -- every one became 00:00 -- and a
+      value off the range moves to the bound's day with its time kept. }
+    function ClampToDays(AValue: TDateTime): TDateTime;
     { TTyCalendar.OnAccept handler: writes the date part back + closes the popup.
       Fires OnChange (via SetDateTime) then FPopup.Close. }
     procedure CalendarAccepted(Sender: TObject);
@@ -1708,9 +1711,7 @@ begin
     Invalidate;
     Exit;
   end;
-  Clamped := FDateTime;
-  if (FMinDate <> 0) and (Clamped < FMinDate) then Clamped := FMinDate;
-  if (FMaxDate <> 0) and (Clamped > FMaxDate) then Clamped := FMaxDate;
+  Clamped := ClampToDays(FDateTime);
   { A 4-digit year field let a user type 0001 or 9999 into an UNBOUNDED picker, and
     dates before Oct 1752 are what LCL refuses outright because widgetset calendars
     misdraw them -- a value entered here can be handed to one of those. So the absolute
@@ -1895,7 +1896,8 @@ begin
   { Create the calendar first (owned by Self, so FreeAndNil(FCalendar) frees it). }
   FCalendar             := TTyCalendar.Create(Self);
   FCalendar.Controller  := ActiveController;
-  FCalendar.OnChange    := @CalendarChange;
+  { #160: no OnChange: moving through the calendar is not picking. It changed the value at
+    once, so Esc and a click elsewhere could not cancel. }
   FCalendar.OnAccept    := @CalendarAccepted;
 
   { Create the popup helper (owns its form; does NOT own FCalendar). }
@@ -2021,30 +2023,13 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.CalendarChange(Sender: TObject);
-{ OnChange: arrow-key navigation inside the popup.  Update the date part of
-  FDateTime so the picker text follows live, but do NOT close the popup. }
-var
-  OldVal: TDateTime;
+function TTyDateTimePicker.ClampToDays(AValue: TDateTime): TDateTime;
 begin
-  if FCalendar = nil then Exit;
-  { The calendar is open over a read-only picker only when ReadOnly was set while it was
-    open. Moving through it then edits nothing. }
-  if FReadOnly then Exit;
-  OldVal    := FDateTime;
-  { Keep the time part; replace only the date part -- except that an EMPTY field has no
-    time part, and Frac of the sentinel is not one. Navigating the calendar over an empty
-    field FILLS it, which is what the user asked for by moving the selection. }
-  if TyDateIsNull(FDateTime) then
-    FDateTime := DateOf(FCalendar.Date)
-  else
-    FDateTime := DateOf(FCalendar.Date) + Frac(FDateTime);
-  { Clamp to [MinDate, MaxDate] }
-  if (FMinDate <> 0) and (FDateTime < FMinDate) then FDateTime := FMinDate;
-  if (FMaxDate <> 0) and (FDateTime > FMaxDate) then FDateTime := FMaxDate;
-  if not TyEqualDateTime(FDateTime, OldVal) then
-    if Assigned(FOnChange) then FOnChange(Self);
-  Invalidate;
+  Result := AValue;
+  if (FMinDate <> 0) and (DateOf(Result) < DateOf(FMinDate)) then
+    Result := ComposeDateTime(DateOf(FMinDate), TimeOf(Result));
+  if (FMaxDate <> 0) and (DateOf(Result) > DateOf(FMaxDate)) then
+    Result := ComposeDateTime(DateOf(FMaxDate), TimeOf(Result));
 end;
 
 procedure TTyDateTimePicker.CalendarAccepted(Sender: TObject);
@@ -2053,7 +2038,7 @@ procedure TTyDateTimePicker.CalendarAccepted(Sender: TObject);
   Uses CloseDropDown so both the real-window path (fires PopupClosed→OnCloseUp)
   and the headless test path (CloseDropDown's else-branch fires OnCloseUp) work. }
 var
-  NewDate, OldVal: TDateTime;
+  NewDate, OldVal, Base: TDateTime;
 begin
   if FCalendar = nil then Exit;
   { ReadOnly set while the calendar was open: the click still closes it, and changes nothing. }
@@ -2062,14 +2047,22 @@ begin
     CloseDropDown;
     Exit;
   end;
-  { Same as CalendarChange: no time part to keep when the field is empty. Picking a day
-    is the gesture that fills an empty field. }
+  { No time part to keep when the field is empty. Picking a day is the gesture that fills an
+    empty field. }
   if TyDateIsNull(FDateTime) then
     NewDate := DateOf(FCalendar.Date)
   else
     NewDate := DateOf(FCalendar.Date) + Frac(FDateTime);
   OldVal  := FDateTime;
+  { A pick is the user's edit, not the host's write: Esc still goes back to where it went
+    before it (#160) -- SetDateTime makes what it is given the new baseline. }
+  Base := FConfirmedDateTime;
   SetDateTime(NewDate);
+  FConfirmedDateTime := Base;
+  { dtpoAutoCheck: a pick, like a typed edit, means the value is wanted (#160). }
+  if (not TyEqualDateTime(FDateTime, OldVal)) and (dtpoAutoCheck in FOptions)
+     and FShowCheckBox and not FChecked then
+    Checked := True;
   { Picking a day in the dropdown is a USER edit, so it must notify even though it goes
     through the (now silent) programmatic setter. Without this line the one gesture the
     dropdown exists for became the one gesture that told nobody. }
@@ -2551,8 +2544,9 @@ begin
       InflateRect(CbBoxR, MulDiv(2, Font.PixelsPerInch, 96), MulDiv(2, Font.PixelsPerInch, 96));
       if PtInRect(CbBoxR, Point(X, Y)) then
       begin
-        { Through the property, so the notification happens in one place. }
-        Checked := not FChecked;
+        { Through the property, so the notification happens in one place. ReadOnly stops the
+          mouse as it stops Space (#160). }
+        if not FReadOnly then Checked := not FChecked;
         try
           if CanFocus then SetFocus;
         except
@@ -2589,8 +2583,10 @@ begin
                   S.FontWeight, Font.PixelsPerInch);
       if HitSeg >= 0 then
       begin
+        { #160: the digits typed into the field being left go in first, as the keys do -- the
+          click threw them away. }
+        if FDigitBuffer <> '' then FinalizeBuffer(FDateTime, False);
         FActiveSeg   := HitSeg;
-        FDigitBuffer := '';
         Invalidate;
       end;
     end;
@@ -2648,8 +2644,7 @@ begin
     AValue := TyNullDate
   else
   begin
-    if (FMinDate <> 0) and (AValue < FMinDate) then AValue := FMinDate;
-    if (FMaxDate <> 0) and (AValue > FMaxDate) then AValue := FMaxDate;
+    AValue := ClampToDays(AValue);
     if AValue < TyTheSmallestDate then AValue := TyTheSmallestDate;
     if AValue > TyTheBiggestDate  then AValue := TyTheBiggestDate;
   end;
@@ -2768,7 +2763,8 @@ begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
   if not DateIsNull then
-    if (FMinDate <> 0) and (FDateTime < FMinDate) then SetDateTime(FMinDate);
+    if not TyEqualDateTime(ClampToDays(FDateTime), FDateTime) then
+      SetDateTime(ClampToDays(FDateTime));
   Invalidate;
 end;
 
@@ -2777,7 +2773,8 @@ begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
   if not DateIsNull then
-    if (FMaxDate <> 0) and (FDateTime > FMaxDate) then SetDateTime(FMaxDate);
+    if not TyEqualDateTime(ClampToDays(FDateTime), FDateTime) then
+      SetDateTime(ClampToDays(FDateTime));
   Invalidate;
 end;
 
@@ -2885,7 +2882,9 @@ procedure TTyDateTimePicker.SetDroppedDown(AValue: Boolean);
 begin
   if AValue then
     OpenDropDown
-  else
+  { #160: nothing to close is no close-up -- DroppedDown := False on a closed picker fired
+    OnCloseUp. }
+  else if GetDroppedDown then
     CloseDropDown;
 end;
 

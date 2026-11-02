@@ -67,6 +67,15 @@ type
   end;
 
   { --- 1. TTySpinEdit: the fresh control's range contract (claim 16) --- }
+  { #160 }
+  TUpDownQuietReadTest = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure Changed(Sender: TObject);
+  published
+    procedure TestReadingPositionIsNoChange;
+  end;
+
   TSpinDefaultRangeTest = class(TTestCase)
   published
     procedure FreshMaxValueIsZero;
@@ -392,6 +401,43 @@ function TSpinHexProbe.GetLimitedValue(const AValue: Integer): Integer;
 begin
   // Snap to multiples of 4 on top of whatever the base class enforces.
   Result := (inherited GetLimitedValue(AValue) div 4) * 4;
+end;
+
+procedure TUpDownQuietReadTest.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+{ #160: reading Position takes the field's number back without a word; a click after typing
+  is one change, not two. }
+procedure TUpDownQuietReadTest.TestReadingPositionIsNoChange;
+var
+  f: TForm;
+  ed: TTyEdit;
+  ud: TUpDownArrowProbe;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    ed := TTyEdit.Create(f);
+    ed.Parent := f;
+    ud := TUpDownArrowProbe.Create(f);
+    ud.Parent := f;
+    ud.SetBounds(0, 0, 17, 24);
+    ud.Max := 100;
+    ud.Associate := ed;
+    ud.Position := 5;
+    ud.OnChange := @Changed;
+    ed.Text := '40';
+    FChanges := 0;
+    AssertEquals('the field''s number is read', 40, ud.Position);
+    AssertEquals('and reading it is no change', 0, FChanges);
+    ed.Text := '60';
+    ud.PressUp;
+    AssertEquals('setup: stepped from the field', 61, ud.Position);
+    AssertEquals('one click after typing, one change', 1, FChanges);
+  finally
+    f.Free;
+  end;
 end;
 
 procedure TUpDownArrowProbe.PressUp;
@@ -1793,6 +1839,7 @@ begin
 end;
 
 initialization
+  RegisterTest(TUpDownQuietReadTest);
   RegisterTest(TSpinDefaultRangeTest);
   RegisterTest(TSpinEditorEnabledTest);
   RegisterTest(TSpinEditorStateTest);

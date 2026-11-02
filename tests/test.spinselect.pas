@@ -33,6 +33,9 @@ type
     procedure TestCodePlacingTheCaretLetsTheSelectionGo;
     procedure TestAClickInTheFieldLetsTheSelectionGo;
     procedure TestTheSelectedValueIsDrawnSelected;
+    { #160 }
+    procedure TestAStepStartsFromTheTypedValue;
+    procedure TestALongNumberKeepsTheCaretInTheBox;
   end;
 
 implementation
@@ -273,6 +276,50 @@ begin
     s.Free;
     c.Free;
   end;
+end;
+
+{ #160: the arrow keys and the wheel step from the number typed, not from the last one
+  committed: 5, type 40, Up gives 41. }
+procedure TSpinSelectTest.TestAStepStartsFromTheTypedValue;
+var
+  s: TTySpinEdit;
+begin
+  s := NewSpin;
+  s.Value := 5;
+  TSpinCrack(s).DoEnter;   // the value is selected: typing replaces it
+  TypeIn(s, '40');
+  Press(s, VK_UP);
+  AssertEquals('Up steps from what was typed', 41, s.Value);
+  TypeIn(s, '0');          // 410
+  TSpinCrack(s).DoMouseWheel([], 120, Point(5, 5));
+  AssertEquals('so does the wheel', 411, s.Value);
+end;
+
+{ #160: a number longer than the box scrolls with the caret instead of being cut, so the
+  caret stays inside the text area. }
+procedure TSpinSelectTest.TestALongNumberKeepsTheCaretInTheBox;
+var
+  s: TTySpinEdit;
+  bmp: TBitmap;
+begin
+  s := NewSpin;
+  s.MaxValue := 2000000000;
+  s.Font.PixelsPerInch := 96;
+  s.SetBounds(0, 0, 70, 26);
+  s.Value := 1234567890;
+  TSpinCrack(s).DoEnter;
+  Press(s, VK_END);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(70, 26);
+    TSpinCrack(s).RenderTo(bmp.Canvas, Rect(0, 0, 70, 26), 96);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue(Format('the caret is drawn inside the text area (%d of %d)',
+    [TSpinCrack(s).CaretPixelX(10, 96), s.ClientWidth]),
+    TSpinCrack(s).CaretPixelX(10, 96) < s.ClientWidth - 12);
 end;
 
 initialization

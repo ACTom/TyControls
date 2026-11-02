@@ -98,6 +98,7 @@ type
       the caret or clicking in the field lets it go. The buffer has no other selection (#190). }
     FAllSelected: Boolean;
     FMeasureBmp: TBGRABitmap;  // lazy; used only for text measurement
+    FScrollX: Integer;         // device px the text is scrolled left, when it does not fit (#160)
     // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
     // lazily and started ONLY when HandleAllocated, so headless tests never blink
     // and the static-caret pixel tests stay deterministic.
@@ -129,6 +130,8 @@ type
     procedure EditBackspace;
     procedure EditDelete;
     function CaretPixelX(AIdx, APPI: Integer): Integer;
+    { #160: FScrollX so the caret is inside the text area -- 0 while the number fits. }
+    procedure KeepCaretInView(APPI: Integer);
     function AlignOffset(APPI: Integer): Integer;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -590,8 +593,13 @@ begin
 end;
 
 procedure TTySpinEdit.StepValue(ADelta: Integer);
+var
+  base: Integer;
 begin
-  Value := FValue + ADelta;
+  { #160: from the number in the box, typed and not yet committed -- 5, type 40, Up gives 41 --
+    as TTyUpDown steps from its field. It stepped from the old value and threw the typing away. }
+  if BufferDiffers and (FEditText <> '') then base := StrToValue(FEditText) else base := FValue;
+  Value := base + ADelta;
   FModified := True;          // the arrows are the user editing, exactly like typing
 end;
 
@@ -817,12 +825,31 @@ var
 begin
   S := CurrentStyle;
   EffSize := ResolveFontSize(S);   // theme font-size > Font.Size > 9; shared with RenderTo so caret stays aligned
-  Result := MulDiv(S.Padding.Left, APPI, 96) + AlignOffset(APPI);   // local-left text start + H-align shift
+  Result := MulDiv(S.Padding.Left, APPI, 96) + AlignOffset(APPI) - FScrollX;   // text start + H-align shift, scrolled
   if (FEditText = '') or (AIdx <= 0) then Exit;
   if AIdx > UTF8Length(FEditText) then AIdx := UTF8Length(FEditText);
   if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
   TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
   Result := Result + FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, AIdx)).cx;
+end;
+
+procedure TTySpinEdit.KeepCaretInView(APPI: Integer);
+var
+  S: TTyStyleSet;
+  ViewW, TextW, CaretW: Integer;
+begin
+  FScrollX := 0;
+  if (FEditText = '') or (ClientWidth <= 0) then Exit;
+  S := CurrentStyle;
+  ViewW := ClientWidth
+    - MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96)
+    - MulDiv(S.Padding.Left, APPI, 96) - MulDiv(S.Padding.Right, APPI, 96);
+  if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
+  TyConfigureTextFont(FMeasureBmp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+  TextW := FMeasureBmp.TextSize(FEditText).cx;
+  if TextW <= ViewW then Exit;
+  CaretW := FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, FCaret)).cx;
+  if CaretW > ViewW then FScrollX := CaretW - ViewW;
 end;
 
 procedure TTySpinEdit.CommitEdit;
@@ -949,6 +976,7 @@ begin
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW - P.Scale(S.Padding.Right), R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
+    KeepCaretInView(APPI);
     { #189: the selected value under its band, the band an edit's selection draws }
     if FAllSelected and Focused and (FEditText <> '') then
       P.FillBackground(Rect(CaretPixelX(0, APPI), TextR.Top,
@@ -959,9 +987,14 @@ begin
       P.DrawText(TextR, FTextHint, S.FontName, EffSize, S.FontWeight,
         ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor,
         FAlignment, tlCenter, True)
+    else if FScrollX > 0 then
+      { #160: a number longer than the box scrolls with the caret, as an edit's text does; it
+        was cut with an ellipsis, and the caret drawn past what was shown. }
+      P.DrawText(Rect(TextR.Left - FScrollX, TextR.Top, TextR.Right, TextR.Bottom), FEditText,
+        S.FontName, EffSize, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, False)
     else
       P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
-        S.TextColor, FAlignment, tlCenter, True);
+        S.TextColor, FAlignment, tlCenter, False);
     { The hovered or pressed half first, inside the field's frame -- border and focus ring both
       (TTySpinButtons.PaintHalf) -- and its arrow in the ink that state asks for. }
     bw := TySpinFrameInsetPx(P, S);
