@@ -785,7 +785,7 @@ type
     画树线与图标,网格里没有任何代码读它,4.0 起不再发布。 }
   TTyGridHeader = class(TTyCustomHeader)
   published
-    property Height stored IsHeightStored nodefault;   // #152
+    property Height;
     property Columns;
     property SortColumn;
     property SortDirection;

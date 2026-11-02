@@ -418,7 +418,8 @@ type
     property SortStored: Boolean read FSortStored write FSortStored;
     { The header's properties. TTyHeader publishes every one of them; TTyGridHeader all but
       MainColumn (#130). }
-    property Height:        Integer              read FHeight        write SetHeight        default 22;
+    { #152: saved whenever it was set, 22 included (the default, so it was never written). }
+    property Height:        Integer              read FHeight        write SetHeight        stored IsHeightStored nodefault;
     { The setter is what makes this collection STREAM, and it is not optional.
 
       FPC gates both halves of streaming on SetProc being present, for every property
@@ -452,8 +453,7 @@ type
   { The header ListView and TreeView publish. }
   TTyHeader = class(TTyCustomHeader)
   published
-    { #152: saved whenever it was set, 22 included (the default, so it was never written). }
-    property Height stored IsHeightStored nodefault;
+    property Height;
     property Columns;
     property MainColumn;
     property SortColumn;

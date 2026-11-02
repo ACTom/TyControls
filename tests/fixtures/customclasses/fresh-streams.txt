@@ -46,7 +46,6 @@
     Height = 120
     Top = 0
     Width = 120
-    Time =  3.6526500000000000E+004
   end
 # TTyArrow
     Left = 0
@@ -539,6 +538,7 @@
     Top = 0
     Width = 160
     TabOrder = 0
+    SelectedFont = <from the machine>
   end
 # TTyFontSizeComboBox
     Left = 0
@@ -1265,7 +1265,6 @@
     Width = 200
     TabOrder = 0
     Align = alTop
-    ButtonWidth = 46
   end
 # TTyToggleSwitch
     Left = 0

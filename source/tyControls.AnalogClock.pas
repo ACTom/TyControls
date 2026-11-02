@@ -49,7 +49,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    property Time: TDateTime read FTime write SetTime;
+    { Saved only for a stopped clock (#149): a running one sets it from the system clock every
+      second, so the saved value was never used, and the form changed on every save. Declared
+      here, so a descendant that publishes it saves it as TTyAnalogClock does. }
+    property Time: TDateTime read FTime write SetTime stored IsTimeStored;
     property ShowSeconds: Boolean read FShowSeconds write SetShowSeconds default True;
     property ShowTicks: Boolean read FShowTicks write SetShowTicks default True;
     property Running: Boolean read FRunning write SetRunning default True;
@@ -97,9 +100,7 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { Saved only for a stopped clock (#149): a running one sets it from the system clock every
-      second, so the saved value was never used, and the form changed on every save. }
-    property Time stored IsTimeStored;
+    property Time;
     property ShowSeconds;
     property ShowTicks;
     property Running;

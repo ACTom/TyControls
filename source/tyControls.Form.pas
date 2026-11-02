@@ -334,7 +334,10 @@ type
     { Left (default) or centered title text. Centered lays out within the content
       zone (left pad .. start of the caption buttons), so it never overlaps them. }
     property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment default taLeftJustify;
-    property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
+    { #152: saved only when set, so a bar that never was follows the skin's
+      --caption-button-width. It was always saved, and the 46 a bar starts with came back as a
+      pin under every skin. }
+    property ButtonWidth: Integer read FButtonWidth write SetButtonWidth stored FButtonWidthExplicit;
     { Per-button switches. On a STANDALONE bar they are the whole story. Associated with a
       TTyForm, the form additionally decides which buttons the WINDOW offers (BorderIcons +
       Resizable, see OfferedButtons) and a button shows only when both agree: a designer-set
@@ -417,10 +420,7 @@ type
     property TitleAlignment;
     property Align;
     property Anchors;
-    { #152: saved only when set, so a bar that never was follows the skin's
-      --caption-button-width. It was always saved, and the 46 a bar starts with came back as a
-      pin under every skin. }
-    property ButtonWidth stored FButtonWidthExplicit;
+    property ButtonWidth;
     property ShowMinimize;
     property ShowMaximize;
     property ShowClose;
