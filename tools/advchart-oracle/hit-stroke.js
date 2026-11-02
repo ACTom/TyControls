@@ -51,6 +51,14 @@
 //          zr.animation.update() and the timers -- what the pointer finds
 //          that far into the entering animation
 // A custom series' renderItem is written '@name' and run as RENDER[name].
+// R7-O adds (r7o.*): a graph edge's end symbols, which take the pointer as
+// the edge's (setItemGraphicEl writes its ECData onto every child of the
+// Line group) -- an arrow, an empty circle (its pen lineWidth 2 in its own
+// frame, filled with the ground), a diamond and an empty rect, on a view
+// scaled equally and on one whose scaleY is not its scaleX (the symbols
+// squashed by scaleY / scaleX after their turn); and a scatter's arrow,
+// whose barbs reach two thirds of its width out of its unit box's centre
+// (r7o.scatter-arrow-barbs: the rays pass under them).
 // Run: node tools/advchart-oracle/hit-stroke.js -> tests/fixtures/advchart-hit-stroke.json
 'use strict';
 const fs = require('fs');
@@ -472,6 +480,35 @@ function r7iCases() {
         data: GRAPH_NODES, links: GRAPH_LINKS }] }, [{ thumbWin: true }]],
     ['r7i.sankey-anim', ANIM(solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
       links: [{ source: 'a', target: 'b', value: 3 }], lineStyle: { opacity: 0.5 } })), [PT(200, 150, 200)], { t: 300 }],
+    // [R7-O] a graph edge's end symbols: on a view scaled equally (2.6 both ways), then 3 across and 1.5 down
+    ['r7o.graph-ends', solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 260, height: 260, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [16, 24], lineStyle: { width: 1, opacity: 1 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' },
+        { source: 'c', target: 'b', symbol: ['diamond', 'emptyRect'], symbolSize: 20 }] }),
+    [PT(300, 21, 40), PT(56, 21, 30), PT(300, 270, 40), PT(310, 31, 30)]],
+    ['r7o.graph-ends-squash', solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 300, height: 150, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [16, 24], lineStyle: { width: 1, opacity: 1 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 },
+        { name: 'd', x: 0, y: 100, symbol: 'rect', symbolSize: [24, 12], symbolRotate: 30,
+          itemStyle: { borderColor: '#000', borderWidth: 3 } }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' },
+        { source: 'c', target: 'd', lineStyle: { curveness: 0.3 }, symbol: ['diamond', 'emptyRect'], symbolSize: 20 }] }),
+    [PT(340, 21, 40), PT(56, 21, 30), PT(340, 165, 40), PT(345, 30, 30), PT(60, 165, 30)]],
+    // a two-pixel empty circle at the end of an upright edge, squashed: its frame's diagonal holds a one (the pen in the
+    // symbol's own frame is not strokeNoScale -- no getLineScale rule)
+    ['r7o.graph-tiny-ends-squash', solo({ type: 'graph', layout: 'none', left: 100, top: 20, width: 100, height: 100, symbolSize: 0,
+      edgeSymbol: ['emptyCircle', 'emptyCircle'], edgeSymbolSize: 2, lineStyle: { width: 1, opacity: 1, color: '#000' },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 0, y: 100 }, { name: 'c', x: 50, y: 50 }],
+      links: [{ source: 'a', target: 'b' }] }),
+    [PT(100, 20, 8), PT(100, 120, 8)]],
+    // drawing out (enter, linear 1000 ms, 400 ms in): the line and its end symbols as drawn at the percent
+    ['r7o.graph-squash-anim', ANIM(solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 300, height: 150,
+      symbolSize: 10, edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [16, 24], lineStyle: { width: 1, opacity: 1 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] })),
+    [PT(56, 21, 30), PT(170, 21, 30), PT(150, 70, 30)], { t: 400 }],
+    ['r7o.scatter-arrow-barbs', sc('arrow', 40, {}, { data: [[5, 5]] }), [PT(210, 178, 40), PT(210, 175, 40)]],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
 }
 function withRender(option) {

@@ -6723,6 +6723,8 @@ var
   ah, ah1: TTyTextAnchorH;
   av, av1: TTyTextAnchorV;
   now_: TTyChartElement;
+  { [R7-O] scaleY / scaleX of the view at rest and now }
+  r1, rn: Double;
 begin
   if IsNan(APercent) then Exit;
   { [F3d] THE LINE AS IT IS NOW: its shape's ends and control point from the
@@ -6771,6 +6773,10 @@ begin
           AEl.Shape.HitCP := TyGraphEdgeDev(now_, d);
         end;
         AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
+        { [R7-O] the line in the group's units for the pointer, as drawn }
+        if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
+          TyGraphEdgeZrHit(AEl, q1, q2, qc, cv, APercent, now_.Anim.G[7],
+            now_.Anim.G[8], now_.Anim.G[9], now_.Anim.G[10]);
         if not (APercent > 0) then MakeInkless(AEl);
       end;
     carGraphEdgeFrom, carGraphEdgeTo:
@@ -6790,6 +6796,18 @@ begin
           s := (s * now_.Anim.G[7]) / (s1 * AEl.Anim.G[7])
         else
           s := APercent;
+        { [R7-O] UNDER A VIEW THAT SCALES UNEQUALLY the symbol keeps
+          scaleY / scaleX on y AFTER its turn: the rest's squash taken off
+          about its end, the scale and the turn of this frame, then this
+          frame's squash on [was: the rest's squashed outline turned] }
+        r1 := 1;
+        rn := 1;
+        if (AEl.Anim.G[7] <> 0) and not IsNan(AEl.Anim.G[7]) and not IsNan(AEl.Anim.G[8]) then
+          r1 := AEl.Anim.G[8] / AEl.Anim.G[7];
+        if (now_.Anim.G[7] <> 0) and not IsNan(now_.Anim.G[7]) and not IsNan(now_.Anim.G[8]) then
+          rn := now_.Anim.G[8] / now_.Anim.G[7];
+        if (r1 <> 1) and (r1 <> 0) and not IsInfinite(r1) then
+          TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, 1, 1 / r1);
         TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, s, s);
         { turned by the tangent's turn: setSymbolRotation reads tangentAt(0)
           or tangentAt(1), whatever the percent }
@@ -6807,6 +6825,12 @@ begin
         end;
         if not SameBitsD(rot, rot1) and not IsNan(rot) and not IsNan(rot1) then
           TyShapeRotateAbout(AEl.Shape, d1.X, d1.Y, (rot - rot1) * Pi / 180);
+        if (rn <> 1) and not IsInfinite(rn) then
+          TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, 1, rn);
+        { the pen in the symbol's frame goes with it: the root of the map's
+          determinant (the port's round pen) }
+        if (AEl.Style.StrokeWidthLogical > 0) and ((s <> 1) or (rn <> 1)) then
+          AEl.Style.PenScale := Abs(s) * Sqrt(Abs(rn));
         d := TyGraphEdgeDev(now_, TyPointF(x, y));
         TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
       end;

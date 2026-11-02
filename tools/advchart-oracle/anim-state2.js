@@ -770,6 +770,9 @@ const CASES = [
   { id: 'graph-hover', note: 'hover node b at 0: its path scales to _sizeX * 1.1 (absolute), the fill lifts, the label '
       + 'stays; hover the edge b-c at 500 (the line\'s stroke lifts, its arrow and label with it); out at 1000',
     option: graph(), events: [over(0, ['item', 0, 1]), over(500, ['gedge', 0, 1]), out(1000)] },
+  { id: 'graph-empty-ends', note: "[R7-O] edgeSymbol ['emptyCircle', 'arrow'], emphasis.lineStyle colour: hover the edge b-c at 0 -- the empty circle takes the line's state stroke as its pen (stateStyle[__isEmptyBrush ? 'stroke' : 'fill']), the arrow as its fill; out at 500",
+    option: graph({ edgeSymbol: ['emptyCircle', 'arrow'], emphasis: { lineStyle: { color: '#00aa00' } } }),
+    events: [over(0, ['gedge', 0, 1]), out(500)] },
   { id: 'graph-scale', note: 'emphasis.scale 1.6 on an oblong symbol ([24, 12]): scaleX 12 * 1.6, scaleY 6 * 1.6',
     option: graph({ symbolSize: [24, 12], emphasis: { scale: 1.6 } }), events: [over(0, ['item', 0, 2]), out(500)] },
   { id: 'graph-adjacency', note: 'focus adjacency: hovering c keeps b, d and the two edges, the rest blurs (opacity 0.1 '

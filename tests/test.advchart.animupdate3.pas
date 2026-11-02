@@ -75,6 +75,9 @@ type
     procedure ProbePictorial(ARec: TJSONObject);
     procedure ProbeState(ARec: TJSONObject);
     procedure ProbeLabels(ARec: TJSONObject);
+    procedure ProbeGraphSym(ARec: TJSONObject);
+    procedure MappedOutline(const AWhat: string; const AEl: TTyChartElement;
+      const AType: string; AX, AY, AW, AH: Double; const M: TTyMat2D);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -90,6 +93,7 @@ type
     procedure TestAStatesGradientTweensAsUpstream;
     procedure TestATreeToggleIsTheAction;
     procedure TestARenderEndsTheLabelsFadesAsUpstream;
+    procedure TestASquashedViewsSymbolsAsUpstream;
   end;
 
 implementation
@@ -119,6 +123,27 @@ var q: QWord;
 begin
   Move(A, q, SizeOf(q));
   Result := LowerCase(IntToHex(q, 16));
+end;
+
+{ [R7-O] the alignment's name, as zrender writes it }
+function AnchorHName(A: TTyTextAnchorH): string;
+begin
+  case A of
+    tahLeft: Result := 'left';
+    tahRight: Result := 'right';
+  else
+    Result := 'center';
+  end;
+end;
+
+function AnchorVName(A: TTyTextAnchorV): string;
+begin
+  case A of
+    tavTop: Result := 'top';
+    tavBottom: Result := 'bottom';
+  else
+    Result := 'middle';
+  end;
 end;
 
 function Txt(A: Double): string;
@@ -418,6 +443,16 @@ begin
   begin
     { a circle: the moveTo before its arc is the arc's start, not a vertex }
     Inc(FCompared);
+    { [R7-O] under a view scaled unequally the circle is an ellipse: the
+      record's radius is the arc's times the root of the map's determinant,
+      the root of the two radii }
+    if AEl.Shape.Kind = cskEllipse then
+    begin
+      NearNum(AWhat + ' drawn cx', AEl.Shape.CX, arcs.Items[0], 1e-6);
+      NearNum(AWhat + ' drawn cy', AEl.Shape.CY, arcs.Items[1], 1e-6);
+      NearNum(AWhat + ' drawn r', Sqrt(AEl.Shape.R0 * AEl.Shape.R1), arcs.Items[2], 1e-6);
+      Exit;
+    end;
     if AEl.Shape.Kind <> cskCircle then
     begin
       Bad(AWhat + ': upstream draws a circle, the port another shape');
@@ -1032,6 +1067,311 @@ begin
   end;
 end;
 
+{ [R7-O] A SYMBOL THROUGH ITS WHOLE MAP M against the frame's element: the
+  path createSymbol(AType, AX, AY, AW, AH) makes -- a circle's centre and
+  its radii on screen (an upright ellipse where M's rows are at right
+  angles), a polygon's vertices in order (a rect's four corners), any other
+  outline (a pin's, a roundRect's, a path's, a circle M turns) by its
+  bounds, sampled finely here, to a twentieth of a pixel (the port samples
+  its curves). }
+procedure TAdvChartAnimUpdate3OracleTest.MappedOutline(const AWhat: string;
+  const AEl: TTyChartElement; const AType: string; AX, AY, AW, AH: Double;
+  const M: TTyMat2D);
+const cSteps = 256;
+var
+  path: TTyZrPath;
+  pts: array of TTyPointF;
+  i, k, n: Integer;
+  r, rx, ry, cx, cy, lx, ly, t, u, a, x0, y0, sx, sy: Double;
+  minX, minY, maxX, maxY: Double;
+  bx: TTyRectF;
+  poly, anyCurve: Boolean;
+
+  procedure Add(APx, APy: Double);
+  begin
+    SetLength(pts, Length(pts) + 1);
+    pts[High(pts)] := TyPointF(M[0] * APx + M[2] * APy + M[4], M[1] * APx + M[3] * APy + M[5]);
+  end;
+
+begin
+  if (AType = 'circle') or (AType = 'emptyCircle') then
+  begin
+    r := Min(AW, AH) / 2;
+    lx := AX + AW / 2;
+    ly := AY + AH / 2;
+    cx := M[0] * lx + M[2] * ly + M[4];
+    cy := M[1] * lx + M[3] * ly + M[5];
+    rx := r * Sqrt(M[0] * M[0] + M[2] * M[2]);
+    ry := r * Sqrt(M[1] * M[1] + M[3] * M[3]);
+    if Abs(M[0] * M[1] + M[2] * M[3]) <= 1e-12 * rx * ry / (r * r) then
+    begin
+      Inc(FCompared);
+      if AEl.Shape.Kind = cskCircle then
+      begin
+        NearVal(AWhat + ' cx', AEl.Shape.CX, cx);
+        NearVal(AWhat + ' cy', AEl.Shape.CY, cy);
+        NearVal(AWhat + ' rx', AEl.Shape.R1, rx);
+        NearVal(AWhat + ' ry', AEl.Shape.R1, ry);
+      end
+      else if AEl.Shape.Kind = cskEllipse then
+      begin
+        NearVal(AWhat + ' cx', AEl.Shape.CX, cx);
+        NearVal(AWhat + ' cy', AEl.Shape.CY, cy);
+        NearVal(AWhat + ' rx', AEl.Shape.R0, rx);
+        NearVal(AWhat + ' ry', AEl.Shape.R1, ry);
+      end
+      else
+        Bad(AWhat + ': upstream draws an upright ellipse, the port another shape');
+      Exit;
+    end;
+  end;
+  path := TyZrSymbol(AType, AX, AY, AW, AH);
+  pts := nil;
+  poly := True;
+  anyCurve := False;
+  x0 := 0;
+  y0 := 0;
+  sx := 0;
+  sy := 0;
+  for i := 0 to High(path) do
+    case path[i].Cmd of
+      zrM:
+        begin
+          Add(path[i].V[0], path[i].V[1]);
+          x0 := path[i].V[0];
+          y0 := path[i].V[1];
+          sx := x0;
+          sy := y0;
+        end;
+      zrL:
+        begin
+          Add(path[i].V[0], path[i].V[1]);
+          x0 := path[i].V[0];
+          y0 := path[i].V[1];
+        end;
+      zrR:
+        begin
+          Add(path[i].V[0], path[i].V[1]);
+          Add(path[i].V[0] + path[i].V[2], path[i].V[1]);
+          Add(path[i].V[0] + path[i].V[2], path[i].V[1] + path[i].V[3]);
+          Add(path[i].V[0], path[i].V[1] + path[i].V[3]);
+        end;
+      zrC:
+        begin
+          poly := False;
+          anyCurve := True;
+          for k := 1 to cSteps do
+          begin
+            t := k / cSteps;
+            u := 1 - t;
+            Add(u * u * u * x0 + 3 * u * u * t * path[i].V[0] + 3 * u * t * t * path[i].V[2] + t * t * t * path[i].V[4],
+              u * u * u * y0 + 3 * u * u * t * path[i].V[1] + 3 * u * t * t * path[i].V[3] + t * t * t * path[i].V[5]);
+          end;
+          x0 := path[i].V[4];
+          y0 := path[i].V[5];
+        end;
+      zrQ:
+        begin
+          poly := False;
+          anyCurve := True;
+          for k := 1 to cSteps do
+          begin
+            t := k / cSteps;
+            u := 1 - t;
+            Add(u * u * x0 + 2 * u * t * path[i].V[0] + t * t * path[i].V[2],
+              u * u * y0 + 2 * u * t * path[i].V[1] + t * t * path[i].V[3]);
+          end;
+          x0 := path[i].V[2];
+          y0 := path[i].V[3];
+        end;
+      zrA:
+        begin
+          poly := False;
+          anyCurve := True;
+          for k := 0 to cSteps do
+          begin
+            a := path[i].V[4] + path[i].V[5] * k / cSteps;
+            Add(path[i].V[0] + path[i].V[2] * Cos(a) * Cos(path[i].V[6]) - path[i].V[3] * Sin(a) * Sin(path[i].V[6]),
+              path[i].V[1] + path[i].V[2] * Cos(a) * Sin(path[i].V[6]) + path[i].V[3] * Sin(a) * Cos(path[i].V[6]));
+          end;
+          a := path[i].V[4] + path[i].V[5];
+          x0 := path[i].V[0] + path[i].V[2] * Cos(a);
+          y0 := path[i].V[1] + path[i].V[3] * Sin(a);
+        end;
+      zrZ:
+        begin
+          x0 := sx;
+          y0 := sy;
+        end;
+    end;
+  if Length(pts) = 0 then
+  begin
+    Inc(FCompared);
+    Bad(AWhat + ': no path upstream');
+    Exit;
+  end;
+  if poly and not anyCurve and (AType <> 'circle') and (AType <> 'emptyCircle') then
+  begin
+    n := Length(pts);
+    { the closing lineTo back to the first point is not a vertex of its own }
+    if (n > 1) and SameBits(pts[0].X, pts[n - 1].X) and SameBits(pts[0].Y, pts[n - 1].Y) then Dec(n);
+    Inc(FCompared);
+    if Length(AEl.Shape.Points) <> n then
+    begin
+      Bad(Format('%s: %d points, upstream %d', [AWhat, Length(AEl.Shape.Points), n]));
+      Exit;
+    end;
+    for k := 0 to n - 1 do
+    begin
+      NearVal(Format('%s x%d', [AWhat, k]), AEl.Shape.Points[k].X, pts[k].X);
+      NearVal(Format('%s y%d', [AWhat, k]), AEl.Shape.Points[k].Y, pts[k].Y);
+    end;
+    Exit;
+  end;
+  minX := pts[0].X; maxX := minX; minY := pts[0].Y; maxY := minY;
+  for k := 1 to High(pts) do
+  begin
+    if pts[k].X < minX then minX := pts[k].X;
+    if pts[k].X > maxX then maxX := pts[k].X;
+    if pts[k].Y < minY then minY := pts[k].Y;
+    if pts[k].Y > maxY then maxY := pts[k].Y;
+  end;
+  bx := TyShapeBounds(AEl.Shape);
+  if AEl.Shape.HasCmdBounds then bx := AEl.Shape.CmdBounds;
+  Inc(FCompared);
+  if not TyRectFIsValid(bx) then
+  begin
+    Bad(AWhat + ': upstream draws an outline, the port nothing');
+    Exit;
+  end;
+  for k := 0 to 3 do
+  begin
+    case k of
+      0: begin t := bx.Left; u := minX; end;
+      1: begin t := bx.Top; u := minY; end;
+      2: begin t := bx.Right; u := maxX; end;
+    else
+      begin t := bx.Bottom; u := maxY; end;
+    end;
+    Inc(FCompared);
+    if Abs(t - u) > 0.05 then
+      Bad(Format('%s bounds[%d] %s, upstream %s', [AWhat, k, Txt(t), Txt(u)]));
+  end;
+end;
+
+{ ---- [R7-O] a graph's end symbols and nodes through their whole maps ---- }
+procedure TAdvChartAnimUpdate3OracleTest.ProbeGraphSym(ARec: TJSONObject);
+var
+  i, s, idx, slash, k: Integer;
+  name, rest, sub, tp: string;
+  leaf, lab: TJSONObject;
+  el, cap: TTyChartElement;
+  m: TTyMat2D;
+  bx: TJSONArray;
+  role: TTyChartAnimRole;
+  l: TTyPaintList;
+  found: Boolean;
+  ps: Double;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if (Length(name) < 2) or (name[1] <> 'g') or not (name[2] in ['0'..'9']) then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 2, slash - 2));
+    rest := Copy(name, slash + 1, MaxInt);
+    sub := '';
+    if Pos('/', rest) > 0 then
+    begin
+      sub := Copy(rest, Pos('/', rest) + 1, MaxInt);
+      rest := Copy(rest, 1, Pos('/', rest) - 1);
+    end;
+    leaf := TJSONObject(ARec.Items[i]);
+    if not ((sub = 'fm') or (sub = 'tm')) then
+    begin
+      if Copy(rest, 1, 4) <> 'nsym' then Continue;
+    end;
+    for k := 0 to 5 do m[k] := WantNum(leaf.Arrays['m'].Items[k]);
+    if (sub = 'fm') or (sub = 'tm') then
+    begin
+      idx := StrToInt(Copy(rest, 5, MaxInt));
+      { at percent 0 the symbol has no scale: nothing to draw }
+      if (m[0] = 0) and (m[1] = 0) and (m[2] = 0) and (m[3] = 0) then Continue;
+      if sub = 'tm' then role := carGraphEdgeTo else role := carGraphEdgeFrom;
+      Inc(FCompared);
+      if not FrameEl(s, idx, role, el) then
+      begin
+        Bad(name + ': upstream draws the end symbol, the frame has none');
+        Continue;
+      end;
+      if leaf.Find('type') is TJSONString then
+      begin
+        tp := leaf.Strings['type'];
+        bx := leaf.Arrays['box'];
+        MappedOutline(name, el, tp, WantNum(bx.Items[0]), WantNum(bx.Items[1]),
+          WantNum(bx.Items[2]), WantNum(bx.Items[3]), m);
+      end;
+      { the pen: the symbol's own (no strokeNoScale), its width as the
+        style holds it, stretched with the map -- the port's round pen the
+        root of its determinant }
+      Inc(FCompared);
+      if leaf.Booleans['stroked'] <> ((el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0)) then
+        Bad(Format('%s: upstream strokes %s, the port %s', [name,
+          BoolToStr(leaf.Booleans['stroked'], True),
+          BoolToStr(el.Style.StrokeWidthLogical > 0, True)]));
+      Inc(FCompared);
+      if leaf.Booleans['filled'] <> el.Style.HasFill then
+        Bad(Format('%s: upstream fills %s, the port %s', [name,
+          BoolToStr(leaf.Booleans['filled'], True), BoolToStr(el.Style.HasFill, True)]));
+      if leaf.Booleans['stroked'] then
+      begin
+        SameNum(name + ' lineWidth', el.Style.StrokeWidthLogical, leaf.Find('lw'));
+        ps := el.Style.PenScale;
+        if not (ps > 0) then ps := 1;
+        NearVal(name + ' pen scale', ps, Sqrt(Abs(m[0] * m[3] - m[1] * m[2])));
+      end;
+    end
+    else
+    begin
+      idx := StrToInt(Copy(rest, 5, MaxInt));
+      Inc(FCompared);
+      if not FrameEl(s, idx, carSymbol, el) then
+      begin
+        Bad(name + ': upstream draws the node, the frame has none');
+        Continue;
+      end;
+      if (m[0] = 0) and (m[1] = 0) and (m[2] = 0) and (m[3] = 0) then Continue;
+      if leaf.Find('type') is TJSONString then
+        MappedOutline(name, el, leaf.Strings['type'], -1, -1, 2, 2, m);
+      if leaf.Find('label') is TJSONObject then
+      begin
+        lab := leaf.Objects['label'];
+        l := FChart.Frame;
+        if (l = nil) or (l.Count = 0) then l := FChart.List;
+        found := False;
+        for k := 0 to l.Count - 1 do
+        begin
+          cap := l.Element(k);
+          if (cap.Datum.SeriesIndex <> s) or cap.Datum.IsEdge
+            or (cap.Datum.DataIndex <> idx) or (cap.Caption.FontSizeLogical <= 0) then Continue;
+          found := True;
+          NearNum(name + ' label x', cap.Caption.X, lab.Find('x'), 1e-9);
+          NearNum(name + ' label y', cap.Caption.Y, lab.Find('y'), 1e-9);
+          Inc(FCompared);
+          if (AnchorHName(cap.Caption.AnchorH) <> lab.Strings['align'])
+            or (AnchorVName(cap.Caption.AnchorV) <> lab.Strings['vAlign']) then
+            Bad(Format('%s label %s/%s, upstream %s/%s', [name,
+              AnchorHName(cap.Caption.AnchorH), AnchorVName(cap.Caption.AnchorV),
+              lab.Strings['align'], lab.Strings['vAlign']]));
+          Break;
+        end;
+        Inc(FCompared);
+        if not found then Bad(name + ': upstream draws the label, the port none');
+      end;
+    end;
+  end;
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -1044,6 +1384,7 @@ begin
     else if AProbes.Strings[i] = 'labels' then ProbeLabels(ARec)
     { [R7-N] the edge labels' maps: read by the graph probe }
     else if AProbes.Strings[i] = 'gl' then
+    else if AProbes.Strings[i] = 'gsym' then ProbeGraphSym(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -1150,6 +1491,15 @@ end;
 procedure TAdvChartAnimUpdate3OracleTest.TestTheGraphUpdatesAsUpstream;
 begin
   RunGroup('graph', 2000);
+end;
+
+{ [R7-O] a graph on a view whose scaleY is not its scaleX: its end symbols
+  turned by the tangent in the group's units and squashed after the turn
+  (static, merged, entering), its turned nodes squashed after their turn and
+  their labels off that rect }
+procedure TAdvChartAnimUpdate3OracleTest.TestASquashedViewsSymbolsAsUpstream;
+begin
+  RunGroup('graphSquash', 500);
 end;
 
 procedure TAdvChartAnimUpdate3OracleTest.TestTheTreeExpandsAndCollapsesAsUpstream;

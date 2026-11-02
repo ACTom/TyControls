@@ -609,6 +609,9 @@ var
     k2: Integer;
     cx2, cy2, ct, st, u, v, u0, u1, v0, v1, g: Double;
     first: Boolean;
+    toEnd: Boolean;
+    gx2, gy2, k2s: Double;
+    tg2: TTyPointF;
 
     procedure P(AX, AY: Double);
     begin
@@ -629,6 +632,24 @@ var
     end;
 
   begin
+    { [R7-O] in the group's units, exactly: the path's own rect grown by
+      its pen (the builder's Vals[7..10]) through the symbol's local
+      transform -- at its end of the line, turned by that end's tangent,
+      scaled by 1 / scaleX [was: the drawn outline turned by the chord and
+      scaled back by 1 / scaleX, its pen the canvas'] }
+    if sq and (AEl2.Anim.Role in [carGraphEdgeFrom, carGraphEdgeTo])
+      and (Length(AEl2.Anim.Vals) >= 11) then
+    begin
+      toEnd := AEl2.Anim.Role = carGraphEdgeTo;
+      TyGraphEdgeEnds(AHostNow, 1, toEnd, gx2, gy2, k2s);
+      if toEnd then tg2 := TyGraphTangentAt(q1, q2, qc, cv, 1)
+      else tg2 := TyGraphTangentAt(q1, q2, qc, cv, 0);
+      r := TyRectApplyMat(TyXYWH(AEl2.Anim.Vals[7], AEl2.Anim.Vals[8],
+        AEl2.Anim.Vals[9], AEl2.Anim.Vals[10]),
+        TyZrLocal(k2s, k2s, TyGraphArrowRotationRad(tg2, toEnd), gx2, gy2));
+      Union;
+      Exit;
+    end;
     b := TyShapeBounds(AEl2.Shape);
     if not TyRectFIsValid(b) then Exit;
     cx2 := (b.Left + b.Right) / 2;
@@ -2574,8 +2595,9 @@ begin
         FSt[s].HostIdx[raw] := k;
       Continue;
     end;
-    { [F2a] A GRAPH'S EDGE: its line hosts, its arrows (silent) are parts,
-      its caption the label }
+    { [F2a] A GRAPH'S EDGE: its line hosts, its arrows are parts (by their
+      role: they take the pointer as the edge's [R7-O]), its caption the
+      label }
     if pe^.Datum.IsEdge and (FSt[s].Kind = sskGraph) then
     begin
       raw := StGraphEdgeOfRow(SlotOfSeries(s), pe^.Datum.DataIndex);
@@ -2584,7 +2606,7 @@ begin
       begin
         if FSt[s].EdgeLabelIdx[raw] < 0 then FSt[s].EdgeLabelIdx[raw] := k;
       end
-      else if pe^.Silent then
+      else if pe^.Silent or (pe^.Anim.Role in [carGraphEdgeFrom, carGraphEdgeTo]) then
         StPush(FSt[s].EdgePartIdx[raw], k)
       else if FSt[s].EdgeHostIdx[raw] < 0 then
         FSt[s].EdgeHostIdx[raw] := k;
@@ -4921,8 +4943,9 @@ end;
 
 { A GRAPH'S EDGE (Line.ts _updateCommonStl): the line's states are its
   lineStyle's along link -> series; the arrows take the line's state stroke
-  as their fill and its opacity; the label's states are the link's `label`,
-  the series' `edgeLabel` (resolveParentPath), its emphasis show defaulting
+  as their fill (an empty one's as its pen [R7-O]) and its opacity; the
+  label's states are the link's `label`, the series' `edgeLabel`
+  (resolveParentPath), its emphasis show defaulting
   to the normal one (defaultEmphasis). emphasis.disabled: no dispatcher, no
   proxy on any of them. }
 procedure TTyCustomAdvanceChart.StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
@@ -4932,7 +4955,7 @@ var
   cap: TTyChartElement;
   ph: PTyChartElement;
   nodes: TTyStNodeArray;
-  has, bolder, disabled, was, prevWas, normalShow, stShow: Boolean;
+  has, bolder, disabled, was, prevWas, normalShow, stShow, emptyPart: Boolean;
   prev: TTyStNames;
   n: TTyStName;
   obj: TTyStObject;
@@ -4970,12 +4993,24 @@ begin
     item^.Parts[k].Exists := True;
     item^.Parts[k].IsPath := True;
     item^.Parts[k].Proxy := not disabled;
-    item^.Parts[k].Rest := StRestOf(AList.Element(FSt[s].EdgePartIdx[AEdge][k]));
+    cap := AList.Element(FSt[s].EdgePartIdx[AEdge][k]);
+    item^.Parts[k].Rest := StRestOf(cap);
+    { [R7-O] an empty symbol (filled with the ground, stroked; a 'line' is
+      stroked over zrender's default fill, and is no empty one): the state's
+      stroke is its pen -- stateStyle[__isEmptyBrush ? 'stroke' : 'fill'] }
+    emptyPart := cap.Style.HasFill and (cap.Style.StrokeWidthLogical > 0)
+      and (cap.Shape.Kind <> cskPolyline);
     for n := Low(TTyStName) to High(TTyStName) do
     begin
       item^.Parts[k].HasState[n] := True;
       obj := TyStNoObject;
-      if item^.Host.Decl[n].Has[stkStroke] then
+      if item^.Host.Decl[n].Has[stkStroke] and emptyPart then
+      begin
+        obj.Has[stkStroke] := True;
+        obj.Color[stkStroke] := item^.Host.Decl[n].Color[stkStroke];
+        obj.None[stkStroke] := item^.Host.Decl[n].None[stkStroke];
+      end
+      else if item^.Host.Decl[n].Has[stkStroke] then
       begin
         obj.Has[stkFill] := True;
         obj.Color[stkFill] := item^.Host.Decl[n].Color[stkStroke];
