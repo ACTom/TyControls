@@ -1,7 +1,8 @@
 unit test.maskedit;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, LCLType, fpcunit, testregistry, tyControls.MaskEdit;
+uses Classes, SysUtils, LCLType, Forms, Controls, StdCtrls, fpcunit, testregistry,
+  tyControls.Edit, tyControls.TextMenu, tyControls.MaskEdit;
 type
   { Exposes the protected UTF8KeyPress and KeyDown so masked entry can be driven headlessly
     (InjectKey bypasses UTF8KeyPress, so it can't exercise the mask filter). }
@@ -14,6 +15,9 @@ type
     procedure PressWith(k: Word; Shift: TShiftState);
     function ReadClipboardText: string; override;
     procedure WriteClipboardText(const S: string); override;
+    procedure ImeCommit(const S: string);
+    procedure Enter;
+    procedure Leave;
   end;
 
   TMaskEditTest = class(TTestCase)
@@ -38,9 +42,209 @@ type
     procedure TestTypingOverASelectionClearsIt;
     procedure TestCutClearsTheSelectedSlotsInPlace;
     procedure TestShortFormKeepsItsOwnPastePath;
+    { #158 }
+    procedure TestNoEditGoesAroundTheMask;
+    procedure TestTheShortFormKeepsItsShapeToo;
+    procedure TestCharCaseNumbersOnlyAndOnKeyPressHoldUnderAMask;
+    procedure TestClearKeepsTheLiterals;
+    procedure TestAFailedValidationTakesTheUserBack;
+  end;
+
+  TMaskKeyCatch = class
+    procedure Swallow(Sender: TObject; var Key: Char);
   end;
 
 implementation
+
+procedure TAccessMask.ImeCommit(const S: string);
+begin
+  HandleImeCommit(S);
+end;
+
+procedure TAccessMask.Enter;
+begin
+  DoEnter;
+end;
+
+procedure TAccessMask.Leave;
+begin
+  DoExit;
+end;
+
+procedure TMaskKeyCatch.Swallow(Sender: TObject; var Key: Char);
+begin
+  if Key = 'x' then Key := #0;
+end;
+
+var
+  MaskWidgetSetReady: Boolean = False;
+
+procedure NeedMaskWidgetSet;
+begin
+  if MaskWidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  MaskWidgetSetReady := True;
+end;
+
+{ A date the mask still holds: ten characters, the slashes where the mask puts them. }
+procedure AssertShaped(const AWhat: string; m: TTyMaskEdit);
+begin
+  if (Length(m.Text) <> 10) or (m.Text[3] <> '/') or (m.Text[6] <> '/') then
+    raise EAssertionFailedError.Create(AWhat + ': the mask was gone around: "' + m.Text + '"');
+end;
+
+procedure TMaskEditTest.TestNoEditGoesAroundTheMask;
+var m: TAccessMask;
+    acts: ITyTextEditActions;
+    i: Integer;
+begin
+  m := TAccessMask.Create(nil);
+  try
+    m.Mask := '00/00/0000;1;_';
+    for i := 1 to 8 do m.Key(Char(Ord('0') + i mod 10));
+    AssertEquals('setup', '12/34/5678', m.Text);
+    acts := m as ITyTextEditActions;
+    m.CaretPos := 10;
+    m.PressWith(VK_BACK, [ssCtrl]);
+    AssertShaped('Ctrl+Backspace', m);
+    AssertEquals('it takes the slot before', '12/34/567_', m.Text);
+    m.CaretPos := 0;
+    m.PressWith(VK_DELETE, [ssCtrl]);
+    AssertShaped('Ctrl+Delete', m);
+    AssertEquals('and the slot at the caret', '_2/34/567_', m.Text);
+    m.SelStart := 3;
+    m.SelLength := 2;
+    acts.TeCut;
+    AssertShaped('the menu''s Cut', m);
+    AssertEquals('the slots are blanked', '_2/__/567_', m.Text);
+    AssertEquals('onto the clipboard', '34', m.Clip);
+    m.SelStart := 3;
+    m.SelLength := 2;   // over the blanked slots: a splice would shorten the text
+    m.Clip := '99';
+    acts.TePaste;
+    AssertShaped('the menu''s Paste', m);
+    AssertEquals('the paste lands in the slots', '_2/99/567_', m.Text);
+    m.SelStart := 0;
+    m.SelLength := 2;
+    m.SelText := '45';
+    AssertShaped('SelText', m);
+    AssertEquals('SelText fills the slots', '45/99/567_', m.Text);
+    m.SelStart := 6;
+    m.SelLength := 3;
+    m.ClearSelection;
+    AssertShaped('ClearSelection', m);
+    AssertEquals('it blanks them', '45/99/___' + '_', m.Text);
+    m.SelStart := 0;
+    m.SelLength := 2;
+    m.PressWith(VK_DELETE, [ssShift]);
+    AssertShaped('Shift+Delete', m);
+    m.SelStart := 6;
+    m.SelLength := 4;   // over the year's slots
+    m.ImeCommit('2026');
+    AssertShaped('an input-method commit', m);
+    AssertEquals('goes through the slots', '__/99/2026', m.Text);
+    m.CaretPos := 0;
+    m.ImeSessionBegin;
+    m.ImeReplace(0, 0, '1');
+    m.ImeReplace(0, 1, '12');
+    AssertEquals('a composition is held, not drawn into the mask', '__/99/2026', m.Text);
+    m.ImeSessionEnd;
+    AssertEquals('and goes in at its end', '12/99/2026', m.Text);
+    acts := nil;
+  finally m.Free; end;
+end;
+
+procedure TMaskEditTest.TestTheShortFormKeepsItsShapeToo;
+var m: TAccessMask;
+begin
+  m := TAccessMask.Create(nil);
+  try
+    m.SpaceChar := #0;
+    m.Mask := '00-00;1';
+    m.Text := '12-34';
+    m.SelStart := 1;
+    m.SelLength := 1;
+    m.SelText := '';
+    AssertEquals('a splice there is read through the mask again', '13-4', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TMaskEditTest.TestCharCaseNumbersOnlyAndOnKeyPressHoldUnderAMask;
+var
+  m: TAccessMask;
+  catch: TMaskKeyCatch;
+begin
+  m := TAccessMask.Create(nil);
+  catch := TMaskKeyCatch.Create;
+  try
+    m.Mask := 'CCC;1;_';
+    m.CharCase := ecUppercase;
+    m.Key('a');
+    AssertEquals('CharCase holds under a mask', 'A__', m.Text);
+    m.CharCase := ecNormal;
+    m.Text := '';
+    m.NumbersOnly := True;
+    m.Key('b');
+    AssertEquals('NumbersOnly refuses a letter', '___', m.Text);
+    m.Key('5');
+    AssertEquals('and takes a digit', '5__', m.Text);
+    m.NumbersOnly := False;
+    m.OnKeyPress := @catch.Swallow;
+    m.Key('x');
+    AssertEquals('OnKeyPress can take the key', '5__', m.Text);
+    m.Key('y');
+    AssertEquals('and leave the rest', '5y_', m.Text);
+  finally
+    m.Free;
+    catch.Free;
+  end;
+end;
+
+procedure TMaskEditTest.TestClearKeepsTheLiterals;
+var m: TAccessMask;
+begin
+  m := TAccessMask.Create(nil);
+  try
+    m.Mask := '00/00;1;_';
+    m.Text := '12/34';
+    m.Clear;
+    AssertEquals('Clear leaves the empty mask, as LCL''s', '__/__', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TMaskEditTest.TestAFailedValidationTakesTheUserBack;
+var
+  f: TForm;
+  m: TAccessMask;
+  o: TTyEdit;
+begin
+  NeedMaskWidgetSet;
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(-4000, -4000, 300, 200);
+    f.Visible := True;
+    m := TAccessMask.Create(f);
+    m.Parent := f;
+    m.SetBounds(0, 0, 120, 24);
+    o := TTyEdit.Create(f);
+    o.Parent := f;
+    o.SetBounds(0, 40, 120, 24);
+    m.Mask := '000;1;_';
+    m.Enter;
+    m.Key('1');
+    o.SetFocus;
+    try
+      m.Leave;
+      Fail('setup: a half-filled mask does not validate');
+    except
+      on ETyMaskError do ;
+    end;
+    AssertSame('the user is taken back to the field', TObject(m), TObject(f.ActiveControl));
+    AssertEquals('all of it selected', 3, m.SelLength);
+  finally
+    f.Free;
+  end;
+end;
 
 procedure TAccessMask.Key(c: Char);
 var k: TUTF8Char;

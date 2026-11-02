@@ -119,6 +119,8 @@ type
       while the first exception is still unwound. }
     FTextOnEnter: string;
     FValidationFailed: Boolean;
+    FImeText: string;   // the composition so far, while one runs (#158)
+    FImeOn: Boolean;
     procedure SetMask(const AValue: string);
     procedure SetSpaceChar(const AValue: Char);
     procedure ApplyRaw(const ARaw: string);
@@ -168,6 +170,21 @@ type
       the slot before the caret, Delete blanks the slot at it. }
     procedure InjectBackspace; override;
     procedure InjectDelete; override;
+    { #158: the selection replaced by AInsert in the short form (no placeholder), the result
+      read through the mask again -- what a splice has to be there. }
+    procedure SpliceShort(const AInsert: string);
+    { #158: as the keys are -- slot by slot, the literals kept. They spliced the display
+      string, which left '12/34/' or '12//5678' in the box. }
+    procedure SetSelText(const AValue: string); override;
+    procedure HandleImeCommit(const ACommitUtf8: string); override;
+    procedure ClearSelection; override;
+    procedure Clear; override;   // the empty mask, literals and all, as LCL's
+    procedure CutToClipboard; override;
+    procedure PasteFromClipboard; override;
+    { macOS: the composition is held, not drawn into the mask, and goes in at its end. }
+    procedure ImeSessionBegin; override;
+    procedure ImeSessionEnd; override;
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string); override;
     // True when every REQUIRED slot of the mask is filled (e.g. gate an OK button).
     function IsComplete: Boolean;
     { The significant characters, with placeholders stripped -- the VALUE behind the
@@ -1011,6 +1028,15 @@ begin
   end;
   { The base class reaches ReadOnly and Enabled through InjectKey, which this override
     does not call -- so a read-only masked field took dictation. }
+  { #158: the application hears the key first, as for a plain edit -- OnUTF8KeyPress and
+    OnKeyPress may take it or change it -- and CharCase and NumbersOnly hold as they do there. }
+  if not AskTypedKey(UTF8Key) then Exit;
+  if NumbersOnly and ((Length(UTF8Key) <> 1) or not (UTF8Key[1] in ['0'..'9'])) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  UTF8Key := ApplyCharCase(UTF8Key);
   if IsEnabled and not ReadOnly and (Length(UTF8Key) = 1) then
   begin
     c := UTF8Key[1];
@@ -1056,7 +1082,9 @@ begin
       Key := 0;
       Exit;
     end;
-    if (Shift = []) and ((Key = VK_BACK) or (Key = VK_DELETE)) then
+    { Ctrl or Alt with them too (#158): word deletion splices the display string. Shift+Delete
+      is Cut, which the mask takes in CutToClipboard. }
+    if (Shift * [ssShift] = []) and ((Key = VK_BACK) or (Key = VK_DELETE)) then
     begin
       { Delete used to fall through to the plain edit, which removes the character at the
         caret -- including a mask LITERAL, leaving Text no longer conforming to the mask
@@ -1127,6 +1155,119 @@ begin
     InjectBackspace;
 end;
 
+procedure TTyMaskEdit.SpliceShort(const AInsert: string);
+var
+  s: string;
+begin
+  s := Copy(Text, 1, SelStart) + AInsert + Copy(Text, SelStart + SelLength + 1, MaxInt);   // single-byte, as the mask
+  ApplyRaw(AcceptedFrom(FSpec, '', s, FSpaceChar));
+end;
+
+procedure TTyMaskEdit.ClearSelection;
+begin
+  if FMask = '' then
+  begin
+    inherited ClearSelection;
+    Exit;
+  end;
+  if not HasSelection then
+    CollapseSelection
+  else if InPlace then
+    ErasePlace(False)
+  else
+    SpliceShort('');
+end;
+
+procedure TTyMaskEdit.Clear;
+begin
+  if FMask = '' then inherited Clear else SetMaskedText('');
+end;
+
+procedure TTyMaskEdit.CutToClipboard;
+begin
+  if FMask = '' then
+  begin
+    inherited CutToClipboard;
+    Exit;
+  end;
+  if not HasSelection then Exit;
+  CopyToClipboard;
+  if ReadOnly then Exit;
+  if InPlace then ErasePlace(False) else SpliceShort('');
+end;
+
+procedure TTyMaskEdit.PasteFromClipboard;
+begin
+  if FMask = '' then
+  begin
+    inherited PasteFromClipboard;
+    Exit;
+  end;
+  if ReadOnly then Exit;
+  if InPlace then PasteInPlace(ReadClipboardText) else SpliceShort(ReadClipboardText);
+end;
+
+procedure TTyMaskEdit.SetSelText(const AValue: string);
+begin
+  if FMask = '' then
+  begin
+    inherited SetSelText(AValue);
+    Exit;
+  end;
+  if not InPlace then
+    SpliceShort(AValue)
+  else if AValue <> '' then
+    PasteInPlace(AValue)
+  else if HasSelection then
+    ErasePlace(False);
+end;
+
+procedure TTyMaskEdit.HandleImeCommit(const ACommitUtf8: string);
+begin
+  if FMask = '' then
+  begin
+    inherited HandleImeCommit(ACommitUtf8);
+    Exit;
+  end;
+  if ReadOnly or not IsEnabled or (ACommitUtf8 = '') then Exit;
+  if InPlace then PasteInPlace(ACommitUtf8) else SpliceShort(ACommitUtf8);
+end;
+
+procedure TTyMaskEdit.ImeSessionBegin;
+begin
+  if FMask = '' then
+  begin
+    inherited ImeSessionBegin;
+    Exit;
+  end;
+  FImeOn := True;
+  FImeText := '';
+end;
+
+procedure TTyMaskEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
+begin
+  if not FImeOn then
+  begin
+    inherited ImeReplace(AStart, ALen, AText);
+    Exit;
+  end;
+  { Each update replaces the whole span the last one put down (TTyCocoaImeHandler), so the
+    latest text IS the composition; an empty one is the input method cancelling it. }
+  FImeText := AText;
+end;
+
+procedure TTyMaskEdit.ImeSessionEnd;
+begin
+  if not FImeOn then
+  begin
+    inherited ImeSessionEnd;
+    Exit;
+  end;
+  FImeOn := False;
+  HandleImeCommit(FImeText);
+  FImeText := '';
+end;
+
 function TTyMaskEdit.IsComplete: Boolean;
 begin
   Result := IsCompleteSpec(FSpec, Text, FSpaceChar);
@@ -1166,6 +1307,13 @@ begin
       second one raised while this is still unwound aborts the application instead of
       reporting anything. Cleared on the next DoEnter. }
     FValidationFailed := True;
+    { #158: and the user is taken back to the field, all of it selected, as LCL's DoExit does --
+      when it can take the focus: raising inside a refused focus change aborts the run. }
+    if CanSetFocus then
+    begin
+      SetFocus;
+      SelectAll;
+    end;
     raise;
   end;
 end;
