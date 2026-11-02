@@ -115415,6 +115415,1886 @@
     }
    ],
    "looks": true
+  },
+  {
+   "name": "gauge-title-width-percent",
+   "note": "title width '50%': a plain plate, a truncated name, a rich one -- none of the radius",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "20%",
+       "50%"
+      ],
+      "radius": "30%",
+      "data": [
+       {
+        "value": 37,
+        "name": "Speed"
+       }
+      ],
+      "detail": {
+       "show": false
+      },
+      "title": {
+       "color": "#123456",
+       "width": "50%",
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#333333",
+       "borderWidth": 1
+      },
+      "axisLabel": {
+       "show": false
+      }
+     },
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "50%",
+       "50%"
+      ],
+      "radius": "30%",
+      "data": [
+       {
+        "value": 37,
+        "name": "A rather long gauge name"
+       }
+      ],
+      "detail": {
+       "show": false
+      },
+      "title": {
+       "color": "#123456",
+       "width": "50%",
+       "overflow": "truncate",
+       "backgroundColor": "#eeeeee"
+      },
+      "axisLabel": {
+       "show": false
+      }
+     },
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "80%",
+       "50%"
+      ],
+      "radius": "30%",
+      "data": [
+       {
+        "value": 37,
+        "name": "{n|Speed} now"
+       }
+      ],
+      "detail": {
+       "show": false
+      },
+      "title": {
+       "color": "#123456",
+       "width": "50%",
+       "backgroundColor": "#eeeeee",
+       "rich": {
+        "n": {
+         "color": "#aa0000",
+         "fontSize": 14
+        }
+       }
+      },
+      "axisLabel": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "record": [
+    "chartText"
+   ],
+   "match": "Speed|long|now",
+   "texts": [
+    {
+     "component": "chartText",
+     "owner": "series0",
+     "attached": false,
+     "text": "Speed",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "405e000000000000",
+      "xText": "120",
+      "y": "406a800000000000",
+      "yText": "212",
+      "g": {
+       "x": "405e000000000000",
+       "xText": "120",
+       "y": "406a800000000000",
+       "yText": "212"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 16px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4030000000000000",
+      "fontSizeText": "16",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#123456",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "center",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "borderColor": "#333333",
+      "borderWidth": "3ff0000000000000",
+      "borderWidthText": "1",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "Speed",
+       "x": "405e000000000000",
+       "xText": "120",
+       "y": "406a800000000000",
+       "yText": "212",
+       "gx": "405e000000000000",
+       "gxText": "120",
+       "gy": "406a800000000000",
+       "gyText": "212",
+       "font": "normal normal 16px Microsoft YaHei",
+       "px": 16,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "16",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#123456",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "40582e147ae147ae",
+        "xText": "96.72",
+        "y": "4069800000000000",
+        "yText": "204",
+        "width": "404747ae147ae148",
+        "widthText": "46.56",
+        "height": "4030000000000000",
+        "heightText": "16"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series1",
+     "attached": false,
+     "text": "A rather long gauge name",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "4072c00000000000",
+      "xText": "300",
+      "y": "406a800000000000",
+      "yText": "212",
+      "g": {
+       "x": "4072c00000000000",
+       "xText": "300",
+       "y": "406a800000000000",
+       "yText": "212"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 16px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4030000000000000",
+      "fontSizeText": "16",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#123456",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "center",
+      "verticalAlign": "middle",
+      "overflow": "truncate",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    },
+    {
+     "component": "chartText",
+     "owner": "series2",
+     "attached": false,
+     "text": "{n|Speed} now",
+     "rich": true,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "407e000000000000",
+      "xText": "480",
+      "y": "406a800000000000",
+      "yText": "212",
+      "g": {
+       "x": "407e000000000000",
+       "xText": "480",
+       "y": "406a800000000000",
+       "yText": "212"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 16px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4030000000000000",
+      "fontSizeText": "16",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#123456",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "center",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": {
+      "n": {
+       "font": "normal normal 14px Microsoft YaHei",
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "402c000000000000",
+       "fontSizeText": "14",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#aa0000"
+      }
+     },
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    }
+   ],
+   "looks": true
+  },
+  {
+   "name": "gauge-axislabel-width-percent",
+   "note": "axis labels width '50%': no plates; a truncation keeps nothing; rich labels are not drawn",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "20%",
+       "50%"
+      ],
+      "radius": "30%",
+      "min": 0,
+      "max": 40,
+      "splitNumber": 2,
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "data": [
+       {
+        "value": 37
+       }
+      ],
+      "axisLabel": {
+       "color": "#334455",
+       "width": "50%",
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#333333",
+       "borderWidth": 1,
+       "padding": [
+        1,
+        3
+       ]
+      }
+     },
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "50%",
+       "50%"
+      ],
+      "radius": "30%",
+      "min": 100,
+      "max": 140,
+      "splitNumber": 2,
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "data": [
+       {
+        "value": 137
+       }
+      ],
+      "axisLabel": {
+       "color": "#334455",
+       "width": "50%",
+       "overflow": "truncate"
+      }
+     },
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "80%",
+       "50%"
+      ],
+      "radius": "30%",
+      "min": 200,
+      "max": 240,
+      "splitNumber": 2,
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "data": [
+       {
+        "value": 237
+       }
+      ],
+      "axisLabel": {
+       "color": "#334455",
+       "width": "auto",
+       "formatter": "{a|{value}}",
+       "backgroundColor": "#eeeeee",
+       "rich": {
+        "a": {
+         "color": "#aa0000"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "record": [
+    "chartText"
+   ],
+   "match": null,
+   "texts": [
+    {
+     "component": "chartText",
+     "owner": "series0",
+     "attached": false,
+     "text": "0",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "405994a10ffb2652",
+      "xText": "102.32233047033631",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "405994a10ffb2652",
+       "xText": "102.32233047033631",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "left",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "3ff0000000000000",
+       "4008000000000000",
+       "3ff0000000000000",
+       "4008000000000000"
+      ],
+      "paddingText": [
+       "1",
+       "3",
+       "1",
+       "3"
+      ],
+      "width": "50%",
+      "align": "left",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "borderColor": "#333333",
+      "borderWidth": "3ff0000000000000",
+      "borderWidthText": "1",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "0",
+       "x": "405a54a10ffb2652",
+       "xText": "105.32233047033631",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637",
+       "gx": "405a54a10ffb2652",
+       "gxText": "105.32233047033631",
+       "gy": "406b35af78026cd7",
+       "gyText": "217.6776695296637",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#334455",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "405a54a10ffb2652",
+        "xText": "105.32233047033631",
+        "y": "406a75af78026cd7",
+        "yText": "211.6776695296637",
+        "width": "401ae147ae147ae2",
+        "widthText": "6.720000000000001",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series0",
+     "attached": false,
+     "text": "20",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "405e000000000000",
+      "xText": "120",
+      "y": "4065e00000000000",
+      "yText": "175",
+      "g": {
+       "x": "405e000000000000",
+       "xText": "120",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "top",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "3ff0000000000000",
+       "4008000000000000",
+       "3ff0000000000000",
+       "4008000000000000"
+      ],
+      "paddingText": [
+       "1",
+       "3",
+       "1",
+       "3"
+      ],
+      "width": "50%",
+      "align": "center",
+      "verticalAlign": "top",
+      "backgroundColor": "#eeeeee",
+      "borderColor": "#333333",
+      "borderWidth": "3ff0000000000000",
+      "borderWidthText": "1",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "20",
+       "x": "405e000000000000",
+       "xText": "120",
+       "y": "4066c00000000000",
+       "yText": "182",
+       "gx": "405e000000000000",
+       "gxText": "120",
+       "gy": "4066c00000000000",
+       "gyText": "182",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#334455",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "405c51eb851eb852",
+        "xText": "113.28",
+        "y": "4066000000000000",
+        "yText": "176",
+        "width": "402ae147ae147ae2",
+        "widthText": "13.440000000000001",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series0",
+     "attached": false,
+     "text": "40",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "406135af78026cd7",
+      "xText": "137.6776695296637",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "406135af78026cd7",
+       "xText": "137.6776695296637",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "right",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "3ff0000000000000",
+       "4008000000000000",
+       "3ff0000000000000",
+       "4008000000000000"
+      ],
+      "paddingText": [
+       "1",
+       "3",
+       "1",
+       "3"
+      ],
+      "width": "50%",
+      "align": "right",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "borderColor": "#333333",
+      "borderWidth": "3ff0000000000000",
+      "borderWidthText": "1",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "40",
+       "x": "4060d5af78026cd7",
+       "xText": "134.6776695296637",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637",
+       "gx": "4060d5af78026cd7",
+       "gxText": "134.6776695296637",
+       "gy": "406b35af78026cd7",
+       "gyText": "217.6776695296637",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#334455",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "right",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "405e4f35fa424a52",
+        "xText": "121.23766952966369",
+        "y": "406a75af78026cd7",
+        "yText": "211.6776695296637",
+        "width": "402ae147ae147ae2",
+        "widthText": "13.440000000000001",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series1",
+     "attached": false,
+     "text": "100",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "4071a52843fec995",
+      "xText": "282.32233047033634",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "4071a52843fec995",
+       "xText": "282.32233047033634",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "left",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "left",
+      "verticalAlign": "middle",
+      "overflow": "truncate",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    },
+    {
+     "component": "chartText",
+     "owner": "series1",
+     "attached": false,
+     "text": "120",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "4072c00000000000",
+      "xText": "300",
+      "y": "4065e00000000000",
+      "yText": "175",
+      "g": {
+       "x": "4072c00000000000",
+       "xText": "300",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "top",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "center",
+      "verticalAlign": "top",
+      "overflow": "truncate",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    },
+    {
+     "component": "chartText",
+     "owner": "series1",
+     "attached": false,
+     "text": "140",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "4073dad7bc01366c",
+      "xText": "317.6776695296637",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "4073dad7bc01366c",
+       "xText": "317.6776695296637",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "right",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "50%",
+      "align": "right",
+      "verticalAlign": "middle",
+      "overflow": "truncate",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    },
+    {
+     "component": "chartText",
+     "owner": "series2",
+     "attached": false,
+     "text": "{a|200}",
+     "rich": true,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "407ce52843fec995",
+      "xText": "462.32233047033634",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "407ce52843fec995",
+       "xText": "462.32233047033634",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "left",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "auto",
+      "align": "left",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": {
+      "a": {
+       "font": "normal normal 12px Microsoft YaHei",
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "4028000000000000",
+       "fontSizeText": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#aa0000"
+      }
+     },
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "text",
+       "of": "token",
+       "line": null,
+       "token": null,
+       "text": "200",
+       "x": "407ce52843fec995",
+       "xText": "462.32233047033634",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637",
+       "gx": "407ce52843fec995",
+       "gxText": "462.32233047033634",
+       "gy": "406b35af78026cd7",
+       "gyText": "217.6776695296637",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#aa0000",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "407ce52843fec995",
+        "xText": "462.32233047033634",
+        "y": "406a75af78026cd7",
+        "yText": "211.6776695296637",
+        "width": "403428f5c28f5c2a",
+        "widthText": "20.160000000000004",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series2",
+     "attached": false,
+     "text": "{a|220}",
+     "rich": true,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "407e000000000000",
+      "xText": "480",
+      "y": "4065e00000000000",
+      "yText": "175",
+      "g": {
+       "x": "407e000000000000",
+       "xText": "480",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "top",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "auto",
+      "align": "center",
+      "verticalAlign": "top",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": {
+      "a": {
+       "font": "normal normal 12px Microsoft YaHei",
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "4028000000000000",
+       "fontSizeText": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#aa0000"
+      }
+     },
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    },
+    {
+     "component": "chartText",
+     "owner": "series2",
+     "attached": false,
+     "text": "{a|240}",
+     "rich": true,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "407f1ad7bc01366c",
+      "xText": "497.6776695296637",
+      "y": "406b35af78026cd7",
+      "yText": "217.6776695296637",
+      "g": {
+       "x": "407f1ad7bc01366c",
+       "xText": "497.6776695296637",
+       "y": "406b35af78026cd7",
+       "yText": "217.6776695296637"
+      }
+     },
+     "align": "right",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#334455",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "width": "auto",
+      "align": "right",
+      "verticalAlign": "middle",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": {
+      "a": {
+       "font": "normal normal 12px Microsoft YaHei",
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "4028000000000000",
+       "fontSizeText": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#aa0000"
+      }
+     },
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": []
+    }
+   ],
+   "looks": true
+  },
+  {
+   "name": "gauge-detail-width-null",
+   "note": "detail width null on the series: no width (not the default 100); an item's null falls through to the series' 160",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "30%",
+       "50%"
+      ],
+      "radius": "40%",
+      "data": [
+       {
+        "value": 37,
+        "name": "n"
+       }
+      ],
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "width": null,
+       "fontSize": 20,
+       "color": "#222222",
+       "backgroundColor": "#dddddd",
+       "borderColor": "#999999",
+       "borderWidth": 1
+      },
+      "axisLabel": {
+       "show": false
+      }
+     },
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "center": [
+       "75%",
+       "50%"
+      ],
+      "radius": "40%",
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "width": 160,
+       "fontSize": 20,
+       "color": "#222222",
+       "backgroundColor": "#dddddd"
+      },
+      "data": [
+       {
+        "value": 64,
+        "name": "m",
+        "detail": {
+         "width": null
+        }
+       }
+      ],
+      "axisLabel": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "record": [
+    "chartText"
+   ],
+   "match": "^(37|64)$",
+   "texts": [
+    {
+     "component": "chartText",
+     "owner": "series0",
+     "attached": false,
+     "text": "37",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "4066800000000000",
+      "xText": "180",
+      "y": "406d000000000000",
+      "yText": "232",
+      "g": {
+       "x": "4066800000000000",
+       "xText": "180",
+       "y": "406d000000000000",
+       "yText": "232"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal bold 20px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "bold",
+      "fontSize": "4034000000000000",
+      "fontSizeText": "20",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#222222",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "4014000000000000",
+       "4024000000000000",
+       "4014000000000000",
+       "4024000000000000"
+      ],
+      "paddingText": [
+       "5",
+       "10",
+       "5",
+       "10"
+      ],
+      "width": null,
+      "height": null,
+      "lineHeight": "403e000000000000",
+      "lineHeightText": "30",
+      "align": "center",
+      "verticalAlign": "middle",
+      "backgroundColor": "#dddddd",
+      "borderColor": "#999999",
+      "borderWidth": "3ff0000000000000",
+      "borderWidthText": "1",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "4063d9999999999a",
+      "xText": "158.8",
+      "y": "406a800000000000",
+      "yText": "212",
+      "width": "4045333333333334",
+      "widthText": "42.400000000000006",
+      "height": "4044000000000000",
+      "heightText": "40",
+      "corners": [
+       {
+        "x": "4063d9999999999a",
+        "xText": "158.8",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4069266666666667",
+        "xText": "201.20000000000002",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4069266666666667",
+        "xText": "201.20000000000002",
+        "y": "406f800000000000",
+        "yText": "252"
+       },
+       {
+        "x": "4063d9999999999a",
+        "xText": "158.8",
+        "y": "406f800000000000",
+        "yText": "252"
+       }
+      ],
+      "aabb": {
+       "x": "4063d9999999999a",
+       "xText": "158.8",
+       "y": "406a800000000000",
+       "yText": "212",
+       "width": "4045333333333334",
+       "widthText": "42.400000000000006",
+       "height": "4044000000000000",
+       "heightText": "40"
+      }
+     },
+     "bounds": {
+      "x": "4063b9999999999a",
+      "xText": "157.8",
+      "y": "406a600000000000",
+      "yText": "211",
+      "width": "4046333333333334",
+      "widthText": "44.400000000000006",
+      "height": "4045000000000000",
+      "heightText": "42",
+      "corners": [
+       {
+        "x": "4063b9999999999a",
+        "xText": "157.8",
+        "y": "406a600000000000",
+        "yText": "211"
+       },
+       {
+        "x": "4069466666666667",
+        "xText": "202.20000000000002",
+        "y": "406a600000000000",
+        "yText": "211"
+       },
+       {
+        "x": "4069466666666667",
+        "xText": "202.20000000000002",
+        "y": "406fa00000000000",
+        "yText": "253"
+       },
+       {
+        "x": "4063b9999999999a",
+        "xText": "157.8",
+        "y": "406fa00000000000",
+        "yText": "253"
+       }
+      ],
+      "aabb": {
+       "x": "4063b9999999999a",
+       "xText": "157.8",
+       "y": "406a600000000000",
+       "yText": "211",
+       "width": "4046333333333334",
+       "widthText": "44.400000000000006",
+       "height": "4045000000000000",
+       "heightText": "42"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "4063d9999999999a",
+       "xText": "158.8",
+       "y": "406a800000000000",
+       "yText": "212",
+       "width": "4045333333333334",
+       "widthText": "42.400000000000006",
+       "height": "4044000000000000",
+       "heightText": "40",
+       "corners": [
+        {
+         "x": "4063d9999999999a",
+         "xText": "158.8",
+         "y": "406a800000000000",
+         "yText": "212"
+        },
+        {
+         "x": "4069266666666667",
+         "xText": "201.20000000000002",
+         "y": "406a800000000000",
+         "yText": "212"
+        },
+        {
+         "x": "4069266666666667",
+         "xText": "201.20000000000002",
+         "y": "406f800000000000",
+         "yText": "252"
+        },
+        {
+         "x": "4063d9999999999a",
+         "xText": "158.8",
+         "y": "406f800000000000",
+         "yText": "252"
+        }
+       ],
+       "aabb": {
+        "x": "4063d9999999999a",
+        "xText": "158.8",
+        "y": "406a800000000000",
+        "yText": "212",
+        "width": "4045333333333334",
+        "widthText": "42.400000000000006",
+        "height": "4044000000000000",
+        "heightText": "40"
+       },
+       "fill": "#dddddd",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": "#999999",
+       "lineWidth": "4000000000000000",
+       "lineWidthText": "2",
+       "strokeOpacity": "3ff0000000000000",
+       "strokeOpacityText": "1",
+       "strokeFirst": true,
+       "lineDash": null,
+       "rRaw": null,
+       "r4": [
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "r4Text": [
+        "0",
+        "0",
+        "0",
+        "0"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "37",
+       "x": "4066800000000000",
+       "xText": "180",
+       "y": "406d000000000000",
+       "yText": "232",
+       "gx": "4066800000000000",
+       "gxText": "180",
+       "gy": "406d000000000000",
+       "gyText": "232",
+       "font": "normal bold 20px Microsoft YaHei",
+       "px": 20,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "bold",
+       "fontSize": "20",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#222222",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "406519999999999a",
+        "xText": "168.8",
+        "y": "406bc00000000000",
+        "yText": "222",
+        "width": "4036666666666667",
+        "widthText": "22.400000000000002",
+        "height": "4034000000000000",
+        "heightText": "20"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "chartText",
+     "owner": "series1",
+     "attached": false,
+     "text": "64",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "407c200000000000",
+      "xText": "450",
+      "y": "406d000000000000",
+      "yText": "232",
+      "g": {
+       "x": "407c200000000000",
+       "xText": "450",
+       "y": "406d000000000000",
+       "yText": "232"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": null,
+     "style": {
+      "font": "normal bold 20px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "bold",
+      "fontSize": "4034000000000000",
+      "fontSizeText": "20",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#222222",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "4014000000000000",
+       "4024000000000000",
+       "4014000000000000",
+       "4024000000000000"
+      ],
+      "paddingText": [
+       "5",
+       "10",
+       "5",
+       "10"
+      ],
+      "width": "4064000000000000",
+      "widthText": "160",
+      "height": null,
+      "lineHeight": "403e000000000000",
+      "lineHeightText": "30",
+      "align": "center",
+      "verticalAlign": "middle",
+      "backgroundColor": "#dddddd",
+      "borderColor": "#9ea0a5",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "4076800000000000",
+      "xText": "360",
+      "y": "406a800000000000",
+      "yText": "212",
+      "width": "4066800000000000",
+      "widthText": "180",
+      "height": "4044000000000000",
+      "heightText": "40",
+      "corners": [
+       {
+        "x": "4076800000000000",
+        "xText": "360",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4080e00000000000",
+        "xText": "540",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4080e00000000000",
+        "xText": "540",
+        "y": "406f800000000000",
+        "yText": "252"
+       },
+       {
+        "x": "4076800000000000",
+        "xText": "360",
+        "y": "406f800000000000",
+        "yText": "252"
+       }
+      ],
+      "aabb": {
+       "x": "4076800000000000",
+       "xText": "360",
+       "y": "406a800000000000",
+       "yText": "212",
+       "width": "4066800000000000",
+       "widthText": "180",
+       "height": "4044000000000000",
+       "heightText": "40"
+      }
+     },
+     "bounds": {
+      "x": "4076800000000000",
+      "xText": "360",
+      "y": "406a800000000000",
+      "yText": "212",
+      "width": "4066800000000000",
+      "widthText": "180",
+      "height": "4044000000000000",
+      "heightText": "40",
+      "corners": [
+       {
+        "x": "4076800000000000",
+        "xText": "360",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4080e00000000000",
+        "xText": "540",
+        "y": "406a800000000000",
+        "yText": "212"
+       },
+       {
+        "x": "4080e00000000000",
+        "xText": "540",
+        "y": "406f800000000000",
+        "yText": "252"
+       },
+       {
+        "x": "4076800000000000",
+        "xText": "360",
+        "y": "406f800000000000",
+        "yText": "252"
+       }
+      ],
+      "aabb": {
+       "x": "4076800000000000",
+       "xText": "360",
+       "y": "406a800000000000",
+       "yText": "212",
+       "width": "4066800000000000",
+       "widthText": "180",
+       "height": "4044000000000000",
+       "heightText": "40"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "4076800000000000",
+       "xText": "360",
+       "y": "406a800000000000",
+       "yText": "212",
+       "width": "4066800000000000",
+       "widthText": "180",
+       "height": "4044000000000000",
+       "heightText": "40",
+       "corners": [
+        {
+         "x": "4076800000000000",
+         "xText": "360",
+         "y": "406a800000000000",
+         "yText": "212"
+        },
+        {
+         "x": "4080e00000000000",
+         "xText": "540",
+         "y": "406a800000000000",
+         "yText": "212"
+        },
+        {
+         "x": "4080e00000000000",
+         "xText": "540",
+         "y": "406f800000000000",
+         "yText": "252"
+        },
+        {
+         "x": "4076800000000000",
+         "xText": "360",
+         "y": "406f800000000000",
+         "yText": "252"
+        }
+       ],
+       "aabb": {
+        "x": "4076800000000000",
+        "xText": "360",
+        "y": "406a800000000000",
+        "yText": "212",
+        "width": "4066800000000000",
+        "widthText": "180",
+        "height": "4044000000000000",
+        "heightText": "40"
+       },
+       "fill": "#dddddd",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": null,
+       "r4": [
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "r4Text": [
+        "0",
+        "0",
+        "0",
+        "0"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "64",
+       "x": "407c200000000000",
+       "xText": "450",
+       "y": "406d000000000000",
+       "yText": "232",
+       "gx": "407c200000000000",
+       "gxText": "450",
+       "gy": "406d000000000000",
+       "gyText": "232",
+       "font": "normal bold 20px Microsoft YaHei",
+       "px": 20,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "bold",
+       "fontSize": "20",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#222222",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "407b6ccccccccccd",
+        "xText": "438.8",
+        "y": "406bc00000000000",
+        "yText": "222",
+        "width": "4036666666666667",
+        "widthText": "22.400000000000002",
+        "height": "4034000000000000",
+        "heightText": "20"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    }
+   ],
+   "looks": true
   }
  ]
 }

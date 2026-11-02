@@ -416,6 +416,13 @@ function TyDefaultEncodeAxis(var ACursor: TTyEncodeCursor;
 function TyDefaultEncodeNameBased(const ASource: TTyChartSource;
   ADimCount: Integer): TTySeriesEncode;
 
+{ [R7-D] THE ENCODE OF A SERIES THAT HANDS ITS COORDINATE DIMENSIONS AS AN
+  ARRAY -- createSeriesDataSimply(this, ['value']), a gauge's: no encodeDefine
+  and no encodeDefaulter reach prepareSeriesDataSchema, so `encode` is read by
+  nobody, the one coordinate takes the first dimension and no dimension names
+  the rows. }
+function TyEncodeFirstDim: TTySeriesEncode;
+
 { Whether dimension ADim looks like a category. Reads the declared type first
   and sniffs at most five rows otherwise. }
 function TySourceDimIsOrdinal(const ASource: TTyChartSource;
@@ -2058,6 +2065,12 @@ begin
     ord_ := CellIsOrdinal(TySourceCell(ASource, i, ADim), known);
     if known then Exit(ord_);
   end;
+end;
+
+function TyEncodeFirstDim: TTySeriesEncode;
+begin
+  Result := NewEncode(1);
+  Result.Columns[0] := 0;
 end;
 
 function TyDefaultEncodeNameBased(const ASource: TTyChartSource;

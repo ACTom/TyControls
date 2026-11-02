@@ -715,6 +715,10 @@ begin
   Inc(FCompared);
   if not dr.Found then
   begin
+    { [R7-D] upstream drew none of it either: a text whose width is a word
+      lays out at NaN (the plate, a rich text's tokens), and an empty
+      truncation draws nothing }
+    if (T.Find('pieces') is TJSONArray) and (T.Arrays['pieces'].Count = 0) then Exit;
     Miss(where + ': not drawn');
     Exit;
   end;

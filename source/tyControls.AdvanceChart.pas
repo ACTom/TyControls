@@ -3150,6 +3150,10 @@ type
     { Every gauge's geometry. Runs in Relayout, beside SolvePies. }
     procedure SolveGauges(APPI: Integer);
     function GaugeVisual(ASlot: Integer): TTyGaugeVisual;
+    { [R7-D] a gauge's first dimension that upstream types ordinal (declared,
+      or guessOrdinal) recorded on its raw position: its cells are read as
+      written (TyGaugeRowValue) }
+    procedure GaugeOrdinalValue(ASlot: Integer; AStore: TTyDataStore);
     { Every radar's geometry AND every spoke's value range. Both, because the
       two halves are one answer: the range of a spoke is the union over every
       series bound to that radar, which nothing else in this control is in a

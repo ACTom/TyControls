@@ -410,16 +410,29 @@ begin
           SetLength(coord, 1);
           coord[0].Name := typeInfo.Dims[0];
           coord[0].Ordinal := False;
-          enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
-            FSources[i], coord);
-          if not enc.Given then
-            enc := TyDefaultEncodeNameBased(FSources[i],
-              FSources[i].DimCount);
+          { [R7-D] A GAUGE READS NO ENCODE: GaugeSeries.getInitialData hands
+            createSeriesDataSimply its dimensions as an array, so the value
+            is the first dimension and no row has a name [was: the pie's
+            encode and its name-based default] }
+          if FBindings[i].SeriesType = TyGaugeSeriesTypeName then
+            enc := TyEncodeFirstDim
+          else
+          begin
+            enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
+              FSources[i], coord);
+            if not enc.Given then
+              enc := TyDefaultEncodeNameBased(FSources[i],
+                FSources[i].DimCount);
+          end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
         end
         else
           TyFillSeriesStore(FOption, i, dims, st);
+        { [R7-D] a gauge's first dimension that upstream types ordinal keeps
+          its cells as written (no ordinal meta): the reading is the cell }
+        if FBindings[i].SeriesType = TyGaugeSeriesTypeName then
+          GaugeOrdinalValue(i, st);
       end;
       Continue;
     end;
