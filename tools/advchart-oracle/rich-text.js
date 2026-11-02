@@ -713,6 +713,47 @@ const R7M_COMPONENT_CASES = [
   { name: 'dz-slider-numstr', looks: true, note: "a slider's labels width '60' over a rounded plate, joined to the style's x; lineHeight '20' on two lines",
     record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, labelFormatter: '{value}\nend',
       textStyle: { color: '#333333', width: '60', lineHeight: '20', backgroundColor: '#eeeeee', borderRadius: 3 } }] }, CMP_BAR)) },
+  // a calendar's labels are createTextStyle of dayLabel / monthLabel /
+  // yearLabel (CalendarView): the week and month words placed by their
+  // style's x / y, the year's by its transform (turned on a vertical one)
+  { name: 'calendar-label-box', looks: true, note: "a calendar's day, month and year labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX), monthLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX),
+      yearLabel: Object.assign({}, CMP_BOX, { opacity: 0.8 }) } }) },
+  { name: 'calendar-label-rich', looks: true, note: "a vertical calendar: rich month words with a halo and a shadow, lineHeight 20; the year turned with a plate; day words width 20 truncated",
+    record: ['other'], option: opt({ calendar: { orient: 'vertical', range: '2017-02', cellSize: 22, left: 120, top: 60,
+      monthLabel: Object.assign({ formatter: '{a|{M}}{b|m}' }, CMP_RICH),
+      yearLabel: { color: '#333333', backgroundColor: '#eeeeee', padding: 4, borderColor: '#aa0000', borderWidth: 1 },
+      dayLabel: { color: '#333333', width: 12, overflow: 'truncate', nameMap: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], backgroundColor: '#eeeeee' } } }) },
+  { name: 'calendar-label-numstr', looks: true, note: "month words width '60' over a rounded plate, joined to the style's x",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: { nameMap: 'EN', color: '#333333' }, yearLabel: { color: '#333333' },
+      monthLabel: { nameMap: 'EN', color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }) },
+  // a timeline's labels are createTextStyle of label (SliderTimelineView)
+  { name: 'timeline-label-box', looks: true, note: "a timeline's labels with a plate, rich and a halo",
+    record: ['other'], option: { baseOption: { animation: false, timeline: { data: ['2001', '2002', '2003'], label: Object.assign({ formatter: '{a|{value}}' }, CMP_BOX,
+      { rich: { a: { color: '#aa0000' } }, textBorderColor: '#ffffff', textBorderWidth: 2 }) }, xAxis: xCat(), yAxis: val(), series: [{ type: 'bar' }] },
+      options: [{ series: [{ data: DATA }] }, { series: [{ data: [1, 2, 3] }] }, { series: [{ data: [3, 2, 1] }] }] } },
+];
+// ---- [R7-M] a treemap's label is laid out on its cell: TreemapView's
+// beforeUpdate sets the label's width and height to the content rect's (the
+// upper label's strip's) less the padding (5 by default), so a plate covers
+// the whole cell; the breadcrumb's words are createTextStyle of its
+// itemStyle.textStyle ----
+const TM_DATA = [{ name: 'Alpha', children: [{ name: 'a1', value: 3 }, { name: 'a2 long name here', value: 2 }] }, { name: 'Beta', value: 4 }];
+const R7M_TREEMAP_CASES = [
+  { name: 'treemap-label-box', looks: true, note: "content labels with a plate and a border: the plate is the cell less nothing (width = cell - padding 5 + padding); upper labels' plate the strip; the breadcrumb's words boxed",
+    option: opt({ series: [{ type: 'treemap', name: 'Total', leafDepth: 2, top: 10, bottom: 60,
+      label: { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1 },
+      upperLabel: { show: true, color: '#333333', backgroundColor: '#dddddd' },
+      breadcrumb: { show: true, itemStyle: { textStyle: CMP_BOX } }, data: TM_DATA }] }) },
+  { name: 'treemap-label-pos', looks: true, note: "insideTopLeft with padding [2, 8] over a plate, rich tokens with their own box; an upper label 'inside' padded 3; a long name truncated in its cell",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { position: 'insideTopLeft', padding: [2, 8], color: '#333333', backgroundColor: '#eeeeee', formatter: '{a|{b}}',
+        rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] } } },
+      upperLabel: { show: true, position: 'inside', padding: 3, color: '#333333', backgroundColor: '#dddddd', borderRadius: 4 },
+      data: TM_DATA }] }) },
+  { name: 'treemap-label-plain-pad', looks: true, note: "a plain label with only a padding (no plate): laid out in the cell as before; a lineHeight 30 and a text shadow",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { color: '#333333', padding: 10, lineHeight: 30, textShadowColor: '#888888', textShadowBlur: 2 }, data: TM_DATA }] }) },
 ];
 const R7H_CASES = [
   { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
@@ -980,6 +1021,7 @@ const cases = [
   ...R7L_HUNG_CASES,
   ...R7L_EXTREME_CASES,
   ...R7M_COMPONENT_CASES,
+  ...R7M_TREEMAP_CASES,
 ];
 
 // ---------- running upstream ----------

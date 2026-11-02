@@ -1097,8 +1097,9 @@ begin
     gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
     halo's three labels and title, [R7-L] label-opacity-scatter's two plain
     labels, label-opacity-root's one, label-opacity-item's end label at its
-    own 0.7, label-opacity-hier's treemap label -- and no others }
-  AssertEquals('texts drawn as one run', 32, FOneRun);
+    own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
+    numstr's seven day words and its year -- and no others }
+  AssertEquals('texts drawn as one run', 40, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 

@@ -400,6 +400,11 @@ procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
   AHostHasFill, AHostGradient, AInside: Boolean;
   out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
 
+{ [R7-M] A TREEMAP'S LABEL ON ITS CELL (ACaption.HasFixedBox): the width,
+  the height and the padding TreemapView's beforeUpdate gives the label --
+  the content rect (the strip) less the padding, which the cell was cut by }
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+
 { AN ATTACHED LABEL'S BLOCK: ASpec.Rt finished in the spec's font with the
   host's fill as the inherit colour, laid out about (0, 0) with the host's
   defaults -- the automatic ink and halo TyLabelInk gives a label with no
@@ -632,6 +637,20 @@ begin
   Result := TyLabelEmphPiecesOver(ASpec, AText, AHostFill, AHostHasFill,
     AEmphInk, AEmphStroke, AEmphStrokeW, AH, AV, AScale, AMeasurer,
     TyLabelEmphOverNone);
+end;
+
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+var k: Integer;
+begin
+  if not ACaption.HasFixedBox then Exit;
+  ASpec.Rt.Style.WidthKind := rtwNumber;
+  ASpec.Rt.Style.Width := ACaption.FixedBoxW;
+  ASpec.Rt.Style.WidthIsText := False;
+  ASpec.Rt.Style.HasHeight := True;
+  ASpec.Rt.Style.Height := ACaption.FixedBoxH;
+  ASpec.Rt.Style.HeightIsText := False;
+  ASpec.Rt.Style.HasPadding := True;
+  for k := 0 to 3 do ASpec.Rt.Style.Padding[k] := ACaption.FixedBoxPad[k];
 end;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
@@ -1311,6 +1330,7 @@ var
   tbox: TTyRectF;
   tpieces: TTyRtPieceArray;
   tinside, tgrad: Boolean;
+  tspec: TTyLabelSpec;
   tink, tstroke: TTyChartColor;
 begin
   Result := False;
@@ -1453,8 +1473,22 @@ begin
   tpieces := nil;
   if AIn.Spec.Rt.Needed then
   begin
-    tpieces := TyLabelBlockPieces(AIn.Spec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
-      tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
+    tspec := AIn.Spec;
+    { [R7-M] a treemap's label on its cell, under the state's place }
+    if (anc >= 0) and AIn.Host.EmphTwin[anc].Caption.HasFixedBox then
+    begin
+      TyLabelFixBox(tspec, AIn.Host.EmphTwin[anc].Caption);
+      tspec.Rt.Style.Align := rtaNone;
+      tspec.Rt.Style.VAlign := rtvNone;
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, AIn.Host.EmphTwin[anc].Caption.FixedBoxAH,
+        AIn.Host.EmphTwin[anc].Caption.FixedBoxAV, AIn.Scale, AMeasurer);
+      TyRtShiftPieces(tpieces, (AIn.Host.EmphTwin[anc].Caption.FixedBoxX + toffX - tx)
+        / AIn.Scale, (AIn.Host.EmphTwin[anc].Caption.FixedBoxY + toffY - ty) / AIn.Scale);
+    end
+    else
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
     if Length(tpieces) = 0 then Exit;
     tbox := TyRtDeviceBox(tpieces, tx, ty, trot, AIn.Scale);
   end
@@ -1846,9 +1880,23 @@ begin
         autoSpec.Rt.Style.Align := rtaNone;
         autoSpec.Rt.Style.VAlign := rtvNone;
       end;
-      pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
-        hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-        LabelInside(host, pos), ah, av, scale, AMeasurer);
+      { [R7-M] A TREEMAP'S LABEL ON ITS CELL: the box the cell's, laid out at
+        the position's anchor by its alignment (the padding is the block's),
+        and hung where the words' anchor is }
+      if host.Caption.HasFixedBox then
+      begin
+        TyLabelFixBox(autoSpec, host.Caption);
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), host.Caption.FixedBoxAH, host.Caption.FixedBoxAV,
+          scale, AMeasurer);
+        TyRtShiftPieces(pieces, (host.Caption.FixedBoxX + offX - x) / scale,
+          (host.Caption.FixedBoxY + offY - y) / scale);
+      end
+      else
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
       { [R7-L] A TEXT LAID OUT WHOLLY AT NaN (a size written as a word) draws
         nothing but is still upstream's label: the label layout weighs it by
         its box, which can hide the others. It stands as one undrawn rect,

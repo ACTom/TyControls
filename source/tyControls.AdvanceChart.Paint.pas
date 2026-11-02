@@ -631,6 +631,19 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [R7-M] A TREEMAP'S LABEL ON ITS CELL: TreemapView's beforeUpdate sets
+      the label's width and height to its content rect's (an upper label's
+      strip's) less the padding, so a block's box is the whole cell. A block
+      is laid out at FixedBoxX / Y (device px: the position's anchor, before
+      the padding the one-run caption's FixedX / Y has in it) by
+      FixedBoxAH / AV, its width FixedBoxW, its height FixedBoxH and its
+      padding FixedBoxPad (top, right, bottom, left) CSS px -- the padding
+      the cell was cut by, the label's own or the treemap's default }
+    HasFixedBox: Boolean;
+    FixedBoxX, FixedBoxY, FixedBoxW, FixedBoxH: Double;
+    FixedBoxAH: TTyTextAnchorH;
+    FixedBoxAV: TTyTextAnchorV;
+    FixedBoxPad: array[0..3] of Double;
     { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
       the position and the distance (device px) it was placed by, so a
       frame can place it again on the box as drawn }
