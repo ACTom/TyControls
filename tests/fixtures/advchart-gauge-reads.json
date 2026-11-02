@@ -2053,6 +2053,317 @@
    ]
   },
   {
+   "name": "data-dims-number",
+   "note": "data arrays whose first word is declared 'number' by the series' dimensions: parsed, NaN",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "dimensions": [
+       {
+        "name": "v",
+        "type": "number"
+       },
+       "w"
+      ],
+      "data": [
+       [
+        "abc",
+        3
+       ],
+       [
+        5,
+        6
+       ]
+      ],
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "NaN",
+       "name": ""
+      },
+      {
+       "value": "4014000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      ""
+     ],
+     "details": [
+      "NaN",
+      "5"
+     ],
+     "pointers": [
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4004bc08f251d868",
+       "fill": "#91cc75ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      },
+      {
+       "end": "4004bc08f251d867",
+       "start": "4002d97c7f3321d2",
+       "fill": "#91cc75ff"
+      }
+     ],
+     "lines": []
+    }
+   ]
+  },
+  {
+   "name": "ds-null-inherit",
+   "note": "the reading's 'inherit' over two bands: a null cell is 0 (the first band), a word NaN (the last)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false,
+       "lineStyle": {
+        "color": [
+         [
+          0.5,
+          "#ff0000"
+         ],
+         [
+          1,
+          "#0000ff"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "min": -50,
+      "max": 50,
+      "detail": {
+       "color": "inherit"
+      }
+     }
+    ],
+    "dataset": {
+     "source": [
+      [
+       "v"
+      ],
+      [
+       null
+      ],
+      [
+       "Rate"
+      ],
+      [
+       30
+      ]
+     ]
+    }
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": null,
+     "rows": [
+      {
+       "value": null,
+       "name": ""
+      },
+      {
+       "value": "s:Rate",
+       "name": ""
+      },
+      {
+       "value": "403e000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      "",
+      ""
+     ],
+     "details": [
+      "",
+      "Rate",
+      "30"
+     ],
+     "pointers": [
+      {
+       "angle": "4012d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#91cc75ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "40188121d88f4591",
+       "fill": "#fac858ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      null,
+      null,
+      null
+     ],
+     "lines": [],
+     "inks": [
+      "#ff0000ff",
+      "#0000ffff",
+      "#0000ffff"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "ds-count-words",
+   "note": "valueAnimation over cells that are words: no count, the words throughout (sampled at 300 ms)",
+   "option": {
+    "animation": true,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "detail": {
+       "valueAnimation": true,
+       "formatter": "{value} %"
+      }
+     }
+    ],
+    "dataset": {
+     "source": [
+      [
+       "v"
+      ],
+      [
+       "Rate"
+      ],
+      [
+       "7"
+      ],
+      [
+       40
+      ]
+     ]
+    }
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "s:Rate",
+       "name": ""
+      },
+      {
+       "value": "s:7",
+       "name": ""
+      },
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "details": [
+      "Rate %",
+      "7 %",
+      "4 %"
+     ]
+    }
+   ],
+   "at": 300
+  },
+  {
    "name": "data-encode-ignored",
    "note": "data arrays with encode.value 1: the first element",
    "option": {

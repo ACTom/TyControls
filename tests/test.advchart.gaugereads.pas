@@ -17,7 +17,10 @@ unit test.advchart.gaugereads;
   drawn, each pointer's angle, shape numbers and fill, each progress arc's
   end angle and fill, and the split lines' or ticks' strokes in order. A
   colour equal to the series' default band (`band`) is the track's, which a
-  skin decides here: it is compared with the skin's track colour. }
+  skin decides here: it is compared with the skin's track colour. A case
+  with `inks` compares each reading's fill too; one with `at` runs animated
+  and compares the readings of the frame at T0 + at (a cell that is a word
+  does not count). }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -31,6 +34,7 @@ type
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    function Frame: TTyPaintList;
   end;
 
   TAdvChartGaugeReadsOracleTest = class(TTestCase)
@@ -44,6 +48,9 @@ type
     FMisses: TStringList;
     FCompared: Integer;
     FTrack: TTyChartColor;
+    FMode: TTyChartAnimationMode;
+    FAt: Boolean;
+    function Elements: TTyPaintList;
     procedure Miss(const AWhat: string);
     procedure SameColour(const AWhat, AUp, ABand: string; APort: TTyChartColor);
     procedure SameNum(const AWhat: string; AGot: Double; const AHex: string);
@@ -68,6 +75,14 @@ function TGrProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
 end;
+
+function TGrProbe.Frame: TTyPaintList;
+begin
+  Result := AnimFrame;
+end;
+
+const
+  cT0 = 1700000000000.0;
 
 function FixturePath: string;
 begin
@@ -122,6 +137,7 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, 400, 300);
+  FMode := FChart.AnimationMode;
   { the track's colour: the skin's, the key GaugeVisual reads }
   FTrack := TTyChartColor(FCtl.Model.ResolveStyle('TyAdvChartEmptyCircle', '',
     []).Background.Color);
@@ -137,6 +153,12 @@ begin
   FCtl.Free;
   FMisses.Free;
   inherited TearDown;
+end;
+
+{ the drawn list, or the frame of an animated case }
+function TAdvChartGaugeReadsOracleTest.Elements: TTyPaintList;
+begin
+  if FAt then Result := FChart.Frame else Result := FChart.List;
 end;
 
 procedure TAdvChartGaugeReadsOracleTest.Miss(const AWhat: string);
@@ -183,13 +205,13 @@ var k: Integer;
 begin
   Result := False;
   AEl := Default(TTyChartElement);
-  if FChart.List = nil then Exit;
-  for k := 0 to FChart.List.Count - 1 do
-    if (FChart.List.Element(k).Anim.Role = ARole)
-      and (FChart.List.Element(k).Anim.Series = ASeries)
-      and (FChart.List.Element(k).Anim.Index = AIndex) then
+  if Elements = nil then Exit;
+  for k := 0 to Elements.Count - 1 do
+    if (Elements.Element(k).Anim.Role = ARole)
+      and (Elements.Element(k).Anim.Series = ASeries)
+      and (Elements.Element(k).Anim.Index = AIndex) then
     begin
-      AEl := FChart.List.Element(k);
+      AEl := Elements.Element(k);
       Exit(True);
     end;
 end;
@@ -221,8 +243,12 @@ begin
     else if up = '' then
       Miss(Format('%s none upstream, "%s" here', [where, el.Caption.Text]))
     else if el.Caption.Text <> up then
-      Miss(Format('%s "%s" upstream, "%s" here', [where, up, el.Caption.Text]));
+      Miss(Format('%s "%s" upstream, "%s" here', [where, up, el.Caption.Text]))
+    else if S.Find('inks') is TJSONArray then
+      SameColour(where + ' ink', Str(S.Arrays['inks'].Items[k]), band, el.Caption.Colour);
   end;
+  { a frame of the count holds the readings only }
+  if FAt then Exit;
   { the titles drawn: the series' words that are no reading, as a set }
   ups := TStringList.Create;
   here := TStringList.Create;
@@ -335,6 +361,20 @@ begin
   begin
     cs := cases.Objects[c];
     FCase := cs.Strings['name'];
+    FAt := cs.Find('at') <> nil;
+    { a fresh chart, as upstream's every case: a count enters from nothing }
+    FreeAndNil(FChart);
+    FChart := TGrProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, 400, 300);
+    if FAt then
+    begin
+      FChart.AnimationMode := camAlways;
+      FChart.AnimNow := cT0;
+    end
+    else
+      FChart.AnimationMode := FMode;
     FChart.Option := cs.Objects['option'].AsJSON;
     if FChart.OptionError <> '' then
     begin
@@ -343,6 +383,7 @@ begin
     end;
     FBmp.Fill(BGRA(255, 255, 255, 255));
     FChart.Render(FBmp.Canvas, Rect(0, 0, 400, 300), 96);
+    if FAt then FChart.AnimTick(cT0 + cs.Integers['at']);
     series := cs.Arrays['series'];
     for k := 0 to series.Count - 1 do CheckSeries(series.Objects[k]);
   end;

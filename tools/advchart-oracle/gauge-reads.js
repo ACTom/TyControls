@@ -37,6 +37,10 @@
 //   progress[] {end: shape.endAngle hex | 'NaN', start (hex), fill} | null
 //   lines[]  the strokes of the split lines and ticks, in order (a case
 //            shows one kind)
+//   inks[]   (cases that ask) each row's reading's fill
+// A case with `at` runs animated (valueAnimation's count): the clock is
+// stepped to T0 + at and only the readings are recorded, as that frame
+// shows them.
 // Colours: echarts.color.parse as #rrggbbaa, 'x:<word>' a word it does not
 // take.
 //
@@ -50,6 +54,14 @@
 const fs = require('fs');
 const path = require('path');
 
+const RealDate = Date;
+const T_BASE = 1700000000000;
+let NOW = T_BASE;
+class ClockDate extends RealDate {
+  constructor(...a) { if (a.length === 0) super(NOW); else super(...a); }
+  static now() { return NOW; }
+}
+global.Date = ClockDate;
 const DIST = process.env.ECHARTS_DIST || 'D:/Projects/echarts/dist/echarts.js';
 const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -130,6 +142,14 @@ function cases() {
       opt(g(PROG), { dataset: { source: [['v'], ['37'], [' 64 ']] } })],
     ['data-arrays-ordinal', 'data arrays whose first item starts with a word: the cells as written',
       opt(g(Object.assign({ data: [['abc', 3], [5, 6], ['7', 1]] }, PROG)))],
+    ['data-dims-number', "data arrays whose first word is declared 'number' by the series' dimensions: parsed, NaN",
+      opt(g(Object.assign({ dimensions: [{ name: 'v', type: 'number' }, 'w'], data: [['abc', 3], [5, 6]] }, PROG)))],
+    ['ds-null-inherit', "the reading's 'inherit' over two bands: a null cell is 0 (the first band), a word NaN (the last)",
+      opt(g({ min: -50, max: 50, axisLine: { show: false, lineStyle: { color: [[0.5, '#ff0000'], [1, '#0000ff']] } },
+        detail: { color: 'inherit' } }), { dataset: { source: [['v'], [null], ['Rate'], [30]] } }), { inks: true }],
+    ['ds-count-words', "valueAnimation over cells that are words: no count, the words throughout (sampled at 300 ms)",
+      Object.assign(opt(g({ detail: { valueAnimation: true, formatter: '{value} %' } }), { dataset: { source: [['v'], ['Rate'], ['7'], [40]] } }),
+        { animation: true }), { at: 300 }],
     ['data-encode-ignored', 'data arrays with encode.value 1: the first element',
       opt(g(Object.assign({ encode: { value: 1 }, data: [[37, 5], [64, 6]] }, PROG)))],
     ['data-objects', "items with values a number, a numeric word, a word: a number column",
@@ -168,7 +188,7 @@ function cases() {
   ];
 }
 
-function seriesOut(chart, s) {
+function seriesOut(chart, s, more) {
   const data = s.getData();
   const view = chart.getViewOfSeriesModel(s);
   const vd = data.mapDimension('value');
@@ -202,24 +222,39 @@ function seriesOut(chart, s) {
   }
   out.lines = [];
   view.group.traverse(e => { if (e.type === 'line') out.lines.push(colourOf(e.style.stroke)); });
+  if (more.inks) out.inks = (view._detailEls || []).map(d => (d && d.parent ? colourOf(d.style.fill) : null));
+  if (more.at != null) {
+    // a frame of the count: its readings only
+    return { index: out.index, band: out.band, rows: out.rows, details: out.details };
+  }
   return out;
 }
 
 function run(c) {
   const [name, note, option] = c;
+  const more = c[3] || {};
+  NOW = T_BASE;
+  echarts.env.node = more.at == null;
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   try {
+    if (more.at != null) chart._ssr = false;
     chart.setOption(JSON.parse(JSON.stringify(option)));
-    chart.renderToSVGString();
+    if (more.at != null) {
+      NOW = T_BASE + more.at;
+      chart.getZr().animation.update();
+    } else chart.renderToSVGString();
     const series = [];
     chart.getModel().eachSeries(s => {
       const raw = (option.series || [])[s.seriesIndex] || {};
       s.__r7dOwnBands = !!(raw.axisLine && raw.axisLine.lineStyle && raw.axisLine.lineStyle.color);
-      series.push(seriesOut(chart, s));
+      series.push(seriesOut(chart, s, more));
     });
-    return { name, note, option, series };
+    const rec = { name, note, option, series };
+    if (more.at != null) rec.at = more.at;
+    return rec;
   } finally {
     chart.dispose();
+    echarts.env.node = true;
   }
 }
 
@@ -245,6 +280,11 @@ function guards(out) {
   must(pg.progress.every(p => p.fill === pg.band), 'an auto arc with no bands is the band');
   const ip = c('item-pointer');
   must(ip.pointers[0].w !== ip.pointers[2].w, "an item's pointer width is its own");
+  const ct = c('ds-count-words');
+  must(ct.details[2] !== '40 %', 'a number counts');
+  must(ct.details[0] === 'Rate %' && ct.details[1] === '7 %', 'words do not count');
+  const ni = c('ds-null-inherit');
+  must(ni.inks[0] === '#ff0000ff' && ni.inks[1] === '#0000ffff', 'null inherits the first band, a word the last');
   const mx = c('ds-null-empty');
   must(mx.rows[1].value === null && mx.details[1] === '' && mx.pointers[1].angle !== mx.pointers[0].angle, 'null is 0 to the dial');
 }
