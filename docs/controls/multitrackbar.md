@@ -445,7 +445,7 @@ end;
 - **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去——除非用户操作时开着 `AllowCrossing`（越过后重新排序）或 `Pushable`（推着邻居走），见第 5 节。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
 - **整体重排**发生在改 `Min`、`Max`、`MinGap` 时，关掉 `AllowCrossing` 时，以及读完窗体时：先排序，从左往右推开到满足间距，超出 `Max` 的再从右往左推回来。读窗体时的重排不触发事件。
 - **`MinGap` 放不下时**——`(滑块数 − 1) × MinGap > Max − Min`——不报错，也不改属性值：滑块按 `(Max − Min) div (滑块数 − 1)` 的间距摆放。之后把范围放宽，原来的间距自动恢复。
-- **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：
+- **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。这期间调 `SetThumbValue` 也一样原样存进项里；改 `Min`、`Max`、`MinGap` 或 `AllowCrossing` 不会冲掉项里存着的值，`EndUpdate` 时按新的设置一起排。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：
 
   ```pascal
   Bar.Ranges.BeginUpdate;

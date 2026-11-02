@@ -256,6 +256,10 @@ type
     { #182: ranges added or deleted from code during a drag: the drag stays on the end (or the
       span) of the range it started on, and ends with that range. }
     procedure TestADragStaysOnItsRangeWhenRangesChange;
+    { #182: values held inside BeginUpdate survive a Min / Max / MinGap / AllowCrossing change
+      and a SetThumbValue in the same batch, and EndUpdate sorts them out against the new
+      range. }
+    procedure TestABatchKeepsItsValuesThroughARangeChange;
   end;
 
   TMultiAccess = class(TTyMultiTrackBar);
@@ -307,6 +311,8 @@ type
     { #182: thumbs added or deleted from code during a drag: the drag stays on its item, and
       ends with it. }
     procedure TestADragStaysOnItsThumbWhenThumbsChange;
+    { #182: as the range bar's. }
+    procedure TestABatchKeepsItsValuesThroughARangeChange;
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
@@ -2857,6 +2863,39 @@ begin
   end;
 end;
 
+procedure TTyRangeTrackBarTest.TestABatchKeepsItsValuesThroughARangeChange;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].Low := 400;
+    FBar.Ranges[0].High := 600;
+    FBar.Max := 1000;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('Max set inside the batch', '400..600', RangesText(FBar));
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].Low := 10;
+    FBar.MinGap := 5;
+    FBar.AllowCrossing := True;
+    FBar.Min := 5;
+    FBar.SetThumbValue(1, 20);
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('MinGap, AllowCrossing, Min and a SetThumbValue inside the batch', '10..20',
+    RangesText(FBar));
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].High := 900;
+    FBar.Max := 500;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('EndUpdate holds the values to the new Max', '10..500', RangesText(FBar));
+end;
+
 procedure TTyRangeTrackBarTest.TestADragStaysOnItsRangeWhenRangesChange;
 var
   p, q: TPoint;
@@ -3477,6 +3516,28 @@ begin
   finally
     host.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarTest.TestABatchKeepsItsValuesThroughARangeChange;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[2].Value := 900;
+    FBar.Max := 1000;
+    FBar.SetThumbValue(0, 300);
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('Max and a SetThumbValue inside the batch', '50,300,900', Values);
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[0].Value := 10;
+    FBar.MinGap := 5;
+    FBar.Min := 5;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('MinGap and Min inside the batch', '10,300,900', Values);
 end;
 
 procedure TTyMultiTrackBarTest.TestADragStaysOnItsThumbWhenThumbsChange;

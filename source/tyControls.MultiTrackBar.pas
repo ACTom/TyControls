@@ -269,6 +269,10 @@ type
       values and before any event fires: a final class copies them back into its collection
       items here, so the items always read what the thumbs show, from the event handlers too. }
     procedure ValuesChanged; virtual;
+    { #182: SetThumbValue asks this first. True: the final class has kept AValue as given for
+      thumb AIndex -- its collection is between BeginUpdate and EndUpdate, which sorts the
+      values out -- and the thumbs do not move now. Here False. }
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; virtual;
     { A move the user makes -- drag, key, wheel, the jump to a press on the track: clamped as
       SetThumbValue clamps, then, when the thumb would really move, offered to
       OnThumbChanging, whose answer is clamped again and applied. An index outside the thumbs
@@ -608,6 +612,7 @@ type
       removed, nothing is selected. }
     procedure RangesChanged;
     procedure ValuesChanged; override;
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; override;
     function ThumbKey(AIndex: Integer): Integer; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
@@ -849,6 +854,7 @@ type
     function AddUserThumb(AValue: Integer): Integer; override;
     procedure RemoveThumb(AIndex: Integer); override;
     procedure ValuesChanged; override;
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
@@ -1378,6 +1384,7 @@ begin
     FValues[AIndex] := AValue;
     Exit;
   end;
+  if HoldThumbValue(AIndex, AValue) then Exit;
   ApplyThumbValue(AIndex, ClampThumbValue(AIndex, AValue));
 end;
 
@@ -1855,6 +1862,11 @@ end;
 
 procedure TTyMultiTrackBarBase.ValuesChanged;
 begin
+end;
+
+function TTyMultiTrackBarBase.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := False;
 end;
 
 procedure TTyMultiTrackBarBase.DoThumbChange(AIndex: Integer);
@@ -3079,12 +3091,23 @@ var
   i: Integer;
 begin
   inherited ValuesChanged;
-  if (FRanges = nil) or (ThumbCount <> 2 * FRanges.Count) then Exit;
+  { #182: between BeginUpdate and EndUpdate the ranges hold what was set on them, raw: a Min,
+    Max or MinGap change meanwhile settles the thumbs, not them; EndUpdate settles both. }
+  if (FRanges = nil) or (FRanges.UpdateCount > 0) or (ThumbCount <> 2 * FRanges.Count) then
+    Exit;
   for i := 0 to FRanges.Count - 1 do
   begin
     FRanges[i].FLow := ThumbValues[2 * i];
     FRanges[i].FHigh := ThumbValues[2 * i + 1];
   end;
+end;
+
+function TTyCustomRangeTrackBar.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := (FRanges <> nil) and (FRanges.UpdateCount > 0) and (AIndex div 2 < FRanges.Count);
+  if not Result then Exit;
+  if Odd(AIndex) then FRanges[AIndex div 2].FHigh := AValue
+  else FRanges[AIndex div 2].FLow := AValue;
 end;
 
 procedure TTyCustomRangeTrackBar.Loaded;
@@ -3615,9 +3638,16 @@ var
   i: Integer;
 begin
   inherited ValuesChanged;
-  if (FThumbs = nil) or (ThumbCount <> FThumbs.Count) then Exit;
+  { #182: see TTyCustomRangeTrackBar.ValuesChanged. }
+  if (FThumbs = nil) or (FThumbs.UpdateCount > 0) or (ThumbCount <> FThumbs.Count) then Exit;
   for i := 0 to FThumbs.Count - 1 do
     FThumbs[i].FValue := ThumbValues[i];
+end;
+
+function TTyCustomMultiTrackBar.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := (FThumbs <> nil) and (FThumbs.UpdateCount > 0) and (AIndex < FThumbs.Count);
+  if Result then FThumbs[AIndex].FValue := AValue;
 end;
 
 procedure TTyCustomMultiTrackBar.Loaded;
