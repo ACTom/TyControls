@@ -108,12 +108,15 @@ type
     ShowModal can't run headlessly, so exercise the forward against a built dialog. }
   TDialogEventForwardTest = class(TTestCase)
   private
+    FSender: TObject;
     procedure HandleShow(Sender: TObject);
     procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
   published
     procedure TestForwardOntoBuiltMessageDialog;
     procedure TestForwardNilFormIsNoOp;
+    { #179: given the wrapper, the handlers get it as Sender, not the form. }
+    procedure TestTheWrapperIsTheSender;
   end;
 
 implementation
@@ -591,13 +594,47 @@ end;
 { TDialogEventForwardTest }
 
 procedure TDialogEventForwardTest.HandleShow(Sender: TObject);
-begin end;
+begin
+  FSender := Sender;
+end;
 
 procedure TDialogEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
-begin end;
+begin
+  FSender := Sender;
+end;
 
 procedure TDialogEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
-begin end;
+begin
+  FSender := Sender;
+end;
+
+procedure TDialogEventForwardTest.TestTheWrapperIsTheSender;
+var
+  d: TTyDialog;
+  w: TComponent;
+  ca: TCloseAction;
+  ok: Boolean;
+begin
+  w := TComponent.Create(nil);
+  d := TyBuildMessageDialog('Hi', mtInformation, [mbOK]);
+  try
+    TyForwardDialogEvents(w, d, @HandleShow, @HandleClose, @HandleCanClose);
+    FSender := nil;
+    d.OnShow(d);
+    AssertSame('OnShow', TObject(w), FSender);
+    FSender := nil;
+    ca := caHide;
+    d.OnClose(d, ca);
+    AssertSame('OnClose', TObject(w), FSender);
+    FSender := nil;
+    ok := True;
+    d.OnCloseQuery(d, ok);
+    AssertSame('OnCanClose', TObject(w), FSender);
+  finally
+    d.Free;
+    w.Free;
+  end;
+end;
 
 procedure TDialogEventForwardTest.TestForwardOntoBuiltMessageDialog;
 var d: TTyDialog;

@@ -103,6 +103,11 @@ type
   the field-forward triple isn't repeated eleven times. AForm may be nil (no-op). }
 procedure TyForwardDialogEvents(AForm: TCustomForm;
   AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
+{ #179: the same, with ADialog -- the wrapper -- as the Sender the three handlers get, as LCL's
+  dialogs pass themselves. The form's events go to a relay ADialog owns, so the form's own
+  Sender never reaches the application. ADialog nil: as above. }
+procedure TyForwardDialogEvents(ADialog: TComponent; AForm: TCustomForm;
+  AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
 
 { Test/introspection helpers (construct-only seam). }
 function TyDialogButtonCount(ADlg: TTyDialog): Integer;
@@ -825,6 +830,64 @@ end;
 
 { Free functions / globals }
 
+type
+  { #179: what the form's three events reach, to hand them on with the wrapper as Sender. }
+  TTyDialogEventRelay = class(TComponent)
+  public
+    Dialog: TComponent;
+    OnShow: TNotifyEvent;
+    OnClose: TCloseEvent;
+    OnCanClose: TCloseQueryEvent;
+    procedure FormShow(Sender: TObject);
+    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+  end;
+
+procedure TTyDialogEventRelay.FormShow(Sender: TObject);
+begin
+  if Assigned(OnShow) then OnShow(Dialog);
+end;
+
+procedure TTyDialogEventRelay.FormClose(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  if Assigned(OnClose) then OnClose(Dialog, CloseAction);
+end;
+
+procedure TTyDialogEventRelay.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  if Assigned(OnCanClose) then OnCanClose(Dialog, CanClose);
+end;
+
+procedure TyForwardDialogEvents(ADialog: TComponent; AForm: TCustomForm;
+  AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
+var
+  relay: TTyDialogEventRelay;
+  i: Integer;
+begin
+  if AForm = nil then Exit;
+  if ADialog = nil then
+  begin
+    TyForwardDialogEvents(AForm, AOnShow, AOnClose, AOnCanClose);
+    Exit;
+  end;
+  { One relay per wrapper, kept: a wrapper that builds a fresh form for every Execute finds it
+    again. Owned by the wrapper, not by its form: a component the form owned would be written
+    by the designer with it. }
+  relay := nil;
+  for i := 0 to ADialog.ComponentCount - 1 do
+    if ADialog.Components[i] is TTyDialogEventRelay then
+      relay := TTyDialogEventRelay(ADialog.Components[i]);
+  if relay = nil then relay := TTyDialogEventRelay.Create(ADialog);
+  relay.Dialog := ADialog;
+  relay.OnShow := AOnShow;
+  relay.OnClose := AOnClose;
+  relay.OnCanClose := AOnCanClose;
+  if Assigned(AOnShow) then AForm.OnShow := @relay.FormShow else AForm.OnShow := nil;
+  if Assigned(AOnClose) then AForm.OnClose := @relay.FormClose else AForm.OnClose := nil;
+  if Assigned(AOnCanClose) then AForm.OnCloseQuery := @relay.FormCloseQuery
+  else AForm.OnCloseQuery := nil;
+end;
+
 procedure TyForwardDialogEvents(AForm: TCustomForm;
   AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
 begin
@@ -938,7 +1001,7 @@ function TTyCustomMessage.Execute: TModalResult;
 var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
-  TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);   // relay LCL-parity events
+  TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);   // relay LCL-parity events
   Result := RunDialogModal(d);
 end;
 
@@ -1011,7 +1074,7 @@ begin
   // OnShow/OnClose/OnCanClose can be forwarded onto the form before ShowModal.
   d := TyBuildInputDialog(FCaption, FPrompt, FValue, e);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FValue := e.Text;
   finally d.Free; end;
@@ -1069,7 +1132,7 @@ var d: TTyDialog; e: TTyEdit;
 begin
   d := TyBuildPasswordDialog(FCaption, FPrompt, FPasswordChar, e);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FValue := e.Text;
   finally d.Free; end;
@@ -1126,7 +1189,7 @@ begin
   // Inline (rather than call TyTextQuery) so the wrapper's events forward before ShowModal.
   d := TyBuildTextDialog(FCaption, FPrompt, FValue, m);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FValue := m.Text;
   finally d.Free; end;
@@ -1217,7 +1280,7 @@ begin
   // Inline (rather than call TySelectValue) so the wrapper's events forward before ShowModal.
   d := TyBuildSelectValueDialog(FCaption, FPrompt, FItems, FItemIndex, lb);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FItemIndex := lb.ItemIndex;
   finally d.Free; end;

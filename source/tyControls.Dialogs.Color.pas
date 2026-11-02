@@ -943,7 +943,7 @@ begin
   Result.SetCustomColors(FCustomColors);
   Result.ApplyOptions(FOptions);
   // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
-  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+  TyForwardDialogEvents(Self, Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 function TTyColorDialog.GetLCL: TColor;

@@ -46,6 +46,9 @@ type
     procedure LayoutChecks;
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #179: the window is the dialog's, built once and shown again by the next Execute, so a
+      close only hides it, whatever an OnClose handler asks. }
+    procedure DoClose(var CloseAction: TCloseAction); override;
   public
     procedure Build(AWithReplace: Boolean);
     procedure SyncFrom(const AFindText, AReplaceText: string; AOptions: TFindOptions);
@@ -213,7 +216,9 @@ begin
   // Action buttons: AddButton(caption, mrNone) is non-closing (mrNone never sets
   // Form.ModalResult) yet still lands on the auto-laid-out button bar. OnClick
   // forwards to the public Do* seams.
-  b := AddButton(rsDlgFindNext, mrNone); b.OnClick := @FindNextClick;
+  { Find Next is the default button, as LCL's (replacedlgunit.lfm FindMoreButton.Default):
+    Enter the focused control leaves alone finds the next match, in the replace dialog too. }
+  b := AddButton(rsDlgFindNext, mrNone, True, False); b.OnClick := @FindNextClick;
   if AWithReplace then
   begin
     b := AddButton(rsDlgReplace, mrNone);    b.OnClick := @ReplaceClick;
@@ -332,7 +337,7 @@ end;
 procedure TTyFindForm.FindNextClick(Sender: TObject);   begin DoFindNext; end;
 procedure TTyFindForm.ReplaceClick(Sender: TObject);    begin DoReplace; end;
 procedure TTyFindForm.ReplaceAllClick(Sender: TObject); begin DoReplaceAll; end;
-procedure TTyFindForm.CloseClick(Sender: TObject);      begin Hide; end;
+procedure TTyFindForm.CloseClick(Sender: TObject);      begin Close; end;
 procedure TTyFindForm.HelpClick(Sender: TObject);
 begin
   if FDlg <> nil then FDlg.DoHelpClicked;
@@ -340,19 +345,21 @@ end;
 
 procedure TTyFindForm.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  // The inherited (modal) Enter/Esc path sets ModalResult, which is inert on a
-  // modeless form. Handle Enter/Esc here instead.
-  if Key = VK_RETURN then
-  begin
-    if FWithReplace then DoReplace else DoFindNext;
-    Key := 0; Exit;
-  end;
+  { The inherited (modal) Esc path sets ModalResult, which is inert on a modeless form, so Esc
+    closes it here -- through Close, so OnCanClose and OnClose hear of it (#179). Enter is left
+    to the focused control and then the default button, Find Next (#179). }
   if Key = VK_ESCAPE then
   begin
-    Hide;
+    Close;
     Key := 0; Exit;
   end;
   inherited KeyDown(Key, Shift);
+end;
+
+procedure TTyFindForm.DoClose(var CloseAction: TCloseAction);
+begin
+  inherited DoClose(CloseAction);
+  CloseAction := caHide;
 end;
 
 function TTyFindForm.FindEdit: TTyEdit;         begin Result := FFindEdit; end;
@@ -402,7 +409,7 @@ begin
   end;
   FForm.SyncFrom(FFindText, FReplaceText, FOptions);
   // Relay the LCL-parity events onto the modeless form (idempotent — safe each call).
-  TyForwardDialogEvents(FForm, FOnShow, FOnClose, FOnCanClose);
+  TyForwardDialogEvents(Self, FForm, FOnShow, FOnClose, FOnCanClose);
   Result := FForm;
 end;
 
@@ -424,7 +431,7 @@ end;
 
 procedure TTyFindDialog.CloseDialog;
 begin
-  if FForm <> nil then FForm.Hide;
+  if FForm <> nil then FForm.Close;   // OnCanClose and OnClose, as LCL's (#179)
 end;
 
 { TTyReplaceDialog }

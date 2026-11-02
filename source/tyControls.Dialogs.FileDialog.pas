@@ -1157,7 +1157,7 @@ begin
     btn := Result.AddButton(rsMsgBtnHelp, mrNone);   { mrNone: the dialog stays open }
     btn.OnClick := @FormHelpClick;
   end;
-  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+  TyForwardDialogEvents(Self, Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 procedure TTyCustomFileDialog.FormHelpClick(Sender: TObject);

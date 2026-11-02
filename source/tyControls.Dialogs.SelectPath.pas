@@ -720,7 +720,7 @@ begin
     btn.OnClick := @FormHelpClick;
   end;
   // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
-  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+  TyForwardDialogEvents(Self, Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 procedure TTySelectPathDialog.FormHelpClick(Sender: TObject);
