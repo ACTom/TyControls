@@ -86,6 +86,8 @@ type
     procedure TestALoadedFilterComboFiltersItsList;
     procedure TestTheGeneratedRowsAreNotWritten;
     procedure TestAShellComboWithNoDirectoryListsTheRoots;
+    { #164 }
+    procedure TestTheDropDownIgnoresLettersAndDrags;
   end;
 
   TChangeProbe = class
@@ -1338,6 +1340,32 @@ begin
   s.Parent := FForm;
   AssertEquals('setup: no directory', '', s.Directory);
   AssertEquals('the drives are there', Length(TyFsRoots), s.Items.Count);
+end;
+
+{ #164: the list's selection change is a pick, so the list box's type-to-find and drag-select
+  are off in it -- a letter or a drag would pick. }
+procedure TComboKeysTest.TestTheDropDownIgnoresLettersAndDrags;
+var
+  c: TComboAccess;
+  lst: TTyCustomListBox;
+  u: TUTF8Char;
+  r: TRect;
+begin
+  c := NewCombo(csDropDownList);
+  c.ItemIndex := 0;
+  c.DropDown;
+  lst := c.PopupList;
+  u := 'b';
+  TListCrack(lst).UTF8KeyPress(u);
+  AssertEquals('a letter in the open list picks nothing', 0, c.ItemIndex);
+  r := lst.ItemRect(1);
+  TListCrack(lst).MouseDown(mbLeft, [ssLeft], 10, (r.Top + r.Bottom) div 2);
+  AssertEquals('setup: a press picks its row', 1, c.ItemIndex);
+  r := lst.ItemRect(2);
+  TListCrack(lst).MouseMove([ssLeft], 10, (r.Top + r.Bottom) div 2);
+  AssertEquals('dragging on picks nothing more', 1, c.ItemIndex);
+  TListCrack(lst).MouseUp(mbLeft, [], 10, (r.Top + r.Bottom) div 2);
+  Application.ProcessMessages;
 end;
 
 procedure TComboKeysTest.TestAnOpenCascaderIsNotOpenedAgain;

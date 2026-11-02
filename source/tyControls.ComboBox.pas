@@ -669,6 +669,8 @@ uses
   Math, tyControls.QtWS, tyControls.PlatformWS;
 
 type
+  TListBoxAccess = class(TTyListBox);
+
   { Items' own class: it tells a rename (Items[i] := S) apart from a rebuild, so the selected
     row keeps its selection through one, and only through one (#120). }
   TTyComboItemList = class(TStringList)
@@ -1449,6 +1451,10 @@ begin
   FPopupList := CreatePopupList;  // virtual: a subclass returns its own list class, and
   // that ONE factory serves both shapes -- popup and embedded -- so the rows cannot
   // paint one way dropped down and another way docked.
+  { #164: the list's selection change is a pick here, so neither a typed letter nor a drag
+    with the button held may move it. }
+  TListBoxAccess(FPopupList).FTypeToFind := False;
+  TListBoxAccess(FPopupList).FDragSelect := False;
   { csNoDesignVisible BEFORE any Parent/Visible change (memory/designer-internal-
     subcontrol-leak, and the PageControl ordering note: the show-state re-eval runs at the
     VISIBLE change and must already see the flag). Set unconditionally at creation: in the

@@ -669,6 +669,9 @@ end;
 constructor TTyCustomValueListEditor.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { #164: its typing and dragging are its own -- the editors and the divider. }
+  FTypeToFind := False;
+  FDragSelect := False;
   FEditFlat := -1;
   FPaintRow := -1;
   FEditCol := 1;      // the value column: what an edit meant before the key became editable

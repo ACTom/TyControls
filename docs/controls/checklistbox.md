@@ -32,7 +32,7 @@ uses tyControls.CheckListBox;
 | `Toggle(AIndex)` | 按状态环推进一格:关→开→关;`AllowGrayed` 打开时 关→灰→开→关(LCL `NextStateMap`)。**禁用行不动**。 |
 | `CheckAll(AState, aAllowGrayed=True, aAllowDisabled=True)` | 把所有行置为 `AState`;两个开关分别用于跳过已是 `cbGrayed` 的行、跳过被 `ItemEnabled` 关掉的行。 |
 | `CheckedCount: Integer` | 已勾选的行数(`cbGrayed` 计入)。 |
-| `OnClickCheck: TNotifyEvent` | 某行勾选状态被切换时触发。 |
+| `OnClickCheck: TNotifyEvent` | 用户点复选框或按空格切换了某行时触发；代码里调 `Toggle` / 写 `Checked[]` 不触发，和 LCL 一样。 |
 
 另继承 `TTyCustomListBox` 的 `Items` / `ItemIndex` / `OnChange` / 多选 等。
 
