@@ -140,6 +140,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { #175: Alt+Down and F4 drop the menu, as a combo box's list -- only the mouse could. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     { The native click path routes here after a mouse-up. When the preceding mouse-down
@@ -321,6 +323,17 @@ begin
     else p := ClientToScreen(Point(0, Height));
     FDropDownMenu.PopUp(p.X, p.Y);
   end;
+end;
+
+procedure TTyDropDownButton.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if IsEnabled and (((Key = VK_DOWN) and (Shift = [ssAlt])) or ((Key = VK_F4) and (Shift = []))) then
+  begin
+    Key := 0;
+    DoDropDown;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
 end;
 
 procedure TTyDropDownButton.DropDownForTest;
