@@ -21,7 +21,7 @@
 >
 > **这一条不是照 Lazarus 抄的。** `TCoolBar` 有同样的死手势——它的 `CalculateAndAlign` 只按溢出换行（`RowEndHelper`，`coolbar.inc:1391`），整个单元里没有任何一处会在落band时减少别的带的 `Width`。**参考是 Win32 的 rebar**：它会把行上的带压到各自的 `cxMinChild`，本库的 `BandMinWidth` 就是那个 `cxMinChild`。
 
-与父类 `TTyControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。典型用途：经典 Office / IE 风格的可拖拽工具带条。
+与父类 `TTyControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。给 `TTyCoolBand.Control` 赋一个控件会把它挪到这条 cool bar 上（与 LCL 相同）；`TTyCoolBand.Width` 赋值同样受 `MinWidth` / `MaxWidth` 约束，调低 `MaxWidth`（或调高 `MinWidth`）会把现有宽度一并收进去。典型用途：经典 Office / IE 风格的可拖拽工具带条。
 
 > **交互 vs 数学：** 真正的拖动（鼠标捕获）属于真机行为；**缝的归属**、**落点**、**命中判定**与**改宽钳制**四处几何都被抽成纯函数（`TyCoolBandSeamOwner` / `TyCoolBandDropIndex` / `TyCoolGripperHit` / `TyCoolBandResize`），可无窗口 headless 单测。
 

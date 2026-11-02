@@ -192,6 +192,9 @@ end;
 constructor TTyControlBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { #176: a band host has no caption -- dropped in the designer it showed its own Name in the
+    middle, as a panel does. TTyCoolBar inherits this. }
+  ControlStyle := ControlStyle - [csSetCaption];
   // TTyPanel already sets csAcceptsControls; keep the band host a designer container.
   FBandHeight := 26;             { classic fallback; unused while FBandHeightExplicit=False }
   FBandHeightExplicit := False;  { follow --header-control-height (density-aware) until set }
