@@ -268,6 +268,10 @@ type
     Fills: TTyChartColorArray;
     Fill: TTyChartColor;
     LineWidthLogical: Double;
+    { [R7-F] the series' lineStyle.width is +Infinity: the ring strokes
+      nothing (the canvas takes no such width) and its stroked rect is
+      not-a-number upstream -- it is never hit }
+    LineInf: Boolean;
     { [R2-B] lineStyle.type (getLineStyle's lineDash, drawn as zrender's
       normalizeLineDash against the width), the series' and -- RowLineSet --
       an item's own lineStyle width and type over it }
@@ -287,6 +291,9 @@ type
     { True only when the author named a colour for it -- otherwise the area
       follows the ROW, which is the whole point of colouring by datum. }
     AreaAuthored: Boolean;
+    { [R7-F] the series' areaStyle.color is 'none': no fill, no inside for
+      the pointer (an item's own colour over it is a fill) }
+    AreaNone: Boolean;
     Area: TTyChartColor;
     AreaOpacity: Double;
     { A STATE WRITES AN areaStyle [F2b]: `emphasis`, `select` or `blur` --
@@ -2057,6 +2064,11 @@ begin
       end;
     end;
     el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
+    if AVisual.LineInf then
+    begin
+      el.Style.StrokeWidthLogical := 0;
+      el.HitNone := True;
+    end;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }
     if (raw >= 0) and (raw <= High(AVisual.RowLineSet)) and AVisual.RowLineSet[raw] then
@@ -2124,6 +2136,12 @@ begin
         el.Style.FillColor := AVisual.RowAreaColour[raw]
       else if AVisual.AreaAuthored then
         el.Style.FillColor := AVisual.Area
+      else if AVisual.AreaNone then
+      begin
+        el.Style.HasFill := False;
+        el.Style.FillColor := 0;
+        el.Style.HitNoFill := True;
+      end
       else
         el.Style.FillColor := rowColour;
       if (raw >= 0) and (raw <= High(AVisual.RowAreaOpacitySet))
@@ -2171,6 +2189,8 @@ begin
       begin
         sym := TyBuildSymbol(rowSym, pts[i].X, pts[i].Y);
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
+        { [R7-F] hit in its own frame, as RadarView's createSymbol }
+        TySymbolHitFrame(sym, rowSym, pts[i].X, pts[i].Y);
         el := TyChartElement(sym);
         el.Style.HasFill := True;
         { [R6-D] the item's visual style first (useStyle(itemStyle)): its

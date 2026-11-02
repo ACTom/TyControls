@@ -116,6 +116,20 @@ type
       pen. Hit as the polygon, zrender's rectContain in the image's own
       frame. Empty on every other shape. }
     Image: string;
+    { [R7-F] UPSTREAM'S OWN OUTLINE FOR THE HIT TEST, where the drawn one
+      stands in for it. HitSym: a symbol as Symbol.ts makes it -- the
+      type's path in the unit box (createSymbol(HitSym, -1, -1, 2, 2), the
+      names TyZrSymbol knows) under HitM, its transform to device px (half
+      the size on each axis, the turn, the place), its pen unscaled
+      (strokeNoScale); '' none. HitQuad: an edge that is one quadratic
+      (BezierCurve), drawn as points -- the first and the last of Points
+      its ends, HitCP its control point. Every move, scale, turn and mirror
+      of the shape carries them (TyShapeHitAffine). The zero value is
+      neither: the drawn geometry is tested. }
+    HitSym: string;
+    HitM: TTyMat2D;
+    HitQuad: Boolean;
+    HitCP: TTyPointF;
   end;
   { [spec 242] an element's clip paths }
   TTyChartShapeArray = array of TTyChartShape;
@@ -324,6 +338,11 @@ function TySnapShape(const AShape: TTyChartShape;
   A ratio of 1 answers the shape unchanged, and so does anything that is not a
   positive finite number -- upstream's own rule for a bad `emphasis.scale`. }
 function TyScaleShape(const AShape: TTyChartShape; ARatio: Double): TTyChartShape;
+
+{ [R7-F] the hit outline's frame (HitM, HitCP) taken through the affine map
+  A (x' = a0 x + a2 y + a4, y' = a1 x + a3 y + a5), as the drawn geometry
+  is: a frame helper that moves, scales, turns or mirrors a shape calls it }
+procedure TyShapeHitAffine(var AShape: TTyChartShape; const A: TTyMat2D);
 
 implementation
 
@@ -1027,7 +1046,7 @@ end;
 
 function TyMirrorShape(const AShape: TTyChartShape; ACX, ACY: Double;
   AFlipX, AFlipY: Boolean): TTyChartShape;
-var i: Integer;
+var i: Integer; m: TTyMat2D;
 begin
   Result := AShape;
   if not (AFlipX or AFlipY) then Exit;
@@ -1055,6 +1074,40 @@ begin
   begin
     if AFlipX then Result.Points[i].X := 2 * ACX - Result.Points[i].X;
     if AFlipY then Result.Points[i].Y := 2 * ACY - Result.Points[i].Y;
+  end;
+  m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := 0; m[5] := 0;
+  if AFlipX then
+  begin
+    m[0] := -1;
+    m[4] := 2 * ACX;
+  end;
+  if AFlipY then
+  begin
+    m[3] := -1;
+    m[5] := 2 * ACY;
+  end;
+  TyShapeHitAffine(Result, m);
+end;
+
+procedure TyShapeHitAffine(var AShape: TTyChartShape; const A: TTyMat2D);
+var m: TTyMat2D; x, y: Double;
+begin
+  if AShape.HitSym <> '' then
+  begin
+    m := AShape.HitM;
+    AShape.HitM[0] := A[0] * m[0] + A[2] * m[1];
+    AShape.HitM[1] := A[1] * m[0] + A[3] * m[1];
+    AShape.HitM[2] := A[0] * m[2] + A[2] * m[3];
+    AShape.HitM[3] := A[1] * m[2] + A[3] * m[3];
+    AShape.HitM[4] := A[0] * m[4] + A[2] * m[5] + A[4];
+    AShape.HitM[5] := A[1] * m[4] + A[3] * m[5] + A[5];
+  end;
+  if AShape.HitQuad then
+  begin
+    x := AShape.HitCP.X;
+    y := AShape.HitCP.Y;
+    AShape.HitCP.X := A[0] * x + A[2] * y + A[4];
+    AShape.HitCP.Y := A[1] * x + A[3] * y + A[5];
   end;
 end;
 
@@ -1377,10 +1430,30 @@ var
   b: TTyRectF;
   cx, cy: Double;
   i: Integer;
+  m: TTyMat2D;
 begin
   Result := AShape;
   if IsNan(ARatio) or IsInfinite(ARatio) or (ARatio <= 0) or (ARatio = 1) then
     Exit;
+  { [R7-F] the hit outline about the same centre }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    if AShape.Kind in [cskCircle, cskEllipse] then
+    begin
+      cx := AShape.CX;
+      cy := AShape.CY;
+    end
+    else
+    begin
+      b := TyShapeBounds(AShape);
+      cx := (b.Left + b.Right) / 2;
+      cy := (b.Top + b.Bottom) / 2;
+    end;
+    m[0] := ARatio; m[1] := 0; m[2] := 0; m[3] := ARatio;
+    m[4] := cx - cx * ARatio;
+    m[5] := cy - cy * ARatio;
+    TyShapeHitAffine(Result, m);
+  end;
   case AShape.Kind of
     cskCircle:
       Result.R1 := AShape.R1 * ARatio;

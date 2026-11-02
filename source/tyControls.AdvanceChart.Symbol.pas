@@ -150,6 +150,18 @@ function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
 function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
   const ABox: TTyRectF): TTyChartShape;
 
+{ [R7-F] A SERIES' SYMBOL AS THE POINTER FINDS IT UPSTREAM: Symbol.ts makes
+  the type's path in the unit box (createSymbol(type, -1, -1, 2, 2)), scales
+  it by half the size on each axis, turns it by symbolRotate (zrender's
+  rotation, anticlockwise on screen) and places it at the point and its
+  offset, its pen unscaled (strokeNoScale) -- Path.contain asks all of it in
+  that frame: the turned symbol's stroked rect, a pin's arcs and curves, an
+  oblong symbol's pen over the line scale. AShape is TyBuildSymbol(ASpec,
+  ACX, ACY) (the offset resolved); a built-in closed type sets its HitSym /
+  HitM, the rest (a line, a path, a picture) keep the drawn geometry }
+procedure TySymbolHitFrame(var AShape: TTyChartShape; const ASpec: TTySymbolSpec;
+  ACX, ACY: Double);
+
 implementation
 
 uses tyControls.AdvanceChart.ZrPath;
@@ -813,6 +825,30 @@ begin
     Result := TyShapePolyline(L.Pts)
   else
     Result := TyShapePolygon(L.Pts);
+end;
+
+procedure TySymbolHitFrame(var AShape: TTyChartShape; const ASpec: TTySymbolSpec;
+  ACX, ACY: Double);
+var name: string;
+begin
+  case ASpec.Kind of
+    tsyCircle: name := 'circle';
+    tsyRect: name := 'rect';
+    tsyRoundRect: name := 'roundRect';
+    tsySquare: name := 'square';
+    tsyTriangle: name := 'triangle';
+    tsyDiamond: name := 'diamond';
+    tsyPin: name := 'pin';
+    tsyArrow: name := 'arrow';
+  else
+    Exit;
+  end;
+  if not ((ASpec.WidthPx > 0) and (ASpec.HeightPx > 0)) then Exit;
+  if IsNan(ACX + ASpec.OffsetX) or IsNan(ACY + ASpec.OffsetY) then Exit;
+  if (AShape.Kind = cskRect) and not TyRectFIsValid(AShape.Bounds) then Exit;
+  AShape.HitSym := name;
+  AShape.HitM := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,
+    DegToRad(ASpec.RotateDeg), ACX + ASpec.OffsetX, ACY + ASpec.OffsetY);
 end;
 
 function TyImageCenterBox(const ASource: string; const ABox: TTyRectF): TTyRectF;

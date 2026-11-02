@@ -164,6 +164,10 @@ type
       does not draw): its sectors are never hit, their stroked rect is
       not-a-number; 0 otherwise }
     StrokeWidthInf: Double;
+    { [R7-F] per sector: its fill is 'none' (no inside for the pointer);
+      and the series' pen is a clear colour (it strokes for the pointer) }
+    FillNones: array of Boolean;
+    StrokeClear: Boolean;
     { device px per logical px: a border grows a gradient's box by its
       width on the device [Batch 105] }
     PxScale: Double;
@@ -567,6 +571,7 @@ begin
   Result.Fills[0] := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
+  Result.StrokeClear := False;
   Result.StrokeWidthInf := 0;
   Result.PxScale := 1;
   Result.EmptyFill := AFill;
@@ -1039,6 +1044,9 @@ begin
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     el.HitNone := AVisual.StrokeWidthInf > 0;
+    { [R7-F] hasFill() / hasStroke() as upstream answers them }
+    el.Style.HitNoFill := (i <= High(AVisual.FillNones)) and AVisual.FillNones[i];
+    el.Style.HitClearPen := AVisual.StrokeClear;
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
       the arc's extent -- grown by the border when there is one [Batch 105] }
     if i <= High(AVisual.Decals) then el.Style.Decal := AVisual.Decals[i];

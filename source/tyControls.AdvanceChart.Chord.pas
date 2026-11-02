@@ -1294,6 +1294,13 @@ begin
         if d = nil then lw := 1 else lw := JsNum(d);
         if lw > 0 then
         begin
+          { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+            note), and its stroked rect is not-a-number -- never hit }
+          if IsInfinite(lw) then
+          begin
+            el.HitNone := True;
+            lw := 0;
+          end;
           el.Style.StrokeColor := c;
           el.Style.StrokeWidthLogical := lw;
         end;
@@ -1421,6 +1428,13 @@ begin
         if d <> nil then lw := JsNum(d);
         if lw > 0 then
         begin
+          { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+            note), and its stroked rect is not-a-number -- never hit }
+          if IsInfinite(lw) then
+          begin
+            el.HitNone := True;
+            lw := 0;
+          end;
           el.Style.StrokeColor := c;
           el.Style.StrokeWidthLogical := lw;
         end;

@@ -12,6 +12,13 @@
 // ribbons, tree edges) and labels (a plate with a border, a border alone, a
 // text stroke), and the large paths (LargeSymbolPath, LargeLineDraw's
 // LargeLinesPath, a large bar).
+// R7-F adds: a fill written 'none' against a clear one, a clear pen, opacity
+// 0 (none.*, clear.*, opacity0.*); curves as curves (curve.*: no step of
+// tolerance is left for a graph's or a lines' curved edge or the pin);
+// turned labels and turned or oblong symbols (turn.*); a pen of infinite
+// width across the series (inf.*: never hit, upstream's stroked rect is
+// not-a-number, but where it is a treemap's, a radar's area, a line's or a
+// label's words).
 //
 // From the real ECharts 6.1 dist (SSR, svg renderer, chart._ssr = false,
 // animation off): each case set, then for each aim -- an element (an item's
@@ -87,9 +94,7 @@ const GRAPH_NODES_TILT = [{ name: 'a', x: 100, y: 150 }, { name: 'b', x: 300, y:
 const GRAPH_LINKS = [{ source: 'a', target: 'b' }, { source: 'b', target: 'c' }];
 const TREE = { name: 'r', children: [{ name: 'a' }, { name: 'b' }] };
 
-// [id, option, aims, tol]: tol, where given, the steps a run's ends may lie
-// off upstream's in the port -- a curve it holds as points (a graph's or a
-// lines' curved edge sampled into a polyline, the pin symbol's outline)
+// [id, option, aims]
 function cases() {
   return [
     // ---- rects ----
@@ -175,8 +180,8 @@ function cases() {
     ['scatter.roundrect', sc('roundRect', 30, B(12)), [IT(0, 1)]],
     ['scatter.triangle', sc('triangle', 30, B(12)), [IT(0, 1)]],
     ['scatter.diamond', sc('diamond', 30, B(12)), [IT(0, 1)]],
-    ['scatter.pin', sc('pin', 30, B(12)), [IT(0, 1)], 2],
-    ['scatter.pin-big', sc('pin', 90, {}), [IT(0, 1)], 2],
+    ['scatter.pin', sc('pin', 30, B(12)), [IT(0, 1)]],
+    ['scatter.pin-big', sc('pin', 90, {}), [IT(0, 1)]],
     ['scatter.arrow', sc('arrow', 30, B(12)), [IT(0, 1)]],
     ['scatter.empty', sc('emptyCircle', 20, {}), [IT(0, 1)]],
     ['scatter.empty-b10', sc('emptyRect', 20, B(10)), [IT(0, 1)]],
@@ -191,11 +196,11 @@ function cases() {
       symbolPosition: 'center', data: [4, 6, 8], itemStyle: B(10) }), [IT(0, 1)]],
     // ---- beziers ----
     ['graph.edges', solo({ type: 'graph', layout: 'none', symbolSize: 20, itemStyle: B(10), data: GRAPH_NODES,
-      links: GRAPH_LINKS, lineStyle: { width: 12, curveness: 0.3, opacity: 1 } }), [EDGE(0, 0), IT(0, 2)], 1],
+      links: GRAPH_LINKS, lineStyle: { width: 12, curveness: 0.3, opacity: 1 } }), [EDGE(0, 0), IT(0, 2)]],
     ['graph.straight-w1', solo({ type: 'graph', layout: 'none', symbolSize: 20, data: GRAPH_NODES_TILT, links: GRAPH_LINKS,
       lineStyle: { width: 1, opacity: 1 } }), [EDGE(0, 0)]],
     ['lines.w12', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 12, curveness: 0.3, opacity: 1 },
-      data: [{ coords: [[1, 2], [9, 8]] }] }), [IT(0, 0)], 1],
+      data: [{ coords: [[1, 2], [9, 8]] }] }), [IT(0, 0)]],
     ['lines.straight', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 2, opacity: 1 },
       data: [{ coords: [[1, 5], [9, 6]] }] }), [IT(0, 0)]],
     ['sankey.b12', solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
@@ -224,6 +229,136 @@ function cases() {
       lineStyle: { width: 12, opacity: 1 }, data: [{ coords: [[1, 5], [9, 5]] }, { coords: [[1, 2], [9, 8]] }] }),
       [PT(200, 150, 40)]],
     ['bar.large', bar(B(10), { large: true, largeThreshold: 1 }), [PT(200, 150, 60)]],
+    // ---- R7-F: a fill written 'none' is no fill, a clear pen is a pen ----
+    ['none.bar', bar(B(8, { color: 'none' })), [IT(0, 1)]],
+    ['none.bar-bare', bar({ color: 'none' }), [PT(200, 150, 60)]],
+    ['none.bar-item', bar({}, { data: [4, { value: 6, itemStyle: { color: 'none', borderColor: '#000', borderWidth: 6 } }, 8] }),
+      [IT(0, 1)]],
+    ['none.bar-null', bar(B(8, { color: null })), [IT(0, 1)]],
+    ['none.scatter', sc('circle', 20, B(4, { color: 'none' })), [IT(0, 1)]],
+    ['none.pie', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
+      itemStyle: B(6, { color: 'none' }) }), [IT(0, 1)]],
+    ['none.funnel', solo({ type: 'funnel', label: { show: false }, data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 },
+      { name: 'c', value: 1 }], itemStyle: B(8, { color: 'none' }) }), [IT(0, 1)]],
+    ['none.sunburst', solo({ type: 'sunburst', radius: [20, 120], label: { show: false },
+      data: [{ name: 'a', value: 3, children: [{ name: 'a1', value: 3 }] }, { name: 'b', value: 2 }],
+      itemStyle: B(6, { color: 'none' }) }), [PT(200, 150, 140)]],
+    ['none.line-area', cart({ type: 'line', symbol: 'none', data: [5, 5, 7], areaStyle: { color: 'none' },
+      lineStyle: { width: 2 } }), [PT(200, 110, 40)]],
+    ['none.radar-area', { animation: false, color: PAL, radar: { indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 },
+      { name: 'r', max: 10 }], radius: 110 }, series: [{ type: 'radar', symbol: 'none', lineStyle: { width: 4 },
+      areaStyle: { color: 'none' }, data: [{ value: [8, 6, 7] }] }] }, [PT(200, 150, 120)]],
+    ['clear.pie-border', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
+      itemStyle: { borderColor: 'transparent', borderWidth: 12 } }), [IT(0, 0)]],
+    ['clear.scatter-border', sc('circle', 20, { borderColor: 'transparent', borderWidth: 12 }), [IT(0, 1)]],
+    ['clear.scatter-rgba', sc('rect', 30, { borderColor: 'rgba(0,0,0,0)', borderWidth: 12 }), [IT(0, 1)]],
+    ['clear.funnel-border', solo({ type: 'funnel', label: { show: false }, data: [{ name: 'a', value: 3 },
+      { name: 'b', value: 2 }, { name: 'c', value: 1 }], itemStyle: { borderColor: 'transparent', borderWidth: 12 } }),
+      [IT(0, 1)]],
+    ['clear.heatmap-border', Object.assign(cart({ type: 'heatmap', data: [[0, 0, 1], [1, 1, 2], [2, 0, 3]],
+      itemStyle: { borderColor: 'transparent', borderWidth: 10 } }),
+      { yAxis: { type: 'category', data: ['p', 'q'] }, visualMap: { show: false, min: 0, max: 3 } }), [IT(0, 1)]],
+    ['opacity0.bar', bar(B(8, { opacity: 0 })), [IT(0, 1)]],
+    ['opacity0.scatter', sc('circle', 20, B(4, { opacity: 0 })), [IT(0, 1)]],
+    ['opacity0.pie', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
+      itemStyle: { opacity: 0 } }), [IT(0, 1)]],
+    // ---- R7-F: curves as curves ----
+    ['curve.graph-w1', solo({ type: 'graph', layout: 'none', symbolSize: 20, data: GRAPH_NODES, links: GRAPH_LINKS,
+      lineStyle: { width: 1, curveness: 0.5, opacity: 1 } }), [EDGE(0, 0), EDGE(0, 1)]],
+    ['curve.lines-w3', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 3, curveness: -0.4, opacity: 1 },
+      data: [{ coords: [[1, 2], [9, 8]] }] }), [IT(0, 0)]],
+    ['curve.pin-b4', sc('pin', 40, B(4)), [IT(0, 1)]],
+    // ---- R7-F: turned labels ----
+    ['turn.label-plate', bar({}, { label: { show: true, position: 'top', rotate: 30, backgroundColor: '#eee', padding: 4,
+      borderWidth: 6, borderColor: '#000' } }), [LBL(0, 1)]],
+    ['turn.label-text', bar({}, { label: { show: true, position: 'top', rotate: 45, fontSize: 20 } }), [LBL(0, 1)]],
+    ['turn.label-stroke', bar({}, { label: { show: true, position: 'top', rotate: -60, fontSize: 20, textBorderWidth: 8,
+      textBorderColor: '#fff' } }), [LBL(0, 1)]],
+    // ---- R7-F: turned and oblong symbols ----
+    ['turn.rect', sc('rect', 30, B(12), { symbolRotate: 30 }), [IT(0, 1)]],
+    ['turn.triangle', sc('triangle', 30, B(12), { symbolRotate: 30 }), [IT(0, 1)]],
+    ['turn.circle', sc('circle', 20, B(20), { symbolRotate: 30 }), [IT(0, 1)]],
+    ['turn.pin', sc('pin', 40, B(6), { symbolRotate: 120 }), [IT(0, 1)]],
+    ['turn.roundrect', sc('roundRect', 30, B(6), { symbolRotate: 45 }), [IT(0, 1)]],
+    ['turn.diamond-offset', sc('diamond', 30, B(8), { symbolRotate: -40, symbolOffset: [5, -3] }), [IT(0, 1)]],
+    ['turn.oblong-rect', sc('rect', [40, 16], B(8)), [IT(0, 1)]],
+    ['turn.oblong-circle', sc('circle', [40, 16], B(6), { symbolRotate: 30 }), [IT(0, 1)]],
+    ['turn.line-symbol', cart({ type: 'line', symbol: 'rect', symbolSize: 24, symbolRotate: 30, data: [5, 5, 7],
+      lineStyle: { width: 1 }, itemStyle: B(8) }), [IT(0, 1)]],
+    // ---- R7-F: a pen of infinite width ----
+    ['inf.sunburst', solo({ type: 'sunburst', radius: [20, 120], label: { show: false },
+      data: [{ name: 'a', value: 3, children: [{ name: 'a1', value: 3 }] }, { name: 'b', value: 2 }],
+      itemStyle: B('Infinity') }), [PT(200, 150, 140)]],
+    ['inf.funnel', solo({ type: 'funnel', label: { show: false }, data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 },
+      { name: 'c', value: 1 }], itemStyle: B('Infinity') }), [PT(200, 150, 150)]],
+    ['inf.treemap', solo({ type: 'treemap', breadcrumb: { show: false }, nodeClick: false, roam: false,
+      data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 }], itemStyle: B('Infinity', { gapWidth: 0 }) }),
+      [PT(200, 150, 150)]],
+    ['inf.heatmap', Object.assign(cart({ type: 'heatmap', data: [[0, 0, 1], [1, 1, 2], [2, 0, 3]], itemStyle: B('Infinity') }),
+      { yAxis: { type: 'category', data: ['p', 'q'] }, visualMap: { show: false, min: 0, max: 3 } }), [PT(200, 150, 150)]],
+    ['inf.themeriver', solo({ type: 'themeRiver', label: { show: false }, data: [[0, 3, 'a'], [1, 4, 'a'], [2, 3, 'a'],
+      [0, 2, 'b'], [1, 2, 'b'], [2, 3, 'b']], itemStyle: B('Infinity') },
+    { singleAxis: { type: 'value', min: 0, max: 2, top: 40, bottom: 40, axisLabel: { show: false } } }), [PT(200, 150, 150)]],
+    ['inf.radar-line', { animation: false, color: PAL, radar: { indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 },
+      { name: 'r', max: 10 }], radius: 110 }, series: [{ type: 'radar', symbol: 'none', lineStyle: { width: 'Infinity' },
+      areaStyle: {}, data: [{ value: [8, 6, 7] }] }] }, [PT(200, 150, 150)]],
+    ['inf.candle', cart({ type: 'candlestick', barWidth: 30, data: [[3, 7, 1, 9], [6, 4, 2, 8], [4, 6, 3, 7]],
+      itemStyle: { borderWidth: 'Infinity' } }), [PT(200, 150, 150)]],
+    ['inf.boxplot', cart({ type: 'boxplot', boxWidth: [30, 30], data: [[1, 3, 5, 7, 9], [2, 4, 5, 6, 8], [1, 2, 3, 4, 5]],
+      itemStyle: { borderWidth: 'Infinity' } }), [PT(200, 150, 150)]],
+    ['inf.sankey', solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
+      links: [{ source: 'a', target: 'b', value: 3 }], itemStyle: B('Infinity'),
+      lineStyle: { borderWidth: 'Infinity', borderColor: '#000', opacity: 1 } }), [PT(200, 150, 200)]],
+    ['inf.graph-edge', solo({ type: 'graph', layout: 'none', symbolSize: 20, data: GRAPH_NODES, links: GRAPH_LINKS,
+      lineStyle: { width: 'Infinity', curveness: 0.3, opacity: 1 } }), [PT(200, 150, 200)]],
+    ['inf.lines', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 'Infinity', opacity: 1 },
+      data: [{ coords: [[1, 2], [9, 8]] }] }), [PT(200, 150, 150)]],
+    ['inf.parallel', { animation: false, color: PAL, parallelAxis: [{ dim: 0, min: 0, max: 10 }, { dim: 1, min: 0, max: 10 },
+      { dim: 2, min: 0, max: 10 }], series: [{ type: 'parallel', lineStyle: { width: 'Infinity', opacity: 1 },
+      data: [[5, 5, 2], [2, 8, 8]] }] }, [PT(200, 150, 150)]],
+    ['inf.polarbar', { animation: false, color: PAL, polar: { radius: [30, 120] }, angleAxis: { max: 10, axisTick: { show: false } },
+      radiusAxis: { type: 'category', data: N },
+      series: [{ type: 'bar', coordinateSystem: 'polar', roundCap: true, data: [4, 6, 8], itemStyle: B('Infinity') }] },
+      [PT(200, 150, 150)]],
+    ['inf.gauge-progress', solo({ type: 'gauge', data: [{ value: 40 }], axisLine: { show: false }, splitLine: { show: false },
+      axisTick: { show: false }, axisLabel: { show: false }, pointer: { show: false }, anchor: { show: false },
+      title: { show: false }, detail: { show: false },
+      progress: { show: true, roundCap: true, width: 14, itemStyle: B('Infinity') } }), [PT(200, 150, 150)]],
+    ['inf.gauge-pointer', solo({ type: 'gauge', data: [{ value: 40 }], axisLine: { show: false }, splitLine: { show: false },
+      axisTick: { show: false }, axisLabel: { show: false }, anchor: { show: false }, title: { show: false },
+      detail: { show: false }, itemStyle: B('Infinity') }), [PT(200, 150, 150)]],
+    ['inf.chord', solo({ type: 'chord', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
+      links: [{ source: 'a', target: 'b', value: 3 }], itemStyle: B('Infinity'),
+      lineStyle: { color: '#000', width: 'Infinity', opacity: 1 } }), [PT(200, 150, 150)]],
+    ['inf.tree', solo({ type: 'tree', data: [TREE], symbolSize: 16, label: { show: false }, expandAndCollapse: false,
+      itemStyle: B('Infinity'), lineStyle: { width: 'Infinity' } }), [PT(200, 150, 200)]],
+    ['inf.effect', vv({ type: 'effectScatter', symbolSize: 20, rippleEffect: { number: 0 }, showEffectOn: 'emphasis',
+      data: [[2, 2], [5, 5], [8, 8]], itemStyle: B('Infinity') }), [PT(200, 150, 150)]],
+    ['inf.pictorial', cart({ type: 'pictorialBar', symbol: 'rect', symbolSize: [40, 30], symbolRepeat: false,
+      symbolPosition: 'center', data: [4, 6, 8], itemStyle: B('Infinity') }), [PT(200, 150, 150)]],
+    ['inf.graph-node', solo({ type: 'graph', layout: 'none', symbolSize: 20, itemStyle: B('Infinity'), data: GRAPH_NODES,
+      links: [], lineStyle: { width: 2 } }), [PT(200, 150, 200)]],
+    ['inf.label-plate', bar({}, { label: { show: true, position: 'top', backgroundColor: '#eee', padding: 4,
+      borderWidth: 'Infinity', borderColor: '#000' } }), [PT(200, 100, 60)]],
+    ['inf.line-symbol', cart({ type: 'line', symbolSize: 16, data: [5, 5, 7], lineStyle: { width: 2 },
+      itemStyle: B('Infinity') }), [PT(200, 150, 150)]],
+    // ---- R7-F: an item's own, and the other series' symbols ----
+    ['clear.scatter-item', sc('rect', 30, {}, { data: [[2, 2], { value: [5, 5],
+      itemStyle: { borderColor: 'transparent', borderWidth: 12 } }, [8, 8]] }), [IT(0, 1)]],
+    ['none.pie-item', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1,
+      { value: 2, itemStyle: { color: 'none', borderColor: '#000', borderWidth: 6 } }, 3] }), [IT(0, 1)]],
+    ['none.graph-node', solo({ type: 'graph', layout: 'none', symbolSize: 30, itemStyle: B(4, { color: 'none' }),
+      data: GRAPH_NODES, links: [] }), [IT(0, 2)]],
+    ['none.line-symbol', cart({ type: 'line', symbolSize: 24, data: [5, 5, 7], lineStyle: { width: 1, color: '#888' },
+      itemStyle: B(4, { color: 'none' }) }), [IT(0, 1)]],
+    ['none.effect', vv({ type: 'effectScatter', symbolSize: 24, rippleEffect: { number: 0 }, showEffectOn: 'emphasis',
+      data: [[2, 2], [5, 5], [8, 8]], itemStyle: B(4, { color: 'none' }) }), [IT(0, 1)]],
+    ['none.boxplot', cart({ type: 'boxplot', boxWidth: [40, 40], data: [[1, 3, 5, 7, 9], [2, 4, 5, 6, 8], [1, 2, 3, 4, 5]],
+      itemStyle: { color: 'none', borderWidth: 4 } }), [IT(0, 1)]],
+    ['none.tree-node', solo({ type: 'tree', data: [TREE], symbolSize: 24, label: { show: false }, expandAndCollapse: false,
+      itemStyle: B(4, { color: 'none' }), lineStyle: { width: 1 } }), [PT(200, 150, 200)]],
+    ['clear.label-text-border', bar({}, { label: { show: true, position: 'top', fontSize: 20, textBorderWidth: 10,
+      textBorderColor: 'transparent' } }), [LBL(0, 1)]],
   ];
 }
 
@@ -288,7 +423,7 @@ function aimEl(chart, a) {
 // -- a tie this fixture is not about
 const OFF = [0.3, 0.2];
 const DIRS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
-function run(id, option, aims, tol) {
+function run(id, option, aims) {
   NOW = T_BASE;
   rngState = SEED;
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
@@ -333,9 +468,7 @@ function run(id, option, aims, tol) {
         rays.push({ o, d, n, seq: seq.map(p => p[0] + '*' + p[1]).join(' ') });
       });
     });
-    const rec = { id, option, rays };
-    if (tol) rec.tol = tol;
-    return rec;
+    return { id, option, rays };
   }
   finally {
     chart.dispose();
@@ -343,12 +476,17 @@ function run(id, option, aims, tol) {
 }
 
 function generate() {
-  const charts = cases().map(([id, o, aims, tol]) => run(id, o, aims, tol));
+  const charts = cases().map(([id, o, aims]) => run(id, o, aims));
   const by = id => charts.find(c => c.id === id);
-  // every case hits its aim somewhere, but the silent one and the infinite pens
+  // every case hits its aim somewhere, but the silent one, the one with
+  // neither a fill nor a pen, and the infinite pens upstream never hits
+  const MISS = ['bar.silent', 'scatter.infinite', 'pie.infinite', 'line.infinite', 'none.bar-bare',
+    'inf.sunburst', 'inf.funnel', 'inf.heatmap', 'inf.themeriver', 'inf.candle', 'inf.boxplot', 'inf.sankey',
+    'inf.lines', 'inf.parallel', 'inf.polarbar', 'inf.gauge-progress', 'inf.gauge-pointer', 'inf.chord',
+    'inf.effect', 'inf.pictorial', 'inf.graph-node'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
-    must(any === !['bar.silent', 'scatter.infinite', 'pie.infinite', 'line.infinite'].includes(c.id), c.id + ': hits ' + any);
+    must(any === !MISS.includes(c.id), c.id + ': hits ' + any);
   });
   // a bar whose 1000 px border took all of its width is hit over most of the grid
   must(by('bar.b1000').rays[4].seq === 's0/1*' + by('bar.b1000').rays[4].n, 'bar.b1000: ' + by('bar.b1000').rays[4].seq);
@@ -357,8 +495,7 @@ function generate() {
       + 'polyline / polygon, a graph edge or an item\'s label, rounded; or a point) in eight directions, a pixel a step, out to '
       + 'the half diagonal and 4 (or the point\'s reach) or the canvas\' edge: `seq` what findHover(x, y).target is at each step, '
       + 'run-length encoded -- sS/D the series and data index of the ECData the dispatcher walk finds (sS/eD an edge), sS/- a '
-      + 'series\' ECData without a data index, x a target without one, - none. `tol`: the steps a run\'s ends may lie off '
-      + 'these where the port holds a curve as points.', W, H, charts };
+      + 'series\' ECData without a data index, x a target without one, - none.', W, H, charts };
 }
 
 let j1, j2;

@@ -214,6 +214,20 @@ type
       scale, where the canvas strokes a stretched pen. 0, the zero value,
       and 1 are none. }
     PenScale: Double;
+    { [R7-F] WHAT THE HIT TEST ASKS OF THE STYLE that the paint cannot tell:
+      zrender's hasFill() is `fill != null && fill !== 'none'` and its
+      hasStroke() `stroke != null && stroke !== 'none' && lineWidth > 0`,
+      so a colour written 'transparent' or rgba(..., 0) fills and strokes
+      for the pointer while it paints nothing, and 'none' does neither.
+      The colours above hold both as transparent. HitNoFill: a closed
+      shape's fill is null or 'none' -- Path.contain asks no inside, and
+      the pen reaches at least strokeContainThreshold (an open line asks
+      HasFill, as before). HitClearPen: a pen of no alpha that is a colour
+      all the same (it strokes for the pointer at its width). The zero
+      values are the old reading: a closed shape filled, a clear pen none.
+      The painter reads neither. }
+    HitNoFill: Boolean;
+    HitClearPen: Boolean;
   end;
 
   { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
@@ -341,6 +355,10 @@ type
     HasBorderColor: Boolean;
     BorderColor: TTyChartColor;
     BorderWidth: Double;
+    { [R7-F] the box's borderWidth written +Infinity: drawn as none (the
+      canvas takes no such width), and the box's stroked rect is
+      not-a-number upstream -- the pointer never finds the box }
+    BorderWidthInf: Boolean;
     { [R2-I2] the box's border dash as written (a label's borderType, a
       graphic text's borderDash; '' solid) and its phase (borderDashOffset) }
     BorderDash: string;
@@ -405,6 +423,9 @@ type
     Line, Token: Integer;
     X, Y, W, H: Double;        // a rect's box; a text's anchor in X, Y
     Drawn: Boolean;            // a rect with no fill and no stroke is not
+    { [R7-F] a rect the pointer never finds (a box whose border is
+      +Infinity: its stroked rect is not-a-number) }
+    NoHit: Boolean;
     HasFill: Boolean;
     Fill: TTyChartColor;
     HasStroke: Boolean;
@@ -676,6 +697,16 @@ type
     RtPieces: TTyRtPieceArray;
     RtEmph: TTyRtPieceArray;
     RtScale: Double;
+    { [R7-F] A SERIES LABEL'S BOX IN ITS OWN FRAME: about (X, Y), unturned,
+      device px (the block's union, or the plain words' box). Where the
+      label turns (RotationRad), the hit test takes the point back into
+      that frame and asks this box -- zrender's rectContain / Path.contain
+      in local coordinates -- not the element's upright bounds. HitRelOwn:
+      the box leaves out a piece the pointer never finds (NoHit), so it is
+      asked turned or not. }
+    HasHitRel: Boolean;
+    HitRelOwn: Boolean;
+    HitRel: TTyRectF;
     { A VALUE THAT COUNTS (label.valueAnimation, a bar's or a gauge's
       reading): the raw value (ValHas: there is one -- the next render's
       prevValue), and the words with #1 where the value goes -- upstream's
@@ -2067,15 +2098,26 @@ begin
   AEl.HitPadLogical := cSymbolTargetLogical - reach;
 end;
 
+{ [R7-F] zrender's hasFill() of the element: an open line's fill as it is
+  painted, a closed shape's unless written 'none' (HitNoFill) }
+function ElFills(const AEl: TTyChartElement): Boolean; inline;
+begin
+  if AEl.Shape.Kind = cskPolyline then Result := AEl.Style.HasFill
+  else Result := not AEl.Style.HitNoFill;
+end;
+
 function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Double;
 var w, ps: Double;
 begin
   Result := 0;
   w := AEl.Style.StrokeWidthLogical;
   if not (w > 0) then Exit;
-  if ((AEl.Style.StrokeColor shr 24) = 0) and (AEl.Style.StrokeGradient.Kind = cgkNone) then Exit;
+  if ((AEl.Style.StrokeColor shr 24) = 0) and (AEl.Style.StrokeGradient.Kind = cgkNone)
+    and not AEl.Style.HitClearPen then Exit;
   if IsInfinite(w) then Exit(-1);
-  if not AEl.Style.HasFill and (AEl.Shape.Kind = cskPolyline) then w := Max(w, Double(5));
+  { strokeContainThreshold where Path.contain asks no fill; a symbol in its
+    own frame takes it there (SymbolHit) }
+  if not ElFills(AEl) and (AEl.Shape.HitSym = '') then w := Max(w, Double(5));
   ps := AEl.Style.PenScale;
   if ps > 0 then w := w * ps;
   Result := w * AScale;
@@ -2120,6 +2162,89 @@ begin
   AY := -dx * s + dy * c;
 end;
 
+{ [R7-F] Path.contain of a quadratic edge (BezierCurve): its stroked rect --
+  the curve's own extent (fromQuadratic) grown by half the width -- then
+  quadratic.containStroke; it has no fill }
+function QuadHit(const AShape: TTyChartShape; AWidthPx, AX, AY: Double): Boolean;
+var
+  path: TTyZrPath;
+  box: TTyXYWH;
+  n: Integer;
+  old: TFPUExceptionMask;
+begin
+  Result := False;
+  n := Length(AShape.Points);
+  if (n < 2) or not (AWidthPx > 0) then Exit;
+  path := nil;
+  TyZrMoveTo(path, AShape.Points[0].X, AShape.Points[0].Y);
+  TyZrQuad(path, AShape.HitCP.X, AShape.HitCP.Y, AShape.Points[n - 1].X, AShape.Points[n - 1].Y);
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    box := TyZrBBox(path);
+    if not ((AX >= box.X - AWidthPx / 2) and (AX <= box.X - AWidthPx / 2 + (box.W + AWidthPx))
+      and (AY >= box.Y - AWidthPx / 2) and (AY <= box.Y - AWidthPx / 2 + (box.H + AWidthPx))) then Exit;
+  finally
+    TyZrRestoreFpu(old);
+  end;
+  Result := TyZrContainStroke(path, AWidthPx, AX, AY);
+end;
+
+{ [R7-F] Path.contain of a symbol in its own frame (TTyChartShape.HitSym):
+  the point taken back through HitM (transformCoordToLocal), the unit
+  path's rect grown by the pen over the line scale (getLineScale: the
+  square root of the frame's determinant, 1 where either diagonal entry is
+  1), containStroke at that width (at least strokeContainThreshold without
+  a fill), then the fill. The port's pad tests the drawn shape first. }
+function SymbolHit(const AEl: TTyChartElement; AWidthPx, APadPx, AScale: Double;
+  AFill: Boolean; AX, AY: Double): Boolean;
+var
+  m, inv: TTyMat2D;
+  det, lx, ly, ls, w, e: Double;
+  path: TTyZrPath;
+  box: TTyXYWH;
+  old: TFPUExceptionMask;
+begin
+  Result := False;
+  if (APadPx > 0) and AFill and ShapeArea(AEl.Shape, AX, AY, APadPx) then Exit(True);
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    m := AEl.Shape.HitM;
+    { matrix.invert, then applyTransform }
+    det := m[0] * m[3] - m[1] * m[2];
+    if det = 0 then Exit;
+    det := 1 / det;
+    inv[0] := m[3] * det;
+    inv[1] := -m[1] * det;
+    inv[2] := -m[2] * det;
+    inv[3] := m[0] * det;
+    inv[4] := (m[2] * m[5] - m[3] * m[4]) * det;
+    inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
+    lx := inv[0] * AX + inv[2] * AY + inv[4];
+    ly := inv[1] * AX + inv[3] * AY + inv[5];
+    if (Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10) then
+      ls := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]))
+    else ls := 1;
+    w := AWidthPx;
+    if (w > 0) and not AFill then w := Max(w, 5 * AScale);
+    e := 0;
+    if (w > 0) and (ls > 1e-10) then e := w / ls / 2;
+    { every built-in path lies in [-1, 1] x [-2, 2] of its unit box (a pin's
+      head and an arrow's body leave it upward and downward): no path is
+      built for a point past that and the pen }
+    if IsNan(lx) or IsNan(ly) or (Abs(lx) > 1 + e) or (Abs(ly) > 2 + e) then Exit;
+    path := TyZrSymbol(AEl.Shape.HitSym, -1, -1, 2, 2);
+    box := TyZrBBox(path);
+    if not ((lx >= box.X - e) and (lx <= box.X - e + (box.W + 2 * e))
+      and (ly >= box.Y - e) and (ly <= box.Y - e + (box.H + 2 * e))) then Exit;
+  finally
+    TyZrRestoreFpu(old);
+  end;
+  if (w > 0) and (ls > 1e-10) and TyZrContainStroke(path, w / ls, lx, ly) then Exit(True);
+  if AFill then Result := TyZrContain(path, lx, ly);
+end;
+
 { Path.contain of a stroked shape: the fill (grown by the pad), then the
   stroke -- an open line has no fill to ask }
 function StrokedHit(const AShape: TTyChartShape; AHasFill: Boolean;
@@ -2128,6 +2253,8 @@ var
   b: TTyRectF;
   r: Double;
 begin
+  if AShape.HitQuad then
+    Exit(((APadPx > 0) and ShapeArea(AShape, AX, AY, APadPx)) or QuadHit(AShape, AWidthPx, AX, AY));
   { far from the shape's own bounds is far from its fill, its pad and its
     stroked rect alike: most of a list is refused here at a compare (a turned
     or mirrored path's bounds are in its own frame, and a poly's curves may
@@ -2141,7 +2268,7 @@ begin
     if not ((AX >= b.Left - r) and (AX <= b.Right + r) and (AY >= b.Top - r)
       and (AY <= b.Bottom + r)) then Exit(False);
   end;
-  if (AHasFill or (AShape.Kind <> cskPolyline)) and ShapeArea(AShape, AX, AY, APadPx) then
+  if AHasFill and ShapeArea(AShape, AX, AY, APadPx) then
     Exit(True);
   Result := TyZrShapeContainStroke(AShape, AWidthPx, AX, AY);
 end;
@@ -2153,14 +2280,14 @@ var shape: TTyChartShape;
 begin
   shape := AEl.Shape;
   Upright(shape, AX, AY);
-  Result := StrokedHit(shape, AEl.Style.HasFill, AWidthPx, APadPx, AX, AY);
+  Result := StrokedHit(shape, ElFills(AEl), AWidthPx, APadPx, AX, AY);
 end;
 
 function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
   APad: Boolean): Boolean;
 var
   k: Integer;
-  s, w, pad: Double;
+  s, w, pad, padArea, c, sn, dx, dy, lx, ly, r: Double;
 begin
   if AEl.HitNone then Exit(False);
   for k := 0 to High(AEl.ClipPaths) do
@@ -2179,17 +2306,40 @@ begin
     cskPolyline, cskPolygon, cskPath] then
     w := TyElementStrokeHitPx(AEl, s);
   if w < 0 then Exit(False);
+  { [R7-F] a turned label in its own frame }
+  if AEl.Caption.HasHitRel and ((AEl.Caption.RotationRad <> 0) or AEl.Caption.HitRelOwn)
+    and (w = 0) then
+  begin
+    c := Cos(AEl.Caption.RotationRad);
+    sn := Sin(AEl.Caption.RotationRad);
+    dx := AX - AEl.Caption.X;
+    dy := AY - AEl.Caption.Y;
+    lx := dx * c - dy * sn;
+    ly := dx * sn + dy * c;
+    r := AEl.HitSlopLogical * s + pad;
+    Exit((lx >= AEl.Caption.HitRel.Left - r) and (lx <= AEl.Caption.HitRel.Right + r)
+      and (ly >= AEl.Caption.HitRel.Top - r) and (ly <= AEl.Caption.HitRel.Bottom + r));
+  end;
+  { [R7-F] THE PAD TOPS THE PEN'S REACH UP TO ITS FOUR PIXELS: the drawn
+    shape grown by both (TySymbolHitSlop's reach is the slop) -- the pen's
+    own reach alone answered past the pad [R7-C: the pad was all of it] }
+  padArea := 0;
+  if pad > 0 then padArea := AEl.HitSlopLogical * s + pad;
+  { [R7-F] a symbol in its own frame, upstream's own outline }
+  if AEl.Shape.HitSym <> '' then Exit(SymbolHit(AEl, w, padArea, s, ElFills(AEl), AX, AY));
   if w > 0 then
   begin
     { the slop the builder gave the element stood for the stroke and is not
       asked }
-    if AEl.HitUpright then Exit(UprightHit(AEl, w, pad, AX, AY));
-    Exit(StrokedHit(AEl.Shape, AEl.Style.HasFill, w, pad, AX, AY));
+    if AEl.HitUpright then Exit(UprightHit(AEl, w, padArea, AX, AY));
+    Exit(StrokedHit(AEl.Shape, ElFills(AEl), w, padArea, AX, AY));
   end;
   { an open line with neither a pen nor a fill: Path.contain has nothing to
     ask (a line written at width 0) }
   if (AEl.Shape.Kind = cskPolyline) and not AEl.Style.HasFill
     and not (AEl.Style.StrokeWidthLogical > 0) then Exit(False);
+  { [R7-F] nor a closed shape whose fill is 'none' and that strokes nothing }
+  if (AEl.Shape.Kind <> cskPolyline) and AEl.Style.HitNoFill then Exit(False);
   Result := ShapeArea(AEl.Shape, AX, AY, AEl.HitSlopLogical * s + pad);
 end;
 

@@ -1499,6 +1499,8 @@ var
   pieces: TTyRtPieceArray;
   raw: TTyRectF;
   hostRect, hbox: TTyXYWH;
+  rtb: TTyXYWH;
+  hitPieces: TTyRtPieceArray;
   hasHostRect, hasBox: Boolean;
   baseX, baseY, offX, offY, rot: Double;
   m: TTyMat2D;
@@ -1873,8 +1875,11 @@ begin
     { [R7-C] A PLAIN TEXT'S PEN GROWS ITS RECT by half its width on every
       side (TSpan.getBoundingRect), which is what the pointer is tested
       against (rectContain) -- the box above stays the words' own, as the
-      layout reads it }
-    if (pieces = nil) and (strokeW > 0) and ((stroke shr 24) <> 0) then
+      layout reads it. [R7-F] A WRITTEN pen only: Text._updatePlainTexts
+      gives the automatic halo a rect without it (usingDefaultStroke) [was:
+      the halo grew it too] }
+    if (pieces = nil) and (cap.Caption.LmStrokeW > 0) and (strokeW > 0)
+      and ((stroke shr 24) <> 0) then
       cap.HitSlopLogical := strokeW / 2;
     cap.Caption.StrokeType := spec.BorderType;
     cap.Caption.StrokeDashOffset := spec.BorderDashOffset;
@@ -1985,6 +1990,29 @@ begin
     cap.Caption.RtPieces := pieces;
     cap.Caption.RtEmph := nil;
     cap.Caption.RtScale := scale;
+    { [R7-F] THE BOX IN THE LABEL'S OWN FRAME, about (X, Y) and unturned:
+      where the label turns, zrender tests the point taken back into that
+      frame (TSpan's and the plate's contain in local coordinates), not
+      the turned box's upright bounds }
+    cap.Caption.HasHitRel := True;
+    if pieces <> nil then
+    begin
+      { a piece the pointer never finds is not in it }
+      hitPieces := nil;
+      for k := 0 to High(pieces) do
+        if pieces[k].NoHit then cap.Caption.HitRelOwn := True
+        else
+        begin
+          SetLength(hitPieces, Length(hitPieces) + 1);
+          hitPieces[High(hitPieces)] := pieces[k];
+        end;
+      if cap.Caption.HitRelOwn then rtb := TyRtBounds(hitPieces)
+      else rtb := TyRtBounds(pieces);
+      cap.Caption.HitRel := TyRectF(rtb.X * scale, rtb.Y * scale,
+        (rtb.X + rtb.W) * scale, (rtb.Y + rtb.H) * scale);
+    end
+    else
+      cap.Caption.HitRel := TyRectF(box.Left - x, box.Top - y, box.Right - x, box.Bottom - y);
     { emphasis.label's own rich styles: laid out again [R5-B]; its font or
       box too, a one-run label's as well, and a data item's own over the
       series' [R5-F: a one-run label only changed its ink] }

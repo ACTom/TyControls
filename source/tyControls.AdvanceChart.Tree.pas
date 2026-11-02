@@ -1257,6 +1257,15 @@ begin
   if IsNan(Result) then Result := ADefault;
 end;
 
+{ [R7-F] a pen width of +Infinity in the chain: drawn as none, and its
+  stroked rect is not-a-number upstream -- the element is never hit }
+function ChainInf(const AChain: array of TJSONObject; const ASub, AKey: string): Boolean;
+var d: TJSONData;
+begin
+  d := ChainFind(AChain, ASub, AKey);
+  Result := TyOptIsPosInf(d);
+end;
+
 function ChainDash(const AChain: array of TJSONObject; const ASub, AKey: string;
   AWidth: Double): TTyDoubleArray;
 var
@@ -1592,6 +1601,7 @@ begin
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
+      el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1721,6 +1731,7 @@ begin
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
+      el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1767,6 +1778,8 @@ begin
       sym.OffsetY := vs * sym.OffsetY;
     end;
     shape := TyBuildSymbol(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(shape, sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
     { A NODE OF NO SIZE is still an element: it paints nothing and carries
       its label }
     zeroSize := (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds)
@@ -1802,6 +1815,7 @@ begin
       begin
         el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'itemStyle', 'borderColor', colour);
         el.Style.StrokeWidthLogical := ChainPen(Slice(chain, cnt), 'itemStyle', 'borderWidth', 1.5, True);
+        el.HitNone := ChainInf(Slice(chain, cnt), 'itemStyle', 'borderWidth');
       end;
     end;
     el.Style.Alpha := ChainNum(Slice(chain, cnt), 'itemStyle', 'opacity', 1);

@@ -387,6 +387,10 @@ function TyLineDashOf(AType: TJSONData; ALineWidth: Double; out AWord: Byte): TT
   number above nought (it keeps the last element's; 10 here). }
 function TyOptJsNumber(AData: TJSONData): Double;
 function TyOptPenWidth(AData: TJSONData): Double;
+{ [R7-F] whether the value's Number is +Infinity (a pen of that width is
+  never hit upstream: its stroked rect is not-a-number); False for nil and
+  for a value that is no number }
+function TyOptIsPosInf(AData: TJSONData): Boolean;
 function TyOptPenOffset(AData: TJSONData): Double;
 function TyOptMiterLimit(AData: TJSONData): Double;
 
@@ -1168,6 +1172,15 @@ begin
   if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
   Result := TyOptJsNumber(AData);
   if IsNan(Result) or IsInfinite(Result) then Result := 0;
+end;
+
+function TyOptIsPosInf(AData: TJSONData): Boolean;
+var v: Double;
+begin
+  if AData = nil then Exit(False);
+  v := TyOptJsNumber(AData);
+  { (IsInfinite first: a comparison with a not-a-number raises here) }
+  Result := IsInfinite(v) and (v > 0);
 end;
 
 function TyOptPenOffset(AData: TJSONData): Double;

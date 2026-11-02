@@ -674,6 +674,7 @@ begin
   Result.H := AH;
   Result.HasFill := S.HasBackground;
   Result.Fill := S.Background;
+  Result.NoHit := S.BorderWidthInf and S.HasBorderColor;
   if (S.BorderWidth <> 0) and S.HasBorderColor then
   begin
     Result.HasStroke := True;
