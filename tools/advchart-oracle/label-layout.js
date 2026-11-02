@@ -636,6 +636,8 @@ const CASES = [
     option: wordScatter([[6, 5], [5, 5], { value: [4, 5], label: { width: '50%', backgroundColor: '#eee' } }, [5.1, 5]], { moveOverlap: 'shiftX' }) },
   { id: 'string.width.shiftX.squeeze', note: "shiftX pushing long labels past the right edge, one at NaN among them: a NaN gap makes the gaps' total NaN and the squeeze stops",
     option: wordScatter([[9, 5], { value: [9.3, 5], label: { width: '50%', backgroundColor: '#eee' } }, [9.6, 5], [10, 5]].map(d => d), { moveOverlap: 'shiftX' }, 'a long label {c}') },
+  { id: 'string.width.shiftX.squeeze.gap', note: "the same squeeze with a label clear of the others on the left: the gaps' total is NaN (Math.max keeps it), not the one finite gap",
+    option: wordScatter([[6, 5], [9, 5], { value: [9.3, 5], label: { width: '50%', backgroundColor: '#eee' } }, [9.6, 5], [10, 5]], { moveOverlap: 'shiftX' }, 'a long label {c}') },
   { id: 'string.numwidth.hide', note: "a numeric string width '120' with a plate: its rect runs to x + '1200'",
     option: wordScatter(WORD_ROW(2, { width: '120', backgroundColor: '#eee' }), { hideOverlap: true }) },
 ];

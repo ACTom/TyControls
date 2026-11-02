@@ -211831,6 +211831,644 @@
    "hover": []
   },
   {
+   "id": "string.width.shiftX.squeeze.gap",
+   "note": "the same squeeze with a label clear of the others on the left: the gaps' total is NaN (Math.max keeps it), not the one finite gap",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "label": {
+       "show": true,
+       "formatter": "a long label {c}"
+      },
+      "labelLayout": {
+       "moveOverlap": "shiftX"
+      },
+      "data": [
+       [
+        6,
+        5
+       ],
+       [
+        9,
+        5
+       ],
+       {
+        "value": [
+         9.3,
+         5
+        ],
+        "label": {
+         "width": "50%",
+         "backgroundColor": "#eee"
+        }
+       },
+       [
+        9.6,
+        5
+       ],
+       [
+        10,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "manager": [
+    {
+     "s": 0,
+     "d": 0,
+     "dataType": null,
+     "text": "a long label 6,5",
+     "host": [
+      "4076300000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "4073f147ae147ae1",
+      "4067500000000000",
+      "405475c28f5c28f6",
+      "4028000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4076800000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "moveOverlap": "shiftX"
+     },
+     "entry": {
+      "rawLocal": [
+       "c04475c28f5c28f6",
+       "c018000000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "c04475c28f5c28f6",
+       "c018000000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4076800000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "4073f147ae147ae1",
+       "4067500000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4076800000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4076800000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "4072f7ae147ae147",
+      "labelY": "4068100000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dataType": null,
+     "text": "a long label 9,5",
+     "host": [
+      "407ea00000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "407c6147ae147ae1",
+      "4067500000000000",
+      "405475c28f5c28f6",
+      "4028000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407ef00000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "moveOverlap": "shiftX"
+     },
+     "entry": {
+      "rawLocal": [
+       "c04475c28f5c28f6",
+       "c018000000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "c04475c28f5c28f6",
+       "c018000000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407ef00000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "407c6147ae147ae1",
+       "4067500000000000",
+       "405475c28f5c28f6",
+       "4028000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407ef00000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407ef00000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "407b67ae147ae147",
+      "labelY": "4068100000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "dataType": null,
+     "text": "a long label 9.3,5",
+     "host": [
+      "407f780000000001",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "7ff8000000000000",
+      "4067500000000000",
+      "4056fae147ae147b",
+      "4028000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407fc80000000001",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "moveOverlap": "shiftX"
+     },
+     "entry": {
+      "rawLocal": [
+       "7ff8000000000000",
+       "c018000000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "7ff8000000000000",
+       "c018000000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407fc80000000001",
+       "4068100000000000"
+      ],
+      "rect": [
+       "7ff8000000000000",
+       "4067500000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407fc80000000001",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407fc80000000001",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "407c3fae147ae148",
+      "labelY": "4068100000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "dataType": null,
+     "text": "a long label 9.6,5",
+     "host": [
+      "4080280000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "407dc0a3d70a3d71",
+      "4067500000000000",
+      "4056fae147ae147b",
+      "4028000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4080500000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "moveOverlap": "shiftX"
+     },
+     "entry": {
+      "rawLocal": [
+       "c046fae147ae147b",
+       "c018000000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "c046fae147ae147b",
+       "c018000000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4080500000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "407dc0a3d70a3d71",
+       "4067500000000000",
+       "4056fae147ae147b",
+       "4028000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4080500000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4080500000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "407d17ae147ae147",
+      "labelY": "4068100000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "dataType": null,
+     "text": "a long label 10,5",
+     "host": [
+      "4080b80000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "407efb851eb851ec",
+      "4067500000000000",
+      "405623d70a3d70a4",
+      "4028000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4080e00000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "moveOverlap": "shiftX"
+     },
+     "entry": {
+      "rawLocal": [
+       "c04623d70a3d70a4",
+       "c018000000000000",
+       "405623d70a3d70a4",
+       "4028000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "c04623d70a3d70a4",
+       "c018000000000000",
+       "405623d70a3d70a4",
+       "4028000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4080e00000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "407efb851eb851ec",
+       "4067500000000000",
+       "405623d70a3d70a4",
+       "4028000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4080e00000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4080e00000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "40815dc28f5c28f6",
+      "labelY": "4068100000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    }
+   ],
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "text": "a long label 6,5",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4076800000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "c04475c28f5c28f6",
+      "c018000000000000",
+      "405475c28f5c28f6",
+      "4028000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "text": "a long label 9,5",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407ef00000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "c04475c28f5c28f6",
+      "c018000000000000",
+      "405475c28f5c28f6",
+      "4028000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "text": "a long label 9.3,5",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407fc80000000001",
+      "4068100000000000"
+     ],
+     "local": [
+      "7ff8000000000000",
+      "c018000000000000",
+      "4056fae147ae147b",
+      "4028000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "text": "a long label 9.6,5",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4080500000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "c046fae147ae147b",
+      "c018000000000000",
+      "4056fae147ae147b",
+      "4028000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "text": "a long label 10,5",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4080e00000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "c04623d70a3d70a4",
+      "c018000000000000",
+      "405623d70a3d70a4",
+      "4028000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    }
+   ],
+   "calls": [],
+   "hover": []
+  },
+  {
    "id": "string.numwidth.hide",
    "note": "a numeric string width '120' with a plate: its rect runs to x + '1200'",
    "option": {
@@ -212690,7 +213328,8 @@
     "shiftY.squeeze",
     "shiftY.free.hide",
     "shiftX.bounds",
-    "string.width.shiftX.squeeze"
+    "string.width.shiftX.squeeze",
+    "string.width.shiftX.squeeze.gap"
    ],
    "ok": true
   },
