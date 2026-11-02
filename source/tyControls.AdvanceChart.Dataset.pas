@@ -1340,17 +1340,20 @@ var
   i, n: Integer;
   named: TTySourceDimArray;
   cell: TJSONData;
-  ownMeta, isClone: Boolean;
+  ownMeta, isClone, dimsGiven: Boolean;
 
   { The series' answer, or the dataset's, or nothing -- in that order. A
     series reading a fromTransformResult COPY has only its own: the copy
     carries no raw meta, so upstream builds the series' source from the
-    series' answers alone [Batch 133]. }
+    series' answers alone [Batch 133]. A null is no answer (retrieve2's
+    `!= null`): the dataset's is asked then [was: the series' null won]. }
   function Meta(const AKey: string): TJSONData;
   begin
     Result := nil;
     if snode <> nil then Result := snode.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
     if (Result = nil) and ownMeta then Result := node.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
   end;
 
 begin
@@ -1388,7 +1391,7 @@ begin
     if not (d is TJSONObject) then Exit;
     Result.Keyed := TJSONObject(d);
     named := ReadDimensions(Meta('dimensions'));
-    if named = nil then
+    if not TyDatasetTruthy(Meta('dimensions')) then
     begin
       SetLength(named, Result.Keyed.Count);
       for i := 0 to Result.Keyed.Count - 1 do
@@ -1411,6 +1414,11 @@ begin
     Result.LayoutBy := slbRow;
 
   named := ReadDimensions(Meta('dimensions'));
+  { WRITTEN IS `dimensionsDefine` TRUTHY (Source.ts' `!dimensionsDefine`):
+    an empty list is written and names nothing -- the header names nothing
+    then, nor do the object rows' keys [was: an empty list, read to no
+    names, was as none written] }
+  dimsGiven := TyDatasetTruthy(Meta('dimensions'));
 
   if Result.Format = tsfArrayRows then
   begin
@@ -1441,7 +1449,7 @@ begin
     { THE NAMES COME OFF THE HEADER LINE ONLY WHEN THERE IS EXACTLY ONE HEADER
       ROW. `sourceHeader: 2` skips two rows and names nothing, which reads like
       an oversight and is what the code does. }
-    if (named = nil) and (Result.StartIndex = 1) then
+    if (not dimsGiven) and (Result.StartIndex = 1) then
     begin
       n := FirstLineLength(Result.Data, Result.LayoutBy);
       SetLength(named, n);
@@ -1462,7 +1470,7 @@ begin
   end
   else if Result.Format = tsfObjectRows then
   begin
-    if named = nil then named := ObjectRowDims(Result.Data);
+    if not dimsGiven then named := ObjectRowDims(Result.Data);
     Result.DimCount := Length(named);
   end;
 
@@ -1889,6 +1897,15 @@ var
   node, enc: TJSONObject;
   d: TJSONData;
   i: Integer;
+
+  { createDimensions' `false`: a lone number below nought (normalizeToArray
+    of it, one entry, no string) asks for no mapping }
+  function NoMapping(AValue: TJSONData): Boolean;
+  begin
+    if (AValue is TJSONArray) and (AValue.Count = 1) then AValue := AValue.Items[0];
+    Result := (AValue.JSONType = jtNumber) and (AValue.AsFloat < 0);
+  end;
+
 begin
   Result := NewEncode(Length(ACoordDims));
   if AOption = nil then Exit;
@@ -1908,7 +1925,11 @@ begin
     if d <> nil then
     begin
       Result.Columns[i] := EncodeValue(d, ASource);
-      Result.Explicit[i] := True;
+      { WRITTEN IS REACHING A DIMENSION, or asking for none: a value that
+        reaches none -- a name the table does not have, [], null -- leaves
+        the coordinate to the next free dimension, as one not written
+        (createDimensions: its validDataDims are empty) [was: none] }
+      Result.Explicit[i] := (Result.Columns[i] >= 0) or NoMapping(d);
     end;
   end;
   Result.Tooltip := EncodeList(enc.Find('tooltip'), ASource);

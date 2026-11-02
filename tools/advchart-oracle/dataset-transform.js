@@ -257,6 +257,27 @@ function renderOut(chart) {
   return out;
 }
 
+// what each series reads (cases that ask): its data's dimensions, the one
+// x and y map to, and the stored (x, y) of each item -- null for a value
+// that is no number
+function readsOut(chart) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    const data = s.getData();
+    const x = data.mapDimension('x');
+    const y = data.mapDimension('y');
+    const values = [];
+    for (let i = 0; i < data.count(); i++) {
+      values.push([x, y].map(d => {
+        const v = data.get(d, i);
+        return typeof v === 'number' && !isNaN(v) ? hex(v) : null;
+      }));
+    }
+    out.push({ index: s.seriesIndex, dims: data.dimensions.slice(), x, y, values });
+  });
+  return out;
+}
+
 function runCase(c) {
   const option = clone(c.option);
   const rec = { id: c.id, group: c.group, note: c.note, option };
@@ -278,6 +299,7 @@ function runCase(c) {
       rec.optionError = threw;
       return rec;
     }
+    if (c.reads && rec.render && !rec.render.error) rec.reads = readsOut(chart);
     rec.datasets = datasetsOut(chart);
     return rec;
   } finally {
@@ -613,6 +635,31 @@ R('r-reg', 'a bar over a reg filter',
   { dataset: [ds(), { transform: filt({ dimension: 'product', reg: '^[A-M]' }) }], xAxis: { type: 'category' }, yAxis: {},
     series: [{ type: 'bar', datasetIndex: 1, encode: { x: 'product', y: 'sales' }, label: { show: true } }] });
 
+// ---- an empty `dimensions` list is written (sourceManager's retrieve2 keeps
+// it, Source.ts' `!dimensionsDefine` is false): the header names nothing, so
+// an encode by the header's names reaches no dimension and x / y take the
+// first free ones; a null one is not written (retrieve2 passes it by)
+const PVG = [['p', 'v', 'g'], [1, 6, 'A'], [2, 7, 'B'], [3, 8, 'A']];
+const pvg = (dataset, series) => ({ dataset, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+  series: [Object.assign({ type: 'scatter', encode: { x: 'v', y: 'p' } }, series)] });
+const RD = { reads: true };
+add('render', 'r-dims-header', 'the header names the dimensions: x reads v, y reads p', pvg({ source: clone(PVG) }, {}), RD);
+add('render', 'r-dims-empty-series', "the series' dimensions []: the header names nothing, x reads the first dimension, y the second",
+  pvg({ source: clone(PVG) }, { dimensions: [] }), RD);
+add('render', 'r-dims-empty-dataset', "the dataset's dimensions []: the same", pvg({ source: clone(PVG), dimensions: [] }, {}), RD);
+add('render', 'r-dims-null-over-empty', "the series' dimensions null over the dataset's []: null is not written, the dataset's [] is",
+  pvg({ source: clone(PVG), dimensions: [] }, { dimensions: null }), RD);
+add('render', 'r-dims-empty-objects', "object rows under the series' dimensions []: no key named, nothing read",
+  pvg({ source: PVG.slice(1).map(r => ({ p: r[0], v: r[1], g: r[2] })) }, { dimensions: [] }), RD);
+// (createDimensions: a coordinate whose encode reaches no dimension -- a name
+// nobody has, an empty list, null -- is filled from the next free dimension
+// as one not written; a lone negative number asks for none)
+add('render', 'r-encode-unknown-name', "encode x a name the table does not have: x takes the first free dimension (v, as p is y's)",
+  pvg({ source: clone(PVG) }, { encode: { x: 'nope', y: 'p' } }), RD);
+add('render', 'r-encode-empty-list', 'encode x []: the same', pvg({ source: clone(PVG) }, { encode: { x: [], y: 'p' } }), RD);
+add('render', 'r-encode-null', 'encode x null: the same', pvg({ source: clone(PVG) }, { encode: { x: null, y: 'p' } }), RD);
+add('render', 'r-encode-negative', 'encode x -1: no dimension for x', pvg({ source: clone(PVG) }, { encode: { x: -1, y: 'p' } }), RD);
+
 // ---------------------------------------------------------------------------
 // guards: expectations read off the source
 // ---------------------------------------------------------------------------
@@ -700,6 +747,20 @@ function guards(o) {
   guard('render: the pie is sorted', cs('r-pie-sort').render.series[0].labels[0].text === 'Cheese');
   guard('render: a throwing transform refuses the option', !!cs('r-error').render.error);
   guard('render: the copy guessed a header: one bar', cs('r-copy-guess').render.series[0].count === 1);
+  const rd = id => cs(id).reads[0];
+  const rv = id => JSON.stringify(rd(id).values.map(v => v.map(h => (h === null ? null : num(h)))));
+  guard('dims: the header names them, x reads v', rd('r-dims-header').x === 'v' && rv('r-dims-header') === '[[6,1],[7,2],[8,3]]');
+  for (const id of ['r-dims-empty-series', 'r-dims-empty-dataset', 'r-dims-null-over-empty']) {
+    guard('dims: ' + id + ' reads the first two dimensions', rd(id).x === 'x' && rd(id).y === 'y'
+      && rv(id) === '[[1,6],[2,7],[3,8]]');
+  }
+  guard('dims: the empty dataset list is written (none detected)', JSON.stringify(res('r-dims-empty-dataset', 0).dims) === '[]'
+    && res('r-dims-empty-dataset', 0).detected === 0);
+  guard('dims: object rows under [] read nothing', rv('r-dims-empty-objects') === '[[null,null],[null,null],[null,null]]');
+  for (const id of ['r-encode-unknown-name', 'r-encode-empty-list', 'r-encode-null']) {
+    guard('encode: ' + id + ' fills x from v', rd(id).x === 'v' && rv(id) === '[[6,1],[7,2],[8,3]]');
+  }
+  guard('encode: x -1 maps x to nothing', rd('r-encode-negative').x === undefined);
   return g;
 }
 
