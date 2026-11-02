@@ -81,6 +81,7 @@ type
     procedure TestPrimaryOutlivesTheSelection;
     procedure TestSelectLinesIsClampedAndOrdered;
     procedure TestNothingClearedIsNoChange;
+    procedure TestAMenuBeforeAReportedPressLeavesNothingBehind;
   end;
 
 implementation
@@ -1083,6 +1084,23 @@ begin
   AssertEquals('select all again: no change', 1, FChanges);
   V.ClearSelection;
   AssertEquals('cleared', 2, FChanges);
+end;
+
+{ #185: where the menu comes before the press (some widgetsets), a reported right press
+  must not leave its mark behind: after the program lets the mouse go, the next right
+  click has its menu }
+procedure TTyTerminalViewMouseTests.TestAMenuBeforeAReportedPressLeavesNothingBehind;
+begin
+  V.WriteSync(#27'[?1000h');
+  V.UseFakeShift := True;
+  V.FakeShift := [];
+  AssertTrue('handled', V.ContextPopup(V.CellCenter(1, 1)));
+  V.Down(mbRight, [ssRight], V.CellCenter(1, 1));
+  V.Up(mbRight, [], V.CellCenter(1, 1));
+  AssertEquals('reported, no menu', 0, V.MenuShows);
+  V.WriteSync(#27'[?1000l');
+  V.ContextPopup(V.CellCenter(1, 1));
+  AssertEquals('the program let the mouse go: the menu', 1, V.MenuShows);
 end;
 
 initialization

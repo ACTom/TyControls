@@ -280,6 +280,9 @@ type
     FRouteButton: TMouseButton;
     FReportHeld: set of TMouseButton;
     FRightReported, FRightLocal: Boolean;
+    { #185: 菜单先于右键按下到、已经因为程序要鼠标不弹了(有的 widgetset 按下时就发):随后
+      那次按下不再记 FRightReported,它不会再有菜单来清 }
+    FRightMenuAnswered: Boolean;
     { 在 LCL 的抬起消息里(它先放捕获、CaptureChanged 先于 MouseUp 到):这时的捕获变化不是
       「抬起丢了」 }
     FInButtonUp: Boolean;

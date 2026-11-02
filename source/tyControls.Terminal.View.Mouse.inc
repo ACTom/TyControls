@@ -244,7 +244,11 @@ begin
   if FRoute = mrReport then
   begin
     Include(FReportHeld, Button);
-    if Button = mbRight then FRightReported := True;
+    if Button = mbRight then
+    begin
+      FRightReported := not FRightMenuAnswered;
+      FRightMenuAnswered := False;
+    end;
     ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
     Exit;
   end;
@@ -259,7 +263,11 @@ begin
     FRoute := mrReport;
     FRouteButton := Button;
     FReportHeld := [Button];
-    if Button = mbRight then FRightReported := True;
+    if Button = mbRight then
+    begin
+      FRightReported := not FRightMenuAnswered;
+      FRightMenuAnswered := False;
+    end;
     ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
     Exit;
   end;
@@ -270,7 +278,11 @@ begin
         FRouteButton := Button;
         SelectionPress(Shift, X, Y);
       end;
-    mbRight: FRightLocal := True;           { 菜单由 DoContextPopup 弹 }
+    mbRight:
+      begin
+        FRightLocal := True;                 { 菜单由 DoContextPopup 弹 }
+        FRightMenuAnswered := False;
+      end;
     mbMiddle:
       { X11 惯例:中键粘贴 PRIMARY(松开时);Windows / macOS 上中键不做事 }
       if FUsesPrimary then

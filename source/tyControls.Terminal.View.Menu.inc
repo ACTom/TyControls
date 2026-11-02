@@ -27,7 +27,9 @@ begin
       FRightLocal := False
     else if Reporting and not OverrideHeld(CurrentShiftState) then
     begin
-      { 菜单先于按下到(有的 widgetset 按下时就发):按下会报给程序,这里不弹 }
+      { 菜单先于按下到(有的 widgetset 按下时就发):按下会报给程序,这里不弹;记下这次已经
+        答过了,随后的按下别再等一个不会来的菜单 }
+      FRightMenuAnswered := True;
       Handled := True;
       Exit;
     end;
