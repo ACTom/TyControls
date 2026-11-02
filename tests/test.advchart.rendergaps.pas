@@ -62,6 +62,8 @@ type
     procedure TestThePointerLineIsOnTheHalfPixel;
     procedure TestTheTitleFrameSnapsInItsGroup;
     procedure TestTheTitleFrameIsDrawnSnapped;
+    procedure TestTheTitleFillIsDrawnOnTheFrame;
+    procedure TestTheLegendAndTooltipBoxesAreNotSnapped;
     procedure TestPictorialBorderTakesPartInTheLayout;
     procedure TestBarInsetFollowsTheBorderColourAsWritten;
     procedure TestAxisPartsAnswerThePointerAsUpstream;
@@ -497,6 +499,102 @@ begin
   AssertTrue('column 10 inked', Ink(10, y) > 0);
   AssertTrue('column 11 inked', Ink(11, y) > 0);
   AssertTrue('column 10 the darker', Ink(10, y) > Ink(11, y));
+end;
+
+{ [R7-I] ... and its fill with it, to the fraction: title.b0 (no border, so
+  no move) is filled from x 10.3, y 7.2 upstream -- column 10 takes seven
+  tenths of a full pixel's ink, row 7 eight tenths, column 9 and row 6
+  none; its far edges likewise at the fraction the frame ends at (the
+  title's own size: the skin's font). [Was: the fill rounded to whole
+  pixels: column 10 full.] }
+procedure TAdvChartRenderGapsTest.TestTheTitleFillIsDrawnOnTheFrame;
+var
+  c: TJSONObject;
+  full, x, y, xr, yb: Integer;
+  r: TTyRectF;
+  pts: TJSONArray;
+begin
+  c := Find('title.b0', 'subpixel');
+  Build(c.Objects['option'], 'title.b0');
+  r := TyTitleFrameDrawn(FChart.TitleLayoutOf(0), 0);
+  pts := c.Arrays['els'].Objects[0].Arrays['pts'];
+  AssertEquals('left as upstream', HexAt(pts.Arrays[0], 0), r.Left, 1e-9);
+  AssertEquals('top as upstream', HexAt(pts.Arrays[0], 1), r.Top, 1e-9);
+  x := Trunc(r.Left);
+  y := Trunc(r.Top);
+  xr := Trunc(r.Right);
+  yb := Trunc(r.Bottom);
+  full := Ink(x + 2, y + 2);
+  AssertTrue('a full pixel of the fill', full > 30);
+  AssertEquals('the column after full', full, Ink(x + 1, y + 2));
+  AssertEquals('the column before clear', 0, Ink(x - 1, y + 2));
+  AssertEquals('the row before clear', 0, Ink(x + 2, y - 1));
+  AssertEquals('the left column at its fraction', 1 - Frac(r.Left), Ink(x, y + 2) / full, 0.08);
+  AssertEquals('the top row at its fraction', 1 - Frac(r.Top), Ink(x + 2, y) / full, 0.08);
+  AssertEquals('the right column at its fraction', Frac(r.Right), Ink(xr, y + 2) / full, 0.08);
+  AssertEquals('the bottom row at its fraction', Frac(r.Bottom), Ink(x + 2, yb) / full, 0.08);
+  AssertEquals('the column after clear', 0, Ink(xr + 1, y + 2));
+end;
+
+{ [R7-I] THE OTHER BOXES, which upstream never snaps: a legend's background
+  (listComponent.makeBackground: a Rect without subPixelOptimize --
+  `legend: {left: 10.3, top: 7.2}` fills from x 10.3, y 7.2 in the real
+  dist's SVG, `translate(16.3 12.7)` of a path from (-6, -5.5)) and a
+  tooltip's (TooltipRichContent: its rect at the place, to the fraction, a
+  border and a shadow of nought adding nothing): column 10 / 50 and row 7 /
+  40 take part of a pixel's ink (the list's rects blend as BGRA does), the
+  ones before none. [The legend's frame was already there, but drawn in the
+  skin's colour whatever backgroundColor said -- invisible here; the
+  tooltip was rounded to whole pixels.] }
+procedure TAdvChartRenderGapsTest.TestTheLegendAndTooltipBoxesAreNotSnapped;
+var
+  o: TJSONObject;
+  full: Integer;
+begin
+  o := TJSONObject(GetJSON('{"animation":false,"legend":{"left":10.3,"top":7.2,'
+    + '"backgroundColor":"#000","padding":[5.5,6]},'
+    + '"series":[{"type":"pie","name":"a","radius":40,"label":{"show":false},'
+    + '"data":[{"name":"x","value":1}]}]}'));
+  try
+    Build(o, 'legend');
+  finally
+    o.Free;
+  end;
+  AssertEquals('legend: its left', 10.3, FChart.LegendLayout(0).Frame.Left, 1e-9);
+  AssertEquals('legend: its top', 7.2, FChart.LegendLayout(0).Frame.Top, 1e-9);
+  full := Ink(14, 12);
+  AssertTrue('legend: the written colour', full > 600);
+  AssertEquals('legend: column 9 clear', 0, Ink(9, 12));
+  AssertTrue('legend: column 10 part of a pixel', (Ink(10, 12) > 0) and (Ink(10, 12) < full));
+  AssertEquals('legend: column 11 full', full, Ink(11, 12));
+  AssertEquals('legend: row 6 clear', 0, Ink(14, 6));
+  AssertTrue('legend: row 7 part of a pixel', (Ink(14, 7) > 0) and (Ink(14, 7) < full));
+
+  o := TJSONObject(GetJSON('{"animation":false,"tooltip":{"position":[50.3,40.6],"hideDelay":0,'
+    + '"backgroundColor":"#000","borderWidth":0,"shadowBlur":0,"shadowColor":"transparent",'
+    + '"padding":6,"renderMode":"richText"},'
+    + '"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"value","max":10},'
+    + '"series":[{"type":"bar","data":[3,5]}]}'));
+  try
+    Build(o, 'tooltip');
+  finally
+    o.Free;
+  end;
+  FChart.TooltipNow := 0;
+  FChart.Move(270, 200);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  AssertTrue('tooltip: shown', FChart.TooltipShown);
+  AssertEquals('tooltip: its left', 50.3, FChart.TooltipBox.Left, 1e-9);
+  AssertEquals('tooltip: its top', 40.6, FChart.TooltipBox.Top, 1e-9);
+  full := Ink(55, 45);
+  AssertTrue('tooltip: a full pixel', full > 600);
+  AssertEquals('tooltip: column 49 clear', 0, Ink(49, 45));
+  AssertTrue('tooltip: column 50 part of a pixel', (Ink(50, 45) > 0) and (Ink(50, 45) < full));
+  AssertEquals('tooltip: column 51 full', full, Ink(51, 45));
+  AssertEquals('tooltip: row 39 clear', 0, Ink(55, 39));
+  AssertTrue('tooltip: row 40 part of a pixel', (Ink(55, 40) > 0) and (Ink(55, 40) < full));
+  AssertEquals('tooltip: row 41 full', full, Ink(55, 41));
 end;
 
 { ==================== pictorial ==================== }

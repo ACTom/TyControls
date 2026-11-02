@@ -3282,7 +3282,6 @@ var
   lay: TTyTitleLayout;
   f0, f1: TTyTitleFont;
   ink0, ink1: TTyColor;
-  frameFill: TTyFill;
   frameInk: TTyColor;
   { [R7-G] the background as its Rect builds it }
   frame: TTyRectF;
@@ -3346,15 +3345,15 @@ begin
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
       backgroundColor) [was: the skin's surface, whatever the option wrote] }
+    { [R7-I] on the frame as drawn, to the fraction: the Rect's fill and
+      stroke share subPixelOptimizeRect's shape [was: the fill rounded to
+      whole pixels] }
     if FTitleSpecs[i].HasBackground then
     begin
-      frameFill := Default(TTyFill);
-      frameFill.Kind := tfkSolid;
-      frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
-      APainter.FillBackground(
-        Rect(Round(frame.Left), Round(frame.Top),
-             Round(frame.Right), Round(frame.Bottom)),
-        frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
+      APainter.BeginPath;
+      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
+        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
+      APainter.FillPath(TTyColor(FTitleSpecs[i].BackgroundColor));
     end;
     { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
       borderColor, tokens.color.primary by default (the title's ink)

@@ -7039,6 +7039,8 @@ var
   st: TTyStyleSet;
   w, h, lineH, gap, cx, cy: Double;
   padL, padT, padR, padB, radius, borderW: Double;
+  onFraction: Boolean;
+  halfPen: Double;
   box: TTyRectF;
   r: TRect;
   i, j, row, lineTop: Integer;
@@ -7238,7 +7240,23 @@ begin
       surface.Kind := tfkSolid;
       surface.Color := TTyColor(spec.Background);
     end;
-    APainter.FillBackground(r, surface, corners);
+    { [R7-I] WHERE THE BOX FALLS BETWEEN PIXELS, THERE: upstream never
+      snaps it (TooltipRichContent puts its rect at the place to the
+      fraction, a DOM box sits on a fractional transform) -- the fill and
+      the pen on the box itself, one radius all round [was: always rounded
+      to whole pixels; a box on whole pixels is drawn as before] }
+    onFraction := ((Frac(box.Left) <> 0) or (Frac(box.Top) <> 0)
+      or (Frac(box.Right) <> 0) or (Frac(box.Bottom) <> 0))
+      and (corners.TL = corners.TR) and (corners.TL = corners.BR)
+      and (corners.TL = corners.BL);
+    if onFraction then
+    begin
+      APainter.BeginPath;
+      APainter.RoundRectPath(box.Left, box.Top, box.Right, box.Bottom, corners.TL);
+      APainter.FillPathWith(surface, r);
+    end
+    else
+      APainter.FillBackground(r, surface, corners);
 
     { THE BORDER IS TINTED WITH THE HOVERED ITEM'S COLOUR, which is the
       signature ECharts 6 look and is easy to miss: the grey token is the
@@ -7267,7 +7285,19 @@ begin
       FTipLastBorder := borderCol;
     end;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
-      APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
+    begin
+      if onFraction then
+      begin
+        { inside the box, as StrokeBorder strokes it }
+        halfPen := APainter.ScaleF(Round(borderW)) / 2;
+        APainter.BeginPath;
+        APainter.RoundRectPath(box.Left + halfPen, box.Top + halfPen,
+          box.Right - halfPen, box.Bottom - halfPen, corners.TL);
+        APainter.StrokePath(borderCol, Round(borderW));
+      end
+      else
+        APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
+    end;
 
     lineH := APainter.ScaleF(ink.LineHeightLogical);
     row := 0;
