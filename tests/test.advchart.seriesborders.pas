@@ -20,12 +20,26 @@ unit test.advchart.seriesborders;
   stroke upstream that is a word zrender cannot parse ('source', a chord's
   default colour) is the canvas' to keep the last element's colour for and
   the port's to draw none: it is not compared; a dash the canvas'
-  setLineDash ignores is solid here. }
+  setLineDash ignores is solid here.
+
+  [R6-E] Cases may carry more: `shapes` -- each path of the part as
+  type|cx|cy|r0|r|clockwise start|sweep (a sector, a sausage), a circle's,
+  a rect's box -- compared with the elements' shapes; `fills` the set of the
+  part's fills (a transparent one, the pictorial bar's rect, not compared);
+  `hits` what zr's findHover finds at a point (the part, '' another path,
+  '-' nothing), compared with HitTestAt; `clip` a line group's clip rect,
+  compared with the elements' ClipRect; `at` the frame at T0 + at with the
+  animation running instead of the settled one. A part is also held to its
+  path count where it has shapes, and every element of a gauge's progress
+  (its round caps too) or track is of the part, with or without a datum.
+  A pictorial glyph's pen is drawn in the glyph's frame upstream: the
+  oracle writes it times the line scale to four places, and so does this. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
@@ -53,6 +67,9 @@ type
     procedure TearDown; override;
   published
     procedure TestThePensAsUpstream;
+    procedure TestARoundCappedArcStrokesOneOutline;
+    procedure TestThePenNumbersAsTheCanvasTakesThem;
+    procedure TestAPictorialGlyphStrokesInItsOwnFrame;
   end;
 
 implementation
@@ -136,6 +153,21 @@ begin
   Result := FloatToStr(AV);
 end;
 
+{ String(Math.round(v * 10^ADigits) / 10^ADigits) }
+function RoundText(AV: Double; ADigits: Integer): string;
+var p: Double;
+begin
+  p := IntPower(10, ADigits);
+  AV := Floor(AV * p + 0.5) / p;
+  if AV = 0 then AV := 0;
+  Result := FloatToStr(AV);
+end;
+
+function ScaledPen(const AEl: TTyChartElement): Boolean;
+begin
+  Result := AEl.Anim.Role in [carPictorialGlyph, carPictorialClip];
+end;
+
 { stroke|width|dash|offset|cap/join/miterLimit, as the oracle writes it (the
   dash normalizeLineDash'd against the width) }
 function PenOf(const AEl: TTyChartElement): string;
@@ -144,7 +176,11 @@ var
   dash: TTyDoubleArray;
   i: Integer;
   ds: string;
+  ps: Double;
 begin
+  { [R6-E] a pen in the shape's frame, as drawn }
+  ps := AEl.Style.PenScale;
+  if not (ps > 0) then ps := 1;
   if AEl.Style.StrokeGradient.Kind <> cgkNone then Result := 'grad'
   else
   begin
@@ -153,9 +189,12 @@ begin
       c and $FF, c shr 24]));
   end;
   if AEl.Style.DashWord <> 0 then
-    dash := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical)
+    dash := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical * ps)
   else
-    dash := AEl.Style.DashLogical;
+  begin
+    dash := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical));
+    for i := 0 to High(dash) do dash[i] := dash[i] * ps;
+  end;
   ds := '';
   for i := 0 to High(dash) do
   begin
@@ -167,11 +206,16 @@ begin
       Break;
     end;
     if i > 0 then ds := ds + ',';
-    ds := ds + NumText(dash[i]);
+    if ScaledPen(AEl) then ds := ds + RoundText(dash[i], 4)
+    else ds := ds + NumText(dash[i]);
   end;
   if ds = '' then ds := 'solid';
-  Result := Result + '|' + NumText(AEl.Style.StrokeWidthLogical) + '|' + ds + '|'
-    + NumText(AEl.Style.DashOffsetLogical) + '|';
+  if ScaledPen(AEl) then
+    Result := Result + '|' + RoundText(AEl.Style.StrokeWidthLogical * ps, 4) + '|' + ds + '|'
+      + RoundText(AEl.Style.DashOffsetLogical * ps, 4) + '|'
+  else
+    Result := Result + '|' + NumText(AEl.Style.StrokeWidthLogical) + '|' + ds + '|'
+      + NumText(AEl.Style.DashOffsetLogical) + '|';
   case AEl.Style.LineCap of
     1: Result := Result + 'round';
     2: Result := Result + 'square';
@@ -195,7 +239,47 @@ begin
     Result := 'symbol'
   else if AEl.Anim.Role = carGaugePointer then Result := 'pointer'
   else if AEl.Anim.Role = carGaugeProgress then Result := 'progress'
-  else if (AEl.Anim.Role = carChord) and AEl.Datum.IsEdge then Result := 'ribbon';
+  else if (AEl.Anim.Role = carChord) and AEl.Datum.IsEdge then Result := 'ribbon'
+  { a gauge's track: its silent bands (and their caps) }
+  else if (AEl.Anim.Role = carNone) and AEl.Silent and (AEl.Shape.Kind in [cskSector, cskCircle])
+    and (AEl.Caption.Text = '') then Result := 'track';
+end;
+
+{ the oracle's type|cx|cy|r0|r|start|sweep, circle|cx|cy|r, rect|x|y|w|h }
+function ShapeText(const AEl: TTyChartElement): string;
+var a: Double;
+begin
+  case AEl.Shape.Kind of
+    cskSector:
+      begin
+        if AEl.Shape.Sausage then Result := 'sausage' else Result := 'sector';
+        a := AEl.Shape.StartRad - Floor(AEl.Shape.StartRad / (2 * Pi)) * 2 * Pi;
+        Result := Result + '|' + RoundText(AEl.Shape.CX, 2) + '|' + RoundText(AEl.Shape.CY, 2) + '|'
+          + RoundText(AEl.Shape.R0, 2) + '|' + RoundText(AEl.Shape.R1, 2) + '|' + RoundText(a, 4)
+          + '|' + RoundText(Abs(AEl.Shape.EndRad - AEl.Shape.StartRad), 4);
+      end;
+    cskCircle:
+      Result := 'circle|' + RoundText(AEl.Shape.CX, 2) + '|' + RoundText(AEl.Shape.CY, 2) + '|'
+        + RoundText(AEl.Shape.R1, 2);
+    cskRect, cskRoundRect:
+      Result := 'rect|' + RoundText(AEl.Shape.Bounds.Left, 2) + '|' + RoundText(AEl.Shape.Bounds.Top, 2)
+        + '|' + RoundText(AEl.Shape.Bounds.Right - AEl.Shape.Bounds.Left, 2) + '|'
+        + RoundText(AEl.Shape.Bounds.Bottom - AEl.Shape.Bounds.Top, 2);
+  else
+    Result := 'kind' + IntToStr(Ord(AEl.Shape.Kind));
+  end;
+end;
+
+function FillText(const AEl: TTyChartElement): string;
+var c: Cardinal;
+begin
+  Result := '';
+  if not AEl.Style.HasFill then Exit;
+  if AEl.Style.FillGradient.Kind <> cgkNone then Exit('grad');
+  c := Cardinal(AEl.Style.FillColor);
+  if (c shr 24) = 0 then Exit;
+  Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF, (c shr 8) and $FF,
+    c and $FF, c shr 24]));
 end;
 
 procedure TAdvChartSeriesBordersTest.TestThePensAsUpstream;
@@ -203,17 +287,53 @@ var
   fix: TJSONData;
   cs, pens: TJSONArray;
   c: TJSONObject;
-  i, k, seen, n, nBad, nCases, nParts: Integer;
+  i, k, seen, n, nBad, nCases, nParts, hitEl: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
-  got: TStringList;
-  want, have, id, bad, part: string;
-  act: TJSONData;
+  got, shapes, fills, clips: TStringList;
+  want, have, id, bad, part, p, s: string;
+  act, more: TJSONData;
+  arr: TJSONArray;
+
+  function SetText(AList: TStringList): string;
+  var j: Integer;
+  begin
+    Result := '';
+    for j := 0 to AList.Count - 1 do Result := Result + ' ' + AList[j];
+  end;
+
+  function ArrText(AArr: TJSONArray; ASkipClear: Boolean): string;
+  var j: Integer;
+  begin
+    Result := '';
+    for j := 0 to AArr.Count - 1 do
+      if not (ASkipClear and (Copy(AArr.Strings[j], 8, 2) = '00')) then
+        Result := Result + ' ' + AArr.Strings[j];
+  end;
+
 begin
   fix := LoadJson('advchart-series-borders.json');
+  { the oracle's sort is JS's, by code unit }
   got := TStringList.Create;
+  got.UseLocale := False;
+  got.CaseSensitive := True;
   got.Sorted := True;
   got.Duplicates := dupIgnore;
+  shapes := TStringList.Create;
+  shapes.UseLocale := False;
+  shapes.CaseSensitive := True;
+  shapes.Sorted := True;
+  shapes.Duplicates := dupAccept;
+  clips := TStringList.Create;
+  clips.UseLocale := False;
+  clips.CaseSensitive := True;
+  clips.Sorted := True;
+  clips.Duplicates := dupIgnore;
+  fills := TStringList.Create;
+  fills.UseLocale := False;
+  fills.CaseSensitive := True;
+  fills.Sorted := True;
+  fills.Duplicates := dupIgnore;
   nBad := 0;
   nCases := 0;
   nParts := 0;
@@ -238,7 +358,14 @@ begin
       FChart.Option := c.Objects['option'].AsJSON;
       AssertEquals(id + ' parses', '', FChart.OptionError);
       Draw;
-      Settle(T0);
+      more := c.Find('at');
+      if more <> nil then
+      begin
+        FChart.AnimTick(T0 + more.AsFloat);
+        Draw;
+      end
+      else
+        Settle(T0);
       act := c.Find('action');
       if (act <> nil) and (act.JSONType = jtObject) then
       begin
@@ -248,6 +375,9 @@ begin
       end;
       lst := FChart.Frame;
       got.Clear;
+      shapes.Clear;
+      fills.Clear;
+      clips.Clear;
       seen := 0;
       n := 0;
       for k := 0 to lst.Count - 1 do
@@ -261,10 +391,19 @@ begin
             + ' sub ' + IntToStr(el.Anim.Sub) + ' text "' + el.Caption.Text + '"');
         if el.Ignore or el.IsGuide or (el.Anim.Role = carLabel) then Continue;
         if el.Caption.FontSizeLogical > 0 then Continue;
+        p := PartOf(el);
         if not (((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0))
-          or ((el.Anim.UtTag = 1) and (el.Anim.Series >= 0))) then Continue;
-        if (part <> '') and (PartOf(el) <> part) then Continue;
+          or ((el.Anim.UtTag = 1) and (el.Anim.Series >= 0))
+          or ((part <> '') and (p = part) and ((p = 'track') or (p = 'progress')))) then Continue;
+        if (part <> '') and (p <> part) then Continue;
         Inc(seen);
+        shapes.Add(ShapeText(el));
+        s := FillText(el);
+        if s <> '' then fills.Add(s);
+        if el.HasClip then
+          clips.Add('rect|' + RoundText(el.ClipRect.Left, 2) + '|' + RoundText(el.ClipRect.Top, 2) + '|'
+            + RoundText(el.ClipRect.Right - el.ClipRect.Left, 2) + '|'
+            + RoundText(el.ClipRect.Bottom - el.ClipRect.Top, 2));
         if not (el.Style.StrokeWidthLogical > 0) then Continue;
         if ((el.Style.StrokeColor shr 24) = 0) and (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
         Inc(n);
@@ -288,6 +427,39 @@ begin
         if (seen <> c.Integers['seen']) and (have = want) then
           have := have + Format(' (%d elements, upstream %d)', [seen, c.Integers['seen']]);
       end;
+      arr := c.Find('shapes') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' shapes' + ArrText(arr, False);
+        have := have + ' shapes' + SetText(shapes);
+      end;
+      arr := c.Find('fills') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' fills' + ArrText(arr, True);
+        have := have + ' fills' + SetText(fills);
+      end;
+      arr := c.Find('clip') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' clip' + ArrText(arr, False);
+        have := have + ' clip' + SetText(clips);
+      end;
+      arr := c.Find('hits') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' hits';
+        have := have + ' hits';
+        for k := 0 to arr.Count - 1 do
+        begin
+          FChart.HitTestAt(TJSONArray(arr.Items[k]).Integers[0], TJSONArray(arr.Items[k]).Integers[1], hitEl);
+          if hitEl < 0 then p := '-' else p := PartOf(FChart.SeriesList.Element(hitEl));
+          want := want + Format(' %d,%d=%s', [TJSONArray(arr.Items[k]).Integers[0],
+            TJSONArray(arr.Items[k]).Integers[1], TJSONArray(arr.Items[k]).Strings[2]]);
+          have := have + Format(' %d,%d=%s', [TJSONArray(arr.Items[k]).Integers[0],
+            TJSONArray(arr.Items[k]).Integers[1], p]);
+        end;
+      end;
       if have <> want then
       begin
         Inc(nBad);
@@ -297,11 +469,169 @@ begin
     end;
   finally
     got.Free;
+    shapes.Free;
+    fills.Free;
+    clips.Free;
     fix.Free;
   end;
   AssertTrue('cases', nCases >= 40);
   AssertTrue('parts', nParts >= 25);
   AssertTrue(Format('%d of %d differ from upstream:%s', [nBad, nCases, bad]), nBad = 0);
+end;
+
+{ [R6-E] A ROUND-CAPPED PROGRESS ARC WITH A BORDER, drawn: its round end is
+  stroked round its rim, and where the end meets the ring -- the middle of the
+  band at the end angle -- there is fill and no pen (the sector and two discs
+  it was stroked the sector's square end across the band and the discs not
+  at all) }
+procedure TAdvChartSeriesBordersTest.TestARoundCappedArcStrokesOneOutline;
+var
+  k: Integer;
+  el, arc: TTyChartElement;
+  rc, dr, a, cx, cy: Double;
+  c: TBGRAPixel;
+
+  function Dark(AX, AY: Double): Boolean;
+  begin
+    c := FBmp.GetPixel(Round(AX), Round(AY));
+    Result := (c.red < 90) and (c.green < 90) and (c.blue < 90);
+  end;
+
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"series":[{"type":"gauge","pointer":{"show":false},'
+    + '"axisLine":{"show":false},"axisTick":{"show":false},"splitLine":{"show":false},'
+    + '"axisLabel":{"show":false},"detail":{"show":false},"title":{"show":false},'
+    + '"progress":{"show":true,"roundCap":true,"width":30,"itemStyle":{"color":"#ff0000",'
+    + '"borderColor":"#000","borderWidth":3}},"data":[{"value":40}]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  arc := Default(TTyChartElement);
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if el.Anim.Role = carGaugeProgress then arc := el;
+  end;
+  AssertTrue('the arc', arc.Shape.Kind = cskSector);
+  dr := (arc.Shape.R1 - arc.Shape.R0) / 2;
+  rc := arc.Shape.R0 + dr;
+  for k := 0 to 1 do
+  begin
+    if k = 0 then a := arc.Shape.EndRad else a := arc.Shape.StartRad;
+    cx := arc.Shape.CX + Cos(a) * rc;
+    cy := arc.Shape.CY + Sin(a) * rc;
+    AssertFalse(Format('end %d: no pen across the band (%d %d %d)', [k, c.red, c.green, c.blue]),
+      Dark(cx, cy) or Dark(cx + Cos(a) * dr * 0.5, cy + Sin(a) * dr * 0.5));
+    { the tip of the round end, past the end angle along the band }
+    if k = 0 then a := a + Pi / 2 else a := a - Pi / 2;
+    { (antialiased: the darkest of three pixels across the rim) }
+    AssertTrue(Format('end %d: its rim stroked (%d %d %d)', [k, c.red, c.green, c.blue]),
+      Dark(cx + Cos(a) * (dr - 1), cy + Sin(a) * (dr - 1)) or Dark(cx + Cos(a) * dr, cy + Sin(a) * dr)
+      or Dark(cx + Cos(a) * (dr + 1), cy + Sin(a) * (dr + 1)));
+  end;
+end;
+
+{ [R6-E] A PICTORIAL GLYPH'S PEN, DRAWN: built at the pattern size (400)
+  and scaled to its 20 px box, a borderWidth of 40 is 2 px on the screen --
+  five pixels outside the glyph is ground, inside its edge is the fill }
+procedure TAdvChartSeriesBordersTest.TestAPictorialGlyphStrokesInItsOwnFrame;
+var
+  k: Integer;
+  el, glyph: TTyChartElement;
+  b: TTyRectF;
+  c: TBGRAPixel;
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"xAxis":{"type":"category","data":["a"],"show":false},'
+    + '"yAxis":{"show":false},"series":[{"type":"pictorialBar","symbol":"rect","symbolSize":[20,20],'
+    + '"itemStyle":{"color":"#ff0000","borderColor":"#000","borderWidth":40},"data":[5]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  glyph := Default(TTyChartElement);
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if el.Anim.Role in [carPictorialGlyph, carPictorialClip] then glyph := el;
+  end;
+  AssertTrue('the glyph', glyph.Anim.Role in [carPictorialGlyph, carPictorialClip]);
+  AssertEquals('its pen in its frame', 0.05, glyph.Style.PenScale, 1e-9);
+  b := TyShapeBounds(glyph.Shape);
+  c := FBmp.GetPixel(Round(b.Right + 5), Round((b.Top + b.Bottom) / 2));
+  AssertTrue(Format('ground beside it (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red > 200) and (c.green > 200) and (c.blue > 200));
+  c := FBmp.GetPixel(Round(b.Right - 4), Round((b.Top + b.Bottom) / 2));
+  AssertTrue(Format('fill inside its edge (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red > 200) and (c.green < 60) and (c.blue < 60));
+end;
+
+{ [R6-E] A PEN'S NUMBERS: a numeric string is its number (the canvas
+  converts it); a width that is no number strokes nothing (zrender's
+  `lineWidth > 0`); what the canvas refuses -- an infinite width, a phase
+  that is no finite number, a miter limit that is no number above nought --
+  it would keep from the last element, and this takes as none, nought and
+  the default 10. Not written (nil, null) is not-a-number: the model's get
+  falls through it. }
+procedure TAdvChartSeriesBordersTest.TestThePenNumbersAsTheCanvasTakesThem;
+
+  function J(const AText: string): TJSONData;
+  begin
+    Result := GetJSON('{"v":' + AText + '}');
+  end;
+
+  procedure W(const AText: string; AWant: Double);
+  var o: TJSONData; v: Double;
+  begin
+    o := J(AText);
+    try
+      v := TyOptPenWidth(TJSONObject(o).Find('v'));
+      if IsNan(AWant) then AssertTrue('width ' + AText + ' unwritten', IsNan(v))
+      else AssertEquals('width ' + AText, AWant, v, 0);
+    finally
+      o.Free;
+    end;
+  end;
+
+  procedure O(const AText: string; AWant: Double);
+  var x: TJSONData; v: Double;
+  begin
+    x := J(AText);
+    try
+      v := TyOptPenOffset(TJSONObject(x).Find('v'));
+      if IsNan(AWant) then AssertTrue('offset ' + AText + ' unwritten', IsNan(v))
+      else AssertEquals('offset ' + AText, AWant, v, 0);
+    finally
+      x.Free;
+    end;
+  end;
+
+  procedure M(const AText: string; AWant: Double);
+  var x: TJSONData; v: Double;
+  begin
+    x := J(AText);
+    try
+      v := TyOptMiterLimit(TJSONObject(x).Find('v'));
+      if IsNan(AWant) then AssertTrue('miter ' + AText + ' unwritten', IsNan(v))
+      else AssertEquals('miter ' + AText, AWant, v, 0);
+    finally
+      x.Free;
+    end;
+  end;
+
+begin
+  W('3', 3); W('"3"', 3); W('" 2.5 "', 2.5); W('"0x10"', 16); W('"abc"', 0); W('""', 0);
+  W('"0"', 0); W('true', 1); W('[2]', 2); W('[]', 0); W('[1,2]', 0); W('{}', 0);
+  W('"1e999"', 0); W('null', NaN); W('-2', -2);
+  AssertTrue('width nil unwritten', IsNan(TyOptPenWidth(nil)));
+  O('"2"', 2); O('"abc"', 0); O('"1e999"', 0); O('""', 0); O('-3', -3); O('null', NaN);
+  M('"4"', 4); M('""', 10); M('"0"', 10); M('0', 10); M('-1', 10); M('"abc"', 10);
+  M('"1e999"', 10); M('2.5', 2.5); M('null', NaN);
+  AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));
 end;
 
 initialization

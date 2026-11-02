@@ -1648,7 +1648,7 @@ begin
     carSunPiece: Result := 'sunPiece';
     carFunnel: Result := 'funnel';
     carGaugePointer: Result := 'gaugePointer';
-    carGaugeProgress, carGaugeCap: Result := 'gaugeProgress';
+    carGaugeProgress: Result := 'gaugeProgress';
     carRadarLine: Result := 'radarLine';
     carRadarArea: Result := 'radarArea';
     carCandleBody, carCandleWickHigh, carCandleWickLow: Result := 'candle';
@@ -2949,8 +2949,6 @@ begin
   begin
     el := AList.Element(i);
     if el.Anim.Role = carNone then Continue;
-    { a cap is armed by its arc, which comes after it in the list }
-    if el.Anim.Role = carGaugeCap then Continue;
     s := el.Anim.Series;
     if (s < 0) or (s > High(ASeries)) or not ASeries[s].Present then Continue;
     role := TyChartAnimRoleKey(el);
@@ -5642,7 +5640,7 @@ begin
     for i := 0 to AList.Count - 1 do
     begin
       el := AList.Element(i);
-      if el.Anim.Role in [carNone, carGaugeCap] then Continue;
+      if el.Anim.Role = carNone then Continue;
       s := el.Anim.Series;
       if (s < 0) or (s > High(ASeries)) or not ASeries[s].Present then Continue;
       role := TyChartAnimRoleKey(el);
@@ -6232,6 +6230,8 @@ begin
   Result := TyShapeSector(P.Num('shape.cx'), P.Num('shape.cy'), P.Num('shape.r0'),
     P.Num('shape.r'), P.Num('shape.startAngle'), P.Num('shape.endAngle'));
   Result.SectorRadii := AEl.Shape.SectorRadii;
+  { [R6-E] a gauge's round-capped progress arc grows as its Sausage }
+  Result.Sausage := AEl.Shape.Sausage;
 end;
 
 { a key the proxy holds, as a number; AOr where it holds none (or there is
@@ -7096,12 +7096,6 @@ begin
     carSunPiece:
       { the ring as the proxy has it now [Batch 115] }
       AEl.Shape := SunPieceFrom(AEl, AProxy);
-    carGaugeCap:
-      begin
-        a := AProxy.Num('shape.endAngle');
-        AEl.Shape.CX := AEl.Anim.G[0] + Cos(a) * AEl.Anim.G[2];
-        AEl.Shape.CY := AEl.Anim.G[1] + Sin(a) * AEl.Anim.G[2];
-      end;
     carFunnel:
       begin
         AEl.Style.Alpha := AProxy.Num('style.opacity');

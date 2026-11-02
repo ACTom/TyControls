@@ -67,9 +67,8 @@ type
     { [R5-A] axisLine.lineStyle's shadow: every band casts it (GaugeView's
       sector.setStyle(lineStyleModel.getLineStyle(['color', 'width']))) }
     Shadow: TTyChartShadow;
-    { Not honoured: this library has no capped arc and no stroke line-cap to
-      fake one with. Carried so the option is not silently swallowed and so
-      the day a Sausage shape exists there is somewhere to read it. }
+    { [R6-E] every band a Sausage (GaugeView's MainPath), one path with its
+      round ends [was: a sector and two discs] }
     RoundCap: Boolean;
     WidthLogical: Double;
     { Empty means the author wrote nothing, and the theme's own track colour
@@ -1223,57 +1222,16 @@ end;
 
 { ==================== the dial ==================== }
 
-{ THE CAPS OF A ROUND-CAPPED BAND, upstream's Sausage: a half-disc of radius
-  half the band's thickness, centred on the band's midline at each end.
-
-  Drawn as WHOLE discs rather than halves, because the band itself covers the
-  inner half of each and the two are the same colour. A half-disc would need a
-  shape this library does not have; a disc needs one it does. }
-procedure AddCaps(const ALayout: TTyGaugeLayout; AR0, AR1, AFrom, ATo: Double;
-  AFill: TTyChartColor; AZ, AZ2: Integer; AList: TTyPaintList;
-  var ACount: Integer; ASeries: Integer = -1; AIndex: Integer = -1);
-var
-  dr, rc: Double;
-  el: TTyChartElement;
-
-  procedure Cap(AAngle: Double; AEnd: Boolean);
-  begin
-    el := TyChartElement(TyShapeCircle(ALayout.CX + Cos(AAngle) * rc,
-      ALayout.CY + Sin(AAngle) * rc, dr));
-    el.Style.HasFill := True;
-    el.Style.FillColor := AFill;
-    el.Z := AZ;
-    el.Z2 := AZ2;
-    el.Silent := True;
-    { THE END CAP RIDES THE GROWING END of the progress arc: upstream's
-      Sausage is one path, its round end where endAngle is [Batch 89] }
-    if AEnd and (ASeries >= 0) then
-    begin
-      el.Anim.Role := carGaugeCap;
-      el.Anim.Series := ASeries;
-      el.Anim.Index := AIndex;
-      el.Anim.G[0] := ALayout.CX;
-      el.Anim.G[1] := ALayout.CY;
-      el.Anim.G[2] := rc;
-    end;
-    AList.Add(el);
-    Inc(ACount);
-  end;
-
-begin
-  dr := (AR1 - AR0) / 2;
-  if dr <= 0 then Exit;
-  rc := AR0 + dr;
-  Cap(AFrom, False);
-  Cap(ATo, True);
-end;
-
-{ One band of the track. }
+{ One band of the track: a Sector, or with roundCap a Sausage -- one path,
+  the ring with a half disc of its half thickness on either end
+  (util/shape/sausage.ts) [R6-E: was a sector and two whole discs, which
+  cast three shadows and stacked under a translucent fill] }
 function BandElement(const ALayout: TTyGaugeLayout; AFrom, ATo: Double;
-  AFill: TTyChartColor; AZ: Integer): TTyChartElement;
+  AFill: TTyChartColor; AZ: Integer; ARound: Boolean): TTyChartElement;
 begin
   Result := TyChartElement(TyShapeSector(ALayout.CX, ALayout.CY,
     Max(Double(0), ALayout.R - ALayout.AxisWidth), ALayout.R, AFrom, ATo));
+  Result.Shape.Sausage := ARound;
   Result.Style.HasFill := True;
   Result.Style.FillColor := AFill;
   Result.Z := AZ;
@@ -1328,17 +1286,11 @@ begin
       if Abs(ALayout.Span) > cSweepEps then
       begin
         trackAt := AList.Count;
-        if ASpec.AxisLine.RoundCap then
-          AddCaps(ALayout, Max(Double(0), ALayout.R - ALayout.AxisWidth),
-            ALayout.R, ALayout.StartRad, ALayout.EndRad, AVisual.Track,
-            AVisual.Z, 0, AList, Result);
         AList.Add(BandElement(ALayout, ALayout.StartRad, ALayout.EndRad,
-          AVisual.Track, AVisual.Z));
+          AVisual.Track, AVisual.Z, ASpec.AxisLine.RoundCap));
         Inc(Result);
-        { [R5-A] the band casts the lineStyle's shadow (its round ends too:
-          upstream's one Sausage) }
-        for j := trackAt to AList.Count - 1 do
-          TyStyleSetShadow(AList.Ref(j)^.Style, ASpec.AxisLine.Shadow);
+        { [R5-A] the band casts the lineStyle's shadow }
+        TyStyleSetShadow(AList.Ref(trackAt)^.Style, ASpec.AxisLine.Shadow);
       end;
     end
     else
@@ -1356,10 +1308,10 @@ begin
         begin
           if ASpec.AxisLine.Stops[i].HasColour then
             bands[j] := BandElement(ALayout, prevEnd, endA,
-              ASpec.AxisLine.Stops[i].Colour, AVisual.Z)
+              ASpec.AxisLine.Stops[i].Colour, AVisual.Z, ASpec.AxisLine.RoundCap)
           else
             bands[j] := BandElement(ALayout, prevEnd, endA, AVisual.Track,
-              AVisual.Z);
+              AVisual.Z, ASpec.AxisLine.RoundCap);
           Inc(j);
         end;
         prevEnd := endA;
@@ -1370,10 +1322,6 @@ begin
       trackAt := AList.Count;
       for i := j - 1 downto 0 do
       begin
-        if ASpec.AxisLine.RoundCap then
-          AddCaps(ALayout, bands[i].Shape.R0, bands[i].Shape.R1,
-            bands[i].Shape.StartRad, bands[i].Shape.EndRad,
-            bands[i].Style.FillColor, AVisual.Z, 0, AList, Result);
         AList.Add(bands[i]);
         Inc(Result);
       end;
@@ -1734,7 +1682,7 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
   end;
 
 var
-  k, raw, n, textZ2, added, capAt, c: Integer;
+  k, raw, n, textZ2, added: Integer;
   val, frac, angle, endA, pw, r0, r1, len, halfW, ox, oy, scale: Double;
   det: TTyChartElement;
   fill, autoC: TTyChartColor;
@@ -1901,15 +1849,13 @@ begin
         el.Anim.G[3] := r1;
         el.Anim.G[4] := ALayout.StartRad;
         el.Anim.G[5] := endA;
-        { [R5-A] the item's progress shadow (its round ends too) }
+        { [R6-E] roundCap: one Sausage (GaugeView's ProgressPath) -- its
+          outline is one stroke, its round ends hit and grow with it [was: a
+          sector and two silent discs: the ends unstroked, a seam where they
+          met, a hover on an end missed] }
+        el.Shape.Sausage := ASpec.Progress.RoundCap;
+        { [R5-A] the item's progress shadow }
         TyStyleSetShadow(el.Style, ProgShadow(raw));
-        capAt := AList.Count;
-        if ASpec.Progress.RoundCap then
-          AddCaps(ALayout, Max(Double(0), r0), r1, ALayout.StartRad, endA,
-            el.Style.FillColor, AVisual.Z, el.Z2, AList, Result,
-            ABinding.SeriesIndex, k);
-        for c := capAt to AList.Count - 1 do
-          TyStyleSetShadow(AList.Ref(c)^.Style, ProgShadow(raw));
         AList.Add(el);
         Inc(Result);
       end;

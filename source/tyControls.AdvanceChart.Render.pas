@@ -3098,7 +3098,35 @@ begin
   end;
 end;
 
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement); forward;
+
+{ [R6-E] a pen in the shape's own frame (PenScale) drawn at its scale: the
+  width, the lengths of its dash and its phase }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
+var
+  el: TTyChartElement;
+  k: Integer;
+begin
+  if (AElement.Style.PenScale <= 0) or (AElement.Style.PenScale = 1)
+    or IsNan(AElement.Style.PenScale) or IsInfinite(AElement.Style.PenScale) then
+  begin
+    RenderElementAsStyled(P, AElement);
+    Exit;
+  end;
+  el := AElement;
+  el.Style.StrokeWidthLogical := el.Style.StrokeWidthLogical * el.Style.PenScale;
+  el.Style.DashLogical := Copy(AElement.Style.DashLogical, 0, Length(AElement.Style.DashLogical));
+  if el.Style.DashWord <> 0 then
+    el.Style.DashLogical := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical)
+  else
+    for k := 0 to High(el.Style.DashLogical) do
+      el.Style.DashLogical[k] := el.Style.DashLogical[k] * el.Style.PenScale;
+  el.Style.DashOffsetLogical := el.Style.DashOffsetLogical * el.Style.PenScale;
+  el.Style.PenScale := 0;
+  RenderElementAsStyled(P, el);
+end;
+
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;

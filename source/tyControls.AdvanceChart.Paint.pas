@@ -200,6 +200,16 @@ type
       series' blendMode on every element its view renders (echarts'
       updateBlend) -- '' source over }
     Blend: string;
+    { [R6-E] A PEN IN THE SHAPE'S OWN FRAME: the scale the canvas' transform
+      puts on the stroke of a path that is no strokeNoScale -- a pictorial
+      bar's glyph, built at the pattern size and scaled to its box (useStyle
+      drops the strokeNoScale createPath gave it). The width, the dash and
+      its phase above are the style's, as upstream holds them (a state sets
+      and tweens them as they are); the renderer draws them times this.
+      sqrt|det| of the transform, one number for both axes: zrender's line
+      scale, where the canvas strokes a stretched pen. 0, the zero value,
+      and 1 are none. }
+    PenScale: Double;
   end;
 
   { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
@@ -767,7 +777,7 @@ type
     rebuilt on every static render, the proxy only when the option is. }
   TTyChartAnimRole = (carNone, carBar, carSymbol, carLineSymbol, carLineRun,
     carLineArea, carSector, carFunnel, carGaugePointer, carGaugeProgress,
-    carGaugeCap, carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
+    carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
     carCandleWickLow, carLabel, carGuide,
     { [Batch 92, AN4] a gauge's reading; an effectScatter's symbol and its
       ripples (Sub: which ripple); a markPoint's symbol; a markLine's

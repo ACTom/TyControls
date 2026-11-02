@@ -2531,9 +2531,10 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
-    { A GAUGE: the pointer hosts, the progress arc is the peer, its round
-      caps (added just before it) follow it; the title and the reading are
-      no label of either -- they have no states [F2b] }
+    { A GAUGE: the pointer hosts, the progress arc is the peer (a round-capped
+      one is a single Sausage [R6-E: was a sector its two discs followed]);
+      the title and the reading are no label of either -- they have no
+      states [F2b] }
     if FSt[s].Kind = sskGauge then
     begin
       if pe^.Anim.Role = carGaugePointer then
@@ -2541,18 +2542,7 @@ begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
       end
       else if (pe^.Anim.Role = carGaugeProgress) and (FSt[s].PeerHostIdx[raw] < 0) then
-      begin
         FSt[s].PeerHostIdx[raw] := k;
-        { the end cap rides the arc's end, the start cap is before it }
-        if (k >= 1) and (AList.Element(k - 1).Anim.Role = carGaugeCap) then
-        begin
-          StPush(FSt[s].PeerFollowIdx[raw], k - 1);
-          if (k >= 2) and (AList.Element(k - 2).Anim.Role = carNone)
-            and (AList.Element(k - 2).Shape.Kind = cskCircle)
-            and AList.Element(k - 2).Silent then
-            StPush(FSt[s].PeerFollowIdx[raw], k - 2);
-        end;
-      end;
       Continue;
     end;
     { A RADAR ITEM: its polyline hosts, its polygon and its symbols are

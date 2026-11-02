@@ -2845,6 +2845,7 @@ begin
   if not IsNan(item.BorderWidthLogical) then
     AVisual.StrokeWidthLogical := item.BorderWidthLogical;
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
+  AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -2903,6 +2904,10 @@ begin
     end;
     if not IsNan(line.BorderWidthLogical) then
       AVisual.StrokeWidthLogical := line.BorderWidthLogical;
+    { [R6-E] a written width, whatever it is: the line's default 2 is for
+      none }
+    AVisual.StrokeWidthSet := not IsNan(line.BorderWidthLogical);
+    AVisual.StrokeWidthNaN := False;
     { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
       drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
       leaves todNone, which answers solid -- so a line series that writes only
@@ -4722,6 +4727,7 @@ var
     p: array of string;
     i: Integer;
     dd: TJSONData;
+    v: Double;
   begin
     SetLength(p, Length(APath) + 1);
     for i := 0 to High(APath) do p[i] := APath[i];
@@ -4736,10 +4742,12 @@ var
       joinHas := True;
     end;
     if ALine then p[High(p)] := 'miterLimit' else p[High(p)] := 'borderMiterLimit';
-    dd := TyStFind(ANodes, p);
-    if (dd <> nil) and (dd.JSONType = jtNumber) and (dd.AsFloat > 0) and not IsInfinite(dd.AsFloat) then
+    { [R6-E] as the canvas takes it: `|| 10`, a numeric string its number, a
+      limit it refuses the default [was: a number only] }
+    v := TyOptMiterLimit(TyStFind(ANodes, p));
+    if not IsNan(v) then
     begin
-      if dd.AsFloat = 10 then pe^.Style.MiterLimit := 0 else pe^.Style.MiterLimit := dd.AsFloat;
+      if v = 10 then pe^.Style.MiterLimit := 0 else pe^.Style.MiterLimit := v;
     end;
     { [R6-D] the dash (getItemStyle's / getLineStyle's lineDash), for the
       views whose builders do not read it (dashOn): a word
@@ -4773,12 +4781,10 @@ var
           end;
       end;
     end;
-    { and its phase (lineDashOffset), a number }
+    { and its phase (lineDashOffset), as the canvas takes it }
     if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
-    dd := TyStFind(ANodes, p);
-    if (dd <> nil) and (dd.JSONType = jtNumber) and not IsNan(dd.AsFloat)
-      and not IsInfinite(dd.AsFloat) then
-      pe^.Style.DashOffsetLogical := dd.AsFloat;
+    v := TyOptPenOffset(TyStFind(ANodes, p));
+    if not IsNan(v) then pe^.Style.DashOffsetLogical := v;
   end;
 
   { [R6-D] THE STROKE AND ITS WIDTH under APath (getItemStyle's borderColor
@@ -4828,14 +4834,9 @@ var
     SetLength(p, Length(APath) + 1);
     for i := 0 to High(APath) do p[i] := APath[i];
     p[High(p)] := 'borderWidth';
+    { [R6-E] a numeric string is its number [was: none] }
     dd := TyStFind(ANodes, p);
-    if dd <> nil then
-    begin
-      if (dd.JSONType = jtNumber) and not IsNan(dd.AsFloat) and not IsInfinite(dd.AsFloat) then
-        pe^.Style.StrokeWidthLogical := dd.AsFloat
-      else
-        pe^.Style.StrokeWidthLogical := 0;
-    end;
+    if dd <> nil then pe^.Style.StrokeWidthLogical := TyOptPenWidth(dd);
   end;
 
   { the row's visual colour (an icon pointer's setColor) }
@@ -4936,7 +4937,7 @@ begin
     case pe^.Anim.Role of
       carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
       carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
-      carGaugeCap, carGaugeDetail:
+      carGaugeDetail:
         Continue;
       carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
         Take(nodes, ['lineStyle'], True);

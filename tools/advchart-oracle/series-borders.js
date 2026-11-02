@@ -26,6 +26,19 @@
 // where none), the ends the
 // canvas' defaults (butt, miter, 10) where the style has none. `pens` is the
 // sorted set of these, `n` how many stroked paths.
+//
+// Round 6 R6-E adds, on its own cases only (the R6-D records keep their
+// fields): `shapes` -- each path of the part as `type|cx|cy|r0|r|a|sweep`
+// (a sector's or a sausage's ring, the sweep's clockwise start and its
+// size; a circle's centre and radius; a rect's x|y|w|h) -- `fills` the
+// sorted set of the fills of the part, `hits` what zr's findHover finds at the
+// given points (the part, '' another path, '-' nothing), and `at`: sampled
+// at T0 + at with the animation running instead of settled. And on every
+// case a path whose stroke scales with it (no strokeNoScale, a transform
+// that scales: a pictorial bar's glyph, which useStyle(symbolMeta.style)
+// leaves without the strokeNoScale createPath gave it) records the width,
+// the dash and the offset as drawn -- times the transform's line scale
+// sqrt|det| -- and the ends as the canvas takes them: `style.x || default`.
 // Run: node tools/advchart-oracle/series-borders.js -> tests/fixtures/advchart-series-borders.json
 'use strict';
 const fs = require('fs');
@@ -72,6 +85,10 @@ const gauge = s => solo(Object.assign({ type: 'gauge', data: [{ value: 40 }] }, 
 const chord = s => solo(Object.assign({ type: 'chord', data: [{ name: 'a' }, { name: 'b' }],
   links: [{ source: 'a', target: 'b', value: 3 }] }, s));
 const HL = { type: 'highlight', seriesIndex: 0, dataIndex: 0 };
+// R6-E: the same pens with every number written as a numeric string
+const ISS = { borderColor: '#000', borderWidth: '3', borderType: 'dashed', borderDashOffset: '2', borderMiterLimit: '4' };
+const LSS = { color: '#333', width: '4', type: 'dotted', dashOffset: '1', miterLimit: '4' };
+const RC = { show: true, roundCap: true, width: 14, itemStyle: { borderColor: '#000', borderWidth: 3 } };
 
 // [id, option, part ('' every path, 'symbol' a radar's symbols, 'pointer',
 //  'progress', 'ribbon' a chord's links), action]
@@ -192,6 +209,109 @@ function cases() {
     ['chord.nodes', chord({ itemStyle: IS }), ''],
     ['polarbar', { animation: false, color: PAL, polar: {}, angleAxis: { type: 'category', data: N }, radiusAxis: {},
       series: [{ type: 'bar', coordinateSystem: 'polar', itemStyle: IS, data: [3, 5, 2] }] }, ''],
+    // ==== R6-E ====
+    // ---- a round-capped progress arc and track: one Sausage, one outline ----
+    ['gauge.round', gauge({ progress: RC }), 'progress', null, { shapes: true, hits: true }],
+    ['gauge.round-dash', gauge({ progress: Object.assign({}, RC, { itemStyle: ISS }) }), 'progress', null, { shapes: true }],
+    ['gauge.round-two', gauge({ progress: Object.assign({}, RC, { overlap: false }), data: [{ value: 40 }, { value: 70 }] }),
+      'progress', null, { shapes: true, hits: true }],
+    ['gauge.round-ccw', gauge({ clockwise: false, progress: Object.assign({}, RC, { itemStyle: IS }) }), 'progress', null,
+      { shapes: true, hits: true }],
+    ['gauge.round-emphasis', gauge({ progress: RC, emphasis: { itemStyle: { borderWidth: 6, borderColor: '#00f' } } }),
+      'progress', HL, { shapes: true }],
+    ['gauge.round-grow', Object.assign(gauge({ progress: RC }), { animation: true }), 'progress', null,
+      { shapes: true, at: 300 }],
+    ['gauge.round-track', gauge({ axisLine: { roundCap: true } }), 'track', null, { shapes: true }],
+    ['gauge.round-stops', gauge({ axisLine: { roundCap: true, lineStyle: { width: 12, shadowBlur: 4, shadowColor: '#000',
+      color: [[0.3, '#f00'], [0.7, '#0f0'], [1, '#00f']] } } }), 'track', null, { shapes: true }],
+    ['gauge.track', gauge({ axisLine: { lineStyle: { color: [[0.4, '#f00'], [1, '#00f']] } } }), 'track', null, { shapes: true }],
+    ['polarbar.round', { animation: false, color: PAL, polar: {}, radiusAxis: { type: 'category', data: N }, angleAxis: {},
+      series: [{ type: 'bar', coordinateSystem: 'polar', roundCap: true, itemStyle: IS, data: [3, 5, 2] }] }, '', null,
+      { shapes: true }],
+    // ---- numbers written as numeric strings ----
+    ['radar.str', radar({ itemStyle: ISS }), 'symbol'],
+    ['gauge.str', gauge({ itemStyle: ISS }), 'pointer'],
+    ['gauge.pointer-str', gauge({ pointer: { itemStyle: ISS } }), 'pointer'],
+    ['gauge.progress-str', gauge({ progress: { show: true, itemStyle: ISS } }), 'progress'],
+    ['chord.str', chord({ lineStyle: Object.assign({}, LSS, { color: '#000' }) }), 'ribbon'],
+    ['bar.str', cart({ type: 'bar', itemStyle: ISS, data: [3, 5, 2] }), '', null, { shapes: true }],
+    ['line.str', cart({ type: 'line', symbol: 'circle', itemStyle: ISS, lineStyle: LSS, data: [3, 5, 2] }), ''],
+    ['scatter.str', cart({ type: 'scatter', itemStyle: ISS, data: [3, 5, 2] }), ''],
+    ['scatter.empty-str', cart({ type: 'scatter', symbol: 'emptyCircle', itemStyle: ISS, data: [3, 5, 2] }), ''],
+    ['escatter.str', cart({ type: 'effectScatter', itemStyle: ISS, data: [3, 5, 2] }), ''],
+    ['pie.str', solo({ type: 'pie', itemStyle: ISS, data: [3, 5, 2] }), ''],
+    ['funnel.str', solo({ type: 'funnel', itemStyle: ISS, data: [3, 5, 2] }), ''],
+    ['candle.str', cart({ type: 'candlestick', itemStyle: Object.assign({ borderColor0: '#444' }, ISS), data: [[2, 4, 1, 5], [3, 2, 1, 4]] }), ''],
+    ['boxplot.str', cart({ type: 'boxplot', itemStyle: ISS, data: [[1, 2, 3, 4, 5], [2, 3, 4, 5, 6]] }), ''],
+    ['heatmap.str', { animation: false, color: PAL, xAxis: { type: 'category', data: N }, yAxis: { type: 'category', data: N },
+      visualMap: { show: false, min: 0, max: 5 }, series: [{ type: 'heatmap', itemStyle: ISS, data: [[0, 0, 1], [1, 1, 3]] }] }, ''],
+    ['sunburst.str', solo({ type: 'sunburst', itemStyle: ISS, data: [{ name: 'a', value: 3, children: [{ name: 'b', value: 2 }] }] }), ''],
+    ['treemap.str', solo({ type: 'treemap', breadcrumb: { show: false }, itemStyle: ISS,
+      data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 }] }), '', null, { shapes: true }],
+    ['graph.str', solo({ type: 'graph', layout: 'none', itemStyle: ISS, lineStyle: LSS,
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 10, y: 10 }], links: [{ source: 'a', target: 'b' }] }), ''],
+    ['tree.str', solo({ type: 'tree', itemStyle: Object.assign({ color: '#abc' }, ISS), lineStyle: LSS,
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
+    ['sankey.str', solo({ type: 'sankey', itemStyle: ISS, lineStyle: Object.assign({ opacity: 0.5 }, LSS),
+      data: [{ name: 'a' }, { name: 'b' }], links: [{ source: 'a', target: 'b', value: 3 }] }), ''],
+    ['sankey.band-str', solo({ type: 'sankey', lineStyle: { borderColor: '#000', borderWidth: '2', borderType: 'dashed',
+      borderDashOffset: '1', borderMiterLimit: '4' },
+      data: [{ name: 'a' }, { name: 'b' }], links: [{ source: 'a', target: 'b', value: 3 }] }), ''],
+    ['parallel.str', { animation: false, color: PAL, parallelAxis: [{ dim: 0 }, { dim: 1 }],
+      series: [{ type: 'parallel', lineStyle: LSS, data: [[1, 2], [3, 4]] }] }, ''],
+    ['lines.str', { animation: false, color: PAL, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: LSS, data: [{ coords: [[0, 0], [5, 5]] }] }] }, ''],
+    ['pict.str', cart({ type: 'pictorialBar', itemStyle: ISS, symbol: 'rect', data: [3, 5, 2] }), ''],
+    ['river.str', { animation: false, color: PAL, singleAxis: { type: 'time' }, series: [{ type: 'themeRiver', itemStyle: ISS,
+      data: [['2015/11/08', 3, 'a'], ['2015/11/09', 4, 'a']] }] }, ''],
+    ['chord.nodes-str', chord({ itemStyle: ISS }), ''],
+    ['polarbar.str', { animation: false, color: PAL, polar: {}, angleAxis: { type: 'category', data: N }, radiusAxis: {},
+      series: [{ type: 'bar', coordinateSystem: 'polar', itemStyle: ISS, data: [3, 5, 2] }] }, ''],
+    // ---- a width that is a string but no positive number ----
+    ...['0', 'abc', ''].map(w => [
+      ['bar.w' + JSON.stringify(w), cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: w }, data: [3, 5] }), '', null,
+        { shapes: true }],
+      ['gauge.w' + JSON.stringify(w), gauge({ itemStyle: { borderColor: '#000', borderWidth: w } }), 'pointer'],
+      ['line.w' + JSON.stringify(w), cart({ type: 'line', symbol: 'circle', itemStyle: { borderColor: '#000', borderWidth: w },
+        lineStyle: { width: w }, data: [3, 5, 2] }), ''],
+      ['scatter.w' + JSON.stringify(w), cart({ type: 'scatter', itemStyle: { borderColor: '#000', borderWidth: w }, data: [3, 5] }), ''],
+      ['pie.w' + JSON.stringify(w), solo({ type: 'pie', itemStyle: { borderColor: '#000', borderWidth: w }, data: [3, 5] }), ''],
+    ]).reduce((a, b) => a.concat(b), []),
+    ['bar.item-abc', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 3 },
+      data: [3, { value: 5, itemStyle: { borderWidth: 'abc' } }] }), '', null, { shapes: true }],
+    ['line.item-str', cart({ type: 'line', symbol: 'circle', itemStyle: { borderColor: '#000', borderWidth: 3 },
+      data: [3, { value: 5, itemStyle: { borderWidth: '1' } }, { value: 2, itemStyle: { borderWidth: '' } }] }), ''],
+    ['bar.miter-empty', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderMiterLimit: '',
+      borderDashOffset: '', borderType: [4, 2] }, data: [3] }), ''],
+    ['gauge.pointer-miter', gauge({ pointer: { itemStyle: { borderColor: '#000', borderWidth: '2', borderMiterLimit: '6',
+      borderDashOffset: '3', borderType: [4, 2] } } }), 'pointer'],
+    // ---- a pictorial bar's glyphs: no setColor; a pen in the glyph's frame ----
+    ['pict.empty', cart({ type: 'pictorialBar', symbol: 'emptyCircle', data: [3, 5] }), '', null, { fills: true }],
+    ['pict.empty-border', cart({ type: 'pictorialBar', symbol: 'emptyCircle', itemStyle: { borderColor: '#000', borderWidth: 2 },
+      data: [3, 5] }), '', null, { fills: true }],
+    ['pict.empty-size', cart({ type: 'pictorialBar', symbol: 'emptyRect', symbolSize: [20, 20],
+      itemStyle: { borderColor: '#000', borderWidth: 40, borderType: [20, 10], borderDashOffset: 10 }, data: [3, 5] }), '', null,
+      { fills: true }],
+    ['pict.line', cart({ type: 'pictorialBar', symbol: 'line', itemStyle: { borderColor: '#000', borderWidth: 30 }, data: [3, 5] }),
+      '', null, { fills: true }],
+    ['pict.line-rest', cart({ type: 'pictorialBar', symbol: 'line', data: [3, 5] }), '', null, { fills: true }],
+    ['pict.repeat', cart({ type: 'pictorialBar', symbol: 'emptyRect', symbolRepeat: true, symbolSize: [16, 8],
+      itemStyle: { borderColor: '#000', borderWidth: 25 }, data: [3, 5] }), '', null, { fills: true }],
+    ['pict.empty-emphasis', cart({ type: 'pictorialBar', symbol: 'emptyCircle', symbolSize: [20, 20],
+      emphasis: { itemStyle: { borderColor: '#00f', borderWidth: 60 } }, data: [3, 5] }), '', HL, { fills: true }],
+    ['pict.empty-item', cart({ type: 'pictorialBar', symbol: 'emptyTriangle', symbolSize: [20, 20],
+      data: [3, { value: 5, itemStyle: { color: '#0f0', borderColor: '#f00', borderWidth: 20 } }] }), '', null, { fills: true }],
+    // ---- the mutation round's follow-ups ----
+    ['gauge.flat', gauge({ progress: { show: true, width: 14, itemStyle: { borderColor: '#000', borderWidth: 3 } } }), 'progress', null,
+      { shapes: true }],
+    ['bar.abc-no-colour', cart({ type: 'bar', itemStyle: { borderWidth: 'abc' }, data: [3, 5] }), '', null, { shapes: true }],
+    ['bar.emphasis-str', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+      emphasis: { itemStyle: { borderWidth: '6', borderDashOffset: '3', borderType: 'dashed' } }, data: [3] }), '', HL],
+    ['bar.item-offset-str', cart({ type: 'bar', itemStyle: IS, data: [3, { value: 5, itemStyle: { borderDashOffset: '5' } }] }), ''],
+    ['line.clip', cart({ type: 'line', symbol: 'none', areaStyle: {}, data: [3, 5, 2] }), '', null, { clip: true }],
+    ['line.w0-clip', cart({ type: 'line', symbol: 'none', areaStyle: {}, lineStyle: { width: 0 }, data: [3, 5, 2] }), '', null,
+      { clip: true }],
+    ['line.w4-clip', cart({ type: 'line', symbol: 'none', lineStyle: { width: 4 }, data: [3, 5, 2] }), '', null, { clip: true }],
   ];
 }
 
@@ -221,9 +341,59 @@ function partsOf(chart, view) {
   if (view.type === 'gauge' && data) {
     data.each(i => { const e = data.getItemGraphicEl(i); if (e) m.set(e, 'pointer'); });
     (view._progressEls || []).forEach(e => e && m.set(e, 'progress'));
+    // the axis line's bands: the view's own sectors / sausages
+    view.group.traverse(e => { if ((e.type === 'sector' || e.type === 'sausage') && !m.has(e)) m.set(e, 'track'); });
   }
   if (view.type === 'chord') view.group.traverse(e => { if (e instanceof Path && e.type !== 'sector') m.set(e, 'ribbon'); });
   return m;
+}
+
+const r2 = v => String(Math.round(v * 100) / 100);
+const r4 = v => String(Math.round(v * 10000) / 10000);
+function mod2pi(a) { a = a % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a; }
+function shapeOf(e) {
+  // as the path takes them (PathProxy's data is numbers: a treemap's content
+  // rect is at x: borderWidth as written, a string where one is)
+  const s = {};
+  Object.keys(e.shape).forEach(k => { s[k] = typeof e.shape[k] === 'string' ? Number(e.shape[k]) : e.shape[k]; });
+  if (e.type === 'sector' || e.type === 'sausage') {
+    const cw = s.clockwise !== false;
+    const from = cw ? s.startAngle : s.endAngle;
+    return [e.type, r2(s.cx), r2(s.cy), r2(Math.max(s.r0 || 0, 0)), r2(s.r), r4(mod2pi(from)),
+      r4(Math.abs(s.endAngle - s.startAngle))].join('|');
+  }
+  if (e.type === 'circle') return ['circle', r2(s.cx), r2(s.cy), r2(s.r)].join('|');
+  if (e.type === 'rect') {
+    // in the canvas' frame (a treemap's rects sit in their nodes' groups),
+    // the corner that is the least
+    const m = e.transform || [1, 0, 0, 1, 0, 0];
+    const x0 = m[0] * s.x + m[2] * s.y + m[4], y0 = m[1] * s.x + m[3] * s.y + m[5];
+    const x1 = m[0] * (s.x + s.width) + m[2] * (s.y + s.height) + m[4];
+    const y1 = m[1] * (s.x + s.width) + m[3] * (s.y + s.height) + m[5];
+    return ['rect', r2(Math.min(x0, x1)), r2(Math.min(y0, y1)), r2(Math.abs(x1 - x0)), r2(Math.abs(y1 - y0))].join('|');
+  }
+  return e.type;
+}
+// zrender's line scale, the drawn one: sqrt|det| of the transform where the
+// path is no strokeNoScale and the transform scales; else 1
+function penScale(e) {
+  const m = e.transform;
+  if (e.style.strokeNoScale || !m) return 1;
+  const d = Math.sqrt(Math.abs(m[0] * m[3] - m[2] * m[1]));
+  return Math.abs(d - 1) > 1e-10 ? d : 1;
+}
+// points about a round-capped arc: inside each cap, beyond the sweep, and
+// the middle of the ring
+function capPoints(e) {
+  const s = e.shape;
+  const r0 = Math.max(s.r0 || 0, 0);
+  const dr = (s.r - r0) / 2;
+  const rc = r0 + dr;
+  const sgn = s.clockwise !== false ? 1 : -1;
+  const at = (a, rad) => [Math.round(s.cx + Math.cos(a) * rad), Math.round(s.cy + Math.sin(a) * rad)];
+  const beyond = 0.6 * dr / rc;
+  return [at(s.endAngle + sgn * beyond, rc), at(s.startAngle - sgn * beyond, rc),
+    at((s.startAngle + s.endAngle) / 2, rc), at(s.endAngle + sgn * 1.5 * dr / rc, rc)];
 }
 
 function settle(chart, start) {
@@ -238,37 +408,80 @@ function settle(chart, start) {
   must(live === 0, 'did not settle');
 }
 
-function run(id, option, part, action) {
+function run(id, option, part, action, more) {
   NOW = T_BASE;
   rngState = SEED;
+  more = more || {};
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   try {
     chart.setOption(JSON.parse(JSON.stringify(option)));
-    settle(chart, T_BASE);
+    if (more.at != null) {
+      NOW = T_BASE + more.at;
+      chart.getZr().animation.update();
+      chart.getZr().storage.getDisplayList(true);
+    }
+    else settle(chart, T_BASE);
     if (action) {
       NOW = T_BASE + 10000;
       chart.dispatchAction(JSON.parse(JSON.stringify(action)));
       settle(chart, T_BASE + 10000);
     }
     const set = new Set();
+    const shapes = [];
+    const fills = new Set();
+    const partEls = [];
     let n = 0;
     let seen = 0;
-    (chart._chartsViews || []).forEach(v => { const parts = partsOf(chart, v); v.group.traverse(e => {
+    let parts = new Map();
+    (chart._chartsViews || []).forEach(v => { const pv = partsOf(chart, v); pv.forEach((p, e) => parts.set(e, p)); v.group.traverse(e => {
       if (!(e instanceof Path) || e.ignore || e.invisible) return;
-      if (part && parts.get(e) !== part) return;
+      if (part && pv.get(e) !== part) return;
       seen++;
+      partEls.push(e);
+      if (more.shapes) shapes.push(shapeOf(e));
+      if (more.fills && e.style.fill != null && e.style.fill !== 'none') fills.add(colourOf(e.style.fill));
       const s = e.style;
       if (!(s.lineWidth > 0) || s.stroke == null || s.stroke === 'none') return;
       n++;
+      const ls = penScale(e);
       const dash = normalizeLineDash(s.lineDash, s.lineWidth);
       // setLineDash ignores a dash with an entry that is no finite number of nought or more
       const bad = dash && dash.some(v => !(isFinite(Number(v)) && Number(v) >= 0));
-      set.add([colourOf(s.stroke), String(s.lineWidth), bad ? 'ignored' : dash ? dash.map(Number).join(',') : 'solid',
-        String(s.lineDashOffset == null ? 0 : s.lineDashOffset),
-        [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit == null ? 10 : s.miterLimit)].join('/')].join('|'));
+      const off = s.lineDashOffset == null ? 0 : s.lineDashOffset;
+      if (ls === 1) {
+        set.add([colourOf(s.stroke), String(s.lineWidth), bad ? 'ignored' : dash ? dash.map(Number).join(',') : 'solid',
+          String(Number(off)),
+          [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit || 10)].join('/')].join('|'));
+      }
+      else {
+        set.add([colourOf(s.stroke), r4(s.lineWidth * ls), bad ? 'ignored' : dash ? dash.map(v => r4(v * ls)).join(',') : 'solid',
+          r4(off * ls), [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit || 10)].join('/')].join('|'));
+      }
     }); });
-    return { id, option, part, action: action || null, seen, n, pens: Array.from(set).sort() };
+    const rec = { id, option, part, action: action || null, seen, n, pens: Array.from(set).sort() };
+    if (more.at != null) rec.at = more.at;
+    if (more.shapes) rec.shapes = shapes.sort();
+    if (more.fills) rec.fills = Array.from(fills).sort();
+    // the clip path of a line's group (createGridClipPath), x|y|w|h
+    if (more.clip) {
+      rec.clip = [];
+      (chart._chartsViews || []).forEach(v => v.group.traverse(e => {
+        const c = e.getClipPath && e.getClipPath();
+        if (c && c.shape) rec.clip.push(['rect', r2(+c.shape.x), r2(+c.shape.y), r2(+c.shape.width), r2(+c.shape.height)].join('|'));
+      }));
+    }
+    if (more.hits) {
+      const handler = chart.getZr().handler;
+      rec.hits = [];
+      partEls.forEach(e => { if (e.type === 'sausage') capPoints(e).forEach(p => {
+        const h = handler.findHover(p[0], p[1]).target;
+        let what = '-';
+        if (h) what = parts.get(h) || '';
+        rec.hits.push([p[0], p[1], what]);
+      }); });
+    }
+    return rec;
   }
   finally {
     chart.dispose();
@@ -276,7 +489,7 @@ function run(id, option, part, action) {
 }
 
 function generate() {
-  const charts = cases().map(([id, o, part, act]) => run(id, o, part, act));
+  const charts = cases().map(([id, o, part, act, more]) => run(id, o, part, act, more));
   const by = id => charts.find(c => c.id === id);
   const pens = id => by(id).pens.join(' ');
   // guards: what upstream does that the port did not
@@ -295,13 +508,35 @@ function generate() {
   must(pens('chord.width') === 'x:source|2|solid|0|butt/miter/10', 'chord.width: ' + pens('chord.width'));
   must(pens('chord.emphasis') === '#ff0000ff|5|5|0|butt/miter/10', 'chord.emphasis: ' + pens('chord.emphasis'));
   must(by('radar.select').seen > 0 && by('radar.blur').seen > 0, 'states seen');
-  must(charts.every(c => c.seen > 0), 'a case has no path: ' + charts.filter(c => c.seen === 0).map(c => c.id));
+  // R6-E: a round-capped arc is one Sausage, stroked whole; a hover on its round end finds it
+  must(by('gauge.round').shapes.join(' ') === 'sausage|200|150|98.5|112.5|2.3562|1.885', 'gauge.round: ' + by('gauge.round').shapes);
+  must(pens('gauge.round') === '#000000ff|3|solid|0|butt/miter/10' && by('gauge.round').hits[0][2] === 'progress'
+    && by('gauge.round').hits[3][2] === '-', 'gauge.round hits: ' + JSON.stringify(by('gauge.round').hits));
+  must(by('gauge.round-track').shapes[0].indexOf('sausage|') === 0, 'gauge.round-track');
+  // a numeric string is its number; a word, '' and '0' stroke nothing; a word makes a bar's layout NaN
+  must(pens('bar.str') === '#000000ff|3|12,6|2|butt/miter/4', 'bar.str: ' + pens('bar.str'));
+  must(by('bar.w"abc"').seen === 0 && by('bar.w""').n === 0 && by('line.w""').n === 0 && by('line.w"0"').n === 0, 'width words');
+  must(pens('bar.miter-empty') === '#000000ff|2|4,2|0|butt/miter/10', 'bar.miter-empty: ' + pens('bar.miter-empty'));
+  // a pictorial glyph: no setColor (an empty one filled in the colour), its pen in the glyph's frame
+  must(by('pict.empty').n === 0 && by('pict.empty').fills.includes('#5470c6ff'), 'pict.empty: ' + by('pict.empty').fills);
+  must(pens('pict.empty-size') === '#000000ff|2|1,0.5|0.5|butt/miter/10', 'pict.empty-size: ' + pens('pict.empty-size'));
+  // a line written at nought: its clip is not grown (lineStyle.width || 0); the default 2 grows it by 1 a side
+  must(by('line.w0-clip').clip[0] !== by('line.clip').clip[0], 'line clips: ' + by('line.w0-clip').clip + ' ' + by('line.clip').clip);
+  // R6-E: a bar whose border width is a word: getLineWidth's Math.min is NaN, the layout NaN -- no bar
+  const NO_PATH = ['bar.w"abc"'];
+  must(charts.every(c => c.seen > 0 || NO_PATH.includes(c.id)), 'a case has no path: '
+    + charts.filter(c => c.seen === 0 && !NO_PATH.includes(c.id)).map(c => c.id));
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg)',
     note: 'R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends '
       + 'of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where '
       + 'one is (symbol: a radar item\'s symbols; pointer / progress: a gauge\'s; ribbon: a chord\'s links) -- the stroke #rrggbbaa '
       + '(color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash\'d against the width (solid '
-      + 'none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.', W, H, charts };
+      + 'none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones. '
+      + 'R6-E: a pen whose path scales with it (no strokeNoScale, a scaling transform: a pictorial glyph) as drawn, its width, dash and '
+      + 'offset times sqrt|det| to four places; the offset as the canvas takes it (Number); part track: the bands of a gauge axis line; '
+      + '`shapes` each path of the part as type|cx|cy|r0|r|clockwise start|sweep (sector, sausage), circle|cx|cy|r, rect|x|y|w|h '
+      + '(canvas frame); `fills` the fills of the part; `hits` [x, y, the part findHover finds there, empty another path, - none]; `at`: '
+      + 'sampled at T0 + at, animating; `clip` the clip rects of the view (a line group, createGridClipPath).', W, H, charts };
 }
 
 let j1, j2;
