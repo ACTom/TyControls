@@ -618,7 +618,7 @@ end;
 function TTyBreadcrumb.SlotStyle(AItemIndex: Integer; AHovered: Boolean): TTyStyleSet;
 begin
   Result := PartStyle('TyBreadcrumbItem', StyleClass,
-    TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, Enabled));
+    TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, IsEnabled));   // #118: a parent's too
 end;
 
 function TTyBreadcrumb.SlotHovered(AItemIndex: Integer): Boolean;
