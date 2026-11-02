@@ -336,6 +336,7 @@ function cases() {
       SHD) } }), 'track', null, LK],
     ['gauge.track-pen-keys', gOnly({ axisLine: { lineStyle: { color: [[1, '#f00']], type: 'dashed', dashOffset: 2, cap: 'round',
       join: 'round', miterLimit: 4, opacity: 0.7 } } }), 'track', null, LK],
+    ['gauge.track-default-opacity', gOnly({ axisLine: { lineStyle: { opacity: 0.4 } } }), 'track', null, LK],
     ['gauge.split-looks', gOnly({ splitLine: { show: true, lineStyle: Object.assign({ color: '#f00', width: 3, opacity: 0.4,
       type: 'dashed', dashOffset: 2, cap: 'round', join: 'bevel', miterLimit: 5 }, SHD) } }), 'line', null, LK],
     ['gauge.split-auto-dash', gOnly({ axisLine: { show: false, lineStyle: { color: [[0.5, '#f00'], [1, '#00f']] } },

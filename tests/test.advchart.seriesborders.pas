@@ -81,6 +81,7 @@ type
     procedure TestThePenNumbersAsTheCanvasTakesThem;
     procedure TestAPictorialGlyphStrokesInItsOwnFrame;
     procedure TestAPlateStrokesUnderItsFill;
+    procedure TestAGaugeTickDashIsMeasuredAtItsWidth;
   end;
 
 implementation
@@ -199,8 +200,14 @@ begin
     Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF, (c shr 8) and $FF,
       c and $FF, c shr 24]));
   end;
-  if AEl.Style.DashWord <> 0 then
+  { [R6-F] a word's lengths as the renderer takes them -- the element's
+    own, which RenderElementAsStyled strokes (the word is measured again
+    only for a pen in a shape's frame) [was: the word measured here, blind
+    to lengths the builder left measured against another width] }
+  if (AEl.Style.DashWord <> 0) and ScaledPen(AEl) then
     dash := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical * ps)
+  else if AEl.Style.DashWord <> 0 then
+    dash := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical))
   else
   begin
     dash := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical));
@@ -638,6 +645,39 @@ begin
   c := FBmp.GetPixel(Round(b.Right - 4), Round((b.Top + b.Bottom) / 2));
   AssertTrue(Format('fill inside its edge (%d %d %d)', [c.red, c.green, c.blue]),
     (c.red > 200) and (c.green < 60) and (c.blue < 60));
+end;
+
+{ [R6-F] A SPLIT LINE'S DASH WORD IN THE LIST: 'dashed' at width 3 is
+  [12, 6] on the element itself -- the list is what is painted wherever no
+  animation frame stands (AnimFrame hands it over as it is), and a frame
+  measures the word again, so the pens' comparison, which reads the frame,
+  cannot tell lengths measured against another width }
+procedure TAdvChartSeriesBordersTest.TestAGaugeTickDashIsMeasuredAtItsWidth;
+var
+  k, n: Integer;
+  el: TTyChartElement;
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"series":[{"type":"gauge","pointer":{"show":false},'
+    + '"axisLine":{"show":false},"axisTick":{"show":false},"axisLabel":{"show":false},'
+    + '"detail":{"show":false},"title":{"show":false},"splitLine":{"show":true,'
+    + '"lineStyle":{"color":"#ff0000","width":3,"type":"dashed"}},"data":[{"value":40}]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  n := 0;
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if PartOf(el) <> 'line' then Continue;
+    Inc(n);
+    AssertEquals('the dash''s two lengths', 2, Length(el.Style.DashLogical));
+    AssertEquals('dash', 12, el.Style.DashLogical[0], 1e-9);
+    AssertEquals('gap', 6, el.Style.DashLogical[1], 1e-9);
+  end;
+  AssertEquals('the split lines', 11, n);
 end;
 
 { [R6-F] A READING'S PLATE WITH A FILL AND A BORDER, drawn: zrender's

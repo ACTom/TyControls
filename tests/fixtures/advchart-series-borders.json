@@ -7429,6 +7429,62 @@
    ]
   },
   {
+   "id": "gauge.track-default-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "opacity": 0.4
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.4|0|0|0|"
+   ]
+  },
+  {
    "id": "gauge.split-looks",
    "option": {
     "animation": false,
