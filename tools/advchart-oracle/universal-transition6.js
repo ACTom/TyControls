@@ -631,6 +631,9 @@ function chartCases() {
   add('enc.dataset-renamed', 'the series\' own dimensions over the dataset\'s (a, b, c): grp names no dimension, so the '
     + 'groups are the ids and nothing pairs', [s(Object.assign(sCart([dsScat({ dimensions: ['a', 'b', 'c'],
       encode: { x: 0, y: 1, itemGroupId: 'grp' } })]), { dataset: { source: DS } })), s(gCart([gBars()]))]);
+  add('enc.dataset-dims-empty', 'the series\' own dimensions an empty list: it is given (no header names), so grp names no '
+    + 'dimension -- x and y take the first free ones, the groups are the ids and nothing pairs',
+    [s(Object.assign(sCart([dsScat({ dimensions: [] })]), { dataset: { source: DS } })), s(gCart([gBars()]))]);
   add('enc.dataset-row', 'the same dataset laid out by row (seriesLayoutBy: \'row\')',
     [s(Object.assign(sCart([dsScat({ seriesLayoutBy: 'row' })]), { dataset: { source: DSROW } })), s(gCart([gBars()]))]);
   const DAYS = ['2017-02-01', '2017-02-04'];
