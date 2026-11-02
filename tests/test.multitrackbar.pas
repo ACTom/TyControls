@@ -186,6 +186,9 @@ type
     procedure TestThumbsOnOneValueComeApartInTheDragDirection;
     procedure TestADisabledBarIgnoresTheMouse;
     procedure TestTheHintIsTheThumbsUnderThePointer;
+    { #182: the capture taken away mid-drag (a modal dialog opened from OnChange, a switch to
+      another window) ends the drag, as a move with no button held does. }
+    procedure TestALostCaptureEndsTheDrag;
   end;
 
   { The final classes as a form and a theme see them: the published collection, the type key,
@@ -608,6 +611,8 @@ type
     procedure TestOffASpanPressJumpsTheNearestThumb;
     procedure TestTrackClickHandledDragsNoSpan;
     procedure TestANewRangeIsDraggedOnWhenDraggable;
+    { #182: a span drag and an end dragged off the track end when the capture is lost. }
+    procedure TestALostCaptureEndsASpanDragAndARemoval;
   end;
 
   { The colour dialog answered without a dialog: logs `dialog:<colour as $hex> `, then picks
@@ -2010,6 +2015,32 @@ begin
   AssertEquals('between thumbs: the control''s', 'bar', FBar.HintAt(p.X, p.Y, r));
   AssertEquals('the gap ends where thumb 0 does', FBar.ThumbRect(0).Right, r.Left);
   AssertEquals('and starts where thumb 1 does', FBar.ThumbRect(1).Left, r.Right);
+end;
+
+procedure TTyMultiTrackMouseTest.TestALostCaptureEndsTheDrag;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 50, 80]);
+  p := At(50);
+  FBar.Press(p.X, p.Y);
+  FBar.CaptureChanged;
+  FLog := '';
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('the capture taken away ended the drag', '20,50,80', Values);
+  AssertEquals('nothing reported', '', FLog);
+  FBar.Release(At(60).X, p.Y);
+  { A move with no button held: the button-up went elsewhere. }
+  FBar.Press(p.X, p.Y);
+  FBar.Hover(At(55).X, p.Y);
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('a move with no button held ended the drag', '20,50,80', Values);
+  FBar.Release(At(60).X, p.Y);
+  { And the drag itself still works. }
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('setup: a held drag follows the pointer', '20,60,80', Values);
+  FBar.Release(At(60).X, p.Y);
 end;
 
 { TTyMultiTrackKeyboardTest }
@@ -6870,6 +6901,39 @@ begin
   AssertEquals('the press drags the new range on, whole', '10..20;55..65', Ranges);
   AssertEquals('K2:55@45 K3:65@55 T2 T3 C ', FLog);
   Release(PtOn(60));
+end;
+
+procedure TTyRangeUserRangesTest.TestALostCaptureEndsASpanDragAndARemoval;
+var
+  c: TPoint;
+begin
+  FBar.MinGap := 5;
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  FBar.AllowUserRanges := True;
+  Press(PtOn(50));
+  TBaseAccess(FBar).CaptureChanged;
+  Drag(PtOn(55));
+  AssertEquals('the span drag ended with the capture', '10..20;40..60', Ranges);
+  Release(PtOn(55));
+  { An end dragged off the track, drawn removing: the capture lost, the next move ends the drag,
+    and a release out there removes nothing. }
+  c := Centre(3);
+  Press(c);
+  Drag(Point(c.X, 80));
+  AssertEquals('setup: dragged off', 3, FBar.RemovingThumb);
+  TBaseAccess(FBar).CaptureChanged;
+  Drag(Point(c.X, 81));
+  AssertEquals('no longer removing', -1, FBar.RemovingThumb);
+  Release(Point(c.X, 81));
+  AssertEquals('nothing removed', '10..20;40..60', Ranges);
+  { A plain release: LCL lets go of the capture first, then the button-up arrives -- and that
+    still removes the range. }
+  Press(c);
+  Drag(Point(c.X, 80));
+  TBaseAccess(FBar).CaptureChanged;
+  Release(Point(c.X, 80));
+  AssertEquals('released off the track: removed', '10..20', Ranges);
 end;
 
 { Within 4 of R, G, B on every channel: a gradient's pixel at a stop's centre. }

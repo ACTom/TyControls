@@ -196,6 +196,10 @@ type
     { The span being dragged whole (DraggableRanges): the index of its lower thumb, -1 = none.
       FGrab then holds where on the span it was pressed, from the lower thumb's centre. }
     FDragSpan: Integer;
+    { #182: the mouse capture went elsewhere mid-drag; the next move ends the drag. }
+    FCaptureLost: Boolean;
+    { End a drag whose button-up went elsewhere: nothing moves, nothing is removed. }
+    procedure EndLostDrag;
     procedure SetAllowCrossing(const AValue: Boolean);
     { The user moves AllowCrossing and Pushable make; see UserMoveThumb. }
     procedure UserCrossThumb(AIndex, AValue: Integer);
@@ -374,6 +378,11 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #182 (as #147): the capture taken away mid-drag -- a modal dialog opened from an event, a
+      switch to another window -- ends the drag at the next move, as a move with no button held
+      does. Not at once: LCL lets go of the capture just before a plain button-up too, and that
+      release still has to remove a thumb dragged off the track. }
+    procedure CaptureChanged; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { Tab / Shift+Tab move between the enabled thumbs; the bar asks for the key only while
@@ -2423,6 +2432,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   FDragSpan := -1;
+  FCaptureLost := False;
   { The further presses of a multi-click whose first press OnTrackClick took: the same click. }
   if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
   else if FTrackClickTaken then Exit;
@@ -2500,6 +2510,8 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  if ((FDragThumb >= 0) or (FDragSpan >= 0)) and (FCaptureLost or not (ssLeft in Shift)) then
+    EndLostDrag;
   if FDragSpan >= 0 then
   begin
     { The lower end follows the pointer as a dragged thumb would, grabbed where pressed; the
@@ -2570,9 +2582,25 @@ begin
     FDragThumb := -1;
     FDragSpan := -1;
     FRemoving := False;
+    FCaptureLost := False;
     Invalidate;
     if off then UserRemoveThumb(i);
   end;
+end;
+
+procedure TTyMultiTrackBarBase.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  if (FDragThumb >= 0) or (FDragSpan >= 0) then FCaptureLost := True;
+end;
+
+procedure TTyMultiTrackBarBase.EndLostDrag;
+begin
+  FDragThumb := -1;
+  FDragSpan := -1;
+  FRemoving := False;
+  FCaptureLost := False;
+  Invalidate;
 end;
 
 procedure TTyMultiTrackBarBase.MouseLeave;
