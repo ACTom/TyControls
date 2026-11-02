@@ -27,6 +27,8 @@ type
     procedure TestMovingAlongTheEdgeWritesTheCursorOnce;
     procedure TestFreeingTheBarMidResizeIsQuiet;
     procedure TestAPressAfterALostReleaseRestoresTheStartSize;
+    { 拖过了可用空间:栏停在编辑区压到 0 的地方,ExpandedSize 写的也是看得见的那么宽。 }
+    procedure TestDraggingPastTheRoomStoresWhatIsShown;
   end;
 
 implementation
@@ -280,6 +282,34 @@ begin
   AssertEquals('回到起点', 200, FBar.ExpandedSize);
   AssertEquals('这次按下照常武装', Ord(twgsArmed), Ord(FBar.GestureStateForTest));
   FBar.CallMouseUp(p.X, p.Y);
+end;
+
+procedure TTyToolWindowEdgeTests.TestDraggingPastTheRoomStoresWhatIsShown;
+var
+  e: TPoint;
+  rb: TBarAccess;
+  room, rightW: Integer;
+begin
+  rb := TBarAccess.Create(FForm);
+  rb.Placement := twpRight;
+  rb.Parent := FForm;
+  rb.Controller := FCtl;
+  rb.Font.PixelsPerInch := 96;
+  NewWindowIn(rb, FForm);
+  rb.ExpandedSize := 300;
+  rightW := rb.Width;
+  NewWindow;
+  FBar.ExpandedSize := 200;
+  room := FForm.ClientWidth - rightW - StripPx - EdgePx;
+  AssertTrue('前提:两条栏放得下', room > 200);
+  e := FBar.EdgeRect.CenterPoint;
+  FBar.CallMouseDown(e.X, e.Y);
+  FBar.CallMouseMove(e.X + 2000, e.Y);
+  AssertEquals('栏停在编辑区压到 0 的地方', StripPx + EdgePx + room, FBar.Width);
+  AssertEquals('另一条栏不被挤窄', rightW, rb.Width);
+  AssertEquals('ExpandedSize 写的是看得见的那么宽', room, FBar.ExpandedSize);
+  FBar.CallMouseUp(e.X + 2000, e.Y);
+  AssertEquals('松开保持', room, FBar.ExpandedSize);
 end;
 
 initialization

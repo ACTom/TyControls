@@ -929,6 +929,13 @@ type
       对齐兄弟 − 同轴所有栏的固定部分;同轴的栏按各自**未收窄**的内容一起算,放不下按
       ExpandedSize 比例分,各自不低于 content-min。只影响这一次排布,不写回 ExpandedSize。 }
     function NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { 上面那一笔账:可用(设备像素),和同轴所有栏(含本栏)未收窄的内容之和、ExpandedSize 之和、
+      要内容的栏数。没有父控件、不参与分空间时答 False。 }
+    function AxisBudget(const AM: TTyToolWindowBarMetrics;
+      out AAvail, ASumDemand, ASumW, ACount: Integer): Boolean;
+    { 拉宽边最多拉到多宽(96 DPI 逻辑像素,同 ExpandedSize):编辑区压到 0、别的栏照旧不收窄的那么宽。
+      不知道(没有父控件、不参与分空间)时 -1。 }
+    function DragRoomLogical: Integer;
     { 参与分空间:看得见、Align 就是 Placement 要求的那个。 }
     function JoinsNarrowing: Boolean;
     { 父控件尺寸变了:重推(收窄跟着可用空间走)。 }
@@ -3621,7 +3628,8 @@ begin
   Result := IsControlVisible and (Align = PlacementAlign);
 end;
 
-function TTyCustomToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.AxisBudget(const AM: TTyToolWindowBarMetrics;
+  out AAvail, ASumDemand, ASumW, ACount: Integer): Boolean;
 var
   p: TWinControl;
   r: TRect;
@@ -3629,12 +3637,14 @@ var
   b: TTyCustomToolWindowBar;
   m: TTyToolWindowBarMetrics;
   side: Boolean;
-  avail, demand, sumDemand, sumW, n, i, v: Integer;
+  avail, demand, sumDemand, sumW, n, i: Integer;
 begin
-  Result := UnnarrowedContentPx(AM);
-  if Result <= 0 then Exit;
+  AAvail := 0;
+  ASumDemand := 0;
+  ASumW := 0;
+  ACount := 0;
   p := Parent;
-  if (p = nil) or not JoinsNarrowing then Exit;
+  if (p = nil) or not JoinsNarrowing then Exit(False);
   { 父控件调整后的客户区,沿栏的轴向(spec §6.2)。 }
   r := p.ClientRect;
   TWinControlAccess(p).AdjustClientRect(r);
@@ -3669,6 +3679,20 @@ begin
       Dec(avail, c.Height);
     { alClient(编辑区)不算:它可以被压到 0。 }
   end;
+  AAvail := avail;
+  ASumDemand := sumDemand;
+  ASumW := sumW;
+  ACount := n;
+  Result := True;
+end;
+
+function TTyCustomToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+var
+  avail, sumDemand, sumW, n, v: Integer;
+begin
+  Result := UnnarrowedContentPx(AM);
+  if Result <= 0 then Exit;
+  if not AxisBudget(AM, avail, sumDemand, sumW, n) then Exit;
   if sumDemand <= avail then Exit;           { 放得下就各用各的 }
   if avail < 0 then avail := 0;
   { 放不下:按 ExpandedSize 比例分,不超过自己要的,不低于 content-min。 }
@@ -3676,6 +3700,21 @@ begin
   else v := avail div n;
   if v < Result then Result := v;
   if Result < AM.ContentMin then Result := AM.ContentMin;
+end;
+
+function TTyCustomToolWindowBar.DragRoomLogical: Integer;
+var
+  m: TTyToolWindowBarMetrics;
+  avail, sumDemand, sumW, n, own: Integer;
+begin
+  m := Metrics;
+  if not AxisBudget(m, avail, sumDemand, sumW, n) then Exit(-1);
+  { 别的栏按各自未收窄的内容留着,剩下的(编辑区压到 0)都归本栏。 }
+  own := UnnarrowedContentPx(m);
+  if own < 0 then own := 0;
+  Result := avail - (sumDemand - own);
+  if Result < 0 then Result := 0;
+  Result := MulDiv(Result, 96, PPI);
 end;
 
 function TTyCustomToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
@@ -6300,7 +6339,7 @@ end;
 procedure TTyCustomToolWindowBar.EdgeDragTo(X, Y: Integer);
 var
   p: TPoint;
-  d, want, minL, v: Integer;
+  d, want, minL, v, room: Integer;
   wasSnapped: Boolean;
 begin
   p := ClientToScreen(Point(X, Y));
@@ -6322,6 +6361,19 @@ begin
   if FGesture.Snapped then v := FGesture.StartSize
   else if want < minL then v := minL
   else v := want;
+  { 拖过了可用空间(编辑区已经压到 0):栏停在那里,写进 ExpandedSize 的也停在那里 —— 不写一个用户
+    从没看见过、存进布局串、下次在大窗口里才露出来的宽(同 TCustomSplitter 钳到可用空间,
+    customsplitter.inc:253)。拖动开始时就已经被挤窄的,往外拖也不超过起点。 }
+  if not FGesture.Snapped then
+  begin
+    room := DragRoomLogical;
+    if (room >= 0) and (v > room) then
+    begin
+      if room < minL then room := minL;
+      if FGesture.StartSize > room then room := FGesture.StartSize;
+      if v > room then v := room;
+    end;
+  end;
   if v <> FExpandedSize then
     ExpandedSize := v            { 自己 Relayout }
   else if wasSnapped <> FGesture.Snapped then
