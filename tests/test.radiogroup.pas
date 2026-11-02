@@ -947,8 +947,9 @@ begin
   AssertTrue('the one moved in stays checked', b.Checked);
   AssertFalse('the other in that group is unchecked', a.Checked);
   a.GroupIndex := 2;
+  a.GroupIndex := 0;
   AssertFalse('an unchecked one moving checks nothing', a.Checked);
-  AssertTrue('and unchecks nothing', b.Checked);
+  AssertTrue('and unchecks nothing in the group it joins', b.Checked);
 end;
 
 initialization
