@@ -74,6 +74,7 @@ type
     procedure TestConstraintsExpandAndWrite;
     { #183 }
     procedure TestOnSetPropertyTextIsHandedTheButtonsOwnFont;
+    procedure TestTheFontRowReadsTheFontAfterASubRowEdit;
   end;
 
 implementation
@@ -428,6 +429,16 @@ begin
   AssertEquals('what the handler wrote stays', 13, FButton.Font.Size);
   AssertEquals('the face kept', 'Arial', FButton.Font.Name);
   AssertEquals('the row reads it', '13', FGrid.RowAt('Font.Size').Value);
+end;
+
+{ With Font.Name hidden the value list editor's own summary of the font row lost the name
+  (', 12'); the grid's text for the font is what the row shows. }
+procedure TPropertyGridButtonTest.TestTheFontRowReadsTheFontAfterASubRowEdit;
+begin
+  FGrid.HiddenProperties.Add('Font.Name');
+  FGrid.TypeInto(FGrid.RowAt('Font.Size'), '12');
+  AssertEquals('the button''s font size', 12, FButton.Font.Size);
+  AssertEquals('the font row reads the font', 'Arial, 12', FGrid.RowAt('Font').Value);
 end;
 
 procedure TPropertyGridButtonTest.TestFontStyleElementWritesTheFont;

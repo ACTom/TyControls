@@ -263,6 +263,11 @@ type
       default; a host that holds the real font -- the property grid -- starts from that, so
       what the rows do not show (CharSet, Pitch, Quality, Orientation) is not lost on OK. }
     procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); virtual;
+    { What a row whose value is made from its children reads once one of them has changed: a
+      font row's 'Name, Size Bold', a style row's 'Bold, Italic'. False when ARow is no such row
+      (it then keeps its value). A host whose rows stand for something else -- the property
+      grid reads them from the object -- answers its own way (#183). }
+    function ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean; virtual;
     { The two dialogs this control opens itself, so a descendant can supply its own and a test
       can answer without a modal window. ExecuteFontDialog starts from AFont and writes the
       choice back into it; ExecuteColorDialog likewise for AColor. True = the user confirmed. }
@@ -1415,6 +1420,11 @@ begin
     Result := False;
 end;
 
+function TTyCustomValueListEditor.ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean;
+begin
+  Result := ComposeValue(ARow, AValue);
+end;
+
 procedure TTyCustomValueListEditor.PropagateUp(ARow: TTyValueRow);
 var p, nextP: TTyValueRow; nv: string;
 begin
@@ -1422,7 +1432,7 @@ begin
   while p <> nil do
   begin
     nextP := p.Parent;   // capture BEFORE the OnValueChanged handler can restructure/free the tree
-    if ComposeValue(p, nv) and (nv <> p.Value) then
+    if ComposeRowValue(p, nv) and (nv <> p.Value) then
     begin
       p.Value := nv;
       if Assigned(FOnValueChanged) then FOnValueChanged(Self, p);
@@ -1438,7 +1448,7 @@ procedure TTyCustomValueListEditor.RecomputeComposite(ARow: TTyValueRow);
 var i: Integer; nv: string;
 begin
   for i := 0 to ARow.ChildCount - 1 do RecomputeComposite(ARow.Child[i]);
-  if ComposeValue(ARow, nv) and (nv <> ARow.Value) then
+  if ComposeRowValue(ARow, nv) and (nv <> ARow.Value) then
   begin
     ARow.Value := nv;
     if Assigned(FOnValueChanged) then FOnValueChanged(Self, ARow);

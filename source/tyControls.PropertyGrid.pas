@@ -463,6 +463,10 @@ type
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); override;
+    { A row of the grid's reads what the object holds, as everywhere else: the font row after a
+      Font.Size edit is the grid's text for the font (empty while several objects disagree), not
+      the value list editor's 'Name, Size' put together from the rows below it (#183). }
+    function ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { A right click makes the row under the mouse the current one, whichever menu then shows.
       A right click (or the menu key) on a collection or item row shows the built-in menu: Add
@@ -2863,6 +2867,16 @@ begin
     end;
   end;
   inherited SeedEditFont(ARow, AFont);
+end;
+
+function TTyCustomPropertyGrid.ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean;
+var nd: TTyPropertyNode;
+begin
+  nd := nil;
+  if FRows <> nil then nd := FRows.NodeOf(ARow);
+  if nd = nil then Exit(inherited ComposeRowValue(ARow, AValue));
+  AValue := FRows.ReadText(nd);
+  Result := True;
 end;
 
 function TTyCustomPropertyGrid.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;
