@@ -695,6 +695,14 @@ add('treemap', 'tm-label-box', "[R7-N] content labels on a plate (padding 4, a b
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
       { name: 'b', children: [{ name: 'b1', value: 5 }] }, { name: 'c', value: 6 }] }] } },
     ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('treemap', 'tm-label-box-pos', "[R7-N] the same with insideTopLeft and padding [2, 8]: the plate is laid out at the corner, the words hang off it padded",
+  { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear',
+    label: { position: 'insideTopLeft', color: '#333333', backgroundColor: '#eeeeee', padding: [2, 8] } })] },
+  ['tm', 'tmb'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
+      { name: 'b', children: [{ name: 'b1', value: 5 }] }, { name: 'c', value: 6 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 // ---- roam ----
 const GN = [{ name: 'a', x: 10, y: 10 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 50, y: 100 }];

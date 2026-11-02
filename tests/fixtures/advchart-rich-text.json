@@ -472,6 +472,15 @@
    "heightText": "12"
   },
   {
+   "text": "100.00 units here",
+   "px": 12,
+   "mono": false,
+   "width": "40574f5c28f5c28e",
+   "widthText": "93.23999999999998",
+   "height": "4028000000000000",
+   "heightText": "12"
+  },
+  {
    "text": "110",
    "px": 12,
    "mono": false,
@@ -191701,6 +191710,650 @@
      "y": 200
     }
    ]
+  },
+  {
+   "name": "ptr-label-confine",
+   "note": "a right y axis' long label and an x axis' label under a grid at the very bottom: confineInContainer pulls both boxes back into the chart",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisPointer": {
+      "show": true,
+      "value": "Wed",
+      "status": "show",
+      "label": {
+       "show": true,
+       "color": "#333333",
+       "backgroundColor": "#eeeeee"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "position": "right",
+     "axisPointer": {
+      "show": true,
+      "value": 100,
+      "status": "show",
+      "label": {
+       "show": true,
+       "formatter": "{value} units here",
+       "color": "#333333",
+       "backgroundColor": "#eeeeee"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       120,
+       200,
+       150
+      ]
+     }
+    ],
+    "grid": {
+     "bottom": 2,
+     "right": 40
+    }
+   },
+   "record": [
+    "pointerLabel"
+   ],
+   "match": null,
+   "texts": [
+    {
+     "component": "pointerLabel",
+     "owner": "yAxis0",
+     "attached": false,
+     "text": "100.00 units here",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407ecc28f5c28f5c",
+      "406a700000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "492.76",
+      "211.5"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "407ecc28f5c28f5c",
+       "xText": "492.76",
+       "y": "406a700000000000",
+       "yText": "211.5"
+      }
+     },
+     "align": null,
+     "verticalAlign": null,
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "4014000000000000",
+       "401c000000000000",
+       "4014000000000000",
+       "401c000000000000"
+      ],
+      "paddingText": [
+       "5",
+       "7",
+       "5",
+       "7"
+      ],
+      "backgroundColor": "#eeeeee",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "borderRadius": "4008000000000000",
+      "borderRadiusText": "3",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "405acf5c28f5c28e",
+      "widthText": "107.23999999999998",
+      "height": "4036000000000000",
+      "heightText": "22",
+      "corners": [
+       {
+        "x": "407ecc28f5c28f5c",
+        "xText": "492.76",
+        "y": "406a700000000000",
+        "yText": "211.5"
+       },
+       {
+        "x": "4082c00000000000",
+        "xText": "600",
+        "y": "406a700000000000",
+        "yText": "211.5"
+       },
+       {
+        "x": "4082c00000000000",
+        "xText": "600",
+        "y": "406d300000000000",
+        "yText": "233.5"
+       },
+       {
+        "x": "407ecc28f5c28f5c",
+        "xText": "492.76",
+        "y": "406d300000000000",
+        "yText": "233.5"
+       }
+      ],
+      "aabb": {
+       "x": "407ecc28f5c28f5c",
+       "xText": "492.76",
+       "y": "406a700000000000",
+       "yText": "211.5",
+       "width": "405acf5c28f5c290",
+       "widthText": "107.24000000000001",
+       "height": "4036000000000000",
+       "heightText": "22"
+      }
+     },
+     "bounds": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "405acf5c28f5c28e",
+      "widthText": "107.23999999999998",
+      "height": "4036000000000000",
+      "heightText": "22",
+      "corners": [
+       {
+        "x": "407ecc28f5c28f5c",
+        "xText": "492.76",
+        "y": "406a700000000000",
+        "yText": "211.5"
+       },
+       {
+        "x": "4082c00000000000",
+        "xText": "600",
+        "y": "406a700000000000",
+        "yText": "211.5"
+       },
+       {
+        "x": "4082c00000000000",
+        "xText": "600",
+        "y": "406d300000000000",
+        "yText": "233.5"
+       },
+       {
+        "x": "407ecc28f5c28f5c",
+        "xText": "492.76",
+        "y": "406d300000000000",
+        "yText": "233.5"
+       }
+      ],
+      "aabb": {
+       "x": "407ecc28f5c28f5c",
+       "xText": "492.76",
+       "y": "406a700000000000",
+       "yText": "211.5",
+       "width": "405acf5c28f5c290",
+       "widthText": "107.24000000000001",
+       "height": "4036000000000000",
+       "heightText": "22"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "405acf5c28f5c28e",
+       "widthText": "107.23999999999998",
+       "height": "4036000000000000",
+       "heightText": "22",
+       "corners": [
+        {
+         "x": "407ecc28f5c28f5c",
+         "xText": "492.76",
+         "y": "406a700000000000",
+         "yText": "211.5"
+        },
+        {
+         "x": "4082c00000000000",
+         "xText": "600",
+         "y": "406a700000000000",
+         "yText": "211.5"
+        },
+        {
+         "x": "4082c00000000000",
+         "xText": "600",
+         "y": "406d300000000000",
+         "yText": "233.5"
+        },
+        {
+         "x": "407ecc28f5c28f5c",
+         "xText": "492.76",
+         "y": "406d300000000000",
+         "yText": "233.5"
+        }
+       ],
+       "aabb": {
+        "x": "407ecc28f5c28f5c",
+        "xText": "492.76",
+        "y": "406a700000000000",
+        "yText": "211.5",
+        "width": "405acf5c28f5c290",
+        "widthText": "107.24000000000001",
+        "height": "4036000000000000",
+        "heightText": "22"
+       },
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": "4008000000000000",
+       "rRawText": "3",
+       "r4": [
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000"
+       ],
+       "r4Text": [
+        "3",
+        "3",
+        "3",
+        "3"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "100.00 units here",
+       "x": "401c000000000000",
+       "xText": "7",
+       "y": "4026000000000000",
+       "yText": "11",
+       "gx": "407f3c28f5c28f5c",
+       "gxText": "499.76",
+       "gy": "406bd00000000000",
+       "gyText": "222.5",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "401c000000000000",
+        "xText": "7",
+        "y": "4014000000000000",
+        "yText": "5",
+        "width": "40574f5c28f5c28e",
+        "widthText": "93.23999999999998",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "pointerLabel",
+     "owner": "xAxis0",
+     "attached": false,
+     "text": "Wed",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407ce4e81b4e81b4",
+      "4077a00000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "462.3066666666666",
+      "378"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "407ce4e81b4e81b4",
+       "xText": "462.3066666666666",
+       "y": "4077a00000000000",
+       "yText": "378"
+      }
+     },
+     "align": null,
+     "verticalAlign": null,
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "4014000000000000",
+       "401c000000000000",
+       "4014000000000000",
+       "401c000000000000"
+      ],
+      "paddingText": [
+       "5",
+       "7",
+       "5",
+       "7"
+      ],
+      "backgroundColor": "#eeeeee",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "borderRadius": "4008000000000000",
+      "borderRadiusText": "3",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "40435c28f5c28f5c",
+      "widthText": "38.72",
+      "height": "4036000000000000",
+      "heightText": "22",
+      "corners": [
+       {
+        "x": "407ce4e81b4e81b4",
+        "xText": "462.3066666666666",
+        "y": "4077a00000000000",
+        "yText": "378"
+       },
+       {
+        "x": "407f506d3a06d3a0",
+        "xText": "501.02666666666664",
+        "y": "4077a00000000000",
+        "yText": "378"
+       },
+       {
+        "x": "407f506d3a06d3a0",
+        "xText": "501.02666666666664",
+        "y": "4079000000000000",
+        "yText": "400"
+       },
+       {
+        "x": "407ce4e81b4e81b4",
+        "xText": "462.3066666666666",
+        "y": "4079000000000000",
+        "yText": "400"
+       }
+      ],
+      "aabb": {
+       "x": "407ce4e81b4e81b4",
+       "xText": "462.3066666666666",
+       "y": "4077a00000000000",
+       "yText": "378",
+       "width": "40435c28f5c28f60",
+       "widthText": "38.72000000000003",
+       "height": "4036000000000000",
+       "heightText": "22"
+      }
+     },
+     "bounds": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "40435c28f5c28f5c",
+      "widthText": "38.72",
+      "height": "4036000000000000",
+      "heightText": "22",
+      "corners": [
+       {
+        "x": "407ce4e81b4e81b4",
+        "xText": "462.3066666666666",
+        "y": "4077a00000000000",
+        "yText": "378"
+       },
+       {
+        "x": "407f506d3a06d3a0",
+        "xText": "501.02666666666664",
+        "y": "4077a00000000000",
+        "yText": "378"
+       },
+       {
+        "x": "407f506d3a06d3a0",
+        "xText": "501.02666666666664",
+        "y": "4079000000000000",
+        "yText": "400"
+       },
+       {
+        "x": "407ce4e81b4e81b4",
+        "xText": "462.3066666666666",
+        "y": "4079000000000000",
+        "yText": "400"
+       }
+      ],
+      "aabb": {
+       "x": "407ce4e81b4e81b4",
+       "xText": "462.3066666666666",
+       "y": "4077a00000000000",
+       "yText": "378",
+       "width": "40435c28f5c28f60",
+       "widthText": "38.72000000000003",
+       "height": "4036000000000000",
+       "heightText": "22"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40435c28f5c28f5c",
+       "widthText": "38.72",
+       "height": "4036000000000000",
+       "heightText": "22",
+       "corners": [
+        {
+         "x": "407ce4e81b4e81b4",
+         "xText": "462.3066666666666",
+         "y": "4077a00000000000",
+         "yText": "378"
+        },
+        {
+         "x": "407f506d3a06d3a0",
+         "xText": "501.02666666666664",
+         "y": "4077a00000000000",
+         "yText": "378"
+        },
+        {
+         "x": "407f506d3a06d3a0",
+         "xText": "501.02666666666664",
+         "y": "4079000000000000",
+         "yText": "400"
+        },
+        {
+         "x": "407ce4e81b4e81b4",
+         "xText": "462.3066666666666",
+         "y": "4079000000000000",
+         "yText": "400"
+        }
+       ],
+       "aabb": {
+        "x": "407ce4e81b4e81b4",
+        "xText": "462.3066666666666",
+        "y": "4077a00000000000",
+        "yText": "378",
+        "width": "40435c28f5c28f60",
+        "widthText": "38.72000000000003",
+        "height": "4036000000000000",
+        "heightText": "22"
+       },
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": "4008000000000000",
+       "rRawText": "3",
+       "r4": [
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000"
+       ],
+       "r4Text": [
+        "3",
+        "3",
+        "3",
+        "3"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "Wed",
+       "x": "401c000000000000",
+       "xText": "7",
+       "y": "4026000000000000",
+       "yText": "11",
+       "gx": "407d54e81b4e81b4",
+       "gxText": "469.3066666666666",
+       "gy": "4078500000000000",
+       "gyText": "389",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "401c000000000000",
+        "xText": "7",
+        "y": "4014000000000000",
+        "yText": "5",
+        "width": "4038b851eb851eb8",
+        "widthText": "24.72",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    }
+   ],
+   "looks": true
   },
   {
    "name": "ptr-label-single",
