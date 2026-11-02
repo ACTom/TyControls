@@ -214,6 +214,9 @@ type
       const AText: string; AAskApp: Boolean = True);
     function GetRoot: TPersistent;
     function GetRoots(AIndex: Integer): TPersistent;
+    { OnGetPropertyRow once more, for a property row whose value has just been re-read and has
+      changed: a DisplayValue made from the value follows it (#183). }
+    procedure AskRowAgain(ANode: TTyPropertyNode);
   protected
     { The three ways a descendant (TTyCustomPropertyGrid's own, which hands them to the grid's
       virtual methods) takes part in the mapping. BuildRow fills ANode's row (ANode.Row exists,
@@ -317,7 +320,8 @@ type
     property OnGetComponentNames: TTyGetComponentNamesEvent read FOnGetComponentNames
       write FOnGetComponentNames;
     { Called once per property row (not for a set's elements or a collection's items), after the
-      row is filled. }
+      row is filled -- and again each time the row's value is re-read and has changed (after a
+      write, a Refresh), so a DisplayValue made from the value follows it. }
     property OnGetPropertyRow: TTyGetPropertyRowEvent read FOnGetPropertyRow
       write FOnGetPropertyRow;
     property OnGetPropertyText: TTyGetPropertyTextEvent read FOnGetPropertyText
@@ -1996,13 +2000,34 @@ begin
   AText := ReadText(ANode);
 end;
 
+procedure TTyPropertyRows.AskRowAgain(ANode: TTyPropertyNode);
+var h: TObject;
+begin
+  if not Assigned(FOnGetPropertyRow) or (ANode.FRow = nil) or (ANode.FPropInfo = nil) then Exit;
+  if ANode.FKind in [pnkSetElement, pnkCollectionItem, pnkCategory] then Exit;   // never asked
+  try
+    h := HolderIn(ANode, 0);   // as at the build: the first object's
+  except
+    h := nil;
+  end;
+  if h is TPersistent then FOnGetPropertyRow(FSender, TPersistent(h), ANode.FPropInfo, ANode.FRow);
+end;
+
 procedure TTyPropertyRows.RefreshValues(AExcept: TTyValueRow);
-var i: Integer; n: TTyPropertyNode; names: TStringList;
+var i: Integer; n: TTyPropertyNode; names: TStringList; t: string;
 begin
   for i := 0 to FNodes.Count - 1 do
   begin
     n := TTyPropertyNode(FNodes[i]);
-    if (n.FRow <> nil) and (n.FRow <> AExcept) then n.FRow.Value := ReadText(n);
+    if (n.FRow <> nil) and (n.FRow <> AExcept) then
+    begin
+      t := ReadText(n);
+      if t <> n.FRow.Value then
+      begin
+        n.FRow.Value := t;
+        AskRowAgain(n);
+      end;
+    end;
     if (n.FRow <> nil) and (n.FKind = pnkComponent) then
     begin
       names := TStringList.Create;
@@ -2832,6 +2857,11 @@ begin
     RebuildRows(True)
   else
   begin
+    { The row being committed is asked about its new value now, before the editor stores it
+      (#183: a DisplayValue made from the value follows it). }
+    if (AExceptRow <> nil) and (AExceptRow = ANode.Row) and (AKind <> pwkStrings)
+      and (AExceptRow.Value <> AText) then
+      FRows.AskRowAgain(ANode);
     { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
       being committed is left for the editor, which compares AText with its old value. }
     FRows.RefreshValues(AExceptRow);

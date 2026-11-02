@@ -135,7 +135,7 @@ OnPropertyError(Sender; AInstance: TPersistent; const APropName: string; E: Exce
 procedure (Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo; ARow: TTyValueRow)
 ```
 
-每个属性的行建好之后(连同它下面的行)调用一次;集合的元素行、集合项那一行、分类标题行不调。可以改 `ARow.EditorKind`、`EnumValues`、`DisplayValue`、样式(`Bold`、`TextColor`、`ImageIndex`),或者把行设成只读。例如把某个字符串属性换成对话框编辑:
+每个属性的行建好之后(连同它下面的行)调用一次;集合的元素行、集合项那一行、分类标题行不调。之后这一行的值每次重读出来变了(写回之后、`Refresh`),还会再问一次,所以按值算出来的 `DisplayValue` 会跟着值走。可以改 `ARow.EditorKind`、`EnumValues`、`DisplayValue`、样式(`Bold`、`TextColor`、`ImageIndex`),或者把行设成只读。例如把某个字符串属性换成对话框编辑:
 
 ```pascal
 if APropInfo^.Name = 'FileName' then ARow.EditorKind := vekDialog;

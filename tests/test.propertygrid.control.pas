@@ -46,6 +46,8 @@ type
       var AShow: Boolean);
     function Lines(const AText: string): string;
     procedure RebuildGrid(Sender: TObject);
+    procedure ShowInMm(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      ARow: TTyValueRow);
     procedure CountAsDialog(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
       ARow: TTyValueRow);
     procedure EditCount(Sender: TObject; ARow: TTyValueRow; AInstance: TPersistent;
@@ -90,6 +92,7 @@ type
     procedure TestAWriteThatChangesTheStructureRebuildsTheRows;
     procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
     procedure TestTheGridsOwnLinksOutliveTheSelection;
+    procedure TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
   end;
 
 implementation
@@ -204,6 +207,13 @@ end;
 procedure TPropertyGridControlTest.RebuildGrid(Sender: TObject);
 begin
   FGrid.Rebuild;
+end;
+
+procedure TPropertyGridControlTest.ShowInMm(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; ARow: TTyValueRow);
+begin
+  if (APropInfo^.Name = 'Zeta') or (APropInfo^.Name = 'Width') then
+    ARow.DisplayValue := IntToStr(GetOrdProp(AInstance, APropInfo)) + ' mm';
 end;
 
 procedure TPropertyGridControlTest.CountAsDialog(Sender: TObject; AInstance: TPersistent;
@@ -835,6 +845,24 @@ begin
   end;
   AssertNull('the selection let go of it', FGrid.SelectedObject);
   AssertEquals('no rows', 0, FGrid.RowCount);
+end;
+
+{ Doc section 5.3: OnGetPropertyRow may set DisplayValue. One made from the value has to follow it
+  -- on the row edited, and on a row a setter moved -- or the edit looks as if it did nothing. }
+procedure TPropertyGridControlTest.TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
+begin
+  FGrid.OnGetPropertyRow := @ShowInMm;
+  FGrid.Rebuild;
+  AssertEquals('shown as the handler says', '0 mm', FGrid.RowAt('Zeta').EffectiveValue);
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('written', 42, FObj.Zeta);
+  AssertEquals('the row edited shows the new value', '42 mm', FGrid.RowAt('Zeta').EffectiveValue);
+  FGrid.Select(FGrid.RowAt('AutoGrow'));
+  FGrid.Press(VK_SPACE);                 // AutoGrow's setter moves Width to 999
+  AssertEquals('a row a setter moved too', '999 mm', FGrid.RowAt('Width').EffectiveValue);
+  FObj.Zeta := 7;
+  FGrid.Refresh;
+  AssertEquals('and after a Refresh', '7 mm', FGrid.RowAt('Zeta').EffectiveValue);
 end;
 
 initialization
