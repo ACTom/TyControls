@@ -861,20 +861,21 @@ begin
   end;
 end;
 
-{ Found while wiring PageIndex: the selection is pinned to the POSITION (the documented
-  rule), but only the HEADER was following it. Visible belongs to the page object and
-  nothing re-assigned it after the array was permuted, so dragging a tab past the selected
-  one left the highlighted tab and the shown page disagreeing until the next click. }
+{ Found while wiring PageIndex: the header and the shown page must agree after a reorder --
+  Visible belongs to the page object, and nothing re-assigned it after the array was permuted.
+  #173: the selection follows its page, as LCL's ActivePage does (it was pinned to the slot,
+  which changed the active page with no event). }
 procedure TTyTabMemberParity.ReorderKeepsTheShownPageOnTheSelectedTab;
+var a: TTyCustomTabSheet;
 begin
   BuildPager(3);
   FPager.ActivePageIndex := 0;
+  a := FPager.ActivePage;
   FPager.MovePage(0, 2);
-  AssertEquals('the selection stays on slot 0', 0, FPager.ActivePageIndex);
-  AssertTrue('and the page now IN slot 0 is the one that is shown',
-    FPager.Pages[0].Visible);
-  AssertFalse('the moved page must have been hidden with its slot',
-    FPager.Pages[2].Visible);
+  AssertEquals('the selection follows the page to slot 2', 2, FPager.ActivePageIndex);
+  AssertSame('it is the same page', a, FPager.ActivePage);
+  AssertTrue('and it is the one shown', FPager.Pages[2].Visible);
+  AssertFalse('the page now in slot 0 is hidden', FPager.Pages[0].Visible);
 end;
 
 procedure TTyTabMemberParity.PageGeometryIsNotStreamed;
