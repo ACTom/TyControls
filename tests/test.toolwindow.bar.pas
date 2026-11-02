@@ -212,6 +212,8 @@ type
     procedure TestAContentMinOnlyThemeChangeRelayouts;
     procedure TestExpandedSizeBelowTheFloorKeepsWidthOnTheDerivation;
     procedure TestOnChangeFromANewWindowSeesTheNewWidth;
+    { AutoSize 问到的首选尺寸就是推导出来的那一边:开着它,LCL 的自动尺寸不跟推导打架。 }
+    procedure TestThePreferredSizeIsTheDerivedSize;
     procedure TestDesignerResizeDoesNotWriteBackUnderAForeignAlign;
     procedure TestAStrayChildIsHiddenAtRunTime;
     procedure TestIsActiveFollowsTheBarsCurrentPage;
@@ -2002,6 +2004,32 @@ begin
   AssertEquals('Width 就是推导值', FBar.CallDerivedAxisPx, FBar.Width);
   FBar.Placement := twpRight;
   AssertEquals('换一边也一样', FBar.CallDerivedAxisPx, FBar.Width);
+end;
+
+procedure TTyToolWindowBarTests.TestThePreferredSizeIsTheDerivedSize;
+var
+  a: TProbeWindow;
+  w, h: Integer;
+begin
+  a := NewWindow;
+  a.SetBounds(0, 0, 50, 50);
+  FBar.ExpandedSize := 240;
+  FBar.AutoSize := True;
+  w := 0;
+  h := 0;
+  FBar.GetPreferredSize(w, h, True);
+  AssertEquals('侧栏:首选宽就是推导出来的宽', StripPx + EdgePx + 240, w);
+  FBar.Collapsed := True;
+  FBar.GetPreferredSize(w, h, True);
+  AssertEquals('收起:首选宽跟着变', FBar.Width, w);
+  FBar.Collapsed := False;
+  a.Parent := nil;
+  FBar.Placement := twpBottom;
+  a.Parent := FBar;
+  FBar.ExpandedSize := 200;
+  FBar.GetPreferredSize(w, h, True);
+  AssertEquals('底栏:首选高就是推导出来的高', FBar.Height, h);
+  AssertTrue('前提:底栏推导出来的高不是 0', FBar.Height > 0);
 end;
 
 procedure TTyToolWindowBarTests.TestOnChangeFromANewWindowSeesTheNewWidth;

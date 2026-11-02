@@ -1325,6 +1325,11 @@ type
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
       MaxHeight: TConstraintSize); override;
+    { AutoSize 问到的首选尺寸:沿轴那一边就是推导出来的那一边(spec §6.1),另一边 0(由 Align 定)。
+      不问子控件 —— 窗口是 alClient,尺寸从栏来,不是反过来;继承的那一份按窗口的首选尺寸答,
+      开着 AutoSize 时 LCL 的自动尺寸就跟推导来回打架。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure Loaded; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure SetController(AValue: TTyCustomStyleController); override;
@@ -4168,6 +4173,21 @@ begin
       if not SizesAsCollapsed then Inc(lo, m.Edge + m.ContentMin);
     end;
     if lo > MinWidth then MinWidth := lo;
+  end;
+end;
+
+procedure TTyCustomToolWindowBar.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+begin
+  if FPlacement = twpBottom then
+  begin
+    PreferredWidth := 0;
+    PreferredHeight := DerivedAxisPx;
+  end
+  else
+  begin
+    PreferredWidth := DerivedAxisPx;
+    PreferredHeight := 0;
   end;
 end;
 
