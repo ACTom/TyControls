@@ -12661,6 +12661,7 @@ type
     procedure TestOnScrollHintAsksWhileTheThumbIsDragged;
     procedure TestEveryEditorReportsItsChange;
     procedure TestOnCanEditCellGuardsPasteReplaceAndFill;
+    procedure TestCutAndTheStarsAskOnCanEditCell;
     procedure TestAddSortColumnAsksOnCanSort;
     procedure TestTheEndOfSizeEventsNeedADrag;
   end;
@@ -12866,6 +12867,30 @@ begin
   FG.Row := 1;
   FG.PasteFromText('x');
   AssertEquals('paste leaves it too', '', FG.Cells[0, 1]);
+end;
+
+procedure TGrid168Test.TestCutAndTheStarsAskOnCanEditCell;
+var r: TRect;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.Cells[0, 0] := 'a';
+  FG.Cells[1, 0] := 'a';
+  (FG.Header.Columns.Items[0] as TTyGridColumn).EditorKind := gekRating;
+  FG.Cells[0, 1] := '2';
+  FG.ForceUpdateScrollBars;
+  FG.OnCanEditCell := @RefuseCol0Edit;
+  FG.MoveCursor(0, 0);
+  FG.AnchorSelection;
+  FG.PressKeyShift(VK_RIGHT);
+  SetClipboardChecked('sentinel');
+  FG.CutToClipboard;
+  AssertEquals('cut leaves a cell OnCanEditCell refuses', 'a', FG.Cells[0, 0]);
+  AssertEquals('and clears the others', '', FG.Cells[1, 0]);
+  r := FG.RatingStarRect(0, 1, 4);
+  AssertTrue('setup: the fourth star', not IsRectEmpty(r));
+  FG.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('a click on a star of a refused cell changes nothing', '2', FG.Cells[0, 1]);
 end;
 
 procedure TGrid168Test.TestAddSortColumnAsksOnCanSort;
