@@ -3423,6 +3423,13 @@ end;
 procedure TTyCustomTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
 begin
   ModifierChanged(Key, Shift);
+  { #185: 修饰键松开了，之后来的字符就不是带着它打的。Windows 的 Alt+小键盘码(Alt+0233 = é)
+    在 Alt 松开后才送字符，中间没有自己的 KeyDown:不能还按数字键那次的 Alt 丢掉它 }
+  case Key of
+    VK_MENU, VK_LMENU, VK_RMENU: Exclude(FLastKeyShift, ssAlt);
+    VK_CONTROL, VK_LCONTROL, VK_RCONTROL: Exclude(FLastKeyShift, ssCtrl);
+    VK_LWIN, VK_RWIN: Exclude(FLastKeyShift, ssMeta);
+  end;
   inherited KeyUp(Key, Shift);
   { 这个键的字符没来(widgetset 不送、或者按下时被别处拿走):别留给下一个键 }
   FKeyDownHandled := False;

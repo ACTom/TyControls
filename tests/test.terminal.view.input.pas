@@ -82,6 +82,7 @@ type
     procedure TestReportedWheelPixelsStayInTheGrid;
     { #185 }
     procedure TestWindowKeysAreLeftToWindows;
+    procedure TestAnAltCodeCharacterIsTyped;
   end;
 
 implementation
@@ -843,6 +844,35 @@ begin
   F.View.SetPlatform(False, False);
   Press(VK_F4, [ssAlt]);
   AssertTrue('elsewhere the window manager takes Alt+F4 before us: sent as ever', Sent);
+end;
+
+{ #185: Alt held, digits on the number pad, Alt released: Windows posts the character after
+  Alt comes up, with no key-down of its own. The Alt of the digits' key-downs must not drop it. }
+procedure TTyTerminalViewInputTests.TestAnAltCodeCharacterIsTyped;
+var
+  k: Word;
+begin
+  F.View.SetPlatform(False, True);
+  F.View.KeyDownNow(VK_MENU, [ssAlt]);
+  k := Press(VK_NUMPAD0, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD0, [ssAlt]);
+  Press(VK_NUMPAD2, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD2, [ssAlt]);
+  Press(VK_NUMPAD3, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD3, [ssAlt]);
+  Press(VK_NUMPAD3, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD3, [ssAlt]);
+  AssertEquals('the digits send nothing', '', Hex);
+  AssertEquals('and are left to Windows', VK_NUMPAD0, k);
+  F.View.KeyUpNow(VK_MENU, []);
+  TypeIt(#$C3#$A9);
+  AssertEquals('the character is typed', 'C3 A9', Hex);
+  F.ClearRecords;
+  { still: a character typed while Ctrl is down is dropped }
+  F.View.KeyDownNow(VK_CONTROL, [ssCtrl]);
+  Press(Ord('B'), [ssCtrl, ssShift]);
+  TypeIt('B');
+  AssertEquals('Ctrl held: dropped', '', Hex);
 end;
 
 initialization
