@@ -471,6 +471,10 @@ type
       Font.Size edit is the grid's text for the font (empty while several objects disagree), not
       the value list editor's 'Name, Size' put together from the rows below it (#183). }
     function ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean; override;
+    { Every colour identifier, as LCL's colour property editor offers them (graphpropedits.pas,
+      TColorPropertyEditor.GetValues -> GetColorValues): the basic and extended colours, clNone,
+      clDefault and the system colours -- so a colour can follow the theme again (#183). }
+    procedure GetRowColors(ARow: TTyValueRow; AItems: TStrings); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { A right click makes the row under the mouse the current one, whichever menu then shows.
       A right click (or the menu key) on a collection or item row shows the built-in menu: Add
@@ -727,7 +731,7 @@ function TyPropertyGridCategoryOf(const APropName: string; AKind: TTypeKind): st
 implementation
 
 uses
-  tyControls.StyleModel, tyControls.StrConsts, tyControls.Dialogs;
+  tyControls.StyleModel, tyControls.StrConsts, tyControls.Dialogs, tyControls.ColorBox;
 
 function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 begin
@@ -2907,6 +2911,17 @@ begin
   if nd = nil then Exit(inherited ComposeRowValue(ARow, AValue));
   AValue := FRows.ReadText(nd);
   Result := True;
+end;
+
+procedure TTyCustomPropertyGrid.GetRowColors(ARow: TTyValueRow; AItems: TStrings);
+begin
+  if (FRows = nil) or (FRows.NodeOf(ARow) = nil) then
+  begin
+    inherited GetRowColors(ARow, AItems);   // a row the grid did not build
+    Exit;
+  end;
+  TyBuildColorPalette(AItems, [cbStandardColors, cbExtendedColors, cbSystemColors, cbIncludeNone,
+    cbIncludeDefault]);
 end;
 
 function TTyCustomPropertyGrid.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;

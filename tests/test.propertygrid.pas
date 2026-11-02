@@ -13,7 +13,7 @@ interface
 
 uses
   Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms, fpcunit, testregistry,
-  tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid,
+  tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.StrConsts,
   test.propertygrid.fixtures;
 
 type
@@ -73,6 +73,7 @@ type
     procedure TestASetterThatRaisesLeavesTheRowAlone;
     procedure TestReadOnlyRowDoesNotOpen;
     procedure TestAnEditInProgressIsWrittenBeforeTheSelectionMoves;
+    procedure TestAColourCanGoBackToDefaultNoneOrASystemColour;
   end;
 
 implementation
@@ -295,6 +296,29 @@ begin
     FGrid.SelectedObject := nil;
     other.Free;
   end;
+end;
+
+{ #183: the list offers the colour identifiers, as LCL's colour property editor does
+  (graphpropedits.pas, TColorPropertyEditor.GetValues -> GetColorValues): clDefault, clNone and
+  the system colours too, or a colour once picked could never follow the theme again. }
+procedure TPropertyGridEditTest.TestAColourCanGoBackToDefaultNoneOrASystemColour;
+var lst: TTyListBox;
+begin
+  FGrid.PickFromDropdown(FGrid.RowAt('Tint'), 'clDefault');
+  AssertEquals('clDefault written', clDefault, FObj.Tint);
+  AssertEquals('the row names it', 'clDefault', FGrid.RowAt('Tint').Value);
+  FGrid.ClickValue(FGrid.RowAt('Tint'));
+  lst := FGrid.Dropped;
+  AssertNotNull('dropped', lst);
+  AssertEquals('the value held is the one marked, not black (its RGB)', 'clDefault',
+    lst.Items[lst.ItemIndex]);
+  AssertTrue('clBtnFace offered', lst.Items.IndexOf('clBtnFace') >= 0);
+  AssertEquals('More… still last', rsColorComboMore, lst.Items[lst.Items.Count - 1]);
+  FGrid.CloseEditor;
+  FGrid.PickFromDropdown(FGrid.RowAt('Tint'), 'clBtnFace');
+  AssertEquals('a system colour', clBtnFace, FObj.Tint);
+  FGrid.PickFromDropdown(FGrid.RowAt('Tint'), 'clNone');
+  AssertEquals('clNone', clNone, FObj.Tint);
 end;
 
 procedure TPropertyGridEditTest.TestTypedIntegerIsWritten;

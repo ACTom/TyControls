@@ -367,6 +367,8 @@ type
     function ShownKeys: string;
     { A click on the '…' painted at the end of a font or dialog row. }
     procedure ClickPaintedEllipsis(ARow: TTyValueRow);
+    { Close whatever cell editor or list is open, committing nothing. }
+    procedure CloseEditor;
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -932,6 +934,11 @@ begin
   y := (r.Top + r.Bottom) div 2;
   MouseDown(mbLeft, [], x, y);
   MouseUp(mbLeft, [], x, y);
+end;
+
+procedure TPGGrid.CloseEditor;
+begin
+  EndEdit(False);
 end;
 
 function TPGGrid.ShownKeys: string;

@@ -44,7 +44,7 @@ PropGrid.SelectObjects([Button1, Button2]);      // 同时改两个按钮
 | 布尔 | `False` / `True` 下拉;选中这一行按**空格**直接切换 |
 | 枚举 | 下拉,选项是这个枚举的全部名字 |
 | 集合 | 显示成 `[akLeft,akTop]`;展开后每个元素一行布尔,改哪个元素就写回整个集合 |
-| `TColor` | 色板下拉,最后一项「更多…」打开取色对话框 |
+| `TColor` | 颜色下拉,列出所有颜色标识符:16 种基本色、扩展色、`clNone`、`clDefault` 和系统颜色(`clBtnFace`、`clWindow`……),和 Lazarus 的对象查看器一样。最后一项「更多…」打开取色对话框 |
 | `TFont` | 字体行:`…` 打开字体对话框;展开后 `Name`、`Size`、`Style` 等各占一行。不管从哪里改,都是先改一份副本,再整体写回 |
 | 其他 `TPersistent` 子对象(`Constraints`、`BorderSpacing` 等),以及带 `csSubComponent` 的子组件 | 显示 `(TSizeConstraints)` 这样的类名,本行只读;展开后是子对象自己的属性,可以直接改 |
 | `TCollection`(表格的列、状态栏的面板) | 显示 `(3 items)`;每一项一行,显示项的 `DisplayName`,再展开就是这一项的属性。项可以增删、调整顺序(§8) |

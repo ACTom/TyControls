@@ -271,6 +271,10 @@ type
       (it then keeps its value). A host whose rows stand for something else -- the property
       grid reads them from the object -- answers its own way (#183). }
     function ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean; virtual;
+    { The colours a colour row's list offers (name in AItems[i], the TColor in Objects[i], as
+      TyAddColorItem stores it); "More…" is added after them. Default: the 16 basic colours. The
+      property grid offers every colour identifier, as LCL's colour property editor does (#183). }
+    procedure GetRowColors(ARow: TTyValueRow; AItems: TStrings); virtual;
     { The two dialogs this control opens itself, so a descendant can supply its own and a test
       can answer without a modal window. ExecuteFontDialog starts from AFont and writes the
       choice back into it; ExecuteColorDialog likewise for AColor. True = the user confirmed. }
@@ -1653,8 +1657,13 @@ end;
 
 { vekColor: a palette dropdown (swatch per colour) whose LAST row is a "more…" entry
   (TyColorMoreMarker) that opens the themed colour dialog. }
+procedure TTyCustomValueListEditor.GetRowColors(ARow: TTyValueRow; AItems: TStrings);
+begin
+  TyAddDefaultColorPalette(AItems);
+end;
+
 procedure TTyCustomValueListEditor.BeginColorDropdown(AFlat: Integer);
-var cell: TRect; rows, idx: Integer;
+var cell: TRect; rows, idx, i: Integer; cur: TColor;
 begin
   FEditFlat := AFlat;
   FDropMode := True;
@@ -1672,8 +1681,14 @@ begin
   FColorList.Controller := Controller;
   FDropSeeding := True;
   FColorList.Items.Clear;
-  TyAddDefaultColorPalette(FColorList.Items);
-  idx := TySelectColorIndex(FColorList.Items, StringToColorDef(FFlatRow[AFlat].Value, clBlack));
+  GetRowColors(FFlatRow[AFlat], FColorList.Items);
+  cur := StringToColorDef(FFlatRow[AFlat].Value, clBlack);
+  { The entry that IS the value first: clDefault, clNone and a system colour have an RGB of
+    another entry's (clDefault's is black's). Else by RGB, or added. }
+  idx := -1;
+  for i := 0 to FColorList.Items.Count - 1 do
+    if TyColorOfItem(FColorList.Items, i) = cur then begin idx := i; Break; end;
+  if idx < 0 then idx := TySelectColorIndex(FColorList.Items, cur);
   { #68: the translated "More…" (it was a Chinese literal), read here rather than kept from
     the constructor so a language picked later still reaches it -- as TTyColorComboBox does. }
   TyAddColorItem(FColorList.Items, rsColorComboMore, TyColorMoreMarker);   // "more…", kept LAST
