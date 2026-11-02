@@ -55,6 +55,9 @@ type
     procedure TestTargetsAndHostsAsUpstream;
     procedure TestAlignedAxesAsUpstream;
     procedure TestFilterModesAsUpstream;
+    { [spec 259] an encode key written as a list: every dimension it reaches
+      is on the axis }
+    procedure TestEncodeListsAsUpstream;
     procedure TestGalleryAsUpstream;
     procedure TestSliderMoveShiftsKeepingTheSpan;
     procedure TestAnUntypedDataZoomIsASlider;
@@ -379,7 +382,8 @@ procedure TAdvChartDataZoomWindowOracleTest.CheckSeries(ACase: TJSONObject);
 var
   arr, ri, lay, em, vals: TJSONArray;
   s, it: TJSONObject;
-  i, k, j, si, col, n, found: Integer;
+  i, k, j, si, col, n, found, place, q: Integer;
+  cols: TTyIntegerArray;
   store: TTyDataStore;
   cnt: Integer;
   typ: string;
@@ -483,6 +487,14 @@ begin
       for j := 0 to em.Count - 1 do
       begin
         col := store.DimIndexOf(em.Objects[j].Strings['coordDim']);
+        { [spec 259] a coordinate written as a list has a dimension per
+          entry, mapDimensionsAll's order: the n-th of them is the n-th
+          column of the coordinate here }
+        place := 0;
+        for q := 0 to j - 1 do
+          if em.Objects[q].Strings['coordDim'] = em.Objects[j].Strings['coordDim'] then Inc(place);
+        cols := store.DimsOfCoord(em.Objects[j].Strings['coordDim']);
+        if place <= High(cols) then col := cols[place];
         vals := em.Objects[j].Arrays['values'];
         Inc(FCompared);
         if col < 0 then
@@ -566,6 +578,21 @@ begin
         mark := e;
       end;
       Inc(FCompared);
+      { [spec 259] A KEPT ROW WHOSE POINT IS OFF THE PLOT draws no symbol: a
+        scatter clips (SymbolDraw's symbolNeedsDraw against the grid's
+        area) -- 'weakFilter' keeps a row straddling the window }
+      if typ = 'scatter' then
+      begin
+        PlotOf(ACase, s, px, py, pw, ph);
+        x := HexOf(TJSONArray(lay.Items[k]).Items[0]);
+        y := HexOf(TJSONArray(lay.Items[k]).Items[1]);
+        if not ((x >= px) and (x <= px + pw) and (y >= py) and (y <= py + ph)) then
+        begin
+          if found <> 0 then
+            Miss(Format('s%d raw %d: off the plot upstream, %d marks here', [si, ri.Integers[k], found]));
+          Continue;
+        end;
+      end;
       if found <> 1 then
       begin
         Miss(Format('s%d raw %d: %d marks here', [si, ri.Integers[k], found]));
@@ -688,6 +715,11 @@ end;
 procedure TAdvChartDataZoomWindowOracleTest.TestFilterModesAsUpstream;
 begin
   RunCases(['F']);
+end;
+
+procedure TAdvChartDataZoomWindowOracleTest.TestEncodeListsAsUpstream;
+begin
+  RunCases(['L']);
 end;
 
 procedure TAdvChartDataZoomWindowOracleTest.TestGalleryAsUpstream;

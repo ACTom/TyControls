@@ -1967,108 +1967,9 @@ begin
   Result := TJSONString.Create(TyCustomColorText(Cardinal(SeriesColor(si))));
 end;
 
-procedure TTyCustomAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
-var
-  node, enc: TJSONObject;
-  d, names: TJSONData;
-  outDims: TTySeriesDimArray;
-  dim: TTySeriesDim;
-  i, k, n: Integer;
-  pos: TTyIntegerArray;
-  spread: Boolean;
-
-  function PosOf(A: TJSONData): Integer;
-  var q: Integer; e: TJSONData; nm: string;
-  begin
-    Result := -1;
-    if A = nil then Exit;
-    if A.JSONType = jtNumber then Exit(Trunc(A.AsFloat));
-    if (A.JSONType <> jtString) or not (names is TJSONArray) then Exit;
-    for q := 0 to names.Count - 1 do
-    begin
-      e := TJSONArray(names).Items[q];
-      if e.JSONType = jtString then nm := e.AsString
-      else if (e is TJSONObject) and (TJSONObject(e).Find('name') <> nil) then
-        nm := CuText(TJSONObject(e).Find('name'))
-      else nm := '';
-      if nm = A.AsString then Exit(q);
-    end;
-  end;
-
-  procedure Positions(A: TJSONData);
-  var q, p: Integer;
-  begin
-    pos := nil;
-    if A = nil then Exit;
-    if A is TJSONArray then
-    begin
-      for q := 0 to A.Count - 1 do
-      begin
-        p := PosOf(A.Items[q]);
-        if p < 0 then Continue;
-        SetLength(pos, Length(pos) + 1);
-        pos[High(pos)] := p;
-      end;
-    end
-    else
-    begin
-      p := PosOf(A);
-      if p >= 0 then
-      begin
-        SetLength(pos, 1);
-        pos[0] := p;
-      end;
-    end;
-  end;
-
-begin
-  if FBindings[ASlot].SeriesType <> TyCustomSeriesType then Exit;
-  if FOption = nil then Exit;
-  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
-  if not (d is TJSONObject) then Exit;
-  node := TJSONObject(d);
-  enc := CuObj(node, 'encode');
-  if enc = nil then Exit;
-  names := node.Find('dimensions');
-  spread := False;
-  for i := 0 to High(ADims) do
-  begin
-    Positions(enc.Find(ADims[i].Name));
-    if Length(pos) > 1 then spread := True;
-  end;
-  if not spread then Exit;
-  { EVERY POSITION THE ENCODE NAMES IS A COLUMN, each feeding its
-    coordinate: both ends of a span size the axis and both are what a
-    dataZoom filters on }
-  outDims := nil;
-  n := 0;
-  for i := 0 to High(ADims) do
-  begin
-    Positions(enc.Find(ADims[i].Name));
-    if Length(pos) = 0 then
-    begin
-      SetLength(outDims, n + 1);
-      outDims[n] := ADims[i];
-      Inc(n);
-      Continue;
-    end;
-    for k := 0 to High(pos) do
-    begin
-      dim := ADims[i];
-      if k > 0 then dim.Name := ADims[i].Name + IntToStr(k);
-      dim.SourceSlot := pos[k] + 1;
-      dim.Coord := ADims[i].Name;
-      SetLength(outDims, n + 1);
-      outDims[n] := dim;
-      Inc(n);
-    end;
-  end;
-  ADims := outDims;
-end;
-
 procedure TTyCustomAdvanceChart.SolveCustom(APPI: Integer);
 var
-  i, si, n, p, c, k: Integer;
+  i, si, n, p, c, k, place: Integer;
   view: TTyCustomView;
   node: TJSONObject;
   d: TJSONData;
@@ -2330,7 +2231,12 @@ begin
         names[1] := 'y';
       end;
     end;
-    { wrapEncodeDef: every coordinate column's data dimension, by position }
+    { wrapEncodeDef: each coordinate's data dimensions at their places --
+      the column's own at 0, a list's later entries at theirs, a place no
+      dimension reached a gap (null) -- the coordinates in the order of
+      their first dimension
+      [spec 259: was every column of the coordinate by position, the gaps
+      dropped] }
     FCustomParams.Encode := TJSONObject.Create;
     for p := 0 to Max(st.RawWidth, st.DimCount) - 1 do
       for c := 0 to st.DimCount - 1 do
@@ -2342,6 +2248,11 @@ begin
         for k := 0 to High(names) do
           if names[k] = coord then isCoord := True;
         if not isCoord then Continue;
+        { the place: a spread column's suffix, the coordinate's own 0 }
+        place := 0;
+        if TyIsSpreadDim(st.DimName(c)) then
+          place := StrToIntDef(Copy(st.DimName(c),
+            Length(TyEncodeSpreadPrefix) + Length(coord) + 2, MaxInt), 0);
         d := FCustomParams.Encode.Find(coord);
         if not (d is TJSONArray) then
         begin
@@ -2350,7 +2261,8 @@ begin
         end
         else
           arr := TJSONArray(d);
-        arr.Add(p);
+        while arr.Count <= place do arr.Add(TJSONNull.Create);
+        arr.Items[place] := TJSONIntegerNumber.Create(p);
       end;
     d := node.Find('itemPayload');
     if CuTruthy(d) and (d is TJSONObject) then

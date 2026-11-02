@@ -7799,6 +7799,1163 @@
      ]
     }
    ]
+  },
+  {
+   "name": "encode list: pie value [v, w]: the name",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: pie value [v, w]: '{b}|{c}|{d}|{@w}'",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true,
+       "formatter": "{b}|{c}|{d}|{@w}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A|1,6,A,9|28.57|9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B|2,7,B,4|33.33|4"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "A|3,8,A,2|38.1|2"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: funnel value [v, w]: the name",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "funnel",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: funnel value ['nope', 'w']: the names, though nothing has a width",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "nope",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "funnel",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      },
+      {
+       "dataIndex": 2,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix scatter value 2: v",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix scatter value [2, 3]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix scatter value [3, 2]: the last in the table, w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        3,
+        2
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix heatmap value [2, 3]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2
+    },
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "heatmap",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix scatter x [0, 3] collecting: v",
+   "option": {
+    "matrix": {},
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        0,
+        3
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: pie itemName 0, value 1",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": 0,
+       "value": 1
+      },
+      "data": [
+       [
+        "A",
+        5
+       ],
+       [
+        "B",
+        6
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: scatter itemName 2",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 2
+      },
+      "data": [
+       [
+        1,
+        6,
+        "A"
+       ],
+       [
+        2,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: scatter itemName 2, an item with its own name",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 2
+      },
+      "data": [
+       {
+        "value": [
+         1,
+         6,
+         "A"
+        ],
+        "name": "own"
+       },
+       [
+        2,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "own"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: scatter dimensions a b n, itemName 'n'",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": "a",
+       "y": "b",
+       "itemName": "n"
+      },
+      "data": [
+       [
+        1,
+        6,
+        "A"
+       ],
+       [
+        2,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      },
+      "dimensions": [
+       "a",
+       "b",
+       "n"
+      ]
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: category bar itemName 2: not the category",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 2
+      },
+      "data": [
+       [
+        0,
+        6,
+        "A"
+       ],
+       [
+        1,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "A"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "B"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: category bar itemName ['nope', 2]: no name at all",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": [
+        "nope",
+        2
+       ]
+      },
+      "data": [
+       [
+        0,
+        6,
+        "A"
+       ],
+       [
+        1,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        ""
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        ""
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own itemName: category bar itemName 'nope': the category",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": "nope"
+      },
+      "data": [
+       [
+        0,
+        6,
+        "A"
+       ],
+       [
+        1,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "c0"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "c1"
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "tooltips": [
@@ -17443,6 +18600,1274 @@
    ],
    "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
    "visible": "P\n  B4"
+  },
+  {
+   "name": "encode list: pie value [v, w]: draws v, tips w",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "P\n  B4"
+  },
+  {
+   "name": "encode list: pie value [w, v], the third row",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "w",
+        "v"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 2,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "A",
+     "value": "2"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|A}{__EC_aUTo_3|2}",
+   "visible": "P\n  A2"
+  },
+  {
+   "name": "encode list: funnel value [v, w]: tips w",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "P\n  B4"
+  },
+  {
+   "name": "encode list: funnel value ['nope', 'w']: tips w",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "nope",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "P\n  B4"
+  },
+  {
+   "name": "encode list: pie value ['nope', 'w']: no sector, the tooltip w",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "nope",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "noElement": true,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "P\n  B4"
+  },
+  {
+   "name": "encode list: pie value [v, w], tooltip [v]",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ],
+       "tooltip": [
+        "v"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|7}",
+   "visible": "P\n  B7"
+  },
+  {
+   "name": "encode list: pie value [v, g]: g a category, no label dimension -- the tooltip v",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "p",
+       "value": [
+        "v",
+        "g"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "2",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|2}{__EC_aUTo_3|7}",
+   "visible": "P\n  27"
+  },
+  {
+   "name": "encode list: matrix scatter value 2: the tooltip v",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "M\n  B6"
+  },
+  {
+   "name": "encode list: matrix scatter value [2, 3]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "encode list: matrix scatter value [3, 2]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        3,
+        2
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "encode list: matrix heatmap value [2, 3]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2
+    },
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "encode list: matrix scatter, no value written: every element",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "p",
+     "value": "B"
+    },
+    {
+     "marker": "subItem",
+     "name": "q",
+     "value": "V"
+    },
+    {
+     "marker": "subItem",
+     "name": "v",
+     "value": "6"
+    },
+    {
+     "marker": "subItem",
+     "name": "w",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_16|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|p}{__EC_aUTo_6|B}\n{__EC_aUTo_7|}  {__EC_aUTo_8|q}{__EC_aUTo_9|V}\n{__EC_aUTo_10|}  {__EC_aUTo_11|v}{__EC_aUTo_12|6}\n{__EC_aUTo_13|}  {__EC_aUTo_14|w}{__EC_aUTo_15|4}",
+   "visible": "M\n  B\n  pB\n  qV\n  v6\n  w4"
+  },
+  {
+   "name": "encode list: matrix scatter x [3, 0] collecting: the name is p, first in the table",
+   "option": {
+    "matrix": {},
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        3,
+        0
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "M\n  B6"
+  },
+  {
+   "name": "own itemName: pie itemName 0, value 1",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": 0,
+       "value": 1
+      },
+      "data": [
+       [
+        "A",
+        5
+       ],
+       [
+        "B",
+        6
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "P\n  B6"
+  },
+  {
+   "name": "own itemName: scatter itemName 2",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 2
+      },
+      "data": [
+       [
+        1,
+        6,
+        "A"
+       ],
+       [
+        2,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|7}",
+   "visible": "S\n  B7"
+  },
+  {
+   "name": "own itemName: category bar itemName ['nope', 2]: no name",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": [
+        "nope",
+        2
+       ]
+      },
+      "data": [
+       [
+        0,
+        6,
+        "A"
+       ],
+       [
+        1,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_3|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|7}",
+   "visible": "S\n  7"
+  },
+  {
+   "name": "own itemName: category bar itemName 2",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 2
+      },
+      "data": [
+       [
+        0,
+        6,
+        "A"
+       ],
+       [
+        1,
+        7,
+        "B"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|7}",
+   "visible": "S\n  B7"
   }
  ],
  "gauge": [

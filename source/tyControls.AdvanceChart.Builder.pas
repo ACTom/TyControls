@@ -646,6 +646,23 @@ function TyIsSpreadDim(const AName: string): Boolean;
   x) answers to that coordinate's key, at its place among the columns that
   do; any other to its own name. }
 procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+{ [spec 259] How many places of one encode key reach a dimension: one past
+  the last that does, its extra entries included -- the length of upstream's
+  mapDimensionsAll for that coordinate, a gap before the last one counted. }
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
+{ [spec 259] defaultedLabel over one coordinate's dimensions: the LAST, in
+  the table's order, of the dimensions coordinate ACoordIndex reaches (its
+  column and its list's extra entries) whose type a label suits -- neither
+  time nor a category, declared or guessed. -1 for none. A pie's or a
+  funnel's tooltip, a matrix series' label and tooltip. }
+function TyEncodeLastLabelDim(const AEnc: TTySeriesEncode; ACoordIndex: Integer;
+  const ASource: TTyChartSource): Integer;
+{ [spec 259] `encode.itemName` on a series' own data: the rows a name of
+  their own does not name are named by that element (SeriesData's
+  nameDimIdx), and any entry reaching an element takes the category's name
+  away (injectOrdinalMeta's hasNameEncode). }
+procedure TyOwnItemNames(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
 { [spec 255] A COORDINATE WRITTEN AS A LIST HOLDS EVERY DIMENSION IT REACHES:
   each extra entry of AEnc becomes a column of its coordinate's kind and
   category list, feeding that coordinate (SetDimCoord), read from its source
@@ -2655,6 +2672,68 @@ begin
   end;
 end;
 
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
+
+  function KeyOf(AIndex: Integer): string;
+  begin
+    if ACoord[AIndex].Key <> '' then Result := ACoord[AIndex].Key
+    else Result := ACoord[AIndex].Name;
+  end;
+
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(ACoord) do
+    if (i <= High(AEnc.Columns)) and (AEnc.Columns[i] >= 0) and (KeyOf(i) = AKey)
+      and (ACoord[i].Index + 1 > Result) then Result := ACoord[i].Index + 1;
+  for i := 0 to High(AEnc.ExtraCoord) do
+    if (AEnc.ExtraCoord[i] >= 0) and (AEnc.ExtraCoord[i] <= High(ACoord))
+      and (KeyOf(AEnc.ExtraCoord[i]) = AKey) and (AEnc.ExtraIndex[i] + 1 > Result) then
+      Result := AEnc.ExtraIndex[i] + 1;
+end;
+
+function TyEncodeLastLabelDim(const AEnc: TTySeriesEncode; ACoordIndex: Integer;
+  const ASource: TTyChartSource): Integer;
+
+  procedure Take(ADim: Integer);
+  begin
+    if ADim < 0 then Exit;
+    if (ADim <= High(ASource.Dims))
+      and ((ASource.Dims[ADim].DimType = 'time') or (ASource.Dims[ADim].DimType = 'ordinal')) then
+      Exit;
+    if ((ADim > High(ASource.Dims)) or (ASource.Dims[ADim].DimType = ''))
+      and TySourceDimIsOrdinal(ASource, ADim) then Exit;
+    if ADim > Result then Result := ADim;
+  end;
+
+var e: Integer;
+begin
+  Result := -1;
+  if (ACoordIndex < 0) or (ACoordIndex > High(AEnc.Columns)) then Exit;
+  Take(AEnc.Columns[ACoordIndex]);
+  for e := 0 to High(AEnc.ExtraCoord) do
+    if AEnc.ExtraCoord[e] = ACoordIndex then Take(AEnc.ExtraDim[e]);
+end;
+
+procedure TyOwnItemNames(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+var
+  i, raw: Integer;
+  cell: TTyDataValue;
+begin
+  if (AStore = nil) or not AEnc.Given or not AEnc.HasNameEncode then Exit;
+  AStore.NameFallback := -1;
+  if AEnc.ItemName < 0 then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    raw := AStore.GetRawIndex(i);
+    if (raw < 0) or (AStore.GetNameByRaw(raw) <> '') then Continue;
+    if not TTyDataStore.RawCell(AStore.RawItem(i), AEnc.ItemName, cell) then Continue;
+    if cell.Kind = dvkNone then Continue;
+    AStore.SetName(raw, TyJsValueText(cell, ''));
+  end;
+end;
+
 procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
   AStore: TTyDataStore);
 var
@@ -2705,6 +2784,15 @@ var
   k, j, t, best, n: Integer;
   pos, order: TTyIntegerArray;
   shared: Boolean;
+
+  { the column parses by a category list: its axis', or one the store was
+    handed (a matrix header's) [spec 259] }
+  function Listed(AK: Integer): Boolean;
+  begin
+    Result := (ADims[AK].Axis <> nil)
+      or ((AK < AStore.DimCount) and (AStore.OrdinalMeta(AK) <> nil));
+  end;
+
 begin
   if AStore = nil then Exit;
   if AFromSource and AEnc.Given and AEnc.HasNameEncode then
@@ -2729,7 +2817,7 @@ begin
   begin
     best := -1;
     for k := 0 to High(ADims) do
-      if (ADims[k].Kind = ddtOrdinal) and (ADims[k].Axis <> nil) and (pos[k] >= 0)
+      if (ADims[k].Kind = ddtOrdinal) and Listed(k) and (pos[k] >= 0)
         and ((best < 0) or (pos[k] < pos[best])) then best := k;
     if best >= 0 then AStore.NameFallback := best + 1;
   end;
@@ -2737,12 +2825,12 @@ begin
     the source's order }
   shared := False;
   for k := 0 to High(ADims) do
-    if TyIsSpreadDim(ADims[k].Name) and (ADims[k].Axis <> nil) then shared := True;
+    if TyIsSpreadDim(ADims[k].Name) and Listed(k) then shared := True;
   if not shared then Exit;
   order := nil;
   for k := 0 to High(ADims) do
   begin
-    if (ADims[k].Kind <> ddtOrdinal) or (ADims[k].Axis = nil) or (pos[k] < 0) then Continue;
+    if (ADims[k].Kind <> ddtOrdinal) or not Listed(k) or (pos[k] < 0) then Continue;
     n := Length(order);
     SetLength(order, n + 1);
     order[n] := k;
@@ -2794,7 +2882,10 @@ begin
       if prepend then pos := 0 else pos := -1;
     end
     else if ADims[k].SourceSlot < 0 then
-      pos := -1
+    begin
+      pos := -1;
+      AStore.SetDimVoid(k);
+    end
     else if ADims[k].SourceSlot > 0 then
     begin
       pos := ADims[k].SourceSlot - 1;
@@ -2957,6 +3048,8 @@ begin
     col := -1;
     if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
     AStore.SetRawDimPos(k, col);
+    { a table has no row-index column: one reading no dimension is a gap }
+    if col < 0 then AStore.SetDimVoid(k);
     if (not named) and (col >= 0) and (ADims[k].Name <> '') then
       AStore.SetRawDimName(col, ADims[k].Name);
   end;

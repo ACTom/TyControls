@@ -384,6 +384,14 @@ begin
               Break;
             end;
         end;
+        { [spec 259] AN ITEM WITH NO ELEMENT HERE -- a pie's sector with no
+          layout upstream (value: ['nope', 'w']), which a showTip action
+          still reaches: the datum itself, its view row its raw one }
+        if not found and (cs.Find('noElement') <> nil) then
+        begin
+          datum := TyChartDatum(cs.Integers['seriesIndex'], cs.Integers['dataIndex']);
+          found := True;
+        end;
         if not found then
         begin
           Miss(cs, 'no element for the item');

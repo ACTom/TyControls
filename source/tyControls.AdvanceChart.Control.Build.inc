@@ -64,6 +64,12 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.RebuildBody;
+{ [spec 259] the box types whose encode lists this batch holds to upstream
+  (a gauge's and a sankey's are not looked at here) }
+function PieOrFunnel(const AType: string): Boolean;
+begin
+  Result := (AType = TyPieSeriesTypeName) or (AType = TyFunnelSeriesTypeName);
+end;
 var
   d: TJSONData;
   lnRaws: TTyLinesRawArray;
@@ -73,6 +79,7 @@ var
   coord: TTyCoordDimArray;
   cursors: TTyEncodeCursorArray;
   enc: TTySeriesEncode;
+  tipPos: TTyIntegerArray;
   typeInfo: TTySeriesTypeInfo;
   radarSpec: TTyRadarSpec;
   polarMissing: TTyStringArray;
@@ -134,6 +141,8 @@ begin
   SetLength(FSources, Length(FBindings));
   SetLength(FSeriesDataset, Length(FBindings));
   SetLength(FEncodes, Length(FBindings));
+  FSeriesRefused := nil;
+  SetLength(FSeriesRefused, Length(FBindings));
   if FDatasetCache = nil then FDatasetCache := TTyDatasetCache.Create
   else FDatasetCache.Clear;
   { the transforms draw from the state their option's first build found
@@ -268,6 +277,19 @@ begin
             TyEncodeDropPast(enc, FSources[i].DimCount);
           end;
           if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
+          { [spec 259] a list's later entries are columns too: an x or a y
+            one parsed -- and collected -- by the tree's category list, in
+            the table's order }
+          if enc.Given then
+          begin
+            TySpreadEncode(enc, dims, st);
+            for k := 3 to st.DimCount - 1 do
+              if st.DimCoord(k) = TyMatrixXDim then
+                st.UseOrdinalMeta(k, FMatrices[FBindings[i].MatrixIndex].Dims[0].Meta)
+              else if st.DimCoord(k) = TyMatrixYDim then
+                st.UseOrdinalMeta(k, FMatrices[FBindings[i].MatrixIndex].Dims[1].Meta);
+            TyEncodeStoreOrder(enc, dims, st, True);
+          end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
         end
@@ -276,7 +298,21 @@ begin
         { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is
           no coordinate dimension, x and y are ordinal: defaultedTooltip is
           empty), so it shows every element of the item [Batch 147] }
-        if (FBindings[i].SeriesType = 'scatter') or (FBindings[i].SeriesType = 'effectScatter') then
+        { [spec 259] -- unless the encode wrote the value: then it is a
+          coordinate, and the label and the tooltip are the last of its
+          entries a label suits }
+        j := -1;
+        if (ds >= 0) and enc.Given and enc.Explicit[2] then
+          j := TyEncodeLastLabelDim(enc, 2, FSources[i]);
+        if j >= 0 then
+        begin
+          tipPos := nil;
+          SetLength(tipPos, 1);
+          tipPos[0] := j;
+          st.SetTooltipPositions(tipPos);
+          st.SetLabelPositions(tipPos);
+        end
+        else if (FBindings[i].SeriesType = 'scatter') or (FBindings[i].SeriesType = 'effectScatter') then
           st.SetTooltipPositions(nil);
         Continue;
       end;
@@ -424,10 +460,24 @@ begin
               FSources[i], coord);
             if not enc.Given then
               enc := TyDefaultEncodeNameBased(FSources[i],
-                FSources[i].DimCount);
+                FSources[i].DimCount)
+            else if PieOrFunnel(FBindings[i].SeriesType) then
+              { [spec 259] the tooltip is defaultedLabel: the last value
+                dimension in the table, which need not be the one drawn }
+              BoxTipDims(enc, FSources[i], st);
           end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
+        end
+        else if PieOrFunnel(FBindings[i].SeriesType) then
+        begin
+          { [spec 259] a pie's or a funnel's own data reads its encode too:
+            the value, the names, the tooltip }
+          SeriesDataEncode(i, dims, enc);
+          TyFillSeriesStore(FOption, i, dims, st);
+          TyOwnItemNames(enc, st);
+          if enc.Given then
+            BoxTipDims(enc, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex), st);
         end
         else
           TyFillSeriesStore(FOption, i, dims, st);
@@ -467,9 +517,10 @@ begin
       other three away. The axis then sized itself from a quarter of its own
       data and the renderer found no columns to read. }
     MultiValueDims(FBindings[i], dims);
-    { a custom series' encode may spread one coordinate over several
-      columns (a span's start and end) [Batch 123] }
-    CustomDims(i, dims);
+    { [spec 259] a custom series' encode spreading one coordinate over
+      several columns (a span's start and end) is an encode list like any
+      other's: TySpreadEncode below, gaps kept [Batch 123: CustomDims, the
+      unreached entries dropped, the columns named x1, x2] }
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
@@ -507,6 +558,8 @@ begin
       StoreKeepPre(dims, pre);
       if enc.Given then TyEncodeStoreOrder(enc, dims, st, False);
       TyFillSeriesStore(FOption, i, dims, st);
+      { [spec 259] encode.itemName names its own rows }
+      TyOwnItemNames(enc, st);
       ResolveTextDims(enc, st, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex));
       HeatmapTipDims(i, enc, st);
       StoreKeepPut(i, sig, dims, pre);
@@ -549,6 +602,7 @@ begin
       at least the coordinates' [spec 255]) }
     if enc.Given then
       TyEncodeFillUnclaimed(enc, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
+    RefuseShortWhisker(i, enc, dims, coord, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
     { [spec 255] every entry of a coordinate's list past its own column is a
       column too: the axis spans it, it may be the label }
     TySpreadEncode(enc, dims, st);
@@ -2705,30 +2759,44 @@ begin
     for i := 0 to st.Count - 1 do
     begin
       facts.Series[n].Rows[i].Name := st.GetItemName(i);
-      { data.getValues(i): every dimension upstream's data has -- the
-        store's own columns, then the item's positions no column reads (a
-        scatter's third `value`, NaN where the item is short), then the
-        stack's two calculated ones -- less the excluded ones }
+      { data.getValues(i): every dimension upstream's data has, in its
+        order -- the item's positions, each the column reading it or, where
+        none does, the element itself (a scatter's third `value`, NaN where
+        the item is short); a column on the row index before them, one past
+        the item after them; a column reading nothing (a gap at place 0 of
+        an encode list) is no dimension at all -- then the stack's two
+        calculated ones, less the excluded ones
+        [spec 259: was the columns first, then the positions no column
+        reads; a gap's NaN listed] }
       vals := nil;
       k := 0;
       for dim := 0 to st.DimCount - 1 do
-        if Copy(st.DimName(dim), 1, 5) <> '__ty_' then
+        if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) < 0)
+          and not st.DimVoid(dim) then
           Push(TyJsNumberToString(st.Get(dim, i)));
       for pos := 0 to st.RawWidth - 1 do
       begin
         read := False;
         for dim := 0 to st.DimCount - 1 do
           if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) = pos) then
+          begin
+            Push(TyJsNumberToString(st.Get(dim, i)));
             read := True;
+            Break;
+          end;
         if read then Continue;
-        { a position no column reads is a float dimension upstream; one it
-          guessed ordinal is not modelled here (NaN) }
-        if TTyDataStore.RawCell(st.RawItemByRaw(st.GetRawIndex(i)), pos, cell)
-          and (st.RawPosType(pos) <> ddtOrdinal) then
-          Push(TyJsNumberToString(TyParseDataValue(cell, ddtFloat)))
+        { a position no column reads is a float dimension upstream, or one
+          it guessed ordinal -- no category list, the element as it is }
+        if not TTyDataStore.RawCell(st.RawItemByRaw(st.GetRawIndex(i)), pos, cell) then
+          Push('NaN')
+        else if st.RawPosType(pos) = ddtOrdinal then
+          Push(TyJsValueText(cell, 'undefined'))
         else
-          Push('NaN');
+          Push(TyJsNumberToString(TyParseDataValue(cell, ddtFloat)));
       end;
+      for dim := 0 to st.DimCount - 1 do
+        if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) >= st.RawWidth) then
+          Push(TyJsNumberToString(st.Get(dim, i)));
       for dim := 0 to st.DimCount - 1 do
         if (Copy(st.DimName(dim), 1, 16) = '__ty_stackresult')
           or (Copy(st.DimName(dim), 1, 16) = '__ty_stackedover') then
@@ -3390,6 +3458,58 @@ end;
   1 of each item and y element 0, exactly as it would pick table columns.
   Only the plain coordinate columns -- a multi-value series places its own,
   and a row-index column reads no element at all. }
+procedure TTyCustomAdvanceChart.BoxTipDims(const AEnc: TTySeriesEncode;
+  const ASource: TTyChartSource; AStore: TTyDataStore);
+var
+  j: Integer;
+  pos: TTyIntegerArray;
+begin
+  if Length(AEnc.Tooltip) > 0 then
+  begin
+    AStore.SetTooltipPositions(AEnc.Tooltip);
+    Exit;
+  end;
+  j := TyEncodeLastLabelDim(AEnc, 0, ASource);
+  if j < 0 then Exit;
+  pos := nil;
+  SetLength(pos, 1);
+  pos[0] := j;
+  AStore.SetTooltipPositions(pos);
+end;
+
+procedure TTyCustomAdvanceChart.RefuseShortWhisker(ASlot: Integer;
+  const AEnc: TTySeriesEncode; const ADims: TTySeriesDimArray;
+  const ACoord: TTyCoordDimArray; ABound: Integer);
+var
+  k, need, reach: Integer;
+  key: string;
+  filled: TTySeriesEncode;
+begin
+  if not AEnc.Given then Exit;
+  if (FBindings[ASlot].SeriesType <> 'candlestick')
+    and (FBindings[ASlot].SeriesType <> 'boxplot') then Exit;
+  { the value coordinate: the columns that feed another one's axis }
+  key := '';
+  need := 0;
+  for k := 0 to High(ADims) do
+    if ADims[k].Coord <> '' then
+    begin
+      key := ADims[k].Coord;
+      Inc(need);
+    end;
+  if need = 0 then Exit;
+  { an unwritten one as createDimensions fills it: the next free dimensions
+    up to the count it makes }
+  filled := AEnc;
+  filled.Columns := Copy(AEnc.Columns);
+  TyEncodeFillUnclaimed(filled, ABound);
+  reach := TyEncodeKeyReach(filled, ACoord, key);
+  if reach >= need then Exit;
+  FSeriesRefused[ASlot] := True;
+  FBuild.Note(Format(rsTyChartSeriesShortEncode, [FBindings[ASlot].SeriesIndex,
+    key, reach, need, FBindings[ASlot].SeriesType]));
+end;
+
 procedure TTyCustomAdvanceChart.SeriesDataEncode(ASlot: Integer;
   var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
@@ -3427,8 +3547,8 @@ begin
   begin
     { [spec 255] A WHISKER BOX'S VALUE LIST, in its order: `y: [1, 4, 3, 2]`
       puts open on element 1 and close on 4 -- past a row index put in front,
-      the index is element 0. A custom series spreads its own. }
-    if FBindings[ASlot].SeriesType = TyCustomSeriesType then Exit;
+      the index is element 0. }
+    RefuseShortWhisker(ASlot, AEnc, ADims, coord, Max(dimW, Length(coord)));
     prepend := False;
     for k := 0 to High(ADims) do
       if ADims[k].FromRowIndex and (ADims[k].Kind = ddtOrdinal) then prepend := True;
@@ -4630,6 +4750,8 @@ begin
         end;
         Continue;
       end;
+      { [spec 259] a whisker box upstream throws on }
+      if (i <= High(FSeriesRefused)) and FSeriesRefused[i] then Continue;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
       { no end label on a polar (LineView warns and draws none) }

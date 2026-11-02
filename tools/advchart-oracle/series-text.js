@@ -650,6 +650,9 @@ function runTooltip(c, lib) {
       } else if (c.trigger === 'item') {
         record.seriesIndex = c.seriesIndex;
         record.dataIndex = c.dataIndex;
+        // [spec 259] the item has an element with no layout upstream and
+        // none in the port: the tooltip is held to the item all the same
+        if (c.noElement) record.noElement = true;
       } else {
         record.category = c.category;
       }
@@ -1003,6 +1006,68 @@ lTip('encode list: candlestick own data y [1, 4, 3, 2]', catX(['d0', 'd1'], [{
 lTip('encode list: pie value [w, v]', {
   dataset: { source: [LH].concat(clone(LROWS)) },
   series: [{ type: 'pie', name: 'P', encode: { itemName: 'g', value: ['w', 'v'] } }] }, 1);
+
+// ---------- [spec 259] what R7-A left of an encode list ----------
+// A pie and a funnel draw place 0 of value and label the name; the tooltip
+// is defaultedLabel -- the LAST non-extra value dimension in the table's
+// order, so value [v, w] draws v and tips w. On a matrix a written value is
+// a coordinate: the label and the tooltip are its last entry (unwritten it
+// is an extra one: no default words, the tooltip every element). itemName
+// on a series' own data names the rows, and takes the category's name away
+// even when no entry reaches a dimension.
+const pv = (encode, extra, type) => Object.assign({
+  dataset: { source: [LH].concat(clone(LROWS)) },
+  series: [{ type: type || 'pie', name: 'P', encode, label: { show: true } }],
+}, extra || {});
+label('encode list: pie value [v, w]: the name', pv({ itemName: 'g', value: ['v', 'w'] }));
+label("encode list: pie value [v, w]: '{b}|{c}|{d}|{@w}'", pv({ itemName: 'g', value: ['v', 'w'] },
+  { series: [{ type: 'pie', name: 'P', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true, formatter: '{b}|{c}|{d}|{@w}' } }] }));
+label('encode list: funnel value [v, w]: the name', pv({ itemName: 'g', value: ['v', 'w'] }, null, 'funnel'));
+label("encode list: funnel value ['nope', 'w']: the names, though nothing has a width", pv({ itemName: 'g', value: ['nope', 'w'] }, null, 'funnel'));
+lTip('encode list: pie value [v, w]: draws v, tips w', pv({ itemName: 'g', value: ['v', 'w'] }), 1);
+lTip('encode list: pie value [w, v], the third row', pv({ itemName: 'g', value: ['w', 'v'] }), 2);
+lTip('encode list: funnel value [v, w]: tips w', pv({ itemName: 'g', value: ['v', 'w'] }, null, 'funnel'), 1);
+lTip("encode list: funnel value ['nope', 'w']: tips w", pv({ itemName: 'g', value: ['nope', 'w'] }, null, 'funnel'), 1);
+itemTip("encode list: pie value ['nope', 'w']: no sector, the tooltip w", pv({ itemName: 'g', value: ['nope', 'w'] }), 0, 1, null,
+  { noElement: true });
+lTip('encode list: pie value [v, w], tooltip [v]', pv({ itemName: 'g', value: ['v', 'w'], tooltip: ['v'] }), 1);
+lTip('encode list: pie value [v, g]: g a category, no label dimension -- the tooltip v', pv({ itemName: 'p', value: ['v', 'g'] }), 1);
+const MXS = [['p', 'q', 'v', 'w'], ['A', 'U', 5, 9], ['B', 'V', 6, 4]];
+const mx = (encode, type, more) => Object.assign({
+  matrix: { x: { data: ['A', 'B'] }, y: { data: ['U', 'V'] } }, dataset: { source: clone(MXS) },
+  series: [{ type: type || 'scatter', name: 'M', coordinateSystem: 'matrix', encode, label: { show: true } }],
+}, more || {});
+const vmx = { visualMap: { show: false, min: 0, max: 10, dimension: 2 } };
+label('encode list: matrix scatter value 2: v', mx({ x: 0, y: 1, value: 2 }));
+label('encode list: matrix scatter value [2, 3]: w', mx({ x: 0, y: 1, value: [2, 3] }));
+label('encode list: matrix scatter value [3, 2]: the last in the table, w', mx({ x: 0, y: 1, value: [3, 2] }));
+label('encode list: matrix heatmap value [2, 3]', mx({ x: 0, y: 1, value: [2, 3] }, 'heatmap', vmx));
+label('encode list: matrix scatter x [0, 3] collecting: v', Object.assign(mx({ x: [0, 3], y: 1, value: 2 }), { matrix: {} }));
+lTip('encode list: matrix scatter value 2: the tooltip v', mx({ x: 0, y: 1, value: 2 }), 1);
+lTip('encode list: matrix scatter value [2, 3]: w', mx({ x: 0, y: 1, value: [2, 3] }), 1);
+lTip('encode list: matrix scatter value [3, 2]: w', mx({ x: 0, y: 1, value: [3, 2] }), 1);
+lTip('encode list: matrix heatmap value [2, 3]', mx({ x: 0, y: 1, value: [2, 3] }, 'heatmap', vmx), 1);
+lTip('encode list: matrix scatter, no value written: every element', mx({ x: 0, y: 1 }), 1);
+lTip('encode list: matrix scatter x [3, 0] collecting: the name is p, first in the table',
+  Object.assign(mx({ x: [3, 0], y: 1, value: 2 }), { matrix: {} }), 1);
+// itemName on a series' own data
+const ownPie = encode => ({ series: [{ type: 'pie', name: 'P', encode, data: [['A', 5], ['B', 6]], label: { show: true } }] });
+const ownSc = (encode, data, more) => valueXY([Object.assign({ type: 'scatter', name: 'S', encode,
+  data: data || [[1, 6, 'A'], [2, 7, 'B']], label: { show: true, formatter: '{b}' } }, more || {})]);
+const ownBar = encode => catX(['c0', 'c1'], [{ type: 'bar', name: 'S', encode, data: [[0, 6, 'A'], [1, 7, 'B']],
+  label: { show: true, formatter: '{b}' } }]);
+label('own itemName: pie itemName 0, value 1', ownPie({ itemName: 0, value: 1 }));
+label('own itemName: scatter itemName 2', ownSc({ x: 0, y: 1, itemName: 2 }));
+label('own itemName: scatter itemName 2, an item with its own name', ownSc({ x: 0, y: 1, itemName: 2 },
+  [{ value: [1, 6, 'A'], name: 'own' }, [2, 7, 'B']]));
+label("own itemName: scatter dimensions a b n, itemName 'n'", ownSc({ x: 'a', y: 'b', itemName: 'n' }, null, { dimensions: ['a', 'b', 'n'] }));
+label('own itemName: category bar itemName 2: not the category', ownBar({ x: 0, y: 1, itemName: 2 }));
+label("own itemName: category bar itemName ['nope', 2]: no name at all", ownBar({ x: 0, y: 1, itemName: ['nope', 2] }));
+label("own itemName: category bar itemName 'nope': the category", ownBar({ x: 0, y: 1, itemName: 'nope' }));
+lTip('own itemName: pie itemName 0, value 1', ownPie({ itemName: 0, value: 1 }), 1);
+lTip('own itemName: scatter itemName 2', ownSc({ x: 0, y: 1, itemName: 2 }), 1);
+lTip("own itemName: category bar itemName ['nope', 2]: no name", ownBar({ x: 0, y: 1, itemName: ['nope', 2] }), 1);
+lTip('own itemName: category bar itemName 2', ownBar({ x: 0, y: 1, itemName: 2 }), 1);
 
 // ---------- gauge ----------
 

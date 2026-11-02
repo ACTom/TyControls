@@ -1441,6 +1441,10 @@ type
       mean. Both index-parallel to FBindings. }
     FSeriesDataset: array of Integer;
     FEncodes: array of TTySeriesEncode;
+    { [spec 259] a series left out of the drawing: its encode gives a whisker
+      box fewer value places than it needs, which upstream throws on.
+      Index-parallel to FBindings. }
+    FSeriesRefused: array of Boolean;
     { WHAT THE AUTHOR'S PALETTE GAVE EACH SERIES, resolved once per rebuild.
       Empty where they gave it nothing, and the theme's ramp answers instead
       -- so a chart with no `color` written is still the skin's chart, and one
@@ -3361,7 +3365,6 @@ type
       the paint elements; the states }
     procedure SolveCustom(APPI: Integer);
     function CustomCall(AIndexInside: Integer): TJSONData;
-    procedure CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
     function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
     function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
     procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
@@ -3526,6 +3529,18 @@ type
       datum. A no-op for every other type. }
     procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray;
       out AEnc: TTySeriesEncode);
+    { [spec 259] A candlestick's or a boxplot's value list that reaches fewer
+      places than the type has values (candlestickLayout's
+      `vDimsI.length < 4`, boxplotLayout's `vDims.length < 5`): no item
+      layout, and upstream throws reading one. The series is left out
+      (FSeriesRefused) and a diagnostic says why. AEnc as filled up to
+      ABound dimensions. }
+    { [spec 259] a pie's or a funnel's tooltip dimensions: `encode.tooltip`,
+      or defaultedLabel -- the last value dimension its encode reaches }
+    procedure BoxTipDims(const AEnc: TTySeriesEncode; const ASource: TTyChartSource;
+      AStore: TTyDataStore);
+    procedure RefuseShortWhisker(ASlot: Integer; const AEnc: TTySeriesEncode;
+      const ADims: TTySeriesDimArray; const ACoord: TTyCoordDimArray; ABound: Integer);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
     procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore;

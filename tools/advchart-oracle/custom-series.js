@@ -342,6 +342,17 @@ const RENDER = {
     return { type: 'rect', shape: { x: start[0], y: start[1] - h / 2, width: end[0] - start[0], height: h },
       style: { fill: api.visual('color') }, info: { inside: params.dataIndexInside, of: params.dataInsideLength, act: params.actionType } };
   },
+  // [spec 259] a span read by the names the dimensions take: y, x, and x0
+  // (removeDuplicates names a coordinate's later entries x0, x1, ...)
+  named(params, api) {
+    const cat = api.value('y');
+    const a = api.value('x');
+    const b = api.value('x0');
+    const start = api.coord([a, cat]);
+    const end = api.coord([b, cat]);
+    return { type: 'rect', shape: { x: start[0], y: start[1] - 5, width: end[0] - start[0], height: 10 },
+      style: api.style() };
+  },
   // a rect with a declared emphasis, a circle lifted by default, a text
   hover(params, api) {
     const p = api.coord([api.value(0), api.value(1)]);
@@ -783,6 +794,38 @@ add('shape', 'gantt-label-null', "[R2-V] the gantt with label.show and encode.la
   { yAxis: { type: 'category', data: ['A', 'B', 'C'] }, xAxis: { type: 'value', min: 0, max: 20 },
     series: [{ type: 'custom', renderItem: '@gantt', label: { show: true }, encode: { x: [1, 2], y: 0, label: 3 },
       data: [[0, 1, 5, 7], [1, 3, 9, null], [2, 6, 15, 8]] }] });
+// [spec 259] an encode key written as a list, as createDimensions resolves
+// it: a dimension at the last place a list names it, a gap where an entry
+// reaches none -- params.encode keeps the gap (wrapEncodeDef: [place] =
+// dimension), the axis spans every entry, the later entries are named x0,
+// x1 on a series' own data and take the axis' type (a category one parses
+// them), the ec4 label and the tooltip are the last coordinate dimension
+const LIST_ROWS = [[0, 1, 5, 9], [1, 3, 9, 4]];
+add('shape', 'list-gap-own', "[spec 259] own data x ['nope', 1, 2], y 0: params.encode.x [null, 1, 2], the axis over both, the label and the tooltip the last",
+  { tooltip: {}, yAxis: { type: 'category', data: ['A', 'B', 'C'] }, xAxis: { type: 'value' },
+    series: [{ type: 'custom', name: 'L', renderItem: '@gantt', label: { show: true }, encode: { x: ['nope', 1, 2], y: 0 },
+      data: clone(LIST_ROWS) }] },
+  { steps: [{ move: 's0:1' }] });
+add('shape', 'list-swap-own', "[spec 259] own data x [2, 1], y 0: params.encode.x [2, 1]; api.value('x') is element 1, 'x0' element 2 -- named in the elements' order",
+  { tooltip: {}, yAxis: { type: 'category', data: ['A', 'B', 'C'] }, xAxis: { type: 'value' },
+    series: [{ type: 'custom', name: 'L', renderItem: '@named', label: { show: true }, encode: { x: [2, 1], y: 0 },
+      data: clone(LIST_ROWS) }] },
+  { steps: [{ move: 's0:1' }] });
+add('shape', 'list-twice-ds', '[spec 259] a dataset, x [1, 1], y 0: named twice, place 0 a gap -- params.encode.x [null, 1], the label the one x (the axis held to 10: the spans stay on the canvas)',
+  { tooltip: {}, dataset: { source: [['r', 'a', 'b', 'c']].concat(LIST_ROWS.map(r => ['ABC'[r[0]]].concat(r.slice(1)))) },
+    yAxis: { type: 'category' }, xAxis: { type: 'value', max: 10 },
+    series: [{ type: 'custom', name: 'L', renderItem: '@gantt', label: { show: true }, encode: { x: [1, 1], y: 0 } }] },
+  { steps: [{ move: 's0:1' }] });
+add('shape', 'list-three-ds', '[spec 259] a dataset, x [1, 3, 2], y 0: three places, the label c -- the last in the table',
+  { tooltip: {}, dataset: { source: [['r', 'a', 'b', 'c']].concat(LIST_ROWS.map(r => ['ABC'[r[0]]].concat(r.slice(1)))) },
+    yAxis: { type: 'category' }, xAxis: { type: 'value' },
+    series: [{ type: 'custom', name: 'L', renderItem: '@gantt', label: { show: true }, encode: { x: [1, 3, 2], y: 0 } }] },
+  { steps: [{ move: 's0:1' }] });
+add('shape', 'list-cat-own', "[spec 259] own data on a category x, x [0, 3]: x0 is a category too -- element 3 parsed as an ordinal, the axis spans it",
+  { tooltip: {}, xAxis: { type: 'category', data: 'ABCDEFGHIJ'.split('') }, yAxis: { type: 'value' },
+    series: [{ type: 'custom', name: 'L', renderItem: '@named', label: { show: true }, encode: { x: [0, 3], y: 1 },
+      data: clone(LIST_ROWS) }] },
+  { steps: [{ move: 's0:1' }] });
 
 // ---------------------------------------------------------------------------
 // one case
@@ -871,6 +914,9 @@ function guards(out) {
   }));
   const g0 = call('gantt', 0, 0);
   guard('one call per item shown', cs('gantt').states[0].calls.length === 4);
+  guard('[spec 259] a gap at place 0 is kept in params.encode', JSON.stringify(call('list-gap-own', 0, 0).params.encode.x) === '[null,1,2]'
+    && JSON.stringify(call('list-twice-ds', 0, 0).params.encode.x) === '[null,1]'
+    && JSON.stringify(call('list-swap-own', 0, 0).params.encode.x) === '[2,1]');
   guard('the params name the series and its coordinate system', g0.params.seriesName === 'jobs' && g0.params.coordSys.type === 'cartesian2d'
     && g0.params.encode.x.join() === '1,2' && g0.params.encode.y.join() === '0' && g0.params.actionType === null);
   guard("api.style carries the item's own colour", apiOf(call('gantt', 0, 2), 'style')[0].ret.fill === '#ee6666'
