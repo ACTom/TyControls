@@ -525,6 +525,9 @@ begin
   inherited Loaded;
   { Do the deferred initial read now that every streamed property is in place. }
   ReloadEntries;
+  { #165: a linked tree opens on this folder, as a load from code would have it -- the pair
+    came up out of step. }
+  PushToTree;
 end;
 
 { ---------------------------------------------------------------------------
@@ -737,26 +740,36 @@ end;
 
 procedure TTyShellListView.CommitEdit(AIndex: Integer; const AText: string);
 var
-  newPath: string;
+  newPath, s: string;
+  i: Integer;
 begin
-  { OwnerData's base default writes nowhere; this is where a rename actually lands.
-    (It renames on disk directly and does not route through OnEdited.) }
+  { OwnerData's base default writes nowhere; this is where a rename actually lands, on disk.
+    #165: OnEdited is asked first, as the base asks it -- the handler may rewrite the name,
+    or blank it to abandon -- and a rename done is an OnChange(ctText); neither fired. }
   if (AIndex < 0) or (AIndex > High(FEntries)) then Exit;
-  if AText = '' then Exit;                             { blank -> abandon }
-  if AText = FEntries[AIndex].Name then Exit;          { unchanged (case-sensitive, so a
+  s := AText;
+  if Assigned(OnEdited) then OnEdited(Self, AIndex, s);
+  if s = '' then Exit;                                 { blank -> abandon }
+  if s = FEntries[AIndex].Name then Exit;              { unchanged (case-sensitive, so a
                                                          case-only rename is allowed) }
   { A rename must stay a leaf name: reject anything carrying a path separator (it would
     move the file, or escape the directory). RenameFileUTF8 handles other illegal chars
     by failing, in which case we simply do not refresh. }
-  if (Pos('/', AText) > 0) or (Pos('\', AText) > 0) then Exit;
-  newPath := AppendPathDelim(FDirectory) + AText;
-  if RenameFileUTF8(FEntries[AIndex].FullPath, newPath) then
+  if (Pos('/', s) > 0) or (Pos('\', s) > 0) then Exit;
+  newPath := AppendPathDelim(FDirectory) + s;
+  if not RenameFileUTF8(FEntries[AIndex].FullPath, newPath) then Exit;
     { UpdateView, not Refresh. This said Refresh, and when Refresh stopped being the
       re-read and went back to meaning "repaint" it silently became one: the file was
       renamed on disk and the row kept showing the old name until something else
       happened to re-enumerate. The rename test could not see it -- it called the
       re-read itself. }
-    UpdateView;   { re-read; the row may move under the active sort }
+  UpdateView;   { re-read; the row may move under the active sort }
+  for i := 0 to High(FEntries) do
+    if SameFileName(FEntries[i].FullPath, newPath) then
+    begin
+      DoChange(i, ctText);   { the row's index after the re-read }
+      Break;
+    end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -993,7 +1006,10 @@ begin
     and the pane is device px. Shared out in device px, the columns were scaled a second
     time when they were used: at 175% the first column alone took most of the pane and the
     last two were pushed out of it. }
-  avail := MulDiv(ClientWidth, 96, Font.PixelsPerInch);
+  { #165: the rows' width -- the vertical bar, when it shows, takes its own off the client. }
+  avail := ClientWidth;
+  if (VScrollBar <> nil) and VScrollBar.Visible then Dec(avail, VScrollBar.Width);
+  avail := MulDiv(avail, 96, Font.PixelsPerInch);
   if avail <= 0 then Exit;      { not laid out yet -- the next Resize will do it }
 
   sum := 0;

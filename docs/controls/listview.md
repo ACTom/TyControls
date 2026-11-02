@@ -141,7 +141,7 @@ LV.Sort;
 | `ShowColumnHeaders` | `Boolean` | `True` | 报表模式是否画表头带 |
 | `GridLines` | `Boolean` | `False` | 报表模式行/列网格线 |
 | `RowSelect` | `Boolean` | `True` | 整行高亮,而非仅第 0 列 |
-| `HotTrack` | `Boolean` | `False` | 鼠标悬停高亮 |
+| `HotTrack` | `Boolean` | `False` | 鼠标悬停高亮(分组视图下也高亮指针下面那一项) |
 | `LargeImages` | `TTyVirtualImageList` | `nil` | `lvsIcon` / `lvsTile` 用 |
 | `SmallImages` | `TTyVirtualImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它 |
 | `Header.Images` | `TTyVirtualImageList` | `nil` | **列头图标**的图像源，按 `TTyColumn.ImageIndex` 取图；为空时回退到 `SmallImages` |
@@ -285,7 +285,9 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
   **双击分隔线** = `AutoFitColumn(该列)`,把列宽调到刚好容纳内容。
 
 > **自适应宽度只采样前 500 行。** 资源管理器会量遍所有行,但 BGRA 的文字测量对一个 10 万行的虚拟列表来说太慢了。普通列表(行数不超过 500)因此是**精确**贴合;超出的部分按前 500 个显示行估算。宽度里还预留了排序箭头的位置(不管当前是否按该列排序),所以点击表头排序时列宽不会跳。
-- **键盘**:方向键二维网格导航(图标模式下 ↑↓ 跨行、←→ 跨列;列表模式相反);`Home` / `End`;`PageUp` / `PageDown`;`Ctrl+A` 全选;`Space` 切换选中;`Enter` 触发 `OnItemActivate`(没挂时交给窗体的默认按钮);直接敲字母做**首字母定位**(按屏幕上看到的顺序查找,重复敲同一字母循环到下一个匹配)。
+- **键盘**:方向键二维网格导航(图标模式下 ↑↓ 跨行、←→ 跨列;列表模式相反);`Home` / `End`;`PageUp` / `PageDown`;`Ctrl+A` 全选;`Space` 切换选中;`Enter` 触发 `OnItemActivate`(没挂时交给窗体的默认按钮);直接敲字母做**首字母定位**(按屏幕上看到的顺序查找,重复敲同一字母循环到下一个匹配)。报表模式下 `←` / `→` 和横向滚轮(倾斜滚轮)左右滚动。
+- **右键**:指针下的项没选中时,先把选中移到它上面(右键菜单针对的就是它);已经选中的项保持原来的选中。
+- **项状态**:`lisCut` 的图标画成半透明(和资源管理器里剪切的文件一样);`lisDisabled` 的项按 `TyListViewItem:disabled` 样式画,点它不选中、不勾选。
 
 ---
 

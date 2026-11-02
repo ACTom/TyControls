@@ -30,6 +30,7 @@ uses
   fpcunit, testregistry,
   tyControls.Columns,       { TTySortDirection, sdAscending, sdDescending }
   tyControls.FileSystem,    { TTyFsEntry(Array), fotFolders/fotFiles/fotHidden }
+  tyControls.ListView,      { TTyItemChange }
   tyControls.ShellListView; { the unit under test }
 
 type
@@ -43,6 +44,7 @@ type
     function XGetItemImageIndex(AIndex, AColumn: Integer): Integer;
     function XGetItemGroup(AIndex: Integer): Integer;
     procedure XCommitEdit(AIndex: Integer; const AText: string);
+    procedure XLayout;   { #165: the bars, then the Resize the columns are fitted in }
     { display position -> stable item index (the inherited DisplayToItem seam). }
     function XOrderAt(ADisplayPos: Integer): Integer;
     { item index -> display position (the inherited ItemToDisplay seam). }
@@ -57,6 +59,9 @@ type
     FRoot: string;                 { enumerated directory, no trailing delimiter }
     FLV:   TTyShellListViewAccess;
     FDirChangeCount: Integer;      { OnDirectoryChange fire counter }
+    FEdited, FTextChanges: Integer;   { #165 }
+    procedure HandleEdited(Sender: TObject; AIndex: Integer; var AText: string);
+    procedure HandleChange(Sender: TObject; AIndex: Integer; AChange: TTyItemChange);
     { --- column indices per the four-column contract (Name/Size/Type/Modified) --- }
     const COL_NAME = 0; COL_SIZE = 1; COL_TYPE = 2; COL_MODIFIED = 3;
   private
@@ -70,6 +75,8 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    procedure TestAnF2RenameIsOnEditedAndATextChange;   // #165
+    procedure TestAutoSizeLeavesTheVerticalBarItsRoom;  // #165
     { #144: Enter opens a folder; on a file with no handler it goes on to the default button. }
     procedure TestEnterOpensAFolderAndLeavesAFileAlone;
     { ----- take: count, per-column text, FileAt / SelectedFile ----- }
@@ -180,6 +187,12 @@ end;
 function TTyShellListViewAccess.XGetItemGroup(AIndex: Integer): Integer;
 begin
   Result := GetItemGroup(AIndex);
+end;
+
+procedure TTyShellListViewAccess.XLayout;
+begin
+  UpdateScrollBars;
+  Resize;
 end;
 
 procedure TTyShellListViewAccess.XCommitEdit(AIndex: Integer; const AText: string);
@@ -707,6 +720,49 @@ begin
   FLV.LoadDirectory(FRoot);
   AssertEquals('ItemIndex cleared after navigation', -1, FLV.ItemIndex);
   AssertEquals('selection cleared after navigation', 0, FLV.SelCount);
+end;
+
+procedure TShellListViewTest.HandleEdited(Sender: TObject; AIndex: Integer; var AText: string);
+begin
+  Inc(FEdited);
+  AText := 'x' + AText;   // the handler's say: the name it gives is the name used
+end;
+
+procedure TShellListViewTest.HandleChange(Sender: TObject; AIndex: Integer; AChange: TTyItemChange);
+begin
+  if AChange = ctText then Inc(FTextChanges);
+end;
+
+{ #165: an F2 rename asks OnEdited, as the base list does, and is an OnChange(ctText). }
+procedure TShellListViewTest.TestAnF2RenameIsOnEditedAndATextChange;
+begin
+  FLV.LoadDirectory(FRoot);
+  FLV.OnEdited := @HandleEdited;
+  FLV.OnChange := @HandleChange;
+  FEdited := 0;
+  FTextChanges := 0;
+  FLV.XCommitEdit(ItemIndexOfName('a.txt'), 'renamed.zzz');
+  AssertEquals('OnEdited is asked', 1, FEdited);
+  AssertTrue('and its name is the one used', FileExistsUTF8(AppendPathDelim(FRoot) + 'xrenamed.zzz'));
+  AssertEquals('the rename is an OnChange(ctText)', 1, FTextChanges);
+end;
+
+{ #165: AutoSizeColumns shares out the rows' width -- the client less a visible vertical bar. }
+procedure TShellListViewTest.TestAutoSizeLeavesTheVerticalBarItsRoom;
+var i, sum: Integer;
+begin
+  for i := 0 to 59 do
+    WriteBytes(AppendPathDelim(FRoot) + Format('n%.2d.txt', [i]), 1);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.SetBounds(0, 0, 400, 150);
+  FLV.LoadDirectory(FRoot);
+  FLV.XLayout;
+  AssertTrue('setup: the rows need the vertical bar', FLV.VScrollBar.Visible);
+  sum := 0;
+  for i := 0 to FLV.Header.Columns.Count - 1 do
+    Inc(sum, TTyColumn(FLV.Header.Columns.Items[i]).Width);
+  AssertTrue(Format('the columns fit beside the bar (%d of %d)',
+    [sum, FLV.ClientWidth - FLV.VScrollBar.Width]), sum <= FLV.ClientWidth - FLV.VScrollBar.Width);
 end;
 
 initialization
