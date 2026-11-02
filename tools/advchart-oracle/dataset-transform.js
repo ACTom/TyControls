@@ -810,6 +810,11 @@ L('r-list-candle-one', 'a candlestick y 1: one of four -- a written list is neve
 L('r-list-candle-gap', "a candlestick y [1, 'nope', 3, 4]: four places, close a gap -- no item has a value, nothing drawn, no throw",
   kds([{ type: 'candlestick', encode: { x: 0, y: [1, 'nope', 3, 4] } }]), { drawn: true, ext: true });
 L('r-list-candle-four', 'a candlestick y [1, 2, 3, 4]: drawn', kds([{ type: 'candlestick', encode: { x: 0, y: [1, 2, 3, 4] } }]), { drawn: true, ext: true });
+L('r-list-candle-five-gap', "a candlestick y [1, 2, 3, 'nope', 4]: five places, highest a gap -- no throw, nothing drawn",
+  kds([{ type: 'candlestick', encode: { x: 0, y: [1, 2, 3, 'nope', 4] } }]), { drawn: true });
+L('r-list-candle-own-x', 'own data, a candlestick encode x 0 alone: y fills the four after it, drawn',
+  { xAxis: { type: 'category', data: ['d0', 'd1'] }, yAxis: { scale: true },
+    series: [{ type: 'candlestick', encode: { x: 0 }, data: [[0, 20, 34, 10, 38], [1, 40, 35, 30, 50]] }] }, { drawn: true });
 L('r-list-candle-line', 'a line, then a candlestick y [1, 2] under an axis tooltip: upstream throws',
   Object.assign(kds([{ type: 'line', encode: { x: 0, y: 1 } }, { type: 'candlestick', encode: { x: 0, y: [1, 2] } }]),
     { tooltip: { trigger: 'axis' } }), {});

@@ -58999,6 +58999,237 @@
    ]
   },
   {
+   "id": "r-list-candle-five-gap",
+   "group": "render",
+   "note": "a candlestick y [1, 2, 3, 'nope', 4]: five places, highest a gap -- no throw, nothing drawn",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        "nope",
+        4
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "d0",
+       "d1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "candlestick",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      false,
+      false
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-own-x",
+   "group": "render",
+   "note": "own data, a candlestick encode x 0 alone: y fills the four after it, drawn",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0
+      },
+      "data": [
+       [
+        0,
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        1,
+        40,
+        35,
+        30,
+        50
+       ]
+      ]
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "d0",
+       "d1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "candlestick",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "datasets": []
+  },
+  {
    "id": "r-list-candle-line",
    "group": "render",
    "note": "a line, then a candlestick y [1, 2] under an axis tooltip: upstream throws",

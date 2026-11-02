@@ -19044,6 +19044,79 @@
    "visible": "P\n  B7"
   },
   {
+   "name": "encode list: pie value [v, g]: g a category, no label dimension -- the tooltip v",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "P",
+      "encode": {
+       "itemName": "p",
+       "value": [
+        "v",
+        "g"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "P",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "2",
+     "value": "7"
+    }
+   ],
+   "text": "{__EC_aUTo_4|P}\n{__EC_aUTo_1|}  {__EC_aUTo_2|2}{__EC_aUTo_3|7}",
+   "visible": "P\n  27"
+  },
+  {
    "name": "encode list: matrix scatter value 2: the tooltip v",
    "option": {
     "matrix": {

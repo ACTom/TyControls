@@ -1031,6 +1031,7 @@ lTip("encode list: funnel value ['nope', 'w']: tips w", pv({ itemName: 'g', valu
 itemTip("encode list: pie value ['nope', 'w']: no sector, the tooltip w", pv({ itemName: 'g', value: ['nope', 'w'] }), 0, 1, null,
   { noElement: true });
 lTip('encode list: pie value [v, w], tooltip [v]', pv({ itemName: 'g', value: ['v', 'w'], tooltip: ['v'] }), 1);
+lTip('encode list: pie value [v, g]: g a category, no label dimension -- the tooltip v', pv({ itemName: 'p', value: ['v', 'g'] }), 1);
 const MXS = [['p', 'q', 'v', 'w'], ['A', 'U', 5, 9], ['B', 'V', 6, 4]];
 const mx = (encode, type, more) => Object.assign({
   matrix: { x: { data: ['A', 'B'] }, y: { data: ['U', 'V'] } }, dataset: { source: clone(MXS) },

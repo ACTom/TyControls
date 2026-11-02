@@ -1112,6 +1112,33 @@ procedure TAdvChartDatasetTransformTest.TestAShortValueListLeavesItsSeriesOut;
     end;
   end;
 
+  procedure Quiet(const AId: string);
+  var
+    c: TJSONObject;
+    i, r: Integer;
+    bmp: TBGRABitmap;
+    stem: string;
+  begin
+    c := CaseById(AId);
+    AssertNotNull(AId, c);
+    AssertTrue(AId + ': upstream draws', c.Objects['render'].Find('error') = nil);
+    NewChart(c.Objects['option']);
+    bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    finally
+      bmp.Free;
+    end;
+    for i := 0 to FChart.DiagnosticCount - 1 do
+      for r := 0 to 5 do
+      begin
+        stem := Format(rsTyChartSeriesShortEncode, [0, 'y', r, 4, 'candlestick']);
+        AssertTrue(AId + ': no diagnostic ' + FChart.Diagnostic(i), Pos(stem, FChart.Diagnostic(i)) = 0);
+        stem := Format(rsTyChartSeriesShortEncode, [0, 'y', r, 5, 'boxplot']);
+        AssertTrue(AId + ': no diagnostic ' + FChart.Diagnostic(i), Pos(stem, FChart.Diagnostic(i)) = 0);
+      end;
+  end;
+
 begin
   Check('r-list-candle-two', 0, 'candlestick', 2, 4, False);
   Check('r-list-candle-three', 0, 'candlestick', 3, 4, False);
@@ -1120,6 +1147,13 @@ begin
   Check('r-list-candle-line', 1, 'candlestick', 2, 4, True);
   Check('r-list-box-four', 0, 'boxplot', 4, 5, False);
   Check('r-list-box-one', 0, 'boxplot', 1, 5, False);
+  { and the lists that reach their places say nothing, drawn or not }
+  Quiet('r-list-candle-four');
+  Quiet('r-list-candle-gap');
+  Quiet('r-list-candle-five-gap');
+  Quiet('r-list-candle-own-x');
+  Quiet('r-list-box-five');
+  Quiet('r-list-box-gap');
 end;
 
 { [spec 259] A PIE WHOSE VALUE LIST HAS A GAP AT PLACE 0 (`value: ['nope',
