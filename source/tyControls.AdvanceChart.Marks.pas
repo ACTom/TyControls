@@ -4923,8 +4923,6 @@ begin
   begin
     el.HasClip := True;
     el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
-    { [R7-I] _updateLargeClip's group clipPath: the hit too }
-    el.ClipHits := True;
   end;
   el.ProgChunk := AChunk;
   AList.Add(el);
@@ -5244,8 +5242,6 @@ begin
     begin
       el.HasClip := True;
       el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
-      { [R7-I] the large candles' group clipPath: the hit too }
-      el.ClipHits := True;
     end;
     if Length(AVisual.LargeChunks) > 0 then el.ProgChunk := c + 1;
     AList.Add(el);

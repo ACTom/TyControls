@@ -194,7 +194,7 @@ begin
     end;
   end;
   FreeAndNil(FChart);
-  AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 44);
+  AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 46);
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(compared) + ' differ:' + report, 0, bad);
   AssertTrue(Format('the boxes were compared (%d)', [boxes]), boxes >= 5);
 end;

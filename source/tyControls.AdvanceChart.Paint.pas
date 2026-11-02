@@ -1205,12 +1205,12 @@ type
       rule above: the hit test ignores the clip.
       [R7-I] Its rect or its sector, wherever upstream's clip is a clipPath
       on the element or a parent: a line's run and area (the lineGroup's),
-      a lines series' every element, a custom series' (clip: true), a large
-      bar's or candle's batch, a candle or box partly clipped (its own), and
-      while they enter, a parallel line, a theme river layer and a sankey's
-      group (removed when the entering ends). Not a pictorial bar's bar
-      rect, nor a series that cuts its geometry (bars, a scatter's points)
-      or none (a graph). }
+      a lines series' every element, a custom series' (clip: true), a candle
+      or box partly clipped (its own), a thumbnail's window (its
+      contentGroup's), and while they enter, a parallel line, a theme river
+      layer and a sankey's group (removed when the entering ends). A large
+      batch asks its own (TTyLargeGeom.ClipOn). Not a series that cuts its
+      geometry (bars, a scatter's points) or none (a graph). }
     ClipHits: Boolean;
     { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
       up its parents (and its host's, for a label), as zrender's Storage

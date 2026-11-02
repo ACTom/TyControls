@@ -465,6 +465,11 @@ function r7iCases() {
       [2, 3, 'a'], [0, 2, 'b'], [1, 2, 'b'], [2, 3, 'b']] },
     { singleAxis: { type: 'value', min: 0, max: 2, top: 40, bottom: 40, axisLabel: { show: false } } })),
     [Object.assign(PT(200, 150, 150), { dirs: [0, 4] })], { t: 300 }],
+    // a thumbnail's window: its contentGroup's clip cuts it (zoomed in on the
+    // graph's corner, the window hangs over the content's edge)
+    ['r7i.thumb-window', { animation: false, color: PAL, thumbnail: {},
+      series: [{ type: 'graph', layout: 'none', roam: true, zoom: 3, center: [100, 60], symbolSize: 20,
+        data: GRAPH_NODES, links: GRAPH_LINKS }] }, [{ thumbWin: true }]],
     ['r7i.sankey-anim', ANIM(solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
       links: [{ source: 'a', target: 'b', value: 3 }], lineStyle: { opacity: 0.5 } })), [PT(200, 150, 200)], { t: 300 }],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
@@ -513,6 +518,12 @@ function globalRect(el) {
   return r;
 }
 function aimEl(chart, a) {
+  if (a.thumbWin) {
+    const tm = chart.getModel().getComponent('thumbnail', 0);
+    const v = tm && chart.getViewOfComponentModel(tm);
+    must(v && v._windowRect, 'no thumbnail window');
+    return v._windowRect;
+  }
   const model = chart.getModel().getSeriesByIndex(a.s);
   must(model, 'no series ' + a.s);
   if (a.poly) {
@@ -613,7 +624,8 @@ function generate() {
   const MISS = ['bar.silent', 'scatter.infinite', 'pie.infinite', 'line.infinite', 'none.bar-bare',
     'inf.sunburst', 'inf.funnel', 'inf.heatmap', 'inf.themeriver', 'inf.candle', 'inf.boxplot', 'inf.sankey',
     'inf.lines', 'inf.parallel', 'inf.polarbar', 'inf.gauge-progress', 'inf.gauge-pointer', 'inf.chord',
-    'inf.effect', 'inf.pictorial', 'inf.graph-node', 'r7i.scatter-out'];
+    'inf.effect', 'inf.pictorial', 'inf.graph-node', 'r7i.scatter-out',
+    'r7i.thumb-window'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
     must(any === !MISS.includes(c.id), c.id + ': hits ' + any);

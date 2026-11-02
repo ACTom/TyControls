@@ -2828,6 +2828,129 @@
     "4069600000000000",
     "4071500000000000"
    ]
+  },
+  {
+   "id": "radar.indicator-silent",
+   "note": "an indicator's own silent over the radar's triggerEvent: no box",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "radar": {
+     "indicator": [
+      {
+       "name": "Speed",
+       "max": 20000,
+       "silent": true
+      },
+      {
+       "name": "Power",
+       "max": 20000
+      },
+      {
+       "name": "Range",
+       "max": 20000
+      }
+     ],
+     "axisLabel": {
+      "show": true
+     },
+     "triggerEvent": true
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5000,
+         12000,
+         8000
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axis": "radar",
+   "target": "name:0",
+   "rect": {
+    "x": "4071a8a3d70a3d71",
+    "y": "4052400000000000",
+    "width": "404175c28f5c28f6",
+    "height": "4028000000000000"
+   },
+   "point": [
+    300,
+    79
+   ],
+   "tip": null
+  },
+  {
+   "id": "label-interval",
+   "note": "a category label under an interval: {d} is its place among the labels built (Fri: 2, not 4)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ],
+     "tooltip": {
+      "show": true,
+      "formatter": "{a}:{d}"
+     },
+     "axisLabel": {
+      "interval": 1
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "axis": "xAxis",
+   "target": 2,
+   "rect": {
+    "x": "407e80a3d70a3d71",
+    "y": "4074800000000000",
+    "width": "402bd70a3d70a3d8",
+    "height": "4028000000000000"
+   },
+   "point": [
+    495,
+    334
+   ],
+   "tip": {
+    "text": "Fri:2"
+   }
   }
  ],
  "guards": [
@@ -2909,6 +3032,14 @@
   },
   {
    "name": "a radar default",
+   "ok": true
+  },
+  {
+   "name": "an indicator silent",
+   "ok": true
+  },
+  {
+   "name": "a label under an interval",
    "ok": true
   }
  ]

@@ -324,6 +324,11 @@ add2('radar.name-formatter', "an indicator name through axisName.formatter: the 
   'radar', 'name:0');
 add2('radar.place', "a radar name's box with no position written",
   radar({ triggerEvent: true }, { tooltip: Object.assign({}, TIPF) }), 'radar', 'name:1', { box: true });
+add2('radar.indicator-silent', "an indicator's own silent over the radar's triggerEvent: no box",
+  radar({ triggerEvent: true, indicator: [{ name: 'Speed', max: 20000, silent: true }, { name: 'Power', max: 20000 },
+    { name: 'Range', max: 20000 }] }), 'radar', 'name:0');
+add2('label-interval', "a category label under an interval: {d} is its place among the labels built (Fri: 2, not 4)",
+  bar({ tooltip: { show: true, formatter: '{a}:{d}' }, axisLabel: { interval: 1 } }), 'xAxis', 2);
 
 function watchMove(chart) {
   const w = { box: null };
@@ -393,6 +398,8 @@ function generate() {
     ['a parallel default', tipIs('parallel.default', null)],
     ['a radar name under triggerEvent', tipIs('radar.name-trigger', 'Power')],
     ['a radar default', tipIs('radar.default', null) && tipIs('radar.tooltip-show', null)],
+    ['an indicator silent', tipIs('radar.indicator-silent', null)],
+    ['a label under an interval', tipIs('label-interval', 'Fri:2')],
   ].map(([name, ok]) => ({ name, ok }));
   return {
     source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H,
