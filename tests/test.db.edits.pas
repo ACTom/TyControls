@@ -184,6 +184,7 @@ type
     procedure TestNothingIsTypedIntoTheUnloadedLabel;
     procedure TestLinesAddIsAnEditAsTextIs;
     procedure TestNonBlobFieldShowsDisplayTextUnfocused;
+    procedure TestEnterAndTabAreDroppedWhenNotEditable;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
@@ -1141,6 +1142,26 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
+end;
+
+{ #184: Enter and (with WantTabs) Tab change the text, so they ask first, as Backspace does --
+  LCL's TDBMemo.KeyPress drops #13 and #9 then. Not a break put in and wiped again, the caret
+  thrown to the end. }
+procedure TDBMemoTest.TestEnterAndTabAreDroppedWhenNotEditable;
+begin
+  FFix.Src.AutoEdit := False;
+  Memo.WantTabs := True;
+  Bind('Note');
+  EnterControl;
+  Memo.SelStart := 5;
+  Memo.SelLength := 0;
+  Key(VK_RETURN);
+  AssertEquals('no line break', CFixNotes[1], Shown);
+  AssertEquals('the caret where it was', 5, Memo.SelStart);
+  Key(VK_TAB);
+  AssertEquals('no tab', CFixNotes[1], Shown);
+  AssertEquals('the caret still where it was', 5, Memo.SelStart);
+  AssertBrowsing('Enter and Tab without AutoEdit');
 end;
 
 { Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over

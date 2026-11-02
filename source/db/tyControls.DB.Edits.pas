@@ -1672,7 +1672,10 @@ begin
     Key := 0;
     Exit;
   end;
-  if ((Key = VK_BACK) or (Key = VK_DELETE))
+  { Enter and Tab too, when the memo takes them: the base control puts the line break or the
+    tab in as it handles the key (LCL's TDBMemo.KeyPress drops #13 and #9 the same way). }
+  if ((Key = VK_BACK) or (Key = VK_DELETE) or ((Key = VK_RETURN) and WantReturns)
+    or ((Key = VK_TAB) and WantTabs))
     and not (FMemoLoaded and TyDBEditAllowed(FDataLink, FInUserEdit)) then
   begin
     Key := 0;
