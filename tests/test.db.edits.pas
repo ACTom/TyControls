@@ -18,7 +18,7 @@ unit test.db.edits;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, LCLType, LMessages, DB, DBCtrls, TypInfo,
+  Classes, SysUtils, Controls, Forms, LCLType, LMessages, DB, DBCtrls, BufDataset, TypInfo,
   fpcunit, testregistry,
   dbfixtures, tyControls.DB.Edits;
 
@@ -130,6 +130,7 @@ type
     procedure TestFocusShowsFieldTextAndBlurShowsDisplayText;
     procedure TestStringFieldSetsMaxLength;
     procedure TestAuthorsMaxLengthIsKept;
+    procedure TestPasteIntoAnAutoIncrementFieldIsUndone;
     procedure TestFieldAlignmentIsCopied;
     procedure TestTypingEditsBeforeTheKeyLands;
     procedure TestCharacterTheFieldRefusesNeverLands;
@@ -207,6 +208,9 @@ type
 
 { The form test controls sit on needs the widgetset once (as test.corehooks does). }
 procedure NeedDBWidgetSet;
+{ A table of its own, open, on its one row: ID an auto-increment counter (ftAutoInc, which
+  FCL's CanModify lets through) and Name a string. The caller frees it. }
+function NewCounterTable: TBufDataset;
 
 implementation
 
@@ -218,6 +222,25 @@ begin
   if WidgetSetReady then Exit;
   Forms.Application.Initialize;
   WidgetSetReady := True;
+end;
+
+function NewCounterTable: TBufDataset;
+var
+  f: TField;
+begin
+  Result := TBufDataset.Create(nil);
+  f := TAutoIncField.Create(Result);
+  f.FieldName := 'ID';
+  f.DataSet := Result;
+  f := TStringField.Create(Result);
+  f.FieldName := 'Name';
+  f.Size := 20;
+  f.DataSet := Result;
+  Result.CreateDataset;
+  Result.Append;
+  Result.FieldByName('Name').AsString := 'first';
+  Result.Post;
+  Result.First;
 end;
 
 function TProbeDBEdit.ReadClipboardText: string;
@@ -699,6 +722,36 @@ begin
   AssertEquals('the author''s limit', 5, Ed.MaxLength);
   SetStrProp(FCtl, 'DataField', 'Amount');
   AssertEquals('still the author''s', 5, Ed.MaxLength);
+end;
+
+{ #184, doc §3.4: an auto-increment field cannot be changed by the user -- a paste, which no key
+  gate sees, is undone, and the record is not put in dsEdit. }
+procedure TDBEditTest.TestPasteIntoAnAutoIncrementFieldIsUndone;
+var
+  ds: TBufDataset;
+  src: TDataSource;
+  before: string;
+begin
+  ds := NewCounterTable;
+  src := TDataSource.Create(nil);
+  try
+    src.DataSet := ds;
+    SetStrProp(FCtl, 'DataField', 'ID');
+    SetObjectProp(FCtl, 'DataSource', src);
+    AssertTrue('precondition: FCL lets the counter be edited',
+      ds.FieldByName('ID').CanModify);
+    before := Ed.Text;
+    EnterControl;
+    Ed.Clip := '99';
+    Key(VK_A, [ssCtrl]);
+    Key(VK_V, [ssCtrl]);
+    AssertEquals('the paste is undone', before, Ed.Text);
+    AssertTrue('the dataset stays in dsBrowse', ds.State = dsBrowse);
+  finally
+    SetObjectProp(FCtl, 'DataSource', nil);
+    src.Free;
+    ds.Free;
+  end;
 end;
 
 procedure TDBEditTest.TestFieldAlignmentIsCopied;

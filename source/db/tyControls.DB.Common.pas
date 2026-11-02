@@ -47,7 +47,11 @@ function TyDBLoadedDate(AValue: TDateTime; AIsNull: Boolean): TTyDBLoadedValue;
 { The user changed the control's value: put the dataset in dsEdit and mark the link modified,
   so UpdateData writes it back (on EditingDone, on leaving the control, or on a Post made
   elsewhere). When the dataset cannot be edited -- the control or the field is read-only,
-  AutoEdit is off and nobody is editing -- the control goes back to the field's value.
+  AutoEdit is off and nobody is editing -- the control goes back to the field's value. So it
+  does for a field TyFieldIsEditable turns down that the link would still start editing: FCL's
+  CanModify lets an auto-increment counter and a data field flagged Calculated through (a
+  lookup field is the link's to judge, by its key fields, and a lookup control writes those).
+  That is how a paste, a cut, an undo or an IME commit -- which no key gate sees -- is refused.
 
   AInUserEdit is the control's flag for "this is the user's change, keep it": TDataSet.Edit
   announces deRecordChange, which reaches the control as DataChange, and a DataChange that
@@ -150,7 +154,10 @@ end;
 
 procedure TyDBUserChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
 begin
-  if StartEdit(ALink, AInUserEdit) then
+  if (ALink.Field <> nil) and (ALink.Field.FieldKind <> fkLookup)
+    and not TyFieldIsEditable(ALink.Field) then
+    ALink.Reset
+  else if StartEdit(ALink, AInUserEdit) then
     ALink.Modified
   else
     ALink.Reset;

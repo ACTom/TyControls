@@ -47,6 +47,7 @@ type
     procedure EditorKey(AKey: Word);
   published
     procedure TestTypingInTheEditableFieldEditsAtOnce;
+    procedure TestTypingIntoAnAutoIncrementFieldIsUndone;
     procedure TestEnterInTheEditableFieldWrites;
     procedure TestEscapeInTheEditableFieldCancels;
     procedure TestReadOnlyListPickIsUndone;
@@ -257,6 +258,32 @@ begin
   AssertEquals('the combo box follows its field', Editor.Text, Combo.Text);
   AssertTrue('one key: dsEdit', FFix.DS.State = dsEdit);
   AssertTrue('the link is editing', Link.Editing);
+end;
+
+{ #184, doc §3.4: the editable field has no key gate of its own, so typing into an
+  auto-increment field reaches the change -- which takes it back. }
+procedure TDBComboBoxTest.TestTypingIntoAnAutoIncrementFieldIsUndone;
+var
+  ds: TBufDataset;
+  src: TDataSource;
+  before: string;
+begin
+  ds := NewCounterTable;
+  src := TDataSource.Create(nil);
+  try
+    src.DataSet := ds;
+    Combo.Style := csDropDown;
+    SetStrProp(FCtl, 'DataField', 'ID');
+    SetObjectProp(FCtl, 'DataSource', src);
+    before := Combo.Text;
+    EditorType('7');
+    AssertEquals('the key is undone', before, Combo.Text);
+    AssertTrue('the dataset stays in dsBrowse', ds.State = dsBrowse);
+  finally
+    SetObjectProp(FCtl, 'DataSource', nil);
+    src.Free;
+    ds.Free;
+  end;
 end;
 
 procedure TDBComboBoxTest.TestEnterInTheEditableFieldWrites;
