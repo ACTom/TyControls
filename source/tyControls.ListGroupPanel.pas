@@ -345,10 +345,12 @@ type
     { The sider's model, editable in the Object Inspector and streamed to the .lfm:
       groups first, each group's Items nested under it. }
     property Groups: TTyListGroups read FGroups write SetGroups;
+    { Written once set, the default value too: unset, the theme's token decides, so a 26 the
+      host chose must reach the form file to win over it again (#128). }
     property HeaderHeight: Integer read FHeaderHeight write SetHeaderHeight
-      default TyListGroupDefaultHeaderHeight;
+      stored FHeaderHeightExplicit;
     property ItemHeight: Integer read FItemHeight write SetItemHeight
-      default TyListGroupDefaultItemHeight;
+      stored FItemHeightExplicit;
     { Icon source for the group headers and item rows (addressed by ImageIndex). nil = text
       only. Same facility TTyComboBoxEx uses. }
     property Images: TCustomImageList read FImages write SetImages;
