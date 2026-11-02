@@ -1298,8 +1298,9 @@ type
     { 挡在 LCL 自动拖动前面的那一道闸;通过才调继承的 BeginAutoDrag。测试探针重写它数次数,
       不用靠「无头起 LCL 拖动会抛异常」当判据。 }
     procedure StartLclAutoDrag; virtual;
-    { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);
-      别处 —— 包括键盘菜单键的 (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
+    { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);图标条的空白、
+      拉宽边是栏自己的像素,ContextWindow 置 nil 照样走继承。内容区里的 —— 以及键盘菜单键的
+      (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
       (不发 OnContextPopup,Handled 留 False),ContextWindow 置 nil,并挡住 GetPopupMenu,
       子控件的右键请求照样冒泡到窗体。两处都要挡:LCL 先调 DoContextPopup 再调
       GetPopupMenu(control.inc:2484-2492),只改后者挡不住 OnContextPopup。 }

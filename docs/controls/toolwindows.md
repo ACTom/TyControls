@@ -128,7 +128,7 @@ end
 | `WindowIndex` | 在栏里排第几，可写（写 = 调顺序）；不进 .lfm |
 | `Bar` / `IsActive` / `Actions` / `EnsureActions` | 所在的栏（`TTyCustomToolWindowBar`）；是不是当前页；第一个操作区（`TTyCustomToolWindowActions`）；没有就建一个 |
 | `FocusFirst` | 把焦点给正文里第一个能聚焦的控件（跳过操作区） |
-| `OnShow` / `OnHide` | 这一页显示 / 藏起 |
+| `OnShow` / `OnHide` | 这一页显示 / 藏起。`OnShow` 里栏和这一页已经是显示出来的位置和尺寸 |
 
 ### TTyToolWindowActions
 
@@ -312,6 +312,7 @@ end
 - 栏的 `PopupMenu` 和 `OnContextPopup` 管图标、标签、图标条空白处和拉宽边上的右键，不在图标或标签上时 `ContextWindow` 是 nil。正文里的控件冒上来的右键不经过栏，直接交给窗体。栏没有 `PopupMenu` 时，图标和标签上的右键也接着交给窗体。
 - 操作区不发布 `AutoSize`、`ChildSizing`、`BorderSpacing`：它的位置和尺寸由窗口排，子控件由它自己排。3.x 窗体里存过的这几个值，载入时丢掉。
 - 启动时显示出来的当前页收不到 `OnShow`。首次填充内容请放在 FormCreate 里。
+- `OnShow` / `OnHide` 里可以改 `ActiveWindow` 和 `Collapsed`，以处理器改的为准，`OnChange` 只报处理器那一次。
 - `OnExit` 里不要把焦点设回被藏起来的窗口里的控件。
 - 底栏收起后界面上没有入口（侧栏至少还有图标条），请自己给一个开关：菜单项或快捷键设 `Collapsed := False`。示例里是 View › Bottom Panel（`Ctrl+J`）。
 - 事件处理器里不要释放栏、窗口或 manager，要释放请用 `Application.ReleaseComponent`。
