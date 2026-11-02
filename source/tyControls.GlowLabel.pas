@@ -288,7 +288,7 @@ var
   P: TTyPainter;
   S: TTyStyleSet;
   ContentRect: TRect;
-  fontSize, mp, blurDev, i, stamps: Integer;
+  fontSize, mp, blurDev, i, stamps, glowRun, tw, th: Integer;
   dispCap: string;
   glowLayer, blurred: TBGRABitmap;
   glowPx: TBGRAPixel;
@@ -306,6 +306,13 @@ begin
       P.Opacity := S.Opacity;
 
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    { #181: the text sits inside the radius CalculatePreferredSize reserves on each side, so the
+      halo has it. It was laid out against the edge, and the room went to the right of the text
+      while the left glow was cut off. Never more than the box can spare beside the text. }
+    MeasureCaption(APPI, tw, th);
+    glowRun := Math.Min(P.Scale(TyGlowClampRadius(FGlowRadius)),
+      Math.Max(0, ((ContentRect.Right - ContentRect.Left) - tw) div 2));
+    InflateRect(ContentRect, -glowRun, 0);
 
     if dispCap <> '' then
     begin

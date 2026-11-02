@@ -39,8 +39,8 @@ uses tyControls.Gauge;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Min` | `Double` | `0` | 量程下限。 |
-| `Max` | `Double` | `100` | 量程上限;`Max<=Min` 时比例恒为 0(不会除零)。 |
+| `Min` | `Double` | `0` | 量程下限。改了之后 `Value` 若落到量程外，会被重新夹回 `[Min,Max]`。 |
+| `Max` | `Double` | `100` | 量程上限;`Max<=Min` 时比例恒为 0(不会除零)。改了之后同样把 `Value` 夹回量程内。 |
 | `Value` | `Double` | `0` | 当前值;写入时夹紧到 `[Min,Max]`,并**缓动**到新值(见 `AnimationsEnabled`)。 |
 | `Style` | `TTyGaugeStyle` | `gsArc` | `gsLinearH`(横条)/ `gsLinearV`(竖条)/ `gsArc`(开口弧)/ `gsRing`(整环)。 |
 | `ShowValue` | `Boolean` | `True` | 是否在中央绘制格式化后的数值文字。 |

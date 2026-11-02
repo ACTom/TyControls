@@ -66,6 +66,9 @@ type
     procedure PictureChanged(Sender: TObject);
     function GetHasGraphic: Boolean;
     function GetImageSize: Integer;
+    { #181: the image-list edge at APPI -- ImageWidth (or the list's width) is a 96-PPI size, as
+      LCL's SizeForPPI[ImageWidth, PPI] takes it. }
+    function ImageEdgeAt(APPI: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;   // 'TyImage'
     { Picture changed (loaded, assigned, cleared, or its graphic edited), called after the
@@ -274,6 +277,9 @@ function TyImageFitRect(ASrcW, ASrcH, ADstW, ADstH: Integer;
   AKeepOriginX, AKeepOriginY: Boolean): TRect; overload;
 
 implementation
+
+uses
+  LCLType;   // MulDiv
 
 function TyImageFitRect(ASrcW, ASrcH, ADstW, ADstH: Integer;
   AStretch, AProportional, ACenter: Boolean): TRect;
@@ -545,11 +551,19 @@ end;
 
 function TTyCustomImage.GetImageSize: Integer;
 begin
+  Result := ImageEdgeAt(Font.PixelsPerInch);
+end;
+
+function TTyCustomImage.ImageEdgeAt(APPI: Integer): Integer;
+begin
   if FImages = nil then Exit(0);
+  if APPI <= 0 then APPI := 96;
   if FImageWidth > 0 then
     Result := FImageWidth
   else
     Result := FImages.Width;
+  { #181: scaled for the DPI -- a 16 px icon drew 16 device pixels at 150 %. }
+  Result := MulDiv(Result, APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
@@ -677,7 +691,7 @@ begin
       end
       else
         { An image-list icon is rendered for the layer: DeviceScale times its S = 1 size (#83). }
-        src := TyRenderImageScaled(P, FImages, GetImageIndex, GetImageSize, False);
+        src := TyRenderImageScaled(P, FImages, GetImageIndex, ImageEdgeAt(APPI), False);
       if (src = nil) or (src.Width <= 0) or (src.Height <= 0) then
       begin
         P.EndPaint;

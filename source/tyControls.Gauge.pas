@@ -251,6 +251,9 @@ procedure TTyCustomGauge.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
+  { #181: Value stays inside the range, as its own setter keeps it -- a Min moved past it left
+    the readout showing a number the scale no longer has. }
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
@@ -258,6 +261,7 @@ procedure TTyCustomGauge.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;   { #181 }
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 

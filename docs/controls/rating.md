@@ -39,9 +39,9 @@ uses tyControls.Rating;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Count` | `Integer` | `5` | 星数(≥1);减小时 `Value` 随之夹紧。 |
-| `Value` | `Double` | `0` | 当前分值,夹紧到 `0..Count`;赋值仅在**真正变化**时触发 `OnChange`。 |
-| `AllowHalf` | `Boolean` | `False` | 允许半星(0.5 步);关闭时把已有半星四舍五入到整星。 |
+| `Count` | `Integer` | `5` | 星数(≥1);减小时 `Value` 随之夹紧，并触发 `OnChange`。 |
+| `Value` | `Double` | `0` | 当前分值,夹紧到 `0..Count`,并取整到整星(`AllowHalf` 时取整到半星):`3.7` 是 `4`,半星模式下是 `3.5`。赋值仅在**真正变化**时触发 `OnChange`。 |
+| `AllowHalf` | `Boolean` | `False` | 允许半星(0.5 步);关闭时把已有半星取整到整星，值变了就触发 `OnChange`。 |
 | `ReadOnly` | `Boolean` | `False` | 只读:忽略鼠标 / 键盘改值,并丢弃悬停预览。 |
 
 继承:`Font` / `Align` / `Anchors` / `StyleClass` / `Controller` / `TabStop`(默认 `True`)。

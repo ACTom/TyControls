@@ -273,12 +273,23 @@ procedure TTyCustomSparkline.DrawLastDot(P: TTyPainter; const R: TRect; AMin, AM
   const ADotS: TTyStyleSet);
 var
   ctx: TBGRACanvas2D;
-  n: Integer;
-  x, y, rad: Double;
+  n, gap, x0, x1: Integer;
+  x, y, rad, slot: Double;
 begin
   n := Length(FValues);
   if n = 0 then Exit;
   x := R.Right;   // last point is at the far right for both the 1-point and n-point layouts
+  if FStyle = ssBar then
+  begin
+    { #181: on the last BAR -- the middle of the very rect DrawBars fills for it. The line's
+      last point is the band's right edge, but no bar reaches it. }
+    gap := Math.Max(1, P.Scale(1));
+    slot := (R.Right - R.Left) / n;
+    x0 := R.Left + Round((n - 1) * slot) + gap;
+    x1 := R.Left + Round(n * slot) - gap;
+    if x1 <= x0 then x1 := x0 + 1;
+    x := (x0 + x1) / 2;
+  end;
   y := TySparklineY(FValues[n - 1], AMin, AMax, R.Top, R.Bottom - R.Top);
   rad := Math.Max(2, P.Scale(3));
   ctx := P.Bitmap.Canvas2D;

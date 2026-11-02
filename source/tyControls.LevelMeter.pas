@@ -240,6 +240,9 @@ procedure TTyCustomLevelMeter.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
+  { #181: Value stays inside the range, as its own setter keeps it -- a Min moved past it left
+    the readout showing a number the scale no longer has. }
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
@@ -247,6 +250,7 @@ procedure TTyCustomLevelMeter.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;   { #181 }
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
@@ -309,17 +313,24 @@ end;
 procedure TTyCustomLevelMeter.DrawSegments(P: TTyPainter; const ATrack: TRect;
   AFrac: Double; const AFillS: TTyStyleSet);
 var
-  lit, i, gap, spanW, spanH, segLen, ofs: Integer;
+  lit, i, gap, spanW, spanH, segLen, ofs, n: Integer;
   segR: TRect;
 begin
-  lit := TyLevelSegmentsLit(AFrac, FSegments);
-  if lit <= 0 then Exit;
   gap := Math.Max(1, P.Scale(2));
+  { #181: no more segments than the track has room for, a pixel and a gap each. Past that each
+    one still took a pixel and a gap, so the lit ones ran off the end of the track and the meter
+    read full at any level. }
+  if FOrientation = loVertical then n := ATrack.Bottom - ATrack.Top
+  else n := ATrack.Right - ATrack.Left;
+  n := Math.Min(FSegments, (n + gap) div (1 + gap));
+  if n <= 0 then Exit;
+  lit := TyLevelSegmentsLit(AFrac, n);
+  if lit <= 0 then Exit;
   if FOrientation = loVertical then
   begin
-    spanH := (ATrack.Bottom - ATrack.Top) - gap * (FSegments - 1);
-    if spanH < FSegments then spanH := FSegments;
-    segLen := spanH div FSegments;
+    spanH := (ATrack.Bottom - ATrack.Top) - gap * (n - 1);
+    if spanH < n then spanH := n;
+    segLen := spanH div n;
     if segLen < 1 then segLen := 1;
     for i := 0 to lit - 1 do
     begin
@@ -331,9 +342,9 @@ begin
   end
   else
   begin
-    spanW := (ATrack.Right - ATrack.Left) - gap * (FSegments - 1);
-    if spanW < FSegments then spanW := FSegments;
-    segLen := spanW div FSegments;
+    spanW := (ATrack.Right - ATrack.Left) - gap * (n - 1);
+    if spanW < n then spanW := n;
+    segLen := spanW div n;
     if segLen < 1 then segLen := 1;
     for i := 0 to lit - 1 do
     begin

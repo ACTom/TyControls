@@ -54,7 +54,7 @@ uses tyControls.Image;
 | `AntialiasingMode` | `TAntialiasingMode` | `amDontCare` | 缩放质量。`amOff` **保证**硬边（像素画 / 二维码 / 精灵图，任何缩放比例下都不混色）；`amOn` **保证**插值平滑；`amDontCare` 走原有路径，不改变任何既有窗体。 |
 | `Images` | `TCustomImageList` | `nil` | 共享图像源。`Picture` 非空时**优先用 `Picture`**（与 `customimage.inc` 一致）。列表被释放时引用自动置 `nil`。 |
 | `ImageIndex` | `Integer` | `-1` | 显示 `Images` 的第几项。`-1` = 不显示（LCL 默认是 `0`；这里用 `-1`，因为本库的列表按**名字**索引、设计期 `Names` 可以是空的，而 `-1` 也是全库统一的"无图标"哨兵）。 |
-| `ImageWidth` | `Integer` | `0` | 渲染列表项时的像素**边长**；`0` = 用列表自己的 `DefaultSize`。 |
+| `ImageWidth` | `Integer` | `0` | 渲染列表项时的**边长**，按 96 PPI 计、随控件 DPI 缩放（与 LCL 的 `SizeForPPI[ImageWidth, PPI]` 一致）；`0` = 用列表自己的 `DefaultSize`。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态（通常降低不透明度，图像一并变淡）。 |
 | `AutoSize` | `Boolean` | `False` | `True` 时控件尺寸跟随图像原始尺寸；无 `Picture` 时退回到图像列表的尺寸（`ImageSize` 见下）。 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式。 |
@@ -65,7 +65,7 @@ uses tyControls.Image;
 | 成员 | 类型 | 说明 |
 |------|------|------|
 | `HasGraphic` | `Boolean` | 有没有东西可画：有 `Picture`，**或**有 `Images` 且 `ImageIndex` 落在范围内。宿主用它决定要不要显示占位内容，不必自己去 `Picture.Graphic` 上做 nil / `Empty` 判断。 |
-| `ImageSize` | `Integer` | 列表项实际渲染的像素边长：`ImageWidth` 非 0 就用它，否则用 `Images.DefaultSize`；没有列表时为 `0`。 |
+| `ImageSize` | `Integer` | 列表项实际渲染的像素边长：`ImageWidth` 非 0 就用它，否则用 `Images.DefaultSize`，再按控件的 `Font.PixelsPerInch` 缩放（150% 下 16 → 24）；没有列表时为 `0`。 |
 
 ### 继承的通用成员
 

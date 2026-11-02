@@ -271,6 +271,7 @@ uses
   test.parity.shapearrow,
   test.parity.starshape,
   test.parity.image,
+  test.parity.display,
   test.parity.shell,
   test.parity.numeric,
   test.parity.treeview,

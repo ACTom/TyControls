@@ -34,7 +34,7 @@ end;
 | 成员 | 说明 |
 |---|---|
 | `Html: string` | HTML 子集文本。写它重解析 + 重排 + 重绘。 |
-| `WordWrap: Boolean` | 按宽度自动换行。默认 True。 |
+| `WordWrap: Boolean` | 按宽度自动换行。默认 True。在空格处断行;中日韩文字没有空格，每个字都可以断行(与 `TTyLabel` 的折行规则相同)。 |
 | `OnLinkClick(Sender; const AHref)` | 点击 `<a>` 链接触发。 |
 | `AutoSize` | 按内容自适应尺寸。 |
 

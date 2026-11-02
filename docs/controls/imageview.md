@@ -27,7 +27,7 @@ View.ZoomToActual;               // 平滑动画到 100%
 
 | 成员 | 说明 |
 |---|---|
-| `LoadFromFile(path)` / `Picture := pic` / `Clear` | 加载(BGRA 解码,失败清空不崩)/ 赋图 / 清空。 |
+| `LoadFromFile(path)` / `Picture := pic` / `Clear` | 加载(BGRA 解码,失败清空不崩)/ 赋图 / 清空。`LoadFromFile`、`AssignBitmap`、`Clear` 之后读 `Picture`,得到的是当前显示的图(`Clear` 后为空);转换在第一次读 `Picture` 时才做，不读不花这份开销。 |
 | `Zoom: Double`(只读) | 当前缩放(动画时是插值中间值)。 |
 | `ZoomToFit` / `ZoomToActual` | 适配窗口 / 100%(都平滑动画)。 |
 | `ZoomIn` / `ZoomOut` / `ZoomAt(factor, x, y)` | 放大/缩小(以视口中心为锚)/ 以 (x,y) 为锚缩放。 |
@@ -37,7 +37,7 @@ View.ZoomToActual;               // 平滑动画到 100%
 | `Grayscale` / `Sharpen` / `Invert: Boolean` | 灰度 / 锐化 / 反相(直接补色 255-x)。 |
 | `BlurRadius: Integer` | 模糊半径,0=关。 |
 | `TintColor: TColor` + `TintAmount: Integer` | 着色(0..100,100=全覆盖成该色)。 |
-| `OnZoomChange` | 缩放变化(含动画每帧)。 |
+| `OnZoomChange` | 缩放变化(含动画每帧)。`AutoFit` 跟着控件尺寸重新适配、`Clear` 把缩放还原到 100% 时也会触发;尺寸没变的布局轮次不触发。 |
 
 **交互**:滚轮=以光标为中心缩放;拖拽=平移(放大到可平移时);双击=在适配 ↔ 100% 间切换。
 
