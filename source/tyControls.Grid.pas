@@ -364,6 +364,8 @@ type
     procedure SetCellDisplay(AValue: TTyGridCellDisplay);
     procedure SetColor(AValue: TTyColor);
     procedure SetLayout(AValue: TTextLayout);
+    procedure SetSortKind(AValue: TTyGridSortKind);
+    procedure SetAggregate(AValue: TTyGridAggregate);
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
@@ -407,9 +409,9 @@ type
     property PickList: TStrings read FPickList write SetPickList;
     { 这一列按什么比。混合表里日期列按文本排会得到 '10/1' < '2/1' —— 排序方式
       本来就该跟着列走,而不是全表一个开关。gskAuto = 沿用网格的 SortKind。 }
-    property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskAuto;
+    property SortKind: TTyGridSortKind read FSortKind write SetSortKind default gskAuto;
     { 汇总带上这一列显示什么统计。 }
-    property Aggregate: TTyGridAggregate read FAggregate write FAggregate
+    property Aggregate: TTyGridAggregate read FAggregate write SetAggregate
       default gagNone;
     { 整列的单元格底色。TyColorNone(0,默认)= 不指定,走主题。
       对标 LCL TGridColumn.Color (grids.pas:613)。
@@ -780,7 +782,13 @@ type
 
   { 网格的表头。与 TTyHeader 完全一样,只是有了自己的类 —— 设计器才能单独藏起网格用不上的
     MainColumn(#130):它在树/列表上决定哪一列画树线与图标,网格里没有任何代码读它。 }
-  TTyGridHeader = class(TTyHeader);
+  TTyCustomGrid = class;
+
+  TTyGridHeader = class(TTyHeader)
+  private
+    { #169: the grid it heads -- a column's SortKind is a setting the grid has to act on. }
+    FGrid: TTyCustomGrid;
+  end;
 
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
   TTyCustomGrid = class(TTyCustomControl)
@@ -2068,6 +2076,7 @@ type
       分开两个控件是最便宜的隔离。 }
     FFilterEditor: TTyEdit;
     FFilterEditCol: Integer;
+    FFilterEditOrig: string;    { #169: the column's filter when the box opened -- Esc goes back to it }
     { 输入即筛要防抖:百万行的表每敲一个键就重建一次显示序会卡死。 }
     FFilterTimer: TTimer;
     FEditCol: Integer;
@@ -2148,6 +2157,7 @@ type
       长度 <> 列数 = 整体失效(见 InvalidateAggregates)。 }
     FAggCache: array of Double;
     FAggValid: array of Boolean;
+    FAggKind: array of TTyGridAggregate;   { #169: what each cached value was counted as }
     { 逐格附加属性(合并跨度、以及留给后面几批的底色/字体/只读)。
       与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
     FAttrs: TTyGridCellAttrStore;
@@ -2287,6 +2297,7 @@ type
     { #127:网格级 SortKind = gskAuto 时每列判定出来的比较方式,一次排序内有效。 }
     FAutoKinds: array of TTyGridSortKind;
     FAutoKindsValid: Boolean;
+    FColumnsReshaping: Integer;   { #169: InsertColumn/DeleteColumn under way -- indexes in flux }
     procedure CollectKey(Item: string; const Key: string; var AContinue: Boolean);
     procedure SnapshotCellKeys(ADest: TStrings);
     procedure ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
@@ -2310,6 +2321,16 @@ type
     procedure ShowSortInHeader(ACol: Integer; ADir: TTySortDirection);
     procedure SetGroupRowFormat(const AValue: string);
     procedure SeedSort(ACol: Integer; ADir: TTySortDirection);
+    procedure SetSortKind(AValue: TTyGridSortKind);
+    procedure SetBlanksPosition(AValue: TTyGridBlanksPosition);
+    procedure SetSortIgnoreCase(AValue: Boolean);
+    procedure ReapplySort;
+    procedure ColumnSortKindChanged(ACol: Integer);
+    procedure KeepCursorOffHiddenColumn;
+    procedure ShiftColumnState(ACol, ADelta: Integer);
+    function  NextMatch(const AText: string; ACaseSensitive, AWholeCell, AEditable: Boolean;
+      out ACol, ARow: Integer): Boolean;
+    function  EmptyIntoCell: Boolean;
     function  CompareRowsByKeys(const AKeys: TTyGridSortKeys;
       ARow1, ARow2: Integer): Integer;
     function  BlankVerdict(ACol, ARow1, ARow2: Integer;
@@ -3274,12 +3295,12 @@ type
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。
       gskAuto(#127):每列看自己的内容 —— 非空格都是数就按数,都是日期就按日期,否则按文本。 }
-    property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
+    property SortKind: TTyGridSortKind read FSortKind write SetSortKind default gskText;
     { 空值排最前还是最后(翻方向时位置不变)。 }
     property BlanksPosition: TTyGridBlanksPosition read FBlanksPosition
-      write FBlanksPosition default gbpLast;
+      write SetBlanksPosition default gbpLast;
     { 文本比较区不区分大小写。从前写死 CompareText(恒不区分)。 }
-    property SortIgnoreCase: Boolean read FSortIgnoreCase write FSortIgnoreCase
+    property SortIgnoreCase: Boolean read FSortIgnoreCase write SetSortIgnoreCase
       default True;
     property OnCanSort: TTyGridCanSortEvent read FOnCanSort write FOnCanSort;
     { 自定义比较;置 AResult 即接管该列的比较。 }
@@ -3867,6 +3888,27 @@ begin
   ColumnChanged;   { #170 }
 end;
 
+procedure TTyGridColumn.SetSortKind(AValue: TTyGridSortKind);
+var
+  g: TTyCustomGrid;
+begin
+  if FSortKind = AValue then Exit;
+  FSortKind := AValue;
+  { #169:从前直写字段 —— 当前的排序照旧按老办法比,直到下一次点列头。 }
+  g := nil;
+  if (Collection <> nil) and (Collection.Owner is TTyGridHeader) then
+    g := TTyGridHeader(Collection.Owner).FGrid;
+  if g is TTyStringGrid then TTyStringGrid(g).ColumnSortKindChanged(Index);
+end;
+
+procedure TTyGridColumn.SetAggregate(AValue: TTyGridAggregate);
+begin
+  if FAggregate = AValue then Exit;
+  FAggregate := AValue;
+  { #169:页脚重画;缓存里的数记着它是按什么口径算的,口径一变自己就不作数了。 }
+  ColumnChanged;
+end;
+
 procedure TTyGridColumn.Assign(ASource: TPersistent);
 begin
   inherited Assign(ASource);
@@ -4078,6 +4120,7 @@ begin
   TabStop := True;
   { 让表头造网格自己的列类。 }
   FHeader := TTyGridHeader.Create(TTyGridColumn);
+  TTyGridHeader(FHeader).FGrid := Self;   { #169 }
   FHeader.Columns.NewColumnWidth := @NewColumnWidth;   { #127 }
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
@@ -8722,11 +8765,20 @@ begin
 end;
 
 procedure TTyStringGrid.SetUndoLimit(AValue: Integer);
+var
+  i, n: Integer;
 begin
   if AValue < 0 then AValue := 0;
   if FUndoLimit = AValue then Exit;
   FUndoLimit := AValue;
   if FUndoLimit = 0 then ClearUndo;
+  { #169:调低上限当场丢掉最老的那几条(栈底在下标 0)—— 从前要等新步骤一条条挤出去。 }
+  n := Length(FUndoStack) - FUndoLimit;
+  if (FUndoLimit > 0) and (n > 0) then
+  begin
+    for i := 0 to FUndoLimit - 1 do FUndoStack[i] := FUndoStack[i + n];
+    SetLength(FUndoStack, FUndoLimit);
+  end;
 end;
 
 function TTyStringGrid.UndoCount: Integer;
@@ -10050,6 +10102,18 @@ begin
   Key := #0;
 end;
 
+function TTyStringGrid.EmptyIntoCell: Boolean;
+begin
+  Result := False;
+  if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox, gekRating] then Exit;
+  Result := BeginEdit;
+  if not Result then Exit;
+  if FEditor.Visible then FEditor.Text := ''
+  else if FMemoEditor.Visible then FMemoEditor.Text := ''
+  else if FCalcEditor.Visible then FCalcEditor.Text := ''
+  else if FMaskEditor.Visible then FMaskEditor.Text := '';
+end;
+
 function TTyStringGrid.TypeIntoCell(const AChar: string): Boolean;
 var
   key: TUTF8Char;
@@ -10209,6 +10273,10 @@ begin
     VK_PRIOR: begin MoveCursor(FCol, RowStep(FRow, -PageRowStep)); Key := 0; end;
     VK_NEXT:  begin MoveCursor(FCol, RowStep(FRow, PageRowStep)); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
+    { #169: on a cell not being edited they open its editor emptied, as in LCL (grids.pas
+      VK_DELETE, VK_BACK): Enter keeps the empty cell, Esc gives the text back. }
+    VK_DELETE, VK_BACK:
+      if (Shift = []) and not FEditing and EmptyIntoCell then Key := 0;
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
     VK_RETURN: begin
@@ -10312,6 +10380,7 @@ begin
     列增删之后也就不必单独再失效一次。 }
   SetLength(FAggValid, 0);
   SetLength(FAggCache, 0);
+  SetLength(FAggKind, 0);
 end;
 
 procedure TTyStringGrid.InvalidateOrder;
@@ -10740,6 +10809,7 @@ begin
   if w <= 0 then Exit;
 
   FFilterEditCol := ACol;
+  FFilterEditOrig := FilterText(ACol);   { #169 }
   FFilterEditor.SetBounds(l + ScaleI(2), bandTop + ScaleI(2), w - 2 * ScaleI(2),
     h - 2 * ScaleI(2));
   { 先摆好位置再灌值 —— 灌值会触发 OnChange,而它要用到 FFilterEditCol。 }
@@ -10758,7 +10828,9 @@ begin
   which := FFilterEditCol;
   FFilterEditCol := -1;              { 先清,免得 OnExit 递归回来 }
   FFilterEditor.Visible := False;
-  if AApply then SetFilterText(which, FFilterEditor.Text);
+  if AApply then SetFilterText(which, FFilterEditor.Text)
+  { #169:防抖可能已经把敲的字筛上去了 —— 放弃就得回到打开时的那一条。 }
+  else if FilterText(which) <> FFilterEditOrig then SetFilterText(which, FFilterEditOrig);
   Invalidate;
 end;
 
@@ -11167,6 +11239,7 @@ begin
   inherited DoHeaderChanged;
   if FHeaderSortSync > 0 then Exit;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  if FColumnsReshaping = 0 then KeepCursorOffHiddenColumn;
   { NoColumn 只是熄掉三角(与 HideSortArrow 同义,顺序留着),不动排序键。 }
   if Header.SortColumn = NoColumn then Exit;
   if (Header.SortColumn <> FSortCol) or (Header.SortDirection <> FSortDir) then
@@ -11181,6 +11254,79 @@ begin
   inherited Loaded;
   if Header.SortColumn <> NoColumn then
     SeedSort(Header.SortColumn, Header.SortDirection);
+end;
+
+{ #169: a hidden column holds no cursor. HideColumn on the cursor's column, or on the cell being
+  edited, left the cursor -- and the editor -- in a column nobody can see. The edit is committed,
+  as a sort commits it, and the cursor goes to the next column on screen, or the one before. }
+procedure TTyStringGrid.KeepCursorOffHiddenColumn;
+var
+  c: Integer;
+begin
+  if not IsHiddenColumn(FCol) then Exit;
+  if FEditing then EndEdit(True);
+  c := NextVisibleCol(FCol, 1);
+  if IsHiddenColumn(c) then c := NextVisibleCol(FCol, -1);
+  if IsHiddenColumn(c) then Exit;    { every column hidden }
+  MoveCursor(c, FRow);
+  AnchorSelection;
+end;
+
+{ #169: SortKind, BlanksPosition, SortIgnoreCase and a sort column's SortKind change how the
+  rows compare -- the sort in force is redone with them. They were fields written straight, read
+  only by the next click on a header. }
+procedure TTyStringGrid.ReapplySort;
+begin
+  if Length(FSortKeys) = 0 then Exit;
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  EndEdit(True);
+  InvalidateOrder;
+  EnsureOrder;
+  if CanSortPhysically then
+  begin
+    ApplyOrderToData;
+    EnsureOrder;
+  end;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ColumnSortKindChanged(ACol: Integer);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FSortKeys) do
+    if FSortKeys[i].Col = ACol then
+    begin
+      ReapplySort;
+      Exit;
+    end;
+  if IsGroupColumn(ACol) then    { 分组列也按它排 }
+  begin
+    InvalidateOrder;
+    Invalidate;
+  end;
+end;
+
+procedure TTyStringGrid.SetSortKind(AValue: TTyGridSortKind);
+begin
+  if FSortKind = AValue then Exit;
+  FSortKind := AValue;
+  ReapplySort;
+end;
+
+procedure TTyStringGrid.SetBlanksPosition(AValue: TTyGridBlanksPosition);
+begin
+  if FBlanksPosition = AValue then Exit;
+  FBlanksPosition := AValue;
+  ReapplySort;
+end;
+
+procedure TTyStringGrid.SetSortIgnoreCase(AValue: Boolean);
+begin
+  if FSortIgnoreCase = AValue then Exit;
+  FSortIgnoreCase := AValue;
+  ReapplySort;
 end;
 
 { 只种下排序键,不立即排:窗体刚读进来时多半还没有行(SortByColumn 遇到空表会把排序清掉),
@@ -13097,6 +13243,7 @@ begin
     ShiftColKeyedTable(FColFilters, AFromIndex, ADelta);
     ShiftColKeyedTable(FValFilters, AFromIndex, ADelta);
     ShiftColKeyedTable(FAggregates, AFromIndex, ADelta);
+    ShiftColumnState(AFromIndex, ADelta);   { #169:按列号记的其余状态 }
     InvalidateOrder;          { 筛选变了 → 显示序与汇总都要重算 }
   end;
 end;
@@ -13283,6 +13430,99 @@ begin
   end;
 end;
 
+{ #169: the state kept by column index follows its column when one is inserted at ACol
+  (ADelta = 1) or column ACol is deleted (ADelta = -1) -- the sort keys and Header.SortColumn,
+  the group columns, TreeColumn, the header groups, AutoSizeIndex, the cursor and the selection
+  anchor. What pointed at the deleted column lets go of it; the cursor and the anchor stay on
+  its index, the column that took its place. Called before the column is added or removed, with
+  FColumnsReshaping held, so nothing reads the indexes while they are in flux. }
+procedure TTyStringGrid.ShiftColumnState(ACol, ADelta: Integer);
+var
+  i, n, f, l: Integer;
+  gone: Boolean;
+  g: TTyGridHeaderGroup;
+
+  function Moved(AIdx: Integer): Integer;
+  begin
+    gone := False;
+    Result := AIdx;
+    if AIdx < 0 then Exit;
+    if ADelta > 0 then
+    begin
+      if AIdx >= ACol then Inc(Result);
+    end
+    else if AIdx = ACol then gone := True
+    else if AIdx > ACol then Dec(Result);
+  end;
+
+begin
+  n := 0;
+  for i := 0 to High(FSortKeys) do
+  begin
+    FSortKeys[i].Col := Moved(FSortKeys[i].Col);
+    if gone then Continue;
+    FSortKeys[n] := FSortKeys[i];
+    Inc(n);
+  end;
+  SetLength(FSortKeys, n);
+  if n > 0 then
+  begin
+    FSortCol := FSortKeys[0].Col;
+    FSortDir := FSortKeys[0].Dir;
+  end
+  else
+    FSortCol := -1;
+  i := Moved(Header.SortColumn);
+  if gone then i := NoColumn;
+  if i <> Header.SortColumn then ShowSortInHeader(i, Header.SortDirection);
+
+  n := 0;
+  for i := 0 to High(FGroupCols) do
+  begin
+    f := Moved(FGroupCols[i]);
+    if gone then Continue;
+    FGroupCols[n] := f;
+    Inc(n);
+  end;
+  SetLength(FGroupCols, n);
+
+  i := Moved(TreeColumn);
+  if gone then i := -1;
+  TreeColumn := i;
+
+  { 插进一个分组的中间,分组就宽一列;删掉只剩一列的分组,分组就没了。 }
+  for i := HeaderGroups.Count - 1 downto 0 do
+  begin
+    g := TTyGridHeaderGroup(HeaderGroups.Items[i]);
+    f := g.FirstCol;
+    l := g.LastCol;
+    if ADelta > 0 then
+    begin
+      if f >= ACol then Inc(f);
+      if l >= ACol then Inc(l);
+    end
+    else
+    begin
+      if (f = ACol) and (l = ACol) then
+      begin
+        HeaderGroups.Delete(i);
+        Continue;
+      end;
+      if f > ACol then Dec(f);
+      if l >= ACol then Dec(l);
+    end;
+    g.FirstCol := f;
+    g.LastCol := l;
+  end;
+
+  i := Moved(Header.AutoSizeIndex);
+  if gone then i := NoColumn;
+  if i <> Header.AutoSizeIndex then Header.AutoSizeIndex := i;
+
+  FCol := Moved(FCol);
+  FSelAnchorCol := Moved(FSelAnchorCol);
+end;
+
 procedure TTyStringGrid.SwapRows(ARow1, ARow2: Integer);
 var
   j: Integer;
@@ -13327,6 +13567,11 @@ begin
     map[ARow1] := ARow2;
     map[ARow2] := ARow1;
     PermuteRowState(map);
+    { #169:光标与锚点记的是数据行 —— 跟着那条记录走(MoveRow 与拖行都走这里)。 }
+    if FRow = ARow1 then FRow := ARow2
+    else if FRow = ARow2 then FRow := ARow1;
+    if FSelAnchorRow = ARow1 then FSelAnchorRow := ARow2
+    else if FSelAnchorRow = ARow2 then FSelAnchorRow := ARow1;
   finally
     EndUpdateOrder;
   end;
@@ -13484,6 +13729,8 @@ begin
   try
   if (ACol < 0) or (ACol > Header.Columns.Count) then Exit;
   EndEdit(True);
+  Inc(FColumnsReshaping);
+  try
   ShiftCells(ACol, 1, False);
   c := Header.Columns.Add;
   { 新列按 DefaultColWidth 起宽(LCL 的 DefaultColWidth 就管这件事)。
@@ -13491,6 +13738,9 @@ begin
     网格有意见时该由网格说了算,否则这个属性只在设计器里好看。 }
   c.Width := GetDefaultColWidth;
   c.Index := ACol;
+  finally
+    Dec(FColumnsReshaping);
+  end;
   { **在格子搬移之后**记 —— 撤销是倒序应用的,这一条要最先跑
     (先把列去掉,后面的 gukCell 条目才有正确的落点)。 }
   RecordColumnUndo(gukColInsert, ACol);
@@ -13514,10 +13764,18 @@ begin
   { 快照要在**删之前**取(那时列还在),条目要在**删之后**入栈
     (撤销倒序应用,列得先回来,后面的 gukCell 才有地方放)。 }
   snap := SnapshotColumn(ACol);
-  ShiftCells(ACol, -1, False);
-  Header.Columns.Delete(ACol);
+  Inc(FColumnsReshaping);
+  try
+    ShiftCells(ACol, -1, False);
+    Header.Columns.Delete(ACol);
+  finally
+    Dec(FColumnsReshaping);
+  end;
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
+  if FSelAnchorCol > Header.Columns.Count - 1 then FSelAnchorCol := Header.Columns.Count - 1;
+  if FSelAnchorCol < 0 then FSelAnchorCol := 0;
+  KeepCursorOffHiddenColumn;   { #169:接替它的那一列可能是藏着的 }
   RecordColumnUndo(gukColDelete, ACol, -1, snap);
   Invalidate;
   finally
@@ -13808,7 +14066,8 @@ begin
   k := IntToStr(ACol);
   i := FAggregates.IndexOfName(k);
   if i >= 0 then FAggregates.Delete(i);
-  if AKind <> gagNone then FAggregates.Add(k + '=' + IntToStr(Ord(AKind)));
+  { #169:gagNone 也记下 —— 不记的话就落回列的 Aggregate,关不掉。 }
+  FAggregates.Add(k + '=' + IntToStr(Ord(AKind)));
   InvalidateAggregates;      { 换了口径,缓存里那个数已经不是要的那个了 }
   Invalidate;
 end;
@@ -13944,9 +14203,11 @@ begin
     begin
       SetLength(FAggValid, Header.Columns.Count);
       SetLength(FAggCache, Header.Columns.Count);
+      SetLength(FAggKind, Header.Columns.Count);
       for n := 0 to High(FAggValid) do FAggValid[n] := False;
     end;
-    if (ACol <= High(FAggValid)) and FAggValid[ACol] then
+    { #169:按别的口径算的数不作数 —— 运行时改了列的 Aggregate,页脚从前一直是旧值。 }
+    if (ACol <= High(FAggValid)) and FAggValid[ACol] and (FAggKind[ACol] = kind) then
       Exit(FAggCache[ACol]);
   end;
 
@@ -13957,8 +14218,9 @@ begin
   begin
     dataRow := DisplayToData(pos);
     if dataRow < 0 then Continue;
+    { #169:started 只由 AccumulateCell 置 —— 从前这里每格都置,第一个显示的格子
+      是空的或是文字时,Min/Max 就拿 0 去比。 }
     AccumulateCell(ACol, dataRow, kind, acc, n, started);
-    started := True;
   end;
 
   { n = 0(整列一格数值都没有)也要记进缓存,否则空列每帧照样白扫一遍全表。 }
@@ -13968,6 +14230,7 @@ begin
   if cacheable and (ACol <= High(FAggValid)) then
   begin
     FAggCache[ACol] := Result;
+    FAggKind[ACol] := kind;
     FAggValid[ACol] := True;
   end;
 end;
@@ -14744,6 +15007,15 @@ end;
 
 function TTyStringGrid.FindCell(const AText: string;
   ACaseSensitive, AWholeCell: Boolean; out ACol, ARow: Integer): Boolean;
+begin
+  Result := NextMatch(AText, ACaseSensitive, AWholeCell, False, ACol, ARow);
+end;
+
+{ The next cell after the cursor that holds AText, for FindCell/FindNext and a single replace.
+  #169: hidden columns are passed over, as nobody sees what is in them; AEditable passes over
+  the cells that cannot be changed too. }
+function TTyStringGrid.NextMatch(const AText: string; ACaseSensitive, AWholeCell,
+  AEditable: Boolean; out ACol, ARow: Integer): Boolean;
 var
   startPos, flat, total, n, pos, c, dataRow, i: Integer;
 begin
@@ -14768,6 +15040,8 @@ begin
     c := ColumnAtPlace(flat mod n);
     dataRow := DisplayToData(pos);
     if dataRow < 0 then Continue;                 { 分组行跳过 }
+    if IsHiddenColumn(c) then Continue;
+    if AEditable and not CanEditCell(c, dataRow) then Continue;
     if TyGridMatches(GetCellText(c, dataRow), AText, ACaseSensitive, AWholeCell) then
     begin
       ACol := c;
@@ -14800,9 +15074,25 @@ var
 begin
   Result := 0;
   if AFind = '' then Exit;
+  if FReadOnly then Exit;     { #169 }
   EndEdit(True);
   flags := [rfReplaceAll];
   if not ACaseSensitive then Include(flags, rfIgnoreCase);
+
+  { #169: one replace is the next match, the one FindNext goes to -- it was the first match from
+    row 0, the same one each time -- and the cursor goes there, so the next replace goes on. }
+  if not AAll then
+  begin
+    if not NextMatch(AFind, ACaseSensitive, AWholeCell, True, c, dataRow) then Exit;
+    cur := GetCellText(c, dataRow);
+    if AWholeCell then Cells[c, dataRow] := AReplace
+    else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+    Result := 1;
+    MoveCursor(c, dataRow);
+    AnchorSelection;
+    ScrollIntoView(c, dataRow);
+    Exit;
+  end;
 
   { 全部替换 = **一条**撤销记录。逐格记的话,替换 30 处要按 30 次 Ctrl+Z,
     而且每一条都会清一次重做链;记录数还会把 UndoLimit(默认 100)撑爆,
@@ -14817,13 +15107,13 @@ begin
       for p := 0 to Header.Columns.Count - 1 do
       begin
         c := ColumnAtPlace(p);             { 与 FindCell 同序:屏幕上从左往右(#111) }
+        if IsHiddenColumn(c) then Continue;    { #169 }
         cur := GetCellText(c, dataRow);
         if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
         if not CanEditCell(c, dataRow) then Continue;    { 只读格不动;#168:也问 OnCanEditCell }
         if AWholeCell then Cells[c, dataRow] := AReplace
         else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
         Inc(Result);
-        if not AAll then Exit;
       end;
     end;
   finally
@@ -15204,6 +15494,28 @@ var
     Result := True;
   end;
 
+  procedure DropReadOnlyCells;
+  var
+    keys: TStringList;
+    k: Integer;
+    a: TTyGridCellAttr;
+  begin
+    keys := TStringList.Create;
+    try
+      FAttrs.SnapshotKeys(keys);
+      for k := 0 to keys.Count - 1 do
+      begin
+        a := FAttrs.Find(keys[k]);
+        if (a = nil) or not a.ReadOnly then Continue;
+        a := FAttrs.Mutate(keys[k]);
+        a.ReadOnly := False;
+        FAttrs.DropIfDefault(keys[k]);
+      end;
+    finally
+      keys.Free;
+    end;
+  end;
+
 begin
   EndEdit(False);
   { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
@@ -15258,6 +15570,13 @@ begin
     else
     begin
       ClearCells;
+      { #169:换掉内容就是换掉这张表 —— 旧的合并、只读格、隐藏行、行高与多出来的列
+        都是长在旧数据上的,从前全留着,落到新数据头上。 }
+      ClearMerges;
+      DropReadOnlyCells;
+      RowCount := 0;
+      while Header.Columns.Count > Length(csvRows[0]) do
+        DeleteColumn(Header.Columns.Count - 1);
       ClearFilters;
       SortByColumn(-1, sdAscending);     { 导入后回到原始顺序 }
       base := 0;
