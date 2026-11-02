@@ -867,6 +867,11 @@ function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
 function TyAxisLabelGeomsJs(const ASpec: TTyAxisLayoutSpec;
   const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; out AAnyNaN: Boolean): TTyLabelGeomArray;
+{ [R7-L] the traps masked for JS arithmetic over a box at NaN, and handed
+  back clean: the SSE flags ClearExceptions leaves on x86_64 cleared too,
+  so the host's next division by zero is still EZeroDivide }
+function TyMaskJs: TFPUExceptionMask;
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
 
 { The frame of an axis on ARect when nothing better is known: its line on
   the plot's edge, moved out by the offset. The builder, which knows about
@@ -1515,6 +1520,21 @@ begin
   AMargin.AxisAligned := ABare.AxisAligned;
 end;
 
+function TyMaskJs: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
 { [R7-L] THE SAME BOXES AS zrender's union gives them where the label's
   size is written as a string: a word lays the plate out at NaN, and the
   box is NaN there (Text.getBoundingRect). True when a box holds a NaN.
@@ -1537,8 +1557,7 @@ begin
     and not IsNan(box.H)) then
   begin
     Result := True;
-    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
-      exOverflow, exUnderflow, exPrecision]);
+    mask := TyMaskJs;
     try
       padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
       padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
@@ -1553,11 +1572,7 @@ begin
         AMargin.Rect := TyRectExpand(AMargin.Rect, padH, padH, padH, padH);
       end;
     finally
-      ClearExceptions(False);
-      {$IFDEF CPUX86_64}
-      SetMXCSR(GetMXCSR and not LongWord($3F));
-      {$ENDIF}
-      SetExceptionMask(mask);
+      TyUnmaskJs(mask);
     end;
   end;
 end;
@@ -3046,9 +3061,7 @@ begin
     { [R7-L] a box at NaN: BoundingRect.intersect as JS compares, every
       comparison with NaN false -- two labels meet when their other axis
       does }
-    if nanBox then
-      mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
-        exOverflow, exUnderflow, exPrecision]);
+    if nanBox then mask := TyMaskJs;
     try
       TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
         ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
@@ -3056,14 +3069,7 @@ begin
         ASpec.CustomLabels);
       if ASpec.HideOverlap then TyHideOverlap(cands);
     finally
-      if nanBox then
-      begin
-        ClearExceptions(False);
-        {$IFDEF CPUX86_64}
-        SetMXCSR(GetMXCSR and not LongWord($3F));
-        {$ENDIF}
-        SetExceptionMask(mask);
-      end;
+      if nanBox then TyUnmaskJs(mask);
     end;
   end;
   for k := 0 to m - 1 do

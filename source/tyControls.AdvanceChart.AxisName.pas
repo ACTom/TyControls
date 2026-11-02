@@ -693,9 +693,7 @@ begin
     axis alone and hands back a NaN translation) is placed at NaN and
     drawn nowhere: the moves run as JS computes them and a name left at a
     NaN is not shown }
-  if anyNaN then
-    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
-      exOverflow, exUnderflow, exPrecision]);
+  if anyNaN then mask := TyMaskJs;
   try
   for i := 0 to High(AAxes) do
   begin
@@ -725,14 +723,7 @@ begin
     if anyNaN then NameOffNaN(Result[i]);
   end;
   finally
-    if anyNaN then
-    begin
-      ClearExceptions(False);
-      {$IFDEF CPUX86_64}
-      SetMXCSR(GetMXCSR and not LongWord($3F));
-      {$ENDIF}
-      SetExceptionMask(mask);
-    end;
+    if anyNaN then TyUnmaskJs(mask);
   end;
 end;
 
