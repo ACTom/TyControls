@@ -530,6 +530,9 @@ begin
   FPC.Pages[0].PageIndex := 2;
   AssertSame('TabSheet.PageIndex on another page: still A', a, FPC.ActivePage);
   AssertEquals('which moved over', 1, FPC.ActivePageIndex);
+  FPC.MovePage(2, 0);
+  AssertSame('a page from after it moved before it: still A', a, FPC.ActivePage);
+  AssertEquals('which moved over the other way', 2, FPC.ActivePageIndex);
   AssertEquals('the same page: no OnChange', 0, FChanges);
   AssertEquals('nor OnChanging', 0, FChangings);
 end;

@@ -499,6 +499,7 @@ type
     procedure TestADragKeepsTheSelectedTab;
     procedure TestAutoSizeFollowsASideBand;
     procedure TestAutoSizeFollowsFoldedRows;
+    procedure TestTheAskedSizeIsAskedAgainWhenTheBandChanges;
   end;
 
   TTabSet173Access = class(TTyTabSet);
@@ -571,6 +572,9 @@ begin
   AssertEquals('another tab dragged past it: A moves over', 1, FT.TabIndex);
   AssertEquals('still A', 'A', FT.Tabs[FT.TabIndex]);
   AssertEquals('the same tab, nothing to tell', 0, FChanges);
+  FT.Tabs[0] := FT.Tabs[0] + '2';
+  AssertEquals('an edit after the drag still finds A', 'A', FT.Tabs[FT.TabIndex]);
+  AssertEquals('silently', 0, FChanges);
 end;
 
 procedure TTabSet173Test.TestAutoSizeFollowsASideBand;
@@ -583,6 +587,19 @@ begin
   AssertTrue(Format('a side band asks for its width (%d)', [w]), w > 0);
   AssertEquals('the band is the widest tab', FT.BandThicknessPx, w);
   AssertEquals('and leaves the height alone', 0, h);
+end;
+
+procedure TTabSet173Test.TestTheAskedSizeIsAskedAgainWhenTheBandChanges;
+var w, h, one: Integer;
+begin
+  FT.Width := 120;
+  FT.Tabs.AddStrings(['Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel']);
+  w := 0; one := 0;
+  FT.GetPreferredSize(w, one);      // asked once: LCL keeps the answer
+  FT.MultiLine := True;
+  w := 0; h := 0;
+  FT.GetPreferredSize(w, h);
+  AssertTrue(Format('a parent asking again gets the folded height (%d > %d)', [h, one]), h > one);
 end;
 
 procedure TTabSet173Test.TestAutoSizeFollowsFoldedRows;
