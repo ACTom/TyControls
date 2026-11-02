@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyOfficeListBox 是**带分组标题行的列表框**(Office 风格分组列表)。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent`:**标题行**画一条着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),与条目天然对齐(排序 / 删除都跟着走,不会错位)。标题行**不可选中**——点击会被吞掉。用 `AddHeader` / `AddItem` 构建列表。
+TTyOfficeListBox 是**带分组标题行的列表框**(Office 风格分组列表)。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent`:**标题行**画一条着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),与条目天然对齐(排序 / 删除都跟着走,不会错位)。标题行**不可选中**——点它照样有 `OnMouseDown`、照样拿到焦点，只是不选中。用 `AddHeader` / `AddItem` 构建列表。
 
 ---
 
@@ -35,7 +35,7 @@ uses tyControls.OfficeListBox;
 
 ## 4. 交互
 
-- 点击**标题行** → 被吞掉,不选中、不改变 `ItemIndex`。
+- 点击**标题行** → 不选中、不改变 `ItemIndex`;`OnMouseDown` 照常触发,控件照常拿到焦点。
 - 点击**普通行** → 正常选中(同 `TTyListBox`)。
 - **键盘上下 / `Home` / `End` / 代码设 `ItemIndex`** → 若落到标题行,自动按移动方向跳到相邻的可选条目;标题行在**任何路径**(键盘 / 程序 / 鼠标)都不可选。
 

@@ -191,7 +191,8 @@ begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   if not GetItemEnabled(AIndex) then Exit;   { a disabled row does not move }
   SetState(AIndex, NextState[GetState(AIndex)][FAllowGrayed]);
-  ClickCheck;
+  { #164: no ClickCheck -- OnClickCheck is the user's click or Space, as in LCL (checklst.pas:242,
+    :339); a toggle from code fired it too. }
 end;
 
 procedure TTyCheckListBox.CheckAll(AState: TCheckBoxState; aAllowGrayed: Boolean;
@@ -312,7 +313,11 @@ begin
     row := RowAtY(Y);
     // Toggle already refuses a disabled row; the guard here is only so a click on one
     // cannot be mistaken for a no-op caused by geometry.
-    if (row >= 0) and GetItemEnabled(row) then Toggle(row);
+    if (row >= 0) and GetItemEnabled(row) then
+    begin
+      Toggle(row);
+      ClickCheck;
+    end;
   end;
 end;
 
@@ -323,7 +328,11 @@ begin
     // LCL gates the keyboard toggle on ItemEnabled too (checklst.pas:336). Space is still
     // consumed on a disabled row: the row IS the focused one, so letting the key fall
     // through to the form would fire whatever default button is there.
-    if GetItemEnabled(ItemIndex) then Toggle(ItemIndex);
+    if GetItemEnabled(ItemIndex) then
+    begin
+      Toggle(ItemIndex);
+      ClickCheck;
+    end;
     Key := 0;
     Exit;
   end;

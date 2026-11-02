@@ -16,13 +16,14 @@ type
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     { Nearest non-header index at/after ATarget in the direction of travel (inferred from ATarget
       vs the current ItemIndex, flipping at the ends); -1 if the list is all headers. }
     function NextSelectable(ATarget: Integer): Integer;
     { All selection (keyboard nav, the ItemIndex setter, a row click) funnels through SelectItem;
       redirect a header target to its group's nearest real item so headers are never selectable
-      on ANY path (the MouseDown swallow keeps a header click a no-op rather than a redirect). }
+      on ANY path. A click on a header is the base MouseDown's, which asks RowSelectable: it
+      fires OnMouseDown and takes the focus, and selects nothing (#164 -- the swallow here
+      skipped the inherited MouseDown, events and focus with it). }
     procedure SelectItem(AIndex: Integer); override;
     { #123: the multi-select paths -- arrows, Shift ranges, SelectAll -- step over headers too. }
     function RowSelectable(AIndex: Integer): Boolean; override;
@@ -119,18 +120,6 @@ begin
       ActiveController, RtlRowLayout)   // #153
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
-end;
-
-procedure TTyOfficeListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-var
-  row: Integer;
-begin
-  // Swallow a left click on a header row so it never selects; normal rows fall through to the
-  // base. NOTE: in LCL, MouseDown's Shift set INCLUDES the pressed button (ssLeft) — gate on
-  // Button = mbLeft, never on `Shift = []`.
-  row := RowAtY(Y);
-  if (Button = mbLeft) and (row >= 0) and IsHeader(row) then Exit;
-  inherited MouseDown(Button, Shift, X, Y);
 end;
 
 function TTyOfficeListBox.NextSelectable(ATarget: Integer): Integer;
