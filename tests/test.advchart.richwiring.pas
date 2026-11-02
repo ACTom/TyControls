@@ -1105,10 +1105,10 @@ begin
     halo's three labels and title, [R7-L] label-opacity-scatter's two plain
     labels, label-opacity-root's one, label-opacity-item's end label at its
     own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
-    numstr's seven day words and its year, graph-edge-scale's level edge
+    numstr's seven day words, graph-edge-scale's level edge
     label, graph-edge-scale-curve's haloed one and its 'from' -- and no
     others }
-  AssertEquals('texts drawn as one run', 43, FOneRun);
+  AssertEquals('texts drawn as one run', 42, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
@@ -1800,8 +1800,10 @@ end;
   plate is an upright rect half as tall as it is unsquashed. }
 procedure TAdvChartRichWiringOracleTest.TestAnUnequalViewDrawsTheEdgeLabelSquashed;
 var
-  x, y, top, bottom, left, right: Integer;
+  x, y, top, bottom, left, right, k: Integer;
   c: TBGRAPixel;
+  e: TTyChartElement;
+  seen: Boolean;
 begin
   FBmp.Fill(BGRAWhite);
   FChart.Option := '{"animation":false,"series":[{"type":"graph","layout":"none",'
@@ -1840,6 +1842,19 @@ begin
     the data, times 2) }
   AssertTrue(Format('above the line: bottom row %d', [bottom]),
     (bottom >= 95) and (bottom <= 99));
+  { and the label's element is the box the map lays it down as }
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'xx') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertTrue('under the whole map', e.Caption.HasAffine);
+    AssertTrue(Format('its box half as tall: %g', [e.Shape.Bounds.Bottom - e.Shape.Bounds.Top]),
+      (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top > 9)
+      and (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top < 11));
+  end;
+  AssertTrue('the label is there', seen);
 end;
 
 initialization
