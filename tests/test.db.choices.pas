@@ -99,6 +99,8 @@ type
     procedure TestValuesStandInForItems;
     procedure TestValueReadsAndWritesTheSelection;
     procedure TestFieldValueInNoOptionSelectsNothing;
+    procedure TestItemsFilledAfterBindingSelectTheField;
+    procedure TestItemsReorderedSelectTheFieldsOption;
   end;
 
   TDBSegmentedTest = class(TDBChoiceTestBase)
@@ -118,6 +120,8 @@ type
     procedure TestValuesStandInForItems;
     procedure TestValueReadsAndWritesTheSelection;
     procedure TestFieldValueInNoSegmentSelectsNothing;
+    procedure TestItemsFilledAfterBindingSelectTheField;
+    procedure TestItemsReorderedSelectTheFieldsSegment;
   end;
 
   TDBRatingTest = class(TDBChoiceTestBase)
@@ -565,6 +569,38 @@ begin
   AssertBrowsing('a value in no option');
 end;
 
+{ #184: the form fills Items after the dataset is open -- the field's option is selected then,
+  not only after the next record. }
+procedure TDBRadioGroupTest.TestItemsFilledAfterBindingSelectTheField;
+begin
+  Group.Items.Clear;
+  Bind('Kind');
+  AssertEquals('no options yet', -1, Group.ItemIndex);
+  Group.Items.Add('alpha');
+  Group.Items.Add('beta');
+  AssertEquals('alpha, the field''s', 0, Group.ItemIndex);
+  AssertBrowsing('filling Items');
+end;
+
+{ #184: reordered options select the one that stands for the field's value, not the one with
+  the caption that was selected before. }
+procedure TDBRadioGroupTest.TestItemsReorderedSelectTheFieldsOption;
+begin
+  Group.Items.Clear;
+  Group.Items.Add('One');
+  Group.Items.Add('Two');
+  Group.Values.Add('alpha');
+  Group.Values.Add('beta');
+  Bind('Kind');
+  GoRow(2);
+  AssertEquals('beta: Two', 1, Group.ItemIndex);
+  Group.Items.Exchange(0, 1);   // Two, One -- still standing for alpha, beta
+  AssertEquals('beta is the second option still', 1, Group.ItemIndex);
+  AssertEquals('which shows One now', 'One', Group.Items[Group.ItemIndex]);
+  AssertEquals('the value shown is the field''s', 'beta', Group.Value);
+  AssertBrowsing('reordering Items');
+end;
+
 { =============================================================== TDBSegmentedTest ========= }
 
 function TDBSegmentedTest.NewControl: TControl;
@@ -666,6 +702,29 @@ begin
   PutField('Kind', 'zeta');
   AssertEquals('nothing selected', -1, Seg.ItemIndex);
   AssertEquals('no value', '', Seg.Value);
+end;
+
+procedure TDBSegmentedTest.TestItemsFilledAfterBindingSelectTheField;
+begin
+  Seg.Items.Clear;
+  Bind('Kind');
+  AssertEquals('no segments yet', -1, Seg.ItemIndex);
+  Seg.Items.Add('alpha');
+  Seg.Items.Add('beta');
+  AssertEquals('alpha, the field''s', 0, Seg.ItemIndex);
+  AssertBrowsing('filling Items');
+end;
+
+{ The segments are their own values here: one put in front moves the field's segment along. }
+procedure TDBSegmentedTest.TestItemsReorderedSelectTheFieldsSegment;
+begin
+  Bind('Kind');
+  GoRow(2);
+  AssertEquals('beta', 1, Seg.ItemIndex);
+  Seg.Items.Insert(0, 'zeta');   // zeta, alpha, beta, gamma
+  AssertEquals('beta has moved along', 2, Seg.ItemIndex);
+  AssertEquals('the value shown is the field''s', 'beta', Seg.Value);
+  AssertBrowsing('editing Items');
 end;
 
 { ================================================================== TDBRatingTest ========= }

@@ -271,6 +271,8 @@ type
     FLoading: Boolean;
     FInUserEdit: Boolean;
     FValues: TStringList;
+    { The base control's own handler of an Items change, which rebuilds the buttons. }
+    FBaseItemsChanged: TNotifyEvent;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -281,6 +283,9 @@ type
     function GetValues: TStrings;
     procedure SetValues(AValue: TStrings);
     procedure ValuesChanged(Sender: TObject);
+    { Items changed: the buttons are rebuilt, then the field's option selected again -- the
+      base control keeps the old selection by caption, which may stand for another value now. }
+    procedure FieldItemsChanged(Sender: TObject);
     function GetValue: string;
     procedure SetValue(const AValue: string);
     function IndexOfValue(const AValue: string): Integer;
@@ -400,6 +405,8 @@ type
     FDataLink: TFieldDataLink;
     FInUserEdit: Boolean;
     FValues: TStringList;
+    { The base control's own handler of an Items change, which keeps the selected index. }
+    FBaseItemsChanged: TNotifyEvent;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -410,6 +417,8 @@ type
     function GetValues: TStrings;
     procedure SetValues(AValue: TStrings);
     procedure ValuesChanged(Sender: TObject);
+    { Items changed: the field's segment is selected again, as for a Values change. }
+    procedure FieldItemsChanged(Sender: TObject);
     function GetValue: string;
     procedure SetValue(const AValue: string);
     function IndexOfValue(const AValue: string): Integer;
@@ -957,6 +966,8 @@ begin
   ControlStyle := ControlStyle + [csReplicatable];
   FValues := TStringList.Create;
   FValues.OnChange := @ValuesChanged;
+  FBaseItemsChanged := TStringList(Items).OnChange;
+  TStringList(Items).OnChange := @FieldItemsChanged;
   FDataLink := TFieldDataLink.Create;
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
@@ -1025,6 +1036,12 @@ end;
 procedure TTyCustomDBRadioGroup.ValuesChanged(Sender: TObject);
 begin
   if (FDataLink <> nil) and (FDataLink.Field <> nil) then DataChange(Self);
+end;
+
+procedure TTyCustomDBRadioGroup.FieldItemsChanged(Sender: TObject);
+begin
+  if Assigned(FBaseItemsChanged) then FBaseItemsChanged(Sender);
+  ValuesChanged(Sender);
 end;
 
 function TTyCustomDBRadioGroup.ButtonValue(AIndex: Integer): string;
@@ -1116,6 +1133,8 @@ begin
   ControlStyle := ControlStyle + [csReplicatable];
   FValues := TStringList.Create;
   FValues.OnChange := @ValuesChanged;
+  FBaseItemsChanged := TStringList(Items).OnChange;
+  TStringList(Items).OnChange := @FieldItemsChanged;
   FDataLink := TFieldDataLink.Create;
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
@@ -1184,6 +1203,12 @@ end;
 procedure TTyCustomDBSegmented.ValuesChanged(Sender: TObject);
 begin
   if (FDataLink <> nil) and (FDataLink.Field <> nil) then DataChange(Self);
+end;
+
+procedure TTyCustomDBSegmented.FieldItemsChanged(Sender: TObject);
+begin
+  if Assigned(FBaseItemsChanged) then FBaseItemsChanged(Sender);
+  ValuesChanged(Sender);
 end;
 
 function TTyCustomDBSegmented.ButtonValue(AIndex: Integer): string;
