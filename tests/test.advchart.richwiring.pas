@@ -941,8 +941,11 @@ begin
     end;
     w := Str(p.Find('fontWeight'));
     if (w = '') and (Pos('bold', Str(p.Find('font'))) > 0) then w := 'bold';
+    { [R7-M] a looks case's heavy weight is its own: compared whatever the
+      skin's }
     if (WeightOf(w) <> WeightOf(Str(style.Find('fontWeight'))))
-      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight')))) then
+      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight'))))
+      or (FLooks and (WeightOf(Str(style.Find('fontWeight'))) > 400)) then
     begin
       Inc(FCompared);
       if WeightOf(w) <> TyFontWeightOf(q.FontWeight) then
@@ -1107,9 +1110,9 @@ begin
     labels, label-opacity-root's one, label-opacity-item's end label at its
     own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
     numstr's seven day words, graph-edge-scale's level edge
-    label, graph-edge-scale-curve's haloed one and its 'from' -- and no
-    others }
-  AssertEquals('texts drawn as one run', 42, FOneRun);
+    label, graph-edge-scale-curve's haloed one and its 'from', vm-plain-
+    font's four visualMap words and two slider labels -- and no others }
+  AssertEquals('texts drawn as one run', 48, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
