@@ -29,6 +29,7 @@ type
     procedure TestTheHintGoesToSimpleTextWithNoPanels;
     procedure TestACoolBandHandsItsWidthAndVisibleToItsControl;
     procedure TestItemHeightWinsOverTheThemeOnceSet;
+    procedure TestHeightsSetToTheDefaultSurviveTheFormFile;
     procedure TestZoomMaxReclampsTheZoom;
     procedure TestZoomToActualStaysInsideTheLimits;
   end;
@@ -139,6 +140,42 @@ begin
     g.Click(20, 26 + 30 + 5);   // inside the second row, if rows are 30 tall
     AssertEquals('the rows are as tall as ItemHeight, not the token', 1, g.SelectedItem);
   finally
+    g.Free;
+    ctl.Free;
+  end;
+end;
+
+{ #128: HeaderHeight and ItemHeight set to the declared defaults, 26 and 24, on a theme whose
+  token says otherwise, are written to the form file and win again when it is read. }
+procedure TMiscPropsTest.TestHeightsSetToTheDefaultSurviveTheFormFile;
+var
+  ctl: TTyStyleController;
+  g, h: TGroupProbe;
+  ms: TMemoryStream;
+begin
+  ctl := TTyStyleController.Create(nil);
+  g := TGroupProbe.Create(nil);
+  h := TGroupProbe.Create(nil);
+  ms := TMemoryStream.Create;
+  try
+    ctl.LoadThemeCss(':root { --listgroup-header-height: 40px; --listgroup-item-height: 40px; }');
+    g.HeaderHeight := 26;
+    g.ItemHeight := 24;
+    ms.WriteComponent(g);
+    ms.Position := 0;
+    ms.ReadComponent(h);
+    h.Controller := ctl;
+    h.Font.PixelsPerInch := 96;
+    h.SetBounds(0, 0, 200, 300);
+    h.AddGroup('G');
+    h.AddItem(0, 'a');
+    h.AddItem(0, 'b');
+    h.ToggleGroup(0);   // groups start closed
+    h.Click(20, 26 + 24 + 5);   // inside the second row, if the header is 26 and the rows 24
+    AssertEquals('both heights came back from the form file, over the token', 1, h.SelectedItem);
+  finally
+    ms.Free;
+    h.Free;
     g.Free;
     ctl.Free;
   end;
