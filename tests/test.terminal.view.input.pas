@@ -86,6 +86,7 @@ type
     procedure TestReadOnlyLeavesTheKeysItWouldOnlySend;
     procedure TestOnKeyPressSeesTypedCharacters;
     procedure TestNoScrollbackOnTheNormalScreenSendsNoArrows;
+    procedure TestAutoSizeKeepsTheBounds;
   end;
 
 implementation
@@ -936,6 +937,22 @@ begin
   F.ClearRecords;
   F.View.Wheel([], 120, Point(10, 10));
   AssertEquals('the alternate screen: an up arrow', '1B 5B 41', Hex);
+end;
+
+{ #185: AutoSize at run time sized the terminal to its one child, the scroll bar (about
+  15 px wide, 2 columns for the PTY). It has no natural size, as a memo: it keeps its bounds. }
+procedure TTyTerminalViewInputTests.TestAutoSizeKeepsTheBounds;
+var
+  w, h: Integer;
+begin
+  w := F.View.Width;
+  h := F.View.Height;
+  AssertTrue('the bar is there', F.View.Bar <> nil);
+  F.View.AutoSize := True;
+  TyTestSettle(F.Form);
+  AssertEquals('the width', w, F.View.Width);
+  AssertEquals('the height', h, F.View.Height);
+  AssertEquals('the columns', 20, F.View.Cols);
 end;
 
 initialization

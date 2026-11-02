@@ -36,7 +36,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 ## `AutoSize` 不起作用的控件
 
-下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`。
+下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`、`TTyTerminalView`（要固定行列用 `SizeForGrid`）。
 
 ## 不再发布的属性
 

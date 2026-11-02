@@ -654,6 +654,9 @@ type
       columns. 4.0 does not publish ChildSizing; a form saved by 3.x that sets it opens, and the
       value is read past (TTyRetiredPaths). }
     procedure ReadState(Reader: TReader); override;
+    { #185: AutoSize -- no natural size (see the body) }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -920,6 +923,15 @@ const
   FloodCycleMs = 50;             { 输出一直排着时,解析加绘制一轮这么久(约 20 帧每秒) }
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
+
+procedure TTyCustomTerminalView.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { 没有「按内容」的尺寸(同 TTyMemo):答 0 x 0 就保持原来的边界。TWinControl 会按唯一的子控件
+    ——内嵌滚动条——定尺寸，终端缩成一条滚动条宽、PTY 收到 2 列 }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+end;
 
 procedure TTyCustomTerminalView.ReadState(Reader: TReader);
 var

@@ -36,7 +36,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 
 ## Controls `AutoSize` does not apply to
 
-These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`.
+These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`, `TTyTerminalView` (use `SizeForGrid` for a fixed grid).
 
 ## Properties no longer published
 
