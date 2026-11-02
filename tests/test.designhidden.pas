@@ -27,6 +27,7 @@ type
     procedure TestPickOnlyCombosListOnlyPickOnlyStyles;
     procedure TestTheDrawGridDoesNotPublishWhatOnlyTheStringGridUses;
     procedure TestAGridsHeaderPublishesEverythingButMainColumn;
+    procedure TestSizePriorityIsTheGridsOnly;   // #155
     procedure TestTheGeneratedComboRowsAreHidden;
   end;
 
@@ -151,6 +152,14 @@ begin
   finally
     g.Free;
   end;
+end;
+
+procedure TDesignHiddenTest.TestSizePriorityIsTheGridsOnly;
+begin
+  AssertEquals('a list or tree column has no fill to weigh', 'THiddenPropertyEditor',
+    EditorFor('TTyColumn', 'SizePriority'));
+  AssertEquals('the grid''s column offers it again', 'TIntegerPropertyEditor',
+    EditorFor('TTyGridColumn', 'SizePriority'));
 end;
 
 initialization

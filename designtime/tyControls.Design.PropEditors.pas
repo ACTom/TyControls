@@ -20,7 +20,7 @@ uses
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons, tyControls.ValueListEditor,
   tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
   tyControls.ComboBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
-  tyControls.OfficeComboBox,
+  tyControls.OfficeComboBox, tyControls.Grid, tyControls.Columns,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor, tyControls.Design.AdvanceChart.Editor;
 
@@ -903,6 +903,10 @@ begin
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomFilterComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomOfficeComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomShellComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  { #155: a column's SizePriority is the grid's AutoFillColumns weight; the list view and the
+    tree view have no fill to weigh. Offered again on the grid's own column class. }
+  RegisterPropertyEditor(TypeInfo(Integer), TTyColumn, 'SizePriority', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyGridColumn, 'SizePriority', TIntegerPropertyEditor);
   { #167: a value list editor's rows are its own model; Items is the view's flat key list. }
   RegisterPropertyEditor(TypeInfo(TStrings), TTyValueListEditor, 'Items', THiddenPropertyEditor);
   { #163: the filter and look-in combos make their rows from Filter and Directory. }

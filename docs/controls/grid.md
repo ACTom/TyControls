@@ -417,7 +417,7 @@ TyGridButton                按钮单元格(:hover / :active)
 
 ### 事件
 单元格级鼠标(`OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`)、
-表头(`OnHeaderClick` / `OnHeaderRightClick` / `OnColumnMove`)、
+表头(`OnHeaderClick` / `OnHeaderRightClick` / `OnColumnMove`;`OnHeaderClick` 在同一段列头上按下再松开时触发,拖列、点筛选按钮都不算,列去掉 `coAllowClick` 也不触发)、
 尺寸(`OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`)、
 内建控件(`OnCanToggleCheck` / `OnCheckBoxChange` / `OnCellButtonClick`)。
 

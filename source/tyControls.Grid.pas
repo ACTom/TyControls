@@ -878,6 +878,7 @@ type
       要压过 hover 的观感。也与 FDragCol 分开:后者只在 hoDrag + coDraggable
       时才置位,是"这一列可能要被拖走"的候选,不是"这一段被按住了"。 }
     FPressedHeaderCol: Integer;
+    FSpringW:          Integer;   { #155:coAutoSpring 上次分配时的宽度(逻辑像素) }
     { 逐格样式解析的记忆化。**这是 A2 渲染管线逐格化能不掉速的全部原因**:
       按状态组合缓存,绝大多数格状态相同(空集)于是整帧只解析一次;
       只有 hover/选中/被钩子改过的那几格才多解析几次。 }
@@ -1617,6 +1618,7 @@ type
       accessors of its own (a data-aware grid's Columns). Same rules as ColumnClass. }
     function ColumnsClass: TTyColumnsClass; virtual;
     procedure Resize; override;
+    procedure Loaded; override;   { #155 }
     { An open in-place editor follows its cell after the layout moved: a scroll, a column
       or row size, the control's own size. Called where those settle (UpdateScrollBars,
       the two scroll setters) and again before every paint, so a path that changes the
@@ -4917,7 +4919,17 @@ end;
 procedure TTyCustomGrid.Resize;
 begin
   inherited Resize;
+  { #155:coAutoSpring 的列分掉宽度的变化 —— DistributeSpring 从前没有调用点。
+    AutoFillColumns 开着时整行由它铺满,弹簧就不再插手。 }
+  if not FAutoFillColumns and not (csLoading in ComponentState) then
+    FHeader.Columns.SpringTo(UnscaleI(ClientWidth), FSpringW);
   UpdateScrollBars;
+end;
+
+procedure TTyCustomGrid.Loaded;
+begin
+  inherited Loaded;
+  FSpringW := UnscaleI(ClientWidth);   { #155:读进来的列宽是按这个宽度定的 }
 end;
 
 procedure TTyCustomGrid.EditorFollowCell;
@@ -7487,6 +7499,8 @@ begin
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
     if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
+    { #155:coResizable 关掉的列,分隔线不认 —— 从前照样能拖宽。 }
+    if not (coResizable in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
     { goFixedColSizing:关掉时冻结列的分隔线不认。判据与 ClipColToBody
       用的是同一对(前导 FixedCols + 尾部 FixedColsRight),两边不同步的话
       会出现"能拖的列"和"画在冻结带里的列"对不上。 }
@@ -7582,7 +7596,7 @@ begin
   d := ColumnAtX(X);
   if d >= 0 then
   begin
-    if Assigned(FOnHeaderClick) then FOnHeaderClick(Self, d);
+    { #155:OnHeaderClick 挪到松开时(MouseUp),与排序同一个点击语义。 }
     { 记下被按住的那一段。**状态总是记**、重绘只在 goHeaderPushedLook 开着时做:
       标志关掉时这条路径与从前逐位一致(连重绘次数都一样),不给现有窗体添一帧。 }
     FPressedHeaderCol := d;
@@ -7714,6 +7728,16 @@ begin
     FOnEndRowSize(Self, DisplayToData(FResizeRow),
       RowHeightOf(DisplayToData(FResizeRow)));
 
+  { #155:列头点击 = 按下并在同一段列头上松开,中间没把列拖走 —— 与排序一致。
+    从前在按下时就发:拖列、点筛选按钮的那一下也算点击,而且不看 coAllowClick。 }
+  if (Button = mbLeft) and (FPressedHeaderCol >= 0) and not FHeaderDragMoved
+     and Assigned(FOnHeaderClick) then
+  begin
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpHeader) and (hit.Col = FPressedHeaderCol)
+       and (coAllowClick in TTyColumn(FHeader.Columns.Items[FPressedHeaderCol]).Options) then
+      FOnHeaderClick(Self, FPressedHeaderCol);
+  end;
   FResizeCol := -1;
   FResizeRow := -1;
   FDragCol := -1;
@@ -10266,11 +10290,13 @@ begin
      and ShowsFilterButton(hit.Col)
      and PtInRect(HeaderFilterRect(hit.Col, HeaderHeightPx), Point(X, Y)) then
   begin
+    FPressedHeaderCol := -1;   { #155:点筛选按钮不是点列头 }
     ShowColumnFilterDropDown(hit.Col);
     Exit;
   end;
   if (hit.Part = ghpHeader) and (hit.Col >= 0)
-     and (hoHeaderClickAutoSort in Header.Options) then
+     and (hoHeaderClickAutoSort in Header.Options)
+     and (coAllowClick in TTyColumn(Header.Columns.Items[hit.Col]).Options) then   { #155 }
   begin
     { 这里只**武装**,排序在 MouseUp 里做:排序是点击语义,点击 = 按下并在同一处
       松开。从前在按下时就排,于是按在分隔线上准备拖宽的那一下先把表排了一遍

@@ -303,6 +303,13 @@ type
     { What the last MouseDown landed on. DblClick carries no coordinates, and a
       double-click in the header must not activate the focused ITEM. }
     FPressHit:     TTyListHitPart;
+    { #155: the header section under the pointer (hoHotTrack) and the one pressed, -1 for
+      none; a press on a section that the pointer then drags (hoDrag + coDraggable) moves
+      the column instead of clicking it. }
+    FHeaderHot, FHeaderPressed: Integer;
+    FColDragging: Boolean;
+    FColDragStartX: Integer;
+    FSpringW: Integer;   { #155: the width coAutoSpring last shared out, logical px }
     FResizing:     Boolean;
     FResizeCol:    Integer;
     FResizeStartX: Integer;
@@ -1208,6 +1215,8 @@ begin
 
   FItemIndex := -1;
   FAnchor    := -1;
+  FHeaderHot     := -1;   // #155
+  FHeaderPressed := -1;
   FHot       := -1;
 
   FResizeCol     := NoColumn;
@@ -2333,6 +2342,7 @@ end;
 procedure TTyCustomListView.Loaded;
 begin
   inherited Loaded;
+  FSpringW := UnscaleI(ClientWidth);   // #155: the authored widths are for this width
   if (FSortColumn < 0) and (FHeader.SortColumn >= 0) then
   begin
     FSortColumn := FHeader.SortColumn;
@@ -2677,7 +2687,10 @@ begin
   if regionH < 0 then regionH := 0;
 
   vertCap := FViewStyle in [lvsReport, lvsIcon, lvsSmallIcon, lvsTile];
-  horzCap := FViewStyle in [lvsReport, lvsList];
+  { #155/#165: a report row spans every column, so bringing it into view sideways jumped the
+    view to the row's far end (or back to its start) on every arrow key. Only the list
+    mode's column-major cells scroll into view sideways. }
+  horzCap := FViewStyle = lvsList;
 
   if vertCap then
   begin
@@ -3481,6 +3494,7 @@ var
   useSec: Boolean;
   border: TBGRAPixel;
   icoList: TCustomImageList;
+  secStates: TTyStateSet;
 begin
   { The REPORT column-header band and its cells. Distinct from the group band's key
     ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat
@@ -3520,6 +3534,15 @@ begin
     if cellR.Left < 0 then cellR.Left := 0;
     if cellR.Right > M.ViewportW then cellR.Right := M.ViewportW;
 
+    { #155: the section's own states -- :hover under the pointer with hoHotTrack, :selected
+      while pressed. They were never resolved, though the theme styles both. }
+    { Pressed wins over hover -- the resolve applies :hover last. }
+    secStates := [];
+    if col.Index = FHeaderPressed then secStates := [tysSelected]
+    else if (hoHotTrack in FHeader.Options) and (col.Index = FHeaderHot) then secStates := [tysHover];
+    hs := PartStyle('TyListViewHeaderSection', '', TyStatesUnlessDisabled(Self, secStates));
+    useSec := tpTextColor in hs.Present;
+    if useSec then tc := hs.TextColor else tc := AFrame.TextColor;
     if tpBackground in hs.Present then
       P.FillBackground(cellR, hs.Background, 0);
 
@@ -3916,6 +3939,8 @@ begin
     EndEdit(True);
   end;
   UpdateScrollBars;
+  if not (csLoading in ComponentState) then
+    FHeader.Columns.SpringTo(UnscaleI(ClientWidth), FSpringW);   // #155
   ApplyHeaderAutoSize;   // #125
 end;
 
@@ -4106,27 +4131,17 @@ begin
       if HandleAllocated then MouseCapture := True;   { headless: no handle to capture with — same guard TTyTreeView already carries }
       Exit;
     end;
+    { #155: a header click is a press and a release on the same section with no column
+      dragged on the way (MouseUp) -- as LVN_COLUMNCLICK. It fired on the press, which left
+      no room for hoDrag. }
     clickCol := FHeader.Columns.ColumnFromPosition(X, ColumnAxis);
     if clickCol <> NoColumn then
     begin
-      if Assigned(FOnColumnClick) then FOnColumnClick(Self, clickCol);
-      col := FHeader.Columns.Items[clickCol] as TTyColumn;
-      if FAutoSort and (coAllowClick in col.Options) then
-      begin
-        if FSortColumn = clickCol then
-        begin
-          if FSortDirection = sdAscending then FSortDirection := sdDescending
-          else FSortDirection := sdAscending;
-        end
-        else
-        begin
-          FSortColumn := clickCol;
-          FSortDirection := sdAscending;
-        end;
-        FHeader.SortColumn := FSortColumn;       // #125: in step before the header notifies
-        FHeader.SortDirection := FSortDirection;
-        Sort;
-      end;
+      FHeaderPressed := clickCol;
+      FColDragging := False;
+      FColDragStartX := X;
+      if HandleAllocated then MouseCapture := True;
+      Invalidate;
     end;
     Exit;
   end;
@@ -4328,6 +4343,30 @@ begin
     Exit;
   end;
 
+  { #155: a pressed section dragged past the threshold is a column move, when hoDrag and the
+    column's coDraggable allow it. }
+  if (FHeaderPressed >= 0) and (ssLeft in Shift) and not FColDragging
+    and (Abs(X - FColDragStartX) > ScaleI(4)) and (hoDrag in FHeader.Options)
+    and (coDraggable in (FHeader.Columns.Items[FHeaderPressed] as TTyColumn).Options) then
+  begin
+    FColDragging := True;
+    Invalidate;
+  end;
+  { #155: hoHotTrack lights the header section under the pointer. }
+  if hoHotTrack in FHeader.Options then
+  begin
+    m := CurrentMetrics;
+    if (FViewStyle = lvsReport) and (m.HeaderH > 0) and (Y >= 0) and (Y < m.HeaderH) then
+      newHot := FHeader.Columns.ColumnFromPosition(X, ColumnAxis)
+    else
+      newHot := -1;
+    if newHot <> FHeaderHot then
+    begin
+      FHeaderHot := newHot;
+      Invalidate;
+    end;
+  end;
+
   UpdateHoverCursor(X, Y);
 
   if FHotTrack then
@@ -4343,8 +4382,60 @@ begin
 end;
 
 procedure TTyCustomListView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  m: TTyListMetrics;
+  upCol, target: Integer;
+  col: TTyColumn;
 begin
   inherited MouseUp(Button, Shift, X, Y);
+  if (Button = mbLeft) and (FHeaderPressed >= 0) then
+  begin
+    col := FHeader.Columns.Items[FHeaderPressed] as TTyColumn;
+    upCol := FHeader.Columns.ColumnFromPosition(X, ColumnAxis);
+    if FColDragging then
+    begin
+      { #155: the column goes where it was dropped. }
+      if upCol <> NoColumn then
+        target := (FHeader.Columns.Items[upCol] as TTyColumn).Position
+      else if X > 0 then
+        target := FHeader.Columns.Count - 1
+      else
+        target := 0;
+      if target <> Integer(col.Position) then
+        FHeader.Columns.AdjustPosition(col, target);
+    end
+    else
+    begin
+      m := CurrentMetrics;
+      if (upCol = FHeaderPressed) and (Y >= 0) and (Y < m.HeaderH)
+        and (coAllowClick in col.Options) then
+      begin
+        { #155: coAllowClick gates the click, and the sort is AutoSort's and the header's
+          hoHeaderClickAutoSort's both -- the header option was ignored. }
+        if Assigned(FOnColumnClick) then FOnColumnClick(Self, upCol);
+        if FAutoSort and (hoHeaderClickAutoSort in FHeader.Options) then
+        begin
+          if FSortColumn = upCol then
+          begin
+            if FSortDirection = sdAscending then FSortDirection := sdDescending
+            else FSortDirection := sdAscending;
+          end
+          else
+          begin
+            FSortColumn := upCol;
+            FSortDirection := sdAscending;
+          end;
+          FHeader.SortColumn := FSortColumn;       // #125: in step before the header notifies
+          FHeader.SortDirection := FSortDirection;
+          Sort;
+        end;
+      end;
+    end;
+    FHeaderPressed := -1;
+    FColDragging := False;
+    if HandleAllocated then MouseCapture := False;
+    Invalidate;
+  end;
   if FResizing then
   begin
     FResizing := False;
@@ -4381,6 +4472,11 @@ begin
   { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
   NoteHostHover(False);
   SetDividerCursor(False);
+  if FHeaderHot <> -1 then
+  begin
+    FHeaderHot := -1;
+    Invalidate;
+  end;
   if FHot <> -1 then
   begin
     FHot := -1;

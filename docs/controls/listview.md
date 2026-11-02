@@ -119,7 +119,10 @@ LV.Sort;
 
 - 排序**只置换内部的显示顺序,从不改动 `Items`**。所以一个不可变的数据源(shell 目录)也能排序。
 - 平局按 item index 兜底,**排序是稳定的**。
-- `AutoSort = True`(默认)时点击表头即排序,并切换升/降序。
+- 点击表头 = 在同一个分区上按下再松开(中间没拖动列)。`AutoSort = True`(默认)且 `Header.Options` 含 `hoHeaderClickAutoSort`(默认含)时点击即排序,并切换升/降序;两者关掉任一个就只触发 `OnColumnClick` 不排序。列的 `Options` 去掉 `coAllowClick` 后点它什么都不触发。
+- `hoDrag` + 列的 `coDraggable`(默认都开)时,按住列头拖过 4 像素就是挪列,松开时列移到落点,这一下不算点击。
+- `hoHotTrack` 时鼠标下的列头分区按 `TyListViewHeaderSection:hover` 画;按住的分区按 `:selected` 画。
+- 列的 `coAutoSpring`:控件变宽 / 变窄时,这些列按各自宽度的比例分掉变化量。
 - `lskNumber` / `lskDateTime` 解析不了的单元格**永远排在最后,与升降序无关** —— 按大小降序排文件,你想看到的是最大的文件在顶上,不是一堆空白。
 - `lskDateTime` 只认 ISO 格式(`2026-07-10` / `2026-07-10 08:30`),避免排序结果依赖机器 locale。文本更花哨的列请用 `OnCompare`。
 - `OnCompare` 已接则完全接管比较,收到的是两个 **item index**。
@@ -254,7 +257,7 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
 |---|---|
 | `OnGetItemText` / `OnGetItemImage` / `OnGetItemState` | 虚拟模式取数 |
 | `OnCompare` | 自定义比较,收两个 item index |
-| `OnColumnClick` | 点击表头分区 |
+| `OnColumnClick` | 点击表头分区(松开时触发,拖动列不算;需要列的 `coAllowClick`) |
 | `OnSelectItem(Sender; AIndex: Integer; ASelected: Boolean)` | 某一项的选中状态**翻转**了:被选上 → `ASelected = True`,被放开 → `False`。**一次操作会为每一个翻转的项各触发一次** |
 | `OnChanging(Sender; AIndex; AChange: TTyItemChange; var AAllowChange: Boolean)` | 选择变化**之前**触发,置 `AAllowChange := False` 即否决——控件不动选择位,后续的 `OnChange` / `OnSelectItem` 也都不发 |
 | `OnChange(Sender; AIndex: Integer; AChange: TTyItemChange)` | 变化**之后**触发,说明是哪一项、变的是什么 |

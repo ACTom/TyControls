@@ -47,6 +47,8 @@ type
     procedure XMouseMove(X, Y: Integer);
     { A left press, optionally the second click of a double-click. }
     procedure XMouseDown(X, Y: Integer; ADouble: Boolean = False);
+    { A press and its release: a header click is the release on the pressed section (#155). }
+    procedure XClick(X, Y: Integer);
     procedure XDblClick;
     { A key press, for the F2 / Space / Ctrl+Space wiring. }
     procedure XKeyDown(AKey: Word; AShift: TShiftState = []);
@@ -494,6 +496,24 @@ type
     procedure TestLeftRightAndTheTiltScrollAReport;
   end;
 
+  { #155: header hover / pressed, column drag, the click on release and its gates, spring. }
+  TListView155Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FClicks: Integer;
+    procedure ColClicked(Sender: TObject; AColumn: Integer);
+    function NewTwoColumns: TLV165;
+    function HeaderBand(L: TLV165; AMove: Boolean; ADown: Boolean): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHotTrackAndThePressLightTheSection;
+    procedure TestDraggingAColumnMovesIt;
+    procedure TestTheClickIsTheReleaseAndItsGatesHold;
+    procedure TestSpringColumnsShareAResize;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -571,6 +591,12 @@ begin
   sh := [ssLeft];
   if ADouble then Include(sh, ssDouble);
   MouseDown(mbLeft, sh, X, Y);
+end;
+
+procedure TTyListViewAccess.XClick(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], X, Y);
+  MouseUp(mbLeft, [], X, Y);
 end;
 
 procedure TTyListViewAccess.XDblClick;
@@ -2663,22 +2689,22 @@ end;
 
 procedure TListViewHeaderDpiTest.TestClickOnAColumnsFirstPaintedPixelSelectsThatColumn;
 begin
-  FLV.XMouseDown(PaintLeft(1), 5);
+  FLV.XClick(PaintLeft(1), 5);
   AssertEquals('the first painted pixel of column 1 is column 1', 1, FClicked);
 end;
 
 procedure TListViewHeaderDpiTest.TestClickJustLeftOfTheEdgeStaysOnThePreviousColumn;
 begin
-  FLV.XMouseDown(PaintLeft(1) - 1, 5);
+  FLV.XClick(PaintLeft(1) - 1, 5);
   AssertEquals('the pixel before it is still column 0', 0, FClicked);
 end;
 
 procedure TListViewHeaderDpiTest.TestTheSecondInteriorBoundaryAgrees;
 begin
-  FLV.XMouseDown(PaintLeft(2), 5);
+  FLV.XClick(PaintLeft(2), 5);
   AssertEquals('the first painted pixel of column 2 is column 2', 2, FClicked);
   FClicked := -2;
-  FLV.XMouseDown(PaintLeft(2) - 1, 5);
+  FLV.XClick(PaintLeft(2) - 1, 5);
   AssertEquals('the pixel before it is still column 1', 1, FClicked);
 end;
 
@@ -2914,9 +2940,13 @@ begin
   (l.Header.Columns.Items[0] as TTyColumn).Width := 800;
   l.XLayout;
   AssertTrue('setup: something to the side', l.HScrollBar.Visible);
+  l.ItemIndex := 0;
   before := l.OffX;
   l.XKey(VK_RIGHT);
-  AssertTrue('Right scrolls the report sideways', l.OffX > before);
+  AssertEquals('Right scrolls the report one step sideways', before + 16, l.OffX);
+  AssertEquals('and leaves the selection', 0, l.ItemIndex);
+  l.XKey(VK_DOWN);
+  AssertEquals('an arrow down keeps the view where it is sideways', before + 16, l.OffX);
   before := l.OffX;
   l.XKey(VK_LEFT);
   AssertTrue('Left brings it back', l.OffX < before);
@@ -2925,7 +2955,129 @@ begin
   AssertTrue('a tilt to the right scrolls right', l.OffX > before);
 end;
 
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TListView155Test.ColClicked(Sender: TObject; AColumn: Integer);
+begin
+  Inc(FClicks);
+end;
+
+procedure TListView155Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FClicks := 0;
+end;
+
+procedure TListView155Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TListView155Test.NewTwoColumns: TLV165;
+var c: TTyColumn; i: Integer;
+begin
+  Result := TLV165.Create(FForm);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 300, 200);
+  Result.ViewStyle := lvsReport;
+  c := Result.Header.Columns.Add as TTyColumn; c.Text := 'A'; c.Width := 100;
+  c := Result.Header.Columns.Add as TTyColumn; c.Text := 'B'; c.Width := 100;
+  for i := 0 to 2 do Result.Items.Add.Caption := 'item ' + IntToStr(i);
+  Result.XLayout;
+  Result.OnColumnClick := @ColClicked;
+end;
+
+function TListView155Test.HeaderBand(L: TLV165; AMove: Boolean; ADown: Boolean): TBGRABitmap;
+var bmp: TBitmap;
+begin
+  if AMove then L.XMove(30, 5);
+  if ADown then L.MouseDown(mbLeft, [ssLeft], 30, 5);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 200);
+    L.XRender(bmp);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function BandDiff(A, B: TBGRABitmap): Integer;
+var x, y: Integer;
+begin
+  Result := 0;
+  for y := 1 to 15 do
+    for x := 5 to 95 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TListView155Test.TestHotTrackAndThePressLightTheSection;
+var l: TLV165; plain, hover, pressed: TBGRABitmap;
+begin
+  l := NewTwoColumns;
+  l.Header.Options := l.Header.Options + [hoHotTrack];
+  plain := HeaderBand(l, False, False);
+  hover := HeaderBand(l, True, False);
+  pressed := HeaderBand(l, False, True);
+  try
+    AssertTrue(Format('hoHotTrack: the section under the pointer is :hover (%d px)',
+      [BandDiff(plain, hover)]), BandDiff(plain, hover) > 100);
+    AssertTrue(Format('pressed, it is :selected (%d px)', [BandDiff(hover, pressed)]),
+      BandDiff(hover, pressed) > 100);
+  finally
+    plain.Free; hover.Free; pressed.Free;
+  end;
+  l.MouseUp(mbLeft, [], 30, 5);
+end;
+
+procedure TListView155Test.TestDraggingAColumnMovesIt;
+var l: TLV165;
+begin
+  l := NewTwoColumns;
+  l.MouseDown(mbLeft, [ssLeft], 30, 5);
+  l.MouseMove([ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('hoDrag + coDraggable: the column goes where it is dropped', 1,
+    Integer((l.Header.Columns.Items[0] as TTyColumn).Position));
+  AssertEquals('and a drag is no click', 0, FClicks);
+end;
+
+procedure TListView155Test.TestTheClickIsTheReleaseAndItsGatesHold;
+var l: TLV165; c: TTyColumn;
+begin
+  l := NewTwoColumns;
+  l.MouseDown(mbLeft, [ssLeft], 30, 5);
+  AssertEquals('the press is no click yet', 0, FClicks);
+  l.MouseUp(mbLeft, [], 30, 5);
+  AssertEquals('the release on the same section is', 1, FClicks);
+  AssertEquals('and AutoSort sorts on it', 0, l.SortColumn);
+  l.Header.Options := l.Header.Options - [hoHeaderClickAutoSort];
+  l.MouseDown(mbLeft, [ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('without hoHeaderClickAutoSort the click still counts', 2, FClicks);
+  AssertEquals('but sorts nothing', 0, l.SortColumn);
+  c := l.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  l.MouseDown(mbLeft, [ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('without coAllowClick it is no click', 2, FClicks);
+end;
+
+procedure TListView155Test.TestSpringColumnsShareAResize;
+var l: TLV165; c: TTyColumn;
+begin
+  l := NewTwoColumns;
+  c := l.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  l.SetBounds(0, 0, 400, 200);
+  AssertEquals('the spring column takes the 100 px the list grew by', 200, c.Width);
+  AssertEquals('the other keeps its width', 100, (l.Header.Columns.Items[1] as TTyColumn).Width);
+end;
+
 initialization
+  RegisterTest(TListView155Test);
   RegisterTest(TListView165Test);
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
