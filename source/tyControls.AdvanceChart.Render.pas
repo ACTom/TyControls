@@ -142,6 +142,8 @@ function TyNormalizeLineDash(const AType: string; AWidth: Double;
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
+{ [R7-L] THE OPACITY A PIECE IS DRAWN AT under an element of AAlpha. }
+function TyRtPieceDrawnAlpha(const APiece: TTyRtPiece; AAlpha: Double): Double;
 { [R5-A] A FRAME'S CANVAS SHADOW (a title's): the frame's fill, its alpha, on a mask of
   its own and the painter's shadow cast from it -- the frame itself is drawn as it
   always was. ARadius as FillBackground takes it. }
@@ -2304,7 +2306,9 @@ procedure TraceRtPiece(P: TTyPainter; const APc: TTyRtPiece; AScale: Double;
   const AR: array of Double);
 var r1, r2, r3, r4, x0, y0, x1, y1: Double;
 begin
-  if not APc.PathEdges or (AR[0] + AR[1] + AR[2] + AR[3] <= 0) then
+  { [R7-L] the rounded path whenever borderRadius is truthy ([0, 0] too):
+    with a size that was a string it runs to the joined edges }
+  if not APc.PathEdges or (not APc.Rounded and (AR[0] + AR[1] + AR[2] + AR[3] <= 0)) then
   begin
     TraceRtRect(P, APc.X * AScale, APc.Y * AScale, APc.W * AScale,
       APc.H * AScale, AR);
@@ -2453,6 +2457,14 @@ begin
   end;
 end;
 
+function TyRtPieceDrawnAlpha(const APiece: TTyRtPiece; AAlpha: Double): Double;
+begin
+  { [R7-L] a token's own opacity is its own (retrieve3's first); every
+    other piece is the Text's, under the element's alpha }
+  if APiece.OwnOpacity then Result := APiece.Opacity
+  else Result := APiece.Opacity * AAlpha;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -2481,7 +2493,7 @@ begin
   for i := 0 to High(APieces) do
   begin
     pc := APieces[i];
-    a := pc.Opacity * AAlpha;
+    a := TyRtPieceDrawnAlpha(pc, AAlpha);
     if pc.Kind = rpkRect then
     begin
       if not pc.Drawn then Continue;
@@ -2504,7 +2516,10 @@ begin
         finally
           P.RestoreState;
         end;
-        RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
+        if pc.OwnOpacity then
+          RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity)
+        else
+          RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
         Continue;
       end;
       P.SaveState;

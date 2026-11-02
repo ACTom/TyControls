@@ -39,6 +39,11 @@
 //   number); a rect whose shape holds one also records `pathBounds`, its
 //   own bounds, whose path joins it as a string (x + '600'). A text placed
 //   at NaN (a non-finite transform) records no pieces.
+//   [R7-L] a label's opacity on every series kind (`looks`): the label's
+//   own, the root textStyle's, the host's defaultOpacity (a scatter's 0.8,
+//   an itemStyle.opacity, a graph edge's or a lines' lineStyle.opacity),
+//   none at all (sunburst, sankey, themeRiver, a line's endLabel, a
+//   markArea), and a rich token's own over the Text's.
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -572,6 +577,100 @@ const scatLayout = (item1, layout) => opt({
   series: [{ type: 'scatter', labelLayout: layout, label: { show: true, formatter: 'label{c}', color: '#333333', opacity: 1, backgroundColor: '#eeeeee' },
     data: SCAT.map((v, i) => (i === 1 ? { value: v, label: item1 } : v)) }],
 });
+// ---- [R7-L] a label's opacity: setTokenTextStyle's retrieve2(its own, the
+// root textStyle's), else the host's style.opacity a view hands over as
+// defaultOpacity (a scatter's symbols are 0.8) -- the normal state only, and
+// not inside rich, where a token keeps retrieve2(its own, the root's) and
+// zrender gives every other child the Text's style.opacity (Text.ts:630,
+// 868, 966). Series kinds whose view passes no defaultOpacity keep 1.
+const OPAC_XY = { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } };
+const OPAC_LBL = { show: true, color: '#333333', formatter: 'L{c}' };
+const OPAC_BOX = { backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 };
+const opacScatter = (series, extra) => opt(Object.assign({}, OPAC_XY, { series }, extra));
+const OPAC_ITEMS = [[1, 1], { value: [3, 3], label: OPAC_BOX }, { value: [5, 5], label: Object.assign({ opacity: 0.5 }, OPAC_BOX) },
+  { value: [7, 7], label: { formatter: '{a|x}{b|y}', rich: { a: { opacity: 0.3, color: '#aa0000', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } } },
+  { value: [9, 9], label: { opacity: 0.4 } }];
+const OPAC_PIE_LBL = { show: true, color: '#333333', formatter: '{b}', backgroundColor: '#eeeeee' };
+const OPAC_HALF = { opacity: 0.5 };
+const R7L_OPACITY_CASES = [
+  { name: 'label-opacity-scatter', looks: true, note: "scatter labels: plain and boxed at the symbols' 0.8, an own 0.5 over a box, a rich text (a token's own 0.3, the other at 0.8), an own 0.4 plain",
+    option: opacScatter([{ type: 'scatter', label: OPAC_LBL, data: OPAC_ITEMS }]) },
+  { name: 'label-opacity-root', looks: true, note: "the root textStyle.opacity 0.6: a scatter label's (over the 0.8) and a rich token's own; a written token 0.3 over it",
+    option: opacScatter([{ type: 'scatter', label: OPAC_LBL, data: OPAC_ITEMS.slice(0, 4) }], { textStyle: { opacity: 0.6 } }) },
+  { name: 'label-opacity-item', looks: true, note: "itemStyle.opacity 0.4 on a scatter, 0.5 on a bar, a line (its symbols' labels) and an effectScatter: each label takes it, boxed or rich; a line's endLabel keeps 1, or its own 0.7",
+    option: opt({ xAxis: xCat(), yAxis: val(), series: [
+      { type: 'bar', itemStyle: OPAC_HALF, label: Object.assign({ position: 'top' }, OPAC_LBL, OPAC_BOX), data: DATA },
+      { type: 'line', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, { formatter: '{a|{c}}', rich: { a: { color: '#aa0000', backgroundColor: '#dddddd' } } }), data: [60, 90, 70] },
+      { type: 'effectScatter', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX), data: [30, 40, 50] },
+      { type: 'scatter', itemStyle: { opacity: 0.4 }, label: Object.assign({}, OPAC_LBL, OPAC_BOX), data: [160, 230, 180] },
+      { type: 'line', itemStyle: OPAC_HALF, lineStyle: OPAC_HALF, endLabel: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'End' }), data: [10, 20, 15] },
+      { type: 'line', endLabel: Object.assign({}, OPAC_LBL, { formatter: 'End2', opacity: 0.7 }), data: [5, 6, 7] }] }) },
+  { name: 'label-opacity-pie-funnel', looks: true, note: "itemStyle.opacity 0.5 on a pie (outside labels) and a funnel (inside): the labels take it; an item's label.opacity 0.6 over it",
+    option: opt({ series: [
+      { type: 'pie', center: ['25%', '50%'], radius: '30%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ value: 3, name: 'Alpha' }, { value: 2, name: 'Beta' }, { value: 2, name: 'Eps', label: { opacity: 0.6 } }] },
+      { type: 'funnel', left: '55%', width: '40%', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_PIE_LBL, { position: 'inside' }), data: [{ value: 3, name: 'Gamma' }, { value: 2, name: 'Delta' }, { value: 1, name: 'Zeta', label: { opacity: 0.6 } }] }] }) },
+  { name: 'label-opacity-hier', looks: true, note: "itemStyle.opacity 0.5 on a treemap (the label takes the visual opacity), a sunburst (no defaultOpacity: 1) and a tree (its symbols' labels take it)",
+    option: opt({ series: [
+      { type: 'treemap', left: 0, width: '30%', breadcrumb: { show: false }, itemStyle: OPAC_HALF, label: { show: true, color: '#333333', formatter: '{b}' }, data: [{ value: 3, name: 'Tm' }] },
+      { type: 'sunburst', center: ['50%', '50%'], radius: [0, '20%'], itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ value: 3, name: 'Sb' }] },
+      { type: 'tree', left: '70%', right: '5%', top: '20%', bottom: '20%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Tr', children: [{ name: 'Tc' }] }] }] }) },
+  { name: 'label-opacity-flow', looks: true, note: "itemStyle.opacity 0.5 on a sankey and a themeRiver (no defaultOpacity: 1); a lines series' labels at its lineStyle.opacity 0.4",
+    option: opt({ singleAxis: { top: '60%', bottom: '10%', type: 'value' }, xAxis: { type: 'value', min: 0, max: 10, show: false }, yAxis: { type: 'value', min: 0, max: 10, show: false },
+      grid: { left: '55%', top: '5%', height: '40%' },
+      series: [
+        { type: 'sankey', left: 10, top: 10, width: '40%', height: '45%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Sa' }, { name: 'Sz' }], links: [{ source: 'Sa', target: 'Sz', value: 1 }] },
+        { type: 'themeRiver', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [[1, 3, 'Ra'], [2, 4, 'Ra'], [3, 3, 'Ra']] },
+        { type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { opacity: 0.4, color: '#888888' }, label: { show: true, color: '#333333', formatter: 'Ln', backgroundColor: '#eeeeee' },
+          data: [{ coords: [[1, 1], [9, 9]] }] }] }) },
+  { name: 'label-opacity-markers', looks: true, note: "a markPoint's label at its itemStyle.opacity 0.5, a markLine's at its lineStyle.opacity 0.4, a markArea's at 1 whatever its itemStyle.opacity",
+    record: ['markerLabel'], option: opt({ xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', data: DATA,
+      markPoint: { itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'MP' }), data: [{ type: 'max' }] },
+      markLine: { symbol: 'none', lineStyle: { opacity: 0.4, color: '#888888' }, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'ML' }), data: [{ type: 'average' }] },
+      markArea: { itemStyle: { opacity: 0.3, color: '#cccccc' }, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'MA' }), data: [[{ xAxis: 'Mon' }, { xAxis: 'Tue' }]] } }] }) },
+  { name: 'label-opacity-graph', looks: true, note: "a graph's node labels at itemStyle.opacity 0.5, its edge labels at lineStyle.opacity 0.4; a radar's symbol labels at 0.5, an item's own 0.3; a chord's at 0.5",
+    option: opt({ radar: { center: ['75%', '50%'], radius: '30%', indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }], axisName: { show: false } },
+      series: [
+        { type: 'graph', left: 20, top: 40, width: 200, height: 200, itemStyle: OPAC_HALF, lineStyle: { opacity: 0.4, color: '#888888' }, label: OPAC_PIE_LBL,
+          edgeLabel: { show: true, color: '#333333', formatter: 'e', backgroundColor: '#eeeeee' },
+          data: [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }], links: [{ source: 'Ga', target: 'Gb' }] },
+        { type: 'radar', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'R{c}' }), data: [{ value: [3, 6, 9] }, { value: [2, 4, 8], itemStyle: { opacity: 0.3 } }] },
+        { type: 'chord', center: ['45%', '20%'], radius: ['8%', '10%'], itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Ca' }, { name: 'Cb' }], links: [{ source: 'Ca', target: 'Cb', value: 1 }] }] }) },
+  { name: 'label-opacity-heat-pict', looks: true, note: "itemStyle.opacity 0.5 on a cartesian heatmap and a pictorialBar: the labels take it",
+    option: opt({ xAxis: xCat(), yAxis: { type: 'category', data: ['u', 'v'] }, visualMap: { show: false, min: 0, max: 1, inRange: { color: ['#5470c6', '#5470c6'] } }, series: [
+      { type: 'heatmap', itemStyle: Object.assign({ color: '#5470c6' }, OPAC_HALF), label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'H' }), data: [[0, 0, 1]] },
+      { type: 'pictorialBar', symbol: 'rect', itemStyle: OPAC_HALF, label: Object.assign({ position: 'top' }, OPAC_LBL, OPAC_BOX, { formatter: 'P' }), data: [0, 1, 0] }] }) },
+];
+
+// ---- [R7-L] a legend's text is placed by its style's x / y (LegendView:
+// x: textX, y: itemHeight / 2): a size written as a numeric string is
+// joined to that place, not to 0 ----
+const HUNG_BAR = { xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }, { type: 'bar', name: 'Cost', data: [60, 70, 80] }] };
+const R7L_HUNG_CASES = [
+  { name: 'legend-numstr-width', looks: true, note: "legend textStyle width '60' with a rounded plate: the path runs from textX to textX + '600'; the items laid out by their bounds",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { textStyle: { color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }, HUNG_BAR)) },
+  { name: 'legend-numstr-lineheight', looks: true, note: "legend lineHeight '20' on two lines: the second at textY + '20' from the item's y",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { formatter: '{name}\nnext', textStyle: { color: '#333333', lineHeight: '20' } } }, HUNG_BAR)) },
+  { name: 'legend-numstr-rich', looks: true, note: "a rich legend width '80': the right token at xLeft + '80'",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { formatter: '{a|{name}}{c|R}', textStyle: { color: '#333333', width: '80', backgroundColor: '#eeeeee',
+      rich: { a: { color: '#aa0000' }, c: { align: 'right', color: '#0000aa' } } } } }, HUNG_BAR)) },
+];
+// ---- [R7-L] the extremes R7-H left: a numeric string width / height below
+// nought over a rounded plate (roundRect: x = x + width, a string), the
+// same without a radius (canvas' rect takes the number), and a radius
+// written [0, 0] (truthy: the rounded path, its edges joined) ----
+const R7L_EXTREME_CASES = [
+  { name: 'numstr-negative', looks: true, note: "width '-60' over a rounded plate (x + '-600' a string: no plate), the same unrounded (a rect to the left), height '-30' rounded",
+    option: sLabel([{ width: '-60', backgroundColor: '#eeeeee', borderRadius: 3 },
+      { width: '-60', backgroundColor: '#eeeeee' },
+      { height: '-30', backgroundColor: '#eeeeee', borderRadius: 3 }], {}) },
+  { name: 'numstr-radius-zero-array', looks: true, note: "width '60' with borderRadius [0, 0]: shape.r is truthy, so the rounded path runs to the joined edge; borderRadius 0 the canvas rect",
+    option: sLabel([{ width: '60', backgroundColor: '#eeeeee', borderRadius: [0, 0] },
+      { width: '60', backgroundColor: '#eeeeee', borderRadius: 0 },
+      { width: '60', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: [0, 0, 0, 0] }], {}) },
+];
 const R7H_CASES = [
   { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
     option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
@@ -834,6 +933,9 @@ const cases = [
       detail: { formatter: '{a|{value}}%', backgroundColor: '#eeeeee', borderRadius: 3, padding: [4, 8], fontSize: 20, rich: { a: { color: '#c23531', fontSize: 24 } } } }] }) },
   ...GAUGE_CASES,
   ...R7H_CASES,
+  ...R7L_OPACITY_CASES,
+  ...R7L_HUNG_CASES,
+  ...R7L_EXTREME_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -959,9 +1061,16 @@ function probeBox(lib, el) {
 // [R7-H] what canvas makes of a value zrender kept as a string ('600', a
 // plain line's y '-7530' after textY += '20'): its number
 const num = v => (typeof v === 'string' ? +v : v);
+// [R7-L] a rounded rect (shape.r truthy: roundRect) whose path runs through a
+// joined string to NaN (x + '-600') draws nothing; an unrounded one is
+// canvas' rect at its numbers
 function finChild(c) {
   if (c.type === 'tspan') {
     return (c.style.x == null || Number.isFinite(num(c.style.x))) && (c.style.y == null || Number.isFinite(num(c.style.y)));
+  }
+  if (c.shape.r && ['x', 'y', 'width', 'height'].some(k => typeof c.shape[k] === 'string')) {
+    const pb = c.getBoundingRect();
+    if (![pb.x, pb.y, pb.width, pb.height].every(Number.isFinite)) return false;
   }
   return ['x', 'y', 'width', 'height'].every(k => (typeof c.shape[k] === 'number' || typeof c.shape[k] === 'string')
     && Number.isFinite(num(c.shape[k])));
@@ -995,8 +1104,11 @@ function recordText(lib, t, measureSet) {
   // own box laid out at NaN): its transform is not finite and nothing of it
   // is placed -- it records no pieces
   const unplaced = !!m && !m.every(Number.isFinite);
+  // [R7-L] and a text whose own bounds are NaN (an unrounded plate whose
+  // path joins a negative numeric string: drawn by canvas, bounded at NaN)
+  const ownBounds = el.getBoundingRect();
   const wordWidth = unplaced || !children.every(finChild) || ![pb.x, pb.y, pb.w, pb.h].every(v => (typeof v === 'number' || typeof v === 'string')
-    && Number.isFinite(num(v)));
+    && Number.isFinite(num(v))) || ![ownBounds.x, ownBounds.y, ownBounds.width, ownBounds.height].every(Number.isFinite);
   const box = wordWidth ? null : put(put(put(put({}, 'x', num(pb.x)), 'y', num(pb.y)), 'width', num(pb.w)), 'height', num(pb.h));
   if (box) Object.assign(box, corners(m, num(pb.x), num(pb.y), num(pb.w), num(pb.h)));
   const drawnBox = log.bgs.filter(b => b.isBox);
@@ -1128,7 +1240,13 @@ function recordText(lib, t, measureSet) {
       Object.assign(o, corners(m, num(sh.x), num(sh.y), num(sh.width), num(sh.height)));
       if (['x', 'y', 'width', 'height'].some(k => typeof sh[k] === 'string')) {
         const pbr = c.getBoundingRect();
-        o.pathBounds = put(put(put(put({}, 'x', pbr.x), 'y', pbr.y), 'width', pbr.width), 'height', pbr.height);
+        // [R7-L] pathNaN where they are NaN (an unrounded rect canvas draws at
+        // its numbers, its path joined to '300-600')
+        if ([pbr.x, pbr.y, pbr.width, pbr.height].every(Number.isFinite)) {
+          o.pathBounds = put(put(put(put({}, 'x', pbr.x), 'y', pbr.y), 'width', pbr.width), 'height', pbr.height);
+        } else {
+          o.pathNaN = true;
+        }
       }
       o.fill = nn(cs.fill);
       put(o, 'fillOpacity', cs.fillOpacity);

@@ -861,6 +861,17 @@ function TyRectExpand(const ARect: TTyXYWH; ATop, ARight, ABottom,
 function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
   const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyLabelGeomArray;
+{ [R7-L] the same labels with their boxes as zrender's union gives them --
+  NaN where a size written as a word laid a plate out at NaN; AAnyNaN when
+  one is. Only the name layout's moves read these. }
+function TyAxisLabelGeomsJs(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; out AAnyNaN: Boolean): TTyLabelGeomArray;
+{ [R7-L] the traps masked for JS arithmetic over a box at NaN, and handed
+  back clean: the SSE flags ClearExceptions leaves on x86_64 cleared too,
+  so the host's next division by zero is still EZeroDivide }
+function TyMaskJs: TFPUExceptionMask;
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
 
 { The frame of an axis on ARect when nothing better is known: its line on
   the plot's edge, moved out by the offset. The builder, which knows about
@@ -942,7 +953,8 @@ implementation
 
 uses tyControls.AdvanceChart.AxisName, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.AxisBreak,
-  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Data;
+  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Data,
+  tyControls.AdvanceChart.RichStyle;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -1508,6 +1520,63 @@ begin
   AMargin.AxisAligned := ABare.AxisAligned;
 end;
 
+function TyMaskJs: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+{ [R7-L] THE SAME BOXES AS zrender's union gives them where the label's
+  size is written as a string: a word lays the plate out at NaN, and the
+  box is NaN there (Text.getBoundingRect). True when a box holds a NaN.
+  Only the rules that weigh labels against each other read these (the
+  ends, hideOverlap). }
+function LabelBoxesJs(const ASpec: TTyAxisLayoutSpec;
+  const APlace: TTyAxisLabelPlacement; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; var AMargin, ABare: TTyLabelBox): Boolean;
+var
+  jm: ITyTextJsBoxMeasurer;
+  box: TTyXYWH;
+  padH, padV: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := False;
+  if not Supports(LabelMeterOf(ASpec, AMeasurer), ITyTextJsBoxMeasurer, jm) then Exit;
+  if not jm.MeasureJsBox(APlace.Text, ASpec.FontName, ASpec.FontSizeLogical,
+    ASpec.FontWeight, APlace.AnchorH, APlace.AnchorV, box) then Exit;
+  if not (not IsNan(box.X) and not IsNan(box.Y) and not IsNan(box.W)
+    and not IsNan(box.H)) then
+  begin
+    Result := True;
+    mask := TyMaskJs;
+    try
+      padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
+      padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
+      ABare.LocalRect := box;
+      if ASpec.LabelMinMargin then AMargin.LocalRect := ABare.LocalRect
+      else AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
+      ABare.Rect := TyRectApplyMat(ABare.LocalRect, ABare.M);
+      AMargin.Rect := TyRectApplyMat(AMargin.LocalRect, AMargin.M);
+      if ASpec.LabelMinMargin then
+      begin
+        padH := AxisScaleF(ASpec.LabelMinMarginLogical, APPI);
+        AMargin.Rect := TyRectExpand(AMargin.Rect, padH, padH, padH, padH);
+      end;
+    finally
+      TyUnmaskJs(mask);
+    end;
+  end;
+end;
+
 { The first line of a label: the auto interval measures one line's height. }
 function FirstLine(const AText: string): string;
 var p: Integer;
@@ -1587,10 +1656,13 @@ begin
   i := 0;
   while i <= n - 1 do
   begin
-    { the widest line, and one line's height }
-    LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
-      ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
-    LabelMeterOf(ASpec, AMeasurer).MeasureLine(FirstLine(ASpec.Labels[i]),
+    { the widest line, and one line's height -- [R7-L] of the words in the
+      label's font (makeAutoCategoryInterval: textContain.getBoundingRect
+      of the formatted text), not of its box: a plate, padding or a width
+      written on the label weighs nothing here [was: the block's box] }
+    TyRtInnerMeasurer(LabelMeterOf(ASpec, AMeasurer)).MeasureLine(ASpec.Labels[i],
+      ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
+    TyRtInnerMeasurer(LabelMeterOf(ASpec, AMeasurer)).MeasureLine(FirstLine(ASpec.Labels[i]),
       ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight, lw, h);
     ws[k] := w;
     hs[k] := h;
@@ -2222,10 +2294,20 @@ begin
   begin
     cx := M[0] * px[k] + M[2] * py[k] + M[4];
     cy := M[1] * px[k] + M[3] * py[k] + M[5];
-    if cx < Result.X then Result.X := cx;
-    if cy < Result.Y then Result.Y := cy;
-    if cx > maxX then maxX := cx;
-    if cy > maxY then maxY := cy;
+    { [R7-L] Math.min / Math.max: a NaN corner (a box laid out at NaN, the
+      traps masked) is NaN }
+    if IsNan(cx) then begin Result.X := NaN; maxX := NaN; end
+    else if not IsNan(Result.X) then
+    begin
+      if cx < Result.X then Result.X := cx;
+      if cx > maxX then maxX := cx;
+    end;
+    if IsNan(cy) then begin Result.Y := NaN; maxY := NaN; end
+    else if not IsNan(Result.Y) then
+    begin
+      if cy < Result.Y then Result.Y := cy;
+      if cy > maxY then maxY := cy;
+    end;
   end;
   Result.W := maxX - Result.X;
   Result.H := maxY - Result.Y;
@@ -2237,19 +2319,33 @@ begin
     or ((Abs(M[0]) < 1e-5) and (Abs(M[3]) < 1e-5));
 end;
 
+{ [R7-L] Math.min / Math.max: NaN when either is (a box at NaN, the traps
+  masked) }
+function UMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  Result := Min(A, B);
+end;
+
+function UMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  Result := Max(A, B);
+end;
+
 function TyRectUnion(const A, B: TTyXYWH): TTyXYWH;
 begin
   { A is `this`, B `other` }
-  Result.X := Min(B.X, A.X);
-  Result.Y := Min(B.Y, A.Y);
+  Result.X := UMin(B.X, A.X);
+  Result.Y := UMin(B.Y, A.Y);
   if (not IsNan(A.X)) and (not IsInfinite(A.X)) and (not IsNan(A.W))
     and (not IsInfinite(A.W)) then
-    Result.W := Max(B.X + B.W, A.X + A.W) - Result.X
+    Result.W := UMax(B.X + B.W, A.X + A.W) - Result.X
   else
     Result.W := B.W;
   if (not IsNan(A.Y)) and (not IsInfinite(A.Y)) and (not IsNan(A.H))
     and (not IsInfinite(A.H)) then
-    Result.H := Max(B.Y + B.H, A.Y + A.H) - Result.Y
+    Result.H := UMax(B.Y + B.H, A.Y + A.H) - Result.Y
   else
     Result.H := B.H;
 end;
@@ -2266,14 +2362,34 @@ end;
 
 { ==================== the labels as geometry ==================== }
 
+function AxisLabelGeomsIn(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AJs: Boolean; out AAnyNaN: Boolean): TTyLabelGeomArray; forward;
+
 function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
   const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyLabelGeomArray;
+var nan: Boolean;
+begin
+  Result := AxisLabelGeomsIn(ASpec, ARect, AMeasurer, APPI, False, nan);
+end;
+
+function TyAxisLabelGeomsJs(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; out AAnyNaN: Boolean): TTyLabelGeomArray;
+begin
+  Result := AxisLabelGeomsIn(ASpec, ARect, AMeasurer, APPI, True, AAnyNaN);
+end;
+
+function AxisLabelGeomsIn(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AJs: Boolean; out AAnyNaN: Boolean): TTyLabelGeomArray;
 var
   places: TTyAxisLabelPlacementArray;
   i, n: Integer;
   box, bare: TTyLabelBox;
 begin
+  AAnyNaN := False;
   Result := nil;
   if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
   { THE LABELS THIS RECT SHOWS: thinned on it, the hidden ends left out --
@@ -2285,6 +2401,8 @@ begin
   begin
     if (not places[i].Shown) or (places[i].Text = '') then Continue;
     LabelBoxes(ASpec, places[i], AMeasurer, APPI, box, bare);
+    if AJs and LabelBoxesJs(ASpec, places[i], AMeasurer, APPI, box, bare) then
+      AAnyNaN := True;
     Result[n].Index := i;
     Result[n].X := places[i].X;
     Result[n].Y := places[i].Y;
@@ -2718,6 +2836,8 @@ var
   offs: TTyBoolArray;
   cands: TTyLabelCandidateArray;
   byFrame: Boolean;
+  nanBox: Boolean;
+  mask: TFPUExceptionMask;
   fr: TTyAxisNameFrame;
   g, lm: TTyMat2D;
   lr: Double;
@@ -2924,21 +3044,33 @@ begin
 
   { THE BOXES the rules weigh: every one under hideOverlap, else only the
     two at each end }
+  nanBox := False;
   if AMeasurer <> nil then
     for k := 0 to m - 1 do
       if ASpec.HideOverlap or (k <= 1) or (k >= m - 2) then
       begin
         LabelBoxes(ASpec, Result[cands[k].Index], AMeasurer, APPI,
           cands[k].Margin, cands[k].Bare);
+        { [R7-L] at NaN where upstream's is }
+        if LabelBoxesJs(ASpec, Result[cands[k].Index], AMeasurer, APPI,
+          cands[k].Margin, cands[k].Bare) then nanBox := True;
         cands[k].HasBox := True;
       end;
   if AMeasurer <> nil then
   begin
-    TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
-      ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
-      ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap,
-      ASpec.CustomLabels);
-    if ASpec.HideOverlap then TyHideOverlap(cands);
+    { [R7-L] a box at NaN: BoundingRect.intersect as JS compares, every
+      comparison with NaN false -- two labels meet when their other axis
+      does }
+    if nanBox then mask := TyMaskJs;
+    try
+      TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
+        ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
+        ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap,
+        ASpec.CustomLabels);
+      if ASpec.HideOverlap then TyHideOverlap(cands);
+    finally
+      if nanBox then TyUnmaskJs(mask);
+    end;
   end;
   for k := 0 to m - 1 do
   begin

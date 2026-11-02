@@ -358,6 +358,11 @@ type
     BorderWidthLogical: Double;
     RowBorder: array of TTyOptColor;
     RowBorderWidth: TTyDoubleArray;
+    { [R7-L] THE SYMBOLS' OPACITY, the item's visual style's: the series'
+      itemStyle.opacity and, per RAW row, an item's own over it; NaN where
+      none is written (1). Their labels take it (defaultOpacity). }
+    Opacity: Double;
+    RowOpacity: TTyDoubleArray;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -708,6 +713,7 @@ begin
   Result.Z := 2;
   Result.Z2 := 0;
   Result.BorderWidthLogical := NaN;
+  Result.Opacity := NaN;
 end;
 
 function ReadIndicators(ANode: TJSONObject): TTyRadarIndicatorArray;
@@ -2055,7 +2061,7 @@ var
   pts, ring: TTyPointFArray;
   spoke: TTyIntegerArray;
   rowColour: TTyChartColor;
-  v: Double;
+  v, op: Double;
   el: TTyChartElement;
   sym: TTyChartShape;
   rowSym: TTySymbolSpec;
@@ -2261,6 +2267,13 @@ begin
         { [R6-D] the item's visual style first (useStyle(itemStyle)): its
           border's colour and width, zrender's 1 where none is written }
         PenOf(raw, el.Style);
+        { [R7-L] and its opacity, which the point's label takes as well
+          [was: never read -- the symbols opaque, their labels at 1] }
+        op := AVisual.Opacity;
+        if (raw >= 0) and (raw <= High(AVisual.RowOpacity))
+          and not IsNan(AVisual.RowOpacity[raw]) then
+          op := AVisual.RowOpacity[raw];
+        if not IsNan(op) then el.Style.Alpha := Min(Double(1), Max(Double(0), op));
         { then setColor(color): an empty symbol's pen is the colour at 2, a
           line's the colour at the border's width [was: both at 2, the
           border never drawn] }

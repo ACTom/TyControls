@@ -106,6 +106,22 @@ procedure TyRtClampRadii(AW, AH: Double; var R1, R2, R3, R4: Double);
   bounds are those, not the rect canvas draws. False for any other piece. }
 function TyRtPathBounds(const APiece: TTyRtPiece; out AX0, AY0, AX1, AY1: Double): Boolean;
 
+{ [R7-L] ZRENDER'S Text.getBoundingRect OF THE TEXT AS LAID OUT, before
+  anything at NaN is dropped: each child's own box -- a rect's path bounds
+  (PathProxy's fromLine, Math.min / max: NaN where a corner is), grown by a
+  stroke; a TSpan's at `style.x || 0`, `style.y || 0` (a TSpan at NaN is
+  bounded where it would stand at 0) -- unioned as BoundingRect.union does
+  it (Math.min; once the box's x or width is not finite, the other's width).
+  The box may hold NaN: an x, y, width or height upstream reads as NaN is
+  NaN here, for a label layout that compares it as JS does. A text with no
+  string size is TyRtBounds' box in every finite case but the last bit. The
+  traps are masked inside. }
+function TyRtLayoutJsBox(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyXYWH;
+{ [R7-L] whether AR holds a NaN or an infinity }
+function TyRtBoxIsFinite(const AR: TTyXYWH): Boolean;
+
 { WHETHER THE TEXT HOLDS A TAG zrender's parser takes -- a name of letters,
   digits and underscores, a bar, and a closing brace somewhere after it. A
   text without one lays out the same rich or plain. [Batch 104] }
@@ -168,6 +184,13 @@ function JsMax(A, B: Double): Double;
 begin
   if IsNan(A) or IsNan(B) then Exit(NaN);
   if A > B then Result := A else Result := B;
+end;
+
+{ Math.min: NaN when either is }
+function JsMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
 end;
 
 { parseInt(AText, 10) }
@@ -623,8 +646,11 @@ begin
     begin
       with Result.Pieces[i] do
         if Kind = rpkRect then
+          { [R7-L] canvas draws an unrounded rect at its numbers (rect()
+            takes '-600' as -600); the rounded path runs through the
+            joined edges, and at NaN nothing is drawn }
           keep := Fin(X) and Fin(Y) and Fin(W) and Fin(H)
-            and (not PathEdges or (Fin(EdgeX1) and Fin(EdgeY1)))
+            and (not (PathEdges and Rounded) or (Fin(EdgeX1) and Fin(EdgeY1)))
         else
           keep := Fin(X) and Fin(Y);
       if not keep then Continue;
@@ -675,14 +701,19 @@ var
   xs, ys: array[0..5] of Double;
   k: Integer;
 begin
-  Result := (APiece.Kind = rpkRect) and APiece.PathEdges;
+  { [R7-L] an unrounded rect whose joined edge is NaN (a negative numeric
+    string) is canvas' rect at its numbers: no path bounds here (they are
+    NaN upstream -- TyRtLayoutJsBox has them) }
+  Result := (APiece.Kind = rpkRect) and APiece.PathEdges
+    and Fin(APiece.EdgeX1) and Fin(APiece.EdgeY1);
   AX0 := 0; AY0 := 0; AX1 := 0; AY1 := 0;
   if not Result then Exit;
   r1 := APiece.Radius[0];
   r2 := APiece.Radius[1];
   r3 := APiece.Radius[2];
   r4 := APiece.Radius[3];
-  if r1 + r2 + r3 + r4 <= 0 then
+  { [R7-L] the rounded path whenever borderRadius is truthy ([0, 0] too) }
+  if not APiece.Rounded and (r1 + r2 + r3 + r4 <= 0) then
   begin
     { Rect.buildPath with no radius: ctx.rect, whose path is fromLine }
     AX0 := Min(APiece.X, APiece.EdgeX1);
@@ -702,6 +733,143 @@ begin
   begin
     AX0 := Min(AX0, xs[k]); AX1 := Max(AX1, xs[k]);
     AY0 := Min(AY0, ys[k]); AY1 := Max(AY1, ys[k]);
+  end;
+end;
+
+function TyRtBoxIsFinite(const AR: TTyXYWH): Boolean;
+begin
+  Result := Fin(AR.X) and Fin(AR.Y) and Fin(AR.W) and Fin(AR.H);
+end;
+
+function AdjustX(AX, AW: Double; AAlign: TTyRtAlign): Double; forward;
+
+{ a child's own box, as zrender bounds it (see TyRtLayoutJsBox); traps
+  masked }
+procedure PieceJsBox(const P: TTyRtPiece; out AX, AY, AW, AH: Double);
+var
+  x0, y0, x1, y1, ex, ey, r1, r2, r3, r4, g: Double;
+  xs, ys: array[0..5] of Double;
+  k: Integer;
+begin
+  if P.Kind = rpkRect then
+  begin
+    { the rect's path: fromLine(x, y, x + w, y + h); a size that was a
+      string joins its edge (EdgeX1 / EdgeY1) }
+    if P.PathEdges then
+    begin
+      ex := P.EdgeX1;
+      ey := P.EdgeY1;
+    end
+    else
+    begin
+      ex := P.X + P.W;
+      ey := P.Y + P.H;
+    end;
+    r1 := P.Radius[0]; r2 := P.Radius[1]; r3 := P.Radius[2]; r4 := P.Radius[3];
+    if P.PathEdges and (P.Rounded or (r1 + r2 + r3 + r4 > 0)) then
+    begin
+      { a rounded one runs through its corners' points (TyRtPathBounds) }
+      TyRtClampRadii(P.W, P.H, r1, r2, r3, r4);
+      xs[0] := P.X; xs[1] := P.X + r1; xs[2] := P.X + r4;
+      xs[3] := ex; xs[4] := ex - r2; xs[5] := ex - r3;
+      ys[0] := P.Y; ys[1] := P.Y + r1; ys[2] := P.Y + r2;
+      ys[3] := ey; ys[4] := ey - r3; ys[5] := ey - r4;
+      x0 := xs[0]; x1 := xs[0]; y0 := ys[0]; y1 := ys[0];
+      for k := 1 to 5 do
+      begin
+        x0 := JsMin(x0, xs[k]); x1 := JsMax(x1, xs[k]);
+        y0 := JsMin(y0, ys[k]); y1 := JsMax(y1, ys[k]);
+      end;
+    end
+    else
+    begin
+      x0 := JsMin(P.X, ex); x1 := JsMax(P.X, ex);
+      y0 := JsMin(P.Y, ey); y1 := JsMax(P.Y, ey);
+    end;
+    AX := x0;
+    AY := y0;
+    AW := x1 - x0;
+    AH := y1 - y0;
+    { Path.getBoundingRect: the stroke, strokeContainThreshold 0 }
+    if P.HasStroke and (P.LineWidth > 0) then
+    begin
+      g := P.LineWidth;
+      AX := AX - g / 2;
+      AY := AY - g / 2;
+      AW := AW + g;
+      AH := AH + g;
+    end;
+  end
+  else
+  begin
+    { tSpanCreateBoundingRect2: style.x || 0 }
+    AW := P.W;
+    AH := P.H;
+    if IsNan(P.X) then AX := AdjustX(0, AW, P.TextAlign)
+    else AX := AdjustX(P.X, AW, P.TextAlign);
+    if IsNan(P.Y) then AY := 0 - AH / 2 else AY := P.Y - AH / 2;
+    if P.HasStroke and not P.DefaultStroke and (P.LineWidth > 0) then
+    begin
+      g := P.LineWidth;
+      AX := AX - g / 2;
+      AY := AY - g / 2;
+      AW := AW + g;
+      AH := AH + g;
+    end;
+  end;
+end;
+
+function TyRtLayoutJsBox(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyXYWH;
+var
+  mask: TFPUExceptionMask;
+  res: TTyRtResult;
+  i: Integer;
+  bx, by, bw, bh, x, y: Double;
+  any: Boolean;
+
+  procedure Union(OX, OY, OW, OH: Double);
+  begin
+    { BoundingRect.union, `this` the box so far }
+    x := JsMin(OX, Result.X);
+    y := JsMin(OY, Result.Y);
+    if Fin(Result.X) and Fin(Result.W) then
+      Result.W := JsMax(OX + OW, Result.X + Result.W) - x
+    else
+      Result.W := OW;
+    if Fin(Result.Y) and Fin(Result.H) then
+      Result.H := JsMax(OY + OH, Result.Y + Result.H) - y
+    else
+      Result.H := OH;
+    Result.X := x;
+    Result.Y := y;
+  end;
+
+begin
+  Result.X := 0; Result.Y := 0; Result.W := 0; Result.H := 0;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    res := LayoutIn(AText, AStyle, ARichStyles, ARich, ADefault, ABaseX, ABaseY,
+      AMeasurer);
+    any := False;
+    for i := 0 to High(res.Pieces) do
+    begin
+      PieceJsBox(res.Pieces[i], bx, by, bw, bh);
+      if not any then
+      begin
+        Result.X := bx; Result.Y := by; Result.W := bw; Result.H := bh;
+        any := True;
+      end;
+      Union(bx, by, bw, bh);
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
   end;
 end;
 
@@ -997,6 +1165,8 @@ begin
     if IsNan(Result.BorderDashOffset) then Result.BorderDashOffset := 0;
   end;
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
+  Result.Rounded := S.RadiusTruthy or (S.Radius[0] + S.Radius[1] + S.Radius[2]
+    + S.Radius[3] > 0);
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;
   Result.Drawn := Result.HasFill or Result.HasStroke;
   { [R5-A] the box's canvas shadow: style.shadowBlur || 0, the offsets alike,
@@ -1043,7 +1213,7 @@ var
     ts: TTyRtStyle;
     found, tokenBg, useDefaultFill: Boolean;
     y, rx0: Double;
-    p: TTyRtPiece;
+    p, rp: TTyRtPiece;
   begin
     tk := Result.Block.Lines[ALine].Tokens[AIdx];
     ts := StyleOf(ARichStyles, tk.StyleIndex, AStyle, found);
@@ -1060,8 +1230,11 @@ var
       else
         rx0 := AX;
       end;
-      AddPiece(Result, RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
-        ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1)));
+      rp := RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
+        ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1));
+      { [R7-L] the token's rect takes the token's own opacity }
+      rp.OwnOpacity := ts.HasOpacity;
+      AddPiece(Result, rp);
       tokenBg := ts.HasBackground or (ts.BgImage <> '');
     end;
     if tk.HasPadding then
@@ -1140,6 +1313,8 @@ var
     if found and ts.HasOpacity then p.Opacity := ts.Opacity
     else if AStyle.HasOpacity then p.Opacity := AStyle.Opacity
     else p.Opacity := 1;
+    { [R7-L] retrieve3's first: the token's own }
+    p.OwnOpacity := found and ts.HasOpacity;
     { each shadow part: the token's, else the block's, else none }
     if found and (ts.ShadowBlur <> 0) then p.ShadowBlur := ts.ShadowBlur
     else p.ShadowBlur := AStyle.ShadowBlur;

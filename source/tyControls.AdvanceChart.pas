@@ -5827,7 +5827,7 @@ uses
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvanceChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
   { [R5-D] the WebP export, libwebp loaded when it is asked for }

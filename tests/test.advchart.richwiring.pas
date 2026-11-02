@@ -36,7 +36,8 @@ unit test.advchart.richwiring;
   aside; and it compares what the others leave: each piece's opacity, a
   rect's border dash, its phase and its shadow, a text's halo dash and its
   phase. A one-run caption's pieces take the element's alpha and the
-  caption's halo dash. }
+  caption's halo dash; [R7-L] a block's pieces are compared at the opacity
+  they are drawn at, under the element's alpha. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -117,6 +118,9 @@ type
     procedure TestASkinWithNoWeightDrawsTheNormalOne;
     procedure TestAShadowWithoutABlurIsNotDrawn;
     procedure TestARoundedPlateRunsToItsJoinedEdge;
+    procedure TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
+    procedure TestARadiusArrayIsTruthy;
+    procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -438,7 +442,11 @@ begin
   end;
   Result := Default(TRwDrawn);
   Result.Found := True;
-  Result.D.Pieces := E.Caption.RtPieces;
+  { [R7-L] each piece at the opacity it is drawn at: its own under the
+    element's alpha, as the renderer combines them }
+  Result.D.Pieces := Copy(E.Caption.RtPieces, 0, Length(E.Caption.RtPieces));
+  for k := 0 to High(Result.D.Pieces) do
+    Result.D.Pieces[k].Opacity := TyRtPieceDrawnAlpha(Result.D.Pieces[k], E.Style.Alpha);
   Result.D.X := E.Caption.X;
   Result.D.Y := E.Caption.Y;
   Result.D.RotationRad := E.Caption.RotationRad;
@@ -489,7 +497,10 @@ begin
         and (Length(e.Caption.RtPieces) > 0))) or (e.Caption.Text <> text) then Continue;
       if comp = 'seriesLabel' then
       begin
-        if (e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si) then Continue;
+        { [R7-L] a line's end label answers for no datum: its role names
+          the series }
+        if not ((e.Anim.Role = carEndLabel) and (e.Anim.Series = si))
+          and ((e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si)) then Continue;
       end
       else if comp = 'markerLabel' then
       begin
@@ -778,12 +789,14 @@ begin
   end;
   pieces := T.Arrays['pieces'];
   { [R7-H] a text laid out at NaN (no box recorded) is recorded by what is
-    drawn, and a line truncated to nothing draws nothing }
+    drawn, and a line truncated to nothing draws nothing; [R7-L] nor is the
+    undrawn rect a text wholly at NaN stands as }
   if (T.Find('box') <> nil) and (T.Find('box').JSONType = jtNull) then
   begin
     n := 0;
     for i := 0 to High(dr.D.Pieces) do
-      if (dr.D.Pieces[i].Kind = rpkRect) or (dr.D.Pieces[i].Text <> '') then
+      if ((dr.D.Pieces[i].Kind = rpkRect) and not dr.D.Pieces[i].Placeholder)
+        or (dr.D.Pieces[i].Text <> '') then
       begin
         dr.D.Pieces[n] := dr.D.Pieces[i];
         Inc(n);
@@ -1082,8 +1095,10 @@ begin
     title, gauge-axislabel-plain's five labels, gauge-states-ignored's six
     labels and two titles, gauge-font-size-string's three labels and title,
     gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
-    halo's three labels and title -- and no others }
-  AssertEquals('texts drawn as one run', 27, FOneRun);
+    halo's three labels and title, [R7-L] label-opacity-scatter's two plain
+    labels, label-opacity-root's one, label-opacity-item's end label at its
+    own 0.7, label-opacity-hier's treemap label -- and no others }
+  AssertEquals('texts drawn as one run', 32, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
@@ -1656,6 +1671,116 @@ begin
     p.Free;
     b.Free;
   end;
+end;
+
+{ [R7-L] borderRadius [0, 0] is truthy: zrender's Rect takes roundRect's
+  path, which runs to the joined edge -- radii nought or not }
+procedure TAdvChartRichWiringOracleTest.TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
+var
+  b: TBGRABitmap;
+  p: TTyPainter;
+  pc: TTyRtPieceArray;
+begin
+  SetLength(pc, 1);
+  pc[0] := Default(TTyRtPiece);
+  pc[0].Kind := rpkRect;
+  pc[0].Line := -1;
+  pc[0].Token := -1;
+  pc[0].X := 60;
+  pc[0].Y := 10;
+  pc[0].W := 30;
+  pc[0].H := 20;
+  pc[0].PathEdges := True;
+  pc[0].Rounded := True;
+  pc[0].EdgeX1 := 10;
+  pc[0].EdgeY1 := 30;
+  pc[0].HasFill := True;
+  pc[0].Fill := TTyChartColor($FFE02020);
+  pc[0].Drawn := True;
+  pc[0].Opacity := 1;
+  b := TBGRABitmap.Create(120, 40, BGRA(255, 255, 255, 255));
+  p := TTyPainter.Create;
+  try
+    p.BeginPaintOn(nil, Rect(0, 0, 120, 40), 96, b);
+    TyRenderRtPieces(p, pc, 0, 0, 0, 1, 1, False, TTyColor(0));
+    p.EndPaint;
+    AssertTrue('the joined path covers 10..60', b.GetPixel(35, 20).green < 100);
+    AssertTrue('the canvas rect 60..90 is not the path', b.GetPixel(75, 20).green > 200);
+  finally
+    p.Free;
+    b.Free;
+  end;
+end;
+
+{ [R7-L] the plate of a label whose borderRadius is [0, 0] takes the rounded
+  path; borderRadius 0 does not }
+procedure TAdvChartRichWiringOracleTest.TestARadiusArrayIsTruthy;
+var
+  cases: TJSONArray;
+  c, k: Integer;
+  e: TTyChartElement;
+  seenArray, seenZero: Boolean;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for c := 0 to cases.Count - 1 do
+    if cases.Objects[c].Strings['name'] = 'numstr-radius-zero-array' then
+    begin
+      FChart.Option := cases.Objects[c].Objects['option'].AsJSON;
+      FChart.SetBounds(0, 0, 600, 400);
+      FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+    end;
+  seenArray := False;
+  seenZero := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if Length(e.Caption.RtPieces) = 0 then Continue;
+    if e.Caption.Text = '120' then
+    begin
+      seenArray := True;
+      AssertTrue('[0, 0]: the rounded path', e.Caption.RtPieces[0].Rounded);
+    end
+    else if e.Caption.Text = '200' then
+    begin
+      seenZero := True;
+      AssertFalse('0: the canvas rect', e.Caption.RtPieces[0].Rounded);
+    end;
+  end;
+  AssertTrue('both labels drawn', seenArray and seenZero);
+end;
+
+{ [R7-L] a centred rich label whose width is '50%' and which has no plate
+  lays every token out at NaN: nothing is drawn, but zrender bounds its
+  TSpans at style.x || 0, so the label is still there for the label layout
+  and the pointer -- one undrawn rect, the size of its words }
+procedure TAdvChartRichWiringOracleTest.TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+var
+  k: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+begin
+  { label-layout.js' string.width.rich: no plate, no token box, so its box
+    is the TSpan's at 0 }
+  FChart.Option := '{"animation":false,"xAxis":{"type":"value","min":0,"max":10},'
+    + '"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"scatter",'
+    + '"label":{"show":true,"formatter":"L{c}"},"data":[[2,5],{"value":[8,5],'
+    + '"label":{"width":"50%","formatter":"{a|L{c}}","rich":{"a":{"color":"#333"}}}}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    { the label, not its host's caption it was expanded from }
+    if (e.Caption.Text <> '{a|L8,5}') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertEquals('one piece', 1, Length(e.Caption.RtPieces));
+    AssertTrue('a placeholder', e.Caption.RtPieces[0].Placeholder);
+    AssertFalse('not drawn', e.Caption.RtPieces[0].Drawn);
+    AssertTrue('as wide as its words', e.Caption.RtPieces[0].W > 10);
+    AssertTrue('as tall as a line', e.Caption.RtPieces[0].H > 5);
+  end;
+  AssertTrue('the label is there', seen);
 end;
 
 initialization

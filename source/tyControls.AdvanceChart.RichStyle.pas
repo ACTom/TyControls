@@ -106,6 +106,12 @@ function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
+{ [R7-L] TyRtLay's text as zrender bounds it before anything at NaN is
+  dropped (TyRtLayoutJsBox), in CSS px: NaN where upstream's box is NaN. }
+function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+
 { THE BOX THE PIECES OCCUPY in their own frame: zrender's Text
   getBoundingRect, the union of every child -- an undrawn rect included, a
   stroked rect grown by its stroke as painted, a text by its content box
@@ -148,6 +154,28 @@ type
     function MeasureBox(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
       AV: TTyTextAnchorV): TTyRectF;
+  end;
+
+  { [R7-L] THE BOX OF A TEXT ITS STYLE PLACES AT (AHangX, AHangY) CSS px
+    (TyRtLayHung) -- a legend item's words at x: textX, y: itemHeight / 2 --
+    relative to that place, in device px: a size written as a numeric string
+    joins that place, not 0. }
+  ITyTextHungBoxMeasurer = interface
+    ['{8D41F3A6-2B95-4E07-A1C8-6F3E92B05D17}']
+    function MeasureBoxHung(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
+  end;
+
+  { [R7-L] THE BOX zrender's union gives the text (TyRtLayJsBox), hung by
+    AH / AV about (0, 0), in device px -- NaN where upstream's is. True
+    when the block holds a size written as a string, the only case it can
+    differ from MeasureBox's in more than the last bit. }
+  ITyTextJsBoxMeasurer = interface
+    ['{5C2E8A14-9B37-4D61-8F0A-2E7B4C9D1A53}']
+    function MeasureJsBox(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
   end;
 
 { [F4c] a textBorderType (or a graphic text's lineDash) as written: a word
@@ -347,11 +375,15 @@ begin
   if NumOf(A, x) then
   begin
     for k := 0 to 3 do S.Radius[k] := x;
+    { [R7-L] `shape.r` truthy: not nought, not NaN }
+    S.RadiusTruthy := (x <> 0) and not IsNan(x);
     Exit;
   end;
   if A.JSONType <> jtArray then Exit;
   n := A.Count;
   if n = 0 then Exit;
+  { [R7-L] an array is truthy whatever it holds }
+  S.RadiusTruthy := True;
   for k := 0 to 3 do v[k] := 0;
   for k := 0 to Min(n, 4) - 1 do NumOf(A.Items[k], v[k]);
   { roundRect.ts: the CSS spread of fewer than four }
@@ -909,6 +941,21 @@ begin
     0, 0, m).Pieces;
 end;
 
+function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+var m: ITyTextMeasurer;
+begin
+  Result := TyXYWH(0, 0, 0, 0);
+  if AMeasurer = nil then Exit;
+  if (AScale > 0) and (Abs(AScale - 1) > 1e-12) then
+    m := TScaledMeasurer.Create(AMeasurer, AScale)
+  else
+    m := AMeasurer;
+  Result := TyRtLayoutJsBox(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
+    ADefault, 0, 0, m);
+end;
+
 function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
@@ -1076,7 +1123,7 @@ type
   end;
 
   TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer,
-    ITyRtInnerMeasurer)
+    ITyRtInnerMeasurer, ITyTextJsBoxMeasurer, ITyTextHungBoxMeasurer)
   private
     FInner: ITyTextMeasurer;
     FBlock: TTyRtBlockStyle;
@@ -1089,6 +1136,12 @@ type
     function MeasureBox(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
       AV: TTyTextAnchorV): TTyRectF;
+    function MeasureJsBox(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
+    function MeasureBoxHung(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
     constructor Create(const AInner: ITyTextMeasurer; const ABlock: TTyRtBlockStyle;
       const AGlobal: TTyRtGlobal; AScale: Double);
     procedure MeasureLine(const AText, AFontName: string;
@@ -1141,6 +1194,38 @@ begin
   if box.W < 0 then Exit(TyRectF(0, 0, 0, 0));
   Result := TyRectF(box.X * FScale, box.Y * FScale, (box.X + box.W) * FScale,
     (box.Y + box.H) * FScale);
+end;
+
+function TBlockMeasurer.MeasureBoxHung(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+  AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
+var
+  b: TTyRtBlockStyle;
+  box: TTyXYWH;
+begin
+  b := FBlock;
+  TyRtFinish(b, AFontName, AFontSizeLogical, AWeight, FGlobal, True, $FF000000);
+  box := TyRtBounds(TyRtLayHung(AText, b, TyRtDefaultOf(False, 0, False, 0, False,
+    AH, AV), AHangX, AHangY, FScale, FInner));
+  if box.W < 0 then Exit(TyRectF(0, 0, 0, 0));
+  Result := TyRectF(box.X * FScale, box.Y * FScale, (box.X + box.W) * FScale,
+    (box.Y + box.H) * FScale);
+end;
+
+function TBlockMeasurer.MeasureJsBox(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+  AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
+var b: TTyRtBlockStyle;
+begin
+  ABox := TyXYWH(0, 0, 0, 0);
+  b := FBlock;
+  TyRtFinish(b, AFontName, AFontSizeLogical, AWeight, FGlobal, True, $FF000000);
+  Result := TyRtHasStringSize(b.Style, b.Rich);
+  if not Result then Exit;
+  ABox := TyRtLayJsBox(AText, b, TyRtDefaultOf(False, 0, False, 0, False, AH, AV),
+    FScale, FInner);
+  { a quiet NaN multiplies without a trap }
+  ABox := TyXYWH(ABox.X * FScale, ABox.Y * FScale, ABox.W * FScale, ABox.H * FScale);
 end;
 
 function TBlockMeasurer.WrapToWidth(const AText, AFontName: string;
