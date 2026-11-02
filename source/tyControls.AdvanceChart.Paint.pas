@@ -196,6 +196,10 @@ type
       the zero value draws as before }
     HasFillOpacity, HasStrokeOpacity: Boolean;
     FillOpacity, StrokeOpacity: Double;
+    { [R6-F] zrender's style.strokeFirst: the pen before the fill, which then
+      covers its inner half (a text's plate with a fill and a border) --
+      False, the zero value, the fill first }
+    StrokeFirst: Boolean;
     { [R5-A] zrender's style.blend, the canvas' globalCompositeOperation: a
       series' blendMode on every element its view renders (echarts'
       updateBlend) -- '' source over }
@@ -1087,6 +1091,11 @@ type
       of its outline and not inside. 0: the area, as every other element.
       A matrix cell written `silent: false` with no fill [Batch 147]. }
     HitStrokeBand: Double;
+    { [R6-F] NEVER HIT, though drawn and in the states: zrender's
+      Path.contain of a path whose bounding rect is not-a-number -- a pen of
+      infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
+      NaN (a bar whose infinite border took all of its width) }
+    HitNone: Boolean;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -2037,6 +2046,7 @@ end;
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 var k: Integer;
 begin
+  if AEl.HitNone then Exit(False);
   { [spec 242] a point outside a clip path is not over the element }
   for k := 0 to High(AEl.ClipPaths) do
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);

@@ -7228,6 +7228,1758 @@
    "clip": [
     "rect|58|63|304|159"
    ]
+  },
+  {
+   "id": "gauge.track-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "opacity": 0.5,
+        "color": [
+         [
+          0.4,
+          "#f00"
+         ],
+         [
+          1,
+          "#00f"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.5|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.track-round-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "roundCap": true,
+       "lineStyle": {
+        "opacity": 0.3,
+        "color": [
+         [
+          1,
+          "#0f0"
+         ]
+        ],
+        "shadowBlur": 3,
+        "shadowColor": "#000",
+        "shadowOffsetX": 1
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.3|3|1|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.track-pen-keys",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "color": [
+         [
+          1,
+          "#f00"
+         ]
+        ],
+        "type": "dashed",
+        "dashOffset": 2,
+        "cap": "round",
+        "join": "round",
+        "miterLimit": 4,
+        "opacity": 0.7
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.7|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.split-looks",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#f00",
+        "width": 3,
+        "opacity": 0.4,
+        "type": "dashed",
+        "dashOffset": 2,
+        "cap": "round",
+        "join": "bevel",
+        "miterLimit": 5,
+        "shadowBlur": 3,
+        "shadowColor": "#000",
+        "shadowOffsetX": 1
+       }
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "line",
+   "action": null,
+   "seen": 11,
+   "n": 11,
+   "pens": [
+    "#ff0000ff|3|12,6|2|round/bevel/5"
+   ],
+   "looks": [
+    "0.4|3|1|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.split-auto-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false,
+       "lineStyle": {
+        "color": [
+         [
+          0.5,
+          "#f00"
+         ],
+         [
+          1,
+          "#00f"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "auto",
+        "width": 2,
+        "type": [
+         4,
+         2
+        ],
+        "opacity": 0.8
+       }
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "line",
+   "action": null,
+   "seen": 11,
+   "n": 11,
+   "pens": [
+    "#0000ffff|2|4,2|0|butt/miter/10",
+    "#ff0000ff|2|4,2|0|butt/miter/10"
+   ],
+   "looks": [
+    "0.8|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.tick-looks",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": true,
+       "lineStyle": {
+        "color": "#00f",
+        "width": 2,
+        "type": "dotted",
+        "dashOffset": 1,
+        "cap": "square",
+        "opacity": 0.6,
+        "shadowBlur": 2,
+        "shadowColor": "#f00"
+       }
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "line",
+   "action": null,
+   "seen": 60,
+   "n": 60,
+   "pens": [
+    "#0000ffff|2|2|1|square/miter/10"
+   ],
+   "looks": [
+    "0.6|2|0|0|#ff0000ff"
+   ]
+  },
+  {
+   "id": "gauge.tick-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#00f",
+        "width": "2",
+        "type": "dashed",
+        "dashOffset": "1",
+        "miterLimit": "3"
+       }
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "line",
+   "action": null,
+   "seen": 30,
+   "n": 30,
+   "pens": [
+    "#0000ffff|2|8,4|1|butt/miter/3"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.pointer-looks",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": true,
+       "itemStyle": {
+        "opacity": 0.8,
+        "shadowBlur": 2,
+        "shadowColor": "#000"
+       }
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "itemStyle": {
+       "color": "#0f0",
+       "opacity": 0.5
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.8|2|0|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.pointer-item-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40,
+        "itemStyle": {
+         "opacity": 0.3
+        }
+       },
+       {
+        "value": 70,
+        "pointer": {
+         "itemStyle": {
+          "opacity": 0.6
+         }
+        }
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": true
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "itemStyle": {
+       "color": "#0f0"
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.3|0|0|0|",
+    "0.6|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.pointer-icon-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": true,
+       "icon": "emptyCircle",
+       "itemStyle": {
+        "opacity": 0.4
+       }
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "itemStyle": {
+       "color": "#0f0",
+       "borderWidth": 2
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#00ff00ff|2|solid|0|butt/miter/10"
+   ],
+   "looks": [
+    "0.4|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.progress-looks",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "progress": {
+       "show": true,
+       "itemStyle": {
+        "opacity": 0.7
+       }
+      },
+      "itemStyle": {
+       "color": "#f00",
+       "opacity": 0.4
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.7|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.progress-item-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40,
+        "itemStyle": {
+         "opacity": 0.3
+        }
+       },
+       {
+        "value": 70,
+        "progress": {
+         "itemStyle": {
+          "opacity": 0.6
+         }
+        }
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "progress": {
+       "show": true,
+       "overlap": false
+      },
+      "itemStyle": {
+       "color": "#f00"
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.3|0|0|0|",
+    "0.6|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.anchor-looks",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": true,
+       "size": 20,
+       "itemStyle": {
+        "color": "#f00",
+        "borderColor": "#000",
+        "borderWidth": 2,
+        "borderType": "dashed",
+        "borderDashOffset": 1,
+        "borderCap": "round",
+        "borderJoin": "round",
+        "borderMiterLimit": 3,
+        "opacity": 0.5,
+        "shadowBlur": 3,
+        "shadowColor": "#000",
+        "shadowOffsetX": 1
+       }
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "anchor",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|2|8,4|1|round/round/3"
+   ],
+   "looks": [
+    "0.5|3|1|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.anchor-rect",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": true,
+       "icon": "rect",
+       "size": 16,
+       "itemStyle": {
+        "color": "#ff0",
+        "borderColor": "#000",
+        "borderWidth": 3,
+        "borderType": [
+         3,
+         1
+        ]
+       }
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "anchor",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|3,1|0|butt/miter/10"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.detail-box",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": true,
+       "backgroundColor": "#ff0",
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": "dashed",
+       "borderDashOffset": 3,
+       "borderRadius": 4,
+       "opacity": 0.5,
+       "shadowBlur": 3,
+       "shadowColor": "#000",
+       "shadowOffsetX": 1
+      }
+     }
+    ]
+   },
+   "part": "box",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|4|16,8|3|butt/miter/10"
+   ],
+   "looks": [
+    "0.5|3|1|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.detail-border-only",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": true,
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderType": "dotted"
+      }
+     }
+    ]
+   },
+   "part": "box",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|4|4|0|butt/miter/10"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.title-box",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40,
+        "name": "Speed"
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": true,
+       "backgroundColor": "#ff0",
+       "borderColor": "#000",
+       "borderWidth": 1,
+       "borderType": [
+        2,
+        2
+       ],
+       "opacity": 0.6,
+       "shadowBlur": 3,
+       "shadowColor": "#000",
+       "shadowOffsetX": 1
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "box",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|2|2,2|0|butt/miter/10"
+   ],
+   "looks": [
+    "0.6|3|1|0|#000000ff"
+   ]
+  },
+  {
+   "id": "gauge.title-words",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40,
+        "name": "Speed"
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": true,
+       "opacity": 0.4
+      },
+      "detail": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "part": "words",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.4|0|0|0|"
+   ]
+  },
+  {
+   "id": "gauge.detail-words",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "pointer": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": true,
+       "opacity": 0.3
+      }
+     }
+    ]
+   },
+   "part": "words",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "0.3|0|0|0|"
+   ]
+  },
+  {
+   "id": "bar.w-infinity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "Infinity"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|Infinity|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|110|161.5|0|24",
+    "rect|210|99.5|0|86"
+   ],
+   "cHits": [
+    [
+     110,
+     174,
+     "-"
+    ],
+    [
+     109,
+     174,
+     "-"
+    ],
+    [
+     111,
+     174,
+     "-"
+    ],
+    [
+     210,
+     143,
+     "-"
+    ],
+    [
+     209,
+     143,
+     "-"
+    ],
+    [
+     211,
+     143,
+     "-"
+    ]
+   ]
+  },
+  {
+   "id": "bar.w-1e999",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "1e999"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|Infinity|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|110|161.5|0|24",
+    "rect|210|99.5|0|86"
+   ]
+  },
+  {
+   "id": "bar.w-infinity-h",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "xAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "Infinity"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|Infinity|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|77.83|142.5|264.35|0",
+    "rect|77.83|194.17|144.35|0"
+   ],
+   "cHits": [
+    [
+     150,
+     194,
+     "-"
+    ],
+    [
+     149,
+     194,
+     "-"
+    ],
+    [
+     151,
+     194,
+     "-"
+    ],
+    [
+     210,
+     143,
+     "-"
+    ],
+    [
+     209,
+     143,
+     "-"
+    ],
+    [
+     211,
+     143,
+     "-"
+    ]
+   ]
+  },
+  {
+   "id": "bar.w-infinity-item",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderWidth": "Infinity"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|2|solid|0|butt/miter/10",
+    "#000000ff|Infinity|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|210|99.5|0|86",
+    "rect|76.5|128|67|91"
+   ],
+   "cHits": [
+    [
+     110,
+     174,
+     "bar"
+    ],
+    [
+     109,
+     174,
+     "bar"
+    ],
+    [
+     111,
+     174,
+     "bar"
+    ],
+    [
+     210,
+     143,
+     "-"
+    ],
+    [
+     209,
+     143,
+     "-"
+    ],
+    [
+     211,
+     143,
+     "-"
+    ]
+   ]
+  },
+  {
+   "id": "bar.w-infinity-no-colour",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderWidth": "Infinity"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|175.5|65|69|155",
+    "rect|75.5|127|69|93"
+   ]
+  },
+  {
+   "id": "bar.w-huge",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 1000
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|1000|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|110|161.5|0|24",
+    "rect|210|99.5|0|86"
+   ]
+  },
+  {
+   "id": "bar.w-neg-infinity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "-Infinity"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 0,
+   "n": 0,
+   "pens": [],
+   "shapes": []
+  },
+  {
+   "id": "bar.w-neg",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": -2
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|174.5|65|71|155",
+    "rect|74.5|126|71|94"
+   ]
+  },
+  {
+   "id": "polarbar.w-infinity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "radiusAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "Infinity"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|Infinity|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "sector|200|150|0|120|0.733|1.6755",
+    "sector|200|150|0|48|2.8274|1.6755",
+    "sector|200|150|0|72|4.9218|1.6755"
+   ]
   }
  ]
 }

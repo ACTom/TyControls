@@ -288,6 +288,11 @@ type
       it strokes nothing (BorderWidthLogical 0), and a bar's getLineWidth
       (`borderWidth || 0` in a Math.min) makes its layout not-a-number }
     BorderWidthNaN: Boolean;
+    { [R6-F] the width is written and its Number is infinite (Infinity,
+      '1e999', '-Infinity'): that infinity -- it strokes nothing
+      (BorderWidthLogical 0), and a bar's getLineWidth takes it into its
+      Math.min -- 0 otherwise }
+    BorderWidthInf: Double;
     Opacity: Double;              // NaN = not written
     Dash: TTyOptDash;
     DashLogical: TTyDoubleArray;  // todExplicit only
@@ -1196,6 +1201,18 @@ begin
   Result := (d <> nil) and (d.JSONType <> jtNull) and IsNan(TyOptJsNumber(d));
 end;
 
+{ [R6-F] the written width's Number where it is infinite, else 0 }
+function WidthInfIn(ANode: TJSONObject; const AKey: string): Double;
+var d: TJSONData; v: Double;
+begin
+  Result := 0;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  v := TyOptJsNumber(d);
+  if IsInfinite(v) then Result := v;
+end;
+
 function PenOffsetIn(ANode: TJSONObject; const AKey: string): Double;
 begin
   if ANode = nil then Exit(NaN);
@@ -1577,6 +1594,7 @@ begin
   { [R6-E] a numeric string is its number [was: not written] }
   Result.BorderWidthLogical := PenWidthIn(sub, 'borderWidth');
   Result.BorderWidthNaN := WidthNaNIn(sub, 'borderWidth');
+  Result.BorderWidthInf := WidthInfIn(sub, 'borderWidth');
   Result.Dash := ReadDash(sub, 'borderType', Result.DashLogical);
   Result.DashOffset := PenOffsetIn(sub, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
@@ -1602,6 +1620,7 @@ begin
   Result.BorderColor := ReadOptColor(AObj, 'borderColor');
   Result.BorderWidthLogical := PenWidthIn(AObj, 'borderWidth');
   Result.BorderWidthNaN := WidthNaNIn(AObj, 'borderWidth');
+  Result.BorderWidthInf := WidthInfIn(AObj, 'borderWidth');
   Result.Dash := ReadDash(AObj, 'borderType', Result.DashLogical);
   Result.DashOffset := PenOffsetIn(AObj, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);

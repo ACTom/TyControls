@@ -347,6 +347,30 @@ function TyStReadShadow(const ANodes: array of TJSONObject; const APath,
 function TyStShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
   out AShadow: TTyChartShadow): Boolean;
 
+type
+  { [R6-F] which of a style block's pen keys TyStTakePenKeys reads: the
+    ends (cap, join, miterLimit) and the dash with its phase }
+  TTyStPenKey = (spkEnds, spkDash);
+  TTyStPenKeys = set of TTyStPenKey;
+
+{ [R6-F] A STYLE BLOCK'S PEN KEYS onto AStyle, each from the first node that
+  writes it under APath (null falls through): getLineStyle's cap / join /
+  miterLimit / type / dashOffset where ALine, getItemStyle's border* ones
+  otherwise. The ends as the canvas takes them -- a word it does not know
+  and a limit that is no number above nought are its to ignore (the
+  default); the dash a word kept as a word and measured against the width
+  AStyle has now, a number or an array lengths (each entry as the canvas'
+  setLineDash takes it), 'solid' and any other value none; its phase as the
+  canvas takes it. AJoinHas: a join is written. (ApplySeriesPens' own,
+  shared with a gauge's parts.) }
+procedure TyStTakePenKeys(var AStyle: TTyChartElementStyle;
+  const ANodes: array of TJSONObject; const APath: array of string;
+  ALine: Boolean; AKeys: TTyStPenKeys; out AJoinHas: Boolean);
+{ [R6-F] A STYLE BLOCK'S OPACITY onto AStyle.Alpha: the first node that
+  writes a number under APath, clamped to [0, 1]. False: none writes one. }
+function TyStTakeOpacity(var AStyle: TTyChartElementStyle;
+  const ANodes: array of TJSONObject; const APath: array of string): Boolean;
+
 { ==================== the selection model ==================== }
 
 type
@@ -1116,6 +1140,88 @@ begin
       TyStSetNum(AObj, cSt[k], v);
     end;
   end;
+end;
+
+procedure TyStTakePenKeys(var AStyle: TTyChartElementStyle;
+  const ANodes: array of TJSONObject; const APath: array of string;
+  ALine: Boolean; AKeys: TTyStPenKeys; out AJoinHas: Boolean);
+var
+  p: array of string;
+  i: Integer;
+  dd: TJSONData;
+  v: Double;
+begin
+  AJoinHas := False;
+  SetLength(p, Length(APath) + 1);
+  for i := 0 to High(APath) do p[i] := APath[i];
+  if spkEnds in AKeys then
+  begin
+    if ALine then p[High(p)] := 'cap' else p[High(p)] := 'borderCap';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) then AStyle.LineCap := TyCapOfWord(dd.AsString);
+    if ALine then p[High(p)] := 'join' else p[High(p)] := 'borderJoin';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) then
+    begin
+      AStyle.LineJoin := TyJoinOfWord(dd.AsString);
+      AJoinHas := True;
+    end;
+    if ALine then p[High(p)] := 'miterLimit' else p[High(p)] := 'borderMiterLimit';
+    { [R6-E] as the canvas takes it: `|| 10`, a numeric string its number, a
+      limit it refuses the default }
+    v := TyOptMiterLimit(TyStFind(ANodes, p));
+    if not IsNan(v) then
+    begin
+      if v = 10 then AStyle.MiterLimit := 0 else AStyle.MiterLimit := v;
+    end;
+  end;
+  if not (spkDash in AKeys) then Exit;
+  if ALine then p[High(p)] := 'type' else p[High(p)] := 'borderType';
+  dd := TyStFind(ANodes, p);
+  if dd <> nil then
+  begin
+    AStyle.DashWord := 0;
+    if (dd.JSONType = jtString) and (dd.AsString = 'dashed') then AStyle.DashWord := 1
+    else if (dd.JSONType = jtString) and (dd.AsString = 'dotted') then AStyle.DashWord := 2;
+    AStyle.DashLogical := nil;
+    if AStyle.DashWord <> 0 then
+      AStyle.DashLogical := TyDashOfWord(AStyle.DashWord, AStyle.StrokeWidthLogical)
+    else if (dd.JSONType = jtNumber) and (dd.AsFloat <> 0) and not IsNan(dd.AsFloat) then
+      AStyle.DashLogical := TTyDoubleArray.Create(dd.AsFloat)
+    else if dd.JSONType = jtArray then
+    begin
+      { setLineDash takes each entry as a number (Number('4') is 4) }
+      SetLength(AStyle.DashLogical, dd.Count);
+      for i := 0 to dd.Count - 1 do
+        case dd.Items[i].JSONType of
+          jtNumber: AStyle.DashLogical[i] := dd.Items[i].AsFloat;
+          jtString: AStyle.DashLogical[i] := TyOptJsNumber(dd.Items[i]);
+          jtBoolean: AStyle.DashLogical[i] := Ord(dd.Items[i].AsBoolean);
+          jtNull: AStyle.DashLogical[i] := 0;
+        else
+          AStyle.DashLogical[i] := NaN;
+        end;
+    end;
+  end;
+  { and its phase (lineDashOffset), as the canvas takes it }
+  if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
+  v := TyOptPenOffset(TyStFind(ANodes, p));
+  if not IsNan(v) then AStyle.DashOffsetLogical := v;
+end;
+
+function TyStTakeOpacity(var AStyle: TTyChartElementStyle;
+  const ANodes: array of TJSONObject; const APath: array of string): Boolean;
+var
+  p: array of string;
+  i: Integer;
+  dd: TJSONData;
+begin
+  SetLength(p, Length(APath) + 1);
+  for i := 0 to High(APath) do p[i] := APath[i];
+  p[High(p)] := 'opacity';
+  dd := TyStFind(ANodes, p);
+  Result := (dd <> nil) and (dd.JSONType = jtNumber) and not IsNan(dd.AsFloat);
+  if Result then AStyle.Alpha := Min(Double(1), Max(Double(0), dd.AsFloat));
 end;
 
 function TyStReadShadow(const ANodes: array of TJSONObject; const APath,

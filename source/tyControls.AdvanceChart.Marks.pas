@@ -219,6 +219,10 @@ type
       number: a bar's layout is then not-a-number (getLineWidth) and the
       bar is not drawn }
     StrokeWidthNaN: Boolean;
+    { [R6-F] the border width written is infinite (Infinity, '1e999',
+      '-Infinity'): that infinity, else 0 -- no pen (StrokeWidthLogical 0),
+      and a bar's getLineWidth takes it into its Math.min }
+    StrokeWidthInf: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -1238,6 +1242,9 @@ begin
     begin
       Result.StrokeWidthLogical := OverrideNumber(v);
       Result.StrokeWidthNaN := IsNan(Result.StrokeWidthLogical);
+      { [R6-F] an infinity kept for the bar's layout }
+      if IsInfinite(Result.StrokeWidthLogical) then Result.StrokeWidthInf := Result.StrokeWidthLogical
+      else Result.StrokeWidthInf := 0;
       if IsNan(Result.StrokeWidthLogical) or IsInfinite(Result.StrokeWidthLogical) then
         Result.StrokeWidthLogical := 0;
       Result.StrokeWidthSet := True;
@@ -1519,11 +1526,11 @@ var
   r, bg, plot: TTyRectF;
   p, loPt: TTyPointF;
   col: TTyBarColumn;
-  baseHoriz, haveCol, stacked, clipped: Boolean;
+  baseHoriz, haveCol, stacked, clipped, fixed: Boolean;
   shape: TTyChartShape;
   bgEl, el: TTyChartElement;
   rv: TTySeriesVisual;
-  fix, sx, sy: Double;
+  fix, sx, sy, bw: Double;
   b, v: Double;
   pb: TTyPointF;
   mat: TTyMat2D;
@@ -1735,15 +1742,27 @@ begin
       (isValidLayout) -- nor its label }
     if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
       Continue;
-    if (rv.StrokeWidthLogical > 0) and (rv.Stroke <> 0) then
+    { [R6-F] getLineWidth's own number, `borderWidth || 0` in its
+      Math.min: an infinite width is the bar's own width or height, which
+      shrinks it to none (and kept: a rect of no width); -Infinity a layout
+      that is not finite, no bar (isValidLayout); a negative one grows it.
+      The pen strokes what the canvas takes -- none for an infinity, none
+      below nought [was: only a width above nought, so the bar kept its
+      size] }
+    fixed := False;
+    if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    else bw := rv.StrokeWidthLogical;
+    if (bw <> 0) and (rv.Stroke <> 0) then
     begin
-      fix := Min(rv.StrokeWidthLogical * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
+      fix := Min(bw * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
+      if IsInfinite(fix) then Continue;
       if lw > 0 then sx := 1 else sx := -1;
       if lh > 0 then sy := 1 else sy := -1;
       lx := lx + sx * fix / 2;
       ly := ly + sy * fix / 2;
       lw := lw - sx * fix;
       lh := lh - sy * fix;
+      fixed := True;
     end;
 
     { clip, default TRUE: a bar whose value runs past the axis' own min or max
@@ -1771,14 +1790,16 @@ begin
 
     { A zero-width column draws nothing rather than an invisible rect that is
       still hit-testable -- which is what a bar on a value axis used to be. }
+    { [R6-F] -- but one its border took all of is a rect of no width
+      upstream, kept }
     if baseHoriz then
     begin
-      if (r.Right - r.Left <= 0) and not clipped then Continue;
+      if (r.Right - r.Left <= 0) and not clipped and not fixed then Continue;
       zero := lh = 0;
     end
     else
     begin
-      if (r.Bottom - r.Top <= 0) and not clipped then Continue;
+      if (r.Bottom - r.Top <= 0) and not clipped and not fixed then Continue;
       zero := lw = 0;
     end;
     if TyHasCorner(col.Radii) then
@@ -1789,6 +1810,9 @@ begin
                       ABinding.SeriesIndex, i);
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     el.Ignore := clipped;
+    { [R6-F] the pen of an infinite border makes its bounding rect
+      not-a-number upstream: the bar is never hit }
+    el.HitNone := fixed and IsInfinite(bw);
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
