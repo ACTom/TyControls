@@ -135,6 +135,9 @@ const ZRENDER_SRC = process.env.ZRENDER_SRC || 'D:/Projects/zrender/src/core/pla
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-matrix2.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 const W = 800;
 const H = 600;
 
@@ -321,7 +324,7 @@ function mk() {
 }
 function load(c) {
   if (!c.gallery) return c.option;
-  const o = JSON.parse(fs.readFileSync(path.join(GALLERY, c.gallery + '.json'), 'utf8'));
+  const o = withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, c.gallery + '.json'), 'utf8')));
   // a gallery custom series lost its renderItem to JSON: the generic cell
   [].concat(o.series || []).forEach(s => {
     if (s && s.type === 'custom') s.renderItem = '@mxGal';

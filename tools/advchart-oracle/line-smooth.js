@@ -125,6 +125,9 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-line-smooth.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -842,7 +845,7 @@ function recordSeries(chart, sm, side, key) {
 }
 
 // ---------- the cases ----------
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 const CAT12 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const UPS = [120, 132, 101, 134, 290, 230, 210, 182, 191, 234, 330, 310];
 const PLATEAU = [10, 10, 10, 60, 5, 5, 30, 32, 90, 88];

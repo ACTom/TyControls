@@ -71,6 +71,8 @@ type
 
 implementation
 
+uses test.advchart.gallerytext;
+
 const
   cPalette = '["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a",'
     + '"#fb628b","#785db0","#3fbe95"]';
@@ -1006,7 +1008,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R7-K] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
