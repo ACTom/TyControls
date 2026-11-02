@@ -156,11 +156,11 @@ type
   end;
 
   { A masked edit bound to a field. With CustomEditMask False (the default, as in LCL) the
-    field's EditMask is applied; a field mask this control cannot parse -- the '#' code, which
-    it refuses -- is left off rather than raising. With a mask in force the control shows and
-    edits Field.Text and writes back MaskedValue (the literals kept only when the mask says
-    ';1;'); an empty field writes an empty value without being validated, so a masked field
-    can still be cleared. Without a mask it behaves as TTyDBEdit. }
+    field's EditMask is applied; a field mask this control cannot parse -- one with no slot,
+    which it refuses -- is left off rather than raising. With a mask in force the control
+    shows and edits Field.Text and writes back MaskedValue (the literals kept only when the
+    mask says ';1;'); an empty field writes an empty value without being validated, so a
+    masked field can still be cleared. Without a mask it behaves as TTyDBEdit. }
   TTyCustomDBMaskEdit = class(TTyCustomMaskEdit)
   private
     FDataLink: TFieldDataLink;
@@ -1326,7 +1326,7 @@ var
   m: string;
 begin
   m := AMask;
-  if TyMaskRejectReason(m) <> '' then m := '';   // e.g. '#': refused here, so not applied
+  if TyMaskRejectReason(m) <> '' then m := '';   // e.g. no slot: refused here, so not applied
   if GetMask <> m then inherited Mask := m;
 end;
 
