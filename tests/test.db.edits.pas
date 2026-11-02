@@ -91,6 +91,8 @@ type
     function Link: TFieldDataLink;
     function BoundField: TField;
     procedure Key(AKey: Word; AShift: TShiftState = []);
+    { The key down and up again: a check box or a switch acts on the key-up (#151). }
+    procedure Press(AKey: Word);
     procedure TypeText(const S: string);
     procedure EnterControl;
     procedure LeaveControl;
@@ -316,6 +318,15 @@ begin
   AssertTrue('keys go to a windowed control', FCtl is TWinControl);
   k := AKey;
   TInputAccess(FCtl).KeyDown(k, AShift);
+end;
+
+procedure TDBControlTestBase.Press(AKey: Word);
+var
+  k: Word;
+begin
+  Key(AKey);
+  k := AKey;
+  TInputAccess(FCtl).KeyUp(k, []);
 end;
 
 procedure TDBControlTestBase.TypeText(const S: string);

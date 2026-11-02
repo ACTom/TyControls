@@ -1873,7 +1873,9 @@ begin
   own.SetBounds(0, 30, 120, 24);
   own.HandleNeeded;
   third.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  third.Perform(CN_KEYUP, VK_SPACE, 0);   // #151: Space acts on the key-up
   own.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  own.Perform(CN_KEYUP, VK_SPACE, 0);
   AssertTrue('Space checks the mimic', third.Checked);
   AssertEquals('as it checks TTyCheckBox', own.Checked, third.Checked);
   PressAndRelease(third, 5, 10);
