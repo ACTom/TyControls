@@ -965,6 +965,8 @@ type
       一个可聚焦控件都没有、为 nil),同收起那一路交给 Tab 顺序里栏后面的那一个(spec §5.3),
       不交给平台去挑。 }
     procedure FocusInto(AWindow: TTyCustomToolWindow);
+    { 栏不弹菜单时,把右键请求(屏幕坐标)交给父控件一层层往上,同平台的冒泡。 }
+    procedure PassContextPopupUp(const AScreenPos: TPoint);
     procedure ShowWindowNow(AWindow: TTyCustomToolWindow);
     procedure HideWindowNow(AWindow: TTyCustomToolWindow);
     { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
@@ -5533,6 +5535,25 @@ begin
   Result := RowHintAt(h, X, Y, AText, ARect);
 end;
 
+procedure TTyCustomToolWindowBar.PassContextPopupUp(const AScreenPos: TPoint);
+var
+  c: TWinControl;
+  lp: PtrUInt;
+  wp: PtrUInt;
+begin
+  { 平台的冒泡(Win32 的 DefWindowProc、GTK 的事件传播)就是这样:一层没处理(结果 0),交给它的
+    父窗口,直到有一层弹了菜单或处理掉。坐标是屏幕坐标,每一层自己换算(control.inc 的
+    WMContextMenu)。 }
+  lp := PtrUInt(Word(SmallInt(AScreenPos.X))) or (PtrUInt(Word(SmallInt(AScreenPos.Y))) shl 16);
+  c := Parent;
+  while c <> nil do
+  begin
+    if c.HandleAllocated then wp := PtrUInt(c.Handle) else wp := 0;
+    if c.Perform(LM_CONTEXTMENU, WParam(wp), LParam(lp)) <> 0 then Exit;
+    c := c.Parent;
+  end;
+end;
+
 procedure TTyCustomToolWindowBar.HeaderContextPopup(AWindow: TTyCustomToolWindow; X, Y: Integer);
 var
   idx: Integer;
@@ -5552,7 +5573,14 @@ begin
   { DoContextPopup 只发事件;弹菜单本来是 LCL 的 WM_CONTEXTMENU 在它之后做的,这里没有那一层,
     自己补。只在当前页有句柄时弹。 }
   menu := GetPopupMenu;
-  if (menu = nil) or not menu.AutoPopup or not AWindow.HandleAllocated then Exit;
+  { 栏没有菜单:同侧栏图标那一路(栏不处理,WM_CONTEXTMENU 冒泡到父控件),接着往上交。请求已经被
+    当前页标成处理过了,平台不会再替它冒,自己交。 }
+  if menu = nil then
+  begin
+    PassContextPopupUp(AWindow.ClientToScreen(Point(X, Y)));
+    Exit;
+  end;
+  if not menu.AutoPopup or not AWindow.HandleAllocated then Exit;
   menu.PopupComponent := Self;
   pt := AWindow.ClientToScreen(Point(X, Y));
   menu.PopUp(pt.X, pt.Y);

@@ -184,6 +184,8 @@ type
     procedure TestTheRowsBlankShowsNoHint;
     procedure TestARightClickOnATabGoesToTheBarInBarCoordinates;
     procedure TestARightClickOnTheRowsBlankIsSwallowed;
+    { 栏没有 PopupMenu:标签上的右键同侧栏图标那一路,接着冒泡到窗体。 }
+    procedure TestARightClickOnATabWithoutABarMenuBubblesToTheForm;
     { 页的 ShowHint = False:标签行的提示请求落到栏,栏不替它答。 }
     procedure TestAPageThatDeclinesHintsShowsNoTabHint;
     { Task 9:标签拖动调顺序(spec §9.1 / §9.2 / §9.4 / §9.8)。 }
@@ -2392,6 +2394,27 @@ procedure TTyToolWindowBottomInputTests.CountFormPopup(Sender: TObject; MousePos
   var Handled: Boolean);
 begin
   Inc(FFormPopups);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestARightClickOnATabWithoutABarMenuBubblesToTheForm;
+var
+  w: TProbeWindow;
+  handled: Boolean;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  FBar.OnContextPopup := @CountBarPopup;
+  FForm.OnContextPopup := @CountFormPopup;
+  FFormPopups := 0;
+  handled := False;
+  w.CallDoContextPopup(TabCentre(0), handled);
+  AssertEquals('栏的 OnContextPopup 照常', 1, FBarPopups);
+  AssertEquals('栏没有菜单:冒泡到窗体(同侧栏图标)', 1, FFormPopups);
+  FBar.PopupMenu := TPopupMenu.Create(FForm);
+  FFormPopups := 0;
+  handled := False;
+  w.CallDoContextPopup(TabCentre(0), handled);
+  AssertEquals('栏有菜单:窗体不再被问', 0, FFormPopups);
 end;
 
 procedure TTyToolWindowBottomInputTests.TestAPageThatDeclinesHintsShowsNoTabHint;
