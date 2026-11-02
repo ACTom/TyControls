@@ -284,6 +284,10 @@ procedure TTyCustomTerminalView.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
+  { #185: 路要的键这次移动里已经不在了(抬起落在模态框上，捕获变化来时键还按着):照松开
+    收尾，选区不再跟着空手的指针走;上报路补发的抬起在上次知道的位置 }
+  if (FRoute <> mrNone) and not RouteButtonsIn(Shift) then
+    ForgetPress;
   FLastMousePos := Point(X, Y);
   case FRoute of
     mrReport:
@@ -313,19 +317,22 @@ begin
 end;
 
 function TTyCustomTerminalView.RouteButtonsHeld: Boolean;
+begin
+  Result := RouteButtonsIn(HeldMouseButtons);
+end;
+
+function TTyCustomTerminalView.RouteButtonsIn(AHeld: TShiftState): Boolean;
 var
-  held: TShiftState;
   b: TMouseButton;
 begin
-  held := HeldMouseButtons;
   if FRoute = mrReport then
   begin
     for b := Low(TMouseButton) to High(TMouseButton) do
-      if (b in FReportHeld) and (MouseButtonShift(b) * held <> []) then
+      if (b in FReportHeld) and (MouseButtonShift(b) * AHeld <> []) then
         Exit(True);
     Exit(False);
   end;
-  Result := MouseButtonShift(FRouteButton) * held <> [];
+  Result := MouseButtonShift(FRouteButton) * AHeld <> [];
 end;
 
 procedure TTyCustomTerminalView.ForgetPress;

@@ -449,8 +449,9 @@ type
       X, Y: Integer; Shift: TShiftState): Boolean;
     function OverrideIsAlt: Boolean;
     procedure UpdatePointer(Shift: TShiftState);
-    { 这次按下的路要的键还按着没有(HeldMouseButtons) }
+    { 这次按下的路要的键还按着没有(HeldMouseButtons;RouteButtonsIn 问给定的一组键) }
     function RouteButtonsHeld: Boolean;
+    function RouteButtonsIn(AHeld: TShiftState): Boolean;
     { 抬起丢了(捕获被拿走、失焦,键已经不在了):照 MouseUp 收尾——停自动滚、选区松开、
       上报路补发抬起、路复位;链接不激活、PRIMARY 不粘贴 }
     procedure ForgetPress;

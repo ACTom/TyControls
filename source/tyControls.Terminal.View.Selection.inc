@@ -175,6 +175,12 @@ procedure TTyCustomTerminalView.DragScrollTick;
 var
   n: Integer;
 begin
+  { #185: 键已经松开了，抬起却没来(模态框拿走了它):不再滚，照松开收尾 }
+  if not RouteButtonsHeld then
+  begin
+    ForgetPress;
+    Exit;
+  end;
   SyncSelectionTrim;
   n := FSelection.DragScrollAmount;
   if n <> 0 then

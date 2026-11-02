@@ -75,6 +75,9 @@ type
     procedure TestPrimaryIsOfferedNotBuilt;
     procedure TestCopyingTenThousandRowsIsQuick;
     procedure TestAWordWrappedOverManyRows;
+    { #185 }
+    procedure TestAMoveWithTheButtonUpFinishesThePress;
+    procedure TestTheDragTimerStopsWhenTheButtonIsUp;
   end;
 
 implementation
@@ -416,6 +419,9 @@ begin
   V.WriteSync(Lines(0, 100));
   r := V.CellRect(0, 0);
   top := r.Top;
+  { the button is held all along: a tick checks it (#185) }
+  V.UseFakeButtons := True;
+  V.FakeButtons := [ssLeft];
   V.Down(mbLeft, [ssLeft], V.CellLeft(0, 2));
   AssertTrue('the drag timer runs', V.DragTimerOn);
   V.MoveTo([ssLeft], V.CellLeft(3, 0).X, top - 30);
@@ -955,6 +961,62 @@ begin
   t := V.SelectionText;
   AssertEquals('the whole word', N * V.Cols, Length(t));
   AssertEquals('and nothing else', StringOfChar('w', N * V.Cols), t);
+end;
+
+{ #185: the release went elsewhere and no capture event came (a modal dialog took the
+  mouse while the button was down): the next move without the button finishes the press
+  as a release would, instead of the selection following the bare pointer }
+procedure TTyTerminalViewMouseTests.TestAMoveWithTheButtonUpFinishesThePress;
+begin
+  V.WriteSync('hello world');
+  V.CopyOnSelect := True;
+  V.UseFakeShift := True;
+  V.FakeShift := [];
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  AssertTrue('selecting', V.MouseRoute = mrSelect);
+  V.MoveTo([], V.CellLeft(9, 0));
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  AssertEquals('the selection did not follow the pointer', 'hell', V.SelectionText);
+  AssertFalse('the drag timer stopped', V.DragTimerOn);
+  AssertEquals('finished as a release: CopyOnSelect wrote it', 1, V.ClipWrites);
+  { reported: the program gets its release where the button was last seen }
+  V.WriteSync(#27'[?1002h'#27'[?1006h');
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  Reset;
+  V.MoveTo([], V.CellCenter(4, 1));
+  AssertEquals('the release is reported', Sgr(0, 2, 1, False), Hex);
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  { a second button still down keeps a reported press going }
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  V.Down(mbRight, [ssLeft, ssRight], V.CellCenter(2, 1));
+  V.MoveTo([ssRight], V.CellCenter(3, 1));
+  AssertTrue('right still held: still reporting', V.MouseRoute = mrReport);
+  V.Up(mbRight, [], V.CellCenter(3, 1));
+end;
+
+{ #185: the drag timer runs while a drag is past the edge; once the button is up (the
+  release lost to a dialog) its next tick finishes the press instead of scrolling on }
+procedure TTyTerminalViewMouseTests.TestTheDragTimerStopsWhenTheButtonIsUp;
+var
+  y: Integer;
+begin
+  V.WriteSync(Lines(0, 100));
+  V.UseFakeButtons := True;
+  V.FakeButtons := [ssLeft];
+  V.ScrollLines(-50);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 2));
+  V.MoveTo([ssLeft], V.CellLeft(3, 0).X, V.ClientHeight + 40);
+  AssertTrue('the drag timer runs', V.DragTimerOn);
+  y := V.Core.Buffer.YDisp;
+  V.TickDrag;
+  AssertTrue('a tick with the button down scrolls', V.Core.Buffer.YDisp > y);
+  V.FakeButtons := [];
+  y := V.Core.Buffer.YDisp;
+  V.TickDrag;
+  AssertFalse('the button is up: the timer stopped', V.DragTimerOn);
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  AssertEquals('and that tick did not scroll', y, V.Core.Buffer.YDisp);
 end;
 
 initialization
