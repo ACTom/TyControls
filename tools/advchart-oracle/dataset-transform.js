@@ -715,6 +715,9 @@ L('r-list-past-first', 'x [5, 1]: a gap, then v', lsc({ encode: { x: [5, 1], y: 
 L('r-list-both', 'x 1, y 1: the later coordinate keeps the dimension, x has none', lsc({ encode: { x: 1, y: 1 } }));
 L('r-list-fill', 'x [3, 0], y unwritten: y takes v, the first nobody holds', lsc({ encode: { x: [3, 0] } }));
 L('r-list-dims-empty', "the series' dimensions []: two dimensions, so x [0, 3] keeps p alone", lsc({ dimensions: [], encode: { x: [0, 3], y: 1 } }));
+// (variation round: with dimensions written the fill stops at their count)
+L('r-list-dims-empty-fill', "the series' dimensions [] over p v w g: x [0, 1] holds both dimensions, y has none",
+  lsc({ dimensions: [], encode: { x: [0, 1] } }, { source: [['p', 'v', 'w', 'g'], [1, 6, 9, 'A'], [2, 7, 4, 'B'], [3, 8, 2, 'A']] }));
 L('r-list-own', 'own data x [0, 2]: the axis spans both', { xAxis: { type: 'value' }, yAxis: { type: 'value' },
   series: [{ type: 'scatter', label: { show: true }, data: [[1, 6, 9], [2, 7, 4]], encode: { x: [0, 2], y: 1 } }] });
 L('r-list-own-names', "own data, dimensions a b c: x ['nope', 'c'] a gap", { xAxis: { type: 'value' }, yAxis: { type: 'value' },

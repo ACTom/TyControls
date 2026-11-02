@@ -56108,6 +56108,204 @@
    ]
   },
   {
+   "id": "r-list-dims-empty-fill",
+   "group": "render",
+   "note": "the series' dimensions [] over p v w g: x [0, 1] holds both dimensions, y has none",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "w",
+       "g"
+      ],
+      [
+       1,
+       6,
+       9,
+       "A"
+      ],
+      [
+       2,
+       7,
+       4,
+       "B"
+      ],
+      [
+       3,
+       8,
+       2,
+       "A"
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "label": {
+       "show": true
+      },
+      "dimensions": [],
+      "encode": {
+       "x": [
+        0,
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": null
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 3,
+      "items": [
+       [
+        "4062480000000000",
+        "7ff8000000000000"
+       ],
+       [
+        "4069500000000000",
+        "7ff8000000000000"
+       ],
+       [
+        "40702c0000000000",
+        "7ff8000000000000"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "reads": [
+    {
+     "index": 0,
+     "dims": [
+      "x",
+      "x0"
+     ],
+     "x": "x",
+     "values": [
+      [
+       "3ff0000000000000",
+       null
+      ],
+      [
+       "4000000000000000",
+       null
+      ],
+      [
+       "4008000000000000",
+       null
+      ]
+     ]
+    }
+   ],
+   "extents": [
+    {
+     "dim": "x",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "4020000000000000"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ]
+    }
+   ],
+   "sizes": [
+    {
+     "index": 0,
+     "sizes": [
+      "4024000000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "p",
+        "v",
+        "w",
+        "g"
+       ],
+       "detected": 4,
+       "rows": [
+        [
+         "s:p",
+         "s:v",
+         "s:w",
+         "s:g"
+        ],
+        [
+         "3ff0000000000000",
+         "4018000000000000",
+         "4022000000000000",
+         "s:A"
+        ],
+        [
+         "4000000000000000",
+         "401c000000000000",
+         "4010000000000000",
+         "s:B"
+        ],
+        [
+         "4008000000000000",
+         "4020000000000000",
+         "4000000000000000",
+         "s:A"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "r-list-own",
    "group": "render",
    "note": "own data x [0, 2]: the axis spans both",

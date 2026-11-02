@@ -16358,6 +16358,143 @@
    "visible": "L\n  9"
   },
   {
+   "name": "encode list: own data x [0, 2], tooltip [1, 2]: inline, no names",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "L",
+      "encode": {
+       "x": [
+        0,
+        2
+       ],
+       "y": 1,
+       "tooltip": [
+        1,
+        2
+       ]
+      },
+      "data": [
+       [
+        1,
+        6,
+        9
+       ],
+       [
+        2,
+        7,
+        4
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "L",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "6  9"
+    }
+   ],
+   "text": "{__EC_aUTo_3|L}\n{__EC_aUTo_1|}  {__EC_aUTo_2|6  9}",
+   "visible": "L\n  6  9"
+  },
+  {
+   "name": "encode list: no header x [0, 1], y 3: the tooltip is the label, w",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "L",
+      "encode": {
+       "x": [
+        0,
+        1
+       ],
+       "y": 3
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 0,
+   "lines": [
+    {
+     "marker": null,
+     "name": "L",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": null,
+     "value": "9"
+    }
+   ],
+   "text": "{__EC_aUTo_3|L}\n{__EC_aUTo_1|}  {__EC_aUTo_2|9}",
+   "visible": "L\n  9"
+  },
+  {
    "name": "encode list: seriesName [3, 1]: \"w v\"",
    "option": {
     "dataset": {

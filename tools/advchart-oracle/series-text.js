@@ -979,6 +979,11 @@ lTip('encode list: x [0, 3]: the tooltip w', lsc({ x: [0, 3], y: 1 }));
 lTip('encode list: x [0, 1], y 3: the tooltip is the label, w', lsc({ x: [0, 1], y: 3 }));
 lTip('encode list: own data x [0, 2]: the tooltip x0, no names', valueXY([{
   type: 'scatter', name: 'L', encode: { x: [0, 2], y: 1 }, data: [[1, 6, 9], [2, 7, 4]] }]));
+// (variation round: an extra column displays no name -- the rows inline)
+lTip('encode list: own data x [0, 2], tooltip [1, 2]: inline, no names', valueXY([{
+  type: 'scatter', name: 'L', encode: { x: [0, 2], y: 1, tooltip: [1, 2] }, data: [[1, 6, 9], [2, 7, 4]] }]));
+// (variation round: an extra column is no column a type marks for its tooltip)
+lTip('encode list: no header x [0, 1], y 3: the tooltip is the label, w', lsc({ x: [0, 1], y: 3 }, null, false));
 const unnamed = o => { delete o.series[0].name; return o; };
 lTip('encode list: seriesName [3, 1]: "w v"', unnamed(lsc({ x: 0, y: 1, seriesName: [3, 1] })));
 lTip("encode list: seriesName ['nope', 'w']", unnamed(lsc({ x: 0, y: 1, seriesName: ['nope', 'w'] })));
