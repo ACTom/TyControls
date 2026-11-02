@@ -2556,6 +2556,10 @@ type
     function WeakKeep(ARawIndex: Integer): Boolean;
     procedure SolveVisualMapViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
+    { [R7-M] a component's words: textStyle's font, block and opacity }
+    procedure ComponentTextBlock(const AJson: string; var AFontName: string;
+      var AFontWeight: Integer; out AHasRt: Boolean; out ART: TTyRtBlockStyle;
+      out AGlobal: TTyRtGlobal; out AHasOpacity: Boolean; out AOpacity: Double);
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
     { [R2-L] the components a list ends with, from the visual maps on --

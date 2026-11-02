@@ -225,6 +225,7 @@ var
   model: TTyStyleModel;
   st: TTyStyleSet;
 begin
+  Result := Default(TTyVisualMapInk);
   model := ActiveController.Model;
   st := model.ResolveStyle('TyAdvChartVisualMap', '', []);
   Result.FontName := st.FontName;
@@ -236,6 +237,11 @@ begin
   if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
   Result.FontWeight := TyFontStyleCodeOver(AView.FontStyle, Result.FontWeight);
   if AView.HasText_ then Result.Text := AView.TextColour;
+  { [R7-M] the rest of createTextStyle: the family, the weight, the block,
+    the opacity }
+  ComponentTextBlock(AView.TextStyleJson, Result.FontName, Result.FontWeight,
+    Result.HasRt, Result.Rt, Result.RtGlobal, Result.HasOpacity, Result.Opacity);
+  if FLastPPI > 0 then Result.RtScale := FLastPPI / 96 else Result.RtScale := 1;
   if AView.HasBorder then Result.Border := AView.BorderColour
   else Result.Border := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapBorder', '', []).BorderColor);

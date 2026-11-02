@@ -294,6 +294,11 @@ begin
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
   Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, Result.FontWeight);
+  { [R7-M] the rest of createTextStyle: the family, the weight, the block,
+    the opacity }
+  ComponentTextBlock(ASpec.TextStyleJson, Result.FontName, Result.FontWeight,
+    Result.HasRt, Result.Rt, Result.RtGlobal, Result.HasOpacity, Result.Opacity);
+  if FLastPPI > 0 then Result.RtScale := FLastPPI / 96 else Result.RtScale := 1;
   Result.Filler := TTyChartColor(
     model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
   Result.Frame := TTyChartColor(

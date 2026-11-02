@@ -671,6 +671,49 @@ const R7L_EXTREME_CASES = [
       { width: '60', backgroundColor: '#eeeeee', borderRadius: 0 },
       { width: '60', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: [0, 0, 0, 0] }], {}) },
 ];
+// ---- [R7-M] a visualMap's and a slider dataZoom's words are createTextStyle
+// of their textStyle (ContinuousView, PiecewiseView, SliderZoomView): every
+// key a label reads -- the box, its border and radius, padding, width and
+// height, lineHeight, overflow, rich, the halo and the text shadow -- placed
+// by its style's x / y (a numeric string size joins that place). Every colour
+// is the case's own (`looks`).
+const CMP_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 };
+const CMP_BAR = { xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] };
+const CMP_RICH = { color: '#333333', lineHeight: 20, textBorderColor: '#ffffff', textBorderWidth: 2,
+  textShadowColor: '#888888', textShadowBlur: 2, textShadowOffsetX: 1, textShadowOffsetY: 1,
+  rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] }, b: { color: '#0000aa', fontSize: 14 } } };
+const R7M_COMPONENT_CASES = [
+  { name: 'vm-continuous-box', looks: true, note: "a vertical continuous visualMap: the ends' text and the handle labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'], textStyle: CMP_BOX } }, CMP_BAR)) },
+  { name: 'vm-continuous-h-box', looks: true, note: "a horizontal one: the ends left and right, the handle labels centred over the handles, the words at 0.6",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', orient: 'horizontal', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: Object.assign({}, CMP_BOX, { opacity: 0.6 }) } }, CMP_BAR)) },
+  { name: 'vm-continuous-rich', looks: true, note: "handle labels '{a|{value}}{b|!}' in rich, a halo, a text shadow and lineHeight 20; an end on two lines",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['Very\nhigh', 'Low'], formatter: '{a|{value}}{b|!}',
+      textStyle: CMP_RICH } }, CMP_BAR)) },
+  { name: 'vm-continuous-size', looks: true, note: "width 30 with overflow truncate and a plate, height 24, align right: the ends and the labels cut and boxed",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 20000, calculable: true, text: ['Highest', 'Lowest'],
+      textStyle: { color: '#333333', width: 30, height: 24, overflow: 'truncate', backgroundColor: '#eeeeee', align: 'right' } } }, CMP_BAR)) },
+  { name: 'vm-continuous-numstr', looks: true, note: "width '60' over a rounded plate: the path runs from the style's x to x + '600'; the group placed by its bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, right: 10, text: ['High', 'Low'],
+      textStyle: { color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }, CMP_BAR)) },
+  { name: 'vm-piecewise-box', looks: true, note: "piecewise items with a plate and padding; one piece unselected (its words at 0.5); the items stacked by their bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 3, selected: { 1: false }, textStyle: CMP_BOX } }, CMP_BAR)) },
+  { name: 'vm-piecewise-ends', looks: true, note: "piecewise with ends text, width 40 and a plate, rich items over a pieces list (showLabel), align left, the words at 0.7",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', orient: 'horizontal', text: ['Hi', 'Lo'], showLabel: true,
+      pieces: [{ min: 0, max: 100, label: '{a|low} part' }, { min: 100, max: 200, label: '{b|high}' }],
+      textStyle: Object.assign({}, CMP_RICH, { width: 40, backgroundColor: '#eeeeee', align: 'left', opacity: 0.7 }) } }, CMP_BAR)) },
+  { name: 'vm-piecewise-numstr', looks: true, note: "piecewise height '30' with a plate: each item's box joins its y (itemHeight / 2) to '30' + padding",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 2, textStyle: { color: '#333333', height: '30', backgroundColor: '#eeeeee' } } }, CMP_BAR)) },
+  { name: 'dz-slider-box', looks: true, note: "a slider's handle labels shown, with a rounded, bordered, padded plate",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: CMP_BOX }] }, CMP_BAR)) },
+  { name: 'dz-slider-vertical-rich', looks: true, note: "a vertical slider on y: labels '{a|{value}}{b|v}' in rich with a halo, a shadow and lineHeight 20",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', orient: 'vertical', yAxisIndex: 0, handleLabel: { show: true },
+      labelFormatter: '{a|{value}}{b|v}', textStyle: CMP_RICH }] }, CMP_BAR)) },
+  { name: 'dz-slider-numstr', looks: true, note: "a slider's labels width '60' over a rounded plate, joined to the style's x; lineHeight '20' on two lines",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, labelFormatter: '{value}\nend',
+      textStyle: { color: '#333333', width: '60', lineHeight: '20', backgroundColor: '#eeeeee', borderRadius: 3 } }] }, CMP_BAR)) },
+];
 const R7H_CASES = [
   { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
     option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
@@ -936,6 +979,7 @@ const cases = [
   ...R7L_OPACITY_CASES,
   ...R7L_HUNG_CASES,
   ...R7L_EXTREME_CASES,
+  ...R7M_COMPONENT_CASES,
 ];
 
 // ---------- running upstream ----------
