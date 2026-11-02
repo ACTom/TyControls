@@ -51,6 +51,10 @@ type
     { Display AValue (AGroup = the grouped blur form), keeping Modified as it was. Does nothing
       while the form is being read: Loaded displays once, when every property has arrived. }
     procedure ShowValue(AValue: Double; AGroup: Boolean);
+    { #159: AValue set by a gesture of the control's own -- the track edit's slider: shown as
+      the user's edit (Modified, OnChange) when the text moves. ANewStep: take an undo step
+      first, once per gesture. True when the text moved. }
+    function ApplyUserValue(AValue: Double; ANewStep: Boolean): Boolean;
     { The number in a displayed text: AText without what Formatted put around it. The base adds
       nothing; TTyCurrencyEdit takes its symbol off. }
     function StripDecoration(const AText: string): string; virtual;
@@ -154,7 +158,7 @@ type
 implementation
 
 uses
-  tyControls.Types;
+  tyControls.Types, tyControls.UndoStack;
 
 procedure TTyCustomNumericEdit.DefineProperties(Filer: TFiler);
 begin
@@ -327,15 +331,40 @@ end;
 procedure TTyCustomNumericEdit.ShowValue(AValue: Double; AGroup: Boolean);
 var
   WasModified: Boolean;
+  s: string;
+  was, now: Double;
 begin
   { While a form is read, Text arrives before the properties that shape it (Decimals, the
     currency symbol ...), so a text parsed then would be parsed under the defaults: 'Fr.1,234.50'
     read before CurrencySymbol = 'Fr.' came out 0. }
   if csLoading in ComponentState then Exit;
   FLastValue := AValue;
-  WasModified := Modified;
-  Text := Formatted(AValue, AGroup);
-  Modified := WasModified;
+  s := Formatted(AValue, AGroup);
+  { #159: the same number shown another way -- grouped on the blur, plain on the focus -- is no
+    change. It went through Text :=, so taking or leaving the focus fired OnChange and took an
+    undo step. A number that moved (clamped, rounded, an emptied field read as 0) still is. }
+  if TyParseNumber(StripDecoration(Text), FThousands, FDecimalSep, was)
+     and TyParseNumber(StripDecoration(s), FThousands, FDecimalSep, now) and (was = now) then
+    SetDisplayText(s)
+  else
+  begin
+    WasModified := Modified;
+    Text := s;
+    Modified := WasModified;
+  end;
+end;
+
+function TTyCustomNumericEdit.ApplyUserValue(AValue: Double; ANewStep: Boolean): Boolean;
+var
+  s: string;
+begin
+  FLastValue := ClampVal(AValue);
+  s := Formatted(FLastValue, not Focused);
+  Result := s <> Text;
+  if not Result then Exit;
+  if ANewStep then BeginUndoStep(uskNone);   // a step of its own
+  SetDisplayText(s);
+  DoChange;   // not by code: Modified, OnChange
 end;
 
 function TTyCustomNumericEdit.StripDecoration(const AText: string): string;

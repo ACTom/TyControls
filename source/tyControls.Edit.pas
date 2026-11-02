@@ -203,6 +203,10 @@ type
       whole display string on every accepted character, and routing that through the
       programmatic path would clear the dirty flag on every keypress. }
     procedure SetTextInternal(const AValue: TCaption; AByCode: Boolean);
+    { #159: the text the field already holds, shown another way -- a number regrouped when the
+      field takes or loses the focus. No change: no undo step, no OnChange, Modified left as it
+      is. The caret parks at the end, as for Text :=. }
+    procedure SetDisplayText(const AValue: TCaption);
     // Text measurement helpers (protected so headless access subclasses can call them --
     // the comment that claimed so had been sitting over a PRIVATE block).
     function TextStartX(APPI: Integer): Integer;
@@ -371,7 +375,8 @@ type
     function TeHasSelection: Boolean;
     function TeCanPaste: Boolean;
     function TeHasText: Boolean;
-    function TeIsReadOnly: Boolean;
+    { Virtual (#159): a subclass whose editor can be locked another way says so to the menu. }
+    function TeIsReadOnly: Boolean; virtual;
     // --- ITyImeEditable: the seam the macOS IME handler drives during CJK composition (thin
     // delegates to members below; see tyControls.CocoaWS / tyControls.TextMenu). ---
     function  ImeTargetControl: TWinControl;
@@ -1178,6 +1183,22 @@ begin
     FTextChangeByCode := False;
   end;
   if AByCode then FModified := False;
+end;
+
+procedure TTyCustomEdit.SetDisplayText(const AValue: TCaption);
+var
+  APPI: Integer;
+begin
+  if FText = AValue then Exit;
+  BreakCoalescing;   // the next keystroke starts a step of its own
+  FText := AValue;
+  FCaret := UTF8Length(FText);
+  FSelAnchor := FCaret;
+  InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
+  Invalidate;
 end;
 
 procedure TTyCustomEdit.SetCaretPos(AValue: Integer);

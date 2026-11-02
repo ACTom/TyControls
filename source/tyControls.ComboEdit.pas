@@ -120,7 +120,7 @@ procedure TTyCustomComboEdit.MouseDown(Button: TMouseButton; Shift: TShiftState;
 begin
   if (Button = mbLeft) and PtInRect(TrailingZone(Font.PixelsPerInch), Point(X, Y)) then
   begin
-    DropDown;
+    if not ReadOnly then DropDown;   // #159: read-only, the button is off, as LCL's TEditButton
     Exit;   // consumed by the button
   end;
   inherited MouseDown(Button, Shift, X, Y);
