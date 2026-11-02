@@ -912,6 +912,7 @@ type
     procedure TestTheGroupBoxCaptionIsTheControls;
     procedure TestTheCardStaysHoveredOverItsContent;
     procedure TestTheSplitterLeavesRoomForTheOtherPanes;
+    procedure TestTheSplitterCountsItsAlignedPaneOnce;
     procedure TestTheSplitterTurnsItsThickness;
     procedure TestEveryGridCellIsPlacedWhateverTheSizes;
     procedure TestFewerColumnsKeepTheirControls;
@@ -1056,6 +1057,30 @@ begin
     FForm.ClientWidth - 40 - 5 - right.Width, pan.Width);
 end;
 
+procedure TContainers174Test.TestTheSplitterCountsItsAlignedPaneOnce;
+var pan, right: TPanel; sp: TSplitter174Probe;
+begin
+  pan := TPanel.Create(FForm);
+  pan.Parent := FForm;
+  pan.Width := 100;
+  pan.Align := alLeft;
+  right := TPanel.Create(FForm);
+  right.Parent := FForm;
+  right.Width := 150;
+  right.Align := alRight;
+  sp := TSplitter174Probe.Create(FForm);
+  sp.Parent := FForm;
+  sp.Align := alNone;
+  sp.SetBounds(pan.Left + pan.Width, 0, 5, 200);
+  sp.Align := alLeft;
+  sp.Left := pan.Left + pan.Width;
+  sp.MinSize := 40;
+  sp.AutoSnap := False;
+  sp.FakeDrag(0, 1000, 100);
+  AssertEquals('the aligned pane being resized is not counted against itself',
+    FForm.ClientWidth - 40 - 5 - right.Width, pan.Width);
+end;
+
 procedure TContainers174Test.TestTheSplitterTurnsItsThickness;
 var sp: TTySplitter;
 begin
@@ -1178,19 +1203,23 @@ begin
 end;
 
 procedure TContainers174FocusTest.TestCollapsingMovesTheFocusOut;
-var ex: TTyExPanel; inside, after: TTyEdit;
+var ex: TTyExPanel; before, inside, after: TTyEdit;
 begin
+  before := TTyEdit.Create(FForm);
+  before.Parent := FForm;
+  before.SetBounds(300, 10, 100, 24);
+  before.TabOrder := 0;
   ex := TTyExPanel.Create(FForm);
   ex.Parent := FForm;
   ex.SetBounds(0, 0, 200, 140);
-  ex.TabOrder := 0;
+  ex.TabOrder := 1;
   inside := TTyEdit.Create(FForm);
   inside.Parent := ex;
   inside.SetBounds(10, 40, 100, 24);
   after := TTyEdit.Create(FForm);
   after.Parent := FForm;
   after.SetBounds(10, 200, 100, 24);
-  after.TabOrder := 1;
+  after.TabOrder := 2;
   FForm.HandleNeeded;
   Forms.Application.ProcessMessages;
   inside.SetFocus;
@@ -1198,7 +1227,8 @@ begin
   AssertSame('setup: focus inside', inside, FForm.ActiveControl);
   ex.Collapsed := True;
   Forms.Application.ProcessMessages;
-  AssertSame('collapsing moves the focus to the next control', after, FForm.ActiveControl);
+  AssertSame('collapsing moves the focus to the next control, not the first', after,
+    FForm.ActiveControl);
 end;
 
 initialization
