@@ -13,16 +13,20 @@ end;
 
 { isLabelSilent: `axisModel.get('silent')` (the axis defaults have
   `silent: false`, so the root is never reached) or neither triggerEvent
-  nor a tooltip with show }
-function AxisTextSilent(ANode, ARoot: TJSONData): Boolean;
-var tip: TJSONData;
+  nor a tooltip with show -- [R7-G] ATooltipShows the axis model's default
+  `tooltip.show` (a single axis': true), a written `show` over it }
+function AxisTextSilent(ANode, ARoot: TJSONData; ATooltipShows: Boolean = False): Boolean;
+var tip, show: TJSONData;
 begin
   Result := TyOptTruthy(TyGetShallowRoot(ANode, nil, 'silent'));
   if Result then Exit;
   if TyOptTruthy(TyGetShallowRoot(ANode, nil, 'triggerEvent')) then Exit(False);
   tip := nil;
   if ANode is TJSONObject then tip := TJSONObject(ANode).Find('tooltip');
-  Result := not ((tip is TJSONObject) and TyOptTruthy(TJSONObject(tip).Find('show')));
+  show := nil;
+  if tip is TJSONObject then show := TJSONObject(tip).Find('show');
+  if (show <> nil) and (show.JSONType <> jtNull) then Result := not TyOptTruthy(show)
+  else Result := not ATooltipShows;
 end;
 
 function TTyCustomAdvanceChart.AxisTextAt(AX, AY: Integer;

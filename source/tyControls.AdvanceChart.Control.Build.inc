@@ -3948,6 +3948,8 @@ function TTyCustomAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
 var
   list: TTyPaintList;
   i, drawn, furniture, n: Integer;
+  { [R7-G] a radar's texts in the list }
+  rt0, rt: Integer;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -4011,9 +4013,26 @@ begin
   drawn := 0;
   { a view excludeComponents names is not built, and one that builds
     something is drawn [Batch 106] }
+  FRadarTexts := nil;
   if not ViewHidden(cvRadar) then
     for i := 0 to High(FRadars) do
+    begin
+      rt0 := list.Count;
       Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+      { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words }
+      for rt := rt0 to list.Count - 1 do
+        if (list.Element(rt).Shape.Kind = cskRect) and (list.Element(rt).Caption.Text <> '')
+          and (list.Element(rt).Z2 in [1, 10]) then
+        begin
+          SetLength(FRadarTexts, Length(FRadarTexts) + 1);
+          FRadarTexts[High(FRadarTexts)].Box := list.Element(rt).Shape.Bounds;
+          FRadarTexts[High(FRadarTexts)].Radar := i;
+          FRadarTexts[High(FRadarTexts)].Z := list.Element(rt).Z;
+          FRadarTexts[High(FRadarTexts)].Z2 := list.Element(rt).Z2;
+          FRadarTexts[High(FRadarTexts)].IsName := list.Element(rt).Z2 = 1;
+          FRadarTexts[High(FRadarTexts)].Text := list.Element(rt).Caption.Text;
+        end;
+    end;
   if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn
     at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line
