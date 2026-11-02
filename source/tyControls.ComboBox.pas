@@ -1014,6 +1014,7 @@ begin
         FItemIndex := -1
       else
         FItemIndex := TyComboIndexOfText(FItems, AValue, False);
+  if FStyle = csSimple then SyncEmbeddedSelection;   // the docked list shows that row too
   { In editable mode keep the visible field in sync with a programmatic Text set,
     but under the guard so it does not re-trigger the autocomplete filter/popup. }
   if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) and (FEditor.Text <> AValue) then
