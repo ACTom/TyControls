@@ -947,7 +947,8 @@ end;
 
 procedure TTyCustomDBToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if ((Key = VK_SPACE) or (Key = VK_RETURN)) and Enabled and not FlipAllowed then
+  { #144: Space only; Enter is not the switch's key and goes on to the form. }
+  if (Key = VK_SPACE) and Enabled and not FlipAllowed then
   begin
     Key := 0;
     Exit;

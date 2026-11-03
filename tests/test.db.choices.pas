@@ -79,6 +79,7 @@ type
   published
     procedure TestSpaceTogglesAndWrites;
     procedure TestRefusedKeysAndClickDoNotFlip;
+    procedure TestARefusedSwitchLetsEnterGoOn;
     procedure TestWordListsMap;
     procedure TestCheckedSetFromCodeIsAnEdit;
     procedure TestCheckedSetFromCodeIsRefusedLikeAClick;
@@ -487,6 +488,24 @@ begin
   AssertEquals('the switch', 'on', Shown);
   AssertEquals('it never moved: no OnChange', 0, FChanges);
   AssertBrowsing('refused keys and click');
+end;
+
+{ #144: Enter is not the switch's key, refused or not: it goes on to the form's default button.
+  Only the refused Space is eaten. }
+procedure TDBToggleSwitchTest.TestARefusedSwitchLetsEnterGoOn;
+var
+  k: Word;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Active');
+  EnterControl;
+  k := VK_RETURN;
+  TChoiceInput(FCtl).KeyDown(k, []);
+  AssertEquals('Enter goes on to the form', VK_RETURN, k);
+  k := VK_SPACE;
+  TChoiceInput(FCtl).KeyDown(k, []);
+  AssertEquals('the refused Space is eaten', 0, k);
+  AssertBrowsing('refused keys');
 end;
 
 procedure TDBToggleSwitchTest.TestWordListsMap;
