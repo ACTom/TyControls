@@ -571,12 +571,9 @@ begin
           ln.Y2 := d.Shape.Y2;
           TySingleSubPixelLine(ln, APainter.ScaleF(w));
           dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
-          APainter.SetLineDash(dash);
-          APainter.BeginPath;
-          APainter.MoveTo(ln.X1, ln.Y1);
-          APainter.LineTo(ln.X2, ln.Y2);
-          APainter.StrokePath(colour, w);
-          APainter.SetLineDash([]);
+          { [R7-X] the full getLineStyle }
+          PtrShapePaint(APainter, AHit, TyShapePolyline([TyPointF(ln.X1, ln.Y1),
+            TyPointF(ln.X2, ln.Y2)]), True, colour, w, dash);
         end;
       end;
     spkRect:
@@ -584,13 +581,11 @@ begin
       begin
         colour := shadowS.Background.Color;
         if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
-        APainter.BeginPath;
-        APainter.MoveTo(d.Shape.X1, d.Shape.Y1);
-        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1);
-        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2);
-        APainter.LineTo(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2);
-        APainter.ClosePath;
-        APainter.FillPath(colour);
+        { [R7-X] the full getAreaStyle }
+        PtrShapePaint(APainter, AHit, TyShapePolygon([TyPointF(d.Shape.X1, d.Shape.Y1),
+          TyPointF(d.Shape.X1 + d.Shape.X2, d.Shape.Y1),
+          TyPointF(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2),
+          TyPointF(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2)]), False, colour, 0, nil);
       end;
   end;
   if not d.HasLabel or (d.Text = '') then Exit;
@@ -1454,6 +1449,28 @@ begin
   ADraw.HasLabel := True;
 end;
 
+{ [R7-X] a polar pointer's band as a sector shape: a whole ring, or the
+  sweep closed through its inner arc or the centre }
+function PolarBandShape(const S: TTyPolarPointerShape): TTyChartShape;
+begin
+  Result := Default(TTyChartShape);
+  Result.Kind := cskSector;
+  Result.CX := S.CX;
+  Result.CY := S.CY;
+  Result.R1 := Math.Max(S.R, 0);
+  if S.R0 > 1e-4 then Result.R0 := S.R0 else Result.R0 := 0;
+  if Abs(S.EndAngle - S.StartAngle) > 2 * Pi - 1e-4 then
+  begin
+    Result.StartRad := 0;
+    Result.EndRad := 2 * Pi;
+  end
+  else
+  begin
+    Result.StartRad := S.StartAngle;
+    Result.EndRad := S.EndAngle;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.PaintPolarPointer(APainter: TTyPainter;
   const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
   const AHit: TTyAxisHit);
@@ -1483,20 +1500,13 @@ begin
         if w > 0 then
         begin
           dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
-          APainter.SetLineDash(dash);
-          APainter.BeginPath;
+          { [R7-X] the full getLineStyle }
           if s.Kind = plpkLine then
-          begin
-            APainter.MoveTo(s.X1, s.Y1);
-            APainter.LineTo(s.X2, s.Y2);
-          end
+            PtrShapePaint(APainter, AHit, TyShapePolyline([TyPointF(s.X1, s.Y1),
+              TyPointF(s.X2, s.Y2)]), True, colour, w, dash)
           else
-          begin
-            APainter.MoveTo(s.CX + s.R, s.CY);
-            APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
-          end;
-          APainter.StrokePath(colour, w);
-          APainter.SetLineDash([]);
+            PtrShapePaint(APainter, AHit, TyShapeCircle(s.CX, s.CY,
+              Math.Max(s.R, 0)), True, colour, w, dash);
         end;
       end;
     plpkSector:
@@ -1504,33 +1514,8 @@ begin
       begin
         colour := shadowS.Background.Color;
         if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
-        APainter.BeginPath;
-        if Abs(s.EndAngle - s.StartAngle) > 2 * Pi - 1e-4 then
-        begin
-          APainter.MoveTo(s.CX + s.R, s.CY);
-          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
-          if s.R0 > 1e-4 then
-          begin
-            APainter.MoveTo(s.CX + s.R0, s.CY);
-            APainter.ArcTo(s.CX, s.CY, s.R0, 2 * Pi, 0, True);
-          end;
-        end
-        else
-        begin
-          APainter.MoveTo(s.CX + s.R * TyJsCos(s.StartAngle),
-            s.CY + s.R * TyJsSin(s.StartAngle));
-          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), s.StartAngle, s.EndAngle, False);
-          if s.R0 > 1e-4 then
-          begin
-            APainter.LineTo(s.CX + s.R0 * TyJsCos(s.EndAngle),
-              s.CY + s.R0 * TyJsSin(s.EndAngle));
-            APainter.ArcTo(s.CX, s.CY, s.R0, s.EndAngle, s.StartAngle, True);
-          end
-          else
-            APainter.LineTo(s.CX, s.CY);
-          APainter.ClosePath;
-        end;
-        APainter.FillPath(colour);
+        { [R7-X] the full getAreaStyle: the same path, drawn as an element }
+        PtrShapePaint(APainter, AHit, PolarBandShape(s), False, colour, 0, nil);
       end;
   end;
   if not d.HasLabel or (d.Text = '') then Exit;

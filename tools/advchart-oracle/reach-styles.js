@@ -150,11 +150,12 @@ function cases() {
     // a cross: the base arm the lineStyle chain, the other arm the tooltip's crossStyle (whole) over the
     // component's and the root's lineStyle; the root's crossStyle reaches neither
     ['ptr.cross-root', cartP({ lineStyle: RL }, { type: 'cross', label: { show: false } }), 'pointer', PTN],
-    ['ptr.cross-own', cartP({}, { type: 'cross', label: { show: false }, crossStyle: PL }), 'pointer', PT],
+    ['ptr.cross-own', cartP({}, { type: 'cross', label: { show: false }, lineStyle: { color: '#445566' }, crossStyle: PL }), 'pointer', PT],
     ['ptr.cross-rootcross', cartP({ crossStyle: PL }, { type: 'cross', label: { show: false } }), 'pointer', PTN],
     // the shadow band: getAreaStyle of shadowStyle -- its fill, opacity, shadow
     ['ptr.shadow', cartP({}, { type: 'shadow', shadowStyle: PS }), 'pointer', PT],
-    ['ptr.shadow-root', cartP({ shadowStyle: { opacity: 0.3, shadowBlur: 5, shadowColor: '#0000ff' }, areaStyle: RA, lineStyle: RL },
+    ['ptr.shadow-root', cartP({ shadowStyle: { opacity: 0.3, shadowBlur: 5, shadowColor: '#0000ff' }, areaStyle: RA, lineStyle: RL,
+      axisPointer: { shadowStyle: { color: 'rgba(0, 0, 0, 0.25)' } } },
       { type: 'shadow' }), 'pointer', PTN],
     // polar: a line on the angle axis, a circle on the radius axis, a sector for a shadow
     ['ptr.polar', polarP({ lineStyle: RL }), 'pointer', PTPN],

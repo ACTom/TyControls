@@ -4300,6 +4300,11 @@ type
       the last paint drew them }
     function PointerShapesDrawn: TTyOverlayShapeArray;
     function TitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
+      as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
+    procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
+      const AShape: TTyChartShape; APen: Boolean; AColour: TTyColor;
+      AWidth: Double; const ADash: TTyDoubleArray);
     { [R7-N] an axis pointer label's text style (buildLabelElOption) }
     function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
     { [R7-N] the box buildLabelElOption places: the plain text's bounding

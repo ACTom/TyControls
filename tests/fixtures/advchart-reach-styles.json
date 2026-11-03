@@ -692,6 +692,9 @@
        "show": false
       },
       "type": "cross",
+      "lineStyle": {
+       "color": "#445566"
+      },
       "crossStyle": {
        "color": "#123456",
        "width": 2,
@@ -743,7 +746,7 @@
    "seen": 2,
    "n": 2,
    "pens": [
-    "xAxis0|#b7b9beff|1|4,2|0|butt/miter/10",
+    "xAxis0|#445566ff|1|4,2|0|butt/miter/10",
     "yAxis0|#123456ff|2|8,4|3|round/bevel/2"
    ],
    "action": {
@@ -996,6 +999,11 @@
      "shadowColor": "#00ffff",
      "shadowOffsetY": 2,
      "curveness": 0.3
+    },
+    "axisPointer": {
+     "shadowStyle": {
+      "color": "rgba(0, 0, 0, 0.25)"
+     }
     }
    },
    "part": "pointer",
@@ -1013,7 +1021,7 @@
     "xAxis0|0.3|5|0|0|#0000ffff"
    ],
    "fills": [
-    "xAxis0|#81828833"
+    "xAxis0|#00000040"
    ]
   },
   {

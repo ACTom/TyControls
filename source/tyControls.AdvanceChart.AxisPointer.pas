@@ -107,6 +107,18 @@ type
     { The band. }
     HasShadowColour: Boolean;
     ShadowColour: TTyChartColor;
+    { [R7-X] THE REST OF buildElStyle'S STYLE: getLineStyle's opacity,
+      shadow, dash phase, cap, join and miterLimit (LineLook), getAreaStyle's
+      opacity and shadow (BandLook), each key off the chain the colour,
+      width and type are read from -- the axis' block, the tooltip's (one
+      level's whole), the axisPointer component's -- and below it the
+      option root's lineStyle / shadowStyle (GlobalModel, every model's
+      parent: the component's defaults hold the colour, width and type).
+      Alpha (as written; 1 unwritten), the shadow's four, LineCap,
+      LineJoin, MiterLimit (0 the default 10) and DashOffsetLogical of a
+      TTyChartElementStyle. }
+    LineLook: TTyChartElementStyle;
+    BandLook: TTyChartElementStyle;
     LabelSpec: TTyAxisPointerLabelSpec;
     { [R2-I7] `triggerTooltip` as the axis' own model (its block over the
       root) says it, default true -- what an axis collected for its own
@@ -206,7 +218,7 @@ function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;
 
 implementation
 
-uses jsonparser;
+uses jsonparser, tyControls.AdvanceChart.States;
 
 { ---- reading one axisPointer block ---- }
 
@@ -502,14 +514,41 @@ end;
     apnRootUnderTooltip  the root, reachable for everything the tooltip layer
                 did not claim EXCEPT snap, which is recomputed per axis and
                 therefore unreachable from the root on a tooltip axis }
+{ [R7-X] THE STYLE MODELS' CHAIN: getModel('lineStyle') /
+  getModel('shadowStyle') of the axis' pointer model -- the axis' block,
+  then the volatile model's (makeAxisPointerModel clones the tooltip's
+  block whole: only the first tooltip level that has one), then the
+  axisPointer component's, each key from the first block that writes it
+  (null falls through) }
+type
+  TTyPtrBlocks = array of TJSONObject;
+  TTyPtrChain = record
+    Pen, Band: TTyPtrBlocks;
+    TipPen, TipBand: Boolean;
+  end;
+
+procedure ChainTake(ANode: TJSONObject; const AKey: string; ATip: Boolean;
+  var ATaken: Boolean; var AList: TTyPtrBlocks);
+var d: TJSONData;
+begin
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if not (d is TJSONObject) then Exit;
+  if ATip then
+  begin
+    if ATaken then Exit;
+    ATaken := True;
+  end;
+  SetLength(AList, Length(AList) + 1);
+  AList[High(AList)] := TJSONObject(d);
+end;
+
 procedure MergePointerNode(ANode: TJSONObject; const AStyleKey: string;
   ALevel: TTyPointerLevel;
-  var ASpec: TTyAxisPointerSpec; var ASeen: TTyStringArray);
+  var ASpec: TTyAxisPointerSpec; var ASeen: TTyStringArray;
+  var AChain: TTyPtrChain);
 var
   d: TJSONData;
-  st: TTyOptStyle;
-  sh: TTyOptStyle;
-  c: TTyChartColor;
 begin
   if ANode = nil then Exit;
 
@@ -549,39 +588,115 @@ begin
     end;
   end;
 
-  if Claim(ANode, AStyleKey, ASeen) then
-  begin
-    st := TyReadOptStyle(ANode, AStyleKey);
-    if st.Color.Written and not st.Color.IsNone and not st.Color.IsAuto then
-    begin
-      ASpec.HasLineColour := True;
-      ASpec.LineColour := st.Color.Color;
-    end;
-    if not IsNan(st.BorderWidthLogical) then
-    begin
-      ASpec.HasLineWidth := True;
-      ASpec.LineWidthLogical := Max(Double(0), Min(Double(64),
-        st.BorderWidthLogical));
-    end;
-    if st.Dash <> todNone then
-    begin
-      ASpec.LineDash := st.Dash;
-      ASpec.LineDashExplicit := st.DashLogical;
-      ASpec.LineDashWritten := True;
-    end;
-  end;
-
-  if Claim(ANode, 'shadowStyle', ASeen) then
-  begin
-    sh := TyReadOptStyle(ANode, 'shadowStyle');
-    if sh.Color.Written and not sh.Color.IsNone and not sh.Color.IsAuto then
-    begin
-      ASpec.HasShadowColour := True;
-      ASpec.ShadowColour := sh.Color.Color;
-    end;
-  end;
+  { [R7-X] the pen and the band onto the chain, resolved key by key below
+    [was: the first level's block whole, at every level] }
+  ChainTake(ANode, AStyleKey, ALevel = apnTooltip, AChain.TipPen, AChain.Pen);
+  ChainTake(ANode, 'shadowStyle', ALevel = apnTooltip, AChain.TipBand, AChain.Band);
 
   ReadLabel(ANode, ASpec.LabelSpec, ASeen);
+end;
+
+{ [R7-X] the chain's keys into the spec: the colour, the width and the type
+  where a block of it writes them (the component's defaults are the skin's),
+  the rest down to the option root's block (ARootPen, ARootBand) }
+procedure ResolvePointerChain(const AChain: TTyPtrChain; ARootPen, ARootBand: TJSONObject;
+  var ASpec: TTyAxisPointerSpec);
+var
+  i: Integer;
+  st: TTyOptStyle;
+  d: TJSONData;
+  all: TTyPtrBlocks;
+  joinHas: Boolean;
+  sh: TTyChartShadow;
+
+  function Writes(ABlock: TJSONObject; const AKey: string): Boolean;
+  begin
+    d := ABlock.Find(AKey);
+    Result := (d <> nil) and (d.JSONType <> jtNull);
+  end;
+
+  { opacity, as written, and the shadow's four off AList }
+  procedure Looks(const AList: TTyPtrBlocks; var AStyle: TTyChartElementStyle);
+  begin
+    AStyle.Alpha := 1;
+    d := TyStFind(AList, ['opacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      AStyle.Alpha := d.AsFloat;
+    if TyStReadShadow(AList, [], [], sh) then TyStyleSetShadow(AStyle, sh);
+  end;
+
+begin
+  for i := 0 to High(AChain.Pen) do
+    if Writes(AChain.Pen[i], 'color') then
+    begin
+      st := TyReadOptLineStyleOf(AChain.Pen[i]);
+      if st.Color.Written and not st.Color.IsNone and not st.Color.IsAuto then
+      begin
+        ASpec.HasLineColour := True;
+        ASpec.LineColour := st.Color.Color;
+      end;
+      Break;
+    end;
+  for i := 0 to High(AChain.Pen) do
+    if Writes(AChain.Pen[i], 'width') then
+    begin
+      st := TyReadOptLineStyleOf(AChain.Pen[i]);
+      if not IsNan(st.BorderWidthLogical) then
+      begin
+        ASpec.HasLineWidth := True;
+        ASpec.LineWidthLogical := Max(Double(0), Min(Double(64),
+          st.BorderWidthLogical));
+      end;
+      Break;
+    end;
+  for i := 0 to High(AChain.Pen) do
+    if Writes(AChain.Pen[i], 'type') then
+    begin
+      st := TyReadOptLineStyleOf(AChain.Pen[i]);
+      if st.Dash <> todNone then
+      begin
+        ASpec.LineDash := st.Dash;
+        ASpec.LineDashExplicit := st.DashLogical;
+        ASpec.LineDashWritten := True;
+      end;
+      Break;
+    end;
+  for i := 0 to High(AChain.Band) do
+    if Writes(AChain.Band[i], 'color') then
+    begin
+      st := TyReadOptLineStyleOf(AChain.Band[i]);
+      if st.Color.Written and not st.Color.IsNone and not st.Color.IsAuto then
+      begin
+        ASpec.HasShadowColour := True;
+        ASpec.ShadowColour := st.Color.Color;
+      end;
+      Break;
+    end;
+  { the pen's other keys, down to the root's block }
+  SetLength(all, Length(AChain.Pen) + 1);
+  for i := 0 to High(AChain.Pen) do all[i] := AChain.Pen[i];
+  all[High(all)] := ARootPen;
+  ASpec.LineLook := Default(TTyChartElementStyle);
+  Looks(all, ASpec.LineLook);
+  TyStTakePenKeys(ASpec.LineLook, all, [], True, [spkEnds], joinHas);
+  ASpec.LineLook.DashOffsetLogical := TyOptPenOffset(TyStFind(all, ['dashOffset']));
+  if IsNan(ASpec.LineLook.DashOffsetLogical) then ASpec.LineLook.DashOffsetLogical := 0;
+  { and the band's }
+  SetLength(all, Length(AChain.Band) + 1);
+  for i := 0 to High(AChain.Band) do all[i] := AChain.Band[i];
+  all[High(all)] := ARootBand;
+  ASpec.BandLook := Default(TTyChartElementStyle);
+  Looks(all, ASpec.BandLook);
+end;
+
+{ the option root's block AKey, or nil }
+function RootBlock(AOption: TTyChartOption; const AKey: string): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if not (AOption.Root is TJSONObject) then Exit;
+  d := TJSONObject(AOption.Root).Find(AKey);
+  if d is TJSONObject then Result := TJSONObject(d);
 end;
 
 { The `axisPointer` object under a component, or nil. }
@@ -669,8 +784,12 @@ var
   seen: TTyStringArray;
   tip: TJSONObject;
   penKey: string;
+  chain: TTyPtrChain;
 begin
   Result := Default(TTyAxisPointerSpec);
+  Result.LineLook.Alpha := 1;
+  Result.BandLook.Alpha := 1;
+  chain := Default(TTyPtrChain);
   Result.Show := apsAuto;
   Result.PointerType := aptLine;
   Result.LineDash := todDashed;
@@ -687,7 +806,7 @@ begin
   { ---- the axis' own block, which outranks everything ---- }
   MergePointerNode(PointerNodeIn(
     AOption.ComponentAt(AAxisMainType, AAxisIndex)), 'lineStyle', apnAll,
-    Result, seen);
+    Result, seen, chain);
 
   { ---- the tooltip's, but only nine of its keys and only for a tooltip
          axis. `show`, `triggerTooltip`, `handle`, `link` and `zlevel` written
@@ -705,18 +824,22 @@ begin
     { [R5-D] the coordinate system's tooltip first: each field the first
       level that has it }
     if ACoordTip <> nil then
-      MergePointerNode(PointerNodeIn(ACoordTip), penKey, apnTooltip, Result, seen);
+      MergePointerNode(PointerNodeIn(ACoordTip), penKey, apnTooltip, Result, seen, chain);
     if tip <> nil then
-      MergePointerNode(PointerNodeIn(tip), penKey, apnTooltip, Result, seen);
+      MergePointerNode(PointerNodeIn(tip), penKey, apnTooltip, Result, seen, chain);
   end;
 
   { ---- and the root component, reachable for whatever is still unclaimed ---- }
   if AFromTooltip then
     MergePointerNode(PointerNodeIn(AOption.Root), 'lineStyle',
-      apnRootUnderTooltip, Result, seen)
+      apnRootUnderTooltip, Result, seen, chain)
   else
     MergePointerNode(PointerNodeIn(AOption.Root), 'lineStyle', apnAll,
-      Result, seen);
+      Result, seen, chain);
+  { [R7-X] the pen and the band key by key, the option root's blocks under
+    them (a root crossStyle is on no chain) }
+  ResolvePointerChain(chain, RootBlock(AOption, 'lineStyle'),
+    RootBlock(AOption, 'shadowStyle'), Result);
   { [R5-A] the label's text style falls to the root textStyle (labelStyle's
     global one): its fontStyle where no block wrote one }
   if (Result.LabelSpec.FontStyle = TyFontStyleUnset) and (AOption.Root is TJSONObject)
