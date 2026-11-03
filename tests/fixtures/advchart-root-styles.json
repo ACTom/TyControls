@@ -2307,6 +2307,98 @@
    ]
   },
   {
+   "id": "gauge.plain",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    },
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       40
+      ],
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "anchor": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "part": "",
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "1|0|0|0|"
+   ],
+   "fills": [
+    "#5470c6ff"
+   ],
+   "shapes": [
+    "sector|200|150|102.5|112.5|2.3562|1.885"
+   ]
+  },
+  {
    "id": "radar.root",
    "option": {
     "animation": false,

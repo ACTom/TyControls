@@ -168,6 +168,8 @@ function cases() {
     ['funnel.root', solo({ type: 'funnel', label: { show: false }, data: [3, 5, 2] }), '', ALL],
     ['funnel.own', solo(own({ type: 'funnel', label: { show: false }, data: [3, 5, 2] })), '', ALL],
     ['gauge.root', solo(Object.assign({ type: 'gauge', data: [{ value: 40 }] }, GH)), '', ALL],
+    // a bare number for the item: its parts' shadows the series' visual style's alone
+    ['gauge.plain', solo(Object.assign({ type: 'gauge', data: [40] }, GH)), '', ALL],
     ['radar.root', radar({}), '', ALL],
     ['radar.own', radar(OS), '', ALL],
     ['radar.area', radar({ areaStyle: {} }), '', ALL],
