@@ -802,14 +802,15 @@ begin
     el.Style.HasFill := True;
     el.Style.FillColor := fill;
     el.Style.Alpha := v.Alpha;
-    if (v.Stroke <> 0) and (v.StrokeWidthLogical > 0) then
-    begin
-      el.Style.StrokeColor := v.Stroke;
-      el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
-    end;
-    { [R7-F] a pen of +Infinity (drawn as none): the layer's stroked rect is
-      not-a-number upstream, it is never hit }
-    el.HitNone := (v.StrokeWidthInf > 0) and (v.Stroke <> 0);
+    { [R7-Y] THE BORDER is the visual style's (polygon.useStyle): no stroke
+      until a borderColor is written, then at zrender's lineWidth 1 unless a
+      borderWidth is -- ApplySeriesPens takes the colour (a gradient, 'auto'
+      the series' palette colour, a clear one), the width (+Infinity stroked
+      at the lineWidth the canvas had, never hit), the dash and the ends
+      [was: a colour and a width both written, as a solid colour; drawn as
+      none otherwise] }
+    el.Style.StrokeColor := 0;
+    el.Style.StrokeWidthLogical := 1;
     { and that row's decal [F4a] }
     el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
@@ -3299,8 +3300,10 @@ begin
   begin
     ls := TJSONObject(d);
     d := ls.Find('width');
-    if (d <> nil) and (d.JSONType = jtNumber) then
-      Result.LineWidthLogical := d.AsFloat;
+    { [R7-Y] as the canvas takes it: a numeric string its number, one that
+      is no number or infinite no width [was: a JSON number only] }
+    if not IsNan(TyOptPenWidth(d)) then
+      Result.LineWidthLogical := TyOptPenWidth(d);
     { [R7-F] +Infinity: drawn as none, never hit }
     Result.LineInf := TyOptIsPosInf(d);
   end;
@@ -3311,6 +3314,7 @@ begin
   Result.Border := os.BorderColor;
   Result.BorderAuto := TTyChartColor(SeriesPaletteColor(FBindings[ASlot].SeriesIndex));
   Result.BorderWidthLogical := os.BorderWidthLogical;
+  Result.BorderWidthInf := os.BorderWidthInf > 0;
   { [R7-L] and their opacity }
   Result.Opacity := os.Opacity;
   d := node.Find('data');
@@ -3318,6 +3322,7 @@ begin
   begin
     SetLength(Result.RowBorder, d.Count);
     SetLength(Result.RowBorderWidth, d.Count);
+    SetLength(Result.RowBorderWidthInf, d.Count);
     SetLength(Result.RowOpacity, d.Count);
     for k := 0 to d.Count - 1 do
     begin
@@ -3327,6 +3332,7 @@ begin
       os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'itemStyle');
       Result.RowBorder[k] := os.BorderColor;
       Result.RowBorderWidth[k] := os.BorderWidthLogical;
+      Result.RowBorderWidthInf[k] := os.BorderWidthInf > 0;
       Result.RowOpacity[k] := os.Opacity;
     end;
   end;
@@ -3343,6 +3349,7 @@ begin
   begin
     SetLength(Result.RowLineSet, d.Count);
     SetLength(Result.RowLineWidth, d.Count);
+    SetLength(Result.RowLineInf, d.Count);
     SetLength(Result.RowLineDash, d.Count);
     SetLength(Result.RowLineDashExplicit, d.Count);
     SetLength(Result.RowLineDashOffsetSet, d.Count);
@@ -3360,6 +3367,9 @@ begin
         Result.RowLineColour[k], Result.RowLineGrad[k]);
       Result.RowLineSet[k] := True;
       Result.RowLineWidth[k] := os.BorderWidthLogical;
+      { [R7-Y] the item's own width of +Infinity }
+      Result.RowLineInf[k] := TyOptIsPosInf(TJSONObject(TJSONObject(
+        TJSONArray(d).Items[k]).Find('lineStyle')).Find('width'));
       Result.RowLineDash[k] := os.Dash;
       Result.RowLineDashExplicit[k] := os.DashLogical;
       Result.RowLineDashOffsetSet[k] := os.DashOffsetHas;

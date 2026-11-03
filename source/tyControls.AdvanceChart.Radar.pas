@@ -284,6 +284,9 @@ type
     LineDashExplicit: TTyDoubleArray;
     RowLineSet: array of Boolean;
     RowLineWidth: TTyDoubleArray;
+    { [R7-Y] an item's own lineStyle.width is +Infinity (the item's over the
+      series' LineInf, where it writes one) }
+    RowLineInf: array of Boolean;
     RowLineDash: array of TTyOptDash;
     RowLineDashExplicit: array of TTyDoubleArray;
     { [R2-I2] lineStyle.dashOffset: the series', an item's own over it }
@@ -358,6 +361,10 @@ type
     BorderWidthLogical: Double;
     RowBorder: array of TTyOptColor;
     RowBorderWidth: TTyDoubleArray;
+    { [R7-Y] the border's width is +Infinity, the series' and an item's own
+      over it: stroked at the lineWidth the canvas had, never hit }
+    BorderWidthInf: Boolean;
+    RowBorderWidthInf: array of Boolean;
     { [R7-L] THE SYMBOLS' OPACITY, the item's visual style's: the series'
       itemStyle.opacity and, per RAW row, an item's own over it; NaN where
       none is written (1). Their labels take it (defaultOpacity). }
@@ -2042,7 +2049,7 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 
   { the item's visual style's pen: the series' border, an item's own over it
     key by key }
-  procedure PenOf(ARaw: Integer; var AStyle: TTyChartElementStyle);
+  function PenOf(ARaw: Integer; var AStyle: TTyChartElementStyle): Boolean;
   begin
     AStyle.StrokeColor := 0;
     AStyle.StrokeGradient := Default(TTyChartGradient);
@@ -2050,10 +2057,15 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
     TakeColour(AVisual.Border, True, AStyle);
     if not IsNan(AVisual.BorderWidthLogical) then
       AStyle.StrokeWidthLogical := AVisual.BorderWidthLogical;
+    { [R7-Y] whether the width is +Infinity: the item's where it writes one }
+    Result := AVisual.BorderWidthInf;
     if (ARaw < 0) or (ARaw > High(AVisual.RowBorder)) then Exit;
     TakeColour(AVisual.RowBorder[ARaw], False, AStyle);
     if (ARaw <= High(AVisual.RowBorderWidth)) and not IsNan(AVisual.RowBorderWidth[ARaw]) then
+    begin
       AStyle.StrokeWidthLogical := AVisual.RowBorderWidth[ARaw];
+      Result := (ARaw <= High(AVisual.RowBorderWidthInf)) and AVisual.RowBorderWidthInf[ARaw];
+    end;
   end;
 
 var
@@ -2067,6 +2079,7 @@ var
   rowSym: TTySymbolSpec;
   rowArea, rowItemLabel: Boolean;
   rowLabel: TTyLabelSpec;
+  lineInf: Boolean;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or (ARadar = nil) then Exit;
@@ -2135,19 +2148,19 @@ begin
       end;
     end;
     el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
-    if AVisual.LineInf then
-    begin
-      el.Style.StrokeWidthLogical := 0;
-      el.HitNone := True;
-      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
-      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
-    end;
+    { [R7-Y] whether the width is +Infinity: the item's own where it writes
+      one, else the series' [was: the series' alone, and kept under an
+      item's number] }
+    lineInf := AVisual.LineInf;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }
     if (raw >= 0) and (raw <= High(AVisual.RowLineSet)) and AVisual.RowLineSet[raw] then
     begin
       if not IsNan(AVisual.RowLineWidth[raw]) then
+      begin
         el.Style.StrokeWidthLogical := AVisual.RowLineWidth[raw];
+        lineInf := (raw <= High(AVisual.RowLineInf)) and AVisual.RowLineInf[raw];
+      end;
       if AVisual.RowLineDash[raw] <> todNone then
       begin
         el.Style.DashLogical := TyDashPattern(AVisual.RowLineDash[raw],
@@ -2166,6 +2179,13 @@ begin
       el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
         el.Style.StrokeWidthLogical);
       el.Style.DashWord := TyDashWord(AVisual.LineDash);
+    end;
+    if lineInf then
+    begin
+      el.Style.StrokeWidthLogical := 0;
+      el.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     end;
     { [R2-I2] its phase, key by key the same way }
     el.Style.DashOffsetLogical := AVisual.LineDashOffset;
@@ -2269,8 +2289,19 @@ begin
         TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rowSym, pts[i].X, pts[i].Y));
         el.Style.HasFill := True;
         { [R6-D] the item's visual style first (useStyle(itemStyle)): its
-          border's colour and width, zrender's 1 where none is written }
-        PenOf(raw, el.Style);
+          border's colour and width, zrender's 1 where none is written --
+          [R7-Y] a width of +Infinity strokes at the lineWidth the canvas had
+          (TyLinesCanvasLeftovers) and its stroked rect is not a number:
+          never hit [was: no pen, hit] }
+        if PenOf(raw, el.Style) then
+        begin
+          el.Style.StrokeWidthLogical := 0;
+          if ((el.Style.StrokeColor shr 24) <> 0) or (el.Style.StrokeGradient.Kind <> cgkNone) then
+          begin
+            el.HitNone := True;
+            el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+          end;
+        end;
         { [R7-L] and its opacity, which the point's label takes as well
           [was: never read -- the symbols opaque, their labels at 1] }
         op := AVisual.Opacity;

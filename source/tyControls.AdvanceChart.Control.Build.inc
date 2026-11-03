@@ -5395,6 +5395,10 @@ begin
         { [R6-D] a funnel's bands: the border the author writes over the
           port's own ground-coloured one [was: never read] }
         if typ = TyFunnelSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
+        { [R7-Y] a themeRiver's layer: ThemeRiverView's polygon.useStyle(the
+          last row's visual style), the series' border [was: never read
+          here; BuildRiverMarks drew a written colour at a written width] }
+        if typ = TyThemeRiverSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
         { [R7-F] A PIE'S SLICE, likewise: PieView's sector.useStyle(the item's
           visual style), the item's own border over the series' ('auto' the
           series' palette colour, seriesStyleTask) [was: the series' border
