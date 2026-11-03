@@ -63,6 +63,14 @@ type
     procedure TestTheDiagnosticsKnowTheRootKeys;
   end;
 
+{ [R7-X] the oracle's records off the port's elements, for
+  test.advchart.reachstyles too }
+function PenOf(const AEl: TTyChartElement): string;
+function LooksOf(const AEl: TTyChartElement): string;
+function ShapeText(const AEl: TTyChartElement): string;
+function FillText(const AEl: TTyChartElement): string;
+function NewSet(ADup: TDuplicates): TStringList;
+
 implementation
 
 const

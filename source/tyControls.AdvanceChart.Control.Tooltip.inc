@@ -2859,6 +2859,16 @@ begin
   Result := Copy(FPtrLabelsDrawn, 0, Length(FPtrLabelsDrawn));
 end;
 
+function TTyCustomAdvanceChart.PointerShapesDrawn: TTyOverlayShapeArray;
+begin
+  Result := Copy(FPtrShapesDrawn, 0, Length(FPtrShapesDrawn));
+end;
+
+function TTyCustomAdvanceChart.TitleFramesDrawn: TTyOverlayShapeArray;
+begin
+  Result := Copy(FTitleFramesDrawn, 0, Length(FTitleFramesDrawn));
+end;
+
 { [R7-N] buildLabelElOption's style: createTextStyle(labelModel, {text, font,
   fill: getTextColor(), padding, backgroundColor}) -- every key of the label
   model (LabelSpec.Json: the axis' own label over the tooltip's over the

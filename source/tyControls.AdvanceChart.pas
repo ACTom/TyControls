@@ -282,6 +282,16 @@ type
   end;
   TTyPtrLabelDrawnArray = array of TTyPtrLabelDrawn;
 
+  { [R7-X] A SHAPE DRAWN STRAIGHT ONTO THE CANVAS, outside the paint list,
+    as the last paint drew it: an axis pointer's line or band (Owner its
+    axis, mainType and component index), a title's box (Owner 'title' and
+    its index). El is the element the renderer drew. }
+  TTyOverlayShape = record
+    Owner: string;
+    El: TTyChartElement;
+  end;
+  TTyOverlayShapeArray = array of TTyOverlayShape;
+
   { [R7-N] AN AXIS POINTER LABEL'S TEXT STYLE as buildLabelElOption makes
     it: createTextStyle(labelModel, {text, font, fill, padding,
     backgroundColor}), finished in the label's font (getFont: its own parts,
@@ -1902,6 +1912,10 @@ type
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R7-N] the pointer labels the last PaintAxisPointers drew }
     FPtrLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the pointer lines and bands the last PaintAxisPointers drew,
+      the title boxes the last PaintTitles drew }
+    FPtrShapesDrawn: TTyOverlayShapeArray;
+    FTitleFramesDrawn: TTyOverlayShapeArray;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -4282,6 +4296,10 @@ type
       out ADraw: TTySinglePointerDraw): Boolean;
     { [R7-N] the axis pointers' labels as the last paint drew them }
     function PointerLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the axis pointers' lines and bands, and the titles' boxes, as
+      the last paint drew them }
+    function PointerShapesDrawn: TTyOverlayShapeArray;
+    function TitleFramesDrawn: TTyOverlayShapeArray;
     { [R7-N] an axis pointer label's text style (buildLabelElOption) }
     function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
     { [R7-N] the box buildLabelElOption places: the plain text's bounding
