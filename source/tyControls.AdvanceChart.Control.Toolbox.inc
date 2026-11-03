@@ -89,7 +89,13 @@ begin
   case C.Kind of
     tbcNone: Exit(False);
     tbcText:
-      if not TyTryParseChartColor(C.Text, AColour) then AColour := AFallback;
+      if not TyTryParseChartColor(C.Text, AColour) then
+      begin
+        AColour := AFallback;
+        { [R7-Z] a colour no parser reads: the canvas refuses it and keeps
+          what it had (the list's run settles it) [was: the skin's] }
+        if (C.Text <> '') and not TyColourIsHandler(C.Text) then AColour := cTyCanvasColourLeft;
+      end;
   end;
   Result := True;
 end;

@@ -334,6 +334,20 @@ begin
   else Result := crNone_;
 end;
 
+{ [R7-Z] A TEXT'S FILL OR STROKE: a string no parser reads (not a callback)
+  goes to the canvas, which refuses it and keeps what it had --
+  cTyCanvasColourLeft, settled in paint order [was: 'none', not drawn] }
+function ColourReadText(A: TJSONData; out AC: TTyChartColor): TColourRead;
+begin
+  Result := ColourRead(A, AC);
+  if (Result = crNone_) and (A.AsString <> 'none') and (A.AsString <> 'transparent')
+    and not TyColourIsHandler(A.AsString) then
+  begin
+    AC := cTyCanvasColourLeft;
+    Result := crColour;
+  end;
+end;
+
 { zrender's parseFontSize and the SSR measure's reading of it: a number is
   px, '14' and '14px' are 14, anything else 12 }
 function FontPxOf(A: TJSONData): Double;
@@ -434,12 +448,12 @@ begin
   d := ARoot.Find('textStyle');
   if not (d is TJSONObject) then Exit;
   ts := TJSONObject(d);
-  if ColourRead(ts.Find('color'), c) = crColour then
+  if ColourReadText(ts.Find('color'), c) = crColour then
   begin
     Result.HasColour := True;
     Result.Colour := c;
   end;
-  case ColourRead(ts.Find('textBorderColor'), c) of
+  case ColourReadText(ts.Find('textBorderColor'), c) of
     crColour: begin Result.HasStroke := True; Result.Stroke := c; end;
     crNone_: begin Result.HasStroke := True; Result.StrokeNone := True; end;
   end;
@@ -514,7 +528,7 @@ begin
   plainToo := AHasPlain and AInherit;
   { the fill: own, 'inherit' the site's; a free text's falls to the root
     colour, then (normal state) to the inherit colour }
-  case ColourRead(Get(AOwn, 'color'), c) of
+  case ColourReadText(Get(AOwn, 'color'), c) of
     crColour: begin S.HasFill := True; S.Fill := c; end;
     crNone_: begin S.HasFill := True; S.FillNone := True; end;
     crInherit: S.FillInherit := True;
@@ -529,7 +543,7 @@ begin
     else
       S.FillInherit := True;
   end;
-  case ColourRead(Get(AOwn, 'textBorderColor'), c) of
+  case ColourReadText(Get(AOwn, 'textBorderColor'), c) of
     crColour: begin S.HasStroke := True; S.Stroke := c; end;
     crNone_: begin S.HasStroke := True; S.StrokeNone := True; end;
     crInherit: S.StrokeInherit := True;

@@ -768,6 +768,14 @@ begin
       ASpec.AutoColour := False;
       ASpec.InheritColour := False;
       ASpec.Colour := c;
+    end
+    { [R7-Z] a colour no parser reads: the canvas refuses it and fills with
+      what it had (the list's run settles it) [was: the automatic colour] }
+    else if (s <> '') and (s <> 'auto') and (s <> 'none') and not TyColourIsHandler(s) then
+    begin
+      ASpec.AutoColour := False;
+      ASpec.InheritColour := False;
+      ASpec.Colour := cTyCanvasColourLeft;
     end;
 
     s := StrIn(ALabel, 'textBorderColor');
@@ -777,6 +785,8 @@ begin
       if (s = 'none') or (s = 'transparent') then ASpec.BorderColourNone := True
       else if s = 'inherit' then ASpec.BorderColourInherit := True
       else if TyTryParseChartColor(s, c) then ASpec.BorderColour := c
+      { [R7-Z] (as the fill) [was: none] }
+      else if not TyColourIsHandler(s) then ASpec.BorderColour := cTyCanvasColourLeft
       else ASpec.BorderColourNone := True;
     end;
     { textBorderType as written [F4c] }

@@ -70,6 +70,8 @@ type
     { [R5-G] the colour as a gradient object (Colour its first stop) --
       cgkNone for a plain colour }
     Gradient: TTyChartGradient;
+    { [R7-Z] the width is +Infinity (the canvas keeps the one it had) }
+    WidthInf: Boolean;
   end;
 
   { the canvas' lineCap }
@@ -90,6 +92,12 @@ type
     { [R5-G] a gradient stroke (zrender's canvas gradient over the stroked
       element's getBoundingRect -- the stroke-grown rect) }
     Gradient: TTyChartGradient;
+    { [R7-Z] what the canvas refuses of it, and keeps its own value for:
+      cTyCanvasStrokeLeft (a colour no parser reads), cTyCanvasWidthLeft
+      (+Infinity), cTyCanvasPhaseLeftFlag (a phase that is no number),
+      cTyCanvasCapLeft (a word that is not a lineCap) -- settled in paint
+      order before the axis is drawn }
+    Left: Word;
   end;
 
   { What an axis actually draws, once its TYPE's defaults and the `auto`
@@ -1691,7 +1699,16 @@ begin
   { [R5-A] and its fontStyle, in the weight's style flags }
   AWeight := TyFontStyleOver(ANode.Find('fontStyle'), AWeight);
   d := ANode.Find('color');
-  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+  { [R7-Z] A COLOUR NO PARSER READS (not a callback) is written: the canvas
+    refuses it and fills with what it had (CompRun settles it)
+    [was: not written, the theme's] }
+  if (d <> nil) and (d.JSONType = jtString) and not TyColourIsHandler(d.AsString)
+    and (d.AsString <> '') and (d.AsString <> 'none') and not TyTryParseChartColor(d.AsString, c) then
+  begin
+    AHasColour := True;
+    AColour := cTyCanvasColourLeft;
+  end
+  else if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
   begin
     AHasColour := True;
     AColour := c;
@@ -1885,6 +1902,13 @@ end;
   upstream's `areaColors.length` reads before it wraps the string; a list is
   itself. An empty list, or a colour that is not a string or cannot be read,
   is an ink that draws nothing. Nothing written: empty. }
+{ [R7-Z] a string the canvas is handed and refuses (not empty, not
+  'none', not a callback) }
+function InkLeft(const S: string): Boolean;
+begin
+  Result := (S <> '') and (S <> 'none') and not TyColourIsHandler(S);
+end;
+
 procedure InksIn(ANode: TJSONObject; const AName, AStyle: string;
   out AInks: TTyAxisInkArray; out ACount: Integer);
 var
@@ -1902,6 +1926,13 @@ begin
     SetLength(AInks, 1);
     AInks[0].Ok := TyTryParseChartColor(d.AsString, c);
     AInks[0].Colour := c;
+    { [R7-Z] a colour no parser reads: drawn, in what the canvas had
+      (CompRun) [was: not drawn] }
+    if not AInks[0].Ok and InkLeft(d.AsString) then
+    begin
+      AInks[0].Ok := True;
+      AInks[0].Colour := cTyCanvasColourLeft;
+    end;
     ACount := Length(UTF8Decode(d.AsString));
   end
   else if d is TJSONArray then
@@ -1920,6 +1951,12 @@ begin
       begin
         AInks[k].Ok := True;
         AInks[k].Colour := TyGradientSolid(AInks[k].Grad);
+      end
+      { [R7-Z] (as above) }
+      else if (a.Items[k].JSONType = jtString) and InkLeft(a.Items[k].AsString) then
+      begin
+        AInks[k].Ok := True;
+        AInks[k].Colour := cTyCanvasColourLeft;
       end;
     end;
   end
@@ -2049,14 +2086,18 @@ begin
     Result.Gradient := AStyle.Color.Gradient;
   end;
   Result.Width := AStyle.BorderWidthLogical;
+  Result.WidthInf := AStyle.WidthInf;
   Result.Dash := AStyle.Dash;
   Result.DashLogical := Copy(AStyle.DashLogical, 0, Length(AStyle.DashLogical));
   Result.HasDashOffset := AStyle.DashOffsetHas;
   Result.DashOffset := AStyle.DashOffset;
-  c := LowerCase(AStyle.Cap);
+  { [R7-Z] the canvas' words, as written: another (a 'Round') is refused,
+    the cap the canvas had kept (3) [was: lowercased; another the default] }
+  c := AStyle.Cap;
   if c = 'butt' then Result.Cap := Ord(acButt)
   else if c = 'round' then Result.Cap := Ord(acRound)
-  else if c = 'square' then Result.Cap := Ord(acSquare);
+  else if c = 'square' then Result.Cap := Ord(acSquare)
+  else if c <> '' then Result.Cap := 3;
   Result.Opacity := AStyle.Opacity;
 end;
 
@@ -2070,7 +2111,11 @@ begin
     Result.Colour := ABase.Colour;
     Result.Gradient := ABase.Gradient;
   end;
-  if IsNan(Result.Width) then Result.Width := ABase.Width;
+  if IsNan(Result.Width) then
+  begin
+    Result.Width := ABase.Width;
+    Result.WidthInf := ABase.WidthInf;
+  end;
   if Result.Dash = todNone then
   begin
     Result.Dash := ABase.Dash;
@@ -2103,11 +2148,36 @@ begin
     Result.Drawn := False;
   if IsNan(APen.Width) then Result.WidthLogical := ASkinWidthLogical
   else Result.WidthLogical := APen.Width;
-  { zrender's hasStroke: a width that is not above nought strokes nothing }
-  if not (Result.WidthLogical > 0) then Result.Drawn := False;
-  Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, Result.WidthLogical);
+  { [R7-Z] A COLOUR NO PARSER READS strokes all the same, in the colour the
+    canvas had }
+  if Result.Drawn and (APen.Gradient.Kind = cgkNone) and (Result.Colour = cTyCanvasColourLeft) then
+    Result.Left := Result.Left or cTyCanvasStrokeLeft;
+  { [R7-Z] +INFINITY strokes (hasStroke), at the width the canvas had -- a
+    word's dash, Infinity long, refused: solid [was: no stroke] }
+  if APen.WidthInf then
+  begin
+    Result.Left := Result.Left or cTyCanvasWidthLeft;
+    Result.WidthLogical := 1;
+    if APen.Dash = todExplicit then
+      Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, 1)
+    else
+      Result.Dash := nil;
+  end
+  else
+  begin
+    { zrender's hasStroke: a width that is not above nought strokes nothing }
+    if not (Result.WidthLogical > 0) then Result.Drawn := False;
+    Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, Result.WidthLogical);
+  end;
   if APen.HasDashOffset then Result.DashOffset := APen.DashOffset;
-  if APen.Cap >= 0 then Result.Cap := TTyAxisCap(APen.Cap)
+  { [R7-Z] a phase that is no number: the one the canvas had }
+  if TyPhaseLeft(Result.DashOffset) then Result.Left := Result.Left or cTyCanvasPhaseLeftFlag;
+  if APen.Cap = 3 then
+  begin
+    Result.Cap := ADefaultCap;
+    Result.Left := Result.Left or cTyCanvasCapLeft;
+  end
+  else if APen.Cap >= 0 then Result.Cap := TTyAxisCap(APen.Cap)
   else Result.Cap := ADefaultCap;
   if IsNan(APen.Opacity) then Result.Opacity := 1
   else Result.Opacity := APen.Opacity;
@@ -2190,6 +2260,10 @@ begin
     `true`, no `auto` [Batch 118] }
   if ASingle then
   begin
+    { [R7-Z] SingleAxisModel's split line is dashed, at an opacity of 0.2
+      [was: solid, opaque] }
+    if Result.SplitPen.Dash = todNone then Result.SplitPen.Dash := todDashed;
+    if IsNan(Result.SplitPen.Opacity) then Result.SplitPen.Opacity := 0.2;
     Result.ShowLine := ShowIn(ANode, 'axisLine', True, False, True);
     Result.ShowTicks := ShowIn(ANode, 'axisTick', True, False, True);
     Result.ShowSplitLine := ShowIn(ANode, 'splitLine', True, False, True);

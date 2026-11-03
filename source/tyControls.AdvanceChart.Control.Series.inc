@@ -377,6 +377,8 @@ begin
       end;
       { the split lines in their colours, in the split line's pen [R5-B] }
       inkK := TyAxisSkinStroke(v.Furn.SplitPen, splitS, acButt);
+      { [R7-Z] what the canvas refuses: what it had at the part (CompRun) }
+      inkK := CompPen(s.Axis, cpkSplit, inkK);
       if inkK.Drawn or ((Length(v.Furn.SplitLineInks) > 0) and (inkK.WidthLogical > 0)) then
         for q := 0 to Math.Max(0, High(v.Furn.SplitLineInks)) do
         begin
@@ -384,6 +386,7 @@ begin
           begin
             if not v.Furn.SplitLineInks[q].Ok then Continue;
             inkK.Colour := v.Furn.SplitLineInks[q].Colour;
+            if inkK.Colour = cTyCanvasColourLeft then inkK.Colour := CompInkOf(s.Axis, cpkSplit, q);
             inkK.Gradient := v.Furn.SplitLineInks[q].Grad;
             inkK.Drawn := True;
             StrokeLines(v.SplitLines, inkK, q);
@@ -395,6 +398,7 @@ begin
     end;
     sp := v.Spec;
     lineK := TyAxisSkinStroke(v.Furn.LinePen, lineS, acRound);
+    if v.HasLine then lineK := CompPen(s.Axis, cpkLine, lineK);
     if v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
@@ -421,9 +425,12 @@ begin
         for q := 0 to High(sp.Arrows) do
           if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(v.Ticks, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt), -1, True);
-    StrokeLines(v.MinorTicks, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt), -1, True);
+    StrokeLines(v.Ticks, CompPen(s.Axis, cpkTick, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt)), -1, True);
+    StrokeLines(v.MinorTicks, CompPen(s.Axis, cpkMinorTick,
+      TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt)), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
+    labelS.TextColor := CompText(s.Axis, cpkLabel, labelS.TextColor);
+    nameS.TextColor := CompText(s.Axis, cpkName, nameS.TextColor);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
     begin
@@ -898,6 +905,8 @@ var
   view: TTyChartView;
   { the line's pen of the axis being drawn, for its arrows [R5-B] }
   lineK: TTyAxisStroke;
+  { [R7-Z] the axis being drawn }
+  curAxis: TTyAxis;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -1128,6 +1137,8 @@ var
   begin
     { in the split line's pen [R5-B] }
     inkK := TyAxisSkinStroke(AView.Furn.SplitPen, splitS, acButt);
+    { [R7-Z] what the canvas refuses: what it had at the part (CompRun) }
+    inkK := CompPen(curAxis, cpkSplit, inkK);
     if not (inkK.Drawn or ((Length(AView.Furn.SplitLineInks) > 0)
       and (inkK.WidthLogical > 0))) then Exit;
     for q := 0 to Math.Max(0, High(AView.Furn.SplitLineInks)) do
@@ -1138,6 +1149,7 @@ var
         inkK.Colour := AView.Furn.SplitLineInks[q].Colour;
         inkK.Gradient := AView.Furn.SplitLineInks[q].Grad;
         inkK.Drawn := True;
+        if inkK.Colour = cTyCanvasColourLeft then inkK.Colour := CompInkOf(curAxis, cpkSplit, q);
         if ACircles then StrokeArcs(AView.SplitCircles, inkK, q)
         else StrokeLines(AView.SplitLines, inkK, q);
       end
@@ -1195,6 +1207,7 @@ var
     sp := AView.Spec;
     { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
     lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
     if AView.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
     begin
       APainter.BeginPath;
@@ -1205,10 +1218,13 @@ var
         and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
         for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1, True);
-    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt), -1, True);
+    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick,
+      TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1, True);
+    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt)), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
+    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
+    nameS.TextColor := CompText(curAxis, cpkName, nameS.TextColor);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
     begin
@@ -1272,13 +1288,14 @@ var
     begin
       APainter.BeginPath;
       ArcPath(AView.LineArc);
-      TyStrokeAxisPath(APainter, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt));
+      TyStrokeAxisPath(APainter, CompPen(curAxis, cpkLine, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt)));
     end;
     { the angle axis' ticks are AngleAxisView's own: one mergePath each }
-    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
-    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt), -1);
+    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1);
+    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt)), -1);
     AxisTextStyles(@sp, labelS, nameS);
+    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
     if not (tpTextColor in labelS.Present) then Exit;
     for q := 0 to High(AView.Labels) do
     begin
@@ -1319,6 +1336,7 @@ begin
       { [R5-J] on the zlevel PaintZLevels draws now }
       if (k = 0) and not ApartIn(AxisModelZLevel(p.AngleAxis)) then Continue;
       if (k = 1) and not ApartIn(AxisModelZLevel(p.RadiusAxis)) then Continue;
+      if k = 0 then curAxis := p.AngleAxis else curAxis := p.RadiusAxis;
       if k = 0 then
       begin
         if not p.AngleView.Shown then Continue;
@@ -1662,9 +1680,15 @@ end;
 
 function TTyCustomAdvanceChart.CanvasGroundState: TTyCanvasGround;
 begin
-  { [R7-W] the cartesian axes as the last paint drew them; else the
-    shadowColor alone }
-  if FCanvasGroundOk and (CanvasGround <> 0) then Exit(FCanvasGround);
+  { [R7-Z] what the components drawn before the list left (CompRun) --
+    a shown axis the run does not model ('#000') under it [R7-W: the
+    cartesian axes' alone]; else the shadowColor alone }
+  if FCanvasGroundOk then
+  begin
+    Result := FCanvasGround;
+    if (Result.Shadow = 0) and (CanvasGround <> 0) then Result.Shadow := CanvasGround;
+    Exit;
+  end;
   Result := TyCanvasGroundOf(CanvasGround);
 end;
 
