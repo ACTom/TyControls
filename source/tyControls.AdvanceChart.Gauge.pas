@@ -2416,7 +2416,7 @@ var
   ti, it: TTyGaugeItem;
   box: TTyRectF;
   sym: TTySymbolSpec;
-  empty, isCell: Boolean;
+  empty, isCell, cover: Boolean;
   pathBody, words: string;
   keep: ITyTextMeasurer;
 begin
@@ -2678,8 +2678,13 @@ begin
           meant to sit two thirds of the way out sitting at the centre,
           tilted. }
         if el.Shape.Kind = cskPath then
+        begin
+          { [R7-S] covering its box as built (no keepAspect) }
+          cover := el.Shape.PathCover;
           el.Shape := TyShapePath(el.Shape.PathData, el.Shape.Bounds,
-            angle + Pi / 2, ALayout.CX, ALayout.CY)
+            angle + Pi / 2, ALayout.CX, ALayout.CY);
+          el.Shape.PathCover := cover;
+        end
         else if el.Shape.Kind in [cskPolygon, cskPolyline] then
           { [F6a] a built-in icon or a picture is points: they turn about
             the hub the same way (a picture's corners carry its turn) }

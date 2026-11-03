@@ -3237,6 +3237,37 @@ begin
     else AOut.Shape := TyShapePolyline(pts);
     AOut.Shape.Cmds := cmds;
     AOut.Shape.HitNonZero := True;
+    { [R7-S] THE POINTER'S Path.contain IN THE ELEMENT'S OWN FRAME: its path
+      there, the point taken back through the device transform's inverse;
+      the pen read at hit time (OwnZrHit) [was: the drawn outline on the
+      canvas -- a turned segment's end box, an arc's width (cubics at half
+      of it) off by a pixel or several] }
+    if Length(path) > 0 then
+    begin
+      m2 := Default(TTyMat2D);
+      if TyMatInvert(m, m2) then
+      begin
+        AOut.ZrHit.Active := True;
+        AOut.ZrHit.OwnPen := True;
+        AOut.ZrHit.Path := path;
+        AOut.ZrHit.ToLocal := m2;
+        AOut.ZrHit.PathBox := TyZrBBox(path);
+        AOut.ZrHit.Fill := hasFill;
+        AOut.ZrHit.Stroke := hasStroke;
+        AOut.ZrHit.LineScale := TyGfxLineScale(AEl);
+        AOut.ZrHit.FixedLw := NaN;
+        { what TyElementContains reads: the rect as built, grown by the pen }
+        AOut.ZrHit.Box := AOut.ZrHit.PathBox;
+        if hasStroke and (AOut.ZrHit.LineScale > 1e-10) and not IsInfinite(lw) then
+        begin
+          if hasFill then AOut.ZrHit.LineWidth := Max(lw, 0) / AOut.ZrHit.LineScale
+          else AOut.ZrHit.LineWidth := Max(lw, Double(5)) / AOut.ZrHit.LineScale;
+          AOut.ZrHit.Box := TyGrowByStroke(AOut.ZrHit.PathBox, True, AOut.ZrHit.LineWidth);
+        end
+        else AOut.ZrHit.Stroke := False;
+        if AEl.Invisible then AOut.ZrHit.FixedLw := lw;
+      end;
+    end;
     if hasStroke then AOut.HitSlopLogical := Max(lw, 0) * us / ACtx.Scale / 2
     else if not hasFill then AOut.HitSlopLogical := 5 * us / ACtx.Scale / 2;
     if hasFill and not hasStroke then AOut.HitSlopLogical := 0;
@@ -3299,6 +3330,9 @@ begin
         else
           AOut.HitMinScale := ks;
       end;
+      { [R7-S] the drawn width's css px per unit of lineWidth, which the
+        pointer takes back (OwnZrHit) }
+      AOut.ZrHit.LwDiv := us / ACtx.Scale;
       if hasStroke then
       begin
         d := AEl.Style.Find('stroke');

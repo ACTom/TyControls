@@ -257,6 +257,10 @@ type
   end;
 
 const
+  { [R7-S] TTyChartElement.CanvasFlags }
+  cTyCanvasOwnShadow = 1;
+  cTyCanvasShadowLeft = 2;
+  cTyCanvasTransformLeft = 4;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;
   cTyCapRound = 1;
@@ -1141,6 +1145,21 @@ type
     StyleWidth: Boolean;
     LineScale: Double;
     PathBox: TTyXYWH;
+    { [R7-S] A GRAPHIC OR CUSTOM SERIES ELEMENT'S WHOLE Path.contain IN ITS
+      OWN FRAME: Path its path there (TyGfxPath), ToLocal the inverse of its
+      device transform, PathBox the path's rect, Fill its hasFill and Stroke
+      its hasStroke as built; the pen's width read off the style at hit time
+      (a state tweens it) as its own lineWidth -- StrokeWidthLogical over
+      LwDiv, the css px of the drawn width per unit of it; FixedLw instead
+      where it is not drawn (invisible: the style holds no pen, upstream
+      still asks it) -- at least strokeContainThreshold without a fill, over
+      LineScale (getLineScale where strokeNoScale, else 1); the rect grown by
+      that. So a segment's end box, an arc's whole width and the threshold
+      are all upstream's, in its frame [was: the drawn outline on the
+      canvas, its arcs as cubics at half the width]. }
+    OwnPen: Boolean;
+    LwDiv: Double;
+    FixedLw: Double;
   end;
 
   { [R2-I3] A TEXT AS ITS EMPHASIS STATE LAYS IT OUT: the caption and the
@@ -1219,6 +1238,16 @@ type
       (10 px at scale 2; its line scale where strokeNoScale). 0, the zero
       value, is 1: 5 on the canvas, as every element built in px. }
     HitMinScale: Double;
+    { [R7-S] WHAT THE CANVAS IS LEFT WITH (TyLinesCanvasLeftovers): a lines
+      effect symbol's own canvas shadowColor (CanvasShadow, where
+      CanvasFlags has cTyCanvasOwnShadow: its written shadowColor or its
+      colour, which zrender assigns even where nothing casts it); its shadow
+      in the colour the canvas had (cTyCanvasShadowLeft: its colour a
+      gradient, or no colour, the canvas refuses); its transform the one the
+      canvas had (cTyCanvasTransformLeft: a scale that is not a number, the
+      transform refused) }
+    CanvasFlags: Byte;
+    CanvasShadow: TTyChartColor;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
@@ -2802,6 +2831,46 @@ begin
   Result := TyZrHitContains(h, AX, AY);
 end;
 
+{ [R7-S] Path.contain of a graphic or custom series element in its own
+  frame (TTyZrHit.OwnPen): the pen as the style holds it now -- its own
+  routine, so the managed copy costs nothing to the rest }
+function OwnZrHit(const AEl: TTyChartElement; AX, AY: Double): Boolean;
+var
+  h: TTyZrHit;
+  lw, w: Double;
+  stroke: Boolean;
+begin
+  h := AEl.ZrHit;
+  { hasStroke() as the style is now: the pen it was built with, or one a
+    state gives it }
+  stroke := h.Stroke or ((AEl.Style.StrokeColor shr 24) <> 0)
+    or (AEl.Style.StrokeGradient.Kind <> cgkNone);
+  if not IsNan(h.FixedLw) then lw := h.FixedLw
+  else if (AEl.Style.StrokeWidthLogical > 0) and (h.LwDiv > 0) then
+    lw := AEl.Style.StrokeWidthLogical / h.LwDiv
+  else lw := 0;
+  { hasStroke(): a pen of a width above nought -- a state that takes it to
+    none takes the stroke away }
+  if not (lw > 0) then stroke := False;
+  { an infinite pen: the stroked rect is not a number, nothing is inside }
+  if stroke and IsInfinite(lw) then Exit(False);
+  w := lw;
+  if stroke and not h.Fill then w := Max(w, Double(5));
+  if not (h.LineScale > 1e-10) then stroke := False;
+  h.Box := h.PathBox;
+  if stroke then
+  begin
+    { width first, then x -- rectStroke.width += w; rectStroke.x -= w / 2 }
+    h.Box.W := h.PathBox.W + w / h.LineScale;
+    h.Box.H := h.PathBox.H + w / h.LineScale;
+    h.Box.X := h.PathBox.X - w / h.LineScale / 2;
+    h.Box.Y := h.PathBox.Y - w / h.LineScale / 2;
+    h.LineWidth := w / h.LineScale;
+  end;
+  h.Stroke := stroke;
+  Result := TyZrHitContains(h, AX, AY);
+end;
+
 function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
   APad: Boolean): Boolean;
 var
@@ -2814,6 +2883,8 @@ begin
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
   { [R7-I] the rect or the sector [was: the rect alone] }
   if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
+  { [R7-S] a graphic or custom element: all of it in its own frame }
+  if AEl.ZrHit.Active and AEl.ZrHit.OwnPen then Exit(OwnZrHit(AEl, AX, AY));
   if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
     Exit(StyleZrHit(AEl, AX, AY, APPI));
   if AEl.ZrHit.Active then Exit(TyZrHitContains(AEl.ZrHit, AX, AY));

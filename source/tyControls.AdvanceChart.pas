@@ -3432,6 +3432,11 @@ type
     { [Batch 121] }
     procedure SolveLines(APPI: Integer);
     function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
+    { [R7-S] the shadowColor the canvas of zlevel 0 holds when the series
+      begin: '#000' (zrender's, of an element with none) where an axis, a
+      grid, a geo or a calendar was drawn before them, else the canvas' own
+      transparent default (TyLinesCanvasLeftovers) }
+    function CanvasGround: TTyChartColor;
     function LinesInk(ASlot: Integer; ANode: TJSONObject; const ASolved: TTyLinesSolved;
       ARow: Integer; AStroke: TTyChartColor; AScale: Double;
       out ASpec: TTyLabelSpec): TTyLinesInk;

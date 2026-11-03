@@ -4883,6 +4883,8 @@ begin
       FLineHistDue := False;
       LineHistRoll;
     end;
+    { [R7-S] what the canvas is left with, in paint order }
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGround);
     list.JournalClose;
   end;
 end;

@@ -627,6 +627,9 @@ begin
       pe.Shape := drawn.Shape;
       pe.Style := drawn.Style;
       pe.Style.Decal := decal;
+      { [R7-S] and the pointer's frame with them (a morph took it off) }
+      pe.ZrHit := drawn.ZrHit;
+      pe.HitMinScale := drawn.HitMinScale;
     end;
     place := pe.Anim.Sub;
     { (CustomUtPath writes a transform only where there is one) }

@@ -1166,7 +1166,14 @@ var
       P.Y := L.From.Point.Y;
     end;
     P.HasTransform := LocalTransform(P.X, P.Y, P.Rotation, 0, 0, P.Transform);
-    P.Path := TyZrSymbol(P.ShapeType, P.Box.X, P.Box.Y, P.Box.W, P.Box.H);
+    { [R7-S] a path:// end: makePath 'cover' over the box unless the end's
+      symbolKeepAspect ('center') [was: always fitted to its aspect] }
+    if (Copy(P.ShapeType, 1, 7) = 'path://')
+      and not Truthy(TyMkLineVisual(ABlock, L.Index, not AIsTo, 'symbolKeepAspect')) then
+      P.Path := TyZrMakePathCover(Copy(P.ShapeType, 8, MaxInt), TyXYWH(P.Box.X, P.Box.Y,
+        P.Box.W, P.Box.H))
+    else
+      P.Path := TyZrSymbol(P.ShapeType, P.Box.X, P.Box.Y, P.Box.W, P.Box.H);
     { setColor: the line's stroke }
     P.Fill := '#000';
     P.Stroke := '';
@@ -2984,7 +2991,14 @@ var
     if P.HasGroupTransform and P.HasLocal then P.Global := MatMul(P.GroupTransform, P.Local)
     else if P.HasLocal then P.Global := P.Local
     else if P.HasGroupTransform then P.Global := P.GroupTransform;
-    P.Path := TyZrSymbol(P.ShapeType, -1, -1, 2, 2);
+    { [R7-S] a path:// one covers the unit box unless symbolKeepAspect
+      (createSymbol(type, -1, -1, 2, 2, color, keepAspect)), then scaled by
+      half the size: an oblong one stretched [was: always fitted to its
+      aspect] }
+    if (Copy(P.ShapeType, 1, 7) = 'path://') and not Truthy(Cbd(Chain(lv, 'symbolKeepAspect'))) then
+      P.Path := TyZrMakePathCover(Copy(P.ShapeType, 8, MaxInt), TyXYWH(-1, -1, 2, 2))
+    else
+      P.Path := TyZrSymbol(P.ShapeType, -1, -1, 2, 2);
     P.BBox := TyZrBBox(P.Path);
     if P.HasGlobal and (Abs(P.Global[0] - 1) > 1e-10) and (Abs(P.Global[3] - 1) > 1e-10) then
       P.LineScale := Sqrt(Abs(P.Global[0] * P.Global[3] - P.Global[2] * P.Global[1]))

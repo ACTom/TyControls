@@ -1415,6 +1415,11 @@ begin
   spec.WidthPx := w;
   spec.HeightPx := h;
   Result := TyBuildSymbol(spec, ABox.Left + w / 2, ABox.Top + h / 2);
+  { [R7-S] A path:// IN A REAL BOX: makePath 'cover' over the whole box
+    unless keepAspect ('center') -- a gauge's pointer and anchor icons, a
+    piecewise visualMap's item symbols [was: always fitted to its aspect] }
+  if (ASpec.Kind = tsyPath) and (Result.Kind = cskPath) and not ASpec.KeepAspect then
+    Result.PathCover := True;
 end;
 
 function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
@@ -1433,11 +1438,17 @@ begin
       TyXYWH(0, 0, TyRectFWidth(ABox), TyRectFHeight(ABox))));
     spec := ASpec;
     spec.KeepAspect := False;
+    { [R7-S] the fitted rect is what the path then covers (PathCover) }
     if (fb.W > 0) and (fb.H > 0) and not IsNan(fb.W + fb.H) then
       Exit(TyBuildSymbolInBox(spec, TyRectF(ABox.Left + fb.X, ABox.Top + fb.Y,
         ABox.Left + (fb.X + fb.W), ABox.Top + (fb.Y + fb.H))));
-    Exit(TyBuildSymbolInBox(spec, ABox));
+    Result := TyBuildSymbolInBox(spec, ABox);
+    Result.PathCover := False;
+    Exit;
   end;
+  { [R7-S] without keepAspect a path covers the box (TyBuildSymbolInBox):
+    a legend's icon under symbolKeepAspect: false, a line's own marker, a
+    map's icon [was: fitted to its aspect, centred] }
   Result := TyBuildSymbolInBox(ASpec, ABox);
 end;
 

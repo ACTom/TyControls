@@ -9885,6 +9885,11 @@ begin
     r := TyPathCmdsRect(cmds);
     AEl.Shape.HasCmdBounds := True;
     AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+    { [R7-S] the morphing path has no transform (prepareMorphPath nulls
+      it): Path.contain asks it on the canvas, strokeContainThreshold there
+      -- not the element's own frame (TTyZrHit.OwnPen) }
+    if AEl.ZrHit.OwnPen then AEl.ZrHit := Default(TTyZrHit);
+    AEl.HitMinScale := 0;
   end;
   if AProxy.FUtStyleOn then UtApplyStyle(AEl, AProxy);
 end;
@@ -9914,6 +9919,9 @@ begin
   r := TyPathCmdsRect(cmds);
   AEl.Shape.HasCmdBounds := True;
   AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+  { [R7-S] a morphing child on the canvas, not in the host's own frame }
+  if AEl.ZrHit.OwnPen then AEl.ZrHit := Default(TTyZrHit);
+  AEl.HitMinScale := 0;
   { the child's own style: nothing of the host's but what it copied }
   AEl.Style.HasFill := False;
   AEl.Style.FillGradient := Default(TTyChartGradient);

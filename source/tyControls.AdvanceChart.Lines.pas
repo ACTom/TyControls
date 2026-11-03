@@ -216,6 +216,12 @@ type
     EffMiter: Double;
     EffShadowSet: Boolean;
     EffShadow: TTyChartShadow;
+    { [R7-S] the shadowColor the symbol hands the canvas (zrender assigns it
+      whether or not anything is cast): its written one, else its colour;
+      EffShadowLeft where that is no colour the canvas takes (a gradient,
+      'none') -- the canvas keeps what it had }
+    EffShadowLeft: Boolean;
+    EffCanvasShadow: TTyChartColor;
     { [R7-R] effect.color written 'none': truthy, so it is the colour --
       setColor fills (or strokes) with 'none', which is none }
     EffColorNone: Boolean;
@@ -375,6 +381,22 @@ procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
   AGone: Boolean);
 { the run an effect element starts from (its G, Pts and Mono) }
 procedure TyLinesEffectOfElement(const AEl: TTyChartElement; out AE: TTyLinesEffect);
+{ [R7-S] WHAT THE CANVAS IS LEFT WITH, in AList's paint order: an effect
+  symbol whose shadowColor the canvas refuses (a gradient) is cast in the
+  shadowColor the element brushed before it left -- zrender's '#000' after
+  one that writes none, a solid effect symbol's colour, a written one --
+  and one whose transform is not a number (a one-number symbolSize: scaleY
+  undefined) is the unit symbol under the transform the canvas had -- the
+  effect symbol's before it, else none (the css px frame). A clip's
+  restore returns both to what the canvas had when the clip began
+  (zrender saves the context per clip path, a series' group each its own),
+  a new zlevel starts from AGround (the shadowColor what the chart drew
+  first on it leaves: '#000' under shown axes, the canvas' transparent
+  default under nothing). }
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
+{ whether AList holds anything TyLinesCanvasLeftovers settles (the only
+  cost a chart without one pays) }
+function TyLinesCanvasLeftoversDue(AList: TTyPaintList): Boolean;
 
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
@@ -387,7 +409,7 @@ implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol,
-  tyControls.AdvanceChart.ZrPath;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
 
 const
   cPi: Double = 3.141592653589793;
@@ -1332,13 +1354,59 @@ begin
   end;
 end;
 
+{ [R7-S] createSymbol's path without keepAspect: a path:// one covers the
+  box (makePath 'cover'), the rest symbol.ts' own [was: TyZrSymbol's
+  path:// fitted to its aspect -- a gradient's box off for an oblong one] }
+function CoverSymbolPath(const AType: string; AX, AY, AW, AH: Double): TTyZrPath;
+begin
+  if Copy(AType, 1, 7) = 'path://' then
+    Result := TyZrMakePathCover(Copy(AType, 8, MaxInt), TyXYWH(AX, AY, AW, AH))
+  else
+    Result := TyZrSymbol(AType, AX, AY, AW, AH);
+end;
+
 { An end symbol: createSymbol(type, -w / 2, -h / 2, w, h) at the end, turned
   -- a circle is the real box's (min(w, h) / 2), the rest are the same
   picture either way and take the turn }
 function EndSymbolShape(AKind: TTySymbolKind; AEmpty: Boolean; const APath: string;
   AW, AH, AX, AY, ARotRad: Double): TTyChartShape;
-var spec: TTySymbolSpec; rot: Double;
+var
+  spec: TTySymbolSpec;
+  rot: Double;
+  zp: TTyZrPath;
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  nm: string;
 begin
+  { [R7-S] A BOX WITH A SIDE OF NOUGHT (a one-number size, normalizeSymbolSize's
+    [w, 0]): symbol.ts' own path in that collapsed box, turned and placed --
+    nothing to fill, though a pen still draws its edge and a pin its head
+    of the width [was: never this small -- a missing height took the width] }
+  if not ((AW > 0) and (AH > 0)) and not IsNan(AW) and not IsNan(AH)
+    and not (AKind in [tsyNone, tsyImage]) then
+  begin
+    if IsNan(ARotRad) then rot := 0 else rot := ARotRad;
+    case AKind of
+      tsyCircle: nm := 'circle';
+      tsyRect: nm := 'rect';
+      tsyRoundRect: nm := 'roundRect';
+      tsySquare: nm := 'square';
+      tsyTriangle: nm := 'triangle';
+      tsyDiamond: nm := 'diamond';
+      tsyPin: nm := 'pin';
+      tsyArrow: nm := 'arrow';
+      tsyLine: nm := 'line';
+    else
+      nm := '';
+    end;
+    if AKind = tsyPath then zp := TyZrMakePathCover(APath, TyXYWH(-AW / 2, -AH / 2, AW, AH))
+    else zp := TyZrSymbol(nm, -AW / 2, -AH / 2, AW, AH);
+    TyGfxPathCmds(zp, TyZrLocal(1, 1, rot, AX, AY), cmds, pts);
+    if AKind = tsyLine then Result := TyShapePolyline(pts) else Result := TyShapePolygon(pts);
+    Result.Cmds := cmds;
+    Result.HitNonZero := True;
+    Exit;
+  end;
   spec := TySymbolDefault('scatter');
   spec.Kind := AKind;
   spec.Empty := AEmpty;
@@ -1698,7 +1766,7 @@ begin
         if ink.StrokeGrad.Kind <> cgkNone then
         begin
           sym.Anim.LGrad := ink.StrokeGrad;
-          sym.Anim.LGradBox := TyZrBBox(TyZrSymbol(ink.Sym[e].Name,
+          sym.Anim.LGradBox := TyZrBBox(CoverSymbolPath(ink.Sym[e].Name,
             -ink.Sym[e].W / 2, -ink.Sym[e].H / 2, ink.Sym[e].W, ink.Sym[e].H));
           sym.Anim.LGradStroke := em or (kind = tsyLine);
           PlaceLocalGrad(sym, 1, 1, rot, at.X, at.Y);
@@ -1818,6 +1886,13 @@ begin
         sym.Style.MiterLimit := ink.EffMiter;
       end;
       if ink.EffShadowSet then TyStyleSetShadow(sym.Style, ink.EffShadow);
+      { [R7-S] the canvas' shadowColor it leaves, or takes }
+      if ink.EffShadowLeft then sym.CanvasFlags := cTyCanvasShadowLeft
+      else
+      begin
+        sym.CanvasFlags := cTyCanvasOwnShadow;
+        sym.CanvasShadow := ink.EffCanvasShadow;
+      end;
       { the frame's device px per css px: the pen's own frame is css px }
       sym.Anim.Vals := TTyDoubleArray.Create(ASolved.Scale);
       sym.Style.Alpha := ink.EffOpacity;
@@ -1827,7 +1902,7 @@ begin
       if ink.EffGrad.Kind <> cgkNone then
       begin
         sym.Anim.LGrad := ink.EffGrad;
-        sym.Anim.LGradBox := TyZrBBox(TyZrSymbol(ink.EffName, -0.5, -0.5, 1, 1));
+        sym.Anim.LGradBox := TyZrBBox(CoverSymbolPath(ink.EffName, -0.5, -0.5, 1, 1));
         { [R7-R] an empty one's pen too }
         sym.Anim.LGradStroke := em or (TySymbolKindOf(ink.EffName, em, pd) = tsyLine);
       end;
@@ -1868,18 +1943,11 @@ begin
   AE.Poisoned := (flags and 8) <> 0;
 end;
 
-procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
-  AGone: Boolean);
-var sh: TTyChartShape; L: TTyMat2D; ds: Double;
+{ the effect symbol under the transform (ASX, ASY, ARot, AX, AY), device px }
+procedure PlaceEffect(var AEl: TTyChartElement; ASX, ASY, AX, AY, ARot: Double);
+var L: TTyMat2D; ds: Double;
 begin
-  if AGone or AE.Ignore or IsNan(AE.X) or IsNan(AE.Y) then
-  begin
-    AEl.Shape := TyShapeRect(TyRectF(0, 0, 0, 0));
-    AEl.Ignore := True;
-    Exit;
-  end;
-  sh := EffectShape(AEl.Anim.Mono, AE.ScaleX, AE.ScaleY, AE.X, AE.Y, AE.Rotation);
-  AEl.Shape := sh;
+  AEl.Shape := EffectShape(AEl.Anim.Mono, ASX, ASY, AX, AY, ARot);
   AEl.Ignore := False;
   { [R7-R] THE PEN IN THE SYMBOL'S OWN FRAME: its scale (the trail's
     scaleY too) and its turn, not strokeNoScale -- the root of the scale's
@@ -1888,14 +1956,145 @@ begin
   begin
     ds := 1;
     if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
-    if IsNan(AE.Rotation) then L := TyZrLocal(AE.ScaleX / ds, AE.ScaleY / ds, 0, 0, 0)
-    else L := TyZrLocal(AE.ScaleX / ds, AE.ScaleY / ds, AE.Rotation, 0, 0);
+    if IsNan(ARot) then L := TyZrLocal(ASX / ds, ASY / ds, 0, 0, 0)
+    else L := TyZrLocal(ASX / ds, ASY / ds, ARot, 0, 0);
     AEl.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
     TyStyleSetPenShape(AEl.Style, L);
   end;
   { [spec 242] its gradient where the symbol is now }
-  if IsNan(AE.Rotation) then PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, 0, AE.X, AE.Y)
-  else PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, AE.Rotation, AE.X, AE.Y);
+  if IsNan(ARot) then PlaceLocalGrad(AEl, ASX, ASY, 0, AX, AY)
+  else PlaceLocalGrad(AEl, ASX, ASY, ARot, AX, AY);
+end;
+
+procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
+  AGone: Boolean);
+var ds: Double;
+begin
+  if AGone or AE.Ignore or IsNan(AE.X) or IsNan(AE.Y) then
+  begin
+    AEl.Shape := TyShapeRect(TyRectF(0, 0, 0, 0));
+    AEl.Ignore := True;
+    Exit;
+  end;
+  ds := 1;
+  if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
+  { [R7-S] A SCALE THAT IS NOT A NUMBER (`symbolSize: [12]`: scaleY
+    undefined): the canvas refuses the transform and keeps the one it had
+    -- the unit symbol in the css px frame until TyLinesCanvasLeftovers says
+    which [was: a square of the width]. A new array, not the list's: the
+    frame's copy shares it }
+  if IsNan(AE.ScaleX) or IsNan(AE.ScaleY) then
+  begin
+    AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTransformLeft;
+    AEl.Anim.Vals := TTyDoubleArray.Create(ds);
+    PlaceEffect(AEl, ds, ds, 0, 0, NaN);
+    Exit;
+  end;
+  AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasTransformLeft;
+  { the transform it leaves on the canvas: 1, then x, y, scaleX, scaleY,
+    rotation }
+  AEl.Anim.Vals := TTyDoubleArray.Create(ds, 1, AE.X, AE.Y, AE.ScaleX, AE.ScaleY, AE.Rotation);
+  PlaceEffect(AEl, AE.ScaleX, AE.ScaleY, AE.X, AE.Y, AE.Rotation);
+end;
+
+function TyLinesCanvasLeftoversDue(AList: TTyPaintList): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+    if (AList.Ref(i)^.CanvasFlags and (cTyCanvasShadowLeft or cTyCanvasTransformLeft)) <> 0 then
+      Exit(True);
+end;
+
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
+type
+  TCanvasState = record
+    Shadow: TTyChartColor;
+    HasT: Boolean;
+    TX, TY, TSX, TSY, TRot: Double;
+  end;
+var
+  i, zl, cs: Integer;
+  pe: PTyChartElement;
+  cur, saved: TCanvasState;
+  inClip, first, clipped: Boolean;
+  cr: TTyRectF;
+  ds: Double;
+begin
+  if not TyLinesCanvasLeftoversDue(AList) then Exit;
+  first := True;
+  zl := 0;
+  cs := 0;
+  inClip := False;
+  cur := Default(TCanvasState);
+  saved := cur;
+  cr := TyRectF(0, 0, 0, 0);
+  for i := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(AList.PaintOrder(i));
+    { what the painter skips: ignored, held back, of no opacity }
+    if pe^.Ignore or pe^.ProgHidden or not (pe^.Style.Alpha > 0) then Continue;
+    if first or (pe^.ZLevel <> zl) then
+    begin
+      first := False;
+      zl := pe^.ZLevel;
+      cur := Default(TCanvasState);
+      if zl = 0 then cur.Shadow := AGround;
+      inClip := False;
+    end;
+    { a clip path: saved on entering, restored on leaving or changing (a
+      series' group clip its own, whatever its rect) }
+    clipped := pe^.HasClip or pe^.HasClipSector;
+    if inClip and (not clipped or (pe^.Datum.SeriesIndex <> cs)
+      or (pe^.ClipRect.Left <> cr.Left) or (pe^.ClipRect.Top <> cr.Top)
+      or (pe^.ClipRect.Right <> cr.Right) or (pe^.ClipRect.Bottom <> cr.Bottom)) then
+    begin
+      cur := saved;
+      inClip := False;
+    end;
+    if clipped and not inClip then
+    begin
+      saved := cur;
+      inClip := True;
+      cs := pe^.Datum.SeriesIndex;
+      cr := pe^.ClipRect;
+    end;
+    { the shadowColor: refused (kept), the symbol's own, a written one, else
+      zrender's '#000' }
+    if (pe^.CanvasFlags and cTyCanvasShadowLeft) <> 0 then
+      pe^.Style.ShadowColor := cur.Shadow
+    else if (pe^.CanvasFlags and cTyCanvasOwnShadow) <> 0 then
+      cur.Shadow := pe^.CanvasShadow
+    else if (pe^.Style.ShadowColor shr 24) <> 0 then
+      cur.Shadow := pe^.Style.ShadowColor
+    else
+      cur.Shadow := TTyChartColor($FF000000);
+    { the transform: refused (the unit symbol under the one kept), an effect
+      symbol's own, else none }
+    if (pe^.CanvasFlags and cTyCanvasTransformLeft) <> 0 then
+    begin
+      if cur.HasT then PlaceEffect(pe^, cur.TSX, cur.TSY, cur.TX, cur.TY, cur.TRot)
+      else
+      begin
+        ds := 1;
+        if (Length(pe^.Anim.Vals) > 0) and (pe^.Anim.Vals[0] > 0) then ds := pe^.Anim.Vals[0];
+        PlaceEffect(pe^, ds, ds, 0, 0, NaN);
+      end;
+    end
+    else if (pe^.Anim.Role = carLinesEffect) and (Length(pe^.Anim.Vals) >= 7)
+      and (pe^.Anim.Vals[1] = 1) then
+    begin
+      cur.HasT := True;
+      cur.TX := pe^.Anim.Vals[2];
+      cur.TY := pe^.Anim.Vals[3];
+      cur.TSX := pe^.Anim.Vals[4];
+      cur.TSY := pe^.Anim.Vals[5];
+      cur.TRot := pe^.Anim.Vals[6];
+    end
+    else
+      cur.HasT := False;
+  end;
 end;
 
 procedure TyLinesFrameLine(var AEl: TTyChartElement; APercent: Double);
