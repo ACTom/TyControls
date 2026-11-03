@@ -1,7 +1,7 @@
 unit test.menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Forms, Menus, fpcunit, testregistry, tyControls.Menu, tyControls.Accel,
+uses Classes, SysUtils, Types, Controls, Forms, Menus, LCLVersion, fpcunit, testregistry, tyControls.Menu, tyControls.Accel,
   LCLType, ActnList, tyControls.DropButtons, tyControls.Popup;
 type
   TMenuModelTest = class(TTestCase)
@@ -863,9 +863,11 @@ begin
     AssertEquals('A', 'A', rows[0].Caption);
     AssertTrue('one line between', rows[1].Kind = mrkSeparator);
     AssertEquals('B', 'B', rows[2].Caption);
+    {$IF LCL_FULLVERSION >= 4000000}   // AutoLineReduction came with Lazarus 4.0
     root.AutoLineReduction := maManual;
     rows := TyBuildMenuRows(root);
     AssertEquals('manual: every line is shown', 6, Length(rows));
+    {$ENDIF}
   finally
     root.Free;
   end;
