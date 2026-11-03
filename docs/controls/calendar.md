@@ -136,7 +136,7 @@ TyCalendarCell:disabled { color: var(--muted); }
 ### 渲染 / 布局细节
 
 - 布局按当前尺寸 + PPI 自适应：表头带高 28 逻辑像素（`dsShowHeadings` 去掉则为 0）、星期名行高 20（`dsShowDayNames` 去掉则为 0）、周数列宽 24（`dsShowWeekNumbers` 时），其余按 7 列 × 6 行均分——**被去掉的带高会让给日期网格**。下钻视图（月 / 年 / 十年）使用 4×3 网格，表头带高同样 28。注意：表头是进入下钻视图的唯一入口，去掉 `dsShowHeadings` 就得到一块纯日期网格。
-- 表头为 `[←] [标题] [→]`：左右箭头用主体 `TextColor` 绘制的字形（`tgArrowLeft`/`tgArrowRight`），标题居中。
+- 表头为 `[←] [标题] [→]`：左右箭头是全库统一的尖角（`--glyph-chevron-size` 管大小，`--glyph-chevron-alpha` 管深浅，`--glyph-chevron-left`/`--glyph-chevron-right` 可换成图标字体），用主体 `TextColor`，标题居中。下拉日历（`TTyDateTimePicker`）是同一个控件，箭头也一样。
 - 相邻月 / 越界格子若主题未显式给 `color`，则回退为**主体文本色的低透明度版本**（alpha≈100）做灰显。
 - 今日环颜色复用 `TyCalendarCell:selected` 的 `background`（即 `var(--accent)`），线宽为缩放后的 1px 发丝线。
 

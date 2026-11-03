@@ -7,7 +7,7 @@ uses
   Translations,          // TPOFile — drive the name-source seam the way a real catalogue does
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.Calendar;
+  tyControls.Calendar, tyControls.DateTimePicker;
 
 type
 
@@ -133,6 +133,7 @@ type
   TCalendarPixelTest = class(TTestCase)
   published
     procedure TestSelectedCellIsBlue;
+    procedure TestTheMonthArrowsAreTheSharedChevrons;
   end;
 
   { B3: zoom pure-function tests }
@@ -885,6 +886,85 @@ begin
 end;
 
 { TCalendarPixelTest }
+
+type
+  TPicker194 = class(TTyDateTimePicker);
+  TCal194 = class(TTyCalendar);
+
+{ How tall the ink of the left arrow is: the rows, inside the header's arrow slot, that differ from
+  the slot's ground. A little way in from the edges, clear of the frame. }
+function ArrowInkHeight(ACal: TTyCalendar): Integer;
+var
+  bmp: TBitmap;
+  x, y, first, last: Integer;
+  ground, c: TColor;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(ACal.Width, ACal.Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    ACal.RenderToPublic(bmp.Canvas, Rect(0, 0, ACal.Width, ACal.Height), 96);
+    ground := bmp.Canvas.Pixels[3, 3];
+    first := -1;
+    last := -1;
+    for y := 3 to 25 do
+      for x := 3 to 25 do
+      begin
+        c := bmp.Canvas.Pixels[x, y];
+        if Abs(Red(c) - Red(ground)) + Abs(Green(c) - Green(ground)) + Abs(Blue(c) - Blue(ground)) > 24 then
+        begin
+          if first < 0 then first := y;
+          last := y;
+          Break;
+        end;
+      end;
+    if first < 0 then Exit(0);
+    Result := last - first + 1;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ #194: the arrows are the library's chevron, not a glyph stretched to the header band: the token
+  sizes them, on the standalone calendar and in the picker's drop-down. }
+procedure TCalendarPixelTest.TestTheMonthArrowsAreTheSharedChevrons;
+var
+  ctl: TTyStyleController;
+  cal: TTyCalendar;
+  picker: TPicker194;
+  dflt, big, i: Integer;
+begin
+  ctl := TTyStyleController.Create(nil);
+  cal := TTyCalendar.Create(nil);
+  picker := TPicker194.Create(nil);
+  try
+    cal.SetBounds(0, 0, 240, 220);
+    cal.Controller := ctl;
+    dflt := ArrowInkHeight(cal);
+    AssertTrue(Format('setup: an arrow is drawn (%d)', [dflt]), dflt > 0);
+    AssertTrue(Format('the size the other chevrons have, not the header band''s (%d)', [dflt]),
+      dflt <= 9);
+    ctl.LoadThemeCssAdditive(':root { --glyph-chevron-size: 14px; }');
+    big := ArrowInkHeight(cal);
+    AssertTrue(Format('--glyph-chevron-size sizes it (%d -> %d)', [dflt, big]), big >= 13);
+    for i := 1 to 3 do   // the title zooms out: months, years, decades
+    begin
+      TCal194(cal).MouseDown(mbLeft, [], cal.Width div 2, 4);
+      AssertEquals(Format('and in view %d of the zoom', [i]), big, ArrowInkHeight(cal));
+    end;
+    picker.EnsurePopup;
+    AssertNotNull('setup: the picker''s calendar', picker.Calendar);
+    picker.Calendar.SetBounds(0, 0, 240, 220);
+    picker.Calendar.Controller := ctl;
+    AssertEquals('the drop-down calendar has the same arrow', big, ArrowInkHeight(picker.Calendar));
+  finally
+    picker.Free;
+    cal.Free;
+    ctl.Free;
+  end;
+end;
 
 procedure TCalendarPixelTest.TestSelectedCellIsBlue;
 { June 15 2026, Sun-first, 240x220 at 96ppi.

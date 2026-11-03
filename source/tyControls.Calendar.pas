@@ -845,8 +845,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
+    TyDrawChevron(P, ActiveController, ArrowLeftRect,  tgChevronLeft,  S.TextColor);
+    TyDrawChevron(P, ActiveController, ArrowRightRect, tgChevronRight, S.TextColor);
   end;
 
   TitleText := IntToStr(FViewYear);
@@ -925,8 +925,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
+    TyDrawChevron(P, ActiveController, ArrowLeftRect,  tgChevronLeft,  S.TextColor);
+    TyDrawChevron(P, ActiveController, ArrowRightRect, tgChevronRight, S.TextColor);
   end;
 
   TitleText := IntToStr(DS) + '–' + IntToStr(DS + 9);
@@ -1017,8 +1017,8 @@ begin
     band, and a 0x0 glyph rect is not something the painter should be asked to scale. }
   if HeaderH > 0 then
   begin
-    P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
-    P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
+    TyDrawChevron(P, ActiveController, ArrowLeftRect,  tgChevronLeft,  S.TextColor);
+    TyDrawChevron(P, ActiveController, ArrowRightRect, tgChevronRight, S.TextColor);
   end;
 
   TitleText := IntToStr(CentStart) + '–' + IntToStr(CentStart + 99);
@@ -1208,8 +1208,8 @@ begin
       ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
       TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
 
-      P.DrawGlyph(ArrowLeftRect,  tgChevronLeft,  S.TextColor, 1);
-      P.DrawGlyph(ArrowRightRect, tgChevronRight, S.TextColor, 1);
+      TyDrawChevron(P, ActiveController, ArrowLeftRect,  tgChevronLeft,  S.TextColor);
+      TyDrawChevron(P, ActiveController, ArrowRightRect, tgChevronRight, S.TextColor);
 
       { Title text. The month name goes through TyDateTimeNames, NOT the bare
         DefaultFormatSettings: the app's language wins over the machine's.
