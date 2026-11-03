@@ -220,6 +220,7 @@ uses
   test.advchart.linetempsymbol,
   test.advchart.labellinestates,
   test.advchart.legenditemown,
+  test.advchart.legendstyles,
   test.advchart.imageshadow,
   test.advchart.legendtooltip,
   test.advchart.animedges,
