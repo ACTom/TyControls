@@ -10,6 +10,8 @@
 
 ## 2. 单元与 typeKey
 
+报表视图的表头与数据表格共用 `--grid-header-*` 令牌,排序标记用 `--sort-glyph`、`--sort-glyph-size`、`--sort-glyph-color`。见 [tycss 参考 §3.7](../tycss-reference.md)。
+
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ListView`(几何在 `tyControls.ListView.Layout`,列/表头模型在 `tyControls.Columns`) |

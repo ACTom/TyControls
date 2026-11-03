@@ -12,7 +12,7 @@ uses
   BGRABitmap, BGRABitmapTypes, LMessages,
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.Grid.Layout,
   tyControls.ListView,
-  tyControls.ListView.Layout, tyControls.TreeView;
+  tyControls.ListView.Layout, tyControls.TreeView, tyControls.Panel;
 
 type
   TGridTokensTest = class(TTestCase)
@@ -41,6 +41,7 @@ type
     procedure TestTheHeaderDoesNotCoverTheFrame;
     procedure TestTheHeaderKeepsToTheRoundedCorners;
     procedure TestARowFillDoesNotCoverTheFrame;
+    procedure TestAnEmptyGridsFrameIsAPlainFrame;
     procedure TestAScrollKeepsTheBottomBorderAndCorners;
     procedure TestAListViewHeaderDoesNotCoverTheFrame;
     { grid lines }
@@ -106,6 +107,11 @@ type
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  TPanelAccess = class(TTyPanel)
+  public
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
 procedure TGridAccess.DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
@@ -156,6 +162,11 @@ begin
 end;
 
 procedure TListAccess.DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TPanelAccess.DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
@@ -373,6 +384,48 @@ begin
     AssertEquals(AWhat, 0, diff);
   finally
     moved.Free;
+  end;
+end;
+
+procedure TGridTokensTest.TestAnEmptyGridsFrameIsAPlainFrame;
+const
+  RULE = '{ background: #F0F0F0; color: #000000; border-width: 2px; border-color: #0000FF; border-radius: 8px; padding: 0px; }';
+var
+  g: TTyStringGrid;
+  pn: TPanelAccess;
+  plain: TBGRABitmap;
+  x, y, diff: Integer;
+  a, b: TBGRAPixel;
+begin
+  { The frame goes under the content and back over it, and where the content did not touch it has
+    to come out as if it had never been apart: the fill cut once, the border stroked once. }
+  FCtl.LoadThemeCss('TyGrid ' + RULE + ' TyPanel ' + RULE);
+  pn := TPanelAccess.Create(FForm);
+  pn.Parent := FForm;
+  pn.Controller := FCtl;
+  pn.SetBounds(0, 0, W, H);
+  FBmp.Canvas.Brush.Color := clWhite;
+  FBmp.Canvas.FillRect(Rect(0, 0, W, H));
+  pn.DoRender(FBmp.Canvas, Rect(0, 0, W, H), 96);
+  plain := TBGRABitmap.Create(FBmp);
+  try
+    g := MakeGrid(False);
+    g.GridLineStyle := glsNone;
+    g.RowCount := 0;
+    Render(g);
+    diff := 0;
+    for y := 0 to 11 do
+      for x := 0 to 11 do
+      begin
+        a := Px(x, y);
+        b := plain.GetPixel(x, y);
+        if (Abs(a.red - b.red) > 1) or (Abs(a.green - b.green) > 1) or (Abs(a.blue - b.blue) > 1) then
+          Inc(diff);
+      end;
+    AssertEquals('the top left corner, pixel for pixel', 0, diff);
+    AssertTrue('and the corner is there to compare', plain.GetPixel(5, 1).blue > plain.GetPixel(5, 1).red);
+  finally
+    plain.Free;
   end;
 end;
 

@@ -312,6 +312,8 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 
 ## 5. 状态与主题
 
+表头的颜色、字重和分隔线颜色与数据表格共用 `--grid-header-*` 令牌,排序标记的形状、大小和颜色用 `--sort-glyph`、`--sort-glyph-size`、`--sort-glyph-color`。见 [tycss 参考 §3.7](../tycss-reference.md)。
+
 ### 支持的伪类状态
 
 外框 `TyTreeView` 沿用基类状态机；行 / 复选框子部件在绘制时单独解析伪类：
