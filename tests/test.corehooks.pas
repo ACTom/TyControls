@@ -109,7 +109,7 @@ type
     procedure TestPickerWheelCallsChangeThenOnChange;
     procedure TestPickerSpinButtonCallsChangeThenOnChange;
     procedure TestPickerClearingKeyCallsChangeThenOnChange;
-    procedure TestPickerCalendarMoveCallsChangeThenOnChange;
+    procedure TestPickerCalendarPickCallsChangeThenOnChange;
     procedure TestPickerCalendarAcceptCallsChangeThenOnChange;
     procedure TestPickerEscapeCallsChangeThenOnChange;
     procedure TestPickerCodeWriteCallsNeitherByDefault;
@@ -499,7 +499,9 @@ begin
   AssertEquals('emptying it: hook, then event', 'CO', p.Log);
 end;
 
-procedure TCoreHooksTest.TestPickerCalendarMoveCallsChangeThenOnChange;
+{ #160: moving through the open calendar is not a pick -- the value stays, and nothing is told,
+  until the day is picked; then the hook, then the event. }
+procedure TCoreHooksTest.TestPickerCalendarPickCallsChangeThenOnChange;
 var
   p: THookPicker;
   before: TDateTime;
@@ -508,10 +510,12 @@ begin
   before := p.DateTime;
   p.OpenCalendar;
   p.Log := '';
-  p.PressCalendarKey(VK_RIGHT);   { the arrow inside the open calendar moves the day }
-  AssertEquals('precondition: the picker followed the calendar',
-    DateToStr(IncDay(before)), DateToStr(p.DateTime));
-  AssertEquals('a move in the calendar: hook, then event', 'CO', p.Log);
+  p.PressCalendarKey(VK_RIGHT);   { the arrow inside the open calendar moves its selection }
+  AssertEquals('a move is no edit', DateToStr(before), DateToStr(p.DateTime));
+  AssertEquals('and tells nobody', '', p.Log);
+  p.PressCalendarKey(VK_RETURN);
+  AssertEquals('the pick takes the day', DateToStr(IncDay(before)), DateToStr(p.DateTime));
+  AssertEquals('picking it: hook, then event', 'CO', p.Log);
 end;
 
 procedure TCoreHooksTest.TestPickerCalendarAcceptCallsChangeThenOnChange;
