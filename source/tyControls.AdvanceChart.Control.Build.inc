@@ -4771,6 +4771,10 @@ begin
         or (FBindings[i].SeriesType = 'bar') or (FBindings[i].SeriesType = 'line')
         or (FBindings[i].SeriesType = 'pictorialBar') then
       begin
+        { [R7-X] a cartesian bar's rows' own corners, in its series' units
+          (the bar layout's, unscaled) }
+        if FBindings[i].SeriesType = 'bar' then
+          HeatmapItemRadii(FBindings[i].SeriesIndex, 96, v.HeatRadii, v.HeatHasRadii);
         { a symbol's own label over its series' [Batch 71]; a bar's, a
           line point's and a pictorial bar's too [Batch 82] }
         ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
@@ -4885,6 +4889,7 @@ begin
       rest values [R5-A] }
     if drawn > 0 then ApplySeriesShadows(list);
     if drawn > 0 then ApplySeriesPens(list);
+    if drawn > 0 then ApplyCandleTopKeys(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -5074,6 +5079,54 @@ begin
       else
         Take(StOwnChain(nodes, s), ['itemStyle']);
     end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplyCandleTopKeys(AList: TTyPaintList);
+var
+  k, s, slot, raw: Integer;
+  pe: PTyChartElement;
+  chain: array[0..2] of TJSONObject;
+  d: TJSONData;
+  sh: TTyChartShadow;
+  joinHas: Boolean;
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if not (pe^.Anim.Role in [carCandleBody, carCandleWickHigh, carCandleWickLow]) then Continue;
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.DataIndex < 0) then Continue;
+    s := pe^.Datum.SeriesIndex;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) or (FBindings[slot].SeriesType <> 'candlestick') then
+      Continue;
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    { the item model's chain: the item (an object), the series, the root }
+    chain[0] := StItemNode(s, raw);
+    chain[1] := StSeriesNode(s);
+    if FOption.Root is TJSONObject then chain[2] := TJSONObject(FOption.Root)
+    else chain[2] := nil;
+    { lineWidth first: a dash word is measured against it }
+    d := TyStFind(chain, ['borderWidth']);
+    if d <> nil then
+    begin
+      pe^.Style.StrokeWidthLogical := TyOptPenWidth(d);
+      if (pe^.Anim.Role = carCandleBody) and (pe^.Style.StrokeWidthLogical > 0) then
+        pe^.HitSlopLogical := pe^.Style.StrokeWidthLogical / 2;
+    end;
+    d := TyStFind(chain, ['opacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      pe^.Style.Alpha := d.AsFloat;
+    if TyStReadShadow(chain, [], [], sh) then TyStyleSetShadow(pe^.Style, sh);
+    TyStTakePenKeys(pe^.Style, chain, [], False, [spkEnds, spkDash], joinHas);
+    { a dash word the canvas measures against the width it strokes at }
+    if pe^.Style.DashWord <> 0 then
+      pe^.Style.DashLogical := TyDashOfWord(pe^.Style.DashWord, pe^.Style.StrokeWidthLogical);
   end;
 end;
 

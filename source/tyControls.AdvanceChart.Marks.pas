@@ -356,7 +356,9 @@ type
     RipplePeriod: Double;
     RippleScale: Double;
     { a heatmap row's own itemStyle.borderRadius, by RAW row, when its item
-      wrote one (an array form is not a scalar the override table keeps) }
+      wrote one (an array form is not a scalar the override table keeps);
+      [R7-X] a cartesian bar's too (BarView's itemModel.get(['itemStyle',
+      'borderRadius'])), in the units of its series' Bar.Radii }
     HeatRadii: TTyCornerRadiiArray;
     { a data item's own label read over the series', by raw row }
     ItemLabels: TTyLabelSpecArray;
@@ -1614,6 +1616,8 @@ var
   pb: TTyPointF;
   mat: TTyMat2D;
   bgCol: TTyBarColumn;
+  radii: TTyCornerRadii;
+  raw: Integer;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -1890,8 +1894,14 @@ begin
       if (r.Bottom - r.Top <= 0) and not clipped and not fixed then Continue;
       zero := lw = 0;
     end;
-    if TyHasCorner(col.Radii) then
-      shape := TyShapeRoundRect(r, col.Radii)
+    { [R7-X] the row's own corners where its item writes them [was: the
+      series' for every row] }
+    radii := col.Radii;
+    raw := AStore.GetRawIndex(i);
+    if (raw >= 0) and (raw <= High(AVisual.HeatHasRadii)) and AVisual.HeatHasRadii[raw] then
+      radii := AVisual.HeatRadii[raw];
+    if TyHasCorner(radii) then
+      shape := TyShapeRoundRect(r, radii)
     else
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
@@ -1928,12 +1938,12 @@ begin
     el.Caption.LgG[1] := ly;
     el.Caption.LgG[2] := lw;
     el.Caption.LgG[3] := lh;
-    if TyHasCorner(col.Radii) then
+    if TyHasCorner(radii) then
     begin
-      el.Caption.LgG[4] := col.Radii[0];
-      el.Caption.LgG[5] := col.Radii[1];
-      el.Caption.LgG[6] := col.Radii[2];
-      el.Caption.LgG[7] := col.Radii[3];
+      el.Caption.LgG[4] := radii[0];
+      el.Caption.LgG[5] := radii[1];
+      el.Caption.LgG[6] := radii[2];
+      el.Caption.LgG[7] := radii[3];
     end;
     AList.Add(el);
     Inc(Result);

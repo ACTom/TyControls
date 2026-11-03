@@ -4441,6 +4441,13 @@ type
       an icon pointer's setColor, then pointer.itemStyle /
       progress.itemStyle over them }
     procedure ApplySeriesPens(AList: TTyPaintList);
+    { [R7-X] A CANDLESTICK'S TOP-LEVEL KEYS: candlestickVisual extends each
+      item's visual style with getItemStyle() of the item model -- the
+      item's, the series', the option root's TOP-LEVEL borderWidth,
+      opacity, shadow, borderType, borderDashOffset, borderCap, borderJoin
+      and borderMiterLimit (its fill and stroke then the item's itemStyle
+      colours) -- over what the series' and the item's itemStyle gave }
+    procedure ApplyCandleTopKeys(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on

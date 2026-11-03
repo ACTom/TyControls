@@ -105,6 +105,11 @@ type
       sector has a different one -- so the values are carried as written and
       resolved per sector when the marks are built. }
     Corners: TTyBoxValueArray;
+    { [R7-X] a data item's own itemStyle.borderRadius, by raw row, where it
+      writes one (getSectorCornerRadius of the item's itemStyle model):
+      ItemCornersSet[raw] says so, ItemCorners[raw] its values as Corners }
+    ItemCorners: array of TTyBoxValueArray;
+    ItemCornersSet: array of Boolean;
   end;
 
   { One datum's wedge, in DEVICE px and canvas radians.
@@ -241,9 +246,10 @@ function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
   non-zero r wins outright. Run it with r = 80 and r0 = 30 and it answers 80,
   not the 50 the name dr suggests. Transcribed, because a port that quietly
   did the sensible thing would draw different corners from every ECharts
-  chart it is compared against. }
+  chart it is compared against. [R7-X] ARaw the slice's raw row: its item's
+  own corners where it writes them. }
 function TyPieCornersFor(const ASpec: TTyPieSpec;
-  AR0, AR1: Double): TTyDoubleArray;
+  AR0, AR1: Double; ARaw: Integer = -1): TTyDoubleArray;
 
 { ---- the marks ---- }
 { Append this pie's sectors to AList and answer how many were added. A sector
@@ -491,6 +497,7 @@ var
   node: TJSONObject;
   d: TJSONData;
   s: string;
+  k: Integer;
 begin
   Result := TyPieSpecDefault;
   if AOption = nil then Exit;
@@ -543,6 +550,21 @@ begin
   Result.ShowEmptyCircle :=
     BoolIn(node, 'showEmptyCircle', Result.ShowEmptyCircle);
   Result.Corners := ReadCorners(node);
+  { [R7-X] each object item's own [was: the series' for every slice] }
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.ItemCorners, d.Count);
+    SetLength(Result.ItemCornersSet, d.Count);
+    for k := 0 to d.Count - 1 do
+      if (d.Items[k] is TJSONObject) and (TJSONObject(d.Items[k]).Find('itemStyle') is TJSONObject)
+        and (TJSONObject(TJSONObject(d.Items[k]).Find('itemStyle')).Find('borderRadius') <> nil)
+        and (TJSONObject(TJSONObject(d.Items[k]).Find('itemStyle')).Find('borderRadius').JSONType <> jtNull) then
+      begin
+        Result.ItemCornersSet[k] := True;
+        Result.ItemCorners[k] := ReadCorners(TJSONObject(d.Items[k]));
+      end;
+  end;
 
   { roseType is tested for TRUTH, not for membership: pieLayout.ts:159 asks
     `roseType ?` and :119 asks `roseType !== 'area'`. So `true` behaves as
@@ -992,19 +1014,23 @@ end;
 { ==================== the marks ==================== }
 
 function TyPieCornersFor(const ASpec: TTyPieSpec;
-  AR0, AR1: Double): TTyDoubleArray;
+  AR0, AR1: Double; ARaw: Integer = -1): TTyDoubleArray;
 var
   i: Integer;
   dr: Double;
+  cs: TTyBoxValueArray;
 begin
   Result := nil;
-  if Length(ASpec.Corners) = 0 then Exit;
+  cs := ASpec.Corners;
+  if (ARaw >= 0) and (ARaw <= High(ASpec.ItemCornersSet)) and ASpec.ItemCornersSet[ARaw] then
+    cs := ASpec.ItemCorners[ARaw];
+  if Length(cs) = 0 then Exit;
   if AR1 <> 0 then dr := Abs(AR1)
   else if AR0 <> 0 then dr := Abs(AR0)
   else dr := 0;
-  SetLength(Result, Length(ASpec.Corners));
-  for i := 0 to High(ASpec.Corners) do
-    Result[i] := TyPieResolve(ASpec.Corners[i], dr);
+  SetLength(Result, Length(cs));
+  for i := 0 to High(cs) do
+    Result[i] := TyPieResolve(cs[i], dr);
 end;
 
 function TyBuildPieMarks(const ABinding: TTySeriesBinding;
@@ -1032,7 +1058,8 @@ begin
     sh := TyShapeSector(ALayout.Sectors[i].CX, ALayout.Sectors[i].CY,
       ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
       ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad,
-      TyPieCornersFor(ASpec, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1));
+      TyPieCornersFor(ASpec, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
+        ALayout.Sectors[i].RawIndex));
     el := TyChartElement(sh);
     el.Style.HasFill := True;
     if Length(AVisual.Fills) > 0 then
