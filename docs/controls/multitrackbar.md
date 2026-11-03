@@ -41,7 +41,7 @@ uses tyControls.MultiTrackBar;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Min` / `Max` | `Integer` | `0` / `100` | 取值范围。改了以后所有滑块重新排好（见第 8 节），有滑块因此移动时照常触发事件。 |
-| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 8 节。打开 `AllowCrossing` 时用户的操作不受它约束（第 5 节）。 |
+| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 8 节。打开 `AllowCrossing` 时用户的操作不受它约束，区间控件里区间之间仍受约束（第 5 节）。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 与 `TTyTrackBar` 相同：竖排时顶部是 `Max`，改方向时宽高自动对调（读窗体时不动）。 |
 | `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。 |
 | `TickMarks` / `TickStyle` / `Frequency` | — | `ttmBottomRight` / `ttsAuto` / `1` | 刻度画在哪一侧、画哪些值，与 `TTyTrackBar` 完全相同，连画法都是同一段代码。`SetTick` / `ClearTicks` / `TickCount` 用于 `ttsManual`。 |
@@ -208,6 +208,7 @@ TTyTrackThumbRemovingEvent = procedure(Sender: TObject; AIndex: Integer;
 
 - 用户拖动的滑块不再被邻居挡住，越过去以后所有滑块按值重新排序。被拖的滑块带着它的项一起走——颜色、提示、样式类，选中也跟着它。方向键、`PageUp` / `PageDown`、`Home` / `End`、滚轮同样能越过。
 - 开着时 `MinGap` 对用户操作不生效，两个滑块可以叠在同一个值上。
+- 区间控件：端点只能越过**自己区间的另一端**。越过后这个区间的 `Low` 和 `High` 对调，区间还是原来那一项；被拖的滑块接着当这个区间的另一端拖，选中也跟着它。碰到相邻区间时停在离它 `MinGap` 的地方，和不开 `AllowCrossing` 时一样，不会钻进别的区间，也不会把几个区间的端点重新配对。按键和滚轮同样按这条规则走。想换一种夹法，在子类里重写 `ClampCrossing`。
 - 越过以后的事件顺序：`OnThumbSelect`（新序号）→ `OnThumbChange`（新序号）→ `OnChange`。
 - **只管用户。** 代码写值（`SetThumbValue`、`Thumbs[i].Value`）照旧夹在两个邻居之间（间距按 0 算），不改变项的顺序。要整体重排，用 `BeginUpdate` / `EndUpdate`（第 8 节）。
 - 关掉时滑块按 `MinGap` 重新排开，和改 `MinGap` 一样会触发事件。
@@ -336,7 +337,7 @@ TTyTrackThumbChangingEvent = procedure(Sender: TObject; AIndex: Integer; var AVa
 ```
 
 - 用户要移动第 `AIndex` 个滑块时、值**还没变**之前触发。用户操作指：拖动（每挪一步问一次）、方向键 / `PageUp` / `PageDown` / `Home` / `End`、滚轮，按在轨道空白处时最近的滑块跳过来，以及 `Pushable` 推动的每个邻居、`DraggableRanges` 拖动的区间两端。
-- `AValue` 是滑块将要去的值，已经夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间（`AllowCrossing` 开着时只夹 `Min..Max`）。这一下根本动不了（比如已经顶着邻居还往那边拖）就不问。
+- `AValue` 是滑块将要去的值，已经夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间（`AllowCrossing` 开着时只夹 `Min..Max`，区间控件再夹在相邻区间 ± `MinGap` 之间）。这一下根本动不了（比如已经顶着邻居还往那边拖）就不问。
 - `AAllow := False`：滑块不动，也不触发 `OnThumbChange` / `OnChange`。
 - 改 `AValue`：滑块去你给的值。这个值会再按邻居 ± `MinGap` 和 `Min..Max` 夹一遍，所以给得再离谱也破坏不了第 8 节的不变式。改完正好等于当前值，就什么都不发生。
 - **只管用户，不管代码。** `SetThumbValue`、给 `Thumbs[i].Value` / `Ranges[i].Low` / `High` / `LowValue` / `HighValue` 赋值、改 `Min` / `Max` / `MinGap` 引起的重排、读窗体，都不触发——和 LCL 的惯例一样，这类事件拦的是用户，不是程序自己。
@@ -443,7 +444,7 @@ end;
 
 **不变式**：滑块按值升序排列，相邻两个至少隔 `MinGap`，全部在 `Min..Max` 内。`AllowCrossing` 开着时间距不算（按 0）。
 
-- **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去——除非用户操作时开着 `AllowCrossing`（越过后重新排序）或 `Pushable`（推着邻居走），见第 5 节。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
+- **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去——除非用户操作时开着 `AllowCrossing`（越过后重新排序；区间控件只越过自己区间的另一端）或 `Pushable`（推着邻居走），见第 5 节。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
 - **整体重排**发生在改 `Min`、`Max`、`MinGap` 时，关掉 `AllowCrossing` 时，以及读完窗体时：先排序，从左往右推开到满足间距，超出 `Max` 的再从右往左推回来。读窗体时的重排不触发事件。
 - **`MinGap` 放不下时**——`(滑块数 − 1) × MinGap > Max − Min`——不报错，也不改属性值：滑块按 `(Max − Min) div (滑块数 − 1)` 的间距摆放。之后把范围放宽，原来的间距自动恢复。
 - **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。这期间调 `SetThumbValue` 也一样原样存进项里；改 `Min`、`Max`、`MinGap` 或 `AllowCrossing` 不会冲掉项里存着的值，`EndUpdate` 时按新的设置一起排。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：

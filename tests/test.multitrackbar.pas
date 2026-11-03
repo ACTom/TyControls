@@ -541,7 +541,9 @@ type
   published
     procedure TestTheSwitchesAreOffAndPublished;
     procedure TestACrossingThumbTakesItsLookAndSelectionAlong;
-    procedure TestARangeEndCrossesIntoTheNextRange;
+    { #182: a range's end crosses its own other end (the two swap, the range stays the same
+      item) and stops MinGap short of a neighbouring range, by mouse and by key alike. }
+    procedure TestARangeEndCrossesOnlyItsOwnOtherEnd;
     procedure TestTheFinalBarsPush;
   end;
 
@@ -6074,53 +6076,103 @@ begin
   AssertEquals('its hint is shown over it', 'first', info.HintStr);
 end;
 
-procedure TTyMultiTrackSwitchesFinalTest.TestARangeEndCrossesIntoTheNextRange;
+procedure TTyMultiTrackSwitchesFinalTest.TestARangeEndCrossesOnlyItsOwnOtherEnd;
 var
   bar: TTyRangeTrackBar;
   r: TTyTrackRange;
   p, q: TPoint;
+  id0, id1: Integer;
+  k: Word;
+
+  procedure SetRanges;
+  begin
+    bar.Ranges.BeginUpdate;
+    try
+      bar.Ranges.Clear;
+      r := bar.Ranges.Add;
+      r.Low := 10;
+      r.High := 30;
+      r := bar.Ranges.Add;
+      r.Low := 60;
+      r.High := 85;
+    finally
+      bar.Ranges.EndUpdate;
+    end;
+    id0 := bar.Ranges[0].ID;
+    id1 := bar.Ranges[1].ID;
+  end;
+
 begin
   bar := TTyRangeTrackBar.Create(FForm);
   bar.Parent := FForm;
   bar.Font.PixelsPerInch := 96;
   bar.SetBounds(0, 0, 400, 24);
   bar.MinGap := 5;
-  bar.Ranges.BeginUpdate;
-  try
-    bar.Ranges.Clear;
-    r := bar.Ranges.Add;
-    r.Low := 10;
-    r.High := 30;
-    r := bar.Ranges.Add;
-    r.Low := 60;
-    r.High := 85;
-  finally
-    bar.Ranges.EndUpdate;
-  end;
+  SetRanges;
   bar.AllowCrossing := True;
+  bar.OnThumbSelect := @ThumbSelected;
+  bar.OnThumbChange := @ThumbMoved;
+  bar.OnChange := @Changed;
   p := PtOn(bar, 30);
   TBaseAccess(bar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
   q := PtOn(bar, 70);
   TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
-  AssertEquals('sorted as one list and paired off again', '10..60;70..85', RangesText(bar));
-  AssertEquals('the dragged end is now the second range''s low end', 2, bar.SelectedThumb);
+  AssertEquals('the end stops MinGap short of the next range', '10..55;60..85',
+    RangesText(bar));
+  AssertEquals('still the first range''s high end', 1, bar.SelectedThumb);
+  FLog := '';
+  q := PtOn(bar, 0);
+  TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
+  AssertEquals('past its own low end: the two ends swap', '0..10;60..85', RangesText(bar));
+  AssertEquals('the same range', id0, bar.Ranges[0].ID);
+  AssertEquals('the dragged end is that range''s low end now', 0, bar.SelectedThumb);
+  AssertEquals('the selection reported at its new index, then the move', 'S0 T0 C ', FLog);
   q := PtOn(bar, 20);
   TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
   TBaseAccess(bar).MouseUp(mbLeft, [], q.X, q.Y);
-  AssertEquals('and back', '10..20;60..85', RangesText(bar));
+  AssertEquals('and back over: the drag stayed on its thumb', '10..20;60..85', RangesText(bar));
   AssertEquals(1, bar.SelectedThumb);
-  { The bar knows which end of which range is selected: a range added before it moves the
-    selection along with that end. }
-  bar.Ranges.BeginUpdate;
-  try
-    r := bar.Ranges.Add;
-    r.Low := 0;
-    r.High := 5;
-  finally
-    bar.Ranges.EndUpdate;
-  end;
-  AssertEquals('0..5;10..20;60..85', RangesText(bar));
-  AssertEquals('still the end the drag left at 20', 20, bar.ThumbValues[bar.SelectedThumb]);
+  AssertEquals('the ranges are still the same items', id0, bar.Ranges[0].ID);
+  AssertEquals(id1, bar.Ranges[1].ID);
+  { A low end stops MinGap short of the range before it. }
+  p := PtOn(bar, 60);
+  TBaseAccess(bar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  q := PtOn(bar, 0);
+  TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(bar).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the second range''s low end stops at the first range', '10..20;25..85',
+    RangesText(bar));
+  AssertEquals(2, bar.SelectedThumb);
+  { The keys go by the same rule. }
+  SetRanges;
+  bar.SelectedThumb := 1;
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('PageDown to its own low end', '10..10;60..85', RangesText(bar));
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('and past it: the ends swap', '0..10;60..85', RangesText(bar));
+  AssertEquals('the key drives the same end, now the low one', 0, bar.SelectedThumb);
+  k := VK_END;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('End: back over its other end, MinGap short of the next range',
+    '10..55;60..85', RangesText(bar));
+  AssertEquals(1, bar.SelectedThumb);
+  bar.SelectedThumb := 2;
+  k := VK_HOME;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('Home: MinGap short of the range before', '10..55;60..85', RangesText(bar));
+  SetRanges;
+  bar.SelectedThumb := 3;
+  k := VK_HOME;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('Home on a high end: past its low end, to the range before', '10..30;35..60',
+    RangesText(bar));
+  AssertEquals(2, bar.SelectedThumb);
+  AssertEquals('the ranges are still the same items', id0, bar.Ranges[0].ID);
+  AssertEquals(id1, bar.Ranges[1].ID);
 end;
 
 procedure TTyMultiTrackSwitchesFinalTest.TestTheFinalBarsPush;

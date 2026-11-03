@@ -290,6 +290,10 @@ type
       towards AFrom). A final class moves its item the same way here, so the thumb's colour,
       hint and selection go with it; ValuesChanged follows. }
     procedure ThumbIndexMoved(AFrom, ATo: Integer); virtual;
+    { #182: where a user move under AllowCrossing may take thumb AIndex, AValue held there. Here
+      Min..Max: the thumb passes any other. The range bar keeps an end between the
+      neighbouring ranges. }
+    function ClampCrossing(AIndex, AValue: Integer): Integer; virtual;
     { Add a thumb at AValue (already where it may go) and return its index. Here: inserted
       into the thumbs as they are; a final class adds an item instead (TTyMultiTrackBar: one
       that follows the theme). The selection is the caller's to set. }
@@ -628,6 +632,10 @@ type
     procedure RangesChanged;
     procedure ValuesChanged; override;
     function HoldThumbValue(AIndex, AValue: Integer): Boolean; override;
+    { #182: an end crosses only its own range's other end (the two swap, the range stays the
+      same item); it stops MinGap short of the neighbouring ranges, as without AllowCrossing,
+      so the ends are never paired off into other ranges. }
+    function ClampCrossing(AIndex, AValue: Integer): Integer; override;
     function ThumbKey(AIndex: Integer): Integer; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
@@ -1454,26 +1462,32 @@ begin
   else if (ATo < AFrom) and (AX >= ATo) and (AX < AFrom) then Result := AX + 1;
 end;
 
-procedure TTyMultiTrackBarBase.UserCrossThumb(AIndex, AValue: Integer);
+function TTyMultiTrackBarBase.ClampCrossing(AIndex, AValue: Integer): Integer;
 var
-  lo, hi, v, j, n, sel: Integer;
-  allow: Boolean;
+  lo, hi: Integer;
 begin
   lo := FMin;
   hi := FMax;
   if hi < lo then hi := lo;
   { Min..Max only: the neighbours do not hold it. }
-  v := AValue;
-  if v > hi then v := hi;
-  if v < lo then v := lo;
+  Result := AValue;
+  if Result > hi then Result := hi;
+  if Result < lo then Result := lo;
+end;
+
+procedure TTyMultiTrackBarBase.UserCrossThumb(AIndex, AValue: Integer);
+var
+  v, j, n, sel: Integer;
+  allow: Boolean;
+begin
+  v := ClampCrossing(AIndex, AValue);
   if v = FValues[AIndex] then Exit;
   allow := True;
   DoThumbChanging(AIndex, v, allow);
   if not allow then Exit;
   n := Length(FValues);
   if AIndex >= n then Exit;
-  if v > hi then v := hi;
-  if v < lo then v := lo;
+  v := ClampCrossing(AIndex, v);
   if v = FValues[AIndex] then Exit;
   { Into its place by value: past every thumb it went beyond, not past one it only reached
     (a stable order, so equal values keep their order). }
@@ -3179,6 +3193,30 @@ begin
   if not Result then Exit;
   if Odd(AIndex) then FRanges[AIndex div 2].FHigh := AValue
   else FRanges[AIndex div 2].FLow := AValue;
+end;
+
+function TTyCustomRangeTrackBar.ClampCrossing(AIndex, AValue: Integer): Integer;
+var
+  k, n, lo, hi: Integer;
+begin
+  Result := inherited ClampCrossing(AIndex, AValue);
+  k := AIndex - AIndex mod 2;   // the range's lower end
+  n := ThumbCount;
+  if k + 1 >= n then Exit;
+  { MinGap from the range before and the range after -- never tighter than where the range's
+    own ends are already: values set from code under AllowCrossing may stand closer. }
+  if k > 0 then
+  begin
+    lo := FValues[k - 1] + MinGap;
+    if lo > FValues[k] then lo := FValues[k];
+    if Result < lo then Result := lo;
+  end;
+  if k + 2 < n then
+  begin
+    hi := FValues[k + 2] - MinGap;
+    if hi < FValues[k + 1] then hi := FValues[k + 1];
+    if Result > hi then Result := hi;
+  end;
 end;
 
 procedure TTyCustomRangeTrackBar.Loaded;
