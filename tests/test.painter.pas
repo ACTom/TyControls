@@ -2151,6 +2151,7 @@ type
     procedure TestAOnePixelBorderIsOneRowOfItsOwnColour;
     procedure TestATwoPixelBorderIsTwoRows;
     procedure TestARoundedOnePixelBorderIsOneRowAlongItsSides;
+    procedure TestAThickBorderKeepsTheFillsOuterArc;
     procedure TestASquareTranslucentBorderDoesNotDoubleUpAtItsCorners;
     procedure TestARoundedFillCoversExactlyItsRect;
     procedure TestAFillBehindABorderLeavesNoHaloOnADarkParent;
@@ -2307,6 +2308,20 @@ begin
   { The radius is the outer arc's: the straight run begins r pixels from the corner, and not before. }
   AssertPixel('the arc has ended 6 from the corner', 16, 10, EDGE_INK);
   AssertTrue('and has not ended 2 from it', FP.Bitmap.GetPixel(12, 10).red > 128);
+end;
+
+procedure TPixelEdgesTest.TestAThickBorderKeepsTheFillsOuterArc;
+begin
+  Start(EDGE_GROUND);
+  { The radius is the outer arc's, as in CSS. Taken as the line's centre, a border 4 wide would
+    round half its width further out than the fill under it. (12,12) is inside an arc of radius 8
+    on the corner at (10,10), and outside one of radius 10 from the inset line. }
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 8, 4, TyRGB(0, 0, 0));
+  AssertTrue(Format('the border reaches (12,12): %d', [FP.Bitmap.GetPixel(12, 12).red]),
+    FP.Bitmap.GetPixel(12, 12).red < 128);
+  AssertTrue('and stops short of (10,10)', FP.Bitmap.GetPixel(10, 10).red > 200);
+  AssertPixel('the straight run is 4 wide', 30, 13, EDGE_INK);
+  AssertPixel('and no more', 30, 14, EDGE_GROUND);
 end;
 
 procedure TPixelEdgesTest.TestASquareTranslucentBorderDoesNotDoubleUpAtItsCorners;
