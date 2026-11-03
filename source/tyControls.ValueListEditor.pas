@@ -130,6 +130,7 @@ type
     FEnumList: TTyListBox;            // content for vekBoolean / vekEnum
     FColorList: TTyListBox;           // content for vekColor (a TTyColorMorePopupList instance)
     FColorDlgRow: TTyValueRow;        // row awaiting the deferred "more…" colour dialog (by identity), or nil
+    FInDialog: Boolean;               // a row's dialog is running (EditingDone waits for its end)
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
@@ -218,6 +219,9 @@ type
       a descendant that opens an editor has to be able to close one, and the guards drive the
       commit through here rather than by simulating a click somewhere else on the control. }
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
+    { Where the '…' of a font or dialog row at flat index AFlat is painted, in client pixels --
+      a click there runs the row's dialog; an empty rect for any other row (#195). }
+    function DialogButtonRect(AFlat: Integer): TRect;
     { The height the enum/colour dropdown popup opens at for ARows rows. One formula for
       both dropdowns, protected so the guards can read it headlessly -- the popup itself
       needs a real window, which is exactly what a test run does not have. }
@@ -261,6 +265,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Held back while a cell is being edited -- the control loses focus to its own editor, its
+      list or its dialog when an edit starts -- and called when the edit ends instead: a commit
+      from the editor, a pick from the list, a row's dialog closing. LCL's grid does the same
+      (grids.pas, TCustomGrid.EditingDone and TStringCellEditor.EditingDone). #195 }
+    procedure EditingDone; override;
     // Append a root row and return it (nest via its AddChild, set EditorKind / style, etc.).
     function AddRow(const AKey, AValue: string): TTyValueRow;
     { LCL's signature (valedit.pas:188 `function InsertRow(const KeyName, Value: string;
@@ -572,6 +581,12 @@ begin
   inherited Destroy;
 end;
 
+procedure TTyValueListEditor.EditingDone;
+begin
+  if (FEditFlat >= 0) or FDropMode or FInDialog then Exit;
+  inherited EditingDone;
+end;
+
 procedure TTyValueListEditor.FreeRows;
 var i: Integer;
 begin
@@ -678,6 +693,17 @@ begin
   if hi < lo then hi := lo;
   if Result < lo then Result := lo;
   if Result > hi then Result := hi;
+end;
+
+function TTyValueListEditor.DialogButtonRect(AFlat: Integer): TRect;
+var cell: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  if not (FFlatRow[AFlat].EditorKind in [vekFont, vekDialog]) then Exit;
+  { PaintItemContent's: 16 px ending 4 px short of the row's right edge -- and that margin too. }
+  cell := CellRect(AFlat, 1);
+  Result := Rect(cell.Right - Dp(20), cell.Top, cell.Right, cell.Bottom);
 end;
 
 function TTyValueListEditor.CellRect(AFlat, ACol: Integer): TRect;
@@ -1484,6 +1510,7 @@ begin
       begin
         if FEnumList.ItemIndex >= 0 then CommitEditor(flat, FEnumList.Items[FEnumList.ItemIndex]);
         if FDropPopup <> nil then FDropPopup.Close;
+        EditingDone;
       end;
     dkColor:
       begin
@@ -1502,6 +1529,7 @@ begin
         begin
           CommitEditor(flat, ColorToString(TyColorOfItem(FColorList.Items, idx)));
           if FDropPopup <> nil then FDropPopup.Close;
+          EditingDone;
         end;
       end;
   else
@@ -1517,8 +1545,14 @@ begin
   if (r = nil) or not RowExists(r) then Exit;   // row removed while the async call was pending
   col := StringToColorDef(r.Value, clBlack);
   a := 255;
-  if TySelectColor(rsColorButtonDialogTitle, col, a) and RowExists(r) then   // re-check: the modal pumped messages (#68: the title was a Chinese literal)
-    CommitEditorRow(r, ColorToString(col));
+  FInDialog := True;
+  try
+    if TySelectColor(rsColorButtonDialogTitle, col, a) and RowExists(r) then   // re-check: the modal pumped messages (#68: the title was a Chinese literal)
+      CommitEditorRow(r, ColorToString(col));
+  finally
+    FInDialog := False;
+  end;
+  EditingDone;
 end;
 
 procedure TTyValueListEditor.DropPick(Sender: TObject);
@@ -1536,12 +1570,17 @@ end;
 
 procedure TTyValueListEditor.DropClosed(Sender: TObject);
 begin
-  FDropMode := False;
   FDropKind := dkNone;
   if FEditor <> nil then begin FEditor.ReadOnly := False; FEditor.Visible := False; end;
   FEditFlat := -1;
   Invalidate;
-  if CanFocus then SetFocus;
+  { The focus comes back while the list still counts as open: its kill-focus on the way is not
+    the end of an edit (HandleDropCommit announces a pick itself). #195 }
+  try
+    if CanFocus then SetFocus;
+  finally
+    FDropMode := False;
+  end;
 end;
 
 { The inline "…" button was clicked (or InvokeRowDialog called): run the row's dialog editor. }
@@ -1559,11 +1598,17 @@ begin
   { Commit + CLOSE the inline editor before the modal opens. Otherwise the editor loses focus to
     the dialog, its OnExit commits the (stale) editor text, and that overwrites the value the
     dialog just set — the classic "font dialog changes nothing" bug. }
-  if FEditFlat = AFlat then EndEdit(True);
-  case r.EditorKind of
-    vekFont:   EditFontRow(AFlat);
-    vekDialog: if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
+  FInDialog := True;   // one EditingDone, when the dialog is over
+  try
+    if FEditFlat = AFlat then EndEdit(True);
+    case r.EditorKind of
+      vekFont:   EditFontRow(AFlat);
+      vekDialog: if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
+    end;
+  finally
+    FInDialog := False;
   end;
+  EditingDone;
 end;
 
 { Seed a TFont from a Font row: from its child rows (Name/Size/Bold/Italic/Color) if it has
@@ -1718,6 +1763,7 @@ begin
       end
       else
         CommitEditor(flat, FEditor.Text);
+      EditingDone;   // the edit is over (#195)
     end
     else
       Invalidate;
@@ -1739,6 +1785,13 @@ end;
 
 procedure TTyValueListEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  { Ctrl+Enter in the text of a font or dialog row: its '…' (#195). }
+  if (Key = VK_RETURN) and (Shift = [ssCtrl]) and FEditor.ShowEllipsis and (FEditFlat >= 0) then
+  begin
+    Key := 0;
+    InvokeRowDialog(FEditFlat);
+    Exit;
+  end;
   case Key of
     VK_RETURN: begin EndEdit(True,  True); Key := 0; end;
     VK_ESCAPE: begin EndEdit(False, True); Key := 0; end;
@@ -1940,7 +1993,14 @@ begin
   inherited MouseDown(Button, Shift, X, Y);   // focus + row selection
   if (Button = mbLeft) and not FReadOnly and (flat >= 0) then
   begin
-    if X >= SplitXDp then BeginEdit(flat)
+    { #195: the '…' painted at the end of a font or dialog row runs the dialog at once. It took a
+      second click: the first only opened the inline text, with a '…' of its own. }
+    if PtInRect(DialogButtonRect(flat), Point(X, Y)) then
+    begin
+      if FEditFlat >= 0 then EndEdit(True);
+      if flat <= High(FFlatRow) then InvokeRowDialog(flat);
+    end
+    else if X >= SplitXDp then BeginEdit(flat)
     { keyEdit turns the key cell into the second editable column. Off, a click left of the
       divider keeps doing what it always did: commit whatever was open and select the row. }
     else if keyEdit in FKeyOptions then BeginKeyEdit(flat)
@@ -1996,6 +2056,27 @@ begin
       Key := 0;
       Exit;
     end;
+  end;
+  { #195: Alt+Right opens the current row, Alt+Left closes it, as in LCL's object inspector
+    (objectinspector.pp, HandleStandardKeys) -- without them a row's children were reachable by
+    the mouse alone. }
+  if ((Key = VK_RIGHT) or (Key = VK_LEFT)) and (Shift = [ssAlt]) and (ItemIndex >= 0)
+    and (ItemIndex <= High(FFlatRow)) and FFlatRow[ItemIndex].HasChildren
+    and (FFlatRow[ItemIndex].Expanded <> (Key = VK_RIGHT)) then
+  begin
+    SetExpanded(FFlatRow[ItemIndex], Key = VK_RIGHT);
+    Key := 0;
+    Exit;
+  end;
+  { #195: Ctrl+Enter runs the dialog of a font or dialog row, as in LCL's object inspector
+    (objectinspector.pp: Ctrl+Enter -> ToggleRow -> DoCallEdit). }
+  if (Key = VK_RETURN) and (Shift = [ssCtrl]) and (ItemIndex >= 0)
+    and (ItemIndex <= High(FFlatRow)) and not FReadOnly
+    and (FFlatRow[ItemIndex].EditorKind in [vekFont, vekDialog]) then
+  begin
+    Key := 0;
+    InvokeRowDialog(ItemIndex);
+    Exit;
   end;
   if ((Key = VK_F2) or (Key = VK_RETURN)) and (Shift = []) and (ItemIndex >= 0)
     and not FReadOnly and (FEditFlat < 0) then

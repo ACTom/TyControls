@@ -1,7 +1,7 @@
 unit test.valuelisteditor;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, LCLType, fpcunit, testregistry, TypInfo,
+uses Classes, SysUtils, LCLType, Controls, Forms, fpcunit, testregistry, TypInfo, Types,
   tyControls.ValueListEditor;
 type
   { Drive the input paths to test the numeric filter headlessly. }
@@ -515,6 +515,171 @@ begin
   end;
 end;
 
+
+type
+  { #195: the end of an edit, and the keys and the click that reach a row's dialog and children. }
+  TVLE195 = class(TTyValueListEditor)
+  public
+    procedure Press(AKey: Word; AShift: TShiftState);
+    procedure ClickAt(X, Y: Integer);
+    function EllipsisOf(AFlat: Integer): TRect;
+  end;
+
+  TVLE195Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FEd: TVLE195;
+    FRow: TTyValueRow;
+    FDialogs, FDone: Integer;
+    procedure EditRow(Sender: TObject; ARow: TTyValueRow);
+    procedure Done(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAltArrowsOpenAndCloseARow;
+    procedure TestCtrlEnterRunsARowsDialog;
+    procedure TestCtrlEnterInTheTextRunsTheDialog;
+    procedure TestOneClickOnThePaintedEllipsisRunsTheDialog;
+    procedure TestOnEditingDoneWaitsForTheEndOfAnEdit;
+    procedure TestOnEditingDoneComesOnceAfterADialog;
+  end;
+
+var
+  VLE195WidgetSet: Boolean = False;
+
+procedure TVLE195.Press(AKey: Word; AShift: TShiftState);
+begin
+  KeyDown(AKey, AShift);
+end;
+
+procedure TVLE195.ClickAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+function TVLE195.EllipsisOf(AFlat: Integer): TRect;
+begin
+  Result := DialogButtonRect(AFlat);
+end;
+
+procedure TVLE195Test.EditRow(Sender: TObject; ARow: TTyValueRow);
+begin
+  Inc(FDialogs);
+end;
+
+procedure TVLE195Test.Done(Sender: TObject);
+begin
+  Inc(FDone);
+end;
+
+procedure TVLE195Test.SetUp;
+begin
+  if not VLE195WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    VLE195WidgetSet := True;
+  end;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 400, 300);
+  FEd := TVLE195.Create(FForm);
+  FEd.Parent := FForm;
+  FEd.SetBounds(0, 0, 300, 200);
+  FRow := FEd.AddRow('Dialog', 'value');
+  FRow.EditorKind := vekDialog;
+  FEd.AddRow('Text', 'plain');
+  FEd.OnEditRow := @EditRow;
+  FEd.OnEditingDone := @Done;
+  FDialogs := 0;
+  FDone := 0;
+  FForm.Visible := True;
+  Forms.Application.ProcessMessages;
+end;
+
+procedure TVLE195Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TVLE195Test.TestAltArrowsOpenAndCloseARow;
+var parent: TTyValueRow; before: Integer;
+begin
+  parent := FEd.AddRow('Parent', '');
+  parent.AddChild('Child', 'c');
+  before := FEd.Items.Count;
+  FEd.ItemIndex := before - 1;
+  FEd.SetExpanded(parent, False);
+  FEd.ItemIndex := before - 1;
+  before := FEd.Items.Count;
+  FEd.Press(VK_RIGHT, [ssAlt]);
+  AssertEquals('Alt+Right opens the row', before + 1, FEd.Items.Count);
+  FEd.Press(VK_LEFT, [ssAlt]);
+  AssertEquals('Alt+Left closes it', before, FEd.Items.Count);
+end;
+
+procedure TVLE195Test.TestCtrlEnterRunsARowsDialog;
+begin
+  FEd.ItemIndex := 0;
+  FEd.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('on a dialog row, Ctrl+Enter runs it', 1, FDialogs);
+  FEd.ItemIndex := 1;
+  FEd.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('not on a text row', 1, FDialogs);
+  FEd.ReadOnly := True;
+  FEd.ItemIndex := 0;
+  FEd.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('nor on a read-only editor', 1, FDialogs);
+end;
+
+procedure TVLE195Test.TestCtrlEnterInTheTextRunsTheDialog;
+var k: Word;
+begin
+  FEd.BeginEdit(0);
+  AssertNotNull('setup: the inline editor', FEd.InlineEditor);
+  k := VK_RETURN;
+  FEd.InlineEditor.OnKeyDown(FEd.InlineEditor, k, [ssCtrl]);
+  AssertEquals('Ctrl+Enter in the row''s text runs its dialog', 1, FDialogs);
+  AssertEquals('and takes the key', 0, k);
+end;
+
+procedure TVLE195Test.TestOneClickOnThePaintedEllipsisRunsTheDialog;
+var r: TRect;
+begin
+  r := FEd.EllipsisOf(0);
+  AssertTrue('setup: a dialog row has the button', r.Right > r.Left);
+  FEd.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('one click on it runs the dialog', 1, FDialogs);
+  AssertTrue('a text row has none', FEd.EllipsisOf(1).Right <= FEd.EllipsisOf(1).Left);
+  FEd.ClickAt(r.Left - 20, (r.Top + r.Bottom) div 2);
+  AssertEquals('elsewhere in the cell it opens the text', 1, FDialogs);
+end;
+
+procedure TVLE195Test.TestOnEditingDoneWaitsForTheEndOfAnEdit;
+begin
+  FEd.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the editor has the focus', FEd.Focused);
+  FEd.BeginEdit(1);   // the focus goes to the inline editor: LCL's kill-focus calls EditingDone
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: and the inline editor took it', FEd.InlineEditor.Focused);
+  AssertEquals('an edit starting announces nothing', 0, FDone);
+  FEd.EndEdit(True);
+  AssertEquals('its commit does, once', 1, FDone);
+  FEd.BeginEdit(1);
+  FEd.EndEdit(False);
+  AssertEquals('Esc ends nothing the program has to hear about', 1, FDone);
+end;
+
+procedure TVLE195Test.TestOnEditingDoneComesOnceAfterADialog;
+begin
+  FEd.ItemIndex := 0;
+  FEd.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('setup: the dialog ran', 1, FDialogs);
+  AssertEquals('it ends the edit, once', 1, FDone);
+end;
+
 initialization
+  RegisterTest(TVLE195Test);
   RegisterTest(TValueListEditorTest);
 end.
