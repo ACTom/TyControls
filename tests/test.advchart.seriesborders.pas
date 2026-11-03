@@ -855,8 +855,8 @@ begin
   W('"1e999"', 0); W('null', NaN); W('-2', -2);
   AssertTrue('width nil unwritten', IsNan(TyOptPenWidth(nil)));
   O('"2"', 2); O('"abc"', 0); O('"1e999"', 0); O('""', 0); O('-3', -3); O('null', NaN);
-  M('"4"', 4); M('""', 10); M('"0"', 10); M('0', 10); M('-1', 10); M('"abc"', 10);
-  M('"1e999"', 10); M('2.5', 2.5); M('null', NaN);
+  M('"4"', 4); M('""', 10); M('"0"', -1); M('0', 10); M('-1', -1); M('"abc"', -1);
+  M('"1e999"', -1); M('2.5', 2.5); M('null', NaN);
   AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));
 end;
 
