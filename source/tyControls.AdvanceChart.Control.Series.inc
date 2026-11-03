@@ -1586,7 +1586,9 @@ begin
   end;
 end;
 
-{ a symbol size as written: a number, or the first two of an array }
+{ an effect's symbol size as EffectLine reads it: a number for both, or
+  the first two of an array -- [R7-S] a missing second is undefined, scaleY
+  not a number [was: the first again, a square] }
 procedure LnSize(AData: TJSONData; AScale: Double; out AW, AH: Double);
 begin
   AW := NaN;
@@ -1595,7 +1597,7 @@ begin
   if AData is TJSONArray then
   begin
     if AData.Count > 0 then AW := TyLinesJsNum(TJSONArray(AData).Items[0]);
-    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]) else AH := AW;
+    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]);
   end
   else
   begin
@@ -1604,6 +1606,64 @@ begin
   end;
   AW := AW * AScale;
   AH := AH * AScale;
+end;
+
+{ [R7-S] an end symbol's size as Line.createSymbol reads it --
+  normalizeSymbolSize: an array's first two (`size[0] || 0`, `size[1] ||
+  0`: a missing height is 0, a box of no height), a number for both (`+size`,
+  not a number 0); none at all (the series' pair shorter) [0, 0] [was: a
+  missing height took the width, a square] }
+procedure LnEndSize(AData: TJSONData; AScale: Double; out AW, AH: Double);
+begin
+  AW := 0;
+  AH := 0;
+  if AData = nil then Exit;
+  if AData is TJSONArray then
+  begin
+    if AData.Count > 0 then AW := TyLinesJsNum(TJSONArray(AData).Items[0]);
+    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]);
+  end
+  else
+  begin
+    AW := TyLinesJsNum(AData);
+    AH := AW;
+  end;
+  if IsNan(AW) then AW := 0;
+  if IsNan(AH) then AH := 0;
+  AW := AW * AScale;
+  AH := AH * AScale;
+end;
+
+function TTyCustomAdvanceChart.CanvasGround: TTyChartColor;
+const
+  cAxes: array[0..5] of string = ('xAxis', 'yAxis', 'radiusAxis', 'angleAxis', 'singleAxis',
+    'parallelAxis');
+var
+  i, k: Integer;
+  d, s: TJSONData;
+begin
+  Result := TTyChartColor($FF000000);
+  if FOption = nil then Exit(0);
+  for k := 0 to High(cAxes) do
+    for i := 0 to FOption.ComponentCount(cAxes[k]) - 1 do
+    begin
+      d := FOption.ComponentAt(cAxes[k], i);
+      s := nil;
+      if d is TJSONObject then s := TJSONObject(d).Find('show');
+      if not ((s <> nil) and (s.JSONType = jtBoolean) and not s.AsBoolean) then Exit;
+    end;
+  for i := 0 to FOption.ComponentCount('grid') - 1 do
+  begin
+    d := FOption.ComponentAt('grid', i);
+    if d is TJSONObject then
+    begin
+      s := TJSONObject(d).Find('show');
+      if (s <> nil) and (s.JSONType = jtBoolean) and s.AsBoolean then Exit;
+    end;
+  end;
+  { (a geo's regions and a calendar's cells are in the list itself, before
+    the series: TyLinesCanvasLeftovers sees them) }
+  Result := 0;
 end;
 
 function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
@@ -1837,13 +1897,13 @@ begin
       Result.Sym[e].H := 10 * AScale;
     end
     else
-      LnSize(Pair(sizes, e), AScale, Result.Sym[e].W, Result.Sym[e].H);
+      LnEndSize(Pair(sizes, e), AScale, Result.Sym[e].W, Result.Sym[e].H);
     d := Pair(TyLinesItemFind(raw, ['symbol']), e);
     if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
       Result.Sym[e].Name := SymName(d);
     d := Pair(TyLinesItemFind(raw, ['symbolSize']), e);
     if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
-      LnSize(d, AScale, Result.Sym[e].W, Result.Sym[e].H);
+      LnEndSize(d, AScale, Result.Sym[e].W, Result.Sym[e].H);
   end;
   { THE LABEL: the series' spec under the row's own label; placed by the
     line, `position || 'middle'` over the series' default 'end' }
@@ -2040,6 +2100,19 @@ begin
   begin
     if Result.EffGrad.Kind <> cgkNone then Result.EffShadow.Color := 0
     else Result.EffShadow.Color := Result.EffColor;
+  end;
+  { [R7-S] the shadowColor it hands the canvas whether or not anything is
+    cast: the written one, else its colour -- a gradient or 'none' the
+    canvas refuses, keeping what it had (TyLinesCanvasLeftovers) [was: a
+    gradient one cast nothing] }
+  if d <> nil then
+  begin
+    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow);
+  end
+  else
+  begin
+    Result.EffShadowLeft := (Result.EffGrad.Kind <> cgkNone) or Result.EffColorNone;
+    Result.EffCanvasShadow := Result.EffColor;
   end;
   d := TyLinesFind(raw, ANode, ['effect', 'period']);
   if d = nil then Result.EffPeriod := 4 * 1000 else Result.EffPeriod := TyLinesJsNum(d) * 1000;

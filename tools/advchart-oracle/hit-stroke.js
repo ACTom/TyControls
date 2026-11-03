@@ -70,6 +70,13 @@
 // circle's radius min(w, h) / 2, a roundRect's corner min(w, h) / 4, a pin's
 // head of the width); a lines series' effect symbol with a border (its pen
 // in its own frame, scaled by effect.symbolSize), filled and not.
+// R7-S adds (r7s.*): the whole of Path.contain in the element's own frame
+// -- turned, scaled and thick graphic elements and a custom series' (a
+// polyline's ends, where line.containStroke's box is the segment's own
+// grown by the WHOLE width in that frame; a circle's, an arc's, a ring's and
+// a sector's arcs, which arc.containStroke takes at the whole width; a
+// rect's corners; a bezier), rays through their ends and around their arcs;
+// an invisible element (not drawn, still asked).
 // R7-O adds (r7o.*): a graph edge's end symbols, which take the pointer as
 // the edge's (setItemGraphicEl writes its ECData onto every child of the
 // Line group) -- an arrow, an empty circle (its pen lineWidth 2 in its own
@@ -139,6 +146,8 @@ const POLY = s => ({ s, poly: 'polyline' });
 const AREA = s => ({ s, poly: 'polygon' });
 const EDGE = (s, e) => ({ s, edge: e });
 const PT = (x, y, r) => ({ at: [x, y], r });
+// [R7-S] one graphic element on its own
+const G = el => ({ animation: false, graphic: [el] });
 const START = (s, r) => ({ s, poly: 'polyline', start: true, r, dirs: [0, 4] });
 const GRAPH_NODES = [{ name: 'a', x: 100, y: 150 }, { name: 'b', x: 300, y: 150 }, { name: 'c', x: 200, y: 60 }];
 // a straight edge off the horizontal: upstream's ECLinePath snaps a level or an
@@ -437,6 +446,17 @@ const RENDER = {
     return { type: 'polyline', x: c[0], y: c[1], scaleX: 2, scaleY: 2,
       shape: { points: [[0, 0], [30, -20], [60, 0]] }, style: { fill: null, stroke: '#000', lineWidth: 1 } };
   },
+  // [R7-S] a turned, scaled group of thick unfilled paths at the item's
+  // point: an arc, a circle and a polyline
+  cuturn: function (params, api) {
+    const c = api.coord([api.value(0), api.value(1)]);
+    return { type: 'group', x: c[0], y: c[1], rotation: 0.5, scaleX: 1.4, scaleY: 1.4, children: [
+      { type: 'arc', shape: { cx: 0, cy: 0, r: 40, startAngle: 0.2, endAngle: 2.6 },
+        style: { fill: null, stroke: '#000', lineWidth: 10 } },
+      { type: 'circle', shape: { cx: -10, cy: -12, r: 12 }, style: { fill: null, stroke: '#000', lineWidth: 6 } },
+      { type: 'polyline', shape: { points: [[-50, 30], [-20, 45], [10, 30]] },
+        style: { fill: null, stroke: '#000', lineWidth: 8 } }] };
+  },
 };
 function r7iCases() {
   return [
@@ -629,6 +649,50 @@ function r7iCases() {
     ['r7r.lines-effect-none', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 0, opacity: 1 },
       effect: { show: true, symbol: 'triangle', symbolSize: [8, 4], color: 'none', borderColor: '#000', borderWidth: 0.1,
         trailLength: 0, delay: 0, period: 4 }, data: [{ coords: [[2, 5], [8, 5]] }] }), [PT(120, 142, 50)], { t: 0 }],
+    // [R7-S] the whole of Path.contain in the element's own frame
+    ['r7s.graphic-turned-line', G({ type: 'polyline', x: 130, y: 110, rotation: Math.PI / 6, scaleX: 1.5, scaleY: 1.5,
+      shape: { points: [[0, 0], [60, 0], [60, 40]] }, style: { fill: null, stroke: '#000', lineWidth: 10 } }),
+    [PT(176, 140, 80), PT(130, 110, 30), PT(161, 47, 30)]],
+    ['r7s.graphic-turned-thin', G({ type: 'polyline', x: 120, y: 160, rotation: -0.4, scaleX: 2, scaleY: 2,
+      shape: { points: [[0, 0], [50, 0], [80, 20]] }, style: { fill: null, stroke: '#000', lineWidth: 1 } }),
+    [PT(120, 160, 25), PT(212, 120, 25), PT(282, 116, 25)]],
+    ['r7s.graphic-circle', G({ type: 'circle', x: 200, y: 150, rotation: 0.4, scaleX: 1.3, scaleY: 1.3,
+      shape: { cx: 0, cy: 0, r: 40 }, style: { fill: null, stroke: '#000', lineWidth: 16 } }),
+    [PT(200, 150, 80)]],
+    ['r7s.graphic-circle-oblong', G({ type: 'circle', x: 200, y: 150, scaleX: 2, scaleY: 1,
+      shape: { cx: 0, cy: 0, r: 40 }, style: { fill: null, stroke: '#000', lineWidth: 6 } }),
+    [PT(200, 150, 100)]],
+    ['r7s.graphic-arc', G({ type: 'arc', x: 200, y: 150, rotation: 0.5, scaleX: 1.2, scaleY: 1.2,
+      shape: { cx: 0, cy: 0, r: 50, startAngle: 0.3, endAngle: 2.2 }, style: { fill: null, stroke: '#000', lineWidth: 12 } }),
+    [PT(200, 150, 90), PT(250, 170, 30), PT(170, 200, 30)]],
+    ['r7s.graphic-ring', G({ type: 'ring', x: 200, y: 150, rotation: 0.3, scaleX: 1.2, scaleY: 1.2,
+      shape: { cx: 0, cy: 0, r: 50, r0: 30 }, style: { fill: '#888', stroke: '#000', lineWidth: 8 } }),
+    [PT(200, 150, 90)]],
+    ['r7s.graphic-sector', G({ type: 'sector', x: 200, y: 150, rotation: -0.6,
+      shape: { cx: 0, cy: 0, r: 70, r0: 20, startAngle: 0.4, endAngle: 2.0 }, style: { fill: null, stroke: '#000', lineWidth: 14 } }),
+    [PT(200, 150, 100)]],
+    ['r7s.graphic-rect', G({ type: 'rect', x: 200, y: 150, rotation: 0.5, scaleX: 2, scaleY: 2,
+      shape: { x: -25, y: -18, width: 50, height: 36 }, style: { fill: null, stroke: '#000', lineWidth: 7 } }),
+    [PT(200, 150, 110)]],
+    ['r7s.graphic-bezier', G({ type: 'bezierCurve', x: 100, y: 200, rotation: -0.3, scaleX: 1.5, scaleY: 1.5,
+      shape: { x1: 0, y1: 0, x2: 120, y2: 10, cpx1: 30, cpy1: -80, cpx2: 90, cpy2: 60 },
+      style: { fill: null, stroke: '#000', lineWidth: 9 } }),
+    [PT(190, 170, 110), PT(100, 200, 25)]],
+    ['r7s.graphic-group-circle', { animation: false, graphic: [{ type: 'group', x: 200, y: 150, rotation: 0.3, scaleX: 2,
+      scaleY: 2, children: [{ type: 'circle', shape: { cx: 10, cy: 0, r: 30 }, style: { fill: null, stroke: '#000', lineWidth: 3 } }] }] },
+    [PT(218, 156, 90)]],
+    ['r7s.graphic-noscale-quirk', G({ type: 'polyline', x: 150, y: 120, scaleX: 2, scaleY: 2,
+      rotation: Math.PI / 3, shape: { points: [[0, 0], [40, 0], [40, 30]] },
+      style: { fill: null, stroke: '#000', lineWidth: 1, strokeNoScale: true } }),
+    [PT(150, 120, 40), PT(190, 189, 40), PT(138, 241, 40)]],
+    ['r7s.graphic-filled-thick', G({ type: 'polygon', x: 200, y: 150, rotation: 0.7, scaleX: 1.5, scaleY: 1.5,
+      shape: { points: [[-40, -20], [40, -30], [10, 40]] }, style: { fill: '#888', stroke: '#000', lineWidth: 12 } }),
+    [PT(200, 150, 100)]],
+    ['r7s.custom-turned', vv({ type: 'custom', renderItem: '@cuturn', data: [[5, 5]] }), [IT(0, 0)]],
+    // not drawn, still asked: Path.contain reads its style as written
+    ['r7s.graphic-invisible', G({ type: 'rect', invisible: true, x: 200, y: 150, rotation: 0.4, scaleX: 1.5, scaleY: 1.5,
+      shape: { x: -30, y: -20, width: 60, height: 40 }, style: { fill: null, stroke: '#000', lineWidth: 8 } }),
+    [PT(200, 150, 80)]],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
 }
 function withRender(option) {
@@ -785,7 +849,10 @@ function generate() {
     'r7i.thumb-window',
     // a graphic element is no series' (x)
     'r7p.graphic-scaled', 'r7p.graphic-noscale', 'r7r.graphic-thin', 'r7r.graphic-thin-oblong',
-    'r7r.graphic-thin-noscale', 'r7r.graphic-noscale-quirk', 'r7r.graphic-group-thin'];
+    'r7r.graphic-thin-noscale', 'r7r.graphic-noscale-quirk', 'r7r.graphic-group-thin',
+    'r7s.graphic-turned-line', 'r7s.graphic-turned-thin', 'r7s.graphic-circle', 'r7s.graphic-circle-oblong',
+    'r7s.graphic-arc', 'r7s.graphic-ring', 'r7s.graphic-sector', 'r7s.graphic-rect', 'r7s.graphic-bezier',
+    'r7s.graphic-group-circle', 'r7s.graphic-noscale-quirk', 'r7s.graphic-filled-thick', 'r7s.graphic-invisible'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
     must(any === !MISS.includes(c.id), c.id + ': hits ' + any);

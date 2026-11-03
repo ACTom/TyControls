@@ -582,6 +582,14 @@ C('r5-gradient', 'draw', 'a gradient line colour: the series a linear one, an it
       { coords: [[30, 90], [95, 90]], lineStyle: { color: { type: 'linear', x: 100, y: 0, x2: 500, y2: 0, global: true,
         colorStops: [{ offset: 0, color: '#00ffff' }, { offset: 1, color: '#ff00ff' }] } }, value: 3 },
     ] })] }), { grad: true, legend: true, drawn: true });
+// [R7-S] a gradient over path:// end and effect symbols: the gradient's box
+// is the covered path's (createSymbol without keepAspect: makePath 'cover')
+C('r7s-gradient-path', 'draw', "[R7-S] a gradient line colour over oblong path:// end symbols and a path:// effect: the gradient's box the covered path's",
+  base({ series: [L({ symbol: ['path://M0 0L10 0L5 20Z', 'path://M0 0L20 0L20 5L0 5Z'], symbolSize: [[24, 10], [10, 24]],
+    effect: { show: true, trailLength: 0, symbol: 'path://M0 0L10 0L10 30L0 30Z', symbolSize: [16, 8] },
+    lineStyle: { width: 2, opacity: 1, color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+      colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } },
+    data: [{ coords: [[10, 10], [80, 60]], value: 1 }, { coords: [[20, 80], [70, 30]], value: 2 }] })] }), { grad: true });
 C('r5-plain-ink', 'draw', "a plain line colour: the label is the outside ink (#333 in the light theme), not the line's colour",
   base({ series: [L({ lineStyle: { color: '#00aa00' }, label: { show: true }, data: [{ coords: [[10, 10], [80, 60]], value: 1 },
     { coords: [[20, 80], [70, 30]], label: { position: 'middle', color: 'inherit' }, value: 2 },
@@ -646,9 +654,11 @@ function styleRec(s) {
 }
 function symbolRec(sym) {
   const r = {
-    name: sym.name, symbolType: sym.shape.symbolType,
+    // (makePath's element for a path:// one has no symbolType: 'path')
+    name: sym.name, symbolType: sym.shape.symbolType === undefined ? 'path' : sym.shape.symbolType,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation), scale: hex(sym.scaleX),
-    box: [sym.shape.x, sym.shape.y, sym.shape.width, sym.shape.height].map(hex),
+    // (a path:// symbol's shape is its path data: no box, null)
+    box: [sym.shape.x, sym.shape.y, sym.shape.width, sym.shape.height].map(v => (v === undefined ? null : hex(v))),
     fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke), opacity: hexOr(sym.style.opacity, 1),
   };
   // [R7-O] a case flagged pen: the symbol's lineWidth (symbolPathSetColor
@@ -697,7 +707,7 @@ function effectRec(sym) {
   if (!sym) return null;
   const c = clipOf(sym);
   const r = {
-    symbolType: sym.shape.symbolType, z2: sym.z2,
+    symbolType: sym.shape.symbolType === undefined ? 'path' : sym.shape.symbolType, z2: sym.z2,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0), scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY),
     ignore: !!sym.ignore, fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke),
     shadowColor: colourOf(sym.style.shadowColor), opacity: hexOr(sym.style.opacity, 1),
