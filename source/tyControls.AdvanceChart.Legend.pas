@@ -1749,7 +1749,8 @@ begin
     end;
     if d.JSONType = jtString then
     begin
-      if (d.AsString <> 'none') and TyTryParseChartColor(d.AsString, c) then
+      { 'none' (and anything else that is no CSS colour) strokes nothing }
+      if TyTryParseChartColor(d.AsString, c) then
       begin
         AKind := 1;
         AColour := c;
