@@ -990,6 +990,38 @@ begin
   end;
 end;
 
+{ [R7-X] THE OPTION ROOT UNDER THE GLOBAL TOOLTIP: buildTooltipModel's
+  last parent is the GlobalModel, so a key TooltipModel's defaults hold
+  none of -- formatter, valueFormatter, borderColor, order, position,
+  align, verticalAlign, and padding (its default is null) -- is the root's
+  top-level key where no level writes it. The defaulted ones (show,
+  trigger, backgroundColor, borderWidth, borderRadius, textStyle ...) stop
+  at the defaults. }
+procedure MergeTooltipRoot(AOption: TTyChartOption; var ASpec: TTyTooltipSpec;
+  var ASeen: TTyStringArray);
+const
+  cClimbs: array[0..7] of string = ('formatter', 'valueFormatter', 'borderColor',
+    'order', 'position', 'align', 'verticalAlign', 'padding');
+var
+  root, part: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  if (AOption = nil) or not (AOption.Root is TJSONObject) then Exit;
+  root := TJSONObject(AOption.Root);
+  part := TJSONObject.Create;
+  try
+    for i := 0 to High(cClimbs) do
+    begin
+      d := root.Find(cClimbs[i]);
+      if (d <> nil) and (d.JSONType <> jtNull) then part.Add(cClimbs[i], d.Clone);
+    end;
+    if part.Count > 0 then MergeTooltipNode(part, ASpec, ASeen);
+  finally
+    part.Free;
+  end;
+end;
+
 function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   ARawIndex: Integer): TTyTooltipSpec;
 begin
@@ -1028,6 +1060,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -1099,6 +1132,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
@@ -1179,6 +1213,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(TJSONObject(comp), Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
@@ -1219,6 +1254,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
   Result.Trigger := tttItem;
 end;
 
@@ -1282,6 +1318,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 { ============================ placement ============================ }

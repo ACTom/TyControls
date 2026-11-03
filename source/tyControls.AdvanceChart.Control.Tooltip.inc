@@ -2724,7 +2724,6 @@ var
   band: TTyRectF;
   dash: TTyDoubleArray;
   txt: string;
-  surface: TTyFill;
   sh: TTyXYWH;
   lbl: TTyPtrLabel;
   lx, ly: Double;
@@ -2735,6 +2734,7 @@ begin
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel',
     '', []);
   FPtrLabelsDrawn := nil;
+  FPtrShapesDrawn := nil;
   { [R2-I8] a pointer this paint does not draw is hidden }
   PointerMemoHideOthers(AHits);
   for i := 0 to High(AHits) do
@@ -2787,13 +2787,10 @@ begin
             Continue;
           colour := shadowS.Background.Color;
           if hit.Spec.HasShadowColour then colour := TTyColor(hit.Spec.ShadowColour);
-          surface := shadowS.Background;
-          surface.Kind := tfkSolid;
-          surface.Color := colour;
-          APainter.FillBackground(
-            Rect(Round(band.Left), Round(band.Top),
-                 Round(band.Right), Round(band.Bottom)), surface,
-            TyCorners(0, 0, 0, 0));
+          { [R7-X] with getAreaStyle's opacity and shadow, on the band as
+            makeRectShape gives it, to the fraction [was: the colour alone,
+            on the band rounded to whole pixels] }
+          PtrShapePaint(APainter, hit, TyShapeRect(band), False, colour, 0, nil);
         end;
       aptLine:
         begin
@@ -2823,15 +2820,10 @@ begin
             py2 := at;
           end;
           TyZrSubPixelOptimizeLine(px1, py1, px2, py2, APainter.ScaleF(w));
-          APainter.BeginPath;
-          APainter.MoveTo(px1, py1);
-          APainter.LineTo(px2, py2);
-          APainter.StrokePath(colour, w);
-          { AND THE DASH IS PUT BACK. SetLineDash is painter state, not an
-            argument -- leaving it set dashes whatever is drawn next, which is
-            the same class of leak as forgetting BeginPath and just as invisible
-            until something downstream comes out wrong. }
-          APainter.SetLineDash([]);
+          { [R7-X] with getLineStyle's opacity, shadow, phase, cap, join
+            and miterLimit [was: the colour, width and dash alone] }
+          PtrShapePaint(APainter, hit, TyShapePolyline([TyPointF(px1, py1),
+            TyPointF(px2, py2)]), True, colour, w, dash);
         end;
     end;
 
@@ -2857,6 +2849,64 @@ end;
 function TTyCustomAdvanceChart.PointerLabelsDrawn: TTyPtrLabelDrawnArray;
 begin
   Result := Copy(FPtrLabelsDrawn, 0, Length(FPtrLabelsDrawn));
+end;
+
+function TTyCustomAdvanceChart.PointerShapesDrawn: TTyOverlayShapeArray;
+begin
+  Result := Copy(FPtrShapesDrawn, 0, Length(FPtrShapesDrawn));
+end;
+
+{ [R7-X] viewHelper.buildElStyle: a line's style is getLineStyle of the
+  pointer model's lineStyle (no fill), a band's getAreaStyle of its
+  shadowStyle (no stroke) -- the colour, width and dash as resolved (the
+  skin's where nothing writes them), the rest the spec's looks. The element
+  the renderer draws is the one logged. }
+procedure TTyCustomAdvanceChart.PtrShapePaint(APainter: TTyPainter;
+  const AHit: TTyAxisHit; const AShape: TTyChartShape; APen: Boolean;
+  AColour: TTyColor; AWidth: Double; const ADash: TTyDoubleArray);
+var
+  el: TTyChartElement;
+  n: Integer;
+begin
+  el := Default(TTyChartElement);
+  el.Silent := True;
+  el.Datum := TyChartNoDatum;
+  el.Shape := AShape;
+  if APen then
+  begin
+    el.Style := AHit.Spec.LineLook;
+    el.Style.HasFill := False;
+    el.Style.StrokeColor := TTyChartColor(AColour);
+    el.Style.StrokeWidthLogical := AWidth;
+    el.Style.DashLogical := Copy(ADash, 0, Length(ADash));
+  end
+  else
+  begin
+    el.Style := AHit.Spec.BandLook;
+    el.Style.HasFill := True;
+    el.Style.FillColor := TTyChartColor(AColour);
+    el.Style.StrokeWidthLogical := 0;
+  end;
+  TyRenderElement(APainter, el);
+  n := Length(FPtrShapesDrawn);
+  SetLength(FPtrShapesDrawn, n + 1);
+  FPtrShapesDrawn[n].Owner := AHit.Axis.MainType + IntToStr(AHit.Axis.ComponentIndex);
+  FPtrShapesDrawn[n].El := el;
+end;
+
+function TTyCustomAdvanceChart.TitleFramesDrawn: TTyOverlayShapeArray;
+var i, n: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(FTitleFramesDrawn));
+  n := 0;
+  for i := 0 to High(FTitleFramesDrawn) do
+    if FTitleFramesDrawn[i].Owner <> '' then
+    begin
+      Result[n] := FTitleFramesDrawn[i];
+      Inc(n);
+    end;
+  SetLength(Result, n);
 end;
 
 { [R7-N] buildLabelElOption's style: createTextStyle(labelModel, {text, font,

@@ -282,6 +282,16 @@ type
   end;
   TTyPtrLabelDrawnArray = array of TTyPtrLabelDrawn;
 
+  { [R7-X] A SHAPE DRAWN STRAIGHT ONTO THE CANVAS, outside the paint list,
+    as the last paint drew it: an axis pointer's line or band (Owner its
+    axis, mainType and component index), a title's box (Owner 'title' and
+    its index). El is the element the renderer drew. }
+  TTyOverlayShape = record
+    Owner: string;
+    El: TTyChartElement;
+  end;
+  TTyOverlayShapeArray = array of TTyOverlayShape;
+
   { [R7-N] AN AXIS POINTER LABEL'S TEXT STYLE as buildLabelElOption makes
     it: createTextStyle(labelModel, {text, font, fill, padding,
     backgroundColor}), finished in the label's font (getFont: its own parts,
@@ -1921,6 +1931,10 @@ type
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R7-N] the pointer labels the last PaintAxisPointers drew }
     FPtrLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the pointer lines and bands the last PaintAxisPointers drew,
+      the title boxes the last PaintTitles drew }
+    FPtrShapesDrawn: TTyOverlayShapeArray;
+    FTitleFramesDrawn: TTyOverlayShapeArray;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -4304,6 +4318,15 @@ type
       out ADraw: TTySinglePointerDraw): Boolean;
     { [R7-N] the axis pointers' labels as the last paint drew them }
     function PointerLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the axis pointers' lines and bands, and the titles' boxes, as
+      the last paint drew them }
+    function PointerShapesDrawn: TTyOverlayShapeArray;
+    function TitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
+      as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
+    procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
+      const AShape: TTyChartShape; APen: Boolean; AColour: TTyColor;
+      AWidth: Double; const ADash: TTyDoubleArray);
     { [R7-N] an axis pointer label's text style (buildLabelElOption) }
     function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
     { [R7-N] the box buildLabelElOption places: the plain text's bounding
@@ -4440,6 +4463,13 @@ type
       an icon pointer's setColor, then pointer.itemStyle /
       progress.itemStyle over them }
     procedure ApplySeriesPens(AList: TTyPaintList);
+    { [R7-X] A CANDLESTICK'S TOP-LEVEL KEYS: candlestickVisual extends each
+      item's visual style with getItemStyle() of the item model -- the
+      item's, the series', the option root's TOP-LEVEL borderWidth,
+      opacity, shadow, borderType, borderDashOffset, borderCap, borderJoin
+      and borderMiterLimit (its fill and stroke then the item's itemStyle
+      colours) -- over what the series' and the item's itemStyle gave }
+    procedure ApplyCandleTopKeys(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on

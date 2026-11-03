@@ -1758,7 +1758,7 @@ const
   cVmRampMarker = #0'ty:gradientColor'#0;
   cVmInactiveMarker = #0'ty:inactiveColor'#0;
 
-procedure VmCompleteInputs(ANode: TJSONObject; out ASubType: string;
+procedure VmCompleteInputs(ANode, ARoot: TJSONObject; out ASubType: string;
   out AIsCat: Boolean; out AItemW: Double; out ADefSymbol: string);
 var d: TJSONData;
 begin
@@ -1781,9 +1781,13 @@ begin
     if (d = nil) or (d.JSONType = jtNull) then ADefSymbol := 'roundRect'
     else if Truthy(d) then ADefSymbol := JsStrOf(d);
   end;
-  { resetItemSize's width, for the controller's sizes }
+  { resetItemSize's width, for the controller's sizes -- [R7-X] a
+    continuous one's unwritten width the option root's }
   AItemW := NaN;
   d := ANode.Find('itemWidth');
+  if ((d = nil) or (d.JSONType = jtNull)) and (ASubType <> 'piecewise')
+    and (ARoot <> nil) then
+    d := ARoot.Find('itemWidth');
   if (d <> nil) and (d.JSONType = jtNumber) then AItemW := d.AsFloat
   else if (d <> nil) and (d.JSONType = jtString) then AItemW := TyJsParseFloat(d.AsString);
   if IsNan(AItemW) then AItemW := 20;
@@ -2137,7 +2141,10 @@ begin
   if (AOption = nil) or (AModel = nil) then Exit;
   node := ObjOf(AOption.ComponentAt('visualMap', AIndex));
   if node = nil then Exit;
-  VmCompleteInputs(node, sub, isCat, itemW, defSymbol);
+  if AOption.Root is TJSONObject then
+    VmCompleteInputs(node, TJSONObject(AOption.Root), sub, isCat, itemW, defSymbol)
+  else
+    VmCompleteInputs(node, nil, sub, isCat, itemW, defSymbol);
   if sub = '' then Exit;
   { this.get('inactiveColor'): the author's, as written now -- the model
     keeps it; the theme's otherwise (one that does not parse too, as the

@@ -363,6 +363,10 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := FTbSpecs[t].BorderWidth;
     end;
+    { [R7-X] the shadow and the border's dash, phase, cap, join and
+      miterLimit [was: never drawn] }
+    if FTbSpecs[t].HasShadow then TyStyleSetShadow(el.Style, FTbSpecs[t].Shadow);
+    TyStyleTakeBorderKeys(el.Style, FTbSpecs[t].Look);
     if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
     begin
       AList.Add(el);

@@ -3314,6 +3314,10 @@ var
   frameInk: TTyColor;
   { [R7-G] the background as its Rect builds it }
   frame: TTyRectF;
+  { [R7-X] ... drawn as an element }
+  el: TTyChartElement;
+  rad: array[0..3] of Double;
+  k: Integer;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -3349,6 +3353,12 @@ var
   end;
 
 begin
+  { [R7-X] one entry per title, kept by the zlevel pass that draws it }
+  if Length(FTitleFramesDrawn) <> Length(FTitles) then
+  begin
+    FTitleFramesDrawn := nil;
+    SetLength(FTitleFramesDrawn, Length(FTitles));
+  end;
   if Length(FTitles) = 0 then Exit;
   if ViewHidden(cvTitle) then Exit;
   st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
@@ -3357,7 +3367,11 @@ begin
   for i := 0 to High(FTitles) do
   begin
     lay := FTitles[i];
-    if not lay.Valid then Continue;
+    if not lay.Valid then
+    begin
+      FTitleFramesDrawn[i] := Default(TTyOverlayShape);
+      Continue;
+    end;
     { [R5-J] on the zlevel PaintZLevels draws now }
     if not ApartIn(ModelZLevel('title', i)) then Continue;
     ViewDrew(cvTitle);
@@ -3368,35 +3382,37 @@ begin
     { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
       group's frame by the border width [was: as laid out] }
     frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth));
-    { [R5-A] the frame's shadow, under it }
-    if FTitleSpecs[i].HasBackground then
-      TyCastFrameShadow(APainter, frame, Round(FTitleSpecs[i].BorderRadii[0]),
-        TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
-    { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
-      backgroundColor) [was: the skin's surface, whatever the option wrote] }
-    { [R7-I] on the frame as drawn, to the fraction: the Rect's fill and
-      stroke share subPixelOptimizeRect's shape [was: the fill rounded to
-      whole pixels] }
-    if FTitleSpecs[i].HasBackground then
-    begin
-      APainter.BeginPath;
-      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
-        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
-      APainter.FillPath(TTyColor(FTitleSpecs[i].BackgroundColor));
-    end;
-    { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
-      borderColor, tokens.color.primary by default (the title's ink)
-      [was: never drawn] }
+    { [R7-X] THE BOX AS install.ts' Rect: one element of the whole
+      getItemStyle(['color', 'opacity']) -- the fill (the author's
+      backgroundColor [R5-G]), the pen (borderWidth above nought in
+      borderColor, tokens.color.primary by default -- the title's ink),
+      its dash, phase, cap, join and miterLimit, the shadow cast by both,
+      the corners of every form -- on the frame as drawn, to the fraction
+      [R7-I] [was: the fill and the pen alone, the shadow under the fill
+      only, one corner radius] }
+    el := Default(TTyChartElement);
+    el.Silent := True;
+    el.Datum := TyChartNoDatum;
+    el.Style := FTitleSpecs[i].Look;
+    for k := 0 to 3 do rad[k] := APainter.ScaleF(FTitleSpecs[i].BorderRadii[k]);
+    el.Shape := TyShapeRoundRect(frame, rad);
+    el.Style.HasFill := FTitleSpecs[i].HasBackground
+      and ((FTitleSpecs[i].BackgroundColor shr 24) <> 0);
+    el.Style.FillColor := FTitleSpecs[i].BackgroundColor;
+    el.Style.StrokeWidthLogical := 0;
     if FTitleSpecs[i].BorderWidth > 0 then
     begin
       if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
       else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
       else frameInk := st.TextColor;
-      APainter.BeginPath;
-      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
-        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
-      APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
+      el.Style.StrokeColor := TTyChartColor(frameInk);
+      el.Style.StrokeWidthLogical := FTitleSpecs[i].BorderWidth;
     end;
+    TyStyleSetShadow(el.Style, FTitleSpecs[i].Shadow);
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+      TyRenderElement(APainter, el);
+    FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
+    FTitleFramesDrawn[i].El := el;
     { in the fonts the layout measured -- the author's where written }
     f0 := FTitleFonts[i][0];
     f1 := FTitleFonts[i][1];
@@ -4755,6 +4771,10 @@ begin
         or (FBindings[i].SeriesType = 'bar') or (FBindings[i].SeriesType = 'line')
         or (FBindings[i].SeriesType = 'pictorialBar') then
       begin
+        { [R7-X] a cartesian bar's rows' own corners, in its series' units
+          (the bar layout's, unscaled) }
+        if FBindings[i].SeriesType = 'bar' then
+          HeatmapItemRadii(FBindings[i].SeriesIndex, 96, v.HeatRadii, v.HeatHasRadii);
         { a symbol's own label over its series' [Batch 71]; a bar's, a
           line point's and a pictorial bar's too [Batch 82] }
         ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
@@ -4869,6 +4889,7 @@ begin
       rest values [R5-A] }
     if drawn > 0 then ApplySeriesShadows(list);
     if drawn > 0 then ApplySeriesPens(list);
+    if drawn > 0 then ApplyCandleTopKeys(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -5058,6 +5079,54 @@ begin
       else
         Take(StOwnChain(nodes, s), ['itemStyle']);
     end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplyCandleTopKeys(AList: TTyPaintList);
+var
+  k, s, slot, raw: Integer;
+  pe: PTyChartElement;
+  chain: array[0..2] of TJSONObject;
+  d: TJSONData;
+  sh: TTyChartShadow;
+  joinHas: Boolean;
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if not (pe^.Anim.Role in [carCandleBody, carCandleWickHigh, carCandleWickLow]) then Continue;
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.DataIndex < 0) then Continue;
+    s := pe^.Datum.SeriesIndex;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) or (FBindings[slot].SeriesType <> 'candlestick') then
+      Continue;
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    { the item model's chain: the item (an object), the series, the root }
+    chain[0] := StItemNode(s, raw);
+    chain[1] := StSeriesNode(s);
+    if FOption.Root is TJSONObject then chain[2] := TJSONObject(FOption.Root)
+    else chain[2] := nil;
+    { lineWidth first: a dash word is measured against it }
+    d := TyStFind(chain, ['borderWidth']);
+    if d <> nil then
+    begin
+      pe^.Style.StrokeWidthLogical := TyOptPenWidth(d);
+      if (pe^.Anim.Role = carCandleBody) and (pe^.Style.StrokeWidthLogical > 0) then
+        pe^.HitSlopLogical := pe^.Style.StrokeWidthLogical / 2;
+    end;
+    d := TyStFind(chain, ['opacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      pe^.Style.Alpha := d.AsFloat;
+    if TyStReadShadow(chain, [], [], sh) then TyStyleSetShadow(pe^.Style, sh);
+    TyStTakePenKeys(pe^.Style, chain, [], False, [spkEnds, spkDash], joinHas);
+    { a dash word the canvas measures against the width it strokes at }
+    if pe^.Style.DashWord <> 0 then
+      pe^.Style.DashLogical := TyDashOfWord(pe^.Style.DashWord, pe^.Style.StrokeWidthLogical);
   end;
 end;
 

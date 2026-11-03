@@ -157,6 +157,14 @@ type
     Background, BorderColor: TTyTbColour;
     BorderWidth: Double;
     Radius: array of Double;
+    { [R7-X] the rest of makeBackground's getItemStyle(['color',
+      'opacity']): the shadow (HasShadow) and the border's dash, phase,
+      cap, join and miterLimit (Look, TyStyleTakeBorderKeys) -- keys
+      ToolboxModel's defaults hold none of, each down to the option root's
+      top-level key [was: never drawn] }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+    Look: TTyChartElementStyle;
     Z: Integer;
     { the hover's position when the emphasis style names none }
     DefaultTextPos: string;
@@ -736,9 +744,10 @@ function TyToolboxSpecOf(AOption: TTyChartOption; AIndex: Integer;
   const ATitles: TTyTbTitles; AStatus: TStrings;
   const AMagicTitle: string): TTyToolboxSpec;
 var
-  tb, feats, fm, iconMap, titleMap: TJSONObject;
+  tb, feats, fm, iconMap, titleMap, root: TJSONObject;
   d, t: TJSONData;
   i, k, n, j: Integer;
+  joinHas: Boolean;
   name, iconName, iconStr: string;
   icon: TTyTbIcon;
   defBox: TTyRawBox;
@@ -840,6 +849,12 @@ begin
   d := tb.Find('borderWidth');
   if Present(d) then NumOf(d, Result.BorderWidth) else Result.BorderWidth := 0;
   if IsNan(Result.BorderWidth) then Result.BorderWidth := 0;
+  { [R7-X] the shadow and the border's keys, down to the root's }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  Result.HasShadow := TyStReadShadow([tb, root], [], [], Result.Shadow);
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [tb, root], [], False, [spkEnds, spkDash], joinHas);
   d := tb.Find('borderRadius');
   if d is TJSONArray then
   begin

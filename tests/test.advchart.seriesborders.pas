@@ -863,6 +863,9 @@ begin
     one it had: cTyCanvasPhaseLeft for the paint order to settle [was: 0] }
   O('"2"', 2); O('"abc"', cTyCanvasPhaseLeft); O('"1e999"', cTyCanvasPhaseLeft); O('""', 0);
   O('-3', -3); O('null', NaN);
+  { [R7-V] what `|| 10` hands on and the canvas refuses ('0', a negative,
+    'abc', infinity) keeps the canvas' last one: -1 until the paint order
+    settles it }
   M('"4"', 4); M('""', 10); M('"0"', -1); M('0', 10); M('-1', -1); M('"abc"', -1);
   M('"1e999"', -1); M('2.5', 2.5); M('null', NaN);
   AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));

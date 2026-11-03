@@ -76,6 +76,13 @@ type
       rect, getItemStyle(['color', 'opacity'])) -- cast by the fill the
       option writes (BackgroundColor, 0 where it does not parse) }
     Shadow: TTyChartShadow;
+    { [R7-X] the rest of getItemStyle(['color', 'opacity']): borderType,
+      borderDashOffset, borderCap, borderJoin, borderMiterLimit (DashWord /
+      DashLogical at BorderWidth, DashOffsetLogical, LineCap, LineJoin,
+      MiterLimit). These, the shadow and borderRadius are keys the title's
+      defaults hold none of: each climbs to the option root's top-level key
+      (the GlobalModel is the title model's parent). }
+    Look: TTyChartElementStyle;
     BackgroundColor: TTyChartColor;
     { [R5-G] the box's pen: borderColor where written and readable
       (HasBorderColor; else tokens.color.primary -- the skin's), stroked
@@ -285,8 +292,9 @@ end;
 
 function TyTitleSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyTitleSpec;
 var
-  node: TJSONObject;
+  node, root: TJSONObject;
   d: TJSONData;
+  joinHas: Boolean;
 begin
   Result := TyTitleSpecDefault;
   if AOption = nil then Exit;
@@ -317,16 +325,21 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
-  TyStReadShadow([node], [], [], Result.Shadow);
   if not (Result.HasBackground and TyTryParseChartColor(d.AsString, Result.BackgroundColor)) then
     Result.BackgroundColor := 0;
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
   d := node.Find('borderColor');
   Result.HasBorderColor := (d <> nil) and (d.JSONType = jtString)
     and TyTryParseChartColor(d.AsString, Result.BorderColor);
-  d := node.Find('borderRadius');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderRadii := TyCornerRadii([d.AsFloat]);
+  { [R7-X] the keys the title's defaults leave out climb to the option
+    root's [was: the title's own only] }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  TyStReadShadow([node, root], [], [], Result.Shadow);
+  Result.BorderRadii := TyBoxRadiiOf(TyStFind([node, root], ['borderRadius']));
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.Alpha := 1;
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [node, root], [], False, [spkEnds, spkDash], joinHas);
 end;
 
 { ==================== the layout ==================== }
