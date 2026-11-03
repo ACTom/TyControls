@@ -152,12 +152,14 @@ begin
   { [R7-V] a lines row's line, a graph edge's line and node }
   else if pre = 'l' then role := carLinesLine
   else if pre = 'ge' then begin role := carGraphEdge; edge := True; end
+  else if pre = 'ln' then role := carLineRun
   else role := carSymbol;
   L := FChart.Frame;
   for k := 0 to L.Count - 1 do
   begin
     el := L.Element(k);
-    if (el.Anim.Role = role) and (el.Datum.SeriesIndex = s) and (el.Datum.DataIndex = r)
+    if (el.Anim.Role = role) and (el.Datum.SeriesIndex = s)
+      and ((el.Datum.DataIndex = r) or (role = carLineRun))
       and (el.Datum.IsEdge = edge) and (el.Caption.FontSizeLogical = 0) then
       Exit(k);
   end;
@@ -401,9 +403,10 @@ begin
     begin
       fr := frames.Objects[j];
       t := fr.Floats['t'];
-      { the case's action: a highlight before its second sample }
-      if (id = 'v-op-scatter') and (j = 1) then
-        FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":0}');
+      { the actions the case dispatches before this sample }
+      if (c.Find('acts') <> nil) and (c.Objects['acts'].Find(IntToStr(j)) <> nil) then
+        for q := 0 to c.Objects['acts'].Arrays[IntToStr(j)].Count - 1 do
+          FChart.DispatchAction(c.Objects['acts'].Arrays[IntToStr(j)].Objects[q].AsJSON);
       if t > 0 then FChart.AnimTick(cT0 + t);
       FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
       if AHits then
@@ -526,8 +529,10 @@ begin
           or (el.Style.ShadowBlur <> sb) then
           Miss(Format('%s: shadow %x blur %g (has %s), want %s blur %g', [where,
             el.Style.ShadowColor, el.Style.ShadowBlur, BoolToStr(TyStyleHasShadow(el.Style), True), sc, sb]));
-        { THE PEN's cap, join and miterLimit, THE FILL (the v-ex- cases) }
-        if Copy(id, 1, 5) = 'v-ex-' then
+        { THE PEN's cap, join and miterLimit, THE FILL (the v-ex- cases;
+          not v-ex-fill: a fill / stroke colour the canvas refuses is still
+          the port's own -- recorded, not held, see spec 276) }
+        if (Copy(id, 1, 5) = 'v-ex-') and (id <> 'v-ex-fill') then
           for q := 0 to ops.Count - 1 do
           begin
             o := ops.Objects[q];
@@ -558,24 +563,18 @@ begin
             end;
           end;
         { AN EFFECT SYMBOL'S TRANSFORM no number: the unit symbol under the
-          one the canvas had }
-        if (key[1] = 'e') and (rec.Find('sy').JSONType = jtNull) then
+          one the canvas had -- the bounds of the path it built there (a
+          turned circle's are its circle's, not its box's) }
+        if (key[1] = 'e') and (rec.Find('sy').JSONType = jtNull)
+          and (rec.Find('pb').JSONType <> jtNull) then
         begin
-          for q := 0 to 5 do m[q] := HexD(st.Arrays['m'].Strings[q]);
-          mb := TyRectF(Infinity, Infinity, -Infinity, -Infinity);
-          for q := 0 to 3 do
-          begin
-            if q in [0, 3] then x := -0.5 else x := 0.5;
-            if q in [0, 1] then y := -0.5 else y := 0.5;
-            mb.Left := Min(mb.Left, m[0] * x + m[2] * y + m[4]);
-            mb.Right := Max(mb.Right, m[0] * x + m[2] * y + m[4]);
-            mb.Top := Min(mb.Top, m[1] * x + m[3] * y + m[5]);
-            mb.Bottom := Max(mb.Bottom, m[1] * x + m[3] * y + m[5]);
-          end;
+          mb := TyRectF(HexD(rec.Arrays['pb'].Strings[0]), HexD(rec.Arrays['pb'].Strings[1]),
+            HexD(rec.Arrays['pb'].Strings[2]), HexD(rec.Arrays['pb'].Strings[3]));
           bb := TyShapeBounds(el.Shape);
           Inc(FCompared);
-          if not TyRectFIsValid(bb) or (Abs(bb.Left - mb.Left) > 1e-6) or (Abs(bb.Right - mb.Right) > 1e-6)
-            or (Abs(bb.Top - mb.Top) > 1e-6) or (Abs(bb.Bottom - mb.Bottom) > 1e-6) then
+          { (the record samples an arc at 256 points: 1e-4 of its radius) }
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - mb.Left) > 1e-4) or (Abs(bb.Right - mb.Right) > 1e-4)
+            or (Abs(bb.Top - mb.Top) > 1e-4) or (Abs(bb.Bottom - mb.Bottom) > 1e-4) then
             Miss(Format('%s: drawn at (%g,%g)-(%g,%g), want (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, mb.Left, mb.Top, mb.Right, mb.Bottom]));
         end;

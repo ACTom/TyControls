@@ -338,19 +338,48 @@ function cases() {
     ['v-tf-after-end', vv(LNC({ symbolSize: [12] }, ROWS2, { symbol: ['none', 'arrow'], symbolSize: 10 })),
       [0, 600], { v2: true, probes: 'nan-effects' }],
     ['v-tf-after-label', vv(LNC({ symbolSize: [12] }, ROWS2, { label: { show: true, formatter: 'Ab', position: 'insideStartTop' } })),
-      [0, 600], { v2: true, probes: 'nan-effects' }],
+      [0, 600], { v2: true, probes: 'nan-origin' }],
+    ['v-tf-after-label-slant', vv(LNC({ symbol: 'triangle', symbolSize: [12] },
+      [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }],
+      { label: { show: true, formatter: 'Ab', position: 'insideStartTop' } })),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
     ['v-tf-after-label-end', vv(LNC({ symbolSize: [12] }, ROWS2, { label: { show: true, formatter: 'Ab', position: 'end' } })),
-      [0, 600], { v2: true, probes: 'nan-effects' }],
+      [0, 600], { v2: true, probes: 'nan-origin' }],
     ['v-tf-after-scatter', vv([LNC({ symbolSize: [12] }, ROWS2),
       { type: 'scatter', symbolSize: [8, 6], symbolRotate: 30, data: [[3, 5], [6, 6]] }]),
     [0, 600], { v2: true, probes: 'nan-effects' }],
     // a bar series' label (z2 above its bar, below the effect symbols)
-    ['v-tf-after-bar-label', vv([LNC({ symbolSize: [12] }, ROWS2),
+    ['v-tf-after-bar-label', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2),
       { type: 'bar', data: [[3, 4], [6, 5]], label: { show: true, rotate: 30 } }]),
-    [0, 600], { v2: true, probes: 'nan-effects' }],
+    [0, 600], { v2: true, probes: 'nan-origin' }],
     ['v-sh-bar-label', vv([LNC({ color: GRAD, shadowBlur: 4 }, ROWS2),
       { type: 'bar', data: [[3, 4], [6, 5]], label: { show: true, textShadowBlur: 3, textShadowColor: '#ff00ff' } }]),
     [0, 600], { v2: true }],
+    // a graph series after it: its last edge's end symbol (a symbol's frame
+    // under the view), or its edge's line (the view's transform)
+    ['v-tf-after-scatter-z', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2,
+      { lineStyle: { color: '#999', opacity: 0 } }),
+      { type: 'scatter', z: 1, symbolSize: [8, 6], symbolRotate: 30, data: [[3, 5], [6, 6]] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    ['v-tf-after-graph-squash', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2),
+      { type: 'graph', layout: 'none', left: 60, top: 40, width: 240, height: 60, symbolSize: 3,
+        edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 9, lineStyle: { width: 1 },
+        data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }], links: [{ source: 'a', target: 'b' }] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    ['v-tf-after-graph-end', vv([LNC({ symbolSize: [12] }, ROWS2),
+      { type: 'graph', coordinateSystem: 'cartesian2d', edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 9,
+        data: [[2, 2], [5, 6], [8, 3]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    ['v-tf-after-graph-edge', vv([LNC({ symbolSize: [12] }, ROWS2),
+      { type: 'graph', layout: 'none', left: 60, top: 40, width: 200, height: 120, symbolSize: 3,
+        lineStyle: { width: 2, color: '#333' },
+        data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 30 }], links: [{ source: 'a', target: 'b' }] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    // a clip entered at the effect symbol itself: the clip path's transform
+    // (none), not the one before it
+    ['v-tf-clip-entry', vv([LNC({ symbolSize: 10 }, [{ coords: [[1, 8], [9, 8]] }], { symbol: ['none', 'arrow'], symbolSize: 10 }),
+      LN({ symbolSize: [12] }, [{ coords: [[1, 3], [9, 3]] }], { lineStyle: { color: '#999', opacity: 0 } })]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
     ['v-tf-hit', vv(LNC({ symbolSize: [12] }, ROWS2)), [0, 600], { v2: true, probes: 'nan-effects' }],
     ['v-tf-rect-restart', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900, 1050, 1300], { v2: true, probes: 'nan-effects' }],
@@ -365,6 +394,9 @@ function cases() {
       { label: { show: true, formatter: 'Ab', textShadowBlur: 2 } })), [0, 600], { v2: true }],
     ['v-sh-scatter-noblur', vv([LNC({ color: GRAD, shadowBlur: 4 }, ROWS2),
       { type: 'scatter', itemStyle: { shadowColor: '#ff00ff' }, data: [[3, 5]] }]), [0, 600], { v2: true }],
+    // a bar with a shadowColor and no blur, brushed before the effect symbols
+    ['v-sh-bar-noblur', vv([LNC({ color: GRAD, shadowBlur: 4 }, ROWS2),
+      { type: 'bar', data: [[3, 4], [6, 5]], itemStyle: { shadowColor: '#00ffff' } }]), [0, 600], { v2: true }],
     ['v-sh-invalid', vv(LN({ color: GRAD, shadowBlur: 4 }, [{ coords: [[1, 8], [9, 8]] }],
       { lineStyle: { color: '#999', opacity: 1, shadowColor: 'notacolor', shadowBlur: 2 } })), [0, 600], { v2: true }],
     ['v-sh-negblur', vv(LN({ color: '#ff0000', shadowBlur: 6 }, [{ coords: [[1, 8], [9, 8]] },
@@ -373,7 +405,12 @@ function cases() {
     ['v-op-scatter', vv([{ type: 'scatter', emphasis: { focus: 'series' }, data: [[1, 1]] },
       { type: 'scatter', symbolSize: 10, data: [{ value: [2, 2], itemStyle: { opacity: -0.5 } },
         { value: [4, 4], itemStyle: { opacity: 1.7 } }, { value: [6, 6], itemStyle: { opacity: 3 } },
-        { value: [8, 8], itemStyle: { opacity: 0.4 } }] }]), [0, 10],
+        { value: [8, 8], itemStyle: { opacity: 0.4 } }] },
+      { type: 'scatter', symbolSize: 10, itemStyle: { opacity: 2.5 }, data: [[3, 7]] }]), [0, 10],
+    { v2: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['v-op-line', vv([{ type: 'scatter', emphasis: { focus: 'series' }, data: [[1, 1]] },
+      { type: 'line', showSymbol: false, lineStyle: { opacity: 3 }, data: [[2, 2], [8, 6]] },
+      { type: 'line', showSymbol: false, lineStyle: { opacity: -2 }, data: [[2, 5], [8, 9]] }]), [0, 10],
     { v2: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }] } }],
     ['v-op-lines', vv(LN({ color: GRAD, shadowBlur: 4, opacity: 2 }, [{ coords: [[1, 8], [9, 8]] }],
       { lineStyle: { color: '#999', opacity: -1, shadowColor: '#0000ff' } })), [0, 600], { v2: true }],
@@ -392,12 +429,17 @@ function cases() {
         style: { fill: '#00ffff', fillOpacity: 0.5, opacity: 3 } },
       { type: 'rect', name: 'gr6', shape: { x: 140, y: 80, width: 40, height: 30 },
         style: { fill: '#808080', stroke: '#000000', lineWidth: 2, fillOpacity: 0.5, strokeOpacity: 0.5, opacity: 1.5 } },
+      { type: 'rect', name: 'gr7', shape: { x: 200, y: 80, width: 40, height: 30 },
+        style: { fill: '#804000', fillOpacity: 0.5, opacity: -1 } },
     ] }, [0], { v2: true }],
     // 5. the same refusal elsewhere: a pen's cap, join and miterLimit; a fill
     ['v-ex-pen', vv(LN({ show: false }, [
       { coords: [[1, 8], [9, 8]], lineStyle: { cap: 'round', join: 'round', miterLimit: 4, width: 3 } },
       { coords: [[1, 5], [9, 5]], lineStyle: { cap: 'Round', join: 'foo', miterLimit: -2, width: 3 } },
-      { coords: [[1, 3], [9, 3]], lineStyle: { cap: 'square', join: 'bevel', miterLimit: 0, width: 3 } }])),
+      { coords: [[1, 3], [9, 3]], lineStyle: { cap: 'square', join: 'bevel', miterLimit: 0, width: 3 } },
+      { coords: [[1, 2], [9, 2]], lineStyle: { cap: 'round', miterLimit: 6, width: 3 } },
+      { coords: [[1, 1], [9, 1]], lineStyle: { cap: '', join: '', miterLimit: '0', width: 3 } },
+      { coords: [[1, 0.5], [9, 0.5]], lineStyle: { miterLimit: 'abc', width: 3 } }])),
     [0], { v2: true }],
     ['v-ex-fill', vv([{ type: 'scatter', itemStyle: { color: '#ff0000' }, data: [[2, 2]] },
       { type: 'scatter', itemStyle: { color: 'notacolor' }, data: [[5, 5]] },
@@ -449,6 +491,11 @@ function track(chart) {
         }
       }
     }
+    else if (V2 && type === 'line') {
+      // [R7-V] a line series' polyline
+      const view = chart.getViewOfSeriesModel(sm);
+      if (view && view._polyline) map.set(view._polyline, 'ln' + si + '.0');
+    }
     else if (type === 'scatter') {
       const data = sm.getData();
       for (let i = 0; i < data.count(); i++) {
@@ -479,6 +526,9 @@ function elRec(el, key, brushes) {
   if (V2) {
     // [R7-V] the context once it was brushed, its fills and strokes, its path
     r.st = SNAPS.has(el) ? SNAPS.get(el) : null;
+    // the inverse its hit takes the point back through (kept while a
+    // transform does not invert)
+    r.inv = el.invTransform ? Array.from(el.invTransform).map(hexOrNull) : null;
     r.ops = OPS.get(el) || [];
     const p = PATHS.get(el);
     if (p && p.length) {
@@ -504,7 +554,7 @@ function unhex(s) {
   bits.setUint32(4, parseInt(s.slice(8), 16));
   return bits.getFloat64(0);
 }
-function probesOf(kind, els) {
+function probesOf(kind, els, prevEls) {
   const out = [];
   if (Array.isArray(kind)) return kind;
   if (kind === 'ends') {
@@ -512,18 +562,28 @@ function probesOf(kind, els) {
       if (!/^g[ft]/.test(e.key) || !e.pb) continue;
       const cx = (unhex(e.pb[0]) + unhex(e.pb[2])) / 2;
       const cy = (unhex(e.pb[1]) + unhex(e.pb[3])) / 2;
-      for (const dx of [-7, -3, -1, -0.4, 0, 0.4, 1, 3, 7]) {
-        for (const dy of [-7, -3, -1, -0.4, 0, 0.4, 1, 3, 7]) out.push([cx + dx, cy + dy]);
+      // (off a pen's edge, never on it: 0.9 and 1.1 about a half width of 1)
+      for (const dx of [-7, -3, -1.1, -0.9, -0.4, 0, 0.4, 0.9, 1.1, 3, 7]) {
+        for (const dy of [-7, -3, -1.1, -0.9, -0.4, 0, 0.4, 0.9, 1.1, 3, 7]) out.push([cx + dx, cy + dy]);
       }
     }
   }
-  else if (kind === 'nan-effects') {
+  else if (kind === 'nan-effects' || kind === 'nan-origin') {
     for (const p of [[0.1, 0.1], [0.4, 0.4], [0.45, -0.45], [0.6, 0.2], [-0.3, 0.3], [1, 1]]) out.push(p);
-    for (const e of els) {
+    // (where a label sits its box is the measurer's, not compared: the origin alone)
+    if (kind === 'nan-effects') for (const e of els) {
       if (e.key[0] !== 'e' || e.sy !== null || !e.st) continue;
       const mx = unhex(e.st.m[4]);
       const my = unhex(e.st.m[5]);
-      for (const d of [[0, 0], [0.3, 0], [0, 0.3], [2, 0], [0, 2], [5, 5]]) out.push([mx + d[0], my + d[1]]);
+      // (off its place by a little: an end symbol's tip sits there, a vertex)
+      for (const d of [[0.013, 0.011], [0.3, 0], [0, 0.3], [2, 0], [0, 2], [5, 5]]) out.push([mx + d[0], my + d[1]]);
+      // and where the frame before drew it (its inverse kept)
+      const pe = prevEls && prevEls.find(q => q.key === e.key);
+      if (pe && pe.st && pe.sy !== null) {
+        const px = unhex(pe.st.m[4]);
+        const py = unhex(pe.st.m[5]);
+        for (const d of [[0.013, 0.011], [2, 0.5], [-3, 1], [0, 20], [1, -15]]) out.push([px + d[0], py + d[1]]);
+      }
     }
   }
   return out;
@@ -572,7 +632,7 @@ function run(id, option, samples, opts) {
       if (V2 && opts.probes) {
         const zr = chart.getZr();
         const hits = [];
-        for (const [x, y] of probesOf(opts.probes, els)) {
+        for (const [x, y] of probesOf(opts.probes, els, frames.length ? frames[frames.length - 1].els : null)) {
           const h = zr.handler.findHover(x, y);
           const tg = h && h.target;
           hits.push([hex(x), hex(y), tg ? (map.get(tg) || 'other') : null]);
@@ -586,6 +646,8 @@ function run(id, option, samples, opts) {
     chart.dispose();
     V2 = false;
   }
+  // [R7-V] the actions dispatched before a sample
+  if (opts.acts) return { id, option, acts: opts.acts, frames };
   return { id, option, frames };
 }
 
