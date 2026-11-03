@@ -70,6 +70,7 @@ function LooksOf(const AEl: TTyChartElement): string;
 function ShapeText(const AEl: TTyChartElement): string;
 function FillText(const AEl: TTyChartElement): string;
 function NewSet(ADup: TDuplicates): TStringList;
+function PolyText(const AEl: TTyChartElement): string;
 
 implementation
 

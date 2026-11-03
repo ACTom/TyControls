@@ -71,6 +71,7 @@ type
   published
     procedure TestTheReachAsUpstream;
     procedure TestTheDiagnosticsKnowTheReachedKeys;
+    procedure TestTheLoggedShapesAreDrawn;
   end;
 
 implementation
@@ -217,7 +218,7 @@ var
   i, k, nBad, nCases, nPtr, nBox, nTip: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
-  pens, shapes, fills, looks, texts, labels: TStringList;
+  pens, shapes, fills, looks, texts, labels, polys: TStringList;
   want, have, id, bad, part, s, pre: string;
   arr: TJSONArray;
   noColour: Boolean;
@@ -292,6 +293,7 @@ begin
   looks := NewSet(dupIgnore);
   texts := NewSet(dupIgnore);
   labels := NewSet(dupIgnore);
+  polys := NewSet(dupAccept);
   nBad := 0;
   nCases := 0;
   nPtr := 0;
@@ -340,6 +342,7 @@ begin
       looks.Clear;
       texts.Clear;
       labels.Clear;
+      polys.Clear;
       shapes.Duplicates := dupAccept;
       if part = 'tooltip' then
       begin
@@ -424,6 +427,12 @@ begin
           if el.IsGuide or (el.Anim.Role in [carLabel, carMarkLineLabel,
             carMarkPointLabel, carEndLabel, carLinesLabel, carGraphEdgeLabel]) then Continue;
           if el.Caption.FontSizeLogical > 0 then Continue;
+          { a component's polygons (a visualMap's bar) }
+          if (part <> '') and (part <> 'geo') and (el.Datum.SeriesIndex < 0) then
+          begin
+            s := PolyText(el);
+            if s <> '' then polys.Add(s);
+          end;
           if part = '' then
           begin
             if not ((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0)) then Continue;
@@ -451,6 +460,7 @@ begin
       Compare('fills', fills, True);
       Compare('looks', looks, False);
       Compare('labels', labels, False);
+      Compare('polys', polys, False);
       { the texts upstream draws are among the port's }
       arr := c.Find('texts') as TJSONArray;
       if arr <> nil then
@@ -500,6 +510,7 @@ begin
     looks.Free;
     texts.Free;
     labels.Free;
+    polys.Free;
     fix.Free;
     TyChartClearMaps;
   end;
@@ -508,6 +519,60 @@ begin
   AssertTrue('box cases', nBox >= 8);
   AssertTrue('tooltip cases', nTip >= 3);
   AssertTrue(Format('%d of %d differ from upstream:%s', [nBad, nCases, bad]), nBad = 0);
+end;
+
+{ THE SHAPES LOGGED ARE THE SHAPES DRAWN: a pointer line of half opacity
+  is half its colour on the white ground, its shadow (no blur, offset 6 px)
+  lands beside it; a title's box is its fill. }
+procedure TAdvChartReachStylesOracleTest.TestTheLoggedShapesAreDrawn;
+var
+  ov: TTyOverlayShapeArray;
+  x, y, k: Integer;
+  p: TBGRAPixel;
+begin
+  FChart := TReachProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"tooltip":{"trigger":"axis","showContent":false,'
+    + '"axisPointer":{"label":{"show":false},"lineStyle":{"color":"#ff0000","width":4,"type":"solid",'
+    + '"opacity":0.5,"shadowColor":"#0000ff","shadowOffsetX":6}}},'
+    + '"xAxis":{"type":"category","data":["A","B","C"],"axisLabel":{"show":false}},'
+    + '"yAxis":{"show":false},"series":[{"type":"scatter","symbolSize":0,"data":[3,5,2]}]}';
+  Draw;
+  FChart.DispatchAction('{"type":"updateAxisPointer","currTrigger":"mousemove","x":200,"y":150}');
+  Draw;
+  ov := FChart.PtrShapes;
+  AssertEquals('one pointer line', 1, Length(ov));
+  y := Round((ov[0].El.Shape.Points[0].Y + ov[0].El.Shape.Points[1].Y) / 2);
+  { the line's darkest pixel across its width }
+  x := Floor(ov[0].El.Shape.Points[0].X);
+  p := FBmp.GetPixel(x, y);
+  for k := x - 2 to x + 2 do
+    if FBmp.GetPixel(k, y).green < p.green then
+    begin
+      p := FBmp.GetPixel(k, y);
+      x := k;
+    end;
+  { (the renderer's blend of a half-opaque pen: neither the ground nor the
+    full colour) }
+  AssertTrue(Format('the line at part of its red (%d %d %d)', [p.red, p.green, p.blue]),
+    (p.red > 240) and (p.green > 100) and (p.green < 200) and (p.blue > 100) and (p.blue < 200));
+  p := FBmp.GetPixel(x + 6, y);
+  AssertTrue(Format('its shadow beside it (%d %d %d)', [p.red, p.green, p.blue]),
+    (p.blue > 200) and (p.red < 200));
+  FreeAndNil(FChart);
+  FChart := TReachProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"title":{"text":"T","backgroundColor":"#00ff00"}}';
+  Draw;
+  ov := FChart.TitleFrames;
+  AssertEquals('one title box', 1, Length(ov));
+  p := FBmp.GetPixel(Round(ov[0].El.Shape.Bounds.Left + 2), Round(ov[0].El.Shape.Bounds.Top + 2));
+  AssertTrue(Format('the box in its fill (%d %d %d)', [p.red, p.green, p.blue]),
+    (p.green > 240) and (p.red < 20) and (p.blue < 20));
 end;
 
 { none of the root's keys a model here climbs to is an unknown option to the

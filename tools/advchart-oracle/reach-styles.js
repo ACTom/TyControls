@@ -260,6 +260,16 @@ function cases() {
     // ---- a label's inherited colour: the visual's, not the root's itemStyle colour ----
     ['label.inherit-bar', bare({ itemStyle: RI, xAxis: { type: 'category', data: N }, yAxis: {},
       series: [{ type: 'bar', label: { show: true, position: 'top', color: 'inherit' }, data: [3, 5, 2] }] }), '', { labels: true }],
+    // ---- for the mutation round ----
+    // a continuous visualMap's controller sizes map onto itemSize[0]: the bar's polygon under inRange.symbolSize
+    ['visualMap.size-symbol', vm({ inRange: { symbolSize: [5, 40] } }, { itemWidth: 30 }), 'visualMap', { polys: true }],
+    // a dash word from the series' itemStyle, measured against the root's top-level width
+    ['candle.top-dash', candle({ itemStyle: Object.assign({ borderType: 'dashed' }, CS) }, { borderWidth: 3 }), '', LF],
+    // an axis tooltip: its model over the global one, the root under it
+    ['tip.axis', bare(Object.assign({}, TIPC, { tooltip: { renderMode: 'richText', trigger: 'axis' }, formatter: 'R:{b}',
+      borderColor: '#00ff00' })), 'tooltip', { tip: true }],
+    // a title's corners as an array
+    ['title.radius-array', bare({ title: { text: 'T', backgroundColor: '#eeeeee', borderRadius: [1, 2, 3, 4] } }), 'title', BOX],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
   ];
@@ -322,6 +332,12 @@ function shapeOf(e) {
     return out;
   }
   return '';
+}
+// a polygon's points, canvas frame, two places (root-styles.js')
+function polyOf(e) {
+  if (e.type !== 'polygon' || !e.shape.points) return '';
+  const m = e.transform || [1, 0, 0, 1, 0, 0];
+  return e.shape.points.map(p => r2(m[0] * p[0] + m[2] * p[1] + m[4]) + ',' + r2(m[1] * p[0] + m[3] * p[1] + m[5])).join(';');
 }
 function looksOf(e) {
   const s = e.style;
@@ -398,6 +414,7 @@ function run(id, option, part, more) {
     const shapes = [];
     const texts = [];
     const labels = new Set();
+    const polys = [];
     const icons = [];
     let seen = 0;
     let n = 0;
@@ -443,6 +460,7 @@ function run(id, option, part, more) {
           if (more.icons && e instanceof Path && e.shape && e.shape.symbolType != null) icons.push(e.shape.symbolType);
           // the box: makeBackground's / the visualMap's z2 -1 rect, the title's rect
           if (e.type === 'rect' && (e.z2 === -1 || part === 'title')) visit(e, '');
+          if (more.polys) { const q = polyOf(e); if (q) polys.push(q); }
         });
       });
     }
@@ -455,6 +473,7 @@ function run(id, option, part, more) {
     if (more.shapes) rec.shapes = shapes.sort();
     if (more.texts) rec.texts = texts.sort();
     if (more.icons) rec.icons = icons.sort();
+    if (more.polys) rec.polys = polys.sort();
     if (more.labels) rec.labels = Array.from(labels).sort();
     if (more.vm) {
       const m = chart.getModel().getComponent('visualMap', 0);
@@ -501,7 +520,7 @@ function generate() {
       + 'icon symbol types; `vm` the visualMap model\'s itemSize and text; `tip` (part tooltip) the item tooltip model\'s '
       + 'formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box\'s '
       + 'text and border colour; `labels` the text|fill of each series element\'s label; part geo every path of the geo '
-      + 'component\'s view. `maps` the maps registered.',
+      + 'component\'s view; `polys` a component\'s polygons (root-styles.js\'). `maps` the maps registered.',
     W, H, maps: MAPS, charts };
 }
 
