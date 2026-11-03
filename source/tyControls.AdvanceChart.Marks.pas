@@ -1214,7 +1214,11 @@ begin
     if v.Kind <> dvkNone then
     begin
       Result.DashOffset := OverrideNumber(v);
-      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then Result.DashOffset := 0;
+      { [R7-Y] no finite number: the canvas refuses it and keeps the phase
+        it had (cTyCanvasPhaseLeft, settled in paint order), as the series'
+        own (TyOptPenOffset) [was: nought] }
+      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then
+        Result.DashOffset := cTyCanvasPhaseLeft;
     end;
   end;
   { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
