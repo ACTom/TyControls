@@ -480,7 +480,7 @@ begin
     else
     begin
       if tpBackground in S.Present then
-        P.FillBackground(bodyRect, S.Background, S.BorderRadius);
+        P.FillBackground(bodyRect, S.Background, S.BorderRadius, bw > 0);
       if bw > 0 then
         P.StrokeBorder(bodyRect, S.BorderRadius, bw, S.BorderColor);
     end;

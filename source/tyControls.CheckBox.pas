@@ -377,7 +377,7 @@ begin
       BoxRect := Rect(ContentRect.Right - BoxSize, BoxTop, ContentRect.Right, BoxTop + BoxSize)
     else
       BoxRect := Rect(ContentRect.Left, BoxTop, ContentRect.Left + BoxSize, BoxTop + BoxSize);
-    P.FillBackground(BoxRect, S.Background, S.BorderRadius);
+    P.FillBackground(BoxRect, S.Background, S.BorderRadius, True);
     P.StrokeBorder(BoxRect, S.BorderRadius, S.BorderWidth, S.BorderColor);
     // v3/C5: the check/indeterminate glyph is theme-overridable with an icon-font codepoint.
     case FState of
@@ -743,7 +743,7 @@ begin
     // which is 8 at 96ppi. Default TyRadioButton border-radius:8px → Min(8,8)=8 → circle
     // unchanged; only a SMALLER theme radius squares the corners.
     DotRadiusLogical := TyClampRadius(S.BorderRadius, MulDiv(BoxSize, 96, APPI) div 2);
-    P.FillBackground(DotRect, S.Background, DotRadiusLogical);
+    P.FillBackground(DotRect, S.Background, DotRadiusLogical, True);
     P.StrokeBorder(DotRect, DotRadiusLogical, S.BorderWidth, S.BorderColor);
     if FChecked then
       TyDrawGlyph(P, ActiveController, DotRect, '--glyph-radio', tgRadioDot, S.TextColor, 2);

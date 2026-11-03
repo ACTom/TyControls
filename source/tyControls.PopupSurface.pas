@@ -183,7 +183,7 @@ begin
   try
     P.BeginPaint(Canvas, Rect(0, 0, W, H), Font.PixelsPerInch);
     if tpBackground in S.Present then
-      P.FillBackground(Rect(0, 0, W, H), S.Background, S.BorderRadius);
+      P.FillBackground(Rect(0, 0, W, H), S.Background, S.BorderRadius, True);
     // A visible edge even when the theme's ribbon surface has no border of its own.
     if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
       P.StrokeBorder(Rect(0, 0, W, H), S.BorderRadius, S.BorderWidth, S.BorderColor)

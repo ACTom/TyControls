@@ -223,7 +223,7 @@ begin
   if states = [] then states := [tysNormal];
   cs := ActiveController.Model.ResolveStyle('TyCheckBox', '', states);
   if tpBackground in cs.Present then
-    P.FillBackground(boxR, cs.Background, cs.BorderRadius);
+    P.FillBackground(boxR, cs.Background, cs.BorderRadius, (tpBorderColor in cs.Present) and (cs.BorderWidth > 0));
   if (tpBorderColor in cs.Present) and (cs.BorderWidth > 0) then
     P.StrokeBorder(boxR, cs.BorderRadius, cs.BorderWidth, cs.BorderColor);
   { v3/C5 glyph override, same call shape TTyCheckBox uses for its own three states. }

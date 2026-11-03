@@ -642,7 +642,7 @@ begin
       // the labels below still draw: a theme that fills only :selected gets the classic
       // "only the chosen one has a thumb" for free, with no code branch of its own.
       if tpBackground in segStyle.Present then
-        P.FillBackground(segR, segStyle.Background, TyEffectiveCorners(segStyle));
+        P.FillBackground(segR, segStyle.Background, TyEffectiveCorners(segStyle), TyBorderVisible(segStyle));
       if TyBorderVisible(segStyle) then
         P.StrokeBorder(segR, TyEffectiveCorners(segStyle), segStyle.BorderWidth,
           segStyle.BorderColor);

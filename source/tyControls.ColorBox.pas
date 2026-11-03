@@ -438,7 +438,7 @@ begin
   f := Default(TTyFill);
   f.Kind := tfkSolid;
   f.Color := TyTColorToTy(AColor);
-  P.FillBackground(swR, f, 2);
+  P.FillBackground(swR, f, 2, True);
   P.StrokeBorder(swR, 2, 1, AStyle.TextColor);   // theme-driven outline so light swatches show
   if ARightToLeft then
     txR := Rect(ARect.Left + pad, ARect.Top, swR.Left - pad, ARect.Bottom)

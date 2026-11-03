@@ -2153,7 +2153,7 @@ begin
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', [tysActive])
       else
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', []);
-      P.FillBackground(L.CheckBox, CbS.Background, CbS.BorderRadius);
+      P.FillBackground(L.CheckBox, CbS.Background, CbS.BorderRadius, True);
       P.StrokeBorder(L.CheckBox, CbS.BorderRadius, CbS.BorderWidth, CbS.BorderColor);
       if FChecked then
         P.DrawGlyph(L.CheckBox, tgCheck, CbS.TextColor, 2);

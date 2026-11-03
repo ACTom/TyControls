@@ -3120,9 +3120,9 @@ begin
   else
     cb := ActiveController.Model.ResolveStyle('TyListViewCheckBox', '', []);
   if tpBackground in cb.Present then
-    P.FillBackground(ABox, cb.Background, cb.BorderRadius)
+    P.FillBackground(ABox, cb.Background, cb.BorderRadius, True)
   else
-    P.FillBackground(ABox, S.Background, 2);
+    P.FillBackground(ABox, S.Background, 2, True);
   if tpBorderColor in cb.Present then
     P.StrokeBorder(ABox, cb.BorderRadius, cb.BorderWidth, cb.BorderColor)
   else

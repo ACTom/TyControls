@@ -43,6 +43,7 @@ type
   published
     procedure TestThumbPixelUsesThumbTypeKey;
     procedure TestThumbDefaultPixelIsBorderColor;
+    procedure TestTheThumbsEdgesAreSharp;
     procedure TestThumbHoverActiveStatesDiscriminate;
   end;
 
@@ -513,6 +514,65 @@ begin
       AssertTrue('default thumb B ~ border $DB (>180)', PxThumb.blue > 180);
       AssertTrue('default thumb is gray (|R-B| small)',
         Abs(Integer(PxThumb.red) - Integer(PxThumb.blue)) < 30);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyScrollBarThumbColorTest.TestTheThumbsEdgesAreSharp;
+{ #196, what the eye noticed first: every edge of a rounded thumb lay half on a pixel, so a thumb on
+  a pale track had a soft ring all round it. Away from its corners the thumb is two colours: going
+  across or along it, nothing lies between the track's colour and the thumb's. }
+var
+  Ctl: TTyStyleController;
+  Bar: TScrollAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  thumb, track, c: TBGRAPixel;
+  i, firstThumb: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Bar := TScrollAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Kind := sbVertical;
+    Bar.SetBounds(0, 0, 12, 200);
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.PageSize := 25;
+    Bar.Position := 30;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(12, 200);
+    Bar.SmokeRender(Bmp.Canvas, Rect(0, 0, 12, 200), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      track := Reread.GetPixel(6, 195 - 16);
+      { Down the middle: track, then thumb, nothing in between. }
+      firstThumb := -1;
+      for i := 16 to 199 - 16 do
+      begin
+        c := Reread.GetPixel(6, i);
+        if c.red = track.red then Continue;
+        firstThumb := i;
+        Break;
+      end;
+      AssertTrue('there is a thumb', firstThumb > 0);
+      thumb := Reread.GetPixel(6, firstThumb + 6);
+      AssertTrue('it differs from the track', thumb.red <> track.red);
+      AssertEquals('its first row is its own colour', thumb.red, Reread.GetPixel(6, firstThumb).red);
+      { Across the middle of it: thumb from edge to edge. }
+      i := firstThumb + 6;
+      AssertEquals('its left column is its own colour', thumb.red, Reread.GetPixel(0, i).red);
+      AssertEquals('its right column is its own colour', thumb.red, Reread.GetPixel(11, i).red);
     finally
       Reread.Free;
     end;

@@ -2360,7 +2360,7 @@ begin
   corners := ACorners;
   TyApplyRenderStyle(eff, corners);
   if tpBackground in eff.Present then
-    APainter.FillBackground(ARect, eff.Background, corners);
+    APainter.FillBackground(ARect, eff.Background, corners, TyBorderVisible(eff));
   if TyBorderVisible(eff) then
     if eff.BorderStyle in [tbsOutset, tbsInset] then
       TyDrawBevelBorder(APainter, ARect, eff)
@@ -2383,7 +2383,7 @@ begin
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
   if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
+    APainter.FillBackground(ARect, effStyle.Background, corners, TyBorderVisible(effStyle));
   if TyBorderVisible(effStyle) then
     if effStyle.BorderStyle in [tbsOutset, tbsInset] then
       TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
@@ -3185,7 +3185,7 @@ begin
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
   if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
+    APainter.FillBackground(ARect, effStyle.Background, corners, TyBorderVisible(effStyle));
   if TyBorderVisible(effStyle) then
     if effStyle.BorderStyle in [tbsOutset, tbsInset] then
       TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel

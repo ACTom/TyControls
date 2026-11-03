@@ -1667,7 +1667,7 @@ begin
         // captions below still draw: a theme that fills only :selected / :hover gets the
         // classic "only the current option has a plate" for free, with no code branch.
         if tpBackground in rowS.Present then
-          P.FillBackground(rowR, rowS.Background, TyEffectiveCorners(rowS));
+          P.FillBackground(rowR, rowS.Background, TyEffectiveCorners(rowS), TyBorderVisible(rowS));
         if TyBorderVisible(rowS) then
           P.StrokeBorder(rowR, TyEffectiveCorners(rowS), rowS.BorderWidth, rowS.BorderColor);
 

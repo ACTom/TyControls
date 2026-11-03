@@ -228,7 +228,7 @@ begin
   try
     P.BeginPaint(Canvas, R, ppi);
     if tpBackground in S.Present then
-      P.FillBackground(Rect(0, 0, cW, cH), S.Background, S.BorderRadius);
+      P.FillBackground(Rect(0, 0, cW, cH), S.Background, S.BorderRadius, (tpBorderColor in S.Present) and (S.BorderWidth > 0));
     if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
       P.StrokeBorder(Rect(0, 0, cW, cH), S.BorderRadius, S.BorderWidth, S.BorderColor);
     MeasureHint(Caption, S, ppi, Lines, tw, th, lh, FWrapPx);

@@ -1259,7 +1259,7 @@ begin
     end
     else
     begin
-      P.FillBackground(Lay.BodyRect, S.Background, TyEffectiveCorners(S));
+      P.FillBackground(Lay.BodyRect, S.Background, TyEffectiveCorners(S), bw > 0);
       if bw > 0 then
         P.StrokeBorder(Lay.BodyRect, TyEffectiveCorners(S), bw, S.BorderColor);
     end;

@@ -5644,7 +5644,7 @@ begin
 
   bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
-    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
+    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS), TyBorderVisible(bS));
   if TyBorderVisible(bS) then
     P.StrokeBorder(r, TyEffectiveCorners(bS), bS.BorderWidth, bS.BorderColor);
 
@@ -11525,7 +11525,7 @@ begin
   fill.Kind := tfkSolid;
   fill.Color := c;
   { 圆角半径是逻辑像素,画家自己缩放;传 ScaleI(2) 就缩放了两次。 }
-  P.FillBackground(sw, fill, 2);
+  P.FillBackground(sw, fill, 2, True);
   { 描一圈边,免得浅色块在浅色底上看不见边界。 }
   P.StrokeBorder(sw, 2, 1, AFrame.BorderColor);
 end;
@@ -12419,7 +12419,7 @@ begin
 
   bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
-    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
+    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS), TyBorderVisible(bS));
   if TyBorderVisible(bS) then
     P.StrokeBorder(r, TyEffectiveCorners(bS), bS.BorderWidth, bS.BorderColor);
   if tpTextColor in bS.Present then ink := bS.TextColor else ink := AFrame.TextColor;
@@ -12665,7 +12665,7 @@ begin
     boxS := ActiveController.Model.ResolveStyle('TyGridCheckBox', StyleClass, []);
 
   if tpBackground in boxS.Present then
-    P.FillBackground(box, boxS.Background, TyEffectiveCorners(boxS));
+    P.FillBackground(box, boxS.Background, TyEffectiveCorners(boxS), TyBorderVisible(boxS));
   if TyBorderVisible(boxS) then
     P.StrokeBorder(box, TyEffectiveCorners(boxS), boxS.BorderWidth, boxS.BorderColor);
 

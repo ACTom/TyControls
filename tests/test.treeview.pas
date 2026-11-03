@@ -6715,7 +6715,8 @@ begin
 end;
 
 procedure TTreeB2CheckPaintTest.TestUncheckedNodeDrawsEmptyBox;
-{ Row 1 (csUnchecked) at y=30. Border in slot (non-white); no dark glyph in centre. }
+{ Row 1 (csUnchecked) at y=30. Border in slot (non-white); no dark glyph in centre: the box is
+  x=[22..34), its borders on 22 and 33. }
 var
   Ctl: TTyStyleController;
   F: TForm;
@@ -6735,8 +6736,8 @@ begin
       try
         AssertTrue('B2: unchecked row 1 border ink in x=[16..32) at y=30',
           HasNonWhiteAt(Bgra, 16, 32, 30));
-        AssertFalse('B2: unchecked row 1 no dark glyph in x=[21..27) at y=30',
-          HasDarkInkAt(Bgra, 21, 27, 30));
+        AssertFalse('B2: unchecked row 1 no dark glyph in x=[24..32) at y=30',
+          HasDarkInkAt(Bgra, 24, 32, 30));
       finally Bgra.Free; end;
     finally Bmp.Free; end;
   finally F.Free; Ctl.Free; end;
