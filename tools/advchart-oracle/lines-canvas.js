@@ -776,7 +776,10 @@ function cases() {
       { value: [8, 8], itemStyle: { shadowColor: '#00ff00', shadowBlur: 'Infinity', shadowOffsetX: 1, shadowOffsetY: '' } }] }),
     [0], { y: true }],
     ['y-blend', vv([{ type: 'scatter', clip: false, blendMode: 'multiply', itemStyle: { color: '#ff0000' }, data: [[2, 2]] },
-      { type: 'scatter', clip: false, blendMode: 'Foo', itemStyle: { color: '#00ff00' }, data: [[4, 4]] },
+      { type: 'scatter', clip: false, blendMode: 'darken', label: { show: true, formatter: 'A' }, itemStyle: { color: '#ff8800' },
+        data: [[3, 3]] },
+      // (above the label before it: a label sets source-over)
+      { type: 'scatter', clip: false, z: 3, blendMode: 'Foo', itemStyle: { color: '#00ff00' }, data: [[4, 4]] },
       { type: 'scatter', clip: false, blendMode: 'lighter', itemStyle: { color: '#0000ff' }, data: [[6, 6]] },
       { type: 'scatter', clip: false, blendMode: 'Screen', itemStyle: { color: '#00ffff' }, data: [[8, 8]] },
       { type: 'scatter', clip: false, itemStyle: { color: '#ff00ff' }, data: [[9, 3]] }]), [0], { y: true }],
@@ -799,7 +802,8 @@ function cases() {
     //    effect symbol of no transform is drawn under after it
     ['y-tf-enter-end', Object.assign(vv(LNC({ symbol: 'triangle', symbolSize: [12] },
       [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }], { symbol: ['none', 'arrow'], symbolSize: 10 })),
-    { animation: true, animationDuration: 1000, animationEasing: 'linear' }), [0, 300, 600, 1200], { y: true, anim: true }],
+    { animation: true, animationDuration: 1000, animationEasing: 'linear' }), [0, 300, 600, 1200],
+    { y: true, anim: true }],
     // [R7-Y] 6. a lines end symbol hit exactly on a vertex or an edge: its
     //    own Path.contain, in the symbol's frame
     ['y-hit-ends', vv(LNC({ show: false }, [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 2], [7, 4]] },

@@ -561,7 +561,12 @@ option 编辑器：
 - 坐标轴、标题、工具栏、dataZoom 等组件自己写了浏览器 canvas 不收的值（如读不出的颜色、无穷大的线宽）时，浏览器沿用上一个图形的，这里按缺省画。图例照 ECharts 画。
 - 坐标轴触发的提示框高亮数据时，这里在上面另画一份高亮的图形。强调状态写了画布不收的值（如负的模糊、读不出的颜色）时，这一份按缺省画，ECharts 沿用上一个图形的。
 - 系列之前先画的组件交给画布的状态，这里只算直角坐标系的坐标轴。极坐标、单轴的轴和压在坐标轴下面的 graphic 元素，仍只按「黑色阴影、没有变换」算。
-- 初始化时打开 `useDirtyRect` 后，ECharts 按脏矩形一块一块重画，每块从画布的初始状态开始，这里静态的重画也这样算。动画中（如 lines 的特效）这里每帧整张重画，沿用的值按整张图的绘制顺序算。
+- 打开 `useDirtyRect` 后，ECharts 6.1 一次重画只画第一个脏块，其余的块先清空，等下一次重画再画。这里每块都画。动画中两个运动的图形离得远时，ECharts 的画面会缺一块，这里不缺。
+- 打开 `useDirtyRect` 时，带拖尾的 lines 特效这里每帧整张重画。
+- 脏块开头沿用的画布状态，这里按所有坐标轴最后留下的算。ECharts 只算画进这一块的坐标轴元素。
+- 系列标签的 `fontStyle`、`fontWeight`、`fontSize` 写成画布不认的值时，ECharts 用上一个文字的字体画，这里也这样画。量文字宽度时这里仍用自己的缺省字体，ECharts 用测量画布上一次设成功的字体，和页面上量过的别的文字有关。
+- 富文本片段、坐标轴、标题等其余文字的字体写成画布不认的值时，这里按缺省画。
+- 系列之前先画的坐标轴标签留下的字体，这里没算进去。系列的第一个标签字体写错时，这里按画布的 10px sans-serif 画。
 - 坐标轴指示器的线只画颜色、线宽和虚线，`opacity`、阴影、`cap`、`join`、`miterLimit`、`dashOffset` 写了也不画。option 根上的 `lineStyle` 落到指示器的正是这几个键，所以也不起作用。
 - 直角坐标系的柱子，数据项自己写的 `itemStyle.borderRadius` 不起作用，用系列的。
 - option 根上写的 `shadowBlur`、`shadowColor`、`shadowOffsetX`、`shadowOffsetY`、`borderRadius`、`borderType`，ECharts 会用到 title、legend、toolbox 的框上，这里不用。

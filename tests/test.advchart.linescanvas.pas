@@ -1350,9 +1350,10 @@ var
   x1, y1, x2, y2, gr, ux1, uy1, ux2, uy2, ur: Double;
   fill: Boolean;
   wc: TTyChartColor;
-  j, q2: Integer;
+  j, q2, j2: Integer;
   t: Double;
   bb: TTyRectF;
+  px: TBGRAPixel;
 begin
   FBad := 0;
   FCompared := 0;
@@ -1426,6 +1427,25 @@ begin
       begin
         o := yops.Objects[q];
         fill := o.Strings['op'] = 'fill';
+        { A FILL'S COLOUR (an image before it sets none) }
+        if (Copy(id, 1, 7) = 'y-fill-') and (o.Strings['op'] = 'fill') then
+        begin
+          where := Format('%s %s fill', [id, key]);
+          if Copy(key, 1, 2) = 'gr' then idx := GraphicOf(rec) else idx := WElOf(key, rec);
+          if idx < 0 then
+          begin
+            Miss(where + ': no element');
+            Continue;
+          end;
+          el := FChart.Frame.Element(idx);
+          Inc(FCompared);
+          if not TyTryParseChartColor(o.Strings['fs'], wc) or not el.Style.HasFill
+            or el.Style.FillPattern.Present or (el.Style.FillGradient.Kind <> cgkNone)
+            or not SameInk(el.Style.FillColor, wc) then
+            Miss(Format('%s: fill %x (pattern %s), upstream %s', [where, el.Style.FillColor,
+              BoolToStr(el.Style.FillPattern.Present, True), o.Strings['fs']]));
+          Continue;
+        end;
         { A LABEL'S FONT: the size, the weight and (where not the default
           family) the family each text is drawn in }
         if (Copy(id, 1, 6) = 'y-font') and (o.Strings['op'] = 'fillText') then
@@ -1570,6 +1590,23 @@ begin
               Miss(Format('%s: pattern [%g %g %g %g %g %g], upstream [%g %g %g %g %g %g]', [where,
                 pm[0], pm[1], pm[2], pm[3], pm[4], pm[5], u[0], u[1], u[2], u[3], u[4], u[5]]));
               Break;
+            end;
+          { AND AS DRAWN: the middle of each texel of the 2 x 2 checker (red
+            where its column and row add up even) under upstream's matrix,
+            well inside the element, its colour }
+          bb := TyShapeBounds(el.Shape);
+          for n := -6 to 6 do
+            for j2 := -6 to 6 do
+            begin
+              x1 := u[0] * (n + 0.5) + u[2] * (j2 + 0.5) + u[4];
+              y1 := u[1] * (n + 0.5) + u[3] * (j2 + 0.5) + u[5];
+              if (x1 < bb.Left + 3) or (x1 > bb.Right - 3) or (y1 < bb.Top + 3) or (y1 > bb.Bottom - 3) then
+                Continue;
+              px := FBmp.GetPixel(Trunc(x1), Trunc(y1));
+              Inc(FCompared);
+              if (((n + j2) and 1) = 0) <> (px.red > px.blue) then
+                Miss(Format('%s: texel (%d,%d) at (%g,%g) drawn (%d,%d,%d)', [where, n, j2, x1, y1,
+                  px.red, px.green, px.blue]));
             end;
           Continue;
         end;
