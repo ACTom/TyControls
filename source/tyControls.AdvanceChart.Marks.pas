@@ -1133,8 +1133,11 @@ begin
         Result.FillPattern := Default(TTyChartPattern);
         Result.FillNone := False;
       end;
+      { [R7-V] the opacity as written: the canvas' globalAlpha clamps it
+        (bindCommonProps, TyCanvasPartAlpha), a state's blur multiplies it
+        and a tween runs to it [was: clamped here] }
       if vr.OpacitySet and not IsNan(vr.Opacity) then
-        Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+        Result.Alpha := vr.Opacity;
     end;
   end;
   { THE PER-DATUM PALETTE (stage 4600, after the encoding and the item
@@ -1170,8 +1173,9 @@ begin
   if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.opacity')) then
   begin
     v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.opacity'));
+    { [R7-V] as written (the canvas clamps it) }
     if (v.Kind = dvkNumber) and not IsNan(v.Num) then
-      Result.Alpha := Min(Double(1), Max(Double(0), v.Num));
+      Result.Alpha := v.Num;
   end;
   { [R2-I2] the item's own borderDashOffset over the series' (getItemStyle
     key by key) }
@@ -1330,8 +1334,9 @@ begin
     Result.FillPattern := Default(TTyChartPattern);
     Result.FillNone := False;
   end;
+  { [R7-V] as written (the canvas clamps it) }
   if vr.LateOpacity and not IsNan(vr.Opacity) then
-    Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+    Result.Alpha := vr.Opacity;
 end;
 
 { THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
@@ -3726,8 +3731,9 @@ begin
     begin
       if AVisual.VisualRows[raw].ColorSet then
         v.Stroke := TyVisualToChart(AVisual.VisualRows[raw].Color);
+      { [R7-V] as written (the canvas clamps it) }
       if AVisual.VisualRows[raw].OpacitySet and not IsNan(AVisual.VisualRows[raw].Opacity) then
-        v.Alpha := Min(Double(1), Max(Double(0), AVisual.VisualRows[raw].Opacity));
+        v.Alpha := AVisual.VisualRows[raw].Opacity;
     end;
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.color')) then
     begin
@@ -3755,8 +3761,9 @@ begin
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.opacity')) then
     begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.opacity'));
+      { [R7-V] as written (the canvas clamps it) }
       if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then
-        v.Alpha := Min(Double(1), Max(Double(0), dv.Num));
+        v.Alpha := dv.Num;
     end;
     { [R5-B] THE PER-DATUM PALETTE (colorBy other than 'series', stage
       4600): on the pen, asked only by a row neither a visual channel nor
@@ -4883,8 +4890,9 @@ begin
     AEl.Style.DashWord := TyDashWord(bs.Dash);
     AEl.Style.DashOffsetLogical := bs.DashOffset;
   end;
+  { [R7-V] as written (the canvas clamps it) }
   if not IsNan(bs.Opacity) then
-    AEl.Style.Alpha := Min(Double(1), Max(Double(0), bs.Opacity));
+    AEl.Style.Alpha := bs.Opacity;
 end;
 
 { createLarge: the background batch first (z2 0, silent), then the bars (z2

@@ -1782,8 +1782,9 @@ procedure TyLegendPenApply(const AKeys: TTyLegendPen; AWidth: Double;
   var AStyle: TTyChartElementStyle);
 begin
   if not AKeys.Resolved then Exit;
+  { [R7-V] as written (the canvas clamps it) }
   if AKeys.HasOpacity then
-    AStyle.Alpha := Max(Double(0), Min(Double(1), AKeys.Opacity));
+    AStyle.Alpha := AKeys.Opacity;
   AStyle.DashLogical := nil;
   AStyle.DashWord := 0;
   if AWidth > 0 then
@@ -3691,8 +3692,9 @@ begin
     begin
       el := Icon(kind, empty, path, it.IconBox);
       Clipped(el);
+      { [R7-V] as written (the canvas clamps it) }
       if it.HasOpacity then
-        el.Style.Alpha := Min(Double(1), Max(Double(0), it.Opacity));
+        el.Style.Alpha := it.Opacity;
       AList.Add(el);
       Inc(Result);
     end;

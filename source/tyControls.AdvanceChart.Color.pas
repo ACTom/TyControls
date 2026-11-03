@@ -384,7 +384,9 @@ function TyLineDashOf(AType: TJSONData; ALineWidth: Double; out AWord: Byte): TT
   TyOptMiterLimit: a miter limit (borderMiterLimit, miterLimit) --
   not-a-number where nothing is written, else the limit the canvas strokes
   with: `style.miterLimit || 10`, and the canvas refuses a limit that is no
-  number above nought (it keeps the last element's; 10 here). }
+  number above nought (it keeps the last element's: [R7-V] -1 here, which
+  TyLinesCanvasLeftovers settles in paint order, the renderer's default 10
+  until then [was: 10]). }
 function TyOptJsNumber(AData: TJSONData): Double;
 function TyOptPenWidth(AData: TJSONData): Double;
 { [R7-F] whether the value's Number is +Infinity (a pen of that width is
@@ -1193,9 +1195,19 @@ end;
 function TyOptMiterLimit(AData: TJSONData): Double;
 begin
   if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
+  { `style.miterLimit || 10`: a falsy value (nought, false, '') is the
+    default; [R7-V] anything else goes to the canvas, which refuses what is
+    not a number above nought ('abc', '0', a negative, infinity), keeping
+    the one it had -- -1 until the paint order settles it
+    (TyLinesCanvasLeftovers) [was: the default] }
+  case AData.JSONType of
+    jtNumber: if AData.AsFloat = 0 then Exit(10);
+    jtBoolean: if not AData.AsBoolean then Exit(10);
+    jtString: if AData.AsString = '' then Exit(10);
+  end;
   Result := TyOptJsNumber(AData);
   { (NaN first: a comparison with it raises here) }
-  if IsNan(Result) or IsInfinite(Result) or (Result <= 0) then Result := 10;
+  if IsNan(Result) or IsInfinite(Result) or not (Result > 0) then Result := -1;
 end;
 
 { a pen key under ANode: TyOptPenWidth / TyOptPenOffset of its value }
@@ -1460,16 +1472,14 @@ function TyLineCapOf(AData: TJSONData): Byte;
 begin
   Result := 0;
   if (AData = nil) or (AData.JSONType <> jtString) then Exit;
-  if AData.AsString = 'round' then Result := 1
-  else if AData.AsString = 'square' then Result := 2;
+  Result := TyCapOfWord(AData.AsString);
 end;
 
 function TyLineJoinOf(AData: TJSONData): Byte;
 begin
   Result := 0;
   if (AData = nil) or (AData.JSONType <> jtString) then Exit;
-  if AData.AsString = 'round' then Result := 1
-  else if AData.AsString = 'bevel' then Result := 2;
+  Result := TyJoinOfWord(AData.AsString);
 end;
 
 function TyDashWord(ADash: TTyOptDash): Byte;
@@ -1558,7 +1568,10 @@ begin
   if ABlur <> nil then
   begin
     v := Num(ABlur);
-    if (not IsNan(v)) and (not IsInfinite(v)) and (v > 0) then AShadow.Blur := v;
+    { [R7-V] a blur below nought the canvas refuses, keeping the one it
+      had: kept negative until the paint order settles it
+      (TyLinesCanvasLeftovers) [was: none] }
+    if (not IsNan(v)) and (not IsInfinite(v)) and (v <> 0) then AShadow.Blur := v;
   end;
   if AOffsetX <> nil then
   begin
@@ -1571,9 +1584,13 @@ begin
     if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetY := v;
   end;
   AShadow.Color := $FF000000;
-  if (AColour <> nil) and (AColour.JSONType = jtString)
-    and TyTryParseChartColor(AColour.AsString, c) then
-    AShadow.Color := c;
+  if (AColour <> nil) and (AColour.JSONType = jtString) then
+  begin
+    if TyTryParseChartColor(AColour.AsString, c) then AShadow.Color := c
+    { [R7-V] a string no colour parser takes the canvas refuses, keeping the
+      shadowColor it had (an empty one is `|| '#000'`) [was: '#000'] }
+    else if AColour.AsString <> '' then AShadow.Color := cTyCanvasColourLeft;
+  end;
 end;
 
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;

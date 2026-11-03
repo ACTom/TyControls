@@ -1694,7 +1694,8 @@ begin
     d := node.Find('borderMiterLimit');
     if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
       el.Style.MiterLimit := d.AsFloat;
-    if not IsNan(st.Opacity) then el.Style.Alpha := Max(Double(0), Min(Double(1), st.Opacity))
+    { [R7-V] as written (the canvas clamps it) }
+    if not IsNan(st.Opacity) then el.Style.Alpha := st.Opacity
     else el.Style.Alpha := 1;
     TyStyleSetShadow(el.Style, st.Shadow);
     { the grid's z (0) and zlevel (its own, else the root's) }

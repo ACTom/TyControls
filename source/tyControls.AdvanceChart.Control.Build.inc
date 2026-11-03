@@ -2963,8 +2963,11 @@ begin
   AVisual.ItemDash := item.Dash;
   AVisual.ItemDashExplicit := item.DashLogical;
   AVisual.ItemDashOffset := item.DashOffset;
+  { [R7-V] the opacity as written: the canvas' globalAlpha clamps it
+    (bindCommonProps, TyCanvasPartAlpha), a state's blur multiplies it and a
+    tween runs to it [was: clamped here] }
   if not IsNan(item.Opacity) then
-    AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity))
+    AVisual.Alpha := item.Opacity
   else if st = 'scatter' then
     { A SCATTER'S SYMBOLS ARE FOUR FIFTHS OPAQUE unless told otherwise --
       ScatterSeries' own default, which its labels inherit. [Revised in
@@ -3026,8 +3029,9 @@ begin
     AVisual.Dash := line.Dash;
     AVisual.DashExplicit := line.DashLogical;
     AVisual.DashOffset := line.DashOffset;
+    { [R7-V] as written (the canvas clamps it) }
     if not IsNan(line.Opacity) then
-      AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
+      AVisual.Alpha := line.Opacity;
     if line.Color.Gradient.Kind <> cgkNone then
       AVisual.StrokeGradient := line.Color.Gradient
     { [R5-B] the visual colour a line is stroked with when its lineStyle
