@@ -429,12 +429,13 @@ begin
           surfB, TyBlueOf(s.Background.Color));
       end;
 
-      // ...but a grid header still reads as a header: it keeps --surface-chrome's tint.
+      // ...but a grid header still reads as a header: a tint of its own, or the rule under it.
       hdr := c.Model.ResolveStyle('TyGridHeader', '', []);
-      AssertTrue(SKINS[i] + ': the grid header keeps a tint distinct from the surface',
+      AssertTrue(SKINS[i] + ': the grid header has a tint distinct from the surface, or a rule',
         (TyRedOf(hdr.Background.Color) <> surfR) or
         (TyGreenOf(hdr.Background.Color) <> surfG) or
-        (TyBlueOf(hdr.Background.Color) <> surfB));
+        (TyBlueOf(hdr.Background.Color) <> surfB) or
+        (c.Metric('--grid-header-rule-width', 0) > 0));
     end;
   finally c.Free; end;
 end;
@@ -756,9 +757,9 @@ begin
       hover := c.Model.ResolveStyle('TyTab', '', [tysHover]);
       sel   := c.Model.ResolveStyle('TyTab', '', [tysActive]);
       { The two keys that OWN the chrome tokens the strip is supposed to alias:
-        TyToolBar fills from --chrome-bar-bg, TyTreeHeader from --surface-chrome. }
+        TyToolBar fills from --chrome-bar-bg, TyGridHeaderGroup from --surface-chrome. }
       bar         := c.Model.ResolveStyle('TyToolBar', '', []);
-      chromeHost  := c.Model.ResolveStyle('TyTreeHeader', '', []);
+      chromeHost  := c.Model.ResolveStyle('TyGridHeaderGroup', '', []);
 
       AssertEquals(Format('aero/%s: a resting tab must BE the command band '
         + '(--chrome-bar-bg), not the base MAP''s neutral darken(surface,5%%)', [mode]),

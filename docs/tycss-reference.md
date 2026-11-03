@@ -306,7 +306,105 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 或者不写,都表示照常补画。代码里也可以整个关掉:`TyChromeOverlayEnabled := False;`
 (`tyControls.Base` 单元,默认 `True`)。
 
-补画只发生在 TyControls 自己的控件上;原生 LCL 控件放上去,照旧会盖住外框。这个行为从 3.0.5 开始。
+补画只发生在 TyControls 自己的控件上;原生 LCL 控件放上去,照旧会盖住外框。这个行为从 3.0.4 开始。
+
+### 3.7 数据表格
+
+`TTyStringGrid` 和 `TTyDrawGrid` 的每个部分都有令牌。基层的 `TyGrid*` 规则读取其中的颜色和字体令牌,
+所以皮肤既可以设令牌,也可以直接写规则。单个表格在自己的 `StyleOverride` 里写同样的名字:
+
+```text
+--grid-header-bg: none; --grid-line-v-width: 0; --grid-hover: row;
+```
+
+**表格线**
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--grid-line-color` | 颜色 | 表面色的一个深浅 | 两个方向。写 `TyGridLine { background: … }` 效果相同。 |
+| `--grid-line-h-color`、`--grid-line-v-color` | 颜色 | `--grid-line-color` | 单个方向。 |
+| `--grid-line-h-width`、`--grid-line-v-width` | 长度 | `1px` | `0` 隐藏这个方向。 |
+| `--grid-line-h-style`、`--grid-line-v-style` | `solid` / `dotted` / `dashed` / 一到两个长度 | `solid` | 线型,写法同 `--treeview-lines-style`。 |
+| `--grid-line-extend` | `full` / `columns` | `full` | 行线是否穿过最后一列之后的空白。 |
+
+`GridLineStyle` 和 `GridLineWidth` 继续有效。保持默认值(`glsBoth`、`1`)时由主题决定。`GridLineWidth`
+改成别的值,两个方向都用这个宽度。`glsHorizontal`、`glsVertical` 在隐藏了该方向的皮肤下也会显示,
+`glsNone` 什么都不画。
+
+**表头**
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--grid-header-bg`、`--grid-header-color` | 颜色;底色也可以是 `none` | 浅色带 | 色带和文字。 |
+| `--grid-header-font-size`、`--grid-header-font-weight` | 字号、字重 | 基础字号、`400` | 标题字体。 |
+| `--grid-header-padding-start`、`--grid-header-padding-end` | 长度 | `6px`、`4px` | 分段边缘到标题的距离。 |
+| `--grid-header-separator-color` | 颜色 | `--grid-line-color` | 分段之间的线。也是 `TyGridHeader` 的 `border-color`。 |
+| `--grid-header-separator-width` | 长度 | `1px` | `0` 去掉。 |
+| `--grid-header-separator-height` | 百分比或长度 | `100%` | 在色带里垂直居中。 |
+| `--grid-header-separator-style` | 同表格线线型 | `solid` | 线型。 |
+| `--grid-header-rule-color`、`--grid-header-rule-width` | 颜色、长度 | `--border`、`1px` | 色带下方的线。`0` 去掉。 |
+| `--grid-header-hover-bg`、`--grid-header-pressed-bg` | 颜色 | `--surface-hover`、`--surface-active` | 鼠标下的分段(`hoHotTrack`)和按住的分段(`goHeaderPushedLook`)。 |
+| `--grid-header-sorted-bg`、`--grid-header-sorted-color` | 颜色;底色也可以是 `none` | `none`、同表头 | 正在排序的分段。规则:`TyGridHeaderSorted`。 |
+| `--grid-header-filtered-bg`、`--grid-header-filtered-color` | 颜色;底色也可以是 `none` | `none`、同表头 | 正在筛选的分段。规则:`TyGridHeaderFiltered`。 |
+| `--grid-header-group-bg`、`--grid-header-group-color` | 颜色 | `--surface-chrome`、`--on-surface` | 列分组的色带。 |
+| `--grid-header-bevel` | `none` / `raised` | `none` | 把每个分段画成按钮,按住时凹下去。 |
+| `--grid-header-bevel-light`、`--grid-header-bevel-dark` | 颜色 | 白、灰 | 按钮的亮边和暗边。 |
+| `--grid-filter-icon-color`、`--grid-filter-icon-active-color` | 颜色 | 表头文字色、`:selected` 的文字色 | 筛选标记,未筛选和已筛选。 |
+
+色带高度是 `Header.Height`,程序没设时是 `--header-height`。
+
+**排序标记**
+
+表格、列表、树共用。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--sort-glyph` | `chevron` / `arrow` / `triangle` / `none` | `chevron` | 形状。 |
+| `--sort-glyph-size` | 长度 | `--glyph-chevron-size`,另两种是 `10px` | 大小。 |
+| `--sort-glyph-color` | 颜色 | 表头文字色 | 颜色。 |
+| `--sort-glyph-unsorted` | `none` / `hover` / `always` | `none` | 仅表格:可点击但未排序的列上显示一个淡的标记。 |
+| `--sort-glyph-unsorted-color` | 颜色 | 淡的表头文字色 | 这个标记的颜色。 |
+
+**行和单元格**
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--grid-cell-bg`、`--grid-cell-color` | 颜色;底色也可以是 `none` | `none`、`--on-surface` | 普通单元格。 |
+| `--grid-hover` | `cell` / `row` / `column` / `cross` / `none` | `cell` | 鼠标点亮什么。 |
+| `--grid-hover-bg` | 颜色 | `--surface-hover` | 点亮的颜色。 |
+| `--grid-alt-bg` | 颜色 | `--surface-alt` | 隔行底色(`AlternateRows`)。 |
+| `--grid-sorted-cell-bg` | 颜色或 `none` | `none` | 排序列的正文底色。 |
+| `--grid-selected-bg`、`--grid-selected-color` | 颜色 | `--accent`、`--on-accent` | 选区。 |
+| `--grid-selected-hover-bg` | 颜色 | `--grid-selected-bg` | 鼠标下的选区。 |
+| `--grid-selected-inactive-bg`、`--grid-selected-inactive-color` | 颜色 | 淡的强调色、`--on-surface` | 表格没有焦点时的选区。 |
+| `--grid-active-cell-bg`、`--grid-active-cell-color` | 颜色 | `--surface-active`、`--on-surface` | 光标所在的格。 |
+| `--grid-focus-ring-width` | 长度 | `0` | 光标所在格的焦点框。 |
+| `--grid-focus-ring-color`、`--grid-focus-ring-style` | 颜色、同表格线线型 | 表格边框色、`solid` | 焦点框的颜色和线型。 |
+| `--grid-fill-handle-size` | 长度 | `6px` | 选区角上的填充柄。 |
+
+选区外框的颜色和粗细是 `TyGridSelectionFrame` 的 `border-color`、`border-width`。写在 `StyleOverride` 里
+用 `--grid-selection-frame-border-color`、`--grid-selection-frame-border-width`。
+
+**冻结行列、行号槽和其他色带**
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--grid-fixed-bg`、`--grid-fixed-color` | 颜色 | 同表头色带、`--on-surface` | 冻结的行和列。 |
+| `--grid-frozen-line-color`、`--grid-frozen-line-width` | 颜色、长度 | `--border`、`1px` | 冻结区和正文之间的线。 |
+| `--grid-frozen-shadow-size`、`--grid-frozen-shadow-color` | 长度、颜色 | `0`、淡黑 | 内容滚到冻结区下面之后,这条线旁边的阴影。 |
+| `--grid-indicator-bg`、`--grid-indicator-color` | 颜色 | 同表头色带、`--muted` | 行号槽。 |
+| `--grid-indicator-active-color` | 颜色 | `--on-surface` | 光标所在行的行号。规则:`TyGridIndicatorActive`,也可以写背景。 |
+| `--grid-filter-bg`、`--grid-filter-color` | 颜色 | `--surface`、`--on-surface` | 筛选行。 |
+| `--grid-group-bg`、`--grid-group-color` | 颜色或 `none` | `none`、`--on-surface` | 分组行。 |
+| `--grid-group-indent` | 长度 | `14px` | 每级分组的缩进。 |
+| `--grid-footer-bg`、`--grid-footer-color` | 颜色或 `none` | `none`、`--on-surface` | 汇总行。 |
+| `--grid-footer-rule-color`、`--grid-footer-rule-width` | 颜色、长度 | `--border`、`1px` | 汇总行上方的线。`0` 去掉。 |
+
+每个部分的 `-bg`、`-color`、`-font-size`、`-font-weight` 都可以写在 `StyleOverride` 里,`-border-color`、
+`-border-width` 也可以。`TyGrid*` 规则的其他属性要写规则。
+
+行高是 `DefaultRowHeight`,程序没设时是 `--row-height`。行号槽宽度是 `IndicatorWidth`。滚动条和其他地方
+一样(`TyScrollBar`、`--scrollbar-size`)。
 
 ---
 

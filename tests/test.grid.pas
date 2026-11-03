@@ -1830,7 +1830,7 @@ begin
       { 从左往右扫,第一列出现墨的位置就是这一行内容的起点。
         三角也是墨 —— 所以这个数同时反映了缩进与三角,正是我们要的
         "看起来更靠右"。 }
-      for x := cell.Left to cell.Right - 1 do
+      for x := cell.Left + 3 to cell.Right - 1 do   { past the focus ring, which lies over the cell's edge }
         for y := cell.Top to cell.Bottom - 1 do
         begin
           if (y < 0) or (y >= re.Height) or (x < 0) or (x >= re.Width) then Continue;
@@ -4941,7 +4941,7 @@ var
     x := G.ColLeft(1) - 1;
     Re := TBGRABitmap.Create(Bmp);
     try
-      for pos := 0 to 9 do
+      for pos := 1 to 9 do   { row 0 has the cursor, whose frame lies over the line }
       begin
         r := G.RowRectAt(pos);
         px := Re.GetPixel(x, (r.Top + r.Bottom) div 2);
@@ -4984,7 +4984,7 @@ begin
 
     G.GridLineStyle := glsBoth;
     Render;
-    AssertTrue('两轴都画时应当有竖线', BlueOnColumnEdge >= 10);
+    AssertTrue('两轴都画时应当有竖线', BlueOnColumnEdge >= 9);
     AssertTrue('两轴都画时应当有横线', BlueOnRowEdge > 50);
 
     G.GridLineStyle := glsHorizontal;
@@ -4994,7 +4994,7 @@ begin
 
     G.GridLineStyle := glsVertical;
     Render;
-    AssertTrue('竖线仍在', BlueOnColumnEdge >= 10);
+    AssertTrue('竖线仍在', BlueOnColumnEdge >= 9);
     AssertEquals('只要竖线时横线像素必须为 0', 0, BlueOnRowEdge);
 
     { 老代码的 GridLines 布尔开关必须还能用。 }

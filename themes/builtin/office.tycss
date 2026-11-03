@@ -20,6 +20,12 @@
    tokens hand them this skin's corners and the well of this skin's own edit, so they read as
    part of the skin instead of the default theme in the skin's colours. */
 :root {
+  /* Table: a worksheet. A band, full separators, the cursor's row number picked out. */
+  --grid-header-bg: var(--surface-chrome);
+  --grid-header-separator-color: var(--border);
+  --grid-indicator-bg: var(--surface-chrome);
+  --grid-indicator-active-color: var(--accent);
+  --grid-line-color: darken(--surface, 10%);
   --radius:        2px;
   --radius-sm:     2px;
   --radius-scroll: 0;

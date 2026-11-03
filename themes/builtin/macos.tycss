@@ -11,6 +11,12 @@
    tokens hand them this skin's corners and the well of this skin's own edit, so they read as
    part of the skin instead of the default theme in the skin's colours. */
 :root {
+  /* Table: no band, a quiet caption, short separators, faint lines between rows, no hover. */
+  --grid-header-bg: var(--grid-bg);
+  --grid-header-color: alpha(var(--on-surface), 0.7);
+  --grid-header-separator-height: 50%;
+  --grid-line-v-width: 0;
+  --grid-hover: none;
   --radius:        6px;
   --radius-sm:     4px;
   --radius-scroll: 8px;

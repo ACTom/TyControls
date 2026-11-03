@@ -232,6 +232,8 @@ end;
 ```
 TyGrid                      整体表面 / 边框 / 字体
 TyGridCell                  正文单元格(:hover / :selected)
+TyGridCellSelectedHover     选中且鼠标在上面的格
+TyGridCellSorted            排序列的正文底色(默认不上色)
 TyGridCellAlt               斑马纹的隔行底色(AlternateRows)
 TyGridCellSelectedInactive  失焦时的选区底色(HideSelectionWhenInactive)—— 独立的键,
                             不写成 TyGridCell:selected:disabled,因为一个选择器只认一个 :state
@@ -239,12 +241,16 @@ TyGridActiveCell            焦点格(光标所在)—— 整行选中模式下�
 TyGridCellMarked            选区盖在"用户显式指定了底色"的格上时用的半透明层
 TyGridFixed                 冻结区(固定行列)
 TyGridIndicator             行头 / 行号槽
+TyGridIndicatorActive       光标所在行的行号
 TyGridHeader                列头带
 TyGridHeaderSection         列头分段(:hover / :selected / :active)
                             :active = 被按住的那一段,只在 goHeaderPushedLook 开着时解析。
                             **它不吃控件级的按下态**:CurrentStates 是整个表格的状态,
                             鼠标在表里任何地方按下都会带上 tysActive,若不剔掉,随便点一下
                             正文就会让整条列头换底(RenderHeaderSections 里显式减掉了它)。
+                            控件级的悬停同样减掉::hover 只给 hoHotTrack 判定的那一段。
+TyGridHeaderSorted          正在排序的那一段(默认不上色)
+TyGridHeaderFiltered        正在筛选的那一段(默认不上色)
 TyGridHeaderGroup           分组表头带(横跨若干列的上层标题)
 TyGridFilterRow             内嵌筛选行的底色与文字色
 TyGridLine                  格线(读 background)
@@ -261,8 +267,9 @@ TyGridCommentMark           批注格右上角那个小三角的颜色
 TyGridButton                按钮单元格(:hover / :active)
 ```
 
-度量:`--grid-row-height` / `--grid-header-height` / `--grid-indicator-width` /
-`--grid-line-width` / `--grid-cell-padding`。
+这些键的颜色和字体都来自 `--grid-*` 令牌,皮肤可以设令牌也可以直接写规则。单个表格在
+`StyleOverride` 里写同样的名字。表格线、表头分隔线、排序标记、悬停范围、焦点框、冻结线和阴影
+也都有令牌,完整列表见 [tycss 参考 §3.7](../tycss-reference.md)。
 
 基层(`themes/light.tycss`)已给全套键,所以**新皮肤一条网格规则都不写也能正常显示**。
 
@@ -273,8 +280,7 @@ TyGridButton                按钮单元格(:hover / :active)
 > 而那一轮是纯粹的可主题化重构);皮肤想要那层底色,自己写 `background: var(--surface-chrome)` 即可。
 > 字体一律不声明(与 `TyGridCell` 一致),两条带因此跟着网格自身的字体走;但**只要皮肤声明了**
 > `font-name` / `font-size` / `font-weight`,两个键都会读。
-> `TyGridSummaryRow` **有意不给 `border-color`**:`RenderFooter` 压根不读它,写了也是死规则 ——
-> 汇总带要一条分隔发丝线,得先改代码。
+> 汇总带上方的线用 `--grid-footer-rule-width` 和 `--grid-footer-rule-color`。
 
 ## 能力一览
 
@@ -286,7 +292,7 @@ TyGridButton                按钮单元格(:hover / :active)
 - 斑马纹 `AlternateRows`(按**显示行号**取奇偶,排序筛选后条纹仍然隔行)
 - 行号 `ShowRowNumbers`(画在行头槽里,按**显示序** —— 排序后屏幕第一行仍是 1)
 - 焦点格与选区区分(`TyGridActiveCell`)
-- 格线 `GridLineStyle`(none / 只横 / 只竖 / 全)+ `GridLineWidth`
+- 格线 `GridLineStyle`(none / 只横 / 只竖 / 全)+ `GridLineWidth`。保持默认值(`glsBoth`、`1`)时由主题的 `--grid-line-*` 决定
   —— 线**不占布局像素**,压在边界上,列宽不因线变粗而挪位
   —— ⚠ **与 LCL 同名不同义**:LCL 的 `TCustomGrid.GridLineStyle` 是 `TPenStyle`
   (`psSolid` / `psDash` / `psDot`,即线**怎么画**);这里是线**画哪几轴**。

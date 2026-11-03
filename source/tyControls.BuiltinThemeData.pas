@@ -474,10 +474,10 @@ begin
     'TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }' + LineEnding +
-    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
-    'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
-    'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
-    'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--grid-header-bg); border-color: var(--grid-header-separator-color); border-width: var(--input-border-width); color: var(--grid-header-color); font-size: var(--grid-header-font-size); font-weight: var(--grid-header-font-weight); }' + LineEnding +
+    'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--grid-header-color); border-color: var(--grid-header-separator-color); }' + LineEnding +
+    'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--grid-header-hover-bg); }' + LineEnding +
+    'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--grid-header-selected-bg); }' + LineEnding +
     'TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
@@ -540,6 +540,7 @@ begin
     '  --surface-hover:            darken(--surface, 4%);' + LineEnding +
     '  --surface-active:           darken(--surface, 10%);' + LineEnding +
     '  --surface-chrome:           darken(--surface, 6%);' + LineEnding +
+    '  --grid-line-color:          darken(--surface, 8%);' + LineEnding +
     '  --surface-sunk:             darken(--surface, 8%);' + LineEnding +
     '  --surface-track:            darken(--surface, 10%);' + LineEnding +
     '  --surface-listitem-hover:   darken(--surface, 5%);' + LineEnding +
@@ -599,6 +600,7 @@ begin
     '  --surface-hover:            lighten(--surface, 8%);' + LineEnding +
     '  --surface-active:           darken(--surface, 6%);' + LineEnding +
     '  --surface-chrome:           darken(--surface, 4%);' + LineEnding +
+    '  --grid-line-color:          lighten(--surface, 10%);' + LineEnding +
     '  --surface-sunk:             darken(--surface, 4%);' + LineEnding +
     '  --surface-track:            darken(--surface, 4%);' + LineEnding +
     '  --surface-listitem-hover:   lighten(--surface, 10%);' + LineEnding +
@@ -1272,6 +1274,13 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, a bold quiet caption, no separators, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-color: alpha(var(--on-surface), 0.7);' + LineEnding +
+    '  --grid-header-font-weight: 700;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --radius:        6px;' + LineEnding +
     '  --radius-sm:     4px;' + LineEnding +
     '  --radius-scroll: 8px;' + LineEnding +
@@ -1472,6 +1481,11 @@ begin
     '' + LineEnding +
     '/* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: Windows 7''s details view. No band, a slate caption, full separators, a pale blue hover. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-color: alpha(var(--on-surface), 0.7);' + LineEnding +
+    '  --grid-header-hover-bg: alpha(var(--accent), 0.12);' + LineEnding +
+    '  --grid-header-pressed-bg: alpha(var(--accent), 0.24);' + LineEnding +
     '  --focus-ring: alpha(var(--accent), 0.55);' + LineEnding +
     '  --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
@@ -2038,6 +2052,17 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: a pale band, strong caption, short separators, carets, the sorted column tinted. */' + LineEnding +
+    '  --grid-header-bg: darken(--surface, 2%);' + LineEnding +
+    '  --grid-header-font-weight: 600;' + LineEnding +
+    '  --grid-header-separator-height: 50%;' + LineEnding +
+    '  --grid-header-sorted-bg: darken(--surface, 6%);' + LineEnding +
+    '  --grid-sorted-cell-bg: darken(--surface, 2%);' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
+    '  --sort-glyph: triangle;' + LineEnding +
+    '  --sort-glyph-size: 11px;' + LineEnding +
+    '  --sort-glyph-unsorted: always;' + LineEnding +
     '  --radius:    6px;' + LineEnding +
     '  --radius-sm: 4px;' + LineEnding +
     '}' + LineEnding +
@@ -2303,6 +2328,14 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, a bold caption over a heavier rule, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-font-weight: 700;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-header-rule-width: 2px;' + LineEnding +
+    '  --grid-header-rule-color: var(--on-surface);' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --radius:       6px;' + LineEnding +
     '  --radius-sm:    4px;' + LineEnding +
     '  --input-border: var(--field-border);' + LineEnding +
@@ -2751,6 +2784,12 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: a band, short separators, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--surface-chrome);' + LineEnding +
+    '  --grid-header-separator-height: 60%;' + LineEnding +
+    '  --grid-header-separator-color: var(--border);' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --radius:        3px;' + LineEnding +
     '  --radius-sm:     2px;' + LineEnding +
     '  --radius-scroll: 3px;' + LineEnding +
@@ -2987,6 +3026,17 @@ begin
     '   caption band in this idiom (see TyCardHeader), so it is caption-short too — not the tall' + LineEnding +
     '   36px band a modern skin wants. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: raised buttons for a header, dark lines, triangles. */' + LineEnding +
+    '  --grid-header-bg: var(--surface);' + LineEnding +
+    '  --grid-header-bevel: raised;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-header-separator-color: darken(--surface, 30%);' + LineEnding +
+    '  --grid-header-rule-width: 0;' + LineEnding +
+    '  --grid-header-hover-bg: var(--surface);' + LineEnding +
+    '  --grid-header-pressed-bg: var(--surface);' + LineEnding +
+    '  --grid-line-color: var(--border);' + LineEnding +
+    '  --sort-glyph: triangle;' + LineEnding +
+    '  --sort-glyph-size: 9px;' + LineEnding +
     '  --caption-button-width:    25;   /* small squarish caption buttons */' + LineEnding +
     '  --caption-button-margin:    3;   /* horizontal gap: buttons ↔ right edge / caption */' + LineEnding +
     '  --caption-button-margin-y:  6;   /* vertical gap: buttons ↔ title-bar top & bottom */' + LineEnding +
@@ -3236,6 +3286,12 @@ begin
     '' + LineEnding +
     '/* ── Mode-invariant scalars (geometry, opacity) ── */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, semibold caption, no separators, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-font-weight: 600;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --radius:       4px;' + LineEnding +
     '  --radius-check: 3px;' + LineEnding +
     '  --radius-pill:  100px;' + LineEnding +
@@ -3557,6 +3613,12 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, a quiet caption, short separators, faint lines between rows, no hover. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-color: alpha(var(--on-surface), 0.7);' + LineEnding +
+    '  --grid-header-separator-height: 50%;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: none;' + LineEnding +
     '  --radius:        6px;' + LineEnding +
     '  --radius-sm:     4px;' + LineEnding +
     '  --radius-scroll: 8px;' + LineEnding +
@@ -3825,6 +3887,13 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, medium caption, no separators, an arrow for the sort. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-font-weight: 500;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
+    '  --sort-glyph: arrow;' + LineEnding +
     '  --radius:       4px;' + LineEnding +
     '  --radius-sm:    4px;' + LineEnding +
     '  --input-bg:     var(--field);' + LineEnding +
@@ -4044,6 +4113,12 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: a worksheet. A band, full separators, the cursor''s row number picked out. */' + LineEnding +
+    '  --grid-header-bg: var(--surface-chrome);' + LineEnding +
+    '  --grid-header-separator-color: var(--border);' + LineEnding +
+    '  --grid-indicator-bg: var(--surface-chrome);' + LineEnding +
+    '  --grid-indicator-active-color: var(--accent);' + LineEnding +
+    '  --grid-line-color: darken(--surface, 10%);' + LineEnding +
     '  --radius:        2px;' + LineEnding +
     '  --radius-sm:     2px;' + LineEnding +
     '  --radius-scroll: 0;' + LineEnding +
@@ -4848,10 +4923,10 @@ begin
     'TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }' + LineEnding +
-    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
-    'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
-    'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
-    'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--grid-header-bg); border-color: var(--grid-header-separator-color); border-width: var(--input-border-width); color: var(--grid-header-color); font-size: var(--grid-header-font-size); font-weight: var(--grid-header-font-weight); }' + LineEnding +
+    'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--grid-header-color); border-color: var(--grid-header-separator-color); }' + LineEnding +
+    'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--grid-header-hover-bg); }' + LineEnding +
+    'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--grid-header-selected-bg); }' + LineEnding +
     'TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
@@ -4964,6 +5039,12 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, a bold caption, no separators, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-font-weight: 700;' + LineEnding +
+    '  --grid-header-separator-width: 0;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --radius:        6px;' + LineEnding +
     '  --radius-sm:     4px;' + LineEnding +
     '  --radius-scroll: 8px;' + LineEnding +
@@ -5150,6 +5231,11 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: Explorer''s details view. No band, a quiet caption, full separators, a pale blue hover. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-color: alpha(var(--on-surface), 0.7);' + LineEnding +
+    '  --grid-header-hover-bg: alpha(var(--accent), 0.12);' + LineEnding +
+    '  --grid-header-pressed-bg: alpha(var(--accent), 0.24);' + LineEnding +
     '  --radius:        0;' + LineEnding +
     '  --radius-sm:     0;' + LineEnding +
     '  --radius-scroll: 0;' + LineEnding +
@@ -5394,6 +5480,12 @@ begin
     '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
     '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: no band, a quiet caption, short separators, lines between rows only. */' + LineEnding +
+    '  --grid-header-bg: var(--grid-bg);' + LineEnding +
+    '  --grid-header-color: alpha(var(--on-surface), 0.7);' + LineEnding +
+    '  --grid-header-separator-height: 60%;' + LineEnding +
+    '  --grid-line-v-width: 0;' + LineEnding +
+    '  --grid-hover: row;' + LineEnding +
     '  --input-bg:     var(--field);' + LineEnding +
     '  --input-border: var(--border);' + LineEnding +
     '  --grid-bg:      var(--field);' + LineEnding +
@@ -5660,6 +5752,14 @@ begin
     '   90deg = a vertical top->bottom gradient here. */' + LineEnding +
     '' + LineEnding +
     ':root {' + LineEnding +
+    '  /* Table: Luna''s header. The window colour with a bevelled foot, full separators, triangles. */' + LineEnding +
+    '  --grid-header-bg: var(--surface);' + LineEnding +
+    '  --grid-header-separator-color: var(--border);' + LineEnding +
+    '  --grid-header-rule-width: 2px;' + LineEnding +
+    '  --grid-header-hover-bg: lighten(--surface, 6%);' + LineEnding +
+    '  --grid-line-color: var(--border);' + LineEnding +
+    '  --sort-glyph: triangle;' + LineEnding +
+    '  --sort-glyph-size: 9px;' + LineEnding +
     '  --radius: 3px;' + LineEnding +
     '  /* XP caption buttons: small glossy rounded squares (a touch wider than tall), each white-ringed. */' + LineEnding +
     '  --caption-button-width:    24;' + LineEnding +

@@ -4327,6 +4327,8 @@ begin
   FG.IndicatorWidth := 20;
   FG.FixedCols := 1;
   FG.GridLineStyle := glsNone;
+  { The band's own colour from edge to edge: no frame over it, no line along its inner edge. }
+  FG.StyleOverride := 'border-width: 0; --grid-frozen-line-width: 0';
   FG.Remeasure;
   M := FG.Metrics;
   AssertEquals('precondition: gutter + one frozen column', 80, FG.FrozenW);

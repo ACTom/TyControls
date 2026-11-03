@@ -56,6 +56,49 @@
      the surface and the grid has always sat on the surface itself, so a skin that wants a
      field-white grid says so here. */
   --grid-bg:          var(--surface);
+  /* The data grid, part by part. The TyGrid* rules below read these, so a skin retunes the table
+     here or writes the rule outright; one grid takes the same names in its own StyleOverride. */
+  --grid-line-color:              darken(--surface, 8%);
+  --grid-header-bg:               darken(--surface, 2.5%);
+  --grid-header-color:            var(--on-surface);
+  --grid-header-font-size:        var(--font-size-base);
+  --grid-header-font-weight:      var(--font-weight-normal);
+  --grid-header-separator-color:  var(--grid-line-color);
+  --grid-header-rule-color:       var(--border);
+  --grid-header-hover-bg:         var(--surface-hover);
+  --grid-header-selected-bg:      var(--surface-active);
+  --grid-header-pressed-bg:       var(--surface-active);
+  --grid-header-sorted-bg:        none;
+  --grid-header-sorted-color:     var(--grid-header-color);
+  --grid-header-filtered-bg:      none;
+  --grid-header-filtered-color:   var(--grid-header-color);
+  --grid-header-group-bg:         var(--surface-chrome);
+  --grid-header-group-color:      var(--on-surface);
+  --grid-cell-bg:                 none;
+  --grid-cell-color:              var(--on-surface);
+  --grid-hover-bg:                var(--surface-hover);
+  --grid-alt-bg:                  var(--surface-alt);
+  --grid-sorted-cell-bg:          none;
+  --grid-selected-bg:             var(--accent);
+  --grid-selected-color:          var(--on-accent);
+  --grid-selected-hover-bg:       var(--grid-selected-bg);
+  --grid-selected-inactive-bg:    alpha(var(--accent), 0.35);
+  --grid-selected-inactive-color: var(--on-surface);
+  --grid-active-cell-bg:          var(--surface-active);
+  --grid-active-cell-color:       var(--on-surface);
+  --grid-fixed-bg:                var(--grid-header-bg);
+  --grid-fixed-color:             var(--on-surface);
+  --grid-frozen-line-color:       var(--border);
+  --grid-indicator-bg:            var(--grid-header-bg);
+  --grid-indicator-color:         var(--muted);
+  --grid-indicator-active-color:  var(--on-surface);
+  --grid-filter-bg:               var(--surface);
+  --grid-filter-color:            var(--on-surface);
+  --grid-group-bg:                none;
+  --grid-group-color:             var(--on-surface);
+  --grid-footer-bg:               none;
+  --grid-footer-color:            var(--on-surface);
+  --grid-footer-rule-color:       var(--border);
   --scroll-handle:    var(--border);          /* resting scroll thumb/handle */
   --input-border-hover: var(--border-hover);  /* neutral inputs hover border */
   /* on-* declared here but WIRED only in the §3 bug-fix commit */
@@ -186,6 +229,26 @@
   --gallery-grid-cell-height: 44px;
   --glyph-button-gap: 6px;
   --grid-comment-mark-size: 7px;
+  --grid-fill-handle-size: 6px;
+  --grid-focus-ring-style: solid;
+  --grid-focus-ring-width: 0px;
+  --grid-footer-rule-width: 1px;
+  --grid-frozen-line-width: 1px;
+  --grid-frozen-shadow-size: 0px;
+  --grid-group-indent: 14px;
+  --grid-header-bevel: none;
+  --grid-header-padding-end: 4px;
+  --grid-header-padding-start: 6px;
+  --grid-header-rule-width: 1px;
+  --grid-header-separator-height: 100%;
+  --grid-header-separator-style: solid;
+  --grid-header-separator-width: 1px;
+  --grid-hover: cell;
+  --grid-line-extend: full;
+  --grid-line-h-style: solid;
+  --grid-line-h-width: 1px;
+  --grid-line-v-style: solid;
+  --grid-line-v-width: 1px;
   --header-control-height: 26px;
   --header-section-width: 100px;
   --listgroup-chevron-size: 14px;
@@ -793,25 +856,29 @@ TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }
 TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }
 TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }
 TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }
-TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
-TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
-TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }
-TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }
+TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--grid-header-bg); border-color: var(--grid-header-separator-color); border-width: var(--input-border-width); color: var(--grid-header-color); font-size: var(--grid-header-font-size); font-weight: var(--grid-header-font-weight); }
+TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--grid-header-color); border-color: var(--grid-header-separator-color); }
+TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--grid-header-hover-bg); }
+TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--grid-header-selected-bg); }
 
 /* --- 数据网格 TTyGrid ------------------------------------------------------
    基层给全套键,新皮肤即使一条网格规则都不写也能正常显示(基层垫在每个主题之下)。
    网格自成一套 typeKey,不借用树/列表的键 —— 借来的键在外观主题层够不着。 */
 TyGrid { background: var(--grid-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }
 /* 正文单元格。resting 透明,让网格表面透出来;选中/悬停才上色。 */
-TyGridCell { background: none; color: var(--on-surface); padding: var(--pad-cell); }
-TyGridCell:hover    { background: var(--surface-hover); }
-TyGridCell:selected { background: var(--accent); color: var(--on-accent); }
+TyGridCell { background: var(--grid-cell-bg); color: var(--grid-cell-color); padding: var(--pad-cell); }
+TyGridCell:hover    { background: var(--grid-hover-bg); }
+TyGridCell:selected { background: var(--grid-selected-bg); color: var(--grid-selected-color); }
+/* 选中且鼠标在上面。自己的键:语法每个选择器只认一个 :state。 */
+TyGridCellSelectedHover { background: var(--grid-selected-hover-bg); }
+/* 排序列的正文。默认不上色。 */
+TyGridCellSorted { background: var(--grid-sorted-cell-bg); }
 /* 失焦时的选区(HideSelectionWhenInactive)。给它**自己的键**,不写成
    TyGridCell:selected:disabled —— 语法每个选择器只认一个 :state,
    链式伪状态解析不了(而且借别的键会让外观层够不着,见 TyGridActiveCell)。 */
-TyGridCellSelectedInactive { background: alpha(var(--accent), 0.35); color: var(--on-surface); }
+TyGridCellSelectedInactive { background: var(--grid-selected-inactive-bg); color: var(--grid-selected-inactive-color); }
 /* 焦点格(光标所在)。整行选中模式下,不区分就看不出光标在哪一格。 */
-TyGridActiveCell { background: var(--surface-active); color: var(--on-surface); }
+TyGridActiveCell { background: var(--grid-active-cell-bg); color: var(--grid-active-cell-color); }
 /* 选区盖在"用户显式指定了底色"的格上时用这一层(逐格色/行色/条件着色)。
    不透明的选区色会把用户自己标的颜色整块抹掉,而光标总落在刚上色的那一格上。 */
 TyGridCellMarked { background: alpha(--accent, 0.42); }
@@ -821,15 +888,20 @@ TyGridCellMarked { background: alpha(--accent, 0.42); }
 TyGridSelectionFrame { border-color: var(--accent); border-width: 1px; background: var(--accent); color: var(--surface); }
 /* 斑马纹。自己的 typeKey 而不是 TyGridCell:alternate:加伪类要动共享的状态枚举与
    CSS 解析器,会波及每一个控件;而网格的各部件本来就各有各的键。 */
-TyGridCellAlt { background: var(--surface-alt); }
+TyGridCellAlt { background: var(--grid-alt-bg); }
 /* 冻结区(固定行列)与行头槽:比正文略重,读者一眼能分出"这块不滚动"。 */
-TyGridFixed     { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); }
-TyGridIndicator { background: var(--surface-chrome); color: var(--muted); border-color: var(--border); }
+TyGridFixed     { background: var(--grid-fixed-bg); color: var(--grid-fixed-color); border-color: var(--border); }
+TyGridIndicator { background: var(--grid-indicator-bg); color: var(--grid-indicator-color); border-color: var(--border); }
+/* 光标所在那一行的行号。 */
+TyGridIndicatorActive { color: var(--grid-indicator-active-color); }
 /* 列头带 —— 与树表头同族的观感,但用自己的键。 */
-TyGridHeader        { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
-TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
-TyGridHeaderSection:hover    { background: var(--surface-hover); }
-TyGridHeaderSection:selected { background: var(--surface-active); }
+TyGridHeader        { background: var(--grid-header-bg); color: var(--grid-header-color); border-color: var(--grid-header-separator-color); border-width: var(--input-border-width); font-size: var(--grid-header-font-size); font-weight: var(--grid-header-font-weight); }
+TyGridHeaderSection { background: none; color: var(--grid-header-color); border-color: var(--grid-header-separator-color); }
+TyGridHeaderSection:hover    { background: var(--grid-header-hover-bg); }
+TyGridHeaderSection:selected { background: var(--grid-header-selected-bg); }
+/* 正在排序的一段、正在筛选的一段。默认不上色。 */
+TyGridHeaderSorted   { background: var(--grid-header-sorted-bg); color: var(--grid-header-sorted-color); }
+TyGridHeaderFiltered { background: var(--grid-header-filtered-bg); color: var(--grid-header-filtered-color); }
 /* 按下态("列头按下去"的观感)。这条规则以前不存在,于是按下的列头解析回 base 的
    `background: none` —— 与静止态一模一样,看不出被按下。与其发布一个控件不照办的标志,
    不如先把缝补上;这条规则补的就是那个缝,控件侧的 goHeaderPushedLook 随后接上。
@@ -840,12 +912,12 @@ TyGridHeaderSection:selected { background: var(--surface-active); }
    与 :selected 同值是有意的:两者都是"这一段正被使用",而真正的差别是相对 base
    的 `none` —— 按下去现在有底色了。tests/test.themes 的 golden 第 2 号状态槽
    (STATES[2] = [tysActive])把这条钉住。 */
-TyGridHeaderSection:active   { background: var(--surface-active); }
+TyGridHeaderSection:active   { background: var(--grid-header-pressed-bg); }
 /* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */
-TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }
+TyGridHeaderGroup { background: var(--grid-header-group-bg); color: var(--grid-header-group-color); border-color: var(--grid-header-separator-color); }
 /* 内嵌筛选行。它是"能打字的地方",所以底色跟表面走、边框跟输入框走 ——
    与列头带(chrome 色)刻意区分开,否则用户看不出它可以输入。 */
-TyGridFilterRow { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); }
+TyGridFilterRow { background: var(--grid-filter-bg); color: var(--grid-filter-color); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); }
 /* Group band (TTyStringGrid grouping) and summary/footer band. Both keys have been
    resolved by the code since grouping landed, but NO theme ever defined them, so they
    fell through to an empty style: no band fill at all, and the ink borrowed the grid
@@ -858,10 +930,10 @@ TyGridFilterRow { background: var(--surface); color: var(--on-surface); border-c
    grid's own font; both keys DO read font-name/-size/-weight if a skin declares them.
    TyGridSummaryRow deliberately has no border-color: RenderFooter never reads one, so a
    declaration here would be dead. A footer hairline needs a code change first. */
-TyGridGroupRow   { background: none; color: var(--on-surface); }
-TyGridSummaryRow { background: none; color: var(--on-surface); }
+TyGridGroupRow   { background: var(--grid-group-bg); color: var(--grid-group-color); }
+TyGridSummaryRow { background: var(--grid-footer-bg); color: var(--grid-footer-color); }
 /* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */
-TyGridLine      { background: var(--border); }
+TyGridLine      { background: var(--grid-line-color); }
 /* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,
    而且改它会波及那些控件。状态只由单元格自身决定,不掺网格的瞬时状态。 */
 TyGridCheckBox           { background: var(--input-bg); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }

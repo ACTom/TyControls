@@ -15,6 +15,9 @@ function TyOn(bg: TTyColor): TTyColor; overload;                              //
 function TyOn(bg, inkOnLight, inkOnDark: TTyColor): TTyColor; overload;       // bg light->inkOnLight
 
 function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;  // resolves var()/funcs
+{ A line style token: 'solid', 'dotted' (1 on, 1 off), 'dashed' (3 on, 3 off) or '<on> [<off>]' in
+  logical pixels, as in stroke-dasharray. AOn = 0 means a solid line. }
+procedure TyParseLineDash(const AText: string; out AOn, AOff: Integer);
 function TyEvalLength(const Expr: string; Vars: TStrings): Integer;  // '6px'->6, var() ok
 { 把 Expr 里所有 var(...) 就地展开成它们的值,返回展开后的字符串。
   多值属性(padding)必须**先展开再切分** —— 反过来的话
@@ -355,6 +358,52 @@ begin
     ref := Copy(Result, i, j - i + 1);
     val := Trim(ResolveVarRef(ref, Vars));
     Result := Copy(Result, 1, i - 1) + val + Copy(Result, j + 1, MaxInt);
+  end;
+end;
+
+procedure TyParseLineDash(const AText: string; out AOn, AOff: Integer);
+var
+  s, a, b: string;
+  sp: Integer;
+begin
+  AOn := 0;
+  AOff := 0;
+  s := Trim(StringReplace(AText, ',', ' ', [rfReplaceAll]));
+  if SameText(s, 'dotted') then
+  begin
+    AOn := 1;
+    AOff := 1;
+    Exit;
+  end;
+  if SameText(s, 'dashed') then
+  begin
+    AOn := 3;
+    AOff := 3;
+    Exit;
+  end;
+  if (s = '') or SameText(s, 'solid') then Exit;
+  sp := Pos(' ', s);
+  if sp > 0 then
+  begin
+    a := Trim(Copy(s, 1, sp - 1));
+    b := Trim(Copy(s, sp + 1, MaxInt));
+  end
+  else
+  begin
+    a := s;
+    b := s;
+  end;
+  try
+    AOn := TyEvalLength(a, nil);
+    AOff := TyEvalLength(b, nil);
+  except
+    AOn := 0;
+    AOff := 0;
+  end;
+  if (AOn < 1) or (AOff < 1) then
+  begin
+    AOn := 0;
+    AOff := 0;
   end;
 end;
 
