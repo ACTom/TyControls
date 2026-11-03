@@ -108,6 +108,8 @@ type
     Dash: TTyDoubleArray;
     DashOffset, Opacity: Double;
     LineCap, LineJoin: string;
+    { [R7-U] the lineStyle's miterLimit, NaN where none }
+    Miter: Double;
     Z2: Double;
     { [R5-A] the lineStyle's shadow (Line.ts' line.useStyle(lineStyle)); its
       end symbols take none }
@@ -264,6 +266,10 @@ type
     StyleFill, StyleStroke: string;
     StyleLineWidth, StyleOpacity, StyleDashOffset: Double;
     StyleDash: TJSONData;
+    { [R7-U] the itemStyle's borderCap, borderJoin ('' none) and
+      borderMiterLimit (NaN none) }
+    StyleCap, StyleJoin: string;
+    StyleMiter: Double;
     { [R5-A] the itemStyle's shadow (SymbolDraw's visual style) }
     StyleShadow: TTyChartShadow;
     { what the painter strokes: width and dash in the path's own units }
@@ -316,6 +322,8 @@ type
     LineWidth, Opacity, DashOffset: Double;
     Dash: TJSONData;
     LineCap, LineJoin: string;
+    { [R7-U] the itemStyle's borderMiterLimit, NaN where none }
+    Miter: Double;
     { [R5-A] the itemStyle's shadow (MarkAreaView's polygon.useStyle) }
     Shadow: TTyChartShadow;
     Lbl: TTyMkPtLabelPic;
@@ -476,6 +484,21 @@ begin
 end;
 
 { Model.get / getShallow over the levels: the first that is not null }
+{ [R7-U] A PEN'S ENDS ON THE ELEMENT, as the canvas takes them: a cap or a
+  join word it knows (any other keeps its default), a miterLimit that is a
+  number above nought (style.miterLimit else 10) }
+procedure MkSetEnds(var AStyle: TTyChartElementStyle; const ACap, AJoin: string;
+  AMiter: Double);
+begin
+  if ACap = 'round' then AStyle.LineCap := 1
+  else if ACap = 'square' then AStyle.LineCap := 2
+  else if ACap = 'butt' then AStyle.LineCap := 0;
+  if AJoin = 'round' then AStyle.LineJoin := 1
+  else if AJoin = 'bevel' then AStyle.LineJoin := 2
+  else if AJoin = 'miter' then AStyle.LineJoin := 0;
+  if (AMiter > 0) and not IsInfinite(AMiter) then AStyle.MiterLimit := AMiter;
+end;
+
 function Chain(const L: TMkLevels; const AKey: string; AOwnOnly: Boolean = False): TJSONData;
 var i: Integer;
 begin
@@ -1514,6 +1537,8 @@ var
     if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
     d := Chain(LS, 'join');
     if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+    d := Chain(LS, 'miterLimit');
+    if d <> nil then P.Miter := NumOf(d) else P.Miter := NaN;
     P.Shadow := MkShadow(LS);
     P.Stroke := stroke;
     d := Chain(itemLv, 'z2');
@@ -2146,6 +2171,8 @@ begin
       el.Style.DashLogical := Copy(APics[i].Dash);
       el.Style.DashWord := APics[i].DashWord;
       el.Style.DashOffsetLogical := APics[i].DashOffset;
+      { [R7-U] its cap, join and miterLimit (getLineStyle) [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
       TyStyleSetShadow(el.Style, APics[i].Shadow);
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
@@ -2971,6 +2998,13 @@ var
     P.StyleDash := Chain(IS_, 'borderType');
     d := Chain(IS_, 'borderDashOffset');
     if d <> nil then P.StyleDashOffset := NumOf(d);
+    { [R7-U] the pen's ends (getItemStyle) }
+    d := Chain(IS_, 'borderCap');
+    if d <> nil then P.StyleCap := JsStringOf(d) else P.StyleCap := '';
+    d := Chain(IS_, 'borderJoin');
+    if d <> nil then P.StyleJoin := JsStringOf(d) else P.StyleJoin := '';
+    d := Chain(IS_, 'borderMiterLimit');
+    if d <> nil then P.StyleMiter := NumOf(d) else P.StyleMiter := NaN;
     P.StyleShadow := MkShadow(IS_);
     if P.Empty then
     begin
@@ -3535,6 +3569,8 @@ begin
       { [R2-I5] a word, measured again against the width a state draws }
       el.Style.DashWord := DashWordOf(APics[i].StyleDash);
       el.Style.DashOffsetLogical := APics[i].StyleDashOffset;
+      { [R7-U] its cap, join and miterLimit [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].StyleCap, APics[i].StyleJoin, APics[i].StyleMiter);
       { [R7-P] its pen through the unit path's transform (strokeNoScale):
         stretched where the symbol's size is not square }
       if APics[i].HasGlobal then TyStyleNoScalePen(el.Style, APics[i].Global);
@@ -3751,6 +3787,8 @@ begin
       if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
       d := Chain(IS_, 'borderJoin');
       if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+      d := Chain(IS_, 'borderMiterLimit');
+      if d <> nil then P.Miter := NumOf(d) else P.Miter := NaN;
       P.Shadow := MkShadow(IS_);
       hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
         and (P.LineWidth > 0);
@@ -3906,6 +3944,8 @@ begin
       { [R2-I5] a word, measured again against the width a state draws }
       el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
+      { [R7-U] its cap, join and miterLimit [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
     end
     else if (APics[i].LineWidth > 0) and (APics[i].Stroke = '')
       and (APics[i].StrokeData <> nil) and TyTryReadGradient(APics[i].StrokeData, g) then
@@ -3916,6 +3956,7 @@ begin
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
       el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
     end;
     { getBoundingRect: the polygon's box grown by its stroke [Batch 105] }
     el.Style.GradBoxSet := True;

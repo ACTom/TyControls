@@ -1132,8 +1132,11 @@ begin
         TyRtResolveOpt(False));
   end;
 
-  TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result.Needle.Shadow);
-  TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result.Progress.Shadow);
+  { [R7-U] over the visual style's: the series' own block }
+  TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'], ['itemStyle'],
+    Result.Needle.Shadow);
+  TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'], ['itemStyle'],
+    Result.Progress.Shadow);
   n2 := ObjIn(node, 'pointer');
   if n2 <> nil then
   begin
@@ -1255,15 +1258,19 @@ begin
       over the series' }
     if arr.Items[i] is TJSONObject then
     begin
-      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['pointer', 'itemStyle'],
+      TyStReadShadowFb([TJSONObject(arr.Items[i]), node],
+        [TJSONObject(arr.Items[i]), AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'],
         ['itemStyle'], Result[i].NeedleShadow);
-      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['progress', 'itemStyle'],
+      TyStReadShadowFb([TJSONObject(arr.Items[i]), node],
+        [TJSONObject(arr.Items[i]), AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'],
         ['itemStyle'], Result[i].ProgressShadow);
     end
     else
     begin
-      TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result[i].NeedleShadow);
-      TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result[i].ProgressShadow);
+      TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'],
+        ['itemStyle'], Result[i].NeedleShadow);
+      TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'],
+        ['itemStyle'], Result[i].ProgressShadow);
     end;
     if arr.Items[i].JSONType <> jtObject then Continue;
     { [R7-D] the item's own pointer and part colours }

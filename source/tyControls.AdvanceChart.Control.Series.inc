@@ -1789,6 +1789,7 @@ function TTyCustomAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
   const ASolved: TTyLinesSolved; ARow: Integer; AStroke: TTyChartColor;
   AScale: Double; out ASpec: TTyLabelSpec): TTyLinesInk;
 var
+  vNode: TJSONObject;
   grad: TTyChartGradient;
   raw: TTyLinesRaw;
   d, own, fmt: TJSONData;
@@ -1870,16 +1871,20 @@ begin
     Result.StrokeGrad := grad;
     Result.Stroke := TyGradientSolid(grad);
   end;
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'width']);
+  { [R7-U] the row's visual style: its own lineStyle over the series' own
+    (ignoreParent) -- none of the root's }
+  vNode := FOption.SeriesOwnStyle(ASolved.SeriesIndex);
+  if vNode = nil then vNode := ANode;
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'width']);
   if d = nil then Result.Width := 1 else Result.Width := TyLinesJsNum(d);
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'opacity']);
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'opacity']);
   if d = nil then Result.Opacity := 0.5 else Result.Opacity := TyLinesJsNum(d);
-  LnDashOf(TyLinesFind(raw, ANode, ['lineStyle', 'type']), dash, expl);
+  LnDashOf(TyLinesFind(raw, vNode, ['lineStyle', 'type']), dash, expl);
   Result.Dash := TyDashPattern(dash, expl, Result.Width);
   { [R2-I5] a word, measured again against the width a frame draws }
   Result.DashWord := TyDashWord(dash);
   { [R2-I2] its phase, the row's else the series' }
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'dashOffset']);
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'dashOffset']);
   { [R6-E] as the canvas takes it: a numeric string its number }
   if d <> nil then Result.DashOffset := TyOptPenOffset(d);
   if IsNan(Result.DashOffset) then Result.DashOffset := 0;
@@ -2193,11 +2198,11 @@ begin
     if d = nil then trail := 0.2 else trail := TyLinesJsNum(d);
     if sol.Effect and (trail > 0) then sol.TrailAlpha := TyLinesTrailAlpha(trail);
     { the series' visual colour: lineStyle.color, else the palette's -- a
-      gradient object too [spec 242] }
+      gradient object too [spec 242]; [R7-U] the series' own (ignoreParent) }
     stroke := TTyChartColor(SeriesColor(si));
     FLnSeriesGrad := Default(TTyChartGradient);
-    if LnColour(LnNode(node, ['lineStyle', 'color']), c) then stroke := c
-    else if TyTryReadGradient(LnNode(node, ['lineStyle', 'color']), FLnSeriesGrad) then
+    if LnColour(LnNode(FOption.SeriesOwnStyle(si), ['lineStyle', 'color']), c) then stroke := c
+    else if TyTryReadGradient(LnNode(FOption.SeriesOwnStyle(si), ['lineStyle', 'color']), FLnSeriesGrad) then
       stroke := TyGradientSolid(FLnSeriesGrad);
     sol.Scale := scale;
     { THE CLIP: createGridClipPath widened by the series' lineStyle.width
@@ -2420,6 +2425,7 @@ end;
   axis is brushed, else activeOpacity / inactiveOpacity }
 procedure TTyCustomAdvanceChart.SolveParallels(APPI: Integer);
 var
+  vis: TJSONObject;
   i, a, r, raw, si: Integer;
   b: TTySeriesBinding;
   par: TTyParallel;
@@ -2498,19 +2504,22 @@ begin
       poss[a] := par.DimNums[a];
       cats[a] := par.Axis(a).AxisType = atCategory;
     end;
-    { the series' style }
+    { the series' style [R7-U: its visual style, the series' own block --
+      none of the root's] }
     base := TTyChartColor(SeriesColor(si));
+    vis := FOption.SeriesOwnStyle(si);
+    if vis = nil then vis := node;
     { [R6-E] the pen as the canvas takes it: a numeric string its number }
-    lsWidth := TyOptPenWidth(LnNode(node, ['lineStyle', 'width']));
+    lsWidth := TyOptPenWidth(LnNode(vis, ['lineStyle', 'width']));
     if IsNan(lsWidth) then lsWidth := 1;
-    d := LnNode(node, ['lineStyle', 'type']);
+    d := LnNode(vis, ['lineStyle', 'type']);
     if d = nil then dashWord := 'solid' else dashWord := DashText(d);
     LnDashOf(d, dash, expl);
     if d = nil then dash := todSolid;
     { [R2-I2] the phase }
-    dashOff := TyOptPenOffset(LnNode(node, ['lineStyle', 'dashOffset']));
+    dashOff := TyOptPenOffset(LnNode(vis, ['lineStyle', 'dashOffset']));
     if IsNan(dashOff) then dashOff := 0;
-    d := LnNode(node, ['lineStyle', 'opacity']);
+    d := LnNode(vis, ['lineStyle', 'opacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opN := d.AsFloat else opN := 0.45;
     d := LnNode(node, ['activeOpacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opA := d.AsFloat else opA := 1;
@@ -3278,8 +3287,9 @@ begin
     Result.LineInf := TyOptIsPosInf(d);
   end;
   { [R6-D] the symbols' pen: the series' itemStyle border ('auto' its
-    palette colour) and each item's own over it }
-  os := TyReadOptStyle(node, 'itemStyle');
+    palette colour) and each item's own over it [R7-U: the visual style's,
+    the series' own block] }
+  os := TyReadOptStyle(FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex), 'itemStyle');
   Result.Border := os.BorderColor;
   Result.BorderAuto := TTyChartColor(SeriesPaletteColor(FBindings[ASlot].SeriesIndex));
   Result.BorderWidthLogical := os.BorderWidthLogical;
@@ -3341,12 +3351,14 @@ begin
   { AN AREA ONLY WHEN THE AUTHOR ASKED FOR ONE, and `areaStyle: {}` counts as
     asking -- upstream's test is whether the option object exists at all, not
     whether it has anything in it. That is why an empty object is the documented
-    way to fill a radar. }
+    way to fill a radar. [R7-U] Whether the series' own option has one
+    (isEmpty); its keys climb to the root's (getAreaStyle), an item's area
+    over them too. }
+  Result.HasArea := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex).Find('areaStyle') is TJSONObject;
+  Result.Area := Result.Fill;
   d := node.Find('areaStyle');
   if (d <> nil) and (d.JSONType = jtObject) then
   begin
-    Result.HasArea := True;
-    Result.Area := Result.Fill;
     ar := TJSONObject(d);
     d := ar.Find('color');
     if (d <> nil) and (d.JSONType = jtString)
@@ -3675,8 +3687,8 @@ begin
   { AND THE BORDER the series wrote: PieSeries' itemStyle is borderWidth 1
     with no colour, so nothing is stroked until a colour is written [Batch
     105: it was never read] }
-  bst := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
-    FBindings[ASlot].SeriesIndex)), 'itemStyle');
+  { [R7-U] the visual style's: the series' own block }
+  bst := TyReadOptStyle(FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex), 'itemStyle');
   if bst.BorderColor.Written and not bst.BorderColor.IsNone
     and not bst.BorderColor.IsAuto then
   begin
@@ -3771,6 +3783,8 @@ begin
   if FOption = nil then Exit;
   d := FOption.ComponentAt('series', si);
   if not (d is TJSONObject) then Exit;
+  { [R7-U] the visual style: the series' own block }
+  d := FOption.SeriesOwnStyle(si);
   st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
   { [R2-J3] A FUNCTION AS itemStyle.color, not the boxplot's colour key: the
     style task gives the fill the palette's colour (`isFunction(fill) ?

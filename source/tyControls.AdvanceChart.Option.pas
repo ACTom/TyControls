@@ -90,6 +90,10 @@ type
       Old: TJSONData;
     end;
     FFillDepth: Integer;
+    { [R7-U] per series (by index), the style blocks it wrote itself --
+      clones taken before RootFill put the root's in -- where the root
+      writes one; nil elsewhere (see SeriesOwnStyle) }
+    FOwnStyle: array of TJSONObject;
     procedure RootUnfill;
     procedure RootFill;
     procedure DropMerged;
@@ -189,6 +193,13 @@ type
     function ComponentMerged(const AMainType: string; AIndex: Integer): Boolean;
     { the merged option, shaped as upstream's getOption shapes it }
     function OptionJson: string;
+    { [R7-U] THE SERIES' OWN STYLE BLOCKS, as the series' visual reads them
+      (visual/style.ts: makeStyleMapper(..., ignoreParent)): an object
+      holding the itemStyle / lineStyle / areaStyle the series wrote, none
+      of the root's that RootFill put under it -- or the series' node itself
+      where the root writes no style block. Read only those three keys off
+      it; nil for a series index that is no object. }
+    function SeriesOwnStyle(AIndex: Integer): TJSONObject;
     property Keys: TTyOptionKeys read FKeys;
 
     { Resolve a dotted/indexed path -- 'series[0].itemStyle.color'. nil when any
@@ -235,9 +246,9 @@ type
 { [spec 242] the leaves each series type's defaults hold under the root's
   object keys ('pie:label.show' ...), as the ECharts 6.1 dist has them }
 function TyRootDefaultPaths: TTyStringArray;
-{ [R7-U] the leaves each series type's and component's defaultOption holds
-  under the root's style blocks and scalars, as 'type:path' -- where the
-  root's do not reach }
+{ [R7-U] the leaves each series type's and marker's defaultOption holds
+  under the root's style blocks (itemStyle, lineStyle, areaStyle), as
+  'type:path' -- where the root's do not reach }
 function TyRootStyleDefaultPaths: TTyStringArray;
 
 { Does this text look like it contains a JS function value? Used to turn
@@ -512,6 +523,8 @@ begin
     in for are the records' }
   for i := 0 to High(FFills) do FFills[i].Old.Free;
   FFills := nil;
+  for i := 0 to High(FOwnStyle) do FOwnStyle[i].Free;
+  FOwnStyle := nil;
   FreeAndNil(FRoot);
   DropMerged;
   FreeAndNil(FMedia);
@@ -2346,11 +2359,6 @@ const
     'sunburst:blur.itemStyle.opacity',
     'sunburst:blur.label.opacity');
 
-function TyRootStyleDefaultPaths: TTyStringArray;
-begin
-  Result := nil;
-end;
-
 function TyRootDefaultPaths: TTyStringArray;
 var i: Integer;
 begin
@@ -2374,12 +2382,164 @@ begin
   Result := False;
 end;
 
+const
+  { [R7-U] THE ROOT'S STYLE BLOCKS. getModel('itemStyle') (lineStyle,
+    areaStyle) builds its model over the root's block, so a view's
+    getItemStyle / get(['itemStyle', k]) reads the root's k where the series
+    (its defaults merged in) holds none -- the series' visual does not
+    (ignoreParent), and reads SeriesOwnStyle. The same blocks reach a
+    marker over its master component (its own option and defaults first)
+    and a legend. }
+  cRootStyleKeys: array[0..2] of string = ('itemStyle', 'lineStyle', 'areaStyle');
+  { [R7-U] THE ROOT'S SCALARS a series reads with get() (the parent
+    climbed) where its type's defaults hold none: a pictorial bar's
+    symbolSize (visual/symbol.ts), a pie's roseType (pieLayout), a funnel's
+    min and max (funnelLayout), a graph's, a tree's, a sankey's and a map's
+    roam center (the defaults hold the rest's) }
+  cRootScalarKeys: array[0..4] of string = ('symbolSize', 'roseType', 'center',
+    'min', 'max');
+  { the leaves each series type's and component's defaultOption holds
+    under them, from the ECharts 6.1 dist (tools/advchart-oracle/
+    root-styles.js records them; the suite holds this table to it) }
+  cRootStyleDefaultPaths: array[0..96] of string = (
+    'line:lineStyle.width',
+    'line:lineStyle.type',
+    'line:symbolSize',
+    'pie:itemStyle.borderWidth',
+    'pie:itemStyle.borderJoin',
+    'pie:center',
+    'scatter:itemStyle.opacity',
+    'scatter:symbolSize',
+    'radar:lineStyle.width',
+    'radar:lineStyle.type',
+    'radar:lineStyle.join',
+    'radar:symbolSize',
+    'map:itemStyle.borderWidth',
+    'map:itemStyle.borderColor',
+    'map:itemStyle.areaColor',
+    'tree:itemStyle.color',
+    'tree:itemStyle.borderWidth',
+    'tree:lineStyle.color',
+    'tree:lineStyle.width',
+    'tree:lineStyle.curveness',
+    'tree:symbolSize',
+    'treemap:itemStyle.borderWidth',
+    'treemap:itemStyle.gapWidth',
+    'treemap:itemStyle.borderColor',
+    'graph:lineStyle.color',
+    'graph:lineStyle.width',
+    'graph:lineStyle.opacity',
+    'graph:symbolSize',
+    'chord:itemStyle.borderRadius',
+    'chord:lineStyle.width',
+    'chord:lineStyle.color',
+    'chord:lineStyle.opacity',
+    'chord:center',
+    'gauge:center',
+    'gauge:min',
+    'gauge:max',
+    'funnel:itemStyle.borderColor',
+    'funnel:itemStyle.borderWidth',
+    'parallel:lineStyle.width',
+    'parallel:lineStyle.opacity',
+    'parallel:lineStyle.type',
+    'sankey:lineStyle.color',
+    'sankey:lineStyle.opacity',
+    'sankey:lineStyle.curveness',
+    'boxplot:itemStyle.color',
+    'boxplot:itemStyle.borderWidth',
+    'candlestick:itemStyle.color',
+    'candlestick:itemStyle.color0',
+    'candlestick:itemStyle.borderColor',
+    'candlestick:itemStyle.borderColor0',
+    'candlestick:itemStyle.borderWidth',
+    'effectScatter:symbolSize',
+    'lines:lineStyle.opacity',
+    'lines:symbolSize',
+    'sunburst:itemStyle.borderWidth',
+    'sunburst:itemStyle.borderColor',
+    'sunburst:itemStyle.borderType',
+    'sunburst:itemStyle.shadowBlur',
+    'sunburst:itemStyle.shadowColor',
+    'sunburst:itemStyle.shadowOffsetX',
+    'sunburst:itemStyle.shadowOffsetY',
+    'sunburst:itemStyle.opacity',
+    'sunburst:center',
+    'markPoint:itemStyle.borderWidth',
+    'markLine:lineStyle.type',
+    'markArea:itemStyle.borderWidth',
+    'legend:itemStyle.color',
+    'legend:itemStyle.opacity',
+    'legend:itemStyle.borderColor',
+    'legend:itemStyle.borderWidth',
+    'legend:itemStyle.borderCap',
+    'legend:itemStyle.borderJoin',
+    'legend:itemStyle.borderDashOffset',
+    'legend:itemStyle.borderMiterLimit',
+    'legend:lineStyle.width',
+    'legend:lineStyle.color',
+    'legend:lineStyle.inactiveColor',
+    'legend:lineStyle.inactiveWidth',
+    'legend:lineStyle.opacity',
+    'legend:lineStyle.type',
+    'legend:lineStyle.cap',
+    'legend:lineStyle.join',
+    'legend:lineStyle.dashOffset',
+    'legend:lineStyle.miterLimit',
+    'timeline:itemStyle.color',
+    'timeline:itemStyle.borderWidth',
+    'timeline:lineStyle.show',
+    'timeline:lineStyle.width',
+    'timeline:lineStyle.color',
+    'calendar:itemStyle.color',
+    'calendar:itemStyle.borderWidth',
+    'calendar:itemStyle.borderColor',
+    'axisPointer:lineStyle.color',
+    'axisPointer:lineStyle.width',
+    'axisPointer:lineStyle.type',
+    'geo:itemStyle.borderWidth',
+    'geo:itemStyle.borderColor');
+
+function TyRootStyleDefaultPathsIn(const AType, APath: string): Boolean;
+var
+  i: Integer;
+  pre, full: string;
+begin
+  pre := AType + ':' + APath;
+  for i := 0 to High(cRootStyleDefaultPaths) do
+  begin
+    full := cRootStyleDefaultPaths[i];
+    if (full = pre) or (Copy(full, 1, Length(pre) + 1) = pre + '.') then Exit(True);
+  end;
+  Result := False;
+end;
+
+function TyRootStyleDefaultPaths: TTyStringArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(cRootStyleDefaultPaths));
+  for i := 0 to High(cRootStyleDefaultPaths) do Result[i] := cRootStyleDefaultPaths[i];
+end;
+
+function TTyChartOption.SeriesOwnStyle(AIndex: Integer): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FOwnStyle)) and (FOwnStyle[AIndex] <> nil) then
+    Exit(FOwnStyle[AIndex]);
+  d := ComponentAt('series', AIndex);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
 procedure TTyChartOption.RootUnfill;
 var
   i, idx: Integer;
 begin
   Inc(FFillDepth);
   if FFillDepth <> 1 then Exit;
+  for i := 0 to High(FOwnStyle) do FOwnStyle[i].Free;
+  FOwnStyle := nil;
   for i := High(FFills) downto 0 do
   begin
     idx := FFills[i].Parent.IndexOfName(FFills[i].Key);
@@ -2423,14 +2583,26 @@ procedure TTyChartOption.RootFill;
     end;
   end;
 
+  function ChildOf(AObj: TJSONData; const AName: string): TJSONData;
+  begin
+    Result := nil;
+    if AObj is TJSONObject then Result := TJSONObject(AObj).Find(AName);
+  end;
+
   { the root's ARoot at AParent[AKey] (APath under the series): a leaf where
-    the series and its type's defaults hold none, an object key by key }
+    the series and its type's defaults hold none, an object key by key.
+    [R7-U] AStyle: the defaults are the style blocks' table; ANoDef: a key
+    above was written null, so the defaults merged nothing in under it
+    (zrUtil.merge leaves a key that is there); ATop: what the model between
+    the series' and the root's -- a marker's master component -- holds at
+    APath, which stands before the root's }
   procedure FillAt(AParent: TJSONObject; const AKey: string; ARoot: TJSONData;
-    const AType, APath: string);
+    const AType, APath: string; AStyle, ANoDef: Boolean; ATop: TJSONData);
   var
     own: TJSONData;
     k: Integer;
     obj: TJSONObject;
+    held, topHeld: Boolean;
   begin
     own := AParent.Find(AKey);
     if (own <> nil) and (own.JSONType <> jtNull) then
@@ -2440,27 +2612,48 @@ procedure TTyChartOption.RootFill;
       if (own is TJSONObject) and (ARoot is TJSONObject) then
         for k := 0 to ARoot.Count - 1 do
           FillAt(TJSONObject(own), TJSONObject(ARoot).Names[k], ARoot.Items[k],
-            AType, APath + '.' + TJSONObject(ARoot).Names[k]);
+            AType, APath + '.' + TJSONObject(ARoot).Names[k], AStyle, ANoDef,
+            ChildOf(ATop, TJSONObject(ARoot).Names[k]));
       Exit;
     end;
-    { none here: the root's, unless the defaults hold something here }
-    if not DefaultAtOrUnder(AType, APath) then
+    { [R7-U] written null: no default under it }
+    if own <> nil then ANoDef := True;
+    topHeld := (ATop <> nil) and (ATop.JSONType <> jtNull);
+    if ANoDef then held := False
+    else if AStyle then held := TyRootStyleDefaultPathsIn(AType, APath)
+    else held := DefaultAtOrUnder(AType, APath);
+    { none here: the root's, unless the defaults (or the master) hold
+      something here }
+    if not (held or topHeld) then
     begin
       Put(AParent, AKey, ARoot.Clone);
       Exit;
     end;
     if not (ARoot is TJSONObject) then Exit;
+    { a leaf of the master's holds all of it }
+    if topHeld and not (ATop is TJSONObject) then Exit;
     obj := TJSONObject.Create;
     Put(AParent, AKey, obj);
     for k := 0 to ARoot.Count - 1 do
       FillAt(obj, TJSONObject(ARoot).Names[k], ARoot.Items[k], AType,
-        APath + '.' + TJSONObject(ARoot).Names[k]);
+        APath + '.' + TJSONObject(ARoot).Names[k], AStyle, ANoDef,
+        ChildOf(ATop, TJSONObject(ARoot).Names[k]));
   end;
 
+const
+  cMarkerKeys: array[0..2] of string = ('markPoint', 'markLine', 'markArea');
+  { the components whose own style blocks have the root's under them: a
+    legend's (LegendView's getLegendStyle), a timeline's (its line and its
+    symbols), a calendar's (its cells). (The global axisPointer's too
+    upstream -- every axis pointer's model has it for its parent -- but the
+    port's pointer draws none of the keys the root's reaches there.) }
+  cStyledComponents: array[0..2] of string = ('legend', 'timeline', 'calendar');
 var
-  i, s: Integer;
-  rv, node, d: TJSONData;
+  i, s, m: Integer;
+  rv, node, d, top, mk: TJSONData;
   tp: string;
+  anyStyle: Boolean;
+  host: TJSONObject;
 begin
   if FFillDepth > 0 then Dec(FFillDepth);
   if FFillDepth <> 0 then Exit;
@@ -2475,8 +2668,77 @@ begin
       if not (node is TJSONObject) then Continue;
       d := TJSONObject(node).Find('type');
       if (d <> nil) and (d.JSONType = jtString) then tp := d.AsString else tp := '';
-      FillAt(TJSONObject(node), cRootObjectKeys[i], rv, tp, cRootObjectKeys[i]);
+      FillAt(TJSONObject(node), cRootObjectKeys[i], rv, tp, cRootObjectKeys[i],
+        False, False, nil);
     end;
+  end;
+  { [R7-U] the root's scalars under every series }
+  for i := 0 to High(cRootScalarKeys) do
+  begin
+    rv := TJSONObject(FRoot).Find(cRootScalarKeys[i]);
+    if (rv = nil) or (rv.JSONType = jtNull) then Continue;
+    for s := 0 to ComponentCount('series') - 1 do
+    begin
+      node := ComponentAt('series', s);
+      if not (node is TJSONObject) then Continue;
+      d := TJSONObject(node).Find('type');
+      if (d <> nil) and (d.JSONType = jtString) then tp := d.AsString else tp := '';
+      FillAt(TJSONObject(node), cRootScalarKeys[i], rv, tp, cRootScalarKeys[i],
+        True, False, nil);
+    end;
+  end;
+  { [R7-U] the root's style blocks: under every series (its own kept first
+    for its visual), every series' markers (over their master component),
+    every legend, timeline and calendar and the axisPointer component }
+  anyStyle := False;
+  for i := 0 to High(cRootStyleKeys) do
+  begin
+    rv := TJSONObject(FRoot).Find(cRootStyleKeys[i]);
+    if (rv <> nil) and (rv.JSONType <> jtNull) then anyStyle := True;
+  end;
+  if not anyStyle then Exit;
+  SetLength(FOwnStyle, ComponentCount('series'));
+  for s := 0 to High(FOwnStyle) do
+  begin
+    node := ComponentAt('series', s);
+    if not (node is TJSONObject) then Continue;
+    host := TJSONObject.Create;
+    for i := 0 to High(cRootStyleKeys) do
+    begin
+      d := TJSONObject(node).Find(cRootStyleKeys[i]);
+      if d <> nil then host.Add(cRootStyleKeys[i], d.Clone);
+    end;
+    FOwnStyle[s] := host;
+  end;
+  for i := 0 to High(cRootStyleKeys) do
+  begin
+    rv := TJSONObject(FRoot).Find(cRootStyleKeys[i]);
+    if (rv = nil) or (rv.JSONType = jtNull) then Continue;
+    for s := 0 to ComponentCount('series') - 1 do
+    begin
+      node := ComponentAt('series', s);
+      if not (node is TJSONObject) then Continue;
+      d := TJSONObject(node).Find('type');
+      if (d <> nil) and (d.JSONType = jtString) then tp := d.AsString else tp := '';
+      FillAt(TJSONObject(node), cRootStyleKeys[i], rv, tp, cRootStyleKeys[i],
+        True, False, nil);
+      for m := 0 to High(cMarkerKeys) do
+      begin
+        mk := TJSONObject(node).Find(cMarkerKeys[m]);
+        if not (mk is TJSONObject) then Continue;
+        top := ComponentAt(cMarkerKeys[m], 0);
+        FillAt(TJSONObject(mk), cRootStyleKeys[i], rv, cMarkerKeys[m], cRootStyleKeys[i],
+          True, False, ChildOf(top, cRootStyleKeys[i]));
+      end;
+    end;
+    for m := 0 to High(cStyledComponents) do
+      for s := 0 to ComponentCount(cStyledComponents[m]) - 1 do
+      begin
+        node := ComponentAt(cStyledComponents[m], s);
+        if node is TJSONObject then
+          FillAt(TJSONObject(node), cRootStyleKeys[i], rv, cStyledComponents[m],
+            cRootStyleKeys[i], True, False, nil);
+      end;
   end;
 end;
 

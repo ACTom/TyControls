@@ -1316,10 +1316,12 @@ end;
   has no default), `symbol` (a scatter's) and `symbolRotate` /
   `symbolKeepAspect` / `symbolOffset` (no default anywhere), and `z` (a
   treemap's and the graphic component's: no default). Not here, so still
-  reported: the object keys a getModel reaches the root by (`label`,
-  `itemStyle` ...), `zlevel`, which the port does not read there, and
+  reported: `zlevel`, which the port does not read there, and
   `selectedMode`, which reaches get() but not the selection
-  (Series._innerSelect reads the option's own). }
+  (Series._innerSelect reads the option's own). [spec 242] the object keys
+  label, labelLine, labelLayout, emphasis, select, blur, endLabel; [R7-U]
+  itemStyle, lineStyle, areaStyle, symbolSize, roseType, center, min,
+  max (TTyChartOption.RootFill). }
 function RootInheritedKey(const AKey: string): Boolean;
 begin
   Result := (AKey = 'left') or (AKey = 'top') or (AKey = 'right')
@@ -1335,7 +1337,12 @@ begin
     { [spec 242] the object keys every series climbs to }
     or (AKey = 'label') or (AKey = 'labelLine') or (AKey = 'labelLayout')
     or (AKey = 'emphasis') or (AKey = 'select') or (AKey = 'blur')
-    or (AKey = 'endLabel');
+    or (AKey = 'endLabel')
+    { [R7-U] the style blocks the views and the legends, the markers climb
+      to, and the scalars a series' get() does }
+    or (AKey = 'itemStyle') or (AKey = 'lineStyle') or (AKey = 'areaStyle')
+    or (AKey = 'symbolSize') or (AKey = 'roseType') or (AKey = 'center')
+    or (AKey = 'min') or (AKey = 'max');
 end;
 
 { [R2-J] A TREE'S NODE IS THE AUTHOR'S RECORD. A tree, a treemap and a

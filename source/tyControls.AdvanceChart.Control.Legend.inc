@@ -1295,7 +1295,7 @@ end;
 procedure TTyCustomAdvanceChart.LegendPensOf(ALegend: Integer; const AName: string;
   ASlot, ARaw: Integer; var ASrc: TTyLegendSource; ANode: TJSONObject);
 var
-  lg, row, st: TJSONObject;
+  lg, row, st, src: TJSONObject;
   nodes: array[0..1] of TJSONObject;
   vis: TJSONObject;
   d: TJSONData;
@@ -1387,9 +1387,14 @@ begin
     else if t = TyPieSeriesTypeName then vis.Add('lineJoin', 'round');
     for k := 0 to 1 do
     begin
+      { [R7-U] the series' own block (the style task's ignoreParent) -- but
+        a graph category's getItemStyle climbs through the series' to the
+        root's }
+      src := nodes[k];
+      if (k = 0) and (ANode = nil) then src := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex);
       if TyStyleAccessPath(t) = 'lineStyle' then
       begin
-        st := Obj(nodes[k], 'lineStyle');
+        st := Obj(src, 'lineStyle');
         Put('opacity', st, 'opacity');
         Put('lineDash', st, 'type');
         Put('lineDashOffset', st, 'dashOffset');
@@ -1399,7 +1404,7 @@ begin
       end
       else
       begin
-        st := Obj(nodes[k], 'itemStyle');
+        st := Obj(src, 'itemStyle');
         Put('opacity', st, 'opacity');
         Put('lineDash', st, 'borderType');
         Put('lineDashOffset', st, 'borderDashOffset');
@@ -1537,8 +1542,10 @@ begin
     ASrc.HasStroke := True;
     ASrc.Stroke := TTyChartColor(SeriesColor(s));
   end;
-  { the series' itemStyle, then the datum's }
+  { the series' itemStyle, then the datum's [R7-U: the series' own block,
+    its visual style -- a graph category's climbs through the series'] }
   nodes[0] := StSeriesNode(s);
+  if ANode = nil then nodes[0] := FOption.SeriesOwnStyle(s);
   nodes[1] := ANode;
   if (ANode = nil) and (ARaw >= 0) then nodes[1] := StItemNode(s, ARaw);
   for k := 0 to 1 do

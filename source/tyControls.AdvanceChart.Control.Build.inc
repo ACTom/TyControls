@@ -1911,7 +1911,7 @@ var
   chartScope, ownScope: TTyPaletteScope;
   chartPal, ownPal: TTyPalette;
   chartLayers, ownLayers: TTyPaletteLayers;
-  node: TJSONObject;
+  node, own: TJSONObject;
   d: TJSONData;
   st: string;
   style: TTyOptStyle;
@@ -1971,7 +1971,11 @@ begin
       its stroke, so it is `itemStyle.borderColor`; `lines` and `parallel` read
       a different block entirely. A line is NOT one of the exceptions -- writing
       `lineStyle.color` on a line does not stop it taking a palette slot. }
-    style := TyReadOptStyle(node, TyStyleAccessPath(st));
+    { [R7-U] the series' own block: the style task reads it with
+      ignoreParent, the root's colour takes no slot from the palette }
+    own := FOption.SeriesOwnStyle(i);
+    if own = nil then own := node;
+    style := TyReadOptStyle(own, TyStyleAccessPath(st));
     if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
     begin
       key := style.BorderColor;
@@ -1993,7 +1997,7 @@ begin
       a slot and its callback's params carry that colour (a tree with one is
       the palette's, not lightsteelblue's) }
     isCb := False;
-    sd := node.Find(TyStyleAccessPath(st));
+    sd := own.Find(TyStyleAccessPath(st));
     if sd is TJSONObject then
     begin
       if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
@@ -2905,10 +2909,10 @@ end;
 procedure TTyCustomAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
   ASlot: Integer);
 var
-  node: TJSONObject;
+  node, own: TJSONObject;
   d: TJSONData;
   st: string;
-  item, line: TTyOptStyle;
+  item, line, full: TTyOptStyle;
 begin
   if FOption = nil then Exit;
   d := FOption.ComponentAt('series', ASlot);
@@ -2922,8 +2926,14 @@ begin
     settle whether this series took a palette slot, and SeriesColor handed
     the answer over -- reading it a second time here would be a second
     place that has to agree about `auto`. }
-  item := TyReadOptStyle(node, 'itemStyle');
-  line := TyReadOptStyle(node, 'lineStyle');
+  { [R7-U] the visual reads the series' own blocks (ignoreParent): none of
+    the root's -- but a line's polyline is LineView's getLineStyle of the
+    series' lineStyle model, which the root's block is the parent of }
+  own := FOption.SeriesOwnStyle(ASlot);
+  if own = nil then own := node;
+  item := TyReadOptStyle(own, 'itemStyle');
+  if st = 'line' then line := TyReadOptStyle(node, 'lineStyle')
+  else line := TyReadOptStyle(own, 'lineStyle');
 
   { `itemStyle.borderColor` / `borderWidth`. `auto` on a border means the
     palette colour, the same as it does on a fill. }
@@ -2939,6 +2949,18 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-U] the layout's width: getLineWidth / prepareLineWidth read the
+    item model's itemStyle.borderWidth, the root's under the series' }
+  AVisual.LayoutHas := own <> node;
+  if AVisual.LayoutHas then
+  begin
+    full := TyReadOptStyle(node, 'itemStyle');
+    AVisual.LayoutWidthSet := not IsNan(full.BorderWidthLogical);
+    if AVisual.LayoutWidthSet then AVisual.LayoutWidthLogical := full.BorderWidthLogical
+    else AVisual.LayoutWidthLogical := 0;
+    AVisual.LayoutWidthNaN := full.BorderWidthNaN;
+    AVisual.LayoutWidthInf := full.BorderWidthInf;
+  end;
   { [R7-F] 'none' is no fill and a clear colour a pen, for the pointer }
   AVisual.FillNone := item.Color.Written and item.Color.IsNone;
   AVisual.StrokeClear := item.BorderColor.Written and not item.BorderColor.IsNone
@@ -3027,7 +3049,15 @@ begin
     AVisual.DashExplicit := line.DashLogical;
     AVisual.DashOffset := line.DashOffset;
     if not IsNan(line.Opacity) then
+    begin
+      { [R7-U] a line's symbols keep the visual style's }
+      if st = 'line' then
+      begin
+        AVisual.ItemAlphaSet := True;
+        AVisual.ItemAlpha := AVisual.Alpha;
+      end;
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
+    end;
     if line.Color.Gradient.Kind <> cgkNone then
       AVisual.StrokeGradient := line.Color.Gradient
     { [R5-B] the visual colour a line is stroked with when its lineStyle
@@ -4910,6 +4940,12 @@ var
     Result[0] := sNode;
   end;
 
+  { [R7-U] the series' own blocks: its visual style }
+  function SeriesOwnOnly: TTyStNodeArray;
+  begin
+    Result := StOwnChain(SeriesOnly, s);
+  end;
+
 begin
   if (AList = nil) or (FOption = nil) then Exit;
   for k := 0 to AList.Count - 1 do
@@ -4951,11 +4987,17 @@ begin
         if pe^.Shape.Kind = cskPolyline then Take(SeriesOnly, ['lineStyle'])
         else if pe^.Shape.Kind = cskPolygon then Take(SeriesOnly, ['areaStyle']);
       end
-      { a large batch: the series' visual style }
+      { a large batch: LargeLineDraw's and LargeSymbolDraw's
+        getModel(...).getLineStyle / getItemStyle (the root's block under the
+        series' [R7-U]), a large bar's visual style }
       else if pe^.Shape.Kind = cskLarge then
       begin
-        if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+        if typ = TyLinesSeriesTypeName then
           Take(SeriesOnly, ['lineStyle'])
+        else if typ = TyParallelSeriesTypeName then
+          Take(SeriesOwnOnly, ['lineStyle'])
+        else if typ = 'bar' then
+          Take(SeriesOwnOnly, ['itemStyle'])
         else
           Take(SeriesOnly, ['itemStyle']);
       end;
@@ -4981,20 +5023,36 @@ begin
       carGraphEdgeFrom, carGraphEdgeTo:
         Continue;
       { a radar item's polyline its lineStyle, its polygon its areaStyle
-        (RadarView); a tree's edge its node's lineStyle (TreeView drawEdge) }
-      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
+        (RadarView); a tree's edge its node's lineStyle (TreeView drawEdge)
+        -- getModel, the root's block under the series' [R7-U] }
+      carRadarLine, carTreeEdge:
         Take(nodes, ['lineStyle']);
+      { [R7-U] a lines' and a parallel's line: their visual style }
+      carLinesLine, carParallelLine:
+        Take(StOwnChain(nodes, s), ['lineStyle']);
       carRadarArea:
         Take(nodes, ['areaStyle']);
     else
       { a sankey's node is a rect of its own; anything else of the row --
         a bar, a symbol, a slice, a candle and its wicks, a cell -- its
-        visual style }
+        visual style [R7-U: the series' own blocks, none of the root's],
+        but a tree's node, a sankey's and a sunburst's piece their item
+        model's getItemStyle }
       if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
       if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
-        Take(nodes, ['lineStyle'])
-      else
+        Take(StOwnChain(nodes, s), ['lineStyle'])
+      else if StRowClimbs(typ, pe^.Anim.Role)
+        or ((typ = TyGraphSeriesTypeName) and (Length(nodes) > 1) and (nodes[1] <> nil)) then
+      begin
         Take(nodes, ['itemStyle']);
+        { SunburstSeries' itemStyle.shadowColor 'rgba(0, 0, 0, 0.2)', under
+          what the chain writes }
+        if (typ = TySunburstSeriesTypeName) and TyStyleHasShadow(pe^.Style)
+          and (TyStFind(nodes, ['itemStyle', 'shadowColor']) = nil) then
+          pe^.Style.ShadowColor := $33000000;
+      end
+      else
+        Take(StOwnChain(nodes, s), ['itemStyle']);
     end;
   end;
 end;
@@ -5004,8 +5062,8 @@ var
   k, s, slot, raw, e: Integer;
   pe: PTyChartElement;
   typ: string;
-  nodes: TTyStNodeArray;
-  sNode: TJSONObject;
+  nodes, vnodes: TTyStNodeArray;
+  sNode, sOwn: TJSONObject;
   joinHas: Boolean;
   fills: TTyChartColorArray;
   fillsSlot: Integer;
@@ -5063,7 +5121,7 @@ var
       begin
         if oc.IsAuto then
         begin
-          if AAuto and (ANodes[i] = sNode) then
+          if AAuto and ((ANodes[i] = sNode) or (ANodes[i] = sOwn)) then
             pe^.Style.StrokeColor := TTyChartColor(SeriesPaletteColor(s));
         end
         else
@@ -5149,6 +5207,8 @@ begin
     if (typ = TyCustomSeriesType) or (typ = 'map') or (typ = TyTreemapSeriesTypeName) then Continue;
     sNode := StSeriesNode(s);
     if sNode = nil then Continue;
+    { [R7-U] the series' own style blocks, for what its visual draws }
+    sOwn := FOption.SeriesOwnStyle(s);
     joinHas := False;
     { [R6-D] THE DASH AND ITS PHASE where the view's builder does not read
       them: a radar's symbols, a gauge's, a pie's, a funnel's, a boxplot's,
@@ -5194,7 +5254,28 @@ begin
           TakeFillNone(SeriesOnly, ['areaStyle']);
       end
       else if pe^.Shape.Kind = cskLarge then
-        Take(SeriesOnly, ['itemStyle'], False);
+      begin
+        { [R7-U] a large bar's visual style; LargeLineDraw's
+          getModel('lineStyle').getLineStyle and LargeSymbolDraw's /
+          a large candle's getModel('itemStyle').getItemStyle (the root's
+          under the series': the dash, its phase and the opacity too; a
+          symbol's pen; a candle's colours its own) }
+        if typ = 'bar' then Take(StOwnChain(SeriesOnly, s), ['itemStyle'], False)
+        else if typ = TyParallelSeriesTypeName then
+          Take(StOwnChain(SeriesOnly, s), ['lineStyle'], True)
+        else
+        begin
+          dashOn := True;
+          if typ = TyLinesSeriesTypeName then
+            Take(SeriesOnly, ['lineStyle'], True)
+          else
+          begin
+            if typ = 'scatter' then TakePen(SeriesOnly, ['itemStyle'], True);
+            Take(SeriesOnly, ['itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, SeriesOnly, ['itemStyle']);
+          end;
+        end;
+      end;
       Continue;
     end;
     { ---- the row ---- }
@@ -5209,6 +5290,15 @@ begin
       Take(nodes, ['labelLine', 'lineStyle'], True);
       Continue;
     end;
+    { [R7-U] what the row's visual style draws reads the series' own
+      blocks; a tree's node, a sankey's and a sunburst's piece, a radar's
+      polyline and a tree's edge their item model's (getModel climbs to the
+      root's) }
+    vnodes := StOwnChain(nodes, s);
+    if StRowClimbs(typ, pe^.Anim.Role) then vnodes := nodes;
+    { a graph node's category: categoryVisual's getItemStyle climbs }
+    if (typ = TyGraphSeriesTypeName) and (Length(nodes) > 1) and (nodes[1] <> nil) then
+      vnodes := nodes;
     { [R7-F] a radar's or a line's area, its areaStyle's fill 'none' }
     if pe^.Anim.Role in [carRadarArea, carLineArea] then
       TakeFillNone(nodes, ['areaStyle']);
@@ -5217,8 +5307,19 @@ begin
       carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
       carGaugeDetail:
         Continue;
-      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
-        Take(nodes, ['lineStyle'], True);
+      carRadarLine, carTreeEdge:
+        begin
+          Take(nodes, ['lineStyle'], True);
+          if pe^.Anim.Role = carRadarLine then
+          begin
+            { [R7-U] RadarSeries' lineStyle.join 'round' under what the chain
+              writes, and the opacity of its getLineStyle [was: neither] }
+            if not joinHas then pe^.Style.LineJoin := cTyJoinRound;
+            TyStTakeOpacity(pe^.Style, nodes, ['lineStyle']);
+          end;
+        end;
+      carLinesLine, carParallelLine:
+        Take(vnodes, ['lineStyle'], True);
       { [R6-D] GaugeView: pointer.useStyle(the item's visual style), an
         icon's setColor(the visual colour) -- an empty one strokes in it at
         2, a line in it -- then pointer.setStyle(pointer.itemStyle's
@@ -5229,7 +5330,7 @@ begin
           pe^.Style.StrokeColor := 0;
           pe^.Style.StrokeGradient := Default(TTyChartGradient);
           pe^.Style.StrokeWidthLogical := 1;
-          TakePen(nodes, ['itemStyle'], True);
+          TakePen(vnodes, ['itemStyle'], True);
           if (pe^.Anim.Role = carGaugePointer) and (pe^.Caption.LgSymbol <> '') then
             case TySymbolKindOf(pe^.Caption.LgSymbol, iconEmpty, iconBody) of
               tsyImage: ;
@@ -5249,18 +5350,18 @@ begin
           { [R6-F] and the opacity: the item's visual style's (its itemStyle
             over the series'), pointer.itemStyle's / progress.itemStyle's
             over it [was: not read] }
-          TyStTakeOpacity(pe^.Style, nodes, ['itemStyle']);
+          TyStTakeOpacity(pe^.Style, vnodes, ['itemStyle']);
           if pe^.Anim.Role = carGaugePointer then
           begin
             TakePen(nodes, ['pointer', 'itemStyle'], False);
-            Take(nodes, ['itemStyle'], False);
+            Take(vnodes, ['itemStyle'], False);
             Take(nodes, ['pointer', 'itemStyle'], False);
             TyStTakeOpacity(pe^.Style, nodes, ['pointer', 'itemStyle']);
           end
           else
           begin
             TakePen(nodes, ['progress', 'itemStyle'], False);
-            Take(nodes, ['itemStyle'], False);
+            Take(vnodes, ['itemStyle'], False);
             Take(nodes, ['progress', 'itemStyle'], False);
             TyStTakeOpacity(pe^.Style, nodes, ['progress', 'itemStyle']);
           end;
@@ -5280,23 +5381,23 @@ begin
       if typ = TyGaugeSeriesTypeName then Continue;
       if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
       if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
-        Take(nodes, ['lineStyle'], True)
+        Take(vnodes, ['lineStyle'], True)
       else
       begin
         { [R6-D] a funnel's bands: the border the author writes over the
           port's own ground-coloured one [was: never read] }
-        if typ = TyFunnelSeriesTypeName then TakePen(nodes, ['itemStyle'], True);
+        if typ = TyFunnelSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
         { [R7-F] A PIE'S SLICE, likewise: PieView's sector.useStyle(the item's
           visual style), the item's own border over the series' ('auto' the
           series' palette colour, seriesStyleTask) [was: the series' border
           alone, read by PieVisual, and 'auto' none] }
-        if (typ = 'pie') and (pe^.Shape.Kind = cskSector) then TakePen(nodes, ['itemStyle'], True);
-        Take(nodes, ['itemStyle'], False);
+        if (typ = 'pie') and (pe^.Shape.Kind = cskSector) then TakePen(vnodes, ['itemStyle'], True);
+        Take(vnodes, ['itemStyle'], False);
         { [R7-F] a funnel's band, a sunburst's piece, a graph's node: the
           fill 'none' }
         if (typ = TyFunnelSeriesTypeName) or (typ = TySunburstSeriesTypeName)
           or (typ = TyGraphSeriesTypeName) then
-          TakeFillNone(nodes, ['itemStyle']);
+          TakeFillNone(vnodes, ['itemStyle']);
         { FunnelView: polygon.style.lineJoin = 'round' }
         if typ = TyFunnelSeriesTypeName then pe^.Style.LineJoin := cTyJoinRound;
         { [R6-D] PieSeries' itemStyle.borderJoin 'round', under what the
