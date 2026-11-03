@@ -843,7 +843,12 @@ begin
     { [R7-F] A PEN OF +INFINITY (drawn as none): its stroked rect is
       not-a-number upstream, the piece is never hit }
     if TyOptIsPosInf(d)
-      and ((el.Style.StrokeColor shr 24) <> 0) then el.HitNone := True;
+      and ((el.Style.StrokeColor shr 24) <> 0) then
+    begin
+      el.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+    end;
     d := ChainFind(ASolved, row, 'itemStyle', 'opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then el.Style.Alpha := d.AsFloat
     else el.Style.Alpha := 1;

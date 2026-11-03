@@ -1191,8 +1191,9 @@ var
   procedure Halo(AColour: TTyChartColor);
   begin
     { A STROKE THAT IS TRANSPARENT IS NONE -- zrender drops `transparent`
-      before it paints. }
-    if (AColour shr 24) = 0 then Exit;
+      before it paints. [R7-W] A colour no parser reads is a string all
+      the same: stroked with the strokeStyle the canvas had }
+    if ((AColour shr 24) = 0) and (AColour <> cTyCanvasColourLeft) then Exit;
     AStroke := AColour;
     AStrokeWidthLogical := w;
   end;

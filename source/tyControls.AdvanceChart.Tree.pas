@@ -1602,6 +1602,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1732,6 +1734,8 @@ begin
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
       el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1818,6 +1822,8 @@ begin
         el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'itemStyle', 'borderColor', colour);
         el.Style.StrokeWidthLogical := ChainPen(Slice(chain, cnt), 'itemStyle', 'borderWidth', 1.5, True);
         el.HitNone := ChainInf(Slice(chain, cnt), 'itemStyle', 'borderWidth');
+        { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+        if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       end;
     end;
     el.Style.Alpha := ChainNum(Slice(chain, cnt), 'itemStyle', 'opacity', 1);

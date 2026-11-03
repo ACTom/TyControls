@@ -42,8 +42,10 @@ unit test.advchart.seriesborders;
   element, '-' none); the gauge parts `line` (its split lines or ticks),
   `anchor` and `box` (the one other silent path a case shows: the anchor, a
   title's or a reading's plate) and `words` (a title's or a reading's
-  words). A pen whose width is Infinity is the canvas' to refuse and the
-  port's to draw none: not compared. }
+  words). A pen whose width is Infinity, or whose colour is a word no
+  parser reads, is the canvas' to refuse: it strokes with the width / colour
+  the element before it left ([R7-W] the port too, held to upstream's canvas
+  in test.advchart.linescanvas) -- not compared here. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -524,6 +526,8 @@ begin
             + RoundText(el.ClipRect.Bottom - el.ClipRect.Top, 2));
         if not (el.Style.StrokeWidthLogical > 0) then Continue;
         if ((el.Style.StrokeColor shr 24) = 0) and (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
+        { [R7-W] a width or a colour the canvas carried: not compared }
+        if (el.CanvasFlags and (cTyCanvasWidthLeft or cTyCanvasStrokeLeft)) <> 0 then Continue;
         Inc(n);
         got.Add(PenOf(el));
       end;
@@ -800,8 +804,9 @@ end;
   converts it); a width that is no number strokes nothing (zrender's
   `lineWidth > 0`); what the canvas refuses -- an infinite width, a phase
   that is no finite number, a miter limit that is no number above nought --
-  it would keep from the last element, and this takes as none, nought and
-  the default 10. Not written (nil, null) is not-a-number: the model's get
+  it keeps from the last element: the width reads as none here (its
+  builder marks the infinity, R7-W), the phase as cTyCanvasPhaseLeft and
+  the miter as -1, which the paint order settles. Not written (nil, null) is not-a-number: the model's get
   falls through it. }
 procedure TAdvChartSeriesBordersTest.TestThePenNumbersAsTheCanvasTakesThem;
 
@@ -854,7 +859,10 @@ begin
   W('"0"', 0); W('true', 1); W('[2]', 2); W('[]', 0); W('[1,2]', 0); W('{}', 0);
   W('"1e999"', 0); W('null', NaN); W('-2', -2);
   AssertTrue('width nil unwritten', IsNan(TyOptPenWidth(nil)));
-  O('"2"', 2); O('"abc"', 0); O('"1e999"', 0); O('""', 0); O('-3', -3); O('null', NaN);
+  { [R7-W] a phase that is no finite number the canvas refuses, keeping the
+    one it had: cTyCanvasPhaseLeft for the paint order to settle [was: 0] }
+  O('"2"', 2); O('"abc"', cTyCanvasPhaseLeft); O('"1e999"', cTyCanvasPhaseLeft); O('""', 0);
+  O('-3', -3); O('null', NaN);
   M('"4"', 4); M('""', 10); M('"0"', -1); M('0', 10); M('-1', -1); M('"abc"', -1);
   M('"1e999"', -1); M('2.5', 2.5); M('null', NaN);
   AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));

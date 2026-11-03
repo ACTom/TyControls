@@ -149,6 +149,12 @@ type
       registered): the clip's start time is a string upstream, every
       percent not a number -- the symbol is never anywhere }
     Poisoned: Boolean;
+    { [R7-W] the last transform a step left that is a number (x, y, scaleX,
+      scaleY, rotation): what the symbol's invTransform keeps once its
+      transform is none (matrix.invert fails) -- an update's own frame
+      among them }
+    HasInv: Boolean;
+    InvX, InvY, InvSX, InvSY, InvRot: Double;
   end;
 
   { ONE ROW'S LOOK, as the visual and the view resolve it: the line's
@@ -393,10 +399,61 @@ procedure TyLinesEffectOfElement(const AEl: TTyChartElement; out AE: TTyLinesEff
   a new zlevel starts from AGround (the shadowColor what the chart drew
   first on it leaves: '#000' under shown axes, the canvas' transparent
   default under nothing). }
-procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor); overload;
 { whether AList holds anything TyLinesCanvasLeftovers settles (the only
   cost a chart without one pays) }
 function TyLinesCanvasLeftoversDue(AList: TTyPaintList): Boolean;
+
+type
+  { [R7-W] WHAT A ZLEVEL'S CANVAS HOLDS when the list starts on it: the
+    shadowColor, fill, stroke, lineWidth (the canvas' own units) and the
+    transform (device px) the components drawn first left -- the canvas'
+    defaults ('#000000' fill and stroke, a width of 1, no transform) where
+    nothing was }
+  TTyCanvasGround = record
+    Shadow: TTyChartColor;
+    Fill, Stroke: TTyChartColor;
+    LineWidth: Double;
+    HasT: Boolean;
+    M: TTyMat2D;
+  end;
+
+  { [R7-W] the canvas state the paint order carries }
+  TTyCanvasState = record
+    Shadow: TTyChartColor;
+    Blur: Double;
+    Cap, Join: Byte;
+    Miter: Double;
+    HasT: Boolean;
+    M: TTyMat2D;
+    Fill, Stroke: TTyChartColor;
+    FillGrad, StrokeGrad: TTyChartGradient;
+    LineWidth, Phase: Double;
+  end;
+
+  { [R7-W] ONE RUN OF THE PAINT ORDER: TyCanvasRunStart, then
+    TyCanvasRunStep for each element in paint order -- the whole list
+    (TyLinesCanvasLeftovers), or a dirty rect's block, whose elements are
+    the ones that meet it and which starts from the canvas' own state }
+  TTyCanvasRun = record
+    Cur, Saved: TTyCanvasState;
+    InClip, First: Boolean;
+    ZLevel, ClipSeries: Integer;
+    ClipRect: TTyRectF;
+    Ground: TTyCanvasGround;
+    Ds: Double;
+  end;
+
+{ the canvas' own defaults, and AShadow's shadowColor }
+function TyCanvasGroundOf(AShadow: TTyChartColor): TTyCanvasGround;
+procedure TyCanvasRunStart(out ARun: TTyCanvasRun; const AGround: TTyCanvasGround;
+  APPI: Integer);
+procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; const AGround: TTyCanvasGround;
+  APPI: Integer); overload;
+{ [R7-W] whether AEl holds a value the canvas refuses (a dirty rect's block
+  must settle it afresh) }
+function TyCanvasElementCarries(const AEl: TTyChartElement): Boolean;
 
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
@@ -1282,6 +1339,18 @@ begin
   try
     if AE.Poly then StepPoly(AE, AT)
     else StepLine(AE, AT);
+    { [R7-W] a transform that inverts: the inverse the hit keeps }
+    if not (AE.Ignore or IsNan(AE.X) or IsNan(AE.Y) or IsNan(AE.ScaleX) or IsNan(AE.ScaleY)
+      or IsNan(AE.Rotation) or IsInfinite(AE.ScaleX) or IsInfinite(AE.ScaleY))
+      and (AE.ScaleX <> 0) and (AE.ScaleY <> 0) then
+    begin
+      AE.HasInv := True;
+      AE.InvX := AE.X;
+      AE.InvY := AE.Y;
+      AE.InvSX := AE.ScaleX;
+      AE.InvSY := AE.ScaleY;
+      AE.InvRot := AE.Rotation;
+    end;
   finally
     ClearExceptions(False);
     SetExceptionMask(mask);
@@ -1653,6 +1722,18 @@ begin
     begin
       el.Style.StrokeWidthLogical := 0;
       el.HitNone := ink.Width > 0;
+      { [R7-W] the canvas refuses it and strokes at the lineWidth it had
+        (TyLinesCanvasLeftovers) -- a word's dash, Infinity long, it refuses
+        too: solid [was: no pen] }
+      if ink.Width > 0 then
+      begin
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+        if ink.DashWord <> 0 then
+        begin
+          ink.Dash := nil;
+          ink.DashWord := 0;
+        end;
+      end;
     end;
     el.Style.Alpha := ink.Opacity;
     el.Style.DashLogical := ink.Dash;
@@ -2013,6 +2094,12 @@ begin
   ds := 1;
   if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
   m := TyZrLocal(ds, ds, 0, 0, 0);
+  { [R7-W] the inverse a frame that was a number left: its transform (an
+    update's own frame -- setOption's flush steps the clip once more)
+    [was: the identity always] }
+  if (Length(AEl.Anim.Vals) >= 7) and (AEl.Anim.Vals[1] = 2) then
+    m := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
+      AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
   { the symbol's unit box (-1 .. 1) is twice the effect's (-0.5 .. 0.5) }
   AEl.Shape.HitM[0] := m[0] * 0.5;
   AEl.Shape.HitM[1] := m[1] * 0.5;
@@ -2091,7 +2178,12 @@ begin
   if IsNan(AE.ScaleX) or IsNan(AE.ScaleY) then
   begin
     AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTransformLeft;
-    AEl.Anim.Vals := TTyDoubleArray.Create(ds);
+    { [R7-W] and the transform its invTransform keeps, where a frame had one
+      (2: for the hit only) }
+    if AE.HasInv then
+      AEl.Anim.Vals := TTyDoubleArray.Create(ds, 2, AE.InvX, AE.InvY, AE.InvSX, AE.InvSY, AE.InvRot)
+    else
+      AEl.Anim.Vals := TTyDoubleArray.Create(ds);
     PlaceEffect(AEl, ds, ds, 0, 0, NaN);
     { (its hit: TyLinesCanvasLeftovers, NanEffectHit) }
     Exit;
@@ -2111,13 +2203,30 @@ begin
   for i := 0 to AList.Count - 1 do
   begin
     pe := AList.Ref(i);
-    if ((pe^.CanvasFlags and not cTyCanvasOwnShadow) <> 0)
-      { [R7-V] a value the canvas refuses, not yet settled }
-      or (pe^.Style.ShadowColor = cTyCanvasColourLeft) or (pe^.Style.ShadowBlur < 0)
-      or (pe^.Style.LineCap = cTyCanvasWordLeft) or (pe^.Style.LineJoin = cTyCanvasWordLeft)
-      or (pe^.Style.MiterLimit < 0) then
-      Exit(True);
+    if TyCanvasElementCarries(pe^) then Exit(True);
   end;
+end;
+
+function TyCanvasElementCarries(const AEl: TTyChartElement): Boolean;
+var k: Integer;
+begin
+  Result := ((AEl.CanvasFlags and not cTyCanvasOwnShadow) <> 0)
+    { [R7-V] a value the canvas refuses, not yet settled }
+    or (AEl.Style.ShadowColor = cTyCanvasColourLeft) or (AEl.Style.ShadowBlur < 0)
+    or (AEl.Style.LineCap = cTyCanvasWordLeft) or (AEl.Style.LineJoin = cTyCanvasWordLeft)
+    or (AEl.Style.MiterLimit < 0)
+    { [R7-W] a fill / stroke colour, a dash phase, a caption's colours }
+    or (AEl.Style.HasFill and (AEl.Style.FillColor = cTyCanvasColourLeft))
+    or (AEl.Style.StrokeColor = cTyCanvasColourLeft)
+    or TyPhaseLeft(AEl.Style.DashOffsetLogical)
+    or (AEl.Caption.Colour = cTyCanvasColourLeft)
+    or (AEl.Caption.StrokeColour = cTyCanvasColourLeft);
+  if Result then Exit;
+  for k := 0 to High(AEl.Caption.RtPieces) do
+    if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
+      or (AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft))
+      or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft)) then
+      Exit(True);
 end;
 
 { [R7-V] what a label's last text span hands the canvas: its textShadowColor
@@ -2142,184 +2251,366 @@ begin
   end;
 end;
 
-procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
-type
-  TCanvasState = record
-    Shadow: TTyChartColor;
-    { [R7-V] the shadowBlur, the pen's cap / join / miterLimit, the
-      transform (device px; none: the identity) }
-    Blur: Double;
-    Cap, Join: Byte;
-    Miter: Double;
-    HasT: Boolean;
-    M: TTyMat2D;
+function TyCanvasGroundOf(AShadow: TTyChartColor): TTyCanvasGround;
+begin
+  Result := Default(TTyCanvasGround);
+  Result.Shadow := AShadow;
+  Result.Fill := TTyChartColor($FF000000);
+  Result.Stroke := TTyChartColor($FF000000);
+  Result.LineWidth := 1;
+end;
+
+{ the canvas' own state at the start of a zlevel's paint: its defaults, the
+  ground on the components' zlevel }
+procedure GroundState(var ARun: TTyCanvasRun);
+begin
+  ARun.Cur := Default(TTyCanvasState);
+  ARun.Cur.Miter := 10;
+  ARun.Cur.Fill := TTyChartColor($FF000000);
+  ARun.Cur.Stroke := TTyChartColor($FF000000);
+  ARun.Cur.LineWidth := 1;
+  if ARun.ZLevel = 0 then
+  begin
+    ARun.Cur.Shadow := ARun.Ground.Shadow;
+    ARun.Cur.Fill := ARun.Ground.Fill;
+    ARun.Cur.Stroke := ARun.Ground.Stroke;
+    ARun.Cur.LineWidth := ARun.Ground.LineWidth;
+    ARun.Cur.HasT := ARun.Ground.HasT;
+    ARun.Cur.M := ARun.Ground.M;
   end;
+end;
+
+procedure TyCanvasRunStart(out ARun: TTyCanvasRun; const AGround: TTyCanvasGround;
+  APPI: Integer);
+begin
+  ARun := Default(TTyCanvasRun);
+  ARun.First := True;
+  ARun.Ground := AGround;
+  if APPI > 0 then ARun.Ds := APPI / 96 else ARun.Ds := 1;
+  ARun.ZLevel := 0;
+  GroundState(ARun);
+  ARun.Saved := ARun.Cur;
+  ARun.ClipRect := TyRectF(0, 0, 0, 0);
+end;
+
+{ [R7-W] a gradient as the canvas holds it once an element filled or
+  stroked with it: in the frame it was made for, the element's box (the
+  canvas keeps that CanvasGradient, not the element's spec) }
+function CanvasGradOf(const AGrad: TTyChartGradient; const AEl: TTyChartElement): TTyChartGradient;
+var box: TTyXYWH; x1, y1, x2, y2, r: Double;
+begin
+  Result := AGrad;
+  if (AGrad.Kind = cgkNone) or AGrad.Global then Exit;
+  if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
+  else box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
+  TyResolveGradientXYWH(AGrad, box, x1, y1, x2, y2, r);
+  Result.Global := True;
+  Result.X := x1;
+  Result.Y := y1;
+  Result.X2 := x2;
+  Result.Y2 := y2;
+  Result.R := r;
+end;
+
+procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
 var
-  i, zl, cs: Integer;
-  pe: PTyChartElement;
-  cur, saved: TCanvasState;
-  inClip, first, clipped, cap: Boolean;
-  cr: TTyRectF;
-  ds, d, blur: Double;
+  clipped, cap, strokes, dashed: Boolean;
+  ds, d, blur, r, sEl, ps: Double;
   colour: TTyChartColor;
-  r: Double;
+  elHasT: Boolean;
+  elM: TTyMat2D;
+  k: Integer;
+  pc: ^TTyRtPiece;
+begin
+  { what the painter skips: ignored, held back, of an opacity of nought
+    ([R7-V] shouldBePainted's `opacity === 0`: a negative one is brushed,
+    at the clamped nought, and hands the canvas its state [was: any
+    opacity not above nought skipped]) }
+  if AEl.Ignore or AEl.ProgHidden or (AEl.Style.Alpha = 0) then Exit;
+  if ARun.First or (AEl.ZLevel <> ARun.ZLevel) then
+  begin
+    ARun.First := False;
+    ARun.ZLevel := AEl.ZLevel;
+    GroundState(ARun);
+    ARun.InClip := False;
+  end;
+  { a clip path: saved on entering, restored on leaving or changing (a
+    series' group clip its own, whatever its rect) }
+  clipped := AEl.HasClip or AEl.HasClipSector;
+  if ARun.InClip and (not clipped or (AEl.Datum.SeriesIndex <> ARun.ClipSeries)
+    or (AEl.ClipRect.Left <> ARun.ClipRect.Left) or (AEl.ClipRect.Top <> ARun.ClipRect.Top)
+    or (AEl.ClipRect.Right <> ARun.ClipRect.Right) or (AEl.ClipRect.Bottom <> ARun.ClipRect.Bottom)) then
+  begin
+    ARun.Cur := ARun.Saved;
+    ARun.InClip := False;
+  end;
+  if clipped and not ARun.InClip then
+  begin
+    ARun.Saved := ARun.Cur;
+    ARun.InClip := True;
+    ARun.ClipSeries := AEl.Datum.SeriesIndex;
+    ARun.ClipRect := AEl.ClipRect;
+    { [R7-V] updateClipStatus sets the clip path's transform (a series
+      group's clip has none) }
+    ARun.Cur.HasT := False;
+  end;
+  cap := AEl.Caption.FontSizeLogical <> 0;
+  { [R7-V] a value the canvas refuses, first seen: marked, so the next
+    pass settles it again }
+  if AEl.Style.ShadowColor = cTyCanvasColourLeft then
+    AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasShadowLeft;
+  if AEl.Style.ShadowBlur < 0 then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasBlurLeft;
+  if AEl.Style.LineCap = cTyCanvasWordLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasCapLeft;
+  if AEl.Style.LineJoin = cTyCanvasWordLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasJoinLeft;
+  if AEl.Style.MiterLimit < 0 then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasMiterLeft;
+  { [R7-W] and a fill / stroke colour, a dash phase, a caption's colours }
+  if not cap then
+  begin
+    if AEl.Style.HasFill and (AEl.Style.FillColor = cTyCanvasColourLeft)
+      and (AEl.Style.FillGradient.Kind = cgkNone) and not AEl.Style.FillPattern.Present then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFillLeft;
+    if (AEl.Style.StrokeColor = cTyCanvasColourLeft) and (AEl.Style.StrokeGradient.Kind = cgkNone) then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasStrokeLeft;
+    if TyPhaseLeft(AEl.Style.DashOffsetLogical) then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasPhaseLeftFlag;
+  end
+  else
+  begin
+    if AEl.Caption.Colour = cTyCanvasColourLeft then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTextFillLeft;
+    if AEl.Caption.StrokeColour = cTyCanvasColourLeft then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTextStrokeLeft;
+    for k := 0 to High(AEl.Caption.RtPieces) do
+    begin
+      if AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft) then
+        AEl.Caption.RtPieces[k].CanvasLeft := AEl.Caption.RtPieces[k].CanvasLeft or 1;
+      if AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft) then
+        AEl.Caption.RtPieces[k].CanvasLeft := AEl.Caption.RtPieces[k].CanvasLeft or 2;
+    end;
+  end;
+  { the shadowColor: refused (kept), the symbol's own, [R7-V] a label's
+    text span's, a written one, else zrender's '#000' }
+  if (AEl.CanvasFlags and cTyCanvasShadowLeft) <> 0 then
+    AEl.Style.ShadowColor := ARun.Cur.Shadow
+  else if (AEl.CanvasFlags and cTyCanvasOwnShadow) <> 0 then
+    ARun.Cur.Shadow := AEl.CanvasShadow
+  else if cap then
+  begin
+    CaptionShadowOf(AEl, colour, blur);
+    ARun.Cur.Shadow := colour;
+  end
+  else if (AEl.Style.ShadowColor shr 24) <> 0 then
+    ARun.Cur.Shadow := AEl.Style.ShadowColor
+  else
+    ARun.Cur.Shadow := TTyChartColor($FF000000);
+  { [R7-V] the shadowBlur: refused below nought (kept), else its own }
+  if (AEl.CanvasFlags and cTyCanvasBlurLeft) <> 0 then
+    AEl.Style.ShadowBlur := ARun.Cur.Blur
+  else if cap then
+  begin
+    CaptionShadowOf(AEl, colour, blur);
+    ARun.Cur.Blur := blur;
+  end
+  else if AEl.Style.ShadowBlur > 0 then ARun.Cur.Blur := AEl.Style.ShadowBlur
+  else ARun.Cur.Blur := 0;
+  { [R7-V] the pen's cap, join and miterLimit: every path and text sets
+    them (a text its defaults); a word the canvas does not take, or a
+    miterLimit below nought, keeps the one it had }
+  if (AEl.CanvasFlags and cTyCanvasCapLeft) <> 0 then AEl.Style.LineCap := ARun.Cur.Cap
+  else if cap then ARun.Cur.Cap := 0
+  else ARun.Cur.Cap := AEl.Style.LineCap;
+  if (AEl.CanvasFlags and cTyCanvasJoinLeft) <> 0 then AEl.Style.LineJoin := ARun.Cur.Join
+  else if cap then ARun.Cur.Join := 0
+  else ARun.Cur.Join := AEl.Style.LineJoin;
+  if (AEl.CanvasFlags and cTyCanvasMiterLeft) <> 0 then AEl.Style.MiterLimit := ARun.Cur.Miter
+  else if cap or not (AEl.Style.MiterLimit > 0) then ARun.Cur.Miter := 10
+  else ARun.Cur.Miter := AEl.Style.MiterLimit;
+  { the transform: refused (the unit symbol under the one kept), else the
+    element's own -- [R7-V] an effect symbol's place, a caption's anchor
+    and turn, one handed over (CanvasM), a symbol's frame, an own-frame
+    path's, else none [was: only an effect symbol's] }
+  elHasT := False;
+  elM := Default(TTyMat2D);
+  if (AEl.CanvasFlags and cTyCanvasTransformLeft) <> 0 then
+  begin
+    if ARun.Cur.HasT then PlaceEffectM(AEl, ARun.Cur.M)
+    else
+    begin
+      ds := 1;
+      if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
+      PlaceEffect(AEl, ds, ds, 0, 0, NaN);
+    end;
+    NanEffectHit(AEl);
+    { (what the canvas keeps is what it had) }
+    elHasT := ARun.Cur.HasT;
+    elM := ARun.Cur.M;
+  end
+  else if (AEl.Anim.Role = carLinesEffect) and (Length(AEl.Anim.Vals) >= 7)
+    and (AEl.Anim.Vals[1] = 1) then
+  begin
+    elHasT := True;
+    elM := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
+      AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
+  end
+  else if cap then
+  begin
+    elHasT := True;
+    if AEl.Caption.HasFixedAnchor then
+      elM := TyZrLocal(1, 1, AEl.Caption.FixedRotationRad, AEl.Caption.FixedX, AEl.Caption.FixedY)
+    else
+      elM := TyZrLocal(1, 1, AEl.Caption.RotationRad, AEl.Caption.X, AEl.Caption.Y);
+    if IsNan(elM[0]) or IsNan(elM[4]) or IsNan(elM[5]) then elHasT := False;
+  end
+  else if Length(AEl.CanvasM) = 6 then
+  begin
+    elHasT := True;
+    elM[0] := AEl.CanvasM[0]; elM[1] := AEl.CanvasM[1]; elM[2] := AEl.CanvasM[2];
+    elM[3] := AEl.CanvasM[3]; elM[4] := AEl.CanvasM[4]; elM[5] := AEl.CanvasM[5];
+  end
+  else if AEl.Shape.HitSym <> '' then
+  begin
+    elHasT := True;
+    elM := AEl.Shape.HitM;
+    { the unit box's frame is half the symbol's size: the symbol's own
+      scale is that, its path the unit one }
+  end
+  else if AEl.ZrHit.Active then
+  begin
+    { the inverse of the way back }
+    d := AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[3] - AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[2];
+    if not ((d = 0) or IsNan(d) or IsInfinite(d)) then
+    begin
+      r := 1 / d;
+      elHasT := True;
+      elM[0] := AEl.ZrHit.ToLocal[3] * r;
+      elM[1] := -AEl.ZrHit.ToLocal[1] * r;
+      elM[2] := -AEl.ZrHit.ToLocal[2] * r;
+      elM[3] := AEl.ZrHit.ToLocal[0] * r;
+      elM[4] := (AEl.ZrHit.ToLocal[2] * AEl.ZrHit.ToLocal[5] - AEl.ZrHit.ToLocal[3] * AEl.ZrHit.ToLocal[4]) * r;
+      elM[5] := (AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[4] - AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[5]) * r;
+    end;
+  end;
+  ARun.Cur.HasT := elHasT;
+  if elHasT then ARun.Cur.M := elM;
+  { [R7-W] THE LINE SCALE OF ITS TRANSFORM (css px): the canvas' lineWidth
+    and lineDashOffset are in the element's frame -- a strokeNoScale
+    symbol's width over its scale, a path's own under its pen scale }
+  sEl := 1;
+  if elHasT then
+  begin
+    sEl := Sqrt(Abs(elM[0] * elM[3] - elM[1] * elM[2])) / ARun.Ds;
+    if IsNan(sEl) or IsInfinite(sEl) or not (sEl > 1e-12) then sEl := 1;
+  end;
+  ps := 1;
+  if (not IsNan(AEl.Style.PenScale)) and (AEl.Style.PenScale > 0) then ps := AEl.Style.PenScale;
+  { [R7-W] THE FILL AND THE PEN'S COLOUR: bindPathAndTextCommonStyle assigns
+    every string fill / stroke (the canvas refuses one no parser reads,
+    keeping the one it had), brushPath a gradient's CanvasGradient; a text
+    its spans' (a plate's first) }
+  if cap then
+  begin
+    if Length(AEl.Caption.RtPieces) = 0 then
+    begin
+      if (AEl.CanvasFlags and cTyCanvasTextFillLeft) <> 0 then AEl.Caption.Colour := ARun.Cur.Fill
+      else ARun.Cur.Fill := AEl.Caption.Colour;
+      ARun.Cur.FillGrad := Default(TTyChartGradient);
+      if (AEl.CanvasFlags and cTyCanvasTextStrokeLeft) <> 0 then
+        AEl.Caption.StrokeColour := ARun.Cur.Stroke
+      else if AEl.Caption.StrokeWidthLogical > 0 then
+      begin
+        ARun.Cur.Stroke := AEl.Caption.StrokeColour;
+        ARun.Cur.StrokeGrad := Default(TTyChartGradient);
+      end;
+      if AEl.Caption.StrokeWidthLogical > 0 then ARun.Cur.LineWidth := AEl.Caption.StrokeWidthLogical;
+    end
+    else
+      for k := 0 to High(AEl.Caption.RtPieces) do
+      begin
+        pc := @AEl.Caption.RtPieces[k];
+        if (pc^.Kind = rpkText) and (pc^.Text = '') then Continue;
+        if pc^.HasFill then
+        begin
+          if (pc^.CanvasLeft and 1) <> 0 then pc^.Fill := ARun.Cur.Fill
+          else
+          begin
+            ARun.Cur.Fill := pc^.Fill;
+            ARun.Cur.FillGrad := Default(TTyChartGradient);
+          end;
+        end;
+        if pc^.HasStroke then
+        begin
+          if (pc^.CanvasLeft and 2) <> 0 then pc^.Stroke := ARun.Cur.Stroke
+          else
+          begin
+            ARun.Cur.Stroke := pc^.Stroke;
+            ARun.Cur.StrokeGrad := Default(TTyChartGradient);
+          end;
+          if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
+        end;
+      end;
+  end
+  else
+  begin
+    if (AEl.CanvasFlags and cTyCanvasFillLeft) <> 0 then
+    begin
+      AEl.Style.FillColor := ARun.Cur.Fill;
+      AEl.Style.FillGradient := ARun.Cur.FillGrad;
+    end
+    else if AEl.Style.HasFill then
+    begin
+      if AEl.Style.FillPattern.Present then
+      begin
+        { (a pattern the canvas keeps is not carried here: none) }
+        ARun.Cur.Fill := 0;
+        ARun.Cur.FillGrad := Default(TTyChartGradient);
+      end
+      else
+      begin
+        ARun.Cur.Fill := AEl.Style.FillColor;
+        ARun.Cur.FillGrad := CanvasGradOf(AEl.Style.FillGradient, AEl);
+      end;
+    end;
+    { the pen's width: [R7-W] 'Infinity' refused (kept) }
+    if (AEl.CanvasFlags and cTyCanvasWidthLeft) <> 0 then
+      AEl.Style.StrokeWidthLogical := ARun.Cur.LineWidth * sEl / ps;
+    strokes := AEl.Style.StrokeWidthLogical > 0;
+    if (AEl.CanvasFlags and cTyCanvasStrokeLeft) <> 0 then
+    begin
+      AEl.Style.StrokeColor := ARun.Cur.Stroke;
+      AEl.Style.StrokeGradient := ARun.Cur.StrokeGrad;
+    end
+    else if strokes then
+    begin
+      ARun.Cur.Stroke := AEl.Style.StrokeColor;
+      ARun.Cur.StrokeGrad := CanvasGradOf(AEl.Style.StrokeGradient, AEl);
+    end;
+    if strokes and ((AEl.CanvasFlags and cTyCanvasWidthLeft) = 0) then
+      ARun.Cur.LineWidth := AEl.Style.StrokeWidthLogical * ps / sEl;
+    { the dash's phase: [R7-W] no number refused (kept); a dashed pen sets
+      it, a solid one leaves it }
+    dashed := strokes and ((Length(AEl.Style.DashLogical) > 0) or (AEl.Style.DashWord <> 0));
+    if (AEl.CanvasFlags and cTyCanvasPhaseLeftFlag) <> 0 then
+      AEl.Style.DashOffsetLogical := ARun.Cur.Phase * sEl / ps
+    else if dashed then
+      ARun.Cur.Phase := AEl.Style.DashOffsetLogical * ps / sEl;
+  end;
+end;
+
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; const AGround: TTyCanvasGround;
+  APPI: Integer);
+var
+  i: Integer;
+  run: TTyCanvasRun;
 begin
   if not TyLinesCanvasLeftoversDue(AList) then Exit;
-  first := True;
-  zl := 0;
-  cs := 0;
-  inClip := False;
-  cur := Default(TCanvasState);
-  cur.Miter := 10;
-  saved := cur;
-  cr := TyRectF(0, 0, 0, 0);
+  TyCanvasRunStart(run, AGround, APPI);
   for i := 0 to AList.Count - 1 do
-  begin
-    pe := AList.Ref(AList.PaintOrder(i));
-    { what the painter skips: ignored, held back, of an opacity of nought
-      ([R7-V] shouldBePainted's `opacity === 0`: a negative one is brushed,
-      at the clamped nought, and hands the canvas its state [was: any
-      opacity not above nought skipped]) }
-    if pe^.Ignore or pe^.ProgHidden or (pe^.Style.Alpha = 0) then Continue;
-    if first or (pe^.ZLevel <> zl) then
-    begin
-      first := False;
-      zl := pe^.ZLevel;
-      cur := Default(TCanvasState);
-      cur.Miter := 10;
-      if zl = 0 then cur.Shadow := AGround;
-      inClip := False;
-    end;
-    { a clip path: saved on entering, restored on leaving or changing (a
-      series' group clip its own, whatever its rect) }
-    clipped := pe^.HasClip or pe^.HasClipSector;
-    if inClip and (not clipped or (pe^.Datum.SeriesIndex <> cs)
-      or (pe^.ClipRect.Left <> cr.Left) or (pe^.ClipRect.Top <> cr.Top)
-      or (pe^.ClipRect.Right <> cr.Right) or (pe^.ClipRect.Bottom <> cr.Bottom)) then
-    begin
-      cur := saved;
-      inClip := False;
-    end;
-    if clipped and not inClip then
-    begin
-      saved := cur;
-      inClip := True;
-      cs := pe^.Datum.SeriesIndex;
-      cr := pe^.ClipRect;
-      { [R7-V] updateClipStatus sets the clip path's transform (a series
-        group's clip has none) }
-      cur.HasT := False;
-    end;
-    cap := pe^.Caption.FontSizeLogical <> 0;
-    { [R7-V] a value the canvas refuses, first seen: marked, so the next
-      pass settles it again }
-    if pe^.Style.ShadowColor = cTyCanvasColourLeft then
-      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasShadowLeft;
-    if pe^.Style.ShadowBlur < 0 then pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasBlurLeft;
-    if pe^.Style.LineCap = cTyCanvasWordLeft then pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasCapLeft;
-    if pe^.Style.LineJoin = cTyCanvasWordLeft then pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasJoinLeft;
-    if pe^.Style.MiterLimit < 0 then pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasMiterLeft;
-    { the shadowColor: refused (kept), the symbol's own, [R7-V] a label's
-      text span's, a written one, else zrender's '#000' }
-    if (pe^.CanvasFlags and cTyCanvasShadowLeft) <> 0 then
-      pe^.Style.ShadowColor := cur.Shadow
-    else if (pe^.CanvasFlags and cTyCanvasOwnShadow) <> 0 then
-      cur.Shadow := pe^.CanvasShadow
-    else if cap then
-    begin
-      CaptionShadowOf(pe^, colour, blur);
-      cur.Shadow := colour;
-    end
-    else if (pe^.Style.ShadowColor shr 24) <> 0 then
-      cur.Shadow := pe^.Style.ShadowColor
-    else
-      cur.Shadow := TTyChartColor($FF000000);
-    { [R7-V] the shadowBlur: refused below nought (kept), else its own }
-    if (pe^.CanvasFlags and cTyCanvasBlurLeft) <> 0 then
-      pe^.Style.ShadowBlur := cur.Blur
-    else if cap then
-    begin
-      CaptionShadowOf(pe^, colour, blur);
-      cur.Blur := blur;
-    end
-    else if pe^.Style.ShadowBlur > 0 then cur.Blur := pe^.Style.ShadowBlur
-    else cur.Blur := 0;
-    { [R7-V] the pen's cap, join and miterLimit: every path and text sets
-      them (a text its defaults); a word the canvas does not take, or a
-      miterLimit below nought, keeps the one it had }
-    if (pe^.CanvasFlags and cTyCanvasCapLeft) <> 0 then pe^.Style.LineCap := cur.Cap
-    else if cap then cur.Cap := 0
-    else cur.Cap := pe^.Style.LineCap;
-    if (pe^.CanvasFlags and cTyCanvasJoinLeft) <> 0 then pe^.Style.LineJoin := cur.Join
-    else if cap then cur.Join := 0
-    else cur.Join := pe^.Style.LineJoin;
-    if (pe^.CanvasFlags and cTyCanvasMiterLeft) <> 0 then pe^.Style.MiterLimit := cur.Miter
-    else if cap or not (pe^.Style.MiterLimit > 0) then cur.Miter := 10
-    else cur.Miter := pe^.Style.MiterLimit;
-    { the transform: refused (the unit symbol under the one kept), else the
-      element's own -- [R7-V] an effect symbol's place, a caption's anchor
-      and turn, one handed over (CanvasM), a symbol's frame, an own-frame
-      path's, else none [was: only an effect symbol's] }
-    if (pe^.CanvasFlags and cTyCanvasTransformLeft) <> 0 then
-    begin
-      if cur.HasT then PlaceEffectM(pe^, cur.M)
-      else
-      begin
-        ds := 1;
-        if (Length(pe^.Anim.Vals) > 0) and (pe^.Anim.Vals[0] > 0) then ds := pe^.Anim.Vals[0];
-        PlaceEffect(pe^, ds, ds, 0, 0, NaN);
-      end;
-      NanEffectHit(pe^);
-    end
-    else if (pe^.Anim.Role = carLinesEffect) and (Length(pe^.Anim.Vals) >= 7)
-      and (pe^.Anim.Vals[1] = 1) then
-    begin
-      cur.HasT := True;
-      cur.M := TyZrLocal(pe^.Anim.Vals[4], pe^.Anim.Vals[5], pe^.Anim.Vals[6],
-        pe^.Anim.Vals[2], pe^.Anim.Vals[3]);
-    end
-    else if cap then
-    begin
-      cur.HasT := True;
-      if pe^.Caption.HasFixedAnchor then
-        cur.M := TyZrLocal(1, 1, pe^.Caption.FixedRotationRad, pe^.Caption.FixedX, pe^.Caption.FixedY)
-      else
-        cur.M := TyZrLocal(1, 1, pe^.Caption.RotationRad, pe^.Caption.X, pe^.Caption.Y);
-      if IsNan(cur.M[0]) or IsNan(cur.M[4]) or IsNan(cur.M[5]) then cur.HasT := False;
-    end
-    else if Length(pe^.CanvasM) = 6 then
-    begin
-      cur.HasT := True;
-      cur.M[0] := pe^.CanvasM[0]; cur.M[1] := pe^.CanvasM[1]; cur.M[2] := pe^.CanvasM[2];
-      cur.M[3] := pe^.CanvasM[3]; cur.M[4] := pe^.CanvasM[4]; cur.M[5] := pe^.CanvasM[5];
-    end
-    else if pe^.Shape.HitSym <> '' then
-    begin
-      cur.HasT := True;
-      cur.M := pe^.Shape.HitM;
-      { the unit box's frame is half the symbol's size: the symbol's own
-        scale is that, its path the unit one }
-    end
-    else if pe^.ZrHit.Active then
-    begin
-      { the inverse of the way back }
-      d := pe^.ZrHit.ToLocal[0] * pe^.ZrHit.ToLocal[3] - pe^.ZrHit.ToLocal[1] * pe^.ZrHit.ToLocal[2];
-      if (d = 0) or IsNan(d) or IsInfinite(d) then cur.HasT := False
-      else
-      begin
-        r := 1 / d;
-        cur.HasT := True;
-        cur.M[0] := pe^.ZrHit.ToLocal[3] * r;
-        cur.M[1] := -pe^.ZrHit.ToLocal[1] * r;
-        cur.M[2] := -pe^.ZrHit.ToLocal[2] * r;
-        cur.M[3] := pe^.ZrHit.ToLocal[0] * r;
-        cur.M[4] := (pe^.ZrHit.ToLocal[2] * pe^.ZrHit.ToLocal[5] - pe^.ZrHit.ToLocal[3] * pe^.ZrHit.ToLocal[4]) * r;
-        cur.M[5] := (pe^.ZrHit.ToLocal[1] * pe^.ZrHit.ToLocal[4] - pe^.ZrHit.ToLocal[0] * pe^.ZrHit.ToLocal[5]) * r;
-      end;
-    end
-    else
-      cur.HasT := False;
-  end;
+    TyCanvasRunStep(run, AList.Ref(AList.PaintOrder(i))^);
+end;
+
+procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
+begin
+  TyLinesCanvasLeftovers(AList, TyCanvasGroundOf(AGround), 96);
 end;
 
 procedure TyLinesFrameLine(var AEl: TTyChartElement; APercent: Double);

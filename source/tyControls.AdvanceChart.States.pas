@@ -1220,6 +1220,9 @@ begin
   { and its phase (lineDashOffset), as the canvas takes it }
   if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
   v := TyOptPenOffset(TyStFind(ANodes, p));
+  { [R7-W] a state's phase the canvas refuses: nought here, as before (the
+    paint order settles only the elements' own) }
+  if TyPhaseLeft(v) then v := 0;
   if not IsNan(v) then AStyle.DashOffsetLogical := v;
 end;
 
@@ -1357,6 +1360,8 @@ begin
     else d := TyStFind(ANodes, [AState, ABlock, AName]);
     if d = nil then Exit;
     if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
+    { [R7-W] (a refused phase: nought in a state, as before) }
+    if TyPhaseLeft(v) then v := 0;
     if not IsNan(v) then
     begin
       TyStSetNum(AObj, AKey, v);

@@ -6747,6 +6747,9 @@ var
       AEl.Style.HitClearPen := ((b.BorderColor.Color shr 24) = 0)
         and (b.BorderColor.Gradient.Kind = cgkNone) and not b.BorderColor.Pattern.Present;
       AEl.HitNone := b.BorderWidthInf > 0;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if AEl.HitNone and (AEl.Style.StrokeColor <> 0) then
+        AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
     end
     else
       Exit;
@@ -7369,7 +7372,8 @@ begin
     hw := sym.WidthPx / 2;
     hh := sym.HeightPx / 2;
     sz := Min(sym.WidthPx, sym.HeightPx);
-    if IsNan(sz) or (sz <= 0) then Continue;
+    { [R7-W] a side of nought is still a node (below) [was: none] }
+    if IsNan(sz) or (sz < 0) then Continue;
     { THE SYMBOL'S HALF-EXTENTS as zrender composes them: the group's scale
       times the compensation scale, then times the half size -- or, for a
       node a drag moved, times the scale the drag re-derived [Batch 114]. }
@@ -7415,6 +7419,15 @@ begin
     end
     else
       shape := TyBuildSymbolUnit(sym, ANodes[i].PX, ANodes[i].PY);
+    { [R7-W] A NODE OF NO SIZE is still an element upstream: it paints
+      nothing and is hit where its inverse says (TySymbolHitFrame) [was:
+      dropped] }
+    if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds)
+      and (sym.WidthPx >= 0) and (sym.HeightPx >= 0)
+      and ((sym.WidthPx = 0) or (sym.HeightPx = 0))
+      and not IsNan(ANodes[i].PX + sym.OffsetX) and not IsNan(ANodes[i].PY + sym.OffsetY) then
+      shape := TyShapeRect(TyRectF(ANodes[i].PX + sym.OffsetX, ANodes[i].PY + sym.OffsetY,
+        ANodes[i].PX + sym.OffsetX, ANodes[i].PY + sym.OffsetY));
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     { [R7-F] hit in its own frame, as Symbol.ts' path }
     TySymbolHitFrame(shape, sym, ANodes[i].PX, ANodes[i].PY);

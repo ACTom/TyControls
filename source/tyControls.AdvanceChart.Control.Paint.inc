@@ -146,6 +146,8 @@ var
   nx, ny, nrot: Double;
   { the author's pens over the skin [R5-B] }
   lineK, tickK, minorTickK, splitK, minorSplitK, inkK: TTyAxisStroke;
+  { [R7-W] }
+  gi: Integer;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -619,6 +621,18 @@ begin
     and (splitK.Drawn or ((Length(spec^.SplitLineInks) > 0)
       and (splitK.WidthLogical > 0))) then
   begin
+    { [R7-W] the pen it leaves on the canvas }
+    gi := AxGroundAt(AAxis);
+    FAxGround[gi].HasSplit := splitK.WidthLogical > 0;
+    FAxGround[gi].SplitStroke := splitK.Colour;
+    { (the author's list: the last drawn line's) }
+    if Length(spec^.SplitLineInks) > 0 then
+      for i := 0 to High(spec^.SplitLineMarks) do
+        if spec^.SplitLineMarks[i].Drawn and (spec^.SplitLineMarks[i].ColourIndex >= 0)
+          and (spec^.SplitLineMarks[i].ColourIndex <= High(spec^.SplitLineInks)) then
+          FAxGround[gi].SplitStroke :=
+            TTyChartColor(spec^.SplitLineInks[spec^.SplitLineMarks[i].ColourIndex].Colour);
+    FAxGround[gi].SplitW := splitK.WidthLogical;
     for ink := 0 to Max(0, High(spec^.SplitLineInks)) do
     begin
       inkK := splitK;
@@ -670,6 +684,11 @@ begin
     drawn. }
   if furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
   begin
+    { [R7-W] the pen it leaves on the canvas }
+    gi := AxGroundAt(AAxis);
+    FAxGround[gi].HasLine := lineK.Drawn and (lineK.WidthLogical > 0);
+    FAxGround[gi].LineStroke := lineK.Colour;
+    FAxGround[gi].LineW := lineK.WidthLogical;
     APainter.BeginPath;
     { CUT AT THE BREAKS, each segment already on the pixel grid [Batch 132] }
     if (spec <> nil) and spec^.HasBreakLine then
@@ -708,6 +727,11 @@ begin
     [Revised in batch 40: every tickStep-th tick, a hidden label's kept.] }
   if furn.ShowTicks and tickK.Drawn and (spec <> nil) then
   begin
+    { [R7-W] the pen it leaves on the canvas }
+    gi := AxGroundAt(AAxis);
+    FAxGround[gi].HasTick := (Length(spec^.TickMarks) > 0) and (tickK.WidthLogical > 0);
+    FAxGround[gi].TickStroke := tickK.Colour;
+    FAxGround[gi].TickW := tickK.WidthLogical;
     APainter.BeginPath;
     for i := 0 to High(spec^.TickMarks) do
     begin
@@ -849,6 +873,14 @@ begin
       lx := places[i].X;
       ly := places[i].Y;
       ProxLabel(i, lx, ly);
+      { [R7-W] the last label hands the canvas its fill and transform }
+      gi := AxGroundAt(AAxis);
+      FAxGround[gi].HasLabel := True;
+      FAxGround[gi].LabelFill := TTyChartColor(lblStyle.TextColor);
+      if places[i].HasM and (lx = places[i].X) and (ly = places[i].Y) then
+        FAxGround[gi].LabelM := places[i].M
+      else
+        FAxGround[gi].LabelM := TyZrLocal(1, 1, spec^.RotationRad, lx, ly);
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
       begin
@@ -1366,12 +1398,25 @@ begin
     if FPaintList.Ref(k)^.ProgChunk > 0 then Exit(FPaintList.Ref(k)^.ZLevel);
 end;
 
+function TTyCustomAdvanceChart.AxGroundAt(AAxis: TObject): Integer;
+begin
+  for Result := 0 to High(FAxGround) do
+    if FAxGround[Result].Axis = AAxis then Exit;
+  Result := Length(FAxGround);
+  SetLength(FAxGround, Result + 1);
+  FAxGround[Result] := Default(TTyAxGroundRec);
+  FAxGround[Result].Axis := AAxis;
+end;
+
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
 var
-  g, a: Integer;
+  g, a, k, pass: Integer;
   gb: TTyGridBuild;
+  stroked: Boolean;
 begin
+  FAxGround := nil;
+  FCanvasGroundOk := False;
   if FBuild = nil then Exit;
   { THE POLARS' GRIDS, then their axes [Batch 111] }
   PaintPolars(APainter, APPI, AMeasurer, True);
@@ -1397,7 +1442,59 @@ begin
     for a := 0 to gb.YAxisCount - 1 do
       PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
                 False, AProxied);
+    { [R7-W] whether each is a y axis (upstream draws the y axes' elements
+      before the x axes', z2 by z2) }
+    { (one call per statement: the array may grow under its subscript) }
+    for a := 0 to gb.YAxisCount - 1 do
+    begin
+      k := AxGroundAt(gb.YAxis(a));
+      FAxGround[k].IsY := True;
+    end;
   end;
+  { [R7-W] WHAT THEY LEAVE: by z2 -- split lines (0), lines (1), ticks (2),
+    labels (10) -- the y axes before the x, each in its order: the fill and
+    transform of the last label, the pen of the last tick, else line, else
+    split line; zrender's '#000' shadow }
+  if Length(FAxGround) = 0 then Exit;
+  FCanvasGround := TyCanvasGroundOf(TTyChartColor($FF000000));
+  stroked := False;
+  for pass := 0 to 1 do
+    for k := 0 to High(FAxGround) do
+      if FAxGround[k].IsY = (pass = 0) then
+      begin
+        if FAxGround[k].HasLabel then
+        begin
+          FCanvasGround.Fill := FAxGround[k].LabelFill;
+          FCanvasGround.HasT := True;
+          FCanvasGround.M := FAxGround[k].LabelM;
+        end;
+      end;
+  for pass := 0 to 1 do
+    for k := 0 to High(FAxGround) do
+      if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasTick then
+      begin
+        FCanvasGround.Stroke := FAxGround[k].TickStroke;
+        FCanvasGround.LineWidth := FAxGround[k].TickW;
+        stroked := True;
+      end;
+  if not stroked then
+    for pass := 0 to 1 do
+      for k := 0 to High(FAxGround) do
+        if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasLine then
+        begin
+          FCanvasGround.Stroke := FAxGround[k].LineStroke;
+          FCanvasGround.LineWidth := FAxGround[k].LineW;
+          stroked := True;
+        end;
+  if not stroked then
+    for pass := 0 to 1 do
+      for k := 0 to High(FAxGround) do
+        if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasSplit then
+        begin
+          FCanvasGround.Stroke := FAxGround[k].SplitStroke;
+          FCanvasGround.LineWidth := FAxGround[k].SplitW;
+        end;
+  FCanvasGroundOk := True;
 end;
 
 function TTyCustomAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -2333,6 +2430,12 @@ var
   zc, pass: Integer;
   { [R5-J] }
   lvs: TTyIntegerArray;
+  { [R7-W] }
+  carries: Boolean;
+  blk, b0, b1: Integer;
+  run: TTyCanvasRun;
+  ground: TTyCanvasGround;
+  el: TTyChartElement;
 begin
   Result := False;
   measurer := NewTextMeasurer(APPI);
@@ -2392,10 +2495,44 @@ begin
       crossing several rects -- a line's polyline across the plot -- is
       stroked once per rect, and stroking a long polyline costs the same
       however small the clip. What lands outside the rects is never copied
-      out. }
-    box := TyRectToXYWH(TyRectF(px[0].Left, px[0].Top, px[0].Right, px[0].Bottom));
-    for k := 1 to n - 1 do
-      TyZrRectUnion(box, TyRectToXYWH(TyRectF(px[k].Left, px[k].Top, px[k].Right, px[k].Bottom)));
+      out.
+      [R7-W] EXCEPT WHERE THE CANVAS CARRIES A VALUE: each of zrender's
+      blocks saves the context, starts its brushes afresh (prevEl null) and
+      restores it, so an element whose colour, width, shadow or transform
+      the canvas refuses takes what the element before it IN THAT BLOCK
+      left -- rect by rect then, each block settled anew (TyCanvasRunStep
+      on a copy) [was: the whole list's order everywhere] }
+    carries := False;
+    for i := 0 to High(snap) do
+      if TyCanvasElementCarries(snap[i].El) then
+      begin
+        carries := True;
+        Break;
+      end;
+    if carries then
+    begin
+      b0 := 0;
+      b1 := n - 1;
+      ground := CanvasGroundState;
+    end
+    else
+    begin
+      b0 := -1;
+      b1 := -1;
+    end;
+    for blk := b0 to b1 do
+    begin
+    if blk < 0 then
+    begin
+      box := TyRectToXYWH(TyRectF(px[0].Left, px[0].Top, px[0].Right, px[0].Bottom));
+      for k := 1 to n - 1 do
+        TyZrRectUnion(box, TyRectToXYWH(TyRectF(px[k].Left, px[k].Top, px[k].Right, px[k].Bottom)));
+    end
+    else
+    begin
+      box := TyRectToXYWH(TyRectF(px[blk].Left, px[blk].Top, px[blk].Right, px[blk].Bottom));
+      TyCanvasRunStart(run, ground, APPI);
+    end;
     FDrWork.ClipRect := DrRaster(Rect(Round(box.X), Round(box.Y), Round(box.X + box.W),
       Round(box.Y + box.H)));
     { [R5-G] in two passes as the full paint draws: the list up to the
@@ -2427,19 +2564,31 @@ begin
           if snap[idx].Bounded then
           begin
             hit := False;
-            for k := 0 to n - 1 do
-              if TyZrRectIntersect(snap[idx].Rect, zr[k]) then
-              begin
-                hit := True;
-                Break;
-              end;
+            if blk >= 0 then hit := TyZrRectIntersect(snap[idx].Rect, zr[blk])
+            else
+              for k := 0 to n - 1 do
+                if TyZrRectIntersect(snap[idx].Rect, zr[k]) then
+                begin
+                  hit := True;
+                  Break;
+                end;
             if not hit then Continue;
           end;
-          TyRenderElement(P, snap[idx].El);
+          if blk >= 0 then
+          begin
+            el := snap[idx].El;
+            { (its pieces its own: the block settles them afresh) }
+            SetLength(el.Caption.RtPieces, Length(el.Caption.RtPieces));
+            TyCanvasRunStep(run, el);
+            TyRenderElement(P, el);
+          end
+          else
+            TyRenderElement(P, snap[idx].El);
         end;
       finally
         TyClearZBand;
       end;
+    end;
     end;
     FDrWork.ClipRect := oldClip;
     P.EndPaint;

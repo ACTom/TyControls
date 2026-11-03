@@ -56,6 +56,20 @@
 // brush began the path); `pb`, the bounds of the path it built, on the
 // canvas, and `pa` the area it encloses. A case may name probes: `hits`, [x, y, the key findHover's target
 // has (null: none, 'other' an untracked element)].
+//
+// Round 7 R7-W (the cases named `w-...`, recorded as the v- ones and more):
+// setLineDash refuses a list with a value that is not finite or below 0 (an
+// odd one is doubled), and every fill() / stroke() / fillText() /
+// strokeText() of a tracked element records the context then (`ops`: fs / ss
+// fill and stroke style, lw, ld the dash, ldo its phase, sc / sb the shadow,
+// m the transform); the state once brushed holds ld / ldo too. More elements
+// are tracked: a bar `b`, a pie's sector `p`, a line's symbol `ls` and area
+// `la`, a label's last text span `x<key>`, a legend's displayables `lg<i>.<n>`
+// in paint order, and the text spans of the axes `ax<n>`. A case may init with
+// useDirtyRect: each repaint block (`blocks`, the rect, null the whole canvas)
+// numbers the ops brushed in it (`blk`), and an element brushed in two
+// blocks keeps every state (`sts`). A case may set an option before a sample
+// (`sets`).
 // Run: node tools/advchart-oracle/lines-canvas.js -> tests/fixtures/advchart-lines-canvas.json
 'use strict';
 const fs = require('fs');
@@ -101,6 +115,11 @@ const Displayable = Object.getPrototypeOf(Path.prototype).constructor;
 let CUR = null;
 // [R7-V] the record of the cases named v-...
 let V2 = false;
+// [R7-W] the record of the cases named w-...
+let W = false;
+let BLK = 0;
+let BLOCKS = [];
+let SNAPL = new Map();
 let SNAPS = new Map();
 let OPS = new Map();
 let PATHS = new Map();
@@ -110,6 +129,11 @@ Displayable.prototype.innerBeforeBrush = function () { CUR = this; return origIB
 const origIAB = Displayable.prototype.innerAfterBrush;
 Displayable.prototype.innerAfterBrush = function () {
   if (V2 && SNAP) SNAPS.set(this, SNAP());
+  if (W && SNAP) {
+    let l = SNAPL.get(this);
+    if (!l) { l = []; SNAPL.set(this, l); }
+    l.push(Object.assign({ blk: BLK }, SNAP()));
+  }
   return origIAB.apply(this, arguments);
 };
 let BRUSHES = [];
@@ -127,42 +151,67 @@ function makeCtx(canvas) {
   const st = { shadowColor: 'rgba(0, 0, 0, 0)', shadowBlur: 0, m: [1, 0, 0, 1, 0, 0],
     globalAlpha: 1, lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, lineDashOffset: 0,
     shadowOffsetX: 0, shadowOffsetY: 0, fillStyle: '#000000', strokeStyle: '#000000',
-    globalCompositeOperation: 'source-over' };
+    globalCompositeOperation: 'source-over', lineDash: [] };
   const stack = [];
   const note = op => { if (CUR) BRUSHES.push({ el: CUR, op, sc: st.shadowColor, sb: st.shadowBlur, m: st.m.slice() }); };
   // [R7-V] the path being built, its owner and its points on the canvas
   let owner = null;
   let pending = false;
   const at = (x, y) => [st.m[0] * x + st.m[2] * y + st.m[4], st.m[1] * x + st.m[3] * y + st.m[5]];
+  // [R7-W] the points of the path being built, kept for its owner only
+  // once it is filled or stroked (a clip path built under the element
+  // before is not its)
+  let pend = [];
   const put = (x, y) => {
     if (!V2) return;
     if (!pending) { owner = CUR; pending = true; }
     if (!owner) return;
+    if (W) { pend.push(at(x, y)); return; }
     let p = PATHS.get(owner);
     if (!p) { p = []; PATHS.set(owner, p); }
     p.push(at(x, y));
   };
   let px = 0;
   let py = 0;
+  const styleName = v => (v && typeof v === 'object' ? '[grad]' : String(v));
+  // [R7-W] the context a fill or a stroke is made with
+  const opState = () => ({ fs: styleName(st.fillStyle), ss: styleName(st.strokeStyle), lw: hex(st.lineWidth),
+    ld: st.lineDash.map(hex), ldo: hex(st.lineDashOffset), sc: String(st.shadowColor), sb: hex(st.shadowBlur),
+    sox: hex(st.shadowOffsetX), soy: hex(st.shadowOffsetY), cap: st.lineCap, join: st.lineJoin,
+    ml: hex(st.miterLimit), m: st.m.map(hex), blk: BLK });
   const opNote = op => {
     if (!V2) return;
     pending = false;
     if (!owner) return;
+    if (W && pend.length) {
+      let p = PATHS.get(owner);
+      if (!p) { p = []; PATHS.set(owner, p); }
+      for (const q of pend) p.push(q);
+      pend = [];
+    }
     let o = OPS.get(owner);
     if (!o) { o = []; OPS.set(owner, o); }
-    o.push({ op, ga: hex(st.globalAlpha) });
+    if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
+    else o.push({ op, ga: hex(st.globalAlpha) });
   };
-  const styleName = v => (v && typeof v === 'object' ? '[grad]' : String(v));
+  // a text's: its span is the owner
+  const textNote = op => {
+    if (!W || !CUR) return;
+    let o = OPS.get(CUR);
+    if (!o) { o = []; OPS.set(CUR, o); }
+    o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
+  };
   const ctx = {
     canvas,
     dpr: 1,
-    save() { stack.push(Object.assign({}, st, { m: st.m.slice() })); },
+    save() { stack.push(Object.assign({}, st, { m: st.m.slice(), lineDash: st.lineDash.slice() })); },
     restore() { const s = stack.pop(); if (s) Object.assign(st, s); },
     // a browser's: a transform with a value that is not finite is refused
     setTransform(a, b, c, d, e, f) { if ([a, b, c, d, e, f].every(v => isFinite(v))) st.m = [a, b, c, d, e, f]; },
     fill() { note('fill'); opNote('fill'); },
     stroke() { note('stroke'); opNote('stroke'); },
-    beginPath() { pending = false; owner = null; },
+    beginPath() { pending = false; owner = null; pend = []; },
+    clip() { if (W) { pend = []; pending = false; owner = null; } },
     moveTo(x, y) { put(x, y); px = x; py = y; },
     lineTo(x, y) { put(x, y); px = x; py = y; },
     rect(x, y, w, h) { put(x, y); put(x + w, y); put(x + w, y + h); put(x, y + h); px = x; py = y; },
@@ -198,8 +247,16 @@ function makeCtx(canvas) {
       px = cx + r * Math.cos(a0 + sw); py = cy + r * Math.sin(a0 + sw);
     },
     closePath() {},
-    setLineDash() {},
-    getLineDash() { return []; },
+    // a browser's: a list with a value not finite or below 0 is refused, an odd one doubled
+    setLineDash(a) {
+      if (!W) return;
+      const v = Array.from(a || [], toNum);
+      if (v.some(x => !isFinite(x) || x < 0)) return;
+      st.lineDash = v.length % 2 ? v.concat(v) : v;
+    },
+    getLineDash() { return W ? st.lineDash.slice() : []; },
+    fillText() { textNote('fillText'); },
+    strokeText() { textNote('strokeText'); },
     measureText(t) { return { width: String(t).length * 6 }; },
     createLinearGradient() { return { addColorStop() {} }; },
     createRadialGradient() { return { addColorStop() {} }; },
@@ -209,14 +266,15 @@ function makeCtx(canvas) {
   };
   const snap = () => ({ ga: hex(st.globalAlpha), sc: String(st.shadowColor), sb: hex(st.shadowBlur),
     sox: hex(st.shadowOffsetX), soy: hex(st.shadowOffsetY), fs: styleName(st.fillStyle), ss: styleName(st.strokeStyle),
-    lw: hex(st.lineWidth), cap: st.lineCap, join: st.lineJoin, ml: hex(st.miterLimit), m: st.m.map(hex) });
+    lw: hex(st.lineWidth), cap: st.lineCap, join: st.lineJoin, ml: hex(st.miterLimit), m: st.m.map(hex),
+    ...(W ? { ld: st.lineDash.map(hex), ldo: hex(st.lineDashOffset) } : {}) });
   return new Proxy(ctx, {
     get: (t, k) => {
       // the context being drawn on is the one last touched
       SNAP = snap;
       if (k === 'shadowColor') return st.shadowColor;
       if (k === 'shadowBlur') return st.shadowBlur;
-      if (V2 && typeof k === 'string' && k !== 'm' && Object.prototype.hasOwnProperty.call(st, k)) return st[k];
+      if (V2 && typeof k === 'string' && k !== 'm' && k !== 'lineDash' && Object.prototype.hasOwnProperty.call(st, k)) return st[k];
       if (k in t) return t[k];
       if (typeof k === 'string' && /^[a-z]/.test(k)) return function () {};
       return undefined;
@@ -260,8 +318,8 @@ function fakeCanvas(w, h) {
 }
 echarts.setPlatformAPI({ createCanvas() { return fakeCanvas(300, 150); } });
 
-const W = 400;
-const H = 300;
+const CW = 400;
+const CH = 300;
 const GRAD = { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#ff8800' }, { offset: 1, color: '#0088ff' }] };
 const vv = (s, more) => Object.assign({ animation: false, xAxis: { show: false, type: 'value', min: 0, max: 10 },
   yAxis: { show: false, type: 'value', min: 0, max: 10 }, series: Array.isArray(s) ? s : [s] }, more || {});
@@ -284,8 +342,13 @@ const GR = (links, more) => ({ animation: false, series: [Object.assign({ type: 
   data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 0 }, { name: 'c', x: 100, y: 100 }, { name: 'd', x: 0, y: 100 }],
   links }, more || {})] });
 
+// [R7-W] the default palette, written: the port's own is its skin's
+// [R7-W] an axis' colours written (the port's own are its skin's)
+const AXC = a => Object.assign({ axisLabel: { color: '#112233' }, axisLine: { lineStyle: { color: '#445566' } },
+  axisTick: { lineStyle: { color: '#778899' } }, splitLine: { lineStyle: { color: '#aabbcc' } } }, a);
+const PAL = ['#5070dd', '#b6d634', '#505372', '#ff994d', '#0ca8df', '#ffd10a', '#fb628b', '#785db0', '#3fbe95'];
 function cases() {
-  return [
+  return withPalette([
     // ---- 1. a gradient effect symbol's shadow ----
     ['grad-alone', vv(LN({ color: GRAD, shadowBlur: 6 }, ROWS2)), [0, 400, 1200]],
     ['grad-solid-first', vv(LN({ color: GRAD, shadowBlur: 5 }, [
@@ -457,7 +520,129 @@ function cases() {
       { type: 'scatter', itemStyle: { color: 'notacolor' }, data: [[5, 5]] },
       { type: 'scatter', itemStyle: { color: '#00ff00', borderColor: 'nope', borderWidth: 2 }, data: [[7, 7]] }]),
     [0], { v2: true }],
-  ];
+    // ---- [R7-W] ----
+    // 1. a fill or stroke colour no parser reads: the canvas keeps the one it
+    //    had (and a series that writes one takes no palette slot)
+    ['w-fill-scatter', vv([{ type: 'scatter', itemStyle: { color: '#ff0000' }, data: [[2, 2]] },
+      { type: 'scatter', itemStyle: { color: 'notacolor' }, data: [[5, 5], [5, 7]] },
+      { type: 'scatter', itemStyle: { color: '#00ff00', borderColor: 'nope', borderWidth: 2 }, data: [[7, 7]] },
+      { type: 'scatter', data: [[8, 3]] },
+      { type: 'scatter', itemStyle: { color: '#0000ff' }, data: [[3, 8], { value: [4, 8], itemStyle: { color: 'zzz' } }] }]),
+    [0], { w: true }],
+    ['w-fill-line', vv([{ type: 'line', showSymbol: false, lineStyle: { color: '#ff0000', width: 3 },
+      areaStyle: { color: '#ff0000' }, data: [[1, 2], [9, 3]] },
+      { type: 'line', showSymbol: false, lineStyle: { color: 'nope', width: 2 }, areaStyle: { color: 'zz' },
+        data: [[1, 5], [9, 6]] },
+      { type: 'line', symbolSize: 8, itemStyle: { color: 'qq' }, lineStyle: { color: '#0000ff' }, data: [[2, 8], [8, 9]] }]),
+    [0], { w: true }],
+    ['w-fill-bar', vv([{ type: 'bar', barWidth: 20, label: { show: true, position: 'inside' },
+      data: [{ value: [3, 4], itemStyle: { color: '#00ffff' } }, { value: [6, 5], itemStyle: { color: 'nope' } },
+        { value: [8, 3], itemStyle: { color: '#ff00ff', borderColor: 'bad', borderWidth: 3 } }] }]),
+    [0], { w: true }],
+    // a lines row's own unreadable colour, after a row of another
+    ['w-fill-lines-rows', vv(LNC({ show: false }, [
+      { coords: [[1, 8], [9, 8]], lineStyle: { color: '#0000ff', width: 2 } },
+      { coords: [[1, 6], [9, 6]], lineStyle: { color: 'nope', width: 2 } }])), [0], { w: true }],
+    // a label of 'inherit' after one of a colour; a rich inside label of an
+    // unreadable host
+    ['w-fill-label', vv([{ type: 'bar', barWidth: 20, label: { show: true, position: 'top', color: 'inherit' },
+      data: [{ value: [3, 4], itemStyle: { color: '#00ffff' } }, { value: [6, 5], itemStyle: { color: 'nope' } }] },
+    { type: 'bar', barWidth: 20, label: { show: true, position: 'inside', formatter: '{a|Ab}', rich: { a: {} } },
+      data: [{ value: [8, 6], itemStyle: { color: '#ff00ff' } }, { value: [9, 6], itemStyle: { color: 'bad' } }] }]),
+    [0], { w: true }],
+    // (a bar in normal mode has no clip path: one series' bar after another's)
+    ['w-fill-bar-series', Object.assign(vv([{ type: 'bar', data: [[3, 5]], itemStyle: { color: '#ff0000' } },
+      { type: 'bar', data: [[3, 5]], itemStyle: { color: 'bananas' } }, { type: 'bar', data: [[3, 5]] }]),
+    { xAxis: AXC({ type: 'category', data: ['A', 'B', 'C', 'D'] }), yAxis: AXC({ type: 'value' }) }),
+    [0], { w: true }],
+    ['w-fill-pie', { animation: false, series: [{ type: 'pie', radius: 60, center: [200, 150], label: { show: false },
+      data: [{ value: 3, name: 'a', itemStyle: { color: '#ff0000' } }, { value: 2, name: 'b', itemStyle: { color: 'nope' } },
+        { value: 1, name: 'c', itemStyle: { color: '#0000ff' } }] }] },
+    [0], { w: true }],
+    // 2. a width of 'Infinity' and a dash phase no number: the canvas keeps
+    //    the width and the phase it had
+    // (a series' elements share its clip: the canvas carries a value from
+    // one row to the next, a series' restore drops it)
+    ['w-lw-inf', vv([LNC({ show: false }, [
+      { coords: [[1, 8], [9, 8]], lineStyle: { color: '#ff0000', width: 3 } },
+      { coords: [[1, 7], [9, 7]], lineStyle: { color: '#0000ff', width: 'Infinity' } }]),
+    { type: 'bar', barWidth: 20, data: [{ value: [3, 4], itemStyle: { borderColor: '#000', borderWidth: 3 } },
+      { value: [6, 5], itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] },
+    { type: 'scatter', symbolSize: 10, data: [{ value: [2, 2], itemStyle: { borderColor: '#000', borderWidth: 2 } },
+      { value: [8, 2], itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }]),
+    [0], { w: true }],
+    ['w-dash-offset', vv(LNC({ show: false }, [
+      { coords: [[1, 1], [9, 1]], lineStyle: { type: 'dashed', dashOffset: 'abc', width: 2 } },
+      { coords: [[1, 3], [9, 3]], lineStyle: { type: 'dashed', dashOffset: 5, width: 2 } },
+      { coords: [[1, 4], [9, 4]], lineStyle: { type: 'solid', dashOffset: 9, width: 2 } },
+      { coords: [[1, 5], [9, 5]], lineStyle: { type: 'dashed', dashOffset: 'abc', width: 2 } },
+      { coords: [[1, 7], [9, 7]], lineStyle: { type: [4, 4], dashOffset: 'Infinity', width: 2 } },
+      { coords: [[1, 8], [9, 8]], lineStyle: { type: 'solid', width: 2 } },
+      { coords: [[1, 9], [9, 9]], lineStyle: { type: [6, 2], dashOffset: '7', width: 2 } },
+      { coords: [[1, 9.5], [9, 9.5]], lineStyle: { type: [6, 2], dashOffset: 'x', width: 2 } }])),
+    [0], { w: true }],
+    // (the other builders of a pen of 'Infinity': each element after one of 3)
+    ['w-lw-inf-pie', { animation: false, color: PAL, series: [{ type: 'pie', radius: 60, center: [200, 150], label: { show: false },
+      data: [{ value: 3, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { value: 2, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }] }, [0], { w: true }],
+    ['w-lw-inf-sunburst', { animation: false, color: PAL, series: [{ type: 'sunburst', radius: [0, 90], label: { show: false },
+      data: [{ name: 'a', value: 3, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { name: 'b', value: 2, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }] }, [0], { w: true }],
+    ['w-lw-inf-radar', { animation: false, color: PAL, radar: { indicator: [{ max: 10 }, { max: 10 }, { max: 10 }] },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { width: 'Infinity' }, data: [{ value: [5, 6, 7] }, { value: [3, 8, 4] }] },
+      { type: 'radar', symbol: 'none', lineStyle: { width: 3 }, data: [{ value: [2, 2, 2] }] }] }, [0], { w: true }],
+    ['w-lw-inf-tree', { animation: false, color: PAL, series: [{ type: 'tree', label: { show: false }, symbolSize: 10,
+      itemStyle: { color: '#b0c4de', borderColor: '#000', borderWidth: 'Infinity' }, lineStyle: { width: 3 },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }] }, [0], { w: true }],
+    ['w-lw-inf-graph', { animation: false, color: PAL, series: [{ type: 'graph', layout: 'none', symbolSize: 20, label: { show: false },
+      data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { name: 'b', x: 100, y: 0, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }], links: [] }] },
+    [0], { w: true }],
+    // 3. components: a legend's refused values; what the axes, drawn before
+    //    the series, leave on the canvas
+    ['w-comp-legend', Object.assign(vv([{ type: 'scatter', name: 'A', itemStyle: { color: '#ff0000', shadowBlur: 5,
+      shadowColor: '#00ff00', borderColor: '#000', borderWidth: 2 }, data: [[2, 2]] },
+      { type: 'scatter', name: 'B', itemStyle: { color: '#0000ff' }, data: [[5, 5]] }]),
+    { legend: { left: 20, top: 10, itemStyle: { shadowBlur: -3, shadowColor: 'nope', color: 'bad', borderCap: 'Round',
+      borderColor: '#ff00ff', borderWidth: 2 } } }),
+    [0], { w: true }],
+    ['w-comp-axes-fill', Object.assign(vv([{ type: 'scatter', clip: false,
+      itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 }, data: [[5, 5]] }]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10 }), yAxis: AXC({ type: 'value', min: 0, max: 10 }) }),
+    [0], { w: true }],
+    ['w-comp-axes-tf', Object.assign(vv([LNC({ symbol: 'triangle', symbolSize: [12], color: GRAD, shadowBlur: 4 },
+      [{ coords: [[1, 8], [9, 5]] }], { lineStyle: { color: '#999', opacity: 0 } })]),
+    { xAxis: { type: 'value', min: 0, max: 10, axisLabel: { rotate: 30 } }, yAxis: { type: 'value', min: 0, max: 10 } }),
+    [0, 600], { w: true, probes: 'nan-origin' }],
+    // 4. useDirtyRect: each block starts from the canvas' own state
+    ['w-dirty-fill', vv([{ type: 'scatter', symbolSize: 24, itemStyle: { color: '#ff0000' }, emphasis: { scale: false },
+      data: [[5, 5], [1, 1]] },
+      { type: 'scatter', symbolSize: 6, itemStyle: { color: 'nope' }, data: [[5.35, 5.6], [1.2, 9]] }]),
+    [0, 10], { w: true, dirty: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['w-dirty-effect', vv(LN({ color: GRAD, shadowBlur: 5 }, [
+      { coords: [[1, 8], [9, 8]], effect: { color: '#ff0000' } },
+      { coords: [[1, 3], [9, 3]] }])), [0, 500, 1500], { w: true, dirty: true }],
+    // 5. an option set while a trail runs whose transform is no number
+    ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
+      [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
+        [230, 101.8], [238, 90.4], [234, 103], [180, 96], [300, 96]],
+        sets: { 2: { series: [{ lineStyle: { color: '#333' } }] } } }],
+    // 6. a symbol of size nought: its transform does not invert, hit at the
+    //    canvas' top left under the inverse it was made with
+    ['w-zero-scatter', vv([{ type: 'scatter', clip: false, symbol: 'rect', symbolSize: [12, 0], data: [[7, 7]] },
+      { type: 'scatter', clip: false, symbolSize: 0, data: [[5, 5]] }]),
+    [0], { w: true, probes: [[0.2, 0.2], [0.5, -0.5], [0.9, 0.1], [-0.6, -0.6], [1.5, 0], [0, 0.95], [0.9, 0.9],
+      [0.95, -0.9], [-0.9, 0.85], [200, 150], [200.5, 150.5], [270, 111.5], [271, 111.5], [3, 3]] }],
+    ['w-zero-graph', { animation: false, series: [{ type: 'graph', layout: 'none', left: 50, top: 50, width: 300, height: 200,
+      symbolSize: 0, label: { show: false }, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100, symbol: 'rect' }],
+      links: [] }] },
+    [0], { w: true, probes: [[0.2, 0.2], [0.5, -0.5], [0.9, 0.1], [-0.6, -0.6], [1.5, 0], [0.9, 0.9], [-0.95, 0.9],
+      [50, 50], [50.5, 50.5], [350, 250], [3, 3]] }],
+  ]);
+}
+function withPalette(list) {
+  for (const c of list) if (c[3] && c[3].w && !c[1].color) c[1].color = PAL;
+  return list;
 }
 
 function track(chart) {
@@ -516,7 +701,74 @@ function track(chart) {
         if (p) map.set(p, 's' + si + '.' + i);
       }
     }
+    // [R7-W] a bar, a pie's sector, a line's symbols and area
+    if (W && (type === 'bar' || type === 'pie')) {
+      const data = sm.getData();
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        if (g) map.set(g, (type === 'bar' ? 'b' : 'p') + si + '.' + i);
+      }
+    }
+    // [R7-W] any other series' item graphics (its displayables in order)
+    if (W && ['lines', 'graph', 'scatter', 'line', 'bar', 'pie'].indexOf(type) < 0) {
+      const data = sm.getData();
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        if (!g) continue;
+        let n = 0;
+        const visit = e => {
+          if (e.isGroup) { for (const c of e.childrenRef()) visit(c); return; }
+          if (e.style && !map.has(e)) map.set(e, 'd' + si + '.' + i + '.' + (n++));
+        };
+        visit(g);
+      }
+    }
+    if (W && type === 'line') {
+      const data = sm.getData();
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        const p = g && g.childAt && g.childAt(0);
+        if (p) map.set(p, 'ls' + si + '.' + i);
+      }
+      const view = chart.getViewOfSeriesModel(sm);
+      if (view && view._polygon) map.set(view._polygon, 'la' + si + '.0');
+    }
   });
+  if (W) {
+    // a label's last text span
+    for (const [el, key] of Array.from(map)) {
+      const tc = el.getTextContent && el.getTextContent();
+      const kids = tc && tc.childrenRef ? tc.childrenRef() : [];
+      let last = null;
+      for (const k of kids) if (k.style && k.style.text) last = k;
+      if (last) map.set(last, 'x' + key);
+    }
+    // the legends' displayables and the axes' text spans, in paint order
+    const legends = [];
+    model.eachComponent('legend', lm => {
+      const v = chart.getViewOfComponentModel(lm);
+      if (v) legends.push(v.group);
+    });
+    const counts = new Map();
+    let ax = 0;
+    for (const el of chart.getZr().storage.getDisplayList(true)) {
+      let p = el;
+      let li = -1;
+      let isAxis = false;
+      while (p) {
+        const k = legends.indexOf(p);
+        if (k >= 0) { li = k; break; }
+        if (p.__ecComponentInfo && /Axis$/.test(p.__ecComponentInfo.mainType)) isAxis = true;
+        p = p.parent || p.__hostTarget;
+      }
+      if (li >= 0) {
+        const n = counts.get(li) || 0;
+        counts.set(li, n + 1);
+        if (!map.has(el)) map.set(el, 'lg' + li + '.' + n);
+      }
+      else if (isAxis && el.style && el.style.text != null && !map.has(el)) map.set(el, 'ax' + (ax++));
+    }
+  }
   if (V2) {
     for (const el of chart.getZr().storage.getDisplayList(true)) {
       if (el.name && /^gr[0-9]+$/.test(el.name)) map.set(el, el.name);
@@ -538,6 +790,7 @@ function elRec(el, key, brushes) {
   if (V2) {
     // [R7-V] the context once it was brushed, its fills and strokes, its path
     r.st = SNAPS.has(el) ? SNAPS.get(el) : null;
+    if (W) r.sts = SNAPL.get(el) || [];
     // the inverse its hit takes the point back through (kept while a
     // transform does not invert)
     r.inv = el.invTransform ? Array.from(el.invTransform).map(hexOrNull) : null;
@@ -606,9 +859,26 @@ function run(id, option, samples, opts) {
   rngState = SEED;
   CUR = null;
   opts = opts || {};
-  V2 = !!opts.v2;
-  const dom = fakeCanvas(W, H);
-  const chart = echarts.init(dom, null, { renderer: 'canvas', width: W, height: H, devicePixelRatio: 1 });
+  V2 = !!opts.v2 || !!opts.w;
+  W = !!opts.w;
+  const dom = fakeCanvas(CW, CH);
+  const chart = echarts.init(dom, null, { renderer: 'canvas', width: CW, height: CH, devicePixelRatio: 1,
+    useDirtyRect: !!opts.dirty });
+  // [R7-W] the repaint blocks
+  if (W) {
+    const P = chart.getZr().painter.constructor.prototype;
+    if (!P.__r7wBlock) {
+      const orig = P._paintPerCursorInRect;
+      P._paintPerCursorInRect = function (layer, cursor, list, rect) {
+        if (W) {
+          BLK = BLOCKS.length;
+          BLOCKS.push(rect ? [rect.x, rect.y, rect.width, rect.height].map(hex) : null);
+        }
+        return orig.apply(this, arguments);
+      };
+      P.__r7wBlock = true;
+    }
+  }
   // [R7-V] a layer cleared starts the record of its paint afresh (a frame
   // that paints nothing keeps the last paint's)
   if (V2) {
@@ -616,13 +886,15 @@ function run(id, option, samples, opts) {
     if (!L.__r7vClear) {
       const orig = L.clear;
       L.clear = function () {
-        if (V2) { SNAPS = new Map(); OPS = new Map(); PATHS = new Map(); }
+        if (V2) { SNAPS = new Map(); OPS = new Map(); PATHS = new Map(); SNAPL = new Map(); }
         return orig.apply(this, arguments);
       };
       L.__r7vClear = true;
     }
   }
   const frames = [];
+  BLOCKS = [];
+  BLK = 0;
   try {
     chart.setOption(JSON.parse(JSON.stringify(option)));
     for (let si = 0; si < samples.length; si++) {
@@ -630,6 +902,11 @@ function run(id, option, samples, opts) {
       NOW = T_BASE + t;
       BRUSHES = [];
       CUR = null;
+      if (si > 0) {
+        BLOCKS = [];
+        BLK = 0;
+      }
+      if (opts.sets && opts.sets[si]) chart.setOption(JSON.parse(JSON.stringify(opts.sets[si])));
       if (opts.acts && opts.acts[si]) for (const a of opts.acts[si]) chart.dispatchAction(a);
       // zrender's own frame: the clips stepped once, then the stage's flush
       // paints what they moved (a refresh from outside would step them a
@@ -644,20 +921,27 @@ function run(id, option, samples, opts) {
       if (V2 && opts.probes) {
         const zr = chart.getZr();
         const hits = [];
-        for (const [x, y] of probesOf(opts.probes, els, frames.length ? frames[frames.length - 1].els : null)) {
+        const pts = probesOf(opts.probes, els, frames.length ? frames[frames.length - 1].els : null);
+        for (const [x, y] of (opts.more ? pts.concat(opts.more) : pts)) {
           const h = zr.handler.findHover(x, y);
           const tg = h && h.target;
           hits.push([hex(x), hex(y), tg ? (map.get(tg) || 'other') : null]);
         }
-        frames.push({ t, els, hits });
+        if (W) frames.push({ t, els, hits, blocks: BLOCKS });
+        else frames.push({ t, els, hits });
       }
+      else if (W) frames.push({ t, els, blocks: BLOCKS });
       else frames.push({ t, els });
     }
   }
   finally {
     chart.dispose();
     V2 = false;
+    W = false;
   }
+  // [R7-W] the options set before a sample, the dirty rects
+  if (opts.w) return Object.assign({ id, option }, opts.acts ? { acts: opts.acts } : {},
+    opts.sets ? { sets: opts.sets } : {}, opts.dirty ? { dirty: true } : {}, { frames });
   // [R7-V] the actions dispatched before a sample
   if (opts.acts) return { id, option, acts: opts.acts, frames };
   return { id, option, frames };
@@ -682,7 +966,7 @@ function generate() {
       + 'e<series>.<row> a lines effect symbol, f / t its end symbols, gf / gt a graph edge\'s, s a scatter\'s symbol -- with '
       + 'ignore, scaleX / scaleY (hex, null not a number), the shape box [x, y, w, h] and every fill() / stroke() made while '
       + 'it was brushed: the context\'s shadowColor (a string setter, the canvas default rgba(0, 0, 0, 0)) and shadowBlur.',
-    W, H, T0: T_BASE, charts };
+    W: CW, H: CH, T0: T_BASE, charts };
 }
 
 let j1, j2;

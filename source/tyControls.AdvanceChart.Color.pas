@@ -1189,7 +1189,10 @@ function TyOptPenOffset(AData: TJSONData): Double;
 begin
   if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
   Result := TyOptJsNumber(AData);
-  if IsNan(Result) or IsInfinite(Result) then Result := 0;
+  { [R7-W] a phase the canvas refuses (no number, infinite) keeps the
+    lineDashOffset it had: cTyCanvasPhaseLeft until the paint order settles
+    it [was: 0] }
+  if IsNan(Result) or IsInfinite(Result) then Result := cTyCanvasPhaseLeft;
 end;
 
 function TyOptMiterLimit(AData: TJSONData): Double;
@@ -1386,10 +1389,13 @@ begin
     Exit;
   end;
   if not TyTryParseChartColor(d.AsString, Result.Color) then
-    { Unreadable. Upstream would hand the string to the canvas and get the
-      PREVIOUS element's colour; there is nothing to copy there. Treated as
-      unwritten, so the theme answers. }
-    Result.Written := False;
+    { [R7-W] UNREADABLE: upstream hands the string to the canvas, which
+      refuses it and keeps the colour it had -- the element brushed before
+      it left that (TyLinesCanvasLeftovers settles it in paint order). It is
+      written all the same: it takes no palette slot, and the label that
+      inherits it, the legend icon, the emphasis carry it too
+      [was: treated as unwritten, so the theme answered] }
+    Result.Color := cTyCanvasColourLeft;
 end;
 
 function ReadDash(ANode: TJSONObject; const AKey: string;

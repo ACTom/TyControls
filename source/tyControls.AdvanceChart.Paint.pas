@@ -275,6 +275,19 @@ const
     a shadowBlur or miterLimit keeps its own negative }
   cTyCanvasColourLeft = TTyChartColor($00010203);
   cTyCanvasWordLeft = 3;
+  { [R7-W] more of them: a fill / stroke colour no parser reads (written as
+    cTyCanvasColourLeft: the canvas keeps the fillStyle / strokeStyle it
+    had), a width of 'Infinity' (marked by its builder, drawn as none until
+    settled: the lineWidth it had), a dash phase no number or infinite
+    (written as cTyCanvasPhaseLeft: the lineDashOffset it had), a caption's
+    text fill / stroke colour or one of its pieces' (cTyCanvasColourLeft) }
+  cTyCanvasFillLeft = 128;
+  cTyCanvasStrokeLeft = 256;
+  cTyCanvasWidthLeft = 512;
+  cTyCanvasPhaseLeftFlag = 1024;
+  cTyCanvasTextFillLeft = 2048;
+  cTyCanvasTextStrokeLeft = 4096;
+  cTyCanvasPhaseLeft = -1.0e305;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;
   cTyCapRound = 1;
@@ -538,6 +551,9 @@ type
     { [spec 242] a rich token's fill or stroke of its own: a state's style
       on the block (a custom text's emphasis fill) leaves it }
     TokenFill, TokenStroke: Boolean;
+    { [R7-W] its fill (1) / stroke (2) colour one the canvas refused, the
+      one it had settled in (TyLinesCanvasLeftovers) }
+    CanvasLeft: Byte;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
 
@@ -1260,7 +1276,7 @@ type
       gradient, or no colour, the canvas refuses); its transform the one the
       canvas had (cTyCanvasTransformLeft: a scale that is not a number, the
       transform refused) }
-    CanvasFlags: Byte;
+    CanvasFlags: Word;
     CanvasShadow: TTyChartColor;
     { [R7-V] THE TRANSFORM IT HANDS THE CANVAS (zrender's setTransform of its
       own transform), device px, [a, b, c, d, e, f], where it is not read
@@ -1596,6 +1612,9 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
   opacity as the canvas' globalAlpha, under its fillOpacity / strokeOpacity
   where it has one -- the renderer's one rule for both }
 function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
+{ [R7-W] whether a dash phase is cTyCanvasPhaseLeft (scaled or not; a
+  not-a-number is not) }
+function TyPhaseLeft(AValue: Double): Boolean;
 { [R5-A] AShadow onto a style, all four keys }
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 { An element carrying a shape, silent and datum-less until the caller says
@@ -1816,6 +1835,12 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
 begin
   Result := ((AStyle.ShadowColor shr 24) <> 0)
     and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
+end;
+
+function TyPhaseLeft(AValue: Double): Boolean;
+begin
+  { (NaN first: a comparison with it raises here) }
+  Result := (not IsNan(AValue)) and (AValue < -1e290);
 end;
 
 function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
@@ -2539,6 +2564,13 @@ begin
   Result := False;
   if IsNan(AX) or IsNan(AY) then Exit;
   m := AEl.Shape.HitM;
+  { [R7-W] A FRAME THAT DOES NOT INVERT (a side of nought): matrix.invert
+    fails and the inverse stays the one the element was made with, the
+    identity -- the unit symbol at the canvas' top left, in css px [was:
+    never hit] }
+  det := m[0] * m[3] - m[1] * m[2];
+  if (not IsNan(det)) and (det = 0) then
+    m := TyZrLocal(AScale, AScale, 0, 0, 0);
   { [R7-R] the frame's half extents the refusal box scales by: the unit
     box's 1, or a real box's larger half (a pin's head may stand taller
     than its box) }

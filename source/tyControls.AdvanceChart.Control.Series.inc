@@ -1557,6 +1557,14 @@ begin
   AColor := 0;
   if (AData = nil) or (AData.JSONType <> jtString) then Exit;
   Result := TyTryParseChartColor(AData.AsString, AColor);
+  { [R7-W] a string no parser reads (not '' nor 'none'): written, the
+    canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: the
+    series' colour] }
+  if not Result and (AData.AsString <> '') and (AData.AsString <> 'none') then
+  begin
+    AColor := cTyCanvasColourLeft;
+    Result := True;
+  end;
 end;
 
 { lineStyle.type as the dash enum }
@@ -1664,6 +1672,14 @@ begin
   { (a geo's regions and a calendar's cells are in the list itself, before
     the series: TyLinesCanvasLeftovers sees them) }
   Result := 0;
+end;
+
+function TTyCustomAdvanceChart.CanvasGroundState: TTyCanvasGround;
+begin
+  { [R7-W] the cartesian axes as the last paint drew them; else the
+    shadowColor alone }
+  if FCanvasGroundOk and (CanvasGround <> 0) then Exit(FCanvasGround);
+  Result := TyCanvasGroundOf(CanvasGround);
 end;
 
 function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
@@ -2112,7 +2128,9 @@ begin
     gradient one cast nothing] }
   if d <> nil then
   begin
-    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow);
+    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow)
+      { [R7-W] (one no parser reads) }
+      or (Result.EffCanvasShadow = cTyCanvasColourLeft);
   end
   else
   begin
@@ -3641,7 +3659,11 @@ begin
     begin
       ov := FStores[ASlot].GetOverrideByRaw(k, TyOverrideKey('itemStyle.color'));
       if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
-        Result[k] := c;
+        Result[k] := c
+      { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
+        [was: the ramp's] }
+      else if (ov.Kind = dvkText) and (ov.Text <> '') and not TyChartColorIsNone(ov.Text) then
+        Result[k] := cTyCanvasColourLeft;
     end;
 end;
 

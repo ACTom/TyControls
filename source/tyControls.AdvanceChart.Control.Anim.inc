@@ -3264,6 +3264,6 @@ begin
   { [R7-S] what the canvas is left with, frame by frame (a symbol in its
     delay is not brushed) }
   if TyLinesCanvasLeftoversDue(FAnimFrame) then
-    TyLinesCanvasLeftovers(FAnimFrame, CanvasGround);
+    TyLinesCanvasLeftovers(FAnimFrame, CanvasGroundState, FLastPPI);
   Result := FAnimFrame;
 end;
