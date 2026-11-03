@@ -37,6 +37,25 @@
 //              being brushed: {op, sc (ctx.shadowColor then), sb
 //              (ctx.shadowBlur, hex), m (the context's transform [a, b, c, d,
 //              e, f], hex: setTransform refuses a value that is not finite)}
+//
+// Round 7 R7-V (the cases named `v-...`): the recording context refuses what a
+// browser's refuses, setter by setter (the HTML spec's "on setting, ...
+// ignored", after WebIDL's conversion): globalAlpha outside 0..1 or not
+// finite, lineWidth / miterLimit not above 0 or not finite, lineDashOffset /
+// shadowOffsetX / shadowOffsetY not finite, shadowBlur below 0 or not finite,
+// lineCap / lineJoin / globalCompositeOperation not one of their words,
+// fillStyle / strokeStyle / shadowColor neither a gradient or pattern of this
+// context nor a string a CSS colour parser takes (zrender's own
+// color.parse stands in for the browser's: hex, rgb[a](), hsl[a](), the
+// named colours and 'transparent'). Per tracked element and sample, beyond
+// the R7-S record: `st`, the context's state once the element was brushed
+// (ga globalAlpha, sc / sb / sox / soy the shadow, fs / ss fill and stroke
+// style -- a gradient '[grad]' --, lw, cap, join, ml miterLimit, m the
+// transform); `ops`, every fill() / stroke() of its path with the alpha then
+// (a batched path is filled at a later flush: the owner is the element whose
+// brush began the path); `pb`, the bounds of the path it built, on the
+// canvas, and `pa` the area it encloses. A case may name probes: `hits`, [x, y, the key findHover's target
+// has (null: none, 'other' an untracked element)].
 // Run: node tools/advchart-oracle/lines-canvas.js -> tests/fixtures/advchart-lines-canvas.json
 'use strict';
 const fs = require('fs');
@@ -80,14 +99,60 @@ const hexOrNull = v => (typeof v === 'number' && !Number.isNaN(v) ? hex(v) : nul
 const Path = Object.getPrototypeOf(echarts.graphic.Rect.prototype).constructor;
 const Displayable = Object.getPrototypeOf(Path.prototype).constructor;
 let CUR = null;
+// [R7-V] the record of the cases named v-...
+let V2 = false;
+let SNAPS = new Map();
+let OPS = new Map();
+let PATHS = new Map();
+let SNAP = null;
 const origIBB = Displayable.prototype.innerBeforeBrush;
 Displayable.prototype.innerBeforeBrush = function () { CUR = this; return origIBB.apply(this, arguments); };
+const origIAB = Displayable.prototype.innerAfterBrush;
+Displayable.prototype.innerAfterBrush = function () {
+  if (V2 && SNAP) SNAPS.set(this, SNAP());
+  return origIAB.apply(this, arguments);
+};
 let BRUSHES = [];
+// WebIDL's conversion of a double, then the setter's own refusal
+const toNum = v => (typeof v === 'symbol' ? NaN : +v);
+const CAPS = ['butt', 'round', 'square'];
+const JOINS = ['round', 'bevel', 'miter'];
+const COMPOSITES = ['source-over', 'source-in', 'source-out', 'source-atop', 'destination-over', 'destination-in',
+  'destination-out', 'destination-atop', 'lighter', 'copy', 'xor', 'multiply', 'screen', 'overlay', 'darken',
+  'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue',
+  'saturation', 'color', 'luminosity'];
+const isCssColour = v => !!echarts.color.parse(String(v));
 function makeCtx(canvas) {
   // the canvas' own defaults: a transparent black shadow of no blur
-  const st = { shadowColor: 'rgba(0, 0, 0, 0)', shadowBlur: 0, m: [1, 0, 0, 1, 0, 0] };
+  const st = { shadowColor: 'rgba(0, 0, 0, 0)', shadowBlur: 0, m: [1, 0, 0, 1, 0, 0],
+    globalAlpha: 1, lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, lineDashOffset: 0,
+    shadowOffsetX: 0, shadowOffsetY: 0, fillStyle: '#000000', strokeStyle: '#000000',
+    globalCompositeOperation: 'source-over' };
   const stack = [];
   const note = op => { if (CUR) BRUSHES.push({ el: CUR, op, sc: st.shadowColor, sb: st.shadowBlur, m: st.m.slice() }); };
+  // [R7-V] the path being built, its owner and its points on the canvas
+  let owner = null;
+  let pending = false;
+  const at = (x, y) => [st.m[0] * x + st.m[2] * y + st.m[4], st.m[1] * x + st.m[3] * y + st.m[5]];
+  const put = (x, y) => {
+    if (!V2) return;
+    if (!pending) { owner = CUR; pending = true; }
+    if (!owner) return;
+    let p = PATHS.get(owner);
+    if (!p) { p = []; PATHS.set(owner, p); }
+    p.push(at(x, y));
+  };
+  let px = 0;
+  let py = 0;
+  const opNote = op => {
+    if (!V2) return;
+    pending = false;
+    if (!owner) return;
+    let o = OPS.get(owner);
+    if (!o) { o = []; OPS.set(owner, o); }
+    o.push({ op, ga: hex(st.globalAlpha) });
+  };
+  const styleName = v => (v && typeof v === 'object' ? '[grad]' : String(v));
   const ctx = {
     canvas,
     dpr: 1,
@@ -95,8 +160,44 @@ function makeCtx(canvas) {
     restore() { const s = stack.pop(); if (s) Object.assign(st, s); },
     // a browser's: a transform with a value that is not finite is refused
     setTransform(a, b, c, d, e, f) { if ([a, b, c, d, e, f].every(v => isFinite(v))) st.m = [a, b, c, d, e, f]; },
-    fill() { note('fill'); },
-    stroke() { note('stroke'); },
+    fill() { note('fill'); opNote('fill'); },
+    stroke() { note('stroke'); opNote('stroke'); },
+    beginPath() { pending = false; owner = null; },
+    moveTo(x, y) { put(x, y); px = x; py = y; },
+    lineTo(x, y) { put(x, y); px = x; py = y; },
+    rect(x, y, w, h) { put(x, y); put(x + w, y); put(x + w, y + h); put(x, y + h); px = x; py = y; },
+    bezierCurveTo(x1, y1, x2, y2, x, y) {
+      for (let i = 1; i <= 64; i++) {
+        const t = i / 64;
+        const u = 1 - t;
+        put(u * u * u * px + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x,
+          u * u * u * py + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y);
+      }
+      px = x; py = y;
+    },
+    quadraticCurveTo(x1, y1, x, y) {
+      for (let i = 1; i <= 64; i++) {
+        const t = i / 64;
+        const u = 1 - t;
+        put(u * u * px + 2 * u * t * x1 + t * t * x, u * u * py + 2 * u * t * y1 + t * t * y);
+      }
+      px = x; py = y;
+    },
+    arc(cx, cy, r, a0, a1, acw) {
+      // the canvas' sweep: clockwise from a0 to a1 (anticlockwise the other way)
+      let sw = a1 - a0;
+      const full = Math.PI * 2;
+      if (!acw && sw >= full) sw = full;
+      else if (acw && -sw >= full) sw = -full;
+      else if (!acw) { sw = sw % full; if (sw < 0) sw += full; }
+      else { sw = sw % full; if (sw > 0) sw -= full; }
+      for (let i = 0; i <= 256; i++) {
+        const a = a0 + sw * i / 256;
+        put(cx + r * Math.cos(a), cy + r * Math.sin(a));
+      }
+      px = cx + r * Math.cos(a0 + sw); py = cy + r * Math.sin(a0 + sw);
+    },
+    closePath() {},
     setLineDash() {},
     getLineDash() { return []; },
     measureText(t) { return { width: String(t).length * 6 }; },
@@ -106,20 +207,46 @@ function makeCtx(canvas) {
     getImageData() { return { data: [] }; },
     isPointInPath() { return false; },
   };
+  const snap = () => ({ ga: hex(st.globalAlpha), sc: String(st.shadowColor), sb: hex(st.shadowBlur),
+    sox: hex(st.shadowOffsetX), soy: hex(st.shadowOffsetY), fs: styleName(st.fillStyle), ss: styleName(st.strokeStyle),
+    lw: hex(st.lineWidth), cap: st.lineCap, join: st.lineJoin, ml: hex(st.miterLimit), m: st.m.map(hex) });
   return new Proxy(ctx, {
     get: (t, k) => {
+      // the context being drawn on is the one last touched
+      SNAP = snap;
       if (k === 'shadowColor') return st.shadowColor;
       if (k === 'shadowBlur') return st.shadowBlur;
+      if (V2 && typeof k === 'string' && k !== 'm' && Object.prototype.hasOwnProperty.call(st, k)) return st[k];
       if (k in t) return t[k];
       if (typeof k === 'string' && /^[a-z]/.test(k)) return function () {};
       return undefined;
     },
     set: (t, k, v) => {
-      // a browser's setter: a string is parsed (every string here is a
-      // colour), anything else is refused and the value stays
-      if (k === 'shadowColor') { if (typeof v === 'string') st.shadowColor = v; }
-      else if (k === 'shadowBlur') { if (typeof v === 'number' && isFinite(v) && v >= 0) st.shadowBlur = v; }
-      else t[k] = v;
+      SNAP = snap;
+      // R7-S's cases: a string is parsed (every string there is a colour),
+      // anything else is refused and the value stays; the rest kept as set
+      if (!V2) {
+        if (k === 'shadowColor') { if (typeof v === 'string') st.shadowColor = v; }
+        else if (k === 'shadowBlur') { if (typeof v === 'number' && isFinite(v) && v >= 0) st.shadowBlur = v; }
+        else t[k] = v;
+        return true;
+      }
+      // [R7-V] a browser's setter: a value it does not take is refused, the old one stays
+      let n;
+      switch (k) {
+        case 'shadowColor': if (isCssColour(v)) st.shadowColor = v; break;
+        case 'shadowBlur': n = toNum(v); if (isFinite(n) && n >= 0) st.shadowBlur = n; break;
+        case 'globalAlpha': n = toNum(v); if (isFinite(n) && n >= 0 && n <= 1) st.globalAlpha = n; break;
+        case 'lineWidth': case 'miterLimit': n = toNum(v); if (isFinite(n) && n > 0) st[k] = n; break;
+        case 'lineDashOffset': case 'shadowOffsetX': case 'shadowOffsetY':
+          n = toNum(v); if (isFinite(n)) st[k] = n; break;
+        case 'lineCap': if (CAPS.indexOf(String(v)) >= 0) st.lineCap = String(v); break;
+        case 'lineJoin': if (JOINS.indexOf(String(v)) >= 0) st.lineJoin = String(v); break;
+        case 'globalCompositeOperation': if (COMPOSITES.indexOf(String(v)) >= 0) st[k] = String(v); break;
+        case 'fillStyle': case 'strokeStyle':
+          if ((v && typeof v === 'object') || isCssColour(v)) st[k] = v; break;
+        default: t[k] = v;
+      }
       return true;
     },
   });
@@ -142,6 +269,20 @@ const LN = (eff, data, more) => Object.assign({ type: 'lines', coordinateSystem:
   lineStyle: { color: '#999', opacity: 1 }, effect: Object.assign({ show: true, trailLength: 0, delay: 0, period: 4,
     symbol: 'circle', symbolSize: 10 }, eff), data }, more || {});
 const ROWS2 = [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }];
+// [R7-V] a lines series with no clip (nothing restores the canvas between its elements)
+const LNC = (eff, data, more) => LN(eff, data, Object.assign({ clip: false }, more || {}));
+const GRAPH_LINKS = [
+  { source: 'a', target: 'b', symbol: ['emptyRect', 'line'], symbolSize: [[12], [14]] },
+  { source: 'b', target: 'c', symbol: ['pin', 'emptyTriangle'], symbolSize: [[16], [10]] },
+  { source: 'c', target: 'd', symbol: ['emptyCircle', 'emptyDiamond'], symbolSize: [[12], [12]] },
+  { source: 'd', target: 'a', symbol: ['arrow', 'emptyPin'], symbolSize: [[12], [14]] },
+  { source: 'a', target: 'c', symbol: ['emptyRect', 'pin'], symbolSize: [[0, 12], [0, 12]] },
+  { source: 'b', target: 'd', symbol: ['emptyArrow', 'emptyRoundRect'], symbolSize: [[12], [12]] },
+];
+const GR = (links, more) => ({ animation: false, series: [Object.assign({ type: 'graph', layout: 'none', left: 50, top: 50,
+  width: 300, height: 200, symbolSize: 4, lineStyle: { width: 0 }, label: { show: false },
+  data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 0 }, { name: 'c', x: 100, y: 100 }, { name: 'd', x: 0, y: 100 }],
+  links }, more || {})] });
 
 function cases() {
   return [
@@ -186,6 +327,82 @@ function cases() {
       links: [{ source: 'a', target: 'b' }, { source: 'b', target: 'c', symbolSize: [[16], [8]] }] }] }, [0]],
     ['one-size-scatter', vv({ type: 'scatter', symbolSize: [12], data: [[2, 2], [5, 5],
       { value: [8, 8], symbolSize: [6, 9] }] }), [0]],
+    // ---- [R7-V] the recording context refusing what a browser refuses ----
+    // 1. a graph edge's end written as a one-number pair: a collapsed box
+    //    (an empty symbol's edge, a 'line', a pin's head still drawn)
+    ['v-graph-collapsed', GR(GRAPH_LINKS), [0], { v2: true, probes: 'ends' }],
+    ['v-graph-collapsed-zoom', GR(GRAPH_LINKS, { zoom: 2, center: [50, 50] }), [0], { v2: true, probes: 'ends' }],
+    // 2. an effect symbol's transform no number: the canvas keeps the one the
+    //    element brushed before it left (an end symbol, a label, another
+    //    series' symbol); hit as the unit symbol under the last inverse
+    ['v-tf-after-end', vv(LNC({ symbolSize: [12] }, ROWS2, { symbol: ['none', 'arrow'], symbolSize: 10 })),
+      [0, 600], { v2: true, probes: 'nan-effects' }],
+    ['v-tf-after-label', vv(LNC({ symbolSize: [12] }, ROWS2, { label: { show: true, formatter: 'Ab', position: 'insideStartTop' } })),
+      [0, 600], { v2: true, probes: 'nan-effects' }],
+    ['v-tf-after-label-end', vv(LNC({ symbolSize: [12] }, ROWS2, { label: { show: true, formatter: 'Ab', position: 'end' } })),
+      [0, 600], { v2: true, probes: 'nan-effects' }],
+    ['v-tf-after-scatter', vv([LNC({ symbolSize: [12] }, ROWS2),
+      { type: 'scatter', symbolSize: [8, 6], symbolRotate: 30, data: [[3, 5], [6, 6]] }]),
+    [0, 600], { v2: true, probes: 'nan-effects' }],
+    // a bar series' label (z2 above its bar, below the effect symbols)
+    ['v-tf-after-bar-label', vv([LNC({ symbolSize: [12] }, ROWS2),
+      { type: 'bar', data: [[3, 4], [6, 5]], label: { show: true, rotate: 30 } }]),
+    [0, 600], { v2: true, probes: 'nan-effects' }],
+    ['v-sh-bar-label', vv([LNC({ color: GRAD, shadowBlur: 4 }, ROWS2),
+      { type: 'bar', data: [[3, 4], [6, 5]], label: { show: true, textShadowBlur: 3, textShadowColor: '#ff00ff' } }]),
+    [0, 600], { v2: true }],
+    ['v-tf-hit', vv(LNC({ symbolSize: [12] }, ROWS2)), [0, 600], { v2: true, probes: 'nan-effects' }],
+    ['v-tf-rect-restart', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
+      [0, 300, 600, 900, 1050, 1300], { v2: true, probes: 'nan-effects' }],
+    // 3. the shadowColor a gradient effect symbol takes from the canvas
+    ['v-sh-line-noblur', vv(LN({ color: GRAD, shadowBlur: 4 }, ROWS2,
+      { lineStyle: { color: '#999', opacity: 1, shadowColor: '#0000ff' } })), [0, 600], { v2: true }],
+    ['v-sh-label', vv(LNC({ color: GRAD, shadowBlur: 4 }, ROWS2,
+      { label: { show: true, formatter: 'Ab', textShadowBlur: 2, textShadowColor: '#00ff00' } })), [0, 600], { v2: true }],
+    ['v-sh-label-plain', vv(LNC({ color: GRAD, shadowBlur: 4 }, ROWS2,
+      { label: { show: true, formatter: 'Ab', textShadowColor: '#00ff00' } })), [0, 600], { v2: true }],
+    ['v-sh-label-transparent', vv(LNC({ color: GRAD, shadowBlur: 4 }, ROWS2,
+      { label: { show: true, formatter: 'Ab', textShadowBlur: 2 } })), [0, 600], { v2: true }],
+    ['v-sh-scatter-noblur', vv([LNC({ color: GRAD, shadowBlur: 4 }, ROWS2),
+      { type: 'scatter', itemStyle: { shadowColor: '#ff00ff' }, data: [[3, 5]] }]), [0, 600], { v2: true }],
+    ['v-sh-invalid', vv(LN({ color: GRAD, shadowBlur: 4 }, [{ coords: [[1, 8], [9, 8]] }],
+      { lineStyle: { color: '#999', opacity: 1, shadowColor: 'notacolor', shadowBlur: 2 } })), [0, 600], { v2: true }],
+    ['v-sh-negblur', vv(LN({ color: '#ff0000', shadowBlur: 6 }, [{ coords: [[1, 8], [9, 8]] },
+      { coords: [[1, 3], [9, 3]], effect: { color: '#0000ff', shadowBlur: -3 } }])), [0, 600], { v2: true }],
+    // 4. an opacity outside 0..1
+    ['v-op-scatter', vv([{ type: 'scatter', emphasis: { focus: 'series' }, data: [[1, 1]] },
+      { type: 'scatter', symbolSize: 10, data: [{ value: [2, 2], itemStyle: { opacity: -0.5 } },
+        { value: [4, 4], itemStyle: { opacity: 1.7 } }, { value: [6, 6], itemStyle: { opacity: 3 } },
+        { value: [8, 8], itemStyle: { opacity: 0.4 } }] }]), [0, 10],
+    { v2: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['v-op-lines', vv(LN({ color: GRAD, shadowBlur: 4, opacity: 2 }, [{ coords: [[1, 8], [9, 8]] }],
+      { lineStyle: { color: '#999', opacity: -1, shadowColor: '#0000ff' } })), [0, 600], { v2: true }],
+    ['v-op-graphic', { animation: false, graphic: [
+      { type: 'rect', name: 'gr0', shape: { x: 20, y: 20, width: 40, height: 30 },
+        style: { fill: '#ff0000', fillOpacity: 0.4, opacity: 2 } },
+      { type: 'rect', name: 'gr1', shape: { x: 80, y: 20, width: 40, height: 30 },
+        style: { fill: '#00ff00', fillOpacity: -0.5, opacity: -1 } },
+      { type: 'rect', name: 'gr2', shape: { x: 140, y: 20, width: 40, height: 30 },
+        style: { fill: '#0000ff', opacity: -1 } },
+      { type: 'circle', name: 'gr3', shape: { cx: 250, cy: 40, r: 20 },
+        style: { stroke: '#000000', lineWidth: 3, fill: 'none', strokeOpacity: 3, opacity: 0.25 } },
+      { type: 'rect', name: 'gr4', shape: { x: 20, y: 80, width: 40, height: 30 },
+        style: { fill: '#ff00ff', fillOpacity: 2, opacity: 0.25 } },
+      { type: 'rect', name: 'gr5', shape: { x: 80, y: 80, width: 40, height: 30 },
+        style: { fill: '#00ffff', fillOpacity: 0.5, opacity: 3 } },
+      { type: 'rect', name: 'gr6', shape: { x: 140, y: 80, width: 40, height: 30 },
+        style: { fill: '#808080', stroke: '#000000', lineWidth: 2, fillOpacity: 0.5, strokeOpacity: 0.5, opacity: 1.5 } },
+    ] }, [0], { v2: true }],
+    // 5. the same refusal elsewhere: a pen's cap, join and miterLimit; a fill
+    ['v-ex-pen', vv(LN({ show: false }, [
+      { coords: [[1, 8], [9, 8]], lineStyle: { cap: 'round', join: 'round', miterLimit: 4, width: 3 } },
+      { coords: [[1, 5], [9, 5]], lineStyle: { cap: 'Round', join: 'foo', miterLimit: -2, width: 3 } },
+      { coords: [[1, 3], [9, 3]], lineStyle: { cap: 'square', join: 'bevel', miterLimit: 0, width: 3 } }])),
+    [0], { v2: true }],
+    ['v-ex-fill', vv([{ type: 'scatter', itemStyle: { color: '#ff0000' }, data: [[2, 2]] },
+      { type: 'scatter', itemStyle: { color: 'notacolor' }, data: [[5, 5]] },
+      { type: 'scatter', itemStyle: { color: '#00ff00', borderColor: 'nope', borderWidth: 2 }, data: [[7, 7]] }]),
+    [0], { v2: true }],
   ];
 }
 
@@ -207,6 +424,8 @@ function track(chart) {
         const t = line && line.childOfName && line.childOfName('toSymbol');
         if (f) map.set(f, 'f' + si + '.' + i);
         if (t) map.set(t, 't' + si + '.' + i);
+        const lp = V2 && line && line.childOfName && line.childOfName('line');
+        if (lp) map.set(lp, 'l' + si + '.' + i);
       }
     }
     else if (type === 'graph') {
@@ -218,6 +437,16 @@ function track(chart) {
         const t = line.childOfName('toSymbol');
         if (f) map.set(f, 'gf' + si + '.' + i);
         if (t) map.set(t, 'gt' + si + '.' + i);
+        const lp = V2 && line.childOfName('line');
+        if (lp) map.set(lp, 'ge' + si + '.' + i);
+      }
+      if (V2) {
+        const nd = sm.getData();
+        for (let i = 0; i < nd.count(); i++) {
+          const g = nd.getItemGraphicEl(i);
+          const p = g && g.childAt(0);
+          if (p) map.set(p, 'gn' + si + '.' + i);
+        }
       }
     }
     else if (type === 'scatter') {
@@ -229,6 +458,11 @@ function track(chart) {
       }
     }
   });
+  if (V2) {
+    for (const el of chart.getZr().storage.getDisplayList(true)) {
+      if (el.name && /^gr[0-9]+$/.test(el.name)) map.set(el, el.name);
+    }
+  }
   return map;
 }
 
@@ -242,22 +476,89 @@ function elRec(el, key, brushes) {
   // is filled at a later flush, under another element: only the effect
   // symbols are recorded, and the shadow cases give theirs a blur)
   if (key[0] === 'e') r.brushes = brushes.filter(b => b.el === el).map(b => ({ op: b.op, sc: String(b.sc), sb: hex(b.sb), m: b.m.map(hex) }));
+  if (V2) {
+    // [R7-V] the context once it was brushed, its fills and strokes, its path
+    r.st = SNAPS.has(el) ? SNAPS.get(el) : null;
+    r.ops = OPS.get(el) || [];
+    const p = PATHS.get(el);
+    if (p && p.length) {
+      const xs = p.map(q => q[0]);
+      const ys = p.map(q => q[1]);
+      r.pb = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(hex);
+      // the area it encloses (the shoelace over its points, one ring)
+      let a = 0;
+      for (let i = 0; i < p.length; i++) {
+        const q = p[(i + 1) % p.length];
+        a += p[i][0] * q[1] - q[0] * p[i][1];
+      }
+      r.pa = hex(Math.abs(a / 2));
+    }
+    else { r.pb = null; r.pa = null; }
+  }
   return r;
 }
 
-function run(id, option, samples) {
+// [R7-V] the points a case probes with findHover
+function unhex(s) {
+  bits.setUint32(0, parseInt(s.slice(0, 8), 16));
+  bits.setUint32(4, parseInt(s.slice(8), 16));
+  return bits.getFloat64(0);
+}
+function probesOf(kind, els) {
+  const out = [];
+  if (Array.isArray(kind)) return kind;
+  if (kind === 'ends') {
+    for (const e of els) {
+      if (!/^g[ft]/.test(e.key) || !e.pb) continue;
+      const cx = (unhex(e.pb[0]) + unhex(e.pb[2])) / 2;
+      const cy = (unhex(e.pb[1]) + unhex(e.pb[3])) / 2;
+      for (const dx of [-7, -3, -1, -0.4, 0, 0.4, 1, 3, 7]) {
+        for (const dy of [-7, -3, -1, -0.4, 0, 0.4, 1, 3, 7]) out.push([cx + dx, cy + dy]);
+      }
+    }
+  }
+  else if (kind === 'nan-effects') {
+    for (const p of [[0.1, 0.1], [0.4, 0.4], [0.45, -0.45], [0.6, 0.2], [-0.3, 0.3], [1, 1]]) out.push(p);
+    for (const e of els) {
+      if (e.key[0] !== 'e' || e.sy !== null || !e.st) continue;
+      const mx = unhex(e.st.m[4]);
+      const my = unhex(e.st.m[5]);
+      for (const d of [[0, 0], [0.3, 0], [0, 0.3], [2, 0], [0, 2], [5, 5]]) out.push([mx + d[0], my + d[1]]);
+    }
+  }
+  return out;
+}
+
+function run(id, option, samples, opts) {
   NOW = T_BASE;
   rngState = SEED;
   CUR = null;
+  opts = opts || {};
+  V2 = !!opts.v2;
   const dom = fakeCanvas(W, H);
   const chart = echarts.init(dom, null, { renderer: 'canvas', width: W, height: H, devicePixelRatio: 1 });
+  // [R7-V] a layer cleared starts the record of its paint afresh (a frame
+  // that paints nothing keeps the last paint's)
+  if (V2) {
+    const L = chart.getZr().painter.getLayer(0).constructor.prototype;
+    if (!L.__r7vClear) {
+      const orig = L.clear;
+      L.clear = function () {
+        if (V2) { SNAPS = new Map(); OPS = new Map(); PATHS = new Map(); }
+        return orig.apply(this, arguments);
+      };
+      L.__r7vClear = true;
+    }
+  }
   const frames = [];
   try {
     chart.setOption(JSON.parse(JSON.stringify(option)));
-    for (const t of samples) {
+    for (let si = 0; si < samples.length; si++) {
+      const t = samples[si];
       NOW = T_BASE + t;
       BRUSHES = [];
       CUR = null;
+      if (opts.acts && opts.acts[si]) for (const a of opts.acts[si]) chart.dispatchAction(a);
       // zrender's own frame: the clips stepped once, then the stage's flush
       // paints what they moved (a refresh from outside would step them a
       // second time at the same instant: a trail's scaleY falls back to the
@@ -268,17 +569,28 @@ function run(id, option, samples) {
       const els = [];
       for (const [el, key] of map) els.push(elRec(el, key, BRUSHES));
       els.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-      frames.push({ t, els });
+      if (V2 && opts.probes) {
+        const zr = chart.getZr();
+        const hits = [];
+        for (const [x, y] of probesOf(opts.probes, els)) {
+          const h = zr.handler.findHover(x, y);
+          const tg = h && h.target;
+          hits.push([hex(x), hex(y), tg ? (map.get(tg) || 'other') : null]);
+        }
+        frames.push({ t, els, hits });
+      }
+      else frames.push({ t, els });
     }
   }
   finally {
     chart.dispose();
+    V2 = false;
   }
   return { id, option, frames };
 }
 
 function generate() {
-  const charts = cases().map(([id, o, s]) => run(id, o, s));
+  const charts = cases().map(([id, o, s, opts]) => run(id, o, s, opts));
   const by = id => charts.find(c => c.id === id);
   const el = (id, fi, key) => by(id).frames[fi].els.find(e => e.key === key);
   // a gradient effect symbol shadowed in what the canvas had: zrender's #000

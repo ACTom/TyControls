@@ -1571,6 +1571,10 @@ function TyStylePenOf(const AStyle: TTyChartElementStyle; out AE: TTyMat2D): Boo
 function TyChartStyle: TTyChartElementStyle;
 { [R5-A] the element's style casts a shadow: a colour with alpha and a blur or an offset }
 function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+{ [R7-V] THE ALPHA A FILL (AFill) OR A PEN IS DRAWN AT: the element's
+  opacity as the canvas' globalAlpha, under its fillOpacity / strokeOpacity
+  where it has one -- the renderer's one rule for both }
+function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
 { [R5-A] AShadow onto a style, all four keys }
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 { An element carrying a shape, silent and datum-less until the caller says
@@ -1785,6 +1789,15 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
 begin
   Result := ((AStyle.ShadowColor shr 24) <> 0)
     and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
+end;
+
+function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
+begin
+  Result := Max(0.0, Min(1.0, AStyle.Alpha));
+  if AFill and AStyle.HasFillOpacity then
+    Result := Result * Max(0.0, Min(1.0, AStyle.FillOpacity))
+  else if not AFill and AStyle.HasStrokeOpacity then
+    Result := Result * Max(0.0, Min(1.0, AStyle.StrokeOpacity));
 end;
 
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
