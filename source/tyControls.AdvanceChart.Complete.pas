@@ -1342,7 +1342,19 @@ begin
       to, and the scalars a series' get() does }
     or (AKey = 'itemStyle') or (AKey = 'lineStyle') or (AKey = 'areaStyle')
     or (AKey = 'symbolSize') or (AKey = 'roseType') or (AKey = 'center')
-    or (AKey = 'min') or (AKey = 'max');
+    or (AKey = 'min') or (AKey = 'max')
+    { [R7-X] the top-level keys a component's box (getItemStyle of a title,
+      a legend, a toolbox), a candlestick's item model, a visualMap, a
+      legend and a tooltip climb to where their defaults hold none, and the
+      axis pointer's shadowStyle }
+    or (AKey = 'shadowBlur') or (AKey = 'shadowColor') or (AKey = 'shadowOffsetX')
+    or (AKey = 'shadowOffsetY') or (AKey = 'borderRadius') or (AKey = 'borderType')
+    or (AKey = 'borderDashOffset') or (AKey = 'borderCap') or (AKey = 'borderJoin')
+    or (AKey = 'borderMiterLimit') or (AKey = 'borderWidth') or (AKey = 'borderColor')
+    or (AKey = 'opacity') or (AKey = 'itemWidth') or (AKey = 'itemHeight')
+    or (AKey = 'text') or (AKey = 'icon') or (AKey = 'formatter') or (AKey = 'padding')
+    or (AKey = 'order') or (AKey = 'position') or (AKey = 'valueFormatter')
+    or (AKey = 'align') or (AKey = 'verticalAlign') or (AKey = 'shadowStyle');
 end;
 
 { [R2-J] A TREE'S NODE IS THE AUTHOR'S RECORD. A tree, a treemap and a

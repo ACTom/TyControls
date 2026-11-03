@@ -37,7 +37,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.VisualMapView,
-     tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Diagnose,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.rootstyles;
 type
@@ -69,6 +69,7 @@ type
     procedure TearDown; override;
   published
     procedure TestTheReachAsUpstream;
+    procedure TestTheDiagnosticsKnowTheReachedKeys;
   end;
 
 implementation
@@ -486,6 +487,48 @@ begin
   AssertTrue('box cases', nBox >= 8);
   AssertTrue('tooltip cases', nTip >= 3);
   AssertTrue(Format('%d of %d differ from upstream:%s', [nBad, nCases, bad]), nBad = 0);
+end;
+
+{ none of the root's keys a model here climbs to is an unknown option to the
+  diagnostics }
+procedure TAdvChartReachStylesOracleTest.TestTheDiagnosticsKnowTheReachedKeys;
+const
+  cKeys: array[0..24] of string = ('shadowBlur', 'shadowColor', 'shadowOffsetX',
+    'shadowOffsetY', 'borderRadius', 'borderType', 'borderDashOffset', 'borderCap',
+    'borderJoin', 'borderMiterLimit', 'borderWidth', 'borderColor', 'opacity',
+    'itemWidth', 'itemHeight', 'text', 'icon', 'formatter', 'padding', 'order',
+    'position', 'valueFormatter', 'align', 'verticalAlign', 'shadowStyle');
+var
+  fix: TJSONData;
+  cs: TJSONArray;
+  opt: TJSONObject;
+  diags: TTyOptDiagArray;
+  i, k, j, n: Integer;
+  bad: string;
+begin
+  fix := LoadJson('advchart-reach-styles.json');
+  n := 0;
+  bad := '';
+  try
+    cs := TJSONObject(fix).Arrays['charts'];
+    for i := 0 to cs.Count - 1 do
+    begin
+      opt := cs.Objects[i].Objects['option'];
+      diags := TyOptDiagnose(opt.AsJSON);
+      for k := 0 to High(cKeys) do
+      begin
+        if opt.Find(cKeys[k]) = nil then Continue;
+        Inc(n);
+        for j := 0 to High(diags) do
+          if (diags[j].Kind = odkUnknownOption) and (diags[j].Path = cKeys[k]) then
+            bad := bad + ' ' + cs.Objects[i].Strings['id'] + ':' + cKeys[k];
+      end;
+    end;
+  finally
+    fix.Free;
+  end;
+  AssertTrue('root keys looked at', n >= 40);
+  AssertEquals('the root keys reported unknown', '', bad);
 end;
 
 initialization
