@@ -560,6 +560,10 @@ option 编辑器：
 - 斜接上限写成读不出数、不大于 0 或无穷大的值时，浏览器 canvas 沿用上一个图形的值，这里按 10。
 - 折线的 `lineStyle.width` 写成字符串时，ECharts 算裁剪框会把它当字符串拼接，裁剪框变得极大。这里按数加。
 - 逆时针（`clockwise: false`）的扇形和圆头弧描虚线时，虚线从另一端起算。
+- 坐标轴指示器的线只画颜色、线宽和虚线，`opacity`、阴影、`cap`、`join`、`miterLimit`、`dashOffset` 写了也不画。option 根上的 `lineStyle` 落到指示器的正是这几个键，所以也不起作用。
+- 直角坐标系的柱子，数据项自己写的 `itemStyle.borderRadius` 不起作用，用系列的。
+- option 根上写的 `shadowBlur`、`shadowColor`、`shadowOffsetX`、`shadowOffsetY`、`borderRadius`、`borderType`，ECharts 会用到 title、legend、toolbox 的框上，这里不用。
+- option 根上写的 `itemWidth`、`itemHeight`、`text`，ECharts 会用到 visualMap 上，这里不用。
 - lines 特效的颜色是渐变、又没写 `shadowColor` 时，阴影色是画布上前一个图形留下的。这里只认前面的特效符号和写了阴影色的图形，其余图形按黑色算，标签留下的阴影色不认。
 - lines 特效的 `symbolSize` 写成只有一个数的数组时，ECharts 把一个像素大的符号画在前一个图形的变换下。这里只认前一个特效符号的变换，没有就画在左上角。
 - 关系图端点的尺寸写成只有一个数的数组（如 `[[12], 10]`）时，空心符号、`line` 和 `pin` 在 ECharts 里仍画出一条边或 pin 头，这里不画。
