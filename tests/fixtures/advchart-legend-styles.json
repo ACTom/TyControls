@@ -1610,6 +1610,189 @@
    ]
   },
   {
+   "id": "rule.two.legends.width",
+   "note": "the same, legend 0 writing lineStyle.width 4: the rule has a width and still no colour -- not drawn",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": [
+     {
+      "top": 10,
+      "selected": {
+       "A": true
+      },
+      "lineStyle": {
+       "width": 4
+      }
+     },
+     {
+      "bottom": 10,
+      "selected": {
+       "A": false
+      }
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "40700f5c28f5c28f",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402a666666666668"
+     ],
+     "paths": [
+      {
+       "rect": [
+        "40700f5c28f5c28f",
+        "403599999999999a",
+        "4039000000000000",
+        "0000000000000000"
+       ],
+       "fill": "#000",
+       "stroke": null,
+       "strokeGrad": null,
+       "lineWidth": "4010000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "line"
+      },
+      {
+       "rect": [
+        "40706dc28f5c28f5",
+        "402e000000000000",
+        "402a666666666668",
+        "402a666666666668"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "strokeGrad": null,
+       "lineWidth": "4000000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "circle"
+      }
+     ]
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4072f00000000000",
+      "402e000000000000",
+      "4044051eb851eb85",
+      "402a666666666668"
+     ],
+     "paths": [
+      {
+       "rect": [
+        "4072f00000000000",
+        "403399999999999a",
+        "403d000000000000",
+        "4010000000000000"
+       ],
+       "fill": "#000",
+       "stroke": "#b6d634",
+       "strokeGrad": null,
+       "lineWidth": "4010000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "line"
+      },
+      {
+       "rect": [
+        "40736e6666666666",
+        "402e000000000000",
+        "402a666666666668",
+        "402a666666666668"
+       ],
+       "fill": "#fff",
+       "stroke": "#b6d634",
+       "strokeGrad": null,
+       "lineWidth": "4000000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "circle"
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "rule.dash",
    "note": "lineStyle.type dashed, dotted, [6, 3] with dashOffset 2: inherited, dashed in the rule's width",
    "option": {
@@ -5576,6 +5759,221 @@
        "shadowOffsetX": "0000000000000000",
        "shadowOffsetY": "0000000000000000",
        "symbolType": "roundRect"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "marker.item.inherit",
+   "note": "an item's itemStyle color / opacity 'inherit' over the legend's: the series' again",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "itemStyle": {
+      "color": "#ff8800",
+      "opacity": 0.5
+     },
+     "data": [
+      "A",
+      {
+       "name": "B",
+       "itemStyle": {
+        "color": "inherit",
+        "opacity": "inherit"
+       }
+      },
+      {
+       "name": "C",
+       "itemStyle": {
+        "color": "inherit",
+        "opacity": "inherit"
+       }
+      }
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "itemStyle": {
+       "opacity": 0.6
+      }
+     },
+     {
+      "type": "line",
+      "name": "C",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "circle"
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "406d447ae147ae14",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "paths": [
+      {
+       "rect": [
+        "406d447ae147ae14",
+        "402e000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ],
+       "fill": "#ff8800",
+       "stroke": null,
+       "strokeGrad": null,
+       "lineWidth": "0000000000000000",
+       "opacity": "3fe0000000000000",
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "roundRect"
+      }
+     ]
+    },
+    {
+     "name": "B",
+     "hit": [
+      "407182e147ae147b",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "paths": [
+      {
+       "rect": [
+        "407182e147ae147b",
+        "402e000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ],
+       "fill": "#b6d634",
+       "stroke": null,
+       "strokeGrad": null,
+       "lineWidth": "0000000000000000",
+       "opacity": "3fe3333333333333",
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "roundRect"
+      }
+     ]
+    },
+    {
+     "name": "C",
+     "hit": [
+      "407463851eb851eb",
+      "4030000000000000",
+      "4043d1eb851eb852",
+      "4028000000000000"
+     ],
+     "paths": [
+      {
+       "rect": [
+        "407463851eb851eb",
+        "4035000000000000",
+        "403b000000000000",
+        "4000000000000000"
+       ],
+       "fill": "#000",
+       "stroke": "#505372",
+       "strokeGrad": null,
+       "lineWidth": "4000000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "line"
+      },
+      {
+       "rect": [
+        "4074e1eb851eb851",
+        "4030666666666666",
+        "4026666666666668",
+        "4026666666666668"
+       ],
+       "fill": "#505372",
+       "stroke": null,
+       "strokeGrad": null,
+       "lineWidth": "0000000000000000",
+       "opacity": null,
+       "dash": null,
+       "dashOffset": null,
+       "cap": null,
+       "join": null,
+       "miter": null,
+       "shadowBlur": "0000000000000000",
+       "shadowColor": "#000",
+       "shadowOffsetX": "0000000000000000",
+       "shadowOffsetY": "0000000000000000",
+       "symbolType": "circle"
       }
      ]
     }
