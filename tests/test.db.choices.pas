@@ -1046,6 +1046,8 @@ begin
   AssertEquals('2.5 with halves', '2.5', Shown);
   Stars.AllowHalf := False;
   AssertEquals('2.5 in whole stars: half up, as a load', '3.0', Shown);
+  AssertBrowsing('a change of AllowHalf is not an edit');
+  AssertEquals('the field keeps its half star', 2.5, BoundField.AsFloat, 0.0001);
   AssertBrowsing('changing AllowHalf');
 end;
 

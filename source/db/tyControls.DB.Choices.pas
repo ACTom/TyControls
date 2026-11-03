@@ -1400,7 +1400,15 @@ end;
 procedure TTyCustomDBRating.SetAllowHalf(AValue: Boolean);
 begin
   if AValue = AllowHalf then Exit;
-  TTyCustomRating(Self).AllowHalf := AValue;
+  { The base snaps Value off its half star through ChangeValue; that is a way of showing the
+    field, not an edit of it, so it must not write the record. DataChange then reads the field
+    again as the new setting shows it. }
+  FLoading := True;
+  try
+    TTyCustomRating(Self).AllowHalf := AValue;
+  finally
+    FLoading := False;
+  end;
   if FDataLink.Field <> nil then DataChange(Self);
 end;
 
