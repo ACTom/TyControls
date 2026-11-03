@@ -2139,6 +2139,8 @@ begin
     begin
       el.Style.StrokeWidthLogical := 0;
       el.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     end;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }

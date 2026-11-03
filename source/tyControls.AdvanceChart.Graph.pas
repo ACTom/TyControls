@@ -6747,6 +6747,9 @@ var
       AEl.Style.HitClearPen := ((b.BorderColor.Color shr 24) = 0)
         and (b.BorderColor.Gradient.Kind = cgkNone) and not b.BorderColor.Pattern.Present;
       AEl.HitNone := b.BorderWidthInf > 0;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if AEl.HitNone and (AEl.Style.StrokeColor <> 0) then
+        AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
     end
     else
       Exit;

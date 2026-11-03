@@ -773,14 +773,16 @@ begin
     is what lets the palette fill it in -- so `color: null` has to behave as
     though nothing were written at all, not as a colour of nought.
 
-    A string it cannot read is the same answer for a different reason: in a
-    browser the raw string reaches the canvas and an unreadable one leaves
-    the shape painted in the PREVIOUS element's colour, which is a browser
-    accident with nothing portable in it. Falling back to the palette is the
-    only sane reading.
+    [R7-W] A STRING IT CANNOT READ IS WRITTEN all the same: it takes no
+    palette slot, and the raw string reaches the canvas, which refuses it and
+    keeps the fill it had -- the bar is painted in what the element before it
+    left, here the first bar (held to upstream's canvas in
+    test.advchart.linescanvas, w-fill-*).
+    [Was: read as unwritten, the palette's colour and a slot spent -- the
+    port's reading, not upstream's.]
 
-    Both asserted through the THIRD bar, because either mistake would also
-    have to consume a palette slot and move it. }
+    Both asserted through the THIRD bar, which takes the slot the second
+    left. }
   fills := BarFills('{ color: [''#ff0000'', ''#00ff00'', ''#0000ff''],'
     + ' xAxis: { data: [''A''] }, yAxis: {},'
     + ' series: [{ type: ''bar'', data: [5], itemStyle: { color: null } },'
@@ -789,9 +791,10 @@ begin
   AssertEquals('three bars', 3, Length(fills));
   AssertEquals('a null colour falls through to the palette',
     $FFFF0000, fills[0]);
-  AssertEquals('and so does one it cannot read', $FF00FF00, fills[1]);
-  AssertEquals('both of them having spent a slot doing so',
-    $FF0000FF, fills[2]);
+  { (a bar in normal mode has no clip path: the first bar's red is what the
+    canvas still holds) }
+  AssertEquals('one it cannot read is painted in the bar before it', $FFFF0000, fills[1]);
+  AssertEquals('and spends no slot', $FF00FF00, fills[2]);
 end;
 
 procedure TAdvChartColorTest.TestAutoMeansThePaletteAndStillCostsASlot;

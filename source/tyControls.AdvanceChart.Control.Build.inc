@@ -5092,7 +5092,11 @@ var
     if TyOptIsPosInf(dd)
       and (((pe^.Style.StrokeColor shr 24) <> 0) or (pe^.Style.StrokeGradient.Kind <> cgkNone)
         or pe^.Style.HitClearPen) then
+    begin
       pe^.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasWidthLeft;
+    end;
   end;
 
   { [R7-F] A FILL WRITTEN 'none' under APath (the first node that writes the

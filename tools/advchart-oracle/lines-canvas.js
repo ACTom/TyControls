@@ -538,6 +538,11 @@ function cases() {
       data: [{ value: [3, 4], itemStyle: { color: '#00ffff' } }, { value: [6, 5], itemStyle: { color: 'nope' } },
         { value: [8, 3], itemStyle: { color: '#ff00ff', borderColor: 'bad', borderWidth: 3 } }] }]),
     [0], { w: true }],
+    // (a bar in normal mode has no clip path: one series' bar after another's)
+    ['w-fill-bar-series', Object.assign(vv([{ type: 'bar', data: [[3, 5]], itemStyle: { color: '#ff0000' } },
+      { type: 'bar', data: [[3, 5]], itemStyle: { color: 'bananas' } }, { type: 'bar', data: [[3, 5]] }]),
+    { xAxis: AXC({ type: 'category', data: ['A', 'B', 'C', 'D'] }), yAxis: AXC({ type: 'value' }) }),
+    [0], { w: true }],
     ['w-fill-pie', { animation: false, series: [{ type: 'pie', radius: 60, center: [200, 150], label: { show: false },
       data: [{ value: 3, name: 'a', itemStyle: { color: '#ff0000' } }, { value: 2, name: 'b', itemStyle: { color: 'nope' } },
         { value: 1, name: 'c', itemStyle: { color: '#0000ff' } }] }] },
@@ -562,6 +567,20 @@ function cases() {
       { coords: [[1, 8], [9, 8]], lineStyle: { type: 'solid', width: 2 } },
       { coords: [[1, 9], [9, 9]], lineStyle: { type: [6, 2], dashOffset: '7', width: 2 } },
       { coords: [[1, 9.5], [9, 9.5]], lineStyle: { type: [6, 2], dashOffset: 'x', width: 2 } }])),
+    [0], { w: true }],
+    // (the other builders of a pen of 'Infinity': each element after one of 3)
+    ['w-lw-inf-pie', { animation: false, color: PAL, series: [{ type: 'pie', radius: 60, center: [200, 150], label: { show: false },
+      data: [{ value: 3, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { value: 2, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }] }, [0], { w: true }],
+    ['w-lw-inf-sunburst', { animation: false, color: PAL, series: [{ type: 'sunburst', radius: [0, 90], label: { show: false },
+      data: [{ name: 'a', value: 3, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { name: 'b', value: 2, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }] }, [0], { w: true }],
+    ['w-lw-inf-tree', { animation: false, color: PAL, series: [{ type: 'tree', label: { show: false }, symbolSize: 10,
+      itemStyle: { color: '#b0c4de', borderColor: '#000', borderWidth: 'Infinity' }, lineStyle: { width: 3 },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }] }, [0], { w: true }],
+    ['w-lw-inf-graph', { animation: false, color: PAL, series: [{ type: 'graph', layout: 'none', symbolSize: 20, label: { show: false },
+      data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderColor: '#000', borderWidth: 3 } },
+        { name: 'b', x: 100, y: 0, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }], links: [] }] },
     [0], { w: true }],
     // 3. components: a legend's refused values; what the axes, drawn before
     //    the series, leave on the canvas
@@ -672,6 +691,20 @@ function track(chart) {
       for (let i = 0; i < data.count(); i++) {
         const g = data.getItemGraphicEl(i);
         if (g) map.set(g, (type === 'bar' ? 'b' : 'p') + si + '.' + i);
+      }
+    }
+    // [R7-W] any other series' item graphics (its displayables in order)
+    if (W && ['lines', 'graph', 'scatter', 'line', 'bar', 'pie'].indexOf(type) < 0) {
+      const data = sm.getData();
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        if (!g) continue;
+        let n = 0;
+        const visit = e => {
+          if (e.isGroup) { for (const c of e.childrenRef()) visit(c); return; }
+          if (e.style && !map.has(e)) map.set(e, 'd' + si + '.' + i + '.' + (n++));
+        };
+        visit(g);
       }
     }
     if (W && type === 'line') {

@@ -585,7 +585,13 @@ function NumOf(AV: TJSONData): Double;
 begin
   if IsHex16(AV) then Result := FromHex(AV.AsString)
   { [R6-F] a value that is no number (a phase of 'abc'): the canvas' }
-  else if AV.JSONType in [jtString, jtBoolean] then Result := TyOptPenOffset(AV)
+  else if AV.JSONType in [jtString, jtBoolean] then
+  begin
+    Result := TyOptPenOffset(AV);
+    { [R7-W] one the canvas refuses: a state's is nought here (the paint
+      order settles only an element's own, spec 277) }
+    if TyPhaseLeft(Result) then Result := 0;
+  end
   else Result := AV.AsFloat;
 end;
 

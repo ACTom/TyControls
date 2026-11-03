@@ -627,7 +627,32 @@ begin
   Result := -1;
   L := FChart.Frame;
   if Copy(AKey, 1, 2) = 'ax' then Exit;
-  if Copy(AKey, 1, 2) = 'lg' then
+  { [R7-W] another series' item graphic: the one element of its datum, else
+    a legend's: at the recorded path's bounds }
+  if AKey[1] = 'd' then
+  begin
+    p := 2;
+    s := StrToInt(Copy(AKey, p, Pos('.', AKey) - p));
+    host := Copy(AKey, Pos('.', AKey) + 1, MaxInt);
+    r := StrToInt(Copy(host, 1, Pos('.', host) - 1));
+    p := -1;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if (el.Caption.FontSizeLogical = 0) and (el.Datum.Kind = ctkSeries)
+        and (el.Datum.SeriesIndex = s) and (el.Datum.DataIndex = r) and not el.Datum.IsEdge then
+      begin
+        if p >= 0 then
+        begin
+          p := -2;
+          Break;
+        end;
+        p := k;
+      end;
+    end;
+    if p >= 0 then Exit(p);
+  end;
+  if (Copy(AKey, 1, 2) = 'lg') or (AKey[1] = 'd') then
   begin
     if ARec.Find('pb').JSONType = jtNull then Exit(-2);
     pb := ARec.Arrays['pb'];

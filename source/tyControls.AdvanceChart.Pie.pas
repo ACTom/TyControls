@@ -1042,6 +1042,9 @@ begin
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     el.HitNone := AVisual.StrokeWidthInf > 0;
+    { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+    if el.HitNone and (el.Style.StrokeColor <> 0) then
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     { [R7-F] hasFill() / hasStroke() as upstream answers them }
     el.Style.HitNoFill := (i <= High(AVisual.FillNones)) and AVisual.FillNones[i];
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
