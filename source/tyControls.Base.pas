@@ -563,9 +563,10 @@ type
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { For a control whose content runs to its edges -- a table's header band, a row's fill -- and
-      so over its own frame. DrawFrameUnderContent is DrawFrame, keeping what lies under the
-      rounded corners; after the content, DrawFrameOverContent gives those corners back outside
-      the arc and draws the border and focus ring again on top, and frees AGround. }
+      so over its own frame. Together they are DrawFrame with the content in the middle:
+      DrawFrameUnderContent draws what lies under the content and keeps what lies under the rounded
+      corners; DrawFrameOverContent gives those corners back outside the arc, draws the border and
+      focus ring, and frees AGround. }
     function DrawFrameUnderContent(APainter: TTyPainter; const ARect: TRect;
       const AStyle: TTyStyleSet): TBGRABitmap;
     procedure DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
@@ -3233,16 +3234,19 @@ var
   corners: TTyCorners;
   eff: TTyStyleSet;
 begin
+  TyFillParentBg(Self, APainter, ARect, AStyle);
+  TyApplyStyleOpacity(Self, APainter, AStyle);
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
+    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);
   eff := AStyle;
   TyApplyRenderStyle(eff, corners);
-  Result := nil;
-  if (corners.TL > 0) or (corners.TR > 0) or (corners.BR > 0) or (corners.BL > 0) then
-  begin
-    TyFillParentBg(Self, APainter, ARect, AStyle);
-    Result := APainter.KeepCornerGround(ARect, corners);
-  end;
-  DrawFrame(APainter, ARect, AStyle);
+  Result := APainter.KeepCornerGround(ARect, corners);
+  { Square, and no border yet. The arc is cut once, when the ground goes back over the corners, so
+    the edge is the one a rounded fill has; and the border is stroked once, on top. Twice would
+    darken its antialiased pixels, where nothing covers them in between. }
+  if tpBackground in eff.Present then
+    APainter.FillBackground(ARect, eff.Background, 0);
 end;
 
 procedure TTyCustomControl.DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
