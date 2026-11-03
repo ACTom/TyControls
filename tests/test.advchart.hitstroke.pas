@@ -376,10 +376,13 @@ const
       + '{"name":"b","value":2},{"name":"c","value":1}],"itemStyle":{"color":"%s","borderColor":"#000","borderWidth":8}}]}',
     '{"animation":false,"radar":{"indicator":[{"name":"p","max":10},{"name":"q","max":10},{"name":"r","max":10}],"radius":110},'
       + '"series":[{"type":"radar","symbol":"none","lineStyle":{"width":%s},"areaStyle":{},"data":[{"value":[8,6,7]}]}]}');
-  { what each case's '%s' is, then what it must paint as }
+  { what each case's '%s' is, then what it must paint as -- [R7-W] a width
+    of 'Infinity' the canvas refuses, stroking at the one it had: the
+    radar's lines leave 1 (upstream's canvas, test.advchart.linescanvas
+    w-lw-inf-radar) [was: as 0] }
   cWritten: array[0..6] of string = ('none', 'none', 'none', 'none', 'none', 'none', '"Infinity"');
   cAs: array[0..6] of string = ('transparent', 'transparent', 'transparent', 'transparent', 'transparent',
-    'transparent', '0');
+    'transparent', '1');
 var
   i, x, y, n: Integer;
   a, b: TBGRABitmap;
