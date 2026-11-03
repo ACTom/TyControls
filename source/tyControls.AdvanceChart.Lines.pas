@@ -149,6 +149,12 @@ type
       registered): the clip's start time is a string upstream, every
       percent not a number -- the symbol is never anywhere }
     Poisoned: Boolean;
+    { [R7-W] the last transform a step left that is a number (x, y, scaleX,
+      scaleY, rotation): what the symbol's invTransform keeps once its
+      transform is none (matrix.invert fails) -- an update's own frame
+      among them }
+    HasInv: Boolean;
+    InvX, InvY, InvSX, InvSY, InvRot: Double;
   end;
 
   { ONE ROW'S LOOK, as the visual and the view resolve it: the line's
@@ -1333,6 +1339,18 @@ begin
   try
     if AE.Poly then StepPoly(AE, AT)
     else StepLine(AE, AT);
+    { [R7-W] a transform that inverts: the inverse the hit keeps }
+    if not (AE.Ignore or IsNan(AE.X) or IsNan(AE.Y) or IsNan(AE.ScaleX) or IsNan(AE.ScaleY)
+      or IsNan(AE.Rotation) or IsInfinite(AE.ScaleX) or IsInfinite(AE.ScaleY))
+      and (AE.ScaleX <> 0) and (AE.ScaleY <> 0) then
+    begin
+      AE.HasInv := True;
+      AE.InvX := AE.X;
+      AE.InvY := AE.Y;
+      AE.InvSX := AE.ScaleX;
+      AE.InvSY := AE.ScaleY;
+      AE.InvRot := AE.Rotation;
+    end;
   finally
     ClearExceptions(False);
     SetExceptionMask(mask);
@@ -2076,6 +2094,12 @@ begin
   ds := 1;
   if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
   m := TyZrLocal(ds, ds, 0, 0, 0);
+  { [R7-W] the inverse a frame that was a number left: its transform (an
+    update's own frame -- setOption's flush steps the clip once more)
+    [was: the identity always] }
+  if (Length(AEl.Anim.Vals) >= 7) and (AEl.Anim.Vals[1] = 2) then
+    m := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
+      AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
   { the symbol's unit box (-1 .. 1) is twice the effect's (-0.5 .. 0.5) }
   AEl.Shape.HitM[0] := m[0] * 0.5;
   AEl.Shape.HitM[1] := m[1] * 0.5;
@@ -2154,7 +2178,12 @@ begin
   if IsNan(AE.ScaleX) or IsNan(AE.ScaleY) then
   begin
     AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTransformLeft;
-    AEl.Anim.Vals := TTyDoubleArray.Create(ds);
+    { [R7-W] and the transform its invTransform keeps, where a frame had one
+      (2: for the hit only) }
+    if AE.HasInv then
+      AEl.Anim.Vals := TTyDoubleArray.Create(ds, 2, AE.InvX, AE.InvY, AE.InvSX, AE.InvSY, AE.InvRot)
+    else
+      AEl.Anim.Vals := TTyDoubleArray.Create(ds);
     PlaceEffect(AEl, ds, ds, 0, 0, NaN);
     { (its hit: TyLinesCanvasLeftovers, NanEffectHit) }
     Exit;

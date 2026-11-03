@@ -4050,6 +4050,7 @@ var
     rk: string;
     ka: Integer;
     popts: TTyAnimCallOpts;
+    keep: TTyLinesEffect;
     tmg: TTyAnimTiming;
   begin
     case AEl.Anim.Role of
@@ -4753,11 +4754,19 @@ var
               begin
                 a := p.FEff.T;
                 rot := p.FEff.LastT;
+                { [R7-W] the inverse its last frame left goes on }
+                keep := p.FEff;
                 TyLinesEffectOfElement(AEl, p.FEff);
                 p.FEff.T := a;
                 p.FEff.LastT := rot;
                 p.FEff.HasLastT := True;
                 p.FEff.Ignore := True;
+                p.FEff.HasInv := keep.HasInv;
+                p.FEff.InvX := keep.InvX;
+                p.FEff.InvY := keep.InvY;
+                p.FEff.InvSX := keep.InvSX;
+                p.FEff.InvSY := keep.InvSY;
+                p.FEff.InvRot := keep.InvRot;
               end
               else
               begin
