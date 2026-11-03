@@ -25,6 +25,7 @@ type
     procedure TestTypeKey;
     procedure TestDefaultSize;
     procedure TestSegmentAtBasics;
+    procedure TestNeighboursShareOneLine;
     procedure TestSegmentAtOutOfRange;
     procedure TestSegmentRectTilesWidth;
     procedure TestSegmentRectOutOfRange;
@@ -125,6 +126,59 @@ begin
     AssertTrue('Items published', IsPublishedProp(G, 'Items'));
   finally
     G.Free;
+  end;
+end;
+
+procedure TButtonGroupTest.TestNeighboursShareOneLine;
+{ #196: with each segment's border on whole pixels, two neighbours side by side were a line two
+  pixels wide. They share one, and a selected segment shows its own colour on all its edges. }
+var
+  Ctl: TTyStyleController;
+  G: TTyButtonGroupAccess;
+  Bmp: TBitmap;
+
+  function Red(X: Integer): Boolean;
+  begin
+    Result := Bmp.Canvas.Pixels[X, 12] = clRed;
+  end;
+
+  function Blue(X: Integer): Boolean;
+  begin
+    Result := Bmp.Canvas.Pixels[X, 12] = clBlue;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  G := TTyButtonGroupAccess.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyButtonGroup { background: #FFFFFF; color: #000000; border-color: #FF0000; ' +
+      'border-width: 1px; border-radius: 0px; } ' +
+      'TyButtonGroup:selected { background: #FFFFFF; color: #000000; border-color: #0000FF; border-width: 1px; }');
+    G.Controller := Ctl;
+    G.Items.Add('A');
+    G.Items.Add('B');
+    G.Items.Add('C');
+    G.SetBounds(0, 0, 240, 30);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 30);
+    G.ItemIndex := -1;
+    G.RenderTo(Bmp.Canvas, Rect(0, 0, 240, 30), 96);
+    AssertTrue('the line between the first two', Red(79));
+    AssertFalse('is one pixel wide, on the left', Red(78));
+    AssertFalse('and on the right', Red(80));
+    AssertTrue('the second seam', Red(159));
+    AssertFalse('is one wide too', Red(160));
+    AssertTrue('the outer edges stay', Red(0) and Red(239));
+    G.ItemIndex := 1;
+    G.RenderTo(Bmp.Canvas, Rect(0, 0, 240, 30), 96);
+    AssertTrue('the selected segment''s left edge is its own', Blue(79));
+    AssertTrue('and its right edge', Blue(159));
+    AssertFalse('neither neighbour shows beside it', Red(78) or Red(80) or Red(158) or Red(160));
+  finally
+    G.Free;
+    Bmp.Free;
+    Ctl.Free;
   end;
 end;
 
