@@ -1981,7 +1981,8 @@ var
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := S.LineWidth;
     end;
-    if not IsNan(S.Opacity) then el.Style.Alpha := Max(0.0, Min(1.0, S.Opacity));
+    { [R7-V] as written (the canvas clamps it) }
+    if not IsNan(S.Opacity) then el.Style.Alpha := S.Opacity;
     AList.Add(el);
     Inc(Result);
   end;
@@ -2146,7 +2147,8 @@ begin
       el.Style.DashLogical := Copy(APics[i].Dash);
       el.Style.DashWord := APics[i].DashWord;
       el.Style.DashOffsetLogical := APics[i].DashOffset;
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].Opacity;
       TyStyleSetShadow(el.Style, APics[i].Shadow);
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
         fill to its strokeContainThreshold, 5 -- a 1 px line is hit within
@@ -3540,7 +3542,8 @@ begin
       if APics[i].HasGlobal then TyStyleNoScalePen(el.Style, APics[i].Global);
     end;
     if not IsNan(APics[i].StyleOpacity) then
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].StyleOpacity;
     TyStyleSetShadow(el.Style, APics[i].StyleShadow);
     if (APics[i].ScaleX <> 0) and (APics[i].ScaleY <> 0) then
     begin
@@ -3921,7 +3924,8 @@ begin
     el.Style.GradBoxSet := True;
     el.Style.GradBox := APics[i].GradBox;
     if not IsNan(APics[i].Opacity) then
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].Opacity;
     TyStyleSetShadow(el.Style, APics[i].Shadow);
     AList.Add(el);
     Inc(Result);

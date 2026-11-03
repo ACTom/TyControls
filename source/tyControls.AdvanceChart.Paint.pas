@@ -261,6 +261,20 @@ const
   cTyCanvasOwnShadow = 1;
   cTyCanvasShadowLeft = 2;
   cTyCanvasTransformLeft = 4;
+  { [R7-V] a value the canvas refuses, the one it had kept: a shadowBlur
+    below nought, a lineCap / lineJoin that is no word of theirs, a
+    miterLimit below nought (TyLinesCanvasLeftovers settles each in paint
+    order and marks it here) }
+  cTyCanvasBlurLeft = 8;
+  cTyCanvasCapLeft = 16;
+  cTyCanvasJoinLeft = 32;
+  cTyCanvasMiterLeft = 64;
+  { [R7-V] what a builder writes for such a value until the paint order
+    settles it: a shadowColor no colour parser takes (alpha 0: none drawn
+    meanwhile), a lineCap / lineJoin of 3 (drawn as the default meanwhile);
+    a shadowBlur or miterLimit keeps its own negative }
+  cTyCanvasColourLeft = TTyChartColor($00010203);
+  cTyCanvasWordLeft = 3;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;
   cTyCapRound = 1;
@@ -1248,6 +1262,15 @@ type
       transform refused) }
     CanvasFlags: Byte;
     CanvasShadow: TTyChartColor;
+    { [R7-V] THE TRANSFORM IT HANDS THE CANVAS (zrender's setTransform of its
+      own transform), device px, [a, b, c, d, e, f], where it is not read
+      off the element otherwise (a lines series' end symbol, ...): what an
+      effect symbol of no transform is drawn under after it. Nil, the zero
+      value: read off the element (an effect symbol's place, a caption's
+      anchor and turn, a symbol's frame, an own-frame path's) or none. (On an
+      effect symbol whose transform is no number NanEffectHit would read it
+      as the transform its hit's inverse undoes; nil there: the identity) }
+    CanvasM: TTyDoubleArray;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
@@ -1694,14 +1717,20 @@ function TyCapOfWord(const S: string): Byte;
 begin
   if S = 'round' then Result := cTyCapRound
   else if S = 'square' then Result := cTyCapSquare
-  else Result := cTyCapButt;
+  { [R7-V] `style.lineCap || 'butt'`: an empty word is the default; any
+    other word the canvas refuses, keeping the one it had (settled in paint
+    order, TyLinesCanvasLeftovers) [was: the default] }
+  else if (S = 'butt') or (S = '') then Result := cTyCapButt
+  else Result := cTyCanvasWordLeft;
 end;
 
 function TyJoinOfWord(const S: string): Byte;
 begin
   if S = 'round' then Result := cTyJoinRound
   else if S = 'bevel' then Result := cTyJoinBevel
-  else Result := cTyJoinMiter;
+  { [R7-V] the same for lineJoin }
+  else if (S = 'miter') or (S = '') then Result := cTyJoinMiter
+  else Result := cTyCanvasWordLeft;
 end;
 
 function TyChartNoDatum: TTyChartDatumRef;
@@ -1792,12 +1821,23 @@ begin
 end;
 
 function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
+var p: Double;
 begin
-  Result := Max(0.0, Min(1.0, AStyle.Alpha));
-  if AFill and AStyle.HasFillOpacity then
-    Result := Result * Max(0.0, Min(1.0, AStyle.FillOpacity))
-  else if not AFill and AStyle.HasStrokeOpacity then
-    Result := Result * Max(0.0, Min(1.0, AStyle.StrokeOpacity));
+  { bindCommonProps: Math.max(Math.min(opacity, 1), 0), not-a-number 1 --
+    a value outside 0..1 is drawn clamped, the canvas never asked [was:
+    the same, a not-a-number nought] }
+  if IsNan(AStyle.Alpha) then Result := 1
+  else Result := Max(0.0, Min(1.0, AStyle.Alpha));
+  { [R7-V] doFillPath / doStrokePath: globalAlpha = fillOpacity * opacity,
+    the raw opacity, which the canvas refuses outside 0..1 (and not a
+    number) -- the clamped opacity stays [was: each clamped, then the
+    product] }
+  if AFill and AStyle.HasFillOpacity and (AStyle.FillOpacity <> 1) then
+    p := AStyle.FillOpacity * AStyle.Alpha
+  else if not AFill and AStyle.HasStrokeOpacity and (AStyle.StrokeOpacity <> 1) then
+    p := AStyle.StrokeOpacity * AStyle.Alpha
+  else Exit;
+  if not IsNan(p) and (p >= 0) and (p <= 1) then Result := p;
 end;
 
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
@@ -2478,8 +2518,9 @@ var
   box: TTyXYWH;
 begin
   Result := False;
-  { [R7-R] a real box where the shape names one }
-  if (ABoxW > 0) and (ABoxH > 0) then
+  { [R7-R] a real box where the shape names one; [R7-V] a collapsed one (a
+    side of nought) too }
+  if (ABoxW >= 0) and (ABoxH >= 0) and ((ABoxW > 0) or (ABoxH > 0)) then
     path := TyZrSymbol(AName, -ABoxW / 2, -ABoxH / 2, ABoxW, ABoxH)
   else
     path := TyZrSymbol(AName, -1, -1, 2, 2);
@@ -2505,7 +2546,8 @@ begin
     than its box) }
   ux := 1;
   uy := 1;
-  if (AEl.Shape.HitBoxW > 0) and (AEl.Shape.HitBoxH > 0) then
+  if (AEl.Shape.HitBoxW >= 0) and (AEl.Shape.HitBoxH >= 0)
+    and ((AEl.Shape.HitBoxW > 0) or (AEl.Shape.HitBoxH > 0)) then
   begin
     ux := Max(AEl.Shape.HitBoxW, AEl.Shape.HitBoxH) / 2;
     uy := ux;

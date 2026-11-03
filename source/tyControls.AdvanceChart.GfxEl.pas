@@ -3114,7 +3114,10 @@ begin
   op := 1;
   d := AEl.Style.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then op := d.AsFloat;
-  AOut.Style.Alpha := Max(Double(0), Min(Double(1), op));
+  { [R7-V] as written: the canvas' globalAlpha clamps it, a fillOpacity /
+    strokeOpacity multiplies the raw one (TyCanvasPartAlpha) [was: clamped
+    here] }
+  AOut.Style.Alpha := op;
   { [R5-A] THE CANVAS SHADOW the element's style writes -- a path's and an
     image's (bindCommonProps), in css px whatever its transform: a canvas'
     shadow is in device space. A text's words take their textShadow* (the

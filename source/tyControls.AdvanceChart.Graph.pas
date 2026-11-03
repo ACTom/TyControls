@@ -1218,7 +1218,7 @@ var
 implementation
 
 uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.LabelGuide,
-  tyControls.AdvanceChart.ZrPath;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
 
 { ==================== the view ==================== }
 
@@ -6928,8 +6928,23 @@ var
       bx: TTyXYWH;
       { [R7-R] sized [w, h]: createSymbol's real box, another picture }
       oblong: Boolean;
+      { [R7-V] a box with a side of nought }
+      collapsed: Boolean;
+      mask: TFPUExceptionMask;
+      k: Integer;
+      zp: TTyZrPath;
+      cmds: TTyPathCmdArray;
+      pts: TTyPointFArray;
+      M: TTyMat2D;
   begin
-    if (AName = '') or (AName = 'none') or (ASize <= 0) or (AH <= 0) then Exit;
+    if (AName = '') or (AName = 'none') then Exit;
+    { [R7-V] A BOX WITH A SIDE OF NOUGHT (a one-number size, normalizeSymbolSize's
+      [w, 0], or [0, h]): createSymbol's path in that collapsed box -- nothing
+      to fill, though an empty symbol's pen still draws its edge, a 'line'
+      its length and a pin its head [was: never built] }
+    collapsed := not IsNan(ASize) and not IsNan(AH) and (ASize >= 0) and (AH >= 0)
+      and ((ASize > 0) or (AH > 0)) and ((ASize = 0) or (AH = 0));
+    if not collapsed and ((ASize <= 0) or (AH <= 0)) then Exit;
     s := Default(TTySymbolSpec);
     s.Kind := TySymbolKindOf(AName, em, pd);
     if s.Kind = tsyNone then Exit;
@@ -6943,6 +6958,7 @@ var
     if AAtEnd then tg := TyGraphTangentAt(p1, p2, cp, curved, 1)
     else tg := TyGraphTangentAt(p1, p2, cp, curved, 0);
     s.RotateDeg := TyGraphArrowRotation(tg, AAtEnd);
+    L := TyZrLocal(1, 1, 0, 0, 0);
     { [R7-O] UNDER A VIEW WHOSE scaleY IS NOT ITS scaleX: Line.beforeUpdate
       turns the symbol by the tangent in the group's units and scales it by
       1 / scaleX alone, so on the canvas it keeps scaleY / scaleX on y after
@@ -6972,12 +6988,48 @@ var
         [was: one size, the width, read for both] }
       rot := TyGraphArrowRotationRad(tg, AAtEnd);
       L := TyZrLocal(1, 1, rot, 0, 0);
-      sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L);
+      if not collapsed then sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L);
     end
     else
       sh := TyBuildSymbol(s, at.X, at.Y);
+    if collapsed then
+    begin
+      { [R7-V] symbol.ts' own path in the collapsed box, through the
+        symbol's frame and to its end -- only what shows or answers: an
+        empty symbol's pen, a 'line', a pin's head (a filled one has no
+        area, nothing to draw or hit) }
+      if not (em or (s.Kind in [tsyLine, tsyPin])) then Exit;
+      mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+        exOverflow, exUnderflow, exPrecision]);
+      try
+        if s.Kind = tsyPath then zp := TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -AH / 2, ASize, AH))
+        else zp := TyZrSymbol(AName, -ASize / 2, -AH / 2, ASize, AH);
+        M := L;
+        M[4] := at.X;
+        M[5] := at.Y;
+        TyGfxPathCmds(zp, M, cmds, pts);
+      finally
+        ClearExceptions(False);
+        SetExceptionMask(mask);
+      end;
+      if Length(pts) = 0 then Exit;
+      { a pin of no width: a head of no number (Pin.buildPath's asin of
+        nought over nought) -- nothing drawn, nothing hit }
+      for k := 0 to High(pts) do
+        if IsNan(pts[k].X) or IsNan(pts[k].Y) then Exit;
+      if s.Kind = tsyLine then sh := TyShapePolyline(pts) else sh := TyShapePolygon(pts);
+      sh.Cmds := cmds;
+      sh.HitNonZero := True;
+    end;
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     e := TyChartElement(sh);
+    { [R7-V] the transform it hands the canvas: the view's squash and its
+      turn (the size is in the path), at its end }
+    if sq then M := L
+    else M := TyZrLocal(1, 1, TyGraphArrowRotationRad(tg, AAtEnd), 0, 0);
+    M[4] := at.X;
+    M[5] := at.Y;
+    e.CanvasM := TTyDoubleArray.Create(M[0], M[1], M[2], M[3], M[4], M[5]);
     { [R7-O] symbolPathSetColor: an empty symbol is stroked in the line's
       colour at two wide over the theme's ground, a 'line' stroked at
       zrender's one, the rest filled [was: every one filled] }
@@ -7015,7 +7067,25 @@ var
     e.HitSlopLogical := 0;
     if s.Kind <> tsyLine then
     begin
-      if oblong then
+      if collapsed then
+      begin
+        { [R7-V] hit in the symbol's frame on the collapsed box's path (an
+          empty circle's of no radius still answers about its centre) }
+        e.Shape.HitM := M;
+        e.Shape.HitBoxW := ASize;
+        e.Shape.HitBoxH := AH;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+      end
+      else if oblong then
       begin
         { [R7-R] hit in that real box's frame: the path createSymbol makes
           at the size, its pen the symbol's own }

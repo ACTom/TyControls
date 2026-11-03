@@ -3391,7 +3391,8 @@ begin
       if (ar.Find('opacity') <> nil) and (ar.Find('opacity').JSONType = jtNumber) then
       begin
         Result.RowAreaOpacitySet[k] := True;
-        Result.RowAreaOpacity[k] := Max(Double(0), Min(Double(1), ar.Find('opacity').AsFloat));
+        { [R7-V] as written (the canvas clamps it) }
+        Result.RowAreaOpacity[k] := ar.Find('opacity').AsFloat;
       end;
     end;
   end;
