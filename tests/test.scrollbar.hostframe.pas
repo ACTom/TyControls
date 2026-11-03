@@ -1185,8 +1185,8 @@ var
       { 沿条方向避开宿主圆角那几行:弧只弯在贴边那一侧,那几行本来就不对称。 }
       if rad > 0 then
       begin
-        Inc(lo, rad + 2);
-        Dec(hi, rad + 2);
+        Inc(lo, rad + 4);
+        Dec(hi, rad + 4);
       end;
       bad := '';
       thumbHits := 0; ringIn := 0; ringOut := 0;
