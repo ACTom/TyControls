@@ -336,6 +336,10 @@ type
     procedure TestTabWalksTheEnabledThumbsThenLeaves;
     procedure TestEnteringFromTheKeyboardStartsAtTheNearEnd;
     procedure TestTheWheelStepsTheKeyboardsThumb;
+    { #182: on a Reversed bar every value key and the wheel move the thumb the way they move it
+      on an unreversed bar of the same orientation (the screen decides, as TTyTrackBar), so
+      they change the value the other way. Horizontal and vertical. }
+    procedure TestOnAReversedBarTheKeysAndTheWheelFollowTheScreen;
   end;
 
   { ShowValue against TTyTrackBar's: the same strip, the same shorter track, the same text. }
@@ -2337,6 +2341,66 @@ begin
   FBar.Enabled := False;
   AssertFalse('a disabled bar leaves the wheel to its parent', FBar.Wheel(120));
   AssertEquals('20,52,80', Values);
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestOnAReversedBarTheKeysAndTheWheelFollowTheScreen;
+const
+  CWheelUp = 1;      // stand-ins for a wheel notch in the input list
+  CWheelDown = 2;
+  CSteps: array[0..10] of Word = (VK_RIGHT, VK_UP, VK_PRIOR, CWheelUp, VK_LEFT, VK_DOWN,
+    VK_NEXT, CWheelDown, CWheelDown, VK_HOME, VK_END);
+var
+  plain: array[0..High(CSteps)] of TRect;
+  plainV: array[0..High(CSteps)] of Integer;
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  i: Integer;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      FBar.Put([50]);
+      FBar.SelectedThumb := 0;
+      FBar.LineSize := 2;
+      for i := 0 to High(CSteps) do
+      begin
+        where := Format('ori=%d rev=%d step %d', [Ord(ori), Ord(rev), i]);
+        case CSteps[i] of
+          CWheelUp: AssertTrue(where + ': handled', FBar.Wheel(120));
+          CWheelDown: AssertTrue(where + ': handled', FBar.Wheel(-120));
+        else
+          AssertEquals(where + ': consumed', 0, FBar.Key(CSteps[i]));
+        end;
+        if not rev then
+        begin
+          plain[i] := FBar.ThumbRect(0);
+          plainV[i] := FBar.ThumbValues[0];
+        end
+        else
+        begin
+          AssertTrue(where + ': the thumb is where the unreversed bar''s is on screen',
+            EqualRect(plain[i], FBar.ThumbRect(0)));
+          AssertEquals(where + ': so its value is the mirror', 100 - plainV[i],
+            FBar.ThumbValues[0]);
+        end;
+      end;
+      if not rev then
+        AssertEquals('unreversed, as before: up / right increase, End is Max',
+          '52,54,64,66,64,62,52,50,48,0,100', Format('%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d',
+          [plainV[0], plainV[1], plainV[2], plainV[3], plainV[4], plainV[5], plainV[6],
+           plainV[7], plainV[8], plainV[9], plainV[10]]));
+    end;
+  { Spelled out on a horizontal Reversed bar: the right arrow moves the thumb right. }
+  Configure(toHorizontal, True);
+  FBar.Put([50]);
+  FBar.SelectedThumb := 0;
+  FBar.LineSize := 1;
+  i := FBar.ThumbRect(0).Left;
+  FBar.Key(VK_RIGHT);
+  AssertEquals('-> lowers the value on a Reversed bar', 49, FBar.ThumbValues[0]);
+  AssertTrue('and the thumb goes right', FBar.ThumbRect(0).Left > i);
 end;
 
 { TMultiTrackFinalBase }

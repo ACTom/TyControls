@@ -43,7 +43,7 @@ uses tyControls.MultiTrackBar;
 | `Min` / `Max` | `Integer` | `0` / `100` | 取值范围。改了以后所有滑块重新排好（见第 8 节），有滑块因此移动时照常触发事件。 |
 | `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 8 节。打开 `AllowCrossing` 时用户的操作不受它约束，区间控件里区间之间仍受约束（第 5 节）。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 与 `TTyTrackBar` 相同：竖排时顶部是 `Max`，改方向时宽高自动对调（读窗体时不动）。 |
-| `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。 |
+| `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。按键和滚轮跟着屏幕走，见第 9 节。 |
 | `TickMarks` / `TickStyle` / `Frequency` | — | `ttmBottomRight` / `ttsAuto` / `1` | 刻度画在哪一侧、画哪些值，与 `TTyTrackBar` 完全相同，连画法都是同一段代码。`SetTick` / `ClearTicks` / `TickCount` 用于 `ttsManual`。 |
 | `TickLabels` | `Boolean` | `False` | 在每条刻度外侧写上它的值。说明见 [trackbar.md](trackbar.md) 的「刻度标签」。 |
 | `OnFormatTickLabel` | `TTyTrackTickLabelEvent` | `nil` | 改写刻度标签的文字（「1 月」「¥100」），写成空串就不画那一条。 |
@@ -484,6 +484,8 @@ end;
 | `Tab` / `Shift+Tab` | 在可用滑块之间前后切换；到了最后一个（往回时是第一个）再按，焦点才离开控件。没有选中的滑块时，`Tab` 选中第一个可用滑块，`Shift+Tab` 选中最后一个。 |
 | 用 Tab 进入控件 | 选中第一个可用滑块；用 `Shift+Tab` 进入时选中最后一个。点击进入时由点击决定。代码给的焦点（`SetFocus`、窗体的 `ActiveControl`）保留原来选中的滑块，没有选中时同 Tab。 |
 | 滚轮 | 键盘滑块上滚加 `LineSize`、下滚减，同 `TTyTrackBar`；`OnMouseWheel` 里置 `Handled` 可以拦下。 |
+
+上表说的是没翻转的条。`Reversed = True` 时按键和滚轮跟着屏幕走，同 `TTyTrackBar`：每个键、滚轮每一格让滑块在屏幕上往哪边走，和同方向没翻转的条一样，所以值的变化方向正好相反。横排翻转后按 `→`，滑块往右走，值减小；竖排翻转后按 `↑`，滑块往上走，值也减小。`Home` / `End` 去的还是没翻转时那一头，翻转后 `Home` 是往 `Max` 走、`End` 是往 `Min` 走，同样停在邻居 ± `MinGap` 处。
 
 「键盘滑块」是选中的那个；没有选中（或选中的不可用）时是第一个可用滑块，按键后它变成选中的。一个可用滑块都没有时，方向键、`PageUp` / `PageDown`、`Home` / `End` 照样由控件收下，什么也不动，焦点不会被方向键带到别的控件上。
 

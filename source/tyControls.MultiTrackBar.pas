@@ -133,7 +133,8 @@ type
     the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
     the first enabled thumb when entered forwards, the last when entered with Shift+Tab, so
     every thumb is one Tab away; entered by a click, the press picks the thumb. The wheel steps
-    the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's.
+    the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's; on a Reversed
+    bar the keys and the wheel move the thumb the same way on screen (TyTrackInputStep).
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only.
@@ -2611,8 +2612,9 @@ begin
   i := KeyThumb;
   if i < 0 then Exit;
   v := FValues[i];
-  if WheelDelta > 0 then Inc(v, FLineSize)
-  else if WheelDelta < 0 then Dec(v, FLineSize);
+  { #182: on a Reversed bar the other way in value, the same way on screen (TyTrackInputStep). }
+  if WheelDelta > 0 then Inc(v, TyTrackInputStep(FLineSize, FReversed))
+  else if WheelDelta < 0 then Inc(v, TyTrackInputStep(-FLineSize, FReversed));
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
@@ -2852,15 +2854,17 @@ begin
   i := KeyThumb;
   if i < 0 then Exit;
   { Value keys, as TTyTrackBar's: up / right increase whichever way the bar runs, so on a
-    vertical bar "up increases"; Home / End go as far as the neighbours let. }
+    vertical bar "up increases"; Home / End go as far as the neighbours let. #182: on a
+    Reversed bar each key moves the thumb the same way on screen, so the other way in value
+    (TyTrackInputStep); Home / End go to the end of the screen they go to unreversed. }
   case vk of
-    VK_RIGHT, VK_UP: v := Int64(FValues[i]) + FLineSize;
-    VK_LEFT, VK_DOWN: v := Int64(FValues[i]) - FLineSize;
-    VK_PRIOR: v := Int64(FValues[i]) + FPageSize;
-    VK_NEXT: v := Int64(FValues[i]) - FPageSize;
-    VK_HOME: v := FMin;
+    VK_RIGHT, VK_UP: v := Int64(FValues[i]) + TyTrackInputStep(FLineSize, FReversed);
+    VK_LEFT, VK_DOWN: v := Int64(FValues[i]) + TyTrackInputStep(-FLineSize, FReversed);
+    VK_PRIOR: v := Int64(FValues[i]) + TyTrackInputStep(FPageSize, FReversed);
+    VK_NEXT: v := Int64(FValues[i]) + TyTrackInputStep(-FPageSize, FReversed);
+    VK_HOME: if TyTrackInputStep(-1, FReversed) < 0 then v := FMin else v := FMax;
   else
-    v := FMax;   // VK_END
+    if TyTrackInputStep(1, FReversed) > 0 then v := FMax else v := FMin;   // VK_END
   end;
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
