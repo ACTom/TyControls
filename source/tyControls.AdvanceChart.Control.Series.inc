@@ -1661,7 +1661,8 @@ begin
       if (s <> nil) and (s.JSONType = jtBoolean) and s.AsBoolean then Exit;
     end;
   end;
-  if (FOption.ComponentCount('geo') > 0) or (FOption.ComponentCount('calendar') > 0) then Exit;
+  { (a geo's regions and a calendar's cells are in the list itself, before
+    the series: TyLinesCanvasLeftovers sees them) }
   Result := 0;
 end;
 

@@ -160,6 +160,10 @@ function cases() {
     ['grad-two-series-axes', Object.assign(vv([LN({ color: '#00ffff', shadowBlur: 2 }, [{ coords: [[1, 8], [9, 8]] }]),
       LN({ color: GRAD, shadowBlur: 3 }, [{ coords: [[1, 3], [9, 3]] }])]),
     { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } }), [0, 600]],
+    // the same over a calendar drawn first (its cells: '#000' left before the clips)
+    ['grad-two-series-calendar', Object.assign(vv([LN({ color: '#00ffff', shadowBlur: 2 }, [{ coords: [[1, 8], [9, 8]] }]),
+      LN({ color: GRAD, shadowBlur: 3 }, [{ coords: [[1, 3], [9, 3]] }])]),
+    { calendar: { range: '2024-01', left: 20, top: 260, cellSize: [8, 4] } }), [0, 600]],
     ['grad-written', vv(LN({ color: GRAD, shadowBlur: 4, shadowColor: '#00ff00' }, ROWS2)), [0, 600]],
     ['grad-line-colour', vv(LN({ shadowBlur: 3 }, ROWS2, { lineStyle: { color: GRAD, opacity: 1 } })), [0, 600]],
     ['grad-two-series', vv([LN({ color: '#00ffff', shadowBlur: 2 }, [{ coords: [[1, 8], [9, 8]] }]),
