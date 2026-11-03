@@ -1557,6 +1557,14 @@ begin
   AColor := 0;
   if (AData = nil) or (AData.JSONType <> jtString) then Exit;
   Result := TyTryParseChartColor(AData.AsString, AColor);
+  { [R7-W] a string no parser reads (not '' nor 'none'): written, the
+    canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: the
+    series' colour] }
+  if not Result and (AData.AsString <> '') and (AData.AsString <> 'none') then
+  begin
+    AColor := cTyCanvasColourLeft;
+    Result := True;
+  end;
 end;
 
 { lineStyle.type as the dash enum }
@@ -2107,7 +2115,9 @@ begin
     gradient one cast nothing] }
   if d <> nil then
   begin
-    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow);
+    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow)
+      { [R7-W] (one no parser reads) }
+      or (Result.EffCanvasShadow = cTyCanvasColourLeft);
   end
   else
   begin
@@ -3629,7 +3639,11 @@ begin
     begin
       ov := FStores[ASlot].GetOverrideByRaw(k, TyOverrideKey('itemStyle.color'));
       if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
-        Result[k] := c;
+        Result[k] := c
+      { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
+        [was: the ramp's] }
+      else if (ov.Kind = dvkText) and (ov.Text <> '') and not TyChartColorIsNone(ov.Text) then
+        Result[k] := cTyCanvasColourLeft;
     end;
 end;
 

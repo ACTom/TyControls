@@ -349,7 +349,9 @@ var d: Double;
 begin
   if IsNan(ALineWidth) or (ALineWidth = 0) then Exit(APosition);
   d := TyJsRound(APosition * 2);
-  if JsRem(d + TyJsRound(ALineWidth), 2) = 0 then Result := d / 2
+  { [R7-W] a width of 'Infinity': (d + Infinity) % 2 is no number, never
+    nought -- the odd branch [was: Infinity - Infinity raised] }
+  if (not IsInfinite(ALineWidth)) and (JsRem(d + TyJsRound(ALineWidth), 2) = 0) then Result := d / 2
   else if APositive then Result := (d + 1) / 2
   else Result := (d - 1) / 2;
 end;

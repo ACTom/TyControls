@@ -41,6 +41,8 @@ begin
   d := TyStFind(ANodes, APath);
   if (d = nil) or (d.JSONType = jtNumber) then Exit;
   if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
+  { [R7-W] (a refused phase: nought in a state, as before) }
+  if TyPhaseLeft(v) then v := 0;
   if IsNan(v) then Exit;
   { the element strokes it -- or strokes nothing for it, where the rest
     holds zrender's default 1 (StRestOf) }

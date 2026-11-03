@@ -976,8 +976,20 @@ begin
   else
     Exit;
   end;
-  if not ((ASpec.WidthPx > 0) and (ASpec.HeightPx > 0)) then Exit;
+  if IsNan(ASpec.WidthPx) or IsNan(ASpec.HeightPx) then Exit;
   if IsNan(ACX + ASpec.OffsetX) or IsNan(ACY + ASpec.OffsetY) then Exit;
+  { [R7-W] A SIDE OF NOUGHT: the transform does not invert, and the hit is
+    the unit symbol under the inverse it was made with (SymbolHit) --
+    whatever the shape drawn [was: no frame, never hit] }
+  if (ASpec.WidthPx >= 0) and (ASpec.HeightPx >= 0)
+    and ((ASpec.WidthPx = 0) or (ASpec.HeightPx = 0)) then
+  begin
+    AShape.HitSym := name;
+    AShape.HitM := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,
+      DegToRad(ASpec.RotateDeg), ACX + ASpec.OffsetX, ACY + ASpec.OffsetY);
+    Exit;
+  end;
+  if not ((ASpec.WidthPx > 0) and (ASpec.HeightPx > 0)) then Exit;
   if (AShape.Kind = cskRect) and not TyRectFIsValid(AShape.Bounds) then Exit;
   AShape.HitSym := name;
   AShape.HitM := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,

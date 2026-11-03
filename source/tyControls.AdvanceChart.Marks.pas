@@ -1260,6 +1260,14 @@ begin
         Result.StrokeGradient := Default(TTyChartGradient);
         { [R7-F] a clear colour strokes for the pointer }
         Result.StrokeClear := (c shr 24) = 0;
+      end
+      { [R7-W] one no parser reads: the canvas keeps the strokeStyle it
+        had (TyLinesCanvasLeftovers) [was: the series' pen] }
+      else if v.Text <> '' then
+      begin
+        Result.Stroke := cTyCanvasColourLeft;
+        Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end;
     end;
   end;
@@ -1309,6 +1317,15 @@ begin
       `fill` over the gradient. [Batch 105: the series' gradient stayed and
       the datum's colour was only its legend swatch.] }
     Result.Fill := c;
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
+  end
+  { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
+    (TyLinesCanvasLeftovers) [was: the series' colour] }
+  else if v.Text <> '' then
+  begin
+    Result.Fill := cTyCanvasColourLeft;
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
     Result.FillNone := False;
@@ -1458,6 +1475,17 @@ begin
     Path.contain never answers -- every mark, not only a bar [R6-F] }
   Result.HitNone := (AVisual.StrokeWidthInf > 0)
     and ((AVisual.Stroke <> 0) or (AVisual.StrokeGradient.Kind <> cgkNone));
+  { [R7-W] and strokes at the lineWidth the canvas had, which refuses the
+    infinity (TyLinesCanvasLeftovers) [was: no pen] }
+  if Result.HitNone then
+  begin
+    Result.CanvasFlags := Result.CanvasFlags or cTyCanvasWidthLeft;
+    if Result.Style.DashWord <> 0 then
+    begin
+      Result.Style.DashLogical := nil;
+      Result.Style.DashWord := 0;
+    end;
+  end;
 end;
 
 { UPSTREAM'S clip.cartesian2d (BarView.ts), on the layout as upstream holds
@@ -2789,8 +2817,6 @@ begin
   if rs.Kind = tsyNone then Exit;
   rs := TySymbolResolveOffset(rs);
   shape := TyBuildSymbolUnit(rs, AP.X, AP.Y);
-  { [R7-F] hit in its own frame, as Symbol.ts' path }
-  TySymbolHitFrame(shape, rs, AP.X, AP.Y);
   { A SYMBOL OF NO SIZE is still an element upstream -- it paints nothing
     and carries its label, which is how a series of words alone is written
     (calendar-pie's day numbers, calendar-lunar's names) }
@@ -2799,6 +2825,9 @@ begin
     and not IsNan(AP.X + rs.OffsetX) and not IsNan(AP.Y + rs.OffsetY) then
     shape := TyShapeRect(TyRectF(AP.X + rs.OffsetX, AP.Y + rs.OffsetY,
       AP.X + rs.OffsetX, AP.Y + rs.OffsetY));
+  { [R7-F] hit in its own frame, as Symbol.ts' path -- [R7-W] one of no
+    size too (after the rect above, which would drop it) }
+  TySymbolHitFrame(shape, rs, AP.X, AP.Y);
   if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Exit;
   v := RowVisual(AVisual, AStore, ARow);
   ink := v.Fill;
