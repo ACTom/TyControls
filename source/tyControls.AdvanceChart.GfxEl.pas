@@ -3387,7 +3387,7 @@ begin
         it against the element's own width: 'dashed' [4w, 2w], 'dotted'
         [w], a number [n] ('solid' none) -- a timeline's line takes its
         lineStyle.type so [was: an array only] }
-      else if (d <> nil) and (AOut.Style.StrokeWidthLogical > 0) and (lw > 0)
+      else if (d <> nil) and (AOut.Style.StrokeWidthLogical > 0) and not IsNan(lw) and (lw > 0)
         and (((d.JSONType = jtString) and ((d.AsString = 'dashed') or (d.AsString = 'dotted')))
           or (d.JSONType = jtNumber)) then
       begin
@@ -3425,7 +3425,8 @@ begin
         and ((d.AsString = 'round') or (d.AsString = 'bevel') or (d.AsString = 'miter')) then
         AOut.Style.LineJoin := TyJoinOfWord(d.AsString);
       d := AEl.Style.Find('miterLimit');
-      if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) and not IsInfinite(d.AsFloat) then
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat)
+        and not IsInfinite(d.AsFloat) and (d.AsFloat > 0) then
         AOut.Style.MiterLimit := d.AsFloat;
     end;
   end;

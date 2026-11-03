@@ -496,7 +496,8 @@ begin
   if AJoin = 'round' then AStyle.LineJoin := 1
   else if AJoin = 'bevel' then AStyle.LineJoin := 2
   else if AJoin = 'miter' then AStyle.LineJoin := 0;
-  if (AMiter > 0) and not IsInfinite(AMiter) then AStyle.MiterLimit := AMiter;
+  if not IsNan(AMiter) and not IsInfinite(AMiter) and (AMiter > 0) then
+    AStyle.MiterLimit := AMiter;
 end;
 
 function Chain(const L: TMkLevels; const AKey: string; AOwnOnly: Boolean = False): TJSONData;
