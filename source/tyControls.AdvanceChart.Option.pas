@@ -261,6 +261,14 @@ function TyOptionTextHasFunction(const AText: string): Boolean;
   flags above ADefault's weight (TyChartFontItalic) stay: a weight replaces
   the weight, not the font's style. }
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+{ [R7-Y] WHETHER THE CANVAS REFUSES THE FONT makeFont joins (`fontStyle
+  fontWeight parseFontSize(fontSize) family`) for these written parts: a
+  fontStyle string that is no CSS font-style (normal, italic, oblique and an
+  angle), a fontWeight string that is no CSS weight (normal, bold, bolder,
+  lighter, a number 1 to 1000), a fontSize string holding 'px', 'em' or
+  'rem' (parseFontSize passes it on) that is no CSS length -- the words
+  ASCII case-insensitive, as CSS reads them. nil parts are not written. }
+function TyCssFontRefused(AStyle, AWeight, ASize: TJSONData): Boolean;
 
 const
   { [R5-A] tyControls.Types' TyFontItalic: the italic flag above a font
@@ -401,6 +409,78 @@ begin
     if (Pos(',', s) > 0) then v := NaN;
   end;
   if TyFontSizeFromPx(v) > 0 then Result := TyFontSizeFromPx(v);
+end;
+
+function TyCssFontRefused(AStyle, AWeight, ASize: TJSONData): Boolean;
+var s, u: string; v: Double; fs: TFormatSettings; p, k: Integer;
+
+  { a CSS number: digits, at most one point, an exponent }
+  function CssNumber(const AText: string): Boolean;
+  var q: Integer; dig, dot: Boolean;
+  begin
+    Result := False;
+    if AText = '' then Exit;
+    q := 1;
+    if AText[1] in ['+', '-'] then Inc(q);
+    dig := False;
+    dot := False;
+    while q <= Length(AText) do
+    begin
+      if AText[q] in ['0'..'9'] then dig := True
+      else if (AText[q] = '.') and not dot then dot := True
+      else if AText[q] in ['e', 'E'] then
+      begin
+        if not dig then Exit;
+        Inc(q);
+        if (q <= Length(AText)) and (AText[q] in ['+', '-']) then Inc(q);
+        if q > Length(AText) then Exit;
+        while q <= Length(AText) do
+        begin
+          if not (AText[q] in ['0'..'9']) then Exit;
+          Inc(q);
+        end;
+        Exit(True);
+      end
+      else Exit;
+      Inc(q);
+    end;
+    Result := dig;
+  end;
+
+begin
+  Result := False;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  if (AStyle <> nil) and (AStyle.JSONType = jtString) and (Trim(AStyle.AsString) <> '') then
+  begin
+    s := LowerCase(Trim(AStyle.AsString));
+    if not ((s = 'normal') or (s = 'italic') or (s = 'oblique')
+      or ((Copy(s, 1, 8) = 'oblique ') and (Pos('deg', s) > 0))) then Exit(True);
+  end;
+  if (AWeight <> nil) and (AWeight.JSONType = jtString) and (Trim(AWeight.AsString) <> '') then
+  begin
+    s := LowerCase(Trim(AWeight.AsString));
+    if not ((s = 'normal') or (s = 'bold') or (s = 'bolder') or (s = 'lighter')) then
+    begin
+      if not CssNumber(s) or not TryStrToFloat(s, v, fs) or not (v >= 1) or not (v <= 1000) then
+        Exit(True);
+    end;
+  end;
+  if (ASize <> nil) and (ASize.JSONType = jtString) then
+  begin
+    s := ASize.AsString;
+    if (Pos('px', s) > 0) or (Pos('em', s) > 0) then
+    begin
+      { a length: a non-negative number and its unit, nothing else }
+      s := LowerCase(Trim(s));
+      p := Length(s);
+      while (p > 0) and (s[p] in ['a'..'z']) do Dec(p);
+      u := Copy(s, p + 1, MaxInt);
+      k := 0;
+      if (u = 'px') or (u = 'em') or (u = 'rem') then k := 1;
+      if (k = 0) or not CssNumber(Copy(s, 1, p)) or (Copy(s, 1, 1) = '-') then Exit(True);
+    end;
+  end;
 end;
 
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;

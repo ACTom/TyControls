@@ -4330,6 +4330,9 @@ begin
     FListTailAt := list.Count;
     Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
+    { [R7-Y] what the canvas is left with, in paint order, a chart of no
+      series too (its graphic elements) [was: never settled] }
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     Exit;
   end;
   begin

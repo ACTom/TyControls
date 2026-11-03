@@ -7906,13 +7906,22 @@ begin
     else if key = 'style.shadowOffsetX' then
     begin
       if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowOffsetX := v.Num;
+      if v.Kind = avkNumber then
+      begin
+        AEl.Style.ShadowOffsetX := v.Num;
+        { [R7-Y] a value the frame writes is the canvas' to settle afresh }
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffXLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowOffsetY' then
     begin
       if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowOffsetY := v.Num;
+      if v.Kind = avkNumber then
+      begin
+        AEl.Style.ShadowOffsetY := v.Num;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffYLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowColor' then

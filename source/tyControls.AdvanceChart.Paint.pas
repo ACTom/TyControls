@@ -24,7 +24,7 @@ unit tyControls.AdvanceChart.Paint;
   testable here without a graphics stack. }
 interface
 uses SysUtils, Math, tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
-  tyControls.AdvanceChart.ZrPath;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.JsMath;
 
 type
   { $AARRGGBB, byte-identical to tyControls.Types' TTyColor. Declared again here
@@ -288,6 +288,15 @@ const
   cTyCanvasTextFillLeft = 2048;
   cTyCanvasTextStrokeLeft = 4096;
   cTyCanvasPhaseLeft = -1.0e305;
+  { [R7-Y] and more: a shadowOffsetX / Y the canvas refuses (a string that
+    is no finite number: dpr times it is not one -- written as
+    cTyCanvasPhaseLeft, the offset it had), a blend (globalCompositeOperation)
+    that is none of the canvas' words (the one it had), a caption's font the
+    canvas refuses (the font the text before it left) }
+  cTyCanvasOffXLeft = 8192;
+  cTyCanvasOffYLeft = 16384;
+  cTyCanvasBlendLeft = 32768;
+  cTyCanvasFontLeft = 65536;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;
   cTyCapRound = 1;
@@ -1276,7 +1285,7 @@ type
       gradient, or no colour, the canvas refuses); its transform the one the
       canvas had (cTyCanvasTransformLeft: a scale that is not a number, the
       transform refused) }
-    CanvasFlags: Word;
+    CanvasFlags: LongWord;
     CanvasShadow: TTyChartColor;
     { [R7-V] THE TRANSFORM IT HANDS THE CANVAS (zrender's setTransform of its
       own transform), device px, [a, b, c, d, e, f], where it is not read
@@ -1615,6 +1624,9 @@ function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): 
 { [R7-W] whether a dash phase is cTyCanvasPhaseLeft (scaled or not; a
   not-a-number is not) }
 function TyPhaseLeft(AValue: Double): Boolean;
+{ [R7-Y] whether the canvas takes AWord for globalCompositeOperation: one of
+  its words exactly (case and spaces matter) }
+function TyBlendWordKnown(const AWord: string): Boolean;
 { [R5-A] AShadow onto a style, all four keys }
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 { An element carrying a shape, silent and datum-less until the caller says
@@ -1835,6 +1847,20 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
 begin
   Result := ((AStyle.ShadowColor shr 24) <> 0)
     and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
+end;
+
+function TyBlendWordKnown(const AWord: string): Boolean;
+const
+  cWords: array[0..25] of string = ('source-over', 'source-in', 'source-out',
+    'source-atop', 'destination-over', 'destination-in', 'destination-out',
+    'destination-atop', 'lighter', 'copy', 'xor', 'multiply', 'screen', 'overlay',
+    'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light',
+    'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity');
+var k: Integer;
+begin
+  for k := 0 to High(cWords) do
+    if AWord = cWords[k] then Exit(True);
+  Result := False;
 end;
 
 function TyPhaseLeft(AValue: Double): Boolean;
@@ -2539,6 +2565,7 @@ function SymbolPathHit(const AName: string; ALx, ALy, AE, ALw: Double;
 var
   path: TTyZrPath;
   box: TTyXYWH;
+  i, k: Integer;
 begin
   Result := False;
   { [R7-R] a real box where the shape names one; [R7-V] a collapsed one (a
@@ -2547,6 +2574,13 @@ begin
     path := TyZrSymbol(AName, -ABoxW / 2, -ABoxH / 2, ABoxW, ABoxH)
   else
     path := TyZrSymbol(AName, -1, -1, 2, 2);
+  { [R7-Y] AS THE PROXY HOLDS IT ONCE PAINTED: toStatic stores data of more
+    than eleven numbers in a Float32Array -- a point exactly on a vertex or
+    an edge is in or out by those singles [was: the doubles] }
+  if TyZrDataLength(path) > 11 then
+    for i := 0 to High(path) do
+      for k := 0 to TyZrArgCount(path[i].Cmd) - 1 do
+        path[i].V[k] := TyJsFround(path[i].V[k]);
   box := TyZrBBox(path);
   if not ((ALx >= box.X - AE) and (ALx <= box.X - AE + (box.W + 2 * AE))
     and (ALy >= box.Y - AE) and (ALy <= box.Y - AE + (box.H + 2 * AE))) then Exit;
