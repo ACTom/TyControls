@@ -44,7 +44,16 @@ unit test.advchart.linescanvas;
   colour) and what the components drawn before the series hand the canvas
   (the graphic's elements under the axes, the axes in upstream's paint
   order): TestTheComponentsCanvasAsUpstream, against what the port drew
-  (CompDrawn) and the series' elements as the w- cases. }
+  (CompDrawn) and the series' elements as the w- cases.
+
+  [R7-AA] The cases named aa-..., recorded and compared as the z- ones (the
+  lineJoin too, a gradient stroke as one): an axis' shadow, join and
+  miterLimit on every kind of axis, the refused values of the parallel
+  axes, a timeline and a dataZoom, the polar's and the single axis' split
+  areas in paint order, radar's parts among the axes', a zero width that
+  still hands its stroke colour, a transparent background its fill, a
+  gradient axis pen, a label's refused colours in a state:
+  TestTheR7AACanvasAsUpstream. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -95,6 +104,7 @@ type
     procedure TestTheRefusedValuesAsUpstream;
     procedure TestTheR7WHitsAsUpstream;
     procedure TestTheComponentsCanvasAsUpstream;
+    procedure TestTheR7AACanvasAsUpstream;
   end;
 
 implementation
@@ -245,7 +255,8 @@ begin
     id := c.Strings['id'];
     if (AWhich = 0) <> (Copy(id, 1, 5) = 'grad-') then Continue;
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
-    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-') then Continue;
+    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
+      or (Copy(id, 1, 3) = 'aa-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -860,7 +871,11 @@ var
   pdash: TTyDoubleArray;
   isCap, dirty: Boolean;
   px: TBGRAPixel;
+  { [R7-AA] the z- and aa- cases: the cap, join and miterLimit, a dash
+    where upstream strokes solid }
+  strict: Boolean;
 begin
+  strict := APrefix <> 'w-';
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -869,7 +884,7 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
-    if Copy(id, 1, 2) <> APrefix then Continue;
+    if Copy(id, 1, Length(APrefix)) <> APrefix then Continue;
     { a trail's frames under useDirtyRect: upstream repaints a block round
       each moving symbol and keeps the rest of the last frame's pixels; the
       port draws an animated frame whole (recorded, not held: spec 277) }
@@ -1090,7 +1105,14 @@ begin
             if (el.Style.PenScale > 0) and (el.Style.PenScale <> 1) then plw := plw * el.Style.PenScale;
             if not (el.Style.StrokeWidthLogical > 0) or (Abs(plw - lw) > 1e-6) then
               Miss(Format('%s: stroke width %g, upstream %g', [where, plw, lw]));
-            if (o.Strings['ss'] <> '[grad]') and TyTryParseChartColor(o.Strings['ss'], wc) then
+            { [R7-AA] a gradient the canvas holds (the aa- cases) }
+            if (APrefix = 'aa-') and (o.Strings['ss'] = '[grad]') then
+            begin
+              Inc(FCompared);
+              if el.Style.StrokeGradient.Kind = cgkNone then
+                Miss(Format('%s: stroke %x, upstream a gradient', [where, el.Style.StrokeColor]));
+            end
+            else if (o.Strings['ss'] <> '[grad]') and TyTryParseChartColor(o.Strings['ss'], wc) then
             begin
               Inc(FCompared);
               if (el.Style.StrokeGradient.Kind <> cgkNone) or not SameInk(el.Style.StrokeColor, wc) then
@@ -1103,7 +1125,7 @@ begin
               pdash := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical);
             Inc(FCompared);
             { ([R7-Z] the z- cases: a dash where upstream strokes solid too) }
-            if (APrefix = 'z-') and (ld.Count = 0) and (Length(pdash) > 0) then
+            if strict and (ld.Count = 0) and (Length(pdash) > 0) then
               Miss(Format('%s: dash of %d, upstream solid', [where, Length(pdash)]))
             else if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
               Miss(Format('%s: dash of %d, upstream %s', [where, Length(pdash), ld.AsJSON]))
@@ -1124,7 +1146,7 @@ begin
                 Miss(Format('%s: dash phase %g, upstream %g', [where, pldo, ldo]));
             end;
             { [R7-Z] the cap (a word the canvas refuses: the one it had) }
-            if APrefix = 'z-' then
+            if strict then
             begin
               Inc(FCompared);
               case el.Style.LineCap of
@@ -1141,6 +1163,19 @@ begin
               Inc(FCompared);
               if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
                 Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
+              { [R7-AA] and the join (a word the canvas refuses: the one it had) }
+              if APrefix = 'aa-' then
+              begin
+                case el.Style.LineJoin of
+                  1: want := 'round';
+                  2: want := 'bevel';
+                else
+                  want := 'miter';
+                end;
+                Inc(FCompared);
+                if want <> o.Strings['join'] then
+                  Miss(Format('%s: join %s, upstream %s', [where, want, o.Strings['join']]));
+              end;
             end;
           end;
           { the shadow it casts (a refused blur or colour kept) }
@@ -1209,6 +1244,11 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheComponentsCanvasAsUpstream;
 begin
   RunW(False, 'z-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AACanvasAsUpstream;
+begin
+  RunW(False, 'aa-');
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheCanvasStateAsUpstream;
