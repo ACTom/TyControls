@@ -221,6 +221,7 @@ uses
   test.advchart.labellinestates,
   test.advchart.legenditemown,
   test.advchart.legendstyles,
+  test.advchart.rootstyles,
   test.advchart.imageshadow,
   test.advchart.legendtooltip,
   test.advchart.animedges,

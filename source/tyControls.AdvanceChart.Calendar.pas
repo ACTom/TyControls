@@ -87,6 +87,10 @@ type
     RangeA, RangeB: TTyDataValue;
     FirstDay: Double;
     Item: TTyOptStyle;
+    { [R7-U] the cells' pen ends (getItemStyle's borderCap, borderJoin,
+      borderMiterLimit): the canvas' codes, the limit 0 where none }
+    ItemCap, ItemJoin: Byte;
+    ItemMiter: Double;
     SplitShow: Boolean;
     Split: TTyOptStyle;
     DayShow, DayStart: Boolean;
@@ -720,6 +724,19 @@ begin
 
   { ---- the cells and the split lines ---- }
   Result.Item := TyReadOptStyle(node, 'itemStyle');
+  { [R7-U] and its ends }
+  sub := ObjIn(node, 'itemStyle');
+  Result.ItemCap := 0;
+  Result.ItemJoin := 0;
+  Result.ItemMiter := 0;
+  if sub <> nil then
+  begin
+    Result.ItemCap := TyLineCapOf(sub.Find('borderCap'));
+    Result.ItemJoin := TyLineJoinOf(sub.Find('borderJoin'));
+    d := sub.Find('borderMiterLimit');
+    if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+      Result.ItemMiter := d.AsFloat;
+  end;
   sub := ObjIn(node, 'splitLine');
   Result.SplitShow := ShowIn(sub, True);
   Result.Split := TyReadOptStyle(sub, 'lineStyle');
@@ -1665,6 +1682,11 @@ begin
     el.Style.StrokeColor := cellStroke;
     el.Style.StrokeWidthLogical := cellLw;
     el.Style.DashLogical := TyDashPattern(spec.Item.Dash, spec.Item.DashLogical, cellLw);
+    { [R7-U] its phase and its ends [was: not drawn] }
+    if spec.Item.DashOffsetHas then el.Style.DashOffsetLogical := spec.Item.DashOffset;
+    el.Style.LineCap := spec.ItemCap;
+    el.Style.LineJoin := spec.ItemJoin;
+    el.Style.MiterLimit := spec.ItemMiter;
     if not IsNan(spec.Item.Opacity) then el.Style.Alpha := spec.Item.Opacity
     else el.Style.Alpha := 1;
     { [R5-A] itemStyle's shadow (CalendarView's itemRectStyleModel) }

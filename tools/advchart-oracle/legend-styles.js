@@ -33,6 +33,10 @@ take it (fill, stroke as a string or the gradient's JSON, lineWidth,
 opacity, the dash normalised as canvas/dashStyle does, dashOffset, cap,
 join, miterLimit, the shadow).
 
+[R7-U, appended: the cases above are unchanged] the root's itemStyle and
+lineStyle: the legend's own models and a line's legendLineStyle climb to
+them (root.blocks, root.own).
+
   node tools/advchart-oracle/legend-styles.js
 
 writes tests/fixtures/advchart-legend-styles.json (ORACLE_OUT overrides);
@@ -231,6 +235,21 @@ const CASES = [
         data: [{ name: 'n1', category: 0, x: 0, y: 0 }, { name: 'n2', category: 1, x: 10, y: 10 }], layout: 'none' }] } },
   { id: 'line.empty.legend.width', note: "legend lineStyle.width 5 does not thicken an empty marker's ring",
     option: chart([L('A'), L('B', { symbol: 'emptyRect' })], { lineStyle: { width: 5 } }) },
+  // ---- [R7-U] the root's style blocks: the legend's own models (their parent the GlobalModel) and a line's
+  // legendLineStyle (getModel('lineStyle').getLineStyle) climb to them; the style visual does not ----
+  { id: 'root.blocks', note: "the root's itemStyle and lineStyle: a line's rule takes its lineStyle (legendLineStyle), every icon "
+      + "the legend's own itemStyle keys it has no default for (borderType, the shadow), no icon its colour or opacity",
+    option: Object.assign(chart([L('A', { symbol: 'circle' }), L('B'), B('C'), S('D')]),
+      { itemStyle: { color: '#ff0000', borderColor: '#00aa00', borderWidth: 3, opacity: 0.5, borderType: 'dashed',
+        shadowBlur: 4, shadowColor: '#0000ff', shadowOffsetX: 2 },
+        lineStyle: { color: '#aa00aa', width: 5, opacity: 0.6, type: 'dotted', cap: 'square', shadowBlur: 3,
+          shadowColor: '#00ffff', shadowOffsetY: 2 } }) },
+  { id: 'root.own', note: "the root's blocks under a series' and a legend's own keys: theirs win, key by key",
+    option: Object.assign(chart([L('A', { symbol: 'circle', itemStyle: { borderColor: '#333333', borderWidth: 1 },
+      lineStyle: { color: '#123456', shadowBlur: 1 } }), B('C', { itemStyle: { opacity: 0.9 } })],
+      { itemStyle: { shadowBlur: 2, shadowColor: '#999999' }, lineStyle: { shadowOffsetX: 3 } }),
+      { itemStyle: { borderType: 'dotted', shadowBlur: 4, shadowColor: '#0000ff' },
+        lineStyle: { color: '#aa00aa', opacity: 0.6, shadowBlur: 3, shadowColor: '#00ffff' } }) },
 ];
 
 function globalRect(el) {

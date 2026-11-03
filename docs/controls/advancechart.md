@@ -564,6 +564,10 @@ option 编辑器：
 - 系列之前先画的坐标轴等组件交给画布的状态，这里只按「黑色阴影、没有变换」算。
 - 初始化时打开 `useDirtyRect` 后，ECharts 按脏矩形一块一块重画，每块从画布的初始状态开始。这里沿用的值仍按整张图的绘制顺序算。
 - 尺寸为 0 的符号（如散点 `symbolSize: 0`），ECharts 在画布左上角约 2 像素的范围里仍能指中它。这里指不中。
+- 坐标轴指示器的线只画颜色、线宽和虚线，`opacity`、阴影、`cap`、`join`、`miterLimit`、`dashOffset` 写了也不画。option 根上的 `lineStyle` 落到指示器的正是这几个键，所以也不起作用。
+- 直角坐标系的柱子，数据项自己写的 `itemStyle.borderRadius` 不起作用，用系列的。
+- option 根上写的 `shadowBlur`、`shadowColor`、`shadowOffsetX`、`shadowOffsetY`、`borderRadius`、`borderType`，ECharts 会用到 title、legend、toolbox 的框上，这里不用。
+- option 根上写的 `itemWidth`、`itemHeight`、`text`，ECharts 会用到 visualMap 上，这里不用。
 - 命中检测（鼠标指没指中图形）有两处和 ECharts 不同：
   - 鼠标指向散点、折线拐点等符号时，这里在符号外多留一圈：离轮廓不到 4 个逻辑像素都算指中，边框更宽时按边框算。粗指针时不留。ECharts 不留。
   - 正好落在边界上的整数坐标，ECharts 在图形自己的坐标里比较，舍入可能让结果差一位。

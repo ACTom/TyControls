@@ -3385,7 +3385,52 @@ begin
         d := AEl.Style.Find('lineDashOffset');
         if (d <> nil) and (d.JSONType = jtNumber) then
           AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale;
+      end
+      { [R7-U] a word or a number, as dashStyle's normalizeLineDash takes
+        it against the element's own width: 'dashed' [4w, 2w], 'dotted'
+        [w], a number [n] ('solid' none) -- a timeline's line takes its
+        lineStyle.type so [was: an array only] }
+      else if (d <> nil) and (AOut.Style.StrokeWidthLogical > 0) and not IsNan(lw) and (lw > 0)
+        and (((d.JSONType = jtString) and ((d.AsString = 'dashed') or (d.AsString = 'dotted')))
+          or (d.JSONType = jtNumber)) then
+      begin
+        dash := nil;
+        if d.JSONType = jtNumber then
+        begin
+          SetLength(dash, 1);
+          dash[0] := d.AsFloat;
+        end
+        else if d.AsString = 'dashed' then
+        begin
+          SetLength(dash, 2);
+          dash[0] := 4 * lw;
+          dash[1] := 2 * lw;
+        end
+        else
+        begin
+          SetLength(dash, 1);
+          dash[0] := lw;
+        end;
+        for i := 0 to High(dash) do dash[i] := dash[i] * us / ACtx.Scale;
+        AOut.Style.DashLogical := dash;
+        d := AEl.Style.Find('lineDashOffset');
+        if (d <> nil) and (d.JSONType = jtNumber) then
+          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale;
       end;
+      { [R7-U] the pen's ends as the canvas takes them: a cap or a join
+        word it knows, a miterLimit above nought [was: not read] }
+      d := AEl.Style.Find('lineCap');
+      if (d <> nil) and (d.JSONType = jtString)
+        and ((d.AsString = 'round') or (d.AsString = 'square') or (d.AsString = 'butt')) then
+        AOut.Style.LineCap := TyCapOfWord(d.AsString);
+      d := AEl.Style.Find('lineJoin');
+      if (d <> nil) and (d.JSONType = jtString)
+        and ((d.AsString = 'round') or (d.AsString = 'bevel') or (d.AsString = 'miter')) then
+        AOut.Style.LineJoin := TyJoinOfWord(d.AsString);
+      d := AEl.Style.Find('miterLimit');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat)
+        and not IsInfinite(d.AsFloat) and (d.AsFloat > 0) then
+        AOut.Style.MiterLimit := d.AsFloat;
     end;
   end;
   AOut.Silent := False;

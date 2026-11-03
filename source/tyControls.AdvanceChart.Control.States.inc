@@ -4490,6 +4490,28 @@ begin
   Result[1] := StSeriesNode(ASeriesIndex);
 end;
 
+function TTyCustomAdvanceChart.StOwnChain(const ANodes: TTyStNodeArray;
+  ASeriesIndex: Integer): TTyStNodeArray;
+var
+  i: Integer;
+  sn, own: TJSONObject;
+begin
+  Result := Copy(ANodes, 0, Length(ANodes));
+  if FOption = nil then Exit;
+  sn := StSeriesNode(ASeriesIndex);
+  own := FOption.SeriesOwnStyle(ASeriesIndex);
+  if (own = nil) or (own = sn) then Exit;
+  for i := 0 to High(Result) do
+    if Result[i] = sn then Result[i] := own;
+end;
+
+function TTyCustomAdvanceChart.StRowClimbs(const ATyp: string;
+  ARole: TTyChartAnimRole): Boolean;
+begin
+  Result := (ARole = carTreeNode) or (ATyp = TySankeySeriesTypeName)
+    or (ATyp = TySunburstSeriesTypeName) or (ATyp = TyTreemapSeriesTypeName);
+end;
+
 { A SANKEY LINK'S CHAIN: its item, the level of its SOURCE's depth, the
   series [Batch 114] }
 function TTyCustomAdvanceChart.StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;

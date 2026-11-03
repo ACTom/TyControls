@@ -4566,6 +4566,15 @@ type
     { ecData.focus / blurScope of an item's element (the item, then the
       series) and of the series' own elements }
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+    { [R7-U] the chain with the series' own style blocks (SeriesOwnStyle)
+      in its node's place: what the series' visual reads (ignoreParent),
+      none of the root's blocks under it }
+    function StOwnChain(const ANodes: TTyStNodeArray; ASeriesIndex: Integer): TTyStNodeArray;
+    { [R7-U] does the view build this row's path from the item model's
+      own getItemStyle (the root's itemStyle under the series'): a tree's
+      node, a sankey's node, a sunburst's piece, a treemap's rect -- every
+      other row is drawn in its visual style }
+    function StRowClimbs(const ATyp: string; ARole: TTyChartAnimRole): Boolean;
     function GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
     function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
     function StIsSankey(ASeriesIndex: Integer): Boolean;

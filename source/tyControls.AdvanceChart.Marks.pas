@@ -240,6 +240,23 @@ type
       a bar's layout. The item's own over the series' (a null climbs, ''
       does not). [Was: a bar was inset only by a pen of some colour.] }
     BorderLayout: Boolean;
+    { [R7-U] THE WIDTH THE LAYOUT TAKES OUT, where it is not the pen's:
+      getLineWidth's (BarView) and prepareLineWidth's (PictorialBarView)
+      itemModel.get(['itemStyle', 'borderWidth']) climbs to the root's
+      itemStyle, the visual's pen does not. LayoutHas: the root wrote a
+      style block (the series' node holds the root's under its own), and
+      the Layout* fields -- the item's own over the series' with the
+      root's -- stand for the Stroke* ones in the layout. False: the
+      layout takes the pen's, as before. }
+    LayoutHas: Boolean;
+    LayoutWidthLogical, LayoutWidthInf: Double;
+    LayoutWidthNaN, LayoutWidthSet: Boolean;
+    { [R7-U] A LINE'S SYMBOLS' OPACITY, where its polyline's is not theirs:
+      Alpha above is the lineStyle's (LineView's getLineStyle), the symbols
+      draw the visual style's (the itemStyle's). ItemAlphaSet False: Alpha
+      is both. }
+    ItemAlphaSet: Boolean;
+    ItemAlpha: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -790,7 +807,10 @@ begin
   end;
 
   { PRESENCE IS THE SWITCH. `areaStyle: {}` fills the area; there is no
-    `show` and no default block to inherit. }
+    `show` and no default block to inherit. [R7-U] The series' own: the
+    root's areaStyle is the parent of the series' model (getAreaStyle reads
+    it) but isEmpty is the series' option alone. }
+  if not (AOption.SeriesOwnStyle(ASlot).Find('areaStyle') is TJSONObject) then Exit;
   d := node.Find('areaStyle');
   if (d = nil) or not (d is TJSONObject) then Exit;
   Result.HasArea := True;
@@ -1289,6 +1309,11 @@ begin
       if IsNan(Result.StrokeWidthLogical) or IsInfinite(Result.StrokeWidthLogical) then
         Result.StrokeWidthLogical := 0;
       Result.StrokeWidthSet := True;
+      { [R7-U] the item's own is the layout's too }
+      Result.LayoutWidthLogical := Result.StrokeWidthLogical;
+      Result.LayoutWidthInf := Result.StrokeWidthInf;
+      Result.LayoutWidthNaN := Result.StrokeWidthNaN;
+      Result.LayoutWidthSet := True;
     end;
   end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
@@ -1804,7 +1829,14 @@ begin
       below nought [was: only a width above nought, so the bar kept its
       size] }
     fixed := False;
-    if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    if rv.LayoutHas then
+    begin
+      { [R7-U] getLineWidth's width climbs to the root's }
+      if rv.LayoutWidthNaN and rv.BorderLayout then Continue;
+      if rv.LayoutWidthInf <> 0 then bw := rv.LayoutWidthInf
+      else bw := rv.LayoutWidthLogical;
+    end
+    else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
     else bw := rv.StrokeWidthLogical;
     { [R7-G] whenever a border colour is written truthy and not 'none',
       whatever the pen draws [was: only a pen of some colour] }
@@ -2663,6 +2695,8 @@ var
 begin
   Result := 0;
   symVis := AVisual;
+  { [R7-U] the visual style's opacity, not the polyline's }
+  if AVisual.ItemAlphaSet then symVis.Alpha := AVisual.ItemAlpha;
   symVis.Dash := AVisual.ItemDash;
   symVis.DashExplicit := AVisual.ItemDashExplicit;
   symVis.DashOffset := AVisual.ItemDashOffset;
@@ -4063,7 +4097,14 @@ begin
     if not noGlyph then
     begin
       rv := RowVisual(AVisual, AStore, i);
-      if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+      { [R7-U] itemModel.get(BAR_BORDER_WIDTH_QUERY) climbs to the root's }
+      if rv.LayoutHas then
+      begin
+        if rv.LayoutWidthInf <> 0 then bw := rv.LayoutWidthInf
+        else if rv.LayoutWidthNaN or not rv.LayoutWidthSet then bw := 0
+        else bw := rv.LayoutWidthLogical;
+      end
+      else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
       else if rv.StrokeWidthNaN or not rv.StrokeWidthSet then bw := 0
       else bw := rv.StrokeWidthLogical;
       rot := spec.RotateDeg * Pi / 180;

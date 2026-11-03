@@ -3972,6 +3972,7 @@ var
   spec: TTyLabelSpec;
   has, emShow: Boolean;
   v: Double;
+  visNode: TJSONObject;
   chain: array[0..2] of TJSONObject;
   one, b: TTyOptStyle;
 begin
@@ -4004,13 +4005,17 @@ begin
     { [R2-I3] THE STYLE'S CATEGORY, which categoryVisual finds by its name
       as well as by its index -- unlike the model's parent above }
     styleCat := GraphCategoryNode(ASlot, FGraphNodes[ASlot][i].Category);
-    v := TyStReadNumber([item, styleCat, sNode], ['itemStyle', 'opacity'], has);
+    { [R7-U] the series' own block (its visual style, ignoreParent) -- but
+      a category's getItemStyle climbs through the series' to the root's }
+    if styleCat <> nil then visNode := sNode
+    else visNode := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex);
+    v := TyStReadNumber([item, styleCat, visNode], ['itemStyle', 'opacity'], has);
     if not has or IsNan(v) then v := 1;
     AInk.NodeOpacity[i] := v;
     { [R2-I3] its border, key by key down the same three }
     chain[0] := item;
     chain[1] := styleCat;
-    chain[2] := sNode;
+    chain[2] := visNode;
     b := Default(TTyOptStyle);
     b.BorderWidthLogical := NaN;
     b.Opacity := NaN;

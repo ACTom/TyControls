@@ -353,6 +353,11 @@ function TyStReadShadow(const ANodes: array of TJSONObject; const APath,
 { [R5-A] the same over the four values as a reader found them (nil: not written) }
 function TyStShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
   out AShadow: TTyChartShadow): Boolean;
+{ [R7-U] TyStReadShadow with the fallback read down its own chain
+  (AFbNodes): a part's style block over the item's visual style -- the
+  series' own blocks, none of the root's }
+function TyStReadShadowFb(const ANodes, AFbNodes: array of TJSONObject; const APath,
+  AFallback: array of string; out AShadow: TTyChartShadow): Boolean;
 
 type
   { [R6-F] which of a style block's pen keys TyStTakePenKeys reads: the
@@ -1260,6 +1265,30 @@ function TyStShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
   out AShadow: TTyChartShadow): Boolean;
 begin
   Result := TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour, AShadow);
+end;
+
+function TyStReadShadowFb(const ANodes, AFbNodes: array of TJSONObject; const APath,
+  AFallback: array of string; out AShadow: TTyChartShadow): Boolean;
+
+  function Leaf(const ANs: array of TJSONObject; const ABase: array of string;
+    const AKey: string): TJSONData;
+  var p: array of string; i: Integer;
+  begin
+    SetLength(p, Length(ABase) + 1);
+    for i := 0 to High(ABase) do p[i] := ABase[i];
+    p[High(p)] := AKey;
+    Result := TyStFind(ANs, p);
+  end;
+
+  function Value(const AKey: string): TJSONData;
+  begin
+    Result := Leaf(ANodes, APath, AKey);
+    if Result = nil then Result := Leaf(AFbNodes, AFallback, AKey);
+  end;
+
+begin
+  Result := TyStShadowOfValues(Value('shadowBlur'), Value('shadowOffsetX'),
+    Value('shadowOffsetY'), Value('shadowColor'), AShadow);
 end;
 
 function TyStReadString(const ANodes: array of TJSONObject;
