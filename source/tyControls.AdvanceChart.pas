@@ -879,6 +879,18 @@ type
     CW: Boolean;
   end;
 
+  { [R7-W] one cartesian axis' last label and pens, as PaintAxis drew them }
+  TTyAxGroundRec = record
+    Axis: TObject;
+    IsY: Boolean;
+    HasLabel: Boolean;
+    LabelFill: TTyChartColor;
+    LabelM: TTyMat2D;
+    HasTick, HasLine, HasSplit: Boolean;
+    TickStroke, LineStroke, SplitStroke: TTyChartColor;
+    TickW, LineW, SplitW: Double;
+  end;
+
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
@@ -1833,6 +1845,13 @@ type
     FDrBase: TBGRABitmap;
     FDrBaseOk: Boolean;
     FDrCapture: Boolean;
+    { [R7-W] WHAT THE CARTESIAN AXES LEAVE ON THE CANVAS, as the last paint
+      drew them: per axis its last label (fill, transform), its ticks', line's
+      and split lines' pen (FAxGround, filled by PaintAxis), composed in
+      upstream's display order by PaintAxes into FCanvasGround }
+    FAxGround: array of TTyAxGroundRec;
+    FCanvasGround: TTyCanvasGround;
+    FCanvasGroundOk: Boolean;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
     FDrDyn: TBGRABitmap;
@@ -3437,6 +3456,9 @@ type
       or grid -- drawn outside the list, before it -- left it, else the
       canvas' own transparent default (TyLinesCanvasLeftovers) }
     function CanvasGround: TTyChartColor;
+    { [R7-W] what the components drawn before the list leave on the canvas }
+    function CanvasGroundState: TTyCanvasGround;
+    function AxGroundAt(AAxis: TObject): Integer;
     function LinesInk(ASlot: Integer; ANode: TJSONObject; const ASolved: TTyLinesSolved;
       ARow: Integer; AStroke: TTyChartColor; AScale: Double;
       out ASpec: TTyLabelSpec): TTyLinesInk;

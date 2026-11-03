@@ -4888,7 +4888,7 @@ begin
       LineHistRoll;
     end;
     { [R7-S] what the canvas is left with, in paint order }
-    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGround);
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     list.JournalClose;
   end;
 end;

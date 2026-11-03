@@ -343,6 +343,9 @@ const GR = (links, more) => ({ animation: false, series: [Object.assign({ type: 
   links }, more || {})] });
 
 // [R7-W] the default palette, written: the port's own is its skin's
+// [R7-W] an axis' colours written (the port's own are its skin's)
+const AXC = a => Object.assign({ axisLabel: { color: '#112233' }, axisLine: { lineStyle: { color: '#445566' } },
+  axisTick: { lineStyle: { color: '#778899' } }, splitLine: { lineStyle: { color: '#aabbcc' } } }, a);
 const PAL = ['#5070dd', '#b6d634', '#505372', '#ff994d', '#0ca8df', '#ffd10a', '#fb628b', '#785db0', '#3fbe95'];
 function cases() {
   return withPalette([
@@ -569,7 +572,8 @@ function cases() {
       borderColor: '#ff00ff', borderWidth: 2 } } }),
     [0], { w: true }],
     ['w-comp-axes-fill', Object.assign(vv([{ type: 'scatter', clip: false,
-      itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 }, data: [[5, 5]] }]), { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } }),
+      itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 }, data: [[5, 5]] }]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10 }), yAxis: AXC({ type: 'value', min: 0, max: 10 }) }),
     [0], { w: true }],
     ['w-comp-axes-tf', Object.assign(vv([LNC({ symbol: 'triangle', symbolSize: [12], color: GRAD, shadowBlur: 4 },
       [{ coords: [[1, 8], [9, 5]] }], { lineStyle: { color: '#999', opacity: 0 } })]),

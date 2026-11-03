@@ -1250,7 +1250,15 @@ var
   begin
     Result := False;
     if (AData = nil) or (AData.JSONType <> jtString) then Exit;
-    if not TyTryParseChartColor(AData.AsString, c) then Exit;
+    if not TyTryParseChartColor(AData.AsString, c) then
+    begin
+      { [R7-W] a string no parser reads (no word of the legend's own): the
+        canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: no
+        colour] }
+      if (AData.AsString = '') or (AData.AsString = 'none') or (AData.AsString = 'inherit')
+        or (AData.AsString = 'auto') then Exit;
+      c := cTyCanvasColourLeft;
+    end;
     AHas := True;
     AColour := c;
     Result := True;
@@ -3612,6 +3620,10 @@ begin
     begin
       el := Blank;
       el.Shape := TyShapeRect(hit);
+      { [R7-W] filled 'transparent' (LegendView's hitRect): it hands the
+        canvas that fill }
+      el.Style.HasFill := True;
+      el.Style.FillColor := 0;
       { `hitRect.silent = !selectMode` (LegendView.ts:506): selectedMode
         false takes the pointer away -- no hover link, no click, and no
         legend mouse event either, its children being silent already

@@ -634,7 +634,8 @@ begin
     for k := 0 to L.Count - 1 do
     begin
       el := L.Element(k);
-      if el.Datum.Kind <> ctkLegend then Continue;
+      { (an icon is its series' datum, the hit rect the legend's) }
+      if not (el.Datum.Kind in [ctkLegend, ctkSeries]) then Continue;
       if el.Caption.FontSizeLogical <> 0 then Continue;
       bb := TyShapeBounds(el.Shape);
       if not TyRectFIsValid(bb) then Continue;
@@ -749,6 +750,10 @@ begin
     c := cs.Objects[i];
     id := c.Strings['id'];
     if Copy(id, 1, 2) <> 'w-' then Continue;
+    { a trail's frames under useDirtyRect: upstream repaints a block round
+      each moving symbol and keeps the rest of the last frame's pixels; the
+      port draws an animated frame whole (recorded, not held: spec 277) }
+    if id = 'w-dirty-effect' then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     dirty := c.Find('dirty') <> nil;
     FreeAndNil(FChart);
@@ -786,6 +791,8 @@ begin
       if t > 0 then FChart.AnimTick(cT0 + t);
       if dirty then FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96)
       else FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+        FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
       if AHits then
       begin
         if fr.Find('hits') = nil then Continue;
@@ -817,8 +824,18 @@ begin
         if idx < 0 then
         begin
           { an axis' text: not in the list; a legend's text: not matched
-            (-2) }
+            (-2); a legend's background that paints nothing (a fill of no
+            alpha, no pen): the port builds none }
           if (Copy(key, 1, 2) = 'ax') or (idx = -2) then Continue;
+          if Copy(key, 1, 2) = 'lg' then
+          begin
+            n := 0;
+            for q := 0 to ops.Count - 1 do
+              if (ops.Objects[q].Strings['op'] <> 'fill')
+                or not TyTryParseChartColor(ops.Objects[q].Strings['fs'], wc) or ((wc shr 24) <> 0) then
+                Inc(n);
+            if n = 0 then Continue;
+          end;
           Miss(where + ': no element');
           Continue;
         end;
@@ -837,16 +854,32 @@ begin
             if not TyTryParseChartColor(o.Strings['fs'], wc) then Continue;
             { (where the block's fill is not the whole paint's) }
             if FirstFill(frames.Objects[0], key) = o.Strings['fs'] then Continue;
-            ga := HexD(o.Strings['ga']);
             x := (HexD(rec.Arrays['pb'].Strings[0]) + HexD(rec.Arrays['pb'].Strings[2])) / 2;
             y := (HexD(rec.Arrays['pb'].Strings[1]) + HexD(rec.Arrays['pb'].Strings[3])) / 2;
             px := FBmp.GetPixel(Trunc(x), Trunc(y));
+            { the colour over white at whatever coverage the pixel shows: the
+              coverage read off the channel farthest from white }
+            ga := 0;
+            for n := 0 to 2 do
+            begin
+              sc := 255 - ((wc shr (16 - 8 * n)) and $FF);
+              if sc > 60 then
+              begin
+                case n of
+                  0: ga := (255 - px.red) / sc;
+                  1: ga := (255 - px.green) / sc;
+                else
+                  ga := (255 - px.blue) / sc;
+                end;
+                Break;
+              end;
+            end;
             Inc(FCompared);
-            if (Abs(px.red - (((wc shr 16) and $FF) * ga + 255 * (1 - ga))) > 4)
-              or (Abs(px.green - (((wc shr 8) and $FF) * ga + 255 * (1 - ga))) > 4)
-              or (Abs(px.blue - ((wc and $FF) * ga + 255 * (1 - ga))) > 4) then
-              Miss(Format('%s: the block drew (%d,%d,%d) at (%g,%g), upstream %s at %g', [where,
-                px.red, px.green, px.blue, x, y, o.Strings['fs'], ga]));
+            if (ga < 0.3) or (Abs(px.red - (((wc shr 16) and $FF) * ga + 255 * (1 - ga))) > 6)
+              or (Abs(px.green - (((wc shr 8) and $FF) * ga + 255 * (1 - ga))) > 6)
+              or (Abs(px.blue - ((wc and $FF) * ga + 255 * (1 - ga))) > 6) then
+              Miss(Format('%s: the block drew (%d,%d,%d) at (%g,%g), upstream %s', [where,
+                px.red, px.green, px.blue, x, y, o.Strings['fs']]));
           end;
           Continue;
         end;

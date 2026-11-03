@@ -1674,6 +1674,14 @@ begin
   Result := 0;
 end;
 
+function TTyCustomAdvanceChart.CanvasGroundState: TTyCanvasGround;
+begin
+  { [R7-W] the cartesian axes as the last paint drew them; else the
+    shadowColor alone }
+  if FCanvasGroundOk and (CanvasGround <> 0) then Exit(FCanvasGround);
+  Result := TyCanvasGroundOf(CanvasGround);
+end;
+
 function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
   AClamp: Boolean): TTyPointF;
 var
