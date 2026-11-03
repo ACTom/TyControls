@@ -36,13 +36,23 @@ unit test.advchart.linescanvas;
   a legend's refused values, what the axes drawn before the series leave,
   a dirty rect's block starting from the canvas' own state, an option set
   while a trail's transform is no number, a symbol of size nought:
-  TestTheRefusedValuesAsUpstream and TestTheR7WHitsAsUpstream. }
+  TestTheRefusedValuesAsUpstream and TestTheR7WHitsAsUpstream.
+
+  [R7-Y] The cases named y-..., every paint of a sample kept: useDirtyRect
+  in motion -- the block round what moved repainted from the canvas' own
+  state, every other pixel the last frame's: TestTheDirtyFramesAsUpstream,
+  on the pixels the cached path composites. A pattern or a gradient the
+  canvas keeps for an element whose fill or stroke it refuses, under that
+  element's transform (and an element's own pattern in its frame); a
+  shadow offset or blur the canvas refuses, a blend word it does not know
+  (the ones it had): TestTheHeldPatternsAsUpstream. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
+     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, tyControls.FontUnits,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart;
 type
   TLcProbe = class(TTyAdvanceChart)
@@ -70,6 +80,8 @@ type
     procedure RunV(AHits: Boolean);
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
     procedure RunW(AHits: Boolean);
+    procedure RunY;
+    procedure RunYHeld;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -80,6 +92,8 @@ type
     procedure TestTheHitsAsUpstream;
     procedure TestTheRefusedValuesAsUpstream;
     procedure TestTheR7WHitsAsUpstream;
+    procedure TestTheDirtyFramesAsUpstream;
+    procedure TestTheHeldPatternsAsUpstream;
   end;
 
 implementation
@@ -209,7 +223,7 @@ begin
     id := c.Strings['id'];
     if (AWhich = 0) <> (Copy(id, 1, 5) = 'grad-') then Continue;
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
-    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') then Continue;
+    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'y-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -1039,6 +1053,570 @@ begin
   if FBad > 0 then
     Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
   AssertTrue('compared', FCompared > 10);
+end;
+
+{ [R7-Y] whether a pixel is AWant over white: the ink it shows (white less
+  the pixel) the wanted ink's direction, at least AMin of it (the painter
+  blends in its own light, so the coverage is not one number per channel);
+  AWant of no alpha: white }
+function InkOver(const APx: TBGRAPixel; AWant: TTyChartColor; AMin: Double): Boolean;
+var p, w: array[0..2] of Double; n: Integer; dot, pp, ww: Double;
+begin
+  if (AWant shr 24) = 0 then
+    Exit((APx.red >= 247) and (APx.green >= 247) and (APx.blue >= 247));
+  p[0] := 255 - APx.red;
+  p[1] := 255 - APx.green;
+  p[2] := 255 - APx.blue;
+  for n := 0 to 2 do w[n] := 255 - ((AWant shr (16 - 8 * n)) and $FF);
+  dot := 0;
+  pp := 0;
+  ww := 0;
+  for n := 0 to 2 do
+  begin
+    dot := dot + p[n] * w[n];
+    pp := pp + p[n] * p[n];
+    ww := ww + w[n] * w[n];
+  end;
+  Result := (Sqrt(pp) >= AMin) and (ww > 0) and (dot / Sqrt(pp * ww) >= 0.98);
+end;
+
+function RectOfHex(AData: TJSONData; out AR: TTyRectF): Boolean;
+var a: TJSONArray;
+begin
+  Result := (AData <> nil) and (AData.JSONType = jtArray);
+  if not Result then Exit;
+  a := TJSONArray(AData);
+  AR := TyRectF(HexD(a.Strings[0]), HexD(a.Strings[1]),
+    HexD(a.Strings[0]) + HexD(a.Strings[2]), HexD(a.Strings[1]) + HexD(a.Strings[3]));
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.RunY;
+var
+  cs, frames, els, yops, paints: TJSONArray;
+  c, fr, rec, o: TJSONObject;
+  i, j, k, q, n, p, b, jj, got: Integer;
+  id, key, where: string;
+  t, cx, cy, r, x, y, d, best, dd, dy: Double;
+  wc: TTyChartColor;
+  px: TBGRAPixel;
+  blkR, rr: TTyRectF;
+  ever: array of TTyRectF;
+  effs: array of TTyPointF;
+  effr: array of Double;
+  ok: Boolean;
+
+  procedure EffectsOf(AEls: TJSONArray);
+  var k2: Integer; o2: TJSONObject; a: TJSONArray;
+  begin
+    effs := nil;
+    effr := nil;
+    for k2 := 0 to AEls.Count - 1 do
+    begin
+      if AEls.Objects[k2].Strings['key'][1] <> 'e' then Continue;
+      a := AEls.Objects[k2].Arrays['yops'];
+      if a.Count = 0 then Continue;
+      o2 := a.Objects[a.Count - 1];
+      SetLength(effs, Length(effs) + 1);
+      SetLength(effr, Length(effr) + 1);
+      effs[High(effs)] := TyPointF(HexD(o2.Arrays['m'].Strings[4]), HexD(o2.Arrays['m'].Strings[5]));
+      effr[High(effr)] := Sqrt(Abs(HexD(o2.Arrays['m'].Strings[0]) * HexD(o2.Arrays['m'].Strings[3])
+        - HexD(o2.Arrays['m'].Strings[1]) * HexD(o2.Arrays['m'].Strings[2]))) / 2;
+    end;
+  end;
+
+  { clear of every effect symbol by AGap }
+  function ClearOfEffects(AX, AY, AGap: Double): Boolean;
+  var k2: Integer;
+  begin
+    Result := True;
+    for k2 := 0 to High(effs) do
+      if Sqrt(Sqr(AX - effs[k2].X) + Sqr(AY - effs[k2].Y)) < effr[k2] + AGap then Exit(False);
+  end;
+
+  function Probe(AX, AY: Double; AWant: TTyChartColor; AMin: Double; const AWhat: string): Boolean;
+  begin
+    Inc(FCompared);
+    px := FBmp.GetPixel(Trunc(AX), Trunc(AY));
+    Result := InkOver(px, AWant, AMin);
+    if not Result then
+      Miss(Format('%s: (%d,%d,%d) at (%g,%g), upstream %s', [AWhat, px.red, px.green, px.blue,
+        AX, AY, '#' + IntToHex(AWant, 8)]));
+  end;
+
+begin
+  FBad := 0;
+  FCompared := 0;
+  FReport := '';
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  for i := 0 to cs.Count - 1 do
+  begin
+    c := cs.Objects[i];
+    id := c.Strings['id'];
+    if (Copy(id, 1, 2) <> 'y-') or (c.Find('dirty') = nil) then Continue;
+    if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := cT0;
+    FChart.UseDirtyRect := True;
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals(id + ' parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    frames := c.Arrays['frames'];
+    ever := nil;
+    for j := 0 to frames.Count - 1 do
+    begin
+      fr := frames.Objects[j];
+      t := fr.Floats['t'];
+      if t > 0 then FChart.AnimTick(cT0 + t);
+      FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+        FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
+      paints := fr.Arrays['paints'];
+      { every block repainted so far }
+      for p := 0 to paints.Count - 1 do
+        for b := 0 to paints.Arrays[p].Count - 1 do
+          if RectOfHex(paints.Arrays[p].Items[b], rr) then
+          begin
+            SetLength(ever, Length(ever) + 1);
+            ever[High(ever)] := rr;
+          end;
+      { (the first sample's last paints are setOption's own flush's leftovers) }
+      if j = 0 then Continue;
+      els := fr.Arrays['els'];
+      EffectsOf(els);
+      for k := 0 to els.Count - 1 do
+      begin
+        rec := els.Objects[k];
+        key := rec.Strings['key'];
+        yops := rec.Arrays['yops'];
+        where := Format('%s t=%g %s', [id, t, key]);
+        { WHAT A BLOCK BRUSHED LAST, in it: an effect symbol's shadow just
+          off its edge, a scatter's fill inside it }
+        if yops.Count > 0 then
+        begin
+          o := yops.Objects[yops.Count - 1];
+          if not RectOfHex(paints.Arrays[o.Integers['p']].Items[o.Integers['b']], blkR) then
+            blkR := TyRectF(0, 0, FBmp.Width, FBmp.Height);
+          cx := HexD(o.Arrays['m'].Strings[4]);
+          cy := HexD(o.Arrays['m'].Strings[5]);
+          r := Sqrt(Abs(HexD(o.Arrays['m'].Strings[0]) * HexD(o.Arrays['m'].Strings[3])
+            - HexD(o.Arrays['m'].Strings[1]) * HexD(o.Arrays['m'].Strings[2])));
+          if key[1] = 'e' then
+          begin
+            r := r / 2;
+            { above or below: away from the other symbols }
+            dy := -(r + 1.5);
+            best := -1;
+            for q := 0 to 1 do
+            begin
+              d := (r + 1.5) * (2 * q - 1);
+              dd := 1e9;
+              for n := 0 to High(effs) do
+                if (Abs(effs[n].X - cx) > 1e-9) or (Abs(effs[n].Y - cy) > 1e-9) then
+                  dd := Min(dd, Sqrt(Sqr(effs[n].X - cx) + Sqr(effs[n].Y - cy - d)));
+              if dd > best then
+              begin
+                best := dd;
+                dy := d;
+              end;
+            end;
+            { (no blur, no shadow to look at) }
+            if not (HexD(o.Strings['sb']) > 0) then Continue;
+            if not TyTryParseChartColor(o.Strings['sc'], wc) then Continue;
+            Probe(cx, cy + dy, wc, 10, where + ' shadow');
+          end
+          else if (key[1] = 's') and (o.Strings['op'] = 'fill')
+            and TyTryParseChartColor(o.Strings['fs'], wc) and (rec.Find('pb') <> nil) then
+          begin
+            { points of the block inside the symbol, clear of the moving ones }
+            got := 0;
+            y := blkR.Top + 1.5;
+            while (y <= blkR.Bottom - 1.5) and (got < 6) do
+            begin
+              x := blkR.Left + 1.5;
+              while (x <= blkR.Right - 1.5) and (got < 6) do
+              begin
+                if (Sqrt(Sqr(x - cx) + Sqr(y - cy)) <= r - 1.5) and ClearOfEffects(x, y, 2.5) then
+                begin
+                  Probe(x, y, wc, 40, where + ' fill in its block');
+                  Inc(got);
+                end;
+                x := x + 2;
+              end;
+              y := y + 2;
+            end;
+            { and away from every block so far: the whole paint's }
+            for jj := 0 to frames.Objects[0].Arrays['els'].Count - 1 do
+              if frames.Objects[0].Arrays['els'].Objects[jj].Strings['key'] = key then
+              begin
+                o := frames.Objects[0].Arrays['els'].Objects[jj].Arrays['yops'].Objects[0];
+                if not TyTryParseChartColor(o.Strings['fs'], wc) then Break;
+                got := 0;
+                y := cy - r;
+                while (y <= cy + r) and (got < 4) do
+                begin
+                  x := cx - r;
+                  while (x <= cx + r) and (got < 4) do
+                  begin
+                    ok := (Sqrt(Sqr(x - cx) + Sqr(y - cy)) <= r - 1.5) and ClearOfEffects(x, y, 2.5);
+                    for n := 0 to High(ever) do
+                      if ok and (x > ever[n].Left - 4) and (x < ever[n].Right + 4)
+                        and (y > ever[n].Top - 4) and (y < ever[n].Bottom + 4) then ok := False;
+                    if ok then
+                    begin
+                      Probe(x, y, wc, 40, where + ' fill outside the blocks');
+                      Inc(got);
+                    end;
+                    x := x + 3;
+                  end;
+                  y := y + 3;
+                end;
+                Break;
+              end;
+          end;
+        end;
+      end;
+    end;
+  end;
+  FreeAndNil(FChart);
+  if FBad > 0 then
+    Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
+  AssertTrue('compared', FCompared > 10);
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheDirtyFramesAsUpstream;
+begin
+  RunY;
+end;
+
+{ [R7-Y] the y- cases drawn whole: each fill / stroke made with a pattern or
+  a gradient, upstream's in device px (the op's transform times the
+  CanvasPattern's matrix, or times the CanvasGradient's points) against
+  what the port's element holds once the paint order settled it }
+{ [R7-Y] a canvas font's size (px), weight (400 for none) and family }
+procedure FontOfCss(const AFont: string; out APx: Double; out AWeight: Integer;
+  out AFamily: string);
+var t: TStringList; k, p: Integer; w: string; v: Double; fs: TFormatSettings;
+begin
+  APx := 0;
+  AWeight := 400;
+  AFamily := '';
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  t := TStringList.Create;
+  try
+    t.Delimiter := ' ';
+    t.StrictDelimiter := True;
+    t.DelimitedText := Trim(AFont);
+    for k := 0 to t.Count - 1 do
+    begin
+      w := LowerCase(t[k]);
+      p := Pos('px', w);
+      if (p > 0) and TryStrToFloat(Copy(w, 1, p - 1), v, fs) then
+      begin
+        APx := v;
+        for p := k + 1 to t.Count - 1 do
+        begin
+          if AFamily <> '' then AFamily := AFamily + ' ';
+          AFamily := AFamily + t[p];
+        end;
+        Exit;
+      end;
+      if (w = 'bold') or (w = 'bolder') then AWeight := 700
+      else if TryStrToFloat(w, v, fs) then AWeight := Round(v);
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.RunYHeld;
+var
+  cs, els, yops, a: TJSONArray;
+  c, rec, o, ob: TJSONObject;
+  i, k, q, n, idx: Integer;
+  id, key, where, kind: string;
+  m: array[0..5] of Double;
+  u, u2: array[0..5] of Double;
+  pm: TTyDoubleArray;
+  em: TTyMat2D;
+  el: TTyChartElement;
+  grad: TTyChartGradient;
+  x1, y1, x2, y2, gr, ux1, uy1, ux2, uy2, ur: Double;
+  fill: Boolean;
+  wc: TTyChartColor;
+  j, q2: Integer;
+  t: Double;
+  bb: TTyRectF;
+begin
+  FBad := 0;
+  FCompared := 0;
+  FReport := '';
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  for i := 0 to cs.Count - 1 do
+  begin
+    c := cs.Objects[i];
+    id := c.Strings['id'];
+    if (Copy(id, 1, 2) <> 'y-') or (c.Find('dirty') <> nil) then Continue;
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := cT0;
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals(id + ' parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    for j := 0 to c.Arrays['frames'].Count - 1 do
+    begin
+    t := c.Arrays['frames'].Objects[j].Floats['t'];
+    if t > 0 then FChart.AnimTick(cT0 + t);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    { findHover at the probes }
+    if c.Arrays['frames'].Objects[j].Find('hits') <> nil then
+    begin
+      a := c.Arrays['frames'].Objects[j].Arrays['hits'];
+      for k := 0 to a.Count - 1 do
+      begin
+        if a.Arrays[k].Items[2].JSONType = jtNull then kind := '-' else kind := a.Arrays[k].Strings[2];
+        idx := FChart.Frame.HitTestElement(HexD(a.Arrays[k].Strings[0]), HexD(a.Arrays[k].Strings[1]), 96, False);
+        if idx < 0 then key := '-' else key := KeyOfEl(idx, False);
+        Inc(FCompared);
+        if key <> kind then
+          Miss(Format('%s t=%g (%.17g,%.17g): hit %s, upstream %s', [id, t,
+            HexD(a.Arrays[k].Strings[0]), HexD(a.Arrays[k].Strings[1]), key, kind]));
+      end;
+    end;
+    els := c.Arrays['frames'].Objects[j].Arrays['els'];
+    for k := 0 to els.Count - 1 do
+    begin
+      rec := els.Objects[k];
+      key := rec.Strings['key'];
+      yops := rec.Arrays['yops'];
+      { AN EFFECT SYMBOL'S TRANSFORM no number: the unit symbol under the one
+        the canvas had (an end symbol's in the line's enter animation), at
+        the path's bounds }
+      if (key[1] = 'e') and (rec.Find('sy').JSONType = jtNull)
+        and (rec.Find('pb').JSONType <> jtNull) then
+      begin
+        idx := WElOf(key, rec);
+        Inc(FCompared);
+        if idx < 0 then Miss(Format('%s t=%g %s: no element', [id, t, key]))
+        else
+        begin
+          bb := TyShapeBounds(FChart.Frame.Element(idx).Shape);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > 1e-4)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > 1e-4)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-4)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-4) then
+            Miss(Format('%s t=%g %s: drawn at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [id, t, key,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
+      end;
+      for q := 0 to yops.Count - 1 do
+      begin
+        o := yops.Objects[q];
+        fill := o.Strings['op'] = 'fill';
+        { A LABEL'S FONT: the size, the weight and (where not the default
+          family) the family each text is drawn in }
+        if (Copy(id, 1, 6) = 'y-font') and (o.Strings['op'] = 'fillText') then
+        begin
+          where := Format('%s %s', [id, key]);
+          idx := WElOf(key, rec);
+          if idx < 0 then
+          begin
+            Miss(where + ': no element');
+            Continue;
+          end;
+          el := FChart.Frame.Element(idx);
+          FontOfCss(o.Strings['font'], ux1, n, kind);
+          { (the port's px coding; a weight of nought is the regular one) }
+          if TyFontSizeIsPx(el.Caption.FontSizeLogical) then ux2 := TyFontPxOf(el.Caption.FontSizeLogical)
+          else ux2 := el.Caption.FontSizeLogical * 96 / 72;
+          q2 := el.Caption.FontWeight and TyChartFontWeightMask;
+          if q2 = 0 then q2 := 400;
+          Inc(FCompared);
+          if (Abs(ux2 - ux1) > 1e-6) or (q2 <> n)
+            or ((kind <> 'Microsoft YaHei') and (el.Caption.FontName <> kind)) then
+            Miss(Format('%s: font %s %gpx %d, upstream %s', [where, el.Caption.FontName,
+              ux2, q2, o.Strings['font']]));
+          Continue;
+        end;
+        { A STROKE'S COLOUR, one of no width before it among them }
+        if Copy(id, 1, 9) = 'y-stroke-' then
+        begin
+          if o.Strings['op'] <> 'stroke' then Continue;
+          where := Format('%s %s stroke', [id, key]);
+          idx := WElOf(key, rec);
+          if idx < 0 then
+          begin
+            Miss(where + ': no element');
+            Continue;
+          end;
+          el := FChart.Frame.Element(idx);
+          Inc(FCompared);
+          if not TyTryParseChartColor(o.Strings['ss'], wc) or not SameInk(el.Style.StrokeColor, wc)
+            or (Abs(el.Style.StrokeWidthLogical - HexD(o.Strings['lw'])) > 1e-9) then
+            Miss(Format('%s: stroke %x width %g, upstream %s width %g', [where, el.Style.StrokeColor,
+              el.Style.StrokeWidthLogical, o.Strings['ss'], HexD(o.Strings['lw'])]));
+          Continue;
+        end;
+        { THE SHADOW AND THE COMPOSITE OPERATION each op is made with }
+        if (Copy(id, 1, 5) = 'y-sh-') or (Copy(id, 1, 7) = 'y-blend') then
+        begin
+          where := Format('%s %s %s', [id, key, o.Strings['op']]);
+          if Copy(key, 1, 2) = 'gr' then idx := GraphicOf(rec) else idx := WElOf(key, rec);
+          if idx < 0 then
+          begin
+            Miss(where + ': no element');
+            Continue;
+          end;
+          el := FChart.Frame.Element(idx);
+          Inc(FCompared);
+          kind := el.Style.Blend;
+          if kind = '' then kind := 'source-over';
+          if kind <> o.Strings['gco'] then
+            Miss(Format('%s: blend %s, upstream %s', [where, kind, o.Strings['gco']]));
+          if (HexD(o.Strings['sb']) > 0) and TyTryParseChartColor(o.Strings['sc'], wc)
+            and ((wc shr 24) <> 0) then
+          begin
+            Inc(FCompared);
+            if not TyStyleHasShadow(el.Style) or (el.Style.ShadowColor <> wc)
+              or (Abs(el.Style.ShadowBlur - HexD(o.Strings['sb'])) > 1e-9)
+              or (Abs(el.Style.ShadowOffsetX - HexD(o.Strings['sox'])) > 1e-9)
+              or (Abs(el.Style.ShadowOffsetY - HexD(o.Strings['soy'])) > 1e-9) then
+              Miss(Format('%s: shadow %x blur %g offset (%g,%g), upstream %s blur %g offset (%g,%g)',
+                [where, el.Style.ShadowColor, el.Style.ShadowBlur, el.Style.ShadowOffsetX,
+                el.Style.ShadowOffsetY, o.Strings['sc'], HexD(o.Strings['sb']),
+                HexD(o.Strings['sox']), HexD(o.Strings['soy'])]));
+          end;
+          Continue;
+        end;
+        if fill then
+        begin
+          if o.Find('fo').JSONType = jtNull then Continue;
+          ob := o.Objects['fo'];
+        end
+        else
+        begin
+          if o.Find('so').JSONType = jtNull then Continue;
+          ob := o.Objects['so'];
+        end;
+        where := Format('%s %s %s', [id, key, o.Strings['op']]);
+        idx := WElOf(key, rec);
+        if idx < 0 then
+        begin
+          Miss(where + ': no element');
+          Continue;
+        end;
+        el := FChart.Frame.Element(idx);
+        for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
+        kind := ob.Strings['k'];
+        Inc(FCompared);
+        if kind = 'pattern' then
+        begin
+          { upstream: the op's transform times the pattern's matrix }
+          a := ob.Arrays['m'];
+          u[0] := m[0] * HexD(a.Strings[0]) + m[2] * HexD(a.Strings[1]);
+          u[1] := m[1] * HexD(a.Strings[0]) + m[3] * HexD(a.Strings[1]);
+          u[2] := m[0] * HexD(a.Strings[2]) + m[2] * HexD(a.Strings[3]);
+          u[3] := m[1] * HexD(a.Strings[2]) + m[3] * HexD(a.Strings[3]);
+          u[4] := m[0] * HexD(a.Strings[4]) + m[2] * HexD(a.Strings[5]) + m[4];
+          u[5] := m[1] * HexD(a.Strings[4]) + m[3] * HexD(a.Strings[5]) + m[5];
+          if not el.Style.HasFill or not el.Style.FillPattern.Present then
+          begin
+            Miss(Format('%s: no pattern (fill %x)', [where, el.Style.FillColor]));
+            Continue;
+          end;
+          { the port's, as the renderer takes it (css px, 96 PPI) }
+          if el.Style.FillPattern.HasMatrix then
+          begin
+            SetLength(pm, 6);
+            for n := 0 to 5 do pm[n] := el.Style.FillPattern.Matrix[n];
+          end
+          else
+          begin
+            TyPatternMatrix(el.Style.FillPattern, pm);
+            { in the element's frame: a symbol's (HitM), one handed over }
+            if Length(el.CanvasM) = 6 then
+              for n := 0 to 5 do em[n] := el.CanvasM[n]
+            else if el.Shape.HitSym <> '' then em := el.Shape.HitM
+            else
+            begin
+              em := Default(TTyMat2D);
+              em[0] := 1;
+              em[3] := 1;
+            end;
+            for n := 0 to 5 do u2[n] := pm[n];
+            pm[0] := em[0] * u2[0] + em[2] * u2[1];
+            pm[1] := em[1] * u2[0] + em[3] * u2[1];
+            pm[2] := em[0] * u2[2] + em[2] * u2[3];
+            pm[3] := em[1] * u2[2] + em[3] * u2[3];
+            pm[4] := em[0] * u2[4] + em[2] * u2[5] + em[4];
+            pm[5] := em[1] * u2[4] + em[3] * u2[5] + em[5];
+          end;
+          for n := 0 to 5 do
+            if Abs(pm[n] - u[n]) > 1e-6 then
+            begin
+              Miss(Format('%s: pattern [%g %g %g %g %g %g], upstream [%g %g %g %g %g %g]', [where,
+                pm[0], pm[1], pm[2], pm[3], pm[4], pm[5], u[0], u[1], u[2], u[3], u[4], u[5]]));
+              Break;
+            end;
+          Continue;
+        end;
+        { a gradient: its points through the op's transform }
+        a := ob.Arrays['a'];
+        if fill then grad := el.Style.FillGradient else grad := el.Style.StrokeGradient;
+        if grad.Kind = cgkNone then
+        begin
+          Miss(where + ': no gradient');
+          Continue;
+        end;
+        TyResolveGradientXYWH(grad, TyElementGradientBox(el, 96), x1, y1, x2, y2, gr);
+        if kind = 'linear' then
+        begin
+          ux1 := m[0] * HexD(a.Strings[0]) + m[2] * HexD(a.Strings[1]) + m[4];
+          uy1 := m[1] * HexD(a.Strings[0]) + m[3] * HexD(a.Strings[1]) + m[5];
+          ux2 := m[0] * HexD(a.Strings[2]) + m[2] * HexD(a.Strings[3]) + m[4];
+          uy2 := m[1] * HexD(a.Strings[2]) + m[3] * HexD(a.Strings[3]) + m[5];
+          if (grad.Kind <> cgkLinear) or (Abs(x1 - ux1) > 1e-6) or (Abs(y1 - uy1) > 1e-6)
+            or (Abs(x2 - ux2) > 1e-6) or (Abs(y2 - uy2) > 1e-6) then
+            Miss(Format('%s: linear (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              x1, y1, x2, y2, ux1, uy1, ux2, uy2]));
+        end
+        else
+        begin
+          { createRadialGradient(x, y, 0, x, y, r) }
+          ux1 := m[0] * HexD(a.Strings[3]) + m[2] * HexD(a.Strings[4]) + m[4];
+          uy1 := m[1] * HexD(a.Strings[3]) + m[3] * HexD(a.Strings[4]) + m[5];
+          ur := HexD(a.Strings[5]) * Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));
+          if (grad.Kind <> cgkRadial) or (Abs(x1 - ux1) > 1e-6) or (Abs(y1 - uy1) > 1e-6)
+            or (Abs(gr - ur) > 1e-6) then
+            Miss(Format('%s: radial (%g,%g) r %g, upstream (%g,%g) r %g', [where,
+              x1, y1, gr, ux1, uy1, ur]));
+        end;
+      end;
+    end;
+    end;
+  end;
+  FreeAndNil(FChart);
+  if FBad > 0 then
+    Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
+  AssertTrue('compared', FCompared > 8);
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheHeldPatternsAsUpstream;
+begin
+  RunYHeld;
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheRefusedValuesAsUpstream;

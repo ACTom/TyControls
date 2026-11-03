@@ -70,6 +70,18 @@
 // numbers the ops brushed in it (`blk`), and an element brushed in two
 // blocks keeps every state (`sts`). A case may set an option before a sample
 // (`sets`).
+//
+// Round 7 R7-Y (the cases named `y-...`, recorded as the w- ones and more):
+// every paint of a sample is kept (`paints`: per paint the blocks it
+// repainted, null the whole canvas), and per tracked element every fill /
+// stroke / text made in the sample (`yops`: p the paint, b its block, and
+// the context then), never reset by a layer's clear; `pr` the element's
+// paint rect now. A gradient the context makes keeps its arguments, a
+// pattern its repetition and the matrix setTransform gave it (a DOMMatrix
+// stands in for the browser's: translate . rotate . scale, as
+// createCanvasPattern builds it), and an op records them (`fo` / `so`: k
+// 'linear' / 'radial' / 'pattern', a the arguments, in the frame of the
+// element that made it, or rep and m); an image is ready at once (2 x 2).
 // Run: node tools/advchart-oracle/lines-canvas.js -> tests/fixtures/advchart-lines-canvas.json
 'use strict';
 const fs = require('fs');
@@ -86,6 +98,31 @@ global.Date = ClockDate;
 global.setTimeout = function () { return 0; };
 global.clearTimeout = function () {};
 global.requestAnimationFrame = function () { return 0; };
+// [R7-Y] the browser's DOMMatrix, as far as createCanvasPattern uses it
+// (node has none, and zrender skips the pattern's transform without it)
+global.DOMMatrix = class {
+  constructor() { this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0; }
+  translateSelf(tx, ty) {
+    this.e += this.a * tx + this.c * ty;
+    this.f += this.b * tx + this.d * ty;
+    return this;
+  }
+  rotateSelf(rx, ry, rz) {
+    const rad = rz * Math.PI / 180;
+    const cs = Math.cos(rad);
+    const sn = Math.sin(rad);
+    const a = this.a * cs + this.c * sn;
+    const b = this.b * cs + this.d * sn;
+    const c = -this.a * sn + this.c * cs;
+    const d = -this.b * sn + this.d * cs;
+    this.a = a; this.b = b; this.c = c; this.d = d;
+    return this;
+  }
+  scaleSelf(sx, sy) {
+    this.a *= sx; this.b *= sx; this.c *= sy; this.d *= sy;
+    return this;
+  }
+};
 const DIST = process.env.ECHARTS_DIST || 'D:/Projects/echarts/dist/echarts.js';
 const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -117,6 +154,17 @@ let CUR = null;
 let V2 = false;
 // [R7-W] the record of the cases named w-...
 let W = false;
+// [R7-Y] the record of the cases named y-...
+let Y = false;
+let YPAINTS = [];
+let YBLK = 0;
+let YOPS = new Map();
+const yNote = (el, rec) => {
+  if (!Y || !el) return;
+  let o = YOPS.get(el);
+  if (!o) { o = []; YOPS.set(el, o); }
+  o.push(Object.assign({ p: YPAINTS.length - 1, b: YBLK }, rec));
+};
 let BLK = 0;
 let BLOCKS = [];
 let SNAPL = new Map();
@@ -146,12 +194,35 @@ const COMPOSITES = ['source-over', 'source-in', 'source-out', 'source-atop', 'de
   'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue',
   'saturation', 'color', 'luminosity'];
 const isCssColour = v => !!echarts.color.parse(String(v));
+// [R7-Y] the font shorthand a browser's parser takes, as far as makeFont
+// writes one: words of style / variant / weight / stretch, a size with its
+// unit (or a size keyword), then a family that does not start with a digit
+const FONT_WORDS = ['normal', 'italic', 'oblique', 'small-caps', 'bold', 'bolder', 'lighter', 'ultra-condensed',
+  'extra-condensed', 'condensed', 'semi-condensed', 'semi-expanded', 'expanded', 'extra-expanded', 'ultra-expanded'];
+const FONT_SIZE = /^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(px|em|rem|pt|pc|in|cm|mm|q|ex|ch|vw|vh|vmin|vmax|%)(\/\S+)?$/i;
+const FONT_SIZE_WORDS = ['xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large', 'xxx-large', 'larger', 'smaller'];
+function cssFontOk(v) {
+  const t = String(v).trim().split(/\s+/);
+  let i = 0;
+  for (; i < t.length; i++) {
+    const w = t[i].toLowerCase();
+    if (FONT_SIZE.test(w) || FONT_SIZE_WORDS.indexOf(w) >= 0) break;
+    if (FONT_WORDS.indexOf(w) >= 0) continue;
+    if (/^\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(w) && +w >= 1 && +w <= 1000) continue;
+    return false;
+  }
+  if (i >= t.length - 1) return false;
+  const fam = t.slice(i + 1).join(' ');
+  return fam.length > 0 && !/^[0-9]/.test(fam);
+}
 function makeCtx(canvas) {
   // the canvas' own defaults: a transparent black shadow of no blur
   const st = { shadowColor: 'rgba(0, 0, 0, 0)', shadowBlur: 0, m: [1, 0, 0, 1, 0, 0],
     globalAlpha: 1, lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, lineDashOffset: 0,
     shadowOffsetX: 0, shadowOffsetY: 0, fillStyle: '#000000', strokeStyle: '#000000',
     globalCompositeOperation: 'source-over', lineDash: [] };
+  // [R7-Y] the canvas' own font
+  if (Y) st.font = '10px sans-serif';
   const stack = [];
   const note = op => { if (CUR) BRUSHES.push({ el: CUR, op, sc: st.shadowColor, sb: st.shadowBlur, m: st.m.slice() }); };
   // [R7-V] the path being built, its owner and its points on the canvas
@@ -174,6 +245,10 @@ function makeCtx(canvas) {
   let px = 0;
   let py = 0;
   const styleName = v => (v && typeof v === 'object' ? '[grad]' : String(v));
+  // [R7-Y] a gradient's or a pattern's own record
+  const objRec = v => (!v || typeof v !== 'object' || !v.__k ? null
+    : v.__k === 'pattern' ? { k: 'pattern', rep: v.rep, m: v.m ? v.m.map(hex) : null }
+      : { k: v.__k, a: v.args.map(hex) });
   // [R7-W] the context a fill or a stroke is made with
   const opState = () => ({ fs: styleName(st.fillStyle), ss: styleName(st.strokeStyle), lw: hex(st.lineWidth),
     ld: st.lineDash.map(hex), ldo: hex(st.lineDashOffset), sc: String(st.shadowColor), sb: hex(st.shadowBlur),
@@ -193,6 +268,8 @@ function makeCtx(canvas) {
     if (!o) { o = []; OPS.set(owner, o); }
     if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
     else o.push({ op, ga: hex(st.globalAlpha) });
+    yNote(owner, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
+      { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation }));
   };
   // a text's: its span is the owner
   const textNote = op => {
@@ -200,6 +277,8 @@ function makeCtx(canvas) {
     let o = OPS.get(CUR);
     if (!o) { o = []; OPS.set(CUR, o); }
     o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
+    yNote(CUR, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
+      { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation, font: st.font }));
   };
   const ctx = {
     canvas,
@@ -258,9 +337,11 @@ function makeCtx(canvas) {
     fillText() { textNote('fillText'); },
     strokeText() { textNote('strokeText'); },
     measureText(t) { return { width: String(t).length * 6 }; },
-    createLinearGradient() { return { addColorStop() {} }; },
-    createRadialGradient() { return { addColorStop() {} }; },
-    createPattern() { return {}; },
+    createLinearGradient(...a) { return Y ? { __k: 'linear', args: a, addColorStop() {} } : { addColorStop() {} }; },
+    createRadialGradient(...a) { return Y ? { __k: 'radial', args: a, addColorStop() {} } : { addColorStop() {} }; },
+    createPattern(img, rep) {
+      return Y ? { __k: 'pattern', rep, m: null, setTransform(mm) { this.m = [mm.a, mm.b, mm.c, mm.d, mm.e, mm.f]; } } : {};
+    },
     getImageData() { return { data: [] }; },
     isPointInPath() { return false; },
   };
@@ -303,6 +384,8 @@ function makeCtx(canvas) {
         case 'globalCompositeOperation': if (COMPOSITES.indexOf(String(v)) >= 0) st[k] = String(v); break;
         case 'fillStyle': case 'strokeStyle':
           if ((v && typeof v === 'object') || isCssColour(v)) st[k] = v; break;
+        // [R7-Y] the font, refused where the parser does not take it
+        case 'font': if (Y) { if (cssFontOk(v)) st.font = String(v); } else t[k] = v; break;
         default: t[k] = v;
       }
       return true;
@@ -316,7 +399,11 @@ function fakeCanvas(w, h) {
   c.getContext = () => ctx;
   return c;
 }
-echarts.setPlatformAPI({ createCanvas() { return fakeCanvas(300, 150); } });
+echarts.setPlatformAPI({ createCanvas() { return fakeCanvas(300, 150); },
+  // [R7-Y] an image ready at once
+  loadImage(src) { return { width: 2, height: 2, src }; } });
+// [R7-Y] a 2 x 2 image for a pattern (red and blue checker)
+const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP4z8AAQkAMJEAsAEPOB/npBtUZAAAAAElFTkSuQmCC';
 
 const CW = 400;
 const CH = 300;
@@ -622,6 +709,115 @@ function cases() {
     ['w-dirty-effect', vv(LN({ color: GRAD, shadowBlur: 5 }, [
       { coords: [[1, 8], [9, 8]], effect: { color: '#ff0000' } },
       { coords: [[1, 3], [9, 3]] }])), [0, 500, 1500], { w: true, dirty: true }],
+    // [R7-Y] 1. useDirtyRect in motion: only the block round what moved is
+    //    repainted, from the canvas' own state; the rest of the canvas keeps
+    //    the last frame's pixels. (Steps small enough that a symbol's last
+    //    rect and its new one merge: zrender 6.1 brushes the first block of
+    //    a paint only -- each _paintPerCursorInRect leaves the cursor's
+    //    drawIdx at the end -- and clears the others; y-dirty-two-blocks
+    //    records that.)
+    // a gradient effect after a scatter's red shadow far away: in its block
+    // nothing before it, the canvas' transparent default
+    ['y-dirty-shadow', vv([{ type: 'scatter', symbolSize: 10, itemStyle: { color: '#00aa00', shadowColor: '#ff0000',
+      shadowBlur: 6 }, data: [[8, 9]] },
+    LN({ color: GRAD, shadowBlur: 5, period: 1 }, [{ coords: [[3, 5], [9, 5]] }],
+      { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // a scatter of an unreadable colour under a moving effect: the part of
+    // it in the effect's block is repainted from the canvas' own black, the
+    // rest keeps the whole paint's (the scatter's green before it)
+    ['y-dirty-scatter', vv([{ type: 'scatter', symbolSize: 40, itemStyle: { color: '#00aa00' }, data: [[8, 9]] },
+      { type: 'scatter', symbolSize: 40, itemStyle: { color: 'nope' }, data: [[3, 5]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // two rows near enough that their blocks merge: the second's gradient
+    // after the first's red, as the whole paint has it
+    ['y-dirty-effect-near', vv(LN({ color: GRAD, shadowBlur: 5, period: 1 }, [
+      { coords: [[3, 6], [9, 6]], effect: { color: '#ff0000' } },
+      { coords: [[3, 5.4], [9, 5.4]] }])), [0, 16, 32, 48], { y: true, dirty: true }],
+    // (rows apart: two blocks a paint, the second cleared and not brushed)
+    ['y-dirty-two-blocks', vv(LN({ color: GRAD, shadowBlur: 5, period: 1 }, [
+      { coords: [[3, 8], [9, 8]], effect: { color: '#ff0000' } },
+      { coords: [[3, 3], [9, 3]] }])), [0, 16, 32], { y: true, dirty: true }],
+    // [R7-Y] 2. a pattern or a gradient the canvas keeps for an element whose
+    //    fill or stroke it refuses: the CanvasPattern under that element's
+    //    transform, the CanvasGradient's points (made in the frame of the
+    //    element before) under it too
+    ['y-pat-bar', vv([{ type: 'bar', barWidth: 30, data: [{ value: [3, 5], itemStyle: { color: { image: IMG, repeat: 'repeat',
+      x: 3, y: 1, rotation: 0.5, scaleX: 4, scaleY: 3 } } },
+    { value: [7, 6], itemStyle: { color: 'nope' } }] }]), [0], { y: true }],
+    ['y-pat-scatter', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { image: IMG, repeat: 'repeat',
+      scaleX: 0.25, scaleY: 0.5 } }, data: [[3, 5]] },
+    { type: 'scatter', symbolSize: 30, itemStyle: { color: 'nope' }, data: [[7, 6]] }]), [0], { y: true }],
+    ['y-grad-scatter', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: GRAD }, data: [[3, 5]] },
+      { type: 'scatter', symbolSize: 30, itemStyle: { color: 'nope' }, data: [[7, 6]] }]), [0], { y: true }],
+    ['y-grad-radial', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbolSize: [30, 30], itemStyle: { color: 'nope' }, data: [[7, 6]] }]), [0], { y: true }],
+    // (a bar in normal mode has no clip path: the next series' symbol takes
+    // its gradient, made in no transform, under its own)
+    ['y-grad-bar', vv([{ type: 'bar', barWidth: 30, itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'bar', barWidth: 30, itemStyle: { color: 'nope' }, data: [[5, 4]] },
+    { type: 'scatter', clip: false, symbolSize: 16, itemStyle: { color: 'nope' }, data: [[7, 8]] }]), [0], { y: true }],
+    ['y-grad-stroke', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: '#ffffff', borderWidth: 2,
+      borderColor: GRAD }, data: [[3, 5]] },
+    { type: 'scatter', symbolSize: 30, itemStyle: { color: '#ffffff', borderWidth: 2, borderColor: 'nope' }, data: [[7, 6]] }]),
+    [0], { y: true }],
+    // [R7-Y] 3. a shadow offset or blur that is a string of no finite
+    //    number (dpr times it is none: refused, the canvas' kept), a numeric
+    //    string taken; a blend no word of the canvas' (kept)
+    ['y-sh-offset', vv({ type: 'scatter', symbolSize: 12, data: [
+      { value: [2, 2], itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 4, shadowOffsetY: 3 } },
+      { value: [4, 4], itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 'abc', shadowOffsetY: 'Infinity' } },
+      { value: [5, 5], itemStyle: { shadowColor: '#0000ff', shadowBlur: 3, shadowOffsetX: '6', shadowOffsetY: '0x3' } },
+      { value: [6, 6], itemStyle: { shadowColor: '#00ff00', shadowBlur: 'abc', shadowOffsetX: 'x', shadowOffsetY: -2 } },
+      { value: [8, 8], itemStyle: { shadowColor: '#00ff00', shadowBlur: 'Infinity', shadowOffsetX: 1, shadowOffsetY: '' } }] }),
+    [0], { y: true }],
+    ['y-blend', vv([{ type: 'scatter', clip: false, blendMode: 'multiply', itemStyle: { color: '#ff0000' }, data: [[2, 2]] },
+      { type: 'scatter', clip: false, blendMode: 'Foo', itemStyle: { color: '#00ff00' }, data: [[4, 4]] },
+      { type: 'scatter', clip: false, blendMode: 'lighter', itemStyle: { color: '#0000ff' }, data: [[6, 6]] },
+      { type: 'scatter', clip: false, blendMode: 'Screen', itemStyle: { color: '#00ffff' }, data: [[8, 8]] },
+      { type: 'scatter', clip: false, itemStyle: { color: '#ff00ff' }, data: [[9, 3]] }]), [0], { y: true }],
+    ['y-blend-graphic', { animation: false, graphic: [
+      { type: 'rect', name: 'gr0', shape: { x: 20, y: 20, width: 40, height: 30 }, style: { fill: '#ff0000', blend: 'multiply' } },
+      { type: 'rect', name: 'gr1', shape: { x: 80, y: 20, width: 40, height: 30 }, style: { fill: '#00ff00', blend: 'nope' } },
+      { type: 'rect', name: 'gr2', shape: { x: 140, y: 20, width: 40, height: 30 }, style: { fill: '#0000ff' } },
+      { type: 'rect', name: 'gr3', shape: { x: 200, y: 20, width: 40, height: 30 }, style: { fill: '#00ffff', blend: 'screen' } },
+      { type: 'rect', name: 'gr4', shape: { x: 260, y: 20, width: 40, height: 30 }, style: { fill: '#ff00ff', blend: 'Darken' } }] },
+    [0], { y: true }],
+    // [R7-Y] 4. a stroke colour of no width is still the canvas' strokeStyle
+    //    (bindPathAndTextCommonStyle assigns every string stroke)
+    ['y-stroke-zero', vv([{ type: 'bar', barWidth: 20, data: [
+      { value: [2, 5], itemStyle: { borderColor: '#0000ff', borderWidth: 2 } },
+      { value: [4, 5], itemStyle: { borderColor: '#00ff00', borderWidth: 0 } },
+      { value: [6, 5], itemStyle: { borderColor: 'nope', borderWidth: 2 } },
+      { value: [8, 5], itemStyle: { borderColor: 'bad', borderWidth: 3 } }] }]), [0], { y: true }],
+    // [R7-Y] 5. an end symbol in the line's enter animation hands the canvas
+    //    its transform then (placed at the percent, scaled by it): what an
+    //    effect symbol of no transform is drawn under after it
+    ['y-tf-enter-end', Object.assign(vv(LNC({ symbol: 'triangle', symbolSize: [12] },
+      [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }], { symbol: ['none', 'arrow'], symbolSize: 10 })),
+    { animation: true, animationDuration: 1000, animationEasing: 'linear' }), [0, 300, 600, 1200], { y: true, anim: true }],
+    // [R7-Y] 6. a lines end symbol hit exactly on a vertex or an edge: its
+    //    own Path.contain, in the symbol's frame
+    ['y-hit-ends', vv(LNC({ show: false }, [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 2], [7, 4]] },
+      { coords: [[2, 6], [2, 1]] }], { symbol: ['diamond', 'arrow'], symbolSize: [14, 10],
+      lineStyle: { color: '#999', opacity: 1, width: 1 } })),
+    [0], { y: true, probes: 'end-verts' }],
+    // [R7-Y] 7. a label's font the canvas refuses: the one the text before
+    //    it left (the canvas' own '10px sans-serif' before any)
+    ['y-font', vv([{ type: 'bar', barWidth: 16, label: { show: true, position: 'top', formatter: 'Ab' }, data: [
+      { value: [1, 3], label: { fontWeight: 'heavy' } },
+      { value: [2, 3], label: { fontSize: 16, fontWeight: 'bold', fontFamily: 'serif' } },
+      { value: [3, 3], label: { fontWeight: 'heavy' } },
+      { value: [4, 3], label: { fontStyle: 'slanted', fontSize: 9 } },
+      { value: [5, 3], label: { fontSize: '12abcpx' } },
+      { value: [6, 3], label: { fontSize: 11, fontWeight: 600 } },
+      { value: [7, 3], label: { fontSize: '13px', fontWeight: 'Bolder' } },
+      { value: [8, 3], label: { fontWeight: '450', fontSize: 10 } },
+      { value: [9, 3], label: { fontStyle: 'Italic', fontSize: 14 } }] }]), [0], { y: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
@@ -641,7 +837,7 @@ function cases() {
   ]);
 }
 function withPalette(list) {
-  for (const c of list) if (c[3] && c[3].w && !c[1].color) c[1].color = PAL;
+  for (const c of list) if (c[3] && (c[3].w || c[3].y) && !c[1].color) c[1].color = PAL;
   return list;
 }
 
@@ -810,6 +1006,12 @@ function elRec(el, key, brushes) {
     }
     else { r.pb = null; r.pa = null; }
   }
+  // [R7-Y] every op of the sample, and the paint rect now
+  if (Y) {
+    r.yops = YOPS.get(el) || [];
+    const pr = el.getPaintRect ? el.getPaintRect() : null;
+    r.pr = pr ? [pr.x, pr.y, pr.width, pr.height].map(hexOrNull) : null;
+  }
   return r;
 }
 
@@ -859,9 +1061,17 @@ function run(id, option, samples, opts) {
   rngState = SEED;
   CUR = null;
   opts = opts || {};
-  V2 = !!opts.v2 || !!opts.w;
-  W = !!opts.w;
+  V2 = !!opts.v2 || !!opts.w || !!opts.y;
+  W = !!opts.w || !!opts.y;
+  Y = !!opts.y;
+  YPAINTS = [];
+  YBLK = 0;
+  YOPS = new Map();
   const dom = fakeCanvas(CW, CH);
+  // [R7-Y] a case whose enter animation runs: echarts.env.node off (node
+  // skips every transition)
+  const nodeWas = echarts.env.node;
+  if (opts.anim) echarts.env.node = false;
   const chart = echarts.init(dom, null, { renderer: 'canvas', width: CW, height: CH, devicePixelRatio: 1,
     useDirtyRect: !!opts.dirty });
   // [R7-W] the repaint blocks
@@ -874,9 +1084,26 @@ function run(id, option, samples, opts) {
           BLK = BLOCKS.length;
           BLOCKS.push(rect ? [rect.x, rect.y, rect.width, rect.height].map(hex) : null);
         }
+        if (Y && YPAINTS.length) {
+          const l = YPAINTS[YPAINTS.length - 1];
+          YBLK = l.length;
+          l.push(rect ? [rect.x, rect.y, rect.width, rect.height].map(hex) : null);
+        }
         return orig.apply(this, arguments);
       };
       P.__r7wBlock = true;
+    }
+  }
+  // [R7-Y] each paint of the layers
+  if (Y) {
+    const P = chart.getZr().painter.constructor.prototype;
+    if (!P.__r7yPaint) {
+      const orig = P._doPaintList;
+      P._doPaintList = function () {
+        if (Y) { YPAINTS.push([]); YBLK = 0; }
+        return orig.apply(this, arguments);
+      };
+      P.__r7yPaint = true;
     }
   }
   // [R7-V] a layer cleared starts the record of its paint afresh (a frame
@@ -905,6 +1132,9 @@ function run(id, option, samples, opts) {
       if (si > 0) {
         BLOCKS = [];
         BLK = 0;
+        YPAINTS = [];
+        YBLK = 0;
+        YOPS = new Map();
       }
       if (opts.sets && opts.sets[si]) chart.setOption(JSON.parse(JSON.stringify(opts.sets[si])));
       if (opts.acts && opts.acts[si]) for (const a of opts.acts[si]) chart.dispatchAction(a);
@@ -921,15 +1151,30 @@ function run(id, option, samples, opts) {
       if (V2 && opts.probes) {
         const zr = chart.getZr();
         const hits = [];
-        const pts = probesOf(opts.probes, els, frames.length ? frames[frames.length - 1].els : null);
+        let pts = probesOf(opts.probes, els, frames.length ? frames[frames.length - 1].els : null);
+        // [R7-Y] an end symbol's own vertices and the middles of its edges,
+        // exactly (where the path was built on the canvas)
+        if (opts.probes === 'end-verts') {
+          pts = [];
+          for (const [el, key] of map) {
+            if (!/^[ft][0-9]/.test(key)) continue;
+            const p = PATHS.get(el) || [];
+            for (let q = 0; q < p.length; q++) {
+              const r = p[(q + 1) % p.length];
+              pts.push([p[q][0], p[q][1]], [(p[q][0] + r[0]) / 2, (p[q][1] + r[1]) / 2]);
+            }
+          }
+        }
         for (const [x, y] of (opts.more ? pts.concat(opts.more) : pts)) {
           const h = zr.handler.findHover(x, y);
           const tg = h && h.target;
           hits.push([hex(x), hex(y), tg ? (map.get(tg) || 'other') : null]);
         }
-        if (W) frames.push({ t, els, hits, blocks: BLOCKS });
+        if (Y) frames.push({ t, els, hits, blocks: BLOCKS, paints: YPAINTS });
+        else if (W) frames.push({ t, els, hits, blocks: BLOCKS });
         else frames.push({ t, els, hits });
       }
+      else if (Y) frames.push({ t, els, blocks: BLOCKS, paints: YPAINTS });
       else if (W) frames.push({ t, els, blocks: BLOCKS });
       else frames.push({ t, els });
     }
@@ -938,9 +1183,11 @@ function run(id, option, samples, opts) {
     chart.dispose();
     V2 = false;
     W = false;
+    Y = false;
+    echarts.env.node = nodeWas;
   }
   // [R7-W] the options set before a sample, the dirty rects
-  if (opts.w) return Object.assign({ id, option }, opts.acts ? { acts: opts.acts } : {},
+  if (opts.w || opts.y) return Object.assign({ id, option }, opts.acts ? { acts: opts.acts } : {},
     opts.sets ? { sets: opts.sets } : {}, opts.dirty ? { dirty: true } : {}, { frames });
   // [R7-V] the actions dispatched before a sample
   if (opts.acts) return { id, option, acts: opts.acts, frames };
