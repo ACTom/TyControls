@@ -2576,8 +2576,11 @@ begin
     path := TyZrSymbol(AName, -1, -1, 2, 2);
   { [R7-Y] AS THE PROXY HOLDS IT ONCE PAINTED: toStatic stores data of more
     than eleven numbers in a Float32Array -- a point exactly on a vertex or
-    an edge is in or out by those singles [was: the doubles] }
-  if TyZrDataLength(path) > 11 then
+    an edge is in or out by those singles [was: the doubles]. Only where
+    the path is upstream's own (the real box createSymbol made): the unit
+    path stood in for a scaled frame rounds otherwise }
+  if (ABoxW >= 0) and (ABoxH >= 0) and ((ABoxW > 0) or (ABoxH > 0))
+    and (TyZrDataLength(path) > 11) then
     for i := 0 to High(path) do
       for k := 0 to TyZrArgCount(path[i].Cmd) - 1 do
         path[i].V[k] := TyJsFround(path[i].V[k]);
