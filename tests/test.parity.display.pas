@@ -36,6 +36,7 @@ type
     procedure TestAnEmptyBadgeTakesNoClicks;
     procedure TestTheUnderlineFollowsTheLayout;
     procedure TestARatingSnapsAndTells;
+    procedure TestAHalfStarRoundsUp;
     procedure TestAStreamedRatingSnapsOnceLoaded;
   end;
 
@@ -469,6 +470,27 @@ begin
   r.AllowHalf := False;
   AssertEquals('no halves any more: 1.5 is 2', 2, r.Value, 0.0001);
   AssertEquals('told', 1, FChanges);
+end;
+
+{ A half star goes up to the next whole one, as the data-aware rating loads a field -- Round
+  went to the even star, so 2.5 was 2 and 3.5 was 4. }
+procedure TDisplay181Test.TestAHalfStarRoundsUp;
+var r: TRating181;
+begin
+  r := TRating181.Create(FForm);
+  r.Count := 5;
+  r.Value := 2.5;
+  AssertEquals('2.5 in whole stars is 3', 3, r.Value, 0.0001);
+  r.AllowHalf := True;
+  r.Value := 2.25;
+  AssertEquals('2.25 in halves is 2.5', 2.5, r.Value, 0.0001);
+  r.AllowHalf := False;
+  AssertEquals('2.5 with the halves gone is 3', 3, r.Value, 0.0001);
+  r := TRating181.Create(FForm);
+  r.Loading;
+  r.Value := 2.5;
+  r.Loaded;
+  AssertEquals('a streamed 2.5 in whole stars is 3', 3, r.Value, 0.0001);
 end;
 
 procedure TDisplay181Test.TestAStreamedRatingSnapsOnceLoaded;

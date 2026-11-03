@@ -183,10 +183,17 @@ begin
   Result := 'TyRating';
 end;
 
+{ A whole number of stars, or of halves; a half goes up, as the data-aware rating loads a
+  field -- Round went to the even star, so 2.5 was 2 and 3.5 was 4. Values are never negative. }
+function SnapStars(AValue: Double; AHalf: Boolean): Double;
+begin
+  if AHalf then Result := Floor(AValue * 2 + 0.5) / 2 else Result := Floor(AValue + 0.5);
+end;
+
 procedure TTyCustomRating.Loaded;
 begin
   inherited Loaded;
-  if FAllowHalf then FValue := Round(FValue * 2) / 2 else FValue := Round(FValue);
+  FValue := SnapStars(FValue, FAllowHalf);
 end;
 
 procedure TTyCustomRating.ApplyValue(AValue: Double);
@@ -196,8 +203,7 @@ begin
   { #181: a Value is a whole number of stars, or of halves with AllowHalf -- 3.7 drew a star
     seven-tenths full that no click can give. Not while the form is read: AllowHalf streams
     after Value, and Loaded snaps what arrived. }
-  if not (csLoading in ComponentState) then
-    if FAllowHalf then v := Round(v * 2) / 2 else v := Round(v);
+  if not (csLoading in ComponentState) then v := SnapStars(v, FAllowHalf);
   if v < 0 then v := 0 else if v > FCount then v := FCount;
   if FValue = v then Exit;      // no OnChange on a same-value set
   ChangeValue(v);
