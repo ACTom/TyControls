@@ -1102,7 +1102,10 @@ begin
             if el.Style.DashWord <> 0 then
               pdash := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical);
             Inc(FCompared);
-            if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
+            { ([R7-Z] the z- cases: a dash where upstream strokes solid too) }
+            if (APrefix = 'z-') and (ld.Count = 0) and (Length(pdash) > 0) then
+              Miss(Format('%s: dash of %d, upstream solid', [where, Length(pdash)]))
+            else if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
               Miss(Format('%s: dash of %d, upstream %s', [where, Length(pdash), ld.AsJSON]))
             else if ld.Count > 0 then
             begin
@@ -1132,6 +1135,12 @@ begin
               end;
               if want <> o.Strings['cap'] then
                 Miss(Format('%s: cap %s, upstream %s', [where, want, o.Strings['cap']]));
+              { and the miterLimit (one the canvas refuses: the one it had) }
+              lw := el.Style.MiterLimit;
+              if not (lw > 0) then lw := 10;
+              Inc(FCompared);
+              if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
+                Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
             end;
           end;
           { the shadow it casts (a refused blur or colour kept) }

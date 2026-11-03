@@ -672,6 +672,13 @@ function cases() {
         name: 'Xx', nameTextStyle: { color: 'nope' } },
       yAxis: { show: false, type: 'value', min: 0, max: 10 },
       series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#0000ff' } }] }, [0], { w: true, z: true }],
+    // a name before the labels: the fill it keeps is the graphic's, not theirs
+    ['z-ax-name-order', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
+      style: { fill: '#ff0000' } }],
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisTick: { show: false },
+        axisLine: { lineStyle: { color: '#0000ff' } }, axisLabel: { color: '#00ff00' }, name: 'Xx', nameTextStyle: { color: 'nope' } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [] }, [0], { w: true, z: true }],
     // a dash word under an infinite width: [Infinity, Infinity], refused -- solid
     ['z-ax-tick-inf-dash', { animation: false,
       xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisLabel: { show: false },
@@ -687,6 +694,10 @@ function cases() {
         label: { show: true, formatter: 'Ab', color: 'nope', textBorderColor: 'bad', textBorderWidth: 2 } },
       { type: 'scatter', z: 3, data: [[6, 6]], itemStyle: { color: 'nope', borderColor: '#0000ff', borderWidth: 2,
         borderMiterLimit: -1 } }])), [0], { w: true, z: true }],
+    // a rich text's own fill the canvas refuses
+    ['z-label-rich', Object.assign(vv([
+      { type: 'scatter', data: [[3, 3]], itemStyle: { color: '#ff0000' },
+        label: { show: true, formatter: '{a|Ab}', rich: { a: { color: 'nope' } } } }])), [0], { w: true, z: true }],
     // 3. after the series: a legend's text, a title's box and text
     ['z-legend-text', Object.assign(vv([{ type: 'scatter', name: 'A', data: [[5, 5]],
       itemStyle: { color: '#ff0000' } }]), { legend: { left: 20, top: 10, textStyle: { color: 'nope' } } }),
