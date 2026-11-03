@@ -347,7 +347,7 @@ begin
   end;
   cs := ActiveController.Model.ResolveStyle('TyCheckBox', '', states);
   if tpBackground in cs.Present then
-    P.FillBackground(boxR, cs.Background, cs.BorderRadius);
+    P.FillBackground(boxR, cs.Background, cs.BorderRadius, (tpBorderColor in cs.Present) and (cs.BorderWidth > 0));
   if (tpBorderColor in cs.Present) and (cs.BorderWidth > 0) then
     P.StrokeBorder(boxR, cs.BorderRadius, cs.BorderWidth, cs.BorderColor);
   // Through TyDrawGlyph so a theme can substitute an icon-font codepoint, exactly as

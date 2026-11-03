@@ -137,7 +137,8 @@ type
     procedure RasterLeave;
     { The bodies of the drawing methods that map their rect in the raster scope: the public
       method of the same name enters the scope and calls these with the mapped rect. }
-    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+      ABehindBorder: Boolean = False);
     procedure StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
     procedure DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
     procedure DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
@@ -256,8 +257,14 @@ type
     function Scale(ALogical: Integer): Integer;
     function Unscale(ADevice: Integer): Integer;
     function MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
-    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer); overload;
-    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
+    { Fills exactly the pixels of ARect, its corners rounded. ABehindBorder: a border is about to be
+      stroked on the same rect, so the fill stops half a pixel in, under the middle of that border:
+      at a rounded corner a fill reaching the border's outer edge would show through the border's
+      antialiased pixels, as a light fringe on a dark parent. }
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer;
+      ABehindBorder: Boolean = False); overload;
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+      ABehindBorder: Boolean = False); overload;
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     { A rounded body that carries a triangular POINTER out of one of its sides, filled and
@@ -277,10 +284,11 @@ type
       ABorderWidthLogical <= 0 (or a fully transparent colour) fills only.
 
       Fill and stroke are built from DIFFERENT rects, matching the rest of the painter: the
-      fill covers the body verbatim, the stroke rides an inset centreline (Left+w/2 ..
-      Right-1-w/2) exactly like StrokeBorder, so a bordered balloon lines up with every other
-      bordered control. The pointer is TRANSLATED with that inset, never rescaled, so its
-      slope is identical in both passes. }
+      stroke rides an inset centreline (Left+w/2 .. Right-w/2: a canvas path's coordinates are
+      pixel corners) so it covers the same pixels as StrokeBorder and a bordered balloon lines
+      up with every other bordered control; the fill stops half a pixel in under it, as
+      FillBackground's ABehindBorder does. The pointer is TRANSLATED with the inset, never
+      rescaled, so its slope is identical in both passes. }
     procedure FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
       ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
       AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
@@ -3058,26 +3066,34 @@ begin
   if Result > m then Result := m;
 end;
 
-procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
+procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer;
+  ABehindBorder: Boolean);
 begin
-  FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical));
+  FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical), ABehindBorder);
 end;
 
-procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+  ABehindBorder: Boolean);
 var
   R: TRect;
 begin
   if RasterEnter then R := Dev(ARect) else R := ARect;
   try
-    FillBackgroundAt(R, AFill, ACorners);
+    FillBackgroundAt(R, AFill, ACorners, ABehindBorder);
   finally
     RasterLeave;
   end;
 end;
 
-procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+  ABehindBorder: Boolean);
 var
   r: Integer;
+  { #196: BGRABitmap's antialiased shapes put pixel CENTRES on whole coordinates, so pixel L runs
+    from L - 0.5 to L + 0.5. The rect covering pixels [Left, Right) is Left - 0.5 .. Right - 0.5.
+    Left .. Right - 1 left every straight edge half covered: a soft fringe all round, and the
+    shape a pixel smaller than asked. }
+  fl, ft, fr, fb, fr2: Single;
   opts: TRoundRectangleOptions;
   px: TBGRAPixel;
   p1f, p2f: TPointF;
@@ -3099,6 +3115,17 @@ begin
   if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
   if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
+  if ABehindBorder then
+  begin
+    fl := ARect.Left;  ft := ARect.Top;  fr := ARect.Right - 1;  fb := ARect.Bottom - 1;
+    fr2 := r - 0.5;
+    if fr2 < 0 then fr2 := 0;
+  end
+  else
+  begin
+    fl := ARect.Left - 0.5;  ft := ARect.Top - 0.5;  fr := ARect.Right - 0.5;  fb := ARect.Bottom - 0.5;
+    fr2 := r;
+  end;
   case AFill.Kind of
     tfkSolid:
       begin
@@ -3106,7 +3133,7 @@ begin
         if r <= 0 then
           FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency)
         else
-          FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, opts);
+          FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, px, opts);
       end;
     tfkNone: ;
     tfkLinearGradient:
@@ -3137,7 +3164,7 @@ begin
             if r <= 0 then
               FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
             else
-              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+              FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, grad, opts + [rrDefault]);
           finally
             grad.Free;
             multi.Free;
@@ -3152,7 +3179,7 @@ begin
             if r <= 0 then
               FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
             else
-              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+              FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, grad, opts + [rrDefault]);
           finally
             grad.Free;
           end;
@@ -3226,26 +3253,29 @@ var
   procedure BuildPath(AInset: Single);
   var
     l, t, r, b, tp: Single;
-    rTL, rTR, rBR, rBL, maxR: Integer;
+    rTL, rTR, rBR, rBL: Single;
+    maxR: Integer;
 
     { Clamp one corner radius so two corners on the same side can never overlap. }
     function Corner(ALogical: Integer): Single;
     begin
-      Result := TyClampRadiusPx(Scale(ALogical), Round(r - l), Round(b - t));
+      { The outer arc's radius less the inset, so every pass shares one outer curve. }
+      Result := TyClampRadiusPx(Scale(ALogical), ABody.Right - ABody.Left, ABody.Bottom - ABody.Top) - AInset;
+      if Result < 0 then Result := 0;
     end;
 
   begin
     l := ABody.Left + AInset;
     t := ABody.Top + AInset;
-    r := ABody.Right - 1 - AInset;
-    b := ABody.Bottom - 1 - AInset;
+    r := ABody.Right - AInset;
+    b := ABody.Bottom - AInset;
     if (r <= l) or (b <= t) then Exit;
     maxR := ACorners.TL;
     if ACorners.TR > maxR then maxR := ACorners.TR;
     if ACorners.BR > maxR then maxR := ACorners.BR;
     if ACorners.BL > maxR then maxR := ACorners.BL;
-    rTL := Round(Corner(ACorners.TL)); rTR := Round(Corner(ACorners.TR));
-    rBR := Round(Corner(ACorners.BR)); rBL := Round(Corner(ACorners.BL));
+    rTL := Corner(ACorners.TL); rTR := Corner(ACorners.TR);
+    rBR := Corner(ACorners.BR); rBL := Corner(ACorners.BL);
     if maxR = 0 then begin rTL := 0; rTR := 0; rBR := 0; rBL := 0; end;
     tp := ATipPos;
 
@@ -3289,11 +3319,11 @@ var
 begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
-  BuildPath(0);
+  w := Scale(ABorderWidthLogical);
+  if (w > 0) and (TyAlphaOf(ABorderColor) <> 0) then BuildPath(0.5) else BuildPath(0);
   ctx.fillStyle(TyColorToBGRA(AFillColor));
   CtxFill(ctx);
 
-  w := Scale(ABorderWidthLogical);
   if (w <= 0) or (TyAlphaOf(ABorderColor) = 0) then Exit;
   half := w / 2;
   { The pointer rides the SAME inset as the body edge, so the wedge is translated inward, not
@@ -3325,7 +3355,7 @@ procedure TTyPainter.StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorne
 var
   w, r: Integer;
   opts: TRoundRectangleOptions;
-  half: Single;
+  half, rc: Single;
   px: TBGRAPixel;
   l, t, rr, b: Single;
 begin
@@ -3343,16 +3373,31 @@ begin
   if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   px := TyColorToBGRA(AColor);
-  half := w / 2;
+  { #196: the line's centre, with pixel centres on whole coordinates: a border w pixels wide along
+    the left edge covers pixels Left .. Left + w - 1, so its centre is Left + (w - 1) / 2. It was
+    Left + w / 2, half a pixel off: a 1 px line lay half on each of two pixels, twice as wide and
+    half as dark. The radius is the outer arc's, as in CSS and as the fill has it; the line runs
+    half a width inside that. }
+  half := (w - 1) / 2;
   l := ARect.Left + half;
   t := ARect.Top + half;
   rr := ARect.Right - 1 - half;
   b := ARect.Bottom - 1 - half;
-  r := TyClampRadiusPx(r, Round(rr - l), Round(b - t));   // hug the fill's clamped corner (no lens)
+  r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);   // the fill's clamped corner (no lens)
+  rc := r - w / 2;
   if r <= 0 then
+  begin
+    { Square: whole pixels, four bars that do not overlap (RectangleAntialias softens two of the
+      corner pixels, and a translucent colour would double up where lines meet). }
+    FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Top + w, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Left, ARect.Bottom - w, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Left, ARect.Top + w, ARect.Left + w, ARect.Bottom - w, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Right - w, ARect.Top + w, ARect.Right, ARect.Bottom - w, px, dmDrawWithTransparency);
+  end
+  else if rc <= 0 then
     FBmp.RectangleAntialias(l, t, rr, b, px, w)
   else
-    FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w, opts);
+    FBmp.RoundRectAntialias(l, t, rr, b, rc, rc, px, w, opts);
 end;
 
 procedure TTyPainter.DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
@@ -4059,6 +4104,13 @@ var
   th: Single;
   pad: Integer;
   l, t, r, b, cx, cy, w, h, m: Single;
+
+  { #196: the centre a straight stroke th wide needs to cover whole pixels. }
+  function Snap(C: Single): Single;
+  begin
+    Result := Round(C - (th - 1) / 2) + (th - 1) / 2;
+  end;
+
 begin
   if FBmp = nil then
     Exit;
@@ -4085,7 +4137,7 @@ begin
         FBmp.DrawLineAntialias(r, t, l, b, px, th, True);
       end;
     tgMinimize:
-      FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+      FBmp.DrawLineAntialias(l, Snap(cy), r, Snap(cy), px, th, True);
     tgMaximize:
       FBmp.RectangleAntialias(l, t, r, b, px, th);
     tgRestore:
@@ -4100,7 +4152,8 @@ begin
         PointF(r, t)], px, th);
     tgCheckIndeterminate:
       // centered filled square (Windows indeterminate look); m = min(w,h) from the setup vars
-      FBmp.FillRectAntialias(cx - m * 0.28, cy - m * 0.28, cx + m * 0.28, cy + m * 0.28, px);
+      FBmp.FillRectAntialias(Round(cx - m * 0.28) - 0.5, Round(cy - m * 0.28) - 0.5,
+        Round(cx + m * 0.28) + 0.5, Round(cy + m * 0.28) + 0.5, px);
     tgRadioDot:
       FBmp.FillEllipseAntialias(cx, cy, m * 0.3, m * 0.3, px);
     tgChevronDown:
@@ -4124,44 +4177,50 @@ begin
         PointF(cx, t + h * 0.2), PointF(r, b - h * 0.3)], px, th);
     tgArrowUp:
       begin
-        FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);
+        FBmp.DrawLineAntialias(Snap(cx), b, Snap(cx), t, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, t + h * 0.35),
-          PointF(cx, t), PointF(r - w * 0.25, t + h * 0.35)], px, th);
+          PointF(Snap(cx), t), PointF(r - w * 0.25, t + h * 0.35)], px, th);
       end;
     tgArrowDown:
       begin
-        FBmp.DrawLineAntialias(cx, t, cx, b, px, th, True);
+        FBmp.DrawLineAntialias(Snap(cx), t, Snap(cx), b, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, b - h * 0.35),
-          PointF(cx, b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
+          PointF(Snap(cx), b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
       end;
     tgArrowLeft:
       begin
-        FBmp.DrawLineAntialias(r, cy, l, cy, px, th, True);
+        FBmp.DrawLineAntialias(r, Snap(cy), l, Snap(cy), px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.35, t + h * 0.25),
-          PointF(l, cy), PointF(l + w * 0.35, b - h * 0.25)], px, th);
+          PointF(l, Snap(cy)), PointF(l + w * 0.35, b - h * 0.25)], px, th);
       end;
     tgArrowRight:
       begin
-        FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+        FBmp.DrawLineAntialias(l, Snap(cy), r, Snap(cy), px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(r - w * 0.35, t + h * 0.25),
-          PointF(r, cy), PointF(r - w * 0.35, b - h * 0.25)], px, th);
+          PointF(r, Snap(cy)), PointF(r - w * 0.35, b - h * 0.25)], px, th);
       end;
     { Filled triangles. Base m, height 0.6*m -- the 5:3 proportion the Windows spin part uses,
       kept as a ratio so the shape is the same at every density instead of a fixed 5x3 that
       would vanish on a 200% display. Centred on the glyph box, so a caller that squares its
       button half (TySquareGlyphBox) gets the same triangle up and down. }
+    { #196: the flat side lies on a pixel boundary (Round(..) + 0.5, pixel centres being whole):
+      anywhere else that whole row is partly covered and the triangle's foot looks soft. }
     tgTriangleUp:
       FBmp.FillPolyAntialias([PointF(cx, cy - m * 0.3),
-        PointF(cx + m * 0.5, cy + m * 0.3), PointF(cx - m * 0.5, cy + m * 0.3)], px);
+        PointF(cx + m * 0.5, Round(cy + m * 0.3 - 0.5) + 0.5),
+        PointF(cx - m * 0.5, Round(cy + m * 0.3 - 0.5) + 0.5)], px);
     tgTriangleDown:
       FBmp.FillPolyAntialias([PointF(cx, cy + m * 0.3),
-        PointF(cx - m * 0.5, cy - m * 0.3), PointF(cx + m * 0.5, cy - m * 0.3)], px);
+        PointF(cx - m * 0.5, Round(cy - m * 0.3 - 0.5) + 0.5),
+        PointF(cx + m * 0.5, Round(cy - m * 0.3 - 0.5) + 0.5)], px);
     tgTriangleLeft:
       FBmp.FillPolyAntialias([PointF(cx - m * 0.3, cy),
-        PointF(cx + m * 0.3, cy - m * 0.5), PointF(cx + m * 0.3, cy + m * 0.5)], px);
+        PointF(Round(cx + m * 0.3 - 0.5) + 0.5, cy - m * 0.5),
+        PointF(Round(cx + m * 0.3 - 0.5) + 0.5, cy + m * 0.5)], px);
     tgTriangleRight:
       FBmp.FillPolyAntialias([PointF(cx + m * 0.3, cy),
-        PointF(cx - m * 0.3, cy + m * 0.5), PointF(cx - m * 0.3, cy - m * 0.5)], px);
+        PointF(Round(cx - m * 0.3 - 0.5) + 0.5, cy + m * 0.5),
+        PointF(Round(cx - m * 0.3 - 0.5) + 0.5, cy - m * 0.5)], px);
     tgDialogLauncher:
       begin
         // Office group dialog-launcher: a diagonal arrow into the bottom-right corner.
@@ -4532,7 +4591,7 @@ begin
       if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
       mask := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
       try
-        mask.FillRoundRectAntialias(0, 0, w - 1, h - 1, r, r, BGRAWhite, opts);
+        mask.FillRoundRectAntialias(-0.5, -0.5, w - 0.5, h - 0.5, r, r, BGRAWhite, opts);   // #196: every pixel of the rect
         temp.ApplyMask(mask);
       finally
         mask.Free;
@@ -4588,8 +4647,8 @@ begin
   if not IntersectRect(vis, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
   temp := TBGRABitmap.Create(vis.Right - vis.Left, vis.Bottom - vis.Top, TyColorToBGRA(AColor));
   try
-    temp.EraseRoundRectAntialias(ARect.Left - vis.Left, ARect.Top - vis.Top,
-      ARect.Left - vis.Left + w - 1, ARect.Top - vis.Top + h - 1, r, r, 255, opts);
+    temp.EraseRoundRectAntialias(ARect.Left - vis.Left - 0.5, ARect.Top - vis.Top - 0.5,
+      ARect.Left - vis.Left + w - 0.5, ARect.Top - vis.Top + h - 0.5, r, r, 255, opts);   // #196: the fill's own outline
     FBmp.PutImage(vis.Left, vis.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;

@@ -1204,7 +1204,7 @@ begin
         // marks below still draw: a theme that fills only :selected gets the classic "only
         // the step you are on has a solid disc" for free, with no code branch of its own.
         if tpBackground in markS.Present then
-          P.FillBackground(lay.MarkerRect, markS.Background, TyEffectiveCorners(markS));
+          P.FillBackground(lay.MarkerRect, markS.Background, TyEffectiveCorners(markS), TyBorderVisible(markS));
         if TyBorderVisible(markS) then
           P.StrokeBorder(lay.MarkerRect, TyEffectiveCorners(markS), markS.BorderWidth,
             markS.BorderColor);

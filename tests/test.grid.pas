@@ -4960,7 +4960,7 @@ var
       begin
         r := G.RowRectAt(pos);
         px := Re.GetPixel(x, (r.Top + r.Bottom) div 2);
-        if (px.blue > 180) and (px.red < 100) then Inc(Result);
+        if (px.blue > 180) and (px.red < 100) and (px.green < 100) then Inc(Result);   { not the accent }
       end;
     finally
       Re.Free;
@@ -4978,7 +4978,7 @@ var
       for x := 4 to 70 do
       begin
         px := Re.GetPixel(x, r.Bottom - 1);
-        if (px.blue > 180) and (px.red < 100) then Inc(Result);
+        if (px.blue > 180) and (px.red < 100) and (px.green < 100) then Inc(Result);   { not the accent }
       end;
     finally
       Re.Free;

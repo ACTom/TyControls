@@ -6244,9 +6244,9 @@ begin
               if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
               begin
                 if tpBackground in cbStyle.Present then
-                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius, True)
                 else
-                  P.FillBackground(cbBoxRect, S.Background, 2);
+                  P.FillBackground(cbBoxRect, S.Background, 2, True);
                 if tpBorderColor in cbStyle.Present then
                   P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
                 else
@@ -6283,9 +6283,9 @@ begin
                   { Draw circle only — no square box (FIX 4: prevents corner artifact) }
                   { The radius is LOGICAL -- the painter scales it -- and the box is device px. }
                   if tpBackground in cbStyle.Present then
-                    P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
+                    P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2, True)
                   else
-                    P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
+                    P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2, True);
                   if tpBorderColor in cbStyle.Present then
                     P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
                   else
@@ -6509,9 +6509,9 @@ begin
           if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
           begin
             if tpBackground in cbStyle.Present then
-              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius, True)
             else
-              P.FillBackground(cbBoxRect, S.Background, 2);
+              P.FillBackground(cbBoxRect, S.Background, 2, True);
             if tpBorderColor in cbStyle.Present then
               P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
             else
@@ -6546,9 +6546,9 @@ begin
             begin
               { Draw circle only — no square box (FIX 4: prevents corner artifact) }
               if tpBackground in cbStyle.Present then
-                P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
+                P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2, True)
               else
-                P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
+                P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2, True);
               if tpBorderColor in cbStyle.Present then
                 P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
               else
