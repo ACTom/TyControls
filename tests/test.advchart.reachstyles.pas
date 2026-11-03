@@ -32,11 +32,12 @@ unit test.advchart.reachstyles;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
-     tyControls.Controller,
+     tyControls.Controller, tyControls.Types,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.VisualMapView,
+     tyControls.AdvanceChart.Tooltip,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.rootstyles;
 type
@@ -49,6 +50,9 @@ type
     function Frame: TTyPaintList;
     function PtrShapes: TTyOverlayShapeArray;
     function TitleFrames: TTyOverlayShapeArray;
+    function TipSpec: TTyTooltipSpec;
+    function TipText: string;
+    function TipStroke: TTyColor;
   end;
 
   TAdvChartReachStylesOracleTest = class(TTestCase)
@@ -98,6 +102,57 @@ end;
 function TReachProbe.TitleFrames: TTyOverlayShapeArray;
 begin
   Result := TitleFramesDrawn;
+end;
+
+{ the item tooltip's model for the second row of the first series }
+function TReachProbe.TipSpec: TTyTooltipSpec;
+begin
+  Result := TooltipSpecFor(TyChartDatum(0, 1, 1));
+end;
+
+function TReachProbe.TipText: string;
+begin
+  Result := TooltipFormatterText;
+end;
+
+function TReachProbe.TipStroke: TTyColor;
+begin
+  Result := TooltipBorderColour;
+end;
+
+{ a colour as the oracle writes it, #rrggbbaa }
+function ColourHex(AC: Cardinal): string;
+begin
+  Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [(AC shr 16) and $FF, (AC shr 8) and $FF,
+    AC and $FF, AC shr 24]));
+end;
+
+{ a JSON value the way the record compares it: a padding written as a
+  number, an array, or none }
+function PadText(AData: TJSONData): string;
+var
+  v: array[0..3] of Double;
+  i, n: Integer;
+begin
+  Result := 'none';
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+  begin
+    for i := 0 to 3 do v[i] := AData.AsFloat;
+  end
+  else if AData is TJSONArray then
+  begin
+    n := AData.Count;
+    for i := 0 to 3 do v[i] := 0;
+    for i := 0 to n - 1 do v[i] := AData.Items[i].AsFloat;
+    case n of
+      1: begin v[1] := v[0]; v[2] := v[0]; v[3] := v[0]; end;
+      2: begin v[2] := v[0]; v[3] := v[1]; end;
+      3: v[3] := v[1];
+    end;
+  end
+  else Exit;
+  Result := FloatToStr(v[0]) + ',' + FloatToStr(v[1]) + ',' + FloatToStr(v[2]) + ',' + FloatToStr(v[3]);
 end;
 
 function LoadJson(const AName: string): TJSONData;
@@ -157,7 +212,7 @@ var
   fix: TJSONData;
   cs: TJSONArray;
   c, vmRec: TJSONObject;
-  i, k, nBad, nCases, nPtr, nBox: Integer;
+  i, k, nBad, nCases, nPtr, nBox, nTip: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
   pens, shapes, fills, looks, texts: TStringList;
@@ -168,6 +223,8 @@ var
   opt: TTyChartOption;
   vs: TTyVmViewSpec;
   ls: TTyLegendSpec;
+  tip: TJSONObject;
+  ts: TTyTooltipSpec;
 
   function SetText(AList: TStringList): string;
   var j: Integer;
@@ -236,6 +293,7 @@ begin
   nCases := 0;
   nPtr := 0;
   nBox := 0;
+  nTip := 0;
   bad := '';
   opt := TTyChartOption.Create;
   try
@@ -273,6 +331,51 @@ begin
       looks.Clear;
       texts.Clear;
       shapes.Duplicates := dupAccept;
+      if part = 'tooltip' then
+      begin
+        { the model the item's showTip builds, and what its box shows }
+        tip := c.Objects['tip'];
+        ts := FChart.TipSpec;
+        want := ' formatter ' + tip.Get('formatter', '(none)') + ' border ';
+        if tip.Find('borderColor').JSONType = jtString then want := want + tip.Strings['borderColor']
+        else want := want + '(none)';
+        want := want + ' padding ' + PadText(tip.Find('padding')) + ' order '
+          + tip.Get('order', '(none)');
+        if ts.HasFormatter then have := ' formatter ' + ts.Formatter else have := ' formatter (none)';
+        have := have + ' border ';
+        if ts.HasBorderColour then have := have + Copy(ColourHex(Cardinal(ts.BorderColour)), 1, 7)
+        else have := have + '(none)';
+        if ts.HasPadding then
+          have := have + ' padding ' + FloatToStr(ts.PadTop) + ',' + FloatToStr(ts.PadRight) + ','
+            + FloatToStr(ts.PadBottom) + ',' + FloatToStr(ts.PadLeft)
+        else have := have + ' padding none';
+        have := have + ' order ';
+        if not ts.HasOrder then have := have + '(none)'
+        else
+          case ts.Order of
+            ttoValueAsc: have := have + 'valueAsc';
+            ttoValueDesc: have := have + 'valueDesc';
+            ttoSeriesDesc: have := have + 'seriesDesc';
+          else
+            have := have + 'seriesAsc';
+          end;
+        { the defaulted keys stop at the defaults: none here }
+        if ts.HasBackground then have := have + ' background ' + ColourHex(Cardinal(ts.Background));
+        if ts.HasBorderRadius then have := have + ' radius ' + FloatToStr(ts.BorderRadiusLogical);
+        { and the box: its text, its border }
+        FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":1}');
+        Draw;
+        want := want + ' text ' + tip.Strings['text'] + ' stroke ' + tip.Strings['stroke'];
+        have := have + ' text ' + FChart.TipText + ' stroke ' + ColourHex(Cardinal(FChart.TipStroke));
+        Inc(nCases);
+        Inc(nTip);
+        if have <> want then
+        begin
+          Inc(nBad);
+          bad := bad + LineEnding + Format('  %s: %s here, upstream %s', [id, Trim(have), Trim(want)]);
+        end;
+        Continue;
+      end;
       if part = 'pointer' then
       begin
         Inc(nPtr);
@@ -381,6 +484,7 @@ begin
   AssertTrue('cases', nCases >= 40);
   AssertTrue('pointer cases', nPtr >= 15);
   AssertTrue('box cases', nBox >= 8);
+  AssertTrue('tooltip cases', nTip >= 3);
   AssertTrue(Format('%d of %d differ from upstream:%s', [nBad, nCases, bad]), nBad = 0);
 end;
 

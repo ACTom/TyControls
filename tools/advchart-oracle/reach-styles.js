@@ -122,6 +122,9 @@ const candle = (s, o) => bare(Object.assign({ xAxis: { type: 'category', data: N
 const ALL = { looks: true, fills: true, shapes: true };
 // a candlestick's body is no rect: its pens, looks and fills
 const LF = { looks: true, fills: true };
+// an item tooltip shown by showTip, its content in rich text
+const TIPC = { tooltip: { renderMode: 'richText' }, xAxis: { type: 'category', data: N }, yAxis: {},
+  series: [{ type: 'scatter', data: [1, 2, 3] }] };
 const vm = (v, o) => bare(Object.assign({ visualMap: Object.assign({ min: 0, max: 10, calculable: false }, v),
   series: [{ type: 'scatter', data: [[1, 2, 3]] }], xAxis: {}, yAxis: {} }, o));
 
@@ -221,6 +224,14 @@ function cases() {
     ['state.bar-select', bare({ itemStyle: RI, xAxis: { type: 'category', data: N }, yAxis: {},
       series: [{ type: 'bar', selectedMode: 'single', select: { itemStyle: { borderWidth: 2, borderColor: '#000000' } }, data: [3, 5, 2] }] }),
     '', { looks: true, fills: true, shapes: true, action: { type: 'select', seriesIndex: 0, dataIndex: 1 } }],
+    // ---- the tooltip's model: its keys TooltipModel has no default for (formatter, borderColor,
+    // order, position, valueFormatter, align, verticalAlign; padding's is null) climb to the root's ----
+    ['tip.root', bare(Object.assign({}, TIPC, { formatter: 'R:{b}', borderColor: '#00ff00', padding: 20, order: 'valueDesc',
+      backgroundColor: '#123456', borderRadius: 9, borderWidth: 4 })), 'tooltip', { tip: true }],
+    ['tip.own', bare(Object.assign({}, TIPC, { tooltip: { renderMode: 'richText', formatter: 'T:{b}', padding: [1, 2],
+      borderColor: '#0000ff' }, formatter: 'R:{b}', borderColor: '#00ff00', padding: 20 })), 'tooltip', { tip: true }],
+    ['tip.series', bare(Object.assign({}, TIPC, { formatter: 'R:{b}', padding: 20,
+      series: [{ type: 'scatter', tooltip: { formatter: 'S:{b}' }, data: [1, 2, 3] }] })), 'tooltip', { tip: true }],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
   ];
@@ -312,16 +323,40 @@ function settle(chart, start) {
   for (let c = zr.animation._head; c; c = c.next) if (!c.loop) live++;
   must(live === 0, 'did not settle');
 }
+const PROTO = (function () {
+  const probe = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
+  const p = Object.getPrototypeOf(probe);
+  probe.dispose();
+  return p;
+})();
+const DOM = {};
+const GET_DOM = PROTO.getDom;
 const AXES = ['xAxis', 'yAxis', 'angleAxis', 'radiusAxis', 'singleAxis'];
 
 function run(id, option, part, more) {
   NOW = T_BASE;
   rngState = SEED;
   more = more || {};
+  // a tooltip view needs a dom (TooltipView.render returns without one): only for the cases that ask
+  if (more.tip) PROTO.getDom = () => DOM;
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   try {
     chart.setOption(JSON.parse(JSON.stringify(option)));
+    if (more.tip) {
+      const view = chart.getViewOfComponentModel(chart.getModel().getComponent('tooltip', 0));
+      view._tooltipContent.getSize = () => [80, 40];
+      let model = null;
+      const show = view._showTooltipContent;
+      view._showTooltipContent = function (tooltipModel) { model = tooltipModel; return show.apply(this, arguments); };
+      chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: 1 });
+      must(model, id + ': no tooltip shown');
+      const el = view._tooltipContent.el;
+      const get = k => { const v = model.get(k); return v == null ? null : JSON.parse(JSON.stringify(v)); };
+      return { id, option, part, seen: 1, n: 0, pens: [], tip: { formatter: get('formatter'), borderColor: get('borderColor'),
+        padding: get('padding'), order: get('order'), backgroundColor: get('backgroundColor'), borderRadius: get('borderRadius'),
+        text: el.style.text, stroke: colourOf(el.style.borderColor) } };
+    }
     settle(chart, T_BASE);
     if (more.action) {
       NOW = T_BASE + 10000;
@@ -391,6 +426,7 @@ function run(id, option, part, more) {
   }
   finally {
     chart.dispose();
+    if (more.tip) PROTO.getDom = GET_DOM;
   }
 }
 
@@ -411,6 +447,9 @@ function generate() {
   must(by('visualMap.size').vm.itemSize.join() === '30,80', 'visualMap.size: ' + JSON.stringify(by('visualMap.size').vm));
   must(by('visualMap.piece').vm.itemSize.join() === '20,14', 'visualMap.piece: ' + JSON.stringify(by('visualMap.piece').vm));
   must(has('candle.top-root', 'looks', '0.5|4|2|0|#0000ffff'), 'candle.top-root looks: ' + by('candle.top-root').looks);
+  // the root's formatter, borderColor and padding reach an item tooltip; its backgroundColor does not
+  must(by('tip.root').tip.text === 'R:B' && by('tip.root').tip.stroke === '#00ff00ff' && by('tip.root').tip.padding === 20
+    && by('tip.root').tip.backgroundColor === '#fff', 'tip.root: ' + JSON.stringify(by('tip.root').tip));
   must(charts.every(c => c.seen > 0), 'a case has no path: ' + charts.filter(c => c.seen === 0).map(c => c.id));
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg)',
     note: 'R7-X: what reaches the axis pointer\'s line and band, the component boxes, a candlestick (its top-level keys) '
@@ -419,7 +458,9 @@ function generate() {
       + 'each entry prefixed with its axis; title / legend / toolbox / visualMap the component\'s background rect), as '
       + 'root-styles.js; nocolour: the pens without the stroke colour; `looks` opacity|shadowBlur|shadowOffsetX|shadowOffsetY|'
       + 'shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component\'s texts; `icons` a legend\'s '
-      + 'icon symbol types; `vm` the visualMap model\'s itemSize and text.',
+      + 'icon symbol types; `vm` the visualMap model\'s itemSize and text; `tip` (part tooltip) the item tooltip model\'s '
+      + 'formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box\'s '
+      + 'text and border colour.',
     W, H, charts };
 }
 

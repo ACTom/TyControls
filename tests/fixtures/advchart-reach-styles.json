@@ -1,6 +1,6 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
- "note": "R7-X: what reaches the axis pointer's line and band, the component boxes, a candlestick (its top-level keys) and a bar's corners. Each case settled (its action dispatched and settled); `pens` the sorted set of stroke|width|dash|offset|cap/join/miter of every stroked path of the part ('' the series' views; pointer the axes' pointer groups, each entry prefixed with its axis; title / legend / toolbox / visualMap the component's background rect), as root-styles.js; nocolour: the pens without the stroke colour; `looks` opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component's texts; `icons` a legend's icon symbol types; `vm` the visualMap model's itemSize and text.",
+ "note": "R7-X: what reaches the axis pointer's line and band, the component boxes, a candlestick (its top-level keys) and a bar's corners. Each case settled (its action dispatched and settled); `pens` the sorted set of stroke|width|dash|offset|cap/join/miter of every stroked path of the part ('' the series' views; pointer the axes' pointer groups, each entry prefixed with its axis; title / legend / toolbox / visualMap the component's background rect), as root-styles.js; nocolour: the pens without the stroke colour; `looks` opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component's texts; `icons` a legend's icon symbol types; `vm` the visualMap model's itemSize and text; `tip` (part tooltip) the item tooltip model's formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box's text and border colour.",
  "W": 400,
  "H": 300,
  "charts": [
@@ -2970,6 +2970,174 @@
     "rect|277|159.5|66|59|r:6,6,6,6",
     "rect|77|128.5|66|90|r:6,6,6,6"
    ]
+  },
+  {
+   "id": "tip.root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": "valueDesc",
+    "backgroundColor": "#123456",
+    "borderRadius": 9,
+    "borderWidth": 4
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": "valueDesc",
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:B",
+    "stroke": "#00ff00ff"
+   }
+  },
+  {
+   "id": "tip.own",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "formatter": "T:{b}",
+     "padding": [
+      1,
+      2
+     ],
+     "borderColor": "#0000ff"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "T:{b}",
+    "borderColor": "#0000ff",
+    "padding": [
+     1,
+     2
+    ],
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "T:B",
+    "stroke": "#0000ffff"
+   }
+  },
+  {
+   "id": "tip.series",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "tooltip": {
+       "formatter": "S:{b}"
+      },
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "formatter": "R:{b}",
+    "padding": 20
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "S:{b}",
+    "borderColor": null,
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "S:B",
+    "stroke": "#5470c6ff"
+   }
   },
   {
    "id": "state.pie-blur",
