@@ -857,15 +857,21 @@ begin
   end;
 end;
 
+function TyFollowVarRef(const AValue: string; AVars: TStrings): string; forward;
+
 function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: string;
   Vars: TStrings): Boolean;
 var
-  prop, raw: string;
+  prop, raw, followed: string;
   fill: TTyFill;
 begin
   Result := True;
   prop := LowerCase(Trim(AProp));
   raw := Trim(ARawValue);
+  { #197: a value that is only a reference may name any form the property has -- 'none' or a
+    gradient for a background -- and another reference: --grid-header-font-size: var(--font-size-base). }
+  followed := TyFollowVarRef(raw, Vars);
+  if followed <> '' then raw := followed;
   if (prop = 'background') or (prop = 'background-color') then
   begin
     if LowerCase(raw) = 'none' then

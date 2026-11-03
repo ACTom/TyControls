@@ -3604,11 +3604,7 @@ begin
                       cellR.Right - margin, M.HeaderH - ScaleI(2));
       if sortR.Right > sortR.Left then
       begin
-        { The thickness is LOGICAL: DrawGlyph scales it. ScaleI(1) was scaled twice. }
-        if FSortDirection = sdAscending then
-          P.DrawGlyph(sortR, tgArrowUp, tc, 1, 1)
-        else
-          P.DrawGlyph(sortR, tgArrowDown, tc, 1, 1);
+        DrawSortMark(P, sortR, FSortDirection = sdAscending, tc);
       end;
     end;
 
@@ -3858,6 +3854,7 @@ end;
 
 procedure TTyCustomListView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
+  ground: TBGRABitmap;
   P: TTyPainter;
   S, rowStyle: TTyStyleSet;
   m: TTyListMetrics;
@@ -3878,7 +3875,7 @@ begin
     h := ARect.Bottom - ARect.Top;
     clientBox := Rect(0, 0, w, h);
     S := CurrentStyle;
-    DrawFrame(P, clientBox, S);
+    ground := DrawFrameUnderContent(P, clientBox, S);
 
     m := CurrentMetrics;
     cnt := GetItemCount;
@@ -3913,6 +3910,9 @@ begin
 
     if FMarquee then
       RenderMarquee(P, S);
+
+    { The header band runs to the control's edges, so the frame goes back over it. }
+    DrawFrameOverContent(P, clientBox, S, ground);
 
     P.EndPaint;
   finally

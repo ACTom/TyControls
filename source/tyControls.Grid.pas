@@ -802,6 +802,9 @@ type
   end;
 
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
+  { --grid-hover: what the pointer lights. Read once per frame. }
+  TTyGridHoverKind = (ghkCell, ghkRow, ghkColumn, ghkCross, ghkNone);
+
   TTyCustomGrid = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FHeader:           TTyGridHeader;
@@ -873,6 +876,7 @@ type
     FGridLineWidth:    Integer;
     { 鼠标当前所在的格(-1 = 不在任何格上)。`TyGridCell:hover` 这条主题规则
       从前永远不会触发,就是因为没人记这个。 }
+    FHoverKind:        TTyGridHoverKind;
     FHoverCol:         Integer;
     FHoverRow:         Integer;
     { 鼠标底下的**列头段**(-1 = 不在任何列头上)。与 FHoverCol 分开记:
@@ -1488,6 +1492,29 @@ type
     { 网格线颜色:优先取 TyGridLine 的 background,主题没定义时退回本体的 border-color
       —— 让只写了 TyGrid 一条规则的皮肤也能画出可辨认的格子。 }
     function GridLineColor(const AFrame: TTyStyleSet): TBGRAPixel;
+    { #197. The width of one direction's lines. GridLineWidth at its default leaves it to the theme
+      (--grid-line-h-width, --grid-line-v-width; 0 hides them); anything else is the host's word.
+      glsHorizontal and glsVertical are the host asking for that direction, so a skin that hides it
+      does not get the last word; glsBoth, which is the default, leaves both to the theme. }
+    function GridLinePx(AHorizontal: Boolean): Integer;
+    { #197. One part as the theme gives it, then this grid's own '--grid-*' tokens. The theme's
+      rules read the same names through var(), but a rule is resolved once for the whole theme,
+      so one control's override is laid over what comes back. GridPart is PartStyle's view (the
+      control's font and ink), GridPartPlain the model's. }
+    procedure ApplyPartTokens(var AStyle: TTyStyleSet; const AKey: string; const AStates: TTyStateSet);
+    function GridPart(const AKey: string; const AStates: TTyStateSet): TTyStyleSet;
+    function GridPartPlain(const AKey: string; const AStates: TTyStateSet): TTyStyleSet;
+    { AName from this grid's StyleOverride alone: the theme's value of that name is already in the
+      rule it feeds, and asking it here too would undo a skin that writes the rule outright. }
+    function OverrideColor(const AName: string; ADefault: TTyColor): TTyColor;
+    { One straight rule, ARect in layout pixels. AOn/AOff: its dash, 0 for solid, the pattern
+      starting from APhase along its length. }
+    procedure PutRule(P: TTyPainter; const ARect: TRect; AHorizontal: Boolean; const AColor: TBGRAPixel;
+      AOn, AOff, APhase: Integer);
+    { The lines where a frozen band meets the scrolling body, and the shadow under them. }
+    procedure RenderFrozenEdges(P: TTyPainter; const M: TTyGridMetrics);
+    { What goes over the cells and the grid lines. }
+    procedure RenderOverlay(P: TTyPainter; const M: TTyGridMetrics; const AFrame: TTyStyleSet); virtual;
 
     { 用某个 typeKey 的 background 填一块区域;该键没定义背景就什么都不画
       (于是那块区域透出网格表面本色 —— 这正是"皮肤没写就优雅退化"的做法)。 }
@@ -2792,6 +2819,9 @@ type
     procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
       var AAcc: Double; var ACount: Integer; var AStarted: Boolean); virtual;
     function  AggregatePrefix(AKind: TTyGridAggregate): string;
+    { 选区外框 + 填充柄,和焦点框。画在格线之上:外框的右缘和下缘就在格线那一像素上,
+      画在格线之前会被盖掉。 }
+    procedure RenderOverlay(P: TTyPainter; const M: TTyGridMetrics; const AFrame: TTyStyleSet); override;
     procedure RenderSelectionFrame(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
@@ -5573,11 +5603,178 @@ end;
 function TTyCustomGrid.CellStates(ACol, ARow: Integer): TTyStateSet;
 begin
   Result := [];
-  if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(Result, tysHover);
+  if (FHoverCol < 0) or (FHoverRow < 0) then Exit;
+  case FHoverKind of
+    ghkCell:   if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(Result, tysHover);
+    ghkRow:    if ARow = FHoverRow then Include(Result, tysHover);
+    ghkColumn: if ACol = FHoverCol then Include(Result, tysHover);
+    ghkCross:  if (ACol = FHoverCol) or (ARow = FHoverRow) then Include(Result, tysHover);
+  end;
+end;
+
+function TyGridPartTokens(const AKey: string; const AStates: TTyStateSet): string;
+begin
+  if AKey = 'TyGridHeader' then Result := '--grid-header'
+  else if AKey = 'TyGridHeaderSection' then
+  begin
+    if tysActive in AStates then Result := '--grid-header-pressed'
+    else if tysHover in AStates then Result := '--grid-header-hover'
+    else if tysSelected in AStates then Result := '--grid-header-selected'
+    else Result := '--grid-header';
+  end
+  else if AKey = 'TyGridHeaderSorted' then Result := '--grid-header-sorted'
+  else if AKey = 'TyGridHeaderFiltered' then Result := '--grid-header-filtered'
+  else if AKey = 'TyGridHeaderGroup' then Result := '--grid-header-group'
+  else if AKey = 'TyGridFilterRow' then Result := '--grid-filter'
+  else if AKey = 'TyGridFixed' then Result := '--grid-fixed'
+  else if AKey = 'TyGridIndicator' then Result := '--grid-indicator'
+  else if AKey = 'TyGridIndicatorActive' then Result := '--grid-indicator-active'
+  else if AKey = 'TyGridCell' then
+  begin
+    if tysSelected in AStates then Result := '--grid-selected'
+    else if tysHover in AStates then Result := '--grid-hover'
+    else Result := '--grid-cell';
+  end
+  else if AKey = 'TyGridCellSelectedInactive' then Result := '--grid-selected-inactive'
+  else if AKey = 'TyGridCellSelectedHover' then Result := '--grid-selected-hover'
+  else if AKey = 'TyGridCellAlt' then Result := '--grid-alt'
+  else if AKey = 'TyGridCellSorted' then Result := '--grid-sorted-cell'
+  else if AKey = 'TyGridActiveCell' then Result := '--grid-active-cell'
+  else if AKey = 'TyGridSelectionFrame' then Result := '--grid-selection-frame'
+  else if AKey = 'TyGridGroupRow' then Result := '--grid-group'
+  else if AKey = 'TyGridSummaryRow' then Result := '--grid-footer'
+  else Result := '';
+end;
+
+procedure TTyCustomGrid.ApplyPartTokens(var AStyle: TTyStyleSet; const AKey: string;
+  const AStates: TTyStateSet);
+var
+  pre: string;
+  c: TTyColor;
+  v: Integer;
+  found: Boolean;
+begin
+  if Pos('--grid-', StyleOverride) = 0 then Exit;
+  pre := TyGridPartTokens(AKey, AStates);
+  if pre = '' then Exit;
+  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-bg', 0, found);
+  if found then
+  begin
+    AStyle.Background := Default(TTyFill);
+    AStyle.Background.Kind := tfkSolid;
+    AStyle.Background.Color := c;
+    Include(AStyle.Present, tpBackground);
+  end
+  else if SameText(Trim(ActiveController.Model.ResolveOverrideToken(StyleOverride, pre + '-bg', found)), 'none')
+    and found then
+  begin
+    AStyle.Background := Default(TTyFill);
+    AStyle.Background.Kind := tfkNone;
+    Include(AStyle.Present, tpBackground);
+  end;
+  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-color', 0, found);
+  if found then
+  begin
+    AStyle.TextColor := c;
+    Include(AStyle.Present, tpTextColor);
+  end;
+  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-border-color', 0, found);
+  if found then
+  begin
+    AStyle.BorderColor := c;
+    Include(AStyle.Present, tpBorderColor);
+  end;
+  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-border-width', 0, found);
+  if found then
+  begin
+    AStyle.BorderWidth := v;
+    Include(AStyle.Present, tpBorderWidth);
+  end;
+  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-font-size', 0, found);
+  if found then
+  begin
+    AStyle.FontSize := v;
+    Include(AStyle.Present, tpFontSize);
+  end;
+  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-font-weight', 0, found);
+  if found then
+  begin
+    AStyle.FontWeight := v;
+    Include(AStyle.Present, tpFontWeight);
+  end;
+end;
+
+function TTyCustomGrid.GridPart(const AKey: string; const AStates: TTyStateSet): TTyStyleSet;
+begin
+  Result := PartStyle(AKey, StyleClass, AStates);
+  ApplyPartTokens(Result, AKey, AStates);
+end;
+
+function TTyCustomGrid.GridPartPlain(const AKey: string; const AStates: TTyStateSet): TTyStyleSet;
+begin
+  Result := ActiveController.Model.ResolveStyle(AKey, StyleClass, AStates);
+  ApplyPartTokens(Result, AKey, AStates);
+end;
+
+function TTyCustomGrid.OverrideColor(const AName: string; ADefault: TTyColor): TTyColor;
+var
+  found: Boolean;
+begin
+  Result := ADefault;
+  if Pos('--grid-', StyleOverride) > 0 then
+    Result := ActiveController.Model.ResolveOverrideColor(StyleOverride, AName, ADefault, found);
+end;
+
+procedure TTyCustomGrid.PutRule(P: TTyPainter; const ARect: TRect; AHorizontal: Boolean;
+  const AColor: TBGRAPixel; AOn, AOff, APhase: Integer);
+var
+  mode: TDrawMode;
+  lo, hi, period, pos: Integer;
+  seg: TRect;
+begin
+  if AColor.alpha = 0 then Exit;
+  { Opaque is a plain write, as the grid lines have always been; a translucent colour blends with
+    what is there, or it would leave a hole in the surface down to whatever is behind the control. }
+  if AColor.alpha = 255 then mode := dmSet else mode := dmDrawWithTransparency;
+  if (AOn <= 0) or (AOff < 0) then
+  begin
+    P.Bitmap.FillRect(P.Dev(ARect), AColor, mode);
+    Exit;
+  end;
+  if AHorizontal then
+  begin
+    lo := ARect.Left;
+    hi := ARect.Right;
+  end
+  else
+  begin
+    lo := ARect.Top;
+    hi := ARect.Bottom;
+  end;
+  period := AOn + AOff;
+  pos := APhase + Floor((lo - APhase) / period) * period;
+  while pos < hi do
+  begin
+    if AHorizontal then
+      seg := Rect(Max(pos, lo), ARect.Top, Min(pos + AOn, hi), ARect.Bottom)
+    else
+      seg := Rect(ARect.Left, Max(pos, lo), ARect.Right, Min(pos + AOn, hi));
+    if not IsRectEmpty(seg) then
+      P.Bitmap.FillRect(P.Dev(seg), AColor, mode);
+    Inc(pos, period);
+  end;
 end;
 
 procedure TTyCustomGrid.ResetCellStyleCache;
+var
+  hover: string;
 begin
+  hover := LowerCase(Trim(StyleToken('--grid-hover', 'cell')));
+  if hover = 'row' then FHoverKind := ghkRow
+  else if hover = 'column' then FHoverKind := ghkColumn
+  else if hover = 'cross' then FHoverKind := ghkCross
+  else if hover = 'none' then FHoverKind := ghkNone
+  else FHoverKind := ghkCell;
   SetLength(FCellStyleStates, 0);
   SetLength(FCellStyleCache, 0);
   SetLength(FCellBaseCache, 0);
@@ -5596,7 +5793,7 @@ begin
   for i := 0 to High(FCellStyleStates) do
     if FCellStyleStates[i] = st then Exit(i);
 
-  sty := PartStyle('TyGridCell', StyleClass, st);
+  sty := GridPart('TyGridCell', st);
   n := Length(FCellStyleStates);
   SetLength(FCellStyleStates, n + 1);
   SetLength(FCellStyleCache, n + 1);
@@ -6353,7 +6550,7 @@ begin
 
   { 量最高的那个标题。Header.Height 当**下限** —— 自适应只往上撑,
     不会把一条正常高度的列头压扁。 }
-  hdrS := PartStyle('TyGridHeader', StyleClass, []);
+  hdrS := GridPart('TyGridHeader', []);
   bmp := TBGRABitmap.Create(1, 1);
   try
     TyConfigureTextFont(bmp, hdrS.FontName, ResolveFontSize(hdrS),
@@ -6475,6 +6672,8 @@ var
   procedure DrawOneNumber;
   var
     slot: TRect;
+    numS: TTyStyleSet;
+    numInk: TTyColor;
   begin
     { 槽是**调用方给的那一条**(RenderChrome 用同一条铺底色),这里只在它的
       尾缘让出 4px 气口 —— 回到阅读空间做那一次内缩,再送回屏幕。
@@ -6483,10 +6682,21 @@ var
       taRightJustify 由画笔那一层(BeginPaintOn 收到的 RTL 标志)翻成
       taLeftJustify —— 槽换了边而对齐没换,号码会贴到槽外那一侧去。 }
     slot := ToReadingRect(Rect(ASlotLeft, r.Top, ASlotRight, r.Bottom));
+    { #197: the number of the row the cursor is on. }
+    numS := indS;
+    numInk := ink;
+    if IsActiveRow(DisplayToData(pos)) then
+    begin
+      numS := GridPart('TyGridIndicatorActive', []);
+      if tpBackground in numS.Present then
+        P.FillBackground(Rect(ASlotLeft, r.Top, ASlotRight, r.Bottom), numS.Background, 0);
+      if tpTextColor in numS.Present then numInk := numS.TextColor;
+      if not (tpFontWeight in numS.Present) then numS.FontWeight := indS.FontWeight;
+    end;
     Dec(slot.Right, ScaleI(4));
     DrawCellText(P, ToScreenRect(slot),
-      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
-      ink, taRightJustify, tlCenter);
+      IntToStr(pos + 1), numS.FontName, ResolveFontSize(numS), numS.FontWeight,
+      numInk, taRightJustify, tlCenter);
   end;
 
 begin
@@ -6497,7 +6707,7 @@ begin
 
   { 复用行头槽自己的 typeKey 取墨色与字体 —— 不硬编码任何视觉值,
     也不借别的控件的键。 }
-  indS := PartStyle('TyGridIndicator', StyleClass, []);
+  indS := GridPart('TyGridIndicator', []);
   if tpTextColor in indS.Present then ink := indS.TextColor
   else ink := CurrentStyle.TextColor;
 
@@ -6577,13 +6787,24 @@ begin
     本来就各有各的键,这条更一致、也够得着外观主题层。 }
   if FAlternateRows and Odd(ADisplayPos) then
   begin
-    altS := ActiveController.Model.ResolveStyle('TyGridCellAlt', StyleClass, []);
+    altS := GridPartPlain('TyGridCellAlt', []);
     if (tpBackground in altS.Present) and (altS.Background.Kind <> tfkNone) then
     begin
       Result.HasBackground := True;
       Result.Background := altS.Background;
     end;
     if tpTextColor in altS.Present then Result.TextColor := altS.TextColor;
+  end;
+
+  { #197: the sorted column's body. A skin leaves it alone unless it writes the token. }
+  if (ACol = FHeader.SortColumn) and (hoShowSortGlyphs in FHeader.Options) then
+  begin
+    altS := GridPartPlain('TyGridCellSorted', []);
+    if (tpBackground in altS.Present) and (altS.Background.Kind <> tfkNone) then
+    begin
+      Result.HasBackground := True;
+      Result.Background := altS.Background;
+    end;
   end;
 
   { 整列底色(TTyGridColumn.Color)。排在斑马纹**之后** —— 列色是宿主对这一列
@@ -6635,7 +6856,7 @@ begin
      and (IsActiveCell(ACol, ARow)
           or ((goRowHighlight in Options) and IsActiveRow(ARow))) then
   begin
-    actS := ActiveController.Model.ResolveStyle('TyGridActiveCell', StyleClass, []);
+    actS := GridPartPlain('TyGridActiveCell', []);
     { 用户给这格指定了底色时**不铺焦点底色** —— 否则光标停在哪一格,
       哪一格的颜色就看不见了(而光标恰恰总停在刚被上色的那一格上)。
       焦点仍靠文字色与选区层区分得出来。 }
@@ -7499,18 +7720,36 @@ var
 begin
   lineS := ActiveController.Model.ResolveStyle('TyGridLine', StyleClass, CurrentStates);
   if tpBackground in lineS.Present then
-    Result := TyColorToBGRA(lineS.Background.Color)
+    Result := TyColorToBGRA(OverrideColor('--grid-line-color', lineS.Background.Color))
   else
-    Result := TyColorToBGRA(AFrame.BorderColor);
+    Result := TyColorToBGRA(OverrideColor('--grid-line-color', AFrame.BorderColor));
+end;
+
+function TTyCustomGrid.GridLinePx(AHorizontal: Boolean): Integer;
+begin
+  Result := 0;
+  case FGridLineStyle of
+    glsNone: Exit;
+    glsHorizontal: if not AHorizontal then Exit;
+    glsVertical: if AHorizontal then Exit;
+  end;
+  if FGridLineWidth <> 1 then
+    Result := ScaleI(FGridLineWidth)
+  else if AHorizontal then
+    Result := ScaleI(StyleMetric('--grid-line-h-width', 1))
+  else
+    Result := ScaleI(StyleMetric('--grid-line-v-width', 1));
+  if (Result < 1) and (FGridLineStyle <> glsBoth) then Result := 1;
 end;
 
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
   slot: Integer;   { 绘制槽位 }
-  first, last, row, i, x, lw, half: Integer;
+  first, last, row, i, x, hw, vw, hHalf, vHalf, hOn, hOff, vOn, vOff, x0, x1, l: Integer;
   r: TRect;
-  line: TBGRAPixel;
+  base: TTyColor;
+  hLine, vLine: TBGRAPixel;
   col: TTyColumn;
   merged: Boolean;
 
@@ -7522,8 +7761,7 @@ var
   begin
     if not merged then
     begin
-      P.Bitmap.FillRect(P.Dev(Rect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw)),
-        line, dmSet);
+      PutRule(P, Rect(x0, r.Bottom - 1 - hHalf, x1, r.Bottom - 1 - hHalf + hw), True, hLine, hOn, hOff, 0);
       Exit;
     end;
     { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
@@ -7533,29 +7771,58 @@ var
       if not (coVisible in c.Options) then Continue;
       if SameMergedCell(j, DisplayToData(row), j, DisplayToData(row + 1)) then Continue;
       cx := ColumnLeftPx(j);
-      P.Bitmap.FillRect(P.Dev(Rect(cx, r.Bottom - 1 - half,
-        cx + ColumnWidthPx(j), r.Bottom - 1 - half + lw)), line, dmSet);
+      PutRule(P, Rect(cx, r.Bottom - 1 - hHalf, cx + ColumnWidthPx(j), r.Bottom - 1 - hHalf + hw),
+        True, hLine, hOn, hOff, 0);
     end;
   end;
 
 begin
-  line := GridLineColor(AFrame);
+  hLine := GridLineColor(AFrame);
+  base := TyRGBA(hLine.red, hLine.green, hLine.blue, hLine.alpha);
+  hLine := TyColorToBGRA(StyleColor('--grid-line-h-color', base));
+  vLine := TyColorToBGRA(StyleColor('--grid-line-v-color', base));
+  TyParseLineDash(StyleToken('--grid-line-h-style', 'solid'), hOn, hOff);
+  TyParseLineDash(StyleToken('--grid-line-v-style', 'solid'), vOn, vOff);
+  hOn := ScaleI(hOn); hOff := ScaleI(hOff);
+  vOn := ScaleI(vOn); vOff := ScaleI(vOff);
 
   { 线压在边界上、两侧各占一半:lw=1 时就是从前那条 r.Bottom-1 的发丝线,
     加粗时向两边长而不是把边界推走(列宽/行高不因线粗而改变)。 }
-  lw := M.GridLineWidth;
-  if lw < 1 then lw := 1;
-  half := lw div 2;
+  hw := GridLinePx(True);
+  vw := GridLinePx(False);
+  hHalf := hw div 2;
+  vHalf := vw div 2;
 
   { 有没有合并区决定走哪条路:没有就整条画完(绝大多数表),
     有才逐列/逐行分段、跳过合并区内部的边界。
     分段要多出 列数 x 行数 次 FillRect,不能让没用合并的表白白付这个钱。 }
   merged := HasMergedCells;
 
+  { #197: a row's line runs across the whole width, or with --grid-line-extend: columns, stops
+    where the columns stop. }
+  x0 := 0;
+  x1 := M.ClientW;
+  if SameText(Trim(StyleToken('--grid-line-extend', 'full')), 'columns') then
+  begin
+    x0 := M.ClientW;
+    x1 := 0;
+    for i := 0 to FHeader.Columns.Count - 1 do
+    begin
+      if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
+      l := ColumnLeftPx(i);
+      if l < x0 then x0 := l;
+      if l + ColumnWidthPx(i) > x1 then x1 := l + ColumnWidthPx(i);
+    end;
+    if x1 > M.ClientW then x1 := M.ClientW;
+    if x0 < 0 then x0 := 0;
+    { RTL or LTR, the empty side is the one past the columns; the frozen slot stays in the line. }
+    if not RtlLayout then x0 := 0 else x1 := M.ClientW;
+  end;
+
   { 横线:每一可见行的下沿。只走绘制槽位 —— 百万行的表在这里也只画几十条。
     每条线都裁到它那一行所属的带,否则滚到冻结带底下的行会把线画进冻结带里
     (单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
-  if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridDrawSlots(M, first, last) then
+  if (hw > 0) and TyGridDrawSlots(M, first, last) then
     for slot := first to last do
     begin
       row := TyGridRowAtSlot(slot, M);
@@ -7566,29 +7833,89 @@ begin
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
     绝不另算 —— 否则线会和单元格边界差一像素。 }
-  if not (FGridLineStyle in [glsVertical, glsBoth]) then Exit;
+  if vw <= 0 then Exit;
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
     col := TTyColumn(FHeader.Columns.Items[i]);
     if not (coVisible in col.Options) then Continue;
     x := ColumnLeftPx(i) + ColumnWidthPx(i);
     if (x <= 0) or (x > M.ClientW) then Continue;
-    if not merged then
-      P.Bitmap.FillRect(P.Dev(Rect(x - 1 - half, M.FrozenTop, x - 1 - half + lw, M.ClientH)),
-        line, dmSet)
+    if (not merged) and (vOn <= 0) then
+      PutRule(P, Rect(x - 1 - vHalf, M.FrozenTop, x - 1 - vHalf + vw, M.ClientH), False, vLine, 0, 0, 0)
     else
-      { 逐行分段:本列与右邻列在这一行上属于同一个合并区时,跳过这一段。 }
+      { 逐行分段:本列与右邻列在这一行上属于同一个合并区时,跳过这一段。
+        A dash starts again at each row's top: it moves with the row, so a scroll that reuses the
+        rows' pixels shows the pattern a full repaint would. }
       if TyGridDrawSlots(M, first, last) then
         for slot := first to last do
         begin
           row := TyGridRowAtSlot(slot, M);
           if row < 0 then Continue;
-          if SameMergedCell(i, DisplayToData(row), i + 1, DisplayToData(row)) then Continue;
+          if merged and SameMergedCell(i, DisplayToData(row), i + 1, DisplayToData(row)) then Continue;
           r := TyGridRowRect(row, M);
-          P.Bitmap.FillRect(P.Dev(Rect(x - 1 - half, r.Top, x - 1 - half + lw, r.Bottom)),
-            line, dmSet);
+          if r.Top < M.FrozenTop then r.Top := M.FrozenTop;
+          PutRule(P, Rect(x - 1 - vHalf, r.Top, x - 1 - vHalf + vw, r.Bottom), False, vLine, vOn, vOff,
+            TyGridRowRect(row, M).Top);
         end;
   end;
+end;
+
+{ #197. }
+procedure TTyCustomGrid.RenderFrozenEdges(P: TTyPainter; const M: TTyGridMetrics);
+var
+  w, shadow, i, a, band, bandTop, y: Integer;
+  line, sc: TBGRAPixel;
+  c: TTyColor;
+  frame: TTyStyleSet;
+
+  procedure ShadowStrip(const AStrip: TRect);
+  begin
+    P.Bitmap.FillRect(P.Dev(AStrip), sc, dmDrawWithTransparency);
+  end;
+
+begin
+  w := ScaleI(StyleMetric('--grid-frozen-line-width', 1));
+  shadow := ScaleI(StyleMetric('--grid-frozen-shadow-size', 0));
+  if (w <= 0) and (shadow <= 0) then Exit;
+  frame := CurrentStyle;
+  line := TyColorToBGRA(StyleColor('--grid-frozen-line-color', frame.BorderColor));
+  c := StyleColor('--grid-frozen-shadow-color', TyRGBA(0, 0, 0, 40));
+  bandTop := GroupBandHeightPx + FilterRowHeightPx;
+  if hoVisible in FHeader.Options then Inc(bandTop, HeaderHeightPx);
+  band := M.ClientW - M.FrozenRight;
+
+  if shadow > 0 then
+    for i := 0 to shadow - 1 do
+    begin
+      { Fading out from the edge. Only where something has really scrolled under the band. }
+      a := TyAlphaOf(c) * (shadow - i) div shadow;
+      sc := TyColorToBGRA(c);
+      sc.alpha := a;
+      if (M.FrozenLeft > 0) and ((M.ScrollX > 0) or RtlLayout) then
+        ShadowStrip(Rect(M.FrozenLeft + i, bandTop, M.FrozenLeft + i + 1, M.ClientH));
+      if (M.FrozenRight > 0) and ((M.ScrollX > 0) or not RtlLayout) then
+        ShadowStrip(Rect(band - 1 - i, bandTop, band - i, M.ClientH));
+      if (M.FrozenTop > bandTop) and (M.ScrollY > 0) then
+        ShadowStrip(Rect(0, M.FrozenTop + i, M.ClientW, M.FrozenTop + i + 1));
+    end;
+
+  if w > 0 then
+  begin
+    if M.FrozenLeft > 0 then
+      PutRule(P, Rect(M.FrozenLeft - w, bandTop, M.FrozenLeft, M.ClientH), False, line, 0, 0, 0);
+    if M.FrozenRight > 0 then
+      PutRule(P, Rect(band, bandTop, band + w, M.ClientH), False, line, 0, 0, 0);
+    if M.FrozenTop > bandTop then
+      PutRule(P, Rect(0, M.FrozenTop - w, M.ClientW, M.FrozenTop), True, line, 0, 0, 0);
+    y := M.ClientH - M.FrozenBottom;
+    if M.FrozenBottom > 0 then
+      PutRule(P, Rect(0, y, M.ClientW, y + w), True, line, 0, 0, 0);
+  end;
+end;
+
+procedure TTyCustomGrid.RenderOverlay(P: TTyPainter; const M: TTyGridMetrics; const AFrame: TTyStyleSet);
+begin
+  { 基类没有光标,也没有选区。 }
 end;
 
 procedure TTyCustomGrid.FillRegion(P: TTyPainter; const ARect: TRect; const AKey: string);
@@ -7596,7 +7923,7 @@ var
   S: TTyStyleSet;
 begin
   if IsRectEmpty(ARect) then Exit;
-  S := ActiveController.Model.ResolveStyle(AKey, StyleClass, CurrentStates);
+  S := GridPartPlain(AKey, CurrentStates);
   if not (tpBackground in S.Present) then Exit;   { 皮肤没写这块 → 透出表面本色 }
   P.FillBackground(ARect, S.Background, 0);
 end;
@@ -7906,10 +8233,16 @@ begin
 end;
 
 function TTyCustomGrid.HeaderSortGlyphW(ACol: Integer): Integer;
+var
+  unsorted: string;
 begin
   Result := 0;
-  if (hoShowSortGlyphs in FHeader.Options) and (ACol = FHeader.SortColumn) then
-    Result := ScaleI(12);
+  if not (hoShowSortGlyphs in FHeader.Options) then Exit;
+  if ACol = FHeader.SortColumn then Exit(ScaleI(12));
+  unsorted := LowerCase(Trim(StyleToken('--sort-glyph-unsorted', 'none')));
+  if (unsorted = 'always') or ((unsorted = 'hover') and (ACol = FHoverHeaderCol)) then
+    if coAllowClick in TTyColumn(FHeader.Columns.Items[ACol]).Options then
+      Result := ScaleI(12);
 end;
 
 function TTyCustomGrid.HeaderFunnelCenterX(ACol: Integer): Integer;
@@ -7963,11 +8296,13 @@ var
   hdrFontSize, hdrFontWeight: Integer;
   col: TTyColumn;
   imgList: TCustomImageList;
-  secS, hdrS, actHdrS, hotS, pushS: TTyStyleSet;
-  hotTrack, pushed: Boolean;
-  ink: TTyColor;
+  secS, hdrS, actHdrS, hotS, pushS, sortedS, filteredS: TTyStyleSet;
+  hotTrack, pushed, bevel: Boolean;
+  ink, bevelLight, bevelDark: TTyColor;
   r, textR: TRect;
   line: TBGRAPixel;
+  sepW, sepOn, sepOff, sepPx, sepTop, padStart, padEnd: Integer;
+  sepH: string;
 begin
   { **`tysActive` 必须从这两趟里剔掉。** CurrentStates 是**整个控件**的状态:鼠标在
     表格里任何地方按下去,控件就带上 tysActive。列头带和列头段是 chrome,不是按钮 ——
@@ -7977,18 +8312,39 @@ begin
     整条列头带的每一段都换底,而且 goHeaderPushedLook 关着也照样发生。按下去的观感
     **只有一个来源** —— 下面那趟按 FPressedHeaderCol 逐段判定、且由标志把门的解析。
     (加这条规则之前 :active 不存在,所以剔掉它对既有主题逐像素无影响。) }
-  hdrS := PartStyle('TyGridHeader', StyleClass,
-    CurrentStates - [tysActive]);
-  secS := PartStyle('TyGridHeaderSection', StyleClass,
-    CurrentStates - [tysActive]);
+  { #197: and tysHover the same way. The pointer anywhere over the table put every section into
+    its :hover look; the one under the pointer takes that below, by hoHotTrack. }
+  hdrS := GridPart('TyGridHeader', CurrentStates - [tysActive, tysHover]);
+  secS := GridPart('TyGridHeaderSection', CurrentStates - [tysActive, tysHover]);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
-  line := TyColorToBGRA(hdrS.BorderColor);
+  { #197: the separator, from the theme: width (0 for none), height ('100%', '60%', '16px'), its
+    style, and the colour TyGridHeader's border has. }
+  line := TyColorToBGRA(OverrideColor('--grid-header-separator-color', hdrS.BorderColor));
+  sepW := ScaleI(StyleMetric('--grid-header-separator-width', 1));
+  TyParseLineDash(StyleToken('--grid-header-separator-style', 'solid'), sepOn, sepOff);
+  sepOn := ScaleI(sepOn);
+  sepOff := ScaleI(sepOff);
+  sepH := Trim(StyleToken('--grid-header-separator-height', '100%'));
+  sepPx := AHeaderH;
+  if (sepH <> '') and (sepH[Length(sepH)] = '%') then
+    sepPx := AHeaderH * StrToIntDef(Copy(sepH, 1, Length(sepH) - 1), 100) div 100
+  else if sepH <> '' then
+    sepPx := ScaleI(StyleMetric('--grid-header-separator-height', AHeaderH));
+  if sepPx > AHeaderH then sepPx := AHeaderH;
+  sepTop := (AHeaderH - sepPx) div 2;
+  bevel := SameText(Trim(StyleToken('--grid-header-bevel', 'none')), 'raised');
+  if bevel then
+  begin
+    bevelLight := StyleColor('--grid-header-bevel-light', TyRGBA(255, 255, 255, 255));
+    bevelDark := StyleColor('--grid-header-bevel-dark', TyRGBA(128, 128, 128, 255));
+  end;
+  padStart := ScaleI(StyleMetric('--grid-header-padding-start', 6));
+  padEnd := ScaleI(StyleMetric('--grid-header-padding-end', 4));
   { 激活态漏斗的颜色走主题(选中态的表头文字色);主题没给就退回普通墨色 ——
     绝不自己发明一个颜色。 }
-  actHdrS := PartStyle('TyGridHeaderSection',
-    StyleClass, [tysSelected]);
+  actHdrS := GridPart('TyGridHeaderSection', [tysSelected]);
   if tpTextColor in actHdrS.Present then accentInk := actHdrS.TextColor
   else accentInk := ink;
 
@@ -8001,8 +8357,7 @@ begin
     好处在列头上全赔掉。没在 hot-track 或者鼠标不在列头上时一次都不解析。 }
   hotTrack := (hoHotTrack in FHeader.Options) and (FHoverHeaderCol >= 0);
   if hotTrack then
-    hotS := PartStyle('TyGridHeaderSection',
-      StyleClass, [tysHover]);
+    hotS := GridPart('TyGridHeaderSection', [tysHover]);
 
   { 按下去的那一段 —— goHeaderPushedLook。这个标志从前**没有进枚举**,理由写在
     docs/controls/grid.md 的对照表里:主题当时没有 TyGridHeaderSection:active,
@@ -8012,8 +8367,10 @@ begin
     与 hotS 同样**在循环外解析一次**:每段各解析一遍会把逐格记忆化的好处全赔掉。 }
   pushed := (goHeaderPushedLook in Options) and (FPressedHeaderCol >= 0);
   if pushed then
-    pushS := PartStyle('TyGridHeaderSection',
-      StyleClass, [tysActive]);
+    pushS := GridPart('TyGridHeaderSection', [tysActive]);
+  { #197: a sorted and a filtered section may have a look of their own. }
+  sortedS := GridPart('TyGridHeaderSorted', []);
+  filteredS := GridPart('TyGridHeaderFiltered', []);
 
   imgList := HeaderImageList;
 
@@ -8039,6 +8396,24 @@ begin
     hdrBg := secS.Background;
     hdrHasBg := tpBackground in secS.Present;
     hdrInk := ink;
+    if (i = FHeader.SortColumn) and (hoShowSortGlyphs in FHeader.Options) then
+    begin
+      if (tpBackground in sortedS.Present) and (sortedS.Background.Kind <> tfkNone) then
+      begin
+        hdrBg := sortedS.Background;
+        hdrHasBg := True;
+      end;
+      if tpTextColor in sortedS.Present then hdrInk := sortedS.TextColor;
+    end;
+    if ColumnFilterActive(i) then
+    begin
+      if (tpBackground in filteredS.Present) and (filteredS.Background.Kind <> tfkNone) then
+      begin
+        hdrBg := filteredS.Background;
+        hdrHasBg := True;
+      end;
+      if tpTextColor in filteredS.Present then hdrInk := filteredS.TextColor;
+    end;
     { 鼠标底下那一段用 :hover 的那份。主题没给 hover 背景就退回普通那份 ——
       与本单元其余"皮肤没写就优雅退化"的地方同一条规矩。宿主钩子在后面,
       仍然压得过它。 }
@@ -8073,6 +8448,12 @@ begin
 
     if hdrHasBg then
       P.FillBackground(r, hdrBg, 0);
+    { #197: --grid-header-bevel: raised -- a button for a section, sunk while it is pressed. }
+    if bevel then
+      if pushed and (i = FPressedHeaderCol) then
+        P.DrawEdge(r, 1, bevelDark, bevelLight)
+      else
+        P.DrawEdge(r, 1, bevelLight, bevelDark);
 
     { 这一段自己的**阅读空间**矩形。图标 / 标题 / 漏斗 / 排序徽标 / 排序三角
       五个槽位全部在它里面算,最后各自反射回屏幕 —— 一处定方向,五个槽一起换边。 }
@@ -8107,8 +8488,8 @@ begin
       end;
     end;
 
-    textR := ToScreenRect(Rect(rr.Left + ScaleI(6) + imgPad, r.Top,
-      rr.Right - ScaleI(4) - gs, r.Bottom));
+    textR := ToScreenRect(Rect(rr.Left + padStart + imgPad, r.Top,
+      rr.Right - padEnd - gs, r.Bottom));
     if (col.Text <> '') and (textR.Right > textR.Left) then
       { 换行时不省略号截断 —— 两者一起开的话第二行永远画不出来。
         (B6 勾了"换行绘制(表头格同享)",但表头走的 P.DrawText
@@ -8131,7 +8512,10 @@ begin
         从前这里和那里各写一个式子,靠 `r.Right = l + w` 恰好相等。 }
       cx := HeaderFunnelCenterX(i);
       cy := bandTop + AHeaderH div 2;
-      if ColumnFilterActive(i) then funnelInk := accentInk else funnelInk := ink;
+      if ColumnFilterActive(i) then
+        funnelInk := StyleColor('--grid-filter-icon-active-color', accentInk)
+      else
+        funnelInk := StyleColor('--grid-filter-icon-color', ink);
       TyDrawChevron(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
         tgChevronDown, funnelInk);
@@ -8149,25 +8533,24 @@ begin
           hdrFontSize - 2, hdrFontWeight, hdrInk, taCenter, tlCenter, False);
     end;
 
-    { 排序方向的小三角。 }
+    { 排序方向的标记。 }
     if gs > 0 then
     begin
       cx := ToReadingX(rr.Right - ScaleI(10));   { 反射自逆,见 HeaderFunnelCenterX }
       cy := bandTop + AHeaderH div 2;
-      { 槽位式调用传 pad=1:DrawGlyph 默认每边内缩 4 逻辑像素,小槽里会只剩个糊点。 }
-      if FHeader.SortDirection = sdAscending then
-        TyDrawGlyph(P, ActiveController,
-          Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
-          tgArrowUp, ink, 1, 1)
+      if i = FHeader.SortColumn then
+        DrawSortMark(P, Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
+          FHeader.SortDirection = sdAscending, ink)
       else
-        TyDrawGlyph(P, ActiveController,
-          Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
-          tgArrowDown, ink, 1, 1);
+        { #197: --sort-glyph-unsorted: the hint that this column can be sorted. }
+        DrawSortMark(P, Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
+          False, ink, True);
     end;
 
     { 分段之间的竖分隔线。 }
-    if r.Right - 1 < M.ClientW then
-      P.DrawRule(r.Right - 1, bandTop, r.Right - 1, bandTop + AHeaderH, line);
+    if (sepW > 0) and (r.Right - sepW < M.ClientW) and (sepPx > 0) then
+      PutRule(P, Rect(r.Right - sepW, bandTop + sepTop, r.Right, bandTop + sepTop + sepPx), False, line,
+        sepOn, sepOff, bandTop + sepTop);
   end;
 end;
 
@@ -8246,7 +8629,7 @@ end;
 
 procedure TTyCustomGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
 var
-  headerH, indW, bandH, ind0, ind1: Integer;
+  headerH, indW, bandH, ind0, ind1, ruleW: Integer;
   fixR: TRect;
 begin
   headerH := 0;
@@ -8283,6 +8666,11 @@ begin
     { 分组带先画(在上),列头带画在它下面。 }
     RenderHeaderGroups(P, M);
     RenderHeaderSections(P, M, HeaderHeightPx);
+    { #197: the rule under the band. Without a fill of its own a header needs it to read as one. }
+    ruleW := ScaleI(StyleMetric('--grid-header-rule-width', 1));
+    if ruleW > 0 then
+      PutRule(P, Rect(0, headerH - ruleW, M.ClientW, headerH), True,
+        TyColorToBGRA(StyleColor('--grid-header-rule-color', CurrentStyle.BorderColor)), 0, 0, 0);
   end;
 
   { 内嵌筛选行:紧贴列头之下,同样横跨整幅宽度。 }
@@ -8405,7 +8793,7 @@ begin
   h := FilterRowHeightPx;
   if h <= 0 then Exit;
 
-  fs := PartStyle('TyGridFilterRow', StyleClass, []);
+  fs := GridPart('TyGridFilterRow', []);
 
   { 整条带先铺底 —— 与列头带一样横跨整幅宽度(含行头槽上方那一块)。 }
   r := Rect(0, ATop, M.ClientW, ATop + h);
@@ -8452,12 +8840,12 @@ begin
   h := GroupBandHeightPx;
   if h <= 0 then Exit;
 
-  hdrS := PartStyle('TyGridHeader', StyleClass, CurrentStates);
-  secS := PartStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
+  hdrS := GridPart('TyGridHeader', CurrentStates);
+  secS := GridPart('TyGridHeaderGroup', CurrentStates);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
-  line := TyColorToBGRA(hdrS.BorderColor);
+  line := TyColorToBGRA(OverrideColor('--grid-header-separator-color', hdrS.BorderColor));
 
   lvlH := ScaleI(FGroupHeaderHeight);
   for i := 0 to FHeaderGroups.Count - 1 do
@@ -8589,8 +8977,15 @@ end;
 
 procedure TTyCustomGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
   const AFooterRect: TRect; const AFrame: TTyStyleSet);
+var
+  w: Integer;
 begin
   FillRegion(P, AFooterRect, 'TyGridSummaryRow');
+  { #197. }
+  w := ScaleI(StyleMetric('--grid-footer-rule-width', 1));
+  if w > 0 then
+    PutRule(P, Rect(AFooterRect.Left, AFooterRect.Top, AFooterRect.Right, AFooterRect.Top + w), True,
+      TyColorToBGRA(StyleColor('--grid-footer-rule-color', AFrame.BorderColor)), 0, 0, 0);
 end;
 
 procedure TTyCustomGrid.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -8599,9 +8994,52 @@ var
   S: TTyStyleSet;
   R, band, oldClip: TRect;
   M: TTyGridMetrics;
-  fastDy, bodyTop, seamPos, sc: Integer;
+  fastDy, bodyTop, seamPos, sc, edge, edgeTop, edgeBottom: Integer;
   seamR: TRect;
   canFast: Boolean;
+  corners: TTyCorners;
+
+  { One pass of the whole frame, or of one band with the clip set: the same calls either way, so
+    that what the fast path redraws is pixel for pixel what a full repaint would. }
+  procedure PaintAll;
+  var
+    ground: TBGRABitmap;
+  begin
+    ground := DrawFrameUnderContent(P, R, S);
+    try
+      { 背景图铺在本体底色**之上**、任何内容之下。 }
+      RenderBackgroundBitmap(P, M, R);
+
+      RenderChrome(P, M);
+      RenderCellBackgrounds(P, M);
+      if FooterHeightPx > 0 then
+        RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
+      RenderCells(P, M, S);
+      if FGridLineStyle <> glsNone then
+        RenderGridLines(P, M, S);
+      { 逐格边框压在格线之上、文字之上 —— 它表达的是"分区",应当最显眼。 }
+      RenderCellBorders(P, M);
+      RenderFrozenEdges(P, M);
+      RenderOverlay(P, M, S);
+    except
+      ground.Free;
+      raise;
+    end;
+    { #197: the header band and the rows run to the control's edges. }
+    DrawFrameOverContent(P, R, S, ground);
+  end;
+
+  procedure PaintBand(const ABand: TRect);
+  begin
+    M.ClipTop := ABand.Top;
+    M.ClipBottom := ABand.Bottom;
+    FMetricsCache := M;
+    oldClip := P.Bitmap.ClipRect;
+    P.Bitmap.ClipRect := P.Dev(ABand);
+    PaintAll;
+    P.Bitmap.ClipRect := oldClip;
+  end;
+
 begin
   { 持久表面:滚动时正文那一大块像素可以整体平移复用。尺寸变了就重建。
     The surface holds DEVICE pixels, DeviceScale times the layout size (#83); a change of the
@@ -8658,19 +9096,28 @@ begin
         ② 几何里的 ClipTop/ClipBottom 把逐行循环夹到那条带 → 真正省掉 CPU。
       正因为代码路径没有分叉,结果才能与整幅重画逐像素相同(有测试守着)。 }
     bodyTop := M.FrozenTop;
-    canFast := (fastDy <> 0)
-               and (M.ClientH - M.FrozenBottom - bodyTop > Abs(fastDy));
+    { #197: the frame lies over the content, so the rows it crosses at the top and the bottom of
+      the control, and the band a frozen edge's shadow falls on, cannot be moved with the rest:
+      they are redrawn on every scroll, and stay out of the part that moves. }
+    corners := TyEffectiveCorners(S);
+    edge := Max(Max(corners.TL, corners.TR), Max(corners.BR, corners.BL));
+    if TyBorderVisible(S) then edge := Max(edge, S.BorderWidth);
+    edge := ScaleI(edge);
+    edgeTop := Max(bodyTop, edge);
+    if M.ScrollY > 0 then
+      edgeTop := Max(edgeTop, bodyTop + ScaleI(StyleMetric('--grid-frozen-shadow-size', 0)));
+    edgeBottom := Min(M.ClientH - M.FrozenBottom, R.Bottom - edge);
+    canFast := (fastDy <> 0) and (edgeBottom - edgeTop > Abs(fastDy));
     if canFast then
     begin
       Inc(FFastScrollFrames);
       { 平移带的下沿是**正文窗格**的下沿,不是视口下沿 ——
         底部冻结带不随滚动,搬了它就会跟着一起跑。 }
-      ShiftSurfaceRows(P.Dev(bodyTop), P.Dev(M.ClientH - M.FrozenBottom), P.Dev(fastDy));
+      ShiftSurfaceRows(P.Dev(edgeTop), P.Dev(edgeBottom), P.Dev(fastDy));
       if fastDy > 0 then
-        band := Rect(0, M.ClientH - M.FrozenBottom - fastDy, M.ClientW,
-                     M.ClientH - M.FrozenBottom)
+        band := Rect(0, edgeBottom - fastDy, M.ClientW, edgeBottom)
       else
-        band := Rect(0, bodyTop, M.ClientW, bodyTop - fastDy);
+        band := Rect(0, edgeTop, M.ClientW, edgeTop - fastDy);
 
       { **接缝那一行必须一起重画,不能只复用它。**
         上一帧里,骑在正文窗格边缘上的那一行是被**裁着**画的 —— 只画了露在
@@ -8699,35 +9146,22 @@ begin
       if band.Top < bodyTop then band.Top := bodyTop;
       if band.Bottom > M.ClientH - M.FrozenBottom then
         band.Bottom := M.ClientH - M.FrozenBottom;
-      M.ClipTop := band.Top;
-      M.ClipBottom := band.Bottom;
-      FMetricsCache := M;
-      oldClip := P.Bitmap.ClipRect;
-      P.Bitmap.ClipRect := P.Dev(band);
+      { The frame first, on the fast path too: there the clip holds the strip that came into
+        view, so the full repaint's own call repaints just that strip, pixel for pixel. Filling
+        the strip with the body colour instead covered the frame's left edge across the view's
+        width and never drew it back -- a gap in the border after every scroll (#86). }
+      PaintBand(band);
+      if bodyTop < edgeTop then
+        PaintBand(Rect(0, bodyTop, M.ClientW, edgeTop));
+      if edgeBottom < M.ClientH - M.FrozenBottom then
+        PaintBand(Rect(0, edgeBottom, M.ClientW, M.ClientH - M.FrozenBottom));
     end
     else
+    begin
       FSurface.Fill(BGRAPixelTransparent);
+      PaintAll;
+    end;
 
-    { The frame first, on the fast path too: there the clip holds the strip that came into
-      view, so the full repaint's own call repaints just that strip, pixel for pixel. Filling
-      the strip with the body colour instead covered the frame's left edge across the view's
-      width and never drew it back -- a gap in the border after every scroll (#86). }
-    DrawFrame(P, R, S);
-
-    { 背景图铺在本体底色**之上**、任何内容之下。 }
-    RenderBackgroundBitmap(P, M, R);
-
-    RenderChrome(P, M);
-    RenderCellBackgrounds(P, M);
-    if FooterHeightPx > 0 then
-      RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
-    RenderCells(P, M, S);
-    { 逐格边框压在格线之上、文字之上 —— 它表达的是"分区",应当最显眼。 }
-    RenderCellBorders(P, M);
-    if FGridLineStyle <> glsNone then
-      RenderGridLines(P, M, S);
-
-    if canFast then P.Bitmap.ClipRect := oldClip;
     FSurfaceFresh := True;
   finally
     FMetricsCached := False;
@@ -8979,7 +9413,7 @@ begin
   if not TyGridDrawSlots(M, firstSlot, lastSlot) then Exit;
 
   { 同上:内边距也别跟着网格自身的状态变,否则鼠标进出会让文字左右挪一下。 }
-  cellS := PartStyle('TyGridCell', StyleClass, []);
+  cellS := GridPart('TyGridCell', []);
   if tpTextColor in cellS.Present then ink := cellS.TextColor
   else ink := AFrame.TextColor;
   padL := ScaleI(cellS.Padding.Left);
@@ -12534,7 +12968,7 @@ begin
     树形列再减缩进。少减一项就会出现"提示说放得下、屏幕上却带着…"。 }
   M := GridMetrics;
   cell := TyGridCellContentRect(CellRect(ACol, ARow), M);
-  cellSty := PartStyle('TyGridCell', StyleClass, []);
+  cellSty := GridPart('TyGridCell', []);
   textR := ToReadingRect(cell);
   textR := Rect(textR.Left + ScaleI(cellSty.Padding.Left), cell.Top,
                 textR.Right - ScaleI(cellSty.Padding.Right), cell.Bottom);
@@ -12572,9 +13006,9 @@ end;
 function TTyCustomStringGrid.SelectionFillStyle: TTyStyleSet;
 begin
   if FHideSelectionWhenInactive and (not SelectionIsActive) then
-    Result := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive', StyleClass, [])
+    Result := GridPartPlain('TyGridCellSelectedInactive', [])
   else
-    Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
+    Result := GridPartPlain('TyGridCell', [tysSelected]);
 end;
 
 { #60. The selection always holds the cursor cell, and its fill went over that cell with the
@@ -14369,7 +14803,7 @@ var
   r: TRect;
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  cS := PartStyle('TyGridCell', StyleClass, []);
+  cS := GridPart('TyGridCell', []);
   padL := ScaleI(cS.Padding.Left);
   padR := ScaleI(cS.Padding.Right);
 
@@ -14453,8 +14887,8 @@ begin
   { 1x1 的临时位图只用来量文字 —— 不需要画布,也不需要窗口句柄。 }
   bmp := TBGRABitmap.Create(1, 1);
   try
-    cSty := PartStyle('TyGridCell', StyleClass, []);
-    hSty := PartStyle('TyGridHeader', StyleClass, []);
+    cSty := GridPart('TyGridCell', []);
+    hSty := GridPart('TyGridHeader', []);
 
     widest := TextW(TTyColumn(Header.Columns.Items[ACol]).Text, hSty);
 
@@ -14559,7 +14993,7 @@ begin
     根本看不出谁包着谁。命中走的也是这个矩形,所以点得到的就是看得见的那一个。 }
   ind := ScaleI(4);
   if IsGroupRow(APos, gi) and (gi >= 0) and (gi <= High(FGroups)) then
-    Inc(ind, FGroups[gi].Level * ScaleI(14));
+    Inc(ind, FGroups[gi].Level * ScaleI(StyleMetric('--grid-group-indent', 14)));
   { 缩进从**阅读起点**起算,反射一次落到屏幕上。绘制与命中读的都是这一个矩形,
     所以三角换边时点击面一起换 —— 它们本来就不可能是两处。 }
   Result := ToScreenRect(Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box));
@@ -14581,7 +15015,7 @@ begin
   if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
 
   info := GroupInfo(AGroupIndex);
-  gS := PartStyle('TyGridGroupRow', StyleClass, CurrentStates);
+  gS := GridPart('TyGridGroupRow', CurrentStates);
   if tpBackground in gS.Present then
     P.FillBackground(r, gS.Background, 0);
   if tpTextColor in gS.Present then ink := gS.TextColor else ink := AFrame.TextColor;
@@ -14834,7 +15268,7 @@ var
 begin
   inherited RenderFooter(P, M, AFooterRect, AFrame);
 
-  fS := PartStyle('TyGridSummaryRow', StyleClass, CurrentStates);
+  fS := GridPart('TyGridSummaryRow', CurrentStates);
   if tpTextColor in fS.Present then ink := fS.TextColor else ink := AFrame.TextColor;
 
   for i := 0 to Header.Columns.Count - 1 do
@@ -15018,7 +15452,7 @@ begin
   if not RowsShownInDataOrder then Exit;
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
-  sz := ScaleI(6);
+  sz := ScaleI(StyleMetric('--grid-fill-handle-size', 6));
   { 贴在选区的**尾下角**、略微外探一点 —— 与 Excel 的手感一致,也更好点中。
     绘制(RenderSelectionFrame)与命中(MouseDown)读的都是这一个矩形。 }
   bb := ToReadingRect(b);
@@ -18004,7 +18438,7 @@ begin
   if IsRectEmpty(b) then Exit;
   r := ActiveSelectionRect;
 
-  fS := ActiveController.Model.ResolveStyle('TyGridSelectionFrame', StyleClass, []);
+  fS := GridPartPlain('TyGridSelectionFrame', []);
   if not (tpBorderColor in fS.Present) then Exit;   { 主题没定义就不画 }
 
   { 裁到选区**所属的那个窗格**,而不是笼统裁到正文窗格。
@@ -18013,11 +18447,40 @@ begin
   DrawInPane(P, CellPane(ColumnAtPlace(r.Right), r.Bottom), M, @DrawFrameAndHandle);
 end;
 
+procedure TTyCustomStringGrid.RenderOverlay(P: TTyPainter; const M: TTyGridMetrics; const AFrame: TTyStyleSet);
+var
+  w, onPx, offPx: Integer;
+  ring: TRect;
+  c: TBGRAPixel;
+
+  procedure DrawRing;
+  begin
+    PutRule(P, Rect(ring.Left, ring.Top, ring.Right, ring.Top + w), True, c, onPx, offPx, ring.Left);
+    PutRule(P, Rect(ring.Left, ring.Bottom - w, ring.Right, ring.Bottom), True, c, onPx, offPx, ring.Left);
+    PutRule(P, Rect(ring.Left, ring.Top + w, ring.Left + w, ring.Bottom - w), False, c, onPx, offPx, ring.Top);
+    PutRule(P, Rect(ring.Right - w, ring.Top + w, ring.Right, ring.Bottom - w), False, c, onPx, offPx, ring.Top);
+  end;
+
+begin
+  RenderSelectionFrame(P, M, AFrame);
+  { #197: the cursor's own ring, for the modes that have no frame of their own to show it by. }
+  w := ScaleI(StyleMetric('--grid-focus-ring-width', 0));
+  if (w <= 0) or not FShowFocusCell or (FCol < 0) or (FRow < 0) then Exit;
+  if (FCol >= Header.Columns.Count) or not (Focused or not FHideSelectionWhenInactive) then Exit;
+  ring := CellVisibleRect(FCol, FRow);
+  if IsRectEmpty(ring) then Exit;
+  c := TyColorToBGRA(StyleColor('--grid-focus-ring-color', AFrame.BorderColor));
+  TyParseLineDash(StyleToken('--grid-focus-ring-style', 'solid'), onPx, offPx);
+  onPx := ScaleI(onPx);
+  offPx := ScaleI(offPx);
+  DrawInPane(P, CellPane(FCol, DataToDisplay(FRow)), M, @DrawRing);
+end;
+
 procedure TTyCustomStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
   slot: Integer;   { 绘制槽位 }
-  selS, markS: TTyStyleSet;
+  selS, markS, selHoverS: TTyStyleSet;
   vis: TRect;
   firstRow, lastRow, pos, dataRow, colIdx, gIdx: Integer;
 begin
@@ -18036,7 +18499,8 @@ begin
   { 盖在"用户显式指定了底色"的格上时改用半透明层。选区底色是不透明的 accent,
     直接铺上去会把用户自己标的颜色**整块抹掉** —— 而光标总是落在刚上色的那一格上,
     于是"上了色却什么都没变"。半透明层让两者都读得出来。 }
-  markS := ActiveController.Model.ResolveStyle('TyGridCellMarked', StyleClass, []);
+  markS := GridPartPlain('TyGridCellMarked', []);
+  selHoverS := GridPartPlain('TyGridCellSelectedHover', []);
   if tpBackground in selS.Present then
     if TyGridDrawSlots(M, firstRow, lastRow) then
       for slot := firstRow to lastRow do
@@ -18053,14 +18517,13 @@ begin
           if CellAppearance(colIdx, dataRow, pos, AFrame).HasExplicitBackground
             and (tpBackground in markS.Present) then
             P.FillBackground(vis, markS.Background, 0)
+          else if (tysHover in CellStates(colIdx, dataRow))
+            and (tpBackground in selHoverS.Present) and (selHoverS.Background.Kind <> tfkNone) then
+            P.FillBackground(vis, selHoverS.Background, 0)   { #197 }
           else
             P.FillBackground(vis, selS.Background, 0);
         end;
       end;
-  { 选区外框 + 填充柄。画在选区底色之上、单元格文字之前 ——
-    外框是"这块是选中的"的边界线索,底色只给面。 }
-  RenderSelectionFrame(P, M, AFrame);
-
   { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
     所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
   if (GetGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then

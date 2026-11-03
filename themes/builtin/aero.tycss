@@ -15,6 +15,11 @@
 
 /* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */
 :root {
+  /* Table: Windows 7's details view. No band, a slate caption, full separators, a pale blue hover. */
+  --grid-header-bg: var(--grid-bg);
+  --grid-header-color: alpha(var(--on-surface), 0.7);
+  --grid-header-hover-bg: alpha(var(--accent), 0.12);
+  --grid-header-pressed-bg: alpha(var(--accent), 0.24);
   --focus-ring: alpha(var(--accent), 0.55);
   --on-titlebar: var(--titlebar-ink);   /* ink for controls hosted on the title bar */
 }

@@ -514,6 +514,20 @@ type
   protected
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+    { For a control whose content runs to its edges -- a table's header band, a row's fill -- and
+      so over its own frame. DrawFrameUnderContent is DrawFrame, keeping what lies under the
+      rounded corners; after the content, DrawFrameOverContent gives those corners back outside
+      the arc and draws the border and focus ring again on top, and frees AGround. }
+    function DrawFrameUnderContent(APainter: TTyPainter; const ARect: TRect;
+      const AStyle: TTyStyleSet): TBGRABitmap;
+    procedure DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
+      const AStyle: TTyStyleSet; AGround: TBGRABitmap);
+    { The mark on a sorted header section, in the middle of AZone: one for the grid, the list view
+      and the tree. --sort-glyph: chevron | arrow | triangle | none; --sort-glyph-size;
+      --sort-glyph-color, by default AInk. AHint: the faint one on a column that is not sorted but
+      could be; --sort-glyph-unsorted-color. }
+    procedure DrawSortMark(APainter: TTyPainter; const AZone: TRect; AAscending: Boolean; AInk: TTyColor;
+      AHint: Boolean = False);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
       host is reachable; returns whether it painted. For control regions OUTSIDE the
       styled frame (a group-box caption band, the empty part of a tab header strip)
@@ -3093,6 +3107,91 @@ begin
   TyApplyStyleOpacity(Self, APainter, AStyle);
   TyDrawFrameUnderlay(APainter, ARect, AStyle);
   TyDrawFrameChrome(Self, APainter, ARect, AStyle);
+end;
+
+function TTyCustomControl.DrawFrameUnderContent(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet): TBGRABitmap;
+var
+  corners: TTyCorners;
+  eff: TTyStyleSet;
+begin
+  corners := TyEffectiveCorners(AStyle);
+  eff := AStyle;
+  TyApplyRenderStyle(eff, corners);
+  Result := nil;
+  if (corners.TL > 0) or (corners.TR > 0) or (corners.BR > 0) or (corners.BL > 0) then
+  begin
+    TyFillParentBg(Self, APainter, ARect, AStyle);
+    Result := APainter.KeepCornerGround(ARect, corners);
+  end;
+  DrawFrame(APainter, ARect, AStyle);
+end;
+
+procedure TTyCustomControl.DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet; AGround: TBGRABitmap);
+var
+  corners: TTyCorners;
+  eff: TTyStyleSet;
+begin
+  corners := TyEffectiveCorners(AStyle);
+  eff := AStyle;
+  TyApplyRenderStyle(eff, corners);
+  try
+    APainter.LayCornerGround(ARect, corners, AGround, TyBorderVisible(eff));
+  finally
+    AGround.Free;
+  end;
+  TyDrawFrameChrome(Self, APainter, ARect, AStyle);
+end;
+
+procedure TTyCustomControl.DrawSortMark(APainter: TTyPainter; const AZone: TRect; AAscending: Boolean;
+  AInk: TTyColor; AHint: Boolean);
+var
+  kind: string;
+  ink: TTyColor;
+  sz, cx, cy, half: Integer;
+  ctrl: TTyCustomStyleController;
+  px: TBGRAPixel;
+begin
+  kind := LowerCase(Trim(StyleToken('--sort-glyph', 'chevron')));
+  if kind = 'none' then Exit;
+  if AHint then
+  begin
+    px := TyColorToBGRA(AInk);
+    ink := StyleColor('--sort-glyph-unsorted-color', TyRGBA(px.red, px.green, px.blue, 110));
+  end
+  else
+    ink := StyleColor('--sort-glyph-color', AInk);
+  ctrl := ActiveController;
+  if (kind = 'arrow') or (kind = 'triangle') then
+  begin
+    sz := APainter.Scale(StyleMetric('--sort-glyph-size', 10));
+    half := sz div 2;
+    cx := (AZone.Left + AZone.Right) div 2;
+    cy := (AZone.Top + AZone.Bottom) div 2;
+    if kind = 'arrow' then
+    begin
+      if AAscending then
+        TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgArrowUp, ink, 1, 1)
+      else
+        TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgArrowDown, ink, 1, 1);
+    end
+    else if AAscending then
+      TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgTriangleUp, ink, 1, 1)
+    else
+      TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgTriangleDown, ink, 1, 1);
+    Exit;
+  end;
+  ink := TyChevronInk(ctrl, ink);
+  if AAscending then
+  begin
+    if not TyTryDrawGlyphOverride(APainter, ctrl, AZone, TyGlyphKindToken(tgChevronUp), ink) then
+      APainter.DrawChevron(AZone, tgChevronUp, ink,
+        StyleMetric('--sort-glyph-size', ctrl.Metric('--glyph-chevron-size', TyDropChevronSize)));
+  end
+  else if not TyTryDrawGlyphOverride(APainter, ctrl, AZone, TyGlyphKindToken(tgChevronDown), ink) then
+    APainter.DrawChevron(AZone, tgChevronDown, ink,
+      StyleMetric('--sort-glyph-size', ctrl.Metric('--glyph-chevron-size', TyDropChevronSize)));
 end;
 
 function TTyCustomControl.FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;

@@ -146,6 +146,7 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure DrawChevronAt(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    function CornerRadiusAt(const ARect: TRect; const ACorners: TTyCorners; out AOptions: TRoundRectangleOptions): Integer;
     procedure EraseRectAt(const ARect: TRect);
     procedure DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
     procedure FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
@@ -363,6 +364,14 @@ type
       Used to re-establish a clean parent background in a windowed control's corners
       after a drop shadow bled into them. No-op when there are no rounded corners. }
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    { For a control whose content runs to its edges and so over its own frame. KeepCornerGround
+      copies what lies under the frame's rounded corners, before the frame is painted (nil for a
+      square one); LayCornerGround lays that back outside the arc once the content is done, which
+      is the clip a rounded frame would have given the content. ABehindBorder: a border goes over
+      next, and the arc is the one FillBackground's ABehindBorder fills to. }
+    function KeepCornerGround(const ARect: TRect; const ACorners: TTyCorners): TBGRABitmap;
+    procedure LayCornerGround(const ARect: TRect; const ACorners: TTyCorners; AGround: TBGRABitmap;
+      ABehindBorder: Boolean);
     procedure EraseRect(const ARect: TRect);
     { Bitmap.DrawLine(AX1, AY1, AX2, AY2, AColor, False) for a horizontal or vertical run, in
       layout pixels: the same pixels -- from the first point up to, not including, the second --
@@ -4600,6 +4609,94 @@ begin
     FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;
+  end;
+end;
+
+function TTyPainter.CornerRadiusAt(const ARect: TRect; const ACorners: TTyCorners;
+  out AOptions: TRoundRectangleOptions): Integer;
+begin
+  { Max corner radius + per-corner squaring, exactly as FillBackground computes. }
+  Result := ACorners.TL;
+  if ACorners.TR > Result then Result := ACorners.TR;
+  if ACorners.BR > Result then Result := ACorners.BR;
+  if ACorners.BL > Result then Result := ACorners.BL;
+  Result := TyClampRadiusPx(Scale(Result), ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  AOptions := [];
+  if ACorners.TL <= 0 then Include(AOptions, rrTopLeftSquare);
+  if ACorners.TR <= 0 then Include(AOptions, rrTopRightSquare);
+  if ACorners.BR <= 0 then Include(AOptions, rrBottomRightSquare);
+  if ACorners.BL <= 0 then Include(AOptions, rrBottomLeftSquare);
+end;
+
+function TTyPainter.KeepCornerGround(const ARect: TRect; const ACorners: TTyCorners): TBGRABitmap;
+var
+  R: TRect;
+  rad, mx, my, x, y: Integer;
+  opts: TRoundRectangleOptions;
+begin
+  Result := nil;
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    if FBmp = nil then Exit;
+    rad := CornerRadiusAt(R, ACorners, opts);
+    if rad <= 0 then Exit;
+    { 2r x 2r: the four corner squares side by side, which is also the shape of the mask below. }
+    Result := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    for my := 0 to 2 * rad - 1 do
+      for mx := 0 to 2 * rad - 1 do
+      begin
+        if mx < rad then x := R.Left + mx else x := R.Right - 2 * rad + mx;
+        if my < rad then y := R.Top + my else y := R.Bottom - 2 * rad + my;
+        Result.SetPixel(mx, my, FBmp.GetPixel(x, y));
+      end;
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.LayCornerGround(const ARect: TRect; const ACorners: TTyCorners; AGround: TBGRABitmap;
+  ABehindBorder: Boolean);
+var
+  R, clip: TRect;
+  rad, mx, my, x, y, o: Integer;
+  opts: TRoundRectangleOptions;
+  mask: TBGRABitmap;
+  g, d: TBGRAPixel;
+begin
+  if AGround = nil then Exit;
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    if FBmp = nil then Exit;
+    rad := CornerRadiusAt(R, ACorners, opts);
+    if (rad <= 0) or (AGround.Width <> 2 * rad) or (AGround.Height <> 2 * rad) then Exit;
+    mask := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    try
+      if ABehindBorder then
+        mask.FillRoundRectAntialias(0, 0, 2 * rad - 1, 2 * rad - 1, rad - 0.5, rad - 0.5, BGRAWhite, opts)
+      else
+        mask.FillRoundRectAntialias(-0.5, -0.5, 2 * rad - 0.5, 2 * rad - 0.5, rad, rad, BGRAWhite, opts);
+      clip := FBmp.ClipRect;
+      for my := 0 to 2 * rad - 1 do
+        for mx := 0 to 2 * rad - 1 do
+        begin
+          o := 255 - mask.GetPixel(mx, my).alpha;
+          if o = 0 then Continue;
+          if mx < rad then x := R.Left + mx else x := R.Right - 2 * rad + mx;
+          if my < rad then y := R.Top + my else y := R.Bottom - 2 * rad + my;
+          if (x < clip.Left) or (x >= clip.Right) or (y < clip.Top) or (y >= clip.Bottom) then Continue;
+          g := AGround.GetPixel(mx, my);
+          d := FBmp.GetPixel(x, y);
+          d.red := (d.red * (255 - o) + g.red * o) div 255;
+          d.green := (d.green * (255 - o) + g.green * o) div 255;
+          d.blue := (d.blue * (255 - o) + g.blue * o) div 255;
+          d.alpha := (d.alpha * (255 - o) + g.alpha * o) div 255;
+          FBmp.SetPixel(x, y, d);
+        end;
+    finally
+      mask.Free;
+    end;
+  finally
+    RasterLeave;
   end;
 end;
 

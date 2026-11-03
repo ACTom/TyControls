@@ -20,6 +20,17 @@
    caption band in this idiom (see TyCardHeader), so it is caption-short too — not the tall
    36px band a modern skin wants. */
 :root {
+  /* Table: raised buttons for a header, dark lines, triangles. */
+  --grid-header-bg: var(--surface);
+  --grid-header-bevel: raised;
+  --grid-header-separator-width: 0;
+  --grid-header-separator-color: darken(--surface, 30%);
+  --grid-header-rule-width: 0;
+  --grid-header-hover-bg: var(--surface);
+  --grid-header-pressed-bg: var(--surface);
+  --grid-line-color: var(--border);
+  --sort-glyph: triangle;
+  --sort-glyph-size: 9px;
   --caption-button-width:    25;   /* small squarish caption buttons */
   --caption-button-margin:    3;   /* horizontal gap: buttons ↔ right edge / caption */
   --caption-button-margin-y:  6;   /* vertical gap: buttons ↔ title-bar top & bottom */
