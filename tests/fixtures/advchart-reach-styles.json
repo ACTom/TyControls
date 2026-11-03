@@ -3837,6 +3837,147 @@
    ]
   },
   {
+   "id": "ptr.colour-order",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "showContent": false,
+     "renderMode": "richText",
+     "axisPointer": {
+      "label": {
+       "show": false
+      },
+      "lineStyle": {
+       "color": "#00ff00",
+       "type": "solid"
+      }
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     },
+     "axisPointer": {
+      "lineStyle": {
+       "color": "#123456"
+      }
+     }
+    },
+    "yAxis": {
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 0,
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ],
+    "axisPointer": {
+     "lineStyle": {
+      "color": "#0000ff",
+      "type": "dotted"
+     }
+    }
+   },
+   "part": "pointer",
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "xAxis0|#123456ff|1|solid|0|butt/miter/10"
+   ],
+   "action": {
+    "type": "updateAxisPointer",
+    "currTrigger": "mousemove",
+    "x": 200,
+    "y": 150
+   },
+   "looks": [
+    "xAxis0|1|0|0|0|"
+   ],
+   "fills": []
+  },
+  {
+   "id": "tip.proxy",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "hello",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "hello",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 100,
+     "y": 100,
+     "tooltip": {
+      "content": "hello"
+     }
+    }
+   }
+  },
+  {
    "id": "state.pie-blur",
    "option": {
     "animation": false,

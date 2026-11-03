@@ -270,6 +270,12 @@ function cases() {
       borderColor: '#00ff00' })), 'tooltip', { tip: true }],
     // a title's corners as an array
     ['title.radius-array', bare({ title: { text: 'T', backgroundColor: '#eeeeee', borderRadius: [1, 2, 3, 4] } }), 'title', BOX],
+    // the axis' colour over the tooltip's, the tooltip's over the component's (key by key, the first level wins)
+    ['ptr.colour-order', cartP({ axisPointer: { lineStyle: { color: '#0000ff', type: 'dotted' } } },
+      { lineStyle: { color: '#00ff00', type: 'solid' } }, { axisPointer: { lineStyle: { color: '#123456' } } }), 'pointer', PT],
+    // a proxy tooltip (showTip at a point with its own option): [tooltipOpt, {formatter: content}] over the global, the root under it
+    ['tip.proxy', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20 })), 'tooltip',
+      { tip: { type: 'showTip', x: 100, y: 100, tooltip: { content: 'hello' } } }],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
   ];
@@ -394,13 +400,15 @@ function run(id, option, part, more) {
       let model = null;
       const show = view._showTooltipContent;
       view._showTooltipContent = function (tooltipModel) { model = tooltipModel; return show.apply(this, arguments); };
-      chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: 1 });
+      chart.dispatchAction(more.tip === true ? { type: 'showTip', seriesIndex: 0, dataIndex: 1 } : JSON.parse(JSON.stringify(more.tip)));
       must(model, id + ': no tooltip shown');
       const el = view._tooltipContent.el;
       const get = k => { const v = model.get(k); return v == null ? null : JSON.parse(JSON.stringify(v)); };
-      return { id, option, part, seen: 1, n: 0, pens: [], tip: { formatter: get('formatter'), borderColor: get('borderColor'),
+      const rec = { id, option, part, seen: 1, n: 0, pens: [], tip: { formatter: get('formatter'), borderColor: get('borderColor'),
         padding: get('padding'), order: get('order'), backgroundColor: get('backgroundColor'), borderRadius: get('borderRadius'),
         text: el.style.text, stroke: colourOf(el.style.borderColor) } };
+      if (more.tip !== true) rec.tip.action = more.tip;
+      return rec;
     }
     settle(chart, T_BASE);
     if (more.action) {

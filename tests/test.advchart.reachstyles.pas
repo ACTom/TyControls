@@ -49,6 +49,7 @@ type
     Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function Frame: TTyPaintList;
+    function Built: TTyPaintList;
     function PtrShapes: TTyOverlayShapeArray;
     function TitleFrames: TTyOverlayShapeArray;
     function TipSpec: TTyTooltipSpec;
@@ -95,6 +96,12 @@ end;
 function TReachProbe.Frame: TTyPaintList;
 begin
   Result := AnimFrame;
+end;
+
+{ the list as the build left it, before an animation frame measures it }
+function TReachProbe.Built: TTyPaintList;
+begin
+  Result := SeriesList;
 end;
 
 function TReachProbe.PtrShapes: TTyOverlayShapeArray;
@@ -349,6 +356,22 @@ begin
         { the model the item's showTip builds, and what its box shows }
         tip := c.Objects['tip'];
         ts := FChart.TipSpec;
+        { a proxy's box: its own cascade, not the item's -- the box alone }
+        if tip.Find('action') is TJSONObject then
+        begin
+          FChart.DispatchAction(tip.Objects['action'].AsJSON);
+          Draw;
+          want := ' text ' + tip.Strings['text'] + ' stroke ' + tip.Strings['stroke'];
+          have := ' text ' + FChart.TipText + ' stroke ' + ColourHex(Cardinal(FChart.TipStroke));
+          Inc(nCases);
+          Inc(nTip);
+          if have <> want then
+          begin
+            Inc(nBad);
+            bad := bad + LineEnding + Format('  %s: %s here, upstream %s', [id, Trim(have), Trim(want)]);
+          end;
+          Continue;
+        end;
         want := ' formatter ' + tip.Get('formatter', '(none)') + ' border ';
         if tip.Find('borderColor').JSONType = jtString then want := want + tip.Strings['borderColor']
         else want := want + '(none)';
@@ -493,6 +516,27 @@ begin
           want := want + ' icon ' + c.Arrays['icons'].Strings[0];
           have := have + ' icon ' + ls.Icon;
         end;
+      end;
+      { a candlestick's pens as built too: what a paint draws without an
+        animation frame }
+      if Copy(id, 1, 7) = 'candle.' then
+      begin
+        pens.Clear;
+        lst := FChart.Built;
+        for k := 0 to lst.Count - 1 do
+        begin
+          el := lst.Element(k);
+          if el.Ignore or (el.Caption.FontSizeLogical > 0) then Continue;
+          if not ((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0)) then Continue;
+          if not (el.Style.StrokeWidthLogical > 0) then Continue;
+          if (el.Style.StrokeColor shr 24) = 0 then Continue;
+          pens.Add(PenOf(el));
+        end;
+        arr := c.Arrays['pens'];
+        s := '';
+        for k := 0 to arr.Count - 1 do s := s + ' ' + arr.Strings[k];
+        want := want + ' built' + s;
+        have := have + ' built' + SetText(pens);
       end;
       Inc(nCases);
       if have <> want then
