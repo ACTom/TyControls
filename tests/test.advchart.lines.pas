@@ -652,8 +652,12 @@ begin
     SameHex(what + ' ' + sym.Strings['name'] + ' rotation', el.Anim.G[11], sym.Find('rotation'));
     SameHex(what + ' ' + sym.Strings['name'] + ' rotation (the function)',
       TyLinesSymbolRotation(g, e = 1), sym.Find('rotation'));
-    SameHex(what + ' ' + sym.Strings['name'] + ' width', el.Anim.G[8], sym.Arrays['box'].Items[2]);
-    SameHex(what + ' ' + sym.Strings['name'] + ' height', el.Anim.G[9], sym.Arrays['box'].Items[3]);
+    { [R7-S] a path:// one's element is makePath's: no box recorded }
+    if sym.Arrays['box'].Items[2].JSONType <> jtNull then
+    begin
+      SameHex(what + ' ' + sym.Strings['name'] + ' width', el.Anim.G[8], sym.Arrays['box'].Items[2]);
+      SameHex(what + ' ' + sym.Strings['name'] + ' height', el.Anim.G[9], sym.Arrays['box'].Items[3]);
+    end;
     SameHex(what + ' ' + sym.Strings['name'] + ' opacity', el.Style.Alpha, sym.Find('opacity'));
     if el.Anim.G[10] <> 0 then
     begin

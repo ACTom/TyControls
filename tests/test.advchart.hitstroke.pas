@@ -54,6 +54,9 @@ type
     { [R7-R] hit-stroke.js' RENDER.cuthin: a thin unfilled polyline scaled 2
       from the item's point }
     function CuThin(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    { [R7-S] hit-stroke.js' RENDER.cuturn: a turned, scaled group of thick
+      unfilled paths (an arc, a circle, a polyline) }
+    function CuTurn(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
   TAdvChartHitStrokeTest = class(TTestCase)
@@ -78,6 +81,8 @@ type
     procedure TestATurnedRoundRectAndEllipseDrawAsUpstream;
     procedure TestThePadTopsThePenUpToFour;
     procedure TestAnOblongPathSymbolIsDrawnStretched;
+    procedure TestAGraphicElementIsHitAlikeAtAnyPPI;
+    procedure TestAGraphicPenIsReadAtHitTime;
   end;
 
 implementation
@@ -134,12 +139,36 @@ begin
     'style', TJSONObject.Create(['fill', TJSONNull.Create, 'stroke', '#000', 'lineWidth', 1])]);
 end;
 
+function Pt2(AX, AY: Double): TJSONArray;
+begin
+  Result := TJSONArray.Create([AX, AY]);
+end;
+
+function TCuClip.CuTurn(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var c: TTyDoubleArray;
+begin
+  c := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  Result := TJSONObject.Create(['type', 'group', 'x', c[0], 'y', c[1], 'rotation', 0.5,
+    'scaleX', 1.4, 'scaleY', 1.4, 'children', TJSONArray.Create([
+      TJSONObject.Create(['type', 'arc',
+        'shape', TJSONObject.Create(['cx', 0, 'cy', 0, 'r', 40, 'startAngle', 0.2, 'endAngle', 2.6]),
+        'style', TJSONObject.Create(['fill', TJSONNull.Create, 'stroke', '#000', 'lineWidth', 10])]),
+      TJSONObject.Create(['type', 'circle',
+        'shape', TJSONObject.Create(['cx', -10, 'cy', -12, 'r', 12]),
+        'style', TJSONObject.Create(['fill', TJSONNull.Create, 'stroke', '#000', 'lineWidth', 6])]),
+      TJSONObject.Create(['type', 'polyline',
+        'shape', TJSONObject.Create(['points', TJSONArray.Create([Pt2(-50, 30), Pt2(-20, 45),
+          Pt2(10, 30)])]),
+        'style', TJSONObject.Create(['fill', TJSONNull.Create, 'stroke', '#000', 'lineWidth', 8])])])]);
+end;
+
 procedure TAdvChartHitStrokeTest.SetUp;
 begin
   inherited SetUp;
   FCu := TCuClip.Create;
   TyChartRegisterRenderItem('cuclip', @FCu.CuClip);
   TyChartRegisterRenderItem('cuthin', @FCu.CuThin);
+  TyChartRegisterRenderItem('cuturn', @FCu.CuTurn);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -157,6 +186,7 @@ begin
   FreeAndNil(FMeasure);
   TyChartUnregisterRenderItem('cuclip');
   TyChartUnregisterRenderItem('cuthin');
+  TyChartUnregisterRenderItem('cuturn');
   FreeAndNil(FCu);
   inherited TearDown;
 end;
@@ -684,6 +714,115 @@ begin
       bmp.Free;
     end;
   end;
+end;
+
+{ [R7-S] A GRAPHIC ELEMENT'S Path.contain IN ITS OWN FRAME IS THE SAME AT
+  ANY PPI: the point taken back through the device transform, the pen read
+  off the style in the element's own units -- at 192 PPI every css point of
+  a ray finds what it finds at 96 (a turned rect and arc, thick, unfilled;
+  a scaled circle, thin) }
+procedure TAdvChartHitStrokeTest.TestAGraphicElementIsHitAlikeAtAnyPPI;
+const
+  cOpt = '{"animation":false,"graphic":['
+    + '{"type":"rect","x":120,"y":110,"rotation":0.5,"scaleX":1.5,"scaleY":1.5,'
+    + '"shape":{"x":-30,"y":-20,"width":60,"height":40},"style":{"fill":null,"stroke":"#000","lineWidth":9}},'
+    + '{"type":"arc","x":280,"y":150,"rotation":-0.3,"scaleX":1.2,"scaleY":1.2,'
+    + '"shape":{"cx":0,"cy":0,"r":45,"startAngle":0.2,"endAngle":2.4},"style":{"fill":null,"stroke":"#000","lineWidth":11}},'
+    + '{"type":"circle","x":200,"y":230,"scaleX":2,"scaleY":2,'
+    + '"shape":{"cx":0,"cy":0,"r":20},"style":{"fill":null,"stroke":"#000","lineWidth":1}}]}';
+var
+  bmp: TBGRABitmap;
+  ppi, k, j, nHit, nDiff: Integer;
+  x, y, s: Double;
+  at: array[0..1] of array of Boolean;
+begin
+  nHit := 0;
+  nDiff := 0;
+  for ppi := 0 to 1 do
+  begin
+    FreeAndNil(FChart);
+    FChart := THitStrokeProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, cW, cH);
+    FChart.Option := cOpt;
+    AssertEquals('parses', '', FChart.OptionError);
+    s := ppi + 1;
+    bmp := TBGRABitmap.Create(Round(cW * s), Round(cH * s), BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, Round(cW * s), Round(cH * s)), Round(96 * s));
+    finally
+      bmp.Free;
+    end;
+    SetLength(at[ppi], 0);
+    for j := 0 to 59 do
+      for k := 0 to 399 do
+      begin
+        x := k + 0.3;
+        y := 40 + j * 4.1;
+        SetLength(at[ppi], Length(at[ppi]) + 1);
+        at[ppi][High(at[ppi])] := FChart.SeriesList.HitTestElement(x * s, y * s,
+          Round(96 * s), False) >= 0;
+      end;
+  end;
+  for k := 0 to High(at[0]) do
+  begin
+    if at[0][k] then Inc(nHit);
+    if at[0][k] <> at[1][k] then Inc(nDiff);
+  end;
+  AssertTrue('the elements are hit somewhere', nHit > 500);
+  AssertEquals('points found otherwise at 192 PPI', 0, nDiff);
+end;
+
+{ [R7-S] THE PEN AS THE STYLE HOLDS IT NOW (a state tweens it): Path.contain
+  reads this.style -- the width in the element's own units (the drawn width
+  over its scale), hasStroke() a pen a state gives a shape built with none.
+  A rect scaled 2 from (100, 100), 40 x 30 in its own units: the right edge
+  at x 180. Unfilled, lineWidth 1: the threshold 5 of its units, 5 px out;
+  a drawn 16 (a state's lineWidth 8 under the scale): 8 px out. Filled with
+  no pen: nothing past the edge; a state's pen drawn 12 (6 of its units):
+  6 px out. }
+procedure TAdvChartHitStrokeTest.TestAGraphicPenIsReadAtHitTime;
+const
+  cOpt = '{"animation":false,"graphic":[{"type":"rect","x":100,"y":100,"scaleX":2,"scaleY":2,'
+    + '"shape":{"x":0,"y":0,"width":40,"height":30},"style":{%s}}]}';
+var
+  el: TTyChartElement;
+  bmp: TBGRABitmap;
+
+  function Build(const AStyle: string): TTyChartElement;
+  begin
+    FreeAndNil(FChart);
+    FChart := THitStrokeProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, cW, cH);
+    FChart.Option := Format(cOpt, [AStyle]);
+    AssertEquals('parses', '', FChart.OptionError);
+    bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+    finally
+      bmp.Free;
+    end;
+    AssertTrue('one element', FChart.SeriesList.Count >= 1);
+    Result := FChart.SeriesList.Element(0);
+  end;
+
+begin
+  el := Build('"fill":null,"stroke":"#000","lineWidth":1');
+  AssertTrue('the threshold: 4.9 px out', TyElementHit(el, 184.9, 130, 96, False));
+  AssertFalse('the threshold: 5.1 px out', TyElementHit(el, 185.1, 130, 96, False));
+  el.Style.StrokeWidthLogical := 16;
+  AssertTrue('a state''s pen of 8: 7.9 px out', TyElementHit(el, 187.9, 130, 96, False));
+  AssertFalse('a state''s pen of 8: 8.1 px out', TyElementHit(el, 188.1, 130, 96, False));
+  el := Build('"fill":"#888"');
+  AssertTrue('the fill', TyElementHit(el, 179.9, 130, 96, False));
+  AssertFalse('no pen: nothing past the edge', TyElementHit(el, 180.5, 130, 96, False));
+  el.Style.StrokeColor := TTyChartColor($FF000000);
+  el.Style.StrokeWidthLogical := 12;
+  AssertTrue('a state''s pen of 6: 5.9 px out', TyElementHit(el, 185.9, 130, 96, False));
+  AssertFalse('a state''s pen of 6: 6.1 px out', TyElementHit(el, 186.1, 130, 96, False));
 end;
 
 initialization
