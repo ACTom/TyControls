@@ -1309,6 +1309,13 @@ begin
     { an object is truthy }
     Result.BorderLayout := True;
   end;
+  { [R7-Y] an item's own border colour where no width is written anywhere:
+    zrender's lineWidth 1 [was: no pen] }
+  if (rf.StrokeObjSet or (AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderColor'))
+    and (AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Kind = dvkText)
+    and not TyChartColorIsNone(AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Text)))
+    and not Result.StrokeWidthSet and not (Result.StrokeWidthLogical > 0) then
+    Result.StrokeWidthLogical := 1;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
   begin
@@ -1873,6 +1880,9 @@ begin
       else bw := rv.LayoutWidthLogical;
     end
     else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    { [R7-Y] `borderWidth || 0`: a width nobody wrote is nought, whatever
+      the pen strokes at (zrender's 1 under a written colour) }
+    else if not rv.StrokeWidthSet then bw := 0
     else bw := rv.StrokeWidthLogical;
     { [R7-G] whenever a border colour is written truthy and not 'none',
       whatever the pen draws [was: only a pen of some colour] }

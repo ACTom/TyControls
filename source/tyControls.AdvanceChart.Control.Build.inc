@@ -2949,6 +2949,13 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-Y] A BORDER COLOUR WRITTEN WITH NO WIDTH strokes at zrender's
+    lineWidth 1 (getItemStyle leaves the key out; the path's default style
+    has 1) [was: no pen -- a bar's, a scatter's, a heatmap's border never
+    drawn] }
+  if item.BorderColor.Written and not item.BorderColor.IsNone
+    and not AVisual.StrokeWidthSet and not (AVisual.StrokeWidthLogical > 0) then
+    AVisual.StrokeWidthLogical := 1;
   { [R7-U] the layout's width: getLineWidth / prepareLineWidth read the
     item model's itemStyle.borderWidth, the root's under the series' }
   AVisual.LayoutHas := own <> node;
