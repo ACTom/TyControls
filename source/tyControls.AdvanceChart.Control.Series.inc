@@ -1560,7 +1560,8 @@ begin
   { [R7-W] a string no parser reads (not '' nor 'none'): written, the
     canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: the
     series' colour] }
-  if not Result and (AData.AsString <> '') and (AData.AsString <> 'none') then
+  if not Result and (AData.AsString <> '') and (AData.AsString <> 'none')
+    and not TyColourIsHandler(AData.AsString) then
   begin
     AColor := cTyCanvasColourLeft;
     Result := True;
@@ -3662,7 +3663,8 @@ begin
         Result[k] := c
       { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
         [was: the ramp's] }
-      else if (ov.Kind = dvkText) and (ov.Text <> '') and not TyChartColorIsNone(ov.Text) then
+      else if (ov.Kind = dvkText) and (ov.Text <> '') and not TyChartColorIsNone(ov.Text)
+        and not TyColourIsHandler(ov.Text) then
         Result[k] := cTyCanvasColourLeft;
     end;
 end;

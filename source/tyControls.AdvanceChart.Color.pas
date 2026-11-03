@@ -58,6 +58,9 @@ function TyTryParseCssRgba(const AText: string;
   which paints nothing but still hit-tests and still contributes a bounding
   rect. Same pixels, different geometry. }
 function TyChartColorIsNone(const AText: string): Boolean;
+{ [R7-W] '@Name': a callback the host answers, not a colour string -- the
+  canvas never sees it, so it is no refused colour }
+function TyColourIsHandler(const AText: string): Boolean;
 
 { ==================== the palette ==================== }
 
@@ -664,6 +667,11 @@ end;
 function Pack(AR, AG, AB, AAlpha: Cardinal): TTyChartColor;
 begin
   Result := TTyChartColor((AAlpha shl 24) or (AR shl 16) or (AG shl 8) or AB);
+end;
+
+function TyColourIsHandler(const AText: string): Boolean;
+begin
+  Result := (Length(AText) > 1) and (AText[1] = '@');
 end;
 
 function TyChartColorIsNone(const AText: string): Boolean;
@@ -1386,6 +1394,12 @@ begin
   if s = 'none' then
   begin
     Result.IsNone := True;
+    Exit;
+  end;
+  { a callback: unwritten here, the palette's colour is what it is handed }
+  if TyColourIsHandler(d.AsString) then
+  begin
+    Result.Written := False;
     Exit;
   end;
   if not TyTryParseChartColor(d.AsString, Result.Color) then

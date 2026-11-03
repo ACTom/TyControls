@@ -1283,7 +1283,7 @@ begin
       end
       { [R7-W] one no parser reads: the canvas keeps the strokeStyle it
         had (TyLinesCanvasLeftovers) [was: the series' pen] }
-      else if v.Text <> '' then
+      else if (v.Text <> '') and not TyColourIsHandler(v.Text) then
       begin
         Result.Stroke := cTyCanvasColourLeft;
         Result.StrokeGradient := Default(TTyChartGradient);
@@ -1348,7 +1348,7 @@ begin
   end
   { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
     (TyLinesCanvasLeftovers) [was: the series' colour] }
-  else if v.Text <> '' then
+  else if (v.Text <> '') and not TyColourIsHandler(v.Text) then
   begin
     Result.Fill := cTyCanvasColourLeft;
     Result.FillGradient := Default(TTyChartGradient);

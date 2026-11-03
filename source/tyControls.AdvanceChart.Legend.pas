@@ -1256,7 +1256,7 @@ var
         canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: no
         colour] }
       if (AData.AsString = '') or (AData.AsString = 'none') or (AData.AsString = 'inherit')
-        or (AData.AsString = 'auto') then Exit;
+        or (AData.AsString = 'auto') or TyColourIsHandler(AData.AsString) then Exit;
       c := cTyCanvasColourLeft;
     end;
     AHas := True;
