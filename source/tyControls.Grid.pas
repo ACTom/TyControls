@@ -15654,8 +15654,8 @@ begin
   begin
     if not NextMatch(AFind, ACaseSensitive, AWholeCell, True, c, dataRow) then Exit;
     cur := GetCellText(c, dataRow);
-    if AWholeCell then Cells[c, dataRow] := AReplace
-    else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+    if AWholeCell then SetEditText(c, dataRow, AReplace)
+    else SetEditText(c, dataRow, StringReplace(cur, AFind, AReplace, flags));
     Result := 1;
     MoveCursor(c, dataRow);
     AnchorSelection;

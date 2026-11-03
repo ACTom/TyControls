@@ -1332,8 +1332,8 @@ begin
     inherited ImeReplace(AStart, ALen, AText);
     Exit;
   end;
-  { Each update replaces the whole span the last one put down (TTyCocoaImeHandler), so the
-    latest text IS the composition; an empty one is the input method cancelling it. }
+  { Each update replaces the whole span the last one put down (the Cocoa input-method handler),
+    so the latest text IS the composition; an empty one is the input method cancelling it. }
   FImeText := AText;
 end;
 

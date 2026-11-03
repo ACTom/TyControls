@@ -528,7 +528,7 @@ function TyParseFontDescriptor(const ADesc: string; out AName: string; out ASize
 implementation
 
 uses
-  Forms, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
+  TypInfo, Forms, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
   tyControls.ColorBox, tyControls.ColorComboBox,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font, tyControls.StrConsts;
 
@@ -901,8 +901,11 @@ begin
     mine.Free;
   end;
   { Write-only under Items' own name: reading, the path walks into the published Items, whose
-    lines Loaded turns into rows -- so a form file still opens in a version without this. }
-  Filer.DefineProperty('Items.Strings', nil, @WriteRowLines, has);
+    lines Loaded turns into rows -- so a form file still opens in a version without this. Only
+    where Items IS published: a descendant that keeps it to itself (the property grid builds its
+    rows from the object it inspects) would write a path its own form file cannot read. }
+  if IsPublishedProp(Self, 'Items') then
+    Filer.DefineProperty('Items.Strings', nil, @WriteRowLines, has);
 end;
 
 procedure TTyCustomValueListEditor.Loaded;
