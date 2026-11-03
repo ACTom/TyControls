@@ -42,6 +42,11 @@ type
     procedure ApplyValue(AValue: Double);   // clamp + Invalidate + fire OnChange on real change
     function DisplayValue: Double;           // hover preview if active, else committed Value
   protected
+    { Every change of Value -- a click, a key, code -- ends here, AValue already clamped to
+      0..Count and differing from Value: the stars change, then OnChange fires. A descendant
+      that must ask before the stars move, or act after, overrides this (the data-aware
+      rating writes its field). }
+    procedure ChangeValue(AValue: Double); virtual;
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
@@ -195,7 +200,12 @@ begin
     if FAllowHalf then v := Round(v * 2) / 2 else v := Round(v);
   if v < 0 then v := 0 else if v > FCount then v := FCount;
   if FValue = v then Exit;      // no OnChange on a same-value set
-  FValue := v;
+  ChangeValue(v);
+end;
+
+procedure TTyCustomRating.ChangeValue(AValue: Double);
+begin
+  FValue := AValue;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
 end;

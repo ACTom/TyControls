@@ -32,6 +32,10 @@ type
     procedure SetActionGroupIndex(AValue: Integer);
     function GetActionLinkClass: TControlActionLinkClass; override;
     procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
+    { Every change of State -- a click, a key, code -- ends here, AValue differing from State:
+      State is set, then OnChange and OnClick fire. A descendant that must ask before the box
+      flips, or act after it, overrides this (the data-aware box writes its field). }
+    procedure ChangeState(AValue: TCheckBoxState); virtual;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
@@ -402,7 +406,11 @@ end;
 
 procedure TTyCustomCheckBox.SetState(const AValue: TCheckBoxState);
 begin
-  if FState = AValue then Exit;
+  if FState <> AValue then ChangeState(AValue);
+end;
+
+procedure TTyCustomCheckBox.ChangeState(AValue: TCheckBoxState);
+begin
   FState := AValue;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);

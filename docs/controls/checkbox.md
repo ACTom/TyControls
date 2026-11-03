@@ -143,6 +143,7 @@ ChkRemember.Enabled := False;
 - **点击即切换：** 一次点击切换一次 `State`，状态一变就触发 `OnClick`，只触发一次；`OnClick` 里读到的已是新值。
 - **独立状态：** 每个 `TTyCheckBox` 独立维护自己的 `Checked`，不与其他复选框联动。如需单选互斥行为，应使用 `TTyRadioButton`。
 - **代码改状态也触发 `OnClick`：** 和 LCL 一样，`Checked :=` / `State :=` 改变了状态就依次触发 `OnChange`、`OnClick`。在一个复选框的 `OnClick` 里去改另一个复选框（比如"全选"联动）时要防来回触发；子类可以临时打开受保护的 `ClicksDisabled`，只发 `OnChange`。
+- **子类拦截状态变化：** 点击、按键、代码改 `State` / `Checked`，只要状态真的变了，都经过受保护的虚方法 `ChangeState`，由它设新状态、再触发 `OnChange` 和 `OnClick`。子类覆盖它，可以在翻转之前拦下（不调 inherited 就不变、不发事件），或者在之后做事；`TTyDBCheckBox` 就是在这里写字段的。
 - **:active 视觉效果（Batch ④）：** `:active` 现同时由"鼠标按下"与"已勾选（`Checked = True`）"触发（`CurrentStates` 重写）。主题规则把方框填成 accent 蓝（`var(--accent)`）、勾号变白（`color: #FFFFFF`），形成 accent 方框 + 白勾；**Caption 标签不受影响**——其文字色由一份剔除了 `tysActive` 的样式解析提供，故标签保持常规前景色。
 - **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyCheckBox` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用（例如 `TyCheckBox:disabled { opacity: 0.5; }`）。
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于小方块本身，控件整体（Caption 文字区域）保持透明，不绘制整体背景框。

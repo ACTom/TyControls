@@ -28,6 +28,10 @@ type
     procedure HandleTimer(Sender: TObject);
     function GetKnobAnimProgress: Single;
   protected
+    { Every change of Checked -- a click, a key, Toggle, code -- ends here, AValue differing
+      from Checked: the knob moves, then OnChange fires. A descendant that must ask before the
+      switch flips, or act after it, overrides this (the data-aware switch writes its field). }
+    procedure ChangeChecked(AValue: Boolean); virtual;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { The size the caption actually needs, in DEVICE px at APPI. Measured with the SAME
@@ -258,7 +262,11 @@ end;
 
 procedure TTyCustomToggleSwitch.SetChecked(const AValue: Boolean);
 begin
-  if FChecked = AValue then Exit;
+  if FChecked <> AValue then ChangeChecked(AValue);
+end;
+
+procedure TTyCustomToggleSwitch.ChangeChecked(AValue: Boolean);
+begin
   FChecked := AValue;
   FKnobAnim.Target := Ord(AValue);
   if FAnimationsEnabled and HandleAllocated then

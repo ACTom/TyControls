@@ -130,6 +130,11 @@ type
     procedure MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
       out AWidestPx, ALineHeightPx: Integer);
   protected
+    { Every change of ItemIndex -- a click, a key, code -- ends here, AValue a valid index (or
+      -1) differing from ItemIndex: the segment is selected, then OnChange fires. A descendant
+      that must act on the change overrides this (the data-aware control writes its field).
+      Not called for the silent re-validations (an Items edit, a streamed index). }
+    procedure ChangeItemIndex(AValue: Integer); virtual;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -386,8 +391,12 @@ begin
     Exit;
   end;
   valid := TySegmentedValidIndex(AValue, FItems.Count);
-  if valid = FItemIndex then Exit;
-  FItemIndex := valid;
+  if valid <> FItemIndex then ChangeItemIndex(valid);
+end;
+
+procedure TTyCustomSegmented.ChangeItemIndex(AValue: Integer);
+begin
+  FItemIndex := AValue;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
 end;

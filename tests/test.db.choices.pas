@@ -11,8 +11,8 @@ unit test.db.choices;
 
   Every change is the user's: a press and release delivered as the widgetset delivers them
   (LM_LBUTTONDOWN / LM_LBUTTONUP, which LCL turns into Click), a key (KeyDown), a click on the
-  radio group's CHILD button -- never a write to State, Checked, ItemIndex or Value, which is
-  exactly what a control must not take for the user. }
+  radio group's CHILD button. A write to State, Checked, ItemIndex or Value from code is an
+  edit too (#184), and has tests of its own. }
 
 interface
 
@@ -59,6 +59,8 @@ type
     procedure TestClickIsWrittenAtOnce;
     procedure TestRefusedClickDoesNotFlip;
     procedure TestClickToGrayedWritesNull;
+    procedure TestStateSetFromCodeIsAnEdit;
+    procedure TestStateSetFromCodeIsRefusedLikeAClick;
   end;
 
   TDBToggleSwitchTest = class(TDBChoiceTestBase)
@@ -78,6 +80,8 @@ type
     procedure TestSpaceTogglesAndWrites;
     procedure TestRefusedKeysAndClickDoNotFlip;
     procedure TestWordListsMap;
+    procedure TestCheckedSetFromCodeIsAnEdit;
+    procedure TestCheckedSetFromCodeIsRefusedLikeAClick;
   end;
 
   TDBRadioGroupTest = class(TDBChoiceTestBase)
@@ -122,6 +126,8 @@ type
     procedure TestFieldValueInNoSegmentSelectsNothing;
     procedure TestItemsFilledAfterBindingSelectTheField;
     procedure TestItemsReorderedSelectTheFieldsSegment;
+    procedure TestItemIndexSetFromCodeIsAnEdit;
+    procedure TestItemIndexSetFromCodeIsRefusedLikeAClick;
   end;
 
   TDBRatingTest = class(TDBChoiceTestBase)
@@ -147,6 +153,8 @@ type
     procedure TestStarsResolveLikeTheBaseControls;
     procedure TestWithoutAutoEditTheStarsDoNotMove;
     procedure TestAllowHalfChangedShowsTheFieldAgain;
+    procedure TestValueSetFromCodeIsAnEdit;
+    procedure TestValueSetFromCodeIsRefusedLikeAClick;
   end;
 
 implementation
@@ -350,6 +358,49 @@ begin
   AssertFalse('False', BoundField.AsBoolean);
 end;
 
+{ #184: a State or Checked set from code is an edit, as on LCL's TDBCheckBox (DoOnChange:
+  Edit, Modified, UpdateRecord). It showed in the box only, and the next record change put the
+  box back. Loading the field is no edit (C2). }
+procedure TDBCheckBoxTest.TestStateSetFromCodeIsAnEdit;
+begin
+  Bind('Active');
+  Box.Checked := False;
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertFalse('written at once', BoundField.AsBoolean);
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('posted by the move: the box keeps it', 'unchecked', Shown);
+  AssertFalse('and the field', BoundField.AsBoolean);
+  Box.State := cbGrayed;
+  AssertTrue('State: grayed is NULL', BoundField.IsNull);
+  FFix.DS.Post;
+  AssertEquals('posted', 'grayed', Shown);
+end;
+
+{ Where the dataset cannot be edited the box does what a click does there: it does not flip,
+  and announces nothing. }
+procedure TDBCheckBoxTest.TestStateSetFromCodeIsRefusedLikeAClick;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Active');
+  Box.OnChange := @CountChange;
+  Box.OnClick := @CountClick;
+  Box.Checked := False;
+  AssertEquals('AutoEdit off: the box', 'checked', Shown);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertEquals('no OnClick', 0, FClicks);
+  AssertBrowsing('Checked set with AutoEdit off');
+  Box.ReadOnly := True;
+  FFix.DS.Edit;
+  Box.State := cbUnchecked;
+  AssertEquals('ReadOnly: the box', 'checked', Shown);
+  AssertTrue('ReadOnly: the field', BoundField.AsBoolean);
+  Box.ReadOnly := False;
+  Box.Checked := False;
+  AssertEquals('the record in edit: taken', 'unchecked', Shown);
+  AssertFalse('and written', BoundField.AsBoolean);
+end;
+
 { ============================================================ TDBToggleSwitchTest ========= }
 
 function TDBToggleSwitchTest.NewControl: TControl;
@@ -448,6 +499,43 @@ begin
   AssertEquals('row 2: N', 'off', Shown);
   ClickCenter(FCtl);
   AssertEquals('the first word of ValueChecked', 'Y', FFix.DS.FieldByName('Flag').AsString);
+end;
+
+{ #184: Checked set from code is an edit, as the check box's is. }
+procedure TDBToggleSwitchTest.TestCheckedSetFromCodeIsAnEdit;
+begin
+  Bind('Active');
+  Switch.Checked := False;
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertFalse('written at once', BoundField.AsBoolean);
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('posted by the move: the switch keeps it', 'off', Shown);
+  AssertFalse('and the field', BoundField.AsBoolean);
+  Switch.Toggle;
+  AssertTrue('Toggle too', BoundField.AsBoolean);
+end;
+
+procedure TDBToggleSwitchTest.TestCheckedSetFromCodeIsRefusedLikeAClick;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Active');
+  Switch.OnChange := @CountChange;
+  Switch.Checked := False;
+  AssertEquals('AutoEdit off: the switch', 'on', Shown);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertBrowsing('Checked set with AutoEdit off');
+  FFix.Src.AutoEdit := True;
+  BoundField.ReadOnly := True;
+  Switch.Checked := False;
+  AssertEquals('a read-only field: the switch', 'on', Shown);
+  AssertBrowsing('Checked set on a read-only field');
+  BoundField.ReadOnly := False;
+  FFix.Src.AutoEdit := False;
+  FFix.DS.Edit;
+  Switch.Checked := False;
+  AssertEquals('the record in edit: taken', 'off', Shown);
+  AssertFalse('and written', BoundField.AsBoolean);
 end;
 
 { ============================================================== TDBRadioGroupTest ========= }
@@ -686,8 +774,7 @@ begin
   AssertEquals('the value written', 'B', BoundField.AsString);
 end;
 
-{ Unlike the radio group, the segmented control hears the user only through its own mouse and
-  keys, so choosing from code selects the segment and edits nothing. }
+{ As on the radio group, choosing from code is an edit (#184). }
 procedure TDBSegmentedTest.TestValueReadsAndWritesTheSelection;
 begin
   Bind('Kind');
@@ -695,7 +782,8 @@ begin
   Seg.Value := 'gamma';
   AssertEquals('selected', 2, Seg.ItemIndex);
   AssertEquals('read back', 'gamma', Seg.Value);
-  AssertBrowsing('Value set from code');
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertEquals('written', 'gamma', BoundField.AsString);
 end;
 
 procedure TDBSegmentedTest.TestFieldValueInNoSegmentSelectsNothing;
@@ -727,6 +815,36 @@ begin
   AssertEquals('beta has moved along', 2, Seg.ItemIndex);
   AssertEquals('the value shown is the field''s', 'beta', Seg.Value);
   AssertBrowsing('editing Items');
+end;
+
+{ #184: ItemIndex set from code is an edit, as the radio group's is. It selected the segment
+  only, and the next record change put the field's back. }
+procedure TDBSegmentedTest.TestItemIndexSetFromCodeIsAnEdit;
+begin
+  Bind('Kind');
+  Seg.ItemIndex := 1;
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertEquals('written at once', 'beta', BoundField.AsString);
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('posted by the move: the segment kept', 1, Seg.ItemIndex);
+  AssertEquals('and the field', 'beta', BoundField.AsString);
+end;
+
+{ Where the dataset cannot be edited, what a click does there: the field's segment again. }
+procedure TDBSegmentedTest.TestItemIndexSetFromCodeIsRefusedLikeAClick;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Kind');
+  Seg.ItemIndex := 2;
+  AssertEquals('AutoEdit off: the field''s segment', 0, Seg.ItemIndex);
+  AssertBrowsing('ItemIndex set with AutoEdit off');
+  FFix.Src.AutoEdit := True;
+  Seg.ReadOnly := True;
+  Seg.Value := 'beta';
+  AssertEquals('ReadOnly: the field''s segment', 0, Seg.ItemIndex);
+  AssertBrowsing('Value set on a read-only control');
+  AssertEquals('the field', 'alpha', BoundField.AsString);
 end;
 
 { ================================================================== TDBRatingTest ========= }
@@ -910,6 +1028,45 @@ begin
   Stars.AllowHalf := False;
   AssertEquals('2.5 in whole stars: half up, as a load', '3.0', Shown);
   AssertBrowsing('changing AllowHalf');
+end;
+
+{ #184: Value set from code is an edit. It moved the stars only, and the next record change
+  put the field's back. }
+procedure TDBRatingTest.TestValueSetFromCodeIsAnEdit;
+begin
+  Bind('Stars');
+  Stars.Value := 2;
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertEquals('written at once', 2, BoundField.AsFloat, 0);
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('posted by the move: the stars kept', '2.0', Shown);
+  AssertEquals('and the field', 2, BoundField.AsFloat, 0);
+  Stars.Value := 0;
+  AssertTrue('no stars is NULL', BoundField.IsNull);
+end;
+
+{ Where the dataset cannot be edited the rating is read-only, so a click moves no star; a
+  Value set from code moves none either, and announces nothing. }
+procedure TDBRatingTest.TestValueSetFromCodeIsRefusedLikeAClick;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Stars');
+  Stars.OnChange := @CountChange;
+  Stars.Value := 5;
+  AssertEquals('AutoEdit off: the stars', '3.5', Shown);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertBrowsing('Value set with AutoEdit off');
+  FFix.Src.AutoEdit := True;
+  Stars.ReadOnly := True;
+  Stars.Value := 1;
+  AssertEquals('ReadOnly: the stars', '3.5', Shown);
+  AssertBrowsing('Value set on a read-only rating');
+  Stars.ReadOnly := False;
+  FFix.Src.AutoEdit := False;
+  FFix.DS.Edit;
+  Stars.Value := 1;
+  AssertEquals('the record in edit: taken', 1, BoundField.AsFloat, 0);
 end;
 
 initialization

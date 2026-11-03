@@ -181,6 +181,6 @@ SW.Checked := True;             // 旋钮平滑滑到右侧（约 120ms）
 
 1. **ON 状态映射 `:active`：** `CurrentStates` 重写会在 `Checked = True` 时加入 `tysActive`，因此主题中 `TyToggleSwitch:active { }` 规则同时覆盖"鼠标按下"和"已选中 ON"两种情形。需要在主题中区分时，建议通过 `StyleClass` 变体实现（如 `.on`），但需在代码中手动同步 `StyleClass`。
 2. **旋钮颜色来自子部件 typeKey `TyToggleKnob`（Batch ④）：** 旋钮的填充色与圆角取 `TyToggleKnob` 的 `background` / `border-radius`（默认白色、`12px`），不再借用 `TyToggleSwitch` 的 `color`。常见配置为 `TyToggleKnob { background: #FFFFFF; }`（白色旋钮）以在彩色轨道上提供对比。默认值与早前借用 `color` 渲染时一致，老主题升级后旋钮外观不变。
-3. **OnChange 在直接赋值时也触发：** 无论通过 `Toggle()`、点击、按键还是直接 `Checked := Value`，只要值变化，`OnChange` 就会被调用。
+3. **OnChange 在直接赋值时也触发：** 无论通过 `Toggle()`、点击、按键还是直接 `Checked := Value`，只要值变化，`OnChange` 就会被调用。这些路径都经过受保护的虚方法 `ChangeChecked`，子类覆盖它可以在翻转之前拦下（不调 inherited 就不变、不发事件），或者在之后做事；`TTyDBToggleSwitch` 就是在这里写字段的。
 4. **DFM 序列化：** `Checked` 声明了 `default False`，值为 `False` 时不写入 `.lfm`；值为 `True` 时写入。
 5. **默认尺寸偏小：** 默认宽 44、高 24 是最小可用尺寸；在高分屏或需要触控操作的场景下，建议放大到 56 × 28 或更大。
