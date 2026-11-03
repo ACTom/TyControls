@@ -1224,8 +1224,8 @@ var
   end;
 
 begin
-  { pass 0:宿主静止(框 = 1px 边,让 2 列)。pass 1:条自己带焦点环(夹具直接写在 base 上,
-    不必真给焦点 —— 判的是它画在哪)。pass 2:宿主带 2px 焦点环(让 3 列)。 }
+  { pass 0:宿主静止(框 = 1px 边,让 1 列)。pass 1:条自己带焦点环(夹具直接写在 base 上,
+    不必真给焦点 —— 判的是它画在哪)。pass 2:宿主带 2px 焦点环(让 2 列)。 }
   for pass := 0 to 2 do
     for rad := 0 to 1 do
       for f := bfVisible to bfMid do
@@ -1238,21 +1238,21 @@ begin
         lb := MakeListBox;
         try
           CheckBar(Format('竖条 pass=%d r=%d fade=%d', [pass, rad * 6, Ord(f)]),
-            FindBar(lb, sbVertical), 2 + Ord(pass = 2), pass = 1);
+            FindBar(lb, sbVertical), 1 + Ord(pass = 2), pass = 1);
         finally
           lb.Free;
         end;
         lb := MakeListBox(False, HostW, HostH, 96, True);
         try
           CheckBar(Format('RTL 竖条 pass=%d r=%d fade=%d', [pass, rad * 6, Ord(f)]),
-            FindBar(lb, sbVertical), 2 + Ord(pass = 2), pass = 1);
+            FindBar(lb, sbVertical), 1 + Ord(pass = 2), pass = 1);
         finally
           lb.Free;
         end;
         lb := MakeListBox(True);
         try
           CheckBar(Format('横条 pass=%d r=%d fade=%d', [pass, rad * 6, Ord(f)]),
-            FindBar(lb, sbHorizontal), 2 + Ord(pass = 2), pass = 1);
+            FindBar(lb, sbHorizontal), 1 + Ord(pass = 2), pass = 1);
         finally
           lb.Free;
         end;
@@ -1304,7 +1304,7 @@ begin
         SetFade(bar, bfVisible);
         over := Shoot(@lb.Render, [bar], True);
         bare := Shoot(@lb.Render, [bar], False);
-        span := VisibleSpan(lb, bar, 2);
+        span := VisibleSpan(lb, bar, 1);
         n := SpanWidth(bar, span);
         if bar.Kind = sbVertical then
         begin
@@ -1391,7 +1391,7 @@ begin
         what := Format('%s 令牌=%d', [what, tok * 6]);
         SetFade(bar, bfVisible);
         over := Shoot(@lb.Render, [bar], True);
-        span := VisibleSpan(lb, bar, 2);
+        span := VisibleSpan(lb, bar, 1);
         if bar.Kind = sbVertical then
         begin
           lo := span.Top; hi := span.Bottom;

@@ -855,6 +855,9 @@ procedure TyPaintChromeOverGraphicChildren(AHost: TWinControl; ACanvas: TCanvas;
   传进来的是**状态解析后**的样式,所以宿主获得焦点时这个数会大一档(焦点环比边框宽):让开
   的正好是当下真画出来的那一圈。 }
 function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+{ How many logical pixels the border or the focus ring really covers, whichever reaches further:
+  TyChromeInsetLogical without its column to spare. Straight edges land on whole pixels (#196). }
+function TyChromeWidthLogical(const AStyle: TTyStyleSet): Integer;
 
 { ======================= DrawFrame,拆成可以「替别人画」的三段 =======================
   TTyCustomControl.DrawFrame 就是这三段按顺序调一遍(再加一句 TyApplyStyleOpacity),
@@ -1019,13 +1022,18 @@ begin
   else Result := Result + ' on-titlebar';
 end;
 
-function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+function TyChromeWidthLogical(const AStyle: TTyStyleSet): Integer;
 begin
   Result := AStyle.BorderWidth;
   if Result < 0 then Result := 0;
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
     if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
       Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
+end;
+
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+begin
+  Result := TyChromeWidthLogical(AStyle);
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
 end;
 
