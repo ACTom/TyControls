@@ -173,6 +173,9 @@ function cases() {
     ['radar.area', radar({ areaStyle: {} }), '', ALL],
     ['graph.root', solo(graph), '', Object.assign({ curves: true }, ALL)],
     ['graph.own', solo(own(graph)), '', Object.assign({ curves: true }, ALL)],
+    // a node in a category: categoryVisual's getItemStyle of the category climbs through the series' to the root's
+    ['graph.category', solo(Object.assign({}, graph, { categories: [{ name: 'k' }],
+      data: [{ name: 'a', x: 0, y: 0, category: 0 }, { name: 'b', x: 10, y: 10 }, { name: 'c', x: 20, y: 0, category: 0 }] })), '', ALL],
     ['tree.root', solo(tree), '', Object.assign({ curves: true }, ALL)],
     ['tree.own', solo(own(tree)), '', Object.assign({ curves: true }, ALL)],
     ['treemap.root', solo(tmap), '', ALL],
@@ -220,6 +223,12 @@ function cases() {
       yearLabel: { show: false }, splitLine: { show: false } } }), 'all', NC],
     ['calendar.bare', bare({ calendar: { range: '2017-01', dayLabel: { show: false }, monthLabel: { show: false },
       yearLabel: { show: false }, splitLine: { show: false } } }), 'all', NC],
+    // the master marker component (the root's markPoint / markLine / markArea) stands before the root's blocks
+    ['marker.master', Object.assign(cart({ type: 'scatter', data: [3, 5, 2], markPoint: { label: { show: false }, data: [{ type: 'max' }] },
+      markLine: { label: { show: false }, symbol: 'none', data: [{ type: 'average' }] },
+      markArea: { label: { show: false }, data: [[{ xAxis: 'A' }, { xAxis: 'B' }]] } }),
+      { markPoint: { itemStyle: { color: '#123456', shadowBlur: 1 } }, markLine: { lineStyle: { color: '#654321', cap: 'butt' } },
+        markArea: { itemStyle: { opacity: 0.25 } } }), 'marker', ALL],
     ['marker.own', cart({ type: 'scatter', data: [3, 5, 2],
       markPoint: { label: { show: false }, itemStyle: OI, data: [{ type: 'max' }] },
       markLine: { label: { show: false }, symbol: 'none', lineStyle: OL, data: [{ type: 'average' }] },

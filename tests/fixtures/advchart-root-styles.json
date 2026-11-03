@@ -2805,6 +2805,113 @@
    ]
   },
   {
+   "id": "graph.category",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "lineStyle": {
+       "color": "#86878c"
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 10
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       }
+      ],
+      "categories": [
+       {
+        "name": "k"
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "seen": 5,
+   "n": 4,
+   "pens": [
+    "#00aa00ff|3|12,6|1|round/bevel/4",
+    "#86878cff|1|1|2|square/round/3"
+   ],
+   "looks": [
+    "0.5|3|0|2|#00ffffff",
+    "0.5|4|2|0|#0000ffff",
+    "1|0|0|0|"
+   ],
+   "fills": [
+    "#5470c6ff",
+    "#ff0000ff"
+   ],
+   "shapes": []
+  },
+  {
    "id": "tree.root",
    "option": {
     "animation": false,
@@ -5056,6 +5163,142 @@
    "looks": [
     "1|0|0|0|"
    ]
+  },
+  {
+   "id": "marker.master",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       3,
+       5,
+       2
+      ],
+      "markPoint": {
+       "label": {
+        "show": false
+       },
+       "data": [
+        {
+         "type": "max"
+        }
+       ]
+      },
+      "markLine": {
+       "label": {
+        "show": false
+       },
+       "symbol": "none",
+       "data": [
+        {
+         "type": "average"
+        }
+       ]
+      },
+      "markArea": {
+       "label": {
+        "show": false
+       },
+       "data": [
+        [
+         {
+          "xAxis": "A"
+         },
+         {
+          "xAxis": "B"
+         }
+        ]
+       ]
+      }
+     }
+    ],
+    "markPoint": {
+     "itemStyle": {
+      "color": "#123456",
+      "shadowBlur": 1
+     }
+    },
+    "markLine": {
+     "lineStyle": {
+      "color": "#654321",
+      "cap": "butt"
+     }
+    },
+    "markArea": {
+     "itemStyle": {
+      "opacity": 0.25
+     }
+    }
+   },
+   "part": "marker",
+   "seen": 3,
+   "n": 2,
+   "pens": [
+    "#00aa00ff|2|8,4|1|round/bevel/4",
+    "#654321ff|5|20,10|2|butt/round/3"
+   ],
+   "looks": [
+    "0.25|4|2|0|#0000ffff",
+    "0.5|1|2|0|#0000ffff",
+    "0.6|3|0|2|#00ffffff"
+   ],
+   "fills": [
+    "#123456ff",
+    "#ff0000ff"
+   ],
+   "shapes": []
   },
   {
    "id": "marker.own",
