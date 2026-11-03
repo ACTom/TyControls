@@ -2897,8 +2897,18 @@ begin
 end;
 
 function TTyCustomAdvanceChart.TitleFramesDrawn: TTyOverlayShapeArray;
+var i, n: Integer;
 begin
-  Result := Copy(FTitleFramesDrawn, 0, Length(FTitleFramesDrawn));
+  Result := nil;
+  SetLength(Result, Length(FTitleFramesDrawn));
+  n := 0;
+  for i := 0 to High(FTitleFramesDrawn) do
+    if FTitleFramesDrawn[i].Owner <> '' then
+    begin
+      Result[n] := FTitleFramesDrawn[i];
+      Inc(n);
+    end;
+  SetLength(Result, n);
 end;
 
 { [R7-N] buildLabelElOption's style: createTextStyle(labelModel, {text, font,

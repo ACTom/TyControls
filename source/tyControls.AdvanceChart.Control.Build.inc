@@ -3314,6 +3314,10 @@ var
   frameInk: TTyColor;
   { [R7-G] the background as its Rect builds it }
   frame: TTyRectF;
+  { [R7-X] ... drawn as an element }
+  el: TTyChartElement;
+  rad: array[0..3] of Double;
+  k: Integer;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -3349,6 +3353,12 @@ var
   end;
 
 begin
+  { [R7-X] one entry per title, kept by the zlevel pass that draws it }
+  if Length(FTitleFramesDrawn) <> Length(FTitles) then
+  begin
+    FTitleFramesDrawn := nil;
+    SetLength(FTitleFramesDrawn, Length(FTitles));
+  end;
   if Length(FTitles) = 0 then Exit;
   if ViewHidden(cvTitle) then Exit;
   st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
@@ -3357,7 +3367,11 @@ begin
   for i := 0 to High(FTitles) do
   begin
     lay := FTitles[i];
-    if not lay.Valid then Continue;
+    if not lay.Valid then
+    begin
+      FTitleFramesDrawn[i] := Default(TTyOverlayShape);
+      Continue;
+    end;
     { [R5-J] on the zlevel PaintZLevels draws now }
     if not ApartIn(ModelZLevel('title', i)) then Continue;
     ViewDrew(cvTitle);
@@ -3368,35 +3382,37 @@ begin
     { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
       group's frame by the border width [was: as laid out] }
     frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth));
-    { [R5-A] the frame's shadow, under it }
-    if FTitleSpecs[i].HasBackground then
-      TyCastFrameShadow(APainter, frame, Round(FTitleSpecs[i].BorderRadii[0]),
-        TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
-    { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
-      backgroundColor) [was: the skin's surface, whatever the option wrote] }
-    { [R7-I] on the frame as drawn, to the fraction: the Rect's fill and
-      stroke share subPixelOptimizeRect's shape [was: the fill rounded to
-      whole pixels] }
-    if FTitleSpecs[i].HasBackground then
-    begin
-      APainter.BeginPath;
-      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
-        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
-      APainter.FillPath(TTyColor(FTitleSpecs[i].BackgroundColor));
-    end;
-    { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
-      borderColor, tokens.color.primary by default (the title's ink)
-      [was: never drawn] }
+    { [R7-X] THE BOX AS install.ts' Rect: one element of the whole
+      getItemStyle(['color', 'opacity']) -- the fill (the author's
+      backgroundColor [R5-G]), the pen (borderWidth above nought in
+      borderColor, tokens.color.primary by default -- the title's ink),
+      its dash, phase, cap, join and miterLimit, the shadow cast by both,
+      the corners of every form -- on the frame as drawn, to the fraction
+      [R7-I] [was: the fill and the pen alone, the shadow under the fill
+      only, one corner radius] }
+    el := Default(TTyChartElement);
+    el.Silent := True;
+    el.Datum := TyChartNoDatum;
+    el.Style := FTitleSpecs[i].Look;
+    for k := 0 to 3 do rad[k] := APainter.ScaleF(FTitleSpecs[i].BorderRadii[k]);
+    el.Shape := TyShapeRoundRect(frame, rad);
+    el.Style.HasFill := FTitleSpecs[i].HasBackground
+      and ((FTitleSpecs[i].BackgroundColor shr 24) <> 0);
+    el.Style.FillColor := FTitleSpecs[i].BackgroundColor;
+    el.Style.StrokeWidthLogical := 0;
     if FTitleSpecs[i].BorderWidth > 0 then
     begin
       if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
       else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
       else frameInk := st.TextColor;
-      APainter.BeginPath;
-      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
-        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
-      APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
+      el.Style.StrokeColor := TTyChartColor(frameInk);
+      el.Style.StrokeWidthLogical := FTitleSpecs[i].BorderWidth;
     end;
+    TyStyleSetShadow(el.Style, FTitleSpecs[i].Shadow);
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+      TyRenderElement(APainter, el);
+    FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
+    FTitleFramesDrawn[i].El := el;
     { in the fonts the layout measured -- the author's where written }
     f0 := FTitleFonts[i][0];
     f1 := FTitleFonts[i][1];

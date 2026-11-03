@@ -481,7 +481,7 @@ end;
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
   AIndex: Integer): TTyVmViewSpec;
 var
-  node, ts, hs, eh: TJSONObject;
+  node, ts, hs, eh, root, root2: TJSONObject;
   d: TJSONData;
   arr: TJSONArray;
   def: TTyRawBox;
@@ -523,10 +523,16 @@ begin
   d := node.Find('align');
   if (d <> nil) and (d.JSONType = jtString) then Result.Align := d.AsString;
   { resetItemSize: parseFloat of each, NaN falling back to the defaults --
-    20 x 140 continuous, 20 x 14 piecewise }
-  Result.ItemW := ParseFloatOf(node.Find('itemWidth'));
+    20 x 140 continuous, 20 x 14 piecewise. [R7-X] A continuous one's
+    defaults are null (DEFAULT_BAR_BOUND comes after), so an unwritten size
+    is the option root's itemWidth / itemHeight (get climbs to the
+    GlobalModel); a piecewise one's 20 and 14 are its own [was: the
+    visualMap's alone]. }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  if Result.Piecewise then root2 := nil else root2 := root;
+  Result.ItemW := ParseFloatOf(TyStFind([node, root2], ['itemWidth']));
   if IsNan(Result.ItemW) then Result.ItemW := 20;
-  Result.ItemH := ParseFloatOf(node.Find('itemHeight'));
+  Result.ItemH := ParseFloatOf(TyStFind([node, root2], ['itemHeight']));
   if IsNan(Result.ItemH) then
     if Result.Piecewise then Result.ItemH := 14 else Result.ItemH := 140;
   d := node.Find('itemGap');
@@ -581,7 +587,9 @@ begin
   end;
   d := node.Find('textGap');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.TextGap := d.AsFloat;
-  d := node.Find('text');
+  { [R7-X] `text` defaults to null for both kinds: the root's where the
+    visualMap writes none }
+  d := TyStFind([node, root], ['text']);
   if (d <> nil) and (d.JSONType = jtArray) then
   begin
     Result.HasText := True;

@@ -14,7 +14,7 @@ unit tyControls.AdvanceChart.Shape;
   That is deliberate: hit-testing is where the bugs are, and it must be testable
   without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvanceChart.Types, tyControls.SubPixel,
+uses SysUtils, Math, fpjson, tyControls.AdvanceChart.Types, tyControls.SubPixel,
   tyControls.AdvanceChart.Large;
 
 type
@@ -184,6 +184,10 @@ function TyShapeRoundRect(const ABounds: TTyRectF;
 function TyCornerRadii(const AValues: array of Double): TTyCornerRadii;
 { True when at least one corner is actually rounded. }
 function TyHasCorner(const ARadii: TTyCornerRadii): Boolean;
+{ [R7-X] A BOX'S borderRadius as RectShape.r takes it: a number every
+  corner, an array of numbers the short forms above (an entry that is no
+  number nought); nil or anything else none. }
+function TyBoxRadiiOf(AData: TJSONData): TTyCornerRadii;
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;
 function TyShapeEllipse(ACX, ACY, ARX, ARY: Double): TTyChartShape;
 function TyShapeSector(ACX, ACY, AR0, AR1, AStartRad, AEndRad: Double): TTyChartShape;
@@ -567,6 +571,25 @@ end;
 function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
 begin
   Result := TyShapeRoundRect(ABounds, [ARadiusPx]);
+end;
+
+function TyBoxRadiiOf(AData: TJSONData): TTyCornerRadii;
+var
+  v: array of Double;
+  i: Integer;
+begin
+  Result := TyCornerRadii([]);
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+    Result := TyCornerRadii([AData.AsFloat])
+  else if (AData is TJSONArray) and (AData.Count > 0) then
+  begin
+    SetLength(v, Min(AData.Count, 4));
+    for i := 0 to High(v) do
+      if AData.Items[i].JSONType = jtNumber then v[i] := AData.Items[i].AsFloat
+      else v[i] := 0;
+    Result := TyCornerRadii(v);
+  end;
 end;
 
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;

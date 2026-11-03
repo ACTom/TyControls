@@ -355,6 +355,12 @@ type
     { [R5-A] the box's shadow: the legend's own shadow keys
       (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
     Shadow: TTyChartShadow;
+    { [R7-X] the rest of it: borderType, borderDashOffset, borderCap,
+      borderJoin, borderMiterLimit (TyStyleTakeBorderKeys). These and the
+      shadow are keys LegendModel's defaults hold none of: each climbs to
+      the option root's top-level key (borderRadius, defaulted to 0, does
+      not); so do `icon` and `formatter`. }
+    Look: TTyChartElementStyle;
     { `legend.z`, so the legend sorts against the series in the one paint
       list. Default 4. }
     Z: Integer;
@@ -1110,10 +1116,10 @@ end;
 
 function TyLegendSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyLegendSpec;
 var
-  node: TJSONObject;
+  node, root: TJSONObject;
   d: TJSONData;
   w: string;
-  given: Boolean;
+  given, joinHas: Boolean;
 begin
   Result := TyLegendSpecDefault;
   if AOption = nil then Exit;
@@ -1143,12 +1149,17 @@ begin
   Result.ItemGap := NumIn(node, 'itemGap', Result.ItemGap);
   Result.ItemWidth := NumIn(node, 'itemWidth', Result.ItemWidth);
   Result.ItemHeight := NumIn(node, 'itemHeight', Result.ItemHeight);
-  Result.Icon := StrIn(node, 'icon');
+  { [R7-X] icon and formatter: LegendModel has no default for either, so
+    an unwritten (or null) one is the option root's [was: the legend's
+    alone] }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  d := TyStFind([node, root], ['icon']);
+  if (d <> nil) and (d.JSONType = jtString) then Result.Icon := d.AsString;
   d := node.Find('symbolKeepAspect');
   if (d <> nil) and (d.JSONType = jtBoolean) then Result.KeepAspect := d.AsBoolean;
   { A FUNCTION FORMATTER CANNOT SURVIVE JSON, so only the string form exists
     here and a non-string leaves the name alone. }
-  d := node.Find('formatter');
+  d := TyStFind([node, root], ['formatter']);
   if (d <> nil) and (d.JSONType = jtString) then Result.Formatter := d.AsString;
   Result.SelectedMode := SelectedModeOf(node);
 
@@ -1160,11 +1171,14 @@ begin
   d := node.Find('borderColor');
   if (d <> nil) and (d.JSONType = jtString) then
     Result.HasBorderColour := TyTryParseChartColor(d.AsString, Result.BorderColour);
-  TyStReadShadow([node], [], [], Result.Shadow);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
-  d := node.Find('borderRadius');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderRadii := TyCornerRadii([d.AsFloat]);
+  { [R7-X] the shadow and the border's keys down to the root's }
+  TyStReadShadow([node, root], [], [], Result.Shadow);
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [node, root], [], False, [spkEnds, spkDash], joinHas);
+  { a number or an array (RectShape.r) [was: a number] }
+  Result.BorderRadii := TyBoxRadiiOf(node.Find('borderRadius'));
   Result.Z := TyRoundOpt(NumIn(node, 'z', cDefaultZ), cDefaultZ);
   { anything written but 'auto' (null falls back to the default) }
   d := node.Find('inactiveBorderWidth');
@@ -3578,7 +3592,8 @@ begin
     el := Blank;
     el.Z2 := -1;
     el.Shape := TyShapeRoundRect(ALayout.Frame,
-      ASpec.BorderRadii[0] * scale);
+      [ASpec.BorderRadii[0] * scale, ASpec.BorderRadii[1] * scale,
+       ASpec.BorderRadii[2] * scale, ASpec.BorderRadii[3] * scale]);
     el.Style.HasFill := ASpec.HasBackground;
     if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
     else el.Style.FillColor := AInk.Background;
@@ -3589,6 +3604,8 @@ begin
       else el.Style.StrokeColor := AInk.Border;
     end;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
+    { [R7-X] its dash, phase, cap, join and miterLimit }
+    TyStyleTakeBorderKeys(el.Style, ASpec.Look);
     AList.Add(el);
     Inc(Result);
   end;

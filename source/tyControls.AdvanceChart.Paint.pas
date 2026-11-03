@@ -1598,6 +1598,10 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
 function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
 { [R5-A] AShadow onto a style, all four keys }
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
+{ [R7-X] a box's border keys -- the dash (DashWord, DashLogical), its phase,
+  LineCap, LineJoin, MiterLimit -- from ALook onto AStyle }
+procedure TyStyleTakeBorderKeys(var AStyle: TTyChartElementStyle;
+  const ALook: TTyChartElementStyle);
 { An element carrying a shape, silent and datum-less until the caller says
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
@@ -1802,6 +1806,17 @@ begin
   Result.FillEvenOdd := False;
   Result.DashLogical := nil;
   Result.Alpha := 1;
+end;
+
+procedure TyStyleTakeBorderKeys(var AStyle: TTyChartElementStyle;
+  const ALook: TTyChartElementStyle);
+begin
+  AStyle.DashWord := ALook.DashWord;
+  AStyle.DashLogical := Copy(ALook.DashLogical, 0, Length(ALook.DashLogical));
+  AStyle.DashOffsetLogical := ALook.DashOffsetLogical;
+  AStyle.LineCap := ALook.LineCap;
+  AStyle.LineJoin := ALook.LineJoin;
+  AStyle.MiterLimit := ALook.MiterLimit;
 end;
 
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);

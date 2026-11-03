@@ -176,6 +176,14 @@ var
     for j := 0 to AList.Count - 1 do Result := Result + ' ' + AList[j];
   end;
 
+  { a title box's place is the title layout's (its own suites): its kind
+    and corners }
+  function Corners(const S: string): string;
+  begin
+    Result := Copy(S, 1, Pos('|', S) - 1);
+    if Pos('|r:', S) > 0 then Result := Result + Copy(S, Pos('|r:', S), MaxInt);
+  end;
+
   function ArrText(AArr: TJSONArray; ASkipClear: Boolean): string;
   var j: Integer;
   begin
@@ -183,7 +191,12 @@ var
     for j := 0 to AArr.Count - 1 do
       if not (ASkipClear and (Copy(AArr.Strings[j], Length(AArr.Strings[j]) - 1, 2) = '00')
         and (Pos('#', AArr.Strings[j]) > 0)) then
-        Result := Result + ' ' + AArr.Strings[j];
+      begin
+        if (part = 'title') and (arr = c.Find('shapes')) then
+          Result := Result + ' ' + Corners(AArr.Strings[j])
+        else
+          Result := Result + ' ' + AArr.Strings[j];
+      end;
   end;
 
   procedure Compare(const AKey: string; AHere: TStringList; ASkipClear: Boolean);
@@ -201,6 +214,7 @@ var
     if APre <> '' then p := APre + '|' else p := '';
     looks.Add(p + LooksOf(AEl));
     s := ShapeText(AEl);
+    if (s <> '') and (part = 'title') then s := Corners(s);
     if s <> '' then shapes.Add(p + s);
     s := FillText(AEl);
     if s <> '' then fills.Add(p + s);
