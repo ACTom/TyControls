@@ -4658,10 +4658,17 @@ procedure TTyPainter.LayCornerGround(const ARect: TRect; const ACorners: TTyCorn
   ABehindBorder: Boolean);
 var
   R, clip: TRect;
-  rad, mx, my, x, y, o: Integer;
+  rad, mx, my, x, y: Integer;
   opts: TRoundRectangleOptions;
-  mask: TBGRABitmap;
-  g, d: TBGRAPixel;
+  mask, top: TBGRABitmap;
+  c: TBGRAPixel;
+
+  procedure CornerAt(AMx, AMy: Integer; out AX, AY: Integer);
+  begin
+    if AMx < rad then AX := R.Left + AMx else AX := R.Right - 2 * rad + AMx;
+    if AMy < rad then AY := R.Top + AMy else AY := R.Bottom - 2 * rad + AMy;
+  end;
+
 begin
   if AGround = nil then Exit;
   if RasterEnter then R := Dev(ARect) else R := ARect;
@@ -4670,29 +4677,34 @@ begin
     rad := CornerRadiusAt(R, ACorners, opts);
     if (rad <= 0) or (AGround.Width <> 2 * rad) or (AGround.Height <> 2 * rad) then Exit;
     mask := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    top := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
     try
       if ABehindBorder then
         mask.FillRoundRectAntialias(0, 0, 2 * rad - 1, 2 * rad - 1, rad - 0.5, rad - 0.5, BGRAWhite, opts)
       else
         mask.FillRoundRectAntialias(-0.5, -0.5, 2 * rad - 0.5, 2 * rad - 0.5, rad, rad, BGRAWhite, opts);
+      { The content, cut by the arc, laid on the ground: what filling the rounded shape would have
+        done, by the same blend, so an edge the content did not touch is the plain frame's edge. }
+      for my := 0 to 2 * rad - 1 do
+        for mx := 0 to 2 * rad - 1 do
+        begin
+          CornerAt(mx, my, x, y);
+          c := FBmp.GetPixel(x, y);
+          c.alpha := (c.alpha * mask.GetPixel(mx, my).alpha + 127) div 255;
+          top.SetPixel(mx, my, c);
+        end;
+      AGround.PutImage(0, 0, top, dmDrawWithTransparency);
       clip := FBmp.ClipRect;
       for my := 0 to 2 * rad - 1 do
         for mx := 0 to 2 * rad - 1 do
         begin
-          o := 255 - mask.GetPixel(mx, my).alpha;
-          if o = 0 then Continue;
-          if mx < rad then x := R.Left + mx else x := R.Right - 2 * rad + mx;
-          if my < rad then y := R.Top + my else y := R.Bottom - 2 * rad + my;
+          if mask.GetPixel(mx, my).alpha = 255 then Continue;
+          CornerAt(mx, my, x, y);
           if (x < clip.Left) or (x >= clip.Right) or (y < clip.Top) or (y >= clip.Bottom) then Continue;
-          g := AGround.GetPixel(mx, my);
-          d := FBmp.GetPixel(x, y);
-          d.red := (d.red * (255 - o) + g.red * o) div 255;
-          d.green := (d.green * (255 - o) + g.green * o) div 255;
-          d.blue := (d.blue * (255 - o) + g.blue * o) div 255;
-          d.alpha := (d.alpha * (255 - o) + g.alpha * o) div 255;
-          FBmp.SetPixel(x, y, d);
+          FBmp.SetPixel(x, y, AGround.GetPixel(mx, my));
         end;
     finally
+      top.Free;
       mask.Free;
     end;
   finally
