@@ -262,6 +262,9 @@ function cases() {
         [{ value: [3, 3, 3] }, { value: [7, 2, 6], itemStyle: { borderWidth: 3 } }])] },
     { probes: 'symbols' }],
     // ---- 2. a themeRiver's border ----
+    // no border written: no stroke; a width alone strokes nothing either
+    ['tr-plain', TR(undefined), { probes: 'river' }],
+    ['tr-width-only', TR({ borderWidth: 3 }), { probes: 'river' }],
     ['tr-border', TR({ borderColor: '#000' }), { probes: 'river' }],
     ['tr-border-pen', TR({ borderColor: '#ff0000', borderWidth: 3, borderType: 'dashed', borderDashOffset: 2,
       borderCap: 'round', borderJoin: 'bevel', borderMiterLimit: 4 }), { probes: 'river' }],
@@ -316,6 +319,37 @@ function cases() {
     ['x-candle', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value', min: 0, max: 10 },
       series: [{ type: 'candlestick', itemStyle: { borderWidth: 2, color: '#ff0000', color0: '#00aa00', borderColor: '#880000', borderColor0: '#004400' }, data: [{ value: [2, 6, 1, 8], itemStyle: { borderWidth: 5 } },
         { value: [6, 3, 2, 9], itemStyle: { borderWidth: 'Infinity' } }] }] }, {}],
+    // ---- 4. the same pattern elsewhere: a border colour written alone
+    //      (zrender's width 1) ----
+    ['b-funnel', { animation: false, color: PAL, series: [{ type: 'funnel', label: { show: false },
+      itemStyle: { borderColor: '#ff0000' }, data: [{ value: 3, name: 'a' }, { value: 2, name: 'b' }] }] }, {}],
+    ['b-pie', { animation: false, color: PAL, series: [{ type: 'pie', radius: 60, label: { show: false },
+      itemStyle: { borderColor: '#ff0000' }, data: [{ value: 3, name: 'a' }, { value: 2, name: 'b' }] }] }, {}],
+    ['b-sunburst', { animation: false, color: PAL, series: [{ type: 'sunburst', radius: [0, 90], label: { show: false },
+      itemStyle: { borderColor: '#ff0000' }, data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 }] }] }, {}],
+    ['b-sankey', { animation: false, color: PAL, series: [{ type: 'sankey', label: { show: false },
+      itemStyle: { borderColor: '#ff0000' }, data: [{ name: 'a' }, { name: 'b' }],
+      links: [{ source: 'a', target: 'b', value: 3 }] }] }, {}],
+    ['b-bar', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#ff0000' }, data: [3, 5] }] }, {}],
+    ['b-bar-zero', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#ff0000', borderWidth: 0 }, data: [3, 5] }] }, {}],
+    // an item's own, over a series of none and of a width 0
+    ['b-bar-item', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value' },
+      series: [{ type: 'bar', data: [{ value: 3, itemStyle: { borderColor: '#00ff00' } }, 5,
+        { value: 4, itemStyle: { borderColor: '#0000ff', borderWidth: 0 } }] },
+      { type: 'bar', itemStyle: { borderWidth: 0 }, data: [{ value: 2, itemStyle: { borderColor: '#00ff00' } }, 1, 2] }] }, {}],
+    ['b-scatter', { animation: false, color: PAL, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'scatter', itemStyle: { borderColor: '#ff0000' }, data: [[1, 2], [3, 4]] }] }, {}],
+    ['b-effect', { animation: false, color: PAL, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'effectScatter', rippleEffect: { number: 0 }, itemStyle: { borderColor: '#ff0000' }, data: [[1, 2], [3, 4]] }] }, {}],
+    ['b-pictorial', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+      series: [{ type: 'pictorialBar', symbol: 'rect', itemStyle: { borderColor: '#ff0000' }, data: [3, 5] }] }, {}],
+    ['b-heatmap', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['p'] },
+      visualMap: { show: false, min: 0, max: 10 },
+      series: [{ type: 'heatmap', itemStyle: { borderColor: '#ff0000' }, data: [[0, 0, 3], [1, 0, 7]] }] }, {}],
+    ['b-graph', { animation: false, color: PAL, series: [{ type: 'graph', layout: 'none', symbolSize: 20, label: { show: false },
+      itemStyle: { borderColor: '#ff0000' }, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 0 }], links: [] }] }, {}],
     ['x-heatmap', { animation: false, color: PAL, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['p'] },
       visualMap: { show: false, min: 0, max: 10 },
       series: [{ type: 'heatmap', itemStyle: { borderColor: '#000', borderWidth: 2 },
@@ -352,6 +386,11 @@ function track(chart) {
         const line = ed.getItemGraphicEl(i);
         const lp = line && line.childOfName('line');
         if (lp) map.set(lp, 'ge' + si + '.' + i);
+      }
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        const p = g && g.childAt(0);
+        if (p) map.set(p, 'd' + si + '.' + i + '.0');
       }
       return;
     }

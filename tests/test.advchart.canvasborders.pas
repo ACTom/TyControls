@@ -162,8 +162,11 @@ begin
     else if pre = 'tr' then ok := el.Anim.Role = carRiver
     else
     begin
-      { d<s>.<i>.<n>: the n-th element of the datum }
+      { d<s>.<i>.<n>: the n-th element of the datum (a pictorial bar's
+        bar rect, which upstream adds after its glyphs and the port before
+        them, not counted) }
       ok := False;
+      if el.Anim.Role = carPictorialRect then Continue;
       if n = j then Exit(k);
       Inc(n);
     end;
@@ -273,6 +276,9 @@ begin
         if (Copy(key, 1, 2) = 'ra') or (idx < 0) then Continue;
       end;
       idx := ElOf(key);
+      { (an element upstream strokes nothing with that the port does not
+        build: a pictorial bar's transparent bar rect) }
+      if (idx < 0) and (stroke = nil) and (key[1] = 'd') then Continue;
       if idx < 0 then
       begin
         Miss(where + ': no element');
