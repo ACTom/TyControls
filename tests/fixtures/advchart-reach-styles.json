@@ -931,6 +931,90 @@
    ]
   },
   {
+   "id": "ptr.shadow-frac",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "showContent": false,
+     "renderMode": "richText",
+     "axisPointer": {
+      "label": {
+       "show": false
+      },
+      "type": "shadow",
+      "shadowStyle": {
+       "color": "rgba(10, 20, 30, 0.5)",
+       "opacity": 0.8,
+       "shadowBlur": 6,
+       "shadowColor": "#00ff00",
+       "shadowOffsetX": 3,
+       "shadowOffsetY": 1
+      }
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G"
+     ],
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 0,
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "pointer",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "action": {
+    "type": "updateAxisPointer",
+    "currTrigger": "mousemove",
+    "x": 200,
+    "y": 150
+   },
+   "looks": [
+    "xAxis0|0.8|6|3|1|#00ff00ff"
+   ],
+   "fills": [
+    "xAxis0|#0a141e80"
+   ],
+   "shapes": [
+    "xAxis0|rect|188.57|65|42.86|155"
+   ]
+  },
+  {
    "id": "ptr.shadow-root",
    "option": {
     "animation": false,

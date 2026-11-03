@@ -2724,7 +2724,6 @@ var
   band: TTyRectF;
   dash: TTyDoubleArray;
   txt: string;
-  surface: TTyFill;
   sh: TTyXYWH;
   lbl: TTyPtrLabel;
   lx, ly: Double;
@@ -2788,11 +2787,10 @@ begin
             Continue;
           colour := shadowS.Background.Color;
           if hit.Spec.HasShadowColour then colour := TTyColor(hit.Spec.ShadowColour);
-          { [R7-X] with getAreaStyle's opacity and shadow [was: the colour
-            alone] }
-          PtrShapePaint(APainter, hit, TyShapeRect(TyRectF(Round(band.Left),
-            Round(band.Top), Round(band.Right), Round(band.Bottom))), False,
-            colour, 0, nil);
+          { [R7-X] with getAreaStyle's opacity and shadow, on the band as
+            makeRectShape gives it, to the fraction [was: the colour alone,
+            on the band rounded to whole pixels] }
+          PtrShapePaint(APainter, hit, TyShapeRect(band), False, colour, 0, nil);
         end;
       aptLine:
         begin

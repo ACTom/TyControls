@@ -168,6 +168,9 @@ function cases() {
     ['ptr.cross-rootcross', cartP({ crossStyle: PL }, { type: 'cross', label: { show: false } }), 'pointer', PTN],
     // the shadow band: getAreaStyle of shadowStyle -- its fill, opacity, shadow
     ['ptr.shadow', cartP({}, { type: 'shadow', shadowStyle: PS }), 'pointer', PT],
+    // a band of a fractional width, where it lands
+    ['ptr.shadow-frac', cartP({}, { type: 'shadow', shadowStyle: PS }, { data: ['A', 'B', 'C', 'D', 'E', 'F', 'G'] }), 'pointer',
+      Object.assign({ shapes: true }, PT)],
     ['ptr.shadow-root', cartP({ shadowStyle: { opacity: 0.3, shadowBlur: 5, shadowColor: '#0000ff' }, areaStyle: RA, lineStyle: RL,
       axisPointer: { shadowStyle: { color: 'rgba(0, 0, 0, 0.25)' } } },
       { type: 'shadow' }), 'pointer', PTN],
@@ -307,7 +310,8 @@ function shapeOf(e) {
     if (c.some(v => v > 0)) out += '|r:' + c.map(r2).join(',');
     return out;
   }
-  if (e.type === 'rect') {
+  // (an axis pointer's band is graphic['Rect'], its type the class name)
+  if (e.type === 'rect' || e.type === 'Rect') {
     const m = e.transform || [1, 0, 0, 1, 0, 0];
     const x0 = m[0] * s.x + m[2] * s.y + m[4], y0 = m[1] * s.x + m[3] * s.y + m[5];
     const x1 = m[0] * (s.x + s.width) + m[2] * (s.y + s.height) + m[4];
