@@ -243,9 +243,38 @@ function cases() {
       { value: [7, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 2 },
         emphasis: { itemStyle: { borderWidth: 'Infinity' } } },
       { value: [9, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 2, shadowBlur: 2, shadowColor: '#ff00ff' },
-        emphasis: { itemStyle: { color: 'nope', borderColor: 'bad', shadowColor: 'nope', shadowBlur: 3 } } }])),
+        emphasis: { itemStyle: { color: 'nope', borderColor: 'bad', shadowColor: 'nope', shadowBlur: 3 } } },
+      // (a rest phase refused, a state's taken: a discrete track, set at once)
+      { value: [9, 8], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 2, borderType: [4, 4],
+        borderDashOffset: 'abc' }, emphasis: { itemStyle: { borderDashOffset: 2 } } }])),
     { animation: true, animationDuration: 100 }),
-    [600, 1000, 1030, 1100, 1250, 1400], { acts: { 1: [HI(0, 1), HI(0, 2), HI(0, 3), HI(0, 4)] } }],
+    [600, 1000, 1030, 1100, 1250, 1400], { acts: { 1: [HI(0, 1), HI(0, 2), HI(0, 3), HI(0, 4), HI(0, 5)] } }],
+    // [mutation round] a value refused at rest, a state's that is taken
+    // (the rest's settled mark goes): a blur, a cap, a join, a miterLimit
+    ['st-rest-refused', vv(SC([{ value: [2, 5], itemStyle: BEFORE },
+      { value: [5, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 2, shadowBlur: -2,
+        shadowColor: '#ff00ff', borderCap: 'Round', borderJoin: 'foo', borderMiterLimit: -3, borderType: [4, 4],
+        borderDashOffset: 'abc' },
+      emphasis: { itemStyle: { shadowBlur: 5, borderCap: 'square', borderJoin: 'round', borderMiterLimit: 7,
+        borderDashOffset: 2 } } },
+      { value: [8, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 'Infinity' },
+        emphasis: { itemStyle: { borderWidth: 4 } } }])),
+    [0, 10, 20], { acts: { 1: [HI(0, 1), HI(0, 2)], 2: [{ type: 'downplay', seriesIndex: 0 }] } }],
+    // an emphasis width of 'Infinity' after an element of another width; a
+    // phase refused over a rest of nought
+    ['st-emph-inf', vv(SC([{ value: [2, 5], itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 5,
+      borderType: [3, 3], borderDashOffset: 4 } },
+    { value: [5, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 1 },
+      emphasis: { itemStyle: { borderWidth: 'Infinity' } } },
+    { value: [8, 5], itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 1, borderType: [2, 2] },
+      emphasis: { itemStyle: { borderDashOffset: 'Infinity' } } }])),
+    [0, 10], { acts: { 1: [HI(0, 1), HI(0, 2)] } }],
+    // a map region's emphasis (the geo reader's shadow keys)
+    ['st-map', { animation: false, color: PAL, series: [{ type: 'map', map: 'r7ysq', label: { show: false },
+      itemStyle: { areaColor: '#808080', borderColor: '#000', borderWidth: 1 },
+      emphasis: { label: { show: false }, itemStyle: { areaColor: '#00ffff', shadowBlur: -3, shadowColor: 'nope' } },
+      data: [{ name: 'P', itemStyle: { areaColor: '#ff0000', shadowBlur: 6, shadowColor: '#00ff00' } }, { name: 'Q' }] }] },
+    [0, 10], { acts: { 1: [{ type: 'highlight', seriesIndex: 0, name: 'Q' }] } }],
     // a blur below nought at rest, tweened to one above (refused until it crosses)
     ['st-tween-rest-neg', Object.assign(vv(SC([{ value: [2, 5], itemStyle: BEFORE },
       { value: [5, 5], itemStyle: { color: '#808080', shadowBlur: -2, shadowColor: '#ff00ff' },
@@ -266,6 +295,19 @@ function track(chart) {
         if (p) map.set(p, 's' + si + '.' + i);
       }
     }
+    else if (type === 'map') {
+      // a region's displayables in order
+      for (let i = 0; i < data.count(); i++) {
+        const g = data.getItemGraphicEl(i);
+        if (!g) continue;
+        let n = 0;
+        const visit = e => {
+          if (e.isGroup) { for (const c of e.childrenRef()) visit(c); return; }
+          if (e.style && e.type !== 'text' && !map.has(e)) map.set(e, 'g' + si + '.' + i + '.' + (n++));
+        };
+        visit(g);
+      }
+    }
     else if (type === 'bar' || type === 'pie') {
       for (let i = 0; i < data.count(); i++) {
         const g = data.getItemGraphicEl(i);
@@ -284,6 +326,13 @@ function track(chart) {
   });
   return map;
 }
+
+// two squares, P and Q, as a GeoJSON map
+const SQ = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
+const MAPS = [{ name: 'r7ysq', geo: { type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'P' }, geometry: { type: 'Polygon', coordinates: [SQ(0, 0, 8, 8)] } },
+  { type: 'Feature', properties: { name: 'Q' }, geometry: { type: 'Polygon', coordinates: [SQ(8, 0, 16, 8)] } }] } }];
+for (const m of MAPS) echarts.registerMap(m.name, m.geo);
 
 function run(id, option, samples, opts) {
   NOW = T_BASE;
@@ -330,7 +379,7 @@ function generate() {
       + 'each tracked element (s a scatter symbol, b a bar, ln a polyline, ls a line symbol, p a sector) with every '
       + 'fill() / stroke() of its path and the context then: a browser\'s setters refuse a negative blur, a cap / join '
       + 'no canvas word, a miterLimit or width not above nought or not finite, a phase not finite, a colour no parser reads.',
-    W: CW, H: CH, T0: T_BASE, charts };
+    W: CW, H: CH, T0: T_BASE, maps: MAPS.map(m => ({ name: m.name, text: JSON.stringify(m.geo) })), charts };
 }
 
 let j1, j2;

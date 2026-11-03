@@ -22,11 +22,13 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart;
 type
   TCsProbe = class(TTyAdvanceChart)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { through the cached path: a state's change patches the list }
+    procedure Cached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function Frame: TTyPaintList;
   end;
 
@@ -41,11 +43,14 @@ type
     FReport: string;
     procedure Miss(const AWhat: string);
     function ElOf(const AKey: string): Integer;
+    procedure Run(ACached, AOff: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestTheStateValuesAsUpstream;
+    procedure TestTheStateValuesThroughTheCacheAsUpstream;
+    procedure TestTheStateValuesWithoutAnimationAsUpstream;
   end;
 
 implementation
@@ -58,6 +63,11 @@ const
 procedure TCsProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TCsProbe.Cached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderCached(ACanvas, ARect, APPI);
 end;
 
 function TCsProbe.Frame: TTyPaintList;
@@ -124,7 +134,21 @@ begin
   while (p <= Length(AKey)) and (AKey[p] in ['a'..'z']) do Inc(p);
   pre := Copy(AKey, 1, p - 1);
   s := StrToInt(Copy(AKey, p, Pos('.', AKey) - p));
-  r := StrToInt(Copy(AKey, Pos('.', AKey) + 1, MaxInt));
+  if pre <> 'g' then r := StrToInt(Copy(AKey, Pos('.', AKey) + 1, MaxInt));
+  { a map region's path (its displayables numbered after the row) }
+  if pre = 'g' then
+  begin
+    r := StrToInt(Copy(AKey, Pos('.', AKey) + 1, Pos('.', Copy(AKey, Pos('.', AKey) + 1, MaxInt)) - 1));
+    L := FChart.Frame;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if (el.Anim.Role = carMapRegion) and (el.Datum.SeriesIndex = s) and (el.Datum.DataIndex = r)
+        and (el.Caption.FontSizeLogical = 0) then
+        Exit(k);
+    end;
+    Exit;
+  end;
   if pre = 'b' then role := carBar
   else if pre = 'p' then role := carSector
   else if pre = 'ln' then role := carLineRun
@@ -147,7 +171,35 @@ begin
   Result := (A = B) or (((A shr 24) = 0) and ((B shr 24) = 0));
 end;
 
+procedure RegisterMaps(ARoot: TJSONData);
+var maps: TJSONArray; i: Integer;
+begin
+  TyChartClearMaps;
+  maps := TJSONObject(ARoot).Arrays['maps'];
+  for i := 0 to maps.Count - 1 do
+    TyChartRegisterMap(maps.Objects[i].Strings['name'], maps.Objects[i].Strings['text'], '');
+end;
+
 procedure TAdvChartCanvasStatesOracleTest.TestTheStateValuesAsUpstream;
+begin
+  Run(False, False);
+end;
+
+{ the window's path: the cache kept, a state's change patching the list
+  where it stands (StPatchList) rather than building it again }
+procedure TAdvChartCanvasStatesOracleTest.TestTheStateValuesThroughTheCacheAsUpstream;
+begin
+  Run(True, False);
+end;
+
+{ camOff: no proxy, the states written onto the list itself (StWriteHost)
+  and a change patched there -- the cases of no transition only }
+procedure TAdvChartCanvasStatesOracleTest.TestTheStateValuesWithoutAnimationAsUpstream;
+begin
+  Run(True, True);
+end;
+
+procedure TAdvChartCanvasStatesOracleTest.Run(ACached, AOff: Boolean);
 var
   cs, frames, els, ops, ld: TJSONArray;
   c, fr, rec, o: TJSONObject;
@@ -162,23 +214,27 @@ begin
   FBad := 0;
   FCompared := 0;
   FReport := '';
+  RegisterMaps(FRoot);
   cs := TJSONObject(FRoot).Arrays['charts'];
   for i := 0 to cs.Count - 1 do
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
+    if AOff and (Pos('tween', id) > 0) then Continue;
     if GetEnvironmentVariable('TY_CS_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TCsProbe.Create(FForm);
     FChart.Parent := FForm;
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
-    FChart.AnimationMode := camAlways;
+    if AOff then FChart.AnimationMode := camOff
+    else FChart.AnimationMode := camAlways;
     FChart.AnimNow := cT0;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
-    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    if ACached then FChart.Cached(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96)
+    else FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
     frames := c.Arrays['frames'];
     for j := 0 to frames.Count - 1 do
     begin
@@ -191,7 +247,8 @@ begin
           FChart.DispatchAction(c.Objects['acts'].Arrays[IntToStr(j)].Objects[q].AsJSON);
       end;
       if t > 0 then FChart.AnimTick(cT0 + t);
-      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      if ACached then FChart.Cached(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96)
+      else FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
       els := fr.Arrays['els'];
       for k := 0 to els.Count - 1 do
       begin
@@ -306,6 +363,7 @@ begin
     end;
   end;
   FreeAndNil(FChart);
+  TyChartClearMaps;
   if FBad > 0 then
     Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
   AssertTrue('compared', FCompared > 50);
