@@ -4683,7 +4683,14 @@ type
     { the target the element at AIndex of the list answers as }
     function TargetOfElement(AIndex: Integer): TTyChartEventTarget;
     { the series' (or the datum's) border, for its legend icon }
-    procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource);
+    { [R7-T] ANode: the datum's node where it is not the store's row (a
+      graph's category) }
+    procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource;
+      ANode: TJSONObject = nil);
+    { [R7-T] the icon's pen keys and, for a line's own icon, its rule, as
+      getLegendStyle resolves them for legend ALegend's item AName }
+    procedure LegendPensOf(ALegend: Integer; const AName: string;
+      ASlot, ARaw: Integer; var ASrc: TTyLegendSource; ANode: TJSONObject = nil);
     procedure EmitPayloadEvent(const AType, APayloadJson: string;
       AObj: TJSONObject = nil);
     function HasChartHandler(const AType: string): Boolean;
