@@ -203,6 +203,8 @@ type
       of the two words; an unreadable one is not written. }
     HasOwnWidth: Boolean;
     OwnWidth: Double;
+    { [R7-Y] the edge's own width is +Infinity }
+    OwnWidthInf: Boolean;
     HasOwnOpacity: Boolean;
     OwnOpacity: Double;
     HasOwnColour: Boolean;
@@ -340,6 +342,8 @@ type
     HasAutoList: Boolean;
     AutoList: TTyDoubleArray;
     LineWidthLogical: Double;
+    { [R7-Y] the series' lineStyle.width is +Infinity }
+    LineWidthInf: Boolean;
     LineOpacity: Double;
     HasLineColour: Boolean;
     LineColour: TTyChartColor;
@@ -2440,6 +2444,7 @@ begin
     { [R6-E] a numeric string is its number }
     if not IsNan(TyOptPenWidth(sub.Find('width'))) then
       Result.LineWidthLogical := TyOptPenWidth(sub.Find('width'));
+    Result.LineWidthInf := TyOptIsPosInf(sub.Find('width'));
     Result.LineOpacity := NumIn(sub, 'opacity', Result.LineOpacity);
     { `type`, the dash [Batch 114] }
     Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
@@ -3207,6 +3212,7 @@ begin
     AEdge.HasOwnWidth := True;
     { [R6-E] a numeric string is its number }
     AEdge.OwnWidth := TyOptPenWidth(d);
+    AEdge.OwnWidthInf := TyOptIsPosInf(d);
   end;
   d := AStyle.Find('opacity');
   if (d <> nil) and (d.JSONType <> jtNull) then
@@ -7306,6 +7312,17 @@ begin
     if AEdges[i].HasOwnDash then el.Style.DashWord := TyDashWord(AEdges[i].OwnDash)
     else el.Style.DashWord := TyDashWord(ASpec.LineDash);
     el.Style.DashOffsetLogical := TyGraphEdgeDashOffset(ASpec, AEdges[i]);
+    { [R7-Y] A WIDTH OF +Infinity, the edge's own where it writes one, else
+      the series': stroked at the lineWidth the canvas had
+      (TyLinesCanvasLeftovers), its stroked rect not a number -- never hit
+      [was: no pen] }
+    if ((AEdges[i].HasOwnWidth and AEdges[i].OwnWidthInf)
+      or (not AEdges[i].HasOwnWidth and ASpec.LineWidthInf))
+      and (((el.Style.StrokeColor shr 24) <> 0) or (el.Style.StrokeGradient.Kind <> cgkNone)) then
+    begin
+      el.HitNone := True;
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+    end;
     el.Z := ASpec.Z;
     el.Z2 := ASpec.Z2;
     el.Silent := False;

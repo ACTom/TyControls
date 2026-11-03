@@ -1559,22 +1559,27 @@ end;
 function TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
   out AShadow: TTyChartShadow): Boolean;
 
-  { dpr * value as the canvas reads it }
+  { dpr * value as the canvas reads it: [R7-Y] JavaScript's Number() of a
+    string ('0x10' 16, '1e3' 1000) [was: a decimal only] }
   function Num(AData: TJSONData): Double;
-  var v: Double; fs: TFormatSettings;
   begin
     Result := NaN;
     case AData.JSONType of
       jtNumber: Result := AData.AsFloat;
-      jtString:
-        begin
-          fs := DefaultFormatSettings;
-          fs.DecimalSeparator := '.';
-          if Trim(AData.AsString) = '' then Result := 0
-          else if TryStrToFloat(Trim(AData.AsString), v, fs) then Result := v;
-        end;
+      jtString: Result := TyOptJsNumber(AData);
       jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
     end;
+  end;
+
+  { [R7-Y] `dpr * (value || 0)` that the canvas refuses: a truthy string
+    whose Number is none or infinite (a falsy one is nought) }
+  function Refused(AData: TJSONData): Boolean;
+  var v: Double;
+  begin
+    Result := False;
+    if (AData = nil) or (AData.JSONType <> jtString) or (AData.AsString = '') then Exit;
+    v := TyOptJsNumber(AData);
+    Result := IsNan(v) or IsInfinite(v);
   end;
 
 var
@@ -1595,17 +1600,23 @@ begin
     { [R7-V] a blur below nought the canvas refuses, keeping the one it
       had: kept negative until the paint order settles it
       (TyLinesCanvasLeftovers) [was: none] }
-    if (not IsNan(v)) and (not IsInfinite(v)) and (v <> 0) then AShadow.Blur := v;
+    if (not IsNan(v)) and (not IsInfinite(v)) and (v <> 0) then AShadow.Blur := v
+    { [R7-Y] and a truthy string that is no finite number: dpr * 'abc' is
+      none, refused the same way [was: none] }
+    else if Refused(ABlur) then AShadow.Blur := -1;
   end;
   if AOffsetX <> nil then
   begin
     v := Num(AOffsetX);
-    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetX := v;
+    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetX := v
+    { [R7-Y] refused: the offset the canvas had [was: nought] }
+    else if Refused(AOffsetX) then AShadow.OffsetX := cTyCanvasPhaseLeft;
   end;
   if AOffsetY <> nil then
   begin
     v := Num(AOffsetY);
-    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetY := v;
+    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetY := v
+    else if Refused(AOffsetY) then AShadow.OffsetY := cTyCanvasPhaseLeft;
   end;
   AShadow.Color := $FF000000;
   if (AColour <> nil) and (AColour.JSONType = jtString) then

@@ -137,6 +137,8 @@ type
     HasDojiBorder: Boolean;
     DojiBorder: TTyChartColor;
     BorderWidthLogical: Double;
+    { [R7-Y] the width is +Infinity (the item's own where it writes one) }
+    BorderWidthInf: Boolean;
     { [R5-B] a border WRITTEN AS null: no colour, so the pen is the body's
       (`getBorderColor(sign, itemModel) || style.fill`) -- the default border
       stays only where the key is absent }
@@ -677,7 +679,10 @@ begin
   { [R6-E] a numeric string is its number }
   d := item.Find('borderWidth');
   if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
     Result.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
+    Result.BorderWidthInf := TyOptIsPosInf(d);
+  end;
 end;
 
 function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
@@ -725,7 +730,10 @@ begin
     Result.Spec.HasDojiBorder := True;
   d := item.Find('borderWidth');
   if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
     Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
+    Result.Spec.BorderWidthInf := TyOptIsPosInf(d);
+  end;
   d := item.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Opacity := d.AsFloat;
 end;
@@ -1208,7 +1216,11 @@ begin
     if v.Kind <> dvkNone then
     begin
       Result.DashOffset := OverrideNumber(v);
-      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then Result.DashOffset := 0;
+      { [R7-Y] no finite number: the canvas refuses it and keeps the phase
+        it had (cTyCanvasPhaseLeft, settled in paint order), as the series'
+        own (TyOptPenOffset) [was: nought] }
+      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then
+        Result.DashOffset := cTyCanvasPhaseLeft;
     end;
   end;
   { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
@@ -1303,6 +1315,13 @@ begin
     { an object is truthy }
     Result.BorderLayout := True;
   end;
+  { [R7-Y] an item's own border colour where no width is written anywhere:
+    zrender's lineWidth 1 [was: no pen] }
+  if (rf.StrokeObjSet or (AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderColor'))
+    and (AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Kind = dvkText)
+    and not TyChartColorIsNone(AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Text)))
+    and not Result.StrokeWidthSet and not (Result.StrokeWidthLogical > 0) then
+    Result.StrokeWidthLogical := 1;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
   begin
@@ -1869,6 +1888,9 @@ begin
       else bw := rv.LayoutWidthLogical;
     end
     else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    { [R7-Y] `borderWidth || 0`: a width nobody wrote is nought, whatever
+      the pen strokes at (zrender's 1 under a written colour) }
+    else if not rv.StrokeWidthSet then bw := 0
     else bw := rv.StrokeWidthLogical;
     { [R7-G] whenever a border colour is written truthy and not 'none',
       whatever the pen draws [was: only a pen of some colour] }
@@ -3571,6 +3593,10 @@ begin
     v.Fill := fill;
     v.Stroke := border;
     v.StrokeWidthLogical := cs.BorderWidthLogical;
+    { [R7-Y] +Infinity, the row's own where it writes a width: stroked at
+      the lineWidth the canvas had, never hit (MarkElement) [was: the
+      series' alone] }
+    if cs.BorderWidthInf then v.StrokeWidthInf := Infinity else v.StrokeWidthInf := 0;
     { the item's own opacity (getItemStyle) [R5-B] }
     if not IsNan(rowOpacity) then v.Alpha := rowOpacity;
     { THE BRUSH'S fill and opacity (its visual stage writes style.fill, the
@@ -3730,6 +3756,7 @@ var
   band: Double;
   ws, os: TTyDoubleArray;
   raw: Integer;
+  bwv: Double;
 begin
   Result := 0;
   if (AStore = nil) or (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
@@ -3829,7 +3856,22 @@ begin
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.borderWidth')) then
     begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderWidth'));
-      if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then v.StrokeWidthLogical := dv.Num;
+      { [R7-Y] as the canvas takes it: a numeric string its number, +Infinity
+        stroked at the lineWidth the canvas had and never hit (MarkElement)
+        [was: a number only, the series' width under a string] }
+      bwv := NaN;
+      if dv.Kind = dvkNumber then bwv := dv.Num
+      else if dv.Kind = dvkText then bwv := TyJsToNumber(dv.Text);
+      if IsInfinite(bwv) then
+      begin
+        if bwv > 0 then v.StrokeWidthInf := bwv else v.StrokeWidthInf := 0;
+        v.StrokeWidthLogical := 0;
+      end
+      else if not IsNan(bwv) then
+      begin
+        v.StrokeWidthLogical := bwv;
+        v.StrokeWidthInf := 0;
+      end;
     end;
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.opacity')) then
     begin

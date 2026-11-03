@@ -361,10 +361,14 @@ var
   pos: TTyLabelPosition;
   s: string;
   v: Double;
+  fwv: Double;
+  fwfs: TFormatSettings;
 begin
   Result := ABase;
   series := ASeries;
   node := ANode;
+  fwfs := DefaultFormatSettings;
+  fwfs.DecimalSeparator := '.';
   { A STATE THAT SHOWS THE LABEL, read whether or not the series writes a
     `label` of its own: needsCreateText [Batch 88] }
   if series <> nil then
@@ -575,9 +579,19 @@ begin
     point size drew a third too large [Batch 83] }
   Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
     Result.FontSizeLogical);
-  s := StrIn(node, 'fontWeight');
+  { [R7-Y] its fontFamily, as makeFont joins it [was: not read -- the
+    skin's family whatever the label wrote] }
+  s := StrIn(node, 'fontFamily');
+  if s <> '' then Result.FontName := s;
+  { [R7-Y] a CSS word, ASCII case-insensitive, and a number written as a
+    string, as the canvas' font parser reads them [was: lower case only, a
+    string's number not read] }
+  s := LowerCase(Trim(StrIn(node, 'fontWeight')));
+  fwv := NaN;
+  if (s <> '') and TryStrToFloat(s, fwv, fwfs) and (fwv >= 1) and (fwv <= 1000) then
+    Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or TyRoundOpt(fwv, 400)
   { [R5-A] the weight only: the style flags above it are the font's style }
-  if (s = 'bold') or (s = 'bolder') then
+  else if (s = 'bold') or (s = 'bolder') then
     Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 700
   else if s = 'normal' then
     Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 400
@@ -588,6 +602,9 @@ begin
   { [R5-A] fontStyle: the label's own, else what the spec was handed (the
     series' label, the root textStyle) }
   Result.FontWeight := TyFontStyleOver(node.Find('fontStyle'), Result.FontWeight);
+  { [R7-Y] a font the canvas refuses (the one it had drawn instead) }
+  Result.FontLeft := TyCssFontRefused(node.Find('fontStyle'), node.Find('fontWeight'),
+    node.Find('fontSize'));
   ResolveBlock(node, Result);
 end;
 

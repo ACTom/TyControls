@@ -1887,6 +1887,12 @@ type
     FDrSnapOk: Boolean;
     FDrDyn: TBGRABitmap;
     FDrDynTiles: TTyZrRectArray;
+    { [R7-Y] THE FRAME IN MOTION AS THE DYNAMIC LAYER LAST HOLDS IT: the
+      whole frame (both layers' elements) with its paint rects, while a
+      continuous animation's frame carries a value the canvas refuses
+      (FDrAnimSnapOk) -- what the next frame's blocks are diffed against }
+    FDrAnimSnap: TTyDirtySnap;
+    FDrAnimSnapOk: Boolean;
     { the device scale of this frame (#83): FDrWork, FDrBase, FDrDyn and the
       static cache hold that many pixels per device px; the snapshot, the
       repaint pool, FDrDynTiles and FDrLastRects stay in device px }
@@ -4226,6 +4232,10 @@ type
     procedure DrStaticFull(const R: TRect; APPI: Integer);
     procedure DrDynamic(const R: TRect; APPI: Integer; var APool: TTyRepaintPool;
       var AFull: Boolean);
+    { [R7-Y] a continuous animation's frame that carries a value the canvas
+      refuses, repainted in the blocks round what moved (False: not one) }
+    function DrDynamicBlocks(const R: TRect; APPI: Integer;
+      var APool: TTyRepaintPool): Boolean;
     { a frame's rect of device px on its layers: FDrScale times it (#83) }
     function DrRaster(const R: TRect): TRect;
     { the static cache's APx onto ACanvas at APx (client px), and the

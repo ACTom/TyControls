@@ -210,7 +210,7 @@ function TyRectFillMemoNew: TObject;
 
 implementation
 
-uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
+uses base64, Generics.Collections, tyControls.AdvanceChart.Large, tyControls.AdvanceChart.Lines,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl,
   tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle;
@@ -3236,6 +3236,13 @@ begin
   RenderElementAsStyled(P, AElement, False, Default(TTyMat2D));
 end;
 
+{ [R7-Y] a shadow offset the paint order never settled (an element drawn
+  outside it): nought, as the canvas' own }
+function ShadowOff(AValue: Double): Double;
+begin
+  if TyPhaseLeft(AValue) then Result := 0 else Result := AValue;
+end;
+
 procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
   APen: Boolean; const APenMap: TTyMat2D);
 var
@@ -3247,6 +3254,7 @@ var
   pm: TTyDoubleArray;
   nw, nh, devW: Double;
   ca, cd, ctx, cty: Double;
+  em: TTyMat2D;
 
   procedure PaintPen; forward;
 
@@ -3350,6 +3358,15 @@ var
               pm[1] := pm[1] / img.Width;
               pm[2] := pm[2] / img.Height;
               pm[3] := pm[3] / img.Height;
+            end
+            { [R7-Y] a whole matrix of the image's natural px (a pattern the
+              canvas kept): at the resolution it was decoded at }
+            else if (img.Width > 0) and (img.Height > 0) and (nw > 0) and (nh > 0) then
+            begin
+              pm[0] := pm[0] * nw / img.Width;
+              pm[1] := pm[1] * nw / img.Width;
+              pm[2] := pm[2] * nh / img.Height;
+              pm[3] := pm[3] * nh / img.Height;
             end;
           end
           else
@@ -3364,6 +3381,11 @@ var
               pm[2] := pm[2] * nh / img.Height;
               pm[3] := pm[3] * nh / img.Height;
             end;
+            { [R7-Y] IN THE ELEMENT'S FRAME: createCanvasPattern's matrix is
+              taken under the transform the element hands the canvas (a
+              symbol's scale and place) [was: the canvas' own] }
+            if TyElementCanvasTransform(AElement, em) then
+              TyPatternUnder(em, P.PPI / 96, pm);
           end;
           for gi := 0 to 5 do pm[gi] := pm[gi] * P.PPI / 96;
           P.FillPathPattern(img, AElement.Style.FillPattern.Repetition, pm, rule);
@@ -3787,7 +3809,7 @@ begin
         bindContextStyle) [was: a picture cast none] }
       if TyStyleHasShadow(AElement.Style) then
         P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
-          AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+          ShadowOff(AElement.Style.ShadowOffsetX), ShadowOff(AElement.Style.ShadowOffsetY));
       PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
     finally
       P.RestoreState;
@@ -3869,7 +3891,7 @@ begin
       path below, not the layers or the tiles }
     if TyStyleHasShadow(AElement.Style) then
       P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
-        AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+        ShadowOff(AElement.Style.ShadowOffsetX), ShadowOff(AElement.Style.ShadowOffsetY));
     { [R5-A] the series' blendMode: each fill and each stroke composited so
       -- a large batch as its one path, as upstream's }
     if AElement.Style.Blend <> '' then P.SetBlendMode(AElement.Style.Blend);
