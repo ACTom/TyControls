@@ -2457,6 +2457,7 @@ var
   rawItem: TTyRawItem;
   cell: TTyDataValue;
   v, lsWidth, opN, opA, opI, w, dashOff: Double;
+  lsInf, winf: Boolean;
   seen: TStringList;
   key: string;
   has, any, catHas: Boolean;
@@ -2531,6 +2532,7 @@ begin
     { [R6-E] the pen as the canvas takes it: a numeric string its number }
     lsWidth := TyOptPenWidth(LnNode(vis, ['lineStyle', 'width']));
     if IsNan(lsWidth) then lsWidth := 1;
+    lsInf := TyOptIsPosInf(LnNode(vis, ['lineStyle', 'width']));
     d := LnNode(vis, ['lineStyle', 'type']);
     if d = nil then dashWord := 'solid' else dashWord := DashText(d);
     LnDashOf(d, dash, expl);
@@ -2588,6 +2590,7 @@ begin
         if (raw >= 0) and (raw <= High(vrows)) and vrows[raw].ColorSet then
           c := TyVisualToChart(vrows[raw].Color);
         w := lsWidth;
+        winf := lsInf;
         iword := dashWord;
         idash := dash;
         iexpl := expl;
@@ -2600,7 +2603,11 @@ begin
           if not IsNan(TyOptPenOffset(d)) then row.DashOffset := TyOptPenOffset(d);
           if LnColour(LnNode(item, ['lineStyle', 'color']), ic) then c := ic;
           d := LnNode(item, ['lineStyle', 'width']);
-          if not IsNan(TyOptPenWidth(d)) then w := TyOptPenWidth(d);
+          if not IsNan(TyOptPenWidth(d)) then
+          begin
+            w := TyOptPenWidth(d);
+            winf := TyOptIsPosInf(d);
+          end;
           d := LnNode(item, ['lineStyle', 'type']);
           if d <> nil then
           begin
@@ -2623,6 +2630,7 @@ begin
         end;
         row.Stroke := c;
         row.Width := w;
+        row.WidthInf := winf;
         row.DashWord := iword;
         row.Dash := TyDashPattern(idash, iexpl, w);
         sol.Rows[r] := row;
