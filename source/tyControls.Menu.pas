@@ -753,9 +753,11 @@ begin
   end;
   { #175: AutoLineReduction -- a separator at either end, or right after another, is not shown,
     as LCL's RethinkLines hides it. It was drawn: a menu whose items were hidden around a line
-    showed two lines in a row, or a line at the top. The items' Visible is left as it is. }
+    showed two lines in a row, or a line at the top. The items' Visible is left as it is.
+    Lazarus 3.x has no AutoLineReduction (it came with 4.0): there the lines are always reduced,
+    which is LCL 4's default. }
   if (n > 0) and not (csDesigning in ARoot.ComponentState)
-     and TMenuItemAccess(ARoot).GetAutoLineReduction then
+     {$IF LCL_FULLVERSION >= 4000000} and TMenuItemAccess(ARoot).GetAutoLineReduction {$ENDIF} then
   begin
     m := 0;
     lastSep := True;   // the top counts as a line: a separator there goes

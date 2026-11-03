@@ -258,7 +258,7 @@ end;
 - **禁用的顶层项打不开：** `Enabled = False` 的顶层项，点击、悬停切换、Alt+助记符三条路都打不开它的下拉（三者都汇到同一个 `OpenTop`，所以判定就写在那里）；它同时按 `:disabled` 绘制，用户看得出来点不动。
 - **没有子项的顶层项是一个命令按钮：** 与原生菜单栏一致，点一个没有子项的顶层项直接触发它的 `OnClick`（先收起已打开的下拉）。这就是"帮助"这类单条命令能直接摆在菜单栏上的做法。
 - **菜单栏跟着 `TMainMenu` 走：** 运行时改了顶层项的 `Visible` / `Enabled` / 标题，菜单栏在程序空闲时重画（开了 `AutoSizeWidth` 还会重新贴合宽度）。
-- **`AutoLineReduction`：** 默认（`maAutomatic`）不画两头的分隔线和连着的分隔线，与 LCL 相同；菜单项本身的 `Visible` 不被改动。设 `maManual` 则每条都画。
+- **`AutoLineReduction`：** 默认（`maAutomatic`）不画两头的分隔线和连着的分隔线，与 LCL 相同；菜单项本身的 `Visible` 不被改动。设 `maManual` 则每条都画。Lazarus 3.x 没有这个属性（4.0 才有），在那里总是按默认去掉多余的分隔线。
 - **比屏幕高的菜单：** 弹出体不超过显示器工作区的高度，多出来的部分滚动——鼠标滚轮滚动，方向键移动高亮时自动滚到可见。
 - **`RightJustify` 让顶层项贴右：** 某个顶层项的 `TMenuItem.RightJustify = True` 时，它贴着菜单栏右边缘排布（经典的右对齐"帮助"/"窗口"菜单）。位置是**从右往左**量出来的——右边缘减去「它自己及其之后所有顶层项」的宽度之和——所以菜单栏拉伸时这一组始终咬着右边缘。**惯例是从要右对齐的那一项起，后面每一项都设 `RightJustify`**：没设的那些仍按左侧打包排布，而右侧会替它们留出空位。
 - **`TTyPopupMenu.PopUp` 走完整的 LCL 弹出协议：** 顺序是——先 `Close` 掉别的 `ActivePopupMenu` → 写 `PopupPoint` → 触发 `OnPopup` → `Items.Count = 0` 则直接返回 → 认领 `ActivePopupMenu`（`Close`/`OnClose` 靠它才够得着）→ `InitiateActions`（action 关联项刷新 `Enabled`/`Caption`/`Checked`）→ **最后**才做行快照并弹出。顺序是重点：快照如果先做，即使 `OnPopup` 触发了，在里面增删的项也进不了这一次弹出。
