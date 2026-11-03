@@ -529,7 +529,8 @@ function cases() {
       { type: 'scatter', data: [[8, 3]] },
       { type: 'scatter', itemStyle: { color: '#0000ff' }, data: [[3, 8], { value: [4, 8], itemStyle: { color: 'zzz' } }] }]),
     [0], { w: true }],
-    ['w-fill-line', vv([{ type: 'line', showSymbol: false, lineStyle: { color: '#ff0000', width: 3 }, data: [[1, 2], [9, 3]] },
+    ['w-fill-line', vv([{ type: 'line', showSymbol: false, lineStyle: { color: '#ff0000', width: 3 },
+      areaStyle: { color: '#ff0000' }, data: [[1, 2], [9, 3]] },
       { type: 'line', showSymbol: false, lineStyle: { color: 'nope', width: 2 }, areaStyle: { color: 'zz' },
         data: [[1, 5], [9, 6]] },
       { type: 'line', symbolSize: 8, itemStyle: { color: 'qq' }, lineStyle: { color: '#0000ff' }, data: [[2, 8], [8, 9]] }]),
@@ -537,6 +538,17 @@ function cases() {
     ['w-fill-bar', vv([{ type: 'bar', barWidth: 20, label: { show: true, position: 'inside' },
       data: [{ value: [3, 4], itemStyle: { color: '#00ffff' } }, { value: [6, 5], itemStyle: { color: 'nope' } },
         { value: [8, 3], itemStyle: { color: '#ff00ff', borderColor: 'bad', borderWidth: 3 } }] }]),
+    [0], { w: true }],
+    // a lines row's own unreadable colour, after a row of another
+    ['w-fill-lines-rows', vv(LNC({ show: false }, [
+      { coords: [[1, 8], [9, 8]], lineStyle: { color: '#0000ff', width: 2 } },
+      { coords: [[1, 6], [9, 6]], lineStyle: { color: 'nope', width: 2 } }])), [0], { w: true }],
+    // a label of 'inherit' after one of a colour; a rich inside label of an
+    // unreadable host
+    ['w-fill-label', vv([{ type: 'bar', barWidth: 20, label: { show: true, position: 'top', color: 'inherit' },
+      data: [{ value: [3, 4], itemStyle: { color: '#00ffff' } }, { value: [6, 5], itemStyle: { color: 'nope' } }] },
+    { type: 'bar', barWidth: 20, label: { show: true, position: 'inside', formatter: '{a|Ab}', rich: { a: {} } },
+      data: [{ value: [8, 6], itemStyle: { color: '#ff00ff' } }, { value: [9, 6], itemStyle: { color: 'bad' } }] }]),
     [0], { w: true }],
     // (a bar in normal mode has no clip path: one series' bar after another's)
     ['w-fill-bar-series', Object.assign(vv([{ type: 'bar', data: [[3, 5]], itemStyle: { color: '#ff0000' } },
@@ -562,6 +574,7 @@ function cases() {
     ['w-dash-offset', vv(LNC({ show: false }, [
       { coords: [[1, 1], [9, 1]], lineStyle: { type: 'dashed', dashOffset: 'abc', width: 2 } },
       { coords: [[1, 3], [9, 3]], lineStyle: { type: 'dashed', dashOffset: 5, width: 2 } },
+      { coords: [[1, 4], [9, 4]], lineStyle: { type: 'solid', dashOffset: 9, width: 2 } },
       { coords: [[1, 5], [9, 5]], lineStyle: { type: 'dashed', dashOffset: 'abc', width: 2 } },
       { coords: [[1, 7], [9, 7]], lineStyle: { type: [4, 4], dashOffset: 'Infinity', width: 2 } },
       { coords: [[1, 8], [9, 8]], lineStyle: { type: 'solid', width: 2 } },
@@ -575,6 +588,9 @@ function cases() {
     ['w-lw-inf-sunburst', { animation: false, color: PAL, series: [{ type: 'sunburst', radius: [0, 90], label: { show: false },
       data: [{ name: 'a', value: 3, itemStyle: { borderColor: '#000', borderWidth: 3 } },
         { name: 'b', value: 2, itemStyle: { borderColor: '#000', borderWidth: 'Infinity' } }] }] }, [0], { w: true }],
+    ['w-lw-inf-radar', { animation: false, color: PAL, radar: { indicator: [{ max: 10 }, { max: 10 }, { max: 10 }] },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { width: 'Infinity' }, data: [{ value: [5, 6, 7] }, { value: [3, 8, 4] }] },
+      { type: 'radar', symbol: 'none', lineStyle: { width: 3 }, data: [{ value: [2, 2, 2] }] }] }, [0], { w: true }],
     ['w-lw-inf-tree', { animation: false, color: PAL, series: [{ type: 'tree', label: { show: false }, symbolSize: 10,
       itemStyle: { color: '#b0c4de', borderColor: '#000', borderWidth: 'Infinity' }, lineStyle: { width: 3 },
       data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }] }, [0], { w: true }],

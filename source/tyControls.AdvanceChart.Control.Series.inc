@@ -810,8 +810,6 @@ begin
     { [R7-F] a pen of +Infinity (drawn as none): the layer's stroked rect is
       not-a-number upstream, it is never hit }
     el.HitNone := (v.StrokeWidthInf > 0) and (v.Stroke <> 0);
-    { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
-    if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     { and that row's decal [F4a] }
     el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
