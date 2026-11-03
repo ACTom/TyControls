@@ -38,6 +38,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.VisualMapView,
      tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Diagnose,
+     tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.rootstyles;
 type
@@ -216,7 +217,7 @@ var
   i, k, nBad, nCases, nPtr, nBox, nTip: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
-  pens, shapes, fills, looks, texts: TStringList;
+  pens, shapes, fills, looks, texts, labels: TStringList;
   want, have, id, bad, part, s, pre: string;
   arr: TJSONArray;
   noColour: Boolean;
@@ -290,6 +291,7 @@ begin
   fills := NewSet(dupIgnore);
   looks := NewSet(dupIgnore);
   texts := NewSet(dupIgnore);
+  labels := NewSet(dupIgnore);
   nBad := 0;
   nCases := 0;
   nPtr := 0;
@@ -298,6 +300,12 @@ begin
   bad := '';
   opt := TTyChartOption.Create;
   try
+    { the maps the geo and map cases draw }
+    TyChartClearMaps;
+    arr := TJSONObject(fix).Arrays['maps'];
+    for k := 0 to arr.Count - 1 do
+      AssertTrue('registered ' + arr.Objects[k].Strings['name'],
+        TyChartRegisterMap(arr.Objects[k].Strings['name'], arr.Objects[k].Strings['text'], ''));
     cs := TJSONObject(fix).Arrays['charts'];
     for i := 0 to cs.Count - 1 do
     begin
@@ -331,6 +339,7 @@ begin
       fills.Clear;
       looks.Clear;
       texts.Clear;
+      labels.Clear;
       shapes.Duplicates := dupAccept;
       if part = 'tooltip' then
       begin
@@ -408,12 +417,21 @@ begin
               + ' looks ' + LooksOf(el) + ' text "' + el.Caption.Text + '"');
           if el.Ignore then Continue;
           if el.Caption.Text <> '' then texts.Add(el.Caption.Text);
+          { a series label's words and ink }
+          if (part = '') and (el.Caption.Text <> '') and (el.Caption.FontSizeLogical > 0)
+            and (el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0) then
+            labels.Add(el.Caption.Text + '|' + Copy(ColourHex(Cardinal(el.Caption.Colour)), 1, 9));
           if el.IsGuide or (el.Anim.Role in [carLabel, carMarkLineLabel,
             carMarkPointLabel, carEndLabel, carLinesLabel, carGraphEdgeLabel]) then Continue;
           if el.Caption.FontSizeLogical > 0 then Continue;
           if part = '' then
           begin
             if not ((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0)) then Continue;
+          end
+          else if part = 'geo' then
+          begin
+            { every path of the geo component's view }
+            if el.Datum.Kind <> ctkGeo then Continue;
           end
           else
           begin
@@ -432,6 +450,7 @@ begin
       Compare('shapes', shapes, False);
       Compare('fills', fills, True);
       Compare('looks', looks, False);
+      Compare('labels', labels, False);
       { the texts upstream draws are among the port's }
       arr := c.Find('texts') as TJSONArray;
       if arr <> nil then
@@ -480,7 +499,9 @@ begin
     fills.Free;
     looks.Free;
     texts.Free;
+    labels.Free;
     fix.Free;
+    TyChartClearMaps;
   end;
   AssertTrue('cases', nCases >= 40);
   AssertTrue('pointer cases', nPtr >= 15);

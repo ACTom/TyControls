@@ -274,6 +274,13 @@ type
     { [R2-I2] borderDashOffset, px (DashOffsetHas: the style sets it) }
     DashOffsetHas: Boolean;
     DashOffset: Double;
+    { [R7-X] getItemStyle's borderCap, borderJoin and borderMiterLimit
+      (lineCap, lineJoin, miterLimit -- TTyChartElementStyle's codes; a
+      limit as TyOptMiterLimit reads it), where the style sets them [was:
+      never drawn] }
+    CapHas, JoinHas, MiterHas: Boolean;
+    Cap, Join: Byte;
+    Miter: Double;
     { [Batch 148] A STATE'S STYLE IS SPARSE: which keys it sets (the
       opacity's is HasOpacity), the token a default colour is, and an
       emphasis fill written 'inherit' (the proxy's own word). The normal
@@ -3922,6 +3929,26 @@ begin
     Result.DashOffsetHas := True;
     Result.DashOffset := d.AsFloat;
   end;
+  { [R7-X] the pen's ends }
+  d := Get('borderCap');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.CapHas := True;
+    Result.Cap := TyLineCapOf(d);
+  end;
+  d := Get('borderJoin');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.JoinHas := True;
+    Result.Join := TyLineJoinOf(d);
+  end;
+  d := Get('borderMiterLimit');
+  if d <> nil then
+  begin
+    Result.Miter := TyOptMiterLimit(d);
+    Result.MiterHas := not IsNan(Result.Miter);
+    if Result.Miter = 10 then Result.Miter := 0;
+  end;
   { [R5-A] the shadow keys }
   Result.Shadow := TyStNoObject;
   TyStSetShadowKey(Result.Shadow, stkShadowBlur, Get('shadowBlur'));
@@ -5090,6 +5117,14 @@ begin
 end;
 
 { [R5-A] the current shadow onto a region's path }
+{ [R7-X] a paint's ends onto a style, where it sets them }
+procedure GeoTakeEnds(var AStyle: TTyChartElementStyle; const APaint: TTyGeoPaint);
+begin
+  if APaint.CapHas then AStyle.LineCap := APaint.Cap;
+  if APaint.JoinHas then AStyle.LineJoin := APaint.Join;
+  if APaint.MiterHas then AStyle.MiterLimit := APaint.Miter;
+end;
+
 procedure GeoWriteShadow(var AEl: TTyChartElement; const C: TTyStObject);
 begin
   if not C.Has[stkShadowColor] then Exit;
@@ -6296,6 +6331,10 @@ var
               for sn := Low(TTyStName) to High(TTyStName) do
                 if (sn in st.States) and look.StateOpt[sn].DashOffsetHas then
                   el.Style.DashOffsetLogical := look.StateOpt[sn].DashOffset;
+              { [R7-X] the ends, the normal's, a state's over them }
+              GeoTakeEnds(el.Style, look.Opt);
+              for sn := Low(TTyStName) to High(TTyStName) do
+                if sn in st.States then GeoTakeEnds(el.Style, look.StateOpt[sn]);
             end;
             if optDash then
             begin
@@ -6639,6 +6678,10 @@ begin
             for s := Low(TTyStName) to High(TTyStName) do
               if (s in it.Host.States) and p.StatePaint[s].DashOffsetHas then
                 el.Style.DashOffsetLogical := p.StatePaint[s].DashOffset;
+            { [R7-X] the ends, the normal's, a state's over them }
+            GeoTakeEnds(el.Style, p.Paint);
+            for s := Low(TTyStName) to High(TTyStName) do
+              if s in it.Host.States then GeoTakeEnds(el.Style, p.StatePaint[s]);
             { Path.contain's stroke: the width, at least
               strokeContainThreshold where there is no fill }
             lw := c.Num[stkLineWidth] * scale;

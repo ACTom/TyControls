@@ -122,6 +122,17 @@ const candle = (s, o) => bare(Object.assign({ xAxis: { type: 'category', data: N
 const ALL = { looks: true, fills: true, shapes: true };
 // a candlestick's body is no rect: its pens, looks and fills
 const LF = { looks: true, fills: true };
+// a map of two squares, registered for the geo and map cases
+function sq(x0, y0, x1, y1) { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]; }
+const MAPS = [{ name: 'r7xsq', text: JSON.stringify({ type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [sq(0, 0, 10, 10)] } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [sq(10, 0, 20, 10)] } }] }) }];
+for (const m of MAPS) echarts.registerMap(m.name, m.text);
+// the pens without their (default) colours, no fills: a region's defaults are the theme's
+const NCL = { looks: true, nocolour: true };
+// root-styles.js' own keys of a series
+const OI = { color: '#112233', opacity: 0.9, borderWidth: 1, borderRadius: 2, shadowBlur: 1 };
+const RS = { itemStyle: RI, lineStyle: RL, areaStyle: RA };
 // an item tooltip shown by showTip, its content in rich text
 const TIPC = { tooltip: { renderMode: 'richText' }, xAxis: { type: 'category', data: N }, yAxis: {},
   series: [{ type: 'scatter', data: [1, 2, 3] }] };
@@ -232,6 +243,20 @@ function cases() {
       borderColor: '#0000ff' }, formatter: 'R:{b}', borderColor: '#00ff00', padding: 20 })), 'tooltip', { tip: true }],
     ['tip.series', bare(Object.assign({}, TIPC, { formatter: 'R:{b}', padding: 20,
       series: [{ type: 'scatter', tooltip: { formatter: 'S:{b}' }, data: [1, 2, 3] }] })), 'tooltip', { tip: true }],
+    // ---- geo and map under the root's blocks: a region's getItemStyle climbs the geo's (the series') itemStyle to the root's ----
+    ['geo.root', bare(Object.assign({ geo: { map: 'r7xsq' } }, RS)), 'geo', NCL],
+    ['geo.own', bare(Object.assign({ geo: { map: 'r7xsq', itemStyle: OI } }, RS)), 'geo', { looks: true, fills: true, nocolour: true }],
+    ['map.root', bare(Object.assign({ series: [{ type: 'map', map: 'r7xsq', data: [{ name: 'A', value: 1 }] }] }, RS)), '', NCL],
+    // ---- more per-item keys: a funnel's opacity, a treemap's and a sunburst's corners ----
+    ['funnel.item-opacity', bare({ series: [{ type: 'funnel', label: { show: false }, itemStyle: { opacity: 0.8 },
+      data: [3, { value: 5, itemStyle: { opacity: 0.3 } }, 2] }] }), '', ALL],
+    ['treemap.item-radius', bare({ series: [{ type: 'treemap', breadcrumb: { show: false }, itemStyle: { borderRadius: 2 },
+      data: [{ name: 'a', value: 3, itemStyle: { borderRadius: 6 } }, { name: 'b', value: 2 }] }] }), '', ALL],
+    ['sunburst.item-radius', bare({ series: [{ type: 'sunburst', itemStyle: { borderRadius: 2 },
+      data: [{ name: 'a', value: 3, itemStyle: { borderRadius: 5 } }, { name: 'c', value: 2 }] }] }), '', ALL],
+    // ---- a label's inherited colour: the visual's, not the root's itemStyle colour ----
+    ['label.inherit-bar', bare({ itemStyle: RI, xAxis: { type: 'category', data: N }, yAxis: {},
+      series: [{ type: 'bar', label: { show: true, position: 'top', color: 'inherit' }, data: [3, 5, 2] }] }), '', { labels: true }],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
   ];
@@ -368,6 +393,7 @@ function run(id, option, part, more) {
     const fills = new Set();
     const shapes = [];
     const texts = [];
+    const labels = new Set();
     const icons = [];
     let seen = 0;
     let n = 0;
@@ -378,6 +404,10 @@ function run(id, option, part, more) {
       if (more.looks) looks.add(pre + looksOf(e));
       if (more.shapes) { const t = shapeOf(e); if (t) shapes.push(pre + t); }
       if (more.fills && e.style.fill != null && e.style.fill !== 'none') fills.add(pre + colourOf(e.style.fill));
+      if (more.labels) {
+        const tc = e.getTextContent && e.getTextContent();
+        if (tc && !tc.ignore && !tc.invisible && tc.style.text) labels.add(String(tc.style.text) + '|' + colourOf(tc.style.fill));
+      }
       const p = penOf(e, more.nocolour);
       if (!p) return;
       n++;
@@ -397,6 +427,9 @@ function run(id, option, part, more) {
         const owner = v.__model.mainType + v.__model.componentIndex;
         walk(g, e => visit(e, owner));
       });
+    }
+    else if (part === 'geo') {
+      views.forEach(v => { if (v.__model.mainType === 'geo') walk(v.group, e => visit(e, '')); });
     }
     else if (part) {
       views.forEach(v => {
@@ -418,6 +451,7 @@ function run(id, option, part, more) {
     if (more.shapes) rec.shapes = shapes.sort();
     if (more.texts) rec.texts = texts.sort();
     if (more.icons) rec.icons = icons.sort();
+    if (more.labels) rec.labels = Array.from(labels).sort();
     if (more.vm) {
       const m = chart.getModel().getComponent('visualMap', 0);
       rec.vm = { itemSize: m.itemSize.map(Number), text: m.get('text') == null ? null : m.get('text').map(String) };
@@ -450,6 +484,8 @@ function generate() {
   // the root's formatter, borderColor and padding reach an item tooltip; its backgroundColor does not
   must(by('tip.root').tip.text === 'R:B' && by('tip.root').tip.stroke === '#00ff00ff' && by('tip.root').tip.padding === 20
     && by('tip.root').tip.backgroundColor === '#fff', 'tip.root: ' + JSON.stringify(by('tip.root').tip));
+  // a geo region: the root's opacity and shadow under the geo's defaults (colour, border)
+  must(by('geo.root').looks.some(l => l.startsWith('0.5|4|2|0|')), 'geo.root looks: ' + by('geo.root').looks);
   must(charts.every(c => c.seen > 0), 'a case has no path: ' + charts.filter(c => c.seen === 0).map(c => c.id));
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg)',
     note: 'R7-X: what reaches the axis pointer\'s line and band, the component boxes, a candlestick (its top-level keys) '
@@ -460,8 +496,9 @@ function generate() {
       + 'shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component\'s texts; `icons` a legend\'s '
       + 'icon symbol types; `vm` the visualMap model\'s itemSize and text; `tip` (part tooltip) the item tooltip model\'s '
       + 'formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box\'s '
-      + 'text and border colour.',
-    W, H, charts };
+      + 'text and border colour; `labels` the text|fill of each series element\'s label; part geo every path of the geo '
+      + 'component\'s view. `maps` the maps registered.',
+    W, H, maps: MAPS, charts };
 }
 
 let j1, j2;

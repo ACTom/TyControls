@@ -1,8 +1,14 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
- "note": "R7-X: what reaches the axis pointer's line and band, the component boxes, a candlestick (its top-level keys) and a bar's corners. Each case settled (its action dispatched and settled); `pens` the sorted set of stroke|width|dash|offset|cap/join/miter of every stroked path of the part ('' the series' views; pointer the axes' pointer groups, each entry prefixed with its axis; title / legend / toolbox / visualMap the component's background rect), as root-styles.js; nocolour: the pens without the stroke colour; `looks` opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component's texts; `icons` a legend's icon symbol types; `vm` the visualMap model's itemSize and text; `tip` (part tooltip) the item tooltip model's formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box's text and border colour.",
+ "note": "R7-X: what reaches the axis pointer's line and band, the component boxes, a candlestick (its top-level keys) and a bar's corners. Each case settled (its action dispatched and settled); `pens` the sorted set of stroke|width|dash|offset|cap/join/miter of every stroked path of the part ('' the series' views; pointer the axes' pointer groups, each entry prefixed with its axis; title / legend / toolbox / visualMap the component's background rect), as root-styles.js; nocolour: the pens without the stroke colour; `looks` opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor; `fills`; `shapes` rects and sectors with their corners; `texts` the component's texts; `icons` a legend's icon symbol types; `vm` the visualMap model's itemSize and text; `tip` (part tooltip) the item tooltip model's formatter, borderColor, padding, order, backgroundColor and borderRadius as showTip builds it, and its rich-text box's text and border colour; `labels` the text|fill of each series element's label; part geo every path of the geo component's view. `maps` the maps registered.",
  "W": 400,
  "H": 300,
+ "maps": [
+  {
+   "name": "r7xsq",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  }
+ ],
  "charts": [
   {
    "id": "ptr.root",
@@ -3138,6 +3144,419 @@
     "text": "S:B",
     "stroke": "#5470c6ff"
    }
+  },
+  {
+   "id": "geo.root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7xsq"
+    },
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "0.5|2,1|1|round/bevel/4"
+   ],
+   "nocolour": true,
+   "looks": [
+    "0.5|4|2|0|#0000ffff"
+   ]
+  },
+  {
+   "id": "geo.own",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7xsq",
+     "itemStyle": {
+      "color": "#112233",
+      "opacity": 0.9,
+      "borderWidth": 1,
+      "borderRadius": 2,
+      "shadowBlur": 1
+     }
+    },
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "1|4,2|1|round/bevel/4"
+   ],
+   "nocolour": true,
+   "looks": [
+    "0.9|1|2|0|#0000ffff"
+   ],
+   "fills": [
+    "#112233ff"
+   ]
+  },
+  {
+   "id": "map.root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "map",
+      "map": "r7xsq",
+      "data": [
+       {
+        "name": "A",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    }
+   },
+   "part": "",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "0.5|2,1|1|round/bevel/4"
+   ],
+   "nocolour": true,
+   "looks": [
+    "0.5|4|2|0|#0000ffff"
+   ]
+  },
+  {
+   "id": "funnel.item-opacity",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "funnel",
+      "label": {
+       "show": false
+      },
+      "itemStyle": {
+       "opacity": 0.8
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "opacity": 0.3
+        }
+       },
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#ffffffff|1|solid|0|butt/round/10"
+   ],
+   "looks": [
+    "0.3|0|0|0|",
+    "0.8|0|0|0|"
+   ],
+   "fills": [
+    "#5470c6ff",
+    "#91cc75ff",
+    "#fac858ff"
+   ],
+   "shapes": []
+  },
+  {
+   "id": "treemap.item-radius",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "treemap",
+      "breadcrumb": {
+       "show": false
+      },
+      "itemStyle": {
+       "borderRadius": 2
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3,
+        "itemStyle": {
+         "borderRadius": 6
+        }
+       },
+       {
+        "name": "b",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "seen": 5,
+   "n": 0,
+   "pens": [],
+   "looks": [
+    "1|0|0|0|"
+   ],
+   "fills": [
+    "#5470c6ff",
+    "#91cc75ff",
+    "#ffffffff"
+   ],
+   "shapes": [
+    "rect|20|50|216|200|r:6,6,6,6",
+    "rect|20|50|216|200|r:6,6,6,6",
+    "rect|20|50|360|200|r:2,2,2,2",
+    "rect|236|50|144|200|r:2,2,2,2",
+    "rect|236|50|144|200|r:2,2,2,2"
+   ]
+  },
+  {
+   "id": "sunburst.item-radius",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "sunburst",
+      "itemStyle": {
+       "borderRadius": 2
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3,
+        "itemStyle": {
+         "borderRadius": 5
+        }
+       },
+       {
+        "name": "c",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#ffffffff|1|solid|0|butt/bevel/10"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ],
+   "fills": [
+    "#5470c6ff",
+    "#91cc75ff"
+   ],
+   "shapes": [
+    "sector|200|150|0|112.5|2.1991|2.5133|r:2,2,2,2",
+    "sector|200|150|0|112.5|4.7124|3.7699|r:5,5,5,5"
+   ]
+  },
+  {
+   "id": "label.inherit-bar",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "label": {
+       "show": true,
+       "position": "top",
+       "color": "inherit"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "seen": 3,
+   "n": 0,
+   "pens": [],
+   "labels": [
+    "2|#5470c6ff",
+    "3|#5470c6ff",
+    "5|#5470c6ff"
+   ]
   },
   {
    "id": "state.pie-blur",
