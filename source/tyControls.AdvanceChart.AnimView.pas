@@ -819,6 +819,12 @@ function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy):
 { a packed colour as the state machine hands it to the engine: lifted (or
   not opaque) as zrender's rgba() string, else as '#rrggbb' }
 function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
+const
+  { [R7-Y] A STATE'S COLOUR NO PARSER READS as the engine holds it: a string
+    that is no colour, so its track is discrete (set at its start, as
+    zrender's track of 'nope' is), and a frame that holds it brushes the
+    colour the canvas had (cTyCanvasColourLeft) }
+  cTyAnimCanvasLeft = '[canvas]';
 { [F3d] A STATE'S GRADIENT. liftColor of a gradient value: every stop's
   r, g and b times (1 - -0.1), truncated and clamped (zrender's lift), its
   offset and alpha as they are (util/color.ts liftColor) }
@@ -6284,6 +6290,23 @@ end;
   number as it is; a boolean, a string's or an array's JS Number -- one that
   is no finite number nought (a state's width 'abc', which its discrete
   track sets at once). False: no value }
+{ [R7-Y] the same, JavaScript's Number as it is (not-a-number and the
+  infinities kept): what the canvas is handed }
+function PenRawNumOf(const AValue: TTyAnimValue; out ANum: Double): Boolean;
+begin
+  Result := True;
+  case AValue.Kind of
+    avkNumber, avkBool: ANum := AValue.Num;
+    avkString: ANum := TyJsToNumber(AValue.Str);
+    avkArray:
+      if Length(AValue.Arr) = 0 then ANum := 0
+      else if (Length(AValue.Arr) = 1) and (AValue.Stride = 0) then ANum := AValue.Arr[0]
+      else ANum := NaN;
+  else
+    Result := False;
+  end;
+end;
+
 function PenNumOf(const AValue: TTyAnimValue; out ANum: Double): Boolean;
 begin
   Result := True;
@@ -7728,7 +7751,7 @@ var
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
   g: TTyChartGradient;
-  fx, fy, cx, cy, pn: Double;
+  fx, fy, cx, cy, pn, raw: Double;
   b: TTyRectF;
 
   { the role's branch draws a key its proxy rests at a layout value of }
@@ -7746,13 +7769,18 @@ var
   { [R6-F] a pen's number off its rest, as the canvas takes the two: a
     value that is no number ('abc') against a number is no colour against
     no colour to StSameValue, the same }
-  function OffPen(const AKey: string; out AV: TTyAnimValue; out ANum: Double): Boolean;
+  { [R7-Y] off its rest as the canvas is handed the two (not-a-number and
+    the infinities told apart: a phase of 'abc' over a rest of nought is
+    refused, not nought) [was: each as the canvas' nought-for-no-number] }
+  function OffPen(const AKey: string; out AV: TTyAnimValue; out ANum, ARaw: Double): Boolean;
   var r: TTyAnimValue; rn: Double;
   begin
     AV := AProxy.GetAnimProp(AKey);
-    Result := AProxy.StRestOf(AKey, r) and PenNumOf(AV, ANum)
-      and not (PenNumOf(r, rn) and ((IsNan(ANum) and IsNan(rn))
-        or (not IsNan(ANum) and not IsNan(rn) and (ANum = rn))));
+    Result := AProxy.StRestOf(AKey, r) and PenRawNumOf(AV, ARaw)
+      and not (PenRawNumOf(r, rn) and ((IsNan(ARaw) and IsNan(rn))
+        or (not IsNan(ARaw) and not IsNan(rn) and (ARaw = rn))));
+    ANum := ARaw;
+    if IsNan(ANum) or IsInfinite(ANum) then ANum := 0;
   end;
 
 begin
@@ -7765,6 +7793,8 @@ begin
       if RoleHas(key) or not Off(key, v, rest) then Continue;
       { a follower (a candle's wick) has no fill to change }
       if not AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then Continue;
+      { [R7-Y] a value the frame writes is the canvas' to settle afresh }
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasFillLeft;
       if StColourOf(v, c) then
       begin
         AEl.Style.HasFill := True;
@@ -7777,12 +7807,20 @@ begin
         AEl.Style.HasFill := True;
         AEl.Style.FillGradient := g;
       end
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+      begin
+        AEl.Style.HasFill := True;
+        AEl.Style.FillColor := cTyCanvasColourLeft;
+        AEl.Style.FillGradient := Default(TTyChartGradient);
+      end
       else
         AEl.Style.HasFill := False;
     end
     else if key = 'style.stroke' then
     begin
       if not Off(key, v, rest) then Continue;
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasStrokeLeft;
       if StColourOf(v, c) then
       begin
         AEl.Style.StrokeColor := c;
@@ -7798,13 +7836,39 @@ begin
         if not (AEl.Style.StrokeWidthLogical > 0) then
           AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
       end
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+      begin
+        AEl.Style.StrokeColor := cTyCanvasColourLeft;
+        AEl.Style.StrokeGradient := Default(TTyChartGradient);
+        if not (AEl.Style.StrokeWidthLogical > 0) then
+          AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
+      end
       else
         AEl.Style.StrokeColor := 0;
     end
     else if key = 'style.lineWidth' then
     begin
       { [R6-F] a value that is no number as the canvas takes it }
-      if OffPen(key, v, pn) then AEl.Style.StrokeWidthLogical := pn;
+      if OffPen(key, v, pn, raw) then
+      begin
+        AEl.Style.StrokeWidthLogical := pn;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasWidthLeft;
+        { [R7-Y] Infinity (a tween towards it past its start): stroked at
+          the width the canvas had, never hit, a word's dash refused --
+          not-a-number (its start) strokes nothing }
+        if IsInfinite(raw) and (raw > 0) then
+        begin
+          AEl.Style.StrokeWidthLogical := 1;
+          AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
+          AEl.HitNone := (AEl.Style.StrokeColor <> 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone);
+          if AEl.Style.DashWord <> 0 then
+          begin
+            AEl.Style.DashLogical := nil;
+            AEl.Style.DashWord := 0;
+          end;
+        end;
+      end;
     end
     { [R5-I] a label line's smooth, tweening: its path again at the smooth
       it has now (buildLabelLinePath) }
@@ -7817,13 +7881,26 @@ begin
     { [R2-I3] a state's dashOffset, tweening }
     else if key = 'style.lineDashOffset' then
     begin
-      if OffPen(key, v, pn) then AEl.Style.DashOffsetLogical := pn;
+      { [R7-Y] no finite number: refused, the canvas' (paint order) [was:
+        nought] }
+      if OffPen(key, v, pn, raw) then
+      begin
+        if IsNan(raw) or IsInfinite(raw) then pn := cTyCanvasPhaseLeft;
+        AEl.Style.DashOffsetLogical := pn;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasPhaseLeftFlag;
+      end;
     end
     { [R5-A] a state's shadow, tweening }
     else if key = 'style.shadowBlur' then
     begin
       if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowBlur := Max(Double(0), v.Num);
+      { [R7-Y] below nought refused: kept negative for the paint order
+        [was: nought] }
+      if v.Kind = avkNumber then
+      begin
+        AEl.Style.ShadowBlur := v.Num;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasBlurLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowOffsetX' then
@@ -7841,7 +7918,11 @@ begin
     else if key = 'style.shadowColor' then
     begin
       if not Off(key, v, rest) then Continue;
-      if StColourOf(v, c) then AEl.Style.ShadowColor := c;
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasShadowLeft;
+      if StColourOf(v, c) then AEl.Style.ShadowColor := c
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+        AEl.Style.ShadowColor := cTyCanvasColourLeft;
     end
     else if key = 'style.opacity' then
     begin

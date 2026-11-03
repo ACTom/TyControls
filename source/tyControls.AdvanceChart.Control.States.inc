@@ -41,8 +41,7 @@ begin
   d := TyStFind(ANodes, APath);
   if (d = nil) or (d.JSONType = jtNumber) then Exit;
   if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
-  { [R7-W] (a refused phase: nought in a state, as before) }
-  if TyPhaseLeft(v) then v := 0;
+  { [R7-Y] (a refused phase stays cTyCanvasPhaseLeft: the rest's own) }
   if IsNan(v) then Exit;
   { the element strokes it -- or strokes nothing for it, where the rest
     holds zrender's default 1 (StRestOf) }
@@ -156,23 +155,80 @@ begin
     and TyAnimGradientOfValue(StColourValue(AObj, AKey), AGrad);
 end;
 
+{ [R7-Y] A KEY A STATE WRITES IS NO LONGER ONE THE CANVAS SETTLED: the
+  paint order marks it again where the new value is refused too (a rest
+  blur below nought, an emphasis of 5: the 5 is drawn) }
+procedure StUnsettle(var AEl: TTyChartElement; AFlag: Word); inline;
+begin
+  AEl.CanvasFlags := AEl.CanvasFlags and not AFlag;
+end;
+
 { [R5-A] A STATE'S SHADOW onto an element: the four keys where they differ from rest }
 procedure StWriteShadow(var AEl: TTyChartElement; const C, R: TTyStObject);
 begin
   if not StSameNum(C.Num[stkShadowBlur], R.Num[stkShadowBlur]) then
+  begin
     AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
+    StUnsettle(AEl, cTyCanvasBlurLeft);
+  end;
   if not StSameNum(C.Num[stkShadowOffsetX], R.Num[stkShadowOffsetX]) then
     AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
   if not StSameNum(C.Num[stkShadowOffsetY], R.Num[stkShadowOffsetY]) then
     AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
   if C.Has[stkShadowColor] and (C.Color[stkShadowColor] <> R.Color[stkShadowColor]) then
-    AEl.Style.ShadowColor := C.Color[stkShadowColor]
+  begin
+    AEl.Style.ShadowColor := C.Color[stkShadowColor];
+    StUnsettle(AEl, cTyCanvasShadowLeft);
+  end
   { a shadow the state brings on an element that had none: its colour,
     the prototype's '#000' where it says none }
   else if C.Has[stkShadowColor] and (AEl.Style.ShadowColor = 0)
     and ((AEl.Style.ShadowBlur > 0) or (AEl.Style.ShadowOffsetX <> 0)
       or (AEl.Style.ShadowOffsetY <> 0)) then
     AEl.Style.ShadowColor := C.Color[stkShadowColor];
+end;
+
+{ [R7-Y] A STATE'S lineCap / lineJoin / miterLimit onto an element: the
+  later state's over the earlier one's (useStates merges in order) }
+procedure StWriteWords(var AEl: TTyChartElement; const AState: TTyStElement);
+var n: TTyStName;
+begin
+  for n := Low(TTyStName) to High(TTyStName) do
+    if n in AState.States then
+    begin
+      if AState.Decl[n].CapWord > 0 then
+      begin
+        AEl.Style.LineCap := AState.Decl[n].CapWord - 1;
+        StUnsettle(AEl, cTyCanvasCapLeft);
+      end;
+      if AState.Decl[n].JoinWord > 0 then
+      begin
+        AEl.Style.LineJoin := AState.Decl[n].JoinWord - 1;
+        StUnsettle(AEl, cTyCanvasJoinLeft);
+      end;
+      if AState.Decl[n].HasMiter then
+      begin
+        AEl.Style.MiterLimit := AState.Decl[n].Miter;
+        StUnsettle(AEl, cTyCanvasMiterLeft);
+      end;
+    end;
+end;
+
+{ [R7-Y] A STATE'S WIDTH OF 'Infinity': hasStroke, the canvas refusing the
+  width and keeping the one it had (cTyCanvasWidthLeft, settled in paint
+  order); its stroked rect not-a-number, so never hit; a word's dash of
+  infinite lengths refused (solid) -- as an element's own (MarkElement) }
+procedure StInfiniteWidth(var AEl: TTyChartElement);
+begin
+  if not (IsInfinite(AEl.Style.StrokeWidthLogical) and (AEl.Style.StrokeWidthLogical > 0)) then Exit;
+  AEl.Style.StrokeWidthLogical := 1;
+  AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
+  AEl.HitNone := (AEl.Style.StrokeColor <> 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone);
+  if AEl.Style.DashWord <> 0 then
+  begin
+    AEl.Style.DashLogical := nil;
+    AEl.Style.DashWord := 0;
+  end;
 end;
 
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
@@ -200,6 +256,11 @@ begin
       it draws (TyAnimApplyState) }
     AEl.Style.DashWord := TyDashWord(TTyOptDash(Round(c.Num[stkDash])));
   end;
+  { [R7-Y] ITS CAP, JOIN AND MITER LIMIT, the later state's over the
+    earlier one's, set at its start proxy or not (STROKE_PROPS: every brush
+    assigns them; a word or a limit the canvas refuses is settled in paint
+    order) [was: a series item's state left them at rest] }
+  StWriteWords(AEl, AState);
   if AProxied then
   begin
     AEl.Z2 := Round(c.Num[stkZ2]);
@@ -208,9 +269,13 @@ begin
   end;
   { [R2-I3] and its phase, at once where nothing tweens it }
   if c.Has[stkDashOffset] and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
+  begin
     AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
+    StUnsettle(AEl, cTyCanvasPhaseLeftFlag);
+  end;
   if not SameColourKey(c, r, stkFill) then
   begin
+    StUnsettle(AEl, cTyCanvasFillLeft);
     if c.None[stkFill] then AEl.Style.HasFill := False
     { [F3d] a state's gradient -- declared, inherited or lifted }
     else if StGradientOf(c, stkFill, g) then
@@ -228,6 +293,7 @@ begin
   end;
   if not SameColourKey(c, r, stkStroke) then
   begin
+    StUnsettle(AEl, cTyCanvasStrokeLeft);
     if c.None[stkStroke] then AEl.Style.StrokeColor := 0
     else if StGradientOf(c, stkStroke, g) then
     begin
@@ -245,6 +311,10 @@ begin
   if TyStHasColour(c, stkStroke)
     or not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]) then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  { (a width the state changes; the rest's own 'Infinity' stays marked) }
+  if not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]) then
+    StUnsettle(AEl, cTyCanvasWidthLeft);
+  StInfiniteWidth(AEl);
   { [R2-I4] A DASH WRITTEN AS A WORD, the state's or the rest's, against the
     width the state draws [was: the rest's word kept the rest's lengths] }
   if AEl.Style.DashWord <> 0 then
@@ -905,13 +975,7 @@ begin
       AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
     AEl.Style.DashWord := TyDashWord(TTyOptDash(Round(c.Num[stkDash])));
   end;
-  for n := Low(TTyStName) to High(TTyStName) do
-    if n in AState.States then
-    begin
-      if AState.Decl[n].CapWord > 0 then AEl.Style.LineCap := AState.Decl[n].CapWord - 1;
-      if AState.Decl[n].JoinWord > 0 then AEl.Style.LineJoin := AState.Decl[n].JoinWord - 1;
-      if AState.Decl[n].HasMiter then AEl.Style.MiterLimit := AState.Decl[n].Miter;
-    end;
+  StWriteWords(AEl, AState);
   if not AProxied and c.Has[stkDashOffset]
     and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
     AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
@@ -3290,6 +3354,10 @@ begin
   TmCrumbStates(FPaintList);
   MapRepatch(FPaintListPPI, True);
   StSyncMarks(FPaintList);
+  { [R7-Y] what the canvas is left with, in paint order: a state's refused
+    value is settled as an element's own [was: only at a build] }
+  if TyLinesCanvasLeftoversDue(FPaintList) then
+    TyLinesCanvasLeftovers(FPaintList, CanvasGroundState, FPaintListPPI);
   FPaintList.JournalClose;
   if region and ProgPatchRegion(prevIdx, prevEls) then FProgLayerOk := True;
   { [R2-I9] the copies are of the list as written }
@@ -3649,6 +3717,10 @@ begin
     end;
     if AObj.Lifted[AKey] then Result := TyAnimLiftGradient(Result);
   end
+  { [R7-Y] a colour no parser reads: no colour to the engine (a discrete
+    track, set at once) }
+  else if AObj.Color[AKey] = cTyCanvasColourLeft then
+    Result := TyAnimStr(cTyAnimCanvasLeft)
   else
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
 end;
