@@ -248,8 +248,9 @@ end;
 
 procedure TTyCustomToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
-  i, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder: Integer;
+  i, j, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder, newH, limitH: Integer;
   ppi, indentPx, spacingPx: Integer;
+  ours: Boolean;
   kids: array of TControl;
   widths: array of Integer;
   ctl: TControl;
@@ -279,6 +280,16 @@ begin
     begin
       ctl := Controls[i];
       if IsInternalChild(ctl) then Continue;   // the chevron is placed by us, not laid out
+      { #176: a child the application hid is not a tool on the bar -- it was counted, took
+        its width, and was shown again by the placement below. Only the ones WE hid into the
+        overflow come back. }
+      if not ctl.Visible then
+      begin
+        ours := False;
+        for j := 0 to High(FOverflow) do
+          if FOverflow[j] = ctl then ours := True;
+        if not ours then Continue;
+      end;
       kids[n] := ctl;
       Inc(n);
     end;
@@ -368,9 +379,15 @@ begin
       defeat a squash anyway, since SetBounds clamps back up. When the row already fits, padY is
       unchanged and no existing bar moves a pixel. }
     bottomBorder := BottomBorderPx(Font.PixelsPerInch);
+    { #176: a top or bottom bar grows to its row, as the base bar does -- the modern density's
+      taller buttons were clipped. The row is placed against the height this pass is about to
+      give the bar, so it does not move up for one frame and back the next. }
+    newH := padY * 2 + rowH;
+    limitH := ClientHeight;
+    if Align in [alTop, alBottom] then Inc(limitH, newH - Height);
     rowTop := padY;
-    if rowTop + rowH > ClientHeight - bottomBorder then
-      rowTop := ClientHeight - bottomBorder - rowH;
+    if rowTop + rowH > limitH - bottomBorder then
+      rowTop := limitH - bottomBorder - rowH;
     if rowTop < 0 then rowTop := 0;
 
     x := indentPx;
@@ -405,6 +422,8 @@ begin
     end
     else if FMoreBtn <> nil then
       FMoreBtn.Visible := False;
+    if (Align in [alTop, alBottom]) and (Height <> newH) then
+      Height := newH;
   finally
     FInExLayout := False;
   end;

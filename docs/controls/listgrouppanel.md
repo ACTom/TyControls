@@ -5,7 +5,7 @@
 `TTyListGroupPanel` 是 TyControls 库中的 **Outlook 风格分组可展开列表（手风琴/accordion）** 容器，继承自 `TTyCustomControl`。它把内容组织成一列纵向堆叠的**分组（group）**：
 
 - 每个分组有一段**标题栏（header band）**：内含一个展开/折叠三角形箭头（chevron，复用 `TTyExPanel` 的箭头几何）和分组 `Caption`。点击标题栏即切换该分组的 `Expanded` 状态（并触发 `OnGroupToggle`）。
-- 分组**展开时**在其标题栏下方显示该分组的**条目（item）**，每行一个条目 `Caption`（可选 `ImageIndex`）。点击某条目即选中它（`SelectedGroup` / `SelectedItem`），并触发 `OnItemClick`。
+- 分组**展开时**在其标题栏下方显示该分组的**条目（item）**，每行一个条目 `Caption`（可选 `ImageIndex`）。点击某条目即选中它（`SelectedGroup` / `SelectedItem`），并触发 `OnItemClick`——每次点击都触发，点已经选中的条目也一样。
 
 **滚动策略**：当所有分组堆叠后的内容高度超过控件高度时，内容会被**裁剪（clip）到客户区**，并由**鼠标滚轮**平移（`FScrollOffset`）——本控件**不内嵌子滚动条**，以便把整套布局保留在纯几何函数里（便于 headless 测试）。内容比客户区矮时，偏移固定为 0。
 
@@ -81,7 +81,7 @@ TyListGroupItem:active   { background: var(--selection); color: var(--accent); }
 | `property Expanded[AGroup: Integer]: Boolean` | 读/写某分组的展开状态（写入并触发 `OnGroupToggle`） |
 | `property GroupCaption[AGroup: Integer]: string` | 读/写分组标题 |
 | `property SelectedGroup: Integer` | 当前选中条目所属分组（无选中为 `-1`） |
-| `property SelectedItem: Integer` | 当前选中条目索引（无选中为 `-1`） |
+| `property SelectedItem: Integer` | 当前选中条目索引（无选中为 `-1`）。增删分组或条目后，选中跟着原来那个条目走；那个条目被删了就清空 |
 | `property ScrollOffset: Integer` | 只读，当前纵向滚动偏移（设备像素，`0..MaxScrollOffset`） |
 
 ### 3.3 published 属性与事件
@@ -92,7 +92,7 @@ TyListGroupItem:active   { background: var(--selection); color: var(--accent); }
 | `ItemHeight: Integer` | 24 | 条目行逻辑高度（`--listgroup-item-height` 优先） |
 | `Images: TCustomImageList` | `nil` | 分组/条目图标源（按 `ImageIndex` 取；`nil` = 纯文字） |
 | `OnGroupToggle: TTyListGroupToggleEvent` | — | `procedure(Sender; AGroupIndex)`，分组展开状态真变化时触发 |
-| `OnItemClick: TTyListGroupItemEvent` | — | `procedure(Sender; AGroupIndex, AItemIndex)`，选中条目真变化时触发 |
+| `OnItemClick: TTyListGroupItemEvent` | — | `procedure(Sender; AGroupIndex, AItemIndex)`。每次鼠标点击条目都触发（已选中的也触发，双击的第二下除外）；键盘或代码改变选中时也触发 |
 | `OnItemDblClick: TTyListGroupItemEvent` | — | 双击条目行时触发（第一击已按 `OnItemClick` 发过；标题栏双击仍是两次切换,不触发本事件） |
 | `Align` / `Anchors` / `StyleClass` / `Controller` / `TabStop` | — | 继承自基类的常规属性 |
 

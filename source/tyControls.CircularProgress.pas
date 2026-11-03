@@ -244,6 +244,8 @@ var
   cx, cy, radius: Double;
   th: Integer;
   pct: Double;
+  fs: Integer;
+  vs: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
@@ -284,8 +286,12 @@ begin
       pct := TyGaugeFraction(FPosition, FMin, FMax) * 100;
       { A sixth of the ring, turned back into a LOGICAL size: the ring is device px and
         DrawText scales what it is given. See TTyGauge.DrawValueText. }
-      P.DrawText(R, TyFormatValue(FValueFormat, pct), Font.Name,
-        Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI)), 700, trackS.TextColor,
+      fs := TyControlFontSize(Self);   // a size the author set wins over the ring's sixth (#113)
+      if fs <= 0 then
+        fs := Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI));
+      vs := CurrentStyle;   // the theme's face, the font's style flags under the bold
+      P.DrawText(R, TyFormatValue(FValueFormat, pct), vs.FontName, fs,
+        700 or (vs.FontWeight and not TyFontWeightMask), trackS.TextColor,
         taCenter, tlCenter, False);
     end;
     P.EndPaint;

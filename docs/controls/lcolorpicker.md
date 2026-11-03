@@ -38,8 +38,8 @@ uses tyControls.LColorPicker;
 
 | 成员 | 说明 |
 |------|------|
-| `Hue: Single` | 固定色相,`0..360`,默认 `0`。改变会重画。 |
-| `Sat: Single` | 固定饱和度,`0..1`,默认 `1`。改变会重画。 |
+| `Hue: Single` | 固定色相,`0..360`,默认 `0`。**setter 钳制到 `[0,360]`**,改变会重画。 |
+| `Sat: Single` | 固定饱和度,`0..1`,默认 `1`。**setter 钳制到 `[0,1]`**,改变会重画。 |
 | `Position: Single` | 选中的明度值 `0..1`,默认 `1`。**setter 会钳制到 `[0,1]`**、重画并触发 `OnChange`(仅在值真正改变时)。 |
 | `SelectedColor: TTyColor`(只读) | 当前 Hue/Sat/Position 对应的不透明颜色,等价于 `TyHSVToRGB(Hue, Sat, Position, 255)`。 |
 | `OnChange: TNotifyEvent` | `Position` 改变(拖动或程序赋值)时触发。 |

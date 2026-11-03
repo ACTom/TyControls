@@ -30,7 +30,7 @@ uses tyControls.GroupBox;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 分组框顶部嵌入边框线的标题文字。写入时触发重绘。若为空字符串，则不绘制标题文字和背景遮盖带。 |
+| `Caption` | `string` | `''` | 分组框顶部嵌入边框线的标题文字，就是控件本身的 `Caption` / `Text`（所以动作的标题会显示出来）。写入时触发重绘。若为空字符串，则不绘制标题文字和背景遮盖带。放到窗体上时不会自动取成控件名。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 标题文字在顶部边框带内的水平对齐方式：`taLeftJustify`（左对齐，默认）/ `taCenter`（居中）/ `taRightJustify`（右对齐）。背景遮盖带与文字按同一对齐方式定位，使断口始终对准标题文字。赋值时触发 `Invalidate`。 |
 | `ClientWidth` | `Integer` | — | **（API parity 新增，转发 `TControl` 的）** 设定 / 流式化**框内**可用空间的宽度。分组框的客户区与外框差着标题带加主题内边距，所以"我要框里这么大地方"本来就是最自然的说法；以前设计器里说不出来，移植过来的 `.lfm` 里这一行会被丢掉。对应 LCL 的 `TGroupBox`（`stdctrls.pp:193-194`）。 |
 | `ClientHeight` | `Integer` | — | **（API parity 新增，转发 `TControl` 的）** 同上，框内可用空间的高度。 |

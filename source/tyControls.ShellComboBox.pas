@@ -62,6 +62,8 @@ type
     FIcons: TTyImageCollection;     { owned; the 128px folder/drive BGRA masters }
     FImages: TTyVirtualImageList;   { owned; the glyph list the popup + field draw from }
     procedure SetDirectory(const AValue: string);
+    { Rebuild Items from FDirectory: its breadcrumb, then the other roots. }
+    procedure BuildPlaces;
     procedure BuildGlyphs;
   protected
     { A row was committed by the user. Navigate to its path (rebuild + reselect) and fire
@@ -73,6 +75,9 @@ type
     function CreatePopupList: TTyCustomListBox; override;
     { Always pick-only -- ignore any attempt to make the field editable. }
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
+    { #163: the rows are the file system's, made again from Directory -- rows an older form file
+      carries are dropped. }
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -289,7 +294,19 @@ end;
 constructor TTyCustomShellComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { #163: the rows are generated; written to the form file too they were a stale, editable
+    copy of the file system. }
+  FItemsStreamed := False;
   BuildGlyphs;
+  { #163: Directory = '' lists the roots -- the drives -- as it does under any directory;
+    SetDirectory('') finds nothing to change, so the drop-down stayed empty. }
+  BuildPlaces;
+end;
+
+procedure TTyCustomShellComboBox.Loaded;
+begin
+  inherited Loaded;
+  BuildPlaces;
 end;
 
 destructor TTyCustomShellComboBox.Destroy;
@@ -386,17 +403,22 @@ end;
 procedure TTyCustomShellComboBox.SetDirectory(const AValue: string);
 var
   p2: string;
-  i, sel: Integer;
 begin
   p2 := ExcludeTrailingPathDelimiter(Trim(AValue));
   { Re-entrancy guard: navigating back to the same directory must not rebuild + loop. }
   if SameFileName(p2, FDirectory) then
     Exit;
   FDirectory := p2;
+  BuildPlaces;
+end;
+
+procedure TTyCustomShellComboBox.BuildPlaces;
+var i, sel: Integer;
+begin
   FUpdating := True;
   BeginQuietChange;   { #145: writing Directory fires no event, as the documentation says }
   try
-    FPlaces := TyLookInPlaces(p2);
+    FPlaces := TyLookInPlaces(FDirectory);
     Items.Clear;
     { Plain Display -- hierarchy is drawn as pixel indentation from Depth (via Objects[]),
       not as leading spaces in the item text. }

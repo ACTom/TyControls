@@ -602,7 +602,7 @@ begin
   try
     // Collect FORWARD, so the target receives the rows in source order...
     for i := 0 to High(idx) do
-      moved.Add(ASource[idx[i]]);
+      moved.AddObject(ASource[idx[i]], ASource.Objects[idx[i]]);   // #167: the row's object goes too
     // ...but delete BACKWARD, so an earlier removal never shifts a later index onto the
     // wrong row. (Normalisation is what makes "backward" well-defined here.)
     for i := High(idx) downto 0 do

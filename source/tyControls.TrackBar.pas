@@ -1139,7 +1139,7 @@ end;
 
 procedure TTyCustomTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
-  DecKey, IncKey: Word;
+  DecKey, IncKey, DecKey2, IncKey2: Word;
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -1153,6 +1153,20 @@ begin
     DecKey := VK_LEFT;
     IncKey := VK_RIGHT;
   end;
+  { #180: the arrows across the bar move it too -- up and right are more, as Up is on the
+    vertical bar -- rather than going on to the form and taking the focus away. }
+  if FOrientation = toVertical then
+  begin
+    DecKey2 := VK_LEFT;
+    IncKey2 := VK_RIGHT;
+  end
+  else
+  begin
+    DecKey2 := VK_DOWN;
+    IncKey2 := VK_UP;
+  end;
+  if Key = IncKey2 then Key := IncKey
+  else if Key = DecKey2 then Key := DecKey;
   if Key = IncKey then
   begin
     Position := FPosition + FLineSize;

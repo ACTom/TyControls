@@ -32,6 +32,8 @@ type
     function NextSelectable(ATarget: Integer): Integer;
     { Redirect a header target to the nearest real item so no path can select a header. }
     procedure SelectItem(AIndex: Integer); override;
+    { #161: a header's caption names no item -- Text := 'Fruit' selected the header row. }
+    function IndexOfCaption(const AValue: string): Integer; override;
     { Locked to csDropDownList (pick-only). The editable csDropDown popup is prefix-FILTERED and
       commits picks via a direct FItemIndex assign that bypasses SelectItem, which would let a
       header row be selected. Grouped combos are pick-only anyway. }
@@ -213,6 +215,14 @@ begin
     if AIndex < 0 then Exit;   // list is all headers — refuse
   end;
   inherited SelectItem(AIndex);
+end;
+
+function TTyCustomOfficeComboBox.IndexOfCaption(const AValue: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to Items.Count - 1 do
+    if not IsHeader(i) and (AnsiCompareText(Items[i], AValue) = 0) then Exit(i);
+  Result := -1;
 end;
 
 procedure TTyCustomOfficeComboBox.SetStyle(AValue: TTyComboBoxStyle);

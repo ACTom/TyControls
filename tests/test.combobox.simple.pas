@@ -61,6 +61,7 @@ type
     procedure TestItemsMutationsMirrorIntoTheDockedList;
     procedure TestSortedReorderReachesTheDockedList;
     procedure TestProgrammaticSelectionReachesListAndField;
+    procedure TestProgrammaticTextReachesTheDockedList;
     procedure TestListPickCommitsWithoutACloseUp;
     procedure TestTypingTracksTheExactMatchAndNeverFilters;
     { keyboard }
@@ -448,6 +449,22 @@ begin
     AssertEquals('combo re-pinned its selection by text', 'zeta', c.Text);
     AssertEquals('and the docked list highlights the same row',
       c.ItemIndex, c.PopupList.ItemIndex);
+  finally c.Free; end;
+end;
+
+{ #120: Text := that names an item selects it, and the docked list shows that row; text that
+  names none leaves no row highlighted. }
+procedure TComboSimpleModeTest.TestProgrammaticTextReachesTheDockedList;
+var c: TSimpleComboProbe;
+begin
+  c := MakeSimple;
+  try
+    c.Text := 'item2';
+    AssertEquals('the text selects its item', 1, c.ItemIndex);
+    AssertEquals('and the docked list highlights it', 1, c.PopupList.ItemIndex);
+    c.Text := 'none of them';
+    AssertEquals('text naming no item selects none', -1, c.ItemIndex);
+    AssertEquals('and the docked list lets go of the row', -1, c.PopupList.ItemIndex);
   finally c.Free; end;
 end;
 

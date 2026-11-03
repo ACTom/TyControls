@@ -1,7 +1,8 @@
 unit test.menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Forms, Menus, fpcunit, testregistry, tyControls.Menu, tyControls.Accel;
+uses Classes, SysUtils, Types, Controls, Forms, Menus, LCLVersion, fpcunit, testregistry, tyControls.Menu, tyControls.Accel,
+  LCLType, ActnList, tyControls.DropButtons, tyControls.Popup;
 type
   TMenuModelTest = class(TTestCase)
   published
@@ -224,9 +225,12 @@ begin
   mm := TMainMenu.Create(nil);
   try
     top := TMenuItem.Create(mm); mm.Items.Add(top);
+    { Between two items: a line alone is dropped by AutoLineReduction (#175). }
+    top.Add(NewItem('A', 0, False, True, nil, 0, ''));
     top.Add(NewLine);
+    top.Add(NewItem('B', 0, False, True, nil, 0, ''));
     rows := TyBuildMenuRows(top, True);
-    AssertEquals('bare dash is a separator even with headers on', Ord(mrkSeparator), Ord(rows[0].Kind));
+    AssertEquals('bare dash is a separator even with headers on', Ord(mrkSeparator), Ord(rows[1].Kind));
   finally mm.Free; end;
 end;
 
@@ -660,7 +664,276 @@ begin
   finally pm.Free; end;
 end;
 
+
+type
+  { #175: a submenu opening clicks its item, a tall menu scrolls, the bar follows its menu,
+    Close from code, AutoLineReduction, the drop-down button's keys. }
+  TMenu175Test = class(TTestCase)
+  private
+    FClicks, FCloses: Integer;
+    procedure FillOnClick(Sender: TObject);
+    procedure DisableOnUpdate(Sender: TObject);
+    procedure Closed(Sender: TObject);
+  published
+    procedure TestOpeningASubmenuClicksItsItem;
+    procedure TestTheBarFollowsItsMenu;
+    procedure TestTheBarFollowsItsMenuWhenIdle;
+    procedure TestABarDropDownClicksItsItem;
+    procedure TestATallMenuFitsTheScreenAndScrolls;
+    procedure TestAutoLineReductionDropsSpareLines;
+    procedure TestTheDropDownButtonOpensFromTheKeyboard;
+    procedure TestCloseFromCodeTakesThePopupDown;
+  end;
+
+  TMenuBar175 = class(TTyMenuBar);
+  TMenuView175 = class(TTyMenuView);
+  TDropDown175 = class(TTyDropDownButton);
+
+var
+  Menu175WidgetSet: Boolean = False;
+
+procedure TMenu175Test.FillOnClick(Sender: TObject);
+var mi: TMenuItem; i: Integer;
+begin
+  Inc(FClicks);
+  mi := TMenuItem(Sender);
+  mi.Clear;
+  for i := 1 to 3 do
+    mi.Add(NewItem('Item ' + IntToStr(i), 0, False, True, nil, 0, ''));
+end;
+
+procedure TMenu175Test.DisableOnUpdate(Sender: TObject);
+begin
+  TAction(Sender).Enabled := False;
+end;
+
+procedure TMenu175Test.Closed(Sender: TObject);
+begin
+  Inc(FCloses);
+end;
+
+procedure TMenu175Test.TestOpeningASubmenuClicksItsItem;
+var pop: TTyMenuPopupAccess; mm: TMainMenu; top, sub, acted: TMenuItem; act: TAction;
+begin
+  FClicks := 0;
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    sub := TMenuItem.Create(mm); sub.Caption := 'Recent';
+    sub.Add(NewItem('(empty)', 0, False, True, nil, 0, ''));
+    sub.OnClick := @FillOnClick;
+    top.Add(sub);
+    acted := TMenuItem.Create(mm); acted.Caption := 'Acted';
+    act := TAction.Create(mm);
+    act.ActionList := TActionList.Create(mm);
+    act.Caption := 'Acted';
+    act.OnUpdate := @DisableOnUpdate;
+    acted.Action := act;
+    top.Add(acted);
+    pop := TTyMenuPopupAccess.Create(nil);
+    try
+      pop.SetRoot(mm.Items);
+      pop.ActivateRowForTest(0);
+      AssertEquals('only the item opened is clicked, not the ones it shows', 0, FClicks);
+      AssertTrue('and refreshes the actions of what it shows', not acted.Enabled);
+    finally pop.Free; end;
+    pop := TTyMenuPopupAccess.Create(nil);
+    try
+      pop.SetRoot(top);
+      pop.ActivateRowForTest(0);
+      AssertEquals('opening a submenu clicks its item', 1, FClicks);
+      AssertEquals('so what it fills in shows', 3, pop.ChildRowCountForTest);
+    finally pop.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenu175Test.TestTheBarFollowsItsMenu;
+var bar: TMenuBar175; mm: TMainMenu; w0: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  bar := TMenuBar175.Create(nil);
+  try
+    mm.Items.Add(NewItem('&File', 0, False, True, nil, 0, ''));
+    mm.Items.Add(NewItem('&Edit', 0, False, True, nil, 0, ''));
+    mm.Items.Add(NewItem('&View', 0, False, True, nil, 0, ''));
+    bar.Align := alNone;
+    bar.Menu := mm;
+    bar.AutoSizeWidth := True;
+    w0 := bar.Width;
+    bar.CheckMenuChanged;
+    AssertEquals('nothing changed: nothing done', w0, bar.Width);
+    mm.Items[1].Visible := False;
+    bar.CheckMenuChanged;
+    AssertTrue(Format('a top item hidden at run time leaves the bar (%d < %d)', [bar.Width, w0]),
+      bar.Width < w0);
+  finally
+    bar.Free;
+    mm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestTheBarFollowsItsMenuWhenIdle;
+var bar: TMenuBar175; mm: TMainMenu; w0: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  bar := TMenuBar175.Create(nil);
+  try
+    mm.Items.Add(NewItem('&File', 0, False, True, nil, 0, ''));
+    mm.Items.Add(NewItem('&Edit', 0, False, True, nil, 0, ''));
+    bar.Align := alNone;
+    bar.Menu := mm;
+    bar.AutoSizeWidth := True;
+    w0 := bar.Width;
+    mm.Items[1].Visible := False;
+    Forms.Application.Idle(False);
+    AssertTrue('the application going idle is when the bar catches up', bar.Width < w0);
+  finally
+    bar.Free;
+    mm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestABarDropDownClicksItsItem;
+var bar: TMenuBar175; mm: TMainMenu; top: TMenuItem;
+begin
+  FClicks := 0;
+  mm := TMainMenu.Create(nil);
+  bar := TMenuBar175.Create(nil);
+  try
+    top := NewItem('&Recent', 0, False, True, nil, 0, '');
+    top.Add(NewItem('(empty)', 0, False, True, nil, 0, ''));
+    top.OnClick := @FillOnClick;
+    mm.Items.Add(top);
+    bar.Menu := mm;
+    bar.OpenTopForTest(0);
+    AssertEquals('a drop-down opening clicks its top item', 1, FClicks);
+    AssertEquals('which filled it', 3, top.Count);
+  finally
+    bar.Free;
+    mm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestATallMenuFitsTheScreenAndScrolls;
+var pop: TTyMenuPopupAccess; v: TMenuView175; root: TMenuItem; i, wa: Integer; r: TRect;
+begin
+  pop := TTyMenuPopupAccess.Create(nil);
+  try
+    r := pop.ComputeBounds(Rect(10, 10, 10, 10), 200, 100000, 96, False);
+    wa := TyPopupWorkArea(Rect(10, 10, 10, 10)).Bottom - TyPopupWorkArea(Rect(10, 10, 10, 10)).Top;
+    AssertTrue(Format('no taller than the work area (%d <= %d)', [r.Bottom - r.Top, wa]),
+      r.Bottom - r.Top <= wa);
+    AssertTrue('and on it', r.Bottom <= TyPopupWorkArea(Rect(10, 10, 10, 10)).Bottom);
+  finally pop.Free; end;
+  root := TMenuItem.Create(nil);
+  v := TMenuView175.Create(nil);
+  try
+    for i := 1 to 60 do
+      root.Add(NewItem('Row ' + IntToStr(i), 0, False, True, nil, 0, ''));
+    v.SetBounds(0, 0, 200, 150);
+    v.SetRows(TyBuildMenuRows(root));
+    AssertTrue('setup: taller than its window', v.MaxScrollY > 0);
+    v.SetHighlight(59);
+    AssertTrue('the highlight moved to the last row brings it into view',
+      v.RowTop(59, 96) + v.RowHeight(59, 96) <= v.ClientHeight);
+    AssertTrue('by scrolling', v.ScrollY > 0);
+    v.SetHighlight(0);
+    AssertEquals('back to the first, back to the top', 0, v.ScrollY);
+    AssertTrue('the wheel scrolls it', v.DoMouseWheel([], -120, Point(5, 5)));
+    AssertTrue('down', v.ScrollY > 0);
+  finally
+    v.Free;
+    root.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestAutoLineReductionDropsSpareLines;
+var root: TMenuItem; rows: TTyMenuRowArray;
+begin
+  root := TMenuItem.Create(nil);
+  try
+    root.Add(NewLine);
+    root.Add(NewItem('A', 0, False, True, nil, 0, ''));
+    root.Add(NewLine);
+    root.Add(NewLine);
+    root.Add(NewItem('B', 0, False, True, nil, 0, ''));
+    root.Add(NewLine);
+    rows := TyBuildMenuRows(root);
+    AssertEquals('a line at either end or after a line is dropped', 3, Length(rows));
+    AssertEquals('A', 'A', rows[0].Caption);
+    AssertTrue('one line between', rows[1].Kind = mrkSeparator);
+    AssertEquals('B', 'B', rows[2].Caption);
+    {$IF LCL_FULLVERSION >= 4000000}   // AutoLineReduction came with Lazarus 4.0
+    root.AutoLineReduction := maManual;
+    rows := TyBuildMenuRows(root);
+    AssertEquals('manual: every line is shown', 6, Length(rows));
+    {$ENDIF}
+  finally
+    root.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestTheDropDownButtonOpensFromTheKeyboard;
+var b: TDropDown175; pm: TTyPopupMenu; k: Word;
+begin
+  b := TDropDown175.Create(nil);
+  pm := TTyPopupMenu.Create(nil);
+  try
+    pm.Items.Add(NewItem('One', 0, False, True, nil, 0, ''));
+    b.DropDownMenu := pm;
+    k := VK_DOWN;
+    b.KeyDown(k, []);
+    AssertFalse('Down alone does not', b.RequestedPopup);
+    k := VK_F4;
+    b.KeyDown(k, []);
+    AssertTrue('F4 drops the menu', b.RequestedPopup);
+    AssertEquals('and takes the key', 0, k);
+  finally
+    b.Free;
+    pm.Free;
+  end;
+  b := TDropDown175.Create(nil);
+  pm := TTyPopupMenu.Create(nil);
+  try
+    pm.Items.Add(NewItem('One', 0, False, True, nil, 0, ''));
+    b.DropDownMenu := pm;
+    k := VK_DOWN;
+    b.KeyDown(k, [ssAlt]);
+    AssertTrue('Alt+Down too', b.RequestedPopup);
+  finally
+    b.Free;
+    pm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestCloseFromCodeTakesThePopupDown;
+var f: TForm; pm: TTyPopupMenu;
+begin
+  if not Menu175WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    Menu175WidgetSet := True;
+  end;
+  FCloses := 0;
+  f := TForm.CreateNew(nil);
+  pm := TTyPopupMenu.Create(f);
+  try
+    f.SetBounds(-4000, -4000, 300, 200);
+    f.Visible := True;
+    pm.Items.Add(NewItem('One', 0, False, True, nil, 0, ''));
+    pm.OnClose := @Closed;
+    pm.PopUp(-3900, -3900);
+    AssertTrue('setup: the themed pop-up is up', pm.RendererForTest.IsOpen);
+    pm.Close;
+    AssertFalse('Close from code takes it down', pm.RendererForTest.IsOpen);
+    AssertEquals('with one OnClose', 1, FCloses);
+  finally
+    f.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TMenu175Test);
   RegisterTest(TMenuModelTest);
   RegisterTest(TMenuViewTest);
   RegisterTest(TMenuPopupTest);

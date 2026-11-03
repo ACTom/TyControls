@@ -58,7 +58,7 @@ uses tyControls.RadioGroup;
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnSelectionChanged` | `TNotifyEvent` | **`ItemIndex` 发生改变时**触发，不论改变来自用户点击还是程序化赋值。只有 `Items` 重建时的选中恢复**不会**触发本事件（重建不是一次选择）。一次用户手势（点击 → 目标选中 + 兄弟取消，共触发多个子控件的 `OnChange`）只会汇聚为**一次** `OnSelectionChanged`。 |
+| `OnSelectionChanged` | `TNotifyEvent` | **`ItemIndex` 发生改变时**触发，不论改变来自用户点击还是程序化赋值。只有 `Items` 重建时的选中恢复**不会**触发本事件（重建不是一次选择）；但选中的那一项被删掉、`ItemIndex` 变成 `-1` 时会触发。一次用户手势（点击 → 目标选中 + 兄弟取消，共触发多个子控件的 `OnChange`）只会汇聚为**一次** `OnSelectionChanged`。 |
 | `OnClick` | `TNotifyEvent` | 与 `OnSelectionChanged` **同时同条件**触发（先 `OnSelectionChanged` 后 `OnClick`），也就是只在选择变了时触发，与 LCL 的 `TCustomRadioGroup` 一致。点到边框、标题或空白处不触发。 |
 | `OnItemEnter` | `TNotifyEvent` | 焦点**进入某一个选项**时触发，`Sender` 是**那个 `TTyRadioButton`**，不是分组框——重点就在于知道键盘现在停在哪一项上。逐项帮助文字、状态栏提示、跟着键盘走的预览面板都挂在这里。对应 LCL `extctrls.pp:779`，`Sender` 约定一致（`include/radiogroup.inc:147-155`）。 |
 | `OnItemExit` | `TNotifyEvent` | 焦点**离开某一个选项**时触发，`Sender` 同样是那个子控件。对应 LCL `extctrls.pp:780`。 |
@@ -178,7 +178,7 @@ end;
 ## 8. 注意事项
 
 1. **子控件是内部辅助控件：** 由 `TTyRadioGroup` 自身创建并拥有，标记 `csNoDesignVisible`，**不会**出现在 IDE 设计器的对象树中。请勿手动往 `TTyRadioGroup` 里拖放子控件——用 `Items` 驱动。
-2. **`Items` 变化会整体重建子控件：** `TStrings.OnChange` 不携带差异信息，因此每次变化都会释放旧子控件、重建新集合。重建后，**若原 `ItemIndex` 仍在有效范围内则恢复选中**，否则清空为 `-1`。
+2. **`Items` 变化会整体重建子控件：** `TStrings.OnChange` 不携带差异信息，因此每次变化都会释放旧子控件、重建新集合。重建后选中留在**原来那一项**上：先按**标题**认项（插入、删除一项，其余各项还是原来那一项），标题对不上的新项若所在位置上的旧项也已不在新列表里，就当作那一项改了名，接过它的状态；重复标题按先后一一配对。所以在选中项前面插一项，`ItemIndex` 跟着加一；给选中项改名，选中不丢。选中项被删掉则清空为 `-1`，并触发 `OnSelectionChanged`。
 3. **`ItemIndex` 是"读=已选/写=去选"的活属性：** 读取时实时扫描子控件的 `Checked` 状态，写入时选中目标并互斥其余。它不缓存独立字段，与子控件状态始终一致。
 4. **程序化设值同样通知：** `ItemIndex :=` 赋值与用户点击走同一条通知路径（`OnSelectionChanged` + `OnClick`）。以前它是静默的，于是"让详情面板跟着选择走"这类处理器在用户点击时有效、在程序恢复一个存档选择时静默失效。内部的重入守卫只负责把"选中目标 + 取消兄弟"这一串子控件事件收敛成**一次**通知，不负责让程序化赋值变哑。只有 `Items` 重建恢复选中仍保持静默——重建不是一次选择。
 5. **整组只占一个 Tab 位：** 只有当前选中项（未选中时为第 0 项）`TabStop = True`，选择变化与 `Items` 重建后都会重算。以前每个子控件各占一位，于是一个五项的单选组在 Tab 序里就是五站，而真正用来移动选择的方向键反倒无事可做。

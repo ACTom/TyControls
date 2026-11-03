@@ -606,6 +606,8 @@ type
     FOnColumnResized:  TTyTreeColumnEvent;
     { D3: column drag-reorder state }
     FDragColumn:       Integer;   // collection Index of the dragged column; NoColumn when idle
+    FHotHeaderColumn:  Integer;   // #155: the header section under the pointer (hoHotTrack)
+    FSpringW:          Integer;   // #155: the width coAutoSpring last shared out, logical px
     FDragPending:      Boolean;   // MouseDown on a draggable section; drag not yet started
     FDragStartX:       Integer;   // device X at the drag press
     FDragging:         Boolean;   // threshold exceeded: ghost + drop-mark active
@@ -840,11 +842,20 @@ type
       Each default implementation fires the event, so an override that wants both calls
       inherited. }
     procedure DoGetText(Node: PTyTreeNode; var AText: string); virtual;
+    { #166: OnPaintText as VTV's: before the text, on a canvas whose Font is the cell's; the
+      colour, style, size and name the handler leaves are what the text is drawn with. It
+      fired after the text, onto the canvas the off-screen paint is copied to, so nothing it
+      did showed. }
+    procedure AskPaintText(ACanvas: TCanvas; Node: PTyTreeNode; AColumn: Integer;
+      var AFontName: string; var ASize, AWeight: Integer; var AColor: TTyColor);
     procedure DoInitNode(AParent, Node: PTyTreeNode; var AStates: TTyNodeInitStates); virtual;
     procedure DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean); virtual;
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); virtual;
     procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { The focus moved to Node: OnFocusChanged. A descendant that follows the focus overrides
+      it -- TTyShellTreeView, whose path is the focused folder's (#165). }
+    procedure DoFocusChanged(Node: PTyTreeNode); virtual;
     { A node is about to be freed: its data and its item are still readable. Fires OnFreeNode. }
     procedure DoFreeNode(Node: PTyTreeNode); virtual;
     { Items were turned into nodes again (RebuildFromItems): every node before it is gone. }
@@ -1459,6 +1470,9 @@ implementation
 
 uses
   tyControls.Css.Values;
+
+procedure SortTreeNode(Tree: TTyCustomTreeView; Node: PTyTreeNode;
+  Column: Integer; ADirection: TTySortDirection); forward;
 
 type
   { #101. --treeview-lines }
@@ -2523,7 +2537,22 @@ procedure TTyCustomTreeView.SetFocusedNode(AValue: PTyTreeNode);
 var
   prevFocus: PTyTreeNode;
 begin
-  if AValue = FFocusedNode then Exit;
+  if AValue = FFocusedNode then
+  begin
+    { #166: focusing the focused node -- a click on it -- after its selection was cleared
+      selects it again, as focusing does; the early exit left it unselected. }
+    if (AValue <> nil) and not GetSelected(AValue) and DoChanging(AValue) then
+    begin
+      FSuppressChanging := True;
+      try
+        SetSelected(AValue, True);
+      finally
+        FSuppressChanging := False;
+      end;
+      Invalidate;
+    end;
+    Exit;
+  end;
   { LCL parity: OnChanging vetoes the whole move — focus does NOT budge either, or
     the caret and the selection would end up on different rows. }
   if not DoChanging(AValue) then Exit;
@@ -2540,8 +2569,7 @@ begin
       FSuppressChanging := False;
     end;
   end;
-  if Assigned(FOnFocusChanged) then
-    FOnFocusChanged(Self, AValue);
+  DoFocusChanged(AValue);
   { AutoExpand runs after the notification, so a handler reading Expanded[] sees the
     state the user is about to see. }
   ApplyAutoExpand(prevFocus, AValue);
@@ -2559,7 +2587,7 @@ begin
   if not DoChanging(AValue) then Exit;
   prevFocus    := FFocusedNode;
   FFocusedNode := AValue;
-  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, AValue);
+  DoFocusChanged(AValue);
   ApplyAutoExpand(prevFocus, AValue);
   Invalidate;
 end;
@@ -2800,12 +2828,12 @@ procedure TTyCustomTreeView.SetIndent(AValue: Integer);
 begin
   if FIndent = AValue then Exit;
   FIndent := AValue;
-  Invalidate;
+  InvalidateTreeLayout;   // #166: the widest row is measured again -- the range only grew
 end;
 
 procedure TTyCustomTreeView.ImagesChanged(Sender: TObject);
 begin
-  Invalidate;
+  InvalidateTreeLayout;   // #166
 end;
 
 procedure TTyCustomTreeView.SetImages(AValue: TCustomImageList);
@@ -2832,7 +2860,7 @@ begin
   if FItemMode and (FItems <> nil) then
     for i := 0 to FItems.Count - 1 do
       FItems.Items[i].ResolveIcons;
-  Invalidate;
+  InvalidateTreeLayout;   // #166
 end;
 
 procedure TTyCustomTreeView.SetShowButtons(AValue: Boolean);
@@ -2853,7 +2881,7 @@ procedure TTyCustomTreeView.SetShowRoot(AValue: Boolean);
 begin
   if FShowRoot = AValue then Exit;
   FShowRoot := AValue;
-  Invalidate;
+  InvalidateTreeLayout;   // #166
 end;
 
 procedure TTyCustomTreeView.SetToggleOnDblClick(AValue: Boolean);
@@ -3408,6 +3436,8 @@ procedure TTyCustomTreeView.Resize;
 begin
   inherited Resize;
   UpdateScrollBars;
+  if (FHeader <> nil) and not (csLoading in ComponentState) then
+    FHeader.Columns.SpringTo(MulDiv(ClientWidth, 96, Font.PixelsPerInch), FSpringW);   // #155
   ApplyHeaderAutoSize;   // D4: after UpdateScrollBars so ContentRect is current
   RepositionEditor;   // ③e E4: keep an open editor glued to its cell after a resize
 end;
@@ -3513,6 +3543,7 @@ begin
   FResizeStartX     := 0;
   { D3: column drag-reorder — idle state }
   FDragColumn       := NoColumn;
+  FHotHeaderColumn  := NoColumn;
   FDragPending      := False;
   FDragStartX       := 0;
   FDragging         := False;
@@ -4791,6 +4822,20 @@ begin
     if not allowed then Exit;
 
     InitChildren(Node);
+    { #166: a header sort leaves collapsed subtrees for their expansion -- and nothing sorted
+      them then, so they opened in their old order. While the sort is the header's still,
+      the subtree opening is put in it. }
+    if (not FSorting) and (FSortedColumn <> NoColumn) and (FHeader <> nil)
+      and (FHeader.SortColumn = FSortedColumn) and (FHeader.SortDirection = FSortedDirection) then
+    begin
+      FSorting := True;
+      try
+        SortTreeNode(Self, Node, FSortedColumn, FSortedDirection);
+        ItemsFollowNodeOrder;   { #141 }
+      finally
+        FSorting := False;
+      end;
+    end;
     Include(Node^.States, nsExpanded);
 
     // Add the newly-visible descendant heights.
@@ -5423,6 +5468,9 @@ var
   slots: TTyTreeCaptionSlots;
   nodeStates: TTyStateSet;
   txt: string;
+  ptName: string;            // #166: the text font OnPaintText may change
+  ptSize, ptWeight: Integer;
+  ptColor: TTyColor;
   ghosted: Boolean;
   imgIdx: Integer;
   selIdx, ovlIdx: Integer;      { ikSelected / ikOverlay answers for the current row }
@@ -5456,6 +5504,8 @@ var
   colTxt: string;
   sortGlyphSize: Integer;
   colAlign: TAlignment;
+  secStates: TTyStateSet;   // #155
+  hdrIco: Integer;
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
 
@@ -5789,10 +5839,15 @@ begin
 
         { Fill cell background — hover if this is the hovered column,
           else transparent (inherits band bg) }
-        if (hoHotTrack in FHeader.Options) and (colIdx = NoColumn) then
-        begin
-          { NoColumn = -1, so this branch never fires — FHotHeaderColumn would go here in Phase D }
-        end;
+        { #155: the section's own states -- :hover under the pointer with hoHotTrack, :selected
+          while pressed. The hover branch here tested colIdx = NoColumn and never ran. }
+        { Pressed wins over hover -- the resolve applies :hover last. }
+        secStates := [];
+        if FDragPending and not FDragging and (colIdx = FDragColumn) then
+          secStates := [tysSelected]
+        else if (hoHotTrack in FHeader.Options) and (colIdx = FHotHeaderColumn) then
+          secStates := [tysHover];
+        headerSecStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, secStates));
         if tpBackground in headerSecStyle.Present then
           P.FillBackground(clipR, headerSecStyle.Background, 0);
 
@@ -5816,6 +5871,33 @@ begin
                            headerBandRect.Top,
                            clipR.Right - colMargin - sortGlyphSize,
                            headerBandRect.Bottom);
+
+        { #155: the column's icon from Header.Images, at the caption's reading start -- the
+          header never drew one. }
+        if (FHeader.Images <> nil) and (col.ImageIndex >= 0)
+          and (col.ImageIndex < TyImageCount(FHeader.Images)) then
+        begin
+          hdrIco := P.Scale(16);
+          if hdrIco > (headerBandRect.Bottom - headerBandRect.Top) - P.Scale(4) then
+            hdrIco := (headerBandRect.Bottom - headerBandRect.Top) - P.Scale(4);
+          if (hdrIco > 0) and (textRect.Right - textRect.Left > hdrIco) then
+          begin
+            if RtlLayout then
+            begin
+              TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Right - hdrIco,
+                headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
+                hdrIco, False);
+              Dec(textRect.Right, hdrIco + P.Scale(4));
+            end
+            else
+            begin
+              TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Left,
+                headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
+                hdrIco, False);
+              Inc(textRect.Left, hdrIco + P.Scale(4));
+            end;
+          end;
+        end;
 
         if textRect.Left < textRect.Right then
         begin
@@ -6281,13 +6363,16 @@ begin
               textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
                                slots.CaptionRight - slots.TextPad, rowTop + rowH);
               FillCaptionHighlight(textRect, colTxt, False);   { #71 }
+              ptName := NodeStyle.FontName;
+              ptSize := ResolveFontSize(NodeStyle);
+              ptWeight := NodeStyle.FontWeight;
+              ptColor := NodeStyle.TextColor;
+              AskPaintText(ACanvas, node, colIdx, ptName, ptSize, ptWeight, ptColor);
+              { #155: the main column's own Alignment, as every other column's -- it was
+                always left-justified. }
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
-                P.DrawText(textRect, colTxt,
-                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                  NodeStyle.TextColor, taLeftJustify, tlCenter, True);
-
-              if Assigned(FOnPaintText) then
-                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+                P.DrawText(textRect, colTxt, ptName, ptSize, ptWeight, ptColor,
+                  col.Alignment, tlCenter, True);
             end;
           end
           else
@@ -6313,13 +6398,14 @@ begin
               textRect := Rect(colCaptionX, rowTop,
                                slots.CaptionRight - colMargin, rowTop + rowH);
               { #71: not on the highlight unless the whole row is, so the chrome's style. }
+              ptName := ChromeStyle.FontName;
+              ptSize := ResolveFontSize(ChromeStyle);
+              ptWeight := ChromeStyle.FontWeight;
+              ptColor := ChromeStyle.TextColor;
+              AskPaintText(ACanvas, node, colIdx, ptName, ptSize, ptWeight, ptColor);
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
-                P.DrawText(textRect, colTxt,
-                  ChromeStyle.FontName, ResolveFontSize(ChromeStyle), ChromeStyle.FontWeight,
-                  ChromeStyle.TextColor, colAlign, tlCenter, True);
-
-              if Assigned(FOnPaintText) then
-                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+                P.DrawText(textRect, colTxt, ptName, ptSize, ptWeight, ptColor,
+                  colAlign, tlCenter, True);
             end;
           end;
 
@@ -6546,13 +6632,14 @@ begin
           textRect := Rect(slots.CaptionX + slots.TextPad, rowTop,
                            slots.CaptionRight, rowTop + rowH);
           FillCaptionHighlight(textRect, txt, False);   { #71 }
+          ptName := NodeStyle.FontName;
+          ptSize := ResolveFontSize(NodeStyle);
+          ptWeight := NodeStyle.FontWeight;
+          ptColor := NodeStyle.TextColor;
+          AskPaintText(ACanvas, node, -1, ptName, ptSize, ptWeight, ptColor);
           if (textRect.Left < textRect.Right) and (txt <> '') then
-            P.DrawText(textRect, txt,
-              NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-              NodeStyle.TextColor, taLeftJustify, tlCenter, True);
-
-          if Assigned(FOnPaintText) then
-            FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+            P.DrawText(textRect, txt, ptName, ptSize, ptWeight, ptColor,
+              taLeftJustify, tlCenter, True);
         end;
 
         { ── FRangeX accumulation ─────────────────────────────────────────── }
@@ -7171,7 +7258,10 @@ begin
 
   { ToggleOnDblClick: toggle expand/collapse on the node (only if expandable
     and the click was NOT on the explicit button — that already toggled on Down). }
-  if FToggleOnDblClick and (nsHasChildren in node^.States) then
+  { #166: not on the expander or the check box -- each press there already did its own thing,
+    and the double-click toggled the expansion a third time. }
+  if FToggleOnDblClick and (nsHasChildren in node^.States)
+    and not (FLastMouseHitPart in [hpButton, hpCheckBox]) then
     Expanded[node] := not Expanded[node];
 
   if Assigned(FOnNodeDblClick) then FOnNodeDblClick(Self, node);
@@ -7190,6 +7280,48 @@ end;
 function TTyCustomTreeView.SupportsItemModel: Boolean;
 begin
   Result := True;
+end;
+
+procedure TTyCustomTreeView.AskPaintText(ACanvas: TCanvas; Node: PTyTreeNode; AColumn: Integer;
+  var AFontName: string; var ASize, AWeight: Integer; var AColor: TTyColor);
+var
+  saved: TFont;
+  c0: TColor;
+  s0, s1: TFontStyles;
+  z0: Integer;
+  n0: string;
+  css: Integer;
+begin
+  if not Assigned(FOnPaintText) or (ACanvas = nil) then Exit;
+  saved := TFont.Create;
+  try
+    saved.Assign(ACanvas.Font);
+    if AFontName <> '' then ACanvas.Font.Name := AFontName;
+    ACanvas.Font.Size := ASize;
+    ACanvas.Font.Color := TyColorToLCL(AColor);
+    ACanvas.Font.Style := TyFontStylesOf(AWeight);
+    c0 := ACanvas.Font.Color;
+    s0 := ACanvas.Font.Style;
+    z0 := ACanvas.Font.Size;
+    n0 := ACanvas.Font.Name;
+    FOnPaintText(Self, ACanvas, Node, AColumn, ttNormal);
+    if ACanvas.Font.Color <> c0 then
+      AColor := TyRGB(Red(ColorToRGB(ACanvas.Font.Color)), Green(ColorToRGB(ACanvas.Font.Color)),
+        Blue(ColorToRGB(ACanvas.Font.Color)));
+    s1 := ACanvas.Font.Style;
+    if s1 <> s0 then
+    begin
+      css := TyFontWeightOf(AWeight);
+      if fsBold in s1 then css := 700
+      else if css >= 600 then css := 400;   // bold taken off
+      AWeight := TyFontWeightWithStyle(css, s1);
+    end;
+    if (ACanvas.Font.Size <> z0) and (ACanvas.Font.Size > 0) then ASize := ACanvas.Font.Size;
+    if ACanvas.Font.Name <> n0 then AFontName := ACanvas.Font.Name;
+  finally
+    ACanvas.Font.Assign(saved);
+    saved.Free;
+  end;
 end;
 
 procedure TTyCustomTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
@@ -7214,6 +7346,7 @@ var
   msg: string;
 begin
   inherited Loaded;
+  FSpringW := MulDiv(ClientWidth, 96, Font.PixelsPerInch);   // #155: the widths read are for this width
   if FPendingConflict <> '' then
   begin
     msg := FPendingConflict;
@@ -7262,6 +7395,11 @@ begin
   if Assigned(FOnChange) then FOnChange(Self, Node);
 end;
 
+procedure TTyCustomTreeView.DoFocusChanged(Node: PTyTreeNode);
+begin
+  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, Node);
+end;
+
 procedure TTyCustomTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);
 begin
   if AOn then
@@ -7293,6 +7431,21 @@ begin
   hitColIdx := NoColumn;
   targetPos := 0;
   inherited MouseMove(Shift, X, Y);
+
+  { #155: hoHotTrack lights the header section under the pointer. }
+  if (FHeader <> nil) and (hoHotTrack in FHeader.Options) then
+  begin
+    if GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderSection) then
+      hitColIdx := hCol
+    else
+      hitColIdx := NoColumn;
+    if hitColIdx <> FHotHeaderColumn then
+    begin
+      FHotHeaderColumn := hitColIdx;
+      Invalidate;
+    end;
+    hitColIdx := NoColumn;
+  end;
 
   { ③f F2: intra-tree node drag. Engaged only when a node was armed on MouseDown
     (FDragNode<>nil) under toNodeDrag — a header column drag arms FDragPending /
@@ -7532,6 +7685,11 @@ begin
   inherited MouseLeave;
   { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
   NoteHostHover(False);
+  if FHotHeaderColumn <> NoColumn then
+  begin
+    FHotHeaderColumn := NoColumn;
+    Invalidate;
+  end;
   if FHotNode <> nil then
   begin
     FHotNode := nil;
@@ -7756,7 +7914,11 @@ begin
       Key := 0;
     end;
 
-    VK_ADD, Ord('+'):   { Expand }
+    { #166: the keypad's +, - and * (VK_ADD / VK_SUBTRACT / VK_MULTIPLY), as LCL's tree view.
+      Ord('+'), Ord('-') and Ord('*') here were VK_EXECUTE, VK_INSERT and VK_PRINT -- Insert
+      collapsed the node. With Ctrl or Alt the keys are the application's. }
+    VK_ADD:   { Expand }
+    if Shift * [ssCtrl, ssAlt] = [] then
     begin
       if cur <> nil then
       begin
@@ -7767,14 +7929,16 @@ begin
       Key := 0;
     end;
 
-    VK_SUBTRACT, Ord('-'):  { Collapse }
+    VK_SUBTRACT:  { Collapse }
+    if Shift * [ssCtrl, ssAlt] = [] then
     begin
       if cur <> nil then
         Expanded[cur] := False;
       Key := 0;
     end;
 
-    VK_MULTIPLY, Ord('*'):   { FullExpand from focused node }
+    VK_MULTIPLY:   { FullExpand from focused node }
+    if Shift * [ssCtrl, ssAlt] = [] then
     begin
       if cur <> nil then
         FullExpand(cur)
@@ -7864,10 +8028,29 @@ end;
 { DoCompare: wraps OnCompareNodes.  Returns 0 when no handler assigned.
   The caller uses natural ordering; the sort direction is handled by the merge. }
 function TTyCustomTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+var t1, t2: string;
 begin
   Result := 0;
   if Assigned(FOnCompareNodes) then
+  begin
     FOnCompareNodes(Self, Node1, Node2, Column, Result);
+    Exit;
+  end;
+  { #155: no handler, the cells' text, case aside -- as LCL's AlphaSort compares Text. The
+    sort arrow turned and nothing moved. }
+  t1 := '';
+  t2 := '';
+  if Assigned(FOnGetTextWithType) then
+  begin
+    FOnGetTextWithType(Self, Node1, Column, ttNormal, t1);
+    FOnGetTextWithType(Self, Node2, Column, ttNormal, t2);
+  end
+  else
+  begin
+    DoGetText(Node1, t1);
+    DoGetText(Node2, t2);
+  end;
+  Result := UTF8CompareText(t1, t2);
 end;
 
 { MergeSortedLists: merge two sorted singly-linked (NextSibling) lists into one.
@@ -8019,9 +8202,14 @@ begin
 
   col := FHeader.Columns.Items[ColIndex] as TTyColumn;
 
-  { Guard: column must allow click and header must have auto-sort on }
+  { Guard: the column must allow the click. #155: the click is reported whether or not the
+    header sorts on it -- OnHeaderClick fired only with hoHeaderClickAutoSort. }
   if not (coAllowClick in col.Options) then Exit;
-  if not (hoHeaderClickAutoSort in FHeader.Options) then Exit;
+  if not (hoHeaderClickAutoSort in FHeader.Options) then
+  begin
+    if Assigned(FOnHeaderClick) then FOnHeaderClick(Self, ColIndex);
+    Exit;
+  end;
 
   { Update SortColumn / SortDirection (suppress HeaderChanged reentrancy) }
   FSorting := True;

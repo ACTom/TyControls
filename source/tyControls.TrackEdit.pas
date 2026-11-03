@@ -21,6 +21,7 @@ type
   private
     FSliderWidth: Integer;   // logical px of the slider zone
     FDragging: Boolean;
+    FDragStepTaken: Boolean;   // the drag's one undo step is in (#159)
     procedure TrackSpan(out ALeft, ARight, AMidY: Integer);
     procedure SetFromX(AX: Integer);
     procedure SetSliderWidth(AValue: Integer);
@@ -205,15 +206,20 @@ procedure TTyCustomTrackEdit.SetFromX(AX: Integer);
 var tl, tr, midY: Integer;
 begin
   TrackSpan(tl, tr, midY);
-  if tr > tl then
-    Value := TyTrackEditValueAt(AX, tl, tr, MinValue, MaxValue);
+  { #159: the user's edit -- Modified, OnChange -- with one undo step for the whole drag. Value :=
+    made each move a programmatic write: Modified cleared, a step taken every time. }
+  if (tr > tl) and ApplyUserValue(TyTrackEditValueAt(AX, tl, tr, MinValue, MaxValue),
+       not FDragStepTaken) then
+    FDragStepTaken := True;
 end;
 
 procedure TTyCustomTrackEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if (Button = mbLeft) and PtInRect(TrailingZone(Font.PixelsPerInch), Point(X, Y)) then
   begin
+    if ReadOnly then Exit;   // #159: the slider does not edit a read-only field
     FDragging := True;
+    FDragStepTaken := False;
     SetFromX(X);
     Exit;   // slider consumes the click (no caret / selection)
   end;

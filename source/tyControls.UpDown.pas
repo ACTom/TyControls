@@ -567,8 +567,17 @@ begin
     { Unparseable text is not a value: keep what we have, exactly as LCL does. This is what
       lets the user clear the field or type '-' on the way to '-5' without the pair
       snapping the entry back to a number under their cursor. }
+    { #160: taken back silently. A READ is no change -- it fired OnChange -- and a click after
+      typing fired it twice, once for the read and once for the step. }
     if TyUpDownParsePosition(GetAssociateText, ThousandSepChar, v) then
-      SetPosition(v);       // clamps, and announces via OnChange only if it really moved
+    begin
+      v := TyUpDownClamp(v, FMin, FMax, False);
+      if v <> FPosition then
+      begin
+        FPosition := v;
+        Invalidate;
+      end;
+    end;
   finally
     FSyncing := False;
   end;

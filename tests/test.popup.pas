@@ -242,7 +242,8 @@ var
       sl.LoadFromFile(dir + AUnit);
       shows := 0;
       for k := 0 to sl.Count - 1 do
-        if Trim(sl[k]) = stmt then
+        { #178: TyShowPassive shows the window too. }
+        if (Trim(sl[k]) = stmt) or (Pos('TyShowPassive(' + AWin, Trim(sl[k])) = 1) then
         begin
           Inc(shows);
           j := k - 1;

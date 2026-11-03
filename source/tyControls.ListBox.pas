@@ -57,6 +57,19 @@ type
       SelectAll -- SelectItem is public AND virtual, so widening it would break every
       descendant that overrides it (TTyValueListEditor does). }
     FUserAction: Integer;
+    { #164: bumped by every announced selection change, so a key handler can tell whether it
+      moved the selection -- which LCL's list box reports as a click. }
+    FSelChanges: Cardinal;
+    { #164: type-to-find's prefix and when it was last typed to; the button held on a row. }
+    FFindPrefix: string;
+    FFindTick: QWord;
+    FDragSelecting: Boolean;
+    procedure NavigateByKey(var Key: Word; Shift: TShiftState);
+    { Put the caret on ATarget as a plain arrow key does: the selection in single mode, the
+      selection (or, AExtend, the range from the anchor) in extended mode, the caret alone in
+      the simple multi-select. }
+    procedure MoveCaretTo(ATarget: Integer; AExtend: Boolean);
+    procedure DragSelectTo(ARow: Integer);
     function GetItems: TStrings;
     procedure SetItems(const AValue: TStrings);
     procedure SetSorted(const AValue: Boolean);
@@ -130,6 +143,11 @@ type
       TTyCustomColorListBox, whose palette comes from Style and whose colours a TStrings in a form
       file cannot carry. READING an Items block is unaffected, so older .lfm files still load. }
     FItemsStreamed: Boolean;
+    { #164: False = typing does not find a row, and dragging with the button down does not
+      select. A list whose selection change is a pick -- TTyComboBox's drop-down -- or whose
+      typing and dragging are its own -- TTyValueListEditor -- turns them off. }
+    FTypeToFind: Boolean;
+    FDragSelect: Boolean;
     function ItemsStored: Boolean;
     function GetStyleTypeKey: string; override;
     { 本控件画框用的样式 —— RenderTo 自己读它,贴边的内嵌条(ITyScrollBarFrameHost)也读它,
@@ -239,8 +257,13 @@ type
     { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
       docs/controls/scrollbar.md §7。 }
     procedure MouseEnter; override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    { #164: the tilt wheel scrolls sideways, as Shift+wheel does. }
+    function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     procedure Resize; override;
     procedure UpdateScrollBar;
@@ -430,6 +453,9 @@ type
 
 implementation
 
+uses
+  LazUTF8;
+
 function IfThenIdx(ACond: Boolean; ATrue, AFalse: Integer): Integer;
 begin if ACond then Result := ATrue else Result := AFalse; end;
 
@@ -499,6 +525,8 @@ begin
   FExtendedSelect := True;        { LCL's default discipline }
   FLockSelectionChange := 0;
   FUserAction := 0;
+  FTypeToFind := True;
+  FDragSelect := True;
   TabStop := True;
   Width := 160;
   Height := 120;
@@ -753,10 +781,16 @@ end;
 
 procedure TTyCustomListBox.SetItemHeight(const AValue: Integer);
 begin
+  { #164: 0 is the default height, as LCL's -- it gave 1 px rows; a negative one is refused. }
+  if AValue < 0 then Exit;
+  if AValue = 0 then
+  begin
+    FollowThemeItemHeight;
+    Exit;
+  end;
   FItemHeightExplicit := True;   { host pinned it, even at the fallback value }
   if FItemHeight = AValue then Exit;
   FItemHeight := AValue;
-  if FItemHeight < 1 then FItemHeight := 1;
   UpdateScrollBar;
   Invalidate;
 end;
@@ -1200,6 +1234,7 @@ end;
   the flag exactly as customlistbox.inc:360 does. }
 procedure TTyCustomListBox.FireSelectionChanged;
 begin
+  Inc(FSelChanges);
   DoSelectionChange((FUserAction > 0) and (FLockSelectionChange = 0));
 end;
 
@@ -1407,6 +1442,17 @@ begin
 end;
 
 procedure TTyCustomListBox.KeyDown(var Key: Word; Shift: TShiftState);
+var changes: Cardinal;
+begin
+  if not IsEnabled then Exit;
+  inherited KeyDown(Key, Shift);
+  changes := FSelChanges;
+  NavigateByKey(Key, Shift);
+  { #164: a selection the keyboard moved is a click, as LCL's list box reports it (LBN_SELCHANGE). }
+  if FSelChanges <> changes then Click;
+end;
+
+procedure TTyCustomListBox.NavigateByKey(var Key: Word; Shift: TShiftState);
 var RowTotal, NewFocus, VR: Integer; Extend: Boolean;
   procedure MoveFocus(ATarget: Integer);
   begin
@@ -1415,8 +1461,19 @@ var RowTotal, NewFocus, VR: Integer; Extend: Boolean;
     NewFocus := ATarget;
   end;
 begin
-  if not IsEnabled then Exit;
-  inherited KeyDown(Key, Shift);
+  { #164: sideways while there is something to the side -- the keys of Shift+wheel. }
+  if (Key = VK_LEFT) or (Key = VK_RIGHT) then
+  begin
+    if (FHScrollBar <> nil) and FHScrollBar.Visible then
+    begin
+      if Key = VK_LEFT then
+        SetHOffset(FHOffset - FHScrollBar.SmallChange)
+      else
+        SetHOffset(FHOffset + FHScrollBar.SmallChange);
+      Key := 0;
+    end;
+    Exit;
+  end;
   RowTotal := FItems.Count;
   if RowTotal = 0 then Exit;
   { Every selection change from here down is the USER's; the counter is what lets
@@ -1450,17 +1507,23 @@ begin
     Exit;   // key not handled (leave Key unconsumed)
   end;
   Key := 0;
+  MoveCaretTo(NewFocus, Extend);
+  finally
+    Dec(FUserAction);   { every Exit above passes through here }
+  end;
+end;
 
+procedure TTyCustomListBox.MoveCaretTo(ATarget: Integer; AExtend: Boolean);
+begin
   if not FMultiSelect then
   begin
-    SelectItem(NewFocus);   // single mode: existing behavior (clamps, OnChange, scrolls)
+    SelectItem(ATarget);   // single mode: existing behavior (clamps, OnChange, scrolls)
     Exit;
   end;
-
   // Multi mode: move focus; extend range from anchor if Shift, else select-only.
-  NewFocus := FocusTarget(NewFocus);   // #123: rows that are not items are stepped over
-  if NewFocus < 0 then Exit;
-  FItemIndex := NewFocus;
+  ATarget := FocusTarget(ATarget);   // #123: rows that are not items are stepped over
+  if ATarget < 0 then Exit;
+  FItemIndex := ATarget;
   EnsureSelectedLen;
   if not FExtendedSelect then
   begin
@@ -1468,20 +1531,62 @@ begin
       move the caret only, Shift or not, as Win32 and Qt do; Space toggles the row under it. }
     Invalidate;
   end
-  else if Extend then
-    ApplyRangeSelection(FSelAnchorOr(NewFocus), NewFocus)
+  else if AExtend then
+    ApplyRangeSelection(FSelAnchorOr(ATarget), ATarget)
   else
   begin
     ClearAllBits;
-    FSelected[NewFocus] := True;
-    FSelAnchor := NewFocus;
+    FSelected[ATarget] := True;
+    FSelAnchor := ATarget;
     Invalidate; DoChangeSel;
   end;
   EnsureSelectionVisible;
   UpdateScrollBar;
-  finally
-    Dec(FUserAction);   { every Exit above passes through here }
+end;
+
+{ #164: type-to-find, as a native list box has: the typed prefix finds the next row that starts
+  with it, case aside. A growing prefix looks from the current row on (it may still be the one);
+  a first key looks past it, so one key pressed again walks the rows that start with it. A pause
+  of 600 ms starts a new prefix. }
+procedure TTyCustomListBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  nowTick: QWord;
+  n, start, i, row, hit: Integer;
+  changes: Cardinal;
+  low: string;
+begin
+  if not IsEnabled then Exit;
+  inherited UTF8KeyPress(UTF8Key);
+  if not FTypeToFind or (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+  n := FItems.Count;
+  if n = 0 then Exit;
+  nowTick := GetTickCount64;
+  if nowTick - FFindTick > 600 then FFindPrefix := '';
+  FFindTick := nowTick;
+  FFindPrefix := FFindPrefix + UTF8Key;
+  low := UTF8LowerCase(FFindPrefix);
+  if Length(FFindPrefix) > Length(UTF8Key) then start := FItemIndex else start := FItemIndex + 1;
+  if start < 0 then start := 0;
+  hit := -1;
+  for i := 0 to n - 1 do
+  begin
+    row := (start + i) mod n;
+    if RowSelectable(row) and (Pos(low, UTF8LowerCase(FItems[row])) = 1) then
+    begin
+      hit := row;
+      Break;
+    end;
   end;
+  if hit < 0 then Exit;
+  UTF8Key := '';
+  changes := FSelChanges;
+  Inc(FUserAction);
+  try
+    MoveCaretTo(hit, False);
+  finally
+    Dec(FUserAction);
+  end;
+  if FSelChanges <> changes then Click;
 end;
 
 procedure TTyCustomListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1495,8 +1600,13 @@ begin
     { RowAtY, not a division of its own: with per-row heights there is no single row height
       a second copy of the arithmetic could use, and there never should have been two. }
     Row := RowAtY(Y);
-    if (Row >= 0) and (Row < FItems.Count) then
+    { #164: a row that is not an item (TTyOfficeListBox's group header) takes the click -- the
+      event and the focus below -- but not the selection. }
+    if (Row >= 0) and (Row < FItems.Count) and RowSelectable(Row) then
     begin
+      { #164: held down and dragged, the selection follows the pointer -- the row under it in
+        single mode, the range from the anchor in the extended one -- as a native list's. }
+      FDragSelecting := FDragSelect and ((not FMultiSelect) or (FExtendedSelect and not (ssCtrl in Shift)));
       Inc(FUserAction);   { everything below is the USER moving the selection }
       try
         if not FMultiSelect then
@@ -1547,9 +1657,21 @@ end;
 
 procedure TTyCustomListBox.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  NewRow: Integer;
+  NewRow, dragRow: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
+  if FDragSelecting and (ssLeft in Shift) and (FItems.Count > 0) then
+  begin
+    { Past the top or the bottom it reaches for the row beyond the view, which scrolls it in. }
+    dragRow := RowAtY(Y);
+    if Y < ContentTopOffset then
+      dragRow := FTopIndex - 1
+    else if dragRow < 0 then
+      dragRow := FTopIndex + VisibleRows;
+    if dragRow < 0 then dragRow := 0;
+    if dragRow > FItems.Count - 1 then dragRow := FItems.Count - 1;
+    DragSelectTo(dragRow);
+  end;
   NewRow := RowAtY(Y);
   if NewRow <> FHoverRow then
   begin
@@ -1572,6 +1694,31 @@ begin
   { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
   inherited MouseEnter;
   NoteHostHover(True);
+end;
+
+procedure TTyCustomListBox.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbLeft then FDragSelecting := False;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyCustomListBox.DragSelectTo(ARow: Integer);
+begin
+  if (ARow = FItemIndex) or not RowSelectable(ARow) then Exit;
+  Inc(FUserAction);
+  try
+    if not FMultiSelect then
+      SelectItem(ARow)
+    else
+    begin
+      ApplyRangeSelection(FSelAnchorOr(ARow), ARow);
+      FItemIndex := ARow;
+      EnsureSelectionVisible;
+      UpdateScrollBar;
+    end;
+  finally
+    Dec(FUserAction);
+  end;
 end;
 
 procedure TTyCustomListBox.MouseLeave;
@@ -1619,6 +1766,21 @@ begin
   Result := True;
 end;
 
+function TTyCustomListBox.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var Delta: Integer;
+begin
+  if not IsEnabled then Exit(False);
+  if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
+  Result := False;
+  if (FHScrollBar = nil) or not FHScrollBar.Visible then Exit;
+  { LCL's sign: a positive WheelDelta tilts to the right (control.inc DoMouseWheelHorz). }
+  Delta := 3 * FHScrollBar.SmallChange;
+  if WheelDelta < 0 then Delta := -Delta;
+  SetHOffset(FHOffset + Delta);
+  Result := True;
+end;
+
 procedure TTyCustomListBox.Resize;
 begin
   inherited Resize;
@@ -1654,6 +1816,8 @@ var
   contentFills: Boolean;
   rowCorners: TTyCorners;
   savedClip: TRect;
+  caretR: TRect;
+  caretInk: TTyColor;
 begin
   // Keep scrollbar in sync (cheap; catches external Items.Add calls)
   UpdateScrollBar;
@@ -1717,6 +1881,8 @@ begin
       mid-loop -- nothing in the loop touches Items or a row height. }
     contentFills := ContentFillsHeight(ContentRect.Bottom - ContentRect.Top, APPI);
 
+    caretR := Rect(0, 0, 0, 0);
+    caretInk := BoxStyle.TextColor;
     rowTop := ContentRect.Top;
     for i := FTopIndex to LastRow do
     begin
@@ -1774,9 +1940,23 @@ begin
 
       // Per-item content (default: the text; a subclass draws a swatch/glyph + text).
       PaintItemContent(P, RowRect, i, RowStyle);
+      if i = FItemIndex then
+      begin
+        caretR := Rect(R.Left + inset + leadSB, RowRect.Top, R.Right - inset - trailSB, RowRect.Bottom);
+        caretInk := RowStyle.TextColor;
+      end;
       Inc(rowTop, SH);
     end;
 
+    { #164: with several rows selectable the selection does not say where the keys are, so the
+      caret row is outlined while the box has the focus, as a native list box draws its focus
+      rectangle -- in the box's focus ring colour, or the row's ink where the theme has none. }
+    if FMultiSelect and (tysFocused in CurrentStates) and not IsRectEmpty(caretR) then
+    begin
+      if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
+        caretInk := BoxStyle.OutlineColor;
+      P.StrokeBorder(caretR, 0, 1, caretInk);
+    end;
     P.Bitmap.ClipRect := savedClip;   // restore (rows were clipped to the interior)
 
     P.EndPaint;
@@ -1883,7 +2063,7 @@ begin
   end;
   if Result > 0 then
   begin
-    if FTopIndex > FItems.Count - 1 then FTopIndex := 0;
+    if FTopIndex > MaxTopIndex then FTopIndex := MaxTopIndex;   // #164: it went back to the top
     UpdateScrollBar;
     Invalidate;
     FireSelectionChanged;

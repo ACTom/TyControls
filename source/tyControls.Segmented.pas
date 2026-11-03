@@ -316,6 +316,7 @@ end;
 constructor TTyCustomSegmented.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FItems := TStringList.Create;
   TStringList(FItems).OnChange := @ItemsChanged;
   FItemIndex := -1;
@@ -416,6 +417,7 @@ begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(TySegmentedPadVar, TySegmentedPad);
   if Result < 0 then Result := 0;
+  Inc(Result, BorderWidth);   // #115: the track's inset is its padding, and BorderWidth adds to it
   // MulDiv(...,APPI,96) is the same logical->device conversion TTyPainter.Scale applies,
   // so the rects the hit-test measures are the rects the paint drew.
   Result := MulDiv(Result, APPI, 96);

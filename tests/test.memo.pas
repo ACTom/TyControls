@@ -57,6 +57,39 @@ type
     property ClipText: string read FClipText write FClipText;
   end;
 
+  { #157: a memo with its keyboard, mouse and wheel reachable, and an in-memory clipboard. }
+  TMemoBehProbe = class(TTyMemo)
+  protected
+    function ReadClipboardText: string; override;
+    procedure WriteClipboardText(const S: string); override;
+  public
+    FClip: string;
+    procedure Key(AKey: Word; AShift: TShiftState);
+    procedure TypeChar(const C: TUTF8Char);
+    procedure Down(X, Y: Integer);
+    procedure Move(X, Y: Integer);
+    procedure Wheel(ADelta: Integer);
+    procedure WheelH(ADelta: Integer);
+    procedure Top(ARow: Integer);
+    function Rows: Integer;
+  end;
+
+  { #157 }
+  TMemoBehaviourTest = class(TTestCase)
+  private
+    FCount: Integer;
+    procedure Count(Sender: TObject);
+    function NewMemo(ALines: Integer): TMemoBehProbe;
+  published
+    procedure TestClearSelectionIsAnEdit;
+    procedure TestClearResetsModified;
+    procedure TestALinesChangeThatMovesTheCaretIsASelectionChange;
+    procedure TestMaxLengthLetsASelectionBeReplaced;
+    procedure TestPageDownAndPageUp;
+    procedure TestADragPastTheBottomScrolls;
+    procedure TestTheWheelFollowsItsDelta;
+  end;
+
   TTyMemoCursorTest = class(TTestCase)
   published
     procedure TestMemoUsesIBeam;
@@ -1805,32 +1838,246 @@ begin
   end;
 end;
 
-{ Lines := X records an undo step only when it changes the content. That check compared
-  X.Text with the memo's own text, and the two never match any more -- an ordinary TStrings
-  ends every line with a break, the memo's text does not -- so every reassignment, the same
-  content included, would have recorded a step. }
+{ Lines := X starts the undo history again only when it changes the content (#156: a write by
+  code is where undo starts). That check compared X.Text with the memo's own text, and the two
+  never match any more -- an ordinary TStrings ends every line with a break, the memo's text
+  does not -- so every reassignment, the same content included, would have wiped the history. }
 procedure TTyMemoTextFidelityTest.TestReassigningTheSameLinesIsNotAStep;
 var
   m: TTyMemo;
-  src: TStringList;
+  src, same: TStringList;
 begin
   m := TTyMemo.Create(nil);
   src := TStringList.Create;
+  same := TStringList.Create;
   try
     src.Add('a');
     src.Add('b');
     m.Lines := src;
-    m.Lines := src;   // the same content again: nothing to undo
     m.Undo;
-    AssertEquals('one Undo takes back the one real change', 0, m.Lines.Count);
+    AssertEquals('text set by code is where undo starts', 2, m.Lines.Count);
+    m.SelText := 'x';                   // an edit: 'xa'
+    same.Assign(m.Lines);
+    m.Lines := same;                    // the same content again: the history stays
+    m.Undo;
+    AssertEquals('one Undo takes back the edit', 'a', m.Lines[0]);
   finally
+    same.Free;
     src.Free;
     m.Free;
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  #157: ClearSelection, Clear, MaxLength, Page Up/Down, drag-select and the wheel
+  --------------------------------------------------------------------------- }
+
+function TMemoBehProbe.ReadClipboardText: string;
+begin
+  Result := FClip;
+end;
+
+procedure TMemoBehProbe.WriteClipboardText(const S: string);
+begin
+  FClip := S;
+end;
+
+procedure TMemoBehProbe.Key(AKey: Word; AShift: TShiftState);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+procedure TMemoBehProbe.TypeChar(const C: TUTF8Char);
+var k: TUTF8Char;
+begin
+  k := C;
+  UTF8KeyPress(k);
+end;
+
+procedure TMemoBehProbe.Down(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TMemoBehProbe.Move(X, Y: Integer);
+begin
+  MouseMove([ssLeft], X, Y);
+end;
+
+procedure TMemoBehProbe.Wheel(ADelta: Integer);
+begin
+  DoMouseWheel([], ADelta, Point(10, 10));
+end;
+
+procedure TMemoBehProbe.WheelH(ADelta: Integer);
+begin
+  DoMouseWheelHorz([], ADelta, Point(10, 10));
+end;
+
+procedure TMemoBehProbe.Top(ARow: Integer);
+begin
+  SetTopLine(ARow);
+end;
+
+function TMemoBehProbe.Rows: Integer;
+begin
+  Result := VisibleRows;
+end;
+
+procedure TMemoBehaviourTest.Count(Sender: TObject);
+begin
+  Inc(FCount);
+end;
+
+function TMemoBehaviourTest.NewMemo(ALines: Integer): TMemoBehProbe;
+var
+  i: Integer;
+  s: string;
+begin
+  Result := TMemoBehProbe.Create(nil);
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 200, 120);
+  s := '';
+  for i := 1 to ALines do
+  begin
+    if i > 1 then s := s + LineEnding;
+    s := s + 'line ' + IntToStr(i);
+  end;
+  Result.Text := s;
+end;
+
+procedure TMemoBehaviourTest.TestClearSelectionIsAnEdit;
+var m: TMemoBehProbe;
+begin
+  m := NewMemo(0);
+  try
+    m.Text := 'hello';
+    m.OnChange := @Count;
+    FCount := 0;
+    m.SelStart := 1;
+    m.SelLength := 3;
+    m.ClearSelection;
+    AssertEquals('setup: deleted', 'ho', m.Text);
+    AssertEquals('OnChange fires', 1, FCount);
+    AssertTrue('Modified, as LCL''s', m.Modified);
+    m.Undo;
+    AssertEquals('and it is one undo step', 'hello', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestClearResetsModified;
+var m: TMemoBehProbe;
+begin
+  m := NewMemo(0);
+  try
+    m.TypeChar('a');
+    AssertTrue('setup: typed', m.Modified);
+    m.Clear;
+    AssertEquals('emptied', '', m.Text);
+    AssertFalse('and Modified is back to False, as LCL''s Clear', m.Modified);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestALinesChangeThatMovesTheCaretIsASelectionChange;
+var m: TMemoBehProbe;
+begin
+  m := NewMemo(3);
+  try
+    m.SelStart := Length(m.Text);   // the end of line 3
+    m.OnSelectionChange := @Count;
+    FCount := 0;
+    m.Lines.Delete(2);
+    AssertTrue('the caret had to move: OnSelectionChange', FCount > 0);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestMaxLengthLetsASelectionBeReplaced;
+var m: TMemoBehProbe;
+begin
+  m := NewMemo(0);
+  try
+    m.MaxLength := 5;
+    m.Text := 'hello';
+    m.SelectAll;
+    m.TypeChar('X');
+    AssertEquals('typing over a selection at the limit replaces it', 'X', m.Text);
+    m.Text := 'hello';
+    m.SelStart := 1;
+    m.SelLength := 3;
+    m.FClip := 'abc';
+    m.PasteFromClipboard;
+    AssertEquals('so does a paste, as much as the selection frees', 'habco', m.Text);
+    m.WantTabs := True;
+    m.SelStart := 5;
+    m.Key(VK_TAB, []);
+    AssertEquals('and a tab is held to the limit too', 'habco', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestPageDownAndPageUp;
+var
+  m: TMemoBehProbe;
+  page: Integer;
+begin
+  m := NewMemo(40);
+  try
+    m.SelStart := 0;
+    page := m.Rows - 1;
+    AssertTrue('setup: more than a row on screen', page >= 1);
+    m.Key(VK_NEXT, []);
+    AssertEquals('Page Down moves a page', page, m.CaretLine);
+    AssertEquals('and the view with it', page, m.TopRow);
+    m.Key(VK_NEXT, [ssShift]);
+    AssertTrue('Shift extends the selection', m.SelLength > 0);
+    m.Key(VK_PRIOR, []);
+    AssertEquals('Page Up comes back a page', page, m.CaretLine);
+    AssertEquals('without the selection', 0, m.SelLength);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestADragPastTheBottomScrolls;
+var m: TMemoBehProbe;
+begin
+  m := NewMemo(40);
+  try
+    m.Down(10, 5);
+    m.Move(10, m.Height + 20);
+    AssertTrue('the view scrolls', m.TopRow > 0);
+    AssertTrue('and the selection runs into it', m.CaretLine >= m.Rows);
+  finally m.Free; end;
+end;
+
+procedure TMemoBehaviourTest.TestTheWheelFollowsItsDelta;
+var
+  m: TMemoBehProbe;
+  one: Integer;
+begin
+  m := NewMemo(80);
+  try
+    m.Wheel(-120);
+    one := m.TopRow;
+    AssertTrue('setup: a notch scrolls', one > 0);
+    m.Top(0);
+    m.Wheel(-240);
+    AssertEquals('two notches scroll twice as far', 2 * one, m.TopRow);
+    m.Top(0);
+    m.Wheel(-60);
+    AssertEquals('half a notch waits', 0, m.TopRow);
+    m.Wheel(-60);
+    AssertEquals('and two halves make one', one, m.TopRow);
+    m.Text := StringOfChar('x', 400);
+    m.WheelH(120);
+    AssertTrue('the horizontal wheel scrolls a long line', m.ScrollX > 0);
+    m.WheelH(-120);
+    AssertEquals('and back', 0, m.ScrollX);
+  finally m.Free; end;
+end;
+
 initialization
   RegisterTest(TTyMemoTest);
+  RegisterTest(TMemoBehaviourTest);
   RegisterTest(TTyMemoTextFidelityTest);
   RegisterTest(TTyMemoCursorTest);
 end.

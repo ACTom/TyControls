@@ -101,6 +101,8 @@ type
   published
     procedure TestBuildSeedsListAndSelection;
     procedure TestResultIndexLogic;
+    { #179: OK closes on a chosen row only. }
+    procedure TestOkNeedsARow;
   end;
 
   { The shared TyForwardDialogEvents helper is the exact seam every modal wrapper's
@@ -108,12 +110,15 @@ type
     ShowModal can't run headlessly, so exercise the forward against a built dialog. }
   TDialogEventForwardTest = class(TTestCase)
   private
+    FSender: TObject;
     procedure HandleShow(Sender: TObject);
     procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
   published
     procedure TestForwardOntoBuiltMessageDialog;
     procedure TestForwardNilFormIsNoOp;
+    { #179: given the wrapper, the handlers get it as Sender, not the form. }
+    procedure TestTheWrapperIsTheSender;
   end;
 
 implementation
@@ -588,16 +593,70 @@ begin
   finally items.Free; end;
 end;
 
+procedure TSelectValueTest.TestOkNeedsARow;
+var d: TTyDialog; lb: TTyListBox; items: TStringList;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('A'); items.Add('B');
+    d := TyBuildSelectValueDialog('X', 'p', items, -1, lb);
+    try
+      d.ModalResult := mrOK;
+      AssertFalse('no row: OK does not close', d.CloseQuery);
+      lb.ItemIndex := 1;
+      d.ModalResult := mrOK;
+      AssertTrue('a row: it does', d.CloseQuery);
+      d.ModalResult := mrCancel;
+      lb.ItemIndex := -1;
+      AssertTrue('Cancel closes either way', d.CloseQuery);
+    finally d.Free; end;
+  finally items.Free; end;
+end;
+
 { TDialogEventForwardTest }
 
 procedure TDialogEventForwardTest.HandleShow(Sender: TObject);
-begin end;
+begin
+  FSender := Sender;
+end;
 
 procedure TDialogEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
-begin end;
+begin
+  FSender := Sender;
+end;
 
 procedure TDialogEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
-begin end;
+begin
+  FSender := Sender;
+end;
+
+procedure TDialogEventForwardTest.TestTheWrapperIsTheSender;
+var
+  d: TTyDialog;
+  w: TComponent;
+  ca: TCloseAction;
+  ok: Boolean;
+begin
+  w := TComponent.Create(nil);
+  d := TyBuildMessageDialog('Hi', mtInformation, [mbOK]);
+  try
+    TyForwardDialogEvents(w, d, @HandleShow, @HandleClose, @HandleCanClose);
+    FSender := nil;
+    d.OnShow(d);
+    AssertSame('OnShow', TObject(w), FSender);
+    FSender := nil;
+    ca := caHide;
+    d.OnClose(d, ca);
+    AssertSame('OnClose', TObject(w), FSender);
+    FSender := nil;
+    ok := True;
+    d.OnCloseQuery(d, ok);
+    AssertSame('OnCanClose', TObject(w), FSender);
+  finally
+    d.Free;
+    w.Free;
+  end;
+end;
 
 procedure TDialogEventForwardTest.TestForwardOntoBuiltMessageDialog;
 var d: TTyDialog;

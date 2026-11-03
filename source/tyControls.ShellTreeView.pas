@@ -216,6 +216,10 @@ type
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); override;
     procedure DoTreeChange(Node: PTyTreeNode); override;
+    { #165: with toMultiSelect the path is the focused folder's. The selection change that
+      reaches DoTreeChange there is the old folder's deselection, so SelectedPath,
+      OnPathChange and the linked list followed the folder just left. }
+    procedure DoFocusChanged(Node: PTyTreeNode); override;
     { The RAW absolute path a node maps to -- no trailing delimiter, whatever the
       node is. This is the internal form every comparison in this unit uses;
       GetPathFromNode is the public, LCL-shaped one. Protected so a subclass/test
@@ -930,13 +934,34 @@ end;
 procedure TTyCustomShellTreeView.DoTreeChange(Node: PTyTreeNode);
 begin
   { Fires on every focus/selection move (mouse, keyboard, or a programmatic
-    FocusedNode from SelectPath). Cache the path + notify. }
-  FSelectedPath := NodePath(Node);
-  if Assigned(FOnPathChange) then
-    FOnPathChange(Self);
-  { ...and the designer-wired companion list, which needs no glue at all. }
-  PushToList;
+    FocusedNode from SelectPath). Cache the path + notify -- in a single-select tree; a
+    multi-select one takes it from the focus (DoFocusChanged). }
+  if not (toMultiSelect in Options) then
+  begin
+    FSelectedPath := NodePath(Node);
+    if Assigned(FOnPathChange) then
+      FOnPathChange(Self);
+    { ...and the designer-wired companion list, which needs no glue at all. }
+    PushToList;
+  end;
   inherited DoTreeChange(Node);            { OnChange belongs to the app now }
+end;
+
+procedure TTyCustomShellTreeView.DoFocusChanged(Node: PTyTreeNode);
+var p: string;
+begin
+  if toMultiSelect in Options then
+  begin
+    p := NodePath(FocusedNode);
+    if p <> FSelectedPath then
+    begin
+      FSelectedPath := p;
+      if Assigned(FOnPathChange) then
+        FOnPathChange(Self);
+      PushToList;
+    end;
+  end;
+  inherited DoFocusChanged(Node);
 end;
 
 { ---------------------------------------------------------------------------
@@ -1490,7 +1515,12 @@ begin
   begin
     SelectPath(FStreamedDirectory);   // no raise: a stale saved path just selects nothing
     FStreamedDirectory := '';
-  end;
+  end
+  { #165: no folder of its own, it opens on the linked list's, so the pair starts in step. }
+  else if (FSelectedPath = '') and (FShellListView <> nil) and (FShellListView.Directory <> '') then
+    ShellLinkSelect(FShellListView.Directory);
+  { The list hears the tree's folder now: while the form was read, PushToList waited. }
+  PushToList;
 end;
 
 procedure TTyCustomShellTreeView.SetDirectory(const AValue: string);

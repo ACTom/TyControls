@@ -227,6 +227,7 @@ end;
 constructor TTyCustomTag.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FClosable := False;
   FHoverClose := False;
   FClosePressed := False;

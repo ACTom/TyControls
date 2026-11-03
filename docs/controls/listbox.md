@@ -31,7 +31,7 @@ uses tyControls.ListBox;
 | `Items` | `TStrings` | `''`（空列表） | 条目集合。**类型是抽象的 `TStrings`（对齐 LCL `stdctrls.pp:435`）**，所以 `LB.Items := Memo.Lines` / `:= 任意 TStrings` 这种日常写法能直接编译；以前声明成具体的 `TStringList`，这一句是硬编译错误。底层仍是 `TStringList`（`Sorted` 就骑在它上面），需要 `TStringList` 独有成员（尤其是挂 `OnChange` 钩子）时用只读的 `ItemsList` 拿到同一个对象。通过赋值触发整体替换（`Assign`），同时校正 `TopIndex` 与 `ItemIndex`，自动更新滚动条并重绘。直接调用 `Items.Add` / `Items.Clear` 等方法也有效，但不触发自动夹取——`TopIndex` 会在下次重绘（`Paint` → `UpdateScrollBar`）时自动收敛到合法范围。 |
 | `ItemIndex` | `Integer` | `-1` | 当前焦点行（光标行）的从 0 起始的索引；`-1` 表示无焦点。写入等价于调用 `SelectItem`：范围外的值被夹为 `-1`，并触发 `EnsureSelectionVisible`、滚动条更新及 `OnChange`。 |
 | `MultiSelect` | `Boolean` | `False` | 是否允许多选。`False` 时为单选模式，行为与旧版相同；`True` 时启用多选，`Selected[]`、`SelCount`、`ClearSelection`、`SelectAll` 等多选方法生效。切换此属性会清空所有选择位。 |
-| `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。**逐行不同高度**见下面的 `RowHeight`。 |
+| `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度；写 `0` 回到默认行高（跟随主题的 `--item-height`，和 LCL 一样），负数不接受；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。**逐行不同高度**见下面的 `RowHeight`。 |
 | `ScrollWidth` | `Integer` | `0` | **（LCL 同名，`stdctrls.pp:676`）** 一行内容的**逻辑像素宽度**。`0` = 行与列表框等宽，不横向滚动；比列表框**宽**时底部出现横向滚动条，可以把行里放不下的那一段滚进来；比列表框窄时无效（行不会比它所在的框还窄）。<br>**这是一个你自己设的数，不是量出来的**：LCL 与本控件都不会去遍历条目找最长的一条，因为字符串是应用的，只有应用知道自己怎么画（带色块或图标的行比它的文字宽）。要自适应就自己量出最宽的一行赋进来。 |
 | `TopIndex` | `Integer` | `0` | 当前最顶部可见行的索引，范围 `[0, MaxTopIndex]`，写入时自动夹紧。直接改 `Items` 后 `TopIndex` 会在下次更新时自动收敛。 |
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌的那一条（或两条）滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。`TTyValueListEditor` 从本控件继承，同样有这个属性。 |
@@ -105,7 +105,7 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 | `function Count: Integer` | 行数，转发 `Items.Count`。 |
 | `function ItemRect(AIndex: Integer): TRect` | 第 `AIndex` 行**实际绘制**所在的设备像素矩形（相对客户区，含滚动偏移）。索引越界返回空矩形 `(0,0,0,0)`；**滚出视野的行返回的是客户区之外的坐标（可能为负），不是空矩形**——要判断是否可见请自行与 `ClientRect` 相交。与绘制共用同一套 `ScaledItemHeight` / `ContentTopOffset`，因此在行上叠编辑器或弹层不会与实际行错位。 |
 | `function GetIndexAtY(AY: Integer): Integer` | `ItemRect` 的逆运算：设备 y 坐标 → 行索引（转发命中测试用的同一个 `RowAtY`）；落到任何行之外返回 `-1`。 |
-| `function DeleteSelected: Integer` | 删除所有选中行并返回删除条数。多选模式下**从后往前**删（否则删掉第一行后后面的索引全部错位）；单选模式下删当前 `ItemIndex` 行。删过就把 `ItemIndex` 置 `-1`、更新滚动条并触发 `OnChange`。 |
+| `function DeleteSelected: Integer` | 删除所有选中行并返回删除条数。多选模式下**从后往前**删（否则删掉第一行后后面的索引全部错位）；单选模式下删当前 `ItemIndex` 行。删过就把 `ItemIndex` 置 `-1`、更新滚动条并触发 `OnChange`；滚动位置尽量保持，不会跳回顶部。 |
 | `procedure LockSelectionChange` / `UnlockSelectionChange` | **（LCL `stdctrls.pp:625/631`)** 把一段批量的程序化改动括起来，其中每一次 `OnSelectionChange` 都报 `AUser = False`，不论改动实际由什么产生。注意它**降级标志、不吞事件**（LCL `customlistbox.inc:360` 就是这么做的）：只关心用户编辑的处理器因此保持正确，而镜像整个选择的处理器仍能看到每一次变化。引用计数，成对使用。 |
 | `property ItemsList: TStringList` | `Items` 背后的那个 `TStringList` 本体（同一个对象，别 Free、别换掉）。`Items` 为对齐 LCL 声明成 `TStrings`，而 `TStringList` 有一个成员是别人真正需要的：`OnChange`——想知道「列表本身变了」只能从这里挂。 |
 | `procedure SelectRange(ALow, AHigh: Integer; ASelected: Boolean)` | 把闭区间 `[ALow..AHigh]` 整体设为选中 / 未选中（顺序颠倒会自动交换，端点自动夹紧）。**非多选模式下为空操作**——单选框装不下一个区间，而"悄悄只选一端"比什么都不做更糟。有位变化才触发 `Invalidate` 和 `OnChange`。 |
@@ -128,6 +128,13 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 
 以上键通过 `SelectItem` 实现，自动触发 `EnsureSelectionVisible` 与 `OnChange`。
 
+键盘（包括下面的按字母查找）改变了选中时还会触发 `OnClick`，和 LCL 的列表框一样；没改变选中的按键不触发。
+
+| 按键 | 行为（两种模式都一样） |
+|------|------|
+| 字母 / 数字 | 按字母查找：选中下一个以键入内容开头的条目（不分大小写）；连续键入会缩小范围，停顿约 600 ms 后重新开始 |
+| `←` / `→` | 有横向滚动条时左右滚动；没有时不处理 |
+
 ### 多选模式（`MultiSelect = True`）
 
 多选模式下引入"锚点（anchor）"概念：锚点是最后一次普通点击或不带 Shift 的键盘移动时确定的行索引，`Shift+方向键/翻页键` 从锚点到当前行构成选中区间。
@@ -138,6 +145,8 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 | `Shift+↑/↓/PageUp/PageDown/Home/End` | 移动焦点行，**选中从锚点到新焦点行的连续区间**（区间外清除） |
 | `Space` | 切换焦点行的选中位（不移动焦点，不影响其他行）；将锚点设为当前焦点行 |
 
+多选模式下，控件有焦点时焦点行（`ItemIndex`）画一圈边框，颜色取列表框的焦点环颜色（主题没有焦点环时取该行文字色）——`ExtendedSelect = False` 时方向键只移动这个焦点行，不改选中。
+
 ### 鼠标交互
 
 | 操作 | 单选模式 | 多选模式 |
@@ -145,9 +154,11 @@ TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机
 | 普通左键点击 | 选中该行 | 清除所有选中，选中该行；锚点 = 该行 |
 | `Ctrl+左键点击` | — | 切换该行选中位；焦点 = 锚点 = 该行 |
 | `Shift+左键点击` | — | 选中从锚点到该行的连续区间；焦点 = 该行 |
+| 按住左键拖动 | 选中跟着指针走 | `ExtendedSelect = True`：从锚点到指针所在行的区间；`False`：不拖选 |
 | 鼠标左键点击（通用） | 点击后尝试获取键盘焦点 | 同左 |
 | 滚轮上 | `TopIndex -= 3`（不改变 `ItemIndex`） | 同左 |
 | 滚轮下 | `TopIndex += 3` | 同左 |
+| 横向滚轮（倾斜滚轮）/ `Shift+滚轮` | 有横向滚动条时左右滚动 | 同左 |
 
 ---
 

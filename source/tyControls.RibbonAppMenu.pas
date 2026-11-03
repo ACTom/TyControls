@@ -81,6 +81,8 @@ type
       (protected) so a headless test can assert the composed item count/wiring without a
       live PopUp. }
     procedure RebuildMenu; virtual;
+    { #177: a command and its whole submenu tree, owned by the drop-down menu. }
+    function CloneCommand(ASrc: TMenuItem): TMenuItem;
     { Test seams over the composed internal menu (which a headless test can't reach — FMenu
       is private): the count of, and AIndex-th item of, FMenu.Items after RebuildMenu. Let
       a test verify the composition (command count + separator + recent count) and click a
@@ -260,7 +262,7 @@ end;
 procedure TTyCustomRibbonAppMenu.RebuildMenu;
 var
   i: Integer;
-  SrcRoot, Src, Clone, Sep: TMenuItem;
+  SrcRoot, Clone, Sep: TMenuItem;
 begin
   if FMenu = nil then Exit;
   FMenu.Items.Clear;
@@ -272,29 +274,11 @@ begin
   //    menu is open. A '-' caption stays a separator (IsLine keys off the caption).
   if FCommands <> nil then
   begin
+    { #177: the icons resolve against the same list the Commands menu has. }
+    FMenu.Images := FCommands.Images;
     SrcRoot := FCommands.Items;
     for i := 0 to SrcRoot.Count - 1 do
-    begin
-      Src := SrcRoot.Items[i];
-      Clone := TMenuItem.Create(FMenu);
-      Clone.Caption := Src.Caption;
-      Clone.Enabled := Src.Enabled;
-      Clone.ImageIndex := Src.ImageIndex;
-      if not Src.IsLine then
-      begin
-        if Src.Action <> nil then
-          Clone.Action := Src.Action          // the Action drives execute/caption/state
-        else
-        begin
-          Clone.OnClick   := Src.OnClick;      // fires the user's handler directly
-          Clone.AutoCheck := Src.AutoCheck;
-          Clone.Checked   := Src.Checked;
-          Clone.RadioItem := Src.RadioItem;
-          Clone.GroupIndex := Src.GroupIndex;
-        end;
-      end;
-      FMenu.Items.Add(Clone);
-    end;
+      FMenu.Items.Add(CloneCommand(SrcRoot.Items[i]));
   end;
 
   // 2) Recent-items section: a separator (only when commands precede it) + one item per
@@ -316,6 +300,40 @@ begin
       FMenu.Items.Add(Clone);
     end;
   end;
+end;
+
+{ #177: one command and everything under it -- the copy took the top level's Caption, Enabled
+  and ImageIndex and lost the submenus, Visible, Tag, ShortCut, Hint and the icons. }
+function TTyCustomRibbonAppMenu.CloneCommand(ASrc: TMenuItem): TMenuItem;
+var
+  j: Integer;
+begin
+  Result := TMenuItem.Create(FMenu);
+  Result.Caption := ASrc.Caption;
+  Result.Enabled := ASrc.Enabled;
+  Result.Visible := ASrc.Visible;
+  Result.ImageIndex := ASrc.ImageIndex;
+  Result.Tag := ASrc.Tag;
+  Result.Hint := ASrc.Hint;
+  Result.Default := ASrc.Default;
+  Result.SubMenuImages := ASrc.SubMenuImages;
+  if ASrc.HasBitmap then Result.Bitmap.Assign(ASrc.Bitmap);
+  if not ASrc.IsLine then
+  begin
+    if ASrc.Action <> nil then
+      Result.Action := ASrc.Action          // the Action drives execute/caption/state
+    else
+    begin
+      Result.OnClick   := ASrc.OnClick;      // fires the user's handler directly
+      Result.ShortCut  := ASrc.ShortCut;
+      Result.AutoCheck := ASrc.AutoCheck;
+      Result.Checked   := ASrc.Checked;
+      Result.RadioItem := ASrc.RadioItem;
+      Result.GroupIndex := ASrc.GroupIndex;
+    end;
+  end;
+  for j := 0 to ASrc.Count - 1 do
+    Result.Add(CloneCommand(ASrc.Items[j]));
 end;
 
 function TTyCustomRibbonAppMenu.DroppedMenuItemCount: Integer;

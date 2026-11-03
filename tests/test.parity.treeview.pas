@@ -43,7 +43,8 @@ uses
   Classes, SysUtils, Types, Math, Controls, Graphics, ImgList, StdCtrls, ComCtrls,
   LCLType, Forms, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.TreeView;
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.TreeView,
+  tyControls.Columns;
 
 type
   { Reaches the protected mouse/key seams the way test.treeview does. }
@@ -222,6 +223,56 @@ type
     procedure TestSelectedImageKindIsAsked;
     { ikOverlay draws a badge on top of the normal icon }
     procedure TestOverlayImageKindIsDrawnOnTop;
+  end;
+
+  { #166: the keypad keys, re-selecting the focused node, sorting on expand, OnPaintText,
+    a double-click on the expander, the horizontal range. }
+  TTree166Access = class(TTyTreeView)
+  public
+    function XKey(AKey: Word; AShift: TShiftState = []): Word;
+    procedure XDown(X, Y: Integer; AShift: TShiftState);
+    procedure XDblClick;
+    procedure XRender(ABmp: TBitmap);
+  end;
+
+  TTree166Test = class(TTestCase)
+  private
+    FT: TTree166Access;
+    procedure Compare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode; Column: Integer;
+      var CompareResult: Integer);
+    procedure PaintRed(Sender: TTyCustomTreeView; const TargetCanvas: TCanvas; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheKeypadKeysAndNotInsert;
+    procedure TestFocusingTheFocusedNodeSelectsItAgain;
+    procedure TestASortedTreeSortsWhatItOpens;
+    procedure TestOnPaintTextChangesTheText;
+    procedure TestADoubleClickOnTheExpanderIsNoThirdToggle;
+    procedure TestTheRangeShrinksWithTheIndent;
+  end;
+
+  { #155: header hover / pressed, OnHeaderClick without the auto-sort, the default sort, the
+    header's icons, the main column's alignment, spring. }
+  TTree155Test = class(TTestCase)
+  private
+    FT: TTree166Access;
+    FHeaderClicks: Integer;
+    procedure HeaderClicked(Sender: TTyCustomTreeView; Column: Integer);
+    procedure BuildTwoColumns;
+    function Render: TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHotTrackAndThePressLightTheSection;
+    procedure TestOnHeaderClickDoesNotNeedTheAutoSort;
+    procedure TestAHeaderSortWithoutAHandlerSortsByText;
+    procedure TestTheHeaderDrawsItsColumnIcons;
+    procedure TestTheMainColumnTakesItsAlignment;
+    procedure TestSpringColumnsShareAResize;
   end;
 
 implementation
@@ -1128,7 +1179,367 @@ begin
     (px.green > 150) and (px.blue < 120));
 end;
 
+{ --- #166 ------------------------------------------------------------------------------- }
+
+function TTree166Access.XKey(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, AShift);
+end;
+
+procedure TTree166Access.XDown(X, Y: Integer; AShift: TShiftState);
+begin
+  MouseDown(mbLeft, AShift, X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TTree166Access.XDblClick;
+begin
+  DblClick;
+end;
+
+procedure TTree166Access.XRender(ABmp: TBitmap);
+begin
+  RenderTo(ABmp.Canvas, Rect(0, 0, ABmp.Width, ABmp.Height), 96);
+end;
+
+procedure TTree166Test.Compare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var CompareResult: Integer);
+begin
+  CompareResult := CompareText(Sender.NodeText[Node1], Sender.NodeText[Node2]);
+end;
+
+procedure TTree166Test.PaintRed(Sender: TTyCustomTreeView; const TargetCanvas: TCanvas;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType);
+begin
+  TargetCanvas.Font.Color := clRed;
+end;
+
+procedure TTree166Test.SetUp;
+begin
+  FT := TTree166Access.Create(nil);
+  FT.Font.PixelsPerInch := 96;
+  FT.SetBounds(0, 0, 200, 160);
+end;
+
+procedure TTree166Test.TearDown;
+begin
+  FreeAndNil(FT);
+end;
+
+procedure TTree166Test.TestTheKeypadKeysAndNotInsert;
+var a: TTyTreeNodeItem;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(a, 'a1');
+  FT.FocusedNode := a.Node;
+  FT.Expanded[a.Node] := True;
+  FT.XKey(VK_INSERT);
+  AssertTrue('Insert is no collapse (it was: VK_INSERT = Ord(''-''))', FT.Expanded[a.Node]);
+  FT.XKey(VK_SUBTRACT, [ssCtrl]);
+  AssertTrue('with Ctrl the keypad minus is the application''s', FT.Expanded[a.Node]);
+  FT.XKey(VK_SUBTRACT);
+  AssertFalse('the keypad minus collapses', FT.Expanded[a.Node]);
+  FT.XKey(VK_EXECUTE);
+  AssertFalse('VK_EXECUTE (Ord(''+'')) is no expand', FT.Expanded[a.Node]);
+  FT.XKey(VK_ADD);
+  AssertTrue('the keypad plus expands', FT.Expanded[a.Node]);
+end;
+
+procedure TTree166Test.TestFocusingTheFocusedNodeSelectsItAgain;
+var a: TTyTreeNodeItem;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(nil, 'B');
+  FT.FocusedNode := a.Node;
+  FT.ClearSelection;
+  AssertFalse('setup: the selection is cleared', FT.NodeSelected[a.Node]);
+  FT.FocusedNode := a.Node;   // what a click on it does
+  AssertTrue('the focused node is selected again', FT.NodeSelected[a.Node]);
+end;
+
+procedure TTree166Test.TestASortedTreeSortsWhatItOpens;
+var r: TTyTreeNodeItem; n: PTyTreeNode;
+begin
+  FT.Header.Columns.Add;
+  FT.Header.MainColumn := 0;
+  FT.OnCompareNodes := @Compare;
+  r := FT.Items.AddChild(nil, 'R');
+  FT.Items.AddChild(r, 'c');
+  FT.Items.AddChild(r, 'a');
+  FT.Items.AddChild(r, 'b');
+  FT.Header.SortColumn := 0;
+  FT.Header.SortDirection := tyControls.Columns.sdAscending;
+  FT.SortTree(0, tyControls.Columns.sdAscending);
+  FT.Expanded[r.Node] := True;
+  n := FT.GetFirstChild(r.Node);
+  AssertEquals('the opened children are in the sort''s order', 'a', FT.NodeText[n]);
+  AssertEquals('all of them', 'b', FT.NodeText[FT.GetNextSibling(n)]);
+end;
+
+procedure TTree166Test.TestOnPaintTextChangesTheText;
+
+  function RedCount: Integer;
+  var bmp: TBitmap; b: TBGRABitmap; x, y: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(200, 40);
+      FT.XRender(bmp);
+      b := TBGRABitmap.Create(bmp);
+      try
+        for y := 0 to 39 do
+          for x := 0 to 199 do
+          begin
+            px := b.GetPixel(x, y);
+            if (px.red > 180) and (px.green < 80) and (px.blue < 80) then Inc(Result);
+          end;
+      finally
+        b.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  end;
+
+begin
+  FT.Items.AddChild(nil, 'WWWWWWWW');
+  AssertEquals('setup: no red without the handler', 0, RedCount);
+  FT.OnPaintText := @PaintRed;
+  AssertTrue('the colour the handler sets is the text''s', RedCount > 10);
+end;
+
+procedure TTree166Test.TestADoubleClickOnTheExpanderIsNoThirdToggle;
+var
+  a: TTyTreeNodeItem;
+  x, y: Integer;
+  part: TTyTreeHitPart;
+  found: Boolean;
+  before: Boolean;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(a, 'a1');
+  found := False;
+  y := FT.DefaultNodeHeight div 2;
+  for x := 0 to 60 do
+    if (FT.GetNodeAtPoint(x, y, part) = a.Node) and (part = hpButton) then
+    begin
+      found := True;
+      Break;
+    end;
+  AssertTrue('setup: the expander is found', found);
+  FT.XDown(x, y, [ssLeft]);
+  FT.XDown(x, y, [ssLeft, ssDouble]);
+  before := FT.Expanded[a.Node];
+  FT.XDblClick;
+  AssertEquals('the double-click on the expander toggles nothing more', before, FT.Expanded[a.Node]);
+end;
+
+procedure TTree166Test.TestTheRangeShrinksWithTheIndent;
+var bmp: TBitmap; wide: Integer;
+begin
+  FT.Items.AddChild(nil, 'A rather long caption for the range');
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(200, 160);
+    FT.Indent := 120;
+    FT.XRender(bmp);
+    wide := FT.RangeX;
+    FT.Indent := 16;
+    FT.XRender(bmp);
+    AssertTrue(Format('the range follows a smaller indent back (%d, was %d)', [FT.RangeX, wide]),
+      FT.RangeX < wide);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TTree155Test.HeaderClicked(Sender: TTyCustomTreeView; Column: Integer);
+begin
+  Inc(FHeaderClicks);
+end;
+
+procedure TTree155Test.SetUp;
+begin
+  FT := TTree166Access.Create(nil);
+  FT.Font.PixelsPerInch := 96;
+  FT.SetBounds(0, 0, 300, 160);
+  FHeaderClicks := 0;
+end;
+
+procedure TTree155Test.TearDown;
+begin
+  FreeAndNil(FT);
+end;
+
+procedure TTree155Test.BuildTwoColumns;
+var c: TTyColumn;
+begin
+  c := FT.Header.Columns.Add as TTyColumn; c.Text := 'A'; c.Width := 120;
+  c := FT.Header.Columns.Add as TTyColumn; c.Text := 'B'; c.Width := 120;
+  FT.Header.MainColumn := 0;
+  FT.Header.Options := FT.Header.Options + [hoVisible];
+  FT.OnHeaderClick := @HeaderClicked;
+end;
+
+function TTree155Test.Render: TBGRABitmap;
+var bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 160);
+    FT.XRender(bmp);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function HeadDiff(A, B: TBGRABitmap): Integer;
+var x, y: Integer;
+begin
+  Result := 0;
+  for y := 2 to 14 do
+    for x := 8 to 110 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TTree155Test.TestHotTrackAndThePressLightTheSection;
+var plain, hover, pressed: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  FT.Header.Options := FT.Header.Options + [hoHotTrack];
+  FT.Items.AddChild(nil, 'x');
+  plain := Render;
+  FT.MouseMove([], 40, 8);
+  hover := Render;
+  FT.MouseDown(mbLeft, [ssLeft], 40, 8);
+  pressed := Render;
+  try
+    AssertTrue(Format('hoHotTrack: :hover under the pointer (%d px)', [HeadDiff(plain, hover)]),
+      HeadDiff(plain, hover) > 100);
+    AssertTrue(Format('pressed: :selected (%d px)', [HeadDiff(hover, pressed)]),
+      HeadDiff(hover, pressed) > 100);
+  finally
+    plain.Free; hover.Free; pressed.Free;
+  end;
+  FT.MouseUp(mbLeft, [], 40, 8);
+end;
+
+procedure TTree155Test.TestOnHeaderClickDoesNotNeedTheAutoSort;
+var c: TTyColumn;
+begin
+  BuildTwoColumns;
+  FT.Header.Options := FT.Header.Options - [hoHeaderClickAutoSort];
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('a header click is reported without the auto-sort', 1, FHeaderClicks);
+  c := FT.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('and not without coAllowClick', 1, FHeaderClicks);
+end;
+
+procedure TTree155Test.TestAHeaderSortWithoutAHandlerSortsByText;
+begin
+  BuildTwoColumns;
+  FT.Items.AddChild(nil, 'cherry');
+  FT.Items.AddChild(nil, 'Apple');
+  FT.Items.AddChild(nil, 'banana');
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('setup: sorted on column 0', 0, FT.Header.SortColumn);
+  AssertEquals('with no OnCompareNodes, by the text, case aside', 'Apple',
+    FT.NodeText[FT.GetFirstChild(nil)]);
+  AssertEquals('all of it', 'banana', FT.NodeText[FT.GetNextSibling(FT.GetFirstChild(nil))]);
+end;
+
+procedure TTree155Test.TestTheHeaderDrawsItsColumnIcons;
+
+  function Reds(B: TBGRABitmap): Integer;
+  var x, y: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    for y := 0 to 20 do
+      for x := 0 to 299 do
+      begin
+        px := B.GetPixel(x, y);
+        if (px.red > 230) and (px.green < 30) and (px.blue < 30) then Inc(Result);
+      end;
+  end;
+
+var il: TImageList; bmp: TBitmap; b: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  il := TImageList.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    il.Width := 16; il.Height := 16;
+    bmp.PixelFormat := pf24bit; bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clRed; bmp.Canvas.FillRect(0, 0, 16, 16);
+    il.Add(bmp, nil);
+    FT.Header.Images := il;
+    (FT.Header.Columns.Items[1] as TTyColumn).ImageIndex := 0;
+    b := Render;
+    try
+      AssertTrue('the column''s icon is in the header', Reds(b) > 50);
+    finally
+      b.Free;
+    end;
+  finally
+    FT.Header.Images := nil;
+    bmp.Free;
+    il.Free;
+  end;
+end;
+
+procedure TTree155Test.TestTheMainColumnTakesItsAlignment;
+
+  function InkLeft(B: TBGRABitmap): Integer;
+  var x, y: Integer; px: TBGRAPixel;
+  begin
+    for x := 0 to 119 do
+      for y := 24 to 40 do
+      begin
+        px := B.GetPixel(x, y);
+        if (px.red < 90) and (px.green < 90) and (px.blue < 90) then Exit(x);
+      end;
+    Result := -1;
+  end;
+
+var left, right: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  FT.Items.AddChild(nil, 'ii');
+  left := Render;
+  (FT.Header.Columns.Items[0] as TTyColumn).Alignment := taRightJustify;
+  right := Render;
+  try
+    AssertTrue('setup: the text is drawn', InkLeft(left) >= 0);
+    AssertTrue(Format('right-justified, the main column''s text moves right (%d -> %d)',
+      [InkLeft(left), InkLeft(right)]), InkLeft(right) > InkLeft(left) + 40);
+  finally
+    left.Free; right.Free;
+  end;
+end;
+
+procedure TTree155Test.TestSpringColumnsShareAResize;
+var c: TTyColumn;
+begin
+  BuildTwoColumns;
+  c := FT.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  FT.SetBounds(0, 0, 400, 160);
+  AssertEquals('the spring column takes what the tree grew by', 220, c.Width);
+end;
+
 initialization
+  RegisterTest(TTree155Test);
+  RegisterTest(TTree166Test);
   RegisterTest(TTreeParityNameTest);
   RegisterTest(TTreeParityBehaviourTest);
   RegisterTest(TTreeParityPaintTest);

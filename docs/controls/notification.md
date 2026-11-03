@@ -37,7 +37,7 @@ uses tyControls.Notification;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Title` | `string` | `''` | 标题，用卡片字体 + `--notification-title-weight` 绘制。空 = 无标题，正文独占整个文字列。 |
-| `Message` | `string` | `''` | 正文。**只按换行符断行，不自动折行**——卡片是固定主题宽度，行末由作者决定（与 `TTyBalloonHint.Description` 同一约定）。 |
+| `Message` | `string` | `''` | 正文。作者写的换行照留，比卡片文字栏宽的行**自动折行**（按空格，中日韩文字逐字可断）。 |
 | `NotificationType` | `TTyNotificationType` | `atInfo` | `atInfo` / `atSuccess` / `atWarning` / `atError`。挑标记字形 + 标记墨色（第 6 节）。 |
 | `Duration` | `Integer` | `4500`（= `TyNotificationDuration`，AntD 的 4.5 秒） | 自动消失延时（毫秒）。**`0` = 不自动消失**，只能由 `Hide` / `x` 关掉——所以 `Duration = 0` 时务必保持 `Closable = True`。负值被夹成 `0`。 |
 | `Position` | `TTyNotificationPosition` | `npTopRight` | `npTopLeft` / `npTopRight` / `npBottomLeft` / `npBottomRight`——**屏幕工作区**的四角（不是窗体的角：toast 活得比弹它的那次点击长，用户可能早就切走了）。同角的 toast 按弹出顺序**堆叠**。 |
@@ -252,7 +252,7 @@ end;
 - **`TTyNotification` 不是 `TTyMessage` 的轻量版：** 后者是模态对话框（拦住用户、要回答），toast 谁也不拦、不要回答、自己会走。要一个**行内**常驻的警告条，那是 `TTyAlert`。
 - **两个手势互不串味：** 点 `x` **只**触发 `OnClose`，绝不触发 `OnClick`；按下 `x` 拖开再抬起 = 取消（不关闭，也不产生 `OnClick`——这次按下从来就不属于卡片）。
 - **`OnClose` 里不要 `Free` 组件**（见第 4 节）；要「弹完就不管」用 `TyNotify`。
-- **正文不自动折行：** 只按换行符断行。卡片是固定的 `--notification-width`，行末由作者决定；放不下的行按省略号截断，装不下的行直接不画（绝不溢出卡片）。
+- **正文自动折行：** 作者写的换行照留，过宽的行在卡片固定的 `--notification-width` 里折行（中日韩文字逐字可断）；高度装不下的行直接不画（绝不溢出卡片）。
 - **窗口被裁成卡片的圆角轮廓**（`SetWindowRgn`），所以主题给 `TyNotification` 写的 `shadow` **看不见**——阴影会连同轮廓外的一切被裁掉。顶层窗口的「浮起感」是 OS 的活。**Wayland 上没有 XShape**，`setMask` 会被静默忽略 → 卡片退化成直角（与 `TTyBalloonHint` 同样的降级）；窗口的 `Color` 会被设成卡片的表面色，所以那些切不掉的像素读起来仍然是卡片，而不是一块黑角（暗色 OS 上 LCL 默认的 `clBtnFace` 就是近黑）。
 - **`Position` 是屏幕工作区的角，不是窗体的角：** toast 活得比弹它的那次点击长，用户可能早就切走了。当前用**主显示器**的工作区（`Screen.WorkAreaRect`）。
 - **堆叠是按角分开的**：只有同一个角的 toast 才互相让位；中间那张消失后，下面的会自动补上空位。

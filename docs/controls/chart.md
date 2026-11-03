@@ -31,7 +31,7 @@
 
 ### 子部件 typeKey
 
-**目前只有 `TyChartTooltip` 一个。** 标题、图例、坐标轴、网格、刻度标签**没有**各自的键——它们的字号 / 字重是代码里的字面量（标题 `11/700`、图例 `9/400`、刻度 `8/400`，且都用控件的 `Font.Name` 而非样式的 `font-name`），网格线的 70 alpha 也是字面量。子部件键（`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`）的扩展已被**刻意推迟**——其中系列色那一组一旦落地会真的改变像素——这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
+**目前只有 `TyChartTooltip` 一个。** 标题、图例、坐标轴、网格、刻度标签**没有**各自的键——它们的字号是代码里的字面量（标题 `11`、图例 `9`、刻度 `8`），字体取 `TyChart` 样式的 `font-family`，字重取它的 `font-weight`（标题加粗）。给控件设了 `Font.Size` 时，这些字号连同装它们的标题条、图例条和刻度栏一起按 `Font.Size / 9` 缩放。网格线的 70 alpha 也是字面量。子部件键（`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`）的扩展已被**刻意推迟**——其中系列色那一组一旦落地会真的改变像素——这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.Chart;
@@ -47,9 +47,9 @@ uses tyControls.Chart;
 |------|------|--------|------|
 | `ChartType` | `TTyChartType` | `ctLine` | `(ctLine, ctBar, ctPie, ctDonut)`。一图一类型（不混合）。`ctDonut` **追加在枚举末尾**，已有 `.lfm` 的序数不受影响。 |
 | `Series` | `TTyChartSeries` | 空 | 系列集合（设计期可编辑）。每项：`Name` / `Color`（`clDefault` = 按调色板循环）/ `Values`（逗号分隔数值，`.` 小数点）。 |
-| `Categories` | `TStrings` | 空 | X 轴分类（折线 / 柱）；饼 / 环形下是**扇区名**（图例即取此）。缺失时回退为 1-based 序号。 |
+| `Categories` | `TStrings` | 空 | X 轴分类（折线 / 柱）；饼 / 环形下是**扇区名**。缺失时回退为 1-based 序号。 |
 | `Title` | `string` | `''` | 标题，占据内容区顶部一条 20 逻辑像素的带。 |
-| `ShowLegend` | `Boolean` | `True` | 底部图例条。**关掉会把这条空间还给数据区**，不是只停止绘制。 |
+| `ShowLegend` | `Boolean` | `True` | 底部图例条。**关掉会把这条空间还给数据区**，不是只停止绘制。折线 / 柱的图例列各个系列；饼 / 环形的图例列**实际画出来的扇区**——第一个系列里大于 0 的每个值一项，名字取对应的 `Categories`（缺了就是序号），色块与扇区同色。 |
 | `ShowGrid` | `Boolean` | `True` | 水平网格线（折线 / 柱）。 |
 | `ShowValues` | `Boolean` | `False` | 常驻数值标注（柱 / 折线为数值，饼 / 环形为百分比）。与 tooltip 相互独立。 |
 | `ShowTooltip` | `Boolean` | `True` | 悬停 tooltip 总开关。关掉时**立即**抹掉屏上已显示的 tooltip，不等下次鼠标移动。 |

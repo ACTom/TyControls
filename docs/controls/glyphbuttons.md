@@ -92,7 +92,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `GroupIndex` | `Integer` | `0` | `0` = 普通按钮（`Click` 仅触发 `OnClick`）。`>0` 时表现为**单选**：按下自己并抬起**同 Parent、同 GroupIndex** 的其它 `TTySpeedButton`。**代码里写 `Down := True` 与用户点击等效**——互斥逻辑在 `SetDown` 里，不是只在 `Click` 里（与 LCL 的 `SetDown → UpdateExclusive` 一致），所以"恢复上次保存的工具模式"这类代码不会留下一组全按下的按钮。 |
+| `GroupIndex` | `Integer` | `0` | `0` = 普通按钮（`Click` 仅触发 `OnClick`）。`>0` 时表现为**单选**：按下自己并抬起**同 Parent、同 GroupIndex** 的其它 `TTySpeedButton`。**代码里写 `Down := True` 与用户点击等效**——互斥逻辑在 `SetDown` 里，不是只在 `Click` 里（与 LCL 的 `SetDown → UpdateExclusive` 一致），所以"恢复上次保存的工具模式"这类代码不会留下一组全按下的按钮。挂了 `Action` 时 `GroupIndex` 跟着动作走；动作的 `Checked` 驱动 `Down`，但与 LCL 一样只在 `GroupIndex <> 0` 且 `AllowAllUp` 时联动（按下后抬不起来的按钮不跟）。 |
 | `AllowAllUp` | `Boolean` | `False` | `True` 时，点击**已按下**的按钮会把它切回抬起（整组可全部抬起）；`False`（默认）时已按下的按钮再点保持按下（严格单选），代码写 `Down := False` 同样被拒绝——只有分组自己的换选能放开它。**把它从 `True` 改回 `False` 会当场重建约束**：若此时整组无人按下，就按下正在配置的这一个（否则会留下一个"什么都没选"的单选组，直到用户碰巧点一下）。 |
 
 **`TTySpeedButton` public 方法：**

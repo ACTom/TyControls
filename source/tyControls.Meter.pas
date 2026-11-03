@@ -209,6 +209,9 @@ procedure TTyCustomMeter.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
+  { #181: Value stays inside the range, as its own setter keeps it -- a Min moved past it left
+    the readout showing a number the scale no longer has. }
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
@@ -216,6 +219,7 @@ procedure TTyCustomMeter.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
+  if FValue < FMin then FValue := FMin else if FValue > FMax then FValue := FMax;   { #181 }
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
@@ -251,7 +255,7 @@ var
   R: TRect;
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, rr: Double;
-  i: Integer;
+  i, fs, bandH: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -301,9 +305,16 @@ begin
     end;
 
     if FShowValue then
-      P.DrawText(Rect(R.Left, R.Bottom - P.Scale(22), R.Right, R.Bottom),
-        TyFormatValue(FValueFormat, FValue), Font.Name, 11, 700, faceS.TextColor,
+    begin
+      fs := TyControlFontSize(Self);   // a size the author set wins over the readout's 11 (#113)
+      if fs <= 0 then fs := 11;
+      // the readout's band grows with the figure, so a big size is not cut off
+      bandH := Math.Max(P.Scale(22), P.MeasureText('0', faceS.FontName, fs, 700).cy + P.Scale(4));
+      P.DrawText(Rect(R.Left, R.Bottom - bandH, R.Right, R.Bottom),
+        TyFormatValue(FValueFormat, FValue), faceS.FontName, fs,
+        700 or (faceS.FontWeight and not TyFontWeightMask), faceS.TextColor,
         taCenter, tlCenter, False);
+    end;
     P.EndPaint;
   finally
     P.Free;

@@ -70,6 +70,7 @@ type
     FOnChanging: TTyTabChangingEvent;
     FOnReorder: TTyTabReorderEvent;
     FTabsClosable: Boolean;
+    FImagesLink: TChangeLink;   { #173: the list's own changes re-measure the tabs }
     FDesignTabGesture: Boolean;   // a design-time press landed on a tab; see CMDesignHitTest
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
@@ -157,6 +158,7 @@ type
       that take that one answer. See the implementations. }
     function  EffectiveBandSide: TTabPosition;
     procedure InsetForBand(var ARect: TRect);
+    procedure ImagesListChanged(Sender: TObject);
     procedure GrowTowardBand(var ARect: TRect; AAmount: Integer);
     function  BandEdgeOf(const ARect: TRect; AThick: Integer): TRect;
   protected
@@ -235,6 +237,11 @@ type
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); virtual;
     procedure RemoveTabData(AIndex: Integer); virtual;
     procedure TabsChanged; virtual;
+    { #173: OnChange, for a subclass whose selection changed under it -- the selected tab gone. }
+    procedure NotifyTabChange;
+    { #173: the band's thickness may have changed: the pages are laid out again inside it and an
+      AutoSize strip fits it again. }
+    procedure HeaderLayoutChanged;
     { Device-px reserved at the LEFT of the header strip: the tab headers are shifted
       right by this much so a subclass can draw its own leftmost element there (e.g. a
       ribbon "File" tab). Default 0. }
@@ -615,10 +622,14 @@ begin
   TabStop    := True;
   Width      := 300;
   Height     := 200;
+  FImagesLink := TChangeLink.Create;
+  FImagesLink.OnChange := @ImagesListChanged;
 end;
 
 destructor TTyCustomTabStrip.Destroy;
 begin
+  if FImages <> nil then FImages.UnRegisterChanges(FImagesLink);
+  FreeAndNil(FImagesLink);
   { FTimer is owned by Self (would be freed by DestroyComponents), but free it
     explicitly first so the OnTimer callback can never fire mid-teardown. }
   FreeAndNil(FTimer);
@@ -700,7 +711,37 @@ end;
 
 procedure TTyCustomTabStrip.TabsChanged;
 begin
-  if not (csLoading in ComponentState) then Invalidate;
+  if csLoading in ComponentState then Exit;
+  { #173: on a side band the thickness is the widest tab, and folded rows are as many as the
+    captions need -- a caption, an icon, a page shown or added can change it. The pages were
+    left at the old inset. }
+  if BandIsVertical or HeaderMultiLine then
+    HeaderLayoutChanged
+  else
+    Invalidate;
+end;
+
+procedure TTyCustomTabStrip.NotifyTabChange;
+begin
+  if Assigned(FOnChange) and not FApplyingStreamed then
+    FOnChange(Self);
+end;
+
+procedure TTyCustomTabStrip.HeaderLayoutChanged;
+begin
+  Realign;
+  InvalidatePreferredSize;   { a parent sizing to it asks again too }
+  if AutoSize then AdjustSize;
+  Invalidate;
+end;
+
+{ #173: a change inside the list -- an icon added, replaced, a new size -- re-measures the tabs,
+  as a new list does; it was never seen. }
+procedure TTyCustomTabStrip.ImagesListChanged(Sender: TObject);
+begin
+  if csDestroying in ComponentState then Exit;
+  DoImagesChanged;
+  HeaderLayoutChanged;
 end;
 
 function TTyCustomTabStrip.HeaderLeftInset: Integer;
@@ -848,8 +889,7 @@ begin
     length (Width <-> Height): an offset valid for the old axis is meaningless on the new
     one. Reset rather than clamp -- clamping would silently keep a fraction of it. }
   FHeaderScroll := 0;
-  Realign;
-  Invalidate;
+  HeaderLayoutChanged;   { #173: an AutoSize strip fits the new band }
 end;
 
 { Folding changes the band's THICKNESS (one row becomes RowCount rows), which is the client
@@ -865,8 +905,7 @@ begin
   if FMultiLine = AValue then Exit;
   FMultiLine := AValue;
   FHeaderScroll := 0;
-  Realign;
-  Invalidate;
+  HeaderLayoutChanged;   { #173: an AutoSize strip fits the new band }
 end;
 
 { Justification only moves tabs ALONG their row, so unlike MultiLine this cannot change the
@@ -890,9 +929,17 @@ end;
 procedure TTyCustomTabStrip.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
-  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  if FImages <> nil then
+  begin
+    FImages.UnRegisterChanges(FImagesLink);
+    FImages.RemoveFreeNotification(Self);
+  end;
   FImages := AValue;
-  if FImages <> nil then FImages.FreeNotification(Self);
+  if FImages <> nil then
+  begin
+    FImages.FreeNotification(Self);
+    FImages.RegisterChanges(FImagesLink);
+  end;
   { A list arriving is when each page's streamed-but-pending ImageIndex can finally become a name
     (TTyPageControl overrides this; the base does nothing). }
   DoImagesChanged;
@@ -1932,8 +1979,7 @@ begin
     ScrollTabIntoView(FTabIndex);
   end;
   Invalidate;
-  if Assigned(FOnChange) and not FApplyingStreamed then
-    FOnChange(Self);
+  NotifyTabChange;
   { A design-time switch (a designer tab click, a component-editor verb) changed a
     published value behind the IDE's back. TWO pings, because the IDE splits the
     concerns: OwnerFormDesignerModified marks the unit dirty (TMainIDE.DesignerModified

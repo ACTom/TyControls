@@ -180,6 +180,7 @@ type
     procedure DoItemsChanged; override;
     procedure SelectItem(AIndex: Integer); override;
     procedure Loaded; override;
+    function EditorLeadInset(AFieldHeight, APPI: Integer): Integer; override;
     { Called by ItemsEx whenever the collection changes. }
     procedure ItemsExChanged;
   public
@@ -301,6 +302,9 @@ type
   end;
 
 implementation
+
+uses
+  LCLType;
 
 { TTyComboExItem }
 
@@ -647,11 +651,14 @@ begin
     Paint override that dispatches it is inherited from TTyComboPopupList). }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   { The Owner is the combo (Create(Self) in CreatePopupList); it owns the shared draw
-    method and the Images reference. The row entry rides in Objects[] (copied from the
-    combo via Items.Assign), so field and popup read the same object. }
-  if Owner is TTyCustomComboBoxEx then
+    method and the Images reference. The row entry rides in THIS list's Objects[] (copied
+    from the combo via Items.Assign), so field and popup read the same object. This list's,
+    not the combo's: the autocomplete list holds only the rows that match, so its row 0 is
+    not the combo's row 0 (#161). }
+  if (Owner is TTyCustomComboBoxEx) and (AIndex >= 0) and (AIndex < Items.Count)
+    and (Items.Objects[AIndex] is TTyComboExItem) then
     TTyCustomComboBoxEx(Owner).DrawExItem(P, ARowRect,
-      TTyCustomComboBoxEx(Owner).ItemEx(AIndex), AIndex = ItemIndex, AStyle)
+      TTyComboExItem(Items.Objects[AIndex]), AIndex = ItemIndex, AStyle)
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
@@ -691,6 +698,7 @@ begin
   if FItemsEx <> nil then
     for i := 0 to FItemsEx.Count - 1 do
       FItemsEx.ComboItems[i].ResolveIcons;
+  LayoutEditor;   // the image slot comes or goes (#161)
   Invalidate;
 end;
 
@@ -705,7 +713,10 @@ procedure TTyCustomComboBoxEx.Notification(AComponent: TComponent; Operation: TO
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
+  begin
     FImages := nil;
+    LayoutEditor;
+  end;
 end;
 
 procedure TTyCustomComboBoxEx.ItemsExChanged;
@@ -802,6 +813,20 @@ begin
     so the list is still empty and AIndex would clamp to -1 and be lost. Remember it. }
   if csLoading in ComponentState then FLoadedItemIndex := AIndex;
   inherited SelectItem(AIndex);
+end;
+
+function TTyCustomComboBoxEx.EditorLeadInset(AFieldHeight, APPI: Integer): Integer;
+var sz: Integer;
+begin
+  { #161: the edit box starts past the image slot DrawImageText lays out in the field, so the
+    selected row's image is not under it. The slot is kept whenever there is a list, as the
+    Windows ComboBoxEx keeps its edit indent: the box does not jump while the typing moves
+    between rows with an image and rows without. }
+  Result := 0;
+  if (FImages = nil) or (TyImageCount(FImages) = 0) then Exit;
+  sz := AFieldHeight - MulDiv(6, APPI, 96);
+  if sz < MulDiv(8, APPI, 96) then sz := MulDiv(8, APPI, 96);
+  Result := sz + MulDiv(4, APPI, 96);
 end;
 
 procedure TTyCustomComboBoxEx.Loaded;

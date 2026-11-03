@@ -482,6 +482,7 @@ begin
     B.Controller := Ctl;
     B.Font.PixelsPerInch := cGripPPI;
     B.SetBounds(0, 0, AW, AH);
+    Form.ClientWidth := B.Width; Form.ClientHeight := B.Height;   // #176: the grip is the window corner
     B.SimplePanel := True;
     B.SimpleText := '';
     B.SizeGrip := True;
@@ -530,6 +531,7 @@ begin
     B.Parent := Form;
     B.Font.PixelsPerInch := 96;
     B.SetBounds(0, 0, 200, 22);
+    Form.ClientWidth := B.Width; Form.ClientHeight := B.Height;   // #176: the grip is the window corner
     { The grip zone is 18 device px at 96 PPI, the bottom-edge strip 5: (12, 10) is inside a
       LEFT grip corner and outside every edge strip, (190, 10) likewise for a RIGHT one. }
     AssertTrue('unmirrored: the right corner is the grip', B.ResizeAt(190, 10) <> 0);
@@ -556,6 +558,7 @@ begin
     B.Parent := Form;
     B.Font.PixelsPerInch := 96;
     B.SetBounds(0, 0, 200, 22);
+    Form.ClientWidth := B.Width; Form.ClientHeight := B.Height;   // #176: the grip is the window corner
     ltrCode := B.ResizeAt(190, 10);
     B.BiDiMode := bdRightToLeft;
     rtlCode := B.ResizeAt(12, 10);
@@ -581,7 +584,9 @@ begin
     B.Parent := Form;
     B.Font.PixelsPerInch := 96;
     B.SetBounds(0, 0, 200, 22);
-    B.SizeGrip := False;         // the grip would otherwise own one of the two corners
+    Form.ClientWidth := B.Width; Form.ClientHeight := B.Height;   // #176: the grip is the window corner
+    { #176: the strip resizes only with SizeGrip on. Mirrored, the grip owns the bottom-LEFT
+      corner, and answers it with the same window code as the strip would. }
     B.BiDiMode := bdRightToLeft;
     AssertEquals('the far LEFT of the bottom edge is still HTBOTTOMLEFT', 16, B.ResizeAt(1, 21));
     AssertEquals('the far RIGHT of it is still HTBOTTOMRIGHT', 17, B.ResizeAt(199, 21));

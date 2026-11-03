@@ -2,7 +2,7 @@
 
 Office 式「文件」**backstage** 视图:一个铺满窗口(除标题栏外)的浮层,左侧强调色**命令栏** +
 右侧**内容区**。由 [TTyRibbonAppMenu](ribbonappmenu.md) 在设置了 `Backstage` 时打开(取代小下拉),
-顶部返回箭头(←)或 Esc 关闭。
+顶部返回箭头(←)或 Esc 关闭。命令栏可以用键盘走:`↑`/`↓` 逐项移动(跳过 `-` 分隔线),`Home`/`End` 到两头。`CommandGlyphs` / `BottomCommandGlyphs` 原地修改也会重画。
 
 ## 主题
 

@@ -20,6 +20,7 @@ type
     procedure TestCalcCurrencyIsCurrency;
     procedure TestCalcCurrencyReservesButton;
     procedure TestOnlyAnAcceptedResultIsWrittenBack;
+    procedure TestAReadOnlyEditKeepsTheCalculatorShut;
   end;
 implementation
 
@@ -67,6 +68,51 @@ begin
     c.Value := 7;
     c.PressKey('=');
     AssertEquals('''='' writes the result back', 7, e.Value, 1e-9);
+  finally
+    f.Free;
+  end;
+end;
+
+{ #159: with ReadOnly the button opens no calculator, as LCL's TCalcEdit disables it -- for the
+  currency edit too -- and a calculator already up when the edit turned read-only writes nothing
+  back. }
+procedure TCalcEditTest.TestAReadOnlyEditKeepsTheCalculatorShut;
+var
+  f: TForm;
+  e: TTyCalcEdit;
+  cc: TTyCalcCurrencyEdit;
+  d: TTyCalcDropdown;
+  c: TTyCalculator;
+begin
+  NeedWidgetSet;
+  f := TForm.CreateNew(nil);
+  try
+    f.SetBounds(-4000, -4000, 300, 200);
+    f.Visible := True;
+    e := TTyCalcEdit.Create(f);
+    e.Parent := f;
+    e.SetBounds(0, 0, 160, 26);
+    e.Value := 42;
+    e.ReadOnly := True;
+    d := TTyCalcDropdown.Create(e);
+    d.Toggle;
+    AssertFalse('the button opens nothing', d.IsOpen);
+    cc := TTyCalcCurrencyEdit.Create(f);
+    cc.Parent := f;
+    cc.SetBounds(0, 40, 160, 26);
+    cc.ReadOnly := True;
+    d := TTyCalcDropdown.Create(cc);
+    d.Toggle;
+    AssertFalse('nor on the currency edit', d.IsOpen);
+    e.ReadOnly := False;
+    d := TTyCalcDropdown.Create(e);
+    d.Toggle;
+    c := d.CalculatorForTest;
+    AssertNotNull('setup: the calculator is up', c);
+    e.ReadOnly := True;
+    c.Value := 7;
+    c.PressKey('=');
+    AssertEquals('a read-only edit takes no result', 42, e.Value, 1e-9);
   finally
     f.Free;
   end;

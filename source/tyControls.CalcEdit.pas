@@ -180,6 +180,8 @@ begin
   { Reopen-race guard: clicking the button to CLOSE first deactivates + closes the popup, so this
     Toggle runs with IsOpen already False — suppress an immediate reopen (mirrors TTyComboBox). }
   if (FPopup <> nil) and (GetTickCount64 - FPopup.CloseUpTick <= 200) then Exit;
+  { #159: a read-only edit opens no calculator, as LCL's TCalcEdit disables its button. }
+  if FEdit.ReadOnly then Exit;
   if FPopup = nil then
   begin
     FPopup := TTyDropdownPopup.Create;
@@ -199,7 +201,8 @@ end;
 procedure TTyCalcDropdown.DoResult(Sender: TObject);
 begin
   if (FCalc = nil) or FCalc.IsError then Exit;   // don't commit/close on an error result
-  FEdit.Value := FCalc.Value;   // '=' : apply
+  // '=' : apply -- unless the edit turned read-only while the calculator was up (#159)
+  if not FEdit.ReadOnly then FEdit.Value := FCalc.Value;
   if FPopup <> nil then FPopup.Close;
 end;
 

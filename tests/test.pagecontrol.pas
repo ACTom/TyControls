@@ -3,7 +3,8 @@ unit test.pagecontrol;
 interface
 uses
   Classes, SysUtils, Controls, Forms, LCLType, fpcunit, testregistry,
-  tyControls.Controller, tyControls.TabSheet, tyControls.PageControl;
+  tyControls.Controller, tyControls.TabSheet, tyControls.PageControl,
+  ComCtrls, Graphics, ImgList, tyControls.Edit;
 type
   { Reaches the protected client-rect seam, and counts realigns: Realign is not virtual, but
     it funnels through AlignControls, so an override counts the calls SetTabHeight triggers. }
@@ -437,6 +438,197 @@ begin
   AssertFalse('the page it left is hidden', FPC.Pages[0].Visible);
 end;
 
+
+type
+  { #173: a moved page stays the active one; ActivePage := nil; the focus follows a switch into
+    the new page; a side band re-lays the pages when it grows; a change inside Images re-measures. }
+  TPage173Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FPC: TTyPageControl;
+    FChanges, FChangings: Integer;
+    procedure Changed(Sender: TObject);
+    procedure Changing(Sender: TObject; NewIndex: Integer; var AllowChange: Boolean);
+    procedure Pages(const ACaptions: array of string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAMovedPageStaysActive;
+    procedure TestActivePageNilSelectsNoPage;
+    procedure TestASwitchTakesTheFocusIntoTheNewPage;
+    procedure TestAFocusOutsideIsNotTaken;
+    procedure TestASideBandGrowingReLaysThePages;
+    procedure TestAChangeInsideImagesRepaintsTheTabs;
+  end;
+
+  TPC173Counting = class(TTyPageControl)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+var
+  Page173WidgetSet: Boolean = False;
+
+procedure TPage173Test.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TPage173Test.Changing(Sender: TObject; NewIndex: Integer; var AllowChange: Boolean);
+begin
+  Inc(FChangings);
+end;
+
+procedure TPage173Test.Pages(const ACaptions: array of string);
+var i: Integer; e: TTyEdit;
+begin
+  for i := 0 to High(ACaptions) do
+  begin
+    e := TTyEdit.Create(FForm);
+    e.Parent := FPC.AddPage(ACaptions[i]);
+    e.SetBounds(10, 10, 100, 24);
+  end;
+end;
+
+procedure TPage173Test.SetUp;
+begin
+  { The focus and the alignment need real windows: the widgetset up, the form shown (off screen). }
+  if not Page173WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    Page173WidgetSet := True;
+  end;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 640, 480);
+  FForm.Visible := True;
+  FPC := TTyPageControl.Create(FForm);
+  FPC.Parent := FForm;
+  FPC.SetBounds(0, 0, 400, 300);
+  FChanges := 0;
+  FChangings := 0;
+end;
+
+procedure TPage173Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TPage173Test.TestAMovedPageStaysActive;
+var a: TTyCustomTabSheet;
+begin
+  Pages(['A', 'B', 'C']);
+  FPC.ActivePageIndex := 0;
+  a := FPC.ActivePage;
+  FPC.OnChange := @Changed;
+  FPC.OnChanging := @Changing;
+  FPC.MovePage(0, 2);
+  AssertSame('MovePage: the active page is the same page', a, FPC.ActivePage);
+  AssertEquals('at its new place', 2, FPC.ActivePageIndex);
+  AssertTrue('and it is the one shown', a.Visible);
+  FPC.Pages[0].PageIndex := 2;
+  AssertSame('TabSheet.PageIndex on another page: still A', a, FPC.ActivePage);
+  AssertEquals('which moved over', 1, FPC.ActivePageIndex);
+  FPC.MovePage(2, 0);
+  AssertSame('a page from after it moved before it: still A', a, FPC.ActivePage);
+  AssertEquals('which moved over the other way', 2, FPC.ActivePageIndex);
+  AssertEquals('the same page: no OnChange', 0, FChanges);
+  AssertEquals('nor OnChanging', 0, FChangings);
+end;
+
+procedure TPage173Test.TestActivePageNilSelectsNoPage;
+begin
+  Pages(['A', 'B']);
+  FPC.ActivePageIndex := 1;
+  FPC.ActivePage := nil;
+  AssertEquals('nil is no page', -1, FPC.ActivePageIndex);
+  AssertNull('read back', FPC.ActivePage);
+end;
+
+procedure TPage173Test.TestASwitchTakesTheFocusIntoTheNewPage;
+var e0, e1: TWinControl;
+begin
+  Pages(['A', 'B']);
+  FPC.ActivePageIndex := 0;
+  e0 := TWinControl(FPC.Pages[0].Controls[0]);
+  e1 := TWinControl(FPC.Pages[1].Controls[0]);
+  FForm.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  AssertTrue('setup: the edit on page A takes focus', e0.CanFocus);
+  e0.SetFocus;
+  Forms.Application.ProcessMessages;
+  FPC.ActivePageIndex := 1;
+  Forms.Application.ProcessMessages;
+  AssertSame('the focus goes to the first control of the new page', e1, FForm.ActiveControl);
+end;
+
+procedure TPage173Test.TestAFocusOutsideIsNotTaken;
+var outside: TTyEdit;
+begin
+  Pages(['A', 'B']);
+  outside := TTyEdit.Create(FForm);
+  outside.Parent := FForm;
+  outside.SetBounds(450, 10, 100, 24);
+  FPC.ActivePageIndex := 0;
+  FForm.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  outside.SetFocus;
+  Forms.Application.ProcessMessages;
+  FPC.ActivePageIndex := 1;
+  Forms.Application.ProcessMessages;
+  AssertSame('a focus outside the page control stays there', outside, FForm.ActiveControl);
+end;
+
+procedure TPage173Test.TestASideBandGrowingReLaysThePages;
+var l0: Integer;
+begin
+  Pages(['A', 'B']);
+  FPC.TabPosition := tpLeft;
+  FForm.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  l0 := FPC.Pages[0].Left;
+  FPC.Pages[1].Caption := 'A caption a good deal longer';
+  Forms.Application.ProcessMessages;
+  AssertTrue(Format('the band grew and the page moved over (%d -> %d)', [l0, FPC.Pages[0].Left]),
+    FPC.Pages[0].Left > l0);
+  AssertEquals('to the band''s edge', FPC.BandThicknessPx, FPC.Pages[0].Left);
+end;
+
+procedure TPC173Counting.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+procedure TPage173Test.TestAChangeInsideImagesRepaintsTheTabs;
+var il: TImageList; pc: TPC173Counting; bmp: TBitmap; n: Integer;
+begin
+  il := TImageList.Create(FForm);
+  il.Width := 16;
+  il.Height := 16;
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(16, 16);
+    il.Add(bmp, nil);
+    il.Add(bmp, nil);
+  finally
+    bmp.Free;
+  end;
+  pc := TPC173Counting.Create(FForm);
+  pc.Parent := FForm;
+  pc.AddPage('A').ImageIndex := 0;
+  pc.Images := il;
+  n := pc.Invalidations;
+  il.Move(0, 1);              { a change the list announces (LCL's Add announces none) }
+  AssertTrue('a change inside the list repaints the tabs', pc.Invalidations > n);
+  pc.Images := nil;
+  n := pc.Invalidations;
+  il.Delete(0);
+  AssertEquals('a list let go of is not listened to', n, pc.Invalidations);
+end;
+
 initialization
   RegisterTest(TPageControlTest);
+  RegisterTest(TPage173Test);
 end.

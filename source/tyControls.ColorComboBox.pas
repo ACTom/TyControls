@@ -2,7 +2,7 @@ unit tyControls.ColorComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics,
+  Classes, SysUtils, Types, Graphics, Forms,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
   tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color, LCLType;
 
@@ -31,14 +31,22 @@ type
   TTyCustomColorComboBox = class(TTyCustomColorBox)
   private
     FMoreCaption: string;
-    FPrevIndex: Integer;    // last real selection, to revert a cancelled "more…"
     procedure SetMoreCaption(const AValue: TTranslateString);
     function IsMoreIndex(AIndex: Integer): Boolean;
     procedure RebuildMoreItem;
+    procedure MorePicked(Data: PtrInt);
   protected
     function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
-    procedure DoSelect; override;
+    { #163: "more…" is a command, not a value. Picking it asks for a colour, and the selection
+      changes once, to that colour, or not at all on Cancel -- it changed to the row's marker
+      first, with an OnChange, and back or on with another. The closed field's keys step over
+      it: an arrow key does not open a dialog. }
+    procedure DoPopupPick(AIndex: Integer); override;
+    procedure FieldKeySelect(AIndex: Integer); override;
+    { The colour "more…" asks for, starting at AColor: the themed colour dialog. Virtual, so a
+      host can put its own picker there. False = cancelled. }
+    function AskMoreColor(var AColor: TColor): Boolean; virtual;
     { Every rebuild of the palette -- a form file's Loaded, a Style change -- ends with the
       "more…" row, not just the constructor's (#121). }
     procedure SetColorList; override;
@@ -161,7 +169,6 @@ begin
   { Empty, not 'More…': a literal here was English in every language. MoreText supplies
     the translated default. }
   FMoreCaption := '';
-  FPrevIndex := ItemIndex;   // the inherited constructor's SetColorList already added "more…"
 end;
 
 procedure TTyCustomColorComboBox.SetColorList;
@@ -215,35 +222,53 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);
 end;
 
-procedure TTyCustomColorComboBox.DoSelect;
+procedure TTyCustomColorComboBox.DoPopupPick(AIndex: Integer);
+begin
+  if not IsMoreIndex(AIndex) then
+  begin
+    inherited DoPopupPick(AIndex);
+    Exit;
+  end;
+  { After the list's own click: the dialog is modal, and the list closes first -- closing it
+    from inside that click is the trap TTyComboBox.DoPopupPick defers around. }
+  Application.QueueAsyncCall(@MorePicked, 0);
+end;
+
+procedure TTyCustomColorComboBox.FieldKeySelect(AIndex: Integer);
+begin
+  if IsMoreIndex(AIndex) then Exit;
+  inherited FieldKeySelect(AIndex);
+end;
+
+function TTyCustomColorComboBox.AskMoreColor(var AColor: TColor): Boolean;
+var a: Byte;
+begin
+  a := 255;
+  Result := TySelectColor(MoreText, AColor, a);
+end;
+
+procedure TTyCustomColorComboBox.MorePicked(Data: PtrInt);
 var
   c: TColor;
-  a: Byte;
-  moreIdx: Integer;
+  i, moreIdx: Integer;
 begin
-  if IsMoreIndex(ItemIndex) then
-  begin
-    moreIdx := ItemIndex;
-    c := ColorAt(FPrevIndex);
-    if c = clNone then c := clBlack;
-    a := 255;
-    if TySelectColor(MoreText, c, a) then
+  CloseUp;
+  moreIdx := -1;
+  for i := Items.Count - 1 downto 0 do
+    if IsMoreIndex(i) then
     begin
-      // Insert the picked colour just above "more…" and select it.
-      Items.InsertObject(moreIdx, Format('#%.2x%.2x%.2x',
-        [Red(ColorToRGB(c)), Green(ColorToRGB(c)), Blue(ColorToRGB(c))]), TObject(PtrInt(c)));
-      ItemIndex := moreIdx;
-      FPrevIndex := moreIdx;
-      inherited DoSelect;
-    end
-    else
-      ItemIndex := FPrevIndex;   // cancelled -> restore the previous real selection
-  end
-  else
-  begin
-    FPrevIndex := ItemIndex;
-    inherited DoSelect;
-  end;
+      moreIdx := i;
+      Break;
+    end;
+  if moreIdx < 0 then Exit;
+  if IsMoreIndex(ItemIndex) then c := clNone else c := ColorAt(ItemIndex);
+  if c = clNone then c := clBlack;
+  if not AskMoreColor(c) then Exit;   // cancelled: nothing was picked, nothing changes
+  // The picked colour goes in just above "more…", and is the user's pick: OnChange and
+  // OnSelect, once.
+  Items.InsertObject(moreIdx, Format('#%.2x%.2x%.2x',
+    [Red(ColorToRGB(c)), Green(ColorToRGB(c)), Blue(ColorToRGB(c))]), TObject(PtrInt(c)));
+  inherited FieldKeySelect(moreIdx);
 end;
 
 end.

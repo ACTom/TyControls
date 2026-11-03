@@ -618,6 +618,8 @@ initialization
     { #130's hides. }
     TTyCustomNumericEdit, TTyCustomAdvancedComboBox, TTyCustomCheckComboBox, TTyCustomColorBox,
     TTyCustomOfficeComboBox, TTyCustomDrawGrid, TTyCustomStringGrid, TTyGridHeader,
+    { #155: SizePriority, hidden on TTyColumn and offered again on the grid's column. }
+    TTyGridColumn,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

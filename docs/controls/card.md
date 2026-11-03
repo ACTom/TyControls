@@ -29,7 +29,7 @@
 uses tyControls.Card;
 ```
 
-三个 typeKey 都参与卡片的状态集:`TyCard:hover { … }` 即可实现 AntD 的 `hoverable`(基类已跟踪 hover,无需属性);`:disabled { opacity: … }` 同时作用于三条带。
+三个 typeKey 都参与卡片的状态集:`TyCard:hover { … }` 即可实现 AntD 的 `hoverable`(基类已跟踪 hover,无需属性;指针移到卡片里的控件上仍算悬停在卡片上);`:disabled { opacity: … }` 同时作用于三条带。
 
 ---
 

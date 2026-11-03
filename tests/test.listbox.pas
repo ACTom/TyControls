@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller,
-  tyControls.Base, tyControls.ListBox, tyControls.ScrollBar;
+  tyControls.Base, tyControls.ListBox, tyControls.ScrollBar, tyControls.CheckListBox,
+  tyControls.OfficeListBox, tyControls.ValueListEditor;
 type
   TTyListBoxTest = class(TTestCase)
   private
@@ -43,6 +44,31 @@ type
     procedure TestRowAtYAccountsForPaddingTop;
   end;
 
+  { #164: the keyboard's click, ItemHeight 0, the caret row, type-to-find, drag-select,
+    sideways keys and tilt, DeleteSelected's scroll, Toggle from code, a header's click. }
+  TListBoxGestureTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FClicks, FDowns, FChecks: Integer;
+    procedure Clicked(Sender: TObject);
+    procedure Downed(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure Checked(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheKeyboardsSelectionIsAClick;
+    procedure TestItemHeightZeroIsTheDefault;
+    procedure TestTheMultiSelectCaretRowIsDrawn;
+    procedure TestTypingFindsARow;
+    procedure TestDraggingSelects;
+    procedure TestLeftRightAndTheTiltScrollSideways;
+    procedure TestDeleteSelectedKeepsTheView;
+    procedure TestToggleFromCodeIsNoClickCheck;
+    procedure TestAHeaderTakesTheClickNotTheSelection;
+    procedure TestTheValueListEditorKeepsItsTyping;
+  end;
+
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
   TTyListBoxScrollBarPropTest = class(TTestCase)
   published
@@ -52,6 +78,29 @@ type
 implementation
 
 type
+  TGestureProbe = class(TTyListBox)
+  protected
+    function CurrentStates: TTyStateSet; override;
+  public
+    FocusedForTest: Boolean;
+    function Key(AKey: Word; AShift: TShiftState = []): Word;
+    procedure TypeChar(const C: TUTF8Char);
+    procedure Press(ARow: Integer; AShift: TShiftState = []);
+    procedure DragTo(ARow: Integer);
+    procedure Release(ARow: Integer);
+    procedure Render(ACanvas: TCanvas; const ARect: TRect);
+    function Tilt(ADelta: Integer): Boolean;
+    function Offset: Integer;
+    procedure Layout;
+    procedure SetTypeToFind(AValue: Boolean);
+  end;
+
+  TVleCrack = class(TTyValueListEditor);
+
+  TOfficeProbe = class(TTyOfficeListBox)
+  public
+    procedure Press(ARow: Integer);
+  end;
   TListBoxAccess = class(TTyListBox)
   public
     function StyleTypeKey: string;
@@ -973,7 +1022,330 @@ begin
   end;
 end;
 
+{ --- #164 ------------------------------------------------------------------------------- }
+
+function TGestureProbe.CurrentStates: TTyStateSet;
+begin
+  Result := inherited CurrentStates;
+  if FocusedForTest then Result := Result - [tysNormal] + [tysFocused];
+end;
+
+function TGestureProbe.Key(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, AShift);
+end;
+
+procedure TGestureProbe.TypeChar(const C: TUTF8Char);
+var k: TUTF8Char;
+begin
+  k := C;
+  UTF8KeyPress(k);
+end;
+
+procedure TGestureProbe.Press(ARow: Integer; AShift: TShiftState);
+var r: TRect;
+begin
+  r := ItemRect(ARow);
+  MouseDown(mbLeft, AShift + [ssLeft], 20, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TGestureProbe.DragTo(ARow: Integer);
+var r: TRect;
+begin
+  r := ItemRect(ARow);
+  MouseMove([ssLeft], 20, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TGestureProbe.Release(ARow: Integer);
+var r: TRect;
+begin
+  r := ItemRect(ARow);
+  MouseUp(mbLeft, [], 20, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TGestureProbe.Render(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+function TGestureProbe.Tilt(ADelta: Integer): Boolean;
+begin
+  Result := DoMouseWheelHorz([], ADelta, Point(10, 10));
+end;
+
+function TGestureProbe.Offset: Integer;
+begin
+  Result := HScrollOffset;
+end;
+
+procedure TGestureProbe.Layout;
+begin
+  UpdateScrollBar;
+end;
+
+procedure TGestureProbe.SetTypeToFind(AValue: Boolean);
+begin
+  FTypeToFind := AValue;
+end;
+
+procedure TOfficeProbe.Press(ARow: Integer);
+var r: TRect;
+begin
+  r := ItemRect(ARow);
+  MouseDown(mbLeft, [ssLeft], 20, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TListBoxGestureTest.Clicked(Sender: TObject);
+begin
+  Inc(FClicks);
+end;
+
+procedure TListBoxGestureTest.Downed(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  Inc(FDowns);
+end;
+
+procedure TListBoxGestureTest.Checked(Sender: TObject);
+begin
+  Inc(FChecks);
+end;
+
+procedure TListBoxGestureTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FClicks := 0;
+  FDowns := 0;
+  FChecks := 0;
+end;
+
+procedure TListBoxGestureTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function NewProbe(AForm: TForm; ACount: Integer): TGestureProbe;
+var i: Integer;
+begin
+  Result := TGestureProbe.Create(AForm);
+  Result.Parent := AForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.ItemHeight := 24;
+  Result.SetBounds(0, 0, 160, 120);
+  for i := 0 to ACount - 1 do Result.Items.Add('row ' + IntToStr(i));
+  Result.Layout;
+end;
+
+procedure TListBoxGestureTest.TestTheKeyboardsSelectionIsAClick;
+var l: TGestureProbe;
+begin
+  l := NewProbe(FForm, 3);
+  l.OnClick := @Clicked;
+  l.Key(VK_DOWN);
+  AssertEquals('a key that moves the selection is a click, as LCL''s', 1, FClicks);
+  l.Key(VK_DOWN);
+  l.Key(VK_UP);
+  AssertEquals('each time', 3, FClicks);
+  AssertEquals('setup: back on the first row', 0, l.ItemIndex);
+  l.Key(VK_UP);
+  AssertEquals('one that moves nothing is none', 3, FClicks);
+end;
+
+procedure TListBoxGestureTest.TestItemHeightZeroIsTheDefault;
+var l: TGestureProbe; themed: Integer;
+begin
+  l := NewProbe(FForm, 3);
+  l.FollowThemeItemHeight;
+  themed := l.ItemHeight;
+  l.ItemHeight := 40;
+  l.ItemHeight := 0;
+  AssertEquals('0 is the default height, as LCL''s, not 1 px rows', themed, l.ItemHeight);
+  AssertFalse('the theme''s again', l.ItemHeightIsExplicit);
+end;
+
+procedure TListBoxGestureTest.TestTheMultiSelectCaretRowIsDrawn;
+var
+  l: TGestureProbe;
+
+  { Row ARow's band, rendered with the caret on ACaret, focused or not. }
+  function Band(ACaret: Integer; AFocused: Boolean): TBGRABitmap;
+  var bmp: TBitmap;
+  begin
+    while l.ItemIndex < ACaret do l.Key(VK_DOWN);
+    while l.ItemIndex > ACaret do l.Key(VK_UP);
+    l.FocusedForTest := AFocused;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(160, 120);
+      l.Render(bmp.Canvas, Rect(0, 0, 160, 120));
+      Result := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+  function Diff(A, B: TBGRABitmap; ARow: Integer): Integer;
+  var r: TRect; x, y: Integer;
+  begin
+    Result := 0;
+    r := l.ItemRect(ARow);
+    for x := 12 to 148 do
+      for y := r.Top to r.Bottom - 1 do
+        if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+  end;
+
+var
+  on1, on3, off1, off3: TBGRABitmap;
+begin
+  l := NewProbe(FForm, 4);
+  l.MultiSelect := True;
+  l.ExtendedSelect := False;   // the arrows move the caret alone
+  l.Key(VK_DOWN);
+  AssertEquals('setup: nothing selected', 0, l.SelCount);
+  on1 := Band(1, True);
+  on3 := Band(3, True);
+  off1 := Band(1, False);
+  off3 := Band(3, False);
+  try
+    AssertEquals('setup: still nothing selected', 0, l.SelCount);
+    AssertTrue(Format('focused, the caret row is outlined (%d px)', [Diff(on1, on3, 1)]),
+      Diff(on1, on3, 1) > 100);
+    AssertEquals('a row the caret is not on is not', 0, Diff(on1, on3, 2));
+    AssertEquals('unfocused, no caret is drawn', 0, Diff(off1, off3, 1));
+  finally
+    on1.Free;
+    on3.Free;
+    off1.Free;
+    off3.Free;
+  end;
+end;
+
+procedure TListBoxGestureTest.TestTypingFindsARow;
+var l: TGestureProbe;
+begin
+  l := NewProbe(FForm, 0);
+  l.Items.Add('Apple');
+  l.Items.Add('Apricot');
+  l.Items.Add('Banana');
+  l.Items.Add('Blueberry');
+  l.OnClick := @Clicked;
+  l.TypeChar('b');
+  AssertEquals('a letter finds the row it starts', 2, l.ItemIndex);
+  AssertEquals('and that is a click too', 1, FClicks);
+  l.TypeChar('l');
+  AssertEquals('more letters narrow it', 3, l.ItemIndex);
+  Sleep(700);
+  l.TypeChar('A');
+  AssertEquals('after a pause it starts again, case aside', 0, l.ItemIndex);
+  l.TypeChar('p');
+  AssertEquals('ap still names Apple: it stays', 0, l.ItemIndex);
+  l.TypeChar('r');
+  AssertEquals('apr moves on', 1, l.ItemIndex);
+  l.SetTypeToFind(False);
+  Sleep(700);
+  l.TypeChar('b');
+  AssertEquals('switched off, typing finds nothing', 1, l.ItemIndex);
+end;
+
+procedure TListBoxGestureTest.TestDraggingSelects;
+var l: TGestureProbe;
+begin
+  l := NewProbe(FForm, 4);
+  l.Press(0);
+  l.DragTo(2);
+  AssertEquals('held down, the selection follows the pointer', 2, l.ItemIndex);
+  l.Release(2);
+  l.DragTo(3);
+  AssertEquals('let go, it does not', 2, l.ItemIndex);
+  l.MultiSelect := True;
+  l.Press(1);
+  l.DragTo(3);
+  AssertTrue('extended: the range from the anchor', l.Selected[1] and l.Selected[2] and l.Selected[3]);
+  AssertFalse('and not before it', l.Selected[0]);
+  l.Release(3);
+end;
+
+procedure TListBoxGestureTest.TestLeftRightAndTheTiltScrollSideways;
+var l: TGestureProbe; before: Integer;
+begin
+  l := NewProbe(FForm, 3);
+  l.ScrollWidth := 400;
+  l.Layout;
+  before := l.Offset;
+  AssertEquals('Right is taken', 0, l.Key(VK_RIGHT));
+  AssertTrue('and slides the rows', l.Offset > before);
+  before := l.Offset;
+  l.Key(VK_LEFT);
+  AssertTrue('Left slides them back', l.Offset < before);
+  before := l.Offset;
+  AssertTrue('the tilt is taken', l.Tilt(120));
+  AssertTrue('a tilt to the right slides right', l.Offset > before);
+  l.ScrollWidth := 0;
+  l.Layout;
+  AssertEquals('nothing to the side: Right is left alone', VK_RIGHT, l.Key(VK_RIGHT));
+end;
+
+procedure TListBoxGestureTest.TestDeleteSelectedKeepsTheView;
+var l: TGestureProbe; i: Integer;
+begin
+  l := NewProbe(FForm, 40);
+  l.MultiSelect := True;
+  l.TopIndex := 36;
+  for i := 10 to 39 do l.Selected[i] := True;
+  l.DeleteSelected;
+  AssertEquals('setup: ten rows left', 10, l.Items.Count);
+  AssertEquals('the view stays at the end of what is left, not the top',
+    10 - l.VisibleRows, l.TopIndex);
+end;
+
+procedure TListBoxGestureTest.TestToggleFromCodeIsNoClickCheck;
+var c: TTyCheckListBox;
+begin
+  c := TTyCheckListBox.Create(FForm);
+  c.Items.Add('a');
+  c.OnClickCheck := @Checked;
+  c.Toggle(0);
+  AssertTrue('setup: toggled', c.Checked[0]);
+  AssertEquals('from code, no OnClickCheck: that is the user''s', 0, FChecks);
+end;
+
+procedure TListBoxGestureTest.TestAHeaderTakesTheClickNotTheSelection;
+var o: TOfficeProbe;
+begin
+  o := TOfficeProbe.Create(FForm);
+  o.Parent := FForm;
+  o.Font.PixelsPerInch := 96;
+  o.SetBounds(0, 0, 160, 120);
+  o.AddHeader('Fruit');
+  o.Items.Add('Apple');
+  o.AddHeader('Veg');
+  o.Items.Add('Leek');
+  o.ItemIndex := 3;
+  o.OnMouseDown := @Downed;
+  o.Press(0);
+  AssertEquals('a header click is an OnMouseDown', 1, FDowns);
+  AssertEquals('and selects nothing', 3, o.ItemIndex);
+end;
+
+procedure TListBoxGestureTest.TestTheValueListEditorKeepsItsTyping;
+var
+  v: TTyValueListEditor;
+  k: TUTF8Char;
+begin
+  v := TTyValueListEditor.Create(FForm);
+  v.Parent := FForm;
+  v.InsertRow('Apple', '1', True);
+  v.InsertRow('Banana', '2', True);
+  v.ItemIndex := 0;
+  k := 'b';
+  TVleCrack(v).UTF8KeyPress(k);
+  AssertEquals('its letters are its editors'', not a row search', 0, v.ItemIndex);
+end;
+
 initialization
+  RegisterTest(TListBoxGestureTest);
   RegisterTest(TTyListBoxTest);
   RegisterTest(TTyListBoxScrollBarPropTest);
 end.

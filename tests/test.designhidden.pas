@@ -27,6 +27,8 @@ type
     procedure TestPickOnlyCombosListOnlyPickOnlyStyles;
     procedure TestTheDrawGridDoesNotPublishWhatOnlyTheStringGridUses;
     procedure TestAGridsHeaderPublishesEverythingButMainColumn;
+    procedure TestSizePriorityIsTheGridsOnly;   // #155
+    procedure TestTheGeneratedComboRowsAreHidden;
   end;
 
 implementation
@@ -116,6 +118,16 @@ begin
   end;
 end;
 
+{ #163: the filter combo's rows are Filter's and the look-in combo's the file system's. }
+procedure TDesignHiddenTest.TestTheGeneratedComboRowsAreHidden;
+begin
+  AssertEquals('TTyFilterComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyFilterComboBox', 'Items'));
+  AssertEquals('TTyShellComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyShellComboBox', 'Items'));
+  AssertEquals('a plain combo keeps its rows', '', EditorFor('TTyComboBox', 'Items'));
+  { #167: and a value list editor's Items is the view's key list, not its rows. }
+  AssertEquals('TTyValueListEditor.Items', 'THiddenPropertyEditor', EditorFor('TTyValueListEditor', 'Items'));
+end;
+
 procedure TDesignHiddenTest.TestAGridsHeaderPublishesEverythingButMainColumn;
 var
   list: PPropList;
@@ -140,6 +152,14 @@ begin
   finally
     g.Free;
   end;
+end;
+
+procedure TDesignHiddenTest.TestSizePriorityIsTheGridsOnly;
+begin
+  AssertEquals('a list or tree column has no fill to weigh', 'THiddenPropertyEditor',
+    EditorFor('TTyColumn', 'SizePriority'));
+  AssertEquals('the grid''s column offers it again', 'TIntegerPropertyEditor',
+    EditorFor('TTyGridColumn', 'SizePriority'));
 end;
 
 initialization

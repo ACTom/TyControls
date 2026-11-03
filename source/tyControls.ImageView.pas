@@ -34,6 +34,9 @@ type
     FSource:     TBGRABitmap;    // owned; original decoded image (never filtered)
     FProcessed:  TBGRABitmap;    // owned; filter output (rebuilt when FProcDirty); drawn
     FProcDirty:  Boolean;
+    { #181: FSource came from LoadFromFile, AssignBitmap or Clear, not from Picture -- Picture
+      is brought up to it the next time it is read. }
+    FPictureStale: Boolean;
     { view }
     FZoom:       Double;         // current display scale (interpolated while animating)
     FAutoFit:    Boolean;        // True -> ZoomToFit on load/resize; user zoom/pan clears it
@@ -58,6 +61,7 @@ type
     FTintAmount: Integer;        // 0..100, 0 = off
     FOnZoomChange: TNotifyEvent;
     procedure SetPicture(AValue: TPicture);
+    function GetPicture: TPicture;
     procedure PictureChanged(Sender: TObject);
     procedure SetAutoFit(AValue: Boolean);
     procedure SetZoomMin(AValue: Double);
@@ -105,7 +109,7 @@ type
     property  Zoom: Double read FZoom;              // read-only; current (maybe animating) scale
     // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
     property TabStop default True;
-    property Picture: TPicture read FPicture write SetPicture;   // assign -> decoded to FSource
+    property Picture: TPicture read GetPicture write SetPicture;   // assign -> decoded to FSource
     property AutoFit: Boolean read FAutoFit write SetAutoFit default True;
     property ZoomMin: Double read FZoomMin write SetZoomMin;
     property ZoomMax: Double read FZoomMax write SetZoomMax;
@@ -478,8 +482,30 @@ begin
   if Assigned(FOnZoomChange) then FOnZoomChange(Self);
 end;
 
+{ #181: Picture says what the view shows. LoadFromFile, AssignBitmap and Clear put the image
+  straight into FSource, and Picture went on holding the one before; it is filled from FSource
+  here, when someone looks, so the loads themselves do not pay for a copy nobody reads. }
+function TTyCustomImageView.GetPicture: TPicture;
+begin
+  if FPictureStale then
+  begin
+    FPictureStale := False;
+    FPicture.OnChange := nil;   // the image is already decoded: nothing to re-read
+    try
+      if FSource = nil then
+        FPicture.Clear
+      else
+        FPicture.Bitmap.Assign(FSource);
+    finally
+      FPicture.OnChange := @PictureChanged;
+    end;
+  end;
+  Result := FPicture;
+end;
+
 procedure TTyCustomImageView.SetPicture(AValue: TPicture);
 begin
+  FPictureStale := False;
   FPicture.Assign(AValue);   // triggers OnChange -> PictureChanged, which re-decodes
 end;
 
@@ -489,6 +515,7 @@ procedure TTyCustomImageView.PictureChanged(Sender: TObject);
 var
   tmp: TBitmap;
 begin
+  FPictureStale := False;
   FreeAndNil(FSource);
   if (FPicture.Graphic <> nil) and not FPicture.Graphic.Empty then
   begin
@@ -526,6 +553,7 @@ begin
   FreeAndNil(FSource);
   FSource := bmp;
   FProcDirty := True;
+  FPictureStale := True;
   if FAutoFit then
     ZoomToFit
   else
@@ -543,6 +571,7 @@ begin
   if (ABitmap <> nil) and (ABitmap.Width > 0) and (ABitmap.Height > 0) then
     FSource := ABitmap.Duplicate(True) as TBGRABitmap;
   FProcDirty := True;
+  FPictureStale := True;
   if FAutoFit then
     ZoomToFit
   else
@@ -550,15 +579,20 @@ begin
 end;
 
 procedure TTyCustomImageView.Clear;
+var
+  moved: Boolean;
 begin
   FreeAndNil(FSource);
   FreeAndNil(FProcessed);
   FProcDirty := True;
+  FPictureStale := True;
+  moved := (FZoom <> 1.0) or (FOffX <> 0) or (FOffY <> 0);
   FZoom := 1.0;
   FOffX := 0;
   FOffY := 0;
   if FTimer <> nil then FTimer.Enabled := False;
   Invalidate;
+  if moved then DoZoomChange;   { #181: the zoom went back to 100 % -- say so }
 end;
 
 procedure TTyCustomImageView.ZoomToFit;
@@ -696,18 +730,26 @@ begin
 end;
 
 procedure TTyCustomImageView.Resize;
+var
+  z: Double;
+  moved: Boolean;
 begin
   inherited Resize;
   // Track the window while auto-fitting (immediate, not animated).
   if FAutoFit and (FSource <> nil) then
   begin
     if FTimer <> nil then FTimer.Enabled := False;
-    FZoom := TyImageViewClamp(
+    z := TyImageViewClamp(
       TyImageViewFitZoom(FSource.Width, FSource.Height, ViewW, ViewH),
       FZoomMin, FZoomMax);
+    { #181: the fit follows the window, and a zoom that moves is told -- it was not. Only when
+      it moves: Resize runs on every layout pass. }
+    moved := (z <> FZoom) or (FOffX <> 0) or (FOffY <> 0);
+    FZoom := z;
     FOffX := 0;
     FOffY := 0;
     Invalidate;
+    if moved then DoZoomChange;
   end;
 end;
 

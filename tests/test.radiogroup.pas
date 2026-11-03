@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, ExtCtrls, LCLType,
   fpcunit, testregistry,
   tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.GroupBox,
-  tyControls.RadioGroup, test.danglingrefs;
+  tyControls.RadioGroup, test.danglingrefs,
+  tyControls.Types, tyControls.CheckGroup, tyControls.ButtonGroup;
 type
   { Reaches TTyCustomControl's protected MouseDown / KeyDown / AdjustClientRect, so a test
     can drive a hosted radio the way the widgetset does instead of calling Click (which
@@ -497,7 +498,9 @@ begin
     EndPoison;
   end;
   AssertEquals('the button left over finishes its click', '', raised);
-  AssertEquals('two buttons are left', 2, FGrp.Count);
+  { #171: C, the selected item, deleted is a change of the selection too, so the handler
+    runs once more and deletes B -- and then nothing is selected to lose. }
+  AssertEquals('one button is left', 1, FGrp.Count);
   AssertEquals('and nothing is selected', -1, FGrp.ItemIndex);
 end;
 
@@ -778,6 +781,178 @@ begin
   AssertEquals('valid columns accepted', 3, FGrp.Columns);
 end;
 
+
+type
+  { #171: the group controls keep their selection across an Items edit; ButtonGroup.ItemIndex
+    in MultiSelect; a checked radio button moved into another group. }
+  TGroups171Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FCount: Integer;
+    procedure Counted(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheCarryFindsItemsByCaptionThenByPlace;
+    procedure TestARadioGroupKeepsItsSelectionAcrossAnEdit;
+    procedure TestARadioGroupTellsTheSelectedItemGone;
+    procedure TestACheckGroupKeepsItsChecksAcrossAnEdit;
+    procedure TestAButtonGroupTellsTheSelectedSegmentGone;
+    procedure TestItemIndexInMultiSelectSelectsThatSegment;
+    procedure TestACheckedRadioMovedIntoAGroupIsItsOnlyCheckedOne;
+  end;
+
+procedure TGroups171Test.Counted(Sender: TObject);
+begin
+  Inc(FCount);
+end;
+
+procedure TGroups171Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FCount := 0;
+end;
+
+procedure TGroups171Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGroups171Test.TestTheCarryFindsItemsByCaptionThenByPlace;
+var n: TStringList; c: TTyItemCarry;
+begin
+  n := TStringList.Create;
+  try
+    n.CommaText := 'A,X,B,C';
+    c := TyCarryItems(['A', 'B', 'C'], n);
+    AssertEquals('an insert: A stays A', 0, c[0]);
+    AssertEquals('the inserted one is new', -1, c[1]);
+    AssertEquals('B is still B', 1, c[2]);
+    AssertEquals('C is still C', 2, c[3]);
+    n.CommaText := 'A,Y,C';
+    c := TyCarryItems(['A', 'B', 'C'], n);
+    AssertEquals('a rename takes the place of the one gone', 1, c[1]);
+    n.CommaText := 'A,A';
+    c := TyCarryItems(['A', 'B', 'A'], n);
+    AssertEquals('duplicates pair off in order: first', 0, c[0]);
+    AssertEquals('second', 2, c[1]);
+    n.CommaText := 'P,Q';
+    c := TyCarryItems(['A', 'B'], n);
+    AssertEquals('a whole new list goes by place', 0, c[0]);
+    AssertEquals('both', 1, c[1]);
+  finally
+    n.Free;
+  end;
+end;
+
+procedure TGroups171Test.TestARadioGroupKeepsItsSelectionAcrossAnEdit;
+var g: TTyRadioGroup;
+begin
+  g := TTyRadioGroup.Create(FForm);
+  g.Parent := FForm;
+  g.Items.CommaText := 'A,B,C';
+  g.ItemIndex := 1;
+  g.OnSelectionChanged := @Counted;
+  g.Items[1] := 'B2';
+  AssertEquals('a renamed item keeps the selection', 1, g.ItemIndex);
+  g.Items.Insert(0, 'Z');
+  AssertEquals('an insert before it moves the selection with it', 2, g.ItemIndex);
+  AssertEquals('neither is a choice: no event', 0, FCount);
+end;
+
+procedure TGroups171Test.TestARadioGroupTellsTheSelectedItemGone;
+var g: TTyRadioGroup;
+begin
+  g := TTyRadioGroup.Create(FForm);
+  g.Parent := FForm;
+  g.Items.CommaText := 'A,B,C';
+  g.ItemIndex := 1;
+  g.OnSelectionChanged := @Counted;
+  g.Items.Delete(1);
+  AssertEquals('the selected item deleted: nothing selected', -1, g.ItemIndex);
+  AssertEquals('and that is told', 1, FCount);
+end;
+
+procedure TGroups171Test.TestACheckGroupKeepsItsChecksAcrossAnEdit;
+var g: TTyCheckGroup;
+begin
+  g := TTyCheckGroup.Create(FForm);
+  g.Parent := FForm;
+  g.Items.CommaText := 'A,B,C';
+  g.Checked[1] := True;
+  g.CheckEnabled[2] := False;
+  g.Items[1] := 'B2';
+  AssertTrue('a renamed item keeps its check', g.Checked[1]);
+  g.Items[2] := 'C2';
+  AssertFalse('and its CheckEnabled', g.CheckEnabled[2]);
+  g.Items.Insert(0, 'Z');
+  AssertTrue('an insert moves the check with its item', g.Checked[2]);
+  AssertFalse('not onto the item now at its old place', g.Checked[1]);
+  AssertFalse('CheckEnabled too', g.CheckEnabled[3]);
+  AssertTrue('the inserted one is enabled', g.CheckEnabled[0]);
+end;
+
+procedure TGroups171Test.TestAButtonGroupTellsTheSelectedSegmentGone;
+var g: TTyButtonGroup;
+begin
+  g := TTyButtonGroup.Create(FForm);
+  g.Items.CommaText := 'A,B,C';
+  g.ItemIndex := 2;
+  g.OnSelectionChange := @Counted;
+  g.Items[0] := 'A2';
+  AssertEquals('an edit elsewhere is no change', 0, FCount);
+  g.Items.Delete(2);
+  AssertEquals('the selected segment deleted', -1, g.ItemIndex);
+  AssertEquals('is told', 1, FCount);
+  g.MultiSelect := True;
+  g.SetSelected(0, True);
+  FCount := 0;
+  g.Items.Delete(0);
+  AssertEquals('in MultiSelect too', 1, FCount);
+end;
+
+procedure TGroups171Test.TestItemIndexInMultiSelectSelectsThatSegment;
+var g: TTyButtonGroup;
+begin
+  g := TTyButtonGroup.Create(FForm);
+  g.Items.CommaText := 'A,B,C';
+  g.MultiSelect := True;
+  g.SetSelected(0, True);
+  g.OnSelectionChange := @Counted;
+  g.ItemIndex := 2;
+  AssertTrue('ItemIndex selects that segment', g.IsSelected(2));
+  AssertFalse('and no other', g.IsSelected(0));
+  AssertEquals('it reads back', 2, g.ItemIndex);
+  AssertEquals('one event', 1, FCount);
+  g.ItemIndex := 2;
+  AssertEquals('the same again is no change', 1, FCount);
+  g.ItemIndex := -1;
+  AssertFalse('-1 selects none', g.IsSelected(2));
+  AssertEquals('reads -1', -1, g.ItemIndex);
+end;
+
+procedure TGroups171Test.TestACheckedRadioMovedIntoAGroupIsItsOnlyCheckedOne;
+var a, b: TTyRadioButton;
+begin
+  a := TTyRadioButton.Create(FForm);
+  a.Parent := FForm;
+  b := TTyRadioButton.Create(FForm);
+  b.Parent := FForm;
+  b.GroupIndex := 1;
+  a.Checked := True;
+  b.Checked := True;
+  AssertTrue('setup: two groups, both checked', a.Checked and b.Checked);
+  b.GroupIndex := 0;
+  AssertTrue('the one moved in stays checked', b.Checked);
+  AssertFalse('the other in that group is unchecked', a.Checked);
+  a.GroupIndex := 2;
+  a.GroupIndex := 0;
+  AssertFalse('an unchecked one moving checks nothing', a.Checked);
+  AssertTrue('and unchecks nothing in the group it joins', b.Checked);
+end;
+
 initialization
+  RegisterTest(TGroups171Test);
   RegisterTest(TRadioGroupTest);
 end.

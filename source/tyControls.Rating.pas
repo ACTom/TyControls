@@ -51,6 +51,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    { #181: the streamed Value snapped to AllowHalf, once both have arrived. }
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     property TabStop default True;
@@ -176,10 +178,21 @@ begin
   Result := 'TyRating';
 end;
 
+procedure TTyCustomRating.Loaded;
+begin
+  inherited Loaded;
+  if FAllowHalf then FValue := Round(FValue * 2) / 2 else FValue := Round(FValue);
+end;
+
 procedure TTyCustomRating.ApplyValue(AValue: Double);
 var v: Double;
 begin
   v := AValue;
+  { #181: a Value is a whole number of stars, or of halves with AllowHalf -- 3.7 drew a star
+    seven-tenths full that no click can give. Not while the form is read: AllowHalf streams
+    after Value, and Loaded snaps what arrived. }
+  if not (csLoading in ComponentState) then
+    if FAllowHalf then v := Round(v * 2) / 2 else v := Round(v);
   if v < 0 then v := 0 else if v > FCount then v := FCount;
   if FValue = v then Exit;      // no OnChange on a same-value set
   FValue := v;
@@ -196,7 +209,12 @@ procedure TTyCustomRating.SetCount(const AValue: Integer);
 begin
   if FCount = AValue then Exit;
   FCount := Math.Max(1, AValue);
-  if FValue > FCount then FValue := FCount;
+  { #181: through ApplyValue, so a Value the fewer stars cut down is told (OnChange). }
+  if FValue > FCount then
+  begin
+    if csLoading in ComponentState then FValue := FCount
+    else ApplyValue(FCount);
+  end;
   Invalidate;
 end;
 
@@ -210,7 +228,8 @@ procedure TTyCustomRating.SetAllowHalf(const AValue: Boolean);
 begin
   if FAllowHalf = AValue then Exit;
   FAllowHalf := AValue;
-  if not FAllowHalf then FValue := Round(FValue);   // snap off any half on toggle
+  { Snap off any half on toggle -- through ApplyValue (#181), so the change is told. }
+  if not FAllowHalf and not (csLoading in ComponentState) then ApplyValue(FValue);
   Invalidate;
 end;
 

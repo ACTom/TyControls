@@ -113,6 +113,7 @@ type
       which is why a hand-rolled OnChange dirty-tracker can never reproduce Modified. }
     FTextChangeByCode: Boolean;
     FInActionChange: Boolean;
+    FSelTextByCode: Boolean;   // inside SetSelText: the program writes, ReadOnly or not (#156)
     FAutoSelect: Boolean;
     FAutoSelected: Boolean;
     FOnChange: TNotifyEvent;
@@ -121,8 +122,6 @@ type
     FOnChangeHandlers: TMethodList;
     FImeHook: TObject;    // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
     FImeCaretRect: TRect; // caret rect (client device px) cached each paint; fed to the Qt IME query
-    // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
-    procedure HandleImeCommit(const ACommitUtf8: string);
     // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
     function GetImeCaretRect: TRect;
     procedure SetText(const AValue: TCaption);
@@ -141,9 +140,6 @@ type
     function GetSelText: string;
     procedure SetSelStart(const AValue: Integer);
     procedure SetSelLength(const AValue: Integer);
-    procedure SetSelText(const AValue: string);
-    // Apply CharCase transform to an inserted UTF-8 fragment
-    function ApplyCharCase(const AStr: string): string;
     // Selection helpers
     procedure DeleteSelection;
     // Select the word (or the same-class run) surrounding codepoint boundary AIdx --
@@ -195,6 +191,8 @@ type
     procedure ResetCaretBlink;
     procedure DoEnter; override;
     procedure DoExit; override;
+    { #156: a field that got wider shows its text from the start again, where it fits. }
+    procedure Resize; override;
     function GetStyleTypeKey: string; override;
     procedure DoChange;
     { The one text writer. AByCode=True is a PROGRAMMATIC assignment (the published Text
@@ -203,6 +201,21 @@ type
       whole display string on every accepted character, and routing that through the
       programmatic path would clear the dirty flag on every keypress. }
     procedure SetTextInternal(const AValue: TCaption; AByCode: Boolean);
+    { Virtual (#158): a descendant that keeps its text in a shape of its own -- the mask --
+      takes each of these its own way, so none goes around it. }
+    // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
+    procedure HandleImeCommit(const ACommitUtf8: string); virtual;
+    procedure SetSelText(const AValue: string); virtual;
+    // Apply CharCase transform to an inserted UTF-8 fragment
+    function ApplyCharCase(const AStr: string): string;
+    { #158: the application's OnUTF8KeyPress and OnKeyPress for a typed key, as UTF8KeyPress
+      raises them, without putting it in -- for a descendant that puts it in its own way.
+      False when a handler took the key; a handler may also have changed it. }
+    function AskTypedKey(var UTF8Key: TUTF8Char): Boolean;
+    { #159: the text the field already holds, shown another way -- a number regrouped when the
+      field takes or loses the focus. No change: no undo step, no OnChange, Modified left as it
+      is. The caret parks at the end, as for Text :=. }
+    procedure SetDisplayText(const AValue: TCaption);
     // Text measurement helpers (protected so headless access subclasses can call them --
     // the comment that claimed so had been sitting over a PRIVATE block).
     function TextStartX(APPI: Integer): Integer;
@@ -316,12 +329,12 @@ type
       list/tree/grid deselecting ROWS, which is a different and correct meaning), so the
       change breaks only callers who relied on the collapse. CollapseSelection below is
       that behaviour, kept and named. }
-    procedure ClearSelection;
+    procedure ClearSelection; virtual;
     { Drop the highlight without touching the text -- what ClearSelection used to do. }
     procedure CollapseSelection;
     { Empty the control. One line, but the one LCL name for it -- `Ed.Clear` is what
       ported code writes, and `Text := ''` is what it had to be rewritten to. }
-    procedure Clear;
+    procedure Clear; virtual;
     // Mouse hit test
     function CaretIndexAtX(AX: Integer): Integer; overload;
     { The same, also reporting which side of the boundary the click landed on -- which run
@@ -330,8 +343,8 @@ type
     function CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer; overload;
     // Clipboard API
     procedure CopyToClipboard;
-    procedure CutToClipboard;
-    procedure PasteFromClipboard;
+    procedure CutToClipboard; virtual;
+    procedure PasteFromClipboard; virtual;
     // Rendering helpers (public for headless tests)
     function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
     { Where the caret for ACaretIndex is DRAWN, device px in control coordinates before
@@ -355,6 +368,8 @@ type
     procedure Undo;
     procedure Redo;
     function CanUndo: Boolean;
+    { #156: not on a read-only edit, as LCL's TCustomEdit.EditingDone. }
+    procedure EditingDone; override;
     function CanRedo: Boolean;
     // --- ITyTextEditActions: the seam the shared default context menu drives (thin
     // delegates to the public API above; see tyControls.TextMenu). ---
@@ -371,16 +386,17 @@ type
     function TeHasSelection: Boolean;
     function TeCanPaste: Boolean;
     function TeHasText: Boolean;
-    function TeIsReadOnly: Boolean;
+    { Virtual (#159): a subclass whose editor can be locked another way says so to the menu. }
+    function TeIsReadOnly: Boolean; virtual;
     // --- ITyImeEditable: the seam the macOS IME handler drives during CJK composition (thin
     // delegates to members below; see tyControls.CocoaWS / tyControls.TextMenu). ---
     function  ImeTargetControl: TWinControl;
     function  ImeIsReadOnly: Boolean;
     function  ImeCaretBoundClient: TRect;
     function  ImeCaretIndex: Integer;
-    procedure ImeSessionBegin;
-    procedure ImeSessionEnd;
-    procedure ImeReplace(AStart, ALen: Integer; const AText: string);
+    procedure ImeSessionBegin; virtual;
+    procedure ImeSessionEnd; virtual;
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string); virtual;
     {$IFDEF LCLCocoa}
     // macOS: answer LCL-Cocoa's handle-creation query (LM_IM_COMPOSITION) with our IME handler so the
     // control gets the IME-capable native view whose candidate window follows the caret.
@@ -754,6 +770,17 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomEdit.EditingDone;
+begin
+  if not FReadOnly then inherited EditingDone;
+end;
+
+procedure TTyCustomEdit.Resize;
+begin
+  inherited Resize;
+  ClampScrollX(Font.PixelsPerInch);
+end;
+
 function TTyCustomEdit.GetStyleTypeKey: string;
 begin
   Result := 'TyEdit';
@@ -882,7 +909,8 @@ procedure TTyCustomEdit.TePaste;                         begin PasteFromClipboar
 procedure TTyCustomEdit.TeSelectAll;                     begin SelectAll; end;
 function TTyCustomEdit.TeCanUndo: Boolean;               begin Result := CanUndo; end;
 function TTyCustomEdit.TeCanRedo: Boolean;               begin Result := CanRedo; end;
-function TTyCustomEdit.TeHasSelection: Boolean;          begin Result := HasSelection; end;
+{ #156: a password's selection is not offered to Cut or Copy, which do nothing with it. }
+function TTyCustomEdit.TeHasSelection: Boolean;          begin Result := HasSelection and (FPasswordChar = ''); end;
 // Route through the virtual ReadClipboardText so headless tests can stub the clipboard;
 // production reads Clipboard.AsText (consistent with TyClipboardHasText).
 function TTyCustomEdit.TeCanPaste: Boolean;              begin Result := ReadClipboardText <> ''; end;
@@ -998,13 +1026,15 @@ procedure TTyCustomEdit.SetSelText(const AValue: string);
 var
   TextBefore: string;
 begin
-  if FReadOnly then Exit;
+  { #156: written on a read-only edit too, as LCL's: ReadOnly stops the user, not the program
+    appending to a log. }
   TextBefore := FText;
   // Composite op: delete the current selection then insert AValue. Suppress the
   // inner ops' undo-steps + OnChange so the whole replace is one undo and fires
   // OnChange exactly once (mirrors InjectKey-over-selection / Paste).
   BeginUndoStep(uskPaste);
   FSuspendUndo := True;
+  FSelTextByCode := True;
   try
     if HasSelection then
       DeleteSelection;
@@ -1012,6 +1042,7 @@ begin
       InjectStringAt(AValue);
   finally
     FSuspendUndo := False;
+    FSelTextByCode := False;
   end;
   if FText <> TextBefore then
     DoChange;
@@ -1161,7 +1192,10 @@ var
   APPI: Integer;
 begin
   if FText = AValue then Exit;
-  BeginUndoStep(uskNone);  // SetText is a distinct (non-typing) undo step
+  { #156: text the program sets -- or a form file loads -- is where undo starts, as a native
+    edit's undo buffer starts at WM_SETTEXT: Ctrl+Z went back past it, emptied a pre-filled
+    field and marked it Modified. A write that stands in for a keystroke is a step. }
+  if AByCode then FUndoStack.Clear else BeginUndoStep(uskNone);
   FText := AValue;
   // Caret moves to end on SetText; collapse selection
   FCaret := UTF8Length(FText);
@@ -1178,6 +1212,22 @@ begin
     FTextChangeByCode := False;
   end;
   if AByCode then FModified := False;
+end;
+
+procedure TTyCustomEdit.SetDisplayText(const AValue: TCaption);
+var
+  APPI: Integer;
+begin
+  if FText = AValue then Exit;
+  BreakCoalescing;   // the next keystroke starts a step of its own
+  FText := AValue;
+  FCaret := UTF8Length(FText);
+  FSelAnchor := FCaret;
+  InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
+  Invalidate;
 end;
 
 procedure TTyCustomEdit.SetCaretPos(AValue: Integer);
@@ -1280,14 +1330,10 @@ procedure TTyCustomEdit.SetCharCase(const AValue: TEditCharCase);
 begin
   if FCharCase = AValue then Exit;
   FCharCase := AValue;
-  // Match LCL: re-case the existing buffer when CharCase changes (no caret move,
-  // no undo step — purely a display/content normalization).
+  { #156: re-cased as LCL's SetCharCase re-cases it, through Text := -- OnChange fires, and the
+    undo history starts again from the re-cased text, as after any write by code. }
   if (FText <> '') and (FCharCase <> ecNormal) then
-  begin
-    FText := ApplyCharCase(FText);
-    InvalidateWidthCache;
-    Invalidate;
-  end;
+    SetTextInternal(ApplyCharCase(FText), True);
 end;
 
 function TTyCustomEdit.ApplyCharCase(const AStr: string): string;
@@ -2054,6 +2100,11 @@ begin
   if FReadOnly then Exit;
   S := ReadClipboardText;
   if S = '' then Exit;  // truly empty clipboard: full no-op
+  { #156: nothing to delete and nothing that would go in -- a NumbersOnly field handed letters,
+    say -- is no edit: it took an undo step, and that dropped the redo list. }
+  if not HasSelection
+     and (FilterInsert(StringReplace(StringReplace(S, #13, '', [rfReplaceAll]), #10, '',
+       [rfReplaceAll])) = '') then Exit;
   TextBefore := FText;
   // Capture ONE undo step up front; suppress the inner DeleteSelection /
   // InjectStringAt steps so the whole paste reverts in a single undo.
@@ -2082,15 +2133,24 @@ begin
 end;
 
 function TTyCustomEdit.FilterInsert(const AText: string): string;
+var
+  i: Integer;
 begin
   Result := AText;   // no filtering by default => plain edits are byte-identical
+  { #156: NumbersOnly holds for a paste and a SelText write as for a typed key -- digits only. }
+  if FNumbersOnly then
+  begin
+    Result := '';
+    for i := 1 to Length(AText) do
+      if AText[i] in ['0'..'9'] then Result := Result + AText[i];
+  end;
 end;
 
 procedure TTyCustomEdit.InjectStringAt(const AStr: string);
 var Before, After, Ins: string; InsLen, room, APPI: Integer;
 begin
   if AStr = '' then Exit;
-  if FReadOnly then Exit;
+  if FReadOnly and not FSelTextByCode then Exit;
   // Subclass filter (numeric-only etc.); selection is already deleted by the caller (paste/IME),
   // so FText/FCaret here are the residual text + insert point the filter judges against.
   Ins := FilterInsert(AStr);
@@ -2147,8 +2207,9 @@ begin
         FLastClickTick, FClickCount, Font.PixelsPerInch);
       if Clicks = 2 then
       begin
-        // Double-click: select the word under the pointer (was: select all).
-        SelectWordAt(CaretIndexAtX(X));
+        // Double-click: select the word under the pointer (was: select all). A password has
+        // no words to show -- the whole of it, as a native password field does (#156).
+        if FPasswordChar <> '' then SelectAll else SelectWordAt(CaretIndexAtX(X));
         FMouseSelecting := False;
       end
       else if Clicks = 3 then
@@ -2262,11 +2323,14 @@ begin
     { First left click of this focus visit selects everything (LCL customedit.inc:520-531).
       On MouseUp, not MouseDown, so a click-and-DRAG keeps the range the user swept out --
       selecting all on the press would throw that away before the drag even starts. }
-    if FAutoSelect and not FAutoSelected and not HasSelection then
-    begin
-      SelectAll;
-      if SelText = FText then FAutoSelected := True;
-    end;
+    if FAutoSelect and not FAutoSelected then
+      if HasSelection then
+        FAutoSelected := True   // a drag-select is this visit's first click (#156)
+      else
+      begin
+        SelectAll;
+        if SelText = FText then FAutoSelected := True;
+      end;
   end;
 end;
 
@@ -2385,6 +2449,12 @@ begin
   DoChange;
 end;
 
+function TTyCustomEdit.AskTypedKey(var UTF8Key: TUTF8Char): Boolean;
+begin
+  inherited UTF8KeyPress(UTF8Key);   // OnUTF8KeyPress
+  Result := (UTF8Key <> '') and TyAskKeyPress(Self, UTF8Key);   // OnKeyPress
+end;
+
 procedure TTyCustomEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
@@ -2482,6 +2552,33 @@ begin
   if (Key = VK_RETURN) and (Shift = []) then
   begin
     EditingDone;
+    { #156: and with AutoSelect the text is selected again, as LCL's KeyUpAfterInterface does. }
+    if FAutoSelect then
+    begin
+      SelectAll;
+      if SelText = FText then FAutoSelected := True;
+    end;
+    Exit;
+  end;
+
+  { #156: the CUA keys LCL's edits answer -- Shift+Delete cuts, Shift+Insert pastes,
+    Ctrl+Insert copies. Shift+Delete deleted the selection without cutting it. }
+  if (Key = VK_DELETE) and (Shift = [ssShift]) then
+  begin
+    CutToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if (Key = VK_INSERT) and (Shift = [ssShift]) then
+  begin
+    PasteFromClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if (Key = VK_INSERT) and (Shift = [ssCtrl]) then
+  begin
+    CopyToClipboard;
+    Key := 0;
     Exit;
   end;
 
@@ -2522,7 +2619,7 @@ begin
   if ( (Key = VK_Z) and TyIsShortcutShift(Shift) and (ssShift in Shift) )
      or ( (Key = VK_Y) and TyIsShortcutShift(Shift) ) then
   begin
-    Redo;
+    if not FReadOnly then Redo;   // #156: as the context menu, nothing on a read-only edit
     Key := 0;
     Exit;
   end;
@@ -2530,7 +2627,7 @@ begin
   // Undo: Ctrl/Cmd+Z (no Shift)
   if (Key = VK_Z) and TyIsShortcutShift(Shift) and not (ssShift in Shift) then
   begin
-    Undo;
+    if not FReadOnly then Undo;
     Key := 0;
     Exit;
   end;
@@ -2685,7 +2782,8 @@ begin
     VK_HOME:
     begin
       BreakCoalescing;  // any caret nav ends a typing-coalesce run
-      if HasModifier and not Extending then
+      { Ctrl+Home is Home in a one-line field (#156); Alt and Meta fall through. }
+      if ((ssAlt in Shift) or (ssMeta in Shift)) and not Extending then
         // modifier+home: fall through
       else
       begin
@@ -2714,7 +2812,7 @@ begin
     VK_END:
     begin
       BreakCoalescing;  // any caret nav ends a typing-coalesce run
-      if HasModifier and not Extending then
+      if ((ssAlt in Shift) or (ssMeta in Shift)) and not Extending then   // Ctrl+End: see Home
         // modifier+end: fall through
       else
       begin
@@ -2848,7 +2946,7 @@ begin
     begin
       HintColor := ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor;
       P.DrawText(ContentRect, FTextHint, S.FontName, EffSize, S.FontWeight,
-        HintColor, taLeftJustify, tlCenter, True);
+        HintColor, FAlignment, tlCenter, True);   // where the text will be (#156)
     end
     else
     begin

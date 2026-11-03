@@ -103,6 +103,7 @@ type
     procedure HookTarget;
     procedure UnhookTarget;
     procedure TargetBoundsChanged(Sender: TObject);
+    procedure TargetVisibleChanged(Sender: TObject);
     { An ATTACHED badge is decoration painted ON its target and must never swallow the
       target's clicks: answering 0 makes LCL's ControlAtPos skip it while routing a
       mouse message, so the message reaches the control underneath. A STANDALONE badge
@@ -138,7 +139,8 @@ type
     procedure Invalidate; override;
     { The text this badge currently draws ('' in dot mode). }
     function DisplayText: string;
-    { Whether it currently draws anything (the Value / ShowZero rule). }
+    { Whether it currently draws anything: the Value / ShowZero rule, and an attached badge is
+      hidden with its target. }
     function IsShowing: Boolean;
     { The control this badge marks. Setting it MOVES the badge onto that control: a
       windowed target becomes the badge's Parent (the badge then paints on the target's
@@ -335,6 +337,11 @@ end;
 function TTyCustomBadge.IsShowing: Boolean;
 begin
   Result := TyBadgeVisible(FValue, FShowZero);
+  { #181: a windowless target is the badge's sibling, not its parent, so hiding the target left
+    the badge on show over the empty place. A windowed one hides it as its child already. }
+  if Result and (FTarget <> nil) and not (csDestroying in FTarget.ComponentState)
+     and not FTarget.Visible then
+    Result := False;
 end;
 
 { --- property setters --------------------------------------------------------- }
@@ -387,6 +394,7 @@ begin
   // Observe the target's bounds WITHOUT stealing its OnChangeBounds: LCL keeps a handler
   // LIST per control, so the user's own handler still runs untouched.
   FTarget.AddHandlerOnChangeBounds(@TargetBoundsChanged);
+  FTarget.AddHandlerOnVisibleChanged(@TargetVisibleChanged);
   FTargetHooked := True;
 end;
 
@@ -394,6 +402,7 @@ procedure TTyCustomBadge.UnhookTarget;
 begin
   if (FTarget = nil) or not FTargetHooked then Exit;
   FTarget.RemoveHandlerOnChangeBounds(@TargetBoundsChanged);
+  FTarget.RemoveHandlerOnVisibleChanged(@TargetVisibleChanged);
   FTargetHooked := False;
 end;
 
@@ -404,6 +413,11 @@ begin
   // after Target was assigned finally becomes attachable; once glued, the reparent
   // branch is a no-op and this is a pure re-place.
   UpdateAttachment;
+end;
+
+procedure TTyCustomBadge.TargetVisibleChanged(Sender: TObject);
+begin
+  Invalidate;   { #181: shown or hidden with its target -- IsShowing reads it }
 end;
 
 procedure TTyCustomBadge.Notification(AComponent: TComponent; Operation: TOperation);
@@ -545,7 +559,9 @@ procedure TTyCustomBadge.CMHitTest(var Message: TCMHitTest);
 begin
   inherited;              // TControl.CMHitTest answers 1 (a normal hit)
   if FTarget <> nil then
-    Message.Result := 0;  // attached: fall through to the target underneath
+    Message.Result := 0   // attached: fall through to the target underneath
+  else if not IsShowing then
+    Message.Result := 0;  { #181: nothing drawn, nothing to click -- a 0 hidden by ShowZero }
 end;
 
 { --- painting ----------------------------------------------------------------- }

@@ -436,9 +436,11 @@ begin
   for i := 0 to High(list) do
   begin
     c := Build(list[i]);
+    { The published TabStop, what the form file and the Object Inspector see: an editable combo
+      keeps its stop on the field inside it, and the combo's own window takes none (#161). }
     AssertTrue(c.ClassName + ' must be focusable: without TabStop a click on it cannot '
       + 'move focus, and its keyboard handling can never run',
-      c.TabStop);
+      GetOrdProp(c, 'TabStop') <> 0);
   end;
 end;
 
@@ -562,7 +564,7 @@ procedure TTyFocusTabStopTest.TestPublishedDefaultAgreesWithTheConstructedValue;
       + 'override it in the .lfm)', pi <> nil);
     AssertEquals(AClass.ClassName + ': the declared default must match what the '
       + 'constructor sets, or the .lfm cannot override it',
-      Ord(c.TabStop), pi^.Default);
+      GetOrdProp(c, pi), pi^.Default);
   end;
 
 var

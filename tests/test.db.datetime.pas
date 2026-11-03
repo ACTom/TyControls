@@ -296,15 +296,17 @@ begin
 end;
 
 { The dropdown calendar's edits never pass through the picker's key and mouse code; the base
-  control's Change is where they arrive. }
+  control's Change is where they arrive. A move through the calendar is not one (#160): the pick
+  is. }
 procedure TDBDateTimePickerTest.TestDropDownCalendarPickIsAnEdit;
 begin
   Bind('Born');
   EnterControl;
   Picker.OpenCalendar;
   Picker.PressCalendarKey(VK_RIGHT);
-  AssertTrue('a move in the calendar edits', FFix.DS.State = dsEdit);
+  AssertTrue('a move in the calendar edits nothing', FFix.DS.State = dsBrowse);
   Picker.PressCalendarKey(VK_RETURN);
+  AssertTrue('the pick does', FFix.DS.State = dsEdit);
   Commit;
   AssertEquals('the next day', IncDay(FixBorn(1)), BoundField.AsDateTime, 0);
 end;

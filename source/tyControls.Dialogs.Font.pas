@@ -599,7 +599,7 @@ begin
   Result.Configure(FOptions, FMinFontSize, FMaxFontSize, FPreviewText);
   Result.OnApply := @FormApply;
   // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
-  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+  TyForwardDialogEvents(Self, Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 function TTyFontDialog.Execute: Boolean;

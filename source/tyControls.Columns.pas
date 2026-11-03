@@ -134,6 +134,9 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
+    { #170: tells the owner a property of this column changed, so a descendant's setter can
+      repaint it -- Changed(False) reaches no one (TTyColumns has no Update of its own). }
+    procedure ColumnChanged;
     { #70. A move through Index -- the IDE's collection editor moves columns this way, and so
       does a property grid -- went unheard: TCollectionItem.SetIndex calls Changed, which
       reaches an Update that TTyColumns does not override, so the host's column geometry
@@ -320,6 +323,11 @@ type
       proportionally (integral bonus-pixel remainder so widths stay whole
       and the sum of deltas is exact). }
     procedure DistributeSpring(ADeltaWidth: Integer);
+    { #155: the owner's width went from ALast to AWidth (logical px): the coAutoSpring
+      columns share the difference, and ALast takes AWidth. ALast <= 0 is "not laid out
+      yet" -- it only takes the width. The list view, the tree view and the grid call it
+      on Resize; DistributeSpring had no caller, so coAutoSpring did nothing. }
+    procedure SpringTo(AWidth: Integer; var ALast: Integer);
 
     { Set ABSOLUTE widths so every visible column together fills AClientWidth, sharing
       the spare space by SizePriority. This is what LCL's AutoFillColumns does
@@ -674,6 +682,11 @@ procedure TTyColumn.NotifyOwner;
 begin
   if Collection <> nil then
     GetOwnerColumns.DoChange;
+end;
+
+procedure TTyColumn.ColumnChanged;
+begin
+  NotifyOwner;
 end;
 
 procedure TTyColumn.SetIndex(Value: Integer);
@@ -1431,6 +1444,13 @@ begin
 
   UpdatePositions;
   DoChange;
+end;
+
+procedure TTyColumns.SpringTo(AWidth: Integer; var ALast: Integer);
+begin
+  if (ALast > 0) and (AWidth <> ALast) then
+    DistributeSpring(AWidth - ALast);
+  ALast := AWidth;
 end;
 
 procedure TTyColumns.DistributeFill(AClientWidth: Integer; AMinWidth: Integer;

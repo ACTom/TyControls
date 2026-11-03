@@ -145,17 +145,27 @@ begin
   Result := TyHSVToRGB(FHue, FSat, FPosition, 255);
 end;
 
+{ #180: kept to their ranges, as the HS picker keeps them -- Hue [0,360], Sat [0,1]; a value out of
+  them painted a bar no colour could have. }
 procedure TTyCustomLColorPicker.SetHue(const AValue: Single);
+var
+  v: Single;
 begin
-  if FHue = AValue then Exit;
-  FHue := AValue;
+  v := AValue;
+  if v < 0 then v := 0 else if v > 360 then v := 360;
+  if FHue = v then Exit;
+  FHue := v;
   Invalidate;
 end;
 
 procedure TTyCustomLColorPicker.SetSat(const AValue: Single);
+var
+  v: Single;
 begin
-  if FSat = AValue then Exit;
-  FSat := AValue;
+  v := AValue;
+  if v < 0 then v := 0 else if v > 1 then v := 1;
+  if FSat = v then Exit;
+  FSat := v;
   Invalidate;
 end;
 

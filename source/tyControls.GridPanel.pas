@@ -42,6 +42,8 @@ type
     FRow: Integer;
     FProvisional: Boolean;
     procedure SetPadding(AValue: Integer);
+    procedure SetCol(AValue: Integer);
+    procedure SetRow(AValue: Integer);
   protected
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -58,8 +60,8 @@ type
       TTyGridPanel.Loaded); a designer drop / code path keeps them. }
     property Provisional: Boolean read FProvisional write FProvisional;
     { Set by the owning grid; TTyGridCell publishes them so a streamed form re-seats the cell. }
-    property Col: Integer read FCol write FCol;
-    property Row: Integer read FRow write FRow;
+    property Col: Integer read FCol write SetCol;
+    property Row: Integer read FRow write SetRow;
     property Padding: Integer read FPadding write SetPadding default 0;
   end;
 
@@ -629,18 +631,7 @@ var
 begin
   if csLoading in ComponentState then Exit;   // Loaded reconciles instead
   if Owner <> nil then cellOwner := Owner else cellOwner := Self;
-  // 1) free cells now out of bounds (col>=ColumnCount or row>=RowCount)
-  i := 0;
-  while i <= High(FCells) do
-  begin
-    cell := TTyCustomGridCell(FCells[i]);
-    if (cell = nil) or (cell.Col >= FColumnCount) or (cell.Row >= FRowCount)
-       or (cell.Col < 0) or (cell.Row < 0) then
-      UnregisterCell(cell, True)               // shrinks FCells; do not Inc(i)
-    else
-      Inc(i);
-  end;
-  // 2) create any missing (col,row) in bounds
+  // 1) create any missing (col,row) in bounds
   for row := 0 to FRowCount - 1 do
     for col := 0 to FColumnCount - 1 do
     begin
@@ -653,6 +644,34 @@ begin
         cell.Parent := Self;                   // SetParent -> RegisterCell
       end;
     end;
+  // 2) free cells now out of bounds (col>=ColumnCount or row>=RowCount). #174: what a cell held
+  //    moves to the nearest cell left -- freed with the cell, the controls lost their Parent and
+  //    vanished from the form.
+  i := 0;
+  while i <= High(FCells) do
+  begin
+    cell := TTyCustomGridCell(FCells[i]);
+    if (cell = nil) or (cell.Col >= FColumnCount) or (cell.Row >= FRowCount)
+       or (cell.Col < 0) or (cell.Row < 0) then
+    begin
+      if cell <> nil then
+      begin
+        col := cell.Col;
+        row := cell.Row;
+        if col > FColumnCount - 1 then col := FColumnCount - 1;
+        if row > FRowCount - 1 then row := FRowCount - 1;
+        if col < 0 then col := 0;
+        if row < 0 then row := 0;
+        wanted := TTyCustomGridCell(GetCell(col, row));
+        if (wanted <> nil) and (wanted <> cell) then
+          while cell.ControlCount > 0 do
+            cell.Controls[cell.ControlCount - 1].Parent := wanted;
+      end;
+      UnregisterCell(cell, True)               // shrinks FCells; do not Inc(i)
+    end
+    else
+      Inc(i);
+  end;
   Relayout;
 end;
 
@@ -721,6 +740,20 @@ begin
   EnsureCells;
 end;
 
+procedure FitTracks(var ATracks: TTyGridTracks; ACount: Integer);
+var
+  i, n: Integer;
+begin
+  if ACount < 0 then ACount := 0;
+  n := Length(ATracks);
+  SetLength(ATracks, ACount);
+  for i := n to ACount - 1 do
+  begin
+    ATracks[i].Kind := tgtStar;
+    ATracks[i].Value := 1;
+  end;
+end;
+
 procedure TTyCustomGridPanel.SolveTracks(const AClient: TRect;
   out AColW, ARowH, AColX, ARowY: TTyGridIntArray);
 var
@@ -731,6 +764,11 @@ begin
   if ppi <= 0 then ppi := 96;
   cols := TyParseGridTracks(FColumnSizes, FColumnCount);
   rows := TyParseGridTracks(FRowSizes, FRowCount);
+  { #174: one track per column and per row -- a list longer than the count is cut to it, and a
+    shorter one is filled with equal shares, as no list at all is. Left as they were, the cells
+    past a short list were never placed. }
+  FitTracks(cols, FColumnCount);
+  FitTracks(rows, FRowCount);
   { Only the ABSOLUTE tracks carry a length; a percentage and a star share are ratios of
     whatever the client is, and the client is device px already. }
   for i := 0 to High(cols) do
@@ -852,6 +890,24 @@ begin
   Dec(ARect.Bottom, pad);
   if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+end;
+
+{ #174: a cell moved to another column or row is placed there at once -- the field was written
+  straight, and the cell stayed where it was until the panel was next resized. }
+procedure TTyCustomGridCell.SetCol(AValue: Integer);
+begin
+  if FCol = AValue then Exit;
+  FCol := AValue;
+  if (Parent is TTyCustomGridPanel) and not (csLoading in ComponentState) then
+    TTyCustomGridPanel(Parent).Relayout;
+end;
+
+procedure TTyCustomGridCell.SetRow(AValue: Integer);
+begin
+  if FRow = AValue then Exit;
+  FRow := AValue;
+  if (Parent is TTyCustomGridPanel) and not (csLoading in ComponentState) then
+    TTyCustomGridPanel(Parent).Relayout;
 end;
 
 procedure TTyCustomGridCell.SetParent(AParent: TWinControl);

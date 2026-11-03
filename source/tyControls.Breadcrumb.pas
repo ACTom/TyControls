@@ -596,6 +596,7 @@ end;
 constructor TTyCustomBreadcrumb.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FItems := TStringList.Create;
   TStringList(FItems).OnChange := @ItemsChanged;
   FHoverIndex := -1;
@@ -656,7 +657,7 @@ end;
 function TTyCustomBreadcrumb.SlotStyle(AItemIndex: Integer; AHovered: Boolean): TTyStyleSet;
 begin
   Result := PartStyle('TyBreadcrumbItem', StyleClass,
-    TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, Enabled));
+    TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, IsEnabled));   // #118: a parent's too
 end;
 
 function TTyCustomBreadcrumb.SlotHovered(AItemIndex: Integer): Boolean;

@@ -524,6 +524,7 @@ type
     procedure SetImages(AValue: TTyCustomImageCollection);
     procedure SetHotImages(AValue: TTyCustomImageCollection);
     procedure SetDisabledImages(AValue: TTyCustomImageCollection);
+    procedure InvalidateTools;   { #176: the bar and every tool, each a window of its own }
     procedure SetFlat(AValue: Boolean);
     procedure SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
     procedure Relayout;
@@ -1514,6 +1515,9 @@ begin
   Result := (not (csDesigning in ComponentState)) and (FDropdownMenu <> nil);
   FRequestedPopup := Result;
   if not Result then Exit;
+  { #176: the menu learns what it was opened from, as LCL's TToolBar.CheckMenuDropdown tells it
+    -- OnPopup read a stale PopupComponent, and the menu took its direction from it. }
+  FDropdownMenu.PopupComponent := Self;
   // The themed PopUp needs a live window (ClientToScreen + a GUI form). Headless callers stop
   // after the decision above; only pop for real when mapped.
   if HandleAllocated then
@@ -1570,7 +1574,9 @@ begin
   inArrow := (FDownX >= 0) and IsInArrowZone(FDownX);
   FDownX := -1;
 
-  if FStyle = tbsButtonDrop then
+  { #176: a tbsButton with a DropdownMenu drops it on the whole face, as LCL's -- it dropped
+    nothing. }
+  if (FStyle = tbsButtonDrop) or ((FStyle = tbsButton) and (FDropdownMenu <> nil)) then
   begin
     // The whole face drops (LCL routes tbsButtonDrop through CheckMenuDropdown on any press).
     // The menu first, then the ordinary OnClick — the order TTyMenuButton uses, and for its
@@ -1905,8 +1911,9 @@ begin
   if FHotImages <> nil then FHotImages.FreeNotification(Self);
   { No ApplyToolProperties and no Relayout: these are never lent, and by contract they can
     only change the PICTURE, never the slot — so nothing to push and nothing to re-measure.
-    Invalidate reaches the tools because a bar repaint repaints its children. }
-  Invalidate;
+    #176: but the tools are windows of their own, which a repaint of the bar does not reach --
+    each is repainted. }
+  InvalidateTools;
 end;
 
 procedure TTyCustomToolBar.SetDisabledImages(AValue: TTyCustomImageCollection);
@@ -1915,7 +1922,16 @@ begin
   if FDisabledImages <> nil then FDisabledImages.RemoveFreeNotification(Self);
   FDisabledImages := AValue;
   if FDisabledImages <> nil then FDisabledImages.FreeNotification(Self);
+  InvalidateTools;   { #176: see SetHotImages }
+end;
+
+procedure TTyCustomToolBar.InvalidateTools;
+var
+  i: Integer;
+begin
   Invalidate;
+  for i := 0 to ControlCount - 1 do
+    Controls[i].Invalidate;
 end;
 
 procedure TTyCustomToolBar.ApplyToButton(B: TTyCustomButton);

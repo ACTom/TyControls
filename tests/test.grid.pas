@@ -10,7 +10,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
   tyControls.DateTimePicker, tyControls.CalcEdit,
-  tyControls.Grid.Layout, tyControls.Panel,
+  tyControls.Grid.Layout, tyControls.Panel, tyControls.Memo,
   tyControls.Popover;      // the filter drop-down's popover (TestFilterDropDownDoesNotAnimate)
 
 type
@@ -486,6 +486,7 @@ type
   published
     procedure TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
   end;
+
 
 implementation
 
@@ -12340,7 +12341,1004 @@ begin
     Int64(after) - Int64(before) < Int64(CRounds) * TStringList.InstanceSize);
 end;
 
+type
+  { #155: the header click is the release, after no drag, with coAllowClick; coResizable
+    holds at the divider; spring. }
+  TGrid155Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    FHeaderClicks: Integer;
+    procedure HeaderClicked(Sender: TObject; ACol: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheHeaderClickIsTheRelease;
+    procedure TestADividerOfAFixedWidthColumnIsNoGrip;
+    procedure TestSpringColumnsShareAResize;
+  end;
+
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TGrid155Test.HeaderClicked(Sender: TObject; ACol: Integer);
+begin
+  Inc(FHeaderClicks);
+end;
+
+procedure TGrid155Test.SetUp;
+var c: TTyColumn; i: Integer;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 400, 200);
+  for i := 0 to 2 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := 100;
+  end;
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  FG.OnHeaderClick := @HeaderClicked;
+  FHeaderClicks := 0;
+end;
+
+procedure TGrid155Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid155Test.TestTheHeaderClickIsTheRelease;
+var x: Integer; c: TTyColumn;
+begin
+  x := FG.ColLeft(0) + 30;
+  FG.PressMouseWithoutRelease(x, 5);
+  AssertEquals('the press is no click yet', 0, FHeaderClicks);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('the release on the same section is', 1, FHeaderClicks);
+  c := FG.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('not without coAllowClick', 1, FHeaderClicks);
+  c.Options := c.Options + [coAllowClick];
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.MoveMouseTo(FG.ColLeft(2) + 30, 5);
+  FG.ReleaseMouse(FG.ColLeft(2) + 30, 5);
+  AssertEquals('nor for a press that dragged the column', 1, FHeaderClicks);
+  { Dragged away and back, the release lands on the section it was pressed on: still a drag. }
+  x := FG.ColLeft(0) + 30;
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.MoveMouseTo(FG.ColLeft(2) + 30, 5);
+  FG.MoveMouseTo(x, 5);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('a drag that came back is no click either', 1, FHeaderClicks);
+end;
+
+procedure TGrid155Test.TestADividerOfAFixedWidthColumnIsNoGrip;
+var c: TTyColumn; edge: Integer;
+begin
+  c := FG.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coResizable];
+  edge := FG.ColumnResizeEdgeX(0);
+  FG.PressMouseWithoutRelease(edge, 5);
+  FG.MoveMouseTo(edge + 40, 5);
+  FG.ReleaseMouse(edge + 40, 5);
+  AssertEquals('coResizable off: its edge does not resize it', 100, c.Width);
+end;
+
+procedure TGrid155Test.TestSpringColumnsShareAResize;
+var c: TTyColumn;
+begin
+  c := FG.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  FG.SetBounds(0, 0, 500, 200);
+  AssertEquals('the spring column takes what the grid grew by', 200, c.Width);
+end;
+
+
+type
+  { #170: a read-only check cell, FixedRows in the scroll range, the sideways wheel, a row
+    divider dragged up, a column's Color at run time, DefaultRowHeight with own row heights. }
+  TGrid170Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    FSizes: array of Integer;
+    procedure RowSizing(Sender: TObject; AIndex: Integer; var ANewSize: Integer; var AAllow: Boolean);
+    procedure AddColumns(ACount, AWidth: Integer);
+    function CellPixels(ACol, ARow: Integer): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAReadOnlyCheckCellStillDrawsItsBox;
+    procedure TestFixedRowsAreNotScrolledTwice;
+    procedure TestShiftWheelAndTiltScrollSideways;
+    procedure TestARowDividerDraggedUpStopsAtOnePixel;
+    procedure TestAColumnColourShowsAtRunTime;
+    procedure TestDefaultRowHeightMovesTheOtherRows;
+  end;
+
+procedure TGrid170Test.RowSizing(Sender: TObject; AIndex: Integer; var ANewSize: Integer;
+  var AAllow: Boolean);
+begin
+  SetLength(FSizes, Length(FSizes) + 1);
+  FSizes[High(FSizes)] := ANewSize;
+end;
+
+procedure TGrid170Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 300, 200);
+  FG.DefaultRowHeight := 24;
+  FSizes := nil;
+end;
+
+procedure TGrid170Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid170Test.AddColumns(ACount, AWidth: Integer);
+var i: Integer; c: TTyColumn;
+begin
+  for i := 0 to ACount - 1 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := AWidth;
+  end;
+end;
+
+function TGrid170Test.CellPixels(ACol, ARow: Integer): TBGRABitmap;
+var bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 200);
+    FG.DoRender(bmp.Canvas, Rect(0, 0, 300, 200), 96);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TGrid170Test.TestAReadOnlyCheckCellStillDrawsItsBox;
+var
+  c: TTyGridColumn;
+  editable, ro: TBGRABitmap;
+  r: TRect;
+  x, y, d: Integer;
+begin
+  AddColumns(1, 100);
+  FG.RowCount := 2;
+  c := FG.Header.Columns.Items[0] as TTyGridColumn;
+  c.EditorKind := gekCheckBox;
+  FG.Cells[0, 0] := '1';
+  FG.ForceUpdateScrollBars;
+  editable := CellPixels(0, 0);
+  c.ReadOnly := True;
+  ro := CellPixels(0, 0);
+  try
+    r := FG.CellVisibleRect(0, 0);
+    d := 0;
+    for y := r.Top + 1 to r.Bottom - 2 do
+      for x := r.Left + 1 to r.Right - 2 do
+        if editable.GetPixel(x, y) <> ro.GetPixel(x, y) then Inc(d);
+  finally
+    editable.Free; ro.Free;
+  end;
+  AssertEquals('read-only, the cell is still a check box, not the text 1', 0, d);
+end;
+
+procedure TGrid170Test.TestFixedRowsAreNotScrolledTwice;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 6;
+  FG.ForceUpdateScrollBars;
+  FG.FixedRows := 2;
+  AssertEquals('six rows that fit with two of them fixed: nothing to scroll', 0, FG.MaxScrollY);
+  FG.RowCount := 40;
+  FG.FixedRows := 0;
+  FG.ForceUpdateScrollBars;
+  FG.ScrollY := FG.MaxScrollY;
+  FG.FixedRows := 4;
+  AssertTrue(Format('a new FixedRows re-clamps the scroll (%d of %d)', [FG.ScrollY, FG.MaxScrollY]),
+    FG.ScrollY <= FG.MaxScrollY);
+  AssertEquals('the bar reaches what can be scrolled, no further', FG.MaxScrollY, FG.VScrollBar.Max);
+  AssertEquals('and its page is the body under the four fixed rows, at once',
+    FG.ViewportHeight - FG.FrozenHeightPx, FG.VScrollBar.PageSize);
+end;
+
+procedure TGrid170Test.TestShiftWheelAndTiltScrollSideways;
+var before: Integer;
+begin
+  AddColumns(6, 120);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  before := FG.ScrollX;
+  AssertTrue('Shift+wheel is taken', FG.DoMouseWheel([ssShift], -120, Point(10, 10)));
+  AssertTrue('and scrolls sideways', FG.ScrollX > before);
+  before := FG.ScrollX;
+  AssertTrue('the tilt is taken', FG.DoMouseWheelHorz([], 120, Point(10, 10)));
+  AssertTrue('a tilt to the right scrolls right', FG.ScrollX > before);
+end;
+
+procedure TGrid170Test.TestARowDividerDraggedUpStopsAtOnePixel;
+var r: TRect; ib0, ib1, x: Integer;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 5;
+  FG.ShowIndicator := True;
+  FG.Options := FG.Options + [goRowSizing];
+  FG.OnRowSizing := @RowSizing;
+  FG.ForceUpdateScrollBars;
+  AssertTrue('setup: the row header band', FG.IndicatorBandX(ib0, ib1));
+  x := (ib0 + ib1) div 2;
+  r := TyGridRowRect(1, FG.Metrics);
+  FG.PressMouseWithoutRelease(x, r.Bottom - 1);
+  FG.MoveMouseTo(x, r.Top - 30);
+  FG.ReleaseMouse(x, r.Top - 30);
+  AssertTrue('setup: OnRowSizing was asked', Length(FSizes) > 0);
+  AssertTrue(Format('it is never asked about a size below 1 (%d)', [FSizes[High(FSizes)]]),
+    FSizes[High(FSizes)] >= 1);
+  AssertEquals('dragged past its top the row is 1 px, not back to full height', 1, FG.RowHeights[1]);
+end;
+
+procedure TGrid170Test.TestAColumnColourShowsAtRunTime;
+var b: TBGRABitmap; r: TRect; px: TBGRAPixel; inv: Integer;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  CellPixels(0, 1).Free;   // a paint before the change, as on screen
+  inv := FG.RealInvalidateCount;
+  (FG.Header.Columns.Items[0] as TTyGridColumn).Color := TyRGB(255, 0, 0);
+  AssertTrue('a new column colour repaints', FG.RealInvalidateCount > inv);
+  b := CellPixels(0, 1);
+  try
+    r := FG.CellVisibleRect(0, 1);
+    px := b.GetPixel(r.Right - 4, (r.Top + r.Bottom) div 2);
+    AssertTrue(Format('the column''s new colour is painted (%d,%d,%d)', [px.red, px.green, px.blue]),
+      (px.red > 200) and (px.green < 60) and (px.blue < 60));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TGrid170Test.TestDefaultRowHeightMovesTheOtherRows;
+var m: TTyGridMetrics;
+begin
+  AddColumns(1, 100);
+  FG.RowCount := 5;
+  FG.RowHeights[1] := 40;
+  m := FG.Metrics;
+  AssertEquals('setup: rows 0..2', 24 + 40 + 24, m.RowTops[3]);
+  FG.DefaultRowHeight := 30;
+  m := FG.Metrics;
+  AssertEquals('a new DefaultRowHeight moves the rows that have none of their own',
+    30 + 40 + 30, m.RowTops[3]);
+end;
+
+
+type
+  TDrawGrid168 = class(TTyDrawGrid);
+
+  { #168: grid events that did not fire, or fired at the wrong time. }
+  TGrid168Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    FCount, FHintRow: Integer;
+    FLastEditText: string;
+    procedure Counted(Sender: TObject);
+    procedure CountedCell(Sender: TObject; ACol, ARow: Integer);
+    procedure RefuseCell(Sender: TObject; ACol, ARow: Integer; var ACanSelect: Boolean);
+    procedure RefuseClick(Sender: TObject; ACol, ARow: Integer; var ACanClick: Boolean);
+    procedure RefuseCol0Edit(Sender: TObject; ACol, ARow: Integer; var AAllow: Boolean);
+    procedure RefuseSort(Sender: TObject; ACol: Integer; var AAllow: Boolean);
+    procedure EditChanged(Sender: TObject; ACol, ARow: Integer; const AText: string);
+    procedure ScrollHint(Sender: TObject; ARow: Integer; var AHint: string);
+    procedure Sized(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure Columns(ACount: Integer);
+    function CellCentre(ACol, ARow: Integer): TPoint;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestADoubleClickOnACheckCellTogglesTwiceNotThrice;
+    procedure TestADoubleClickOnARefusedCellEditsNothing;
+    procedure TestTheDrawGridsDoubleClickHonoursTheRefusal;
+    procedure TestTheKeyboardsSelectionIsAnnounced;
+    procedure TestOnScrollHintAsksWhileTheThumbIsDragged;
+    procedure TestEveryEditorReportsItsChange;
+    procedure TestOnCanEditCellGuardsPasteReplaceAndFill;
+    procedure TestCutAndTheStarsAskOnCanEditCell;
+    procedure TestAddSortColumnAsksOnCanSort;
+    procedure TestTheEndOfSizeEventsNeedADrag;
+  end;
+
+procedure TGrid168Test.Counted(Sender: TObject);
+begin
+  Inc(FCount);
+end;
+
+procedure TGrid168Test.CountedCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FCount);
+end;
+
+procedure TGrid168Test.RefuseCell(Sender: TObject; ACol, ARow: Integer; var ACanSelect: Boolean);
+begin
+  if (ACol = 1) and (ARow = 1) then ACanSelect := False;
+end;
+
+procedure TGrid168Test.RefuseClick(Sender: TObject; ACol, ARow: Integer; var ACanClick: Boolean);
+begin
+  ACanClick := False;
+end;
+
+procedure TGrid168Test.RefuseCol0Edit(Sender: TObject; ACol, ARow: Integer; var AAllow: Boolean);
+begin
+  if ACol = 0 then AAllow := False;
+end;
+
+procedure TGrid168Test.RefuseSort(Sender: TObject; ACol: Integer; var AAllow: Boolean);
+begin
+  AAllow := False;
+end;
+
+procedure TGrid168Test.EditChanged(Sender: TObject; ACol, ARow: Integer; const AText: string);
+begin
+  Inc(FCount);
+  FLastEditText := AText;
+end;
+
+procedure TGrid168Test.ScrollHint(Sender: TObject; ARow: Integer; var AHint: string);
+begin
+  Inc(FCount);
+  FHintRow := ARow;
+  AHint := 'row ' + IntToStr(ARow);
+end;
+
+procedure TGrid168Test.Sized(Sender: TObject; AIndex, ANewSize: Integer);
+begin
+  Inc(FCount);
+end;
+
+procedure TGrid168Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 300, 200);
+  FG.DefaultRowHeight := 24;
+  FCount := 0;
+  FHintRow := -1;
+end;
+
+procedure TGrid168Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid168Test.Columns(ACount: Integer);
+var i: Integer; c: TTyColumn;
+begin
+  for i := 0 to ACount - 1 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := 80;
+  end;
+end;
+
+function TGrid168Test.CellCentre(ACol, ARow: Integer): TPoint;
+var r: TRect;
+begin
+  r := FG.CellVisibleRect(ACol, ARow);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TGrid168Test.TestADoubleClickOnACheckCellTogglesTwiceNotThrice;
+var b: TRect; x, y: Integer;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  (FG.Header.Columns.Items[0] as TTyGridColumn).EditorKind := gekCheckBox;
+  FG.ForceUpdateScrollBars;
+  b := FG.CheckBoxRect(0, 1);
+  x := (b.Left + b.Right) div 2;
+  y := (b.Top + b.Bottom) div 2;
+  FG.MouseDown(mbLeft, [ssLeft], x, y);
+  FG.MouseUp(mbLeft, [], x, y);
+  AssertTrue('setup: the first press ticks it', FG.CellChecked(0, 1));
+  FG.MouseDown(mbLeft, [ssLeft, ssDouble], x, y);
+  FG.DblClick;
+  FG.MouseUp(mbLeft, [], x, y);
+  AssertFalse('the second press unticks it, and the double-click toggles nothing more',
+    FG.CellChecked(0, 1));
+end;
+
+procedure TGrid168Test.TestADoubleClickOnARefusedCellEditsNothing;
+var pt: TPoint;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  FG.OnSelectCell := @RefuseCell;
+  pt := CellCentre(1, 1);
+  FG.MouseDown(mbLeft, [ssLeft], pt.X, pt.Y);
+  FG.MouseUp(mbLeft, [], pt.X, pt.Y);
+  AssertTrue('setup: the cursor did not go there', (FG.Col <> 1) or (FG.Row <> 1));
+  FG.MouseDown(mbLeft, [ssLeft, ssDouble], pt.X, pt.Y);
+  FG.DblClick;
+  FG.MouseUp(mbLeft, [], pt.X, pt.Y);
+  AssertFalse('a double-click on a refused cell edits nothing -- not the cursor''s cell either',
+    FG.Editing);
+end;
+
+procedure TGrid168Test.TestTheDrawGridsDoubleClickHonoursTheRefusal;
+var
+  g: TDrawGrid168;
+  c: TTyColumn;
+  r: TRect;
+begin
+  g := TDrawGrid168.Create(FForm);
+  g.Parent := FForm;
+  g.Font.PixelsPerInch := 96;
+  g.SetBounds(0, 0, 300, 200);
+  c := g.Header.Columns.Add as TTyColumn;
+  c.Width := 80;
+  g.RowCount := 3;
+  g.OnCanClickCell := @RefuseClick;
+  g.OnDblClickCell := @CountedCell;
+  r := g.CellVisibleRect(0, 1);
+  g.MouseDown(mbLeft, [ssLeft], r.Left + 5, r.Top + 5);
+  g.DblClick;
+  AssertEquals('OnCanClickCell refused the cell: no OnDblClickCell either', 0, FCount);
+end;
+
+procedure TGrid168Test.TestTheKeyboardsSelectionIsAnnounced;
+begin
+  Columns(2);
+  FG.RowCount := 5;
+  FG.ForceUpdateScrollBars;
+  FG.OnSelectionChanged := @Counted;
+  FG.PressKey(VK_DOWN, []);
+  AssertEquals('an arrow key that moves the selection announces it', 1, FCount);
+  FG.PressKey(VK_DOWN, [ssShift]);
+  AssertEquals('so does Shift extending it', 2, FCount);
+end;
+
+procedure TGrid168Test.TestOnScrollHintAsksWhileTheThumbIsDragged;
+var pos: Integer;
+begin
+  Columns(2);
+  FG.RowCount := 100;
+  FG.ForceUpdateScrollBars;
+  FG.OnScrollHint := @ScrollHint;
+  pos := 10 * 24;
+  FG.VScrollBar.OnScroll(FG.VScrollBar, scTrack, pos);
+  AssertTrue('dragging the thumb asks for the hint', FCount > 0);
+  AssertEquals('about the row that would be at the top', 10, FHintRow);
+end;
+
+procedure TGrid168Test.TestEveryEditorReportsItsChange;
+var ed: TControl;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  (FG.Header.Columns.Items[0] as TTyGridColumn).EditorKind := gekMemo;
+  FG.Cells[0, 1] := 'old';
+  FG.ForceUpdateScrollBars;
+  FG.OnEditChange := @EditChanged;
+  AssertTrue('setup: the memo editor opens', FG.BeginEdit(0, 1));
+  AssertEquals('opening it is no change', 0, FCount);
+  ed := FG.EditorControl;
+  AssertTrue('setup: a memo', ed is TTyMemo);
+  TTyMemo(ed).Text := 'new';
+  AssertTrue('typing in it is an OnEditChange', FCount > 0);
+  AssertEquals('with its text', 'new', FLastEditText);
+  FG.EndEdit(False);
+end;
+
+procedure TGrid168Test.TestOnCanEditCellGuardsPasteReplaceAndFill;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.Cells[0, 0] := 'a';
+  FG.Cells[1, 0] := 'a';
+  FG.ForceUpdateScrollBars;
+  FG.OnCanEditCell := @RefuseCol0Edit;
+  FG.ReplaceCells('a', 'b', True, True, True);
+  AssertEquals('replace leaves a cell OnCanEditCell refuses', 'a', FG.Cells[0, 0]);
+  AssertEquals('and changes the others', 'b', FG.Cells[1, 0]);
+  FG.Col := 0;
+  FG.Row := 1;
+  FG.PasteFromText('x');
+  AssertEquals('paste leaves it too', '', FG.Cells[0, 1]);
+end;
+
+procedure TGrid168Test.TestCutAndTheStarsAskOnCanEditCell;
+var r: TRect;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.Cells[0, 0] := 'a';
+  FG.Cells[1, 0] := 'a';
+  (FG.Header.Columns.Items[0] as TTyGridColumn).EditorKind := gekRating;
+  FG.Cells[0, 1] := '2';
+  FG.ForceUpdateScrollBars;
+  FG.OnCanEditCell := @RefuseCol0Edit;
+  FG.MoveCursor(0, 0);
+  FG.AnchorSelection;
+  FG.PressKeyShift(VK_RIGHT);
+  SetClipboardChecked('sentinel');
+  FG.CutToClipboard;
+  AssertEquals('cut leaves a cell OnCanEditCell refuses', 'a', FG.Cells[0, 0]);
+  AssertEquals('and clears the others', '', FG.Cells[1, 0]);
+  r := FG.RatingStarRect(0, 1, 4);
+  AssertTrue('setup: the fourth star', not IsRectEmpty(r));
+  FG.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('a click on a star of a refused cell changes nothing', '2', FG.Cells[0, 1]);
+end;
+
+procedure TGrid168Test.TestAddSortColumnAsksOnCanSort;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.OnCanSort := @RefuseSort;
+  FG.AddSortColumn(1, sdAscending);
+  AssertEquals('Shift+click''s sort column asks OnCanSort too', 0, FG.SortColumnCountOf);
+end;
+
+procedure TGrid168Test.TestTheEndOfSizeEventsNeedADrag;
+var edge: Integer;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  FG.OnEndColumnSize := @Sized;
+  edge := FG.ColumnResizeEdgeX(0);
+  FG.PressMouseWithoutRelease(edge, 5);
+  FG.ReleaseMouse(edge, 5);
+  AssertEquals('a click on a divider resized nothing: no OnEndColumnSize', 0, FCount);
+  FG.PressMouseWithoutRelease(edge, 5);
+  FG.MoveMouseTo(edge + 20, 5);
+  FG.ReleaseMouse(edge + 20, 5);
+  AssertEquals('a drag did', 1, FCount);
+end;
+
+
+type
+  { #169: row and column changes, the sort settings, footers, search, CSV load, the filter
+    row's Esc, Delete and Backspace, UndoLimit. }
+  TGrid169Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    procedure Columns(ACount: Integer);
+    function Shown(ACol, APos: Integer): string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestSwapAndMoveRowTakeTheCursorWithTheRecord;
+    procedure TestInsertColumnShiftsTheColumnState;
+    procedure TestDeleteColumnShiftsAndDropsTheColumnState;
+    procedure TestGroupColumnsFollowTheirColumn;
+    procedure TestHidingTheCursorsColumnMovesTheCursor;
+    procedure TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
+    procedure TestTheSortSettingsRedoTheSort;
+    procedure TestTheSortSettingsResortTheDataInDataMode;
+    procedure TestAColumnsSortKindRedoesTheSort;
+    procedure TestFooterAggregates;
+    procedure TestReplaceGoesOnFromTheCursorAndSkipsHiddenColumns;
+    procedure TestReplaceLeavesAReadOnlyGridAlone;
+    procedure TestReplacingByCsvDropsTheOldStructure;
+    procedure TestEscInTheFilterRowRestoresTheFilter;
+    procedure TestDeleteAndBackspaceOpenTheEditorEmptied;
+    procedure TestLoweringUndoLimitTrimsTheOldestSteps;
+  end;
+
+procedure TGrid169Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 400, 240);
+  FG.DefaultRowHeight := 24;
+end;
+
+procedure TGrid169Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid169Test.Columns(ACount: Integer);
+var i: Integer; c: TTyColumn;
+begin
+  for i := 0 to ACount - 1 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := 80;
+  end;
+end;
+
+function TGrid169Test.Shown(ACol, APos: Integer): string;
+begin
+  Result := FG.Cells[ACol, FG.DisplayRow(APos)];
+end;
+
+procedure TGrid169Test.TestSwapAndMoveRowTakeTheCursorWithTheRecord;
+var r: Integer;
+begin
+  Columns(2);
+  FG.RowCount := 4;
+  for r := 0 to 3 do FG.Cells[0, r] := 'r' + IntToStr(r);
+  FG.MoveCursor(0, 1);
+  FG.AnchorSelection;
+  FG.SwapRows(1, 3);
+  AssertEquals('SwapRows: the cursor goes with its record', 3, FG.Row);
+  AssertEquals('setup: that record', 'r1', FG.Cells[0, FG.Row]);
+  AssertTrue('and so does the anchor: one cell selected, not rows 1..3',
+    FG.IsCellSelected(0, 3) and not FG.IsCellSelected(0, 2) and not FG.IsCellSelected(0, 1));
+  FG.MoveCursor(0, 0);
+  FG.AnchorSelection;
+  FG.SwapRows(2, 0);
+  AssertEquals('the second of the pair too', 2, FG.Row);
+  FG.MoveRow(2, 3);
+  AssertEquals('MoveRow: the cursor ends on the moved record', 3, FG.Row);
+  AssertEquals('which is the one it was on', 'r0', FG.Cells[0, FG.Row]);
+end;
+
+procedure TGrid169Test.TestInsertColumnShiftsTheColumnState;
+var g: TTyGridHeaderGroup;
+begin
+  Columns(4);
+  FG.RowCount := 3;
+  FG.Cells[2, 0] := 'b';
+  FG.Cells[2, 1] := 'a';
+  FG.SortByColumn(2, sdAscending);
+  FG.AddSortColumn(3, sdDescending);
+  FG.TreeColumn := 3;
+  g := FG.HeaderGroups.Add;
+  g.FirstCol := 1;
+  g.LastCol := 2;
+  FG.Header.AutoSizeIndex := 3;
+  FG.MoveCursor(3, 0);
+  FG.AnchorSelection;
+  FG.InsertColumn(2);
+  AssertEquals('the sort key follows its column', 3, FG.SortColumn);
+  AssertEquals('so does a second one, which the header does not show', 2, FG.SortRankOf(4));
+  AssertEquals('and nothing sorts by the new column', 0, FG.SortRankOf(2));
+  AssertEquals('so does the header''s sort arrow', 3, FG.Header.SortColumn);
+  AssertEquals('TreeColumn', 4, FG.TreeColumn);
+  AssertEquals('a column inserted inside a header group widens it: first', 1, g.FirstCol);
+  AssertEquals('last', 3, g.LastCol);
+  AssertEquals('AutoSizeIndex', 4, FG.Header.AutoSizeIndex);
+  AssertEquals('the cursor stays on its column', 4, FG.Col);
+  AssertTrue('and so does the anchor: one cell selected',
+    FG.IsCellSelected(4, FG.Row) and not FG.IsCellSelected(3, FG.Row));
+  FG.InsertColumn(0);
+  AssertEquals('a group to the right moves whole: first', 2, g.FirstCol);
+  AssertEquals('last', 4, g.LastCol);
+end;
+
+procedure TGrid169Test.TestDeleteColumnShiftsAndDropsTheColumnState;
+var g, g2: TTyGridHeaderGroup;
+begin
+  Columns(5);
+  FG.RowCount := 3;
+  FG.SortByColumn(1, sdAscending);
+  FG.TreeColumn := 4;
+  g := FG.HeaderGroups.Add;
+  g.FirstCol := 2;
+  g.LastCol := 4;
+  g2 := FG.HeaderGroups.Add;
+  g2.FirstCol := 1;
+  g2.LastCol := 1;
+  FG.Header.AutoSizeIndex := 4;
+  FG.MoveCursor(4, 0);
+  FG.AnchorSelection;
+  FG.DeleteColumn(3);
+  AssertEquals('TreeColumn moves left', 3, FG.TreeColumn);
+  AssertEquals('a group losing a column: first', 2, g.FirstCol);
+  AssertEquals('last', 3, g.LastCol);
+  AssertEquals('AutoSizeIndex', 3, FG.Header.AutoSizeIndex);
+  AssertEquals('the cursor stays on its column', 3, FG.Col);
+  AssertTrue('and so does the anchor', FG.IsCellSelected(3, FG.Row)
+    and not FG.IsCellSelected(2, FG.Row));
+  AssertEquals('the sort key left of it stays', 1, FG.SortColumn);
+  FG.DeleteColumn(1);
+  AssertEquals('the sort key of a deleted column goes', -1, FG.SortColumn);
+  AssertEquals('and the arrow with it', NoColumn, FG.Header.SortColumn);
+  AssertEquals('a group of that column alone goes', 1, FG.HeaderGroups.Count);
+  FG.DeleteColumn(2);
+  AssertEquals('TreeColumn of a deleted column is none', -1, FG.TreeColumn);
+  AssertEquals('AutoSizeIndex of a deleted column is none', NoColumn, FG.Header.AutoSizeIndex);
+end;
+
+procedure TGrid169Test.TestGroupColumnsFollowTheirColumn;
+begin
+  Columns(4);
+  FG.RowCount := 3;
+  FG.GroupByColumns([1, 3]);
+  FG.InsertColumn(2);
+  AssertEquals('both group columns kept', 2, Length(FG.GroupColumns));
+  AssertEquals('the one left of the insert stays', 1, FG.GroupColumns[0]);
+  AssertEquals('the one right of it moves', 4, FG.GroupColumns[1]);
+  FG.DeleteColumn(1);
+  AssertEquals('the deleted group column goes', 1, Length(FG.GroupColumns));
+  AssertEquals('the other moves left', 3, FG.GroupColumns[0]);
+end;
+
+procedure TGrid169Test.TestHidingTheCursorsColumnMovesTheCursor;
+begin
+  Columns(3);
+  FG.RowCount := 3;
+  FG.Cells[1, 0] := 'old';
+  FG.ForceUpdateScrollBars;
+  FG.MoveCursor(1, 0);
+  AssertTrue('setup: editing', FG.BeginEdit);
+  FG.HideColumn(1);
+  AssertEquals('the cursor goes to the next column on screen', 2, FG.Col);
+  AssertFalse('and the editor of the hidden cell is gone', FG.EditorVisible);
+  FG.HideColumn(2);
+  AssertEquals('with none to the right, to the one before', 0, FG.Col);
+  AssertTrue('setup: editing again', FG.BeginEdit);
+  FG.HideColumn(0);
+  AssertFalse('every column hidden: the edit is still ended', FG.EditorVisible);
+end;
+
+procedure TGrid169Test.TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
+begin
+  Columns(3);
+  FG.RowCount := 2;
+  FG.ForceUpdateScrollBars;
+  FG.MoveCursor(2, 0);
+  FG.AnchorSelection;
+  FG.DeleteColumn(2);
+  AssertEquals('the last column deleted: the cursor comes back inside', 1, FG.Col);
+  AssertTrue('and the anchor with it: one cell selected',
+    FG.IsCellSelected(1, 0) and not FG.IsCellSelected(0, 0));
+  AssertEquals('the selection reads back inside the grid', 1, FG.Selection.Right);
+  FG.InsertColumn(2);
+  FG.HideColumn(2);
+  FG.MoveCursor(1, 0);
+  FG.DeleteColumn(1);
+  AssertEquals('the column taking its place is hidden: the cursor moves off it', 0, FG.Col);
+end;
+
+procedure TGrid169Test.TestTheSortSettingsRedoTheSort;
+begin
+  Columns(2);
+  FG.RowCount := 4;
+  FG.SortKind := gskText;
+  FG.Cells[0, 0] := '10';
+  FG.Cells[0, 1] := '9';
+  FG.Cells[0, 2] := '2';
+  FG.Cells[0, 3] := '';
+  FG.SortByColumn(0, sdAscending);
+  AssertEquals('setup: as text 10 comes first', '10', Shown(0, 0));
+  FG.SortKind := gskNumber;
+  AssertEquals('SortKind redoes the sort: 2 first', '2', Shown(0, 0));
+  AssertEquals('then 9', '9', Shown(0, 1));
+  AssertEquals('the blank last', '', Shown(0, 3));
+  FG.BlanksPosition := gbpFirst;
+  AssertEquals('BlanksPosition redoes it: the blank first', '', Shown(0, 0));
+  FG.Cells[1, 0] := 'B';
+  FG.Cells[1, 1] := 'a';
+  FG.Cells[1, 2] := 'x';
+  FG.Cells[1, 3] := 'y';
+  FG.SortKind := gskText;
+  FG.BlanksPosition := gbpLast;
+  FG.SortByColumn(1, sdAscending);
+  AssertEquals('setup: ignoring case a comes first', 'a', Shown(1, 0));
+  FG.SortIgnoreCase := False;
+  AssertEquals('SortIgnoreCase redoes it: B before a', 'B', Shown(1, 0));
+end;
+
+procedure TGrid169Test.TestTheSortSettingsResortTheDataInDataMode;
+begin
+  Columns(1);
+  FG.RowCount := 3;
+  FG.SortMode := gsmData;
+  FG.SortKind := gskText;
+  FG.Cells[0, 0] := '10';
+  FG.Cells[0, 1] := '9';
+  FG.Cells[0, 2] := '2';
+  FG.SortByColumn(0, sdAscending);
+  AssertEquals('setup: the data itself sorted as text', '10', FG.Cells[0, 0]);
+  FG.SortKind := gskNumber;
+  AssertEquals('SortKind sorts the data again', '2', FG.Cells[0, 0]);
+  AssertEquals('all of it', '10', FG.Cells[0, 2]);
+end;
+
+procedure TGrid169Test.TestAColumnsSortKindRedoesTheSort;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.SortKind := gskText;
+  FG.Cells[0, 0] := '10';
+  FG.Cells[0, 1] := '9';
+  FG.Cells[0, 2] := '2';
+  FG.SortByColumn(0, sdAscending);
+  AssertEquals('setup: as text', '10', Shown(0, 0));
+  (FG.Header.Columns.Items[0] as TTyGridColumn).SortKind := gskNumber;
+  AssertEquals('the column''s SortKind redoes the sort', '2', Shown(0, 0));
+end;
+
+procedure TGrid169Test.TestFooterAggregates;
+var c: TTyGridColumn; inv: Integer;
+begin
+  Columns(2);
+  FG.RowCount := 4;
+  FG.Cells[0, 0] := '';
+  FG.Cells[0, 1] := 'x';
+  FG.Cells[0, 2] := '5';
+  FG.Cells[0, 3] := '3';
+  c := FG.Header.Columns.Items[0] as TTyGridColumn;
+  c.Aggregate := gagMin;
+  AssertEquals('Min over a column starting blank and text', 3, FG.AggregateValue(0), 0.001);
+  inv := FG.RealInvalidateCount;
+  c.Aggregate := gagMax;
+  AssertTrue('a new Aggregate repaints the footer', FG.RealInvalidateCount > inv);
+  AssertEquals('and shows the new value, not the cached Min', 5, FG.AggregateValue(0), 0.001);
+  c.Aggregate := gagSum;
+  AssertEquals('Sum', 8, FG.AggregateValue(0), 0.001);
+  FG.SetColumnAggregate(0, gagNone);
+  AssertEquals('SetColumnAggregate(gagNone) turns it off', Ord(gagNone), Ord(FG.ColumnAggregate(0)));
+  AssertEquals('with nothing counted', 0, FG.AggregateValue(0), 0.001);
+end;
+
+procedure TGrid169Test.TestReplaceGoesOnFromTheCursorAndSkipsHiddenColumns;
+var c, r: Integer;
+begin
+  Columns(3);
+  FG.RowCount := 3;
+  FG.Cells[0, 0] := 'a';
+  FG.Cells[1, 1] := 'a';
+  FG.Cells[0, 2] := 'a';
+  FG.HideColumn(1);
+  FG.MoveCursor(0, 0);
+  AssertEquals('one replace', 1, FG.ReplaceCells('a', 'b', True, True, False));
+  AssertEquals('is the next match after the cursor, past the hidden column', 'b', FG.Cells[0, 2]);
+  AssertEquals('not the first from row 0', 'a', FG.Cells[0, 0]);
+  AssertEquals('and the cursor goes there', 2, FG.Row);
+  FG.ReplaceCells('a', 'b', True, True, False);
+  AssertEquals('the next goes on from there, round to the top', 'b', FG.Cells[0, 0]);
+  AssertEquals('a hidden column is not replaced', 'a', FG.Cells[1, 1]);
+  AssertFalse('nor searched', FG.FindCell('a', True, True, c, r));
+  FG.Cells[0, 1] := 'a';
+  AssertEquals('replace all', 1, FG.ReplaceCells('a', 'b', True, True, True));
+  AssertEquals('leaves the hidden column too', 'a', FG.Cells[1, 1]);
+end;
+
+procedure TGrid169Test.TestReplaceLeavesAReadOnlyGridAlone;
+begin
+  Columns(2);
+  FG.RowCount := 2;
+  FG.Cells[0, 0] := 'a';
+  FG.ReadOnly := True;
+  AssertEquals('nothing replaced', 0, FG.ReplaceCells('a', 'b', True, True, True));
+  AssertEquals('in a read-only grid', 'a', FG.Cells[0, 0]);
+  AssertEquals('one replace neither', 0, FG.ReplaceCells('a', 'b', True, True, False));
+  AssertEquals('same', 'a', FG.Cells[0, 0]);
+  FG.ReadOnly := False;
+  FG.CellReadOnly[0, 0] := True;
+  FG.Cells[0, 1] := 'a';
+  FG.MoveCursor(1, 1);
+  AssertEquals('one replace', 1, FG.ReplaceCells('a', 'b', True, True, False));
+  AssertEquals('passes over a read-only cell', 'a', FG.Cells[0, 0]);
+  AssertEquals('to the next it can change', 'b', FG.Cells[0, 1]);
+end;
+
+procedure TGrid169Test.TestReplacingByCsvDropsTheOldStructure;
+var cs, rs: Integer;
+begin
+  Columns(4);
+  FG.RowCount := 6;
+  FG.MergeCells(0, 0, 2, 1);
+  FG.CellReadOnly[0, 1] := True;
+  FG.HideRow(2);
+  FG.RowHeights[3] := 40;
+  FG.LoadFromCSVText('x,y'#10'1,2'#10'3,4'#10'5,6'#10'7,8'#10'9,10'#10);
+  AssertEquals('the extra columns go', 2, FG.Header.Columns.Count);
+  AssertEquals('setup: five records', 5, FG.RowCount);
+  AssertFalse('the old merge goes', FG.CellSpan(0, 0, cs, rs) and (cs > 1));
+  AssertFalse('the merge count with it', FG.HasMergedCells);
+  AssertFalse('the read-only cell goes', FG.CellReadOnly[0, 1]);
+  AssertFalse('the hidden row shows', FG.IsHiddenRow(2));
+  AssertEquals('the row height goes', 0, FG.RowHeights[3]);
+  FG.LoadFromCSVText('p,q,r,s'#10'1,2,3,4'#10);
+  FG.HideRow(0);
+  FG.LoadFromCSVText('9,9'#10, ',', True, -1, 0, False);
+  AssertEquals('appending keeps the columns', 4, FG.Header.Columns.Count);
+  AssertTrue('and the rows', FG.IsHiddenRow(0));
+end;
+
+procedure TGrid169Test.TestEscInTheFilterRowRestoresTheFilter;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.ShowFilterRow := True;
+  FG.ForceUpdateScrollBars;
+  FG.SetFilterText(0, 'a');
+  FG.BeginFilterEdit(0);
+  AssertTrue('setup: the filter box', FG.FilterEditorVisible);
+  FG.SetFilterEditorText('ab');
+  FG.SetFilterText(0, 'ab');   // what the delay does with what was typed
+  FG.PressKeyInFilterEditor(VK_ESCAPE);
+  AssertFalse('setup: Esc closed the box', FG.FilterEditorVisible);
+  AssertEquals('Esc goes back to the filter the box opened with', 'a', FG.FilterText(0));
+  FG.BeginFilterEdit(0);
+  FG.SetFilterEditorText('ab');
+  FG.PressKeyInFilterEditor(VK_RETURN);
+  AssertEquals('Enter keeps what was typed', 'ab', FG.FilterText(0));
+end;
+
+procedure TGrid169Test.TestDeleteAndBackspaceOpenTheEditorEmptied;
+begin
+  Columns(2);
+  FG.RowCount := 3;
+  FG.Cells[0, 0] := 'abc';
+  FG.Cells[1, 0] := '1';
+  (FG.Header.Columns.Items[1] as TTyGridColumn).EditorKind := gekCheckBox;
+  FG.ForceUpdateScrollBars;
+  FG.MoveCursor(0, 0);
+  FG.PressKey(VK_DELETE);
+  AssertTrue('Delete opens the editor', FG.EditorVisible);
+  AssertEquals('emptied', '', FG.EditorText);
+  FG.EndEdit(False);
+  AssertEquals('Esc gives the text back', 'abc', FG.Cells[0, 0]);
+  FG.PressKey(VK_BACK);
+  AssertTrue('Backspace opens it too', FG.EditorVisible);
+  AssertEquals('emptied too', '', FG.EditorText);
+  FG.EndEdit(True);
+  AssertEquals('Enter keeps the empty cell', '', FG.Cells[0, 0]);
+  FG.MoveCursor(1, 0);
+  FG.PressKey(VK_DELETE);
+  AssertEquals('a check cell is not toggled by Delete', '1', FG.Cells[1, 0]);
+  FG.MoveCursor(0, 1);
+  FG.Cells[0, 1] := 'keep';
+  FG.PressKey(VK_DELETE, [ssCtrl]);
+  AssertFalse('Ctrl+Delete is not this gesture', FG.EditorVisible);
+end;
+
+procedure TGrid169Test.TestLoweringUndoLimitTrimsTheOldestSteps;
+var i: Integer;
+begin
+  Columns(1);
+  FG.RowCount := 1;
+  FG.UndoLimit := 100;
+  FG.ClearUndo;
+  for i := 1 to 5 do FG.Cells[0, 0] := IntToStr(i);
+  AssertEquals('setup: five steps', 5, FG.UndoCount);
+  FG.UndoLimit := 2;
+  AssertEquals('a lower limit trims the stack', 2, FG.UndoCount);
+  FG.Undo;
+  FG.Undo;
+  AssertEquals('it is the oldest that go: two undos give the third value back', '3', FG.Cells[0, 0]);
+end;
+
 initialization
+  RegisterTest(TGrid169Test);
+  RegisterTest(TGrid168Test);
+  RegisterTest(TGrid170Test);
+  RegisterTest(TGrid155Test);
   RegisterTest(TTyStringGridLeakTest);
   RegisterTest(TGridLifetimeTest);
   RegisterTest(TTyGridControlTest);

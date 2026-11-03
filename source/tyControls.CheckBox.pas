@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, StdCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
-  TTyCustomCheckBox = class(TTyCustomControl)
+  TTyCustomCheckBox = class(TTyCustomControl, ITyActionCheckable)
   private
     FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FState: TCheckBoxState;
@@ -23,6 +23,15 @@ type
       code that keeps a box in step with something else (a data field, a select-all box) and
       must not run the box's click handler doing it. }
     property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
@@ -159,7 +168,7 @@ type
     property OnChange;
   end;
 
-  TTyCustomRadioButton = class(TTyCustomControl)
+  TTyCustomRadioButton = class(TTyCustomControl, ITyActionCheckable)
   private
     FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FChecked: Boolean;
@@ -170,10 +179,20 @@ type
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
+    procedure SetGroupIndex(const AValue: Integer);
     procedure UncheckSiblings;
   protected
     { #188: as TTyCustomCheckBox.ClicksDisabled. }
     property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 与 TTyCheckBox.CalculatePreferredSize 同理,只是指示器读的是 --radio-size /
@@ -206,7 +225,7 @@ type
     procedure Click; override;
     // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
     property TabStop default True;
-    property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
+    property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
     { 圆点在标题的哪一侧 —— 见 TTyCheckBox.Alignment,同名同型同默认值
       (LCL 在 TRadioButton 上转发的是同一个 TCustomCheckBox.Alignment)。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
@@ -733,6 +752,16 @@ begin
     inherited Click;
 end;
 
+{ #171: a checked radio button moved into another group is that group's checked one -- the
+  others in it are unchecked, as a click on it would. It was a field written straight, and the
+  group had two checked buttons. Not while the form is read (see SetChecked). }
+procedure TTyCustomRadioButton.SetGroupIndex(const AValue: Integer);
+begin
+  if FGroupIndex = AValue then Exit;
+  FGroupIndex := AValue;
+  if FChecked and not (csLoading in ComponentState) then UncheckSiblings;
+end;
+
 procedure TTyCustomRadioButton.UncheckSiblings;
 var
   I: Integer;
@@ -972,6 +1001,107 @@ begin
       FRefitting := False;
     end;
   end;
+end;
+
+
+{ #172: an action's Checked drives the check box -- its Checked, as LCL's TButtonActionLink
+  drives a TCheckBox. }
+function TTyCustomCheckBox.ActionCheckable: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomCheckBox.GetActionChecked: Boolean;
+begin
+  Result := Checked;
+end;
+
+procedure TTyCustomCheckBox.SetActionChecked(AValue: Boolean);
+var
+  was: Boolean;
+begin
+  was := FClicksDisabled;
+  FClicksDisabled := True;
+  try
+    Checked := AValue;
+  finally
+    FClicksDisabled := was;
+  end;
+end;
+
+function TTyCustomCheckBox.HasActionGroupIndex: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomCheckBox.GetActionGroupIndex: Integer;
+begin
+  Result := 0;
+end;
+
+procedure TTyCustomCheckBox.SetActionGroupIndex(AValue: Integer);
+begin
+end;
+
+function TTyCustomCheckBox.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTyCustomCheckBox.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
+end;
+
+{ #172: an action's Checked and GroupIndex drive the radio button. }
+function TTyCustomRadioButton.ActionCheckable: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomRadioButton.GetActionChecked: Boolean;
+begin
+  Result := FChecked;
+end;
+
+procedure TTyCustomRadioButton.SetActionChecked(AValue: Boolean);
+var
+  was: Boolean;
+begin
+  was := FClicksDisabled;
+  FClicksDisabled := True;
+  try
+    Checked := AValue;
+  finally
+    FClicksDisabled := was;
+  end;
+end;
+
+function TTyCustomRadioButton.HasActionGroupIndex: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomRadioButton.GetActionGroupIndex: Integer;
+begin
+  Result := FGroupIndex;
+end;
+
+procedure TTyCustomRadioButton.SetActionGroupIndex(AValue: Integer);
+begin
+  GroupIndex := AValue;
+end;
+
+function TTyCustomRadioButton.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTyCustomRadioButton.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
 end;
 
 end.

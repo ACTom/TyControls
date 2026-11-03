@@ -15,7 +15,8 @@ unit test.listview;
 interface
 
 uses
-  Classes, SysUtils, Types, LCLType, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, LCLType, Controls, Graphics, Forms, ImgList, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
   tyControls.ScrollBar,        { TTyScrollBar (the embedded bars) }
@@ -46,6 +47,8 @@ type
     procedure XMouseMove(X, Y: Integer);
     { A left press, optionally the second click of a double-click. }
     procedure XMouseDown(X, Y: Integer; ADouble: Boolean = False);
+    { A press and its release: a header click is the release on the pressed section (#155). }
+    procedure XClick(X, Y: Integer);
     procedure XDblClick;
     { A key press, for the F2 / Space / Ctrl+Space wiring. }
     procedure XKeyDown(AKey: Word; AShift: TShiftState = []);
@@ -465,6 +468,52 @@ type
     procedure TestListViewStyleIgnoresGrouping;
   end;
 
+  { #165: right-click, hot track in groups, lisCut / lisDisabled, sideways in a report. }
+  TLV165 = class(TTyListView)
+  public
+    procedure XDown(AButton: TMouseButton; X, Y: Integer);
+    procedure XMove(X, Y: Integer);
+    procedure XKey(AKey: Word);
+    function XTilt(ADelta: Integer): Boolean;
+    procedure XRender(ABmp: TBitmap);
+    procedure XLayout;
+    function OffX: Integer;
+    function YOf(AItem: Integer): Integer;
+  end;
+
+  TListView165Test = class(TTestCase)
+  private
+    FForm: TForm;
+    function NewReport(ACount: Integer): TLV165;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestARightClickSelectsTheItemUnderThePointer;
+    procedure TestHotTrackFindsTheRowInGroupView;
+    procedure TestACutItemsIconIsGhosted;
+    procedure TestADisabledItemIsDrawnSoAndRefusesTheClick;
+    procedure TestLeftRightAndTheTiltScrollAReport;
+  end;
+
+  { #155: header hover / pressed, column drag, the click on release and its gates, spring. }
+  TListView155Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FClicks: Integer;
+    procedure ColClicked(Sender: TObject; AColumn: Integer);
+    function NewTwoColumns: TLV165;
+    function HeaderBand(L: TLV165; AMove: Boolean; ADown: Boolean): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHotTrackAndThePressLightTheSection;
+    procedure TestDraggingAColumnMovesIt;
+    procedure TestTheClickIsTheReleaseAndItsGatesHold;
+    procedure TestSpringColumnsShareAResize;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -542,6 +591,12 @@ begin
   sh := [ssLeft];
   if ADouble then Include(sh, ssDouble);
   MouseDown(mbLeft, sh, X, Y);
+end;
+
+procedure TTyListViewAccess.XClick(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], X, Y);
+  MouseUp(mbLeft, [], X, Y);
 end;
 
 procedure TTyListViewAccess.XDblClick;
@@ -2634,22 +2689,22 @@ end;
 
 procedure TListViewHeaderDpiTest.TestClickOnAColumnsFirstPaintedPixelSelectsThatColumn;
 begin
-  FLV.XMouseDown(PaintLeft(1), 5);
+  FLV.XClick(PaintLeft(1), 5);
   AssertEquals('the first painted pixel of column 1 is column 1', 1, FClicked);
 end;
 
 procedure TListViewHeaderDpiTest.TestClickJustLeftOfTheEdgeStaysOnThePreviousColumn;
 begin
-  FLV.XMouseDown(PaintLeft(1) - 1, 5);
+  FLV.XClick(PaintLeft(1) - 1, 5);
   AssertEquals('the pixel before it is still column 0', 0, FClicked);
 end;
 
 procedure TListViewHeaderDpiTest.TestTheSecondInteriorBoundaryAgrees;
 begin
-  FLV.XMouseDown(PaintLeft(2), 5);
+  FLV.XClick(PaintLeft(2), 5);
   AssertEquals('the first painted pixel of column 2 is column 2', 2, FClicked);
   FClicked := -2;
-  FLV.XMouseDown(PaintLeft(2) - 1, 5);
+  FLV.XClick(PaintLeft(2) - 1, 5);
   AssertEquals('the pixel before it is still column 1', 1, FClicked);
 end;
 
@@ -2665,7 +2720,365 @@ begin
     Ord(lhpHeader), Ord(FLV.GetHitPart(PaintLeft(1) + 12, 5)));
 end;
 
+{ --- #165 ------------------------------------------------------------------------------- }
+
+procedure TLV165.XDown(AButton: TMouseButton; X, Y: Integer);
+begin
+  if AButton = mbRight then MouseDown(mbRight, [ssRight], X, Y)
+  else MouseDown(mbLeft, [ssLeft], X, Y);
+  MouseUp(AButton, [], X, Y);
+end;
+
+procedure TLV165.XMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+
+procedure TLV165.XKey(AKey: Word);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
+end;
+
+function TLV165.XTilt(ADelta: Integer): Boolean;
+begin
+  Result := DoMouseWheelHorz([], ADelta, Point(10, 10));
+end;
+
+procedure TLV165.XRender(ABmp: TBitmap);
+begin
+  RenderTo(ABmp.Canvas, Rect(0, 0, ABmp.Width, ABmp.Height), 96);
+end;
+
+procedure TLV165.XLayout;
+begin
+  UpdateScrollBars;
+end;
+
+function TLV165.OffX: Integer;
+begin
+  Result := ScrollOffsetX;
+end;
+
+function TLV165.YOf(AItem: Integer): Integer;
+var y: Integer;
+begin
+  for y := 0 to Height - 1 do
+    if GetItemAt(20, y) = AItem then Exit(y + 2);
+  Result := -1;
+end;
+
+procedure TListView165Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+end;
+
+procedure TListView165Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TListView165Test.NewReport(ACount: Integer): TLV165;
+var i: Integer; c: TTyColumn;
+begin
+  Result := TLV165.Create(FForm);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 200, 200);
+  Result.ViewStyle := lvsReport;
+  c := Result.Header.Columns.Add as TTyColumn;
+  c.Text := 'Name';
+  c.Width := 120;
+  for i := 0 to ACount - 1 do Result.Items.Add.Caption := 'item ' + IntToStr(i);
+  Result.XLayout;
+end;
+
+procedure TListView165Test.TestARightClickSelectsTheItemUnderThePointer;
+var l: TLV165;
+begin
+  l := NewReport(3);
+  l.ItemIndex := 0;
+  AssertTrue('setup: item 2 is found', l.YOf(2) > 0);
+  l.XDown(mbRight, 20, l.YOf(2));
+  AssertEquals('a right-click selects the item it is on', 2, l.ItemIndex);
+  l.MultiSelect := True;
+  l.ItemIndex := 0;
+  l.Selected[1] := True;
+  l.XDown(mbRight, 20, l.YOf(1));
+  AssertTrue('on a selected item it keeps the selection', l.Selected[0] and l.Selected[1]);
+end;
+
+procedure TListView165Test.TestHotTrackFindsTheRowInGroupView;
+var
+  l: TLV165;
+  it: TTyListItem;
+  a, b: TBitmap;
+  ba, bb: TBGRABitmap;
+  y, x, d: Integer;
+begin
+  l := NewReport(0);
+  l.Groups.Add.Caption := 'G0';
+  l.Groups.Add.Caption := 'G1';
+  it := l.Items.Add; it.Caption := 'one'; it.GroupIndex := 0;
+  it := l.Items.Add; it.Caption := 'two'; it.GroupIndex := 1;
+  l.GroupView := True;
+  l.HotTrack := True;
+  l.XLayout;
+  y := l.YOf(1);
+  AssertTrue('setup: item 1 is found in the grouped layout', y > 0);
+  a := TBitmap.Create; b := TBitmap.Create;
+  try
+    a.PixelFormat := pf32bit; a.SetSize(200, 200);
+    b.PixelFormat := pf32bit; b.SetSize(200, 200);
+    l.XRender(a);
+    l.XMove(20, y);
+    l.XRender(b);
+    ba := TBGRABitmap.Create(a); bb := TBGRABitmap.Create(b);
+    try
+      d := 0;
+      for x := 10 to 190 do
+        if ba.GetPixel(x, y) <> bb.GetPixel(x, y) then Inc(d);
+    finally
+      ba.Free; bb.Free;
+    end;
+  finally
+    a.Free; b.Free;
+  end;
+  AssertTrue(Format('the row under the pointer lights up (%d px)', [d]), d > 50);
+end;
+
+function SolidImages(AOwner: TComponent): TImageList;
+var bmp: TBitmap;
+begin
+  Result := TImageList.Create(AOwner);
+  Result.Width := 16;
+  Result.Height := 16;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clRed;
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    Result.Add(bmp, nil);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function RedPixels(ABmp: TBitmap): Integer;
+var b: TBGRABitmap; x, y: Integer; px: TBGRAPixel;
+begin
+  Result := 0;
+  b := TBGRABitmap.Create(ABmp);
+  try
+    for y := 0 to b.Height - 1 do
+      for x := 0 to b.Width - 1 do
+      begin
+        px := b.GetPixel(x, y);
+        if (px.red > 230) and (px.green < 30) and (px.blue < 30) then Inc(Result);
+      end;
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TListView165Test.TestACutItemsIconIsGhosted;
+var l: TLV165; bmp: TBitmap; whole, cut: Integer;
+begin
+  l := NewReport(1);
+  l.SmallImages := SolidImages(FForm);
+  l.Items[0].ImageIndex := 0;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit; bmp.SetSize(200, 200);
+    l.XRender(bmp);
+    whole := RedPixels(bmp);
+    l.Items[0].States := [lisCut];
+    l.XRender(bmp);
+    cut := RedPixels(bmp);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('setup: the icon is drawn', whole > 50);
+  AssertEquals('cut, it is drawn faded, as Explorer draws it', 0, cut);
+end;
+
+procedure TListView165Test.TestADisabledItemIsDrawnSoAndRefusesTheClick;
+var l: TLV165; a, b: TBitmap; ba, bb: TBGRABitmap; x, y, d: Integer;
+begin
+  l := NewReport(2);
+  l.ItemIndex := 0;
+  a := TBitmap.Create; b := TBitmap.Create;
+  try
+    a.PixelFormat := pf32bit; a.SetSize(200, 200);
+    b.PixelFormat := pf32bit; b.SetSize(200, 200);
+    l.XRender(a);
+    l.Items[1].States := [lisDisabled];
+    l.XRender(b);
+    ba := TBGRABitmap.Create(a); bb := TBGRABitmap.Create(b);
+    try
+      d := 0;
+      for y := l.YOf(1) - 2 to l.YOf(1) + 16 do
+        for x := 10 to 190 do
+          if ba.GetPixel(x, y) <> bb.GetPixel(x, y) then Inc(d);
+    finally
+      ba.Free; bb.Free;
+    end;
+  finally
+    a.Free; b.Free;
+  end;
+  AssertTrue(Format('a disabled item is drawn disabled (%d px)', [d]), d > 0);
+  l.XDown(mbLeft, 20, l.YOf(1));
+  AssertEquals('and a click does not select it', 0, l.ItemIndex);
+end;
+
+procedure TListView165Test.TestLeftRightAndTheTiltScrollAReport;
+var l: TLV165; before: Integer;
+begin
+  l := NewReport(3);
+  (l.Header.Columns.Items[0] as TTyColumn).Width := 800;
+  l.XLayout;
+  AssertTrue('setup: something to the side', l.HScrollBar.Visible);
+  l.ItemIndex := 0;
+  before := l.OffX;
+  l.XKey(VK_RIGHT);
+  AssertEquals('Right scrolls the report one step sideways', before + 16, l.OffX);
+  AssertEquals('and leaves the selection', 0, l.ItemIndex);
+  l.XKey(VK_DOWN);
+  AssertEquals('an arrow down keeps the view where it is sideways', before + 16, l.OffX);
+  before := l.OffX;
+  l.XKey(VK_LEFT);
+  AssertTrue('Left brings it back', l.OffX < before);
+  before := l.OffX;
+  AssertTrue('the tilt is taken', l.XTilt(120));
+  AssertTrue('a tilt to the right scrolls right', l.OffX > before);
+end;
+
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TListView155Test.ColClicked(Sender: TObject; AColumn: Integer);
+begin
+  Inc(FClicks);
+end;
+
+procedure TListView155Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FClicks := 0;
+end;
+
+procedure TListView155Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TListView155Test.NewTwoColumns: TLV165;
+var c: TTyColumn; i: Integer;
+begin
+  Result := TLV165.Create(FForm);
+  Result.Parent := FForm;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 300, 200);
+  Result.ViewStyle := lvsReport;
+  c := Result.Header.Columns.Add as TTyColumn; c.Text := 'A'; c.Width := 100;
+  c := Result.Header.Columns.Add as TTyColumn; c.Text := 'B'; c.Width := 100;
+  for i := 0 to 2 do Result.Items.Add.Caption := 'item ' + IntToStr(i);
+  Result.XLayout;
+  Result.OnColumnClick := @ColClicked;
+end;
+
+function TListView155Test.HeaderBand(L: TLV165; AMove: Boolean; ADown: Boolean): TBGRABitmap;
+var bmp: TBitmap;
+begin
+  if AMove then L.XMove(30, 5);
+  if ADown then L.MouseDown(mbLeft, [ssLeft], 30, 5);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 200);
+    L.XRender(bmp);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function BandDiff(A, B: TBGRABitmap): Integer;
+var x, y: Integer;
+begin
+  Result := 0;
+  for y := 1 to 15 do
+    for x := 5 to 95 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TListView155Test.TestHotTrackAndThePressLightTheSection;
+var l: TLV165; plain, hover, pressed: TBGRABitmap;
+begin
+  l := NewTwoColumns;
+  l.Header.Options := l.Header.Options + [hoHotTrack];
+  plain := HeaderBand(l, False, False);
+  hover := HeaderBand(l, True, False);
+  pressed := HeaderBand(l, False, True);
+  try
+    AssertTrue(Format('hoHotTrack: the section under the pointer is :hover (%d px)',
+      [BandDiff(plain, hover)]), BandDiff(plain, hover) > 100);
+    AssertTrue(Format('pressed, it is :selected (%d px)', [BandDiff(hover, pressed)]),
+      BandDiff(hover, pressed) > 100);
+  finally
+    plain.Free; hover.Free; pressed.Free;
+  end;
+  l.MouseUp(mbLeft, [], 30, 5);
+end;
+
+procedure TListView155Test.TestDraggingAColumnMovesIt;
+var l: TLV165;
+begin
+  l := NewTwoColumns;
+  l.MouseDown(mbLeft, [ssLeft], 30, 5);
+  l.MouseMove([ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('hoDrag + coDraggable: the column goes where it is dropped', 1,
+    Integer((l.Header.Columns.Items[0] as TTyColumn).Position));
+  AssertEquals('and a drag is no click', 0, FClicks);
+end;
+
+procedure TListView155Test.TestTheClickIsTheReleaseAndItsGatesHold;
+var l: TLV165; c: TTyColumn;
+begin
+  l := NewTwoColumns;
+  l.MouseDown(mbLeft, [ssLeft], 30, 5);
+  AssertEquals('the press is no click yet', 0, FClicks);
+  l.MouseUp(mbLeft, [], 30, 5);
+  AssertEquals('the release on the same section is', 1, FClicks);
+  AssertEquals('and AutoSort sorts on it', 0, l.SortColumn);
+  l.Header.Options := l.Header.Options - [hoHeaderClickAutoSort];
+  l.MouseDown(mbLeft, [ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('without hoHeaderClickAutoSort the click still counts', 2, FClicks);
+  AssertEquals('but sorts nothing', 0, l.SortColumn);
+  c := l.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  l.MouseDown(mbLeft, [ssLeft], 150, 5);
+  l.MouseUp(mbLeft, [], 150, 5);
+  AssertEquals('without coAllowClick it is no click', 2, FClicks);
+end;
+
+procedure TListView155Test.TestSpringColumnsShareAResize;
+var l: TLV165; c: TTyColumn;
+begin
+  l := NewTwoColumns;
+  c := l.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  l.SetBounds(0, 0, 400, 200);
+  AssertEquals('the spring column takes the 100 px the list grew by', 200, c.Width);
+  AssertEquals('the other keeps its width', 100, (l.Header.Columns.Items[1] as TTyColumn).Width);
+end;
+
 initialization
+  RegisterTest(TListView155Test);
+  RegisterTest(TListView165Test);
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
   RegisterTest(TListViewSelectionTest);

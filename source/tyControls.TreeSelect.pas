@@ -206,11 +206,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { Open the drop. No-op when disabled, already open, or within 200ms of a CloseUp (the
-      click-while-open reopen race: the popup deactivates and closes BEFORE this control's
-      Click handler runs, so Click would see a closed popup and re-open it). }
+    { Open the drop. No-op when disabled or already open. The 200ms reopen guard is the
+      click's (see Click), not this: from code or the keyboard it opens at once (#162). }
     procedure DropDown;
-    { Hide the drop (idempotent). Fires OnCloseUp. }
+    { Hide the drop (idempotent). Fires OnCloseUp -- when there was a drop to hide. }
     procedure CloseUp;
     function DroppedDown: Boolean;
     { Commit ANode as the user's pick: select it (OnChange fires when the value actually
@@ -416,10 +415,10 @@ function TyTreeSelectNodeText(ATree: TTyTreeView; ANode: PTyTreeNode): string;
 begin
   Result := '';
   if (ATree = nil) or (ANode = nil) or (ANode = ATree.RootNode) then Exit;
-  if Assigned(ATree.OnGetTextWithType) then
-    ATree.OnGetTextWithType(ATree, ANode, ATree.Header.MainColumn, ttNormal, Result)
-  else if Assigned(ATree.OnGetText) then
-    ATree.OnGetText(ATree, ANode, Result);
+  { The row's text as the tree shows it, in either mode: OnGetTextWithType / OnGetText for a
+    virtual tree, the item's Text for one built from Items -- which asked the events only,
+    so a pick from Items showed nothing (#162). }
+  Result := ATree.NodeText[ANode];
 end;
 
 { --- TTyTreeSelectTree -------------------------------------------------------- }
@@ -676,10 +675,6 @@ var
 begin
   if not IsEnabled then Exit;
   if DroppedDown then Exit;
-  { The click-while-open reopen race: the popup deactivates → Close → PopupClosed BEFORE this
-    control's Click runs, so DroppedDown is already False there and a click on an open field
-    would re-open instead of closing it. }
-  if GetTickCount64 - FCloseUpTick <= 200 then Exit;
 
   EnsurePopup;
   { Re-sync every open so a theme / DPI change since the last one takes effect. }
@@ -700,16 +695,9 @@ end;
 
 procedure TTyCustomTreeSelect.CloseUp;
 begin
+  { Nothing open, no close-up: OnCloseUp is for a drop that closed, as the combo's (#162). }
   if (FPopup <> nil) and FPopup.IsOpen then
-  begin
     FPopup.Close;   // → PopupClosed: stamps the tick, invalidates, fires OnCloseUp
-    Exit;
-  end;
-  { No window (headless, or already closed): still stamp the tick and fire the bookkeeping so
-    the reopen guard works and a host sees the same events either way. }
-  FCloseUpTick := GetTickCount64;
-  Invalidate;
-  DoCloseUp;
 end;
 
 function TTyCustomTreeSelect.DroppedDown: Boolean;
@@ -790,11 +778,13 @@ begin
   if not IsEnabled then Exit;
   inherited Click;
   { The whole field is the drop affordance (there is no editable zone to protect, as
-    TTyComboBox's csDropDown has): a click anywhere toggles. DropDown's own 200ms guard
-    handles the case where the click already closed the popup by deactivating it. }
+    TTyComboBox's csDropDown has): a click anywhere toggles. The click-while-open race: the
+    popup deactivates → Close → PopupClosed BEFORE this runs, so DroppedDown is already
+    False and a click on an open field would re-open it -- hence no reopen within 200ms of a
+    close-up. The click's guard only: DropDown from code or the keyboard opens at once (#162). }
   if DroppedDown then
     CloseUp
-  else
+  else if GetTickCount64 - FCloseUpTick > 200 then
     DropDown;
 end;
 

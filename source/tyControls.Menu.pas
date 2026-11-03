@@ -135,6 +135,7 @@ type
     FMeasured: array of TSize;
     FMeasuredPPI: Integer;
     FMeasuredVer: Cardinal;
+    FScrollY: Integer;   { #175: device px the rows are scrolled up by, in a menu taller than its window }
     procedure EnsureHoverTimer;
     procedure HandleHoverTimer(Sender: TObject);
     procedure SetOwnerDraw(AValue: Boolean);
@@ -197,6 +198,14 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #175: a menu taller than the screen scrolls -- the wheel moves it, and the highlight moved
+      by the keys is brought into view. It ran off the screen. }
+    function MaxScrollY: Integer;
+    procedure SetScrollY(AValue: Integer);
+    procedure ScrollRowIntoView(AIndex: Integer);
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    property ScrollY: Integer read FScrollY write SetScrollY;
     { Arm/disarm the lazy hover-open for the current highlight: if it is a submenu row,
       (re)start the timer toward opening it; otherwise cancel any pending open and ask
       the host to close any already-open child (a non-submenu row has none). Driven from
@@ -409,6 +418,9 @@ type
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     FHoverPollTimer: TTimer;  // non-Win32: poll the cursor to switch top menus on hover while a
                               // dropdown is open (its mouse grab starves the bar's own MouseMove)
+    FBarSig: string;          // #175: the top items as last painted
+    procedure MenuIdle(Sender: TObject; var Done: Boolean);
+    function TopSignature: string;
     procedure StartHoverPoll;
     procedure StopHoverPoll;
     procedure HoverPollTick(Sender: TObject);
@@ -472,6 +484,8 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { Alt+<mnemonic>: open the matching top menu (LCL broadcasts DialogChar to children). }
     function DialogChar(var Message: TLMKey): Boolean; override;
+    { #175: repaint (and refit) when the menu's top items changed; run when the app goes idle. }
+    procedure CheckMenuChanged;
   public
     { Test seams. OpenTop is the single door into a top-level item -- click, hover-switch
       and Alt mnemonic all arrive there -- so driving it directly exercises the disabled
@@ -578,6 +592,7 @@ type
   private
     FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
     FController: TTyCustomStyleController;
+    FClosing: Boolean;           // #175: DoClose under way -- the renderer's own close comes back here
     { Which way this menu reads. A TPopupMenu is a component, not a control, so it has no
       BiDiMode of its own; a context menu belongs to whatever it was raised over, which LCL
       records in PopupComponent (include/control.inc:2496) before popping. Falls back to the
@@ -594,6 +609,9 @@ type
       after its controller is set and BEFORE its rows are built. Base does nothing. }
     procedure ConfigureRenderer(ARenderer: TTyMenuPopup); virtual;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { #175: TPopupMenu.Close is not virtual, but it closes through this -- the themed pop-up goes
+      with it. Close from code left it on screen. }
+    procedure DoClose; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -737,7 +755,8 @@ end;
 
 function TyBuildMenuRows(ARoot: TMenuItem; AAllowHeaders: Boolean): TTyMenuRowArray;
 var
-  i, n, imgW: Integer;
+  i, n, m, imgW: Integer;
+  lastSep: Boolean;
   mi: TMenuItem;
   imgList: TCustomImageList;
 begin
@@ -810,6 +829,31 @@ begin
       end;
     end;
     Inc(n);
+  end;
+  { #175: AutoLineReduction -- a separator at either end, or right after another, is not shown,
+    as LCL's RethinkLines hides it. It was drawn: a menu whose items were hidden around a line
+    showed two lines in a row, or a line at the top. The items' Visible is left as it is.
+    Lazarus 3.x has no AutoLineReduction (it came with 4.0): there the lines are always reduced,
+    which is LCL 4's default. }
+  if (n > 0) and not (csDesigning in ARoot.ComponentState)
+     {$IF LCL_FULLVERSION >= 4000000} and TMenuItemAccess(ARoot).GetAutoLineReduction {$ENDIF} then
+  begin
+    m := 0;
+    lastSep := True;   // the top counts as a line: a separator there goes
+    for i := 0 to n - 1 do
+    begin
+      if Result[i].Kind = mrkSeparator then
+      begin
+        if lastSep then Continue;
+        lastSep := True;
+      end
+      else
+        lastSep := False;
+      Result[m] := Result[i];
+      Inc(m);
+    end;
+    if (m > 0) and (Result[m - 1].Kind = mrkSeparator) then Dec(m);
+    n := m;
   end;
   SetLength(Result, n);
 end;
@@ -1118,7 +1162,7 @@ var
   i: Integer;
 begin
   S := CurrentStyle;
-  Result := MulDiv(S.Padding.Top, APPI, 96);
+  Result := MulDiv(S.Padding.Top, APPI, 96) - FScrollY;   { #175: paint, hit test and the cascade all read it }
   for i := 0 to AIndex - 1 do
   begin
     if (i < 0) or (i > High(FRows)) then Break;
@@ -1180,6 +1224,59 @@ begin
   Result := FHighlight;
 end;
 
+function TTyMenuView.MaxScrollY: Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MeasureHeight(ppi) - ClientHeight;
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyMenuView.SetScrollY(AValue: Integer);
+begin
+  if AValue > MaxScrollY then AValue := MaxScrollY;
+  if AValue < 0 then AValue := 0;
+  if FScrollY = AValue then Exit;
+  FScrollY := AValue;
+  Invalidate;
+end;
+
+procedure TTyMenuView.ScrollRowIntoView(AIndex: Integer);
+var
+  ppi, rowT, h, padT, padB: Integer;
+  S: TTyStyleSet;
+begin
+  if (AIndex < 0) or (AIndex > High(FRows)) then Exit;
+  if MaxScrollY = 0 then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  padT := MulDiv(S.Padding.Top, ppi, 96);
+  padB := MulDiv(S.Padding.Bottom, ppi, 96);
+  rowT := RowTop(AIndex, ppi);
+  h := RowHeight(AIndex, ppi);
+  if rowT < padT then
+    SetScrollY(FScrollY - (padT - rowT))
+  else if rowT + h > ClientHeight - padB then
+    SetScrollY(FScrollY + (rowT + h - (ClientHeight - padB)));
+end;
+
+function TTyMenuView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  ppi, step: Integer;
+begin
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result or (MaxScrollY = 0) then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  step := 3 * ItemRowHeight(ppi);
+  if WheelDelta > 0 then SetScrollY(FScrollY - step) else SetScrollY(FScrollY + step);
+  Result := True;
+end;
+
 procedure TTyMenuView.SetHighlight(AIndex: Integer);
 begin
   // Clamp to a valid selectable row, or -1 (no highlight). Non-selectable indices
@@ -1197,6 +1294,7 @@ begin
     Application.Hint := FRows[FHighlight].Hint
   else
     Application.Hint := '';
+  ScrollRowIntoView(FHighlight);   { #175 }
   Invalidate;
 end;
 
@@ -1798,6 +1896,9 @@ begin
   // a global anchor.Y against a single Screen.Height mis-flipped a low menu upward and could place the
   // popup on the wrong monitor. The anchor's-monitor work area fixes both.
   wa := TyPopupWorkArea(AAnchor);   // #148: the one place every pop-up asks (primary when none)
+  { #175: no taller than the work area -- the view scrolls the rest. A taller menu ran off the
+    screen with its last items out of reach. }
+  if AHeight > wa.Bottom - wa.Top then AHeight := wa.Bottom - wa.Top;
 
   { MIRRORING: a cascade grows toward the reading end, so a mirrored submenu opens to the
     LEFT of its parent row and flips right only when it would run off the screen -- the same
@@ -1842,6 +1943,7 @@ begin
   T := AAnchor.Bottom;
   if (T + AHeight > wa.Bottom) and (AAnchor.Top - AHeight >= wa.Top) then
     T := AAnchor.Top - AHeight;
+  if T + AHeight > wa.Bottom then T := wa.Bottom - AHeight;   { #175: room on neither side }
   if T < wa.Top then T := wa.Top;
 
   Result := Types.Rect(L, T, L + AWidth, T + AHeight);
@@ -2044,6 +2146,12 @@ begin
   rows := TyBuildMenuRows(FRoot, FAllowHeaders);
   if (AIndex < 0) or (AIndex > High(rows)) then Exit;
   if not rows[AIndex].HasSubmenu then Exit;
+  { #175: opening a submenu is a click on its item and refreshes its actions, as LCL's
+    DoClicked -- a submenu filled in that OnClick came up empty, and the action states were
+    stale. }
+  TMenuItemAccess(rows[AIndex].Item).InitiateActions;
+  rows[AIndex].Item.Click;
+  if rows[AIndex].Item.Count = 0 then Exit;
 
   FreeAndNil(FChild);   // only one open submenu per level
   FChild := TTyMenuPopup.Create(Self);
@@ -2224,7 +2332,44 @@ begin
   FPendingTop := -1;
   TyAccelRegister(Self);   // shared Alt-state: repaint the bar when Alt is pressed/released
   if Assigned(Application) then Application.AddOnKeyDownHandler(@AppKeyDown, False);
+  if Assigned(Application) then Application.AddOnIdleHandler(@MenuIdle, False);   // #175
   Height := TyDensityHeight(ActiveController, 28);
+end;
+
+{ #175: what the bar shows of its menu. A TMainMenu tells only its own OnChange, which is the
+  application's; the bar compares this when the application goes idle instead, and repaints --
+  a top item hidden or disabled at run time stayed on the bar, and the hit test, which reads the
+  menu live, disagreed with it. }
+function TTyCustomMenuBar.TopSignature: string;
+var
+  i: Integer;
+  mi: TMenuItem;
+begin
+  Result := '';
+  if FMenu = nil then Exit;
+  for i := 0 to FMenu.Items.Count - 1 do
+  begin
+    mi := FMenu.Items[i];
+    Result := Result + Chr(Ord('0') + Ord(mi.Visible) + 2 * Ord(mi.Enabled)
+      + 4 * Ord(mi.RightJustify)) + mi.Caption + #1;
+  end;
+end;
+
+procedure TTyCustomMenuBar.CheckMenuChanged;
+var
+  s: string;
+begin
+  s := TopSignature;
+  if s = FBarSig then Exit;
+  FBarSig := s;
+  ApplyAutoSizeWidth;
+  Invalidate;
+end;
+
+procedure TTyCustomMenuBar.MenuIdle(Sender: TObject; var Done: Boolean);
+begin
+  if csDestroying in ComponentState then Exit;
+  CheckMenuChanged;
 end;
 
 destructor TTyCustomMenuBar.Destroy;
@@ -2254,6 +2399,7 @@ begin
   FMenu := AValue;
   if FMenu <> nil then
     FMenu.FreeNotification(Self);
+  FBarSig := TopSignature;
   ApplyAutoSizeWidth;   // the cell set changed -> refit when enabled
   Invalidate;
 end;
@@ -2568,6 +2714,10 @@ begin
     mi.Click;
     Exit;
   end;
+  { #175: a drop-down opening is a click on its item and refreshes its actions, as a submenu's. }
+  TMenuItemAccess(mi).InitiateActions;
+  mi.Click;
+  if mi.Count = 0 then begin ClosePopup; Exit; end;
 
   // Reuse the live host across adjacent-cell rotation; rebuild it only when needed.
   if FPopup = nil then
@@ -2960,6 +3110,18 @@ end;
 procedure TTyPopupMenu.HandleRendererClosed(Sender: TObject);
 begin
   Close;   { TPopupMenu.Close: DoClose -> OnClose, and ActivePopupMenu := nil }
+end;
+
+procedure TTyPopupMenu.DoClose;
+begin
+  if FClosing then Exit;
+  FClosing := True;
+  try
+    inherited DoClose;
+    if (FRenderer <> nil) and FRenderer.IsOpen then FRenderer.CloseAll;
+  finally
+    FClosing := False;
+  end;
 end;
 
 procedure TTyPopupMenu.ActivateRowForTest(AIndex: Integer);

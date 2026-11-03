@@ -83,6 +83,7 @@ type
     procedure TestAHoveredLinkLightsUp;
     procedure TestTheCurrentCrumbNeverLightsUp;
     procedure TestADisabledTrailKeepsTheCurrentPlate;
+    procedure TestATrailInADisabledParentLooksDisabled;
     procedure TestTheSeparatorTakesTheBarInk;
     procedure TestAnUndefinedBarKeyDrawsNothing;
     procedure TestAnUndefinedItemKeyStillDrawsCrumbsInTheBarInk;
@@ -1202,6 +1203,31 @@ begin
     try
       AssertTrue('the plate survives being disabled',
         HasBlueChip(Reread, T.TyCrumbRect(2)));
+    finally
+      Reread.Free;
+    end;
+  finally
+    T.Free;
+  end;
+end;
+
+{ #118: a trail inside a disabled container looks disabled too, as LCL's TLabel does (it asks
+  IsEnabled, which also asks the parents) -- its own Enabled stays True. }
+procedure TTyBreadcrumbControlTest.TestATrailInADisabledParentLooksDisabled;
+var
+  T: TCrumbAccess;
+  Reread: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(BaseCss + 'TyBreadcrumbItem:disabled { background: #3B82F6; }');
+  T := MakePath(FForm, FCtl);
+  try
+    T.SetBounds(0, 0, 400, 30);
+    FForm.Enabled := False;
+    AssertTrue('its own Enabled is untouched', T.Enabled);
+    Reread := RenderCrumb(T);
+    try
+      AssertTrue('a link takes :disabled from the disabled parent',
+        HasBlueChip(Reread, T.TyCrumbRect(0)));
     finally
       Reread.Free;
     end;

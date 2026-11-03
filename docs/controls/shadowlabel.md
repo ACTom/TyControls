@@ -29,7 +29,7 @@ uses tyControls.ShadowLabel;
 |------|------|--------|------|
 | `Caption` | `string` | `''` | 标签显示文字，绘制两遍（阴影 + 正文）。 |
 | `ShadowColor` | `TTyColor` | `TyRGBA(0,0,0,120)` | 阴影文字颜色，默认半透明黑；`$AARRGGBB` 格式，支持 alpha。 |
-| `ShadowOffsetX` | `Integer` | `1` | 阴影相对正文的**水平**偏移（逻辑像素，随 PPI 经 `P.Scale` 缩放）。 |
+| `ShadowOffsetX` | `Integer` | `1` | 阴影相对正文的**水平**偏移（逻辑像素，随 PPI 经 `P.Scale` 缩放）。负值把阴影投向左边。正文会在阴影那一侧让出这段偏移（`AutoSize` 预留的正是它），所以无论正负、无论对齐方式，阴影都不会被边缘裁掉。 |
 | `ShadowOffsetY` | `Integer` | `1` | 阴影相对正文的**垂直**偏移（逻辑像素，随 PPI 经 `P.Scale` 缩放）。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 文字**水平**对齐（左 / 右 / 居中）；阴影与正文使用同一对齐。 |
 | `Layout` | `TTextLayout` | `tlCenter` | 文字**垂直**对齐（顶 / 居中 / 底）。 |

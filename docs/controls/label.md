@@ -32,7 +32,7 @@ uses tyControls.TyLabel;
 | `Layout` | `TTextLayout` | `tlCenter` | **（API parity 新增）** 整段文字块的**垂直**对齐（顶 / 居中 / 底）；在 `WordWrap = True` 时按每行块高计算统一垂直偏移后应用。 |
 | `WordWrap` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时文字按控件宽度自动换行；写入会触发重新度量首选尺寸并（在 `AutoSize` 开启时）调整大小。 |
 | `AutoSize` | `Boolean`（继承重 published） | — | **（API parity 新增 published）** 由父类继承；**在 `Caption` 变更、以及 `WordWrap` 开启时宽度变更时重新触发**度量与 `AdjustSize`。 |
-| `Transparent` | `Boolean` | `True` | **（API parity 新增）** 为 `True`（默认）时**不**填充背景，透出父 / 窗体背景（`opacity` 仍被尊重）；为 `False` 时绘制主题 `background` 填充。 |
+| `Transparent` | `Boolean` | `True` | **（API parity 新增）** 为 `True`（默认）时**不**填充背景，透出父 / 窗体背景（`opacity` 仍被尊重）；为 `False` 时不透明，盖住它下面的东西：先铺父控件的背景（图片 / 玻璃主题下是对应的那一片），主题给了 `background` 再画在上面，与 LCL `TLabel` 的不透明行为一致。自带主题都不给 `TyLabel` 背景，所以它看上去和父控件一样——区别在它压在别的控件上时。 |
 | `FocusControl` | `TWinControl` | `nil` | **（API parity 新增）** 点击标签时将焦点设到该控件（若非空且可聚焦）；setter 安装 free notification，目标被销毁时自动清空引用。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态（通常降低不透明度） |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |

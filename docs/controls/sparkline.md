@@ -39,7 +39,7 @@ uses tyControls.Sparkline;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Style` | `TTySparkStyle` | `ssLine` | `ssLine`=折线;`ssBar`=柱状(自基线起)。 |
-| `ShowLast` | `Boolean` | `True` | 末点是否画一个实心 accent 圆点。 |
+| `ShowLast` | `Boolean` | `True` | 末点是否画一个实心 accent 圆点。`ssLine` 时在折线末端;`ssBar` 时在**最后一根柱子**的顶端正中。 |
 | `AutoRange` | `Boolean` | `True` | `True` 时量程取数据的 min/max;`False` 时用 `MinValue`/`MaxValue`。 |
 | `MinValue` / `MaxValue` | `Double` | `0` / `100` | 手动量程(仅 `AutoRange=False` 时生效)。 |
 | `Count` | `Integer` | (只读) | 当前序列长度。 |

@@ -22,6 +22,7 @@ type
     FStreamedItemIndex: Integer;
     FItemIndexWaits: Boolean;
     FSelected: array of Boolean;   // multi-select bit-set (kept sized to Items.Count)
+    FItemCaps: array of string;    // #171: Items as they were, to carry the selection across an edit
     FHoverSeg: Integer;            // -1 = none; tracked in MouseMove for :hover styling
     FKeySeg: Integer;              // #143: MultiSelect's keyboard segment, -1 = none yet
     FRefitting: Boolean;           // guards the AutoSize re-fit in Invalidate against re-entry
@@ -30,6 +31,7 @@ type
     procedure ItemsChanged(Sender: TObject);
     procedure SetMultiSelect(AValue: Boolean);
     procedure SetItemIndex(AValue: Integer);
+    function GetItemIndex: Integer;
     procedure EnsureSelectedLen;
     procedure DoSelectionChange;
   protected
@@ -111,7 +113,7 @@ type
     property TabStop default True;
     property Items: TStrings read FItems write SetItems;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
-    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    property ItemIndex: Integer read GetItemIndex write SetItemIndex default -1;
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
   end;
 
@@ -295,15 +297,37 @@ end;
 
 procedure TTyCustomButtonGroup.ItemsChanged(Sender: TObject);
 var
-  i: Integer;
+  i, before, after, newIndex: Integer;
+  carry: TTyItemCarry;
+  sel: array of Boolean;
 begin
-  // The item list changed structurally. TStrings.OnChange carries no diff, so
-  // positional selection bits (and the single-select index) cannot be remapped —
-  // keeping them would silently move the selection onto a different item after an
-  // insert/delete. Reset selection to a clean state instead (safe over subtly wrong).
-  SetLength(FSelected, FItems.Count);
-  for i := 0 to High(FSelected) do FSelected[i] := False;
-  FItemIndex := -1;
+  { #171: the selection stays on its segments across an Items edit -- found by caption, so an
+    insert or a delete does not move it onto another segment, and a renamed one by its place
+    (TyCarryItems). Every edit cleared it, the documentation promising it kept. A selected
+    segment that is gone is a change of the selection, and is told. }
+  carry := TyCarryItems(FItemCaps, FItems);
+  SetLength(FItemCaps, FItems.Count);
+  for i := 0 to FItems.Count - 1 do FItemCaps[i] := FItems[i];
+  before := 0;
+  for i := 0 to High(FSelected) do
+    if FSelected[i] then Inc(before);
+  SetLength(sel, FItems.Count);
+  after := 0;
+  for i := 0 to High(sel) do
+  begin
+    sel[i] := (carry[i] >= 0) and (carry[i] <= High(FSelected)) and FSelected[carry[i]];
+    if sel[i] then Inc(after);
+  end;
+  FSelected := sel;
+  if FItemIndex >= 0 then
+  begin
+    Inc(before);
+    newIndex := -1;
+    for i := 0 to High(carry) do
+      if carry[i] = FItemIndex then newIndex := i;
+    FItemIndex := newIndex;
+    if FItemIndex >= 0 then Inc(after);
+  end;
   if FHoverSeg >= FItems.Count then FHoverSeg := -1;
   if FKeySeg >= FItems.Count then FKeySeg := -1;
   // 条目变了(数量、文字)→ 要的宽度也变了,AutoSize 的分段条必须重新贴合。
@@ -317,6 +341,7 @@ begin
     AdjustSize;
   end;
   Invalidate;
+  if (after < before) and not (csLoading in ComponentState) then DoSelectionChange;
 end;
 
 procedure TTyCustomButtonGroup.Invalidate;
@@ -376,7 +401,8 @@ end;
 
 procedure TTyCustomButtonGroup.SetItemIndex(AValue: Integer);
 var
-  NewIndex: Integer;
+  NewIndex, i: Integer;
+  anyChange: Boolean;
 begin
   { A form file can hold ItemIndex ahead of Items -- a third party's TTyCustomButtonGroup
     publishes in whatever order it likes (TTyButtonGroup publishes Items first). Read then, it
@@ -396,10 +422,40 @@ begin
     NewIndex := AValue
   else
     NewIndex := -1;
+  { #171: in MultiSelect, ItemIndex selects that one segment and no other (-1: none) -- it
+    fired OnSelectionChange and selected nothing. }
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    anyChange := False;
+    for i := 0 to High(FSelected) do
+      if FSelected[i] <> (i = NewIndex) then
+      begin
+        FSelected[i] := i = NewIndex;
+        anyChange := True;
+      end;
+    if NewIndex >= 0 then FKeySeg := NewIndex;
+    if not anyChange then Exit;
+    Invalidate;
+    DoSelectionChange;
+    Exit;
+  end;
   if NewIndex = FItemIndex then Exit;
   FItemIndex := NewIndex;
   Invalidate;
   DoSelectionChange;
+end;
+
+{ #171: in MultiSelect, the first selected segment, so ItemIndex reads back what it was set to. }
+function TTyCustomButtonGroup.GetItemIndex: Integer;
+var
+  i: Integer;
+begin
+  if not FMultiSelect then Exit(FItemIndex);
+  EnsureSelectedLen;
+  for i := 0 to High(FSelected) do
+    if FSelected[i] then Exit(i);
+  Result := -1;
 end;
 
 function TTyCustomButtonGroup.IsSelected(AIndex: Integer): Boolean;
@@ -686,7 +742,12 @@ begin
         selected one keeps the theme's fill and ink -- an override that recoloured it too
         would leave nothing to show which segment is selected. }
       if tysSelected in segStates then
-        segStyle := PartStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), segStates)
+      begin
+        segStyle := PartStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), segStates);
+        // BorderWidth insets its caption as it does the others' (#115)
+        Inc(segStyle.Padding.Left, BorderWidth);
+        Inc(segStyle.Padding.Right, BorderWidth);
+      end
       else
         segStyle := StyleInState(segStates);
 

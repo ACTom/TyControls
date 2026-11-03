@@ -90,11 +90,14 @@ type
   TTyFileDialogPreviewEvent = procedure(Sender: TObject; const AFileName: string;
     APreview: TTyPreviewBox; var AHandled: Boolean) of object;
 
+  TTyCustomFileDialog = class;
+
   { ===================================================================
     TTyFileDialogForm -- the composed, two-flag file dialog form.
     =================================================================== }
   TTyFileDialogForm = class(TTyDialog)
   private
+    FResultTarget: TTyCustomFileDialog;   { see ResultTarget }
     FSaveMode:    Boolean;
     FPreviewMode: Boolean;
     { Composed children (all owned by the form -> auto-freed). The mode-conditional
@@ -185,6 +188,9 @@ type
     { The public in/out contract (seed before ShowModal; read on mrOK). }
     property InitialDir: string write SetInitialDir;               { write = navigate start }
     property FileName: string read FResultName write SetSeedFileName; { write = prefill; read = result }
+    { #179: the component an accepted OK writes its choice into -- FileName, Files, FilterIndex --
+      before OnCanClose is asked, as LCL's dialog already holds it then. Execute sets it. }
+    property ResultTarget: TTyCustomFileDialog read FResultTarget write FResultTarget;
     property Files: TStrings read FFiles;                          { read-only; Open multi-select }
     property Filter: string read GetFilter write SetFilter;
     property FilterIndex: Integer read GetFilterIndex write SetFilterIndex;
@@ -231,6 +237,8 @@ type
     { The filter used when Filter is empty (picture subclasses give an image filter). }
     function DefaultFilter: string; virtual;
   public
+    { #179: FileName, Files and the FilterIndex the user picked, from AForm's accepted OK. }
+    procedure TakeResult(AForm: TTyFileDialogForm);
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { The form Execute shows -- seeded from the properties, Help added under ofShowHelp, the
@@ -341,12 +349,10 @@ begin
       path-bearing name verbatim, a bare name expanded against the directory; only an
       EMPTY box falls back to the focused item; else nothing. }
     if ATyped <> '' then
-    begin
-      if ExtractFilePath(ATyped) <> '' then
-        Result := ATyped
-      else
-        Result := ExpandFileNameUTF8(ATyped, ADir);
-    end
+      { Against the directory whatever it holds: a relative folder part too (#179), which was
+        returned as typed and so read against the process's current folder. An absolute
+        path comes back as it is. }
+      Result := ExpandFileNameUTF8(ATyped, ADir)
     else if ASelected <> '' then
       Result := ASelected
     else
@@ -830,8 +836,13 @@ begin
     Windows dialog keeps: it refuses a name that fails fdoFileMustExist / fdoPathMustExist
     before CDN_FILEOK, which is where LCL raises OnCanClose. The other way round, an OnCanClose
     that had said yes, and acted on it (saved, say), could still find the dialog kept open. }
-  if (ModalResult = mrOK) and not AcceptSelection then
+  { #179: and OnCanClose about an OK alone -- LCL raises it at CDN_FILEOK, never for a Cancel,
+    which always closes -- with the choice already in the component it is asked through. }
+  if ModalResult <> mrOK then
+    Exit(True);
+  if not AcceptSelection then
     Exit(False);               { LCL resets ModalResult, the dialog stays open }
+  if FResultTarget <> nil then FResultTarget.TakeResult(Self);
   Result := inherited CloseQuery;
 end;
 
@@ -1157,7 +1168,8 @@ begin
     btn := Result.AddButton(rsMsgBtnHelp, mrNone);   { mrNone: the dialog stays open }
     btn.OnClick := @FormHelpClick;
   end;
-  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+  Result.ResultTarget := Self;   { #179: the form hands the choice over before OnCanClose }
+  TyForwardDialogEvents(Self, Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 procedure TTyCustomFileDialog.FormHelpClick(Sender: TObject);
@@ -1202,6 +1214,13 @@ begin
   end;
 end;
 
+procedure TTyCustomFileDialog.TakeResult(AForm: TTyFileDialogForm);
+begin
+  FFileName := AForm.FileName;
+  FFiles.Assign(AForm.Files);
+  FFilterIndex := AForm.FilterIndex;   { #179: the filter the user picked, as LCL's }
+end;
+
 function TTyCustomFileDialog.Execute: Boolean;
 var
   d: TTyFileDialogForm;
@@ -1209,6 +1228,7 @@ begin
   d := BuildForm;
   try
     Result := (d.ShowModal = mrOK);
+    if Result then TakeResult(d);   { #179: FilterIndex too; the form took it already at OK }
     ApplyResult(Result, d.FileName, d.Files);
   finally
     d.Free;

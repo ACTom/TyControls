@@ -344,6 +344,23 @@ type
     procedure TestMovingThroughTheCalendarOfAReadOnlyPickerChangesNothing;
   end;
 
+  { #160 }
+  TDateTimePickerPickTest = class(TTestCase)
+  private
+    FChanges, FCloseUps: Integer;
+    procedure Changed(Sender: TObject);
+    procedure ClosedUp(Sender: TObject);
+    function NewPicker: TTyDateTimePickerProbeC3;
+  published
+    procedure TestMaxDateBoundsTheDayNotTheTime;
+    procedure TestMovingThroughTheCalendarIsNoPick;
+    procedure TestAPickKeepsWhereEscGoesBack;
+    procedure TestAPickTicksAutoCheck;
+    procedure TestClickingAnotherFieldKeepsTheTypedDigits;
+    procedure TestReadOnlyStopsTheMouseOnTheCheckBox;
+    procedure TestDroppedDownFalseOnAClosedPickerIsNoCloseUp;
+  end;
+
 implementation
 
 { ── helpers ──────────────────────────────────────────────────────────────── }
@@ -2420,13 +2437,140 @@ begin
     p.ReadOnly := True;
     FChanges := 0;
     p.Calendar.Date := EncodeDate(2026, 6, 16);   // the arrow keys inside the open calendar
-    p.Calendar.OnChange(p.Calendar);
     AssertEquals('the value does not follow the calendar', EncodeDate(2026, 6, 15), p.DateTimeForTest);
     AssertEquals('and nobody is told of a change', 0, FChanges);
   finally p.Free; end;
 end;
 
+procedure TDateTimePickerPickTest.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TDateTimePickerPickTest.ClosedUp(Sender: TObject);
+begin
+  Inc(FCloseUps);
+end;
+
+function TDateTimePickerPickTest.NewPicker: TTyDateTimePickerProbeC3;
+begin
+  Result := TTyDateTimePickerProbeC3.Create(nil);
+  Result.SetBounds(0, 0, 300, 28);
+  Result.Kind := dtkDate;
+  Result.DateFormat := 'yyyy-mm-dd';
+  Result.DateTime := EncodeDate(2026, 6, 15);
+  Result.OnChange := @Changed;
+  Result.OnCloseUp := @ClosedUp;
+  FChanges := 0;
+  FCloseUps := 0;
+end;
+
+procedure TDateTimePickerPickTest.TestMaxDateBoundsTheDayNotTheTime;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.MaxDate := EncodeDate(2026, 6, 20);
+    p.DateTime := EncodeDateTime(2026, 6, 20, 15, 30, 0, 0);
+    AssertEquals('any time on the MaxDate day is in range, as LCL''s',
+      EncodeDateTime(2026, 6, 20, 15, 30, 0, 0), p.DateTimeForTest);
+    p.DateTime := EncodeDateTime(2026, 6, 25, 9, 45, 0, 0);
+    AssertEquals('a later day moves to MaxDate, its time kept',
+      EncodeDateTime(2026, 6, 20, 9, 45, 0, 0), p.DateTimeForTest);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestMovingThroughTheCalendarIsNoPick;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.EnsurePopupForTest;
+    p.Calendar.Date := EncodeDate(2026, 6, 16);   // the arrow keys inside the calendar
+    { What the calendar does after an arrow key: it reports a change. The picker must not
+      be listening -- a pick is Enter or a click (OnAccept). }
+    if Assigned(p.Calendar.OnChange) then p.Calendar.OnChange(p.Calendar);
+    AssertEquals('moving through the calendar picks nothing', EncodeDate(2026, 6, 15),
+      p.DateTimeForTest);
+    AssertEquals('and tells nobody', 0, FChanges);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestAPickKeepsWhereEscGoesBack;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.ConfirmChanges;   // what the focus coming in does
+    p.SimCalendarAccept(EncodeDate(2026, 7, 20));
+    AssertEquals('setup: picked', EncodeDate(2026, 7, 20), p.DateTimeForTest);
+    p.UndoChanges;      // what Esc does
+    AssertEquals('Esc goes back to before the pick', EncodeDate(2026, 6, 15), p.DateTimeForTest);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestAPickTicksAutoCheck;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.Options := p.Options + [dtpoAutoCheck, dtpoEnabledIfUnchecked];
+    p.ShowCheckBox := True;
+    p.Checked := False;
+    p.SimCalendarAccept(EncodeDate(2026, 7, 20));
+    AssertTrue('picking a day ticks the box, as typing does', p.Checked);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestClickingAnotherFieldKeepsTheTypedDigits;
+var
+  p: TTyDateTimePickerProbeC3;
+  x1, x2: Integer;
+begin
+  p := NewPicker;
+  try
+    p.RenderOffscreen;
+    AssertTrue('setup: the day is painted', p.PaintedSegSpan(2, x1, x2));
+    p.SimMouseDown((x1 + x2) div 2, 14);
+    AssertEquals('setup: on the day', 2, p.ActiveSegForTest);
+    p.SimKeyPress('2');
+    AssertEquals('setup: a digit is waiting', '2', p.DigitBufferForTest);
+    AssertTrue('setup: the month is painted', p.PaintedSegSpan(1, x1, x2));
+    p.SimMouseDown((x1 + x2) div 2, 14);
+    AssertEquals('the click moves to the month', 1, p.ActiveSegForTest);
+    AssertEquals('and the typed day goes in first, as the keys do', 2, DayOf(p.DateTimeForTest));
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestReadOnlyStopsTheMouseOnTheCheckBox;
+var
+  p: TTyDateTimePickerProbeC3;
+  r: TTyDateTimeRects;
+begin
+  p := NewPicker;
+  try
+    p.ShowCheckBox := True;
+    p.Checked := True;
+    p.ReadOnly := True;
+    r := p.RectsForTest;
+    p.SimMouseDown((r.CheckBox.Left + r.CheckBox.Right) div 2,
+      (r.CheckBox.Top + r.CheckBox.Bottom) div 2);
+    AssertTrue('ReadOnly stops the mouse, as it stops Space', p.Checked);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerPickTest.TestDroppedDownFalseOnAClosedPickerIsNoCloseUp;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.DroppedDown := False;
+    AssertEquals('nothing was open: no close-up', 0, FCloseUps);
+  finally p.Free; end;
+end;
+
 initialization
+  RegisterTest(TDateTimePickerPickTest);
   RegisterTest(TDateTimePickerPureTest);
   RegisterTest(TDateTimeNullTest);
   RegisterTest(TDateTimeLayoutTest);
