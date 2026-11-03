@@ -309,6 +309,10 @@ type
     { [R5-A] the block's shadow: getItemStyle / getLineStyle / getAreaStyle's
       four shadow keys (TyShadowOfValues) }
     Shadow: TTyChartShadow;
+    { [R7-Z] a lineStyle's `width` is +Infinity: it strokes (hasStroke is
+      `lineWidth > 0`), the canvas refusing the width and keeping the one it
+      had (BorderWidthLogical is 0) }
+    WidthInf: Boolean;
   end;
 
 { [R5-A] A SHADOW FROM THE FOUR VALUES a style block writes (nil or null: not
@@ -1688,6 +1692,7 @@ begin
   Result.Color := ReadOptColor(AObj, 'color');
   Result.Opacity := NumOr(AObj, 'opacity');
   Result.BorderWidthLogical := PenWidthIn(AObj, 'width');
+  Result.WidthInf := TyOptIsPosInf(AObj.Find('width'));
   Result.Dash := ReadDash(AObj, 'type', Result.DashLogical);
   Result.DashOffset := PenOffsetIn(AObj, 'dashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);

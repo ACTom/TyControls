@@ -330,10 +330,17 @@ begin
     z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
     the grids' at an equal z and z2 }
   AddGridBackgrounds(FGfxUnder);
+  { [R7-Z] these and the axes' parts in upstream's paint order: what each
+    refuses settled, and the ground the list starts from }
+  if APainter <> nil then CompRun(APainter.PPI) else CompRun(FLastPPI);
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
-    if not el.Ignore then TyRenderElement(APainter, el);
+    if el.Ignore then Continue;
+    TyRenderElement(APainter, el);
+    { [R7-Z] (CompDrawn) }
+    if el.Datum.Kind = ctkGraphic then
+      CompDrew(nil, 'graphic0', 0, el.Z2, el.Caption.FontSizeLogical <> 0, el);
   end;
 end;
 

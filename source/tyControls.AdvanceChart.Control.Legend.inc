@@ -616,7 +616,12 @@ begin
   AFont.Weight := TyFontStyleOver(TJSONObject(st).Find('fontStyle'), AFont.Weight);
   d := TJSONObject(st).Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
-    AInk.Text := col;
+    AInk.Text := col
+  { [R7-Z] a colour no parser reads: the fill the canvas had there (the
+    list's run settles it) [was: the theme's] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+    and (d.AsString <> 'inherit') and (d.AsString <> 'auto') and not TyColourIsHandler(d.AsString) then
+    AInk.Text := cTyCanvasColourLeft;
 end;
 
 function TTyCustomAdvanceChart.LegendInk: TTyLegendInk;

@@ -701,6 +701,14 @@ begin
     begin
       Result.HasText_ := True;
       Result.TextColour := c;
+    end
+    { [R7-Z] a colour no parser reads: the fill the canvas had (the list's
+      run settles it) [was: the skin's] }
+    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      Result.HasText_ := True;
+      Result.TextColour := cTyCanvasColourLeft;
     end;
     d := ts.Find('fontSize');
     Result.FontSize := TyOptFontSize(d, Result.FontSize);

@@ -71,6 +71,8 @@ type
     WordH, WordV: string;
     HasBackground: Boolean;
     BorderWidth: Double;
+    { [R7-Z] borderWidth is +Infinity: stroked at the width the canvas had }
+    BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
     { [R5-A] the box's shadow: the title's own shadow keys (install.ts'
       rect, getItemStyle(['color', 'opacity'])) -- cast by the fill the
@@ -328,9 +330,24 @@ begin
   if not (Result.HasBackground and TyTryParseChartColor(d.AsString, Result.BackgroundColor)) then
     Result.BackgroundColor := 0;
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
+  Result.BorderWidthInf := TyOptIsPosInf(node.Find('borderWidth'));
+  { [R7-Z] a background no parser reads: filled, in what the canvas had
+    [was: none] }
+  if Result.HasBackground and (Result.BackgroundColor = 0)
+    and not TyTryParseChartColor(d.AsString, Result.BackgroundColor)
+    and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+    Result.BackgroundColor := cTyCanvasColourLeft;
   d := node.Find('borderColor');
   Result.HasBorderColor := (d <> nil) and (d.JSONType = jtString)
     and TyTryParseChartColor(d.AsString, Result.BorderColor);
+  { [R7-Z] a border colour no parser reads: the stroke the canvas had
+    [was: the skin's] }
+  if not Result.HasBorderColor and (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+  begin
+    Result.HasBorderColor := True;
+    Result.BorderColor := cTyCanvasColourLeft;
+  end;
   { [R7-X] the keys the title's defaults leave out climb to the option
     root's [was: the title's own only] }
   if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;

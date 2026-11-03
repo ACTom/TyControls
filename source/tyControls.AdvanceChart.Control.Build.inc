@@ -3174,6 +3174,14 @@ begin
   begin
     Result.HasColour := True;
     Result.Colour := col;
+  end
+  { [R7-Z] a colour no parser reads: the fill the canvas had there
+    (PaintTitles) [was: the theme's] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+    and not TyColourIsHandler(d.AsString) then
+  begin
+    Result.HasColour := True;
+    Result.Colour := cTyCanvasColourLeft;
   end;
 end;
 
@@ -3397,27 +3405,43 @@ begin
     for k := 0 to 3 do rad[k] := APainter.ScaleF(FTitleSpecs[i].BorderRadii[k]);
     el.Shape := TyShapeRoundRect(frame, rad);
     el.Style.HasFill := FTitleSpecs[i].HasBackground
-      and ((FTitleSpecs[i].BackgroundColor shr 24) <> 0);
+      and (((FTitleSpecs[i].BackgroundColor shr 24) <> 0)
+        or (FTitleSpecs[i].BackgroundColor = cTyCanvasColourLeft));
     el.Style.FillColor := FTitleSpecs[i].BackgroundColor;
     el.Style.StrokeWidthLogical := 0;
-    if FTitleSpecs[i].BorderWidth > 0 then
+    if (FTitleSpecs[i].BorderWidth > 0) or FTitleSpecs[i].BorderWidthInf then
     begin
       if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
       else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
       else frameInk := st.TextColor;
       el.Style.StrokeColor := TTyChartColor(frameInk);
       el.Style.StrokeWidthLogical := FTitleSpecs[i].BorderWidth;
+      { [R7-Z] +Infinity strokes, at the width the canvas had }
+      if FTitleSpecs[i].BorderWidthInf then
+      begin
+        el.Style.StrokeWidthLogical := 1;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
     end;
     TyStyleSetShadow(el.Style, FTitleSpecs[i].Shadow);
-    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
-      TyRenderElement(APainter, el);
-    FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
-    FTitleFramesDrawn[i].El := el;
     { in the fonts the layout measured -- the author's where written }
     f0 := FTitleFonts[i][0];
     f1 := FTitleFonts[i][1];
     if f0.HasColour then ink0 := TTyColor(f0.Colour) else ink0 := st.TextColor;
     if f1.HasColour then ink1 := TTyColor(f1.Colour) else ink1 := subSt.TextColor;
+    { [R7-Z] WHAT THE CANVAS REFUSES of the box and the text: what it had
+      there -- the list's run up to the title's z, then the box (z2 0),
+      the text, the subtext (10) }
+    TitleSettle(i, el, ink0, ink1);
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+      TyRenderElement(APainter, el);
+    FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
+    FTitleFramesDrawn[i].El := el;
+    { [R7-Z] (CompDrawn) }
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+      CompDrew(nil, 'title' + IntToStr(i), 0, 0, False, el);
+    TitleDrewText(i, 0, ink0);
+    TitleDrewText(i, 1, ink1);
     { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86] }
     if (i <= High(FTitleRt)) and (Length(FTitleRt[i][0].Pieces) > 0) then
       TyRenderRtPieces(APainter, FTitleRt[i][0].Pieces, FTitleRt[i][0].X,
@@ -3440,6 +3464,66 @@ begin
   end;
 end;
 
+
+procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+var e: TTyChartElement;
+begin
+  if ALine = 0 then
+  begin
+    if (FTitleSpecs[AIndex].Text = '') and not ((AIndex <= High(FTitleRt))
+      and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then Exit;
+  end
+  else if FTitleSpecs[AIndex].Subtext = '' then Exit;
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Caption.FontSizeLogical := 1;
+  e.Caption.Text := 'x';
+  e.Caption.Colour := TTyChartColor(AInk);
+  CompDrew(nil, 'title' + IntToStr(AIndex), 0, 10, True, e);
+end;
+
+procedure TTyCustomAdvanceChart.TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
+  var AInk0, AInk1: TTyColor);
+var
+  run: TTyCanvasRun;
+  e: TTyChartElement;
+  z: Integer;
+  node, d: TJSONData;
+begin
+  if not (TyCanvasElementCarries(AFrame) or ((AFrame.CanvasFlags and cTyCanvasWidthLeft) <> 0)
+    or (TTyChartColor(AInk0) = cTyCanvasColourLeft) or (TTyChartColor(AInk1) = cTyCanvasColourLeft)) then
+    Exit;
+  { the title's z (its model's default 6) }
+  z := 6;
+  node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      z := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+  end;
+  CompRunTo(z, 0, run);
+  if AFrame.Style.HasFill or (AFrame.Style.StrokeWidthLogical > 0) then TyCanvasRunStep(run, AFrame);
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Caption.FontSizeLogical := 1;
+  e.Caption.Text := 'x';
+  e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+  if (FTitleSpecs[AIndex].Text <> '') or ((AIndex <= High(FTitleRt))
+    and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then
+  begin
+    e.Caption.Colour := TTyChartColor(AInk0);
+    TyCanvasRunStep(run, e);
+    AInk0 := TTyColor(e.Caption.Colour);
+  end;
+  if FTitleSpecs[AIndex].Subtext <> '' then
+  begin
+    e.CanvasFlags := 0;
+    e.Caption.Colour := TTyChartColor(AInk1);
+    TyCanvasRunStep(run, e);
+    AInk1 := TTyColor(e.Caption.Colour);
+  end;
+end;
 
 function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;
 var

@@ -36,7 +36,15 @@ unit test.advchart.linescanvas;
   a legend's refused values, what the axes drawn before the series leave,
   a dirty rect's block starting from the canvas' own state, an option set
   while a trail's transform is no number, a symbol of size nought:
-  TestTheRefusedValuesAsUpstream and TestTheR7WHitsAsUpstream. }
+  TestTheRefusedValuesAsUpstream and TestTheR7WHitsAsUpstream.
+
+  [R7-Z] The cases named z-..., recorded as the w- ones, every component's
+  displayable keyed c.<mainType><index>.<z2>.<t|p>.<n>: a component's own
+  refused values (an axis' colour, width, phase, cap, a label's or a name's
+  colour) and what the components drawn before the series hand the canvas
+  (the graphic's elements under the axes, the axes in upstream's paint
+  order): TestTheComponentsCanvasAsUpstream, against what the port drew
+  (CompDrawn) and the series' elements as the w- cases. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -47,6 +55,11 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
 type
   TLcProbe = class(TTyAdvanceChart)
   public
+    { [R7-Z] a component's part of key AKey, upstream's z2 AZ2 and kind (a
+      text or a path) as it was drawn -- the one that fills (AOp 'fill'),
+      strokes ('stroke'), else the first; False for none }
+    function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
+      out AEl: TTyChartElement): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -69,7 +82,8 @@ type
     function GraphicOf(const ARec: TJSONObject): Integer;
     procedure RunV(AHits: Boolean);
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
-    procedure RunW(AHits: Boolean);
+    function CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+    procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -80,6 +94,7 @@ type
     procedure TestTheHitsAsUpstream;
     procedure TestTheRefusedValuesAsUpstream;
     procedure TestTheR7WHitsAsUpstream;
+    procedure TestTheComponentsCanvasAsUpstream;
   end;
 
 implementation
@@ -95,6 +110,27 @@ end;
 procedure TLcProbe.Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderCached(ACanvas, ARect, APPI);
+end;
+
+function TLcProbe.CompPart(const AKey: string; AZ2: Integer; AText: Boolean;
+  const AOp: string; out AEl: TTyChartElement): Boolean;
+var d: TTyCompPartArray; k, first: Integer;
+begin
+  d := CompDrawn;
+  first := -1;
+  for k := 0 to High(d) do
+    if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
+    begin
+      if first < 0 then first := k;
+      if ((AOp = 'fill') and d[k].El.Style.HasFill)
+        or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0)) then
+      begin
+        AEl := d[k].El;
+        Exit(True);
+      end;
+    end;
+  Result := first >= 0;
+  if Result then AEl := d[first].El else AEl := Default(TTyChartElement);
 end;
 
 function TLcProbe.Frame: TTyPaintList;
@@ -209,7 +245,7 @@ begin
     id := c.Strings['id'];
     if (AWhich = 0) <> (Copy(id, 1, 5) = 'grad-') then Continue;
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
-    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') then Continue;
+    if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -707,6 +743,59 @@ begin
   end;
 end;
 
+{ [R7-Z] a component's displayable that is in the port's list (a legend's,
+  a toolbox's...): a text by its words, a path by its bounds; -2 for a
+  background that paints nothing (a fill of no alpha: the port builds none),
+  -1 for none }
+function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+var
+  L: TTyPaintList;
+  k, q, n: Integer;
+  el: TTyChartElement;
+  bb: TTyRectF;
+  pb, ops: TJSONArray;
+  wc: TTyChartColor;
+  s: string;
+begin
+  Result := -1;
+  L := FChart.Frame;
+  if AText then
+  begin
+    if ARec.Find('tx') = nil then Exit;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if el.Caption.FontSizeLogical = 0 then Continue;
+      s := el.Caption.Text;
+      if (s = '') and (Length(el.Caption.RtPieces) > 0) then
+        for q := 0 to High(el.Caption.RtPieces) do s := s + el.Caption.RtPieces[q].Text;
+      if s = ARec.Strings['tx'] then Exit(k);
+    end;
+    Exit;
+  end;
+  if ARec.Find('pb').JSONType <> jtNull then
+  begin
+    pb := ARec.Arrays['pb'];
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if el.Caption.FontSizeLogical <> 0 then Continue;
+      bb := TyShapeBounds(el.Shape);
+      if not TyRectFIsValid(bb) then Continue;
+      if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
+        and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
+        Exit(k);
+    end;
+  end;
+  ops := ARec.Arrays['ops'];
+  n := 0;
+  for q := 0 to ops.Count - 1 do
+    if (ops.Objects[q].Strings['op'] <> 'fill')
+      or not TyTryParseChartColor(ops.Objects[q].Strings['fs'], wc) or ((wc shr 24) <> 0) then
+      Inc(n);
+  if n = 0 then Result := -2;
+end;
+
 { the colours a canvas holds alike: the same, or both of no alpha }
 function SameInk(A, B: TTyChartColor): Boolean;
 begin
@@ -751,8 +840,14 @@ end;
 
 { AHits False: the context each fill / stroke / text is made with; True:
   findHover at the probes }
-procedure TAdvChartLinesCanvasOracleTest.RunW(AHits: Boolean);
+procedure TAdvChartLinesCanvasOracleTest.RunW(AHits: Boolean; const APrefix: string);
 var
+  { [R7-Z] a component's part: its key, z2 and kind }
+  comp: Boolean;
+  ckey: string;
+  cz2: Integer;
+  ctext: Boolean;
+  parts: TStringList;
   cs, frames, els, ops, hits, h, sets, blocks, ld: TJSONArray;
   c, fr, rec, o: TJSONObject;
   i, j, k, idx, q, n: Integer;
@@ -774,7 +869,7 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
-    if Copy(id, 1, 2) <> 'w-' then Continue;
+    if Copy(id, 1, 2) <> APrefix then Continue;
     { a trail's frames under useDirtyRect: upstream repaints a block round
       each moving symbol and keeps the rest of the last frame's pixels; the
       port draws an animated frame whole (recorded, not held: spec 277) }
@@ -845,6 +940,36 @@ begin
         where := Format('%s t=%g %s', [id, t, key]);
         ops := rec.Arrays['ops'];
         if ops.Count = 0 then Continue;
+        { [R7-Z] a component's part: what the port drew of it }
+        comp := Copy(key, 1, 2) = 'c.';
+        if comp then
+        begin
+          parts := TStringList.Create;
+          try
+            parts.Delimiter := '.';
+            parts.StrictDelimiter := True;
+            parts.DelimitedText := key;
+            ckey := parts[1];
+            cz2 := StrToInt(parts[2]);
+            ctext := parts[3] = 't';
+          finally
+            parts.Free;
+          end;
+          if FChart.CompPart(ckey, cz2, ctext, '', el) then idx := 0
+          else
+          begin
+            { (a component in the list) }
+            comp := False;
+            idx := CListOf(rec, ctext);
+            if idx = -2 then Continue;
+            if idx < 0 then
+            begin
+              Miss(where + ': no part drawn');
+              Continue;
+            end;
+          end;
+        end
+        else
         idx := WElOf(key, rec);
         if idx < 0 then
         begin
@@ -864,8 +989,12 @@ begin
           Miss(where + ': no element');
           Continue;
         end;
-        el := FChart.Frame.Element(idx);
-        isCap := key[1] = 'x';
+        if comp then isCap := ctext
+        else
+        begin
+          el := FChart.Frame.Element(idx);
+          isCap := (key[1] = 'x') or ((Copy(key, 1, 2) = 'c.') and ctext);
+        end;
         { A DIRTY RECT'S BLOCK: what the cached path drew there -- the
           pixel at the middle of the path, the fill the block made it
           with over white (an element whose fill the canvas carried) }
@@ -912,6 +1041,7 @@ begin
         begin
           o := ops.Objects[q];
           op := o.Strings['op'];
+          if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
           sc := Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));
@@ -943,7 +1073,10 @@ begin
             end
             else if TyTryParseChartColor(o.Strings['fs'], wc) then
             begin
-              if not el.Style.HasFill or (el.Style.FillGradient.Kind <> cgkNone)
+              { ([R7-Z] a component's background filled with no alpha: the
+                port fills none) }
+              if (Copy(key, 1, 2) = 'c.') and not el.Style.HasFill and ((wc shr 24) = 0) then
+              else if not el.Style.HasFill or (el.Style.FillGradient.Kind <> cgkNone)
                 or not SameInk(el.Style.FillColor, wc) then
                 Miss(Format('%s: fill %x (has %s), upstream %s', [where, el.Style.FillColor,
                   BoolToStr(el.Style.HasFill, True), o.Strings['fs']]));
@@ -969,7 +1102,10 @@ begin
             if el.Style.DashWord <> 0 then
               pdash := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical);
             Inc(FCompared);
-            if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
+            { ([R7-Z] the z- cases: a dash where upstream strokes solid too) }
+            if (APrefix = 'z-') and (ld.Count = 0) and (Length(pdash) > 0) then
+              Miss(Format('%s: dash of %d, upstream solid', [where, Length(pdash)]))
+            else if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
               Miss(Format('%s: dash of %d, upstream %s', [where, Length(pdash), ld.AsJSON]))
             else if ld.Count > 0 then
             begin
@@ -986,6 +1122,25 @@ begin
               Inc(FCompared);
               if Abs(pldo - ldo) > 1e-6 then
                 Miss(Format('%s: dash phase %g, upstream %g', [where, pldo, ldo]));
+            end;
+            { [R7-Z] the cap (a word the canvas refuses: the one it had) }
+            if APrefix = 'z-' then
+            begin
+              Inc(FCompared);
+              case el.Style.LineCap of
+                1: want := 'round';
+                2: want := 'square';
+              else
+                want := 'butt';
+              end;
+              if want <> o.Strings['cap'] then
+                Miss(Format('%s: cap %s, upstream %s', [where, want, o.Strings['cap']]));
+              { and the miterLimit (one the canvas refuses: the one it had) }
+              lw := el.Style.MiterLimit;
+              if not (lw > 0) then lw := 10;
+              Inc(FCompared);
+              if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
+                Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
             end;
           end;
           { the shadow it casts (a refused blur or colour kept) }
@@ -1049,6 +1204,11 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7WHitsAsUpstream;
 begin
   RunW(True);
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheComponentsCanvasAsUpstream;
+begin
+  RunW(False, 'z-');
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheCanvasStateAsUpstream;

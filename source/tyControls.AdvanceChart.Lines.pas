@@ -416,6 +416,13 @@ type
     LineWidth: Double;
     HasT: Boolean;
     M: TTyMat2D;
+    { [R7-Z] and the rest of what the components drawn first leave: the
+      blur, cap, join, miterLimit (10 where nothing set one), the dash's
+      phase, a gradient fill or stroke }
+    Blur: Double;
+    Cap, Join: Byte;
+    Miter, Phase: Double;
+    FillGrad, StrokeGrad: TTyChartGradient;
   end;
 
   { [R7-W] the canvas state the paint order carries }
@@ -446,6 +453,9 @@ type
 
 { the canvas' own defaults, and AShadow's shadowColor }
 function TyCanvasGroundOf(AShadow: TTyChartColor): TTyCanvasGround;
+{ [R7-Z] what a run leaves the canvas holding: the ground of what is drawn
+  after it on the same canvas }
+function TyCanvasGroundOfRun(const ARun: TTyCanvasRun): TTyCanvasGround;
 procedure TyCanvasRunStart(out ARun: TTyCanvasRun; const AGround: TTyCanvasGround;
   APPI: Integer);
 procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
@@ -2258,6 +2268,25 @@ begin
   Result.Fill := TTyChartColor($FF000000);
   Result.Stroke := TTyChartColor($FF000000);
   Result.LineWidth := 1;
+  Result.Miter := 10;
+end;
+
+function TyCanvasGroundOfRun(const ARun: TTyCanvasRun): TTyCanvasGround;
+begin
+  Result := Default(TTyCanvasGround);
+  Result.Shadow := ARun.Cur.Shadow;
+  Result.Fill := ARun.Cur.Fill;
+  Result.Stroke := ARun.Cur.Stroke;
+  Result.LineWidth := ARun.Cur.LineWidth;
+  Result.HasT := ARun.Cur.HasT;
+  Result.M := ARun.Cur.M;
+  Result.Blur := ARun.Cur.Blur;
+  Result.Cap := ARun.Cur.Cap;
+  Result.Join := ARun.Cur.Join;
+  Result.Miter := ARun.Cur.Miter;
+  Result.Phase := ARun.Cur.Phase;
+  Result.FillGrad := ARun.Cur.FillGrad;
+  Result.StrokeGrad := ARun.Cur.StrokeGrad;
 end;
 
 { the canvas' own state at the start of a zlevel's paint: its defaults, the
@@ -2277,6 +2306,14 @@ begin
     ARun.Cur.LineWidth := ARun.Ground.LineWidth;
     ARun.Cur.HasT := ARun.Ground.HasT;
     ARun.Cur.M := ARun.Ground.M;
+    { [R7-Z] the rest of it [was: the canvas' defaults] }
+    ARun.Cur.Blur := ARun.Ground.Blur;
+    ARun.Cur.Cap := ARun.Ground.Cap;
+    ARun.Cur.Join := ARun.Ground.Join;
+    if ARun.Ground.Miter > 0 then ARun.Cur.Miter := ARun.Ground.Miter;
+    ARun.Cur.Phase := ARun.Ground.Phase;
+    ARun.Cur.FillGrad := ARun.Ground.FillGrad;
+    ARun.Cur.StrokeGrad := ARun.Ground.StrokeGrad;
   end;
 end;
 
@@ -2422,8 +2459,11 @@ begin
   if (AEl.CanvasFlags and cTyCanvasJoinLeft) <> 0 then AEl.Style.LineJoin := ARun.Cur.Join
   else if cap then ARun.Cur.Join := 0
   else ARun.Cur.Join := AEl.Style.LineJoin;
+  { ([R7-Z] a text span's own default is 2 -- TSpan's DEFAULT_TSPAN_STYLE
+    [was: 10]) }
   if (AEl.CanvasFlags and cTyCanvasMiterLeft) <> 0 then AEl.Style.MiterLimit := ARun.Cur.Miter
-  else if cap or not (AEl.Style.MiterLimit > 0) then ARun.Cur.Miter := 10
+  else if cap then ARun.Cur.Miter := 2
+  else if not (AEl.Style.MiterLimit > 0) then ARun.Cur.Miter := 10
   else ARun.Cur.Miter := AEl.Style.MiterLimit;
   { the transform: refused (the unit symbol under the one kept), else the
     element's own -- [R7-V] an effect symbol's place, a caption's anchor
@@ -2452,6 +2492,12 @@ begin
     elM := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
       AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
   end
+  else if Length(AEl.CanvasM) = 6 then
+  begin
+    elHasT := True;
+    elM[0] := AEl.CanvasM[0]; elM[1] := AEl.CanvasM[1]; elM[2] := AEl.CanvasM[2];
+    elM[3] := AEl.CanvasM[3]; elM[4] := AEl.CanvasM[4]; elM[5] := AEl.CanvasM[5];
+  end
   else if cap then
   begin
     elHasT := True;
@@ -2460,12 +2506,6 @@ begin
     else
       elM := TyZrLocal(1, 1, AEl.Caption.RotationRad, AEl.Caption.X, AEl.Caption.Y);
     if IsNan(elM[0]) or IsNan(elM[4]) or IsNan(elM[5]) then elHasT := False;
-  end
-  else if Length(AEl.CanvasM) = 6 then
-  begin
-    elHasT := True;
-    elM[0] := AEl.CanvasM[0]; elM[1] := AEl.CanvasM[1]; elM[2] := AEl.CanvasM[2];
-    elM[3] := AEl.CanvasM[3]; elM[4] := AEl.CanvasM[4]; elM[5] := AEl.CanvasM[5];
   end
   else if AEl.Shape.HitSym <> '' then
   begin

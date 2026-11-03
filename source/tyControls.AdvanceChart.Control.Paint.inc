@@ -146,8 +146,8 @@ var
   nx, ny, nrot: Double;
   { the author's pens over the skin [R5-B] }
   lineK, tickK, minorTickK, splitK, minorSplitK, inkK: TTyAxisStroke;
-  { [R7-W] }
-  gi: Integer;
+  { [R7-Z] }
+  arrowInk: TTyChartColor;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -298,13 +298,45 @@ var
     Inc(batched);
   end;
 
+  { [R7-Z] a part as it is drawn (CompDrawn): its pen, or its text's fill }
+  procedure Drew(AKind: Byte; AZ2: Integer; const AStroke: TTyAxisStroke;
+    AText: Boolean; AFill: TTyChartColor);
+  var e: TTyChartElement;
+  begin
+    e := Default(TTyChartElement);
+    e.Style.Alpha := 1;
+    if AText then
+    begin
+      e.Caption.FontSizeLogical := 1;
+      e.Caption.Text := 'x';
+      e.Caption.Colour := AFill;
+    end
+    else if AKind in [cpkSplitArea, cpkArrow] then
+    begin
+      e.Style.HasFill := True;
+      e.Style.FillColor := AFill;
+    end
+    else
+    begin
+      e.Style.StrokeColor := AStroke.Colour;
+      e.Style.StrokeWidthLogical := AStroke.WidthLogical;
+      e.Style.DashLogical := Copy(AStroke.Dash, 0, Length(AStroke.Dash));
+      e.Style.DashOffsetLogical := AStroke.DashOffset;
+      e.Style.LineCap := Ord(AStroke.Cap);
+    end;
+    CompDrew(AAxis, AAxis.MainType + IntToStr(AAxis.ComponentIndex), AKind, AZ2, AText, e);
+  end;
+
   { Stroke what BatchLine collected, if anything. The count guards a stroke of
     an empty path, which a fully thinned-away set of minor ticks produces.
     In the piece's own pen [R5-B: in the skin's colour and width]. }
-  procedure StrokeBatch(const AStroke: TTyAxisStroke);
+  procedure StrokeBatch(const AStroke: TTyAxisStroke; AKind: Byte; AZ2: Integer);
   begin
     if batched > 0 then
+    begin
       TyStrokeAxisPath(APainter, AStroke);
+      if AStroke.Drawn then Drew(AKind, AZ2, AStroke, False, 0);
+    end;
     batched := 0;
   end;
 
@@ -444,6 +476,17 @@ begin
   minorTickK := TyAxisSkinStroke(furn.MinorTickPen, minorTickS, acButt);
   splitK := TyAxisSkinStroke(furn.SplitPen, splitS, acButt);
   minorSplitK := TyAxisSkinStroke(furn.MinorSplitPen, minorSplitS, acButt);
+  { [R7-Z] WHAT THE CANVAS REFUSES OF EACH -- a colour no parser reads, an
+    infinite width, a phase that is no number, a word that is not a cap --
+    it strokes with what it had there, in upstream's paint order (CompRun)
+    [was: not stroked, or the skin's] }
+  CompSettlePen(AAxis, cpkLine, lineK);
+  CompSettlePen(AAxis, cpkTick, tickK);
+  CompSettlePen(AAxis, cpkMinorTick, minorTickK);
+  CompSettlePen(AAxis, cpkSplit, splitK);
+  CompSettlePen(AAxis, cpkMinorSplit, minorSplitK);
+  labelS.TextColor := TTyColor(CompSettleFill(AAxis, cpkLabel, TTyChartColor(labelS.TextColor)));
+  nameS.TextColor := TTyColor(CompSettleFill(AAxis, cpkName, TTyChartColor(nameS.TextColor)));
 
   { THE TICK'S LENGTH, and it has to be asked AFTER the two lines above. It
     used to be asked first -- reading `spec` and `furn` before either was
@@ -524,6 +567,9 @@ begin
         if not spec^.SplitAreaInks[ink].Ok then Continue;
         areaFill.Kind := tfkSolid;
         areaFill.Color := TTyColor(spec^.SplitAreaInks[ink].Colour);
+        { [R7-Z] a colour the canvas refuses: the fill it had at the band }
+        if spec^.SplitAreaInks[ink].Colour = cTyCanvasColourLeft then
+          areaFill.Color := TTyColor(CompInkOf(AAxis, cpkSplitArea, ink));
       end
       else if (ink <> 0) or not (tpBackground in areaS.Present) then
         Continue;
@@ -600,11 +646,11 @@ begin
         over each one's box }
       if minorSplitK.Gradient.Kind <> cgkNone then
       begin
-        StrokeBatch(minorSplitK);
+        StrokeBatch(minorSplitK, cpkMinorSplit, 0);
         APainter.BeginPath;
       end;
     end;
-    StrokeBatch(minorSplitK);
+    StrokeBatch(minorSplitK, cpkMinorSplit, 0);
   end;
 
   { WHERE THE LAYOUT PUT THEM: the split line's own interval, the labels'
@@ -621,18 +667,6 @@ begin
     and (splitK.Drawn or ((Length(spec^.SplitLineInks) > 0)
       and (splitK.WidthLogical > 0))) then
   begin
-    { [R7-W] the pen it leaves on the canvas }
-    gi := AxGroundAt(AAxis);
-    FAxGround[gi].HasSplit := splitK.WidthLogical > 0;
-    FAxGround[gi].SplitStroke := splitK.Colour;
-    { (the author's list: the last drawn line's) }
-    if Length(spec^.SplitLineInks) > 0 then
-      for i := 0 to High(spec^.SplitLineMarks) do
-        if spec^.SplitLineMarks[i].Drawn and (spec^.SplitLineMarks[i].ColourIndex >= 0)
-          and (spec^.SplitLineMarks[i].ColourIndex <= High(spec^.SplitLineInks)) then
-          FAxGround[gi].SplitStroke :=
-            TTyChartColor(spec^.SplitLineInks[spec^.SplitLineMarks[i].ColourIndex].Colour);
-    FAxGround[gi].SplitW := splitK.WidthLogical;
     for ink := 0 to Max(0, High(spec^.SplitLineInks)) do
     begin
       inkK := splitK;
@@ -642,6 +676,8 @@ begin
         inkK.Colour := spec^.SplitLineInks[ink].Colour;
         inkK.Gradient := spec^.SplitLineInks[ink].Grad;
         inkK.Drawn := True;
+        { [R7-Z] a colour the canvas refuses: the one it had at its first line }
+        if inkK.Colour = cTyCanvasColourLeft then inkK.Colour := CompInkOf(AAxis, cpkSplit, ink);
       end;
       APainter.BeginPath;
       for i := 0 to High(spec^.SplitLineMarks) do
@@ -658,11 +694,11 @@ begin
         { [R5-G] a Line per split line too (CartesianAxisView, not merged) }
         if inkK.Gradient.Kind <> cgkNone then
         begin
-          StrokeBatch(inkK);
+          StrokeBatch(inkK, cpkSplit, 0);
           APainter.BeginPath;
         end;
       end;
-      StrokeBatch(inkK);
+      StrokeBatch(inkK, cpkSplit, 0);
     end;
   end;
 
@@ -684,11 +720,6 @@ begin
     drawn. }
   if furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
   begin
-    { [R7-W] the pen it leaves on the canvas }
-    gi := AxGroundAt(AAxis);
-    FAxGround[gi].HasLine := lineK.Drawn and (lineK.WidthLogical > 0);
-    FAxGround[gi].LineStroke := lineK.Colour;
-    FAxGround[gi].LineW := lineK.WidthLogical;
     APainter.BeginPath;
     { CUT AT THE BREAKS, each segment already on the pixel grid [Batch 132] }
     if (spec <> nil) and spec^.HasBreakLine then
@@ -706,7 +737,7 @@ begin
       BatchLine(APlot.Left, at, APlot.Right, at, lineK.WidthLogical)
     else
       BatchLine(at, APlot.Top, at, APlot.Bottom, lineK.WidthLogical);
-    StrokeBatch(lineK);
+    StrokeBatch(lineK, cpkLine, 1);
     { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
       setColor fills it -- strokes a `line`, rings an `empty` one round the
       skin's empty-symbol ground [Batch 101]. The line's colour, the
@@ -715,7 +746,12 @@ begin
     if (spec <> nil) and not furn.LinePen.ColourNone
       and (furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
       for i := 0 to High(spec^.Arrows) do
-        PaintAxisArrow(APainter, spec^.Arrows[i], lineK.Colour);
+      begin
+        { [R7-Z] a colour the canvas refuses: the fill it had there }
+        arrowInk := CompSettleFill(AAxis, cpkArrow, lineK.Colour);
+        PaintAxisArrow(APainter, spec^.Arrows[i], arrowInk);
+        Drew(cpkArrow, 11, lineK, False, arrowInk);
+      end;
   end;
 
   { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
@@ -727,11 +763,6 @@ begin
     [Revised in batch 40: every tickStep-th tick, a hidden label's kept.] }
   if furn.ShowTicks and tickK.Drawn and (spec <> nil) then
   begin
-    { [R7-W] the pen it leaves on the canvas }
-    gi := AxGroundAt(AAxis);
-    FAxGround[gi].HasTick := (Length(spec^.TickMarks) > 0) and (tickK.WidthLogical > 0);
-    FAxGround[gi].TickStroke := tickK.Colour;
-    FAxGround[gi].TickW := tickK.WidthLogical;
     APainter.BeginPath;
     for i := 0 to High(spec^.TickMarks) do
     begin
@@ -755,11 +786,11 @@ begin
         Line per tick }
       if tickK.Gradient.Kind <> cgkNone then
       begin
-        StrokeBatch(tickK);
+        StrokeBatch(tickK, cpkTick, 2);
         APainter.BeginPath;
       end;
     end;
-    StrokeBatch(tickK);
+    StrokeBatch(tickK, cpkTick, 2);
   end;
 
   { Minor MARKS. The difference in LENGTH is what says which is which when both
@@ -801,11 +832,11 @@ begin
       { [R5-G] a Line per minor tick too }
       if minorTickK.Gradient.Kind <> cgkNone then
       begin
-        StrokeBatch(minorTickK);
+        StrokeBatch(minorTickK, cpkMinorTick, 2);
         APainter.BeginPath;
       end;
     end;
-    StrokeBatch(minorTickK);
+    StrokeBatch(minorTickK, cpkMinorTick, 2);
   end;
 
   { THE AXIS NAME, WHERE THE LAYOUT PUT IT. The grid was shrunk for the
@@ -822,6 +853,7 @@ begin
     ny := spec^.NamePlacement.Y;
     nrot := spec^.NamePlacement.RotationRad;
     ProxName(nx, ny, nrot);
+    Drew(cpkName, 1, lineK, True, TTyChartColor(nameS.TextColor));
     { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
       [Batch 86] }
     if Length(spec^.NamePlacement.Rt) > 0 then
@@ -873,14 +905,7 @@ begin
       lx := places[i].X;
       ly := places[i].Y;
       ProxLabel(i, lx, ly);
-      { [R7-W] the last label hands the canvas its fill and transform }
-      gi := AxGroundAt(AAxis);
-      FAxGround[gi].HasLabel := True;
-      FAxGround[gi].LabelFill := TTyChartColor(lblStyle.TextColor);
-      if places[i].HasM and (lx = places[i].X) and (ly = places[i].Y) then
-        FAxGround[gi].LabelM := places[i].M
-      else
-        FAxGround[gi].LabelM := TyZrLocal(1, 1, spec^.RotationRad, lx, ly);
+      Drew(cpkLabel, 10, lineK, True, TTyChartColor(lblStyle.TextColor));
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
       begin
@@ -1398,26 +1423,688 @@ begin
     if FPaintList.Ref(k)^.ProgChunk > 0 then Exit(FPaintList.Ref(k)^.ZLevel);
 end;
 
-function TTyCustomAdvanceChart.AxGroundAt(AAxis: TObject): Integer;
+{ [R7-Z] THE PARTS OF ONE CARTESIAN AXIS as upstream's AxisBuilder and
+  CartesianAxisView add them, each a pseudo-element of what it hands the
+  canvas: the split areas and lines (z2 0), the name and the line (z2 1,
+  the name first), the ticks (2), the labels (10), the arrows (11). The
+  pens are resolved as PaintAxis resolves them (keep the two in step). }
+procedure TTyCustomAdvanceChart.CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild;
+  AView: Integer; var AParts: TTyCompPartArray);
+var
+  model: TTyStyleModel;
+  lineS, tickStyle, splitS, minorTickS, minorSplitS, areaS, labelS, nameS: TTyStyleSet;
+  furn: TTyAxisFurniture;
+  spec: PTyAxisLayoutSpec;
+  lineK, tickK, minorTickK, splitK, minorSplitK: TTyAxisStroke;
+  key: string;
+  z, seq, i, ink: Integer;
+  scaleTicks: TTyScaleTickArray;
+  minors: Boolean;
+  e: TTyChartElement;
+  col: TTyChartColor;
+  view: TTyChartView;
+  node, d: TJSONData;
+
+  procedure Add(AKind: Byte; AZ2: Integer; AText: Boolean; const AEl: TTyChartElement);
+  var n: Integer;
+  begin
+    n := Length(AParts);
+    SetLength(AParts, n + 1);
+    AParts[n].Owner := AAxis;
+    AParts[n].Key := key;
+    AParts[n].Kind := AKind;
+    AParts[n].Z := z;
+    AParts[n].Z2 := AZ2;
+    AParts[n].View := AView;
+    AParts[n].Seq := seq;
+    Inc(seq);
+    AParts[n].IsText := AText;
+    AParts[n].El := AEl;
+  end;
+
+  function Pen(const K: TTyAxisStroke): TTyChartElement;
+  begin
+    Result := Default(TTyChartElement);
+    Result.Style.Alpha := K.Opacity;
+    Result.Style.StrokeColor := K.Colour;
+    Result.Style.StrokeWidthLogical := K.WidthLogical;
+    Result.Style.DashLogical := Copy(K.Dash, 0, Length(K.Dash));
+    Result.Style.DashOffsetLogical := K.DashOffset;
+    if (K.Left and cTyCanvasCapLeft) <> 0 then Result.Style.LineCap := cTyCanvasWordLeft
+    else Result.Style.LineCap := Ord(K.Cap);
+    if (K.Left and cTyCanvasWidthLeft) <> 0 then Result.CanvasFlags := cTyCanvasWidthLeft;
+  end;
+
+  function Txt(AColour: TTyChartColor; const AM: TTyMat2D): TTyChartElement;
+  begin
+    Result := Default(TTyChartElement);
+    Result.Style.Alpha := 1;
+    Result.Caption.FontSizeLogical := 1;
+    Result.Caption.Text := 'x';
+    Result.Caption.Colour := AColour;
+    Result.CanvasM := TTyDoubleArray.Create(AM[0], AM[1], AM[2], AM[3], AM[4], AM[5]);
+  end;
+
 begin
-  for Result := 0 to High(FAxGround) do
-    if FAxGround[Result].Axis = AAxis then Exit;
-  Result := Length(FAxGround);
-  SetLength(FAxGround, Result + 1);
-  FAxGround[Result] := Default(TTyAxGroundRec);
-  FAxGround[Result].Axis := AAxis;
+  if (AAxis = nil) or not AAxis.Visible then Exit;
+  { (another zlevel is another canvas) }
+  if AxisModelZLevel(AAxis) <> 0 then Exit;
+  if TyChartViewOf(AAxis.MainType, view) and (view in [cvXAxis, cvYAxis]) and ViewHidden(view) then Exit;
+  key := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
+  seq := 0;
+  { the axis' z (its model's default 0) }
+  z := 0;
+  node := nil;
+  if FOption <> nil then node := FOption.ComponentAt(AAxis.MainType, AAxis.ComponentIndex);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      z := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+  end;
+  { THE PENS, as PaintAxis resolves them }
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  minorSplitS := model.ResolveStyle('TyAdvChartMinorSplitLine', '', []);
+  tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
+  spec := nil;
+  if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
+  AxisTextStyles(spec, labelS, nameS);
+  furn := Default(TTyAxisFurniture);
+  furn.ShowLine := True;
+  furn.ShowTicks := True;
+  furn.ShowLabels := True;
+  furn.LinePen.Cap := -1;
+  furn.LinePen.Width := NaN;
+  furn.LinePen.Opacity := NaN;
+  furn.TickPen := furn.LinePen;
+  furn.MinorTickPen := furn.LinePen;
+  furn.SplitPen := furn.LinePen;
+  furn.MinorSplitPen := furn.LinePen;
+  furn.AreaOpacity := NaN;
+  if AGrid <> nil then furn := AGrid.FurnitureFor(AAxis);
+  lineK := TyAxisSkinStroke(furn.LinePen, lineS, acRound);
+  tickK := TyAxisSkinStroke(furn.TickPen, tickStyle, acButt);
+  minorTickK := TyAxisSkinStroke(furn.MinorTickPen, minorTickS, acButt);
+  splitK := TyAxisSkinStroke(furn.SplitPen, splitS, acButt);
+  minorSplitK := TyAxisSkinStroke(furn.MinorSplitPen, minorSplitS, acButt);
+  minors := False;
+  if furn.ShowMinorSplitLine or furn.ShowMinorTick then
+  begin
+    scaleTicks := TyDrawnTicks(AAxis.Scale);
+    for i := 0 to High(scaleTicks) do
+      if scaleTicks[i].Level <> 0 then
+      begin
+        minors := True;
+        Break;
+      end;
+  end;
+  { z2 0: the split areas, a rect a band; the split lines, a line each (the
+    last one's colour is the one left); the minor split lines }
+  if furn.ShowSplitArea and (spec <> nil) then
+    for i := 0 to High(spec^.SplitAreaMarks) - 1 do
+    begin
+      if not spec^.SplitAreaMarks[i].Drawn then Continue;
+      ink := spec^.SplitAreaMarks[i].ColourIndex;
+      if Length(spec^.SplitAreaInks) > 0 then
+      begin
+        if ink > High(spec^.SplitAreaInks) then ink := 0;
+        if not spec^.SplitAreaInks[ink].Ok then Continue;
+        col := spec^.SplitAreaInks[ink].Colour;
+      end
+      else if (ink <> 0) or not (tpBackground in areaS.Present) then Continue
+      else col := TTyChartColor(areaS.Background.Color);
+      e := Default(TTyChartElement);
+      e.Style.Alpha := 1;
+      e.Style.HasFill := True;
+      e.Style.FillColor := col;
+      e.Datum.DataIndex := ink;
+      Add(cpkSplitArea, 0, False, e);
+    end;
+  if furn.ShowSplitLine and (spec <> nil)
+    and (splitK.Drawn or ((Length(spec^.SplitLineInks) > 0) and (splitK.WidthLogical > 0))) then
+    for i := 0 to High(spec^.SplitLineMarks) do
+    begin
+      if not spec^.SplitLineMarks[i].Drawn then Continue;
+      e := Pen(splitK);
+      if Length(spec^.SplitLineInks) > 0 then
+      begin
+        ink := spec^.SplitLineMarks[i].ColourIndex;
+        if (ink < 0) or (ink > High(spec^.SplitLineInks)) or not spec^.SplitLineInks[ink].Ok then Continue;
+        e.Style.StrokeColor := spec^.SplitLineInks[ink].Colour;
+        e.Datum.DataIndex := ink;
+      end;
+      Add(cpkSplit, 0, False, e);
+    end;
+  if furn.ShowMinorSplitLine and minorSplitK.Drawn and minors then
+    Add(cpkMinorSplit, 0, False, Pen(minorSplitK));
+  { z2 1: the name, then the line }
+  if (spec <> nil) and spec^.NamePlacement.Shown and (tpTextColor in nameS.Present) then
+    Add(cpkName, 1, True, Txt(TTyChartColor(nameS.TextColor),
+      TyZrLocal(1, 1, spec^.NamePlacement.RotationRad, spec^.NamePlacement.X, spec^.NamePlacement.Y)));
+  if furn.ShowLine and lineK.Drawn then Add(cpkLine, 1, False, Pen(lineK));
+  { z2 2: the ticks, then the minor ones }
+  if furn.ShowTicks and tickK.Drawn and (spec <> nil) then
+    for i := 0 to High(spec^.TickMarks) do
+      if spec^.TickMarks[i].Drawn then
+      begin
+        Add(cpkTick, 2, False, Pen(tickK));
+        Break;
+      end;
+  if furn.ShowMinorTick and minorTickK.Drawn and minors then
+    Add(cpkMinorTick, 2, False, Pen(minorTickK));
+  { z2 10: the labels, each its fill and transform }
+  if (tpTextColor in labelS.Present) and (spec <> nil) then
+    for i := 0 to High(spec^.Placements) do
+    begin
+      if not spec^.Placements[i].Shown or (spec^.Placements[i].Text = '') then Continue;
+      if spec^.Placements[i].HasM then
+        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor), spec^.Placements[i].M))
+      else
+        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor),
+          TyZrLocal(1, 1, spec^.RotationRad, spec^.Placements[i].X, spec^.Placements[i].Y)));
+    end;
+  { z2 11: the arrows, filled in the line's colour (lineStyle.stroke alone) }
+  if furn.ShowLine and (spec <> nil) and not furn.LinePen.ColourNone
+    and (furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+    for i := 0 to High(spec^.Arrows) do
+    begin
+      e := Default(TTyChartElement);
+      e.Style.Alpha := 1;
+      e.Style.HasFill := True;
+      e.Style.FillColor := lineK.Colour;
+      e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, spec^.Arrows[i].X, spec^.Arrows[i].Y);
+      Add(cpkArrow, 11, False, e);
+    end;
+end;
+
+{ [R7-Z] THE PARTS OF A POLAR'S OR A SINGLE AXIS' VIEW, as upstream's views
+  add them: a radius axis' and a single axis' are AxisBuilder's (split
+  lines at z2 0 -- a single axis' merged into one path filled '#000', a
+  radius axis' circles unfilled --, the name and the line 1, the ticks 2,
+  the labels 10, the arrows 11); an angle axis' labels, merged ticks and
+  merged split lines at z2 0 (the merged paths filled '#000'), its line 1.
+  The split areas are not among them. }
+procedure TTyCustomAdvanceChart.CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
+  const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
+  const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
+  const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray);
+var
+  model: TTyStyleModel;
+  lineS, tickStyle, splitS, minorTickS, labelS, nameS: TTyStyleSet;
+  lineK, tickK, minorTickK, splitK: TTyAxisStroke;
+  key: string;
+  z, seq, i: Integer;
+  e: TTyChartElement;
+  sp: TTyAxisLayoutSpec;
+  angle: Boolean;
+
+  procedure Add(AKind: Byte; AZ2: Integer; AText: Boolean; const AEl: TTyChartElement);
+  var n: Integer;
+  begin
+    n := Length(AParts);
+    SetLength(AParts, n + 1);
+    AParts[n].Owner := AAxis;
+    AParts[n].Key := key;
+    AParts[n].Kind := AKind;
+    AParts[n].Z := z;
+    AParts[n].Z2 := AZ2;
+    AParts[n].View := AView;
+    AParts[n].Seq := seq;
+    Inc(seq);
+    AParts[n].IsText := AText;
+    AParts[n].El := AEl;
+  end;
+
+  function Pen(const K: TTyAxisStroke; AMerged: Boolean): TTyChartElement;
+  begin
+    Result := Default(TTyChartElement);
+    Result.Style.Alpha := K.Opacity;
+    Result.Style.StrokeColor := K.Colour;
+    Result.Style.StrokeWidthLogical := K.WidthLogical;
+    Result.Style.DashLogical := Copy(K.Dash, 0, Length(K.Dash));
+    Result.Style.DashOffsetLogical := K.DashOffset;
+    if (K.Left and cTyCanvasCapLeft) <> 0 then Result.Style.LineCap := cTyCanvasWordLeft
+    else Result.Style.LineCap := Ord(K.Cap);
+    if (K.Left and cTyCanvasWidthLeft) <> 0 then Result.CanvasFlags := cTyCanvasWidthLeft;
+    { a merged path: Path's own default fill }
+    if AMerged then
+    begin
+      Result.Style.HasFill := True;
+      Result.Style.FillColor := TTyChartColor($FF000000);
+    end;
+  end;
+
+  function Txt(AColour: TTyChartColor; AX, AY, ARot: Double): TTyChartElement;
+  var m: TTyMat2D;
+  begin
+    Result := Default(TTyChartElement);
+    Result.Style.Alpha := 1;
+    Result.Caption.FontSizeLogical := 1;
+    Result.Caption.Text := 'x';
+    Result.Caption.Colour := AColour;
+    m := TyZrLocal(1, 1, ARot, AX, AY);
+    Result.CanvasM := TTyDoubleArray.Create(m[0], m[1], m[2], m[3], m[4], m[5]);
+  end;
+
+begin
+  if (AAxis = nil) or (AxisModelZLevel(AAxis) <> 0) then Exit;
+  key := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
+  angle := AShape = 2;
+  seq := 0;
+  z := 0;
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  sp := ASpec;
+  AxisTextStyles(@sp, labelS, nameS);
+  if angle then lineK := TyAxisSkinStroke(AFurn.LinePen, lineS, acButt)
+  else lineK := TyAxisSkinStroke(AFurn.LinePen, lineS, acRound);
+  tickK := TyAxisSkinStroke(AFurn.TickPen, tickStyle, acButt);
+  minorTickK := TyAxisSkinStroke(AFurn.MinorTickPen, minorTickS, acButt);
+  splitK := TyAxisSkinStroke(AFurn.SplitPen, splitS, acButt);
+  if angle then
+  begin
+    { z2 0: the labels, the ticks, the minor ticks, the split lines }
+    if tpTextColor in labelS.Present then
+      for i := 0 to High(ALabels) do
+        if ALabels[i].Text <> '' then
+          Add(cpkLabel, 0, True, Txt(TTyChartColor(labelS.TextColor), ALabels[i].X, ALabels[i].Y, 0));
+    if ATicks and tickK.Drawn then Add(cpkTick, 0, False, Pen(tickK, True));
+    if AMinorTicks and minorTickK.Drawn then Add(cpkMinorTick, 0, False, Pen(minorTickK, True));
+  end;
+  { the split lines, a path a colour of the author's list (-1: the pen's) }
+  if splitK.Drawn or ((Length(AFurn.SplitLineInks) > 0) and (splitK.WidthLogical > 0)) then
+    for i := 0 to High(ASplitInks) do
+    begin
+      e := Pen(splitK, AShape <> 1);
+      if ASplitInks[i] >= 0 then
+      begin
+        if (ASplitInks[i] > High(AFurn.SplitLineInks)) or not AFurn.SplitLineInks[ASplitInks[i]].Ok then
+          Continue;
+        e.Style.StrokeColor := AFurn.SplitLineInks[ASplitInks[i]].Colour;
+        e.Datum.DataIndex := ASplitInks[i];
+      end;
+      Add(cpkSplit, 0, False, e);
+    end;
+  if angle then
+  begin
+    if AHasLine and lineK.Drawn then Add(cpkLine, 1, False, Pen(lineK, False));
+    Exit;
+  end;
+  { z2 1: the name, the line; 2: the ticks; 10: the labels; 11: the arrows }
+  if sp.NamePlacement.Shown and (tpTextColor in nameS.Present) then
+    Add(cpkName, 1, True, Txt(TTyChartColor(nameS.TextColor), sp.NamePlacement.X,
+      sp.NamePlacement.Y, sp.NamePlacement.RotationRad));
+  if AHasLine and lineK.Drawn then Add(cpkLine, 1, False, Pen(lineK, False));
+  if ATicks and tickK.Drawn then Add(cpkTick, 2, False, Pen(tickK, False));
+  if AMinorTicks and minorTickK.Drawn then Add(cpkMinorTick, 2, False, Pen(minorTickK, False));
+  if tpTextColor in labelS.Present then
+    for i := 0 to High(sp.Placements) do
+    begin
+      if not sp.Placements[i].Shown or (sp.Placements[i].Text = '') then Continue;
+      if sp.Placements[i].HasM then
+      begin
+        e := Txt(TTyChartColor(labelS.TextColor), 0, 0, 0);
+        e.CanvasM := TTyDoubleArray.Create(sp.Placements[i].M[0], sp.Placements[i].M[1],
+          sp.Placements[i].M[2], sp.Placements[i].M[3], sp.Placements[i].M[4], sp.Placements[i].M[5]);
+        Add(cpkLabel, 10, True, e);
+      end
+      else
+        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor), sp.Placements[i].X,
+          sp.Placements[i].Y, sp.RotationRad));
+    end;
+  if AHasLine and not AFurn.LinePen.ColourNone
+    and (AFurn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+    for i := 0 to High(sp.Arrows) do
+    begin
+      e := Default(TTyChartElement);
+      e.Style.Alpha := 1;
+      e.Style.HasFill := True;
+      e.Style.FillColor := lineK.Colour;
+      e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, sp.Arrows[i].X, sp.Arrows[i].Y);
+      Add(cpkArrow, 11, False, e);
+    end;
+end;
+
+{ the split lines' colours in the order their paths are added: each colour
+  of the author's list a drawn line has (-1, the pen's, without one) }
+function CompInksOf(AInkCount: Integer; const AIdx: TTyIntegerArray): TTyIntegerArray;
+var k, q: Integer; has: Boolean;
+begin
+  Result := nil;
+  if AInkCount = 0 then
+  begin
+    if Length(AIdx) > 0 then Result := TTyIntegerArray.Create(-1);
+    Exit;
+  end;
+  for k := 0 to AInkCount - 1 do
+  begin
+    has := False;
+    for q := 0 to High(AIdx) do
+      if AIdx[q] = k then has := True;
+    if has then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := k;
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.CompPolarSingleParts(var AParts: TTyCompPartArray);
+var
+  i, k, q: Integer;
+  idx: TTyIntegerArray;
+  ticks, minors: Boolean;
+  v: TTySingleAxisView;
+  pv: TTyPolarAxisView;
+  none: TTyPolarLabelArray;
+
+  procedure Take(ADrawn: Boolean; AInk: Integer);
+  begin
+    if not ADrawn then Exit;
+    SetLength(idx, Length(idx) + 1);
+    idx[High(idx)] := AInk;
+  end;
+
+begin
+  none := nil;
+  { THE SINGLE AXES (their view first) }
+  for i := 0 to High(FSingles) do
+  begin
+    if (FSingles[i] = nil) or ViewHidden(cvSingleAxis) then Continue;
+    v := FSingles[i].View;
+    if not v.Shown then Continue;
+    idx := nil;
+    for q := 0 to High(v.SplitLines) do Take(v.SplitLines[q].Drawn, v.SplitLines[q].ColourIndex);
+    ticks := False;
+    for q := 0 to High(v.Ticks) do if v.Ticks[q].Drawn then ticks := True;
+    minors := False;
+    for q := 0 to High(v.MinorTicks) do if v.MinorTicks[q].Drawn then minors := True;
+    CompViewParts(FSingles[i].Axis, 2, 0, v.Furn, v.Spec, v.HasLine,
+      CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts);
+  end;
+  { THE POLARS: the radius axes' view, then the angle axes' }
+  for k := 0 to 1 do
+    for i := 0 to High(FPolars) do
+    begin
+      if FPolars[i] = nil then Continue;
+      if k = 0 then
+      begin
+        if ViewHidden(cvRadiusAxis) then Continue;
+        pv := FPolars[i].RadiusView;
+      end
+      else
+      begin
+        if ViewHidden(cvAngleAxis) then Continue;
+        pv := FPolars[i].AngleView;
+      end;
+      if not pv.Shown then Continue;
+      idx := nil;
+      if k = 0 then
+        for q := 0 to High(pv.SplitCircles) do Take(True, pv.SplitCircles[q].ColourIndex)
+      else
+        for q := 0 to High(pv.SplitLines) do Take(pv.SplitLines[q].Drawn, pv.SplitLines[q].ColourIndex);
+      ticks := False;
+      for q := 0 to High(pv.Ticks) do if pv.Ticks[q].Drawn then ticks := True;
+      minors := False;
+      for q := 0 to High(pv.MinorTicks) do if pv.MinorTicks[q].Drawn then minors := True;
+      if k = 0 then
+        CompViewParts(FPolars[i].RadiusAxis, 3, 1, pv.Furn, pv.Spec, pv.HasLine,
+          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts)
+      else
+        CompViewParts(FPolars[i].AngleAxis, 4, 2, pv.Furn, pv.Spec, pv.HasLine,
+          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts);
+    end;
+end;
+
+function TTyCustomAdvanceChart.CompPen(AOwner: TTyAxis; AKind: Byte;
+  const K: TTyAxisStroke): TTyAxisStroke;
+var i: Integer; e: TTyChartElement;
+begin
+  Result := K;
+  CompSettlePen(AOwner, AKind, Result);
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind) then
+    begin
+      e := FCompParts[i].El;
+      e.CanvasFlags := 0;
+      e.Style.StrokeColor := Result.Colour;
+      e.Style.StrokeWidthLogical := Result.WidthLogical;
+      e.Style.DashLogical := Copy(Result.Dash, 0, Length(Result.Dash));
+      e.Style.DashOffsetLogical := Result.DashOffset;
+      e.Style.LineCap := Ord(Result.Cap);
+      CompDrew(AOwner, FCompParts[i].Key, AKind, FCompParts[i].Z2, False, e);
+      Exit;
+    end;
+end;
+
+function TTyCustomAdvanceChart.CompText(AOwner: TTyAxis; AKind: Byte; AColour: TTyColor): TTyColor;
+var i: Integer; e: TTyChartElement;
+begin
+  Result := TTyColor(CompSettleFill(AOwner, AKind, TTyChartColor(AColour)));
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind) then
+    begin
+      e := FCompParts[i].El;
+      e.Caption.Colour := TTyChartColor(Result);
+      CompDrew(AOwner, FCompParts[i].Key, AKind, FCompParts[i].Z2, True, e);
+      Exit;
+    end;
+end;
+
+procedure TTyCustomAdvanceChart.CompRun(APPI: Integer);
+var
+  parts: TTyCompPartArray;
+  g, a, i, j, n, ng, t: Integer;
+  gb: TTyGridBuild;
+  ord: array of Integer;
+  run: TTyCanvasRun;
+  any: Boolean;
+  pe: PTyChartElement;
+
+  procedure KeyOf(AIdx: Integer; out AZ, AZ2, AView, ASeq: Integer);
+  var q: PTyChartElement;
+  begin
+    if AIdx < ng then
+    begin
+      q := FGfxUnder.Ref(FGfxUnder.PaintOrder(AIdx));
+      AZ := q^.Z;
+      AZ2 := q^.Z2;
+      AView := 0;
+      ASeq := AIdx;
+    end
+    else
+    begin
+      AZ := parts[AIdx - ng].Z;
+      AZ2 := parts[AIdx - ng].Z2;
+      AView := parts[AIdx - ng].View;
+      ASeq := parts[AIdx - ng].Seq;
+    end;
+  end;
+
+  function Less(A, B: Integer): Boolean;
+  var az, az2, av, aq, bz, bz2, bv, bq: Integer;
+  begin
+    KeyOf(A, az, az2, av, aq);
+    KeyOf(B, bz, bz2, bv, bq);
+    if az <> bz then Exit(az < bz);
+    if az2 <> bz2 then Exit(az2 < bz2);
+    if av <> bv then Exit(av < bv);
+    Result := aq < bq;
+  end;
+
+begin
+  parts := nil;
+  FCompDrawn := nil;
+  { THE VIEWS IN UPSTREAM'S ORDER at an equal z and z2: the graphic's
+    group, the grids' backgrounds (FGfxUnder, in its own order), the single
+    axes, the radius axes, the angle axes, the y axes, the x axes }
+  CompPolarSingleParts(parts);
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.YAxisCount - 1 do CompAxisParts(gb.YAxis(a), gb, 5, parts);
+      for a := 0 to gb.XAxisCount - 1 do CompAxisParts(gb.XAxis(a), gb, 6, parts);
+    end;
+  ng := 0;
+  if FGfxUnder <> nil then ng := FGfxUnder.Count;
+  n := ng + Length(parts);
+  SetLength(ord, n);
+  for i := 0 to n - 1 do ord[i] := i;
+  { (a stable insertion sort: a few dozen) }
+  for i := 1 to n - 1 do
+  begin
+    t := ord[i];
+    j := i - 1;
+    while (j >= 0) and Less(t, ord[j]) do
+    begin
+      ord[j + 1] := ord[j];
+      Dec(j);
+    end;
+    ord[j + 1] := t;
+  end;
+  { FROM THE CANVAS' OWN STATE (a transparent shadow, black fill and
+    stroke, a width of 1), in that order }
+  TyCanvasRunStart(run, TyCanvasGroundOf(0), APPI);
+  any := False;
+  for i := 0 to n - 1 do
+  begin
+    if ord[i] < ng then
+    begin
+      pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(ord[i]));
+      if pe^.ZLevel <> 0 then Continue;
+      TyCanvasRunStep(run, pe^);
+    end
+    else
+      TyCanvasRunStep(run, parts[ord[i] - ng].El);
+    any := True;
+  end;
+  FCompParts := parts;
+  FCompRunOk := True;
+  FCanvasGroundOk := any;
+  if any then FCanvasGround := TyCanvasGroundOfRun(run);
+end;
+
+procedure TTyCustomAdvanceChart.CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+var
+  i: Integer;
+  pe: PTyChartElement;
+begin
+  TyCanvasRunStart(ARun, CanvasGroundState, FLastPPI);
+  if FPaintList = nil then Exit;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(FPaintList.PaintOrder(i));
+    { (the list's zlevel 0 first: another is another canvas) }
+    if pe^.ZLevel <> 0 then Continue;
+    if (pe^.Z > AZ) or ((pe^.Z = AZ) and (pe^.Z2 > AZ2)) then Break;
+    TyCanvasRunStep(ARun, pe^);
+  end;
+end;
+
+function TTyCustomAdvanceChart.CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind) then
+      Exit(@FCompParts[i].El);
+end;
+
+procedure TTyCustomAdvanceChart.CompSettlePen(AOwner: TObject; AKind: Byte;
+  var K: TTyAxisStroke);
+var p: PTyChartElement;
+begin
+  if K.Left = 0 then Exit;
+  p := CompPartOf(AOwner, AKind);
+  if p = nil then
+  begin
+    { not run (on a canvas of its own, first there): the canvas' defaults }
+    if (K.Left and cTyCanvasStrokeLeft) <> 0 then K.Colour := TTyChartColor($FF000000);
+    if (K.Left and cTyCanvasWidthLeft) <> 0 then K.WidthLogical := 1;
+    if (K.Left and cTyCanvasPhaseLeftFlag) <> 0 then K.DashOffset := 0;
+    if (K.Left and cTyCanvasCapLeft) <> 0 then K.Cap := acButt;
+  end
+  else
+  begin
+    if (K.Left and cTyCanvasStrokeLeft) <> 0 then K.Colour := p^.Style.StrokeColor;
+    if (K.Left and cTyCanvasWidthLeft) <> 0 then K.WidthLogical := p^.Style.StrokeWidthLogical;
+    if (K.Left and cTyCanvasPhaseLeftFlag) <> 0 then K.DashOffset := p^.Style.DashOffsetLogical;
+    if (K.Left and cTyCanvasCapLeft) <> 0 then
+      case p^.Style.LineCap of
+        1: K.Cap := acRound;
+        2: K.Cap := acSquare;
+      else
+        K.Cap := acButt;
+      end;
+  end;
+  K.Left := 0;
+end;
+
+function TTyCustomAdvanceChart.CompInkOf(AOwner: TObject; AKind: Byte;
+  AInk: Integer): TTyChartColor;
+var i: Integer;
+begin
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind)
+      and (FCompParts[i].El.Datum.DataIndex = AInk) then
+    begin
+      if FCompParts[i].El.Style.HasFill then Exit(FCompParts[i].El.Style.FillColor);
+      Exit(FCompParts[i].El.Style.StrokeColor);
+    end;
+  Result := TTyChartColor($FF000000);
+end;
+
+function TTyCustomAdvanceChart.CompSettleFill(AOwner: TObject; AKind: Byte;
+  AColour: TTyChartColor): TTyChartColor;
+var p: PTyChartElement;
+begin
+  Result := AColour;
+  if AColour <> cTyCanvasColourLeft then Exit;
+  p := CompPartOf(AOwner, AKind);
+  if p = nil then Exit(TTyChartColor($FF000000));
+  if p^.Caption.FontSizeLogical <> 0 then Result := p^.Caption.Colour
+  else Result := p^.Style.FillColor;
+end;
+
+procedure TTyCustomAdvanceChart.CompDrew(AOwner: TObject; const AKey: string; AKind: Byte;
+  AZ2: Integer; AText: Boolean; const AEl: TTyChartElement);
+var n: Integer;
+begin
+  { (a log for the tests: a frame's worth, not a history) }
+  if Length(FCompDrawn) >= 4096 then FCompDrawn := nil;
+  n := Length(FCompDrawn);
+  SetLength(FCompDrawn, n + 1);
+  FCompDrawn[n].Owner := AOwner;
+  FCompDrawn[n].Key := AKey;
+  FCompDrawn[n].Kind := AKind;
+  FCompDrawn[n].Z2 := AZ2;
+  FCompDrawn[n].IsText := AText;
+  FCompDrawn[n].El := AEl;
+end;
+
+function TTyCustomAdvanceChart.CompDrawn: TTyCompPartArray;
+begin
+  Result := FCompDrawn;
 end;
 
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
 var
-  g, a, k, pass: Integer;
+  g, a: Integer;
   gb: TTyGridBuild;
-  stroked: Boolean;
 begin
-  FAxGround := nil;
-  FCanvasGroundOk := False;
   if FBuild = nil then Exit;
+  { [R7-Z] the parts settled in upstream's order (a layer drawn without the
+    static one's GfxPaintUnder: the last ones) }
+  if not FCompRunOk then CompRun(APPI);
   { THE POLARS' GRIDS, then their axes [Batch 111] }
   PaintPolars(APainter, APPI, AMeasurer, True);
   PaintPolars(APainter, APPI, AMeasurer, False);
@@ -1442,59 +2129,7 @@ begin
     for a := 0 to gb.YAxisCount - 1 do
       PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
                 False, AProxied);
-    { [R7-W] whether each is a y axis (upstream draws the y axes' elements
-      before the x axes', z2 by z2) }
-    { (one call per statement: the array may grow under its subscript) }
-    for a := 0 to gb.YAxisCount - 1 do
-    begin
-      k := AxGroundAt(gb.YAxis(a));
-      FAxGround[k].IsY := True;
-    end;
   end;
-  { [R7-W] WHAT THEY LEAVE: by z2 -- split lines (0), lines (1), ticks (2),
-    labels (10) -- the y axes before the x, each in its order: the fill and
-    transform of the last label, the pen of the last tick, else line, else
-    split line; zrender's '#000' shadow }
-  if Length(FAxGround) = 0 then Exit;
-  FCanvasGround := TyCanvasGroundOf(TTyChartColor($FF000000));
-  stroked := False;
-  for pass := 0 to 1 do
-    for k := 0 to High(FAxGround) do
-      if FAxGround[k].IsY = (pass = 0) then
-      begin
-        if FAxGround[k].HasLabel then
-        begin
-          FCanvasGround.Fill := FAxGround[k].LabelFill;
-          FCanvasGround.HasT := True;
-          FCanvasGround.M := FAxGround[k].LabelM;
-        end;
-      end;
-  for pass := 0 to 1 do
-    for k := 0 to High(FAxGround) do
-      if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasTick then
-      begin
-        FCanvasGround.Stroke := FAxGround[k].TickStroke;
-        FCanvasGround.LineWidth := FAxGround[k].TickW;
-        stroked := True;
-      end;
-  if not stroked then
-    for pass := 0 to 1 do
-      for k := 0 to High(FAxGround) do
-        if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasLine then
-        begin
-          FCanvasGround.Stroke := FAxGround[k].LineStroke;
-          FCanvasGround.LineWidth := FAxGround[k].LineW;
-          stroked := True;
-        end;
-  if not stroked then
-    for pass := 0 to 1 do
-      for k := 0 to High(FAxGround) do
-        if (FAxGround[k].IsY = (pass = 0)) and FAxGround[k].HasSplit then
-        begin
-          FCanvasGround.Stroke := FAxGround[k].SplitStroke;
-          FCanvasGround.LineWidth := FAxGround[k].SplitW;
-        end;
-  FCanvasGroundOk := True;
 end;
 
 function TTyCustomAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;

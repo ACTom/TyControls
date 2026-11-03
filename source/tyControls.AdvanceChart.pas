@@ -889,17 +889,34 @@ type
     CW: Boolean;
   end;
 
-  { [R7-W] one cartesian axis' last label and pens, as PaintAxis drew them }
-  TTyAxGroundRec = record
-    Axis: TObject;
-    IsY: Boolean;
-    HasLabel: Boolean;
-    LabelFill: TTyChartColor;
-    LabelM: TTyMat2D;
-    HasTick, HasLine, HasSplit: Boolean;
-    TickStroke, LineStroke, SplitStroke: TTyChartColor;
-    TickW, LineW, SplitW: Double;
+const
+  { [R7-Z] the parts of an axis (TTyCompPart.Kind) }
+  cpkSplitArea = 1;
+  cpkSplit = 2;
+  cpkMinorSplit = 3;
+  cpkName = 4;
+  cpkLine = 5;
+  cpkTick = 6;
+  cpkMinorTick = 7;
+  cpkLabel = 8;
+  cpkArrow = 9;
+
+type
+  { [R7-Z] ONE PART OF A COMPONENT DRAWN STRAIGHT ONTO THE CANVAS (an
+    axis' split lines, line, name, ticks, labels, arrows -- not in the paint
+    list): its place in upstream's paint order (z, z2, the view's order, its
+    own) and, as a pseudo-element, what it hands the canvas -- the values
+    the canvas refuses settled in that order (TyCanvasRunStep) }
+  TTyCompPart = record
+    Owner: TObject;
+    { mainType + index ('xAxis0') }
+    Key: string;
+    Kind: Byte;
+    Z, Z2, View, Seq: Integer;
+    IsText: Boolean;
+    El: TTyChartElement;
   end;
+  TTyCompPartArray = array of TTyCompPart;
 
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
@@ -1855,13 +1872,17 @@ type
     FDrBase: TBGRABitmap;
     FDrBaseOk: Boolean;
     FDrCapture: Boolean;
-    { [R7-W] WHAT THE CARTESIAN AXES LEAVE ON THE CANVAS, as the last paint
-      drew them: per axis its last label (fill, transform), its ticks', line's
-      and split lines' pen (FAxGround, filled by PaintAxis), composed in
-      upstream's display order by PaintAxes into FCanvasGround }
-    FAxGround: array of TTyAxGroundRec;
+    { [R7-W] WHAT THE COMPONENTS DRAWN BEFORE THE LIST LEAVE ON THE CANVAS
+      -- [R7-Z] the run of FCompParts (CompRun) [was: the cartesian axes'
+      last label and pens, composed by PaintAxes] }
     FCanvasGround: TTyCanvasGround;
     FCanvasGroundOk: Boolean;
+    { [R7-Z] the parts of the components drawn before the list, settled in
+      upstream's paint order (CompRun); and what was drawn, for the tests
+      (CompDrawn) }
+    FCompParts: TTyCompPartArray;
+    FCompRunOk: Boolean;
+    FCompDrawn: TTyCompPartArray;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
     FDrDyn: TBGRABitmap;
@@ -3472,7 +3493,43 @@ type
     function CanvasGround: TTyChartColor;
     { [R7-W] what the components drawn before the list leave on the canvas }
     function CanvasGroundState: TTyCanvasGround;
-    function AxGroundAt(AAxis: TObject): Integer;
+    { [R7-Z] the parts of the cartesian, polar and single axes and the
+      graphic component's elements under them, in upstream's paint order:
+      each part's refused values settled, and the ground the list starts
+      from }
+    procedure CompRun(APPI: Integer);
+    procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;
+      var AParts: TTyCompPartArray);
+    procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
+      const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
+      const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
+      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray);
+    procedure CompPolarSingleParts(var AParts: TTyCompPartArray);
+    { an axis pen of a polar's or a single axis' as it is stroked
+      (CompSettlePen), logged (CompDrawn); a text colour likewise }
+    function CompPen(AOwner: TTyAxis; AKind: Byte; const K: TTyAxisStroke): TTyAxisStroke;
+    function CompText(AOwner: TTyAxis; AKind: Byte; AColour: TTyColor): TTyColor;
+    { the part of AOwner of AKind once settled; nil for none }
+    function CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
+    { an axis' pen as the canvas strokes it: what it refuses, the canvas'
+      value at its part (the canvas' default where the part was not run) }
+    procedure CompSettlePen(AOwner: TObject; AKind: Byte; var K: TTyAxisStroke);
+    { a split line's or area's colour of the author's list (AInk) as its
+      first part settled it }
+    function CompInkOf(AOwner: TObject; AKind: Byte; AInk: Integer): TTyChartColor;
+    { the colour a text part fills with: a refused one the canvas' }
+    function CompSettleFill(AOwner: TObject; AKind: Byte; AColour: TTyChartColor): TTyChartColor;
+    { [R7-Z] the run of the list (FPaintList) from the ground up to the
+      elements of a z and z2 above AZ / AZ2: the canvas a component drawn
+      after the series meets }
+    procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+    { [R7-Z] a title's box and text colours, the canvas refusing them }
+    procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
+      var AInk0, AInk1: TTyColor);
+    procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+    { a part as drawn (CompDrawn) }
+    procedure CompDrew(AOwner: TObject; const AKey: string; AKind: Byte; AZ2: Integer;
+      AText: Boolean; const AEl: TTyChartElement);
     function LinesInk(ASlot: Integer; ANode: TJSONObject; const ASolved: TTyLinesSolved;
       ARow: Integer; AStroke: TTyChartColor; AScale: Double;
       out ASpec: TTyLabelSpec): TTyLinesInk;
@@ -4322,6 +4379,10 @@ type
       the last paint drew them }
     function PointerShapesDrawn: TTyOverlayShapeArray;
     function TitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-Z] the parts of the components drawn straight onto the canvas, as
+      the last paint drew them: Key (mainType + index), Z2 (upstream's),
+      IsText, and El the style each was drawn with }
+    function CompDrawn: TTyCompPartArray;
     { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
       as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
     procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
