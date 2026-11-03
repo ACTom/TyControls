@@ -235,6 +235,10 @@ type
 { [spec 242] the leaves each series type's defaults hold under the root's
   object keys ('pie:label.show' ...), as the ECharts 6.1 dist has them }
 function TyRootDefaultPaths: TTyStringArray;
+{ [R7-U] the leaves each series type's and component's defaultOption holds
+  under the root's style blocks and scalars, as 'type:path' -- where the
+  root's do not reach }
+function TyRootStyleDefaultPaths: TTyStringArray;
 
 { Does this text look like it contains a JS function value? Used to turn
   fcl-json's correct-but-bare "unexpected token" into a message that says what to
@@ -2341,6 +2345,11 @@ const
     'sunburst:emphasis.focus',
     'sunburst:blur.itemStyle.opacity',
     'sunburst:blur.label.opacity');
+
+function TyRootStyleDefaultPaths: TTyStringArray;
+begin
+  Result := nil;
+end;
 
 function TyRootDefaultPaths: TTyStringArray;
 var i: Integer;
