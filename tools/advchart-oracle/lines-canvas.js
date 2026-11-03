@@ -70,6 +70,12 @@
 // numbers the ops brushed in it (`blk`), and an element brushed in two
 // blocks keeps every state (`sts`). A case may set an option before a sample
 // (`sets`).
+//
+// Round 7 R7-Z (the cases named `z-...`, recorded as the w- ones): every
+// displayable of a component (not a series') is tracked as
+// `c.<mainType><index>.<z2>.<t|p>.<n>` -- t a text span, p a path, n its
+// count among those of its component, z2 and kind in paint order -- in place
+// of the w- cases' `lg` / `ax` keys; a text span's text is `tx`.
 // Run: node tools/advchart-oracle/lines-canvas.js -> tests/fixtures/advchart-lines-canvas.json
 'use strict';
 const fs = require('fs');
@@ -117,6 +123,8 @@ let CUR = null;
 let V2 = false;
 // [R7-W] the record of the cases named w-...
 let W = false;
+// [R7-Z] the record of the cases named z-...
+let Z = false;
 let BLK = 0;
 let BLOCKS = [];
 let SNAPL = new Map();
@@ -638,6 +646,78 @@ function cases() {
       links: [] }] },
     [0], { w: true, probes: [[0.2, 0.2], [0.5, -0.5], [0.9, 0.1], [-0.6, -0.6], [1.5, 0], [0.9, 0.9], [-0.95, 0.9],
       [50, 50], [50.5, 50.5], [350, 250], [3, 3]] }],
+    // ---- [R7-Z] a component's own refused values; what the components
+    //      drawn before the series hand the canvas ----
+    // 1. cartesian axes: by z2 (split lines, then line and name, ticks,
+    //    labels, arrows), the y axes' before the x axes'
+    ['z-ax-refused', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'nope', width: 'Infinity' } },
+        axisTick: { lineStyle: { color: '#ff0000', width: 3 } }, axisLabel: { color: 'bad' },
+        splitLine: { lineStyle: { color: '#00ff00', width: 2 } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: true, lineStyle: { color: '#0000ff', width: 4 } },
+        axisLabel: { color: '#123456' }, splitLine: { lineStyle: { color: 'nope' } } },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope' } }] }, [0], { w: true, z: true }],
+    ['z-ax-phase-cap', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+        axisLine: { lineStyle: { color: '#ff0000', type: 'dashed', dashOffset: 'abc', cap: 'Round' } } },
+      yAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisLabel: { show: false },
+        axisLine: { show: true, lineStyle: { color: '#0000ff', width: 2, type: [3, 2], dashOffset: 2, cap: 'square' } } },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#00ff00', borderColor: '#000', borderWidth: 1,
+        borderType: 'dashed', borderDashOffset: 'zz' } }] }, [0], { w: true, z: true }],
+    // the graphic component's elements of z under 0 first; a name before its line
+    ['z-ax-name-gfx', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
+      style: { fill: '#ff0000', stroke: '#00ff00', lineWidth: 3 } }],
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisTick: { show: false },
+        axisLine: { lineStyle: { color: 'nope', width: 'Infinity' } }, axisLabel: { color: 'nope' },
+        name: 'Xx', nameTextStyle: { color: 'nope' } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#0000ff' } }] }, [0], { w: true, z: true }],
+    // a dash word under an infinite width: [Infinity, Infinity], refused -- solid
+    ['z-ax-tick-inf-dash', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisLabel: { show: false },
+        axisLine: { lineStyle: { color: '#ff0000', width: 3 } },
+        axisTick: { show: true, lineStyle: { color: 'nope', width: 'Infinity', type: 'dashed' } } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#0000ff', borderColor: 'nope', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    // 2. a label's own colours the canvas refuses; a text span's miterLimit
+    //    (TSpan's 2) kept by a symbol that writes one below nought
+    ['z-label', Object.assign(vv([
+      { type: 'scatter', data: [[3, 3]], itemStyle: { color: '#ff0000', borderColor: '#00ff00', borderWidth: 2 },
+        label: { show: true, formatter: 'Ab', color: 'nope', textBorderColor: 'bad', textBorderWidth: 2 } },
+      { type: 'scatter', z: 3, data: [[6, 6]], itemStyle: { color: 'nope', borderColor: '#0000ff', borderWidth: 2,
+        borderMiterLimit: -1 } }])), [0], { w: true, z: true }],
+    // 3. after the series: a legend's text, a title's box and text
+    ['z-legend-text', Object.assign(vv([{ type: 'scatter', name: 'A', data: [[5, 5]],
+      itemStyle: { color: '#ff0000' } }]), { legend: { left: 20, top: 10, textStyle: { color: 'nope' } } }),
+    [0], { w: true, z: true }],
+    ['z-title', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { title: { text: 'Ab', subtext: 'Cd', left: 20, top: 10,
+      textStyle: { color: 'nope' }, subtextStyle: { color: 'bad' }, backgroundColor: 'nope', borderColor: 'nope',
+      borderWidth: 'Infinity' } }), [0], { w: true, z: true }],
+    // 4. polar and single axes: their views' order (single, radius, angle)
+    //    and parts (an angle axis' labels and merged ticks at z2 0, merged
+    //    split paths filled '#000')
+    ['z-polar', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: '#ff00ff', width: 3 } },
+        axisLabel: { color: 'nope' }, splitLine: { lineStyle: { color: 'nope', width: 'Infinity' } },
+        axisTick: { lineStyle: { color: 'nope' } } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'nope', type: 'dashed', dashOffset: 'abc' } },
+        axisLabel: { color: '#0000ff' }, splitLine: { lineStyle: { color: '#00aa00', type: [2, 2], dashOffset: 1 } } },
+      series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope' } }] },
+    [0], { w: true, z: true }],
+    ['z-single', { animation: false, singleAxis: { type: 'value', min: 0, max: 10,
+      axisLine: { lineStyle: { color: '#ff00ff', width: 3 } }, axisTick: { lineStyle: { color: 'nope', width: 'Infinity' } },
+      axisLabel: { color: 'nope' }, splitLine: { lineStyle: { color: '#00ffff' } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: 'nope' } }] },
+    [0], { w: true, z: true }],
+    // 5. components in the list after the series: their own refused colours
+    ['z-toolbox', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 2 } }]), { toolbox: { right: 20, top: 10, feature: { restore: {} },
+      borderColor: '#123456', borderWidth: 1, iconStyle: { borderColor: 'nope' } } }), [0], { w: true, z: true }],
+    ['z-visualmap', Object.assign(vv([{ type: 'scatter', data: [[5, 5, 3]], itemStyle: { borderColor: '#00ff00',
+      borderWidth: 2 } }]), { visualMap: { type: 'piecewise', left: 20, top: 10, min: 0, max: 6, splitNumber: 2,
+      dimension: 2, textStyle: { color: 'nope' }, inRange: { color: ['#ff0000', '#0000ff'] } } }), [0], { w: true, z: true }],
   ]);
 }
 function withPalette(list) {
@@ -743,6 +823,24 @@ function track(chart) {
       for (const k of kids) if (k.style && k.style.text) last = k;
       if (last) map.set(last, 'x' + key);
     }
+    // [R7-Z] every component's displayables, in paint order
+    if (Z) {
+      const zc = new Map();
+      for (const el of chart.getZr().storage.getDisplayList(true)) {
+        let p = el;
+        let info = null;
+        while (p) {
+          if (p.__ecComponentInfo) { info = p.__ecComponentInfo; break; }
+          p = p.parent || p.__hostTarget;
+        }
+        if (!info || info.mainType === 'series' || map.has(el) || !el.style) continue;
+        const g = 'c.' + info.mainType + info.index + '.' + el.z2 + '.' + (el.style.text != null ? 't' : 'p');
+        const n = zc.get(g) || 0;
+        zc.set(g, n + 1);
+        map.set(el, g + '.' + n);
+      }
+      return map;
+    }
     // the legends' displayables and the axes' text spans, in paint order
     const legends = [];
     model.eachComponent('legend', lm => {
@@ -810,6 +908,8 @@ function elRec(el, key, brushes) {
     }
     else { r.pb = null; r.pa = null; }
   }
+  // [R7-Z] a component's text span: its text
+  if (Z && key.slice(0, 2) === 'c.' && el.style && el.style.text != null) r.tx = String(el.style.text);
   return r;
 }
 
@@ -861,6 +961,7 @@ function run(id, option, samples, opts) {
   opts = opts || {};
   V2 = !!opts.v2 || !!opts.w;
   W = !!opts.w;
+  Z = !!opts.z;
   const dom = fakeCanvas(CW, CH);
   const chart = echarts.init(dom, null, { renderer: 'canvas', width: CW, height: CH, devicePixelRatio: 1,
     useDirtyRect: !!opts.dirty });
@@ -938,6 +1039,7 @@ function run(id, option, samples, opts) {
     chart.dispose();
     V2 = false;
     W = false;
+    Z = false;
   }
   // [R7-W] the options set before a sample, the dirty rects
   if (opts.w) return Object.assign({ id, option }, opts.acts ? { acts: opts.acts } : {},
