@@ -801,8 +801,9 @@ end;
   `lineWidth > 0`); what the canvas refuses -- an infinite width, a phase
   that is no finite number, a miter limit that is no number above nought --
   it would keep from the last element, and this takes as none, nought and
-  the default 10. Not written (nil, null) is not-a-number: the model's get
-  falls through it. }
+  -- [R7-V] -- -1 for a limit (the paint order settles what the canvas
+  kept). Not written (nil, null) is not-a-number: the model's get falls
+  through it. }
 procedure TAdvChartSeriesBordersTest.TestThePenNumbersAsTheCanvasTakesThem;
 
   function J(const AText: string): TJSONData;
@@ -855,8 +856,11 @@ begin
   W('"1e999"', 0); W('null', NaN); W('-2', -2);
   AssertTrue('width nil unwritten', IsNan(TyOptPenWidth(nil)));
   O('"2"', 2); O('"abc"', 0); O('"1e999"', 0); O('""', 0); O('-3', -3); O('null', NaN);
-  M('"4"', 4); M('""', 10); M('"0"', 10); M('0', 10); M('-1', 10); M('"abc"', 10);
-  M('"1e999"', 10); M('2.5', 2.5); M('null', NaN);
+  { [R7-V] what `|| 10` hands on and the canvas refuses ('0', a negative,
+    'abc', infinity) keeps the canvas' last one: -1 until the paint order
+    settles it }
+  M('"4"', 4); M('""', 10); M('"0"', -1); M('0', 10); M('-1', -1); M('"abc"', -1);
+  M('"1e999"', -1); M('2.5', 2.5); M('null', NaN);
   AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));
 end;
 
