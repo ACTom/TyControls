@@ -335,7 +335,8 @@ function cases() {
     // 2. an effect symbol's transform no number: the canvas keeps the one the
     //    element brushed before it left (an end symbol, a label, another
     //    series' symbol); hit as the unit symbol under the last inverse
-    ['v-tf-after-end', vv(LNC({ symbolSize: [12] }, ROWS2, { symbol: ['none', 'arrow'], symbolSize: 10 })),
+    // (a triangle and slanted rows: a circle's box hides a turn)
+    ['v-tf-after-end', vv(LNC({ symbol: 'triangle', symbolSize: [12] }, [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }], { symbol: ['none', 'arrow'], symbolSize: 10 })),
       [0, 600], { v2: true, probes: 'nan-effects' }],
     ['v-tf-after-label', vv(LNC({ symbolSize: [12] }, ROWS2, { label: { show: true, formatter: 'Ab', position: 'insideStartTop' } })),
       [0, 600], { v2: true, probes: 'nan-origin' }],
@@ -366,8 +367,19 @@ function cases() {
         edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 9, lineStyle: { width: 1 },
         data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }], links: [{ source: 'a', target: 'b' }] }]),
     [0, 600], { v2: true, probes: 'nan-origin' }],
-    ['v-tf-after-graph-end', vv([LNC({ symbolSize: [12] }, ROWS2),
+    ['v-tf-after-graph-end', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2),
       { type: 'graph', coordinateSystem: 'cartesian2d', edgeSymbol: ['none', 'arrow'], edgeSymbolSize: 9,
+        data: [[2, 2], [5, 6], [8, 3]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    // a filled end in a collapsed box draws nothing, but is brushed: its
+    // transform is what the canvas keeps
+    ['v-tf-after-graph-collapsed', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2),
+      { type: 'graph', coordinateSystem: 'cartesian2d', edgeSymbol: ['arrow', 'none'], edgeSymbolSize: [[9], 9],
+        data: [[2, 2], [5, 6], [8, 3]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }] }]),
+    [0, 600], { v2: true, probes: 'nan-origin' }],
+    // a pin of no width: its path no number, still brushed
+    ['v-tf-after-graph-nanpin', vv([LNC({ symbol: 'triangle', symbolSize: [12] }, ROWS2),
+      { type: 'graph', coordinateSystem: 'cartesian2d', edgeSymbol: ['pin', 'none'], edgeSymbolSize: [[0, 9], 9],
         data: [[2, 2], [5, 6], [8, 3]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }] }]),
     [0, 600], { v2: true, probes: 'nan-origin' }],
     ['v-tf-after-graph-edge', vv([LNC({ symbolSize: [12] }, ROWS2),

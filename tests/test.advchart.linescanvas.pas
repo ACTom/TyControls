@@ -292,7 +292,9 @@ begin
             or ((rec.Find('sy').JSONType <> jtNull) and (HexD(rec.Strings['sy']) = 0))
             or ((rec.Find('sx').JSONType <> jtNull) and (HexD(rec.Strings['sx']) = 0));
           if idx >= 0 then bb := TyShapeBounds(el.Shape) else bb := TyInvalidRectF;
-          if TyRectFIsValid(bb) and not el.Ignore then
+          { [R7-V] an element of no ink (no fill, no pen) draws nothing }
+          if TyRectFIsValid(bb) and not el.Ignore
+            and (el.Style.HasFill or (el.Style.StrokeWidthLogical > 0)) then
             area := (bb.Right - bb.Left) * (bb.Bottom - bb.Top)
           else area := 0;
           if IsNan(area) then area := 0;

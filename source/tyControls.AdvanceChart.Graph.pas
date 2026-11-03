@@ -6929,7 +6929,7 @@ var
       { [R7-R] sized [w, h]: createSymbol's real box, another picture }
       oblong: Boolean;
       { [R7-V] a box with a side of nought }
-      collapsed: Boolean;
+      collapsed, inkless, nanPath: Boolean;
       mask: TFPUExceptionMask;
       k: Integer;
       zp: TTyZrPath;
@@ -6942,6 +6942,8 @@ var
       [w, 0], or [0, h]): createSymbol's path in that collapsed box -- nothing
       to fill, though an empty symbol's pen still draws its edge, a 'line'
       its length and a pin its head [was: never built] }
+    inkless := False;
+    nanPath := False;
     collapsed := not IsNan(ASize) and not IsNan(AH) and (ASize >= 0) and (AH >= 0)
       and ((ASize > 0) or (AH > 0)) and ((ASize = 0) or (AH = 0));
     if not collapsed and ((ASize <= 0) or (AH <= 0)) then Exit;
@@ -6995,10 +6997,11 @@ var
     if collapsed then
     begin
       { [R7-V] symbol.ts' own path in the collapsed box, through the
-        symbol's frame and to its end -- only what shows or answers: an
-        empty symbol's pen, a 'line', a pin's head (a filled one has no
-        area, nothing to draw or hit) }
-      if not (em or (s.Kind in [tsyLine, tsyPin])) then Exit;
+        symbol's frame and to its end: an empty symbol's pen, a 'line', a
+        pin's head show; a filled one has no area -- nothing drawn or hit,
+        though it is brushed and hands the canvas its transform: built
+        without ink }
+      inkless := not (em or (s.Kind in [tsyLine, tsyPin]));
       mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
         exOverflow, exUnderflow, exPrecision]);
       try
@@ -7012,14 +7015,22 @@ var
         ClearExceptions(False);
         SetExceptionMask(mask);
       end;
-      if Length(pts) = 0 then Exit;
       { a pin of no width: a head of no number (Pin.buildPath's asin of
-        nought over nought) -- nothing drawn, nothing hit }
+        nought over nought) -- nothing drawn, nothing hit, still brushed }
+      nanPath := Length(pts) = 0;
       for k := 0 to High(pts) do
-        if IsNan(pts[k].X) or IsNan(pts[k].Y) then Exit;
-      if s.Kind = tsyLine then sh := TyShapePolyline(pts) else sh := TyShapePolygon(pts);
-      sh.Cmds := cmds;
-      sh.HitNonZero := True;
+        if IsNan(pts[k].X) or IsNan(pts[k].Y) then nanPath := True;
+      if nanPath then
+      begin
+        inkless := True;
+        sh := TyShapePolyline([TyPointF(at.X, at.Y), TyPointF(at.X, at.Y)]);
+      end
+      else
+      begin
+        if s.Kind = tsyLine then sh := TyShapePolyline(pts) else sh := TyShapePolygon(pts);
+        sh.Cmds := cmds;
+        sh.HitNonZero := True;
+      end;
     end;
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     e := TyChartElement(sh);
@@ -7054,6 +7065,12 @@ var
       e.Style.HasFill := True;
       e.Style.FillColor := EdgeColour(edgeAt);
     end;
+    { [R7-V] a collapsed box of no picture: no fill, no pen, never a target }
+    if inkless then
+    begin
+      e.Style.HasFill := False;
+      e.Style.StrokeWidthLogical := 0;
+    end;
     e.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[edgeAt]);
     e.Z := ASpec.Z;
     e.Z2 := ASpec.Z2;
@@ -7065,7 +7082,8 @@ var
       strokeNoScale) [was: silent] }
     e.Silent := False;
     e.HitSlopLogical := 0;
-    if s.Kind <> tsyLine then
+    if inkless then e.Silent := True
+    else if s.Kind <> tsyLine then
     begin
       if collapsed then
       begin
@@ -7149,7 +7167,9 @@ var
       getBoundingRect takes through the symbol's local transform }
     e.Anim.Vals := Copy(edgeAnim.Vals, 0, Length(edgeAnim.Vals));
     SetLength(e.Anim.Vals, 11);
-    if Copy(AName, 1, 7) = 'path://' then
+    { [R7-V] (a path of no number has no rect: nought) }
+    if nanPath then bx := TyXYWH(0, 0, 0, 0)
+    else if Copy(AName, 1, 7) = 'path://' then
       bx := TyZrBBox(TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -AH / 2, ASize, AH)))
     else
       bx := TyZrBBox(TyZrSymbol(AName, -ASize / 2, -AH / 2, ASize, AH));

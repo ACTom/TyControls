@@ -1267,9 +1267,7 @@ type
       off the element otherwise (a lines series' end symbol, ...): what an
       effect symbol of no transform is drawn under after it. Nil, the zero
       value: read off the element (an effect symbol's place, a caption's
-      anchor and turn, a symbol's frame, an own-frame path's) or none. (On an
-      effect symbol whose transform is no number NanEffectHit would read it
-      as the transform its hit's inverse undoes; nil there: the identity) }
+      anchor and turn, a symbol's frame, an own-frame path's) or none }
     CanvasM: TTyDoubleArray;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of

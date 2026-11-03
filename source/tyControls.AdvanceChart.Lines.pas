@@ -1984,10 +1984,12 @@ end;
 
 { [R7-V] AN EFFECT SYMBOL WHOSE TRANSFORM IS NO NUMBER IS HIT where its
   invTransform says, not where it is drawn: matrix.invert fails and the
-  inverse it was made with stays, the identity in css px (CanvasM's
-  transform where one is handed in) -- Path.contain then asks
-  createSymbol(type, -0.5, -0.5, 1, 1) at the canvas' top left [was: where
-  the canvas drew it] }
+  inverse it was made with stays, the identity in css px -- Path.contain
+  then asks createSymbol(type, -0.5, -0.5, 1, 1) at the canvas' top left
+  [was: where the canvas drew it]. (A trail's frame of no number follows
+  one that is a number only across an update, which builds the symbol's
+  state afresh here: upstream's inverse is then the one setOption's own
+  frame left -- not modelled.) }
 procedure NanEffectHit(var AEl: TTyChartElement);
 var
   em: Boolean;
@@ -2008,17 +2010,9 @@ begin
   else
     Exit;
   end;
-  if Length(AEl.CanvasM) = 6 then
-  begin
-    m[0] := AEl.CanvasM[0]; m[1] := AEl.CanvasM[1]; m[2] := AEl.CanvasM[2];
-    m[3] := AEl.CanvasM[3]; m[4] := AEl.CanvasM[4]; m[5] := AEl.CanvasM[5];
-  end
-  else
-  begin
-    ds := 1;
-    if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
-    m := TyZrLocal(ds, ds, 0, 0, 0);
-  end;
+  ds := 1;
+  if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
+  m := TyZrLocal(ds, ds, 0, 0, 0);
   { the symbol's unit box (-1 .. 1) is twice the effect's (-0.5 .. 0.5) }
   AEl.Shape.HitM[0] := m[0] * 0.5;
   AEl.Shape.HitM[1] := m[1] * 0.5;
@@ -2099,15 +2093,10 @@ begin
     AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTransformLeft;
     AEl.Anim.Vals := TTyDoubleArray.Create(ds);
     PlaceEffect(AEl, ds, ds, 0, 0, NaN);
-    { [R7-V] the hit: the inverse zrender made first, the identity (a
-      trail's frame of no number follows one that is a number only across
-      an update, which builds the symbol's state afresh here) }
-    AEl.CanvasM := nil;
-    NanEffectHit(AEl);
+    { (its hit: TyLinesCanvasLeftovers, NanEffectHit) }
     Exit;
   end;
   AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasTransformLeft;
-  AEl.CanvasM := nil;
   { the transform it leaves on the canvas: 1, then x, y, scaleX, scaleY,
     rotation }
   AEl.Anim.Vals := TTyDoubleArray.Create(ds, 1, AE.X, AE.Y, AE.ScaleX, AE.ScaleY, AE.Rotation);
