@@ -782,7 +782,7 @@ function cases() {
       { type: 'scatter', clip: false, z: 3, blendMode: 'Foo', itemStyle: { color: '#00ff00' }, data: [[4, 4]] },
       { type: 'scatter', clip: false, blendMode: 'lighter', itemStyle: { color: '#0000ff' }, data: [[6, 6]] },
       { type: 'scatter', clip: false, blendMode: 'Screen', itemStyle: { color: '#00ffff' }, data: [[8, 8]] },
-      { type: 'scatter', clip: false, itemStyle: { color: '#ff00ff' }, data: [[9, 3]] }]), [0], { y: true }],
+      { type: 'scatter', clip: false, blendMode: 'screen', itemStyle: { color: '#ff00ff' }, data: [[9, 3]] }]), [0], { y: true }],
     ['y-blend-graphic', { animation: false, graphic: [
       { type: 'rect', name: 'gr0', shape: { x: 20, y: 20, width: 40, height: 30 }, style: { fill: '#ff0000', blend: 'multiply' } },
       { type: 'rect', name: 'gr1', shape: { x: 80, y: 20, width: 40, height: 30 }, style: { fill: '#00ff00', blend: 'nope' } },

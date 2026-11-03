@@ -67919,6 +67919,7 @@
      {
       "type": "scatter",
       "clip": false,
+      "blendMode": "screen",
       "itemStyle": {
        "color": "#ff00ff"
       },
@@ -68782,7 +68783,7 @@
          "blk": 0,
          "fo": null,
          "so": null,
-         "gco": "source-over"
+         "gco": "screen"
         }
        ],
        "pr": [

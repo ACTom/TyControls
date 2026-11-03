@@ -1059,7 +1059,8 @@ end;
   the pixel) the wanted ink's direction, at least AMin of it (the painter
   blends in its own light, so the coverage is not one number per channel);
   AWant of no alpha: white }
-function InkOver(const APx: TBGRAPixel; AWant: TTyChartColor; AMin: Double): Boolean;
+function InkOver(const APx: TBGRAPixel; AWant: TTyChartColor; AMin: Double;
+  ACos: Double = 0.98): Boolean;
 var p, w: array[0..2] of Double; n: Integer; dot, pp, ww: Double;
 begin
   if (AWant shr 24) = 0 then
@@ -1077,7 +1078,7 @@ begin
     pp := pp + p[n] * p[n];
     ww := ww + w[n] * w[n];
   end;
-  Result := (Sqrt(pp) >= AMin) and (ww > 0) and (dot / Sqrt(pp * ww) >= 0.98);
+  Result := (Sqrt(pp) >= AMin) and (ww > 0) and (dot / Sqrt(pp * ww) >= ACos);
 end;
 
 function RectOfHex(AData: TJSONData; out AR: TTyRectF): Boolean;
@@ -1133,11 +1134,12 @@ var
       if Sqrt(Sqr(AX - effs[k2].X) + Sqr(AY - effs[k2].Y)) < effr[k2] + AGap then Exit(False);
   end;
 
-  function Probe(AX, AY: Double; AWant: TTyChartColor; AMin: Double; const AWhat: string): Boolean;
+  function Probe(AX, AY: Double; AWant: TTyChartColor; AMin: Double; const AWhat: string;
+    ACos: Double = 0.98): Boolean;
   begin
     Inc(FCompared);
     px := FBmp.GetPixel(Trunc(AX), Trunc(AY));
-    Result := InkOver(px, AWant, AMin);
+    Result := InkOver(px, AWant, AMin, ACos);
     if not Result then
       Miss(Format('%s: (%d,%d,%d) at (%g,%g), upstream %s', [AWhat, px.red, px.green, px.blue,
         AX, AY, '#' + IntToHex(AWant, 8)]));
@@ -1243,7 +1245,8 @@ begin
               begin
                 if (Sqrt(Sqr(x - cx) + Sqr(y - cy)) <= r - 1.5) and ClearOfEffects(x, y, 2.5) then
                 begin
-                  Probe(x, y, wc, 40, where + ' fill in its block');
+                  { (tighter: an old picture showing through tints it) }
+                  Probe(x, y, wc, 40, where + ' fill in its block', 0.998);
                   Inc(got);
                 end;
                 x := x + 2;
