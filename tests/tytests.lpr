@@ -340,7 +340,8 @@ uses
   test.db.grid.nav,
   test.db.grid.edit,
   test.db.grid.events,
-  test.db.typekeys;
+  test.db.typekeys,
+  test.textground;
 
 type
   TTyTestRunner = class(TTestRunner)

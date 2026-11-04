@@ -760,6 +760,7 @@ begin
       on the layer, which counts device pixels: each run's box and the rule thickness are
       mapped, and its font is set at the raster PPI (#83). }
     fb := P.Bitmap;
+    P.PrepareTextGround(Rect(0, 0, fb.Width, fb.Height));
     thd := P.Dev(th);
     for ii := 0 to High(FLayout) do
     begin
