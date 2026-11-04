@@ -66,8 +66,12 @@ const
     the comparison as this unit has it): every correct picture, palette and
     stateful checks together, scored at most 20 (a bold title in TTyAdvancedListBox; the next
     was 2); of 21 porting mistakes put back one at a time, the lowest still caught scored 28
-    (the menu banner drawn at its layout position). 24 sits between them. }
+    (the menu banner drawn at its layout position). 24 sits between them. Measured again
+    2026-11-04, after text moved to the desktop's own quality (#199): the same bold title scores
+    26, because plain ClearType's Latin widths are not proportional from 12 px to 24 px, and that
+    case has its own limit; the next is 6. }
   CMaxMismatch = 24;
+  CMaxMismatchBoldTitle = 28;
 
 type
   { The checks a device-scale test makes on a control built in a given state. }
@@ -76,7 +80,8 @@ type
     { The control ABuild makes, sized AW x AH, draws at S = 2 as at S = 1: score <= CMaxMismatch.
       With TY_SWEEP_DIR set, a failing check (every check, with TY_SWEEP_ALL too) leaves its two
       pictures, the ink difference and its score there. }
-    procedure CheckScale(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer);
+    procedure CheckScale(const AName: string; ABuild: TTyBuildForScale; AW, AH: Integer;
+      AMax: Integer = CMaxMismatch);
     { The rules across ABand (layout pixels) at S = 1 -- between AMin and AMax of them, so the
       band is not all "rule" -- must be on the S = 2 raster, as painted, exactly those rules one
       layout pixel wide: at twice their place, two device pixels each. Catches what the picture
@@ -501,7 +506,7 @@ begin
 end;
 
 procedure TDeviceScaleCase.CheckScale(const AName: string; ABuild: TTyBuildForScale;
-  AW, AH: Integer);
+  AW, AH: Integer; AMax: Integer);
 var
   a, b, d: TBGRABitmap;
   score, ink, blocks: Integer;
@@ -511,7 +516,7 @@ begin
   score := TyDeviceScaleMismatchPictures(ABuild, AW, AH, a, b, ink, blocks);
   try
     dir := GetEnvironmentVariable('TY_SWEEP_DIR');
-    if ((score > CMaxMismatch) or (GetEnvironmentVariable('TY_SWEEP_ALL') <> '')) and (dir <> '') then
+    if ((score > AMax) or (GetEnvironmentVariable('TY_SWEEP_ALL') <> '')) and (dir <> '') then
     begin
       { Every score, passing or not, for measuring the threshold against. }
       AssignFile(log, IncludeTrailingPathDelimiter(dir) + 'scores.txt');
@@ -529,7 +534,7 @@ begin
     b.Free;
   end;
   AssertTrue(Format('%s draws at the device scale (score %d > %d: ink %d, blocks %d)',
-    [AName, score, CMaxMismatch, ink, blocks]), score <= CMaxMismatch);
+    [AName, score, AMax, ink, blocks]), score <= AMax);
 end;
 
 procedure TDeviceScaleCase.CheckRules(const AName: string; ABuild: TTyBuildForScale;
