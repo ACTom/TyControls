@@ -206,7 +206,7 @@ uses
   test.treeselect, test.cascader, test.popover,
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
   test.dpi.dialogs, test.dpi.snapshot,
-  test.parity.datetime;
+  test.parity.datetime, test.textground;
 
 type
   TTyTestRunner = class(TTestRunner)

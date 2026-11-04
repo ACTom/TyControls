@@ -65,6 +65,8 @@ type
     FRect: TRect;
     FPPI: Integer;
     FOwnsBmp: Boolean;
+    FGround: TBGRABitmap;       { what the canvas held under the layer, this frame: PrepareTextGround }
+    FGroundTried: Boolean;
     FRightToLeft: Boolean;
     { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
       paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
@@ -337,6 +339,17 @@ type
         RASTER pixels: map with Dev(), give fonts RasterPPI, draw 1-px rules with DrawRule.
       At S = 1 the two are the same and nothing needs mapping. }
     property Bitmap: TBGRABitmap read FBmp;
+    { #200. Text is about to be drawn in ARect (layer pixels) on what may be a transparent part of
+      the layer, where the renderer can only lay down one grey: it does not know the colour the
+      pixel ends up. What ends up there is the layer over the canvas, so that colour is on the
+      canvas already. Read it now, lay the layer over it in ARect, and the words go down in their
+      subpixels on the very pixels EndPaint would have made. DrawText calls this itself; code
+      that draws words straight on Bitmap calls it first. Only a control's own canvas in a paint
+      is read: a bitmap handed to RenderTo is a picture being made. Does nothing where the text
+      would gain nothing or the canvas cannot be trusted: off Win32 (a platform's cost stays on
+      it), with ClearType off, on a dimmed layer, on a surface that outlives the frame, on a DC
+      that holds a 32-bit DIB. }
+    procedure PrepareTextGround(const ARect: TRect);
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
       **抽出来是为了让评分控件与网格的星级单元格用同一份几何** ——
@@ -445,6 +458,8 @@ procedure TyForgetDesktopClearType;
   shift added to the clock the kept answer is aged by. }
 function TyDesktopClearTypeAsksForTest: Integer;
 procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
+{ FOR THE TESTS: how many times a layer has read the canvas under it (0 elsewhere than Win32). }
+function TyTextGroundReadsForTest: Integer;
 { FOR THE TESTS: answer as if the desktop's setting were this one (0 off, 1 ClearType); -1 goes
   back to asking. Does nothing elsewhere than Win32. }
 procedure TyDesktopClearTypeForceForTest(AForce: Integer);
@@ -1268,14 +1283,16 @@ type
 
     What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
     strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
-    renderer draws exactly that: GDI renders the run in ClearType in the ink's polarity --
+    renderer draws exactly that: GDI renders the run in the quality the desktop asks for, the
+    one a TLabel gets and any ordinary GDI program, in the ink's polarity --
     dark ink black on white, light ink white on black -- and the three subpixel coverages are
     laid down in the ink colour with the same non-gamma blend GDI uses: channel by channel
     where the surface under the pixel is opaque, as GDI lays them on a window; averaged into
     one grey where it is not, since there the colour the text ends up on is not known yet
     and a coloured edge would land on whatever shows through. (Every pixel was grey until
     #90: weight right, sharpness not -- a stem ClearType puts on two subpixels came out as
-    two grey pixels, soft next to the system's own text.) A desktop with ClearType off gets
+    two grey pixels, soft next to the system's own text. A control with no background of its
+    own is told the colour by TTyPainter.PrepareTextGround: #200.) A desktop with ClearType off gets
     grey everywhere, as its own text is. The polarity is not a nicety: Windows weights the two
     differently under the user's ClearType contrast. At the default (1400) they cover within
     half a percent of each other; at 1200 a white-on-black line of 9pt Segoe UI inks 12% more
@@ -1285,6 +1302,11 @@ type
     down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
     pixels; on an opaque surface black on white and white on black, every channel of every
     pixel is the one GDI draws there.
+
+    The quality is fqDefault, not a ClearType named here (#199). On a ClearType desktop that is
+    plain ClearType; fqCleartypeNatural, asked for here until 3.0.4, moves only hinted Latin
+    glyphs, so Chinese matched LCL to the pixel while a line of English differed in 1848 pixels
+    and was 341 px wide against 338. On any other desktop it is what that desktop draws.
 
     Layout is GDI's own, and it is the layout the measuring side reports: the run is drawn by
     the very DrawText call BGRA measures it with (DT_CALCRECT dropped), on the same font in the
@@ -1391,7 +1413,7 @@ begin
   inherited UpdateFont;
   { The measuring side reads this font too: TextSize and TextFitInfo must answer in the
     advances the drawing side lays the glyphs out with. }
-  FFont.Quality := fqCleartypeNatural;
+  FFont.Quality := fqDefault;
 end;
 
 procedure TTyGdiTextRenderer.InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
@@ -1960,6 +1982,7 @@ begin
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
+  FGroundTried := False;
   FKeptC2D := False;
   FBmp.Fill(BGRAPixelTransparent);
   if FScale > 1 then PresetCanvas2D;
@@ -2060,11 +2083,118 @@ begin
   end;
 end;
 
+{$IFDEF LCLWin32}
+var
+  GTextGroundReads: Integer = 0;
+
+function TyGetObjectType(AObj: THandle): LongWord; stdcall; external 'gdi32' name 'GetObjectType';
+function TyGetCurrentObject(ADC: THandle; AKind: LongWord): THandle; stdcall;
+  external 'gdi32' name 'GetCurrentObject';
+{ The system's. LCL's BitBlt sends a 32-bit DIB to its StretchMaskBlt, which does not honour the
+  source DC's origin, and a graphic control paints with the parent's DC moved to it: it would read
+  the parent's corner instead of what is under it. }
+function TyBitBlt(ADest: THandle; AX, AY, AWidth, AHeight: Integer; ASrc: THandle;
+  AXSrc, AYSrc: Integer; ARop: LongWord): LongBool; stdcall; external 'gdi32' name 'BitBlt';
+
+{ Whether what a DC holds can come back as opaque paint. A window's DC can, and the compatible
+  bitmap LCL double-buffers on. A 32-bit DIB may be someone's picture with real alpha in it, where
+  a clear pixel would come back black. }
+function TyCanvasHoldsOpaquePaint(ADC: HDC): Boolean;
+const
+  OBJ_BITMAP = 7;
+  OBJ_MEMDC = 10;
+var
+  ds: TDIBSection;
+begin
+  Result := True;
+  if TyGetObjectType(ADC) <> OBJ_MEMDC then Exit;
+  FillChar(ds, SizeOf(ds), 0);
+  if (LCLIntf.GetObject(TyGetCurrentObject(ADC, OBJ_BITMAP), SizeOf(ds), @ds) > 0)
+    and (ds.dsBm.bmBits <> nil) and (ds.dsBm.bmBitsPixel = 32) then
+    Result := False;
+end;
+{$ENDIF}
+
+function TyTextGroundReadsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := GTextGroundReads;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TTyPainter.PrepareTextGround(const ARect: TRect);
+{$IFDEF LCLWin32}
+var
+  r: TRect;
+  x, y, a: Integer;
+  s, g: PBGRAPixel;
+begin
+  if (FBmp = nil) or (not FOwnsBmp) or (FScale <> 1) or (Opacity < 1.0)
+    or not (FCanvas is TControlCanvas) then Exit;
+  r := TRect.Intersect(ARect, FBmp.ClipRect);
+  if (r.Left >= r.Right) or (r.Top >= r.Bottom) then Exit;
+  { Every run of text comes through here, and a control with its own background must pay nothing:
+    three pixels say so. One they miss only keeps its grey. }
+  s := FBmp.ScanLine[(r.Top + r.Bottom) div 2];
+  if (s[r.Left].alpha = 255) and (s[(r.Left + r.Right) div 2].alpha = 255)
+    and (s[r.Right - 1].alpha = 255) then Exit;
+  if not TyDesktopClearType then Exit;
+  if not FGroundTried then
+  begin
+    FGroundTried := True;
+    if TyCanvasHoldsOpaquePaint(FCanvas.Handle) then
+    begin
+      Inc(GTextGroundReads);
+      FGround := TBGRABitmap.Create(FBmp.Width, FBmp.Height);
+      if TyBitBlt(FGround.Canvas.Handle, 0, 0, FBmp.Width, FBmp.Height, FCanvas.Handle,
+        FRect.Left, FRect.Top, SRCCOPY) then
+      begin
+        TyGdiFlush;
+        FGround.AlphaFill(255);    { GDI leaves the alpha byte as it pleases }
+      end
+      else
+        FreeAndNil(FGround);       { a printer, a metafile: no pixels to read }
+    end;
+  end;
+  if FGround = nil then Exit;
+  { The layer over the ground, as EndPaint lays it: nothing the layer holds changes, and only the
+    words' rect turns opaque. An antialiased shape elsewhere on the layer keeps its blend. }
+  for y := r.Top to r.Bottom - 1 do
+  begin
+    s := PBGRAPixel(FBmp.ScanLine[y]) + r.Left;
+    g := PBGRAPixel(FGround.ScanLine[y]) + r.Left;
+    for x := r.Left to r.Right - 1 do
+    begin
+      a := s^.alpha;
+      if a = 0 then
+        s^ := g^
+      else if a < 255 then
+      begin
+        s^.red := g^.red + (Integer(s^.red) - g^.red) * a div 255;
+        s^.green := g^.green + (Integer(s^.green) - g^.green) * a div 255;
+        s^.blue := g^.blue + (Integer(s^.blue) - g^.blue) * a div 255;
+        s^.alpha := 255;
+      end;
+      Inc(s);
+      Inc(g);
+    end;
+  end;
+  FBmp.InvalidateBitmap;   // written through ScanLine
+end;
+{$ELSE}
+begin
+  if ARect.Left = 0 then ;
+end;
+{$ENDIF}
+
 procedure TTyPainter.EndPaint;
 var
   baseBmp: TBGRABitmap;
   c: TBGRAPixel;
 begin
+  FreeAndNil(FGround);
   if FKeptC2D then
   begin
     { The two transforms only: a path the caller has open holds device points already. }
@@ -2815,6 +2945,7 @@ begin
   style.Layout := AVAlign;
   style.SingleLine := True;
   style.Clipping := True;
+  PrepareTextGround(ARect);
   FBmp.TextRect(ARect, ARect.Left, ARect.Top, s, style, px);
   // Mnemonic underline: a thin line under the AMnemonicPos-th char (1-based), placed by
   // reusing the same alignment the text was drawn with. Skipped when the text was ellipsis-
@@ -2947,6 +3078,7 @@ begin
     oldClip := FBmp.ClipRect;
     FBmp.ClipRect := TRect.Intersect(oldClip, ARect);
     try
+      PrepareTextGround(ARect);
       lay.DrawText(FBmp, px);
       { Mnemonic underline. The legacy arithmetic -- measure the bytes BEFORE the mnemonic,
         add that to the block's left edge -- assumes the glyphs come out in the order the

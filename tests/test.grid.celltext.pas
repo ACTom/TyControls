@@ -415,7 +415,7 @@ begin
   if not CLaidDownAsDrawn then Exit;
   FCtl.LoadThemeCss(
     'TyGrid, TyListView { background: ' + AGround + '; color: ' + AInk +
-    '; border-width: 0px; padding: 0px; font-family: "' + CFont + '"; font-size: 9px; }' +
+    '; border-width: 0px; padding: 0px; font-family: ' + CFont + '; font-size: 9px; }' +
     'TyGridLine { background: ' + AGround + '; }' +
     'TyGridCell { background: none; color: ' + AInk + '; }' +
     'TyListViewItem { background: none; color: ' + AInk + '; }');
