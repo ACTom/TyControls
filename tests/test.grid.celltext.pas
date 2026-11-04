@@ -238,6 +238,8 @@ procedure TGridCellTextTest.TestTranslucentInk;
 begin
   CheckInk('half light ink on dark', BGRA($1E, $1E, $1E, 255), TyRGBA($E5, $E7, $EB, 128));
   CheckInk('half dark ink on light', BGRA(255, 255, 255, 255), TyRGBA($1F, $29, $37, 128));
+  CheckInk('half light ink on nothing', BGRA(0, 0, 0, 0), TyRGBA($E5, $E7, $EB, 128));
+  CheckInk('half dark ink on half a surface', BGRA(255, 255, 255, 128), TyRGBA($1F, $29, $37, 128));
 end;
 
 procedure TGridCellTextTest.TestOneKeptEntryLiesOnAnyGround;
@@ -279,10 +281,10 @@ var
   half: TRect;
 begin
   OpenSurfaces(BGRA(0, 0, 0, 0));
-  half := Rect(0, 0, 150, H);
+  half := Rect(0, 0, 60, H);
   FKept.Bitmap.FillRect(half, BGRA($1E, $1E, $1E, 255), dmSet);
   FDirect.Bitmap.FillRect(half, BGRA($1E, $1E, $1E, 255), dmSet);
-  half := Rect(250, 0, W, H);
+  half := Rect(110, 0, W, H);
   FKept.Bitmap.FillRect(half, BGRA($1E, $1E, $1E, 128), dmSet);
   FDirect.Bitmap.FillRect(half, BGRA($1E, $1E, $1E, 128), dmSet);
   DrawKept(CBox, CLine, TyRGBA($E5, $E7, $EB, 255));
@@ -296,7 +298,7 @@ var
   x, y, inside, outside: Integer;
 begin
   OpenSurfaces(BGRA($1E, $1E, $1E, 255));
-  clip := Rect(60, 16, 140, 28);
+  clip := Rect(60, 20, 140, 26);
   FKept.Bitmap.ClipRect := clip;
   FDirect.Bitmap.ClipRect := clip;
   DrawKept(CBox, CLine, TyRGBA($E5, $E7, $EB, 255));
