@@ -391,11 +391,11 @@ type
       pixel ends up. What ends up there is the layer over the canvas, so that colour is on the
       canvas already. Read it now, lay the layer over it in ARect, and the words go down in their
       subpixels on the very pixels EndPaint would have made. DrawText calls this itself; code
-      that draws words straight on Bitmap calls it first. Only a control's own canvas in a paint
-      is read: a bitmap handed to RenderTo is a picture being made. Does nothing where the text
-      would gain nothing or the canvas cannot be trusted: off Win32 (a platform's cost stays on
-      it), with ClearType off, on a dimmed layer, on a surface that outlives the frame, on a DC
-      that holds a 32-bit DIB. }
+      that draws words straight on a part of Bitmap it has not filled calls it first. Only a
+      control's own canvas in a paint is read: a bitmap handed to RenderTo is a picture being
+      made. Does nothing where the text would gain nothing or the canvas cannot be trusted: off
+      Win32 (a platform's cost stays on it), with ClearType off, on a dimmed layer, on a surface
+      that outlives the frame, on a DC that holds a 32-bit DIB. }
     procedure PrepareTextGround(const ARect: TRect);
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
@@ -775,6 +775,10 @@ function TyDesktopClearTypeAsksForTest: Integer;
 procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
 { FOR THE TESTS: how many times a layer has read the canvas under it (0 elsewhere than Win32). }
 function TyTextGroundReadsForTest: Integer;
+{ FOR THE TESTS: the quality the renderer asks GDI for. On Windows the renderer and a canvas
+  measure alike since #199; a check that needs them to disagree puts Natural back. Does nothing
+  elsewhere than Win32. }
+procedure TyGdiTextQualityForTest(AQuality: TFontQuality);
 { FOR THE TESTS: answer as if the desktop's setting were this one (0 off, 1 ClearType); -1 goes
   back to asking. Does nothing elsewhere than Win32. }
 procedure TyDesktopClearTypeForceForTest(AForce: Integer);
@@ -1865,6 +1869,7 @@ type
     class var GShot: TBitmap;
     class var GBitmapsMade, GOneOffs, GConversions: Integer;
     class var GForceConversion: Boolean;
+    class var GQuality: TFontQuality;   { fqDefault, but for TyGdiTextQualityForTest }
     { BGRA MEASURES every run, and lays every TURNED run down, on a TBitmap of its own:
       a memory DC, a bitmap and a font selected into them, made and freed per call. On
       the machine this was measured on that is about a millisecond a call, and a chart
@@ -1988,7 +1993,7 @@ begin
   inherited UpdateFont;
   { The measuring side reads this font too: TextSize and TextFitInfo must answer in the
     advances the drawing side lays the glyphs out with. }
-  FFont.Quality := fqDefault;
+  FFont.Quality := GQuality;
 end;
 
 class function TTyGdiTextRenderer.MeasureSurface(AFont: TFont): TBitmap;
@@ -2820,6 +2825,16 @@ begin
   FreeAndNil(TTyGdiTextRenderer.GMeasure);
   FreeAndNil(TTyGdiTextRenderer.GTurn);
   TTyGdiTextRenderer.DropRuns;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextQualityForTest(AQuality: TFontQuality);
+begin
+  {$IFDEF LCLWin32}
+  TTyGdiTextRenderer.GQuality := AQuality;
+  TTyGdiTextRenderer.DropRuns;     { what is kept was laid down in the quality it had }
+  {$ELSE}
+  if AQuality = fqDefault then ;
   {$ENDIF}
 end;
 

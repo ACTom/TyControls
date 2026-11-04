@@ -47,6 +47,7 @@ type
     function BuildHtmlLabel(AParent: TWinControl; APPI: Integer): TControl;
     function BuildGlowLabel(AParent: TWinControl; APPI: Integer): TControl;
     function BuildMenuView(AParent: TWinControl; APPI: Integer): TControl;
+    function BuildMenuViewMirrored(AParent: TWinControl; APPI: Integer): TControl;
     function BuildBarChart(AParent: TWinControl; APPI: Integer): TControl;
     function BuildHeader(AParent: TWinControl; APPI: Integer): TControl;
     function BuildHsvSquare(AParent: TWinControl; APPI: Integer): TControl;
@@ -83,6 +84,7 @@ type
     procedure TestHtmlLabelRichText;
     procedure TestGlowLabel;
     procedure TestMenuViewBannerAndIcons;
+    procedure TestMenuViewBannerMirrored;
     procedure TestBarChartWithLegend;
     procedure TestHeaderDividers;
     procedure TestColourSquare;
@@ -416,6 +418,13 @@ begin
   Result := v;
 end;
 
+function TDeviceScaleControlsTest.BuildMenuViewMirrored(AParent: TWinControl; APPI: Integer): TControl;
+begin
+  { The strip at the far end: its left edge is no longer 0 in either scale. }
+  Result := BuildMenuView(AParent, APPI);
+  Result.BiDiMode := bdRightToLeft;
+end;
+
 function TDeviceScaleControlsTest.BuildBarChart(AParent: TWinControl; APPI: Integer): TControl;
 var
   c: TTyChart;
@@ -481,6 +490,11 @@ end;
 procedure TDeviceScaleControlsTest.TestMenuViewBannerAndIcons;
 begin
   CheckScale('TTyMenuView-banner-icons', @BuildMenuView, 180, 80);
+end;
+
+procedure TDeviceScaleControlsTest.TestMenuViewBannerMirrored;
+begin
+  CheckScale('TTyMenuView-banner-mirrored', @BuildMenuViewMirrored, 180, 80);
 end;
 
 procedure TDeviceScaleControlsTest.TestBarChartWithLegend;
