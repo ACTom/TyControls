@@ -657,7 +657,7 @@ end;
 
 procedure TDeviceScaleControlsTest.TestAdvancedListBoxIcons;
 begin
-  CheckScale('TTyAdvancedListBox-icons', @BuildAdvancedListBox, 200, 120);
+  CheckScale('TTyAdvancedListBox-icons', @BuildAdvancedListBox, 200, 120, CMaxMismatchBoldTitle);
 end;
 
 procedure TDeviceScaleControlsTest.TestTabSetOverflow;
