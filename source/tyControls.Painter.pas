@@ -760,6 +760,9 @@ procedure TyForgetDesktopClearType;
   shift added to the clock the kept answer is aged by. }
 function TyDesktopClearTypeAsksForTest: Integer;
 procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
+{ FOR THE TESTS: answer as if the desktop's setting were this one (0 off, 1 ClearType); -1 goes
+  back to asking. Does nothing elsewhere than Win32. }
+procedure TyDesktopClearTypeForceForTest(AForce: Integer);
 procedure TyGdiTextForceConversionForTest(AOn: Boolean);
 { The kept measuring DC and turned-run DIB (Win32): how many times either was made or
   grown, and a switch back to BGRA's own per-call scratch for both -- the reference the
@@ -826,6 +829,20 @@ procedure TyUnpinBgraRandom(ASaved: LongWord);
 procedure TyCtxFill(ACtx: TBGRACanvas2D);
 procedure TyCtxStroke(ACtx: TBGRACanvas2D);
 procedure TyCtxClip(ACtx: TBGRACanvas2D);
+
+{ TEXT KEPT TO BE LAID DOWN LATER (#198). A control that keeps rendered words on a bitmap of
+  their own (the grid: a hundred thousand rows could not scroll otherwise) has to lay down what
+  drawing them straight on the surface would have left, on whatever ground is there by then.
+
+  TyKeptTextBySubpixels says how an entry made now is held. It follows a setting of the desktop's,
+  so it belongs in the key of whatever keeps the entries. TyKeptTextBitmap makes the bitmap to draw
+  on and says which ink to draw with, which is not always the one asked for. TyLayKeptText lays an
+  entry down for the ink it was made for; it keeps to ADest's ClipRect. }
+function TyKeptTextBySubpixels: Boolean;
+function TyKeptTextBitmap(AWidth, AHeight: Integer; AInk: TTyColor; ABySubpixels: Boolean;
+  out ADrawWith: TTyColor): TBGRABitmap;
+procedure TyLayKeptText(ADest, AKept: TBGRABitmap; AX, AY: Integer; AInk: TTyColor;
+  ABySubpixels: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -1763,6 +1780,12 @@ begin
   {$ENDIF}
 end;
 
+{ Which polarity an ink is drawn in: see TTyGdiTextRenderer. }
+function TyInkIsLight(const AInk: TBGRAPixel): Boolean;
+begin
+  Result := (AInk.red * 30 + AInk.green * 59 + AInk.blue * 11) div 100 > 128;
+end;
+
 {$IFDEF LCLWin32}
 type
   { TEXT ON WINDOWS, AS WINDOWS DRAWS IT.
@@ -1892,6 +1915,7 @@ var
   GClearTypeAskedAt: QWord = 0;
   GClearTypeAsks: Integer = 0;
   GClearTypeClockShift: Int64 = 0;
+  GClearTypeForced: Integer = -1;
 
 function TyAskDesktopClearType: Boolean;
 const
@@ -1914,6 +1938,7 @@ function TyDesktopClearType: Boolean;
 var
   now: QWord;
 begin
+  if GClearTypeForced >= 0 then Exit(GClearTypeForced = 1);
   now := QWord(Int64(GetTickCount64) + GClearTypeClockShift);
   if not GClearTypeKnown or (now - GClearTypeAskedAt >= ClearTypeKeepMs) then
   begin
@@ -2298,7 +2323,7 @@ begin
   end;
   if c.alpha = 0 then Exit;
   { Light ink is drawn white on black, as Windows draws light text: see the class comment. }
-  lightInk := (c.red * 30 + c.green * 59 + c.blue * 11) div 100 > 128;
+  lightInk := TyInkIsLight(c);
   UpdateFont;
   sz := InternalTextSizeStyle(sUTF8, RunStyle(ARightToLeft, AShowPrefix), MaxLongint);
   if (sz.cx <= 0) or (sz.cy <= 0) then Exit;
@@ -2538,6 +2563,118 @@ begin
 end;
 {$ENDIF}
 
+function TyKeptTextBySubpixels: Boolean;
+begin
+  {$IFDEF LCLWin32}
+  Result := TyDesktopClearType;
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
+function TyKeptTextBitmap(AWidth, AHeight: Integer; AInk: TTyColor; ABySubpixels: Boolean;
+  out ADrawWith: TTyColor): TBGRABitmap;
+begin
+  ADrawWith := AInk;
+  if not ABySubpixels then
+    Result := TBGRABitmap.Create(AWidth, AHeight)
+  { By subpixels: the words on an opaque bitmap, where the renderer lays its three coverages down
+    channel by channel, in the pure ink of AInk's polarity. Each channel then IS that coverage,
+    the same three numbers the renderer would have blended the real ink with. }
+  else if TyInkIsLight(TyColorToBGRA(AInk)) then
+  begin
+    Result := TBGRABitmap.Create(AWidth, AHeight, BGRABlack);
+    ADrawWith := TyRGBA(255, 255, 255, 255);
+  end
+  else
+  begin
+    Result := TBGRABitmap.Create(AWidth, AHeight, BGRAWhite);
+    ADrawWith := TyRGBA(0, 0, 0, 255);
+  end;
+end;
+
+procedure TyLayKeptText(ADest, AKept: TBGRABitmap; AX, AY: Integer; AInk: TTyColor;
+  ABySubpixels: Boolean);
+const
+  { An entry that is not held by subpixels is the ink with its coverage as alpha, and the blend is
+    the one a run drawn straight on the surface gets. The renderers on Windows and Cocoa lay their
+    grey down without gamma, as the system's own text is. BGRA's renderer, which Qt and GTK draw
+    through, blends in linear light. dmDrawWithTransparency everywhere was 16% too much ink for
+    light text on dark on Windows and 15% too little for dark text on light. }
+  KeptGreyBlend = {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3)}dmDrawWithTransparency{$ELSE}dmLinearBlend{$ENDIF};
+var
+  c, ink: TBGRAPixel;
+  lightInk, wrote: Boolean;
+  clip: TRect;
+  x0, x1, y0, y1, x, y, cr, cg, cb, cov, a, v, ir, ig, ib: Integer;
+  s, d: PBGRAPixel;
+begin
+  if not ABySubpixels then
+  begin
+    ADest.PutImage(AX, AY, AKept, KeptGreyBlend);
+    Exit;
+  end;
+  c := TyColorToBGRA(AInk);
+  if c.alpha = 0 then Exit;
+  lightInk := TyInkIsLight(c);
+  clip := ADest.ClipRect;
+  x0 := Max(clip.Left - AX, 0);
+  x1 := Min(clip.Right - AX, AKept.Width);
+  y0 := Max(clip.Top - AY, 0);
+  y1 := Min(clip.Bottom - AY, AKept.Height);
+  if (x0 >= x1) or (y0 >= y1) then Exit;
+  ink := c;
+  ir := c.red;   { Integer copies: (byte - byte) of a field goes negative here }
+  ig := c.green;
+  ib := c.blue;
+  wrote := False;
+  for y := y0 to y1 - 1 do
+  begin
+    s := PBGRAPixel(AKept.ScanLine[y]) + x0;
+    d := PBGRAPixel(ADest.ScanLine[AY + y]) + AX + x0;
+    for x := x0 to x1 - 1 do
+    begin
+      cr := s^.red;
+      cg := s^.green;
+      cb := s^.blue;
+      if not lightInk then
+      begin
+        cr := 255 - cr;
+        cg := 255 - cg;
+        cb := 255 - cb;
+      end;
+      if (cr <> 0) or (cg <> 0) or (cb <> 0) then
+      begin
+        { What TTyGdiTextRenderer does with the same three numbers. }
+        if d^.alpha = 255 then
+        begin
+          v := d^.red;
+          d^.red := v + (ir - v) * (cr * c.alpha div 255) div 255;
+          v := d^.green;
+          d^.green := v + (ig - v) * (cg * c.alpha div 255) div 255;
+          v := d^.blue;
+          d^.blue := v + (ib - v) * (cb * c.alpha div 255) div 255;
+          wrote := True;
+        end
+        else
+        begin
+          cov := (cr + cg + cb) div 3;
+          a := cov * c.alpha div 255;
+          if a > 0 then
+          begin
+            ink.alpha := a;
+            ADest.FastBlendPixel(AX + x, AY + y, ink);
+          end;
+        end;
+      end;
+      Inc(s);
+      Inc(d);
+    end;
+  end;
+  if wrote then
+    ADest.InvalidateBitmap;   // written through ScanLine, as FastBlendPixel does after its own
+end;
+
 procedure TyForgetDesktopClearType;
 begin
   {$IFDEF LCLWin32}
@@ -2558,6 +2695,15 @@ procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
 begin
   {$IFDEF LCLWin32}
   GClearTypeClockShift := AMs;
+  {$ENDIF}
+end;
+
+procedure TyDesktopClearTypeForceForTest(AForce: Integer);
+begin
+  {$IFDEF LCLWin32}
+  GClearTypeForced := AForce;
+  {$ELSE}
+  if AForce = 0 then ;
   {$ENDIF}
 end;
 

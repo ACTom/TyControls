@@ -6101,6 +6101,8 @@ var
   key, fname, txt: string;
   bmp: TBGRABitmap;
   st: TTextStyle;
+  bySubpixels: Boolean;
+  drawWith: TTyColor;
 begin
   { The text is laid out on its own bitmap at the RASTER size and PPI (#83): w x h below are
     device pixels, ARect is layout. }
@@ -6119,6 +6121,7 @@ begin
   fname := AFontName;
   sz := AFontSize;
   weight := AFontWeight;
+  bySubpixels := TyKeptTextBySubpixels;
 
   { 键 = 这块文字的**全部外观输入**。任何一项变了都是新条目,
     所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。
@@ -6134,7 +6137,7 @@ begin
          IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
          IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 +
          IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.RasterPPI) + #1 +
-         IntToStr(Ord(goCellEllipsis in Options));
+         IntToStr(Ord(goCellEllipsis in Options)) + #1 + IntToStr(Ord(bySubpixels));
 
   idx := FTextCache.IndexOf(key);
   if idx >= 0 then
@@ -6150,7 +6153,7 @@ begin
       FTextCachePixels := 0;
     end;
 
-    bmp := TBGRABitmap.Create(w, h);      { 全透明 }
+    bmp := TyKeptTextBitmap(w, h, AColor, bySubpixels, drawWith);
     TyConfigureTextFont(bmp, fname, sz, weight, P.RasterPPI);
 
     txt := AText;
@@ -6173,7 +6176,7 @@ begin
       每帧每格建一次正是当年 TTyMemo 每键半秒的那个形状,而网格一帧要画几百格。
       键里含 AText,所以同一串文字全程只排一次。 }
     if TyTextHasRTL(txt) then
-      DrawCellTextBidi(bmp, w, h, txt, AColor, AHAlign, AVAlign, AWordWrap)
+      DrawCellTextBidi(bmp, w, h, txt, drawWith, AHAlign, AVAlign, AWordWrap)
     else
     begin
       st := Default(TTextStyle);
@@ -6182,7 +6185,7 @@ begin
       st.SingleLine := not AWordWrap;
       st.Wordbreak := AWordWrap;
       st.Clipping := True;
-      bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
+      bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(drawWith));
     end;
 
     { 排序表 + dupIgnore:键重复时 AddObject **不会收下这个对象**,
@@ -6198,8 +6201,9 @@ begin
     end;
   end;
 
-  { PutImage 尊重 ClipRect —— 半掩的单元格照样被裁掉一截。 }
-  P.Bitmap.PutImage(P.Dev(ARect.Left), P.Dev(ARect.Top), bmp, dmDrawWithTransparency);
+  { Keeps to the ClipRect: a half-covered cell is cut, not squeezed. #198: and it is the ink the
+    same words leave anywhere else, not a blend of its own. }
+  TyLayKeptText(P.Bitmap, bmp, P.Dev(ARect.Left), P.Dev(ARect.Top), AColor, bySubpixels);
 end;
 
 function TTyGridEditLink.HandleKey(var AKey: Word; AShift: TShiftState): Boolean;
