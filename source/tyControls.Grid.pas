@@ -5737,7 +5737,6 @@ begin
 
   { Keeps to the ClipRect: a half-covered cell is cut, not squeezed. #198: and it is the ink the
     same words leave anywhere else, not a blend of its own. }
-  P.PrepareTextGround(P.Dev(ARect));
   TyLayKeptText(P.Bitmap, bmp, P.Dev(ARect.Left), P.Dev(ARect.Top), AColor, bySubpixels);
 end;
 
