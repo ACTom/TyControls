@@ -7,7 +7,7 @@
 - **TTyImageCollection** —— DPI 感知的**命名位图集合**。你用 `TBGRABitmap` 或 `TPicture` 按名字添加图像,集合为每个名字保留一张或多张 master 位图。消费方按**目标像素尺寸**索取某个名字,得到一张缩放到该尺寸的新位图(保持宽高比、居中于透明方块)。一张 master 即可服务所有 DPI,调用方无需自行维护多套分辨率的图集;而当一个名字下**授权了多张分辨率**时,渲染前会先挑最合适的那张再缩放(见 §3.6)。母版存在 published 的 `Images` 集合里,**因而进 `.lfm`**——设计期加载的图会被保存、运行期能拿回来(见 §3.5)。
 - **TTyVirtualImageList** —— 引用一个 `TTyImageCollection` 的**有序虚拟图像列表**。按名字暴露集合中的一个子集,并可在消费方的目标像素尺寸上**按需**渲染 / 绘制任意一项。形态与 `TTyGlyphImageList` 完全一致,只是源自光栅集合而非图标字体。
 
-两者都**按需渲染**、不缓存固定分辨率的图集,因此是带 `Draw` 方法的普通 `TComponent`,而非 `TCustomImageList` 后代——ty-controls 的自绘控件消费它们,而非 LCL 原生 `TImageList`。**headless 安全,无计时器。**
+`TTyVirtualImageList` 是 `TCustomImageList` 的后代。ty-controls 的自绘控件按需渲染;LCL 原生控件读它预先画好的位图,见 [批量添加](#批量添加)。**headless 安全,无计时器。**
 
 ```pascal
 uses tyControls.ImageCollection;
@@ -140,6 +140,7 @@ Coll.Images.Count;                     // -> 3(三张母版)
 | `Collection` | `TTyImageCollection` | `nil` | 光栅图像源。赋值时注册 `FreeNotification`,集合被先释放时引用自动置 `nil`。 |
 | `Names` | `TStrings` | 空 | 要暴露的图像**名字**(有序,每行一个)——每个都是 `Collection` 中的键。 |
 | `DefaultSize` | `Integer` | `16` | 默认项边长(**逻辑**像素),供不传尺寸的消费方使用。 |
+| `MultiResolution` | `Boolean` | `True` | 除基础尺寸外,再预先画 1.5x、2x、3x 三个尺寸给 LCL 原生控件用。见 [批量添加](#批量添加)。 |
 
 ### 方法
 
@@ -173,6 +174,49 @@ Coll.Images.Count;                     // -> 3(三张母版)
 | `procedure TyFadeBitmapAlpha(ABmp: TBGRABitmap; AFactor: Byte)` | 把每个像素的 alpha 按 `AFactor/255` 缩放(**就地修改**),连抗锯齿边缘一起均匀变淡。单元级导出,因为这是全库唯一的"不可用"观感,别的绘制代码也应当用它。 |
 
 只改 alpha、不改颜色:图标保留自己的配色而失去存在感,这才是"不可用"该有的样子——换色说的是"另一个东西",不是"淡出"。`DrawIndex` 内部会先 `Duplicate` 再淡化:缓存位图是**共享**的,就地淡化会让这个图标从此在所有地方(包括别的控件里)都变淡。
+
+### 批量添加
+
+适用于 `TTyVirtualImageList` 和 `TTyLucideImageList`。
+
+每个新名字都要画图,默认画 4 个尺寸。先设好属性,再用 `BeginUpdate` / `EndUpdate` 包住循环:
+
+```pascal
+Icons := TTyLucideImageList.Create(Self);
+Icons.DefaultSize := 20;
+
+Icons.Names.BeginUpdate;
+try
+  for IconName in IconNames do
+    Icons.Names.Add(IconName);
+finally
+  Icons.Names.EndUpdate;
+end;
+```
+
+已经有字符串列表时,一次写入:
+
+```pascal
+Icons.Names.Assign(IconNames);      // 替换全部
+Icons.Names.AddStrings(MoreNames);  // 追加
+Icons.Names.Text := TyIconHouse + LineEnding + TyIconSearch;
+```
+
+光栅图同样处理,先把图片加进集合,再写 `Names`。`AddBitmap` 和 `AddPicture` 只存图,耗时在列表画图这一步。
+
+| 操作 | 会画哪些图标 |
+|------|------|
+| 在 `Names` 末尾添加 | 只画新增的 |
+| 在 `Names` 里插入、删除、改名 | 全部 |
+| 集合里某个已在列表中的名字换了图、改了名或被删除 | 下次改 `Names` 时画全部 |
+| 改了 `IconFont` 的字形映射 | 下次改 `Names` 时画全部 |
+| 设 `DefaultSize`、`MultiResolution`、`Collection`、`IconFont`、`GlyphColor` | 马上画全部 |
+
+所以这些属性要在填名字之前设好,否则整个列表会多画一遍。集合里的图变了又想马上更新,调 `Refill`。
+
+只给 Ty 控件用时,可以在填名字之前设 `MultiResolution := False`,只画基础尺寸,快很多。Ty 控件绘制时按需渲染,用不到另外 3 个尺寸。列表要给 LCL 原生控件用时保持默认,否则高 DPI 下图标会被拉伸。
+
+**3.0.4 及更早版本:** 每次改 `Names` 都会重画全部图标,循环 `Names.Add` 的耗时随图标数量平方增长,100 个 Lucide 图标要接近一分钟。在这些版本上一定要用上面的写法。
 
 ---
 
@@ -220,9 +264,9 @@ begin
   // 虚拟列表:引用集合,按名字暴露有序子集
   VList := TTyVirtualImageList.Create(Self);
   VList.Collection := Coll;
+  VList.DefaultSize := 20;
   VList.Names.Add('logo');
   VList.Names.Add('avatar');
-  VList.DefaultSize := 20;
 
   // LCL 签名:(画布, X, Y, 序号)——按 DefaultSize 绘制第 0 项到 (40, 8)
   VList.Draw(Canvas, 40, 8, 0);
