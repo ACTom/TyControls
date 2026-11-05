@@ -115,8 +115,12 @@ type
     procedure SetPngBase64(const AValue: string);
     procedure DropDecoded;
     function GetMaster: TBGRABitmap;
+    { Tell the owning collection that what AName draws may have changed. }
+    procedure NoteNameTouched(const AName: string);
   protected
     function GetDisplayName: string; override;
+    { Moving a master can change which of two same-size masters a name picks. }
+    procedure SetIndex(Value: Integer); override;
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
@@ -187,6 +191,11 @@ type
     FNames: TStringList;      // distinct names in first-appearance order; lazy
     FNamesStamp: Cardinal;    // the FChangeStamp FNames was built at
     FChangeStamp: Cardinal;   // bumped by every mutation; see Changed
+    { Per name, the FChangeStamp of the last mutation that could change what that name draws.
+      ChangeStamp alone cannot answer "is this baked slot still right?": adding a NEW image bumps
+      it too, and a list refilled every time that happened would be quadratic in the natural loop
+      of adding an image and then its name. Sorted, byte order; Objects hold the stamp. }
+    FNameStamps: TStringList;
     FCache: TStringList;   // 'name'#1'sizePx' -> TTyImageCacheEntry (OwnsObjects, Sorted)
     FCacheStamp: Cardinal;
     FCacheCapacity: Integer;
@@ -212,6 +221,10 @@ type
     { Evict least-recently-used entries until at most AMax remain. }
     procedure TrimCacheTo(AMax: Integer);
     procedure SetCacheCapacity(AValue: Integer);
+    { Record a mutation that can change what AName draws. Bumps ChangeStamp as well. }
+    procedure NameTouched(const AName: string);
+    { True when something may have changed what AName draws since ChangeStamp was AStamp. }
+    function NameChangedSince(const AName: string; AStamp: Cardinal): Boolean;
   protected
     { Invalidates the render cache (lazily, via Version). Call after any change to
       the stored masters; descendants overriding this must call inherited. }
@@ -357,6 +370,14 @@ type
     FGlyphCacheSize: Integer;
     FGlyphCacheColor: TTyColor;
     FGlyphCacheVersion: Integer;
+    { What the baked side holds, so that a name added at the end can render on its own instead of
+      clearing and rendering the whole list. That rebuild made a loop of N adds cost 2N^2 renders
+      (#202). FBakeValid is False from the start of a fill until it finishes, and after a source
+      is freed: the slots then cannot be trusted and the next change rebuilds them. }
+    FBakeValid: Boolean;
+    FBakedNames: array of string;
+    FBakedStamp: Cardinal;        // the collection's ChangeStamp when the slots were baked
+    FBakedFontVersion: Integer;   // the font's Version when the slots were baked
     { Observers. This list had NO change notification of any kind, and its FNames was a bare
       TStringList with no OnChange -- so anything holding rendered copies of these icons (the
       LCL bridge is the first, but a cache in a control is the same shape) had no way to learn
@@ -381,6 +402,12 @@ type
     procedure SetGlyphColor(AValue: TTyColor);
     procedure SetNames(AValue: TStrings);
     procedure DropGlyphCache;
+    { True when every baked slot is still what its name draws, and the names only grew at the end. }
+    function BakedSlotsStillStand: Boolean;
+    { Render the names from AFrom on into new slots. }
+    procedure BakeSlots(AFrom: Integer);
+    { Record what the slots now hold. AFrom: names before it are already recorded. }
+    procedure NoteBaked(AFrom: Integer);
     { Which source owns AIndex: the collection when it HAS the name, else the icon font when
       it has the glyph. Returns '' in ASourceName when neither does. }
     function ResolveSource(AIndex: Integer; out AName: string): Integer;
@@ -438,10 +465,12 @@ type
       polarity because that is what the callers upstream of it carry. }
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AGhosted: Boolean = False);
-    { Re-render every BAKED slot from the names. Automatic on load and on every change; an
-      explicit call is only for a source this component cannot observe. }
+    { Re-render every BAKED slot from the names. Automatic on load and whenever a change can reach
+      a slot that is already baked; names added at the end render on their own. An explicit call
+      is only for a source this component cannot observe. }
     procedure Refill;
-    { How many fills have actually run. Count cannot tell a refill from no refill. }
+    { How many times the whole list has been rebuilt. Count cannot tell a rebuild from none. Names
+      added at the end do not count: they render without touching the other slots. }
     property FillCount: Integer read FFillCount;
     { Subscribe to "something about this list changed": Names, Collection, IconFont,
       DefaultSize or GlyphColor. Remove in your destructor. }
@@ -707,10 +736,24 @@ begin
     Result := FImageName + ' (empty)';
 end;
 
+procedure TTyImageItem.NoteNameTouched(const AName: string);
+begin
+  if (Collection is TTyImageItems) and (TTyImageItems(Collection).FOwner <> nil) then
+    TTyImageItems(Collection).FOwner.NameTouched(AName);
+end;
+
+procedure TTyImageItem.SetIndex(Value: Integer);
+begin
+  inherited SetIndex(Value);
+  NoteNameTouched(FImageName);
+end;
+
 procedure TTyImageItem.SetImageName(const AValue: string);
 begin
   if FImageName = AValue then Exit;
+  NoteNameTouched(FImageName);   // the old name just lost a master
   FImageName := AValue;
+  NoteNameTouched(FImageName);
   Changed(False);   // -> TTyImageItems.Update -> the owner's Changed
 end;
 
@@ -719,6 +762,7 @@ begin
   if FPngBase64 = AValue then Exit;
   FPngBase64 := AValue;
   DropDecoded;      // the cached bitmap belongs to the OLD payload
+  NoteNameTouched(FImageName);
   Changed(False);
 end;
 
@@ -731,11 +775,13 @@ procedure TTyImageItem.Assign(ASource: TPersistent);
 begin
   if ASource is TTyImageItem then
   begin
+    NoteNameTouched(FImageName);
     FImageName := TTyImageItem(ASource).FImageName;
     // Copy the PAYLOAD, not the decoded bitmap: two items must never share one
     // TBGRABitmap, and the payload is the source of truth anyway.
     FPngBase64 := TTyImageItem(ASource).FPngBase64;
     DropDecoded;
+    NoteNameTouched(FImageName);
     Changed(False);
   end
   else
@@ -774,7 +820,7 @@ procedure TTyImageItems.Notify(AItem: TCollectionItem; AAction: TCollectionNotif
 begin
   inherited Notify(AItem, AAction);
   if FOwner <> nil then
-    FOwner.Changed;   // add / delete / extract all stale the name index and cache
+    FOwner.NameTouched(TTyImageItem(AItem).ImageName);   // add / delete / extract all stale the name index and cache
 end;
 
 procedure TTyImageItems.Update(AItem: TCollectionItem);
@@ -808,6 +854,10 @@ begin
   FNames := TStringList.Create;
   FNames.CaseSensitive := True;  // names are case-sensitive keys (per the contract)
   FNamesStamp := FChangeStamp;   // both start empty, so the snapshot starts valid
+  FNameStamps := TStringList.Create;
+  FNameStamps.CaseSensitive := True;   // must precede Sorted: it selects the compare
+  FNameStamps.UseLocale := False;      // a lookup, not a display order
+  FNameStamps.Sorted := True;
 
   FCache := TStringList.Create;
   FCache.OwnsObjects := True;    // frees each TTyImageCacheEntry (and its render)
@@ -826,7 +876,28 @@ begin
   FImages.FOwner := nil;
   FImages.Free;   // frees every item -> every decoded master
   FNames.Free;
+  FNameStamps.Free;
   inherited Destroy;
+end;
+
+procedure TTyImageCollection.NameTouched(const AName: string);
+var
+  i: Integer;
+begin
+  Changed;
+  if AName = '' then Exit;   // an item not named yet: nothing can have baked it
+  if FNameStamps.Find(AName, i) then
+    FNameStamps.Objects[i] := TObject(PtrUInt(FChangeStamp))
+  else
+    FNameStamps.AddObject(AName, TObject(PtrUInt(FChangeStamp)));
+end;
+
+function TTyImageCollection.NameChangedSince(const AName: string; AStamp: Cardinal): Boolean;
+var
+  i: Integer;
+begin
+  Result := FNameStamps.Find(AName, i)
+    and (Cardinal(PtrUInt(FNameStamps.Objects[i])) > AStamp);
 end;
 
 class function TTyImageCollection.CacheKey(const AName: string; ASizePx: Integer): string;
@@ -1197,8 +1268,52 @@ begin
   { FNames was a bare TStringList with no OnChange, so `List.Names.Add('x')` -- the ordinary
     way to use this component -- changed what it exposes and told nobody. }
   DropGlyphCache;
-  Refill;
+  { Not during a load: Loaded rebuilds from everything the reader delivered, so whatever is baked
+    now would be thrown away. }
+  if (csLoading in ComponentState) or not BakedSlotsStillStand then
+    Refill
+  else if FNames.Count > Length(FBakedNames) then
+  begin
+    BakeSlots(Length(FBakedNames));
+    NoteBaked(Length(FBakedNames));
+    { AddSlice tells nobody, and a rebuild only tells consumers from inside its Clear. }
+    MarkAsChanged;
+    Change;
+  end;
   Changed;
+end;
+
+function TTyVirtualImageList.BakedSlotsStillStand: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if not FBakeValid then Exit;
+  if FNames.Count < Length(FBakedNames) then Exit;
+  { Width and Height are public, and writing either empties the list. Width first: Count routes
+    through it, and asking at a width that is not registered creates one (see the class comment). }
+  if (Width <> FBaseSize) or (Height <> FBaseSize) then Exit;
+  if Count <> Length(FBakedNames) then Exit;
+  if (FIconFont <> nil) and (FIconFont.Version <> FBakedFontVersion) then Exit;
+  for i := 0 to High(FBakedNames) do
+    if FNames[i] <> FBakedNames[i] then Exit;
+  { Per name, not "the collection changed": see FNameStamps. }
+  if (FCollection <> nil) and (FCollection.ChangeStamp <> FBakedStamp) then
+    for i := 0 to High(FBakedNames) do
+      if FCollection.NameChangedSince(FBakedNames[i], FBakedStamp) then Exit;
+  Result := True;
+end;
+
+procedure TTyVirtualImageList.NoteBaked(AFrom: Integer);
+var
+  i: Integer;
+begin
+  SetLength(FBakedNames, FNames.Count);
+  for i := AFrom to FNames.Count - 1 do
+    FBakedNames[i] := FNames[i];
+  if FCollection <> nil then FBakedStamp := FCollection.ChangeStamp;
+  if FIconFont <> nil then FBakedFontVersion := FIconFont.Version;
+  FBakeValid := True;
 end;
 
 constructor TTyVirtualImageList.Create(AOwner: TComponent);
@@ -1276,10 +1391,14 @@ begin
   { A watcher on the change list that is freed leaves it, the rule TTyIconFont follows. }
   if Operation = opRemove then RemoveAllHandlersOfObject(AComponent);
   if (Operation = opRemove) and (AComponent = FCollection) then
+  begin
     FCollection := nil;
+    FBakeValid := False;   // the slots show a source that no longer exists
+  end;
   if (Operation = opRemove) and (AComponent = FIconFont) then
   begin
     FIconFont := nil;
+    FBakeValid := False;
     { The cached glyph belongs to a font that is going away. }
     DropGlyphCache;
   end;
@@ -1415,54 +1534,63 @@ begin
 end;
 
 procedure TTyVirtualImageList.Refill;
+begin
+  { A refill can be provoked from inside a fill (Clear -> Change -> a listener -> Refill). }
+  if FFilling then Exit;
+  if csLoading in ComponentState then Exit;
+  FFilling := True;
+  FBakeValid := False;
+  try
+    Clear;
+    ApplySize;
+    if FNames.Count > 0 then
+    begin
+      BakeSlots(0);
+      Inc(FFillCount);
+    end;
+    NoteBaked(0);
+  finally
+    FFilling := False;
+  end;
+end;
+
+procedure TTyVirtualImageList.BakeSlots(AFrom: Integer);
 var
   widths: array of Integer;
   i, k, w: Integer;
   src: TBGRABitmap;
   bmp: TBitmap;
 begin
-  { A refill can be provoked from inside a fill (Clear -> Change -> a listener -> Refill). }
-  if FFilling then Exit;
-  if csLoading in ComponentState then Exit;
-  FFilling := True;
-  try
-    Clear;
-    ApplySize;
-    if FNames.Count = 0 then Exit;
-    w := FBaseSize;
-    if w < 1 then w := 1;
-    if FMultiResolution then
-    begin
-      SetLength(widths, 4);
-      widths[0] := w; widths[1] := MulDiv(w, 3, 2); widths[2] := w * 2; widths[3] := w * 3;
-    end
-    else
-    begin
-      SetLength(widths, 1);
-      widths[0] := w;
-    end;
-    for i := 0 to FNames.Count - 1 do
-      for k := 0 to High(widths) do
-      begin
-        { RenderIndex never returns nil and always returns the requested square, so a name that
-          resolves to nothing lands as a blank slot and index i stays index i. Several controls
-          here carry hand-written index constants; a fill that skipped a bad name would
-          renumber everything after it. }
-        src := RenderIndex(i, widths[k]);
-        try
-          bmp := src.Bitmap;    { owned by src -- not freed separately }
-          if k = 0 then
-            AddSlice(bmp, Rect(0, 0, bmp.Width, bmp.Height))
-          else
-            ReplaceSliceCentered(i, widths[k], bmp, False);
-        finally
-          src.Free;
-        end;
-      end;
-    Inc(FFillCount);
-  finally
-    FFilling := False;
+  w := FBaseSize;
+  if w < 1 then w := 1;
+  if FMultiResolution then
+  begin
+    SetLength(widths, 4);
+    widths[0] := w; widths[1] := MulDiv(w, 3, 2); widths[2] := w * 2; widths[3] := w * 3;
+  end
+  else
+  begin
+    SetLength(widths, 1);
+    widths[0] := w;
   end;
+  for i := AFrom to FNames.Count - 1 do
+    for k := 0 to High(widths) do
+    begin
+      { RenderIndex never returns nil and always returns the requested square, so a name that
+        resolves to nothing lands as a blank slot and index i stays index i. Several controls
+        here carry hand-written index constants; a fill that skipped a bad name would
+        renumber everything after it. }
+      src := RenderIndex(i, widths[k]);
+      try
+        bmp := src.Bitmap;    { owned by src -- not freed separately }
+        if k = 0 then
+          AddSlice(bmp, Rect(0, 0, bmp.Width, bmp.Height))
+        else
+          ReplaceSliceCentered(i, widths[k], bmp, False);
+      finally
+        src.Free;
+      end;
+    end;
 end;
 
 function TTyVirtualImageList.NameOf(AIndex: Integer): string;

@@ -44,6 +44,11 @@ type
     procedure CacheFollowsTheColour;
     procedure FreeingTheFontLeavesNoDanglingCache;
     procedure GlyphColorDefaultsToSomethingVisible;
+    { #202. }
+    procedure AddingANameRendersOnlyThatName;
+    procedure ALoadRendersEachNameOnce;
+    procedure EditingTheFontRebuildsOnTheNextAdd;
+    procedure LosingTheFontRebuildsOnTheNextAdd;
   end;
 
 implementation
@@ -67,6 +72,22 @@ end;
 const
   { A codepoint with real ink in almost any font; the tests only need "something drew". }
   TestGlyphCp = Ord('W');
+
+var
+  ResolverHits: Integer = 0;
+
+{ Answers for one name and counts the questions. Every render of a font glyph asks, so this sees
+  renders directly: no timing, and nothing added to the list to spy on it. }
+function CountingResolver(const AFamily, AName: string; out ACodepoint: Cardinal): Boolean;
+begin
+  ACodepoint := 0;
+  Result := AName = 'counted';
+  if Result then
+  begin
+    Inc(ResolverHits);
+    ACodepoint := TestGlyphCp;
+  end;
+end;
 
 function TVilIconFontTest.InkOf(ABmp: TBGRABitmap): Integer;
 var
@@ -260,6 +281,87 @@ begin
   f.Free;
   AssertTrue('the reference was nil-ed', FList.IconFont = nil);
   AssertTrue('and nothing is served from the dead font', FList.CachedIndex(0, 20) = nil);
+end;
+
+procedure TVilIconFontTest.AddingANameRendersOnlyThatName;
+begin
+  TyRegisterGlyphResolver(@CountingResolver);
+  try
+    FList.IconFont := FFont;
+    FList.Names.Add('counted');
+    ResolverHits := 0;
+    FList.Names.Add('glyph-a');
+    AssertEquals('the earlier icon was not rendered again', 0, ResolverHits);
+    AssertEquals('both slots are there', 2, FList.Count);
+  finally
+    TyUnregisterGlyphResolver(@CountingResolver);
+  end;
+end;
+
+procedure TVilIconFontTest.ALoadRendersEachNameOnce;
+var
+  ms: TMemoryStream;
+  src, back: TTyVirtualImageList;
+  loadHits: Integer;
+begin
+  { A list holding a font before the stream arrives is what every TTyLucideImageList on a form
+    is: its constructor sets the font. Baking the names as the reader delivers them would throw
+    the work away at Loaded, and every such form would pay for its icons twice. }
+  TyRegisterGlyphResolver(@CountingResolver);
+  ms := TMemoryStream.Create;
+  src := TTyVirtualImageList.Create(nil);
+  back := TTyVirtualImageList.Create(nil);
+  try
+    src.Name := 'Icons';
+    src.Names.Add('counted');
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    back.IconFont := FFont;
+    ResolverHits := 0;
+    ms.ReadComponent(back);
+    loadHits := ResolverHits;
+    AssertEquals('the name came through the stream', 1, back.Count);
+    AssertTrue('the load rendered it', loadHits > 0);
+    ResolverHits := 0;
+    back.Refill;
+    AssertEquals('and rendered it exactly as often as one fill does', ResolverHits, loadHits);
+  finally
+    back.Free;
+    src.Free;
+    ms.Free;
+    TyUnregisterGlyphResolver(@CountingResolver);
+  end;
+end;
+
+procedure TVilIconFontTest.EditingTheFontRebuildsOnTheNextAdd;
+var before: Integer;
+begin
+  FList.IconFont := FFont;
+  FList.Names.Add('glyph-a');
+  before := FList.FillCount;
+  FList.Names.Add('shared');
+  AssertEquals('an untouched font keeps the slots', before, FList.FillCount);
+  FFont.MapGlyph('glyph-a', Ord('M'));
+  FList.Names.Add('no-such-glyph');
+  AssertTrue('an edited font may draw any of them differently', FList.FillCount > before);
+  AssertEquals('every slot is there', 3, FList.Count);
+end;
+
+procedure TVilIconFontTest.LosingTheFontRebuildsOnTheNextAdd;
+var
+  f: TTyIconFont;
+  before: Integer;
+begin
+  f := TTyIconFont.Create(nil);
+  f.FontFamily := 'Arial';
+  f.MapGlyph('glyph-a', TestGlyphCp);
+  FList.IconFont := f;
+  FList.Names.Add('glyph-a');
+  before := FList.FillCount;
+  f.Free;
+  FList.Names.Add('no-such-glyph');
+  AssertTrue('the kept slot came from a font that is gone', FList.FillCount > before);
+  AssertEquals('both slots are there', 2, FList.Count);
 end;
 
 procedure TVilIconFontTest.GlyphColorDefaultsToSomethingVisible;

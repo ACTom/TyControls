@@ -43,6 +43,7 @@ type
     procedure RemovedBrandLogosAreNotOffered;
     procedure TheComponentConfiguresItselfAndSharesOneRegistration;
     procedure TheDroppableListIsPreWiredToLucideAndStartsEmpty;
+    procedure AddingIconsOneByOneDoesNotRebuildTheList;
     procedure TheEmbeddedLicenceMatchesTheSourceFile;
 end;
 
@@ -284,6 +285,26 @@ begin
     list.Names.Text := TyIconHouse;
     AssertEquals('adding a name adds an image', 1, TyImageCount(list));
     AssertEquals('and the name resolves to slot 0', 0, TyImageIndexOfName(list, TyIconHouse));
+  finally
+    list.Free;
+  end;
+end;
+
+procedure TLucideTest.AddingIconsOneByOneDoesNotRebuildTheList;
+var
+  list: TTyLucideImageList;
+  before: Integer;
+begin
+  { #202: 100 of these in a loop took 56 s when every add rebuilt the list. The constructor wires
+    the font, so an empty list must already count as baked or the first add rebuilds. }
+  list := TTyLucideImageList.Create(nil);
+  try
+    before := list.FillCount;
+    list.Names.Add(TyIconHouse);
+    list.Names.Add(TyIconAnchor);
+    list.Names.Add(TyIconAlbum);
+    AssertEquals('no add rebuilt the list', before, list.FillCount);
+    AssertEquals('every icon has its slot', 3, list.Count);
   finally
     list.Free;
   end;
