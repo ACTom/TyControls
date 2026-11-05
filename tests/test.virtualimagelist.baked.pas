@@ -29,7 +29,7 @@ unit test.virtualimagelist.baked;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, ImgList, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, GraphType, ImgList, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.ImageCollection;
 
@@ -38,7 +38,18 @@ type
   private
     FColl: TTyImageCollection;
     FList: TTyVirtualImageList;
+    FAnnounced: Integer;
+    FLinkFired: Integer;
+    FCountWhenLinkFired: Integer;
     procedure AddImage(const AName: string; AColor: TBGRAPixel);
+    procedure AddMaster(const AName: string; ASize: Integer; AColor: TBGRAPixel);
+    { The centre pixel of a baked slot as $AARRGGBB, read from the list's own storage. This is
+      what a stock LCL consumer gets; RenderIndex would ask the source and prove nothing. }
+    function SlotArgb(AWidth, AIndex: Integer): Int64;
+    procedure ListAnnounced(Sender: TObject);
+    procedure LinkFired(Sender: TObject);
+    procedure LinkAddsAName(Sender: TObject);
+    function AddItem(const AName: string; AColor: TBGRAPixel): TTyImageItem;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -50,6 +61,33 @@ type
     procedure AnUnresolvableNameKeepsItsSlot;
     procedure SingleResolutionRegistersOnlyTheBase;
     procedure ChangingNamesRebakes;
+    { #202: a name added at the end renders that name and nothing else. }
+    procedure AddingNamesAtTheEndRebuildsNothing;
+    procedure AnImageAddedBesideEachNameRebuildsNothing;
+    procedure AddedNamesGetTheirOwnPictures;
+    procedure AnAddedNameIsBakedAtEveryWidth;
+    procedure ABracketedBatchAnnouncesOnce;
+    procedure ALinkedConsumerSeesTheAddedImage;
+    procedure InsertingAndDeletingKeepSlotsInStep;
+    procedure AssigningTheSameNamesDoesNothing;
+    procedure ANameAddedFromInsideARebuildGetsOneSlot;
+    { ...and the slots it keeps must still be right: every route that changes what a name draws.
+      Each test has only the affected name in the list, so no other route can rebuild it by luck. }
+    procedure ReplacingAnImageRefreshesItsSlot;
+    procedure NewPixelsOnAnItemRefreshItsSlot;
+    procedure RenamingAnImageBlanksTheOldName;
+    procedure RenamingAnImageFillsTheNewName;
+    procedure DeletingAnImageBlanksItsSlot;
+    procedure AddingAResolutionRefreshesItsSlot;
+    procedure ReorderingTiedMastersRefreshesItsSlot;
+    procedure AChangeFromBeforeTheBakeKeepsTheSlot;
+    procedure AssigningOverAnItemBlanksItsOldName;
+    procedure AssigningOverAnItemFillsItsNewName;
+    procedure ClearingTheCollectionBlanksEverySlot;
+    procedure ALateImageFillsItsBlankSlot;
+    procedure LosingTheCollectionBlanksTheSlots;
+    procedure ClearingTheBakedSideIsRepaired;
+    procedure ResizingTheBakedSideIsRepaired;
     procedure ItStillRendersOnDemandAtAnySize;
     procedure NoPixelBlobReachesTheLfm;
     procedure TheDesignerPositionSurvivesStreaming;
@@ -82,9 +120,65 @@ begin
   end;
 end;
 
+procedure TVirtualImageListBakedTest.AddMaster(const AName: string; ASize: Integer;
+  AColor: TBGRAPixel);
+var bmp: TBGRABitmap;
+begin
+  bmp := TBGRABitmap.Create(ASize, ASize, AColor);
+  try
+    FColl.AddMasterBitmap(AName, bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TVirtualImageListBakedTest.SlotArgb(AWidth, AIndex: Integer): Int64;
+var
+  raw: TRawImage;
+  p: PByte;
+begin
+  FList.Resolution[AWidth].GetRawImage(AIndex, raw);
+  p := raw.Data + ((AWidth div 2) * AWidth + (AWidth div 2)) * 4;
+  Result := (Int64(p[3]) shl 24) or (Int64(p[2]) shl 16) or (Int64(p[1]) shl 8) or Int64(p[0]);
+end;
+
+procedure TVirtualImageListBakedTest.ListAnnounced(Sender: TObject);
+begin
+  Inc(FAnnounced);
+end;
+
+procedure TVirtualImageListBakedTest.LinkFired(Sender: TObject);
+begin
+  Inc(FLinkFired);
+  FCountWhenLinkFired := FList.Count;
+end;
+
+procedure TVirtualImageListBakedTest.LinkAddsAName(Sender: TObject);
+begin
+  Inc(FLinkFired);
+  if FLinkFired = 1 then FList.Names.Add('red');
+end;
+
+function TVirtualImageListBakedTest.AddItem(const AName: string; AColor: TBGRAPixel): TTyImageItem;
+var bmp: TBGRABitmap;
+begin
+  { Straight into Images, which is the only way to get two masters of one size under one name. }
+  Result := FColl.Images.Add;
+  Result.ImageName := AName;
+  bmp := TBGRABitmap.Create(32, 32, AColor);
+  try
+    Result.SetBitmap(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
 procedure TVirtualImageListBakedTest.SetUp;
 begin
   NeedWidgetSet;
+  FAnnounced := 0;
+  FLinkFired := 0;
+  FCountWhenLinkFired := -1;
   FColl := TTyImageCollection.Create(nil);
   FList := TTyVirtualImageList.Create(nil);
   AddImage('red', BGRA(255, 0, 0, 255));
@@ -185,11 +279,329 @@ end;
 procedure TVirtualImageListBakedTest.ChangingNamesRebakes;
 var before: Integer;
 begin
-  FList.Names.Text := 'red';
+  FList.Names.Text := 'red' + LineEnding + 'green';
   before := FList.FillCount;
-  FList.Names.Add('green');
-  AssertTrue('a name change rebakes', FList.FillCount > before);
+  FList.Names[0] := 'blue';
+  AssertTrue('changing a name rebuilds the list', FList.FillCount > before);
   AssertEquals('and the baked side followed', 2, FList.Count);
+  AssertEquals('slot 0 draws the new name', $FF0000FF, SlotArgb(16, 0));
+  AssertEquals('slot 1 is untouched', $FF00FF00, SlotArgb(16, 1));
+end;
+
+procedure TVirtualImageListBakedTest.AddingNamesAtTheEndRebuildsNothing;
+var before: Integer;
+begin
+  { THE defect in #202. Each of these used to clear the list and render every name again at four
+    widths, so a loop of N adds cost 2N^2 renders: 56 s for 100 Lucide icons. }
+  before := FList.FillCount;
+  FList.Names.Add('red');
+  FList.Names.Add('green');
+  FList.Names.Add('blue');
+  AssertEquals('no add rebuilt the list', before, FList.FillCount);
+  AssertEquals('the baked side still followed', 3, FList.Count);
+end;
+
+procedure TVirtualImageListBakedTest.AnImageAddedBesideEachNameRebuildsNothing;
+var before: Integer;
+begin
+  { The natural raster loop: every pass changes the collection, so "the collection changed, start
+    again" would leave this one quadratic. A NEW name cannot change what an old slot draws. }
+  before := FList.FillCount;
+  AddImage('one', BGRA(128, 0, 0, 255));
+  FList.Names.Add('one');
+  AddImage('two', BGRA(0, 128, 0, 255));
+  FList.Names.Add('two');
+  AddImage('three', BGRA(0, 0, 128, 255));
+  FList.Names.Add('three');
+  AssertEquals('no pass rebuilt the list', before, FList.FillCount);
+  AssertEquals('every slot arrived', 3, FList.Count);
+  AssertEquals('slot 0', $FF800000, SlotArgb(16, 0));
+  AssertEquals('slot 2', $FF000080, SlotArgb(16, 2));
+end;
+
+procedure TVirtualImageListBakedTest.AddedNamesGetTheirOwnPictures;
+begin
+  FList.Names.Add('red');
+  FList.Names.Add('green');
+  FList.Names.Add('blue');
+  AssertEquals('slot 0', $FFFF0000, SlotArgb(16, 0));
+  AssertEquals('slot 1', $FF00FF00, SlotArgb(16, 1));
+  AssertEquals('slot 2', $FF0000FF, SlotArgb(16, 2));
+end;
+
+procedure TVirtualImageListBakedTest.AnAddedNameIsBakedAtEveryWidth;
+begin
+  { A flat colour scales to itself, so these masters differ on purpose: a slot only shows the
+    right colour at a width if that width was really rendered and not scaled from the base.
+    The pick is the smallest master at least the width asked for. }
+  AddMaster('multi', 16, BGRA(255, 0, 0, 255));
+  AddMaster('multi', 32, BGRA(0, 255, 0, 255));
+  AddMaster('multi', 48, BGRA(0, 0, 255, 255));
+  FList.Names.Add('red');
+  FList.Names.Add('multi');
+  AssertEquals('16 uses the 16 master', $FFFF0000, SlotArgb(16, 1));
+  AssertEquals('24 uses the 32 master', $FF00FF00, SlotArgb(24, 1));
+  AssertEquals('32 uses the 32 master', $FF00FF00, SlotArgb(32, 1));
+  AssertEquals('48 uses the 48 master', $FF0000FF, SlotArgb(48, 1));
+end;
+
+procedure TVirtualImageListBakedTest.ABracketedBatchAnnouncesOnce;
+var before: Integer;
+begin
+  { What the docs tell people to write for a batch. }
+  FList.AddHandlerOnChange(@ListAnnounced);
+  before := FList.FillCount;
+  FList.Names.BeginUpdate;
+  try
+    FList.Names.Add('red');
+    FList.Names.Add('green');
+    FList.Names.Add('blue');
+    AssertEquals('nothing is baked inside the bracket', 0, FList.Count);
+  finally
+    FList.Names.EndUpdate;
+  end;
+  AssertEquals('one announcement for the whole batch', 1, FAnnounced);
+  AssertEquals('no rebuild', before, FList.FillCount);
+  AssertEquals('every slot arrived', 3, FList.Count);
+end;
+
+procedure TVirtualImageListBakedTest.ALinkedConsumerSeesTheAddedImage;
+var link: TChangeLink;
+begin
+  { LCL controls and TTyTreeView learn about a change through a TChangeLink and nothing else. The
+    rebuild told them while the list was empty; an add has to tell them with the image in place. }
+  link := TChangeLink.Create;
+  try
+    link.OnChange := @LinkFired;
+    FList.RegisterChanges(link);
+    FList.Names.Add('red');
+    AssertEquals('the consumer was told once', 1, FLinkFired);
+    AssertEquals('and the new image was already there', 1, FCountWhenLinkFired);
+    FList.UnRegisterChanges(link);
+  finally
+    link.Free;
+  end;
+end;
+
+procedure TVirtualImageListBakedTest.InsertingAndDeletingKeepSlotsInStep;
+begin
+  FList.Names.Text := 'red' + LineEnding + 'green';
+  FList.Names.Insert(0, 'blue');
+  AssertEquals('three after the insert', 3, FList.Count);
+  AssertEquals('slot 0 is the inserted name', $FF0000FF, SlotArgb(16, 0));
+  AssertEquals('slot 1 moved along', $FFFF0000, SlotArgb(16, 1));
+  AssertEquals('slot 2 moved along', $FF00FF00, SlotArgb(16, 2));
+  FList.Names.Delete(1);
+  AssertEquals('two after the delete', 2, FList.Count);
+  AssertEquals('slot 0 stayed', $FF0000FF, SlotArgb(16, 0));
+  AssertEquals('slot 1 closed up', $FF00FF00, SlotArgb(16, 1));
+end;
+
+procedure TVirtualImageListBakedTest.AssigningTheSameNamesDoesNothing;
+var
+  link: TChangeLink;
+  before: Integer;
+begin
+  FList.Names.Text := 'red' + LineEnding + 'green';
+  before := FList.FillCount;
+  link := TChangeLink.Create;
+  try
+    link.OnChange := @LinkFired;
+    FList.RegisterChanges(link);
+    FList.Names.Text := 'red' + LineEnding + 'green';
+    AssertEquals('nothing was rebuilt', before, FList.FillCount);
+    AssertEquals('and consumers have nothing to redraw', 0, FLinkFired);
+    FList.UnRegisterChanges(link);
+  finally
+    link.Free;
+  end;
+end;
+
+procedure TVirtualImageListBakedTest.ANameAddedFromInsideARebuildGetsOneSlot;
+var link: TChangeLink;
+begin
+  { A rebuild tells consumers from inside its Clear, with the slots empty and the names not yet
+    baked. A name added at that moment must wait for the fill that is already running: baked on
+    its own it would get a second slot from that fill and every later index would be off by one. }
+  link := TChangeLink.Create;
+  try
+    link.OnChange := @LinkAddsAName;
+    FList.RegisterChanges(link);
+    FList.Refill;
+    FList.UnRegisterChanges(link);
+  finally
+    link.Free;
+  end;
+  AssertEquals('the one name', 1, FList.Names.Count);
+  AssertEquals('has one slot', 1, FList.Count);
+end;
+
+procedure TVirtualImageListBakedTest.ReplacingAnImageRefreshesItsSlot;
+begin
+  FList.Names.Text := 'red' + LineEnding + 'green';
+  AddImage('red', BGRA(128, 0, 128, 255));
+  FList.Names.Add('blue');
+  AssertEquals('the replaced image', $FF800080, SlotArgb(16, 0));
+  AssertEquals('the other slot', $FF00FF00, SlotArgb(16, 1));
+  AssertEquals('the added slot', $FF0000FF, SlotArgb(16, 2));
+end;
+
+procedure TVirtualImageListBakedTest.NewPixelsOnAnItemRefreshItsSlot;
+var bmp: TBGRABitmap;
+begin
+  FList.Names.Add('red');
+  bmp := TBGRABitmap.Create(32, 32, BGRA(128, 0, 128, 255));
+  try
+    FColl.Images[0].SetBitmap(bmp);
+  finally
+    bmp.Free;
+  end;
+  FList.Names.Add('blue');
+  AssertEquals('the item''s new pixels', $FF800080, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.RenamingAnImageBlanksTheOldName;
+begin
+  FList.Names.Add('red');
+  FColl.Images[0].ImageName := 'renamed';
+  FList.Names.Add('blue');
+  AssertEquals('the old name has nothing to draw', 0, SlotArgb(16, 0) shr 24);
+end;
+
+procedure TVirtualImageListBakedTest.RenamingAnImageFillsTheNewName;
+begin
+  FList.Names.Add('renamed');
+  AssertEquals('nothing is called that yet', 0, SlotArgb(16, 0) shr 24);
+  FColl.Images[0].ImageName := 'renamed';
+  FList.Names.Add('blue');
+  AssertEquals('the new name took the picture', $FFFF0000, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.DeletingAnImageBlanksItsSlot;
+begin
+  FList.Names.Add('red');
+  FColl.Images.Delete(0);
+  FList.Names.Add('blue');
+  AssertEquals('the deleted image is gone', 0, SlotArgb(16, 0) shr 24);
+  AssertEquals('and the slot is still there', 2, FList.Count);
+end;
+
+procedure TVirtualImageListBakedTest.AddingAResolutionRefreshesItsSlot;
+begin
+  FList.Names.Add('red');
+  AssertEquals('48 stretches the one master', $FFFF0000, SlotArgb(48, 0));
+  AddMaster('red', 64, BGRA(0, 0, 255, 255));
+  FList.Names.Add('green');
+  AssertEquals('48 now scales down from the new master', $FF0000FF, SlotArgb(48, 0));
+  AssertEquals('16 still picks the closer one', $FFFF0000, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.ReorderingTiedMastersRefreshesItsSlot;
+var
+  first, second: TTyImageItem;
+begin
+  { Two masters of one size under one name: the pick keeps the first in authoring order, so moving
+    one changes what the name draws. }
+  first := AddItem('tie', BGRA(128, 0, 0, 255));
+  second := AddItem('tie', BGRA(0, 128, 0, 255));
+  FList.Names.Add('tie');
+  AssertEquals('the first master wins', $FF800000, SlotArgb(16, 0));
+  second.Index := first.Index;
+  FList.Names.Add('red');
+  AssertEquals('the other one is first now', $FF008000, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.AChangeFromBeforeTheBakeKeepsTheSlot;
+var
+  first, second: TTyImageItem;
+  before: Integer;
+begin
+  { Moving a master is the one change that records its name's stamp last, so the stamp can equal
+    the one the bake recorded. The slot already shows that change and must not be rebuilt for it. }
+  first := AddItem('tie', BGRA(128, 0, 0, 255));
+  second := AddItem('tie', BGRA(0, 128, 0, 255));
+  second.Index := first.Index;
+  FList.Names.Add('tie');
+  before := FList.FillCount;
+  AddImage('new', BGRA(0, 0, 128, 255));
+  FList.Names.Add('new');
+  AssertEquals('the kept slot was already right', before, FList.FillCount);
+end;
+
+procedure TVirtualImageListBakedTest.AssigningOverAnItemBlanksItsOldName;
+var src: TTyImageItem;
+begin
+  src := AddItem('other', BGRA(128, 0, 128, 255));
+  FList.Names.Add('red');
+  FColl.Images[0].Assign(src);
+  FList.Names.Add('blue');
+  AssertEquals('red lost its only master', 0, SlotArgb(16, 0) shr 24);
+end;
+
+procedure TVirtualImageListBakedTest.AssigningOverAnItemFillsItsNewName;
+var src: TTyImageItem;
+begin
+  { Item 0 was 'red'. It becomes a 'green' that comes before the original, so it wins the tie. }
+  src := AddItem('green', BGRA(128, 0, 128, 255));
+  FList.Names.Add('green');
+  AssertEquals('the original green wins for now', $FF00FF00, SlotArgb(16, 0));
+  FColl.Images[0].Assign(src);
+  FList.Names.Add('blue');
+  AssertEquals('the earlier master wins now', $FF800080, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.ClearingTheCollectionBlanksEverySlot;
+begin
+  FList.Names.Text := 'red' + LineEnding + 'green';
+  FColl.Clear;
+  AddImage('blue', BGRA(0, 0, 255, 255));
+  FList.Names.Add('blue');
+  AssertEquals('red is gone', 0, SlotArgb(16, 0) shr 24);
+  AssertEquals('green is gone', 0, SlotArgb(16, 1) shr 24);
+  AssertEquals('the new one is there', $FF0000FF, SlotArgb(16, 2));
+end;
+
+procedure TVirtualImageListBakedTest.ALateImageFillsItsBlankSlot;
+begin
+  FList.Names.Add('late');
+  AssertEquals('nothing to draw yet', 0, SlotArgb(16, 0) shr 24);
+  AddImage('late', BGRA(128, 0, 128, 255));
+  FList.Names.Add('red');
+  AssertEquals('the image arrived', $FF800080, SlotArgb(16, 0));
+end;
+
+procedure TVirtualImageListBakedTest.LosingTheCollectionBlanksTheSlots;
+begin
+  FList.Names.Add('red');
+  FreeAndNil(FColl);
+  FList.Names.Add('green');
+  AssertEquals('the source is gone', 0, SlotArgb(16, 0) shr 24);
+  AssertEquals('both slots are there', 2, FList.Count);
+end;
+
+procedure TVirtualImageListBakedTest.ClearingTheBakedSideIsRepaired;
+begin
+  { Clear is public on TCustomImageList, and a kept slot it has emptied cannot be appended to. }
+  FList.Names.Text := 'red' + LineEnding + 'green';
+  FList.Clear;
+  FList.Names.Add('blue');
+  AssertEquals('every name has its slot back', 3, FList.Count);
+  AssertEquals('slot 0', $FFFF0000, SlotArgb(16, 0));
+  AssertEquals('slot 2', $FF0000FF, SlotArgb(16, 2));
+end;
+
+procedure TVirtualImageListBakedTest.ResizingTheBakedSideIsRepaired;
+begin
+  { Width and Height are public and writing either empties the list. On an empty list the slot
+    count cannot show it, so the size has to be checked on its own. }
+  FList.Height := 32;
+  FList.Names.Add('red');
+  AssertEquals('height is back', 16, FList.Height);
+  FList.Names.Clear;
+  FList.Width := 32;
+  FList.Names.Add('red');
+  AssertEquals('width is back', 16, FList.Width);
+  AssertEquals('and the slot is the right size', $FFFF0000, SlotArgb(16, 0));
 end;
 
 procedure TVirtualImageListBakedTest.ItStillRendersOnDemandAtAnySize;
