@@ -12,7 +12,8 @@ uses
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.StyleModel, tyControls.Controller,
-  tyControls.IconFont, tyControls.CheckBox, tyControls.Form, tyControls.SpinEdit;
+  tyControls.IconFont, tyControls.CheckBox, tyControls.Form, tyControls.SpinEdit,
+  tyControls.TreeView;
 type
   TCbProbe = class(TTyCheckBox)
   public
@@ -45,6 +46,10 @@ type
     procedure TestCaptionGlyphOverrideBypassesVector;
     procedure TestGlyphKindTokenMapping;
     procedure TestSpinEditArrowOverrideBypassesVector;
+    procedure TestTheThemeIsWalkedOncePerGlyphToken;
+    procedure TestAModelNobodyElseReadsReadsANewGlyphAgain;
+    procedure TestARawReadIsNotTheFollowedOne;
+    procedure TestATreeRepaintWalksNoneOfTheThemesVariables;
   end;
 
 implementation
@@ -299,6 +304,129 @@ begin
   inkOv := SpinUpArrowInk(':root { --glyph-triangle-up: "Arial" "\20"; --glyph-triangle-down: "Arial" "\20"; } ' + SP);
   AssertTrue('vector spin arrows draw ink', inkVec > 0);
   AssertEquals('override (space) leaves the spin arrows glyphless', 0, inkOv);
+end;
+
+{ #204. Every chevron, check mark and sort mark asks the theme whether an icon-font glyph replaces
+  it, and the theme's answer is found once, not on every ask. Finding it walks every variable of
+  the theme, about 0.2 ms with the built-in themes, and none of them sets a glyph, so the walk
+  always ran to the end. }
+procedure TGlyphTest.TestTheThemeIsWalkedOncePerGlyphToken;
+var
+  m: TTyStyleModel;
+  before, i: Integer;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root { --glyph-check: "Arial" "\41"; }');
+    before := m.TokenLookupsForTest;
+    for i := 1 to 10 do
+    begin
+      AssertEquals('a token the theme sets', '"Arial" "\41"', m.RawVar('--glyph-check'));
+      AssertEquals('one it does not', '', m.RawVar('--glyph-radio'));
+    end;
+    AssertEquals('the theme''s variables are walked once for each token, set or not', 2,
+      m.TokenLookupsForTest - before);
+    AssertEquals('spelt without the dashes, the same answer', '"Arial" "\41"', m.RawVar('glyph-check'));
+  finally
+    m.Free;
+  end;
+end;
+
+{ #204: what was found is the theme's, so a new theme or mode is asked again. With no control in
+  between: under a controller, a new theme makes its controls resolve their styles, which drops
+  every memo before the test asks for a glyph, and RawVar's own check of the theme version went
+  unwatched (#203 had a mutant live that way). Here RawVar is the first read after each change. }
+procedure TGlyphTest.TestAModelNobodyElseReadsReadsANewGlyphAgain;
+var
+  m: TTyStyleModel;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root { --glyph-check: "Arial" "\41"; }');
+    AssertEquals('"Arial" "\41"', m.RawVar('--glyph-check'));
+    AssertEquals('', m.RawVar('--glyph-radio'));
+    m.LoadFromCss(':root { --glyph-check: "Arial" "\42"; --glyph-radio: "Arial" "\43"; }');
+    AssertEquals('a new theme''s glyph, not the one read before', '"Arial" "\42"',
+      m.RawVar('--glyph-check'));
+    AssertEquals('one the old theme did not set', '"Arial" "\43"', m.RawVar('--glyph-radio'));
+    m.LoadFromCss('@mode light { :root { --glyph-check: "Arial" "\44"; } }' + LineEnding +
+                  '@mode dark  { :root { --glyph-check: "Arial" "\45"; } }');
+    m.Mode := 'light';
+    AssertEquals('the light mode''s glyph', '"Arial" "\44"', m.RawVar('--glyph-check'));
+    m.Mode := 'dark';
+    AssertEquals('another mode''s glyph', '"Arial" "\45"', m.RawVar('--glyph-check'));
+    m.LoadFromCss('TyButton { background: #FFFFFF; }');
+    AssertEquals('a theme that sets none: no glyph', '', m.RawVar('--glyph-check'));
+  finally
+    m.Free;
+  end;
+end;
+
+{ #204: RawVar answers the text as the theme wrote it, the word token reader (ResolveToken) the
+  text a reference leads to. Their answers are kept apart, whichever is asked first. }
+procedure TGlyphTest.TestARawReadIsNotTheFollowedOne;
+var
+  m: TTyStyleModel;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root { --icon-a: "Arial" "\41"; --glyph-check: var(--icon-a); ' +
+      '--glyph-radio: var(--icon-a); }');
+    AssertEquals('precondition: the word token follows the reference', '"Arial" "\41"',
+      m.ResolveToken('--glyph-check'));
+    AssertEquals('the raw read after it is still the text the theme wrote', 'var(--icon-a)',
+      m.RawVar('--glyph-check'));
+    AssertEquals('the raw read first', 'var(--icon-a)', m.RawVar('--glyph-radio'));
+    AssertEquals('and the word token after it still follows', '"Arial" "\41"',
+      m.ResolveToken('--glyph-radio'));
+  finally
+    m.Free;
+  end;
+end;
+
+{ #204. A tree draws an expander on every row that has children, and each one asked the theme for
+  its glyph override: with the built-in theme, a 400x800 tree whose every row is a parent spent
+  8 ms of each paint on it. Nothing on screen changes, so no pixel test can see it. Once a paint
+  has asked, the next one walks none of the theme's variables. }
+procedure TGlyphTest.TestATreeRepaintWalksNoneOfTheThemesVariables;
+var
+  ctl: TTyStyleController;
+  host: TTyForm;
+  tv: TTyTreeView;
+  nd: TTyTreeNodeItem;
+  bmp: TBitmap;
+  i, walks: Integer;
+begin
+  ctl := TTyStyleController.Create(nil);
+  host := TTyForm.CreateNew(nil);
+  bmp := TBitmap.Create;
+  try
+    tv := TTyTreeView.Create(host);
+    tv.Parent := host;
+    tv.Controller := ctl;
+    tv.Font.PixelsPerInch := 96;
+    tv.SetBounds(0, 0, 200, 400);
+    for i := 0 to 9 do
+    begin
+      nd := tv.Items.Add(nil, Format('Expanded %d', [i]));
+      tv.Items.AddChild(nd, 'child');
+      nd.Expanded := True;
+      nd := tv.Items.Add(nil, Format('Collapsed %d', [i]));
+      tv.Items.AddChild(nd, 'child');
+    end;
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(200, 400);
+    tv.RenderTo(bmp.Canvas, Rect(0, 0, 200, 400), 96);
+
+    walks := ctl.Model.TokenLookupsForTest;
+    tv.RenderTo(bmp.Canvas, Rect(0, 0, 200, 400), 96);
+    AssertEquals('a repaint walks none of the theme''s variables', 0,
+      ctl.Model.TokenLookupsForTest - walks);
+  finally
+    bmp.Free;
+    host.Free;
+    ctl.Free;
+  end;
 end;
 
 initialization
