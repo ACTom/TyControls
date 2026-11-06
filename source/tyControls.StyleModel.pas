@@ -108,6 +108,11 @@ type
     FTokenCache: TStringList;
     FTokenTexts: TStringList;
     FColorTokenCache: TStringList;
+    { #204. And for RawVar, which every chevron, check mark and sort mark calls to ask whether
+      the theme replaces it with an icon-font glyph: a tree paid 8 ms a paint for its expanders.
+      Its own list, as it answers the text the theme wrote where ResolveToken follows a
+      reference; the text is kept in FTokenTexts the same way. }
+    FRawVarCache: TStringList;
     FTokenLookups: Integer;       // token reads that walked FMergedVars; see TokenLookupsForTest
     procedure InvalidateResolveCache;
     { #98/#99. The merged vars with an override block's '--' declarations laid over them,
@@ -188,8 +193,8 @@ type
     function ResolveToken(const AName: string): string;
     { #101. A colour token in the theme, evaluated; ADefault when unset or not a colour. }
     function ResolveColorToken(const AName: string; ADefault: TTyColor): TTyColor;
-    { FOR THE TESTS: how many token reads (ResolveToken, ResolveColorToken, ResolveMetric) have
-      walked the theme's variables to find their answer, since the model was made. }
+    { FOR THE TESTS: how many token reads (ResolveToken, ResolveColorToken, ResolveMetric,
+      RawVar) have walked the theme's variables to find their answer, since the model was made. }
     function TokenLookupsForTest: Integer;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
@@ -1029,6 +1034,10 @@ begin
   FColorTokenCache.CaseSensitive := True;
   FColorTokenCache.Sorted := True;
   FColorTokenCache.Duplicates := dupIgnore;
+  FRawVarCache := TStringList.Create;
+  FRawVarCache.CaseSensitive := True;
+  FRawVarCache.Sorted := True;
+  FRawVarCache.Duplicates := dupIgnore;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   { Seed the light base PLUS the per-mode contrast @mode snippet, so FModeVars picks up the base's
@@ -1054,6 +1063,7 @@ begin
   FTokenCache.Free;
   FTokenTexts.Free;
   FColorTokenCache.Free;
+  FRawVarCache.Free;
   FRules.Free;
   FBaseRules.Free;
   FVars.Free;
@@ -1267,9 +1277,29 @@ begin
 end;
 
 function TTyStyleModel.RawVar(const AName: string): string;
-{ v3/C5. Raw merged-var value ('' if unset). No evaluation. }
+{ v3/C5. Raw merged-var value ('' if unset). No evaluation.
+  #204: memoised on the FVersion anchor, as ResolveToken is -- see FRawVarCache. }
+var
+  key: string;
+  idx: Integer;
 begin
-  Result := FMergedVars.Values[TyNormVarName(AName)];
+  key := TyNormVarName(AName);
+  if FCacheVerValid and (FCacheVer = FVersion) then
+  begin
+    idx := FRawVarCache.IndexOf(key);
+    if idx >= 0 then
+      Exit(FTokenTexts[PtrInt(FRawVarCache.Objects[idx])]);
+  end
+  else
+  begin
+    InvalidateResolveCache;
+    FCacheVer := FVersion;
+    FCacheVerValid := True;
+  end;
+
+  Inc(FTokenLookups);
+  Result := FMergedVars.Values[key];
+  FRawVarCache.AddObject(key, TObject(PtrInt(FTokenTexts.Add(Result))));
 end;
 
 procedure TTyStyleModel.RebuildMergedVars;
@@ -1813,6 +1843,7 @@ begin
   FTokenCache.Clear;    // #203: so do the word and colour tokens
   FTokenTexts.Clear;
   FColorTokenCache.Clear;
+  FRawVarCache.Clear;   // #204: and the raw reads
 end;
 
 function TTyStyleModel.ResolveCacheKey(const ATypeKey, AStyleClass: string;

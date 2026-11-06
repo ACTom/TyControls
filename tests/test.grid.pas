@@ -7464,7 +7464,9 @@ end;
   repaints reads them all, header included, though it never reaches the header. Each read used to
   walk every variable of the theme, about 0.2 ms: a scroll took 10.5 ms a frame where it took 5.9
   before 3.0.4. Nothing on screen changes, so the pixel tests cannot see it, and the timing test
-  only sees it on a quiet machine. Once the first frames have read them, a frame walks nothing. }
+  only sees it on a quiet machine. Once the first frames have read them, a frame walks nothing.
+  #204: nor does the sort mark's question whether an icon-font glyph replaces it, asked on every
+  frame the same way; with the antdesign skin, which marks every column, that was 17 walks. }
 procedure TTyStringGridTest.TestAFrameReadsItsTokensWithoutWalkingTheTheme;
 var
   Ctl: TTyStyleController;
@@ -7495,6 +7497,7 @@ begin
       for j := 1 to 60 do
         G.Cells[i, j] := Format('R%dC%d', [j, i]);
     AssertTrue('precondition: the header is shown, so its tokens are read', hoVisible in G.Header.Options);
+    G.Header.SortColumn := 2;   // #204: a sort mark, which asks for its glyph
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(600, 400);
 
