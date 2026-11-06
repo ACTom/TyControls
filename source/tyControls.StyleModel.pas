@@ -99,6 +99,16 @@ type
       AND per paint, so this rides the same storm. Same FVersion anchor, same key shape;
       the value is a plain Integer stashed in Objects[] (no box to free). }
     FMetricCache: TStringList;
+    { #203. And for the word and colour tokens, which had been left out: each answer walked
+      FMergedVars the same way, about 0.2 ms with the built-in theme's variables, and the grid
+      reads two dozen of them on every frame (one per header section among them), so a scroll
+      that repaints an 8-pixel strip paid 5 ms for them. Same FVersion anchor. A text is kept in
+      FTokenTexts, the cache's Objects[] holding its index there; a colour is the plain value,
+      keyed with the caller's default for the reason ResolveMetric's is. }
+    FTokenCache: TStringList;
+    FTokenTexts: TStringList;
+    FColorTokenCache: TStringList;
+    FTokenLookups: Integer;       // token reads that walked FMergedVars; see TokenLookupsForTest
     procedure InvalidateResolveCache;
     { #98/#99. The merged vars with an override block's '--' declarations laid over them,
       or nil when the block declares none (the caller then uses FMergedVars). }
@@ -178,6 +188,9 @@ type
     function ResolveToken(const AName: string): string;
     { #101. A colour token in the theme, evaluated; ADefault when unset or not a colour. }
     function ResolveColorToken(const AName: string; ADefault: TTyColor): TTyColor;
+    { FOR THE TESTS: how many token reads (ResolveToken, ResolveColorToken, ResolveMetric) have
+      walked the theme's variables to find their answer, since the model was made. }
+    function TokenLookupsForTest: Integer;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
       block's vars overlay the user :root in the merged var set. SetMode re-runs the merge
@@ -1007,6 +1020,15 @@ begin
   FMetricCache.CaseSensitive := True;
   FMetricCache.Sorted := True;
   FMetricCache.Duplicates := dupIgnore;
+  FTokenCache := TStringList.Create;
+  FTokenCache.CaseSensitive := True;
+  FTokenCache.Sorted := True;
+  FTokenCache.Duplicates := dupIgnore;
+  FTokenTexts := TStringList.Create;
+  FColorTokenCache := TStringList.Create;
+  FColorTokenCache.CaseSensitive := True;
+  FColorTokenCache.Sorted := True;
+  FColorTokenCache.Duplicates := dupIgnore;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   { Seed the light base PLUS the per-mode contrast @mode snippet, so FModeVars picks up the base's
@@ -1029,6 +1051,9 @@ begin
   InvalidateResolveCache;   // a6256: free the boxed styles before the list itself
   FResolveCache.Free;
   FMetricCache.Free;
+  FTokenCache.Free;
+  FTokenTexts.Free;
+  FColorTokenCache.Free;
   FRules.Free;
   FBaseRules.Free;
   FVars.Free;
@@ -1230,6 +1255,7 @@ begin
   end;
 
   Result := ADefault;
+  Inc(FTokenLookups);
   v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
   if v <> '' then
     try
@@ -1784,6 +1810,9 @@ begin
     FResolveCache.Objects[i].Free;
   FResolveCache.Clear;
   FMetricCache.Clear;   // metrics ride the same FVersion anchor; Objects[] are plain ints
+  FTokenCache.Clear;    // #203: so do the word and colour tokens
+  FTokenTexts.Clear;
+  FColorTokenCache.Clear;
 end;
 
 function TTyStyleModel.ResolveCacheKey(const ATypeKey, AStyleClass: string;
@@ -2011,21 +2040,65 @@ begin
 end;
 
 function TTyStyleModel.ResolveToken(const AName: string): string;
+{ #203: memoised on the FVersion anchor, as ResolveMetric is -- see FTokenCache. }
+var
+  key: string;
+  idx: Integer;
 begin
-  Result := TyFollowVarRef(FMergedVars.Values[TyNormVarName(AName)], FMergedVars);
+  key := TyNormVarName(AName);
+  if FCacheVerValid and (FCacheVer = FVersion) then
+  begin
+    idx := FTokenCache.IndexOf(key);
+    if idx >= 0 then
+      Exit(FTokenTexts[PtrInt(FTokenCache.Objects[idx])]);
+  end
+  else
+  begin
+    InvalidateResolveCache;
+    FCacheVer := FVersion;
+    FCacheVerValid := True;
+  end;
+
+  Inc(FTokenLookups);
+  Result := TyFollowVarRef(FMergedVars.Values[key], FMergedVars);
+  FTokenCache.AddObject(key, TObject(PtrInt(FTokenTexts.Add(Result))));
+end;
+
+function TTyStyleModel.TokenLookupsForTest: Integer;
+begin
+  Result := FTokenLookups;
 end;
 
 function TTyStyleModel.ResolveColorToken(const AName: string; ADefault: TTyColor): TTyColor;
+{ #203: memoised on the FVersion anchor, as ResolveMetric is -- see FTokenCache. }
 var
-  v: string;
+  v, key: string;
+  idx: Integer;
 begin
-  v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
-  if v = '' then Exit(ADefault);
-  try
-    Result := TyEvalColor(v, FMergedVars);
-  except
-    Result := ADefault;
+  key := TyNormVarName(AName) + '|' + IntToStr(ADefault);
+  if FCacheVerValid and (FCacheVer = FVersion) then
+  begin
+    idx := FColorTokenCache.IndexOf(key);
+    if idx >= 0 then
+      Exit(TTyColor(PtrUInt(FColorTokenCache.Objects[idx])));
+  end
+  else
+  begin
+    InvalidateResolveCache;
+    FCacheVer := FVersion;
+    FCacheVerValid := True;
   end;
+
+  Inc(FTokenLookups);
+  Result := ADefault;
+  v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
+  if v <> '' then
+    try
+      Result := TyEvalColor(v, FMergedVars);
+    except
+      Result := ADefault;
+    end;
+  FColorTokenCache.AddObject(key, TObject(PtrUInt(Result)));
 end;
 
 function TTyStyleModel.OverrideVarsOver(const ADecls: TTyCssDeclarationArray): TStringList;

@@ -361,6 +361,7 @@ type
       the frame was not drawn again -- the guard above runs with border-width: 0. }
     procedure TestScrollFastPathKeepsTheBorder;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestAFrameReadsItsTokensWithoutWalkingTheTheme;
     procedure TestPhysicalSortCarriesCellAttributes;
     procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
     procedure TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
@@ -7388,9 +7389,16 @@ begin
 
     full := TimeScroll(True);
     fast := TimeScroll(False);
-    { 实测:整幅 37ms/帧,快路径 5.7ms/帧,约 6.4 倍。
-      阈值取 2 倍 —— 离健康值有 3 倍余量抗机器抖动,离"快路径被关掉"(1 倍)
-      还差一倍,不至于两头都误报。 }
+    { Measured 2026-11-06 (Lazarus 4.4, a quiet machine, median of 7 runs of 60 frames): a full
+      repaint 22.5 ms a frame, the fast path 6.1 ms, 3.7 times. Most of the fast path is the copy
+      of the whole surface onto the canvas (EndPaint, about 5.7 ms here), which a full repaint
+      pays too, so the ratio shrinks as full repaints get cheaper: it was 37 / 5.7 ms, 6.4 times,
+      when the fast path came in (July 2026).
+      #203: 3.0.4 had it at 28 / 10.5 ms, 2.7 times -- the strip paid for two dozen theme token
+      reads of about 0.2 ms each. TestAFrameReadsItsTokensWithoutWalkingTheTheme watches that
+      without a clock; this one only went red under load (1.8 times in a parallel full run).
+      The bar stays at twice: about half the healthy ratio, and still a long way from 1, a fast
+      path that is switched off. }
     AssertTrue(Format('滚动该走脏区重绘(整幅 %dms / 快路径 %dms,至少要快一倍)',
       [full, fast]), fast * 2 < full);
   finally
@@ -7445,6 +7453,70 @@ begin
 
     AssertTrue('拖滚动条也要走脏区重绘,而不是整幅重画',
       G.FastScrollFrames > before);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ #203. A frame reads two dozen theme tokens -- the header's separator, padding and bevel, a sort
+  hint for each section, the lines' colours and dashes, the frozen edges -- and the strip a scroll
+  repaints reads them all, header included, though it never reaches the header. Each read used to
+  walk every variable of the theme, about 0.2 ms: a scroll took 10.5 ms a frame where it took 5.9
+  before 3.0.4. Nothing on screen changes, so the pixel tests cannot see it, and the timing test
+  only sees it on a quiet machine. Once the first frames have read them, a frame walks nothing. }
+procedure TTyStringGridTest.TestAFrameReadsItsTokensWithoutWalkingTheTheme;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  i, j, fast, walks: Integer;
+  c: TTyColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; padding: 0px 6px; }');
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 600, 400);
+    for i := 0 to 9 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 60;
+    end;
+    G.DefaultRowHeight := 20;
+    G.RowCount := 200;
+    for i := 0 to 9 do
+      for j := 1 to 60 do
+        G.Cells[i, j] := Format('R%dC%d', [j, i]);
+    AssertTrue('precondition: the header is shown, so its tokens are read', hoVisible in G.Header.Options);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(600, 400);
+
+    { The first frames read the tokens: a full one, a scroll, a full one at a scrolled position. }
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    G.ScrollByForTest(8);
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    G.InvalidateSurfaceForTest;
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 600, 400), 96);
+
+    walks := Ctl.Model.TokenLookupsForTest;
+    fast := G.FastScrollFrames;
+    G.ScrollByForTest(8);
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    AssertEquals('precondition: that frame took the fast path', fast + 1, G.FastScrollFrames);
+    AssertEquals('a scroll walks none of the theme''s variables', 0,
+      Ctl.Model.TokenLookupsForTest - walks);
+
+    walks := Ctl.Model.TokenLookupsForTest;
+    G.InvalidateSurfaceForTest;
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    AssertEquals('nor does a full repaint', 0, Ctl.Model.TokenLookupsForTest - walks);
   finally
     Bmp.Free;
     Ctl.Free;
