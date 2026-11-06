@@ -5,6 +5,7 @@ program tytests;
 uses
   Interfaces, consoletestrunner, Graphics, Forms, tyControls.Painter, tyControls.Controller,
   tyControls.Calendar,
+  test.runnerstate,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
   test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.chevron, test.fieldpad, test.skins, test.fontcascade, test.controlfont, test.stylemetric, test.chrome.overlay, test.styletoken, test.listview.inset, test.treeview.inset, test.treeview.lines, test.darktext, test.painter, test.controller,
   test.controller.hotreload, test.base,
@@ -352,6 +353,18 @@ var
   Application: TTyTestRunner;
 
 begin
+  // FIFTH, and done FIRST: the WIDGETSET. The console runner never initialises it on its
+  // own, so a window class is not registered and the first CreateHandle fails with
+  // "Failed to create win32 control" (1407). Tests used to initialise it lazily, each unit
+  // through its own NeedWidgetSet -- so a suite that forgot passed in the full run only
+  // because an earlier suite had done it, and every suite after the first initialiser
+  // measured its text with the real fonts while the ones before it did not. Initialise it
+  // here, before any test, so every process starts in the same state whichever suite it
+  // runs first: a suite run on its own sees what it sees in the full run. It goes before
+  // the pins below because initialising reads the desktop into ScreenInfo (its PPI among
+  // them); the pins must be what is left standing. tests/test.runnerstate holds the runner
+  // to all of it. (Forms. because Application below is the test runner.)
+  Forms.Application.Initialize;
   // Headless determinism: keep the empty-FontName render path so position-
   // sensitive pixel tests are unaffected by the real system font. Disable the
   // controller's system-font fallback BEFORE any controller is created, and
@@ -382,10 +395,10 @@ begin
   TyLocaleFirstDayOfWeek := wdSunday;
   // FOURTH: the SCREEN. LCL creates every TFont at ScreenInfo's PPI, a form built with
   // CreateNew keeps the one it was born with, and its ParentFont children take it over --
-  // so the screen decides the PPI of every control a test did not pin. Nothing in this
-  // console process ever initialises ScreenInfo, which left it at the LCL default of 72:
-  // a desktop nobody has, on which every unpinned form laid itself out at 75%. Make it the
-  // 96-PPI desktop the expectations in these suites are written for. A test that is ABOUT
+  // so the screen decides the PPI of every control a test did not pin. Left alone it is
+  // whatever this machine's desktop is (initialising the widgetset, FIFTH above, reads it
+  // in; before that, the LCL default of 72, a desktop nobody has). Make it the 96-PPI
+  // desktop the expectations in these suites are written for. A test that is ABOUT
   // another scaling sets these itself and puts them back (tests/test.dpi.measurefont).
   ScreenInfo.PixelsPerInchX := 96;
   ScreenInfo.PixelsPerInchY := 96;
