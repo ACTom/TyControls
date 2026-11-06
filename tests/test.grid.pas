@@ -89,7 +89,7 @@ type
   end;
 
   { 完整体:稀疏存储 + 二维光标 + 键鼠。 }
-  TTyStringGridTest = class(TTestCase)
+  TTyStringGridTestBase = class(TTestCase)
   private
     FForm: TForm;
     FCtl: TTyStyleController;
@@ -175,6 +175,60 @@ type
   protected
     procedure SetUp; override;
     procedure TearDown; override;
+  public
+    { 鼠标事件的桩(同样必须在 published 之外)。 }
+    FSelChanges: Integer;
+    FProbeLink: TTyGridEditLink;
+    FSizingCalls, FEndSizeCalls, FLastEndSize, FMoveCalls: Integer;
+    FCheckChanges: Integer;
+    FEllipsisCalls: Integer;
+    FEllipsisCancel: Boolean;
+    FVetoToggle: Boolean;
+    FClickCol, FClickRow: Integer;
+    FRightCol, FRightRow: Integer;
+    FBtnCol, FBtnRow: Integer;
+    FVetoCol: Integer;
+    FClickCount, FClickCursorCol: Integer;
+    procedure HookClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
+    procedure HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
+      var ACanClick: Boolean);
+    procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
+    procedure HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
+    procedure HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
+    procedure HookEllipsis(Sender: TObject; ACol, ARow: Integer;
+      var ANewText: string; var AAccept: Boolean);
+    procedure HookSelectionChanged(Sender: TObject);
+    procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
+      var AAllow: Boolean);
+    procedure HookCheckChange(Sender: TObject; ACol, ARow: Integer;
+      AChecked: Boolean);
+    procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
+    procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+      var AAllow: Boolean);
+    procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
+      var ANewText: string; var AAllow: Boolean);
+    procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
+      var ALink: TTyGridEditLink);
+    { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
+      每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
+    procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+    procedure HookAlignTop(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+  end;
+
+  TTyStringGridTest = class(TTyStringGridTestBase)
   published
     procedure TestCellStorageIsSparse;
     procedure TestClickMovesTheCursorToTheClickedCell;
@@ -319,7 +373,6 @@ type
     procedure TestUndoRestoresCellColorAndMerge;
     procedure TestSwappingRowsCarriesTheHiddenFlag;
     procedure TestFooterAggregateIsCachedAndInvalidated;
-    procedure TestPasteAndCutAreOneUndoStepEach;
     procedure TestClearAndCsvImportAreUndoable;
     procedure TestNoOpAttributeWriteLeavesTheUndoStackAlone;
     procedure TestMergeCountSurvivesRowRemovalAndUndo;
@@ -394,8 +447,6 @@ type
     procedure TestFillHandleGeometryMatchesWhatIsDrawn;
     procedure TestFillCopiesRepeatsAndExtrapolates;
     procedure TestReadOnlyRefusesPaste;
-    procedure TestReadOnlyCutCopiesButDoesNotClear;
-    procedure TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
     procedure TestReadOnlyHidesAndInertsTheFillHandle;
     procedure TestFillSkipsReadOnlyCellsAndColumns;
     procedure TestCheckedWordFollowsACatalogueLoadedAfterUnitInit;
@@ -419,57 +470,15 @@ type
     procedure TestDeleteRowIsCorrectAcrossTenthRowBoundary;
     procedure TestInsertColumnIsCorrectAcrossTenthColumnBoundary;
     procedure TestRowSideTablesFollowTheDataOnInsert;
-  public
-    { 鼠标事件的桩(同样必须在 published 之外)。 }
-    FSelChanges: Integer;
-    FProbeLink: TTyGridEditLink;
-    FSizingCalls, FEndSizeCalls, FLastEndSize, FMoveCalls: Integer;
-    FCheckChanges: Integer;
-    FEllipsisCalls: Integer;
-    FEllipsisCancel: Boolean;
-    FVetoToggle: Boolean;
-    FClickCol, FClickRow: Integer;
-    FRightCol, FRightRow: Integer;
-    FBtnCol, FBtnRow: Integer;
-    FVetoCol: Integer;
-    FClickCount, FClickCursorCol: Integer;
-    procedure HookClickCell(Sender: TObject; ACol, ARow: Integer);
-    procedure HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
-    procedure HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
-    procedure HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
-      var ACanClick: Boolean);
-    procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
-      var ADisplay: TTyGridCellDisplay);
-    procedure HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
-      var ADisplay: TTyGridCellDisplay);
-    procedure HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
-      var ADisplay: TTyGridCellDisplay);
-    procedure HookEllipsis(Sender: TObject; ACol, ARow: Integer;
-      var ANewText: string; var AAccept: Boolean);
-    procedure HookSelectionChanged(Sender: TObject);
-    procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
-      var AAllow: Boolean);
-    procedure HookCheckChange(Sender: TObject; ACol, ARow: Integer;
-      AChecked: Boolean);
-    procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
-      var ANewSize: Integer; var AAllow: Boolean);
-    procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
-    procedure HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
-      var AAllow: Boolean);
-    procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
-      var ANewText: string; var AAllow: Boolean);
-    procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
-      var ALink: TTyGridEditLink);
-    { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
-      每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
-    procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
-      var ABackground: TTyFill; var ATextColor: TTyColor;
-      var AFontName: string; var AFontSize, AFontWeight: Integer;
-      var AHAlign: TAlignment; var AVAlign: TTextLayout);
-    procedure HookAlignTop(Sender: TObject; ACol, ARow: Integer;
-      var ABackground: TTyFill; var ATextColor: TTyColor;
-      var AFontName: string; var AFontSize, AFontWeight: Integer;
-      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+  end;
+
+  { The tests that read or write the REAL system clipboard. They live in a suite of their own so
+    the parallel runner serialises only these, not the whole string grid suite. }
+  TTyStringGridClipboardTest = class(TTyStringGridTestBase)
+  published
+    procedure TestPasteAndCutAreOneUndoStepEach;
+    procedure TestReadOnlyCutCopiesButDoesNotClear;
+    procedure TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
   end;
 
   { A freed grid takes everything it allocated with it. (#16) }
@@ -2607,25 +2616,25 @@ begin
   finally ctl.Free; f.Free; end;
 end;
 
-procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
 end;
 
-procedure TTyStringGridTest.HandleVirtualText(Sender: TObject;
+procedure TTyStringGridTestBase.HandleVirtualText(Sender: TObject;
   ACol, ARow: Integer; var AText: string);
 begin
   AText := Format('%.2d', [100 - ARow]);
 end;
 
-procedure TTyStringGridTest.HandleVirtualLetter(Sender: TObject;
+procedure TTyStringGridTestBase.HandleVirtualLetter(Sender: TObject;
   ACol, ARow: Integer; var AText: string);
 begin
   AText := Chr(Ord('A') + (9 - ARow));      { 行 0 = 'J' … 行 9 = 'A' }
 end;
 
-procedure TTyStringGridTest.HandleGetEditorProp(Sender: TObject;
+procedure TTyStringGridTestBase.HandleGetEditorProp(Sender: TObject;
   ACol, ARow: Integer; AEditor: TControl);
 begin
   Inc(FEditorPropCount);
@@ -2634,40 +2643,40 @@ begin
   FEditorPropCtl := AEditor;
 end;
 
-procedure TTyStringGridTest.HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
+procedure TTyStringGridTestBase.HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
   var AAllow: Boolean);
 begin
   Inc(FRowMoveCount);
   AAllow := FRowMoveAllow;
 end;
 
-procedure TTyStringGridTest.HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FDblCount);
   FDblCol := ACol;
   FDblRow := ARow;
 end;
 
-procedure TTyStringGridTest.HandleGetPickList(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleGetPickList(Sender: TObject; ACol, ARow: Integer;
   AItems: TStrings);
 begin
   AItems.Add('甲'); AItems.Add('乙'); AItems.Add('丙');
 end;
 
-procedure TTyStringGridTest.HandleTallSecondRow(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleTallSecondRow(Sender: TObject; ARow: Integer;
   var AHeight: Integer);
 begin
   if ARow = 1 then AHeight := 60;
 end;
 
-procedure TTyStringGridTest.HandleDrawCell(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleDrawCell(Sender: TObject; ACol, ARow: Integer;
   const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean);
 begin
   { 接管但什么都不画 —— 这样"控件有没有再画"就能用墨量直接判定。 }
   AHandled := ACol = FTakeOverCol;
 end;
 
-procedure TTyStringGridTest.SetUp;
+procedure TTyStringGridTestBase.SetUp;
 begin
   FForm := TForm.CreateNew(nil);
   FForm.SetBounds(0, 0, 600, 400);
@@ -2677,7 +2686,7 @@ begin
     'TyGridCell { color: #000000; }');
 end;
 
-procedure TTyStringGridTest.TearDown;
+procedure TTyStringGridTestBase.TearDown;
 begin
   FreeAndNil(FForm);
   FreeAndNil(FCtl);
@@ -4698,7 +4707,7 @@ begin
   AssertTrue('原位置不该再是合并基准格', not G.CellSpan(2, 3, cs, rs));
 end;
 
-procedure TTyStringGridTest.HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
   var ABackground: TTyFill; var ATextColor: TTyColor;
   var AFontName: string; var AFontSize, AFontWeight: Integer;
   var AHAlign: TAlignment; var AVAlign: TTextLayout);
@@ -4710,7 +4719,7 @@ begin
   end;
 end;
 
-procedure TTyStringGridTest.HookAlignTop(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookAlignTop(Sender: TObject; ACol, ARow: Integer;
   var ABackground: TTyFill; var ATextColor: TTyColor;
   var AFontName: string; var AFontSize, AFontWeight: Integer;
   var AHAlign: TAlignment; var AVAlign: TTextLayout);
@@ -5011,30 +5020,30 @@ begin
   end;
 end;
 
-procedure TTyStringGridTest.HookClickCell(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HookClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
   FClickCol := ACol; FClickRow := ARow;
   Inc(FClickCount);
   FClickCursorCol := TTyStringGrid(Sender).Col;   // where the cursor is when the click is reported
 end;
 
-procedure TTyStringGridTest.HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
   FRightCol := ACol; FRightRow := ARow;
 end;
 
-procedure TTyStringGridTest.HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
 begin
   FBtnCol := ACol; FBtnRow := ARow;
 end;
 
-procedure TTyStringGridTest.HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
   var ACanClick: Boolean);
 begin
   if ACol = FVetoCol then ACanClick := False;
 end;
 
-procedure TTyStringGridTest.HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
   var ADisplay: TTyGridCellDisplay);
 begin
   if ACol = 1 then ADisplay := gcdButton;
@@ -5314,7 +5323,7 @@ begin
   AssertEquals('空行保持默认高', G.DefaultRowHeight, G.RowHeightOf(2));
 end;
 
-procedure TTyStringGridTest.HookSelectionChanged(Sender: TObject);
+procedure TTyStringGridTestBase.HookSelectionChanged(Sender: TObject);
 begin
   Inc(FSelChanges);
 end;
@@ -5507,7 +5516,7 @@ begin
   FreeAndNil(FCtl);
 end;
 
-procedure TTyStringGridTest.HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
   var ALink: TTyGridEditLink);
 begin
   { 只接管第 2 列 —— 这样才能顺带断言"别的列还是内建编辑器"。 }
@@ -5841,7 +5850,7 @@ begin
   AssertEquals('全展开后回到 6 行', expanded, G.DisplayRowCount);
 end;
 
-procedure TTyStringGridTest.HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
   var ANewText: string; var AAllow: Boolean);
 begin
   if ACol = 1 then AAllow := False           { 第 1 列整列跳过 }
@@ -5950,19 +5959,19 @@ begin
   AssertEquals('第 3 行没动', 'D', G.Cells[0, 3]);
 end;
 
-procedure TTyStringGridTest.HookColumnSizing(Sender: TObject; AIndex: Integer;
+procedure TTyStringGridTestBase.HookColumnSizing(Sender: TObject; AIndex: Integer;
   var ANewSize: Integer; var AAllow: Boolean);
 begin
   Inc(FSizingCalls);
 end;
 
-procedure TTyStringGridTest.HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+procedure TTyStringGridTestBase.HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
   var AAllow: Boolean);
 begin
   Inc(FMoveCalls);
 end;
 
-procedure TTyStringGridTest.HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+procedure TTyStringGridTestBase.HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
 begin
   Inc(FEndSizeCalls);
   FLastEndSize := ANewSize;
@@ -6106,13 +6115,13 @@ begin
   AssertEquals('EndSize 带上最终宽度', G.ColWidth(0), G.ScaleFrom(FLastEndSize));
 end;
 
-procedure TTyStringGridTest.HookCanToggle(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookCanToggle(Sender: TObject; ACol, ARow: Integer;
   var AAllow: Boolean);
 begin
   if FVetoToggle then AAllow := False;
 end;
 
-procedure TTyStringGridTest.HookCheckChange(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookCheckChange(Sender: TObject; ACol, ARow: Integer;
   AChecked: Boolean);
 begin
   Inc(FCheckChanges);
@@ -6548,19 +6557,19 @@ begin
   end;
 end;
 
-procedure TTyStringGridTest.HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
   var ADisplay: TTyGridCellDisplay);
 begin
   if ACol = 1 then ADisplay := gcdColor;
 end;
 
-procedure TTyStringGridTest.HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
   var ADisplay: TTyGridCellDisplay);
 begin
   if ACol = 1 then ADisplay := gcdRating;
 end;
 
-procedure TTyStringGridTest.HookEllipsis(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HookEllipsis(Sender: TObject; ACol, ARow: Integer;
   var ANewText: string; var AAccept: Boolean);
 begin
   Inc(FEllipsisCalls);
@@ -7185,7 +7194,7 @@ begin
     'border-color: #B03030; border-radius: 6px; }', False);
 end;
 
-procedure TTyStringGridTest.CheckScrollFastPath(const AGridRule: string; ALeftChrome: Boolean);
+procedure TTyStringGridTestBase.CheckScrollFastPath(const AGridRule: string; ALeftChrome: Boolean);
 const
   W = 420; H = 300;
 var
@@ -8562,7 +8571,7 @@ end;
   与 TTyEdit/TTyMemo 的 ReadOnly 剪切完全同规(Edit.pas:1684)。LCL 的网格
   在 EditingAllowed=False 时剪切什么都不做(grids.pas:11753-11758);
   这里保住复制那一半,因为"只读=能看能拷、不能改"才是本库一贯的含义。 }
-procedure TTyStringGridTest.TestReadOnlyCutCopiesButDoesNotClear;
+procedure TTyStringGridClipboardTest.TestReadOnlyCutCopiesButDoesNotClear;
 var
   G: TStrGridAccess;
 begin
@@ -8585,7 +8594,7 @@ end;
   同一类漏(TestUndoRedo... 的"只测 API 的话,键没接上也无人知晓")。
   所以这条**只走 KeyDown**,不直接调方法。 }
 
-procedure TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
+procedure TTyStringGridClipboardTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
 var
   G: TStrGridAccess;
 begin
@@ -9669,7 +9678,7 @@ end;
   用户得按 4 次 Ctrl+Z 才退得回去;剪切干脆一点批量都没有。
 
   断言站在用户那一侧:**按一次撤销,整块都得回来**。 }
-procedure TTyStringGridTest.TestPasteAndCutAreOneUndoStepEach;
+procedure TTyStringGridClipboardTest.TestPasteAndCutAreOneUndoStepEach;
 var
   G: TStrGridAccess;
 begin
@@ -10270,7 +10279,7 @@ begin
   end;
 end;
 
-procedure TTyStringGridTest.HookGetCellStyleRecordMin(Sender: TObject;
+procedure TTyStringGridTestBase.HookGetCellStyleRecordMin(Sender: TObject;
   ACol, ARow: Integer; var ABackground: TTyFill; var ATextColor: TTyColor;
   var AFontName: string; var AFontSize, AFontWeight: Integer;
   var AHAlign: TAlignment; var AVAlign: TTextLayout);
@@ -10278,14 +10287,14 @@ begin
   if ARow < FMinHookRow then FMinHookRow := ARow;
 end;
 
-procedure TTyStringGridTest.HookGetCellBorderRecordMin(Sender: TObject;
+procedure TTyStringGridTestBase.HookGetCellBorderRecordMin(Sender: TObject;
   ACol, ARow: Integer; var ABorders: TTyGridCellBorders);
 begin
   if ARow < FMinHookRow then FMinHookRow := ARow;
   ABorders.Left := True;      { 让边框那条路径真的走下去 }
 end;
 
-procedure TTyStringGridTest.HookRowSizingRecordMin(Sender: TObject;
+procedure TTyStringGridTestBase.HookRowSizingRecordMin(Sender: TObject;
   AIndex: Integer; var ANewSize: Integer; var AAllow: Boolean);
 begin
   if AIndex < FMinHookRow then FMinHookRow := AIndex;
@@ -10887,14 +10896,14 @@ begin
     TTyColumn(G.Header.Columns.Items[1]).Position);
 end;
 
-procedure TTyStringGridTest.HandleNodeLevel(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleNodeLevel(Sender: TObject; ARow: Integer;
   var ALevel: Integer);
 begin
   { 0,1,1, 0,1,1 —— 两个根节点,各带两个孩子。 }
   if (ARow mod 3) = 0 then ALevel := 0 else ALevel := 1;
 end;
 
-procedure TTyStringGridTest.HandleHasChildren(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleHasChildren(Sender: TObject; ARow: Integer;
   var AHas: Boolean);
 begin
   AHas := (ARow mod 3) = 0;
@@ -11218,42 +11227,42 @@ end;
 
 { --- B 组(T6-T10)的探针 --- }
 
-procedure TTyStringGridTest.HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
   var AAllow: Boolean);
 begin
   Inc(FCanEditCount); FCanEditCol := ACol; FCanEditRow := ARow;
   AAllow := FCanEditAllow;
 end;
 
-procedure TTyStringGridTest.HandleEditChange(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleEditChange(Sender: TObject; ACol, ARow: Integer;
   const AText: string);
 begin
   Inc(FEditChangeCount); FEditChangeLast := AText;
 end;
 
-procedure TTyStringGridTest.HandleCanInsertRow(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleCanInsertRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   FCanInsertRow := ARow; AAllow := FCanInsertAllow;
 end;
 
-procedure TTyStringGridTest.HandleCanDeleteRow(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleCanDeleteRow(Sender: TObject; ARow: Integer;
   var AAllow: Boolean);
 begin
   FCanDeleteRow := ARow; AAllow := FCanDeleteAllow;
 end;
 
-procedure TTyStringGridTest.HandleReturn(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HandleReturn(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FReturnCount); FReturnRow := ARow;
 end;
 
-procedure TTyStringGridTest.HandleCtrlReturn(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HandleCtrlReturn(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FCtrlReturnCount);
 end;
 
-procedure TTyStringGridTest.HandleScrollHint(Sender: TObject; ARow: Integer;
+procedure TTyStringGridTestBase.HandleScrollHint(Sender: TObject; ARow: Integer;
   var AHint: string);
 begin
   Inc(FScrollHintCount); FScrollHintRow := ARow;
@@ -11407,7 +11416,7 @@ begin
   AssertEquals('没挂钩子就没提示', '', G.ScrollHintForTest(50));
 end;
 
-procedure TTyStringGridTest.HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
+procedure TTyStringGridTestBase.HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
 begin
   Inc(FLinkCount); FLinkCol := ACol; FLinkRow := ARow;
 end;
@@ -11627,7 +11636,7 @@ begin
     G.CellDisplayForTest(1, 3) = gcdRating);
 end;
 
-procedure TTyStringGridTest.HandleColumnCalc(Sender: TObject; ACol: Integer;
+procedure TTyStringGridTestBase.HandleColumnCalc(Sender: TObject; ACol: Integer;
   var AValue: Double; var AHandled: Boolean);
 begin
   Inc(FColCalcCount);
@@ -11908,14 +11917,14 @@ begin
   end;
 end;
 
-procedure TTyStringGridTest.HandleGetFormat(Sender: TObject; ACol, ARow: Integer;
+procedure TTyStringGridTestBase.HandleGetFormat(Sender: TObject; ACol, ARow: Integer;
   var AText: string);
 begin
   Inc(FFormatCount);
   if AText <> '' then AText := '[' + AText + ']';
 end;
 
-procedure TTyStringGridTest.HandleGetFilterValues(Sender: TObject; ACol: Integer;
+procedure TTyStringGridTestBase.HandleGetFilterValues(Sender: TObject; ACol: Integer;
   AItems: TStrings; var AHandled: Boolean);
 begin
   AItems.Clear;
@@ -13198,4 +13207,5 @@ initialization
   RegisterTest(TGridValidateCellTest);
   RegisterTest(TGridEditorCancelTest);
   RegisterTest(TTyStringGridTest);
+  RegisterTest(TTyStringGridClipboardTest);
 end.
