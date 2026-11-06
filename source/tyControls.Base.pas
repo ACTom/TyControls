@@ -380,7 +380,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
+      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
@@ -594,7 +595,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
+      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
