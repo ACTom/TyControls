@@ -251,7 +251,6 @@ type
     procedure TestNumericSortComparesNumbersNotText;
     procedure TestHeaderClickTogglesAscDescThenClears;
     procedure TestShiftArrowsExtendTheRangeAndPlainArrowsCollapseIt;
-    procedure TestSortingRealisticGridIsFast;
     procedure TestSortKeepsTheViewportWhereItWas;
     procedure TestProgrammaticScrollSyncsTheScrollBarThumb;
     procedure TestColumnFilterHidesNonMatchingRows;
@@ -299,7 +298,6 @@ type
     procedure TestAutoResizeColumnFillsRemainingWidth;
     procedure TestPublishedSurfaceHasObservableEffect;
     procedure TestHoverHighlightsTheCellUnderTheMouse;
-    procedure TestPerCellStyleResolutionKeepsDefaultFastPath;
     procedure TestInsertRowShiftsMergeSpansToo;
     procedure TestInsertRowShiftsMergeOfEmptyCell;
     procedure TestCellStyleHookPaintsOnlyThatRow;
@@ -370,7 +368,6 @@ type
     { #86: with a border. The strip that scrolls in was filled across the frame's left edge and
       the frame was not drawn again -- the guard above runs with border-width: 0. }
     procedure TestScrollFastPathKeepsTheBorder;
-    procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
     procedure TestPhysicalSortCarriesCellAttributes;
     procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
@@ -460,7 +457,6 @@ type
     procedure TestFillSkipsReadOnlyCellsAndColumns;
     procedure TestCheckedWordFollowsACatalogueLoadedAfterUnitInit;
     procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
-    procedure TestBulkFillStaysLinear;
     procedure TestBeginUpdateCollapsesRepaints;
     procedure TestFixedRowsRenderTheirContent;
     procedure TestBottomFixedRowsPinRenderAndHitTest;
@@ -488,6 +484,16 @@ type
     procedure TestPasteAndCutAreOneUndoStepEach;
     procedure TestReadOnlyCutCopiesButDoesNotClear;
     procedure TestCtrlXGestureCutsAndReadOnlyDegradesToCopy;
+  end;
+
+  { The tests that assert on wall-clock time (a ratio or a limit). They are a suite of their own so
+    the parallel runner can run them alone and give a red one a reported rerun. }
+  TTyStringGridTimingTest = class(TTyStringGridTestBase)
+  published
+    procedure TestSortingRealisticGridIsFast;
+    procedure TestPerCellStyleResolutionKeepsDefaultFastPath;
+    procedure TestScrollFastPathIsCheaperThanFullRepaint;
+    procedure TestBulkFillStaysLinear;
   end;
 
   { A freed grid takes everything it allocated with it. (#16) }
@@ -3133,7 +3139,7 @@ end;
   ① 单元格存储用 TStringList.Values 查找是**线性扫描**;② 插入排序是 O(n^2)。
   两者相乘 → 200 行就能把界面卡死(用户实机点列头即挂)。
   这条用 1000 行 x 6 列压出来,慢实现根本跑不完。 }
-procedure TTyStringGridTest.TestSortingRealisticGridIsFast;
+procedure TTyStringGridTimingTest.TestSortingRealisticGridIsFast;
 var
   G: TStrGridAccess;
   r, c: Integer;
@@ -4611,7 +4617,7 @@ end;
   这条线是实测定出来的:变异掉缓存后文字增量是固有开销的 **28 倍**
   (每格一次 TextSize 做省略号测量 + 一次 TextRect,都是 BGRA 的重活);
   有缓存时约 1.1 倍。阈值取 4 倍:离健康值有 4 倍余量抗抖动,离病态值还差 7 倍。 }
-procedure TTyStringGridTest.TestPerCellStyleResolutionKeepsDefaultFastPath;
+procedure TTyStringGridTimingTest.TestPerCellStyleResolutionKeepsDefaultFastPath;
 const
   FRAMES = 30;
 var
@@ -7426,7 +7432,7 @@ end;
   照样绿,只有这条会红。
 
   度量是相对的:同样是滚一格,一次让它走快路径,一次强行作废表面走整幅重画。 }
-procedure TTyStringGridTest.TestScrollFastPathIsCheaperThanFullRepaint;
+procedure TTyStringGridTimingTest.TestScrollFastPathIsCheaperThanFullRepaint;
 const
   FRAMES = 60;
 var
@@ -8358,7 +8364,7 @@ end;
   修好前逐批递增(281 / 500 / 704 ms …),修好后持平(16 / 15 / 16 ms)。
   阈值取 3 倍:健康值约 1 倍,退化到第 9 批时约 6 倍以上。
   (第一版只比第 1、3 批、阈值 4 倍 —— 变异测试证明它抓不住退化,已改。) }
-procedure TTyStringGridTest.TestBulkFillStaysLinear;
+procedure TTyStringGridTimingTest.TestBulkFillStaysLinear;
 const
   BLOCK   = 2500;
   LASTBLK = 8;      { 计时的是第 9 批 }
@@ -13357,4 +13363,5 @@ initialization
   RegisterTest(TGridEditorCancelTest);
   RegisterTest(TTyStringGridTest);
   RegisterTest(TTyStringGridClipboardTest);
+  RegisterTest(TTyStringGridTimingTest);
 end.
