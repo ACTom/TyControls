@@ -131,8 +131,12 @@ begin
   { Smooth monospace text. A font the host has not chosen (still SynEdit's default face) gets
     the platform's code face at 10 pt -- in points, so it follows the font's PPI as a height
     in pixels would not. A host with its own face (the theme builder takes it from its
-    theme) keeps it; the quality is set either way. }
-  if FEdit.Font.Name = SynDefaultFontName then
+    theme) keeps it; the quality is set either way. SynEdit 5.0 names its default face
+    'syn/default' (SynFontNameForDefault) instead of the face itself. }
+  if (FEdit.Font.Name = SynDefaultFontName)
+    {$IF DECLARED(SynFontNameForDefault)}
+    or SameText(FEdit.Font.Name, SynFontNameForDefault)
+    {$ENDIF} then
   begin
     FEdit.Font.Name := TyCssEditFontName;
     FEdit.Font.Size := 10;
