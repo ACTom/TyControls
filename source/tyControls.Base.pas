@@ -181,6 +181,8 @@ type
     FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
     procedure RefitToStyle;
+    { Swallows the one silent write TyBornAtDesignPPI makes (#207); every other change goes on. }
+    procedure FontChanged(Sender: TObject); override;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
@@ -1183,10 +1185,17 @@ end;
 
 { TTyGraphicControl }
 
-{ Put a just-created control's font in the design space WITHOUT telling anyone: with the
-  handler off there is no FontChanged, so ParentFont keeps its default and nothing is
-  invalidated or measured on the way. The height is still 0 ("no size chosen") this early,
-  so there is nothing for the PPI change to rescale either. }
+{ The font TyBornAtDesignPPI is writing, while it writes: both bases' FontChanged pass over it. }
+var
+  GTySilentFont: TFont = nil;
+
+{ Put a just-created control's font in the design space WITHOUT telling anyone: there is no
+  FontChanged, so ParentFont keeps its default and nothing is invalidated or measured on the
+  way. The height is still 0 ("no size chosen") this early, so there is nothing for the PPI
+  change to rescale either. Two ways in, both shut: up to Lazarus 4.x the font tells its
+  control through OnChange; from 5.0 it is a TControlFont that calls the control's
+  FontChanged itself and leaves OnChange unassigned (#207), so the bases' FontChanged ignore
+  GTySilentFont too. }
 procedure TyBornAtDesignPPI(AFont: TFont);
 var
   saved: TNotifyEvent;
@@ -1194,9 +1203,11 @@ begin
   if AFont.PixelsPerInch = TyDesignPPI then Exit;
   saved := AFont.OnChange;
   AFont.OnChange := nil;
+  GTySilentFont := AFont;
   try
     AFont.PixelsPerInch := TyDesignPPI;
   finally
+    GTySilentFont := nil;
     AFont.OnChange := saved;
   end;
 end;
@@ -1220,6 +1231,12 @@ begin
   inherited Create(AOwner);
   TyBornAtDesignPPI(Font);     // see SetParent's declaration
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyGraphicControl.FontChanged(Sender: TObject);
+begin
+  if Sender = GTySilentFont then Exit;   // #207: being born, see TyBornAtDesignPPI
+  inherited FontChanged(Sender);
 end;
 
 procedure TTyGraphicControl.SetParent(AParent: TWinControl);
@@ -2592,6 +2609,7 @@ end;
 
 procedure TTyCustomControl.FontChanged(Sender: TObject);
 begin
+  if Sender = GTySilentFont then Exit;   // #207: being born, see TyBornAtDesignPPI
   inherited FontChanged(Sender);
   FStyleLayoutDirty := True;
   CheckStyleLayout;
