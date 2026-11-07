@@ -35,7 +35,7 @@ unit test.dpi.measurefont;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LCLType,
+  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LCLType, LMessages,
   IntfGraphics, FPimage, FileUtil, TypInfo,
   fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   test.designregistry, test.version, test.dpi.support,
@@ -64,6 +64,19 @@ type
 
   { ParentFont is protected on TControl. }
   TParentFontProbe = class(TControl);
+
+  { Count the font changes a control hears while it is being made and after (#207). }
+  TBornButtonProbe = class(TTyButton)
+  public
+    FontChanges: Integer;
+    procedure CMFontChanged(var Message: TLMessage); message CM_FONTCHANGED;
+  end;
+
+  TBornLabelProbe = class(TTyLabel)
+  public
+    FontChanges: Integer;
+    procedure CMFontChanged(var Message: TLMessage); message CM_FONTCHANGED;
+  end;
 
   { What a control says about its own size. The floor is what clamps a designed Width /
     Height (the swollen buttons of the 175% screenshot); the preferred size is what AutoSize
@@ -113,6 +126,7 @@ type
     procedure TestTheCanvasAndTheRendererAgreeOnAWidth;
     // --- which PPI a control is born at, and when it learns better -----------
     procedure TestAControlIsBornInTheDesignSpace;
+    procedure TestBeingBornIsNoFontChange;
     procedure TestAChildWithATouchedFontTakesItsParentsPPI;
     // --- the library, end to end ---------------------------------------------
     procedure TestSizeFloorsFollowTheControlPPIOnly;
@@ -618,6 +632,46 @@ begin
 end;
 
 { ===== which PPI a control is born at ======================================= }
+
+procedure TBornButtonProbe.CMFontChanged(var Message: TLMessage);
+begin
+  Inc(FontChanges);
+  inherited;
+end;
+
+procedure TBornLabelProbe.CMFontChanged(var Message: TLMessage);
+begin
+  Inc(FontChanges);
+  inherited;
+end;
+
+procedure TTyMeasureFontDpiTest.TestBeingBornIsNoFontChange;
+{ #207. Moving the new font to the design PPI tells nobody, on either base. Lazarus 5.0 tells
+  a control about its font through TControlFont, not Font.OnChange, so clearing OnChange
+  stopped keeping the write quiet there: it reached FontChanged, which clears ParentFont. }
+var
+  btn: TBornButtonProbe;
+  lbl: TBornLabelProbe;
+begin
+  SimulateScreen(168);
+  btn := TBornButtonProbe.Create(nil);
+  lbl := TBornLabelProbe.Create(nil);
+  try
+    AssertEquals('precondition: the font was moved from the screen''s PPI', TyDesignPPI,
+      btn.Font.PixelsPerInch);
+    AssertEquals('a windowed control hears no font change being made', 0, btn.FontChanges);
+    AssertEquals('a graphic control hears no font change being made', 0, lbl.FontChanges);
+    AssertTrue('...and follows its parent''s font (windowed)', TParentFontProbe(btn).ParentFont);
+    AssertTrue('...and follows its parent''s font (graphic)', TParentFontProbe(lbl).ParentFont);
+    btn.Font.Style := [fsBold];
+    lbl.Font.Style := [fsBold];
+    AssertTrue('control group: a change made later is heard (windowed)', btn.FontChanges > 0);
+    AssertTrue('control group: a change made later is heard (graphic)', lbl.FontChanges > 0);
+  finally
+    lbl.Free;
+    btn.Free;
+  end;
+end;
 
 procedure TTyMeasureFontDpiTest.TestAControlIsBornInTheDesignSpace;
 { Both bases, because they share no ancestor below TControl and the line exists twice. And
