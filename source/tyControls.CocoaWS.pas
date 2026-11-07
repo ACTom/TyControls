@@ -68,7 +68,9 @@ uses
     so the question is asked here, of LCLVersion in the interface's -- the same with the package
     and without it (a project with source/ on its search path, #88). }
   {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF},
-  CocoaScrollers,   // TCocoaScrollView, the scroll view a press under the title bar stops at (#89)
+  { TCocoaScrollView, the scroll view a press under the title bar stops at (#89). Lazarus 5.0 moved
+    it out of CocoaScrollers into CocoaScrolling (trunk 4.99, 2026-04-06); 4.x keeps CocoaScrollers. }
+  {$IF lcl_fullversion >= 4990000}CocoaScrolling{$ELSE}CocoaScrollers{$ENDIF},
   cocoa_extra;      // NSFloatingWindowLevel: the level LCL-Cocoa gives an fsStayOnTop form
 
 type
