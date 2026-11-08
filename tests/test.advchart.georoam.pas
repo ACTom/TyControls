@@ -361,6 +361,11 @@ begin
   Result.Controller := FCtl;
   { a clock of its own: no timer runs (every case hides at once) }
   Result.TooltipNow := 0;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  Result.DataZoomNow := 0;
+  Result.BrushNow := 0;
+  Result.ParallelExpandNow := 0;
+  Result.TimelineNow := 0;
   for i := 0 to High(cTypes) do Result.ChartOn(cTypes[i], @FLog.Handle);
   Result.Option := AOption;
   Result.SetBounds(0, 0, cW, cH);
@@ -859,6 +864,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.TooltipNow := 0;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 0;
+  FChart.BrushNow := 0;
+  FChart.ParallelExpandNow := 0;
+  FChart.TimelineNow := 0;
   FChart.ChartOn('georoam', @FLog.Handle);
   FChart.Option := AOption;
   FChart.SetBounds(0, 0, cW, cH);
@@ -1075,6 +1085,15 @@ begin
     b.Controller := FCtl;
     a.TooltipNow := 0;
     b.TooltipNow := 0;
+    { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+    a.DataZoomNow := 0;
+    a.BrushNow := 0;
+    a.ParallelExpandNow := 0;
+    a.TimelineNow := 0;
+    b.DataZoomNow := 0;
+    b.BrushNow := 0;
+    b.ParallelExpandNow := 0;
+    b.TimelineNow := 0;
     a.SetBounds(0, 0, cW, cH);
     b.SetBounds(0, 0, cW, cH);
     a.Option := cOpt;

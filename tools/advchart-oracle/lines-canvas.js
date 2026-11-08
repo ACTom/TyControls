@@ -172,6 +172,8 @@ let AC = false;
 let SEQ = 0;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
+// [R7-AB] a case that must not touch a path before it is brushed (see elRec)
+let PRISTINE = false;
 let YPAINTS = [];
 let YBLK = 0;
 let YOPS = new Map();
@@ -840,6 +842,179 @@ function cases() {
       { value: [7, 3], label: { fontSize: '13px', fontWeight: 'Bolder' } },
       { value: [8, 3], label: { fontWeight: '450', fontSize: 10 } },
       { value: [9, 3], label: { fontStyle: 'Italic', fontSize: 14 } }] }]), [0], { y: true }],
+    // ---- [R7-AB] (recorded as the y- ones) ----
+    // 1. a lines end symbol in the enter animation, hit on its own vertices
+    //    and the middles of its edges (y-tf-enter-end's chart). Scaled to
+    //    nought at first, it is not brushed: its first brush builds its path
+    //    and stores it in a Float32Array (toStatic), which Path.contain then
+    //    reads -- y-tf-enter-end's record read its paint rect first, and the
+    //    path made then stays in doubles: pristine
+    ['ab-tf-enter-end-hits', Object.assign(vv(LNC({ symbol: 'triangle', symbolSize: [12] },
+      [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }], { symbol: ['none', 'arrow'], symbolSize: 10 })),
+    { animation: true, animationDuration: 1000, animationEasing: 'linear' }), [0, 300, 600, 1200],
+    { y: true, anim: true, probes: 'end-verts', pristine: true }],
+    // 2. a block starts from the ground: a half-transparent scatter of an
+    //    unreadable colour under a moving effect is, in the effect's block,
+    //    the canvas' own black at half over the ground -- never over the
+    //    whole paint's green (an opaque one, y-dirty-scatter's, hides what
+    //    lies under it)
+    ['ab-dirty-alpha', vv([{ type: 'scatter', symbolSize: 40, itemStyle: { color: '#00aa00' }, data: [[8, 9]] },
+      { type: 'scatter', symbolSize: 40, itemStyle: { color: 'nope', opacity: 0.5 }, data: [[3, 5]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // [R7-AB] 3. a text span's shadow offset of no finite number (`'abc' ||
+    //    0` is 'abc', dpr times it none): refused, the canvas' kept -- only
+    //    where the span casts one (textShadowBlur above nought); a rich
+    //    token's blur of no number over the label's (hasShadow by either,
+    //    the token's 'zz' then refused)
+    ['ab-sh-text', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 4, shadowOffsetY: 3 }, data: [
+        { value: [2, 2] },
+        { value: [4, 4], label: { show: true, formatter: 'Ab', textShadowColor: '#00ff00', textShadowBlur: 3,
+          textShadowOffsetX: 'abc', textShadowOffsetY: 'Infinity' } },
+        { value: [6, 6], label: { show: true, formatter: 'Cd', textShadowColor: '#0000ff', textShadowBlur: '2',
+          textShadowOffsetX: '5', textShadowOffsetY: '' } },
+        { value: [8, 8], label: { show: true, formatter: '{a|Ef}', rich: { a: { textShadowBlur: 'zz', textShadowOffsetX: 'q' } },
+          textShadowColor: '#ff00ff', textShadowBlur: 4, textShadowOffsetX: 2 } },
+        { value: [9, 3], label: { show: true, formatter: 'Gh', textShadowOffsetX: 'abc' } }] }]), [0], { y: true }],
+    // (R7-AB after R7-AA: each span sets the shadowColor -- `token ||
+    //    style || 'transparent'` where it casts one --, a refused one keeping
+    //    the span's before it: the second span of the first label the first
+    //    span's green, not the symbols' red; a span whose blur and colour are
+    //    both refused keeps both)
+    ['ab-sh-text-colour', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2 }, data: [
+        { value: [2, 2] },
+        { value: [4, 4], label: { show: true, formatter: '{a|Ab}{b|Cd}', textShadowBlur: 2,
+          rich: { a: { textShadowColor: '#00ff00' }, b: { textShadowColor: 'nope' } } } },
+        { value: [7, 7], label: { show: true, formatter: '{a|Ef}', textShadowBlur: 3,
+          rich: { a: { textShadowBlur: 'abc', textShadowColor: 'nope' } } } }] }]), [0], { y: true }],
+    // [R7-AB] 4. a gradient under a transform that is no similarity: a
+    //    symbol's frame scaled unevenly -- its own radial gradient is an
+    //    ellipse (the circle in its frame), and the CanvasGradient the canvas
+    //    keeps for the next symbol (made in the first's frame) lands under
+    //    that one's: an ellipse again, a linear one's stripes slanted
+    ['ab-grad-ellipse', vv([{ type: 'scatter', symbol: 'rect', symbolSize: [40, 16], itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [16, 44], itemStyle: { color: 'nope' }, data: [[6, 6]] }]), [0], { y: true }],
+    ['ab-grad-linear-skew', vv([{ type: 'scatter', symbol: 'rect', symbolSize: [40, 16], symbolRotate: 30,
+      itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 1,
+        colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [16, 44], symbolRotate: -20, itemStyle: { color: 'nope' }, data: [[6, 6]] }]),
+    [0], { y: true }],
+    // (a gradient made in a uniform frame -- a circle there -- held for a
+    //    symbol scaled unevenly: back in the first frame, an ellipse under
+    //    the second; its radius the first frame's)
+    ['ab-grad-held-ellipse', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [40, 14], itemStyle: { color: 'nope' }, data: [[6, 6]] }]), [0], { y: true }],
+    // (the same turned a quarter: its frame's diagonal nought, a shear to
+    //    the first's all the same)
+    ['ab-grad-held-turned', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [40, 14], symbolRotate: 90, itemStyle: { color: 'nope' }, data: [[6, 6]] }]),
+    [0], { y: true }],
+    // [R7-AB] 5. a trail under useDirtyRect: its layer (the series' zlevel,
+    //    motionBlur) is faded whole every paint (the last frame drawn back
+    //    at lastFrameAlpha), then only the blocks round what moved are
+    //    brushed -- a line away from every block fades frame by frame
+    ['ab-dirty-trail', vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
+      [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
+    [0, 20, 40, 60, 80], { y: true, dirty: true }],
+    // (the same on a zlevel of its own above the axes': that layer's)
+    ['ab-dirty-trail-z', Object.assign(vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
+      [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { zlevel: 1, lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
+    { xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false } } }),
+    [0, 20, 40, 60, 80], { y: true, dirty: true }],
+    // [R7-AB] 6. a dirty block starts from the canvas' own state and brushes
+    //    the components meeting it too: a scatter of an unreadable colour
+    //    under a moving effect takes, in its block, the fill of the axis
+    //    label in that block (the y axis' inside one), or none (the canvas'
+    //    black) -- the whole paint's is the x axis' labels', drawn last
+    ['ab-dirty-axes', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5], [5, 7]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[0.2, 5], [9.4, 5]] }, { coords: [[5, 7], [9.4, 7]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
+      yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a split line two px above the block: its paint rect is its
+    //    Line's bounds grown by max(width, strokeContainThreshold 5), so it
+    //    meets the block and hands it its stroke -- the ring of a symbol of
+    //    an unreadable border in the block is the split line's green)
+    ['ab-dirty-axes-stroke', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.6]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.6], [9, 5.6]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { lineStyle: { color: '#00ff00' } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (R7-AB after R7-AA: a split area a Rect a band, a split line a Line
+    //    a mark -- only the band and the line meeting the block are brushed
+    //    in it: the scatter of an unreadable colour takes the blue of the band
+    //    it is in, the ring of an unreadable border the red of the line above
+    //    it; the whole paint the last band's green, the last line's blue)
+    ['ab-dirty-bands', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[0.2, 5], [9.4, 5]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { show: false },
+      splitArea: { show: true, areaStyle: { color: ['#ff0000', '#00ff00', '#0000ff'] } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    ['ab-dirty-stroke-inks', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.6]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.6], [9, 5.6]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      splitLine: { lineStyle: { color: ['#ff0000', '#00ff00', '#0000ff'] } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a split line's shadow grows its paint rect: the line 13 px above the
+    //    block's centre meets it by its blur, not by its pen)
+    ['ab-dirty-stroke-shadow', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.3]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.3], [9, 5.3]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      splitLine: { lineStyle: { color: '#00ff00', shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.2)' } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a state's change repainted in blocks, the static layer's: the same)
+    ['ab-dirty-hover-axes', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5], [5, 7]] },
+      { type: 'scatter', clip: false, symbolSize: 8, itemStyle: { color: '#ff00ff', opacity: 1 }, emphasis: { scale: 2 },
+        data: [[0.2, 5.2], [5, 7.2]] }]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
+      yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
+    [0, 10], { y: true, dirty: true, acts: { 1: [{ type: 'highlight', seriesIndex: 1 }] } }],
+    // [R7-AB] 7. fonts the canvas refuses elsewhere: a rich text's token
+    //    (its own font refused: the one the span before left); the axes'
+    //    labels drawn before the series (their font left on the canvas for
+    //    the first series label whose own is refused); an axis label's own
+    //    refused font (the graphic text's under it)
+    ['ab-font-rich', vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top' }, data: [
+      { value: [2, 3], label: { formatter: '{a|Ab}{b|Cd}', rich: { a: { fontSize: 15, fontFamily: 'serif' },
+        b: { fontWeight: 'heavy' } } } },
+      { value: [5, 3], label: { formatter: '{a|Ef}', rich: { a: { fontStyle: 'slanted', fontSize: 11 } } } },
+      { value: [8, 3], label: { formatter: '{a|Gh}{b|Ij}', rich: { a: { fontSize: '13px', fontWeight: 'bold' },
+        b: { fontSize: '12abcpx' } } } },
+      // (a token naming its size alone takes the label's refused weight:
+      // richInheritPlainLabel)
+      { value: [9.5, 6], label: { fontWeight: 'heavy', formatter: '{a|Kl}', rich: { a: { fontSize: 17 } } } }] }]),
+    [0], { y: true }],
+    ['ab-font-ground', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab' }, data: [
+        { value: [2, 3], label: { fontWeight: 'heavy' } }, { value: [5, 3], label: { fontSize: 11 } }] }]),
+    { xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false },
+      axisLabel: { color: '#112233', fontSize: 14, fontFamily: 'monospace' } } }), [0], { y: true }],
+    ['ab-font-axis', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab' }, data: [
+        { value: [2, 3], label: { fontStyle: 'slanted' } }, { value: [5, 3], label: { fontSize: 11 } }] }]),
+    { graphic: [{ type: 'text', z: -1, x: 20, y: 20, style: { text: 'G', fill: '#000', fontSize: 16, fontWeight: 'bold',
+      fontFamily: 'serif' } }],
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false },
+        axisLabel: { color: '#112233', fontWeight: 'heavy' } } }), [0], { y: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
@@ -1528,7 +1703,11 @@ function elRec(el, key, brushes) {
   // [R7-Y] every op of the sample, and the paint rect now
   if (Y) {
     r.yops = YOPS.get(el) || [];
-    const pr = el.getPaintRect ? el.getPaintRect() : null;
+    // [R7-AB] (a path's getBoundingRect before its first brush makes its
+    // proxy: the brush then rebuilds the path from the doubles and never
+    // stores it in a Float32Array -- the record would change what findHover
+    // finds; a pristine case reads no paint rect off such an element)
+    const pr = el.getPaintRect && !(PRISTINE && el instanceof Path && !el.path) ? el.getPaintRect() : null;
     r.pr = pr ? [pr.x, pr.y, pr.width, pr.height].map(hexOrNull) : null;
   }
   return r;
@@ -1587,6 +1766,7 @@ function run(id, option, samples, opts) {
   AC = id.slice(0, 3) === 'ac-';
   SEQ = 0;
   Y = !!opts.y;
+  PRISTINE = !!opts.pristine;
   YPAINTS = [];
   YBLK = 0;
   YOPS = new Map();
@@ -1714,6 +1894,7 @@ function run(id, option, samples, opts) {
     AA = false;
     AC = false;
     Y = false;
+    PRISTINE = false;
     echarts.env.node = nodeWas;
   }
   // [R7-W] the options set before a sample, the dirty rects

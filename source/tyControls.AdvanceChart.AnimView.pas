@@ -7743,6 +7743,22 @@ begin
   if StColourOf(v, c) then Result := c;
 end;
 
+{ [R7-AB] A FRAME'S SHADOW NUMBER as the canvas takes `dpr * (value || 0)`:
+  a number, a string's Number ('' nought); a not-a-number nought (falsy:
+  the first frame of a track into 'Infinity', `0 + (Infinity - 0) * 0`);
+  one the canvas refuses -- an infinity, a truthy string of no finite
+  Number (a discrete track's 'abc') -- ARefused, the mark the paint order
+  settles (the canvas keeps its own). False: no such value (an object, a
+  gradient) }
+function ShadowFrameNum(const AV: TTyAnimValue; ARefused: Double; out ANum: Double): Boolean;
+begin
+  Result := PenRawNumOf(AV, ANum);
+  if not Result then Exit;
+  if (AV.Kind = avkString) and (AV.Str = '') then ANum := 0
+  else if IsNan(ANum) and (AV.Kind <> avkString) then ANum := 0
+  else if IsNan(ANum) or IsInfinite(ANum) then ANum := ARefused;
+end;
+
 procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
   ARole: Boolean);
 var
@@ -7751,7 +7767,7 @@ var
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
   g: TTyChartGradient;
-  fx, fy, cx, cy, pn, raw: Double;
+  fx, fy, cx, cy, pn, raw, x: Double;
   b: TTyRectF;
 
   { the role's branch draws a key its proxy rests at a layout value of }
@@ -7893,22 +7909,26 @@ begin
     { [R5-A] a state's shadow, tweening }
     else if key = 'style.shadowBlur' then
     begin
-      if not Off(key, v, rest) then Continue;
+      { ([R7-AB] off its rest as the canvas is handed the two: 'abc' over a
+        rest of 2 is refused, not the same) }
+      if not OffPen(key, v, pn, raw) then Continue;
       { [R7-Y] below nought refused: kept negative for the paint order
-        [was: nought] }
-      if v.Kind = avkNumber then
+        [was: nought]; [R7-AB] a frame's value no finite number (a string
+        the canvas refuses, set at once; 'Infinity' tweened) refused the
+        same way [was: written raw, or not at all] }
+      if ShadowFrameNum(v, -1, x) then
       begin
-        AEl.Style.ShadowBlur := v.Num;
+        AEl.Style.ShadowBlur := x;
         AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasBlurLeft;
       end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowOffsetX' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then
+      if not OffPen(key, v, pn, raw) then Continue;
+      if ShadowFrameNum(v, cTyCanvasPhaseLeft, x) then
       begin
-        AEl.Style.ShadowOffsetX := v.Num;
+        AEl.Style.ShadowOffsetX := x;
         { [R7-Y] a value the frame writes is the canvas' to settle afresh }
         AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffXLeft;
       end;
@@ -7916,10 +7936,10 @@ begin
     end
     else if key = 'style.shadowOffsetY' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then
+      if not OffPen(key, v, pn, raw) then Continue;
+      if ShadowFrameNum(v, cTyCanvasPhaseLeft, x) then
       begin
-        AEl.Style.ShadowOffsetY := v.Num;
+        AEl.Style.ShadowOffsetY := x;
         AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffYLeft;
       end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);

@@ -457,7 +457,11 @@ begin
     { a fresh chart: the same text twice is no change at all }
     FChart.Option := '{}';
     FChart.Option := sc.Objects['option'].AsJSON;
-    FChart.DataZoomNow := NaN;
+    { [R7-AB] the event clock from the start, not the machine's (its first
+      event's instant) }
+    FChart.DataZoomNow := 0;
+    if sc.Arrays['steps'].Count > 0 then
+      FChart.DataZoomNow := sc.Arrays['steps'].Objects[0].Objects['event'].Floats['t'];
     FChart.SetBounds(0, 0, 800, 600);
     FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, 800, 600), 96);
     FActions := nil;
@@ -635,6 +639,9 @@ begin
     + ' "series": [{"type": "line", "data": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,'
     + ' 12, 13, 14, 15, 16, 17, 18, 19, 20]}],'
     + ' "dataZoom": [{"type": "slider", "start": 20, "end": 60}, {"type": "inside"}]}';
+  { [R7-AB] the throttle's clock stands still, not the machine's: the drag
+    and the wheel come at one instant, however loaded the machine }
+  FChart.DataZoomNow := 1000;
   FChart.SetBounds(0, 0, 800, 600);
   FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, 800, 600), 96);
   FActions := nil;

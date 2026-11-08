@@ -496,6 +496,15 @@ function TyElementCanvasTransform(const AEl: TTyChartElement; out AM: TTyMat2D):
 { [R7-Y] A PATTERN IN AN ELEMENT'S FRAME: APm (pattern px to css px) put
   under the transform AM (device px, ADs device px per css px) }
 procedure TyPatternUnder(const AM: TTyMat2D; ADs: Double; var APm: TTyDoubleArray);
+{ [R7-AB] AN ELEMENT'S GRADIENT AS ITS CANVAS GRADIENT IS MADE (zrender's
+  getCanvasGradient against getBoundingRect, in the element's own
+  coordinates): one made in a frame already (HasM) as it is; an element of
+  a symbol's frame that is no similarity (scaled unevenly, turned) in that
+  frame, against the box its path has there (grown by its pen there) --
+  AFrame that frame, device px; else against its box in device px (ADs
+  device px per css px), AFrame empty. }
+procedure TyElementGradientIn(const AEl: TTyChartElement; const AGrad: TTyChartGradient;
+  ADs: Double; out AX1, AY1, AX2, AY2, AR: Double; out AFrame: TTyDoubleArray);
 
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
@@ -2302,6 +2311,9 @@ begin
   if Result then Exit;
   for k := 0 to High(AEl.Caption.RtPieces) do
     if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
+      { [R7-AB] a shadow part, a font the canvas refuses }
+      or (AEl.Caption.RtPieces[k].ShadowLeft <> 0) or AEl.Caption.RtPieces[k].FontLeft
+      or (AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur < 0))
       or (AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft))
       or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft))
       { [R7-AA] a text shadow's }
@@ -2380,15 +2392,92 @@ begin
   APm[5] := m[1] * p[4] + m[3] * p[5] + m[5];
 end;
 
+{ a 2 x 2 frame that is a similarity: a turn by nought, a uniform scale --
+  a circle stays a circle and stripes stay square to their ramp }
+function FrameSimilar(const M: TTyMat2D): Boolean;
+begin
+  Result := (M[1] = 0) and (M[2] = 0) and (M[0] = M[3]);
+end;
+
+procedure TyElementGradientIn(const AEl: TTyChartElement; const AGrad: TTyChartGradient;
+  ADs: Double; out AX1, AY1, AX2, AY2, AR: Double; out AFrame: TTyDoubleArray);
+var
+  box: TTyXYWH;
+  bw, bh, d: Double;
+  k: Integer;
+begin
+  AFrame := nil;
+  if AGrad.HasM then
+  begin
+    TyResolveGradientXYWH(AGrad, TyRectToXYWH(TyRectF(0, 0, 1, 1)), AX1, AY1, AX2, AY2, AR);
+    SetLength(AFrame, 6);
+    for k := 0 to 5 do AFrame[k] := AGrad.M[k];
+    Exit;
+  end;
+  if (not AGrad.Global) and (AEl.Shape.HitSym <> '') and not FrameSimilar(AEl.Shape.HitM) then
+  begin
+    d := AEl.Shape.HitM[0] * AEl.Shape.HitM[3] - AEl.Shape.HitM[1] * AEl.Shape.HitM[2];
+    if (d <> 0) and not IsNan(d) and not IsInfinite(d) then
+    begin
+      { the box of the path createSymbol made, in the symbol's frame: a real
+        box where the shape names one, else the unit one (-1, -1, 2, 2) }
+      bw := 2;
+      bh := 2;
+      if (AEl.Shape.HitBoxW >= 0) and (AEl.Shape.HitBoxH >= 0)
+        and ((AEl.Shape.HitBoxW > 0) or (AEl.Shape.HitBoxH > 0)) then
+      begin
+        bw := AEl.Shape.HitBoxW;
+        bh := AEl.Shape.HitBoxH;
+      end;
+      box := TyZrBBox(TyZrSymbol(AEl.Shape.HitSym, -bw / 2, -bh / 2, bw, bh));
+      { (its pen in that frame: strokeNoScale, the width over the scale) }
+      if (AEl.Style.StrokeWidthLogical > 0)
+        and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+        box := TyGrowByStroke(box, AEl.Style.HasFill,
+          AEl.Style.StrokeWidthLogical * ADs / Sqrt(Abs(d)));
+      TyResolveGradientXYWH(AGrad, box, AX1, AY1, AX2, AY2, AR);
+      SetLength(AFrame, 6);
+      for k := 0 to 5 do AFrame[k] := AEl.Shape.HitM[k];
+      Exit;
+    end;
+  end;
+  if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
+  else
+  begin
+    box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
+    { [R7-Y] the renderer's box: Path.getBoundingRect grows by the stroke
+      when there is one }
+    if (AEl.Style.StrokeWidthLogical > 0)
+      and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+      box := TyGrowByStroke(box, AEl.Style.HasFill, AEl.Style.StrokeWidthLogical * ADs);
+  end;
+  TyResolveGradientXYWH(AGrad, box, AX1, AY1, AX2, AY2, AR);
+end;
+
 { [R7-Y] A HELD CANVASGRADIENT UNDER ANOTHER TRANSFORM: its points were made
   in the frame of the element that made it (AHasA / AA, else the css px
   frame), and land under the one filling with it -- device px both; a
-  radius by the scales' ratio }
+  radius by the scales' ratio. [R7-AB] One made in a frame (HasM) is that
+  frame's points under the new one; where the two frames differ by more
+  than a similarity, the points are taken back into the first and the
+  gradient made in the second (HasM): an ellipse, slanted stripes [was: a
+  circle of the area's radius, the points mapped] }
 function GradUnder(const AGrad: TTyChartGradient; AHasA: Boolean; const AA: TTyMat2D;
   AHasB: Boolean; const AB: TTyMat2D; ADs: Double): TTyChartGradient;
 var
   ma, mb: TTyMat2D;
-  d, r, lx, ly, sa, sb: Double;
+  d, r, lx, ly, sa, sb, c0, c1, c2, c3: Double;
+  k: Integer;
+
+  { [R7-AB] back into the frame it was made in }
+  procedure Back(var AX, AY: Double);
+  var u, v: Double;
+  begin
+    u := (ma[3] * (AX - ma[4]) - ma[2] * (AY - ma[5])) * r;
+    v := (-ma[1] * (AX - ma[4]) + ma[0] * (AY - ma[5])) * r;
+    AX := u;
+    AY := v;
+  end;
 
   procedure Map(var AX, AY: Double);
   var u, v: Double;
@@ -2419,12 +2508,34 @@ begin
     mb[0] := ADs;
     mb[3] := ADs;
   end;
+  { [R7-AB] made in a frame: the same points under the new one }
+  if AGrad.HasM then
+  begin
+    for k := 0 to 5 do Result.M[k] := mb[k];
+    Exit;
+  end;
   if (ma[0] = mb[0]) and (ma[1] = mb[1]) and (ma[2] = mb[2]) and (ma[3] = mb[3])
     and (ma[4] = mb[4]) and (ma[5] = mb[5]) then Exit;
   d := ma[0] * ma[3] - ma[1] * ma[2];
   { (a frame of no area: no way back -- held as it is) }
   if (d = 0) or IsNan(d) or IsInfinite(d) then Exit;
   r := 1 / d;
+  { [R7-AB] mb after ma's inverse no similarity: back into ma's frame, the
+    gradient made in mb's }
+  c0 := (mb[0] * ma[3] - mb[2] * ma[1]) * r;
+  c1 := (mb[1] * ma[3] - mb[3] * ma[1]) * r;
+  c2 := (-mb[0] * ma[2] + mb[2] * ma[0]) * r;
+  c3 := (-mb[1] * ma[2] + mb[3] * ma[0]) * r;
+  if (Abs(c1) > 1e-12 * (Abs(c0) + Abs(c3))) or (Abs(c2) > 1e-12 * (Abs(c0) + Abs(c3)))
+    or (Abs(c0 - c3) > 1e-12 * (Abs(c0) + Abs(c3))) then
+  begin
+    Back(Result.X, Result.Y);
+    if Result.Kind = cgkLinear then Back(Result.X2, Result.Y2)
+    else Result.R := AGrad.R / Sqrt(Abs(d));
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := mb[k];
+    Exit;
+  end;
   Map(Result.X, Result.Y);
   if Result.Kind = cgkLinear then Map(Result.X2, Result.Y2)
   else
@@ -2439,43 +2550,81 @@ end;
   ('transparent' where none) and blur where it blurs, else zrender's '#000'
   and none -- Text.ts sets a TSpan's shadow only for a textShadowBlur above
   nought }
-{ [R7-AA] the piece CaptionShadowOf reads the shadow of: the last with text,
-  where it blurs; -1 for none }
-function CaptionShadowPiece(const AEl: TTyChartElement): Integer;
-var k: Integer;
+{ [R7-AB] A LABEL'S TEXT SPANS' SHADOW, span by span from what the canvas
+  has (APart 0 the blur, 1 the offsets, 2 the colour): a span that casts one
+  (`textShadowBlur > 0`, whatever blur it then hands the canvas) its own --
+  a part the canvas refuses (ShadowLeft; a blur below nought; [R7-AA] a
+  colour no parser reads, the piece marked CanvasLeft 4 so the next pass
+  settles it again) the canvas' value, written into the span --, one that
+  casts none nought, zrender's '#000' the colour (TSpan's `|| 0`, its
+  default shadowColor); a caption of no span the same [was: the last
+  span's alone, a refused part nought; R7-AA's colour the last span's,
+  where it blurs, from the canvas before the label]. [R7-AC] AND A TEXT'S
+  BOX (a drawn rect piece) IN ITS PLACE AMONG THEM: it sets the canvas'
+  shadowColor, casting or not -- its own (RectPiece: the written one, else
+  the text style's prototype '#000'; one of no alpha 'transparent'), the
+  canvas' where it is a colour no parser reads (marked, CanvasLeft 4) }
+procedure CaptionShadowRun(var ARun: TTyCanvasRun; var AEl: TTyChartElement; APart: Integer);
+var k: Integer; pc: ^TTyRtPiece; any, box: Boolean;
 begin
-  Result := -1;
-  for k := High(AEl.Caption.RtPieces) downto 0 do
+  any := False;
+  box := False;
+  for k := 0 to High(AEl.Caption.RtPieces) do
   begin
-    if AEl.Caption.RtPieces[k].Text = '' then Continue;
-    if AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur > 0) then Result := k;
-    Exit;
-  end;
-end;
-
-procedure CaptionShadowOf(const AEl: TTyChartElement; out AColour: TTyChartColor;
-  out ABlur, AOffX, AOffY: Double);
-var k: Integer;
-begin
-  AColour := TTyChartColor($FF000000);
-  ABlur := 0;
-  AOffX := 0;
-  AOffY := 0;
-  for k := High(AEl.Caption.RtPieces) downto 0 do
-  begin
-    if AEl.Caption.RtPieces[k].Text = '' then Continue;
-    if AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur > 0) then
+    pc := @AEl.Caption.RtPieces[k];
+    if (APart = 2) and (pc^.Kind = rpkRect) and pc^.Drawn then
     begin
-      AColour := AEl.Caption.RtPieces[k].ShadowColor;
-      ABlur := AEl.Caption.RtPieces[k].ShadowBlur;
-      { [R7-Y] and its offsets (`textShadowOffsetX || 0`) }
-      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetX) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetX)) then
-        AOffX := AEl.Caption.RtPieces[k].ShadowOffsetX;
-      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetY) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetY)) then
-        AOffY := AEl.Caption.RtPieces[k].ShadowOffsetY;
+      box := True;
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else ARun.Cur.Shadow := pc^.ShadowColor;
+      Continue;
     end;
-    Exit;
+    if pc^.Text = '' then Continue;
+    any := True;
+    if not pc^.HasShadow then
+    begin
+      if APart = 0 then ARun.Cur.Blur := 0
+      else if APart = 1 then
+      begin
+        ARun.Cur.OffX := 0;
+        ARun.Cur.OffY := 0;
+      end
+      else ARun.Cur.Shadow := TTyChartColor($FF000000);
+    end
+    else if APart = 0 then
+    begin
+      if ((pc^.ShadowLeft and 1) <> 0) or (pc^.ShadowBlur < 0) then pc^.ShadowBlur := ARun.Cur.Blur
+      else ARun.Cur.Blur := pc^.ShadowBlur;
+    end
+    else if APart = 1 then
+    begin
+      if (pc^.ShadowLeft and 2) <> 0 then pc^.ShadowOffsetX := ARun.Cur.OffX
+      else ARun.Cur.OffX := pc^.ShadowOffsetX;
+      if (pc^.ShadowLeft and 4) <> 0 then pc^.ShadowOffsetY := ARun.Cur.OffY
+      else ARun.Cur.OffY := pc^.ShadowOffsetY;
+    end
+    else
+    begin
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else ARun.Cur.Shadow := pc^.ShadowColor;
+    end;
   end;
+  if any or box then Exit;
+  if APart = 0 then ARun.Cur.Blur := 0
+  else if APart = 1 then
+  begin
+    ARun.Cur.OffX := 0;
+    ARun.Cur.OffY := 0;
+  end
+  else ARun.Cur.Shadow := TTyChartColor($FF000000);
 end;
 
 function TyCanvasGroundOf(AShadow: TTyChartColor): TTyCanvasGround;
@@ -2504,6 +2653,12 @@ begin
   Result.Phase := ARun.Cur.Phase;
   Result.FillGrad := ARun.Cur.FillGrad;
   Result.StrokeGrad := ARun.Cur.StrokeGrad;
+  { [R7-AB] and the font the last text left (the axes' labels before the
+    series) [was: none, the canvas' own] }
+  Result.HasFont := ARun.Cur.HasFont;
+  Result.FontFamily := ARun.Cur.FontFamily;
+  Result.FontPx := ARun.Cur.FontPx;
+  Result.FontWeight := ARun.Cur.FontWeight;
 end;
 
 { the canvas' own state at the start of a zlevel's paint: its defaults, the
@@ -2556,22 +2711,20 @@ end;
   canvas keeps that CanvasGradient, not the element's spec) }
 function CanvasGradOf(const AGrad: TTyChartGradient; const AEl: TTyChartElement;
   ADs: Double): TTyChartGradient;
-var box: TTyXYWH; x1, y1, x2, y2, r: Double;
+var x1, y1, x2, y2, r: Double; fr: TTyDoubleArray; k: Integer;
 begin
   Result := AGrad;
   if (AGrad.Kind = cgkNone) or AGrad.Global then Exit;
-  if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
-  else
+  { [R7-Y] the renderer's box (TyElementGradientBox): Path.getBoundingRect
+    grows by the stroke when there is one [was: the shape's alone, a
+    stroke's gradient held off by half its width]; [R7-AB] in a symbol's
+    frame that is no similarity, as the renderer makes it there }
+  TyElementGradientIn(AEl, AGrad, ADs, x1, y1, x2, y2, r, fr);
+  if Length(fr) = 6 then
   begin
-    box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
-    { [R7-Y] the renderer's box (TyElementGradientBox): Path.getBoundingRect
-      grows by the stroke when there is one [was: the shape's alone, a
-      stroke's gradient held off by half its width] }
-    if (AEl.Style.StrokeWidthLogical > 0)
-      and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
-      box := TyGrowByStroke(box, AEl.Style.HasFill, AEl.Style.StrokeWidthLogical * ADs);
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := fr[k];
   end;
-  TyResolveGradientXYWH(AGrad, box, x1, y1, x2, y2, r);
   Result.Global := True;
   Result.X := x1;
   Result.Y := y1;
@@ -2583,9 +2736,8 @@ end;
 procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
 var
   clipped, cap, strokes, dashed: Boolean;
-  ds, blur, sEl, ps, ox, oy: Double;
+  ds, sEl, ps: Double;
   pm: TTyDoubleArray;
-  colour: TTyChartColor;
   elHasT: Boolean;
   elM: TTyMat2D;
   k: Integer;
@@ -2677,38 +2829,9 @@ begin
     AEl.Style.ShadowColor := ARun.Cur.Shadow
   else if (AEl.CanvasFlags and cTyCanvasOwnShadow) <> 0 then
     ARun.Cur.Shadow := AEl.CanvasShadow
-  else if cap then
-  begin
-    { [R7-AC] A TEXT'S BOX BEFORE ITS SPANS: each drawn box (a rect piece)
-      sets the canvas' shadowColor, casting or not -- its own (RectPiece:
-      the written one, else the text style's prototype '#000'; one of no
-      alpha 'transparent'), the one the canvas had where it is a colour no
-      parser reads (marked, CanvasLeft 4) -- and the span after it starts
-      from there [was: the box's shadow not counted, a refused one not
-      drawn] }
-    for k := 0 to High(AEl.Caption.RtPieces) do
-    begin
-      pc := @AEl.Caption.RtPieces[k];
-      if (pc^.Kind <> rpkRect) or not pc^.Drawn then Continue;
-      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
-      begin
-        pc^.CanvasLeft := pc^.CanvasLeft or 4;
-        pc^.ShadowColor := ARun.Cur.Shadow;
-      end
-      else ARun.Cur.Shadow := pc^.ShadowColor;
-    end;
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    { [R7-AA] a text span's shadowColor the canvas refuses: the one it had
-      (the piece marked, so the next pass settles it again) }
-    k := CaptionShadowPiece(AEl);
-    if (k >= 0) and ((colour = cTyCanvasColourLeft) or ((AEl.Caption.RtPieces[k].CanvasLeft and 4) <> 0)) then
-    begin
-      AEl.Caption.RtPieces[k].CanvasLeft := AEl.Caption.RtPieces[k].CanvasLeft or 4;
-      AEl.Caption.RtPieces[k].ShadowColor := ARun.Cur.Shadow;
-    end
-    else
-      ARun.Cur.Shadow := colour;
-  end
+  { ([R7-AA] a text span's shadowColor the canvas refuses: the one it had;
+    [R7-AB] span by span, from the span before it) }
+  else if cap then CaptionShadowRun(ARun, AEl, 2)
   else if (AEl.Style.ShadowColor shr 24) <> 0 then
     ARun.Cur.Shadow := AEl.Style.ShadowColor
   else
@@ -2716,21 +2839,13 @@ begin
   { [R7-V] the shadowBlur: refused below nought (kept), else its own }
   if (AEl.CanvasFlags and cTyCanvasBlurLeft) <> 0 then
     AEl.Style.ShadowBlur := ARun.Cur.Blur
-  else if cap then
-  begin
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    ARun.Cur.Blur := blur;
-  end
+  { ([R7-AB] its spans', each from the canvas', a refused one kept) }
+  else if cap then CaptionShadowRun(ARun, AEl, 0)
   else if AEl.Style.ShadowBlur > 0 then ARun.Cur.Blur := AEl.Style.ShadowBlur
   else ARun.Cur.Blur := 0;
   { [R7-Y] the shadow's offsets: `dpr * (value || 0)`, refused (kept) where
     that is no finite number; a text span's only where it blurs }
-  if cap then
-  begin
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    ARun.Cur.OffX := ox;
-    ARun.Cur.OffY := oy;
-  end
+  if cap then CaptionShadowRun(ARun, AEl, 1)
   else
   begin
     if (AEl.CanvasFlags and cTyCanvasOffXLeft) <> 0 then AEl.Style.ShadowOffsetX := ARun.Cur.OffX
@@ -2803,8 +2918,9 @@ begin
   { [R7-Y] THE FONT: a text sets `style.font || DEFAULT_FONT`, refused where
     the canvas does not parse it (the font it had: the last text's, else
     '10px sans-serif'); each piece of a rich text its own [was: the
-    label's own fallback] }
-  if cap then
+    label's own fallback]; [R7-AB] a graphic text's spans too (a text
+    element, its caption's size nought) [was: none] }
+  if cap or (Length(AEl.Caption.RtPieces) > 0) then
   begin
     if (Length(AEl.Caption.RtPieces) = 0) and ((AEl.CanvasFlags and cTyCanvasFontLeft) <> 0) then
     begin
@@ -2836,6 +2952,24 @@ begin
       for k := 0 to High(AEl.Caption.RtPieces) do
         if (AEl.Caption.RtPieces[k].Kind = rpkText) and (AEl.Caption.RtPieces[k].Text <> '') then
         begin
+          { [R7-AB] a span's font the canvas refuses: the one it had (the
+            span before's, the element before's, '10px sans-serif') }
+          if AEl.Caption.RtPieces[k].FontLeft then
+          begin
+            if ARun.Cur.HasFont then
+            begin
+              AEl.Caption.RtPieces[k].FontFamily := ARun.Cur.FontFamily;
+              AEl.Caption.RtPieces[k].FontSizePx := ARun.Cur.FontPx;
+              AEl.Caption.RtPieces[k].FontWeight := ARun.Cur.FontWeight;
+            end
+            else
+            begin
+              AEl.Caption.RtPieces[k].FontFamily := 'sans-serif';
+              AEl.Caption.RtPieces[k].FontSizePx := 10;
+              AEl.Caption.RtPieces[k].FontWeight := 400;
+            end;
+            Continue;
+          end;
           ARun.Cur.HasFont := True;
           ARun.Cur.FontFamily := AEl.Caption.RtPieces[k].FontFamily;
           ARun.Cur.FontPx := AEl.Caption.RtPieces[k].FontSizePx;

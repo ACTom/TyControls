@@ -228,6 +228,11 @@ begin
   FChart := TCkProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 1000;
+  FChart.BrushNow := 1000;
+  FChart.ParallelExpandNow := 1000;
+  FChart.TimelineNow := 1000;
   FLog := TKbLog.Create;
   FZoom := TCkZoomLog.Create;
   FChart.OnDataZoom := @FZoom.OnZoom;

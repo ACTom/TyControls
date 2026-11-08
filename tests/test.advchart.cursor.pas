@@ -198,6 +198,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.AnimationMode := camOff;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 1000;
+  FChart.BrushNow := 1000;
+  FChart.ParallelExpandNow := 1000;
+  FChart.TimelineNow := 1000;
   FChart.Measurer := TPtToPxMeasurer.Create(TZrSsrMeasurer.Create(
     TJSONObject(FMeasure).Objects['ratios'].Arrays['ratio'],
     TJSONObject(FMeasure).Objects['ratios'].Integers['firstCode']));
@@ -476,6 +481,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.AnimationMode := camOff;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 1000;
+  FChart.BrushNow := 1000;
+  FChart.ParallelExpandNow := 1000;
+  FChart.TimelineNow := 1000;
   FChart.SetBounds(0, 0, 300, 200);
   FBmp := TBGRABitmap.Create(300, 200, BGRA(255, 255, 255, 255));
 end;

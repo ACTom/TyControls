@@ -405,6 +405,15 @@ begin
   end;
   chart := TKbProbe.Create(FForm);
   other := TKbProbe.Create(FForm);
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  chart.DataZoomNow := 1000;
+  chart.BrushNow := 1000;
+  chart.ParallelExpandNow := 1000;
+  chart.TimelineNow := 1000;
+  other.DataZoomNow := 1000;
+  other.BrushNow := 1000;
+  other.ParallelExpandNow := 1000;
+  other.TimelineNow := 1000;
   bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
   phrases := 0;
   try
@@ -534,6 +543,11 @@ begin
   FChart := TKbProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 1000;
+  FChart.BrushNow := 1000;
+  FChart.ParallelExpandNow := 1000;
+  FChart.TimelineNow := 1000;
   FLog := TKbLog.Create;
   FBmp := nil;
 end;
@@ -1019,6 +1033,11 @@ begin
   try
     mouse.Parent := FForm;
     mouse.Controller := FCtl;
+    { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+    mouse.DataZoomNow := 1000;
+    mouse.BrushNow := 1000;
+    mouse.ParallelExpandNow := 1000;
+    mouse.TimelineNow := 1000;
     mouse.SetBounds(0, 0, 600, 400);
     mouse.Option := FChart.Option;
     mouse.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
