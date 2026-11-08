@@ -4078,8 +4078,9 @@ begin
     frame := AnimFrame;
     FZList := frame;
     { [R7-AG] the axes here, with the list's elements among their parts --
-      a ripple, an effect symbol of a lower z among them (FContBand) }
-    if FContBand and not FZMixed then PaintAxes(APainter, APPI, AMeasurer, True, frame);
+      a ripple, an effect symbol of a lower z among them (FContBand: the
+      axes are the dynamic layer's) }
+    if AxesDynamic and not FZMixed then PaintAxes(APainter, APPI, AMeasurer, True, frame);
     TySetZBand(-MaxInt, ComponentZLevel);
     try
       { [R7-AB] a trail on a zlevel above the components' is that level's

@@ -3866,7 +3866,7 @@ begin
     crosses the second's radius split circle of 32 at (208, 150) (red) }
   Draw('{"animation":false,"polar":[{"center":[160,150],"radius":80},{"center":[240,150],"radius":80}],'
     + '"radiusAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"axisLine":{"show":false},'
-    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":false}},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#0000ff","width":3}}},'
     + '{"polarIndex":1,"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisTick":{"show":false},'
     + '"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#ff0000","width":3}}}],'
     + '"angleAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"startAngle":0,"axisLine":{"show":false},'
@@ -3874,6 +3874,29 @@ begin
     + '{"polarIndex":1,"type":"value","min":0,"max":10,"startAngle":0,"show":false}],"series":[]}');
   px := FBmp.GetPixel(208, 150);
   AssertTrue(Format('the first polar''s angle split line over the second''s radius split circle: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 0, 255, 0));
+  { the two radius views' circles of 48 cross at (200, 123.5): the second's
+    (red) over the first's (blue) }
+  px := FBmp.GetPixel(200, 124);
+  AssertTrue(Format('the second polar''s radius split circle over the first''s: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 255, 0, 0));
+  { A NOTMERGE MAKES THE COMPONENTS' VIEWS ANEW, after the series' it keeps:
+    a radius axis' line (z2 1, east along y = 260) under the x axis' line
+    (z2 1, its view after the radius view's) still }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"polar":{"center":[200,260],"radius":90},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"startAngle":0,"show":false},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"scatter","symbolSize":0,"data":[[5,5]]}]}');
+  FChart.SetOption(FChart.Option, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  px := FBmp.GetPixel(250, 260);
+  AssertTrue(Format('the x axis'' line over the radius axis'' after a notMerge: (%d,%d,%d)',
     [px.red, px.green, px.blue]), Near(px, 0, 255, 0));
   { a radius axis up from (200, 260), its tick at nought along the x axis'
     line: the tick (magenta, z2 2) over the line (green, z2 1) }
@@ -4150,12 +4173,16 @@ begin
   One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
   { (the box' px decide the side the labels are on: the centre at css 202
     of 400 is right of the middle, at device 207 of 600 left of it) }
-  One('visualMap auto align', '{' + G + '"visualMap":{"left":192,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
+  One('visualMap auto align', '{' + G + '"visualMap":{"left":192,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
   One('visualMap piecewise', '{' + G + '"visualMap":{"type":"piecewise","left":20,"top":20,"min":0,"max":10,"splitNumber":3,"itemWidth":20,"itemHeight":14},"series":[{"type":"scatter","data":[[3,3,5]]}]}');
   InkAt('title text', '{' + G + '"title":{"text":"Tt","subtext":"Ss","left":20,"top":10},"series":[]}');
   InkAt('title box', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#888888"},"series":[]}');
   Tip('tooltip position', '{' + G + RTIP + ',"position":[100,60],"padding":8},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
   Tip('tooltip by the point', '{' + G + RTIP + '},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  { (on an axis: by the point, the gap of 20 css px down and right) }
+  Tip('tooltip on an axis', '{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+    + RTIP + ',"trigger":"axis","axisPointer":{"type":"none"}},"series":[{"type":"bar","name":"S","data":[3,5,7]}]}');
   Tip('tooltip html', '{' + G + '"tooltip":{"showDelay":0,"transitionDuration":0,"position":[100,60]},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
   { an x axis' ticks: the first at css 40 is snapped to 40.5 (a width of 1)
     -- device 60.75, its 1.5 px from 60 to 61.5: column 59 untouched [was:
