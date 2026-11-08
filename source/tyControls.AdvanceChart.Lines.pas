@@ -2550,53 +2550,16 @@ end;
   ('transparent' where none) and blur where it blurs, else zrender's '#000'
   and none -- Text.ts sets a TSpan's shadow only for a textShadowBlur above
   nought }
-{ [R7-AA] the piece CaptionShadowOf reads the shadow of: the last with text,
-  where it blurs; -1 for none }
-function CaptionShadowPiece(const AEl: TTyChartElement): Integer;
-var k: Integer;
-begin
-  Result := -1;
-  for k := High(AEl.Caption.RtPieces) downto 0 do
-  begin
-    if AEl.Caption.RtPieces[k].Text = '' then Continue;
-    if AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur > 0) then Result := k;
-    Exit;
-  end;
-end;
-
-procedure CaptionShadowOf(const AEl: TTyChartElement; out AColour: TTyChartColor;
-  out ABlur, AOffX, AOffY: Double);
-var k: Integer;
-begin
-  AColour := TTyChartColor($FF000000);
-  ABlur := 0;
-  AOffX := 0;
-  AOffY := 0;
-  for k := High(AEl.Caption.RtPieces) downto 0 do
-  begin
-    if AEl.Caption.RtPieces[k].Text = '' then Continue;
-    { ([R7-AB] a span that casts one: `textShadowBlur > 0`, whatever blur it
-      then hands the canvas) }
-    if AEl.Caption.RtPieces[k].HasShadow then
-    begin
-      AColour := AEl.Caption.RtPieces[k].ShadowColor;
-      ABlur := AEl.Caption.RtPieces[k].ShadowBlur;
-      { [R7-Y] and its offsets (`textShadowOffsetX || 0`) }
-      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetX) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetX)) then
-        AOffX := AEl.Caption.RtPieces[k].ShadowOffsetX;
-      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetY) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetY)) then
-        AOffY := AEl.Caption.RtPieces[k].ShadowOffsetY;
-    end;
-    Exit;
-  end;
-end;
-
 { [R7-AB] A LABEL'S TEXT SPANS' SHADOW, span by span from what the canvas
-  has (APart 0 the blur, 1 the offsets): a span that casts one its own --
-  a part the canvas refuses (ShadowLeft; a blur below nought) the canvas'
-  value, written into the span --, one that casts none nought (TSpan's
-  `|| 0`); a caption of no span nought [was: the last span's alone, a
-  refused part nought] }
+  has (APart 0 the blur, 1 the offsets, 2 the colour): a span that casts one
+  (`textShadowBlur > 0`, whatever blur it then hands the canvas) its own --
+  a part the canvas refuses (ShadowLeft; a blur below nought; [R7-AA] a
+  colour no parser reads, the piece marked CanvasLeft 4 so the next pass
+  settles it again) the canvas' value, written into the span --, one that
+  casts none nought, zrender's '#000' the colour (TSpan's `|| 0`, its
+  default shadowColor); a caption of no span the same [was: the last
+  span's alone, a refused part nought; R7-AA's colour the last span's,
+  where it blurs, from the canvas before the label] }
 procedure CaptionShadowRun(var ARun: TTyCanvasRun; var AEl: TTyChartElement; APart: Integer);
 var k: Integer; pc: ^TTyRtPiece; any: Boolean;
 begin
@@ -2609,32 +2572,43 @@ begin
     if not pc^.HasShadow then
     begin
       if APart = 0 then ARun.Cur.Blur := 0
-      else
+      else if APart = 1 then
       begin
         ARun.Cur.OffX := 0;
         ARun.Cur.OffY := 0;
-      end;
+      end
+      else ARun.Cur.Shadow := TTyChartColor($FF000000);
     end
     else if APart = 0 then
     begin
       if ((pc^.ShadowLeft and 1) <> 0) or (pc^.ShadowBlur < 0) then pc^.ShadowBlur := ARun.Cur.Blur
       else ARun.Cur.Blur := pc^.ShadowBlur;
     end
-    else
+    else if APart = 1 then
     begin
       if (pc^.ShadowLeft and 2) <> 0 then pc^.ShadowOffsetX := ARun.Cur.OffX
       else ARun.Cur.OffX := pc^.ShadowOffsetX;
       if (pc^.ShadowLeft and 4) <> 0 then pc^.ShadowOffsetY := ARun.Cur.OffY
       else ARun.Cur.OffY := pc^.ShadowOffsetY;
+    end
+    else
+    begin
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else ARun.Cur.Shadow := pc^.ShadowColor;
     end;
   end;
   if any then Exit;
   if APart = 0 then ARun.Cur.Blur := 0
-  else
+  else if APart = 1 then
   begin
     ARun.Cur.OffX := 0;
     ARun.Cur.OffY := 0;
-  end;
+  end
+  else ARun.Cur.Shadow := TTyChartColor($FF000000);
 end;
 
 function TyCanvasGroundOf(AShadow: TTyChartColor): TTyCanvasGround;
@@ -2746,9 +2720,8 @@ end;
 procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
 var
   clipped, cap, strokes, dashed: Boolean;
-  ds, blur, sEl, ps, ox, oy: Double;
+  ds, sEl, ps: Double;
   pm: TTyDoubleArray;
-  colour: TTyChartColor;
   elHasT: Boolean;
   elM: TTyMat2D;
   k: Integer;
@@ -2840,20 +2813,9 @@ begin
     AEl.Style.ShadowColor := ARun.Cur.Shadow
   else if (AEl.CanvasFlags and cTyCanvasOwnShadow) <> 0 then
     ARun.Cur.Shadow := AEl.CanvasShadow
-  else if cap then
-  begin
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    { [R7-AA] a text span's shadowColor the canvas refuses: the one it had
-      (the piece marked, so the next pass settles it again) }
-    k := CaptionShadowPiece(AEl);
-    if (k >= 0) and ((colour = cTyCanvasColourLeft) or ((AEl.Caption.RtPieces[k].CanvasLeft and 4) <> 0)) then
-    begin
-      AEl.Caption.RtPieces[k].CanvasLeft := AEl.Caption.RtPieces[k].CanvasLeft or 4;
-      AEl.Caption.RtPieces[k].ShadowColor := ARun.Cur.Shadow;
-    end
-    else
-      ARun.Cur.Shadow := colour;
-  end
+  { ([R7-AA] a text span's shadowColor the canvas refuses: the one it had;
+    [R7-AB] span by span, from the span before it) }
+  else if cap then CaptionShadowRun(ARun, AEl, 2)
   else if (AEl.Style.ShadowColor shr 24) <> 0 then
     ARun.Cur.Shadow := AEl.Style.ShadowColor
   else

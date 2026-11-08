@@ -180,6 +180,10 @@ var
   pend: TTyZrRectArray;
   pendW: Double;
   drewFont: TTyStyleSet;
+  { [R7-AB after R7-AA] the mark of the split line BatchLine draws (-1 for
+    another kind), each pending Line's }
+  lineIx: Integer;
+  pendIx: TTyIntegerArray;
   horiz: Boolean;
   lblH, lblW: Integer;
   scaleTicks: TTyScaleTickArray;
@@ -356,6 +360,8 @@ var
     SetLength(pend, n + 1);
     pend[n] := TyRectToXYWH(TyRectF(Min(AX1, AX2), Min(AY1, AY2), Max(AX1, AX2), Max(AY1, AY2)));
     pendW := APainter.ScaleF(AWidthLogical);
+    SetLength(pendIx, n + 1);
+    pendIx[n] := lineIx;
   end;
 
   { [R7-Z] a part as it is drawn (CompDrawn): its pen, or its text's fill }
@@ -397,17 +403,33 @@ var
     an empty path, which a fully thinned-away set of minor ticks produces.
     In the piece's own pen [R5-B: in the skin's colour and width]. }
   procedure StrokeBatch(const AStroke: TTyAxisStroke; AKind: Byte; AZ2: Integer);
-  var k: Integer;
+  var k: Integer; sb, sx, sy: Double;
   begin
     if batched > 0 then
     begin
       TyStrokeAxisPath(APainter, AStroke);
       if AStroke.Drawn then Drew(AKind, AZ2, AStroke, False, 0);
-      { [R7-AB] where its Lines are }
-      for k := 0 to High(pend) do CompRect(AAxis, AKind, pend[k], pendW, False);
+      { [R7-AB] where its Lines are -- [R7-AB after R7-AA] each its mark, and
+        the shadow its pen casts (getPaintRect grows by it) }
+      sb := 0;
+      sx := 0;
+      sy := 0;
+      if AStroke.HasShadow then
+      begin
+        if not (IsNan(AStroke.Shadow.Blur) or IsInfinite(AStroke.Shadow.Blur)) then
+          sb := APainter.ScaleF(AStroke.Shadow.Blur);
+        if not (IsNan(AStroke.Shadow.OffsetX) or IsInfinite(AStroke.Shadow.OffsetX)
+          or TyPhaseLeft(AStroke.Shadow.OffsetX)) then
+          sx := APainter.ScaleF(AStroke.Shadow.OffsetX);
+        if not (IsNan(AStroke.Shadow.OffsetY) or IsInfinite(AStroke.Shadow.OffsetY)
+          or TyPhaseLeft(AStroke.Shadow.OffsetY)) then
+          sy := APainter.ScaleF(AStroke.Shadow.OffsetY);
+      end;
+      for k := 0 to High(pend) do CompRect(AAxis, AKind, pend[k], pendW, False, pendIx[k], sb, sx, sy);
     end;
     batched := 0;
     pend := nil;
+    pendIx := nil;
   end;
 
   { [R7-AB] a text of AW x AH at (AX, AY) as anchored, turned by ARot about
@@ -676,6 +698,18 @@ begin
         Continue;
       { ([R7-AA] the band as drawn: CompDrawn) }
       CompDrewArea(AAxis, TTyChartColor(areaFill.Color));
+      { [R7-AB after R7-AA] where the band's Rect lies (its part's index) }
+      if ProxArea('area_' + TyJsNumberToString(spec^.SplitAreaMarks[i].Value), areaR) then
+        CompRect(AAxis, cpkSplitArea, TyRectToXYWH(TyRectF(areaR.Left, areaR.Top, areaR.Right,
+          areaR.Bottom)), 0, False, i)
+      else if horiz then
+        CompRect(AAxis, cpkSplitArea, TyRectToXYWH(TyRectF(
+          Min(spec^.SplitAreaMarks[i].Coord, spec^.SplitAreaMarks[i + 1].Coord), APlot.Top,
+          Max(spec^.SplitAreaMarks[i].Coord, spec^.SplitAreaMarks[i + 1].Coord), APlot.Bottom)), 0, False, i)
+      else
+        CompRect(AAxis, cpkSplitArea, TyRectToXYWH(TyRectF(APlot.Left,
+          Min(spec^.SplitAreaMarks[i].Coord, spec^.SplitAreaMarks[i + 1].Coord), APlot.Right,
+          Max(spec^.SplitAreaMarks[i].Coord, spec^.SplitAreaMarks[i + 1].Coord))), 0, False, i);
       { areaStyle.opacity over the band's own alpha [R5-B] }
       areaFill.Color := TyAxisAreaAlpha(areaFill.Color, furn.AreaOpacity);
       bandLo := spec^.SplitAreaMarks[i].Coord;
@@ -763,10 +797,13 @@ begin
           and (spec^.SplitLineMarks[i].ColourIndex <> ink) then Continue;
         if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
         along := spec^.SplitLineMarks[i].Coord;
+        { ([R7-AB after R7-AA] its mark: the part it is) }
+        lineIx := i;
         if horiz then
           BatchLine(along, APlot.Top, along, APlot.Bottom, splitK.WidthLogical)
         else
           BatchLine(APlot.Left, along, APlot.Right, along, splitK.WidthLogical);
+        lineIx := -1;
         { [R5-G] a Line per split line too (CartesianAxisView, not merged) }
         if (inkK.Gradient.Kind <> cgkNone) or inkK.HasShadow then
         begin
@@ -1751,6 +1788,9 @@ begin
         e.Datum.DataIndex := ink;
         if not (splitK.WidthLogical > 0) then e.Style.StrokeWidthLogical := 0;
       end;
+      { [R7-AB after R7-AA] the Line's mark (a dirty block brushes the ones
+        meeting it) }
+      e.Datum.RawDataIndex := i;
       Add(cpkSplit, 0, False, e);
     end;
   if furn.ShowMinorSplitLine and (minorSplitK.Drawn or minorSplitK.Inked) and minors then
@@ -2407,7 +2447,7 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH;
-  APen: Double; AText: Boolean);
+  APen: Double; AText: Boolean; AIndex: Integer; ABlur, AOffX, AOffY: Double);
 var n: Integer; r: TTyXYWH; w: Double;
 begin
   r := AR;
@@ -2423,19 +2463,22 @@ begin
     r.W := r.W + w;
     r.H := r.H + w;
   end;
-  if AText then r := TyZrPaintRect(r, 0, 0, 0, cTyTextDirtyTolerance)
-  else r := TyZrPaintRect(r, 0, 0, 0, 0);
+  { ([R7-AB after R7-AA] and by the shadow it casts: the blur on every side,
+    the offsets) }
+  if AText then r := TyZrPaintRect(r, ABlur, AOffX, AOffY, cTyTextDirtyTolerance)
+  else r := TyZrPaintRect(r, ABlur, AOffX, AOffY, 0);
   n := Length(FCompRects);
   SetLength(FCompRects, n + 1);
   FCompRects[n].Owner := AOwner;
   FCompRects[n].Kind := AKind;
   FCompRects[n].R := r;
+  FCompRects[n].Index := AIndex;
 end;
 
 function TTyCustomAdvanceChart.CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
 var
   run: TTyCanvasRun;
-  i, k, p: Integer;
+  i, k, p, ix: Integer;
   pe: PTyChartElement;
   el: TTyChartElement;
   r: TTyXYWH;
@@ -2460,11 +2503,15 @@ begin
       p := p - FCompNg;
       if p > High(FCompParts) then Continue;
       { the rects its kind was drawn at: one meeting the block; none
-        recorded, every block }
+        recorded, every block -- [R7-AB after R7-AA] a split line and a
+        split area band (a Line a mark, a Rect a band) its own }
+      ix := -1;
+      if FCompParts[p].Kind in [cpkSplit, cpkSplitArea] then ix := FCompParts[p].El.Datum.RawDataIndex;
       meets := False;
       drawn := False;
       for k := 0 to High(FCompRects) do
-        if (FCompRects[k].Owner = FCompParts[p].Owner) and (FCompRects[k].Kind = FCompParts[p].Kind) then
+        if (FCompRects[k].Owner = FCompParts[p].Owner) and (FCompRects[k].Kind = FCompParts[p].Kind)
+          and ((ix < 0) or (FCompRects[k].Index < 0) or (FCompRects[k].Index = ix)) then
         begin
           drawn := True;
           if TyZrRectIntersect(FCompRects[k].R, ABlock) then

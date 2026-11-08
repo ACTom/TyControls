@@ -923,6 +923,9 @@ type
     Owner: TObject;
     Kind: Byte;
     R: TTyXYWH;
+    { [R7-AB after R7-AA] which of its kind's parts (a split line's mark, a
+      split area's band: the part's Datum.RawDataIndex); -1 every one }
+    Index: Integer;
   end;
   TTyCompRectArray = array of TTyCompRect;
 
@@ -3558,9 +3561,11 @@ type
       after the series meets }
     procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
     { [R7-AB] a part of AOwner of kind AKind drawn at AR (device px: its
-      getPaintRect is taken from it) }
+      getPaintRect is taken from it) -- [R7-AB after R7-AA] AIndex which of
+      the kind's parts (-1 every one), and the shadow it casts (device px) }
     procedure CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH; APen: Double;
-      AText: Boolean);
+      AText: Boolean; AIndex: Integer = -1; ABlur: Double = 0; AOffX: Double = 0;
+      AOffY: Double = 0);
     { [R7-AB] THE CANVAS A DIRTY BLOCK STARTS ITS SERIES FROM: each block
       saves the context, brushes afresh (prevEl null) from the canvas' own
       state and restores it, and only the elements meeting it are brushed --
