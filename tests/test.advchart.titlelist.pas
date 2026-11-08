@@ -563,10 +563,12 @@ const
     '{"animation":false,"grid":{"left":40,"right":40,"top":60,"bottom":40},"xAxis":{},"yAxis":{},'
       + '"title":{"text":"Over a plot","left":60,"top":20},"series":[{"type":"line","data":[[1,1],[5,3]]}]}');
 var
-  k, ppi, x, y, ink: Integer;
+  k, ppi, x, y, ink, minX, maxX: Integer;
+  wid: array[0..1] of Integer;
   p: TBGRAPixel;
 begin
   for k := 0 to High(cOpts) do
+  begin
     for ppi := 0 to 1 do
     begin
       if ppi = 0 then NewChart(400, 300) else NewChart(600, 450);
@@ -576,15 +578,28 @@ begin
       FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96 + 48 * ppi);
       Save(Format('alone%d_%d', [k, 96 + 48 * ppi]));
       ink := 0;
+      minX := MaxInt;
+      maxX := -1;
       for y := 0 to FBmp.Height - 1 do
         for x := 0 to FBmp.Width - 1 do
         begin
           p := FBmp.GetPixel(x, y);
-          if (p.red < 200) or (p.green < 200) or (p.blue < 200) then Inc(ink);
+          if (p.red < 200) or (p.green < 200) or (p.blue < 200) then
+          begin
+            Inc(ink);
+            if x < minX then minX := x;
+            if x > maxX then maxX := x;
+          end;
         end;
+      wid[ppi] := maxX - minX;
       AssertTrue(Format('%d at %d PPI: something drawn (%d px)', [k, 96 + 48 * ppi, ink]), ink > 30);
       AssertTrue(Format('%d: a title frame noted', [k]), Length(FChart.Titles) > 0);
     end;
+    { the rich block at 144 PPI one and a half times the one at 96 }
+    if k = 1 then
+      AssertTrue(Format('the block %d px wide at 144 PPI, %d at 96', [wid[1], wid[0]]),
+        Abs(wid[1] - 1.5 * wid[0]) <= 4);
+  end;
   { A BOX OF NO FILL AND NO PEN CASTS NO SHADOW: the Rect is in the list
     (it hands the canvas its fill), its fill transparent -- nothing drawn,
     the words white on white }
