@@ -311,6 +311,18 @@ function cases() {
     { id: 'zl-prog-dz', option: NA(Object.assign({}, XY, { series: [SC(PS(40), { progressive: 10, progressiveThreshold: 30 })],
       dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'filter', startValue: 0, endValue: 4 }] })),
       steps: [{ act: { type: 'dataZoom', startValue: 0, endValue: 10 } }] },
+    // two trails of one trailLength, more rows than their threshold: the ids
+    // their keys (a level each), not the trailLength (one shared)
+    { id: 'zl-prog-trails', anim: true, option: A(Object.assign({}, XY, { series: [
+      LN(2, { progressiveThreshold: 50, data: PL(60) }), LN(2, { progressiveThreshold: 50, data: PL(60) })] })),
+      steps: [{ t: 100 }] },
+    // preventIncremental: a heatmap on a geo (lng / lat) is not progressive, on a grid it is
+    { id: 'zl-prog-heat-geo', option: NA({ geo: { map: 'vl-sq' }, visualMap: { min: 0, max: 1, show: false },
+      xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e', 'f'] }, yAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'] },
+      series: [{ type: 'heatmap', coordinateSystem: 'geo', progressive: 10, progressiveThreshold: 20,
+        data: Array.from({ length: 30 }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10, (i % 10) / 10]) },
+      { type: 'heatmap', progressive: 10, progressiveThreshold: 20,
+        data: Array.from({ length: 30 }, (_, i) => [i % 6, Math.floor(i / 6), (i % 10) / 10]) }] }) },
   ];
 }
 
