@@ -158,6 +158,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.AnimationMode := camOff;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 1000;
+  FChart.BrushNow := 1000;
+  FChart.ParallelExpandNow := 1000;
+  FChart.TimelineNow := 1000;
   FChart.SetBounds(0, 0, ACase.Integers['W'], ACase.Integers['H']);
   FChart.SetOption(ACase.Objects['option'].AsJSON, True);
   AssertEquals(FWhere + ' parses', '', FChart.OptionError);

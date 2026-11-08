@@ -451,6 +451,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.TooltipNow := 0;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 0;
+  FChart.BrushNow := 0;
+  FChart.ParallelExpandNow := 0;
+  FChart.TimelineNow := 0;
   for i := 0 to High(cTypes) do FChart.ChartOn(cTypes[i], @FLog.Handle);
   { brushselected where the option has a brush: upstream's visual stage
     fires an empty one on many an update otherwise }
@@ -1175,6 +1180,11 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.TooltipNow := 0;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  FChart.DataZoomNow := 0;
+  FChart.BrushNow := 0;
+  FChart.ParallelExpandNow := 0;
+  FChart.TimelineNow := 0;
   FChart.Option := AOption;
   FChart.SetBounds(0, 0, 600, 400);
   Paint;
