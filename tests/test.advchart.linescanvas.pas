@@ -61,7 +61,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart;
 type
   TLcProbe = class(TTyAdvanceChart)
   public
@@ -1269,6 +1269,18 @@ var
   effs: array of TTyPointF;
   effr: array of Double;
   ok: Boolean;
+  { [R7-AB] a trail's line: points along it and their ink at the first
+    sample }
+  lineAt: array of TTyPointF;
+  lineInk0: array of Double;
+  lineKey: array of string;
+
+  function InkOf(AX, AY: Double): Double;
+  var p0: TBGRAPixel;
+  begin
+    p0 := FBmp.GetPixel(Trunc(AX), Trunc(AY));
+    Result := Sqrt(Sqr(255 - p0.red) + Sqr(255 - p0.green) + Sqr(255 - p0.blue));
+  end;
 
   procedure EffectsOf(AEls: TJSONArray);
   var k2: Integer; o2: TJSONObject; a: TJSONArray;
@@ -1334,6 +1346,9 @@ begin
     FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
     frames := c.Arrays['frames'];
     ever := nil;
+    lineAt := nil;
+    lineInk0 := nil;
+    lineKey := nil;
     for j := 0 to frames.Count - 1 do
     begin
       fr := frames.Objects[j];
@@ -1351,6 +1366,68 @@ begin
             SetLength(ever, Length(ever) + 1);
             ever[High(ever)] := rr;
           end;
+      { [R7-AB] A TRAIL'S LINE (its layer motion-blurred): at the first
+        sample, points along it and their ink; at the last, one away from
+        every block repainted so far has faded (the layer faded whole every
+        paint, only the blocks brushed again), one in the last paint's
+        block away from the effect symbols has its full ink back }
+      if Pos('trail', id) > 0 then
+      begin
+        els := fr.Arrays['els'];
+        if j = 0 then
+          for k := 0 to els.Count - 1 do
+          begin
+            rec := els.Objects[k];
+            if (rec.Strings['key'][1] <> 'l') or (rec.Find('pb') = nil)
+              or (rec.Find('pb').JSONType <> jtArray) then Continue;
+            y := (HexD(rec.Arrays['pb'].Strings[1]) + HexD(rec.Arrays['pb'].Strings[3])) / 2;
+            x := HexD(rec.Arrays['pb'].Strings[0]) + 6;
+            while x < HexD(rec.Arrays['pb'].Strings[2]) - 6 do
+            begin
+              SetLength(lineAt, Length(lineAt) + 1);
+              SetLength(lineInk0, Length(lineInk0) + 1);
+              SetLength(lineKey, Length(lineKey) + 1);
+              lineAt[High(lineAt)] := TyPointF(x, y);
+              lineInk0[High(lineInk0)] := InkOf(x, y);
+              lineKey[High(lineKey)] := rec.Strings['key'];
+              x := x + 7;
+            end;
+          end
+        else if j = frames.Count - 1 then
+        begin
+          EffectsOf(els);
+          got := 0;
+          for q := 0 to High(lineAt) do
+          begin
+            ok := True;
+            for n := 0 to High(ever) do
+              if (lineAt[q].X > ever[n].Left - 4) and (lineAt[q].X < ever[n].Right + 4)
+                and (lineAt[q].Y > ever[n].Top - 4) and (lineAt[q].Y < ever[n].Bottom + 4) then ok := False;
+            Inc(FCompared);
+            if ok then
+            begin
+              { never brushed again: faded by lastFrameAlpha every paint }
+              Inc(got);
+              if not (InkOf(lineAt[q].X, lineAt[q].Y) <= 0.85 * lineInk0[q]) then
+                Miss(Format('%s %s: ink %g at (%g,%g), %g at the first sample, upstream faded', [id,
+                  lineKey[q], InkOf(lineAt[q].X, lineAt[q].Y), lineAt[q].X, lineAt[q].Y, lineInk0[q]]));
+            end
+            else if ClearOfEffects(lineAt[q].X, lineAt[q].Y, 4) then
+            begin
+              ok := False;
+              p := paints.Count - 1;
+              for b := 0 to paints.Arrays[p].Count - 1 do
+                if RectOfHex(paints.Arrays[p].Items[b], rr) and (lineAt[q].X > rr.Left + 2)
+                  and (lineAt[q].X < rr.Right - 2) and (lineAt[q].Y > rr.Top + 2) and (lineAt[q].Y < rr.Bottom - 2) then
+                  ok := True;
+              if ok and not (InkOf(lineAt[q].X, lineAt[q].Y) >= 0.9 * lineInk0[q]) then
+                Miss(Format('%s %s: ink %g at (%g,%g) in a block, %g at the first sample', [id,
+                  lineKey[q], InkOf(lineAt[q].X, lineAt[q].Y), lineAt[q].X, lineAt[q].Y, lineInk0[q]]));
+            end;
+          end;
+          AssertTrue(id + ': points away from the blocks', got > 4);
+        end;
+      end;
       { (the first sample's last paints are setOption's own flush's leftovers) }
       if j = 0 then Continue;
       els := fr.Arrays['els'];
@@ -1521,6 +1598,78 @@ var
   t: Double;
   bb: TTyRectF;
   px: TBGRAPixel;
+  gfr: TTyDoubleArray;
+
+  { [R7-AB] AS DRAWN: points of the element's path where upstream's ramp
+    (the op's transform AM over the gradient's arguments AA, in the frame
+    they were made in) is half way -- a radial one's half radius each way
+    from its centre, a linear one's middle and either side of it along the
+    stripe -- inside the unit box: one colour at all of them (an ellipse,
+    a slanted stripe; a circle or a square stripe in their place puts them
+    at different points of the ramp) }
+  procedure GradInk(const AWhere: string; const AM: array of Double; AA: TJSONArray; ALinear: Boolean);
+  var
+    q3, k3, seen, ix, iy: Integer;
+    lx, ly, dx, dy, dl, gx, gy, fx, fy: Double;
+    want: TBGRAPixel;
+
+    { the bitmap at (AX, AY) between the four pixel centres round it }
+    function Bilinear(AX, AY: Double): TBGRAPixel;
+    var p00, p10, p01, p11: TBGRAPixel;
+    begin
+      ix := Floor(AX - 0.5);
+      iy := Floor(AY - 0.5);
+      fx := AX - 0.5 - ix;
+      fy := AY - 0.5 - iy;
+      p00 := FBmp.GetPixel(ix, iy);
+      p10 := FBmp.GetPixel(ix + 1, iy);
+      p01 := FBmp.GetPixel(ix, iy + 1);
+      p11 := FBmp.GetPixel(ix + 1, iy + 1);
+      Result.red := Round((p00.red * (1 - fx) + p10.red * fx) * (1 - fy) + (p01.red * (1 - fx) + p11.red * fx) * fy);
+      Result.green := Round((p00.green * (1 - fx) + p10.green * fx) * (1 - fy) + (p01.green * (1 - fx) + p11.green * fx) * fy);
+      Result.blue := Round((p00.blue * (1 - fx) + p10.blue * fx) * (1 - fy) + (p01.blue * (1 - fx) + p11.blue * fx) * fy);
+      Result.alpha := 255;
+    end;
+
+  begin
+    if Copy(id, 1, 8) <> 'ab-grad-' then Exit;
+    want := BGRAPixelTransparent;
+    seen := 0;
+    for q3 := 0 to 3 do
+    begin
+      if ALinear then
+      begin
+        dx := -(HexD(AA.Strings[3]) - HexD(AA.Strings[1]));
+        dy := HexD(AA.Strings[2]) - HexD(AA.Strings[0]);
+        dl := Sqrt(dx * dx + dy * dy);
+        if dl = 0 then Exit;
+        lx := (HexD(AA.Strings[0]) + HexD(AA.Strings[2])) / 2 + dx / dl * (q3 - 1.5) * 0.4;
+        ly := (HexD(AA.Strings[1]) + HexD(AA.Strings[3])) / 2 + dy / dl * (q3 - 1.5) * 0.4;
+      end
+      else
+      begin
+        lx := HexD(AA.Strings[3]) + 0.5 * HexD(AA.Strings[5]) * Cos(q3 * Pi / 2);
+        ly := HexD(AA.Strings[4]) + 0.5 * HexD(AA.Strings[5]) * Sin(q3 * Pi / 2);
+      end;
+      if (Abs(lx) > 0.85) or (Abs(ly) > 0.85) then Continue;
+      gx := AM[0] * lx + AM[2] * ly + AM[4];
+      gy := AM[1] * lx + AM[3] * ly + AM[5];
+      px := Bilinear(gx, gy);
+      Inc(seen);
+      if seen = 1 then
+      begin
+        want := px;
+        Continue;
+      end;
+      Inc(FCompared);
+      k3 := Max(Abs(px.red - want.red), Max(Abs(px.green - want.green), Abs(px.blue - want.blue)));
+      if k3 > 6 then
+        Miss(Format('%s: half way at (%g,%g) drawn (%d,%d,%d), at the first such point (%d,%d,%d)',
+          [AWhere, gx, gy, px.red, px.green, px.blue, want.red, want.green, want.blue]));
+    end;
+    AssertTrue(AWhere + ': half-way points', seen >= 3);
+  end;
+
 begin
   FBad := 0;
   FCompared := 0;
@@ -1815,7 +1964,35 @@ begin
           Miss(where + ': no gradient');
           Continue;
         end;
-        TyResolveGradientXYWH(grad, TyElementGradientBox(el, 96), x1, y1, x2, y2, gr);
+        { [R7-AB] MADE IN A FRAME (a symbol's that is no similarity, or a
+          held one under the filling element's): the frame is the op's
+          transform and the points are the arguments as made }
+        TyElementGradientIn(el, grad, 1, x1, y1, x2, y2, gr, gfr);
+        if Length(gfr) = 6 then
+        begin
+          for n := 0 to 5 do
+            if Abs(gfr[n] - m[n]) > 1e-6 then
+            begin
+              Miss(Format('%s: frame [%g %g %g %g %g %g], upstream [%g %g %g %g %g %g]', [where,
+                gfr[0], gfr[1], gfr[2], gfr[3], gfr[4], gfr[5], m[0], m[1], m[2], m[3], m[4], m[5]]));
+              Break;
+            end;
+          if kind = 'linear' then
+          begin
+            if (Abs(x1 - HexD(a.Strings[0])) > 1e-6) or (Abs(y1 - HexD(a.Strings[1])) > 1e-6)
+              or (Abs(x2 - HexD(a.Strings[2])) > 1e-6) or (Abs(y2 - HexD(a.Strings[3])) > 1e-6) then
+              Miss(Format('%s: linear in its frame (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+                x1, y1, x2, y2, HexD(a.Strings[0]), HexD(a.Strings[1]), HexD(a.Strings[2]),
+                HexD(a.Strings[3])]));
+          end
+          else if (Abs(x1 - HexD(a.Strings[3])) > 1e-6) or (Abs(y1 - HexD(a.Strings[4])) > 1e-6)
+            or (Abs(gr - HexD(a.Strings[5])) > 1e-6) then
+            Miss(Format('%s: radial in its frame (%g,%g) r %g, upstream (%g,%g) r %g', [where,
+              x1, y1, gr, HexD(a.Strings[3]), HexD(a.Strings[4]), HexD(a.Strings[5])]));
+          GradInk(where, m, a, kind = 'linear');
+          Continue;
+        end;
+        GradInk(where, m, a, kind = 'linear');
         if kind = 'linear' then
         begin
           ux1 := m[0] * HexD(a.Strings[0]) + m[2] * HexD(a.Strings[1]) + m[4];

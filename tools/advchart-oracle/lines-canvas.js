@@ -867,6 +867,26 @@ function cases() {
         { value: [8, 8], label: { show: true, formatter: '{a|Ef}', rich: { a: { textShadowBlur: 'zz', textShadowOffsetX: 'q' } },
           textShadowColor: '#ff00ff', textShadowBlur: 4, textShadowOffsetX: 2 } },
         { value: [9, 3], label: { show: true, formatter: 'Gh', textShadowOffsetX: 'abc' } }] }]), [0], { y: true }],
+    // [R7-AB] 4. a gradient under a transform that is no similarity: a
+    //    symbol's frame scaled unevenly -- its own radial gradient is an
+    //    ellipse (the circle in its frame), and the CanvasGradient the canvas
+    //    keeps for the next symbol (made in the first's frame) lands under
+    //    that one's: an ellipse again, a linear one's stripes slanted
+    ['ab-grad-ellipse', vv([{ type: 'scatter', symbol: 'rect', symbolSize: [40, 16], itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [16, 44], itemStyle: { color: 'nope' }, data: [[6, 6]] }]), [0], { y: true }],
+    ['ab-grad-linear-skew', vv([{ type: 'scatter', symbol: 'rect', symbolSize: [40, 16], symbolRotate: 30,
+      itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 1,
+        colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [16, 44], symbolRotate: -20, itemStyle: { color: 'nope' }, data: [[6, 6]] }]),
+    [0], { y: true }],
+    // [R7-AB] 5. a trail under useDirtyRect: its layer (the series' zlevel,
+    //    motionBlur) is faded whole every paint (the last frame drawn back
+    //    at lastFrameAlpha), then only the blocks round what moved are
+    //    brushed -- a line away from every block fades frame by frame
+    ['ab-dirty-trail', vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
+      [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
+    [0, 20, 40, 60, 80], { y: true, dirty: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
