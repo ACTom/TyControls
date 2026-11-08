@@ -158,6 +158,11 @@ type
       a funnel's, a gauge's, a radar's, a polar's, a single axis', a
       parallel's box, centre and radius, a boxplot's width }
     procedure TestOptionPxAtAnotherPPIAsUpstream;
+    { [R7-AD] A POLAR'S, A SINGLE AXIS' LABELS IN A FONT THE CANVAS REFUSES
+      are drawn in the font the text before left (a graphic's bold 16px
+      serif under them): as much ink as the same labels with that font
+      written, far more than in their own readable parts' }
+    procedure TestRefusedAxisFontsAreDrawnInTheFontBefore;
   end;
 
 implementation
@@ -2629,6 +2634,73 @@ begin
     (px.red > 200) and (px.blue < 60));
 end;
 
+{ [R7-AD] every clock of a chart a test draws pinned }
+procedure PinClocks(AChart: TTyCustomAdvanceChart);
+begin
+  AChart.AnimNow := cT0;
+  AChart.TooltipNow := cT0;
+  AChart.DataZoomNow := cT0;
+  AChart.BrushNow := cT0;
+  AChart.ParallelExpandNow := cT0;
+  AChart.TimelineNow := cT0;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestRefusedAxisFontsAreDrawnInTheFontBefore;
+const
+  GT = '"animation":false,"graphic":[{"type":"text","z":-1,"x":20,"y":20,'
+    + '"style":{"text":"G","fill":"#000","fontSize":16,"fontWeight":"bold","fontFamily":"serif"}}],';
+  cRefused = '"color":"#112233","fontStyle":"slanted"';
+  cWritten = '"color":"#112233","fontWeight":"bold","fontSize":16,"fontFamily":"serif"';
+  cOwn = '"color":"#112233"';
+var bad: string;
+
+  function Ink(const AOpt: string): Integer;
+  var x, y: Integer; p: TBGRAPixel;
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption(AOpt, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    { the labels' dark ink (and the graphic's G, the same in each) -- not
+      the axis' grey }
+    Result := 0;
+    for y := 0 to FBmp.Height - 1 do
+      for x := 0 to FBmp.Width - 1 do
+      begin
+        p := FBmp.GetPixel(x, y);
+        if (p.red < 100) and (p.green < 120) and (p.blue < 140) then Inc(Result);
+      end;
+  end;
+
+  procedure Check(const AName, AFmt: string);
+  var a, b, c: Integer;
+  begin
+    a := Ink('{' + GT + Format(AFmt, [cRefused]) + '}');
+    b := Ink('{' + GT + Format(AFmt, [cWritten]) + '}');
+    c := Ink('{' + GT + Format(AFmt, [cOwn]) + '}');
+    if (Abs(a - b) > b div 12) or (a < c + (b - c) div 2) then
+      bad := bad + LineEnding + Format('%s: refused %d, the font before written %d, its own %d',
+        [AName, a, b, c]);
+  end;
+
+begin
+  bad := '';
+  Check('single axis', '"singleAxis":{"type":"value","min":0,"max":10,"axisLabel":{%s}},"series":[]');
+  Check('radius axis', '"polar":{"radius":90},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false}},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{%s}},"series":[]');
+  Check('angle axis', '"polar":{"radius":90},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"axisLabel":{%s}},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false}},"series":[]');
+  if bad <> '' then Fail('labels in a refused font not drawn in the font before:' + bad);
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AACanvasAsUpstream;
 begin
   RunW(False, 'aa-');
@@ -2662,6 +2734,7 @@ var bad: string;
       FChart := TLcProbe.Create(FForm);
       FChart.Parent := FForm;
       FChart.Controller := FCtl;
+      PinClocks(FChart);
       if ppi = 0 then begin w := 400; h := 300; end else begin w := 600; h := 450; end;
       FChart.SetBounds(0, 0, w, h);
       FChart.SetOption(AOpt, True);
@@ -2758,6 +2831,7 @@ var px: TBGRAPixel; x, y: Integer; hits, shot: Integer;
     FChart := TLcProbe.Create(FForm);
     FChart.Parent := FForm;
     FChart.Controller := FCtl;
+    PinClocks(FChart);
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.SetOption(AOpt, True);
     AssertEquals('parses', '', FChart.OptionError);
