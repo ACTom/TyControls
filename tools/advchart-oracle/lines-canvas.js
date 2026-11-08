@@ -172,6 +172,15 @@ let AC = false;
 // [R7-AE] the cases named ae-...: recorded as the ac- ones, and an axis
 // pointer's handle tracked (`c.<axis>Handle<i>...`)
 let AE = false;
+// [R7-AF] the cases named af-...: recorded as the ae- ones, and a text's
+// fillText / strokeText keeps its place and alignment (`tp` [x, y] hex, `al`
+// textAlign, `bl` textBaseline, `font` as set), and a clip the path it was
+// made of on the canvas (`clp`, on the element whose brush set it: a list of
+// rings of [x, y] hex -- updateClipStatus runs before the element's
+// innerBeforeBrush: the rings wait for it)
+let AF = false;
+let CLIPS = new Map();
+let PENDCLIP = [];
 let SEQ = 0;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
@@ -194,7 +203,11 @@ let OPS = new Map();
 let PATHS = new Map();
 let SNAP = null;
 const origIBB = Displayable.prototype.innerBeforeBrush;
-Displayable.prototype.innerBeforeBrush = function () { CUR = this; return origIBB.apply(this, arguments); };
+Displayable.prototype.innerBeforeBrush = function () {
+  CUR = this;
+  if (AF && PENDCLIP.length) { CLIPS.set(this, PENDCLIP); PENDCLIP = []; }
+  return origIBB.apply(this, arguments);
+};
 const origIAB = Displayable.prototype.innerAfterBrush;
 Displayable.prototype.innerAfterBrush = function () {
   if (V2 && SNAP) SNAPS.set(this, SNAP());
@@ -257,7 +270,8 @@ function makeCtx(canvas) {
   const put = (x, y) => {
     if (!V2) return;
     if (!pending) { owner = CUR; pending = true; }
-    if (!owner) return;
+    // ([R7-AF] a clip's path before any element is brushed: kept for the clip)
+    if (!owner && !(AF && W)) return;
     if (W) { pend.push(at(x, y)); return; }
     let p = PATHS.get(owner);
     if (!p) { p = []; PATHS.set(owner, p); }
@@ -294,18 +308,22 @@ function makeCtx(canvas) {
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation }));
   };
   // a text's: its span is the owner
-  const textNote = op => {
+  const textNote = (op, x, y) => {
     if (!W || !CUR) return;
     let o = OPS.get(CUR);
     if (!o) { o = []; OPS.set(CUR, o); }
     o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA || AC ? { q: SEQ++ } : {},
-      AC ? { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle) } : {}));
+      AC ? { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle) } : {},
+      AF ? { tp: [hex(+x), hex(+y)], al: String(ctx.textAlign), bl: String(ctx.textBaseline),
+        font: String(Y ? st.font : ctx.font) } : {}));
     yNote(CUR, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation, font: st.font }));
   };
   const ctx = {
     canvas,
     dpr: 1,
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
     save() { stack.push(Object.assign({}, st, { m: st.m.slice(), lineDash: st.lineDash.slice() })); },
     restore() { const s = stack.pop(); if (s) Object.assign(st, s); },
     // a browser's: a transform with a value that is not finite is refused
@@ -313,7 +331,10 @@ function makeCtx(canvas) {
     fill() { note('fill'); opNote('fill'); },
     stroke() { note('stroke'); opNote('stroke'); },
     beginPath() { pending = false; owner = null; pend = []; },
-    clip() { if (W) { pend = []; pending = false; owner = null; } },
+    clip() {
+      if (AF && pend.length) PENDCLIP.push(pend.map(q => [hex(q[0]), hex(q[1])]));
+      if (W) { pend = []; pending = false; owner = null; }
+    },
     moveTo(x, y) { put(x, y); px = x; py = y; },
     lineTo(x, y) { put(x, y); px = x; py = y; },
     rect(x, y, w, h) { put(x, y); put(x + w, y); put(x + w, y + h); put(x, y + h); px = x; py = y; },
@@ -357,8 +378,8 @@ function makeCtx(canvas) {
       st.lineDash = v.length % 2 ? v.concat(v) : v;
     },
     getLineDash() { return W ? st.lineDash.slice() : []; },
-    fillText() { textNote('fillText'); },
-    strokeText() { textNote('strokeText'); },
+    fillText(t, x, y) { textNote('fillText', x, y); },
+    strokeText(t, x, y) { textNote('strokeText', x, y); },
     measureText(t) { return { width: String(t).length * 6 }; },
     createLinearGradient(...a) { return Y || AC ? { __k: 'linear', args: a, addColorStop() {} } : { addColorStop() {} }; },
     createRadialGradient(...a) { return Y || AC ? { __k: 'radial', args: a, addColorStop() {} } : { addColorStop() {} }; },
@@ -1715,7 +1736,109 @@ function cases() {
       label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#ffffff',
         borderColor: '#0000ff', borderWidth: 1, padding: 4, opacity: 0.6 } }]),
     [0], { w: true, z: true }],
+    // ---- [R7-AF] (recorded as the ae- ones; a text's place and alignment, a clip's path) ----
+    // 1. an unplaced slider's handle labels (handleLabel.show): two texts of
+    // the view group, in their own frame under the transform the canvas had
+    ['af-dz-label', DZU({ handleLabel: { show: true }, textStyle: { color: '#ff0000' } },
+      [{ type: 'scatter', symbolSize: 8, itemStyle: { color: '#ff8800' }, data: [[5, 5]] }]),
+    [0], { w: true, z: true }],
+    // (at a scale of one, where the words are on the canvas: a symbol of size
+    // 2 before the slider; a formatter, a font of its own)
+    ['af-dz-label-px', DZU({ handleLabel: { show: true }, labelFormatter: 'W{value}W',
+      textStyle: { color: '#ff0000', fontSize: 20, fontWeight: 'bold' } },
+      [{ type: 'scatter', symbolSize: 2, itemStyle: { color: '#ff8800' }, data: [[3, 5]] }]),
+    [0], { w: true, z: true }],
+    // (the canvas' own frame: no element before but the line's, restored)
+    ['af-dz-label-own', DZU({ handleLabel: { show: true }, textStyle: { color: '#0000ff' } }, []),
+    [0], { w: true, z: true }],
+    // 2. the same slider under a turned transform: each shadow's clip is the
+    // turned rect
+    ['af-dz-turn', DZU({ fillerColor: 'rgba(0,0,0,0)' },
+      [{ type: 'scatter', symbolSize: 2, symbolRotate: -25, itemStyle: { color: '#ff8800' }, data: [[2.5, 9]] }]),
+    [0], { w: true, z: true }],
+    // (and a skewed one: a symbol of unequal sides, turned)
+    ['af-dz-skew', DZU({ fillerColor: 'rgba(0,0,0,0)' },
+      [{ type: 'scatter', symbolSize: [2, 3], symbolRotate: -20, itemStyle: { color: '#ff8800' }, data: [[2.5, 9]] }]),
+    [0], { w: true, z: true }],
+    // 3. a label's textBorderWidth: 'Infinity' strokes at the width the
+    // canvas had; '3' at 3 (the canvas' lineWidth takes it as its number)
+    ['af-label-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', textBorderColor: '#ff00ff',
+          textBorderWidth: 'Infinity' } }]),
+    [0], { w: true, z: true }],
+    ['af-label-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 2 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', textBorderColor: '#ff00ff',
+          textBorderWidth: '3' } }]),
+    [0], { w: true, z: true }],
+    // (a rich token's, and the block's over a token)
+    ['af-label-inf-rich', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: '{a|Ab}{b|Cd}', color: '#000000', textBorderColor: '#ff00ff',
+          textBorderWidth: '2', rich: { a: { textBorderWidth: 'Infinity' }, b: {} } } }]),
+    [0], { w: true, z: true }],
+    // (a box's borderWidth written as a string: its number; and 'Infinity')
+    ['af-label-box-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#ffffff',
+          borderColor: '#ff00ff', borderWidth: '2', padding: 3 } },
+      { type: 'scatter', data: [[6, 2]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Cd', color: '#000000',
+          borderColor: '#00ffff', borderWidth: 'Infinity', padding: 3 } }]),
+    [0], { w: true, z: true }],
+    // (b) a title's, a legend's and a toolbox's box of an infinite pen: placed
+    // as before it was drawn -- the pen refused, the width the canvas had
+    ['af-title-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } }], {
+      title: { text: 'Tt', left: 20, top: 10, backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 'Infinity',
+        textStyle: { color: '#123456' } } }),
+    [0], { w: true, z: true }],
+    ['af-legend-inf', vv([{ type: 'scatter', name: 'Aa', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } }], {
+      legend: { left: 20, top: 10, backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 'Infinity',
+        textStyle: { color: '#123456' } } }),
+    [0], { w: true, z: true }],
+    ['af-toolbox-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 3 } }], {
+      toolbox: { left: 20, top: 10, backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 'Infinity',
+        feature: { restore: {} }, iconStyle: { borderColor: '#00ff00' } } }),
+    [0], { w: true, z: true }],
+    // (b) a radar's indicator axis lines in a gradient: the box each is made over
+    ['af-grad-radar-line', { animation: false, radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 },
+      { name: 'c', max: 10 }], center: ['50%', '50%'], radius: 100, axisName: { show: false }, splitLine: { show: false },
+      splitArea: { show: false }, axisLine: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { color: 'nope', width: 2 },
+        data: [{ value: [5, 6, 7] }] }] },
+    [0], { w: true, z: true }],
+    // (and its split lines: the rings of a colour one merged path)
+    ['af-grad-radar-split', { animation: false, radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 },
+      { name: 'c', max: 10 }], center: ['50%', '50%'], radius: 100, axisName: { show: false }, axisLine: { show: false },
+      splitArea: { show: false }, splitNumber: 4, splitLine: { show: true, lineStyle: { color: [GRAD,
+        Object.assign({}, GRAD, { x2: 0, y2: 1 })], width: 3 } } },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { color: 'nope', width: 2 },
+        data: [{ value: [5, 6, 7] }] }] },
+    [0], { w: true, z: true }],
   ]);
+}
+// [R7-AF] an unplaced slider (its data shadow's line 'Infinity' wide), its
+// own keys over these, the series after the line's
+function DZU(more, series) {
+  return { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+    yAxis: { type: 'value', min: 0, max: 10, show: false },
+    dataZoom: [Object.assign({ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: true,
+      filterMode: 'none',
+      backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+      dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 'Infinity' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+      selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1, width: 2 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+      handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 1.5 },
+      moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 3 } }, more)],
+    series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[0, 0], [5, 10], [10, 0]] }]
+      .concat(series) };
 }
 function withPalette(list) {
   for (const c of list) if (c[3] && (c[3].w || c[3].y) && !c[1].color) c[1].color = PAL;
@@ -1933,6 +2056,8 @@ function elRec(el, key, brushes) {
     }
     else { r.pb = null; r.pa = null; }
   }
+  // [R7-AF] the clips its brush set
+  if (AF) r.clp = CLIPS.get(el) || null;
   // [R7-Z] a component's text span: its text
   if (Z && key.slice(0, 2) === 'c.' && el.style && el.style.text != null) r.tx = String(el.style.text);
   // [R7-Y] every op of the sample, and the paint rect now
@@ -1998,8 +2123,11 @@ function run(id, option, samples, opts) {
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-';
-  AE = id.slice(0, 3) === 'ae-';
+  AF = id.slice(0, 3) === 'af-';
+  AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;
+  CLIPS = new Map();
+  PENDCLIP = [];
   SEQ = 0;
   Y = !!opts.y;
   PRISTINE = !!opts.pristine;
@@ -2054,7 +2182,7 @@ function run(id, option, samples, opts) {
     if (!L.__r7vClear) {
       const orig = L.clear;
       L.clear = function () {
-        if (V2) { SNAPS = new Map(); OPS = new Map(); PATHS = new Map(); SNAPL = new Map(); }
+        if (V2) { SNAPS = new Map(); OPS = new Map(); PATHS = new Map(); SNAPL = new Map(); CLIPS = new Map(); }
         return orig.apply(this, arguments);
       };
       L.__r7vClear = true;
@@ -2133,6 +2261,7 @@ function run(id, option, samples, opts) {
     AA = false;
     AC = false;
     AE = false;
+    AF = false;
     Y = false;
     PRISTINE = false;
     echarts.env.node = nodeWas;

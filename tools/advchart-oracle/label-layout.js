@@ -513,6 +513,18 @@ const CASES = [
     option: scatter([sc({ label: { show: true, textBorderColor: '#000', textBorderWidth: 6 }, labelLayout: { hideOverlap: true } })]) },
   { id: 'text.border.thin', note: 'a thin written border: the rect is the TSpan rect unioned with itself, (x + w) - x',
     option: scatter([sc({ label: { show: true, textBorderColor: '#000', textBorderWidth: 1.7 }, labelLayout: { hideOverlap: true } })]) },
+  // [R7-AF] a border's width written as a string: the TSpan's rect adds it to
+  // its width and height as a string ('3': 24 + '3' is '243')
+  { id: 'text.border.str', note: "a border width of '3': the rect's width and height joined to it as a string",
+    option: scatter([sc({ label: { show: true, textBorderColor: '#000', textBorderWidth: '3' }, labelLayout: { hideOverlap: true } })]) },
+  { id: 'text.border.str-shift', note: "the same under moveOverlap: shiftY",
+    option: scatter([sc({ label: { show: true, textBorderColor: '#000', textBorderWidth: '1.5' }, labelLayout: { moveOverlap: 'shiftY' },
+      data: pts(12, 7, 13) })]) },
+  { id: 'text.border.str-rich', note: "a rich token's border width of '2'",
+    option: scatter([sc({ label: { show: true, formatter: '{a|{c}}', textBorderColor: '#000', rich: { a: { textBorderWidth: '2' } } },
+      labelLayout: { hideOverlap: true } })]) },
+  { id: 'text.border.inf', note: "a border width of 'Infinity': the rect is -Infinity / NaN",
+    option: scatter([sc({ label: { show: true, textBorderColor: '#000', textBorderWidth: 'Infinity' }, labelLayout: { hideOverlap: true } })]) },
   { id: 'margin.min', note: 'label.minMargin grows the global rect',
     option: scatter([sc({ label: { show: true, minMargin: 12 }, labelLayout: { hideOverlap: true } })]) },
   { id: 'margin.text', note: 'label.textMargin grows the local rect',

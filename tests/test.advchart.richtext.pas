@@ -144,6 +144,9 @@ var
   s: string;
   k: Integer;
   c: TTyChartColor;
+  { [R7-AF] a width written as a string }
+  j: TJSONString;
+  w: Double;
 begin
   Result := TyRtStyleDefault;
   Result.FontSizePx := 0;
@@ -168,7 +171,19 @@ begin
     Result.Stroke := c;
   end;
   d := O.Find('lineWidth');
-  if (d <> nil) and (d.JSONType <> jtNull) then
+  { [R7-AF] a string as RichStyle hands it (its number, kept for the rect) }
+  if IsStrSize(O, 'lineWidth') then
+  begin
+    j := TJSONString.Create(O.Strings['lineWidth']);
+    try
+      TyRtTakeLineWidth(j, w, Result.LineWidthText, Result.LineWidthInf);
+    finally
+      j.Free;
+    end;
+    Result.HasLineWidth := True;
+    Result.LineWidth := w;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     Result.HasLineWidth := True;
     Result.LineWidth := Hex(d);
@@ -223,7 +238,19 @@ begin
     Result.BorderColor := c;
   end;
   d := O.Find('borderWidth');
-  if (d <> nil) and (d.JSONType <> jtNull) then Result.BorderWidth := Hex(d);
+  { [R7-AF] a string: its number, or truthy and stroking nothing }
+  if IsStrSize(O, 'borderWidth') then
+  begin
+    j := TJSONString.Create(O.Strings['borderWidth']);
+    try
+      TyRtTakeLineWidth(j, w, s, Result.BorderWidthInf);
+    finally
+      j.Free;
+    end;
+    Result.BorderWidth := w;
+    Result.BorderWidthWord := not (w > 0) and not Result.BorderWidthInf and (O.Strings['borderWidth'] <> '');
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then Result.BorderWidth := Hex(d);
   d := O.Find('borderRadius');
   if d is TJSONArray then
   begin
