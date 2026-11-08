@@ -3348,8 +3348,9 @@ begin
   end;
 end;
 
-{ [R7-AJ] A TITLE'S BOX AND INKS as its view builds them, before the canvas
-  settles what it refuses (TitleSettle) }
+{ [R7-AJ] A TITLE'S BOX AND INKS as its view builds them -- what the canvas
+  refuses of them settled by the list's run, as any element's
+  (TyLinesCanvasLeftovers) }
 procedure TTyCustomAdvanceChart.TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
   out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
 var
@@ -3433,7 +3434,8 @@ var
   lay: TTyTitleLayout;
   txt: string;
   r: TRect;
-  pieces: Boolean;
+  pieces, fontLeft: Boolean;
+  node: TJSONData;
 
   { The box DrawText wants, hung off an anchor with the title's alignment. }
   function Hang(AX, AY, AW, AH: Double; AAlign: TTyTitleAlign;
@@ -3508,7 +3510,17 @@ begin
     AEl.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
     AEl.Caption.RtScale := FTitleRt[AIndex][ALine].Scale;
   end;
-  { (the canvas' transform as TitleSettle hands it) }
+  { [R7-AD] A FONT THE CANVAS REFUSES: the one the text before left, as the
+    list's run hands it on (FontRefusedOf, as a legend's) }
+  node := nil;
+  if FOption <> nil then node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    if ALine = 0 then fontLeft := FontRefusedOf([TJSONObject(node).Find('textStyle')])
+    else fontLeft := FontRefusedOf([TJSONObject(node).Find('subtextStyle')]);
+    if fontLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFontLeft;
+  end;
+  { (the canvas' transform as R7-Z handed the words on: none) }
   AEl.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
 end;
 
@@ -3562,62 +3574,12 @@ begin
   end;
 end;
 
-{ [R7-AJ] WHAT THE CANVAS REFUSES of a title, settled where the list draws
-  it (TitleSettle): built afresh from its parts and written over its
-  elements -- after a build, a tail's, a state's patch (what is drawn before
-  it may hand another state on) }
-procedure TTyCustomAdvanceChart.TitlesSettle(AList: TTyPaintList; APPI: Integer);
-var
-  i: Integer;
-  frame, e: TTyChartElement;
-  ink0, ink1: TTyColor;
-  f0, f1: TTyTitleFont;
-begin
-  if (AList = nil) or (AList <> FPaintList) or (FOption = nil) then Exit;
-  for i := 0 to Min(High(FTitleAt), High(FTitles)) do
-  begin
-    if (FTitleAt[i][0] < 0) or (FTitleAt[i][0] >= AList.Count) then Continue;
-    TitleParts(i, APPI, frame, ink0, ink1, f0, f1);
-    if not TitleSettle(i, frame, ink0, ink1, f0, f1) then Continue;
-    e := AList.Element(FTitleAt[i][0]);
-    frame.Z := e.Z;
-    frame.Z2 := e.Z2;
-    frame.ZLevel := e.ZLevel;
-    frame.CompView := e.CompView;
-    frame.ViewKnown := e.ViewKnown;
-    AList.SetElement(FTitleAt[i][0], frame);
-    if (FTitleAt[i][1] >= 0) and (FTitleAt[i][1] < AList.Count) then
-    begin
-      e := AList.Element(FTitleAt[i][1]);
-      e.Caption.Colour := TTyChartColor(ink0);
-      e.Caption.FontName := f0.Name;
-      e.Caption.FontSizeLogical := f0.SizeLogical;
-      e.Caption.FontWeight := f0.Weight;
-      if Length(e.Caption.RtPieces) > 0 then
-        e.Caption.RtPieces := Copy(FTitleRt[i][0].Pieces, 0, MaxInt);
-      AList.SetElement(FTitleAt[i][1], e);
-    end;
-    if (FTitleAt[i][2] >= 0) and (FTitleAt[i][2] < AList.Count) then
-    begin
-      e := AList.Element(FTitleAt[i][2]);
-      e.Caption.Colour := TTyChartColor(ink1);
-      e.Caption.FontName := f1.Name;
-      e.Caption.FontSizeLogical := f1.SizeLogical;
-      e.Caption.FontWeight := f1.Weight;
-      if Length(e.Caption.RtPieces) > 0 then
-        e.Caption.RtPieces := Copy(FTitleRt[i][1].Pieces, 0, MaxInt);
-      AList.SetElement(FTitleAt[i][2], e);
-    end;
-  end;
-end;
-
 { [R7-AJ] THE TITLES THIS PAINT DREW, as the list holds them: their boxes
   (TitleFramesDrawn) and their parts' log (CompDrawn) }
 procedure TTyCustomAdvanceChart.TitlesNote;
 var
   i, k: Integer;
   e: TTyChartElement;
-  f: TTyTitleFont;
 begin
   if Length(FTitleFramesDrawn) <> Length(FTitles) then
   begin
@@ -3637,174 +3599,30 @@ begin
     for k := 1 to 2 do
     begin
       if (FTitleAt[i][k] < 0) or (FTitleAt[i][k] >= FPaintList.Count) then Continue;
-      e := FPaintList.Element(FTitleAt[i][k]);
-      f := FTitleFonts[i][k - 1];
-      f.Name := e.Caption.FontName;
-      f.SizeLogical := e.Caption.FontSizeLogical;
-      f.Weight := e.Caption.FontWeight;
-      TitleDrewText(i, k - 1, TTyColor(e.Caption.Colour), f);
+      TitleDrewText(i, k - 1, FPaintList.Element(FTitleAt[i][k]));
     end;
   end;
 end;
 
 
-procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor;
-  const AFont: TTyTitleFont);
+{ [R7-Z] a title's line as drawn (CompDrawn): [R7-AJ] its element in the
+  list, as the list's run settled it }
+procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer;
+  const AEl: TTyChartElement);
 var e: TTyChartElement;
 begin
-  if ALine = 0 then
-  begin
-    if (FTitleSpecs[AIndex].Text = '') and not ((AIndex <= High(FTitleRt))
-      and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then Exit;
-  end
-  else if FTitleSpecs[AIndex].Subtext = '' then Exit;
   e := Default(TTyChartElement);
   e.Style.Alpha := 1;
-  e.Caption.FontSizeLogical := 1;
   e.Caption.Text := 'x';
-  e.Caption.Colour := TTyChartColor(AInk);
+  e.Caption.Colour := AEl.Caption.Colour;
   { [R7-AD] and the font it is drawn in }
-  e.Caption.FontName := AFont.Name;
-  e.Caption.FontSizeLogical := AFont.SizeLogical;
-  e.Caption.FontWeight := AFont.Weight;
+  e.Caption.FontName := AEl.Caption.FontName;
+  e.Caption.FontSizeLogical := AEl.Caption.FontSizeLogical;
+  e.Caption.FontWeight := AEl.Caption.FontWeight;
   { [R7-AA] a block's pieces as drawn (their fill and stroke) }
-  if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0) then
-    e.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
+  if Length(AEl.Caption.RtPieces) > 0 then
+    e.Caption.RtPieces := Copy(AEl.Caption.RtPieces, 0, MaxInt);
   CompDrew(nil, 'title' + IntToStr(AIndex), 0, 10, True, e);
-end;
-
-function TTyCustomAdvanceChart.TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-  var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont): Boolean;
-var
-  run: TTyCanvasRun;
-  e: TTyChartElement;
-  z: Integer;
-  node: TJSONData;
-  { [R7-AD] the text's and the subtext's fonts the canvas refuses }
-  left0, left1: Boolean;
-  { [R7-AJ] the list walked to the title's own elements }
-  walk: Boolean;
-  pos: Integer;
-
-  { [R7-AJ] THE LIST'S RUN UP TO THE TITLE'S ELEMENT APART (0 its box, 1 its
-    text, 2 its subtext), each element on the way as CompRunTo steps it:
-    what is drawn before its box, what is drawn between its elements (a
-    toolbox's icons after its box, at its z and z2 0) -- the box sorts
-    before its words, so the walk meets the title's own elements only as
-    the ones it walks to }
-  procedure RunTo(APart: Integer);
-  var at, idx: Integer; pe: PTyChartElement;
-  begin
-    at := FTitleAt[AIndex][APart];
-    if at < 0 then Exit;
-    while pos < FPaintList.Count do
-    begin
-      idx := FPaintList.PaintOrder(pos);
-      Inc(pos);
-      if idx = at then Exit;
-      pe := FPaintList.Ref(idx);
-      if (pe^.ZLevel <> 0) or pe^.GfxUnder then Continue;
-      TyCanvasRunStep(run, pe^);
-    end;
-  end;
-
-begin
-  Result := False;
-  node := FOption.ComponentAt('title', AIndex);
-  left0 := False;
-  left1 := False;
-  if node is TJSONObject then
-  begin
-    left0 := FontRefusedOf([TJSONObject(node).Find('textStyle')]);
-    left1 := FontRefusedOf([TJSONObject(node).Find('subtextStyle')]);
-  end;
-  if not (TyCanvasElementCarries(AFrame) or ((AFrame.CanvasFlags and cTyCanvasWidthLeft) <> 0)
-    or (TTyChartColor(AInk0) = cTyCanvasColourLeft) or (TTyChartColor(AInk1) = cTyCanvasColourLeft)
-    or TitlePiecesCarry(AIndex) or left0 or left1) then
-    Exit;
-  Result := True;
-  { [R7-AJ] THE TITLE IN THE LIST on the root's zlevel: the run walked to
-    each of its elements (a view before its own at its z and z2 0, the
-    toolbox's icons between its box and its text) [was: the list up to the
-    title's z and z2 0, every view there, then the box and the texts] }
-  walk := (AIndex <= High(FTitleAt)) and (FPaintList <> nil) and (FTitleAt[AIndex][0] >= 0)
-    and (FTitleAt[AIndex][0] < FPaintList.Count) and (FPaintList.Ref(FTitleAt[AIndex][0])^.ZLevel = 0);
-  pos := 0;
-  if walk then
-  begin
-    TyCanvasRunStart(run, CanvasGroundState, FLastPPI);
-    RunTo(0);
-  end
-  else
-  begin
-    { the title's z (its model's default 6) }
-    z := TitleZ(AIndex);
-    CompRunTo(z, 0, run);
-  end;
-  TyCanvasRunStep(run, AFrame);
-  e := Default(TTyChartElement);
-  e.Style.Alpha := 1;
-  e.Caption.FontSizeLogical := 1;
-  e.Caption.Text := 'x';
-  e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
-  if (FTitleSpecs[AIndex].Text <> '') or ((AIndex <= High(FTitleRt))
-    and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then
-  begin
-    e.Caption.Colour := TTyChartColor(AInk0);
-    { [R7-AD] its font (one the canvas refuses: the one the text before
-      left) }
-    e.Caption.FontName := AFont0.Name;
-    e.Caption.FontSizeLogical := AFont0.SizeLogical;
-    e.Caption.FontWeight := AFont0.Weight;
-    if left0 then e.CanvasFlags := e.CanvasFlags or cTyCanvasFontLeft;
-    { [R7-AA] a block: its pieces, each its fill and stroke }
-    e.Caption.RtPieces := nil;
-    if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][0].Pieces) > 0) then
-      e.Caption.RtPieces := FTitleRt[AIndex][0].Pieces;
-    if walk then RunTo(1);
-    TyCanvasRunStep(run, e);
-    AInk0 := TTyColor(e.Caption.Colour);
-    if left0 then
-    begin
-      AFont0.Name := e.Caption.FontName;
-      AFont0.SizeLogical := e.Caption.FontSizeLogical;
-      AFont0.Weight := e.Caption.FontWeight;
-    end;
-  end;
-  if FTitleSpecs[AIndex].Subtext <> '' then
-  begin
-    e.CanvasFlags := 0;
-    e.Caption.Colour := TTyChartColor(AInk1);
-    e.Caption.FontName := AFont1.Name;
-    e.Caption.FontSizeLogical := AFont1.SizeLogical;
-    e.Caption.FontWeight := AFont1.Weight;
-    if left1 then e.CanvasFlags := e.CanvasFlags or cTyCanvasFontLeft;
-    e.Caption.RtPieces := nil;
-    if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][1].Pieces) > 0) then
-      e.Caption.RtPieces := FTitleRt[AIndex][1].Pieces;
-    if walk then RunTo(2);
-    TyCanvasRunStep(run, e);
-    AInk1 := TTyColor(e.Caption.Colour);
-    if left1 then
-    begin
-      AFont1.Name := e.Caption.FontName;
-      AFont1.SizeLogical := e.Caption.FontSizeLogical;
-      AFont1.Weight := e.Caption.FontWeight;
-    end;
-  end;
-end;
-
-function TTyCustomAdvanceChart.TitlePiecesCarry(AIndex: Integer): Boolean;
-var line, k: Integer;
-begin
-  Result := False;
-  if AIndex > High(FTitleRt) then Exit;
-  for line := 0 to 1 do
-    for k := 0 to High(FTitleRt[AIndex][line].Pieces) do
-      with FTitleRt[AIndex][line].Pieces[k] do
-        if (HasFill and (Fill = cTyCanvasColourLeft)) or (HasStroke and (Stroke = cTyCanvasColourLeft))
-          or (CanvasLeft <> 0) or FontLeft then
-          Exit(True);
 end;
 
 function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;
@@ -4729,8 +4547,6 @@ begin
     { [R7-Y] what the canvas is left with, in paint order, a chart of no
       series too (its graphic elements) [was: never settled] }
     if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
-    { [R7-AJ] the titles' refused values where the list draws them }
-    TitlesSettle(list, APPI);
     Exit;
   end;
   begin
@@ -5342,8 +5158,6 @@ begin
     if FCompRunOk then CompSettle(APPI, False);
     { [R7-S] what the canvas is left with, in paint order }
     if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
-    { [R7-AJ] the titles' refused values where the list draws them }
-    TitlesSettle(list, APPI);
     list.JournalClose;
   end;
 end;
@@ -6084,8 +5898,6 @@ begin
   BuildListTail(FPaintList, NewTextMeasurer(FLastPPI));
   { [R7-AH] each its view's place }
   ViewsTag(FPaintList);
-  { [R7-AJ] the titles' refused values: the tail may hand another state on }
-  TitlesSettle(FPaintList, FLastPPI);
   { the incremental layer holds none of the end: what a build would draw
     on it again it holds already where it is what a whole drawing in paint
     order gives -- else drawn again, as after a build }

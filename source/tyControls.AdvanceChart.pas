@@ -3437,15 +3437,15 @@ type
     { [R7-AJ] THE TITLES IN THE LIST (TitleView's group: the background Rect
       z2 0, the text and the subtext z2 10, at the title's z and zlevel):
       their parts as built (TitleParts, TitleLineEl), appended
-      (BuildTitles: FTitleAt their places), settled where the list draws
-      them (TitlesSettle), noted as drawn (TitlesNote) }
+      (BuildTitles: FTitleAt their places), what the canvas refuses of
+      them settled by the list's run as any element's, noted as drawn
+      (TitlesNote) }
     function TitleZ(AIndex: Integer): Integer;
     procedure TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
       out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
     function TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
       const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
     function BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
-    procedure TitlesSettle(AList: TTyPaintList; APPI: Integer);
     procedure TitlesNote;
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
@@ -3827,12 +3827,8 @@ type
     { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
       from where the list's run reaches their z: appended to FCompParts }
     procedure ParRun;
-    { [R7-Z] a title's box and text colours, the canvas refusing them }
-    function TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-      var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont): Boolean;
-    procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor; const AFont: TTyTitleFont);
-    { [R7-AA] a title line's block holds a colour the canvas refuses }
-    function TitlePiecesCarry(AIndex: Integer): Boolean;
+    { [R7-Z] a title's line as drawn (CompDrawn) }
+    procedure TitleDrewText(AIndex, ALine: Integer; const AEl: TTyChartElement);
     { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
     procedure CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
     { a part as drawn (CompDrawn) }
