@@ -7203,6 +7203,13 @@ begin
     if (ASpec.ShadowKeys and 2) <> 0 then e.Style.ShadowOffsetX := ASpec.ShadowOffsetX;
     if (ASpec.ShadowKeys and 4) <> 0 then e.Style.ShadowOffsetY := ASpec.ShadowOffsetY;
     if ASpec.ShadowColourRefused then e.Style.ShadowColor := cTyCanvasColourLeft;
+  end
+  else
+  begin
+    { (`shadowColor || 'transparent'`: the canvas is handed a transparent
+      one) }
+    e.CanvasFlags := cTyCanvasOwnShadow;
+    e.CanvasShadow := 0;
   end;
   OvStep(e, 60, 0);
   ASurface.Kind := tfkSolid;
@@ -7229,6 +7236,9 @@ begin
           colour (one no parser reads: what the canvas had), no shadow }
         e.Style.HasFill := True;
         e.Style.FillColor := ALines[i].Runs[j].Colour;
+        { (its Rect's shadowColor 'transparent') }
+        e.CanvasFlags := cTyCanvasOwnShadow;
+        e.CanvasShadow := 0;
         OvStep(e, 60, 0);
         ALines[i].Runs[j].Colour := e.Style.FillColor;
         CompDrew(nil, 'tooltip0', 0, 0, False, e);
@@ -7262,6 +7272,7 @@ begin
       e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
       OvStep(e, 60, 0);
       ALines[i].Runs[j].Colour := e.Caption.RtPieces[0].Fill;
+      ALines[i].Runs[j].ShadowColour := e.Caption.RtPieces[0].ShadowColor;
       CompDrew(nil, 'tooltip0', 0, 0, True, e);
     end;
   end;
@@ -7572,6 +7583,43 @@ begin
   end;
 end;
 
+{ [R7-AC] A TOOLTIP TEXT'S SHADOW: its glyphs, as DrawText puts them in
+  ARect, on a mask of their own, and the painter's shadow cast from it --
+  blurred, moved (css px), in AShadow -- under where the text is drawn
+  (Render's RtTextShadow for a text in a rect) }
+procedure TipTextShadow(P: TTyPainter; const ARect: TRect; const AText, AFont: string;
+  ASize, AWeight: Integer; AInk, AShadow: TTyColor; ABlur, AOffsetX, AOffsetY: Double);
+var
+  m, s, mw, mh: Integer;
+  mp: TTyPainter;
+  mask: TBGRABitmap;
+  sc: TTyCanvasScale;
+begin
+  if (P = nil) or (P.Bitmap = nil) or (ARect.Right <= ARect.Left) or (ARect.Bottom <= ARect.Top) then Exit;
+  m := 4;
+  mw := ARect.Right - ARect.Left + 2 * m;
+  mh := ARect.Bottom - ARect.Top + 2 * m;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create(mw * s, mh * s, BGRAPixelTransparent);
+  try
+    mp := TTyPainter.Create;
+    try
+      mp.FastStrokes := P.FastStrokes;
+      mp.BeginPaintOnScaled(nil, Rect(0, 0, mw, mh), P.PPI, mask, sc);
+      mp.DrawText(Rect(m, m, m + ARect.Right - ARect.Left, m + ARect.Bottom - ARect.Top),
+        AText, AFont, ASize, AWeight, AInk or TTyColor($FF000000), taLeftJustify, tlCenter, False);
+      mp.EndPaint;
+    finally
+      mp.Free;
+    end;
+    P.CastShadowOf(mask, (ARect.Left - m) * s, (ARect.Top - m) * s, AShadow, ABlur, AOffsetX, AOffsetY);
+  finally
+    mask.Free;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
@@ -7604,6 +7652,7 @@ var
   rich, refusedShadow: Boolean;
   richBw, sBlur, sOffX, sOffY, outL, outR, outT, outB, sc: Double;
   outer: TRect;
+  tsc: TTyChartColor;
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
@@ -8008,6 +8057,32 @@ begin
         end
         else
         begin
+          { [R7-AC] THE TEXT'S SHADOW, under it: textStyle's textShadow* --
+            html's text-shadow (colour and blur written, the browser taking
+            both), richText's spans (a blur above nought, the colour as the
+            canvas settled it) [was: never drawn -- the option had no
+            effect] }
+          tsc := 0;
+          if ((spec.TextShadowKeys and 1) <> 0) and (spec.TextShadowBlur > 0) then
+          begin
+            if not rich then
+            begin
+              if ((spec.TextShadowKeys and 8) <> 0) and not spec.TextShadowColourRefused then
+                tsc := spec.TextShadowColour;
+            end
+            else if frozenPic or ((spec.TextShadowKeys and 8) <> 0) then
+              tsc := lines[i].Runs[j].ShadowColour;
+          end;
+          if (tsc shr 24) <> 0 then
+            TipTextShadow(APainter,
+              Rect(Round(box.Left + padL + lines[i].Runs[j].X), lineTop,
+                   Round(box.Left + padL + lines[i].Runs[j].X
+                         + lines[i].Runs[j].W) + 1,
+                   Round(lineTop + hPx)),
+              TyInkText(lines[i].Runs[j].Text), lines[i].Runs[j].FontName,
+              lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
+              TTyColor(lines[i].Runs[j].Colour), TTyColor(tsc), spec.TextShadowBlur,
+              spec.TextShadowOffsetX, spec.TextShadowOffsetY);
           { NO ELLIPSIS. The box was measured to fit these exact runs, and
             upstream never wraps or truncates a tooltip in either mode -- its
             width is content-driven and its CSS says `white-space: nowrap`. }

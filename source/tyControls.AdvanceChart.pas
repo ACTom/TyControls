@@ -1983,6 +1983,11 @@ type
     FOvPos: Integer;
     FOvOn: Boolean;
     FPtrPass: Integer;
+    { [R7-AC] a merging setOption keeps the axis pointers' slides: the
+      views and their BaseAxisPointer stay, setStyle takes the new style at
+      once and the slide goes on (a notMerge, a resize: dropped with the
+      build, as before) }
+    FPtrSlideKeep: Boolean;
     FTitleFramesDrawn: TTyOverlayShapeArray;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }

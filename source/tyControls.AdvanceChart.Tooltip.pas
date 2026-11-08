@@ -293,6 +293,9 @@ type
     BoxWLogical, BoxHLogical, BoxRadiusLogical: Double;
     MarginLLogical, MarginRLogical: Double;
     LineHeightLogical: Double;
+    { [R7-AC] a text run's shadow colour as the canvas settled it (richText:
+      a textShadowColor no parser reads takes what the canvas had) }
+    ShadowColour: TTyChartColor;
     { Set once measured. }
     X, W: Double;
   end;
