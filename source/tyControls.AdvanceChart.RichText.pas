@@ -40,6 +40,9 @@ type
     IsStr: Boolean;
     S: string;
     N: Double;
+    { [R7-AI] a value that is no string and no number: String of it
+      ('undefined', 'null', 'true', 'false'), N its Number ('' a number) }
+    Lit: string;
   end;
 
   TTyRtToken = record
@@ -60,10 +63,15 @@ type
     { [R7-H] the height (padding in) and the line height as zrender holds
       them: a string height stays one ('16' + 4 = '164') }
     HeightV, LineHeightV: TTyRtJs;
+    { [R7-AI] the width as zrender holds it (`token.width += paddingH`: a
+      padding side that is a string joins it); Width its Number }
+    WidthV: TTyRtJs;
   end;
   TTyRtLine = record
     Tokens: array of TTyRtToken;
     Width, LineHeight: Double;
+    { [R7-AI] `lineWidth += token.width`, as zrender holds it }
+    WidthV: TTyRtJs;
   end;
 
   TTyRtBlock = record
@@ -83,6 +91,11 @@ type
 
 { A style with nothing set: 12px sans-serif, normal, no box. }
 function TyRtStyleDefault: TTyRtStyle;
+
+{ [R7-AI] side AK of a style's padding as zrender holds it (TTyRtStyle.
+  PaddingKind), and `padding[A] + padding[B]` (nought without a padding) }
+function TyRtPadV(const S: TTyRtStyle; AK: Integer): TTyRtJs;
+function TyRtPadJoin(const S: TTyRtStyle; A, B: Integer): TTyRtJs;
 
 { THE BLOCK AND ITS PIECES. ARich: the text takes the rich path (zrender
   chooses it whenever `style.rich` is set, tokens or not). ABaseX/Y: the
@@ -130,7 +143,9 @@ function TyRtHasMarkup(const AText: string): Boolean;
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Symbol,
-  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+  { [R7-AI] Math.cos of a rounded path's arcs }
+  tyControls.AdvanceChart.JsMath;
 
 const
   cGuo = #$E5#$9B#$BD;   // U+56FD: zrender's measure of a font's height
@@ -150,6 +165,7 @@ begin
   Result.IsStr := False;
   Result.S := '';
   Result.N := A;
+  Result.Lit := '';
 end;
 
 function JStr(const A: string): TTyRtJs;
@@ -157,11 +173,23 @@ begin
   Result.IsStr := True;
   Result.S := A;
   Result.N := TyJsToNumber(A);
+  Result.Lit := '';
+end;
+
+{ [R7-AI] undefined, null, true or false }
+function JLit(const AText: string; AN: Double): TTyRtJs;
+begin
+  Result.IsStr := False;
+  Result.S := '';
+  Result.N := AN;
+  Result.Lit := AText;
 end;
 
 function JText(const A: TTyRtJs): string;
 begin
-  if A.IsStr then Result := A.S else Result := TyJsNumberToString(A.N);
+  if A.IsStr then Result := A.S
+  else if A.Lit <> '' then Result := A.Lit
+  else Result := TyJsNumberToString(A.N);
 end;
 
 { `a + b`: joined when either is a string, else the sum }
@@ -169,6 +197,25 @@ function JAdd(const A, B: TTyRtJs): TTyRtJs;
 begin
   if A.IsStr or B.IsStr then Result := JStr(JText(A) + JText(B))
   else Result := JNum(A.N + B.N);
+end;
+
+function TyRtPadV(const S: TTyRtStyle; AK: Integer): TTyRtJs;
+begin
+  case S.PaddingKind[AK] of
+    cTyPadStr: Result := JStr(S.PaddingText[AK]);
+    cTyPadUndef: Result := JLit('undefined', NaN);
+    cTyPadNull: Result := JLit('null', 0);
+    cTyPadTrue: Result := JLit('true', 1);
+    cTyPadFalse: Result := JLit('false', 0);
+  else
+    Result := JNum(S.Padding[AK]);
+  end;
+end;
+
+function TyRtPadJoin(const S: TTyRtStyle; A, B: Integer): TTyRtJs;
+begin
+  if not S.HasPadding then Exit(JNum(0));
+  Result := JAdd(TyRtPadV(S, A), TyRtPadV(S, B));
 end;
 
 { `a > b`: two strings compare as strings, else as numbers (false against
@@ -251,12 +298,14 @@ end;
 function TyRtHasStringSize(const AStyle: TTyRtStyle; const ARich: TTyRtRich): Boolean;
 var i: Integer;
 begin
-  { ([R7-AF] and a text border's width written as a string) }
+  { ([R7-AF] and a text border's width written as a string; [R7-AI] and
+    a padding that holds a side that is no number) }
   Result := AStyle.WidthIsText or AStyle.HeightIsText or AStyle.LineHeightIsText
-    or (AStyle.LineWidthText <> '');
+    or (AStyle.LineWidthText <> '') or AStyle.PaddingJs;
   for i := 0 to High(ARich) do
     if ARich[i].Style.WidthIsText or ARich[i].Style.HeightIsText
-      or ARich[i].Style.LineHeightIsText or (ARich[i].Style.LineWidthText <> '') then Exit(True);
+      or ARich[i].Style.LineHeightIsText or (ARich[i].Style.LineWidthText <> '')
+      or ARich[i].Style.PaddingJs then Exit(True);
 end;
 
 function Fin(A: Double): Boolean; inline;
@@ -292,6 +341,9 @@ end;
 type
   TWrapResult = record
     AccumWidth: Double;
+    { [R7-AI] as zrender holds it: `accumWidth += lastAccumWidth` joins a
+      string }
+    AccumWidthV: TTyRtJs;
     Lines: array of string;
     Widths: array of Double;
   end;
@@ -308,10 +360,14 @@ begin
     or ((ACode >= $1E00) and (ACode <= $206F)));
 end;
 
+{ ([R7-AI] ALastAccum and ALineWidthV as zrender holds them: the first
+  line's `lastAccumWidth + accumWidth + chWidth > lineWidth` joins a string
+  and compares two strings as strings) }
 function WrapText(const AText, AFamily: string; APx: Double; AWeight: Integer;
-  ALineWidth: Double; ABreakAll: Boolean; ALastAccum: Double;
+  const ALineWidthV: TTyRtJs; ABreakAll: Boolean; const ALastAccum: TTyRtJs;
   const AMeasurer: ITyTextMeasurer): TWrapResult;
 var
+  ALineWidth: Double;
   u: UnicodeString;
   i, code: Integer;
   ch: UnicodeString;
@@ -339,6 +395,7 @@ var
 
 begin
   Result := Default(TWrapResult);
+  ALineWidth := ALineWidthV.N;
   u := UTF8Decode(AText);
   line := '';
   currentWord := '';
@@ -365,7 +422,7 @@ begin
     chWidth := CharW(code, ch);
     if ABreakAll then inWord := False else inWord := not IsWordBreakCode(code);
     if Length(Result.Lines) = 0 then
-      over := ALastAccum + accumWidth + chWidth > ALineWidth
+      over := JGreater(JAdd(JAdd(ALastAccum, JNum(accumWidth)), JNum(chWidth)), ALineWidthV)
     else
       over := accumWidth + chWidth > ALineWidth;
     if over then
@@ -432,8 +489,9 @@ begin
   end;
   if currentWord <> '' then line := line + currentWord;
   if line <> '' then Push(line, accumWidth);
-  if Length(Result.Lines) = 1 then accumWidth := accumWidth + ALastAccum;
-  Result.AccumWidth := accumWidth;
+  if Length(Result.Lines) = 1 then Result.AccumWidthV := JAdd(JNum(accumWidth), ALastAccum)
+  else Result.AccumWidthV := JNum(accumWidth);
+  Result.AccumWidth := Result.AccumWidthV.N;
 end;
 
 { ---- styles ---- }
@@ -478,8 +536,10 @@ end;
 type
   TWrapInfo = record
     Active: Boolean;
-    Width, AccumWidth: Double;
+    Width: Double;
     BreakAll: Boolean;
+    { [R7-AI] the width and the accumulated width as zrender holds them }
+    WidthV, AccumWidth: TTyRtJs;
   end;
 
 procedure PushTokens(var ABlock: TTyRtBlock; const AStr: string;
@@ -492,7 +552,8 @@ var
   widths: array of Double;
   hasWidths: Boolean;
   fam: string;
-  px, padH, outerW: Double;
+  px: Double;
+  padH, outerW: TTyRtJs;
   wt, i, n, k: Integer;
   tok: TTyRtToken;
   wr: TWrapResult;
@@ -507,25 +568,27 @@ begin
   widths := nil;
   if AWrap.Active then
   begin
-    if found and ts.HasPadding then padH := ts.Padding[1] + ts.Padding[3]
-    else padH := 0;
+    { ([R7-AI] `tokenPadding[1] + tokenPadding[3]`, joined where a side is a
+      string) }
+    if found and ts.HasPadding then padH := TyRtPadJoin(ts, 1, 3)
+    else padH := JNum(0);
     { `tokenStyle.width != null && !== 'auto'`: parsePercent of it -- a
       percentage parseFloat / 100 of the wrap's width, any other string its
       parseFloat [R7-H: was a number or a percentage only] }
     if found and (ts.WidthKind in [rtwNumber, rtwPercent, rtwText]) then
     begin
-      if ts.WidthKind = rtwPercent then outerW := ts.Width / 100 * AWrap.Width + padH
-      else if ts.WidthKind = rtwText then outerW := TyJsParseFloat(ts.WidthText) + padH
-      else outerW := ts.Width + padH;
-      if (Length(ABlock.Lines) > 0) and (outerW + AWrap.AccumWidth > AWrap.Width) then
+      if ts.WidthKind = rtwPercent then outerW := JAdd(JNum(ts.Width / 100 * AWrap.Width), padH)
+      else if ts.WidthKind = rtwText then outerW := JAdd(JNum(TyJsParseFloat(ts.WidthText)), padH)
+      else outerW := JAdd(JNum(ts.Width), padH);
+      if (Length(ABlock.Lines) > 0) and JGreater(JAdd(outerW, AWrap.AccumWidth), AWrap.WidthV) then
         newLine := True;
       AWrap.AccumWidth := outerW;
     end
     else
     begin
-      wr := WrapText(AStr, fam, px, wt, AWrap.Width, AWrap.BreakAll,
+      wr := WrapText(AStr, fam, px, wt, AWrap.WidthV, AWrap.BreakAll,
         AWrap.AccumWidth, AMeasurer);
-      AWrap.AccumWidth := wr.AccumWidth + padH;
+      AWrap.AccumWidth := JAdd(wr.AccumWidthV, padH);
       SetLength(strLines, Length(wr.Lines));
       for k := 0 to High(wr.Lines) do strLines[k] := wr.Lines[k];
       widths := Copy(wr.Widths);
@@ -736,6 +799,18 @@ begin
     AX0 := Min(AX0, xs[k]); AX1 := Max(AX1, xs[k]);
     AY0 := Min(AY0, ys[k]); AY1 := Max(AY1, ys[k]);
   end;
+  { ([R7-AI] where the place is a string, the arcs about it joined again:
+    the extent RectPiece took) }
+  if APiece.XText <> '' then
+  begin
+    if not (Fin(APiece.EdgeXMin) and Fin(APiece.EdgeXMax)) then
+    begin
+      AX0 := 0; AY0 := 0; AX1 := 0; AY1 := 0;
+      Exit(False);
+    end;
+    AX0 := APiece.EdgeXMin;
+    AX1 := APiece.EdgeXMax;
+  end;
 end;
 
 function TyRtBoxIsFinite(const AR: TTyXYWH): Boolean;
@@ -781,6 +856,12 @@ begin
       begin
         x0 := JsMin(x0, xs[k]); x1 := JsMax(x1, xs[k]);
         y0 := JsMin(y0, ys[k]); y1 := JsMax(y1, ys[k]);
+      end;
+      { ([R7-AI] joined where the place is a string: RoundPathXs) }
+      if P.XText <> '' then
+      begin
+        x0 := P.EdgeXMin;
+        x1 := P.EdgeXMax;
       end;
     end
     else
@@ -919,6 +1000,8 @@ var
   wrap: TWrapInfo;
   i, j, k: Integer;
   lnH, lnW, calcH, calcW, padH, remain, iw, ih: Double;
+  { [R7-AI] the token's paddingH and the line's width as zrender holds them }
+  padHV, lnWV: TTyRtJs;
   ts: TTyRtStyle;
   found, truncLine, stop: Boolean;
   fam: string;
@@ -939,10 +1022,13 @@ begin
   topW := BlockWidthOf(AStyle, hasTopW);
   topH := HeightOf(AStyle);
   wrap := Default(TWrapInfo);
+  wrap.AccumWidth := JNum(0);
+  wrap.WidthV := JNum(0);
   wrap.Active := (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and hasTopW;
   if wrap.Active then
   begin
     wrap.Width := topW.N;
+    wrap.WidthV := topW;
     wrap.BreakAll := AStyle.Overflow = rtoBreakAll;
   end;
   Tokenise(Result, AText, AStyle, ARich, wrap, AMeasurer);
@@ -955,6 +1041,7 @@ begin
   begin
     lnH := 0;
     lnW := 0;
+    lnWV := JNum(0);
     for j := 0 to High(Result.Lines[i].Tokens) do
     begin
       with Result.Lines[i].Tokens[j] do
@@ -964,10 +1051,12 @@ begin
         if HasPadding then
         begin
           for k := 0 to 3 do Padding[k] := ts.Padding[k];
-          padH := Padding[1] + Padding[3];
+          { ([R7-AI] joined where a side is a string) }
+          padHV := TyRtPadJoin(ts, 1, 3);
         end
         else
-          padH := 0;
+          padHV := JNum(0);
+        padH := padHV.N;
         TokenFont(ts, found, AStyle, fam, px, wt);
         FontFamily := fam;
         FontSizePx := px;
@@ -978,7 +1067,9 @@ begin
         if found and ts.HasHeight then th := HeightOf(ts)
         else th := JNum(ContentHeight);
         InnerHeight := th.N;
-        if HasPadding then th := JAdd(th, JNum(Padding[0] + Padding[2]));
+        { ([R7-AI] `textPadding[0] + textPadding[2]`, joined where a side is a
+          string, then added) }
+        if HasPadding then th := JAdd(th, TyRtPadJoin(ts, 0, 2));
         HeightV := th;
         Height := th.N;
         { retrieve3(tokenStyle.lineHeight, style.lineHeight, tokenHeight) }
@@ -999,6 +1090,7 @@ begin
         begin
           SetLength(Result.Lines[i].Tokens, j);
           Result.Lines[i].Width := lnW;
+          Result.Lines[i].WidthV := lnWV;
           Result.Lines[i].LineHeight := lnH;
           calcH := calcH + lnH;
           calcW := JsMax(calcW, lnW);
@@ -1065,14 +1157,19 @@ begin
           else
             ContentWidth := MeasureW(AMeasurer, Text, FontFamily, FontSizePx, FontWeight);
         end;
-        Width := Width + padH;
-        lnW := lnW + Width;
+        { ([R7-AI] `token.width += paddingH` and `lineWidth += token.width`:
+          a padding that is a string joins them) }
+        WidthV := JAdd(JNum(Width), padHV);
+        Width := WidthV.N;
+        lnWV := JAdd(lnWV, WidthV);
+        lnW := lnWV.N;
         { Math.max: a line height that is a word is NaN [R7-H] }
         lnH := JsMax(lnH, LineHeight);
       end;
     end;
     if stop then Break;
     Result.Lines[i].Width := lnW;
+    Result.Lines[i].WidthV := lnWV;
     Result.Lines[i].LineHeight := lnH;
     calcH := calcH + lnH;
     calcW := JsMax(calcW, lnW);
@@ -1088,8 +1185,9 @@ begin
   Result.ContentHeight := calcH;
   if AStyle.HasPadding then
   begin
-    Result.OuterWidthV := JAdd(Result.WidthV, JNum(AStyle.Padding[1] + AStyle.Padding[3]));
-    Result.OuterHeightV := JAdd(Result.HeightV, JNum(AStyle.Padding[0] + AStyle.Padding[2]));
+    { ([R7-AI] stlPaddingH / V joined where a side is a string) }
+    Result.OuterWidthV := JAdd(Result.WidthV, TyRtPadJoin(AStyle, 1, 3));
+    Result.OuterHeightV := JAdd(Result.HeightV, TyRtPadJoin(AStyle, 0, 2));
   end
   else
   begin
@@ -1103,7 +1201,10 @@ begin
     [R7-H: of its text] }
   for k := 0 to High(pending) do
     with Result.Lines[pending[k].L].Tokens[pending[k].T] do
+    begin
       Width := Percent / 100 * Result.Width;
+      WidthV := JNum(Width);
+    end;
 end;
 
 { ---- placing ---- }
@@ -1143,6 +1244,59 @@ begin
     or (((S.BorderWidth <> 0) or S.BorderWidthInf or S.BorderWidthWord) and S.HasBorderColor);
 end;
 
+{ [R7-AI] A TSPAN'S RECT AS rectContain READS IT (TTyRtPiece.HitJs),
+  tSpanCreateBoundingRect2 over the place zrender holds (AXV, AYV): `style.x
+  || 0` hung by its alignment, a stroke the style gave it taken off the
+  corner and added to the size -- joined where the place or the width is a
+  string -- and the far edges `rect.x + rect.width` joined once more. Only
+  where something is a string; else the content box is it. }
+procedure SpanHit(var P: TTyRtPiece; const AXV, AYV: TTyRtJs);
+var
+  xv, yv, lw, wv, hv: TTyRtJs;
+  y0: Double;
+begin
+  P.HitJs := False;
+  if not (AXV.IsStr or AYV.IsStr or (P.LineWidthText <> '')) then Exit;
+  { `style.x || 0`: '' and NaN and nought are 0 }
+  if AXV.IsStr then
+  begin
+    if AXV.S = '' then xv := JNum(0) else xv := AXV;
+  end
+  else if IsNan(AXV.N) or (AXV.N = 0) then xv := JNum(0)
+  else xv := AXV;
+  if AYV.IsStr then
+  begin
+    if AYV.S = '' then yv := JNum(0) else yv := AYV;
+  end
+  else if IsNan(AYV.N) or (AYV.N = 0) then yv := JNum(0)
+  else yv := AYV;
+  case P.TextAlign of
+    rtaRight: xv := JNum(xv.N - P.W);
+    rtaCenter: xv := JNum(xv.N - P.W / 2);
+  end;
+  y0 := yv.N - P.H / 2;
+  wv := JNum(P.W);
+  hv := JNum(P.H);
+  { forceLineWidth: the auto stroke grows nothing; else tSpanHasStroke's
+    `lineWidth > 0` }
+  if P.HasStroke and not P.DefaultStroke then
+  begin
+    if P.LineWidthText <> '' then lw := JStr(P.LineWidthText) else lw := JNum(P.LineWidth);
+    if lw.N > 0 then
+    begin
+      xv := JNum(xv.N - lw.N / 2);
+      y0 := y0 - lw.N / 2;
+      wv := JAdd(wv, lw);
+      hv := JAdd(hv, lw);
+    end;
+  end;
+  P.HitJs := True;
+  P.HitL := xv.N;
+  P.HitT := y0;
+  P.HitR := JAdd(xv, wv).N;
+  P.HitB := JAdd(JNum(y0), hv).N;
+end;
+
 procedure AddPiece(var R: TTyRtResult; const P: TTyRtPiece);
 begin
   SetLength(R.Pieces, Length(R.Pieces) + 1);
@@ -1151,23 +1305,80 @@ end;
 
 { _renderBackground: the box; strokeFirst and the doubled width when it has
   both a fill and a border }
-function RectPiece(const S: TTyRtStyle; AX, AY: Double; const AW, AH: TTyRtJs;
+{ [R7-AI] THE x-EXTENT OF roundRect's PATH (PathProxy.getBoundingRect)
+  whose place AXV is a string: every point the commands reach -- `x + r1`,
+  `x + width - r2`, `x + width`, `x + r4`, `x` -- and the ends of the four
+  arcs, `Math.cos(a) * r + cx`, joined where the centre is a string (the left
+  two: `x + r4`, `x + r1`); a radius of nought draws no arc. Math.min / max:
+  NaN once any is. }
+procedure RoundPathXs(var P: TTyRtPiece; const AXV, AW: TTyRtJs; R1, R2, R3, R4: Double);
+var
+  lo, hi: Double;
+  xw: Double;
+  cx: TTyRtJs;
+
+  procedure Take(AV: Double);
+  begin
+    lo := JsMin(lo, AV);
+    hi := JsMax(hi, AV);
+  end;
+
+begin
+  lo := JAdd(AXV, JNum(R1)).N;
+  hi := lo;
+  xw := JAdd(AXV, AW).N;
+  Take(xw - R2);
+  if R2 <> 0 then
+  begin
+    Take(TyJsCos(-Pi / 2) * R2 + (xw - R2));
+    Take(TyJsCos(0) * R2 + (xw - R2));
+  end;
+  Take(xw);
+  if R3 <> 0 then
+  begin
+    Take(TyJsCos(0) * R3 + (xw - R3));
+    Take(TyJsCos(Pi / 2) * R3 + (xw - R3));
+  end;
+  Take(JAdd(AXV, JNum(R4)).N);
+  if R4 <> 0 then
+  begin
+    cx := JAdd(AXV, JNum(R4));
+    Take(JAdd(JNum(TyJsCos(Pi / 2) * R4), cx).N);
+    Take(JAdd(JNum(TyJsCos(Pi) * R4), cx).N);
+  end;
+  Take(AXV.N);
+  if R1 <> 0 then
+  begin
+    cx := JAdd(AXV, JNum(R1));
+    Take(JAdd(JNum(TyJsCos(Pi) * R1), cx).N);
+    Take(JAdd(JNum(TyJsCos(Pi * 1.5) * R1), cx).N);
+  end;
+  P.EdgeXMin := lo;
+  P.EdgeXMax := hi;
+end;
+
+function RectPiece(const S: TTyRtStyle; const AXV: TTyRtJs; AY: Double; const AW, AH: TTyRtJs;
   ALine, AToken: Integer; AOpacityFallback: Double): TTyRtPiece;
-var k: Integer;
+var
+  k: Integer;
+  r1, r2, r3, r4: Double;
 begin
   Result := Default(TTyRtPiece);
   Result.Kind := rpkRect;
   Result.Line := ALine;
   Result.Token := AToken;
-  Result.X := AX;
+  Result.X := AXV.N;
   Result.Y := AY;
   { [R7-H] canvas takes a string size as its number; the path adds it to
     the corner as a string (TTyRtPiece.PathEdges) }
+  { ([R7-AI] and a place that is a string: a left-aligned token's x after a
+    padding side that joined the block's left edge) }
   Result.W := AW.N;
   Result.H := AH.N;
-  Result.PathEdges := AW.IsStr or AH.IsStr;
-  Result.EdgeX1 := JAdd(JNum(AX), AW).N;
+  Result.PathEdges := AW.IsStr or AH.IsStr or AXV.IsStr;
+  Result.EdgeX1 := JAdd(AXV, AW).N;
   Result.EdgeY1 := JAdd(JNum(AY), AH).N;
+  if AXV.IsStr then Result.XText := AXV.S;
   Result.HasFill := S.HasBackground;
   Result.Fill := S.Background;
   Result.NoHit := S.BorderWidthInf and S.HasBorderColor;
@@ -1218,6 +1429,16 @@ begin
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   Result.Rounded := S.RadiusTruthy or (S.Radius[0] + S.Radius[1] + S.Radius[2]
     + S.Radius[3] > 0);
+  { [R7-AI] roundRect's `x + r1` and `x + r4` after its clamp: joined where
+    the place is a string }
+  r1 := S.Radius[0];
+  r2 := S.Radius[1];
+  r3 := S.Radius[2];
+  r4 := S.Radius[3];
+  TyRtClampRadii(Result.W, Result.H, r1, r2, r3, r4);
+  Result.EdgeXR1 := JAdd(AXV, JNum(r1)).N;
+  Result.EdgeXR4 := JAdd(AXV, JNum(r4)).N;
+  if AXV.IsStr then RoundPathXs(Result, AXV, AW, r1, r2, r3, r4);
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;
   Result.Drawn := Result.HasFill or Result.HasStroke;
   { [R5-A] the box's canvas shadow: style.shadowBlur || 0, the offsets alike,
@@ -1256,34 +1477,38 @@ function LayoutIn(const AText: string; const AStyle: TTyRtStyle;
 var
   textAlign: TTyRtAlign;
   vAlign: TTyRtVAlign;
-  boxX, boxY, xLeft, xRight, lineTop, remained, lx, rx, w: Double;
+  boxX, boxY, remained, w: Double;
+  { [R7-AI] the places as zrender holds them: a padding side that is a
+    string joins the block's left edge and line top, and every place
+    reckoned from them after }
+  xLeft, xRight, lineTop, lx, rx: TTyRtJs;
   i, idx, ridx: Integer;
   blockBg: Boolean;
 
-  procedure PlaceToken(ALine, AIdx: Integer; AX: Double; AAlign: TTyRtAlign);
+  procedure PlaceToken(ALine, AIdx: Integer; AX: TTyRtJs; AAlign: TTyRtAlign);
   var
     tk: TTyRtToken;
     ts: TTyRtStyle;
     found, tokenBg, useDefaultFill: Boolean;
-    y, rx0: Double;
+    rx0, y: TTyRtJs;
     p, rp: TTyRtPiece;
   begin
     tk := Result.Block.Lines[ALine].Tokens[AIdx];
     ts := StyleOf(ARichStyles, tk.StyleIndex, AStyle, found);
-    y := lineTop + Result.Block.Lines[ALine].LineHeight / 2;
-    if tk.VAlign = rtvTop then y := lineTop + tk.Height / 2
+    y := JAdd(lineTop, JNum(Result.Block.Lines[ALine].LineHeight / 2));
+    if tk.VAlign = rtvTop then y := JAdd(lineTop, JNum(tk.Height / 2))
     else if tk.VAlign = rtvBottom then
-      y := lineTop + Result.Block.Lines[ALine].LineHeight - tk.Height / 2;
+      y := JNum(JAdd(lineTop, JNum(Result.Block.Lines[ALine].LineHeight)).N - tk.Height / 2);
     tokenBg := False;
     if found and not tk.IsLineHolder and NeedBackground(ts) then
     begin
       case AAlign of
-        rtaRight: rx0 := AX - tk.Width;
-        rtaCenter: rx0 := AX - tk.Width / 2;
+        rtaRight: rx0 := JNum(AX.N - tk.Width);
+        rtaCenter: rx0 := JNum(AX.N - tk.Width / 2);
       else
         rx0 := AX;
       end;
-      rp := RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
+      rp := RectPiece(ts, rx0, y.N - tk.Height / 2, tk.WidthV, tk.HeightV,
         ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1));
       { [R7-L] the token's rect takes the token's own opacity }
       rp.OwnOpacity := ts.HasOpacity;
@@ -1292,20 +1517,23 @@ var
     end;
     if tk.HasPadding then
     begin
+      { getTextXForPadding: `x + textPadding[3]` joined where the side is a
+        string [R7-AI] }
       case AAlign of
-        rtaRight: AX := AX - tk.Padding[1];
-        rtaCenter: AX := AX + tk.Padding[3] / 2 - tk.Padding[1] / 2;
+        rtaRight: AX := JNum(AX.N - TyRtPadV(ts, 1).N);
+        rtaCenter: AX := JNum(JAdd(AX, JNum(TyRtPadV(ts, 3).N / 2)).N - TyRtPadV(ts, 1).N / 2);
       else
-        AX := AX + tk.Padding[3];
+        AX := JAdd(AX, TyRtPadV(ts, 3));
       end;
-      y := y - (tk.Height / 2 - tk.Padding[0] - tk.InnerHeight / 2);
+      y := JNum(y.N - (tk.Height / 2 - TyRtPadV(ts, 0).N - tk.InnerHeight / 2));
     end;
     p := Default(TTyRtPiece);
     p.Kind := rpkText;
     p.Line := ALine;
     p.Token := AIdx;
-    p.X := AX;
-    p.Y := y;
+    p.X := AX.N;
+    p.Y := y.N;
+    if AX.IsStr then p.XText := AX.S;
     p.Text := tk.Text;
     p.TextAlign := AAlign;
     p.FontFamily := tk.FontFamily;
@@ -1373,10 +1601,11 @@ var
         if AStyle.LineWidthInf then p.CanvasLeft := p.CanvasLeft or 8;
       end
       else p.LineWidth := 2;
-      { [R7-AF] A SPAN WHOSE RECT JOINED A STRING IS FOUND BY NOTHING:
-        rectContain's `x <= rect.x + rect.width` joins it again ('-4.86' +
-        '6.72..3' is no number) [was: found in its words' box] }
-      if (p.LineWidthText <> '') and not p.DefaultStroke then p.NoHit := True;
+      { [R7-AF] A SPAN WHOSE RECT JOINED A STRING: rectContain's `x <=
+        rect.x + rect.width` joins it again ('-4.86' + '6.72..3' is no
+        number) [was: found in its words' box] -- [R7-AI] and where that is
+        a number (a span on the right: '12' + '243'), found up to it: the
+        rect as rectContain reads it (SpanHit) [was: found by nothing] }
       { [F4c] the token's textBorderType, else the block's }
       if found and (ts.LineDash <> '') then p.LineDash := ts.LineDash
       else p.LineDash := AStyle.LineDash;
@@ -1428,19 +1657,21 @@ var
       was the chosen blur's] }
     p.HasShadow := (found and ((ts.ShadowBlur > 0) or ((ts.ShadowLeft and 8) <> 0)))
       or (AStyle.ShadowBlur > 0) or ((AStyle.ShadowLeft and 8) <> 0);
+    { [R7-AI] its rect as the pointer reads it }
+    SpanHit(p, AX, y);
     AddPiece(Result, p);
   end;
 
   procedure PlainLayout;
   var
     lines: TStringArray;
-    lh, contentH, height, contentW, textX, textY, bx, by, fontH, q: Double;
+    lh, contentH, height, contentW, textY, bx, by, fontH, q: Double;
     k, keep: Integer;
     cut: TStringArray;
     p: TTyRtPiece;
     useDefaultFill, bgDrawn, hasW: Boolean;
     wr: TWrapResult;
-    widthV, heightV, lhV, textYV, padHV, padVV: TTyRtJs;
+    widthV, heightV, lhV, textYV, padHV, padVV, textXV: TTyRtJs;
   begin
     fontH := FontHeight(AMeasurer, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight);
     { [R7-H] the width, height and line height as zrender holds them: a
@@ -1455,7 +1686,7 @@ var
       if (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and hasW then
       begin
         wr := WrapText(AText, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight,
-          widthV.N, AStyle.Overflow = rtoBreakAll, 0, AMeasurer);
+          widthV, AStyle.Overflow = rtoBreakAll, JNum(0), AMeasurer);
         SetLength(lines, Length(wr.Lines));
         for k := 0 to High(wr.Lines) do lines[k] := wr.Lines[k];
       end
@@ -1512,8 +1743,9 @@ var
     { outerWidth += paddingH, always: a string joins it [R7-H] }
     if AStyle.HasPadding then
     begin
-      padHV := JNum(AStyle.Padding[1] + AStyle.Padding[3]);
-      padVV := JNum(AStyle.Padding[0] + AStyle.Padding[2]);
+      { ([R7-AI] joined where a side is a string) }
+      padHV := TyRtPadJoin(AStyle, 1, 3);
+      padVV := TyRtPadJoin(AStyle, 0, 2);
     end
     else
     begin
@@ -1530,7 +1762,7 @@ var
     Result.Block.ContentHeight := contentH;
     Result.Block.OuterWidth := Result.Block.OuterWidthV.N;
     Result.Block.OuterHeight := Result.Block.OuterHeightV.N;
-    textX := ABaseX;
+    textXV := JNum(ABaseX);
     textY := AdjustY(ABaseY, contentH, vAlign);
     bx := AdjustX(ABaseX, Result.Block.OuterWidth, textAlign);
     by := AdjustY(ABaseY, Result.Block.OuterHeight, vAlign);
@@ -1541,33 +1773,37 @@ var
     bgDrawn := False;
     if NeedBackground(AStyle) then
     begin
-      AddPiece(Result, RectPiece(AStyle, bx, by, Result.Block.OuterWidthV,
+      AddPiece(Result, RectPiece(AStyle, JNum(bx), by, Result.Block.OuterWidthV,
         Result.Block.OuterHeightV, -1, -1, 1));
       bgDrawn := AStyle.HasBackground or (AStyle.BgImage <> '');
     end;
     textY := textY + lh / 2;
-    if AStyle.HasPadding then
-    begin
-      case textAlign of
-        rtaRight: textX := ABaseX - AStyle.Padding[1];
-        rtaCenter: textX := ABaseX + AStyle.Padding[3] / 2 - AStyle.Padding[1] / 2;
-      else
-        textX := ABaseX + AStyle.Padding[3];
-      end;
-      if vAlign = rtvTop then textY := textY + AStyle.Padding[0]
-      else if vAlign = rtvBottom then textY := textY - AStyle.Padding[2];
-    end;
     { [R7-H] `textY += lineHeight` after each line: a string line height
       joins it, and the next line sits at the joined number }
     textYV := JNum(textY);
+    if AStyle.HasPadding then
+    begin
+      { getTextXForPadding and `textY += textPadding[0]`: joined where the
+        side is a string ('0' + '2' is '02') [R7-AI] }
+      case textAlign of
+        rtaRight: textXV := JNum(ABaseX - TyRtPadV(AStyle, 1).N);
+        rtaCenter: textXV := JNum(JAdd(JNum(ABaseX), JNum(TyRtPadV(AStyle, 3).N / 2)).N
+          - TyRtPadV(AStyle, 1).N / 2);
+      else
+        textXV := JAdd(JNum(ABaseX), TyRtPadV(AStyle, 3));
+      end;
+      if vAlign = rtvTop then textYV := JAdd(textYV, TyRtPadV(AStyle, 0))
+      else if vAlign = rtvBottom then textYV := JNum(textY - TyRtPadV(AStyle, 2).N);
+    end;
     for k := 0 to High(lines) do
     begin
       p := Default(TTyRtPiece);
       p.Kind := rpkText;
       p.Line := k;
       p.Token := -1;
-      p.X := textX;
+      p.X := textXV.N;
       p.Y := textYV.N;
+      if textXV.IsStr then p.XText := textXV.S;
       p.Text := lines[k];
       p.TextAlign := textAlign;
       p.FontFamily := AStyle.FontFamily;
@@ -1614,8 +1850,6 @@ var
           if AStyle.LineWidthInf then p.CanvasLeft := p.CanvasLeft or 8;
         end
         else p.LineWidth := 2;
-        { ([R7-AF] as a token's) }
-        if (p.LineWidthText <> '') and not p.DefaultStroke then p.NoHit := True;
         p.LineDash := AStyle.LineDash;
         if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
       end;
@@ -1627,6 +1861,8 @@ var
       { [R7-AB] the parts the canvas refuses, and `style.textShadowBlur > 0` }
       p.ShadowLeft := AStyle.ShadowLeft and 7;
       p.HasShadow := (p.ShadowBlur > 0) or ((AStyle.ShadowLeft and 8) <> 0);
+      { ([R7-AF] as a token's; [R7-AI] the rect as the pointer reads it) }
+      SpanHit(p, textXV, textYV);
       AddPiece(Result, p);
       textYV := JAdd(textYV, lhV);
     end;
@@ -1652,25 +1888,28 @@ begin
   Result.BoxY := boxY;
   Result.BoxW := Result.Block.OuterWidth;
   Result.BoxH := Result.Block.OuterHeight;
-  xLeft := boxX;
-  lineTop := boxY;
+  xLeft := JNum(boxX);
+  lineTop := JNum(boxY);
   if AStyle.HasPadding then
   begin
-    xLeft := xLeft + AStyle.Padding[3];
-    lineTop := lineTop + AStyle.Padding[0];
+    { ([R7-AI] joined where the side is a string) }
+    xLeft := JAdd(xLeft, TyRtPadV(AStyle, 3));
+    lineTop := JAdd(lineTop, TyRtPadV(AStyle, 0));
   end;
   { `xLeft + contentWidth`: a width that is a string joins it [R7-H] }
-  xRight := JAdd(JNum(xLeft), Result.Block.WidthV).N;
+  xRight := JAdd(xLeft, Result.Block.WidthV);
   blockBg := False;
   if NeedBackground(AStyle) then
   begin
-    AddPiece(Result, RectPiece(AStyle, boxX, boxY, Result.Block.OuterWidthV,
+    AddPiece(Result, RectPiece(AStyle, JNum(boxX), boxY, Result.Block.OuterWidthV,
       Result.Block.OuterHeightV, -1, -1, 1));
     blockBg := AStyle.HasBackground or (AStyle.BgImage <> '');
   end;
   for i := 0 to High(Result.Block.Lines) do
   begin
-    remained := Result.Block.Lines[i].Width;
+    { `remainedWidth -= token.width` is a number; `lineXLeft += token.width`
+      joins a string [R7-AI] }
+    remained := Result.Block.Lines[i].WidthV.N;
     lx := xLeft;
     rx := xRight;
     idx := 0;
@@ -1680,7 +1919,7 @@ begin
       w := Result.Block.Lines[i].Tokens[idx].Width;
       PlaceToken(i, idx, lx, rtaLeft);
       remained := remained - w;
-      lx := lx + w;
+      lx := JAdd(lx, Result.Block.Lines[i].Tokens[idx].WidthV);
       Inc(idx);
     end;
     while (ridx >= idx) and (Result.Block.Lines[i].Tokens[ridx].Align = rtaRight) do
@@ -1688,18 +1927,18 @@ begin
       w := Result.Block.Lines[i].Tokens[ridx].Width;
       PlaceToken(i, ridx, rx, rtaRight);
       remained := remained - w;
-      rx := rx - w;
+      rx := JNum(rx.N - w);
       Dec(ridx);
     end;
-    lx := lx + (Result.Block.Width - (lx - xLeft) - (xRight - rx) - remained) / 2;
+    lx := JAdd(lx, JNum((Result.Block.Width - (lx.N - xLeft.N) - (xRight.N - rx.N) - remained) / 2));
     while idx <= ridx do
     begin
       w := Result.Block.Lines[i].Tokens[idx].Width;
-      PlaceToken(i, idx, lx + w / 2, rtaCenter);
-      lx := lx + w;
+      PlaceToken(i, idx, JAdd(lx, JNum(w / 2)), rtaCenter);
+      lx := JAdd(lx, Result.Block.Lines[i].Tokens[idx].WidthV);
       Inc(idx);
     end;
-    lineTop := lineTop + Result.Block.Lines[i].LineHeight;
+    lineTop := JAdd(lineTop, JNum(Result.Block.Lines[i].LineHeight));
   end;
 end;
 
