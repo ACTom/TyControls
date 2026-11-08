@@ -8,6 +8,14 @@
    90deg = a vertical top->bottom gradient here. */
 
 :root {
+  /* Table: Luna's header. The window colour with a bevelled foot, full separators, triangles. */
+  --grid-header-bg: var(--surface);
+  --grid-header-separator-color: var(--border);
+  --grid-header-rule-width: 2px;
+  --grid-header-hover-bg: lighten(--surface, 6%);
+  --grid-line-color: var(--border);
+  --sort-glyph: triangle;
+  --sort-glyph-size: 9px;
   --radius: 3px;
   /* XP caption buttons: small glossy rounded squares (a touch wider than tall), each white-ringed. */
   --caption-button-width:    24;

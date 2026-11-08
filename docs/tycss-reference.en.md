@@ -320,7 +320,106 @@ whole application. `0`, `false`, `none` or no value at all leave it on. Code can
 off too: `TyChromeOverlayEnabled := False;` (unit `tyControls.Base`, `True` by default).
 
 Only TyControls' own controls get the frame drawn over them; a native LCL control placed on
-a frame still covers it. This behaviour starts with 3.0.5.
+a frame still covers it. This behaviour starts with 3.0.4.
+
+### 3.7 The data grid
+
+Every part of `TTyStringGrid` and `TTyDrawGrid` has tokens. The base layer's `TyGrid*` rules read
+the colour and font ones, so a skin can set the token or write the rule outright. One grid takes
+any of them in its own `StyleOverride`:
+
+```text
+--grid-header-bg: none; --grid-line-v-width: 0; --grid-hover: row;
+```
+
+**Grid lines**
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--grid-line-color` | a colour | a shade of the surface | Both directions. `TyGridLine { background: … }` is the same thing. |
+| `--grid-line-h-color`, `--grid-line-v-color` | a colour | `--grid-line-color` | One direction. |
+| `--grid-line-h-width`, `--grid-line-v-width` | a length | `1px` | `0` hides that direction. |
+| `--grid-line-h-style`, `--grid-line-v-style` | `solid` / `dotted` / `dashed` / one or two lengths | `solid` | The dash, as in `--treeview-lines-style`. |
+| `--grid-line-extend` | `full` / `columns` | `full` | Whether a row's line crosses the empty part past the last column. |
+
+`GridLineStyle` and `GridLineWidth` still work. At their defaults (`glsBoth`, `1`) the theme decides.
+`GridLineWidth` set to anything else gives that width in both directions. `glsHorizontal` and
+`glsVertical` show that direction even under a skin that hides it, and `glsNone` shows none.
+
+**The header**
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--grid-header-bg`, `--grid-header-color` | a colour; the fill also `none` | a pale band | The band and its text. |
+| `--grid-header-font-size`, `--grid-header-font-weight` | a size, a weight | base size, `400` | The caption's font. |
+| `--grid-header-padding-start`, `--grid-header-padding-end` | a length | `6px`, `4px` | Between the section's edge and its caption. |
+| `--grid-header-separator-color` | a colour | `--grid-line-color` | The line between sections. Also `border-color` of `TyGridHeader`. |
+| `--grid-header-separator-width` | a length | `1px` | `0` removes it. |
+| `--grid-header-separator-height` | a percentage or a length | `100%` | Centred in the band. |
+| `--grid-header-separator-style` | as the lines' style | `solid` | The dash. |
+| `--grid-header-rule-color`, `--grid-header-rule-width` | a colour, a length | `--border`, `1px` | The line under the band. `0` removes it. |
+| `--grid-header-hover-bg`, `--grid-header-pressed-bg` | a colour | `--surface-hover`, `--surface-active` | The section under the pointer (`hoHotTrack`), and the one held down (`goHeaderPushedLook`). |
+| `--grid-header-sorted-bg`, `--grid-header-sorted-color` | a colour; the fill also `none` | `none`, the header's | The section being sorted by. Rule: `TyGridHeaderSorted`. |
+| `--grid-header-filtered-bg`, `--grid-header-filtered-color` | a colour; the fill also `none` | `none`, the header's | A section with a filter on. Rule: `TyGridHeaderFiltered`. |
+| `--grid-header-group-bg`, `--grid-header-group-color` | a colour | `--surface-chrome`, `--on-surface` | The band of column groups. |
+| `--grid-header-bevel` | `none` / `raised` | `none` | Draws each section as a button, sunk while it is pressed. |
+| `--grid-header-bevel-light`, `--grid-header-bevel-dark` | a colour | white, grey | The button's edges. |
+| `--grid-filter-icon-color`, `--grid-filter-icon-active-color` | a colour | the header's ink, `:selected`'s | The filter mark, off and on. |
+
+The band's height is `Header.Height`, or `--header-height` when the host did not set it.
+
+**The sort mark**
+
+These hold for the grid, the list view and the tree alike.
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--sort-glyph` | `chevron` / `arrow` / `triangle` / `none` | `chevron` | Its shape. |
+| `--sort-glyph-size` | a length | `--glyph-chevron-size`, or `10px` for the other two | Its size. |
+| `--sort-glyph-color` | a colour | the header's ink | Its colour. |
+| `--sort-glyph-unsorted` | `none` / `hover` / `always` | `none` | Grid only: a faint mark on a clickable column that is not sorted. |
+| `--sort-glyph-unsorted-color` | a colour | the header's ink, faint | That mark's colour. |
+
+**Rows and cells**
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--grid-cell-bg`, `--grid-cell-color` | a colour; the fill also `none` | `none`, `--on-surface` | A resting cell. |
+| `--grid-hover` | `cell` / `row` / `column` / `cross` / `none` | `cell` | What the pointer lights. |
+| `--grid-hover-bg` | a colour | `--surface-hover` | How. |
+| `--grid-alt-bg` | a colour | `--surface-alt` | Every other row (`AlternateRows`). |
+| `--grid-sorted-cell-bg` | a colour or `none` | `none` | The body of the sorted column. |
+| `--grid-selected-bg`, `--grid-selected-color` | a colour | `--accent`, `--on-accent` | The selection. |
+| `--grid-selected-hover-bg` | a colour | `--grid-selected-bg` | The selection under the pointer. |
+| `--grid-selected-inactive-bg`, `--grid-selected-inactive-color` | a colour | a pale accent, `--on-surface` | The selection while the grid has no focus. |
+| `--grid-active-cell-bg`, `--grid-active-cell-color` | a colour | `--surface-active`, `--on-surface` | The cursor's cell. |
+| `--grid-focus-ring-width` | a length | `0` | A ring round the cursor's cell. |
+| `--grid-focus-ring-color`, `--grid-focus-ring-style` | a colour, as the lines' style | the grid's border colour, `solid` | Its colour and dash. |
+| `--grid-fill-handle-size` | a length | `6px` | The handle at the selection's corner. |
+
+The selection frame's colour and width are `border-color` and `border-width` of `TyGridSelectionFrame`.
+In a `StyleOverride`, `--grid-selection-frame-border-color` and `--grid-selection-frame-border-width`.
+
+**Frozen rows and columns, the row number slot, and the other bands**
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--grid-fixed-bg`, `--grid-fixed-color` | a colour | the header's band, `--on-surface` | Frozen rows and columns. |
+| `--grid-frozen-line-color`, `--grid-frozen-line-width` | a colour, a length | `--border`, `1px` | The line where a frozen band meets the body. |
+| `--grid-frozen-shadow-size`, `--grid-frozen-shadow-color` | a length, a colour | `0`, a faint black | A shadow beside that line once something has scrolled under the band. |
+| `--grid-indicator-bg`, `--grid-indicator-color` | a colour | the header's band, `--muted` | The row number slot. |
+| `--grid-indicator-active-color` | a colour | `--on-surface` | The number of the cursor's row. Rule: `TyGridIndicatorActive`, which may also have a background. |
+| `--grid-filter-bg`, `--grid-filter-color` | a colour | `--surface`, `--on-surface` | The filter row. |
+| `--grid-group-bg`, `--grid-group-color` | a colour or `none` | `none`, `--on-surface` | A group row. |
+| `--grid-group-indent` | a length | `14px` | Per group level. |
+| `--grid-footer-bg`, `--grid-footer-color` | a colour or `none` | `none`, `--on-surface` | The summary row. |
+| `--grid-footer-rule-color`, `--grid-footer-rule-width` | a colour, a length | `--border`, `1px` | The line above it. `0` removes it. |
+
+Each part's `-bg`, `-color`, `-font-size` and `-font-weight` work in a `StyleOverride`, and so do
+`-border-color` and `-border-width`. For a `TyGrid*` rule's other properties, write the rule.
+
+The row height is `DefaultRowHeight`, or `--row-height` when the host did not set it. Row-number slot
+width is `IndicatorWidth`. Scroll bars are themed as everywhere else (`TyScrollBar`, `--scrollbar-size`).
 
 ---
 

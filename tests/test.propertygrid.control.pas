@@ -13,7 +13,7 @@ unit test.propertygrid.control;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms, Menus, fpcunit, testregistry,
   tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.Button,
   tyControls.Edit, tyControls.StrConsts, test.propertygrid.fixtures, test.danglingrefs;
 
@@ -31,6 +31,7 @@ type
     FChanging, FChanged, FErrors, FEdits, FRowCalls: Integer;
     FChangedName: string;
     FChangedInstance: TPersistent;
+    FDone: Integer;
     FAllow: Boolean;
     FHandle: Boolean;
     procedure Changing(Sender: TObject; AInstance: TPersistent; const APropName,
@@ -45,6 +46,14 @@ type
     procedure HideAlpha(Sender: TObject; AInstance: TPersistent; const APropName: string;
       var AShow: Boolean);
     function Lines(const AText: string): string;
+    procedure RebuildGrid(Sender: TObject);
+    procedure EditingDoneSeen(Sender: TObject);
+    procedure ShowInMm(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      ARow: TTyValueRow);
+    procedure CountAsDialog(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      ARow: TTyValueRow);
+    procedure EditCount(Sender: TObject; ARow: TTyValueRow; AInstance: TPersistent;
+      const APropName: string; var AHandled: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -79,6 +88,16 @@ type
     procedure TestPropertyOrderRebuildsAtOnce;
     procedure TestTypeFilterHiddenPropertiesAndTheFilterEventRebuildAtOnce;
     procedure TestKeyOptionsStayEmpty;
+    { #183 }
+    procedure TestASetterThatRebuildsTheRowsEndsTheWrite;
+    procedure TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
+    procedure TestAWriteThatChangesTheStructureRebuildsTheRows;
+    procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
+    procedure TestTheGridsOwnLinksOutliveTheSelection;
+    procedure TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
+    procedure TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
+    procedure TestOnEditingDoneComesOnceWhenAnEditEnds;
+    procedure TestAnEditOnAComponentBeingFreedIsDropped;
   end;
 
 implementation
@@ -89,6 +108,13 @@ type
   published
     Grid: TTyPropertyGrid;
     Button1: TTyButton;
+  end;
+
+  { The grid read before the component it inspects, whose Loaded comes after the grid's. }
+  TPGLoadedHostForm = class(TForm)
+  published
+    Grid: TTyPropertyGrid;
+    Comp: TPGLoadedComp;
   end;
 
 procedure TPropertyGridControlTest.SetUp;
@@ -181,6 +207,37 @@ end;
 function TPropertyGridControlTest.Lines(const AText: string): string;
 begin
   Result := StringReplace(Trim(AText), LineEnding, ',', [rfReplaceAll]);
+end;
+
+procedure TPropertyGridControlTest.RebuildGrid(Sender: TObject);
+begin
+  FGrid.Rebuild;
+end;
+
+procedure TPropertyGridControlTest.EditingDoneSeen(Sender: TObject);
+begin
+  Inc(FDone);
+end;
+
+procedure TPropertyGridControlTest.ShowInMm(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; ARow: TTyValueRow);
+begin
+  if (APropInfo^.Name = 'Zeta') or (APropInfo^.Name = 'Width') then
+    ARow.DisplayValue := IntToStr(GetOrdProp(AInstance, APropInfo)) + ' mm';
+end;
+
+procedure TPropertyGridControlTest.CountAsDialog(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; ARow: TTyValueRow);
+begin
+  if APropInfo^.Name = 'Count' then ARow.EditorKind := vekDialog;
+end;
+
+procedure TPropertyGridControlTest.EditCount(Sender: TObject; ARow: TTyValueRow;
+  AInstance: TPersistent; const APropName: string; var AHandled: Boolean);
+begin
+  if not (AInstance is TPGCounted) or (APropName <> 'Count') then Exit;
+  TPGCounted(AInstance).Count := 3;   // the application's own dialog, answered
+  AHandled := True;
 end;
 
 { ================================================================ selection }
@@ -649,6 +706,238 @@ begin
   FGrid.Press(VK_INSERT);
   FGrid.Press(VK_DELETE, [ssModifier]);
   AssertEquals('Insert and Ctrl+Delete leave the rows alone', n, FGrid.RowCount);
+end;
+
+{ ================================================================ #183 }
+
+{ The first object's setter rebuilds the rows (the application refreshing the grid from it) while
+  the grid is still writing. Freed blocks are poisoned, so a write that went on with the node the
+  rebuild freed faults instead of meeting a fresh node in the same memory. }
+procedure TPropertyGridControlTest.TestASetterThatRebuildsTheRowsEndsTheWrite;
+var a, b: TPGHook;
+begin
+  a := TPGHook.Create;
+  b := TPGHook.Create;
+  try
+    a.OnSet := @RebuildGrid;
+    FGrid.SelectObjects([a, b]);
+    FGrid.OnPropertyError := @Failed;
+    BeginPoison;
+    try
+      FGrid.TypeInto(FGrid.RowAt('Value'), '5');
+    finally
+      EndPoison;
+    end;
+    AssertEquals('no error reached the application', '', FSeenError);
+    AssertEquals('the first object took it', 5, a.Value);
+    AssertEquals('the write stopped where the rows were rebuilt', 0, b.Value);
+    AssertEquals('the rows read the objects', '', FGrid.RowAt('Value').Value);
+  finally
+    FGrid.SelectedObject := nil;
+    a.Free;
+    b.Free;
+  end;
+end;
+
+{ The rows are rebuilt while the strings dialog is up (a timer, say). OK still writes the list:
+  into the same property of the same object, found again by its path. }
+procedure TPropertyGridControlTest.TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
+begin
+  FGrid.SelectedObject := FHolder;
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'x' + LineEnding + 'y';
+  FGrid.OnStringsDialog := @RebuildGrid;
+  BeginPoison;
+  try
+    FGrid.InvokeRowDialog(FGrid.FlatOf(FGrid.RowAt('Lines')));
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the dialog ran', 1, FGrid.StringsDialogs);
+  AssertEquals('the list was written', 'x,y', Lines(FHolder.Lines.Text));
+  AssertEquals('through the setter', 1, FHolder.LinesSets);
+end;
+
+{ Count resizes the collection beside it. After the grid's own write -- typed, or a handled
+  OnEditProperty -- the rows are rebuilt as Refresh would, the current row kept. }
+procedure TPropertyGridControlTest.TestAWriteThatChangesTheStructureRebuildsTheRows;
+var c: TPGCounted;
+begin
+  c := TPGCounted.Create;
+  try
+    FGrid.SelectedObject := c;
+    FGrid.ExpandedProperties.Add('Items');
+    FGrid.TypeInto(FGrid.RowAt('Count'), '4');
+    AssertEquals('the object grew', 4, c.Items.Count);
+    AssertTrue('a row for each new item', FGrid.HasRow('Items.[3]'));
+    AssertEquals('the new item reads its caption', 'item3', FGrid.RowAt('Items.[3]').Value);
+    AssertSame('the current row kept', FGrid.RowAt('Count'), FGrid.CurrentRow);
+    FGrid.TypeInto(FGrid.RowAt('Count'), '1');
+    AssertFalse('the rows of the items gone are gone', FGrid.HasRow('Items.[1]'));
+    FGrid.OnGetPropertyRow := @CountAsDialog;
+    FGrid.OnEditProperty := @EditCount;
+    FGrid.Rebuild;
+    FGrid.InvokeRowDialog(FGrid.FlatOf(FGrid.RowAt('Count')));
+    AssertEquals('the handler wrote it', 3, c.Items.Count);
+    AssertTrue('and the rows followed', FGrid.HasRow('Items.[2]'));
+  finally
+    FGrid.SelectedObject := nil;
+    c.Free;
+  end;
+end;
+
+{ The grid comes before the component in the form file, so its Loaded -- the first build -- runs
+  before the component's own Loaded sets Level. Once loading is over the rows read it again. }
+procedure TPropertyGridControlTest.TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
+var
+  src, dst: TPGLoadedHostForm;
+  ms: TMemoryStream;
+  i: Integer;
+  level: TTyValueRow;
+begin
+  RegisterClasses([TTyPropertyGrid, TPGLoadedComp]);
+  src := TPGLoadedHostForm.CreateNew(nil);
+  dst := TPGLoadedHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    src.Name := 'PGLoadedHostForm1';
+    src.Grid := TTyPropertyGrid.Create(src);
+    src.Grid.Name := 'Grid';
+    src.Grid.Parent := src;
+    src.Comp := TPGLoadedComp.Create(src);
+    src.Comp.Name := 'Comp';
+    src.Grid.SelectedComponent := src.Comp;
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    AssertEquals('the component set itself up', 99, dst.Comp.Level);
+    Forms.Application.ProcessMessages;
+    level := nil;
+    for i := 0 to dst.Grid.RowCount - 1 do
+      if dst.Grid.Row(i).Key = 'Level' then level := dst.Grid.Row(i);
+    AssertNotNull('Level listed', level);
+    AssertEquals('and the row reads what it holds now', '99', level.Value);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+{ The grid inspects the image list (or the menu) it also uses as its own Images (PopupMenu).
+  TComponent keeps one free notification per pair, so letting go of one must not let go of the
+  other: freed, the list is let go of by both. }
+procedure TPropertyGridControlTest.TestTheGridsOwnLinksOutliveTheSelection;
+var il: TImageList; pm: TPopupMenu;
+begin
+  il := TImageList.Create(nil);
+  FGrid.Images := il;
+  FGrid.SelectedComponent := il;
+  FGrid.SelectedObject := FObj;          // the image list leaves the selection
+  il.Free;
+  AssertNull('the grid let go of its Images', FGrid.Images);
+  pm := TPopupMenu.Create(nil);
+  FGrid.PopupMenu := pm;
+  FGrid.SelectedComponent := pm;
+  FGrid.SelectedObject := FObj;
+  pm.Free;
+  AssertNull('and of its PopupMenu', FGrid.PopupMenu);
+  il := TImageList.Create(nil);
+  FGrid.SelectedComponent := il;
+  FGrid.Images := il;
+  FGrid.Images := nil;                    // the grid stops using it; it is still inspected
+  BeginPoison;
+  try
+    il.Free;
+    FGrid.Refresh;
+  finally
+    EndPoison;
+  end;
+  AssertNull('the selection let go of it', FGrid.SelectedObject);
+  AssertEquals('no rows', 0, FGrid.RowCount);
+end;
+
+{ Doc section 5.3: OnGetPropertyRow may set DisplayValue. One made from the value has to follow it
+  -- on the row edited, and on a row a setter moved -- or the edit looks as if it did nothing. }
+procedure TPropertyGridControlTest.TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
+begin
+  FGrid.OnGetPropertyRow := @ShowInMm;
+  FGrid.Rebuild;
+  AssertEquals('shown as the handler says', '0 mm', FGrid.RowAt('Zeta').EffectiveValue);
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('written', 42, FObj.Zeta);
+  AssertEquals('the row edited shows the new value', '42 mm', FGrid.RowAt('Zeta').EffectiveValue);
+  FGrid.Select(FGrid.RowAt('AutoGrow'));
+  FGrid.Press(VK_SPACE);                 // AutoGrow's setter moves Width to 999
+  AssertEquals('a row a setter moved too', '999 mm', FGrid.RowAt('Width').EffectiveValue);
+  FObj.Zeta := 7;
+  FGrid.Refresh;
+  AssertEquals('and after a Refresh', '7 mm', FGrid.RowAt('Zeta').EffectiveValue);
+end;
+
+{ LCL's grid: EditingDone is held back while the cell editor is showing and comes when the edit is
+  finished (grids.pas, TCustomGrid.EditingDone and TStringCellEditor.EditingDone). The grid lost
+  focus to its own editor the moment a cell was clicked, and that was announced instead. Real
+  focus, on a shown form. }
+procedure TPropertyGridControlTest.TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
+begin
+  FDone := 0;
+  FGrid.OnEditingDone := @EditingDoneSeen;
+  FForm.Show;
+  FGrid.SetFocus;
+  AssertTrue('the grid has the focus', FGrid.Focused);
+  FGrid.ClickValue(FGrid.RowAt('Zeta'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  AssertTrue('and took the focus', FGrid.Editor.Focused);
+  AssertEquals('not when the edit starts', 0, FDone);
+  FGrid.CloseEditor;
+end;
+
+{ Each end of an edit announced once: the focus coming back from the dropped list is not another
+  end. }
+procedure TPropertyGridControlTest.TestOnEditingDoneComesOnceWhenAnEditEnds;
+begin
+  FDone := 0;
+  FGrid.OnEditingDone := @EditingDoneSeen;
+  FGrid.ClickValue(FGrid.RowAt('Zeta'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  AssertEquals('nothing yet', 0, FDone);
+  FGrid.Editor.TypeText('5');
+  FGrid.Editor.PressKey(VK_RETURN);
+  AssertEquals('written', 5, FObj.Zeta);
+  AssertEquals('when it is committed', 1, FDone);
+  FGrid.PickFromDropdown(FGrid.RowAt('Flag'), 'True');
+  AssertTrue('picked', FObj.Flag);
+  AssertEquals('and after a pick from a list', 2, FDone);
+  FGrid.SelectedObject := FHolder;
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'z';
+  FGrid.ClickPaintedEllipsis(FGrid.RowAt('Lines'));
+  AssertEquals('the dialog wrote', 'z', Trim(FHolder.Lines.Text));
+  AssertEquals('and once it was over', 3, FDone);
+end;
+
+{ The rows are rebuilt when a selected component is freed, and a rebuild now writes an edit in
+  progress first (#183) -- but not into the component going away. }
+procedure TPropertyGridControlTest.TestAnEditOnAComponentBeingFreedIsDropped;
+var host: TPGHostComp;
+begin
+  host := TPGHostComp.Create(nil);
+  FGrid.SelectedComponent := host;
+  FGrid.OnPropertyChanging := @Changing;
+  FGrid.ClickValue(FGrid.RowAt('Tag'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  FGrid.Editor.TypeText('5');
+  BeginPoison;
+  try
+    host.Free;
+    FGrid.Refresh;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('nothing was written into it', 0, FChanging);
+  AssertEquals('the editor is closed', -1, FGrid.EditingRow);
+  AssertNull('the selection let go', FGrid.SelectedObject);
 end;
 
 initialization

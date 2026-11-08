@@ -302,7 +302,7 @@ begin
   // Rounded swatch, filled with the selected colour.
   fill := SolidFill(FSelectedColor);
   radius := 3;   // logical px; FillBackground/StrokeBorder scale it
-  APainter.FillBackground(swatch, fill, TyUniformCorners(radius));
+  APainter.FillBackground(swatch, fill, TyUniformCorners(radius), True);
   APainter.StrokeBorder(swatch, TyUniformCorners(radius), 1, borderCol);
 
   // Caption (or, with none, the optional hex) on the far side of the swatch.

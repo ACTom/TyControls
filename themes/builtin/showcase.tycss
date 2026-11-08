@@ -500,10 +500,6 @@ TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }
 TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }
 TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }
 TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }
-TyTreeHeader, TyListViewHeader, TyListViewGroupHeader, TyHeaderControl { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
-TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
-TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }
-TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }
 TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
 TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }

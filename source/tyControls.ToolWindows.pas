@@ -110,7 +110,7 @@ type
     FLastStripClick: QWord;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
-    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式)。
+    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式, 样式类)。
       「有没有缓存」单拿一个布尔答,不拿 -1 当哨兵:token 是度量值,而 TyEvalLength
       不钳(Css.Values.pas:373),皮肤或 StyleOverride 里写 -1px 就真的解析成 -1 ——
       哨兵一旦跟真值撞上,缓存永远命中不了,Invalidate 里「上一次有值吗」也从此恒假,
@@ -125,6 +125,8 @@ type
     FHeaderPxAnchor: TObject;
     FHeaderPxRTL: Boolean;
     FHeaderPxMode: TTyToolWindowHeaderMode;
+    { 底线按样式类解析(HeaderRuleUncached):只换 StyleClass 时主题版本号不动,键里得有它。 }
+    FHeaderPxClass: string;
     FRelayouting: Boolean;
     { 上一次对齐时标题行的样子(那一条 + 整套几何)。操作区变宽 / 变高 / 被藏起来,
       标题行跟着变,而窗口尺寸一个像素没动 —— 缓存自己看不出来,见 AlignControls。 }
@@ -461,7 +463,7 @@ type
 
   { 标题行尾端的操作区(spec §4)。只由组件编辑器的「添加操作区」或 EnsureActions 建,
     位置和尺寸永远由所在窗口排:Align 钉死 alCustom,Align / Anchors 不 published;
-    AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用,子控件由它自己排成一排。 }
+    AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用(不 published),子控件由它自己排成一排。 }
   TTyCustomToolWindowActions = class(TTyCustomControl)
   private
     FInLayout: Boolean;
@@ -497,6 +499,12 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { 位置和尺寸由所在窗口排(Align 钉死在 alCustom),子控件由它自己排成一排:AutoSize、ChildSizing、
+      BorderSpacing 从来不起作用,4.0 不发布。3.x 的窗体里存过的值读过去、丢掉:AutoSize 走
+      TyDefineRetiredProperties,另两个是子属性('ChildSizing.LeftRightSpacing = 6'),走
+      TTyRetiredPaths。 }
+    procedure DefineProperties(Filer: TFiler); override;
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     { 运行时,所在窗口不认的那一个(多出来的、孤儿)不露面。派生而不是去写 Visible:
@@ -550,9 +558,7 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
-    property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -566,7 +572,6 @@ type
     property OnShowHint;
     property PopupMenu;
     property Constraints;
-    property BorderSpacing;
     property ParentShowHint;
     property Action;
     property OnPaint;
@@ -927,6 +932,13 @@ type
       对齐兄弟 − 同轴所有栏的固定部分;同轴的栏按各自**未收窄**的内容一起算,放不下按
       ExpandedSize 比例分,各自不低于 content-min。只影响这一次排布,不写回 ExpandedSize。 }
     function NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+    { 上面那一笔账:可用(设备像素),和同轴所有栏(含本栏)未收窄的内容之和、ExpandedSize 之和、
+      要内容的栏数。没有父控件、不参与分空间时答 False。 }
+    function AxisBudget(const AM: TTyToolWindowBarMetrics;
+      out AAvail, ASumDemand, ASumW, ACount: Integer): Boolean;
+    { 拉宽边最多拉到多宽(96 DPI 逻辑像素,同 ExpandedSize):编辑区压到 0、别的栏照旧不收窄的那么宽。
+      不知道(没有父控件、不参与分空间)时 -1。 }
+    function DragRoomLogical: Integer;
     { 参与分空间:看得见、Align 就是 Placement 要求的那个。 }
     function JoinsNarrowing: Boolean;
     { 父控件尺寸变了:重推(收窄跟着可用空间走)。 }
@@ -959,12 +971,20 @@ type
     function ControlIndexForWindowPos(AWindow: TTyCustomToolWindow; APos: Integer): Integer;
     procedure MoveToOuterEdge;
     function FocusIsInside(AWindow: TTyCustomToolWindow): Boolean;
+    { 切页第 5 步(spec §5.1):焦点给 AWindow 正文里第一个可聚焦控件;它聚焦不了(禁用的、正文里
+      一个可聚焦控件都没有、为 nil),同收起那一路交给 Tab 顺序里栏后面的那一个(spec §5.3),
+      不交给平台去挑。 }
+    procedure FocusInto(AWindow: TTyCustomToolWindow);
+    { 栏不弹菜单时,把右键请求(屏幕坐标)交给父控件一层层往上,同平台的冒泡。 }
+    procedure PassContextPopupUp(const AScreenPos: TPoint);
     procedure ShowWindowNow(AWindow: TTyCustomToolWindow);
     procedure HideWindowNow(AWindow: TTyCustomToolWindow);
     { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
       显示 / 隐藏不看 AOld:先显示目标,再把栏里**其余每一个**窗口藏起来;收起着就
-      连目标一起藏。 }
-    procedure SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
+      连目标一起藏。
+      答 False:途中某一页的 OnShow / OnHide 里又切了页,那一次已经从头做完、自己报过了,
+      这一次到此为止 —— 调用方别再报 OnChange。 }
+    function SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean): Boolean;
     { 一次静默切页 = BeginSilent + 切 + EndSilent(try/finally)的薄包装。 }
     procedure SwitchSilently(AWindow: TTyCustomToolWindow);
     { 跨栏移动的最后一步(CommitCrossMove):AWindow(已经在本栏里)成为当前页并展开;设计期
@@ -980,6 +1000,8 @@ type
     FPendingEvents: TTyToolWindowBarEvents;
     { ActivateExpanded 里:收起着的栏这一次切页按展开的样子切(显示目标、藏其余)。 }
     FSwitchExpanded: Boolean;
+    { 每一次切页(SwitchCore)加一。切页途中它变了,就是某一页的 OnShow / OnHide 里又切了页。 }
+    FSwitchSerial: Cardinal;
     { > 0 = 布局应用的批次(spec §10.4):栏事件不发(EventsAllowed)、切页和收起跳过焦点那一步、
       当前页离开不回落(由计划统一激活)。窗口的 OnShow / OnHide 照常 —— 那是 BeginSilent 的事,
       两者互不替代(加载结束时应用挂起计划才两样一起包)。 }
@@ -1276,8 +1298,9 @@ type
     { 挡在 LCL 自动拖动前面的那一道闸;通过才调继承的 BeginAutoDrag。测试探针重写它数次数,
       不用靠「无头起 LCL 拖动会抛异常」当判据。 }
     procedure StartLclAutoDrag; virtual;
-    { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);
-      别处 —— 包括键盘菜单键的 (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
+    { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);图标条的空白、
+      拉宽边是栏自己的像素,ContextWindow 置 nil 照样走继承。内容区里的 —— 以及键盘菜单键的
+      (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
       (不发 OnContextPopup,Handled 留 False),ContextWindow 置 nil,并挡住 GetPopupMenu,
       子控件的右键请求照样冒泡到窗体。两处都要挡:LCL 先调 DoContextPopup 再调
       GetPopupMenu(control.inc:2484-2492),只改后者挡不住 OnContextPopup。 }
@@ -1306,6 +1329,11 @@ type
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
       MaxHeight: TConstraintSize); override;
+    { AutoSize 问到的首选尺寸:沿轴那一边就是推导出来的那一边(spec §6.1),另一边 0(由 Align 定)。
+      不问子控件 —— 窗口是 alClient,尺寸从栏来,不是反过来;继承的那一份按窗口的首选尺寸答,
+      开着 AutoSize 时 LCL 的自动尺寸就跟推导来回打架。 }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     procedure Loaded; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure SetController(AValue: TTyCustomStyleController); override;
@@ -1939,15 +1967,17 @@ var
   mdl: TTyStyleModel;
   ver: Cardinal;
   mode: TTyToolWindowHeaderMode;
+  cls: string;
 begin
   mode := HeaderMode;
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
+  cls := TyStyleClassFor(Self, StyleClass);
   { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
     会把 A 的值端给 B —— Controller 是 published,中途换得掉。 }
   if (not FHeaderPxValid) or (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
      or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> IsRightToLeft)
-     or (FHeaderPxMode <> mode) then
+     or (FHeaderPxMode <> mode) or (FHeaderPxClass <> cls) then
   begin
     { twhNone 也进缓存,键照常存(连同 mode)。在查键之前就 Exit(0) 的话,缓存和
       FHeaderPxMode 都停在上一次 —— 比如还在栏里时的 26 —— 于是 Invalidate 从此每次都
@@ -1963,6 +1993,7 @@ begin
     FHeaderPxPPI := Font.PixelsPerInch;
     FHeaderPxRTL := IsRightToLeft;
     FHeaderPxMode := mode;
+    FHeaderPxClass := cls;
     FHeaderPxValid := True;
   end;
   Result := FHeaderPxCache;
@@ -2983,6 +3014,24 @@ begin
   { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
 end;
 
+procedure TTyCustomToolWindowActions.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['AutoSize']);
+end;
+
+procedure TTyCustomToolWindowActions.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing', 'BorderSpacing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
+
 function TTyCustomToolWindowActions.GetStyleTypeKey: string;
 begin
   Result := TyToolWindowActionsKey;
@@ -3562,9 +3611,11 @@ end;
 function TTyCustomToolWindowBar.SizesAsCollapsed: Boolean;
 begin
   { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。
-    算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。 }
+    算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。
+    收起着点另一页的图标(ActivateExpanded,FSwitchExpanded):这一次切页按展开的样子显示目标,
+    尺寸也按展开的推 —— 目标的 OnShow 里读到的是展开的宽。 }
   Result := not FAssumeShown and not (csDesigning in ComponentState)
-    and (FCollapsed or (WindowCount = 0) or EdgeSnapped);
+    and ((FCollapsed and not FSwitchExpanded) or (WindowCount = 0) or EdgeSnapped);
 end;
 
 function TTyCustomToolWindowBar.HiddenAsEmpty: Boolean;
@@ -3604,7 +3655,8 @@ begin
   Result := IsControlVisible and (Align = PlacementAlign);
 end;
 
-function TTyCustomToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.AxisBudget(const AM: TTyToolWindowBarMetrics;
+  out AAvail, ASumDemand, ASumW, ACount: Integer): Boolean;
 var
   p: TWinControl;
   r: TRect;
@@ -3612,12 +3664,14 @@ var
   b: TTyCustomToolWindowBar;
   m: TTyToolWindowBarMetrics;
   side: Boolean;
-  avail, demand, sumDemand, sumW, n, i, v: Integer;
+  avail, demand, sumDemand, sumW, n, i: Integer;
 begin
-  Result := UnnarrowedContentPx(AM);
-  if Result <= 0 then Exit;
+  AAvail := 0;
+  ASumDemand := 0;
+  ASumW := 0;
+  ACount := 0;
   p := Parent;
-  if (p = nil) or not JoinsNarrowing then Exit;
+  if (p = nil) or not JoinsNarrowing then Exit(False);
   { 父控件调整后的客户区,沿栏的轴向(spec §6.2)。 }
   r := p.ClientRect;
   TWinControlAccess(p).AdjustClientRect(r);
@@ -3652,6 +3706,20 @@ begin
       Dec(avail, c.Height);
     { alClient(编辑区)不算:它可以被压到 0。 }
   end;
+  AAvail := avail;
+  ASumDemand := sumDemand;
+  ASumW := sumW;
+  ACount := n;
+  Result := True;
+end;
+
+function TTyCustomToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+var
+  avail, sumDemand, sumW, n, v: Integer;
+begin
+  Result := UnnarrowedContentPx(AM);
+  if Result <= 0 then Exit;
+  if not AxisBudget(AM, avail, sumDemand, sumW, n) then Exit;
   if sumDemand <= avail then Exit;           { 放得下就各用各的 }
   if avail < 0 then avail := 0;
   { 放不下:按 ExpandedSize 比例分,不超过自己要的,不低于 content-min。 }
@@ -3659,6 +3727,21 @@ begin
   else v := avail div n;
   if v < Result then Result := v;
   if Result < AM.ContentMin then Result := AM.ContentMin;
+end;
+
+function TTyCustomToolWindowBar.DragRoomLogical: Integer;
+var
+  m: TTyToolWindowBarMetrics;
+  avail, sumDemand, sumW, n, own: Integer;
+begin
+  m := Metrics;
+  if not AxisBudget(m, avail, sumDemand, sumW, n) then Exit(-1);
+  { 别的栏按各自未收窄的内容留着,剩下的(编辑区压到 0)都归本栏。 }
+  own := UnnarrowedContentPx(m);
+  if own < 0 then own := 0;
+  Result := avail - (sumDemand - own);
+  if Result < 0 then Result := 0;
+  Result := MulDiv(Result, 96, PPI);
 end;
 
 function TTyCustomToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
@@ -4112,6 +4195,21 @@ begin
       if not SizesAsCollapsed then Inc(lo, m.Edge + m.ContentMin);
     end;
     if lo > MinWidth then MinWidth := lo;
+  end;
+end;
+
+procedure TTyCustomToolWindowBar.CalculatePreferredSize(var PreferredWidth,
+  PreferredHeight: Integer; WithThemeSpace: Boolean);
+begin
+  if FPlacement = twpBottom then
+  begin
+    PreferredWidth := 0;
+    PreferredHeight := DerivedAxisPx;
+  end
+  else
+  begin
+    PreferredWidth := DerivedAxisPx;
+    PreferredHeight := 0;
   end;
 end;
 
@@ -5518,6 +5616,25 @@ begin
   Result := RowHintAt(h, X, Y, AText, ARect);
 end;
 
+procedure TTyCustomToolWindowBar.PassContextPopupUp(const AScreenPos: TPoint);
+var
+  c: TWinControl;
+  lp: PtrUInt;
+  wp: PtrUInt;
+begin
+  { 平台的冒泡(Win32 的 DefWindowProc、GTK 的事件传播)就是这样:一层没处理(结果 0),交给它的
+    父窗口,直到有一层弹了菜单或处理掉。坐标是屏幕坐标,每一层自己换算(control.inc 的
+    WMContextMenu)。 }
+  lp := PtrUInt(Word(SmallInt(AScreenPos.X))) or (PtrUInt(Word(SmallInt(AScreenPos.Y))) shl 16);
+  c := Parent;
+  while c <> nil do
+  begin
+    if c.HandleAllocated then wp := PtrUInt(c.Handle) else wp := 0;
+    if c.Perform(LM_CONTEXTMENU, WParam(wp), LParam(lp)) <> 0 then Exit;
+    c := c.Parent;
+  end;
+end;
+
 procedure TTyCustomToolWindowBar.HeaderContextPopup(AWindow: TTyCustomToolWindow; X, Y: Integer);
 var
   idx: Integer;
@@ -5537,7 +5654,14 @@ begin
   { DoContextPopup 只发事件;弹菜单本来是 LCL 的 WM_CONTEXTMENU 在它之后做的,这里没有那一层,
     自己补。只在当前页有句柄时弹。 }
   menu := GetPopupMenu;
-  if (menu = nil) or not menu.AutoPopup or not AWindow.HandleAllocated then Exit;
+  { 栏没有菜单:同侧栏图标那一路(栏不处理,WM_CONTEXTMENU 冒泡到父控件),接着往上交。请求已经被
+    当前页标成处理过了,平台不会再替它冒,自己交。 }
+  if menu = nil then
+  begin
+    PassContextPopupUp(AWindow.ClientToScreen(Point(X, Y)));
+    Exit;
+  end;
+  if not menu.AutoPopup or not AWindow.HandleAllocated then Exit;
   menu.PopupComponent := Self;
   pt := AWindow.ClientToScreen(Point(X, Y));
   menu.PopUp(pt.X, pt.Y);
@@ -6085,7 +6209,11 @@ begin
     FContextWindow := WindowAtPos(MousePos.X, MousePos.Y)
   else
     FContextWindow := nil;
-  FPopupBlocked := FContextWindow = nil;
+  { 挡的只是正文里的子控件冒上来的请求(落点在内容区,或菜单键的 (-1, -1):栏不拿焦点),好让它
+    接着冒到窗体(spec §6.8)。图标条的空白、拉宽边是栏自己的像素:OnContextPopup、栏的菜单照常,
+    ContextWindow 是 nil。 }
+  FPopupBlocked := (FContextWindow = nil) and (((MousePos.X = -1) and (MousePos.Y = -1))
+    or PtInRect(BarLayout.Content, MousePos));
   if FPopupBlocked then Exit;
   inherited DoContextPopup(MousePos, Handled);
 end;
@@ -6253,7 +6381,7 @@ end;
 procedure TTyCustomToolWindowBar.EdgeDragTo(X, Y: Integer);
 var
   p: TPoint;
-  d, want, minL, v: Integer;
+  d, want, minL, v, room: Integer;
   wasSnapped: Boolean;
 begin
   p := ClientToScreen(Point(X, Y));
@@ -6275,6 +6403,19 @@ begin
   if FGesture.Snapped then v := FGesture.StartSize
   else if want < minL then v := minL
   else v := want;
+  { 拖过了可用空间(编辑区已经压到 0):栏停在那里,写进 ExpandedSize 的也停在那里 —— 不写一个用户
+    从没看见过、存进布局串、下次在大窗口里才露出来的宽(同 TCustomSplitter 钳到可用空间,
+    customsplitter.inc:253)。拖动开始时就已经被挤窄的,往外拖也不超过起点。 }
+  if not FGesture.Snapped then
+  begin
+    room := DragRoomLogical;
+    if (room >= 0) and (v > room) then
+    begin
+      if room < minL then room := minL;
+      if FGesture.StartSize > room then room := FGesture.StartSize;
+      if v > room then v := room;
+    end;
+  end;
   if v <> FExpandedSize then
     ExpandedSize := v            { 自己 Relayout }
   else if wasSnapped <> FGesture.Snapped then
@@ -6514,6 +6655,18 @@ begin
     Message.Result := 1;
     Exit;
   end;
+  { 当前页上的标签行(spec §7.1):请求落到栏上,只能是那一页 ShowHint = False(LCL 的
+    GetHintControl 跳过它找到了栏)—— 标签的提示跟着各窗口的 ShowHint。栏不替它答,也不回落到
+    栏自己的 Hint;挪一下就重新问。 }
+  if (info <> nil) and (FPlacement = twpBottom) and (FActive <> nil) and FActive.Visible
+     and FActive.InTabRowRegion(info^.CursorPos.X - FActive.Left,
+       info^.CursorPos.Y - FActive.Top) then
+  begin
+    info^.CursorRect := Rect(info^.CursorPos.X, info^.CursorPos.Y,
+      info^.CursorPos.X + 1, info^.CursorPos.Y + 1);
+    Message.Result := 1;
+    Exit;
+  end;
   if (info <> nil) and StripHintAt(info^.CursorPos.X, info^.CursorPos.Y, txt, r) then
   begin
     info^.HintStr := txt;
@@ -6668,6 +6821,13 @@ begin
           这一步,由批次最后统一处理(spec §5.3 / §10.4 第 7 步)。 }
         focusIn := (FLayoutBatch = 0) and FocusIsInside(FActive);
         HideWindowNow(FActive);
+        { OnHide 里又展开了:那一次已经显示、重排、报过 OnExpand,这一次不再报 OnCollapse。焦点照
+          展开前的样子还给这一页。 }
+        if FCollapsed <> AValue then
+        begin
+          if focusIn and not FocusIsInside(FActive) then FocusInto(FActive);
+          Exit;
+        end;
         { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半在 test.toolwindow.focus 测。 }
         if focusIn then
         begin
@@ -6676,7 +6836,11 @@ begin
         end;
       end
       else
+      begin
         ShowWindowNow(FActive);
+        { OnShow 里又收起了:那一次已经藏好、重排、报过 OnCollapse,这一次不再报 OnExpand。 }
+        if FCollapsed <> AValue then Exit;
+      end;
     end;
     Relayout;
     Invalidate;
@@ -6816,9 +6980,19 @@ begin
   Result := AWindow.ContainsControl(form.ActiveControl);
 end;
 
+procedure TTyCustomToolWindowBar.FocusInto(AWindow: TTyCustomToolWindow);
+var
+  form: TCustomForm;
+begin
+  if (AWindow <> nil) and AWindow.CanFocus then AWindow.FocusFirst;
+  if FocusIsInside(AWindow) then Exit;
+  form := GetParentForm(Self);
+  if form <> nil then form.SelectNext(Self, True, True);
+end;
+
 procedure TTyCustomToolWindowBar.ShowWindowNow(AWindow: TTyCustomToolWindow);
 var
-  was: Boolean;
+  was, events: Boolean;
 begin
   was := FBarSwitching;
   FBarSwitching := True;
@@ -6831,7 +7005,23 @@ begin
       (那时 InvalidateHeader 丢的是当时的当前页)、换了主题……藏着的页没人替它丢缓存,
       显示出来就 blit 旧帧(spec §3.5)。显示是低频事件,统一在这里丢。 }
     if AWindow.FPaintCache <> nil then AWindow.FPaintCache.Drop;
-    AWindow.Visible := True;
+    { OnShow 里读到的得是新的几何(展开、第一个窗口进了空栏):CM_VISIBLECHANGED 在 LCL 摆它之前就到,
+      那时栏还是收起 / 宽 0 的样子,这一页还在上一次显示时的位置。所以先不出声地显示出来,栏按此刻的
+      样子推一遍尺寸、对齐引擎把它摆进内容区,再发 OnShow(同 TCustomPage:显示时已经在位)。
+      本来就不发的(设计期、静默批次)照旧只写 Visible。 }
+    events := not AWindow.Visible and not (csDesigning in AWindow.ComponentState)
+      and (AWindow.FSilentVisibility = 0);
+    if events then AWindow.BeginSilentVisibility;
+    try
+      AWindow.Visible := True;
+    finally
+      if events then AWindow.EndSilentVisibility;
+    end;
+    if events then
+    begin
+      Relayout;
+      AWindow.DoShow;
+    end;
   finally
     FBarSwitching := was;
   end;
@@ -6852,17 +7042,32 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindowBar.SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
+function TTyCustomToolWindowBar.SwitchCore(AWindow, AOld: TTyCustomToolWindow;
+  AMoveFocus: Boolean): Boolean;
 var
   focusIn: Boolean;
   wins: TTyToolWindowArray;
   i: Integer;
+  serial: Cardinal;
+
+  { 某一页的 OnShow / OnHide 里又切了页:那一次已经显示、藏好、重排、通知过了,这一次不许再藏
+    它显示的那一页、不许再报一遍。焦点原来在旧页里、而那一次没把它带走(它的「旧页」是这一次的
+    目标),照第 5 步交给那一次的当前页。 }
+  function Superseded: Boolean;
+  begin
+    Result := FSwitchSerial <> serial;
+    if Result and focusIn and not FocusIsInside(FActive) then FocusInto(FActive);
+  end;
+
 begin
+  Result := True;
   { 布局应用的批次跳过焦点这一步,由批次最后统一处理(spec §5.1 第 5 步 / §10.4 第 7 步)。 }
   if FLayoutBatch > 0 then AMoveFocus := False;
   { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
   focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
   FActive := AWindow;
+  Inc(FSwitchSerial);
+  serial := FSwitchSerial;
   { 标签行上的手势属于捕获它的那一页。代码在手势进行中换了当前页:那一页的标签行不再显示,
     手势作废 —— 否则之后在旧页上的松开照样被当成点击 / 落点(spec §7.1 / §9.7)。 }
   if (FGesture.Capturer is TTyCustomToolWindow) and (FGesture.Capturer <> FActive) then
@@ -6877,19 +7082,27 @@ begin
   begin
     { 1. 收起着就到此为止(spec §5.3):一页都不显示,连目标一起藏。 }
     for i := 0 to High(wins) do
-      if IsRegistered(wins[i]) then HideWindowNow(wins[i]);
+      if IsRegistered(wins[i]) then
+      begin
+        HideWindowNow(wins[i]);
+        if Superseded then Exit(False);
+      end;
   end
   else
   begin
     { 2、3:先显示新页再藏其余的 —— 先藏的话 LCL 会把焦点交给窗体本身。 }
     if AWindow <> nil then ShowWindowNow(AWindow);
+    if Superseded then Exit(False);
     for i := 0 to High(wins) do
-      if (wins[i] <> AWindow) and IsRegistered(wins[i]) then HideWindowNow(wins[i]);
+      if (wins[i] <> AWindow) and IsRegistered(wins[i]) then
+      begin
+        HideWindowNow(wins[i]);
+        if Superseded then Exit(False);
+      end;
     { 4. 标题行按此刻的样子重排(悬停在下面重查)。 }
     if AWindow <> nil then AWindow.RelayoutHeader;
     { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
-    if focusIn and (AWindow <> nil) and AWindow.CanFocus then
-      AWindow.FocusFirst;
+    if focusIn then FocusInto(AWindow);
   end;
   { 4(续). 当前页被强制留在条上,切页可能换掉条上排的是哪几个图标:按指针此刻的位置
     重查悬停,不然悬停停在切页前那一格上。设计期不做悬停。 }
@@ -6995,8 +7208,7 @@ begin
   { 当前页也存在布局串里(spec §10.2 的 pActive):改之前记默认布局(spec §10.5)。 }
   if FManager <> nil then FManager.NoteLayoutChanging(Self);
   prev := FActive;
-  SwitchCore(AWindow, prev, True);
-  if FActive <> prev then DoChange;
+  if SwitchCore(AWindow, prev, True) and (FActive <> prev) then DoChange;
 end;
 
 function TTyCustomToolWindowBar.GetActiveIndex: Integer;
@@ -7023,6 +7235,7 @@ procedure TTyCustomToolWindowBar.RegisterWindow(AWindow: TTyCustomToolWindow);
 var
   i: Integer;
   prev: TTyCustomToolWindow;
+  stood: Boolean;
 begin
   if (AWindow = nil) or (AWindow.Parent <> Self) then Exit;
   if IsRegistered(AWindow) then Exit;     { 幂等 }
@@ -7041,8 +7254,9 @@ begin
   prev := FActive;
   { 不在加载中注册进来的(组件编辑器新建、粘贴、代码添加、从别的栏挪过来)成为当前页。
     MoveWindow 和布局应用自己管激活(FQuietMove,spec §5.1)。 }
+  stood := True;
   if not (csLoading in ComponentState) and not AWindow.FQuietMove then
-    SwitchCore(AWindow, prev, True);
+    stood := SwitchCore(AWindow, prev, True);
   { 先把尺寸推好再发事件:OnChange 里读到的 Width 得是新的(第一个窗口进来,空栏就展开)。 }
   Relayout;
   Invalidate;
@@ -7051,7 +7265,7 @@ begin
   { 标签多了一个。 }
   InvalidateHeader;
   TabRowHostMayHaveChanged;
-  if FActive <> prev then DoChange;
+  if stood and (FActive <> prev) then DoChange;
 end;
 
 procedure TTyCustomToolWindowBar.RemoveControl(AControl: TControl);
@@ -7076,6 +7290,7 @@ var
   i, idx: Integer;
   prev, next: TTyCustomToolWindow;
   rest: TTyToolWindowArray;
+  stood: Boolean;
 begin
   if not IsRegistered(AWindow) then Exit;
   for i := 0 to High(FRegistered) do
@@ -7117,6 +7332,7 @@ begin
   if not (csDestroying in AWindow.ComponentState) then
     AWindow.RemoveFreeNotification(Self);
   prev := FActive;
+  stood := True;
   if csDestroying in ComponentState then
   begin
     if FActive = AWindow then FActive := nil;
@@ -7137,7 +7353,7 @@ begin
     rest := WindowList(AWindow);
     if (idx >= 0) and (idx <= High(rest)) then next := rest[idx]
     else if Length(rest) > 0 then next := rest[High(rest)];
-    if next <> nil then SwitchCore(next, nil, False);
+    if next <> nil then stood := SwitchCore(next, nil, False);
   end;
   Relayout;
   Invalidate;
@@ -7145,7 +7361,7 @@ begin
   InvalidateHeader;
   { 走的是禁用的当前页、又没有回落页:标签行不再让出(spec §3.7)。 }
   TabRowHostMayHaveChanged;
-  if FActive <> prev then DoChange;
+  if stood and (FActive <> prev) then DoChange;
 end;
 
 procedure TTyCustomToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);

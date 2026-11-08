@@ -18,7 +18,7 @@ unit test.db.edits;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, LCLType, LMessages, DB, DBCtrls, TypInfo,
+  Classes, SysUtils, Controls, Forms, LCLType, LMessages, DB, DBCtrls, BufDataset, TypInfo,
   fpcunit, testregistry,
   dbfixtures, tyControls.DB.Edits;
 
@@ -130,6 +130,8 @@ type
     procedure TestFocusShowsFieldTextAndBlurShowsDisplayText;
     procedure TestStringFieldSetsMaxLength;
     procedure TestAuthorsMaxLengthIsKept;
+    procedure TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
+    procedure TestPasteIntoAnAutoIncrementFieldIsUndone;
     procedure TestFieldAlignmentIsCopied;
     procedure TestTypingEditsBeforeTheKeyLands;
     procedure TestCharacterTheFieldRefusesNeverLands;
@@ -160,6 +162,7 @@ type
     procedure TestUnparsableMaskIsNotAppliedAndDoesNotRaise;
     procedure TestCustomEditMaskKeepsTheControlsMask;
     procedure TestChangingTheMaskKeepsShowingTheField;
+    procedure TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
@@ -181,6 +184,7 @@ type
     procedure TestNothingIsTypedIntoTheUnloadedLabel;
     procedure TestLinesAddIsAnEditAsTextIs;
     procedure TestNonBlobFieldShowsDisplayTextUnfocused;
+    procedure TestEnterAndTabAreDroppedWhenNotEditable;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
@@ -207,6 +211,9 @@ type
 
 { The form test controls sit on needs the widgetset once (as test.corehooks does). }
 procedure NeedDBWidgetSet;
+{ A table of its own, open, on its one row: ID an auto-increment counter (ftAutoInc, which
+  FCL's CanModify lets through) and Name a string. The caller frees it. }
+function NewCounterTable: TBufDataset;
 
 implementation
 
@@ -218,6 +225,25 @@ begin
   if WidgetSetReady then Exit;
   Forms.Application.Initialize;
   WidgetSetReady := True;
+end;
+
+function NewCounterTable: TBufDataset;
+var
+  f: TField;
+begin
+  Result := TBufDataset.Create(nil);
+  f := TAutoIncField.Create(Result);
+  f.FieldName := 'ID';
+  f.DataSet := Result;
+  f := TStringField.Create(Result);
+  f.FieldName := 'Name';
+  f.Size := 20;
+  f.DataSet := Result;
+  Result.CreateDataset;
+  Result.Append;
+  Result.FieldByName('Name').AsString := 'first';
+  Result.Post;
+  Result.First;
 end;
 
 function TProbeDBEdit.ReadClipboardText: string;
@@ -701,6 +727,49 @@ begin
   AssertEquals('still the author''s', 5, Ed.MaxLength);
 end;
 
+{ #184: a limit the program sets after binding is the author's: the next record does not put the
+  field's size back (LCL fills MaxLength only while it is 0, dbedit.inc DataChange). }
+procedure TDBEditTest.TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
+begin
+  Bind('Name');
+  AssertEquals('the field''s size', 40, Ed.MaxLength);
+  Ed.MaxLength := 20;
+  GoRow(2);
+  AssertEquals('the program''s limit, on the next record', 20, Ed.MaxLength);
+  SetStrProp(FCtl, 'DataField', 'Amount');
+  AssertEquals('and on a field that sets none', 20, Ed.MaxLength);
+end;
+
+{ #184, doc §3.4: an auto-increment field cannot be changed by the user -- a paste, which no key
+  gate sees, is undone, and the record is not put in dsEdit. }
+procedure TDBEditTest.TestPasteIntoAnAutoIncrementFieldIsUndone;
+var
+  ds: TBufDataset;
+  src: TDataSource;
+  before: string;
+begin
+  ds := NewCounterTable;
+  src := TDataSource.Create(nil);
+  try
+    src.DataSet := ds;
+    SetStrProp(FCtl, 'DataField', 'ID');
+    SetObjectProp(FCtl, 'DataSource', src);
+    AssertTrue('precondition: FCL lets the counter be edited',
+      ds.FieldByName('ID').CanModify);
+    before := Ed.Text;
+    EnterControl;
+    Ed.Clip := '99';
+    Key(VK_A, [ssCtrl]);
+    Key(VK_V, [ssCtrl]);
+    AssertEquals('the paste is undone', before, Ed.Text);
+    AssertTrue('the dataset stays in dsBrowse', ds.State = dsBrowse);
+  finally
+    SetObjectProp(FCtl, 'DataSource', nil);
+    src.Free;
+    ds.Free;
+  end;
+end;
+
 procedure TDBEditTest.TestFieldAlignmentIsCopied;
 begin
   FFix.DS.FieldByName('Name').Alignment := taRightJustify;
@@ -924,6 +993,15 @@ begin
   AssertBrowsing('changing the mask');
 end;
 
+procedure TDBMaskEditTest.TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
+begin
+  Bind('Name');
+  AssertEquals('the field''s size', 40, Ed.MaxLength);
+  Ed.MaxLength := 20;
+  GoRow(2);
+  AssertEquals('the program''s limit, on the next record', 20, Ed.MaxLength);
+end;
+
 { Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over
   everything -- is an edit like any other, and EditingDone writes it. }
 procedure TDBMaskEditTest.TestOldValuePutBackAfterAWriteIsWritten;
@@ -1064,6 +1142,26 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
+end;
+
+{ #184: Enter and (with WantTabs) Tab change the text, so they ask first, as Backspace does --
+  LCL's TDBMemo.KeyPress drops #13 and #9 then. Not a break put in and wiped again, the caret
+  thrown to the end. }
+procedure TDBMemoTest.TestEnterAndTabAreDroppedWhenNotEditable;
+begin
+  FFix.Src.AutoEdit := False;
+  Memo.WantTabs := True;
+  Bind('Note');
+  EnterControl;
+  Memo.SelStart := 5;
+  Memo.SelLength := 0;
+  Key(VK_RETURN);
+  AssertEquals('no line break', CFixNotes[1], Shown);
+  AssertEquals('the caret where it was', 5, Memo.SelStart);
+  Key(VK_TAB);
+  AssertEquals('no tab', CFixNotes[1], Shown);
+  AssertEquals('the caret still where it was', 5, Memo.SelStart);
+  AssertBrowsing('Enter and Tab without AutoEdit');
 end;
 
 { Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over

@@ -41,9 +41,9 @@ uses tyControls.MultiTrackBar;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Min` / `Max` | `Integer` | `0` / `100` | 取值范围。改了以后所有滑块重新排好（见第 8 节），有滑块因此移动时照常触发事件。 |
-| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 8 节。打开 `AllowCrossing` 时用户的操作不受它约束（第 5 节）。 |
+| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 8 节。打开 `AllowCrossing` 时用户的操作不受它约束，区间控件里区间之间仍受约束（第 5 节）。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 与 `TTyTrackBar` 相同：竖排时顶部是 `Max`，改方向时宽高自动对调（读窗体时不动）。 |
-| `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。 |
+| `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。按键和滚轮跟着屏幕走，见第 9 节。 |
 | `TickMarks` / `TickStyle` / `Frequency` | — | `ttmBottomRight` / `ttsAuto` / `1` | 刻度画在哪一侧、画哪些值，与 `TTyTrackBar` 完全相同，连画法都是同一段代码。`SetTick` / `ClearTicks` / `TickCount` 用于 `ttsManual`。 |
 | `TickLabels` | `Boolean` | `False` | 在每条刻度外侧写上它的值。说明见 [trackbar.md](trackbar.md) 的「刻度标签」。 |
 | `OnFormatTickLabel` | `TTyTrackTickLabelEvent` | `nil` | 改写刻度标签的文字（「1 月」「¥100」），写成空串就不画那一条。 |
@@ -51,6 +51,7 @@ uses tyControls.MultiTrackBar;
 | `ShowValue` | `Boolean` | `False` | 在轨道旁显示数值（横排在右、竖排在下）：显示**选中滑块**的值，没有选中时显示第一个滑块的值。读数那一条按 `Min`、`Max` 里较宽的那个量，拖动时轨道长度不会跟着位数变。 |
 | `TabStop` | `Boolean` | `True` | 可以用 Tab 进入。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 任何一个滑块的值变了就触发（一次操作只触发一次）。用户加、删滑块或区间，渐变控件里改色标颜色，也触发。 |
+| `OnEditingDone` | `TNotifyEvent` | `nil` | 用户改完一次就触发，同 LCL 的 `TTrackBar`：鼠标操作（拖动、点轨道让滑块跳过来、加或删滑块）在松开时触发一次，按键和滚轮每次都触发；什么都没变就不触发。焦点离开控件时也触发。 |
 | `OnThumbChange` | `TTyTrackThumbEvent` | `nil` | 某个滑块的值变了，`AIndex` 是它的序号。先于 `OnChange`。 |
 | `OnThumbChanging` | `TTyTrackThumbChangingEvent` | `nil` | 用户正要移动某个滑块，值还没变。可以不让动，也可以改成别的值。只管用户操作，代码赋值不触发。见第 7 节。 |
 | `OnThumbSelect` | `TTyTrackThumbEvent` | `nil` | 选中的滑块变了，`AIndex` 是新序号（`-1` = 没有选中）。 |
@@ -112,7 +113,7 @@ uses tyControls.MultiTrackBar;
 | `Value` | 新加在末尾时为 `Max` | 滑块的值，赋值与 `SetThumbValue` 相同。 |
 | `Color` | `clDefault` | `clDefault` 跟主题走；其他颜色在所有状态下替换主题给的背景色。颜色在这里是**数据**（就像取色器选出来的那个颜色），不是界面样式。用户加的滑块是 `clDefault`。 |
 | `Hint` | `''` | 指针停在这个滑块上时控件显示的提示（需要 `ShowHint`）；空串时用控件自己的 `Hint`。 |
-| `Enabled` | `True` | `False`：照常画出来，但不能按、不能拖、不能选，键盘和 Tab 都跳过它。 |
+| `Enabled` | `True` | `False`：照常画出来，但不能按、不能拖、不能选，键盘和 Tab 都跳过它。选中的滑块设成 `False` 就不再选中（触发 `OnThumbSelect(-1)`），正在拖的就停下，`SelectedThumb` 也不接受不可用的滑块（读出 -1）。 |
 | `StyleClass` | `''` | 按 `TyTrackThumb.<类>` 解析这个滑块的样式。 |
 
 分段：第 0 段从轨道 `Min` 端到第一个滑块，第 i 段在滑块 i−1 和滑块 i 之间，最后一段从最后一个滑块到 `Max` 端。`Segments[i]` 的 `StyleClass` 不为空时，这一段用 `TyTrackSegment.<类>` 解析出的 `background` 填充；类为空或者 `Segments` 项数不够，这一段就不画，露出凹槽。默认主题带 `success`、`warning`、`danger` 三个类：
@@ -164,7 +165,7 @@ TTyEditStopColorEvent = procedure(Sender: TObject; AIndex: Integer; var AColor: 
 
 **`clDefault` 的色标**没有自己的颜色：不进 `Gradient`，滑块按主题画。
 
-**混色。** 渐变逐个色标线性混合，按 sRGB 各通道直接插值，不做 gamma 校正；新色标的颜色也按同样的方法算。画家在恰好两个色标、位置正好 0 和 1 时会走另一条带 gamma 校正的快路径，中间会亮一截（黑到白的中点约 `#AAAAAA`），再加一个色标整条渐变就变了样。为了让两个色标和三个色标画得一致，`GradientFill` 在这种情况下把第一个色标重复一次，避开那条路。
+**混色。** 渐变逐个色标线性混合，按 sRGB 各通道直接插值，不做 gamma 校正；新色标的颜色也按同样的方法算。画家画两个色标和画更多色标时都这样混色，所以 `GradientFill` 把色标原样交出去，两个色标就是两项。
 
 ```pascal
 // 预览条：画的就是轨道上那条渐变
@@ -207,6 +208,7 @@ TTyTrackThumbRemovingEvent = procedure(Sender: TObject; AIndex: Integer;
 
 - 用户拖动的滑块不再被邻居挡住，越过去以后所有滑块按值重新排序。被拖的滑块带着它的项一起走——颜色、提示、样式类，选中也跟着它。方向键、`PageUp` / `PageDown`、`Home` / `End`、滚轮同样能越过。
 - 开着时 `MinGap` 对用户操作不生效，两个滑块可以叠在同一个值上。
+- 区间控件：端点只能越过**自己区间的另一端**。越过后这个区间的 `Low` 和 `High` 对调，区间还是原来那一项；被拖的滑块接着当这个区间的另一端拖，选中也跟着它。碰到相邻区间时停在离它 `MinGap` 的地方，和不开 `AllowCrossing` 时一样，不会钻进别的区间，也不会把几个区间的端点重新配对。按键和滚轮同样按这条规则走。想换一种夹法，在子类里重写 `ClampCrossing`。
 - 越过以后的事件顺序：`OnThumbSelect`（新序号）→ `OnThumbChange`（新序号）→ `OnChange`。
 - **只管用户。** 代码写值（`SetThumbValue`、`Thumbs[i].Value`）照旧夹在两个邻居之间（间距按 0 算），不改变项的顺序。要整体重排，用 `BeginUpdate` / `EndUpdate`（第 8 节）。
 - 关掉时滑块按 `MinGap` 重新排开，和改 `MinGap` 一样会触发事件。
@@ -335,7 +337,7 @@ TTyTrackThumbChangingEvent = procedure(Sender: TObject; AIndex: Integer; var AVa
 ```
 
 - 用户要移动第 `AIndex` 个滑块时、值**还没变**之前触发。用户操作指：拖动（每挪一步问一次）、方向键 / `PageUp` / `PageDown` / `Home` / `End`、滚轮，按在轨道空白处时最近的滑块跳过来，以及 `Pushable` 推动的每个邻居、`DraggableRanges` 拖动的区间两端。
-- `AValue` 是滑块将要去的值，已经夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间（`AllowCrossing` 开着时只夹 `Min..Max`）。这一下根本动不了（比如已经顶着邻居还往那边拖）就不问。
+- `AValue` 是滑块将要去的值，已经夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间（`AllowCrossing` 开着时只夹 `Min..Max`，区间控件再夹在相邻区间 ± `MinGap` 之间）。这一下根本动不了（比如已经顶着邻居还往那边拖）就不问。
 - `AAllow := False`：滑块不动，也不触发 `OnThumbChange` / `OnChange`。
 - 改 `AValue`：滑块去你给的值。这个值会再按邻居 ± `MinGap` 和 `Min..Max` 夹一遍，所以给得再离谱也破坏不了第 8 节的不变式。改完正好等于当前值，就什么都不发生。
 - **只管用户，不管代码。** `SetThumbValue`、给 `Thumbs[i].Value` / `Ranges[i].Low` / `High` / `LowValue` / `HighValue` 赋值、改 `Min` / `Max` / `MinGap` 引起的重排、读窗体，都不触发——和 LCL 的惯例一样，这类事件拦的是用户，不是程序自己。
@@ -442,10 +444,10 @@ end;
 
 **不变式**：滑块按值升序排列，相邻两个至少隔 `MinGap`，全部在 `Min..Max` 内。`AllowCrossing` 开着时间距不算（按 0）。
 
-- **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去——除非用户操作时开着 `AllowCrossing`（越过后重新排序）或 `Pushable`（推着邻居走），见第 5 节。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
+- **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去——除非用户操作时开着 `AllowCrossing`（越过后重新排序；区间控件只越过自己区间的另一端）或 `Pushable`（推着邻居走），见第 5 节。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
 - **整体重排**发生在改 `Min`、`Max`、`MinGap` 时，关掉 `AllowCrossing` 时，以及读完窗体时：先排序，从左往右推开到满足间距，超出 `Max` 的再从右往左推回来。读窗体时的重排不触发事件。
 - **`MinGap` 放不下时**——`(滑块数 − 1) × MinGap > Max − Min`——不报错，也不改属性值：滑块按 `(Max − Min) div (滑块数 − 1)` 的间距摆放。之后把范围放宽，原来的间距自动恢复。
-- **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：
+- **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。这期间调 `SetThumbValue` 也一样原样存进项里；改 `Min`、`Max`、`MinGap` 或 `AllowCrossing` 不会冲掉项里存着的值，`EndUpdate` 时按新的设置一起排。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：
 
   ```pascal
   Bar.Ranges.BeginUpdate;
@@ -471,7 +473,7 @@ end;
 | 左键按在滑块上 | 选中它，从按下的位置开始拖（只按不动不会挪动滑块）。几个滑块叠在一起时取中心最近的那个，一样近取值小的。 |
 | 左键按在轨道空白处 | 先问 `OnTrackClick`（见第 7 节）；没被处理时，开了 `AllowUserThumbs` / `AllowUserRanges` 就在那里加滑块或区间（第 5 节），没开就是离按点最近的滑块跳过去并选中，接着可以拖。一样近时取值小的那个。 |
 | 左键按在区间高亮段上 | `DraggableRanges` 开着时先问 `OnTrackClick`，没被处理就整段拖这个区间；关着时同按在空白处。 |
-| 拖动 | 每一步先问 `OnThumbChanging`，碰到邻居停在 `MinGap` 处（`AllowCrossing` 时越过、`Pushable` 时推着走）。`MinGap = 0` 时几个滑块叠在同一个值上，往哪边拖就由能往那边走的那个接手，叠在两端的滑块也拉得开。拖出控件不中断，松开左键才结束。 |
+| 拖动 | 每一步先问 `OnThumbChanging`，碰到邻居停在 `MinGap` 处（`AllowCrossing` 时越过、`Pushable` 时推着走）。`MinGap = 0` 时几个滑块叠在同一个值上，往哪边拖就由能往那边走的那个接手，叠在两端的滑块也拉得开。拖出控件不中断，松开左键才结束。鼠标捕获被拿走时（比如事件里弹出了模态对话框），拖动也结束，滑块不再跟着指针。 |
 | 拖出轨道 | 开了 `AllowUserThumbs` / `AllowUserRanges` 时，离控件边缘超过 `--track-remove-distance` 就显示「将被删除」，松手删除（第 5 节）。 |
 | 双击色标 | 渐变控件：改颜色（第 4 节）。 |
 | `←` / `↓` | 键盘滑块减 `LineSize`（竖排时 `↑` 增大，同 `TTyTrackBar`） |
@@ -479,11 +481,13 @@ end;
 | `PageUp` / `PageDown` | 加 / 减 `PageSize` |
 | `Home` / `End` | 到它能去的最小 / 最大值（邻居 ± `MinGap`，或 `Min` / `Max`） |
 | `Delete` | 开了 `AllowUserThumbs` / `AllowUserRanges` 时删除选中的滑块（区间控件删它所在的区间），先问 `OnThumbRemoving`。 |
-| `Tab` / `Shift+Tab` | 在可用滑块之间前后切换；到了最后一个（往回时是第一个）再按，焦点才离开控件。 |
-| 用 Tab 进入控件 | 选中第一个可用滑块；用 `Shift+Tab` 进入时选中最后一个。点击进入时由点击决定。 |
+| `Tab` / `Shift+Tab` | 在可用滑块之间前后切换；到了最后一个（往回时是第一个）再按，焦点才离开控件。没有选中的滑块时，`Tab` 选中第一个可用滑块，`Shift+Tab` 选中最后一个。 |
+| 用 Tab 进入控件 | 选中第一个可用滑块；用 `Shift+Tab` 进入时选中最后一个。点击进入时由点击决定。代码给的焦点（`SetFocus`、窗体的 `ActiveControl`）保留原来选中的滑块，没有选中时同 Tab。 |
 | 滚轮 | 键盘滑块上滚加 `LineSize`、下滚减，同 `TTyTrackBar`；`OnMouseWheel` 里置 `Handled` 可以拦下。 |
 
-「键盘滑块」是选中的那个；没有选中（或选中的不可用）时是第一个可用滑块，按键后它变成选中的。
+上表说的是没翻转的条。`Reversed = True` 时按键和滚轮跟着屏幕走，同 `TTyTrackBar`：每个键、滚轮每一格让滑块在屏幕上往哪边走，和同方向没翻转的条一样，所以值的变化方向正好相反。横排翻转后按 `→`，滑块往右走，值减小；竖排翻转后按 `↑`，滑块往上走，值也减小。`Home` / `End` 去的还是没翻转时那一头，翻转后 `Home` 是往 `Max` 走、`End` 是往 `Min` 走，同样停在邻居 ± `MinGap` 处。
+
+「键盘滑块」是选中的那个；没有选中（或选中的不可用）时是第一个可用滑块，按键后它变成选中的。一个可用滑块都没有时，方向键、`PageUp` / `PageDown`、`Home` / `End` 照样由控件收下，什么也不动，焦点不会被方向键带到别的控件上。
 
 ---
 
@@ -502,6 +506,9 @@ end;
 | 度量 | 默认 | 说明 |
 |------|------|------|
 | `--track-remove-distance` | `24px` | 滑块垂直于轨道拖出控件边缘多远算「拖出去了」。 |
+| `--track-thickness` | `4px` | 凹槽的粗细，与 `TTyTrackBar` 共用。 |
+
+这两个度量也可以写在单个控件的 `StyleOverride` 里（比如 `--track-remove-distance: 60px;`），只对这一个控件生效。
 
 默认主题里的相关规则：
 
@@ -545,7 +552,7 @@ TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }
 2. **淡出由控件自己做。** 画家的 `opacity` 只作用于整次绘制，所以控件把 `.removing` 解析出的 `opacity` 乘到这个滑块的颜色上。自绘滑块（`OnDrawThumb` 接管）时要自己画，判断用 `RemovingThumb`。
 3. **区间控件的「加删」开关叫 `AllowUserRanges`**，和多值控件的 `AllowUserThumbs` 是同一套机制；区间控件不发布 `MinThumbs` / `MaxThumbs`。区间被拖出时高亮段沿用 `.removing` 的 `opacity`，没有单独的主题键。
 4. **`AllowCrossing` 只管用户。** 代码写值仍然夹在邻居之间，不改变项的顺序。
-5. **渐变的混色不做 gamma 校正**，按 sRGB 各通道线性插值，`GradientFill` 在只有首尾两个色标时会重复第一个色标（第 4 节）。
+5. **渐变的混色不做 gamma 校正**，按 sRGB 各通道线性插值（第 4 节）。
 6. **新增 `RemovingThumb`**（public，只读），给自绘用；**新增 `TyTrackThumb.stop`**，让色标在任何颜色下都有边。
 
 ---

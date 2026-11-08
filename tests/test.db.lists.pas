@@ -47,6 +47,7 @@ type
     procedure EditorKey(AKey: Word);
   published
     procedure TestTypingInTheEditableFieldEditsAtOnce;
+    procedure TestTypingIntoAnAutoIncrementFieldIsUndone;
     procedure TestEnterInTheEditableFieldWrites;
     procedure TestEscapeInTheEditableFieldCancels;
     procedure TestReadOnlyListPickIsUndone;
@@ -103,6 +104,7 @@ type
     procedure TestNullValueKeyIsRefusedWhenNotEditable;
     procedure TestListFollowsTheLookupTable;
     procedure TestLookupFieldBringsItsOwnDefinition;
+    procedure TestScrollListDatasetMovesTheListWhenUnbound;
   end;
 
   TDBLookupComboBoxTest = class(TDBLookupTestBase)
@@ -118,6 +120,7 @@ type
     function Combo: TTyDBLookupComboBox;
   published
     procedure TestDefaultStyleIsDropDownList;
+    procedure TestPickOfAnotherRowWithTheSameTextIsWritten;
   end;
 
   TDBLookupListBoxTest = class(TDBLookupTestBase)
@@ -255,6 +258,32 @@ begin
   AssertEquals('the combo box follows its field', Editor.Text, Combo.Text);
   AssertTrue('one key: dsEdit', FFix.DS.State = dsEdit);
   AssertTrue('the link is editing', Link.Editing);
+end;
+
+{ #184, doc §3.4: the editable field has no key gate of its own, so typing into an
+  auto-increment field reaches the change -- which takes it back. }
+procedure TDBComboBoxTest.TestTypingIntoAnAutoIncrementFieldIsUndone;
+var
+  ds: TBufDataset;
+  src: TDataSource;
+  before: string;
+begin
+  ds := NewCounterTable;
+  src := TDataSource.Create(nil);
+  try
+    src.DataSet := ds;
+    Combo.Style := csDropDown;
+    SetStrProp(FCtl, 'DataField', 'ID');
+    SetObjectProp(FCtl, 'DataSource', src);
+    before := Combo.Text;
+    EditorType('7');
+    AssertEquals('the key is undone', before, Combo.Text);
+    AssertTrue('the dataset stays in dsBrowse', ds.State = dsBrowse);
+  finally
+    SetObjectProp(FCtl, 'DataSource', nil);
+    src.Free;
+    ds.Free;
+  end;
 end;
 
 procedure TDBComboBoxTest.TestEnterInTheEditableFieldWrites;
@@ -638,6 +667,22 @@ begin
   end;
 end;
 
+{ #184: LCL's master/detail idiom -- a lookup control with no DataSource, ScrollListDataset on:
+  every pick moves the list's dataset to the picked row (TDBLookup.UpdateData's Locate, which
+  LCL calls for an unbound control on each pick). }
+procedure TDBLookupTestBase.TestScrollListDatasetMovesTheListWhenUnbound;
+begin
+  SetOrdProp(FCtl, 'ScrollListDataset', 1);
+  SetKeyValueOf(1);
+  AssertEquals('precondition: Cities on Paris', 'Paris', FFix.Cities.FieldByName('Name').AsString);
+  EnterControl;
+  Key(VK_DOWN);
+  AssertEquals('picked', 'Tokyo', Shown);
+  AssertEquals('Cities moved with the pick', 'Tokyo', FFix.Cities.FieldByName('Name').AsString);
+  Key(VK_DOWN);
+  AssertEquals('and again', 'Lima', FFix.Cities.FieldByName('Name').AsString);
+end;
+
 { ========================================================= TDBLookupComboBoxTest ========= }
 
 function TDBLookupComboBoxTest.NewLookupControl: TControl;
@@ -695,6 +740,20 @@ begin
   AssertTrue('csDropDownList', Combo.Style = csDropDownList);
   AssertEquals('the declared default, so a form file leaves it out', Ord(csDropDownList),
     GetPropInfo(Combo, 'Style')^.Default);
+end;
+
+{ #184: two rows may show the same text; picking the other one is an edit all the same. }
+procedure TDBLookupComboBoxTest.TestPickOfAnotherRowWithTheSameTextIsWritten;
+begin
+  Bind('CityID');
+  FFix.Cities.AppendRecord([4, 'Paris']);
+  AssertEquals('precondition: two Paris rows', 'Paris', ListItems[ListItems.Count - 1]);
+  AssertEquals('precondition: row 1 holds the first Paris', 0, Combo.ItemIndex);
+  EnterControl;
+  Key(VK_END);
+  AssertEquals('the second Paris picked', ListItems.Count - 1, Combo.ItemIndex);
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertEquals('its key written', 4, BoundField.AsInteger);
 end;
 
 { ========================================================== TDBLookupListBoxTest ========= }

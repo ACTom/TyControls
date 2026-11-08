@@ -969,7 +969,7 @@ begin
         // "the link under the pointer lights up" for free, with no code branch of its own,
         // and one that fills only :selected gets the current-location plate the same way.
         if tpBackground in crumbS.Present then
-          P.FillBackground(slots[i].ItemRect, crumbS.Background, TyEffectiveCorners(crumbS));
+          P.FillBackground(slots[i].ItemRect, crumbS.Background, TyEffectiveCorners(crumbS), TyBorderVisible(crumbS));
         if TyBorderVisible(crumbS) then
           P.StrokeBorder(slots[i].ItemRect, TyEffectiveCorners(crumbS), crumbS.BorderWidth,
             crumbS.BorderColor);

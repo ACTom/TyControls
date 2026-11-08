@@ -26,7 +26,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **像素属性都是逻辑像素**(96 PPI 下的像素)。宽度、高度、内边距、`BorderWidth` 等由控件按自己的 PPI 缩放，高 DPI 下不用手工换算。
 - **`TTyScrollBar.Position` 可以到达 `Max`。** LCL 的滚动条最大只到 `Max - PageSize + 1`。
 - **`TabStop = False` 的控件点击时不获得焦点**,键盘焦点留在原来的控件上。文本框、多行文本框和数值、日期时间这类输入字段除外：点进去就是为了输入。
-- **`TTyTrackBar` 按 PageUp 增大 `Position`**,与 Qt 一致，与 Win32 相反。
+- **`TTyTrackBar` 按 PageUp 增大 `Position`**,与 Qt 一致，与 Win32 相反。`Reversed` 的条上按键和滚轮跟着屏幕走：滑块在屏幕上往哪边走和没翻转时一样，所以 PageUp 减小 `Position`。
 - **`TTyTreeView.AutoExpand` 沿用 Delphi 的语义**:焦点移到哪个节点就展开哪个，离开的节点收起。LCL 的含义是"给节点添加子节点时展开它"。
 - **`TTyTitleBar` 禁用后外观不变。** 它代表窗口本身，窗口不会变灰;要表示"窗口不可用"请禁用窗口里的内容。
 - **窗体自己的 `Font` 不覆盖主题。** 整个窗口的字体来自主题;要换字体，改主题或用 `StyleOverride`。控件自己设置的字体照常生效。
@@ -36,7 +36,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 ## `AutoSize` 不起作用的控件
 
-下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`。
+下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`、`TTyTerminalView`（要固定行列用 `SizeForGrid`）。
 
 ## 不再发布的属性
 
@@ -52,7 +52,8 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 | `TTyShellTreeView` | `NodeDataSize`、`RootNodeCount`、`Items`、`OnInitChildren` | 节点由它自己从文件系统建;`TTyTreeView` 照常发布 |
 | `TTyDBLookupListBox` | `MultiSelect`、`ExtendedSelect` | 查找列表只存一个键(LCL 也不发布);`TTyDBListBox` 照常发布 |
 | 文本输入控件:`TTyEdit`、`TTyMaskEdit`、`TTyComboEdit`、`TTyURLEdit`、数值框、`TTyMemo`、`TTySpinEdit`、`TTyDateTimePicker` 及它们的 DB 版本 | `ChildSizing` | 没有要排的子控件 |
-| `TTyMultiTrackBar`、`TTyGradientTrackBar` | `ChildSizing` | 没有要排的子控件 |
+| `TTyRangeTrackBar`、`TTyMultiTrackBar`、`TTyGradientTrackBar` | `ChildSizing` | 没有要排的子控件 |
 | `TTyTerminalView` | `ChildSizing` | 滚动条由终端自己摆;设了它，滚动条会盖到最后几列上 |
+| `TTyToolWindowActions` | `AutoSize`、`ChildSizing`、`BorderSpacing` | 位置和尺寸由所在的工具窗口排，子控件由它自己排成一排 |
 
 上面这些只能选的组合框(`TTyColorBox`、`TTyColorComboBox` 除外)的 `Style` 仍然发布，但对象查看器的下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式。

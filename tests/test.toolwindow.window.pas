@@ -117,6 +117,8 @@ type
     procedure TestAHeaderBorderPaintsABottomRuleTheActionsStayAbove;
     procedure TestTheBaseThemeHasNoHeaderRule;
     procedure TestAThemeThatAddsOnlyTheRuleRelayouts;
+    { 只换窗口的样式类(主题版本号不动):底线跟着有 / 没有,标题行跟着重排。 }
+    procedure TestAStyleClassChangeAddsAndRemovesTheRule;
     { StripHint 能被窗体翻译:LCL 只认类型正好是 TTranslateString 的属性。 }
     procedure TestStripHintIsATranslateString;
   end;
@@ -1264,6 +1266,24 @@ begin
     一次裸 Invalidate,缓存键里没有底线的话它看不出来。 }
   FCtl.StyleOverride := 'TyToolWindowHeader { border-color: #FF0000; border-width: 2px; }';
   AssertTrue('只加了底线的主题也要重排', FWin.AlignCount > before);
+end;
+
+procedure TTyToolWindowTests.TestAStyleClassChangeAddsAndRemovesTheRule;
+var
+  before: Integer;
+begin
+  FWin.Font.PixelsPerInch := 96;
+  FWin.SetBounds(0, 0, 160, 120);
+  FCtl.StyleOverride := 'TyToolWindowHeader.ruled { border-color: #FF0000; border-width: 2px; }';
+  AssertEquals('前提:没有类就没有底线', 0, FWin.HeaderInput(96, 160).BottomRule);
+  before := FWin.AlignCount;
+  FWin.StyleClass := 'ruled';
+  AssertEquals('换上类:底线出现', 2, FWin.HeaderInput(96, 160).BottomRule);
+  AssertTrue('换上类:标题行重排', FWin.AlignCount > before);
+  before := FWin.AlignCount;
+  FWin.StyleClass := '';
+  AssertEquals('换回来:底线没了', 0, FWin.HeaderInput(96, 160).BottomRule);
+  AssertTrue('换回来:标题行重排', FWin.AlignCount > before);
 end;
 
 procedure TTyToolWindowTests.TestStripHintIsATranslateString;

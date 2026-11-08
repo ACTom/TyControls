@@ -183,7 +183,9 @@ type
       "up increases" true for the keyboard, the wheel and the drag alike -- see KeyDown.
       LCL/Win32's un-reversed vertical is Min at the top, so a ported form that sets
       Reversed on a VERTICAL bar draws the other way round here. Migration: drop
-      Reversed on ported vertical bars, set it on ported horizontal ones unchanged. }
+      Reversed on ported vertical bars, set it on ported horizontal ones unchanged.
+      The keys and the wheel follow the screen, as LCL's on Windows: Reversed does not change
+      which way any of them moves the thumb (TyTrackInputStep). }
     property Reversed: Boolean read FReversed write SetReversed default False;
     { Which side of the groove the ticks are drawn on. LCL: comctrls.pp:2795, same
       default. Ticks used to be nailed to one side (below when horizontal, right when
@@ -306,6 +308,12 @@ type
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+{ #182: the keys and the wheel follow the screen, as LCL's TTrackBar does on Windows: each one
+  moves the thumb the way it moves it on an unreversed bar of the same orientation, so on a
+  Reversed bar it changes the value the other way. AStep is what a key or a wheel notch adds
+  to the value of an unreversed bar; the result is what it adds on this one. Shared by
+  TTyTrackBar and the multi-thumb bars. }
+function TyTrackInputStep(AStep: Integer; AReversed: Boolean): Integer;
 { THE SLIDER'S SHAPE, shared by TTyTrackBar and the multi-thumb bars so a thumb, a groove and a
   slider band come out the same size and in the same place on both.
   TyTrackThumbLen: the thumb's length along the track at APPI (12 logical px, at least 1). }
@@ -351,6 +359,11 @@ begin
     Result := Int64(AFrequency) * ((ticks + maxTicks - 1) div maxTicks);
 end;
 
+
+function TyTrackInputStep(AStep: Integer; AReversed: Boolean): Integer;
+begin
+  if AReversed then Result := -AStep else Result := AStep;
+end;
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 var travel, span, eff: Integer;
@@ -1167,36 +1180,39 @@ begin
   end;
   if Key = IncKey2 then Key := IncKey
   else if Key = DecKey2 then Key := DecKey;
+  { #182: on a Reversed bar each key moves the thumb the same way on screen as here, so it
+    changes Position the other way (TyTrackInputStep); Home / End go to the end of the screen
+    they go to here. }
   if Key = IncKey then
   begin
-    Position := FPosition + FLineSize;
+    Position := FPosition + TyTrackInputStep(FLineSize, FReversed);
     Key := 0;
   end
   else if Key = DecKey then
   begin
-    Position := FPosition - FLineSize;
+    Position := FPosition + TyTrackInputStep(-FLineSize, FReversed);
     Key := 0;
   end
   else
     case Key of
       VK_PRIOR:   // PageUp increases
         begin
-          Position := FPosition + FPageSize;
+          Position := FPosition + TyTrackInputStep(FPageSize, FReversed);
           Key := 0;
         end;
       VK_NEXT:
         begin
-          Position := FPosition - FPageSize;
+          Position := FPosition + TyTrackInputStep(-FPageSize, FReversed);
           Key := 0;
         end;
       VK_HOME:
         begin
-          Position := FMin;
+          if TyTrackInputStep(-1, FReversed) < 0 then Position := FMin else Position := FMax;
           Key := 0;
         end;
       VK_END:
         begin
-          Position := FMax;
+          if TyTrackInputStep(1, FReversed) > 0 then Position := FMax else Position := FMin;
           Key := 0;
         end;
     end;
@@ -1283,7 +1299,8 @@ begin
   if not IsEnabled then Exit;
   // Convention: match the native LCL TTrackBar slider -> wheel-up
   // (WheelDelta > 0) INCREASES Position by LineSize; wheel-down decreases it.
-  Position := Position + Sign(WheelDelta) * FLineSize;
+  // #182: on a Reversed bar the thumb moves the same way on screen, so the other way in value.
+  Position := Position + TyTrackInputStep(Sign(WheelDelta) * FLineSize, FReversed);
   Result := True;
 end;
 

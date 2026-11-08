@@ -54,6 +54,8 @@ type
     { spec §6.8:右键。 }
     procedure TestARightClickOnAnIconSetsContextWindowAndPopsTheBarsMenu;
     procedure TestARightClickOffTheIconsBubblesToTheForm;
+    { 栏自己的像素(图标条的空白、拉宽边)上的右键:栏的菜单和 OnContextPopup 照常,ContextWindow nil。 }
+    procedure TestARightClickOnTheBarsOwnBlankOpensItsMenu;
     procedure TestADisabledBarGreysItsIcons;
     procedure TestRenderingAtAnotherPpiScalesTheWholeGeometry;
     procedure TestTheDesignNotesFollowTheReadingDirection;
@@ -938,6 +940,36 @@ begin
     FBar.Perform(LM_CONTEXTMENU, 0, PtrInt($FFFFFFFF)));
   AssertEquals('菜单键:也不发 OnContextPopup', 0, FContextPopups);
   AssertTrue('菜单键:ContextWindow nil', FBar.ContextWindow = nil);
+end;
+
+procedure TTyToolWindowStripTests.TestARightClickOnTheBarsOwnBlankOpensItsMenu;
+var
+  menu: TPopupMenu;
+  handled: Boolean;
+  L: TTyToolWindowBarLayout;
+  blank: TPoint;
+begin
+  NewWindow;
+  NewWindow;
+  menu := TPopupMenu.Create(FForm);
+  FBar.PopupMenu := menu;
+  FBar.OnContextPopup := @CountContextPopup;
+  L := FBar.BarLayout;
+  { 图标条里最后一个图标下面的空白。 }
+  blank := Point((L.Strip.Left + L.Strip.Right) div 2, L.Strip.Bottom - 4);
+  AssertTrue('前提:那一点在图标条的空白里',
+    PtInRect(L.Strip, blank) and (FBar.WindowAtPos(blank.X, blank.Y) = nil));
+  FContextPopups := 0;
+  handled := False;
+  FBar.CallDoContextPopup(blank, handled);
+  AssertEquals('图标条的空白:发栏的 OnContextPopup', 1, FContextPopups);
+  AssertTrue('图标条的空白:ContextWindow nil', FBar.ContextWindow = nil);
+  AssertSame('图标条的空白:栏的菜单照常弹', menu, FBar.CallGetPopupMenu);
+  FContextPopups := 0;
+  handled := False;
+  FBar.CallDoContextPopup(L.Edge.CenterPoint, handled);
+  AssertEquals('拉宽边:发栏的 OnContextPopup', 1, FContextPopups);
+  AssertSame('拉宽边:栏的菜单照常弹', menu, FBar.CallGetPopupMenu);
 end;
 
 procedure TTyToolWindowStripTests.TestADisabledBarGreysItsIcons;

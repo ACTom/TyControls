@@ -49,9 +49,11 @@ type
       FFocusedDisplay). Kept as a flag rather than read from Focused so the display follows the
       focus messages, not the widget's state at the moment DataChange runs. }
     FFocusedDisplay: Boolean;
-    { MaxLength came from the field's size, not from the author; a later field that is not a
-      string field takes it back to 0 instead of inheriting a limit nobody set. }
-    FFieldMaxLength: Boolean;
+    { The MaxLength the field's size put there (0: none). While MaxLength still holds it, the
+      field owns it: the next string field puts its own size, any other field takes it back to
+      0 instead of inheriting a limit nobody set. A MaxLength the program set since is its own,
+      and stays (LCL fills MaxLength only while it is 0). }
+    FFieldMaxLength: Integer;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -168,7 +170,7 @@ type
     FInUserEdit: Boolean;
     FLoaded: TTyDBLoadedValue;
     FFocusedDisplay: Boolean;
-    FFieldMaxLength: Boolean;
+    FFieldMaxLength: Integer;   // as TTyCustomDBEdit's
     FCustomEditMask: Boolean;
     function GetDataField: string;
     function GetDataSource: TDataSource;
@@ -926,11 +928,11 @@ type
     procedure SetRange(AMin, AMax: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
+    procedure ValueChanged(Sender: TObject);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    procedure DoChange; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
@@ -1110,16 +1112,16 @@ begin
       Alignment := f.Alignment;
       if f.DataType in CStringFieldTypes then
       begin
-        if (MaxLength = 0) or FFieldMaxLength then
+        if (MaxLength = 0) or (MaxLength = FFieldMaxLength) then
         begin
           MaxLength := f.Size;
-          FFieldMaxLength := True;
+          FFieldMaxLength := f.Size;
         end;
       end
-      else if FFieldMaxLength then
+      else if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       if FFocusedDisplay and FDataLink.CanModify then
         Text := f.Text
@@ -1128,10 +1130,10 @@ begin
     end
     else
     begin
-      if FFieldMaxLength then
+      if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       Text := '';
     end;
@@ -1344,16 +1346,16 @@ begin
       Alignment := f.Alignment;
       if f.DataType in CStringFieldTypes then
       begin
-        if (MaxLength = 0) or FFieldMaxLength then
+        if (MaxLength = 0) or (MaxLength = FFieldMaxLength) then
         begin
           MaxLength := f.Size;
-          FFieldMaxLength := True;
+          FFieldMaxLength := f.Size;
         end;
       end
-      else if FFieldMaxLength then
+      else if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       { A mask shapes the EDITABLE form; DisplayText may not fit it at all. }
       if (GetMask <> '') or (FFocusedDisplay and FDataLink.CanModify) then
@@ -1364,10 +1366,10 @@ begin
     else
     begin
       if not FCustomEditMask then ApplyFieldMask('');
-      if FFieldMaxLength then
+      if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       Text := '';
     end;
@@ -1670,7 +1672,10 @@ begin
     Key := 0;
     Exit;
   end;
-  if ((Key = VK_BACK) or (Key = VK_DELETE))
+  { Enter and Tab too, when the memo takes them: the base control puts the line break or the
+    tab in as it handles the key (LCL's TDBMemo.KeyPress drops #13 and #9 the same way). }
+  if ((Key = VK_BACK) or (Key = VK_DELETE) or ((Key = VK_RETURN) and WantReturns)
+    or ((Key = VK_TAB) and WantTabs))
     and not (FMemoLoaded and TyDBEditAllowed(FDataLink, FInUserEdit)) then
   begin
     Key := 0;
@@ -2545,7 +2550,9 @@ end;
 
 procedure TTyCustomDBFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if ((Key = VK_BACK) or (Key = VK_DELETE)) and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  { With EditorEnabled off the base control drops these keys itself: nothing to ask for. }
+  if ((Key = VK_BACK) or (Key = VK_DELETE)) and EditorEnabled
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     Key := 0;
     Exit;
@@ -2563,8 +2570,9 @@ procedure TTyCustomDBFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   { Only for what this control would insert: any other character the base filter drops
     without the dataset being asked. Not the field's IsValidChar -- a float field's takes the
-    locale's DecimalSeparator, this control always types a '.'. }
-  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.'])
+    locale's DecimalSeparator, this control always types a '.'. Nor while EditorEnabled is off:
+    the base control drops every character then. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.']) and EditorEnabled
     and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     UTF8Key := '';
@@ -2623,6 +2631,7 @@ begin
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
   FDataLink.OnUpdateData := @UpdateData;
+  AddHandlerOnChange(@ValueChanged);
 end;
 
 destructor TTyCustomDBSpinEdit.Destroy;
@@ -2762,9 +2771,8 @@ begin
   FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
-procedure TTyCustomDBSpinEdit.DoChange;
+procedure TTyCustomDBSpinEdit.ValueChanged(Sender: TObject);
 begin
-  inherited DoChange;
   if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
   if Text = FLoaded.Text then Exit;
   TyDBUserChanged(FDataLink, FInUserEdit);
@@ -2795,8 +2803,15 @@ begin
         Key := 0;
         Exit;
       end;
-    VK_UP, VK_DOWN, VK_BACK, VK_DELETE:
+    VK_UP, VK_DOWN:
       if not TyDBEditAllowed(FDataLink, FInUserEdit) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+    { With EditorEnabled off the base control drops these keys itself: nothing to ask for. }
+    VK_BACK, VK_DELETE:
+      if EditorEnabled and not TyDBEditAllowed(FDataLink, FInUserEdit) then
       begin
         Key := 0;
         Exit;
@@ -2810,7 +2825,8 @@ end;
 
 procedure TTyCustomDBSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
-  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-'])
+  { Not while EditorEnabled is off: the base control drops every character then. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-']) and EditorEnabled
     and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     UTF8Key := '';

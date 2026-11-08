@@ -16,6 +16,13 @@
    tokens hand them this skin's corners and the well of this skin's own edit, so they read as
    part of the skin instead of the default theme in the skin's colours. */
 :root {
+  /* Table: no band, medium caption, no separators, an arrow for the sort. */
+  --grid-header-bg: var(--grid-bg);
+  --grid-header-font-weight: 500;
+  --grid-header-separator-width: 0;
+  --grid-line-v-width: 0;
+  --grid-hover: row;
+  --sort-glyph: arrow;
   --radius:       4px;
   --radius-sm:    4px;
   --input-bg:     var(--field);

@@ -16,7 +16,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Button,
-  tyControls.TyLabel, tyControls.Css.Values;
+  tyControls.TyLabel, tyControls.Css.Values, tyControls.StyleModel;
 
 type
   TStyleTokenTest = class(TTestCase)
@@ -38,6 +38,10 @@ type
     procedure TestAColourThatDoesNotEvaluateIsTheThemes;
     procedure TestTheReadFollowsTheTextAndTheTheme;
     procedure TestTheGraphicTwinReadsThemToo;
+    procedure TestTheThemeIsWalkedOncePerToken;
+    procedure TestANewThemeIsReadAgain;
+    procedure TestAModelNobodyElseReadsReadsANewThemeAgain;
+    procedure TestTheDefaultIsPartOfAColoursAnswer;
   end;
 
 implementation
@@ -202,6 +206,83 @@ begin
   FCtl.StyleOverride := ':root { --test-root: dotted; }';
   FLabel.StyleOverride := TOK + ': var(--test-root)';
   AssertEquals('through a theme var', 'dotted', FLabel.StyleToken(TOK, 'x'));
+end;
+
+{ #203. The theme's answer for a token is found once, not on every read. Finding it walks every
+  variable of the theme, about 0.2 ms, and the grid reads two dozen tokens on every frame, one per
+  header section among them: a scroll that repaints an 8-pixel strip took 10.5 ms instead of 5.9. }
+procedure TStyleTokenTest.TestTheThemeIsWalkedOncePerToken;
+var
+  before, i: Integer;
+begin
+  FCtl.StyleOverride := ':root { ' + TOK + ': dotted; ' + COL + ': #0000ff; }';
+  before := FCtl.Model.TokenLookupsForTest;
+  for i := 1 to 10 do
+  begin
+    AssertEquals('the theme''s text', 'dotted', FOther.StyleToken(TOK, 'solid'));
+    AssertEquals('the graphic twin reads the same', 'dotted', FLabel.StyleToken(TOK, 'solid'));
+    CheckColor('the theme''s colour', BLUE, FOther.StyleColor(COL, GREY));
+  end;
+  AssertEquals('the theme''s variables are walked once for each token, not for each read', 2,
+    FCtl.Model.TokenLookupsForTest - before);
+end;
+
+{ #203: what was found is the theme's, so a new theme, or a variable set at run time, is read
+  again. }
+procedure TStyleTokenTest.TestANewThemeIsReadAgain;
+const
+  GREEN: TTyColor = $FF00FF00;
+begin
+  FCtl.StyleOverride := ':root { ' + TOK + ': dotted; ' + COL + ': #0000ff; }';
+  AssertEquals('dotted', FOther.StyleToken(TOK, 'solid'));
+  CheckColor('blue', BLUE, FOther.StyleColor(COL, GREY));
+  FCtl.StyleOverride := ':root { ' + TOK + ': dashed; ' + COL + ': #ff0000; }';
+  AssertEquals('a new theme''s text, not the one read before', 'dashed', FOther.StyleToken(TOK, 'solid'));
+  CheckColor('a new theme''s colour, not the one read before', RED, FOther.StyleColor(COL, GREY));
+  FCtl.Model.SetVarOverride(COL, '#00ff00');
+  CheckColor('a variable set at run time', GREEN, FOther.StyleColor(COL, GREY));
+  FCtl.Model.ClearVarOverride(COL);
+  CheckColor('and taken away again', RED, FOther.StyleColor(COL, GREY));
+end;
+
+{ #203: the same with no control in between. Under a controller, a new theme makes its controls
+  resolve their styles, and that drops every memo before the test reads a token -- so the tokens'
+  own check of the theme version went unwatched there (a mutant that skipped it lived). A model
+  read by nobody else has only that check. }
+procedure TStyleTokenTest.TestAModelNobodyElseReadsReadsANewThemeAgain;
+var
+  m: TTyStyleModel;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root { ' + TOK + ': dotted; ' + COL + ': #0000ff; }');
+    AssertEquals('dotted', m.ResolveToken(TOK));
+    CheckColor('blue', BLUE, m.ResolveColorToken(COL, GREY));
+    m.LoadFromCss(':root { ' + TOK + ': dashed; ' + COL + ': #ff0000; }');
+    AssertEquals('a new theme''s text, not the one read before', 'dashed', m.ResolveToken(TOK));
+    CheckColor('a new theme''s colour, not the one read before', RED, m.ResolveColorToken(COL, GREY));
+    { The colour first this time: whichever read comes first after a load drops every memo, so
+      each order watches the other one's check. }
+    m.LoadFromCss(':root { ' + TOK + ': groove; ' + COL + ': #0000ff; }');
+    CheckColor('a colour read first after a new theme', BLUE, m.ResolveColorToken(COL, GREY));
+    AssertEquals('and the text after it', 'groove', m.ResolveToken(TOK));
+  finally
+    m.Free;
+  end;
+end;
+
+{ #203: an unset colour, or one that is not a colour, is the default its reader asked for, whoever
+  asked first. }
+procedure TStyleTokenTest.TestTheDefaultIsPartOfAColoursAnswer;
+begin
+  CheckColor('unset: the default asked for', GREY, FOther.StyleColor(COL, GREY));
+  CheckColor('unset, another default: that one', RED, FOther.StyleColor(COL, RED));
+  CheckColor('and the first one again', GREY, FOther.StyleColor(COL, GREY));
+  FCtl.StyleOverride := ':root { ' + COL + ': banana; }';
+  CheckColor('not a colour: the default asked for', BLUE, FOther.StyleColor(COL, BLUE));
+  CheckColor('not a colour, another default: that one', RED, FOther.StyleColor(COL, RED));
+  AssertEquals('an unset text: the reader''s default', 'a', FOther.StyleToken(TOK, 'a'));
+  AssertEquals('another reader''s default', 'b', FOther.StyleToken(TOK, 'b'));
 end;
 
 initialization

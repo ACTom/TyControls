@@ -381,7 +381,6 @@ procedure TPainterTest.TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
       b.Canvas.FillRect(0, 0, W, H);
       b.Canvas.Font.Name := AFont;
       b.Canvas.Font.Height := -TyFontHeightPx(9, 96);
-      b.Canvas.Font.Quality := fqCleartypeNatural;
       TTestCanvasAccess(b.Canvas).RequiredState([csHandleValid, csFontValid]);
       SetBkMode(b.Canvas.Handle, TRANSPARENT);
       SetTextColor(b.Canvas.Handle, BGRAToColor(ink));
@@ -601,7 +600,6 @@ procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
       b.Canvas.FillRect(0, 0, w, h);
       b.Canvas.Font.Name := AFont;
       b.Canvas.Font.Height := -TyFontHeightPx(9, APPI);
-      b.Canvas.Font.Quality := fqCleartypeNatural;
       if ALightInk then b.Canvas.Font.Color := clWhite else b.Canvas.Font.Color := clBlack;
       b.Canvas.Brush.Style := bsClear;
       b.Canvas.TextOut(0, 2, CText);
@@ -2133,6 +2131,358 @@ begin
   end;
 end;
 
+{ ---- the shapes land on the pixels they name (#196) ---- }
+
+type
+  TPixelEdgesTest = class(TTestCase)
+  private
+    FHost: TBitmap;
+    FP: TTyPainter;
+    function Solid(AColor: TTyColor): TTyFill;
+    procedure Start(AGround: TBGRAPixel);
+    procedure AssertPixel(const AWhat: string; X, Y: Integer; AExpected: TBGRAPixel);
+    procedure AssertAColumnHasOnlyTwoColours(const AWhat: string; X: Integer; A, B: TBGRAPixel);
+    procedure AssertARowHasOnlyTwoColours(const AWhat: string; Y: Integer; A, B: TBGRAPixel);
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestAOnePixelBorderIsOneRowOfItsOwnColour;
+    procedure TestATwoPixelBorderIsTwoRows;
+    procedure TestARoundedOnePixelBorderIsOneRowAlongItsSides;
+    procedure TestAThickBorderKeepsTheFillsOuterArc;
+    procedure TestASquareTranslucentBorderDoesNotDoubleUpAtItsCorners;
+    procedure TestARoundedFillCoversExactlyItsRect;
+    procedure TestAFillBehindABorderLeavesNoHaloOnADarkParent;
+    procedure TestAPointerShapeCoversExactlyItsBody;
+    procedure TestATrianglesFlatSideIsCrisp;
+    procedure TestTheMinimizeBarIsOneRow;
+    procedure TestAnArrowShaftIsOneColumn;
+    procedure TestTheIndeterminateSquareHasCrispEdges;
+  end;
+
+const
+  EDGE_INK: TBGRAPixel = (blue: 0; green: 0; red: 0; alpha: 255);
+  EDGE_GROUND: TBGRAPixel = (blue: 255; green: 255; red: 255; alpha: 255);
+
+{ Walking from one side of the bitmap along the line through X (or Y) in the direction (DX, DY),
+  the first pixel with any ink is the flat side of a triangle pointing the other way. }
+function FootIsWhole(ABmp: TBGRABitmap; AMid, DX, DY: Integer): Boolean;
+var
+  i: Integer;
+  c: TBGRAPixel;
+begin
+  Result := True;
+  if DY <> 0 then
+  begin
+    if DY > 0 then i := ABmp.Height - 1 else i := 0;
+    while (i >= 0) and (i < ABmp.Height) do
+    begin
+      c := ABmp.GetPixel(AMid, i);
+      if c.red <> 255 then Exit(c.red = 0);
+      Dec(i, DY);
+    end;
+  end
+  else
+  begin
+    if DX > 0 then i := ABmp.Width - 1 else i := 0;
+    while (i >= 0) and (i < ABmp.Width) do
+    begin
+      c := ABmp.GetPixel(i, AMid);
+      if c.red <> 255 then Exit(c.red = 0);
+      Dec(i, DX);
+    end;
+  end;
+  Result := False;   // no ink at all
+end;
+
+function TPixelEdgesTest.Solid(AColor: TTyColor): TTyFill;
+begin
+  Result := Default(TTyFill);
+  Result.Kind := tfkSolid;
+  Result.Color := AColor;
+end;
+
+procedure TPixelEdgesTest.Start(AGround: TBGRAPixel);
+begin
+  FHost := TBitmap.Create;
+  FHost.SetSize(120, 120);
+  FP := TTyPainter.Create;
+  FP.BeginPaint(FHost.Canvas, Rect(0, 0, 120, 120), 96);
+  FP.Bitmap.Fill(AGround);
+end;
+
+procedure TPixelEdgesTest.TearDown;
+begin
+  if Assigned(FP) then
+  begin
+    FP.EndPaint;
+    FreeAndNil(FP);
+  end;
+  FreeAndNil(FHost);
+  inherited TearDown;
+end;
+
+procedure TPixelEdgesTest.AssertPixel(const AWhat: string; X, Y: Integer; AExpected: TBGRAPixel);
+var
+  c: TBGRAPixel;
+begin
+  c := FP.Bitmap.GetPixel(X, Y);
+  AssertTrue(Format('%s: (%d,%d) is %d,%d,%d, expected %d,%d,%d', [AWhat, X, Y, c.red, c.green, c.blue,
+    AExpected.red, AExpected.green, AExpected.blue]),
+    (c.red = AExpected.red) and (c.green = AExpected.green) and (c.blue = AExpected.blue));
+end;
+
+procedure TPixelEdgesTest.AssertAColumnHasOnlyTwoColours(const AWhat: string; X: Integer; A, B: TBGRAPixel);
+var
+  y: Integer;
+  c: TBGRAPixel;
+begin
+  for y := 0 to FP.Bitmap.Height - 1 do
+  begin
+    c := FP.Bitmap.GetPixel(X, y);
+    AssertTrue(Format('%s: (%d,%d) is a soft %d', [AWhat, X, y, c.red]),
+      (c.red = A.red) or (c.red = B.red));
+  end;
+end;
+
+procedure TPixelEdgesTest.AssertARowHasOnlyTwoColours(const AWhat: string; Y: Integer; A, B: TBGRAPixel);
+var
+  x: Integer;
+  c: TBGRAPixel;
+begin
+  for x := 0 to FP.Bitmap.Width - 1 do
+  begin
+    c := FP.Bitmap.GetPixel(x, Y);
+    AssertTrue(Format('%s: (%d,%d) is a soft %d', [AWhat, x, Y, c.red]),
+      (c.red = A.red) or (c.red = B.red));
+  end;
+end;
+
+procedure TPixelEdgesTest.TestAOnePixelBorderIsOneRowOfItsOwnColour;
+begin
+  Start(EDGE_GROUND);
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 0, 1, TyRGB(0, 0, 0));
+  { The line was centred half a pixel off: half on each of two rows, twice as wide, half as dark. }
+  AssertPixel('above the top edge', 30, 9, EDGE_GROUND);
+  AssertPixel('the top edge', 30, 10, EDGE_INK);
+  AssertPixel('below the top edge', 30, 11, EDGE_GROUND);
+  AssertPixel('left of the left edge', 9, 25, EDGE_GROUND);
+  AssertPixel('the left edge', 10, 25, EDGE_INK);
+  AssertPixel('right of the left edge', 11, 25, EDGE_GROUND);
+  AssertPixel('inside the right edge', 48, 25, EDGE_GROUND);
+  AssertPixel('the right edge', 49, 25, EDGE_INK);
+  AssertPixel('past the right edge', 50, 25, EDGE_GROUND);
+  AssertPixel('inside the bottom edge', 30, 38, EDGE_GROUND);
+  AssertPixel('the bottom edge', 30, 39, EDGE_INK);
+  AssertPixel('past the bottom edge', 30, 40, EDGE_GROUND);
+  AssertPixel('the corners are whole too', 10, 10, EDGE_INK);
+  AssertPixel('the corners are whole too', 49, 39, EDGE_INK);
+end;
+
+procedure TPixelEdgesTest.TestATwoPixelBorderIsTwoRows;
+begin
+  Start(EDGE_GROUND);
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 0, 2, TyRGB(0, 0, 0));
+  AssertPixel('above', 30, 9, EDGE_GROUND);
+  AssertPixel('row 1', 30, 10, EDGE_INK);
+  AssertPixel('row 2', 30, 11, EDGE_INK);
+  AssertPixel('below', 30, 12, EDGE_GROUND);
+  AssertPixel('inside the bottom', 30, 37, EDGE_GROUND);
+  AssertPixel('bottom row 1', 30, 38, EDGE_INK);
+  AssertPixel('bottom row 2', 30, 39, EDGE_INK);
+  AssertPixel('past the bottom', 30, 40, EDGE_GROUND);
+end;
+
+procedure TPixelEdgesTest.TestARoundedOnePixelBorderIsOneRowAlongItsSides;
+begin
+  Start(EDGE_GROUND);
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 6, 1, TyRGB(0, 0, 0));
+  AssertPixel('above the top edge', 30, 9, EDGE_GROUND);
+  AssertPixel('the top edge', 30, 10, EDGE_INK);
+  AssertPixel('below the top edge', 30, 11, EDGE_GROUND);
+  AssertPixel('the right edge', 49, 25, EDGE_INK);
+  AssertPixel('inside the right edge', 48, 25, EDGE_GROUND);
+  AssertPixel('past the right edge', 50, 25, EDGE_GROUND);
+  { The radius is the outer arc's: the straight run begins r pixels from the corner, and not before. }
+  AssertPixel('the arc has ended 6 from the corner', 16, 10, EDGE_INK);
+  AssertTrue('and has not ended 2 from it', FP.Bitmap.GetPixel(12, 10).red > 128);
+end;
+
+procedure TPixelEdgesTest.TestAThickBorderKeepsTheFillsOuterArc;
+begin
+  Start(EDGE_GROUND);
+  { The radius is the outer arc's, as in CSS. Taken as the line's centre, a border 4 wide would
+    round half its width further out than the fill under it. (12,12) is inside an arc of radius 8
+    on the corner at (10,10), and outside one of radius 10 from the inset line. }
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 8, 4, TyRGB(0, 0, 0));
+  AssertTrue(Format('the border reaches (12,12): %d', [FP.Bitmap.GetPixel(12, 12).red]),
+    FP.Bitmap.GetPixel(12, 12).red < 128);
+  AssertTrue('and stops short of (10,10)', FP.Bitmap.GetPixel(10, 10).red > 200);
+  AssertPixel('the straight run is 4 wide', 30, 13, EDGE_INK);
+  AssertPixel('and no more', 30, 14, EDGE_GROUND);
+end;
+
+procedure TPixelEdgesTest.TestASquareTranslucentBorderDoesNotDoubleUpAtItsCorners;
+var
+  edge, corner: TBGRAPixel;
+begin
+  Start(EDGE_GROUND);
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 0, 2, TyRGBA(0, 0, 0, 128));
+  edge := FP.Bitmap.GetPixel(30, 10);
+  AssertTrue('the line is translucent', (edge.red > 40) and (edge.red < 220));
+  corner := FP.Bitmap.GetPixel(10, 10);
+  AssertEquals('top left corner', edge.red, corner.red);
+  corner := FP.Bitmap.GetPixel(49, 39);
+  AssertEquals('bottom right corner', edge.red, corner.red);
+  corner := FP.Bitmap.GetPixel(11, 12);
+  AssertEquals('where the left side meets the top bar', edge.red, corner.red);
+end;
+
+procedure TPixelEdgesTest.TestARoundedFillCoversExactlyItsRect;
+begin
+  Start(EDGE_GROUND);
+  FP.FillBackground(Rect(10, 10, 50, 40), Solid(TyRGB(0, 0, 0)), 4);
+  { Every straight edge was half covered: a soft ring, and the shape a pixel short of what it asked. }
+  AssertPixel('above', 30, 9, EDGE_GROUND);
+  AssertPixel('top row', 30, 10, EDGE_INK);
+  AssertPixel('left of it', 9, 25, EDGE_GROUND);
+  AssertPixel('left column', 10, 25, EDGE_INK);
+  AssertPixel('right column', 49, 25, EDGE_INK);
+  AssertPixel('right of it', 50, 25, EDGE_GROUND);
+  AssertPixel('bottom row', 30, 39, EDGE_INK);
+  AssertPixel('below', 30, 40, EDGE_GROUND);
+  AssertTrue('the corner is still round', FP.Bitmap.GetPixel(10, 10).red = 255);
+end;
+
+procedure TPixelEdgesTest.TestAFillBehindABorderLeavesNoHaloOnADarkParent;
+var
+  x, y, worst: Integer;
+  c: TBGRAPixel;
+  d: Double;
+begin
+  { White fill, black border, black parent: a border drawn over a fill that reaches its outer edge
+    shows the fill through its antialiased pixels -- a light fringe round each corner. }
+  Start(EDGE_INK);
+  FP.FillBackground(Rect(10, 10, 50, 40), Solid(TyRGB(255, 255, 255)), 8, True);
+  FP.StrokeBorder(Rect(10, 10, 50, 40), 8, 1, TyRGB(0, 0, 0));
+  worst := 0;
+  for y := 10 to 17 do
+    for x := 10 to 17 do
+    begin
+      { Pixels at least as far out as the border's centre line, from the corner's centre (17.5,17.5). }
+      d := Sqrt(Sqr(x - 17.5) + Sqr(y - 17.5));
+      if d < 7.5 then Continue;
+      c := FP.Bitmap.GetPixel(x, y);
+      if c.red > worst then worst := c.red;
+    end;
+  AssertTrue(Format('the brightest pixel outside the border''s centre line is %d', [worst]), worst < 60);
+  AssertPixel('the fill is inside the border', 30, 11, EDGE_GROUND);
+  AssertPixel('the border', 30, 10, EDGE_INK);
+end;
+
+procedure TPixelEdgesTest.TestAPointerShapeCoversExactlyItsBody;
+begin
+  Start(EDGE_GROUND);
+  { White fill so the border's pixels stand out from the fill's; ground is grey-free white too, so the
+    edge is read off the ink. }
+  FP.FillPointerShape(Rect(10, 20, 50, 60), TyUniformCorners(0), tpsTop, 30, 6, 5,
+    TyRGB(255, 255, 255), TyRGB(0, 0, 0), 1);
+  AssertPixel('left border', 10, 40, EDGE_INK);
+  AssertPixel('inside the left border', 11, 40, EDGE_GROUND);
+  AssertPixel('top border', 20, 20, EDGE_INK);
+  { It stopped a pixel short of the rect it was asked to cover, on these two sides only. }
+  AssertPixel('right border', 49, 40, EDGE_INK);
+  AssertPixel('inside the right border', 48, 40, EDGE_GROUND);
+  AssertPixel('past the right border', 50, 40, EDGE_GROUND);
+  AssertPixel('bottom border', 30, 59, EDGE_INK);
+  AssertPixel('inside the bottom border', 30, 58, EDGE_GROUND);
+  AssertPixel('past the bottom border', 30, 60, EDGE_GROUND);
+end;
+
+procedure TPixelEdgesTest.TestATrianglesFlatSideIsCrisp;
+const
+  KINDS: array[0..3] of TTyGlyphKind = (tgTriangleUp, tgTriangleDown, tgTriangleLeft, tgTriangleRight);
+var
+  i, size: Integer;
+  mid: Integer;
+begin
+  Start(EDGE_GROUND);
+  { Every box size, odd and even: where the flat side falls depends on it. Only the flat side is
+    required to be sharp, so scan the line through the apex: ground, then ink, and the ink's last
+    pixel going towards the foot has to be whole. }
+  for size := 12 to 19 do
+    for i := 0 to 3 do
+    begin
+      FP.Bitmap.Fill(EDGE_GROUND);
+      FP.DrawGlyph(Rect(40, 40, 40 + size, 40 + size), KINDS[i], TyRGB(0, 0, 0), 1, 2);
+      case KINDS[i] of
+        tgTriangleUp:
+          begin
+            mid := 40 + size div 2;
+            AssertTrue(Format('up %d: the foot', [size]), FootIsWhole(FP.Bitmap, mid, 0, 1));
+          end;
+        tgTriangleDown:
+          begin
+            mid := 40 + size div 2;
+            AssertTrue(Format('down %d: the foot', [size]), FootIsWhole(FP.Bitmap, mid, 0, -1));
+          end;
+        tgTriangleLeft:
+          begin
+            mid := 40 + size div 2;
+            AssertTrue(Format('left %d: the foot', [size]), FootIsWhole(FP.Bitmap, mid, 1, 0));
+          end;
+        tgTriangleRight:
+          begin
+            mid := 40 + size div 2;
+            AssertTrue(Format('right %d: the foot', [size]), FootIsWhole(FP.Bitmap, mid, -1, 0));
+          end;
+      end;
+    end;
+end;
+
+procedure TPixelEdgesTest.TestTheMinimizeBarIsOneRow;
+var
+  size, x: Integer;
+begin
+  Start(EDGE_GROUND);
+  for size := 12 to 19 do
+  begin
+    FP.Bitmap.Fill(EDGE_GROUND);
+    FP.DrawGlyph(Rect(40, 40, 40 + size, 40 + size), tgMinimize, TyRGB(0, 0, 0), 1, 2);
+    x := 40 + size div 2;
+    AssertAColumnHasOnlyTwoColours(Format('a box of %d', [size]), x, EDGE_GROUND, EDGE_INK);
+  end;
+end;
+
+procedure TPixelEdgesTest.TestAnArrowShaftIsOneColumn;
+var
+  size: Integer;
+begin
+  Start(EDGE_GROUND);
+  for size := 12 to 19 do
+  begin
+    FP.Bitmap.Fill(EDGE_GROUND);
+    FP.DrawGlyph(Rect(40, 40, 40 + size, 40 + size), tgArrowRight, TyRGB(0, 0, 0), 1, 2);
+    { Left of the arrowhead there is only the shaft. }
+    AssertAColumnHasOnlyTwoColours(Format('a box of %d', [size]), 43, EDGE_GROUND, EDGE_INK);
+  end;
+end;
+
+procedure TPixelEdgesTest.TestTheIndeterminateSquareHasCrispEdges;
+var
+  size, mid: Integer;
+begin
+  Start(EDGE_GROUND);
+  for size := 12 to 19 do
+  begin
+    FP.Bitmap.Fill(EDGE_GROUND);
+    FP.DrawGlyph(Rect(40, 40, 40 + size, 40 + size), tgCheckIndeterminate, TyRGB(0, 0, 0), 1, 2);
+    mid := 40 + size div 2;
+    AssertARowHasOnlyTwoColours(Format('a box of %d, across', [size]), mid, EDGE_GROUND, EDGE_INK);
+    AssertAColumnHasOnlyTwoColours(Format('a box of %d, down', [size]), mid, EDGE_GROUND, EDGE_INK);
+  end;
+end;
+
 { ---- the ellipsis fit DrawText and the grid share (#18) ---- }
 
 type
@@ -2269,5 +2619,6 @@ end;
 initialization
   RegisterTest(TEllipsisFitTest);
   RegisterTest(TPainterTest);
+  RegisterTest(TPixelEdgesTest);
 
 end.

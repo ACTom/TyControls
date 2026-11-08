@@ -90,9 +90,10 @@ const
     (U: 'tyControls.FormSurface'; K: 'TyFormSurface'),
     (U: 'tyControls.GlyphButtons'; K: 'TyGlyphContainerButton,TySpeedButton'),
     (U: 'tyControls.Grid'; K: 'TyGrid,TyGridActiveCell,TyGridButton,TyGridCell,TyGridCellAlt,' +
-      'TyGridCellMarked,TyGridCellSelectedInactive,TyGridCheckBox,TyGridCommentMark,' +
-      'TyGridFilterRow,TyGridFixed,TyGridGroupRow,TyGridHeader,TyGridHeaderGroup,' +
-      'TyGridHeaderSection,TyGridHyperlink,TyGridIndicator,TyGridLine,TyGridProgress,' +
+      'TyGridCellMarked,TyGridCellSelectedHover,TyGridCellSelectedInactive,TyGridCellSorted,' +
+      'TyGridCheckBox,TyGridCommentMark,TyGridFilterRow,TyGridFixed,TyGridGroupRow,TyGridHeader,' +
+      'TyGridHeaderFiltered,TyGridHeaderGroup,TyGridHeaderSection,TyGridHeaderSorted,' +
+      'TyGridHyperlink,TyGridIndicator,TyGridIndicatorActive,TyGridLine,TyGridProgress,' +
       'TyGridProgressFill,TyGridRating,TyGridRatingEmpty,TyGridSelectionFrame,TyGridSummaryRow'),
     { not in the preview: in the table so its keys are known ones (the catalogue leaves them
       out -- the base deliberately does not define them) }

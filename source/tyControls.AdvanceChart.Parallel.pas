@@ -167,6 +167,9 @@ type
     Active: TTyParallelActive;
     Stroke: TTyChartColor;
     Width, Opacity: Double;
+    { [R7-Y] the width is +Infinity: the item's own where it writes one,
+      else the series' }
+    WidthInf: Boolean;
     Dash: TTyDoubleArray;
     { the dash as the style holds it: '' none, 'solid', 'dashed', 'dotted',
       or '[...]' for a list }
@@ -1514,6 +1517,13 @@ begin
     el.Datum := TyChartDatum(ASolved.SeriesIndex, r.Row, r.Raw);
     { Path.contain: the stroke at max(lineWidth, strokeContainThreshold 5) }
     el.HitSlopLogical := Math.Max(r.Width, Double(5)) / 2;
+    { [R7-Y] a width of +Infinity: stroked at the lineWidth the canvas had
+      (TyLinesCanvasLeftovers), never hit [was: no pen] }
+    if r.WidthInf and (((r.Stroke shr 24) <> 0)) then
+    begin
+      el.HitNone := True;
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+    end;
     el.Anim.Series := ASolved.SeriesIndex;
     el.Anim.Index := r.Row;
     { [spec 242] its points tween in an update (updateProps on its row) }

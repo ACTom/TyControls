@@ -1148,7 +1148,7 @@ begin
     if tpOpacity in S.Present then P.Opacity := S.Opacity;
     // No shadow: the window is cut to the card's silhouette, so a drop shadow would be cut off
     // with everything else outside it. Elevation is the OS's business for a top-level window.
-    P.FillBackground(R, S.Background, TyEffectiveCorners(S));
+    P.FillBackground(R, S.Background, TyEffectiveCorners(S), TyBorderVisible(S));
     if TyBorderVisible(S) then
       P.StrokeBorder(R, TyEffectiveCorners(S), S.BorderWidth, S.BorderColor);
 

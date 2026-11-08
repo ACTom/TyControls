@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲：从键盘拿到焦点时全选当前值，此外没有选区、剪贴板和撤销，见 #190），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制。**通知分两个事件**：`OnChange` 是「编辑框文字变了」（每一次按键 / 删除 / 步进 / 夹紧 / 程序赋值都会触发，与 LCL 各编辑类控件一致），`OnValueChange` 是「提交后的整数值真的动了」。
+`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomEdit`。控件显示一个整数值，右侧有上/下两个小箭头按钮。输入框就是一个完整的编辑框，和 LCL 的 `TSpinEdit` 一样：可以用鼠标和 Shift+方向键选择，可以剪切、复制、粘贴和撤销，也有默认的右键菜单和输入法（#190）。能输入的只有数字和开头的一个 `-`，粘贴进来的其他字符会被丢掉。用户既可以直接键入，也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**输入的文字（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制。**通知分两个事件**：`OnChange` 是「编辑框文字变了」（每一次按键 / 删除 / 步进 / 夹紧 / 程序赋值都会触发，与 LCL 各编辑类控件一致），`OnValueChange` 是「提交后的整数值真的动了」。
 
 ---
 
@@ -12,7 +12,7 @@
 |------|-----|
 | 单元 | `tyControls.SpinEdit` |
 | typeKey | `TySpinEdit` |
-| 基类 | `TTyCustomSpinEdit` → `TTyCustomControl`（继承自 `TCustomControl`） |
+| 基类 | `TTyCustomSpinEdit` → `TTyCustomEdit`（与 [`TTyEdit`](edit.md) 同一个文本引擎） |
 | 默认尺寸 | 120 × 28（逻辑像素） |
 
 ```pascal
@@ -35,8 +35,9 @@ uses tyControls.SpinEdit;
 | `EditorEnabled` | `Boolean` | `True` | **（API parity 新增）** 为 `False` 时**只锁键盘**：不能键入 / 退格 / 删除，但箭头按钮、方向键、滚轮照常步进——即"只能用箭头选，不许手打"，把值限制在合法刻度（5 的倍数、偶数……）上的标准做法。与 `ReadOnly` 正交（LCL `spin.pp:79`）：`ReadOnly` 锁死整个值，这个只锁输入。 |
 | `ValueEmpty` | `Boolean` | `False` | **（API parity 新增）** 让字段显示**空白**而不是数字——"尚未填写 / 多选混合"这种 `0` 无法诚实表达的状态（LCL `spin.pp:84`）。与 LCL 一样是**程序设置、真实输入清除**的状态：键入数字、删除字符或写入 `Value` 都会让它回到 `False`。 |
 | `TextHint` | `TCaption` | `''` | **（API parity 新增）** 字段为空时用 `TyTextHint` 的弱化墨色绘制的占位文字（LCL `stdctrls.pp:879`），与兄弟控件 `TTyEdit` 同一个 token、同一条绘制规则。 |
-| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 内联文本的水平对齐（左 / 右 / 居中）；光标随对齐偏移（`AlignOffset`）。 |
-| `MaxLength` | `Integer` | `0`（无限） | **（API parity 新增）** 按码点封顶内联编辑缓冲长度；`0` 表示无限制；插入时检查。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 文字的水平对齐（左 / 右 / 居中），光标和选区跟着走。 |
+| `MaxLength` | `Integer` | `0`（无限） | **（API parity 新增）** 按码点限制文字长度；`0` 表示不限制；键入和粘贴都检查。 |
+| `AutoSelect` | `Boolean` | `True` | 从键盘拿到焦点时全选当前值，第一个键入的数字就替换它（LCL `TSpinEdit` 同名属性）。点击进入时不全选，光标放在点的位置。 |
 | `OnChange` | `TNotifyEvent` | `nil` | **编辑框文字变化时触发**——每按一个数字键、每次退格/删除、箭头按钮 / 方向键 / 滚轮步进、夹紧、`Esc` 还原、程序化 `Value :=` 都算（等价于 LCL `TCustomEdit.Change`）。文字没真的变（同值再写一次）则不触发。 |
 | `OnValueChange` | `TNotifyEvent` | `nil` | **提交后的 `Value` 真的移动时触发**；键入过程中不触发（半截数字还没提交）。给"值现在是 N"这类回调用。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
@@ -51,8 +52,12 @@ uses tyControls.SpinEdit;
 | 成员 | 类型 / 签名 | 说明 |
 |------|------|------|
 | `Text` | `TCaption` | **（API parity 新增）** 编辑框里**尚未提交**的原始文字，等价于 LCL `TCustomEdit.Text`（`stdctrls.pp:878`）。读：拿到用户正在键入的字符串；写：能解析成整数就写进 `Value`（照常夹紧 + 通知），解析不了就**原样保留**，于是可以把字段预置成非规范字符串（与 LCL `RealSetText` 一致）。`Caption` 同源。 |
-| `CaretPos` | `Integer` | **（API parity 新增）** 光标位置（**码点下标**），赋值自动夹紧到 `0..长度`。宿主接管字段时可以据此把光标放到该放的地方。**与 LCL 的 `TPoint` 类型不同**——单行数字框没有第二个轴；这条差异是编译期报错的响亮失败，不是静默的错答案。与兄弟控件 `TTyEdit.CaretPos` 一致。 |
-| `Modified` | `Boolean` | **（API parity 新增）** 脏标记：**用户**改过（键入 / 删除 / 箭头按钮 / 方向键 / 滚轮）为 `True`；**程序**写 `Value` 或 `Text` 后回到 `False`；`Enter` / 失焦提交**保留**它（提交是用户在收尾，不是代码在覆盖）。宿主可据此驱动"启用保存"/"关闭前提示"。LCL 同样区分（`include/spinedit.inc:38-42, 163-165`）。 |
+| `SelStart` / `SelLength` / `SelText` | `Integer` / `Integer` / `string` | 选区，和 [`TTyEdit`](edit.md) 的一样。写 `SelText` 替换选中的文字，同样只收数字和开头的 `-`。 |
+| `CutToClipboard` / `CopyToClipboard` / `PasteFromClipboard` / `Undo` / `Redo` / `SelectAll` | 方法 | 来自 `TTyCustomEdit`。粘贴只留下数字和开头的一个 `-`：粘贴 `1,234 px` 得到 `1234`。 |
+| `StepValue` | `procedure(ADelta: Integer); virtual` | 按用户操作的方式移动值：`ReadOnly` 时不动，动了就置 `Modified`。按钮、方向键和滚轮都走这里，派生类覆写它就能一起改掉或拦下它们。 |
+| `UpButtonRect` / `DownButtonRect` | `function(APPI: Integer): TRect` | 上下两个按钮的客户区矩形，和绘制用的是同一组矩形。 |
+| `CaretPos` | `Integer` | **（API parity 新增）** 光标位置（**码点下标**），赋值自动夹紧到 `0..长度`，并取消选区。宿主接管字段时可以据此把光标放到该放的地方。**与 LCL 的 `TPoint` 类型不同**——单行数字框没有第二个轴；这条差异是编译期报错的响亮失败，不是静默的错答案。与兄弟控件 `TTyEdit.CaretPos` 一致。 |
+| `Modified` | `Boolean` | **（API parity 新增）** 脏标记：**用户**改过（键入 / 删除 / 剪切 / 粘贴 / 撤销 / 箭头按钮 / 方向键 / 滚轮）为 `True`；**程序**写 `Value` 或 `Text` 后回到 `False`；`Enter` / 失焦提交**保留**它（提交是用户在收尾，不是代码在覆盖）。宿主可据此驱动"启用保存"/"关闭前提示"。LCL 同样区分（`include/spinedit.inc:38-42, 163-165`）。 |
 | `GetLimitedValue` | `function(const AValue: Integer): Integer; virtual` | **（API parity 新增）** 夹紧规则。 |
 | `ValueToStr` | `function(const AValue: Integer): string; virtual` | **（API parity 新增）** 值 → 显示文字。 |
 | `StrToValue` | `function(const S: string): Integer; virtual` | **（API parity 新增）** 显示文字 → 值。 |
@@ -84,24 +89,24 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 | 操作 | 行为 |
 |------|------|
-| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，触发 `OnChange`，重绘。值处于全选时（Tab 等从键盘拿到焦点之后），先清掉原值再插入，和 LCL 的 `AutoSelect` 一样；点击进入时不全选，光标留在点的位置 |
-| `-` | 仅在光标位于位置 0 且缓冲中尚无 `-` 时插入（允许键入负数），其余位置忽略 |
-| `←` | 光标左移一码点（到达缓冲开头后停止）；全选时取消全选，光标到开头 |
-| `→` | 光标右移一码点（到达缓冲末尾后停止）；全选时取消全选，光标到末尾 |
-| `Home` | 光标移到缓冲开头 |
-| `End` | 光标移到缓冲末尾 |
-| `Backspace` | 删除光标前一码点（真的删掉了才触发 `OnChange`；光标在开头时什么都不做也不通知）。全选时清空整个值；`Delete` 同样 |
-| `Delete` | 删除光标后一码点（同上） |
-| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 回填缓冲（文字变了就触发 `OnChange`）→ 触发 `OnEditingDone`（只读时不触发）。按键不吃掉，照常交给窗体的默认按钮，和原生编辑框一样 |
-| `Esc` | **还原**：缓冲和当前 `Value` 不一样时，丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘，并吃掉这个键；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange`。没有可还原的内容时，`Esc` 交给窗体的取消按钮 |
-| `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），同步回填缓冲，消费按键 |
-| `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），同步回填缓冲，消费按键 |
+| 数字键 `0`–`9` | 在光标处插入数字，有选区时替换选区，触发 `OnChange`。从键盘拿到焦点时值是全选的（`AutoSelect`），第一个数字就替换整个值 |
+| `-` | 只在插入点是开头、并且剩下的文字里没有 `-` 时插入（用来键入负数），否则忽略 |
+| 其他字符 | 忽略，选区保持不动 |
+| `←` / `→` / `Home` / `End` | 移动光标，和 [`TTyEdit`](edit.md) 一样；加 Shift 时扩展选区，加 Ctrl 时按词移动 |
+| `Backspace` / `Delete` | 删除选区，没有选区时删除光标前 / 后一个字符；真的删了才触发 `OnChange` |
+| `Ctrl+A` / `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | 全选 / 复制 / 剪切 / 粘贴（macOS 上是 Cmd）。粘贴只留下数字和开头的一个 `-` |
+| `Ctrl+Z` / `Ctrl+Y`（`Ctrl+Shift+Z`） | 撤销 / 重做 |
+| 鼠标左键在文字区 | 放下光标，拖动选择，双击选词，和 [`TTyEdit`](edit.md) 一样；右键弹出默认的编辑菜单（设了 `PopupMenu` 时弹它） |
+| `Enter` | **提交**：将文字解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 按值重写文字（文字变了就触发 `OnChange`）→ 触发 `OnEditingDone`。`OnEditingDone` 里读到的 `Value` 已经是提交后的值。按键不吃掉，照常交给窗体的默认按钮，和原生编辑框一样 |
+| `Esc` | **还原**：文字和当前 `Value` 不一样时，丢掉输入的文字，改回当前 `Value`（`SyncTextToValue`），并吃掉这个键；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange`。没有可还原的内容时，`Esc` 交给窗体的取消按钮 |
+| `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），按新值重写文字，消费按键 |
+| `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），按新值重写文字，消费按键 |
 | 鼠标移到上 / 下箭头上 | 光标变成普通箭头（文字区仍是 I 形）；指针下那一半显示悬停底色（`ReadOnly` 时不显示） |
-| 鼠标左键按下上箭头 | `Value += Increment`，同步回填缓冲；按住约 400 ms 后每 100 ms 再走一步，松开或移出控件即停；按住期间显示按下底色 |
+| 鼠标左键按下上箭头 | `Value += Increment`，按新值重写文字，不移动光标也不改选区；按住约 400 ms 后每 100 ms 再走一步，松开或移出控件即停；按住期间显示按下底色 |
 | 鼠标左键按下下箭头 | `Value -= Increment`，其余同上 |
-| 鼠标滚轮向上 | `Value += Increment`，同步回填缓冲 |
-| 鼠标滚轮向下 | `Value -= Increment`，同步回填缓冲 |
-| 失焦（`DoExit`） | 等同 `Enter`：自动提交当前缓冲 |
+| 鼠标滚轮向上 | `Value += Increment`，按新值重写文字 |
+| 鼠标滚轮向下 | `Value -= Increment`，按新值重写文字 |
+| 失焦（`DoExit`） | 等同 `Enter`：自动提交输入的文字 |
 
 > **注意：** 当 `Enabled = False` 时，`KeyDown` 不消费按键、`DoMouseWheel` 返回 `False`、`MouseDown` 直接返回——即禁用状态下所有输入都不生效。滚轮处理会先调用 `inherited`（即用户的 `OnMouseWheel`），若用户已消费事件则不再步进。
 >
@@ -119,9 +124,9 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制（tier-b 单色字形），颜色取自解析样式的 `TextColor`。
 
-两个箭头按钮各有悬停和按下状态：那一半铺 `TyButton:hover` / `TyButton:active` 的 `background`，箭头改用该状态的 `color`，和独立的 `TTyUpDown` 画法一致，皮肤不用另写规则。底色只铺在字段的边框和焦点环以内，外侧的角跟着字段圆角。`ReadOnly` 时按钮不响应，也就不显示这两个状态。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
+两个箭头按钮各有悬停和按下状态：那一半铺 `TyButton:hover` / `TyButton:active` 的 `background`，箭头改用该状态的 `color`，和独立的 `TTyUpDown` 画法一致，皮肤不用另写规则。底色只铺在字段的边框和焦点环以内，外侧的角跟着字段圆角。`ReadOnly` 时按钮不响应，也就不显示这两个状态。文字、选区、光标和闪烁都由 `TTyCustomEdit` 绘制，和 `TTyEdit` 一样；选区用 `TyTextSelection` 的底色。
 
-**数值文字字号由主题 `font-size` 决定（Batch ④）：** 数值文字与光标定位统一经 `ResolveFontSize(S)` 取字号——优先用主题 `TySpinEdit { font-size }`（内置 9px），其次 `Font.Size`，再退到默认 9。绘制（`DrawText`）与光标横坐标测量（`CaretPixelX`）共用同一字号，保证光标始终对齐。早前写死的孤立字号 12 已移除。
+**数值文字字号由主题 `font-size` 决定（Batch ④）：** 数值文字与光标定位统一经 `ResolveFontSize(S)` 取字号——优先用主题 `TySpinEdit { font-size }`（内置 9px），其次 `Font.Size`，再退到默认 9。绘制与光标横坐标测量共用同一字号，保证光标始终对齐。早前写死的孤立字号 12 已移除。
 
 ### light.tycss 示例规则
 
@@ -188,12 +193,12 @@ end;
 4. **Min/Max 修改会重新过一遍 `Value` setter：** 改范围后当前值按**同一条**夹紧规则重算（空区间照样不夹紧），若因此移动则照常触发 `OnChange` + `OnValueChange`——早前这里是静默改写显示值的，校验回调根本不知道值动过。
 5. **Increment 下限为 1：** 给 `Increment` 赋小于 1 的值会被强制置为 1。
 6. **按钮几何固定：** 上/下箭头按钮宽度固定为 18 逻辑像素（DPI 缩放后）、贴齐右缘，各占高度一半，不可通过属性调整。
-7. **内联编辑缓冲轻量：** 编辑缓冲（`FEditText`/`FCaret`）无选区、无剪贴板、无撤销栈；步进操作（方向键/滚轮/按钮）总是立即提交并回填缓冲，不经过缓冲层。
-8. **非法输入安全退回：** 提交时若缓冲为空串或仅含 `-`（`StrToIntDef` 返回当前 `FValue` 作为默认值），则 `Value` 不变、`OnValueChange` 不触发；缓冲回填为当前 `Value` 的字符串表示，这一步改写了显示文字，因此触发 `OnChange`。
-9. **光标闪烁：** 聚焦时以约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
-10. **`ReadOnly` 与 `EditorEnabled` 是两把不同的锁（API parity 新增）：** `ReadOnly := True` 锁死整个值——键入不行、箭头 / 方向键 / 滚轮也不动（这**就是** LCL 的语义：Win32 部件在 `win32wsspin.pp:274` 的 `UDN_DELTAPOS` 分支里明确 `if not SpinEdit.ReadOnly`）。`EditorEnabled := False` 只锁键盘，箭头照常工作。早前只有前者，于是"只许用箭头选、不许手打"的微调框做不出来——把它设成 `ReadOnly` 会让控件彻底变成死的。
-11. **空白状态与占位文字（API parity 新增）：** `ValueEmpty := True` 让字段真的空着（`0` 是一个合法值，拿它冒充"没填"是在说谎）；配合 `TextHint` 就能显示"请选择年份"这类提示。真实输入会清掉空白状态，这与 LCL 一致（`include/spinedit.inc:76`）——它是程序设置的状态，不是键入能产生的状态。
+7. **完整的编辑框（#190）：** 4.0 起本控件继承 `TTyCustomEdit`，选区、剪贴板、撤销、右键菜单和输入法都和 `TTyEdit` 一样。早前它是 `TTyCustomControl` 加一个轻量缓冲：没有选区、剪贴板和撤销，点击也不能放光标。步进（方向键 / 滚轮 / 按钮）总是立即提交，按新值重写文字，所以撤销能撤回的是文字，不是值；撤销后的文字到下次提交才变成值。**BREAKING：** 派生类里用到的 `FEditText`、`FCaret`、`InsertEditChar`、`EditBackspace`、`EditDelete`、`SyncBufferToValue`、`BufferDiffers`、`CaretPixelX` 和可覆写的 `DoChange` 都没有了。改用 `Text`、`CaretPos`、`SelStart`/`SelLength`、`SyncTextToValue`、`TextDiffersFromValue`、`CaretPixelXAt`，要观察文字变化用 `AddHandlerOnChange`。
+8. **非法输入安全退回：** 提交时若文字为空串或仅含 `-`（`StrToIntDef` 返回当前 `Value` 作为默认值），则 `Value` 不变、`OnValueChange` 不触发；文字改回当前 `Value` 的字符串表示，这一步改写了显示文字，因此触发 `OnChange`。
+9. **光标闪烁：** 和 `TTyEdit` 一样，聚焦时以约 530 ms 间隔闪烁；无头测试与设计器中光标静态。
+10. **`ReadOnly` 与 `EditorEnabled` 是两把不同的锁（API parity 新增）：** `ReadOnly := True` 锁死整个值——键入不行、箭头 / 方向键 / 滚轮也不动（这**就是** LCL 的语义：Win32 部件在 `win32wsspin.pp:274` 的 `UDN_DELTAPOS` 分支里明确 `if not SpinEdit.ReadOnly`）。`EditorEnabled := False` 只锁键盘，箭头照常工作。锁住的是所有会改文字的按键：字符、`Backspace`、`Delete`，以及剪切、粘贴、撤销、重做；选择和复制照常可用。这些键在编辑框处理之前就被吃掉了，所以 `OnKeyDown` 也收不到它们。早前只有前者，于是"只许用箭头选、不许手打"的微调框做不出来——把它设成 `ReadOnly` 会让控件彻底变成死的。
+11. **空白状态与占位文字（API parity 新增）：** `ValueEmpty := True` 让字段真的空着（`0` 是一个合法值，拿它冒充"没填"是在说谎）；配合 `TextHint` 就能显示"请选择年份"这类提示。真实输入（键入、删除、粘贴、步进）会清掉空白状态，这与 LCL 一致（`include/spinedit.inc:76`）——它是程序设置的状态，不是键入能产生的状态。
 12. **`OnChange` 是状态问题，`Modified` 是意图问题：** `OnChange` 回答"字段现在是什么"，所以程序赋值也触发（每一次变化都是事实）；`Modified` 回答"用户碰过没有"，所以程序赋值把它清成 `False`（把代码写的值算成用户输入就是在撒谎）。
 13. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到控件上时呈现标准的文本输入「I 形」光标，提示内联数字编辑区可直接键入。
-14. **和 `TTyUpDown` + `TTyEdit` 的分工：** [`TTyUpDown.Associate`](updown.md#31-绑定伴随字段associate) 现在可以把一对上下按钮绑到任意编辑框上，双向同步。两条路的区别只有一个，但它很关键：绑定方案里的输入框是一个**完整的 `TTyEdit`**（选区、剪贴板、撤销、IME 全都在），而 `TTySpinEdit` 自带的是轻量行缓冲（见第 8 条）。需要在数字字段里选择 / 粘贴 / 撤销，就用绑定方案；要一个开箱即用、能 Tab 进去的一体控件，用 `TTySpinEdit`。
-15. **小数版本是一个单独的控件：[`TTyFloatSpinEdit`](floatspinedit.md)。** 它**不是** `TTySpinEdit` 的后代——LCL 把家族反着建（整数版继承小数版，`spin.pp:146`），而本控件那三个 `Integer` 的 `public virtual` 缝（`GetLimitedValue` / `ValueToStr` / `StrToValue`）已经有外部覆写者，改不成 `Double`。小数版改为继承 [`TTyNumericEdit`](numericedit.md)，因此顺带拥有 `TTyEdit` 的完整文本引擎（选区 / 剪贴板 / 撤销 / IME），而本控件只有轻量行缓冲（见第 7 条）。两者的其他差别：`Increment` 那边是 `Double` 且**不**钳到 ≥ 1；按钮不贴右缘而是落在 `TTyEdit` 被内距内缩过的尾部区里（刻意，与 `TTyComboEdit` / `TTyURLEdit` 的尾部按钮对齐）。
+14. **和 `TTyUpDown` + `TTyEdit` 的分工：** [`TTyUpDown.Associate`](updown.md#31-绑定伴随字段associate) 可以把一对上下按钮绑到任意编辑框上，双向同步。两边的输入框现在都是完整的编辑框。要一个开箱即用、能 Tab 进去的一体控件，用 `TTySpinEdit`；按钮要放在别处、或者输入框是别的编辑框时，用绑定方案。
+15. **小数版本是一个单独的控件：[`TTyFloatSpinEdit`](floatspinedit.md)。** 它**不是** `TTySpinEdit` 的后代——LCL 把家族反着建（整数版继承小数版，`spin.pp:146`），而本控件那三个 `Integer` 的 `public virtual` 缝（`GetLimitedValue` / `ValueToStr` / `StrToValue`）已经有外部覆写者，改不成 `Double`。小数版继承 [`TTyNumericEdit`](numericedit.md)，本控件直接继承 `TTyCustomEdit`，两者用的是同一个文本引擎，按钮也挂在同一个尾部区里、几何一样。其他差别：`Increment` 那边是 `Double` 且**不**钳到 ≥ 1；那边没有 `OnValueChange` 和 `ValueEmpty`。

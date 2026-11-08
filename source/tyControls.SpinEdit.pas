@@ -4,8 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
   ExtCtrls,
-  BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Edit;
 type
   TTySpinStepEvent = procedure(ADir: Integer) of object;
 
@@ -57,82 +56,73 @@ type
     property RepeatTimer: TTimer read FRepeatTimer;
   end;
 
-  TTyCustomSpinEdit = class(TTyCustomControl)
+  { An INTEGER spin edit: the counterpart of LCL's TSpinEdit (spin.pp:146).
+
+    #190: it descends from TTyCustomEdit and uses its text engine -- selection by mouse and
+    Shift+arrows, Cut / Copy / Paste, Undo / Redo, the default right-click menu, the input
+    method -- because LCL's TSpinEdit IS a TCustomEdit and code written against it uses all of
+    those. It used to be a TTyCustomControl with a small typing buffer of its own (no selection,
+    clipboard or undo), which was documented as a design choice and found wanting by the
+    behaviour audit. TTyFloatSpinEdit already sat on the edit engine (through
+    TTyCustomNumericEdit) and this control now hangs its buttons the same way: in TTyEdit's
+    trailing zone (RightReserve / PaintTrailing / TrailingZone).
+
+    What it keeps of its own: the committed integer Value (the text is what the user is typing;
+    Enter, leaving the field or EditingDone commits it), MinValue / MaxValue / Increment,
+    EditorEnabled, ValueEmpty, OnValueChange, and the three public number seams of LCL's
+    spin.pp:74-76. Theme: 'TySpinEdit', as before. }
+  TTyCustomSpinEdit = class(TTyCustomEdit)
   private
     FSpin: TTySpinButtons;
     FMinValue, FMaxValue, FValue, FIncrement: Integer;
-    FOnChange: TNotifyEvent;
     FOnValueChange: TNotifyEvent;
-    FReadOnly: Boolean;
     FEditorEnabled: Boolean;
-    FAlignment: TAlignment;
-    FMaxLength: Integer;
-    FModified: Boolean;
     FValueEmpty: Boolean;
-    FTextHint: TCaption;
+    { True while the control itself rewrites the text from Value: that is not input, so it does
+      not end ValueEmpty. }
+    FSyncing: Boolean;
     procedure SetMinValue(const AValue: Integer);
     procedure SetMaxValue(const AValue: Integer);
     procedure SetValue(const AValue: Integer);
     procedure SetIncrement(const AValue: Integer);
-    procedure SetReadOnly(const AValue: Boolean);
     procedure SetEditorEnabled(const AValue: Boolean);
-    procedure SetAlignment(const AValue: TAlignment);
-    procedure SetMaxLength(const AValue: Integer);
     procedure SetValueEmpty(const AValue: Boolean);
-    procedure SetTextHint(const AValue: TCaption);
-    procedure SetCaretPos(const AValue: Integer);
-    { The user moved the value with the arrows/wheel/buttons. Separate from a plain
-      Value write so Modified can tell "the user did this" from "the code did this" --
-      both land in the same setter. }
-    procedure StepValue(ADelta: Integer);
+    function GetSpinText: TCaption;
+    procedure SetSpinText(const AValue: TCaption);
+    { Registered first on the edit's OnChange list: any text change that is not the control's
+      own rewrite is input, and input ends the blank state. }
+    procedure HandleTextChange(Sender: TObject);
+    { True for the keystrokes that would change the text. Used only while EditorEnabled is
+      False; the same set TTyFloatSpinEdit blocks. }
+    function KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
+    { Whether AText inserted at AAt into AResidual keeps a number: digits, and one '-' at the
+      start. Returns what of AText may go in. }
+    function NumberPart(const AResidual: string; AAt: Integer; const AText: string): string;
     procedure SpinStep(ADir: Integer);
     function SpinHitAt(X, Y: Integer): Integer;
-    function ClearSelectedValue: Boolean;
   protected
-    // Inline edit buffer (lightweight, no selection/clipboard). Protected so
-    // headless access subclasses (tests) can reach the buffer + helpers.
-    FEditText: string;
-    FCaret: Integer;      // codepoint index 0..UTF8Length(FEditText)
-    { #189: the whole value is selected, as LCL's AutoSelect leaves it when the focus comes from
-      the keyboard: the first key typed replaces it, Backspace or Delete clears it, and moving
-      the caret or clicking in the field lets it go. The buffer has no other selection (#190). }
-    FAllSelected: Boolean;
-    FMeasureBmp: TBGRABitmap;  // lazy; used only for text measurement
-    // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
-    // lazily and started ONLY when HandleAllocated, so headless tests never blink
-    // and the static-caret pixel tests stay deterministic.
-    FCaretVisible: Boolean;
-    FBlinkTimer: TTimer;
-    FBlinkElapsedMs: Integer;
-    procedure EnsureBlinkTimer;
-    procedure HandleBlink(Sender: TObject);
-    procedure ResetCaretBlink;
-    procedure DoEnter; override;
-    { OnChange is the EDIT's change notification, as it is on every LCL edit-derived
-      control (TCustomEdit.Change, customedit.inc:622, reached from TextChanged on each
-      keystroke -- and TSpinEdit IS a TCustomEdit). It therefore fires for EVERY buffer
-      mutation: a typed digit, a delete, a spin step, a clamp, a programmatic Value write.
-      Firing it only for a committed value move -- as this control used to -- left live
-      validation and "enable OK while typing" handlers dead for the whole time the user
-      was typing, because a half-typed number may never commit at all. }
-    procedure DoChange; virtual;
-    { OnValueChange is the other half: the committed integer actually moved. Anything that
-      wants "the number is now N" (a preview, a model write-back) hangs here and is not
-      woken by every keystroke. }
+    { OnValueChange is the other half of OnChange: the committed integer actually moved.
+      Anything that wants "the number is now N" (a preview, a model write-back) hangs here and
+      is not woken by every keystroke. }
     procedure DoValueChange; virtual;
-    // Edit-buffer helpers
-    procedure SyncBufferToValue;
+    { Rewrite the text from Value (blank while ValueEmpty), as a write from code: OnChange fires
+      if the text really moved, and Modified comes back False. }
+    procedure SyncTextToValue;
     { The typed text is not the value's (#144): Esc has something to put back. }
-    function BufferDiffers: Boolean;
+    function TextDiffersFromValue: Boolean;
+    { Parse the text, clamp it and make it the Value; the user finishing an edit, so Modified
+      is kept. Enter, leaving the field and EditingDone all come here. }
     procedure CommitEdit;
-    procedure InsertEditChar(const C: TUTF8Char);
-    procedure EditBackspace;
-    procedure EditDelete;
-    function CaretPixelX(AIdx, APPI: Integer): Integer;
-    function AlignOffset(APPI: Integer): Integer;
     function GetStyleTypeKey: string; override;
-    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-    procedure Paint; override;
+    { The button column at the right of the text area, and the two arrows painted in it. }
+    function RightReserve(APPI: Integer): Integer; override;
+    procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect;
+      const AStyle: TTyStyleSet); override;
+    { False: the spin buttons keep their own arrow cursor (TTySpinButtons). }
+    function TrailingShowsArrow: Boolean; override;
+    { Typing, paste and an input-method commit all funnel through here: only digits and a
+      leading '-' go in, and nothing at all while EditorEnabled is False. }
+    function FilterInsert(const AText: string): string; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure DoExit; override;
@@ -143,21 +133,9 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     property SpinButtons: TTySpinButtons read FSpin;
-    { Text/Caption read straight out of the edit buffer, as they do on every LCL edit
-      (TCustomFloatSpinEdit routes both through RealGetText/RealSetText,
-      include/spinedit.inc:52,60). Before this, the typed-but-uncommitted string was
-      protected state no host could see. }
-    function RealGetText: TCaption; override;
+    { Caption is Text (TTyCustomEdit), and here a Caption write takes the Text setter's number
+      rule too: TTyUpDown's Associate and an action link write the value, not a string. }
     procedure RealSetText(const AValue: TCaption); override;
-    { AutoSize is republished on the base class already; without this it had nothing to
-      ask. Height only -- the digits' height is a font/theme decision that a skin with a
-      bigger font or fatter padding must be able to push out, while the width is the
-      form author's. }
-    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
-      WithThemeSpace: Boolean); override;
-    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
-      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
-    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -168,23 +146,21 @@ type
     function GetLimitedValue(const AValue: Integer): Integer; virtual;
     function ValueToStr(const AValue: Integer): string; virtual;
     function StrToValue(const S: string): Integer; virtual;
-    { The raw editor text, LCL's TCustomEdit.Text (stdctrls.pp:878, public). Reads what
-      the user has typed BEFORE it commits; writing a string that parses sets Value,
-      and one that does not is kept verbatim so the field can be preset to a
-      non-canonical string (LCL's RealSetText does exactly this). }
-    property Text;
-    { Caret index in codepoints, matching the sibling TTyEdit.CaretPos. LCL's is a
-      TPoint because TCustomEdit spans a memo too; a single-line integer field has no
-      second axis, so this deliberately differs -- it will not compile against ported
-      code, which is the loud failure, not the silent one. }
-    property CaretPos: Integer read FCaret write SetCaretPos;
-    { Dirty flag: True once the USER has changed the field (typed, deleted, or stepped
-      with the arrows/wheel/buttons), False again after a programmatic Value or Text
-      write. LCL keeps the same split -- SetValue arranges for Modified to come back
-      False in the resulting OnChange (include/spinedit.inc:38-42,163-165) -- so a host
-      can drive enable-Save / prompt-on-close off it. }
-    property Modified: Boolean read FModified write FModified;
-    property TabStop default True;
+    { Move the value by ADelta from what is typed, the way the USER moves it: refused while
+      ReadOnly, and it marks the field Modified, because the arrows are the user editing,
+      exactly like typing. Every button, arrow key and wheel notch goes through here (as on
+      TTyFloatSpinEdit), so a descendant can re-point or refuse all of them at once. }
+    procedure StepValue(ADelta: Integer); virtual;
+    { Commits what is typed first, so OnEditingDone sees the value Enter made. }
+    procedure EditingDone; override;
+    { The two clickable halves, in client pixels: the same rects the paint uses. }
+    function UpButtonRect(APPI: Integer): TRect;
+    function DownButtonRect(APPI: Integer): TRect;
+    { The editor text, LCL's TCustomEdit.Text (stdctrls.pp:878, public). Reads what the user
+      has typed BEFORE it commits; writing a string that parses sets Value, and one that does
+      not is kept verbatim so the field can be preset to a non-canonical string (LCL's
+      RealSetText does exactly this, include/spinedit.inc:64-67). }
+    property Text: TCaption read GetSpinText write SetSpinText;
     property MinValue: Integer read FMinValue write SetMinValue default 0;
     { LCL's DefMaxValue is 0 (spin.pp:37) and Max <= Min means "no limit", so a freshly
       dropped spin edit accepts any integer. Ours shipped 100, which turned the same
@@ -194,40 +170,21 @@ type
     property MaxValue: Integer read FMaxValue write SetMaxValue default 0;
     property Value: Integer read FValue write SetValue default 0;
     property Increment: Integer read FIncrement write SetIncrement default 1;
-    // ReadOnly locks the value entirely (LCL TSpinEdit semantics): it blocks
-    // both inline text editing AND +/- stepping (buttons/arrows/wheel).
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     { The other half of the pair LCL keeps ORTHOGONAL to ReadOnly (spin.pp:79, default
       True): False makes the TEXT non-typeable while the arrows keep stepping -- the
       standard way to force a value onto a legal grid (multiples of 5, even numbers)
-      without turning the control inert. ReadOnly locks the value entirely; this locks
-      only the keyboard. Both blocking typing is the same on the Win32 widgetset
-      (win32wsspin.pp:409 ORs them into EM_SETREADONLY). }
+      without turning the control inert. ReadOnly locks the value entirely (typing and
+      stepping); this locks only the keyboard: a character, Backspace, Delete, and the
+      clipboard-and-undo keys, which are consumed before the edit sees them. }
     property EditorEnabled: Boolean read FEditorEnabled write SetEditorEnabled default True;
-    // Default taLeftJustify == the alignment RenderTo used before this property
-    // existed, so existing pixel tests stay unchanged.
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    // 0 == unlimited; caps the inline edit buffer length in codepoints on insert.
-    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     { Show the field BLANK instead of a number -- the "nothing entered yet / mixed
       selection" state a filter form or a property-inspector row needs, and which 0
       cannot honestly stand in for. LCL: spin.pp:84. Like LCL's, this is a state the
-      program sets and real input clears (include/spinedit.inc:76): typing a digit,
-      deleting one, or stepping puts a number back. }
+      program sets and real input clears (include/spinedit.inc:76): typing, deleting,
+      pasting or stepping puts a number back. }
     property ValueEmpty: Boolean read FValueEmpty write SetValueEmpty default False;
-    { Placeholder drawn in the muted 'TyTextHint' ink while the field is blank -- the
-      same token and the same paint rule the sibling TTyEdit already uses. LCL:
-      TCustomEdit.TextHint, stdctrls.pp:879. }
-    property TextHint: TCaption read FTextHint write SetTextHint;
-    { Text changed (see DoChange): every keystroke, delete, step, clamp and Value write. }
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { The committed Value moved (see DoValueChange). }
     property OnValueChange: TNotifyEvent read FOnValueChange write FOnValueChange;
-  published
-    { #108: TControl publishes Cursor and a redeclaration cannot unpublish it, so it is redeclared
-      here with the value the constructor sets -- the designer can then store the other ones,
-      and a descendant gets the clause too. }
-    property Cursor default crIBeam;
   end;
 
   { TTySpinEdit publishes TTyCustomSpinEdit's properties; everything lives in TTyCustomSpinEdit. }
@@ -288,6 +245,7 @@ type
     property Increment;
     property ReadOnly;
     property EditorEnabled;
+    property AutoSelect;
     property Alignment;
     property MaxLength;
     property ValueEmpty;
@@ -511,95 +469,28 @@ end;
 
 { TTyCustomSpinEdit }
 
-procedure TTyCustomSpinEdit.ReadState(Reader: TReader);
-var
-  retired: TTyRetiredPaths;
-begin
-  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
-  try
-    inherited ReadState(Reader);
-  finally
-    retired.Free;
-  end;
-end;
-
 constructor TTyCustomSpinEdit.Create(AOwner: TComponent);
 begin
   { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
     control is being built or torn down (a paint, a mouse-leave) finds it there. }
   FSpin := TTySpinButtons.Create(Self, @SpinStep);
   inherited Create(AOwner);
-  FFitsToStyle := True;   // AutoSize follows the theme (#114)
-  TabStop := True;
-  Cursor := crIBeam;
   FMinValue := 0;
   FMaxValue := 0;              // == MinValue, i.e. unbounded (LCL DefMaxValue)
   FValue := 0;
   FIncrement := 1;
-  FReadOnly := False;
   FEditorEnabled := True;
-  FAlignment := taLeftJustify;
-  FMaxLength := 0;
-  FModified := False;
   FValueEmpty := False;
   Width := 120;
-  Height := TyDensityHeight(ActiveController, 28);
-  FCaretVisible := True;       // solid caret until a real timer toggles it
-  FBlinkTimer := nil;          // lazy: created only when HandleAllocated
-  FBlinkElapsedMs := 0;
-  SyncBufferToValue;
+  AddHandlerOnChange(@HandleTextChange, True);
+  SyncTextToValue;
 end;
 
 destructor TTyCustomSpinEdit.Destroy;
 begin
-  // Stop the timers first so their OnTimer callbacks can never fire mid-teardown.
-  if FSpin <> nil then FSpin.MouseUp;   // ends a held press, and the repeat timer with it
-  FreeAndNil(FBlinkTimer);
-  FMeasureBmp.Free;
+  if FSpin <> nil then FSpin.MouseUp;   // first: a held button's repeat timer must not fire mid-teardown
   inherited Destroy;
   FreeAndNil(FSpin);
-end;
-
-// ---- Blinking caret (Task 10) ----
-
-procedure TTyCustomSpinEdit.EnsureBlinkTimer;
-begin
-  if FBlinkTimer = nil then
-  begin
-    FBlinkTimer := TTimer.Create(Self);
-    FBlinkTimer.Enabled := False;
-    FBlinkTimer.Interval := 530;
-    FBlinkTimer.OnTimer := @HandleBlink;
-  end;
-end;
-
-procedure TTyCustomSpinEdit.HandleBlink(Sender: TObject);
-begin
-  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
-  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
-  Invalidate;
-end;
-
-procedure TTyCustomSpinEdit.ResetCaretBlink;
-begin
-  FCaretVisible := True;
-  FBlinkElapsedMs := 0;
-end;
-
-procedure TTyCustomSpinEdit.DoEnter;
-begin
-  inherited DoEnter;
-  { #189: Tab (or any focus that is not a click in the field) selects the value, as LCL's
-    TCustomEdit.DoEnter does under AutoSelect; a click puts the caret where it was. }
-  FAllSelected := (FEditText <> '') and not (csLButtonDown in ControlState);
-  if FAllSelected then FCaret := UTF8Length(FEditText);
-  Invalidate;
-  ResetCaretBlink;
-  if HandleAllocated then
-  begin
-    EnsureBlinkTimer;
-    FBlinkTimer.Enabled := True;
-  end;
 end;
 
 function TTyCustomSpinEdit.GetStyleTypeKey: string;
@@ -607,17 +498,15 @@ begin
   Result := 'TySpinEdit';
 end;
 
-procedure TTyCustomSpinEdit.DoChange;
-begin
-  { #145: not while the form is read or torn down. }
-  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
-  if Assigned(FOnChange) then FOnChange(Self);
-end;
-
 procedure TTyCustomSpinEdit.DoValueChange;
 begin
   if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   if Assigned(FOnValueChange) then FOnValueChange(Self);
+end;
+
+procedure TTyCustomSpinEdit.HandleTextChange(Sender: TObject);
+begin
+  if not FSyncing then FValueEmpty := False;
 end;
 
 function TTyCustomSpinEdit.GetLimitedValue(const AValue: Integer): Integer;
@@ -658,43 +547,28 @@ begin
     blank state, the same way LCL's TextChanged clears FValueEmpty once the value
     really moves (include/spinedit.inc:76). }
   if Moved then FValueEmpty := False;
-  SyncBufferToValue;          // always keep buffer in step with Value; fires OnChange if the text moved
+  SyncTextToValue;            // always keep the text in step with Value; fires OnChange if it moved
   { OnValueChange goes last so the handler sees a settled control: new value AND the
-    buffer already rewritten. }
+    text already rewritten. }
   if Moved then DoValueChange;
   { A write from code is not the user touching the field. LCL arranges the same reset
     (include/spinedit.inc:163-165 sets the flag that makes Change report Modified=False),
-    and the user-driven paths below put it straight back. }
-  FModified := False;
-  Invalidate;
+    and the user-driven paths put it straight back. }
+  Modified := False;
 end;
 
 procedure TTyCustomSpinEdit.StepValue(ADelta: Integer);
 begin
-  Value := FValue + ADelta;
-  FModified := True;          // the arrows are the user editing, exactly like typing
+  if ReadOnly then Exit;
+  { #160: from what is typed, not from the value it has not committed yet -- value 5, type 40,
+    Up gives 41. StrToValue falls back to Value when the text is not a number. }
+  Value := StrToValue(Text) + ADelta;
+  Modified := True;           // the arrows are the user editing, exactly like typing
 end;
 
 procedure TTyCustomSpinEdit.SpinStep(ADir: Integer);
 begin
-  { A held button repeats from a timer, and ReadOnly may have been switched on meanwhile;
-    every other route checks it before calling StepValue, so this one does too. }
-  if FReadOnly then Exit;
-  StepValue(ADir * FIncrement);
-end;
-
-function TTyCustomSpinEdit.SpinHitAt(X, Y: Integer): Integer;
-var
-  ppi, bw: Integer;
-begin
-  ppi := Font.PixelsPerInch;
-  bw := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), ppi, 96);
-  if PtInRect(TySpinUpButtonRect(ClientRect, ppi, bw), Point(X, Y)) then
-    Result := 1
-  else if PtInRect(TySpinDownButtonRect(ClientRect, ppi, bw), Point(X, Y)) then
-    Result := -1
-  else
-    Result := 0;
+  StepValue(ADir * FIncrement);   // StepValue itself refuses while ReadOnly
 end;
 
 procedure TTyCustomSpinEdit.SetMinValue(const AValue: Integer);
@@ -722,428 +596,259 @@ begin
     FIncrement := 1
   else
     FIncrement := AValue;
-  Invalidate;
-end;
-
-procedure TTyCustomSpinEdit.SetReadOnly(const AValue: Boolean);
-begin
-  if FReadOnly = AValue then Exit;
-  FReadOnly := AValue;
-  Invalidate;
 end;
 
 procedure TTyCustomSpinEdit.SetEditorEnabled(const AValue: Boolean);
 begin
   if FEditorEnabled = AValue then Exit;
   FEditorEnabled := AValue;
-  Invalidate;
 end;
 
 procedure TTyCustomSpinEdit.SetValueEmpty(const AValue: Boolean);
 begin
   if FValueEmpty = AValue then Exit;
   FValueEmpty := AValue;
-  SyncBufferToValue;   // renders '' while empty, the number again once it is not
-  Invalidate;
+  SyncTextToValue;   // shows '' while empty, the number again once it is not
 end;
 
-procedure TTyCustomSpinEdit.SetTextHint(const AValue: TCaption);
+function TTyCustomSpinEdit.GetSpinText: TCaption;
 begin
-  if FTextHint = AValue then Exit;
-  FTextHint := AValue;
-  Invalidate;
+  Result := TTyCustomEdit(Self).Text;
 end;
 
-procedure TTyCustomSpinEdit.SetCaretPos(const AValue: Integer);
-var
-  V, L: Integer;
-begin
-  L := UTF8Length(FEditText);
-  V := AValue;
-  if V < 0 then V := 0;
-  if V > L then V := L;
-  if FAllSelected then
-  begin
-    FAllSelected := False;   // #189: placing the caret lets the selected value go, as SelStart does
-    Invalidate;
-  end;
-  if FCaret = V then Exit;
-  FCaret := V;
-  ResetCaretBlink;
-  Invalidate;
-end;
-
-function TTyCustomSpinEdit.RealGetText: TCaption;
-begin
-  Result := FEditText;
-end;
-
-procedure TTyCustomSpinEdit.RealSetText(const AValue: TCaption);
+procedure TTyCustomSpinEdit.SetSpinText(const AValue: TCaption);
 var
   Parsed: Integer;
 begin
   if TryStrToInt(Trim(AValue), Parsed) then
-    Value := Parsed          // setter clamps, rewrites the buffer and notifies
+    Value := Parsed          // setter clamps, rewrites the text and notifies
   else
-  begin
-    { Not a number: keep it verbatim so a host can preset a non-canonical string, which
-      is what LCL does when TryStrToFloat fails (include/spinedit.inc:64-67). Value is
-      left alone; the next commit re-parses and falls back to it. }
-    if FEditText = AValue then Exit;
-    FEditText := AValue;
-    FCaret := UTF8Length(FEditText);
-    FValueEmpty := False;
-    FModified := False;      // written by code, not by the user
-    ResetCaretBlink;
-    DoChange;
-    Invalidate;
-  end;
+    { Not a number: kept verbatim, as LCL keeps it when TryStrToFloat fails. Value is left
+      alone; the next commit re-parses and falls back to it. Written by code, so Modified
+      comes back False; HandleTextChange ends ValueEmpty. }
+    TTyCustomEdit(Self).Text := AValue;
 end;
 
-procedure TTyCustomSpinEdit.CalculatePreferredSize(var PreferredWidth,
-  PreferredHeight: Integer; WithThemeSpace: Boolean);
+procedure TTyCustomSpinEdit.RealSetText(const AValue: TCaption);
+begin
+  if InActionChange then Exit;
+  SetSpinText(AValue);
+end;
+
+function TTyCustomSpinEdit.TextDiffersFromValue: Boolean;
+begin
+  if FValueEmpty then Result := Text <> '' else Result := Text <> ValueToStr(FValue);
+end;
+
+procedure TTyCustomSpinEdit.SyncTextToValue;
 var
-  S: TTyStyleSet;
-  ppi: Integer;
+  S: string;
 begin
-  ppi := Font.PixelsPerInch;
-  if ppi <= 0 then ppi := 96;
-  S := CurrentStyle;
-  { WIDTH 0 == "no preference on this axis" (LCL): the form author owns how wide a
-    number field is. The height is the one a skin can push out from under us -- the
-    same digits + padding + border RenderTo lays out, which every one-line field now
-    answers the same way (TyFieldPreferredHeight, #114). }
-  PreferredWidth := 0;
-  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
-end;
-
-procedure TTyCustomSpinEdit.SetAlignment(const AValue: TAlignment);
-begin
-  if FAlignment = AValue then Exit;
-  FAlignment := AValue;
-  // Alignment shifts the visual text start; the caret follows via AlignOffset.
-  Invalidate;
-end;
-
-procedure TTyCustomSpinEdit.SetMaxLength(const AValue: Integer);
-var
-  V: Integer;
-begin
-  V := AValue;
-  if V < 0 then V := 0;
-  if FMaxLength = V then Exit;
-  FMaxLength := V;
-  Invalidate;
-end;
-
-function TTyCustomSpinEdit.BufferDiffers: Boolean;
-begin
-  if FValueEmpty then Result := FEditText <> '' else Result := FEditText <> ValueToStr(FValue);
-end;
-
-procedure TTyCustomSpinEdit.SyncBufferToValue;
-var
-  Old: string;
-begin
-  Old := FEditText;
   { The single formatting point, so ValueToStr really is the seam a descendant
     overrides. ValueEmpty renders as nothing at all -- that is the whole point of it. }
-  if FValueEmpty then FEditText := '' else FEditText := ValueToStr(FValue);
-  FCaret := UTF8Length(FEditText);
-  ResetCaretBlink;
-  { Rewriting the buffer IS a text change, so it reaches OnChange from here: a step, a
-    clamp, an Esc revert and a commit that reformats '007' into '7' all arrive this way,
-    and only when the text really moved (re-writing the same value stays silent). }
-  if FEditText <> Old then DoChange;
-end;
-
-function TTyCustomSpinEdit.AlignOffset(APPI: Integer): Integer;
-{ Horizontal shift applied to the text (and caret) so the caret tracks the
-  DrawText H-alignment. 0 for taLeftJustify, or the slack inside the text rect
-  for center/right. Mirrors RenderTo's TextR (Padding.Left .. Right-BtnW-Padding.Right). }
-var
-  S: TTyStyleSet;
-  EffSize, StartX, RightPad, BtnW, ViewWidth, TextWidth, Slack: Integer;
-begin
-  Result := 0;
-  if FAlignment = taLeftJustify then Exit;
-  if ClientWidth <= 0 then Exit;
-  S := CurrentStyle;
-  EffSize := ResolveFontSize(S);
-  StartX := MulDiv(S.Padding.Left, APPI, 96);
-  RightPad := MulDiv(S.Padding.Right, APPI, 96);
-  BtnW := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
-  ViewWidth := ClientWidth - BtnW - StartX - RightPad;
-  if ViewWidth <= 0 then Exit;
-  TextWidth := 0;
-  if FEditText <> '' then
-  begin
-    if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
-    TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
-    TextWidth := FMeasureBmp.TextSize(FEditText).cx;
+  if FValueEmpty then S := '' else S := ValueToStr(FValue);
+  { A step, a clamp, an Esc revert and a commit that reformats '007' into '7' all arrive
+    here, and reach OnChange only when the text really moved. }
+  FSyncing := True;
+  try
+    TTyCustomEdit(Self).Text := S;
+  finally
+    FSyncing := False;
   end;
-  Slack := ViewWidth - TextWidth;
-  if Slack <= 0 then Exit;
-  case FAlignment of
-    taRightJustify: Result := Slack;
-    taCenter:       Result := Slack div 2;
-  end;
-end;
-
-function TTyCustomSpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
-var
-  S: TTyStyleSet;
-  EffSize: Integer;
-begin
-  S := CurrentStyle;
-  EffSize := ResolveFontSize(S);   // theme font-size > Font.Size > 9; shared with RenderTo so caret stays aligned
-  Result := MulDiv(S.Padding.Left, APPI, 96) + AlignOffset(APPI);   // local-left text start + H-align shift
-  if (FEditText = '') or (AIdx <= 0) then Exit;
-  if AIdx > UTF8Length(FEditText) then AIdx := UTF8Length(FEditText);
-  if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
-  TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
-  Result := Result + FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, AIdx)).cx;
 end;
 
 procedure TTyCustomSpinEdit.CommitEdit;
 var
-  v: Integer;
   WasModified: Boolean;
 begin
   { Committing is the user finishing an edit, not the program overwriting the field, so
     the dirty flag has to survive the Value write that deliberately clears it. }
-  WasModified := FModified;
-  v := StrToValue(FEditText);
-  Value := v;                 // setter clamps to [Min,Max], rewrites the buffer, and notifies
-  SyncBufferToValue;          // resync to the (possibly clamped) value
-  FModified := WasModified;
-  Invalidate;
+  WasModified := Modified;
+  Value := StrToValue(Text);  // setter clamps to [Min,Max], rewrites the text, and notifies
+  Modified := WasModified;
 end;
 
-procedure TTyCustomSpinEdit.InsertEditChar(const C: TUTF8Char);
+procedure TTyCustomSpinEdit.EditingDone;
+begin
+  CommitEdit;
+  inherited EditingDone;
+end;
+
+function TTyCustomSpinEdit.NumberPart(const AResidual: string; AAt: Integer;
+  const AText: string): string;
 var
-  Before, After: string;
-  L: Integer;
+  i: Integer;
+  SignFree: Boolean;
 begin
-  // ReadOnly locks the value; EditorEnabled=False locks only the keyboard.
-  if FReadOnly or (not FEditorEnabled) then Exit;
-  // Accept digits 0..9 always; accept '-' only at position 0 and when no '-' yet.
-  if C = '' then Exit;
-  { #189: a digit or a sign typed over the selected value replaces it; another key leaves it }
-  if FAllSelected and ( ((Length(C)=1) and (C[1] in ['0'..'9'])) or (C = '-') ) then
-  begin
-    FAllSelected := False;
-    FEditText := '';
-    FCaret := 0;
-  end;
-  if not ( ((Length(C)=1) and (C[1] in ['0'..'9']))
-           or ((C = '-') and (FCaret = 0) and (Pos('-', FEditText) = 0)) ) then Exit;
-  L := UTF8Length(FEditText);
-  // MaxLength (0 = unlimited): cap the buffer length in codepoints on insert.
-  if (FMaxLength > 0) and (L >= FMaxLength) then Exit;
-  if FCaret > L then FCaret := L;
-  Before := UTF8Copy(FEditText, 1, FCaret);
-  After  := UTF8Copy(FEditText, FCaret + 1, L - FCaret);
-  FEditText := Before + C + After;
-  Inc(FCaret);
-  FValueEmpty := False;       // real input ends the blank state (LCL: spinedit.inc:76)
-  FModified := True;
-  ResetCaretBlink;
-  DoChange;                   // a typed character is a text change (the path that used to be silent)
-end;
-
-{ #189: Backspace or Delete over the selected value clears it. }
-function TTyCustomSpinEdit.ClearSelectedValue: Boolean;
-begin
-  Result := FAllSelected;
-  if not Result then Exit;
-  FAllSelected := False;
-  FEditText := '';
-  FCaret := 0;
-  FValueEmpty := False;
-  FModified := True;
-  ResetCaretBlink;
-  DoChange;
-end;
-
-procedure TTyCustomSpinEdit.EditBackspace;
-var
-  Before, After: string;
-  L: Integer;
-begin
-  if FReadOnly or (not FEditorEnabled) then Exit;
-  if ClearSelectedValue then Exit;
-  if FCaret = 0 then Exit;
-  L := UTF8Length(FEditText);
-  Before := UTF8Copy(FEditText, 1, FCaret - 1);
-  After  := UTF8Copy(FEditText, FCaret + 1, L - FCaret);
-  FEditText := Before + After;
-  Dec(FCaret);
-  FValueEmpty := False;
-  FModified := True;
-  ResetCaretBlink;
-  DoChange;                   // a deleted character is a text change too
-end;
-
-procedure TTyCustomSpinEdit.EditDelete;
-var
-  Before, After: string;
-  L: Integer;
-begin
-  if FReadOnly or (not FEditorEnabled) then Exit;
-  if ClearSelectedValue then Exit;
-  L := UTF8Length(FEditText);
-  if FCaret >= L then Exit;
-  Before := UTF8Copy(FEditText, 1, FCaret);
-  After  := UTF8Copy(FEditText, FCaret + 2, L - FCaret - 1);
-  FEditText := Before + After;
-  FValueEmpty := False;
-  FModified := True;
-  ResetCaretBlink;
-  DoChange;
-end;
-
-procedure TTyCustomSpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-var
-  P: TTyPainter;
-  S: TTyStyleSet;
-  R, TextR, UpR, DownR, CaretRect, Inner: TRect;
-  BtnW, EffSize, cx, bw: Integer;
-  UpInk, DownInk: TTyColor;
-begin
-  P := TTyPainter.Create;
-  try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
-    S := CurrentStyle;
-    DrawFrame(P, R, S);
-    BtnW := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
-    { 按钮宽单一来源:上下键矩形与文字区让位用的是同一个 BtnW —— 否则
-      现代密度下绘制位置和可点区域会错位。 }
-    UpR := TySpinUpButtonRect(R, APPI, BtnW);
-    DownR := TySpinDownButtonRect(R, APPI, BtnW);
-    { Right edge subtracts Padding.Right so right/center-aligned text keeps a gap from the
-      spin buttons -- AND so the text's right edge matches CaretPixelX's ViewWidth (which
-      already subtracts RightPad). Without this the caret ends RightPad px short of the last
-      glyph and blinks ON the digit under right/center alignment (left is unaffected: no slack). }
-    TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
-      R.Right - BtnW - P.Scale(S.Padding.Right), R.Bottom - P.Scale(S.Padding.Bottom));
-    EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
-    { #189: the selected value under its band, the band an edit's selection draws }
-    if FAllSelected and Focused and (FEditText <> '') then
-      P.FillBackground(Rect(CaretPixelX(0, APPI), TextR.Top,
-        CaretPixelX(UTF8Length(FEditText), APPI), TextR.Bottom),
-        ActiveController.Model.ResolveStyle('TyTextSelection', '', []).Background, 0);
-    if (FEditText = '') and (FTextHint <> '') then
-      // Same muted ink and same rule as the sibling TTyEdit (Edit.pas:1719-1723).
-      P.DrawText(TextR, FTextHint, S.FontName, EffSize, S.FontWeight,
-        ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor,
-        FAlignment, tlCenter, True)
-    else
-      P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
-        S.TextColor, FAlignment, tlCenter, True);
-    { The hovered or pressed half first, inside the field's frame -- border and focus ring both
-      (TTySpinButtons.PaintHalf) -- and its arrow in the ink that state asks for. }
-    bw := TySpinFrameInsetPx(P, S);
-    Inner := Rect(R.Left + bw, R.Top + bw, R.Right - bw, R.Bottom - bw);
-    UpInk := FSpin.PaintHalf(P, ActiveController, UpR, Inner, S, 1);
-    DownInk := FSpin.PaintHalf(P, ActiveController, DownR, Inner, S, -1);
-    { Filled triangles in a SQUARED half at pad 1 -- the Windows spin part's shape, and the
-      only pad that leaves a readable mark: the raw half is 18 x 14 and the default pad of 4
-      eats 9px per axis. See TySquareGlyphBox. (v3/C5 overridable.) }
-    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(UpR),   tgTriangleUp,   UpInk, 2, 1);
-    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(DownR), tgTriangleDown, DownInk, 2, 1);
-    if Focused and FCaretVisible then
+  Result := '';
+  { A sign only at the very start, and only one: the residual text holds none, nothing
+    goes in before it, and this insertion has not put one in already. }
+  SignFree := (AAt = 0) and (Pos('-', AResidual) = 0);
+  { Byte by byte: every byte of a multi-byte character is >= $80, so none is accepted and a
+    character is dropped whole -- pasting "1,234 px" leaves 1234. }
+  for i := 1 to Length(AText) do
+    if AText[i] in ['0'..'9'] then
+      Result := Result + AText[i]
+    else if (AText[i] = '-') and SignFree and (Result = '') then
     begin
-      cx := CaretPixelX(FCaret, APPI);
-      CaretRect := Rect(cx, TextR.Top + P.Scale(2), cx + P.Scale(1), TextR.Bottom - P.Scale(2));
-      P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+      Result := '-';
+      SignFree := False;
     end;
-    P.EndPaint;
-  finally
-    P.Free;
-  end;
 end;
 
-procedure TTyCustomSpinEdit.Paint;
+function TTyCustomSpinEdit.FilterInsert(const AText: string): string;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  if not FEditorEnabled then Exit('');
+  { Called after any selected text is gone: Text and CaretPos are the residual and the
+    insertion point. }
+  Result := NumberPart(Text, CaretPos, inherited FilterInsert(AText));
+end;
+
+function TTyCustomSpinEdit.KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
+var
+  Cmd: Boolean;
+begin
+  Cmd := (ssCtrl in AShift) or (ssMeta in AShift);
+  Result := (AKey = VK_BACK) or (AKey = VK_DELETE)
+    or (Cmd and ((AKey = VK_X) or (AKey = VK_V) or (AKey = VK_Z) or (AKey = VK_Y)));
 end;
 
 procedure TTyCustomSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  Residual: string;
 begin
-  if not IsEnabled then Exit;
+  { A refused key is turned away HERE, before the edit sees it: TTyEdit deletes the selection
+    before it consults FilterInsert, so a letter typed over the selected value would wipe it
+    and put nothing in. A locked editor refuses every key the same way. '' is this library's
+    spelling of "key rejected". }
+  if not FEditorEnabled then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  Residual := UTF8Copy(Text, 1, SelStart) + UTF8Copy(Text, SelStart + SelLength + 1, MaxInt);
+  if (UTF8Key <> '') and (UTF8Key[1] >= ' ') and (NumberPart(Residual, SelStart, UTF8Key) = '') then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
   inherited UTF8KeyPress(UTF8Key);
-  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
-  InsertEditChar(UTF8Key);
-  if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
-  Invalidate;
 end;
 
 procedure TTyCustomSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not IsEnabled then Exit;
+  { Before inherited: TTyEdit's handler would already have deleted / pasted / undone by the
+    time control came back here. }
+  if (not FEditorEnabled) and KeyWouldEditTheText(Key, Shift) then
+  begin
+    Key := 0;
+    Exit;
+  end;
+  { inherited FIRST, and the keys are read out of Key AFTERWARDS: the application's OnKeyDown
+    runs inside it, so a handler that zeroes Key vetoes the step, and one that remaps it is
+    obeyed. Enter commits there too, through EditingDone. }
   inherited KeyDown(Key, Shift);
   case Key of
-    VK_UP:
-      begin
-        if not FReadOnly then StepValue(FIncrement);
-        Key := 0;
-      end;
-    VK_DOWN:
-      begin
-        if not FReadOnly then StepValue(-FIncrement);
-        Key := 0;
-      end;
-    { #144: Enter commits and goes on to the form's default button, as a native edit's does
-      (and is an EditingDone, as there); Esc goes on to the cancel button unless it has a
-      typed value to put back. Both were swallowed. }
-    VK_RETURN:
-      begin
-        CommitEdit;
-        if not FReadOnly then EditingDone;
-      end;
+    VK_UP:   begin StepValue(FIncrement);  Key := 0; end;
+    VK_DOWN: begin StepValue(-FIncrement); Key := 0; end;
+    { #144: Esc goes on to the form's cancel button unless there is a typed value to put back. }
     VK_ESCAPE:
-      if BufferDiffers then
+      if TextDiffersFromValue then
       begin
-        SyncBufferToValue;
-        Invalidate;
+        SyncTextToValue;
         Key := 0;
       end;
-    VK_BACK:   begin EditBackspace; Invalidate; Key := 0; end;
-    VK_DELETE: begin EditDelete; Invalidate; Key := 0; end;
-    { #189: moving the caret lets the selected value go; Left and Home from it go to the start,
-      Right and End to the end -- where the caret of the selected value is -- as in an edit }
-    VK_LEFT:   begin if FAllSelected then FCaret := 0 else if FCaret > 0 then Dec(FCaret);
-                 FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret);
-                 FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_HOME:   begin FCaret := 0; FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_END:    begin FCaret := UTF8Length(FEditText); FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
   end;
 end;
 
 procedure TTyCustomSpinEdit.DoExit;
 begin
   inherited DoExit;
-  CommitEdit;   // on a dying form it reports nothing (#145, DoChange / DoValueChange)
-  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
-  FCaretVisible := True;
-  Invalidate;
+  CommitEdit;   // on a dying form it reports nothing (#145)
+end;
+
+function TTyCustomSpinEdit.RightReserve(APPI: Integer): Integer;
+begin
+  { Read the metric live, so the button column tracks the theme's density and lines up with
+    a combo box's drop button and the float spin edit's arrows. }
+  Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
+end;
+
+function TTyCustomSpinEdit.TrailingShowsArrow: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomSpinEdit.UpButtonRect(APPI: Integer): TRect;
+var
+  Z: TRect;
+begin
+  Z := TrailingZone(APPI);
+  if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
+  { The column runs the field's full height, not the trailing zone's (which stops a padding
+    short of the top and bottom): the same halves TTyFloatSpinEdit uses. }
+  Result := TySpinUpButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
+end;
+
+function TTyCustomSpinEdit.DownButtonRect(APPI: Integer): TRect;
+var
+  Z: TRect;
+begin
+  Z := TrailingZone(APPI);
+  if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
+  Result := TySpinDownButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
+end;
+
+procedure TTyCustomSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
+  const AStyle: TTyStyleSet);
+var
+  ppi, w, bw: Integer;
+  col, upR, dnR, inner: TRect;
+  upInk, dnInk: TTyColor;
+begin
+  w := AZone.Right - AZone.Left;
+  if w <= 0 then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  { The zone the painter was given, grown back by the padding to the field's full height, so
+    the painted halves are the clickable ones (UpButtonRect). }
+  col := Rect(AZone.Left, AZone.Top - APainter.Scale(AStyle.Padding.Top), AZone.Right,
+    AZone.Bottom + APainter.Scale(AStyle.Padding.Bottom));
+  upR := TySpinUpButtonRect(col, ppi, w);
+  dnR := TySpinDownButtonRect(col, ppi, w);
+  { The hovered or pressed half first, inside the field's frame -- border and focus ring both
+    (TTySpinButtons.PaintHalf) -- and its arrow in the ink that state asks for. Filled
+    triangles in a SQUARED half at pad 1 (TySquareGlyphBox). }
+  bw := TySpinFrameInsetPx(APainter, AStyle);
+  inner := Rect(0, col.Top + bw, col.Right - bw, col.Bottom - bw);
+  upInk := FSpin.PaintHalf(APainter, ActiveController, upR, inner, AStyle, 1);
+  dnInk := FSpin.PaintHalf(APainter, ActiveController, dnR, inner, AStyle, -1);
+  TyDrawGlyph(APainter, ActiveController, TySquareGlyphBox(upR), tgTriangleUp, upInk, 2, 1);
+  TyDrawGlyph(APainter, ActiveController, TySquareGlyphBox(dnR), tgTriangleDown, dnInk, 2, 1);
+end;
+
+function TTyCustomSpinEdit.SpinHitAt(X, Y: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if PtInRect(UpButtonRect(ppi), Point(X, Y)) then
+    Result := 1
+  else if PtInRect(DownButtonRect(ppi), Point(X, Y)) then
+    Result := -1
+  else
+    Result := 0;
 end;
 
 function TTyCustomSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not IsEnabled then Exit(False);
-  // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
-  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
-  begin
-    Result := True;
-    Exit;
-  end;
-  // ReadOnly locks the value: don't step on the wheel.
-  if FReadOnly then Exit(False);
+  // The application's OnMouseWheel runs first; if it consumed the notch, stop.
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
+  { Read-only: report the notch unhandled so an enclosing scroll box still gets it. }
+  if ReadOnly then Exit(False);
   if WheelDelta > 0 then
     StepValue(FIncrement)
   else
@@ -1154,25 +859,26 @@ end;
 procedure TTyCustomSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not IsEnabled then Exit;
-  inherited MouseDown(Button, Shift, X, Y);
-  if Button = mbLeft then
+  { A press on a button steps once and holds it, repeating until the release. ReadOnly locks
+    the value: there the press steps nothing but is still the button's. It takes the focus --
+    the arrow keys continue the same gesture -- and does not move the caret or the selection. }
+  if (Button = mbLeft) and FSpin.MouseDown(SpinHitAt(X, Y), not ReadOnly) then
   begin
-    { A press on a button steps once and holds it, repeating until the release. ReadOnly locks
-      the value: there the buttons do not step, and the press only takes focus. }
-    FSpin.MouseDown(SpinHitAt(X, Y), not FReadOnly);
     try
       if CanFocus then SetFocus;
     except
+      // headless / not yet parented: focus is not available, and not needed
     end;
-    if SpinHitAt(X, Y) = 0 then FAllSelected := False;   // #189: a click in the field
+    Exit;
   end;
+  inherited MouseDown(Button, Shift, X, Y);
 end;
 
 procedure TTyCustomSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if not IsEnabled then Exit;
-  FSpin.MouseMove(SpinHitAt(X, Y), not FReadOnly);
+  FSpin.MouseMove(SpinHitAt(X, Y), not ReadOnly);
 end;
 
 procedure TTyCustomSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

@@ -82,6 +82,8 @@ type
     FRect: TRect;
     FPPI: Integer;
     FOwnsBmp: Boolean;
+    FGround: TBGRABitmap;       { what the canvas held under the layer, this frame: PrepareTextGround }
+    FGroundTried: Boolean;
     FRightToLeft: Boolean;
     { The dash pattern in LOGICAL px, plus its own save/restore stack.
 
@@ -137,7 +139,8 @@ type
     procedure RasterLeave;
     { The bodies of the drawing methods that map their rect in the raster scope: the public
       method of the same name enters the scope and calls these with the mapped rect. }
-    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+    procedure FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+      ABehindBorder: Boolean = False);
     procedure StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
     procedure DrawEdgeAt(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
     procedure DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
@@ -145,6 +148,7 @@ type
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
     procedure DrawChevronAt(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    function CornerRadiusAt(const ARect: TRect; const ACorners: TTyCorners; out AOptions: TRoundRectangleOptions): Integer;
     procedure EraseRectAt(const ARect: TRect);
     procedure DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
     procedure FillPointerShapeAt(const ABody: TRect; const ACorners: TTyCorners;
@@ -256,8 +260,14 @@ type
     function Scale(ALogical: Integer): Integer;
     function Unscale(ADevice: Integer): Integer;
     function MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
-    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer); overload;
-    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
+    { Fills exactly the pixels of ARect, its corners rounded. ABehindBorder: a border is about to be
+      stroked on the same rect, so the fill stops half a pixel in, under the middle of that border:
+      at a rounded corner a fill reaching the border's outer edge would show through the border's
+      antialiased pixels, as a light fringe on a dark parent. }
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer;
+      ABehindBorder: Boolean = False); overload;
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+      ABehindBorder: Boolean = False); overload;
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     { A rounded body that carries a triangular POINTER out of one of its sides, filled and
@@ -277,10 +287,11 @@ type
       ABorderWidthLogical <= 0 (or a fully transparent colour) fills only.
 
       Fill and stroke are built from DIFFERENT rects, matching the rest of the painter: the
-      fill covers the body verbatim, the stroke rides an inset centreline (Left+w/2 ..
-      Right-1-w/2) exactly like StrokeBorder, so a bordered balloon lines up with every other
-      bordered control. The pointer is TRANSLATED with that inset, never rescaled, so its
-      slope is identical in both passes. }
+      stroke rides an inset centreline (Left+w/2 .. Right-w/2: a canvas path's coordinates are
+      pixel corners) so it covers the same pixels as StrokeBorder and a bordered balloon lines
+      up with every other bordered control; the fill stops half a pixel in under it, as
+      FillBackground's ABehindBorder does. The pointer is TRANSLATED with the inset, never
+      rescaled, so its slope is identical in both passes. }
     procedure FillPointerShape(const ABody: TRect; const ACorners: TTyCorners;
       ASide: TTyPointerSide; ATipPos, AHalfBase, AHeight: Integer;
       AFillColor, ABorderColor: TTyColor; ABorderWidthLogical: Integer);
@@ -355,6 +366,14 @@ type
       Used to re-establish a clean parent background in a windowed control's corners
       after a drop shadow bled into them. No-op when there are no rounded corners. }
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+    { For a control whose content runs to its edges and so over its own frame. KeepCornerGround
+      copies what lies under the frame's rounded corners, before the frame is painted (nil for a
+      square one); LayCornerGround lays that back outside the arc once the content is done, which
+      is the clip a rounded frame would have given the content. ABehindBorder: a border goes over
+      next, and the arc is the one FillBackground's ABehindBorder fills to. }
+    function KeepCornerGround(const ARect: TRect; const ACorners: TTyCorners): TBGRABitmap;
+    procedure LayCornerGround(const ARect: TRect; const ACorners: TTyCorners; AGround: TBGRABitmap;
+      ABehindBorder: Boolean);
     procedure EraseRect(const ARect: TRect);
     { Bitmap.DrawLine(AX1, AY1, AX2, AY2, AColor, False) for a horizontal or vertical run, in
       layout pixels: the same pixels -- from the first point up to, not including, the second --
@@ -367,6 +386,17 @@ type
         RASTER pixels: map with Dev(), give fonts RasterPPI, draw 1-px rules with DrawRule.
       At S = 1 the two are the same and nothing needs mapping. }
     property Bitmap: TBGRABitmap read FBmp;
+    { #200. Text is about to be drawn in ARect (layer pixels) on what may be a transparent part of
+      the layer, where the renderer can only lay down one grey: it does not know the colour the
+      pixel ends up. What ends up there is the layer over the canvas, so that colour is on the
+      canvas already. Read it now, lay the layer over it in ARect, and the words go down in their
+      subpixels on the very pixels EndPaint would have made. DrawText calls this itself; code
+      that draws words straight on a part of Bitmap it has not filled calls it first. Only a
+      control's own canvas in a paint is read: a bitmap handed to RenderTo is a picture being
+      made. Does nothing where the text would gain nothing or the canvas cannot be trusted: off
+      Win32 (a platform's cost stays on it), with ClearType off, on a dimmed layer, on a surface
+      that outlives the frame, on a DC that holds a 32-bit DIB. }
+    procedure PrepareTextGround(const ARect: TRect);
     { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
       填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
       **抽出来是为了让评分控件与网格的星级单元格用同一份几何** ——
@@ -752,6 +782,15 @@ procedure TyForgetDesktopClearType;
   shift added to the clock the kept answer is aged by. }
 function TyDesktopClearTypeAsksForTest: Integer;
 procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
+{ FOR THE TESTS: how many times a layer has read the canvas under it (0 elsewhere than Win32). }
+function TyTextGroundReadsForTest: Integer;
+{ FOR THE TESTS: the quality the renderer asks GDI for. On Windows the renderer and a canvas
+  measure alike since #199; a check that needs them to disagree puts Natural back. Does nothing
+  elsewhere than Win32. }
+procedure TyGdiTextQualityForTest(AQuality: TFontQuality);
+{ FOR THE TESTS: answer as if the desktop's setting were this one (0 off, 1 ClearType); -1 goes
+  back to asking. Does nothing elsewhere than Win32. }
+procedure TyDesktopClearTypeForceForTest(AForce: Integer);
 procedure TyGdiTextForceConversionForTest(AOn: Boolean);
 { The kept measuring DC and turned-run DIB (Win32): how many times either was made or
   grown, and a switch back to BGRA's own per-call scratch for both -- the reference the
@@ -818,6 +857,20 @@ procedure TyUnpinBgraRandom(ASaved: LongWord);
 procedure TyCtxFill(ACtx: TBGRACanvas2D);
 procedure TyCtxStroke(ACtx: TBGRACanvas2D);
 procedure TyCtxClip(ACtx: TBGRACanvas2D);
+
+{ TEXT KEPT TO BE LAID DOWN LATER (#198). A control that keeps rendered words on a bitmap of
+  their own (the grid: a hundred thousand rows could not scroll otherwise) has to lay down what
+  drawing them straight on the surface would have left, on whatever ground is there by then.
+
+  TyKeptTextBySubpixels says how an entry made now is held. It follows a setting of the desktop's,
+  so it belongs in the key of whatever keeps the entries. TyKeptTextBitmap makes the bitmap to draw
+  on and says which ink to draw with, which is not always the one asked for. TyLayKeptText lays an
+  entry down for the ink it was made for; it keeps to ADest's ClipRect. }
+function TyKeptTextBySubpixels: Boolean;
+function TyKeptTextBitmap(AWidth, AHeight: Integer; AInk: TTyColor; ABySubpixels: Boolean;
+  out ADrawWith: TTyColor): TBGRABitmap;
+procedure TyLayKeptText(ADest, AKept: TBGRABitmap; AX, AY: Integer; AInk: TTyColor;
+  ABySubpixels: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -1755,6 +1808,12 @@ begin
   {$ENDIF}
 end;
 
+{ Which polarity an ink is drawn in: see TTyGdiTextRenderer. }
+function TyInkIsLight(const AInk: TBGRAPixel): Boolean;
+begin
+  Result := (AInk.red * 30 + AInk.green * 59 + AInk.blue * 11) div 100 > 128;
+end;
+
 {$IFDEF LCLWin32}
 type
   { TEXT ON WINDOWS, AS WINDOWS DRAWS IT.
@@ -1776,14 +1835,16 @@ type
 
     What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
     strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
-    renderer draws exactly that: GDI renders the run in ClearType in the ink's polarity --
+    renderer draws exactly that: GDI renders the run in the quality the desktop asks for, the
+    one a TLabel gets and any ordinary GDI program, in the ink's polarity --
     dark ink black on white, light ink white on black -- and the three subpixel coverages are
     laid down in the ink colour with the same non-gamma blend GDI uses: channel by channel
     where the surface under the pixel is opaque, as GDI lays them on a window; averaged into
     one grey where it is not, since there the colour the text ends up on is not known yet
     and a coloured edge would land on whatever shows through. (Every pixel was grey until
     #90: weight right, sharpness not -- a stem ClearType puts on two subpixels came out as
-    two grey pixels, soft next to the system's own text.) A desktop with ClearType off gets
+    two grey pixels, soft next to the system's own text. A control with no background of its
+    own is told the colour by TTyPainter.PrepareTextGround: #200.) A desktop with ClearType off gets
     grey everywhere, as its own text is. The polarity is not a nicety: Windows weights the two
     differently under the user's ClearType contrast. At the default (1400) they cover within
     half a percent of each other; at 1200 a white-on-black line of 9pt Segoe UI inks 12% more
@@ -1793,6 +1854,11 @@ type
     down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
     pixels; on an opaque surface black on white and white on black, every channel of every
     pixel is the one GDI draws there.
+
+    The quality is fqDefault, not a ClearType named here (#199). On a ClearType desktop that is
+    plain ClearType; fqCleartypeNatural, asked for here until 3.0.4, moves only hinted Latin
+    glyphs, so Chinese matched LCL to the pixel while a line of English differed in 1848 pixels
+    and was 341 px wide against 338. On any other desktop it is what that desktop draws.
 
     Layout is GDI's own, and it is the layout the measuring side reports: the run is drawn by
     the very DrawText call BGRA measures it with (DT_CALCRECT dropped), on the same font in the
@@ -1812,6 +1878,7 @@ type
     class var GShot: TBitmap;
     class var GBitmapsMade, GOneOffs, GConversions: Integer;
     class var GForceConversion: Boolean;
+    class var GQuality: TFontQuality;   { fqDefault, but for TyGdiTextQualityForTest }
     { BGRA MEASURES every run, and lays every TURNED run down, on a TBitmap of its own:
       a memory DC, a bitmap and a font selected into them, made and freed per call. On
       the machine this was measured on that is about a millisecond a call, and a chart
@@ -1884,6 +1951,7 @@ var
   GClearTypeAskedAt: QWord = 0;
   GClearTypeAsks: Integer = 0;
   GClearTypeClockShift: Int64 = 0;
+  GClearTypeForced: Integer = -1;
 
 function TyAskDesktopClearType: Boolean;
 const
@@ -1906,6 +1974,7 @@ function TyDesktopClearType: Boolean;
 var
   now: QWord;
 begin
+  if GClearTypeForced >= 0 then Exit(GClearTypeForced = 1);
   now := QWord(Int64(GetTickCount64) + GClearTypeClockShift);
   if not GClearTypeKnown or (now - GClearTypeAskedAt >= ClearTypeKeepMs) then
   begin
@@ -1933,7 +2002,7 @@ begin
   inherited UpdateFont;
   { The measuring side reads this font too: TextSize and TextFitInfo must answer in the
     advances the drawing side lays the glyphs out with. }
-  FFont.Quality := fqCleartypeNatural;
+  FFont.Quality := GQuality;
 end;
 
 class function TTyGdiTextRenderer.MeasureSurface(AFont: TFont): TBitmap;
@@ -2290,7 +2359,7 @@ begin
   end;
   if c.alpha = 0 then Exit;
   { Light ink is drawn white on black, as Windows draws light text: see the class comment. }
-  lightInk := (c.red * 30 + c.green * 59 + c.blue * 11) div 100 > 128;
+  lightInk := TyInkIsLight(c);
   UpdateFont;
   sz := InternalTextSizeStyle(sUTF8, RunStyle(ARightToLeft, AShowPrefix), MaxLongint);
   if (sz.cx <= 0) or (sz.cy <= 0) then Exit;
@@ -2530,6 +2599,118 @@ begin
 end;
 {$ENDIF}
 
+function TyKeptTextBySubpixels: Boolean;
+begin
+  {$IFDEF LCLWin32}
+  Result := TyDesktopClearType;
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
+function TyKeptTextBitmap(AWidth, AHeight: Integer; AInk: TTyColor; ABySubpixels: Boolean;
+  out ADrawWith: TTyColor): TBGRABitmap;
+begin
+  ADrawWith := AInk;
+  if not ABySubpixels then
+    Result := TBGRABitmap.Create(AWidth, AHeight)
+  { By subpixels: the words on an opaque bitmap, where the renderer lays its three coverages down
+    channel by channel, in the pure ink of AInk's polarity. Each channel then IS that coverage,
+    the same three numbers the renderer would have blended the real ink with. }
+  else if TyInkIsLight(TyColorToBGRA(AInk)) then
+  begin
+    Result := TBGRABitmap.Create(AWidth, AHeight, BGRABlack);
+    ADrawWith := TyRGBA(255, 255, 255, 255);
+  end
+  else
+  begin
+    Result := TBGRABitmap.Create(AWidth, AHeight, BGRAWhite);
+    ADrawWith := TyRGBA(0, 0, 0, 255);
+  end;
+end;
+
+procedure TyLayKeptText(ADest, AKept: TBGRABitmap; AX, AY: Integer; AInk: TTyColor;
+  ABySubpixels: Boolean);
+const
+  { An entry that is not held by subpixels is the ink with its coverage as alpha, and the blend is
+    the one a run drawn straight on the surface gets. The renderers on Windows and Cocoa lay their
+    grey down without gamma, as the system's own text is. BGRA's renderer, which Qt and GTK draw
+    through, blends in linear light. dmDrawWithTransparency everywhere was 16% too much ink for
+    light text on dark on Windows and 15% too little for dark text on light. }
+  KeptGreyBlend = {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3)}dmDrawWithTransparency{$ELSE}dmLinearBlend{$ENDIF};
+var
+  c, ink: TBGRAPixel;
+  lightInk, wrote: Boolean;
+  clip: TRect;
+  x0, x1, y0, y1, x, y, cr, cg, cb, cov, a, v, ir, ig, ib: Integer;
+  s, d: PBGRAPixel;
+begin
+  if not ABySubpixels then
+  begin
+    ADest.PutImage(AX, AY, AKept, KeptGreyBlend);
+    Exit;
+  end;
+  c := TyColorToBGRA(AInk);
+  if c.alpha = 0 then Exit;
+  lightInk := TyInkIsLight(c);
+  clip := ADest.ClipRect;
+  x0 := Max(clip.Left - AX, 0);
+  x1 := Min(clip.Right - AX, AKept.Width);
+  y0 := Max(clip.Top - AY, 0);
+  y1 := Min(clip.Bottom - AY, AKept.Height);
+  if (x0 >= x1) or (y0 >= y1) then Exit;
+  ink := c;
+  ir := c.red;   { Integer copies: (byte - byte) of a field goes negative here }
+  ig := c.green;
+  ib := c.blue;
+  wrote := False;
+  for y := y0 to y1 - 1 do
+  begin
+    s := PBGRAPixel(AKept.ScanLine[y]) + x0;
+    d := PBGRAPixel(ADest.ScanLine[AY + y]) + AX + x0;
+    for x := x0 to x1 - 1 do
+    begin
+      cr := s^.red;
+      cg := s^.green;
+      cb := s^.blue;
+      if not lightInk then
+      begin
+        cr := 255 - cr;
+        cg := 255 - cg;
+        cb := 255 - cb;
+      end;
+      if (cr <> 0) or (cg <> 0) or (cb <> 0) then
+      begin
+        { What TTyGdiTextRenderer does with the same three numbers. }
+        if d^.alpha = 255 then
+        begin
+          v := d^.red;
+          d^.red := v + (ir - v) * (cr * c.alpha div 255) div 255;
+          v := d^.green;
+          d^.green := v + (ig - v) * (cg * c.alpha div 255) div 255;
+          v := d^.blue;
+          d^.blue := v + (ib - v) * (cb * c.alpha div 255) div 255;
+          wrote := True;
+        end
+        else
+        begin
+          cov := (cr + cg + cb) div 3;
+          a := cov * c.alpha div 255;
+          if a > 0 then
+          begin
+            ink.alpha := a;
+            ADest.FastBlendPixel(AX + x, AY + y, ink);
+          end;
+        end;
+      end;
+      Inc(s);
+      Inc(d);
+    end;
+  end;
+  if wrote then
+    ADest.InvalidateBitmap;   // written through ScanLine, as FastBlendPixel does after its own
+end;
+
 procedure TyForgetDesktopClearType;
 begin
   {$IFDEF LCLWin32}
@@ -2550,6 +2731,15 @@ procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
 begin
   {$IFDEF LCLWin32}
   GClearTypeClockShift := AMs;
+  {$ENDIF}
+end;
+
+procedure TyDesktopClearTypeForceForTest(AForce: Integer);
+begin
+  {$IFDEF LCLWin32}
+  GClearTypeForced := AForce;
+  {$ELSE}
+  if AForce = 0 then ;
   {$ENDIF}
 end;
 
@@ -2644,6 +2834,16 @@ begin
   FreeAndNil(TTyGdiTextRenderer.GMeasure);
   FreeAndNil(TTyGdiTextRenderer.GTurn);
   TTyGdiTextRenderer.DropRuns;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextQualityForTest(AQuality: TFontQuality);
+begin
+  {$IFDEF LCLWin32}
+  TTyGdiTextRenderer.GQuality := AQuality;
+  TTyGdiTextRenderer.DropRuns;     { what is kept was laid down in the quality it had }
+  {$ELSE}
+  if AQuality = fqDefault then ;
   {$ENDIF}
 end;
 
@@ -2815,6 +3015,7 @@ begin
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create((ARect.Right - ARect.Left) * FScale, (ARect.Bottom - ARect.Top) * FScale);
   FOwnsBmp := True;
+  FGroundTried := False;
   FKeptC2D := False;
   FBmp.Fill(BGRAPixelTransparent);
   if FScale > 1 then PresetCanvas2D;
@@ -2929,6 +3130,112 @@ begin
   end;
 end;
 
+{$IFDEF LCLWin32}
+var
+  GTextGroundReads: Integer = 0;
+
+function TyGetObjectType(AObj: THandle): LongWord; stdcall; external 'gdi32' name 'GetObjectType';
+function TyGetCurrentObject(ADC: THandle; AKind: LongWord): THandle; stdcall;
+  external 'gdi32' name 'GetCurrentObject';
+{ The system's. LCL's BitBlt sends a 32-bit DIB to its StretchMaskBlt, which does not honour the
+  source DC's origin, and a graphic control paints with the parent's DC moved to it: it would read
+  the parent's corner instead of what is under it. }
+function TyBitBlt(ADest: THandle; AX, AY, AWidth, AHeight: Integer; ASrc: THandle;
+  AXSrc, AYSrc: Integer; ARop: LongWord): LongBool; stdcall; external 'gdi32' name 'BitBlt';
+
+{ Whether what a DC holds can come back as opaque paint. A window's DC can, and the compatible
+  bitmap LCL double-buffers on. A 32-bit DIB may be someone's picture with real alpha in it, where
+  a clear pixel would come back black. }
+function TyCanvasHoldsOpaquePaint(ADC: HDC): Boolean;
+const
+  OBJ_BITMAP = 7;
+  OBJ_MEMDC = 10;
+var
+  ds: TDIBSection;
+begin
+  Result := True;
+  if TyGetObjectType(ADC) <> OBJ_MEMDC then Exit;
+  FillChar(ds, SizeOf(ds), 0);
+  if (LCLIntf.GetObject(TyGetCurrentObject(ADC, OBJ_BITMAP), SizeOf(ds), @ds) > 0)
+    and (ds.dsBm.bmBits <> nil) and (ds.dsBm.bmBitsPixel = 32) then
+    Result := False;
+end;
+{$ENDIF}
+
+function TyTextGroundReadsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := GTextGroundReads;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TTyPainter.PrepareTextGround(const ARect: TRect);
+{$IFDEF LCLWin32}
+var
+  r: TRect;
+  x, y, a: Integer;
+  s, g: PBGRAPixel;
+begin
+  if (FBmp = nil) or (not FOwnsBmp) or (FScale <> 1) or (Opacity < 1.0)
+    or not (FCanvas is TControlCanvas) then Exit;
+  r := TRect.Intersect(ARect, FBmp.ClipRect);
+  if (r.Left >= r.Right) or (r.Top >= r.Bottom) then Exit;
+  { Every run of text comes through here, and a control with its own background must pay nothing:
+    three pixels say so. One they miss only keeps its grey. }
+  s := FBmp.ScanLine[(r.Top + r.Bottom) div 2];
+  if (s[r.Left].alpha = 255) and (s[(r.Left + r.Right) div 2].alpha = 255)
+    and (s[r.Right - 1].alpha = 255) then Exit;
+  if not TyDesktopClearType then Exit;
+  if not FGroundTried then
+  begin
+    FGroundTried := True;
+    if TyCanvasHoldsOpaquePaint(FCanvas.Handle) then
+    begin
+      Inc(GTextGroundReads);
+      FGround := TBGRABitmap.Create(FBmp.Width, FBmp.Height);
+      if TyBitBlt(FGround.Canvas.Handle, 0, 0, FBmp.Width, FBmp.Height, FCanvas.Handle,
+        FRect.Left, FRect.Top, SRCCOPY) then
+      begin
+        TyGdiFlush;
+        FGround.AlphaFill(255);    { GDI leaves the alpha byte as it pleases }
+      end
+      else
+        FreeAndNil(FGround);       { a printer, a metafile: no pixels to read }
+    end;
+  end;
+  if FGround = nil then Exit;
+  { The layer over the ground, as EndPaint lays it: nothing the layer holds changes, and only the
+    words' rect turns opaque. An antialiased shape elsewhere on the layer keeps its blend. }
+  for y := r.Top to r.Bottom - 1 do
+  begin
+    s := PBGRAPixel(FBmp.ScanLine[y]) + r.Left;
+    g := PBGRAPixel(FGround.ScanLine[y]) + r.Left;
+    for x := r.Left to r.Right - 1 do
+    begin
+      a := s^.alpha;
+      if a = 0 then
+        s^ := g^
+      else if a < 255 then
+      begin
+        s^.red := g^.red + (Integer(s^.red) - g^.red) * a div 255;
+        s^.green := g^.green + (Integer(s^.green) - g^.green) * a div 255;
+        s^.blue := g^.blue + (Integer(s^.blue) - g^.blue) * a div 255;
+        s^.alpha := 255;
+      end;
+      Inc(s);
+      Inc(g);
+    end;
+  end;
+  FBmp.InvalidateBitmap;   // written through ScanLine
+end;
+{$ELSE}
+begin
+  if ARect.Left = 0 then ;
+end;
+{$ENDIF}
+
 procedure TTyPainter.EndPaint;
 var
   baseBmp, layer: TBGRABitmap;
@@ -2938,6 +3245,7 @@ var
 begin
   { before the bitmap goes: a kept bitmap's canvas must not be left sharing them }
   ReleaseClipMasks;
+  FreeAndNil(FGround);
   if FKeptC2D then
   begin
     { The two transforms only: a path the caller has open holds device points already. }
@@ -3067,26 +3375,34 @@ begin
   if Result > m then Result := m;
 end;
 
-procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
+procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer;
+  ABehindBorder: Boolean);
 begin
-  FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical));
+  FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical), ABehindBorder);
 end;
 
-procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+  ABehindBorder: Boolean);
 var
   R: TRect;
 begin
   if RasterEnter then R := Dev(ARect) else R := ARect;
   try
-    FillBackgroundAt(R, AFill, ACorners);
+    FillBackgroundAt(R, AFill, ACorners, ABehindBorder);
   finally
     RasterLeave;
   end;
 end;
 
-procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
+procedure TTyPainter.FillBackgroundAt(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners;
+  ABehindBorder: Boolean);
 var
   r: Integer;
+  { #196: BGRABitmap's antialiased shapes put pixel CENTRES on whole coordinates, so pixel L runs
+    from L - 0.5 to L + 0.5. The rect covering pixels [Left, Right) is Left - 0.5 .. Right - 0.5.
+    Left .. Right - 1 left every straight edge half covered: a soft fringe all round, and the
+    shape a pixel smaller than asked. }
+  fl, ft, fr, fb, fr2: Single;
   opts: TRoundRectangleOptions;
   px: TBGRAPixel;
   p1f, p2f: TPointF;
@@ -3108,6 +3424,17 @@ begin
   if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
   if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
+  if ABehindBorder then
+  begin
+    fl := ARect.Left;  ft := ARect.Top;  fr := ARect.Right - 1;  fb := ARect.Bottom - 1;
+    fr2 := r - 0.5;
+    if fr2 < 0 then fr2 := 0;
+  end
+  else
+  begin
+    fl := ARect.Left - 0.5;  ft := ARect.Top - 0.5;  fr := ARect.Right - 0.5;  fb := ARect.Bottom - 0.5;
+    fr2 := r;
+  end;
   case AFill.Kind of
     tfkSolid:
       begin
@@ -3115,7 +3442,7 @@ begin
         if r <= 0 then
           FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency)
         else
-          FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, opts);
+          FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, px, opts);
       end;
     tfkNone: ;
     tfkLinearGradient:
@@ -3146,7 +3473,7 @@ begin
             if r <= 0 then
               FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
             else
-              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+              FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, grad, opts + [rrDefault]);
           finally
             grad.Free;
             multi.Free;
@@ -3161,7 +3488,7 @@ begin
             if r <= 0 then
               FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
             else
-              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+              FBmp.FillRoundRectAntialias(fl, ft, fr, fb, fr2, fr2, grad, opts + [rrDefault]);
           finally
             grad.Free;
           end;
@@ -3235,26 +3562,29 @@ var
   procedure BuildPath(AInset: Single);
   var
     l, t, r, b, tp: Single;
-    rTL, rTR, rBR, rBL, maxR: Integer;
+    rTL, rTR, rBR, rBL: Single;
+    maxR: Integer;
 
     { Clamp one corner radius so two corners on the same side can never overlap. }
     function Corner(ALogical: Integer): Single;
     begin
-      Result := TyClampRadiusPx(Scale(ALogical), Round(r - l), Round(b - t));
+      { The outer arc's radius less the inset, so every pass shares one outer curve. }
+      Result := TyClampRadiusPx(Scale(ALogical), ABody.Right - ABody.Left, ABody.Bottom - ABody.Top) - AInset;
+      if Result < 0 then Result := 0;
     end;
 
   begin
     l := ABody.Left + AInset;
     t := ABody.Top + AInset;
-    r := ABody.Right - 1 - AInset;
-    b := ABody.Bottom - 1 - AInset;
+    r := ABody.Right - AInset;
+    b := ABody.Bottom - AInset;
     if (r <= l) or (b <= t) then Exit;
     maxR := ACorners.TL;
     if ACorners.TR > maxR then maxR := ACorners.TR;
     if ACorners.BR > maxR then maxR := ACorners.BR;
     if ACorners.BL > maxR then maxR := ACorners.BL;
-    rTL := Round(Corner(ACorners.TL)); rTR := Round(Corner(ACorners.TR));
-    rBR := Round(Corner(ACorners.BR)); rBL := Round(Corner(ACorners.BL));
+    rTL := Corner(ACorners.TL); rTR := Corner(ACorners.TR);
+    rBR := Corner(ACorners.BR); rBL := Corner(ACorners.BL);
     if maxR = 0 then begin rTL := 0; rTR := 0; rBR := 0; rBL := 0; end;
     tp := ATipPos;
 
@@ -3298,11 +3628,11 @@ var
 begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
-  BuildPath(0);
+  w := Scale(ABorderWidthLogical);
+  if (w > 0) and (TyAlphaOf(ABorderColor) <> 0) then BuildPath(0.5) else BuildPath(0);
   ctx.fillStyle(TyColorToBGRA(AFillColor));
   CtxFill(ctx);
 
-  w := Scale(ABorderWidthLogical);
   if (w <= 0) or (TyAlphaOf(ABorderColor) = 0) then Exit;
   half := w / 2;
   { The pointer rides the SAME inset as the body edge, so the wedge is translated inward, not
@@ -3334,7 +3664,7 @@ procedure TTyPainter.StrokeBorderAt(const ARect: TRect; const ACorners: TTyCorne
 var
   w, r: Integer;
   opts: TRoundRectangleOptions;
-  half: Single;
+  half, rc: Single;
   px: TBGRAPixel;
   l, t, rr, b: Single;
 begin
@@ -3352,16 +3682,31 @@ begin
   if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   px := TyColorToBGRA(AColor);
-  half := w / 2;
+  { #196: the line's centre, with pixel centres on whole coordinates: a border w pixels wide along
+    the left edge covers pixels Left .. Left + w - 1, so its centre is Left + (w - 1) / 2. It was
+    Left + w / 2, half a pixel off: a 1 px line lay half on each of two pixels, twice as wide and
+    half as dark. The radius is the outer arc's, as in CSS and as the fill has it; the line runs
+    half a width inside that. }
+  half := (w - 1) / 2;
   l := ARect.Left + half;
   t := ARect.Top + half;
   rr := ARect.Right - 1 - half;
   b := ARect.Bottom - 1 - half;
-  r := TyClampRadiusPx(r, Round(rr - l), Round(b - t));   // hug the fill's clamped corner (no lens)
+  r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);   // the fill's clamped corner (no lens)
+  rc := r - w / 2;
   if r <= 0 then
+  begin
+    { Square: whole pixels, four bars that do not overlap (RectangleAntialias softens two of the
+      corner pixels, and a translucent colour would double up where lines meet). }
+    FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Top + w, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Left, ARect.Bottom - w, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Left, ARect.Top + w, ARect.Left + w, ARect.Bottom - w, px, dmDrawWithTransparency);
+    FBmp.FillRect(ARect.Right - w, ARect.Top + w, ARect.Right, ARect.Bottom - w, px, dmDrawWithTransparency);
+  end
+  else if rc <= 0 then
     FBmp.RectangleAntialias(l, t, rr, b, px, w)
   else
-    FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w, opts);
+    FBmp.RoundRectAntialias(l, t, rr, b, rc, rc, px, w, opts);
 end;
 
 procedure TTyPainter.DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
@@ -3805,6 +4150,7 @@ begin
   style.Layout := AVAlign;
   style.SingleLine := True;
   style.Clipping := True;
+  PrepareTextGround(ARect);
   FBmp.TextRect(ARect, ARect.Left, ARect.Top, s, style, px);
   // Mnemonic underline: a thin line under the AMnemonicPos-th char (1-based), placed by
   // reusing the same alignment the text was drawn with. Skipped when the text was ellipsis-
@@ -3937,6 +4283,7 @@ begin
     oldClip := FBmp.ClipRect;
     FBmp.ClipRect := TRect.Intersect(oldClip, ARect);
     try
+      PrepareTextGround(ARect);
       lay.DrawText(FBmp, px);
       { Mnemonic underline. The legacy arithmetic -- measure the bytes BEFORE the mnemonic,
         add that to the block's left edge -- assumes the glyphs come out in the order the
@@ -4068,6 +4415,13 @@ var
   th: Single;
   pad: Integer;
   l, t, r, b, cx, cy, w, h, m: Single;
+
+  { #196: the centre a straight stroke th wide needs to cover whole pixels. }
+  function Snap(C: Single): Single;
+  begin
+    Result := Round(C - (th - 1) / 2) + (th - 1) / 2;
+  end;
+
 begin
   if FBmp = nil then
     Exit;
@@ -4094,7 +4448,7 @@ begin
         FBmp.DrawLineAntialias(r, t, l, b, px, th, True);
       end;
     tgMinimize:
-      FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+      FBmp.DrawLineAntialias(l, Snap(cy), r, Snap(cy), px, th, True);
     tgMaximize:
       FBmp.RectangleAntialias(l, t, r, b, px, th);
     tgRestore:
@@ -4109,7 +4463,8 @@ begin
         PointF(r, t)], px, th);
     tgCheckIndeterminate:
       // centered filled square (Windows indeterminate look); m = min(w,h) from the setup vars
-      FBmp.FillRectAntialias(cx - m * 0.28, cy - m * 0.28, cx + m * 0.28, cy + m * 0.28, px);
+      FBmp.FillRectAntialias(Round(cx - m * 0.28) - 0.5, Round(cy - m * 0.28) - 0.5,
+        Round(cx + m * 0.28) + 0.5, Round(cy + m * 0.28) + 0.5, px);
     tgRadioDot:
       FBmp.FillEllipseAntialias(cx, cy, m * 0.3, m * 0.3, px);
     tgChevronDown:
@@ -4133,44 +4488,50 @@ begin
         PointF(cx, t + h * 0.2), PointF(r, b - h * 0.3)], px, th);
     tgArrowUp:
       begin
-        FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);
+        FBmp.DrawLineAntialias(Snap(cx), b, Snap(cx), t, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, t + h * 0.35),
-          PointF(cx, t), PointF(r - w * 0.25, t + h * 0.35)], px, th);
+          PointF(Snap(cx), t), PointF(r - w * 0.25, t + h * 0.35)], px, th);
       end;
     tgArrowDown:
       begin
-        FBmp.DrawLineAntialias(cx, t, cx, b, px, th, True);
+        FBmp.DrawLineAntialias(Snap(cx), t, Snap(cx), b, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, b - h * 0.35),
-          PointF(cx, b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
+          PointF(Snap(cx), b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
       end;
     tgArrowLeft:
       begin
-        FBmp.DrawLineAntialias(r, cy, l, cy, px, th, True);
+        FBmp.DrawLineAntialias(r, Snap(cy), l, Snap(cy), px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.35, t + h * 0.25),
-          PointF(l, cy), PointF(l + w * 0.35, b - h * 0.25)], px, th);
+          PointF(l, Snap(cy)), PointF(l + w * 0.35, b - h * 0.25)], px, th);
       end;
     tgArrowRight:
       begin
-        FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+        FBmp.DrawLineAntialias(l, Snap(cy), r, Snap(cy), px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(r - w * 0.35, t + h * 0.25),
-          PointF(r, cy), PointF(r - w * 0.35, b - h * 0.25)], px, th);
+          PointF(r, Snap(cy)), PointF(r - w * 0.35, b - h * 0.25)], px, th);
       end;
     { Filled triangles. Base m, height 0.6*m -- the 5:3 proportion the Windows spin part uses,
       kept as a ratio so the shape is the same at every density instead of a fixed 5x3 that
       would vanish on a 200% display. Centred on the glyph box, so a caller that squares its
       button half (TySquareGlyphBox) gets the same triangle up and down. }
+    { #196: the flat side lies on a pixel boundary (Round(..) + 0.5, pixel centres being whole):
+      anywhere else that whole row is partly covered and the triangle's foot looks soft. }
     tgTriangleUp:
       FBmp.FillPolyAntialias([PointF(cx, cy - m * 0.3),
-        PointF(cx + m * 0.5, cy + m * 0.3), PointF(cx - m * 0.5, cy + m * 0.3)], px);
+        PointF(cx + m * 0.5, Round(cy + m * 0.3 - 0.5) + 0.5),
+        PointF(cx - m * 0.5, Round(cy + m * 0.3 - 0.5) + 0.5)], px);
     tgTriangleDown:
       FBmp.FillPolyAntialias([PointF(cx, cy + m * 0.3),
-        PointF(cx - m * 0.5, cy - m * 0.3), PointF(cx + m * 0.5, cy - m * 0.3)], px);
+        PointF(cx - m * 0.5, Round(cy - m * 0.3 - 0.5) + 0.5),
+        PointF(cx + m * 0.5, Round(cy - m * 0.3 - 0.5) + 0.5)], px);
     tgTriangleLeft:
       FBmp.FillPolyAntialias([PointF(cx - m * 0.3, cy),
-        PointF(cx + m * 0.3, cy - m * 0.5), PointF(cx + m * 0.3, cy + m * 0.5)], px);
+        PointF(Round(cx + m * 0.3 - 0.5) + 0.5, cy - m * 0.5),
+        PointF(Round(cx + m * 0.3 - 0.5) + 0.5, cy + m * 0.5)], px);
     tgTriangleRight:
       FBmp.FillPolyAntialias([PointF(cx + m * 0.3, cy),
-        PointF(cx - m * 0.3, cy + m * 0.5), PointF(cx - m * 0.3, cy - m * 0.5)], px);
+        PointF(Round(cx - m * 0.3 - 0.5) + 0.5, cy + m * 0.5),
+        PointF(Round(cx - m * 0.3 - 0.5) + 0.5, cy - m * 0.5)], px);
     tgDialogLauncher:
       begin
         // Office group dialog-launcher: a diagonal arrow into the bottom-right corner.
@@ -4541,7 +4902,7 @@ begin
       if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
       mask := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
       try
-        mask.FillRoundRectAntialias(0, 0, w - 1, h - 1, r, r, BGRAWhite, opts);
+        mask.FillRoundRectAntialias(-0.5, -0.5, w - 0.5, h - 0.5, r, r, BGRAWhite, opts);   // #196: every pixel of the rect
         temp.ApplyMask(mask);
       finally
         mask.Free;
@@ -4550,6 +4911,106 @@ begin
     FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;
+  end;
+end;
+
+function TTyPainter.CornerRadiusAt(const ARect: TRect; const ACorners: TTyCorners;
+  out AOptions: TRoundRectangleOptions): Integer;
+begin
+  { Max corner radius + per-corner squaring, exactly as FillBackground computes. }
+  Result := ACorners.TL;
+  if ACorners.TR > Result then Result := ACorners.TR;
+  if ACorners.BR > Result then Result := ACorners.BR;
+  if ACorners.BL > Result then Result := ACorners.BL;
+  Result := TyClampRadiusPx(Scale(Result), ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  AOptions := [];
+  if ACorners.TL <= 0 then Include(AOptions, rrTopLeftSquare);
+  if ACorners.TR <= 0 then Include(AOptions, rrTopRightSquare);
+  if ACorners.BR <= 0 then Include(AOptions, rrBottomRightSquare);
+  if ACorners.BL <= 0 then Include(AOptions, rrBottomLeftSquare);
+end;
+
+function TTyPainter.KeepCornerGround(const ARect: TRect; const ACorners: TTyCorners): TBGRABitmap;
+var
+  R: TRect;
+  rad, mx, my, x, y: Integer;
+  opts: TRoundRectangleOptions;
+begin
+  Result := nil;
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    if FBmp = nil then Exit;
+    rad := CornerRadiusAt(R, ACorners, opts);
+    if rad <= 0 then Exit;
+    { 2r x 2r: the four corner squares side by side, which is also the shape of the mask below. }
+    Result := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    for my := 0 to 2 * rad - 1 do
+      for mx := 0 to 2 * rad - 1 do
+      begin
+        if mx < rad then x := R.Left + mx else x := R.Right - 2 * rad + mx;
+        if my < rad then y := R.Top + my else y := R.Bottom - 2 * rad + my;
+        Result.SetPixel(mx, my, FBmp.GetPixel(x, y));
+      end;
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.LayCornerGround(const ARect: TRect; const ACorners: TTyCorners; AGround: TBGRABitmap;
+  ABehindBorder: Boolean);
+var
+  R, clip: TRect;
+  rad, mx, my, x, y: Integer;
+  opts: TRoundRectangleOptions;
+  mask, top: TBGRABitmap;
+  c: TBGRAPixel;
+
+  procedure CornerAt(AMx, AMy: Integer; out AX, AY: Integer);
+  begin
+    if AMx < rad then AX := R.Left + AMx else AX := R.Right - 2 * rad + AMx;
+    if AMy < rad then AY := R.Top + AMy else AY := R.Bottom - 2 * rad + AMy;
+  end;
+
+begin
+  if AGround = nil then Exit;
+  if RasterEnter then R := Dev(ARect) else R := ARect;
+  try
+    if FBmp = nil then Exit;
+    rad := CornerRadiusAt(R, ACorners, opts);
+    if (rad <= 0) or (AGround.Width <> 2 * rad) or (AGround.Height <> 2 * rad) then Exit;
+    mask := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    top := TBGRABitmap.Create(2 * rad, 2 * rad, BGRAPixelTransparent);
+    try
+      if ABehindBorder then
+        mask.FillRoundRectAntialias(0, 0, 2 * rad - 1, 2 * rad - 1, rad - 0.5, rad - 0.5, BGRAWhite, opts)
+      else
+        mask.FillRoundRectAntialias(-0.5, -0.5, 2 * rad - 0.5, 2 * rad - 0.5, rad, rad, BGRAWhite, opts);
+      { The content, cut by the arc, laid on the ground: what filling the rounded shape would have
+        done, by the same blend, so an edge the content did not touch is the plain frame's edge. }
+      for my := 0 to 2 * rad - 1 do
+        for mx := 0 to 2 * rad - 1 do
+        begin
+          CornerAt(mx, my, x, y);
+          c := FBmp.GetPixel(x, y);
+          c.alpha := (c.alpha * mask.GetPixel(mx, my).alpha + 127) div 255;
+          top.SetPixel(mx, my, c);
+        end;
+      AGround.PutImage(0, 0, top, dmDrawWithTransparency);
+      clip := FBmp.ClipRect;
+      for my := 0 to 2 * rad - 1 do
+        for mx := 0 to 2 * rad - 1 do
+        begin
+          if mask.GetPixel(mx, my).alpha = 255 then Continue;
+          CornerAt(mx, my, x, y);
+          if (x < clip.Left) or (x >= clip.Right) or (y < clip.Top) or (y >= clip.Bottom) then Continue;
+          FBmp.SetPixel(x, y, AGround.GetPixel(mx, my));
+        end;
+    finally
+      top.Free;
+      mask.Free;
+    end;
+  finally
+    RasterLeave;
   end;
 end;
 
@@ -4597,8 +5058,8 @@ begin
   if not IntersectRect(vis, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
   temp := TBGRABitmap.Create(vis.Right - vis.Left, vis.Bottom - vis.Top, TyColorToBGRA(AColor));
   try
-    temp.EraseRoundRectAntialias(ARect.Left - vis.Left, ARect.Top - vis.Top,
-      ARect.Left - vis.Left + w - 1, ARect.Top - vis.Top + h - 1, r, r, 255, opts);
+    temp.EraseRoundRectAntialias(ARect.Left - vis.Left - 0.5, ARect.Top - vis.Top - 0.5,
+      ARect.Left - vis.Left + w - 0.5, ARect.Top - vis.Top + h - 0.5, r, r, 255, opts);   // #196: the fill's own outline
     FBmp.PutImage(vis.Left, vis.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;

@@ -1711,7 +1711,7 @@ begin
     if (tpShadow in tipS.Present) and (TyAlphaOf(tipS.ShadowColor) > 0) then
       P.DropShadow(box, tipS.BorderRadius, tipS.ShadowColor, tipS.ShadowBlur, tipS.ShadowOffset);
     if tpBackground in tipS.Present then
-      P.FillBackground(box, tipS.Background, TyEffectiveCorners(tipS));
+      P.FillBackground(box, tipS.Background, TyEffectiveCorners(tipS), TyBorderVisible(tipS));
     if TyBorderVisible(tipS) then
       P.StrokeBorder(box, TyEffectiveCorners(tipS), tipS.BorderWidth, tipS.BorderColor);
 

@@ -19,9 +19,11 @@ unit tyControls.DB.Choices;
   TDBDateTimePicker is). The radio group and the segmented control have neither, so a change
   the dataset refuses is undone: the control goes back to the field.
 
-  CODE. Setting the value from code is not the user's edit -- except on the radio group, whose
-  only change notification is the one a click gives too (SelectionChanged), so setting its
-  ItemIndex or Value from code edits the field, as it does on LCL's TDBRadioGroup.
+  CODE. Setting the value from code -- State, Checked, ItemIndex, Value -- is an edit as a click
+  is (#184), as on LCL's TDBCheckBox and TDBRadioGroup: every change of the value goes through
+  one virtual of the base control (ChangeState, ChangeChecked, ChangeItemIndex, ChangeValue,
+  SelectionChanged), which tells a click from code no more than LCL's DoOnChange does, and is
+  refused the same way. Only DataChange's own load (FLoading) writes nothing back.
 
   NULL (plan D5): the check box shows cbGrayed, and writes NULL when AllowGrayed lets the user
   click to the grayed state; the switch shows off; the radio group and the segmented control
@@ -42,6 +44,7 @@ type
   TTyCustomDBCheckBox = class(TTyCustomCheckBox)
   private
     FDataLink: TFieldDataLink;
+    FLoading: Boolean;
     FInUserEdit: Boolean;
     FValueChecked: string;
     FValueUnchecked: string;
@@ -64,12 +67,13 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { Every change of State but a load from the field -- a click, Space, the accelerator, code
+      -- is an edit, asked for before the box flips. }
+    procedure ChangeState(AValue: TCheckBoxState); override;
     property Checked stored False;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { Every way the user toggles a check box -- a click, Space, its accelerator -- ends here. }
-    procedure Click; override;
     function ExecuteAction(AAction: TBasicAction): Boolean; override;
     function UpdateAction(AAction: TBasicAction): Boolean; override;
     property Field: TField read GetField;
@@ -151,10 +155,12 @@ type
   end;
 
   { A switch bound to a field: TTyDBCheckBox's mapping without the grayed state. NULL, or a text
-    in neither list, shows off. A click, Space and Enter all toggle it, and all three ask first. }
+    in neither list, shows off. A click, Space and Checked set from code all toggle it, and all
+    ask first. }
   TTyCustomDBToggleSwitch = class(TTyCustomToggleSwitch)
   private
     FDataLink: TFieldDataLink;
+    FLoading: Boolean;
     FInUserEdit: Boolean;
     FValueChecked: string;
     FValueUnchecked: string;
@@ -179,12 +185,16 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    { Space and Enter toggle the base switch without going through Click. }
+    { A Space the dataset would refuse is dropped before it arms the key-up toggle. }
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { Every change of Checked but a load from the field is an edit, asked for before the switch
+      flips. }
+    procedure ChangeChecked(AValue: Boolean); override;
     property Checked stored False;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Refused before the switch flips, so that no OnClick fires either. }
     procedure Click; override;
     function ExecuteAction(AAction: TBasicAction): Boolean; override;
     function UpdateAction(AAction: TBasicAction): Boolean; override;
@@ -271,6 +281,8 @@ type
     FLoading: Boolean;
     FInUserEdit: Boolean;
     FValues: TStringList;
+    { The base control's own handler of an Items change, which rebuilds the buttons. }
+    FBaseItemsChanged: TNotifyEvent;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -281,6 +293,9 @@ type
     function GetValues: TStrings;
     procedure SetValues(AValue: TStrings);
     procedure ValuesChanged(Sender: TObject);
+    { Items changed: the buttons are rebuilt, then the field's option selected again -- the
+      base control keeps the old selection by caption, which may stand for another value now. }
+    procedure FieldItemsChanged(Sender: TObject);
     function GetValue: string;
     procedure SetValue(const AValue: string);
     function IndexOfValue(const AValue: string): Integer;
@@ -393,13 +408,16 @@ type
   end;
 
   { A segmented control bound to a field: TTyDBRadioGroup's mapping (Values, Value) on one
-    row of segments. A click or an arrow key that moves the selection is the user's edit;
-    setting ItemIndex or Value from code is not. }
+    row of segments. A click, an arrow key or ItemIndex or Value set from code that moves the
+    selection is an edit. }
   TTyCustomDBSegmented = class(TTyCustomSegmented)
   private
     FDataLink: TFieldDataLink;
+    FLoading: Boolean;
     FInUserEdit: Boolean;
     FValues: TStringList;
+    { The base control's own handler of an Items change, which keeps the selected index. }
+    FBaseItemsChanged: TNotifyEvent;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -410,19 +428,20 @@ type
     function GetValues: TStrings;
     procedure SetValues(AValue: TStrings);
     procedure ValuesChanged(Sender: TObject);
+    { Items changed: the field's segment is selected again, as for a Values change. }
+    procedure FieldItemsChanged(Sender: TObject);
     function GetValue: string;
     procedure SetValue(const AValue: string);
     function IndexOfValue(const AValue: string): Integer;
-    { The selection moved under the user's hand (it was ABefore). }
-    procedure UserMoved(ABefore: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { Every change of ItemIndex but a load from the field is an edit; one the dataset refuses
+      is undone, the field's segment selected again. }
+    procedure ChangeItemIndex(AValue: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -503,13 +522,14 @@ type
   end;
 
   { A star rating bound to a number field (AsFloat). With AllowHalf off it shows, and so
-    writes, whole stars: a field's 3.5 shows as 4 (it is written back only when the user
-    changes the rating). No stars is NULL: a NULL field shows none, and clearing the rating to
+    writes, whole stars: a field's 3.5 shows as 4 (it is written back only when the rating is
+    changed). No stars is NULL: a NULL field shows none, and clearing the rating to
     none writes NULL -- or 0 when the field is Required. The base control's own ReadOnly is on
     while this ReadOnly is, or while the field cannot be changed. }
   TTyCustomDBRating = class(TTyCustomRating)
   private
     FDataLink: TFieldDataLink;
+    FLoading: Boolean;
     FInUserEdit: Boolean;
     function GetDataField: string;
     function GetDataSource: TDataSource;
@@ -518,10 +538,13 @@ type
     procedure SetDataField(const AValue: string);
     procedure SetDataSource(AValue: TDataSource);
     procedure SetReadOnly(AValue: Boolean);
+    function GetAllowHalf: Boolean;
+    { The base control's, then the field shown again at the new precision. }
+    procedure SetAllowHalf(AValue: Boolean);
     { The base control's ReadOnly := ours, or the field cannot be changed (LCL's
-      TDBDateTimePicker.CheckField does the same with CanModify). }
+      TDBDateTimePicker.CheckField does the same with CanModify), or no edit could begin --
+      AutoEdit off and the record not being edited (TyDBEditCanBegin). }
     procedure SyncReadOnly;
-    procedure UserMoved(ABefore: Double);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure LinkStateChange(Sender: TObject);
@@ -531,6 +554,10 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { Every change of Value but a load from the field is an edit, asked for before the stars
+      move: where the dataset cannot be edited a click finds the rating read-only, and a Value
+      set from code is dropped likewise. }
+    procedure ChangeValue(AValue: Double); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -540,6 +567,7 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property AllowHalf: Boolean read GetAllowHalf write SetAllowHalf default False;
     property Value stored False;
   end;
 
@@ -722,7 +750,12 @@ end;
 procedure TTyCustomDBCheckBox.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;   // the dataset entering dsEdit for the user's click
-  State := FieldState;
+  FLoading := True;
+  try
+    State := FieldState;
+  finally
+    FLoading := False;
+  end;
 end;
 
 procedure TTyCustomDBCheckBox.UpdateData(Sender: TObject);
@@ -740,16 +773,18 @@ begin
     f.AsString := TyDBFirstWord(FValueUnchecked);
 end;
 
-procedure TTyCustomDBCheckBox.Click;
-var
-  before: TCheckBoxState;
+procedure TTyCustomDBCheckBox.ChangeState(AValue: TCheckBoxState);
 begin
+  if FLoading or (FDataLink = nil) or (FDataLink.Field = nil)
+    or (csLoading in ComponentState) then
+  begin
+    inherited ChangeState(AValue);
+    Exit;
+  end;
   { Refused before the box flips: no OnChange, no OnClick for a change that cannot be kept. }
-  if (FDataLink.Field <> nil) and not TyDBEditAllowed(FDataLink, FInUserEdit) then Exit;
-  before := State;
-  inherited Click;
-  if (FDataLink.Field <> nil) and (State <> before) then
-    TyDBChoiceChanged(FDataLink, FInUserEdit);
+  if not TyDBEditAllowed(FDataLink, FInUserEdit) then Exit;
+  inherited ChangeState(AValue);
+  TyDBChoiceChanged(FDataLink, FInUserEdit);
 end;
 
 procedure TTyCustomDBCheckBox.CMGetDataLink(var Message: TLMessage);
@@ -883,7 +918,12 @@ end;
 procedure TTyCustomDBToggleSwitch.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
-  Checked := FieldChecked;
+  FLoading := True;
+  try
+    Checked := FieldChecked;
+  finally
+    FLoading := False;
+  end;
 end;
 
 procedure TTyCustomDBToggleSwitch.UpdateData(Sender: TObject);
@@ -900,29 +940,33 @@ begin
 end;
 
 procedure TTyCustomDBToggleSwitch.Click;
-var
-  before: Boolean;
 begin
   if not FlipAllowed then Exit;
-  before := Checked;
   inherited Click;
-  if (FDataLink.Field <> nil) and (Checked <> before) then
-    TyDBChoiceChanged(FDataLink, FInUserEdit);
 end;
 
 procedure TTyCustomDBToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
-var
-  before: Boolean;
 begin
-  if ((Key = VK_SPACE) or (Key = VK_RETURN)) and Enabled and not FlipAllowed then
+  { #144: Space only; Enter is not the switch's key and goes on to the form. }
+  if (Key = VK_SPACE) and Enabled and not FlipAllowed then
   begin
     Key := 0;
     Exit;
   end;
-  before := Checked;
   inherited KeyDown(Key, Shift);
-  if (FDataLink.Field <> nil) and (Checked <> before) then
-    TyDBChoiceChanged(FDataLink, FInUserEdit);
+end;
+
+procedure TTyCustomDBToggleSwitch.ChangeChecked(AValue: Boolean);
+begin
+  if FLoading or (FDataLink = nil) or (FDataLink.Field = nil)
+    or (csLoading in ComponentState) then
+  begin
+    inherited ChangeChecked(AValue);
+    Exit;
+  end;
+  if not TyDBEditAllowed(FDataLink, FInUserEdit) then Exit;
+  inherited ChangeChecked(AValue);
+  TyDBChoiceChanged(FDataLink, FInUserEdit);
 end;
 
 procedure TTyCustomDBToggleSwitch.CMGetDataLink(var Message: TLMessage);
@@ -957,6 +1001,8 @@ begin
   ControlStyle := ControlStyle + [csReplicatable];
   FValues := TStringList.Create;
   FValues.OnChange := @ValuesChanged;
+  FBaseItemsChanged := TStringList(Items).OnChange;
+  TStringList(Items).OnChange := @FieldItemsChanged;
   FDataLink := TFieldDataLink.Create;
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
@@ -1025,6 +1071,12 @@ end;
 procedure TTyCustomDBRadioGroup.ValuesChanged(Sender: TObject);
 begin
   if (FDataLink <> nil) and (FDataLink.Field <> nil) then DataChange(Self);
+end;
+
+procedure TTyCustomDBRadioGroup.FieldItemsChanged(Sender: TObject);
+begin
+  if Assigned(FBaseItemsChanged) then FBaseItemsChanged(Sender);
+  ValuesChanged(Sender);
 end;
 
 function TTyCustomDBRadioGroup.ButtonValue(AIndex: Integer): string;
@@ -1116,6 +1168,8 @@ begin
   ControlStyle := ControlStyle + [csReplicatable];
   FValues := TStringList.Create;
   FValues.OnChange := @ValuesChanged;
+  FBaseItemsChanged := TStringList(Items).OnChange;
+  TStringList(Items).OnChange := @FieldItemsChanged;
   FDataLink := TFieldDataLink.Create;
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
@@ -1186,6 +1240,12 @@ begin
   if (FDataLink <> nil) and (FDataLink.Field <> nil) then DataChange(Self);
 end;
 
+procedure TTyCustomDBSegmented.FieldItemsChanged(Sender: TObject);
+begin
+  if Assigned(FBaseItemsChanged) then FBaseItemsChanged(Sender);
+  ValuesChanged(Sender);
+end;
+
 function TTyCustomDBSegmented.ButtonValue(AIndex: Integer): string;
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then
@@ -1216,10 +1276,15 @@ end;
 procedure TTyCustomDBSegmented.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
-  if FDataLink.Field = nil then
-    ItemIndex := -1
-  else
-    ItemIndex := IndexOfValue(FDataLink.Field.Text);
+  FLoading := True;
+  try
+    if FDataLink.Field = nil then
+      ItemIndex := -1
+    else
+      ItemIndex := IndexOfValue(FDataLink.Field.Text);
+  finally
+    FLoading := False;
+  end;
 end;
 
 procedure TTyCustomDBSegmented.UpdateData(Sender: TObject);
@@ -1230,28 +1295,12 @@ begin
     FDataLink.Field.Text := ButtonValue(ItemIndex);
 end;
 
-procedure TTyCustomDBSegmented.UserMoved(ABefore: Integer);
+procedure TTyCustomDBSegmented.ChangeItemIndex(AValue: Integer);
 begin
-  if (ItemIndex = ABefore) or (FDataLink.Field = nil) then Exit;
+  inherited ChangeItemIndex(AValue);
+  if FLoading or FInUserEdit or (csLoading in ComponentState) or (FDataLink = nil)
+    or (FDataLink.Field = nil) then Exit;
   TyDBChoiceChanged(FDataLink, FInUserEdit);
-end;
-
-procedure TTyCustomDBSegmented.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-var
-  before: Integer;
-begin
-  before := ItemIndex;
-  inherited MouseDown(Button, Shift, X, Y);
-  UserMoved(before);
-end;
-
-procedure TTyCustomDBSegmented.KeyDown(var Key: Word; Shift: TShiftState);
-var
-  before: Integer;
-begin
-  before := ItemIndex;
-  inherited KeyDown(Key, Shift);
-  UserMoved(before);
 end;
 
 procedure TTyCustomDBSegmented.CMGetDataLink(var Message: TLMessage);
@@ -1343,10 +1392,30 @@ begin
   SyncReadOnly;
 end;
 
+function TTyCustomDBRating.GetAllowHalf: Boolean;
+begin
+  Result := TTyCustomRating(Self).AllowHalf;
+end;
+
+procedure TTyCustomDBRating.SetAllowHalf(AValue: Boolean);
+begin
+  if AValue = AllowHalf then Exit;
+  { The base snaps Value off its half star through ChangeValue; that is a way of showing the
+    field, not an edit of it, so it must not write the record. DataChange then reads the field
+    again as the new setting shows it. }
+  FLoading := True;
+  try
+    TTyCustomRating(Self).AllowHalf := AValue;
+  finally
+    FLoading := False;
+  end;
+  if FDataLink.Field <> nil then DataChange(Self);
+end;
+
 procedure TTyCustomDBRating.SyncReadOnly;
 begin
   TTyCustomRating(Self).ReadOnly := FDataLink.ReadOnly
-    or ((FDataLink.Field <> nil) and not FDataLink.CanModify);
+    or ((FDataLink.Field <> nil) and not TyDBEditCanBegin(FDataLink));
 end;
 
 procedure TTyCustomDBRating.LinkStateChange(Sender: TObject);
@@ -1367,7 +1436,12 @@ begin
     v := TyDBReadNumber(FDataLink.Field);
     if not AllowHalf then v := Floor(v + 0.5);   // whole stars, half up
   end;
-  Value := v;
+  FLoading := True;
+  try
+    Value := v;
+  finally
+    FLoading := False;
+  end;
 end;
 
 procedure TTyCustomDBRating.UpdateData(Sender: TObject);
@@ -1378,28 +1452,29 @@ begin
     TyDBWriteNumber(FDataLink.Field, Value);
 end;
 
-procedure TTyCustomDBRating.UserMoved(ABefore: Double);
-begin
-  if (Value = ABefore) or (FDataLink.Field = nil) then Exit;
-  TyDBChoiceChanged(FDataLink, FInUserEdit);
-end;
-
 procedure TTyCustomDBRating.KeyDown(var Key: Word; Shift: TShiftState);
-var
-  before: Double;
 begin
-  before := Value;
+  SyncReadOnly;   // AutoEdit may have changed since, and a data source does not say so
   inherited KeyDown(Key, Shift);
-  UserMoved(before);
 end;
 
 procedure TTyCustomDBRating.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-var
-  before: Double;
 begin
-  before := Value;
+  SyncReadOnly;
   inherited MouseDown(Button, Shift, X, Y);
-  UserMoved(before);
+end;
+
+procedure TTyCustomDBRating.ChangeValue(AValue: Double);
+begin
+  if FLoading or (FDataLink = nil) or (FDataLink.Field = nil)
+    or (csLoading in ComponentState) then
+  begin
+    inherited ChangeValue(AValue);
+    Exit;
+  end;
+  if not TyDBEditAllowed(FDataLink, FInUserEdit) then Exit;
+  inherited ChangeValue(AValue);
+  TyDBChoiceChanged(FDataLink, FInUserEdit);
 end;
 
 procedure TTyCustomDBRating.CMGetDataLink(var Message: TLMessage);

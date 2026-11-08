@@ -1728,7 +1728,9 @@ procedure TCheckBoxMeasureMemoTest.TestMeasureMatchesTheDirectMeasureWhereTheRen
 { The captions above at the fonts captionfit probes, on both controls, against the direct
   measure (which keeps the renderer's width when it is larger). The direct measure counts
   the configurations the renderer won; with none, nothing here could tell a measurement
-  that dropped the renderer max from one that kept it, and the test fails saying so. }
+  that dropped the renderer max from one that kept it, and the test fails saying so. On Windows
+  the two have measured alike since #199, so the renderer is put back in the quality it won in;
+  Cocoa, Qt and GTK still disagree. }
 var
   F: TForm;
   C: TTyCheckBoxAccess;
@@ -1737,6 +1739,10 @@ var
   tag: string;
 begin
   F := TForm.CreateNew(nil);
+  {$IFDEF LCLWin32}
+  TyGdiTextQualityForTest(fqCleartypeNatural);
+  TyInvalidateTextMeasureCache;
+  {$ENDIF}
   try
     C := TTyCheckBoxAccess.Create(F);
     C.Parent := F;
@@ -1782,6 +1788,10 @@ begin
     AssertTrue('precondition: the renderer measures some caption wider than the canvas ' +
       'in at least one of the probed fonts', GDirectRendererWins > 0);
   finally
+    {$IFDEF LCLWin32}
+    TyGdiTextQualityForTest(fqDefault);
+    TyInvalidateTextMeasureCache;
+    {$ENDIF}
     F.Free;
   end;
 end;

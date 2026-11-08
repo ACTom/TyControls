@@ -364,7 +364,7 @@ end;
 
 function TSpinProbe.Buffer: string;
 begin
-  Result := FEditText;
+  Result := Text;
 end;
 
 procedure TSpinProbe.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

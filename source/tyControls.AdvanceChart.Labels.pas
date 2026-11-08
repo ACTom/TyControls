@@ -155,6 +155,11 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
+    { [R7-Y] the font zrender joins from it (makeFont) is one the canvas
+      refuses -- a fontStyle / fontWeight that is no CSS word, a fontSize
+      string with a unit that is no length: the text is drawn in the font
+      the canvas had (TyCanvasRunStep) }
+    FontLeft: Boolean;
     { When False the ink is Colour. When True it is chosen from the host's own
       fill, the way an unset label.color is. }
     AutoColour: Boolean;
@@ -2201,6 +2206,7 @@ begin
     cap.Caption.FontName := spec.FontName;
     cap.Caption.FontSizeLogical := spec.FontSizeLogical;
     cap.Caption.FontWeight := spec.FontWeight;
+    if spec.FontLeft then cap.CanvasFlags := cap.CanvasFlags or cTyCanvasFontLeft;
     cap.Caption.X := x;
     cap.Caption.Y := y;
     cap.Caption.AnchorH := ah;

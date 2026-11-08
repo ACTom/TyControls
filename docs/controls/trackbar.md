@@ -34,7 +34,7 @@ uses tyControls.TrackBar;
 | `Position` | `Integer` | `0` | 当前值，范围 `[Min, Max]`，赋值时自动夹紧；若值真正变化则触发 `OnChange` 和重绘。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 滑块方向：`toHorizontal`（水平，默认；左=Min、右=Max）/ `toVertical`（垂直）。**垂直约定：顶部为 `Max`，值向上增大**（即向上拖动/方向键增大 `Position`）。赋值时若当前宽高与新方向不符会**自动对调宽高**（与 LCL 一致），随后重绘；流式载入期间（`csLoading`）不动，`.lfm` 里写死的尺寸优先。 |
 | `Frequency` | `Integer` | `1` | 刻度线（tick marks）间隔，单位为值（value-units）。默认 `1` = 每个值单位一条刻度（与原生 `TTrackBar` 一致，开箱即可见刻度）；`0` = **不绘制刻度**。负值被夹为 0。 |
-| `Reversed` | `Boolean` | `False` | **（API parity 新增）** 在**不改方向**的前提下翻转值轴：水平条从左到右递**减**，或垂直条把 `Min` 放到顶部。早前方向是写死在 `Orientation` 上的（垂直=反向、水平=正向），四种配置里有两种根本取不到。**垂直轴上与 LCL 有意不同**，见第 8 节第 12 条。 |
+| `Reversed` | `Boolean` | `False` | **（API parity 新增）** 在**不改方向**的前提下翻转值轴：水平条从左到右递**减**，或垂直条把 `Min` 放到顶部。早前方向是写死在 `Orientation` 上的（垂直=反向、水平=正向），四种配置里有两种根本取不到。**垂直轴上与 LCL 有意不同**，见第 8 节第 12 条。按键和滚轮跟着屏幕走，翻转后改变 `Position` 的方向相反，见第 5 节。 |
 | `TickMarks` | `TTyTrackTickMark` | `ttmBottomRight` | **（API parity 新增）** 刻度画在轨道哪一侧：`ttmBottomRight`（水平在下 / 垂直在右，默认）/ `ttmTopLeft` / `ttmBoth`。与 LCL `TTickMark` 同义同默认（`comctrls.pp:2795`）。 |
 | `TickStyle` | `TTyTrackTickStyle` | `ttsAuto` | **（API parity 新增）** 刻度怎么生成：`ttsAuto`（每 `Frequency` 个值单位一条，默认）/ `ttsNone`（不画）/ `ttsManual`（**只**画 `SetTick` 手工放的那几条）。与 LCL `TTickStyle` 同义同默认（`comctrls.pp:2796`）。`Frequency = 0` 仍然能关掉自动刻度，旧写法不变。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
@@ -96,7 +96,17 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 | 鼠标左键释放 | — | — | 结束拖动 |
 | 鼠标滚轮 | — | — | **（API parity 新增）** 滚轮上滚 `Position += LineSize`、下滚 `-= LineSize`（与原生 LCL `TTrackBar` 一致：上滚增大，与 ScrollBar 相反）；经 `SetPosition` 触发 `OnChange`。`Enabled = False` 时忽略。 |
 
-> **注意：** 垂直方向上 `↑` 增大、`↓` 减小（顶部=Max）；四个方向键在两种方向下都起作用，`↑`/`→` 始终增大、`↓`/`←` 始终减小，按键不会漏给窗体让焦点跑掉；`PageUp` 始终增大、`PageDown` 始终减小，与方向无关。每个被处理的按键消费后不再传递（`Key := 0`）。
+> **注意：** 垂直方向上 `↑` 增大、`↓` 减小（顶部=Max）；四个方向键在两种方向下都起作用，`↑`/`→` 始终增大、`↓`/`←` 始终减小，按键不会漏给窗体让焦点跑掉；`PageUp` 始终增大、`PageDown` 始终减小，与方向无关。上面说的都是没翻转的条。每个被处理的按键消费后不再传递（`Key := 0`）。
+
+**`Reversed = True` 时按键和滚轮跟着屏幕走。** 每个键、滚轮每一格让滑块在屏幕上往哪边走，和同方向没翻转的条完全一样，所以改变 `Position` 的方向正好相反：
+
+- 横排翻转后按 `→`，滑块往右走，`Position` 减小；按 `←` 往左走，`Position` 增大。
+- 竖排翻转后按 `↑`，滑块往上走，`Position` 减小；按 `↓` 往下走，`Position` 增大。
+- `PageUp` / `PageDown` 同理：`PageUp` 还是让滑块往右（竖排往上）走，翻转后 `Position` 减小。
+- `Home` 把滑块送到没翻转时它去的那一头（横排左端、竖排底端），翻转后那一头是 `Max`；`End` 送到另一头，是 `Min`。
+- 滚轮上滚还是让滑块往右（竖排往上）走，翻转后 `Position` 减小。
+
+这和 LCL 的 `TTrackBar` 在 Windows 上一样：Windows 的原生滑块本身不翻转，LCL 只是把位置镜像过去，所以翻不翻转，按键都按屏幕方向走。
 
 > **基线事件集：** 除 `OnChange` 外，TTyTrackBar 还暴露全部**基线事件**（Tier A + Tier B），见 [../events.md](../events.md)。TrackBar **无** `OnScroll` 事件（与 ScrollBar 不同），位置变化统一通过 `OnChange` 通知。
 
@@ -243,4 +253,4 @@ end;
 9. **刻度由 Frequency 驱动：** 默认 `Frequency = 1`（每个值单位一条刻度，与原生 `TTrackBar` 一致）；置 `0` 才不绘制刻度。颜色取自主题 `TyTrackBar` 的 `color`。以前默认是 `0`，于是拖一个滑块到窗体上看到的是一条光秃秃的轨道，刻度看起来像没实现，而不像被关掉了。
 10. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（方向键/翻页/Home/End/赋值）时滑块缓动到新位置（约 120ms），**拖动 / 点击定位则始终瞬时跟手**；headless / 设计器下瞬间吸附。详见上文「状态过渡动画」。
 11. **`AutoSize` 现在有东西可问（API parity 新增）：** 控件实现了 `CalculatePreferredSize`，**只答跨轴**（水平条答高度、垂直条答宽度，主轴返回 `0` = 该轴无意见）——与 LCL `ShouldAutoAdjust` 的切分一致（`include/trackbar.inc:95-107`）。轨道多长是窗体作者的事，多厚是主题的事：换一个刻度更长、内距更厚或读数字体更大的皮肤时，写死 `Height = 24` 的滑块会把刻度或读数裁掉。（`ShowValue` 的文字高度在绘制时量得并缓存，因此开了读数的控件在**第二次**布局时才稳定，与 `MainLen` 早就带着的首帧局限一样。）
-12. **`Reversed` 在垂直轴上与 LCL 不同（有意，有迁移路径）：** 本控件**未翻转**的垂直方向是顶部 = `Max`（音量推块），因为只有这样“向上 = 变大”对键盘、滚轮和拖动才同时成立（见第 6 条）；LCL/Win32 未翻转的垂直条是顶部 = `Min`。所以：**水平条与 LCL 完全一致**，垂直条正好相反。迁移：从 Lazarus 移植时，垂直条上的 `Reversed` 去掉，水平条上的原样保留。若改成跟随 LCL，现有每一个垂直 `TTyTrackBar` 都会静默倒过来，而且 `↑` 会变成向下拖滑块。
+12. **`Reversed` 在垂直轴上与 LCL 不同（有意，有迁移路径）：** 本控件**未翻转**的垂直方向是顶部 = `Max`（音量推块），因为只有这样“向上 = 变大”对键盘、滚轮和拖动才同时成立（见第 6 条）；LCL/Win32 未翻转的垂直条是顶部 = `Min`。所以水平条的值轴与 LCL 一致，垂直条正好相反。迁移：从 Lazarus 移植时，垂直条上的 `Reversed` 去掉，水平条上的原样保留。若改成跟随 LCL，现有每一个垂直 `TTyTrackBar` 都会静默倒过来，而且 `↑` 会变成向下拖滑块。按键和滚轮在翻转的条上跟着屏幕走（第 5 节），这条规则与 LCL 在 Windows 上一致。各个键往哪边走仍有本控件自己的约定：`PageUp` 往 `Max` 那头走，Windows 往左（竖排往上）走，见 [LCL 差异](../lcl-differences.md)；竖排的 `Home` 去底端，Windows 去顶端。

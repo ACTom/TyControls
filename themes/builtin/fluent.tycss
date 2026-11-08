@@ -9,6 +9,12 @@
 
 /* ── Mode-invariant scalars (geometry, opacity) ── */
 :root {
+  /* Table: no band, semibold caption, no separators, lines between rows only. */
+  --grid-header-bg: var(--grid-bg);
+  --grid-header-font-weight: 600;
+  --grid-header-separator-width: 0;
+  --grid-line-v-width: 0;
+  --grid-hover: row;
   --radius:       4px;
   --radius-check: 3px;
   --radius-pill:  100px;

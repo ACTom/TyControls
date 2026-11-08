@@ -76,7 +76,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 ### 3.4 不能改的时候
 
-`ReadOnly` 打开、字段不能改（只读字段、计算字段、自增字段），或者数据源的 `AutoEdit` 关着而记录又不在编辑中——这三种情况下用户的改动都不生效，控件显示的始终是字段的值，数据集也不会进入编辑。能事先拦住的就拦住：编辑框里的按键直接丢掉，复选框和开关点了不翻转（也不触发 `OnChange`），评分和日期时间框在这期间是只读的。拦不住的（单选组、分段、`csDropDownList` 下的组合框、列表框、图片）在改动之后马上改回字段的值。
+`ReadOnly` 打开、字段不能改（只读字段、计算字段、自增字段），或者数据源的 `AutoEdit` 关着而记录又不在编辑中——这三种情况下用户的改动都不生效，控件显示的始终是字段的值，数据集也不会进入编辑。能事先拦住的就拦住：编辑框里的按键直接丢掉，复选框和开关点了不翻转（也不触发 `OnChange`），评分和日期时间框在这期间是只读的。拦不住的（单选组、分段、`csDropDownList` 下的组合框、列表框、图片）在改动之后马上改回字段的值。程序给选择类控件设值时也一样：复选框、开关、评分保持原样（也不触发 `OnChange`），单选组和分段改回字段的值。
 
 ---
 
@@ -84,7 +84,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 ### 文本
 
-- **`TTyDBEdit`**：获得焦点并且可以编辑时显示 `Field.Text`，其余时候显示 `Field.DisplayText`（比如带 `DisplayFormat` 的数值字段，没焦点时显示格式化后的样子）。写回 `Field.Text := Text`。字符串字段、`MaxLength` 为 0 时取字段的 `Size`；对齐方式跟字段的 `Alignment`。
+- **`TTyDBEdit`**：获得焦点并且可以编辑时显示 `Field.Text`，其余时候显示 `Field.DisplayText`（比如带 `DisplayFormat` 的数值字段，没焦点时显示格式化后的样子）。写回 `Field.Text := Text`。字符串字段、`MaxLength` 为 0 时取字段的 `Size`；程序在绑定之后自己设的 `MaxLength` 保留，换行、换字段都不会被字段的 `Size` 盖掉。对齐方式跟字段的 `Alignment`。
 - **`TTyDBMaskEdit`**：`CustomEditMask` 为 False（默认，照 LCL）时用字段的 `EditMask`，为 True 时用控件自己的 `EditMask`。字段的掩码解析不了（比如一个可编辑位都没有）就不套掩码，不报错。
 - **`TTyDBMemo`**：备注（blob）字段用 `AsString` 装载，字段有 `OnGetText` / `OnSetText` 时用 `Text`。`AutoDisplay` 为 False 时先显示 `(字段名)` 这样的占位，按 Enter（或调用 `LoadMemo`）才装载，适合一屏显示很多大文本的场合。
 - **`TTyDBText`**：只读，显示 `Field.DisplayText`。设计期没绑字段时显示自己的 `Name`，运行时为空。
@@ -95,21 +95,21 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 ### 选择
 
-- **`TTyDBCheckBox`**：布尔字段走 `AsBoolean`。其他字段按 `ValueChecked` / `ValueUnchecked` 匹配字段文本：可以用 `;` 分隔多个词（如 `'Y;Yes'`），比较不分大小写，写回时用第一个词。默认值和 LCL 一样是 `BoolToStr(True)` / `BoolToStr(False)`，即 `'-1'` / `'0'`。
-- **`TTyDBToggleSwitch`**：值的对应规则同复选框，没有灰态。
-- **`TTyDBRadioGroup`、`TTyDBSegmented`**：第 i 项对应 `Values[i]`，`Values` 这一行为空时用 `Items[i]` 本身（照 LCL）。按 `Field.Text` 找到对应项选中，写回 `Field.Text`。字段值不在列表里就什么都不选（`ItemIndex = -1`）。public 的 `Value` 可以直接读写当前值。单选组只能从子按钮的选择变化知道用户点了什么，所以程序设 `ItemIndex` / `Value` 也会改字段，这一点和 LCL 的 `TDBRadioGroup` 相同。
-- **`TTyDBRating`**：数值字段，`AsFloat`。`AllowHalf` 关着时只显示、只写整星：字段里的 3.5 显示成 4，用户改了才写回。
+- **`TTyDBCheckBox`**：布尔字段走 `AsBoolean`。其他字段按 `ValueChecked` / `ValueUnchecked` 匹配字段文本：可以用 `;` 分隔多个词（如 `'Y;Yes'`），比较不分大小写，写回时用第一个词。默认值和 LCL 一样是 `BoolToStr(True)` / `BoolToStr(False)`，即 `'-1'` / `'0'`。程序设 `State` 或 `Checked` 也算编辑，马上写进记录，和 LCL 的 `TDBCheckBox` 相同。
+- **`TTyDBToggleSwitch`**：值的对应规则同复选框，没有灰态。程序设 `Checked` 或调用 `Toggle` 也算编辑。
+- **`TTyDBRadioGroup`、`TTyDBSegmented`**：第 i 项对应 `Values[i]`，`Values` 这一行为空时用 `Items[i]` 本身（照 LCL）。按 `Field.Text` 找到对应项选中，写回 `Field.Text`。字段值不在列表里就什么都不选（`ItemIndex = -1`）。程序改了 `Items`（比如打开数据集之后才填），会按字段的值重新选中。public 的 `Value` 可以直接读写当前值。程序设 `ItemIndex` / `Value` 也算编辑，马上写进记录，这一点和 LCL 的 `TDBRadioGroup` 相同。
+- **`TTyDBRating`**：数值字段，`AsFloat`。`AllowHalf` 关着时只显示、只写整星：字段里的 3.5 显示成 4，改了才写回。程序设 `Value` 也算编辑。绑定之后改 `AllowHalf`，按新的精度重新显示字段的值。
 
 ### 列表
 
 - **`TTyDBComboBox`**：显示 `Field.Text`（选中文字相同的那一项），写回控件的文字。`csDropDown` 下打字立刻进入编辑。程序设 `ItemIndex` 或 `Text` 也算编辑，和给 `TTyDBEdit` 设 `Text` 一样。组合框自己的 `ReadOnly` 只管得到可编辑的输入框，`csDropDownList` 下从列表选的改动会被改回去。
 - **`TTyDBListBox`**：选中 `Items.IndexOf(Field.Text)` 那一项，写回选中项的文字。程序设 `ItemIndex` 不算编辑。
-- **`TTyDBLookupComboBox`、`TTyDBLookupListBox`**：显示 `ListSource` 各行的 `ListField`，把选中行的 `KeyField` 写进 `DataField`；`DataField` 本身是查找字段（`fkLookup`）时用字段自己的定义。选中就写进记录。其他照 LCL：`ListFieldIndex`、`LookupCache`、`ScrollListDataset`、`KeyValue`（public，选中行的键；设它只选中行、不改字段，用于不绑 `DataSource` 当普通列表用的场合）、`EmptyValue` / `DisplayEmpty`（列表第一行放一个代表 `EmptyValue` 的空项）、`NullValueKey`（一个快捷键，按下就把字段清成 NULL，0 表示不用）。查找表增删行，列表跟着变。
+- **`TTyDBLookupComboBox`、`TTyDBLookupListBox`**：显示 `ListSource` 各行的 `ListField`，把选中行的 `KeyField` 写进 `DataField`；`DataField` 本身是查找字段（`fkLookup`）时用字段自己的定义。选中就写进记录。其他照 LCL：`ListFieldIndex`、`LookupCache`、`ScrollListDataset`（不绑 `DataSource` 时也有效：用户选哪一行，`ListSource` 的数据集就移到哪一行，可以拿来做主从表）、`KeyValue`（public，选中行的键；设它只选中行、不改字段，用于不绑 `DataSource` 当普通列表用的场合）、`EmptyValue` / `DisplayEmpty`（列表第一行放一个代表 `EmptyValue` 的空项）、`NullValueKey`（一个快捷键，按下就把字段清成 NULL，0 表示不用）。查找表增删行，列表跟着变。
 
 ### 其他
 
 - **`TTyDBImage`**：blob 字段里存图片文件本身的格式（PNG、BMP、JPEG……）。默认在前面加一个扩展名头，格式和 LCL 的 `TDBImage` 一样，两边写的数据可以互相读；`WriteHeader` 为 False 时不加。读的时候有头用头，没有就按内容识别；`OnDBImageRead` / `OnDBImageWrite` 让程序读写自己的头。程序给 `Picture` 赋值、`LoadFromFile`、`Clear` 都算用户的改动，马上写进记录，清空的图写成 NULL。`AutoDisplay`、`QuickDraw`（和 LCL 一样不起作用）、`PictureLoaded`、`LoadPicture` 照 LCL。
-- **`TTyDBDateTimePicker`**：`AsDateTime` 装载；日期字段只写日期部分，时间字段只写时间部分。不能改时下拉日历也打不开。在编辑中按 Esc 回到**字段**的值，而不是获得焦点时的值。
+- **`TTyDBDateTimePicker`**：`AsDateTime` 装载；字段里的值超出 `MinDate`..`MaxDate` 时照原样显示（照 LCL），用户不改就不写回；用户改了其中任何一段，整个值按范围收拢再写回。日期字段只写日期部分，时间字段只写时间部分。不能改时下拉日历也打不开。在编辑中按 Esc 回到**字段**的值，而不是获得焦点时的值。
 - **`TTyDBCalendar`**：显示字段的日期，超出 `MinDate`..`MaxDate` 时按范围显示，不抛异常。用户点某一天、用方向键或 PageUp/PageDown 换了日子都算编辑；点选确认、按 Enter / 空格、离开控件或别处 `Post` 时写回。日期时间字段保留原来的时刻。翻月不算编辑。
 - **`TTyDBNavigator`**：一排十个按钮（首条、上一条、下一条、末条、插入、删除、编辑、保存、取消、刷新），类型和名字都用 LCL `DBCtrls` 里的：`VisibleButtons`（默认全部）、`Direction`（横排 / 竖排）、`Hints`、`ShowButtonHints`、`Images`（`Images[Ord(按钮)]` 优先于内置图标）、`ConfirmDelete`（默认 True）、`BeforeAction`、`OnClick`，所以给 `TDBNavigator` 写的窗体属性读进来含义相同。按钮的可用规则照 LCL；刷新在数据集打开且不在编辑中时可用。删除确认是主题化的消息框，经 protected virtual `ConfirmDeleteRecord` 调用，子类可以换掉。从右往左的布局里首条按钮在右边。默认尺寸 241 × 25。
 
@@ -173,6 +173,7 @@ TyDBEdit { background: mix(var(--surface), var(--accent), 6%); }
 - **查找组合框默认 `csDropDownList`**（LCL 默认 `csDropDown`）：查找控件只该选列表里有的值。
 - **导航条不可聚焦。** 十个按钮是控件自己画的矩形，不是子窗口，所以没有 LCL 的 `Options`（`navFocusableButtons`）和 `Flat`，按住上一条 / 下一条也不会连续翻动。
 - **选择类控件和图片改了就写进记录。** LCL 的复选框和查找控件本来如此；LCL 的单选组要等 `EditingDone` 才写，图片要等 `Post`，而且图片在 LCL 里改了也不让数据集进入编辑。这里单选组和图片也是改了就写，开关、分段、评分同样处理。
+- **数据集不能编辑时，程序给复选框设的值事先就拦下。** LCL 的复选框这时先翻转、再改回字段的值，`OnChange` 照样触发；这里和用户点击一样，不翻转，也不触发 `OnChange` / `OnClick`，见 3.4。
 - **数值按数值读写。** LCL 只能用文本框绑数值字段；这里的数值控件用 `AsFloat` / `AsCurrency` / `AsInteger`，不受系统小数点影响。
 - **超出范围的值按范围显示。** 数值控件设了 `MinValue` / `MaxValue` 时，字段里越界的值按范围显示，用户不改就不写回。
 - **空值**按第 5 节的表处理。

@@ -5,6 +5,7 @@
 
 procedure TTyCustomTerminalView.SelectionChanged(Sender: TObject);
 begin
+  if FSelChangeMuted then Exit;
   if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
 end;
 
@@ -109,6 +110,8 @@ begin
     if LinkAt(cell.X, cell.Y, link) then
       lp := @link.Range;
   end;
+  { 单击会清掉选区:PRIMARY 留着原来的文字，等这次选完再换 }
+  KeepPrimary;
   { Shift 扩展只在程序没接管鼠标时(上游 _enabled && shiftKey);程序接管时 Shift 是覆盖键 }
   FSelection.Press(SelPointAt(X, Y), clicks, not Reporting and (ssShift in Shift), ColumnWanted(Shift), lp);
   if FSelection.Dragging then
@@ -142,7 +145,12 @@ begin
   { PRIMARY 只登记,文字等有人要时再取(一万行的选区松手时不必拼一遍);CopyOnSelect 才
     现在就要文字 }
   if FUsesPrimary then
+  begin
     OfferPrimary;
+    FPrimaryLive := True;
+    FPrimaryKept := False;
+    FPrimaryKeptText := '';
+  end;
   if FCopyOnSelect then
     WriteClipboardText(FSelection.Text(LineEnding));
 end;
@@ -175,6 +183,12 @@ procedure TTyCustomTerminalView.DragScrollTick;
 var
   n: Integer;
 begin
+  { #185: 键已经松开了，抬起却没来(模态框拿走了它):不再滚，照松开收尾 }
+  if not RouteButtonsHeld then
+  begin
+    ForgetPress;
+    Exit;
+  end;
   SyncSelectionTrim;
   n := FSelection.DragScrollAmount;
   if n <> 0 then
@@ -192,13 +206,28 @@ end;
 procedure TTyCustomTerminalView.SelectAll;
 begin
   SyncSelectionTrim;
-  FSelection.SelectAll;
+  { 已经是全选:选区没变,不报(上游的 selectAll 每次都报) }
+  FSelChangeMuted := FSelection.Model.IsSelectAllActive;
+  try
+    FSelection.SelectAll;
+  finally
+    FSelChangeMuted := False;
+  end;
 end;
 
 procedure TTyCustomTerminalView.ClearSelection;
 begin
+  KeepPrimary;
   StopDragTimer;
-  FSelection.Clear;
+  { 没有选区时照样清(按下了还没拖出选区的起点也要清掉),只是不报变化:换屏、改行数、
+    程序要鼠标、Reset 都走这里(上游的 clearSelection 每次都报) }
+  SyncSelectionTrim;
+  FSelChangeMuted := not FSelection.HasSelection;
+  try
+    FSelection.Clear;
+  finally
+    FSelChangeMuted := False;
+  end;
 end;
 
 { 宿主给的数钳进缓冲:列 0..Cols、行 0..最后一行、长度 0..到缓冲末尾(上游不查;长度
@@ -220,9 +249,22 @@ begin
   FSelection.SetSelection(ACol, AAbsRow, ALength);
 end;
 
+{ #185: 两头都钳进缓冲(上游只钳 AFirst < 0、ALast 过尾),先后颠倒的换过来;选区服务照上游
+  不动,上游轨迹回放靠它 }
 procedure TTyCustomTerminalView.SelectLines(AFirst, ALast: Integer);
+var
+  last: Integer;
 begin
   SyncSelectionTrim;
+  last := Max(FCore.Buffer.Lines.Length - 1, 0);
+  AFirst := EnsureRange(AFirst, 0, last);
+  ALast := EnsureRange(ALast, 0, last);
+  if AFirst > ALast then
+  begin
+    last := AFirst;
+    AFirst := ALast;
+    ALast := last;
+  end;
   FSelection.SelectLines(AFirst, ALast);
 end;
 

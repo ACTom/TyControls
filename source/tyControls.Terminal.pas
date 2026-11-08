@@ -280,6 +280,9 @@ type
     FRouteButton: TMouseButton;
     FReportHeld: set of TMouseButton;
     FRightReported, FRightLocal: Boolean;
+    { #185: 菜单先于右键按下到、已经因为程序要鼠标不弹了(有的 widgetset 按下时就发):随后
+      那次按下不再记 FRightReported,它不会再有菜单来清 }
+    FRightMenuAnswered: Boolean;
     { 在 LCL 的抬起消息里(它先放捕获、CaptureChanged 先于 MouseUp 到):这时的捕获变化不是
       「抬起丢了」 }
     FInButtonUp: Boolean;
@@ -298,6 +301,8 @@ type
     FCopyOnSelect: Boolean;
     FWordSeparators: string;
     FOnSelectionChange: TNotifyEvent;
+    { #185: 选区服务照上游清空、全选都报一次变化;没变的那次不转给 OnSelectionChange }
+    FSelChangeMuted: Boolean;
     { 链接:识别网址、非 http(s) 的 OSC 8 算不算链接;悬停的那条(按着链接键时)、按下时的
       那条、指针在不在控件里、上次悬停用的修饰键 }
     FDetectUrls, FAllowNonHttpLinks: Boolean;
@@ -449,8 +454,9 @@ type
       X, Y: Integer; Shift: TShiftState): Boolean;
     function OverrideIsAlt: Boolean;
     procedure UpdatePointer(Shift: TShiftState);
-    { 这次按下的路要的键还按着没有(HeldMouseButtons) }
+    { 这次按下的路要的键还按着没有(HeldMouseButtons;RouteButtonsIn 问给定的一组键) }
     function RouteButtonsHeld: Boolean;
+    function RouteButtonsIn(AHeld: TShiftState): Boolean;
     { 抬起丢了(捕获被拿走、失焦,键已经不在了):照 MouseUp 收尾——停自动滚、选区松开、
       上报路补发抬起、路复位;链接不激活、PRIMARY 不粘贴 }
     procedure ForgetPress;
@@ -490,12 +496,19 @@ type
     FIsMac, FIsWindows: Boolean;
     { 用不用 X11 的 PRIMARY(TyTerminalUsesPrimary);测试可以改 }
     FUsesPrimary: Boolean;
+    { #185: PRIMARY 答的是此刻的选区(FPrimaryLive),还是选区没了以后留下的那段文字
+      (FPrimaryKept / FPrimaryKeptText) }
+    FPrimaryLive, FPrimaryKept: Boolean;
+    FPrimaryKeptText: string;
     function ReadPrimaryText: string; virtual;
     { 选区成了 PRIMARY:只登记「有、是文字」,文字等有人要时才取(PrimaryRequestText);默认
       走 LCL 的 PrimarySelection.OnRequest(SynEdit 的做法) }
     procedure OfferPrimary; virtual;
-    { 有人要 PRIMARY 时给的:此刻的选区文字 }
+    { 有人要 PRIMARY 时给的:此刻的选区文字;选区已经没了，就是它没之前的文字 }
     function PrimaryRequestText: string;
+    { 选区要被清掉或换掉了:PRIMARY 正答着它，就先把文字留下(X11 惯例：新的选区来之前
+      PRIMARY 不变) }
+    procedure KeepPrimary;
     { 剪贴板里有没有文字(弹菜单时判「粘贴」,不读整段);默认 TyClipboardHasText }
     function ClipboardHasText: Boolean; virtual;
     { 此刻实际按着的鼠标键(ssLeft / ssMiddle / ssRight);默认按 GetKeyState 问 }
@@ -646,6 +659,9 @@ type
       columns. 4.0 does not publish ChildSizing; a form saved by 3.x that sets it opens, and the
       value is read past (TTyRetiredPaths). }
     procedure ReadState(Reader: TReader); override;
+    { #185: AutoSize -- no natural size (see the body) }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -912,6 +928,15 @@ const
   FloodCycleMs = 50;             { 输出一直排着时,解析加绘制一轮这么久(约 20 帧每秒) }
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
+
+procedure TTyCustomTerminalView.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { 没有「按内容」的尺寸(同 TTyMemo):答 0 x 0 就保持原来的边界。TWinControl 会按唯一的子控件
+    ——内嵌滚动条——定尺寸，终端缩成一条滚动条宽、PTY 收到 2 列 }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+end;
 
 procedure TTyCustomTerminalView.ReadState(Reader: TReader);
 var
@@ -3272,8 +3297,20 @@ end;
 
 function TTyCustomTerminalView.PrimaryRequestText: string;
 begin
+  if FPrimaryKept then
+    Exit(FPrimaryKeptText);
   SyncSelectionTrim;
   Result := FSelection.Text(LineEnding);
+end;
+
+procedure TTyCustomTerminalView.KeepPrimary;
+begin
+  if not FPrimaryLive then Exit;
+  SyncSelectionTrim;
+  if not FSelection.HasSelection then Exit;
+  FPrimaryKeptText := FSelection.Text(LineEnding);
+  FPrimaryKept := True;
+  FPrimaryLive := False;
 end;
 
 procedure TTyCustomTerminalView.PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);
@@ -3319,11 +3356,12 @@ end;
 { 修饰键按下 / 抬起:链接悬停与指针形状跟着变(指针没动也一样)。不改变按键的去向 }
 procedure TTyCustomTerminalView.ModifierChanged(AKey: Word; Shift: TShiftState);
 begin
-  if (AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN) or (AKey = VK_RWIN) then
+  { #185: 指针不在终端上(离开了，焦点还在这里)就不找链接:FLastMousePos 是离开前的位置 }
+  if FMouseInside and ((AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN)
+    or (AKey = VK_RWIN)) then
   begin
     UpdateHover(FLastMousePos.X, FLastMousePos.Y, Shift);
-    if FMouseInside then
-      UpdatePointer(Shift);
+    UpdatePointer(Shift);
   end;
 end;
 
@@ -3344,6 +3382,10 @@ begin
   if Key = 0 then Exit;
   { 输入法正在组字(CompositionHelper.ts:117-131 同一个意思):不动 }
   if (Key = TyVkImeProcess) or (Key = VK_PROCESSKEY) then Exit;
+  { #185: Windows 的 Alt+F4(关窗)、Alt+Space(系统菜单)要 DefWindowProc 看见这个键才成,
+    不编码(Windows Terminal、conhost 同);别处窗口管理器先拿走了，到不了这里 }
+  if FIsWindows and (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = [ssAlt])
+    and ((Key = VK_F4) or (Key = VK_SPACE)) then Exit;
   ev := TyTerminalKeyEventFromLCL(Key, Shift);
   ctrl := ssCtrl in Shift;
   alt := ssAlt in Shift;
@@ -3385,6 +3427,11 @@ begin
       end;
     end;
   end;
+  { #185: 只读时发出去的字节 Core 都挡掉(上游 disableStdin 挡在 triggerDataEvent 里):只会
+    被发的键就不吞，Tab 照常移焦点，Enter / Esc 到得了对话框的按钮(同只读的 TMemo);本地
+    动作照常 }
+  if (act = kaSend) and ReadOnly then
+    act := kaNone;
   { 没有动作:Key 原样往下走(窗体快捷键、Tab 导航照常) }
   if act = kaNone then Exit;
   { 有动作:先问宿主要不要放行给窗体 }
@@ -3395,8 +3442,6 @@ begin
   case act of
     kaSend:
       begin
-        { ReadOnly 不在这里判断:Core 把 OnData 挡掉(上游 disableStdin 同样挡在
-          triggerDataEvent 里),本地动作照常 }
         FCore.Input(r.Key, True);
         NoteActivity;
       end;
@@ -3419,6 +3464,13 @@ end;
 procedure TTyCustomTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
 begin
   ModifierChanged(Key, Shift);
+  { #185: 修饰键松开了，之后来的字符就不是带着它打的。Windows 的 Alt+小键盘码(Alt+0233 = é)
+    在 Alt 松开后才送字符，中间没有自己的 KeyDown:不能还按数字键那次的 Alt 丢掉它 }
+  case Key of
+    VK_MENU, VK_LMENU, VK_RMENU: Exclude(FLastKeyShift, ssAlt);
+    VK_CONTROL, VK_LCONTROL, VK_RCONTROL: Exclude(FLastKeyShift, ssCtrl);
+    VK_LWIN, VK_RWIN: Exclude(FLastKeyShift, ssMeta);
+  end;
   inherited KeyUp(Key, Shift);
   { 这个键的字符没来(widgetset 不送、或者按下时被别处拿走):别留给下一个键 }
   FKeyDownHandled := False;
@@ -3428,6 +3480,7 @@ procedure TTyCustomTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   full: string;
   ev: TTyTerminalKeyEvent;
+  ch: Char;
 begin
   { GTK3 把输入法的提交截断成一个 TUTF8Char 送来:整段还在 widgetset 手里,取那一段
     (Edit.pas 同一个绕行;其他 widgetset 上返回空串) }
@@ -3463,6 +3516,19 @@ begin
   begin
     UTF8Key := '';
     Exit;
+  end;
+  { #185: OnKeyPress 是 published 的:单字节的字符先给它(同 TEdit),置 #0 就不发、改了就发
+    改过的。下面清空了 UTF8Key,LCL 自己不会再调 KeyPress }
+  if Length(UTF8Key) = 1 then
+  begin
+    ch := UTF8Key[1];
+    KeyPress(ch);
+    if ch = #0 then
+    begin
+      UTF8Key := '';
+      Exit;
+    end;
+    UTF8Key := ch;
   end;
   FCore.Input(UTF8Key, True);
   NoteActivity;
@@ -3553,7 +3619,12 @@ end;
 procedure TTyCustomTerminalView.SetScrollback(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
+  if AValue = FCore.Scrollback then Exit;
   FCore.Scrollback := AValue;
+  { #185: 改小了会剪掉滚回头上的行;用户翻在上面时视口里换了别的行,Core 不报:重画,
+    选区跟着上移 }
+  SyncSelectionTrim;
+  DirtyAll;
   SyncScrollBar;
 end;
 

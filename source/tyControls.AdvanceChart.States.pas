@@ -503,6 +503,14 @@ begin
     if ATop.Has[k] then CopyKey(Result, ATop, k);
   if ATop.Has[stkFill] then Result.FillInherit := ATop.FillInherit
   else Result.FillInherit := ABase.FillInherit or ATop.FillInherit;
+  { [R7-Y] and its cap, join and miterLimit }
+  if ATop.CapWord > 0 then Result.CapWord := ATop.CapWord;
+  if ATop.JoinWord > 0 then Result.JoinWord := ATop.JoinWord;
+  if ATop.HasMiter then
+  begin
+    Result.HasMiter := True;
+    Result.Miter := ATop.Miter;
+  end;
 end;
 
 function TyStHasColour(const AObj: TTyStObject; AKey: TTyStKey): Boolean;
@@ -1100,22 +1108,33 @@ begin
   end;
 end;
 
+{ [R7-Y] a state's shadowColor as the canvas takes it: a colour; a string no
+  parser reads cTyCanvasColourLeft (refused: the one the canvas had); else
+  zrender's `|| '#000'` [was: '#000' for the unreadable string too] }
+function StShadowColourOf(AData: TJSONData): TTyChartColor;
+begin
+  Result := $FF000000;
+  if AData.JSONType <> jtString then Exit;
+  if not TyTryParseChartColor(AData.AsString, Result) then
+  begin
+    Result := $FF000000;
+    if AData.AsString <> '' then Result := cTyCanvasColourLeft;
+  end;
+end;
+
 procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
 var
   v: Double;
-  c: TTyChartColor;
 begin
   if (AData = nil) or (AData.JSONType = jtNull) then Exit;
   if AKey = stkShadowColor then
-  begin
-    if not ((AData.JSONType = jtString) and TyTryParseChartColor(AData.AsString, c)) then
-      c := $FF000000;
-    TyStSetColor(AObj, stkShadowColor, c);
-  end
+    TyStSetColor(AObj, stkShadowColor, StShadowColourOf(AData))
   else
   begin
     v := ShadowNumOf(AData);
-    if IsNan(v) or IsInfinite(v) or ((AKey = stkShadowBlur) and (v < 0)) then v := 0;
+    { [R7-Y] a blur below nought the canvas refuses, as an element's own:
+      kept negative for the paint order to settle [was: nought] }
+    if IsNan(v) or IsInfinite(v) then v := 0;
     TyStSetNum(AObj, AKey, v);
   end;
 end;
@@ -1132,7 +1151,6 @@ var
   i, k: Integer;
   d: TJSONData;
   v: Double;
-  c: TTyChartColor;
 begin
   SetLength(p, Length(APath) + 1);
   for i := 0 to High(APath) do p[i] := APath[i];
@@ -1142,15 +1160,12 @@ begin
     d := TyStFind(ANodes, p);
     if d = nil then Continue;
     if cSt[k] = stkShadowColor then
-    begin
-      if not ((d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c)) then
-        c := $FF000000;
-      TyStSetColor(AObj, stkShadowColor, c);
-    end
+      TyStSetColor(AObj, stkShadowColor, StShadowColourOf(d))
     else
     begin
       v := ShadowNumOf(d);
-      if IsNan(v) or IsInfinite(v) or ((cSt[k] = stkShadowBlur) and (v < 0)) then v := 0;
+      { [R7-Y] (a blur below nought kept, as above) }
+      if IsNan(v) or IsInfinite(v) then v := 0;
       TyStSetNum(AObj, cSt[k], v);
     end;
   end;
@@ -1220,9 +1235,8 @@ begin
   { and its phase (lineDashOffset), as the canvas takes it }
   if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
   v := TyOptPenOffset(TyStFind(ANodes, p));
-  { [R7-W] a state's phase the canvas refuses: nought here, as before (the
-    paint order settles only the elements' own) }
-  if TyPhaseLeft(v) then v := 0;
+  { [R7-Y] a phase the canvas refuses stays cTyCanvasPhaseLeft, which the
+    paint order settles [was: nought] }
   if not IsNan(v) then AStyle.DashOffsetLogical := v;
 end;
 
@@ -1345,7 +1359,13 @@ begin
     AObj.FillInherit := True;
   end
   else if TyTryParseChartColor(s, c) then
-    TyStSetColor(AObj, AKey, c);
+    TyStSetColor(AObj, AKey, c)
+  { [R7-Y] a string no parser reads: the state's style holds it and the
+    canvas refuses it, keeping the colour it had (cTyCanvasColourLeft, the
+    paint order settles it) -- a declared colour, so the emphasis lifts
+    nothing [was: not written, the rest colour lifted] }
+  else if s <> '' then
+    TyStSetColor(AObj, AKey, cTyCanvasColourLeft);
 end;
 
 procedure ReadNum(const ANodes: array of TJSONObject; const AState, ABlock,
@@ -1360,8 +1380,11 @@ begin
     else d := TyStFind(ANodes, [AState, ABlock, AName]);
     if d = nil then Exit;
     if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
-    { [R7-W] (a refused phase: nought in a state, as before) }
-    if TyPhaseLeft(v) then v := 0;
+    { [R7-Y] A WIDTH OF 'Infinity' strokes (hasStroke) at the lineWidth the
+      canvas had, which refuses it: +Infinity here, StWriteHost marks it;
+      a refused phase stays cTyCanvasPhaseLeft for the paint order [was:
+      nought for both] }
+    if (AKey = stkLineWidth) and TyOptIsPosInf(d) then v := Infinity;
     if not IsNan(v) then
     begin
       TyStSetNum(AObj, AKey, v);
@@ -1454,6 +1477,28 @@ function TyStReadStyle(const ANodes: array of TJSONObject; const AState,
   ABlock: string; out AWidthBolder: Boolean): TTyStObject;
 var s: string; has: Boolean;
 
+  { [R7-Y] the block's lineCap / lineJoin / miterLimit, set when the state
+    is entered -- a word the canvas does not take is cTyCanvasWordLeft, a
+    miterLimit it refuses -1 (the paint order keeps the canvas' own) [was:
+    a label line's only] }
+  procedure PenWordsOf(const ABlk, ACap, AJoin, AMiter: string);
+  var d: TJSONData;
+  begin
+    if AState = '' then d := TyStFind(ANodes, [ABlk, ACap])
+    else d := TyStFind(ANodes, [AState, ABlk, ACap]);
+    if (d <> nil) and (d.JSONType <> jtNull) then Result.CapWord := 1 + TyLineCapOf(d);
+    if AState = '' then d := TyStFind(ANodes, [ABlk, AJoin])
+    else d := TyStFind(ANodes, [AState, ABlk, AJoin]);
+    if (d <> nil) and (d.JSONType <> jtNull) then Result.JoinWord := 1 + TyLineJoinOf(d);
+    if AState = '' then d := TyStFind(ANodes, [ABlk, AMiter])
+    else d := TyStFind(ANodes, [AState, ABlk, AMiter]);
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result.HasMiter := True;
+      Result.Miter := TyOptMiterLimit(d);
+    end;
+  end;
+
   { [R5-A] the block's shadow keys }
   procedure ShadowOf(const AName: string);
   begin
@@ -1474,6 +1519,7 @@ begin
     ReadDashKey(ANodes, AState, 'lineStyle', 'borderType', Result);
     ReadNum(ANodes, AState, 'lineStyle', 'borderDashOffset', stkDashOffset, Result);
     ShadowOf('lineStyle');
+    PenWordsOf('lineStyle', 'borderCap', 'borderJoin', 'borderMiterLimit');
   end
   else if ABlock = 'lineStyle' then
   begin
@@ -1487,6 +1533,7 @@ begin
     ReadDashKey(ANodes, AState, ABlock, 'type', Result);
     ReadNum(ANodes, AState, ABlock, 'dashOffset', stkDashOffset, Result);
     ShadowOf(ABlock);
+    PenWordsOf(ABlock, 'cap', 'join', 'miterLimit');
   end
   else if ABlock = 'areaStyle' then
   begin
@@ -1504,6 +1551,7 @@ begin
     ReadDashKey(ANodes, AState, ABlock, 'borderType', Result);
     ReadNum(ANodes, AState, ABlock, 'borderDashOffset', stkDashOffset, Result);
     ShadowOf(ABlock);
+    PenWordsOf(ABlock, 'borderCap', 'borderJoin', 'borderMiterLimit');
   end;
 end;
 

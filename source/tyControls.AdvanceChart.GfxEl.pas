@@ -3125,6 +3125,14 @@ begin
   if (AEl.Kind <> gkText) and (AEl.Style <> nil)
     and TyStReadShadow([AEl.Style], [], [], sh) then
     TyStyleSetShadow(AOut.Style, sh);
+  { [R7-Y] ITS COMPOSITE OPERATION: bindCommonProps sets `style.blend ||
+    'source-over'` for a path and an image as for a series' elements (a word
+    the canvas does not know it refuses: the paint order) [was: not read] }
+  if (AEl.Kind <> gkText) and (AEl.Style <> nil) then
+  begin
+    d := AEl.Style.Find('blend');
+    if (d <> nil) and (d.JSONType = jtString) then AOut.Style.Blend := d.AsString;
+  end;
   case AEl.Kind of
     gkImage:
       begin

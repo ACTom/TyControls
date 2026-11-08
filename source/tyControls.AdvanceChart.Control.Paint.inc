@@ -1522,13 +1522,10 @@ var
     else Result.Style.LineCap := Ord(K.Cap);
     if (K.Left and cTyCanvasWidthLeft) <> 0 then Result.CanvasFlags := cTyCanvasWidthLeft;
     { [R7-AA] its shadow, join, miterLimit and gradient; a width of nought
-      that still hands its stroke colour }
+      still hands its stroke colour (the run takes a colour of no width:
+      R7-Y) }
     TyCompStrokeLook(Result.Style, K, True);
-    if not K.Drawn and K.Inked then
-    begin
-      Result.Style.StrokeWidthLogical := 0;
-      Result.CanvasFlags := Result.CanvasFlags or cTyCanvasStrokeSet;
-    end;
+    if not K.Drawn then Result.Style.StrokeWidthLogical := 0;
   end;
 
   function Txt(AColour: TTyChartColor; const AM: TTyMat2D): TTyChartElement;
@@ -1634,11 +1631,7 @@ begin
         e.Style.StrokeColor := spec^.SplitLineInks[ink].Colour;
         e.Style.StrokeGradient := spec^.SplitLineInks[ink].Grad;
         e.Datum.DataIndex := ink;
-        if not (splitK.WidthLogical > 0) then
-        begin
-          e.Style.StrokeWidthLogical := 0;
-          e.CanvasFlags := e.CanvasFlags or cTyCanvasStrokeSet;
-        end;
+        if not (splitK.WidthLogical > 0) then e.Style.StrokeWidthLogical := 0;
       end;
       Add(cpkSplit, 0, False, e);
     end;
@@ -1750,13 +1743,10 @@ var
     else Result.Style.LineCap := Ord(K.Cap);
     if (K.Left and cTyCanvasWidthLeft) <> 0 then Result.CanvasFlags := cTyCanvasWidthLeft;
     { [R7-AA] its shadow, join, miterLimit and gradient; a width of nought
-      that still hands its stroke colour }
+      still hands its stroke colour (the run takes a colour of no width:
+      R7-Y) }
     TyCompStrokeLook(Result.Style, K, True);
-    if not K.Drawn and K.Inked then
-    begin
-      Result.Style.StrokeWidthLogical := 0;
-      Result.CanvasFlags := Result.CanvasFlags or cTyCanvasStrokeSet;
-    end;
+    if not K.Drawn then Result.Style.StrokeWidthLogical := 0;
     { a merged path: Path's own default fill }
     if AMerged then
     begin
@@ -1819,11 +1809,7 @@ begin
         e.Style.StrokeGradient := AFurn.SplitLineInks[ASplitInks[i]].Grad;
         e.Datum.DataIndex := ASplitInks[i];
         { ([R7-AA] a width of nought: the stroke colour handed on) }
-        if not (splitK.WidthLogical > 0) then
-        begin
-          e.Style.StrokeWidthLogical := 0;
-          e.CanvasFlags := e.CanvasFlags or cTyCanvasStrokeSet;
-        end;
+        if not (splitK.WidthLogical > 0) then e.Style.StrokeWidthLogical := 0;
       end;
       Add(cpkSplit, 0, False, e);
     end;
@@ -3491,8 +3477,13 @@ begin
     FreeAndNil(FDrDyn);
     FDrDyn := TBGRABitmap.Create(R.Right * FDrScale, R.Bottom * FDrScale, BGRAPixelTransparent);
     FDrDynTiles := nil;
+    FDrAnimSnapOk := False;
     AFull := True;
-  end;
+  end
+  { [R7-Y] a frame in motion that carries a value the canvas refuses: the
+    blocks round what moved only, as zrender repaints it }
+  else if DrDynamicBlocks(R, APPI, APool) then
+    Exit;
   { THE LAST INK GOES: the layer is transparent again everywhere }
   for i := 0 to High(FDrDynTiles) do
   begin
@@ -3526,6 +3517,150 @@ begin
       cur[i].H := cur[i].H / FDrScale;
       TyRepaintPoolAdd(APool, cur[i]);
     end;
+  end;
+  FDrDynTiles := cur;
+  { [R7-Y] the frame the next one's blocks are found against: only while a
+    continuous animation's frame carries a value the canvas refuses (the
+    one case where a block's paint differs from the whole paint) }
+  FDrAnimSnapOk := False;
+  FDrAnimSnap := nil;
+  if FAnimContinuous and not FExporting and (FZList <> nil)
+    and TyLinesCanvasLeftoversDue(FZList) then
+  begin
+    FDrAnimSnap := TyDirtySnapshot(FZList, APPI);
+    FDrAnimSnapOk := True;
+  end;
+end;
+
+function TTyCustomAdvanceChart.DrDynamicBlocks(const R: TRect; APPI: Integer;
+  var APool: TTyRepaintPool): Boolean;
+var
+  frame: TTyPaintList;
+  snap: TTyDirtySnap;
+  rects, zr, cur: TTyZrRectArray;
+  px: array of TRect;
+  pr, oldClip, rp: TRect;
+  box: TTyXYWH;
+  i, n, blk, idx: Integer;
+  P: TTyPainter;
+  sc: TTyCanvasScale;
+  measurer: ITyTextMeasurer;
+  run: TTyCanvasRun;
+  ground: TTyCanvasGround;
+  el: TTyChartElement;
+  lvs: TTyIntegerArray;
+begin
+  Result := False;
+  { A FRAME OF THE LOOPS ALONE, over a ground the static layer captured,
+    and nothing else in the dynamic layer: zrender's useDirtyRect repaints
+    the blocks round the elements that changed -- each block cleared,
+    clipped, its brushes started afresh (prevEl null) from the canvas' own
+    state, only the elements meeting it brushed -- and keeps every other
+    pixel of the last frame. Where nothing carries a value the canvas
+    refuses, a block's paint is the whole paint's (the port's full frame
+    then); where something does, the element before it differs block by
+    block: the blocks here, each settled anew (TyCanvasRunStep on a copy)
+    over the ground, the static layer's elements meeting it among them, the
+    layer opaque there so it stands for the whole picture [was: the frame
+    drawn whole, the list's order everywhere] }
+  if not FAnimContinuous or FExporting or not FDrAnimSnapOk then Exit;
+  if (FDrDyn = nil) or (FDrBase = nil) or not FDrBaseOk
+    or (FDrBase.Width <> FDrDyn.Width) or (FDrBase.Height <> FDrDyn.Height) then Exit;
+  { what else the dynamic layer draws (HasDynamicContent's own terms) }
+  if TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) or FTipShown or FLoadShown
+    or (Length(OptionPointerHits) > 0) or FKbActive or FKbStopOn or StHoverAny
+    or (Length(FHandles) > 0) or HdConfigured then Exit;
+  if ZMixedNow(lvs) then Exit;
+  frame := AnimFrame;
+  if (frame = nil) or not TyLinesCanvasLeftoversDue(frame) then Exit;
+  if TyMaxZLevelOf(frame) > ComponentZLevel then Exit;
+  { a trail is a layer of its own, faded whole every frame }
+  for i := 0 to frame.Count - 1 do
+    if (frame.Element(i).Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(frame.Element(i).Datum.SeriesIndex) > 0) then Exit;
+  snap := TyDirtySnapshot(frame, APPI);
+  if not TyDirtyDiff(FDrAnimSnap, snap, rects) then Exit;
+  Result := True;
+  FZList := frame;
+  FDrAnimSnap := snap;
+  n := 0;
+  SetLength(px, Length(rects));
+  SetLength(zr, Length(rects));
+  for i := 0 to High(rects) do
+    if TyZrRectToPixels(rects[i], R.Right, R.Bottom, pr) then
+    begin
+      px[n] := pr;
+      zr[n] := rects[i];
+      Inc(n);
+    end;
+  { EACH BLOCK FROM THE GROUND: everything the static layer drew before the
+    series, opaque, so the block stands for the whole canvas there }
+  for i := 0 to n - 1 do
+  begin
+    rp := DrRaster(px[i]);
+    FDrDyn.PutImagePart(rp.Left, rp.Top, FDrBase, rp, dmSet);
+    box.X := px[i].Left;
+    box.Y := px[i].Top;
+    box.W := px[i].Right - px[i].Left;
+    box.H := px[i].Bottom - px[i].Top;
+    TyRepaintPoolAdd(APool, box);
+  end;
+  if n > 0 then
+  begin
+    measurer := NewTextMeasurer(APPI);
+    ground := CanvasGroundState;
+    P := NewPainter;
+    oldClip := FDrDyn.ClipRect;
+    try
+      sc.Scale := FDrScale;
+      sc.DeviceUnits := False;
+      P.BeginPaintOnScaled(nil, R, APPI, FDrDyn, sc);
+      for blk := 0 to n - 1 do
+      begin
+        FDrDyn.ClipRect := DrRaster(px[blk]);
+        TyCanvasRunStart(run, ground, APPI);
+        TySetZBand(-MaxInt, ComponentZLevel);
+        try
+          for i := 0 to frame.Count - 1 do
+          begin
+            idx := frame.PaintOrder(i);
+            if (idx < 0) or (idx > High(snap)) then Continue;
+            { TyRenderPaintList's own skips }
+            if snap[idx].El.Ignore or snap[idx].El.ProgHidden or snap[idx].El.GfxUnder then
+              Continue;
+            { an element nothing bounds is drawn wherever it is }
+            if snap[idx].Bounded and not TyZrRectIntersect(snap[idx].Rect, zr[blk]) then
+              Continue;
+            el := snap[idx].El;
+            { (its pieces its own: the block settles them afresh) }
+            SetLength(el.Caption.RtPieces, Length(el.Caption.RtPieces));
+            TyCanvasRunStep(run, el);
+            TyRenderElement(P, el);
+          end;
+        finally
+          TyClearZBand;
+        end;
+        { what the dynamic layer draws over the loops, as it draws it }
+        PaintBreakAreas(P);
+        PaintParallels(P, APPI, measurer);
+        PaintTitles(P);
+      end;
+      FDrDyn.ClipRect := oldClip;
+      P.EndPaint;
+    finally
+      FDrDyn.ClipRect := oldClip;
+      P.Free;
+    end;
+  end;
+  { the layer's ink found again (the blocks are opaque) }
+  cur := nil;
+  TyInkTiles(FDrDyn, cDrInkTile * FDrScale, cur);
+  for i := 0 to High(cur) do
+  begin
+    cur[i].X := cur[i].X / FDrScale;
+    cur[i].Y := cur[i].Y / FDrScale;
+    cur[i].W := cur[i].W / FDrScale;
+    cur[i].H := cur[i].H / FDrScale;
   end;
   FDrDynTiles := cur;
 end;

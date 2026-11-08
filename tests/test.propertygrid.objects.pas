@@ -39,6 +39,10 @@ type
     procedure TestACancelledStringsDialogWritesNothing;
     procedure TestACycleStopsAtTheDepthLimit;
     procedure TestASubComponentIsExpandedNotReferenced;
+    { #183 }
+    procedure TestAltRightAndAltLeftOpenAndCloseARow;
+    procedure TestCtrlEnterRunsTheDialogOfADialogRow;
+    procedure TestOneClickOnThePaintedEllipsisRunsTheDialog;
   end;
 
   { A real control on a real form: Font, Constraints, Anchors, PopupMenu. }
@@ -50,6 +54,9 @@ type
     FElsewhere: TComponent;
     FGrid: TPGGrid;
     FAnswer: TFont;
+    FSetOn: TObject;   // the instance OnSetPropertyText was handed for Size
+    procedure SetSizeText(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string; var AHandled: Boolean);
     procedure AddForeignMenu(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
       AList: TStrings);
     function Lines(const AText: string): string;
@@ -69,11 +76,61 @@ type
     procedure TestACancelledFontDialogWritesNothing;
     procedure TestTheFontDialogStartsFromTheButtonsFont;
     procedure TestConstraintsExpandAndWrite;
+    { #183 }
+    procedure TestOnSetPropertyTextIsHandedTheButtonsOwnFont;
+    procedure TestTheFontRowReadsTheFontAfterASubRowEdit;
   end;
 
 implementation
 
 { ================================================================ fixtures }
+
+{ ---- #183: the keyboard and the '…' ---- }
+
+{ LCL's object inspector: Alt+Right expands the current row, Alt+Left collapses it
+  (objectinspector.pp, HandleStandardKeys). }
+procedure TPropertyGridObjectsTest.TestAltRightAndAltLeftOpenAndCloseARow;
+begin
+  FGrid.Select(FGrid.RowAt('Inner'));
+  AssertFalse('closed to start', FGrid.RowAt('Inner').Expanded);
+  FGrid.Press(VK_RIGHT, [ssAlt]);
+  AssertTrue('Alt+Right opens it', FGrid.RowAt('Inner').Expanded);
+  AssertTrue('its rows are on display', Pos('Level', FGrid.ShownKeys) > 0);
+  AssertSame('the current row stays', FGrid.RowAt('Inner'), FGrid.CurrentRow);
+  FGrid.Press(VK_LEFT, [ssAlt]);
+  AssertFalse('Alt+Left closes it', FGrid.RowAt('Inner').Expanded);
+  FGrid.Select(FGrid.RowAt('Items.[1]'));
+  FGrid.Press(VK_RIGHT, [ssAlt]);
+  AssertTrue('a collection item too', FGrid.RowAt('Items.[1]').Expanded);
+end;
+
+{ LCL's object inspector: Ctrl+Enter runs the dialog of a dialog property (ToggleRow ->
+  DoCallEdit, objectinspector.pp). On the row, and in its read-only inline text as well. }
+procedure TPropertyGridObjectsTest.TestCtrlEnterRunsTheDialogOfADialogRow;
+begin
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'k';
+  FGrid.Select(FGrid.RowAt('Lines'));
+  FGrid.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('the dialog ran', 1, FGrid.StringsDialogs);
+  AssertEquals('and wrote the list', 'k', Trim(FHolder.Lines.Text));
+  FGrid.StringsAnswer := 'm';
+  FGrid.Press(VK_F2);
+  AssertTrue('F2 opened the row''s text', FGrid.EditingRow >= 0);
+  FGrid.Editor.PressKey(VK_RETURN, [ssCtrl]);
+  AssertEquals('Ctrl+Enter in it runs the dialog', 2, FGrid.StringsDialogs);
+  AssertEquals('written', 'm', Trim(FHolder.Lines.Text));
+end;
+
+procedure TPropertyGridObjectsTest.TestOneClickOnThePaintedEllipsisRunsTheDialog;
+begin
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'one click';
+  FGrid.ClickPaintedEllipsis(FGrid.RowAt('Lines'));
+  AssertEquals('one click ran the dialog', 1, FGrid.StringsDialogs);
+  AssertEquals('and it wrote', 'one click', Trim(FHolder.Lines.Text));
+  AssertEquals('no text editor left open', -1, FGrid.EditingRow);
+end;
 
 procedure TPropertyGridObjectsTest.SetUp;
 begin
@@ -402,6 +459,37 @@ begin
   AssertEquals('the button''s font size', 14, FButton.Font.Size);
   AssertEquals('and its face kept', 'Arial', FButton.Font.Name);
   AssertEquals('the font row followed', 'Arial, 14', FGrid.RowAt('Font').Value);
+end;
+
+procedure TPropertyGridButtonTest.SetSizeText(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; const AText: string; var AHandled: Boolean);
+begin
+  if APropInfo^.Name <> 'Size' then Exit;
+  FSetOn := AInstance;
+  TFont(AInstance).Size := StrToInt(AText);
+  AHandled := True;
+end;
+
+{ The doc's promise for every event: AInstance is the object that really has the property. For a
+  font's own row that is the button's font, not a copy the grid writes back afterwards. }
+procedure TPropertyGridButtonTest.TestOnSetPropertyTextIsHandedTheButtonsOwnFont;
+begin
+  FGrid.OnSetPropertyText := @SetSizeText;
+  FGrid.TypeInto(FGrid.RowAt('Font.Size'), '13');
+  AssertSame('the button''s own font', FButton.Font, FSetOn);
+  AssertEquals('what the handler wrote stays', 13, FButton.Font.Size);
+  AssertEquals('the face kept', 'Arial', FButton.Font.Name);
+  AssertEquals('the row reads it', '13', FGrid.RowAt('Font.Size').Value);
+end;
+
+{ With Font.Name hidden the value list editor's own summary of the font row lost the name
+  (', 12'); the grid's text for the font is what the row shows. }
+procedure TPropertyGridButtonTest.TestTheFontRowReadsTheFontAfterASubRowEdit;
+begin
+  FGrid.HiddenProperties.Add('Font.Name');
+  FGrid.TypeInto(FGrid.RowAt('Font.Size'), '12');
+  AssertEquals('the button''s font size', 12, FButton.Font.Size);
+  AssertEquals('the font row reads the font', 'Arial, 12', FGrid.RowAt('Font').Value);
 end;
 
 procedure TPropertyGridButtonTest.TestFontStyleElementWritesTheFont;

@@ -7917,7 +7917,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -9524,6 +9523,7 @@ type
     property Increment;
     property ReadOnly;
     property EditorEnabled;
+    property AutoSelect;
     property Alignment;
     property MaxLength;
     property ValueEmpty;
@@ -10794,9 +10794,7 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
-    property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -10810,7 +10808,6 @@ type
     property OnShowHint;
     property PopupMenu;
     property Constraints;
-    property BorderSpacing;
     property ParentShowHint;
     property Action;
     property OnPaint;

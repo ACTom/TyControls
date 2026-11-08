@@ -133,7 +133,8 @@ type
     the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
     the first enabled thumb when entered forwards, the last when entered with Shift+Tab, so
     every thumb is one Tab away; entered by a click, the press picks the thumb. The wheel steps
-    the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's.
+    the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's; on a Reversed
+    bar the keys and the wheel move the thumb the same way on screen (TyTrackInputStep).
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only.
@@ -196,6 +197,20 @@ type
     { The span being dragged whole (DraggableRanges): the index of its lower thumb, -1 = none.
       FGrab then holds where on the span it was pressed, from the lower thumb's centre. }
     FDragSpan: Integer;
+    { #182: the mouse capture went elsewhere mid-drag; the next move ends the drag. }
+    FCaptureLost: Boolean;
+    { #182: ThumbKey of every thumb as the thumbs were last rebuilt or moved, and what the drag,
+      the span drag and the hover were on when a rebuild began (-1 = nothing). }
+    FThumbKeys: array of Integer;
+    FHeldDrag, FHeldSpan, FHeldHover: Integer;
+    { #182: OnChange fired so far, and how many had fired when the left button went down (-1 =
+      no press): a press that changed something ends with EditingDone. }
+    FChangeCount: Integer;
+    FPressChanges: Integer;
+    { The press is over: EditingDone if it changed anything. }
+    procedure EndPress;
+    { End a drag whose button-up went elsewhere: nothing moves, nothing is removed. }
+    procedure EndLostDrag;
     procedure SetAllowCrossing(const AValue: Boolean);
     { The user moves AllowCrossing and Pushable make; see UserMoveThumb. }
     procedure UserCrossThumb(AIndex, AValue: Integer);
@@ -261,6 +276,10 @@ type
       values and before any event fires: a final class copies them back into its collection
       items here, so the items always read what the thumbs show, from the event handlers too. }
     procedure ValuesChanged; virtual;
+    { #182: SetThumbValue asks this first. True: the final class has kept AValue as given for
+      thumb AIndex -- its collection is between BeginUpdate and EndUpdate, which sorts the
+      values out -- and the thumbs do not move now. Here False. }
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; virtual;
     { A move the user makes -- drag, key, wheel, the jump to a press on the track: clamped as
       SetThumbValue clamps, then, when the thumb would really move, offered to
       OnThumbChanging, whose answer is clamped again and applied. An index outside the thumbs
@@ -272,6 +291,10 @@ type
       towards AFrom). A final class moves its item the same way here, so the thumb's colour,
       hint and selection go with it; ValuesChanged follows. }
     procedure ThumbIndexMoved(AFrom, ATo: Integer); virtual;
+    { #182: where a user move under AllowCrossing may take thumb AIndex, AValue held there. Here
+      Min..Max: the thumb passes any other. The range bar keeps an end between the
+      neighbouring ranges. }
+    function ClampCrossing(AIndex, AValue: Integer): Integer; virtual;
     { Add a thumb at AValue (already where it may go) and return its index. Here: inserted
       into the thumbs as they are; a final class adds an item instead (TTyMultiTrackBar: one
       that follows the theme). The selection is the caller's to set. }
@@ -304,11 +327,26 @@ type
       kept on its thumb, at its new index); a final class deletes its item instead. }
     procedure RemoveThumb(AIndex: Integer); virtual;
     procedure DoThumbRemoving(AIndex: Integer; var AAllow: Boolean); virtual;
-    { The theme's --track-remove-distance in device px at the bar's PPI. }
+    { The theme's --track-remove-distance (the bar's StyleOverride first) in device px at the
+      bar's PPI. }
     function RemoveDistance: Integer;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
+    { #182: what thumb AIndex is in the final class's items, the same number for the same thumb
+      however the items are added, deleted or sorted: here -1 (no items). }
+    function ThumbKey(AIndex: Integer): Integer; virtual;
+    { #182: around a rebuild of the thumbs from the items, the drag, the span drag and the hover
+      stay on the thumbs they were on (found again by ThumbKey), or end with them. Begin before
+      the thumbs change, End once they are the items again; SnapThumbKeys after any other change
+      of order. }
+    procedure BeginFollowThumbs;
+    procedure EndFollowThumbs;
+    procedure SnapThumbKeys;
+    { #182: a thumb disabled meanwhile is no longer dragged, hovered or (DropDisabledThumbs)
+      selected; the final class calls this when an item's Enabled changes. }
+    procedure DropDisabledPointer;
+    procedure DropDisabledThumbs;
     { #182: around a rebuild of the thumbs from the items, OnChange waits for the end. Fired in
       the middle, a handler's add, delete or value was swallowed by the rebuild still running:
       the thumbs fell out of step with the items, and a later removal raised EListError. }
@@ -357,15 +395,24 @@ type
     { The thumb the keyboard drives: the selected one if it is enabled, else the first enabled
       thumb; -1 = none. }
     function KeyThumb: Integer;
-    { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. }
+    { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. AFrom may
+      be -1 or ThumbCount, just outside the thumbs. }
     function NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
+    { Where Tab (AForward) or Shift+Tab goes: the next enabled thumb from the selected one; with
+      none selected (#182), the first enabled thumb, or the last for Shift+Tab. -1 = none. }
+    function TabThumb(AForward: Boolean): Integer;
     { The modifier keys and mouse buttons held now. CM_WANTSPECIALKEY and CM_ENTER carry none,
       so Shift+Tab is told from Tab, and a click from a key, by asking the keyboard and the
       mouse; virtual so a test can hold them without either. }
     function KeyShiftState: TShiftState; virtual;
-    { Entered from the keyboard: the first enabled thumb (Shift held: the last) is selected,
-      whatever was selected before -- a forward Tab that landed on the last thumb would
-      otherwise leave again at once. Entered with a mouse button down: left to the press. }
+    { #182: the Tab key is down now -- the focus came in by Tab or Shift+Tab, not from code
+      (SetFocus, the form's ActiveControl). Virtual for the same reason. }
+    function TabHeld: Boolean; virtual;
+    { Entered by Tab: the first enabled thumb (Shift+Tab: the last) is selected, whatever was
+      selected before -- a forward Tab that landed on the last thumb would otherwise leave
+      again at once. Entered with a mouse button down: left to the press. Entered from code
+      (SetFocus, ActiveControl): the selection stays, and only with none is the near end
+      picked. }
     procedure DoEnter; override;
     { The wheel steps the thumb the keyboard drives (selecting it) by LineSize, wheel-up
       increasing, as TTyTrackBar's; an OnMouseWheel* handler that handles it stops the step. }
@@ -374,6 +421,11 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #182 (as #147): the capture taken away mid-drag -- a modal dialog opened from an event, a
+      switch to another window -- ends the drag at the next move, as a move with no button held
+      does. Not at once: LCL lets go of the capture just before a plain button-up too, and that
+      release still has to remove a thumb dragged off the track. }
+    procedure CaptureChanged; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { Tab / Shift+Tab move between the enabled thumbs; the bar asks for the key only while
@@ -385,6 +437,10 @@ type
     { Cross axis only, as TTyTrackBar: the thumb, the ticks and their labels. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { #182: something CalculatePreferredSize reads has changed -- a switch, a size a paint
+      measured, the theme: LCL asks again, and AutoSize re-fits. }
+    procedure PreferredSizeChanged;
+    procedure StyleLayoutChanged; override;
 
     { ---- The switches (off here; each final class publishes the ones it offers). ---- }
     { A thumb the user moves is not stopped by its neighbours: it goes past them and the
@@ -446,7 +502,8 @@ type
     property ThumbCount: Integer read GetThumbCount;
     { Read-only here: a thumb moves through SetThumbValue or the final class's collection. }
     property ThumbValues[AIndex: Integer]: Integer read GetThumbValue;
-    { The thumb the keyboard acts on; -1 = none. Kept within 0..ThumbCount - 1. A change fires
+    { The thumb the keyboard acts on; -1 = none. Kept within 0..ThumbCount - 1 and on an enabled
+      thumb (a disabled one reads -1, and a thumb disabled while selected drops it). A change fires
       OnThumbSelect. }
     property SelectedThumb: Integer read FSelectedThumb write SetSelectedThumb default -1;
     { The thumb being dragged while it is off the track far enough to be removed on release
@@ -561,6 +618,10 @@ type
     procedure WriteNoRanges(Writer: TWriter);
   protected
     function GetStyleTypeKey: string; override;
+    { #182 (as #192 for the other two bars): a track bar has no children to size, so 4.0 does
+      not publish ChildSizing; a form saved by 3.x that sets it opens, and the value is read
+      past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
     { True while a range's value is kept as given rather than moved through SetThumbValue: a
       form being read, Ranges between BeginUpdate and EndUpdate, the thumbs not (yet) the
       ranges' -- see TTyTrackRange. }
@@ -571,6 +632,12 @@ type
       removed, nothing is selected. }
     procedure RangesChanged;
     procedure ValuesChanged; override;
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; override;
+    { #182: an end crosses only its own range's other end (the two swap, the range stays the
+      same item); it stops MinGap short of the neighbouring ranges, as without AllowCrossing,
+      so the ends are never paired off into other ranges. }
+    function ClampCrossing(AIndex, AValue: Integer): Integer; override;
+    function ThumbKey(AIndex: Integer): Integer; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
@@ -634,7 +701,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -806,10 +872,12 @@ type
       wherever that puts it; removed, nothing is selected. }
     procedure ThumbsChanged;
     procedure ThumbIndexMoved(AFrom, ATo: Integer); override;
+    function ThumbKey(AIndex: Integer): Integer; override;
     { A new item at AValue that follows the theme (Color clDefault, no hint or class). }
     function AddUserThumb(AValue: Integer): Integer; override;
     procedure RemoveThumb(AIndex: Integer); override;
     procedure ValuesChanged; override;
+    function HoldThumbValue(AIndex, AValue: Integer): Boolean; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
@@ -1082,6 +1150,7 @@ begin
   FDragThumb := -1;
   FHoverThumb := -1;
   FDragSpan := -1;
+  FPressChanges := -1;
   FOrientation := toHorizontal;
   FTickMarks := ttmBottomRight;
   FTickStyle := ttsAuto;
@@ -1220,6 +1289,74 @@ begin
   if FDeferChange > 0 then FChangePending := True else DoChange;
 end;
 
+function TTyMultiTrackBarBase.ThumbKey(AIndex: Integer): Integer;
+begin
+  Result := -1;
+end;
+
+procedure TTyMultiTrackBarBase.SnapThumbKeys;
+var
+  i: Integer;
+begin
+  SetLength(FThumbKeys, Length(FValues));
+  for i := 0 to High(FThumbKeys) do FThumbKeys[i] := ThumbKey(i);
+end;
+
+procedure TTyMultiTrackBarBase.BeginFollowThumbs;
+
+  function KeyOf(AIndex: Integer): Integer;
+  begin
+    if (AIndex >= 0) and (AIndex < Length(FThumbKeys)) then Result := FThumbKeys[AIndex]
+    else Result := -1;
+  end;
+
+begin
+  FHeldDrag := KeyOf(FDragThumb);
+  FHeldSpan := KeyOf(FDragSpan);
+  FHeldHover := KeyOf(FHoverThumb);
+end;
+
+procedure TTyMultiTrackBarBase.EndFollowThumbs;
+
+  function IndexOf(AKey: Integer): Integer;
+  var
+    i: Integer;
+  begin
+    if AKey >= 0 then
+      for i := 0 to High(FValues) do
+        if ThumbKey(i) = AKey then Exit(i);
+    Result := -1;
+  end;
+
+begin
+  if FDragThumb >= 0 then FDragThumb := IndexOf(FHeldDrag);
+  if FDragSpan >= 0 then FDragSpan := IndexOf(FHeldSpan);
+  if FHoverThumb >= 0 then FHoverThumb := IndexOf(FHeldHover);
+  if FDragThumb < 0 then FRemoving := False;
+  DropDisabledPointer;
+  SnapThumbKeys;
+end;
+
+procedure TTyMultiTrackBarBase.DropDisabledPointer;
+begin
+  if (FDragThumb >= 0) and not ThumbEnabled(FDragThumb) then
+  begin
+    FDragThumb := -1;
+    FRemoving := False;
+  end;
+  if (FDragSpan >= 0) and not (ThumbEnabled(FDragSpan) and ThumbEnabled(FDragSpan + 1)) then
+    FDragSpan := -1;
+  if (FHoverThumb >= 0) and not ThumbEnabled(FHoverThumb) then FHoverThumb := -1;
+end;
+
+procedure TTyMultiTrackBarBase.DropDisabledThumbs;
+begin
+  DropDisabledPointer;
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+     and not ThumbEnabled(FSelectedThumb) then
+    SelectedThumb := -1;
+end;
+
 procedure TTyMultiTrackBarBase.BeginDeferChange;
 begin
   Inc(FDeferChange);
@@ -1271,6 +1408,7 @@ begin
     FValues[AIndex] := AValue;
     Exit;
   end;
+  if HoldThumbValue(AIndex, AValue) then Exit;
   ApplyThumbValue(AIndex, ClampThumbValue(AIndex, AValue));
 end;
 
@@ -1325,26 +1463,32 @@ begin
   else if (ATo < AFrom) and (AX >= ATo) and (AX < AFrom) then Result := AX + 1;
 end;
 
-procedure TTyMultiTrackBarBase.UserCrossThumb(AIndex, AValue: Integer);
+function TTyMultiTrackBarBase.ClampCrossing(AIndex, AValue: Integer): Integer;
 var
-  lo, hi, v, j, n, sel: Integer;
-  allow: Boolean;
+  lo, hi: Integer;
 begin
   lo := FMin;
   hi := FMax;
   if hi < lo then hi := lo;
   { Min..Max only: the neighbours do not hold it. }
-  v := AValue;
-  if v > hi then v := hi;
-  if v < lo then v := lo;
+  Result := AValue;
+  if Result > hi then Result := hi;
+  if Result < lo then Result := lo;
+end;
+
+procedure TTyMultiTrackBarBase.UserCrossThumb(AIndex, AValue: Integer);
+var
+  v, j, n, sel: Integer;
+  allow: Boolean;
+begin
+  v := ClampCrossing(AIndex, AValue);
   if v = FValues[AIndex] then Exit;
   allow := True;
   DoThumbChanging(AIndex, v, allow);
   if not allow then Exit;
   n := Length(FValues);
   if AIndex >= n then Exit;
-  if v > hi then v := hi;
-  if v < lo then v := lo;
+  v := ClampCrossing(AIndex, v);
   if v = FValues[AIndex] then Exit;
   { Into its place by value: past every thumb it went beyond, not past one it only reached
     (a stable order, so equal values keep their order). }
@@ -1364,6 +1508,7 @@ begin
   if j <> AIndex then
   begin
     ThumbIndexMoved(AIndex, j);
+    SnapThumbKeys;
     FDragThumb := MovedIndex(FDragThumb, AIndex, j);
     FHoverThumb := MovedIndex(FHoverThumb, AIndex, j);
     FSelectedThumb := MovedIndex(FSelectedThumb, AIndex, j);
@@ -1551,8 +1696,8 @@ var
 begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  Result := MulDiv(ActiveController.Metric(TyTrackRemoveDistanceVar, TyTrackRemoveDistance),
-    ppi, 96);
+  { #182: through StyleMetric, so the bar's own StyleOverride can set it. }
+  Result := MulDiv(StyleMetric(TyTrackRemoveDistanceVar, TyTrackRemoveDistance), ppi, 96);
 end;
 
 procedure TTyMultiTrackBarBase.SetMinThumbs(const AValue: Integer);
@@ -1749,6 +1894,11 @@ procedure TTyMultiTrackBarBase.ValuesChanged;
 begin
 end;
 
+function TTyMultiTrackBarBase.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := False;
+end;
+
 procedure TTyMultiTrackBarBase.DoThumbChange(AIndex: Integer);
 begin
   if Assigned(FOnThumbChange) then FOnThumbChange(Self, AIndex);
@@ -1761,7 +1911,19 @@ end;
 
 procedure TTyMultiTrackBarBase.DoChange;
 begin
+  Inc(FChangeCount);
   if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyMultiTrackBarBase.EndPress;
+var
+  c: Integer;
+begin
+  c := FPressChanges;
+  FPressChanges := -1;
+  { #182: as LCL's TTrackBar, OnEditingDone after a user change -- here once the press that
+    made it (a drag, a jump, an add, a removal) is over, not at every step of a drag. }
+  if (c >= 0) and (c <> FChangeCount) then EditingDone;
 end;
 
 procedure TTyMultiTrackBarBase.SetMin(const AValue: Integer);
@@ -1797,6 +1959,9 @@ end;
 procedure TTyMultiTrackBarBase.SetSelectedThumb(AValue: Integer);
 begin
   if (AValue < 0) or (AValue >= Length(FValues)) then AValue := -1;
+  { #182: a disabled thumb cannot be selected (from code either). }
+  if (AValue >= 0) and not (csLoading in ComponentState) and not ThumbEnabled(AValue) then
+    AValue := -1;
   if FSelectedThumb = AValue then Exit;
   FSelectedThumb := AValue;
   Invalidate;
@@ -1831,6 +1996,7 @@ procedure TTyMultiTrackBarBase.SetTickMarks(const AValue: TTyTrackTickMark);
 begin
   if FTickMarks = AValue then Exit;
   FTickMarks := AValue;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -1856,6 +2022,7 @@ begin
   if FTickLabels = AValue then Exit;
   FTickLabels := AValue;
   if not FTickLabels then FTickLabelPx := 0;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -1902,6 +2069,18 @@ end;
 function TTyMultiTrackBarBase.ThumbEnabled(AIndex: Integer): Boolean;
 begin
   Result := True;
+end;
+
+procedure TTyMultiTrackBarBase.PreferredSizeChanged;
+begin
+  InvalidatePreferredSize;
+  AdjustSize;
+end;
+
+procedure TTyMultiTrackBarBase.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  PreferredSizeChanged;
 end;
 
 function TTyMultiTrackBarBase.ThumbColor(AIndex: Integer): TColor;
@@ -1959,6 +2138,7 @@ begin
     FValueAreaPx := 0;
     FValueTextPx := 0;
   end;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -2102,6 +2282,7 @@ var
   c: TColor;
   vs, vw: TSize;
   dflt, segDflt: Boolean;
+  oldLabelPx, oldTextPx: Integer;
 
   procedure DrawThumb(AIndex: Integer);
   var
@@ -2148,6 +2329,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
+    oldLabelPx := FTickLabelPx;
+    oldTextPx := FValueTextPx;
 
     TW := TyTrackThumbLen(APPI);
     { The readout strip, measured as TTyTrackBar measures it: as wide as the wider of Min and
@@ -2196,8 +2379,10 @@ begin
     SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand,
       FValueAreaPx);
 
+    { TyTrackGrooveThickness's --track-thickness, read through StyleMetric (#182) so the bar's
+      own StyleOverride can set it. }
     GrooveR := TyTrackGrooveRect(SlideR, FOrientation, MLen,
-      TyTrackGrooveThickness(P, ActiveController));
+      P.Scale(StyleMetric('--track-thickness', TyTrackThickness)));
     { The track -- the groove and the fills on it -- unless the owner draws it. }
     dflt := True;
     if Assigned(FOnDrawTrack) then FOnDrawTrack(Self, P, GrooveR, dflt);
@@ -2258,6 +2443,8 @@ begin
   finally
     P.Free;
   end;
+  { #182: the label strip and the readout are measured here: a new size is a new answer. }
+  if (FTickLabelPx <> oldLabelPx) or (FValueTextPx <> oldTextPx) then PreferredSizeChanged;
 end;
 
 procedure TTyMultiTrackBarBase.PaintGroove(APainter: TTyPainter; const AGroove: TRect;
@@ -2339,13 +2526,24 @@ var
   j: Integer;
 begin
   Result := -1;
-  if AFrom < 0 then Exit;
+  if AFrom < -1 then Exit;
   j := AFrom;
   repeat
     if AForward then Inc(j) else Dec(j);
     if (j < 0) or (j > High(FValues)) then Exit;
   until ThumbEnabled(j);
   Result := j;
+end;
+
+function TTyMultiTrackBarBase.TabThumb(AForward: Boolean): Integer;
+begin
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+     and ThumbEnabled(FSelectedThumb) then
+    Result := NextEnabledThumb(FSelectedThumb, AForward)
+  else if AForward then
+    Result := NextEnabledThumb(-1, True)
+  else
+    Result := NextEnabledThumb(Length(FValues), False);
 end;
 
 function TTyMultiTrackBarBase.KeyThumb: Integer;
@@ -2368,13 +2566,22 @@ begin
   if GetKeyState(VK_MBUTTON) < 0 then Include(Result, ssMiddle);
 end;
 
+function TTyMultiTrackBarBase.TabHeld: Boolean;
+begin
+  Result := GetKeyState(VK_TAB) < 0;
+end;
+
 procedure TTyMultiTrackBarBase.DoEnter;
 var
   sh: TShiftState;
   i: Integer;
 begin
   sh := KeyShiftState;
-  if sh * [ssLeft, ssRight, ssMiddle] = [] then
+  { #182: given from code with a thumb selected, the focus keeps it: only Tab and Shift+Tab
+    start at the near end. }
+  if (sh * [ssLeft, ssRight, ssMiddle] = [])
+     and (TabHeld or (FSelectedThumb < 0) or (FSelectedThumb > High(FValues))
+       or not ThumbEnabled(FSelectedThumb)) then
   begin
     { The near end for the direction the focus came from: the last enabled thumb for
       Shift+Tab, else the first. }
@@ -2397,7 +2604,7 @@ end;
 function TTyMultiTrackBarBase.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  i: Integer;
+  i, c: Integer;
   v: Int64;
 begin
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
@@ -2405,12 +2612,15 @@ begin
   i := KeyThumb;
   if i < 0 then Exit;
   v := FValues[i];
-  if WheelDelta > 0 then Inc(v, FLineSize)
-  else if WheelDelta < 0 then Dec(v, FLineSize);
+  { #182: on a Reversed bar the other way in value, the same way on screen (TyTrackInputStep). }
+  if WheelDelta > 0 then Inc(v, TyTrackInputStep(FLineSize, FReversed))
+  else if WheelDelta < 0 then Inc(v, TyTrackInputStep(-FLineSize, FReversed));
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
+  c := FChangeCount;
   UserMoveThumb(i, v);
+  if FChangeCount <> c then EditingDone;   // #182, as a key
   Result := True;
 end;
 
@@ -2423,6 +2633,8 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   FDragSpan := -1;
+  FCaptureLost := False;
+  FPressChanges := FChangeCount;
   { The further presses of a multi-click whose first press OnTrackClick took: the same click. }
   if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
   else if FTrackClickTaken then Exit;
@@ -2500,6 +2712,8 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  if ((FDragThumb >= 0) or (FDragSpan >= 0)) and (FCaptureLost or not (ssLeft in Shift)) then
+    EndLostDrag;
   if FDragSpan >= 0 then
   begin
     { The lower end follows the pointer as a dragged thumb would, grabbed where pressed; the
@@ -2570,9 +2784,27 @@ begin
     FDragThumb := -1;
     FDragSpan := -1;
     FRemoving := False;
+    FCaptureLost := False;
     Invalidate;
     if off then UserRemoveThumb(i);
+    EndPress;
   end;
+end;
+
+procedure TTyMultiTrackBarBase.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  if (FDragThumb >= 0) or (FDragSpan >= 0) then FCaptureLost := True;
+end;
+
+procedure TTyMultiTrackBarBase.EndLostDrag;
+begin
+  FDragThumb := -1;
+  FDragSpan := -1;
+  FRemoving := False;
+  FCaptureLost := False;
+  Invalidate;
+  EndPress;
 end;
 
 procedure TTyMultiTrackBarBase.MouseLeave;
@@ -2585,14 +2817,15 @@ end;
 
 procedure TTyMultiTrackBarBase.KeyDown(var Key: Word; Shift: TShiftState);
 var
-  i, nxt: Integer;
+  i, nxt, c: Integer;
   v: Int64;
+  vk: Word;
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_TAB) and (Shift - [ssShift] = []) then
   begin
-    nxt := NextEnabledThumb(KeyThumb, not (ssShift in Shift));
+    nxt := TabThumb(not (ssShift in Shift));
     if nxt >= 0 then
     begin
       SelectedThumb := nxt;
@@ -2607,28 +2840,39 @@ begin
      and ThumbEnabled(FSelectedThumb) then
   begin
     Key := 0;
+    c := FChangeCount;
     UserRemoveThumb(FSelectedThumb);
+    if FChangeCount <> c then EditingDone;
     Exit;
   end;
+  if not (Key in [VK_RIGHT, VK_UP, VK_LEFT, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END]) then
+    Exit;
+  { #182: the value keys are the bar's even with no thumb to move, as TTyTrackBar's: left to
+    the form, an arrow would move the focus to the next control. }
+  vk := Key;
+  Key := 0;
   i := KeyThumb;
   if i < 0 then Exit;
   { Value keys, as TTyTrackBar's: up / right increase whichever way the bar runs, so on a
-    vertical bar "up increases"; Home / End go as far as the neighbours let. }
-  case Key of
-    VK_RIGHT, VK_UP: v := Int64(FValues[i]) + FLineSize;
-    VK_LEFT, VK_DOWN: v := Int64(FValues[i]) - FLineSize;
-    VK_PRIOR: v := Int64(FValues[i]) + FPageSize;
-    VK_NEXT: v := Int64(FValues[i]) - FPageSize;
-    VK_HOME: v := FMin;
-    VK_END: v := FMax;
+    vertical bar "up increases"; Home / End go as far as the neighbours let. #182: on a
+    Reversed bar each key moves the thumb the same way on screen, so the other way in value
+    (TyTrackInputStep); Home / End go to the end of the screen they go to unreversed. }
+  case vk of
+    VK_RIGHT, VK_UP: v := Int64(FValues[i]) + TyTrackInputStep(FLineSize, FReversed);
+    VK_LEFT, VK_DOWN: v := Int64(FValues[i]) + TyTrackInputStep(-FLineSize, FReversed);
+    VK_PRIOR: v := Int64(FValues[i]) + TyTrackInputStep(FPageSize, FReversed);
+    VK_NEXT: v := Int64(FValues[i]) + TyTrackInputStep(-FPageSize, FReversed);
+    VK_HOME: if TyTrackInputStep(-1, FReversed) < 0 then v := FMin else v := FMax;
   else
-    Exit;
+    if TyTrackInputStep(1, FReversed) > 0 then v := FMax else v := FMin;   // VK_END
   end;
-  Key := 0;
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
+  c := FChangeCount;
   UserMoveThumb(i, v);
+  { #182: as LCL's TTrackBar, OnEditingDone after each change the user makes. }
+  if FChangeCount <> c then EditingDone;
 end;
 
 procedure TTyMultiTrackBarBase.CMWantSpecialKey(var Message: TLMKey);
@@ -2638,7 +2882,7 @@ begin
   if (Message.CharCode = VK_TAB) and Enabled then
   begin
     sh := KeyShiftState;
-    if (sh * [ssCtrl, ssAlt, ssMeta] = []) and (NextEnabledThumb(KeyThumb, not (ssShift in sh)) >= 0) then
+    if (sh * [ssCtrl, ssAlt, ssMeta] = []) and (TabThumb(not (ssShift in sh)) >= 0) then
     begin
       Message.Result := 1;
       Exit;
@@ -2787,6 +3031,18 @@ end;
 
 { TTyCustomRangeTrackBar }
 
+procedure TTyCustomRangeTrackBar.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
+
 constructor TTyCustomRangeTrackBar.Create(AOwner: TComponent);
 var
   r: TTyTrackRange;
@@ -2870,6 +3126,7 @@ begin
   selID := FSelectedID;
   prev := FSelectedThumb;
   sel := -1;
+  BeginFollowThumbs;
   BeginDeferChange;
   try
     FSyncing := True;
@@ -2899,6 +3156,7 @@ begin
     if it <> nil then sel := 2 * it.Index + Ord(FSelectedHigh);
     if sel >= ThumbCount then sel := -1;
     FSelectedThumb := sel;
+    EndFollowThumbs;
   finally
     EndDeferChange;   // #182: the rebuild is over -- a handler's change goes through in full
   end;
@@ -2922,11 +3180,46 @@ var
   i: Integer;
 begin
   inherited ValuesChanged;
-  if (FRanges = nil) or (ThumbCount <> 2 * FRanges.Count) then Exit;
+  { #182: between BeginUpdate and EndUpdate the ranges hold what was set on them, raw: a Min,
+    Max or MinGap change meanwhile settles the thumbs, not them; EndUpdate settles both. }
+  if (FRanges = nil) or (FRanges.UpdateCount > 0) or (ThumbCount <> 2 * FRanges.Count) then
+    Exit;
   for i := 0 to FRanges.Count - 1 do
   begin
     FRanges[i].FLow := ThumbValues[2 * i];
     FRanges[i].FHigh := ThumbValues[2 * i + 1];
+  end;
+end;
+
+function TTyCustomRangeTrackBar.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := (FRanges <> nil) and (FRanges.UpdateCount > 0) and (AIndex div 2 < FRanges.Count);
+  if not Result then Exit;
+  if Odd(AIndex) then FRanges[AIndex div 2].FHigh := AValue
+  else FRanges[AIndex div 2].FLow := AValue;
+end;
+
+function TTyCustomRangeTrackBar.ClampCrossing(AIndex, AValue: Integer): Integer;
+var
+  k, n, lo, hi: Integer;
+begin
+  Result := inherited ClampCrossing(AIndex, AValue);
+  k := AIndex - AIndex mod 2;   // the range's lower end
+  n := ThumbCount;
+  if k + 1 >= n then Exit;
+  { MinGap from the range before and the range after -- never tighter than where the range's
+    own ends are already: values set from code under AllowCrossing may stand closer. }
+  if k > 0 then
+  begin
+    lo := FValues[k - 1] + MinGap;
+    if lo > FValues[k] then lo := FValues[k];
+    if Result < lo then Result := lo;
+  end;
+  if k + 2 < n then
+  begin
+    hi := FValues[k + 2] - MinGap;
+    if hi < FValues[k + 1] then hi := FValues[k + 1];
+    if Result > hi then Result := hi;
   end;
 end;
 
@@ -2947,6 +3240,16 @@ begin
   inherited Loaded;
   { No OnThumbSelect while reading: note the selection's range here instead. }
   RememberSelection(FSelectedThumb);
+  SnapThumbKeys;
+end;
+
+function TTyCustomRangeTrackBar.ThumbKey(AIndex: Integer): Integer;
+begin
+  { The range's ID and the end of it. }
+  if (FRanges <> nil) and (AIndex >= 0) and (AIndex div 2 < FRanges.Count) then
+    Result := 2 * FRanges[AIndex div 2].ID + Ord(Odd(AIndex))
+  else
+    Result := -1;
 end;
 
 procedure TTyCustomRangeTrackBar.ReadNoRanges(Reader: TReader);
@@ -3206,8 +3509,13 @@ procedure TTyTrackThumbs.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
   if not (Owner is TTyCustomMultiTrackBar) then Exit;
-  { One item's look changed: repaint. The collection changed shape: rebuild the thumbs. }
-  if Item <> nil then TTyCustomMultiTrackBar(Owner).Invalidate
+  { One item's look changed: repaint -- and a thumb disabled now is dropped from the drag, the
+    hover and the selection. The collection changed shape: rebuild the thumbs. }
+  if Item <> nil then
+  begin
+    TTyCustomMultiTrackBar(Owner).DropDisabledThumbs;
+    TTyCustomMultiTrackBar(Owner).Invalidate;
+  end
   else TTyCustomMultiTrackBar(Owner).ThumbsChanged;
 end;
 
@@ -3358,6 +3666,7 @@ begin
   selID := FSelectedID;
   prev := FSelectedThumb;
   sel := -1;
+  BeginFollowThumbs;
   BeginDeferChange;
   try
     FSyncing := True;
@@ -3376,8 +3685,9 @@ begin
     it := nil;
     if selID >= 0 then it := FThumbs.FindItemID(selID);
     if it <> nil then sel := it.Index;
-    if sel >= ThumbCount then sel := -1;
+    if (sel >= ThumbCount) or ((sel >= 0) and not ThumbEnabled(sel)) then sel := -1;
     FSelectedThumb := sel;
+    EndFollowThumbs;
   finally
     EndDeferChange;   // #182: see RangesChanged
   end;
@@ -3441,9 +3751,16 @@ var
   i: Integer;
 begin
   inherited ValuesChanged;
-  if (FThumbs = nil) or (ThumbCount <> FThumbs.Count) then Exit;
+  { #182: see TTyCustomRangeTrackBar.ValuesChanged. }
+  if (FThumbs = nil) or (FThumbs.UpdateCount > 0) or (ThumbCount <> FThumbs.Count) then Exit;
   for i := 0 to FThumbs.Count - 1 do
     FThumbs[i].FValue := ThumbValues[i];
+end;
+
+function TTyCustomMultiTrackBar.HoldThumbValue(AIndex, AValue: Integer): Boolean;
+begin
+  Result := (FThumbs <> nil) and (FThumbs.UpdateCount > 0) and (AIndex < FThumbs.Count);
+  if Result then FThumbs[AIndex].FValue := AValue;
 end;
 
 procedure TTyCustomMultiTrackBar.Loaded;
@@ -3458,6 +3775,15 @@ begin
     FSyncing := False;
   end;
   inherited Loaded;
+  SnapThumbKeys;
+end;
+
+function TTyCustomMultiTrackBar.ThumbKey(AIndex: Integer): Integer;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].ID
+  else
+    Result := -1;
 end;
 
 procedure TTyCustomMultiTrackBar.ReadNoThumbs(Reader: TReader);
@@ -3772,7 +4098,7 @@ end;
 
 procedure TTyCustomGradientTrackBar.EditStopColor(AIndex: Integer);
 var
-  c, old: TColor;
+  c, old, offered: TColor;
   handled: Boolean;
 begin
   if (AIndex < 0) or (AIndex >= Thumbs.Count) then Exit;
@@ -3781,11 +4107,13 @@ begin
   { No colour of its own: start from the one the gradient shows there. }
   if c = clDefault then c := ColorAtValue(Thumbs[AIndex].Value);
   if c = clDefault then c := clBlack;
+  offered := c;
   handled := False;
   if Assigned(FOnEditStopColor) then FOnEditStopColor(Self, AIndex, c, handled);
   if not handled and not ExecuteColorDialog(c) then Exit;
-  { The handler may have removed stops. }
-  if (AIndex >= Thumbs.Count) or (c = old) then Exit;
+  { The handler may have removed stops. Handled with AColor as it came (#182): nothing changes
+    -- a stop of no colour of its own does not take the one it was offered. }
+  if (AIndex >= Thumbs.Count) or (c = old) or (handled and (c = offered)) then Exit;
   Thumbs[AIndex].Color := c;
   Invalidate;
   DoChange;

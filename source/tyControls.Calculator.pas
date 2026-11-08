@@ -535,7 +535,7 @@ begin
     pad := P.Scale(6);
     dispR := Rect(P.Scale(4), P.Scale(4), ClientWidth - P.Scale(4), FDisplayHeight - P.Scale(2));
     if tpBackground in es.Present then
-      P.FillBackground(dispR, es.Background, es.BorderRadius);
+      P.FillBackground(dispR, es.Background, es.BorderRadius, (tpBorderColor in es.Present) and (es.BorderWidth > 0));
     if (tpBorderColor in es.Present) and (es.BorderWidth > 0) then
       P.StrokeBorder(dispR, es.BorderRadius, es.BorderWidth, es.BorderColor);
     mid := dispR.Top + (dispR.Bottom - dispR.Top) * 2 div 5;

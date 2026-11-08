@@ -27,7 +27,9 @@ begin
       FRightLocal := False
     else if Reporting and not OverrideHeld(CurrentShiftState) then
     begin
-      { 菜单先于按下到(有的 widgetset 按下时就发):按下会报给程序,这里不弹 }
+      { 菜单先于按下到(有的 widgetset 按下时就发):按下会报给程序,这里不弹;记下这次已经
+        答过了,随后的按下别再等一个不会来的菜单 }
+      FRightMenuAnswered := True;
       Handled := True;
       Exit;
     end;
@@ -83,7 +85,8 @@ begin
   { 只问「有没有文字」,不把整段读出来(剪贴板里可能是几兆) }
   FMenuPaste.Enabled := not ReadOnly and ClipboardHasText;
   FMenuSelectAll.Enabled := True;
-  FMenuClear.Enabled := True;
+  { #185: 清屏改写的是当前的屏;备用屏没有滚回可清，改了 vim、htop 的画面它们也不知道 }
+  FMenuClear.Enabled := not FCore.Buffers.IsAlt;
 end;
 
 procedure TTyCustomTerminalView.ShowContextMenu(const AClientPos: TPoint);

@@ -60,6 +60,10 @@ type
     procedure TestDisabledMouseIgnored;
     procedure TestTrackBarKeyboardSteps;
     procedure TestTrackBarVerticalUpIncreases;
+    { #182: on a Reversed bar every key and the wheel move the thumb the way they move it on
+      an unreversed bar of the same orientation -- the screen decides, as LCL's TTrackBar on
+      Windows -- so they change Position the other way. Horizontal and vertical. }
+    procedure TestReversedKeysAndWheelFollowTheScreen;
   end;
 
   TTyTrackBarPixelTest = class(TTestCase)
@@ -508,6 +512,85 @@ begin
     K := VK_DOWN; T.SimulateKeyDown(K); AssertEquals('down -LineSize', 50, T.Position);
   finally
     T.Free;
+  end;
+end;
+
+procedure TTyTrackBarControlTest.TestReversedKeysAndWheelFollowTheScreen;
+const
+  CWheelUp = 1;      // stand-ins for a wheel notch in the input list
+  CWheelDown = 2;
+  CHorz: array[0..8] of Word = (VK_RIGHT, VK_PRIOR, CWheelUp, VK_LEFT, VK_NEXT, CWheelDown,
+    CWheelDown, VK_HOME, VK_END);
+  CVert: array[0..8] of Word = (VK_UP, VK_PRIOR, CWheelUp, VK_DOWN, VK_NEXT, CWheelDown,
+    CWheelDown, VK_HOME, VK_END);
+var
+  bars: array[Boolean] of TTyTrackBarProbe;
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  i: Integer;
+  K: Word;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+  begin
+    for rev := False to True do
+    begin
+      bars[rev] := TTyTrackBarProbe.Create(nil);
+      bars[rev].Font.PixelsPerInch := 96;
+      bars[rev].Orientation := ori;
+      if ori = toVertical then bars[rev].SetBounds(0, 0, 24, 200)
+      else bars[rev].SetBounds(0, 0, 200, 24);
+      bars[rev].Min := 0;
+      bars[rev].Max := 100;
+      bars[rev].LineSize := 2;
+      bars[rev].PageSize := 20;
+      bars[rev].Position := 50;
+      bars[rev].Reversed := rev;
+    end;
+    try
+      for i := 0 to High(CHorz) do
+      begin
+        where := Format('ori=%d step %d', [Ord(ori), i]);
+        for rev := False to True do
+        begin
+          if ori = toVertical then K := CVert[i] else K := CHorz[i];
+          if K = CWheelUp then bars[rev].SimulateMouseWheel(120)
+          else if K = CWheelDown then bars[rev].SimulateMouseWheel(-120)
+          else
+          begin
+            bars[rev].SimulateKeyDown(K);
+            AssertEquals(where + ': the key is consumed', 0, Integer(K));
+          end;
+        end;
+        AssertTrue(where + ': the reversed thumb is where the plain one is on screen',
+          EqualRect(bars[False].ThumbRect, bars[True].ThumbRect));
+        AssertEquals(where + ': so its Position is the mirror', 100 - bars[False].Position,
+          bars[True].Position);
+      end;
+      { The values the plain bar went through stay as before. }
+      AssertEquals(Format('ori=%d: End on the plain bar is Max', [Ord(ori)]), 100,
+        bars[False].Position);
+      AssertEquals(Format('ori=%d: End on the reversed bar is Min, at the same end', [Ord(ori)]),
+        0, bars[True].Position);
+    finally
+      bars[False].Free;
+      bars[True].Free;
+    end;
+  end;
+  { Spelled out on a horizontal Reversed bar: the right arrow moves the thumb right. }
+  bars[True] := TTyTrackBarProbe.Create(nil);
+  try
+    bars[True].SetBounds(0, 0, 200, 24);
+    bars[True].Font.PixelsPerInch := 96;
+    bars[True].Reversed := True;
+    bars[True].Position := 50;
+    i := bars[True].ThumbRect.Left;
+    K := VK_RIGHT;
+    bars[True].SimulateKeyDown(K);
+    AssertEquals('-> lowers Position on a Reversed bar', 49, bars[True].Position);
+    AssertTrue('and the thumb goes right', bars[True].ThumbRect.Left > i);
+  finally
+    bars[True].Free;
   end;
 end;
 

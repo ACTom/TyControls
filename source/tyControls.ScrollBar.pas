@@ -1644,14 +1644,14 @@ begin
   h := (ARect.Bottom - ARect.Top) * sc.Scale;
 
   { 条身看得见的那一截。条的哪条边贴着宿主外沿,那条边就让开宿主框**此刻**占掉的那一圈
-    (TyChromeInsetLogical:边框或焦点环取宽的那个,再加一列抗锯齿;宿主获得焦点时大一档,
+    (TyChromeWidthLogical:边框或焦点环取宽的那个;宿主获得焦点时大一档,
     与列表框的行让开的是同一条带)。
     为什么要让:下面「上层」那一步把框线沾到的像素整列换回宿主的,条身若按整条排,凡是左右
     对称画的东西 —— 滑块的圆边、条自己的焦点环、箭头的居中 —— 在内容侧完整、在贴边侧被削掉
     一截,两条长边就长得不一样(真机报的「滚动条左右的渲染好奇怪」)。按看得见的那一截排,
     两侧才是镜像。
     只让贴边的那几条边:内容侧没有框;竖条下沿挨着横条时也没有。 }
-  band := APainter.Scale(TyChromeInsetLogical(hs));
+  band := APainter.Scale(TyChromeWidthLogical(hs));
   span := ARect;
   if hostR.Left >= ARect.Left then Inc(span.Left, band);
   if hostR.Top >= ARect.Top then Inc(span.Top, band);

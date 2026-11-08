@@ -423,6 +423,12 @@ type
     Cap, Join: Byte;
     Miter, Phase: Double;
     FillGrad, StrokeGrad: TTyChartGradient;
+    { [R7-Y] the font the last text left (HasFont False: the canvas' own
+      '10px sans-serif') }
+    HasFont: Boolean;
+    FontFamily: string;
+    FontPx: Double;
+    FontWeight: Integer;
   end;
 
   { [R7-W] the canvas state the paint order carries }
@@ -436,6 +442,23 @@ type
     Fill, Stroke: TTyChartColor;
     FillGrad, StrokeGrad: TTyChartGradient;
     LineWidth, Phase: Double;
+    { [R7-Y] the transform (device px) a held gradient was made under -- a
+      CanvasGradient's points are in the frame of the element that made it,
+      and land under the transform of whichever fills with it; and a held
+      pattern (FillPat.Present), its own matrix in the frame of whichever
+      fills with it }
+    FillGradHasT, StrokeGradHasT: Boolean;
+    FillGradM, StrokeGradM: TTyMat2D;
+    FillPat: TTyChartPattern;
+    { [R7-Y] the shadow's offsets (css px) and the composite operation ('':
+      source-over) }
+    OffX, OffY: Double;
+    Blend: string;
+    { [R7-Y] the font (HasFont False: the canvas' own) }
+    HasFont: Boolean;
+    FontFamily: string;
+    FontPx: Double;
+    FontWeight: Integer;
   end;
 
   { [R7-W] ONE RUN OF THE PAINT ORDER: TyCanvasRunStart, then
@@ -464,6 +487,15 @@ procedure TyLinesCanvasLeftovers(AList: TTyPaintList; const AGround: TTyCanvasGr
 { [R7-W] whether AEl holds a value the canvas refuses (a dirty rect's block
   must settle it afresh) }
 function TyCanvasElementCarries(const AEl: TTyChartElement): Boolean;
+{ [R7-Y] THE TRANSFORM AN ELEMENT HANDS THE CANVAS (device px), False for
+  none: a lines effect symbol's place, a caption's anchor and turn, one
+  handed over (CanvasM), a symbol's frame (HitM), an own-frame path's (the
+  inverse of ZrHit.ToLocal) -- what setContextTransform sets for it, and
+  the frame its fill's pattern lies in }
+function TyElementCanvasTransform(const AEl: TTyChartElement; out AM: TTyMat2D): Boolean;
+{ [R7-Y] A PATTERN IN AN ELEMENT'S FRAME: APm (pattern px to css px) put
+  under the transform AM (device px, ADs device px per css px) }
+procedure TyPatternUnder(const AM: TTyMat2D; ADs: Double; var APm: TTyDoubleArray);
 
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
@@ -476,7 +508,7 @@ implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol,
-  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl, tyControls.FontUnits;
 
 const
   cPi: Double = 3.141592653589793;
@@ -1511,6 +1543,38 @@ begin
   Result := TyBuildSymbolUnit(spec, AX, AY);
 end;
 
+{ [R7-Y] A LINES END SYMBOL'S HIT IN ITS OWN FRAME: Path.contain takes the
+  point back through the symbol's transform (placed, turned, scaled by
+  AScale -- the line's enter percent) and tests the path createSymbol made
+  in the box (-w / 2, -h / 2, w, h), its pen there too -- a point exactly on
+  a vertex or an edge as upstream's arithmetic has it [was: the drawn
+  shape] }
+procedure EndSymbolHitFrame(var AEl: TTyChartElement; AKind: TTySymbolKind;
+  AW, AH, AScale, ARotRad, AX, AY: Double);
+var nm: string; lm: TTyMat2D;
+begin
+  case AKind of
+    tsyCircle: nm := 'circle';
+    tsyRect: nm := 'rect';
+    tsyRoundRect: nm := 'roundRect';
+    tsySquare: nm := 'square';
+    tsyTriangle: nm := 'triangle';
+    tsyDiamond: nm := 'diamond';
+    tsyPin: nm := 'pin';
+    tsyArrow: nm := 'arrow';
+  else
+    Exit;
+  end;
+  if IsNan(AW) or IsNan(AH) or (AW < 0) or (AH < 0) or not ((AW > 0) or (AH > 0)) then Exit;
+  if IsNan(ARotRad) then ARotRad := 0;
+  lm := TyZrLocal(AScale, AScale, ARotRad, AX, AY);
+  AEl.Shape.HitSym := nm;
+  AEl.Shape.HitM := lm;
+  AEl.Shape.HitBoxW := AW;
+  AEl.Shape.HitBoxH := AH;
+  AEl.Shape.HitPenInFrame := True;
+end;
+
 { The effect symbol: createSymbol(type, -0.5, -0.5, 1, 1) scaled by (sx, sy),
   turned and placed -- the unit box's picture }
 function EffectShape(const AName: string; ASX, ASY, AX, AY, ARotRad: Double): TTyChartShape;
@@ -1884,6 +1948,7 @@ begin
         sym.Silent := False;
         sym.Datum := TyChartDatum(ASolved.SeriesIndex, g.Row, g.Row);
         sym.HitSlopLogical := 0;
+        EndSymbolHitFrame(sym, kind, ink.Sym[e].W, ink.Sym[e].H, 1, rot, at.X, at.Y);
         SetClip(sym);
         sym.Anim.Series := ASolved.SeriesIndex;
         sym.Anim.Index := g.Row;
@@ -2230,7 +2295,10 @@ begin
     or (AEl.Style.StrokeColor = cTyCanvasColourLeft)
     or TyPhaseLeft(AEl.Style.DashOffsetLogical)
     or (AEl.Caption.Colour = cTyCanvasColourLeft)
-    or (AEl.Caption.StrokeColour = cTyCanvasColourLeft);
+    or (AEl.Caption.StrokeColour = cTyCanvasColourLeft)
+    { [R7-Y] a shadow offset, a blend word }
+    or TyPhaseLeft(AEl.Style.ShadowOffsetX) or TyPhaseLeft(AEl.Style.ShadowOffsetY)
+    or ((AEl.Style.Blend <> '') and not TyBlendWordKnown(AEl.Style.Blend));
   if Result then Exit;
   for k := 0 to High(AEl.Caption.RtPieces) do
     if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
@@ -2239,16 +2307,144 @@ begin
       Exit(True);
 end;
 
+function TyElementCanvasTransform(const AEl: TTyChartElement; out AM: TTyMat2D): Boolean;
+var d, r: Double;
+begin
+  Result := False;
+  AM := Default(TTyMat2D);
+  if (AEl.Anim.Role = carLinesEffect) and (Length(AEl.Anim.Vals) >= 7)
+    and (AEl.Anim.Vals[1] = 1) then
+  begin
+    AM := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
+      AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
+    Exit(True);
+  end;
+  { [R7-Z] a transform the element carries (an end symbol's, a component
+    part's) before a caption's }
+  if Length(AEl.CanvasM) = 6 then
+  begin
+    AM[0] := AEl.CanvasM[0]; AM[1] := AEl.CanvasM[1]; AM[2] := AEl.CanvasM[2];
+    AM[3] := AEl.CanvasM[3]; AM[4] := AEl.CanvasM[4]; AM[5] := AEl.CanvasM[5];
+    Exit(True);
+  end;
+  if AEl.Caption.FontSizeLogical <> 0 then
+  begin
+    if AEl.Caption.HasFixedAnchor then
+      AM := TyZrLocal(1, 1, AEl.Caption.FixedRotationRad, AEl.Caption.FixedX, AEl.Caption.FixedY)
+    else
+      AM := TyZrLocal(1, 1, AEl.Caption.RotationRad, AEl.Caption.X, AEl.Caption.Y);
+    Exit(not (IsNan(AM[0]) or IsNan(AM[4]) or IsNan(AM[5])));
+  end;
+  if AEl.Shape.HitSym <> '' then
+  begin
+    { the unit box's frame is half the symbol's size: the symbol's own
+      scale is that, its path the unit one }
+    AM := AEl.Shape.HitM;
+    Exit(True);
+  end;
+  if AEl.ZrHit.Active then
+  begin
+    { the inverse of the way back }
+    d := AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[3] - AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[2];
+    if not ((d = 0) or IsNan(d) or IsInfinite(d)) then
+    begin
+      r := 1 / d;
+      AM[0] := AEl.ZrHit.ToLocal[3] * r;
+      AM[1] := -AEl.ZrHit.ToLocal[1] * r;
+      AM[2] := -AEl.ZrHit.ToLocal[2] * r;
+      AM[3] := AEl.ZrHit.ToLocal[0] * r;
+      AM[4] := (AEl.ZrHit.ToLocal[2] * AEl.ZrHit.ToLocal[5] - AEl.ZrHit.ToLocal[3] * AEl.ZrHit.ToLocal[4]) * r;
+      AM[5] := (AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[4] - AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[5]) * r;
+      Exit(True);
+    end;
+  end;
+end;
+
+procedure TyPatternUnder(const AM: TTyMat2D; ADs: Double; var APm: TTyDoubleArray);
+var m: array[0..5] of Double; k: Integer; p: array[0..5] of Double;
+begin
+  if Length(APm) <> 6 then Exit;
+  if not (ADs > 0) then ADs := 1;
+  for k := 0 to 5 do
+  begin
+    m[k] := AM[k] / ADs;
+    p[k] := APm[k];
+  end;
+  APm[0] := m[0] * p[0] + m[2] * p[1];
+  APm[1] := m[1] * p[0] + m[3] * p[1];
+  APm[2] := m[0] * p[2] + m[2] * p[3];
+  APm[3] := m[1] * p[2] + m[3] * p[3];
+  APm[4] := m[0] * p[4] + m[2] * p[5] + m[4];
+  APm[5] := m[1] * p[4] + m[3] * p[5] + m[5];
+end;
+
+{ [R7-Y] A HELD CANVASGRADIENT UNDER ANOTHER TRANSFORM: its points were made
+  in the frame of the element that made it (AHasA / AA, else the css px
+  frame), and land under the one filling with it -- device px both; a
+  radius by the scales' ratio }
+function GradUnder(const AGrad: TTyChartGradient; AHasA: Boolean; const AA: TTyMat2D;
+  AHasB: Boolean; const AB: TTyMat2D; ADs: Double): TTyChartGradient;
+var
+  ma, mb: TTyMat2D;
+  d, r, lx, ly, sa, sb: Double;
+
+  procedure Map(var AX, AY: Double);
+  var u, v: Double;
+  begin
+    { back into the frame it was made in, then under mb }
+    u := (ma[3] * (AX - ma[4]) - ma[2] * (AY - ma[5])) * r;
+    v := (-ma[1] * (AX - ma[4]) + ma[0] * (AY - ma[5])) * r;
+    lx := mb[0] * u + mb[2] * v + mb[4];
+    ly := mb[1] * u + mb[3] * v + mb[5];
+    AX := lx;
+    AY := ly;
+  end;
+
+begin
+  Result := AGrad;
+  if AGrad.Kind = cgkNone then Exit;
+  if AHasA then ma := AA
+  else
+  begin
+    ma := Default(TTyMat2D);
+    ma[0] := ADs;
+    ma[3] := ADs;
+  end;
+  if AHasB then mb := AB
+  else
+  begin
+    mb := Default(TTyMat2D);
+    mb[0] := ADs;
+    mb[3] := ADs;
+  end;
+  if (ma[0] = mb[0]) and (ma[1] = mb[1]) and (ma[2] = mb[2]) and (ma[3] = mb[3])
+    and (ma[4] = mb[4]) and (ma[5] = mb[5]) then Exit;
+  d := ma[0] * ma[3] - ma[1] * ma[2];
+  { (a frame of no area: no way back -- held as it is) }
+  if (d = 0) or IsNan(d) or IsInfinite(d) then Exit;
+  r := 1 / d;
+  Map(Result.X, Result.Y);
+  if Result.Kind = cgkLinear then Map(Result.X2, Result.Y2)
+  else
+  begin
+    sa := Sqrt(Abs(d));
+    sb := Sqrt(Abs(mb[0] * mb[3] - mb[1] * mb[2]));
+    Result.R := AGrad.R / sa * sb;
+  end;
+end;
+
 { [R7-V] what a label's last text span hands the canvas: its textShadowColor
   ('transparent' where none) and blur where it blurs, else zrender's '#000'
   and none -- Text.ts sets a TSpan's shadow only for a textShadowBlur above
   nought }
 procedure CaptionShadowOf(const AEl: TTyChartElement; out AColour: TTyChartColor;
-  out ABlur: Double);
+  out ABlur, AOffX, AOffY: Double);
 var k: Integer;
 begin
   AColour := TTyChartColor($FF000000);
   ABlur := 0;
+  AOffX := 0;
+  AOffY := 0;
   for k := High(AEl.Caption.RtPieces) downto 0 do
   begin
     if AEl.Caption.RtPieces[k].Text = '' then Continue;
@@ -2256,6 +2452,11 @@ begin
     begin
       AColour := AEl.Caption.RtPieces[k].ShadowColor;
       ABlur := AEl.Caption.RtPieces[k].ShadowBlur;
+      { [R7-Y] and its offsets (`textShadowOffsetX || 0`) }
+      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetX) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetX)) then
+        AOffX := AEl.Caption.RtPieces[k].ShadowOffsetX;
+      if not (IsNan(AEl.Caption.RtPieces[k].ShadowOffsetY) or IsInfinite(AEl.Caption.RtPieces[k].ShadowOffsetY)) then
+        AOffY := AEl.Caption.RtPieces[k].ShadowOffsetY;
     end;
     Exit;
   end;
@@ -2314,6 +2515,10 @@ begin
     ARun.Cur.Phase := ARun.Ground.Phase;
     ARun.Cur.FillGrad := ARun.Ground.FillGrad;
     ARun.Cur.StrokeGrad := ARun.Ground.StrokeGrad;
+    ARun.Cur.HasFont := ARun.Ground.HasFont;
+    ARun.Cur.FontFamily := ARun.Ground.FontFamily;
+    ARun.Cur.FontPx := ARun.Ground.FontPx;
+    ARun.Cur.FontWeight := ARun.Ground.FontWeight;
   end;
 end;
 
@@ -2333,13 +2538,23 @@ end;
 { [R7-W] a gradient as the canvas holds it once an element filled or
   stroked with it: in the frame it was made for, the element's box (the
   canvas keeps that CanvasGradient, not the element's spec) }
-function CanvasGradOf(const AGrad: TTyChartGradient; const AEl: TTyChartElement): TTyChartGradient;
+function CanvasGradOf(const AGrad: TTyChartGradient; const AEl: TTyChartElement;
+  ADs: Double): TTyChartGradient;
 var box: TTyXYWH; x1, y1, x2, y2, r: Double;
 begin
   Result := AGrad;
   if (AGrad.Kind = cgkNone) or AGrad.Global then Exit;
   if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
-  else box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
+  else
+  begin
+    box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
+    { [R7-Y] the renderer's box (TyElementGradientBox): Path.getBoundingRect
+      grows by the stroke when there is one [was: the shape's alone, a
+      stroke's gradient held off by half its width] }
+    if (AEl.Style.StrokeWidthLogical > 0)
+      and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+      box := TyGrowByStroke(box, AEl.Style.HasFill, AEl.Style.StrokeWidthLogical * ADs);
+  end;
   TyResolveGradientXYWH(AGrad, box, x1, y1, x2, y2, r);
   Result.Global := True;
   Result.X := x1;
@@ -2352,7 +2567,8 @@ end;
 procedure TyCanvasRunStep(var ARun: TTyCanvasRun; var AEl: TTyChartElement);
 var
   clipped, cap, strokes, dashed: Boolean;
-  ds, d, blur, r, sEl, ps: Double;
+  ds, blur, sEl, ps, ox, oy: Double;
+  pm: TTyDoubleArray;
   colour: TTyChartColor;
   elHasT: Boolean;
   elM: TTyMat2D;
@@ -2364,6 +2580,12 @@ begin
     at the clamped nought, and hands the canvas its state [was: any
     opacity not above nought skipped]) }
   if AEl.Ignore or AEl.ProgHidden or (AEl.Style.Alpha = 0) then Exit;
+  { [R7-Y] and shouldBePainted's `m && !m[0] && !m[3]`: a transform scaled
+    to nought is not brushed (a symbol of size nought, an end symbol at the
+    start of its line's enter animation) [was: brushed, its transform and
+    colours handed on] }
+  if ((AEl.CanvasFlags and cTyCanvasTransformLeft) = 0)
+    and TyElementCanvasTransform(AEl, elM) and (elM[0] = 0) and (elM[3] = 0) then Exit;
   if ARun.First or (AEl.ZLevel <> ARun.ZLevel) then
   begin
     ARun.First := False;
@@ -2400,6 +2622,11 @@ begin
   if AEl.Style.LineCap = cTyCanvasWordLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasCapLeft;
   if AEl.Style.LineJoin = cTyCanvasWordLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasJoinLeft;
   if AEl.Style.MiterLimit < 0 then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasMiterLeft;
+  { [R7-Y] a shadow offset, a blend word }
+  if TyPhaseLeft(AEl.Style.ShadowOffsetX) then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasOffXLeft;
+  if TyPhaseLeft(AEl.Style.ShadowOffsetY) then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasOffYLeft;
+  if (AEl.Style.Blend <> '') and not TyBlendWordKnown(AEl.Style.Blend) then
+    AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasBlendLeft;
   { [R7-W] and a fill / stroke colour, a dash phase, a caption's colours }
   if not cap then
   begin
@@ -2433,7 +2660,7 @@ begin
     ARun.Cur.Shadow := AEl.CanvasShadow
   else if cap then
   begin
-    CaptionShadowOf(AEl, colour, blur);
+    CaptionShadowOf(AEl, colour, blur, ox, oy);
     ARun.Cur.Shadow := colour;
   end
   else if (AEl.Style.ShadowColor shr 24) <> 0 then
@@ -2445,11 +2672,34 @@ begin
     AEl.Style.ShadowBlur := ARun.Cur.Blur
   else if cap then
   begin
-    CaptionShadowOf(AEl, colour, blur);
+    CaptionShadowOf(AEl, colour, blur, ox, oy);
     ARun.Cur.Blur := blur;
   end
   else if AEl.Style.ShadowBlur > 0 then ARun.Cur.Blur := AEl.Style.ShadowBlur
   else ARun.Cur.Blur := 0;
+  { [R7-Y] the shadow's offsets: `dpr * (value || 0)`, refused (kept) where
+    that is no finite number; a text span's only where it blurs }
+  if cap then
+  begin
+    CaptionShadowOf(AEl, colour, blur, ox, oy);
+    ARun.Cur.OffX := ox;
+    ARun.Cur.OffY := oy;
+  end
+  else
+  begin
+    if (AEl.CanvasFlags and cTyCanvasOffXLeft) <> 0 then AEl.Style.ShadowOffsetX := ARun.Cur.OffX
+    else if IsNan(AEl.Style.ShadowOffsetX) or IsInfinite(AEl.Style.ShadowOffsetX) then ARun.Cur.OffX := 0
+    else ARun.Cur.OffX := AEl.Style.ShadowOffsetX;
+    if (AEl.CanvasFlags and cTyCanvasOffYLeft) <> 0 then AEl.Style.ShadowOffsetY := ARun.Cur.OffY
+    else if IsNan(AEl.Style.ShadowOffsetY) or IsInfinite(AEl.Style.ShadowOffsetY) then ARun.Cur.OffY := 0
+    else ARun.Cur.OffY := AEl.Style.ShadowOffsetY;
+  end;
+  { [R7-Y] the composite operation: `style.blend || 'source-over'`, a word
+    the canvas does not know refused (kept); a label carries none }
+  if (AEl.CanvasFlags and cTyCanvasBlendLeft) <> 0 then AEl.Style.Blend := ARun.Cur.Blend
+  else if cap then ARun.Cur.Blend := ''
+  else if AEl.Style.Blend = 'source-over' then ARun.Cur.Blend := ''
+  else ARun.Cur.Blend := AEl.Style.Blend;
   { [R7-V] the pen's cap, join and miterLimit: every path and text sets
     them (a text its defaults); a word the canvas does not take, or a
     miterLimit below nought, keeps the one it had }
@@ -2485,51 +2735,8 @@ begin
     elHasT := ARun.Cur.HasT;
     elM := ARun.Cur.M;
   end
-  else if (AEl.Anim.Role = carLinesEffect) and (Length(AEl.Anim.Vals) >= 7)
-    and (AEl.Anim.Vals[1] = 1) then
-  begin
-    elHasT := True;
-    elM := TyZrLocal(AEl.Anim.Vals[4], AEl.Anim.Vals[5], AEl.Anim.Vals[6],
-      AEl.Anim.Vals[2], AEl.Anim.Vals[3]);
-  end
-  else if Length(AEl.CanvasM) = 6 then
-  begin
-    elHasT := True;
-    elM[0] := AEl.CanvasM[0]; elM[1] := AEl.CanvasM[1]; elM[2] := AEl.CanvasM[2];
-    elM[3] := AEl.CanvasM[3]; elM[4] := AEl.CanvasM[4]; elM[5] := AEl.CanvasM[5];
-  end
-  else if cap then
-  begin
-    elHasT := True;
-    if AEl.Caption.HasFixedAnchor then
-      elM := TyZrLocal(1, 1, AEl.Caption.FixedRotationRad, AEl.Caption.FixedX, AEl.Caption.FixedY)
-    else
-      elM := TyZrLocal(1, 1, AEl.Caption.RotationRad, AEl.Caption.X, AEl.Caption.Y);
-    if IsNan(elM[0]) or IsNan(elM[4]) or IsNan(elM[5]) then elHasT := False;
-  end
-  else if AEl.Shape.HitSym <> '' then
-  begin
-    elHasT := True;
-    elM := AEl.Shape.HitM;
-    { the unit box's frame is half the symbol's size: the symbol's own
-      scale is that, its path the unit one }
-  end
-  else if AEl.ZrHit.Active then
-  begin
-    { the inverse of the way back }
-    d := AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[3] - AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[2];
-    if not ((d = 0) or IsNan(d) or IsInfinite(d)) then
-    begin
-      r := 1 / d;
-      elHasT := True;
-      elM[0] := AEl.ZrHit.ToLocal[3] * r;
-      elM[1] := -AEl.ZrHit.ToLocal[1] * r;
-      elM[2] := -AEl.ZrHit.ToLocal[2] * r;
-      elM[3] := AEl.ZrHit.ToLocal[0] * r;
-      elM[4] := (AEl.ZrHit.ToLocal[2] * AEl.ZrHit.ToLocal[5] - AEl.ZrHit.ToLocal[3] * AEl.ZrHit.ToLocal[4]) * r;
-      elM[5] := (AEl.ZrHit.ToLocal[1] * AEl.ZrHit.ToLocal[4] - AEl.ZrHit.ToLocal[0] * AEl.ZrHit.ToLocal[5]) * r;
-    end;
-  end;
+  else
+    elHasT := TyElementCanvasTransform(AEl, elM);
   ARun.Cur.HasT := elHasT;
   if elHasT then ARun.Cur.M := elM;
   { [R7-W] THE LINE SCALE OF ITS TRANSFORM (css px): the canvas' lineWidth
@@ -2547,13 +2754,59 @@ begin
     every string fill / stroke (the canvas refuses one no parser reads,
     keeping the one it had), brushPath a gradient's CanvasGradient; a text
     its spans' (a plate's first) }
+  { [R7-Y] THE FONT: a text sets `style.font || DEFAULT_FONT`, refused where
+    the canvas does not parse it (the font it had: the last text's, else
+    '10px sans-serif'); each piece of a rich text its own [was: the
+    label's own fallback] }
+  if cap then
+  begin
+    if (Length(AEl.Caption.RtPieces) = 0) and ((AEl.CanvasFlags and cTyCanvasFontLeft) <> 0) then
+    begin
+      if ARun.Cur.HasFont then
+      begin
+        AEl.Caption.FontName := ARun.Cur.FontFamily;
+        AEl.Caption.FontSizeLogical := TyFontSizeFromPx(ARun.Cur.FontPx);
+        AEl.Caption.FontWeight := ARun.Cur.FontWeight;
+      end
+      else
+      begin
+        AEl.Caption.FontName := 'sans-serif';
+        AEl.Caption.FontSizeLogical := TyFontSizeFromPx(10);
+        AEl.Caption.FontWeight := 400;
+      end;
+    end
+    else if Length(AEl.Caption.RtPieces) = 0 then
+    begin
+      ARun.Cur.HasFont := True;
+      ARun.Cur.FontFamily := AEl.Caption.FontName;
+      { (a theme's size is points, an author's px: TyOptFontSize) }
+      if TyFontSizeIsPx(AEl.Caption.FontSizeLogical) then
+        ARun.Cur.FontPx := TyFontPxOf(AEl.Caption.FontSizeLogical)
+      else
+        ARun.Cur.FontPx := AEl.Caption.FontSizeLogical * 96 / 72;
+      ARun.Cur.FontWeight := AEl.Caption.FontWeight;
+    end
+    else
+      for k := 0 to High(AEl.Caption.RtPieces) do
+        if (AEl.Caption.RtPieces[k].Kind = rpkText) and (AEl.Caption.RtPieces[k].Text <> '') then
+        begin
+          ARun.Cur.HasFont := True;
+          ARun.Cur.FontFamily := AEl.Caption.RtPieces[k].FontFamily;
+          ARun.Cur.FontPx := AEl.Caption.RtPieces[k].FontSizePx;
+          ARun.Cur.FontWeight := AEl.Caption.RtPieces[k].FontWeight;
+        end;
+  end;
   if cap then
   begin
     if Length(AEl.Caption.RtPieces) = 0 then
     begin
       if (AEl.CanvasFlags and cTyCanvasTextFillLeft) <> 0 then AEl.Caption.Colour := ARun.Cur.Fill
-      else ARun.Cur.Fill := AEl.Caption.Colour;
-      ARun.Cur.FillGrad := Default(TTyChartGradient);
+      else
+      begin
+        ARun.Cur.Fill := AEl.Caption.Colour;
+        ARun.Cur.FillGrad := Default(TTyChartGradient);
+        ARun.Cur.FillPat := Default(TTyChartPattern);
+      end;
       if (AEl.CanvasFlags and cTyCanvasTextStrokeLeft) <> 0 then
         AEl.Caption.StrokeColour := ARun.Cur.Stroke
       else if AEl.Caption.StrokeWidthLogical > 0 then
@@ -2575,6 +2828,7 @@ begin
           begin
             ARun.Cur.Fill := pc^.Fill;
             ARun.Cur.FillGrad := Default(TTyChartGradient);
+            ARun.Cur.FillPat := Default(TTyChartPattern);
           end;
         end;
         if pc^.HasStroke then
@@ -2594,20 +2848,44 @@ begin
     if (AEl.CanvasFlags and cTyCanvasFillLeft) <> 0 then
     begin
       AEl.Style.FillColor := ARun.Cur.Fill;
-      AEl.Style.FillGradient := ARun.Cur.FillGrad;
+      { [R7-Y] a held gradient's points under this element's transform, a
+        held pattern in this element's frame [was: the gradient where the
+        element before had it, a pattern none] }
+      AEl.Style.FillGradient := GradUnder(ARun.Cur.FillGrad, ARun.Cur.FillGradHasT,
+        ARun.Cur.FillGradM, elHasT, elM, ARun.Ds);
+      AEl.Style.FillPattern := Default(TTyChartPattern);
+      if ARun.Cur.FillPat.Present then
+      begin
+        AEl.Style.FillPattern := ARun.Cur.FillPat;
+        TyPatternMatrix(ARun.Cur.FillPat, pm);
+        if elHasT then TyPatternUnder(elM, ARun.Ds, pm);
+        AEl.Style.FillPattern.HasMatrix := True;
+        AEl.Style.FillPattern.UnitImage := False;
+        AEl.Style.FillPattern.HasCrop := False;
+        for k := 0 to 5 do AEl.Style.FillPattern.Matrix[k] := pm[k];
+      end;
     end
     else if AEl.Style.HasFill then
     begin
       if AEl.Style.FillPattern.Present then
       begin
-        { (a pattern the canvas keeps is not carried here: none) }
-        ARun.Cur.Fill := 0;
-        ARun.Cur.FillGrad := Default(TTyChartGradient);
+        { [R7-Y] an image (drawImage) sets no fillStyle; a pattern the
+          canvas keeps, its matrix taken in the frame of whichever fills
+          with it [was: none kept] }
+        if not AEl.Style.FillPattern.UnitImage then
+        begin
+          ARun.Cur.Fill := 0;
+          ARun.Cur.FillGrad := Default(TTyChartGradient);
+          ARun.Cur.FillPat := AEl.Style.FillPattern;
+        end;
       end
       else
       begin
         ARun.Cur.Fill := AEl.Style.FillColor;
-        ARun.Cur.FillGrad := CanvasGradOf(AEl.Style.FillGradient, AEl);
+        ARun.Cur.FillGrad := CanvasGradOf(AEl.Style.FillGradient, AEl, ARun.Ds);
+        ARun.Cur.FillGradHasT := elHasT;
+        ARun.Cur.FillGradM := elM;
+        ARun.Cur.FillPat := Default(TTyChartPattern);
       end;
     end;
     { the pen's width: [R7-W] 'Infinity' refused (kept) }
@@ -2617,15 +2895,20 @@ begin
     if (AEl.CanvasFlags and cTyCanvasStrokeLeft) <> 0 then
     begin
       AEl.Style.StrokeColor := ARun.Cur.Stroke;
-      AEl.Style.StrokeGradient := ARun.Cur.StrokeGrad;
+      AEl.Style.StrokeGradient := GradUnder(ARun.Cur.StrokeGrad, ARun.Cur.StrokeGradHasT,
+        ARun.Cur.StrokeGradM, elHasT, elM, ARun.Ds);
     end
     else if strokes then
     begin
       ARun.Cur.Stroke := AEl.Style.StrokeColor;
-      ARun.Cur.StrokeGrad := CanvasGradOf(AEl.Style.StrokeGradient, AEl);
+      ARun.Cur.StrokeGrad := CanvasGradOf(AEl.Style.StrokeGradient, AEl, ARun.Ds);
+      ARun.Cur.StrokeGradHasT := elHasT;
+      ARun.Cur.StrokeGradM := elM;
     end
-    { [R7-AA] a width of nought: its stroke colour all the same }
-    else if (AEl.CanvasFlags and cTyCanvasStrokeSet) <> 0 then
+    { [R7-Y] A COLOUR OF NO WIDTH: bindPathAndTextCommonStyle assigns every
+      string stroke, whatever the width (a gradient only where it strokes)
+      [was: only where it strokes] }
+    else if (AEl.Style.StrokeGradient.Kind = cgkNone) and ((AEl.Style.StrokeColor shr 24) <> 0) then
     begin
       ARun.Cur.Stroke := AEl.Style.StrokeColor;
       ARun.Cur.StrokeGrad := Default(TTyChartGradient);
@@ -2680,13 +2963,16 @@ begin
 end;
 
 procedure TyLinesFrameSymbol(var AEl: TTyChartElement; APercent: Double);
-var g: TTyLinesGeom; at: TTyPointF; pd: string;
+var g: TTyLinesGeom; at: TTyPointF; pd: string; lm: TTyMat2D; rot: Double;
 begin
   if not (APercent > 0) then
   begin
     AEl.Style.HasFill := False;
     AEl.Style.StrokeWidthLogical := 0;
     AEl.Silent := True;
+    { [R7-Y] scaled to nought: shouldBePainted's `!m[0] && !m[3]`, not
+      brushed, nothing handed to the canvas }
+    AEl.CanvasM := TTyDoubleArray.Create(0, 0, 0, 0, 0, 0);
     Exit;
   end;
   g := GeomOfG(AEl);
@@ -2694,9 +2980,19 @@ begin
     percent; the turn is the tangent's at 0 and at 1 whatever the percent }
   if AEl.Anim.Role = carLinesFrom then at := TyLinesPointAt(g, 0)
   else at := TyLinesPointAt(g, APercent);
+  { [R7-Y] the transform it hands the canvas now: placed there, scaled by the
+    percent (a new array: the frame's copy shares the list's) [was: the one
+    at rest] }
+  rot := AEl.Anim.G[11];
+  if IsNan(rot) then rot := 0;
+  lm := TyZrLocal(APercent, APercent, rot, at.X, at.Y);
+  AEl.CanvasM := TTyDoubleArray.Create(lm[0], lm[1], lm[2], lm[3], lm[4], lm[5]);
   pd := AEl.Shape.PathData;
   AEl.Shape := EndSymbolShape(TTySymbolKind(Round(AEl.Anim.G[7])), AEl.Anim.G[10] <> 0,
     pd, AEl.Anim.G[8] * APercent, AEl.Anim.G[9] * APercent, at.X, at.Y, AEl.Anim.G[11]);
+  { [R7-Y] its hit in its frame, scaled by the percent }
+  EndSymbolHitFrame(AEl, TTySymbolKind(Round(AEl.Anim.G[7])), AEl.Anim.G[8], AEl.Anim.G[9],
+    APercent, AEl.Anim.G[11], at.X, at.Y);
   { [spec 242] the symbol is scaled by the percent: its gradient too }
   PlaceLocalGrad(AEl, APercent, APercent, AEl.Anim.G[11], at.X, at.Y);
 end;

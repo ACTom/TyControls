@@ -585,13 +585,9 @@ function NumOf(AV: TJSONData): Double;
 begin
   if IsHex16(AV) then Result := FromHex(AV.AsString)
   { [R6-F] a value that is no number (a phase of 'abc'): the canvas' }
-  else if AV.JSONType in [jtString, jtBoolean] then
-  begin
-    Result := TyOptPenOffset(AV);
-    { [R7-W] one the canvas refuses: a state's is nought here (the paint
-      order settles only an element's own, spec 277) }
-    if TyPhaseLeft(Result) then Result := 0;
-  end
+  { [R7-Y] (one the canvas refuses is cTyCanvasPhaseLeft: the element's
+    own and a state's alike) [R7-W: a state's was nought] }
+  else if AV.JSONType in [jtString, jtBoolean] then Result := TyOptPenOffset(AV)
   else Result := AV.AsFloat;
 end;
 
@@ -724,7 +720,17 @@ begin
     else
       fel := el;
     Inc(FDashOffs);
-    if Abs(fel.Style.DashOffsetLogical - NumOf(fv)) > 1e-9 then
+    { [R7-Y] A PHASE THE CANVAS REFUSES ('abc', 'Infinity'): the one it had,
+      settled in paint order -- the element marked so (what the canvas then
+      holds is test.advchart.canvasstates') [R7-W: compared as nought] }
+    if TyPhaseLeft(NumOf(fv)) then
+    begin
+      if ((fel.CanvasFlags and cTyCanvasPhaseLeftFlag) = 0)
+        and not TyPhaseLeft(fel.Style.DashOffsetLogical) then
+        Miss(Format('%s %s: dash phase %s, upstream refused (%s)', [AWhere, id,
+          FloatToStr(fel.Style.DashOffsetLogical), fv.AsJSON]), AWhere + id + 'doff');
+    end
+    else if Abs(fel.Style.DashOffsetLogical - NumOf(fv)) > 1e-9 then
       Miss(Format('%s %s: dash phase %s, upstream %s', [AWhere, id,
         FloatToStr(fel.Style.DashOffsetLogical), FloatToStr(NumOf(fv))]), AWhere + id + 'doff');
   end;

@@ -2949,6 +2949,13 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-Y] A BORDER COLOUR WRITTEN WITH NO WIDTH strokes at zrender's
+    lineWidth 1 (getItemStyle leaves the key out; the path's default style
+    has 1) [was: no pen -- a bar's, a scatter's, a heatmap's border never
+    drawn] }
+  if item.BorderColor.Written and not item.BorderColor.IsNone
+    and not AVisual.StrokeWidthSet and not (AVisual.StrokeWidthLogical > 0) then
+    AVisual.StrokeWidthLogical := 1;
   { [R7-U] the layout's width: getLineWidth / prepareLineWidth read the
     item model's itemStyle.borderWidth, the root's under the series' }
   AVisual.LayoutHas := own <> node;
@@ -4423,6 +4430,9 @@ begin
     FListTailAt := list.Count;
     Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
+    { [R7-Y] what the canvas is left with, in paint order, a chart of no
+      series too (its graphic elements) [was: never settled] }
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     Exit;
   end;
   begin
@@ -5548,6 +5558,10 @@ begin
         { [R6-D] a funnel's bands: the border the author writes over the
           port's own ground-coloured one [was: never read] }
         if typ = TyFunnelSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
+        { [R7-Y] a themeRiver's layer: ThemeRiverView's polygon.useStyle(the
+          last row's visual style), the series' border [was: never read
+          here; BuildRiverMarks drew a written colour at a written width] }
+        if typ = TyThemeRiverSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
         { [R7-F] A PIE'S SLICE, likewise: PieView's sector.useStyle(the item's
           visual style), the item's own border over the series' ('auto' the
           series' palette colour, seriesStyleTask) [was: the series' border
