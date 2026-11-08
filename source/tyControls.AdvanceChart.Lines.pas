@@ -496,6 +496,15 @@ function TyElementCanvasTransform(const AEl: TTyChartElement; out AM: TTyMat2D):
 { [R7-Y] A PATTERN IN AN ELEMENT'S FRAME: APm (pattern px to css px) put
   under the transform AM (device px, ADs device px per css px) }
 procedure TyPatternUnder(const AM: TTyMat2D; ADs: Double; var APm: TTyDoubleArray);
+{ [R7-AB] AN ELEMENT'S GRADIENT AS ITS CANVAS GRADIENT IS MADE (zrender's
+  getCanvasGradient against getBoundingRect, in the element's own
+  coordinates): one made in a frame already (HasM) as it is; an element of
+  a symbol's frame that is no similarity (scaled unevenly, turned) in that
+  frame, against the box its path has there (grown by its pen there) --
+  AFrame that frame, device px; else against its box in device px (ADs
+  device px per css px), AFrame empty. }
+procedure TyElementGradientIn(const AEl: TTyChartElement; const AGrad: TTyChartGradient;
+  ADs: Double; out AX1, AY1, AX2, AY2, AR: Double; out AFrame: TTyDoubleArray);
 
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
@@ -2381,15 +2390,92 @@ begin
   APm[5] := m[1] * p[4] + m[3] * p[5] + m[5];
 end;
 
+{ a 2 x 2 frame that is a similarity: a turn by nought, a uniform scale --
+  a circle stays a circle and stripes stay square to their ramp }
+function FrameSimilar(const M: TTyMat2D): Boolean;
+begin
+  Result := (M[1] = 0) and (M[2] = 0) and (M[0] = M[3]);
+end;
+
+procedure TyElementGradientIn(const AEl: TTyChartElement; const AGrad: TTyChartGradient;
+  ADs: Double; out AX1, AY1, AX2, AY2, AR: Double; out AFrame: TTyDoubleArray);
+var
+  box: TTyXYWH;
+  bw, bh, d: Double;
+  k: Integer;
+begin
+  AFrame := nil;
+  if AGrad.HasM then
+  begin
+    TyResolveGradientXYWH(AGrad, TyRectToXYWH(TyRectF(0, 0, 1, 1)), AX1, AY1, AX2, AY2, AR);
+    SetLength(AFrame, 6);
+    for k := 0 to 5 do AFrame[k] := AGrad.M[k];
+    Exit;
+  end;
+  if (not AGrad.Global) and (AEl.Shape.HitSym <> '') and not FrameSimilar(AEl.Shape.HitM) then
+  begin
+    d := AEl.Shape.HitM[0] * AEl.Shape.HitM[3] - AEl.Shape.HitM[1] * AEl.Shape.HitM[2];
+    if (d <> 0) and not IsNan(d) and not IsInfinite(d) then
+    begin
+      { the box of the path createSymbol made, in the symbol's frame: a real
+        box where the shape names one, else the unit one (-1, -1, 2, 2) }
+      bw := 2;
+      bh := 2;
+      if (AEl.Shape.HitBoxW >= 0) and (AEl.Shape.HitBoxH >= 0)
+        and ((AEl.Shape.HitBoxW > 0) or (AEl.Shape.HitBoxH > 0)) then
+      begin
+        bw := AEl.Shape.HitBoxW;
+        bh := AEl.Shape.HitBoxH;
+      end;
+      box := TyZrBBox(TyZrSymbol(AEl.Shape.HitSym, -bw / 2, -bh / 2, bw, bh));
+      { (its pen in that frame: strokeNoScale, the width over the scale) }
+      if (AEl.Style.StrokeWidthLogical > 0)
+        and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+        box := TyGrowByStroke(box, AEl.Style.HasFill,
+          AEl.Style.StrokeWidthLogical * ADs / Sqrt(Abs(d)));
+      TyResolveGradientXYWH(AGrad, box, AX1, AY1, AX2, AY2, AR);
+      SetLength(AFrame, 6);
+      for k := 0 to 5 do AFrame[k] := AEl.Shape.HitM[k];
+      Exit;
+    end;
+  end;
+  if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
+  else
+  begin
+    box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
+    { [R7-Y] the renderer's box: Path.getBoundingRect grows by the stroke
+      when there is one }
+    if (AEl.Style.StrokeWidthLogical > 0)
+      and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
+      box := TyGrowByStroke(box, AEl.Style.HasFill, AEl.Style.StrokeWidthLogical * ADs);
+  end;
+  TyResolveGradientXYWH(AGrad, box, AX1, AY1, AX2, AY2, AR);
+end;
+
 { [R7-Y] A HELD CANVASGRADIENT UNDER ANOTHER TRANSFORM: its points were made
   in the frame of the element that made it (AHasA / AA, else the css px
   frame), and land under the one filling with it -- device px both; a
-  radius by the scales' ratio }
+  radius by the scales' ratio. [R7-AB] One made in a frame (HasM) is that
+  frame's points under the new one; where the two frames differ by more
+  than a similarity, the points are taken back into the first and the
+  gradient made in the second (HasM): an ellipse, slanted stripes [was: a
+  circle of the area's radius, the points mapped] }
 function GradUnder(const AGrad: TTyChartGradient; AHasA: Boolean; const AA: TTyMat2D;
   AHasB: Boolean; const AB: TTyMat2D; ADs: Double): TTyChartGradient;
 var
   ma, mb: TTyMat2D;
-  d, r, lx, ly, sa, sb: Double;
+  d, r, lx, ly, sa, sb, c0, c1, c2, c3: Double;
+  k: Integer;
+
+  { [R7-AB] back into the frame it was made in }
+  procedure Back(var AX, AY: Double);
+  var u, v: Double;
+  begin
+    u := (ma[3] * (AX - ma[4]) - ma[2] * (AY - ma[5])) * r;
+    v := (-ma[1] * (AX - ma[4]) + ma[0] * (AY - ma[5])) * r;
+    AX := u;
+    AY := v;
+  end;
 
   procedure Map(var AX, AY: Double);
   var u, v: Double;
@@ -2420,12 +2506,34 @@ begin
     mb[0] := ADs;
     mb[3] := ADs;
   end;
+  { [R7-AB] made in a frame: the same points under the new one }
+  if AGrad.HasM then
+  begin
+    for k := 0 to 5 do Result.M[k] := mb[k];
+    Exit;
+  end;
   if (ma[0] = mb[0]) and (ma[1] = mb[1]) and (ma[2] = mb[2]) and (ma[3] = mb[3])
     and (ma[4] = mb[4]) and (ma[5] = mb[5]) then Exit;
   d := ma[0] * ma[3] - ma[1] * ma[2];
   { (a frame of no area: no way back -- held as it is) }
   if (d = 0) or IsNan(d) or IsInfinite(d) then Exit;
   r := 1 / d;
+  { [R7-AB] mb after ma's inverse no similarity: back into ma's frame, the
+    gradient made in mb's }
+  c0 := (mb[0] * ma[3] - mb[2] * ma[1]) * r;
+  c1 := (mb[1] * ma[3] - mb[3] * ma[1]) * r;
+  c2 := (-mb[0] * ma[2] + mb[2] * ma[0]) * r;
+  c3 := (-mb[1] * ma[2] + mb[3] * ma[0]) * r;
+  if (Abs(c1) > 1e-12 * (Abs(c0) + Abs(c3))) or (Abs(c2) > 1e-12 * (Abs(c0) + Abs(c3)))
+    or (Abs(c0 - c3) > 1e-12 * (Abs(c0) + Abs(c3))) then
+  begin
+    Back(Result.X, Result.Y);
+    if Result.Kind = cgkLinear then Back(Result.X2, Result.Y2)
+    else Result.R := AGrad.R / Sqrt(Abs(d));
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := mb[k];
+    Exit;
+  end;
   Map(Result.X, Result.Y);
   if Result.Kind = cgkLinear then Map(Result.X2, Result.Y2)
   else
@@ -2591,22 +2699,20 @@ end;
   canvas keeps that CanvasGradient, not the element's spec) }
 function CanvasGradOf(const AGrad: TTyChartGradient; const AEl: TTyChartElement;
   ADs: Double): TTyChartGradient;
-var box: TTyXYWH; x1, y1, x2, y2, r: Double;
+var x1, y1, x2, y2, r: Double; fr: TTyDoubleArray; k: Integer;
 begin
   Result := AGrad;
   if (AGrad.Kind = cgkNone) or AGrad.Global then Exit;
-  if AEl.Style.GradBoxSet then box := AEl.Style.GradBox
-  else
+  { [R7-Y] the renderer's box (TyElementGradientBox): Path.getBoundingRect
+    grows by the stroke when there is one [was: the shape's alone, a
+    stroke's gradient held off by half its width]; [R7-AB] in a symbol's
+    frame that is no similarity, as the renderer makes it there }
+  TyElementGradientIn(AEl, AGrad, ADs, x1, y1, x2, y2, r, fr);
+  if Length(fr) = 6 then
   begin
-    box := TyRectToXYWH(TyShapeBounds(AEl.Shape));
-    { [R7-Y] the renderer's box (TyElementGradientBox): Path.getBoundingRect
-      grows by the stroke when there is one [was: the shape's alone, a
-      stroke's gradient held off by half its width] }
-    if (AEl.Style.StrokeWidthLogical > 0)
-      and (((AEl.Style.StrokeColor shr 24) > 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone)) then
-      box := TyGrowByStroke(box, AEl.Style.HasFill, AEl.Style.StrokeWidthLogical * ADs);
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := fr[k];
   end;
-  TyResolveGradientXYWH(AGrad, box, x1, y1, x2, y2, r);
   Result.Global := True;
   Result.X := x1;
   Result.Y := y1;

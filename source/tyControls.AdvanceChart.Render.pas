@@ -3251,6 +3251,8 @@ procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
+  { [R7-AB] the frame a gradient is made in (none: device px) }
+  gfr: TTyDoubleArray;
   mlim: Double;
   stops: array of TTyGradStop;
   img: TBGRABitmap;
@@ -3290,8 +3292,11 @@ var
           not the plot and not the series. So every bar ramps over itself and
           a two-stop gradient reads the same on all of them, and a stacked
           segment restarts per segment. }
-        TyResolveGradientXYWH(AElement.Style.FillGradient,
-          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
+        { [R7-AB] in the element's frame where that is no similarity (a
+          symbol scaled unevenly, turned), or the frame a held one was made
+          in: an ellipse there [was: a circle of the box's smaller side] }
+        TyElementGradientIn(AElement, AElement.Style.FillGradient, P.PPI / 96,
+          gx1, gy1, gx2, gy2, gr, gfr);
         SetLength(stops, Length(AElement.Style.FillGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -3299,7 +3304,7 @@ var
             TTyColor(AElement.Style.FillGradient.Stops[gi].Color);
           stops[gi].Pos := AElement.Style.FillGradient.Stops[gi].Offset;
         end;
-        P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, rule);
+        P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, gfr, rule);
       end
       else if AElement.Style.FillPattern.Present then
       begin
@@ -3413,8 +3418,9 @@ var
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then
       begin
-        TyResolveGradientXYWH(AElement.Style.StrokeGradient,
-          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
+        { ([R7-AB] in a frame, as the fill's) }
+        TyElementGradientIn(AElement, AElement.Style.StrokeGradient, P.PPI / 96,
+          gx1, gy1, gx2, gy2, gr, gfr);
         SetLength(stops, Length(AElement.Style.StrokeGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -3423,7 +3429,7 @@ var
           stops[gi].Pos := AElement.Style.StrokeGradient.Stops[gi].Offset;
         end;
         P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr,
-          AElement.Style.StrokeWidthLogical);
+          AElement.Style.StrokeWidthLogical, gfr);
       end
       else if TyRenderKeptStrokes then
         P.StrokePathKept(TTyColor(AElement.Style.StrokeColor),

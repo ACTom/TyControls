@@ -64,6 +64,13 @@ type
     { In the order they were written. Upstream neither sorts, dedupes nor
       clamps them, and emits duplicate offsets itself. }
     Stops: TTyChartGradStopArray;
+    { [R7-AB] A CANVAS GRADIENT MADE IN A FRAME (Global then): the points
+      and the radius are in the frame M [a, b, c, d, e, f] takes to device
+      px -- an element's own frame that is no similarity (a symbol scaled
+      unevenly or turned), or the frame of the element a held gradient is
+      filled under: a radial one an ellipse there, as the canvas has it }
+    HasM: Boolean;
+    M: array[0..5] of Double;
   end;
 
   { A COLOUR THAT IS AN IMAGE: zrender's ImagePatternObject -- `image`,
