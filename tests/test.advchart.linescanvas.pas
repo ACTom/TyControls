@@ -1304,29 +1304,30 @@ var
   { [R7-AB] clear of every other tracked symbol drawn over it (a later
     series': a highlighted one in the block) }
   function ClearOfOthers(AX, AY: Double; const AKey: string): Boolean;
-  var k2: Integer; o2: TJSONObject; rr2: TTyRectF; a2: TJSONArray;
+  var k2: Integer; o2, op2: TJSONObject; rr2: TTyRectF; a2: TJSONArray; ox2, oy2, or2: Double;
   begin
     Result := True;
     for k2 := 0 to els.Count - 1 do
     begin
       o2 := els.Objects[k2];
       if (o2.Strings['key'] = AKey) or (o2.Strings['key'][1] <> 's') or (o2.Strings['key'] <= AKey) then Continue;
-      { its path's bounds, else (not brushed by the last paint) its paint rect }
-      if (o2.Find('pb') <> nil) and (o2.Find('pb').JSONType = jtArray) then
+      { the circle it was last brushed as (its op's transform: the unit
+        symbol scaled by half its size), else its paint rect }
+      a2 := o2.Arrays['yops'];
+      if a2.Count > 0 then
       begin
-        a2 := o2.Arrays['pb'];
-        rr2 := TyRectF(HexD(a2.Strings[0]) - 2, HexD(a2.Strings[1]) - 2, HexD(a2.Strings[2]) + 2,
-          HexD(a2.Strings[3]) + 2);
+        op2 := a2.Objects[a2.Count - 1];
+        ox2 := HexD(op2.Arrays['m'].Strings[4]);
+        oy2 := HexD(op2.Arrays['m'].Strings[5]);
+        or2 := Sqrt(Abs(HexD(op2.Arrays['m'].Strings[0]) * HexD(op2.Arrays['m'].Strings[3])
+          - HexD(op2.Arrays['m'].Strings[1]) * HexD(op2.Arrays['m'].Strings[2])));
+        if Sqrt(Sqr(AX - ox2) + Sqr(AY - oy2)) < or2 + 2 then Exit(False);
       end
       else if RectOfHex(o2.Find('pr'), rr2) then
       begin
-        rr2.Left := rr2.Left - 2;
-        rr2.Top := rr2.Top - 2;
-        rr2.Right := rr2.Right + 2;
-        rr2.Bottom := rr2.Bottom + 2;
-      end
-      else Continue;
-      if (AX > rr2.Left) and (AX < rr2.Right) and (AY > rr2.Top) and (AY < rr2.Bottom) then Exit(False);
+        if (AX > rr2.Left - 2) and (AX < rr2.Right + 2) and (AY > rr2.Top - 2) and (AY < rr2.Bottom + 2) then
+          Exit(False);
+      end;
     end;
   end;
 
@@ -1508,6 +1509,25 @@ begin
             if not (HexD(o.Strings['sb']) > 0) then Continue;
             if not TyTryParseChartColor(o.Strings['sc'], wc) then Continue;
             Probe(cx, cy + dy, wc, 10, where + ' shadow');
+          end
+          { [R7-AB] A RING (a symbol's border the canvas refused) in its block:
+            the stroke the block's run left there }
+          else if (key[1] = 's') and (o.Strings['op'] = 'stroke') and (Pos('stroke', id) > 0)
+            and TyTryParseChartColor(o.Strings['ss'], wc) then
+          begin
+            y := blkR.Top + 1.5;
+            while y <= blkR.Bottom - 1.5 do
+            begin
+              x := blkR.Left + 1.5;
+              while x <= blkR.Right - 1.5 do
+              begin
+                if (Abs(Sqrt(Sqr(x - cx) + Sqr(y - cy)) - r) <= 0.8) and ClearOfEffects(x, y, 2.5)
+                  and ClearOfOthers(x, y, key) then
+                  Probe(x, y, wc, 40, where + ' ring in its block', 0.998);
+                x := x + 1;
+              end;
+              y := y + 1;
+            end;
           end
           else if (key[1] = 's') and (o.Strings['op'] = 'fill')
             and TyTryParseChartColor(o.Strings['fs'], wc) and (rec.Find('pb') <> nil) then
@@ -1705,6 +1725,29 @@ var
           [AWhere, gx, gy, px.red, px.green, px.blue, want.red, want.green, want.blue]));
     end;
     AssertTrue(AWhere + ': half-way points', seen >= 3);
+    { and the ramp is there: a fifth of the way along (a radial one's fifth
+      of its radius, a linear one's fifth from its start) is another colour }
+    if ALinear then
+    begin
+      lx := HexD(AA.Strings[0]) + 0.3 * (HexD(AA.Strings[2]) - HexD(AA.Strings[0]));
+      ly := HexD(AA.Strings[1]) + 0.3 * (HexD(AA.Strings[3]) - HexD(AA.Strings[1]));
+    end
+    else
+    begin
+      lx := HexD(AA.Strings[3]) + 0.15 * HexD(AA.Strings[5]);
+      ly := HexD(AA.Strings[4]);
+    end;
+    if (Abs(lx) <= 0.85) and (Abs(ly) <= 0.85) then
+    begin
+      gx := AM[0] * lx + AM[2] * ly + AM[4];
+      gy := AM[1] * lx + AM[3] * ly + AM[5];
+      px := Bilinear(gx, gy);
+      Inc(FCompared);
+      k3 := Max(Abs(px.red - want.red), Max(Abs(px.green - want.green), Abs(px.blue - want.blue)));
+      if k3 <= 20 then
+        Miss(Format('%s: near the start at (%g,%g) drawn (%d,%d,%d), as half way (%d,%d,%d): no ramp',
+          [AWhere, gx, gy, px.red, px.green, px.blue, want.red, want.green, want.blue]));
+    end;
   end;
 
 begin

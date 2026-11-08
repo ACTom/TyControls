@@ -880,6 +880,18 @@ function cases() {
         colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
     { type: 'scatter', symbol: 'rect', symbolSize: [16, 44], symbolRotate: -20, itemStyle: { color: 'nope' }, data: [[6, 6]] }]),
     [0], { y: true }],
+    // (a gradient made in a uniform frame -- a circle there -- held for a
+    //    symbol scaled unevenly: back in the first frame, an ellipse under
+    //    the second; its radius the first frame's)
+    ['ab-grad-held-ellipse', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [40, 14], itemStyle: { color: 'nope' }, data: [[6, 6]] }]), [0], { y: true }],
+    // (the same turned a quarter: its frame's diagonal nought, a shear to
+    //    the first's all the same)
+    ['ab-grad-held-turned', vv([{ type: 'scatter', symbol: 'rect', symbolSize: 20, itemStyle: { color: { type: 'radial', x: 0.3,
+      y: 0.4, r: 0.6, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } }, data: [[3, 5]] },
+    { type: 'scatter', symbol: 'rect', symbolSize: [40, 14], symbolRotate: 90, itemStyle: { color: 'nope' }, data: [[6, 6]] }]),
+    [0], { y: true }],
     // [R7-AB] 5. a trail under useDirtyRect: its layer (the series' zlevel,
     //    motionBlur) is faded whole every paint (the last frame drawn back
     //    at lastFrameAlpha), then only the blocks round what moved are
@@ -904,6 +916,17 @@ function cases() {
     { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
       yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
     [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a split line two px above the block: its paint rect is its
+    //    Line's bounds grown by max(width, strokeContainThreshold 5), so it
+    //    meets the block and hands it its stroke -- the ring of a symbol of
+    //    an unreadable border in the block is the split line's green)
+    ['ab-dirty-axes-stroke', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.6]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.6], [9, 5.6]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { lineStyle: { color: '#00ff00' } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
     // (a state's change repainted in blocks, the static layer's: the same)
     ['ab-dirty-hover-axes', Object.assign(vv([
       { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5], [5, 7]] },
@@ -922,7 +945,11 @@ function cases() {
         b: { fontWeight: 'heavy' } } } },
       { value: [5, 3], label: { formatter: '{a|Ef}', rich: { a: { fontStyle: 'slanted', fontSize: 11 } } } },
       { value: [8, 3], label: { formatter: '{a|Gh}{b|Ij}', rich: { a: { fontSize: '13px', fontWeight: 'bold' },
-        b: { fontSize: '12abcpx' } } } }] }]), [0], { y: true }],
+        b: { fontSize: '12abcpx' } } } },
+      // (a token naming its size alone takes the label's refused weight:
+      // richInheritPlainLabel)
+      { value: [9.5, 6], label: { fontWeight: 'heavy', formatter: '{a|Kl}', rich: { a: { fontSize: 17 } } } }] }]),
+    [0], { y: true }],
     ['ab-font-ground', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
       label: { show: true, position: 'top', formatter: 'Ab' }, data: [
         { value: [2, 3], label: { fontWeight: 'heavy' } }, { value: [5, 3], label: { fontSize: 11 } }] }]),
