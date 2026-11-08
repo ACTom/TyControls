@@ -4608,7 +4608,7 @@
        "borderWidth": 3,
        "opacity": 0.5,
        "shadowBlur": 4,
-       "shadowColor": "#ff0000"
+       "shadowColor": "#ff00ff"
       },
       "xAxis": {
        "type": "category",
@@ -4673,7 +4673,7 @@
           "shadowBlur": 4,
           "shadowOffsetX": 0,
           "shadowOffsetY": 0,
-          "shadowColor": "#ff0000"
+          "shadowColor": "#ff00ff"
          }
         }
        ]

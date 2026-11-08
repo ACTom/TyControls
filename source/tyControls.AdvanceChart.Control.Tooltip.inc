@@ -2812,6 +2812,8 @@ begin
           if hit.Spec.HasLineWidth then w := hit.Spec.LineWidthLogical;
           if w <= 0 then Continue;
           dash := TyDashPattern(hit.Spec.LineDash, hit.Spec.LineDashExplicit, w);
+          { ([R7-AA] a word's dash at an infinite width is refused: solid) }
+          if hit.Spec.LineWidthInf and (hit.Spec.LineDash <> todExplicit) then dash := nil;
           APainter.SetLineDash(dash);
           { [R7-G] CartesianAxisPointer's Line has subPixelOptimize: the
             line on the half pixel of its width, every frame of its slide
@@ -2878,6 +2880,7 @@ procedure TTyCustomAdvanceChart.PtrShapePaint(APainter: TTyPainter;
 var
   el: TTyChartElement;
   n: Integer;
+  run: TTyCanvasRun;
 begin
   el := Default(TTyChartElement);
   el.Silent := True;
@@ -2898,6 +2901,17 @@ begin
     el.Style.FillColor := TTyChartColor(AColour);
     el.Style.StrokeWidthLogical := 0;
   end;
+  { [R7-AA] WHAT THE CANVAS REFUSES OF IT -- a colour no parser reads, an
+    infinite width, a phase, a cap, a join, a miterLimit, a shadow -- it
+    draws with what it had: the pointer's group is the root's, after the
+    list (the list's run up to its end) [was: not drawn, or the default] }
+  if APen and AHit.Spec.LineWidthInf then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+  if TyCanvasElementCarries(el) or ((el.CanvasFlags and cTyCanvasWidthLeft) <> 0) then
+  begin
+    CompRunTo(MaxInt, MaxInt, run);
+    TyCanvasRunStep(run, el);
+  end;
+  CompDrew(nil, AHit.Axis.MainType + 'Pointer' + IntToStr(AHit.Axis.ComponentIndex), 0, 0, False, el);
   TyRenderElement(APainter, el);
   n := Length(FPtrShapesDrawn);
   SetLength(FPtrShapesDrawn, n + 1);

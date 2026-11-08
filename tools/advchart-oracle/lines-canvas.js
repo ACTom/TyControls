@@ -1036,6 +1036,33 @@ function cases() {
       yAxis: { show: false, type: 'value', min: 0, max: 10 }, useUTC: true,
       series: [{ type: 'scatter', data: [[Date.UTC(2021, 0, 1), 5]], itemStyle: { color: 'nope' } }] },
     [0], { w: true, z: true }],
+    // an axis pointer's own refused values (its group the root's, after the list)
+    ['aa-pointer-refused', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false },
+      axisLabel: { show: false }, splitLine: { show: false }, axisTick: { show: false },
+      axisPointer: { show: true, value: 4, status: 'show', label: { show: false },
+        lineStyle: { color: 'nope', width: 'Infinity', type: 'dashed', dashOffset: 'x', cap: 'Round' } } } }),
+    [0], { w: true, z: true }],
+    // a refused join and miterLimit after a line's own; the minor ticks take
+    // the tick model's own shadow
+    ['aa-ax-join', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { show: false },
+        axisLine: { lineStyle: { color: '#ff0000', width: 3, join: 'round', miterLimit: 4 } },
+        axisTick: { show: true, shadowBlur: 4, shadowColor: '#00ffff',
+          lineStyle: { color: '#0000ff', join: 'Round', miterLimit: 'abc' } },
+        minorTick: { show: true } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#00ff00' } }] }, [0], { w: true, z: true }],
+    // a dataZoom's unselected shadow its clip culls hands the canvas nothing
+    ['aa-datazoom-culled', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, showDetail: false,
+        fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#e0e4f2', backgroundColor: 'transparent',
+        handleStyle: { color: '#ffffff', borderColor: '#c0c9e6' }, moveHandleStyle: { color: '#8292cc', opacity: 1 },
+        dataBackground: { lineStyle: { color: '#123456', opacity: 1 }, areaStyle: { color: '#654321', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: 'nope' }, areaStyle: { color: 'bad' } } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#ff0000' }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
     // 3. the polar's and the single axis' split areas, in paint order
     ['aa-polar-area', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
       style: { fill: '#ff0000' } }], polar: { radius: 100 },
@@ -1198,6 +1225,12 @@ function track(chart) {
       const zc = new Map();
       // [R7-AA] a richText tooltip's element, on the root (no view's group)
       let tipEl = null;
+      // [R7-AA] an axis pointer's group, on the root too
+      const PTRS = new Map();
+      for (const mt of ['xAxis', 'yAxis']) model.eachComponent(mt, (m, i) => {
+        const v = chart.getViewOfComponentModel(m);
+        if (v && v._axisPointer && v._axisPointer._group) PTRS.set(v._axisPointer._group, { mainType: mt + 'Pointer', index: i });
+      });
       for (const v of chart._componentsViews || []) {
         if (v && v.type === 'tooltip' && v._tooltipContent && v._tooltipContent.el) tipEl = v._tooltipContent.el;
       }
@@ -1207,6 +1240,7 @@ function track(chart) {
         while (p) {
           if (p.__ecComponentInfo) { info = p.__ecComponentInfo; break; }
           if (AA && tipEl && p === tipEl) { info = { mainType: 'tooltip', index: 0 }; break; }
+          if (AA && PTRS.has(p)) { info = PTRS.get(p); break; }
           p = p.parent || p.__hostTarget;
         }
         if (!info || info.mainType === 'series' || map.has(el) || !el.style) continue;

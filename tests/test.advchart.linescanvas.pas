@@ -104,8 +104,9 @@ type
     function GraphicOf(const ARec: TJSONObject): Integer;
     procedure RunV(AHits: Boolean);
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
-    function CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+    function CListOf(const ARec: TJSONObject; AText: Boolean; AZ2: Integer = MaxInt): Integer;
     procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
+    procedure CheckAreas(const AWhere: string; AEls: TJSONArray);
     procedure RunY;
     procedure RunYHeld;
   protected
@@ -122,6 +123,8 @@ type
     procedure TestTheDirtyFramesAsUpstream;
     procedure TestTheHeldPatternsAsUpstream;
     procedure TestTheR7AACanvasAsUpstream;
+    procedure TestAnAxisPensShadowIsDrawn;
+    procedure TestThePolarViewsInUpstreamsOrder;
   end;
 
 implementation
@@ -797,7 +800,8 @@ end;
   a toolbox's...): a text by its words, a path by its bounds; -2 for a
   background that paints nothing (a fill of no alpha: the port builds none),
   -1 for none }
-function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean;
+  AZ2: Integer): Integer;
 var
   L: TTyPaintList;
   best, dist: Double;
@@ -827,6 +831,16 @@ begin
     end;
     Exit;
   end;
+  { ([R7-AA] a plate that only fills with no alpha -- a hit area, a
+    transparent background: what it hands on is held by the elements after
+    it; the port builds some of them, not all: none matched) }
+  ops := ARec.Arrays['ops'];
+  n := 0;
+  for q := 0 to ops.Count - 1 do
+    if (ops.Objects[q].Strings['op'] <> 'fill')
+      or not TyTryParseChartColor(ops.Objects[q].Strings['fs'], wc) or ((wc shr 24) <> 0) then
+      Inc(n);
+  if n = 0 then Exit(-2);
   if ARec.Find('pb').JSONType <> jtNull then
   begin
     pb := ARec.Arrays['pb'];
@@ -847,6 +861,9 @@ begin
       begin
         dist := Abs(bb.Left - HexD(pb.Strings[0])) + Abs(bb.Top - HexD(pb.Strings[1]))
           + Abs(bb.Right - HexD(pb.Strings[2])) + Abs(bb.Bottom - HexD(pb.Strings[3]));
+        { (of two at one place, the one of upstream's z2: a dataZoom's
+          background and its filler over a full window) }
+        if (AZ2 <> MaxInt) and (el.Z2 <> AZ2) then dist := dist + 0.01;
         if dist < best then
         begin
           best := dist;
@@ -856,13 +873,6 @@ begin
     end;
     if Result >= 0 then Exit;
   end;
-  ops := ARec.Arrays['ops'];
-  n := 0;
-  for q := 0 to ops.Count - 1 do
-    if (ops.Objects[q].Strings['op'] <> 'fill')
-      or not TyTryParseChartColor(ops.Objects[q].Strings['fs'], wc) or ((wc shr 24) <> 0) then
-      Inc(n);
-  if n = 0 then Result := -2;
 end;
 
 { the colours a canvas holds alike: the same, or both of no alpha }
@@ -1010,6 +1020,7 @@ begin
       end;
       blocks := fr.Arrays['blocks'];
       els := fr.Arrays['els'];
+      if APrefix = 'aa-' then CheckAreas(Format('%s t=%g', [id, t]), els);
       for k := 0 to els.Count - 1 do
       begin
         rec := els.Objects[k];
@@ -1037,7 +1048,7 @@ begin
           begin
             { (a component in the list) }
             comp := False;
-            idx := CListOf(rec, ctext);
+            idx := CListOf(rec, ctext, cz2);
             if idx = -2 then Continue;
             if idx < 0 then
             begin
@@ -1933,9 +1944,139 @@ begin
   RunW(False, 'z-');
 end;
 
+{ [R7-AA] AN AXIS' SPLIT AREAS BAND BY BAND: upstream's paths of z2 0 that
+  only fill (a band, a merged colour), in their order, against the areas
+  the port drew for that axis (CompDrawn, cpkSplitArea) in its order --
+  the colour each settled in (a refused band the fill the band before
+  left, not the first band of its colour's) }
+procedure TAdvChartLinesCanvasOracleTest.CheckAreas(const AWhere: string; AEls: TJSONArray);
+var
+  keys: TStringList;
+  k, q, i, n: Integer;
+  rec: TJSONObject;
+  ops: TJSONArray;
+  key, ck, pre: string;
+  fills: TStringList;
+  d: TTyCompPartArray;
+  wc: TTyChartColor;
+  only: Boolean;
+begin
+  keys := TStringList.Create;
+  fills := TStringList.Create;
+  try
+    for k := 0 to AEls.Count - 1 do
+    begin
+      key := AEls.Objects[k].Strings['key'];
+      if Copy(key, 1, 2) <> 'c.' then Continue;
+      ck := Copy(key, 3, MaxInt);
+      ck := Copy(ck, 1, Pos('.', ck) - 1);
+      if keys.IndexOf(ck) < 0 then keys.Add(ck);
+    end;
+    d := FChart.CompDrawn;
+    for i := 0 to keys.Count - 1 do
+    begin
+      { upstream's fill-only paths of z2 0, by their count n }
+      fills.Clear;
+      pre := 'c.' + keys[i] + '.0.p.';
+      for n := 0 to 999 do
+      begin
+        rec := nil;
+        for k := 0 to AEls.Count - 1 do
+          if AEls.Objects[k].Strings['key'] = pre + IntToStr(n) then rec := AEls.Objects[k];
+        if rec = nil then Break;
+        ops := rec.Arrays['ops'];
+        only := ops.Count > 0;
+        for q := 0 to ops.Count - 1 do
+          if ops.Objects[q].Strings['op'] <> 'fill' then only := False;
+        if only then fills.Add(ops.Objects[0].Strings['fs']);
+      end;
+      { the port's areas of that axis }
+      q := 0;
+      for k := 0 to High(d) do
+        if (d[k].Key = keys[i]) and (d[k].Kind = cpkSplitArea) then
+        begin
+          Inc(FCompared);
+          if q > fills.Count - 1 then
+            Miss(Format('%s %s: area %d drawn, upstream %d', [AWhere, keys[i], q, fills.Count]))
+          else if TyTryParseChartColor(fills[q], wc) and not SameInk(d[k].El.Style.FillColor, wc) then
+            Miss(Format('%s %s: area %d fill %x, upstream %s', [AWhere, keys[i], q,
+              d[k].El.Style.FillColor, fills[q]]));
+          Inc(q);
+        end;
+      if (q > 0) and (q <> fills.Count) then
+        Miss(Format('%s %s: %d areas drawn, upstream %d', [AWhere, keys[i], q, fills.Count]));
+    end;
+  finally
+    fills.Free;
+    keys.Free;
+  end;
+end;
+
+{ [R7-AA] THE POLAR'S VIEWS IN UPSTREAM'S ORDER, as drawn: the radius
+  axis' line (z2 1, its view first), then the angle axis' circle (z2 1,
+  its view after): where the spoke meets the circle the circle is on top.
+  A radius line red and 6 wide up from the centre (the angle axis starts
+  at 90 degrees), the circle blue and 6 wide: the pixel a step inside the
+  circle's top on the spoke is blue. }
+procedure TAdvChartLinesCanvasOracleTest.TestThePolarViewsInUpstreamsOrder;
+var px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.SetOption('{"animation":false,"polar":{"center":[200,150],"radius":100},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#0000ff","width":6}}},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#ff0000","width":6}}},'
+    + '"series":[]}', True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  px := FBmp.GetPixel(200, 51);
+  AssertTrue(Format('the circle over the spoke: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.blue > 200) and (px.red < 60));
+  px := FBmp.GetPixel(200, 100);
+  AssertTrue(Format('the spoke itself red: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 200) and (px.blue < 60));
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AACanvasAsUpstream;
 begin
   RunW(False, 'aa-');
+end;
+
+{ [R7-AA] THE SHADOW IS DRAWN, not only handed on: an x axis line in red,
+  2 wide, its lineStyle's shadow blue at an offset of (0, 8) and no blur --
+  the canvas draws the line's shape again 8 px under it in the shadow's
+  colour. Down the column through the plot's middle: the red row, then,
+  eight rows on, the blue one. }
+procedure TAdvChartLinesCanvasOracleTest.TestAnAxisPensShadowIsDrawn;
+var y, red, blue: Integer; px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,'
+    + '"axisLabel":{"show":false},"splitLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLine":{"lineStyle":{"color":"#ff0000","width":2,"shadowColor":"#0000ff",'
+    + '"shadowOffsetY":8}}},"yAxis":{"show":false,"type":"value"},"series":[]}', True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  red := -1;
+  blue := -1;
+  for y := 0 to FBmp.Height - 1 do
+  begin
+    px := FBmp.GetPixel(FBmp.Width div 2, y);
+    if (red < 0) and (px.red > 200) and (px.green < 60) and (px.blue < 60) then red := y;
+    if (blue < 0) and (px.blue > 200) and (px.red < 60) and (px.green < 60) then blue := y;
+  end;
+  AssertTrue('the line is drawn', red >= 0);
+  AssertTrue('its shadow is drawn', blue >= 0);
+  AssertEquals('eight rows under it', 8, blue - red);
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheCanvasStateAsUpstream;

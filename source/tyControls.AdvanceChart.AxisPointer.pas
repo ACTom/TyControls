@@ -101,6 +101,9 @@ type
     LineColour: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidthLogical: Double;
+    { [R7-AA] the width is +Infinity: it strokes at the width the canvas had
+      (a dash word under it is refused: solid) }
+    LineWidthInf: Boolean;
     LineDash: TTyOptDash;
     LineDashExplicit: TTyDoubleArray;
     LineDashWritten: Boolean;
@@ -641,7 +644,13 @@ begin
     if Writes(AChain.Pen[i], 'width') then
     begin
       st := TyReadOptLineStyleOf(AChain.Pen[i]);
-      if not IsNan(st.BorderWidthLogical) then
+      if st.WidthInf then
+      begin
+        ASpec.HasLineWidth := True;
+        ASpec.LineWidthInf := True;
+        ASpec.LineWidthLogical := 1;
+      end
+      else if not IsNan(st.BorderWidthLogical) then
       begin
         ASpec.HasLineWidth := True;
         ASpec.LineWidthLogical := Max(Double(0), Min(Double(64),
