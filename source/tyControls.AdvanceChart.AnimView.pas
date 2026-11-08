@@ -6844,9 +6844,10 @@ begin
       begin
         TyGraphEdgeLine(now_, q1, q2, qc, cv);
         { [R7-G] the shape on the half pixel before the percent, in its
-          frame (Line.buildPath with subPixelOptimize) }
+          frame (Line.buildPath with subPixelOptimize) -- ([R7-AJ] on axes
+          the css px one at another PPI [was: the device px grid]) }
         if Length(now_.Anim.Vals) > 6 then
-          TyGraphEdgeSnap(q1, q2, cv, now_.Anim.Vals[6]);
+          TyGraphEdgeSnap(q1, q2, cv, now_.Anim.Vals[6], AEl.Anim.PxScale);
         pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
         for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
         AEl.Shape.Points := pts;

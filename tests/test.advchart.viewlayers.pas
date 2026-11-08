@@ -793,6 +793,10 @@ begin
     + '"lineStyle":{"width":1,"color":"#000000","opacity":1},"data":[{"coords":[[1,5.13],[9,5.13]]}]}]}');
   One('a graph edge on axes', '{"animation":false,' + cAxes + '"series":[{"type":"graph","coordinateSystem":"cartesian2d",'
     + '"symbolSize":0,"data":[[1,5.13],[9,5.13]],"links":[{"source":0,"target":1}],"lineStyle":{"width":1,"color":"#000000","opacity":1}}]}');
+  { ([R7-AJ] a mark line's: Line.ts' ECLinePath too) }
+  One('a mark line', '{"animation":false,' + cAxes + '"series":[{"type":"scatter","symbolSize":0,"data":[[1,1]],'
+    + '"markLine":{"symbol":"none","label":{"show":false},"lineStyle":{"width":1,"type":"solid","color":"#000000"},'
+    + '"data":[{"yAxis":5.13},{"xAxis":3.37}]}}]}');
   for ppi := 0 to 1 do
   begin
     Render(96 + 48 * ppi, '{"animation":false,"title":{"text":"T","left":43.3,"top":41.7,'

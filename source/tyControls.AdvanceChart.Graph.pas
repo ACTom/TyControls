@@ -6875,6 +6875,9 @@ var
     SetLength(A.Vals, 7);
     if A.InView then A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt])
     else A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt]) * pxs;
+    { [R7-AJ] and the grid it snaps on: the css px one on axes (the device
+      px a css px makes), the frame's own on a view }
+    if A.InView then A.PxScale := 1 else A.PxScale := pxs;
     A.Vals[0] := -1;
     A.Vals[1] := 0;
     A.Vals[2] := 0;
