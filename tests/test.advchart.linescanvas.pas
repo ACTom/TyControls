@@ -1301,6 +1301,35 @@ var
     end;
   end;
 
+  { [R7-AB] clear of every other tracked symbol drawn over it (a later
+    series': a highlighted one in the block) }
+  function ClearOfOthers(AX, AY: Double; const AKey: string): Boolean;
+  var k2: Integer; o2: TJSONObject; rr2: TTyRectF; a2: TJSONArray;
+  begin
+    Result := True;
+    for k2 := 0 to els.Count - 1 do
+    begin
+      o2 := els.Objects[k2];
+      if (o2.Strings['key'] = AKey) or (o2.Strings['key'][1] <> 's') or (o2.Strings['key'] <= AKey) then Continue;
+      { its path's bounds, else (not brushed by the last paint) its paint rect }
+      if (o2.Find('pb') <> nil) and (o2.Find('pb').JSONType = jtArray) then
+      begin
+        a2 := o2.Arrays['pb'];
+        rr2 := TyRectF(HexD(a2.Strings[0]) - 2, HexD(a2.Strings[1]) - 2, HexD(a2.Strings[2]) + 2,
+          HexD(a2.Strings[3]) + 2);
+      end
+      else if RectOfHex(o2.Find('pr'), rr2) then
+      begin
+        rr2.Left := rr2.Left - 2;
+        rr2.Top := rr2.Top - 2;
+        rr2.Right := rr2.Right + 2;
+        rr2.Bottom := rr2.Bottom + 2;
+      end
+      else Continue;
+      if (AX > rr2.Left) and (AX < rr2.Right) and (AY > rr2.Top) and (AY < rr2.Bottom) then Exit(False);
+    end;
+  end;
+
   { clear of every effect symbol by AGap }
   function ClearOfEffects(AX, AY, AGap: Double): Boolean;
   var k2: Integer;
@@ -1491,7 +1520,8 @@ begin
               x := blkR.Left + 1.5;
               while (x <= blkR.Right - 1.5) and (got < 6) do
               begin
-                if (Sqrt(Sqr(x - cx) + Sqr(y - cy)) <= r - 1.5) and ClearOfEffects(x, y, 2.5) then
+                if (Sqrt(Sqr(x - cx) + Sqr(y - cy)) <= r - 1.5) and ClearOfEffects(x, y, 2.5)
+                  and ClearOfOthers(x, y, key) then
                 begin
                   { (tighter: an old picture showing through tints it) }
                   Probe(x, y, wc, 40, where + ' fill in its block', 0.998);
