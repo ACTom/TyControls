@@ -892,6 +892,8 @@ type
     HasEmph: Boolean;
     EmphColour, EmphStrokeColour: TTyChartColor;
     EmphStrokeWidthLogical: Double;
+    { [R7-AI] the hover's halo is of 'Infinity': the width the canvas had }
+    EmphStrokeInf: Boolean;
     { [R7-AA] what the hover's label writes of its ink: 1 its color, 2 its
       textBorderColor or textBorderWidth -- the state style's keys, which go
       over a block's own (TyCaptionToEmphasis) }

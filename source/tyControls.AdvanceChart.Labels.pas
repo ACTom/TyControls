@@ -220,6 +220,9 @@ type
     StateShow: Boolean;
     EmphHasBorderWidth: Boolean;
     EmphBorderWidthLogical: Double;
+    { [R7-AI] emphasis.label.textBorderWidth written as 'Infinity': the
+      hovered halo at the width the canvas had }
+    EmphBorderWidthInf: Boolean;
     EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
     EmphBorderColour: TTyChartColor;
     { `emphasis.itemStyle.color`: the hovered host's fill, when written;
@@ -865,6 +868,11 @@ begin
   TyLabelInkEmphasis(ASpec, fill, AHostHasFill, grad, AInside,
     ACaption.EmphColour, ACaption.EmphStrokeColour,
     ACaption.EmphStrokeWidthLogical);
+  { [R7-AI] a hovered halo of 'Infinity': stroked at the width the canvas
+    had (StWriteLabel marks the element) }
+  ACaption.EmphStrokeInf := ASpec.EmphHasBorderWidth and ASpec.EmphBorderWidthInf
+    and (((ACaption.EmphStrokeColour shr 24) <> 0)
+      or (ACaption.EmphStrokeColour = cTyCanvasColourLeft));
   ACaption.HasEmph := True;
   ACaption.EmphOwnInk := 0;
   if ASpec.EmphHasColour then ACaption.EmphOwnInk := ACaption.EmphOwnInk or 1;
@@ -1323,6 +1331,9 @@ begin
   begin
     s.HasBorderWidth := True;
     s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
+    { ([R7-AI] and one of 'Infinity') }
+    s.BorderWidthInf := ASpec.EmphBorderWidthInf;
+    s.BorderWidthText := '';
   end;
   { the hover's stroke colour over the normal one: zrender merges the
     emphasis style's `stroke` over the label's (labelStyle.ts:550-583) }

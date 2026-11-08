@@ -2118,6 +2118,14 @@ begin
   begin
     R.HasLineWidth := True;
     R.LineWidth := x;
+  end
+  { [R7-AI] A STRING as a label's (TyRtTakeLineWidth): the canvas' number,
+    kept for the TSpan's rect; 'Infinity' the width the canvas had -- a
+    graphic text's, a timeline's label [was: not written] }
+  else if (S.Find('lineWidth') <> nil) and (S.Find('lineWidth').JSONType = jtString) then
+  begin
+    R.HasLineWidth := True;
+    TyRtTakeLineWidth(S.Find('lineWidth'), R.LineWidth, R.LineWidthText, R.LineWidthInf);
   end;
   { [R2-F] the stroke's dashes and their phase, as written (Text.ts hands
     lineDash and lineDashOffset to every TSpan that strokes) }
