@@ -244,6 +244,14 @@ type
       (z2 2) over a cartesian x axis' line (z2 1); a single axis' tick (z2
       2) over it too }
     procedure TestThePolarAndSingleViewsInterleaved;
+    { [R7-AG] a ripple of z -1 while it moves: under the x axis' split line
+      (zrender's one display list) [was: the dynamic layer's, over the
+      axes] }
+    procedure TestARippleUnderTheAxesWhileItMoves;
+    { [R7-AG] tooltip.textStyle.fontWeight is the tokens' weight
+      (getTooltipTextStyle) [was: not read -- the skin's]: 'normal' draws
+      the value (the skin's bold) with less ink than none written }
+    procedure TestATipsFontWeightIsTheTextStyles;
   end;
 
 implementation
@@ -3756,6 +3764,77 @@ begin
   RunW(False, 'ag-');
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestARippleUnderTheAxesWhileItMoves;
+var px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  PinClocks(FChart);
+  FChart.AnimationMode := camAlways;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  { the ripple at (168, 150) on the split line there (the value 4), grown
+    over its period to 4 times 30 }
+  FChart.SetOption('{"animation":true,"animationDuration":0,"animationDurationUpdate":0,'
+    + '"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"splitLine":{"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"effectScatter","z":-1,"symbolSize":30,"data":[[4,5]],"itemStyle":{"color":"#ff0000"},'
+    + '"rippleEffect":{"brushType":"fill","period":4,"scale":4,"number":1}}]}', True);
+  AssertEquals('parses', '', FChart.OptionError);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  FChart.AnimTick(cT0 + 1000);
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+    FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + 'ripple-under.png');
+  { inside the ripple's disc, on the split line }
+  px := FBmp.GetPixel(168, 150 - 22);
+  AssertTrue(Format('the split line over the moving ripple: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.blue > 150) and (px.red < 150));
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestATipsFontWeightIsTheTextStyles;
+
+  function Ink(const AWeight: string): Integer;
+  var r: TTyRectF; x, y: Integer; px: TBGRAPixel;
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption('{"animation":false,"xAxis":{"show":false,"type":"value","min":0,"max":10},'
+      + '"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+      + '"tooltip":{"renderMode":"richText","showDelay":0,"transitionDuration":0,"position":[100,60],'
+      + '"backgroundColor":"#ffffff","borderWidth":0,"shadowBlur":0,"textStyle":{"color":"#000000"' + AWeight + '}},'
+      + '"series":[{"type":"scatter","name":"Series","symbolSize":0,"data":[[5,5]]}]}', True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    r := FChart.TipFill;
+    Result := 0;
+    for y := Max(0, Round(r.Top)) to Min(FBmp.Height - 1, Round(r.Bottom)) do
+      for x := Max(0, Round(r.Left)) to Min(FBmp.Width - 1, Round(r.Right)) do
+      begin
+        px := FBmp.GetPixel(x, y);
+        Inc(Result, 255 - px.green);
+      end;
+  end;
+
+var none, light: Integer;
+begin
+  none := Ink('');
+  light := Ink(',"fontWeight":"normal"');
+  AssertTrue(Format('a normal weight draws less ink: %d, none written %d', [light, none]),
+    light < none - none div 20);
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.TestThePolarAndSingleViewsInterleaved;
 var px: TBGRAPixel; shot: Integer;
 
@@ -4020,6 +4099,8 @@ begin
   One('graph none', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10},{"x":5,"y":3}],"links":[{"source":0,"target":1}]}]}');
   One('graph circular', '{"animation":false,"series":[{"type":"graph","layout":"circular","left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":0,"target":1}]}]}');
   One('graph force', '{"animation":false,"series":[{"type":"graph","layout":"force","force":{"repulsion":80,"edgeLength":40,"layoutAnimation":false},"left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"}],"links":[{"source":0,"target":1},{"source":1,"target":2},{"source":2,"target":3}]}]}');
+  { (a centre in the view rect's frame -- no positions written: css px) }
+  One('graph centre', '{"animation":false,"series":[{"type":"graph","layout":"circular","left":50,"top":50,"width":300,"height":200,"center":[150,120],"zoom":1.5,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":0,"target":1}]}]}');
   One('graph ends', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"edgeSymbol":["circle","arrow"],"edgeSymbolSize":[8,14],"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10}],"links":[{"source":0,"target":1}]}]}');
   One('graph on axes', '{' + G + '"series":[{"type":"graph","coordinateSystem":"cartesian2d","symbolSize":16,"label":{"show":false},"data":[[2,2],[8,8]],"links":[{"source":0,"target":1}]}]}');
   One('tree', '{"animation":false,"series":[{"type":"tree","left":40,"top":40,"right":40,"bottom":40,"symbolSize":10,"label":{"show":false},"data":[{"name":"r","children":[{"name":"a"},{"name":"b"}]}]}]}');
@@ -4035,6 +4116,9 @@ begin
   { (the bar's place across is its labels' half width off the box: the
     text measured at each PPI) }
   One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
+  { (the box' px decide the side the labels are on: the centre at css 202
+    of 400 is right of the middle, at device 207 of 600 left of it) }
+  One('visualMap auto align', '{' + G + '"visualMap":{"left":192,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
   One('visualMap piecewise', '{' + G + '"visualMap":{"type":"piecewise","left":20,"top":20,"min":0,"max":10,"splitNumber":3,"itemWidth":20,"itemHeight":14},"series":[{"type":"scatter","data":[[3,3,5]]}]}');
   Tip('tooltip position', '{' + G + RTIP + ',"position":[100,60],"padding":8},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
   Tip('tooltip by the point', '{' + G + RTIP + '},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
