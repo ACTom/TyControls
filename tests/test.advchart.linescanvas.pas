@@ -2799,6 +2799,8 @@ begin
     One('pie px', '{"animation":false,"series":[{"type":"pie","radius":[30,80],"center":[200,150],"label":{"show":false},"data":[1,2,3]}]}');
     One('pie pct', '{"animation":false,"series":[{"type":"pie","radius":["20%","50%"],"label":{"show":false},"data":[1,2,3]}]}');
     One('boxplot', '{' + C + '"series":[{"type":"boxplot","boxWidth":[10,30],"data":[[1,2,3,4,5],[2,3,4,5,6],[1,3,5,7,9]]}]}');
+    { (no boxWidth: the default bounds, 7 and 50 css px, on a band wide enough to meet the upper) }
+    One('boxplot auto', '{' + C + '"series":[{"type":"boxplot","data":[[1,2,3,4,5],[2,3,4,5,6],[1,3,5,7,9]]}]}');
     One('funnel gap', '{"animation":false,"series":[{"type":"funnel","left":40,"top":40,"width":300,"height":200,"gap":8,"label":{"show":false},"data":[{"value":3},{"value":2},{"value":1}]}]}');
     One('gauge', '{"animation":false,"series":[{"type":"gauge","center":[200,150],"radius":100,"detail":{"show":false},"title":{"show":false},"axisLabel":{"show":false},"axisLine":{"lineStyle":{"width":12}},"pointer":{"width":8,"length":60},"splitLine":{"length":10},"axisTick":{"length":5},"data":[{"value":40}]}]}');
     One('sankey', '{"animation":false,"series":[{"type":"sankey","left":40,"top":40,"right":40,"bottom":40,"nodeWidth":15,"nodeGap":10,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":"a","target":"b","value":3},{"source":"a","target":"c","value":2}]}]}');

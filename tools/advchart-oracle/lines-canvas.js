@@ -1341,6 +1341,16 @@ function cases() {
       yAxis: { type: 'value', min: 0, max: 10, show: false },
       series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff00ff', borderColor: 'nope', borderWidth: 2 } }] },
     [0], { w: true, z: true }],
+    // a radar's split line colours in a list, two no parser reads: each its
+    // bucket (RadarView groups the rings by colour index), stroked with
+    // what the canvas had -- not dropped, the list closing up
+    ['ad-radar-lines', { animation: false,
+      radar: { radius: 80, splitNumber: 3, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }],
+        axisName: { show: false }, axisLine: { lineStyle: { color: '#00aa00' } },
+        splitLine: { lineStyle: { color: ['nope', '#ff0000', 'bad'] } }, splitArea: { show: false } },
+      series: [{ type: 'scatter', data: [], xAxisIndex: 0 }],
+      xAxis: { show: false, type: 'value' }, yAxis: { show: false, type: 'value' } },
+    [0], { w: true, z: true }],
     // 2. [R7-AD] fonts the canvas refuses in the rest of the texts (recorded
     //    as the y- ones, the components' displayables keyed as the z- ones):
     //    the font the text before left -- a title's text and subtext after
