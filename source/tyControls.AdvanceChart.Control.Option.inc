@@ -23,6 +23,7 @@ begin
   FTipLastY := NaN;
   FTipKeepAt := NaN;
   FTipBox := TyInvalidRectF;
+  FTipFill := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
   { what upstream's canvas starts as [F6a] }
   FCursorName := 'default';

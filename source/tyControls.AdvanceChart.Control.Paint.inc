@@ -1504,10 +1504,52 @@ var
   { [R7-AA] a gradient line's box }
   lineAt: Double;
   gb: TTyXYWH;
+  { [R7-AC] a tick's, a split line's }
+  j: Integer;
+  at, len: Double;
 
   function APlotOf(G: TTyGridBuild): TTyRectF;
   begin
     Result := G.PlotRect;
+  end;
+
+  { [R7-AC] A LINE'S GRADIENT BOX: its ends on the pixel grid
+    (subPixelOptimize), the path's bounds grown by its pen -- no fill:
+    max(width, 5) (Path.getBoundingRect) }
+  procedure LineBox(var AEl: TTyChartElement; AX1, AY1, AX2, AY2, AW: Double);
+  var sc: Double;
+  begin
+    if FLastPPI > 0 then sc := FLastPPI / 96 else sc := 1;
+    TySubPixelLine(AX1, AY1, AX2, AY2, AW * sc);
+    AEl.Style.GradBoxSet := True;
+    AEl.Style.GradBox := TyGrowByStroke(TyRectToXYWH(TyRectF(Math.Min(AX1, AX2),
+      Math.Min(AY1, AY2), Math.Max(AX1, AX2), Math.Max(AY1, AY2))), False, AW);
+  end;
+
+  { [R7-AC] a tick's (PaintAxis' line: from the axis line, its length out
+    or -- inside -- in) }
+  procedure TickBox(var AEl: TTyChartElement; AAlong, ALenLogical, AW: Double);
+  var sc, lat, ln, x1, y1, x2, y2: Double;
+  begin
+    if FLastPPI > 0 then sc := FLastPPI / 96 else sc := 1;
+    lat := AGrid.AxisLineCoord(AAxis, FLastPPI);
+    ln := ALenLogical * sc;
+    if furn.TickInside then ln := -ln;
+    if AAxis.Horizontal then
+    begin
+      x1 := AAlong;
+      x2 := AAlong;
+      y1 := lat;
+      if AAxis.Side = asTop then y2 := lat - ln else y2 := lat + ln;
+    end
+    else
+    begin
+      y1 := AAlong;
+      y2 := AAlong;
+      x1 := lat;
+      if AAxis.Side = asRight then x2 := lat + ln else x2 := lat - ln;
+    end;
+    LineBox(AEl, x1, y1, x2, y2, AW);
   end;
 
   procedure Add(AKind: Byte; AZ2: Integer; AText: Boolean; const AEl: TTyChartElement);
@@ -1652,10 +1694,33 @@ begin
         e.Datum.DataIndex := ink;
         if not (splitK.WidthLogical > 0) then e.Style.StrokeWidthLogical := 0;
       end;
+      { [R7-AC] a gradient pen: made over this line's box (a Line each) }
+      if (e.Style.StrokeGradient.Kind <> cgkNone) and (AGrid <> nil) then
+        if AAxis.Horizontal then
+          LineBox(e, spec^.SplitLineMarks[i].Coord, APlotOf(AGrid).Top,
+            spec^.SplitLineMarks[i].Coord, APlotOf(AGrid).Bottom, splitK.WidthLogical)
+        else
+          LineBox(e, APlotOf(AGrid).Left, spec^.SplitLineMarks[i].Coord,
+            APlotOf(AGrid).Right, spec^.SplitLineMarks[i].Coord, splitK.WidthLogical);
       Add(cpkSplit, 0, False, e);
     end;
   if furn.ShowMinorSplitLine and (minorSplitK.Drawn or minorSplitK.Inked) and minors then
-    Add(cpkMinorSplit, 0, False, Pen(minorSplitK));
+  begin
+    e := Pen(minorSplitK);
+    { [R7-AC] the last minor split line's box }
+    if (e.Style.StrokeGradient.Kind <> cgkNone) and (AGrid <> nil) then
+      for i := High(scaleTicks) downto 0 do
+        if scaleTicks[i].Level <> 0 then
+        begin
+          at := AAxis.DataToCoord(scaleTicks[i].Value);
+          if AAxis.Horizontal then
+            LineBox(e, at, APlotOf(AGrid).Top, at, APlotOf(AGrid).Bottom, minorSplitK.WidthLogical)
+          else
+            LineBox(e, APlotOf(AGrid).Left, at, APlotOf(AGrid).Right, at, minorSplitK.WidthLogical);
+          Break;
+        end;
+    Add(cpkMinorSplit, 0, False, e);
+  end;
   { z2 1: the name, then the line }
   if (spec <> nil) and spec^.NamePlacement.Shown and (tpTextColor in nameS.Present) then
     Add(cpkName, 1, True, Txt(TTyChartColor(nameS.TextColor),
@@ -1677,16 +1742,38 @@ begin
     end;
     Add(cpkLine, 1, False, e);
   end;
-  { z2 2: the ticks, then the minor ones }
+  { z2 2: the ticks, then the minor ones -- [R7-AC] a gradient pen made
+    over the last one's box (a Line each: the canvas keeps the last one's
+    CanvasGradient) [was: no box] }
   if furn.ShowTicks and (tickK.Drawn or tickK.Inked) and (spec <> nil) then
     for i := 0 to High(spec^.TickMarks) do
       if spec^.TickMarks[i].Drawn then
       begin
-        Add(cpkTick, 2, False, Pen(tickK));
+        e := Pen(tickK);
+        if (e.Style.StrokeGradient.Kind <> cgkNone) and (AGrid <> nil) then
+          for j := High(spec^.TickMarks) downto 0 do
+            if spec^.TickMarks[j].Drawn then
+            begin
+              TickBox(e, spec^.TickMarks[j].Coord, spec^.TickLengthLogical, tickK.WidthLogical);
+              Break;
+            end;
+        Add(cpkTick, 2, False, e);
         Break;
       end;
   if furn.ShowMinorTick and (minorTickK.Drawn or minorTickK.Inked) and minors then
-    Add(cpkMinorTick, 2, False, Pen(minorTickK));
+  begin
+    e := Pen(minorTickK);
+    if (e.Style.StrokeGradient.Kind <> cgkNone) and (AGrid <> nil) then
+      for i := High(scaleTicks) downto 0 do
+        if scaleTicks[i].Level <> 0 then
+        begin
+          if not IsNan(furn.MinorTickLengthLogical) then len := furn.MinorTickLengthLogical
+          else len := ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen);
+          TickBox(e, AAxis.DataToCoord(scaleTicks[i].Value), len, minorTickK.WidthLogical);
+          Break;
+        end;
+    Add(cpkMinorTick, 2, False, e);
+  end;
   { z2 10: the labels, each its fill and transform }
   if (tpTextColor in labelS.Present) and (spec <> nil) then
     for i := 0 to High(spec^.Placements) do
@@ -1937,18 +2024,127 @@ end;
 
 procedure TTyCustomAdvanceChart.CompPolarSingleParts(var AParts: TTyCompPartArray);
 var
-  i, k, q, g, ink: Integer;
+  i, k, q, g, ink, n0: Integer;
   idx, aidx: TTyIntegerArray;
   ticks, minors, has: Boolean;
   v: TTySingleAxisView;
   pv: TTyPolarAxisView;
   none: TTyPolarLabelArray;
+  { [R7-AC] the lines of a view as boxes: their rects, inks, drawn }
+  bl: array of TTyRectF;
+  bi: TTyIntegerArray;
+  bd: array of Boolean;
 
   procedure Take(ADrawn: Boolean; AInk: Integer);
   begin
     if not ADrawn then Exit;
     SetLength(idx, Length(idx) + 1);
     idx[High(idx)] := AInk;
+  end;
+
+  procedure LinesOfS(const AL: TTySingleLineArray);
+  var j: Integer;
+  begin
+    SetLength(bl, Length(AL));
+    SetLength(bi, Length(AL));
+    SetLength(bd, Length(AL));
+    for j := 0 to High(AL) do
+    begin
+      bl[j] := TyRectF(Math.Min(AL[j].X1, AL[j].X2), Math.Min(AL[j].Y1, AL[j].Y2),
+        Math.Max(AL[j].X1, AL[j].X2), Math.Max(AL[j].Y1, AL[j].Y2));
+      bi[j] := AL[j].ColourIndex;
+      bd[j] := AL[j].Drawn;
+    end;
+  end;
+
+  procedure LinesOfP(const AL: TTyPolarLineArray);
+  var j: Integer;
+  begin
+    SetLength(bl, Length(AL));
+    SetLength(bi, Length(AL));
+    SetLength(bd, Length(AL));
+    for j := 0 to High(AL) do
+    begin
+      bl[j] := TyRectF(Math.Min(AL[j].X1, AL[j].X2), Math.Min(AL[j].Y1, AL[j].Y2),
+        Math.Max(AL[j].X1, AL[j].X2), Math.Max(AL[j].Y1, AL[j].Y2));
+      bi[j] := AL[j].ColourIndex;
+      bd[j] := AL[j].Drawn;
+    end;
+  end;
+
+  procedure CirclesOf(const AL: TTyPolarArcArray);
+  var j: Integer;
+  begin
+    SetLength(bl, Length(AL));
+    SetLength(bi, Length(AL));
+    SetLength(bd, Length(AL));
+    for j := 0 to High(AL) do
+    begin
+      bl[j] := TyRectF(AL[j].CX - AL[j].R, AL[j].CY - AL[j].R, AL[j].CX + AL[j].R, AL[j].CY + AL[j].R);
+      bi[j] := AL[j].ColourIndex;
+      bd[j] := True;
+    end;
+  end;
+
+  { [R7-AC] A GRADIENT PEN'S BOX on a part: the last of its Lines (AMerged
+    False: a Line each, the canvas keeping the last one's gradient), else
+    the merged path's bounds -- the lines of AInk (-1 all) --, grown by the
+    pen (a merged path is filled '#000': half the width; a Line or a
+    radius axis' unfilled circles: max(width, 5)) }
+  procedure BoxOn(var AEl: TTyChartElement; AMerged, AFilled: Boolean; AInk: Integer);
+  var j: Integer; u: TTyRectF; any: Boolean;
+  begin
+    if AEl.Style.StrokeGradient.Kind = cgkNone then Exit;
+    any := False;
+    u := TyRectF(0, 0, 0, 0);
+    for j := High(bl) downto 0 do
+    begin
+      if not bd[j] then Continue;
+      if (AInk >= 0) and (bi[j] <> AInk) then Continue;
+      if not any then u := bl[j]
+      else
+        u := TyRectF(Math.Min(u.Left, bl[j].Left), Math.Min(u.Top, bl[j].Top),
+          Math.Max(u.Right, bl[j].Right), Math.Max(u.Bottom, bl[j].Bottom));
+      any := True;
+      if not AMerged then Break;
+    end;
+    if not any then Exit;
+    AEl.Style.GradBoxSet := True;
+    AEl.Style.GradBox := TyGrowByStroke(TyRectToXYWH(u), AFilled, AEl.Style.StrokeWidthLogical);
+  end;
+
+  { the parts a view added from AFrom: their boxes }
+  procedure Boxes(AFrom, AShape: Integer; const ATicks, AMinors: TTyPolarLineArray;
+    const ASTicks, ASMinors, ASSplits: TTySingleLineArray; const APSplits: TTyPolarLineArray;
+    const ACircles: TTyPolarArcArray; AHasInks: Boolean);
+  var j, ink2: Integer;
+  begin
+    for j := AFrom to High(AParts) do
+    begin
+      if AParts[j].El.Style.StrokeGradient.Kind = cgkNone then Continue;
+      ink2 := -1;
+      if (AParts[j].Kind = cpkSplit) and AHasInks then ink2 := AParts[j].El.Datum.DataIndex;
+      case AShape of
+        0:
+          case AParts[j].Kind of
+            cpkTick: begin LinesOfS(ASTicks); BoxOn(AParts[j].El, False, False, -1); end;
+            cpkMinorTick: begin LinesOfS(ASMinors); BoxOn(AParts[j].El, False, False, -1); end;
+            cpkSplit: begin LinesOfS(ASSplits); BoxOn(AParts[j].El, True, True, ink2); end;
+          end;
+        1:
+          case AParts[j].Kind of
+            cpkTick: begin LinesOfP(ATicks); BoxOn(AParts[j].El, False, False, -1); end;
+            cpkMinorTick: begin LinesOfP(AMinors); BoxOn(AParts[j].El, False, False, -1); end;
+            cpkSplit: begin CirclesOf(ACircles); BoxOn(AParts[j].El, True, False, ink2); end;
+          end;
+      else
+        case AParts[j].Kind of
+          cpkTick: begin LinesOfP(ATicks); BoxOn(AParts[j].El, True, True, -1); end;
+          cpkMinorTick: begin LinesOfP(AMinors); BoxOn(AParts[j].El, True, True, -1); end;
+          cpkSplit: begin LinesOfP(APSplits); BoxOn(AParts[j].El, True, True, ink2); end;
+        end;
+      end;
+    end;
   end;
 
 begin
@@ -1980,8 +2176,11 @@ begin
       aidx[High(aidx)] := ink;
     end;
     if not v.Furn.ShowSplitArea then aidx := nil;
+    n0 := Length(AParts);
     CompViewParts(FSingles[i].Axis, 2, 0, v.Furn, v.Spec, v.HasLine,
       CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx);
+    Boxes(n0, 0, nil, nil, v.Ticks, v.MinorTicks, v.SplitLines, nil, nil,
+      Length(v.Furn.SplitLineInks) > 0);
   end;
   { THE POLARS: the radius axes' view, then the angle axes' }
   for k := 0 to 1 do
@@ -2024,12 +2223,15 @@ begin
         if Length(pv.Furn.SplitAreaInks) > 0 then aidx[High(aidx)] := g
         else aidx[High(aidx)] := -1;
       end;
+      n0 := Length(AParts);
       if k = 0 then
         CompViewParts(FPolars[i].RadiusAxis, 3, 1, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx)
       else
         CompViewParts(FPolars[i].AngleAxis, 4, 2, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts, aidx);
+      Boxes(n0, k + 1, pv.Ticks, pv.MinorTicks, nil, nil, nil, pv.SplitLines, pv.SplitCircles,
+        Length(pv.Furn.SplitLineInks) > 0);
     end;
 end;
 

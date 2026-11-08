@@ -136,6 +136,18 @@ type
     ShadowKeys: Byte;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
     ShadowColour: TTyChartColor;
+    { [R7-AC] a shadowColor no parser reads (ShadowKeys has 8; ShadowColour
+      cTyCanvasColourLeft): html drops the box-shadow declaration, the
+      canvas keeps the shadowColor it had. ShadowBlur is as written (a
+      negative one: html drops the declaration, the canvas keeps its blur) }
+    ShadowColourRefused: Boolean;
+    { [R7-AC] textStyle's textShadowBlur / textShadowOffsetX / Y /
+      textShadowColor (TextShadowKeys 1, 2, 4, 8): the text's shadow (a
+      colour no parser reads TextShadowColourRefused, cTyCanvasColourLeft) }
+    TextShadowKeys: Byte;
+    TextShadowBlur, TextShadowOffsetX, TextShadowOffsetY: Double;
+    TextShadowColour: TTyChartColor;
+    TextShadowColourRefused: Boolean;
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
@@ -971,7 +983,9 @@ begin
     if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
     begin
       ASpec.ShadowKeys := ASpec.ShadowKeys or 1;
-      ASpec.ShadowBlur := Max(Double(0), d.AsFloat);
+      { ([R7-AC] as written: a negative one is refused where it is drawn
+        [was: clamped to nought]) }
+      ASpec.ShadowBlur := d.AsFloat;
     end;
   end;
   if Fresh('shadowOffsetX') then
@@ -999,6 +1013,13 @@ begin
     begin
       ASpec.ShadowKeys := ASpec.ShadowKeys or 8;
       ASpec.ShadowColour := c;
+    end
+    { [R7-AC] one no parser reads [was: not written, the skin's] }
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 8;
+      ASpec.ShadowColour := cTyCanvasColourLeft;
+      ASpec.ShadowColourRefused := True;
     end;
   end;
   if Fresh('borderWidth') then
@@ -1048,6 +1069,38 @@ begin
         ASpec.TextSizeLogical := Max(Double(1), Min(Double(400), d.AsFloat));
       end;
       ASpec.TextFontStyle := TyFontStyleCode(ts.Find('fontStyle'));
+      { [R7-AC] the text's shadow [was: never read -- the option had no
+        effect] }
+      d := ts.Find('textShadowBlur');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 1;
+        ASpec.TextShadowBlur := d.AsFloat;
+      end;
+      d := ts.Find('textShadowOffsetX');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 2;
+        ASpec.TextShadowOffsetX := d.AsFloat;
+      end;
+      d := ts.Find('textShadowOffsetY');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 4;
+        ASpec.TextShadowOffsetY := d.AsFloat;
+      end;
+      d := ts.Find('textShadowColor');
+      if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 8;
+        ASpec.TextShadowColour := c;
+      end
+      else if (d <> nil) and (d.JSONType = jtString) and Refused(d.AsString) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 8;
+        ASpec.TextShadowColour := cTyCanvasColourLeft;
+        ASpec.TextShadowColourRefused := True;
+      end;
     end;
   end;
 end;

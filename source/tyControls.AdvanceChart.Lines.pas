@@ -2679,6 +2679,23 @@ begin
     ARun.Cur.Shadow := AEl.CanvasShadow
   else if cap then
   begin
+    { [R7-AC] A TEXT'S BOX BEFORE ITS SPANS: each drawn box (a rect piece)
+      sets the canvas' shadowColor -- its own, 'transparent' where it casts
+      none, the one the canvas had where it is a colour no parser reads
+      (marked, CanvasLeft 4) -- and the span after it starts from there
+      [was: the box's shadow not counted, a refused one not drawn] }
+    for k := 0 to High(AEl.Caption.RtPieces) do
+    begin
+      pc := @AEl.Caption.RtPieces[k];
+      if (pc^.Kind <> rpkRect) or not pc^.Drawn then Continue;
+      if pc^.HasShadow and ((pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0)) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else if pc^.HasShadow then ARun.Cur.Shadow := pc^.ShadowColor
+      else ARun.Cur.Shadow := 0;
+    end;
     CaptionShadowOf(AEl, colour, blur, ox, oy);
     { [R7-AA] a text span's shadowColor the canvas refuses: the one it had
       (the piece marked, so the next pass settles it again) }
@@ -2867,7 +2884,9 @@ begin
             ARun.Cur.Stroke := pc^.Stroke;
             ARun.Cur.StrokeGrad := Default(TTyChartGradient);
           end;
-          if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
+          { ([R7-AC] a box's border of 'Infinity': the width the canvas had) }
+          if (pc^.CanvasLeft and 8) <> 0 then pc^.LineWidth := ARun.Cur.LineWidth
+          else if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
         end;
       end;
   end
