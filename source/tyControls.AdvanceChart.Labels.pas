@@ -182,6 +182,12 @@ type
     { `textBorderWidth`, LOGICAL px. }
     HasBorderWidth: Boolean;
     BorderWidthLogical: Double;
+    { [R7-AF] one written as a STRING: the string where it strokes (the
+      TSpan's rect joins it to its width and height), and +Infinity, which
+      the canvas refuses -- stroked at the width it had (BorderWidthLogical
+      nought) }
+    BorderWidthText: string;
+    BorderWidthInf: Boolean;
     { [F4c] textBorderType as written ('' a solid halo) }
     BorderType: string;
     { [R2-F] textBorderDashOffset, LOGICAL px: the label's, else the global
@@ -1241,8 +1247,11 @@ begin
   AStrokeWidthLogical := 0;
   inside := AInside and AHostHasFill;
   band := TyLabelInkBand(AHostFill, AHostGradient);
-  { `textBorderWidth || 2`: a nought is two. }
-  if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
+  { `textBorderWidth || 2`: a nought is two. ([R7-AF] +Infinity is the
+    width the canvas had: nought until the paint order settles it) }
+  if ASpec.HasBorderWidth and ASpec.BorderWidthInf then
+    w := 0
+  else if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
     w := ASpec.BorderWidthLogical
   else
     w := 2;
@@ -1268,7 +1277,7 @@ begin
   if ASpec.HasBorderColour then
   begin
     if ASpec.BorderColourNone then Exit;
-    if not (ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0)) then Exit;
+    if not (ASpec.HasBorderWidth and ((ASpec.BorderWidthLogical > 0) or ASpec.BorderWidthInf)) then Exit;
     if ASpec.BorderColourInherit then Halo(AHostFill)
     else Halo(ASpec.BorderColour);
     Exit;
@@ -2112,9 +2121,16 @@ begin
     { A WRITTEN text border is counted in the text's rect; the automatic
       halo is not (Text.ts _updatePlainTexts) }
     cap.Caption.LmStrokeW := 0;
+    cap.Caption.LmStrokeText := '';
     if spec.HasBorderColour and not spec.BorderColourNone and spec.HasBorderWidth
-      and (spec.BorderWidthLogical > 0) then
+      and ((spec.BorderWidthLogical > 0) or spec.BorderWidthInf) then
+    begin
       cap.Caption.LmStrokeW := spec.BorderWidthLogical * scale;
+      { ([R7-AF] a string joins the rect's width and height; 'Infinity'
+        takes its corner to -Infinity, its size to NaN) }
+      cap.Caption.LmStrokeText := spec.BorderWidthText;
+      if spec.BorderWidthInf then cap.Caption.LmStrokeW := Infinity;
+    end;
     cap.Caption.LmInkFill := hostFill;
     cap.Caption.LmInkHasFill := hostHasFill;
     cap.Caption.LmInkGradient := host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone);
@@ -2131,6 +2147,11 @@ begin
     cap.Caption.Colour := ink;
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
+    { [R7-AF] A HALO OF 'Infinity': the canvas refuses the width and strokes
+      at the one it had (the paint order settles it) [was: not stroked] }
+    if spec.HasBorderWidth and spec.BorderWidthInf
+      and (((stroke shr 24) <> 0) or (stroke = cTyCanvasColourLeft)) then
+      cap.CanvasFlags := cap.CanvasFlags or cTyCanvasWidthLeft;
     { [R7-C] A PLAIN TEXT'S PEN GROWS ITS RECT by half its width on every
       side (TSpan.getBoundingRect), which is what the pointer is tested
       against (rectContain) -- the box above stays the words' own, as the
@@ -2261,7 +2282,16 @@ begin
       frame (TSpan's and the plate's contain in local coordinates), not
       the turned box's upright bounds }
     cap.Caption.HasHitRel := True;
-    if pieces <> nil then
+    { [R7-AF] A WORDS' RECT THAT JOINED A STRING (a written halo's width as a
+      string, or 'Infinity') IS FOUND BY NOTHING: rectContain joins it again
+      and the edge is no number, or left of the corner [was: found in the
+      words' box] }
+    if (pieces = nil) and (cap.Caption.LmStrokeText <> '') then
+    begin
+      cap.Caption.HitRelOwn := True;
+      cap.Caption.HitRel := TyRectF(1e300, 1e300, -1e300, -1e300);
+    end
+    else if pieces <> nil then
     begin
       { a piece the pointer never finds is not in it }
       hitPieces := nil;

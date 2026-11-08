@@ -517,7 +517,9 @@ implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol,
-  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl, tyControls.FontUnits;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl, tyControls.FontUnits,
+  { [R7-AF] an own-frame path's bounds through the map }
+  tyControls.AdvanceChart.LinePath;
 
 const
   cPi: Double = 3.141592653589793;
@@ -2250,12 +2252,17 @@ end;
   (an unplaced slider's: TTyChartElement.FrameShape): AM the canvas'
   transform (device px) -- its path, its group's clip and its pen mapped
   through it; the pen's width, dash and phase stay the canvas' own (in that
-  frame), its scale and shape the map's }
+  frame), its scale and shape the map's. [R7-AF] A text (a handle label,
+  its anchor Caption.X / Y in that frame) is drawn under the whole map
+  (Caption.Affine) [was: none drawn]; a clip the map turns or shears is
+  the turned rect (ClipPaths, in the box ClipRect) [was: the box round it];
+  a path's bounds its own through the map (a curve's bulge) }
 procedure PlaceFrame(var AEl: TTyChartElement; const AM: TTyMat2D; ADs: Double);
 var
   k: Integer;
   L: TTyMat2D;
   xs, ys: array[0..3] of Double;
+  b: TTyXYWH;
 
   procedure Map(var AX, AY: Double);
   var x: Double;
@@ -2277,8 +2284,15 @@ begin
     Map(AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
   end;
   AEl.Shape.HasCmdBounds := False;
+  if Length(AEl.Shape.Cmds) > 0 then
+  begin
+    b := TyPathCmdsRect(AEl.Shape.Cmds);
+    AEl.Shape.HasCmdBounds := True;
+    AEl.Shape.CmdBounds := TyRectF(b.X, b.Y, b.X + b.W, b.Y + b.H);
+  end;
   AEl.Ignore := False;
-  { the clip: its rect through the map (its bounds where the map turns it) }
+  { the clip: its rect through the map -- the box round it is the rect the
+    run groups clips by, the turned rect itself what cuts the ink }
   if AEl.HasClip and (Length(AEl.FrameClip) = 4) then
   begin
     xs[0] := AEl.FrameClip[0];
@@ -2291,6 +2305,21 @@ begin
     ys[3] := ys[2];
     for k := 0 to 3 do Map(xs[k], ys[k]);
     AEl.ClipRect := TyRectF(MinValue(xs), MinValue(ys), MaxValue(xs), MaxValue(ys));
+    AEl.ClipPaths := nil;
+    if (AM[1] <> 0) or (AM[2] <> 0) then
+      AEl.ClipPaths := [TyShapePolygon([TyPointF(xs[0], ys[0]), TyPointF(xs[1], ys[1]),
+        TyPointF(xs[2], ys[2]), TyPointF(xs[3], ys[3])])];
+  end;
+  { a text: the map at its anchor }
+  if AEl.Caption.Text <> '' then
+  begin
+    AEl.Caption.HasAffine := True;
+    AEl.Caption.Affine[0] := AM[0];
+    AEl.Caption.Affine[1] := AM[1];
+    AEl.Caption.Affine[2] := AM[2];
+    AEl.Caption.Affine[3] := AM[3];
+    AEl.Caption.Affine[4] := AM[0] * AEl.Caption.X + AM[2] * AEl.Caption.Y + AM[4];
+    AEl.Caption.Affine[5] := AM[1] * AEl.Caption.X + AM[3] * AEl.Caption.Y + AM[5];
   end;
   L := AM;
   L[4] := 0;
@@ -3065,14 +3094,18 @@ begin
         ARun.Cur.FillGrad := Default(TTyChartGradient);
         ARun.Cur.FillPat := Default(TTyChartPattern);
       end;
+      { ([R7-AF] a halo of 'Infinity' strokes all the same: the canvas
+        refuses the width and keeps the one it had) }
       if (AEl.CanvasFlags and cTyCanvasTextStrokeLeft) <> 0 then
         AEl.Caption.StrokeColour := ARun.Cur.Stroke
-      else if AEl.Caption.StrokeWidthLogical > 0 then
+      else if (AEl.Caption.StrokeWidthLogical > 0) or ((AEl.CanvasFlags and cTyCanvasWidthLeft) <> 0) then
       begin
         ARun.Cur.Stroke := AEl.Caption.StrokeColour;
         ARun.Cur.StrokeGrad := Default(TTyChartGradient);
       end;
-      if AEl.Caption.StrokeWidthLogical > 0 then ARun.Cur.LineWidth := AEl.Caption.StrokeWidthLogical;
+      if (AEl.CanvasFlags and cTyCanvasWidthLeft) <> 0 then
+        AEl.Caption.StrokeWidthLogical := ARun.Cur.LineWidth
+      else if AEl.Caption.StrokeWidthLogical > 0 then ARun.Cur.LineWidth := AEl.Caption.StrokeWidthLogical;
     end
     else
       for k := 0 to High(AEl.Caption.RtPieces) do

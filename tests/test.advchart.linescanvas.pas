@@ -85,7 +85,16 @@ unit test.advchart.linescanvas;
   the gradient a polar's, a single axis' and a parallel axis' line hands
   on; a text box's token backgrounds among its spans; a label's box on a
   translucent host: TestTheR7AECanvasAsUpstream, TestTheR7AEHitsAsUpstream,
-  TestAnUnplacedSlidersPointerAsUpstream. }
+  TestAnUnplacedSlidersPointerAsUpstream.
+
+  [R7-AF] The cases named af-..., recorded and compared as the ae- ones and
+  more (a text's place and alignment, a clip's path on the canvas): an
+  unplaced slider's handle labels in their own frame under the transform the
+  canvas had, its shadows' clips turned with it; a label's textBorderWidth
+  of 'Infinity' (the width the canvas had) or a string (its number), a box's
+  borderWidth as a string; a title's, a legend's and a toolbox's box of an
+  infinite pen; a radar's gradient axis lines: TestTheR7AFCanvasAsUpstream,
+  TestAnUnplacedSlidersLabelsAsUpstream, TestAnUnplacedSlidersTurnedClip. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, tyControls.FontUnits,
@@ -172,6 +181,12 @@ type
     procedure TestTheR7ACCanvasAsUpstream;
     procedure TestTheR7AECanvasAsUpstream;
     procedure TestTheR7AEHitsAsUpstream;
+    procedure TestTheR7AFCanvasAsUpstream;
+    procedure TestTheR7AFHitsAsUpstream;
+    procedure TestAnUnplacedSlidersLabelsAsUpstream;
+    procedure TestAnUnplacedSlidersTurnedClip;
+    procedure TestAnInfiniteHaloHandsItsColourAtOnce;
+    procedure TestTheRadarRingsShareTheirGradient;
     procedure TestAnUnplacedSlidersPointerAsUpstream;
     procedure TestALabelBoxOnATranslucentHostAsUpstream;
     procedure TestADzWidthOfNoNumberStrokesNothing;
@@ -386,6 +401,9 @@ begin
   Result := PointerShapesDrawn;
 end;
 
+procedure FontOfCss(const AFont: string; out APx: Double; out AWeight: Integer;
+  out AFamily: string); forward;
+
 function HexD(const S: string): Double;
 var q: QWord;
 begin
@@ -516,7 +534,7 @@ begin
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
       or (Copy(id, 1, 2) = 'y-')
       or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ad-') or (Copy(id, 1, 4) = 'ady-')
-      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-')
+      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') or (Copy(id, 1, 3) = 'af-')
       { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
       or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
@@ -1048,6 +1066,9 @@ var
   pb, ops: TJSONArray;
   wc: TTyChartColor;
   s: string;
+  { [R7-AF] a clip's ring and its box }
+  ring: TJSONArray;
+  rx0, ry0, rx1, ry1, v: Double;
 begin
   Result := -1;
   L := FChart.Frame;
@@ -1113,6 +1134,29 @@ begin
           end
           else if TyTryParseChartColor(ops.Objects[0].Strings['ss'], wc)
             and not SameInkL(el.Style.StrokeColor, wc) then dist := dist + 0.005;
+          { ([R7-AF] and of those, the one whose clip's box is the box of the
+            record's ring: the shadows on either side of the window are
+            alike in colour and bounds) }
+          if (ARec.Find('clp') <> nil) and (ARec.Find('clp').JSONType = jtArray) then
+          begin
+            ring := ARec.Arrays['clp'].Arrays[ARec.Arrays['clp'].Count - 1];
+            rx0 := 1e300;
+            ry0 := 1e300;
+            rx1 := -1e300;
+            ry1 := -1e300;
+            for q := 0 to ring.Count - 1 do
+            begin
+              v := HexD(ring.Arrays[q].Strings[0]);
+              rx0 := Min(rx0, v);
+              rx1 := Max(rx1, v);
+              v := HexD(ring.Arrays[q].Strings[1]);
+              ry0 := Min(ry0, v);
+              ry1 := Max(ry1, v);
+            end;
+            if not el.HasClip or (Abs(el.ClipRect.Left - rx0) > 1e-6) or (Abs(el.ClipRect.Top - ry0) > 1e-6)
+              or (Abs(el.ClipRect.Right - rx1) > 1e-6) or (Abs(el.ClipRect.Bottom - ry1) > 1e-6) then
+              dist := dist + 0.002;
+          end;
         end;
         { ([R7-AD] and of those, one that makes the record's first op: a
           radar's merged split lines over its outer band's merged path) }
@@ -1259,10 +1303,18 @@ var
   pk: string;
   ptrs: TTyOverlayShapeArray;
   fps: Double;
+  { [R7-AF] the af- cases: as the ae- ones, and a text's place, a clip's path }
+  ae, af: Boolean;
+  fpx, ux, uy: Double;
+  fw: Integer;
+  ffam: string;
+  ring: TJSONArray;
 begin
+  af := APrefix = 'af-';
+  ae := (APrefix = 'ae-') or af;
   strict := APrefix <> 'w-';
-  { (and the ac-, ae- ones: R7-AC, R7-AE) }
-  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or (APrefix = 'ae-')
+  { (and the ac-, ae- ones: R7-AC, R7-AE; [R7-AF] the af- ones; [R7-AG] the ag- ones) }
+  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or ae
     or (APrefix = 'ag-');
   FBad := 0;
   FCompared := 0;
@@ -1357,7 +1409,7 @@ begin
         if (APrefix = 'ac-') and (Copy(key, 1, 15) = 'c.tooltip0.0.t.') and (Trim(rec.Get('tx', '')) = '') then
           Continue;
         { [R7-AE] a text's box or span of its own }
-        if (APrefix = 'ae-') and (key[1] = 'k') then
+        if ae and (key[1] = 'k') then
         begin
           KPiece(where, rec, key);
           Continue;
@@ -1488,6 +1540,45 @@ begin
           sc := Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));
           if isCap then
           begin
+            { [R7-AF] A DATAZOOM LABEL'S PLACE (its middle-aligned span is at
+              its anchor): the op's transform at the span's (x, y) against
+              the caption's anchor -- under a whole map, the map's origin and
+              its linear part the op's -- its alignment and font }
+            if af and (o.Find('tp') <> nil) and (Copy(key, 1, 11) = 'c.dataZoom0') then
+            begin
+              ux := m[0] * HexD(o.Arrays['tp'].Strings[0]) + m[2] * HexD(o.Arrays['tp'].Strings[1]) + m[4];
+              uy := m[1] * HexD(o.Arrays['tp'].Strings[0]) + m[3] * HexD(o.Arrays['tp'].Strings[1]) + m[5];
+              Inc(FCompared);
+              if el.Caption.HasAffine then
+              begin
+                if (Abs(el.Caption.Affine[4] - ux) > 1e-6) or (Abs(el.Caption.Affine[5] - uy) > 1e-6)
+                  or (Abs(el.Caption.Affine[0] - m[0]) > 1e-9) or (Abs(el.Caption.Affine[1] - m[1]) > 1e-9)
+                  or (Abs(el.Caption.Affine[2] - m[2]) > 1e-9) or (Abs(el.Caption.Affine[3] - m[3]) > 1e-9) then
+                  Miss(Format('%s: text under [%g,%g,%g,%g,%g,%g], upstream at (%g,%g) under [%g,%g,%g,%g]',
+                    [where, el.Caption.Affine[0], el.Caption.Affine[1], el.Caption.Affine[2], el.Caption.Affine[3],
+                    el.Caption.Affine[4], el.Caption.Affine[5], ux, uy, m[0], m[1], m[2], m[3]]));
+              end
+              else if (Abs(el.Caption.X - ux) > 1e-6) or (Abs(el.Caption.Y - uy) > 1e-6)
+                or (Abs(m[0] - 1) > 1e-9) or (Abs(m[3] - 1) > 1e-9) or (m[1] <> 0) or (m[2] <> 0) then
+                Miss(Format('%s: text at (%g,%g), upstream (%g,%g) under [%g,%g,%g,%g]', [where,
+                  el.Caption.X, el.Caption.Y, ux, uy, m[0], m[1], m[2], m[3]]));
+              case el.Caption.AnchorH of
+                tahRight: want := 'right';
+                tahCentre: want := 'center';
+              else
+                want := 'left';
+              end;
+              Inc(FCompared);
+              if (want <> o.Strings['al']) or (el.Caption.AnchorV <> tavMiddle) or (o.Strings['bl'] <> 'middle') then
+                Miss(Format('%s: text aligned %s, upstream %s / %s', [where, want, o.Strings['al'], o.Strings['bl']]));
+              FontOfCss(o.Strings['font'], fpx, fw, ffam);
+              Inc(FCompared);
+              { (the port's weight nought is the normal one) }
+              if (Abs(TyFontPxOf(el.Caption.FontSizeLogical) - fpx) > 1e-9)
+                or ((el.Caption.FontWeight <> fw) and not ((el.Caption.FontWeight = 0) and (fw = 400))) then
+                Miss(Format('%s: text of %gpx weight %d, upstream %s', [where,
+                  TyFontPxOf(el.Caption.FontSizeLogical), el.Caption.FontWeight, o.Strings['font']]));
+            end;
             CaptionInk(el, pf, ps, plw);
             if (op = 'fillText') and TyTryParseChartColor(o.Strings['fs'], wc) then
             begin
@@ -1637,7 +1728,7 @@ begin
             0.2) and the arguments of a gradient a series' element is
             handed (made over the box of the element that set it, in that
             element's frame) }
-          if ((APrefix = 'ac-') or (APrefix = 'ae-')) and ((op = 'fill') or (op = 'stroke')) then
+          if ((APrefix = 'ac-') or ae) and ((op = 'fill') or (op = 'stroke')) then
           begin
             Inc(FCompared);
             ga := el.Style.Alpha;
@@ -1646,7 +1737,7 @@ begin
             if Abs(ga - HexD(o.Strings['ga'])) > 1e-6 then
               Miss(Format('%s: %s at alpha %g, upstream %g', [where, op, ga, HexD(o.Strings['ga'])]));
             { ([R7-AE] the ae- cases: a component's part too) }
-            if (not comp and (Copy(key, 1, 2) <> 'c.')) or (APrefix = 'ae-') then
+            if (not comp and (Copy(key, 1, 2) <> 'c.')) or ae then
               GradMiss(where + ' ' + op, el, op = 'fill', o);
           end;
           { the shadow it casts (a refused blur or colour kept) }
@@ -1669,7 +1760,7 @@ begin
         end;
         { [R7-AC] AN AXIS POINTER'S LINE WHERE ITS SLIDE HAS GOT TO (the
           ac- cases): the drawn line's bounds }
-        if ((APrefix = 'ac-') or (APrefix = 'ae-')) and comp and not ctext and (Pos('Pointer', ckey) > 0) and (cz2 = 0)
+        if ((APrefix = 'ac-') or ae) and comp and not ctext and (Pos('Pointer', ckey) > 0) and (cz2 = 0)
           and (rec.Find('pb').JSONType <> jtNull) and FChart.CompPart(ckey, cz2, ctext, 'stroke', el) then
         begin
           bb := TyShapeBounds(el.Shape);
@@ -1686,7 +1777,7 @@ begin
         { [R7-AC] A RICHTEXT TOOLTIP'S BOX where upstream fills it: the
           place moveTo was given, in by the border's width (TooltipRichContent's
           1) and the shadow's outer size }
-        if ((APrefix = 'ac-') or (APrefix = 'ae-')) and (key = 'c.tooltip0.0.p.0') and (rec.Find('pb').JSONType <> jtNull) then
+        if ((APrefix = 'ac-') or ae) and (key = 'c.tooltip0.0.p.0') and (rec.Find('pb').JSONType <> jtNull) then
         begin
           bb := FChart.TipFill;
           Inc(FCompared);
@@ -1721,10 +1812,51 @@ begin
             Miss(Format('%s: box (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, mb.Left, mb.Top, mb.Right, mb.Bottom]));
         end;
+        { [R7-AF] A CLIP'S PATH ON THE CANVAS (the af- cases): the element
+          whose brush set it -- each corner of upstream's ring a corner of the
+          port's clip (its path, else its rect) }
+        if af and (rec.Find('clp') <> nil) and (rec.Find('clp').JSONType = jtArray)
+          and (Copy(key, 1, 11) = 'c.dataZoom0') and not comp then
+        begin
+          ring := rec.Arrays['clp'].Arrays[rec.Arrays['clp'].Count - 1];
+          Inc(FCompared);
+          if Length(el.ClipPaths) > 0 then
+          begin
+            for n := 0 to ring.Count - 1 do
+            begin
+              ux := HexD(ring.Arrays[n].Strings[0]);
+              uy := HexD(ring.Arrays[n].Strings[1]);
+              nm := False;
+              for q := 0 to High(el.ClipPaths[0].Points) do
+                if (Abs(el.ClipPaths[0].Points[q].X - ux) < 1e-6) and (Abs(el.ClipPaths[0].Points[q].Y - uy) < 1e-6) then
+                  nm := True;
+              if not nm then
+              begin
+                Miss(Format('%s: no corner of the clip at (%g,%g)', [where, ux, uy]));
+                Break;
+              end;
+            end;
+          end
+          else if not el.HasClip then
+            Miss(where + ': no clip, upstream one')
+          else
+            for n := 0 to ring.Count - 1 do
+            begin
+              ux := HexD(ring.Arrays[n].Strings[0]);
+              uy := HexD(ring.Arrays[n].Strings[1]);
+              if not (((Abs(ux - el.ClipRect.Left) < 1e-6) or (Abs(ux - el.ClipRect.Right) < 1e-6))
+                and ((Abs(uy - el.ClipRect.Top) < 1e-6) or (Abs(uy - el.ClipRect.Bottom) < 1e-6))) then
+              begin
+                Miss(Format('%s: clip (%g,%g)-(%g,%g), upstream a corner at (%g,%g)', [where,
+                  el.ClipRect.Left, el.ClipRect.Top, el.ClipRect.Right, el.ClipRect.Bottom, ux, uy]));
+                Break;
+              end;
+            end;
+        end;
         { [R7-AE] A DATAZOOM'S PART WHERE IT IS BRUSHED (the ae- cases, and
           ac-dz-inf): the drawn path's bounds -- an unplaced slider's in its
           own frame under the transform the canvas had }
-        if (((APrefix = 'ae-') or (id = 'ac-dz-inf')) and (Copy(key, 1, 11) = 'c.dataZoom0') and not ctext
+        if ((ae or (id = 'ac-dz-inf')) and (Copy(key, 1, 11) = 'c.dataZoom0') and not ctext
           and not comp and (rec.Find('pb').JSONType <> jtNull)) then
         begin
           mb := TyRectF(HexD(rec.Arrays['pb'].Strings[0]), HexD(rec.Arrays['pb'].Strings[1]),
@@ -1740,7 +1872,7 @@ begin
       { [R7-AE] a pointer's line or band the port drew: upstream has its
         group's path (one an action showed is gone after a notMerge
         setOption) }
-      if APrefix = 'ae-' then
+      if ae then
       begin
         ptrs := FChart.PtrShapes;
         for q := 0 to High(ptrs) do
@@ -3130,6 +3262,18 @@ begin
   RunW(True, 'ae-');
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AFCanvasAsUpstream;
+begin
+  RunW(False, 'af-');
+end;
+
+{ [R7-AF] a label's words whose rect joined a string width (or 'Infinity'):
+  found by nothing, upstream's findHover at their probes }
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AFHitsAsUpstream;
+begin
+  RunW(True, 'af-');
+end;
+
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the
   boxes drawn and the spans with words of the host's caption, in their
   order (zrender's children: the block's Rect, then each token's Rect and
@@ -3228,12 +3372,13 @@ begin
       if not pc.HasFill or not SameInkL(pc.Fill, wc) then
         Miss(Format('%s: %s %x, upstream %s', [AWhere, op, pc.Fill, o.Strings['fs']]));
     end;
-    if (op = 'stroke') and TyTryParseChartColor(o.Strings['ss'], wc) then
+    { ([R7-AF] a span's halo too) }
+    if ((op = 'stroke') or (op = 'strokeText')) and TyTryParseChartColor(o.Strings['ss'], wc) then
     begin
       Inc(FCompared);
       if not pc.HasStroke or not SameInkL(pc.Stroke, wc)
         or (Abs(pc.LineWidth - HexD(o.Strings['lw'])) > 1e-6) then
-        Miss(Format('%s: stroke %x width %g, upstream %s width %g', [AWhere, pc.Stroke,
+        Miss(Format('%s: %s %x width %g, upstream %s width %g', [AWhere, op, pc.Stroke,
           pc.LineWidth, o.Strings['ss'], HexD(o.Strings['lw'])]));
     end;
     sb := HexD(o.Strings['sb']);
@@ -3444,6 +3589,272 @@ begin
         (Abs(px.red - $EE) <= 3) and (Abs(px.green - $EE) <= 3) and (Abs(px.blue - $EE) <= 3));
     end;
   end;
+end;
+
+{ [R7-AF] AN UNPLACED SLIDER'S HANDLE LABELS ARE DRAWN (af-dz-label-px):
+  each where upstream's fillText puts it -- the record's transform at the
+  span's place, right-aligned for the first (its words left of the place,
+  none right of it), left for the second (from its place to the canvas'
+  edge) -- in the textStyle's red }
+procedure TAdvChartLinesCanvasOracleTest.TestAnUnplacedSlidersLabelsAsUpstream;
+var
+  cs, els, ops: TJSONArray;
+  c, o: TJSONObject;
+  i, k, x, y, n, nr, lab: Integer;
+  px: TBGRAPixel;
+  m: array[0..5] of Double;
+  ux, uy: Double;
+  el: TTyChartElement;
+  b: TTyRectF;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'af-dz-label-px' then c := cs.Objects[i];
+  AssertTrue('af-dz-label-px', c <> nil);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  PinClocks(FChart);
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  els := c.Arrays['frames'].Objects[0].Arrays['els'];
+  for lab := 0 to 1 do
+  begin
+    o := nil;
+    for k := 0 to els.Count - 1 do
+      if els.Objects[k].Strings['key'] = 'c.dataZoom0.10.t.' + IntToStr(lab) then
+      begin
+        ops := els.Objects[k].Arrays['ops'];
+        AssertTrue('a text drawn upstream', ops.Count > 0);
+        o := ops.Objects[0];
+      end;
+    AssertTrue('the label upstream', o <> nil);
+    for k := 0 to 5 do m[k] := HexD(o.Arrays['m'].Strings[k]);
+    ux := m[0] * HexD(o.Arrays['tp'].Strings[0]) + m[2] * HexD(o.Arrays['tp'].Strings[1]) + m[4];
+    uy := m[1] * HexD(o.Arrays['tp'].Strings[0]) + m[3] * HexD(o.Arrays['tp'].Strings[1]) + m[5];
+    n := 0;
+    nr := 0;
+    for y := Round(uy) - 12 to Round(uy) + 12 do
+      for x := 0 to FBmp.Width - 1 do
+      begin
+        px := FBmp.GetPixel(x, y);
+        if not ((px.red > 200) and (px.green < 90) and (px.blue < 90)) then Continue;
+        if lab = 0 then
+        begin
+          if (x <= ux + 1) and (x >= ux - 120) then Inc(n)
+          else if (x > ux + 3) and (x < ux + 80) then Inc(nr);
+        end
+        else if x >= ux - 1 then Inc(n);
+      end;
+    AssertTrue(Format('label %d: %d red px by its place (%g,%g)', [lab, n, ux, uy]), n > 30);
+    AssertEquals(Format('label %d: red px right of its place', [lab]), 0, nr);
+    { and its element's bounds are where it is drawn (a dirty block that
+      meets the words redraws them) }
+    nr := 0;
+    for k := 0 to FChart.Frame.Count - 1 do
+    begin
+      el := FChart.Frame.Element(k);
+      if (el.Caption.Text <> 'W2.00W') and (el.Caption.Text <> 'W8.00W') then Continue;
+      if (lab = 0) <> (el.Caption.Text = 'W2.00W') then Continue;
+      b := TyShapeBounds(el.Shape);
+      Inc(nr);
+      if lab = 0 then
+        AssertTrue(Format('label 0: its bounds (%g,%g)-(%g,%g) hold its words', [b.Left, b.Top, b.Right, b.Bottom]),
+          (b.Left <= ux - 10) and (b.Right >= ux - 10) and (b.Top <= uy) and (b.Bottom >= uy))
+      else
+        AssertTrue(Format('label 1: its bounds (%g,%g)-(%g,%g) hold its words', [b.Left, b.Top, b.Right, b.Bottom]),
+          (b.Left <= ux + 10) and (b.Right >= ux + 10) and (b.Top <= uy) and (b.Bottom >= uy));
+    end;
+    AssertEquals(Format('label %d: its element', [lab]), 1, nr);
+  end;
+end;
+
+{ [R7-AF] AN UNPLACED SLIDER'S CLIPS TURN WITH THE TRANSFORM (af-dz-turn,
+  af-dz-skew): the data shadow's area beside the window and in it, each in
+  its group's clip -- the rect in the shadow's own frame under the
+  transform the canvas had (the record's), a turned or sheared one, not the
+  box round it. Points 3 frame px over the slider's foot, 4 to either side of
+  each window end, are the green beside the window and the yellow in it }
+procedure TAdvChartLinesCanvasOracleTest.TestAnUnplacedSlidersTurnedClip;
+const
+  cX: array[0..7] of Double = (58, 60, 68, 70, 250, 252, 260, 262);
+var
+  cs, els: TJSONArray;
+  c, o: TJSONObject;
+  i, k, pass: Integer;
+  px: TBGRAPixel;
+  m: array[0..5] of Double;
+  dx, dy: Double;
+  id, bad: string;
+  yellow: Boolean;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  bad := '';
+  for pass := 0 to 1 do
+  begin
+    if pass = 0 then id := 'af-dz-turn' else id := 'af-dz-skew';
+    c := nil;
+    for i := 0 to cs.Count - 1 do
+      if cs.Objects[i].Strings['id'] = id then c := cs.Objects[i];
+    AssertTrue(id, c <> nil);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.AnimationMode := camAlways;
+    PinClocks(FChart);
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    els := c.Arrays['frames'].Objects[0].Arrays['els'];
+    o := nil;
+    for k := 0 to els.Count - 1 do
+      if els.Objects[k].Strings['key'] = 'c.dataZoom0.-20.p.0' then o := els.Objects[k].Arrays['ops'].Objects[0];
+    AssertTrue('the shadow upstream', o <> nil);
+    for k := 0 to 5 do m[k] := HexD(o.Arrays['m'].Strings[k]);
+    AssertTrue(id + ': a turned transform upstream', Abs(m[1]) > 0.1);
+    { the window's ends: 20% and 80% of 320 }
+    for k := 0 to High(cX) do
+    begin
+      dx := m[0] * cX[k] + m[2] * 3 + m[4];
+      dy := m[1] * cX[k] + m[3] * 3 + m[5];
+      px := FBmp.GetPixel(Round(dx), Round(dy));
+      yellow := (cX[k] > 64) and (cX[k] < 256);
+      if (yellow <> (px.red > 200)) or (px.green < 200) or (px.blue > 60) then
+        bad := bad + Format(' %s: frame (%g,3) at (%d,%d) is (%d,%d,%d), upstream %s;', [id, cX[k],
+          Round(dx), Round(dy), px.red, px.green, px.blue, BoolToStr(yellow, 'yellow', 'green')]);
+    end;
+  end;
+  AssertEquals('the shadows in their turned clips', '', bad);
+end;
+
+{ [R7-AF] A HALO OF 'Infinity' HANDS THE CANVAS ITS COLOUR IN THE FIRST PAINT
+  ORDER OVER IT (af-label-inf): the list as built -- the halo's width not yet
+  settled (nought), the symbol after it (z 3) with the borderColor no parser
+  reads -- through one TyLinesCanvasLeftovers: the symbol strokes in the
+  label's '#ff00ff'. (A paint runs the order more than once, and from the
+  second the halo has its width: the first is what this asks.) }
+procedure TAdvChartLinesCanvasOracleTest.TestAnInfiniteHaloHandsItsColourAtOnce;
+var
+  cs: TJSONArray;
+  c: TJSONObject;
+  i, k, n: Integer;
+  el: TTyChartElement;
+  L: TTyPaintList;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'af-label-inf' then c := cs.Objects[i];
+  AssertTrue('af-label-inf', c <> nil);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  PinClocks(FChart);
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  L := TTyPaintList.Create;
+  try
+    for k := 0 to FChart.Frame.Count - 1 do
+    begin
+      el := FChart.Frame.Element(k);
+      { (as built: the halo's width nought, the symbol's colour refused) }
+      if (el.Caption.Text = 'Ab') and ((el.CanvasFlags and cTyCanvasWidthLeft) <> 0) then
+        el.Caption.StrokeWidthLogical := 0;
+      if (el.Datum.SeriesIndex = 2) and (el.Caption.Text = '') then
+        el.Style.StrokeColor := cTyCanvasColourLeft;
+      L.Add(el);
+    end;
+    TyLinesCanvasLeftovers(L, TyCanvasGroundOf(0), 96);
+    n := 0;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if (el.Datum.SeriesIndex <> 2) or (el.Caption.Text <> '') then Continue;
+      Inc(n);
+      AssertEquals('the symbol after the label strokes in its halo''s colour', Integer($FFFF00FF),
+        Integer(el.Style.StrokeColor));
+    end;
+    AssertTrue('the symbol after the label', n > 0);
+  finally
+    L.Free;
+  end;
+end;
+
+{ [R7-AF] A RADAR'S RINGS OF ONE COLOUR ARE ONE PATH upstream (mergePath), its
+  gradient over the merged path's box (af-grad-radar-split): every ring the
+  port draws with a gradient takes the gradient of one of upstream's two
+  merged paths -- the stroke op's arguments through its transform }
+procedure TAdvChartLinesCanvasOracleTest.TestTheRadarRingsShareTheirGradient;
+var
+  cs, els: TJSONArray;
+  c, o: TJSONObject;
+  i, k, j, n, rings: Integer;
+  el: TTyChartElement;
+  m: array[0..5] of Double;
+  x1, y1, x2, y2, gr: Double;
+  ux: array[0..1, 0..3] of Double;
+  a: TJSONArray;
+  ok: Boolean;
+  bad: string;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'af-grad-radar-split' then c := cs.Objects[i];
+  AssertTrue('af-grad-radar-split', c <> nil);
+  els := c.Arrays['frames'].Objects[0].Arrays['els'];
+  n := 0;
+  for k := 0 to els.Count - 1 do
+    if Copy(els.Objects[k].Strings['key'], 1, 13) = 'c.radar0.0.p.' then
+    begin
+      AssertTrue('two merged paths upstream', n < 2);
+      o := els.Objects[k].Arrays['ops'].Objects[0];
+      for j := 0 to 5 do m[j] := HexD(o.Arrays['m'].Strings[j]);
+      a := o.Objects['so'].Arrays['a'];
+      ux[n, 0] := m[0] * HexD(a.Strings[0]) + m[2] * HexD(a.Strings[1]) + m[4];
+      ux[n, 1] := m[1] * HexD(a.Strings[0]) + m[3] * HexD(a.Strings[1]) + m[5];
+      ux[n, 2] := m[0] * HexD(a.Strings[2]) + m[2] * HexD(a.Strings[3]) + m[4];
+      ux[n, 3] := m[1] * HexD(a.Strings[2]) + m[3] * HexD(a.Strings[3]) + m[5];
+      Inc(n);
+    end;
+  AssertEquals('the merged paths upstream', 2, n);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  PinClocks(FChart);
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  rings := 0;
+  bad := '';
+  for k := 0 to FChart.Frame.Count - 1 do
+  begin
+    el := FChart.Frame.Element(k);
+    if (el.Datum.SeriesIndex >= 0) or (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
+    Inc(rings);
+    TyResolveGradientXYWH(el.Style.StrokeGradient, TyElementGradientBox(el, 96), x1, y1, x2, y2, gr);
+    ok := False;
+    for j := 0 to n - 1 do
+      if (Abs(x1 - ux[j, 0]) < 1e-6) and (Abs(y1 - ux[j, 1]) < 1e-6) and (Abs(x2 - ux[j, 2]) < 1e-6)
+        and (Abs(y2 - ux[j, 3]) < 1e-6) then ok := True;
+    if not ok then bad := bad + Format(' ring %d: (%g,%g)-(%g,%g);', [k, x1, y1, x2, y2]);
+  end;
+  AssertEquals('the radar''s rings with a gradient', 4, rings);
+  AssertEquals('each ring in its merged path''s gradient', '', bad);
 end;
 
 { [R7-AE] AN UNPLACED SLIDER IS FOUND BY NOTHING (ae-dz-inf-*, ac-dz-inf):

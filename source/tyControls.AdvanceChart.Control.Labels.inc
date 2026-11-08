@@ -638,8 +638,10 @@ end;
 { A ONE-RUN LABEL'S BOX in its own frame: the TSpan's (adjustTextX /
   adjustTextY about nought, a written border round it) unioned with itself,
   as ZRText.getBoundingRect unions its children }
+{ ([R7-AF] AStrokeText: the written border's width as a string, joined to
+  the width and height in CSS px -- AScale device px each) }
 function LmPlainRect(AW, AH, AStroke: Double; AAH: TTyTextAnchorH;
-  AAV: TTyTextAnchorV): TTyXYWH;
+  AAV: TTyTextAnchorV; const AStrokeText: string = ''; AScale: Double = 1): TTyXYWH;
 var x, y, w, h: Double;
 begin
   x := 0;
@@ -658,8 +660,16 @@ begin
   begin
     x := x - AStroke / 2;
     y := y - AStroke / 2;
-    w := w + AStroke;
-    h := h + AStroke;
+    if (AStrokeText <> '') and (AScale > 0) then
+    begin
+      w := TyRtJoinedNum(AW / AScale, AStrokeText) * AScale;
+      h := TyRtJoinedNum(AH / AScale, AStrokeText) * AScale;
+    end
+    else
+    begin
+      w := w + AStroke;
+      h := h + AStroke;
+    end;
   end;
   Result := TyXYWH(x, y, (x + w) - x, (y + h) - y);
 end;
@@ -977,8 +987,12 @@ begin
         -c.LmOffX, -c.LmOffY, c.RotationRad, 1, 1, m0);
       TyLabelDecompose(m0, hasM0, defX, defY, defRot, defSx, defSy);
       if Length(c.RtPieces) > 0 then raw0 := LmBlockRect(c.RtPieces, c.RtScale)
-      else raw0 := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, c.AnchorH, c.AnchorV);
-      if hasM0 then labelRect := TyRectApplyMat(raw0, m0) else labelRect := raw0;
+      else raw0 := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, c.AnchorH, c.AnchorV,
+        c.LmStrokeText, c.RtScale);
+      { ([R7-AF] one at NaN through the transform as JS takes it) }
+      if hasM0 and not TyRtBoxIsFinite(raw0) then
+        labelRect := TyLabelGeometry(raw0, m0, True, 0, []).Rect
+      else if hasM0 then labelRect := TyRectApplyMat(raw0, m0) else labelRect := raw0;
       { ---- the layout for this label: the object, or the function's answer ---- }
       if lay.Kind = tlkHandler then
       begin
@@ -1140,7 +1154,7 @@ begin
           AMeasurer.MeasureLine(c.Text, c.FontName, fsz, c.FontWeight, w, h);
         refs[r].TextW := w;
         refs[r].TextH := h;
-        it.RawLocal := LmPlainRect(w, h, c.LmStrokeW, ah, av);
+        it.RawLocal := LmPlainRect(w, h, c.LmStrokeW, ah, av, c.LmStrokeText, c.RtScale);
       end
       else
       begin
@@ -1477,7 +1491,11 @@ begin
       else if r >= 0 then av := c.LmPosAV
       else av := tavTop;
       if Length(c.RtPieces) = 0 then
-        rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av)
+      begin
+        { ([R7-AF] a rect that joined a string, NaN or not: the line is routed
+          on it as JS routes it -- TyLabelLineRoute masks the traps) }
+        rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av, c.LmStrokeText, c.RtScale);
+      end
       else if (ah = c.AnchorH) and (av = c.AnchorV) then
         rawRect := LmBlockRect(c.RtPieces, c.RtScale)
       else

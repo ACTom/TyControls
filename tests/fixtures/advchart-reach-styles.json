@@ -4879,6 +4879,584 @@
    }
   },
   {
+   "id": "tip.legend-scroll-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "Alpha",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Bravo",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Charlie",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Delta",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Echo",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Foxtrot",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Golf",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Hotel",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "type": "scroll",
+     "left": 20,
+     "width": 160,
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "Golf",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "Golf",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "Golf"
+    },
+    "at": [
+     405.40999999999997,
+     272.5
+    ]
+   }
+  },
+  {
+   "id": "tip.axis-ref-turned",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Alpha",
+      "Bravo",
+      "Charlie"
+     ],
+     "axisLabel": {
+      "rotate": 40
+     },
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "Bravo",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "Bravo",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "Bravo"
+    },
+    "at": [
+     197.95778135416967,
+     238.10462122427242
+    ]
+   }
+  },
+  {
+   "id": "tip.axis-ref-hidden",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Alphabet",
+      "Bravissimo",
+      "Charleston",
+      "Deltawing",
+      "Echoplex",
+      "Foxtrotting"
+     ],
+     "axisLabel": {
+      "interval": 0,
+      "hideOverlap": true,
+      "fontSize": 30
+     },
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "Bravissimo",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "Bravissimo",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "Bravissimo"
+    },
+    "at": [
+     135,
+     243
+    ]
+   }
+  },
+  {
+   "id": "tip.axis-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "A"
+     ],
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "A",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "A",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "A"
+    },
+    "at": [
+     310,
+     234
+    ]
+   }
+  },
+  {
+   "id": "tip.matrix-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "matrix": {
+     "x": {
+      "data": [
+       "P",
+       "Q",
+       "P"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "P",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "P",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "matrixIndex": 0,
+     "name": "P"
+    },
+    "at": [
+     160.5,
+     70.5
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref-group",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "group",
+      "name": "G",
+      "x": 30,
+      "y": 20,
+      "tooltip": {
+       "show": true,
+       "formatter": "grp"
+      },
+      "children": [
+       {
+        "type": "rect",
+        "name": "G",
+        "shape": {
+         "x": 50,
+         "y": 40,
+         "width": 40,
+         "height": 30
+        },
+        "style": {
+         "fill": "#ff0000"
+        },
+        "tooltip": {
+         "show": true,
+         "formatter": "kid"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "grp",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "grp",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "G"
+    },
+    "at": [
+     100,
+     75
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "rect",
+      "name": "H",
+      "shape": {
+       "x": 150,
+       "y": 40,
+       "width": 40,
+       "height": 30
+      },
+      "style": {
+       "fill": "#ff0000"
+      },
+      "tooltip": {
+       "show": true,
+       "formatter": "one"
+      }
+     },
+     {
+      "type": "rect",
+      "name": "H",
+      "shape": {
+       "x": 50,
+       "y": 140,
+       "width": 60,
+       "height": 20
+      },
+      "style": {
+       "fill": "#0000ff"
+      },
+      "tooltip": {
+       "show": true,
+       "formatter": "two"
+      }
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "two",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "two",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "H"
+    },
+    "at": [
+     80,
+     150
+    ]
+   }
+  },
+  {
    "id": "tip.series-name",
    "option": {
     "animation": false,

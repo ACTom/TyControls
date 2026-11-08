@@ -251,10 +251,12 @@ end;
 function TyRtHasStringSize(const AStyle: TTyRtStyle; const ARich: TTyRtRich): Boolean;
 var i: Integer;
 begin
-  Result := AStyle.WidthIsText or AStyle.HeightIsText or AStyle.LineHeightIsText;
+  { ([R7-AF] and a text border's width written as a string) }
+  Result := AStyle.WidthIsText or AStyle.HeightIsText or AStyle.LineHeightIsText
+    or (AStyle.LineWidthText <> '');
   for i := 0 to High(ARich) do
     if ARich[i].Style.WidthIsText or ARich[i].Style.HeightIsText
-      or ARich[i].Style.LineHeightIsText then Exit(True);
+      or ARich[i].Style.LineHeightIsText or (ARich[i].Style.LineWidthText <> '') then Exit(True);
 end;
 
 function Fin(A: Double): Boolean; inline;
@@ -808,13 +810,33 @@ begin
     if IsNan(P.X) then AX := AdjustX(0, AW, P.TextAlign)
     else AX := AdjustX(P.X, AW, P.TextAlign);
     if IsNan(P.Y) then AY := 0 - AH / 2 else AY := P.Y - AH / 2;
-    if P.HasStroke and not P.DefaultStroke and (P.LineWidth > 0) then
+    { ([R7-AF] a string width joined as one -- 'Infinity' takes the corner
+      to -Infinity and the size to NaN, as JS does: the caller has the
+      traps masked) }
+    if P.HasStroke and not P.DefaultStroke and (P.LineWidth = 0) and (P.LineWidthText <> '')
+      and ((P.CanvasLeft and 8) <> 0) then
+    begin
+      g := TyJsToNumber(P.LineWidthText);
+      AX := AX - g / 2;
+      AY := AY - g / 2;
+      AW := JAdd(JNum(AW), JStr(P.LineWidthText)).N;
+      AH := JAdd(JNum(AH), JStr(P.LineWidthText)).N;
+    end
+    else if P.HasStroke and not P.DefaultStroke and (P.LineWidth > 0) then
     begin
       g := P.LineWidth;
       AX := AX - g / 2;
       AY := AY - g / 2;
-      AW := AW + g;
-      AH := AH + g;
+      if P.LineWidthText <> '' then
+      begin
+        AW := JAdd(JNum(AW), JStr(P.LineWidthText)).N;
+        AH := JAdd(JNum(AH), JStr(P.LineWidthText)).N;
+      end
+      else
+      begin
+        AW := AW + g;
+        AH := AH + g;
+      end;
     end;
   end;
 end;
@@ -1118,7 +1140,7 @@ function NeedBackground(const S: TTyRtStyle): Boolean;
 begin
   { ([R7-AC] a border of 'Infinity' is truthy too) }
   Result := S.HasBackground or (S.BgImage <> '') or LineHeightTruthy(S)
-    or (((S.BorderWidth <> 0) or S.BorderWidthInf) and S.HasBorderColor);
+    or (((S.BorderWidth <> 0) or S.BorderWidthInf or S.BorderWidthWord) and S.HasBorderColor);
 end;
 
 procedure AddPiece(var R: TTyRtResult; const P: TTyRtPiece);
@@ -1169,6 +1191,19 @@ begin
     the canvas had (it refuses Infinity, doubled or not) -- marked for the
     paint order (CanvasLeft 8), no width until it is settled [was: not
     stroked] }
+  { [R7-AF] A BORDER WRITTEN AS A STRING THAT STROKES NOTHING ('0', 'abc'):
+    the rect's stroke all the same, of no width -- the canvas keeps its
+    lineWidth and takes the strokeStyle [was: no stroke] }
+  else if S.BorderWidthWord and S.HasBorderColor then
+  begin
+    Result.HasStroke := True;
+    Result.Stroke := S.BorderColor;
+    Result.LineWidth := 0;
+    if Result.HasFill then Result.StrokeFirst := True;
+    Result.BorderDash := S.BorderDash;
+    Result.BorderDashOffset := S.BorderDashOffset;
+    if IsNan(Result.BorderDashOffset) then Result.BorderDashOffset := 0;
+  end
   else if S.BorderWidthInf and S.HasBorderColor then
   begin
     Result.HasStroke := True;
@@ -1208,7 +1243,7 @@ begin
   begin
     Result.Image := S.BgImage;
     Result.Drawn := True;
-    if LineHeightTruthy(S) or ((S.BorderWidth <> 0) and S.HasBorderColor) then
+    if LineHeightTruthy(S) or (((S.BorderWidth <> 0) or S.BorderWidthWord) and S.HasBorderColor) then
       Result.ImageOpacity := 1
     else
       Result.ImageOpacity := Result.Opacity;
@@ -1323,9 +1358,25 @@ var
     end;
     if p.HasStroke then
     begin
-      if found and ts.HasLineWidth then p.LineWidth := ts.LineWidth
-      else if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth
+      { ([R7-AF] retrieve3's: the token's, the block's -- a string kept for
+        the rect, +Infinity stroked at the width the canvas had) }
+      if found and ts.HasLineWidth then
+      begin
+        p.LineWidth := ts.LineWidth;
+        p.LineWidthText := ts.LineWidthText;
+        if ts.LineWidthInf then p.CanvasLeft := p.CanvasLeft or 8;
+      end
+      else if AStyle.HasLineWidth then
+      begin
+        p.LineWidth := AStyle.LineWidth;
+        p.LineWidthText := AStyle.LineWidthText;
+        if AStyle.LineWidthInf then p.CanvasLeft := p.CanvasLeft or 8;
+      end
       else p.LineWidth := 2;
+      { [R7-AF] A SPAN WHOSE RECT JOINED A STRING IS FOUND BY NOTHING:
+        rectContain's `x <= rect.x + rect.width` joins it again ('-4.86' +
+        '6.72..3' is no number) [was: found in its words' box] }
+      if (p.LineWidthText <> '') and not p.DefaultStroke then p.NoHit := True;
       { [F4c] the token's textBorderType, else the block's }
       if found and (ts.LineDash <> '') then p.LineDash := ts.LineDash
       else p.LineDash := AStyle.LineDash;
@@ -1555,7 +1606,16 @@ var
       end;
       if p.HasStroke then
       begin
-        if AStyle.HasLineWidth then p.LineWidth := AStyle.LineWidth else p.LineWidth := 2;
+        if AStyle.HasLineWidth then
+        begin
+          p.LineWidth := AStyle.LineWidth;
+          { ([R7-AF] as a token's) }
+          p.LineWidthText := AStyle.LineWidthText;
+          if AStyle.LineWidthInf then p.CanvasLeft := p.CanvasLeft or 8;
+        end
+        else p.LineWidth := 2;
+        { ([R7-AF] as a token's) }
+        if (p.LineWidthText <> '') and not p.DefaultStroke then p.NoHit := True;
         p.LineDash := AStyle.LineDash;
         if AStyle.HasLineDashOffset then p.LineDashOffset := AStyle.LineDashOffset;
       end;

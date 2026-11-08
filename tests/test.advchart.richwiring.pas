@@ -102,7 +102,7 @@ type
     function PlainDrawn(const AText, AFont: string; ASize, AWeight: Integer;
       AHasInk: Boolean; AInk: TTyChartColor; AHasHalo: Boolean;
       AHalo: TTyChartColor; AHaloW: Double; AH: TTyTextAnchorH;
-      AV: TTyTextAnchorV; AX, AY, ARot: Double): TRwDrawn;
+      AV: TTyTextAnchorV; AX, AY, ARot: Double; const AHaloText: string = ''): TRwDrawn;
     function FromCaption(const E: TTyChartElement): TRwDrawn;
     function FindDrawn(T: TJSONObject): TRwDrawn;
     procedure CheckText(T: TJSONObject);
@@ -379,7 +379,7 @@ end;
 function TAdvChartRichWiringOracleTest.PlainDrawn(const AText, AFont: string;
   ASize, AWeight: Integer; AHasInk: Boolean; AInk: TTyChartColor;
   AHasHalo: Boolean; AHalo: TTyChartColor; AHaloW: Double; AH: TTyTextAnchorH;
-  AV: TTyTextAnchorV; AX, AY, ARot: Double): TRwDrawn;
+  AV: TTyTextAnchorV; AX, AY, ARot: Double; const AHaloText: string): TRwDrawn;
 var
   st: TTyRtStyle;
   def: TTyRtDefault;
@@ -396,6 +396,8 @@ begin
   begin
     st.HasLineWidth := True;
     st.LineWidth := AHaloW;
+    { ([R7-AF] written as a string: the rect joins it) }
+    st.LineWidthText := AHaloText;
   end;
   def := Default(TTyRtDefault);
   def.HasFill := AHasInk;
@@ -439,7 +441,7 @@ begin
     Result := PlainDrawn(E.Caption.Text, E.Caption.FontName, E.Caption.FontSizeLogical,
       E.Caption.FontWeight, True, E.Caption.Colour, E.Caption.StrokeWidthLogical > 0,
       E.Caption.StrokeColour, E.Caption.StrokeWidthLogical, E.Caption.AnchorH,
-      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad);
+      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad, E.Caption.LmStrokeText);
     { [R7-M] drawn under a whole map }
     Result.D.HasAffine := E.Caption.HasAffine;
     for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
@@ -1145,8 +1147,9 @@ begin
     own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
     numstr's seven day words, graph-edge-scale's level edge
     label, graph-edge-scale-curve's haloed one and its 'from', vm-plain-
-    font's four visualMap words and two slider labels -- and no others }
-  AssertEquals('texts drawn as one run', 48, FOneRun);
+    font's four visualMap words and two slider labels, [R7-AF] numstr-text-
+    border's two haloed labels -- and no others }
+  AssertEquals('texts drawn as one run', 50, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 

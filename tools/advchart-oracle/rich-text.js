@@ -47,6 +47,13 @@
 //   [R7-N] an axis pointer's label (cartesian, single, polar; shown by its
 //   status or by a tooltip's showTip): every key createTextStyle hands it,
 //   the root textStyle's, and its place from the plain text's box.
+//   [R7-AF] a text border's width written as a string (textBorderWidth '3'
+//   on a series label, plain and rich, a legend's and a title's text): the
+//   canvas strokes its number, the TSpan's rect joins it to its width and
+//   height as a string (6.72 + '3' is '6.723'); a box's borderWidth as a
+//   string ('2': its number, doubled under a fill; '0', 'abc': the rect made,
+//   unstroked). A TSpan's lineWidth and bbox are recorded as numbers (a
+//   joined bbox is not checked against the measure).
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -787,6 +794,27 @@ const GRAPH_EDGE_LBL = { show: true, color: '#333333', formatter: 'edge' };
 const PTR_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 2, padding: [3, 6], borderRadius: 4 };
 const PTR_BAR = o => opt(Object.assign({ xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] }, o));
 const PTR_SHOW = (value, label, extra) => Object.assign({ axisPointer: Object.assign({ show: true, value, status: 'show', label: Object.assign({ show: true }, label) }, extra) });
+// ---- [R7-AF] a border's width written as a string ----
+const R7AF_CASES = [
+  { name: 'numstr-text-border', looks: true, note: "textBorderWidth '3' and '1.5' with a written textBorderColor: the halo at its number, the TSpan's rect joined (the second's no number)",
+    option: sLabel([{ textBorderColor: '#ff0000', textBorderWidth: '3' }, { textBorderColor: '#ff0000', textBorderWidth: '1.5' }], {}) },
+  { name: 'numstr-text-border-rich', looks: true, note: "a token's textBorderWidth '2' over the block's '3'; a box round them",
+    option: sLabel([{ formatter: '{a|Ab}{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '3', rich: { a: { textBorderWidth: '2' }, b: {} } },
+      { formatter: '{a|Ab}{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '3', backgroundColor: '#eeeeee', padding: [2, 4],
+        rich: { a: { textBorderWidth: '2', color: '#0000aa' } } },
+      { formatter: '{a|Ab}\n{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '0', rich: { a: { textBorderWidth: '4' } } }], {}) },
+  { name: 'numstr-text-border-components', looks: true, note: "a legend's and a title's textBorderWidth '3': the legend's items laid out by the joined rects",
+    record: ['legend', 'title'],
+    option: opt(Object.assign({ title: { text: 'Title', textStyle: { color: '#333333', fontSize: 18, textBorderColor: '#ff0000', textBorderWidth: '3' } },
+      legend: { top: 40, textStyle: { color: '#333333', textBorderColor: '#ff0000', textBorderWidth: '3' } } }, HUNG_BAR)) },
+  { name: 'numstr-text-border-root', looks: true, note: "the root textStyle's textBorderWidth '3' under a block's written halo",
+    option: Object.assign(sLabel([{ formatter: '{a|Ab}', textBorderColor: '#ff0000', rich: { a: { color: '#0000aa' } } }], {}),
+      { textStyle: { textBorderWidth: '3' } }) },
+  { name: 'numstr-box-border', looks: true, note: "a box's borderWidth '2' (doubled under a fill), '2' unfilled, '0' (the rect made, unstroked)",
+    option: sLabel([{ backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: '2' }, { borderColor: '#333333', borderWidth: '2' },
+      { borderColor: '#333333', borderWidth: '0', padding: 3 }], {}) },
+];
+
 const R7N_POINTER_CASES = [
   { name: 'ptr-label-font', looks: true, note: "a category x and a value y axis pointer shown by status: the label in 16 px bold monospace with a bordered, rounded, padded plate",
     record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', Object.assign({ fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' }, PTR_BOX))),
@@ -1107,6 +1135,7 @@ const cases = [
   ...R7M_TREEMAP_CASES,
   ...R7M_GRAPH_CASES,
   ...R7N_POINTER_CASES,
+  ...R7AF_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -1373,7 +1402,8 @@ function recordText(lib, t, measureSet) {
         ? Math.max(0, ...children.filter(x => x.type === 'tspan').map(x => ruleWidth(String(x.style.text), x.style.font)))
         : ruleWidth(String(cs.text), cs.font);
       const grow = (stroke && cs.lineWidth > 0 && bb.width !== tw) ? cs.lineWidth : 0;
-      must(Object.is(bb.width, tw + grow) || Object.is(bb.width - grow, tw),
+      // ([R7-AF] a width joined to a lineWidth written as a string is not the measure's)
+      must(typeof bb.width === 'string' || Object.is(bb.width, tw + grow) || Object.is(bb.width - grow, tw),
         where + ': TSpan ' + JSON.stringify(cs.text) + ' measures ' + bb.width + ', the rule ' + tw);
       measureSet.set(JSON.stringify([String(cs.text), pxOfFont(cs.font), isMono(cs.font)]), { text: String(cs.text), font: cs.font });
       const o = { kind: 'text', of: own.of, line: nn(own.line), token: nn(own.token), text: String(cs.text) };
@@ -1387,14 +1417,16 @@ function recordText(lib, t, measureSet) {
       o.fontFamily = nn(cs.fontFamily);
       o.fill = nn(cs.fill);
       o.stroke = stroke;
-      put(o, 'lineWidth', stroke ? cs.lineWidth : null);
+      put(o, 'lineWidth', stroke ? num(cs.lineWidth) : null);
       put(o, 'lineDash', stroke && cs.lineDash ? cs.lineDash : null);
       o.textAlign = nn(cs.textAlign);
       o.textBaseline = nn(cs.textBaseline);
       put(o, 'opacity', cs.opacity == null ? 1 : cs.opacity);
       o.strokeFirst = !!cs.strokeFirst;
       o.shadow = shadowOf(cs);
-      o.bbox = put(put(put(put({}, 'x', bb.x), 'y', bb.y), 'width', bb.width), 'height', bb.height);
+      // ([R7-AF] a joined size that is no number: null)
+      const putN = (q, k, v) => (Number.isFinite(v) ? put(q, k, v) : Object.assign(q, { [k]: null }));
+      o.bbox = putN(putN(put(put({}, 'x', bb.x), 'y', bb.y), 'width', num(bb.width)), 'height', num(bb.height));
       if (t.looks) put(o, 'lineDashOffset', stroke && cs.lineDash ? (cs.lineDashOffset || 0) : null);
       void lw;
       return o;
@@ -1422,7 +1454,7 @@ function recordText(lib, t, measureSet) {
       o.fill = nn(cs.fill);
       put(o, 'fillOpacity', cs.fillOpacity);
       o.stroke = cs.stroke == null || cs.stroke === 'none' ? null : cs.stroke;
-      put(o, 'lineWidth', o.stroke ? cs.lineWidth : null);
+      put(o, 'lineWidth', o.stroke ? num(cs.lineWidth) : null);
       put(o, 'strokeOpacity', o.stroke ? cs.strokeOpacity : null);
       o.strokeFirst = !!cs.strokeFirst;
       put(o, 'lineDash', cs.lineDash || null);
