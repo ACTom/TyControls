@@ -1386,11 +1386,12 @@ function cases() {
     ['ady-dirty-stroke-zero', Object.assign(vv([
       { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
         borderWidth: 4 }, data: [[2.35, 5], [2.35, 6]] },
-      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }, { coords: [[3, 6], [9, 6]] }],
+      LN({ color: '#ff00ff', symbolSize: 8, period: 0.2 }, [{ coords: [[3, 5], [9, 5]] }, { coords: [[3, 6], [9, 6]] }],
         { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
     // (the y axis' line and ticks hidden: the last component stroke in a
     // block the split line of no width crosses is its red, in one it does
-    // not cross none -- the canvas' black)
+    // not cross none -- the canvas' black; the effects quick, so a frame's
+    // block where one was holds the ring clear of it)
     { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
       axisLine: { show: false }, axisTick: { show: false },
       splitLine: { lineStyle: { color: '#ff0000', width: 0 } } } }),

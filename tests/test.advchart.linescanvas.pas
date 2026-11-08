@@ -2784,6 +2784,10 @@ begin
 
     One('bar barWidth', '{' + C + '"series":[{"type":"bar","barWidth":30,"data":[3,5,7]}]}');
     One('bar auto', '{' + C + '"series":[{"type":"bar","data":[3,5,7]}]}');
+    { (a box's numbers written as strings: px as well) }
+    One('grid strings', '{"animation":false,"grid":{"left":"40","right":"30","top":"40","bottom":"20"},'
+      + '"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+      + '"series":[{"type":"bar","data":[3,5,7]}]}');
     One('bar gap', '{' + C + '"series":[{"type":"bar","barWidth":20,"barGap":10,"data":[3,5,7]},{"type":"bar","barWidth":20,"data":[2,4,6]}]}');
     One('bar maxW', '{' + C + '"series":[{"type":"bar","barMaxWidth":12,"data":[3,5,7]}]}');
     One('bar minH', '{' + C + '"series":[{"type":"bar","barMinHeight":30,"data":[0.1,5,7]}]}');
