@@ -204,14 +204,16 @@ type
   nil), its axes (in component order, every type -- a parallelAxis with no
   `type` is a VALUE axis even with `data`), its box on AViewport and the
   axes' places (resize / _layoutAxes). }
+{ [R7-AD] APxScale: the box's pixel counts are css px, APxScale (PPI / 96)
+  device px each [was: device px] }
 function TyBuildParallels(AOption: TTyChartOption;
-  const AViewport: TTyRectF): TTyParallelArray;
+  const AViewport: TTyRectF; APxScale: Double = 1): TTyParallelArray;
 { [Batch 154] Parallel.resize again in createBoxLayoutReference's container
   ARef -- a matrix cell or a calendar day: getLayoutRect of the box there,
   then the axes laid out on it. A cell of no position or no size: the box
   far off the canvas (TyBoxNowhere), as a grid's. }
 procedure TyParallelResizeIn(AOption: TTyChartOption; APar: TTyParallel;
-  const ARef: TTyXYWH);
+  const ARef: TTyXYWH; APxScale: Double = 1);
 
 { The store's columns of a parallel series: one per row element up to the
   widest of the data and the highest 'dimN', 'dimN' (typed by its axis,
@@ -548,6 +550,10 @@ end;
 
 { mergeDefaultAndTheme's mergeLayoutParam (layoutMode 'box') over the
   defaults 80 / 60 / 80 / 60, then getLayoutRect on the chart }
+var
+  { [R7-AD] the pixel scale ParallelBoxIn reads the box at }
+  GParPx: Double = 1;
+
 function ParallelBoxIn(ANode: TJSONObject; const ARef: TTyXYWH;
   ARoot: TJSONData): TTyXYWH; forward;
 
@@ -589,6 +595,8 @@ begin
   box.Bottom := target[5].V;
   { getBoxLayoutParams: a null or undefined key reads the option root [F4c] }
   TyBoxClimbRoot(box, ARoot);
+  { [R7-AD] css px at the PPI }
+  box := TyBoxRawScaled(box, GParPx);
   Result := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
 end;
 
@@ -828,7 +836,7 @@ begin
 end;
 
 function TyBuildParallels(AOption: TTyChartOption;
-  const AViewport: TTyRectF): TTyParallelArray;
+  const AViewport: TTyRectF; APxScale: Double): TTyParallelArray;
 var
   n, p, k, cnt, num: Integer;
   d: TJSONData;
@@ -883,7 +891,9 @@ begin
         par.AxisInverse[High(par.AxisInverse)] := JsTruthy(an.Find('inverse'));
       end;
       SetLength(par.Intervals, Length(par.FAxes));
+      GParPx := APxScale;
       par.FRect := ParallelBox(node, AViewport, AOption.Root);
+      GParPx := 1;
       LayoutAxes(par, node);
     end;
   finally
@@ -892,7 +902,7 @@ begin
 end;
 
 procedure TyParallelResizeIn(AOption: TTyChartOption; APar: TTyParallel;
-  const ARef: TTyXYWH);
+  const ARef: TTyXYWH; APxScale: Double);
 var
   node: TJSONObject;
   mask: TFPUExceptionMask;
@@ -902,7 +912,9 @@ begin
   if node = nil then Exit;
   mask := MaskFP;
   try
+    GParPx := APxScale;
     APar.FRect := ParallelBoxIn(node, ARef, AOption.Root);
+    GParPx := 1;
     if not TyXYWHIsValid(APar.FRect) then
       APar.FRect := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize,
         TyBoxNowhereSize);

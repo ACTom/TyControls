@@ -922,6 +922,11 @@ type
     El: TTyChartElement;
   end;
   TTyCompPartArray = array of TTyCompPart;
+  { [R7-AD] the z2 values a cartesian axis' part is drawn at (PaintAxis
+    draws those in the set): 0 the split areas and lines, 1 the name and
+    the line, 2 the ticks, 10 on the labels (a time axis' 10 plus the
+    level), 11 the arrows }
+  TTyAxisZ2Set = set of 0..31;
   { [R7-AB] WHERE ONE OF A COMPONENT'S DISPLAYABLES WAS DRAWN (its paint
     rect, device px): a dirty block's run starts with the parts that meet it }
   TTyCompRect = record
@@ -1908,6 +1913,13 @@ type
       were drawn at (PaintAxis) }
     FCompOrder: TTyIntegerArray;
     FCompNg: Integer;
+    { [R7-AD] how many of FCompOrder's indices from FCompNg on are
+      FCompParts' (CompRun made them); the ones past them FCompBand's, the
+      list's elements in the components' band (FPaintList indices) }
+    FCompNp: Integer;
+    FCompBand: TTyIntegerArray;
+    { [R7-AD] what PrepareSeries counted, for RenderSeries }
+    FSerDrawn: Integer;
     FCompRects: TTyCompRectArray;
     { [R7-AA] how many of FCompParts CompRun made (the parallel axes' run,
       ParRun, appends its own after them) }
@@ -2483,8 +2495,14 @@ type
     { while the series move, axes with proxies are drawn in the dynamic
       layer from them }
     function AxesDynamic: Boolean;
+    { [R7-AD] THE COMPONENTS' BAND IN UPSTREAM'S ORDER (CompRun's): the
+      axes' parts -- a cartesian axis' z2 by z2 (PaintAxis), a polar's and a
+      single axis' view by view --, where AGfx the graphic's elements under
+      them, and AList's elements in the band (its indices FPaintList's: the
+      list itself, or an animation frame of it) }
     procedure PaintAxes(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
+      const AMeasurer: ITyTextMeasurer; AProxied: Boolean; AList: TTyPaintList = nil;
+      AGfx: Boolean = False);
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
@@ -2594,9 +2612,11 @@ type
       while there is one axis of each family and wrong the moment there are
       two: the second y axis' split line lands on the first one's zero and
       rubs out the x axis line that `onZero` had just put there. }
+    { [R7-AD] the parts of AZ2 [was: ABelow, the split areas and lines, or
+      everything else] }
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean = False);
+      const AMeasurer: ITyTextMeasurer; const AZ2: TTyAxisZ2Set; AProxied: Boolean = False);
     { THE BREAK AREAS [Batch 132]: over the series (zigzagZ, 100 by default),
       each break's polylines and the polygon between them }
     procedure PaintBreakAreas(APainter: TTyPainter);
@@ -2689,6 +2709,11 @@ type
     { Every series' marks, in one list, ordered once. }
     procedure PaintSeries(APainter: TTyPainter;
       const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    { [R7-AD] ...in two halves: the list built and prepared (the components'
+      band drawn among the axes needs it), then drawn }
+    procedure PrepareSeries(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    procedure RenderSeries(APainter: TTyPainter; const AMeasurer: ITyTextMeasurer;
+      APPI: Integer);
     { The theme colour for series ASeriesIndex, from the DERIVED ramp item 18
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
@@ -3556,6 +3581,19 @@ type
       each part's refused values settled, and the ground the list starts
       from }
     procedure CompRun(APPI: Integer);
+    { [R7-AD] ...its order and run again over the parts it made: the list's
+      elements in the components' band marked afresh (CompBandMark), and
+      the list settled again from the ground where AList }
+    procedure CompSettle(APPI: Integer; AList: Boolean);
+    procedure CompBandMark;
+    { [R7-AD] an element's view's place in the zr root (the sort's third
+      key at an equal z and z2): the graphic's 0, a matrix 1500, a calendar
+      1600, the single axes 2000, the radius 3000, the angle 4000, a geo
+      4600, a radar 4700, the y axes 5000, the x axes 6000 (each plus its
+      index), the list's other components after them, the series last }
+    function CompViewOf(const AEl: TTyChartElement): Integer;
+    { [R7-AD] AList's elements from AFrom on: of the view AView }
+    procedure CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
     procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;
       var AParts: TTyCompPartArray);
     procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
@@ -3568,6 +3606,9 @@ type
       (CompSettlePen), logged (CompDrawn); a text colour likewise }
     function CompPen(AOwner: TTyAxis; AKind: Byte; const K: TTyAxisStroke): TTyAxisStroke;
     function CompText(AOwner: TTyAxis; AKind: Byte; AColour: TTyColor): TTyColor;
+    { [R7-AD] a polar's or a single axis' text style as it is drawn: the
+      colour and the font the paint order settled, logged so (CompDrawn) }
+    procedure CompTextDrawn(AOwner: TTyAxis; AKind: Byte; var AStyle: TTyStyleSet);
     { the part of AOwner of AKind once settled; nil for none }
     function CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
     { an axis' pen as the canvas strokes it: what it refuses, the canvas'
@@ -3591,6 +3632,16 @@ type
     procedure CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH; APen: Double;
       AText: Boolean; AIndex: Integer = -1; ABlur: Double = 0; AOffX: Double = 0;
       AOffY: Double = 0);
+    { [R7-AD] ...of a part stroked in K over AR (device px): a merged path
+      (AFilled: its own '#000' fill) grown by its width, a Line by max(width,
+      5), one of no width (Inked: its colour handed on, nothing stroked) not
+      at all; the shadow K casts }
+    procedure CompPenRect(APainter: TTyPainter; AOwner: TObject; AKind: Byte;
+      const K: TTyAxisStroke; const AR: TTyXYWH; AFilled: Boolean; AIndex: Integer = -1);
+    { [R7-AD] ...of a text of AW x AH hung at (AX, AY) as anchored, turned
+      by ARot about its anchor }
+    procedure CompTextRect(AOwner: TObject; AKind: Byte; AX, AY: Double; AW, AH: Integer;
+      AH2: TTyTextAnchorH; AV: TTyTextAnchorV; ARot: Double);
     { [R7-AB] THE CANVAS A DIRTY BLOCK STARTS ITS SERIES FROM: each block
       saves the context, brushes afresh (prevEl null) from the canvas' own
       state and restores it, and only the elements meeting it are brushed --
@@ -3607,13 +3658,28 @@ type
     { [R7-AB] a text part's font the canvas refused: AStyle's font the one
       the paint order settled it to }
     procedure CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
+    { [R7-AD] WHETHER A TEXT'S FONT THE CANVAS REFUSES: makeFont's string of
+      the first of ANodes (text style objects, the nearest first) that
+      writes each of fontStyle / fontWeight / fontSize, else the root
+      textStyle's -- one part the canvas does not parse refuses it all }
+    function FontRefusedOf(const ANodes: array of TJSONData): Boolean;
+    { [R7-AD] AList's captions from AFrom on (plain ones, no pieces of their
+      own) whose font the canvas refuses: marked (cTyCanvasFontLeft), the
+      run gives them the font the text before left }
+    procedure FontLeftFrom(AList: TTyPaintList; AFrom: Integer; ARefused: Boolean);
+    procedure LegendFontsLeft(AList: TTyPaintList; AFrom, AIndex: Integer;
+      const ALayout: TTyLegendLayout);
+    { [R7-AD] a label part's settled pieces (a rich label's, drawn as the
+      paint order settled them: a refused font, a refused fill); nil where
+      it has none }
+    function CompPieces(AOwner: TObject; AKind: Byte; AIndex: Integer): TTyRtPieceArray;
     { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
       from where the list's run reaches their z: appended to FCompParts }
     procedure ParRun;
     { [R7-Z] a title's box and text colours, the canvas refusing them }
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-      var AInk0, AInk1: TTyColor);
-    procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+      var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont);
+    procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor; const AFont: TTyTitleFont);
     { [R7-AA] a title line's block holds a colour the canvas refuses }
     function TitlePiecesCarry(AIndex: Integer): Boolean;
     { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
@@ -4500,6 +4566,9 @@ type
       the last paint drew them: Key (mainType + index), Z2 (upstream's),
       IsText, and El the style each was drawn with }
     function CompDrawn: TTyCompPartArray;
+    { [R7-AD] where the last paint drew the components' parts (each its
+      paint rect, as a dirty block meets it) }
+    function CompRectsDrawn: TTyCompRectArray;
     { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
       as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
     procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
@@ -4697,7 +4766,9 @@ type
       ready, and turned into paint elements }
     procedure GfxBuild(APPI: Integer);
     { the elements under the axes }
-    procedure GfxPaintUnder(APainter: TTyPainter);
+    { [R7-AD] APaint False: made ready and run, not drawn (PaintAxes draws
+      them among the axes' parts) }
+    procedure GfxPaintUnder(APainter: TTyPainter; APaint: Boolean = True);
     { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
     procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;

@@ -336,6 +336,30 @@ begin
       x1 := AEl.Style.FillGradient.X; y1 := AEl.Style.FillGradient.Y;
       x2 := AEl.Style.FillGradient.X2; y2 := AEl.Style.FillGradient.Y2;
       r := AEl.Style.FillGradient.R;
+      { [R7-AD] a gradient made in the path's own frame (HasM): its points
+        through that frame, its radius times sqrt|det| (the circle of the
+        ellipse's area) -- and a frame there whenever gm is no similarity
+        (canvas' ellipse, its slanted stripes) }
+      if not IsNull(ARec.Find('gm')) then
+      begin
+        gm := ARec.Arrays['gm'];
+        for k := 0 to 5 do g[k] := WantNum(gm.Items[k]);
+        Inc(FCompared);
+        if not ((g[1] = 0) and (g[2] = 0) and (g[0] = g[3]))
+          and not AEl.Style.FillGradient.HasM then
+          Bad(AWhat + ': a gradient under a turn or a skew not in its frame');
+      end;
+      if AEl.Style.FillGradient.HasM then
+      begin
+        for k := 0 to 5 do g[k] := AEl.Style.FillGradient.M[k];
+        x := x1; y := y1;
+        x1 := g[0] * x + g[2] * y + g[4];
+        y1 := g[1] * x + g[3] * y + g[5];
+        x := x2; y := y2;
+        x2 := g[0] * x + g[2] * y + g[4];
+        y2 := g[1] * x + g[3] * y + g[5];
+        r := r * Sqrt(Abs(g[0] * g[3] - g[2] * g[1]));
+      end;
     end
     else
       TyResolveGradientXYWH(AEl.Style.FillGradient, TyElementGradientBox(AEl, 96),

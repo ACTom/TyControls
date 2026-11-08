@@ -86,7 +86,8 @@ function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   (isInLargeMode ? 0.5 : 1)`) [Batch 117] }
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray): TTyBarColumnArray;
+  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray;
+  APxScale: Double = 1): TTyBarColumnArray;
 
 { The answer for ONE default bar series in a band of ABandWidth.
 
@@ -519,7 +520,7 @@ end;
 
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray): TTyBarColumnArray;
+  AIndex: TTyAxisSeriesIndex; const ALarge: TTyBoolArray; APxScale: Double): TTyBarColumnArray;
 var
   g, a, i: Integer;
   gb: TTyGridBuild;
@@ -540,6 +541,16 @@ var
     autoCount, k, m, si: Integer;
     barGap, catGap, v: TBarSize;
     found: Boolean;
+
+    { [R7-AD] a pixel count is css px, PPI / 96 device px each (a
+      percentage is of the band, as it is) [was: device px] }
+    function Px(const ASize: TBarSize): TBarSize;
+    begin
+      Result := ASize;
+      if ASize.Present and not ASize.Percent and (APxScale > 0) then
+        Result.Value := ASize.Value * APxScale;
+    end;
+
   begin
     if AAxis = nil then Exit;
     onIt := AIndex.SeriesOnAxisOfKey(AAxis, key);
@@ -617,11 +628,11 @@ var
 
       { barWidth is FIRST-wins within a column: only the first series of a
         stack that supplies one is heard. }
-      v := SizeIn(ClimbView(node, AOption, 'barWidth'), 'barWidth');
+      v := Px(SizeIn(ClimbView(node, AOption, 'barWidth'), 'barWidth'));
       if v.Present and not Truthy(cols[m].Width) then
         cols[m].Width := Resolve(v, band);
 
-      v := SizeIn(ClimbView(node, AOption, 'barMaxWidth'), 'barMaxWidth');
+      v := Px(SizeIn(ClimbView(node, AOption, 'barMaxWidth'), 'barMaxWidth'));
       if v.Present then cols[m].MaxWidth := Resolve(v, band);
 
       { LAST-WINS, INCLUDING THE DEFAULT, which is not obvious and matters. The
@@ -638,15 +649,16 @@ var
         and (ClimbView(node, AOption, 'barMinWidth').Find('barMinWidth').JSONType = jtNumber) then
         v := NoSize;
       if v.Present then
-        cols[m].MinWidth := Resolve(v, band)
+        cols[m].MinWidth := Resolve(Px(v), band)
       else if (si >= 0) and (si <= High(ALarge)) and ALarge[si] then
-        cols[m].MinWidth := cLargeBarMinWidth
+        cols[m].MinWidth := cLargeBarMinWidth * APxScale
       else
-        cols[m].MinWidth := cDefaultBarMinWidth;
+        cols[m].MinWidth := cDefaultBarMinWidth * APxScale;
 
       v := SizeIn(ClimbView(node, AOption, 'barGap'), 'barGap');
       if v.Present then barGap := v;
-      v := SizeIn(ClimbView(node, AOption, 'barCategoryGap'), 'barCategoryGap');
+      { (a category gap's pixel count against the band) }
+      v := Px(SizeIn(ClimbView(node, AOption, 'barCategoryGap'), 'barCategoryGap'));
       if v.Present then catGap := v;
     end;
 
@@ -663,7 +675,7 @@ var
       answer[si].Offset := cols[m].Offset;
       answer[si].Width := cols[m].Width;
       answer[si].Radii := RadiusIn(node);
-      answer[si].MinHeightPx := AtLeast(FloatIn(node, 'barMinHeight', 0), 0);
+      answer[si].MinHeightPx := AtLeast(FloatIn(node, 'barMinHeight', 0), 0) * APxScale;
       answer[si].ShowBackground := BoolIn(node, 'showBackground', False);
       answer[si].BackgroundRadii := BackgroundRadiusIn(node);
       answer[si].Clip := BoolIn(node, 'clip', defClip);

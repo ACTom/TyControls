@@ -1192,10 +1192,28 @@ function GradOnBox(const AG: TTyChartGradient; const ABox: TTyXYWH;
     AX := M[0] * x + M[2] * y + M[4];
     AY := M[1] * x + M[3] * y + M[5];
   end;
+var k: Integer;
 begin
   Result := AG;
   if (AG.Kind = cgkNone) or AG.Global then Exit;
   Result.Global := True;
+  { [R7-AD] under a transform that is no similarity: made in the path's
+    frame and kept there (HasM) -- the canvas' ellipse, slanted stripes
+    [was: a circle of the area's radius] }
+  if not ((M[1] = 0) and (M[2] = 0) and (M[0] = M[3])) then
+  begin
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := M[k];
+    Result.X := AG.X * ABox.W + ABox.X;
+    Result.Y := AG.Y * ABox.H + ABox.Y;
+    if AG.Kind = cgkRadial then Result.R := AG.R * Min(ABox.W, ABox.H)
+    else
+    begin
+      Result.X2 := AG.X2 * ABox.W + ABox.X;
+      Result.Y2 := AG.Y2 * ABox.H + ABox.Y;
+    end;
+    Exit;
+  end;
   Through(AG.X, AG.Y, Result.X, Result.Y);
   if AG.Kind = cgkRadial then
     Result.R := AG.R * Min(ABox.W, ABox.H) * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]))
@@ -3841,6 +3859,13 @@ begin
       Result.FillSrc := gisOption;
       Result.Fill := c;
       Result.FillGradient := g;
+    end
+    { [R7-AD] a string no parser reads: MapDraw fills with it, the canvas
+      refusing it -- the fill it had (cTyCanvasColourLeft) [was: none] }
+    else if (d.JSONType = jtString) and not none then
+    begin
+      Result.FillSrc := gisOption;
+      Result.Fill := cTyCanvasColourLeft;
     end;
   end
   else if tok <> gtkNone then
@@ -3882,6 +3907,12 @@ begin
     begin
       Result.StrokeSrc := gisOption;
       Result.Stroke := c;
+    end
+    { [R7-AD] (and the border's) }
+    else if (d.JSONType = jtString) and not none then
+    begin
+      Result.StrokeSrc := gisOption;
+      Result.Stroke := cTyCanvasColourLeft;
     end;
   end
   else if tok <> gtkNone then

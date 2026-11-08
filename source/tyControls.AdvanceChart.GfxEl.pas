@@ -2957,6 +2957,7 @@ function GradOf(AEl: TTyGfxEl; AData: TJSONData; const ABox: TTyXYWH;
   const AM: TTyMat2D; out AGrad: TTyChartGradient): Boolean;
 var
   x1, y1, x2, y2, r, det: Double;
+  k: Integer;
 begin
   Result := TyTryReadGradient(AData, AGrad);
   if not Result then Exit;
@@ -2964,6 +2965,22 @@ begin
     painter takes coordinates already placed }
   TyResolveGradientXYWH(AGrad, ABox, x1, y1, x2, y2, r);
   AGrad.Global := True;
+  { [R7-AD] UNDER A TRANSFORM THAT IS NO SIMILARITY (scaled unevenly,
+    turned): the CanvasGradient is made in the element's frame and drawn
+    under its transform -- kept there (HasM): a radial one an ellipse, a
+    linear one's stripes slanted [was: the points carried, a radial one's
+    radius by sqrt|det|: a circle] }
+  if not ((AM[1] = 0) and (AM[2] = 0) and (AM[0] = AM[3])) then
+  begin
+    AGrad.HasM := True;
+    for k := 0 to 5 do AGrad.M[k] := AM[k];
+    AGrad.X := x1;
+    AGrad.Y := y1;
+    AGrad.X2 := x2;
+    AGrad.Y2 := y2;
+    AGrad.R := r;
+    Exit;
+  end;
   AGrad.X := AM[0] * x1 + AM[2] * y1 + AM[4];
   AGrad.Y := AM[1] * x1 + AM[3] * y1 + AM[5];
   AGrad.X2 := AM[0] * x2 + AM[2] * y2 + AM[4];

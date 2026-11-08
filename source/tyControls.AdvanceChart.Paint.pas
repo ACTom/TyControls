@@ -1408,6 +1408,16 @@ type
       group joins the zrender root first). The list's renderer skips it;
       the control paints it before the axes. Hit and ordered as any other. }
     GfxUnder: Boolean;
+    { [R7-AD] AN ELEMENT OF THE LIST IN THE COMPONENTS' BAND: on zlevel 0
+      and sorted -- by z, z2 and its view's place in the zr root -- before
+      the last of the axes' parts or of the graphic's elements under them
+      (a radar's, a geo's, a matrix's furniture, a series of a z under the
+      axes'): drawn among them in that order (PaintAxes), GfxUnder too so
+      the list's renderer and its run pass it by (CompRun marks it).
+      CompView its view's place where the build knows it (a radar, a
+      calendar, a matrix, a geo: CompViewOf), 0 to take it from the datum }
+    CompBand: Boolean;
+    CompView: Integer;
     { [Batch 148] UPSTREAM'S OWN Path.contain, where the element asks for
       it (a geo region): the full path, not the shape's points -- see
       TTyPathHit. The shape test is not consulted then. }

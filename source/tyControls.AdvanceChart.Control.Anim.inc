@@ -90,7 +90,10 @@ end;
 
 function TTyCustomAdvanceChart.AxesDynamic: Boolean;
 begin
-  Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
+  { [R7-AD] and while the list moves with elements among their parts: those
+    are drawn among them, the frame's }
+  Result := FAnimLive and not FAnimContinuous
+    and ((AnimAxisProxyCount > 0) or (Length(FCompBand) > 0));
 end;
 
 { Axis.getMinorTicksCoords, flat: each minor tick with the major interval
