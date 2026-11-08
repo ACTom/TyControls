@@ -158,6 +158,8 @@ type
     FCtl: TTyStyleController;
     FChart: TLcProbe;
     FRoot: TJSONData;
+    { [R7-AK] CListOf's colour tie-break for every component (RunW's ak-) }
+    FAkTie: Boolean;
     FBmp: TBGRABitmap;
     FBad, FCompared: Integer;
     FReport: string;
@@ -208,6 +210,11 @@ type
     { [R7-AK] a title's frame whose size a string padding joined, at 144
       PPI: the far edge joined on the css px grid, 1.5 times upstream's }
     procedure TestAStringPaddedTitleFrameAt144PPI;
+    { [R7-AK] the ak- cases: a component's padding with a side undefined (its
+      parts in their own frames under the transform the canvas had, or at
+      their own places), a background of corners on its joined edges }
+    procedure TestTheR7AKCanvasAsUpstream;
+    procedure TestTheR7AKHitsAsUpstream;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
     procedure TestAnInfiniteHaloHandsItsColourAtOnce;
@@ -744,6 +751,10 @@ begin
   if (el.Caption.FontSizeLogical <> 0) and FCapKeys and (el.Datum.SeriesIndex >= 0) then
     Exit(Format('ks%d.%d', [el.Datum.SeriesIndex, el.Datum.DataIndex]));
   if el.Caption.FontSizeLogical <> 0 then Exit('other');
+  { [R7-AK] a legend item's hit rect: its item group's second path (the
+    icon the first) }
+  if el.Datum.Kind = ctkLegend then
+    Exit(Format('c.legend%d.0.p.%d', [el.Datum.ComponentIndex, 2 * el.Datum.DataIndex + 1]));
   case el.Anim.Role of
     carLinesEffect: pre := 'e';
     carLinesFrom: pre := 'f';
@@ -1207,7 +1218,9 @@ begin
         { ([R7-AC] and of those, the one in the colour of the record's
           first op: a dataZoom's shadow of the window and the ones beside
           it lie over one another) }
-        if (ops.Count > 0) and (Copy(ARec.Strings['key'], 1, 4) = 'c.da') then
+        { ([R7-AK] and in the ak- cases: an unplaced legend's icons lie
+          over one another in their own frames) }
+        if (ops.Count > 0) and ((Copy(ARec.Strings['key'], 1, 4) = 'c.da') or FAkTie) then
         begin
           if ops.Objects[0].Strings['op'] = 'fill' then
           begin
@@ -1387,13 +1400,16 @@ var
   fps: Double;
   { [R7-AF] the af- cases: as the ae- ones, and a text's place, a clip's path }
   ae, af: Boolean;
+  { [R7-AK] the ak- cases }
+  ak: Boolean;
   fpx, ux, uy: Double;
   fw: Integer;
   ffam: string;
   ring: TJSONArray;
 begin
-  { ([R7-AI] the ai- cases as the af- ones) }
-  af := (APrefix = 'af-') or (APrefix = 'ai-');
+  { ([R7-AI] the ai- cases as the af- ones; [R7-AK] the ak- ones too) }
+  ak := Copy(APrefix, 1, 3) = 'ak-';
+  af := (APrefix = 'af-') or (APrefix = 'ai-') or ak;
   ae := (APrefix = 'ae-') or af;
   strict := APrefix <> 'w-';
   { (and the ac-, ae- ones: R7-AC, R7-AE; [R7-AF] the af- ones; [R7-AG] the ag- ones) }
@@ -1423,7 +1439,8 @@ begin
     PinClocks(FChart);
     FChart.UseDirtyRect := dirty;
     { ([R7-AI] the ai- cases measure as the recording canvas) }
-    FChart.Six := APrefix = 'ai-';
+    FChart.Six := (APrefix = 'ai-') or ak;
+    FAkTie := ak;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -1457,6 +1474,22 @@ begin
       if t > 0 then FChart.AnimTick(cT0 + t);
       if dirty then FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96)
       else FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      { ([R7-AK] a trace of the list's elements, TY_LC_DUMP) }
+      if GetEnvironmentVariable('TY_LC_DUMP') <> '' then
+        for k := 0 to FChart.Frame.Count - 1 do
+        begin
+          el := FChart.Frame.Element(k);
+          bb := TyShapeBounds(el.Shape);
+          WriteLn(Format('dump %s %d z%d/%d kind%d (%g,%g)-(%g,%g) fill %x txt %s fs%d', [id, k, el.Z, el.Z2,
+            Ord(el.Shape.Kind), bb.Left, bb.Top, bb.Right, bb.Bottom, el.Style.FillColor, el.Caption.Text,
+            Length(el.FrameShape)]));
+        end;
+      if (GetEnvironmentVariable('TY_LC_DUMP') <> '') and (FChart.LegendLayoutCount > 0) then
+        WriteLn(Format('dumplg %s lx %g ly %g w %s h %s ox %g oy %g frame (%g,%g)-(%g,%g)', [id,
+          FChart.LegendLayout(0).FrameLX, FChart.LegendLayout(0).FrameLY, FChart.LegendLayout(0).FrameWText,
+          FChart.LegendLayout(0).FrameHText, FChart.LegendLayout(0).FrameOX, FChart.LegendLayout(0).FrameOY,
+          FChart.LegendLayout(0).Frame.Left, FChart.LegendLayout(0).Frame.Top,
+          FChart.LegendLayout(0).Frame.Right, FChart.LegendLayout(0).Frame.Bottom]));
       if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
         FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
       if AHits then
@@ -1633,7 +1666,9 @@ begin
               its anchor): the op's transform at the span's (x, y) against
               the caption's anchor -- under a whole map, the map's origin and
               its linear part the op's -- its alignment and font }
-            if af and (o.Find('tp') <> nil) and (Copy(key, 1, 11) = 'c.dataZoom0') then
+            { ([R7-AK] and an unplaced component's words in the list) }
+            if af and (o.Find('tp') <> nil) and ((Copy(key, 1, 11) = 'c.dataZoom0')
+              or (ak and not comp and (Copy(key, 1, 2) = 'c.'))) then
             begin
               ux := m[0] * HexD(o.Arrays['tp'].Strings[0]) + m[2] * HexD(o.Arrays['tp'].Strings[1]) + m[4];
               uy := m[1] * HexD(o.Arrays['tp'].Strings[0]) + m[3] * HexD(o.Arrays['tp'].Strings[1]) + m[5];
@@ -1662,8 +1697,10 @@ begin
                 Miss(Format('%s: text aligned %s, upstream %s / %s', [where, want, o.Strings['al'], o.Strings['bl']]));
               FontOfCss(o.Strings['font'], fpx, fw, ffam);
               Inc(FCompared);
-              { (the port's weight nought is the normal one) }
-              if (Abs(TyFontPxOf(el.Caption.FontSizeLogical) - fpx) > 1e-9)
+              { (the port's weight nought is the normal one; [R7-AK] a
+                component's words in the skin's font: not compared) }
+              if (Copy(key, 1, 11) <> 'c.dataZoom0') then
+              else if (Abs(TyFontPxOf(el.Caption.FontSizeLogical) - fpx) > 1e-9)
                 or ((el.Caption.FontWeight <> fw) and not ((el.Caption.FontWeight = 0) and (fw = 400))) then
                 Miss(Format('%s: text of %gpx weight %d, upstream %s', [where,
                   TyFontPxOf(el.Caption.FontSizeLogical), el.Caption.FontWeight, o.Strings['font']]));
@@ -1914,6 +1951,46 @@ begin
             or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-6)
             or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-6) then
             Miss(Format('%s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
+        { [R7-AK] A TITLE'S BACKGROUND AS DRAWN (the ak- cases): its bounds on
+          the canvas -- a path of corners on its joined edges }
+        if ak and comp and not ctext and (cz2 = 0) and (Copy(key, 1, 7) = 'c.title')
+          and (rec.Find('pb').JSONType <> jtNull) and not IsNan(HexD(rec.Arrays['pb'].Strings[0]))
+          and FChart.CompPart(ckey, 0, False, 'fill', el) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > 1e-6)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > 1e-6)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-6)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-6) then
+            Miss(Format('%s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
+        { [R7-AK] A COMPONENT'S PATH IN THE LIST (the ak- cases): its bounds
+          on the canvas, to the millionth -- a background of corners on its
+          joined edges, a part in its own frame under the transform the
+          canvas had (CListOf matched it to a pixel) }
+        if ak and not comp and not ctext and (Copy(key, 1, 2) = 'c.')
+          and ((Pos('.-1.p.', key) > 0) or (Length(el.FrameShape) > 0))
+          and (rec.Find('pb').JSONType <> jtNull) and not IsNan(HexD(rec.Arrays['pb'].Strings[0])) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          { (a background to the millionth; a part in its own frame to a
+            twentieth: its curves' bounds are the vertices', the recorder's
+            the arc's) }
+          if Pos('.-1.p.', key) > 0 then fps := 1e-6 else fps := 0.05;
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > fps)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > fps)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > fps)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > fps) then
+            Miss(Format('%s: drawn at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
               HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
               HexD(rec.Arrays['pb'].Strings[3])]));
@@ -3397,6 +3474,19 @@ begin
   finally
     FCapKeys := False;
   end;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AKCanvasAsUpstream;
+begin
+  RunW(False, 'ak-');
+end;
+
+{ [R7-AK] a legend whose group has no transform (a padding of no side
+  readable: its y NaN too): its items at their own places in the canvas'
+  frame, found there -- upstream's findHover at the probes }
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AKHitsAsUpstream;
+begin
+  RunW(True, 'ak-');
 end;
 
 { [R7-AK] THE TITLE OF ai-comp-pad ('12', a border of 1) AT 144 PPI: the

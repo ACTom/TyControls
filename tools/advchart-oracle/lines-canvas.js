@@ -2245,6 +2245,60 @@ function cases() {
       series: [{ type: 'radar', symbol: 'none', lineStyle: { color: 'nope', width: 2 },
         data: [{ value: [5, 6, 7] }] }] },
     [0], { w: true, z: true }],
+    // ---- [R7-AK] (recorded as the af- ones) ----
+    // 1. a component's padding with a side that cannot be read ('4', [4]):
+    // getLayoutRect's place is NaN, the group's transform refused -- every
+    // displayable drawn in its own frame under the transform the canvas had
+    ['ak-undef-title', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } }], {
+      title: { text: 'Tt', subtext: 'ss', left: 10, top: 5, padding: '4', backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 1,
+        textStyle: { color: '#000000' }, subtextStyle: { color: '#0000ff' } } }),
+    [0], { w: true, z: true }],
+    ['ak-undef-legend', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', name: 'Sf', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' } }], {
+      legend: { left: 5, top: 15, padding: [4], backgroundColor: '#ddeeff', borderColor: '#00aaaa', borderWidth: 1,
+        textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true, probes: [[10, 22], [30, 25], [270, 150], [300, 170], [12, 7], [240, 142]] }],
+    ['ak-undef-toolbox', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } }], {
+      toolbox: { right: 30, top: 2, padding: '4', backgroundColor: '#ffeedd', iconStyle: { borderColor: '#0000ff' },
+        feature: { restore: {}, saveAsImage: {} } } }),
+    [0], { w: true, z: true }],
+    // (nothing before them but the canvas' own frame)
+    // 2. a background of corners while the padding is a string: roundRect's
+    // edges `x + width` and `y + height` joined ('-2' + '1222'), the radii
+    // cut against the joined size as numbers; a title's border snaps the size
+    // to a number first (subPixelOptimizeRect)
+    ['ak-round-title', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, padding: '12', backgroundColor: '#eeeeee', borderRadius: 4,
+        textStyle: { color: '#000000' } },
+      { text: 'Uu', left: 200, top: 100, padding: '21', backgroundColor: '#dddddd', borderRadius: [2, 3, 4, 5],
+        textStyle: { color: '#000000' } },
+      { text: 'Vv', left: 120, top: 200, padding: '12', backgroundColor: '#cccccc', borderColor: '#ff00ff', borderWidth: 1,
+        borderRadius: 3, textStyle: { color: '#000000' } }] }),
+    [0], { w: true, z: true }],
+    ['ak-round-legend', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', borderColor: '#00aaaa', borderWidth: 1,
+        borderRadius: 5, textStyle: { color: '#000000' } },
+      toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', borderRadius: 3, iconStyle: { borderColor: '#0000ff' },
+        feature: { restore: {} } } }),
+    [0], { w: true, z: true }],
+    // (a toolbox of one picture: its rect whole, the joined edge a number)
+    ['ak-round-toolbox', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', borderRadius: [3, 0, 2, 1], borderColor: '#00aa00',
+        borderWidth: 1, feature: { saveAsImage: { title: 'Pp', icon: 'image://' + IMG } } } }),
+    [0], { w: true, z: true }],
+    ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
+      title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },
+      legend: { left: 5, top: 15, padding: '4', textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true }],
+    // (no side readable at all -- [], true: the place's y NaN too, so the
+    // group has no transform: drawn at its parts' own places in the canvas'
+    // frame, a legend item found there)
+    ['ak-undef-none', vv([{ type: 'scatter', name: 'Aa', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#00aa00' } },
+      { type: 'scatter', name: 'Bb', data: [], itemStyle: { color: '#0000aa' } }], {
+      title: { text: 'Tt', subtext: 'ss', left: 10, top: 5, padding: [], backgroundColor: '#eeeeee', textStyle: { color: '#000000' },
+        subtextStyle: { color: '#0000aa' } },
+      legend: { left: 5, top: 15, padding: true, textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true, probes: [[12, 7], [40, 7], [62, 7], [100, 7], [12, 40], [1, 1], [20, 13], [36, 7], [45, 7], [80, 12], [82, 7], [150, 142]] }],
   ]);
 }
 // [R7-AF] an unplaced slider (its data shadow's line 'Infinity' wide), its
@@ -2546,7 +2600,7 @@ function run(id, option, samples, opts) {
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-'
     || id.slice(0, 3) === 'ag-' || id.slice(0, 4) === 'agy-';
-  AF = id.slice(0, 3) === 'af-' || id.slice(0, 3) === 'ai-';
+  AF = id.slice(0, 3) === 'af-' || id.slice(0, 3) === 'ai-' || id.slice(0, 3) === 'ak-';
   AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;
   CLIPS = new Map();
