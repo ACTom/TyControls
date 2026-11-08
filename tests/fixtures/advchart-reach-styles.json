@@ -4584,7 +4584,11 @@
      "type": "showTip",
      "seriesIndex": 0,
      "dataIndex": 1
-    }
+    },
+    "at": [
+     210,
+     116.66666666666667
+    ]
    }
   },
   {

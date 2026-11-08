@@ -321,7 +321,8 @@ function cases() {
     // (an item's tooltip showing: a showTip that finds no element leaves it as it was)
     ['tip.legend-ref-pre', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
       legend: {}, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
-    'tooltip', { pre: { type: 'showTip', seriesIndex: 0, dataIndex: 1 }, tip: { type: 'showTip', legendIndex: 0, name: 'S' } }],
+    'tooltip', { pre: { type: 'showTip', seriesIndex: 0, dataIndex: 1 }, tip: { type: 'showTip', legendIndex: 0, name: 'S' },
+      at: true }],
     ['tip.legend-name', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
       legend: { name: 'LG', tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] },
         { type: 'scatter', name: 'T', data: [2, 3, 1] }] })),
