@@ -1202,7 +1202,7 @@ begin
     v.Line.Drawn := True;
     { [R5-G] by the width it is stroked with (the skin's where the option
       writes none) [was: the option's, else 1] }
-    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
     v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
   end;
   marks := TyPolarTickMarks(AOption, ax, v.Spec, v.Furn, AMeasurer, APPI);
@@ -1220,7 +1220,7 @@ begin
       ln := Default(TTyPolarLine);
       Apply(M, hasM, marks[i].Coord, 0, ln.X1, ln.Y1);
       Apply(M, hasM, marks[i].Coord, endCoord, ln.X2, ln.Y2);
-      TyPolarSubPixelLine(ln, w);
+      TyPolarSubPixelLine(ln, w, APPI / 96);
       ln.Value := marks[i].Value;
       ln.Drawn := True;
       if (not v.Furn.MinorTickOption) and not marks[i].OnBand then
@@ -1250,7 +1250,7 @@ begin
       ln := Default(TTyPolarLine);
       Apply(M, hasM, minors[i], 0, ln.X1, ln.Y1);
       Apply(M, hasM, minors[i], endCoord, ln.X2, ln.Y2);
-      TyPolarSubPixelLine(ln, mw);
+      TyPolarSubPixelLine(ln, mw, APPI / 96);
       ln.Value := NaN;
       ln.Drawn := True;
       v.MinorTicks[i] := ln;

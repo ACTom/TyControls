@@ -353,7 +353,15 @@ var
   procedure BatchLine(AX1, AY1, AX2, AY2: Double; AWidthLogical: Double);
   var n: Integer;
   begin
-    TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
+    { ([R7-AG] at another PPI on the css px grid [was: the device px
+      grid]) }
+    if APainter.ScaleF(1) <> 1 then
+    begin
+      if APainter.ScaleF(AWidthLogical) > 0 then
+        TyZrSubPixelLineAt(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical), APainter.ScaleF(1));
+    end
+    else
+      TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
     APainter.MoveTo(AX1, AY1);
     APainter.LineTo(AX2, AY2);
     Inc(batched);
@@ -1747,7 +1755,13 @@ var
   var sc: Double;
   begin
     if FLastPPI > 0 then sc := FLastPPI / 96 else sc := 1;
-    TySubPixelLine(AX1, AY1, AX2, AY2, AW * sc);
+    { ([R7-AG] on the css px grid, as drawn) }
+    if sc <> 1 then
+    begin
+      if AW * sc > 0 then TyZrSubPixelLineAt(AX1, AY1, AX2, AY2, AW * sc, sc);
+    end
+    else
+      TySubPixelLine(AX1, AY1, AX2, AY2, AW * sc);
     AEl.Style.GradBoxSet := True;
     AEl.Style.GradBox := TyGrowByStroke(TyRectToXYWH(TyRectF(Math.Min(AX1, AX2),
       Math.Min(AY1, AY2), Math.Max(AX1, AX2), Math.Max(AY1, AY2))), False, AW);

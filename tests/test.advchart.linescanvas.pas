@@ -213,6 +213,17 @@ type
       its box by the line width -- not by max(width, 5) as a Line's: at
       width 4 the rect is 3 px wider than at width 1 }
     procedure TestAMergedSplitPathGrowsByItsWidth;
+    { [R7-AG] THE REST OF AN OPTION'S CSS PX AT ANOTHER PPI, element by
+      element as TestOptionPxAtAnotherPPIAsUpstream (every element of the
+      list, a component's too): a pictorialBar's symbol, size, offset and
+      margin; a graph's box, its symbols and its edges' ends (none,
+      circular, force, on axes); a tree's and a radar series' symbols; a
+      candle's sides on the css px' half pixel; a chord's centre and radii;
+      a matrix' cells on the css px' half pixel; a legend's, a title's and a
+      visualMap's box; a tooltip's position (the option's px, the gap); an
+      axis' ticks on the css px' half pixel (the device column left of a
+      tick at css 40.5 stays clear) }
+    procedure TestTheRestOfTheOptionPxAtAnotherPPIAsUpstream;
   end;
 
 implementation
@@ -3760,6 +3771,156 @@ begin
   if bad <> '' then Fail('at 144 PPI not the 96 PPI chart times 1.5:' + bad);
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestTheRestOfTheOptionPxAtAnotherPPIAsUpstream;
+var bad: string;
+
+  procedure Chart(APPI: Integer; const AOpt: string; AB: TBGRABitmap);
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, AB.Width, AB.Height);
+    FChart.SetOption(AOpt, True);
+    FChart.Render(AB.Canvas, Rect(0, 0, AB.Width, AB.Height), APPI);
+  end;
+
+  { every element of the list but a text: its box at 144 PPI is the one at
+    96 times 1.5 (to ATol) }
+  procedure One(const AName, AOpt: string; ATol: Double = 0.01);
+  var ppi, k, n: Integer; b: TBGRABitmap; el: TTyChartElement; bb: TTyRectF;
+    boxes: array[0..1] of array of TTyRectF; s: string; worst: Double;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+      finally
+        b.Free;
+      end;
+      boxes[ppi] := nil;
+      for k := 0 to FChart.Frame.Count - 1 do
+      begin
+        el := FChart.Frame.Element(k);
+        if (el.Caption.FontSizeLogical <> 0) or el.Ignore then Continue;
+        bb := TyShapeBounds(el.Shape);
+        if not TyRectFIsValid(bb) then Continue;
+        n := Length(boxes[ppi]);
+        SetLength(boxes[ppi], n + 1);
+        boxes[ppi][n] := bb;
+      end;
+    end;
+    s := '';
+    worst := 0;
+    if Length(boxes[0]) <> Length(boxes[1]) then s := Format(' count %d vs %d', [Length(boxes[0]), Length(boxes[1])])
+    else
+      for k := 0 to High(boxes[0]) do
+      begin
+        worst := Max(worst, Abs(boxes[1][k].Left - 1.5 * boxes[0][k].Left));
+        worst := Max(worst, Abs(boxes[1][k].Right - 1.5 * boxes[0][k].Right));
+        worst := Max(worst, Abs(boxes[1][k].Top - 1.5 * boxes[0][k].Top));
+        worst := Max(worst, Abs(boxes[1][k].Bottom - 1.5 * boxes[0][k].Bottom));
+        if (k < 2) then s := s + Format(' [%.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f]', [boxes[0][k].Left, boxes[0][k].Top,
+          boxes[0][k].Right - boxes[0][k].Left, boxes[0][k].Bottom - boxes[0][k].Top,
+          boxes[1][k].Left, boxes[1][k].Top, boxes[1][k].Right - boxes[1][k].Left, boxes[1][k].Bottom - boxes[1][k].Top]);
+      end;
+    if (Length(boxes[0]) = 0) or (Length(boxes[0]) <> Length(boxes[1])) or (worst > ATol) then
+      bad := bad + LineEnding + Format('%s: %d elements at 96, %d at 144, off by %.3f%s',
+        [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
+  end;
+
+  { a tooltip shown by an action: its box' top-left at 144 PPI is the one at
+    96 times 1.5 (its size is the text's: measured at each PPI) }
+  procedure Tip(const AName, AOpt: string);
+  var ppi: Integer; b: TBGRABitmap; at: array[0..1] of TTyRectF;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+        FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+        if ppi = 0 then FChart.Render(b.Canvas, Rect(0, 0, b.Width, b.Height), 96)
+        else FChart.Render(b.Canvas, Rect(0, 0, b.Width, b.Height), 144);
+      finally
+        b.Free;
+      end;
+      at[ppi] := FChart.TipFill;
+    end;
+    if not TyRectFIsValid(at[0]) or not TyRectFIsValid(at[1])
+      or (Abs(at[1].Left - 1.5 * at[0].Left) > 0.3) or (Abs(at[1].Top - 1.5 * at[0].Top) > 0.3) then
+      bad := bad + LineEnding + Format('%s: the box at (%.2f, %.2f) at 96, (%.2f, %.2f) at 144',
+        [AName, at[0].Left, at[0].Top, at[1].Left, at[1].Top]);
+  end;
+
+const
+  G = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"value","min":0,"max":10},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+  C = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+  RTIP = '"tooltip":{"renderMode":"richText","showDelay":0,"transitionDuration":0';
+var
+  b: TBGRABitmap;
+  px: TBGRAPixel;
+  y: Integer;
+  ink: Boolean;
+begin
+  bad := '';
+  One('pictorial', '{' + C + '"series":[{"type":"pictorialBar","symbol":"rect","symbolSize":[20,10],"data":[3,5,7]}]}');
+  One('pictorial repeat', '{' + C + '"series":[{"type":"pictorialBar","symbol":"rect","symbolRepeat":true,"symbolSize":[20,10],"symbolMargin":4,"data":[3,5,7]}]}');
+  One('pictorial offset', '{' + C + '"series":[{"type":"pictorialBar","symbol":"circle","symbolSize":16,"symbolOffset":[5,-8],"barCategoryGap":"20%","data":[3,5,7]}]}');
+  One('graph none', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10},{"x":5,"y":3}],"links":[{"source":0,"target":1}]}]}');
+  One('graph circular', '{"animation":false,"series":[{"type":"graph","layout":"circular","left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":0,"target":1}]}]}');
+  One('graph force', '{"animation":false,"series":[{"type":"graph","layout":"force","force":{"repulsion":80,"edgeLength":40,"layoutAnimation":false},"left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"}],"links":[{"source":0,"target":1},{"source":1,"target":2},{"source":2,"target":3}]}]}');
+  One('graph ends', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"edgeSymbol":["circle","arrow"],"edgeSymbolSize":[8,14],"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10}],"links":[{"source":0,"target":1}]}]}');
+  One('graph on axes', '{' + G + '"series":[{"type":"graph","coordinateSystem":"cartesian2d","symbolSize":16,"label":{"show":false},"data":[[2,2],[8,8]],"links":[{"source":0,"target":1}]}]}');
+  One('tree', '{"animation":false,"series":[{"type":"tree","left":40,"top":40,"right":40,"bottom":40,"symbolSize":10,"label":{"show":false},"data":[{"name":"r","children":[{"name":"a"},{"name":"b"}]}]}]}');
+  One('tree radial', '{"animation":false,"series":[{"type":"tree","layout":"radial","left":40,"top":40,"right":40,"bottom":40,"symbolSize":10,"label":{"show":false},"data":[{"name":"r","children":[{"name":"a"},{"name":"b"}]}]}]}');
+  One('radar symbols', '{"animation":false,"radar":{"center":[200,150],"radius":90,"indicator":[{"max":10},{"max":10},{"max":10}]},"series":[{"type":"radar","symbolSize":10,"data":[{"value":[3,5,7]}]}]}');
+  One('candle', '{' + C + '"series":[{"type":"candlestick","barWidth":15,"data":[[2,5,1,6],[3,4,2,7],[5,3,2,6]]}]}');
+  One('candle auto', '{' + C + '"series":[{"type":"candlestick","data":[[2,5,1,6],[3,4,2,7],[5,3,2,6]]}]}');
+  One('chord', '{"animation":false,"series":[{"type":"chord","center":[200,150],"radius":[60,80],"label":{"show":false},"data":[{"name":"a"},{"name":"b"}],"links":[{"source":"a","target":"b","value":3}]}]}');
+  One('matrix', '{"animation":false,"matrix":{"left":40,"top":40,"width":200,"height":120,"x":{"data":["a","b"]},"y":{"data":["c"]}},"series":[]}');
+  One('legend', '{' + G + '"legend":{"left":20,"top":10,"itemWidth":30,"itemHeight":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
+  One('legend vertical', '{' + G + '"legend":{"left":20,"top":10,"orient":"vertical","itemGap":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
+  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}');
+  { (the bar's place across is its labels' half width off the box: the
+    text measured at each PPI) }
+  One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
+  One('visualMap piecewise', '{' + G + '"visualMap":{"type":"piecewise","left":20,"top":20,"min":0,"max":10,"splitNumber":3,"itemWidth":20,"itemHeight":14},"series":[{"type":"scatter","data":[[3,3,5]]}]}');
+  Tip('tooltip position', '{' + G + RTIP + ',"position":[100,60],"padding":8},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  Tip('tooltip by the point', '{' + G + RTIP + '},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  Tip('tooltip html', '{' + G + '"tooltip":{"showDelay":0,"transitionDuration":0,"position":[100,60]},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  { an x axis' ticks: the first at css 40 is snapped to 40.5 (a width of 1)
+    -- device 60.75, its 1.5 px from 60 to 61.5: column 59 untouched [was:
+    snapped on the device to 60, inked from 59.25] }
+  b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+  try
+    Chart(144, '{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"type":"value",'
+      + '"min":0,"max":10,"splitLine":{"show":false},"axisLine":{"show":false},"axisLabel":{"show":false},'
+      + '"axisTick":{"length":8,"lineStyle":{"color":"#000000"}}},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+      + '"series":[]}', b);
+    ink := False;
+    for y := 391 to 400 do
+    begin
+      px := b.GetPixel(59, y);
+      if px.red < 200 then ink := True;
+    end;
+    if ink then bad := bad + LineEnding + 'axis ticks: column 59 inked (snapped on the device px)';
+    ink := False;
+    for y := 391 to 400 do
+    begin
+      px := b.GetPixel(60, y);
+      if px.red < 100 then ink := True;
+    end;
+    if not ink then bad := bad + LineEnding + 'axis ticks: no tick in column 60';
+  finally
+    b.Free;
+  end;
+  if bad <> '' then Fail('at 144 PPI not the 96 PPI chart times 1.5:' + bad);
+end;
 
 { [R7-AD] THE COMPONENTS' BAND IN UPSTREAM'S PAINT ORDER (zrender sorts the
   display list by z, z2 and insertion -- the root's views in their order:

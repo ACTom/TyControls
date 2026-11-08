@@ -2922,7 +2922,8 @@ begin
             px2 := hit.Plot.Right;
             py2 := at;
           end;
-          TyZrSubPixelOptimizeLine(px1, py1, px2, py2, APainter.ScaleF(w));
+          { ([R7-AG] on the css px grid) }
+          TyZrSubPixelLineAt(px1, py1, px2, py2, APainter.ScaleF(w), APainter.ScaleF(1));
           { [R7-X] with getLineStyle's opacity, shadow, phase, cap, join
             and miterLimit [was: the colour, width and dash alone] }
           PtrShapePaint(APainter, hit, TyShapePolyline([TyPointF(px1, py1),
@@ -8161,6 +8162,8 @@ begin
     pin.Gap := gap;
     pin.BorderWidth := APainter.ScaleF(borderW);
     pin.IsAxis := onAxis;
+    { [R7-AG] placed in css px }
+    pin.PxScale := APPI / 96;
     elRect := TyInvalidRectF;
     if (not onAxis) and (FPaintList <> nil) and FPaintListValid
       and (snap.Element >= 0) and (snap.Element < FPaintList.Count) then

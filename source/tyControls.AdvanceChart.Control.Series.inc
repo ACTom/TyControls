@@ -782,7 +782,7 @@ begin
           ln.Y1 := d.Shape.Y1;
           ln.X2 := d.Shape.X2;
           ln.Y2 := d.Shape.Y2;
-          TySingleSubPixelLine(ln, APainter.ScaleF(w));
+          TySingleSubPixelLine(ln, APainter.ScaleF(w), APainter.ScaleF(1));
           dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
           { [R7-X] the full getLineStyle }
           PtrShapePaint(APainter, AHit, TyShapePolyline([TyPointF(ln.X1, ln.Y1),

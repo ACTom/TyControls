@@ -188,7 +188,8 @@ function TySingleDirection(ASingle: TTySingle; AOption: TTyChartOption;
   const AWhich: string): Integer;
 
 { graphic.subPixelOptimizeLine, with Math.round }
-procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double);
+procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double;
+  AScale: Double = 1);
 
 { ---- the pointer ---- }
 type
@@ -664,8 +665,15 @@ begin
   if InsideIn(node, AWhich) then Result := -Result;
 end;
 
-procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double);
+procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double;
+  AScale: Double);
 begin
+  { ([R7-AG] on the css px grid at another PPI) }
+  if (AScale > 0) and (AScale <> 1) then
+  begin
+    TyZrSubPixelLineAt(ALine.X1, ALine.Y1, ALine.X2, ALine.Y2, AWidth, AScale);
+    Exit;
+  end;
   if IsNan(AWidth) or (AWidth = 0) then Exit;
   if TyJsRound(ALine.X1 * 2) = TyJsRound(ALine.X2 * 2) then
   begin
@@ -950,7 +958,7 @@ begin
       Apply(M, hasM, fr.Ext1, 0, v.Line.X2, v.Line.Y2);
       v.Line.Value := NaN;
       v.Line.Drawn := True;
-      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
       { cut at the breaks (axisLine.breakLine) [F4a] }
       TyAxisBreakLineOf(v.Spec, ax, AOption,
@@ -974,7 +982,7 @@ begin
         ln := Default(TTySingleLine);
         Apply(M, hasM, marks[i].Coord, 0, ln.X1, ln.Y1);
         Apply(M, hasM, marks[i].Coord, endCoord, ln.X2, ln.Y2);
-        TySingleSubPixelLine(ln, w);
+        TySingleSubPixelLine(ln, w, APPI / 96);
         ln.Value := marks[i].Value;
         ln.Drawn := True;
         if (not v.Furn.MinorTickOption) and not marks[i].OnBand then
@@ -1004,7 +1012,7 @@ begin
         ln := Default(TTySingleLine);
         Apply(M, hasM, minors[i], 0, ln.X1, ln.Y1);
         Apply(M, hasM, minors[i], endCoord, ln.X2, ln.Y2);
-        TySingleSubPixelLine(ln, mw);
+        TySingleSubPixelLine(ln, mw, APPI / 96);
         ln.Value := NaN;
         ln.Drawn := True;
         v.MinorTicks[i] := ln;
@@ -1038,7 +1046,7 @@ begin
           ln.X2 := r.X + r.W;
           ln.Y2 := c;
         end;
-        TySingleSubPixelLine(ln, w);
+        TySingleSubPixelLine(ln, w, APPI / 96);
         ln.Value := lineMarks[i].Value;
         ln.Drawn := True;
         ln.ColourIndex := i mod Math.Max(1, v.SplitLineInkCount);

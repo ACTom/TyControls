@@ -435,6 +435,11 @@ type
     Gap: Double;
     Params: TTyChartParams;
     IsAxis: Boolean;
+    { [R7-AG] the device px a css px makes (PPI / 96; nought is 1): the
+      lengths above are device px, _updatePosition works in css px -- the
+      option's px, the handler's arguments and answer, the gap, the
+      calcTooltipPosition offset and refix's extra 2 }
+    PxScale: Double;
   end;
 
 { TooltipView._updatePosition, line for line: a position handler is run and
@@ -1505,12 +1510,37 @@ begin
   Result := (AWord = 'center') or (AWord = 'middle');
 end;
 
+{ [R7-AG] the place's lengths in css px (PxScale 1) }
+function PlaceInCss(const AIn: TTyTooltipPlaceIn): TTyTooltipPlaceIn;
+var s: Double;
+begin
+  Result := AIn;
+  s := AIn.PxScale;
+  Result.PxScale := 1;
+  if not (s > 0) or (s = 1) then Exit;
+  Result.PointX := AIn.PointX / s;
+  Result.PointY := AIn.PointY / s;
+  Result.ContentW := AIn.ContentW / s;
+  Result.ContentH := AIn.ContentH / s;
+  Result.ViewW := AIn.ViewW / s;
+  Result.ViewH := AIn.ViewH / s;
+  Result.Rect := TyXYWH(AIn.Rect.X / s, AIn.Rect.Y / s, AIn.Rect.W / s, AIn.Rect.H / s);
+  Result.BorderWidth := AIn.BorderWidth / s;
+  Result.Gap := AIn.Gap / s;
+end;
+
 procedure TyTooltipRunPosition(const ASpec: TTyTooltipSpec;
   const AIn: TTyTooltipPlaceIn; out APos: TTyChartTooltipPos);
 var args: TTyChartTooltipPosArgs;
 begin
   APos := ASpec.Position;
   if ASpec.PositionHandler = '' then Exit;
+  { ([R7-AG] the handler is handed css px) }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    TyTooltipRunPosition(ASpec, PlaceInCss(AIn), APos);
+    Exit;
+  end;
   args := Default(TTyChartTooltipPosArgs);
   args.PointX := AIn.PointX;
   args.PointY := AIn.PointY;
@@ -1539,6 +1569,17 @@ var
   lay: TTyXYWH;
   mask: TFPUExceptionMask;
 begin
+  { [R7-AG] IN CSS PX, as _updatePosition places the DOM box: the place's
+    lengths divided by the PPI's scale, the answer multiplied back [was:
+    the option's px, the gap's arithmetic and the corner's offset taken
+    as device px] }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    Result := TyTooltipPlace(ASpec, PlaceInCss(AIn));
+    Result.X := Result.X * AIn.PxScale;
+    Result.Y := Result.Y * AIn.PxScale;
+    Exit;
+  end;
   w := AIn.ContentW;
   h := AIn.ContentH;
   x := AIn.PointX;

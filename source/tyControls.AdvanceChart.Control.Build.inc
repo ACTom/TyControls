@@ -4596,9 +4596,11 @@ begin
             UtTagGraphNodes(list, utAt, FGraphNodes[i], FGraphNodeScale[i]);
           end
           else
+            { ([R7-AG] on a coordinate system the symbols css px: PPI / 96
+              device px [was: device px]) }
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
-              gi, FStores[i], list));
+              gi, FStores[i], list, APPI / 96, APPI / 96));
           { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
             carries only the WORDS; where they go and what they are drawn
             in is looked up by series index afterwards, so a branch that
