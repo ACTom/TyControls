@@ -70,7 +70,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart;
 type
   TLcProbe = class(TTyAdvanceChart)
   public
@@ -82,6 +82,10 @@ type
       (the split and the minor split lines) are told apart by their pen }
     function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
       out AEl: TTyChartElement; const AWant: string = ''; const AWant2: string = ''): Boolean;
+    { [R7-AD] the AN-th part of key AKey, z2 AZ2 and kind as drawn (the last
+      where there are fewer: one drawn for all) }
+    function CompPartN(const AKey: string; AZ2: Integer; AText: Boolean; AN: Integer;
+      out AEl: TTyChartElement): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -101,7 +105,7 @@ type
     function ElOf(const AKey: string): Integer;
     procedure Run(AWhich: Integer);
     function KeyOfEl(AIdx: Integer; AGraph: Boolean): string;
-    function GraphicOf(const ARec: TJSONObject): Integer;
+    function GraphicOf(const ARec: TJSONObject; ATol: Double = 0.01): Integer;
     procedure RunV(AHits: Boolean);
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
     function CListOf(const ARec: TJSONObject; AText: Boolean; AZ2: Integer = MaxInt): Integer;
@@ -131,6 +135,29 @@ type
     procedure TestTheR7AACanvasAsUpstream;
     procedure TestAnAxisPensShadowIsDrawn;
     procedure TestThePolarViewsInUpstreamsOrder;
+    { [R7-AD] the ad- cases, as the aa- ones }
+    procedure TestTheR7ADCanvasAsUpstream;
+    { [R7-AD] what sorts among the axes' parts is drawn in that order: a
+      radar's split area under the x axis' split lines, its axis lines over
+      them; an x axis' split lines over the y axis'; a series of z under
+      nought under the split lines; a graphic of z2 20 over the labels; a
+      name under its line and ticks }
+    procedure TestTheComponentBandInUpstreamsOrder;
+    { [R7-AD] the ady- cases, as the y- ones: a polar's, a single axis' part
+      and a line of no width in the dirty blocks it meets; fonts the canvas
+      refuses in a title, a legend, a visualMap, a polar's and a single
+      axis' labels, an axis' rich label; a graphic element's own gradient
+      in its frame }
+    procedure TestTheR7ADDirtyFramesAsUpstream;
+    procedure TestTheR7ADCarriesAsUpstream;
+    { [R7-AD] AN OPTION'S CSS PX AT ANOTHER PPI: a browser at
+      devicePixelRatio 1.5 draws every px of the option half again as many
+      device px -- the same chart at 144 PPI on a control half again as big
+      is the 96 PPI one times 1.5, element by element: a grid's box, a bar's
+      width, gap and least height, a symbol's size and offset, a pie's,
+      a funnel's, a gauge's, a radar's, a polar's, a single axis', a
+      parallel's box, centre and radius, a boxplot's width }
+    procedure TestOptionPxAtAnotherPPIAsUpstream;
   end;
 
 implementation
@@ -190,6 +217,24 @@ begin
   if Result then AEl := d[first].El else AEl := Default(TTyChartElement);
 end;
 
+function TLcProbe.CompPartN(const AKey: string; AZ2: Integer; AText: Boolean; AN: Integer;
+  out AEl: TTyChartElement): Boolean;
+var d: TTyCompPartArray; k, n: Integer;
+begin
+  d := CompDrawn;
+  n := 0;
+  Result := False;
+  AEl := Default(TTyChartElement);
+  for k := 0 to High(d) do
+    if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
+    begin
+      AEl := d[k].El;
+      Result := True;
+      if n = AN then Exit;
+      Inc(n);
+    end;
+end;
+
 function TLcProbe.Frame: TTyPaintList;
 begin
   Result := AnimFrame;
@@ -204,7 +249,7 @@ begin
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.SetUp;
-var sl: TStringList;
+var sl: TStringList; mp: TJSONArray; k: Integer;
 begin
   inherited SetUp;
   FForm := TForm.CreateNew(nil);
@@ -220,6 +265,13 @@ begin
   end;
   FBmp := TBGRABitmap.Create(FRoot.FindPath('W').AsInteger, FRoot.FindPath('H').AsInteger,
     BGRA(255, 255, 255, 255));
+  { [R7-AD] the maps the geo cases draw }
+  if TJSONObject(FRoot).Find('maps') <> nil then
+  begin
+    mp := TJSONObject(FRoot).Arrays['maps'];
+    for k := 0 to mp.Count - 1 do
+      TyChartRegisterMap(mp.Objects[k].Strings['name'], mp.Objects[k].Strings['text']);
+  end;
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TearDown;
@@ -306,7 +358,7 @@ begin
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
       or (Copy(id, 1, 2) = 'y-')
-      or (Copy(id, 1, 3) = 'aa-') then Continue;
+      or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ad-') or (Copy(id, 1, 4) = 'ady-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -456,7 +508,7 @@ begin
 end;
 
 { a graphic element: the frame's element whose bounds are the recorded path's }
-function TAdvChartLinesCanvasOracleTest.GraphicOf(const ARec: TJSONObject): Integer;
+function TAdvChartLinesCanvasOracleTest.GraphicOf(const ARec: TJSONObject; ATol: Double): Integer;
 var
   L: TTyPaintList;
   k: Integer;
@@ -472,8 +524,8 @@ begin
     if L.Element(k).Caption.FontSizeLogical <> 0 then Continue;
     bb := TyShapeBounds(L.Element(k).Shape);
     if not TyRectFIsValid(bb) then Continue;
-    if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.01) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.01)
-      and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.01) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.01) then
+    if (Abs(bb.Left - HexD(pb.Strings[0])) < ATol) and (Abs(bb.Top - HexD(pb.Strings[1])) < ATol)
+      and (Abs(bb.Right - HexD(pb.Strings[2])) < ATol) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < ATol) then
       Exit(k);
   end;
 end;
@@ -872,6 +924,12 @@ begin
         { (of two at one place, the one of upstream's z2: a dataZoom's
           background and its filler over a full window) }
         if (AZ2 <> MaxInt) and (el.Z2 <> AZ2) then dist := dist + 0.01;
+        { ([R7-AD] and of those, one that makes the record's first op: a
+          radar's merged split lines over its outer band's merged path) }
+        if (ops.Count > 0) and (((ops.Objects[0].Strings['op'] = 'stroke')
+          and not (el.Style.StrokeWidthLogical > 0))
+          or ((ops.Objects[0].Strings['op'] = 'fill') and not el.Style.HasFill)) then
+          dist := dist + 0.005;
         if dist < best then
         begin
           best := dist;
@@ -950,8 +1008,11 @@ var
   { [R7-AA] the z- and aa- cases: the cap, join and miterLimit, a dash
     where upstream strokes solid }
   strict: Boolean;
+  { [R7-AD] the ad- cases are compared as the aa- ones }
+  aaLike: Boolean;
 begin
   strict := APrefix <> 'w-';
+  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-');
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -965,10 +1026,6 @@ begin
       each moving symbol and keeps the rest of the last frame's pixels; the
       port draws an animated frame whole (recorded, not held: spec 277) }
     if id = 'w-dirty-effect' then Continue;
-    { [R7-AA] radar's component (z 0) among the cartesian axes' parts: the
-      port draws the axes before it builds the list radar's elements are in,
-      so they come after every axis part (recorded, not held: spec 281) }
-    if id = 'aa-radar-order' then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     dirty := c.Find('dirty') <> nil;
     FreeAndNil(FChart);
@@ -1028,7 +1085,7 @@ begin
       end;
       blocks := fr.Arrays['blocks'];
       els := fr.Arrays['els'];
-      if APrefix = 'aa-' then CheckAreas(Format('%s t=%g', [id, t]), els);
+      if aaLike then CheckAreas(Format('%s t=%g', [id, t]), els);
       for k := 0 to els.Count - 1 do
       begin
         rec := els.Objects[k];
@@ -1162,7 +1219,7 @@ begin
             { [R7-AA] the text's shadow where it blurs (a refused colour the
               canvas' own) }
             sb := HexD(o.Strings['sb']);
-            if (APrefix = 'aa-') and (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
+            if aaLike and (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
             begin
               Inc(FCompared);
               n := -1;
@@ -1208,7 +1265,7 @@ begin
             if not (el.Style.StrokeWidthLogical > 0) or (Abs(plw - lw) > 1e-6) then
               Miss(Format('%s: stroke width %g, upstream %g', [where, plw, lw]));
             { [R7-AA] a gradient the canvas holds (the aa- cases) }
-            if (APrefix = 'aa-') and (o.Strings['ss'] = '[grad]') then
+            if aaLike and (o.Strings['ss'] = '[grad]') then
             begin
               Inc(FCompared);
               if el.Style.StrokeGradient.Kind = cgkNone then
@@ -1266,7 +1323,7 @@ begin
               if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
                 Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
               { [R7-AA] and the join (a word the canvas refuses: the one it had) }
-              if APrefix = 'aa-' then
+              if aaLike then
               begin
                 case el.Style.LineJoin of
                   1: want := 'round';
@@ -1770,6 +1827,29 @@ var
   bb: TTyRectF;
   px: TBGRAPixel;
   gfr: TTyDoubleArray;
+  { [R7-AD] }
+  parts: TStringList;
+  gbb: TTyRectF;
+
+  { [R7-AD] a record's path bounds on the canvas }
+  procedure RectOfPb(ARec: TJSONObject; out AR: TTyRectF);
+  begin
+    AR := TyRectF(0, 0, 0, 0);
+    if (ARec.Find('pb') = nil) or (ARec.Find('pb').JSONType <> jtArray) then Exit;
+    AR := TyRectF(HexD(ARec.Arrays['pb'].Strings[0]), HexD(ARec.Arrays['pb'].Strings[1]),
+      HexD(ARec.Arrays['pb'].Strings[2]), HexD(ARec.Arrays['pb'].Strings[3]));
+  end;
+
+  { [R7-AD] a point well inside the element (idx's): it and the points three
+    px about it hit it }
+  function InPath(AX, AY: Double): Boolean;
+  var dx3, dy3: Integer;
+  begin
+    for dx3 := -1 to 1 do
+      for dy3 := -1 to 1 do
+        if FChart.Frame.HitTestElement(AX + 3 * dx3, AY + 3 * dy3, 96, False) <> idx then Exit(False);
+    Result := True;
+  end;
 
   { [R7-AB] AS DRAWN: points of the element's path where upstream's ramp
     (the op's transform AM over the gradient's arguments AA, in the frame
@@ -1803,7 +1883,7 @@ var
     end;
 
   begin
-    if Copy(id, 1, 8) <> 'ab-grad-' then Exit;
+    if (Copy(id, 1, 8) <> 'ab-grad-') and (Copy(id, 1, 9) <> 'ady-grad-') then Exit;
     want := BGRAPixelTransparent;
     seen := 0;
     for q3 := 0 to 3 do
@@ -1822,9 +1902,13 @@ var
         lx := HexD(AA.Strings[3]) + 0.5 * HexD(AA.Strings[5]) * Cos(q3 * Pi / 2);
         ly := HexD(AA.Strings[4]) + 0.5 * HexD(AA.Strings[5]) * Sin(q3 * Pi / 2);
       end;
-      if (Abs(lx) > 0.85) or (Abs(ly) > 0.85) then Continue;
+      { (inside a symbol's unit box; [R7-AD] a graphic element's: inside its
+        path's bounds on the canvas, off its edges) }
+      if (Copy(id, 1, 4) <> 'ady-') and ((Abs(lx) > 0.85) or (Abs(ly) > 0.85)) then Continue;
       gx := AM[0] * lx + AM[2] * ly + AM[4];
       gy := AM[1] * lx + AM[3] * ly + AM[5];
+      if (Copy(id, 1, 4) = 'ady-') and not ((gx > gbb.Left + 3) and (gx < gbb.Right - 3)
+        and (gy > gbb.Top + 3) and (gy < gbb.Bottom - 3) and InPath(gx, gy)) then Continue;
       px := Bilinear(gx, gy);
       Inc(seen);
       if seen = 1 then
@@ -1851,10 +1935,11 @@ var
       lx := HexD(AA.Strings[3]) + 0.15 * HexD(AA.Strings[5]);
       ly := HexD(AA.Strings[4]);
     end;
-    if (Abs(lx) <= 0.85) and (Abs(ly) <= 0.85) then
+    gx := AM[0] * lx + AM[2] * ly + AM[4];
+    gy := AM[1] * lx + AM[3] * ly + AM[5];
+    if ((Copy(id, 1, 4) <> 'ady-') and (Abs(lx) <= 0.85) and (Abs(ly) <= 0.85))
+      or ((Copy(id, 1, 4) = 'ady-') and InPath(gx, gy)) then
     begin
-      gx := AM[0] * lx + AM[2] * ly + AM[4];
-      gy := AM[1] * lx + AM[3] * ly + AM[5];
       px := Bilinear(gx, gy);
       Inc(FCompared);
       k3 := Max(Abs(px.red - want.red), Max(Abs(px.green - want.green), Abs(px.blue - want.blue)));
@@ -1890,8 +1975,17 @@ begin
     for j := 0 to c.Arrays['frames'].Count - 1 do
     begin
     t := c.Arrays['frames'].Objects[j].Floats['t'];
+    { [R7-AD] the actions before the sample (a state's change) }
+    if (c.Find('acts') <> nil) and (c.Objects['acts'].Find(IntToStr(j)) <> nil) then
+    begin
+      FChart.AnimNow := cT0 + t;
+      for q := 0 to c.Objects['acts'].Arrays[IntToStr(j)].Count - 1 do
+        FChart.DispatchAction(c.Objects['acts'].Arrays[IntToStr(j)].Objects[q].AsJSON);
+    end;
     if t > 0 then FChart.AnimTick(cT0 + t);
     FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+      FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
     { findHover at the probes }
     if c.Arrays['frames'].Objects[j].Find('hits') <> nil then
     begin
@@ -1971,6 +2065,38 @@ begin
               Miss(where + ': no label drawn');
               Continue;
             end;
+          end
+          { [R7-AD] a component's text: as drawn (CompDrawn), else its
+            element in the list (by its words) }
+          else if Copy(key, 1, 2) = 'c.' then
+          begin
+            parts := TStringList.Create;
+            try
+              parts.Delimiter := '.';
+              parts.StrictDelimiter := True;
+              parts.DelimitedText := key;
+              if not FChart.CompPartN(parts[1], StrToInt(parts[2]), True, StrToInt(parts[4]), el) then
+              begin
+                idx := CListOf(rec, True, StrToInt(parts[2]));
+                if idx < 0 then
+                begin
+                  Miss(where + ': no text');
+                  Continue;
+                end;
+                el := FChart.Frame.Element(idx);
+              end;
+            finally
+              parts.Free;
+            end;
+            { (a rich text: its last span's font, as settled) }
+            for q2 := High(el.Caption.RtPieces) downto 0 do
+              if (el.Caption.RtPieces[q2].Kind = rpkText) and (el.Caption.RtPieces[q2].Text <> '') then
+              begin
+                el.Caption.FontName := el.Caption.RtPieces[q2].FontFamily;
+                el.Caption.FontSizeLogical := TyFontSizeFromPx(el.Caption.RtPieces[q2].FontSizePx);
+                el.Caption.FontWeight := el.Caption.RtPieces[q2].FontWeight;
+                Break;
+              end;
           end
           else
           begin
@@ -2093,13 +2219,16 @@ begin
           ob := o.Objects['so'];
         end;
         where := Format('%s %s %s', [id, key, o.Strings['op']]);
-        idx := WElOf(key, rec);
+        { ([R7-AD] a graphic element's: its path's bounds the recorder's
+          polyline of an arc's) }
+        if Copy(key, 1, 2) = 'gr' then idx := GraphicOf(rec, 0.6) else idx := WElOf(key, rec);
         if idx < 0 then
         begin
           Miss(where + ': no element');
           Continue;
         end;
         el := FChart.Frame.Element(idx);
+        RectOfPb(rec, gbb);
         for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
         kind := ob.Strings['k'];
         Inc(FCompared);
@@ -2503,6 +2632,211 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AACanvasAsUpstream;
 begin
   RunW(False, 'aa-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7ADCanvasAsUpstream;
+begin
+  RunW(False, 'ad-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7ADDirtyFramesAsUpstream;
+begin
+  RunY('ady-dirty-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7ADCarriesAsUpstream;
+begin
+  RunYHeld('ady-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestOptionPxAtAnotherPPIAsUpstream;
+var bad: string;
+
+  procedure One(const AName, AOpt: string);
+  var ppi, k, w, h, n: Integer; b: TBGRABitmap; el: TTyChartElement; bb: TTyRectF;
+    boxes: array[0..1] of array of TTyRectF; s: string; worst: Double;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      FreeAndNil(FChart);
+      FChart := TLcProbe.Create(FForm);
+      FChart.Parent := FForm;
+      FChart.Controller := FCtl;
+      if ppi = 0 then begin w := 400; h := 300; end else begin w := 600; h := 450; end;
+      FChart.SetBounds(0, 0, w, h);
+      FChart.SetOption(AOpt, True);
+      b := TBGRABitmap.Create(w, h, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then FChart.Render(b.Canvas, Rect(0, 0, w, h), 96)
+        else FChart.Render(b.Canvas, Rect(0, 0, w, h), 144);
+      finally
+        b.Free;
+      end;
+      boxes[ppi] := nil;
+      for k := 0 to FChart.Frame.Count - 1 do
+      begin
+        el := FChart.Frame.Element(k);
+        if (el.Caption.FontSizeLogical <> 0) or (el.Datum.Kind <> ctkSeries) or el.Ignore then Continue;
+        bb := TyShapeBounds(el.Shape);
+        if not TyRectFIsValid(bb) then Continue;
+        n := Length(boxes[ppi]);
+        SetLength(boxes[ppi], n + 1);
+        boxes[ppi][n] := bb;
+      end;
+    end;
+    s := '';
+    worst := 0;
+    if Length(boxes[0]) <> Length(boxes[1]) then s := Format(' count %d vs %d', [Length(boxes[0]), Length(boxes[1])])
+    else
+      for k := 0 to High(boxes[0]) do
+      begin
+        worst := Max(worst, Abs(boxes[1][k].Left - 1.5 * boxes[0][k].Left));
+        worst := Max(worst, Abs(boxes[1][k].Right - 1.5 * boxes[0][k].Right));
+        worst := Max(worst, Abs(boxes[1][k].Top - 1.5 * boxes[0][k].Top));
+        worst := Max(worst, Abs(boxes[1][k].Bottom - 1.5 * boxes[0][k].Bottom));
+        if (k < 2) then s := s + Format(' [%.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f]', [boxes[0][k].Left, boxes[0][k].Top,
+          boxes[0][k].Right - boxes[0][k].Left, boxes[0][k].Bottom - boxes[0][k].Top,
+          boxes[1][k].Left, boxes[1][k].Top, boxes[1][k].Right - boxes[1][k].Left, boxes[1][k].Bottom - boxes[1][k].Top]);
+      end;
+    if (Length(boxes[0]) = 0) or (Length(boxes[0]) <> Length(boxes[1])) or (worst > 0.01) then
+      bad := bad + LineEnding + Format('%s: %d elements at 96, %d at 144, off by %.3f%s',
+        [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
+  end;
+
+const
+  G = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"value","min":0,"max":10},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+  C = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+begin
+  bad := '';
+
+    One('bar barWidth', '{' + C + '"series":[{"type":"bar","barWidth":30,"data":[3,5,7]}]}');
+    One('bar auto', '{' + C + '"series":[{"type":"bar","data":[3,5,7]}]}');
+    One('bar gap', '{' + C + '"series":[{"type":"bar","barWidth":20,"barGap":10,"data":[3,5,7]},{"type":"bar","barWidth":20,"data":[2,4,6]}]}');
+    One('bar maxW', '{' + C + '"series":[{"type":"bar","barMaxWidth":12,"data":[3,5,7]}]}');
+    One('bar minH', '{' + C + '"series":[{"type":"bar","barMinHeight":30,"data":[0.1,5,7]}]}');
+    One('scatter size', '{' + G + '"series":[{"type":"scatter","symbolSize":20,"data":[[3,3],[6,6]]}]}');
+    One('scatter offset', '{' + G + '"series":[{"type":"scatter","symbolSize":20,"symbolOffset":[10,5],"data":[[3,3]]}]}');
+    One('scatter border', '{' + G + '"series":[{"type":"scatter","symbolSize":20,"itemStyle":{"borderWidth":6,"borderColor":"#000"},"data":[[3,3]]}]}');
+    One('line symbols', '{' + G + '"series":[{"type":"line","symbolSize":12,"data":[[3,3],[6,6]]}]}');
+    One('effectScatter', '{' + G + '"series":[{"type":"effectScatter","symbolSize":14,"data":[[3,3]]}]}');
+    One('pie px', '{"animation":false,"series":[{"type":"pie","radius":[30,80],"center":[200,150],"label":{"show":false},"data":[1,2,3]}]}');
+    One('pie pct', '{"animation":false,"series":[{"type":"pie","radius":["20%","50%"],"label":{"show":false},"data":[1,2,3]}]}');
+    One('boxplot', '{' + C + '"series":[{"type":"boxplot","boxWidth":[10,30],"data":[[1,2,3,4,5],[2,3,4,5,6],[1,3,5,7,9]]}]}');
+    One('funnel gap', '{"animation":false,"series":[{"type":"funnel","left":40,"top":40,"width":300,"height":200,"gap":8,"label":{"show":false},"data":[{"value":3},{"value":2},{"value":1}]}]}');
+    One('gauge', '{"animation":false,"series":[{"type":"gauge","center":[200,150],"radius":100,"detail":{"show":false},"title":{"show":false},"axisLabel":{"show":false},"axisLine":{"lineStyle":{"width":12}},"pointer":{"width":8,"length":60},"splitLine":{"length":10},"axisTick":{"length":5},"data":[{"value":40}]}]}');
+    One('sankey', '{"animation":false,"series":[{"type":"sankey","left":40,"top":40,"right":40,"bottom":40,"nodeWidth":15,"nodeGap":10,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":"a","target":"b","value":3},{"source":"a","target":"c","value":2}]}]}');
+    One('treemap', '{"animation":false,"series":[{"type":"treemap","left":40,"top":40,"right":40,"bottom":40,"breadcrumb":{"show":false},"label":{"show":false},"itemStyle":{"gapWidth":6,"borderWidth":3},"data":[{"name":"a","value":3},{"name":"b","value":2}]}]}');
+    One('sunburst px', '{"animation":false,"series":[{"type":"sunburst","center":[200,150],"radius":[20,100],"label":{"show":false},"data":[{"name":"a","value":3},{"name":"b","value":2}]}]}');
+    One('radar px', '{"animation":false,"radar":{"center":[200,150],"radius":90,"indicator":[{"max":10},{"max":10},{"max":10}]},"series":[{"type":"radar","symbol":"none","data":[{"value":[3,5,7]}]}]}');
+    One('polar px', '{"animation":false,"polar":{"center":[200,150],"radius":[20,90]},"angleAxis":{"show":false,"type":"value","min":0,"max":10},"radiusAxis":{"show":false,"type":"value","min":0,"max":10},"series":[{"type":"bar","coordinateSystem":"polar","data":[[3,2],[6,5]]}]}');
+    One('lines effect', '{' + G + '"series":[{"type":"lines","coordinateSystem":"cartesian2d","effect":{"show":true,"symbolSize":10,"period":4},"data":[{"coords":[[1,1],[9,9]]}]}]}');
+    One('parallel', '{"animation":false,"parallel":{"left":40,"right":40,"top":40,"bottom":40},"parallelAxis":[{"dim":0,"min":0,"max":10},{"dim":1,"min":0,"max":10}],"series":[{"type":"parallel","lineStyle":{"width":4},"data":[[3,7]]}]}');
+    One('themeRiver', '{"animation":false,"singleAxis":{"type":"time","left":40,"right":40,"top":40,"bottom":40},"series":[{"type":"themeRiver","label":{"show":false},"data":[["2020-01-01",3,"a"],["2020-01-02",5,"a"],["2020-01-01",2,"b"],["2020-01-02",4,"b"]]}]}');
+
+  if bad <> '' then Fail('at 144 PPI not the 96 PPI chart times 1.5:' + bad);
+end;
+
+
+{ [R7-AD] THE COMPONENTS' BAND IN UPSTREAM'S PAINT ORDER (zrender sorts the
+  display list by z, z2 and insertion -- the root's views in their order:
+  single, radius, angle, polar, geo, radar, y, x, grid, the series last),
+  pixel by pixel where two parts cross:
+  - aa-radar-order's chart: the radar's split area (z2 0) under the x axis'
+    split lines (z2 0, the x view after the radar's), its axis lines (z2 1)
+    over them;
+  - the y axis' split lines (z2 0) under the x axis' (the y view first);
+  - a scatter of z -1 under the split lines;
+  - a graphic rect of z 0, z2 20 over the x axis' labels (z2 10);
+  - an axis name (z2 1) under the axis line (z2 1, after the name) and its
+    ticks (z2 2). }
+procedure TAdvChartLinesCanvasOracleTest.TestTheComponentBandInUpstreamsOrder;
+var px: TBGRAPixel; x, y: Integer; hits, shot: Integer;
+
+  procedure Draw(const AOpt: string);
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption(AOpt, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    Inc(shot);
+    if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+      FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + 'band-' + IntToStr(shot) + '.png');
+  end;
+
+  function Near(const APx: TBGRAPixel; R, G, B: Integer): Boolean;
+  begin
+    Result := (Abs(APx.red - R) < 40) and (Abs(APx.green - G) < 40) and (Abs(APx.blue - B) < 40);
+  end;
+
+begin
+  shot := 0;
+  { a radar over the plot: its yellow band under the blue split lines, its
+    red axis lines over them }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"radar":{"center":[200,150],"radius":100,"startAngle":90,"indicator":[{"max":10},{"max":10},{"max":10},{"max":10}],'
+    + '"axisName":{"show":false},"splitNumber":1,"axisLine":{"lineStyle":{"color":"#ff0000","width":3}},'
+    + '"splitLine":{"show":false},"splitArea":{"areaStyle":{"color":["#ffff00"]}}},'
+    + '"series":[]}');
+  { the split line at x = 200 (the value 5) crosses the band and the
+    radar's vertical spoke: the spoke over it }
+  px := FBmp.GetPixel(200, 100);
+  AssertTrue(Format('the radar''s spoke over the split line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 255, 0, 0));
+  { the split line at x = 168 (the value 4) through the band, off the spokes }
+  px := FBmp.GetPixel(168, 150 - 20);
+  AssertTrue(Format('the split line over the radar''s band: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 0, 0, 255));
+  { the y axis' split lines (red) under the x axis' (blue) where they cross }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"axisLine":{"show":false},"splitLine":{"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisLine":{"show":false},'
+    + '"splitLine":{"lineStyle":{"color":"#ff0000","width":3}}},"series":[]}');
+  { (the value 4 on both: x 168, y 172) }
+  px := FBmp.GetPixel(168, 172);
+  AssertTrue(Format('the x axis'' split line over the y axis'': (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 0, 0, 255));
+  { a scatter of z -1, a big green square over the split line at x = 168 }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"scatter","z":-1,"symbol":"rect","symbolSize":100,"itemStyle":{"color":"#00ff00","opacity":1},'
+    + '"data":[[5,5]]}]}');
+  px := FBmp.GetPixel(168, 140);
+  AssertTrue(Format('the split line over a scatter of z -1: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 0, 0, 255));
+  { a graphic rect of z2 20 over the x axis' labels }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"graphic":[{"type":"rect","z":0,"z2":20,"shape":{"x":150,"y":262,"width":100,"height":24},'
+    + '"style":{"fill":"#00ff00"}}],'
+    + '"xAxis":{"type":"value","min":0,"max":10,"splitLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLabel":{"color":"#ff0000","fontSize":20,"fontWeight":"bold"}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  hits := 0;
+  for x := 150 to 249 do
+    for y := 262 to 285 do
+      if Near(FBmp.GetPixel(x, y), 255, 0, 0) then Inc(hits);
+  AssertEquals('no label shows through the graphic of z2 20', 0, hits);
+  { a name centred on its axis line: the line over the name's glyphs }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"splitLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLabel":{"show":false},"axisLine":{"lineStyle":{"color":"#0000ff","width":3}},'
+    + '"name":"MMMMMMMM","nameLocation":"middle","nameGap":-15,'
+    + '"nameTextStyle":{"color":"#ff0000","fontSize":30,"fontWeight":"bold"}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  hits := 0;
+  for x := 100 to 300 do
+    if Near(FBmp.GetPixel(x, 260), 255, 0, 0) then Inc(hits);
+  AssertEquals('no name glyph over the line', 0, hits);
 end;
 
 { [R7-AA] THE SHADOW IS DRAWN, not only handed on: an x axis line in red,
