@@ -4848,7 +4848,8 @@ begin
     Result := TipAxisRef(mt, mx, nm, AEv);
     Exit;
   end;
-  { a toolbox' icons, in their order ([R7-AF] the last of the name) }
+  { a toolbox' icons, in their order ([R7-AF] the first is the last: a
+    feature's name is its key) }
   for q := 0 to High(FTbSpecs[mx].Icons) do
   begin
     if FTbSpecs[mx].Icons[q].Name <> nm then Continue;
@@ -4859,7 +4860,7 @@ begin
     AEv.TbHas := True;
     AEv.TbIndex := mx;
     AEv.TbIcon := q;
-    Result := True;
+    Exit(True);
   end;
 end;
 
@@ -5157,8 +5158,9 @@ begin
     AY := b.Top + (b.Bottom - b.Top) / 2;
     ADatum := el.Datum;
     AElement := k;
-    { ([R7-AF] the last of the name: the traversal keeps going) }
-    Result := True;
+    { ([R7-AF] the first is the last: a matrix names a dimension's repeated
+      value apart, 'X0') }
+    Exit(True);
   end;
 end;
 
