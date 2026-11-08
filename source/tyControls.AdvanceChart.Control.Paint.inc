@@ -1397,15 +1397,29 @@ begin
     groupTransition [F4a] }
   { [R5-I] and in the continuous phase too: over the series that move there
     [was: under the ripples] }
-  if FExporting or not FAnimLive then PaintBreakAreas(APainter);
+  { ([R7-AJ] each pass after the first blit logged for the progress
+    frames: ProgLogFurn) }
+  if FExporting or not FAnimLive then
+  begin
+    ProgLogFurn(2);
+    PaintBreakAreas(APainter);
+  end;
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
-  if FExporting or not FAnimContinuous then PaintParallels(APainter, APPI, AMeasurer);
+  if FExporting or not FAnimContinuous then
+  begin
+    ProgLogFurn(3);
+    PaintParallels(APainter, APPI, AMeasurer);
+  end;
   { AND THE TITLE LAST. It floats over the container rather than reserving
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
-  if FExporting or not FAnimLive then PaintTitles(APainter);
+  if FExporting or not FAnimLive then
+  begin
+    ProgLogFurn(4);
+    PaintTitles(APainter);
+  end;
   { [R5-G] AND OVER THEM, an element of a higher zlevel -- up to the loading
     mask's, when it shows over the chart }
   if FExporting or not FAnimLive then
@@ -1772,34 +1786,32 @@ begin
     if FOption.ComponentAt('series', i) is TJSONObject then
       node := TJSONObject(FOption.ComponentAt('series', i));
     st := FOption.ComponentSubType('series', i);
-    { getZLevelKey: a lines series' effect shown with a trail -- its
-      trailLength (more rows than getProgressiveThreshold: its id). NOT a
-      scatter's or a trail-less lines series' of more rows than its
-      threshold (the id upstream gives them too): the incremental layer is
-      one for every run here, and the progress frames draw it over the
-      static layer -- a run on a level of its own would need its own (spec
-      288, what remains) }
+    { getZLevelKey: a scatter's, a lines series' of more rows than its
+      getProgressiveThreshold (`data.count() >`, the data as the dataZoom
+      left it) its id -- [R7-AJ] a level of its own, an incremental layer
+      on it [was: a lines series' with a trail only]; else a lines series'
+      effect shown with a trail its trailLength }
     mt := '';
-    if (st = TyLinesSeriesTypeName) and (node <> nil) then
+    if ((st = 'scatter') or (st = TyLinesSeriesTypeName)) and (node <> nil) then
     begin
-      eff := nil;
-      if node.Find('effect') is TJSONObject then eff := TJSONObject(node.Find('effect'));
-      if (eff <> nil) and JsTruthy(eff.Find('show')) then
+      slot := SlotOfSeries(i);
+      cnt := 0;
+      if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+        cnt := FStores[slot].Count;
+      if root <> nil then thr := TyProgSpecOf(st, node, root).Threshold
+      else thr := TyProgSpecOf(st, node).Threshold;
+      if cnt > thr then mt := FOption.ComponentId('series', i)
+      else if st = TyLinesSeriesTypeName then
       begin
-        d := eff.Find('trailLength');
-        if (d = nil) or (d.JSONType = jtNull) then tl := 0.2
-        else if d.JSONType = jtNumber then tl := d.AsFloat
-        else tl := NaN;
-        if tl > 0 then
+        eff := nil;
+        if node.Find('effect') is TJSONObject then eff := TJSONObject(node.Find('effect'));
+        if (eff <> nil) and JsTruthy(eff.Find('show')) then
         begin
-          slot := SlotOfSeries(i);
-          cnt := 0;
-          if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
-            cnt := FStores[slot].Count;
-          if root <> nil then thr := TyProgSpecOf(st, node, root).Threshold
-          else thr := TyProgSpecOf(st, node).Threshold;
-          if cnt > thr then mt := FOption.ComponentId('series', i)
-          else mt := TyJsNumberToString(tl);
+          d := eff.Find('trailLength');
+          if (d = nil) or (d.JSONType = jtNull) then tl := 0.2
+          else if d.JSONType = jtNumber then tl := d.AsFloat
+          else tl := NaN;
+          if tl > 0 then mt := TyJsNumberToString(tl);
         end;
       end;
     end;
@@ -1963,7 +1975,12 @@ procedure TTyCustomAdvanceChart.RenderZList(APainter: TTyPainter; AList: TTyPain
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   if (AList = FPaintList) and not FExporting then ProgRenderList(APainter, AList, APPI)
-  else TyRenderPaintList(APainter, AList);
+  else
+  begin
+    { ([R7-AJ] after a full paint's first blit: what its log cannot say) }
+    if FProgLogOn then FProgLogBad := True;
+    TyRenderPaintList(APainter, AList);
+  end;
 end;
 
 function TTyCustomAdvanceChart.AxesInDynamic: Boolean;
@@ -2009,13 +2026,26 @@ begin
       end
       { ([R7-AH] a level from the trail's on is the frames', over it) }
       else if (FExporting or not AxesInDynamic) and (lv < ZCut) then
+      begin
+        { ([R7-AJ] after the first blit: logged for the progress frames) }
+        ProgLogFurn(1);
         PaintAxes(APainter, APPI, AMeasurer, False);
+      end;
       ListBand(lv - 1, lv, False);
       if ADynamic or (lv < ZCut) then
       begin
-        if over then PaintBreakAreas(APainter);
+        if over then
+        begin
+          ProgLogFurn(2);
+          PaintBreakAreas(APainter);
+        end;
+        ProgLogFurn(3);
         PaintParallels(APainter, APPI, AMeasurer);
-        if over then PaintTitles(APainter);
+        if over then
+        begin
+          ProgLogFurn(4);
+          PaintTitles(APainter);
+        end;
       end;
     finally
       FZApartOn := False;
@@ -3106,6 +3136,33 @@ end;
 function TTyCustomAdvanceChart.TrailAlphaOf(ASeriesIndex: Integer): Double;
 begin
   Result := LinesTrailAlpha(ASeriesIndex);
+end;
+
+function TTyCustomAdvanceChart.ProgLayerLevels: TTyIntegerArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(FProgLayers));
+  for i := 0 to High(FProgLayers) do Result[i] := FProgLayers[i].Level;
+end;
+
+function TTyCustomAdvanceChart.ProgChunkLevels: TTyIntegerArray;
+var i, k, j, z: Integer; pe: PTyChartElement;
+begin
+  Result := nil;
+  if FPaintList = nil then Exit;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(i);
+    if not ProgIsLayered(pe^) then Continue;
+    z := pe^.ZLevel;
+    k := 0;
+    while (k <= High(Result)) and (Result[k] < z) do Inc(k);
+    if (k <= High(Result)) and (Result[k] = z) then Continue;
+    SetLength(Result, Length(Result) + 1);
+    for j := High(Result) downto k + 1 do Result[j] := Result[j - 1];
+    Result[k] := z;
+  end;
 end;
 
 function TTyCustomAdvanceChart.ViewNameOfEl(const AEl: TTyChartElement): string;
@@ -4873,12 +4930,17 @@ begin
       FProgCapOk := False;
       FProgCapUnder := False;
       FProgCap := not GProgFastOff;
+      { [R7-AJ] what it draws after its first blit, logged from there }
+      FProgOps := nil;
+      FProgLogOn := False;
+      FProgLogBad := False;
       try
         PaintStatic(P, R, APPI, measurer);
       finally
         FProgCap := False;
+        FProgLogOn := False;
       end;
-      if FProgCapUnder and (P.Bitmap <> nil) and (P.Opacity = 1.0) then
+      if FProgCapUnder and not FProgLogBad and (P.Bitmap <> nil) and (P.Opacity = 1.0) then
       begin
         if FProgWork = nil then FProgWork := TBGRABitmap.Create(P.Bitmap.Width, P.Bitmap.Height)
         else FProgWork.SetSize(P.Bitmap.Width, P.Bitmap.Height);

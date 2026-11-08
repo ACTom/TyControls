@@ -126,8 +126,8 @@ begin
   FreeAndNil(FDrWork);
   FreeAndNil(FDrBase);
   FreeAndNil(FDrDyn);
-  FreeAndNil(FProgLayer);
   ProgFastDrop;
+  ProgLayersFree;
   FreeAndNil(FTrailLayer);
   TrailLevelsFree;
   FreeAndNil(FDzTimer);

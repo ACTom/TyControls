@@ -5878,7 +5878,7 @@ begin
   { the incremental layer holds none of the end: what a build would draw
     on it again it holds already where it is what a whole drawing in paint
     order gives -- else drawn again, as after a build }
-  if FProgLayerInOrder and (Length(FProgPainted) >= FListTailAt) then
+  if ProgLayersInOrder and (Length(FProgPainted) >= FListTailAt) then
     SetLength(FProgPainted, FPaintList.Count)
   else
     FProgLayerOk := False;

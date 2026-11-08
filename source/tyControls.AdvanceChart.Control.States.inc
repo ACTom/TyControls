@@ -3339,8 +3339,7 @@ begin
     or FDirty or FAnimPending or FExporting or not FPaintList.JournalReady then Exit;
   { [R2-L] what the last patch wrote, as it stands now: what this one
     changes is against it }
-  region := not GLayerRegionOff and FProgLayerOk and FProgLayerInOrder
-    and (FProgLayer <> nil);
+  region := not GLayerRegionOff and FProgLayerOk and ProgLayersInOrder;
   prevIdx := nil;
   prevEls := nil;
   if region then

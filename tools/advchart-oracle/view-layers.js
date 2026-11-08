@@ -188,6 +188,11 @@ const LN = (z, more) => Object.assign({ type: 'lines', coordinateSystem: 'cartes
   lineStyle: { color: '#ff0000', width: 2, opacity: 1 },
   effect: { show: true, trailLength: 0.4, period: 1, symbol: 'circle', symbolSize: 8, delay: 0 },
   data: [{ coords: [[1, 5], [9, 5]] }] }, more || {});
+// [R7-AJ] N scatter points, lines rows, bar values -- deterministic
+const PS = n => Array.from({ length: n }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10]);
+const PL = n => Array.from({ length: n }, (_, i) => ({ coords: [[(i * 37) % 100 / 10, (i * 53) % 100 / 10],
+  [(i * 71) % 100 / 10, (i * 29) % 100 / 10]] }));
+const PB = n => Array.from({ length: n }, (_, i) => 1 + (i * 37) % 9);
 const A = (o) => Object.assign({ animation: true, animationDuration: 0, animationDurationUpdate: 0 }, o);
 const NA = (o) => Object.assign({ animation: false }, o);
 const SQ = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'A' },
@@ -274,6 +279,38 @@ function cases() {
     { id: 'zl-graphic', anim: true, option: A(Object.assign({}, XY, { series: [LN(-1)],
       graphic: [{ type: 'rect', shape: { x: 10, y: 10, width: 20, height: 20 } }, { type: 'rect', z: -5, shape: { x: 40, y: 10, width: 20, height: 20 } }] })),
       steps: [{ t: 100 }] },
+    // ---- R7-AJ: a progressive run's own level (getZLevelKey: more rows than
+    // getProgressiveThreshold), one incremental layer per zlevel ----
+    // a lines series with no effect, more rows than its threshold, under the axes
+    { id: 'zl-prog-lines', option: NA(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d',
+      z: -1, progressive: 20, progressiveThreshold: 50, lineStyle: { color: '#ff0000', width: 1 },
+      data: PL(60) }], legend: {}, title: { text: 'T' } })) },
+    // and of the default z: the axes under it, the legend and the title over it
+    { id: 'zl-prog-lines-z2', option: NA(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d',
+      progressive: 20, progressiveThreshold: 50, data: PL(60) }], legend: {}, title: { text: 'T' } })) },
+    // two runs side by side: their keys (ids) differ -- a level each; a series between
+    { id: 'zl-prog-two', option: NA(Object.assign({}, XY, { series: [SC(PS(30), { progressive: 10, progressiveThreshold: 20 }),
+      SC(PS(30), { progressive: 10, progressiveThreshold: 20 }), { type: 'line', data: [[1, 1], [9, 9]] },
+      SC(PS(30), { z: 4, progressive: 10, progressiveThreshold: 20 })] })) },
+    // a run of no more rows than its threshold has no key
+    { id: 'zl-prog-at', option: NA(Object.assign({}, XY, { series: [SC(PS(20), { progressive: 10, progressiveThreshold: 20 }),
+      { type: 'line', data: [[1, 1], [9, 9]] }] })) },
+    // large: a scatter's threshold 1e4, a lines series' 2e4 -- unless written
+    { id: 'zl-prog-large', option: NA(Object.assign({}, XY, { series: [SC(PS(40), { large: true, largeThreshold: 10 }),
+      { type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 10, data: PL(40) },
+      SC(PS(40), { large: true, largeThreshold: 10, progressiveThreshold: 30 })] })) },
+    // progressive switched off: the key is the rows' and the threshold's alone
+    { id: 'zl-prog-off', option: NA(Object.assign({}, XY, { series: [SC(PS(30), { progressive: 0, progressiveThreshold: 20 })],
+      title: { text: 'T' } })) },
+    // two incremental runs on user zlevels 0 and 2, a graphic on 1 between: a layer each
+    { id: 'zl-prog-user', option: NA(Object.assign({}, XY, { xAxis: { type: 'category' }, series: [
+      { type: 'bar', large: true, largeThreshold: 5, progressive: 10, progressiveThreshold: 20, data: PB(40) },
+      { type: 'bar', zlevel: 2, large: true, largeThreshold: 5, progressive: 10, progressiveThreshold: 20, data: PB(40) }],
+      graphic: [{ type: 'rect', zlevel: 1, shape: { x: 0, y: 0, width: 100, height: 100 } }] })) },
+    // a dataZoom that filters the rows below the threshold: the key is the data's count
+    { id: 'zl-prog-dz', option: NA(Object.assign({}, XY, { series: [SC(PS(40), { progressive: 10, progressiveThreshold: 30 })],
+      dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'filter', startValue: 0, endValue: 4 }] })),
+      steps: [{ act: { type: 'dataZoom', startValue: 0, endValue: 10 } }] },
   ];
 }
 
@@ -285,6 +322,8 @@ function generate() {
   must(by('vo-rm-x').recs[1].roots[by('vo-rm-x').recs[1].roots.length - 1] === 'xAxis0', 'vo-rm-x: brand new last');
   must(by('zl-under').recs[0].zl.S0 === 0 && by('zl-under').recs[0].zl.xAxis0 === 1, 'zl-under: the trail under the axes');
   must(by('zl-off-after').recs[2].zl.S0 === 1, 'zl-off-after: the level stays');
+  must(by('zl-prog-lines').recs[0].zl.S0 === 0 && by('zl-prog-lines').recs[0].zl.xAxis0 === 1, 'zl-prog-lines: the run under the axes');
+  must(!by('zl-prog-at').recs[0].zl.S0 && !by('zl-prog-at').recs[0].zl.S1, 'zl-prog-at: no key at the threshold');
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node, zrender canvas painter on stand-in canvases',
     note: 'R7-AH: per case and step, the root\'s views in order, every model\'s zlevel after allocateZlevels, the '
       + 'painter\'s layers (zlevel, zlevel2, motionBlur, lastFrameAlpha) and the display list as runs of '

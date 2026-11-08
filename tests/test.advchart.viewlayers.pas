@@ -212,9 +212,6 @@ begin
     c := cs.Objects[i];
     id := c.Strings['id'];
     if (APrefix <> '') and (Copy(id, 1, Length(APrefix)) <> APrefix) then Continue;
-    { (a scatter of more rows than its threshold: upstream's level of its
-      own is not the port's -- spec 288, what remains) }
-    if Copy(id, 1, 6) = 'zl-big' then Continue;
     w := c.Get('w', 400);
     h := c.Get('h', 300);
     NewChart(w, h);

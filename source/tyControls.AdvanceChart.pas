@@ -422,6 +422,21 @@ const
   cBreakSingleKey = 900000;
 
 type
+  { [R7-AJ] an incremental layer of one zlevel (FProgLayers) }
+  TTyProgLayer = record
+    Level: Integer;
+    Bmp, Seen: TBGRABitmap;
+    LastPos: Integer;
+    InOrder, Drawn, Touched: Boolean;
+  end;
+  TTyProgLayerArray = array of TTyProgLayer;
+  { [R7-AJ] a step of the full paint after its first blit (FProgOps) }
+  TTyProgOp = record
+    Kind: Byte;
+    BandOn, ApartOn: Boolean;
+    Lo, Hi, From, Pre, Level: Integer;
+  end;
+
   { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
     component ('o' and its index) or of one `map` ('i' and the name) --
     every one of them (R, raw order) and the ones the legend left (F); the
@@ -1101,13 +1116,22 @@ type
     FDzTouched: array of Boolean;
     FDzFrozenStore: array of TTyDataStore;
     FFlushDue: Boolean;
-    { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
+    { THE INCREMENTAL LAYERS (zrender's, for `incremental` elements): every
       shown element of a progressive run painted once, onto a layer of its
       own that a frame adds its chunk to and the static layer blits where
-      the first of them stands in the paint order; whether it holds the
-      list as it stands, its PPI, and what of each element it holds (rows
-      of a growing batch, 1 for anything else, 0 for nothing) }
-    FProgLayer: TBGRABitmap;
+      the first of them stands in the paint order; whether they hold the
+      list as it stands, their PPI, and what of each element they hold
+      (rows of a growing batch, 1 for anything else, 0 for nothing).
+      [R7-AJ] ONE PER ZLEVEL, as zrender 6.1 splits a zlevel round its
+      incremental elements (zlevel2 0, 1, 2): every run of that zlevel on
+      its one layer, blitted where the zlevel's first of them stands --
+      Bmp; Seen the layer as the last capture blitted it; LastPos the last
+      paint position drawn on it and InOrder whether it is what a whole
+      drawing in paint order gives; Drawn: a frame drew on it since the
+      capture; Touched: a state patch changed it (ProgLayerRegionRedraw)
+      [was: one layer for every run, blitted on each run's zlevel] }
+    FProgLayers: TTyProgLayerArray;
+    FProgLayerW, FProgLayerH: Integer;
     FProgLayerOk: Boolean;
     FProgLayerPPI: Integer;
     FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
@@ -1123,17 +1147,27 @@ type
       FProgFastFrame: since the capture the static layer was dropped by
       progress frames alone. }
     FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
-    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: whether the layer
-      is what a whole drawing in paint order gives (FProgLayerInOrder; the
-      last position drawn on it, FProgLayerLastPos), and the box, in device
-      px, a state patch changed on it (FProgLayerRegion when
-      FProgLayerRegionOn) -- see ProgLayerRegionRedraw }
-    FProgLayerInOrder, FProgLayerRegionOn: Boolean;
-    FProgLayerLastPos: Integer;
+    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: the box, in
+      device px, a state patch changed on the layers (FProgLayerRegion when
+      FProgLayerRegionOn; the layers it changed Touched) -- see
+      ProgLayerRegionRedraw }
+    FProgLayerRegionOn: Boolean;
     FProgLayerRegion: TTyXYWH;
     FListTailAt: Integer;
-    FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
+    FProgUnder, FProgWork: TBGRABitmap;
     FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
+    { [R7-AJ] WHAT THE FULL PAINT DREW AFTER ITS FIRST BLIT (FProgBlitLevel's
+      layer at FProgBlitAt), in its order, for a progress frame to draw
+      again over FProgUnder: a run of the list (Kind 0: its band, from a
+      paint position, a level already blitted in it or -MaxInt) -- its later
+      layers blitted at their first chunks -- or a component pass on a level
+      (1 the axes, 2 the break areas, 3 the parallel axes, 4 the titles;
+      ApartOn / Level the zlevel pass it was drawn in). FProgLogOn while
+      the full paint logs; FProgLogBad: it drew something the log cannot
+      say (no progress frame then) }
+    FProgOps: array of TTyProgOp;
+    FProgLogOn, FProgLogBad: Boolean;
+    FProgBlitLevel: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -3348,6 +3382,16 @@ type
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;
     procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
+    { [R7-AJ] the layer of a zlevel (-1 none); every layer freed; whether
+      every one is what a whole drawing in paint order gives }
+    function ProgLayerAt(ALevel: Integer): Integer;
+    { [R7-AJ] the zlevels a progressive run's shown chunks are on, in order }
+    function ProgChunkLevels: TTyIntegerArray;
+    procedure ProgLayersFree;
+    function ProgLayersInOrder: Boolean;
+    { [R7-AJ] a component pass the full paint draws after its first blit,
+      logged for the progress frames (FProgOps) }
+    procedure ProgLogFurn(AKind: Byte);
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
     { [R2-L] the paint-order position the incremental layer is blitted at:
       the first shown element of a run, -1 for none }
@@ -4681,6 +4725,9 @@ type
     function ViewNameOfEl(const AEl: TTyChartElement): string;
     { [R7-AH] a lines series' trail: its layer's lastFrameAlpha (0 none) }
     function TrailAlphaOf(ASeriesIndex: Integer): Double;
+    { [R7-AJ] the zlevels the incremental layers stand on, in order (one
+      per zlevel a progressive run's shown chunks are on) }
+    function ProgLayerLevels: TTyIntegerArray;
     { [R7-AD] where the last paint drew the components' parts (each its
       paint rect, as a dirty block meets it) }
     function CompRectsDrawn: TTyCompRectArray;
