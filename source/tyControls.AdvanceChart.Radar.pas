@@ -1498,6 +1498,8 @@ var
   bandEl, bandBucket: TTyIntegerArray;
   bandBox: array of TTyRectF;
   gi, nb: Integer;
+  { [R7-AD] the rings' colour buckets, in turn }
+  rb, rnb: Integer;
   { [R5-J] a polygon radar's bands merged by colour: the contours, the
     points, the box, the colour }
   mergeCmds: array of TTyPathCmdArray;
@@ -1787,9 +1789,16 @@ begin
   end;
 
   { ---- the rings ---- }
+  { [R7-AD] BY COLOUR BUCKET, as RadarView adds them: ring i into bucket
+    i mod the colours' count, each bucket one merged path, the buckets in
+    order -- a ring takes the canvas' stroke after the buckets before it
+    (a colour no parser reads) [was: ring by ring outwards] }
+  rnb := Max(1, Length(spec.SplitLine.Colours));
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then
+    for rb := 0 to rnb - 1 do
     for k := 0 to ARadar.RingCount do
     begin
+      if k mod rnb <> rb then Continue;
       if not TyRadarBucket(spec.SplitLine.Colours, k, c) then
         c := AInk.SplitLine;
       r := ARadar.RingRadius(k);
