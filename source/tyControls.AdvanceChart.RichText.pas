@@ -1464,16 +1464,20 @@ begin
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   Result.Rounded := S.RadiusTruthy or (S.Radius[0] + S.Radius[1] + S.Radius[2]
     + S.Radius[3] > 0);
-  { [R7-AI] roundRect's `x + r1` and `x + r4` after its clamp: joined where
-    the place is a string }
-  r1 := S.Radius[0];
-  r2 := S.Radius[1];
-  r3 := S.Radius[2];
-  r4 := S.Radius[3];
-  TyRtClampRadii(Result.W, Result.H, r1, r2, r3, r4);
-  Result.EdgeXR1 := JAdd(AXV, JNum(r1)).N;
-  Result.EdgeXR4 := JAdd(AXV, JNum(r4)).N;
-  if AXV.IsStr then RoundPathXs(Result, AXV, AW, r1, r2, r3, r4);
+  { [R7-AI] roundRect's `x + r1` and `x + r4` after its clamp, joined where
+    the place is a string -- read only then (a padding held as JS values:
+    the layout runs with the traps masked) }
+  if AXV.IsStr then
+  begin
+    r1 := S.Radius[0];
+    r2 := S.Radius[1];
+    r3 := S.Radius[2];
+    r4 := S.Radius[3];
+    TyRtClampRadii(Result.W, Result.H, r1, r2, r3, r4);
+    Result.EdgeXR1 := JAdd(AXV, JNum(r1)).N;
+    Result.EdgeXR4 := JAdd(AXV, JNum(r4)).N;
+    RoundPathXs(Result, AXV, AW, r1, r2, r3, r4);
+  end;
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;
   Result.Drawn := Result.HasFill or Result.HasStroke;
   { [R5-A] the box's canvas shadow: style.shadowBlur || 0, the offsets alike,
