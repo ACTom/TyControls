@@ -299,6 +299,12 @@ function cases() {
     { id: 'zl-off', anim: true, option: A(Object.assign({}, XY, { series: [LN(2, { effect: { show: false, trailLength: 0.4 } })], legend: {} })) },
     { id: 'zl-off-after', anim: true, option: A(Object.assign({}, XY, { series: [LN(2)], legend: {} })),
       steps: [{ t: 100 }, { set: { series: [{ effect: { show: false } }] } }, { set: { legend: { zlevel: 0 } } }] },
+    // [R7-AJ] a graphic's elements written onto the trail's zlevel: on its
+    // motion-blurred layer, one before the lines (z 1), one after (z 5)
+    { id: 'zl-graphic-own', anim: true, option: A(Object.assign({}, XY, { series: [LN(2)],
+      graphic: [{ type: 'rect', zlevel: 1, z: 1, shape: { x: 10, y: 10, width: 20, height: 20 } },
+        { type: 'rect', zlevel: 1, z: 5, shape: { x: 40, y: 10, width: 20, height: 20 } }] })),
+      steps: [{ t: 100 }] },
     { id: 'zl-big', option: NA(Object.assign({}, XY, { series: [SC(Array.from({ length: 3500 }, (_, i) => [i % 10, (i * 7) % 10]))],
       legend: {}, title: { text: 'T' } })) },
     { id: 'zl-big-under', option: NA(Object.assign({}, XY, { series: [SC(Array.from({ length: 150 }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10]),
@@ -367,6 +373,9 @@ function generate() {
   must(runAt('vo-title-brush', 1, 'title0', 10) < runAt('vo-title-brush', 1, 'brush0', null), 'vo-title-brush: the cover over the title');
   must(by('zl-under').recs[0].zl.S0 === 0 && by('zl-under').recs[0].zl.xAxis0 === 1, 'zl-under: the trail under the axes');
   must(by('zl-off-after').recs[2].zl.S0 === 1, 'zl-off-after: the level stays');
+  must(by('zl-graphic-own').recs[1].layers.some(l => l[0] === 1 && l[2])
+    && by('zl-graphic-own').recs[1].dl.filter(r => r[0] === 'graphic0' && r[1] === 1).length === 2,
+    'zl-graphic-own: the graphic on the blurred layer of the trail');
   must(by('zl-prog-lines').recs[0].zl.S0 === 0 && by('zl-prog-lines').recs[0].zl.xAxis0 === 1, 'zl-prog-lines: the run under the axes');
   must(!by('zl-prog-at').recs[0].zl.S0 && !by('zl-prog-at').recs[0].zl.S1, 'zl-prog-at: no key at the threshold');
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node, zrender canvas painter on stand-in canvases',
