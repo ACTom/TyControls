@@ -455,13 +455,15 @@ add('legend', 'legend-calendar', 'a legend in a calendar day',
 // ((containerRect.x || 0) + left + '2' is '202'), the sums of two sides are
 // joined ('2' + '2'), and so is the background's size; on the canvas and in
 // a cell
-add('title', 'title-strpad', "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas), '21' on the right (its width joined to the joined place)",
+add('title', 'title-strpad', "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas), '21' on the right (right: 20 is no word: no shift), centred and left 'right' (the shift joined to the joined place)",
   { matrix: MX(), title: [
     { textStyle: { fontSize: 16 }, text: 'Aa', left: 20, top: 10, padding: '12', backgroundColor: '#eee' },
     { textStyle: { fontSize: 16 }, text: 'Bb', coordinateSystem: 'matrix', coord: ['b', 'q'], left: 30, top: 'middle', padding: '21', backgroundColor: '#eee' },
     { textStyle: { fontSize: 16 }, text: 'Cc', right: 20, top: 110, padding: ['3', 4], backgroundColor: '#eee', borderColor: '#333', borderWidth: 1 },
     { textStyle: { fontSize: 16 }, subtextStyle: { fontSize: 11 }, text: 'Dd', subtext: 'dd', left: 40, bottom: 20, padding: '123', backgroundColor: '#eee' },
-    { textStyle: { fontSize: 16, fontFamily: 'monospace' }, text: 'Ee', right: 20, top: 160, padding: '21', backgroundColor: '#eee' }] });
+    { textStyle: { fontSize: 16, fontFamily: 'monospace' }, text: 'Ee', right: 20, top: 160, padding: '21', backgroundColor: '#eee' },
+    { textStyle: { fontSize: 16, fontFamily: 'monospace' }, text: 'Ff', left: 'center', top: 200, padding: '21', backgroundColor: '#eee' },
+    { textStyle: { fontSize: 16, fontFamily: 'monospace' }, text: 'Gg', left: 'right', top: 240, padding: '21', backgroundColor: '#eee' }] });
 add('legend', 'legend-strpad', "legends padded '12' at left 20 (at 202) and '21' vertical on the right of a cell",
   { matrix: MX(), legend: [{ left: 20, top: 10, padding: '12', backgroundColor: '#eee', data: ['One', 'Two'] },
     { coordinateSystem: 'matrix', coord: ['c', ['p', 'q']], orient: 'vertical', right: 10, top: 'middle', padding: '21', backgroundColor: '#eee', data: ['One', 'Two'] }],

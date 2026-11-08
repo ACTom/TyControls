@@ -2562,7 +2562,7 @@
   {
    "id": "title-strpad",
    "group": "title",
-   "note": "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas), '21' on the right (its width joined to the joined place)",
+   "note": "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas), '21' on the right (right: 20 is no word: no shift), centred and left 'right' (the shift joined to the joined place)",
    "gallery": null,
    "option": {
     "matrix": {
@@ -2651,6 +2651,28 @@
       "text": "Ee",
       "right": 20,
       "top": 160,
+      "padding": "21",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16,
+       "fontFamily": "monospace"
+      },
+      "text": "Ff",
+      "left": "center",
+      "top": 200,
+      "padding": "21",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16,
+       "fontFamily": "monospace"
+      },
+      "text": "Gg",
+      "left": "right",
+      "top": 240,
       "padding": "21",
       "backgroundColor": "#eee"
      }
@@ -2765,6 +2787,42 @@
       "height": "4099580000000000"
      },
      "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 5,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4117623000000000",
+      "409f480000000000"
+     ],
+     "bg": {
+      "x": "411761ec00000000",
+      "y": "409f400000000000",
+      "width": "40a9160000000000",
+      "height": "4099580000000000"
+     },
+     "align": "center",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 6,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "41271b1800000000",
+      "40a2c40000000000"
+     ],
+     "bg": {
+      "x": "41271ad600000000",
+      "y": "40a2c00000000000",
+      "width": "40a9160000000000",
+      "height": "4099580000000000"
+     },
+     "align": "right",
      "verticalAlign": "top"
     }
    ],
