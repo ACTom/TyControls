@@ -293,6 +293,11 @@ begin
       Inc(Result, TyBuildVisualMapMarks(FVisualLayouts[k], FVisualViews[k],
         VisualMapInk(FVisualViews[k]), FLastRect.Left, FLastRect.Top, AList,
         VmLiveDraw(k)));
+      { [R7-AD] its words in a font the canvas refuses (its textStyle): the
+        one the text before left }
+      if FOption <> nil then
+        if FOption.ComponentAt('visualMap', k) is TJSONObject then
+          FontLeftFrom(AList, lt, FontRefusedOf([TJSONObject(FOption.ComponentAt('visualMap', k)).Find('textStyle')]));
       { [R5-J] its own zlevel, else the root's }
       LevelTail(AList, lt, 'visualMap', k);
     end;

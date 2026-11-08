@@ -164,7 +164,7 @@ end;
 
 procedure TTyCustomAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
+  const AMeasurer: ITyTextMeasurer; const AZ2: TTyAxisZ2Set; AProxied: Boolean);
 var
   akey: string;
   lx, ly: Double;
@@ -206,6 +206,8 @@ var
   lineK, tickK, minorTickK, splitK, minorSplitK, inkK: TTyAxisStroke;
   { [R7-Z] }
   arrowInk: TTyChartColor;
+  { [R7-AD] }
+  pcs: TTyRtPieceArray;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -676,7 +678,7 @@ begin
     last render, so the stripes do not swap under a zoom.
     [Revised in batch 101: every other band in the skin's colour, from the
     first band of each render.] }
-  if ABelow and furn.ShowSplitArea and (spec <> nil) then
+  if (0 in AZ2) and furn.ShowSplitArea and (spec <> nil) then
   begin
     for i := 0 to High(spec^.SplitAreaMarks) - 1 do
     begin
@@ -773,7 +775,7 @@ begin
   { ONE STROKE PER COLOUR OF THE AUTHOR'S LIST, each line in the colour its
     count among the drawn lines gives it; the skin's one colour when none
     was written [Batch 101] }
-  if ABelow and furn.ShowSplitLine and (spec <> nil)
+  if (0 in AZ2) and furn.ShowSplitLine and (spec <> nil)
     and (splitK.Drawn or ((Length(spec^.SplitLineInks) > 0)
       and (splitK.WidthLogical > 0))) then
   begin
@@ -813,14 +815,30 @@ begin
       end;
       StrokeBatch(inkK, cpkSplit, 0);
     end;
-  end;
+  end
+  { [R7-AD] A WIDTH OF NOUGHT that hands on its colour (a part, Inked):
+    nothing stroked, its Line's paint rect the line itself -- a dirty block
+    counts it where the line crosses it only [was: every block] }
+  else if (0 in AZ2) and furn.ShowSplitLine and (spec <> nil)
+    and (splitK.Inked or (Length(spec^.SplitLineInks) > 0)) then
+    for i := 0 to High(spec^.SplitLineMarks) do
+    begin
+      if not spec^.SplitLineMarks[i].Drawn then Continue;
+      along := spec^.SplitLineMarks[i].Coord;
+      if horiz then
+        CompPenRect(APainter, AAxis, cpkSplit, splitK, TyRectToXYWH(TyRectF(along, APlot.Top,
+          along, APlot.Bottom)), False, i)
+      else
+        CompPenRect(APainter, AAxis, cpkSplit, splitK, TyRectToXYWH(TyRectF(APlot.Left, along,
+          APlot.Right, along)), False, i);
+    end;
 
   { [R7-AA] THE MINOR SPLIT LINES AFTER THE SPLIT LINES, as
     CartesianAxisView's builders run (splitArea, splitLine, minorSplitLine)
     [was: before them] }
   { WHATEVER THE LABELS ARE DOING: upstream subdivides every interval.
     [Revised in batch 40: only while every major label was drawn.] }
-  if ABelow and furn.ShowMinorSplitLine and minorSplitK.Drawn then
+  if (0 in AZ2) and furn.ShowMinorSplitLine and minorSplitK.Drawn then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
@@ -843,25 +861,86 @@ begin
       end;
     end;
     StrokeBatch(minorSplitK, cpkMinorSplit, 0);
+  end
+  { [R7-AD] (of no width: where its Lines lie) }
+  else if (0 in AZ2) and furn.ShowMinorSplitLine and minorSplitK.Inked then
+  begin
+    scaleTicks := TyDrawnTicks(AAxis.Scale);
+    for i := 0 to High(scaleTicks) do
+    begin
+      if scaleTicks[i].Level = 0 then Continue;
+      along := AAxis.DataToCoord(scaleTicks[i].Value);
+      if horiz then
+        CompPenRect(APainter, AAxis, cpkMinorSplit, minorSplitK, TyRectToXYWH(TyRectF(along,
+          APlot.Top, along, APlot.Bottom)), False)
+      else
+        CompPenRect(APainter, AAxis, cpkMinorSplit, minorSplitK, TyRectToXYWH(TyRectF(APlot.Left,
+          along, APlot.Right, along)), False);
+    end;
   end;
 
-  { EVERYTHING ABOVE THIS LINE IS THE GRID and everything below it is the
-    axis. The three grid blocks each test ABelow and this returns on it, so
-    each pass paints its own half and neither repeats the other's -- the
-    return alone was not enough, because the second pass would then draw the
-    grid a second time, over the lines the first pass had just laid.
-
-    THIS RETURN IS INVISIBLE ON ITS OWN. Delete it and the below pass also
-    draws the lines, which the above pass then draws again on top -- same
-    pixels, twice the work. A mutation that removes it survives, and it is
-    the three ABelow tests above that carry the ordering; this one carries
-    only the cost. }
-  if ABelow then Exit;
+  { THE AXIS NAME, WHERE THE LAYOUT PUT IT. The grid was shrunk for the
+    name's box on its estimate pass and the name laid out again on the final
+    rect -- at its location and gap, turned and aligned as upstream turns and
+    aligns it, and moved clear of the labels -- so this draws that answer
+    and works nothing out: a second route here is how the name used to land
+    beside the band that was reserved for it. }
+  { [R7-AD] the name before the line (z2 1 both, the name added first)
+    [was: after the ticks] }
+  if (1 in AZ2) and (spec <> nil) and spec^.NamePlacement.Shown
+    and (tpTextColor in nameS.Present) then
+  begin
+    { where its groupTransition has it now [F3b] }
+    nx := spec^.NamePlacement.X;
+    ny := spec^.NamePlacement.Y;
+    nrot := spec^.NamePlacement.RotationRad;
+    ProxName(nx, ny, nrot);
+    { [R7-AB] a font the canvas refused: the one the paint order settled }
+    CompFont(AAxis, cpkName, nameS);
+    drewFont := nameS;
+    Drew(cpkName, 1, lineK, True, TTyChartColor(nameS.TextColor));
+    { [R7-AB] where it lies }
+    TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+    TextRect(cpkName, nx, ny, lblW, lblH, spec^.NamePlacement.AnchorH,
+      spec^.NamePlacement.AnchorV, nrot);
+    { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
+      [Batch 86] }
+    if Length(spec^.NamePlacement.Rt) > 0 then
+    begin
+      { [R7-AD] its spans as the paint order settled them }
+      pcs := CompPieces(AAxis, cpkName, -1);
+      if Length(pcs) <> Length(spec^.NamePlacement.Rt) then pcs := spec^.NamePlacement.Rt;
+      TyRenderRtPieces(APainter, pcs, nx, ny, nrot, spec^.RtScale, 1,
+        True, nameS.TextColor);
+    end
+    { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
+      hundred quadrillionths of a radian off, and the flat path is the one
+      that sets a name of several lines }
+    else if Abs(nrot) < 1e-9 then
+    begin
+      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+      APainter.DrawText(
+        AnchorBox(nx, ny, lblW, lblH,
+          spec^.NamePlacement.AnchorH, spec^.NamePlacement.AnchorV),
+        spec^.NamePlacement.Text, nameS.FontName, ResolveFontSize(nameS),
+        nameS.FontWeight, nameS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, spec^.NamePlacement.Text) > 0);
+    end
+    else
+    begin
+      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+      DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
+        ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
+        nx, ny, nrot,
+        AnchorAlign(spec^.NamePlacement.AnchorH),
+        AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
+    end;
+  end;
 
   { The domain line. Present, not colour: an undeclared colour resolves to
     alpha zero, so testing the colour would draw an invisible line and call it
     drawn. }
-  if furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
+  if (1 in AZ2) and furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
   begin
     APainter.BeginPath;
     { CUT AT THE BREAKS, each segment already on the pixel grid [Batch 132] }
@@ -881,26 +960,25 @@ begin
     else
       BatchLine(at, APlot.Top, at, APlot.Bottom, lineK.WidthLogical);
     StrokeBatch(lineK, cpkLine, 1);
-    { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
-      setColor fills it -- strokes a `line`, rings an `empty` one round the
-      skin's empty-symbol ground [Batch 101]. The line's colour, the
-      author's where written, without its opacity: createSymbol is handed
-      lineStyle.stroke alone [R5-B] }
-    if (spec <> nil) and not furn.LinePen.ColourNone
-      and (furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
-      for i := 0 to High(spec^.Arrows) do
-      begin
-        { [R7-Z] a colour the canvas refuses: the fill it had there }
-        arrowInk := CompSettleFill(AAxis, cpkArrow, lineK.Colour);
-        PaintAxisArrow(APainter, spec^.Arrows[i], arrowInk);
-        Drew(cpkArrow, 11, lineK, False, arrowInk);
-        { [R7-AB] (its box, turned any way) }
-        CompRect(AAxis, cpkArrow, TyRectToXYWH(TyRectF(
-          spec^.Arrows[i].X - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
-          spec^.Arrows[i].Y - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
-          spec^.Arrows[i].X + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
-          spec^.Arrows[i].Y + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75)), 0, False);
-      end;
+  end
+  { [R7-AD] (of no width: where it lies) }
+  else if (1 in AZ2) and furn.ShowLine and lineK.Inked then
+  begin
+    if (spec <> nil) and spec^.HasBreakLine then
+    begin
+      for i := 0 to High(spec^.BreakLineSegs) do
+        CompPenRect(APainter, AAxis, cpkLine, lineK, TyRectToXYWH(TyRectF(
+          Min(spec^.BreakLineSegs[i].X1, spec^.BreakLineSegs[i].X2),
+          Min(spec^.BreakLineSegs[i].Y1, spec^.BreakLineSegs[i].Y2),
+          Max(spec^.BreakLineSegs[i].X1, spec^.BreakLineSegs[i].X2),
+          Max(spec^.BreakLineSegs[i].Y1, spec^.BreakLineSegs[i].Y2))), False);
+    end
+    else if horiz then
+      CompPenRect(APainter, AAxis, cpkLine, lineK, TyRectToXYWH(TyRectF(APlot.Left, at,
+        APlot.Right, at)), False)
+    else
+      CompPenRect(APainter, AAxis, cpkLine, lineK, TyRectToXYWH(TyRectF(at, APlot.Top,
+        at, APlot.Bottom)), False);
   end;
 
   { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
@@ -910,7 +988,7 @@ begin
   { THE MARKS WHERE THE LAYOUT PUT THEM, on their own interval or the
     labels', a tick whose label was hidden gone with it.
     [Revised in batch 40: every tickStep-th tick, a hidden label's kept.] }
-  if furn.ShowTicks and tickK.Drawn and (spec <> nil) then
+  if (2 in AZ2) and furn.ShowTicks and tickK.Drawn and (spec <> nil) then
   begin
     APainter.BeginPath;
     for i := 0 to High(spec^.TickMarks) do
@@ -940,14 +1018,33 @@ begin
       end;
     end;
     StrokeBatch(tickK, cpkTick, 2);
-  end;
+  end
+  { [R7-AD] (of no width: where its Lines lie) }
+  else if (2 in AZ2) and furn.ShowTicks and tickK.Inked and (spec <> nil) then
+    for i := 0 to High(spec^.TickMarks) do
+    begin
+      if not spec^.TickMarks[i].Drawn then Continue;
+      along := spec^.TickMarks[i].Coord;
+      if horiz then
+      begin
+        if AAxis.Side = asTop then y2 := at - tickLen else y2 := at + tickLen;
+        CompPenRect(APainter, AAxis, cpkTick, tickK, TyRectToXYWH(TyRectF(along, Min(at, y2),
+          along, Max(at, y2))), False);
+      end
+      else
+      begin
+        if AAxis.Side = asRight then x2 := at + tickLen else x2 := at - tickLen;
+        CompPenRect(APainter, AAxis, cpkTick, tickK, TyRectToXYWH(TyRectF(Min(at, x2), along,
+          Max(at, x2), along)), False);
+      end;
+    end;
 
   { Minor MARKS. The difference in LENGTH is what says which is which when both
     are the same colour family -- and how much shorter is the theme's call, not
     a fraction hardcoded here. --advchart-minor-tick-length, its constant and
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
-  if furn.ShowMinorTick and minorTickK.Drawn then
+  if (2 in AZ2) and furn.ShowMinorTick and minorTickK.Drawn then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
@@ -988,70 +1085,20 @@ begin
     StrokeBatch(minorTickK, cpkMinorTick, 2);
   end;
 
-  { THE AXIS NAME, WHERE THE LAYOUT PUT IT. The grid was shrunk for the
-    name's box on its estimate pass and the name laid out again on the final
-    rect -- at its location and gap, turned and aligned as upstream turns and
-    aligns it, and moved clear of the labels -- so this draws that answer
-    and works nothing out: a second route here is how the name used to land
-    beside the band that was reserved for it. }
-  if (spec <> nil) and spec^.NamePlacement.Shown
-    and (tpTextColor in nameS.Present) then
-  begin
-    { where its groupTransition has it now [F3b] }
-    nx := spec^.NamePlacement.X;
-    ny := spec^.NamePlacement.Y;
-    nrot := spec^.NamePlacement.RotationRad;
-    ProxName(nx, ny, nrot);
-    { [R7-AB] a font the canvas refused: the one the paint order settled }
-    CompFont(AAxis, cpkName, nameS);
-    drewFont := nameS;
-    Drew(cpkName, 1, lineK, True, TTyChartColor(nameS.TextColor));
-    { [R7-AB] where it lies }
-    TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
-    TextRect(cpkName, nx, ny, lblW, lblH, spec^.NamePlacement.AnchorH,
-      spec^.NamePlacement.AnchorV, nrot);
-    { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
-      [Batch 86] }
-    if Length(spec^.NamePlacement.Rt) > 0 then
-      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, nx, ny, nrot, spec^.RtScale, 1,
-        True, nameS.TextColor)
-    { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
-      hundred quadrillionths of a radian off, and the flat path is the one
-      that sets a name of several lines }
-    else if Abs(nrot) < 1e-9 then
-    begin
-      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
-      APainter.DrawText(
-        AnchorBox(nx, ny, lblW, lblH,
-          spec^.NamePlacement.AnchorH, spec^.NamePlacement.AnchorV),
-        spec^.NamePlacement.Text, nameS.FontName, ResolveFontSize(nameS),
-        nameS.FontWeight, nameS.TextColor, taCenter, tlCenter, False, 0, False,
-        Pos(#10, spec^.NamePlacement.Text) > 0);
-    end
-    else
-    begin
-      TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
-      DrawRotatedNameLines(APainter, spec^.NamePlacement.Text, nameS.FontName,
-        ResolveFontSize(nameS), nameS.FontWeight, nameS.TextColor,
-        nx, ny, nrot,
-        AnchorAlign(spec^.NamePlacement.AnchorH),
-        AnchorLayout(spec^.NamePlacement.AnchorV), lblH);
-    end;
-  end;
-
-  if not (tpTextColor in labelS.Present) then Exit;
 
   { PHASE 3 PLACES THEM. It was written with item 12 and never called, so every
     label was drawn at a position worked out here and none was ever thinned --
     a crowded axis simply overlapped. The placement carries the anchor too, so
     layout and paint cannot disagree about where a label went. }
-  if (spec <> nil) and (Length(spec^.Placements) > 0) then
+  if (tpTextColor in labelS.Present) and (spec <> nil) and (Length(spec^.Placements) > 0) then
   begin
     places := spec^.Placements;
     for i := 0 to High(places) do
     begin
       if not places[i].Shown then Continue;
       if places[i].Text = '' then Continue;
+      { [R7-AD] the labels of the z2 drawn now }
+      if not (Min(31, TyAxisLabelZ2(AAxis, spec, i)) in AZ2) then Continue;
       { THE STYLE THE LAYOUT MEASURED IT IN. A time axis' heavier `Mar` in a
         run of day numbers is a `{primary|Mar}` tag, drawn from its pieces
         below in the weight the block was measured in. [Revised in batch
@@ -1068,7 +1115,13 @@ begin
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
       begin
-        TyRenderRtPieces(APainter, places[i].Rt, lx, ly,
+        { [R7-AD] its spans as the paint order settled them (and as drawn:
+          CompDrawn) }
+        pcs := CompPieces(AAxis, cpkLabel, i);
+        if Length(pcs) <> Length(places[i].Rt) then pcs := places[i].Rt;
+        if Length(FCompDrawn) > 0 then
+          FCompDrawn[High(FCompDrawn)].El.Caption.RtPieces := Copy(pcs, 0, MaxInt);
+        TyRenderRtPieces(APainter, pcs, lx, ly,
           spec^.RotationRad, spec^.RtScale, 1, True, lblStyle.TextColor);
         Continue;
       end;
@@ -1120,7 +1173,31 @@ begin
         spec^.LabelOverflow = loTruncate, 0, False,
         Pos(#10, places[i].Text) > 0);
     end;
-    Exit;
+  end;
+
+  { [R7-AD] THE ARROWS LAST (z2 11), after the labels [was: with the line] }
+  if (11 in AZ2) and furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
+  begin
+    { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
+      setColor fills it -- strokes a `line`, rings an `empty` one round the
+      skin's empty-symbol ground [Batch 101]. The line's colour, the
+      author's where written, without its opacity: createSymbol is handed
+      lineStyle.stroke alone [R5-B] }
+    if (spec <> nil) and not furn.LinePen.ColourNone
+      and (furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+      for i := 0 to High(spec^.Arrows) do
+      begin
+        { [R7-Z] a colour the canvas refuses: the fill it had there }
+        arrowInk := CompSettleFill(AAxis, cpkArrow, lineK.Colour);
+        PaintAxisArrow(APainter, spec^.Arrows[i], arrowInk);
+        Drew(cpkArrow, 11, lineK, False, arrowInk);
+        { [R7-AB] (its box, turned any way) }
+        CompRect(AAxis, cpkArrow, TyRectToXYWH(TyRectF(
+          spec^.Arrows[i].X - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].Y - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].X + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].Y + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75)), 0, False);
+      end;
   end;
 
   { NO PLACEMENTS, NO LABELS. There used to be a second route here that
@@ -1200,6 +1277,7 @@ end;
 procedure TTyCustomAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
+  axesHere: Boolean;
   boxStyle: TTyStyleSet;
   plotF: TTyRectF;
   bg: TTyChartColor;
@@ -1257,20 +1335,37 @@ begin
     under go beneath the axes, as upstream's group joins the root first
     [Batch 122] }
   GfxBuild(APPI);
-  GfxPaintUnder(APainter);
   { [R5-J] COMPONENTS ON SEVERAL ZLEVELS (a title's, an axis' own), or the
     list under theirs: canvas by canvas, in level order -- no dirty-rect
     ground, no fast progressive frame [was: every component on the root's
     zlevel, whatever it wrote] }
   FZMixed := ZMixedNow(FZLevels);
+  { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
+    the series are [Batch 96] -- an export draws them at rest [Batch 106] }
+  axesHere := not FZMixed and (FExporting or not AxesDynamic);
+  { [R7-AD] the graphic's elements under the axes drawn among their parts
+    where the axes are drawn here (PaintAxes) }
+  GfxPaintUnder(APainter, not axesHere);
   if FZMixed then
   begin
     PaintZLevels(APainter, APPI, AMeasurer, FZLevels, False, nil);
     Exit;
   end;
-  { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
-    the series are [Batch 96] -- an export draws them at rest [Batch 106] }
-  if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
+  { [R7-AD] THE LIST BEFORE THE AXES: what of it falls among their parts --
+    a radar's, a geo's, a matrix's furniture, a series of a lower z -- is
+    drawn with them (CompRun's order); in motion it is the dynamic layer's
+    [was: the list built after the axes, all of it over them] }
+  TySetZBand(-MaxInt, ZBase);
+  try
+    PrepareSeries(AMeasurer, APPI);
+  finally
+    TyClearZBand;
+  end;
+  if axesHere then
+  begin
+    if FAnimLive and not FExporting then PaintAxes(APainter, APPI, AMeasurer, False, nil, True)
+    else PaintAxes(APainter, APPI, AMeasurer, False, FPaintList, True);
+  end;
   { THE GROUND A REPAINTED RECT STARTS FROM: everything above, before the
     first series [Batch 142] }
   if FDrCapture and (APainter <> nil) then DrCaptureBase(APainter.Bitmap);
@@ -1280,7 +1375,7 @@ begin
     components' zlevel or under it: a higher zlevel is a canvas over them. }
   TySetZBand(-MaxInt, ZBase);
   try
-    PaintSeries(APainter, AMeasurer, APPI);
+    RenderSeries(APainter, AMeasurer, APPI);
   finally
     TyClearZBand;
   end;
@@ -1797,8 +1892,15 @@ begin
     Add(cpkMinorSplit, 0, False, Pen(minorSplitK));
   { z2 1: the name, then the line }
   if (spec <> nil) and spec^.NamePlacement.Shown and (tpTextColor in nameS.Present) then
-    Add(cpkName, 1, True, Txt(TTyChartColor(nameS.TextColor),
-      TyZrLocal(1, 1, spec^.NamePlacement.RotationRad, spec^.NamePlacement.X, spec^.NamePlacement.Y)));
+  begin
+    e := Txt(TTyChartColor(nameS.TextColor),
+      TyZrLocal(1, 1, spec^.NamePlacement.RotationRad, spec^.NamePlacement.X, spec^.NamePlacement.Y));
+    { [R7-AD] (a rich name's spans) }
+    e.Datum.RawDataIndex := -1;
+    if Length(spec^.NamePlacement.Rt) > 0 then
+      e.Caption.RtPieces := Copy(spec^.NamePlacement.Rt, 0, MaxInt);
+    Add(cpkName, 1, True, e);
+  end;
   if furn.ShowLine and (lineK.Drawn or lineK.Inked) then
   begin
     e := Pen(lineK);
@@ -1833,10 +1935,16 @@ begin
       if not spec^.Placements[i].Shown or (spec^.Placements[i].Text = '') then Continue;
       { ([R7-AA] a time axis' label at 10 plus its tick's level) }
       if spec^.Placements[i].HasM then
-        Add(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), True, Txt(TTyChartColor(labelS.TextColor), spec^.Placements[i].M))
+        e := Txt(TTyChartColor(labelS.TextColor), spec^.Placements[i].M)
       else
-        Add(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), True, Txt(TTyChartColor(labelS.TextColor),
-          TyZrLocal(1, 1, spec^.RotationRad, spec^.Placements[i].X, spec^.Placements[i].Y)));
+        e := Txt(TTyChartColor(labelS.TextColor),
+          TyZrLocal(1, 1, spec^.RotationRad, spec^.Placements[i].X, spec^.Placements[i].Y));
+      { [R7-AD] a rich label's spans, each its font and fill (settled in the
+        run, drawn so: PaintAxis) [was: the label's own font and fill] }
+      e.Datum.RawDataIndex := i;
+      if Length(spec^.Placements[i].Rt) > 0 then
+        e.Caption.RtPieces := Copy(spec^.Placements[i].Rt, 0, MaxInt);
+      Add(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), True, e);
     end;
   { z2 11: the arrows, filled in the line's colour (lineStyle.stroke alone) }
   if furn.ShowLine and (spec <> nil) and not furn.LinePen.ColourNone
@@ -1985,7 +2093,13 @@ begin
     if tpTextColor in labelS.Present then
       for i := 0 to High(ALabels) do
         if ALabels[i].Text <> '' then
-          Add(cpkLabel, 0, True, Txt(TTyChartColor(labelS.TextColor), ALabels[i].X, ALabels[i].Y, 0));
+        begin
+          e := Txt(TTyChartColor(labelS.TextColor), ALabels[i].X, ALabels[i].Y, 0);
+          { [R7-AD] its placement, a rich one's spans }
+          e.Datum.RawDataIndex := i;
+          if Length(ALabels[i].Rt) > 0 then e.Caption.RtPieces := Copy(ALabels[i].Rt, 0, MaxInt);
+          Add(cpkLabel, 0, True, e);
+        end;
     if ATicks and (tickK.Drawn or tickK.Inked) then Add(cpkTick, 0, False, Pen(tickK, True));
     if AMinorTicks and (minorTickK.Drawn or minorTickK.Inked) then
       Add(cpkMinorTick, 0, False, Pen(minorTickK, True));
@@ -2008,6 +2122,9 @@ begin
         { ([R7-AA] a width of nought: the stroke colour handed on) }
         if not (splitK.WidthLogical > 0) then e.Style.StrokeWidthLogical := 0;
       end;
+      { [R7-AD] its path's colour (-1 the pen's): the rects of its lines
+        (CanvasGroundIn) }
+      e.Datum.RawDataIndex := ASplitInks[i];
       Add(cpkSplit, 0, False, e);
     end;
   { [R7-AA] a polar axis' after them (the radius view's after its split
@@ -2035,11 +2152,14 @@ begin
         e := Txt(TTyChartColor(labelS.TextColor), 0, 0, 0);
         e.CanvasM := TTyDoubleArray.Create(sp.Placements[i].M[0], sp.Placements[i].M[1],
           sp.Placements[i].M[2], sp.Placements[i].M[3], sp.Placements[i].M[4], sp.Placements[i].M[5]);
-        Add(cpkLabel, 10, True, e);
       end
       else
-        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor), sp.Placements[i].X,
-          sp.Placements[i].Y, sp.RotationRad));
+        e := Txt(TTyChartColor(labelS.TextColor), sp.Placements[i].X,
+          sp.Placements[i].Y, sp.RotationRad);
+      { [R7-AD] its placement, a rich one's spans }
+      e.Datum.RawDataIndex := i;
+      if Length(sp.Placements[i].Rt) > 0 then e.Caption.RtPieces := Copy(sp.Placements[i].Rt, 0, MaxInt);
+      Add(cpkLabel, 10, True, e);
     end;
   if AHasLine and not AFurn.LinePen.ColourNone
     and (AFurn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
@@ -2123,7 +2243,7 @@ begin
       aidx[High(aidx)] := ink;
     end;
     if not v.Furn.ShowSplitArea then aidx := nil;
-    CompViewParts(FSingles[i].Axis, 2, 0, v.Furn, v.Spec, v.HasLine,
+    CompViewParts(FSingles[i].Axis, 2000 + i, 0, v.Furn, v.Spec, v.HasLine,
       CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx);
   end;
   { THE POLARS: the radius axes' view, then the angle axes' }
@@ -2168,10 +2288,10 @@ begin
         else aidx[High(aidx)] := -1;
       end;
       if k = 0 then
-        CompViewParts(FPolars[i].RadiusAxis, 3, 1, pv.Furn, pv.Spec, pv.HasLine,
+        CompViewParts(FPolars[i].RadiusAxis, 3000 + i, 1, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx)
       else
-        CompViewParts(FPolars[i].AngleAxis, 4, 2, pv.Furn, pv.Spec, pv.HasLine,
+        CompViewParts(FPolars[i].AngleAxis, 4000 + i, 2, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts, aidx);
     end;
 end;
@@ -2215,11 +2335,185 @@ end;
 procedure TTyCustomAdvanceChart.CompRun(APPI: Integer);
 var
   parts: TTyCompPartArray;
-  g, a, i, j, n, ng, t: Integer;
+  g, a: Integer;
   gb: TTyGridBuild;
-  ord: array of Integer;
+begin
+  parts := nil;
+  FCompDrawn := nil;
+  { THE VIEWS IN UPSTREAM'S ORDER at an equal z and z2: the graphic's
+    group, the grids' backgrounds (FGfxUnder, in its own order), the single
+    axes, the radius axes, the angle axes, the y axes, the x axes --
+    [R7-AD] each axis a view of its own (CompViewOf's numbers), so one x
+    axis' parts of a z2 are all before the next one's [was: one view for
+    every x axis, their parts interleaved by their count] }
+  CompPolarSingleParts(parts);
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.YAxisCount - 1 do
+        if gb.YAxis(a) <> nil then
+          CompAxisParts(gb.YAxis(a), gb, 5000 + Max(0, gb.YAxis(a).ComponentIndex), parts);
+      for a := 0 to gb.XAxisCount - 1 do
+        if gb.XAxis(a) <> nil then
+          CompAxisParts(gb.XAxis(a), gb, 6000 + Max(0, gb.XAxis(a).ComponentIndex), parts);
+    end;
+  FCompParts := parts;
+  FCompBase := Length(parts);
+  FCompNp := Length(parts);
+  FCompRunOk := True;
+  CompSettle(APPI, True);
+end;
+
+function TTyCustomAdvanceChart.CompViewOf(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.CompView > 0 then Exit(AEl.CompView);
+  case AEl.Datum.Kind of
+    ctkGraphic: Result := 0;
+    ctkMatrix: Result := 1500 + Max(0, AEl.Datum.ComponentIndex);
+    ctkGeo: Result := 4600 + Max(0, AEl.Datum.ComponentIndex);
+    ctkSeries:
+      if AEl.Datum.SeriesIndex >= 0 then Result := 100000 + AEl.Datum.SeriesIndex
+      else Result := 80000;
+    ctkMarkPoint, ctkMarkLine, ctkMarkArea: Result := 90000;
+  else
+    Result := 80000;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
+var k: Integer;
+begin
+  if AList = nil then Exit;
+  for k := Max(0, AFrom) to AList.Count - 1 do AList.Ref(k)^.CompView := AView;
+end;
+
+{ two keys of the components' sort: z, z2, the view's place, the count }
+function CompKeyLess(AZ, AZ2, AV, AQ, BZ, BZ2, BV, BQ: Integer): Boolean;
+begin
+  if AZ <> BZ then Exit(AZ < BZ);
+  if AZ2 <> BZ2 then Exit(AZ2 < BZ2);
+  if AV <> BV then Exit(AV < BV);
+  Result := AQ < BQ;
+end;
+
+procedure TTyCustomAdvanceChart.CompBandMark;
+var
+  i, k, ng, h, lz, lz2, lv, lq, firstCont, lastCand: Integer;
+  pe: PTyChartElement;
+  lvs, cand: TTyIntegerArray;
+  has: Boolean;
+
+  { an element the continuous phase draws in its dynamic layer (AnimPartOf):
+    a ripple, an effect symbol, a label hanging off one, a lines series'
+    with a trail }
+  function Cont(AIdx: Integer): Boolean;
+  var q: PTyChartElement; hh: Integer;
+  begin
+    q := FPaintList.Ref(AIdx);
+    Result := q^.Anim.Role in [carRipple, carEffectSymbol, carLinesEffect];
+    if (not Result) and (q^.Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(q^.Datum.SeriesIndex) > 0) then Result := True;
+    if (not Result) and (q^.Anim.Role = carLabel) then
+    begin
+      hh := q^.Anim.HostPlus1 - 1;
+      Result := (hh >= 0) and (hh < FPaintList.Count)
+        and (FPaintList.Ref(hh)^.Anim.Role = carEffectSymbol);
+    end;
+  end;
+
+begin
+  { the marks of the last time off }
+  if FPaintList <> nil then
+    for k := 0 to High(FCompBand) do
+      if (FCompBand[k] >= 0) and (FCompBand[k] < FPaintList.Count) then
+      begin
+        pe := FPaintList.Ref(FCompBand[k]);
+        if pe^.CompBand then
+        begin
+          pe^.CompBand := False;
+          pe^.GfxUnder := False;
+        end;
+      end;
+  FCompBand := nil;
+  if (FPaintList = nil) or not FPaintListValid or (FPaintList.Count = 0) then Exit;
+  { (the levels drawn canvas by canvas: no band) }
+  if ZMixedNow(lvs) then Exit;
+  { THE LAST OF THE COMPONENTS' PARTS and of the graphic's elements under
+    them (zlevel 0) }
+  has := False;
+  lz := 0; lz2 := 0; lv := 0; lq := 0;
+  ng := 0;
+  if FGfxUnder <> nil then ng := FGfxUnder.Count;
+  for i := 0 to ng - 1 do
+  begin
+    pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(i));
+    if pe^.ZLevel <> 0 then Continue;
+    if not has or CompKeyLess(lz, lz2, lv, lq, pe^.Z, pe^.Z2, 0, i) then
+    begin
+      lz := pe^.Z; lz2 := pe^.Z2; lv := 0; lq := i;
+      has := True;
+    end;
+  end;
+  for i := 0 to FCompNp - 1 do
+    if not has or CompKeyLess(lz, lz2, lv, lq, FCompParts[i].Z, FCompParts[i].Z2,
+      FCompParts[i].View, FCompParts[i].Seq) then
+    begin
+      lz := FCompParts[i].Z; lz2 := FCompParts[i].Z2;
+      lv := FCompParts[i].View; lq := FCompParts[i].Seq;
+      has := True;
+    end;
+  if not has then Exit;
+  { THE LIST'S ELEMENTS SORTED BEFORE IT, in paint order (zlevel, z, z2,
+    insertion: past its z and z2 nothing is) -- not a progressive run's
+    (its own layer upstream), not the continuous phase's dynamic part }
+  cand := nil;
+  lastCand := -1;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    k := FPaintList.PaintOrder(i);
+    pe := FPaintList.Ref(k);
+    if pe^.ZLevel < 0 then Continue;
+    if pe^.ZLevel > 0 then Break;
+    if (pe^.Z > lz) or ((pe^.Z = lz) and (pe^.Z2 > lz2)) then Break;
+    { (the graphic's: FGfxUnder's already) }
+    if pe^.GfxUnder then Continue;
+    if not CompKeyLess(pe^.Z, pe^.Z2, CompViewOf(pe^), k, lz, lz2, lv, lq) then Continue;
+    if ProgIsLayered(pe^) then Continue;
+    SetLength(cand, Length(cand) + 1);
+    cand[High(cand)] := k;
+    if k > lastCand then lastCand := k;
+  end;
+  if Length(cand) = 0 then Exit;
+  { (AnimPartOf: from the first of the continuous phase's elements on,
+    everything is its dynamic layer's) }
+  firstCont := MaxInt;
+  for i := 0 to lastCand do
+    if Cont(i) then
+    begin
+      firstCont := i;
+      Break;
+    end;
+  h := 0;
+  for i := 0 to High(cand) do
+    if cand[i] < firstCont then
+    begin
+      pe := FPaintList.Ref(cand[i]);
+      pe^.GfxUnder := True;
+      pe^.CompBand := True;
+      cand[h] := cand[i];
+      Inc(h);
+    end;
+  SetLength(cand, h);
+  FCompBand := cand;
+end;
+
+procedure TTyCustomAdvanceChart.CompSettle(APPI: Integer; AList: Boolean);
+var
+  ng, np, n, i, j, t: Integer;
+  ord: TTyIntegerArray;
   run: TTyCanvasRun;
-  any: Boolean;
+  any, had: Boolean;
   pe: PTyChartElement;
 
   procedure KeyOf(AIdx: Integer; out AZ, AZ2, AView, ASeq: Integer);
@@ -2233,12 +2527,21 @@ var
       AView := 0;
       ASeq := AIdx;
     end
+    else if AIdx < ng + np then
+    begin
+      AZ := FCompParts[AIdx - ng].Z;
+      AZ2 := FCompParts[AIdx - ng].Z2;
+      AView := FCompParts[AIdx - ng].View;
+      ASeq := FCompParts[AIdx - ng].Seq;
+    end
     else
     begin
-      AZ := parts[AIdx - ng].Z;
-      AZ2 := parts[AIdx - ng].Z2;
-      AView := parts[AIdx - ng].View;
-      ASeq := parts[AIdx - ng].Seq;
+      { [R7-AD] a list element in the band: its view's place, its count }
+      q := FPaintList.Ref(FCompBand[AIdx - ng - np]);
+      AZ := q^.Z;
+      AZ2 := q^.Z2;
+      AView := CompViewOf(q^);
+      ASeq := FCompBand[AIdx - ng - np];
     end;
   end;
 
@@ -2247,29 +2550,17 @@ var
   begin
     KeyOf(A, az, az2, av, aq);
     KeyOf(B, bz, bz2, bv, bq);
-    if az <> bz then Exit(az < bz);
-    if az2 <> bz2 then Exit(az2 < bz2);
-    if av <> bv then Exit(av < bv);
-    Result := aq < bq;
+    Result := CompKeyLess(az, az2, av, aq, bz, bz2, bv, bq);
   end;
 
 begin
-  parts := nil;
-  FCompDrawn := nil;
-  { THE VIEWS IN UPSTREAM'S ORDER at an equal z and z2: the graphic's
-    group, the grids' backgrounds (FGfxUnder, in its own order), the single
-    axes, the radius axes, the angle axes, the y axes, the x axes }
-  CompPolarSingleParts(parts);
-  if FBuild <> nil then
-    for g := 0 to FBuild.GridCount - 1 do
-    begin
-      gb := FBuild.Grid(g);
-      for a := 0 to gb.YAxisCount - 1 do CompAxisParts(gb.YAxis(a), gb, 5, parts);
-      for a := 0 to gb.XAxisCount - 1 do CompAxisParts(gb.XAxis(a), gb, 6, parts);
-    end;
+  had := Length(FCompBand) > 0;
+  { [R7-AD] the list's elements among them }
+  CompBandMark;
   ng := 0;
   if FGfxUnder <> nil then ng := FGfxUnder.Count;
-  n := ng + Length(parts);
+  np := Min(FCompNp, Length(FCompParts));
+  n := ng + np + Length(FCompBand);
   SetLength(ord, n);
   for i := 0 to n - 1 do ord[i] := i;
   { (a stable insertion sort: a few dozen) }
@@ -2285,10 +2576,11 @@ begin
     ord[j + 1] := t;
   end;
   { [R7-AB] (the order, for a dirty block's own run) }
-  FCompOrder := Copy(ord, 0, Length(ord));
+  FCompOrder := ord;
   FCompNg := ng;
+  FCompNp := np;
   { FROM THE CANVAS' OWN STATE (a transparent shadow, black fill and
-    stroke, a width of 1), in that order }
+    stroke, a width of 1), in that order -- each settled where it stands }
   TyCanvasRunStart(run, TyCanvasGroundOf(0), APPI);
   any := False;
   for i := 0 to n - 1 do
@@ -2299,15 +2591,19 @@ begin
       if pe^.ZLevel <> 0 then Continue;
       TyCanvasRunStep(run, pe^);
     end
+    else if ord[i] < ng + np then
+      TyCanvasRunStep(run, FCompParts[ord[i] - ng].El)
     else
-      TyCanvasRunStep(run, parts[ord[i] - ng].El);
+      TyCanvasRunStep(run, FPaintList.Ref(FCompBand[ord[i] - ng - np])^);
     any := True;
   end;
-  FCompParts := parts;
-  FCompBase := Length(parts);
-  FCompRunOk := True;
   FCanvasGroundOk := any;
   if any then FCanvasGround := TyCanvasGroundOfRun(run);
+  { [R7-AD] the rest of the list from the ground that leaves (the build
+    settles its own: AList False) }
+  if AList and (had or (Length(FCompBand) > 0)) and (FPaintList <> nil) and FPaintListValid
+    and TyLinesCanvasLeftoversDue(FPaintList) then
+    TyLinesCanvasLeftovers(FPaintList, CanvasGroundState, APPI);
 end;
 
 procedure TTyCustomAdvanceChart.ParRun;
@@ -2446,6 +2742,51 @@ begin
     end;
 end;
 
+function TTyCustomAdvanceChart.FontRefusedOf(const ANodes: array of TJSONData): Boolean;
+var parts: array[0..2] of TJSONData; k, j: Integer; ts: TJSONData;
+const cKeys: array[0..2] of string = ('fontStyle', 'fontWeight', 'fontSize');
+begin
+  ts := nil;
+  if (FOption <> nil) and (FOption.Root is TJSONObject) then ts := TJSONObject(FOption.Root).Find('textStyle');
+  for k := 0 to 2 do
+  begin
+    parts[k] := nil;
+    for j := 0 to High(ANodes) do
+      if ANodes[j] is TJSONObject then
+      begin
+        parts[k] := TJSONObject(ANodes[j]).Find(cKeys[k]);
+        if (parts[k] <> nil) and (parts[k].JSONType <> jtNull) then Break;
+        parts[k] := nil;
+      end;
+    if ((parts[k] = nil) or (parts[k].JSONType = jtNull)) and (ts is TJSONObject) then
+      parts[k] := TJSONObject(ts).Find(cKeys[k]);
+  end;
+  Result := TyCssFontRefused(parts[0], parts[1], parts[2]);
+end;
+
+procedure TTyCustomAdvanceChart.FontLeftFrom(AList: TTyPaintList; AFrom: Integer; ARefused: Boolean);
+var k: Integer; pe: PTyChartElement;
+begin
+  if not ARefused or (AList = nil) then Exit;
+  for k := Max(0, AFrom) to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Caption.Text <> '') and (Length(pe^.Caption.RtPieces) = 0) then
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasFontLeft;
+  end;
+end;
+
+function TTyCustomAdvanceChart.CompPieces(AOwner: TObject; AKind: Byte; AIndex: Integer): TTyRtPieceArray;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to Min(FCompNp, Length(FCompParts)) - 1 do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind)
+      and (FCompParts[i].El.Datum.RawDataIndex = AIndex)
+      and (Length(FCompParts[i].El.Caption.RtPieces) > 0) then
+      Exit(Copy(FCompParts[i].El.Caption.RtPieces, 0, MaxInt));
+end;
+
 procedure TTyCustomAdvanceChart.CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH;
   APen: Double; AText: Boolean; AIndex: Integer; ABlur, AOffX, AOffY: Double);
 var n: Integer; r: TTyXYWH; w: Double;
@@ -2475,6 +2816,84 @@ begin
   FCompRects[n].Index := AIndex;
 end;
 
+procedure TTyCustomAdvanceChart.CompPenRect(APainter: TTyPainter; AOwner: TObject;
+  AKind: Byte; const K: TTyAxisStroke; const AR: TTyXYWH; AFilled: Boolean; AIndex: Integer);
+var r: TTyXYWH; w, sb, sx, sy: Double;
+begin
+  if APainter = nil then Exit;
+  r := AR;
+  w := 0;
+  if K.Drawn and (K.WidthLogical > 0) then w := APainter.ScaleF(K.WidthLogical);
+  sb := 0;
+  sx := 0;
+  sy := 0;
+  if K.HasShadow then
+  begin
+    if not (IsNan(K.Shadow.Blur) or IsInfinite(K.Shadow.Blur)) then sb := APainter.ScaleF(K.Shadow.Blur);
+    if not (IsNan(K.Shadow.OffsetX) or IsInfinite(K.Shadow.OffsetX) or TyPhaseLeft(K.Shadow.OffsetX)) then
+      sx := APainter.ScaleF(K.Shadow.OffsetX);
+    if not (IsNan(K.Shadow.OffsetY) or IsInfinite(K.Shadow.OffsetY) or TyPhaseLeft(K.Shadow.OffsetY)) then
+      sy := APainter.ScaleF(K.Shadow.OffsetY);
+  end;
+  if AFilled then
+  begin
+    if w > 0 then
+    begin
+      r.X := r.X - w / 2;
+      r.Y := r.Y - w / 2;
+      r.W := r.W + w;
+      r.H := r.H + w;
+    end;
+    CompRect(AOwner, AKind, r, 0, False, AIndex, sb, sx, sy);
+  end
+  else
+    CompRect(AOwner, AKind, r, w, False, AIndex, sb, sx, sy);
+end;
+
+procedure TTyCustomAdvanceChart.CompTextRect(AOwner: TObject; AKind: Byte; AX, AY: Double;
+  AW, AH: Integer; AH2: TTyTextAnchorH; AV: TTyTextAnchorV; ARot: Double);
+var b: TRect; r: TTyXYWH; c, s, x, y: Double; k: Integer;
+  xs, ys: array[0..3] of Double;
+begin
+  case AH2 of
+    tahLeft: begin b.Left := Round(AX); b.Right := Round(AX) + AW; end;
+    tahRight: begin b.Left := Round(AX) - AW; b.Right := Round(AX); end;
+  else
+    begin
+      b.Left := Round(AX - AW / 2);
+      b.Right := b.Left + AW;
+    end;
+  end;
+  case AV of
+    tavTop: begin b.Top := Round(AY); b.Bottom := Round(AY) + AH; end;
+    tavBottom: begin b.Top := Round(AY) - AH; b.Bottom := Round(AY); end;
+  else
+    begin
+      b.Top := Round(AY - AH / 2);
+      b.Bottom := b.Top + AH;
+    end;
+  end;
+  if Abs(ARot) < 1e-9 then
+    r := TyRectToXYWH(TyRectF(b.Left, b.Top, b.Right, b.Bottom))
+  else
+  begin
+    c := Cos(ARot);
+    s := Sin(ARot);
+    xs[0] := b.Left; ys[0] := b.Top;
+    xs[1] := b.Right; ys[1] := b.Top;
+    xs[2] := b.Right; ys[2] := b.Bottom;
+    xs[3] := b.Left; ys[3] := b.Bottom;
+    r := TyRectToXYWH(TyRectF(AX, AY, AX, AY));
+    for k := 0 to 3 do
+    begin
+      x := AX + (xs[k] - AX) * c + (ys[k] - AY) * s;
+      y := AY - (xs[k] - AX) * s + (ys[k] - AY) * c;
+      TyZrRectUnion(r, TyRectToXYWH(TyRectF(x, y, x, y)));
+    end;
+  end;
+  CompRect(AOwner, AKind, r, 0, True);
+end;
+
 function TTyCustomAdvanceChart.CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
 var
   run: TTyCanvasRun;
@@ -2497,6 +2916,17 @@ begin
       if pe^.ZLevel <> 0 then Continue;
       if TyElementPaintRect(pe^, APPI, r) and not TyZrRectIntersect(r, ABlock) then Continue;
       el := pe^;
+    end
+    else if p >= FCompNg + FCompNp then
+    begin
+      { [R7-AD] a list element in the components' band }
+      p := p - FCompNg - FCompNp;
+      if (p > High(FCompBand)) or (FPaintList = nil) or (FCompBand[p] >= FPaintList.Count) then Continue;
+      pe := FPaintList.Ref(FCompBand[p]);
+      if not pe^.CompBand then Continue;
+      if TyElementPaintRect(pe^, APPI, r) and not TyZrRectIntersect(r, ABlock) then Continue;
+      el := pe^;
+      SetLength(el.Caption.RtPieces, Length(el.Caption.RtPieces));
     end
     else
     begin
@@ -2654,10 +3084,26 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
+  const AMeasurer: ITyTextMeasurer; AProxied: Boolean; AList: TTyPaintList; AGfx: Boolean);
 var
-  g, a: Integer;
+  g, a, i, p, k, n, z2: Integer;
   gb: TTyGridBuild;
+  pe: PTyChartElement;
+  el: TTyChartElement;
+  axes: array of TTyAxis;
+  grids: array of TTyGridBuild;
+  done: array of TTyAxisZ2Set;
+  sinGrid, sinAxes, polGrid, polAxes: Boolean;
+  v: Integer;
+
+  function AxisAt(AAxis: TObject): Integer;
+  var q: Integer;
+  begin
+    for q := 0 to High(axes) do
+      if axes[q] = AAxis then Exit(q);
+    Result := -1;
+  end;
+
 begin
   if FBuild = nil then Exit;
   { [R7-AB] where the parts are drawn, afresh }
@@ -2665,31 +3111,110 @@ begin
   { [R7-Z] the parts settled in upstream's order (a layer drawn without the
     static one's GfxPaintUnder: the last ones) }
   if not FCompRunOk then CompRun(APPI);
-  { THE POLARS' GRIDS, then their axes [Batch 111] }
-  PaintPolars(APainter, APPI, AMeasurer, True);
-  PaintPolars(APainter, APPI, AMeasurer, False);
-  { THE SINGLE AXES' GRIDS, then their axes [Batch 118] }
-  PaintSingles(APainter, APPI, AMeasurer, True);
-  PaintSingles(APainter, APPI, AMeasurer, False);
+  { the cartesian axes, grid by grid (x then y, as they were drawn) }
+  n := 0;
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
-    { EVERY AXIS' GRID FIRST, then every axis' line. Two passes over the
-      same list rather than one, because the order that matters is
-      between the LAYERS and not between the axes. }
     for a := 0 to gb.XAxisCount - 1 do
-      PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                True, AProxied);
+    begin
+      SetLength(axes, n + 1);
+      SetLength(grids, n + 1);
+      axes[n] := gb.XAxis(a);
+      grids[n] := gb;
+      Inc(n);
+    end;
     for a := 0 to gb.YAxisCount - 1 do
-      PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                True, AProxied);
-    for a := 0 to gb.XAxisCount - 1 do
-      PaintAxis(APainter, gb.XAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                False, AProxied);
-    for a := 0 to gb.YAxisCount - 1 do
-      PaintAxis(APainter, gb.YAxis(a), gb.PlotRect, APPI, gb, AMeasurer,
-                False, AProxied);
+    begin
+      SetLength(axes, n + 1);
+      SetLength(grids, n + 1);
+      axes[n] := gb.YAxis(a);
+      grids[n] := gb;
+      Inc(n);
+    end;
   end;
+  SetLength(done, n);
+  for i := 0 to n - 1 do done[i] := [];
+  sinGrid := False;
+  sinAxes := False;
+  polGrid := False;
+  polAxes := False;
+  { [R7-AD] IN CompRun'S ORDER: zrender sorts the display list by z, z2 and
+    insertion (the root's views in turn), so a radar's or a geo's parts, a
+    series of a lower z, the graphic's elements fall among the axes' parts
+    -- a cartesian axis' drawn z2 by z2 where its parts come, a polar's or
+    a single axis' views at their first part (the grid pass, then the
+    axes' at the first part above z2 0).
+    [Was: the polars, the single axes, then every x axis' grid, every y
+    axis' grid, every x axis, every y axis; the graphic's elements before
+    them all, the list after.] }
+  for i := 0 to High(FCompOrder) do
+  begin
+    p := FCompOrder[i];
+    if p < FCompNg then
+    begin
+      if not AGfx or (FGfxUnder = nil) or (p >= FGfxUnder.Count) then Continue;
+      el := FGfxUnder.Element(FGfxUnder.PaintOrder(p));
+      if el.Ignore or not ApartIn(el.ZLevel) then Continue;
+      TyRenderElement(APainter, el);
+      { [R7-Z] (CompDrawn) }
+      if el.Datum.Kind = ctkGraphic then
+        CompDrew(nil, 'graphic0', 0, el.Z2, el.Caption.FontSizeLogical <> 0, el);
+      Continue;
+    end;
+    if p >= FCompNg + FCompNp then
+    begin
+      if AList = nil then Continue;
+      k := p - FCompNg - FCompNp;
+      if k > High(FCompBand) then Continue;
+      k := FCompBand[k];
+      if (k < 0) or (k >= AList.Count) then Continue;
+      pe := AList.Ref(k);
+      if pe^.CompBand and not pe^.Ignore and not pe^.ProgHidden then TyRenderElement(APainter, pe^);
+      Continue;
+    end;
+    p := p - FCompNg;
+    if p > High(FCompParts) then Continue;
+    v := FCompParts[p].View;
+    if (v >= 2000) and (v < 3000) then
+    begin
+      if not sinGrid then PaintSingles(APainter, APPI, AMeasurer, True);
+      sinGrid := True;
+      if (FCompParts[p].Z2 > 0) and not sinAxes then
+      begin
+        PaintSingles(APainter, APPI, AMeasurer, False);
+        sinAxes := True;
+      end;
+      Continue;
+    end;
+    if (v >= 3000) and (v < 5000) then
+    begin
+      if not polGrid then PaintPolars(APainter, APPI, AMeasurer, True);
+      polGrid := True;
+      if (FCompParts[p].Z2 > 0) and not polAxes then
+      begin
+        PaintPolars(APainter, APPI, AMeasurer, False);
+        polAxes := True;
+      end;
+      Continue;
+    end;
+    a := AxisAt(FCompParts[p].Owner);
+    if a < 0 then Continue;
+    z2 := Max(0, Min(31, FCompParts[p].Z2));
+    if z2 in done[a] then Continue;
+    Include(done[a], z2);
+    PaintAxis(APainter, axes[a], grids[a].PlotRect, APPI, grids[a], AMeasurer, [z2], AProxied);
+  end;
+  { WHAT NO PART ASKED FOR, as it was drawn: a view whose parts the run
+    does not hold, an axis' pieces of no part }
+  if not sinGrid then PaintSingles(APainter, APPI, AMeasurer, True);
+  if not sinAxes then PaintSingles(APainter, APPI, AMeasurer, False);
+  if not polGrid then PaintPolars(APainter, APPI, AMeasurer, True);
+  if not polAxes then PaintPolars(APainter, APPI, AMeasurer, False);
+  for a := 0 to n - 1 do
+    if done[a] <> [0..31] then
+      PaintAxis(APainter, axes[a], grids[a].PlotRect, APPI, grids[a], AMeasurer,
+        [0..31] - done[a], AProxied);
 end;
 
 function TTyCustomAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
@@ -2817,10 +3342,15 @@ end;
 
 procedure TTyCustomAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
+begin
+  PrepareSeries(AMeasurer, APPI);
+  RenderSeries(APainter, AMeasurer, APPI);
+end;
+
+procedure TTyCustomAdvanceChart.PrepareSeries(const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
-  drawn, i: Integer;
-  built, prepped, layered, fresh: Boolean;
-  frame: TTyPaintList;
+  drawn: Integer;
+  built, prepped, fresh: Boolean;
 begin
   FZList := nil;
   { WHAT THE STATIC LAYER HOLDS, for the dirty-rect path: one list at rest,
@@ -2853,20 +3383,32 @@ begin
   FProgReuse := False;
   if built then drawn := BuildSeriesList(AMeasurer, APPI)
   else drawn := FPaintList.Count;
+  FSerDrawn := drawn;
   { AN EXPORT DRAWS THE LIST AS LAID OUT: the finished chart, nothing armed,
     bound or stepped -- the proxies are the window's [Batch 106] }
-  if FExporting then
-  begin
-    FZList := FPaintList;
-    if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
-    Exit;
-  end;
+  if FExporting then Exit;
   if built or fresh then AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
   if not prepped then
   begin
     StAnimSync;
     AnimFlushArmed;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.RenderSeries(APainter: TTyPainter;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+var
+  drawn, i: Integer;
+  layered: Boolean;
+  frame: TTyPaintList;
+begin
+  drawn := FSerDrawn;
+  if FExporting then
+  begin
+    FZList := FPaintList;
+    if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
+    Exit;
   end;
   { IN MOTION, THE SERIES ARE THE DYNAMIC LAYER'S: a static layer holding
     them would freeze the first frame under every later one (Q7). }
@@ -3114,7 +3656,8 @@ begin
     begin
     { the axes in their groupTransition under the series, as the static
       layer draws them [Batch 96] }
-    if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
+    { [R7-AD] and the list's elements among their parts, the frame's }
+    if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True, frame);
     TySetZBand(-MaxInt, ZBase);
     try
       TyRenderPaintList(APainter, frame);

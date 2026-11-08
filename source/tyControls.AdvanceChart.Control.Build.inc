@@ -88,10 +88,10 @@ var
   pre: TTyIntegerArray;
 begin
   DropBuild;
-  FBuild := TyBuildGrids(FOption, FLastRect);
+  FBuild := TyBuildGrids(FOption, FLastRect, FLastPPI);
   { THE POLARS beside the grids: their axes, extents and centres
     [Batch 111] }
-  FPolars := TyBuildPolars(FOption, FLastRect, polarMissing);
+  FPolars := TyBuildPolars(FOption, FLastRect, polarMissing, Math.Max(1, FLastPPI) / 96);
   for i := 0 to High(polarMissing) do
   begin
     j := Pos(':', polarMissing[i]);
@@ -99,10 +99,10 @@ begin
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
   { THE SINGLE AXES: their boxes, axes and extents along them [Batch 118] }
-  FSingles := TyBuildSingles(FOption, FLastRect);
+  FSingles := TyBuildSingles(FOption, FLastRect, Math.Max(1, FLastPPI) / 96);
   { THE PARALLELS beside them: their axes, their boxes, and each axis' active
     intervals from its model [Batch 128] }
-  FParallels := TyBuildParallels(FOption, FLastRect);
+  FParallels := TyBuildParallels(FOption, FLastRect, Math.Max(1, FLastPPI) / 96);
   for i := 0 to High(FParallels) do
     if FParallels[i] <> nil then
       for j := 0 to FParallels[i].AxisCount - 1 do
@@ -1340,13 +1340,13 @@ begin
   { a large bar's barMinWidth defaults to half a pixel [Batch 117] }
   SetLength(largeBars, Length(FBindings));
   for i := 0 to High(largeBars) do largeBars[i] := LargeKindOf(i) = lgkBar;
-  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars);
+  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars, APPI / 96);
   { AND THE BARS ON A POLAR [Batch 113] }
   FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
   { [R5-I] what their updateStyle reads off the elements }
   PolarStyleTake;
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
-  FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
+  FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex, APPI / 96);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
   SolveMarkers(APPI);
   { THE CALENDARS AND THE MATRICES were laid out by Rebuild, before the
@@ -3451,15 +3451,15 @@ begin
     { [R7-Z] WHAT THE CANVAS REFUSES of the box and the text: what it had
       there -- the list's run up to the title's z, then the box (z2 0),
       the text, the subtext (10) }
-    TitleSettle(i, el, ink0, ink1);
+    TitleSettle(i, el, ink0, ink1, f0, f1);
     if ((el.Style.FillColor shr 24) <> 0) or (el.Style.StrokeWidthLogical > 0) then
       TyRenderElement(APainter, el);
     FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
     FTitleFramesDrawn[i].El := el;
     { [R7-Z] (CompDrawn) }
     CompDrew(nil, 'title' + IntToStr(i), 0, 0, False, el);
-    TitleDrewText(i, 0, ink0);
-    TitleDrewText(i, 1, ink1);
+    TitleDrewText(i, 0, ink0, f0);
+    TitleDrewText(i, 1, ink1, f1);
     { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86] }
     if (i <= High(FTitleRt)) and (Length(FTitleRt[i][0].Pieces) > 0) then
       TyRenderRtPieces(APainter, FTitleRt[i][0].Pieces, FTitleRt[i][0].X,
@@ -3483,7 +3483,8 @@ begin
 end;
 
 
-procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor;
+  const AFont: TTyTitleFont);
 var e: TTyChartElement;
 begin
   if ALine = 0 then
@@ -3497,6 +3498,10 @@ begin
   e.Caption.FontSizeLogical := 1;
   e.Caption.Text := 'x';
   e.Caption.Colour := TTyChartColor(AInk);
+  { [R7-AD] and the font it is drawn in }
+  e.Caption.FontName := AFont.Name;
+  e.Caption.FontSizeLogical := AFont.SizeLogical;
+  e.Caption.FontWeight := AFont.Weight;
   { [R7-AA] a block's pieces as drawn (their fill and stroke) }
   if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0) then
     e.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
@@ -3504,16 +3509,26 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-  var AInk0, AInk1: TTyColor);
+  var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont);
 var
   run: TTyCanvasRun;
   e: TTyChartElement;
   z: Integer;
   node, d: TJSONData;
+  { [R7-AD] the text's and the subtext's fonts the canvas refuses }
+  left0, left1: Boolean;
 begin
+  node := FOption.ComponentAt('title', AIndex);
+  left0 := False;
+  left1 := False;
+  if node is TJSONObject then
+  begin
+    left0 := FontRefusedOf([TJSONObject(node).Find('textStyle')]);
+    left1 := FontRefusedOf([TJSONObject(node).Find('subtextStyle')]);
+  end;
   if not (TyCanvasElementCarries(AFrame) or ((AFrame.CanvasFlags and cTyCanvasWidthLeft) <> 0)
     or (TTyChartColor(AInk0) = cTyCanvasColourLeft) or (TTyChartColor(AInk1) = cTyCanvasColourLeft)
-    or TitlePiecesCarry(AIndex)) then
+    or TitlePiecesCarry(AIndex) or left0 or left1) then
     Exit;
   { the title's z (its model's default 6) }
   z := 6;
@@ -3535,22 +3550,44 @@ begin
     and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then
   begin
     e.Caption.Colour := TTyChartColor(AInk0);
+    { [R7-AD] its font (one the canvas refuses: the one the text before
+      left) }
+    e.Caption.FontName := AFont0.Name;
+    e.Caption.FontSizeLogical := AFont0.SizeLogical;
+    e.Caption.FontWeight := AFont0.Weight;
+    if left0 then e.CanvasFlags := e.CanvasFlags or cTyCanvasFontLeft;
     { [R7-AA] a block: its pieces, each its fill and stroke }
     e.Caption.RtPieces := nil;
     if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][0].Pieces) > 0) then
       e.Caption.RtPieces := FTitleRt[AIndex][0].Pieces;
     TyCanvasRunStep(run, e);
     AInk0 := TTyColor(e.Caption.Colour);
+    if left0 then
+    begin
+      AFont0.Name := e.Caption.FontName;
+      AFont0.SizeLogical := e.Caption.FontSizeLogical;
+      AFont0.Weight := e.Caption.FontWeight;
+    end;
   end;
   if FTitleSpecs[AIndex].Subtext <> '' then
   begin
     e.CanvasFlags := 0;
     e.Caption.Colour := TTyChartColor(AInk1);
+    e.Caption.FontName := AFont1.Name;
+    e.Caption.FontSizeLogical := AFont1.SizeLogical;
+    e.Caption.FontWeight := AFont1.Weight;
+    if left1 then e.CanvasFlags := e.CanvasFlags or cTyCanvasFontLeft;
     e.Caption.RtPieces := nil;
     if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][1].Pieces) > 0) then
       e.Caption.RtPieces := FTitleRt[AIndex][1].Pieces;
     TyCanvasRunStep(run, e);
     AInk1 := TTyColor(e.Caption.Colour);
+    if left1 then
+    begin
+      AFont1.Name := e.Caption.FontName;
+      AFont1.SizeLogical := e.Caption.FontSizeLogical;
+      AFont1.Weight := e.Caption.FontWeight;
+    end;
   end;
 end;
 
@@ -3563,7 +3600,7 @@ begin
     for k := 0 to High(FTitleRt[AIndex][line].Pieces) do
       with FTitleRt[AIndex][line].Pieces[k] do
         if (HasFill and (Fill = cTyCanvasColourLeft)) or (HasStroke and (Stroke = cTyCanvasColourLeft))
-          or (CanvasLeft <> 0) then
+          or (CanvasLeft <> 0) or FontLeft then
           Exit(True);
 end;
 
@@ -4384,8 +4421,11 @@ begin
   if not ViewHidden(cvRadar) then
     for i := 0 to High(FRadars) do
     begin
+      n := list.Count;
       Inc(drawn, TyBuildRadarGridTexts(FRadars[i], RadarInk, AMeasurer, APPI, list,
         radarTexts));
+      { [R7-AD] its view's place in the root (CompViewOf) }
+      CompViewSet(list, n, 4700 + i);
       { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words --
         [R7-I] as the grid says it drew them: the spoke, the label's index
         and its rawLabel too }
@@ -4413,14 +4453,22 @@ begin
   furniture := drawn;
   if not ViewHidden(cvCalendar) then
     for i := 0 to High(FCalendars) do
+    begin
+      n := list.Count;
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+      CompViewSet(list, n, 1600 + i);
+    end;
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
   { THE MATRICES' TOO, at their own z (-50 by default: under every series)
     [Batch 145] }
   if not ViewHidden(cvMatrix) then
     for i := 0 to High(FMatrices) do
+    begin
+      n := list.Count;
       Inc(drawn, TyBuildMatrix(FMatrices[i], MatrixInk, RtGlobal, AMeasurer, APPI, list));
+      CompViewSet(list, n, 1500 + i);
+    end;
   if drawn > furniture then ViewDrew(cvMatrix);
   furniture := drawn;
   { THE GEOS' MAPS, a component group ahead of every series [Batch 146] --
@@ -4440,6 +4488,7 @@ begin
     begin
       Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
       if list.Count > n then ViewDrew(cvGeo);
+      CompViewSet(list, n, 4600 + i);
     end;
     SetLength(FGeoDraws, Length(FGeoDraws) + 1);
     FGeoDraws[High(FGeoDraws)].Geo := FGeos[i];
@@ -4465,6 +4514,9 @@ begin
     FListTailAt := list.Count;
     Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
+    { [R7-AD] the list's elements among the axes' parts, and the ground
+      after them }
+    if FCompRunOk then CompSettle(APPI, False);
     { [R7-Y] what the canvas is left with, in paint order, a chart of no
       series too (its graphic elements) [was: never settled] }
     if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
@@ -5067,6 +5119,9 @@ begin
       FLineHistDue := False;
       LineHistRoll;
     end;
+    { [R7-AD] the list's elements among the axes' parts, and the ground
+      after them }
+    if FCompRunOk then CompSettle(APPI, False);
     { [R7-S] what the canvas is left with, in paint order }
     if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     list.JournalClose;

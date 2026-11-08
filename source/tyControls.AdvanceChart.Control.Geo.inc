@@ -207,16 +207,16 @@ begin
       FPolars[p].Unplaced := not TyXYWHIsValid(ref);
       if not TyXYWHIsValid(ref) then
         ref := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
-      TyPolarResize(FOption, FPolars[p], ref);
+      TyPolarResize(FOption, FPolars[p], ref, Math.Max(1, FLastPPI) / 96);
     end;
   { the single axes and the parallels, resized in their cells [Batch 154]
     -- before anything reads their pixel extents }
   for p := 0 to High(FSingles) do
     if (FSingles[p] <> nil) and ComponentBoxRef(TySingleCoordSysName, p, ref) then
-      TySingleResizeIn(FOption, FSingles[p], ref);
+      TySingleResizeIn(FOption, FSingles[p], ref, Math.Max(1, FLastPPI) / 96);
   for p := 0 to High(FParallels) do
     if (FParallels[p] <> nil) and ComponentBoxRef('parallel', p, ref) then
-      TyParallelResizeIn(FOption, FParallels[p], ref);
+      TyParallelResizeIn(FOption, FParallels[p], ref, Math.Max(1, FLastPPI) / 96);
 end;
 
 procedure TTyCustomAdvanceChart.FreeCalendars;

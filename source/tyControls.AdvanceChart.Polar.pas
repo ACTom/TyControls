@@ -181,15 +181,17 @@ type
   extent from polar.center and polar.radius on AViewport (resizePolar). A
   polar missing either axis is not built (upstream throws there); its index
   and the family are in ANotes, one entry each as 'polarIndex:mainType'. }
+{ [R7-AD] APxScale: the centre's and the radius' pixel counts are css px,
+  APxScale (PPI / 96) device px each [was: device px] }
 function TyBuildPolars(AOption: TTyChartOption; const AViewport: TTyRectF;
-  out AMissing: TTyStringArray): TTyPolarArray;
+  out AMissing: TTyStringArray; APxScale: Double = 1): TTyPolarArray;
 { resizePolar: the centre against AContainer (polar.center's percentages of
   its width and height, plus its x and y), the radius extent against half
   its shorter side. AContainer is createBoxLayoutReference's refContainer --
   the canvas, or the matrix cell or calendar day a polar names with
   `coordinateSystem` + `coord` [Batch 151: out of TyBuildPolars]. }
 procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
-  const AContainer: TTyXYWH);
+  const AContainer: TTyXYWH; APxScale: Double = 0);
 
 { THE SERIES ON A POLAR [Batch 113, C4]: every binding that resolved to a
   polar takes that polar's axes -- XAxis the radius, YAxis the angle (the
@@ -557,8 +559,12 @@ end;
 
 { ==================== building ==================== }
 
+var
+  { [R7-AD] the pixel scale TyPolarResize reads the centre and radius at }
+  GPolarPx: Double = 1;
+
 function TyBuildPolars(AOption: TTyChartOption; const AViewport: TTyRectF;
-  out AMissing: TTyStringArray): TTyPolarArray;
+  out AMissing: TTyStringArray; APxScale: Double): TTyPolarArray;
 var
   n, p, q, cnt, ai, ri: Integer;
   ids: TTyStringArray;
@@ -643,7 +649,7 @@ begin
       aa.SetPxExtent(start, stop);
       { resizePolar on the canvas; one in a matrix cell or a calendar day is
         placed again once those are laid out [Batch 151] }
-      TyPolarResize(AOption, polar, TyXYWHOfRect(AViewport));
+      TyPolarResize(AOption, polar, TyXYWHOfRect(AViewport), APxScale);
     end;
   finally
     UnmaskFP(mask);
@@ -651,7 +657,7 @@ begin
 end;
 
 procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
-  const AContainer: TTyXYWH);
+  const AContainer: TTyXYWH; APxScale: Double);
 var
   d, c0, c1, r0d, r1d: TJSONData;
   node: TJSONObject;
@@ -664,6 +670,7 @@ begin
   ra := APolar.RadiusAxis;
   w := AContainer.W;
   h := AContainer.H;
+  if APxScale > 0 then GPolarPx := APxScale;
   mask := MaskFP;
   try
       { resizePolar: the centre against the container, the radius against
@@ -680,8 +687,8 @@ begin
       begin
         if (d.JSONType = jtArray) and (d.Count > 0) then c0 := d.Items[0];
         if (d.JSONType = jtArray) and (d.Count > 1) then c1 := d.Items[1];
-        APolar.SetCentre(TyBoxRawResolve(TyBoxRawOf(c0), w) + AContainer.X,
-          TyBoxRawResolve(TyBoxRawOf(c1), h) + AContainer.Y);
+        APolar.SetCentre(TyBoxRawResolve(TyBoxRawOneScaled(TyBoxRawOf(c0), GPolarPx), w) + AContainer.X,
+          TyBoxRawResolve(TyBoxRawOneScaled(TyBoxRawOf(c1), GPolarPx), h) + AContainer.Y);
       end;
       size := Math.Min(w, h) / 2;
       d := FindIn(node, 'radius');
@@ -702,13 +709,13 @@ begin
         r1d := nil;
         if d.Count > 0 then r0d := d.Items[0];
         if d.Count > 1 then r1d := d.Items[1];
-        r0 := TyBoxRawResolve(TyBoxRawOf(r0d), size);
-        r1 := TyBoxRawResolve(TyBoxRawOf(r1d), size);
+        r0 := TyBoxRawResolve(TyBoxRawOneScaled(TyBoxRawOf(r0d), GPolarPx), size);
+        r1 := TyBoxRawResolve(TyBoxRawOneScaled(TyBoxRawOf(r1d), GPolarPx), size);
       end
       else
       begin
         r0 := TyBoxRawResolve(TyBoxRawNum(0), size);
-        r1 := TyBoxRawResolve(TyBoxRawOf(d), size);
+        r1 := TyBoxRawResolve(TyBoxRawOneScaled(TyBoxRawOf(d), GPolarPx), size);
       end;
       if APolar.RadiusInverse then ra.SetPxExtent(r1, r0)
       else ra.SetPxExtent(r0, r1);
