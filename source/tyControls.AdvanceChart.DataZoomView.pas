@@ -1730,7 +1730,17 @@ var
     begin
       pe := AList.Ref(k);
       SetLength(pe^.FrameShape, 1);
-      if (Length(e.Path) > 0) and (pe^.Shape.Image = '') then
+      { [R7-AF] a handle label: a text of the view group, its rect's corners
+        and its anchor in that frame -- drawn under the transform kept as a
+        whole map (PlaceFrame) [was: not drawn] }
+      if ARole in [dzrLabel0, dzrLabel1] then
+      begin
+        c := TyXYWH(pe^.Shape.Bounds.Left, pe^.Shape.Bounds.Top,
+          pe^.Shape.Bounds.Right - pe^.Shape.Bounds.Left, pe^.Shape.Bounds.Bottom - pe^.Shape.Bounds.Top);
+        pe^.FrameShape[0] := TyShapePolygon([TyPointF(c.X, c.Y), TyPointF(c.X + c.W, c.Y),
+          TyPointF(c.X + c.W, c.Y + c.H), TyPointF(c.X, c.Y + c.H)]);
+      end
+      else if (Length(e.Path) > 0) and (pe^.Shape.Image = '') then
         pe^.FrameShape[0] := TyMkZrShape(e.Path, Ident, False)
       else
         pe^.FrameShape[0] := pe^.Shape;
@@ -1781,8 +1791,6 @@ begin
     role := ALayout.Paint[p];
     e := ALayout.Kids[role];
     n0 := AList.Count;
-    { ([R7-AE] an unplaced slider's labels: not drawn, see Framed) }
-    if ALayout.Unplaced and (role in [dzrLabel0, dzrLabel1]) then Continue;
     try
     case role of
       dzrBackground, dzrFiller:

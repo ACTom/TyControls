@@ -603,10 +603,15 @@ begin
   end;
   st := TJSONObject(node).Find('textStyle');
   if not (st is TJSONObject) then Exit;
-  { the items' text block: free text [Batch 86] }
-  if TyRtNodeWantsBlock(TJSONObject(st)) then
+  { the items' text block: free text [Batch 86] -- [R7-AF] and a written
+    halo, which the one run never drew [was: textBorderColor /
+    textBorderWidth not read] }
+  if TyRtNodeWantsBlock(TJSONObject(st)) or TyRtNodeWritesHalo(TJSONObject(st)) then
+  begin
     AFont.Rt := TyRtResolve([TJSONObject(st)], AFont.RtGlobal,
       TyRtResolveOpt(False));
+    if TyRtNodeWritesHalo(TJSONObject(st)) then AFont.Rt.Needed := True;
+  end;
   d := TJSONObject(st).Find('fontFamily');
   if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
     AFont.Name := d.AsString;

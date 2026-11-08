@@ -261,8 +261,25 @@ end;
   _showComponentItemTooltip -- the element's tooltip (a string a
   formatter), the graphic component's, a level whose formatter is the
   content, the global component. A label is its host's. }
+{ [R7-AF] a graphic element of the tree by its id (nil none) }
+function GfxElOfId(AEl: TTyGfxEl; const AId: string): TTyGfxEl;
+var j: Integer;
+begin
+  Result := nil;
+  if AEl = nil then Exit;
+  if (AEl.Id = AId) and (AEl.Parent <> nil) then Exit(AEl);
+  for j := 0 to High(AEl.Children) do
+  begin
+    Result := GfxElOfId(AEl.Children[j], AId);
+    if Result <> nil then Exit;
+  end;
+end;
+
 function TTyCustomAdvanceChart.IsGfxTipDatum(const ADatum: TTyChartDatumRef): Boolean;
 begin
+  { ([R7-AF] a group a showTip found: by its id) }
+  if (ADatum.Kind = ctkGraphic) and (FGfxView <> nil) and (ADatum.DataIndex = cGfxTipGroup) then
+    Exit(GfxElOfId(FGfxView.Root, FGfxTipGroupId) <> nil);
   Result := (ADatum.Kind = ctkGraphic) and (FGfxView <> nil) and (ADatum.DataIndex >= 0)
     and (ADatum.DataIndex <= High(FGfxPaintEl)) and (FGfxPaintEl[ADatum.DataIndex] <> nil);
 end;
@@ -271,6 +288,7 @@ function TTyCustomAdvanceChart.GfxTipEl(const ADatum: TTyChartDatumRef): TTyGfxE
 begin
   Result := nil;
   if not IsGfxTipDatum(ADatum) then Exit;
+  if ADatum.DataIndex = cGfxTipGroup then Exit(GfxElOfId(FGfxView.Root, FGfxTipGroupId));
   Result := FGfxPaintEl[ADatum.DataIndex];
   if Result.Host <> nil then Result := Result.Host;
 end;

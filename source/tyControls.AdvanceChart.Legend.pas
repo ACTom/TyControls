@@ -351,6 +351,10 @@ type
     HasBorderColour: Boolean;
     BorderColour: TTyChartColor;
     BorderWidth: Double;
+    { [R7-AF] a borderWidth of +Infinity ('Infinity'): makeBackground's Rect
+      joins the group after the layout, so the legend keeps its place; the
+      canvas refuses the width and strokes at the one it had }
+    BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
     { [R5-A] the box's shadow: the legend's own shadow keys
       (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
@@ -1176,6 +1180,7 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then
     Result.HasBorderColour := TyTryParseChartColor(d.AsString, Result.BorderColour);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
+  Result.BorderWidthInf := TyOptIsPosInf(node.Find('borderWidth'));
   { [R7-X] the shadow and the border's keys down to the root's }
   TyStReadShadow([node, root], [], [], Result.Shadow);
   Result.Look := Default(TTyChartElementStyle);
@@ -1320,7 +1325,7 @@ begin
     Colour(AObj.Find('inactiveBorderColor'), Result.HasInactiveBorderColour,
       Result.InactiveBorderColour);
     { [R5-F] its text block where its textStyle asks for one }
-    if (st <> nil) and TyRtNodeWantsBlock(st) then Result.RtItemNode := st.AsJSON
+    if (st <> nil) and (TyRtNodeWantsBlock(st) or TyRtNodeWritesHalo(st)) then Result.RtItemNode := st.AsJSON
     else Result.RtItemNode := '';
   end;
   { [R5-F] its own tooltip (an item's; setTooltipConfig's option) }
@@ -2172,6 +2177,8 @@ begin
     if a is TJSONObject then ca := TJSONObject(a) else ca := nil;
     if b is TJSONObject then cb := TJSONObject(b) else cb := nil;
     Result := TyRtResolve([ca, cb], AGlobal, TyRtResolveOpt(False));
+    { ([R7-AF] a written halo: the block draws it, the one run has none) }
+    if TyRtNodeWritesHalo(ca) or TyRtNodeWritesHalo(cb) then Result.Needed := True;
   finally
     a.Free;
     b.Free;
@@ -3607,9 +3614,9 @@ begin
     and the first item's hit rect -- the next element, filled 'transparent'
     as the box is -- hands the canvas the box's stroke colour instead
     (handBorder) [was: never handed] }
-  handBorder := not (ASpec.HasBackground or (ASpec.BorderWidth > 0));
+  handBorder := not (ASpec.HasBackground or (ASpec.BorderWidth > 0) or ASpec.BorderWidthInf);
   if ASpec.HasBorderColour then borderInk := ASpec.BorderColour else borderInk := AInk.Border;
-  if ASpec.HasBackground or (ASpec.BorderWidth > 0) then
+  if ASpec.HasBackground or (ASpec.BorderWidth > 0) or ASpec.BorderWidthInf then
   begin
     el := Blank;
     el.Z2 := -1;
@@ -3622,6 +3629,8 @@ begin
     { (the stroke colour handed at a width of nought too) }
     el.Style.StrokeColor := borderInk;
     if ASpec.BorderWidth > 0 then el.Style.StrokeWidthLogical := ASpec.BorderWidth;
+    { ([R7-AF] 'Infinity': the width the canvas had [was: not stroked]) }
+    if ASpec.BorderWidthInf then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
     { [R7-X] its dash, phase, cap, join and miterLimit }
     TyStyleTakeBorderKeys(el.Style, ASpec.Look);

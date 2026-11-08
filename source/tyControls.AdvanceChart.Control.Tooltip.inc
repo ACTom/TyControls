@@ -11,6 +11,9 @@ const
     radius or angle axis (the polar's index), a parallel's axis (k * 1000 +
     the axis' place), a radar's text (its FRadarTexts index) }
   cAxisTextSingle = 1000000;
+  { [R7-AF] a graphic datum's DataIndex for the group a showTip found
+    (FGfxTipGroupId), no painted element's }
+  cGfxTipGroup = -2;
   cAxisTextRadius = 2000000;
   cAxisTextAngle = 3000000;
   cAxisTextParallel = 4000000;
@@ -4671,6 +4674,51 @@ var
   b, u: TTyRectF;
   any: Boolean;
   el: TTyChartElement;
+  gfound: TTyGfxEl;
+
+  { [R7-AF] the last element of the name in a pre-order walk, a found one's
+    children not entered }
+  procedure GfxRefWalk(AEl: TTyGfxEl; const AName: string; var AFound: TTyGfxEl);
+  var j: Integer;
+  begin
+    for j := 0 to High(AEl.Children) do
+    begin
+      if AEl.Children[j] = nil then Continue;
+      if AEl.Children[j].Name = AName then AFound := AEl.Children[j]
+      else if AEl.Children[j].IsGroup then GfxRefWalk(AEl.Children[j], AName, AFound);
+    end;
+  end;
+
+  { its painted rect, or a group's union of its elements' (AIdx the first
+    painted element's index in the list) }
+  procedure GfxRefBox(AEl: TTyGfxEl; var AAny: Boolean; var AU: TTyRectF; var AIdx: Integer);
+  var j, n: Integer;
+  begin
+    if AEl.IsGroup then
+    begin
+      for j := 0 to High(AEl.Children) do
+        if AEl.Children[j] <> nil then GfxRefBox(AEl.Children[j], AAny, AU, AIdx);
+      Exit;
+    end;
+    if (AEl.Serial < 0) or (AEl.Serial > High(FGfxPaintEl)) or (FGfxPaintEl[AEl.Serial] <> AEl) then Exit;
+    for n := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(n);
+      if (el.Datum.Kind <> ctkGraphic) or (el.Datum.DataIndex <> AEl.Serial) then Continue;
+      b := TyShapeBounds(el.Shape);
+      if not TyRectFIsValid(b) then Continue;
+      if not AAny then
+      begin
+        AU := b;
+        AIdx := n;
+      end
+      else
+        AU := TyRectF(Min(AU.Left, b.Left), Min(AU.Top, b.Top), Max(AU.Right, b.Right),
+          Max(AU.Bottom, b.Bottom));
+      AAny := True;
+      Exit;
+    end;
+  end;
 
   function WordChars(const S: string): Boolean;
   var j: Integer;
@@ -4729,6 +4777,10 @@ begin
   nm := d.AsString;
   if mt = 'legend' then
   begin
+    { [R7-AF] THE ITEM'S HIT RECT WHEREVER IT IS: a scroll legend keeps every
+      item in its content group, a page not shown too (only clipped) -- its
+      own bounds, not the hit element the clip cut [was: an item off the
+      page shown none]; and the last item of the name (traverse) }
     for q := 0 to High(FLegends[mx].Items) do
     begin
       if FLegends[mx].Items[q].Name <> nm then Continue;
@@ -4736,64 +4788,67 @@ begin
       dt.Kind := ctkLegend;
       dt.ComponentIndex := mx;
       dt.DataIndex := q;
-      if not LgTipItem(dt, AEv.LgIndex, AEv.LgItem) then Continue;
-      { the item's hit rect: the legend's element of the item }
-      any := False;
-      u := TyRectF(0, 0, 0, 0);
+      if not LgTipItem(dt, i, k) then Continue;
+      u := FLegends[mx].Items[q].Bounds;
+      if not TyRectFIsValid(u) then Continue;
+      AEv.LgIndex := i;
+      AEv.LgItem := k;
+      AEv.Datum := dt;
+      AEv.Element := -1;
       for k := 0 to FPaintList.Count - 1 do
       begin
         el := FPaintList.Element(k);
-        if (el.Datum.Kind <> ctkLegend) or (el.Datum.ComponentIndex <> mx)
-          or (el.Datum.DataIndex <> q) then Continue;
-        b := TyShapeBounds(el.Shape);
-        if not TyRectFIsValid(b) then Continue;
-        if not any then
+        if (el.Datum.Kind = ctkLegend) and (el.Datum.ComponentIndex = mx)
+          and (el.Datum.DataIndex = q) then
         begin
-          u := b;
           AEv.Datum := el.Datum;
           AEv.Element := k;
-        end
-        else
-          u := TyRectF(Min(u.Left, b.Left), Min(u.Top, b.Top), Max(u.Right, b.Right),
-            Max(u.Bottom, b.Bottom));
-        any := True;
+          Break;
+        end;
       end;
-      if not any then Continue;
       AEv.X := u.Left + (u.Right - u.Left) / 2;
       AEv.Y := u.Top + (u.Bottom - u.Top) / 2;
       AEv.LgHas := True;
-      Exit(True);
+      Result := True;
     end;
     Exit;
   end;
   if mt = 'graphic' then
   begin
-    { the elements in their tree's order: a label is its host's }
+    { [R7-AF] THE VIEW GROUP'S TRAVERSAL: every element in its tree's order,
+      a group as well (its rect the union of what it holds), the LAST whose
+      name it is -- the callback's `return true` stops the traversal going
+      into a found group, not the traversal; a label is its host's, not a
+      child [was: the first element that is no group] }
     if FGfxView = nil then Exit;
-    for q := 0 to High(FGfxPaintEl) do
+    gfound := nil;
+    GfxRefWalk(FGfxView.Root, nm, gfound);
+    if gfound = nil then Exit;
+    any := False;
+    u := TyRectF(0, 0, 0, 0);
+    GfxRefBox(gfound, any, u, k);
+    if not any then Exit;
+    AEv.X := u.Left + (u.Right - u.Left) / 2;
+    AEv.Y := u.Top + (u.Bottom - u.Top) / 2;
+    if gfound.IsGroup then
     begin
-      if (FGfxPaintEl[q] = nil) or (FGfxPaintEl[q].Host <> nil) or (FGfxPaintEl[q].Name <> nm) then Continue;
-      for k := 0 to FPaintList.Count - 1 do
-      begin
-        el := FPaintList.Element(k);
-        if (el.Datum.Kind <> ctkGraphic) or (el.Datum.DataIndex <> q) then Continue;
-        b := TyShapeBounds(el.Shape);
-        if not TyRectFIsValid(b) then Continue;
-        AEv.X := b.Left + (b.Right - b.Left) / 2;
-        AEv.Y := b.Top + (b.Bottom - b.Top) / 2;
-        AEv.Datum := el.Datum;
-        AEv.Element := k;
-        Exit(True);
-      end;
+      FGfxTipGroupId := gfound.Id;
+      AEv.Datum := TyChartComponentDatum(ctkGraphic, 0, cGfxTipGroup);
+      AEv.Element := -1;
+    end
+    else
+    begin
+      AEv.Datum := FPaintList.Element(k).Datum;
+      AEv.Element := k;
     end;
-    Exit;
+    Exit(True);
   end;
   if mt <> 'toolbox' then
   begin
     Result := TipAxisRef(mt, mx, nm, AEv);
     Exit;
   end;
-  { a toolbox' icons, in their order }
+  { a toolbox' icons, in their order ([R7-AF] the last of the name) }
   for q := 0 to High(FTbSpecs[mx].Icons) do
   begin
     if FTbSpecs[mx].Icons[q].Name <> nm then Continue;
@@ -4804,7 +4859,7 @@ begin
     AEv.TbHas := True;
     AEv.TbIndex := mx;
     AEv.TbIcon := q;
-    Exit(True);
+    Result := True;
   end;
 end;
 
@@ -4845,6 +4900,10 @@ var
 
   function TextBox(const AText: string; const AStyle: TTyStyleSet; AXa, AYa: Double;
     AAH: TTyTextAnchorH; AAV: TTyTextAnchorV; const ART: TTyRtPieceArray; ARot, AScale: Double): TTyRectF;
+  var
+    r: TTyRectF;
+    gx, gy: array[0..3] of Double;
+    j: Integer;
   begin
     if Length(ART) > 0 then Exit(TyRtDeviceBox(ART, AXa, AYa, ARot, AScale));
     if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
@@ -4853,6 +4912,22 @@ var
     if meas <> nil then
       meas.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight, fw, fh);
     Result := Boxed(AXa, AYa, fw, fh, AAH, AAV);
+    { [R7-AF] a turned label: its rect through its transform (applyTransform's
+      bounds of the corners) [was: the upright box] }
+    if ARot = 0 then Exit;
+    r := Result;
+    TyRtPoint(AXa, AYa, ARot, 1, r.Left - AXa, r.Top - AYa, gx[0], gy[0]);
+    TyRtPoint(AXa, AYa, ARot, 1, r.Right - AXa, r.Top - AYa, gx[1], gy[1]);
+    TyRtPoint(AXa, AYa, ARot, 1, r.Right - AXa, r.Bottom - AYa, gx[2], gy[2]);
+    TyRtPoint(AXa, AYa, ARot, 1, r.Left - AXa, r.Bottom - AYa, gx[3], gy[3]);
+    Result := TyRectF(gx[0], gy[0], gx[0], gy[0]);
+    for j := 1 to 3 do
+    begin
+      Result.Left := Min(Result.Left, gx[j]);
+      Result.Top := Min(Result.Top, gy[j]);
+      Result.Right := Max(Result.Right, gx[j]);
+      Result.Bottom := Max(Result.Bottom, gy[j]);
+    end;
   end;
 
   function Found(AComp, AQ: Integer; const ABox: TTyRectF): Boolean;
@@ -4868,7 +4943,10 @@ var
     AEv.Element := -1;
   end;
 
-  { an AxisBuilder spec's: its labels, then its name }
+  { an AxisBuilder spec's: its labels, then its name -- [R7-AF] every label
+    built (one an overlap rule hid is in the group, ignored, all the same),
+    the LAST of the name (the traversal keeps going) [was: the first label
+    shown] }
   function InSpec(AComp: Integer; AAxis: TTyAxis; ASpec: PTyAxisLayoutSpec): Boolean;
   var i: Integer;
   begin
@@ -4876,15 +4954,15 @@ var
     AxisTextStyles(ASpec, lblS, nameS);
     for i := 0 to High(ASpec^.Placements) do
     begin
-      if not ASpec^.Placements[i].Shown or (ASpec^.Placements[i].Text <> AName) then Continue;
+      if not ASpec^.Placements[i].Built or (ASpec^.Placements[i].Text <> AName) then Continue;
       if Found(AComp, i, TextBox(ASpec^.Placements[i].Text, lblS, ASpec^.Placements[i].X,
         ASpec^.Placements[i].Y, ASpec^.Placements[i].AnchorH, ASpec^.Placements[i].AnchorV,
-        ASpec^.Placements[i].Rt, ASpec^.RotationRad, ASpec^.RtScale)) then Exit(True);
+        ASpec^.Placements[i].Rt, ASpec^.RotationRad, ASpec^.RtScale)) then Result := True;
     end;
     if ASpec^.NamePlacement.Shown and (TyAxisFullName(AAxis, ASpec) = AName) then
-      Result := Found(AComp, -1, TyRectF(ASpec^.NamePlacement.Rect.X, ASpec^.NamePlacement.Rect.Y,
+      if Found(AComp, -1, TyRectF(ASpec^.NamePlacement.Rect.X, ASpec^.NamePlacement.Rect.Y,
         ASpec^.NamePlacement.Rect.X + ASpec^.NamePlacement.Rect.W,
-        ASpec^.NamePlacement.Rect.Y + ASpec^.NamePlacement.Rect.H));
+        ASpec^.NamePlacement.Rect.Y + ASpec^.NamePlacement.Rect.H)) then Result := True;
   end;
 
 begin
@@ -5079,7 +5157,8 @@ begin
     AY := b.Top + (b.Bottom - b.Top) / 2;
     ADatum := el.Datum;
     AElement := k;
-    Exit(True);
+    { ([R7-AF] the last of the name: the traversal keeps going) }
+    Result := True;
   end;
 end;
 

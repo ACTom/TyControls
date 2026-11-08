@@ -59,6 +59,10 @@ function TyRtGlobalOf(ARoot: TJSONObject; const AFontFamily: string;
   before paying for the resolution. }
 function TyRtNodeWantsBlock(ANode: TJSONObject): Boolean;
 
+{ [R7-AF] whether a text style writes its halo (textBorderColor, not null):
+  a site whose one run draws none (a legend's items) takes the block then }
+function TyRtNodeWritesHalo(ANode: TJSONObject): Boolean;
+
 { THE STYLES FROM A MODEL CHAIN, the most specific node first (an item's
   label, its series' label, ...). Nil nodes are skipped. The block's font is
   NOT set -- the site's is final and comes in through TyRtFinish. }
@@ -196,11 +200,74 @@ procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
 procedure TyRtTakeHeight(AData: TJSONData; var S: TTyRtStyle);
 procedure TyRtTakeLineHeight(AData: TJSONData; var S: TTyRtStyle);
 
+{ [R7-AF] JAVASCRIPT'S `A + AText` READ BACK AS ITS NUMBER, AText a string:
+  the digits of A joined to it (24 + '3' is '243', 243). zrender grows a
+  TSpan's rect by its lineWidth -- `rect.width += lineWidth` -- and one
+  written as a string joins it. }
+function TyRtJoinedNum(A: Double; const AText: string): Double;
+
+{ [R7-AF] A TEXT BORDER'S WIDTH AS WRITTEN (textBorderWidth; nil or null:
+  False, not written): a number as it is (one that is no finite number
+  nought); a STRING as the canvas takes it -- its Number, nought where that
+  is none or not above nought, AInf where it is +Infinity (the width the
+  canvas had; AW nought) -- and itself in AText where it strokes, the
+  rect's arithmetic joins it; a boolean its number. }
+function TyRtTakeLineWidth(AData: TJSONData; out AW: Double; out AText: string;
+  out AInf: Boolean): Boolean;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText,
-     tyControls.AdvanceChart.Data;
+     tyControls.AdvanceChart.Data,
+     { [R7-AF] JavaScript's String of a number }
+     tyControls.AdvanceChart.Scale;
+
+function TyRtJoinedNum(A: Double; const AText: string): Double;
+begin
+  Result := TyJsToNumber(TyJsNumberToString(A) + AText);
+end;
+
+function TyRtTakeLineWidth(AData: TJSONData; out AW: Double; out AText: string;
+  out AInf: Boolean): Boolean;
+var n: Double;
+begin
+  AW := 0;
+  AText := '';
+  AInf := False;
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber:
+      begin
+        Result := True;
+        AW := AData.AsFloat;
+        if IsNan(AW) or IsInfinite(AW) then AW := 0;
+      end;
+    jtString:
+      begin
+        Result := True;
+        n := TyJsToNumber(AData.AsString);
+        if IsNan(n) then Exit;
+        if IsInfinite(n) then
+        begin
+          if n > 0 then
+          begin
+            AInf := True;
+            AText := AData.AsString;
+          end;
+          Exit;
+        end;
+        AW := n;
+        if n > 0 then AText := AData.AsString;
+      end;
+    jtBoolean:
+      begin
+        Result := True;
+        AW := Ord(AData.AsBoolean);
+      end;
+  end;
+end;
 
 function TyRtResolveOpt(AAttached: Boolean; ADisableBox: Boolean): TTyRtResolveOpt;
 begin
@@ -488,7 +555,8 @@ begin
     crColour: begin Result.HasStroke := True; Result.Stroke := c; end;
     crNone_: begin Result.HasStroke := True; Result.StrokeNone := True; end;
   end;
-  if NumOf(ts.Find('textBorderWidth'), x) then
+  { ([R7-AF] a string as the canvas takes it [was: a number only]) }
+  if TyRtTakeLineWidth(ts.Find('textBorderWidth'), x, Result.LineWidthText, Result.LineWidthInf) then
   begin
     Result.HasLineWidth := True;
     Result.LineWidth := x;
@@ -517,6 +585,12 @@ begin
   ShadowPartOf(ts.Find('textShadowBlur'), 1, Result.ShadowBlur, Result.ShadowLeft);
   ShadowPartOf(ts.Find('textShadowOffsetX'), 2, Result.ShadowOffsetX, Result.ShadowLeft);
   ShadowPartOf(ts.Find('textShadowOffsetY'), 4, Result.ShadowOffsetY, Result.ShadowLeft);
+end;
+
+function TyRtNodeWritesHalo(ANode: TJSONObject): Boolean;
+begin
+  Result := (ANode <> nil) and (ANode.Find('textBorderColor') <> nil)
+    and (ANode.Find('textBorderColor').JSONType <> jtNull);
 end;
 
 function TyRtNodeWantsBlock(ANode: TJSONObject): Boolean;
@@ -590,7 +664,9 @@ begin
     S.StrokeNone := AGlobal.StrokeNone;
     S.Stroke := AGlobal.Stroke;
   end;
-  if NumOf(Get(AOwn, 'textBorderWidth'), x) then
+  { ([R7-AF] a string as the canvas takes it, kept for the rect's
+    arithmetic [was: a number only, a string not written]) }
+  if TyRtTakeLineWidth(Get(AOwn, 'textBorderWidth'), x, S.LineWidthText, S.LineWidthInf) then
   begin
     S.HasLineWidth := True;
     S.LineWidth := x;
@@ -599,6 +675,8 @@ begin
   begin
     S.HasLineWidth := True;
     S.LineWidth := AGlobal.LineWidth;
+    S.LineWidthText := AGlobal.LineWidthText;
+    S.LineWidthInf := AGlobal.LineWidthInf;
   end;
   { textBorderType: retrieve2(the style's own, the global's) [F4c] }
   S.LineDash := TyDashTextOf(Get(AOwn, 'textBorderType'));
@@ -716,9 +794,30 @@ begin
     begin
       S.BorderWidth := x;
       S.BorderWidthInf := False;
+      S.BorderWidthWord := False;
     end
     else if TyOptIsPosInf(Get(AOwn, 'borderWidth')) then
-      S.BorderWidthInf := True;
+      S.BorderWidthInf := True
+    { [R7-AF] A STRING (not empty): its Number -- the canvas' lineWidth and
+      the rect's bounds take it through a product or a division, so '2' is
+      2; one that strokes nothing ('0', 'abc') is truthy all the same, and
+      the box's rect is made [was: not written] }
+    else if (Get(AOwn, 'borderWidth') <> nil) and (Get(AOwn, 'borderWidth').JSONType = jtString)
+      and (Get(AOwn, 'borderWidth').AsString <> '') then
+    begin
+      x := TyJsToNumber(Get(AOwn, 'borderWidth').AsString);
+      S.BorderWidthInf := False;
+      if not IsNan(x) and not IsInfinite(x) and (x > 0) then
+      begin
+        S.BorderWidth := x;
+        S.BorderWidthWord := False;
+      end
+      else
+      begin
+        S.BorderWidth := 0;
+        S.BorderWidthWord := True;
+      end;
+    end;
     SpreadRadius(Get(AOwn, 'borderRadius'), S);
     { [R2-F] backgroundColor: {image: src}: a picture (isImageBg) }
     d := Get(AOwn, 'backgroundColor');
@@ -1138,15 +1237,25 @@ begin
       px := AdjustX(APieces[i].X, pw, APieces[i].TextAlign);
       py := APieces[i].Y - ph / 2;
       { tSpanCreateBoundingRect2: a stroke the style gave grows the TSpan's
-        box by its width; the auto stroke is left out (Text.ts:656-676, 885) }
+        box by its width; the auto stroke is left out (Text.ts:656-676, 885)
+        -- [R7-AF] one written as a string joins the width and the height
+        as a string (the union reads the joined number) }
       if APieces[i].HasStroke and not APieces[i].DefaultStroke
         and (APieces[i].LineWidth > 0) then
       begin
         g := APieces[i].LineWidth;
         px := px - g / 2;
         py := py - g / 2;
-        pw := pw + g;
-        ph := ph + g;
+        if APieces[i].LineWidthText <> '' then
+        begin
+          pw := TyRtJoinedNum(pw, APieces[i].LineWidthText);
+          ph := TyRtJoinedNum(ph, APieces[i].LineWidthText);
+        end
+        else
+        begin
+          pw := pw + g;
+          ph := ph + g;
+        end;
       end;
     end;
     if not any then

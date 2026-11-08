@@ -398,6 +398,13 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [R7-AF] textBorderWidth written as a STRING: LineWidth its Number (the
+      canvas' lineWidth takes it so), LineWidthText the string where that is
+      above nought -- a TSpan's rect adds it to its width and height as a
+      string ('243' of 24 and '3'); LineWidthInf one of +Infinity (stroked at
+      the width the canvas had, LineWidth nought) }
+    LineWidthText: string;
+    LineWidthInf: Boolean;
     { [F4c] textBorderType as written ('' none) }
     LineDash: string;
     { [R2-F] textBorderDashOffset (a graphic text's lineDashOffset), when
@@ -439,6 +446,10 @@ type
       canvas takes no such width), and the box's stroked rect is
       not-a-number upstream -- the pointer never finds the box }
     BorderWidthInf: Boolean;
+    { [R7-AF] a borderWidth written as a string that is truthy but strokes
+      nothing ('0', 'abc'): the box's rect is made all the same
+      (`textBorderWidth && textBorderColor`), unstroked }
+    BorderWidthWord: Boolean;
     { [R2-I2] the box's border dash as written (a label's borderType, a
       graphic text's borderDash; '' solid) and its phase (borderDashOffset) }
     BorderDash: string;
@@ -524,6 +535,9 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     LineWidth: Double;
+    { [R7-AF] a text's lineWidth written as a string (above nought): its
+      rect joins it to its width and height as a string (TyRtBounds) }
+    LineWidthText: string;
     { [F4c] a text's textBorderType as written ('' a solid halo) }
     LineDash: string;
     { [R2-F] its phase (lineDashOffset), px }
@@ -619,6 +633,9 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [R7-AF] as TTyRtStyle's }
+    LineWidthText: string;
+    LineWidthInf: Boolean;
     { [F4c] the global textStyle's textBorderType ('' none) }
     LineDash: string;
     { [R2-F] and its textBorderDashOffset }
@@ -915,6 +932,9 @@ type
     LmMarginType: Integer;
     LmMargin: array[0..3] of Double;
     LmTextW, LmTextH, LmStrokeW: Double;
+    { [R7-AF] the written text border's width as a string: the TSpan's rect
+      joins it to its width and height ('' a number) }
+    LmStrokeText: string;
     LmInkFill: TTyChartColor;
     LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;

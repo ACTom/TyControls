@@ -156,6 +156,11 @@ type
     Box: TTyRawBox;
     Background, BorderColor: TTyTbColour;
     BorderWidth: Double;
+    { [R7-AF] a borderWidth of +Infinity: the box joins the group after the
+      layout (the toolbox keeps its place), the canvas refuses the width and
+      strokes at the one it had -- BorderWidth nought [was: stroked
+      infinitely wide, the pen raised] }
+    BorderWidthInf: Boolean;
     Radius: array of Double;
     { [R7-X] the rest of makeBackground's getItemStyle(['color',
       'opacity']): the shadow (HasShadow) and the border's dash, phase,
@@ -849,6 +854,8 @@ begin
   d := tb.Find('borderWidth');
   if Present(d) then NumOf(d, Result.BorderWidth) else Result.BorderWidth := 0;
   if IsNan(Result.BorderWidth) then Result.BorderWidth := 0;
+  Result.BorderWidthInf := IsInfinite(Result.BorderWidth) and (Result.BorderWidth > 0);
+  if IsInfinite(Result.BorderWidth) then Result.BorderWidth := 0;
   { [R7-X] the shadow and the border's keys, down to the root's }
   if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
   Result.HasShadow := TyStReadShadow([tb, root], [], [], Result.Shadow);
