@@ -887,6 +887,18 @@ function cases() {
     ['ab-dirty-trail', vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
       [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
     [0, 20, 40, 60, 80], { y: true, dirty: true }],
+    // [R7-AB] 6. a dirty block starts from the canvas' own state and brushes
+    //    the components meeting it too: a scatter of an unreadable colour
+    //    under a moving effect takes, in its block, the fill of the axis
+    //    label in that block (the y axis' inside one), or none (the canvas'
+    //    black) -- the whole paint's is the x axis' labels', drawn last
+    ['ab-dirty-axes', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5], [5, 7]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[0.2, 5], [9.4, 5]] }, { coords: [[5, 7], [9.4, 7]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
+      yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
