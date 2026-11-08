@@ -4057,6 +4057,38 @@ var bad: string;
         [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
   end;
 
+  { the ink's top-left corner (a title drawn alone: not in the list) at 144
+    PPI is the one at 96 times 1.5, to a pixel and a half }
+  procedure InkAt(const AName, AOpt: string);
+  var ppi, xx, yy: Integer; b: TBGRABitmap; px, bg: TBGRAPixel; ink: array[0..1] of TPoint;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+        bg := b.GetPixel(b.Width div 2, b.Height - 6);
+        ink[ppi] := Point(MaxInt, MaxInt);
+        for yy := 5 to b.Height - 6 do
+          for xx := 5 to b.Width - 6 do
+          begin
+            px := b.GetPixel(xx, yy);
+            if (Abs(px.red - bg.red) > 6) or (Abs(px.green - bg.green) > 6) or (Abs(px.blue - bg.blue) > 6) then
+            begin
+              if xx < ink[ppi].X then ink[ppi].X := xx;
+              if yy < ink[ppi].Y then ink[ppi].Y := yy;
+            end;
+          end;
+      finally
+        b.Free;
+      end;
+    end;
+    if (Abs(ink[1].X - 1.5 * ink[0].X) > 1.5) or (Abs(ink[1].Y - 1.5 * ink[0].Y) > 1.5) then
+      bad := bad + LineEnding + Format('%s: inked from (%d, %d) at 96, (%d, %d) at 144',
+        [AName, ink[0].X, ink[0].Y, ink[1].X, ink[1].Y]);
+  end;
+
   { a tooltip shown by an action: its box' top-left at 144 PPI is the one at
     96 times 1.5 (its size is the text's: measured at each PPI) }
   procedure Tip(const AName, AOpt: string);
@@ -4120,6 +4152,8 @@ begin
     of 400 is right of the middle, at device 207 of 600 left of it) }
   One('visualMap auto align', '{' + G + '"visualMap":{"left":192,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
   One('visualMap piecewise', '{' + G + '"visualMap":{"type":"piecewise","left":20,"top":20,"min":0,"max":10,"splitNumber":3,"itemWidth":20,"itemHeight":14},"series":[{"type":"scatter","data":[[3,3,5]]}]}');
+  InkAt('title text', '{' + G + '"title":{"text":"Tt","subtext":"Ss","left":20,"top":10},"series":[]}');
+  InkAt('title box', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#888888"},"series":[]}');
   Tip('tooltip position', '{' + G + RTIP + ',"position":[100,60],"padding":8},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
   Tip('tooltip by the point', '{' + G + RTIP + '},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
   Tip('tooltip html', '{' + G + '"tooltip":{"showDelay":0,"transitionDuration":0,"position":[100,60]},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
