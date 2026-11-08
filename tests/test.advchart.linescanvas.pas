@@ -169,6 +169,7 @@ type
     procedure TestALabelBoxOnATranslucentHostAsUpstream;
     procedure TestADzWidthOfNoNumberStrokesNothing;
     procedure TestALonePointDrawsNothing;
+    procedure TestAnUnplacedSlidersPixelsAsUpstream;
     procedure TestARichTipsBorderIsOutsideItsBox;
     procedure TestATipsTextShadowIsDrawn;
     procedure TestALabelBoxsRefusedColoursAreTheCanvas;
@@ -1101,6 +1102,7 @@ var
   nm: Boolean;
   pk: string;
   ptrs: TTyOverlayShapeArray;
+  fps: Double;
 begin
   strict := APrefix <> 'w-';
   FBad := 0;
@@ -1415,6 +1417,13 @@ begin
             { ([R7-AC] a list of an odd length the canvas doubles, as
               setLineDash does: 'dotted' is [w], [w, w] on the canvas) }
             if Odd(Length(pdash)) then pdash := Concat(pdash, pdash);
+            { ([R7-AE] an element in its own frame under the transform the
+              canvas kept: its dash is the canvas' own, drawn at its pen's
+              scale) }
+            fps := 1;
+            if (Length(el.FrameShape) > 0) and (el.Style.PenScale > 0) then fps := el.Style.PenScale;
+            pdash := Copy(pdash, 0, Length(pdash));
+            for n := 0 to High(pdash) do pdash[n] := pdash[n] * fps;
             Inc(FCompared);
             { ([R7-Z] the z- cases: a dash where upstream strokes solid too) }
             if strict and (ld.Count = 0) and (Length(pdash) > 0) then
@@ -1431,7 +1440,7 @@ begin
                   Break;
                 end;
               ldo := HexD(o.Strings['ldo']) * sc;
-              pldo := el.Style.DashOffsetLogical;
+              pldo := el.Style.DashOffsetLogical * fps;
               if IsNan(pldo) then pldo := -1e300;
               Inc(FCompared);
               if Abs(pldo - ldo) > 1e-6 then
@@ -3051,6 +3060,59 @@ begin
       AssertTrue(Format('ink at (%d,%d): (%d,%d,%d)', [x, y, px.red, px.green, px.blue]),
         (px.red >= 250) and (px.green >= 250) and (px.blue >= 250));
     end;
+end;
+
+{ [R7-AE] AN UNPLACED SLIDER'S PIXELS: ae-dz-inf-sym's under the
+  scatter's transform (4 times, at (210, 142.5)) -- the data shadow's
+  area beside the window in the line's green within its group's clip
+  (local x 0 .. 64 is device 210 .. 466), the clip taken through the same
+  transform; and ac-dz-inf's under the canvas' own frame, the chart drawn
+  at (30, 20): the background (local 0 .. 320 x 0 .. 30) from there }
+procedure TAdvChartLinesCanvasOracleTest.TestAnUnplacedSlidersPixelsAsUpstream;
+var
+  cs: TJSONArray;
+  c: TJSONObject;
+  i, x, y, n, pass: Integer;
+  px: TBGRAPixel;
+  id: string;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  for pass := 0 to 1 do
+  begin
+    if pass = 0 then id := 'ae-dz-inf-sym' else id := 'ac-dz-inf';
+    c := nil;
+    for i := 0 to cs.Count - 1 do
+      if cs.Objects[i].Strings['id'] = id then c := cs.Objects[i];
+    AssertTrue(id, c <> nil);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := cT0;
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    if pass = 0 then
+    begin
+      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      n := 0;
+      for x := 212 to FBmp.Width - 2 do
+        for y := 144 to 239 do
+        begin
+          px := FBmp.GetPixel(x, y);
+          if (px.green > 200) and (px.red < 60) and (px.blue < 60) then Inc(n);
+        end;
+      AssertTrue(Format('%s: the area in its clip, %d green px', [id, n]), n > 200);
+    end
+    else
+    begin
+      FChart.Render(FBmp.Canvas, Rect(30, 20, 30 + FBmp.Width, 20 + FBmp.Height), 96);
+      px := FBmp.GetPixel(345, 45);
+      AssertTrue(Format('%s: the background at (345,45): (%d,%d,%d)', [id, px.red, px.green, px.blue]),
+        (Abs(px.red - $EE) <= 3) and (Abs(px.green - $EE) <= 3) and (Abs(px.blue - $EE) <= 3));
+    end;
+  end;
 end;
 
 { [R7-AE] AN UNPLACED SLIDER IS FOUND BY NOTHING (ae-dz-inf-*, ac-dz-inf):

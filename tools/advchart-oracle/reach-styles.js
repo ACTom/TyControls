@@ -318,6 +318,10 @@ function cases() {
     ['tip.legend-ref-off', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
       legend: {}, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
     'tooltip', { tip: { type: 'showTip', legendIndex: 0, name: 'S' }, none: true }],
+    // (an item's tooltip showing: a showTip that finds no element leaves it as it was)
+    ['tip.legend-ref-pre', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: {}, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { pre: { type: 'showTip', seriesIndex: 0, dataIndex: 1 }, tip: { type: 'showTip', legendIndex: 0, name: 'S' } }],
     ['tip.legend-name', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
       legend: { name: 'LG', tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] },
         { type: 'scatter', name: 'T', data: [2, 3, 1] }] })),
@@ -522,7 +526,8 @@ function run(id, option, part, more) {
       }
       // ([R7-AE] the transforms brought up to date first, as a paint would:
       // the rect of the element named is taken through its transform)
-      if (more.at || more.none) chart.getZr().storage.getDisplayList(true);
+      if (more.at || more.none || more.pre) chart.getZr().storage.getDisplayList(true);
+      if (more.pre) chart.dispatchAction(JSON.parse(JSON.stringify(more.pre)));
       chart.dispatchAction(more.tip === true ? { type: 'showTip', seriesIndex: 0, dataIndex: 1 } : JSON.parse(JSON.stringify(more.tip)));
       // [R7-AE] a showTip that opens nothing
       if (more.none) {
@@ -536,6 +541,7 @@ function run(id, option, part, more) {
         padding: get('padding'), order: get('order'), backgroundColor: get('backgroundColor'), borderRadius: get('borderRadius'),
         text: el.style.text, stroke: colourOf(el.style.borderColor) } };
       if (more.tip !== true) rec.tip.action = more.tip;
+      if (more.pre) rec.tip.pre = more.pre;
       // [R7-AE] the point the tip was shown at
       if (more.at) rec.tip.at = [view._lastX, view._lastY];
       return rec;

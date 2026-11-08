@@ -4525,6 +4525,69 @@
    }
   },
   {
+   "id": "tip.legend-ref-pre",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {}
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "pre": {
+     "type": "showTip",
+     "seriesIndex": 0,
+     "dataIndex": 1
+    }
+   }
+  },
+  {
    "id": "tip.legend-name",
    "option": {
     "animation": false,

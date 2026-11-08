@@ -372,6 +372,12 @@ begin
         { a proxy's box: its own cascade, not the item's -- the box alone }
         if tip.Find('action') is TJSONObject then
         begin
+          { ([R7-AE] an action before it: the tip it leaves showing) }
+          if tip.Find('pre') is TJSONObject then
+          begin
+            FChart.DispatchAction(tip.Objects['pre'].AsJSON);
+            Draw;
+          end;
           FChart.DispatchAction(tip.Objects['action'].AsJSON);
           Draw;
           { [R7-AE] a showTip that opens nothing (a timeline's index and a

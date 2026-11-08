@@ -3201,29 +3201,12 @@ procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement);
 { [R7-P] a pen the shape's transform stretches (PenMap): the style's width,
   dash and phase stroked through the map, PenScale folded into it
   (TyStylePenOf) }
-{ [R7-AE] a poly whose path is a move alone (a polyline of one point, a
-  series' path of no segment): the canvas strokes and fills nothing of it }
-function PolyOfNoSegment(const AShape: TTyChartShape): Boolean;
-var k: Integer;
-begin
-  Result := False;
-  if not (AShape.Kind in [cskPolyline, cskPolygon]) then Exit;
-  if Length(AShape.Cmds) > 0 then
-  begin
-    for k := 0 to High(AShape.Cmds) do
-      if AShape.Cmds[k].Kind in [pckLine, pckCurve] then Exit;
-    Exit(True);
-  end;
-  Result := Length(AShape.Points) < 2;
-end;
-
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   el: TTyChartElement;
   k: Integer;
   pm: TTyMat2D;
 begin
-  if PolyOfNoSegment(AElement.Shape) and (AElement.Caption.Text = '') then Exit;
   if TyStylePenOf(AElement.Style, pm) then
   begin
     el := AElement;

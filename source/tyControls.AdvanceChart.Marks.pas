@@ -2700,8 +2700,6 @@ var
       if AVisual.VisualLineStroke then ApplyVisualLine(v, False);
       el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
       AttachPath(el.Shape, lineRuns, spec.Smooth > 0);
-      { ([R7-AE] a lone point's: no segment, nothing to point at) }
-      if lone then el.Silent := True;
       { HALF THE PEN, AT LEAST FIVE WIDE. `v.StrokeWidthLogical` is already the
         resolved width -- the default 2 was filled in a few lines up. zrender's
         Path.contain tests an unfilled stroke at max(lineWidth,
