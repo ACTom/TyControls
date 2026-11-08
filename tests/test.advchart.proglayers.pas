@@ -59,6 +59,7 @@ type
     procedure TestTwoRunsOfOneLevelOutOfOrder;
     procedure TestALevelWhoseFirstChunkDrawsNothing;
     procedure TestRowsSelectedDuringTheRun;
+    procedure TestAPreventedRunIsDrawnAtOnce;
   end;
 
 implementation
@@ -802,6 +803,65 @@ begin
     frames[False].Free;
     frames[True].Free;
     TyAdvChartLayerRegionForTest(True);
+  end;
+end;
+
+{ PREVENTINCREMENTAL: a heatmap on a geo (lng / lat), a lines series whose
+  effect shows -- no progressive pipeline, drawn at once; a heatmap on a
+  grid of as many rows comes in chunks [was: every one in chunks] }
+procedure TAdvChartProgLayersTest.TestAPreventedRunIsDrawnAtOnce;
+const
+  cSq = '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"A"},'
+    + '"geometry":{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}}]}';
+var
+  chart: TPlProbe;
+  bmp: TBitmap;
+  k: Integer;
+  opt, rows, cells: string;
+begin
+  TyChartRegisterMap('pl-sq', cSq);
+  rows := '';
+  cells := '';
+  for k := 0 to 29 do
+  begin
+    if k > 0 then
+    begin
+      rows := rows + ',';
+      cells := cells + ',';
+    end;
+    rows := rows + Format('[%d,%d,0.5]', [(k * 37) mod 10, (k * 53) mod 10]);
+    cells := cells + Format('[%d,%d,0.5]', [k mod 6, k div 6]);
+  end;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(400, 300);
+    for k := 0 to 2 do
+    begin
+      case k of
+        0: opt := '{"animation":false,"geo":{"map":"pl-sq"},"visualMap":{"min":0,"max":1,"show":false},'
+          + '"series":[{"type":"heatmap","coordinateSystem":"geo","progressive":10,"progressiveThreshold":20,'
+          + '"data":[' + rows + ']}]}';
+        1: opt := '{"animation":false,"xAxis":{"min":0,"max":10},"yAxis":{"min":0,"max":10},'
+          + '"series":[{"type":"lines","coordinateSystem":"cartesian2d","progressive":10,"progressiveThreshold":20,'
+          + '"effect":{"show":true},"data":[' + StringReplace(StringReplace(rows, '[', '{"coords":[[', [rfReplaceAll]),
+            ',0.5]', '],[5,5]]}', [rfReplaceAll]) + ']}]}';
+      else
+        opt := '{"animation":false,"visualMap":{"min":0,"max":1,"show":false},'
+          + '"xAxis":{"type":"category","data":["a","b","c","d","e","f"]},"yAxis":{"type":"category","data":["a","b","c","d","e"]},'
+          + '"series":[{"type":"heatmap","progressive":10,"progressiveThreshold":20,"data":[' + cells + ']}]}';
+      end;
+      chart := NewChart(400, 300, opt);
+      try
+        AssertEquals(Format('case %d parses', [k]), '', chart.OptionError);
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        AssertEquals(Format('case %d: in chunks', [k]), k = 2, chart.ProgressiveUnfinished);
+      finally
+        chart.Free;
+      end;
+    end;
+  finally
+    bmp.Free;
   end;
 end;
 
