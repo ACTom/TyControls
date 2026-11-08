@@ -300,6 +300,18 @@ function cases() {
       { value: [6, 5], itemStyle: { color: '#808080', shadowColor: '#0000ff', shadowBlur: 1 },
         emphasis: { itemStyle: { shadowBlur: '0x4', shadowOffsetX: '5' } } }])), { animation: true, animationDuration: 100 }),
     [600, 1000, 1030, 1060, 1100, 1250], { acts: { 1: [HI(0, 1), HI(0, 2)] } }],
+    // [R7-AB] an axis-triggered tooltip's emphasis: updateAxisPointer's
+    // highlight puts the rows under the pointer in their emphasis state, in
+    // the paint order (z2 lifted), its refused values the canvas' kept
+    ['st-axis-tip', Object.assign(vv([{ type: 'bar', barWidth: 20, data: [{ value: 5, itemStyle: BEFORE },
+      { value: 4, itemStyle: { color: '#808080', borderColor: '#000', borderWidth: 2 },
+        emphasis: { itemStyle: { shadowBlur: -3, shadowColor: 'nope', borderCap: 'Round', borderJoin: 'foo',
+          borderWidth: 'Infinity', color: 'nope' } } }, { value: 3 }] },
+    { type: 'line', data: [2, 3, 4], symbolSize: 10, itemStyle: { color: '#00aa00' },
+      emphasis: { scale: false, itemStyle: { shadowBlur: -2, shadowColor: '#ff00ff', color: 'bad', borderMiterLimit: -1 } } }]),
+    { xAxis: { show: false, type: 'category', data: ['a', 'b', 'c'] }, yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      tooltip: { trigger: 'axis', renderMode: 'richText', showContent: false } }),
+    [0, 10], { acts: { 1: [{ type: 'showTip', seriesIndex: 0, dataIndex: 1 }] } }],
   ];
 }
 
