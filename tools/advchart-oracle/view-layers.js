@@ -165,7 +165,9 @@ function run(c) {
     snap();
     for (const s of c.steps || []) {
       if (s.set) chart.setOption(JSON.parse(JSON.stringify(s.set)), s.opts || false);
-      if (s.act) chart.dispatchAction(s.act);
+      // (a copy: dispatchAction writes an inner key into the payload, its
+      // number the order the dist's modules made their inners in)
+      if (s.act) chart.dispatchAction(JSON.parse(JSON.stringify(s.act)));
       if (s.size) chart.resize({ width: s.size[0], height: s.size[1] });
       if (s.t != null) { NOW = T0 + s.t; chart.getZr().animation.update(); }
       chart.getZr().refreshImmediately(true);

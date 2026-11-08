@@ -2504,22 +2504,19 @@
     {
      "act": {
       "type": "timelineChange",
-      "currentIndex": 1,
-      "__ec_inner_19": {}
+      "currentIndex": 1
      }
     },
     {
      "act": {
       "type": "timelineChange",
-      "currentIndex": 2,
-      "__ec_inner_19": {}
+      "currentIndex": 2
      }
     },
     {
      "act": {
       "type": "timelineChange",
-      "currentIndex": 0,
-      "__ec_inner_19": {}
+      "currentIndex": 0
      }
     }
    ],
@@ -3168,8 +3165,7 @@
     {
      "act": {
       "type": "timelineChange",
-      "currentIndex": 1,
-      "__ec_inner_19": {}
+      "currentIndex": 1
      }
     }
    ],
