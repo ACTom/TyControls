@@ -42,6 +42,8 @@ type
     OverrideCalls: Integer;
     function Lines: TTyTooltipLineArray;
     function FmtText: string;
+    { [R7-AC] the control's own text colour (TyAdvChart's) }
+    function HostInk: TTyColor;
     procedure MoveTo(AX, AY: Integer);
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   protected
@@ -163,6 +165,11 @@ end;
 function TThProbe.FmtText: string;
 begin
   Result := TooltipFormatterText;
+end;
+
+function TThProbe.HostInk: TTyColor;
+begin
+  Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]).TextColor;
 end;
 
 function TThProbe.TooltipHtmlLines(const AHtml: string;
@@ -873,20 +880,25 @@ end;
   inherits, the page's (a browser's default black, CanvasText). Not an
   oracle run: node has no DOM; these are CSS's own rules. }
 procedure TAdvChartTipHtmlChartTest.TestRefusedCssColoursAsTheBrowserShowsThem;
-var l: TTyTooltipLineArray; i, j: Integer;
+var l: TTyTooltipLineArray; i, j: Integer; host: TTyColor;
 begin
   Show(Format(cBar, ['"tooltip":{"backgroundColor":"nope","borderColor":"bad","textStyle":{"color":"nope"},'
     + '"formatter":"Ab"},']));
   FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
   Render;
+  { [R7-AC] what the text inherits: the page's colour upstream -- here,
+    with no page, the control's own text colour (TyAdvChart's), not a
+    browser's default black }
+  host := FChart.HostInk;
+  AssertTrue('the host''s colour is not black here', host <> TTyColor($FF000000));
   AssertEquals('background-color dropped: transparent', 0, TyAlphaOf(FChart.TooltipSurfaceColour));
-  AssertEquals('border-color dropped twice: currentColor, the inherited black',
-    IntToHex($FF000000, 8), IntToHex(FChart.TooltipBorderColour, 8));
+  AssertEquals('border-color dropped twice: currentColor, the inherited colour',
+    IntToHex(host, 8), IntToHex(FChart.TooltipBorderColour, 8));
   l := FChart.Lines;
   AssertTrue('a line', Length(l) > 0);
   for i := 0 to High(l) do
     for j := 0 to High(l[i].Runs) do
-      AssertEquals('color dropped: the page''s black', IntToHex($FF000000, 8),
+      AssertEquals('color dropped: the inherited colour, the control''s own', IntToHex(host, 8),
         IntToHex(TTyColor(l[i].Runs[j].Colour), 8));
   { a written text colour: the border's currentColor is it }
   Show(Format(cBar, ['"tooltip":{"borderColor":"bad","textStyle":{"color":"#123456"},"formatter":"Ab"},']));

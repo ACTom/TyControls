@@ -278,6 +278,27 @@ function cases() {
       { tip: { type: 'showTip', x: 100, y: 100, tooltip: { content: 'hello' } } }],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
+    // ---- [R7-AC] the other tooltips' cascades, the root under the global tooltip: a marker's (the
+    // series item tooltip of its data), a matrix cell's, a geo region's, a legend item's, a toolbox
+    // icon's, a timeline tick's -- each opened by showTip at a point over its element (findHover's
+    // target there: `find` names what it must be; the point found is the action recorded) ----
+    ['tip.marker-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      series: [{ type: 'scatter', symbolSize: 4, data: [1, 2, 3],
+        markPoint: { symbol: 'circle', symbolSize: 24, label: { show: false }, data: [{ name: 'M', coord: [1, 2.5] }] } }] })),
+    'tooltip', { tip: { find: 'markPoint' } }],
+    ['tip.matrix-root', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      matrix: { x: { data: ['P', 'Q'] }, y: { data: ['U', 'V'] }, tooltip: { show: true } } }),
+    'tooltip', { tip: { find: 'matrix' } }],
+    ['tip.geo-root', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      geo: { map: 'r7xsq', tooltip: { show: true } } }), 'tooltip', { tip: { find: 'geo' } }],
+    ['tip.legend-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: { tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { tip: { find: 'legend' } }],
+    ['tip.toolbox-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      toolbox: { feature: { restore: {} }, tooltip: { show: true } } })), 'tooltip', { tip: { find: 'toolbox' } }],
+    ['tip.timeline-root', { baseOption: bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20,
+      formatter: 'R:{b}', timeline: { axisType: 'category', data: ['a', 'b'], autoPlay: false, left: 20, right: 20, bottom: 10 } }),
+      options: [{ series: [] }, { series: [] }] }, 'tooltip', { tip: { find: 'timeline' } }],
   ];
 }
 
@@ -400,6 +421,56 @@ function run(id, option, part, more) {
       let model = null;
       const show = view._showTooltipContent;
       view._showTooltipContent = function (tooltipModel) { model = tooltipModel; return show.apply(this, arguments); };
+      // [R7-AC] a point over the element `find` names: of the points of a 2 px raster where findHover's
+      // target is it (a component's tooltipConfig of that main type, a marker's data, a timeline's tick),
+      // the one nearest the middle of those of the first such element (off its edges)
+      if (more.tip.find) {
+        const zr = chart.getZr();
+        // (the transforms brought up to date, as a paint would)
+        zr.storage.getDisplayList(true);
+        // (getECData's store: makeInner's '__ec_inner_<n>' key, geo-svg.js' innerOf)
+        const getECDataOf = el => {
+          for (const k of Object.keys(el)) {
+            const v = el[k];
+            if (k.startsWith('__ec_inner_') && v && typeof v === 'object'
+              && ('dataIndex' in v || 'tooltipConfig' in v || 'dataType' in v || 'dataModel' in v)) return v;
+          }
+          return null;
+        };
+        const kind = more.tip.find;
+        const ok = t => {
+          for (let e = t; e; e = e.parent || e.__hostTarget) {
+            const d = getECDataOf(e);
+            if (!d) continue;
+            if (kind === 'markPoint') return !!d.dataModel && d.dataModel.mainType === 'markPoint';
+            if (kind === 'timeline') return !!d.dataModel && d.dataModel.mainType === 'timeline';
+            if (d.tooltipConfig) return d.componentMainType === kind;
+          }
+          return false;
+        };
+        let found = null;
+        let first = null;
+        const pts = [];
+        for (let y = 1; y < H; y += 2) {
+          for (let x = 1; x < W; x += 2) {
+            const h = zr.handler.findHover(x, y);
+            if (!(h && h.target && ok(h.target))) continue;
+            if (!first) first = h.target;
+            if (h.target === first) pts.push([x, y]);
+          }
+        }
+        if (pts.length) {
+          const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+          const my = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+          let best = Infinity;
+          for (const p of pts) {
+            const d = (p[0] - mx) * (p[0] - mx) + (p[1] - my) * (p[1] - my);
+            if (d < best) { best = d; found = { type: 'showTip', x: p[0], y: p[1] }; }
+          }
+        }
+        must(found, id + ': no ' + kind + ' element to show the tip over');
+        more = Object.assign({}, more, { tip: found });
+      }
       chart.dispatchAction(more.tip === true ? { type: 'showTip', seriesIndex: 0, dataIndex: 1 } : JSON.parse(JSON.stringify(more.tip)));
       must(model, id + ': no tooltip shown');
       const el = view._tooltipContent.el;
