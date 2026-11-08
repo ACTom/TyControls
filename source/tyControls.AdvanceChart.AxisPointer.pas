@@ -426,6 +426,14 @@ begin
     begin
       ASpec.HasColour := True;
       ASpec.Colour := c;
+    end
+    { [R7-AC] a string no parser reads: the label's span keeps the fill the
+      canvas had [was: not written, the skin's] }
+    else if (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      ASpec.HasColour := True;
+      ASpec.Colour := cTyCanvasColourLeft;
     end;
   end;
   if Claim(lbl, 'backgroundColor', ASeen, 'label.') then
@@ -435,6 +443,14 @@ begin
     begin
       ASpec.HasBackground := True;
       ASpec.Background := c;
+    end
+    { [R7-AC] and its box the fill (buildLabelElOption's backgroundColor:
+      the box drawn, in what the canvas had) }
+    else if (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      ASpec.HasBackground := True;
+      ASpec.Background := cTyCanvasColourLeft;
     end;
   end;
   if Claim(lbl, 'borderColor', ASeen, 'label.') then

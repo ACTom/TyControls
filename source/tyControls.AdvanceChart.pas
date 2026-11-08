@@ -247,6 +247,11 @@ type
     ShadowColor: TTyChartColor;
     Image: string;
     Opacity: Double;
+    { [R7-AC] its border: HasStroke where it strokes, the colour and the
+      width (CSS px) }
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    StrokeWidth: Double;
   end;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
@@ -1981,6 +1986,8 @@ type
     FTipBorderPainted: TTyColor;
     { [R7-AA] the box's fill as last painted (TooltipSurfaceColour) }
     FTipSurfacePainted: TTyColor;
+    { [R7-AC] the rect the box was last filled over (TooltipFillBox) }
+    FTipFill: TTyRectF;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R7-N] the pointer labels the last PaintAxisPointers drew }
@@ -1988,6 +1995,21 @@ type
     { [R7-X] the pointer lines and bands the last PaintAxisPointers drew,
       the title boxes the last PaintTitles drew }
     FPtrShapesDrawn: TTyOverlayShapeArray;
+    { [R7-AC] THE OVERLAY'S RUN: the root's groups after the list -- the
+      axis pointers (z 50: their lines, bands and handles at z2 0, then
+      their labels at z2 10, in their groups' order), then a richText
+      tooltip (z 60) -- each element taking what the one before it left.
+      FOvPos the list's elements stepped so far; FPtrPass 1 a pointer's
+      shapes alone, 2 its label alone, 0 both }
+    FOvRun: TTyCanvasRun;
+    FOvPos: Integer;
+    FOvOn: Boolean;
+    FPtrPass: Integer;
+    { [R7-AC] a merging setOption keeps the axis pointers' slides: the
+      views and their BaseAxisPointer stay, setStyle takes the new style at
+      once and the slide goes on (a notMerge, a resize: dropped with the
+      build, as before) }
+    FPtrSlideKeep: Boolean;
     FTitleFramesDrawn: TTyOverlayShapeArray;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
@@ -4016,8 +4038,14 @@ type
       parser reads, as html or the canvas shows them (TooltipInk sets the
       text's) }
     procedure TipSettleRefused(const ASpec: TTyTooltipSpec; const AInk: TTyTooltipInk;
-      var ASurface: TTyFill; var ABorder: TTyColor; ABorderW: Double; const ASt: TTyStyleSet;
+      var ASurface: TTyFill; var ABorder: TTyColor; ABorderW: Double; var ASt: TTyStyleSet;
       var ALines: TTyTooltipLineArray);
+    { [R7-AC] the overlay's run: started from the canvas' ground, the list
+      stepped up to the elements above AZ / AZ2, an element of the overlay
+      stepped there }
+    procedure OvStart;
+    procedure OvAdvance(AZ, AZ2: Integer);
+    procedure OvStep(var AEl: TTyChartElement; AZ, AZ2: Integer);
     { [R2-I8] a component item's content in the box's language: encodeHTML'd
       in html mode, as setTooltipConfig's encodeHTMLContent has it }
     function TipContentName(const AName: string): string;
@@ -4509,6 +4537,13 @@ type
     function TooltipBorderColour: TTyColor;
     { [R7-AA] the colour the tooltip's box was last filled in }
     function TooltipSurfaceColour: TTyColor;
+    { [R7-AC] the rect the box was last filled over, device px (invalid when
+      none was drawn): a richText box sits in from where it was placed by
+      its border and its shadow's outer size }
+    function TooltipFillBox: TTyRectF;
+    { [R7-AC] the model the last show built (its cascade resolved): what
+      its box says, whichever element opened it }
+    function TooltipShownSpec: TTyTooltipSpec;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;

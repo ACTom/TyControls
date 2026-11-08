@@ -570,8 +570,11 @@ begin
   AssertEquals('legend: row 6 clear', 0, Ink(14, 6));
   AssertTrue('legend: row 7 part of a pixel', (Ink(14, 7) > 0) and (Ink(14, 7) < full));
 
+  { ([R7-AC] a richText box's border is TooltipRichContent's 1 whatever
+    borderWidth says -- half of it outside the box, round it: in the fill's
+    colour here, the box's edge at the place) }
   o := TJSONObject(GetJSON('{"animation":false,"tooltip":{"position":[50.3,40.6],"hideDelay":0,'
-    + '"backgroundColor":"#000","borderWidth":0,"shadowBlur":0,"shadowColor":"transparent",'
+    + '"backgroundColor":"#000","borderColor":"#000","borderWidth":0,"shadowBlur":0,"shadowColor":"transparent",'
     + '"padding":6,"renderMode":"richText"},'
     + '"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"value","max":10},'
     + '"series":[{"type":"bar","data":[3,5]}]}'));

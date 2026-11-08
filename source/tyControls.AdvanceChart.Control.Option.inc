@@ -23,6 +23,7 @@ begin
   FTipLastY := NaN;
   FTipKeepAt := NaN;
   FTipBox := TyInvalidRectF;
+  FTipFill := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
   { what upstream's canvas starts as [F6a] }
   FCursorName := 'default';
@@ -211,8 +212,11 @@ begin
   { the hits an action waiting carries hold them too: it falls back on its
     dataByCoordSys [Batch 153] }
   ActForgetHits;
-  { the pointer's slide goes with the axes [Batch 92] }
-  PtrAnimDrop;
+  { the pointer's slide goes with the axes [Batch 92] -- [R7-AC] but for
+    a merging setOption's build: the slide goes on [was: always dropped,
+    the pointer jumping to its end] }
+  if FPtrSlideKeep then FPtrSlideKeep := False
+  else PtrAnimDrop;
   { AND THE RADARS WITH THEM, for the same reason: a binding holds a radar's
     INDEX, and the spoke objects a paint list was built against are about to
     stop existing. }
@@ -561,11 +565,16 @@ begin
     and an init ignores replaceMerge (initBase merges with no opts) }
   if AOpts.NotMerge or not (FOption.Root is TJSONObject) then
   begin
+    FPtrSlideKeep := False;
     ApplyNotMerge(AJson, AOpts.ReplaceMerge);
     Result := not FOption.Error.Failed;
   end
   else
+  begin
+    { [R7-AC] the pointers' slides go on through the merge's build }
+    FPtrSlideKeep := True;
     Result := DoMerge(AJson, AOpts.ReplaceMerge);
+  end;
   if Result then
   begin
     { [F3c] the update's transition option: this setOption's }

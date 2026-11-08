@@ -565,6 +565,8 @@ begin
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  { [R7-AC] the shapes in one pass, the label in another (FPtrPass) }
+  if FPtrPass <> 2 then
   case d.Shape.Kind of
     spkLine:
       if tpBorderColor in lineS.Present then
@@ -601,6 +603,7 @@ begin
           TyPointF(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2)]), False, colour, 0, nil);
       end;
   end;
+  if FPtrPass = 1 then Exit;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
   { [R7-N] the text in its block (createTextStyle), hung at the box's place }
@@ -1558,6 +1561,8 @@ begin
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   s := d.Shape;
+  { [R7-AC] the shapes in one pass, the label in another (FPtrPass) }
+  if FPtrPass <> 2 then
   case s.Kind of
     plpkLine, plpkCircle:
       if tpBorderColor in lineS.Present then
@@ -1587,6 +1592,7 @@ begin
         PtrShapePaint(APainter, AHit, PolarBandShape(s), False, colour, 0, nil);
       end;
   end;
+  if FPtrPass = 1 then Exit;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
   { [R7-N] the text in its block (createTextStyle), hung at the box's place }

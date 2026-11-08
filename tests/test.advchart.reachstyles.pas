@@ -55,6 +55,7 @@ type
     function TipSpec: TTyTooltipSpec;
     function TipText: string;
     function TipStroke: TTyColor;
+    function TipShown: TTyTooltipSpec;
   end;
 
   TAdvChartReachStylesOracleTest = class(TTestCase)
@@ -123,6 +124,11 @@ end;
 function TReachProbe.TipText: string;
 begin
   Result := TooltipFormatterText;
+end;
+
+function TReachProbe.TipShown: TTyTooltipSpec;
+begin
+  Result := TooltipShownSpec;
 end;
 
 function TReachProbe.TipStroke: TTyColor;
@@ -363,6 +369,14 @@ begin
           Draw;
           want := ' text ' + tip.Strings['text'] + ' stroke ' + tip.Strings['stroke'];
           have := ' text ' + FChart.TipText + ' stroke ' + ColourHex(Cardinal(FChart.TipStroke));
+          { [R7-AC] and the padding the shown model has (the root's, under
+            the global tooltip's, for every kind of tooltip) }
+          ts := FChart.TipShown;
+          want := want + ' padding ' + PadText(tip.Find('padding'));
+          if ts.HasPadding then
+            have := have + ' padding ' + FloatToStr(ts.PadTop) + ',' + FloatToStr(ts.PadRight) + ','
+              + FloatToStr(ts.PadBottom) + ',' + FloatToStr(ts.PadLeft)
+          else have := have + ' padding none';
           Inc(nCases);
           Inc(nTip);
           if have <> want then

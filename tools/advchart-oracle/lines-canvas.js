@@ -166,6 +166,9 @@ let W = false;
 let Z = false;
 // [R7-AA] the cases named aa-...: every op numbered in paint order (`q`)
 let AA = false;
+// [R7-AC] the cases named ac-...: recorded as the aa- ones, and a gradient
+// an op is made with keeps its arguments (`fo` / `so`, as the y- cases)
+let AC = false;
 let SEQ = 0;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
@@ -281,7 +284,8 @@ function makeCtx(canvas) {
     }
     let o = OPS.get(owner);
     if (!o) { o = []; OPS.set(owner, o); }
-    if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA ? { q: SEQ++ } : {}));
+    if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA || AC ? { q: SEQ++ } : {},
+      AC ? { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle) } : {}));
     else o.push({ op, ga: hex(st.globalAlpha) });
     yNote(owner, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation }));
@@ -291,7 +295,8 @@ function makeCtx(canvas) {
     if (!W || !CUR) return;
     let o = OPS.get(CUR);
     if (!o) { o = []; OPS.set(CUR, o); }
-    o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA ? { q: SEQ++ } : {}));
+    o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA || AC ? { q: SEQ++ } : {},
+      AC ? { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle) } : {}));
     yNote(CUR, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation, font: st.font }));
   };
@@ -352,8 +357,8 @@ function makeCtx(canvas) {
     fillText() { textNote('fillText'); },
     strokeText() { textNote('strokeText'); },
     measureText(t) { return { width: String(t).length * 6 }; },
-    createLinearGradient(...a) { return Y ? { __k: 'linear', args: a, addColorStop() {} } : { addColorStop() {} }; },
-    createRadialGradient(...a) { return Y ? { __k: 'radial', args: a, addColorStop() {} } : { addColorStop() {} }; },
+    createLinearGradient(...a) { return Y || AC ? { __k: 'linear', args: a, addColorStop() {} } : { addColorStop() {} }; },
+    createRadialGradient(...a) { return Y || AC ? { __k: 'radial', args: a, addColorStop() {} } : { addColorStop() {} }; },
     createPattern(img, rep) {
       return Y ? { __k: 'pattern', rep, m: null, setTransform(mm) { this.m = [mm.a, mm.b, mm.c, mm.d, mm.e, mm.f]; } } : {};
     },
@@ -1290,6 +1295,206 @@ function cases() {
         label: { show: true, formatter: 'Ab', color: '#00ff00', textShadowColor: 'nope', textShadowBlur: 2 },
         emphasis: { label: { color: 'bad', textBorderColor: 'nope', textBorderWidth: 2 } } }])),
     [0, 1], { w: true, z: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 1 }] } }],
+    // ---- [R7-AC] (recorded as the aa- ones; a gradient's arguments kept) ----
+    // 1. a dataZoom's phases, dashes, caps, joins and miterLimits: what the
+    // canvas refuses it keeps
+    ['ac-dz-pens', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 3, type: 'dashed', dashOffset: 'x',
+          cap: 'Round', join: 'Bevel', miterLimit: 'abc' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1, width: 2, type: [4, 2], dashOffset: 1,
+          cap: 'round', join: 'round', miterLimit: 4 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 1.5, borderType: [3, 1],
+          borderDashOffset: 'x', borderCap: 'Square', borderJoin: 'Round', borderMiterLimit: 'abc' },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 2, borderType: 'dotted',
+          borderDashOffset: 2, borderCap: 'square', borderJoin: 'bevel', borderMiterLimit: 3 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2, cap: 'round', join: 'bevel',
+        miterLimit: 3, type: [6, 2], dashOffset: 5 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    // a width of no number: not stroked; one of 'Infinity' on a data
+    // shadow's line or a handle (a string too: the rect's arithmetic
+    // concatenates it): the slider group's rect, and its place, no number --
+    // every element under the transform the canvas had
+    ['ac-dz-nan', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 'abc' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 'abc' },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 1 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    ['ac-dz-inf', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1 }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 'Infinity' },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 1 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    // 2. a dataZoom's style blocks reach the root's (getModel up to GlobalModel)
+    ['ac-dz-root', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      handleStyle: { borderWidth: 2, borderType: 'dashed', shadowBlur: 4, shadowColor: '#ff00ff', borderCap: 'round' },
+      moveHandleStyle: { borderColor: '#123456', borderWidth: 1, shadowBlur: 3, shadowColor: '#00ffff' },
+      dataBackground: { lineStyle: { type: 'dotted', shadowBlur: 2, shadowColor: '#0000ff', width: 4 },
+        areaStyle: { shadowBlur: 5, shadowColor: '#ff0000' } },
+      selectedDataBackground: { lineStyle: { type: [5, 1], cap: 'round' }, areaStyle: { shadowBlur: 3, shadowColor: '#00ff00' } },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff' }, moveHandleStyle: { color: '#8292cc', opacity: 1 },
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1 }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1 }, areaStyle: { color: '#ffff00', opacity: 1 } } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    // 3. a richText tooltip's own refused values: the box's shadow, the
+    // text's shadow (borderWidth is TooltipRichContent's 1, drawn at 2)
+    ['ac-tip-rich', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3, shadowBlur: 5, shadowColor: '#ff00ff' } }]), { tooltip: { renderMode: 'richText',
+      showDelay: 0, transitionDuration: 0, position: [100, 60], backgroundColor: '#ffffff', borderColor: '#0000ff',
+      borderWidth: 5, shadowBlur: -3, shadowColor: 'nope', shadowOffsetX: 2, shadowOffsetY: 3,
+      textStyle: { color: '#333333', textShadowColor: 'nope', textShadowBlur: 2 }, formatter: 'Ab' } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // (the box placed by the Text's bounds and calcShadowOuterSize: a blur
+    // with its offsets; a blur of a fraction as it is written)
+    ['ac-tip-shadow-place', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' } }]),
+      { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0, position: [100, 60],
+        backgroundColor: '#ffffff', borderColor: '#0000ff', shadowBlur: 6.5, shadowColor: 'rgba(0,0,255,0.5)',
+        shadowOffsetX: 2, shadowOffsetY: 1, textStyle: { color: '#333333' }, formatter: 'Ab' } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // 4. a richText tooltip's colour marker (a token's background Rect): a
+    // colour the canvas refuses is the fill it had
+    ['ac-tip-marker', Object.assign(vv([{ type: 'scatter', name: 'S', data: [[5, 5]], itemStyle: { color: 'nope',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { tooltip: { renderMode: 'richText', showDelay: 0,
+      transitionDuration: 0, position: [100, 60], backgroundColor: '#ffeedd', borderColor: '#0000ff',
+      shadowBlur: 0, textStyle: { color: '#333333' } } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // (a marker's Rect hands the canvas a transparent shadowColor: a span
+    // after it whose textShadowColor is refused casts that)
+    ['ac-tip-marker-shadow', Object.assign(vv([{ type: 'scatter', name: 'S', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      shadowBlur: 3, shadowColor: '#00ff00' } }]), { tooltip: { renderMode: 'richText', showDelay: 0,
+      transitionDuration: 0, position: [100, 60], backgroundColor: '#ffeedd', borderColor: '#0000ff',
+      shadowBlur: 2, shadowColor: '#ff00ff', shadowOffsetX: 1, shadowOffsetY: 2,
+      textStyle: { color: '#333333', textShadowColor: 'nope', textShadowBlur: 2 } } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['ac-tip-markers', { animation: false, xAxis: { type: 'category', data: ['a', 'b'], show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      tooltip: { renderMode: 'richText', trigger: 'axis', showDelay: 0, transitionDuration: 0, position: [100, 60],
+        backgroundColor: '#ffeedd', borderColor: '#0000ff', shadowBlur: 0, axisPointer: { type: 'none' },
+        textStyle: { color: '#333333' } },
+      series: [{ type: 'bar', name: 'A', data: [3, 4], itemStyle: { color: '#ff0000' } },
+        { type: 'bar', name: 'B', data: [5, 6], itemStyle: { color: 'nope' } }] },
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 1 }] } }],
+    // 5. several axis pointers: one after another (their groups the root's,
+    // z 50), the richText tooltip (z 60) after them
+    ['ac-ptr-chain', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', label: { show: false },
+          lineStyle: { color: 'nope', width: 'Infinity', type: 'dashed', dashOffset: 'q', cap: 'Round', join: 'x',
+            miterLimit: 'abc' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6, status: 'show', label: { show: false },
+          lineStyle: { color: '#0000ff', width: 4, type: [5, 3], dashOffset: 2, cap: 'round', join: 'bevel', miterLimit: 3 } } },
+      tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0, position: [100, 60],
+        backgroundColor: 'nope', borderColor: 'bad', shadowBlur: 0, textStyle: { color: 'nope' }, formatter: 'Ab' } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // 6. an axis pointer's label: its refused values (a Text with its
+    // background), the next pointer after it
+    ['ac-ptr-label', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 2 },
+          label: { show: true, backgroundColor: 'nope', color: 'bad', borderColor: 'x', borderWidth: 2,
+            shadowBlur: 3, shadowColor: 'nope', padding: 3, formatter: 'P' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6, status: 'show', lineStyle: { color: 'nope', width: 'Infinity' },
+          label: { show: true, backgroundColor: '#ffff00', color: '#000000', borderColor: 'q', borderWidth: 'Infinity',
+            padding: 3, formatter: 'Q' } } } }),
+    [0], { w: true, z: true }],
+    // 7. a gradient tick or split line: the canvas keeps the gradient made
+    // over the last one's bounding rect
+    ['ac-grad-ticks', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false }, axisLine: { show: false }, axisLabel: { show: false },
+        axisTick: { show: true, length: 6, lineStyle: { color: GRAD, width: 2 } } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ac-grad-split', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: true, lineStyle: { color: GRAD, width: 1 } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: true, lineStyle: { color: Object.assign({}, GRAD, { x2: 0, y2: 1 }), width: 3 } } },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ac-grad-minor', { animation: false,
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        minorTick: { show: true, splitNumber: 2, lineStyle: { color: GRAD } },
+        minorSplitLine: { show: false } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ac-grad-polar', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false },
+        splitLine: { show: false }, axisTick: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false },
+        axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: GRAD, width: 1 } } },
+      series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ac-grad-polar2', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false },
+        axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: GRAD, width: 1 } } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false },
+        splitLine: { show: false }, axisTick: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+      series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ac-grad-single', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      axisLine: { show: false }, axisTick: { show: true, lineStyle: { color: GRAD, width: 2 } },
+      splitLine: { show: true, lineStyle: { color: GRAD, width: 1, opacity: 1, type: 'solid' } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    // 9. an axis pointer's style while it slides: updateProps animates the
+    // shape alone, setStyle takes the new style at once -- an option set on
+    // the way (the slide goes on, in the new colour)
+    ['ac-ptr-slide', { animation: false, tooltip: { trigger: 'axis', showContent: false,
+      axisPointer: { type: 'line', animation: true, lineStyle: { color: '#ff0000', width: 3 } } },
+      xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'], axisLabel: { show: false }, axisTick: { show: false },
+        axisLine: { show: false } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#00ff00' }, data: [1, 2, 3, 4, 5] }] },
+    [0, 16, 1000, 1016, 1046, 1062, 1092, 2200], { w: true, z: true, anim: true,
+      acts: { 0: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 70, y: 150 }],
+        2: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 330, y: 150 }] },
+      sets: { 5: { tooltip: { axisPointer: { lineStyle: { color: '#0000ff' } } } } } }],
+    // (a label's box casting no shadow hands the canvas its shadowColor all
+    // the same -- the text style's prototype '#000' -- and a span after it
+    // whose textShadowColor is refused casts that, not the symbol's)
+    ['ac-label-box-shadow', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000', shadowBlur: 3,
+      shadowColor: '#00ff00' }, label: { show: true, position: 'right', formatter: 'Ab', color: '#000000',
+      backgroundColor: '#ffffff', padding: 4, textShadowColor: 'nope', textShadowBlur: 2 } }]),
+    [0], { w: true, z: true }],
+    // 8. a single axis' split lines: dashed at 0.2 by default
+    ['ac-single-split', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#0000ff' } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: '#ff0000' } }] },
+    [0], { w: true, z: true }],
   ]);
 }
 function withPalette(list) {
@@ -1414,8 +1619,8 @@ function track(chart) {
         let info = null;
         while (p) {
           if (p.__ecComponentInfo) { info = p.__ecComponentInfo; break; }
-          if (AA && tipEl && p === tipEl) { info = { mainType: 'tooltip', index: 0 }; break; }
-          if (AA && PTRS.has(p)) { info = PTRS.get(p); break; }
+          if ((AA || AC) && tipEl && p === tipEl) { info = { mainType: 'tooltip', index: 0 }; break; }
+          if ((AA || AC) && PTRS.has(p)) { info = PTRS.get(p); break; }
           p = p.parent || p.__hostTarget;
         }
         if (!info || info.mainType === 'series' || map.has(el) || !el.style) continue;
@@ -1558,6 +1763,7 @@ function run(id, option, samples, opts) {
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-';
+  AC = id.slice(0, 3) === 'ac-';
   SEQ = 0;
   Y = !!opts.y;
   PRISTINE = !!opts.pristine;
@@ -1686,6 +1892,7 @@ function run(id, option, samples, opts) {
     W = false;
     Z = false;
     AA = false;
+    AC = false;
     Y = false;
     PRISTINE = false;
     echarts.env.node = nodeWas;

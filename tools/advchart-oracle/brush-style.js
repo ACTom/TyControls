@@ -181,6 +181,17 @@ const CASES = [
         { brushType: 'rect', range: [[150, 450], [100, 300]] }] } },
     ],
   },
+  {
+    // [R7-AC] new Model(option.brushStyle) has no parent: the root's brushStyle (and its top-level
+    // border keys) reach no cover
+    id: 'root-none', note: 'the option root\'s brushStyle and its top-level border keys: a cover takes none of them',
+    option: Object.assign({}, BAR, { brushStyle: { borderType: 'dotted', borderCap: 'square', borderJoin: 'round',
+      borderMiterLimit: 3, borderDashOffset: 2, borderWidth: 5, opacity: 0.5 }, borderType: 'dashed', borderCap: 'round',
+      brush: { brushStyle: { borderWidth: 1, borderColor: '#00aa00' } } }),
+    steps: [
+      { op: 'action', payload: { type: 'brush', areas: [{ brushType: 'rect', range: [[120, 260], [80, 200]] }] } },
+    ],
+  },
 ];
 
 function runCase(def) {

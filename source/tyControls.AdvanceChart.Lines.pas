@@ -2559,14 +2559,30 @@ end;
   casts none nought, zrender's '#000' the colour (TSpan's `|| 0`, its
   default shadowColor); a caption of no span the same [was: the last
   span's alone, a refused part nought; R7-AA's colour the last span's,
-  where it blurs, from the canvas before the label] }
+  where it blurs, from the canvas before the label]. [R7-AC] AND A TEXT'S
+  BOX (a drawn rect piece) IN ITS PLACE AMONG THEM: it sets the canvas'
+  shadowColor, casting or not -- its own (RectPiece: the written one, else
+  the text style's prototype '#000'; one of no alpha 'transparent'), the
+  canvas' where it is a colour no parser reads (marked, CanvasLeft 4) }
 procedure CaptionShadowRun(var ARun: TTyCanvasRun; var AEl: TTyChartElement; APart: Integer);
-var k: Integer; pc: ^TTyRtPiece; any: Boolean;
+var k: Integer; pc: ^TTyRtPiece; any, box: Boolean;
 begin
   any := False;
+  box := False;
   for k := 0 to High(AEl.Caption.RtPieces) do
   begin
     pc := @AEl.Caption.RtPieces[k];
+    if (APart = 2) and (pc^.Kind = rpkRect) and pc^.Drawn then
+    begin
+      box := True;
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else ARun.Cur.Shadow := pc^.ShadowColor;
+      Continue;
+    end;
     if pc^.Text = '' then Continue;
     any := True;
     if not pc^.HasShadow then
@@ -2601,7 +2617,7 @@ begin
       else ARun.Cur.Shadow := pc^.ShadowColor;
     end;
   end;
-  if any then Exit;
+  if any or box then Exit;
   if APart = 0 then ARun.Cur.Blur := 0
   else if APart = 1 then
   begin
@@ -3003,7 +3019,9 @@ begin
             ARun.Cur.Stroke := pc^.Stroke;
             ARun.Cur.StrokeGrad := Default(TTyChartGradient);
           end;
-          if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
+          { ([R7-AC] a box's border of 'Infinity': the width the canvas had) }
+          if (pc^.CanvasLeft and 8) <> 0 then pc^.LineWidth := ARun.Cur.LineWidth
+          else if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
         end;
       end;
   end
