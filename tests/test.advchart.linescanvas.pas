@@ -81,7 +81,7 @@ type
       the port strokes a piece's lines in one batch, so two pieces of a z2
       (the split and the minor split lines) are told apart by their pen }
     function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
-      out AEl: TTyChartElement; const AWant: string = ''): Boolean;
+      out AEl: TTyChartElement; const AWant: string = ''; const AWant2: string = ''): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -140,33 +140,41 @@ begin
 end;
 
 function TLcProbe.CompPart(const AKey: string; AZ2: Integer; AText: Boolean;
-  const AOp: string; out AEl: TTyChartElement; const AWant: string): Boolean;
-var d: TTyCompPartArray; k, first, op: Integer; wc, c: TTyChartColor; want: Boolean;
+  const AOp: string; out AEl: TTyChartElement; const AWant, AWant2: string): Boolean;
+var
+  d: TTyCompPartArray;
+  k, first, opAny, opCol, opBoth: Integer;
+  wc, wc2, c: TTyChartColor;
+  want, want2: Boolean;
 begin
   d := CompDrawn;
   first := -1;
-  op := -1;
+  opAny := -1;
+  opCol := -1;
+  opBoth := -1;
   want := (AWant <> '') and TyTryParseChartColor(AWant, wc);
+  { [R7-AA] a fill's stroke colour too (two merged paths of a z2 fill
+    alike, '#000') }
+  want2 := (AWant2 <> '') and TyTryParseChartColor(AWant2, wc2);
   for k := 0 to High(d) do
     if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
     begin
       if first < 0 then first := k;
-      if ((AOp = 'fill') and d[k].El.Style.HasFill)
-        or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0)) then
-      begin
-        if op < 0 then op := k;
-        if not want then Break;
-        if AOp = 'fill' then c := d[k].El.Style.FillColor else c := d[k].El.Style.StrokeColor;
-        if (c = wc) or (((c shr 24) = 0) and ((wc shr 24) = 0)) then
-        begin
-          op := k;
-          Break;
-        end;
-      end;
+      if not (((AOp = 'fill') and d[k].El.Style.HasFill)
+        or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0))) then Continue;
+      if opAny < 0 then opAny := k;
+      if not want then Continue;
+      if AOp = 'fill' then c := d[k].El.Style.FillColor else c := d[k].El.Style.StrokeColor;
+      if not ((c = wc) or (((c shr 24) = 0) and ((wc shr 24) = 0))) then Continue;
+      if opCol < 0 then opCol := k;
+      if want2 and (d[k].El.Style.StrokeColor = wc2) and (opBoth < 0) then opBoth := k;
     end;
-  if op >= 0 then
+  if opBoth >= 0 then k := opBoth
+  else if opCol >= 0 then k := opCol
+  else k := opAny;
+  if k >= 0 then
   begin
-    AEl := d[op].El;
+    AEl := d[k].El;
     Exit(True);
   end;
   Result := first >= 0;
@@ -792,6 +800,7 @@ end;
 function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
 var
   L: TTyPaintList;
+  best, dist: Double;
   k, q, n: Integer;
   el: TTyChartElement;
   bb: TTyRectF;
@@ -807,7 +816,10 @@ begin
     for k := 0 to L.Count - 1 do
     begin
       el := L.Element(k);
-      if el.Caption.FontSizeLogical = 0 then Continue;
+      { ([R7-AA] a graphic's or a timeline's text: its pieces, at no caption
+        size of its own) }
+      if (el.Caption.FontSizeLogical = 0)
+        and ((el.Caption.Text = '') or (Length(el.Caption.RtPieces) = 0)) then Continue;
       s := el.Caption.Text;
       if (s = '') and (Length(el.Caption.RtPieces) > 0) then
         for q := 0 to High(el.Caption.RtPieces) do s := s + el.Caption.RtPieces[q].Text;
@@ -818,16 +830,31 @@ begin
   if ARec.Find('pb').JSONType <> jtNull then
   begin
     pb := ARec.Arrays['pb'];
+    { ([R7-AA] the nearest within the tolerance: a frame half a pixel in
+      from the background it lies on [was: the first]) }
+    best := 1e9;
     for k := 0 to L.Count - 1 do
     begin
       el := L.Element(k);
       if el.Caption.FontSizeLogical <> 0 then Continue;
+      { ([R7-AA] one its clip culls is never brushed: no ops upstream) }
+      if el.HasClip and ((el.ClipRect.Right - el.ClipRect.Left = 0)
+        or (el.ClipRect.Bottom - el.ClipRect.Top = 0)) then Continue;
       bb := TyShapeBounds(el.Shape);
       if not TyRectFIsValid(bb) then Continue;
       if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
         and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
-        Exit(k);
+      begin
+        dist := Abs(bb.Left - HexD(pb.Strings[0])) + Abs(bb.Top - HexD(pb.Strings[1]))
+          + Abs(bb.Right - HexD(pb.Strings[2])) + Abs(bb.Bottom - HexD(pb.Strings[3]));
+        if dist < best then
+        begin
+          best := dist;
+          Result := k;
+        end;
+      end;
     end;
+    if Result >= 0 then Exit;
   end;
   ops := ARec.Arrays['ops'];
   n := 0;
@@ -892,7 +919,7 @@ var
   parts: TStringList;
   cs, frames, els, ops, hits, h, sets, blocks, ld: TJSONArray;
   c, fr, rec, o: TJSONObject;
-  i, j, k, idx, q, n: Integer;
+  i, j, k, idx, q, n, q2: Integer;
   id, key, where, got, want, op: string;
   t, x, y, ga, sc, lw, plw, ldo, pldo, sb: Double;
   el: TTyChartElement;
@@ -920,6 +947,10 @@ begin
       each moving symbol and keeps the rest of the last frame's pixels; the
       port draws an animated frame whole (recorded, not held: spec 277) }
     if id = 'w-dirty-effect' then Continue;
+    { [R7-AA] radar's component (z 0) among the cartesian axes' parts: the
+      port draws the axes before it builds the list radar's elements are in,
+      so they come after every axis part (recorded, not held: spec 281) }
+    if id = 'aa-radar-order' then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     dirty := c.Find('dirty') <> nil;
     FreeAndNil(FChart);
@@ -1087,7 +1118,7 @@ begin
         begin
           o := ops.Objects[q];
           op := o.Strings['op'];
-          if comp and (op = 'fill') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['fs'])
+          if comp and (op = 'fill') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['fs'], o.Strings['ss'])
           else if comp and (op = 'stroke') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['ss'])
           else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
@@ -1108,6 +1139,25 @@ begin
               if not SameInk(ps, wc) or (Abs(plw - HexD(o.Strings['lw']) * sc) > 1e-6) then
                 Miss(Format('%s: text stroke %x width %g, upstream %s width %g', [where, ps, plw,
                   o.Strings['ss'], HexD(o.Strings['lw']) * sc]));
+            end;
+            { [R7-AA] the text's shadow where it blurs (a refused colour the
+              canvas' own) }
+            sb := HexD(o.Strings['sb']);
+            if (APrefix = 'aa-') and (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
+            begin
+              Inc(FCompared);
+              n := -1;
+              for q2 := High(el.Caption.RtPieces) downto 0 do
+                if el.Caption.RtPieces[q2].Text <> '' then
+                begin
+                  n := q2;
+                  Break;
+                end;
+              if (n < 0) or not el.Caption.RtPieces[n].HasShadow
+                or not SameInk(el.Caption.RtPieces[n].ShadowColor, wc)
+                or (Abs(el.Caption.RtPieces[n].ShadowBlur - sb) > 1e-9) then
+                Miss(Format('%s: text shadow (piece %d), upstream %s blur %g', [where, n,
+                  o.Strings['sc'], sb]));
             end;
             Continue;
           end;

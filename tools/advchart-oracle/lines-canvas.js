@@ -100,7 +100,10 @@ class ClockDate extends RealDate {
   static now() { return NOW; }
 }
 global.Date = ClockDate;
-global.setTimeout = function () { return 0; };
+// [R7-AA] a case with `timers` runs what setTimeout queued once the
+// option is set (a browser's next task: ParallelView's removeClipPath)
+let TIMERS = null;
+global.setTimeout = function (fn) { if (TIMERS && typeof fn === 'function') TIMERS.push(fn); return 0; };
 global.clearTimeout = function () {};
 global.requestAnimationFrame = function () { return 0; };
 // [R7-Y] the browser's DOMMatrix, as far as createCanvasPattern uses it
@@ -161,6 +164,9 @@ let V2 = false;
 let W = false;
 // [R7-Z] the record of the cases named z-...
 let Z = false;
+// [R7-AA] the cases named aa-...: every op numbered in paint order (`q`)
+let AA = false;
+let SEQ = 0;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
 let YPAINTS = [];
@@ -273,7 +279,7 @@ function makeCtx(canvas) {
     }
     let o = OPS.get(owner);
     if (!o) { o = []; OPS.set(owner, o); }
-    if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
+    if (W) o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA ? { q: SEQ++ } : {}));
     else o.push({ op, ga: hex(st.globalAlpha) });
     yNote(owner, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation }));
@@ -283,7 +289,7 @@ function makeCtx(canvas) {
     if (!W || !CUR) return;
     let o = OPS.get(CUR);
     if (!o) { o = []; OPS.set(CUR, o); }
-    o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState()));
+    o.push(Object.assign({ op, ga: hex(st.globalAlpha) }, opState(), AA ? { q: SEQ++ } : {}));
     yNote(CUR, Object.assign({ op, ga: hex(st.globalAlpha) }, opState(),
       { fo: objRec(st.fillStyle), so: objRec(st.strokeStyle), gco: st.globalCompositeOperation, font: st.font }));
   };
@@ -962,11 +968,11 @@ function cases() {
         shadowBlur: 2, shadowColor: 'nope' } }] },
     [0], { w: true, z: true }],
     ['aa-parallel-pens', { animation: false, parallel: { left: 40, right: 40, top: 40, bottom: 40 },
-      parallelAxis: [{ dim: 0, min: 0, max: 10, axisLabel: { show: false },
+      parallelAxis: [{ dim: 0, min: 0, max: 10, axisLabel: { color: '#112233' },
         axisLine: { lineStyle: { color: '#ff0000', width: 2, shadowBlur: 3, shadowColor: '#00ff00', join: 'round', miterLimit: 3 } },
         axisTick: { lineStyle: { color: '#0000ff', shadowBlur: 2, shadowColor: '#ff00ff' } } },
-      { dim: 1, min: 0, max: 10, axisLabel: { show: false }, axisLine: { lineStyle: { color: '#00aaaa', shadowBlur: 'x' } } }],
-      series: [{ type: 'parallel', lineStyle: { color: '#ff8800', width: 2 }, data: [[3, 7]] }] }, [0], { w: true, z: true }],
+      { dim: 1, min: 0, max: 10, axisLabel: { color: '#112233' }, axisLine: { lineStyle: { color: '#00aaaa', shadowBlur: 'x' } } }],
+      series: [{ type: 'parallel', lineStyle: { color: '#ff8800', width: 2 }, data: [[3, 7]] }] }, [0], { w: true, z: true, timers: true }],
     ['aa-radar-pens', { animation: false, radar: { radius: 90, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }],
       axisName: { show: false },
       axisLine: { lineStyle: { color: '#ff0000', width: 2, shadowBlur: 3, shadowColor: '#00ff00', join: 'bevel' } },
@@ -974,15 +980,16 @@ function cases() {
       splitArea: { show: false } },
       series: [{ type: 'radar', symbol: 'none', lineStyle: { color: '#ff8800', shadowBlur: 2, shadowColor: 'nope' },
         data: [{ value: [3, 5, 7] }] }] }, [0], { w: true, z: true }],
-    ['aa-timeline-pens', { animation: false, timeline: { left: 20, right: 20, bottom: 10, data: ['a', 'b'], autoPlay: false,
-      label: { show: false }, controlStyle: { show: false },
+    ['aa-timeline-pens', { animation: false, timeline: { axisType: 'category', left: 20, right: 20, bottom: 10, data: ['a', 'b'], autoPlay: false,
+      label: { show: false }, controlStyle: { show: false }, itemStyle: { color: '#c0c9e6' },
+      checkpointStyle: { color: '#6578ba', borderColor: '#6578ba' },
       lineStyle: { color: '#ff0000', width: 3, shadowBlur: 3, shadowColor: '#00ff00', join: 'round', miterLimit: 4 },
       progress: { lineStyle: { color: '#0000ff', shadowBlur: 2, shadowColor: '#ff00ff' } } },
       options: [{ series: [] }, { series: [] }] }, [0], { w: true, z: true }],
     ['aa-calendar-pens', { animation: false, calendar: { range: '2020-01', left: 40, top: 40, right: 40, height: 150,
       dayLabel: { show: false }, monthLabel: { show: false }, yearLabel: { show: false },
       splitLine: { lineStyle: { color: '#ff0000', width: 2, shadowBlur: 3, shadowColor: '#00ff00', join: 'bevel', miterLimit: 3 } },
-      itemStyle: { borderWidth: 0 } }, series: [] }, [0], { w: true, z: true }],
+      itemStyle: { color: '#ffffff', borderWidth: 0 } }, series: [] }, [0], { w: true, z: true }],
     // 2. refused values of the parallel axes (z 10, after the series), a
     //    timeline, a dataZoom slider
     ['aa-parallel-refused', { animation: false, parallel: { left: 40, right: 40, top: 40, bottom: 40 },
@@ -991,9 +998,9 @@ function cases() {
         axisLabel: { color: 'nope' } },
       { dim: 1, min: 0, max: 10, axisLine: { lineStyle: { color: '#00aa00', width: 2, dashOffset: 'abc', type: 'dashed' } },
         axisLabel: { color: '#0000ff' } }],
-      series: [{ type: 'parallel', lineStyle: { color: '#ff0000', width: 3 }, data: [[3, 7]] }] }, [0], { w: true, z: true }],
-    ['aa-timeline-refused', { animation: false, timeline: { left: 20, right: 20, bottom: 10, data: ['a', 'b', 'c'],
-      autoPlay: false, lineStyle: { color: 'nope', width: 'Infinity' }, itemStyle: { color: 'nope', borderColor: 'bad', borderWidth: 1 },
+      series: [{ type: 'parallel', lineStyle: { color: '#ff0000', width: 3 }, data: [[3, 7]] }] }, [0], { w: true, z: true, timers: true }],
+    ['aa-timeline-refused', { animation: false, timeline: { axisType: 'category', left: 20, right: 20, bottom: 10, data: ['a', 'b', 'c'],
+      autoPlay: false, lineStyle: { color: 'nope' }, itemStyle: { color: 'nope', borderColor: 'bad', borderWidth: 1 },
       checkpointStyle: { color: 'nope', borderColor: '#ff0000', borderWidth: 2 }, label: { color: 'nope' },
       controlStyle: { color: 'nope', borderColor: 'bad', borderWidth: 1 }, progress: { lineStyle: { color: 'bad' } } },
       options: [{ series: [] }, { series: [] }, { series: [] }] }, [0], { w: true, z: true }],
@@ -1001,26 +1008,36 @@ function cases() {
       yAxis: { type: 'value', min: 0, max: 10, show: false },
       dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, fillerColor: 'nope', borderColor: 'nope',
         handleStyle: { color: 'nope', borderColor: 'bad' }, moveHandleStyle: { color: 'nope' }, textStyle: { color: 'nope' },
-        dataBackground: { lineStyle: { color: 'nope' }, areaStyle: { color: 'bad' } } }],
+        dataBackground: { lineStyle: { color: 'nope' }, areaStyle: { color: 'bad' } },
+        selectedDataBackground: { lineStyle: { color: '#8292cc', opacity: 1 }, areaStyle: { color: '#c0c9e6', opacity: 1 } } }],
       series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#ff0000' }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    // the graphic component's own (the converter a timeline's elements share)
+    ['aa-graphic-refused', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3, borderType: [4, 2], borderDashOffset: 1, borderJoin: 'round', borderMiterLimit: 4 } }]),
+    { graphic: [{ type: 'rect', z: 5, shape: { x: 20, y: 20, width: 30, height: 20 },
+      style: { fill: 'nope', stroke: 'bad', lineWidth: 'Infinity', lineDash: [3, 3], lineDashOffset: 'x', lineJoin: 'Round',
+        miterLimit: 'abc', lineCap: 'Square' } },
+    { type: 'rect', z: 6, shape: { x: 60, y: 20, width: 30, height: 20 }, style: { fill: '#0000ff', stroke: '#ff00ff', lineWidth: 0 } },
+    { type: 'circle', z: 7, shape: { cx: 120, cy: 30, r: 10 }, style: { fill: 'nope', stroke: 'bad', lineWidth: '2' } }] }),
     [0], { w: true, z: true }],
     // 3. the polar's and the single axis' split areas, in paint order
     ['aa-polar-area', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
       style: { fill: '#ff0000' } }], polar: { radius: 100 },
-      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitArea: { show: true,
-        areaStyle: { color: ['#0000ff', 'nope'] } } },
-      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitArea: { show: true,
-        areaStyle: { color: ['nope', '#00ff00'] } } },
+      angleAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitArea: { show: true,
+        areaStyle: { color: ['#0000ff', 'nope'] } } }),
+      radiusAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitArea: { show: true,
+        areaStyle: { color: ['nope', '#00ff00'] } } }),
       series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope' } }] },
     [0], { w: true, z: true }],
     ['aa-single-area', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
-      style: { fill: '#ff0000' } }], singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
-      splitArea: { show: true, areaStyle: { color: ['nope', '#00ff00'] } } },
+      style: { fill: '#ff0000' } }], singleAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      splitArea: { show: true, areaStyle: { color: ['nope', '#00ff00'] } } }),
       series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: 'nope' } }] },
     [0], { w: true, z: true }],
     // radar's component (z 0) among the cartesian axes' parts by z2
     ['aa-radar-order', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
-      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { color: '#00ff00' }, splitLine: { lineStyle: { color: '#0000ff' } } },
+      xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00ff00' }, splitLine: { lineStyle: { color: '#0000ff' } } }),
       yAxis: { type: 'value', min: 0, max: 10, show: false },
       radar: { radius: 60, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }], axisName: { color: 'nope' },
         axisLine: { lineStyle: { color: 'nope' } }, splitLine: { lineStyle: { color: 'bad' } },
@@ -1039,7 +1056,7 @@ function cases() {
       borderColor: '#123456', iconStyle: { borderColor: 'nope', color: 'nope' } } }), [0], { w: true, z: true }],
     ['aa-legend-zero', Object.assign(vv([{ type: 'scatter', name: 'A', data: [[5, 5]],
       itemStyle: { color: '#ff0000', borderColor: 'nope', borderWidth: 2 } }]),
-    { legend: { left: 20, top: 10, borderColor: '#123456' } }), [0], { w: true, z: true }],
+    { legend: { left: 20, top: 10, borderColor: '#123456', textStyle: { color: '#112233' } } }), [0], { w: true, z: true }],
     ['aa-title-zero', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
       borderColor: '#00ff00', borderWidth: 3 } }]), { title: { text: 'Ab', left: 20, top: 10, borderColor: '#123456',
       textStyle: { textBorderColor: 'nope', textBorderWidth: 2, color: '#000000' } } }), [0], { w: true, z: true }],
@@ -1306,6 +1323,8 @@ function run(id, option, samples, opts) {
   V2 = !!opts.v2 || !!opts.w || !!opts.y;
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
+  AA = id.slice(0, 3) === 'aa-';
+  SEQ = 0;
   Y = !!opts.y;
   YPAINTS = [];
   YBLK = 0;
@@ -1366,7 +1385,9 @@ function run(id, option, samples, opts) {
   BLOCKS = [];
   BLK = 0;
   try {
+    TIMERS = opts.timers ? [] : null;
     chart.setOption(JSON.parse(JSON.stringify(option)));
+    if (TIMERS) { const q = TIMERS; TIMERS = null; for (const fn of q) fn(); }
     for (let si = 0; si < samples.length; si++) {
       const t = samples[si];
       NOW = T_BASE + t;
@@ -1427,6 +1448,7 @@ function run(id, option, samples, opts) {
     V2 = false;
     W = false;
     Z = false;
+    AA = false;
     Y = false;
     echarts.env.node = nodeWas;
   }
