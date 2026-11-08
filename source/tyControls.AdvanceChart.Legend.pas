@@ -906,6 +906,10 @@ end;
 function TyLegendSpecDefault: TTyLegendSpec;
 var i: Integer;
 begin
+  { every field nought first: HasBorderColour and its kin were never set
+    here, harmless while only a border of some width read them, not since
+    R7-AA hands the box's stroke colour at a width of nought }
+  Result := Default(TTyLegendSpec);
   Result.Show := True;
   Result.Box := DefaultBox;
   for i := 0 to 3 do Result.Padding[i] := cDefaultPadding;
