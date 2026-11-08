@@ -124,6 +124,18 @@ type
     TextSizeLogical: Double;
     { [R5-A] textStyle.fontStyle (TyFontStyleCode) }
     TextFontStyle: Byte;
+    { [R7-AA] backgroundColor, borderColor, textStyle.color written as a
+      string no colour parser reads: html mode, the browser drops the
+      declaration (the background transparent, the border currentColor --
+      the text's --, the text the page's); richText, the canvas keeps what
+      it had (settled where the box is drawn) }
+    BackgroundRefused, BorderColourRefused, TextColourRefused: Boolean;
+    { [R7-AA] the box's shadowBlur / shadowOffsetX / shadowOffsetY /
+      shadowColor where a level writes them (ShadowKeys 1, 2, 4, 8): the
+      html box-shadow, the richText box's shadow [was: never read] }
+    ShadowKeys: Byte;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColour: TTyChartColor;
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
@@ -793,6 +805,13 @@ begin
   end;
 end;
 
+{ [R7-AA] a colour string the option writes that no parser reads (not '',
+  not 'none', not a '@Name' callback) }
+function Refused(const S: string): Boolean;
+begin
+  Result := (S <> '') and (S <> 'none') and not TyColourIsHandler(S);
+end;
+
 { One cascade level, written into ASpec only where ASpec has not been given an
   answer yet -- which is what "read each key from the nearest level that has
   it" comes to when the levels are visited innermost first. }
@@ -930,7 +949,9 @@ begin
     begin
       ASpec.HasBackground := True;
       ASpec.Background := c;
-    end;
+    end
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+      ASpec.BackgroundRefused := True;
   end;
   if Fresh('borderColor') then
   begin
@@ -939,6 +960,45 @@ begin
     begin
       ASpec.HasBorderColour := True;
       ASpec.BorderColour := c;
+    end
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+      ASpec.BorderColourRefused := True;
+  end;
+  { [R7-AA] the box's shadow, key by key }
+  if Fresh('shadowBlur') then
+  begin
+    d := ANode.Find('shadowBlur');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 1;
+      ASpec.ShadowBlur := Max(Double(0), d.AsFloat);
+    end;
+  end;
+  if Fresh('shadowOffsetX') then
+  begin
+    d := ANode.Find('shadowOffsetX');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 2;
+      ASpec.ShadowOffsetX := d.AsFloat;
+    end;
+  end;
+  if Fresh('shadowOffsetY') then
+  begin
+    d := ANode.Find('shadowOffsetY');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 4;
+      ASpec.ShadowOffsetY := d.AsFloat;
+    end;
+  end;
+  if Fresh('shadowColor') then
+  begin
+    d := ANode.Find('shadowColor');
+    if (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 8;
+      ASpec.ShadowColour := c;
     end;
   end;
   if Fresh('borderWidth') then
@@ -978,7 +1038,9 @@ begin
       begin
         ASpec.HasTextColour := True;
         ASpec.TextColour := c;
-      end;
+      end
+      else if (d <> nil) and (d.JSONType = jtString) and Refused(d.AsString) then
+        ASpec.TextColourRefused := True;
       d := ts.Find('fontSize');
       if (d <> nil) and (d.JSONType = jtNumber) then
       begin

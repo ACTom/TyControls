@@ -474,7 +474,9 @@ begin
     Result.HasOpacity := True;
     Result.Opacity := x;
   end;
-  if ColourRead(ts.Find('textShadowColor'), c) = crColour then
+  { [R7-AA] a colour no parser reads too: the canvas keeps the shadowColor
+    it had (the run settles cTyCanvasColourLeft) [was: none] }
+  if ColourReadText(ts.Find('textShadowColor'), c) = crColour then
   begin
     Result.HasShadowColor := True;
     Result.ShadowColor := c;
@@ -621,7 +623,8 @@ begin
       S.FontItalic := TyFontStyleIsItalic(d.AsString);
     end;
   end;
-  if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
+  { [R7-AA] (a refused one the canvas' own) }
+  if ColourReadText(WithGlobal('textShadowColor'), c) = crColour then
   begin
     S.HasShadowColor := True;
     S.ShadowColor := c;

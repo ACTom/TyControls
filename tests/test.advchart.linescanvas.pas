@@ -53,7 +53,16 @@ unit test.advchart.linescanvas;
   canvas keeps for an element whose fill or stroke it refuses, under that
   element's transform (and an element's own pattern in its frame); a
   shadow offset or blur the canvas refuses, a blend word it does not know
-  (the ones it had): TestTheHeldPatternsAsUpstream. }
+  (the ones it had): TestTheHeldPatternsAsUpstream.
+
+  [R7-AA] The cases named aa-..., recorded and compared as the z- ones (the
+  lineJoin too, a gradient stroke as one): an axis' shadow, join and
+  miterLimit on every kind of axis, the refused values of the parallel
+  axes, a timeline and a dataZoom, the polar's and the single axis' split
+  areas in paint order, radar's parts among the axes', a zero width that
+  still hands its stroke colour, a transparent background its fill, a
+  gradient axis pen, a label's refused colours in a state:
+  TestTheR7AACanvasAsUpstream. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, tyControls.FontUnits,
@@ -67,9 +76,12 @@ type
   public
     { [R7-Z] a component's part of key AKey, upstream's z2 AZ2 and kind (a
       text or a path) as it was drawn -- the one that fills (AOp 'fill'),
-      strokes ('stroke'), else the first; False for none }
+      strokes ('stroke'), else the first; False for none. [R7-AA] Of
+      several that do, the one in AWant's colour (upstream's for the op):
+      the port strokes a piece's lines in one batch, so two pieces of a z2
+      (the split and the minor split lines) are told apart by their pen }
     function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
-      out AEl: TTyChartElement): Boolean;
+      out AEl: TTyChartElement; const AWant: string = ''; const AWant2: string = ''): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -92,8 +104,9 @@ type
     function GraphicOf(const ARec: TJSONObject): Integer;
     procedure RunV(AHits: Boolean);
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
-    function CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+    function CListOf(const ARec: TJSONObject; AText: Boolean; AZ2: Integer = MaxInt): Integer;
     procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
+    procedure CheckAreas(const AWhere: string; AEls: TJSONArray);
     procedure RunY;
     procedure RunYHeld;
   protected
@@ -109,6 +122,9 @@ type
     procedure TestTheComponentsCanvasAsUpstream;
     procedure TestTheDirtyFramesAsUpstream;
     procedure TestTheHeldPatternsAsUpstream;
+    procedure TestTheR7AACanvasAsUpstream;
+    procedure TestAnAxisPensShadowIsDrawn;
+    procedure TestThePolarViewsInUpstreamsOrder;
   end;
 
 implementation
@@ -127,22 +143,43 @@ begin
 end;
 
 function TLcProbe.CompPart(const AKey: string; AZ2: Integer; AText: Boolean;
-  const AOp: string; out AEl: TTyChartElement): Boolean;
-var d: TTyCompPartArray; k, first: Integer;
+  const AOp: string; out AEl: TTyChartElement; const AWant, AWant2: string): Boolean;
+var
+  d: TTyCompPartArray;
+  k, first, opAny, opCol, opBoth: Integer;
+  wc, wc2, c: TTyChartColor;
+  want, want2: Boolean;
 begin
   d := CompDrawn;
   first := -1;
+  opAny := -1;
+  opCol := -1;
+  opBoth := -1;
+  want := (AWant <> '') and TyTryParseChartColor(AWant, wc);
+  { [R7-AA] a fill's stroke colour too (two merged paths of a z2 fill
+    alike, '#000') }
+  want2 := (AWant2 <> '') and TyTryParseChartColor(AWant2, wc2);
   for k := 0 to High(d) do
     if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
     begin
       if first < 0 then first := k;
-      if ((AOp = 'fill') and d[k].El.Style.HasFill)
-        or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0)) then
-      begin
-        AEl := d[k].El;
-        Exit(True);
-      end;
+      if not (((AOp = 'fill') and d[k].El.Style.HasFill)
+        or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0))) then Continue;
+      if opAny < 0 then opAny := k;
+      if not want then Continue;
+      if AOp = 'fill' then c := d[k].El.Style.FillColor else c := d[k].El.Style.StrokeColor;
+      if not ((c = wc) or (((c shr 24) = 0) and ((wc shr 24) = 0))) then Continue;
+      if opCol < 0 then opCol := k;
+      if want2 and (d[k].El.Style.StrokeColor = wc2) and (opBoth < 0) then opBoth := k;
     end;
+  if opBoth >= 0 then k := opBoth
+  else if opCol >= 0 then k := opCol
+  else k := opAny;
+  if k >= 0 then
+  begin
+    AEl := d[k].El;
+    Exit(True);
+  end;
   Result := first >= 0;
   if Result then AEl := d[first].El else AEl := Default(TTyChartElement);
 end;
@@ -260,7 +297,8 @@ begin
     if (AWhich = 0) <> (Copy(id, 1, 5) = 'grad-') then Continue;
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
-      or (Copy(id, 1, 2) = 'y-') then Continue;
+      or (Copy(id, 1, 2) = 'y-')
+      or (Copy(id, 1, 3) = 'aa-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -762,9 +800,11 @@ end;
   a toolbox's...): a text by its words, a path by its bounds; -2 for a
   background that paints nothing (a fill of no alpha: the port builds none),
   -1 for none }
-function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
+function TAdvChartLinesCanvasOracleTest.CListOf(const ARec: TJSONObject; AText: Boolean;
+  AZ2: Integer): Integer;
 var
   L: TTyPaintList;
+  best, dist: Double;
   k, q, n: Integer;
   el: TTyChartElement;
   bb: TTyRectF;
@@ -780,7 +820,10 @@ begin
     for k := 0 to L.Count - 1 do
     begin
       el := L.Element(k);
-      if el.Caption.FontSizeLogical = 0 then Continue;
+      { ([R7-AA] a graphic's or a timeline's text: its pieces, at no caption
+        size of its own) }
+      if (el.Caption.FontSizeLogical = 0)
+        and ((el.Caption.Text = '') or (Length(el.Caption.RtPieces) = 0)) then Continue;
       s := el.Caption.Text;
       if (s = '') and (Length(el.Caption.RtPieces) > 0) then
         for q := 0 to High(el.Caption.RtPieces) do s := s + el.Caption.RtPieces[q].Text;
@@ -788,27 +831,48 @@ begin
     end;
     Exit;
   end;
-  if ARec.Find('pb').JSONType <> jtNull then
-  begin
-    pb := ARec.Arrays['pb'];
-    for k := 0 to L.Count - 1 do
-    begin
-      el := L.Element(k);
-      if el.Caption.FontSizeLogical <> 0 then Continue;
-      bb := TyShapeBounds(el.Shape);
-      if not TyRectFIsValid(bb) then Continue;
-      if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
-        and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
-        Exit(k);
-    end;
-  end;
+  { ([R7-AA] a plate that only fills with no alpha -- a hit area, a
+    transparent background: what it hands on is held by the elements after
+    it; the port builds some of them, not all: none matched) }
   ops := ARec.Arrays['ops'];
   n := 0;
   for q := 0 to ops.Count - 1 do
     if (ops.Objects[q].Strings['op'] <> 'fill')
       or not TyTryParseChartColor(ops.Objects[q].Strings['fs'], wc) or ((wc shr 24) <> 0) then
       Inc(n);
-  if n = 0 then Result := -2;
+  if n = 0 then Exit(-2);
+  if ARec.Find('pb').JSONType <> jtNull then
+  begin
+    pb := ARec.Arrays['pb'];
+    { ([R7-AA] the nearest within the tolerance: a frame half a pixel in
+      from the background it lies on [was: the first]) }
+    best := 1e9;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if el.Caption.FontSizeLogical <> 0 then Continue;
+      { ([R7-AA] one its clip culls is never brushed: no ops upstream) }
+      if el.HasClip and ((el.ClipRect.Right - el.ClipRect.Left = 0)
+        or (el.ClipRect.Bottom - el.ClipRect.Top = 0)) then Continue;
+      bb := TyShapeBounds(el.Shape);
+      if not TyRectFIsValid(bb) then Continue;
+      if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
+        and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
+      begin
+        dist := Abs(bb.Left - HexD(pb.Strings[0])) + Abs(bb.Top - HexD(pb.Strings[1]))
+          + Abs(bb.Right - HexD(pb.Strings[2])) + Abs(bb.Bottom - HexD(pb.Strings[3]));
+        { (of two at one place, the one of upstream's z2: a dataZoom's
+          background and its filler over a full window) }
+        if (AZ2 <> MaxInt) and (el.Z2 <> AZ2) then dist := dist + 0.01;
+        if dist < best then
+        begin
+          best := dist;
+          Result := k;
+        end;
+      end;
+    end;
+    if Result >= 0 then Exit;
+  end;
 end;
 
 { the colours a canvas holds alike: the same, or both of no alpha }
@@ -865,7 +929,7 @@ var
   parts: TStringList;
   cs, frames, els, ops, hits, h, sets, blocks, ld: TJSONArray;
   c, fr, rec, o: TJSONObject;
-  i, j, k, idx, q, n: Integer;
+  i, j, k, idx, q, n, q2: Integer;
   id, key, where, got, want, op: string;
   t, x, y, ga, sc, lw, plw, ldo, pldo, sb: Double;
   el: TTyChartElement;
@@ -875,7 +939,11 @@ var
   pdash: TTyDoubleArray;
   isCap, dirty: Boolean;
   px: TBGRAPixel;
+  { [R7-AA] the z- and aa- cases: the cap, join and miterLimit, a dash
+    where upstream strokes solid }
+  strict: Boolean;
 begin
+  strict := APrefix <> 'w-';
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -884,11 +952,15 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
-    if Copy(id, 1, 2) <> APrefix then Continue;
+    if Copy(id, 1, Length(APrefix)) <> APrefix then Continue;
     { a trail's frames under useDirtyRect: upstream repaints a block round
       each moving symbol and keeps the rest of the last frame's pixels; the
       port draws an animated frame whole (recorded, not held: spec 277) }
     if id = 'w-dirty-effect' then Continue;
+    { [R7-AA] radar's component (z 0) among the cartesian axes' parts: the
+      port draws the axes before it builds the list radar's elements are in,
+      so they come after every axis part (recorded, not held: spec 281) }
+    if id = 'aa-radar-order' then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     dirty := c.Find('dirty') <> nil;
     FreeAndNil(FChart);
@@ -948,6 +1020,7 @@ begin
       end;
       blocks := fr.Arrays['blocks'];
       els := fr.Arrays['els'];
+      if APrefix = 'aa-' then CheckAreas(Format('%s t=%g', [id, t]), els);
       for k := 0 to els.Count - 1 do
       begin
         rec := els.Objects[k];
@@ -975,7 +1048,7 @@ begin
           begin
             { (a component in the list) }
             comp := False;
-            idx := CListOf(rec, ctext);
+            idx := CListOf(rec, ctext, cz2);
             if idx = -2 then Continue;
             if idx < 0 then
             begin
@@ -1056,7 +1129,9 @@ begin
         begin
           o := ops.Objects[q];
           op := o.Strings['op'];
-          if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
+          if comp and (op = 'fill') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['fs'], o.Strings['ss'])
+          else if comp and (op = 'stroke') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['ss'])
+          else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
           sc := Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));
@@ -1075,6 +1150,25 @@ begin
               if not SameInk(ps, wc) or (Abs(plw - HexD(o.Strings['lw']) * sc) > 1e-6) then
                 Miss(Format('%s: text stroke %x width %g, upstream %s width %g', [where, ps, plw,
                   o.Strings['ss'], HexD(o.Strings['lw']) * sc]));
+            end;
+            { [R7-AA] the text's shadow where it blurs (a refused colour the
+              canvas' own) }
+            sb := HexD(o.Strings['sb']);
+            if (APrefix = 'aa-') and (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
+            begin
+              Inc(FCompared);
+              n := -1;
+              for q2 := High(el.Caption.RtPieces) downto 0 do
+                if el.Caption.RtPieces[q2].Text <> '' then
+                begin
+                  n := q2;
+                  Break;
+                end;
+              if (n < 0) or not el.Caption.RtPieces[n].HasShadow
+                or not SameInk(el.Caption.RtPieces[n].ShadowColor, wc)
+                or (Abs(el.Caption.RtPieces[n].ShadowBlur - sb) > 1e-9) then
+                Miss(Format('%s: text shadow (piece %d), upstream %s blur %g', [where, n,
+                  o.Strings['sc'], sb]));
             end;
             Continue;
           end;
@@ -1105,7 +1199,14 @@ begin
             if (el.Style.PenScale > 0) and (el.Style.PenScale <> 1) then plw := plw * el.Style.PenScale;
             if not (el.Style.StrokeWidthLogical > 0) or (Abs(plw - lw) > 1e-6) then
               Miss(Format('%s: stroke width %g, upstream %g', [where, plw, lw]));
-            if (o.Strings['ss'] <> '[grad]') and TyTryParseChartColor(o.Strings['ss'], wc) then
+            { [R7-AA] a gradient the canvas holds (the aa- cases) }
+            if (APrefix = 'aa-') and (o.Strings['ss'] = '[grad]') then
+            begin
+              Inc(FCompared);
+              if el.Style.StrokeGradient.Kind = cgkNone then
+                Miss(Format('%s: stroke %x, upstream a gradient', [where, el.Style.StrokeColor]));
+            end
+            else if (o.Strings['ss'] <> '[grad]') and TyTryParseChartColor(o.Strings['ss'], wc) then
             begin
               Inc(FCompared);
               if (el.Style.StrokeGradient.Kind <> cgkNone) or not SameInk(el.Style.StrokeColor, wc) then
@@ -1118,7 +1219,7 @@ begin
               pdash := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical);
             Inc(FCompared);
             { ([R7-Z] the z- cases: a dash where upstream strokes solid too) }
-            if (APrefix = 'z-') and (ld.Count = 0) and (Length(pdash) > 0) then
+            if strict and (ld.Count = 0) and (Length(pdash) > 0) then
               Miss(Format('%s: dash of %d, upstream solid', [where, Length(pdash)]))
             else if Length(pdash) * Ord(ld.Count > 0) <> ld.Count then
               Miss(Format('%s: dash of %d, upstream %s', [where, Length(pdash), ld.AsJSON]))
@@ -1139,7 +1240,7 @@ begin
                 Miss(Format('%s: dash phase %g, upstream %g', [where, pldo, ldo]));
             end;
             { [R7-Z] the cap (a word the canvas refuses: the one it had) }
-            if APrefix = 'z-' then
+            if strict then
             begin
               Inc(FCompared);
               case el.Style.LineCap of
@@ -1156,6 +1257,19 @@ begin
               Inc(FCompared);
               if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
                 Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
+              { [R7-AA] and the join (a word the canvas refuses: the one it had) }
+              if APrefix = 'aa-' then
+              begin
+                case el.Style.LineJoin of
+                  1: want := 'round';
+                  2: want := 'bevel';
+                else
+                  want := 'miter';
+                end;
+                Inc(FCompared);
+                if want <> o.Strings['join'] then
+                  Miss(Format('%s: join %s, upstream %s', [where, want, o.Strings['join']]));
+              end;
             end;
           end;
           { the shadow it casts (a refused blur or colour kept) }
@@ -1828,6 +1942,141 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheComponentsCanvasAsUpstream;
 begin
   RunW(False, 'z-');
+end;
+
+{ [R7-AA] AN AXIS' SPLIT AREAS BAND BY BAND: upstream's paths of z2 0 that
+  only fill (a band, a merged colour), in their order, against the areas
+  the port drew for that axis (CompDrawn, cpkSplitArea) in its order --
+  the colour each settled in (a refused band the fill the band before
+  left, not the first band of its colour's) }
+procedure TAdvChartLinesCanvasOracleTest.CheckAreas(const AWhere: string; AEls: TJSONArray);
+var
+  keys: TStringList;
+  k, q, i, n: Integer;
+  rec: TJSONObject;
+  ops: TJSONArray;
+  key, ck, pre: string;
+  fills: TStringList;
+  d: TTyCompPartArray;
+  wc: TTyChartColor;
+  only: Boolean;
+begin
+  keys := TStringList.Create;
+  fills := TStringList.Create;
+  try
+    for k := 0 to AEls.Count - 1 do
+    begin
+      key := AEls.Objects[k].Strings['key'];
+      if Copy(key, 1, 2) <> 'c.' then Continue;
+      ck := Copy(key, 3, MaxInt);
+      ck := Copy(ck, 1, Pos('.', ck) - 1);
+      if keys.IndexOf(ck) < 0 then keys.Add(ck);
+    end;
+    d := FChart.CompDrawn;
+    for i := 0 to keys.Count - 1 do
+    begin
+      { upstream's fill-only paths of z2 0, by their count n }
+      fills.Clear;
+      pre := 'c.' + keys[i] + '.0.p.';
+      for n := 0 to 999 do
+      begin
+        rec := nil;
+        for k := 0 to AEls.Count - 1 do
+          if AEls.Objects[k].Strings['key'] = pre + IntToStr(n) then rec := AEls.Objects[k];
+        if rec = nil then Break;
+        ops := rec.Arrays['ops'];
+        only := ops.Count > 0;
+        for q := 0 to ops.Count - 1 do
+          if ops.Objects[q].Strings['op'] <> 'fill' then only := False;
+        if only then fills.Add(ops.Objects[0].Strings['fs']);
+      end;
+      { the port's areas of that axis }
+      q := 0;
+      for k := 0 to High(d) do
+        if (d[k].Key = keys[i]) and (d[k].Kind = cpkSplitArea) then
+        begin
+          Inc(FCompared);
+          if q > fills.Count - 1 then
+            Miss(Format('%s %s: area %d drawn, upstream %d', [AWhere, keys[i], q, fills.Count]))
+          else if TyTryParseChartColor(fills[q], wc) and not SameInk(d[k].El.Style.FillColor, wc) then
+            Miss(Format('%s %s: area %d fill %x, upstream %s', [AWhere, keys[i], q,
+              d[k].El.Style.FillColor, fills[q]]));
+          Inc(q);
+        end;
+      if (q > 0) and (q <> fills.Count) then
+        Miss(Format('%s %s: %d areas drawn, upstream %d', [AWhere, keys[i], q, fills.Count]));
+    end;
+  finally
+    fills.Free;
+    keys.Free;
+  end;
+end;
+
+{ [R7-AA] THE POLAR'S VIEWS IN UPSTREAM'S ORDER, as drawn: the radius
+  axis' line (z2 1, its view first), then the angle axis' circle (z2 1,
+  its view after): where the spoke meets the circle the circle is on top.
+  A radius line red and 6 wide up from the centre (the angle axis starts
+  at 90 degrees), the circle blue and 6 wide: the pixel a step inside the
+  circle's top on the spoke is blue. }
+procedure TAdvChartLinesCanvasOracleTest.TestThePolarViewsInUpstreamsOrder;
+var px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.SetOption('{"animation":false,"polar":{"center":[200,150],"radius":100},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#0000ff","width":6}}},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#ff0000","width":6}}},'
+    + '"series":[]}', True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  px := FBmp.GetPixel(200, 51);
+  AssertTrue(Format('the circle over the spoke: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.blue > 200) and (px.red < 60));
+  px := FBmp.GetPixel(200, 100);
+  AssertTrue(Format('the spoke itself red: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 200) and (px.blue < 60));
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AACanvasAsUpstream;
+begin
+  RunW(False, 'aa-');
+end;
+
+{ [R7-AA] THE SHADOW IS DRAWN, not only handed on: an x axis line in red,
+  2 wide, its lineStyle's shadow blue at an offset of (0, 8) and no blur --
+  the canvas draws the line's shape again 8 px under it in the shadow's
+  colour. Down the column through the plot's middle: the red row, then,
+  eight rows on, the blue one. }
+procedure TAdvChartLinesCanvasOracleTest.TestAnAxisPensShadowIsDrawn;
+var y, red, blue: Integer; px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,'
+    + '"axisLabel":{"show":false},"splitLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLine":{"lineStyle":{"color":"#ff0000","width":2,"shadowColor":"#0000ff",'
+    + '"shadowOffsetY":8}}},"yAxis":{"show":false,"type":"value"},"series":[]}', True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  red := -1;
+  blue := -1;
+  for y := 0 to FBmp.Height - 1 do
+  begin
+    px := FBmp.GetPixel(FBmp.Width div 2, y);
+    if (red < 0) and (px.red > 200) and (px.green < 60) and (px.blue < 60) then red := y;
+    if (blue < 0) and (px.blue > 200) and (px.red < 60) and (px.green < 60) then blue := y;
+  end;
+  AssertTrue('the line is drawn', red >= 0);
+  AssertTrue('its shadow is drawn', blue >= 0);
+  AssertEquals('eight rows under it', 8, blue - red);
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheCanvasStateAsUpstream;

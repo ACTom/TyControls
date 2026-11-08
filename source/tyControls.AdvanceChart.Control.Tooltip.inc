@@ -836,6 +836,17 @@ begin
   begin
     Result.NameColour := ASpec.TextColour;
     Result.ValueColour := ASpec.TextColour;
+  end
+  { [R7-AA] A COLOUR NO PARSER READS: in html the browser drops the `color`
+    declaration (the content's spans' too) and the text takes the colour it
+    inherits -- the page's, a browser's default black (CanvasText); in
+    richText the canvas keeps the fillStyle it had (settled where the box
+    is drawn) [was: the skin's] }
+  else if ASpec.TextColourRefused then
+  begin
+    if TipHtmlMode then Result.NameColour := TTyChartColor($FF000000)
+    else Result.NameColour := cTyCanvasColourLeft;
+    Result.ValueColour := Result.NameColour;
   end;
   if ASpec.HasTextSize then
   begin
@@ -2801,6 +2812,8 @@ begin
           if hit.Spec.HasLineWidth then w := hit.Spec.LineWidthLogical;
           if w <= 0 then Continue;
           dash := TyDashPattern(hit.Spec.LineDash, hit.Spec.LineDashExplicit, w);
+          { ([R7-AA] a word's dash at an infinite width is refused: solid) }
+          if hit.Spec.LineWidthInf and (hit.Spec.LineDash <> todExplicit) then dash := nil;
           APainter.SetLineDash(dash);
           { [R7-G] CartesianAxisPointer's Line has subPixelOptimize: the
             line on the half pixel of its width, every frame of its slide
@@ -2867,6 +2880,7 @@ procedure TTyCustomAdvanceChart.PtrShapePaint(APainter: TTyPainter;
 var
   el: TTyChartElement;
   n: Integer;
+  run: TTyCanvasRun;
 begin
   el := Default(TTyChartElement);
   el.Silent := True;
@@ -2887,6 +2901,17 @@ begin
     el.Style.FillColor := TTyChartColor(AColour);
     el.Style.StrokeWidthLogical := 0;
   end;
+  { [R7-AA] WHAT THE CANVAS REFUSES OF IT -- a colour no parser reads, an
+    infinite width, a phase, a cap, a join, a miterLimit, a shadow -- it
+    draws with what it had: the pointer's group is the root's, after the
+    list (the list's run up to its end) [was: not drawn, or the default] }
+  if APen and AHit.Spec.LineWidthInf then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+  if TyCanvasElementCarries(el) or ((el.CanvasFlags and cTyCanvasWidthLeft) <> 0) then
+  begin
+    CompRunTo(MaxInt, MaxInt, run);
+    TyCanvasRunStep(run, el);
+  end;
+  CompDrew(nil, AHit.Axis.MainType + 'Pointer' + IntToStr(AHit.Axis.ComponentIndex), 0, 0, False, el);
   TyRenderElement(APainter, el);
   n := Length(FPtrShapesDrawn);
   SetLength(FPtrShapesDrawn, n + 1);
@@ -6989,6 +7014,84 @@ begin
   end;
 end;
 
+procedure TTyCustomAdvanceChart.TipSettleRefused(const ASpec: TTyTooltipSpec;
+  const AInk: TTyTooltipInk; var ASurface: TTyFill; var ABorder: TTyColor;
+  ABorderW: Double; const ASt: TTyStyleSet; var ALines: TTyTooltipLineArray);
+var
+  run: TTyCanvasRun;
+  e: TTyChartElement;
+  i, j: Integer;
+  txt: TTyChartColor;
+  fresh: Boolean;
+begin
+  if TipHtmlMode then
+  begin
+    if ASpec.BackgroundRefused then
+    begin
+      ASurface.Kind := tfkSolid;
+      ASurface.Color := 0;
+    end;
+    if ASpec.BorderColourRefused then ABorder := TTyColor(AInk.NameColour);
+    Exit;
+  end;
+  if not (ASpec.BackgroundRefused or ASpec.BorderColourRefused or ASpec.TextColourRefused) then Exit;
+  { from where the list's run ends: the tooltip's Text is the root's, over
+    every other element of its zlevel }
+  CompRunTo(MaxInt, MaxInt, run);
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Style.HasFill := True;
+  if ASpec.BackgroundRefused then e.Style.FillColor := cTyCanvasColourLeft
+  else e.Style.FillColor := TTyChartColor(ASurface.Color);
+  if ASpec.BorderColourRefused then e.Style.StrokeColor := cTyCanvasColourLeft
+  else e.Style.StrokeColor := TTyChartColor(ABorder);
+  e.Style.StrokeWidthLogical := ABorderW;
+  { (zrender's Text background: a fill and a stroke draw the stroke first,
+    at twice the width -- the canvas is left that width) }
+  if ABorderW > 0 then e.Style.StrokeWidthLogical := 2 * ABorderW;
+  if (tpShadow in ASt.Present) and (TyAlphaOf(ASt.ShadowColor) > 0) then
+  begin
+    e.Style.ShadowColor := TTyChartColor(ASt.ShadowColor);
+    e.Style.ShadowBlur := ASt.ShadowBlur;
+    e.Style.ShadowOffsetX := ASt.ShadowOffset.X;
+    e.Style.ShadowOffsetY := ASt.ShadowOffset.Y;
+  end;
+  TyCanvasRunStep(run, e);
+  ASurface.Kind := tfkSolid;
+  ASurface.Color := TTyColor(e.Style.FillColor);
+  ABorder := TTyColor(e.Style.StrokeColor);
+  CompDrew(nil, 'tooltip0', 0, 0, False, e);
+  { the text, after its box }
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Caption.FontSizeLogical := 1;
+  e.Caption.Text := 'x';
+  e.Caption.Colour := AInk.NameColour;
+  e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+  TyCanvasRunStep(run, e);
+  txt := e.Caption.Colour;
+  CompDrew(nil, 'tooltip0', 0, 0, True, e);
+  { the runs in a refused colour take it (a copy: the show's lines stay) }
+  fresh := False;
+  for i := 0 to High(ALines) do
+    for j := 0 to High(ALines[i].Runs) do
+      if ALines[i].Runs[j].Colour = cTyCanvasColourLeft then
+      begin
+        if not fresh then
+        begin
+          ALines := Copy(ALines, 0, Length(ALines));
+          fresh := True;
+        end;
+        ALines[i].Runs := Copy(ALines[i].Runs, 0, Length(ALines[i].Runs));
+        ALines[i].Runs[j].Colour := txt;
+      end;
+end;
+
+function TTyCustomAdvanceChart.TooltipSurfaceColour: TTyColor;
+begin
+  Result := FTipSurfacePainted;
+end;
+
 function TTyCustomAdvanceChart.TipHtmlMode: Boolean;
 begin
   Result := TyTooltipRenderModeIsHtml(FOption, FTooltipAutoRichText);
@@ -7478,6 +7581,15 @@ begin
       tooltip style carrying an opacity would fade the entire chart. So the
       box paints its own surface, and a translucent panel has to arrive as an
       alpha-bearing background colour rather than as an opacity. }
+    { [R7-AA] the option's shadow keys over the skin's [was: the skin's only] }
+    if spec.ShadowKeys <> 0 then
+    begin
+      Include(st.Present, tpShadow);
+      if (spec.ShadowKeys and 1) <> 0 then st.ShadowBlur := Round(spec.ShadowBlur);
+      if (spec.ShadowKeys and 2) <> 0 then st.ShadowOffset.X := Round(spec.ShadowOffsetX);
+      if (spec.ShadowKeys and 4) <> 0 then st.ShadowOffset.Y := Round(spec.ShadowOffsetY);
+      if (spec.ShadowKeys and 8) <> 0 then st.ShadowColor := TTyColor(spec.ShadowColour);
+    end;
     if (tpShadow in st.Present) and (TyAlphaOf(st.ShadowColor) > 0) then
       APainter.DropShadow(r, st.BorderRadius, st.ShadowColor, st.ShadowBlur,
         st.ShadowOffset);
@@ -7521,7 +7633,15 @@ begin
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box
         describing several series cannot take one of their colours. }
       borderCol := st.BorderColor;
+    { [R7-AA] COLOURS NO PARSER READS. html: the browser drops the
+      declaration -- the background is CSS's initial transparent, the border
+      (`border-color` written twice, the near point's colour being the
+      borderColor) currentColor, the text's colour; richText: the box is a
+      Text's background Rect, the canvas keeping the fill and stroke it had,
+      and the text the fill the box left [was: the skin's colours] }
+    if not frozenPic then TipSettleRefused(spec, ink, surface, borderCol, borderW, st, lines);
     FTipBorderPainted := borderCol;
+    FTipSurfacePainted := surface.Color;
     { [R2-E] what this show says, for a re-render to freeze }
     if not frozenPic then
     begin

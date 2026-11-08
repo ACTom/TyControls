@@ -3231,9 +3231,18 @@ begin
       begin
         if line = 0 then st := TJSONObject(node).Find('textStyle')
         else st := TJSONObject(node).Find('subtextStyle');
-        if (st is TJSONObject) and TyRtNodeWantsBlock(TJSONObject(st)) then
+        { ([R7-AA] a textBorderColor / textBorderWidth too: the block draws
+          the text's stroke [was: never drawn]) }
+        if (st is TJSONObject) and (TyRtNodeWantsBlock(TJSONObject(st))
+          or ((TJSONObject(st).Find('textBorderColor') <> nil)
+            and (TJSONObject(st).Find('textBorderColor').JSONType <> jtNull))
+          or ((TJSONObject(st).Find('textBorderWidth') <> nil)
+            and (TJSONObject(st).Find('textBorderWidth').JSONType <> jtNull))) then
+        begin
           rts[line] := TyRtResolve([TJSONObject(st)], glob,
             TyRtResolveOpt(False, True));
+          if not TyRtNodeWantsBlock(TJSONObject(st)) then rts[line].Needed := True;
+        end;
       end;
       meters[line] := nil;
       if rts[line].Needed then
@@ -3411,17 +3420,20 @@ begin
     el.Style := FTitleSpecs[i].Look;
     for k := 0 to 3 do rad[k] := APainter.ScaleF(FTitleSpecs[i].BorderRadii[k]);
     el.Shape := TyShapeRoundRect(frame, rad);
-    el.Style.HasFill := FTitleSpecs[i].HasBackground
-      and (((FTitleSpecs[i].BackgroundColor shr 24) <> 0)
-        or (FTitleSpecs[i].BackgroundColor = cTyCanvasColourLeft));
-    el.Style.FillColor := FTitleSpecs[i].BackgroundColor;
+    { [R7-AA] THE RECT IS ALWAYS THERE: its fill the backgroundColor
+      ('transparent' by default -- it hands the canvas that fillStyle), its
+      stroke colour handed on at a width of nought too [was: built only to
+      draw something] }
+    el.Style.HasFill := True;
+    if FTitleSpecs[i].HasBackground then el.Style.FillColor := FTitleSpecs[i].BackgroundColor
+    else el.Style.FillColor := 0;
     el.Style.StrokeWidthLogical := 0;
+    if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
+    else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
+    else frameInk := st.TextColor;
+    el.Style.StrokeColor := TTyChartColor(frameInk);
     if (FTitleSpecs[i].BorderWidth > 0) or FTitleSpecs[i].BorderWidthInf then
     begin
-      if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
-      else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
-      else frameInk := st.TextColor;
-      el.Style.StrokeColor := TTyChartColor(frameInk);
       el.Style.StrokeWidthLogical := FTitleSpecs[i].BorderWidth;
       { [R7-Z] +Infinity strokes, at the width the canvas had }
       if FTitleSpecs[i].BorderWidthInf then
@@ -3440,13 +3452,12 @@ begin
       there -- the list's run up to the title's z, then the box (z2 0),
       the text, the subtext (10) }
     TitleSettle(i, el, ink0, ink1);
-    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+    if ((el.Style.FillColor shr 24) <> 0) or (el.Style.StrokeWidthLogical > 0) then
       TyRenderElement(APainter, el);
     FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
     FTitleFramesDrawn[i].El := el;
     { [R7-Z] (CompDrawn) }
-    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
-      CompDrew(nil, 'title' + IntToStr(i), 0, 0, False, el);
+    CompDrew(nil, 'title' + IntToStr(i), 0, 0, False, el);
     TitleDrewText(i, 0, ink0);
     TitleDrewText(i, 1, ink1);
     { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86] }
@@ -3486,6 +3497,9 @@ begin
   e.Caption.FontSizeLogical := 1;
   e.Caption.Text := 'x';
   e.Caption.Colour := TTyChartColor(AInk);
+  { [R7-AA] a block's pieces as drawn (their fill and stroke) }
+  if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0) then
+    e.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
   CompDrew(nil, 'title' + IntToStr(AIndex), 0, 10, True, e);
 end;
 
@@ -3498,7 +3512,8 @@ var
   node, d: TJSONData;
 begin
   if not (TyCanvasElementCarries(AFrame) or ((AFrame.CanvasFlags and cTyCanvasWidthLeft) <> 0)
-    or (TTyChartColor(AInk0) = cTyCanvasColourLeft) or (TTyChartColor(AInk1) = cTyCanvasColourLeft)) then
+    or (TTyChartColor(AInk0) = cTyCanvasColourLeft) or (TTyChartColor(AInk1) = cTyCanvasColourLeft)
+    or TitlePiecesCarry(AIndex)) then
     Exit;
   { the title's z (its model's default 6) }
   z := 6;
@@ -3510,7 +3525,7 @@ begin
       z := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
   end;
   CompRunTo(z, 0, run);
-  if AFrame.Style.HasFill or (AFrame.Style.StrokeWidthLogical > 0) then TyCanvasRunStep(run, AFrame);
+  TyCanvasRunStep(run, AFrame);
   e := Default(TTyChartElement);
   e.Style.Alpha := 1;
   e.Caption.FontSizeLogical := 1;
@@ -3520,6 +3535,10 @@ begin
     and (Length(FTitleRt[AIndex][0].Pieces) > 0)) then
   begin
     e.Caption.Colour := TTyChartColor(AInk0);
+    { [R7-AA] a block: its pieces, each its fill and stroke }
+    e.Caption.RtPieces := nil;
+    if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][0].Pieces) > 0) then
+      e.Caption.RtPieces := FTitleRt[AIndex][0].Pieces;
     TyCanvasRunStep(run, e);
     AInk0 := TTyColor(e.Caption.Colour);
   end;
@@ -3527,9 +3546,25 @@ begin
   begin
     e.CanvasFlags := 0;
     e.Caption.Colour := TTyChartColor(AInk1);
+    e.Caption.RtPieces := nil;
+    if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][1].Pieces) > 0) then
+      e.Caption.RtPieces := FTitleRt[AIndex][1].Pieces;
     TyCanvasRunStep(run, e);
     AInk1 := TTyColor(e.Caption.Colour);
   end;
+end;
+
+function TTyCustomAdvanceChart.TitlePiecesCarry(AIndex: Integer): Boolean;
+var line, k: Integer;
+begin
+  Result := False;
+  if AIndex > High(FTitleRt) then Exit;
+  for line := 0 to 1 do
+    for k := 0 to High(FTitleRt[AIndex][line].Pieces) do
+      with FTitleRt[AIndex][line].Pieces[k] do
+        if (HasFill and (Fill = cTyCanvasColourLeft)) or (HasStroke and (Stroke = cTyCanvasColourLeft))
+          or (CanvasLeft <> 0) then
+          Exit(True);
 end;
 
 function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;

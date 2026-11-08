@@ -2303,7 +2303,9 @@ begin
   for k := 0 to High(AEl.Caption.RtPieces) do
     if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
       or (AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft))
-      or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft)) then
+      or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft))
+      { [R7-AA] a text shadow's }
+      or (AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowColor = cTyCanvasColourLeft)) then
       Exit(True);
 end;
 
@@ -2437,6 +2439,20 @@ end;
   ('transparent' where none) and blur where it blurs, else zrender's '#000'
   and none -- Text.ts sets a TSpan's shadow only for a textShadowBlur above
   nought }
+{ [R7-AA] the piece CaptionShadowOf reads the shadow of: the last with text,
+  where it blurs; -1 for none }
+function CaptionShadowPiece(const AEl: TTyChartElement): Integer;
+var k: Integer;
+begin
+  Result := -1;
+  for k := High(AEl.Caption.RtPieces) downto 0 do
+  begin
+    if AEl.Caption.RtPieces[k].Text = '' then Continue;
+    if AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur > 0) then Result := k;
+    Exit;
+  end;
+end;
+
 procedure CaptionShadowOf(const AEl: TTyChartElement; out AColour: TTyChartColor;
   out ABlur, AOffX, AOffY: Double);
 var k: Integer;
@@ -2613,7 +2629,10 @@ begin
       group's clip has none) }
     ARun.Cur.HasT := False;
   end;
-  cap := AEl.Caption.FontSizeLogical <> 0;
+  { ([R7-AA] a graphic's or a timeline's text: its pieces, at no caption
+    size of its own) }
+  cap := (AEl.Caption.FontSizeLogical <> 0)
+    or ((AEl.Caption.Text <> '') and (Length(AEl.Caption.RtPieces) > 0));
   { [R7-V] a value the canvas refuses, first seen: marked, so the next
     pass settles it again }
   if AEl.Style.ShadowColor = cTyCanvasColourLeft then
@@ -2661,7 +2680,16 @@ begin
   else if cap then
   begin
     CaptionShadowOf(AEl, colour, blur, ox, oy);
-    ARun.Cur.Shadow := colour;
+    { [R7-AA] a text span's shadowColor the canvas refuses: the one it had
+      (the piece marked, so the next pass settles it again) }
+    k := CaptionShadowPiece(AEl);
+    if (k >= 0) and ((colour = cTyCanvasColourLeft) or ((AEl.Caption.RtPieces[k].CanvasLeft and 4) <> 0)) then
+    begin
+      AEl.Caption.RtPieces[k].CanvasLeft := AEl.Caption.RtPieces[k].CanvasLeft or 4;
+      AEl.Caption.RtPieces[k].ShadowColor := ARun.Cur.Shadow;
+    end
+    else
+      ARun.Cur.Shadow := colour;
   end
   else if (AEl.Style.ShadowColor shr 24) <> 0 then
     ARun.Cur.Shadow := AEl.Style.ShadowColor
@@ -2934,7 +2962,13 @@ begin
   if not TyLinesCanvasLeftoversDue(AList) then Exit;
   TyCanvasRunStart(run, AGround, APPI);
   for i := 0 to AList.Count - 1 do
+  begin
+    { [R7-AA] the graphic's elements under the axes: drawn, and settled,
+      before them (CompRun) -- the ground holds what they left [was: run a
+      second time at the list's start] }
+    if AList.Ref(AList.PaintOrder(i))^.GfxUnder then Continue;
     TyCanvasRunStep(run, AList.Ref(AList.PaintOrder(i))^);
+  end;
 end;
 
 procedure TyLinesCanvasLeftovers(AList: TTyPaintList; AGround: TTyChartColor);
