@@ -3595,22 +3595,23 @@ begin
     one: upstream gives a legend a transparent background and a zero border, so
     painting a plate behind every legend would put a visible box on every
     chart in the gallery. }
-  if ASpec.HasBackground or (ASpec.BorderWidth > 0) then
+  { [R7-AA] MAKEBACKGROUND'S RECT IS ALWAYS THERE: painting nothing where
+    the option asks for none, it still hands the canvas its fill (the
+    backgroundColor, 'transparent' by default) and its stroke colour (the
+    borderColor, at a width of nought too) [was: built only when it drew] }
   begin
     el := Blank;
     el.Z2 := -1;
     el.Shape := TyShapeRoundRect(ALayout.Frame,
       [ASpec.BorderRadii[0] * scale, ASpec.BorderRadii[1] * scale,
        ASpec.BorderRadii[2] * scale, ASpec.BorderRadii[3] * scale]);
-    el.Style.HasFill := ASpec.HasBackground;
-    if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
+    el.Style.HasFill := True;
+    if not ASpec.HasBackground then el.Style.FillColor := 0
+    else if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
     else el.Style.FillColor := AInk.Background;
-    if ASpec.BorderWidth > 0 then
-    begin
-      el.Style.StrokeWidthLogical := ASpec.BorderWidth;
-      if ASpec.HasBorderColour then el.Style.StrokeColor := ASpec.BorderColour
-      else el.Style.StrokeColor := AInk.Border;
-    end;
+    if ASpec.HasBorderColour then el.Style.StrokeColor := ASpec.BorderColour
+    else el.Style.StrokeColor := AInk.Border;
+    if ASpec.BorderWidth > 0 then el.Style.StrokeWidthLogical := ASpec.BorderWidth;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
     { [R7-X] its dash, phase, cap, join and miterLimit }
     TyStyleTakeBorderKeys(el.Style, ASpec.Look);

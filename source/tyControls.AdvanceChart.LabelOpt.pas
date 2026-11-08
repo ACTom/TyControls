@@ -861,6 +861,15 @@ begin
   begin
     ASpec.EmphHasColour := True;
     ASpec.EmphColour := c;
+  end
+  { [R7-AA] a colour no parser reads: the canvas refuses it and fills the
+    hovered text with what it had (the run settles it) [was: the normal
+    colour] }
+  else if (s <> '') and (s <> 'inherit') and (s <> 'auto') and (s <> 'none')
+    and not TyColourIsHandler(s) then
+  begin
+    ASpec.EmphHasColour := True;
+    ASpec.EmphColour := cTyCanvasColourLeft;
   end;
   d := emph.Find('textBorderWidth');
   if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat >= 0) then
@@ -875,6 +884,8 @@ begin
     if (s = 'none') or (s = 'transparent') then ASpec.EmphBorderColourNone := True
     else if (s = 'inherit') or (s = 'auto') then ASpec.EmphBorderColourInherit := True
     else if TyTryParseChartColor(s, c) then ASpec.EmphBorderColour := c
+    { [R7-AA] (as the fill) [was: none] }
+    else if not TyColourIsHandler(s) then ASpec.EmphBorderColour := cTyCanvasColourLeft
     else ASpec.EmphBorderColourNone := True;
   end;
 end;

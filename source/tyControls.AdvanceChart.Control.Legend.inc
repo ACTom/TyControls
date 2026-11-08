@@ -1566,6 +1566,13 @@ begin
         ASrc.HasStroke := True;
         ASrc.Stroke := col;
       end
+      { [R7-AA] a colour no parser reads: the icon strokes in what the canvas
+        had (the run settles it) [was: no border] }
+      else if (d.AsString <> '') and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+      begin
+        ASrc.HasStroke := True;
+        ASrc.Stroke := cTyCanvasColourLeft;
+      end
       else
         ASrc.HasStroke := False;
     end;

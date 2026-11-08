@@ -3512,7 +3512,8 @@ type
     procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
       const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
       const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
-      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray);
+      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray;
+      const AAreaInks: TTyIntegerArray);
     procedure CompPolarSingleParts(var AParts: TTyCompPartArray);
     { an axis pen of a polar's or a single axis' as it is stroked
       (CompSettlePen), logged (CompDrawn); a text colour likewise }
@@ -3526,6 +3527,9 @@ type
     { a split line's or area's colour of the author's list (AInk) as its
       first part settled it }
     function CompInkOf(AOwner: TObject; AKind: Byte; AInk: Integer): TTyChartColor;
+    { [R7-AA] a split area band's (ABand: its count among the axis' bands)
+      colour as its part settled it }
+    function CompBandInk(AOwner: TObject; AKind: Byte; ABand: Integer): TTyChartColor;
     { the colour a text part fills with: a refused one the canvas' }
     function CompSettleFill(AOwner: TObject; AKind: Byte; AColour: TTyChartColor): TTyChartColor;
     { [R7-Z] the run of the list (FPaintList) from the ground up to the
@@ -3539,6 +3543,10 @@ type
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor);
     procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+    { [R7-AA] a title line's block holds a colour the canvas refuses }
+    function TitlePiecesCarry(AIndex: Integer): Boolean;
+    { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
+    procedure CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
     { a part as drawn (CompDrawn) }
     procedure CompDrew(AOwner: TObject; const AKey: string; AKind: Byte; AZ2: Integer;
       AText: Boolean; const AEl: TTyChartElement);

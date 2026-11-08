@@ -320,12 +320,19 @@ end;
 
 procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
 var
-  i: Integer;
+  i, n: Integer;
   el: TTyChartElement;
+  from: TTyIntegerArray;
 begin
   FGfxUnder.Clear;
+  from := nil;
   for i := 0 to High(FGfxPaint) do
-    if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+    if FGfxPaint[i].GfxUnder then
+    begin
+      FGfxUnder.Add(FGfxPaint[i]);
+      SetLength(from, Length(from) + 1);
+      from[High(from)] := i;
+    end;
   { [R5-G] THE GRIDS' BACKGROUNDS, in the same order: under the axes (their
     z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
     the grids' at an equal z and z2 }
@@ -333,6 +340,11 @@ begin
   { [R7-Z] these and the axes' parts in upstream's paint order: what each
     refuses settled, and the ground the list starts from }
   if APainter <> nil then CompRun(APainter.PPI) else CompRun(FLastPPI);
+  { [R7-AA] what they settled, onto the elements the list copies (the list's
+    run passes them by: they are the ground's) }
+  n := Length(from);
+  if n > FGfxUnder.Count then n := FGfxUnder.Count;
+  for i := 0 to n - 1 do FGfxPaint[from[i]] := FGfxUnder.Element(i);
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));

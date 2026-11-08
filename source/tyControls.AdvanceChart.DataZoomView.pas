@@ -334,6 +334,15 @@ function ColourOf(A: TJSONData; out AColour: TTyChartColor): Boolean;
 begin
   Result := (A <> nil) and (A.JSONType = jtString)
     and TyTryParseChartColor(A.AsString, AColour);
+  { [R7-AA] a string no parser reads (not '' nor 'none'): written, and the
+    canvas refuses it, filling / stroking with what it had (the paint
+    order settles cTyCanvasColourLeft) [was: not written, the theme's] }
+  if not Result and (A <> nil) and (A.JSONType = jtString) and (A.AsString <> '')
+    and (A.AsString <> 'none') then
+  begin
+    AColour := cTyCanvasColourLeft;
+    Result := True;
+  end;
 end;
 
 { getItemStyle / getLineStyle / getAreaStyle, as far as they are read here }
@@ -1558,7 +1567,10 @@ begin
             el.Style.FillColor := Ink(ASpec.Background, True, AInk.Background, 1)
           else
             el.Style.FillColor := Ink(ASpec.Filler, True, AInk.Filler, 1);
-          if (el.Style.FillColor shr 24 <> 0) and (e.Shape.W > 0) then
+          { [R7-AA] a fill of no alpha too: it hands the canvas its fillStyle
+            (a transparent background, a filler colour the canvas refuses)
+            [was: left out] }
+          if e.Shape.W > 0 then
           begin
             AList.Add(el);
             Inc(Result);
@@ -1571,6 +1583,10 @@ begin
             ASpec.Radius, Dev(role));
           el.Style.StrokeColor := Ink(ASpec.Frame, False, AInk.Frame, 1);
           el.Style.StrokeWidthLogical := 1;
+          { [R7-AA] the frame's Rect is filled 'rgba(0,0,0,0)': it hands the
+            canvas that fill }
+          el.Style.HasFill := True;
+          el.Style.FillColor := 0;
           AList.Add(el);
           Inc(Result);
         end;

@@ -341,6 +341,10 @@ begin
           if ink > High(v.Furn.SplitAreaInks) then ink := 0;
           if not v.Furn.SplitAreaInks[ink].Ok then Continue;
           areaColour := TTyColor(v.Furn.SplitAreaInks[ink].Colour);
+          { [R7-AA] a colour the canvas refuses: what it had at the band
+            (CompRun) [was: none filled] }
+          if v.Furn.SplitAreaInks[ink].Colour = cTyCanvasColourLeft then
+            areaColour := TTyColor(CompBandInk(s.Axis, cpkSplitArea, q));
           { [R5-J] a gradient: the band's own Rect's ramp, as the
             cartesian axis' [was: the first stop] }
           if v.Furn.SplitAreaInks[ink].Grad.Kind <> cgkNone then
@@ -365,6 +369,7 @@ begin
           Continue
         else
           areaColour := areaS.Background.Color;
+        CompDrewArea(s.Axis, TTyChartColor(areaColour));
         { areaStyle.opacity [R5-B] }
         areaColour := TyAxisAreaAlpha(areaColour, v.Furn.AreaOpacity);
         APainter.BeginPath;
@@ -1095,6 +1100,10 @@ var
       begin
         if not AView.Furn.SplitAreaInks[g].Ok then Continue;
         areaColour := TTyColor(AView.Furn.SplitAreaInks[g].Colour);
+        { [R7-AA] a colour the canvas refuses: what it had at that path
+          (CompRun) [was: none filled] }
+        if AView.Furn.SplitAreaInks[g].Colour = cTyCanvasColourLeft then
+          areaColour := TTyColor(CompInkOf(curAxis, cpkSplitArea, g));
       end
       { the skin's colour and none in turn: the first only }
       else if not (tpBackground in areaS.Present) then
@@ -1115,6 +1124,7 @@ var
         Inc(n);
       end;
       if n = 0 then Continue;
+      CompDrewArea(curAxis, TTyChartColor(areaColour));
       if (Length(AView.Furn.SplitAreaInks) > 0)
         and (AView.Furn.SplitAreaInks[g].Grad.Kind <> cgkNone) then
       begin
@@ -1201,32 +1211,15 @@ var
     TyRenderElement(APainter, el);
   end;
 
-  procedure PaintRadius(const AView: TTyPolarAxisView);
+  { [R7-AA] the radius axis' AxisBuilder parts of z2 1: the name, then the
+    line (the arrows, z2 11, after its labels) }
+  procedure PaintRadiusLine(const AView: TTyPolarAxisView);
   var
-    q: Integer;
     sp: TTyAxisLayoutSpec;
     pl: TTyAxisNamePlacement;
   begin
     sp := AView.Spec;
-    { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
-    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
-    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
-    if AView.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
-    begin
-      APainter.BeginPath;
-      APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
-      APainter.LineTo(AView.Line.X2, AView.Line.Y2);
-      TyStrokeAxisPath(APainter, lineK);
-      if not AView.Furn.LinePen.ColourNone
-        and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
-        for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
-    end;
-    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick,
-      TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1, True);
-    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt)), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
-    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
     nameS.TextColor := CompText(curAxis, cpkName, nameS.TextColor);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
@@ -1249,7 +1242,33 @@ var
           AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
       end;
     end;
-    if not (tpTextColor in labelS.Present) then Exit;
+    { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
+    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
+    if AView.HasLine and lineK.Drawn then
+    begin
+      APainter.BeginPath;
+      APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
+      APainter.LineTo(AView.Line.X2, AView.Line.Y2);
+      TyStrokeAxisPath(APainter, lineK);
+    end;
+  end;
+
+  { [R7-AA] the rest of them: the ticks (z2 2), the labels (10), the arrows
+    (11) }
+  procedure PaintRadius(const AView: TTyPolarAxisView);
+  var
+    q: Integer;
+    sp: TTyAxisLayoutSpec;
+  begin
+    sp := AView.Spec;
+    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick,
+      TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1, True);
+    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt)), -1, True);
+    AxisTextStyles(@sp, labelS, nameS);
+    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
+    if tpTextColor in labelS.Present then
     for q := 0 to High(sp.Placements) do
     begin
       if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
@@ -1278,28 +1297,37 @@ var
         LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
         False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
+    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
+    if AView.HasLine and not AView.Furn.LinePen.ColourNone
+      and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+      for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
   end;
 
-  procedure PaintAngle(const AView: TTyPolarAxisView);
-  var
-    q: Integer;
-    sp: TTyAxisLayoutSpec;
+  { [R7-AA] the angle axis' own circle (z2 1): getLineStyle with no round
+    cap [R5-B] }
+  procedure PaintAngleLine(const AView: TTyPolarAxisView);
   begin
-    sp := AView.Spec;
-    { the angle axis' own circle: getLineStyle with no round cap [R5-B] }
     if AView.HasLine then
     begin
       APainter.BeginPath;
       ArcPath(AView.LineArc);
       TyStrokeAxisPath(APainter, CompPen(curAxis, cpkLine, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt)));
     end;
-    { the angle axis' ticks are AngleAxisView's own: one mergePath each }
-    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1);
-    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt)), -1);
+  end;
+
+  { [R7-AA] AngleAxisView's parts of z2 0 before its split lines, in its
+    builders' order: the labels, the ticks, the minor ticks (one mergePath
+    each) [was: the ticks, then the labels, over every view's split lines] }
+  procedure PaintAngle(const AView: TTyPolarAxisView);
+  var
+    q: Integer;
+    sp: TTyAxisLayoutSpec;
+  begin
+    sp := AView.Spec;
     AxisTextStyles(@sp, labelS, nameS);
     labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
-    if not (tpTextColor in labelS.Present) then Exit;
+    if tpTextColor in labelS.Present then
     for q := 0 to High(AView.Labels) do
     begin
       if AView.Labels[q].Text = '' then Continue;
@@ -1317,6 +1345,31 @@ var
         LevelLinesAlign(AView.Labels[q].Text, AView.Labels[q].AnchorH), tlCenter,
         False, 0, False, Pos(#10, AView.Labels[q].Text) > 0);
     end;
+    { the angle axis' ticks are AngleAxisView's own: one mergePath each }
+    StrokeLines(AView.Ticks, CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt)), -1);
+    StrokeLines(AView.MinorTicks, CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt)), -1);
+  end;
+
+  { [R7-AA] a view's turn: whether it draws now (shown, on this zlevel) }
+  function ViewOn(AK: Integer): Boolean;
+  var vw: TTyChartView;
+  begin
+    if AK = 0 then vw := cvAngleAxis else vw := cvRadiusAxis;
+    Result := False;
+    if ViewHidden(vw) then Exit;
+    if AK = 0 then
+    begin
+      if not ApartIn(AxisModelZLevel(p.AngleAxis)) or not p.AngleView.Shown then Exit;
+      curAxis := p.AngleAxis;
+    end
+    else
+    begin
+      if not ApartIn(AxisModelZLevel(p.RadiusAxis)) or not p.RadiusView.Shown then Exit;
+      curAxis := p.RadiusAxis;
+    end;
+    ViewDrew(vw);
+    Result := True;
   end;
 
 begin
@@ -1332,42 +1385,37 @@ begin
   begin
     p := FPolars[i];
     if p = nil then Continue;
-    for k := 0 to 1 do
+    { [R7-AA] IN UPSTREAM'S PAINT ORDER: the radius axis' view before the
+      angle axis' (their components' order), each view's parts by z2 and
+      then as its builders add them -- the radius view's split lines, split
+      areas, minor split lines (z2 0); the angle view's labels, ticks, minor
+      ticks, split lines, minor split lines, split areas (all z2 0); then the
+      radius name and line, the angle line (z2 1); the radius ticks, labels,
+      arrows (2, 10, 11) [was: the angle view first, every split area under
+      every split line, the angle labels over every split line] }
+    if ABelow then
     begin
-      if k = 0 then view := cvAngleAxis else view := cvRadiusAxis;
-      if ViewHidden(view) then Continue;
-      { [R5-J] on the zlevel PaintZLevels draws now }
-      if (k = 0) and not ApartIn(AxisModelZLevel(p.AngleAxis)) then Continue;
-      if (k = 1) and not ApartIn(AxisModelZLevel(p.RadiusAxis)) then Continue;
-      if k = 0 then curAxis := p.AngleAxis else curAxis := p.RadiusAxis;
-      if k = 0 then
+      if ViewOn(1) then
       begin
-        if not p.AngleView.Shown then Continue;
-        ViewDrew(view);
-        if ABelow then
-        begin
-          FillAreas(p.AngleView);
-          StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
-            p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
-          SplitLinesOf(p.AngleView, False);
-        end
-        else
-          PaintAngle(p.AngleView);
-      end
-      else
-      begin
-        if not p.RadiusView.Shown then Continue;
-        ViewDrew(view);
-        if ABelow then
-        begin
-          FillAreas(p.RadiusView);
-          StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
-            p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
-          SplitLinesOf(p.RadiusView, True);
-        end
-        else
-          PaintRadius(p.RadiusView);
+        SplitLinesOf(p.RadiusView, True);
+        FillAreas(p.RadiusView);
+        StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
+          p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
       end;
+      if ViewOn(0) then
+      begin
+        PaintAngle(p.AngleView);
+        SplitLinesOf(p.AngleView, False);
+        StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
+          p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+        FillAreas(p.AngleView);
+      end;
+    end
+    else
+    begin
+      if ViewOn(1) then PaintRadiusLine(p.RadiusView);
+      if ViewOn(0) then PaintAngleLine(p.AngleView);
+      if ViewOn(1) then PaintRadius(p.RadiusView);
     end;
   end;
 end;

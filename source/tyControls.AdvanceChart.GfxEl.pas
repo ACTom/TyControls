@@ -1462,20 +1462,30 @@ begin
 end;
 
 function TyGfxLineWidth(AEl: TTyGfxEl): Double;
-var v: TTyAnimValue;
+var v: TTyAnimValue; d: TJSONData;
 begin
   v := AEl.StyleValue('lineWidth');
   if v.Kind = avkNumber then Result := v.Num
-  else Result := NaN;
+  else
+  begin
+    Result := NaN;
+    { [R7-AA] a string is its Number (`lineWidth > 0`, the canvas' setter):
+      '2' strokes at 2, 'Infinity' strokes at the width the canvas had
+      [was: no stroke] }
+    d := AEl.Style.Find('lineWidth');
+    if (d <> nil) and (d.JSONType = jtString) then Result := TyOptJsNumber(d);
+  end;
 end;
 
 function TyGfxHasStroke(AEl: TTyGfxEl): Boolean;
-var d: TJSONData;
+var d: TJSONData; w: Double;
 begin
   d := AEl.Style.Find('stroke');
   if JNull(d) then Exit(False);
   if (d.JSONType = jtString) and (d.AsString = 'none') then Exit(False);
-  Result := TyGfxLineWidth(AEl) > 0;
+  { (NaN first: a comparison with it raises here) }
+  w := TyGfxLineWidth(AEl);
+  Result := not IsNan(w) and (w > 0);
 end;
 
 { ==================== paths ==================== }
@@ -1991,6 +2001,14 @@ begin
   begin
     if A.AsString = 'none' then Exit(cdOff);
     if TyTryParseChartColor(A.AsString, AC) then Exit(cdColour);
+    { [R7-AA] a string no parser reads: the text is filled / stroked in what
+      the canvas had (the paint order settles cTyCanvasColourLeft) [was:
+      not filled] }
+    if A.AsString <> '' then
+    begin
+      AC := cTyCanvasColourLeft;
+      Exit(cdColour);
+    end;
     Exit(cdOff);
   end;
   if A is TJSONObject then
@@ -3279,7 +3297,8 @@ begin
         if AEl.Invisible then AOut.ZrHit.FixedLw := lw;
       end;
     end;
-    if hasStroke then AOut.HitSlopLogical := Max(lw, 0) * us / ACtx.Scale / 2
+    if hasStroke and IsInfinite(lw) then AOut.HitSlopLogical := 0
+    else if hasStroke then AOut.HitSlopLogical := Max(lw, 0) * us / ACtx.Scale / 2
     else if not hasFill then AOut.HitSlopLogical := 5 * us / ACtx.Scale / 2;
     if hasFill and not hasStroke then AOut.HitSlopLogical := 0;
     if not AEl.Invisible then
@@ -3305,6 +3324,13 @@ begin
         begin
           AOut.Style.HasFill := True;
           AOut.Style.FillColor := TyGradientSolid(AOut.Style.FillGradient);
+        end
+        { [R7-AA] a string no parser reads: the canvas refuses it and fills
+          in the fillStyle it had (the paint order settles it) [was: no fill] }
+        else if (d.JSONType = jtString) and (d.AsString <> '') then
+        begin
+          AOut.Style.HasFill := True;
+          AOut.Style.FillColor := cTyCanvasColourLeft;
         end;
       end;
       { strokeNoScale: the canvas divides the width by the line scale, so
@@ -3356,6 +3382,19 @@ begin
         begin
           AOut.Style.StrokeColor := TyGradientSolid(AOut.Style.StrokeGradient);
           AOut.Style.StrokeWidthLogical := lw * us / ACtx.Scale;
+        end
+        { [R7-AA] a string no parser reads strokes in the strokeStyle the
+          canvas had [was: no stroke] }
+        else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+        begin
+          AOut.Style.StrokeColor := cTyCanvasColourLeft;
+          AOut.Style.StrokeWidthLogical := lw * us / ACtx.Scale;
+        end;
+        { [R7-AA] +Infinity strokes, at the width the canvas had }
+        if IsInfinite(lw) and (AOut.Style.StrokeWidthLogical <> 0) then
+        begin
+          AOut.Style.StrokeWidthLogical := 1;
+          AOut.CanvasFlags := AOut.CanvasFlags or cTyCanvasWidthLeft;
         end;
         { [R7-P] THE PEN UNDER THE ELEMENT'S TRANSFORM: the canvas strokes
           in the space it maps, so an unequal scaleX / scaleY (or a skew,
@@ -3367,6 +3406,15 @@ begin
           if TyGfxStrokeNoScale(AEl) then TyStyleNoScalePen(AOut.Style, AEl.Transform)
           else TyStyleSetPenShape(AOut.Style, m);
         end;
+      end;
+      { [R7-AA] A WIDTH OF NOUGHT still hands its stroke colour to the canvas
+        (zrender assigns every string stroke; the paint order takes a
+        colour of no width) }
+      if not hasStroke then
+      begin
+        d := AEl.Style.Find('stroke');
+        if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+          AOut.Style.StrokeColor := c;
       end;
       { [R6-C] fillOpacity / strokeOpacity: the canvas' globalAlpha for the
         fill and for the pen, over the opacity (brushPath) }
@@ -3389,10 +3437,17 @@ begin
         SetLength(dash, d.Count);
         for i := 0 to d.Count - 1 do dash[i] := JsNum(d.Items[i]) * us / ACtx.Scale;
         AOut.Style.DashLogical := dash;
-        { [R2-F] lineDashOffset, scaled as the pattern is }
+        { [R2-F] lineDashOffset, scaled as the pattern is; [R7-AA] one the
+          canvas refuses (no number) the one it had }
         d := AEl.Style.Find('lineDashOffset');
         if (d <> nil) and (d.JSONType = jtNumber) then
-          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale;
+          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale
+        else if (d <> nil) and (d.JSONType <> jtNull) then
+        begin
+          AOut.Style.DashOffsetLogical := TyOptPenOffset(d);
+          if not TyPhaseLeft(AOut.Style.DashOffsetLogical) then
+            AOut.Style.DashOffsetLogical := AOut.Style.DashOffsetLogical * us / ACtx.Scale;
+        end;
       end
       { [R7-U] a word or a number, as dashStyle's normalizeLineDash takes
         it against the element's own width: 'dashed' [4w, 2w], 'dotted'
@@ -3423,22 +3478,26 @@ begin
         AOut.Style.DashLogical := dash;
         d := AEl.Style.Find('lineDashOffset');
         if (d <> nil) and (d.JSONType = jtNumber) then
-          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale;
+          AOut.Style.DashOffsetLogical := d.AsFloat * us / ACtx.Scale
+        else if (d <> nil) and (d.JSONType <> jtNull) then
+        begin
+          AOut.Style.DashOffsetLogical := TyOptPenOffset(d);
+          if not TyPhaseLeft(AOut.Style.DashOffsetLogical) then
+            AOut.Style.DashOffsetLogical := AOut.Style.DashOffsetLogical * us / ACtx.Scale;
+        end;
       end;
       { [R7-U] the pen's ends as the canvas takes them: a cap or a join
-        word it knows, a miterLimit above nought [was: not read] }
+        word it knows, a miterLimit above nought; [R7-AA] another word, a
+        limit it refuses, keeps the one the canvas had (`|| default` first:
+        an empty word is the default) [was: the default] }
       d := AEl.Style.Find('lineCap');
-      if (d <> nil) and (d.JSONType = jtString)
-        and ((d.AsString = 'round') or (d.AsString = 'square') or (d.AsString = 'butt')) then
+      if (d <> nil) and (d.JSONType = jtString) then
         AOut.Style.LineCap := TyCapOfWord(d.AsString);
       d := AEl.Style.Find('lineJoin');
-      if (d <> nil) and (d.JSONType = jtString)
-        and ((d.AsString = 'round') or (d.AsString = 'bevel') or (d.AsString = 'miter')) then
+      if (d <> nil) and (d.JSONType = jtString) then
         AOut.Style.LineJoin := TyJoinOfWord(d.AsString);
-      d := AEl.Style.Find('miterLimit');
-      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat)
-        and not IsInfinite(d.AsFloat) and (d.AsFloat > 0) then
-        AOut.Style.MiterLimit := d.AsFloat;
+      x := TyOptMiterLimit(AEl.Style.Find('miterLimit'));
+      if not IsNan(x) and (x <> 10) then AOut.Style.MiterLimit := x;
     end;
   end;
   AOut.Silent := False;

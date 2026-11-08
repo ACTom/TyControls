@@ -606,10 +606,12 @@ begin
         areaFill.Color := TTyColor(spec^.SplitAreaInks[ink].Colour);
         { [R7-Z] a colour the canvas refuses: the fill it had at the band }
         if spec^.SplitAreaInks[ink].Colour = cTyCanvasColourLeft then
-          areaFill.Color := TTyColor(CompInkOf(AAxis, cpkSplitArea, ink));
+          areaFill.Color := TTyColor(CompBandInk(AAxis, cpkSplitArea, i));
       end
       else if (ink <> 0) or not (tpBackground in areaS.Present) then
         Continue;
+      { ([R7-AA] the band as drawn: CompDrawn) }
+      CompDrewArea(AAxis, TTyChartColor(areaFill.Color));
       { areaStyle.opacity over the band's own alpha [R5-B] }
       areaFill.Color := TyAxisAreaAlpha(areaFill.Color, furn.AreaOpacity);
       bandLo := spec^.SplitAreaMarks[i].Coord;
@@ -1615,6 +1617,8 @@ begin
       e.Style.HasFill := True;
       e.Style.FillColor := col;
       e.Datum.DataIndex := ink;
+      { [R7-AA] the band (a Rect a band: each settles its own) }
+      e.Datum.RawDataIndex := i;
       Add(cpkSplitArea, 0, False, e);
     end;
   { ([R7-AA] a width of nought among them: the stroke colour handed on) }
@@ -1703,10 +1707,11 @@ end;
 procedure TTyCustomAdvanceChart.CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
   const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
   const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
-  const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray);
+  const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray;
+  const AAreaInks: TTyIntegerArray);
 var
   model: TTyStyleModel;
-  lineS, tickStyle, splitS, minorTickS, labelS, nameS: TTyStyleSet;
+  lineS, tickStyle, splitS, minorTickS, labelS, nameS, areaS: TTyStyleSet;
   lineK, tickK, minorTickK, splitK: TTyAxisStroke;
   key: string;
   z, seq, i: Integer;
@@ -1767,6 +1772,35 @@ var
     Result.CanvasM := TTyDoubleArray.Create(m[0], m[1], m[2], m[3], m[4], m[5]);
   end;
 
+  { [R7-AA] THE SPLIT AREAS: a single axis' Rect a band, a polar axis'
+    merged path a colour (AAreaInks in order: an ink of the author's list,
+    -1 the skin's colour), each filled as written at areaStyle.opacity }
+  procedure AreaParts;
+  var q: Integer; e2: TTyChartElement;
+  begin
+    for q := 0 to High(AAreaInks) do
+    begin
+      e2 := Default(TTyChartElement);
+      e2.Style.Alpha := 1;
+      if not IsNan(AFurn.AreaOpacity) then e2.Style.Alpha := AFurn.AreaOpacity;
+      e2.Style.HasFill := True;
+      if AAreaInks[q] >= 0 then
+      begin
+        if (AAreaInks[q] > High(AFurn.SplitAreaInks)) or not AFurn.SplitAreaInks[AAreaInks[q]].Ok then
+          Continue;
+        e2.Style.FillColor := AFurn.SplitAreaInks[AAreaInks[q]].Colour;
+        e2.Datum.DataIndex := AAreaInks[q];
+      end
+      else
+      begin
+        e2.Style.FillColor := TTyChartColor(areaS.Background.Color);
+        e2.Datum.DataIndex := 0;
+      end;
+      e2.Datum.RawDataIndex := q;
+      Add(cpkSplitArea, 0, False, e2);
+    end;
+  end;
+
 begin
   if (AAxis = nil) or (AxisModelZLevel(AAxis) <> 0) then Exit;
   key := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
@@ -1778,6 +1812,7 @@ begin
   tickStyle := model.ResolveStyle('TyAdvChartAxisTick', '', []);
   splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
   minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
   sp := ASpec;
   AxisTextStyles(@sp, labelS, nameS);
   if angle then lineK := TyAxisSkinStroke(AFurn.LinePen, lineS, acButt)
@@ -1796,6 +1831,9 @@ begin
     if AMinorTicks and (minorTickK.Drawn or minorTickK.Inked) then
       Add(cpkMinorTick, 0, False, Pen(minorTickK, True));
   end;
+  { [R7-AA] a single axis' split areas before its split lines (its axis
+    group's, added first) }
+  if AShape = 0 then AreaParts;
   { the split lines, a path a colour of the author's list (-1: the pen's) }
   if splitK.Drawn or splitK.Inked or (Length(AFurn.SplitLineInks) > 0) then
     for i := 0 to High(ASplitInks) do
@@ -1813,6 +1851,9 @@ begin
       end;
       Add(cpkSplit, 0, False, e);
     end;
+  { [R7-AA] a polar axis' after them (the radius view's after its split
+    lines, the angle view's after its minor split lines too) }
+  if AShape <> 0 then AreaParts;
   if angle then
   begin
     if AHasLine and (lineK.Drawn or lineK.Inked) then Add(cpkLine, 1, False, Pen(lineK, False));
@@ -1880,9 +1921,9 @@ end;
 
 procedure TTyCustomAdvanceChart.CompPolarSingleParts(var AParts: TTyCompPartArray);
 var
-  i, k, q: Integer;
-  idx: TTyIntegerArray;
-  ticks, minors: Boolean;
+  i, k, q, g, ink: Integer;
+  idx, aidx: TTyIntegerArray;
+  ticks, minors, has: Boolean;
   v: TTySingleAxisView;
   pv: TTyPolarAxisView;
   none: TTyPolarLabelArray;
@@ -1908,8 +1949,23 @@ begin
     for q := 0 to High(v.Ticks) do if v.Ticks[q].Drawn then ticks := True;
     minors := False;
     for q := 0 to High(v.MinorTicks) do if v.MinorTicks[q].Drawn then minors := True;
+    { a band each, in its colour (the skin's on the first of each pair) }
+    aidx := nil;
+    for q := 0 to High(v.SplitAreas) do
+    begin
+      ink := v.SplitAreas[q].ColourIndex;
+      if Length(v.Furn.SplitAreaInks) > 0 then
+      begin
+        if ink > High(v.Furn.SplitAreaInks) then ink := 0;
+      end
+      else if ink <> 0 then Continue
+      else ink := -1;
+      SetLength(aidx, Length(aidx) + 1);
+      aidx[High(aidx)] := ink;
+    end;
+    if not v.Furn.ShowSplitArea then aidx := nil;
     CompViewParts(FSingles[i].Axis, 2, 0, v.Furn, v.Spec, v.HasLine,
-      CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts);
+      CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx);
   end;
   { THE POLARS: the radius axes' view, then the angle axes' }
   for k := 0 to 1 do
@@ -1936,12 +1992,28 @@ begin
       for q := 0 to High(pv.Ticks) do if pv.Ticks[q].Drawn then ticks := True;
       minors := False;
       for q := 0 to High(pv.MinorTicks) do if pv.MinorTicks[q].Drawn then minors := True;
+      { the merged split areas, a path a colour that has a band }
+      aidx := nil;
+      for g := 0 to Math.Max(0, High(pv.Furn.SplitAreaInks)) do
+      begin
+        has := False;
+        for q := 0 to High(pv.SplitAreas) do
+        begin
+          ink := pv.SplitAreas[q].ColourIndex;
+          if (Length(pv.Furn.SplitAreaInks) > 0) and (ink > High(pv.Furn.SplitAreaInks)) then ink := 0;
+          if ink = g then has := True;
+        end;
+        if not has then Continue;
+        SetLength(aidx, Length(aidx) + 1);
+        if Length(pv.Furn.SplitAreaInks) > 0 then aidx[High(aidx)] := g
+        else aidx[High(aidx)] := -1;
+      end;
       if k = 0 then
         CompViewParts(FPolars[i].RadiusAxis, 3, 1, pv.Furn, pv.Spec, pv.HasLine,
-          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts)
+          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx)
       else
         CompViewParts(FPolars[i].AngleAxis, 4, 2, pv.Furn, pv.Spec, pv.HasLine,
-          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts);
+          CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts, aidx);
     end;
 end;
 
@@ -2116,7 +2188,7 @@ begin
       n := Length(parts);
       { a ParallelAxisView an axis, in the axes' order }
       CompViewParts(par.Axis(a), 1000 * (i + 1) + a, 0, par.Views[a].Furn, par.Views[a].Spec,
-        par.Views[a].HasLine, nil, ticks, minors, none, parts);
+        par.Views[a].HasLine, nil, ticks, minors, none, parts, nil);
       { the axis' z (its model's default 10) }
       if a <= High(par.AxisIndices) then
       begin
@@ -2164,8 +2236,9 @@ begin
   for i := 0 to FPaintList.Count - 1 do
   begin
     pe := FPaintList.Ref(FPaintList.PaintOrder(i));
-    { (the list's zlevel 0 first: another is another canvas) }
-    if pe^.ZLevel <> 0 then Continue;
+    { (the list's zlevel 0 first: another is another canvas; [R7-AA] the
+      graphic's elements under the axes are the ground's already) }
+    if (pe^.ZLevel <> 0) or pe^.GfxUnder then Continue;
     if (pe^.Z > AZ) or ((pe^.Z = AZ) and (pe^.Z2 > AZ2)) then Break;
     TyCanvasRunStep(ARun, pe^);
   end;
@@ -2239,6 +2312,17 @@ begin
   Result := TTyChartColor($FF000000);
 end;
 
+function TTyCustomAdvanceChart.CompBandInk(AOwner: TObject; AKind: Byte;
+  ABand: Integer): TTyChartColor;
+var i: Integer;
+begin
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind)
+      and (FCompParts[i].El.Datum.RawDataIndex = ABand) then
+      Exit(FCompParts[i].El.Style.FillColor);
+  Result := TTyChartColor($FF000000);
+end;
+
 function TTyCustomAdvanceChart.CompSettleFill(AOwner: TObject; AKind: Byte;
   AColour: TTyChartColor): TTyChartColor;
 var p: PTyChartElement;
@@ -2265,6 +2349,17 @@ begin
   FCompDrawn[n].Z2 := AZ2;
   FCompDrawn[n].IsText := AText;
   FCompDrawn[n].El := AEl;
+end;
+
+procedure TTyCustomAdvanceChart.CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
+var e: TTyChartElement;
+begin
+  if AOwner = nil then Exit;
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Style.HasFill := True;
+  e.Style.FillColor := AColour;
+  CompDrew(AOwner, AOwner.MainType + IntToStr(AOwner.ComponentIndex), cpkSplitArea, 0, False, e);
 end;
 
 function TTyCustomAdvanceChart.CompDrawn: TTyCompPartArray;
