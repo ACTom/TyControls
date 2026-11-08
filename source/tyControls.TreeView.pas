@@ -1494,49 +1494,8 @@ end;
   stroke-dasharray -- one length is a gap as long as the dash. Anything else, or a dash or
   gap under 1 px, is solid. }
 procedure TyTreeLineDash(const AText: string; out AOn, AOff: Integer);
-var
-  s, a, b: string;
-  sp: Integer;
 begin
-  AOn := 0;
-  AOff := 0;
-  s := Trim(StringReplace(AText, ',', ' ', [rfReplaceAll]));
-  if SameText(s, 'dotted') then
-  begin
-    AOn := 1;
-    AOff := 1;
-    Exit;
-  end;
-  if SameText(s, 'dashed') then
-  begin
-    AOn := 3;
-    AOff := 3;
-    Exit;
-  end;
-  if (s = '') or SameText(s, 'solid') then Exit;
-  sp := Pos(' ', s);
-  if sp > 0 then
-  begin
-    a := Trim(Copy(s, 1, sp - 1));
-    b := Trim(Copy(s, sp + 1, MaxInt));
-  end
-  else
-  begin
-    a := s;
-    b := s;
-  end;
-  try
-    AOn := TyEvalLength(a, nil);
-    AOff := TyEvalLength(b, nil);
-  except
-    AOn := 0;
-    AOff := 0;
-  end;
-  if (AOn < 1) or (AOff < 1) then
-  begin
-    AOn := 0;
-    AOff := 0;
-  end;
+  TyParseLineDash(AText, AOn, AOff);
 end;
 
 { ===========================================================================
@@ -5934,23 +5893,9 @@ begin
           if sortBandR.Right > sortBandR.Left then
           begin
             if tpTextColor in headerSecStyle.Present then
-              colTxt := ''  { reuse colTxt as a scratch — not used here }
+              DrawSortMark(P, sortBandR, FHeader.SortDirection = sdAscending, headerSecStyle.TextColor)
             else
-              colTxt := '';
-            if FHeader.SortDirection = sdAscending then
-            begin
-              if tpTextColor in headerSecStyle.Present then
-                P.DrawGlyph(sortBandR, tgArrowUp, headerSecStyle.TextColor, 1, 1)
-              else
-                P.DrawGlyph(sortBandR, tgArrowUp, S.TextColor, 1, 1);
-            end
-            else
-            begin
-              if tpTextColor in headerSecStyle.Present then
-                P.DrawGlyph(sortBandR, tgArrowDown, headerSecStyle.TextColor, 1, 1)
-              else
-                P.DrawGlyph(sortBandR, tgArrowDown, S.TextColor, 1, 1);
-            end;
+              DrawSortMark(P, sortBandR, FHeader.SortDirection = sdAscending, S.TextColor);
           end;
         end;
 
@@ -6244,9 +6189,9 @@ begin
               if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
               begin
                 if tpBackground in cbStyle.Present then
-                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius, True)
                 else
-                  P.FillBackground(cbBoxRect, S.Background, 2);
+                  P.FillBackground(cbBoxRect, S.Background, 2, True);
                 if tpBorderColor in cbStyle.Present then
                   P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
                 else
@@ -6283,9 +6228,9 @@ begin
                   { Draw circle only — no square box (FIX 4: prevents corner artifact) }
                   { The radius is LOGICAL -- the painter scales it -- and the box is device px. }
                   if tpBackground in cbStyle.Present then
-                    P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
+                    P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2, True)
                   else
-                    P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
+                    P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2, True);
                   if tpBorderColor in cbStyle.Present then
                     P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
                   else
@@ -6509,9 +6454,9 @@ begin
           if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
           begin
             if tpBackground in cbStyle.Present then
-              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius, True)
             else
-              P.FillBackground(cbBoxRect, S.Background, 2);
+              P.FillBackground(cbBoxRect, S.Background, 2, True);
             if tpBorderColor in cbStyle.Present then
               P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
             else
@@ -6546,9 +6491,9 @@ begin
             begin
               { Draw circle only — no square box (FIX 4: prevents corner artifact) }
               if tpBackground in cbStyle.Present then
-                P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2)
+                P.FillBackground(cbBoxRect, cbStyle.Background, P.Unscale(cbBoxSize) div 2, True)
               else
-                P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2);
+                P.FillBackground(cbBoxRect, S.Background, P.Unscale(cbBoxSize) div 2, True);
               if tpBorderColor in cbStyle.Present then
                 P.StrokeBorder(cbBoxRect, P.Unscale(cbBoxSize) div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
               else

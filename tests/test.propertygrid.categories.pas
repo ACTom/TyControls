@@ -41,6 +41,10 @@ type
     procedure TestASubPropertyStaysWithItsParent;
     procedure TestTheRowsWorkAsBeforeUnderAHeading;
     procedure TestSeveralObjectsAreGroupedToo;
+    { #183 }
+    procedure TestAGivenListThatLeavesACategoryOutKeepsItClosed;
+    procedure TestACategoryClosedInTheFormFileStaysClosed;
+    procedure TestAHeadingHasNoDividerToGrab;
   end;
 
   TPropertyGridFilterTest = class(TTestCase)
@@ -100,6 +104,13 @@ type
     Built: TStringList;   // the properties whose rows BuildPropertyRow was asked for
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+  end;
+
+  { A form with the grid and a button as published fields, for the round trip through a stream. }
+  TPGCatHostForm = class(TForm)
+  published
+    Grid: TTyPropertyGrid;
+    Button1: TTyButton;
   end;
 
   TVLEAccess = class(TTyValueListEditor)
@@ -351,6 +362,119 @@ begin
   AssertFalse('and after the headings come back', FGrid.RowAt(rsTyPropGridCatLayout).Expanded);
   FGrid.ExpandedProperties.Add('@' + rsTyPropGridCatLayout);
   AssertTrue('the list opens it', FGrid.RowAt(rsTyPropGridCatLayout).Expanded);
+end;
+
+{ The application restores a saved ExpandedProperties before the first object is shown: it names
+  Appearance, so a category it leaves out -- Layout -- was closed when it was saved. A list that
+  names no category at all leaves each one to open the first time it is shown. }
+procedure TPropertyGridCategoriesTest.TestAGivenListThatLeavesACategoryOutKeepsItClosed;
+var g: TPGGrid; saved: TStringList;
+begin
+  saved := TStringList.Create;
+  g := TPGGrid.Create(FForm);
+  try
+    g.Parent := FForm;
+    g.SetBounds(0, 0, 440, 720);
+    g.ShowCategories := True;
+    saved.Add('@' + rsTyPropGridCatAppearance);
+    saved.Add('Font');
+    g.ExpandedProperties := saved;
+    g.SelectedObject := FButton;
+    AssertFalse('Layout, left off the list, stays closed', g.RowAt(rsTyPropGridCatLayout).Expanded);
+    AssertTrue('Appearance, on it, is open', g.RowAt(rsTyPropGridCatAppearance).Expanded);
+    AssertTrue('and so is Font', g.RowAt(rsTyPropGridCatAppearance + '.Font').Expanded);
+    AssertTrue('the list still leaves Layout out',
+      g.ExpandedProperties.IndexOf('@' + rsTyPropGridCatLayout) < 0);
+  finally
+    g.Free;
+  end;
+  g := TPGGrid.Create(FForm);
+  try
+    g.Parent := FForm;
+    g.SetBounds(0, 0, 440, 720);
+    g.ShowCategories := True;
+    saved.Clear;
+    saved.Add('Font');
+    g.ExpandedProperties := saved;
+    g.SelectedObject := FButton;
+    AssertTrue('a list naming no category: Layout opens', g.RowAt(rsTyPropGridCatLayout).Expanded);
+    AssertTrue('Font as the list says', g.RowAt(rsTyPropGridCatAppearance + '.Font').Expanded);
+  finally
+    g.Free;
+    saved.Free;
+  end;
+end;
+
+{ Closed in the designer (its path taken off ExpandedProperties there), saved, loaded again. }
+procedure TPropertyGridCategoriesTest.TestACategoryClosedInTheFormFileStaysClosed;
+var
+  src, dst: TPGCatHostForm;
+  ms: TMemoryStream;
+  i: Integer;
+  layout: TTyValueRow;
+begin
+  RegisterClasses([TTyPropertyGrid, TTyButton]);
+  src := TPGCatHostForm.CreateNew(nil);
+  dst := TPGCatHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    src.Name := 'PGCatHostForm1';
+    src.Button1 := TTyButton.Create(src);
+    src.Button1.Name := 'Button1';
+    src.Button1.Parent := src;
+    src.Grid := TTyPropertyGrid.Create(src);
+    src.Grid.Name := 'Grid';
+    src.Grid.Parent := src;
+    src.Grid.ShowCategories := True;
+    src.Grid.SelectedComponent := src.Button1;
+    i := src.Grid.ExpandedProperties.IndexOf('@' + rsTyPropGridCatLayout);
+    AssertTrue('opened the first time it was shown', i >= 0);
+    src.Grid.ExpandedProperties.Delete(i);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    layout := nil;
+    for i := 0 to dst.Grid.RowCount - 1 do
+      if dst.Grid.Row(i).Key = rsTyPropGridCatLayout then layout := dst.Grid.Row(i);
+    AssertNotNull('the Layout heading came back', layout);
+    AssertFalse('closed, as it was saved', layout.Expanded);
+    AssertTrue('and the list did not take it back',
+      dst.Grid.ExpandedProperties.IndexOf('@' + rsTyPropGridCatLayout) < 0);
+    AssertTrue('the others open',
+      dst.Grid.ExpandedProperties.IndexOf('@' + rsTyPropGridCatAppearance) >= 0);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+{ A heading draws no divider, so where the divider would be the heading is just a heading: no
+  resize cursor, no drag -- a click selects it. On a property row the same place is the divider. }
+procedure TPropertyGridCategoriesTest.TestAHeadingHasNoDividerToGrab;
+var head, prop: TTyValueRow; x, y, w: Integer;
+begin
+  FGrid.ShowCategories := True;
+  head := FGrid.RowAt(rsTyPropGridCatLayout);
+  prop := FGrid.RowAt(rsTyPropGridCatLayout + '.Width');
+  FGrid.Select(prop);
+  x := FGrid.DividerX;
+  w := FGrid.KeyColumnWidth;
+  y := FGrid.RowMidY(head);
+  FGrid.MoveTo(x, y, False);
+  AssertFalse('no resize cursor over a heading', FGrid.Cursor = crHSplit);
+  FGrid.PressAt(x, y);
+  FGrid.MoveTo(x + 40, y, True);
+  FGrid.ReleaseAt(x + 40, y);
+  AssertEquals('nothing was dragged', w, FGrid.KeyColumnWidth);
+  AssertSame('the click selected the heading', head, FGrid.CurrentRow);
+  y := FGrid.RowMidY(prop);
+  FGrid.MoveTo(x, y, False);
+  AssertTrue('over a property row it is the divider', FGrid.Cursor = crHSplit);
+  FGrid.PressAt(x, y);
+  FGrid.MoveTo(x + 40, y, True);
+  FGrid.ReleaseAt(x + 40, y);
+  AssertEquals('and it drags', w + 40, FGrid.KeyColumnWidth);
 end;
 
 procedure TPropertyGridCategoriesTest.TestOnGetPropertyCategoryMovesAndInvents;

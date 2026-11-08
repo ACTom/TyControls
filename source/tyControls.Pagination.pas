@@ -1076,7 +1076,7 @@ begin
       // labels below still draw: a theme that fills only :selected gets the classic "only the
       // current page has a chip" for free, with no code branch of its own.
       if tpBackground in cellS.Present then
-        P.FillBackground(cellR, cellS.Background, TyEffectiveCorners(cellS));
+        P.FillBackground(cellR, cellS.Background, TyEffectiveCorners(cellS), TyBorderVisible(cellS));
       if TyBorderVisible(cellS) then
         P.StrokeBorder(cellR, TyEffectiveCorners(cellS), cellS.BorderWidth, cellS.BorderColor);
 

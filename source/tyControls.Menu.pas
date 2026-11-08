@@ -1532,9 +1532,13 @@ begin
         TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600,
           P.RasterPPI);
         // 90° CCW: reads bottom-to-top up the strip, anchored near the bottom, centered across it.
-        // The ROTATION is not mirrored -- a vertical banner reads bottom-to-top in either
-        // direction; only which end of the popup it decorates changes.
-        P.Bitmap.TextOutAngle(P.Dev(Banner.Left + bannerPx div 2), P.Dev(R.Bottom - P.Scale(8)), 900,
+        // Turned that way a line fills its height to the RIGHT of the anchor, so the anchor is
+        // half a line left of the strip's middle (#201). The ROTATION is not mirrored -- a
+        // vertical banner reads bottom-to-top in either direction; only which end of the popup
+        // it decorates changes.
+        P.Bitmap.TextOutAngle(
+          P.Dev(Banner.Left) + (P.Dev(bannerPx) - P.Bitmap.TextSize(FBannerCaption).cy) div 2,
+          P.Dev(R.Bottom - P.Scale(8)), 900,
           FBannerCaption, TyColorToBGRA(BannerStyle.TextColor), taLeftJustify);
       end;
     end;

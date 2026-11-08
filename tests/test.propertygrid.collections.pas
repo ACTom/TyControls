@@ -24,6 +24,9 @@ type
     FAllow: Boolean;
     FLog: TStringList;          // 'changing add 2 2', 'changed delete 0 -1', ...
     FMade: TCollectionItem;
+    FWrites: Integer;
+    procedure CountWrite(Sender: TObject; AInstance: TPersistent; const APropName,
+      ANewValue: string; var AAllow: Boolean);
     procedure Changing(Sender: TObject; ACollection: TCollection; AAction: TTyCollectionAction;
       AIndex, ANewIndex: Integer; var AAllow: Boolean);
     procedure Changed(Sender: TObject; ACollection: TCollection; AAction: TTyCollectionAction;
@@ -57,6 +60,9 @@ type
     { the application's own way in }
     procedure TestTheApplicationsMenuWinsAndThePublicMethodsDoTheSame;
     procedure TestAPathThatIsNoCollectionRaises;
+    procedure TestReadOnlyRefusesThePublicMethodsToo;
+    procedure TestARightClickMakesTheRowCurrentUnderTheApplicationsMenu;
+    procedure TestAnEditOnAnotherItemIsWrittenBeforeADelete;
     { a real host }
     procedure TestAStringGridsColumnsFollow;
   end;
@@ -116,6 +122,12 @@ begin
   TPGItem(FMade).Caption := 'made';
   TPGItem(FMade).Size := 5;
   AItem := FMade;
+end;
+
+procedure TPropertyGridCollectionsTest.CountWrite(Sender: TObject; AInstance: TPersistent;
+  const APropName, ANewValue: string; var AAllow: Boolean);
+begin
+  Inc(FWrites);
 end;
 
 function TPropertyGridCollectionsTest.Captions: string;
@@ -411,6 +423,53 @@ begin
   AssertTrue('a property row''s path too', FGrid.PropertyAt(FGrid.RowAt('Items.[0].Size'), inst, nm));
   AssertEquals('Size', 'Size', nm);
   AssertEquals('Items[0].Size', FGrid.RowPath(FGrid.RowAt('Items.[0].Size')));
+end;
+
+{ #183: the application's own menu calls the public methods -- what doc section 8 calls "the same"
+  as the built-in one, which a ReadOnly grid does not show. ReadOnly refuses them as design time
+  does. }
+procedure TPropertyGridCollectionsTest.TestReadOnlyRefusesThePublicMethodsToo;
+begin
+  FGrid.ReadOnly := True;
+  AssertNull('nothing added', FGrid.AddCollectionItem('Items'));
+  FGrid.DeleteCollectionItem('Items[0]');
+  FGrid.MoveCollectionItem('Items[0]', 1);
+  AssertEquals('nothing deleted or moved', 'first,second', Captions);
+  FGrid.ReadOnly := False;
+  AssertNotNull('and once it is not ReadOnly, they work', FGrid.AddCollectionItem('Items'));
+end;
+
+{ #183: the application's menu deletes RowPath(SelectedRow), as doc section 8 says; the row it
+  acts on is the one right-clicked, as with the built-in menu. }
+procedure TPropertyGridCollectionsTest.TestARightClickMakesTheRowCurrentUnderTheApplicationsMenu;
+begin
+  FGrid.PopupMenu := TPopupMenu.Create(FForm);
+  FGrid.Select(FGrid.RowAt('Items.[0]'));
+  AssertFalse('the application''s menu is left to show itself',
+    FGrid.RightClick(FGrid.RowAt('Items.[1]')));
+  AssertEquals('the row clicked is current', 'Items[1]', FGrid.RowPath(FGrid.SelectedRow));
+  FGrid.DeleteCollectionItem(FGrid.RowPath(FGrid.SelectedRow));
+  AssertEquals('so the item clicked is the one deleted', 'first', Captions);
+end;
+
+{ #183: a delete dropped an edit in progress on ANY row. One on another item is written first; one
+  on the item deleted goes with it. }
+procedure TPropertyGridCollectionsTest.TestAnEditOnAnotherItemIsWrittenBeforeADelete;
+begin
+  FGrid.ClickValue(FGrid.RowAt('Items.[1].Caption'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  FGrid.Editor.TypeText('kept');
+  FGrid.DeleteCollectionItem('Items[0]');
+  AssertEquals('the other item took what was typed', 'kept', Captions);
+  FGrid.AddCollectionItem('Items');
+  FWrites := 0;
+  FGrid.OnPropertyChanging := @CountWrite;
+  FGrid.ClickValue(FGrid.RowAt('Items.[0].Caption'));
+  FGrid.Editor.TypeText('gone');
+  FGrid.DeleteCollectionItem('Items[0]');
+  AssertEquals('an edit on the item deleted goes with it, unwritten', 0, FWrites);
+  AssertEquals('the item went', '', Captions);
+  AssertEquals('one item left', 1, FHolder.Items.Count);
 end;
 
 procedure TPropertyGridCollectionsTest.TestAPathThatIsNoCollectionRaises;

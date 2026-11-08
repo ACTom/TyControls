@@ -46,6 +46,10 @@ type
       AParent: TWinControl = nil): TTyToolWindowBar;
     { 当前页上窗口 AIndex 的标签中心(当前页客户区坐标)。 }
     function BottomTabCentre(AActive: TProbeWindow; AIndex: Integer): TPoint;
+  private
+    { OnShow 那一刻这一页的边界。 }
+    FShowRect: TRect;
+    procedure RecordShow(ASender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -75,6 +79,11 @@ type
     { spec §5.3 / §3.7(整体审查 4):禁用含焦点的当前页,焦点照收起那一路交给栏后面的控件,
       不掉到窗体本身;焦点不在里面就不动它。 }
     procedure TestDisablingThePageWithTheFocusMovesTheFocusOut;
+    { 切到聚焦不了的页(禁用的、正文里没有可聚焦控件的),焦点原来在旧页里:同收起那一路交给
+      栏后面的那一个,不交给平台。 }
+    procedure TestSwitchingToAPageThatCannotTakeTheFocusMovesItPastTheBar;
+    { OnShow 里这一页已经在对齐引擎给它的位置上(展开、第一个窗口进了空栏):对齐引擎要真句柄。 }
+    procedure TestOnShowSeesThePageWhereTheAlignerPutsIt;
   end;
 
 implementation
@@ -522,6 +531,61 @@ begin
   AssertSame('前提:焦点在栏外', FBefore, FForm.ActiveControl);
   FWin.Enabled := False;
   AssertSame('焦点不在里面:一动不动', FBefore, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowFocusTests.TestSwitchingToAPageThatCannotTakeTheFocusMovesItPastTheBar;
+var
+  empty: TTyToolWindow;
+begin
+  FWin2.Enabled := False;
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在当前页里', FEdit, FForm.ActiveControl);
+  FBar.ActiveWindow := FWin2;
+  AssertNothingRaised('切到禁用的页');
+  AssertSame('切到禁用的页:交给 Tab 顺序里栏后面的那一个', FOutside, FForm.ActiveControl);
+  FWin2.Enabled := True;
+  empty := TTyToolWindow.Create(FForm);
+  empty.Parent := FBar;
+  FBar.ActiveWindow := FWin;
+  FEdit.SetFocus;
+  AssertSame('前提:焦点又在当前页里', FEdit, FForm.ActiveControl);
+  FBar.ActiveWindow := empty;
+  AssertNothingRaised('切到空页');
+  AssertSame('切到没有可聚焦控件的页:同样交给栏后面的那一个', FOutside, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowFocusTests.RecordShow(ASender: TObject);
+begin
+  FShowRect := TControl(ASender).BoundsRect;
+end;
+
+procedure TTyToolWindowFocusTests.TestOnShowSeesThePageWhereTheAlignerPutsIt;
+var
+  rb: TTyToolWindowBar;
+  w: TTyToolWindow;
+begin
+  Pump;
+  FBar.Collapsed := True;
+  { 收起期间改了展开尺寸:藏着的页还停在原来那么宽。 }
+  FBar.ExpandedSize := FBar.ExpandedSize + 120;
+  FWin.OnShow := @RecordShow;
+  FBar.Collapsed := False;
+  Pump;
+  AssertTrue('前提:展开后这一页在内容区里', FWin.Width > 0);
+  AssertTrue('展开:OnShow 里这一页已经是对齐引擎给它的位置和尺寸',
+    EqualRect(FWin.BoundsRect, FShowRect));
+  rb := TTyToolWindowBar.Create(FForm);
+  rb.Placement := twpRight;
+  rb.Parent := FForm;
+  rb.Controller := FCtl;
+  Pump;
+  AssertEquals('前提:空的右栏整条隐藏', 0, rb.Width);
+  w := TTyToolWindow.Create(FForm);
+  w.OnShow := @RecordShow;
+  w.Parent := rb;
+  Pump;
+  AssertTrue('前提:来了窗口,这一页在内容区里', w.Width > 0);
+  AssertTrue('第一个窗口进空栏:OnShow 里已经在位', EqualRect(w.BoundsRect, FShowRect));
 end;
 
 initialization

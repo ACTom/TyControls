@@ -265,11 +265,48 @@ type
     property Level: Integer read FLevel write FLevel;
   end;
 
+  { A setter that runs the application's code (OnSet) while the grid is still writing -- the
+    inspected control's OnChange refreshing the grid, say (#183). }
+  TPGHook = class(TPersistent)
+  private
+    FValue: Integer;
+    FOnSet: TNotifyEvent;
+    procedure SetValue(AValue: Integer);
+  public
+    property OnSet: TNotifyEvent read FOnSet write FOnSet;
+  published
+    property Value: Integer read FValue write SetValue;
+  end;
+
+  { Count resizes Items, as a host's setter changes what it owns (#183). Two items to start. }
+  TPGCounted = class(TPersistent)
+  private
+    FItems: TOwnedCollection;
+    function GetCount: Integer;
+    procedure SetCount(AValue: Integer);
+  public
+    constructor Create;
+    destructor Destroy; override;
+  published
+    property Count: Integer read GetCount write SetCount;
+    property Items: TOwnedCollection read FItems;
+  end;
+
+  { Sets Level in its Loaded, as a control that finishes setting itself up once it is read. }
+  TPGLoadedComp = class(TComponent)
+  private
+    FLevel: Integer;
+  protected
+    procedure Loaded; override;
+  published
+    property Level: Integer read FLevel write FLevel;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
     procedure TypeText(const AText: string);
-    procedure PressKey(AKey: Word);
+    procedure PressKey(AKey: Word; AShift: TShiftState = []);
     procedure ClickEllipsis;
   end;
 
@@ -293,6 +330,7 @@ type
     StringsDialogs: Integer;
     StringsTitle: string;
     StringsSeen: string;      // the list as the dialog was handed it
+    OnStringsDialog: TNotifyEvent;   // runs while the strings dialog is up (its modal loop)
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { The row at a dotted key path ('Font.Size', 'Items.[0].Caption'). Fails the test if missing. }
@@ -327,6 +365,18 @@ type
     procedure PaintInto(ACanvas: TCanvas; const ARect: TRect);
     { The keys of the rows on display, top to bottom, comma-separated. }
     function ShownKeys: string;
+    { The mouse at client (X, Y): pressed, moved (with the left button held, or none), released. }
+    procedure PressAt(X, Y: Integer);
+    procedure MoveTo(X, Y: Integer; AHeld: Boolean);
+    procedure ReleaseAt(X, Y: Integer);
+    { Where the key/value divider is drawn, and the middle of ARow (scrolled into view). }
+    function DividerX: Integer;
+    function RowMidY(ARow: TTyValueRow): Integer;
+    { A click on the '…' painted at the end of a font or dialog row. }
+    procedure ClickPaintedEllipsis(ARow: TTyValueRow);
+    { Close whatever cell editor or list is open, committing nothing. }
+    procedure CloseEditor;
+    property OnEditingDone;
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -525,6 +575,47 @@ begin
   FAmount := AValue;
 end;
 
+procedure TPGHook.SetValue(AValue: Integer);
+begin
+  FValue := AValue;
+  if Assigned(FOnSet) then FOnSet(Self);
+end;
+
+constructor TPGCounted.Create;
+begin
+  inherited Create;
+  FItems := TOwnedCollection.Create(Self, TPGItem);
+  SetCount(2);
+end;
+
+destructor TPGCounted.Destroy;
+begin
+  FItems.Free;
+  inherited Destroy;
+end;
+
+function TPGCounted.GetCount: Integer;
+begin
+  Result := FItems.Count;
+end;
+
+procedure TPGCounted.SetCount(AValue: Integer);
+var it: TPGItem;
+begin
+  while FItems.Count < AValue do
+  begin
+    it := TPGItem(FItems.Add);
+    it.Caption := 'item' + IntToStr(it.Index);
+  end;
+  while FItems.Count > AValue do FItems.Delete(FItems.Count - 1);
+end;
+
+procedure TPGLoadedComp.Loaded;
+begin
+  inherited Loaded;
+  FLevel := 99;
+end;
+
 { ---- TPGEditAccess ---- }
 
 procedure TPGEditAccess.TypeText(const AText: string);
@@ -538,11 +629,11 @@ begin
   end;
 end;
 
-procedure TPGEditAccess.PressKey(AKey: Word);
+procedure TPGEditAccess.PressKey(AKey: Word; AShift: TShiftState);
 var k: Word;
 begin
   k := AKey;
-  KeyDown(k, []);
+  KeyDown(k, AShift);
 end;
 
 procedure TPGEditAccess.ClickEllipsis;
@@ -594,6 +685,7 @@ begin
   Inc(StringsDialogs);
   StringsTitle := ATitle;
   StringsSeen := AStrings.Text;
+  if Assigned(OnStringsDialog) then OnStringsDialog(Self);
   Result := StringsAccept;
   if Result then AStrings.Text := StringsAnswer;
 end;
@@ -837,6 +929,55 @@ end;
 procedure TPGGrid.PaintInto(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TPGGrid.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TPGGrid.MoveTo(X, Y: Integer; AHeld: Boolean);
+begin
+  if AHeld then MouseMove([ssLeft], X, Y) else MouseMove([], X, Y);
+end;
+
+procedure TPGGrid.ReleaseAt(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+function TPGGrid.DividerX: Integer;
+begin
+  { The content's left edge (the style's padding, as ClickTriangle has it) plus the key column. }
+  Result := MulDiv(CurrentStyle.Padding.Left, Font.PixelsPerInch, 96)
+    + MulDiv(KeyColumnWidth, Font.PixelsPerInch, 96);
+end;
+
+function TPGGrid.RowMidY(ARow: TTyValueRow): Integer;
+var f: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := ItemRect(f);
+  Result := (r.Top + r.Bottom) div 2;
+end;
+
+procedure TPGGrid.ClickPaintedEllipsis(ARow: TTyValueRow);
+var f, x, y: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := DialogButtonRect(f);
+  if r.Right <= r.Left then raise EAssertionFailedError.Create('no ''…'' on ' + ARow.Key);
+  x := (r.Left + r.Right) div 2;
+  y := (r.Top + r.Bottom) div 2;
+  MouseDown(mbLeft, [], x, y);
+  MouseUp(mbLeft, [], x, y);
+end;
+
+procedure TPGGrid.CloseEditor;
+begin
+  EndEdit(False);
 end;
 
 function TPGGrid.ShownKeys: string;

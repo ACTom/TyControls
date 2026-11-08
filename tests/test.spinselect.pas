@@ -98,13 +98,13 @@ begin
   s := NewSpin;
   TSpinCrack(s).DoEnter;   // the focus from Tab
   TypeIn(s, '7');
-  AssertEquals('the first digit replaces the value', '7', TSpinCrack(s).FEditText);
+  AssertEquals('the first digit replaces the value', '7', s.Text);
   TypeIn(s, '5');
-  AssertEquals('the next one goes after it', '75', TSpinCrack(s).FEditText);
+  AssertEquals('the next one goes after it', '75', s.Text);
   s.Value := 42;
   TSpinCrack(s).DoEnter;
   TypeIn(s, '-');
-  AssertEquals('a sign replaces it too', '-', TSpinCrack(s).FEditText);
+  AssertEquals('a sign replaces it too', '-', s.Text);
 end;
 
 procedure TSpinSelectTest.TestBackspaceClearsTheSelectedValue;
@@ -114,11 +114,11 @@ begin
   s := NewSpin;
   TSpinCrack(s).DoEnter;
   Press(s, VK_BACK);
-  AssertEquals('Backspace clears it', '', TSpinCrack(s).FEditText);
+  AssertEquals('Backspace clears it', '', s.Text);
   s.Value := 42;
   TSpinCrack(s).DoEnter;
   Press(s, VK_DELETE);
-  AssertEquals('and so does Delete', '', TSpinCrack(s).FEditText);
+  AssertEquals('and so does Delete', '', s.Text);
 end;
 
 procedure TSpinSelectTest.TestAClickInTheFieldKeepsTheValue;
@@ -130,7 +130,7 @@ begin
   TSpinCrack(s).DoEnter;
   s.ControlState := s.ControlState - [csLButtonDown];
   TypeIn(s, '7');
-  AssertEquals('typed where the caret is', '427', TSpinCrack(s).FEditText);
+  AssertEquals('typed where the caret is', '427', s.Text);
 end;
 
 procedure TSpinSelectTest.TestMovingTheCaretLetsTheSelectionGo;
@@ -141,18 +141,18 @@ begin
   TSpinCrack(s).DoEnter;
   Press(s, VK_LEFT);
   TypeIn(s, '1');
-  AssertEquals('Left from the selection: to the start', '142', TSpinCrack(s).FEditText);
+  AssertEquals('Left from the selection: to the start', '142', s.Text);
   s.Value := 42;
   TSpinCrack(s).DoEnter;
   Press(s, VK_RIGHT);
   TypeIn(s, '1');
-  AssertEquals('Right: to the end', '421', TSpinCrack(s).FEditText);
+  AssertEquals('Right: to the end', '421', s.Text);
   s.Value := 42;
   TSpinCrack(s).DoEnter;
   Press(s, VK_HOME);
   Press(s, VK_BACK);
   AssertEquals('Home lets it go: Backspace at the start deletes nothing', '42',
-    TSpinCrack(s).FEditText);
+    s.Text);
 end;
 
 procedure TSpinSelectTest.TestAKeyTheFieldRefusesLeavesTheSelection;
@@ -162,9 +162,9 @@ begin
   s := NewSpin;
   TSpinCrack(s).DoEnter;
   TypeIn(s, 'x');
-  AssertEquals('a letter is refused, and the value stays', '42', TSpinCrack(s).FEditText);
+  AssertEquals('a letter is refused, and the value stays', '42', s.Text);
   TypeIn(s, '9');
-  AssertEquals('still selected: the digit replaces it', '9', TSpinCrack(s).FEditText);
+  AssertEquals('still selected: the digit replaces it', '9', s.Text);
 end;
 
 procedure TSpinSelectTest.TestTheCaretOfTheSelectedValueIsAtItsEnd;
@@ -177,7 +177,7 @@ begin
   AssertEquals('at the end, as in an edit', 2, s.CaretPos);
   Press(s, VK_RIGHT);
   TypeIn(s, '1');
-  AssertEquals('so Right from it goes to the end', '421', TSpinCrack(s).FEditText);
+  AssertEquals('so Right from it goes to the end', '421', s.Text);
 end;
 
 procedure TSpinSelectTest.TestCodePlacingTheCaretLetsTheSelectionGo;
@@ -188,12 +188,12 @@ begin
   TSpinCrack(s).DoEnter;
   s.CaretPos := 1;
   TypeIn(s, '7');
-  AssertEquals('typed at the caret, as after SelStart in an edit', '472', TSpinCrack(s).FEditText);
+  AssertEquals('typed at the caret, as after SelStart in an edit', '472', s.Text);
   s.Value := 42;
   TSpinCrack(s).DoEnter;
   s.CaretPos := 2;   // where it is already
   TypeIn(s, '7');
-  AssertEquals('still let go', '427', TSpinCrack(s).FEditText);
+  AssertEquals('still let go', '427', s.Text);
 end;
 
 procedure TSpinSelectTest.TestAClickInTheFieldLetsTheSelectionGo;
@@ -205,7 +205,8 @@ begin
   TSpinCrack(s).MouseDown(mbLeft, [], 10, 13);
   TSpinCrack(s).MouseUp(mbLeft, [], 10, 13);
   TypeIn(s, '7');
-  AssertEquals('typed at the caret', '427', TSpinCrack(s).FEditText);
+  { #190: the click puts the caret where it landed, before the 4, as in an edit }
+  AssertEquals('typed at the caret', '742', s.Text);
 end;
 
 { Green ink anywhere in a render of S. }

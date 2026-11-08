@@ -34,9 +34,11 @@ type
     function ThumbHint(AIndex: Integer): string; override;
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
     function KeyShiftState: TShiftState; override;
+    function TabHeld: Boolean; override;
   public
     HoldShift: Boolean;             // what KeyShiftState reports for Shift
     HoldMouse: Boolean;             // ... and for the left mouse button
+    HoldTab: Boolean;               // what TabHeld reports
     { What Focused answers: a test form is never shown, so the bar never really has the focus. }
     FakeFocus: Boolean;
     Off: array of Boolean;          // thumb i disabled
@@ -143,6 +145,10 @@ type
     procedure TestSegmentSpansRunBetweenTheThumbCentres;
     procedure TestSegmentSpanOutsideTheSegmentsIsFalse;
     procedure TestPreferredCrossSizeIsTheTrackBars;
+    { #182: what LCL holds as the preferred size (AutoSize's answer) is asked again when
+      TickLabels, ShowValue or TickMarks change, and when a paint has measured a different
+      label strip or readout: it never stays the answer from before. }
+    procedure TestThePreferredSizeHeldIsAskedAgain;
   end;
 
   TTyMultiTrackPaintTest = class(TMultiTrackPaintBase)
@@ -186,6 +192,9 @@ type
     procedure TestThumbsOnOneValueComeApartInTheDragDirection;
     procedure TestADisabledBarIgnoresTheMouse;
     procedure TestTheHintIsTheThumbsUnderThePointer;
+    { #182: the capture taken away mid-drag (a modal dialog opened from OnChange, a switch to
+      another window) ends the drag, as a move with no button held does. }
+    procedure TestALostCaptureEndsTheDrag;
   end;
 
   { The final classes as a form and a theme see them: the published collection, the type key,
@@ -248,6 +257,13 @@ type
     procedure TestTheSelectionFollowsItsThumbWhenRangesChange;
     procedure TestRangesRoundTripThroughAFormFile;
     procedure TestNoRangesRoundTrips;
+    { #182: ranges added or deleted from code during a drag: the drag stays on the end (or the
+      span) of the range it started on, and ends with that range. }
+    procedure TestADragStaysOnItsRangeWhenRangesChange;
+    { #182: values held inside BeginUpdate survive a Min / Max / MinGap / AllowCrossing change
+      and a SetThumbValue in the same batch, and EndUpdate sorts them out against the new
+      range. }
+    procedure TestABatchKeepsItsValuesThroughARangeChange;
   end;
 
   TMultiAccess = class(TTyMultiTrackBar);
@@ -271,6 +287,7 @@ type
     procedure Selected(Sender: TObject; AIndex: Integer);
     procedure DeleteBeyondFour(Sender: TObject);
     procedure DeleteTheSeventy(Sender: TObject);
+    procedure EditDone(Sender: TObject);
   protected
     procedure SetUp; override;
   published
@@ -288,11 +305,22 @@ type
     procedure TestAThumbsStyleClassIsResolved;
     procedure TestAThumbsHintIsShownOverIt;
     procedure TestADisabledThumbIsInert;
+    { #182: a thumb disabled while it is selected, hovered or dragged leaves all three, and
+      SelectedThumb does not take a disabled thumb. }
+    procedure TestDisablingAThumbDropsItsSelectionHoverAndDrag;
     procedure TestAnItemChangeRepaints;
     procedure TestSegmentsStyleTheirStretchOnly;
     procedure TestAFormsThumbsAreSortedWhenRead;
     procedure TestThumbsAndSegmentsRoundTripThroughAFormFile;
     procedure TestNoThumbsRoundTrips;
+    { #182: thumbs added or deleted from code during a drag: the drag stays on its item, and
+      ends with it. }
+    procedure TestADragStaysOnItsThumbWhenThumbsChange;
+    { #182: as the range bar's. }
+    procedure TestABatchKeepsItsValuesThroughARangeChange;
+    { #182: OnEditingDone after each user change -- a press and drag once released, a key, a
+      wheel notch, a removal -- as LCL's TTrackBar; not for what changed nothing. }
+    procedure TestEditingDoneFollowsEachUserChange;
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
@@ -308,6 +336,10 @@ type
     procedure TestTabWalksTheEnabledThumbsThenLeaves;
     procedure TestEnteringFromTheKeyboardStartsAtTheNearEnd;
     procedure TestTheWheelStepsTheKeyboardsThumb;
+    { #182: on a Reversed bar every value key and the wheel move the thumb the way they move it
+      on an unreversed bar of the same orientation (the screen decides, as TTyTrackBar), so
+      they change the value the other way. Horizontal and vertical. }
+    procedure TestOnAReversedBarTheKeysAndTheWheelFollowTheScreen;
   end;
 
   { ShowValue against TTyTrackBar's: the same strip, the same shorter track, the same text. }
@@ -343,6 +375,8 @@ type
     procedure TestTheRectanglesAreThePaintedParts;
     procedure TestADefaultDrawFalseLeavesTheThumbToTheHandler;
     procedure TestADefaultDrawFalseLeavesTheTrackToTheHandler;
+    { #182: a '--track-thickness' in the bar's own StyleOverride sets its groove. }
+    procedure TestTheGrooveThicknessFollowsTheBarsStyleOverride;
   end;
 
   { The keyboard's thumb, marked while the bar has the focus (TyTrackThumb:focus): on the
@@ -511,7 +545,9 @@ type
   published
     procedure TestTheSwitchesAreOffAndPublished;
     procedure TestACrossingThumbTakesItsLookAndSelectionAlong;
-    procedure TestARangeEndCrossesIntoTheNextRange;
+    { #182: a range's end crosses its own other end (the two swap, the range stays the same
+      item) and stops MinGap short of a neighbouring range, by mouse and by key alike. }
+    procedure TestARangeEndCrossesOnlyItsOwnOtherEnd;
     procedure TestTheFinalBarsPush;
   end;
 
@@ -555,6 +591,8 @@ type
     procedure TestDraggedOffItIsDrawnRemovingAndGoesOnRelease;
     procedure TestTheDistanceIsAcrossTheTrack;
     procedure TestTheDistanceIsTheThemesMetric;
+    { #182: and a '--track-remove-distance' in the bar's own StyleOverride wins over it. }
+    procedure TestTheDistanceFollowsTheBarsStyleOverride;
     procedure TestOnThumbRemovingAndMinThumbsKeepTheThumb;
     procedure TestDeleteRemovesTheSelectedThumb;
     procedure TestTheBaseClassAddsAndRemovesItsOwnThumbs;
@@ -608,6 +646,8 @@ type
     procedure TestOffASpanPressJumpsTheNearestThumb;
     procedure TestTrackClickHandledDragsNoSpan;
     procedure TestANewRangeIsDraggedOnWhenDraggable;
+    { #182: a span drag and an end dragged off the track end when the capture is lost. }
+    procedure TestALostCaptureEndsASpanDragAndARemoval;
   end;
 
   { The colour dialog answered without a dialog: logs `dialog:<colour as $hex> `, then picks
@@ -671,6 +711,8 @@ type
     procedure TestANewStopChangesNothingOnTheTrack;
     procedure TestADoubleClickEditsTheStopsColour;
     procedure TestOnEditStopColorHandledOpensNoDialog;
+    { #182: handled with AColor left as it came, a stop of no colour of its own keeps none. }
+    procedure TestOnEditStopColorHandledUnchangedChangesNothing;
     procedure TestStopsCrossAndAreRemovedDownToTwo;
     procedure TestStopsRoundTripThroughAFormFile;
   end;
@@ -766,6 +808,11 @@ function TMultiProbe.KeyShiftState: TShiftState;
 begin
   if HoldShift then Result := [ssShift] else Result := [];
   if HoldMouse then Include(Result, ssLeft);
+end;
+
+function TMultiProbe.TabHeld: Boolean;
+begin
+  Result := HoldTab;
 end;
 
 function TMultiProbe.Focused: Boolean;
@@ -1322,6 +1369,59 @@ begin
   AssertTrue('no thumbs: one segment, the whole groove', FBar.SegmentSpan(0, 96, lo, hi));
   AssertEquals(0, lo);
   AssertEquals(CLen, hi);
+end;
+
+procedure TTyMultiTrackGeometryTest.TestThePreferredSizeHeldIsAskedAgain;
+
+  function Held: Integer;
+  var
+    w, h: Integer;
+  begin
+    w := 0;
+    h := 0;
+    FBar.GetPreferredSize(w, h, True, False);
+    Result := h;
+  end;
+
+  function Fresh: Integer;
+  var
+    w, h: Integer;
+  begin
+    FBar.PreferredSize(w, h);
+    Result := h;
+  end;
+
+var
+  before: Integer;
+  b: TBGRABitmap;
+begin
+  FBar.Put([30, 70]);
+  FBar.AutoSize := True;
+  FBar.Frequency := 25;
+  before := Held;
+  FBar.TickLabels := True;
+  AssertEquals('before a paint the label strip is not known yet', before, Held);
+  b := Shot(False); b.Free;      // the label strip is measured when the bar paints
+  AssertTrue('setup: the labels make it thicker', Fresh > before);
+  AssertEquals('the label strip measured: asked again', Fresh, Held);
+  FBar.TickMarks := ttmBoth;
+  AssertEquals('labels on both sides: asked again', Fresh, Held);
+  before := Held;
+  FBar.TickLabels := False;
+  AssertTrue('labels off: thinner', Fresh < before);
+  AssertEquals('labels off: asked again', Fresh, Held);
+  FBar.ShowValue := True;
+  before := Held;
+  b := Shot(False); b.Free;
+  AssertTrue('setup: the readout makes it thicker', Fresh > before);
+  AssertEquals('the readout measured: asked again', Fresh, Held);
+  FBar.ShowValue := False;
+  AssertEquals('the readout off: asked again', Fresh, Held);
+  { A theme whose padding is not the one before. }
+  before := Held;
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackBar { padding: 10px 0; }');
+  AssertTrue('setup: the padding makes it thicker', Fresh > before);
+  AssertEquals('the theme changed: asked again', Fresh, Held);
 end;
 
 procedure TTyMultiTrackGeometryTest.TestPreferredCrossSizeIsTheTrackBars;
@@ -2012,6 +2112,32 @@ begin
   AssertEquals('and starts where thumb 1 does', FBar.ThumbRect(1).Left, r.Right);
 end;
 
+procedure TTyMultiTrackMouseTest.TestALostCaptureEndsTheDrag;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 50, 80]);
+  p := At(50);
+  FBar.Press(p.X, p.Y);
+  FBar.CaptureChanged;
+  FLog := '';
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('the capture taken away ended the drag', '20,50,80', Values);
+  AssertEquals('nothing reported', '', FLog);
+  FBar.Release(At(60).X, p.Y);
+  { A move with no button held: the button-up went elsewhere. }
+  FBar.Press(p.X, p.Y);
+  FBar.Hover(At(55).X, p.Y);
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('a move with no button held ended the drag', '20,50,80', Values);
+  FBar.Release(At(60).X, p.Y);
+  { And the drag itself still works. }
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(At(60).X, p.Y);
+  AssertEquals('setup: a held drag follows the pointer', '20,60,80', Values);
+  FBar.Release(At(60).X, p.Y);
+end;
+
 { TTyMultiTrackKeyboardTest }
 
 procedure TTyMultiTrackKeyboardTest.TestArrowsStepTheSelectedThumb;
@@ -2081,8 +2207,14 @@ begin
   FBar.SelectedThumb := 1;
   k := FBar.Key(VK_RIGHT);
   AssertEquals('20,50', Values);
-  AssertEquals('not consumed', VK_RIGHT, k);
+  { #182: still the bar's, as on a TTyTrackBar -- left to the form, an arrow moves the focus
+    to the next control. }
+  AssertEquals('consumed all the same', 0, k);
+  AssertEquals('Home too', 0, FBar.Key(VK_HOME));
   AssertEquals('no Tab wanted', 0, FBar.WantsKey(VK_TAB));
+  FBar.Put([]);
+  AssertEquals('no thumb at all: consumed', 0, FBar.Key(VK_LEFT));
+  AssertEquals('other keys are not', VK_RETURN, FBar.Key(VK_RETURN));
 end;
 
 procedure TTyMultiTrackKeyboardTest.TestADisabledBarIgnoresTheKeys;
@@ -2113,8 +2245,18 @@ begin
   AssertEquals('Shift+Tab goes back', 0, FBar.SelectedThumb);
   AssertEquals('before the first: Shift+Tab goes to the form', 0, FBar.WantsKey(VK_TAB));
   FBar.HoldShift := False;
+  { #182: none selected (a Delete, a click that selected nothing): Tab selects the first
+    enabled thumb rather than skip it, Shift+Tab the last one rather than leave. }
   FBar.SelectedThumb := -1;
-  AssertEquals('none selected: Tab starts after the first enabled thumb', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals('none selected: Tab has a thumb to go to', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals(0, FBar.Key(VK_TAB));
+  AssertEquals('the first enabled thumb, not the one after it', 0, FBar.SelectedThumb);
+  FBar.SelectedThumb := -1;
+  FBar.HoldShift := True;
+  AssertEquals('none selected: Shift+Tab has one too', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals(0, FBar.Key(VK_TAB, [ssShift]));
+  AssertEquals('the last enabled thumb', 2, FBar.SelectedThumb);
+  FBar.HoldShift := False;
   AssertEquals('other special keys are the form''s', 0, FBar.WantsKey(VK_RETURN));
 end;
 
@@ -2126,6 +2268,7 @@ begin
   FBar.Off[3] := True;
   FBar.SelectedThumb := 2;
   FLog := '';
+  FBar.HoldTab := True;
   FBar.Enter;
   AssertEquals('Tab in: the first enabled thumb, not the one selected before', 1,
     FBar.SelectedThumb);
@@ -2143,6 +2286,23 @@ begin
   AssertEquals('entered by a click: the press picks, the focus does not', 2, FBar.SelectedThumb);
   AssertEquals('', FLog);
   FBar.HoldMouse := False;
+  { #182: the focus given from code (SetFocus, the form's ActiveControl) with no Tab held keeps
+    the selection, whatever modifier happens to be down. }
+  FBar.HoldTab := False;
+  FBar.SelectedThumb := 2;
+  FLog := '';
+  FBar.Enter;
+  AssertEquals('SetFocus from code: the selection stays', 2, FBar.SelectedThumb);
+  FBar.HoldShift := True;
+  FBar.Enter;
+  AssertEquals('Shift held meanwhile: still', 2, FBar.SelectedThumb);
+  FBar.HoldShift := False;
+  AssertEquals('nothing reported', '', FLog);
+  FBar.SelectedThumb := -1;
+  FBar.Enter;
+  AssertEquals('nothing selected: the near end, as for Tab', 1, FBar.SelectedThumb);
+  FBar.HoldTab := True;
+  FBar.SelectedThumb := 2;
   FBar.Off[1] := True;
   FBar.Off[2] := True;
   FBar.Enter;
@@ -2181,6 +2341,66 @@ begin
   FBar.Enabled := False;
   AssertFalse('a disabled bar leaves the wheel to its parent', FBar.Wheel(120));
   AssertEquals('20,52,80', Values);
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestOnAReversedBarTheKeysAndTheWheelFollowTheScreen;
+const
+  CWheelUp = 1;      // stand-ins for a wheel notch in the input list
+  CWheelDown = 2;
+  CSteps: array[0..10] of Word = (VK_RIGHT, VK_UP, VK_PRIOR, CWheelUp, VK_LEFT, VK_DOWN,
+    VK_NEXT, CWheelDown, CWheelDown, VK_HOME, VK_END);
+var
+  plain: array[0..High(CSteps)] of TRect;
+  plainV: array[0..High(CSteps)] of Integer;
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  i: Integer;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      FBar.Put([50]);
+      FBar.SelectedThumb := 0;
+      FBar.LineSize := 2;
+      for i := 0 to High(CSteps) do
+      begin
+        where := Format('ori=%d rev=%d step %d', [Ord(ori), Ord(rev), i]);
+        case CSteps[i] of
+          CWheelUp: AssertTrue(where + ': handled', FBar.Wheel(120));
+          CWheelDown: AssertTrue(where + ': handled', FBar.Wheel(-120));
+        else
+          AssertEquals(where + ': consumed', 0, FBar.Key(CSteps[i]));
+        end;
+        if not rev then
+        begin
+          plain[i] := FBar.ThumbRect(0);
+          plainV[i] := FBar.ThumbValues[0];
+        end
+        else
+        begin
+          AssertTrue(where + ': the thumb is where the unreversed bar''s is on screen',
+            EqualRect(plain[i], FBar.ThumbRect(0)));
+          AssertEquals(where + ': so its value is the mirror', 100 - plainV[i],
+            FBar.ThumbValues[0]);
+        end;
+      end;
+      if not rev then
+        AssertEquals('unreversed, as before: up / right increase, End is Max',
+          '52,54,64,66,64,62,52,50,48,0,100', Format('%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d',
+          [plainV[0], plainV[1], plainV[2], plainV[3], plainV[4], plainV[5], plainV[6],
+           plainV[7], plainV[8], plainV[9], plainV[10]]));
+    end;
+  { Spelled out on a horizontal Reversed bar: the right arrow moves the thumb right. }
+  Configure(toHorizontal, True);
+  FBar.Put([50]);
+  FBar.SelectedThumb := 0;
+  FBar.LineSize := 1;
+  i := FBar.ThumbRect(0).Left;
+  FBar.Key(VK_RIGHT);
+  AssertEquals('-> lowers the value on a Reversed bar', 49, FBar.ThumbValues[0]);
+  AssertTrue('and the thumb goes right', FBar.ThumbRect(0).Left > i);
 end;
 
 { TMultiTrackFinalBase }
@@ -2776,6 +2996,99 @@ begin
   end;
 end;
 
+procedure TTyRangeTrackBarTest.TestABatchKeepsItsValuesThroughARangeChange;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].Low := 400;
+    FBar.Ranges[0].High := 600;
+    FBar.Max := 1000;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('Max set inside the batch', '400..600', RangesText(FBar));
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].Low := 10;
+    FBar.MinGap := 5;
+    FBar.AllowCrossing := True;
+    FBar.Min := 5;
+    FBar.SetThumbValue(1, 20);
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('MinGap, AllowCrossing, Min and a SetThumbValue inside the batch', '10..20',
+    RangesText(FBar));
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges[0].High := 900;
+    FBar.Max := 500;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('EndUpdate holds the values to the new Max', '10..500', RangesText(FBar));
+end;
+
+procedure TTyRangeTrackBarTest.TestADragStaysOnItsRangeWhenRangesChange;
+var
+  p, q: TPoint;
+  r: TRect;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    with FBar.Ranges.Add do begin Low := 10; High := 20; end;
+    with FBar.Ranges.Add do begin Low := 40; High := 50; end;
+    with FBar.Ranges.Add do begin Low := 70; High := 80; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  r := FBar.ThumbRect(2);
+  p := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Ranges.Delete(0);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  AssertTrue('its range''s Low moved up: ' + Values, FBar.Ranges[0].Low > 40);
+  AssertEquals('its High stays', 50, FBar.Ranges[0].High);
+  AssertEquals('the other range is untouched', 70, FBar.Ranges[1].Low);
+  { A range added below it: the drag goes with it to its new index. }
+  FBar.Ranges.BeginUpdate;
+  try
+    with FBar.Ranges.Add do begin Low := 0; High := 5; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('setup: sorted in first', 0, FBar.Ranges[0].Low);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 8, p.Y);
+  AssertTrue('the same end follows the pointer: ' + Values, FBar.Ranges[1].Low < 45);
+  AssertEquals(70, FBar.Ranges[2].Low);
+  { Its range deleted: the drag ends, no other end takes it over. }
+  FBar.Ranges.Delete(1);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 120, p.Y);
+  AssertEquals('0..5;70..80', RangesText(FBar));
+  TRangeAccess(FBar).MouseUp(mbLeft, [], p.X + 120, p.Y);
+  { A span drag: the span of the range it started on. }
+  FBar.DraggableRanges := True;
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    with FBar.Ranges.Add do begin Low := 10; High := 20; end;
+    with FBar.Ranges.Add do begin Low := 40; High := 50; end;
+    with FBar.Ranges.Add do begin Low := 70; High := 80; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  q := Point((FBar.ThumbRect(2).Right + FBar.ThumbRect(3).Left) div 2, p.Y);
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], q.X, q.Y);
+  FBar.Ranges.Delete(0);
+  TRangeAccess(FBar).MouseMove([ssLeft], q.X + 20, q.Y);
+  AssertTrue('the dragged span moved: ' + Values, FBar.Ranges[0].Low > 40);
+  AssertEquals('whole', 10, FBar.Ranges[0].High - FBar.Ranges[0].Low);
+  AssertEquals('the other range is untouched', '70..80',
+    Format('%d..%d', [FBar.Ranges[1].Low, FBar.Ranges[1].High]));
+  TRangeAccess(FBar).MouseUp(mbLeft, [], q.X + 20, q.Y);
+end;
+
 { TMultiCounting }
 
 procedure TMultiCounting.Invalidate;
@@ -3068,6 +3381,37 @@ begin
   end;
 end;
 
+procedure TTyMultiTrackBarTest.TestDisablingAThumbDropsItsSelectionHoverAndDrag;
+var
+  p: TPoint;
+begin
+  FBar.Thumbs[1].Enabled := False;
+  FBar.SelectedThumb := 1;
+  AssertEquals('a disabled thumb is not selected', -1, FBar.SelectedThumb);
+  FBar.Thumbs[1].Enabled := True;
+  FBar.SelectedThumb := 1;
+  FBar.OnThumbSelect := @Selected;
+  FLog := '';
+  FBar.Thumbs[1].Enabled := False;
+  AssertEquals('disabled, it leaves the selection', -1, FBar.SelectedThumb);
+  AssertEquals('reported', 'S-1 ', FLog);
+  FBar.Thumbs[1].Enabled := True;
+  { Hovered. }
+  p := Centre(1);
+  TMultiAccess(FBar).MouseMove([], p.X, p.Y);
+  AssertEquals('setup: hovered', 1, TMultiAccess(FBar).FHoverThumb);
+  FBar.Thumbs[1].Enabled := False;
+  AssertEquals('disabled, it is no longer drawn hovered', -1, TMultiAccess(FBar).FHoverThumb);
+  FBar.Thumbs[1].Enabled := True;
+  { Dragged. }
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Thumbs[1].Enabled := False;
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 40, p.Y);
+  AssertEquals('disabled mid-drag, it stops following the pointer', '25,50,75', Values);
+  AssertEquals('no longer drawn active', -1, TMultiAccess(FBar).FDragThumb);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 40, p.Y);
+end;
+
 procedure TTyMultiTrackBarTest.TestAnItemChangeRepaints;
 var
   bar: TMultiCounting;
@@ -3305,6 +3649,113 @@ begin
   finally
     host.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarTest.EditDone(Sender: TObject);
+begin
+  FLog := FLog + 'E ';
+end;
+
+procedure TTyMultiTrackBarTest.TestEditingDoneFollowsEachUserChange;
+var
+  p: TPoint;
+  k: Word;
+  msg: TLMMouseEvent;
+begin
+  FBar.OnChange := @Changed;
+  FBar.OnEditingDone := @EditDone;
+  FBar.AllowUserThumbs := True;
+  FLog := '';
+  p := Centre(1);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 30, p.Y);
+  AssertEquals('not while the drag goes on', 'C C ', FLog);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 30, p.Y);
+  AssertEquals('once, when it is released', 'C C E ', FLog);
+  FLog := '';
+  p := Centre(1);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X, p.Y);
+  AssertEquals('a press that moved nothing: none', '', FLog);
+  k := VK_RIGHT;
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('a key', 'C E ', FLog);
+  FLog := '';
+  k := VK_HOME;
+  FBar.SelectedThumb := 0;
+  TMultiAccess(FBar).KeyDown(k, []);
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('Home, then Home again where it already is', 'C E ', FLog);
+  FLog := '';
+  FillChar(msg{%H-}, SizeOf(msg), 0);
+  msg.Msg := LM_MOUSEWHEEL;
+  msg.WheelDelta := 120;
+  FBar.Dispatch(msg);
+  AssertEquals('a wheel notch', 'C E ', FLog);
+  FLog := '';
+  k := VK_DELETE;
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('a removal', 'C E ', FLog);
+end;
+
+procedure TTyMultiTrackBarTest.TestABatchKeepsItsValuesThroughARangeChange;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[2].Value := 900;
+    FBar.Max := 1000;
+    FBar.SetThumbValue(0, 300);
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('Max and a SetThumbValue inside the batch', '50,300,900', Values);
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[0].Value := 10;
+    FBar.MinGap := 5;
+    FBar.Min := 5;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('MinGap and Min inside the batch', '10,300,900', Values);
+end;
+
+procedure TTyMultiTrackBarTest.TestADragStaysOnItsThumbWhenThumbsChange;
+var
+  p: TPoint;
+  i: Integer;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Clear;
+    for i := 0 to 4 do FBar.Thumbs.Add.Value := 10 + 20 * i;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  p := Centre(3);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Thumbs.Delete(0);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  AssertTrue('the thumb pressed is the one that moves: ' + Values, FBar.Thumbs[2].Value > 70);
+  AssertEquals('the one after it stays', 90, FBar.Thumbs[3].Value);
+  AssertEquals('and stays selected', 2, FBar.SelectedThumb);
+  { A thumb added below it: the drag goes with it to its new index. }
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Add.Value := 0;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('setup: sorted in first', 0, FBar.Thumbs[0].Value);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 8, p.Y);
+  AssertTrue('the same thumb follows the pointer: ' + Values, FBar.Thumbs[3].Value < 75);
+  AssertEquals(90, FBar.Thumbs[4].Value);
+  { Its item deleted: the drag ends, no other thumb takes it over. }
+  FBar.Thumbs.Delete(3);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 120, p.Y);
+  AssertEquals('0,30,50,90', Values);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 120, p.Y);
 end;
 
 { TTyMultiTrackReadoutTest }
@@ -3566,6 +4017,22 @@ begin
   FBar.FakeFocus := True;
   AssertEquals('focused: the keyboard''s thumb says so',
     'track 1:normal 2:normal 0:normal+focused ', Calls);
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.TestTheGrooveThicknessFollowsTheBarsStyleOverride;
+var
+  b: TBGRABitmap;
+  before: Integer;
+begin
+  FBar.Put([50]);
+  b := Shot(False);
+  b.Free;
+  before := FTrackRect.Bottom - FTrackRect.Top;
+  AssertEquals('setup: the theme''s thickness', TyTrackThickness, before);
+  FBar.StyleOverride := '--track-thickness: 10px;';
+  b := Shot(False);
+  b.Free;
+  AssertEquals('the bar''s own token', 10, FTrackRect.Bottom - FTrackRect.Top);
 end;
 
 procedure TTyMultiTrackOwnerDrawTest.TestTheRectanglesAreThePaintedParts;
@@ -4786,6 +5253,7 @@ begin
   FBar.Key(VK_TAB);
   AssertEquals('the last thumb is a Tab stop too', 3, FBar.SelectedThumb);
   FBar.SelectedThumb := 2;
+  FBar.HoldTab := True;
   FBar.Enter;
   AssertEquals('entering from the keyboard starts on it', 0, FBar.SelectedThumb);
   AssertEquals('none of it moved a thumb', '20,40,60,80', Values);
@@ -5672,53 +6140,103 @@ begin
   AssertEquals('its hint is shown over it', 'first', info.HintStr);
 end;
 
-procedure TTyMultiTrackSwitchesFinalTest.TestARangeEndCrossesIntoTheNextRange;
+procedure TTyMultiTrackSwitchesFinalTest.TestARangeEndCrossesOnlyItsOwnOtherEnd;
 var
   bar: TTyRangeTrackBar;
   r: TTyTrackRange;
   p, q: TPoint;
+  id0, id1: Integer;
+  k: Word;
+
+  procedure SetRanges;
+  begin
+    bar.Ranges.BeginUpdate;
+    try
+      bar.Ranges.Clear;
+      r := bar.Ranges.Add;
+      r.Low := 10;
+      r.High := 30;
+      r := bar.Ranges.Add;
+      r.Low := 60;
+      r.High := 85;
+    finally
+      bar.Ranges.EndUpdate;
+    end;
+    id0 := bar.Ranges[0].ID;
+    id1 := bar.Ranges[1].ID;
+  end;
+
 begin
   bar := TTyRangeTrackBar.Create(FForm);
   bar.Parent := FForm;
   bar.Font.PixelsPerInch := 96;
   bar.SetBounds(0, 0, 400, 24);
   bar.MinGap := 5;
-  bar.Ranges.BeginUpdate;
-  try
-    bar.Ranges.Clear;
-    r := bar.Ranges.Add;
-    r.Low := 10;
-    r.High := 30;
-    r := bar.Ranges.Add;
-    r.Low := 60;
-    r.High := 85;
-  finally
-    bar.Ranges.EndUpdate;
-  end;
+  SetRanges;
   bar.AllowCrossing := True;
+  bar.OnThumbSelect := @ThumbSelected;
+  bar.OnThumbChange := @ThumbMoved;
+  bar.OnChange := @Changed;
   p := PtOn(bar, 30);
   TBaseAccess(bar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
   q := PtOn(bar, 70);
   TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
-  AssertEquals('sorted as one list and paired off again', '10..60;70..85', RangesText(bar));
-  AssertEquals('the dragged end is now the second range''s low end', 2, bar.SelectedThumb);
+  AssertEquals('the end stops MinGap short of the next range', '10..55;60..85',
+    RangesText(bar));
+  AssertEquals('still the first range''s high end', 1, bar.SelectedThumb);
+  FLog := '';
+  q := PtOn(bar, 0);
+  TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
+  AssertEquals('past its own low end: the two ends swap', '0..10;60..85', RangesText(bar));
+  AssertEquals('the same range', id0, bar.Ranges[0].ID);
+  AssertEquals('the dragged end is that range''s low end now', 0, bar.SelectedThumb);
+  AssertEquals('the selection reported at its new index, then the move', 'S0 T0 C ', FLog);
   q := PtOn(bar, 20);
   TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
   TBaseAccess(bar).MouseUp(mbLeft, [], q.X, q.Y);
-  AssertEquals('and back', '10..20;60..85', RangesText(bar));
+  AssertEquals('and back over: the drag stayed on its thumb', '10..20;60..85', RangesText(bar));
   AssertEquals(1, bar.SelectedThumb);
-  { The bar knows which end of which range is selected: a range added before it moves the
-    selection along with that end. }
-  bar.Ranges.BeginUpdate;
-  try
-    r := bar.Ranges.Add;
-    r.Low := 0;
-    r.High := 5;
-  finally
-    bar.Ranges.EndUpdate;
-  end;
-  AssertEquals('0..5;10..20;60..85', RangesText(bar));
-  AssertEquals('still the end the drag left at 20', 20, bar.ThumbValues[bar.SelectedThumb]);
+  AssertEquals('the ranges are still the same items', id0, bar.Ranges[0].ID);
+  AssertEquals(id1, bar.Ranges[1].ID);
+  { A low end stops MinGap short of the range before it. }
+  p := PtOn(bar, 60);
+  TBaseAccess(bar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  q := PtOn(bar, 0);
+  TBaseAccess(bar).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(bar).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the second range''s low end stops at the first range', '10..20;25..85',
+    RangesText(bar));
+  AssertEquals(2, bar.SelectedThumb);
+  { The keys go by the same rule. }
+  SetRanges;
+  bar.SelectedThumb := 1;
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('PageDown to its own low end', '10..10;60..85', RangesText(bar));
+  k := VK_NEXT;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('and past it: the ends swap', '0..10;60..85', RangesText(bar));
+  AssertEquals('the key drives the same end, now the low one', 0, bar.SelectedThumb);
+  k := VK_END;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('End: back over its other end, MinGap short of the next range',
+    '10..55;60..85', RangesText(bar));
+  AssertEquals(1, bar.SelectedThumb);
+  bar.SelectedThumb := 2;
+  k := VK_HOME;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('Home: MinGap short of the range before', '10..55;60..85', RangesText(bar));
+  SetRanges;
+  bar.SelectedThumb := 3;
+  k := VK_HOME;
+  TBaseAccess(bar).KeyDown(k, []);
+  AssertEquals('Home on a high end: past its low end, to the range before', '10..30;35..60',
+    RangesText(bar));
+  AssertEquals(2, bar.SelectedThumb);
+  AssertEquals('the ranges are still the same items', id0, bar.Ranges[0].ID);
+  AssertEquals(id1, bar.Ranges[1].ID);
 end;
 
 procedure TTyMultiTrackSwitchesFinalTest.TestTheFinalBarsPush;
@@ -6164,6 +6682,21 @@ begin
   AssertEquals('81: gone', 1, FBar.Thumbs.Count);
 end;
 
+procedure TTyMultiTrackUserThumbsTest.TestTheDistanceFollowsTheBarsStyleOverride;
+var
+  c: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  FBar.StyleOverride := '--track-remove-distance: 40px;';
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 40));
+  AssertEquals('40 px off: stays (the theme says 24)', 3, FBar.Thumbs.Count);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 41));
+  AssertEquals('41 px off: gone', 2, FBar.Thumbs.Count);
+end;
+
 procedure TTyMultiTrackUserThumbsTest.TestOnThumbRemovingAndMinThumbsKeepTheThumb;
 var
   c, off: TPoint;
@@ -6230,9 +6763,11 @@ begin
   AssertEquals('at MinThumbs: kept, unasked', '', FLog);
   FBar.MinThumbs := 0;
   FBar.Thumbs[0].Enabled := False;
-  AssertEquals('a disabled thumb: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  AssertEquals('a disabled thumb: not selected (#182)', -1, FBar.SelectedThumb);
+  AssertEquals('so not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
   AssertEquals('25,75', Values);
   FBar.Thumbs[0].Enabled := True;
+  FBar.SelectedThumb := 0;
   FBar.AllowUserThumbs := False;
   AssertEquals('off: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
   FBar.AllowUserThumbs := True;
@@ -6872,6 +7407,39 @@ begin
   Release(PtOn(60));
 end;
 
+procedure TTyRangeUserRangesTest.TestALostCaptureEndsASpanDragAndARemoval;
+var
+  c: TPoint;
+begin
+  FBar.MinGap := 5;
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  FBar.AllowUserRanges := True;
+  Press(PtOn(50));
+  TBaseAccess(FBar).CaptureChanged;
+  Drag(PtOn(55));
+  AssertEquals('the span drag ended with the capture', '10..20;40..60', Ranges);
+  Release(PtOn(55));
+  { An end dragged off the track, drawn removing: the capture lost, the next move ends the drag,
+    and a release out there removes nothing. }
+  c := Centre(3);
+  Press(c);
+  Drag(Point(c.X, 80));
+  AssertEquals('setup: dragged off', 3, FBar.RemovingThumb);
+  TBaseAccess(FBar).CaptureChanged;
+  Drag(Point(c.X, 81));
+  AssertEquals('no longer removing', -1, FBar.RemovingThumb);
+  Release(Point(c.X, 81));
+  AssertEquals('nothing removed', '10..20;40..60', Ranges);
+  { A plain release: LCL lets go of the capture first, then the button-up arrives -- and that
+    still removes the range. }
+  Press(c);
+  Drag(Point(c.X, 80));
+  TBaseAccess(FBar).CaptureChanged;
+  Release(Point(c.X, 80));
+  AssertEquals('released off the track: removed', '10..20', Ranges);
+end;
+
 { Within 4 of R, G, B on every channel: a gradient's pixel at a stop's centre. }
 function NearPx(const A: TBGRAPixel; R, G, B: Byte): Boolean;
 begin
@@ -7440,6 +8008,27 @@ begin
   AssertEquals('edit:0:$000000 C ', FLog);
   AssertEquals('dialog:$00FFFF ', FBar.Log);
   AssertEquals('0:$0000FF;100:$FF0000', StopsText);
+end;
+
+procedure TTyGradientTrackBarTest.TestOnEditStopColorHandledUnchangedChangesNothing;
+begin
+  AddPlainStop(50);
+  AssertEquals('setup', '0:$000000;50:def;100:$FFFFFF', StopsText);
+  FBar.OnChange := @Changed;
+  FBar.OnEditStopColor := @EditColor;
+  FHandleEdit := True;
+  FLog := '';
+  Click(Centre(1), True);
+  AssertEquals('asked with the colour the gradient has there, no change', 'edit:1:$808080 ',
+    FLog);
+  AssertEquals('handled, AColor untouched: the stop still has no colour', '0:$000000;50:def;100:$FFFFFF',
+    StopsText);
+  AssertEquals('no dialog', '', FBar.Log);
+  { Untouched on a coloured stop: nothing either. }
+  FLog := '';
+  Click(Centre(0), True);
+  AssertEquals('edit:0:$000000 ', FLog);
+  AssertEquals('0:$000000;50:def;100:$FFFFFF', StopsText);
 end;
 
 procedure TTyGradientTrackBarTest.TestStopsCrossAndAreRemovedDownToTwo;

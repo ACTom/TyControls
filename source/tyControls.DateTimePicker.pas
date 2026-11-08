@@ -325,6 +325,8 @@ type
     { The value as of the last focus-in (or the last programmatic write). Escape
       restores it -- see KeyDown. LCL calls this FConfirmedDateTime. }
     FConfirmedDateTime: TDateTime;
+    { SetDateTimeJumpMinMax is writing: SetDateTime leaves MinDate/MaxDate out. }
+    FJumpMinMax: Boolean;
 
     { Segment editing state }
     FSegments:    TTySegmentArray;  // field kinds + their spans in the FORMAT string
@@ -496,6 +498,10 @@ type
                 out AX1, AX2: Integer): Boolean;
     { Step the active segment by ADelta and commit (protected for test probes). }
     procedure StepActiveSeg(ADelta: Integer);
+    { DateTime := AValue without the MinDate/MaxDate clamp (LCL's SetDateTimeJumpMinMax): a
+      data-aware picker shows the value the record holds even outside the range. The user
+      still cannot enter one -- an edit of any field clamps the whole value as always. }
+    procedure SetDateTimeJumpMinMax(AValue: TDateTime);
     { Ensure FPopup + FCalendar are created (lazy init; protected for probes). }
     procedure EnsurePopup;
     { Copy the picker's bounds and value into the reused popup calendar. Split out of
@@ -2061,6 +2067,8 @@ begin
 end;
 
 procedure TTyCustomDateTimePicker.SeedPopupCalendar;
+var
+  seed: TDateTime;
 begin
   if FCalendar = nil then Exit;
 
@@ -2084,7 +2092,13 @@ begin
   if DateIsNull then
     FCalendar.Date := NullSeedDate
   else
-    FCalendar.Date := DateOf(FDateTime);
+  begin
+    { A value SetDateTimeJumpMinMax put outside the range opens on the nearest day in it. }
+    seed := DateOf(FDateTime);
+    if (FMinDate <> 0) and (seed < FMinDate) then seed := FMinDate;
+    if (FMaxDate <> 0) and (seed > FMaxDate) then seed := FMaxDate;
+    FCalendar.Date := seed;
+  end;
   { Was pinned to wdSunday, which quietly overrode the calendar's own locale default --
     so on a Monday-first machine the dropdown disagreed with a standalone calendar on
     the same form. Let the calendar decide; a host that wants a fixed column order sets
@@ -2199,11 +2213,11 @@ var SavedDT: TDateTime;
 begin
   inherited DoExit;
   SavedDT := FDateTime;
-  { Commit any pending digit buffer on focus-out }
+  { Commit any pending digit buffer on focus-out. Nothing typed, nothing to commit: every
+    other edit committed (and clamped) as it was made, and a value SetDateTimeJumpMinMax
+    put outside the range stays as it is until the user changes it. }
   if FDigitBuffer <> '' then
-    FinalizeBuffer(SavedDT, False)
-  else
-    CommitAndFire(SavedDT);
+    FinalizeBuffer(SavedDT, False);
   Invalidate;
 end;
 
@@ -2256,7 +2270,7 @@ begin
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', [tysActive])
       else
         CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', []);
-      P.FillBackground(L.CheckBox, CbS.Background, CbS.BorderRadius);
+      P.FillBackground(L.CheckBox, CbS.Background, CbS.BorderRadius, True);
       P.StrokeBorder(L.CheckBox, CbS.BorderRadius, CbS.BorderWidth, CbS.BorderColor);
       if FChecked then
         P.DrawGlyph(L.CheckBox, tgCheck, CbS.TextColor, 2);
@@ -2747,7 +2761,7 @@ begin
     AValue := TyNullDate
   else
   begin
-    AValue := ClampToDays(AValue);
+    if not FJumpMinMax then AValue := ClampToDays(AValue);
     if AValue < TyTheSmallestDate then AValue := TyTheSmallestDate;
     if AValue > TyTheBiggestDate  then AValue := TyTheBiggestDate;
   end;
@@ -2760,6 +2774,16 @@ begin
   if dtpoDoChangeOnSetDateTime in FOptions then
     Change;
   Invalidate;
+end;
+
+procedure TTyCustomDateTimePicker.SetDateTimeJumpMinMax(AValue: TDateTime);
+begin
+  FJumpMinMax := True;
+  try
+    SetDateTime(AValue);
+  finally
+    FJumpMinMax := False;
+  end;
 end;
 
 procedure TTyCustomDateTimePicker.Change;

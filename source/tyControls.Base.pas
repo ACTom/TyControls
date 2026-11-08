@@ -181,6 +181,8 @@ type
     FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
     procedure RefitToStyle;
+    { Swallows the one silent write TyBornAtDesignPPI makes (#207); every other change goes on. }
+    procedure FontChanged(Sender: TObject); override;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
@@ -380,7 +382,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
+      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
@@ -514,6 +517,21 @@ type
   protected
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+    { For a control whose content runs to its edges -- a table's header band, a row's fill -- and
+      so over its own frame. Together they are DrawFrame with the content in the middle:
+      DrawFrameUnderContent draws what lies under the content and keeps what lies under the rounded
+      corners; DrawFrameOverContent gives those corners back outside the arc, draws the border and
+      focus ring, and frees AGround. }
+    function DrawFrameUnderContent(APainter: TTyPainter; const ARect: TRect;
+      const AStyle: TTyStyleSet): TBGRABitmap;
+    procedure DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
+      const AStyle: TTyStyleSet; AGround: TBGRABitmap);
+    { The mark on a sorted header section, in the middle of AZone: one for the grid, the list view
+      and the tree. --sort-glyph: chevron | arrow | triangle | none; --sort-glyph-size;
+      --sort-glyph-color, by default AInk. AHint: the faint one on a column that is not sorted but
+      could be; --sort-glyph-unsorted-color. }
+    procedure DrawSortMark(APainter: TTyPainter; const AZone: TRect; AAscending: Boolean; AInk: TTyColor;
+      AHint: Boolean = False);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
       host is reachable; returns whether it painted. For control regions OUTSIDE the
       styled frame (a group-box caption band, the empty part of a tab header strip)
@@ -579,7 +597,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
+      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
@@ -840,6 +859,9 @@ procedure TyPaintChromeOverGraphicChildren(AHost: TWinControl; ACanvas: TCanvas;
   传进来的是**状态解析后**的样式,所以宿主获得焦点时这个数会大一档(焦点环比边框宽):让开
   的正好是当下真画出来的那一圈。 }
 function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+{ How many logical pixels the border or the focus ring really covers, whichever reaches further:
+  TyChromeInsetLogical without its column to spare. Straight edges land on whole pixels (#196). }
+function TyChromeWidthLogical(const AStyle: TTyStyleSet): Integer;
 
 { ======================= DrawFrame,拆成可以「替别人画」的三段 =======================
   TTyCustomControl.DrawFrame 就是这三段按顺序调一遍(再加一句 TyApplyStyleOpacity),
@@ -1004,13 +1026,18 @@ begin
   else Result := Result + ' on-titlebar';
 end;
 
-function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+function TyChromeWidthLogical(const AStyle: TTyStyleSet): Integer;
 begin
   Result := AStyle.BorderWidth;
   if Result < 0 then Result := 0;
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
     if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
       Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
+end;
+
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+begin
+  Result := TyChromeWidthLogical(AStyle);
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
 end;
 
@@ -1065,10 +1092,17 @@ end;
 
 { TTyGraphicControl }
 
-{ Put a just-created control's font in the design space WITHOUT telling anyone: with the
-  handler off there is no FontChanged, so ParentFont keeps its default and nothing is
-  invalidated or measured on the way. The height is still 0 ("no size chosen") this early,
-  so there is nothing for the PPI change to rescale either. }
+{ The font TyBornAtDesignPPI is writing, while it writes: both bases' FontChanged pass over it. }
+var
+  GTySilentFont: TFont = nil;
+
+{ Put a just-created control's font in the design space WITHOUT telling anyone: there is no
+  FontChanged, so ParentFont keeps its default and nothing is invalidated or measured on the
+  way. The height is still 0 ("no size chosen") this early, so there is nothing for the PPI
+  change to rescale either. Two ways in, both shut: up to Lazarus 4.x the font tells its
+  control through OnChange; from 5.0 it is a TControlFont that calls the control's
+  FontChanged itself and leaves OnChange unassigned (#207), so the bases' FontChanged ignore
+  GTySilentFont too. }
 procedure TyBornAtDesignPPI(AFont: TFont);
 var
   saved: TNotifyEvent;
@@ -1076,9 +1110,11 @@ begin
   if AFont.PixelsPerInch = TyDesignPPI then Exit;
   saved := AFont.OnChange;
   AFont.OnChange := nil;
+  GTySilentFont := AFont;
   try
     AFont.PixelsPerInch := TyDesignPPI;
   finally
+    GTySilentFont := nil;
     AFont.OnChange := saved;
   end;
 end;
@@ -1102,6 +1138,12 @@ begin
   inherited Create(AOwner);
   TyBornAtDesignPPI(Font);     // see SetParent's declaration
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyGraphicControl.FontChanged(Sender: TObject);
+begin
+  if Sender = GTySilentFont then Exit;   // #207: being born, see TyBornAtDesignPPI
+  inherited FontChanged(Sender);
 end;
 
 procedure TTyGraphicControl.SetParent(AParent: TWinControl);
@@ -2235,7 +2277,7 @@ begin
   corners := ACorners;
   TyApplyRenderStyle(eff, corners);
   if tpBackground in eff.Present then
-    APainter.FillBackground(ARect, eff.Background, corners);
+    APainter.FillBackground(ARect, eff.Background, corners, TyBorderVisible(eff));
   if TyBorderVisible(eff) then
     if eff.BorderStyle in [tbsOutset, tbsInset] then
       TyDrawBevelBorder(APainter, ARect, eff)
@@ -2255,7 +2297,7 @@ begin
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
   if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
+    APainter.FillBackground(ARect, effStyle.Background, corners, TyBorderVisible(effStyle));
 end;
 
 procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
@@ -2333,7 +2375,7 @@ begin
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
   if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
+    APainter.FillBackground(ARect, effStyle.Background, corners, TyBorderVisible(effStyle));
   if TyBorderVisible(effStyle) then
     if effStyle.BorderStyle in [tbsOutset, tbsInset] then
       TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
@@ -2530,6 +2572,7 @@ end;
 
 procedure TTyCustomControl.FontChanged(Sender: TObject);
 begin
+  if Sender = GTySilentFont then Exit;   // #207: being born, see TyBornAtDesignPPI
   inherited FontChanged(Sender);
   FStyleLayoutDirty := True;
   CheckStyleLayout;
@@ -3093,6 +3136,94 @@ begin
   TyApplyStyleOpacity(Self, APainter, AStyle);
   TyDrawFrameUnderlay(APainter, ARect, AStyle);
   TyDrawFrameChrome(Self, APainter, ARect, AStyle);
+end;
+
+function TTyCustomControl.DrawFrameUnderContent(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet): TBGRABitmap;
+var
+  corners: TTyCorners;
+  eff: TTyStyleSet;
+begin
+  TyFillParentBg(Self, APainter, ARect, AStyle);
+  TyApplyStyleOpacity(Self, APainter, AStyle);
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
+    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
+  corners := TyEffectiveCorners(AStyle);
+  eff := AStyle;
+  TyApplyRenderStyle(eff, corners);
+  Result := APainter.KeepCornerGround(ARect, corners);
+  { Square, and no border yet. The arc is cut once, when the ground goes back over the corners, so
+    the edge is the one a rounded fill has; and the border is stroked once, on top. Twice would
+    darken its antialiased pixels, where nothing covers them in between. }
+  if tpBackground in eff.Present then
+    APainter.FillBackground(ARect, eff.Background, 0);
+end;
+
+procedure TTyCustomControl.DrawFrameOverContent(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet; AGround: TBGRABitmap);
+var
+  corners: TTyCorners;
+  eff: TTyStyleSet;
+begin
+  corners := TyEffectiveCorners(AStyle);
+  eff := AStyle;
+  TyApplyRenderStyle(eff, corners);
+  try
+    APainter.LayCornerGround(ARect, corners, AGround, TyBorderVisible(eff));
+  finally
+    AGround.Free;
+  end;
+  TyDrawFrameChrome(Self, APainter, ARect, AStyle);
+end;
+
+procedure TTyCustomControl.DrawSortMark(APainter: TTyPainter; const AZone: TRect; AAscending: Boolean;
+  AInk: TTyColor; AHint: Boolean);
+var
+  kind: string;
+  ink: TTyColor;
+  sz, cx, cy, half: Integer;
+  ctrl: TTyCustomStyleController;
+  px: TBGRAPixel;
+begin
+  kind := LowerCase(Trim(StyleToken('--sort-glyph', 'chevron')));
+  if kind = 'none' then Exit;
+  if AHint then
+  begin
+    px := TyColorToBGRA(AInk);
+    ink := StyleColor('--sort-glyph-unsorted-color', TyRGBA(px.red, px.green, px.blue, 110));
+  end
+  else
+    ink := StyleColor('--sort-glyph-color', AInk);
+  ctrl := ActiveController;
+  if (kind = 'arrow') or (kind = 'triangle') then
+  begin
+    sz := APainter.Scale(StyleMetric('--sort-glyph-size', 10));
+    half := sz div 2;
+    cx := (AZone.Left + AZone.Right) div 2;
+    cy := (AZone.Top + AZone.Bottom) div 2;
+    if kind = 'arrow' then
+    begin
+      if AAscending then
+        TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgArrowUp, ink, 1, 1)
+      else
+        TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgArrowDown, ink, 1, 1);
+    end
+    else if AAscending then
+      TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgTriangleUp, ink, 1, 1)
+    else
+      TyDrawGlyph(APainter, ctrl, Rect(cx - half, cy - half, cx - half + sz, cy - half + sz), tgTriangleDown, ink, 1, 1);
+    Exit;
+  end;
+  ink := TyChevronInk(ctrl, ink);
+  if AAscending then
+  begin
+    if not TyTryDrawGlyphOverride(APainter, ctrl, AZone, TyGlyphKindToken(tgChevronUp), ink) then
+      APainter.DrawChevron(AZone, tgChevronUp, ink,
+        StyleMetric('--sort-glyph-size', ctrl.Metric('--glyph-chevron-size', TyDropChevronSize)));
+  end
+  else if not TyTryDrawGlyphOverride(APainter, ctrl, AZone, TyGlyphKindToken(tgChevronDown), ink) then
+    APainter.DrawChevron(AZone, tgChevronDown, ink,
+      StyleMetric('--sort-glyph-size', ctrl.Metric('--glyph-chevron-size', TyDropChevronSize)));
 end;
 
 function TTyCustomControl.FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;

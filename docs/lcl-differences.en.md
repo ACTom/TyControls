@@ -26,7 +26,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 - **Pixel properties are logical pixels** (pixels at 96 PPI). Widths, heights, paddings, `BorderWidth` and the like are scaled by the control to its own PPI; there is nothing to convert by hand on high-DPI screens.
 - **`TTyScrollBar.Position` can reach `Max`.** LCL's scroll bar stops at `Max - PageSize + 1`.
 - **A control with `TabStop = False` does not take focus when clicked**; the keyboard focus stays where it was. Text boxes, memos and the other typed fields (numbers, dates and times) are the exception: you click into one to type in it.
-- **`TTyTrackBar` raises `Position` on PageUp**, as Qt does; Win32 does the opposite.
+- **`TTyTrackBar` raises `Position` on PageUp**, as Qt does; Win32 does the opposite. On a `Reversed` bar the keys and the wheel follow the screen: each moves the thumb the way it does on an unreversed bar, so PageUp lowers `Position` there.
 - **`TTyTreeView.AutoExpand` follows Delphi**: the node that gets the focus expands, and the one it left collapses. In LCL it means "expand a node when a child is added to it".
 - **`TTyTitleBar` looks the same when disabled.** It stands for the window itself, and a window does not grey out; to show that a window cannot be used, disable what is in it.
 - **A form's own `Font` does not override the theme.** The whole window takes its font from the theme; change the theme or use `StyleOverride`. A font set on a control itself still applies.
@@ -36,7 +36,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 
 ## Controls `AutoSize` does not apply to
 
-These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`.
+These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`, `TTyTerminalView` (use `SizeForGrid` for a fixed grid).
 
 ## Properties no longer published
 
@@ -52,7 +52,8 @@ These properties can never act on the control that publishes them, and from 4.0 
 | `TTyShellTreeView` | `NodeDataSize`, `RootNodeCount`, `Items`, `OnInitChildren` | It builds its nodes from the file system; still published on `TTyTreeView` |
 | `TTyDBLookupListBox` | `MultiSelect`, `ExtendedSelect` | A lookup list holds one key (LCL does not publish them either); still published on `TTyDBListBox` |
 | The text inputs: `TTyEdit`, `TTyMaskEdit`, `TTyComboEdit`, `TTyURLEdit`, the numeric edits, `TTyMemo`, `TTySpinEdit`, `TTyDateTimePicker` and their DB versions | `ChildSizing` | No children to size |
-| `TTyMultiTrackBar`, `TTyGradientTrackBar` | `ChildSizing` | No children to size |
+| `TTyRangeTrackBar`, `TTyMultiTrackBar`, `TTyGradientTrackBar` | `ChildSizing` | No children to size |
 | `TTyTerminalView` | `ChildSizing` | The terminal places its scroll bar itself; with it set, the bar covered the last columns |
+| `TTyToolWindowActions` | `AutoSize`, `ChildSizing`, `BorderSpacing` | Its tool window places and sizes it, and it lays its children out in a row itself |
 
 The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.

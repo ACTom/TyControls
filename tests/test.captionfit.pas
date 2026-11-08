@@ -18,7 +18,11 @@ unit test.captionfit;
   does), and a one-pixel disagreement would pass it with the bug in place. It renders them at the
   width AutoSize hands the control. That width comes from CalculatePreferredSize, which is what
   LCL's AutoSize asks; the headless runner never realises a handle for it to ask on its own.
-  Had nothing disagreed, the check proved nothing, and it fails saying so. }
+  Had nothing disagreed, the check proved nothing, and it fails saying so.
+
+  On Windows the two have measured alike since #199, while Cocoa, Qt and GTK still disagree: a
+  control that went back to the canvas would be clipped there and nothing here would notice. So
+  on Windows the renderer is put back in the quality it disagreed in, for the length of the check. }
 
 interface
 
@@ -183,7 +187,7 @@ begin
   if n > cFitProbes then SetLength(GFitProbes, cFitProbes);
 end;
 
-procedure CheckAutoSizeDrawsWholeCaption(ACtl: TTyStyleController; AControl: TControl;
+procedure CheckWithTheMeasurementsApart(ACtl: TTyStyleController; AControl: TControl;
   const ATypeKey: string; ARender: TCaptionRender; ACentred: Boolean);
 var
   k, w, h, shift: Integer;
@@ -214,6 +218,23 @@ begin
       [ATypeKey, p.Font, p.Size, p.Weight, cFitCaptions[p.Caption], w, p.CanvasW, p.RenderW]),
       whole);
   end;
+end;
+
+procedure CheckAutoSizeDrawsWholeCaption(ACtl: TTyStyleController; AControl: TControl;
+  const ATypeKey: string; ARender: TCaptionRender; ACentred: Boolean);
+begin
+  {$IFDEF LCLWin32}
+  TyGdiTextQualityForTest(fqCleartypeNatural);
+  TyInvalidateTextMeasureCache;
+  try
+  {$ENDIF}
+    CheckWithTheMeasurementsApart(ACtl, AControl, ATypeKey, ARender, ACentred);
+  {$IFDEF LCLWin32}
+  finally
+    TyGdiTextQualityForTest(fqDefault);
+    TyInvalidateTextMeasureCache;
+  end;
+  {$ENDIF}
 end;
 
 end.

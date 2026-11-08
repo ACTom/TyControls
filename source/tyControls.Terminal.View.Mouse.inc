@@ -39,7 +39,8 @@ begin
   for i := 1 to Abs(notches) do
   begin
     { MouseService.ts:250-292:程序要滚轮事件就上报;否则有滚回就滚 3 行;再否则
-      (备用屏、AlternateScroll)发方向键 }
+      (备用屏、AlternateScroll)发方向键。#185:方向键只在备用屏发(xterm 的 alternateScroll;
+      上游看的是 hasScrollback,主屏 Scrollback = 0 时会翻 shell 的历史) }
     if Reporting then
     begin
       if dir > 0 then
@@ -50,7 +51,7 @@ begin
     end;
     if FCore.Buffer.HasScrollback then
       FCore.ScrollLines(-3 * dir)
-    else if FAlternateScroll then
+    else if FAlternateScroll and FCore.Buffers.IsAlt then
     begin
       if FCore.Modes.ApplicationCursorKeys then
       begin
@@ -243,7 +244,11 @@ begin
   if FRoute = mrReport then
   begin
     Include(FReportHeld, Button);
-    if Button = mbRight then FRightReported := True;
+    if Button = mbRight then
+    begin
+      FRightReported := not FRightMenuAnswered;
+      FRightMenuAnswered := False;
+    end;
     ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
     Exit;
   end;
@@ -258,7 +263,11 @@ begin
     FRoute := mrReport;
     FRouteButton := Button;
     FReportHeld := [Button];
-    if Button = mbRight then FRightReported := True;
+    if Button = mbRight then
+    begin
+      FRightReported := not FRightMenuAnswered;
+      FRightMenuAnswered := False;
+    end;
     ReportMouse(TyTerminalMouseButtonFor(tmaDown, Button, Shift), tmaDown, X, Y, Shift);
     Exit;
   end;
@@ -269,7 +278,11 @@ begin
         FRouteButton := Button;
         SelectionPress(Shift, X, Y);
       end;
-    mbRight: FRightLocal := True;           { 菜单由 DoContextPopup 弹 }
+    mbRight:
+      begin
+        FRightLocal := True;                 { 菜单由 DoContextPopup 弹 }
+        FRightMenuAnswered := False;
+      end;
     mbMiddle:
       { X11 惯例:中键粘贴 PRIMARY(松开时);Windows / macOS 上中键不做事 }
       if FUsesPrimary then
@@ -284,6 +297,10 @@ procedure TTyCustomTerminalView.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
+  { #185: 路要的键这次移动里已经不在了(抬起落在模态框上，捕获变化来时键还按着):照松开
+    收尾，选区不再跟着空手的指针走;上报路补发的抬起在上次知道的位置 }
+  if (FRoute <> mrNone) and not RouteButtonsIn(Shift) then
+    ForgetPress;
   FLastMousePos := Point(X, Y);
   case FRoute of
     mrReport:
@@ -313,19 +330,22 @@ begin
 end;
 
 function TTyCustomTerminalView.RouteButtonsHeld: Boolean;
+begin
+  Result := RouteButtonsIn(HeldMouseButtons);
+end;
+
+function TTyCustomTerminalView.RouteButtonsIn(AHeld: TShiftState): Boolean;
 var
-  held: TShiftState;
   b: TMouseButton;
 begin
-  held := HeldMouseButtons;
   if FRoute = mrReport then
   begin
     for b := Low(TMouseButton) to High(TMouseButton) do
-      if (b in FReportHeld) and (MouseButtonShift(b) * held <> []) then
+      if (b in FReportHeld) and (MouseButtonShift(b) * AHeld <> []) then
         Exit(True);
     Exit(False);
   end;
-  Result := MouseButtonShift(FRouteButton) * held <> [];
+  Result := MouseButtonShift(FRouteButton) * AHeld <> [];
 end;
 
 procedure TTyCustomTerminalView.ForgetPress;

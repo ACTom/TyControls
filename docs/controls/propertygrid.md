@@ -44,7 +44,7 @@ PropGrid.SelectObjects([Button1, Button2]);      // 同时改两个按钮
 | 布尔 | `False` / `True` 下拉;选中这一行按**空格**直接切换 |
 | 枚举 | 下拉,选项是这个枚举的全部名字 |
 | 集合 | 显示成 `[akLeft,akTop]`;展开后每个元素一行布尔,改哪个元素就写回整个集合 |
-| `TColor` | 色板下拉,最后一项「更多…」打开取色对话框 |
+| `TColor` | 颜色下拉,列出所有颜色标识符:16 种基本色、扩展色、`clNone`、`clDefault` 和系统颜色(`clBtnFace`、`clWindow`……),和 Lazarus 的对象查看器一样。最后一项「更多…」打开取色对话框 |
 | `TFont` | 字体行:`…` 打开字体对话框;展开后 `Name`、`Size`、`Style` 等各占一行。不管从哪里改,都是先改一份副本,再整体写回 |
 | 其他 `TPersistent` 子对象(`Constraints`、`BorderSpacing` 等),以及带 `csSubComponent` 的子组件 | 显示 `(TSizeConstraints)` 这样的类名,本行只读;展开后是子对象自己的属性,可以直接改 |
 | `TCollection`(表格的列、状态栏的面板) | 显示 `(3 items)`;每一项一行,显示项的 `DisplayName`,再展开就是这一项的属性。项可以增删、调整顺序(§8) |
@@ -135,7 +135,7 @@ OnPropertyError(Sender; AInstance: TPersistent; const APropName: string; E: Exce
 procedure (Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo; ARow: TTyValueRow)
 ```
 
-每个属性的行建好之后(连同它下面的行)调用一次;集合的元素行、集合项那一行、分类标题行不调。可以改 `ARow.EditorKind`、`EnumValues`、`DisplayValue`、样式(`Bold`、`TextColor`、`ImageIndex`),或者把行设成只读。例如把某个字符串属性换成对话框编辑:
+每个属性的行建好之后(连同它下面的行)调用一次;集合的元素行、集合项那一行、分类标题行不调。之后这一行的值每次重读出来变了(写回之后、`Refresh`),还会再问一次,所以按值算出来的 `DisplayValue` 会跟着值走。可以改 `ARow.EditorKind`、`EnumValues`、`DisplayValue`、样式(`Bold`、`TextColor`、`ImageIndex`),或者把行设成只读。例如把某个字符串属性换成对话框编辑:
 
 ```pascal
 if APropInfo^.Name = 'FileName' then ARow.EditorKind := vekDialog;
@@ -194,6 +194,7 @@ OnSetPropertyText(Sender; AInstance: TPersistent; APropInfo: PPropInfo; const AT
 - **表格认识的类型**:想换个写法时用。比如颜色显示成 `#0000FF` 而不是 `clRed`,读的时候在 `OnGetPropertyText` 里给出文字,写的时候在 `OnSetPropertyText` 里自己解析、自己写属性。没处理的属性照旧走表格的转换。
 - **表格不认识的类型**(接口、变体、不是 `TPersistent` 的类):`OnFilterProperty` 会问到它们,`AShow` 进来是 False。处理程序把 `AShow` 设成 True、而且 `OnGetPropertyText` 给出了文字,它就列出来。没挂 `OnSetPropertyText` 时这一行只读,挂了就能编辑。
 - 集合的元素行(`Font.Style` 下面的 `fsBold`)是整个集合的一部分,不单独问。
+- 字体自己的属性(`Font.Size`)也一样,`AInstance` 是控件真正的那个字体。`OnSetPropertyText` 写进去以后,表格再把整个字体经属性的 setter 写回一次,和它自己写的时候一样。
 - 选了多个对象时,每个对象各问一次;`OnSetPropertyText` 里抛的异常和 setter 抛的一样处理(`OnPropertyError`)。
 - 挂上或换掉这两个事件不会自动重建,要调一次 `Rebuild`。
 
@@ -248,10 +249,11 @@ end;
 
 ## 6. 交互
 
-- 点值列开始编辑:文本和数字直接输入,布尔、枚举、颜色、组件引用是下拉,字体和对话框行点尾部的 `…`。选中一行按 **F2** 或 **Enter** 也行。
-- **Enter** 提交,**Esc** 放弃,点到别处也算提交。
+- 点值列开始编辑:文本和数字直接输入,布尔、枚举、颜色、组件引用是下拉,字体和对话框行点行尾画着的 `…` 直接打开对话框。选中一行按 **F2** 或 **Enter** 也行。字体和对话框行按 **Ctrl+Enter** 打开对话框,在 F2 打开的只读文字里按也行(和 Lazarus 的对象查看器一样)。
+- **Enter** 提交,**Esc** 放弃,点到别处也算提交。换选中的对象、行重建(改过滤条件、`Rebuild`、`Refresh` 发现结构变了)、增删移动集合项之前,正在输入的内容也先写回;正在改的就是要删掉的那一项时才丢掉。
+- `OnEditingDone` 在一次编辑结束时触发:编辑框提交、在下拉里选好、对话框关掉之后各一次。开始编辑时表格把焦点交给自己的编辑框,这时不触发。
 - 选中布尔行(包括集合的元素行)按**空格**直接切换。
-- 点属性名前面的三角展开或收起;分类标题行上按 **Enter** 也能展开、收起。
+- 点属性名前面的三角展开或收起,也可以选中这一行按 **Alt+→** 展开、**Alt+←** 收起(和 Lazarus 的对象查看器一样);分类标题行上按 **Enter** 也能展开、收起。
 - 集合行和集合项上:**Insert** 加一项,**Ctrl+Delete** 删当前项,**Ctrl+↑ / Ctrl+↓** 移动当前项;右键有同样的菜单(§8)。
 
 ---
@@ -295,8 +297,8 @@ else
 
 - 做完之后行会重建,展开的项跟着项走,当前行落在新加的或移动的那一项上;删了就落在原位置的下一项,没有就上一项,再没有就是集合行。
 - 删除不弹确认框。要确认的话在 `OnCollectionChanging` 里自己问。
-- 选了多个对象、表格 `ReadOnly`、设计期,都不能增删。
-- 内置菜单只在表格的 `PopupMenu` 没设时出现。应用有自己的菜单时,用 `SelectedRow` 和 `RowPath` 拿到当前行的路径,再调上面三个公开方法,效果完全一样。
+- 选了多个对象、表格 `ReadOnly`、设计期,都不能增删。`ReadOnly` 和设计期连那三个公开方法也拦:调了什么都不做,`AddCollectionItem` 返回 nil。
+- 内置菜单只在表格的 `PopupMenu` 没设时出现。应用有自己的菜单时,用 `SelectedRow` 和 `RowPath` 拿到当前行的路径,再调上面三个公开方法,效果完全一样。右键点到哪一行,那一行就先成为当前行,再弹出菜单,不管弹的是哪个菜单。
 
 ```pascal
 OnCollectionChanging(Sender; ACollection: TCollection; AAction: TTyCollectionAction;
@@ -363,7 +365,7 @@ begin
 end;
 ```
 
-标题行的展开状态也记在 `ExpandedProperties` 里,写成 `@` 加分类名(`@Layout`,和属性路径不会撞)。一个分类第一次出现时是展开的,它的路径会自动加进去;之后用户收起它,就一直是收起的,换对象、关了分类再打开都一样。想让某个分类一开始就收起,在设了 `ShowCategories` 之后从 `ExpandedProperties` 里删掉它。注意这里存的是显示出来的分类名,换了界面语言,名字也跟着变。
+标题行的展开状态也记在 `ExpandedProperties` 里,写成 `@` 加分类名(`@Layout`,和属性路径不会撞)。一个分类第一次出现时是展开的,它的路径会自动加进去;之后用户收起它,就一直是收起的,换对象、关了分类再打开都一样。想让某个分类一开始就收起,在设了 `ShowCategories` 之后从 `ExpandedProperties` 里删掉它;在对象查看器里删掉也一样,窗体载入后它还是收起的。整份赋给 `ExpandedProperties`(或者从窗体文件载入)时,只要单子上写了分类标题,就由它决定所有分类:没写上的分类第一次出现时也是收起的。单子里一个分类都没写,分类第一次出现照旧展开。注意这里存的是显示出来的分类名,换了界面语言,名字也跟着变。
 
 属性的路径不含分类:`Font.Size` 在分类视图里还是 `Font.Size`,`PropertyAt`、`RowPath`、集合的那几个方法都不受影响。
 
@@ -395,6 +397,7 @@ end;
 - **行是表格的。** 值列表编辑器的 `AddRow`、`DeleteRow`、`Clear` 还能调到,但别用:表格不认识自己没生成的行,下次重建时它们也会消失。
 - **非组件对象要先清空再释放。** 组件被释放时,表格经 `FreeNotification` 自动清空(多选时只去掉它);普通的 `TPersistent` 没有这个机制,释放之前请先 `SelectedObject := nil`。
 - **对象被代码改了要 `Refresh`。** 表格只在自己写回之后重读,别处改了对象它不知道。
+- **窗体载入后会再读一遍。** 从窗体文件载入时,被检查的组件可能排在表格后面,它自己的 `Loaded` 还没执行,窗体也还没排版。所以载入结束、消息循环再转起来时,表格会自己 `Refresh` 一次。
 - **控件会自己维护一些属性。** 有的控件会按自己的规则重设某些属性,比如 `TTyButton` 总是把 `Constraints.MinWidth` 维持在内容宽度,你写进去的值可能马上被它改掉。这不是没写进去:调一次 `Refresh` 就能看到控件现在的真实值。
 - **设计期只看不改。** 在窗体设计器里,设了 `SelectedComponent` 的表格照样列出行,方便看效果,但不能编辑,也不能增删集合项:设计器拦着鼠标,而且绕过设计器去改被设计的组件,设计器不会知道。
 - **浮点数用 `.`。** 不管系统区域设置是什么,浮点属性都显示和解析成 `1.5`;德语系统上也不是 `1,5`。日期时间则相反,按本机格式。

@@ -13,7 +13,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Terminal.Buffer,
   tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal, tyControls.Edit,
-  test.terminal.keyboard, test.terminal.view;
+  test.terminal.keyboard, test.terminal.view, test.dpi.support;
 
 type
   TTyTerminalViewInputTests = class(TTestCase)
@@ -24,6 +24,9 @@ type
     FQueries: Integer;
     FQueryKey: Word;
     FQueryShift: TShiftState;
+    FKeyPresses: string;
+    FDropKey: Char;
+    procedure HostKeyPress(Sender: TObject; var Key: Char);
     procedure Query(Sender: TObject; Key: Word; Shift: TShiftState; var APassToApplication: Boolean);
     procedure HostWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
       var Handled: Boolean);
@@ -77,6 +80,14 @@ type
     procedure TestKeyUpForgetsTheHandledKey;
     procedure TestShiftWheelIsLeftAlone;
     procedure TestReportedWheelPixelsStayInTheGrid;
+    { #185 }
+    procedure TestWindowKeysAreLeftToWindows;
+    procedure TestAnAltCodeCharacterIsTyped;
+    procedure TestReadOnlyLeavesTheKeysItWouldOnlySend;
+    procedure TestOnKeyPressSeesTypedCharacters;
+    procedure TestNoScrollbackOnTheNormalScreenSendsNoArrows;
+    procedure TestAutoSizeKeepsTheBounds;
+    procedure TestLoweringScrollbackRepaints;
   end;
 
 implementation
@@ -89,6 +100,8 @@ begin
   FPassKey := 0;
   FPassShift := [];
   FQueries := 0;
+  FKeyPresses := '';
+  FDropKey := #0;
 end;
 
 procedure TTyTerminalViewInputTests.TearDown;
@@ -110,6 +123,13 @@ procedure TTyTerminalViewInputTests.HostWheel(Sender: TObject; Shift: TShiftStat
   MousePos: TPoint; var Handled: Boolean);
 begin
   Handled := True;
+end;
+
+procedure TTyTerminalViewInputTests.HostKeyPress(Sender: TObject; var Key: Char);
+begin
+  FKeyPresses := FKeyPresses + Key;
+  if Key = FDropKey then
+    Key := #0;
 end;
 
 function TTyTerminalViewInputTests.Press(AKey: Word; AShift: TShiftState): Word;
@@ -803,6 +823,148 @@ begin
   outside := Hex;
   AssertTrue('reported', inside <> '');
   AssertEquals('clamped to the grid''s last pixel', inside, outside);
+end;
+
+{ #185: Alt+F4 closes the window and Alt+Space opens its system menu (DefWindowProc acts on
+  the WM_SYSKEYDOWN only when the control leaves the key): not encoded on Windows, as
+  Windows Terminal and conhost do. F10 alone stays the program's (mc quits on it). }
+procedure TTyTerminalViewInputTests.TestWindowKeysAreLeftToWindows;
+var
+  k: Word;
+begin
+  F.View.SetPlatform(False, True);
+  k := Press(VK_F4, [ssAlt]);
+  AssertEquals('Alt+F4: nothing sent', '', Hex);
+  AssertEquals('Alt+F4: the key goes on to the window', VK_F4, k);
+  k := Press(VK_SPACE, [ssAlt]);
+  AssertEquals('Alt+Space: nothing sent', '', Hex);
+  AssertEquals('Alt+Space: the key goes on', VK_SPACE, k);
+  k := Press(VK_F4, [ssCtrl]);
+  AssertTrue('Ctrl+F4 is still the program''s', Sent);
+  AssertEquals('and swallowed', 0, k);
+  F.ClearRecords;
+  Press(VK_F10);
+  AssertTrue('F10 is the program''s', Sent);
+  F.ClearRecords;
+  F.View.SetPlatform(False, False);
+  Press(VK_F4, [ssAlt]);
+  AssertTrue('elsewhere the window manager takes Alt+F4 before us: sent as ever', Sent);
+end;
+
+{ #185: Alt held, digits on the number pad, Alt released: Windows posts the character after
+  Alt comes up, with no key-down of its own. The Alt of the digits' key-downs must not drop it. }
+procedure TTyTerminalViewInputTests.TestAnAltCodeCharacterIsTyped;
+var
+  k: Word;
+begin
+  F.View.SetPlatform(False, True);
+  F.View.KeyDownNow(VK_MENU, [ssAlt]);
+  k := Press(VK_NUMPAD0, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD0, [ssAlt]);
+  Press(VK_NUMPAD2, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD2, [ssAlt]);
+  Press(VK_NUMPAD3, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD3, [ssAlt]);
+  Press(VK_NUMPAD3, [ssAlt]);
+  F.View.KeyUpNow(VK_NUMPAD3, [ssAlt]);
+  AssertEquals('the digits send nothing', '', Hex);
+  AssertEquals('and are left to Windows', VK_NUMPAD0, k);
+  F.View.KeyUpNow(VK_MENU, []);
+  TypeIt(#$C3#$A9);
+  AssertEquals('the character is typed', 'C3 A9', Hex);
+  F.ClearRecords;
+  { still: a character typed while Ctrl is down is dropped }
+  F.View.KeyDownNow(VK_CONTROL, [ssCtrl]);
+  Press(Ord('B'), [ssCtrl, ssShift]);
+  TypeIt('B');
+  AssertEquals('Ctrl held: dropped', '', Hex);
+end;
+
+{ #185: a read-only terminal sends nothing, so the keys it would only send are not
+  swallowed: Tab moves the focus on, Enter and Esc reach the dialog's buttons. Its own
+  actions (paging, copy) still take their keys. }
+procedure TTyTerminalViewInputTests.TestReadOnlyLeavesTheKeysItWouldOnlySend;
+var
+  k: Word;
+  buf: TTyTerminalBuffer;
+begin
+  Lines(100);
+  buf := F.View.Core.Buffer;
+  F.View.ReadOnly := True;
+  AssertEquals('Tab', VK_TAB, Press(VK_TAB));
+  AssertEquals('Shift+Tab', VK_TAB, Press(VK_TAB, [ssShift]));
+  AssertEquals('Enter', VK_RETURN, Press(VK_RETURN));
+  AssertEquals('Esc', VK_ESCAPE, Press(VK_ESCAPE));
+  AssertEquals('Up', VK_UP, Press(VK_UP));
+  AssertEquals('F5', VK_F5, Press(VK_F5));
+  AssertEquals('Ctrl+C', Ord('C'), Press(Ord('C'), [ssCtrl]));
+  AssertEquals('nothing sent', '', Hex);
+  k := Press(VK_PRIOR, [ssShift]);
+  AssertEquals('Shift+PgUp still pages', buf.YBase - 4, buf.YDisp);
+  AssertEquals('and takes its key', 0, k);
+  AssertEquals('Ctrl+Shift+C still copies (takes its key)', 0, Press(Ord('C'), [ssCtrl, ssShift]));
+  F.View.ReadOnly := False;
+  AssertEquals('writable: Tab is the program''s', 0, Press(VK_TAB));
+  AssertEquals('09', Hex);
+end;
+
+{ #185: OnKeyPress is published: it sees the characters typed, and Key := #0 keeps one
+  from being sent, as in TEdit }
+procedure TTyTerminalViewInputTests.TestOnKeyPressSeesTypedCharacters;
+begin
+  F.View.OnKeyPress := @HostKeyPress;
+  TypeIt('a');
+  AssertEquals('seen', 'a', FKeyPresses);
+  AssertEquals('sent', '61', Hex);
+  FDropKey := 'b';
+  TypeIt('b');
+  AssertEquals('seen too', 'ab', FKeyPresses);
+  AssertEquals('Key := #0: not sent', '61', Hex);
+  TypeIt(#$C3#$A9);
+  AssertEquals('a character of more than one byte is not a Char: not asked', 'ab', FKeyPresses);
+  AssertEquals('and sent', '61 C3 A9', Hex);
+end;
+
+{ #185: AlternateScroll is xterm's: arrow keys for the wheel on the alternate screen only.
+  A normal screen without scrollback (Scrollback = 0) does not walk the shell's history. }
+procedure TTyTerminalViewInputTests.TestNoScrollbackOnTheNormalScreenSendsNoArrows;
+begin
+  F.View.Scrollback := 0;
+  Lines(20);
+  AssertFalse('no scrollback', F.View.Core.Buffer.HasScrollback);
+  F.View.Wheel([], 120, Point(10, 10));
+  AssertEquals('the normal screen: no arrows', '', Hex);
+  F.View.WriteSync(#27'[?1049h');
+  F.ClearRecords;
+  F.View.Wheel([], 120, Point(10, 10));
+  AssertEquals('the alternate screen: an up arrow', '1B 5B 41', Hex);
+end;
+
+{ #185: AutoSize at run time sized the terminal to its one child, the scroll bar (about
+  15 px wide, 2 columns for the PTY). It has no natural size, as a memo: it keeps its bounds. }
+procedure TTyTerminalViewInputTests.TestAutoSizeKeepsTheBounds;
+var
+  w, h: Integer;
+begin
+  w := F.View.Width;
+  h := F.View.Height;
+  AssertTrue('the bar is there', F.View.Bar <> nil);
+  F.View.AutoSize := True;
+  TyTestSettle(F.Form);
+  AssertEquals('the width', w, F.View.Width);
+  AssertEquals('the height', h, F.View.Height);
+  AssertEquals('the columns', 20, F.View.Cols);
+end;
+
+{ #185: lowering Scrollback while scrolled up trims the lines the viewport shows: it repaints }
+procedure TTyTerminalViewInputTests.TestLoweringScrollbackRepaints;
+begin
+  Lines(1000);
+  F.View.ScrollToTop;
+  AssertEquals('at the top', 0, F.View.Core.Buffer.YDisp);
+  F.View.ClearInvalidated;
+  F.View.Scrollback := 100;
+  AssertTrue('the viewport repainted', (Length(F.View.Invalidated) > 0) or (F.View.WholeInvalidates > 0));
 end;
 
 initialization

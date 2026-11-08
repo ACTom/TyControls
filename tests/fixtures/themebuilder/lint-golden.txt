@@ -25,8 +25,8 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/builtin/adwaita.tycss
+undefined variable --on-surface
 unknown property 'border-bottom'
 undefined variable --disabled-opacity
 == themes/builtin/aero.tycss
@@ -41,8 +41,12 @@ undefined variable --pad-card
 undefined variable --on-surface
 undefined variable --disabled-opacity
 == themes/builtin/bootstrap.tycss
+undefined variable --grid-bg
+undefined variable --on-surface
 undefined variable --disabled-opacity
 == themes/builtin/breeze.tycss
+undefined variable --surface-chrome
+undefined variable --border
 undefined variable --radius-round
 undefined variable --disabled-opacity
 == themes/builtin/classic.tycss
@@ -66,12 +70,16 @@ undefined variable --disabled-opacity
 == themes/builtin/macos.tycss
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --on-surface
 undefined variable --disabled-opacity
 == themes/builtin/material3.tycss
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --disabled-opacity
 == themes/builtin/office.tycss
+undefined variable --surface-chrome
+undefined variable --border
+undefined variable --surface-chrome
 undefined variable --disabled-opacity
 == themes/builtin/showcase.tycss
 == themes/builtin/ubuntu.tycss
@@ -79,8 +87,10 @@ undefined variable --disabled-opacity
 == themes/builtin/win10.tycss
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --on-surface
 undefined variable --disabled-opacity
 == themes/builtin/win11.tycss
+undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --on-surface
@@ -128,7 +138,6 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/palettes/dracula.tycss
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -152,7 +161,6 @@ undefined variable --font-size-base
 undefined variable --font-size-title
 undefined variable --font-size-base
 undefined variable --pad-field
-undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -184,7 +192,6 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/palettes/gruvbox.tycss
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -208,7 +215,6 @@ undefined variable --font-size-base
 undefined variable --font-size-title
 undefined variable --font-size-base
 undefined variable --pad-field
-undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -240,7 +246,6 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/palettes/monokai.tycss
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -264,7 +269,6 @@ undefined variable --font-size-base
 undefined variable --font-size-title
 undefined variable --font-size-base
 undefined variable --pad-field
-undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -296,7 +300,6 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/palettes/one.tycss
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -320,7 +323,6 @@ undefined variable --font-size-base
 undefined variable --font-size-title
 undefined variable --font-size-base
 undefined variable --pad-field
-undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -352,7 +354,6 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
-undefined variable --font-size-base
 == themes/palettes/tokyonight.tycss
 undefined variable --font-size-base
 undefined variable --font-size-base
@@ -376,7 +377,6 @@ undefined variable --font-size-base
 undefined variable --font-size-title
 undefined variable --font-size-base
 undefined variable --pad-field
-undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base
 undefined variable --font-size-base

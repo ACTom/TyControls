@@ -364,6 +364,7 @@ var
   Rows: TTyVisualRowArray;
   Line: string;
   i, LH, CW, Y0, Y1: Integer;
+  Any0, Any1: Boolean;
 begin
   SetUpMemo('TyMemo { background:#101010; color:#F0F0F0; border-width:0px; padding:0px; font-size:14px; }',
     200, 120);
@@ -382,11 +383,18 @@ begin
   LH := FMemo.ProbeLineHeight(96);
   Reread := RenderToBGRA(CW, 120);
   try
+    { Any row of the glyphs: an X's middle may be thin there, one subpixel to a stroke. }
     Y0 := LH div 2;
     Y1 := LH + (LH div 2);
-    AssertTrue('token row 0 drew text', BandHasLightPixel(Reread, Y0, 0, CW - 1, 120));
-    AssertTrue('token continuation drew in row 1 band',
-      BandHasLightPixel(Reread, Y1, 0, CW - 1, 120));
+    Any0 := False;
+    Any1 := False;
+    for i := -3 to 3 do
+    begin
+      Any0 := Any0 or BandHasLightPixel(Reread, Y0 + i, 0, CW - 1, 120);
+      Any1 := Any1 or BandHasLightPixel(Reread, Y1 + i, 0, CW - 1, 120);
+    end;
+    AssertTrue('token row 0 drew text', Any0);
+    AssertTrue('token continuation drew in row 1 band', Any1);
   finally
     Reread.Free;
   end;

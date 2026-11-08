@@ -100,7 +100,7 @@ end
 | 成员 | 说明 |
 |---|---|
 | `Placement` | `twpLeft`（默认）/ `twpRight` / `twpBottom`。改它顺带把 `Align` 设成对应值、把栏挪到父控件同侧的最外边。运行时栏里有窗口时，侧 ↔ 底的改动被忽略 |
-| `ExpandedSize` | 展开时沿栏轴向的内容尺寸，**96 DPI 下的逻辑像素**，默认 240。侧栏不含图标条和拉宽边，底栏含标签行。空间不够时这一次排布会收窄，但不写回它 |
+| `ExpandedSize` | 展开时沿栏轴向的内容尺寸，**96 DPI 下的逻辑像素**，默认 240。侧栏不含图标条和拉宽边，底栏含标签行。空间不够时这一次排布会收窄，但不写回它。拖拉宽边最多拖到编辑区压到 0，写进它的是看得见的宽 |
 | `Collapsed` | 收起（默认 False）。只在运行时生效，设计期永远按展开显示。侧栏收起后剩图标条，底栏高度变成 0 |
 | `HideWhenEmpty` | 侧栏没有窗口时整条隐藏（默认 True），见 §7。对底栏没有效果 |
 | `ActiveIndex` / `ActiveWindow` | 当前页。`ActiveIndex` 跟着窗口走：调顺序后当前页还是那个窗口，序号跟着变。代码设当前页不改 `Collapsed` |
@@ -128,7 +128,7 @@ end
 | `WindowIndex` | 在栏里排第几，可写（写 = 调顺序）；不进 .lfm |
 | `Bar` / `IsActive` / `Actions` / `EnsureActions` | 所在的栏（`TTyCustomToolWindowBar`）；是不是当前页；第一个操作区（`TTyCustomToolWindowActions`）；没有就建一个 |
 | `FocusFirst` | 把焦点给正文里第一个能聚焦的控件（跳过操作区） |
-| `OnShow` / `OnHide` | 这一页显示 / 藏起 |
+| `OnShow` / `OnHide` | 这一页显示 / 藏起。`OnShow` 里栏和这一页已经是显示出来的位置和尺寸 |
 
 ### TTyToolWindowActions
 
@@ -309,8 +309,10 @@ end
 
 - `Controller` 由栏推给窗口、窗口再推给操作区。代码里直接赋给窗口的值会被下一次推送盖掉，要换主题请设栏的 `Controller`。
 - 图标条的提示跟着栏的 `ShowHint`，底栏标签的提示跟着各窗口的 `ShowHint`；当前页被禁用、标签行由栏来画的时候，跟着栏的 `ShowHint`。提示文字用 `StripHint`，**不要用 `Hint`**：窗口的 `Hint` 会冒到它里面所有没设 `Hint` 的控件上。
-- 操作区上的 `AutoSize`、`ChildSizing`、`BorderSpacing` 不起作用。
+- 栏的 `PopupMenu` 和 `OnContextPopup` 管图标、标签、图标条空白处和拉宽边上的右键，不在图标或标签上时 `ContextWindow` 是 nil。正文里的控件冒上来的右键不经过栏，直接交给窗体。栏没有 `PopupMenu` 时，图标和标签上的右键也接着交给窗体。
+- 操作区不发布 `AutoSize`、`ChildSizing`、`BorderSpacing`：它的位置和尺寸由窗口排，子控件由它自己排。3.x 窗体里存过的这几个值，载入时丢掉。
 - 启动时显示出来的当前页收不到 `OnShow`。首次填充内容请放在 FormCreate 里。
+- `OnShow` / `OnHide` 里可以改 `ActiveWindow` 和 `Collapsed`，以处理器改的为准，`OnChange` 只报处理器那一次。
 - `OnExit` 里不要把焦点设回被藏起来的窗口里的控件。
 - 底栏收起后界面上没有入口（侧栏至少还有图标条），请自己给一个开关：菜单项或快捷键设 `Collapsed := False`。示例里是 View › Bottom Panel（`Ctrl+J`）。
 - 事件处理器里不要释放栏、窗口或 manager，要释放请用 `Application.ReleaseComponent`。

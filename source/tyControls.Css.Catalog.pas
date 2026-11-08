@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (279 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (340 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (327 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (332 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..278] of string = (
+  TyCatalogTokens: array[0..339] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -89,8 +89,69 @@ const
     '--gallery-glyph-pad',
     '--gallery-grid-cell-height',
     '--glyph-button-gap',
+    '--grid-active-cell-bg',
+    '--grid-active-cell-color',
+    '--grid-alt-bg',
     '--grid-bg',
+    '--grid-cell-bg',
+    '--grid-cell-color',
     '--grid-comment-mark-size',
+    '--grid-fill-handle-size',
+    '--grid-filter-bg',
+    '--grid-filter-color',
+    '--grid-fixed-bg',
+    '--grid-fixed-color',
+    '--grid-focus-ring-style',
+    '--grid-focus-ring-width',
+    '--grid-footer-bg',
+    '--grid-footer-color',
+    '--grid-footer-rule-color',
+    '--grid-footer-rule-width',
+    '--grid-frozen-line-color',
+    '--grid-frozen-line-width',
+    '--grid-frozen-shadow-size',
+    '--grid-group-bg',
+    '--grid-group-color',
+    '--grid-group-indent',
+    '--grid-header-bevel',
+    '--grid-header-bg',
+    '--grid-header-color',
+    '--grid-header-filtered-bg',
+    '--grid-header-filtered-color',
+    '--grid-header-font-size',
+    '--grid-header-font-weight',
+    '--grid-header-group-bg',
+    '--grid-header-group-color',
+    '--grid-header-hover-bg',
+    '--grid-header-padding-end',
+    '--grid-header-padding-start',
+    '--grid-header-pressed-bg',
+    '--grid-header-rule-color',
+    '--grid-header-rule-width',
+    '--grid-header-selected-bg',
+    '--grid-header-separator-color',
+    '--grid-header-separator-height',
+    '--grid-header-separator-style',
+    '--grid-header-separator-width',
+    '--grid-header-sorted-bg',
+    '--grid-header-sorted-color',
+    '--grid-hover',
+    '--grid-hover-bg',
+    '--grid-indicator-active-color',
+    '--grid-indicator-bg',
+    '--grid-indicator-color',
+    '--grid-line-color',
+    '--grid-line-extend',
+    '--grid-line-h-style',
+    '--grid-line-h-width',
+    '--grid-line-v-style',
+    '--grid-line-v-width',
+    '--grid-selected-bg',
+    '--grid-selected-color',
+    '--grid-selected-hover-bg',
+    '--grid-selected-inactive-bg',
+    '--grid-selected-inactive-color',
+    '--grid-sorted-cell-bg',
     '--header-control-height',
     '--header-height',
     '--header-section-width',
@@ -299,7 +360,7 @@ const
     '--treeview-margin',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..326] of string = (
+  TyCatalogTypeKeys: array[0..331] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -464,17 +525,22 @@ const
     'TyGridCell',
     'TyGridCellAlt',
     'TyGridCellMarked',
+    'TyGridCellSelectedHover',
     'TyGridCellSelectedInactive',
+    'TyGridCellSorted',
     'TyGridCheckBox',
     'TyGridCommentMark',
     'TyGridFilterRow',
     'TyGridFixed',
     'TyGridGroupRow',
     'TyGridHeader',
+    'TyGridHeaderFiltered',
     'TyGridHeaderGroup',
     'TyGridHeaderSection',
+    'TyGridHeaderSorted',
     'TyGridHyperlink',
     'TyGridIndicator',
+    'TyGridIndicatorActive',
     'TyGridLine',
     'TyGridProgress',
     'TyGridProgressFill',

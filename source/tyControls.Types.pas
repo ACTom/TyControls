@@ -151,6 +151,18 @@ const
   TyVersion     = '3.99.0';
   TyHomepageUrl = 'https://github.com/ACTom/TyControls';
 
+  // The same version as numbers code can compare (#206), built the way LCL builds
+  // lcl_fullversion: 3.0.5 is 3000500. A project tells versions apart with
+  //   {$IF DECLARED(TyFullVersion)} {$IF TyFullVersion >= 3000500} ... {$ENDIF} {$ENDIF}
+  // (DECLARED: releases before 3.0.5 have no such constant). They carry no pre-release
+  // label; bump them with TyVersion -- tests/test.version checks the three agree.
+  TyVersionMajor   = 3;
+  TyVersionMinor   = 99;
+  TyVersionRelease = 0;
+  TyVersionPatch   = 0;
+  TyFullVersion    = ((TyVersionMajor * 100 + TyVersionMinor) * 100 + TyVersionRelease) * 100
+    + TyVersionPatch;
+
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from
   // duplicated hard-coded literals so they cannot silently drift; each call site
   // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().

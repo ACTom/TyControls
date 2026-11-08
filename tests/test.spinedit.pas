@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.DefaultTheme, tyControls.SpinEdit;
+  tyControls.DefaultTheme, tyControls.Edit, tyControls.SpinEdit;
 type
   { Probe subclass: exposes protected RenderTo and input handlers }
   TTySpinEditProbe = class(TTySpinEdit)
@@ -130,15 +130,15 @@ end;
 
 procedure TTySpinAccess.DoKey(Key: Word; Shift: TShiftState); begin KeyDown(Key, Shift); end;
 procedure TTySpinAccess.TypeChar(const C: TUTF8Char); var k: TUTF8Char; begin k := C; UTF8KeyPress(k); end;
-function TTySpinAccess.EditTextForTest: string; begin Result := FEditText; end;
-function TTySpinAccess.CaretForTest: Integer; begin Result := FCaret; end;
+function TTySpinAccess.EditTextForTest: string; begin Result := Text; end;
+function TTySpinAccess.CaretForTest: Integer; begin Result := CaretPos; end;
 procedure TTySpinAccess.CommitForTest; begin CommitEdit; end;
-procedure TTySpinAccess.FocusBufferForTest; begin SyncBufferToValue; end;
-procedure TTySpinAccess.SetEditTextForTest(const S: string); begin FEditText := S; FCaret := UTF8Length(S); end;
+procedure TTySpinAccess.FocusBufferForTest; begin SyncTextToValue; end;
+procedure TTySpinAccess.SetEditTextForTest(const S: string); begin TTyCustomEdit(Self).Text := S; end;
 procedure TTySpinAccess.RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin RenderTo(ACanvas, ARect, APPI); end;
 function TTySpinAccess.CaretXForTest(AIdx: Integer): Integer;
-begin Result := CaretPixelX(AIdx, 96); end;
+begin Result := CaretPixelXAt(AIdx, 96); end;
 function TTySpinAccess.ResolvedFontSizeForTest: Integer;
 begin Result := ResolveFontSize(CurrentStyle); end;
 procedure TTySpinAccess.MouseDownForTest(X, Y: Integer);

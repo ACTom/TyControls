@@ -689,10 +689,10 @@ end;
 procedure TTyCustomButtonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  W, H, i, n: Integer;
+  W, H, i, n, pass: Integer;
   segStates: TTyStateSet;
   segStyle: TTyStyleSet;
-  segRect: TRect;
+  segRect, frameR: TRect;
   corners: TTyCorners;
   radius: Integer;
   disp: string;
@@ -722,6 +722,9 @@ begin
     radius := StyleInState([tysNormal]).BorderRadius;
     if radius < 0 then radius := 0;
 
+    { #196: neighbours share the line between them, each laid over the one before. A selected or
+      hovered segment goes on top, so all four of its edges show its own colour. }
+    for pass := 0 to 1 do
     for i := 0 to n - 1 do
     begin
       // Per-segment state set: disabled wins; else selected (radio index / multi bit)
@@ -737,6 +740,7 @@ begin
           Include(segStates, tysHover);
         if segStates = [] then Include(segStates, tysNormal);
       end;
+      if (pass = 1) <> (segStates * [tysSelected, tysHover] <> []) then Continue;
 
       { The group's font and StyleOverride reach every segment (#113), except that the
         selected one keeps the theme's fill and ink -- an override that recoloured it too
@@ -758,15 +762,17 @@ begin
       if i = 0 then begin corners.TL := radius; corners.BL := radius; end;
       if i = n - 1 then begin corners.TR := radius; corners.BR := radius; end;
 
+      frameR := segRect;
+      if (i > 0) and TyBorderVisible(segStyle) then
+        Dec(frameR.Left, P.Scale(segStyle.BorderWidth));
+
       // Background fill for this segment (per-corner rounding so seams stay flush).
       if tpBackground in segStyle.Present then
-        P.FillBackground(segRect, segStyle.Background, corners);
+        P.FillBackground(frameR, segStyle.Background, corners, TyBorderVisible(segStyle));
 
-      // Border around the segment. Adjacent cells share a seam so the doubled 1px
-      // stroke reads as a single divider — simple, clean, and keeps each segment's
-      // state border (e.g. selected/accent) visible on its own edges.
+      // Border around the segment, its left edge on the right edge of the one before.
       if TyBorderVisible(segStyle) then
-        P.StrokeBorder(segRect, corners, segStyle.BorderWidth, segStyle.BorderColor);
+        P.StrokeBorder(frameR, corners, segStyle.BorderWidth, segStyle.BorderColor);
 
       // Centered caption, inset horizontally by the style's left/right padding.
       TyParseMnemonic(FItems[i], disp, mp);

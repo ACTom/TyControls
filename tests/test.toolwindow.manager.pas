@@ -97,6 +97,12 @@ type
     procedure TestFreeingTheManagerInABarEventTouchesItNoMore;
     { 在 OnCanMoveWindow 里释放 manager:这一次不挪,之后不再碰它。 }
     procedure TestFreeingTheManagerInOnCanMoveWindowTouchesItNoMore;
+    { 挪进收起着的栏:挪过去的那一页在 OnShow 里看到的已经是目标栏展开的宽。 }
+    procedure TestOnShowOfAWindowMovedIntoACollapsedBarSeesItExpanded;
+  private
+    FShowBar: TTyToolWindowBar;
+    FShowBarWidth: Integer;
+    procedure RecordShowBarWidth(Sender: TObject);
   private
     FDying: TTyToolWindowManager;
     FDeadAddr: Pointer;
@@ -2006,6 +2012,29 @@ begin
   AssertFalse('前提:展开了', FRight.Collapsed);
   AssertTrue('OnChange 里读到的已经是右栏内容区(事件在展开、对齐之后)',
     EqualRect(FRight.BarLayout.Content, FSeenBounds));
+end;
+
+procedure TTyToolWindowManagerTests.RecordShowBarWidth(Sender: TObject);
+begin
+  FShowBarWidth := FShowBar.Width;
+end;
+
+procedure TTyToolWindowManagerTests.TestOnShowOfAWindowMovedIntoACollapsedBarSeesItExpanded;
+var
+  m: TTyToolWindowManager;
+  l, r: TBarAccess;
+  w: TTyCustomToolWindow;
+begin
+  NewLeftRight(m, l, r);
+  w := l.Windows[0];
+  AssertFalse('前提:挪的不是左栏当前页(藏着,挪过去才显示)', w.Visible);
+  FShowBar := r;
+  FShowBarWidth := -1;
+  w.OnShow := @RecordShowBarWidth;
+  AssertTrue('前提:同步挪', m.MoveWindow(w, r));
+  AssertFalse('前提:目标栏展开了', r.Collapsed);
+  AssertTrue('前提:它显示了', w.Visible);
+  AssertEquals('OnShow 里目标栏已经是展开的宽', r.Width, FShowBarWidth);
 end;
 
 initialization

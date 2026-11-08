@@ -209,10 +209,14 @@ type
     function FontOwnerOf(ANode: TTyPropertyNode): TTyPropertyNode;
     procedure StoreFont(AFontNode: TTyPropertyNode; ARoot: Integer; AFont: TFont);
     function FindComponentByName(ANode: TTyPropertyNode; const AName: string): TComponent;
+    { AText into AHolder's property. AAskApp: SetPropText is asked first (it was not yet). }
     procedure WriteOn(ANode: TTyPropertyNode; AHolder: TObject; APropInfo: PPropInfo;
-      const AText: string);
+      const AText: string; AAskApp: Boolean = True);
     function GetRoot: TPersistent;
     function GetRoots(AIndex: Integer): TPersistent;
+    { OnGetPropertyRow once more, for a property row whose value has just been re-read and has
+      changed: a DisplayValue made from the value follows it (#183). }
+    procedure AskRowAgain(ANode: TTyPropertyNode);
   protected
     { The three ways a descendant (TTyCustomPropertyGrid's own, which hands them to the grid's
       virtual methods) takes part in the mapping. BuildRow fills ANode's row (ANode.Row exists,
@@ -316,7 +320,8 @@ type
     property OnGetComponentNames: TTyGetComponentNamesEvent read FOnGetComponentNames
       write FOnGetComponentNames;
     { Called once per property row (not for a set's elements or a collection's items), after the
-      row is filled. }
+      row is filled -- and again each time the row's value is re-read and has changed (after a
+      write, a Refresh), so a DisplayValue made from the value follows it. }
     property OnGetPropertyRow: TTyGetPropertyRowEvent read FOnGetPropertyRow
       write FOnGetPropertyRow;
     property OnGetPropertyText: TTyGetPropertyTextEvent read FOnGetPropertyText
@@ -370,6 +375,8 @@ type
   private
     FRows: TTyPropertyRows;
     FSelected: array of TPersistent;   // the selection, in the order it was given; no nil, no repeat
+    { Holds the selected components' free notifications, apart from the grid's own (#183). }
+    FWatcher: TComponent;
     FOnEditRowApp: TTyValueEditEvent;
     FExpanded: TStringList;
     FHarvesting: Boolean;
@@ -388,6 +395,10 @@ type
     FMenuPath: string;
     { The category headings shown so far ('@Layout'): one shown for the first time opens. }
     FSeenCategories: TStringList;
+    { ExpandedProperties was given whole -- assigned, or read from a form file -- and names a
+      category: then it decides for every category, and one it leaves out is not opened when it
+      is first shown (#183). }
+    FCategoriesGiven: Boolean;
     { ExpandedProperties as it was before FilterText was set, given back when it is cleared. }
     FPreFilterExpanded: TStringList;
     FFiltering: Boolean;
@@ -449,11 +460,24 @@ type
     procedure MenuDeleteClick(Sender: TObject);
     procedure MenuUpClick(Sender: TObject);
     procedure MenuDownClick(Sender: TObject);
+    { A selected component is being freed: it leaves the selection. }
+    procedure SelectionFreed(AComponent: TComponent);
+    { Loaded's second look at the selection, once the message loop runs again (#183). }
+    procedure RefreshAfterLoad(Data: PtrInt);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); override;
+    { A row of the grid's reads what the object holds, as everywhere else: the font row after a
+      Font.Size edit is the grid's text for the font (empty while several objects disagree), not
+      the value list editor's 'Name, Size' put together from the rows below it (#183). }
+    function ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean; override;
+    { Every colour identifier, as LCL's colour property editor offers them (graphpropedits.pas,
+      TColorPropertyEditor.GetValues -> GetColorValues): the basic and extended colours, clNone,
+      clDefault and the system colours -- so a colour can follow the theme again (#183). }
+    procedure GetRowColors(ARow: TTyValueRow; AItems: TStrings); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-    { A right click (or the menu key) on a collection or item row shows the built-in menu: Add
+    { A right click makes the row under the mouse the current one, whichever menu then shows.
+      A right click (or the menu key) on a collection or item row shows the built-in menu: Add
       Item, Delete Item, Move Up, Move Down. Only while PopupMenu is not assigned -- the
       application's own menu wins, and it can do the same through the public methods. }
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
@@ -471,8 +495,9 @@ type
       OnPropertyError. AText is the row's text for pwkText (and comes back as the object reads
       it), AObject the font or the list for the other two. AExceptRow is the row the caller will
       update itself. False when nothing was written -- refused, failed with OnPropertyError
-      assigned, or the rows were rebuilt by a handler (then the caller's row is gone). Raises
-      when the write fails and OnPropertyError is not assigned. }
+      assigned, or the rows were rebuilt by a handler (then the caller's row is gone; a setter
+      that rebuilds them ends the write there, and the objects after it are not written).
+      Raises when the write fails and OnPropertyError is not assigned. }
     function WriteProperty(ANode: TTyPropertyNode; AKind: TTyPropertyWriteKind; AObject: TObject;
       AExceptRow: TTyValueRow; var AText: string): Boolean;
     { The TStrings editor: show AStrings, let the user change it, True when confirmed. The
@@ -509,7 +534,8 @@ type
     { Add an item to the collection at APath ('Items', 'Header.Columns'), at the end; or, given
       an item's path ('Items[1]'), right after that item. OnCreateCollectionItem may create it,
       else ACollection.Add does. Returns the new item, nil when OnCollectionChanging refused
-      (or at design time). The rows are rebuilt with the new item's row current. }
+      (or while ReadOnly, or at design time: then the three do nothing). The rows are rebuilt
+      with the new item's row current. }
     function AddCollectionItem(const APath: string): TCollectionItem;
     { Delete the item at APath ('Items[1]'). The current row moves to the next item, else the
       one before, else the collection's row. }
@@ -557,7 +583,8 @@ type
       the name for an open category heading ('@Layout'). Kept when the selection moves to
       another object, so a row expanded on one button is expanded on the next; adding a path
       expands that row. A category heading the grid shows for the first time is open (its path
-      is added); take it off the list to close it. }
+      is added); take it off the list to close it. A list assigned whole, or read from a form
+      file, that names some category decides for all of them: one it leaves out stays closed. }
     property ExpandedProperties: TStrings read GetExpandedProperties write SetExpandedProperties;
     { Group the top-level properties by category, each group under a heading row that is not
       edited and opens and closes (Enter, or its triangle). Built-in categories by name: Layout
@@ -704,7 +731,7 @@ function TyPropertyGridCategoryOf(const APropName: string; AKind: TTypeKind): st
 implementation
 
 uses
-  tyControls.StyleModel, tyControls.StrConsts, tyControls.Dialogs;
+  tyControls.StyleModel, tyControls.StrConsts, tyControls.Dialogs, tyControls.ColorBox;
 
 function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 begin
@@ -1739,7 +1766,7 @@ begin
 end;
 
 procedure TTyPropertyRows.WriteOn(ANode: TTyPropertyNode; AHolder: TObject; APropInfo: PPropInfo;
-  const AText: string);
+  const AText: string; AAskApp: Boolean);
 var
   cur, bit: Int64;
   t, nm: string;
@@ -1752,7 +1779,7 @@ begin
   if APropInfo = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   { The application's conversion first (a set's element is written as part of its set). }
-  if (ANode.FKind <> pnkSetElement) and (AHolder is TPersistent)
+  if AAskApp and (ANode.FKind <> pnkSetElement) and (AHolder is TPersistent)
     and SetPropText(TPersistent(AHolder), APropInfo, AText) then Exit;
   if ANode.FKind = pnkFont then
   begin
@@ -1940,7 +1967,7 @@ begin
 end;
 
 procedure TTyPropertyRows.WriteTextIn(ANode: TTyPropertyNode; ARoot: Integer; const AText: string);
-var fontNode: TTyPropertyNode; cur, h: TObject; tmp: TFont;
+var fontNode: TTyPropertyNode; cur, h: TObject; tmp: TFont; handled: Boolean;
 begin
   fontNode := FontOwnerOf(ANode);
   if fontNode <> nil then
@@ -1950,9 +1977,14 @@ begin
       raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
     tmp := TFont.Create;
     try
+      { #183: the application's conversion is handed the font itself, as every other event is,
+        not the copy the grid writes into; what it wrote is then stored whole like the grid's own
+        write, through the font property's setter. }
+      handled := (ANode.FKind <> pnkSetElement)
+        and SetPropText(TFont(cur), PropInfoIn(ANode, cur, ARoot), AText);
       tmp.PixelsPerInch := TFont(cur).PixelsPerInch;   // so Height copies across unscaled
       tmp.Assign(TFont(cur));
-      WriteOn(ANode, tmp, ANode.FPropInfo, AText);
+      if not handled then WriteOn(ANode, tmp, ANode.FPropInfo, AText, False);
       StoreFont(fontNode, ARoot, tmp);
     finally
       tmp.Free;
@@ -1972,13 +2004,34 @@ begin
   AText := ReadText(ANode);
 end;
 
+procedure TTyPropertyRows.AskRowAgain(ANode: TTyPropertyNode);
+var h: TObject;
+begin
+  if not Assigned(FOnGetPropertyRow) or (ANode.FRow = nil) or (ANode.FPropInfo = nil) then Exit;
+  if ANode.FKind in [pnkSetElement, pnkCollectionItem, pnkCategory] then Exit;   // never asked
+  try
+    h := HolderIn(ANode, 0);   // as at the build: the first object's
+  except
+    h := nil;
+  end;
+  if h is TPersistent then FOnGetPropertyRow(FSender, TPersistent(h), ANode.FPropInfo, ANode.FRow);
+end;
+
 procedure TTyPropertyRows.RefreshValues(AExcept: TTyValueRow);
-var i: Integer; n: TTyPropertyNode; names: TStringList;
+var i: Integer; n: TTyPropertyNode; names: TStringList; t: string;
 begin
   for i := 0 to FNodes.Count - 1 do
   begin
     n := TTyPropertyNode(FNodes[i]);
-    if (n.FRow <> nil) and (n.FRow <> AExcept) then n.FRow.Value := ReadText(n);
+    if (n.FRow <> nil) and (n.FRow <> AExcept) then
+    begin
+      t := ReadText(n);
+      if t <> n.FRow.Value then
+      begin
+        n.FRow.Value := t;
+        AskRowAgain(n);
+      end;
+    end;
     if (n.FRow <> nil) and (n.FKind = pnkComponent) then
     begin
       names := TStringList.Create;
@@ -2156,11 +2209,42 @@ end;
 
 { ---- TTyCustomPropertyGrid ---- }
 
+type
+  { The receiver of the selected components' free notifications. TComponent keeps ONE link per
+    pair of components, whatever it serves: were the grid itself the receiver, letting go of a
+    component it inspects would also drop the link its Images, PopupMenu or Controller rests on
+    (and setting those to another one would drop the selection's), and the grid would hold a
+    freed object. With its own receiver each link is separate (#183). }
+  TTyPropertyGridWatcher = class(TComponent)
+  private
+    FGrid: TTyCustomPropertyGrid;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  end;
+
+procedure TTyPropertyGridWatcher.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent <> nil) and (FGrid <> nil) then
+    FGrid.SelectionFreed(AComponent);
+end;
+
+{ Does AList name a category heading ('@Layout')? }
+function NamesCategory(AList: TStrings): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to AList.Count - 1 do
+    if Copy(AList[i], 1, 1) = '@' then Exit(True);
+end;
+
 constructor TTyCustomPropertyGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FRows := TTyGridPropertyRows.Create(Self);
   TTyGridPropertyRows(FRows).FGrid := Self;
+  FWatcher := TTyPropertyGridWatcher.Create(nil);
+  TTyPropertyGridWatcher(FWatcher).FGrid := Self;
   FRows.HiddenProperties.OnChange := @HiddenChanged;
   FSeenCategories := TStringList.Create;
   FSeenCategories.CaseSensitive := False;
@@ -2178,6 +2262,8 @@ end;
 
 destructor TTyCustomPropertyGrid.Destroy;
 begin
+  TTyPropertyGridWatcher(FWatcher).FGrid := nil;
+  FreeAndNil(FWatcher);   // and with it the links to the selection
   Clear;          // rows first: their Data points at the nodes
   FreeAndNil(FRows);
   FreeAndNil(FExpanded);
@@ -2216,10 +2302,10 @@ begin
     thrown away: a click on a control that takes no focus never gave the editor its OnExit. }
   if EditingRow >= 0 then EndEdit(True);
   for i := 0 to High(FSelected) do
-    if FSelected[i] is TComponent then TComponent(FSelected[i]).RemoveFreeNotification(Self);
+    if FSelected[i] is TComponent then TComponent(FSelected[i]).RemoveFreeNotification(FWatcher);
   FSelected := fresh;
   for i := 0 to High(FSelected) do
-    if FSelected[i] is TComponent then TComponent(FSelected[i]).FreeNotification(Self);
+    if FSelected[i] is TComponent then TComponent(FSelected[i]).FreeNotification(FWatcher);
   if csLoading in ComponentState then Exit;   // Loaded builds, once the filters are read too
   RebuildRows(False);
 end;
@@ -2261,14 +2347,21 @@ begin
 end;
 
 procedure TTyCustomPropertyGrid.Notification(AComponent: TComponent; Operation: TOperation);
-var i, at: Integer;
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation <> opRemove) or (AComponent = nil) then Exit;
+  { A selected component on the grid's own form is announced here too, by the form: let go of
+    at once, as the watcher would. }
+  if (Operation = opRemove) and (AComponent <> nil) then SelectionFreed(AComponent);
+end;
+
+procedure TTyCustomPropertyGrid.SelectionFreed(AComponent: TComponent);
+var i, at: Integer;
+begin
   at := -1;
   for i := 0 to High(FSelected) do
     if TObject(FSelected[i]) = TObject(AComponent) then at := i;
   if at < 0 then Exit;
+  if EditingRow >= 0 then EndEdit(False);   // the edit may be on the object being freed
   { Before anything of it is freed (TComponent.Destroy notifies first): it leaves the selection
     without being read -- rebuilding reads only the paths and the objects still selected. }
   for i := at to High(FSelected) - 1 do FSelected[i] := FSelected[i + 1];
@@ -2280,7 +2373,18 @@ end;
 procedure TTyCustomPropertyGrid.Loaded;
 begin
   inherited Loaded;
+  { A list read from the form file was saved with the categories closed that it leaves out. }
+  if NamesCategory(FExpanded) then FCategoriesGiven := True;
   RebuildRows(False);
+  { #183: the component inspected may be read after the grid, so its own Loaded has not run yet,
+    and the form has not been laid out (an alClient panel still has its designed size). What it
+    holds is read again once loading is over. }
+  if Length(FSelected) > 0 then Application.QueueAsyncCall(@RefreshAfterLoad, 0);
+end;
+
+procedure TTyCustomPropertyGrid.RefreshAfterLoad(Data: PtrInt);
+begin
+  if not (csDestroying in ComponentState) then Refresh;
 end;
 
 function TTyCustomPropertyGrid.GetStyleTypeKey: string;
@@ -2390,6 +2494,7 @@ end;
 procedure TTyCustomPropertyGrid.SetExpandedProperties(AValue: TStrings);
 begin
   FExpanded.Assign(AValue);   // OnChange applies
+  FCategoriesGiven := NamesCategory(FExpanded);
 end;
 
 procedure TTyCustomPropertyGrid.ExpandedChanged(Sender: TObject);
@@ -2523,6 +2628,7 @@ begin
     p := nd.Path;
     if FSeenCategories.IndexOf(p) >= 0 then Continue;
     FSeenCategories.Add(p);
+    if FCategoriesGiven then Continue;   // the list given says closed
     FHarvesting := True;
     try
       FExpanded.Add(p);
@@ -2568,6 +2674,9 @@ var
   keptTop, at, shown: Integer;
 begin
   if FRows = nil then Exit;
+  { #183: an edit in progress is written before the rows go, as SelectObjects does -- the build
+    closed the editor with the rows, and what was typed was lost. }
+  if EditingRow >= 0 then EndEdit(True);
   { Not after a collection change: the old rows still carry the old indexes, and the list has
     already been moved along with the items (RemapExpanded). }
   if AHarvest then HarvestExpanded;
@@ -2679,8 +2788,9 @@ var
   insts: array of TPersistent;
   names, newTexts: array of string;
   known: array of Boolean;
-  inst: TPersistent;
-  nm, described: string;
+  done: array of TPersistent;
+  doneNames: array of string;
+  described: string;
   allow: Boolean;
   gen, n, k: Integer;
 begin
@@ -2717,6 +2827,7 @@ begin
       if not allow or (gen <> FBuildCount) then Exit;
     end;
   for k := 0 to n - 1 do
+  begin
     try
       case AKind of
         pwkFont:    FRows.WriteFontIn(ANode, k, TFont(AObject));
@@ -2736,18 +2847,38 @@ begin
         Exit;
       end;
     end;
+    { #183: a setter that runs the application's code can rebuild the rows (a Refresh that
+      found the structure changed, a selected component freed). ANode went with them, so the
+      objects after this one are not written. }
+    if gen <> FBuildCount then Exit;
+  end;
   if AKind <> pwkStrings then AText := FRows.ReadText(ANode);   // as the objects read it back
-  { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
-    being committed is left for the editor, which compares AText with its old value. }
-  FRows.RefreshValues(AExceptRow);
-  Invalidate;
+  { Who is announced, taken while ANode is still there to say. }
+  SetLength(done, n);
+  SetLength(doneNames, n);
+  for k := 0 to n - 1 do
+    if not FRows.PropertyOfIn(ANode, k, done[k], doneNames[k]) then done[k] := nil;
+  if FRows.StructureChanged then
+    { #183: the write changed what the rows were built from (a Count that resizes a collection,
+      a sub-object replaced): rebuilt as Refresh does, the expanded rows and the current row
+      kept. ANode and the caller's row go with the old rows. }
+    RebuildRows(True)
+  else
+  begin
+    { The row being committed is asked about its new value now, before the editor stores it
+      (#183: a DisplayValue made from the value follows it). }
+    if (AExceptRow <> nil) and (AExceptRow = ANode.Row) and (AKind <> pwkStrings)
+      and (AExceptRow.Value <> AText) then
+      FRows.AskRowAgain(ANode);
+    { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
+      being committed is left for the editor, which compares AText with its old value. }
+    FRows.RefreshValues(AExceptRow);
+    Invalidate;
+  end;
+  Result := gen = FBuildCount;
   if Assigned(FOnPropertyChanged) then
     for k := 0 to n - 1 do
-    begin
-      if gen <> FBuildCount then Break;   // a handler rebuilt the rows: ANode is gone
-      if FRows.PropertyOfIn(ANode, k, inst, nm) then FOnPropertyChanged(Self, inst, nm);
-    end;
-  Result := gen = FBuildCount;
+      if done[k] <> nil then FOnPropertyChanged(Self, done[k], doneNames[k]);
 end;
 
 procedure TTyCustomPropertyGrid.SeedEditFont(ARow: TTyValueRow; AFont: TFont);
@@ -2774,6 +2905,27 @@ begin
     end;
   end;
   inherited SeedEditFont(ARow, AFont);
+end;
+
+function TTyCustomPropertyGrid.ComposeRowValue(ARow: TTyValueRow; out AValue: string): Boolean;
+var nd: TTyPropertyNode;
+begin
+  nd := nil;
+  if FRows <> nil then nd := FRows.NodeOf(ARow);
+  if nd = nil then Exit(inherited ComposeRowValue(ARow, AValue));
+  AValue := FRows.ReadText(nd);
+  Result := True;
+end;
+
+procedure TTyCustomPropertyGrid.GetRowColors(ARow: TTyValueRow; AItems: TStrings);
+begin
+  if (FRows = nil) or (FRows.NodeOf(ARow) = nil) then
+  begin
+    inherited GetRowColors(ARow, AItems);   // a row the grid did not build
+    Exit;
+  end;
+  TyBuildColorPalette(AItems, [cbStandardColors, cbExtendedColors, cbSystemColors, cbIncludeNone,
+    cbIncludeDefault]);
 end;
 
 function TTyCustomPropertyGrid.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;
@@ -2812,9 +2964,9 @@ begin
   end;
   if handled or (gen <> FBuildCount) then
   begin
-    { The handler wrote the property (or rebuilt the rows): show the object. }
-    if gen = FBuildCount then FRows.RefreshValues(nil);
-    Invalidate;
+    { The handler wrote the property (or rebuilt the rows): show the object -- rebuilt when the
+      write changed its structure (#183), as Refresh does. }
+    if gen = FBuildCount then Refresh else Invalidate;
     Exit;
   end;
   nd := FRows.NodeOf(ARow);
@@ -2832,7 +2984,14 @@ begin
 end;
 
 procedure TTyCustomPropertyGrid.EditStringsRow(ARow: TTyValueRow);
-var nd: TTyPropertyNode; cur: TObject; tmp: TStringList; dummy: string; k: Integer;
+var
+  nd: TTyPropertyNode;
+  cur: TObject;
+  tmp: TStringList;
+  dummy, path: string;
+  k, gen: Integer;
+  sel: array of TPersistent;
+  same: Boolean;
 begin
   nd := FRows.NodeOf(ARow);
   if (nd = nil) or (nd.Kind <> pnkStrings) or ReadOnly or ARow.ReadOnly then Exit;
@@ -2849,8 +3008,24 @@ begin
         tmp.Clear;
         Break;
       end;
-    if ExecuteStringsDialog(Format(rsTyPropGridStringsTitle, [nd.Path]), tmp) then
+    path := nd.Path;
+    gen := FBuildCount;
+    sel := Copy(FSelected);
+    if ExecuteStringsDialog(Format(rsTyPropGridStringsTitle, [path]), tmp) then
     begin
+      { #183: the dialog is modal, and while it was up the rows may have been rebuilt (a timer's
+        Refresh, a selected component freed), nd with them. The same property of the same
+        objects is found again by its path; when the selection has moved, the list is dropped. }
+      if gen <> FBuildCount then
+      begin
+        same := Length(sel) = Length(FSelected);
+        if same then
+          for k := 0 to High(sel) do
+            if sel[k] <> FSelected[k] then same := False;
+        if not same then Exit;
+        nd := FRows.FindByPath(path);
+        if (nd = nil) or (nd.Kind <> pnkStrings) then Exit;
+      end;
       dummy := '';
       WriteProperty(nd, pwkStrings, tmp, nil, dummy);
     end;
@@ -2925,13 +3100,21 @@ var
   coll: TCollection;
   idx, fromIdx, toIdx, gen: Integer;
   allow: Boolean;
-  collPath, sel: string;
+  collPath, sel, edPath: string;
 begin
   Result := nil;
-  if (FRows = nil) or (csDesigning in ComponentState) then Exit;
-  { An open cell editor first: its text is committed (or, for a delete, dropped) before the
-    rows move under it. A commit may rebuild the rows, so the path is resolved after it. }
-  if EditingRow >= 0 then EndEdit(AAction <> caDelete);
+  { #183: ReadOnly refuses the application's calls too, as design time does -- they are what its
+    own menu does in place of the built-in one (doc section 8). }
+  if (FRows = nil) or ReadOnly or (csDesigning in ComponentState) then Exit;
+  { An open cell editor first: its text is committed before the rows move under it -- unless it
+    is on the item being deleted, which takes it along (#183: an edit on any row was dropped). A
+    commit may rebuild the rows, so the path is resolved after it. }
+  if EditingRow >= 0 then
+  begin
+    edPath := RowPath(FlatRowAt(EditingRow));
+    EndEdit((AAction <> caDelete) or not (SameText(edPath, APath)
+      or SameText(Copy(edPath, 1, Length(APath) + 1), APath + '.')));
+  end;
   nd := FRows.FindByPath(APath);
   if (nd = nil) or not (nd.Kind in [pnkCollection, pnkCollectionItem])
     or (FRows.RootCount <> 1) then
@@ -3124,6 +3307,14 @@ var
   isItem: Boolean;
   at: TPoint;
 begin
+  { The row clicked becomes the current one before any menu shows (#183): the application's own
+    PopupMenu acts on SelectedRow, as the built-in menu does on the row it was opened on, and
+    OnContextPopup may read it too. }
+  if (FRows <> nil) and not ((MousePos.X = -1) and (MousePos.Y = -1)) then
+  begin
+    flat := RowAtY(MousePos.Y);
+    if (flat >= 0) and (flat < DisplayRowCount) and (flat <> ItemIndex) then ItemIndex := flat;
+  end;
   inherited DoContextPopup(MousePos, Handled);   // OnContextPopup first; it may take it
   if Handled or (PopupMenu <> nil) or (FRows = nil) then Exit;
   if (MousePos.X = -1) and (MousePos.Y = -1) then
@@ -3132,7 +3323,6 @@ begin
   begin
     flat := RowAtY(MousePos.Y);
     if (flat < 0) or (flat >= DisplayRowCount) then Exit;
-    if flat <> ItemIndex then ItemIndex := flat;   // the row clicked becomes the current one
   end;
   r := FlatRowAt(flat);
   nd := FRows.NodeOf(r);

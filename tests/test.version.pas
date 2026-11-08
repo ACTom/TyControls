@@ -99,6 +99,8 @@ type
     procedure TestEveryRegisteredNameResolves;
     procedure TestEveryRegisteredComponentReportsTyVersion;
     procedure TestPackageVersionsMatchTyVersion;
+    procedure TestNumericVersionMatchesTyVersion;
+    procedure TestFullVersionCanBeComparedAtCompileTime;
     procedure TestVersionEditorBasesResolve;
     procedure TestAboutDialogExemptionStillHolds;
   end;
@@ -332,6 +334,36 @@ end;
   .lpk <Version> — three integers — cannot hold. That is by design: the .lpk keeps the clean
   RELEASE number Lazarus resolves against, and the suffix is display-only. So the comparison is
   against TyVersion's numeric CORE (everything before the first '-'), not the whole string. }
+{ #206: the numbers say what TyVersion says (its numeric core, any -RC label dropped), and
+  TyFullVersion is built from them as LCL builds lcl_fullversion. }
+procedure TVersionTest.TestNumericVersionMatchesTyVersion;
+var
+  core: string;
+begin
+  core := TyVersion;
+  if Pos('-', core) > 0 then core := Copy(core, 1, Pos('-', core) - 1);
+  AssertEquals('TyVersionMajor.Minor.Release must be TyVersion''s release number', core,
+    Format('%d.%d.%d', [TyVersionMajor, TyVersionMinor, TyVersionRelease]));
+  AssertEquals('TyVersionPatch', 0, TyVersionPatch);
+  AssertEquals('TyFullVersion',
+    ((TyVersionMajor * 100 + TyVersionMinor) * 100 + TyVersionRelease) * 100 + TyVersionPatch,
+    TyFullVersion);
+end;
+
+{ #206: what a project writes compiles -- the constants are usable in $IF, as lcl_fullversion is. }
+procedure TVersionTest.TestFullVersionCanBeComparedAtCompileTime;
+var
+  seen: Boolean;
+begin
+  seen := False;
+  {$IF DECLARED(TyFullVersion)}
+    {$IF TyFullVersion >= 3000000}
+  seen := True;
+    {$ENDIF}
+  {$ENDIF}
+  AssertTrue('TyFullVersion must be declared and at least 3.0.0 in a $IF', seen);
+end;
+
 procedure TVersionTest.TestPackageVersionsMatchTyVersion;
 
   function PackageVersion(const AFile: string): string;

@@ -75,6 +75,14 @@ type
     procedure TestPrimaryIsOfferedNotBuilt;
     procedure TestCopyingTenThousandRowsIsQuick;
     procedure TestAWordWrappedOverManyRows;
+    { #185 }
+    procedure TestAMoveWithTheButtonUpFinishesThePress;
+    procedure TestTheDragTimerStopsWhenTheButtonIsUp;
+    procedure TestPrimaryOutlivesTheSelection;
+    procedure TestSelectLinesIsClampedAndOrdered;
+    procedure TestNothingClearedIsNoChange;
+    procedure TestAMenuBeforeAReportedPressLeavesNothingBehind;
+    procedure TestClearIsGreyOnTheAlternateScreen;
   end;
 
 implementation
@@ -416,6 +424,9 @@ begin
   V.WriteSync(Lines(0, 100));
   r := V.CellRect(0, 0);
   top := r.Top;
+  { the button is held all along: a tick checks it (#185) }
+  V.UseFakeButtons := True;
+  V.FakeButtons := [ssLeft];
   V.Down(mbLeft, [ssLeft], V.CellLeft(0, 2));
   AssertTrue('the drag timer runs', V.DragTimerOn);
   V.MoveTo([ssLeft], V.CellLeft(3, 0).X, top - 30);
@@ -955,6 +966,153 @@ begin
   t := V.SelectionText;
   AssertEquals('the whole word', N * V.Cols, Length(t));
   AssertEquals('and nothing else', StringOfChar('w', N * V.Cols), t);
+end;
+
+{ #185: the release went elsewhere and no capture event came (a modal dialog took the
+  mouse while the button was down): the next move without the button finishes the press
+  as a release would, instead of the selection following the bare pointer }
+procedure TTyTerminalViewMouseTests.TestAMoveWithTheButtonUpFinishesThePress;
+begin
+  V.WriteSync('hello world');
+  V.CopyOnSelect := True;
+  V.UseFakeShift := True;
+  V.FakeShift := [];
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  AssertTrue('selecting', V.MouseRoute = mrSelect);
+  V.MoveTo([], V.CellLeft(9, 0));
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  AssertEquals('the selection did not follow the pointer', 'hell', V.SelectionText);
+  AssertFalse('the drag timer stopped', V.DragTimerOn);
+  AssertEquals('finished as a release: CopyOnSelect wrote it', 1, V.ClipWrites);
+  { reported: the program gets its release where the button was last seen }
+  V.WriteSync(#27'[?1002h'#27'[?1006h');
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  Reset;
+  V.MoveTo([], V.CellCenter(4, 1));
+  AssertEquals('the release is reported', Sgr(0, 2, 1, False), Hex);
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  { a second button still down keeps a reported press going }
+  V.Down(mbLeft, [ssLeft], V.CellCenter(2, 1));
+  V.Down(mbRight, [ssLeft, ssRight], V.CellCenter(2, 1));
+  V.MoveTo([ssRight], V.CellCenter(3, 1));
+  AssertTrue('right still held: still reporting', V.MouseRoute = mrReport);
+  V.Up(mbRight, [], V.CellCenter(3, 1));
+end;
+
+{ #185: the drag timer runs while a drag is past the edge; once the button is up (the
+  release lost to a dialog) its next tick finishes the press instead of scrolling on }
+procedure TTyTerminalViewMouseTests.TestTheDragTimerStopsWhenTheButtonIsUp;
+var
+  y: Integer;
+begin
+  V.WriteSync(Lines(0, 100));
+  V.UseFakeButtons := True;
+  V.FakeButtons := [ssLeft];
+  V.ScrollLines(-50);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 2));
+  V.MoveTo([ssLeft], V.CellLeft(3, 0).X, V.ClientHeight + 40);
+  AssertTrue('the drag timer runs', V.DragTimerOn);
+  y := V.Core.Buffer.YDisp;
+  V.TickDrag;
+  AssertTrue('a tick with the button down scrolls', V.Core.Buffer.YDisp > y);
+  V.FakeButtons := [];
+  y := V.Core.Buffer.YDisp;
+  V.TickDrag;
+  AssertFalse('the button is up: the timer stopped', V.DragTimerOn);
+  AssertTrue('the route is free', V.MouseRoute = mrNone);
+  AssertEquals('and that tick did not scroll', y, V.Core.Buffer.YDisp);
+end;
+
+{ #185: X11 keeps the selected text in PRIMARY until a new selection is made (xterm, VTE,
+  Konsole). Typing, a plain click or a screen switch clears the selection; PRIMARY still
+  answers with the text last selected. }
+procedure TTyTerminalViewMouseTests.TestPrimaryOutlivesTheSelection;
+begin
+  V.WriteSync('hello world');
+  V.SetPrimaryPlatform(True);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(0, 0));
+  V.MoveTo([ssLeft], V.CellLeft(4, 0));
+  V.Up(mbLeft, [], V.CellLeft(4, 0));
+  AssertEquals('offered', 'hell', V.PrimaryNow);
+  V.Input('x');
+  AssertFalse('typing cleared the selection', V.HasSelection);
+  AssertEquals('PRIMARY keeps it', 'hell', V.PrimaryNow);
+  V.Down(mbLeft, [ssLeft], V.CellLeft(6, 0));
+  V.MoveTo([ssLeft], V.CellLeft(9, 0));
+  V.Up(mbLeft, [], V.CellLeft(9, 0));
+  AssertEquals('a new selection takes PRIMARY', 'wor', V.PrimaryNow);
+  V.ClickAt(mbLeft, [], V.CellCenter(2, 2));
+  AssertFalse('a plain click cleared it', V.HasSelection);
+  AssertEquals('PRIMARY still has it', 'wor', V.PrimaryNow);
+  V.WriteSync(#27'[?1049h');
+  AssertEquals('the other screen too', 'wor', V.PrimaryNow);
+end;
+
+{ #185: SelectLines clamps both ends into the buffer (docs: 越界钳住) and takes the pair in
+  either order }
+procedure TTyTerminalViewMouseTests.TestSelectLinesIsClampedAndOrdered;
+begin
+  V.WriteSync(Lines(0, 10) + 'last');
+  V.SelectLines(5000, 6000);
+  AssertEquals('past the end: the last line', 'last', V.SelectionText);
+  V.SelectLines(-3, -1);
+  AssertEquals('before the start: the first line', 'line-0', V.SelectionText);
+  V.SelectLines(3, 1);
+  AssertEquals('swapped: rows 1 to 3', 'line-1' + LineEnding + 'line-2' + LineEnding + 'line-3',
+    V.SelectionText);
+end;
+
+{ #185: OnSelectionChange is for a change. With no selection, a screen switch, a new row
+  count, a program taking the mouse, Reset and ClearSelection change nothing; a second
+  SelectAll neither. }
+procedure TTyTerminalViewMouseTests.TestNothingClearedIsNoChange;
+begin
+  V.WriteSync('hello');
+  FChanges := 0;
+  V.WriteSync(#27'[?1049h');
+  V.WriteSync(#27'[?1049l');
+  F.SizeTo(20, 6);
+  AssertEquals('6 rows', 6, V.Rows);
+  V.WriteSync(#27'[?1000h');
+  V.WriteSync(#27'[?1000l');
+  V.Reset;
+  V.ClearSelection;
+  AssertEquals('nothing was selected: no change', 0, FChanges);
+  V.SelectAll;
+  AssertEquals('select all', 1, FChanges);
+  V.SelectAll;
+  AssertEquals('select all again: no change', 1, FChanges);
+  V.ClearSelection;
+  AssertEquals('cleared', 2, FChanges);
+end;
+
+{ #185: where the menu comes before the press (some widgetsets), a reported right press
+  must not leave its mark behind: after the program lets the mouse go, the next right
+  click has its menu }
+procedure TTyTerminalViewMouseTests.TestAMenuBeforeAReportedPressLeavesNothingBehind;
+begin
+  V.WriteSync(#27'[?1000h');
+  V.UseFakeShift := True;
+  V.FakeShift := [];
+  AssertTrue('handled', V.ContextPopup(V.CellCenter(1, 1)));
+  V.Down(mbRight, [ssRight], V.CellCenter(1, 1));
+  V.Up(mbRight, [], V.CellCenter(1, 1));
+  AssertEquals('reported, no menu', 0, V.MenuShows);
+  V.WriteSync(#27'[?1000l');
+  V.ContextPopup(V.CellCenter(1, 1));
+  AssertEquals('the program let the mouse go: the menu', 1, V.MenuShows);
+end;
+
+{ #185: Clear rewrites the active screen; on the alternate screen there is no scrollback,
+  and it would cut a full-screen program's display under it: the item is grey there }
+procedure TTyTerminalViewMouseTests.TestClearIsGreyOnTheAlternateScreen;
+begin
+  AssertTrue('the normal screen: clear', V.MenuItem(4).Enabled);
+  V.WriteSync(#27'[?1049h');
+  AssertFalse('the alternate screen: grey', V.MenuItem(4).Enabled);
+  V.WriteSync(#27'[?1049l');
+  AssertTrue('back: clear', V.MenuItem(4).Enabled);
 end;
 
 initialization

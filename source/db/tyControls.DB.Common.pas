@@ -47,7 +47,11 @@ function TyDBLoadedDate(AValue: TDateTime; AIsNull: Boolean): TTyDBLoadedValue;
 { The user changed the control's value: put the dataset in dsEdit and mark the link modified,
   so UpdateData writes it back (on EditingDone, on leaving the control, or on a Post made
   elsewhere). When the dataset cannot be edited -- the control or the field is read-only,
-  AutoEdit is off and nobody is editing -- the control goes back to the field's value.
+  AutoEdit is off and nobody is editing -- the control goes back to the field's value. So it
+  does for a field TyFieldIsEditable turns down that the link would still start editing: FCL's
+  CanModify lets an auto-increment counter and a data field flagged Calculated through (a
+  lookup field is the link's to judge, by its key fields, and a lookup control writes those).
+  That is how a paste, a cut, an undo or an IME commit -- which no key gate sees -- is refused.
 
   AInUserEdit is the control's flag for "this is the user's change, keep it": TDataSet.Edit
   announces deRecordChange, which reaches the control as DataChange, and a DataChange that
@@ -65,6 +69,12 @@ procedure TyDBUserChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
   which puts the caret at the end and drops the selection the key is about to replace (a
   masked edit rebuilds its whole text). }
 function TyDBEditAllowed(ALink: TFieldDataLink; var AInUserEdit: Boolean): Boolean;
+{ Could the user start an edit through ALink now, without starting one: the link may change
+  the field (CanModify), and AutoEdit is on or the record is in edit already. What a control
+  that turns itself read-only (the rating, the date-time picker) shows. A data source does
+  not tell anyone that its AutoEdit changed, so such a control asks again as a gesture
+  begins. }
+function TyDBEditCanBegin(ALink: TFieldDataLink): Boolean;
 { The same for a typed character: the field takes it (TyFieldCanAcceptKey) and editing could
   begin. AKey is one UTF-8 character; anything longer than a byte is checked as #255, LCL's
   stand-in for "some non-ASCII character". }
@@ -150,7 +160,10 @@ end;
 
 procedure TyDBUserChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
 begin
-  if StartEdit(ALink, AInUserEdit) then
+  if (ALink.Field <> nil) and (ALink.Field.FieldKind <> fkLookup)
+    and not TyFieldIsEditable(ALink.Field) then
+    ALink.Reset
+  else if StartEdit(ALink, AInUserEdit) then
     ALink.Modified
   else
     ALink.Reset;
@@ -159,6 +172,12 @@ end;
 function TyDBEditAllowed(ALink: TFieldDataLink; var AInUserEdit: Boolean): Boolean;
 begin
   Result := TyFieldIsEditable(ALink.Field) and StartEdit(ALink, AInUserEdit);
+end;
+
+function TyDBEditCanBegin(ALink: TFieldDataLink): Boolean;
+begin
+  Result := ALink.CanModify and (ALink.DataSource <> nil)
+    and (ALink.DataSource.AutoEdit or (ALink.DataSource.State in dsEditModes));
 end;
 
 function TyDBKeyAllowed(ALink: TFieldDataLink; const AKey: string;

@@ -46,9 +46,9 @@ uses tyControls.Terminal;
 | `AmbiguousWide` | `Boolean` | `False` | 东亚歧义宽度字符算两格。只对 `UnicodeVersion` 为 `15` / `15-graphemes` 起作用。 |
 | `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §14。 |
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
-| `AlternateScroll` | `Boolean` | `True` | 没有滚回（备用屏）且程序没要鼠标事件时，滚轮发上下方向键。 |
+| `AlternateScroll` | `Boolean` | `True` | 备用屏（vim、less）上程序没要鼠标事件时，滚轮发上下方向键。主屏不发，`Scrollback = 0` 也一样。 |
 | `DrawBoldTextInBrightColors` | `Boolean` | `True` | 粗体的调色板颜色 0–7 画成 8–15。 |
-| `ReadOnly` | `Boolean` | `False` | 不往外发字节（按键、粘贴、输入法都不发）；本地翻页照常。转给 Core。 |
+| `ReadOnly` | `Boolean` | `False` | 不往外发字节（按键、粘贴、输入法都不发）；本地翻页、复制照常。转给 Core。只会被发出去的键（Tab、方向键、Enter、Esc、功能键、Ctrl+字母）这时不吞，交给窗体：Tab 移走焦点，Enter、Esc 到得了对话框的默认 / 取消按钮，同只读的 `TMemo`。 |
 | `ConvertEol` | `Boolean` | `False` | LF 当 CR LF。转给 Core。 |
 | `TabStopWidth` | `Integer` | `8` | 默认制表位间隔。转给 Core。 |
 | `ScrollOnUserInput` | `Boolean` | `True` | 键入、粘贴时滚到底。转给 Core。 |
@@ -94,7 +94,7 @@ uses tyControls.Terminal;
 | `BeginUpdate` / `EndUpdate` | 一次改多个颜色，终端只重算一次。 |
 | `Changed` | 内容没变也算改了一次：终端重新取色、重画。给系统色用（见下）。 |
 
-另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。
+另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnKeyPress` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。`OnKeyPress` 只收打出来的单字节字符，置 `#0` 就不发；Enter、Tab、Esc、Ctrl+字母在按下时就发了，到不了它，要拦就用 `OnKeyDown`。
 
 ### public 属性
 
@@ -120,7 +120,7 @@ uses tyControls.Terminal;
 | `CopyToClipboard` | 有选区才写剪贴板（`SelectionText`）。 |
 | `SelectAll`、`ClearSelection` | 全选（滚回加屏幕）、清掉选区。 |
 | `Select(ACol, AAbsRow, ALength)` | 从缓冲行 `AAbsRow`（0 = 滚回最早一行）的 `ACol` 列起选 `ALength` 格，可以跨行。 |
-| `SelectLines(AFirst, ALast)` | 选中缓冲行 `AFirst`..`ALast` 整行（越界钳住）。 |
+| `SelectLines(AFirst, ALast)` | 选中缓冲行 `AFirst`..`ALast` 整行（两头越界都钳进缓冲；先后颠倒也一样）。 |
 | `Clear` | 清滚回。 |
 | `Reset` | 终端复位（xterm.js headless 的 reset：保留标题等）。 |
 | `ScrollLines(ADelta)`、`ScrollPages(APages)`、`ScrollToTop`、`ScrollToBottom` | 在滚回里移动视口。 |
@@ -139,7 +139,7 @@ uses tyControls.Terminal;
 | `OnBell(Sender)` | BEL。 |
 | `OnOsc(Sender, AIdent, AData)` | 没有处理器接的 OSC（例如 OSC 7 当前目录）。 |
 | `OnShortcutQuery(Sender, Key, Shift, var APassToApplication)` | 控件要吞一个键之前先问宿主；置 `True` 就不吞，交给窗体。见 §5。 |
-| `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。 |
+| `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。没有选区时的「清掉」、已经全选时再全选不算变，不发。 |
 | `OnLinkActivate(Sender, AUri, AFromOsc8)` | 用户 Ctrl+单击（macOS Cmd+单击）了一条链接。控件什么都不打开，打不打开由宿主定。见 §8。 |
 | `OnOsc52(Sender, AWrite, ASelection, var AText, var AAllow)` | 程序要写或读剪贴板，宿主可以改文字、可以拒绝。见 §9。 |
 | `OnClaimedInput(Sender, AData)` | 数据流处理器接管期间，用户的按键、粘贴、滚轮翻成的方向键（已经编好的字节）不发给程序，改从这里来。宿主拿它做取消（比如连按五次 Ctrl+X）。`ReadOnly` 时不发。见 §12。 |
@@ -186,8 +186,10 @@ end;
 
 - Shift+Home / Shift+End 是本地的「到顶 / 到底」，所以不发给程序——PSReadLine、nano 里用它们选到行首 / 行尾的，在这个终端里做不到（xterm.js 不劫持这两个键，这是有意的不同）。
 - Ctrl+C 永远发给程序（`03`），不是复制。
+- `ReadOnly` 时什么都不发，所以只会被发出去的键都不吞，交给窗体；上面的本地动作照常。
 - Alt+字母发 `ESC` + 字母。macOS 上 Option 默认打第三层字符（`MacOptionIsMeta = False`）；设成 `True` 才发 `ESC` 前缀。
 - Windows 上 AltGr（等于 Ctrl+Alt）打的是布局上的字符，不发 `ESC`。
+- Windows 上 Alt+F4（关窗口）和 Alt+Space（系统菜单）不编码，交给窗口，和 Windows Terminal 一样。F10、Shift+F10 照常发给程序。
 - 应用小键盘模式（DECKPAM）不影响小键盘：数字和运算符一律发字符，和 xterm.js 一样。
 - 输入法：提交的文字当作键入发出；候选窗跟着光标格。macOS 上组字串画在光标处，取消组字什么都不发。
 - 焦点跟的是系统焦点：切到别的程序也算失焦——光标变成失焦样式、停止闪烁，程序开了 1004 就收到 `CSI O`。
@@ -199,7 +201,7 @@ end;
 
 - 右侧是内嵌的 `TTyScrollBar`，跟着滚回走；拖动它就在滚回里移动。备用屏（vim、less、htop）没有滚回，条禁用。
 - **条的宽度总是留着**：列数不随主屏 / 备用屏变化，进出 vim 不会让程序多收一次改尺寸。代价是全屏程序右边有一条空白（自动隐藏的主题下条淡掉，只剩空白）。
-- 竖向滚轮三种去向（照 xterm.js）：程序要了鼠标滚轮事件就上报给程序；否则有滚回就滚 3 行；再否则（备用屏）且 `AlternateScroll` 开着，就发上 / 下方向键——less、man 里滚轮就能翻。
+- 竖向滚轮三种去向（照 xterm.js）：程序要了鼠标滚轮事件就上报给程序；否则有滚回就滚 3 行；再否则，在备用屏上且 `AlternateScroll` 开着，就发上 / 下方向键——less、man 里滚轮就能翻。主屏没有滚回（`Scrollback = 0`）时滚轮什么都不做：xterm.js 这时也发方向键，会翻 shell 的历史，这里照 xterm 只在备用屏发。
 - Shift+滚轮照 xterm.js：不上报、不发方向键；Windows / Linux 上它是横滚（终端没有横向可滚，事件交给父控件），macOS 上照常滚滚回。
 - 横向滚轮（触控板、带横滚的鼠标）：程序要了鼠标事件就报左 / 右（SGR 里是 66 / 67）；没要就交给父控件。
 
@@ -238,11 +240,11 @@ end;
 
 **选区跟着文字走**：新的输出把行挤出滚回的顶上时，选区跟着上移；它指的那几行被挤没了，选区就没了。这些时候选区会被清掉：键入或粘贴、行数变了、列数变了且这次重新折行（§6）、切到另一个屏幕（进出 vim、RIS）、程序打开鼠标上报、清滚回。
 
-**复制**：`SelectionText` 去掉每行行尾的空白，折行接成一行，行之间用平台的换行（Windows 上 CRLF，Linux / macOS 上 LF），NBSP 换成空格。复制的快捷键见 §5；`CopyOnSelect` 打开后选完就写剪贴板。Linux（X11）上选完同时占住 PRIMARY，文字等别的程序来要时才取（大选区松手时不拼文字），中键粘贴它（Wayland 下看合成器支不支持）。
+**复制**：`SelectionText` 去掉每行行尾的空白，折行接成一行，行之间用平台的换行（Windows 上 CRLF，Linux / macOS 上 LF），NBSP 换成空格。复制的快捷键见 §5；`CopyOnSelect` 打开后选完就写剪贴板。Linux（X11）上选完同时占住 PRIMARY，文字等别的程序来要时才取（大选区松手时不拼文字），中键粘贴它（Wayland 下看合成器支不支持）。选区被清掉以后（键入、单击、换屏）PRIMARY 还是那段文字，直到选了新的，同 xterm。
 
-**抬起丢了**：按下之后捕获被别处拿走（切换窗口、弹出模态框），或者抬起落在别的窗口上，控件等到那个键确实松开了（或下一次按同一个键时）就照松开收尾：选区照常结束，程序会收到补发的抬起。
+**抬起丢了**：按下之后捕获被别处拿走（切换窗口、弹出模态框），或者抬起落在别的窗口上，控件等到那个键确实松开了（指针在控件上再动、拖出边界自动滚的下一拍，或下一次按同一个键时）就照松开收尾：选区照常结束，程序会收到补发的抬起。
 
-**右键菜单**：复制、粘贴、全选、清屏四项；没有选区时复制是灰的，剪贴板里没有文字或 `ReadOnly` 时粘贴是灰的（只问有没有文字，不把剪贴板读出来）。菜单键在光标格下面弹出。Shift+F10 是有编码的键，照常先发给程序；之后还弹不弹菜单看 widgetset，待真机确认。宿主设了 `PopupMenu` 就弹宿主的；macOS 上右键先选中指针下的词，宿主的菜单也一样。
+**右键菜单**：复制、粘贴、全选、清屏四项；没有选区时复制是灰的，剪贴板里没有文字或 `ReadOnly` 时粘贴是灰的（只问有没有文字，不把剪贴板读出来）；备用屏（vim、htop）上清屏是灰的：那里没有滚回，清了全屏程序的画面它也不知道。菜单键在光标格下面弹出。Shift+F10 是有编码的键，发给程序；Windows 上它不弹菜单（键被终端用了，系统就不再发菜单消息），要用菜单键。宿主设了 `PopupMenu` 就弹宿主的；macOS 上右键先选中指针下的词，宿主的菜单也一样。
 
 **指针形状**：平常是 I 形；程序接管鼠标时是箭头；按着 Alt 要列选择时是十字；链接上是手形。宿主自己设了 `Cursor` 的，平常就用宿主的。
 

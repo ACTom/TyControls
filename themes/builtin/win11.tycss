@@ -15,6 +15,12 @@
    tokens hand them this skin's corners and the well of this skin's own edit, so they read as
    part of the skin instead of the default theme in the skin's colours. */
 :root {
+  /* Table: no band, a quiet caption, short separators, lines between rows only. */
+  --grid-header-bg: var(--grid-bg);
+  --grid-header-color: alpha(var(--on-surface), 0.7);
+  --grid-header-separator-height: 60%;
+  --grid-line-v-width: 0;
+  --grid-hover: row;
   --input-bg:     var(--field);
   --input-border: var(--border);
   --grid-bg:      var(--field);

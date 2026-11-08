@@ -20,6 +20,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, InterfaceBase, LCLPlatformDef,
+  LCLVersion,  // lcl_fullversion: the implementation picks the unit of LCLPlatformDirNames by it
   TypInfo, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.TrackBar;
 
@@ -87,6 +88,13 @@ type
 function TrackFixtureEnv: string;
 
 implementation
+
+{ LCLPlatformDirNames: Lazarus 5.0 moved it from LCLPlatformDef to LazUtils' LazVersion. A uses
+  clause cannot ask a unit of its own clause which Lazarus it is, so the interface's answers. }
+{$IF lcl_fullversion >= 4990000}
+uses
+  LazVersion;
+{$ENDIF}
 
 const
   CFixtureCss =

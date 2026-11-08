@@ -220,7 +220,7 @@ begin
   n := 0;
   y := RowY(ARow) - 3;
   bg := ABmp.GetPixel(ABmp.Width - 3, y);
-  for x := 0 to AMaxX - 1 do
+  for x := 1 to AMaxX - 1 do   { x = 0 is the frame's border }
   begin
     p := ABmp.GetPixel(x, y);
     if (p.red > 200) and (p.green < 60) then Continue;   { the icon }

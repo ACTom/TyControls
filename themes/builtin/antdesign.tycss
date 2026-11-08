@@ -16,6 +16,17 @@
    tokens hand them this skin's corners and the well of this skin's own edit, so they read as
    part of the skin instead of the default theme in the skin's colours. */
 :root {
+  /* Table: a pale band, strong caption, short separators, carets, the sorted column tinted. */
+  --grid-header-bg: darken(--surface, 2%);
+  --grid-header-font-weight: 600;
+  --grid-header-separator-height: 50%;
+  --grid-header-sorted-bg: darken(--surface, 6%);
+  --grid-sorted-cell-bg: darken(--surface, 2%);
+  --grid-line-v-width: 0;
+  --grid-hover: row;
+  --sort-glyph: triangle;
+  --sort-glyph-size: 11px;
+  --sort-glyph-unsorted: always;
   --radius:    6px;
   --radius-sm: 4px;
 }

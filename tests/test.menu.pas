@@ -43,6 +43,7 @@ type
     procedure TestHoverOnSubmenuRowFiresOpenAfterTick;
     procedure TestHeaderRowNotSelectable;
     procedure TestBannerWidensPopup;
+    procedure TestTheBannerCaptionIsCentredInItsStrip;
   end;
 
   { Probe subclass: exposes TTyMenuPopup's protected ComputeBounds seam so the
@@ -106,6 +107,9 @@ type
   end;
 
 implementation
+
+uses
+  Graphics, BGRABitmap, BGRABitmapTypes, tyControls.Controller;
 
 procedure TMenuModelTest.TestBuildRowsMapsFields;
 var mm: TMainMenu; top, sub: TMenuItem; rows: TTyMenuRowArray;
@@ -477,6 +481,70 @@ begin
       AssertEquals('the banner reserves its width in the popup', w0 + 30, w1);
     finally v.Free; end;
   finally mm.Free; end;
+end;
+
+procedure TMenuViewTest.TestTheBannerCaptionIsCentredInItsStrip;
+const
+  Strip = 26;
+  Blue: TBGRAPixel = (blue: 255; green: 0; red: 0; alpha: 255);
+var
+  v: TTyMenuViewAccess;
+  mm: TMainMenu;
+  top: TMenuItem;
+  ctl: TTyStyleController;
+  host: TBitmap;
+  shot: TBGRABitmap;
+  i, x, y, first, last, h: Integer;
+  ink: Boolean;
+begin
+  ctl := TTyStyleController.Create(nil);
+  mm := TMainMenu.Create(nil);
+  host := TBitmap.Create;
+  shot := nil;
+  v := nil;
+  try
+    ctl.LoadThemeCss('TyMenuView { background: #FFFFFF; border-width: 0px; }' +
+      'TyMenuItem:active { background: #0000FF; color: #FFFFFF; font-size: 9px; }');
+    top := TMenuItem.Create(mm);
+    mm.Items.Add(top);
+    for i := 0 to 7 do
+      top.Add(NewItem('Item', 0, False, True, nil, 0, ''));
+    v := TTyMenuViewAccess.Create(nil);
+    v.Controller := ctl;
+    v.BannerWidth := Strip;
+    v.BannerCaption := 'TyControls';
+    v.SetRows(TyBuildMenuRows(top));
+    h := v.MeasureHeight(96);
+    host.PixelFormat := pf24bit;
+    host.SetSize(200, h);
+    v.RenderTo(host.Canvas, Rect(0, 0, 200, h), 96);
+    shot := TBGRABitmap.Create(host);
+    first := Strip;
+    last := -1;
+    for x := 0 to Strip - 1 do
+    begin
+      ink := False;
+      for y := 2 to h - 3 do
+        if shot.GetPixel(x, y) <> Blue then ink := True;
+      if ink then
+      begin
+        if x < first then first := x;
+        if x > last then last := x;
+      end;
+    end;
+    AssertTrue('precondition: the caption drew', last >= first);
+    AssertTrue(Format('the caption ends inside the strip, its last column is %d of %d', [last, Strip]),
+      last < Strip - 1);
+    { Not to the pixel: the line is what is centred, and its ink sits a little off inside it. }
+    AssertTrue(Format('as much strip each side: %d left, %d right', [first, Strip - 1 - last]),
+      Abs(first - (Strip - 1 - last)) <= 3);
+  finally
+    shot.Free;
+    host.Free;
+    v.Free;
+    mm.Free;
+    ctl.Free;
+  end;
 end;
 
 { TMenuPopupTest }

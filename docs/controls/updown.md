@@ -159,7 +159,7 @@ Ud.OnChange := @UpDownChanged;   // 在处理器里:Lbl.Caption := Format('%d �
 
 ## 7. 注意事项
 
-- **分离 vs 一体:** 一体式数值框用 [TTySpinEdit](spinedit.md);需要把上下按钮贴到别处(如自定义布局)时用 TTyUpDown。绑了 `Associate` 的 TTyUpDown + TTyEdit 与 TTySpinEdit 很接近,区别在于前者的输入框是**一个完整的 TTyEdit**(选区、剪贴板、撤销、IME 都在),后者是控件自带的轻量行缓冲。
+- **分离 vs 一体:** 一体式数值框用 [TTySpinEdit](spinedit.md);需要把上下按钮贴到别处(如自定义布局)时用 TTyUpDown。绑了 `Associate` 的 TTyUpDown + TTyEdit 与 TTySpinEdit 很接近,两者的输入框都是完整的编辑框(选区、剪贴板、撤销、IME 都在);区别是按钮能不能放到别处。
 - **自动连发:** 按住某一半会先延迟 ~0.4s 再以 `MinRepeatInterval`(默认 100ms)的间隔连续步进,松开 / 移出即停。连发的每一 tick 都会发 `OnArrowClick`。
 - **按钮对自己仍然不能被 Tab 选中。** 它是 `TTyGraphicControl`,没有窗口句柄,拿不到焦点 —— `ArrowKeys` 解决的是**在被绑定字段里**按方向键,那个键是送到字段(有句柄、能聚焦)上的。想要一个能 Tab 进去的数值框,用 [TTySpinEdit](spinedit.md)。
 - **`Wrap` 带进位:** 回绕不丢溢出量(见第 3 节 `Wrap`);`Wrap=False` 时仍是贴到边界停住。
