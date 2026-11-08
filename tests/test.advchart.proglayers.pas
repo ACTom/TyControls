@@ -36,6 +36,7 @@ type
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Cached(ACanvas: TCanvas; const ARect: TRect);
+    procedure Move(AX, AY: Integer);
     function Levels: TTyIntegerArray;
     function List: TTyPaintList;
   end;
@@ -55,9 +56,15 @@ type
     procedure TestARunUnderTheAxesStaysUnderThem;
     procedure TestRunsOnTwoUserLevelsArePastedOnce;
     procedure TestFastFramesAcrossLevelsAreTheFullPaint;
+    procedure TestTwoRunsOfOneLevelOutOfOrder;
   end;
 
 implementation
+
+procedure TPlProbe.Move(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
+end;
 
 procedure TPlProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -315,9 +322,14 @@ var sb: TStringBuilder; i: Integer;
 begin
   sb := TStringBuilder.Create;
   try
+    { (a title and the y axis' break over the left half's bars: what the
+      static paint draws after the first layer, drawn again where the
+      chunks land) }
     sb.Append('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},');
-    sb.Append('"xAxis":{"type":"category","show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false},');
-    sb.Append('"graphic":[{"type":"rect","zlevel":1,"shape":{"x":0,"y":0,"width":400,"height":300},');
+    sb.Append('"title":{"text":"Two","left":40,"top":70,"textStyle":{"fontSize":40}},');
+    sb.Append('"xAxis":{"type":"category","show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false,');
+    sb.Append('"breaks":[{"start":6,"end":7,"gap":"8%"}]},');
+    sb.Append('"graphic":[{"type":"rect","zlevel":1,"shape":{"x":200,"y":0,"width":200,"height":300},');
     sb.Append('"style":{"fill":"#0000ff"}}],');
     sb.Append('"series":[{"type":"bar","large":true,"largeThreshold":5,"progressive":4,"progressiveThreshold":10,');
     sb.Append('"itemStyle":{"color":"#ff0000"},"data":[');
@@ -388,17 +400,21 @@ begin
         AssertFalse('drawn to the end', chart.ProgressiveUnfinished);
         if fast then used := TyAdvChartProgFastFramesForTest - f0;
         AssertEquals('two layers', 2, Length(chart.Levels));
-        { the first category's red bar (x 41.6 to 47.2 px, to 9 of 10) where
-          no green one is: the rect's blue there }
-        px := bmp.Canvas.Pixels[44, 40 + 44];
+        { the 13th category's red bar (x 233.6 to 239.2 px, to 9 of 10) where
+          no green one is, under the rect: its blue there }
+        px := bmp.Canvas.Pixels[236, 40 + 44];
         AssertTrue(Format('fast %s: the zlevel 0 run under the rect: %.6x', [BoolToStr(fast, True), px]),
           (Blue(px) > 200) and (Red(px) < 60) and (Green(px) < 60));
         { and the green bars over it near the bottom }
         k := 0;
-        for n := 40 to 360 do
+        for n := 200 to 360 do
           if (Green(bmp.Canvas.Pixels[n, 300 - 40 - 20]) > 200) and (Blue(bmp.Canvas.Pixels[n, 300 - 40 - 20]) < 60) then
             Inc(k);
-        AssertTrue(Format('fast %s: the zlevel 2 run over the rect (%d px)', [BoolToStr(fast, True), k]), k > 40);
+        AssertTrue(Format('fast %s: the zlevel 2 run over the rect (%d px)', [BoolToStr(fast, True), k]), k > 20);
+        { and the left half's red bars out of it }
+        px := bmp.Canvas.Pixels[44, 40 + 44];
+        AssertTrue(Format('fast %s: the zlevel 0 run beside the rect: %.6x', [BoolToStr(fast, True), px]),
+          (Red(px) > 200) and (Blue(px) < 60));
       finally
         chart.Free;
       end;
@@ -417,11 +433,27 @@ begin
   end;
 end;
 
-function AcrossOption: string;
+function AcrossOption(AKind: Integer): string;
 var sb: TStringBuilder; i, j: Integer;
 begin
   sb := TStringBuilder.Create;
   try
+    if AKind = 1 then
+    begin
+      { a progressive parallel run under its axes (z 10, drawn after the
+        list) and a title over it }
+      sb.Append('{"animation":false,"title":{"text":"Parallel","left":"center","top":150,"textStyle":{"fontSize":40}},');
+      sb.Append('"parallelAxis":[{"dim":0},{"dim":1},{"dim":2},{"dim":3}],');
+      sb.Append('"series":[{"type":"parallel","progressive":20,"progressiveThreshold":30,');
+      sb.Append('"lineStyle":{"width":2,"opacity":0.6},"data":[');
+      for i := 0 to 99 do
+      begin
+        if i > 0 then sb.Append(',');
+        sb.Append(Format('[%d,%d,%d,%d]', [(i * 37) mod 100, (i * 53) mod 100, (i * 71) mod 100, (i * 29) mod 100]));
+      end;
+      sb.Append(']}]}');
+      Exit(sb.ToString);
+    end;
     { two scatter runs of their own levels (their keys), a line between on
       the level over the first, a title and a legend over them all }
     sb.Append('{"animation":false,"title":{"text":"Across","left":"center","top":120,"textStyle":{"fontSize":40}},');
@@ -458,7 +490,7 @@ procedure TAdvChartProgLayersTest.TestFastFramesAcrossLevelsAreTheFullPaint;
 var
   chart: TPlProbe;
   bmp: TBitmap;
-  n, k, f0, used: Integer;
+  n, k, f0, used, kind: Integer;
   fast: Boolean;
   frames: array[Boolean] of TStringList;
 
@@ -474,15 +506,19 @@ begin
   frames[False] := TStringList.Create;
   frames[True] := TStringList.Create;
   bmp := TBitmap.Create;
-  used := 0;
   try
     bmp.PixelFormat := pf24bit;
     bmp.SetSize(480, 360);
+    for kind := 0 to 1 do
+    begin
+    frames[False].Clear;
+    frames[True].Clear;
+    used := 0;
     for fast := False to True do
     begin
       TyAdvChartProgFastForTest(fast);
       f0 := TyAdvChartProgFastFramesForTest;
-      chart := NewChart(480, 360, AcrossOption);
+      chart := NewChart(480, 360, AcrossOption(kind));
       try
         chart.Cached(bmp.Canvas, Rect(0, 0, 480, 360));
         frames[fast].Add(Frame);
@@ -496,7 +532,7 @@ begin
         end;
         AssertFalse('drawn to the end', chart.ProgressiveUnfinished);
         if fast then used := TyAdvChartProgFastFramesForTest - f0;
-        AssertEquals('a layer per run', 2, Length(chart.Levels));
+        AssertEquals('a layer per zlevel of a run', 2 - kind, Length(chart.Levels));
       finally
         chart.Free;
       end;
@@ -504,14 +540,105 @@ begin
     AssertTrue('several frames', frames[False].Count > 4);
     AssertEquals('as many frames', frames[False].Count, frames[True].Count);
     for k := 0 to frames[False].Count - 1 do
-      AssertTrue(Format('frame %d the same pixels', [k]), frames[False][k] = frames[True][k]);
-    AssertTrue(Format('the progress frames kept the static layer (%d of %d)', [used, frames[False].Count]),
+      AssertTrue(Format('kind %d frame %d the same pixels', [kind, k]), frames[False][k] = frames[True][k]);
+    AssertTrue(Format('kind %d: the progress frames kept the static layer (%d of %d)', [kind, used, frames[False].Count]),
       used >= frames[False].Count - 2);
+    end;
   finally
     bmp.Free;
     frames[False].Free;
     frames[True].Free;
     TyAdvChartProgFastForTest(True);
+  end;
+end;
+
+{ TWO RUNS OF ONE ZLEVEL, their chunks in turn (no key: rows no more than
+  the threshold) under a continuous visual map: one layer, not what a
+  drawing in paint order gives -- the indicator's tail rebuild right after
+  the run draws it again, as the whole rebuild does (the per-zlevel layers
+  keep LargeSpeed's TestTheTailRedrawsALayerOutOfOrder, whose runs now each
+  have a level of their own) }
+procedure TAdvChartProgLayersTest.TestTwoRunsOfOneLevelOutOfOrder;
+var
+  frames: array[Boolean] of TStringList;
+  tail: Boolean;
+  chart: TPlProbe;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, j, k, t0, used: Integer;
+  opt: string;
+
+  function Frame: RawByteString;
+  var y, w: Integer;
+  begin
+    w := bmp.Width * 3;
+    SetLength(Result, w * bmp.Height);
+    for y := 0 to bmp.Height - 1 do Move(bmp.ScanLine[y]^, Result[1 + y * w], w);
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {}, "yAxis": {},');
+    sb.Append(' "visualMap": {"min": 0, "max": 40, "dimension": 1, "calculable": true, "orient": "horizontal", "left": "center", "top": 0},');
+    sb.Append(' "series": [');
+    for j := 0 to 1 do
+    begin
+      if j > 0 then sb.Append(',');
+      sb.Append('{"type": "scatter", "progressive": 25, "progressiveThreshold": 100, "symbolSize": 16,');
+      sb.Append(' "itemStyle": {"opacity": 0.7}, "data": [');
+      for i := 0 to 99 do
+      begin
+        if i > 0 then sb.Append(',');
+        sb.Append(Format('[%d,%d]', [(i * 37 + j * 17) mod 60, (i * 53 + j * 11) mod 40]));
+      end;
+      sb.Append(']}');
+    end;
+    sb.Append(']}');
+    opt := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  used := 0;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(480, 400);
+    for tail := False to True do
+    begin
+      TyAdvChartListTailForTest(tail);
+      chart := NewChart(480, 400, opt);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        while chart.ProgressiveUnfinished do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        end;
+        AssertEquals('one layer', 1, Length(chart.Levels));
+        t0 := TyAdvChartListTailsForTest;
+        for k := 0 to 13 do
+        begin
+          chart.Move(90 + k * 23, 120 + (k mod 4) * 41);
+          chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+          frames[tail].Add(Frame);
+        end;
+        if tail then used := TyAdvChartListTailsForTest - t0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('hover frame %d the same pixels', [k]), frames[False][k] = frames[True][k]);
+    AssertTrue('the indicator moved by its tail', used >= 1);
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartListTailForTest(True);
   end;
 end;
 
