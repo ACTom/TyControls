@@ -2302,6 +2302,9 @@ begin
   if Result then Exit;
   for k := 0 to High(AEl.Caption.RtPieces) do
     if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
+      { [R7-AB] a shadow part the canvas refuses }
+      or (AEl.Caption.RtPieces[k].ShadowLeft <> 0)
+      or (AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur < 0))
       or (AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft))
       or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft)) then
       Exit(True);
@@ -2448,7 +2451,9 @@ begin
   for k := High(AEl.Caption.RtPieces) downto 0 do
   begin
     if AEl.Caption.RtPieces[k].Text = '' then Continue;
-    if AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur > 0) then
+    { ([R7-AB] a span that casts one: `textShadowBlur > 0`, whatever blur it
+      then hands the canvas) }
+    if AEl.Caption.RtPieces[k].HasShadow then
     begin
       AColour := AEl.Caption.RtPieces[k].ShadowColor;
       ABlur := AEl.Caption.RtPieces[k].ShadowBlur;
@@ -2459,6 +2464,52 @@ begin
         AOffY := AEl.Caption.RtPieces[k].ShadowOffsetY;
     end;
     Exit;
+  end;
+end;
+
+{ [R7-AB] A LABEL'S TEXT SPANS' SHADOW, span by span from what the canvas
+  has (APart 0 the blur, 1 the offsets): a span that casts one its own --
+  a part the canvas refuses (ShadowLeft; a blur below nought) the canvas'
+  value, written into the span --, one that casts none nought (TSpan's
+  `|| 0`); a caption of no span nought [was: the last span's alone, a
+  refused part nought] }
+procedure CaptionShadowRun(var ARun: TTyCanvasRun; var AEl: TTyChartElement; APart: Integer);
+var k: Integer; pc: ^TTyRtPiece; any: Boolean;
+begin
+  any := False;
+  for k := 0 to High(AEl.Caption.RtPieces) do
+  begin
+    pc := @AEl.Caption.RtPieces[k];
+    if pc^.Text = '' then Continue;
+    any := True;
+    if not pc^.HasShadow then
+    begin
+      if APart = 0 then ARun.Cur.Blur := 0
+      else
+      begin
+        ARun.Cur.OffX := 0;
+        ARun.Cur.OffY := 0;
+      end;
+    end
+    else if APart = 0 then
+    begin
+      if ((pc^.ShadowLeft and 1) <> 0) or (pc^.ShadowBlur < 0) then pc^.ShadowBlur := ARun.Cur.Blur
+      else ARun.Cur.Blur := pc^.ShadowBlur;
+    end
+    else
+    begin
+      if (pc^.ShadowLeft and 2) <> 0 then pc^.ShadowOffsetX := ARun.Cur.OffX
+      else ARun.Cur.OffX := pc^.ShadowOffsetX;
+      if (pc^.ShadowLeft and 4) <> 0 then pc^.ShadowOffsetY := ARun.Cur.OffY
+      else ARun.Cur.OffY := pc^.ShadowOffsetY;
+    end;
+  end;
+  if any then Exit;
+  if APart = 0 then ARun.Cur.Blur := 0
+  else
+  begin
+    ARun.Cur.OffX := 0;
+    ARun.Cur.OffY := 0;
   end;
 end;
 
@@ -2670,21 +2721,13 @@ begin
   { [R7-V] the shadowBlur: refused below nought (kept), else its own }
   if (AEl.CanvasFlags and cTyCanvasBlurLeft) <> 0 then
     AEl.Style.ShadowBlur := ARun.Cur.Blur
-  else if cap then
-  begin
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    ARun.Cur.Blur := blur;
-  end
+  { ([R7-AB] its spans', each from the canvas', a refused one kept) }
+  else if cap then CaptionShadowRun(ARun, AEl, 0)
   else if AEl.Style.ShadowBlur > 0 then ARun.Cur.Blur := AEl.Style.ShadowBlur
   else ARun.Cur.Blur := 0;
   { [R7-Y] the shadow's offsets: `dpr * (value || 0)`, refused (kept) where
     that is no finite number; a text span's only where it blurs }
-  if cap then
-  begin
-    CaptionShadowOf(AEl, colour, blur, ox, oy);
-    ARun.Cur.OffX := ox;
-    ARun.Cur.OffY := oy;
-  end
+  if cap then CaptionShadowRun(ARun, AEl, 1)
   else
   begin
     if (AEl.CanvasFlags and cTyCanvasOffXLeft) <> 0 then AEl.Style.ShadowOffsetX := ARun.Cur.OffX

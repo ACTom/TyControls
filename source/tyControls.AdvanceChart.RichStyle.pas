@@ -247,6 +247,37 @@ begin
   if Result then AV := A.AsFloat else AV := 0;
 end;
 
+{ [R7-AB] A TEXT SHADOW PART as Text.ts hands it on and the canvas takes it
+  (`dpr * (value || 0)`): written unless null; a number; a string its
+  Number ('' nought, falsy); one whose Number is no finite number refused
+  -- ALeft's bit (AV nought), and 8 with it for a blur above nought (an
+  infinity: `'Infinity' > 0`, the span casts one) [was: a JSON number only,
+  a string not written] }
+function ShadowPartOf(A: TJSONData; ABit: Byte; out AV: Double; var ALeft: Byte): Boolean;
+var n: Double;
+begin
+  AV := 0;
+  ALeft := ALeft and not ABit;
+  if ABit = 1 then ALeft := ALeft and not 8;
+  Result := (A <> nil) and (A.JSONType <> jtNull);
+  if not Result then Exit;
+  if A.JSONType = jtNumber then
+  begin
+    AV := A.AsFloat;
+    Exit;
+  end;
+  if (A.JSONType = jtString) and (A.AsString = '') then Exit;
+  n := TyOptJsNumber(A);
+  if not (IsNan(n) or IsInfinite(n)) then
+  begin
+    AV := n;
+    Exit;
+  end;
+  { (an object or an array of no number is truthy as well) }
+  ALeft := ALeft or ABit;
+  if (ABit = 1) and not IsNan(n) and (n > 0) then ALeft := ALeft or 8;
+end;
+
 procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
 var t: string;
 begin
@@ -479,9 +510,11 @@ begin
     Result.HasShadowColor := True;
     Result.ShadowColor := c;
   end;
-  NumOf(ts.Find('textShadowBlur'), Result.ShadowBlur);
-  NumOf(ts.Find('textShadowOffsetX'), Result.ShadowOffsetX);
-  NumOf(ts.Find('textShadowOffsetY'), Result.ShadowOffsetY);
+  { [R7-AB] as the canvas takes them (a string its Number, refused where
+    that is none) }
+  ShadowPartOf(ts.Find('textShadowBlur'), 1, Result.ShadowBlur, Result.ShadowLeft);
+  ShadowPartOf(ts.Find('textShadowOffsetX'), 2, Result.ShadowOffsetX, Result.ShadowLeft);
+  ShadowPartOf(ts.Find('textShadowOffsetY'), 4, Result.ShadowOffsetY, Result.ShadowLeft);
 end;
 
 function TyRtNodeWantsBlock(ANode: TJSONObject): Boolean;
@@ -631,12 +664,23 @@ begin
     S.HasShadowColor := True;
     S.ShadowColor := AGlobal.ShadowColor;
   end;
-  if not NumOf(WithGlobal('textShadowBlur'), S.ShadowBlur) then
+  { [R7-AB] as the canvas takes them (ShadowPartOf) [was: a JSON number
+    only, else the global's] }
+  if not ShadowPartOf(WithGlobal('textShadowBlur'), 1, S.ShadowBlur, S.ShadowLeft) then
+  begin
     S.ShadowBlur := AGlobal.ShadowBlur;
-  if not NumOf(WithGlobal('textShadowOffsetX'), S.ShadowOffsetX) then
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 9);
+  end;
+  if not ShadowPartOf(WithGlobal('textShadowOffsetX'), 2, S.ShadowOffsetX, S.ShadowLeft) then
+  begin
     S.ShadowOffsetX := AGlobal.ShadowOffsetX;
-  if not NumOf(WithGlobal('textShadowOffsetY'), S.ShadowOffsetY) then
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 2);
+  end;
+  if not ShadowPartOf(WithGlobal('textShadowOffsetY'), 4, S.ShadowOffsetY, S.ShadowLeft) then
+  begin
     S.ShadowOffsetY := AGlobal.ShadowOffsetY;
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 4);
+  end;
 
   { TEXT_PROPS_SELF }
   S.Align := AlignOfWord(StrOf(Get(AOwn, 'align')));

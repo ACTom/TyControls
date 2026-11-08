@@ -2574,7 +2574,10 @@ begin
       say), in textShadowColor ('transparent' when none), blurred, under the
       halo and the glyphs -- cast from them as they are drawn, their ink and
       opacity. [Was: an unblurred copy at the offset.] }
-    if pc.HasShadow and (pc.ShadowBlur > 0) and ((pc.ShadowColor shr 24) <> 0) then
+    { ([R7-AB] a blur the canvas refused keeps the canvas' -- of nought, the
+      offsets alone still cast one) }
+    if pc.HasShadow and ((pc.ShadowBlur > 0) or (pc.ShadowOffsetX <> 0) or (pc.ShadowOffsetY <> 0))
+      and ((pc.ShadowColor shr 24) <> 0) then
       RtTextShadow(P, TyInkText(pc.Text), pc.FontFamily,
         TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
         RtAlign(pc.TextAlign), tlCenter, hasInk, CaptionInk(ink, a),

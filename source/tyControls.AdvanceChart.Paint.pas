@@ -452,6 +452,11 @@ type
     ShadowColor: TTyChartColor;
     HasShadowColor: Boolean;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] a part written as a value the canvas refuses (`dpr * ('abc'
+      || 0)` is none -- truthy, so it wins the `||`): 1 the blur, 2 the
+      offset x, 4 the offset y, its number nought above; 8 the refused blur
+      is above nought ('Infinity': the span casts a shadow) }
+    ShadowLeft: Byte;
     { [R5-A] THE BOX'S SHADOW (TEXT_PROPS_BOX' shadowBlur / shadowColor /
       shadowOffsetX / Y): the rect or the picture of the box casts it, in
       shadowColor -- 'transparent' when none (Text.ts _renderBackground) }
@@ -552,6 +557,10 @@ type
     HasShadow: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] the shadow's parts the canvas refuses (TTyRtStyle.ShadowLeft's
+      1, 2, 4): the value kept is the one it had, settled in the paint order
+      (TyLinesCanvasLeftovers) into the parts above }
+    ShadowLeft: Byte;
     { A TEXT'S FILL OR STROKE THAT CAME FROM THE HOST'S DEFAULT (zrender's
       useDefaultFill, and the auto stroke), not from a style: what a hover
       re-inks, and what a free text whose ink is the skin's takes at paint
@@ -606,6 +615,8 @@ type
     HasShadowColor: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] its parts the canvas refuses (TTyRtStyle.ShadowLeft) }
+    ShadowLeft: Byte;
     { the root wrote richInheritPlainLabel: false -- the zero value is
       upstream's default, on }
     InheritPlainOff: Boolean;
