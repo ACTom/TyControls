@@ -126,9 +126,11 @@ var
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
   maxW, batched: Integer;
-  { [R7-AB] the Lines of the batch, where they lie, and their pen }
+  { [R7-AB] the Lines of the batch, where they lie, and their pen; the font
+    a text part is drawn in (CompDrawn) }
   pend: TTyZrRectArray;
   pendW: Double;
+  drewFont: TTyStyleSet;
   horiz: Boolean;
   lblH, lblW: Integer;
   scaleTicks: TTyScaleTickArray;
@@ -319,6 +321,10 @@ var
       e.Caption.FontSizeLogical := 1;
       e.Caption.Text := 'x';
       e.Caption.Colour := AFill;
+      { [R7-AB] and the font it is drawn in }
+      e.Caption.FontName := drewFont.FontName;
+      e.Caption.FontSizeLogical := ResolveFontSize(drewFont);
+      e.Caption.FontWeight := drewFont.FontWeight;
     end
     else if AKind in [cpkSplitArea, cpkArrow] then
     begin
@@ -902,6 +908,9 @@ begin
     ny := spec^.NamePlacement.Y;
     nrot := spec^.NamePlacement.RotationRad;
     ProxName(nx, ny, nrot);
+    { [R7-AB] a font the canvas refused: the one the paint order settled }
+    CompFont(AAxis, cpkName, nameS);
+    drewFont := nameS;
     Drew(cpkName, 1, lineK, True, TTyChartColor(nameS.TextColor));
     { [R7-AB] where it lies }
     TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
@@ -954,10 +963,13 @@ begin
         below in the weight the block was measured in. [Revised in batch
         104: a whole label marked emphasised and drawn in a second style.] }
       lblStyle := labelS;
+      { [R7-AB] a font the canvas refused: the one the paint order settled }
+      CompFont(AAxis, cpkLabel, lblStyle);
       { where its groupTransition has it now [Batch 96] }
       lx := places[i].X;
       ly := places[i].Y;
       ProxLabel(i, lx, ly);
+      drewFont := lblStyle;
       Drew(cpkLabel, 10, lineK, True, TTyChartColor(lblStyle.TextColor));
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
@@ -1516,6 +1528,10 @@ var
     Inc(seq);
     AParts[n].IsText := AText;
     AParts[n].El := AEl;
+    { [R7-AB] a text's font, as it hands the canvas one }
+    if AText then
+      if AKind = cpkName then CompTextFont(AAxis, 'nameTextStyle', nameS, AParts[n].El)
+      else CompTextFont(AAxis, 'axisLabel', labelS, AParts[n].El);
   end;
 
   function Pen(const K: TTyAxisStroke): TTyChartElement;
@@ -1713,6 +1729,10 @@ var
     Inc(seq);
     AParts[n].IsText := AText;
     AParts[n].El := AEl;
+    { [R7-AB] a text's font, as it hands the canvas one }
+    if AText then
+      if AKind = cpkName then CompTextFont(AAxis, 'nameTextStyle', nameS, AParts[n].El)
+      else CompTextFont(AAxis, 'axisLabel', labelS, AParts[n].El);
   end;
 
   function Pen(const K: TTyAxisStroke; AMerged: Boolean): TTyChartElement;
@@ -2066,6 +2086,46 @@ begin
     if (pe^.Z > AZ) or ((pe^.Z = AZ) and (pe^.Z2 > AZ2)) then Break;
     TyCanvasRunStep(ARun, pe^);
   end;
+end;
+
+procedure TTyCustomAdvanceChart.CompTextFont(AAxis: TTyAxis; const ABlock: string;
+  const AStyle: TTyStyleSet; var AEl: TTyChartElement);
+var node, blk, ts: TJSONData; parts: array[0..2] of TJSONData; k: Integer;
+const cKeys: array[0..2] of string = ('fontStyle', 'fontWeight', 'fontSize');
+begin
+  AEl.Caption.FontName := AStyle.FontName;
+  AEl.Caption.FontSizeLogical := ResolveFontSize(AStyle);
+  AEl.Caption.FontWeight := AStyle.FontWeight;
+  if (AAxis = nil) or (FOption = nil) then Exit;
+  node := FOption.ComponentAt(AAxis.MainType, AAxis.ComponentIndex);
+  blk := nil;
+  if node is TJSONObject then blk := TJSONObject(node).Find(ABlock);
+  ts := nil;
+  if FOption.Root is TJSONObject then ts := TJSONObject(FOption.Root).Find('textStyle');
+  for k := 0 to 2 do
+  begin
+    parts[k] := nil;
+    if blk is TJSONObject then parts[k] := TJSONObject(blk).Find(cKeys[k]);
+    if ((parts[k] = nil) or (parts[k].JSONType = jtNull)) and (ts is TJSONObject) then
+      parts[k] := TJSONObject(ts).Find(cKeys[k]);
+  end;
+  if TyCssFontRefused(parts[0], parts[1], parts[2]) then
+    AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFontLeft;
+end;
+
+procedure TTyCustomAdvanceChart.CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
+var i: Integer;
+begin
+  for i := 0 to High(FCompParts) do
+    if (FCompParts[i].Owner = AOwner) and (FCompParts[i].Kind = AKind)
+      and ((FCompParts[i].El.CanvasFlags and cTyCanvasFontLeft) <> 0) then
+    begin
+      AStyle.FontName := FCompParts[i].El.Caption.FontName;
+      AStyle.FontSize := FCompParts[i].El.Caption.FontSizeLogical;
+      Include(AStyle.Present, tpFontSize);
+      AStyle.FontWeight := FCompParts[i].El.Caption.FontWeight;
+      Exit;
+    end;
 end;
 
 procedure TTyCustomAdvanceChart.CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH;

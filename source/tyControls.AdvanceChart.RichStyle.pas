@@ -654,6 +654,12 @@ begin
       S.FontItalic := TyFontStyleIsItalic(d.AsString);
     end;
   end;
+  { [R7-AB] the parts the canvas' font parser refuses (a rich style's own; a
+    block's, the site's font node's) }
+  S.FontLeft := 0;
+  if TyCssFontRefused(Get(AOwn, 'fontStyle'), nil, nil) then S.FontLeft := S.FontLeft or 1;
+  if TyCssFontRefused(nil, Get(AOwn, 'fontWeight'), nil) then S.FontLeft := S.FontLeft or 2;
+  if TyCssFontRefused(nil, nil, Get(AOwn, 'fontSize')) then S.FontLeft := S.FontLeft or 4;
   if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
   begin
     S.HasShadowColor := True;
@@ -900,6 +906,13 @@ begin
   for k := 0 to High(ABlock.Rich) do
   begin
     s := ABlock.Rich[k].Style;
+    { [R7-AB] a part it takes from the block takes the block's refusal too }
+    if ABlock.InheritPlain then
+    begin
+      if not s.OwnFontStyle then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 1);
+      if not s.OwnFontWeight then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 2);
+      if not s.OwnFontSize then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 4);
+    end;
     if not s.OwnFontFamily then
       if ABlock.InheritPlain then s.FontFamily := AFamily
       else s.FontFamily := gfam;

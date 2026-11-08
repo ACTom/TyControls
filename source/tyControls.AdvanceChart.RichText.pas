@@ -1258,6 +1258,11 @@ var
     p.FontFamily := tk.FontFamily;
     p.FontSizePx := tk.FontSizePx;
     p.FontWeight := tk.FontWeight;
+    { [R7-AB] `token.font = tokenStyle.font || style.font`: the token's (its
+      parts the block's where it names none), else the block's -- refused
+      whole where a part is }
+    if found then p.FontLeft := ts.FontLeft <> 0
+    else p.FontLeft := AStyle.FontLeft <> 0;
     { the TSpan's own box: its content, hung by its alignment }
     p.W := tk.ContentWidth;
     p.H := tk.ContentHeight;
@@ -1499,6 +1504,8 @@ var
       p.FontFamily := AStyle.FontFamily;
       p.FontSizePx := AStyle.FontSizePx;
       p.FontWeight := AStyle.FontWeight;
+      { [R7-AB] the block's font refused }
+      p.FontLeft := AStyle.FontLeft <> 0;
       { EVERY LINE'S BOX IS THE BLOCK'S WIDEST, one font height tall
         (Text.ts:658-676) }
       p.W := contentW;

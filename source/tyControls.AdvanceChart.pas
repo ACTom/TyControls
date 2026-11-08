@@ -3559,6 +3559,15 @@ type
       graphic's elements that meet ABlock (a part whose rects were not
       recorded meets every block) }
     function CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
+    { [R7-AB] A COMPONENT TEXT'S FONT AS THE CANVAS TAKES IT: AEl (a part's
+      pseudo-element) the font of AStyle, and marked cTyCanvasFontLeft
+      where makeFont's string would be refused -- AAxis' ABlock's own
+      fontStyle / fontWeight / fontSize, else the root textStyle's }
+    procedure CompTextFont(AAxis: TTyAxis; const ABlock: string; const AStyle: TTyStyleSet;
+      var AEl: TTyChartElement);
+    { [R7-AB] a text part's font the canvas refused: AStyle's font the one
+      the paint order settled it to }
+    procedure CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
     { [R7-Z] a title's box and text colours, the canvas refusing them }
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor);

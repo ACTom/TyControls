@@ -2311,8 +2311,8 @@ begin
   if Result then Exit;
   for k := 0 to High(AEl.Caption.RtPieces) do
     if (AEl.Caption.RtPieces[k].CanvasLeft <> 0)
-      { [R7-AB] a shadow part the canvas refuses }
-      or (AEl.Caption.RtPieces[k].ShadowLeft <> 0)
+      { [R7-AB] a shadow part, a font the canvas refuses }
+      or (AEl.Caption.RtPieces[k].ShadowLeft <> 0) or AEl.Caption.RtPieces[k].FontLeft
       or (AEl.Caption.RtPieces[k].HasShadow and (AEl.Caption.RtPieces[k].ShadowBlur < 0))
       or (AEl.Caption.RtPieces[k].HasFill and (AEl.Caption.RtPieces[k].Fill = cTyCanvasColourLeft))
       or (AEl.Caption.RtPieces[k].HasStroke and (AEl.Caption.RtPieces[k].Stroke = cTyCanvasColourLeft)) then
@@ -2647,6 +2647,12 @@ begin
   Result.Phase := ARun.Cur.Phase;
   Result.FillGrad := ARun.Cur.FillGrad;
   Result.StrokeGrad := ARun.Cur.StrokeGrad;
+  { [R7-AB] and the font the last text left (the axes' labels before the
+    series) [was: none, the canvas' own] }
+  Result.HasFont := ARun.Cur.HasFont;
+  Result.FontFamily := ARun.Cur.FontFamily;
+  Result.FontPx := ARun.Cur.FontPx;
+  Result.FontWeight := ARun.Cur.FontWeight;
 end;
 
 { the canvas' own state at the start of a zlevel's paint: its defaults, the
@@ -2906,8 +2912,9 @@ begin
   { [R7-Y] THE FONT: a text sets `style.font || DEFAULT_FONT`, refused where
     the canvas does not parse it (the font it had: the last text's, else
     '10px sans-serif'); each piece of a rich text its own [was: the
-    label's own fallback] }
-  if cap then
+    label's own fallback]; [R7-AB] a graphic text's spans too (a text
+    element, its caption's size nought) [was: none] }
+  if cap or (Length(AEl.Caption.RtPieces) > 0) then
   begin
     if (Length(AEl.Caption.RtPieces) = 0) and ((AEl.CanvasFlags and cTyCanvasFontLeft) <> 0) then
     begin
@@ -2939,6 +2946,24 @@ begin
       for k := 0 to High(AEl.Caption.RtPieces) do
         if (AEl.Caption.RtPieces[k].Kind = rpkText) and (AEl.Caption.RtPieces[k].Text <> '') then
         begin
+          { [R7-AB] a span's font the canvas refuses: the one it had (the
+            span before's, the element before's, '10px sans-serif') }
+          if AEl.Caption.RtPieces[k].FontLeft then
+          begin
+            if ARun.Cur.HasFont then
+            begin
+              AEl.Caption.RtPieces[k].FontFamily := ARun.Cur.FontFamily;
+              AEl.Caption.RtPieces[k].FontSizePx := ARun.Cur.FontPx;
+              AEl.Caption.RtPieces[k].FontWeight := ARun.Cur.FontWeight;
+            end
+            else
+            begin
+              AEl.Caption.RtPieces[k].FontFamily := 'sans-serif';
+              AEl.Caption.RtPieces[k].FontSizePx := 10;
+              AEl.Caption.RtPieces[k].FontWeight := 400;
+            end;
+            Continue;
+          end;
           ARun.Cur.HasFont := True;
           ARun.Cur.FontFamily := AEl.Caption.RtPieces[k].FontFamily;
           ARun.Cur.FontPx := AEl.Caption.RtPieces[k].FontSizePx;
