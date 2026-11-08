@@ -1492,10 +1492,9 @@ begin
       else av := tavTop;
       if Length(c.RtPieces) = 0 then
       begin
+        { ([R7-AF] a rect that joined a string, NaN or not: the line is routed
+          on it as JS routes it -- TyLabelLineRoute masks the traps) }
         rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av, c.LmStrokeText, c.RtScale);
-        { ([R7-AF] one at NaN: the drawn words', as a block's) }
-        if not TyRtBoxIsFinite(rawRect) then
-          rawRect := LmPlainRect(c.LmTextW, c.LmTextH, 0, ah, av);
       end
       else if (ah = c.AnchorH) and (av = c.AnchorV) then
         rawRect := LmBlockRect(c.RtPieces, c.RtScale)
