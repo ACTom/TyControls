@@ -180,7 +180,9 @@ function globalT(el) {
   for (let e = el; e; e = e.parent) chain.unshift(e);
   chain.forEach(e => e.updateTransform());
   const t = el.transform;
-  return t ? [t[0], t[1], t[2], t[3], t[4], t[5]] : [1, 0, 0, 1, 0, 0];
+  // ([R7-AI] a place zrender holds as a string ('00202', a padding joined
+  // to it): what the canvas takes, its number)
+  return t ? [+t[0], +t[1], +t[2], +t[3], +t[4], +t[5]] : [1, 0, 0, 1, 0, 0];
 }
 
 // the refContainer createBoxLayoutReference takes: the host's dataToLayout of
@@ -303,8 +305,9 @@ function recordChart(chart, c) {
     const bgEl = kids.find(k => k.type === 'rect');
     rec.titles.push({ index: t.componentIndex, boxed: !!t.boxCoordinateSystem, ref: refRec(t),
       shown: kids.length > 0,
-      group: [hex(g.x), hex(g.y)],
-      bg: bgEl ? { x: hex(g.x + bgEl.shape.x), y: hex(g.y + bgEl.shape.y), width: hex(bgEl.shape.width), height: hex(bgEl.shape.height) } : null,
+      group: [hex(+g.x), hex(+g.y)],
+      // ([R7-AI] a place or a size held as a string: drawn at its number)
+      bg: bgEl ? { x: hex(+g.x + +bgEl.shape.x), y: hex(+g.y + +bgEl.shape.y), width: hex(+bgEl.shape.width), height: hex(+bgEl.shape.height) } : null,
       align: textEl && textEl.style.align != null ? textEl.style.align : null,
       verticalAlign: textEl && textEl.style.verticalAlign != null ? textEl.style.verticalAlign : null });
   });
@@ -444,6 +447,23 @@ add('legend', 'legend-matrix', 'legends in cells: a horizontal one wrapping in i
 
 add('legend', 'legend-calendar', 'a legend in a calendar day',
   { calendar: CAL(), legend: { coordinateSystem: 'calendar', coord: '2017-02-22', left: 0 },
+    xAxis: { show: false }, yAxis: { show: false },
+    series: ['One', 'Two'].map(n => ({ type: 'line', name: n, data: [] })) });
+
+// [R7-AI] a component's padding written as a string: getLayoutRect's
+// normalizeCssArray takes it by its characters, and the place joins its side
+// ((containerRect.x || 0) + left + '2' is '202'), the sums of two sides are
+// joined ('2' + '2'), and so is the background's size; on the canvas and in
+// a cell
+add('title', 'title-strpad', "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas)",
+  { matrix: MX(), title: [
+    { textStyle: { fontSize: 16 }, text: 'Aa', left: 20, top: 10, padding: '12', backgroundColor: '#eee' },
+    { textStyle: { fontSize: 16 }, text: 'Bb', coordinateSystem: 'matrix', coord: ['b', 'q'], left: 30, top: 'middle', padding: '21', backgroundColor: '#eee' },
+    { textStyle: { fontSize: 16 }, text: 'Cc', right: 20, top: 110, padding: ['3', 4], backgroundColor: '#eee', borderColor: '#333', borderWidth: 1 },
+    { textStyle: { fontSize: 16 }, subtextStyle: { fontSize: 11 }, text: 'Dd', subtext: 'dd', left: 40, bottom: 20, padding: '123', backgroundColor: '#eee' }] });
+add('legend', 'legend-strpad', "legends padded '12' at left 20 (at 202) and '21' vertical on the right of a cell",
+  { matrix: MX(), legend: [{ left: 20, top: 10, padding: '12', backgroundColor: '#eee', data: ['One', 'Two'] },
+    { coordinateSystem: 'matrix', coord: ['c', ['p', 'q']], orient: 'vertical', right: 10, top: 'middle', padding: '21', backgroundColor: '#eee', data: ['One', 'Two'] }],
     xAxis: { show: false }, yAxis: { show: false },
     series: ['One', 'Two'].map(n => ({ type: 'line', name: n, data: [] })) });
 

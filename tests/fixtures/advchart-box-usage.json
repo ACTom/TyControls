@@ -2560,6 +2560,396 @@
    ]
   },
   {
+   "id": "title-strpad",
+   "group": "title",
+   "note": "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas)",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "title": [
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "text": "Aa",
+      "left": 20,
+      "top": 10,
+      "padding": "12",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "text": "Bb",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "q"
+      ],
+      "left": 30,
+      "top": "middle",
+      "padding": "21",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "text": "Cc",
+      "right": 20,
+      "top": 110,
+      "padding": [
+       "3",
+       4
+      ],
+      "backgroundColor": "#eee",
+      "borderColor": "#333",
+      "borderWidth": 1
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Dd",
+      "subtext": "dd",
+      "left": 40,
+      "bottom": 20,
+      "padding": "123",
+      "backgroundColor": "#eee"
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4069400000000000",
+      "4059400000000000"
+     ],
+     "bg": {
+      "x": "4069000000000000",
+      "y": "4059000000000000",
+      "width": "4033aea4a8c154ca",
+      "height": "40992c0000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4066f24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924926"
+     },
+     "shown": true,
+     "group": [
+      "407b5828f5c28f5c",
+      "406a66db6db6db6e"
+     ],
+     "bg": {
+      "x": "407b4828f5c28f5c",
+      "y": "406926db6db6db6e",
+      "width": "4033ae5c91d14e3c",
+      "height": "4099580000000000"
+     },
+     "align": "left",
+     "verticalAlign": "middle"
+    },
+    {
+     "index": 2,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4087a3d70a3d70a4",
+      "40913c0000000000"
+     ],
+     "bg": {
+      "x": "408783d70a3d70a4",
+      "y": "4091300000000000",
+      "width": "403b851eb851eb85",
+      "height": "4099840000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 3,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4079200000000000",
+      "40b4010000000000"
+     ],
+     "bg": {
+      "x": "4079000000000000",
+      "y": "40b4000000000000",
+      "width": "40347b71758e2196",
+      "height": "40ad020000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    }
+   ],
+   "legends": [],
+   "series": []
+  },
+  {
+   "id": "legend-strpad",
+   "group": "legend",
+   "note": "legends padded '12' at left 20 (at 202) and '21' vertical on the right of a cell",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "legend": [
+     {
+      "left": 20,
+      "top": 10,
+      "padding": "12",
+      "backgroundColor": "#eee",
+      "data": [
+       "One",
+       "Two"
+      ]
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "orient": "vertical",
+      "right": 10,
+      "top": "middle",
+      "padding": "21",
+      "backgroundColor": "#eee",
+      "data": [
+       "One",
+       "Two"
+      ]
+     }
+    ],
+    "xAxis": {
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "One",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Two",
+      "data": []
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "405e000000000000",
+      "y": "4050400000000000",
+      "width": "4082c00000000000",
+      "height": "407c700000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "group": [
+      "4069400000000000",
+      "4059400000000000"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "One",
+       "t": [
+        "4069600000000000",
+        "4059266666666666"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ae66666666666",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "Two",
+       "t": [
+        "40708ccccccccccd",
+        "4059266666666666"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ad70a3d70a3d7",
+        "402a666666666668"
+       ]
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4062d24924924926"
+     },
+     "group": [
+      "408589ae147ae148",
+      "40648be2be2be2c0"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "One",
+       "t": [
+        "408591ae147ae148",
+        "40647f15f15f15f3"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ae66666666666",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "Two",
+       "t": [
+        "408591ae147ae148",
+        "4067257c57c57c5a"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ad70a3d70a3d7",
+        "402a666666666668"
+       ]
+      }
+     ]
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
    "id": "pie-cells",
    "group": "series",
    "note": "pies: by coord with a percentage radius, by center read as a coord, by coord with a percentage centre and a ring, on a calendar day by coord and by center, and one whose matrix is not there",
@@ -6342,6 +6732,14 @@
   },
   {
    "name": "legend-calendar: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "title-strpad: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "legend-strpad: the recipes hold (R1-R3)",
    "ok": true
   },
   {
