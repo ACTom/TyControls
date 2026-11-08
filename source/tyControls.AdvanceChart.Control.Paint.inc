@@ -125,6 +125,21 @@ begin
   Result := (AColour and $00FFFFFF) or (TTyColor(a) shl 24);
 end;
 
+{ [R7-AA] AN AXIS LABEL'S z2: AxisBuilder's `10 + (tick.time?.level || 0)`
+  -- a time axis' coarser labels over its finer [was: 10 for every one] }
+function TyAxisLabelZ2(AAxis: TTyAxis; ASpec: PTyAxisLayoutSpec; AIndex: Integer): Integer;
+var t: TTyScaleTickArray; k: Integer; v: Double;
+begin
+  Result := 10;
+  if (AAxis = nil) or (ASpec = nil) or (AAxis.AxisType <> atTime) then Exit;
+  if (AIndex < 0) or (AIndex > High(ASpec^.TickValues)) then Exit;
+  v := ASpec^.TickValues[AIndex];
+  t := TyDrawnTicks(AAxis.Scale);
+  for k := 0 to High(t) do
+    if (t[k].Level = 0) and (t[k].Value = v) then
+      Exit(10 + Max(0, t[k].TimeLevel));
+end;
+
 { [R7-AA] A PIECE'S PEN BEYOND ITS COLOUR AND WIDTH onto an element's style:
   its shadow, join, miterLimit and gradient. ARun: for the paint order's
   pass (CompRun), a value the canvas refuses written as the pass reads one
@@ -947,7 +962,7 @@ begin
       lx := places[i].X;
       ly := places[i].Y;
       ProxLabel(i, lx, ly);
-      Drew(cpkLabel, 10, lineK, True, TTyChartColor(lblStyle.TextColor));
+      Drew(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), lineK, True, TTyChartColor(lblStyle.TextColor));
       { A BLOCK DRAWS ITS PIECES [Batch 86] }
       if Length(places[i].Rt) > 0 then
       begin
@@ -1677,10 +1692,11 @@ begin
     for i := 0 to High(spec^.Placements) do
     begin
       if not spec^.Placements[i].Shown or (spec^.Placements[i].Text = '') then Continue;
+      { ([R7-AA] a time axis' label at 10 plus its tick's level) }
       if spec^.Placements[i].HasM then
-        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor), spec^.Placements[i].M))
+        Add(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), True, Txt(TTyChartColor(labelS.TextColor), spec^.Placements[i].M))
       else
-        Add(cpkLabel, 10, True, Txt(TTyChartColor(labelS.TextColor),
+        Add(cpkLabel, TyAxisLabelZ2(AAxis, spec, i), True, Txt(TTyChartColor(labelS.TextColor),
           TyZrLocal(1, 1, spec^.RotationRad, spec^.Placements[i].X, spec^.Placements[i].Y)));
     end;
   { z2 11: the arrows, filled in the line's colour (lineStyle.stroke alone) }

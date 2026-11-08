@@ -1030,6 +1030,12 @@ function cases() {
       shadowBlur: 6, shadowColor: 'rgba(0,0,255,0.5)', shadowOffsetX: 2,
       formatter: 'Ab' } }),
     [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // a time axis' labels: z2 10 plus their tick's level
+    ['aa-time-labels', { animation: false, xAxis: AXC({ type: 'time', min: Date.UTC(2020, 11, 30), max: Date.UTC(2021, 0, 3),
+      splitLine: { show: false }, axisTick: { show: false } }),
+      yAxis: { show: false, type: 'value', min: 0, max: 10 }, useUTC: true,
+      series: [{ type: 'scatter', data: [[Date.UTC(2021, 0, 1), 5]], itemStyle: { color: 'nope' } }] },
+    [0], { w: true, z: true }],
     // 3. the polar's and the single axis' split areas, in paint order
     ['aa-polar-area', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
       style: { fill: '#ff0000' } }], polar: { radius: 100 },
