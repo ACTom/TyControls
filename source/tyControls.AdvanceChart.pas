@@ -1267,6 +1267,11 @@ type
     { [spec 242] the solving lines series' lineStyle.color as a gradient }
     FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
+    { [R7-AB] the trail layer's elements as last painted (FTrailSnapOk):
+      under useDirtyRect the next frame repaints the blocks round what
+      changed only, the layer faded whole }
+    FTrailSnap: TTyDirtySnap;
+    FTrailSnapOk: Boolean;
     { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
       of item roots and its last data, kept across updates for the merge
       by data id); the element each paint list entry was made from (nil for
