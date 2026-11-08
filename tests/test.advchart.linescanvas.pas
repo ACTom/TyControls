@@ -3404,16 +3404,19 @@ begin
   AssertEquals('the shadows in their turned clips', '', bad);
 end;
 
-{ [R7-AF] A HALO OF 'Infinity' HANDS THE CANVAS ITS COLOUR AT THE FIRST PAINT
-  (af-label-inf, drawn once): the symbol after it (z 3) whose borderColor no
-  parser reads strokes in the label's '#ff00ff' -- before the paint order has
-  settled the halo's width once, too }
+{ [R7-AF] A HALO OF 'Infinity' HANDS THE CANVAS ITS COLOUR IN THE FIRST PAINT
+  ORDER OVER IT (af-label-inf): the list as built -- the halo's width not yet
+  settled (nought), the symbol after it (z 3) with the borderColor no parser
+  reads -- through one TyLinesCanvasLeftovers: the symbol strokes in the
+  label's '#ff00ff'. (A paint runs the order more than once, and from the
+  second the halo has its width: the first is what this asks.) }
 procedure TAdvChartLinesCanvasOracleTest.TestAnInfiniteHaloHandsItsColourAtOnce;
 var
   cs: TJSONArray;
   c: TJSONObject;
   i, k, n: Integer;
   el: TTyChartElement;
+  L: TTyPaintList;
 begin
   cs := TJSONObject(FRoot).Arrays['charts'];
   c := nil;
@@ -3430,16 +3433,32 @@ begin
   FChart.SetOption(c.Objects['option'].AsJSON, True);
   FBmp.Fill(BGRA(255, 255, 255, 255));
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
-  n := 0;
-  for k := 0 to FChart.Frame.Count - 1 do
-  begin
-    el := FChart.Frame.Element(k);
-    if (el.Datum.SeriesIndex <> 2) or (el.Caption.Text <> '') then Continue;
-    Inc(n);
-    AssertEquals('the symbol after the label strokes in its halo''s colour', Integer($FFFF00FF),
-      Integer(el.Style.StrokeColor));
+  L := TTyPaintList.Create;
+  try
+    for k := 0 to FChart.Frame.Count - 1 do
+    begin
+      el := FChart.Frame.Element(k);
+      { (as built: the halo's width nought, the symbol's colour refused) }
+      if (el.Caption.Text = 'Ab') and ((el.CanvasFlags and cTyCanvasWidthLeft) <> 0) then
+        el.Caption.StrokeWidthLogical := 0;
+      if (el.Datum.SeriesIndex = 2) and (el.Caption.Text = '') then
+        el.Style.StrokeColor := cTyCanvasColourLeft;
+      L.Add(el);
+    end;
+    TyLinesCanvasLeftovers(L, TyCanvasGroundOf(0), 96);
+    n := 0;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(k);
+      if (el.Datum.SeriesIndex <> 2) or (el.Caption.Text <> '') then Continue;
+      Inc(n);
+      AssertEquals('the symbol after the label strokes in its halo''s colour', Integer($FFFF00FF),
+        Integer(el.Style.StrokeColor));
+    end;
+    AssertTrue('the symbol after the label', n > 0);
+  finally
+    L.Free;
   end;
-  AssertTrue('the symbol after the label', n > 0);
 end;
 
 { [R7-AF] A RADAR'S RINGS OF ONE COLOUR ARE ONE PATH upstream (mergePath), its
