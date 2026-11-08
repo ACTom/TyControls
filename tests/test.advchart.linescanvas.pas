@@ -1353,6 +1353,13 @@ begin
     begin
       fr := frames.Objects[j];
       t := fr.Floats['t'];
+      { [R7-AB] the actions before the sample (a state's change) }
+      if (c.Find('acts') <> nil) and (c.Objects['acts'].Find(IntToStr(j)) <> nil) then
+      begin
+        FChart.AnimNow := cT0 + t;
+        for q := 0 to c.Objects['acts'].Arrays[IntToStr(j)].Count - 1 do
+          FChart.DispatchAction(c.Objects['acts'].Arrays[IntToStr(j)].Objects[q].AsJSON);
+      end;
       if t > 0 then FChart.AnimTick(cT0 + t);
       FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
       if GetEnvironmentVariable('TY_LC_SAVE') <> '' then

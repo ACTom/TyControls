@@ -887,6 +887,11 @@ function cases() {
     ['ab-dirty-trail', vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
       [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
     [0, 20, 40, 60, 80], { y: true, dirty: true }],
+    // (the same on a zlevel of its own above the axes': that layer's)
+    ['ab-dirty-trail-z', Object.assign(vv(LN({ color: '#ff00ff', symbolSize: 8, period: 1, trailLength: 0.2 },
+      [{ coords: [[1, 8], [9, 8]] }, { coords: [[1, 3], [9, 3]] }], { zlevel: 1, lineStyle: { color: '#0000ff', width: 3, opacity: 1 } })),
+    { xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false } } }),
+    [0, 20, 40, 60, 80], { y: true, dirty: true }],
     // [R7-AB] 6. a dirty block starts from the canvas' own state and brushes
     //    the components meeting it too: a scatter of an unreadable colour
     //    under a moving effect takes, in its block, the fill of the axis
@@ -899,6 +904,14 @@ function cases() {
     { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
       yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
     [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a state's change repainted in blocks, the static layer's: the same)
+    ['ab-dirty-hover-axes', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5], [5, 7]] },
+      { type: 'scatter', clip: false, symbolSize: 8, itemStyle: { color: '#ff00ff', opacity: 1 }, emphasis: { scale: 2 },
+        data: [[0.2, 5.2], [5, 7.2]] }]),
+    { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
+      yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
+    [0, 10], { y: true, dirty: true, acts: { 1: [{ type: 'highlight', seriesIndex: 1 }] } }],
     // [R7-AB] 7. fonts the canvas refuses elsewhere: a rich text's token
     //    (its own font refused: the one the span before left); the axes'
     //    labels drawn before the series (their font left on the canvas for
