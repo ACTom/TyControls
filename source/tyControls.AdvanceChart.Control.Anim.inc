@@ -187,6 +187,8 @@ var
     inp.MinorSplitWidth := PenWidth('TyAdvChartMinorSplitLine');
     if inp.ShowMinorTicks or inp.ShowMinorSplitLine then
       inp.MinorTicks := AxisMinorTicks(AAxis);
+    { [R7-AH] snapped on the css px grid, as the axis at rest }
+    inp.Scale := scale;
     els := TyAxisAnimElements(spec^, inp);
     akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
     SetLength(all_, n + Length(els));

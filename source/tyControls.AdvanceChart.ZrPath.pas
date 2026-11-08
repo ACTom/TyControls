@@ -77,6 +77,9 @@ procedure TyZrSubPixelLineAt(var AX1, AY1, AX2, AY2: Double;
   AWidthPx, AScale: Double);
 function TyZrSubPixelOptimizeAt(APosition, AWidthPx: Double;
   APositive: Boolean; AScale: Double): Double;
+{ [R7-AH] subPixelOptimizeRect on the css px grid: ARect and AWidthPx device
+  px, AScale the device px a css px makes (1 or none: the rect itself) }
+function TyZrSubPixelOptimizeRectAt(const ARect: TTyXYWH; AWidthPx, AScale: Double): TTyXYWH;
 
 { createPathProxyFromString with processArc, then toStatic: AFloat32 says
   whether the data went to a Float32Array (more than eleven numbers). }
@@ -409,6 +412,15 @@ begin
     Exit(TyZrSubPixelOptimize(APosition, AWidthPx, APositive));
   if IsNan(AWidthPx) or (AWidthPx = 0) then Exit(APosition);
   Result := TyZrSubPixelOptimize(APosition / AScale, AWidthPx / AScale, APositive) * AScale;
+end;
+
+function TyZrSubPixelOptimizeRectAt(const ARect: TTyXYWH; AWidthPx, AScale: Double): TTyXYWH;
+var r: TTyXYWH;
+begin
+  if not (AScale > 0) or (AScale = 1) then Exit(TyZrSubPixelOptimizeRect(ARect, AWidthPx));
+  r := TyZrSubPixelOptimizeRect(TyXYWH(ARect.X / AScale, ARect.Y / AScale,
+    ARect.W / AScale, ARect.H / AScale), AWidthPx / AScale);
+  Result := TyXYWH(r.X * AScale, r.Y * AScale, r.W * AScale, r.H * AScale);
 end;
 
 function TyZrSubPixelOptimizeRect(const ARect: TTyXYWH;

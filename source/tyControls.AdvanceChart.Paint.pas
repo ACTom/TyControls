@@ -1081,6 +1081,10 @@ type
     TwVals: TTyDoubleArray;
     { the role's own numbers -- see AdvanceChart.AnimView for each }
     G: array[0..11] of Double;
+    { [R7-AH] the device px a css px makes, where the role snaps a line on
+      the half pixel (a lines row's line): on the css px grid (0 or 1: the
+      device px grid) }
+    PxScale: Double;
     { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,
       upstream's whole-series layout points (flattened x, y, Float32 values,
       not-a-number where a row has no point), its stacked-on points (nil
@@ -1418,6 +1422,12 @@ type
       calendar, a matrix, a geo: CompViewOf), 0 to take it from the datum }
     CompBand: Boolean;
     CompView: Integer;
+    { [R7-AH] CompView holds the view's place (of every element of the
+      control's list once it is built): the paint order's key after z2 --
+      zrender's display list, at an equal zlevel, z and z2, is the root's
+      views in the order they were made [was: the order the port built its
+      list in] }
+    ViewKnown: Boolean;
     { [Batch 148] UPSTREAM'S OWN Path.contain, where the element asks for
       it (a geo region): the full path, not the shape's points -- see
       TTyPathHit. The shape test is not consulted then. }
@@ -1542,6 +1552,8 @@ type
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
+    { [R7-AH] the keys of elements written through Ref changed: sorted again }
+    procedure OrderChanged;
     { The insertion index of the AIndex-th element in PAINT order (back first). }
     function PaintOrder(AIndex: Integer): Integer;
     { Topmost non-silent element containing the point, or -1. APad False
@@ -2111,6 +2123,13 @@ begin
       or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel)
       or (FItems[FJrIdx[k]].ZFrac <> FJrOld[k].ZFrac) then
       MarkOrderDirty(FJrIdx[k]);
+    { [R7-AH] its view's place is the build's, written after the session
+      kept the element: it stays }
+    if FItems[FJrIdx[k]].ViewKnown then
+    begin
+      FJrOld[k].CompView := FItems[FJrIdx[k]].CompView;
+      FJrOld[k].ViewKnown := True;
+    end;
     FItems[FJrIdx[k]] := FJrOld[k];
   end;
   JournalOpen;
@@ -2172,9 +2191,17 @@ begin
   { [R2-I6] the order moves only where z or z2 does [was: sorted again
     after any write] }
   if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2)
-    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac) then
+    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac)
+    or (FItems[AIndex].CompView <> AElement.CompView) then
     MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
+end;
+
+procedure TTyPaintList.OrderChanged;
+begin
+  FOrdered := False;
+  FPartial := False;
+  FDirtyN := 0;
 end;
 
 var
@@ -2301,6 +2328,12 @@ begin
     Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
+  { [R7-AH] THE VIEW'S PLACE IN THE ROOT: zrender's display list is the
+    roots' traversal sorted stably by zlevel, z and z2, so at an equal z2
+    the view made first is drawn first [was: the order the list was built
+    in, components of one z ordered by the port's builders] }
+  if FItems[A].CompView <> FItems[B].CompView then
+    Exit(FItems[A].CompView < FItems[B].CompView);
   { [R6-C] a combining host's child added after the list sorts at its
     host's place, after the host and the children before it }
   if (FItems[A].Anim.PieceOf > 0) or (FItems[B].Anim.PieceOf > 0) then

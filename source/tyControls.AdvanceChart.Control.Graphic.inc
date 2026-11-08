@@ -337,6 +337,8 @@ begin
     z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
     the grids' at an equal z and z2 }
   AddGridBackgrounds(FGfxUnder);
+  { [R7-AH] each its view's place, the order's key after z2 }
+  ViewsTag(FGfxUnder);
   { [R7-Z] these and the axes' parts in upstream's paint order: what each
     refuses settled, and the ground the list starts from }
   if APainter <> nil then CompRun(APainter.PPI) else CompRun(FLastPPI);

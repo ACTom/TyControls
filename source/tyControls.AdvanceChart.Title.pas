@@ -121,7 +121,8 @@ type
   and the group's place (TextX, TextY) is added after. The half pixel is
   the local box's, so a title at a fractional place keeps its fraction. A
   width of nought moves nothing. }
-function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double = 1): TTyRectF;
 
 { How many titles the option carries. An object counts as one. }
 function TyTitleCount(AOption: TTyChartOption): Integer;
@@ -149,11 +150,13 @@ implementation
 uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.ZrPath;
 
-function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double): TTyRectF;
 var r: TTyXYWH;
 begin
-  r := TyZrSubPixelOptimizeRect(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
-    ALayout.FrameW, ALayout.FrameH), ALineWidthPx);
+  { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
+  r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
+    ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
   { through the group's transform (a translation): x + tx, the far edge
     (x + w) + tx }
   Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,

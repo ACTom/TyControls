@@ -1288,6 +1288,12 @@ type
     { [spec 242] the solving lines series' lineStyle.color as a gradient }
     FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
+    { [R7-AH] a trail's layer per zlevel (allocateZlevels gives each trail
+      key a level of its own), drawn by PaintZLevelsCut }
+    FTrailLevels: array of record
+      Level: Integer;
+      Bmp: TBGRABitmap;
+    end;
     { [R7-AB] the trail layer's elements as last painted (FTrailSnapOk):
       under useDirtyRect the next frame repaints the blocks round what
       changed only, the layer faded whole }
@@ -1926,8 +1932,32 @@ type
     FViews: array of record
       MainType, Id, Sub: string;
       Index, Gen, Rank: Integer;
+      { [R7-AH] its type's place among the componentsMap's keys (a series'
+        after every one): the order prepareView makes a prepare's new views
+        in }
+      Key: Integer;
     end;
     FViewsGen: Integer;
+    { [R7-AH] THE componentsMap'S KEYS in the order they went in: a new
+      GlobalModel's 'series', then every merge pass' visited main types new
+      to it, in topological order (a type a dependency visits goes in with
+      no model) -- the order prepareView meets the types in }
+    FViewKeys: TStringArray;
+    { [R7-AH] the models a replaceMerge mapped by index since the last
+      prepare ('<mainType>#<index>', brandNew): a new view whatever id they
+      made }
+    FViewBrand: TStringArray;
+    { [R7-AH] '<mainType>#<index>' -> 1 + the view's rank }
+    FViewRank: TFPHashList;
+    { [R7-AH] ALLOCATEZLEVELS (render's first step): where a series asks for
+      a layer of its own (getZLevelKey: a lines series with a trail, a
+      scatter or lines series of more rows than its progressiveThreshold),
+      every model's zlevel as upstream writes it back into the model --
+      '<mainType>#<index>' -> the level + cZAllocBias; FZAllocOn when it
+      ran (no key: nothing written, the option's own) }
+    FZAlloc: TFPHashList;
+    FZAllocOn: Boolean;
+
     { [R7-AG] the band holds an element the continuous phase draws (a ripple,
       an effect symbol, what follows them): the axes are then the dynamic
       layer's in that phase, with every element of the list }
@@ -2683,6 +2713,24 @@ type
       write no default of their own) }
     function ModelZLevel(const AMainType: string; AIndex: Integer): Integer;
     function AxisModelZLevel(AAxis: TTyAxis): Integer;
+    { [R7-AH] allocateZlevels over every model (FZAlloc), from the option's
+      zlevel and z and the series' keys }
+    procedure ZAllocSolve;
+    { [R7-AH] the level allocateZlevels gave model AIndex of AMainType: True
+      where it ran and wrote one }
+    function ZAllocOf(const AMainType: string; AIndex: Integer; out ALevel: Integer): Boolean;
+    { [R7-AH] a series' zlevel: allocated, else its own, else the root's }
+    function SeriesZLevelOf(ASeriesIndex: Integer): Integer;
+    { [R7-AH] a model the merge made anew or wrote a zlevel into: what an
+      allocation wrote into the old one goes }
+    procedure ZAllocForget(const AMainType: string; AIndex: Integer);
+    { [R7-AH] THE CONTINUOUS PHASE'S LEVELS UNDER A TRAIL (FZMixed): the
+      dynamic part of AFrame band by band, the trail's band through its
+      layer (PaintTrail), the components on ACut and above drawn here over
+      it -- those under it are the static layer's }
+    procedure PaintZLevelsCut(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+      APart: TTyPaintList; ACut: Integer);
     { [R5-J] whether a component drawn apart from the list stands on the
       level PaintZLevels draws now (always outside it) }
     function ApartIn(AZLevel: Integer): Boolean;
@@ -3620,14 +3668,21 @@ type
       view whose model it keeps (same id and subType) -- what is made is
       after every view there is }
     procedure ViewsPrepare(AFresh: Boolean);
-    { the rank of the prepare that made the view (0 the earliest live) }
+    { the rank of the prepare that made the view (0 the earliest live) --
+      [R7-AH] of its (prepare, componentsMap key) among the live views' }
     function ViewBorn(const AMainType: string; AIndex: Integer): Integer;
+    { [R7-AH] a merge pass' visited main types new to the componentsMap, in
+      topological order }
+    procedure ViewKeysAdd(const AVisited: array of string);
     { ABase after every view made by an earlier prepare: the place a view
       of that type and index takes (CompViewOf's numbers) }
     function ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
     function GfxViewOf(const AEl: TTyChartElement): Integer;
     { [R7-AD] AList's elements from AFrom on: of the view AView }
     procedure CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
+    { [R7-AH] every element of AList whose view's place is not known yet:
+      CompViewOf's (the paint order's key after z2) }
+    procedure ViewsTag(AList: TTyPaintList);
     procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;
       var AParts: TTyCompPartArray);
     procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
@@ -3727,10 +3782,22 @@ type
     function LinesTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     function LinesTrailAlpha(ASeriesIndex: Integer): Double;
     procedure PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+    { [R7-AH] the trail layer of zlevel ALevel: kept, faded by its series'
+      lastFrameAlpha, AList's elements of that level drawn on it (the zlevel
+      band set), then laid over the canvas }
+    procedure PaintTrailAt(APainter: TTyPainter; AList: TTyPaintList; ALevel: Integer);
+    procedure TrailLevelsFree;
     { [R7-AB] the highest zlevel of a lines series with a trail (-MaxInt:
       none), and the list above the components' zlevel drawn with that
       trail's layer (as PaintAboveComponents draws it without one) }
     function TrailZLevel(AList: TTyPaintList): Integer;
+    { [R7-AH] the lowest zlevel a lines series with a trail stands on
+      (allocateZlevels'; MaxInt for none) }
+    function TrailCutLevel: Integer;
+    { [R7-AH] the continuous phase's cut among levels (FZMixed): the trail's
+      level -- the components on it and above drawn every frame over the
+      trail; MaxInt: none }
+    function ZCut: Integer;
     procedure PaintTrailAbove(APainter: TTyPainter; AList: TTyPaintList);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
@@ -4600,6 +4667,17 @@ type
       the last paint drew them: Key (mainType + index), Z2 (upstream's),
       IsText, and El the style each was drawn with }
     function CompDrawn: TTyCompPartArray;
+    { [R7-AH] the root's views in the order upstream's prepareView leaves
+      them: '<mainType><index>', a series' 'S<index>' }
+    function ViewOrderNames: TTyStringArray;
+    { [R7-AH] a model's zlevel as the chart draws it: 'S0', 'xAxis0',
+      'markPoint0' (allocateZlevels' where it ran) }
+    function ZLevelOfModel(const AKey: string): Integer;
+    { [R7-AH] the view an element of the list is of, named as
+      ViewOrderNames names it ('' where the build gave it none) }
+    function ViewNameOfEl(const AEl: TTyChartElement): string;
+    { [R7-AH] a lines series' trail: its layer's lastFrameAlpha (0 none) }
+    function TrailAlphaOf(ASeriesIndex: Integer): Double;
     { [R7-AD] where the last paint drew the components' parts (each its
       paint rect, as a dirty block meets it) }
     function CompRectsDrawn: TTyCompRectArray;

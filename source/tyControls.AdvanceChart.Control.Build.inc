@@ -1320,7 +1320,8 @@ begin
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
   { THE BREAK AREAS on the final rects, the zigzags from the axes' caches
     [Batch 132] }
-  TyLayoutBreakAreas(FBuild, FOption, FAxisMemory);
+  { ([R7-AH] the zigzag in css px, its ends on the css px grid) }
+  TyLayoutBreakAreas(FBuild, FOption, FAxisMemory, APPI / 96);
   { THE POLAR AXIS VIEWS, in the same fonts and gaps [Batch 111] }
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
@@ -1372,6 +1373,10 @@ begin
     [Batch 121] }
   SolveLines(APPI);
   FreeAndNil(FTrailLayer);
+  { [R7-AH] render's allocateZlevels: the stores' counts and the trails
+    known -- every model's zlevel where a series asks for a layer }
+  ZAllocSolve;
+  TrailLevelsFree;
   { THE CUSTOM SERIES, on the coordinate systems laid out above: renderItem
     runs here, once per item shown [Batch 123] }
   SolveCustom(APPI);
@@ -3405,7 +3410,7 @@ begin
       theme. }
     { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
       group's frame by the border width [was: as laid out] }
-    frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth));
+    frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth), APainter.ScaleF(1));
     { [R7-X] THE BOX AS install.ts' Rect: one element of the whole
       getItemStyle(['color', 'opacity']) -- the fill (the author's
       backgroundColor [R5-G]), the pen (borderWidth above nought in
@@ -4514,6 +4519,8 @@ begin
     FListTailAt := list.Count;
     Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
+    { [R7-AH] every element its view's place: the paint order's key after z2 }
+    ViewsTag(list);
     { [R7-AD] the list's elements among the axes' parts, and the ground
       after them }
     if FCompRunOk then CompSettle(APPI, False);
@@ -5121,6 +5128,8 @@ begin
       FLineHistDue := False;
       LineHistRoll;
     end;
+    { [R7-AH] every element its view's place: the paint order's key after z2 }
+    ViewsTag(list);
     { [R7-AD] the list's elements among the axes' parts, and the ground
       after them }
     if FCompRunOk then CompSettle(APPI, False);
@@ -5723,7 +5732,8 @@ begin
     if node is TJSONObject then d := TJSONObject(node).Find('blendMode');
     if ((d = nil) or (d.JSONType = jtNull)) and (root <> nil) then d := root.Find('blendMode');
     if (d <> nil) and (d.JSONType = jtString) then blends[s] := d.AsString;
-    zl[s] := LevelOf(node, True);
+    { ([R7-AH] allocateZlevels' where it ran) }
+    zl[s] := SeriesZLevelOf(s);
     for kind := 0 to 2 do
     begin
       mk := nil;
@@ -5733,12 +5743,21 @@ begin
           1: mk := TJSONObject(node).Find('markLine');
           2: mk := TJSONObject(node).Find('markArea');
         end;
-      { [R5-J] a marker model's parent is its series: its own zlevel, else
-        the series' (the root's under it) [was: its own, else 0] }
+      { [R7-AH] a series' marker model's parent is the master marker model
+        (createMarkerModelFromSeries(markerOpt, this, ecModel)): its own
+        zlevel, else the master's -- the root's markPoint (markLine,
+        markArea), the level allocateZlevels wrote into it --, else the
+        root's [was: R5-J's own, else the series'] }
       d := nil;
       if mk is TJSONObject then d := TJSONObject(mk).Find('zlevel');
-      if (d = nil) or (d.JSONType = jtNull) then mkLevels[s][kind] := zl[s]
-      else mkLevels[s][kind] := LevelOf(mk, False);
+      if (d <> nil) and (d.JSONType <> jtNull) then mkLevels[s][kind] := LevelOf(mk, False)
+      else
+        case kind of
+          0: mkLevels[s][kind] := ModelZLevel('markPoint', 0);
+          1: mkLevels[s][kind] := ModelZLevel('markLine', 0);
+        else
+          mkLevels[s][kind] := ModelZLevel('markArea', 0);
+        end;
       if mkLevels[s][kind] <> 0 then any := True;
     end;
     if (blends[s] <> '') or (zl[s] <> 0) then any := True;
@@ -5814,13 +5833,19 @@ begin
   end;
   { the parallel axes' covers, z 10000: their controllers' groups are
     zrender's, no view hides them [Batch 130] }
+  n := AList.Count;
   Inc(Result, BuildParallelBrushes(AList));
+  { ([R7-AH] the controllers' groups: zr.add'ed in their views' init, just
+    before the views' own groups) }
+  if AList.Count > n then CompViewSet(AList, n, ViewNum('parallelAxis', 0, 7800));
   { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
     they are its controller's: BrushController.mount adds its group to
     zrender's root, outside the brush view's group, so
     `excludeComponents: ['brush']` cannot hide them and the brush view is
     never a view that drew (its group holds nothing) [milestone C14-C22] }
+  n := AList.Count;
   Inc(Result, BuildBrushes(AList));
+  if AList.Count > n then CompViewSet(AList, n, ViewNum('brush', 0, 7700));
   { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
     roam only moves the window), then the box, the copy and the window
     as elements [Batch 140] }
@@ -5848,6 +5873,8 @@ begin
     or FPaintList.JournalHoldsFrom(FListTailAt) then Exit;
   FPaintList.Truncate(FListTailAt);
   BuildListTail(FPaintList, NewTextMeasurer(FLastPPI));
+  { [R7-AH] each its view's place }
+  ViewsTag(FPaintList);
   { the incremental layer holds none of the end: what a build would draw
     on it again it holds already where it is what a whole drawing in paint
     order gives -- else drawn again, as after a build }
