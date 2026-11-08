@@ -693,6 +693,108 @@
      }
     }
    ]
+  },
+  {
+   "id": "root-none",
+   "note": "the option root's brushStyle and its top-level border keys: a cover takes none of them",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ],
+      "barWidth": "60%"
+     }
+    ],
+    "brushStyle": {
+     "borderType": "dotted",
+     "borderCap": "square",
+     "borderJoin": "round",
+     "borderMiterLimit": 3,
+     "borderDashOffset": 2,
+     "borderWidth": 5,
+     "opacity": 0.5
+    },
+    "borderType": "dashed",
+    "borderCap": "round",
+    "brush": {
+     "brushStyle": {
+      "borderWidth": 1,
+      "borderColor": "#00aa00"
+     }
+    }
+   },
+   "steps": [
+    {
+     "op": "action",
+     "payload": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "rect",
+        "range": [
+         [
+          120,
+          260
+         ],
+         [
+          80,
+          200
+         ]
+        ]
+       }
+      ]
+     },
+     "record": {
+      "covers": [
+       {
+        "style": {
+         "fill": "rgba(234,237,245,0.5)",
+         "stroke": "#00aa00",
+         "lineWidth": 1,
+         "opacity": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        },
+        "strokeNoScale": true,
+        "z": 10000,
+        "z2": 10000,
+        "below": 0
+       }
+      ],
+      "events": [
+       [
+        null
+       ]
+      ],
+      "option": {
+       "borderWidth": 1,
+       "borderColor": "#00aa00",
+       "color": "rgba(234,237,245,0.5)"
+      }
+     }
+    }
+   ]
   }
  ],
  "guards": [

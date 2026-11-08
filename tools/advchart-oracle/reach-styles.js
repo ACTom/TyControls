@@ -127,7 +127,16 @@ function sq(x0, y0, x1, y1) { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x
 const MAPS = [{ name: 'r7xsq', text: JSON.stringify({ type: 'FeatureCollection', features: [
   { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [sq(0, 0, 10, 10)] } },
   { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [sq(10, 0, 20, 10)] } }] }) }];
-for (const m of MAPS) echarts.registerMap(m.name, m.text);
+// [R7-AC] an SVG map of two named open paths (their ends show the cap and the join): node has no
+// DOMParser -- jsdom's, as geo-svg.js installs it. One map a case: GeoSVGResource hands its first
+// graphic to the next chart of the map, the styles a chart set on it kept
+const JSDOM_PATH = process.env.JSDOM_PATH || 'D:/Projects/xterm.js/node_modules/jsdom';
+global.DOMParser = new (require(JSDOM_PATH).JSDOM)('').window.DOMParser;
+const SVG_ENDS = '<svg width="200" height="100" viewBox="0 0 200 100">'
+  + '<path name="P" d="M10 10 L90 10 L90 90" fill="none" stroke="#000000" stroke-width="1"/>'
+  + '<path name="Q" d="M110 90 L110 10 L190 10" fill="none" stroke="#000000" stroke-width="1"/></svg>';
+MAPS.push({ name: 'r7acsvg1', svg: true, text: SVG_ENDS }, { name: 'r7acsvg2', svg: true, text: SVG_ENDS });
+for (const m of MAPS) echarts.registerMap(m.name, m.svg ? { svg: m.text } : m.text);
 // the pens without their (default) colours, no fills: a region's defaults are the theme's
 const NCL = { looks: true, nocolour: true };
 // root-styles.js' own keys of a series
@@ -278,6 +287,72 @@ function cases() {
       { tip: { type: 'showTip', x: 100, y: 100, tooltip: { content: 'hello' } } }],
     ['state.pie-blur', bare({ itemStyle: RI, series: [{ type: 'pie', label: { show: false }, emphasis: { focus: 'self' },
       data: [3, 5, 2] }] }), '', { looks: true, fills: true, shapes: true, action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }],
+    // ---- [R7-AC] the other tooltips' cascades, the root under the global tooltip: a marker's (the
+    // series item tooltip of its data), a matrix cell's, a geo region's, a legend item's, a toolbox
+    // icon's, a timeline tick's -- each opened by showTip at a point over its element (findHover's
+    // target there: `find` names what it must be; the point found is the action recorded) ----
+    ['tip.marker-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      series: [{ type: 'scatter', symbolSize: 4, data: [1, 2, 3],
+        markPoint: { symbol: 'circle', symbolSize: 24, label: { show: false }, data: [{ name: 'M', coord: [1, 2.5] }] } }] })),
+    'tooltip', { tip: { find: 'markPoint' } }],
+    ['tip.matrix-root', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      matrix: { x: { data: ['P', 'Q'] }, y: { data: ['U', 'V'] }, tooltip: { show: true } } }),
+    'tooltip', { tip: { find: 'matrix' } }],
+    ['tip.geo-root', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      geo: { map: 'r7xsq', tooltip: { show: true } } }), 'tooltip', { tip: { find: 'geo' } }],
+    ['tip.legend-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: { tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { tip: { find: 'legend' } }],
+    ['tip.toolbox-root', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      toolbox: { feature: { restore: {} }, tooltip: { show: true } } })), 'tooltip', { tip: { find: 'toolbox' } }],
+    ['tip.timeline-root', { baseOption: bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20,
+      formatter: 'R:{b}', timeline: { axisType: 'category', data: ['a', 'b'], autoPlay: false, left: 20, right: 20, bottom: 10 } }),
+      options: [{ series: [] }, { series: [] }] }, 'tooltip', { tip: { find: 'timeline' } }],
+    // [R7-AE] showTip naming a component and an item's name (findComponentReference: the first
+    // element of the component's view whose tooltipConfig has the name -- the tip shown at the
+    // centre of its rect, `at` the point); a series by its index and a name; a timeline has no
+    // tooltipConfig (`none`: nothing shown)
+    ['tip.legend-ref', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: { tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { tip: { type: 'showTip', legendIndex: 0, name: 'S' }, at: true }],
+    ['tip.legend-ref-off', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: {}, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { tip: { type: 'showTip', legendIndex: 0, name: 'S' }, none: true }],
+    // (an item's tooltip showing: a showTip that finds no element leaves it as it was)
+    ['tip.legend-ref-pre', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: {}, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] }] })),
+    'tooltip', { pre: { type: 'showTip', seriesIndex: 0, dataIndex: 1 }, tip: { type: 'showTip', legendIndex: 0, name: 'S' },
+      at: true }],
+    ['tip.legend-name', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      legend: { name: 'LG', tooltip: { show: true } }, series: [{ type: 'scatter', name: 'S', data: [1, 2, 3] },
+        { type: 'scatter', name: 'T', data: [2, 3, 1] }] })),
+    'tooltip', { tip: { type: 'showTip', legendName: 'LG', name: 'T' }, at: true }],
+    ['tip.toolbox-ref', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      toolbox: { feature: { restore: {}, saveAsImage: {} }, tooltip: { show: true } } })),
+    'tooltip', { tip: { type: 'showTip', toolboxIndex: 0, name: 'saveAsImage' }, at: true }],
+    ['tip.axis-ref', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      xAxis: { type: 'category', data: N, tooltip: { show: true } } })),
+    'tooltip', { tip: { type: 'showTip', xAxisIndex: 0, name: 'B' }, at: true }],
+    ['tip.graphic-ref', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      graphic: [{ type: 'rect', name: 'G', shape: { x: 50, y: 40, width: 40, height: 30 }, style: { fill: '#ff0000' },
+        tooltip: { show: true, formatter: 'G!' } }] })),
+    'tooltip', { tip: { type: 'showTip', graphicIndex: 0, name: 'G' }, at: true }],
+    ['tip.series-name', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}' })),
+    'tooltip', { tip: { type: 'showTip', seriesIndex: 0, name: 'C' }, at: true }],
+    ['tip.geo-ref', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      geo: { map: 'r7xsq', tooltip: { show: true } } }), 'tooltip', { tip: { type: 'showTip', geoIndex: 0, name: 'B' }, at: true }],
+    ['tip.matrix-ref', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      matrix: { x: { data: ['P', 'Q'] }, y: { data: ['U', 'V'] }, tooltip: { show: true } } }),
+    'tooltip', { tip: { type: 'showTip', matrixIndex: 0, name: 'Q' }, at: true }],
+    ['tip.timeline-ref', { baseOption: bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20,
+      formatter: 'R:{b}', timeline: { axisType: 'category', data: ['a', 'b'], autoPlay: false, left: 20, right: 20, bottom: 10 } }),
+      options: [{ series: [] }, { series: [] }] }, 'tooltip', { tip: { type: 'showTip', timelineIndex: 0, name: 'b' }, none: true }],
+    // [R7-AC] an SVG map's named shapes: the geo's own ends, the root's under them (MapDraw._buildSVG
+    // sets the option's itemStyle over the shape's own; R7-X's ends had no SVG case)
+    ['geo.svg-ends', bare({ geo: { map: 'r7acsvg1', itemStyle: { borderColor: '#123456', borderWidth: 3, borderCap: 'round',
+      borderJoin: 'bevel', borderMiterLimit: 3 } } }), 'geo', { looks: true }],
+    ['geo.svg-root', bare(Object.assign({ geo: { map: 'r7acsvg2', itemStyle: { borderColor: '#123456', borderWidth: 2 } } }, RS)),
+      'geo', { looks: true }],
   ];
 }
 
@@ -400,7 +475,66 @@ function run(id, option, part, more) {
       let model = null;
       const show = view._showTooltipContent;
       view._showTooltipContent = function (tooltipModel) { model = tooltipModel; return show.apply(this, arguments); };
+      // [R7-AC] a point over the element `find` names: of the points of a 2 px raster where findHover's
+      // target is it (a component's tooltipConfig of that main type, a marker's data, a timeline's tick),
+      // the one nearest the middle of those of the first such element (off its edges)
+      if (more.tip.find) {
+        const zr = chart.getZr();
+        // (the transforms brought up to date, as a paint would)
+        zr.storage.getDisplayList(true);
+        // (getECData's store: makeInner's '__ec_inner_<n>' key, geo-svg.js' innerOf)
+        const getECDataOf = el => {
+          for (const k of Object.keys(el)) {
+            const v = el[k];
+            if (k.startsWith('__ec_inner_') && v && typeof v === 'object'
+              && ('dataIndex' in v || 'tooltipConfig' in v || 'dataType' in v || 'dataModel' in v)) return v;
+          }
+          return null;
+        };
+        const kind = more.tip.find;
+        const ok = t => {
+          for (let e = t; e; e = e.parent || e.__hostTarget) {
+            const d = getECDataOf(e);
+            if (!d) continue;
+            if (kind === 'markPoint') return !!d.dataModel && d.dataModel.mainType === 'markPoint';
+            if (kind === 'timeline') return !!d.dataModel && d.dataModel.mainType === 'timeline';
+            if (d.tooltipConfig) return d.componentMainType === kind;
+          }
+          return false;
+        };
+        let found = null;
+        let first = null;
+        const pts = [];
+        for (let y = 1; y < H; y += 2) {
+          for (let x = 1; x < W; x += 2) {
+            const h = zr.handler.findHover(x, y);
+            if (!(h && h.target && ok(h.target))) continue;
+            if (!first) first = h.target;
+            if (h.target === first) pts.push([x, y]);
+          }
+        }
+        if (pts.length) {
+          const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+          const my = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+          let best = Infinity;
+          for (const p of pts) {
+            const d = (p[0] - mx) * (p[0] - mx) + (p[1] - my) * (p[1] - my);
+            if (d < best) { best = d; found = { type: 'showTip', x: p[0], y: p[1] }; }
+          }
+        }
+        must(found, id + ': no ' + kind + ' element to show the tip over');
+        more = Object.assign({}, more, { tip: found });
+      }
+      // ([R7-AE] the transforms brought up to date first, as a paint would:
+      // the rect of the element named is taken through its transform)
+      if (more.at || more.none || more.pre) chart.getZr().storage.getDisplayList(true);
+      if (more.pre) chart.dispatchAction(JSON.parse(JSON.stringify(more.pre)));
       chart.dispatchAction(more.tip === true ? { type: 'showTip', seriesIndex: 0, dataIndex: 1 } : JSON.parse(JSON.stringify(more.tip)));
+      // [R7-AE] a showTip that opens nothing
+      if (more.none) {
+        must(!model, id + ': a tooltip shown');
+        return { id, option, part, seen: 1, n: 0, pens: [], tip: { action: more.tip, none: true } };
+      }
       must(model, id + ': no tooltip shown');
       const el = view._tooltipContent.el;
       const get = k => { const v = model.get(k); return v == null ? null : JSON.parse(JSON.stringify(v)); };
@@ -408,6 +542,9 @@ function run(id, option, part, more) {
         padding: get('padding'), order: get('order'), backgroundColor: get('backgroundColor'), borderRadius: get('borderRadius'),
         text: el.style.text, stroke: colourOf(el.style.borderColor) } };
       if (more.tip !== true) rec.tip.action = more.tip;
+      if (more.pre) rec.tip.pre = more.pre;
+      // [R7-AE] the point the tip was shown at
+      if (more.at) rec.tip.at = [view._lastX, view._lastY];
       return rec;
     }
     settle(chart, T_BASE);

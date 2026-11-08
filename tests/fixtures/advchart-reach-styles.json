@@ -7,6 +7,16 @@
   {
    "name": "r7xsq",
    "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  },
+  {
+   "name": "r7acsvg1",
+   "svg": true,
+   "text": "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\"><path name=\"P\" d=\"M10 10 L90 10 L90 90\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/><path name=\"Q\" d=\"M110 90 L110 10 L190 10\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/></svg>"
+  },
+  {
+   "name": "r7acsvg2",
+   "svg": true,
+   "text": "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\"><path name=\"P\" d=\"M10 10 L90 10 L90 90\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/><path name=\"Q\" d=\"M110 90 L110 10 L190 10\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/></svg>"
   }
  ],
  "charts": [
@@ -4041,6 +4051,1141 @@
     "sector|200|150|0|75|3.4558|1.2566|r:6,6,6,6",
     "sector|200|150|0|75|4.7124|1.885|r:6,6,6,6",
     "sector|200|150|0|80|0.3142|3.1416|r:6,6,6,6"
+   ]
+  },
+  {
+   "id": "tip.marker-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 4,
+      "data": [
+       1,
+       2,
+       3
+      ],
+      "markPoint": {
+       "symbol": "circle",
+       "symbolSize": 24,
+       "label": {
+        "show": false
+       },
+       "data": [
+        {
+         "name": "M",
+         "coord": [
+          1,
+          2.5
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:M",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 209,
+     "y": 91
+    }
+   }
+  },
+  {
+   "id": "tip.matrix-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "matrix": {
+     "x": {
+      "data": [
+       "P",
+       "Q"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "P",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "P",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 199,
+     "y": 69
+    }
+   }
+  },
+  {
+   "id": "tip.geo-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "geo": {
+     "map": "r7xsq",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "A",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "A",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 119,
+     "y": 149
+    }
+   }
+  },
+  {
+   "id": "tip.legend-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "S",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "S",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 199,
+     "y": 273
+    }
+   }
+  },
+  {
+   "id": "tip.toolbox-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "toolbox": {
+     "feature": {
+      "restore": {}
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "restore",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "restore",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 375,
+     "y": 23
+    }
+   }
+  },
+  {
+   "id": "tip.timeline-root",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "color": [
+      "#5470c6",
+      "#91cc75",
+      "#fac858",
+      "#ee6666"
+     ],
+     "tooltip": {
+      "renderMode": "richText"
+     },
+     "borderColor": "#00ff00",
+     "padding": 20,
+     "formatter": "R:{b}",
+     "timeline": {
+      "axisType": "category",
+      "data": [
+       "a",
+       "b"
+      ],
+      "autoPlay": false,
+      "left": 20,
+      "right": 20,
+      "bottom": 10
+     }
+    },
+    "options": [
+     {
+      "series": []
+     },
+     {
+      "series": []
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:b",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "x": 329,
+     "y": 247
+    }
+   }
+  },
+  {
+   "id": "tip.legend-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "S",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "S",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "at": [
+     200,
+     273
+    ]
+   }
+  },
+  {
+   "id": "tip.legend-ref-off",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {}
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "none": true
+   }
+  },
+  {
+   "id": "tip.legend-ref-pre",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {}
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "pre": {
+     "type": "showTip",
+     "seriesIndex": 0,
+     "dataIndex": 1
+    },
+    "at": [
+     210,
+     116.66666666666667
+    ]
+   }
+  },
+  {
+   "id": "tip.legend-name",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "T",
+      "data": [
+       2,
+       3,
+       1
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "name": "LG",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "T",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "T",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendName": "LG",
+     "name": "T"
+    },
+    "at": [
+     229.57,
+     273
+    ]
+   }
+  },
+  {
+   "id": "tip.toolbox-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "toolbox": {
+     "feature": {
+      "restore": {},
+      "saveAsImage": {}
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "saveAsImage",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "saveAsImage",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "toolboxIndex": 0,
+     "name": "saveAsImage"
+    },
+    "at": [
+     376.02155160903925,
+     25
+    ]
+   }
+  },
+  {
+   "id": "tip.axis-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ],
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "B",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "B"
+    },
+    "at": [
+     210,
+     234
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "rect",
+      "name": "G",
+      "shape": {
+       "x": 50,
+       "y": 40,
+       "width": 40,
+       "height": 30
+      },
+      "style": {
+       "fill": "#ff0000"
+      },
+      "tooltip": {
+       "show": true,
+       "formatter": "G!"
+      }
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "G!",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "G!",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "G"
+    },
+    "at": [
+     70,
+     55
+    ]
+   }
+  },
+  {
+   "id": "tip.series-name",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:C",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "seriesIndex": 0,
+     "name": "C"
+    },
+    "at": [
+     310,
+     65
+    ]
+   }
+  },
+  {
+   "id": "tip.geo-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "geo": {
+     "map": "r7xsq",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "B",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "geoIndex": 0,
+     "name": "B"
+    },
+    "at": [
+     280,
+     150
+    ]
+   }
+  },
+  {
+   "id": "tip.matrix-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "matrix": {
+     "x": {
+      "data": [
+       "P",
+       "Q"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "Q",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "Q",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "matrixIndex": 0,
+     "name": "Q"
+    },
+    "at": [
+     307,
+     70.5
+    ]
+   }
+  },
+  {
+   "id": "tip.timeline-ref",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "color": [
+      "#5470c6",
+      "#91cc75",
+      "#fac858",
+      "#ee6666"
+     ],
+     "tooltip": {
+      "renderMode": "richText"
+     },
+     "borderColor": "#00ff00",
+     "padding": 20,
+     "formatter": "R:{b}",
+     "timeline": {
+      "axisType": "category",
+      "data": [
+       "a",
+       "b"
+      ],
+      "autoPlay": false,
+      "left": 20,
+      "right": 20,
+      "bottom": 10
+     }
+    },
+    "options": [
+     {
+      "series": []
+     },
+     {
+      "series": []
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "action": {
+     "type": "showTip",
+     "timelineIndex": 0,
+     "name": "b"
+    },
+    "none": true
+   }
+  },
+  {
+   "id": "geo.svg-ends",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7acsvg1",
+     "itemStyle": {
+      "borderColor": "#123456",
+      "borderWidth": 3,
+      "borderCap": "round",
+      "borderJoin": "bevel",
+      "borderMiterLimit": 3
+     }
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#123456ff|3|solid|0|round/bevel/3"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ]
+  },
+  {
+   "id": "geo.svg-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7acsvg2",
+     "itemStyle": {
+      "borderColor": "#123456",
+      "borderWidth": 2
+     }
+    },
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#123456ff|2|8,4|1|round/bevel/4"
+   ],
+   "looks": [
+    "0.5|4|2|0|#0000ffff"
    ]
   }
  ]

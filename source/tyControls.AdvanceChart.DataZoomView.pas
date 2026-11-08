@@ -34,7 +34,7 @@ uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
-     tyControls.AdvanceChart.RichStyle;
+     tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.Color;
 
 type
   { One element's style as the author wrote it; each Has* False where the
@@ -50,6 +50,18 @@ type
     Opacity: Double;
     { [R5-A] the block's shadow (getItemStyle / getLineStyle / getAreaStyle) }
     Shadow: TTyChartShadow;
+    { [R7-AC] the pen beyond its colour and width (getLineStyle's type,
+      dashOffset, cap, join, miterLimit; getItemStyle's border* of them):
+      DashKind todNone unwritten; DashOffset NaN unwritten,
+      cTyCanvasPhaseLeft where the canvas refuses it; Cap / Join -1
+      unwritten, else TyCapOfWord's / TyJoinOfWord's (cTyCanvasWordLeft
+      refused); Miter NaN unwritten, else TyOptMiterLimit's (-1 refused)
+      [was: never read -- the options had no effect] }
+    DashKind: TTyOptDash;
+    Dash: TTyDoubleArray;
+    DashOffset: Double;
+    Cap, Join: Integer;
+    Miter: Double;
   end;
 
   { What a slider dataZoom's option says about how it looks. }
@@ -178,6 +190,13 @@ type
 
   TTyDzSliderLayout = record
     Valid: Boolean;
+    { [R7-AE] THE GROUP HAS NO PLACE: _positionGroup's rect is no number
+      (a data shadow's line, a handle or the move handle stroked
+      'Infinity' wide) -- the view group's x or y is not finite, every
+      transform under it is refused by the canvas: each element is drawn
+      in its own frame under the transform the canvas had, and none is
+      found by the pointer [was: drawn nowhere] }
+    Unplaced: Boolean;
     Index: Integer;
     Horizontal: Boolean;
     { _findCoordRect's answer }
@@ -272,11 +291,13 @@ const
 implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.DataZoom,
      tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States,
      { [R5-D] the emphasis proxy's liftColor }
-     tyControls.AdvanceChart.Style;
+     tyControls.AdvanceChart.Style,
+     { [R7-AE] an unplaced element's path as zrender's commands }
+     tyControls.AdvanceChart.MarkerView;
 
 { ==================== small things ==================== }
 
@@ -345,45 +366,160 @@ begin
   end;
 end;
 
-{ getItemStyle / getLineStyle / getAreaStyle, as far as they are read here }
-procedure StyleOf(ANode: TJSONObject; const AColourKey, AStrokeKey,
-  AWidthKey: string; var AStyle: TTyDzStyleSpec);
-var d: TJSONData;
+{ getItemStyle / getLineStyle / getAreaStyle, as far as they are read here.
+  [R7-AC] AROOT: the block of the same path on the option's root -- the
+  dataZoom's model's getModel climbs to the GlobalModel, so a key the block
+  and its defaults (ADefaults: the keys SliderZoomModel's default block
+  holds, the skin's here) leave out is the root's [was: the dataZoom's
+  block alone]. APen: the pen's keys -- 'line' getLineStyle's (type,
+  dashOffset, cap, join, miterLimit), 'item' getItemStyle's (border*), ''
+  none }
+procedure StyleOf(ANode, ARoot: TJSONObject; const AColourKey, AStrokeKey,
+  AWidthKey, APen: string; const ADefaults: array of string; var AStyle: TTyDzStyleSpec);
+var
+  d: TJSONData;
+  pre: string;
+  wd: Byte;
+
+  function Get(const AKey: string): TJSONData;
+  var k: Integer;
+  begin
+    Result := nil;
+    if ANode <> nil then Result := ANode.Find(AKey);
+    if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+    Result := nil;
+    if ARoot = nil then Exit;
+    for k := 0 to High(ADefaults) do
+      if ADefaults[k] = AKey then Exit;
+    Result := ARoot.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
 begin
-  if ANode = nil then Exit;
-  if (AColourKey <> '') and ColourOf(ANode.Find(AColourKey), AStyle.Fill) then
+  if (ANode = nil) and (ARoot = nil) then Exit;
+  if (AColourKey <> '') and ColourOf(Get(AColourKey), AStyle.Fill) then
     AStyle.HasFill := True;
-  if (AStrokeKey <> '') and ColourOf(ANode.Find(AStrokeKey), AStyle.Stroke) then
+  if (AStrokeKey <> '') and ColourOf(Get(AStrokeKey), AStyle.Stroke) then
     AStyle.HasStroke := True;
   if AWidthKey <> '' then
   begin
-    d := ANode.Find(AWidthKey);
-    if (d <> nil) and (d.JSONType = jtNumber) then AStyle.LineWidth := d.AsFloat;
+    d := Get(AWidthKey);
+    if (d <> nil) and (d.JSONType = jtNumber) then AStyle.LineWidth := d.AsFloat
+    { [R7-AE] A STRING IS JAVASCRIPT'S NUMBER OF IT: the canvas' lineWidth
+      and the bounding rect take style.lineWidth through a division --
+      '3' strokes 3, 'Infinity' an infinite pen; one of no number ('abc')
+      is not above nought: no stroke, as nought [was: not written, the
+      default] }
+    else if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      AStyle.LineWidth := TyJsToNumber(d.AsString);
+      if IsNan(AStyle.LineWidth) then AStyle.LineWidth := 0;
+    end
+    else if (d <> nil) and (d.JSONType = jtBoolean) then
+      AStyle.LineWidth := Ord(d.AsBoolean);
   end;
-  d := ANode.Find('opacity');
+  d := Get('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
   begin
     AStyle.HasOpacity := True;
     AStyle.Opacity := d.AsFloat;
   end;
-  { [R5-A] its shadow keys }
-  TyStReadShadow([ANode], [], [], AStyle.Shadow);
+  { [R5-A] its shadow keys -- [R7-AC] the root's under them }
+  if ARoot <> nil then TyStReadShadow([ANode, ARoot], [], [], AStyle.Shadow)
+  else TyStReadShadow([ANode], [], [], AStyle.Shadow);
+  if APen = '' then Exit;
+  if APen = 'line' then pre := '' else pre := 'border';
+  { the dash: lineStyle.type / itemStyle.borderType }
+  if pre = '' then d := Get('type') else d := Get('borderType');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat <> 0) then
+  begin
+    AStyle.DashKind := todExplicit;
+    AStyle.Dash := TTyDoubleArray.Create(d.AsFloat);
+  end
+  else if (d <> nil) and (d.JSONType = jtArray) then
+  begin
+    AStyle.Dash := TyLineDashOf(d, 1, wd);
+    if Length(AStyle.Dash) = 0 then AStyle.DashKind := todSolid
+    else AStyle.DashKind := todExplicit;
+  end
+  else if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    if d.AsString = 'dashed' then AStyle.DashKind := todDashed
+    else if d.AsString = 'dotted' then AStyle.DashKind := todDotted
+    else AStyle.DashKind := todSolid;
+  end;
+  if pre = '' then d := Get('dashOffset') else d := Get('borderDashOffset');
+  if d <> nil then AStyle.DashOffset := TyOptPenOffset(d);
+  if pre = '' then d := Get('cap') else d := Get('borderCap');
+  if d <> nil then AStyle.Cap := TyLineCapOf(d);
+  if pre = '' then d := Get('join') else d := Get('borderJoin');
+  if d <> nil then AStyle.Join := TyLineJoinOf(d);
+  if pre = '' then d := Get('miterLimit') else d := Get('borderMiterLimit');
+  if d <> nil then AStyle.Miter := TyOptMiterLimit(d);
+end;
+
+{ [R7-AC] the pen's own keys on an element that strokes at AW (CSS px): the
+  dash (a word measured against the width), its phase, cap, join and
+  miterLimit, each where written ([was: a solid butt pen]) }
+procedure PenOn(var AEl: TTyChartElement; const AStyle: TTyDzStyleSpec; AW: Double);
+begin
+  AEl.Style.DashWord := TyDashWord(AStyle.DashKind);
+  AEl.Style.DashLogical := TyDashPattern(AStyle.DashKind, AStyle.Dash, AW);
+  if not IsNan(AStyle.DashOffset) then AEl.Style.DashOffsetLogical := AStyle.DashOffset;
+  if AStyle.Cap >= 0 then AEl.Style.LineCap := AStyle.Cap;
+  if AStyle.Join >= 0 then AEl.Style.LineJoin := AStyle.Join;
+  if not IsNan(AStyle.Miter) then AEl.Style.MiterLimit := AStyle.Miter;
+end;
+
+{ [R7-AC] the hover's pen over the normal one, key by key }
+function PenOver(const AEmph, ABase: TTyDzStyleSpec): TTyDzStyleSpec;
+begin
+  Result := ABase;
+  if AEmph.DashKind <> todNone then
+  begin
+    Result.DashKind := AEmph.DashKind;
+    Result.Dash := AEmph.Dash;
+  end;
+  if not IsNan(AEmph.DashOffset) then Result.DashOffset := AEmph.DashOffset;
+  if AEmph.Cap >= 0 then Result.Cap := AEmph.Cap;
+  if AEmph.Join >= 0 then Result.Join := AEmph.Join;
+  if not IsNan(AEmph.Miter) then Result.Miter := AEmph.Miter;
 end;
 
 function BlankStyle: TTyDzStyleSpec;
 begin
   Result := Default(TTyDzStyleSpec);
   Result.LineWidth := NaN;
+  Result.DashOffset := NaN;
+  Result.Cap := -1;
+  Result.Join := -1;
+  Result.Miter := NaN;
 end;
 
 { ==================== the spec ==================== }
 
+{ a key of a node that may be nil }
+function OptFind(ANode: TJSONObject; const AKey: string): TJSONData;
+begin
+  if ANode = nil then Result := nil else Result := ANode.Find(AKey);
+end;
+
 function TyDzSliderSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyDzSliderSpec;
 var
-  node, o, s: TJSONObject;
+  node, o, s, root, ro: TJSONObject;
   d: TJSONData;
   k: Integer;
   c: TTyChartColor;
+
+  { [R7-AC] the root's block at a path ('' the root itself) }
+  function RootAt(const AKey, ASub: string): TJSONObject;
+  begin
+    Result := nil;
+    if root = nil then Exit;
+    Result := ObjOf(root.Find(AKey));
+    if (Result <> nil) and (ASub <> '') then Result := ObjOf(Result.Find(ASub));
+  end;
+
 begin
   Result := Default(TTyDzSliderSpec);
   Result.Index := AIndex;
@@ -409,6 +545,8 @@ begin
   if AOption = nil then Exit;
   node := ObjOf(AOption.ComponentAt('dataZoom', AIndex));
   if node = nil then Exit;
+  root := nil;
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root);
   d := node.Find('show');
   Result.Show := not ((d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean);
   d := node.Find('brushSelect');
@@ -492,26 +630,37 @@ begin
     Result.Background.HasFill := True;
     Result.Background.Fill := c;
   end;
-  StyleOf(ObjOf(node.Find('handleStyle')), 'color', 'borderColor', 'borderWidth',
-    Result.Handle);
+  StyleOf(ObjOf(node.Find('handleStyle')), RootAt('handleStyle', ''), 'color', 'borderColor',
+    'borderWidth', 'item', ['color', 'borderColor'], Result.Handle);
   { handleColor (deprecated) wins over the style's }
   if ColourOf(node.Find('handleColor'), c) then
   begin
     Result.Handle.HasFill := True;
     Result.Handle.Fill := c;
   end;
-  StyleOf(ObjOf(node.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
-    Result.MoveHandle);
+  StyleOf(ObjOf(node.Find('moveHandleStyle')), RootAt('moveHandleStyle', ''), 'color',
+    'borderColor', 'borderWidth', 'item', ['color', 'opacity'], Result.MoveHandle);
   { [R5-D] the two hover states }
   Result.HandleEmph := BlankStyle;
   Result.MoveHandleEmph := BlankStyle;
   o := ObjOf(node.Find('emphasis'));
-  if o <> nil then
+  ro := RootAt('emphasis', '');
+  if (o <> nil) or (ro <> nil) then
   begin
-    StyleOf(ObjOf(o.Find('handleStyle')), 'color', 'borderColor', 'borderWidth',
-      Result.HandleEmph);
-    StyleOf(ObjOf(o.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
-      Result.MoveHandleEmph);
+    if ro <> nil then
+    begin
+      StyleOf(ObjOf(OptFind(o, 'handleStyle')), ObjOf(ro.Find('handleStyle')), 'color', 'borderColor',
+        'borderWidth', 'item', ['borderColor'], Result.HandleEmph);
+      StyleOf(ObjOf(OptFind(o, 'moveHandleStyle')), ObjOf(ro.Find('moveHandleStyle')), 'color',
+        'borderColor', 'borderWidth', 'item', ['color'], Result.MoveHandleEmph);
+    end
+    else
+    begin
+      StyleOf(ObjOf(o.Find('handleStyle')), nil, 'color', 'borderColor', 'borderWidth', 'item', [],
+        Result.HandleEmph);
+      StyleOf(ObjOf(o.Find('moveHandleStyle')), nil, 'color', 'borderColor', 'borderWidth', 'item', [],
+        Result.MoveHandleEmph);
+    end;
   end;
   { [R5-F] the hover's shadows over the normal ones }
   if o <> nil then
@@ -527,20 +676,18 @@ begin
     Result.MoveHandleEmphShadow := Result.MoveHandle.Shadow;
   end;
   Result.Brush := BlankStyle;
-  StyleOf(ObjOf(node.Find('brushStyle')), 'color', 'borderColor', 'borderWidth',
-    Result.Brush);
+  StyleOf(ObjOf(node.Find('brushStyle')), RootAt('brushStyle', ''), 'color', 'borderColor',
+    'borderWidth', 'item', ['color', 'opacity'], Result.Brush);
   o := ObjOf(node.Find('dataBackground'));
-  if o <> nil then
-  begin
-    StyleOf(ObjOf(o.Find('areaStyle')), 'color', '', '', Result.ShadowArea[0]);
-    StyleOf(ObjOf(o.Find('lineStyle')), '', 'color', 'width', Result.ShadowLine[0]);
-  end;
+  StyleOf(ObjOf(OptFind(o, 'areaStyle')), RootAt('dataBackground', 'areaStyle'), 'color', '', '',
+    '', ['color', 'opacity'], Result.ShadowArea[0]);
+  StyleOf(ObjOf(OptFind(o, 'lineStyle')), RootAt('dataBackground', 'lineStyle'), '', 'color',
+    'width', 'line', ['color', 'width'], Result.ShadowLine[0]);
   o := ObjOf(node.Find('selectedDataBackground'));
-  if o <> nil then
-  begin
-    StyleOf(ObjOf(o.Find('areaStyle')), 'color', '', '', Result.ShadowArea[1]);
-    StyleOf(ObjOf(o.Find('lineStyle')), '', 'color', 'width', Result.ShadowLine[1]);
-  end;
+  StyleOf(ObjOf(OptFind(o, 'areaStyle')), RootAt('selectedDataBackground', 'areaStyle'), 'color',
+    '', '', '', ['color', 'opacity'], Result.ShadowArea[1]);
+  StyleOf(ObjOf(OptFind(o, 'lineStyle')), RootAt('selectedDataBackground', 'lineStyle'), '',
+    'color', 'width', 'line', ['color', 'width'], Result.ShadowLine[1]);
   s := ObjOf(node.Find('textStyle'));
   if s <> nil then
   begin
@@ -1144,6 +1291,8 @@ begin
   Result.PosGroupRect := r;
   if IsNan(r.X) then Result.GroupX := Result.LocX else Result.GroupX := Result.LocX - r.X;
   if IsNan(r.Y) then Result.GroupY := Result.LocY else Result.GroupY := Result.LocY - r.Y;
+  Result.Unplaced := IsNan(Result.GroupX) or IsInfinite(Result.GroupX)
+    or IsNan(Result.GroupY) or IsInfinite(Result.GroupY);
   { the shadow groups' clips }
   if Result.ShadowDrawn then
   begin
@@ -1397,9 +1546,11 @@ var
     end;
   end;
 
-  { the element's transform to the device }
+  { the element's transform to the device -- [R7-AE] none for an unplaced
+    slider: built in its own frame, css px (Framed) }
   function Dev(ARole: TTyDzRole): TTyMat2D;
   begin
+    if ALayout.Unplaced then Exit(Ident);
     Result := TyMatMul(D, TyDzGlobal(ALayout, ARole));
   end;
 
@@ -1484,6 +1635,11 @@ var
     TyZrApply(M, AE.PathRect.X + AE.PathRect.W / 2, AE.PathRect.Y + AE.PathRect.H / 2,
       cx, cy);
     el.Shape := TyBuildSymbol(spec, cx, cy);
+    { [R7-AC] the frame it is brushed in (its whole transform): its pen
+      strokeNoScale, the canvas' lineWidth and lineDashOffset are in it --
+      what it hands on, and a phase it takes from the canvas, are measured
+      there }
+    el.CanvasM := TTyDoubleArray.Create(M[0], M[1], M[2], M[3], M[4], M[5]);
     el.Style.HasFill := True;
     el.Style.FillColor := AFill;
     if AHasStroke then
@@ -1515,8 +1671,10 @@ var
     gi := Ord(ARole) - Ord(dzrShadowPolygon0);
     if not AClose then gi := Ord(ARole) - Ord(dzrShadowPolyline0);
     el.HasClip := True;
-    el.ClipRect := DevRect(ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip,
-      TyMatMul(D, TyDzGlobal(ALayout, TTyDzRole(Ord(dzrShadow0) + gi))));
+    { ([R7-AE] an unplaced slider's in its frame: Framed) }
+    if not ALayout.Unplaced then
+      el.ClipRect := DevRect(ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip,
+        TyMatMul(D, TyDzGlobal(ALayout, TTyDzRole(Ord(dzrShadow0) + gi))));
     if AClose then
     begin
       el.Style.HasFill := True;
@@ -1530,6 +1688,8 @@ var
         AInk.ShadowLine[Ord(gi = 1)], 1);
       el.Style.StrokeWidthLogical := LineWidthOr(ASpec.ShadowLine[Ord(gi = 1)], 0.5);
       TyStyleSetShadow(el.Style, ASpec.ShadowLine[Ord(gi = 1)].Shadow);
+      { [R7-AC] getLineStyle's dash, phase, cap, join, miterLimit }
+      PenOn(el, ASpec.ShadowLine[Ord(gi = 1)], el.Style.StrokeWidthLogical);
     end;
     AList.Add(el);
     Inc(Result);
@@ -1539,24 +1699,91 @@ var
   e: TTyDzElement;
   lb: TTyDzLabel;
   M: TTyMat2D;
+  n0: Integer;
   function Finite(A: Double): Boolean;
   begin
     Result := not (IsNan(A) or IsInfinite(A));
+  end;
+
+  { [R7-AE] AN UNPLACED SLIDER'S ELEMENTS, those ARole added from AFrom:
+    in their own frame -- the path the element holds (zrender's commands,
+    css px; a picture's corners as built), the transform refused
+    (cTyCanvasTransformLeft) and the canvas' own frame's origin, a
+    shadow's group clip in that frame. A handle's pen is strokeNoScale:
+    the canvas' lineWidth, dash and phase are over the line scale its
+    transform's scale and turn still have (Path.getLineScale) }
+  procedure Framed(AFrom: Integer; ARole: TTyDzRole);
+  var
+    k, j, gi: Integer;
+    pe: PTyChartElement;
+    G: TTyMat2D;
+    ls: Double;
+    c: TTyXYWH;
+  begin
+    { [R7-AE] a pen of an infinite width: the canvas refuses it and strokes
+      at the width it had (TyCanvasRunStep) [was: stroked infinitely wide] }
+    for k := AFrom to AList.Count - 1 do
+      if IsInfinite(AList.Ref(k)^.Style.StrokeWidthLogical) then
+        AList.Ref(k)^.CanvasFlags := AList.Ref(k)^.CanvasFlags or cTyCanvasWidthLeft;
+    if not ALayout.Unplaced then Exit;
+    for k := AFrom to AList.Count - 1 do
+    begin
+      pe := AList.Ref(k);
+      SetLength(pe^.FrameShape, 1);
+      if (Length(e.Path) > 0) and (pe^.Shape.Image = '') then
+        pe^.FrameShape[0] := TyMkZrShape(e.Path, Ident, False)
+      else
+        pe^.FrameShape[0] := pe^.Shape;
+      pe^.Shape := pe^.FrameShape[0];
+      pe^.FrameOrigin := TyPointF(AOriginX, AOriginY);
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasTransformLeft;
+      pe^.CanvasM := nil;
+      if ARole in [dzrShadowPolygon0..dzrShadowPolyline2] then
+      begin
+        if ARole <= dzrShadowPolygon2 then gi := Ord(ARole) - Ord(dzrShadowPolygon0)
+        else gi := Ord(ARole) - Ord(dzrShadowPolyline0);
+        c := ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip;
+        pe^.FrameClip := TTyDoubleArray.Create(c.X, c.Y, c.W, c.H);
+        pe^.ClipRect := TyRectF(c.X, c.Y, c.X + c.W, c.Y + c.H);
+      end;
+      if ARole in [dzrHandle0, dzrHandle1] then
+      begin
+        G := TyMatMul(ALayout.SG, ALayout.Kids[ARole].Local);
+        if (Abs(G[0] - 1) > 1e-10) and (Abs(G[3] - 1) > 1e-10) then
+          ls := Sqrt(Abs(G[0] * G[3] - G[2] * G[1]))
+        else
+          ls := 1;
+        if (ls > 1e-10) and not IsInfinite(ls) then
+        begin
+          if not IsInfinite(pe^.Style.StrokeWidthLogical) then
+          pe^.Style.StrokeWidthLogical := pe^.Style.StrokeWidthLogical / ls;
+          pe^.Style.DashLogical := Copy(pe^.Style.DashLogical, 0, Length(pe^.Style.DashLogical));
+          for j := 0 to High(pe^.Style.DashLogical) do
+            pe^.Style.DashLogical[j] := pe^.Style.DashLogical[j] / ls;
+          pe^.Style.DashOffsetLogical := pe^.Style.DashOffsetLogical / ls;
+        end;
+      end;
+    end;
   end;
 
 begin
   Result := 0;
   if not ALayout.Valid then Exit;
   { WASHED AT THE DOOR: the painter runs with the traps on, and a window
-    with no number in it has nowhere to draw }
-  if not (Finite(ALayout.GroupX) and Finite(ALayout.GroupY) and Finite(ALayout.L)
-    and Finite(ALayout.T) and Finite(ALayout.HandleEnds[0])
+    with no number in it has nowhere to draw -- [R7-AE] a group of no place
+    is drawn in the elements' own frames (Framed) }
+  if not ((Finite(ALayout.GroupX) and Finite(ALayout.GroupY)) or ALayout.Unplaced) then Exit;
+  if not (Finite(ALayout.L) and Finite(ALayout.T) and Finite(ALayout.HandleEnds[0])
     and Finite(ALayout.HandleEnds[1]) and Finite(ALayout.HandleH)) then Exit;
   D := TyZrLocal(AScale, AScale, 0, AOriginX, AOriginY);
   for p := 0 to ALayout.Painted - 1 do
   begin
     role := ALayout.Paint[p];
     e := ALayout.Kids[role];
+    n0 := AList.Count;
+    { ([R7-AE] an unplaced slider's labels: not drawn, see Framed) }
+    if ALayout.Unplaced and (role in [dzrLabel0, dzrLabel1]) then Continue;
+    try
     case role of
       dzrBackground, dzrFiller:
         begin
@@ -1604,6 +1831,13 @@ begin
             fill, and the model's default border (the theme's); the theme's
             hover ink where the author wrote no colour at all
             [Was: the theme's hover inks whatever the author wrote.] }
+          { [R7-AC] getItemStyle's border dash, phase, cap, join,
+            miterLimit -- the hover's over them }
+          if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
+            PenOn(el, PenOver(ASpec.HandleEmph, ASpec.Handle),
+              LineWidthOr(ASpec.HandleEmph, LineWidthOr(ASpec.Handle, 1)))
+          else
+            PenOn(el, ASpec.Handle, LineWidthOr(ASpec.Handle, 1));
           if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
           begin
             if ASpec.HandleEmph.HasOpacity then op := ASpec.HandleEmph.Opacity
@@ -1668,6 +1902,14 @@ begin
             TyStyleSetShadow(el.Style, ASpec.MoveHandleEmphShadow)
           else
             TyStyleSetShadow(el.Style, ASpec.MoveHandle.Shadow);
+          { [R7-AC] its border's dash, phase, cap, join, miterLimit }
+          if el.Style.StrokeWidthLogical > 0 then
+          begin
+            if ALayout.MoveHover then
+              PenOn(el, PenOver(ASpec.MoveHandleEmph, ASpec.MoveHandle), el.Style.StrokeWidthLogical)
+            else
+              PenOn(el, ASpec.MoveHandle, el.Style.StrokeWidthLogical);
+          end;
           if e.Shape.W > 0 then
           begin
             AList.Add(el);
@@ -1710,9 +1952,13 @@ begin
           Inc(Result);
         end;
     end;
+    finally
+      Framed(n0, role);
+    end;
   end;
-  { the brush rect, added to the slider group last: silent, over the body }
-  if ALayout.HasBrush and (not IsNan(ALayout.BrushW)) then
+  { the brush rect, added to the slider group last: silent, over the body
+    ([R7-AE] an unplaced slider is never brushed) }
+  if ALayout.HasBrush and (not IsNan(ALayout.BrushW)) and not ALayout.Unplaced then
   begin
     el := Blank(dzrBackground);
     el.Z2 := 0;
@@ -1721,8 +1967,18 @@ begin
     el.Style.HasFill := True;
     el.Style.FillColor := Ink(ASpec.Brush, True, AInk.Brush, 0.3);
     TyStyleSetShadow(el.Style, ASpec.Brush.Shadow);
+    { [R7-AC] brushStyle's border (getItemStyle: its stroke and pen)
+      [was: none drawn] }
+    if ASpec.Brush.HasStroke and (LineWidthOr(ASpec.Brush, 0) > 0) then
+    begin
+      el.Style.StrokeColor := Ink(ASpec.Brush, False, 0, 1);
+      el.Style.StrokeWidthLogical := LineWidthOr(ASpec.Brush, 0);
+      PenOn(el, ASpec.Brush, el.Style.StrokeWidthLogical);
+    end;
+    n0 := AList.Count;
     AList.Add(el);
     Inc(Result);
+    Framed(n0, dzrBackground);
   end;
 end;
 

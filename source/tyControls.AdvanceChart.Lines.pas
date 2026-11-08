@@ -2242,6 +2242,61 @@ begin
   end;
 end;
 
+{ [R7-AE] AN ELEMENT IN ITS OWN FRAME UNDER THE TRANSFORM THE CANVAS KEPT
+  (an unplaced slider's: TTyChartElement.FrameShape): AM the canvas'
+  transform (device px) -- its path, its group's clip and its pen mapped
+  through it; the pen's width, dash and phase stay the canvas' own (in that
+  frame), its scale and shape the map's }
+procedure PlaceFrame(var AEl: TTyChartElement; const AM: TTyMat2D; ADs: Double);
+var
+  k: Integer;
+  L: TTyMat2D;
+  xs, ys: array[0..3] of Double;
+
+  procedure Map(var AX, AY: Double);
+  var x: Double;
+  begin
+    x := AX;
+    AX := AM[0] * x + AM[2] * AY + AM[4];
+    AY := AM[1] * x + AM[3] * AY + AM[5];
+  end;
+
+begin
+  AEl.Shape := AEl.FrameShape[0];
+  AEl.Shape.Points := Copy(AEl.Shape.Points, 0, Length(AEl.Shape.Points));
+  for k := 0 to High(AEl.Shape.Points) do Map(AEl.Shape.Points[k].X, AEl.Shape.Points[k].Y);
+  AEl.Shape.Cmds := Copy(AEl.Shape.Cmds, 0, Length(AEl.Shape.Cmds));
+  for k := 0 to High(AEl.Shape.Cmds) do
+  begin
+    Map(AEl.Shape.Cmds[k].X1, AEl.Shape.Cmds[k].Y1);
+    Map(AEl.Shape.Cmds[k].X2, AEl.Shape.Cmds[k].Y2);
+    Map(AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+  end;
+  AEl.Shape.HasCmdBounds := False;
+  AEl.Ignore := False;
+  { the clip: its rect through the map (its bounds where the map turns it) }
+  if AEl.HasClip and (Length(AEl.FrameClip) = 4) then
+  begin
+    xs[0] := AEl.FrameClip[0];
+    ys[0] := AEl.FrameClip[1];
+    xs[1] := AEl.FrameClip[0] + AEl.FrameClip[2];
+    ys[1] := ys[0];
+    xs[2] := xs[1];
+    ys[2] := AEl.FrameClip[1] + AEl.FrameClip[3];
+    xs[3] := xs[0];
+    ys[3] := ys[2];
+    for k := 0 to 3 do Map(xs[k], ys[k]);
+    AEl.ClipRect := TyRectF(MinValue(xs), MinValue(ys), MaxValue(xs), MaxValue(ys));
+  end;
+  L := AM;
+  L[4] := 0;
+  L[5] := 0;
+  if not (ADs > 0) then ADs := 1;
+  for k := 0 to 3 do L[k] := L[k] / ADs;
+  AEl.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+  TyStyleSetPenShape(AEl.Style, L);
+end;
+
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
   AGone: Boolean);
 var ds: Double;
@@ -2559,14 +2614,30 @@ end;
   casts none nought, zrender's '#000' the colour (TSpan's `|| 0`, its
   default shadowColor); a caption of no span the same [was: the last
   span's alone, a refused part nought; R7-AA's colour the last span's,
-  where it blurs, from the canvas before the label] }
+  where it blurs, from the canvas before the label]. [R7-AC] AND A TEXT'S
+  BOX (a drawn rect piece) IN ITS PLACE AMONG THEM: it sets the canvas'
+  shadowColor, casting or not -- its own (RectPiece: the written one, else
+  the text style's prototype '#000'; one of no alpha 'transparent'), the
+  canvas' where it is a colour no parser reads (marked, CanvasLeft 4) }
 procedure CaptionShadowRun(var ARun: TTyCanvasRun; var AEl: TTyChartElement; APart: Integer);
-var k: Integer; pc: ^TTyRtPiece; any: Boolean;
+var k: Integer; pc: ^TTyRtPiece; any, box: Boolean;
 begin
   any := False;
+  box := False;
   for k := 0 to High(AEl.Caption.RtPieces) do
   begin
     pc := @AEl.Caption.RtPieces[k];
+    if (APart = 2) and (pc^.Kind = rpkRect) and pc^.Drawn then
+    begin
+      box := True;
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
+      begin
+        pc^.CanvasLeft := pc^.CanvasLeft or 4;
+        pc^.ShadowColor := ARun.Cur.Shadow;
+      end
+      else ARun.Cur.Shadow := pc^.ShadowColor;
+      Continue;
+    end;
     if pc^.Text = '' then Continue;
     any := True;
     if not pc^.HasShadow then
@@ -2601,7 +2672,7 @@ begin
       else ARun.Cur.Shadow := pc^.ShadowColor;
     end;
   end;
-  if any then Exit;
+  if any or box then Exit;
   if APart = 0 then ARun.Cur.Blur := 0
   else if APart = 1 then
   begin
@@ -2762,8 +2833,9 @@ begin
     ARun.ClipSeries := AEl.Datum.SeriesIndex;
     ARun.ClipRect := AEl.ClipRect;
     { [R7-V] updateClipStatus sets the clip path's transform (a series
-      group's clip has none) }
-    ARun.Cur.HasT := False;
+      group's clip has none) -- [R7-AE] refused where it is no number (an
+      unplaced slider's shadow groups): the canvas keeps the one it had }
+    if Length(AEl.FrameShape) = 0 then ARun.Cur.HasT := False;
   end;
   { ([R7-AA] a graphic's or a timeline's text: its pieces, at no caption
     size of its own) }
@@ -2868,6 +2940,23 @@ begin
   elM := Default(TTyMat2D);
   if (AEl.CanvasFlags and cTyCanvasTransformLeft) <> 0 then
   begin
+    { [R7-AE] an element in its own frame (an unplaced slider's): under the
+      transform kept, else the canvas' own frame here }
+    if Length(AEl.FrameShape) > 0 then
+    begin
+      if ARun.Cur.HasT then PlaceFrame(AEl, ARun.Cur.M, ARun.Ds)
+      else
+      begin
+        elM := Default(TTyMat2D);
+        elM[0] := ARun.Ds;
+        elM[3] := ARun.Ds;
+        elM[4] := AEl.FrameOrigin.X;
+        elM[5] := AEl.FrameOrigin.Y;
+        PlaceFrame(AEl, elM, ARun.Ds);
+      end;
+    end
+    else
+    begin
     if ARun.Cur.HasT then PlaceEffectM(AEl, ARun.Cur.M)
     else
     begin
@@ -2876,6 +2965,7 @@ begin
       PlaceEffect(AEl, ds, ds, 0, 0, NaN);
     end;
     NanEffectHit(AEl);
+    end;
     { (what the canvas keeps is what it had) }
     elHasT := ARun.Cur.HasT;
     elM := ARun.Cur.M;
@@ -3003,7 +3093,9 @@ begin
             ARun.Cur.Stroke := pc^.Stroke;
             ARun.Cur.StrokeGrad := Default(TTyChartGradient);
           end;
-          if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
+          { ([R7-AC] a box's border of 'Infinity': the width the canvas had) }
+          if (pc^.CanvasLeft and 8) <> 0 then pc^.LineWidth := ARun.Cur.LineWidth
+          else if pc^.LineWidth > 0 then ARun.Cur.LineWidth := pc^.LineWidth;
         end;
       end;
   end

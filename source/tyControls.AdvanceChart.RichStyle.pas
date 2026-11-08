@@ -727,11 +727,14 @@ begin
       and (TJSONObject(d).Find('image').AsString <> '') then
       S.BgImage := TJSONObject(d).Find('image').AsString
     else
-      case ColourRead(d, c) of
+      { ([R7-AC] a colour no parser reads: the box's Rect is filled /
+        stroked all the same, in what the canvas had -- ColourReadText
+        [was: none]) }
+      case ColourReadText(d, c) of
         crColour: begin S.HasBackground := True; S.Background := c; end;
         crInherit: S.BackgroundInherit := True;
       end;
-    case ColourRead(Get(AOwn, 'borderColor'), c) of
+    case ColourReadText(Get(AOwn, 'borderColor'), c) of
       crColour: begin S.HasBorderColor := True; S.BorderColor := c; end;
       crInherit: S.BorderColorInherit := True;
     end;
@@ -744,7 +747,7 @@ begin
     if NumOf(Get(AOwn, 'shadowBlur'), x) then S.BoxShadowBlur := x;
     if NumOf(Get(AOwn, 'shadowOffsetX'), x) then S.BoxShadowOffsetX := x;
     if NumOf(Get(AOwn, 'shadowOffsetY'), x) then S.BoxShadowOffsetY := x;
-    if ColourRead(Get(AOwn, 'shadowColor'), c) = crColour then
+    if ColourReadText(Get(AOwn, 'shadowColor'), c) = crColour then
     begin
       S.HasBoxShadowColor := True;
       S.BoxShadowColor := c;

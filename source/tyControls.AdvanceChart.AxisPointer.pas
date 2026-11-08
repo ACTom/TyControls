@@ -426,6 +426,14 @@ begin
     begin
       ASpec.HasColour := True;
       ASpec.Colour := c;
+    end
+    { [R7-AC] a string no parser reads: the label's span keeps the fill the
+      canvas had [was: not written, the skin's] }
+    else if (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      ASpec.HasColour := True;
+      ASpec.Colour := cTyCanvasColourLeft;
     end;
   end;
   if Claim(lbl, 'backgroundColor', ASeen, 'label.') then
@@ -435,6 +443,14 @@ begin
     begin
       ASpec.HasBackground := True;
       ASpec.Background := c;
+    end
+    { [R7-AC] and its box the fill (buildLabelElOption's backgroundColor:
+      the box drawn, in what the canvas had) }
+    else if (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      ASpec.HasBackground := True;
+      ASpec.Background := cTyCanvasColourLeft;
     end;
   end;
   if Claim(lbl, 'borderColor', ASeen, 'label.') then
@@ -972,6 +988,13 @@ begin
       Result.HasColour := True;
       Result.Colour := c;
     end
+    { [R7-AE] a colour no parser reads (not '' nor 'none'): the canvas
+      refuses it and fills with the one it had [was: no fill] }
+    else if (d.AsString <> '') and not TyChartColorIsNone(d.AsString) then
+    begin
+      Result.HasColour := True;
+      Result.Colour := cTyCanvasColourLeft;
+    end
     else
       Result.NoFill := True;
   end;
@@ -981,8 +1004,23 @@ begin
   begin
     Result.HasBorderColour := True;
     Result.BorderColour := c;
+  end
+  { [R7-AE] the same for its border [was: none] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and not TyChartColorIsNone(d.AsString) then
+  begin
+    Result.HasBorderColour := True;
+    Result.BorderColour := cTyCanvasColourLeft;
   end;
   Result.BorderWidth := Num('borderWidth', 0);
+  { [R7-AE] a string is JavaScript's Number of it ('Infinity' a pen the
+    canvas refuses; one of no number strokes nothing) [was: nought] }
+  d := Key('borderWidth');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.BorderWidth := TyOptJsNumber(d);
+    if IsNan(Result.BorderWidth) then Result.BorderWidth := 0;
+  end;
   Result.Opacity := Num('opacity', 1);
   { [R5-F] the shadow [was: not read] }
   Result.HasShadow := TyShadowOfValues(Key('shadowBlur'), Key('shadowOffsetX'),

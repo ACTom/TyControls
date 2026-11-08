@@ -55,6 +55,9 @@ type
     function TipSpec: TTyTooltipSpec;
     function TipText: string;
     function TipStroke: TTyColor;
+    function TipShown: TTyTooltipSpec;
+    { [R7-AE] the point the last show was made at }
+    function TipAt: TTyPointF;
   end;
 
   TAdvChartReachStylesOracleTest = class(TTestCase)
@@ -123,6 +126,16 @@ end;
 function TReachProbe.TipText: string;
 begin
   Result := TooltipFormatterText;
+end;
+
+function TReachProbe.TipShown: TTyTooltipSpec;
+begin
+  Result := TooltipShownSpec;
+end;
+
+function TReachProbe.TipAt: TTyPointF;
+begin
+  Result := TooltipShownAt;
 end;
 
 function TReachProbe.TipStroke: TTyColor;
@@ -359,10 +372,45 @@ begin
         { a proxy's box: its own cascade, not the item's -- the box alone }
         if tip.Find('action') is TJSONObject then
         begin
+          { ([R7-AE] an action before it: the tip it leaves showing) }
+          if tip.Find('pre') is TJSONObject then
+          begin
+            FChart.DispatchAction(tip.Objects['pre'].AsJSON);
+            Draw;
+          end;
           FChart.DispatchAction(tip.Objects['action'].AsJSON);
           Draw;
+          { [R7-AE] a showTip that opens nothing (a timeline's index and a
+            name: no tooltipConfig) }
+          if tip.Find('none') <> nil then
+          begin
+            Inc(nCases);
+            Inc(nTip);
+            if (FChart.TipText <> '') or (FChart.TipStroke <> 0) then
+            begin
+              Inc(nBad);
+              bad := bad + LineEnding + Format('  %s: a box shown ("%s"), upstream none',
+                [id, FChart.TipText]);
+            end;
+            Continue;
+          end;
           want := ' text ' + tip.Strings['text'] + ' stroke ' + tip.Strings['stroke'];
           have := ' text ' + FChart.TipText + ' stroke ' + ColourHex(Cardinal(FChart.TipStroke));
+          { [R7-AC] and the padding the shown model has (the root's, under
+            the global tooltip's, for every kind of tooltip) }
+          ts := FChart.TipShown;
+          want := want + ' padding ' + PadText(tip.Find('padding'));
+          if ts.HasPadding then
+            have := have + ' padding ' + FloatToStr(ts.PadTop) + ',' + FloatToStr(ts.PadRight) + ','
+              + FloatToStr(ts.PadBottom) + ',' + FloatToStr(ts.PadLeft)
+          else have := have + ' padding none';
+          { [R7-AE] and the point it was shown at (the centre of the named
+            element's rect) }
+          if tip.Find('at') is TJSONArray then
+          begin
+            want := want + Format(' at %.4f,%.4f', [tip.Arrays['at'].Floats[0], tip.Arrays['at'].Floats[1]]);
+            have := have + Format(' at %.4f,%.4f', [FChart.TipAt.X, FChart.TipAt.Y]);
+          end;
           Inc(nCases);
           Inc(nTip);
           if have <> want then

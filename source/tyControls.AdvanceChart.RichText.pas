@@ -1116,8 +1116,9 @@ end;
 
 function NeedBackground(const S: TTyRtStyle): Boolean;
 begin
+  { ([R7-AC] a border of 'Infinity' is truthy too) }
   Result := S.HasBackground or (S.BgImage <> '') or LineHeightTruthy(S)
-    or ((S.BorderWidth <> 0) and S.HasBorderColor);
+    or (((S.BorderWidth <> 0) or S.BorderWidthInf) and S.HasBorderColor);
 end;
 
 procedure AddPiece(var R: TTyRtResult; const P: TTyRtPiece);
@@ -1163,6 +1164,21 @@ begin
     Result.BorderDash := S.BorderDash;
     Result.BorderDashOffset := S.BorderDashOffset;
     if IsNan(Result.BorderDashOffset) then Result.BorderDashOffset := 0;
+  end
+  { [R7-AC] A BORDER OF 'Infinity': stroked all the same, at the lineWidth
+    the canvas had (it refuses Infinity, doubled or not) -- marked for the
+    paint order (CanvasLeft 8), no width until it is settled [was: not
+    stroked] }
+  else if S.BorderWidthInf and S.HasBorderColor then
+  begin
+    Result.HasStroke := True;
+    Result.Stroke := S.BorderColor;
+    Result.LineWidth := 0;
+    Result.CanvasLeft := Result.CanvasLeft or 8;
+    if Result.HasFill then Result.StrokeFirst := True;
+    Result.BorderDash := S.BorderDash;
+    Result.BorderDashOffset := S.BorderDashOffset;
+    if IsNan(Result.BorderDashOffset) then Result.BorderDashOffset := 0;
   end;
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   Result.Rounded := S.RadiusTruthy or (S.Radius[0] + S.Radius[1] + S.Radius[2]
@@ -1172,7 +1188,9 @@ begin
   { [R5-A] the box's canvas shadow: style.shadowBlur || 0, the offsets alike,
     shadowColor || 'transparent' -- where the text style names none its
     prototype's '#000' }
-  if (not S.HasBoxShadowColor) or ((S.BoxShadowColor shr 24) <> 0) then
+  { ([R7-AC] a colour no parser reads too: the canvas' shadowColor) }
+  if (not S.HasBoxShadowColor) or ((S.BoxShadowColor shr 24) <> 0)
+    or (S.BoxShadowColor = cTyCanvasColourLeft) then
   begin
     if (not IsNan(S.BoxShadowBlur)) and (S.BoxShadowBlur > 0) then
       Result.ShadowBlur := S.BoxShadowBlur;
