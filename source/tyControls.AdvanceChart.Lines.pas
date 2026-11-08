@@ -2242,6 +2242,61 @@ begin
   end;
 end;
 
+{ [R7-AE] AN ELEMENT IN ITS OWN FRAME UNDER THE TRANSFORM THE CANVAS KEPT
+  (an unplaced slider's: TTyChartElement.FrameShape): AM the canvas'
+  transform (device px) -- its path, its group's clip and its pen mapped
+  through it; the pen's width, dash and phase stay the canvas' own (in that
+  frame), its scale and shape the map's }
+procedure PlaceFrame(var AEl: TTyChartElement; const AM: TTyMat2D; ADs: Double);
+var
+  k: Integer;
+  L: TTyMat2D;
+  xs, ys: array[0..3] of Double;
+
+  procedure Map(var AX, AY: Double);
+  var x: Double;
+  begin
+    x := AX;
+    AX := AM[0] * x + AM[2] * AY + AM[4];
+    AY := AM[1] * x + AM[3] * AY + AM[5];
+  end;
+
+begin
+  AEl.Shape := AEl.FrameShape[0];
+  AEl.Shape.Points := Copy(AEl.Shape.Points, 0, Length(AEl.Shape.Points));
+  for k := 0 to High(AEl.Shape.Points) do Map(AEl.Shape.Points[k].X, AEl.Shape.Points[k].Y);
+  AEl.Shape.Cmds := Copy(AEl.Shape.Cmds, 0, Length(AEl.Shape.Cmds));
+  for k := 0 to High(AEl.Shape.Cmds) do
+  begin
+    Map(AEl.Shape.Cmds[k].X1, AEl.Shape.Cmds[k].Y1);
+    Map(AEl.Shape.Cmds[k].X2, AEl.Shape.Cmds[k].Y2);
+    Map(AEl.Shape.Cmds[k].X, AEl.Shape.Cmds[k].Y);
+  end;
+  AEl.Shape.HasCmdBounds := False;
+  AEl.Ignore := False;
+  { the clip: its rect through the map (its bounds where the map turns it) }
+  if AEl.HasClip and (Length(AEl.FrameClip) = 4) then
+  begin
+    xs[0] := AEl.FrameClip[0];
+    ys[0] := AEl.FrameClip[1];
+    xs[1] := AEl.FrameClip[0] + AEl.FrameClip[2];
+    ys[1] := ys[0];
+    xs[2] := xs[1];
+    ys[2] := AEl.FrameClip[1] + AEl.FrameClip[3];
+    xs[3] := xs[0];
+    ys[3] := ys[2];
+    for k := 0 to 3 do Map(xs[k], ys[k]);
+    AEl.ClipRect := TyRectF(MinValue(xs), MinValue(ys), MaxValue(xs), MaxValue(ys));
+  end;
+  L := AM;
+  L[4] := 0;
+  L[5] := 0;
+  if not (ADs > 0) then ADs := 1;
+  for k := 0 to 3 do L[k] := L[k] / ADs;
+  AEl.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+  TyStyleSetPenShape(AEl.Style, L);
+end;
+
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
   AGone: Boolean);
 var ds: Double;
@@ -2778,8 +2833,9 @@ begin
     ARun.ClipSeries := AEl.Datum.SeriesIndex;
     ARun.ClipRect := AEl.ClipRect;
     { [R7-V] updateClipStatus sets the clip path's transform (a series
-      group's clip has none) }
-    ARun.Cur.HasT := False;
+      group's clip has none) -- [R7-AE] refused where it is no number (an
+      unplaced slider's shadow groups): the canvas keeps the one it had }
+    if Length(AEl.FrameShape) = 0 then ARun.Cur.HasT := False;
   end;
   { ([R7-AA] a graphic's or a timeline's text: its pieces, at no caption
     size of its own) }
@@ -2884,6 +2940,23 @@ begin
   elM := Default(TTyMat2D);
   if (AEl.CanvasFlags and cTyCanvasTransformLeft) <> 0 then
   begin
+    { [R7-AE] an element in its own frame (an unplaced slider's): under the
+      transform kept, else the canvas' own frame here }
+    if Length(AEl.FrameShape) > 0 then
+    begin
+      if ARun.Cur.HasT then PlaceFrame(AEl, ARun.Cur.M, ARun.Ds)
+      else
+      begin
+        elM := Default(TTyMat2D);
+        elM[0] := ARun.Ds;
+        elM[3] := ARun.Ds;
+        elM[4] := AEl.FrameOrigin.X;
+        elM[5] := AEl.FrameOrigin.Y;
+        PlaceFrame(AEl, elM, ARun.Ds);
+      end;
+    end
+    else
+    begin
     if ARun.Cur.HasT then PlaceEffectM(AEl, ARun.Cur.M)
     else
     begin
@@ -2892,6 +2965,7 @@ begin
       PlaceEffect(AEl, ds, ds, 0, 0, NaN);
     end;
     NanEffectHit(AEl);
+    end;
     { (what the canvas keeps is what it had) }
     elHasT := ARun.Cur.HasT;
     elM := ARun.Cur.M;

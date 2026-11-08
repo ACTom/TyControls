@@ -2256,15 +2256,57 @@ var
     AEl.Style.GradBox := TyGrowByStroke(TyRectToXYWH(u), AFilled, AEl.Style.StrokeWidthLogical);
   end;
 
+  { [R7-AE] A GRADIENT AXIS LINE'S BOX: the Line's (a single axis', a
+    radius axis') ends, the angle axis' Circle, Arc or Ring through its
+    path -- no fill, grown by max(width, 5) [was: none, the gradient made
+    over the box of whatever took it next] }
+  procedure LineBoxOn(var AEl: TTyChartElement; AShape: Integer; const ASLine: TTySingleLine;
+    const APLine: TTyPolarLine; const AArc: TTyPolarArc);
+  var bx: TTyXYWH; path: TTyZrPath;
+  begin
+    if AEl.Style.StrokeGradient.Kind = cgkNone then Exit;
+    case AShape of
+      0: bx := TyRectToXYWH(TyRectF(Math.Min(ASLine.X1, ASLine.X2), Math.Min(ASLine.Y1, ASLine.Y2),
+        Math.Max(ASLine.X1, ASLine.X2), Math.Max(ASLine.Y1, ASLine.Y2)));
+      1: bx := TyRectToXYWH(TyRectF(Math.Min(APLine.X1, APLine.X2), Math.Min(APLine.Y1, APLine.Y2),
+        Math.Max(APLine.X1, APLine.X2), Math.Max(APLine.Y1, APLine.Y2)));
+    else
+      begin
+        { Circle: moveTo(cx + r, cy), the whole turn; Arc: moveTo its start,
+          the arc; Ring: the outer circle and the inner (the outer bounds) }
+        path := nil;
+        if AArc.Kind = pakArc then
+        begin
+          TyZrMoveTo(path, Cos(AArc.StartAngle) * AArc.R + AArc.CX, Sin(AArc.StartAngle) * AArc.R + AArc.CY);
+          TyZrArc(path, AArc.CX, AArc.CY, AArc.R, AArc.StartAngle, AArc.EndAngle, not AArc.Clockwise);
+        end
+        else
+        begin
+          TyZrMoveTo(path, AArc.CX + AArc.R, AArc.CY);
+          TyZrArc(path, AArc.CX, AArc.CY, AArc.R, 0, 2 * Pi, False);
+        end;
+        bx := TyZrBBox(path);
+      end;
+    end;
+    AEl.Style.GradBoxSet := True;
+    AEl.Style.GradBox := TyGrowByStroke(bx, False, AEl.Style.StrokeWidthLogical);
+  end;
+
   { the parts a view added from AFrom: their boxes }
   procedure Boxes(AFrom, AShape: Integer; const ATicks, AMinors: TTyPolarLineArray;
     const ASTicks, ASMinors, ASSplits: TTySingleLineArray; const APSplits: TTyPolarLineArray;
-    const ACircles: TTyPolarArcArray; AHasInks: Boolean);
+    const ACircles: TTyPolarArcArray; AHasInks: Boolean; const ASLine: TTySingleLine;
+    const APLine: TTyPolarLine; const AArc: TTyPolarArc);
   var j, ink2: Integer;
   begin
     for j := AFrom to High(AParts) do
     begin
       if AParts[j].El.Style.StrokeGradient.Kind = cgkNone then Continue;
+      if AParts[j].Kind = cpkLine then
+      begin
+        LineBoxOn(AParts[j].El, AShape, ASLine, APLine, AArc);
+        Continue;
+      end;
       ink2 := -1;
       if (AParts[j].Kind = cpkSplit) and AHasInks then ink2 := AParts[j].El.Datum.DataIndex;
       case AShape of
@@ -2323,7 +2365,7 @@ begin
     CompViewParts(FSingles[i].Axis, 2, 0, v.Furn, v.Spec, v.HasLine,
       CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx);
     Boxes(n0, 0, nil, nil, v.Ticks, v.MinorTicks, v.SplitLines, nil, nil,
-      Length(v.Furn.SplitLineInks) > 0);
+      Length(v.Furn.SplitLineInks) > 0, v.Line, Default(TTyPolarLine), Default(TTyPolarArc));
   end;
   { THE POLARS: the radius axes' view, then the angle axes' }
   for k := 0 to 1 do
@@ -2374,7 +2416,7 @@ begin
         CompViewParts(FPolars[i].AngleAxis, 4, 2, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts, aidx);
       Boxes(n0, k + 1, pv.Ticks, pv.MinorTicks, nil, nil, nil, pv.SplitLines, pv.SplitCircles,
-        Length(pv.Furn.SplitLineInks) > 0);
+        Length(pv.Furn.SplitLineInks) > 0, Default(TTySingleLine), pv.Line, pv.LineArc);
     end;
 end;
 
@@ -2553,6 +2595,21 @@ begin
       { a ParallelAxisView an axis, in the axes' order }
       CompViewParts(par.Axis(a), 1000 * (i + 1) + a, 0, par.Views[a].Furn, par.Views[a].Spec,
         par.Views[a].HasLine, nil, ticks, minors, none, parts, nil);
+      { [R7-AE] A GRADIENT LINE'S BOX: the Line's ends grown by the pen, at
+        least the strokeContainThreshold ParallelAxisView gives the builder
+        -- areaSelectStyle's width [was: none] }
+      for q := n to High(parts) do
+        if (parts[q].Kind = cpkLine) and (parts[q].El.Style.StrokeGradient.Kind <> cgkNone)
+          and (parts[q].El.Style.StrokeWidthLogical > 0)
+          and (a <= High(par.AxisIndices)) then
+        begin
+          parts[q].El.Style.GradBoxSet := True;
+          parts[q].El.Style.GradBox := TyGrowByStroke(TyRectToXYWH(TyRectF(
+            Math.Min(par.Views[a].Line.X1, par.Views[a].Line.X2), Math.Min(par.Views[a].Line.Y1, par.Views[a].Line.Y2),
+            Math.Max(par.Views[a].Line.X1, par.Views[a].Line.X2), Math.Max(par.Views[a].Line.Y1, par.Views[a].Line.Y2))),
+            False, Math.Max(parts[q].El.Style.StrokeWidthLogical,
+              TyParallelSelectStyleOf(FOption.ComponentAt('parallelAxis', par.AxisIndices[a])).Width));
+        end;
       { the axis' z (its model's default 10) }
       if a <= High(par.AxisIndices) then
       begin

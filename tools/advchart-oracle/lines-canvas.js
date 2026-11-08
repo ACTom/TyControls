@@ -169,6 +169,9 @@ let AA = false;
 // [R7-AC] the cases named ac-...: recorded as the aa- ones, and a gradient
 // an op is made with keeps its arguments (`fo` / `so`, as the y- cases)
 let AC = false;
+// [R7-AE] the cases named ae-...: recorded as the ac- ones, and an axis
+// pointer's handle tracked (`c.<axis>Handle<i>...`)
+let AE = false;
 let SEQ = 0;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
@@ -1495,6 +1498,223 @@ function cases() {
       axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#0000ff' } } },
       series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: '#ff0000' } }] },
     [0], { w: true, z: true }],
+    // ---- [R7-AE] (recorded as the ac- ones; a handle tracked, an option set notMerge) ----
+    // 1. a slider whose group has no place (a data shadow's line, a handle's
+    // or a move handle's width 'Infinity', or a string): every element
+    // brushed in its own frame under the transform the canvas had -- after
+    // a scatter's symbol, that symbol's; and nothing of it is hit
+    ['ae-dz-inf-sym', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 'Infinity' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1, width: 2 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 1.5 },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 3 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] },
+        { type: 'scatter', symbolSize: 8, itemStyle: { color: '#ff8800' }, data: [[5, 5]] }] },
+    [0], { w: true, z: true, probes: [[210, 143], [208, 141], [200, 150], [201, 151], [205, 155], [230, 160], [400, 300], [100, 280], [150, 275],
+      [160, 280], [280, 275], [300, 280], [5, 5], [20, 10], [100, 15], [1, 1]] }],
+    // (a dashed handle: its dash and phase over its line scale too)
+    ['ae-dz-inf-dash', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 'Infinity' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1, width: 2 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 1.5, borderType: [3, 1], borderDashOffset: 1 },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 3 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] },
+        { type: 'scatter', symbolSize: 8, itemStyle: { color: '#ff8800' }, data: [[5, 5]] }] },
+    [0], { w: true, z: true }],
+    ['ae-dz-inf-str', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1 }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: '3' },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 1 } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true, probes: [[100, 280], [160, 280], [280, 275], [5, 5], [20, 10]] }],
+    ['ae-dz-inf-move', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: true,
+        filterMode: 'none',
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        textStyle: { color: '#ff0000' },
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1 }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 2 },
+        moveHandleStyle: { color: '#8292cc', opacity: 1, borderColor: '#00ffff', borderWidth: 'Infinity' } }],
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 2 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true, probes: [[100, 280], [160, 280], [280, 275], [5, 5], [20, 10]] }],
+    // 2. a polyline left with one point (no segment to stroke): brushed all
+    // the same, handing its width, cap, join, miterLimit and dash phase on
+    ['ae-one-point', vv([{ type: 'line', symbol: 'none', clip: false, lineStyle: { color: '#123456', width: 3, cap: 'round',
+      join: 'bevel', miterLimit: 4, type: [4, 2], dashOffset: 2 }, data: [[5, 5]] },
+      { type: 'scatter', z: 5, symbolSize: 10, data: [[3, 3]], itemStyle: { color: '#ff0000', borderColor: '#00ff00',
+        borderWidth: 'Infinity', borderCap: 'foo', borderJoin: 'bar', borderMiterLimit: -1, borderType: [3, 1],
+        borderDashOffset: 'x' } }]),
+    [0], { w: true, z: true, probes: [[210, 142.5], [211, 143], [212.5, 142.5], [208, 141]] }],
+    ['ae-dz-filter', { animation: false, xAxis: { type: 'value', min: 0, max: 10, show: false },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
+        backgroundColor: '#eeeeee', fillerColor: 'rgba(0,0,255,0.2)', borderColor: '#999999',
+        dataBackground: { lineStyle: { color: '#ff0000', opacity: 1, width: 3, type: 'dashed', dashOffset: 'x',
+          cap: 'Round', join: 'Bevel', miterLimit: 'abc' }, areaStyle: { color: '#00ff00', opacity: 1 } },
+        selectedDataBackground: { lineStyle: { color: '#0000ff', opacity: 1, width: 2 }, areaStyle: { color: '#ffff00', opacity: 1 } },
+        handleStyle: { color: '#ffffff', borderColor: '#ff00ff', borderWidth: 1.5 },
+        moveHandleStyle: { color: '#8292cc', opacity: 1 } }],
+      series: [{ type: 'line', symbol: 'none', clip: false, lineStyle: { color: '#123456', width: 2, cap: 'round', join: 'bevel',
+        miterLimit: 3, type: [6, 2], dashOffset: 5 }, data: [[1, 2], [5, 8], [9, 3]] }] },
+    [0], { w: true, z: true }],
+    // (an area of one point: its polygon fills nothing, handing its fill on
+    // to the polyline in the same clip; on a polar the same; no point at all)
+    ['ae-one-area', vv([{ type: 'line', symbol: 'none', areaStyle: { color: '#00ff00', opacity: 1 },
+      lineStyle: { color: '#123456', width: 3, cap: 'round', join: 'bevel', miterLimit: 4, type: [4, 2], dashOffset: 2 },
+      data: [[5, 5]] }]),
+    [0], { w: true, z: true }],
+    ['ae-one-polar', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, show: false }, radiusAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'line', coordinateSystem: 'polar', symbol: 'none', lineStyle: { color: '#123456', width: 3,
+        cap: 'round', type: [4, 2], dashOffset: 2 }, data: [[5, 5]] }] },
+    [0], { w: true, z: true }],
+    ['ae-no-point', vv([{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 3, cap: 'round' },
+      data: [[5, '-']] }]),
+    [0], { w: true, z: true }],
+    // (an end label ignores the clip: the canvas restored before it)
+    ['ae-end-label', vv([{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 3, cap: 'round',
+      join: 'bevel', miterLimit: 4, type: [4, 2], dashOffset: 2 }, data: [[2, 2], [5, 5]],
+      endLabel: { show: true, formatter: 'E', color: '#ff0000', textBorderColor: 'nope', textBorderWidth: 2 } }]),
+    [0], { w: true, z: true }],
+    ['ae-end-label-one', vv([{ type: 'line', symbol: 'none', lineStyle: { color: '#123456', width: 3, cap: 'round',
+      join: 'bevel', miterLimit: 4, type: [4, 2], dashOffset: 2 }, data: [[5, 5]],
+      endLabel: { show: true, formatter: 'E', color: '#ff0000', textBorderColor: 'nope', textBorderWidth: 2 } }]),
+    [0], { w: true, z: true }],
+    // 3. an axis pointer's handle: the root's (z 50), added after its
+    // pointer's group -- between the lines and the labels
+    ['ae-ptr-handle', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 4, type: [5, 3],
+          dashOffset: 2, cap: 'round', join: 'bevel', miterLimit: 3 },
+          handle: { show: true, size: 20, color: '#ff8800', borderColor: '#00ffff', borderWidth: 2, shadowBlur: 3,
+            shadowColor: '#ff00ff', shadowOffsetX: 1, shadowOffsetY: 2 },
+          label: { show: true, backgroundColor: 'nope', color: 'bad', borderColor: 'x', borderWidth: 'Infinity',
+            shadowBlur: 3, shadowColor: 'nope', padding: 3, formatter: 'P' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6, status: 'show', label: { show: false },
+          lineStyle: { color: '#00ff00', width: 3 } } } }),
+    [0], { w: true, z: true }],
+    ['ae-ptr-handle-refused', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 4,
+          cap: 'round', join: 'bevel', miterLimit: 3, shadowBlur: 2, shadowColor: '#123456' },
+          handle: { show: true, size: 20, color: 'nope', borderColor: '#00ffff', borderWidth: 'Infinity', shadowBlur: -1,
+            shadowColor: 'bad' },
+          label: { show: false } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6, status: 'show', label: { show: false },
+          lineStyle: { color: '#00ff00', width: 3 } } } }),
+    [0], { w: true, z: true }],
+    // (a handle before the next pointer's line: that line's refused colour
+    // and width are the handle's)
+    ['ae-ptr-handle-order', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', label: { show: false },
+          lineStyle: { color: 'nope', width: 'Infinity' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6, status: 'show', label: { show: false },
+          lineStyle: { color: '#0000ff', width: 3 },
+          handle: { show: true, size: 20, color: '#ff8800', borderColor: '#00ffff', borderWidth: 2 } } } }),
+    [0], { w: true, z: true }],
+    ['ae-ptr-handle-single', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false },
+      axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 4 },
+        handle: { show: true, size: 20, color: '#ff8800', borderColor: '#00ffff', borderWidth: 2 },
+        label: { show: true, backgroundColor: 'nope', color: '#000000', padding: 3, formatter: 'P' } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: '#ff0000' } }] },
+    [0], { w: true, z: true }],
+    // (an axis pointer an action showed: gone after a setOption notMerge)
+    ['ae-ptr-notmerge', { animation: false, tooltip: { trigger: 'axis', showContent: false,
+      axisPointer: { type: 'line', lineStyle: { color: '#ff0000', width: 3 } } },
+      xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'], axisLabel: { show: false }, axisTick: { show: false },
+        axisLine: { show: false } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#00ff00' }, data: [1, 2, 3, 4, 5] }] },
+    [0, 0, 0], { w: true, z: true,
+      acts: { 0: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 70, y: 150 }] },
+      sets: { 1: '=', 2: '=' }, nm: { 1: true } }],
+    // (b) gradient axis lines: a polar's, a single axis', a parallel axis'
+    ['ae-grad-polar-line', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { show: false },
+        axisTick: { show: false }, axisLine: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false },
+        axisTick: { show: false }, splitLine: { show: false } },
+      series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ae-grad-radius-line', { animation: false, polar: { radius: 100 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { show: false },
+        axisTick: { show: false }, axisLine: { show: false } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: true,
+        lineStyle: { color: Object.assign({}, GRAD, { x2: 0, y2: 1 }), width: 3 } }, axisTick: { show: false },
+        splitLine: { show: false } },
+      series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ae-grad-single-line', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      axisTick: { show: false }, splitLine: { show: false }, axisLine: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: 'nope', borderColor: 'bad',
+        borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ae-grad-parallel-line', { animation: false, parallel: { left: 40, right: 40, top: 30, bottom: 30 },
+      parallelAxis: [{ dim: 0, type: 'value', min: 0, max: 10, axisLabel: { color: '#54555a' }, axisTick: { show: false },
+        name: '', axisLine: { show: true, lineStyle: { color: GRAD, width: 2 } } },
+        { dim: 1, type: 'value', min: 0, max: 10, axisLabel: { color: '#54555a' }, axisTick: { show: false }, name: '',
+          axisLine: { show: true, lineStyle: { color: 'nope', width: 3 } } }],
+      series: [{ type: 'parallel', lineStyle: { color: '#ff0000', width: 2, opacity: 1 }, data: [[2, 8]] }] },
+    [0], { w: true, z: true }],
+    // (b) a text box's token backgrounds among its spans: each token's Rect
+    // then its span
+    ['ae-token-shadow', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' },
+      label: { show: true, position: 'right', formatter: '{a|Ab}{b|Cd}', color: '#000000',
+        rich: { a: { backgroundColor: '#ffeeee', shadowColor: '#00ff00', shadowBlur: 2, padding: 2,
+          textShadowColor: 'nope', textShadowBlur: 1 },
+        b: { backgroundColor: '#eeeeff', shadowColor: '#ff00ff', shadowBlur: 2, padding: 2,
+          textShadowColor: 'bad', textShadowBlur: 1 } } } }]),
+    [0], { w: true, z: true }],
+    ['ae-token-shadow2', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' },
+      label: { show: true, position: 'right', formatter: '{a|Ab}{b|Cd}', color: '#000000',
+        rich: { a: { backgroundColor: '#ffeeee', shadowColor: '#00ff00', shadowBlur: 2, padding: 2 },
+        b: { textShadowColor: 'bad', textShadowBlur: 1 } } } }]),
+    [0], { w: true, z: true }],
+    // (b) a label's box on a host of 0.8 (a scatter's default opacity)
+    ['ae-label-alpha', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' },
+      label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#ffffff',
+        borderColor: '#0000ff', borderWidth: 1, padding: 4 } }]),
+    [0], { w: true, z: true }],
+    // (a dark box, for the pixels it is drawn at)
+    ['ae-label-alpha-px', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' },
+      label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#000000',
+        padding: 8 } }]),
+    [0], { w: true, z: true }],
+    ['ae-label-alpha2', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000', opacity: 0.5 },
+      label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#ffffff',
+        borderColor: '#0000ff', borderWidth: 1, padding: 4, opacity: 0.6 } }]),
+    [0], { w: true, z: true }],
   ]);
 }
 function withPalette(list) {
@@ -1599,6 +1819,12 @@ function track(chart) {
       let last = null;
       for (const k of kids) if (k.style && k.style.text) last = k;
       if (last) map.set(last, 'x' + key);
+      // [R7-AE] every displayable of it, in order (`k<key>.<n>`: a box's
+      // Rect, a span)
+      if (AE) {
+        let n = 0;
+        for (const k of kids) if (k.style) map.set(k, 'k' + key + '.' + (n++));
+      }
     }
     // [R7-Z] every component's displayables, in paint order
     if (Z) {
@@ -1610,6 +1836,15 @@ function track(chart) {
       for (const mt of ['xAxis', 'yAxis']) model.eachComponent(mt, (m, i) => {
         const v = chart.getViewOfComponentModel(m);
         if (v && v._axisPointer && v._axisPointer._group) PTRS.set(v._axisPointer._group, { mainType: mt + 'Pointer', index: i });
+      });
+      // [R7-AE] a single axis' pointer too, and every pointer's handle (the
+      // root's, after its pointer's group)
+      if (AE) for (const mt of ['xAxis', 'yAxis', 'singleAxis']) model.eachComponent(mt, (m, i) => {
+        const v = chart.getViewOfComponentModel(m);
+        if (mt === 'singleAxis' && v && v._axisPointer && v._axisPointer._group) {
+          PTRS.set(v._axisPointer._group, { mainType: mt + 'Pointer', index: i });
+        }
+        if (v && v._axisPointer && v._axisPointer._handle) PTRS.set(v._axisPointer._handle, { mainType: mt + 'Handle', index: i });
       });
       for (const v of chart._componentsViews || []) {
         if (v && v.type === 'tooltip' && v._tooltipContent && v._tooltipContent.el) tipEl = v._tooltipContent.el;
@@ -1763,7 +1998,8 @@ function run(id, option, samples, opts) {
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-';
-  AC = id.slice(0, 3) === 'ac-';
+  AE = id.slice(0, 3) === 'ae-';
+  AC = id.slice(0, 3) === 'ac-' || AE;
   SEQ = 0;
   Y = !!opts.y;
   PRISTINE = !!opts.pristine;
@@ -1843,7 +2079,10 @@ function run(id, option, samples, opts) {
         YBLK = 0;
         YOPS = new Map();
       }
-      if (opts.sets && opts.sets[si]) chart.setOption(JSON.parse(JSON.stringify(opts.sets[si])));
+      // ([R7-AE] '=' the case's own option again; `nm` the samples it is set
+      // notMerge before)
+      if (opts.sets && opts.sets[si]) chart.setOption(JSON.parse(JSON.stringify(opts.sets[si] === '=' ? option : opts.sets[si])),
+        !!(opts.nm && opts.nm[si]));
       if (opts.acts && opts.acts[si]) for (const a of opts.acts[si]) chart.dispatchAction(a);
       // zrender's own frame: the clips stepped once, then the stage's flush
       // paints what they moved (a refresh from outside would step them a
@@ -1893,13 +2132,14 @@ function run(id, option, samples, opts) {
     Z = false;
     AA = false;
     AC = false;
+    AE = false;
     Y = false;
     PRISTINE = false;
     echarts.env.node = nodeWas;
   }
   // [R7-W] the options set before a sample, the dirty rects
   if (opts.w || opts.y) return Object.assign({ id, option }, opts.acts ? { acts: opts.acts } : {},
-    opts.sets ? { sets: opts.sets } : {}, opts.dirty ? { dirty: true } : {}, { frames });
+    opts.sets ? { sets: opts.sets } : {}, opts.nm ? { nm: opts.nm } : {}, opts.dirty ? { dirty: true } : {}, { frames });
   // [R7-V] the actions dispatched before a sample
   if (opts.acts) return { id, option, acts: opts.acts, frames };
   return { id, option, frames };

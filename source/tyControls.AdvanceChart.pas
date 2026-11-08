@@ -2005,6 +2005,9 @@ type
     FOvPos: Integer;
     FOvOn: Boolean;
     FPtrPass: Integer;
+    { [R7-AE] the handles this paint's pointers drew in the overlay's run
+      (their keys): PaintHandles draws the rest }
+    FHdDrawn: array of string;
     { [R7-AC] a merging setOption keeps the axis pointers' slides: the
       views and their BaseAxisPointer stay, setStyle takes the new style at
       once and the slide goes on (a notMerge, a resize: dropped with the
@@ -4137,6 +4140,11 @@ type
     { findComponentReference: a component's element by index / id / name
       and the item's name (the port's component tooltips: a matrix cell, a
       geo region) }
+    { [R7-AE] findComponentReference for a legend's item and a toolbox's
+      icon: the event _tryShow is given at the centre of its rect }
+    function TipComponentRefMore(APayload: TJSONObject; var AEv: TTyTipEvent): Boolean;
+    function TipAxisRef(const AMainType: string; AIndex: Integer; const AName: string;
+      var AEv: TTyTipEvent): Boolean;
     function TipComponentRef(APayload: TJSONObject; out ADatum: TTyChartDatumRef;
       out AElement: Integer; out AX, AY: Double): Boolean;
     { a re-render: the hover goes; the box stays, frozen, and _keepShow
@@ -4497,6 +4505,9 @@ type
     procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
       const AShape: TTyChartShape; APen: Boolean; AColour: TTyColor;
       AWidth: Double; const ADash: TTyDoubleArray);
+    { [R7-AE] the handle of AHit's axis, in the overlay's run after its
+      pointer's line or band (the root's, added after the pointer's group) }
+    procedure PtrHandlePaint(APainter: TTyPainter; const AHit: TTyAxisHit);
     { [R7-N] an axis pointer label's text style (buildLabelElOption) }
     function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
     { [R7-N] the box buildLabelElOption places: the plain text's bounding
@@ -4544,6 +4555,9 @@ type
     { [R7-AC] the model the last show built (its cascade resolved): what
       its box says, whichever element opened it }
     function TooltipShownSpec: TTyTooltipSpec;
+    { [R7-AE] the point the last show was made at (_lastX / _lastY), device
+      px; NaN none }
+    function TooltipShownAt: TTyPointF;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;

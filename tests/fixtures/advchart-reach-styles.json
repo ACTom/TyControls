@@ -4408,6 +4408,693 @@
    }
   },
   {
+   "id": "tip.legend-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "S",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "S",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "at": [
+     200,
+     273
+    ]
+   }
+  },
+  {
+   "id": "tip.legend-ref-off",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {}
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "none": true
+   }
+  },
+  {
+   "id": "tip.legend-ref-pre",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {}
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendIndex": 0,
+     "name": "S"
+    },
+    "pre": {
+     "type": "showTip",
+     "seriesIndex": 0,
+     "dataIndex": 1
+    },
+    "at": [
+     210,
+     116.66666666666667
+    ]
+   }
+  },
+  {
+   "id": "tip.legend-name",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "T",
+      "data": [
+       2,
+       3,
+       1
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "legend": {
+     "name": "LG",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "T",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "T",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "legendName": "LG",
+     "name": "T"
+    },
+    "at": [
+     229.57,
+     273
+    ]
+   }
+  },
+  {
+   "id": "tip.toolbox-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "toolbox": {
+     "feature": {
+      "restore": {},
+      "saveAsImage": {}
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "saveAsImage",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "saveAsImage",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "toolboxIndex": 0,
+     "name": "saveAsImage"
+    },
+    "at": [
+     376.02155160903925,
+     25
+    ]
+   }
+  },
+  {
+   "id": "tip.axis-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ],
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "B",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "B"
+    },
+    "at": [
+     210,
+     234
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "rect",
+      "name": "G",
+      "shape": {
+       "x": 50,
+       "y": 40,
+       "width": 40,
+       "height": 30
+      },
+      "style": {
+       "fill": "#ff0000"
+      },
+      "tooltip": {
+       "show": true,
+       "formatter": "G!"
+      }
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "G!",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "G!",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "G"
+    },
+    "at": [
+     70,
+     55
+    ]
+   }
+  },
+  {
+   "id": "tip.series-name",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "R:{b}",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "R:C",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "seriesIndex": 0,
+     "name": "C"
+    },
+    "at": [
+     310,
+     65
+    ]
+   }
+  },
+  {
+   "id": "tip.geo-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "geo": {
+     "map": "r7xsq",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "B",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "B",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "geoIndex": 0,
+     "name": "B"
+    },
+    "at": [
+     280,
+     150
+    ]
+   }
+  },
+  {
+   "id": "tip.matrix-ref",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "matrix": {
+     "x": {
+      "data": [
+       "P",
+       "Q"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "Q",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "Q",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "matrixIndex": 0,
+     "name": "Q"
+    },
+    "at": [
+     307,
+     70.5
+    ]
+   }
+  },
+  {
+   "id": "tip.timeline-ref",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "color": [
+      "#5470c6",
+      "#91cc75",
+      "#fac858",
+      "#ee6666"
+     ],
+     "tooltip": {
+      "renderMode": "richText"
+     },
+     "borderColor": "#00ff00",
+     "padding": 20,
+     "formatter": "R:{b}",
+     "timeline": {
+      "axisType": "category",
+      "data": [
+       "a",
+       "b"
+      ],
+      "autoPlay": false,
+      "left": 20,
+      "right": 20,
+      "bottom": 10
+     }
+    },
+    "options": [
+     {
+      "series": []
+     },
+     {
+      "series": []
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "action": {
+     "type": "showTip",
+     "timelineIndex": 0,
+     "name": "b"
+    },
+    "none": true
+   }
+  },
+  {
    "id": "geo.svg-ends",
    "option": {
     "animation": false,
