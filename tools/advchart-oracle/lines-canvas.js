@@ -873,6 +873,18 @@ function cases() {
         { value: [8, 8], label: { show: true, formatter: '{a|Ef}', rich: { a: { textShadowBlur: 'zz', textShadowOffsetX: 'q' } },
           textShadowColor: '#ff00ff', textShadowBlur: 4, textShadowOffsetX: 2 } },
         { value: [9, 3], label: { show: true, formatter: 'Gh', textShadowOffsetX: 'abc' } }] }]), [0], { y: true }],
+    // (R7-AB after R7-AA: each span sets the shadowColor -- `token ||
+    //    style || 'transparent'` where it casts one --, a refused one keeping
+    //    the span's before it: the second span of the first label the first
+    //    span's green, not the symbols' red; a span whose blur and colour are
+    //    both refused keeps both)
+    ['ab-sh-text-colour', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2 }, data: [
+        { value: [2, 2] },
+        { value: [4, 4], label: { show: true, formatter: '{a|Ab}{b|Cd}', textShadowBlur: 2,
+          rich: { a: { textShadowColor: '#00ff00' }, b: { textShadowColor: 'nope' } } } },
+        { value: [7, 7], label: { show: true, formatter: '{a|Ef}', textShadowBlur: 3,
+          rich: { a: { textShadowBlur: 'abc', textShadowColor: 'nope' } } } }] }]), [0], { y: true }],
     // [R7-AB] 4. a gradient under a transform that is no similarity: a
     //    symbol's frame scaled unevenly -- its own radial gradient is an
     //    ellipse (the circle in its frame), and the CanvasGradient the canvas
@@ -932,6 +944,36 @@ function cases() {
       LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.6], [9, 5.6]] }],
         { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
     { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { lineStyle: { color: '#00ff00' } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (R7-AB after R7-AA: a split area a Rect a band, a split line a Line
+    //    a mark -- only the band and the line meeting the block are brushed
+    //    in it: the scatter of an unreadable colour takes the blue of the band
+    //    it is in, the ring of an unreadable border the red of the line above
+    //    it; the whole paint the last band's green, the last line's blue)
+    ['ab-dirty-bands', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 36, itemStyle: { color: 'nope', opacity: 1 }, data: [[0.2, 5]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[0.2, 5], [9.4, 5]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, splitLine: { show: false },
+      splitArea: { show: true, areaStyle: { color: ['#ff0000', '#00ff00', '#0000ff'] } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    ['ab-dirty-stroke-inks', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.6]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.6], [9, 5.6]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      splitLine: { lineStyle: { color: ['#ff0000', '#00ff00', '#0000ff'] } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // (a split line's shadow grows its paint rect: the line 13 px above the
+    //    block's centre meets it by its blur, not by its pen)
+    ['ab-dirty-stroke-shadow', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5.3]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5.3], [9, 5.3]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      splitLine: { lineStyle: { color: '#00ff00', shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.2)' } } } }),
     [0, 20, 40, 60], { y: true, dirty: true }],
     // (a state's change repainted in blocks, the static layer's: the same)
     ['ab-dirty-hover-axes', Object.assign(vv([
