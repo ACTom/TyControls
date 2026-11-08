@@ -1308,6 +1308,13 @@ function cases() {
       acts: { 0: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 70, y: 150 }],
         2: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 330, y: 150 }] },
       sets: { 5: { tooltip: { axisPointer: { lineStyle: { color: '#0000ff' } } } } } }],
+    // (a label's box casting no shadow hands the canvas its shadowColor all
+    // the same -- the text style's prototype '#000' -- and a span after it
+    // whose textShadowColor is refused casts that, not the symbol's)
+    ['ac-label-box-shadow', vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000', shadowBlur: 3,
+      shadowColor: '#00ff00' }, label: { show: true, position: 'right', formatter: 'Ab', color: '#000000',
+      backgroundColor: '#ffffff', padding: 4, textShadowColor: 'nope', textShadowBlur: 2 } }]),
+    [0], { w: true, z: true }],
     // 8. a single axis' split lines: dashed at 0.2 by default
     ['ac-single-split', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
       axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#0000ff' } } },
