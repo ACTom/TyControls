@@ -76,6 +76,7 @@ type
     procedure TestTheBreaksAtAnotherPPIOnTheCssGrid;
     procedure TestThePositionHandlerIsHandedCssPx;
     procedure TestLinesGraphEdgesAndTitleFramesOnTheCssGrid;
+    procedure TestAViewWrittenIntoAnElementMovesIt;
   end;
 
 implementation
@@ -799,6 +800,37 @@ begin
     bad := bad + LineEnding + Format('the title frame: (%g, %g) at 144, (%g, %g) at 96',
       [fr[1].Left, fr[1].Top, fr[0].Left, fr[0].Top]);
   AssertEquals('at 144 PPI 1.5 times the 96 PPI ones:' + bad, '', bad);
+end;
+
+{ THE VIEW'S PLACE IS A KEY OF THE ORDER: written into an element of a list
+  already sorted (SetElement), the order is worked out again }
+procedure TAdvChartViewLayersOracleTest.TestAViewWrittenIntoAnElementMovesIt;
+var
+  L: TTyPaintList;
+  el: TTyChartElement;
+  i: Integer;
+begin
+  L := TTyPaintList.Create;
+  try
+    for i := 0 to 2 do
+    begin
+      el := Default(TTyChartElement);
+      el.Datum := TyChartNoDatum;
+      el.Z := 4;
+      el.CompView := 3 - i;
+      el.ViewKnown := True;
+      L.Add(el);
+    end;
+    AssertEquals('the view first in the root first', 2, L.PaintOrder(0));
+    AssertEquals('the view last in the root last', 0, L.PaintOrder(2));
+    el := L.Element(0);
+    el.CompView := 0;
+    L.SetElement(0, el);
+    AssertEquals('its view now first: drawn first', 0, L.PaintOrder(0));
+    AssertEquals('then the others in their views'' order', 2, L.PaintOrder(1));
+  finally
+    L.Free;
+  end;
 end;
 
 initialization
