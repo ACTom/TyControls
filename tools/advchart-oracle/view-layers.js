@@ -98,6 +98,8 @@ function viewTags(chart) {
     if (!v.__model) continue;
     const name = v.__model.mainType + v.__model.componentIndex;
     v.group.traverse(el => { m.set(el, name); });
+    // (R7-AJ) a brush's covers: its controller's group, mounted on the root apart from the view's
+    if (v._brushController && v._brushController.group) v._brushController.group.traverse(el => { if (!m.has(el)) m.set(el, name); });
   }
   for (const v of chart._chartsViews) {
     const name = 'S' + v.__model.seriesIndex;
@@ -250,6 +252,31 @@ function cases() {
         { set: { timeline: { data: ['a', 'b'], left: 0, top: 0 } } }] },
     { id: 'vo-geo-radar', option: NA({ geo: { map: 'vl-sq' }, radar: { indicator: [{ max: 1 }, { max: 1 }, { max: 1 }] },
       series: [{ type: 'radar', data: [{ value: [1, 1, 1] }] }] }) },
+    // ---- R7-AJ: the title in the display list, sorted with everything else ----
+    // (TitleView: the text and the subtext z2 10, the background Rect z2 0, all at the title's z)
+    // a thumbnail (z 10) over the title (z 6)
+    { id: 'vo-title-thumb', option: NA({ title: { text: 'Title', left: 0, top: 0, backgroundColor: '#eeeeee' },
+      thumbnail: { left: 0, top: 0, width: 120, height: 80 },
+      series: [{ type: 'graph', layout: 'none', roam: true, data: [{ x: 0, y: 0 }, { x: 100, y: 50 }], links: [{ source: 0, target: 1 }] }] }) },
+    // a brush cover (z 10000) over it
+    { id: 'vo-title-brush', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 'center', top: 'middle', backgroundColor: '#eeeeee' },
+      brush: { xAxisIndex: 0 }, series: [SC()] })),
+      steps: [{ act: { type: 'brush', areas: [{ brushType: 'lineX', coordRange: [2, 8], xAxisIndex: 0 }] } }] },
+    // the toolbox at the title's z: its icons over the frame, under the text
+    { id: 'vo-title-toolbox', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 0, top: 0, backgroundColor: '#eeeeee' },
+      toolbox: { left: 0, top: 0, feature: { restore: {}, saveAsImage: {} } }, series: [SC()] })) },
+    // a parallel axis (z 10) over it
+    { id: 'vo-title-parallel', option: NA({ title: { text: 'Title', left: 'center', top: 'middle', backgroundColor: '#eeeeee' },
+      parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }], series: [{ type: 'parallel', data: [[1, 2, 3], [3, 2, 1]] }] }) },
+    // a title of z 20 over a legend of z 4, under a slider of z 30
+    { id: 'vo-title-z', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 0, top: 0, z: 20, backgroundColor: '#eeeeee' },
+      legend: { left: 0, top: 0 }, dataZoom: [{ type: 'slider', top: 0, left: 0, z: 30 }], series: [SC([[1, 1]], { name: 'A' })] })) },
+    // a title of z -1: under the axes
+    { id: 'vo-title-under', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 'center', top: 'middle', z: -1, backgroundColor: '#eeeeee' },
+      series: [SC()] })) },
+    // a title on a zlevel of its own, and one on the root's
+    { id: 'vo-title-zl', option: NA(Object.assign({}, XY, { title: [{ text: 'A', zlevel: 2 }, { text: 'B', subtext: 's', left: 'right' }],
+      legend: {}, series: [SC([[1, 1]], { name: 'A' })] })) },
     // ---- allocateZlevels ----
     { id: 'zl-under', anim: true, option: A(Object.assign({}, XY, { series: [LN(-1)], legend: {}, title: { text: 'T' } })),
       steps: [{ t: 100 }] },
@@ -332,6 +359,12 @@ function generate() {
   // self-checks: what the cases are for
   must(by('vo-merge-two').recs[1].roots.slice(-2).join(' ') === 'xAxis1 timeline0', 'vo-merge-two: the old key first');
   must(by('vo-rm-x').recs[1].roots[by('vo-rm-x').recs[1].roots.length - 1] === 'xAxis0', 'vo-rm-x: brand new last');
+  // (R7-AJ) the title's runs: the frame z2 0 under the toolbox's icons, the text z2 10 over them; a thumbnail over it
+  const runAt = (id, step, view, z2) => by(id).recs[step].dl.findIndex(r => r[0] === view && (z2 == null || r[3] === z2));
+  must(runAt('vo-title-toolbox', 0, 'title0', 0) < runAt('vo-title-toolbox', 0, 'toolbox0', 0)
+    && runAt('vo-title-toolbox', 0, 'toolbox0', 0) < runAt('vo-title-toolbox', 0, 'title0', 10), 'vo-title-toolbox: frame, icons, text');
+  must(runAt('vo-title-thumb', 0, 'title0', 10) < runAt('vo-title-thumb', 0, 'thumbnail0', null), 'vo-title-thumb: the thumbnail over the title');
+  must(runAt('vo-title-brush', 1, 'title0', 10) < runAt('vo-title-brush', 1, 'brush0', null), 'vo-title-brush: the cover over the title');
   must(by('zl-under').recs[0].zl.S0 === 0 && by('zl-under').recs[0].zl.xAxis0 === 1, 'zl-under: the trail under the axes');
   must(by('zl-off-after').recs[2].zl.S0 === 1, 'zl-off-after: the level stays');
   must(by('zl-prog-lines').recs[0].zl.S0 === 0 && by('zl-prog-lines').recs[0].zl.xAxis0 === 1, 'zl-prog-lines: the run under the axes');

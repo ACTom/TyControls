@@ -4723,6 +4723,1351 @@
    ]
   },
   {
+   "id": "vo-title-thumb",
+   "option": {
+    "animation": false,
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "backgroundColor": "#eeeeee"
+    },
+    "thumbnail": {
+     "left": 0,
+     "top": 0,
+     "width": 120,
+     "height": 80
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "roam": true,
+      "data": [
+       {
+        "x": 0,
+        "y": 0
+       },
+       {
+        "x": 100,
+        "y": 50
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "thumbnail0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "thumbnail0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "S0",
+       0,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       141,
+       false,
+       1
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       151,
+       false,
+       3
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       161,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-brush",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "backgroundColor": "#eeeeee"
+    },
+    "brush": {
+     "xAxisIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "act": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "lineX",
+        "coordRange": [
+         2,
+         8
+        ],
+        "xAxisIndex": 0
+       }
+      ]
+     }
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "brush0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "brush0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       4
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "brush0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "brush0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       4
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "brush0",
+       0,
+       10000,
+       10000,
+       false,
+       3
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-toolbox",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "backgroundColor": "#eeeeee"
+    },
+    "toolbox": {
+     "left": 0,
+     "top": 0,
+     "feature": {
+      "restore": {},
+      "saveAsImage": {}
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-parallel",
+   "option": {
+    "animation": false,
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "backgroundColor": "#eeeeee"
+    },
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        3,
+        2,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "parallelAxis0",
+      "parallelAxis1",
+      "parallelAxis2",
+      "parallel0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "parallelAxis0": null,
+      "parallelAxis1": null,
+      "parallelAxis2": null,
+      "parallel0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "S0",
+       0,
+       2,
+       10,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       2,
+       false,
+       7
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       2,
+       false,
+       5
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       2,
+       false,
+       7
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       10,
+       false,
+       7
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       10,
+       false,
+       5
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       10,
+       false,
+       7
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-z",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "z": 20,
+     "backgroundColor": "#eeeeee"
+    },
+    "legend": {
+     "left": 0,
+     "top": 0
+    },
+    "dataZoom": [
+     {
+      "type": "slider",
+      "top": 0,
+      "left": 0,
+      "z": 30
+     }
+    ],
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ],
+      "name": "A"
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "dataZoom0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "legend0": null,
+      "dataZoom0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       0,
+       false,
+       3
+      ],
+      [
+       "title0",
+       0,
+       20,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       20,
+       10,
+       false,
+       1
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -40,
+       false,
+       1
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -20,
+       false,
+       3
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -19,
+       false,
+       3
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       0,
+       false,
+       6
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       5,
+       false,
+       2
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       10,
+       false,
+       2
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-under",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "z": -1,
+     "backgroundColor": "#eeeeee"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "title0",
+       0,
+       -1,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       -1,
+       10,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-zl",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": [
+     {
+      "text": "A",
+      "zlevel": 2
+     },
+     {
+      "text": "B",
+      "subtext": "s",
+      "left": "right"
+     }
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ],
+      "name": "A"
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "title1",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": 2,
+      "title1": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "legend0": null
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       0,
+       false,
+       3
+      ],
+      [
+       "title1",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title1",
+       0,
+       6,
+       10,
+       false,
+       2
+      ],
+      [
+       "title0",
+       2,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       2,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "zl-under",
    "option": {
     "animation": true,

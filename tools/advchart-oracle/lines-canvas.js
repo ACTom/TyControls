@@ -1121,6 +1121,15 @@ function cases() {
       borderColor: '#00ff00', borderWidth: 3 } }]), { title: { text: 'Ab', subtext: 'Cd', left: 20, top: 10,
       textStyle: { color: 'nope' }, subtextStyle: { color: 'bad' }, backgroundColor: 'nope', borderColor: 'nope',
       borderWidth: 'Infinity' } }), [0], { w: true, z: true }],
+    // (R7-AJ) the title in the display list: a toolbox at its z, its background
+    // (z2 -1) before the title's box, its icons (z2 0, its view after the
+    // title's) between the box and the text -- what each hands the next (the
+    // toolbox's border written: the skin's is not upstream's default)
+    ['z-title-toolbox', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { toolbox: { left: 20, top: 10, borderColor: '#123456', feature: { restore: {} },
+      iconStyle: { borderColor: '#0000ff', color: '#ff00ff' } },
+      title: { text: 'Ab', left: 20, top: 10, textStyle: { color: 'nope' }, backgroundColor: 'nope',
+      borderColor: 'nope', borderWidth: 2 } }), [0], { w: true, z: true }],
     // 4. polar and single axes: their views' order (single, radius, angle)
     //    and parts (an angle axis' labels and merged ticks at z2 0, merged
     //    split paths filled '#000')
