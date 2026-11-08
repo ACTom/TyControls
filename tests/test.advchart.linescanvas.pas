@@ -1769,13 +1769,34 @@ begin
         if (Copy(tag, 1, 6) = 'y-font') and (o.Strings['op'] = 'fillText') then
         begin
           where := Format('%s %s', [id, key]);
-          idx := WElOf(key, rec);
-          if idx < 0 then
+          { [R7-AB] an axis' text: the part as it was drawn (CompDrawn) }
+          if Copy(key, 1, 2) = 'ax' then
           begin
-            Miss(where + ': no element');
-            Continue;
+            if not FChart.CompPart('xAxis0', 10, True, 'fill', el) then
+            begin
+              Miss(where + ': no label drawn');
+              Continue;
+            end;
+          end
+          else
+          begin
+            idx := WElOf(key, rec);
+            if idx < 0 then
+            begin
+              Miss(where + ': no element');
+              Continue;
+            end;
+            el := FChart.Frame.Element(idx);
+            { [R7-AB] a rich text: its last span's font, as settled }
+            for q2 := High(el.Caption.RtPieces) downto 0 do
+              if (el.Caption.RtPieces[q2].Kind = rpkText) and (el.Caption.RtPieces[q2].Text <> '') then
+              begin
+                el.Caption.FontName := el.Caption.RtPieces[q2].FontFamily;
+                el.Caption.FontSizeLogical := TyFontSizeFromPx(el.Caption.RtPieces[q2].FontSizePx);
+                el.Caption.FontWeight := el.Caption.RtPieces[q2].FontWeight;
+                Break;
+              end;
           end;
-          el := FChart.Frame.Element(idx);
           FontOfCss(o.Strings['font'], ux1, n, kind);
           { (the port's px coding; a weight of nought is the regular one) }
           if TyFontSizeIsPx(el.Caption.FontSizeLogical) then ux2 := TyFontPxOf(el.Caption.FontSizeLogical)

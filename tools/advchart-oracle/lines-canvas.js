@@ -899,6 +899,29 @@ function cases() {
     { xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#aa00aa' } }),
       yAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00aa00', inside: true } }) }),
     [0, 20, 40, 60], { y: true, dirty: true }],
+    // [R7-AB] 7. fonts the canvas refuses elsewhere: a rich text's token
+    //    (its own font refused: the one the span before left); the axes'
+    //    labels drawn before the series (their font left on the canvas for
+    //    the first series label whose own is refused); an axis label's own
+    //    refused font (the graphic text's under it)
+    ['ab-font-rich', vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top' }, data: [
+      { value: [2, 3], label: { formatter: '{a|Ab}{b|Cd}', rich: { a: { fontSize: 15, fontFamily: 'serif' },
+        b: { fontWeight: 'heavy' } } } },
+      { value: [5, 3], label: { formatter: '{a|Ef}', rich: { a: { fontStyle: 'slanted', fontSize: 11 } } } },
+      { value: [8, 3], label: { formatter: '{a|Gh}{b|Ij}', rich: { a: { fontSize: '13px', fontWeight: 'bold' },
+        b: { fontSize: '12abcpx' } } } }] }]), [0], { y: true }],
+    ['ab-font-ground', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab' }, data: [
+        { value: [2, 3], label: { fontWeight: 'heavy' } }, { value: [5, 3], label: { fontSize: 11 } }] }]),
+    { xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false },
+      axisLabel: { color: '#112233', fontSize: 14, fontFamily: 'monospace' } } }), [0], { y: true }],
+    ['ab-font-axis', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab' }, data: [
+        { value: [2, 3], label: { fontStyle: 'slanted' } }, { value: [5, 3], label: { fontSize: 11 } }] }]),
+    { graphic: [{ type: 'text', z: -1, x: 20, y: 20, style: { text: 'G', fill: '#000', fontSize: 16, fontWeight: 'bold',
+      fontFamily: 'serif' } }],
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false },
+        axisLabel: { color: '#112233', fontWeight: 'heavy' } } }), [0], { y: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
