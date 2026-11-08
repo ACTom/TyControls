@@ -1161,7 +1161,7 @@ type
       again over FProgUnder: a run of the list (Kind 0: its band, from a
       paint position, a level already blitted in it or -MaxInt) -- its later
       layers blitted at their first chunks -- or a component pass on a level
-      (1 the axes, 2 the break areas, 3 the parallel axes, 4 the titles;
+      (1 the axes, 2 the break areas, 3 the parallel axes;
       ApartOn / Level the zlevel pass it was drawn in). FProgLogOn while
       the full paint logs; FProgLogBad: it drew something the log cannot
       say (no progress frame then) }
@@ -2107,6 +2107,9 @@ type
       build, as before) }
     FPtrSlideKeep: Boolean;
     FTitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-AJ] each title's elements in the list: its box, its text, its
+      subtext (-1 none) }
+    FTitleAt: array of array[0..2] of Integer;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -3431,7 +3434,19 @@ type
     function LegendDeco(AIndex: Integer; const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
     function TitleFontOf(AIndex: Integer; const AKey, AStyleKey: string;
       APick: TTyTextPick): TTyTitleFont;
-    procedure PaintTitles(APainter: TTyPainter);
+    { [R7-AJ] THE TITLES IN THE LIST (TitleView's group: the background Rect
+      z2 0, the text and the subtext z2 10, at the title's z and zlevel):
+      their parts as built (TitleParts, TitleLineEl), appended
+      (BuildTitles: FTitleAt their places), settled where the list draws
+      them (TitlesSettle), noted as drawn (TitlesNote) }
+    function TitleZ(AIndex: Integer): Integer;
+    procedure TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
+      out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
+    function TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+      const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+    function BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
+    procedure TitlesSettle(AList: TTyPaintList; APPI: Integer);
+    procedure TitlesNote;
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
     { ONE COLOUR PER RAW ROW, in raw order, for a series that colours by datum.
@@ -3813,8 +3828,8 @@ type
       from where the list's run reaches their z: appended to FCompParts }
     procedure ParRun;
     { [R7-Z] a title's box and text colours, the canvas refusing them }
-    procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-      var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont);
+    function TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
+      var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont): Boolean;
     procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor; const AFont: TTyTitleFont);
     { [R7-AA] a title line's block holds a colour the canvas refuses }
     function TitlePiecesCarry(AIndex: Integer): Boolean;

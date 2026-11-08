@@ -4501,7 +4501,7 @@ var bad: string;
         [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
   end;
 
-  { the ink's top-left corner (a title drawn alone: not in the list) at 144
+  { the ink's top-left corner (a title's words: no box in the list) at 144
     PPI is the one at 96 times 1.5, to a pixel and a half }
   procedure InkAt(const AName, AOpt: string);
   var ppi, xx, yy: Integer; b: TBGRABitmap; px, bg: TBGRAPixel; ink: array[0..1] of TPoint;
@@ -4588,7 +4588,9 @@ begin
   One('matrix', '{"animation":false,"matrix":{"left":40,"top":40,"width":200,"height":120,"x":{"data":["a","b"]},"y":{"data":["c"]}},"series":[]}');
   One('legend', '{' + G + '"legend":{"left":20,"top":10,"itemWidth":30,"itemHeight":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
   One('legend vertical', '{' + G + '"legend":{"left":20,"top":10,"orient":"vertical","itemGap":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
-  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}');
+  { ([R7-AJ] the title's box is the list's now: round the words measured in
+    each PPI's fonts -- its right and bottom to a pixel and a half) }
+  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}', 1.6);
   { (the bar's place across is its labels' half width off the box: the
     text measured at each PPI) }
   One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);

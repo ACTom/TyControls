@@ -1362,6 +1362,7 @@ begin
   if FZMixed then
   begin
     PaintZLevels(APainter, APPI, AMeasurer, FZLevels, False, nil);
+    TitlesNote;
     Exit;
   end;
   { [R7-AD] THE LIST BEFORE THE AXES: what of it falls among their parts --
@@ -1411,19 +1412,14 @@ begin
     ProgLogFurn(3);
     PaintParallels(APainter, APPI, AMeasurer);
   end;
-  { AND THE TITLE LAST. It floats over the container rather than reserving
-    room, so anything it overlaps it is meant to overlap. While the series
-    move the title goes with them into the dynamic layer, so it stays over
-    them [Batch 89]. }
-  if FExporting or not FAnimLive then
-  begin
-    ProgLogFurn(4);
-    PaintTitles(APainter);
-  end;
+  { [R7-AJ] (THE TITLE is the list's: drawn in it by its zlevel, z, z2 and
+    its view's place -- while the series move, in the frame's [was: drawn
+    here, last, whatever its z [Batch 89]]) }
   { [R5-G] AND OVER THEM, an element of a higher zlevel -- up to the loading
     mask's, when it shows over the chart }
   if FExporting or not FAnimLive then
     PaintAboveComponents(APainter, FZList);
+  TitlesNote;
 end;
 
 function TTyCustomAdvanceChart.ComponentZLevel: Integer;
@@ -1557,7 +1553,6 @@ begin
       try
         PaintBreakAreas(APainter);
         PaintParallels(APainter, APPI, AMeasurer);
-        PaintTitles(APainter);
       finally
         FZApartOn := False;
       end;
@@ -1914,14 +1909,15 @@ begin
     if FParallels[i] <> nil then
       for a := 0 to High(FParallels[i].AxisIndices) do
         Add(ModelZLevel('parallelAxis', FParallels[i].AxisIndices[a]));
-  for i := 0 to High(FTitles) do
-    if FTitles[i].Valid then Add(ModelZLevel('title', i));
+  { ([R7-AJ] a title is the list's, drawn in its band [was: one of these]) }
 end;
 
 function TTyCustomAdvanceChart.ListMinZLevel: Integer;
 const
-  cTypes: array[0..9] of string = ('series', 'legend', 'toolbox', 'dataZoom',
-    'visualMap', 'timeline', 'thumbnail', 'geo', 'matrix', 'radar');
+  cTypes: array[0..10] of string = ('series', 'legend', 'toolbox', 'dataZoom',
+    'visualMap', 'timeline', 'thumbnail', 'geo', 'matrix', 'radar',
+    { [R7-AJ] }
+    'title');
 var
   t, i, k, z: Integer;
   node, mk, d: TJSONData;
@@ -2041,11 +2037,6 @@ begin
         end;
         ProgLogFurn(3);
         PaintParallels(APainter, APPI, AMeasurer);
-        if over then
-        begin
-          ProgLogFurn(4);
-          PaintTitles(APainter);
-        end;
       end;
     finally
       FZApartOn := False;
@@ -4734,7 +4725,6 @@ begin
     end;
     PaintBreakAreas(APainter);
     PaintParallels(APainter, APPI, AMeasurer);
-    PaintTitles(APainter);
     if TrailZLevel(frame) > ComponentZLevel then PaintTrailAbove(APainter, frame)
     else PaintAboveComponents(APainter, frame);
     end;
@@ -4765,7 +4755,6 @@ begin
     PaintBreakAreas(APainter);
     { the parallel axes over the lines in motion [Batch 128] }
     PaintParallels(APainter, APPI, AMeasurer);
-    PaintTitles(APainter);
     { [R5-G] a higher zlevel over them }
     PaintAboveComponents(APainter, frame);
     end;
@@ -5395,7 +5384,6 @@ begin
         { what the static paint draws over the series, as it draws it }
         PaintBreakAreas(P);
         PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
         if TyMaxZLevelOf(FDrStaticList) <= zc then Break;
         TySetZBand(zc, ZStaticTop);
       end;
@@ -5681,7 +5669,6 @@ begin
         { what the dynamic layer draws over the loops, as it draws it }
         PaintBreakAreas(P);
         PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
       end;
       FDrDyn.ClipRect := oldClip;
       P.EndPaint;

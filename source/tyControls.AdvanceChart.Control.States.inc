@@ -3367,6 +3367,8 @@ begin
     value is settled as an element's own [was: only at a build] }
   if TyLinesCanvasLeftoversDue(FPaintList) then
     TyLinesCanvasLeftovers(FPaintList, CanvasGroundState, FPaintListPPI);
+  { [R7-AJ] the titles' refused values: a state may hand another on }
+  TitlesSettle(FPaintList, FPaintListPPI);
   FPaintList.JournalClose;
   if region and ProgPatchRegion(prevIdx, prevEls) then FProgLayerOk := True;
   { [R2-I9] the copies are of the list as written }

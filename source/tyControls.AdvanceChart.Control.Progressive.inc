@@ -1077,9 +1077,8 @@ begin
             case FProgOps[q].Kind of
               1: PaintAxes(P, APPI, measurer, False);
               2: PaintBreakAreas(P);
-              3: PaintParallels(P, APPI, measurer);
             else
-              PaintTitles(P);
+              PaintParallels(P, APPI, measurer);
             end;
             FZApartOn := wasOn;
             FZApartLevel := wasLevel;
