@@ -104,8 +104,22 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart;
 type
-  TLcProbe = class(TTyAdvanceChart)
+  { [R7-AI] the recording canvas' measureText: six px a UTF-16 unit, any
+    font -- zrender's widths and line heights in the lines-canvas run }
+  TLcSixMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public
+    procedure MeasureLine(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+    function WrapToWidth(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+  end;
+
+  TLcProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
+  public
+    { [R7-AI] measure as the recording canvas does (TLcSixMeasurer) }
+    Six: Boolean;
     { [R7-Z] a component's part of key AKey, upstream's z2 AZ2 and kind (a
       text or a path) as it was drawn -- the one that fills (AOp 'fill'),
       strokes ('stroke'), else the first; False for none. [R7-AA] Of
@@ -137,6 +151,8 @@ type
   TAdvChartLinesCanvasOracleTest = class(TTestCase)
   private
     FForm: TForm;
+    { [R7-AI] KeyOfEl keys a series label as the recorder does }
+    FCapKeys: Boolean;
     FCtl: TTyStyleController;
     FChart: TLcProbe;
     FRoot: TJSONData;
@@ -183,6 +199,10 @@ type
     procedure TestTheR7AEHitsAsUpstream;
     procedure TestTheR7AFCanvasAsUpstream;
     procedure TestTheR7AFHitsAsUpstream;
+    { [R7-AI] the ai- cases: a padding written as a string, a rich span's
+      joined rect on the right }
+    procedure TestTheR7AICanvasAsUpstream;
+    procedure TestTheR7AIHitsAsUpstream;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
     procedure TestAnInfiniteHaloHandsItsColourAtOnce;
@@ -273,6 +293,41 @@ implementation
 
 const
   cT0 = 1700000000000.0;
+
+procedure TLcSixMeasurer.MeasureLine(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
+var
+  u: UnicodeString;
+  i, n, lines: Integer;
+begin
+  u := UTF8Decode(AText);
+  AW := 0;
+  n := 0;
+  lines := 1;
+  for i := 1 to Length(u) do
+    if u[i] = #10 then
+    begin
+      AW := Max(AW, 6.0 * n);
+      n := 0;
+      Inc(lines);
+    end
+    else
+      Inc(n);
+  AW := Max(AW, 6.0 * n);
+  AH := 6.0 * lines;
+end;
+
+function TLcSixMeasurer.WrapToWidth(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
+begin
+  Result := AText;
+end;
+
+function TLcProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Six then Result := TLcSixMeasurer.Create
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TLcProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -536,7 +591,9 @@ begin
       or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ad-') or (Copy(id, 1, 4) = 'ady-')
       or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') or (Copy(id, 1, 3) = 'af-')
       { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
-      or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-') then Continue;
+      or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-')
+      { ([R7-AI] the ai- cases: RunW) }
+      or (Copy(id, 1, 3) = 'ai-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -665,6 +722,10 @@ function TAdvChartLinesCanvasOracleTest.KeyOfEl(AIdx: Integer; AGraph: Boolean):
 var el: TTyChartElement; pre: string;
 begin
   el := FChart.Frame.Element(AIdx);
+  { [R7-AI] a series label: its host's key behind an x, as the recorder
+    keys a label's last span (FCapKeys) }
+  if (el.Caption.FontSizeLogical <> 0) and FCapKeys and (el.Datum.SeriesIndex >= 0) then
+    Exit(Format('ks%d.%d', [el.Datum.SeriesIndex, el.Datum.DataIndex]));
   if el.Caption.FontSizeLogical <> 0 then Exit('other');
   case el.Anim.Role of
     carLinesEffect: pre := 'e';
@@ -1310,7 +1371,8 @@ var
   ffam: string;
   ring: TJSONArray;
 begin
-  af := APrefix = 'af-';
+  { ([R7-AI] the ai- cases as the af- ones) }
+  af := (APrefix = 'af-') or (APrefix = 'ai-');
   ae := (APrefix = 'ae-') or af;
   strict := APrefix <> 'w-';
   { (and the ac-, ae- ones: R7-AC, R7-AE; [R7-AF] the af- ones; [R7-AG] the ag- ones) }
@@ -1339,6 +1401,8 @@ begin
     FChart.AnimationMode := camAlways;
     PinClocks(FChart);
     FChart.UseDirtyRect := dirty;
+    { ([R7-AI] the ai- cases measure as the recording canvas) }
+    FChart.Six := APrefix = 'ai-';
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -1384,6 +1448,10 @@ begin
           x := HexD(h.Strings[0]);
           y := HexD(h.Strings[1]);
           if h.Items[2].JSONType = jtNull then want := '-' else want := h.Strings[2];
+          { ([R7-AI] a label's displayable 'k<host>.<n>': the label, whichever
+            of its spans) }
+          if FCapKeys and (Copy(want, 1, 1) = 'k') then
+            want := Copy(want, 1, LastDelimiter('.', want) - 1);
           { ([R7-AE] a dataZoom's part: the chart's own pointer finds it,
             not the list -- TestAnUnplacedSlidersPointerAsUpstream) }
           if Copy(want, 1, 11) = 'c.dataZoom0' then Continue;
@@ -3274,6 +3342,25 @@ begin
   RunW(True, 'af-');
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AICanvasAsUpstream;
+begin
+  RunW(False, 'ai-');
+end;
+
+{ [R7-AI] a label's words whose rect rectContain joins to a string: found up
+  to where the joined edge is (far to the right of '02' + 14.76, of '23' +
+  '242'), where `style.x || 0` bounds words laid out at NaN, and nowhere
+  where the edge is no number -- upstream's findHover at their probes }
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AIHitsAsUpstream;
+begin
+  FCapKeys := True;
+  try
+    RunW(True, 'ai-');
+  finally
+    FCapKeys := False;
+  end;
+end;
+
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the
   boxes drawn and the spans with words of the host's caption, in their
   order (zrender's children: the block's Rect, then each token's Rect and
@@ -3292,6 +3379,16 @@ var
   wc: TTyChartColor;
   sb, ga: Double;
 begin
+  { [R7-AI] A SPAN LAID OUT AT NaN (a padding side undefined): brushed, its
+    fillText at no number draws nothing -- the port drops it }
+  ops := ARec.Arrays['ops'];
+  found := ops.Count > 0;
+  for q := 0 to ops.Count - 1 do
+    if (ops.Objects[q].Find('tp') = nil) or not (ops.Objects[q].Find('tp') is TJSONArray)
+      or not (IsNan(HexD(ops.Objects[q].Arrays['tp'].Strings[0]))
+        or IsNan(HexD(ops.Objects[q].Arrays['tp'].Strings[1]))) then
+      found := False;
+  if found then Exit;
   host := Copy(AKey, 2, MaxInt);
   k := LastDelimiter('.', host);
   n := StrToInt(Copy(host, k + 1, MaxInt));

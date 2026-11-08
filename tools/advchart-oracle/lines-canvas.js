@@ -178,6 +178,7 @@ let AE = false;
 // made of on the canvas (`clp`, on the element whose brush set it: a list of
 // rings of [x, y] hex -- updateClipStatus runs before the element's
 // innerBeforeBrush: the rings wait for it)
+// [R7-AI] the cases named ai-...: recorded as the af- ones
 let AF = false;
 let CLIPS = new Map();
 let PENDCLIP = [];
@@ -2142,6 +2143,35 @@ function cases() {
       toolbox: { left: 20, top: 10, backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 'Infinity',
         feature: { restore: {} }, iconStyle: { borderColor: '#00ff00' } } }),
     [0], { w: true, z: true }],
+    // ---- [R7-AI] (recorded as the af- ones) ----
+    // 1. a label's padding written as a string: normalizeCssArray takes '12'
+    // by its characters, the words sit at x '02' (drawn at 2) and their rect
+    // reaches '02' + 14.76 -- found far to the right; '4' leaves a side
+    // undefined: the words at NaN, not drawn, but their rect at `style.x || 0`
+    ['ai-pad-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', padding: '12' } }]),
+    [0], { w: true, z: true, probes: [[251, 140], [255, 140], [300, 140], [395, 140], [300, 135], [300, 149]] }],
+    ['ai-pad-undef', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', padding: '4' } }]),
+    [0], { w: true, z: true, probes: [[249, 140], [252, 140], [262, 140], [266, 140], [255, 150]] }],
+    // (over a plate, and a rounded one: the plate's size '..22' x '1211')
+    ['ai-pad-str-box', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', padding: '12', backgroundColor: '#ffff00' } },
+      { type: 'scatter', data: [[6, 2]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'left', formatter: 'Cd', color: '#000000', padding: '21', backgroundColor: '#00ffff',
+          borderColor: '#ff00ff', borderWidth: 1, borderRadius: 3 } }]),
+    [0], { w: true, z: true }],
+    // 2. a rich span on the right whose width and line width are whole: its
+    // rect '23' + '242' is found far to the right (the second line, y >= 0);
+    // the first line's and the left spans' are no rect
+    ['ai-halo-right', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'bottom', align: 'left', formatter: '{a|Ab}{b|Cd}\n{a|Ef}{b|Gh}', fontFamily: 'monospace',
+          color: '#000000', textBorderColor: '#ff00ff', textBorderWidth: '2', rich: { a: {}, b: {} } } }]),
+    [0], { w: true, z: true, probes: [[262, 170], [265, 170], [300, 200], [390, 290], [265, 160], [245, 170], [270, 158]] }],
     // (b) a radar's indicator axis lines in a gradient: the box each is made over
     ['af-grad-radar-line', { animation: false, radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 },
       { name: 'c', max: 10 }], center: ['50%', '50%'], radius: 100, axisName: { show: false }, splitLine: { show: false },
@@ -2458,7 +2488,7 @@ function run(id, option, samples, opts) {
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-'
     || id.slice(0, 3) === 'ag-' || id.slice(0, 4) === 'agy-';
-  AF = id.slice(0, 3) === 'af-';
+  AF = id.slice(0, 3) === 'af-' || id.slice(0, 3) === 'ai-';
   AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;
   CLIPS = new Map();

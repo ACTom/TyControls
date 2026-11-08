@@ -54,6 +54,16 @@
 //   string ('2': its number, doubled under a fill; '0', 'abc': the rect made,
 //   unstroked). A TSpan's lineWidth and bbox are recorded as numbers (a
 //   joined bbox is not checked against the measure).
+//   [R7-AI] a padding written as a string or as an array of other lengths
+//   (series labels plain and rich, block and token, boxed and rounded,
+//   wrapped and truncated; axis labels, legend items, a title's text, a
+//   markPoint's, a graphic text, a gauge's detail): normalizeCssArray takes a
+//   string by its characters ('12' is ['1', '2', '1', '2']) and leaves a side
+//   it has none for undefined ('4', [4], [], true), and zrender adds the
+//   sides and the places as JS does ('0' + '2' is '02': a TSpan at x '02'
+//   draws at 2). The cases carry `r7ai`: a TSpan whose rect holds a string
+//   also records `hit`, its rect as rectContain reads it -- [x0, y0, x1, y1],
+//   x1 = rect.x + rect.width in JS (joined; null where it is no number).
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -815,6 +825,73 @@ const R7AF_CASES = [
       { borderColor: '#333333', borderWidth: '0', padding: 3 }], {}) },
 ];
 
+// ---- [R7-AI] a padding written as a string, or as an array of another
+// length: zrender's normalizeCssArray takes '12' as ['1', '2', '1', '2'] and
+// '4' (one character), [4], [] and true as themselves -- a side past the end
+// undefined -- and the layout adds them as JS does: paddingH '2' + '2' is
+// '22', the outer width 14.76 + '22', a left-aligned text's x 0 + '2' is '02'
+// (drawn at 2, its rect's right edge '02' + 14.76 far right), a top-aligned
+// one's y joined to '1' and each line after it to the line height. A side
+// undefined lays the words out at NaN (not drawn) but bounds them at
+// `style.x || 0`. Scatter labels, one per position (its alignment).
+const PAD_XY = { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } };
+const PAD_PTS = [[2, 2], [2, 8], [5, 5], [8, 2], [8, 8], [5, 8], [5, 2]];
+const padScatter = (labels, extra, series) => opt(Object.assign({}, PAD_XY, {
+  series: [Object.assign({ type: 'scatter', symbolSize: 6, label: { show: true, color: '#333333', formatter: 'Ab' },
+    data: labels.map((l, i) => ({ value: PAD_PTS[i], label: l })) }, series)],
+}, extra));
+const PAD_BOX = { backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1 };
+const R7AI_CASES = [
+  { name: 'strpad-plain', looks: true, r7ai: true, note: "padding '12' right, left, bottom and top (two lines), '123' bottom on two lines, '1234' right, '12345' left: the x '02' joined, a top text's y joined and each line after it",
+    option: padScatter([{ position: 'right', padding: '12' }, { position: 'left', padding: '12' }, { position: 'bottom', padding: '12' },
+      { position: 'top', padding: '12', formatter: 'Ab\nCd' }, { position: 'bottom', padding: '123', formatter: 'Ab\nCd\nEf' },
+      { position: 'right', padding: '1234' }, { position: 'left', padding: '12345' }]) },
+  { name: 'strpad-box', looks: true, r7ai: true, note: "the same with a plate: its size '14.76..22' x '1211' (drawn at its numbers, its path joined), a rounded one, a border; ['4', 2] mixed",
+    option: padScatter([Object.assign({ position: 'right', padding: '12' }, PAD_BOX), Object.assign({ position: 'left', padding: '12', borderRadius: 3 }, PAD_BOX),
+      Object.assign({ position: 'bottom', padding: '21', borderRadius: [2, 4] }, PAD_BOX), Object.assign({ position: 'top', padding: ['4', 2] }, PAD_BOX),
+      { position: 'right', padding: ['3', '1', 2], backgroundColor: '#dddddd' }, { position: 'inside', padding: '12', backgroundColor: '#dddddd', formatter: 'Ab\nCd' }]) },
+  { name: 'strpad-undefined', looks: true, r7ai: true, note: "'4', [4], [], true, '0': a side undefined, the words at NaN (not drawn, bounded at 0); [null, 3] and [true, 2] are numbers",
+    option: padScatter([{ position: 'right', padding: '4' }, { position: 'left', padding: [4] }, { position: 'bottom', padding: [] },
+      { position: 'top', padding: true }, Object.assign({ position: 'right', padding: '0' }, PAD_BOX), { position: 'top', padding: [null, 3], backgroundColor: '#dddddd' },
+      { position: 'bottom', padding: [true, 2], backgroundColor: '#dddddd' }]) },
+  { name: 'strpad-rich', looks: true, r7ai: true, note: "rich: the block's '12' joined to xLeft and lineTop (each token after it joined again), a token's '12' joined to its height and width, the line's width; right and centred tokens",
+    option: padScatter([
+      { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: {} } },
+      { position: 'bottom', padding: '12', formatter: '{a|Ab}{b|Cd}\n{c|Ef}', backgroundColor: '#eeeeee', rich: { a: {}, b: { color: '#0000aa' }, c: {} } },
+      { position: 'right', formatter: '{a|Ab}{b|Cd}', rich: { a: { padding: '12', backgroundColor: '#dddddd' }, b: {} } },
+      { position: 'left', formatter: '{a|Ab}{b|Cd}', width: 90, rich: { a: { padding: '21', backgroundColor: '#dddddd', borderRadius: 2 }, b: { align: 'right', padding: '12' } } },
+      { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { backgroundColor: '#dddddd', borderRadius: 3 }, b: { backgroundColor: '#cccccc' } } },
+      { position: 'top', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: { backgroundColor: '#dddddd' } } },
+      { position: 'bottom', formatter: '{a|Ab}\n{b|Cd}', rich: { a: { padding: '4' }, b: { padding: [3] } } }]) },
+  { name: 'strpad-wrap', looks: true, r7ai: true, note: "overflow 'break' at width 60: a token's '12' joins the accumulated width (wrapText's lastAccumWidth a string), a token of width 20 and '12'; a plain text's '12' (the width its own)",
+    option: padScatter([
+      { position: 'right', formatter: '{a|Hello world}{b|again and again}', width: 60, overflow: 'break', rich: { a: { padding: '12' }, b: {} } },
+      { position: 'bottom', formatter: '{a|x}{b|y}{a|z}{b|w}', width: 50, overflow: 'break', rich: { a: { width: 20, padding: '12' }, b: {} } },
+      { position: 'left', formatter: 'never wrapped at all here', width: 60, overflow: 'break', padding: '12', backgroundColor: '#eeeeee' },
+      { position: 'right', formatter: '{a|x}{b|Hello world again}', width: 60, overflow: 'breakAll', rich: { a: { padding: '21' }, b: {} } }]) },
+  { name: 'strpad-truncate', looks: true, r7ai: true, note: "overflow 'truncate' at width 40: a token's '12' (remainTruncWidth < paddingH as numbers, the joined width), a plain text's '12'",
+    option: padScatter([
+      { position: 'right', formatter: '{a|Hello}{b|world again}', width: 40, overflow: 'truncate', rich: { a: { padding: '12' }, b: {} } },
+      { position: 'bottom', formatter: '{a|Hello world}{b|x}', width: 40, overflow: 'truncate', rich: { a: { padding: '12' }, b: { padding: '33' } } },
+      { position: 'left', formatter: 'Hello world again', width: 40, overflow: 'truncate', padding: '12', backgroundColor: '#eeeeee' }]) },
+  { name: 'strpad-halo-right', looks: true, r7ai: true, note: "item 2: monospace tokens of width 24 with textBorderWidth '2' on the second line (y >= 0): the right token's rect '23' + '242' reaches far right; the left one's and the first line's are no rect",
+    option: padScatter([
+      { position: 'bottom', formatter: '{a|Ab}{b|Cd}\n{a|Ef}{b|Gh}', fontFamily: 'monospace', textBorderColor: '#ff00ff', textBorderWidth: '2', rich: { a: {}, b: {} } },
+      { position: 'bottom', formatter: '{a|Ab}{b|Cd}', fontFamily: 'monospace', padding: [10, 0, 0, 0], textBorderColor: '#ff00ff', rich: { a: { textBorderWidth: '2' }, b: { textBorderWidth: '4' } } },
+      { position: 'right', formatter: 'Abcd', fontFamily: 'monospace', textBorderColor: '#ff00ff', textBorderWidth: '2', padding: [8, 0, 0, 3], verticalAlign: 'top' }]) },
+  { name: 'strpad-components', looks: true, r7ai: true, note: "an axis label's '12' and '21', a legend item's text padding '12'; a markPoint label's '21' with a plate",
+    record: ['seriesLabel', 'markerLabel', 'axisLabel', 'legend'],
+    option: opt({ legend: { top: 30, textStyle: { color: '#333333', padding: '12' } },
+      xAxis: xCat({ axisLabel: { color: '#333333', padding: '12' } }), yAxis: val({ axisLabel: { color: '#333333', padding: '21' } }),
+      series: [{ type: 'bar', name: 'Sales', data: DATA, markPoint: { data: [{ type: 'max', label: { color: '#333333', padding: '21', backgroundColor: '#eeeeee' } }] } },
+        { type: 'bar', name: 'Cost', data: [60, 70, 80] }] }) },
+  { name: 'strpad-graphic-gauge', looks: true, r7ai: true, note: "a graphic text's padding '12' over a plate; a gauge detail's '12' over its default [5, 10] with a plate",
+    record: ['chartText', 'other'],
+    option: opt({ graphic: [{ type: 'text', left: 40, top: 40, style: { text: 'Gx', fill: '#333333', padding: '12', backgroundColor: '#eeeeee' } }],
+      series: [Object.assign({ type: 'gauge', center: ['70%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
+        detail: { fontSize: 20, color: '#222222', backgroundColor: '#dddddd', padding: '12' } }, GAUGE_BARE, NO_AXIS)] }) },
+];
+
 const R7N_POINTER_CASES = [
   { name: 'ptr-label-font', looks: true, note: "a category x and a value y axis pointer shown by status: the label in 16 px bold monospace with a bordered, rounded, padded plate",
     record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', Object.assign({ fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' }, PTR_BOX))),
@@ -1136,6 +1213,7 @@ const cases = [
   ...R7M_GRAPH_CASES,
   ...R7N_POINTER_CASES,
   ...R7AF_CASES,
+  ...R7AI_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -1245,7 +1323,7 @@ function probeBox(lib, el) {
     Object.keys(st.rich).forEach(k => { rich[k] = Object.assign({}, st.rich[k]); });
     st.rich = rich;
   }
-  if (st.padding) st.padding = st.padding.slice();
+  if (Array.isArray(st.padding)) st.padding = st.padding.slice();
   st.backgroundColor = '#010203';
   probe.useStyle(st);
   probe.getBoundingRect();
@@ -1428,6 +1506,12 @@ function recordText(lib, t, measureSet) {
       const putN = (q, k, v) => (Number.isFinite(v) ? put(q, k, v) : Object.assign(q, { [k]: null }));
       o.bbox = putN(putN(put(put({}, 'x', bb.x), 'y', bb.y), 'width', num(bb.width)), 'height', num(bb.height));
       if (t.looks) put(o, 'lineDashOffset', stroke && cs.lineDash ? (cs.lineDashOffset || 0) : null);
+      // ([R7-AI] the rect rectContain reads where it holds a string: its
+      // far edges joined in JS)
+      if (t.r7ai && ['x', 'y', 'width', 'height'].some(k => typeof bb[k] === 'string')) {
+        const edge = v => (Number.isFinite(+v) ? hex(+v) : null);
+        o.hit = [edge(bb.x), edge(bb.y), edge(bb.x + bb.width), edge(bb.y + bb.height)];
+      }
       void lw;
       return o;
     }
@@ -1549,7 +1633,7 @@ function run(lib, c, measureSet) {
     const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== ''
       && finChild(x)).length, 0);
     must(svgTexts === spans, c.name + ': the SVG has ' + svgTexts + ' <text>, the visible texts ' + spans + ' non-empty spans');
-    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, Object.assign(t, { looks: !!c.looks }), measureSet));
+    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, Object.assign(t, { looks: !!c.looks, r7ai: !!c.r7ai }), measureSet));
     must(texts.length > 0, c.name + ': nothing recorded');
     return { texts };
   } finally {
@@ -1576,6 +1660,7 @@ function runAll() {
     }
     const rec = Object.assign({ name: c.name, note: c.note, W, H, option: c.option, record: c.record || ['seriesLabel'], match: c.match || null }, r);
     if (c.looks) rec.looks = true;
+    if (c.r7ai) rec.r7ai = true;
     if (c.actions) rec.actions = c.actions;
     if (productionBuild) rec.productionBuild = true;
     return rec;
