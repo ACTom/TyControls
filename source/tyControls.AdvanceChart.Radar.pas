@@ -535,6 +535,14 @@ begin
     begin
       SetLength(Result, 1);
       Result[0] := c;
+    end
+    { [R7-AD] a string no parser reads (not 'none'): RadarView strokes with
+      it, the canvas refusing it -- kept, the colour the canvas had
+      (cTyCanvasColourLeft) [was: the skin's] }
+    else if not TyChartColorIsNone(d.AsString) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := cTyCanvasColourLeft;
     end;
     Exit;
   end;
@@ -547,6 +555,13 @@ begin
       and TyTryParseChartColor(a.Items[i].AsString, c) then
     begin
       Result[n] := c;
+      Inc(n);
+    end
+    { [R7-AD] (and in a list: its bucket kept [was: dropped, the next
+      colour taking its place]) }
+    else if (a.Items[i].JSONType = jtString) and not TyChartColorIsNone(a.Items[i].AsString) then
+    begin
+      Result[n] := cTyCanvasColourLeft;
       Inc(n);
     end;
   SetLength(Result, n);
@@ -576,6 +591,12 @@ begin
     begin
       SetLength(Result, 1);
       Result[0] := c;
+    end
+    { [R7-AD] refused by the canvas: kept (ColoursIn) }
+    else if not TyChartColorIsNone(d.AsString) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := cTyCanvasColourLeft;
     end;
     Exit;
   end;
@@ -607,6 +628,13 @@ begin
       Result[n] := TyGradientSolid(g);
       AGrads[n] := g;
       any := True;
+      Inc(n);
+    end
+    { [R7-AD] refused by the canvas: its bucket kept (ColoursIn) }
+    else if (a.Items[i].JSONType = jtString) and not TyChartColorIsNone(a.Items[i].AsString) then
+    begin
+      Result[n] := cTyCanvasColourLeft;
+      AGrads[n] := Default(TTyChartGradient);
       Inc(n);
     end;
   SetLength(Result, n);
@@ -1141,8 +1169,18 @@ begin
     height separately; BOTH radii run against half the shorter side --
     parsePercent(center[0], width) + x, as upstream adds them. A cell of no
     position or no size: not-a-number, nothing drawn. }
-  FCX := TyBoxResolve(FSpec.CentreX, ARef.W) + ARef.X;
-  FCY := TyBoxResolve(FSpec.CentreY, ARef.H) + ARef.Y;
+  { [R7-AD] a pixel centre is css px too, PPI / 96 device px each (the
+    radius was) [was: device px] }
+  if APPI > 0 then
+  begin
+    FCX := TyBoxResolve(TyBoxValueScaled(FSpec.CentreX, APPI / 96), ARef.W) + ARef.X;
+    FCY := TyBoxResolve(TyBoxValueScaled(FSpec.CentreY, APPI / 96), ARef.H) + ARef.Y;
+  end
+  else
+  begin
+    FCX := TyBoxResolve(FSpec.CentreX, ARef.W) + ARef.X;
+    FCY := TyBoxResolve(FSpec.CentreY, ARef.H) + ARef.Y;
+  end;
   if IsNan(ARef.W) or IsNan(ARef.H) then base := NaN
   else base := Min(ARef.W, ARef.H) / 2;
   FR0 := TyBoxResolve(FSpec.R0V, base);
@@ -1465,6 +1503,8 @@ var
   bandEl, bandBucket: TTyIntegerArray;
   bandBox: array of TTyRectF;
   gi, nb: Integer;
+  { [R7-AD] the rings' colour buckets, in turn }
+  rb, rnb: Integer;
   { [R5-J] a polygon radar's bands merged by colour: the contours, the
     points, the box, the colour }
   mergeCmds: array of TTyPathCmdArray;
@@ -1474,11 +1514,9 @@ var
   mergeColour: TTyChartColorArray;
   u: TTyRectF;
   pe: PTyChartElement;
-  { [R7-AF] the gradient rings: their list index, colour bucket and box;
-    the bucket being drawn and how many there are }
+  { [R7-AF] the gradient rings: their list index, colour bucket and box }
   ringEl, ringBucket: TTyIntegerArray;
   ringBox: array of TTyRectF;
-  rb, nrb: Integer;
 
   { [R5-G] the size a scale label is drawn at -- and so measured at: the
     author's fontSize, else the skin's [was: measured at the skin's whatever
@@ -1761,16 +1799,18 @@ begin
     pe^.Style.GradBox := TyRectToXYWH(u);
   end;
 
-  { ---- the rings ---- [R7-AF] COLOUR BY COLOUR: upstream merges the rings
-    of a colour into one path (mergePath per lineColors entry) and adds the
-    paths in that order, so what the canvas is left with is the last
-    colour's [was: ring by ring] }
-  nrb := Max(1, Length(spec.SplitLine.Colours));
+  { ---- the rings ---- }
+  { [R7-AD] BY COLOUR BUCKET, as RadarView adds them: ring i into bucket
+    i mod the colours' count, each bucket one merged path, the buckets in
+    order -- a ring takes the canvas' stroke after the buckets before it
+    (a colour no parser reads) [was: ring by ring outwards]; [R7-AF] and so
+    what the canvas is left with is the last bucket's, its gradient too }
+  rnb := Max(1, Length(spec.SplitLine.Colours));
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then
-    for rb := 0 to nrb - 1 do
+    for rb := 0 to rnb - 1 do
     for k := 0 to ARadar.RingCount do
     begin
-      if k mod nrb <> rb then Continue;
+      if k mod rnb <> rb then Continue;
       if not TyRadarBucket(spec.SplitLine.Colours, k, c) then
         c := AInk.SplitLine;
       r := ARadar.RingRadius(k);

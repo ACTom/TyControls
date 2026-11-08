@@ -871,8 +871,45 @@ begin
     end;
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
       APPI, AList, i, AMeasurer, hov));
+    { [R7-AD] its words in a font the canvas refuses: the one the text
+      before left (the legend's textStyle, an item's own over it) }
+    LegendFontsLeft(AList, lt, i, lay);
   end;
   if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
+end;
+
+procedure TTyCustomAdvanceChart.LegendFontsLeft(AList: TTyPaintList; AFrom, AIndex: Integer;
+  const ALayout: TTyLegendLayout);
+var
+  node, ts, data, item: TJSONData;
+  k, q: Integer;
+  pe: PTyChartElement;
+  own: TJSONData;
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  node := FOption.ComponentAt('legend', AIndex);
+  if not (node is TJSONObject) then Exit;
+  ts := TJSONObject(node).Find('textStyle');
+  data := TJSONObject(node).Find('data');
+  { each item's words in turn: the plain captions, in the items' order }
+  q := 0;
+  for k := Max(0, AFrom) to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Caption.Text = '') or (Length(pe^.Caption.RtPieces) > 0) then Continue;
+    while (q <= High(ALayout.Items)) and (ALayout.Items[q].Text <> pe^.Caption.Text) do Inc(q);
+    if q > High(ALayout.Items) then Break;
+    own := nil;
+    if (data is TJSONArray) and (ALayout.Items[q].Entry >= 0)
+      and (ALayout.Items[q].Entry < TJSONArray(data).Count) then
+    begin
+      item := TJSONArray(data).Items[ALayout.Items[q].Entry];
+      if item is TJSONObject then own := TJSONObject(item).Find('textStyle');
+    end;
+    if FontRefusedOf([own, ts]) then
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasFontLeft;
+    Inc(q);
+  end;
 end;
 
 function TTyCustomAdvanceChart.LegendSelectedText(AIndex: Integer): string;

@@ -449,6 +449,12 @@ echarts.setPlatformAPI({ createCanvas() { return fakeCanvas(300, 150); },
 // [R7-Y] a 2 x 2 image for a pattern (red and blue checker)
 const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP4z8AAQkAMJEAsAEPOB/npBtUZAAAAAElFTkSuQmCC';
 
+// [R7-AD] a square map for the geo cases (the fixture holds its text: the
+// port registers the same)
+const MAPS = [{ name: 'ad-sq', text: JSON.stringify({ type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]] } }] }) }];
+for (const m of MAPS) echarts.registerMap(m.name, m.text);
 const CW = 400;
 const CH = 300;
 const GRAD = { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#ff8800' }, { offset: 1, color: '#0088ff' }] };
@@ -1736,6 +1742,173 @@ function cases() {
       label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', backgroundColor: '#ffffff',
         borderColor: '#0000ff', borderWidth: 1, padding: 4, opacity: 0.6 } }]),
     [0], { w: true, z: true }],
+    // ---- [R7-AD] (recorded as the aa- ones) ----
+    // 1. what sorts among the axes' parts by z, z2 and the views' order (the
+    //    zr root's: single, radius, angle, polar, geo, radar, y, x, grid --
+    //    an axis a view of its own): a geo's regions (z 0) before the x
+    //    axis' parts of their z2; a series of z under nought before every
+    //    axis part, one of z 0 between the split lines (z2 0) and the line
+    //    (z2 1); a matrix (z -50) before them all; a second x axis' parts
+    //    after the first's of their z2, not interleaved with them
+    ['ad-geo-order', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00ff00' }, splitLine: { lineStyle: { color: '#0000ff' } } }),
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      geo: { map: 'ad-sq', left: 100, top: 80, width: 200, height: 140, silent: true,
+        itemStyle: { areaColor: 'nope', borderColor: 'bad', borderWidth: 2 } },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ad-series-z', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00ff00' }, splitLine: { lineStyle: { color: '#0000ff' } } }),
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'scatter', z: -1, data: [[3, 3]], itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 } },
+        { type: 'scatter', z: 0, data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 } },
+        { type: 'scatter', data: [[7, 7]], itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    // (the matrix's own colours written: its defaults are the theme's tokens,
+    // the port's its skin's; the x axis' split lines refuse theirs and take
+    // the matrix's last stroke)
+    ['ad-matrix-under', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: AXC({ type: 'value', min: 0, max: 10, axisLabel: { color: '#00ff00' }, splitLine: { lineStyle: { color: 'nope' } } }),
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      matrix: { left: 80, right: 80, top: 80, bottom: 80,
+        x: { data: ['a', 'b'], label: { color: '#112233' }, itemStyle: { color: '#eeeeee', borderColor: '#223344' },
+          dividerLineStyle: { color: '#334455' } },
+        y: { data: ['c'], label: { color: '#112233' }, itemStyle: { color: '#eeeeee', borderColor: '#223344' },
+          dividerLineStyle: { color: '#334455' } },
+        body: { itemStyle: { borderColor: '#445566' } }, corner: { itemStyle: { borderColor: '#556677' } },
+        backgroundStyle: { borderColor: '#667788' } },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: 'nope', borderColor: 'nope', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    ['ad-two-x', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: [AXC({ type: 'value', min: 0, max: 10, axisLabel: { show: false },
+        splitLine: { lineStyle: { color: ['#ff0000', '#00ff00', '#0000ff'] } } }),
+      AXC({ type: 'value', position: 'top', min: 0, max: 10, axisLabel: { show: false }, axisTick: { show: false },
+        axisLine: { lineStyle: { color: 'nope' } }, splitLine: { show: true, lineStyle: { color: 'nope' } } })],
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff00ff', borderColor: 'nope', borderWidth: 2 } }] },
+    [0], { w: true, z: true }],
+    // a radar's split line colours in a list, two no parser reads: each its
+    // bucket (RadarView groups the rings by colour index), stroked with
+    // what the canvas had -- not dropped, the list closing up
+    ['ad-radar-lines', { animation: false,
+      radar: { radius: 80, splitNumber: 3, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }],
+        axisName: { show: false }, axisLine: { lineStyle: { color: '#00aa00' } },
+        splitLine: { lineStyle: { color: ['nope', '#ff0000', 'bad'] } }, splitArea: { show: false } },
+      series: [{ type: 'scatter', data: [], xAxisIndex: 0 }],
+      xAxis: { show: false, type: 'value' }, yAxis: { show: false, type: 'value' } },
+    [0], { w: true, z: true }],
+    // 2. [R7-AD] fonts the canvas refuses in the rest of the texts (recorded
+    //    as the y- ones, the components' displayables keyed as the z- ones):
+    //    the font the text before left -- a title's text and subtext after
+    //    the series' labels; a legend's words, a visualMap's; a polar's and a
+    //    single axis' labels after the graphic's text under them; an axis'
+    //    rich label's span
+    ['ady-font-title', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' },
+      data: [[5, 5]] }]), { title: { text: 'Tt', subtext: 'Ss', left: 20, top: 10,
+      textStyle: { fontWeight: 'heavy', color: '#000' }, subtextStyle: { fontSize: '9abcpx', color: '#000' } } }),
+    [0], { y: true, z: true }],
+    ['ady-font-legend', Object.assign(vv([{ type: 'scatter', clip: false, name: 'Aa', symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 13, fontFamily: 'monospace' }, data: [[5, 5]] },
+    { type: 'scatter', clip: false, name: 'Bb', data: [[6, 6]] }]),
+    { legend: { left: 20, top: 10, textStyle: { fontStyle: 'slanted', color: '#000' },
+      data: ['Aa', { name: 'Bb', textStyle: { fontStyle: 'italic', fontSize: 11 } }] } }),
+    [0], { y: true, z: true }],
+    ['ady-font-vm', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 14, fontFamily: 'serif' }, data: [[5, 5, 3]] }]),
+    { visualMap: { type: 'piecewise', left: 20, top: 10, min: 0, max: 6, splitNumber: 2, dimension: 2,
+      textStyle: { fontSize: '12abcpx', color: '#000' }, inRange: { color: ['#ff0000', '#0000ff'] } } }),
+    [0], { y: true, z: true }],
+    ['ady-font-polar', { animation: false, graphic: [{ type: 'text', z: -1, x: 20, y: 20,
+      style: { text: 'G', fill: '#000', fontSize: 16, fontWeight: 'bold', fontFamily: 'serif' } }],
+      polar: { radius: 90 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLabel: { color: '#112233', fontWeight: 'heavy' } },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLabel: { color: '#112233', fontStyle: 'slanted' } },
+      series: [] }, [0], { y: true, z: true }],
+    ['ady-font-single', { animation: false, graphic: [{ type: 'text', z: -1, x: 20, y: 20,
+      style: { text: 'G', fill: '#000', fontSize: 16, fontWeight: 'bold', fontFamily: 'serif' } }],
+      singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { color: '#112233', fontStyle: 'slanted' } },
+      series: [] }, [0], { y: true, z: true }],
+    ['ady-font-axis-rich', { animation: false, graphic: [{ type: 'text', z: -1, x: 20, y: 20,
+      style: { text: 'G', fill: '#000', fontSize: 16, fontWeight: 'bold', fontFamily: 'serif' } }],
+      xAxis: { type: 'value', min: 0, max: 10, splitLine: { show: false },
+        axisLabel: { color: '#112233', formatter: '{a|{value}}', rich: { a: { fontWeight: 'heavy' } } } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false }, series: [] }, [0], { y: true, z: true }],
+    // 3. [R7-AD] a dirty block counts a polar's, a single axis' part only where
+    //    it was drawn (its getPaintRect: a merged path's union), and a line
+    //    of no width that hands on its colour only where it lies: a symbol's
+    //    ring of an unreadable border in a block away from them is the
+    //    canvas' black, in one over them their colour
+    ['ady-dirty-stroke-zero', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5], [2.35, 6]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 0.2 }, [{ coords: [[3, 5], [9, 5]] }, { coords: [[3, 6], [9, 6]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    // (the y axis' line and ticks hidden: the last component stroke in a
+    // block the split line of no width crosses is its red, in one it does
+    // not cross none -- the canvas' black; the effects quick, so a frame's
+    // block where one was holds the ring clear of it)
+    { yAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
+      axisLine: { show: false }, axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#ff0000', width: 0 } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    ['ady-dirty-stroke-polar', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5], [2.35, 8]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }, { coords: [[3, 8], [9, 8]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { polar: { center: [130, 60], radius: 40 },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { lineStyle: { color: '#00ff00' } } },
+      radiusAxis: { type: 'value', min: 0, max: 10, show: false } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    ['ady-dirty-stroke-single', Object.assign(vv([
+      { type: 'scatter', clip: false, symbolSize: 40, itemStyle: { color: '#ffffff', opacity: 1, borderColor: 'nope',
+        borderWidth: 4 }, data: [[2.35, 5], [2.35, 8]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }, { coords: [[3, 8], [9, 8]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    { singleAxis: { type: 'value', min: 0, max: 10, left: 100, right: 100, top: 40, height: 40,
+      axisLabel: { show: false }, axisTick: { show: false }, axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#00ff00' } } } }),
+    [0, 20, 40, 60], { y: true, dirty: true }],
+    // 5. [R7-AD] §282 (b): the root textStyle's shadow keys written as
+    //    strings no number reads; a label's shadow and font in a state
+    //    (emphasis) the canvas refuses
+    ['ady-sh-root', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 4, shadowOffsetY: 3 }, data: [
+        { value: [2, 2] },
+        { value: [4, 4], label: { show: true, formatter: 'Ab', textShadowColor: '#0000ff', textShadowBlur: 2 } },
+        { value: [6, 6], label: { show: true, formatter: 'Cd' } },
+        { value: [8, 8], label: { show: true, formatter: '{a|Ef}', rich: { a: {} }, textShadowBlur: 3 } }] }],
+    { textStyle: { textShadowColor: '#00ff00', textShadowBlur: 'abc', textShadowOffsetX: 'x', textShadowOffsetY: '2' } }),
+    [0], { y: true }],
+    ['ady-sh-emph', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 4, shadowOffsetY: 3 },
+      label: { show: true, formatter: 'Ab', textShadowColor: '#0000ff', textShadowBlur: 2, textShadowOffsetX: 1 },
+      emphasis: { scale: false, label: { textShadowBlur: 'abc', textShadowOffsetX: 'q', textShadowOffsetY: 'Infinity' } },
+      data: [[2, 2], [5, 5], [8, 8]] }]),
+    [0, 1], { y: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 1 }] } }],
+    ['ady-font-emph', vv([{ type: 'scatter', clip: false, symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif' },
+      emphasis: { scale: false, label: { fontWeight: 'heavy' } },
+      data: [{ value: [2, 3], label: { fontSize: 11 } }, [5, 3], { value: [8, 3], label: { fontSize: 13 } }] }]),
+    [0, 1], { y: true, acts: { 1: [{ type: 'highlight', seriesIndex: 0, dataIndex: 1 }] } }],
+    // 4. [R7-AD] a graphic element's own gradient under a transform that is
+    //    no similarity (scaled unevenly, turned): its CanvasGradient made
+    //    against its getBoundingRect in its own frame -- an ellipse, slanted
+    //    stripes (the custom series' elements are the same converter's)
+    ['ady-grad-graphic', { animation: false, graphic: [
+      { type: 'rect', name: 'gr0', x: 40, y: 40, scaleX: 3, shape: { x: 0, y: 0, width: 30, height: 60 },
+        style: { fill: { type: 'radial', x: 0.3, y: 0.4, r: 0.6,
+          colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } } },
+      { type: 'rect', name: 'gr1', x: 260, y: 60, rotation: 0.5, scaleY: 0.4,
+        shape: { x: -60, y: -60, width: 120, height: 120 },
+        style: { fill: { type: 'linear', x: 0, y: 0, x2: 1, y2: 1,
+          colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } } },
+      { type: 'circle', name: 'gr2', x: 120, y: 220, scaleX: 2.5, shape: { cx: 0, cy: 0, r: 30 },
+        style: { fill: { type: 'radial', x: 0.5, y: 0.5, r: 0.5,
+          colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#0000ff' }] } } }] },
+    [0], { y: true }],
     // ---- [R7-AF] (recorded as the ae- ones; a text's place and alignment, a clip's path) ----
     // 1. an unplaced slider's handle labels (handleLabel.show): two texts of
     // the view group, in their own frame under the transform the canvas had
@@ -2124,7 +2297,7 @@ function run(id, option, samples, opts) {
   V2 = !!opts.v2 || !!opts.w || !!opts.y;
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
-  AA = id.slice(0, 3) === 'aa-';
+  AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-';
   AF = id.slice(0, 3) === 'af-';
   AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;
@@ -2295,7 +2468,7 @@ function generate() {
       + 'e<series>.<row> a lines effect symbol, f / t its end symbols, gf / gt a graph edge\'s, s a scatter\'s symbol -- with '
       + 'ignore, scaleX / scaleY (hex, null not a number), the shape box [x, y, w, h] and every fill() / stroke() made while '
       + 'it was brushed: the context\'s shadowColor (a string setter, the canvas default rgba(0, 0, 0, 0)) and shadowBlur.',
-    W: CW, H: CH, T0: T_BASE, charts };
+    W: CW, H: CH, T0: T_BASE, maps: MAPS, charts };
 }
 
 let j1, j2;

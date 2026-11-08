@@ -3641,7 +3641,17 @@ begin
     idx[j + 1] := ti;
     els[j + 1] := te;
   end;
-  for i := 0 to n - 1 do FHoverList.Add(els[i]);
+  for i := 0 to n - 1 do
+  begin
+    { [R7-AD] (an element of the components' band: its copy is the hover
+      layer's own) }
+    if els[i].CompBand then
+    begin
+      els[i].CompBand := False;
+      els[i].GfxUnder := False;
+    end;
+    FHoverList.Add(els[i]);
+  end;
 end;
 
 function TTyCustomAdvanceChart.StHoverAny: Boolean;

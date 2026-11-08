@@ -1411,12 +1411,32 @@ var
   vr: TTyVisualRow;
   e: Boolean;
   p: string;
+
+  { [R7-AD] symbolSize and a pixel symbolOffset are css px: PPI / 96 device
+    px each (a percentage offset is of the size) [was: device px] }
+  procedure AtScale(var S: TTySymbolSpec);
+  begin
+    if not (AVisual.PxScale > 0) or (AVisual.PxScale = 1) then Exit;
+    S.WidthPx := S.WidthPx * AVisual.PxScale;
+    S.HeightPx := S.HeightPx * AVisual.PxScale;
+    if not S.OffsetXIsPct then S.OffsetX := S.OffsetX * AVisual.PxScale;
+    if not S.OffsetYIsPct then S.OffsetY := S.OffsetY * AVisual.PxScale;
+  end;
+
 begin
   Result := ASpec;
   ALift := 0;
-  if (AVisual.VisualRows = nil) or (AStore = nil) then Exit;
+  if (AVisual.VisualRows = nil) or (AStore = nil) then
+  begin
+    AtScale(Result);
+    Exit;
+  end;
   raw := AStore.GetRawIndex(ARow);
-  if (raw < 0) or (raw > High(AVisual.VisualRows)) then Exit;
+  if (raw < 0) or (raw > High(AVisual.VisualRows)) then
+  begin
+    AtScale(Result);
+    Exit;
+  end;
   vr := AVisual.VisualRows[raw];
   if vr.SymbolSet then
   begin
@@ -1434,6 +1454,7 @@ begin
     if IsNan(Result.HeightPx) then Result.HeightPx := 0;
   end;
   if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
+  AtScale(Result);
 end;
 
 { THE DECAL A VIEW ROW IS DRAWN WITH [Batch 131]: its own, else the

@@ -336,7 +336,7 @@ begin
   Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(el.Name));
 end;
 
-procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter; APaint: Boolean);
 var
   i, n: Integer;
   el: TTyChartElement;
@@ -363,6 +363,8 @@ begin
   n := Length(from);
   if n > FGfxUnder.Count then n := FGfxUnder.Count;
   for i := 0 to n - 1 do FGfxPaint[from[i]] := FGfxUnder.Element(i);
+  { [R7-AD] (drawn among the axes' parts: PaintAxes) }
+  if not APaint then Exit;
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));

@@ -425,7 +425,10 @@ type
 { Never raises and never returns nil: an option that says nothing buildable
   produces an empty build with diagnostics, because a design-time editor renders
   every keystroke and half-typed text is the normal state. }
-function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
+{ [R7-AD] APPI: the box's pixel counts are css px, laid out at PPI / 96
+  device px each [was: as device px] }
+function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APPI: Integer = 96): TTyChartBuild;
 { GRID AGridIndex LAID OUT IN ARef [Batch 151] -- createBoxLayoutReference
   for a grid with `coordinateSystem: 'matrix' | 'calendar'` and `coord`:
   its box by getLayoutRect in the cell (x, y, width and height as upstream
@@ -1371,7 +1374,8 @@ begin
   Result := a;
 end;
 
-function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
+function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APPI: Integer): TTyChartBuild;
 var
   build: TTyChartBuild;
   gridCount, xCount, yCount, i, j, k, gi: Integer;
@@ -1467,6 +1471,8 @@ begin
     box := GridDefaultBox;
     box := TyMergeBoxLayout(node, box);
     TyBoxClimbRoot(box, AOption.Root);
+    { [R7-AD] css px at the PPI }
+    if APPI > 0 then box := TyBoxRawScaled(box, APPI / 96);
     build.FGrids[i].FOuterXYWH := TyGetLayoutRect(box, AViewport.Left,
       AViewport.Top, AViewport.Right - AViewport.Left,
       AViewport.Bottom - AViewport.Top, []);
@@ -4850,6 +4856,8 @@ var
       obBox.Top := TyBoxRawNum(0);
       obBox.Bottom := TyBoxRawNum(0);
       obBox := TyMergeBoxLayout(ob, obBox);
+      { [R7-AD] css px at the PPI }
+      if APPI > 0 then obBox := TyBoxRawScaled(obBox, APPI / 96);
       outer := TyGetLayoutRect(obBox, vp.X, vp.Y, vp.W, vp.H, [0]);
     end
     else

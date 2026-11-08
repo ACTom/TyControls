@@ -137,9 +137,11 @@ function TyWhiskerClipRect(const AArea: TTyXYWH): TTyRectF;
 
 { Every candlestick's and boxplot's width, offset and clip, after the axes
   have their final pixel extents. }
+{ [R7-AD] APxScale: a width's pixel count is css px, APxScale (PPI / 96)
+  device px each (a percentage is of the band) [was: device px] }
 function TySolveWhiskerLayouts(AOption: TTyChartOption;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex): TTyWhiskerLayoutArray;
+  AIndex: TTyAxisSeriesIndex; APxScale: Double = 1): TTyWhiskerLayoutArray;
 
 implementation
 
@@ -173,6 +175,10 @@ begin
   Result := (AData = nil) or (AData.JSONType = jtNull);
 end;
 
+var
+  { [R7-AD] the pixel scale the widths are read at (TySolveWhiskerLayouts) }
+  GWhiskerPx: Double = 1;
+
 function TyWhiskerParsePercent(AData: TJSONData; ABase: Double): Double;
 var s, t: string;
     v: Double;
@@ -180,8 +186,8 @@ begin
   Result := NaN;
   if Absent(AData) then Exit;
   case AData.JSONType of
-    jtNumber: Result := AData.AsFloat;
-    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtNumber: Result := AData.AsFloat * GWhiskerPx;
+    jtBoolean: if AData.AsBoolean then Result := GWhiskerPx else Result := 0;
     jtString:
       begin
         s := AData.AsString;
@@ -193,7 +199,7 @@ begin
         if (t <> '') and (t[Length(t)] = '%') then
           Result := v / 100 * ABase
         else
-          Result := v;
+          Result := v * GWhiskerPx;
       end;
   end;
 end;
@@ -207,7 +213,7 @@ begin
   { retrieve2(get('barMaxWidth'), band), retrieve2(get('barMinWidth'), 1) }
   if Absent(ABarMaxWidth) then maxW := ABand
   else maxW := TyWhiskerParsePercent(ABarMaxWidth, ABand);
-  if Absent(ABarMinWidth) then minW := 1
+  if Absent(ABarMinWidth) then minW := GWhiskerPx
   else minW := TyWhiskerParsePercent(ABarMinWidth, ABand);
   if not Absent(ABarWidth) then
     Exit(TyWhiskerParsePercent(ABarWidth, ABand));
@@ -228,8 +234,8 @@ procedure TyBoxWidthBounds(ABoxWidth: TJSONData; ABand: Double;
 begin
   if ABoxWidth = nil then
   begin
-    ALo := cBoxMin;
-    AHi := cBoxMax;
+    ALo := cBoxMin * GWhiskerPx;
+    AHi := cBoxMax * GWhiskerPx;
     Exit;
   end;
   if ABoxWidth is TJSONArray then
@@ -487,7 +493,7 @@ end;
 
 function TySolveWhiskerLayouts(AOption: TTyChartOption;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex): TTyWhiskerLayoutArray;
+  AIndex: TTyAxisSeriesIndex; APxScale: Double): TTyWhiskerLayoutArray;
 var
   i, k: Integer;
   node: TJSONObject;
@@ -527,6 +533,8 @@ begin
   SetLength(Result, Length(ABindings));
   for i := 0 to High(Result) do Result[i] := Default(TTyWhiskerLayout);
   if (AOption = nil) or (AIndex = nil) then Exit;
+  GWhiskerPx := APxScale;
+  try
   SetLength(done, Length(ABindings));
   for i := 0 to High(ABindings) do
   begin
@@ -576,6 +584,9 @@ begin
         done[onIt[k]] := True;
       end;
     end;
+  end;
+  finally
+    GWhiskerPx := 1;
   end;
 end;
 

@@ -237,6 +237,14 @@ function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   reads: auto absent, px a number, a percentage its text with a `%`, centre
   the word [Batch 147] }
 function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
+{ [R7-AD] A RAW BOX'S PIXEL COUNTS AT AScale device px per css px (PPI /
+  96, upstream's devicePixelRatio): a number, a string read as one
+  (parseFloat: not a percentage, not a word) -- the rest as written }
+function TyBoxRawScaled(const ABox: TTyRawBox; AScale: Double): TTyRawBox;
+{ [R7-AD] a box value's (a centre's, a radius') the same }
+function TyBoxValueScaled(const AV: TTyBoxValue; AScale: Double): TTyBoxValue;
+{ [R7-AD] one raw value's (a centre's, a radius' as written) }
+function TyBoxRawOneScaled(const A: TTyBoxRaw; AScale: Double): TTyBoxRaw;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -1984,6 +1992,38 @@ begin
         if IsNan(Result.V) then Result.Kind := tpkNaN;
       end;
   end;
+end;
+
+function TyBoxRawOneScaled(const A: TTyBoxRaw; AScale: Double): TTyBoxRaw;
+var p: TTyPos;
+begin
+  Result := A;
+  if (AScale = 1) or not (A.Kind in [brNumber, brString]) then Exit;
+  p := TyBoxRawPos(A);
+  if p.Kind <> tpkPx then Exit;
+  Result := TyBoxRawNum(p.V * AScale);
+end;
+
+function TyBoxRawScaled(const ABox: TTyRawBox; AScale: Double): TTyRawBox;
+
+  function One(const A: TTyBoxRaw): TTyBoxRaw;
+  begin
+    Result := TyBoxRawOneScaled(A, AScale);
+  end;
+
+begin
+  Result.Left := One(ABox.Left);
+  Result.Right := One(ABox.Right);
+  Result.Top := One(ABox.Top);
+  Result.Bottom := One(ABox.Bottom);
+  Result.Width := One(ABox.Width);
+  Result.Height := One(ABox.Height);
+end;
+
+function TyBoxValueScaled(const AV: TTyBoxValue; AScale: Double): TTyBoxValue;
+begin
+  Result := AV;
+  if AV.Kind = buPx then Result.Value := AV.Value * AScale;
 end;
 
 { One position against its base: `parseFloat(option) / 100 * base + 0`, a
