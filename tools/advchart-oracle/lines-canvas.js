@@ -852,6 +852,21 @@ function cases() {
       LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }],
         { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
     [0, 20, 40, 60], { y: true, dirty: true }],
+    // [R7-AB] 3. a text span's shadow offset of no finite number (`'abc' ||
+    //    0` is 'abc', dpr times it none): refused, the canvas' kept -- only
+    //    where the span casts one (textShadowBlur above nought); a rich
+    //    token's blur of no number over the label's (hasShadow by either,
+    //    the token's 'zz' then refused)
+    ['ab-sh-text', vv([{ type: 'scatter', clip: false, symbolSize: 12,
+      itemStyle: { shadowColor: '#ff0000', shadowBlur: 2, shadowOffsetX: 4, shadowOffsetY: 3 }, data: [
+        { value: [2, 2] },
+        { value: [4, 4], label: { show: true, formatter: 'Ab', textShadowColor: '#00ff00', textShadowBlur: 3,
+          textShadowOffsetX: 'abc', textShadowOffsetY: 'Infinity' } },
+        { value: [6, 6], label: { show: true, formatter: 'Cd', textShadowColor: '#0000ff', textShadowBlur: '2',
+          textShadowOffsetX: '5', textShadowOffsetY: '' } },
+        { value: [8, 8], label: { show: true, formatter: '{a|Ef}', rich: { a: { textShadowBlur: 'zz', textShadowOffsetX: 'q' } },
+          textShadowColor: '#ff00ff', textShadowBlur: 4, textShadowOffsetX: 2 } },
+        { value: [9, 3], label: { show: true, formatter: 'Gh', textShadowOffsetX: 'abc' } }] }]), [0], { y: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],

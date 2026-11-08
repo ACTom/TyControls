@@ -1667,6 +1667,34 @@ begin
             Continue;
           end;
           el := FChart.Frame.Element(idx);
+          { [R7-AB] A LABEL'S TEXT SPAN: the shadow its last span casts once
+            the paint order settled it (a refused part the canvas') }
+          if key[1] = 'x' then
+          begin
+            n := -1;
+            for q2 := 0 to High(el.Caption.RtPieces) do
+              if el.Caption.RtPieces[q2].Text <> '' then n := q2;
+            Inc(FCompared);
+            { (a plain caption, no span: one that casts none) }
+            if (n < 0) or not el.Caption.RtPieces[n].HasShadow then
+            begin
+              if (HexD(o.Strings['sb']) > 0) and TyTryParseChartColor(o.Strings['sc'], wc)
+                and ((wc shr 24) <> 0) then
+                Miss(Format('%s: casts none, upstream %s blur %g', [where, o.Strings['sc'],
+                  HexD(o.Strings['sb'])]));
+              Continue;
+            end;
+            if (Abs(el.Caption.RtPieces[n].ShadowBlur - HexD(o.Strings['sb'])) > 1e-9)
+              or (Abs(el.Caption.RtPieces[n].ShadowOffsetX - HexD(o.Strings['sox'])) > 1e-9)
+              or (Abs(el.Caption.RtPieces[n].ShadowOffsetY - HexD(o.Strings['soy'])) > 1e-9)
+              or (TyTryParseChartColor(o.Strings['sc'], wc)
+                and (el.Caption.RtPieces[n].ShadowColor <> wc)) then
+              Miss(Format('%s: span shadow %x blur %g offset (%g,%g), upstream %s blur %g offset (%g,%g)',
+                [where, el.Caption.RtPieces[n].ShadowColor, el.Caption.RtPieces[n].ShadowBlur,
+                el.Caption.RtPieces[n].ShadowOffsetX, el.Caption.RtPieces[n].ShadowOffsetY,
+                o.Strings['sc'], HexD(o.Strings['sb']), HexD(o.Strings['sox']), HexD(o.Strings['soy'])]));
+            Continue;
+          end;
           Inc(FCompared);
           kind := el.Style.Blend;
           if kind = '' then kind := 'source-over';
