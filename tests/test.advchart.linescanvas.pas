@@ -96,6 +96,7 @@ type
     procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
     procedure RunY(const APrefix: string = 'y-');
     procedure RunYHeld(const APrefix: string = 'y-');
+    procedure RunYTexelsAt(APPI: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -112,6 +113,8 @@ type
     { [R7-AB] the ab- cases, as the y- ones }
     procedure TestTheR7ABDirtyFramesAsUpstream;
     procedure TestTheR7ABCarriesAsUpstream;
+    { [R7-AB] a pattern drawn (its own, one held) at another PPI }
+    procedure TestTheHeldPatternsAtAnotherPPIAsUpstream;
   end;
 
 implementation
@@ -1848,6 +1851,138 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheHeldPatternsAsUpstream;
 begin
   RunYHeld;
+end;
+
+{ [R7-AB] A HELD PATTERN AT ANOTHER PPI. The canvas keeps the CanvasPattern
+  the element before made (createCanvasPattern: its matrix set, relative to
+  the fill's user space); an element whose fill it refuses fills with it
+  under its own transform -- exactly what that element draws with the same
+  pattern object as its own fill, at any devicePixelRatio. So each y-pat-
+  case is drawn at APPI twice, B's refused fill and B's own fill the same
+  pattern as A's, and B's pixels must be the same (inside its bounds) }
+procedure TAdvChartLinesCanvasOracleTest.RunYTexelsAt(APPI: Integer);
+var
+  cs: TJSONArray;
+  c, opt: TJSONObject;
+  i, x, y, k, w, h, diff: Integer;
+  id, keyB: string;
+  bmp1, bmp2: TBGRABitmap;
+  p1, p2: TBGRAPixel;
+  bb: TTyRectF;
+  pat: TJSONData;
+
+  function Draw(const AOpt: string; ABmp: TBGRABitmap; out ABox: TTyRectF): Boolean;
+  var idx: Integer; rec: TJSONObject;
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    { (the control at that PPI: its layout too) }
+    FChart.Font.PixelsPerInch := APPI;
+    FChart.SetBounds(0, 0, w, h);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := cT0;
+    FChart.SetOption(AOpt, True);
+    AssertEquals(id + ' parses', '', FChart.OptionError);
+    ABmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(ABmp.Canvas, Rect(0, 0, w, h), APPI);
+    rec := TJSONObject.Create;
+    try
+      idx := WElOf(keyB, rec);
+    finally
+      rec.Free;
+    end;
+    Result := idx >= 0;
+    if Result then ABox := TyShapeBounds(FChart.Frame.Element(idx).Shape);
+  end;
+
+begin
+  FBad := 0;
+  FCompared := 0;
+  FReport := '';
+  w := Round(FRoot.FindPath('W').AsInteger * APPI / 96);
+  h := Round(FRoot.FindPath('H').AsInteger * APPI / 96);
+  bmp1 := TBGRABitmap.Create(w, h);
+  bmp2 := TBGRABitmap.Create(w, h);
+  try
+    cs := TJSONObject(FRoot).Arrays['charts'];
+    for i := 0 to cs.Count - 1 do
+    begin
+      c := cs.Objects[i];
+      id := c.Strings['id'];
+      if (id <> 'y-pat-bar') and (id <> 'y-pat-scatter') then Continue;
+      opt := TJSONObject(c.Objects['option'].Clone);
+      try
+        { B: the bar after A's, the scatter after A's }
+        if id = 'y-pat-bar' then
+        begin
+          keyB := 'b0.1';
+          pat := opt.FindPath('series[0].data[0].itemStyle.color').Clone;
+          TJSONObject(opt.FindPath('series[0].data[1].itemStyle')).Delete('color');
+          TJSONObject(opt.FindPath('series[0].data[1].itemStyle')).Add('color', pat);
+        end
+        else
+        begin
+          keyB := 's1.0';
+          pat := opt.FindPath('series[0].itemStyle.color').Clone;
+          TJSONObject(opt.FindPath('series[1].itemStyle')).Delete('color');
+          TJSONObject(opt.FindPath('series[1].itemStyle')).Add('color', pat);
+        end;
+        if not Draw(c.Objects['option'].AsJSON, bmp1, bb) then
+        begin
+          Miss(id + ': no B');
+          Continue;
+        end;
+        if not Draw(opt.AsJSON, bmp2, bb) then
+        begin
+          Miss(id + ': no B of its own');
+          Continue;
+        end;
+      finally
+        opt.Free;
+      end;
+      if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+      begin
+        bmp1.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-held' + IntToStr(APPI) + '.png');
+        bmp2.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-own' + IntToStr(APPI) + '.png');
+      end;
+      diff := 0;
+      for y := Ceil(bb.Top) + 2 to Floor(bb.Bottom) - 3 do
+        for x := Ceil(bb.Left) + 2 to Floor(bb.Right) - 3 do
+        begin
+          { (a circle's corners are not its) }
+          if (keyB[1] = 's') and (Sqr(x + 0.5 - (bb.Left + bb.Right) / 2)
+            + Sqr(y + 0.5 - (bb.Top + bb.Bottom) / 2) > Sqr((bb.Right - bb.Left) / 2 - 2)) then Continue;
+          p1 := bmp1.GetPixel(x, y);
+          p2 := bmp2.GetPixel(x, y);
+          Inc(FCompared);
+          k := Max(Abs(p1.red - p2.red), Max(Abs(p1.green - p2.green), Abs(p1.blue - p2.blue)));
+          if k > 8 then
+          begin
+            Inc(diff);
+            if diff <= 4 then
+              Miss(Format('%s @%d: (%d,%d) held (%d,%d,%d), own (%d,%d,%d)', [id, APPI, x, y,
+                p1.red, p1.green, p1.blue, p2.red, p2.green, p2.blue]))
+            else Inc(FBad);
+          end;
+        end;
+    end;
+  finally
+    FreeAndNil(FChart);
+    bmp1.Free;
+    bmp2.Free;
+  end;
+  if FBad > 0 then
+    Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
+  AssertTrue('compared', FCompared > 100);
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheHeldPatternsAtAnotherPPIAsUpstream;
+begin
+  RunYTexelsAt(96);
+  RunYTexelsAt(144);
+  RunYTexelsAt(120);
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7ABDirtyFramesAsUpstream;
