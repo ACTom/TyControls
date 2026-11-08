@@ -110,6 +110,9 @@ type
     function CompPartN(const AKey: string; AZ2: Integer; AText: Boolean; AN: Integer;
       out AEl: TTyChartElement): Boolean;
     { [R7-AC] the ANth part of AKey, AZ2 and kind as drawn (0 the first) }
+    { [R7-AG] a text part of AKey drawn with the words AText }
+    function CompPartWords(const AKey: string; AZ2: Integer; const AWords: string;
+      out AEl: TTyChartElement): Boolean;
     function CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean; ANth: Integer;
       out AEl: TTyChartElement): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -224,6 +227,10 @@ type
       axis' ticks on the css px' half pixel (the device column left of a
       tick at css 40.5 stays clear) }
     procedure TestTheRestOfTheOptionPxAtAnotherPPIAsUpstream;
+    { [R7-AG] the agy- cases, as the y- ones: fonts the canvas refuses in a
+      richText tooltip's spans, an axis pointer's label, a dataZoom's,
+      a timeline's, a calendar's and a matrix' labels }
+    procedure TestTheR7AGCarriesAsUpstream;
   end;
 
 implementation
@@ -299,6 +306,27 @@ begin
       if n = AN then Exit;
       Inc(n);
     end;
+end;
+
+function TLcProbe.CompPartWords(const AKey: string; AZ2: Integer; const AWords: string;
+  out AEl: TTyChartElement): Boolean;
+var d: TTyCompPartArray; k, q: Integer; s: string;
+begin
+  d := CompDrawn;
+  AEl := Default(TTyChartElement);
+  for k := 0 to High(d) do
+    if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and d[k].IsText then
+    begin
+      s := d[k].El.Caption.Text;
+      if (s = '') and (Length(d[k].El.Caption.RtPieces) > 0) then
+        for q := 0 to High(d[k].El.Caption.RtPieces) do s := s + d[k].El.Caption.RtPieces[q].Text;
+      if s = AWords then
+      begin
+        AEl := d[k].El;
+        Exit(True);
+      end;
+    end;
+  Result := False;
 end;
 
 function TLcProbe.CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean;
@@ -455,7 +483,9 @@ begin
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
       or (Copy(id, 1, 2) = 'y-')
       or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ad-') or (Copy(id, 1, 4) = 'ady-')
-      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') then Continue;
+      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-')
+      { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
+      or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -2376,7 +2406,19 @@ begin
               parts.Delimiter := '.';
               parts.StrictDelimiter := True;
               parts.DelimitedText := key;
-              if not FChart.CompPartN(parts[1], StrToInt(parts[2]), True, StrToInt(parts[4]), el) then
+              { ([R7-AG] a richText tooltip's span by its words: its blank
+                ones -- a marker's, the two spaces after it -- are no part
+                of the port's) }
+              if parts[1] = 'tooltip0' then
+              begin
+                if Trim(rec.Get('tx', '')) = '' then Continue;
+                if not FChart.CompPartWords(parts[1], StrToInt(parts[2]), rec.Get('tx', ''), el) then
+                begin
+                  Miss(where + ': no span');
+                  Continue;
+                end;
+              end
+              else if not FChart.CompPartN(parts[1], StrToInt(parts[2]), True, StrToInt(parts[4]), el) then
               begin
                 idx := CListOf(rec, True, StrToInt(parts[2]));
                 if idx < 0 then
@@ -3675,6 +3717,11 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7ADCarriesAsUpstream;
 begin
   RunYHeld('ady-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AGCarriesAsUpstream;
+begin
+  RunYHeld('agy-');
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestOptionPxAtAnotherPPIAsUpstream;

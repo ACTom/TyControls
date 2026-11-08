@@ -63,6 +63,10 @@ type
     { [R7-M] the label's node as written ('' none): its words are
       createTextStyle of it -- the box, the sizes, rich, the halo }
     Json: string;
+    { [R7-AG] its font is one the canvas refuses (fontStyle, fontWeight,
+      fontSize as the label resolves them): drawn in the font the text
+      before left }
+    FontLeft: Boolean;
   end;
 
   { A box key with whether the option object OWNS it -- mergeLayoutParam
@@ -334,6 +338,25 @@ begin
     Result := not IsNan(n) and (n > 0);
     if Result then AWeight := Round(n);
   end;
+end;
+
+{ [R7-AG] whether a label's font is one the canvas refuses: each of
+  fontStyle, fontWeight, fontSize its own key, else the global textStyle's
+  (AAllGlobal False: the style alone -- the year's size and weight are its
+  model's) }
+function FontRefused(AOwn, AGlobal: TJSONObject; AAllGlobal: Boolean): Boolean;
+var parts: array[0..2] of TJSONData; k: Integer;
+const cKeys: array[0..2] of string = ('fontStyle', 'fontWeight', 'fontSize');
+begin
+  for k := 0 to 2 do
+  begin
+    parts[k] := nil;
+    if AOwn <> nil then parts[k] := AOwn.Find(cKeys[k]);
+    if ((parts[k] = nil) or (parts[k].JSONType = jtNull)) and (AGlobal <> nil)
+      and (AAllGlobal or (k = 0)) then
+      parts[k] := AGlobal.Find(cKeys[k]);
+  end;
+  Result := TyCssFontRefused(parts[0], parts[1], parts[2]);
 end;
 
 procedure ReadText(ANode: TJSONObject; var AText: TTyCalText);
@@ -810,6 +833,12 @@ begin
     ReadText(sub, Result.YearText);
     Result.YearText.Json := sub.AsJSON;
   end;
+  { [R7-AG] A FONT THE CANVAS REFUSES: the day's and the month's keys over
+    the global textStyle's, the year's style over it too (its size and
+    weight the model's defaults, readable) }
+  Result.DayText.FontLeft := FontRefused(ObjIn(node, 'dayLabel'), gts, True);
+  Result.MonthText.FontLeft := FontRefused(ObjIn(node, 'monthLabel'), gts, True);
+  Result.YearText.FontLeft := FontRefused(ObjIn(node, 'yearLabel'), gts, False);
 end;
 
 { ==================== the calendar ==================== }
@@ -1523,6 +1552,9 @@ var
     el.Caption.FontName := fname;
     el.Caption.FontSizeLogical := fsize;
     el.Caption.FontWeight := fweight;
+    { [R7-AG] a font the canvas refuses: the one the text before left
+      [was: its own readable parts] }
+    if AText.FontLeft then el.CanvasFlags := el.CanvasFlags or cTyCanvasFontLeft;
     if AText.HasColour then el.Caption.Colour := AText.Colour
     else el.Caption.Colour := ADefColour;
     el.Caption.X := AX;

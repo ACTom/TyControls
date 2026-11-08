@@ -1888,6 +1888,47 @@ function cases() {
         style: { fill: { type: 'radial', x: 0.5, y: 0.5, r: 0.5,
           colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#0000ff' }] } } }] },
     [0], { y: true }],
+    // ---- [R7-AG] (recorded as the aa- ones) ----
+    // 1. fonts the canvas refuses (recorded as the y- ones, the components'
+    //    displayables keyed as the z- ones): the font the text before left
+    //    -- a richText tooltip's spans (its name and value tokens take
+    //    textStyle's weight and size), an axis pointer's label, a dataZoom's
+    //    handle labels, a timeline's labels, a calendar's day, month and year
+    //    labels, a matrix' header labels
+    ['agy-font-tip', Object.assign(vv([{ type: 'scatter', clip: false, name: 'S', symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0,
+      position: [100, 60], textStyle: { fontWeight: 'heavy', color: '#000' } } }),
+    [0], { y: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['agy-font-tip-size', Object.assign(vv([{ type: 'scatter', clip: false, name: 'S', symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0,
+      position: [100, 60], textStyle: { fontSize: '13abcpx', color: '#000' } } }),
+    [0], { y: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['agy-font-ptr', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 1 },
+          label: { show: true, color: '#000', fontStyle: 'slanted', formatter: 'P' } } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-dz', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      dataZoom: [{ type: 'slider', xAxisIndex: 0, showDataShadow: false, handleLabel: { show: true },
+        textStyle: { fontWeight: 'heavy', color: '#000' } }] }),
+    [0], { y: true, z: true }],
+    ['agy-font-timeline', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      timeline: { axisType: 'category', left: 40, right: 40, bottom: 10, data: ['a', 'b', 'c'], autoPlay: false,
+        controlStyle: { show: false }, label: { color: '#000', fontWeight: 'heavy' } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-calendar', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      calendar: { left: 40, top: 60, cellSize: [16, 16], range: '2020-01',
+        dayLabel: { color: '#000', fontWeight: 'heavy', nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'] },
+        monthLabel: { color: '#000', fontStyle: 'slanted',
+          nameMap: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] },
+        yearLabel: { color: '#000', fontSize: '12abcpx' } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-matrix', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      matrix: { left: 120, top: 120, width: 160, height: 80,
+        x: { data: ['a', 'b'], label: { color: '#000', fontWeight: 'heavy' } },
+        y: { data: ['c'], label: { color: '#000', fontStyle: 'slanted' } } } }),
+    [0], { y: true, z: true }],
   ]);
 }
 function withPalette(list) {
@@ -2170,7 +2211,8 @@ function run(id, option, samples, opts) {
   V2 = !!opts.v2 || !!opts.w || !!opts.y;
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
-  AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-';
+  AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-'
+    || id.slice(0, 3) === 'ag-' || id.slice(0, 4) === 'agy-';
   AE = id.slice(0, 3) === 'ae-';
   AC = id.slice(0, 3) === 'ac-' || AE;
   SEQ = 0;

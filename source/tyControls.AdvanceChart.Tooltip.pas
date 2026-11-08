@@ -124,6 +124,14 @@ type
     TextSizeLogical: Double;
     { [R5-A] textStyle.fontStyle (TyFontStyleCode) }
     TextFontStyle: Byte;
+    { [R7-AG] textStyle.fontWeight as written: the name's and the value's
+      weight (getTooltipTextStyle: `fontWeight || '400'`, `|| '900'`) [was:
+      never read -- the skin's]; and whether the canvas refuses the rich
+      tokens' font it makes with fontSize (richText: drawn in the font the
+      text before left) }
+    TextWeightSet: Boolean;
+    TextWeight: Integer;
+    TextFontLeft: Boolean;
     { [R7-AA] backgroundColor, borderColor, textStyle.color written as a
       string no colour parser reads: html mode, the browser drops the
       declaration (the background transparent, the border currentColor --
@@ -244,6 +252,9 @@ type
     NameSizeLogical: Integer;
     NameWeight: Integer;
     NameColour: TTyChartColor;
+    { [R7-AG] the name's and the value's tokens are in a font the canvas
+      refuses (richText): each run of them is marked FontLeft }
+    NameFontLeft, ValueFontLeft: Boolean;
     { The number. A separate key rather than a second weight of the first:
       upstream separates them by weight alone (400 against 900) and the whole
       typographic hierarchy of the box is in that one difference, so it has to
@@ -295,6 +306,9 @@ type
     { [R7-AC] a text run's shadow colour as the canvas settled it (richText:
       a textShadowColor no parser reads takes what the canvas had) }
     ShadowColour: TTyChartColor;
+    { [R7-AG] a token in a font the canvas refuses (richText): drawn in the
+      font the text before left -- settled into the font fields }
+    FontLeft: Boolean;
     { Set once measured. }
     X, W: Double;
   end;
@@ -1076,6 +1090,12 @@ begin
         ASpec.TextSizeLogical := Max(Double(1), Min(Double(400), d.AsFloat));
       end;
       ASpec.TextFontStyle := TyFontStyleCode(ts.Find('fontStyle'));
+      { [R7-AG] the weight, and the rich tokens' font refused }
+      d := ts.Find('fontWeight');
+      ASpec.TextWeightSet := TyFontWeightOf(d, 0) > 0;
+      if ASpec.TextWeightSet then ASpec.TextWeight := TyFontWeightOf(d, 400)
+      else ASpec.TextWeight := 0;
+      ASpec.TextFontLeft := TyCssFontRefused(nil, d, ts.Find('fontSize'));
       { [R7-AC] the text's shadow [was: never read -- the option had no
         effect] }
       d := ts.Find('textShadowBlur');
@@ -1777,6 +1797,7 @@ begin
   begin
     Result.Runs[n] := TextRun(ABlock.Name, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result.Runs[n].FontLeft := AInk.NameFontLeft;
     Inc(n);
   end;
   if not ABlock.NoValue then
@@ -1788,6 +1809,7 @@ begin
     alignRight := (ABlock.Marker <> ttmNone) or not ABlock.NoName;
     Result.Runs[n] := TextRun(ABlock.Value, AInk.ValueFontName,
       AInk.ValueSizeLogical, AInk.ValueWeight, AInk.ValueColour, alignRight);
+    Result.Runs[n].FontLeft := AInk.ValueFontLeft;
     Inc(n);
   end;
   SetLength(Result.Runs, n);
@@ -1855,6 +1877,7 @@ begin
       upstream inks it from exactly the same pair as an inline name. }
     Result[0].Runs[0] := TextRun(ABlock.Header, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result[0].Runs[0].FontLeft := AInk.NameFontLeft;
   end;
   for i := 0 to ABlock.BlockCount - 1 do
   begin

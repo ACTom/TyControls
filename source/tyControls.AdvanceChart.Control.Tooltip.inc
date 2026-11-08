@@ -858,6 +858,16 @@ begin
     Result.NameSizeLogical := TyFontSizeFromPx(ASpec.TextSizeLogical);  // CSS px [Batch 83]
     Result.ValueSizeLogical := Result.NameSizeLogical;
   end;
+  { [R7-AG] textStyle.fontWeight: both tokens' (getTooltipTextStyle) [was:
+    not read]; a font the canvas refuses, in richText: the rich tokens are
+    drawn in the font the text before left }
+  if ASpec.TextWeightSet then
+  begin
+    Result.NameWeight := (Result.NameWeight and not TyChartFontWeightMask) or ASpec.TextWeight;
+    Result.ValueWeight := (Result.ValueWeight and not TyChartFontWeightMask) or ASpec.TextWeight;
+  end;
+  Result.NameFontLeft := ASpec.TextFontLeft and not TipHtmlMode;
+  Result.ValueFontLeft := Result.NameFontLeft;
   { [R5-A] THE FONT'S STYLE, in html mode: the box's css font is getFont()
     (TooltipHTMLContent assembleFont) -- textStyle's fontStyle, else the root
     textStyle's -- and the default content's spans name their size, weight
@@ -7514,6 +7524,24 @@ var
   e: TTyChartElement;
   i, j: Integer;
   c: TTyChartColor;
+
+  { a span's shadow: the Text's textShadow* where it blurs }
+  procedure TipSpanShadow(var APiece: TTyRtPiece);
+  begin
+    if ((ASpec.TextShadowKeys and 1) <> 0) and (ASpec.TextShadowBlur > 0) then
+    begin
+      APiece.HasShadow := True;
+      APiece.ShadowBlur := ASpec.TextShadowBlur;
+      APiece.ShadowOffsetX := ASpec.TextShadowOffsetX;
+      APiece.ShadowOffsetY := ASpec.TextShadowOffsetY;
+      { (`textShadowColor || 'transparent'`) }
+      if (ASpec.TextShadowKeys and 8) <> 0 then
+        APiece.ShadowColor := ASpec.TextShadowColour
+      else
+        APiece.ShadowColor := 0;
+    end;
+  end;
+
 begin
   if TipHtmlMode then
   begin
@@ -7597,6 +7625,29 @@ begin
         OvStep(e, 60, 0);
         ALines[i].Runs[j].Colour := e.Style.FillColor;
         CompDrew(nil, 'tooltip0', 0, 0, False, e);
+        { [R7-AG] AND THE TWO SPACES after the token (getTooltipMarker's
+          '{marker|}  '): a plain span in the Text's own fill and shadow and
+          zrender's default font, 12px sans-serif -- a refused font after it
+          is that one }
+        e := Default(TTyChartElement);
+        e.Style.Alpha := 1;
+        e.Caption.FontName := 'sans-serif';
+        e.Caption.FontSizeLogical := TyFontSizeFromPx(12);
+        e.Caption.FontWeight := 400;
+        e.Caption.Text := '  ';
+        SetLength(e.Caption.RtPieces, 1);
+        e.Caption.RtPieces[0] := Default(TTyRtPiece);
+        e.Caption.RtPieces[0].Kind := rpkText;
+        e.Caption.RtPieces[0].Text := '  ';
+        e.Caption.RtPieces[0].FontFamily := 'sans-serif';
+        e.Caption.RtPieces[0].FontSizePx := 12;
+        e.Caption.RtPieces[0].FontWeight := 400;
+        e.Caption.RtPieces[0].HasFill := True;
+        e.Caption.RtPieces[0].Fill := AInk.NameColour;
+        TipSpanShadow(e.Caption.RtPieces[0]);
+        e.Caption.Colour := AInk.NameColour;
+        e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+        OvStep(e, 60, 0);
         Continue;
       end;
       if ALines[i].Runs[j].Kind <> ttrText then Continue;
@@ -7611,23 +7662,28 @@ begin
       e.Caption.RtPieces[0].Text := ALines[i].Runs[j].Text;
       e.Caption.RtPieces[0].HasFill := True;
       e.Caption.RtPieces[0].Fill := c;
-      if ((ASpec.TextShadowKeys and 1) <> 0) and (ASpec.TextShadowBlur > 0) then
-      begin
-        e.Caption.RtPieces[0].HasShadow := True;
-        e.Caption.RtPieces[0].ShadowBlur := ASpec.TextShadowBlur;
-        e.Caption.RtPieces[0].ShadowOffsetX := ASpec.TextShadowOffsetX;
-        e.Caption.RtPieces[0].ShadowOffsetY := ASpec.TextShadowOffsetY;
-        { (`textShadowColor || 'transparent'`) }
-        if (ASpec.TextShadowKeys and 8) <> 0 then
-          e.Caption.RtPieces[0].ShadowColor := ASpec.TextShadowColour
-        else
-          e.Caption.RtPieces[0].ShadowColor := 0;
-      end;
+      TipSpanShadow(e.Caption.RtPieces[0]);
+      { [R7-AG] its font, as the token writes it (a font the canvas refuses:
+        the one the text before left) [was: none -- the canvas handed a font
+        of no size] }
+      e.Caption.RtPieces[0].FontFamily := ALines[i].Runs[j].FontName;
+      if TyFontSizeIsPx(ALines[i].Runs[j].FontSizeLogical) then
+        e.Caption.RtPieces[0].FontSizePx := TyFontPxOf(ALines[i].Runs[j].FontSizeLogical)
+      else
+        e.Caption.RtPieces[0].FontSizePx := ALines[i].Runs[j].FontSizeLogical * 96 / 72;
+      e.Caption.RtPieces[0].FontWeight := ALines[i].Runs[j].FontWeight;
+      e.Caption.RtPieces[0].FontLeft := ALines[i].Runs[j].FontLeft;
       e.Caption.Colour := c;
       e.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
       OvStep(e, 60, 0);
       ALines[i].Runs[j].Colour := e.Caption.RtPieces[0].Fill;
       ALines[i].Runs[j].ShadowColour := e.Caption.RtPieces[0].ShadowColor;
+      if ALines[i].Runs[j].FontLeft then
+      begin
+        ALines[i].Runs[j].FontName := e.Caption.RtPieces[0].FontFamily;
+        ALines[i].Runs[j].FontSizeLogical := TyFontSizeFromPx(e.Caption.RtPieces[0].FontSizePx);
+        ALines[i].Runs[j].FontWeight := e.Caption.RtPieces[0].FontWeight;
+      end;
       CompDrew(nil, 'tooltip0', 0, 0, True, e);
     end;
   end;
