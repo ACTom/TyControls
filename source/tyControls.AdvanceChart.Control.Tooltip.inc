@@ -7589,16 +7589,17 @@ end;
 { [R7-AC] A TOOLTIP TEXT'S SHADOW: its glyphs, as DrawText puts them in
   ARect, on a mask of their own, and the painter's shadow cast from it --
   blurred, moved (css px), in AShadow -- under where the text is drawn
-  (Render's RtTextShadow for a text in a rect) }
-procedure TipTextShadow(P: TTyPainter; const ARect: TRect; const AText, AFont: string;
+  (Render's RtTextShadow for a text in a rect). AMp: the mask's painter,
+  the chart's (NewPainter) }
+procedure TipTextShadow(P, AMp: TTyPainter; const ARect: TRect; const AText, AFont: string;
   ASize, AWeight: Integer; AInk, AShadow: TTyColor; ABlur, AOffsetX, AOffsetY: Double);
 var
   m, s, mw, mh: Integer;
-  mp: TTyPainter;
   mask: TBGRABitmap;
   sc: TTyCanvasScale;
 begin
-  if (P = nil) or (P.Bitmap = nil) or (ARect.Right <= ARect.Left) or (ARect.Bottom <= ARect.Top) then Exit;
+  if (P = nil) or (AMp = nil) or (P.Bitmap = nil) or (ARect.Right <= ARect.Left)
+    or (ARect.Bottom <= ARect.Top) then Exit;
   m := 4;
   mw := ARect.Right - ARect.Left + 2 * m;
   mh := ARect.Bottom - ARect.Top + 2 * m;
@@ -7607,16 +7608,10 @@ begin
   sc.DeviceUnits := False;
   mask := TBGRABitmap.Create(mw * s, mh * s, BGRAPixelTransparent);
   try
-    mp := TTyPainter.Create;
-    try
-      mp.FastStrokes := P.FastStrokes;
-      mp.BeginPaintOnScaled(nil, Rect(0, 0, mw, mh), P.PPI, mask, sc);
-      mp.DrawText(Rect(m, m, m + ARect.Right - ARect.Left, m + ARect.Bottom - ARect.Top),
-        AText, AFont, ASize, AWeight, AInk or TTyColor($FF000000), taLeftJustify, tlCenter, False);
-      mp.EndPaint;
-    finally
-      mp.Free;
-    end;
+    AMp.BeginPaintOnScaled(nil, Rect(0, 0, mw, mh), P.PPI, mask, sc);
+    AMp.DrawText(Rect(m, m, m + ARect.Right - ARect.Left, m + ARect.Bottom - ARect.Top),
+      AText, AFont, ASize, AWeight, AInk or TTyColor($FF000000), taLeftJustify, tlCenter, False);
+    AMp.EndPaint;
     P.CastShadowOf(mask, (ARect.Left - m) * s, (ARect.Top - m) * s, AShadow, ABlur, AOffsetX, AOffsetY);
   finally
     mask.Free;
@@ -7656,6 +7651,7 @@ var
   richBw, sBlur, sOffX, sOffY, outL, outR, outT, outB, sc: Double;
   outer: TRect;
   tsc: TTyChartColor;
+  smp: TTyPainter;
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
@@ -8078,15 +8074,23 @@ begin
               tsc := lines[i].Runs[j].ShadowColour;
           end;
           if (tsc shr 24) <> 0 then
-            TipTextShadow(APainter,
-              Rect(Round(box.Left + padL + lines[i].Runs[j].X), lineTop,
-                   Round(box.Left + padL + lines[i].Runs[j].X
-                         + lines[i].Runs[j].W) + 1,
-                   Round(lineTop + hPx)),
-              TyInkText(lines[i].Runs[j].Text), lines[i].Runs[j].FontName,
-              lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
-              TTyColor(lines[i].Runs[j].Colour), TTyColor(tsc), spec.TextShadowBlur,
-              spec.TextShadowOffsetX, spec.TextShadowOffsetY);
+          begin
+            { (the mask's painter the chart's own: its stroke mode) }
+            smp := NewPainter;
+            try
+              TipTextShadow(APainter, smp,
+                Rect(Round(box.Left + padL + lines[i].Runs[j].X), lineTop,
+                     Round(box.Left + padL + lines[i].Runs[j].X
+                           + lines[i].Runs[j].W) + 1,
+                     Round(lineTop + hPx)),
+                TyInkText(lines[i].Runs[j].Text), lines[i].Runs[j].FontName,
+                lines[i].Runs[j].FontSizeLogical, lines[i].Runs[j].FontWeight,
+                TTyColor(lines[i].Runs[j].Colour), TTyColor(tsc), spec.TextShadowBlur,
+                spec.TextShadowOffsetX, spec.TextShadowOffsetY);
+            finally
+              smp.Free;
+            end;
+          end;
           { NO ELLIPSIS. The box was measured to fit these exact runs, and
             upstream never wraps or truncates a tooltip in either mode -- its
             width is content-driven and its CSS says `white-space: nowrap`. }
