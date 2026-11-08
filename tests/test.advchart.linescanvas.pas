@@ -94,8 +94,8 @@ type
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
     function CListOf(const ARec: TJSONObject; AText: Boolean): Integer;
     procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
-    procedure RunY;
-    procedure RunYHeld;
+    procedure RunY(const APrefix: string = 'y-');
+    procedure RunYHeld(const APrefix: string = 'y-');
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -109,6 +109,9 @@ type
     procedure TestTheComponentsCanvasAsUpstream;
     procedure TestTheDirtyFramesAsUpstream;
     procedure TestTheHeldPatternsAsUpstream;
+    { [R7-AB] the ab- cases, as the y- ones }
+    procedure TestTheR7ABDirtyFramesAsUpstream;
+    procedure TestTheR7ABCarriesAsUpstream;
   end;
 
 implementation
@@ -257,6 +260,8 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
+    { [R7-AB] the ab- cases: RunY, RunYHeld }
+    if Copy(id, 1, 3) = 'ab-' then Continue;
     if (AWhich = 0) <> (Copy(id, 1, 5) = 'grad-') then Continue;
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
@@ -1247,7 +1252,7 @@ begin
     HexD(a.Strings[0]) + HexD(a.Strings[2]), HexD(a.Strings[1]) + HexD(a.Strings[3]));
 end;
 
-procedure TAdvChartLinesCanvasOracleTest.RunY;
+procedure TAdvChartLinesCanvasOracleTest.RunY(const APrefix: string);
 var
   cs, frames, els, yops, paints: TJSONArray;
   c, fr, rec, o: TJSONObject;
@@ -1310,7 +1315,7 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
-    if (Copy(id, 1, 2) <> 'y-') or (c.Find('dirty') = nil) then Continue;
+    if (Copy(id, 1, Length(APrefix)) <> APrefix) or (c.Find('dirty') = nil) then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -1494,12 +1499,12 @@ begin
   end;
 end;
 
-procedure TAdvChartLinesCanvasOracleTest.RunYHeld;
+procedure TAdvChartLinesCanvasOracleTest.RunYHeld(const APrefix: string);
 var
   cs, els, yops, a: TJSONArray;
   c, rec, o, ob: TJSONObject;
   i, k, q, n, idx: Integer;
-  id, key, where, kind: string;
+  id, key, where, kind, tag: string;
   m: array[0..5] of Double;
   u, u2: array[0..5] of Double;
   pm: TTyDoubleArray;
@@ -1522,7 +1527,9 @@ begin
   begin
     c := cs.Objects[i];
     id := c.Strings['id'];
-    if (Copy(id, 1, 2) <> 'y-') or (c.Find('dirty') <> nil) then Continue;
+    if (Copy(id, 1, Length(APrefix)) <> APrefix) or (c.Find('dirty') <> nil) then Continue;
+    { (the case's kind after its prefix: 'y-fill-...' and 'ab-fill-...' alike) }
+    tag := 'y-' + Copy(id, Length(APrefix) + 1, MaxInt);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
     FChart.Parent := FForm;
@@ -1587,7 +1594,7 @@ begin
         o := yops.Objects[q];
         fill := o.Strings['op'] = 'fill';
         { A FILL'S COLOUR (an image before it sets none) }
-        if (Copy(id, 1, 7) = 'y-fill-') and (o.Strings['op'] = 'fill') then
+        if (Copy(tag, 1, 7) = 'y-fill-') and (o.Strings['op'] = 'fill') then
         begin
           where := Format('%s %s fill', [id, key]);
           if Copy(key, 1, 2) = 'gr' then idx := GraphicOf(rec) else idx := WElOf(key, rec);
@@ -1607,7 +1614,7 @@ begin
         end;
         { A LABEL'S FONT: the size, the weight and (where not the default
           family) the family each text is drawn in }
-        if (Copy(id, 1, 6) = 'y-font') and (o.Strings['op'] = 'fillText') then
+        if (Copy(tag, 1, 6) = 'y-font') and (o.Strings['op'] = 'fillText') then
         begin
           where := Format('%s %s', [id, key]);
           idx := WElOf(key, rec);
@@ -1631,7 +1638,7 @@ begin
           Continue;
         end;
         { A STROKE'S COLOUR, one of no width before it among them }
-        if Copy(id, 1, 9) = 'y-stroke-' then
+        if Copy(tag, 1, 9) = 'y-stroke-' then
         begin
           if o.Strings['op'] <> 'stroke' then Continue;
           where := Format('%s %s stroke', [id, key]);
@@ -1650,7 +1657,7 @@ begin
           Continue;
         end;
         { THE SHADOW AND THE COMPOSITE OPERATION each op is made with }
-        if (Copy(id, 1, 5) = 'y-sh-') or (Copy(id, 1, 7) = 'y-blend') then
+        if (Copy(tag, 1, 5) = 'y-sh-') or (Copy(tag, 1, 7) = 'y-blend') then
         begin
           where := Format('%s %s %s', [id, key, o.Strings['op']]);
           if Copy(key, 1, 2) = 'gr' then idx := GraphicOf(rec) else idx := WElOf(key, rec);
@@ -1813,6 +1820,16 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheHeldPatternsAsUpstream;
 begin
   RunYHeld;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7ABDirtyFramesAsUpstream;
+begin
+  RunY('ab-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7ABCarriesAsUpstream;
+begin
+  RunYHeld('ab-');
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestTheRefusedValuesAsUpstream;

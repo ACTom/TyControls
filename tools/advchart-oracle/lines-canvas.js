@@ -163,6 +163,8 @@ let W = false;
 let Z = false;
 // [R7-Y] the record of the cases named y-...
 let Y = false;
+// [R7-AB] a case that must not touch a path before it is brushed (see elRec)
+let PRISTINE = false;
 let YPAINTS = [];
 let YBLK = 0;
 let YOPS = new Map();
@@ -829,6 +831,27 @@ function cases() {
       { value: [7, 3], label: { fontSize: '13px', fontWeight: 'Bolder' } },
       { value: [8, 3], label: { fontWeight: '450', fontSize: 10 } },
       { value: [9, 3], label: { fontStyle: 'Italic', fontSize: 14 } }] }]), [0], { y: true }],
+    // ---- [R7-AB] (recorded as the y- ones) ----
+    // 1. a lines end symbol in the enter animation, hit on its own vertices
+    //    and the middles of its edges (y-tf-enter-end's chart). Scaled to
+    //    nought at first, it is not brushed: its first brush builds its path
+    //    and stores it in a Float32Array (toStatic), which Path.contain then
+    //    reads -- y-tf-enter-end's record read its paint rect first, and the
+    //    path made then stays in doubles: pristine
+    ['ab-tf-enter-end-hits', Object.assign(vv(LNC({ symbol: 'triangle', symbolSize: [12] },
+      [{ coords: [[1, 8], [9, 5]] }, { coords: [[1, 3], [9, 1]] }], { symbol: ['none', 'arrow'], symbolSize: 10 })),
+    { animation: true, animationDuration: 1000, animationEasing: 'linear' }), [0, 300, 600, 1200],
+    { y: true, anim: true, probes: 'end-verts', pristine: true }],
+    // 2. a block starts from the ground: a half-transparent scatter of an
+    //    unreadable colour under a moving effect is, in the effect's block,
+    //    the canvas' own black at half over the ground -- never over the
+    //    whole paint's green (an opaque one, y-dirty-scatter's, hides what
+    //    lies under it)
+    ['ab-dirty-alpha', vv([{ type: 'scatter', symbolSize: 40, itemStyle: { color: '#00aa00' }, data: [[8, 9]] },
+      { type: 'scatter', symbolSize: 40, itemStyle: { color: 'nope', opacity: 0.5 }, data: [[3, 5]] },
+      LN({ color: '#ff00ff', symbolSize: 8, period: 1 }, [{ coords: [[3, 5], [9, 5]] }],
+        { lineStyle: { color: '#999', opacity: 0 }, z: 3 })]),
+    [0, 20, 40, 60], { y: true, dirty: true }],
     // 5. an option set while a trail runs whose transform is no number
     ['w-tf-update', vv(LNC({ symbol: 'rect', symbolSize: [12], period: 1 }, [{ coords: [[1, 8], [9, 8]] }])),
       [0, 300, 600, 900], { w: true, probes: 'nan-effects', more: [[234, 96], [234.4, 96.2], [222, 95], [246, 97.5],
@@ -1123,7 +1146,11 @@ function elRec(el, key, brushes) {
   // [R7-Y] every op of the sample, and the paint rect now
   if (Y) {
     r.yops = YOPS.get(el) || [];
-    const pr = el.getPaintRect ? el.getPaintRect() : null;
+    // [R7-AB] (a path's getBoundingRect before its first brush makes its
+    // proxy: the brush then rebuilds the path from the doubles and never
+    // stores it in a Float32Array -- the record would change what findHover
+    // finds; a pristine case reads no paint rect off such an element)
+    const pr = el.getPaintRect && !(PRISTINE && el instanceof Path && !el.path) ? el.getPaintRect() : null;
     r.pr = pr ? [pr.x, pr.y, pr.width, pr.height].map(hexOrNull) : null;
   }
   return r;
@@ -1179,6 +1206,7 @@ function run(id, option, samples, opts) {
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
   Y = !!opts.y;
+  PRISTINE = !!opts.pristine;
   YPAINTS = [];
   YBLK = 0;
   YOPS = new Map();
@@ -1300,6 +1328,7 @@ function run(id, option, samples, opts) {
     W = false;
     Z = false;
     Y = false;
+    PRISTINE = false;
     echarts.env.node = nodeWas;
   }
   // [R7-W] the options set before a sample, the dirty rects
