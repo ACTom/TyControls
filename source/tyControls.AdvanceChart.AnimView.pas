@@ -6776,17 +6776,7 @@ begin
   TyShapeScaleAbout(AEl.Shape, ox, oy, sx, sy);
   if AEl.Style.FillGradient.Kind <> cgkNone then
   begin
-    { [R7-AD] made in a frame: the scale on the frame }
-    if AEl.Style.FillGradient.Global and AEl.Style.FillGradient.HasM then
-    begin
-      AEl.Style.FillGradient.M[0] := AEl.Style.FillGradient.M[0] * sx;
-      AEl.Style.FillGradient.M[2] := AEl.Style.FillGradient.M[2] * sx;
-      AEl.Style.FillGradient.M[4] := GX(AEl.Style.FillGradient.M[4]);
-      AEl.Style.FillGradient.M[1] := AEl.Style.FillGradient.M[1] * sy;
-      AEl.Style.FillGradient.M[3] := AEl.Style.FillGradient.M[3] * sy;
-      AEl.Style.FillGradient.M[5] := GY(AEl.Style.FillGradient.M[5]);
-    end
-    else if AEl.Style.FillGradient.Global then
+    if AEl.Style.FillGradient.Global then
     begin
       AEl.Style.FillGradient.X := GX(AEl.Style.FillGradient.X);
       AEl.Style.FillGradient.Y := GY(AEl.Style.FillGradient.Y);
