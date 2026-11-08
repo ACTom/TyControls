@@ -280,6 +280,26 @@ function cases() {
       { value: [5, 5], itemStyle: { color: '#808080', shadowBlur: -2, shadowColor: '#ff00ff' },
         emphasis: { itemStyle: { shadowBlur: 5 } } }])), { animation: true, animationDuration: 100 }),
     [600, 1000, 1030, 1060, 1100, 1250, 1400], { acts: { 1: [HI(0, 1)] } }],
+    // [R7-AB] a shadow blur or offset written as a string of no finite
+    // number: `dpr * ('abc' || 0)` is none, refused (the canvas' kept); a
+    // numeric string its Number ('0x4' 4, '' nought); at rest a string
+    // refused, a state's taken
+    ['st-emph-shadow-str', vv(SC([{ value: [2, 5], itemStyle: Object.assign({}, BEFORE, { shadowOffsetX: 3, shadowOffsetY: 2 }) },
+      { value: [4, 5], itemStyle: { color: '#808080', shadowBlur: 2, shadowColor: '#ff00ff' },
+        emphasis: { itemStyle: { shadowBlur: 'abc', shadowOffsetX: 'x', shadowOffsetY: 'Infinity' } } },
+      { value: [6, 5], itemStyle: { color: '#808080', shadowColor: '#0000ff', shadowBlur: 1 },
+        emphasis: { itemStyle: { shadowBlur: '0x4', shadowOffsetX: '5', shadowOffsetY: '' } } },
+      { value: [8, 5], itemStyle: { color: '#808080', shadowBlur: 'zz', shadowColor: '#0000ff', shadowOffsetX: 'q' },
+        emphasis: { itemStyle: { shadowBlur: 3, shadowOffsetX: 4 } } }])),
+    [0, 10, 20], { acts: { 1: [HI(0, 1), HI(0, 2), HI(0, 3)], 2: [{ type: 'downplay', seriesIndex: 0 }] } }],
+    // the same in a transition: a string of no number a discrete track (set
+    // at once), 'Infinity' interpolated (none past the start)
+    ['st-tween-shadow-str', Object.assign(vv(SC([{ value: [2, 5], itemStyle: Object.assign({}, BEFORE, { shadowOffsetX: 3, shadowOffsetY: 2 }) },
+      { value: [4, 5], itemStyle: { color: '#808080', shadowBlur: 2, shadowColor: '#ff00ff', shadowOffsetX: 1 },
+        emphasis: { itemStyle: { shadowBlur: 'abc', shadowOffsetX: 'x', shadowOffsetY: 'Infinity' } } },
+      { value: [6, 5], itemStyle: { color: '#808080', shadowColor: '#0000ff', shadowBlur: 1 },
+        emphasis: { itemStyle: { shadowBlur: '0x4', shadowOffsetX: '5' } } }])), { animation: true, animationDuration: 100 }),
+    [600, 1000, 1030, 1060, 1100, 1250], { acts: { 1: [HI(0, 1), HI(0, 2)] } }],
   ];
 }
 
