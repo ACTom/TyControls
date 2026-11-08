@@ -7,6 +7,16 @@
   {
    "name": "r7xsq",
    "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  },
+  {
+   "name": "r7acsvg1",
+   "svg": true,
+   "text": "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\"><path name=\"P\" d=\"M10 10 L90 10 L90 90\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/><path name=\"Q\" d=\"M110 90 L110 10 L190 10\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/></svg>"
+  },
+  {
+   "name": "r7acsvg2",
+   "svg": true,
+   "text": "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\"><path name=\"P\" d=\"M10 10 L90 10 L90 90\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/><path name=\"Q\" d=\"M110 90 L110 10 L190 10\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/></svg>"
   }
  ],
  "charts": [
@@ -4396,6 +4406,100 @@
      "y": 247
     }
    }
+  },
+  {
+   "id": "geo.svg-ends",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7acsvg1",
+     "itemStyle": {
+      "borderColor": "#123456",
+      "borderWidth": 3,
+      "borderCap": "round",
+      "borderJoin": "bevel",
+      "borderMiterLimit": 3
+     }
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#123456ff|3|solid|0|round/bevel/3"
+   ],
+   "looks": [
+    "1|0|0|0|"
+   ]
+  },
+  {
+   "id": "geo.svg-root",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "geo": {
+     "map": "r7acsvg2",
+     "itemStyle": {
+      "borderColor": "#123456",
+      "borderWidth": 2
+     }
+    },
+    "itemStyle": {
+     "color": "#ff0000",
+     "borderColor": "#00aa00",
+     "borderWidth": 3,
+     "opacity": 0.5,
+     "shadowBlur": 4,
+     "shadowColor": "#0000ff",
+     "shadowOffsetX": 2,
+     "borderType": "dashed",
+     "borderDashOffset": 1,
+     "borderCap": "round",
+     "borderJoin": "bevel",
+     "borderMiterLimit": 4,
+     "borderRadius": 6
+    },
+    "lineStyle": {
+     "color": "#aa00aa",
+     "width": 5,
+     "opacity": 0.6,
+     "type": "dotted",
+     "dashOffset": 2,
+     "cap": "square",
+     "join": "round",
+     "miterLimit": 3,
+     "shadowBlur": 3,
+     "shadowColor": "#00ffff",
+     "shadowOffsetY": 2,
+     "curveness": 0.3
+    },
+    "areaStyle": {
+     "color": "#ffaa00",
+     "opacity": 0.4,
+     "shadowBlur": 2,
+     "shadowColor": "#333333"
+    }
+   },
+   "part": "geo",
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#123456ff|2|8,4|1|round/bevel/4"
+   ],
+   "looks": [
+    "0.5|4|2|0|#0000ffff"
+   ]
   }
  ]
 }

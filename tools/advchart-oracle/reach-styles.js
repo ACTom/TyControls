@@ -127,7 +127,16 @@ function sq(x0, y0, x1, y1) { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x
 const MAPS = [{ name: 'r7xsq', text: JSON.stringify({ type: 'FeatureCollection', features: [
   { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [sq(0, 0, 10, 10)] } },
   { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [sq(10, 0, 20, 10)] } }] }) }];
-for (const m of MAPS) echarts.registerMap(m.name, m.text);
+// [R7-AC] an SVG map of two named open paths (their ends show the cap and the join): node has no
+// DOMParser -- jsdom's, as geo-svg.js installs it. One map a case: GeoSVGResource hands its first
+// graphic to the next chart of the map, the styles a chart set on it kept
+const JSDOM_PATH = process.env.JSDOM_PATH || 'D:/Projects/xterm.js/node_modules/jsdom';
+global.DOMParser = new (require(JSDOM_PATH).JSDOM)('').window.DOMParser;
+const SVG_ENDS = '<svg width="200" height="100" viewBox="0 0 200 100">'
+  + '<path name="P" d="M10 10 L90 10 L90 90" fill="none" stroke="#000000" stroke-width="1"/>'
+  + '<path name="Q" d="M110 90 L110 10 L190 10" fill="none" stroke="#000000" stroke-width="1"/></svg>';
+MAPS.push({ name: 'r7acsvg1', svg: true, text: SVG_ENDS }, { name: 'r7acsvg2', svg: true, text: SVG_ENDS });
+for (const m of MAPS) echarts.registerMap(m.name, m.svg ? { svg: m.text } : m.text);
 // the pens without their (default) colours, no fills: a region's defaults are the theme's
 const NCL = { looks: true, nocolour: true };
 // root-styles.js' own keys of a series
@@ -299,6 +308,12 @@ function cases() {
     ['tip.timeline-root', { baseOption: bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20,
       formatter: 'R:{b}', timeline: { axisType: 'category', data: ['a', 'b'], autoPlay: false, left: 20, right: 20, bottom: 10 } }),
       options: [{ series: [] }, { series: [] }] }, 'tooltip', { tip: { find: 'timeline' } }],
+    // [R7-AC] an SVG map's named shapes: the geo's own ends, the root's under them (MapDraw._buildSVG
+    // sets the option's itemStyle over the shape's own; R7-X's ends had no SVG case)
+    ['geo.svg-ends', bare({ geo: { map: 'r7acsvg1', itemStyle: { borderColor: '#123456', borderWidth: 3, borderCap: 'round',
+      borderJoin: 'bevel', borderMiterLimit: 3 } } }), 'geo', { looks: true }],
+    ['geo.svg-root', bare(Object.assign({ geo: { map: 'r7acsvg2', itemStyle: { borderColor: '#123456', borderWidth: 2 } } }, RS)),
+      'geo', { looks: true }],
   ];
 }
 

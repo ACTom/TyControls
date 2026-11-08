@@ -1280,6 +1280,19 @@ function cases() {
       series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [5], itemStyle: { color: 'nope', borderColor: 'bad',
         borderWidth: 2 } }] },
     [0], { w: true, z: true }],
+    // 9. an axis pointer's style while it slides: updateProps animates the
+    // shape alone, setStyle takes the new style at once -- an option set on
+    // the way (the slide goes on, in the new colour)
+    ['ac-ptr-slide', { animation: false, tooltip: { trigger: 'axis', showContent: false,
+      axisPointer: { type: 'line', animation: true, lineStyle: { color: '#ff0000', width: 3 } } },
+      xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'], axisLabel: { show: false }, axisTick: { show: false },
+        axisLine: { show: false } },
+      yAxis: { show: false, type: 'value', min: 0, max: 10 },
+      series: [{ type: 'line', symbol: 'none', lineStyle: { color: '#00ff00' }, data: [1, 2, 3, 4, 5] }] },
+    [0, 16, 1000, 1016, 1046, 1062, 1092, 2200], { w: true, z: true, anim: true,
+      acts: { 0: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 70, y: 150 }],
+        2: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 330, y: 150 }] },
+      sets: { 5: { tooltip: { axisPointer: { lineStyle: { color: '#0000ff' } } } } } }],
     // 8. a single axis' split lines: dashed at 0.2 by default
     ['ac-single-split', { animation: false, singleAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false },
       axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#0000ff' } } },

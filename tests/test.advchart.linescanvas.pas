@@ -139,6 +139,7 @@ type
     procedure TestTheR7AACanvasAsUpstream;
     procedure TestTheR7ACCanvasAsUpstream;
     procedure TestARichTipsBorderIsOutsideItsBox;
+    procedure TestATipsTextShadowIsDrawn;
     procedure TestAnAxisPensShadowIsDrawn;
     procedure TestThePolarViewsInUpstreamsOrder;
   end;
@@ -1406,6 +1407,22 @@ begin
                 el.Style.ShadowColor, el.Style.ShadowBlur]));
           end;
         end;
+        { [R7-AC] AN AXIS POINTER'S LINE WHERE ITS SLIDE HAS GOT TO (the
+          ac- cases): the drawn line's bounds }
+        if (APrefix = 'ac-') and comp and not ctext and (Pos('Pointer', ckey) > 0) and (cz2 = 0)
+          and (rec.Find('pb').JSONType <> jtNull) and FChart.CompPart(ckey, cz2, ctext, 'stroke', el) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > 1e-3)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > 1e-3)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-3)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-3) then
+            Miss(Format('%s: the pointer at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
         { [R7-AC] A RICHTEXT TOOLTIP'S BOX where upstream fills it: the
           place moveTo was given, in by the border's width (TooltipRichContent's
           1) and the shadow's outer size }
@@ -2178,6 +2195,51 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7ACCanvasAsUpstream;
 begin
   RunW(False, 'ac-');
+end;
+
+{ [R7-AC] A TOOLTIP'S TEXT CASTS textStyle's SHADOW, in both modes: black
+  text at 20 px on white, its shadow blue, offset 8 px down at a blur of 1
+  (html's text-shadow, richText's spans): blue ink shows in the box under
+  the glyphs (none at all before: the option had no effect) }
+procedure TAdvChartLinesCanvasOracleTest.TestATipsTextShadowIsDrawn;
+var
+  mode: Integer;
+  px: TBGRAPixel;
+  bb: TTyRectF;
+  x, y, blue: Integer;
+  m: string;
+begin
+  for mode := 0 to 1 do
+  begin
+    if mode = 0 then m := 'html' else m := 'richText';
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,"show":false},'
+      + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+      + '"tooltip":{"renderMode":"' + m + '","showDelay":0,"transitionDuration":0,"position":[60,60],'
+      + '"backgroundColor":"#ffffff","borderColor":"#ffffff","shadowBlur":0,"shadowOffsetX":0,"shadowOffsetY":0,'
+      + '"padding":[4,10,16,10],"formatter":"MMMM","textStyle":{"color":"#000000","fontSize":20,'
+      + '"textShadowColor":"#0000ff","textShadowBlur":1,"textShadowOffsetY":8}},'
+      + '"series":[{"type":"scatter","symbolSize":4,"data":[[9,9]]}]}', True);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    bb := FChart.TipFill;
+    AssertTrue(m + ': a box drawn', TyRectFIsValid(bb));
+    blue := 0;
+    for y := Round(bb.Top) to Round(bb.Bottom) - 1 do
+      for x := Round(bb.Left) to Round(bb.Right) - 1 do
+      begin
+        px := FBmp.GetPixel(x, y);
+        if (px.blue > px.red + 60) and (px.blue > px.green + 60) then Inc(blue);
+      end;
+    AssertTrue(Format('%s: the text''s blue shadow drawn (%d px)', [m, blue]), blue > 20);
+  end;
 end;
 
 { [R7-AC] A RICHTEXT TOOLTIP'S BORDER IS OUTSIDE ITS BOX: zrender's Text
