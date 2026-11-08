@@ -287,6 +287,9 @@ const
   cTyCanvasPhaseLeftFlag = 1024;
   cTyCanvasTextFillLeft = 2048;
   cTyCanvasTextStrokeLeft = 4096;
+  { [R7-AA] a pen of a width of nought that hands the canvas its stroke
+    colour all the same (zrender assigns every string stroke) }
+  cTyCanvasStrokeSet = 8192;
   cTyCanvasPhaseLeft = -1.0e305;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;

@@ -66,9 +66,12 @@ type
   public
     { [R7-Z] a component's part of key AKey, upstream's z2 AZ2 and kind (a
       text or a path) as it was drawn -- the one that fills (AOp 'fill'),
-      strokes ('stroke'), else the first; False for none }
+      strokes ('stroke'), else the first; False for none. [R7-AA] Of
+      several that do, the one in AWant's colour (upstream's for the op):
+      the port strokes a piece's lines in one batch, so two pieces of a z2
+      (the split and the minor split lines) are told apart by their pen }
     function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
-      out AEl: TTyChartElement): Boolean;
+      out AEl: TTyChartElement; const AWant: string = ''): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -123,11 +126,13 @@ begin
 end;
 
 function TLcProbe.CompPart(const AKey: string; AZ2: Integer; AText: Boolean;
-  const AOp: string; out AEl: TTyChartElement): Boolean;
-var d: TTyCompPartArray; k, first: Integer;
+  const AOp: string; out AEl: TTyChartElement; const AWant: string): Boolean;
+var d: TTyCompPartArray; k, first, op: Integer; wc, c: TTyChartColor; want: Boolean;
 begin
   d := CompDrawn;
   first := -1;
+  op := -1;
+  want := (AWant <> '') and TyTryParseChartColor(AWant, wc);
   for k := 0 to High(d) do
     if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
     begin
@@ -135,10 +140,21 @@ begin
       if ((AOp = 'fill') and d[k].El.Style.HasFill)
         or ((AOp = 'stroke') and (d[k].El.Style.StrokeWidthLogical > 0)) then
       begin
-        AEl := d[k].El;
-        Exit(True);
+        if op < 0 then op := k;
+        if not want then Break;
+        if AOp = 'fill' then c := d[k].El.Style.FillColor else c := d[k].El.Style.StrokeColor;
+        if (c = wc) or (((c shr 24) = 0) and ((wc shr 24) = 0)) then
+        begin
+          op := k;
+          Break;
+        end;
       end;
     end;
+  if op >= 0 then
+  begin
+    AEl := d[op].El;
+    Exit(True);
+  end;
   Result := first >= 0;
   if Result then AEl := d[first].El else AEl := Default(TTyChartElement);
 end;
@@ -1056,7 +1072,9 @@ begin
         begin
           o := ops.Objects[q];
           op := o.Strings['op'];
-          if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
+          if comp and (op = 'fill') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['fs'])
+          else if comp and (op = 'stroke') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['ss'])
+          else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
           sc := Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));

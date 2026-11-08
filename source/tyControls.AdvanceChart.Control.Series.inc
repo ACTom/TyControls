@@ -245,8 +245,9 @@ var
   var k, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
-    { [R5-G] a gradient over each tick's own box (a Line per tick) }
-    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
+    { [R5-G] a gradient over each tick's own box (a Line per tick);
+      [R7-AA] a shadow under each one }
+    AEach := AEach and ((AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow);
     n := 0;
     APainter.BeginPath;
     for k := 0 to High(ALines) do
@@ -969,8 +970,9 @@ var
   var q, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
-    { [R5-G] a gradient over each tick's own box (a Line per tick) }
-    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
+    { [R5-G] a gradient over each tick's own box (a Line per tick);
+      [R7-AA] a shadow under each one }
+    AEach := AEach and ((AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow);
     n := 0;
     APainter.BeginPath;
     for q := 0 to High(ALines) do
@@ -2663,6 +2665,8 @@ var
   pl: TTyAxisNamePlacement;
   { the author's pens over the skin [R5-B] }
   lineK: TTyAxisStroke;
+  { [R7-AA] the axis drawn now }
+  curAxis: TTyAxis;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -2739,8 +2743,8 @@ var
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
       { [R5-G] parallel draws only ticks here: a Line per tick, a gradient
-        over each one's box }
-      if AStroke.Gradient.Kind <> cgkNone then
+        over each one's box; [R7-AA] a shadow under each one }
+      if (AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow then
       begin
         TyStrokeAxisPath(APainter, AStroke);
         APainter.BeginPath;
@@ -2785,7 +2789,8 @@ var
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := lineK.Colour;
+      { [R7-AA] a refused colour: the fill the canvas had }
+      el.Style.FillColor := CompSettleFill(curAxis, cpkArrow, lineK.Colour);
     end;
     TyRenderElement(APainter, el);
   end;
@@ -2793,6 +2798,8 @@ var
 begin
   if Length(FParallels) = 0 then Exit;
   if ViewHidden(cvParallelAxis) then Exit;
+  { [R7-AA] the parts settled in upstream's paint order, from the list }
+  ParRun;
   model := ActiveController.Model;
   lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
   tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
@@ -2809,9 +2816,13 @@ begin
         and not ApartIn(ModelZLevel('parallelAxis', par.AxisIndices[a])) then Continue;
       ViewDrew(cvParallelAxis);
       sp := par.Views[a].Spec;
+      curAxis := nil;
+      if a < par.AxisCount then curAxis := par.Axis(a);
       { a lone axis stands nowhere (its place is not a number) }
       if not (Fin(par.Layouts[a].PosX) and Fin(par.Layouts[a].PosY)) then Continue;
-      lineK := TyAxisSkinStroke(par.Views[a].Furn.LinePen, lineS, acRound);
+      { [R7-AA] what the canvas refuses: its value there [was: not drawn, or
+        the skin's] }
+      lineK := CompPen(par.Axis(a), cpkLine, TyAxisSkinStroke(par.Views[a].Furn.LinePen, lineS, acRound));
       if par.Views[a].HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
       begin
         APainter.BeginPath;
@@ -2822,11 +2833,13 @@ begin
           and (par.Views[a].Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
           for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
       end;
-      StrokeLines(par.Views[a].Ticks, TyAxisSkinStroke(par.Views[a].Furn.TickPen,
-        tickS, acButt));
-      StrokeLines(par.Views[a].MinorTicks, TyAxisSkinStroke(
-        par.Views[a].Furn.MinorTickPen, minorTickS, acButt));
+      StrokeLines(par.Views[a].Ticks, CompPen(par.Axis(a), cpkTick,
+        TyAxisSkinStroke(par.Views[a].Furn.TickPen, tickS, acButt)));
+      StrokeLines(par.Views[a].MinorTicks, CompPen(par.Axis(a), cpkMinorTick, TyAxisSkinStroke(
+        par.Views[a].Furn.MinorTickPen, minorTickS, acButt)));
       AxisTextStyles(@sp, labelS, nameS);
+      nameS.TextColor := CompText(par.Axis(a), cpkName, nameS.TextColor);
+      labelS.TextColor := CompText(par.Axis(a), cpkLabel, labelS.TextColor);
       pl := sp.NamePlacement;
       if pl.Shown and (tpTextColor in nameS.Present) then
       begin

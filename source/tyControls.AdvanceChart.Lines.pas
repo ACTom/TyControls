@@ -2623,6 +2623,12 @@ begin
     begin
       ARun.Cur.Stroke := AEl.Style.StrokeColor;
       ARun.Cur.StrokeGrad := CanvasGradOf(AEl.Style.StrokeGradient, AEl);
+    end
+    { [R7-AA] a width of nought: its stroke colour all the same }
+    else if (AEl.CanvasFlags and cTyCanvasStrokeSet) <> 0 then
+    begin
+      ARun.Cur.Stroke := AEl.Style.StrokeColor;
+      ARun.Cur.StrokeGrad := Default(TTyChartGradient);
     end;
     if strokes and ((AEl.CanvasFlags and cTyCanvasWidthLeft) = 0) then
       ARun.Cur.LineWidth := AEl.Style.StrokeWidthLogical * ps / sEl;

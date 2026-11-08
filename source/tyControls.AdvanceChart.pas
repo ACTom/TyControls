@@ -1882,6 +1882,9 @@ type
       (CompDrawn) }
     FCompParts: TTyCompPartArray;
     FCompRunOk: Boolean;
+    { [R7-AA] how many of FCompParts CompRun made (the parallel axes' run,
+      ParRun, appends its own after them) }
+    FCompBase: Integer;
     FCompDrawn: TTyCompPartArray;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
@@ -3523,6 +3526,9 @@ type
       elements of a z and z2 above AZ / AZ2: the canvas a component drawn
       after the series meets }
     procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+    { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
+      from where the list's run reaches their z: appended to FCompParts }
+    procedure ParRun;
     { [R7-Z] a title's box and text colours, the canvas refusing them }
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor);
