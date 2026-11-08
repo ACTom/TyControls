@@ -645,6 +645,17 @@ const
   cTyPadFalse = 5;
 
 type
+  { [R7-AI] A COMPONENT'S PADDING as getLayoutRect and makeBackground hold
+    it, `normalizeCssArray(padding || 0)` (a title's, a legend's, a
+    toolbox's): Kind / Num / Text per side as TTyRtStyle.PaddingKind /
+    Padding / PaddingText; Js a side is no plain number -- only then does
+    the layout join a side to a place or a size. }
+  TTyJsPad = record
+    Js: Boolean;
+    Kind: array[0..3] of Byte;
+    Num: array[0..3] of Double;
+    Text: array[0..3] of string;
+  end;
 
 
   { A TEXT'S STYLE AS THE SITE HOLDS IT BEFORE LAYOUT: zrender's block style

@@ -229,6 +229,13 @@ procedure TyRtTakePadding(AData: TJSONData; var S: TTyRtStyle);
   NaN }
 function TyRtPadSum(const S: TTyRtStyle; A, B: Integer): Double;
 
+{ [R7-AI] A COMPONENT'S PADDING AS WRITTEN (not nil or null): getLayoutRect's
+  `normalizeCssArray(padding || 0)` -- a falsy value four noughts, else as
+  TyRtTakePadding takes a text's }
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+{ [R7-AI] a side of it is undefined }
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Option,
@@ -614,6 +621,32 @@ begin
   if not S.HasPadding then Exit(0);
   if not S.PaddingJs then Exit(S.Padding[A] + S.Padding[B]);
   Result := TyRtPadJoin(S, A, B).N;
+end;
+
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+var
+  s: TTyRtStyle;
+  k: Integer;
+begin
+  Result := Default(TTyJsPad);
+  s := Default(TTyRtStyle);
+  TyRtTakePadding(AData, s);
+  if not s.HasPadding then Exit;
+  Result.Js := s.PaddingJs;
+  for k := 0 to 3 do
+  begin
+    Result.Kind[k] := s.PaddingKind[k];
+    Result.Num[k] := s.Padding[k];
+    Result.Text[k] := s.PaddingText[k];
+  end;
+end;
+
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to 3 do
+    if APad.Kind[k] = cTyPadUndef then Exit(True);
 end;
 
 procedure SpreadPadding(A: TJSONData; var S: TTyRtStyle);

@@ -97,6 +97,13 @@ function TyRtStyleDefault: TTyRtStyle;
 function TyRtPadV(const S: TTyRtStyle; AK: Integer): TTyRtJs;
 function TyRtPadJoin(const S: TTyRtStyle; A, B: Integer): TTyRtJs;
 
+{ [R7-AI] JavaScript's number, `a + b` (joined when either is a string),
+  and a component's padding side AK and `padding[A] + padding[B]` }
+function TyRtJsNum(A: Double): TTyRtJs;
+function TyRtJsAdd(const A, B: TTyRtJs): TTyRtJs;
+function TyJsPadV(const P: TTyJsPad; AK: Integer): TTyRtJs;
+function TyJsPadJoin(const P: TTyJsPad; A, B: Integer): TTyRtJs;
+
 { THE BLOCK AND ITS PIECES. ARich: the text takes the rich path (zrender
   chooses it whenever `style.rich` is set, tokens or not). ABaseX/Y: the
   text's own x/y -- 0, 0 for an attached label. }
@@ -216,6 +223,34 @@ function TyRtPadJoin(const S: TTyRtStyle; A, B: Integer): TTyRtJs;
 begin
   if not S.HasPadding then Exit(JNum(0));
   Result := JAdd(TyRtPadV(S, A), TyRtPadV(S, B));
+end;
+
+function TyRtJsNum(A: Double): TTyRtJs;
+begin
+  Result := JNum(A);
+end;
+
+function TyRtJsAdd(const A, B: TTyRtJs): TTyRtJs;
+begin
+  Result := JAdd(A, B);
+end;
+
+function TyJsPadV(const P: TTyJsPad; AK: Integer): TTyRtJs;
+begin
+  case P.Kind[AK] of
+    cTyPadStr: Result := JStr(P.Text[AK]);
+    cTyPadUndef: Result := JLit('undefined', NaN);
+    cTyPadNull: Result := JLit('null', 0);
+    cTyPadTrue: Result := JLit('true', 1);
+    cTyPadFalse: Result := JLit('false', 0);
+  else
+    Result := JNum(P.Num[AK]);
+  end;
+end;
+
+function TyJsPadJoin(const P: TTyJsPad; A, B: Integer): TTyRtJs;
+begin
+  Result := JAdd(TyJsPadV(P, A), TyJsPadV(P, B));
 end;
 
 { `a > b`: two strings compare as strings, else as numbers (false against

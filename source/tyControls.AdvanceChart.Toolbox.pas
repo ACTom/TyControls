@@ -153,6 +153,9 @@ type
     ItemSize, ItemGap: Double;
     ShowTitle: Boolean;
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     Box: TTyRawBox;
     Background, BorderColor: TTyTbColour;
     BorderWidth: Double;
@@ -356,7 +359,9 @@ implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge,
-     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States;
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States,
+     { [R7-AI] a padding written as a string }
+     tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle;
 
 { ==================== JavaScript's arithmetic ====================
   A degenerate icon (a path with no height, say) is NaN all the way
@@ -819,6 +824,15 @@ begin
   end
   else if Present(d) and NumOf(d, v) then
     for k := 0 to 3 do Result.Padding[k] := v;
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  if Present(d) then
+  begin
+    Result.PadJs := TyJsPadOf(d);
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   { the box: left 'right', top 'top', mergeLayoutParam with ignoreSize }
   defBox := Default(TTyRawBox);
   defBox.Left := TyBoxRawStr('right');
@@ -1192,12 +1206,22 @@ var
   r, nr, rect, lr: TTyXYWH;
   have, hasNext, top: Boolean;
   box: TTyRawBox;
+  { [R7-AI] the place as JS holds it }
+  xv, yv: TTyRtJs;
 begin
   Result := Default(TTyToolboxLayout);
   if not ASpec.Show then Exit;
+  { [R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
+    the group draws under the transform the canvas kept -- laid out here as
+    nothing }
+  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) then Exit;
   n := Length(ASpec.Icons);
   for i := 0 to n - 1 do
     ASpec.Icons[i].Rect := TyToolboxIconRect(ASpec, ASpec.Icons[i], ASpec.Icons[i].Status);
+  if ASpec.PadJs.Js then
+    Result.ViewRect := TyGetLayoutRectJs(ASpec.Box, ARef.X, ARef.Y, ARef.W, ARef.H,
+      ASpec.PadJs, xv, yv)
+  else
   Result.ViewRect := TyGetLayoutRect(ASpec.Box, ARef.X, ARef.Y, ARef.W, ARef.H,
     ASpec.Padding);
   { layout.box }
@@ -1269,6 +1293,11 @@ begin
   box := ASpec.Box;
   box.Width := TyBoxRawNum(lr.W);
   box.Height := TyBoxRawNum(lr.H);
+  { ([R7-AI] a padding held as JS values: the place joined, `layoutRect.x -
+    rect.x` its number) }
+  if ASpec.PadJs.Js then
+    r := TyGetLayoutRectJs(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.PadJs, xv, yv)
+  else
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.Padding);
   Result.GroupX := APrevX + (r.X - lr.X);
   Result.GroupY := APrevY + (r.Y - lr.Y);
@@ -1277,6 +1306,14 @@ begin
   Result.Background.Y := rect.Y - ASpec.Padding[0];
   Result.Background.W := rect.W + ASpec.Padding[1] + ASpec.Padding[3];
   Result.Background.H := rect.H + ASpec.Padding[0] + ASpec.Padding[2];
+  { ([R7-AI] its size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    Result.Background.W := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.W), TyJsPadV(ASpec.PadJs, 1)),
+      TyJsPadV(ASpec.PadJs, 3)).N;
+    Result.Background.H := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.H), TyJsPadV(ASpec.PadJs, 0)),
+      TyJsPadV(ASpec.PadJs, 2)).N;
+  end;
   { the titles kept on the canvas }
   for i := 0 to n - 1 do
   begin
