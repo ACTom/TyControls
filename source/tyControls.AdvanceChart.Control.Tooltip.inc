@@ -2824,9 +2824,16 @@ begin
     end;
     hits[j + 1] := tmp;
   end;
+  FHdDrawn := nil;
   for pass := 1 to 2 do
   for i := 0 to High(hits) do
   begin
+    { [R7-AE] A POINTER'S HANDLE right after its line or band: zr.add(handle)
+      follows the pointer's group on the root, z 50 and z2 0 as the line --
+      the next pointer's line after it, every label after them all [was:
+      drawn after every pointer and label, outside the run] }
+    if (pass = 1) and (i > 0) then PtrHandlePaint(APainter, hits[i - 1]);
+    if (pass = 2) and (i = 0) then PtrHandlePaint(APainter, hits[High(hits)]);
     hit := hits[i];
     if hit.Axis = nil then Continue;
     FPtrPass := pass;
@@ -2998,6 +3005,29 @@ begin
   SetLength(FPtrShapesDrawn, n + 1);
   FPtrShapesDrawn[n].Owner := AHit.Axis.MainType + IntToStr(AHit.Axis.ComponentIndex);
   FPtrShapesDrawn[n].El := el;
+end;
+
+procedure TTyCustomAdvanceChart.PtrHandlePaint(APainter: TTyPainter; const AHit: TTyAxisHit);
+var
+  k, j: Integer;
+  key: string;
+  el: TTyChartElement;
+begin
+  if (AHit.Axis = nil) or (AHit.Polar <> nil) then Exit;
+  key := PtrKeyOf(AHit.Axis);
+  for k := 0 to High(FHandles) do
+  begin
+    if FHandles[k].Key <> key then Continue;
+    for j := 0 to High(FHdDrawn) do
+      if FHdDrawn[j] = key then Exit;
+    if not HdShape(k, el) then Exit;
+    OvStep(el, 50, 0);
+    CompDrew(nil, FHandles[k].MainType + 'Handle' + IntToStr(FHandles[k].Index), 0, 0, False, el);
+    TyRenderElement(APainter, el);
+    SetLength(FHdDrawn, Length(FHdDrawn) + 1);
+    FHdDrawn[High(FHdDrawn)] := key;
+    Exit;
+  end;
 end;
 
 function TTyCustomAdvanceChart.TitleFramesDrawn: TTyOverlayShapeArray;
@@ -4619,6 +4649,310 @@ begin
     Result := False;
 end;
 
+{ [R7-AE] FINDCOMPONENTREFERENCE FOR A LEGEND, A TOOLBOX, AN AXIS AND THE
+  GRAPHIC: the payload's first <mainType>Index / Id / Name names the
+  component (queryReferringComponents, no default), and of its view's
+  elements the first whose tooltipConfig has the payload's name -- a legend
+  item's hit rect (where its tooltip shows: setTooltipConfig only then), a
+  toolbox icon, an axis' label (its formatted text) before its name
+  (AxisBuilder builds the labels first), a graphic element (by its name) --
+  is the target, the centre of its rect through its transform the point,
+  the box below it unless placed otherwise [was: not shown -- only a
+  matrix's cells and a geo's regions were found] }
+function TTyCustomAdvanceChart.TipComponentRefMore(APayload: TJSONObject;
+  var AEv: TTyTipEvent): Boolean;
+const
+  cSuffixes: array[0..2] of string = ('Index', 'Id', 'Name');
+var
+  i, k, mx, cnt, q: Integer;
+  key, mt, nm: string;
+  d: TJSONData;
+  dt: TTyChartDatumRef;
+  b, u: TTyRectF;
+  any: Boolean;
+  el: TTyChartElement;
+
+  function WordChars(const S: string): Boolean;
+  var j: Integer;
+  begin
+    Result := S <> '';
+    for j := 1 to Length(S) do
+      if not (S[j] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(False);
+  end;
+
+begin
+  Result := False;
+  if (FOption = nil) or (FPaintList = nil) or not FPaintListValid then Exit;
+  mt := '';
+  for i := 0 to APayload.Count - 1 do
+  begin
+    key := APayload.Names[i];
+    if (key = 'dataIndex') or (key = 'dataIndexInside') then Continue;
+    for k := 0 to High(cSuffixes) do
+      if (Length(key) > Length(cSuffixes[k]))
+        and (Copy(key, Length(key) - Length(cSuffixes[k]) + 1, MaxInt) = cSuffixes[k])
+        and WordChars(Copy(key, 1, Length(key) - Length(cSuffixes[k]))) then
+      begin
+        mt := Copy(key, 1, Length(key) - Length(cSuffixes[k]));
+        Break;
+      end;
+    if mt <> '' then Break;
+  end;
+  if mt = 'legend' then cnt := Length(FLegends)
+  else if mt = 'toolbox' then cnt := Min(Length(FTbSpecs), Length(FTbLayouts))
+  else if (mt = 'xAxis') or (mt = 'yAxis') or (mt = 'singleAxis') or (mt = 'radiusAxis')
+    or (mt = 'angleAxis') or (mt = 'parallelAxis') or (mt = 'graphic') then
+    cnt := FOption.ComponentCount(mt)
+  else Exit;
+  mx := -1;
+  d := APayload.Find(mt + 'Index');
+  if (d <> nil) and (d.JSONType = jtNumber) then mx := Trunc(d.AsFloat)
+  else
+  begin
+    d := APayload.Find(mt + 'Id');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      for k := 0 to cnt - 1 do
+        if (mx < 0) and (FOption.ComponentId(mt, k) = d.AsString) then mx := k;
+    end
+    else
+    begin
+      d := APayload.Find(mt + 'Name');
+      if (d <> nil) and (d.JSONType = jtString) then
+        for k := 0 to cnt - 1 do
+          if (mx < 0) and (FOption.ComponentModelName(mt, k) = d.AsString) then mx := k;
+    end;
+  end;
+  if (mx < 0) or (mx >= cnt) then Exit;
+  d := APayload.Find('name');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  nm := d.AsString;
+  if mt = 'legend' then
+  begin
+    for q := 0 to High(FLegends[mx].Items) do
+    begin
+      if FLegends[mx].Items[q].Name <> nm then Continue;
+      dt := TyChartNoDatum;
+      dt.Kind := ctkLegend;
+      dt.ComponentIndex := mx;
+      dt.DataIndex := q;
+      if not LgTipItem(dt, AEv.LgIndex, AEv.LgItem) then Continue;
+      { the item's hit rect: the legend's element of the item }
+      any := False;
+      u := TyRectF(0, 0, 0, 0);
+      for k := 0 to FPaintList.Count - 1 do
+      begin
+        el := FPaintList.Element(k);
+        if (el.Datum.Kind <> ctkLegend) or (el.Datum.ComponentIndex <> mx)
+          or (el.Datum.DataIndex <> q) then Continue;
+        b := TyShapeBounds(el.Shape);
+        if not TyRectFIsValid(b) then Continue;
+        if not any then
+        begin
+          u := b;
+          AEv.Datum := el.Datum;
+          AEv.Element := k;
+        end
+        else
+          u := TyRectF(Min(u.Left, b.Left), Min(u.Top, b.Top), Max(u.Right, b.Right),
+            Max(u.Bottom, b.Bottom));
+        any := True;
+      end;
+      if not any then Continue;
+      AEv.X := u.Left + (u.Right - u.Left) / 2;
+      AEv.Y := u.Top + (u.Bottom - u.Top) / 2;
+      AEv.LgHas := True;
+      Exit(True);
+    end;
+    Exit;
+  end;
+  if mt = 'graphic' then
+  begin
+    { the elements in their tree's order: a label is its host's }
+    if FGfxView = nil then Exit;
+    for q := 0 to High(FGfxPaintEl) do
+    begin
+      if (FGfxPaintEl[q] = nil) or (FGfxPaintEl[q].Host <> nil) or (FGfxPaintEl[q].Name <> nm) then Continue;
+      for k := 0 to FPaintList.Count - 1 do
+      begin
+        el := FPaintList.Element(k);
+        if (el.Datum.Kind <> ctkGraphic) or (el.Datum.DataIndex <> q) then Continue;
+        b := TyShapeBounds(el.Shape);
+        if not TyRectFIsValid(b) then Continue;
+        AEv.X := b.Left + (b.Right - b.Left) / 2;
+        AEv.Y := b.Top + (b.Bottom - b.Top) / 2;
+        AEv.Datum := el.Datum;
+        AEv.Element := k;
+        Exit(True);
+      end;
+    end;
+    Exit;
+  end;
+  if mt <> 'toolbox' then
+  begin
+    Result := TipAxisRef(mt, mx, nm, AEv);
+    Exit;
+  end;
+  { a toolbox' icons, in their order }
+  for q := 0 to High(FTbSpecs[mx].Icons) do
+  begin
+    if FTbSpecs[mx].Icons[q].Name <> nm then Continue;
+    b := TipTbIconRect(mx, q);
+    if not TyRectFIsValid(b) then Continue;
+    AEv.X := b.Left + (b.Right - b.Left) / 2;
+    AEv.Y := b.Top + (b.Bottom - b.Top) / 2;
+    AEv.TbHas := True;
+    AEv.TbIndex := mx;
+    AEv.TbIcon := q;
+    Exit(True);
+  end;
+end;
+
+{ [R7-AE] an axis' text of the name AName (its labels first, then its
+  name): its datum, the centre of its box the point }
+function TTyCustomAdvanceChart.TipAxisRef(const AMainType: string; AIndex: Integer;
+  const AName: string; var AEv: TTyTipEvent): Boolean;
+var
+  g, a, q, comp: Integer;
+  gb: TTyGridBuild;
+  axObj: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  pol: TTyPolar;
+  par: TTyParallel;
+  meas: ITyTextMeasurer;
+  lblS, nameS: TTyStyleSet;
+  b: TTyRectF;
+  fw, fh: Double;
+
+  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
+    AAV: TTyTextAnchorV): TTyRectF;
+  var l, t: Double;
+  begin
+    case AAH of
+      tahLeft: l := AXa;
+      tahRight: l := AXa - AW;
+    else
+      l := AXa - AW / 2;
+    end;
+    case AAV of
+      tavTop: t := AYa;
+      tavBottom: t := AYa - AH;
+    else
+      t := AYa - AH / 2;
+    end;
+    Result := TyRectF(l, t, l + AW, t + AH);
+  end;
+
+  function TextBox(const AText: string; const AStyle: TTyStyleSet; AXa, AYa: Double;
+    AAH: TTyTextAnchorH; AAV: TTyTextAnchorV; const ART: TTyRtPieceArray; ARot, AScale: Double): TTyRectF;
+  begin
+    if Length(ART) > 0 then Exit(TyRtDeviceBox(ART, AXa, AYa, ARot, AScale));
+    if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+    fw := 0;
+    fh := 0;
+    if meas <> nil then
+      meas.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight, fw, fh);
+    Result := Boxed(AXa, AYa, fw, fh, AAH, AAV);
+  end;
+
+  function Found(AComp, AQ: Integer; const ABox: TTyRectF): Boolean;
+  begin
+    Result := TyRectFIsValid(ABox);
+    if not Result then Exit;
+    AEv.X := ABox.Left + (ABox.Right - ABox.Left) / 2;
+    AEv.Y := ABox.Top + (ABox.Bottom - ABox.Top) / 2;
+    AEv.Datum := TyChartNoDatum;
+    AEv.Datum.Kind := ctkAxisText;
+    AEv.Datum.ComponentIndex := AComp;
+    AEv.Datum.DataIndex := AQ;
+    AEv.Element := -1;
+  end;
+
+  { an AxisBuilder spec's: its labels, then its name }
+  function InSpec(AComp: Integer; AAxis: TTyAxis; ASpec: PTyAxisLayoutSpec): Boolean;
+  var i: Integer;
+  begin
+    Result := False;
+    AxisTextStyles(ASpec, lblS, nameS);
+    for i := 0 to High(ASpec^.Placements) do
+    begin
+      if not ASpec^.Placements[i].Shown or (ASpec^.Placements[i].Text <> AName) then Continue;
+      if Found(AComp, i, TextBox(ASpec^.Placements[i].Text, lblS, ASpec^.Placements[i].X,
+        ASpec^.Placements[i].Y, ASpec^.Placements[i].AnchorH, ASpec^.Placements[i].AnchorV,
+        ASpec^.Placements[i].Rt, ASpec^.RotationRad, ASpec^.RtScale)) then Exit(True);
+    end;
+    if ASpec^.NamePlacement.Shown and (TyAxisFullName(AAxis, ASpec) = AName) then
+      Result := Found(AComp, -1, TyRectF(ASpec^.NamePlacement.Rect.X, ASpec^.NamePlacement.Rect.Y,
+        ASpec^.NamePlacement.Rect.X + ASpec^.NamePlacement.Rect.W,
+        ASpec^.NamePlacement.Rect.Y + ASpec^.NamePlacement.Rect.H));
+  end;
+
+begin
+  Result := False;
+  meas := nil;
+  if (AMainType = 'xAxis') or (AMainType = 'yAxis') then
+  begin
+    if FBuild = nil then Exit;
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+      begin
+        if a < gb.XAxisCount then axObj := gb.XAxis(a)
+        else axObj := gb.YAxis(a - gb.XAxisCount);
+        if (axObj = nil) or (axObj.ComponentIndex <> AIndex) then Continue;
+        if (a < gb.XAxisCount) <> (AMainType = 'xAxis') then Continue;
+        spec := gb.SpecFor(axObj);
+        if spec = nil then Continue;
+        Exit(InSpec(g * 1000 + a, axObj, spec));
+      end;
+    end;
+    Exit;
+  end;
+  if AMainType = 'singleAxis' then
+  begin
+    if (AIndex > High(FSingles)) or (FSingles[AIndex] = nil) or not FSingles[AIndex].View.Shown then Exit;
+    Exit(InSpec(1 * cAxisTextSingle + AIndex, FSingles[AIndex].Axis, @FSingles[AIndex].View.Spec));
+  end;
+  if (AMainType = 'radiusAxis') or (AMainType = 'angleAxis') then
+  begin
+    for g := 0 to High(FPolars) do
+    begin
+      pol := FPolars[g];
+      if pol = nil then Continue;
+      if AMainType = 'radiusAxis' then
+      begin
+        if (pol.RadiusAxis = nil) or (pol.RadiusAxis.ComponentIndex <> AIndex) then Continue;
+        Exit(InSpec(2 * cAxisTextSingle + g, pol.RadiusAxis, @pol.RadiusView.Spec));
+      end;
+      if (pol.AngleAxis = nil) or (pol.AngleAxis.ComponentIndex <> AIndex) then Continue;
+      { AngleAxisView's labels: no name }
+      AxisTextStyles(@pol.AngleView.Spec, lblS, nameS);
+      for q := 0 to High(pol.AngleView.Labels) do
+        if pol.AngleView.Labels[q].Text = AName then
+          if Found(3 * cAxisTextSingle + g, q, TextBox(pol.AngleView.Labels[q].Text, lblS,
+            pol.AngleView.Labels[q].X, pol.AngleView.Labels[q].Y, pol.AngleView.Labels[q].AnchorH,
+            pol.AngleView.Labels[q].AnchorV, pol.AngleView.Labels[q].Rt, 0, pol.AngleView.Spec.RtScale)) then
+            Exit(True);
+      Exit;
+    end;
+    Exit;
+  end;
+  { a parallel's axes }
+  for g := 0 to High(FParallels) do
+  begin
+    par := FParallels[g];
+    if par = nil then Continue;
+    for a := 0 to Min(par.AxisCount, Length(par.Views)) - 1 do
+    begin
+      axObj := par.Axis(a);
+      if (axObj = nil) or (axObj.ComponentIndex <> AIndex) or not par.Views[a].Shown then Continue;
+      comp := 4 * cAxisTextSingle + g * 1000 + a;
+      Exit(InSpec(comp, axObj, @par.Views[a].Spec));
+    end;
+  end;
+end;
+
 function TTyCustomAdvanceChart.TipComponentRef(APayload: TJSONObject;
   out ADatum: TTyChartDatumRef; out AElement: Integer; out AX, AY: Double): Boolean;
 const
@@ -5166,7 +5500,8 @@ begin
     begin
       ev := TipEventBlank;
       ev.PosJson := TipPositionJson(APayload);
-      if TipComponentRef(APayload, ev.Datum, ev.Element, ev.X, ev.Y) then
+      if TipComponentRef(APayload, ev.Datum, ev.Element, ev.X, ev.Y)
+        or TipComponentRefMore(APayload, ev) then
       begin
         { on the element, the box below it unless placed otherwise }
         ev.PosDefault := True;
@@ -6068,6 +6403,11 @@ begin
   end
   else
     AEl.Shape := TyMkZrShape(path, TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y), True);
+  { [R7-AE] the frame it is brushed in: its pen is strokeNoScale, the
+    canvas' lineWidth there over its scale -- what it hands on, and a
+    width it takes from the canvas, are measured in it }
+  M := TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y);
+  AEl.CanvasM := TTyDoubleArray.Create(M[0], M[1], M[2], M[3], M[4], M[5]);
   { [R5-F] its shadow }
   if h.HasShadow then TyStyleSetShadow(AEl.Style, h.Shadow);
   if isImage then
@@ -6093,6 +6433,8 @@ begin
   begin
     AEl.Style.StrokeColor := h.BorderColour;
     AEl.Style.StrokeWidthLogical := h.BorderWidth;
+    { [R7-AE] an infinite width the canvas refuses: the one it had }
+    if IsInfinite(h.BorderWidth) then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
   end;
   AEl.Style.Alpha := h.Opacity;
   AEl.Datum := TyChartNoDatum;
@@ -6329,12 +6671,21 @@ end;
 
 procedure TTyCustomAdvanceChart.PaintHandles(APainter: TTyPainter);
 var
-  k: Integer;
+  k, j: Integer;
   el: TTyChartElement;
+  done: Boolean;
 begin
   HdSync;
   for k := 0 to High(FHandles) do
+  begin
+    { ([R7-AE] one its pointer drew in the overlay's run is drawn) }
+    done := False;
+    for j := 0 to High(FHdDrawn) do
+      if FHdDrawn[j] = FHandles[k].Key then done := True;
+    if done then Continue;
     if HdShape(k, el) then TyRenderElement(APainter, el);
+  end;
+  FHdDrawn := nil;
 end;
 
 function TTyCustomAdvanceChart.PointerHandleCount: Integer;
@@ -7294,6 +7645,11 @@ end;
 function TTyCustomAdvanceChart.TooltipShownSpec: TTyTooltipSpec;
 begin
   Result := FTipCur.Spec;
+end;
+
+function TTyCustomAdvanceChart.TooltipShownAt: TTyPointF;
+begin
+  Result := TyPointF(FTipLastX, FTipLastY);
 end;
 
 function TTyCustomAdvanceChart.TipHtmlMode: Boolean;

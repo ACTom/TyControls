@@ -190,6 +190,13 @@ type
 
   TTyDzSliderLayout = record
     Valid: Boolean;
+    { [R7-AE] THE GROUP HAS NO PLACE: _positionGroup's rect is no number
+      (a data shadow's line, a handle or the move handle stroked
+      'Infinity' wide) -- the view group's x or y is not finite, every
+      transform under it is refused by the canvas: each element is drawn
+      in its own frame under the transform the canvas had, and none is
+      found by the pointer [was: drawn nowhere] }
+    Unplaced: Boolean;
     Index: Integer;
     Horizontal: Boolean;
     { _findCoordRect's answer }
@@ -288,7 +295,9 @@ uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.DataZoom,
      tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States,
      { [R5-D] the emphasis proxy's liftColor }
-     tyControls.AdvanceChart.Style;
+     tyControls.AdvanceChart.Style,
+     { [R7-AE] an unplaced element's path as zrender's commands }
+     tyControls.AdvanceChart.MarkerView;
 
 { ==================== small things ==================== }
 
@@ -395,7 +404,19 @@ begin
   if AWidthKey <> '' then
   begin
     d := Get(AWidthKey);
-    if (d <> nil) and (d.JSONType = jtNumber) then AStyle.LineWidth := d.AsFloat;
+    if (d <> nil) and (d.JSONType = jtNumber) then AStyle.LineWidth := d.AsFloat
+    { [R7-AE] A STRING IS JAVASCRIPT'S NUMBER OF IT: the canvas' lineWidth
+      and the bounding rect take style.lineWidth through a division --
+      '3' strokes 3, 'Infinity' an infinite pen; one of no number ('abc')
+      is not above nought: no stroke, as nought [was: not written, the
+      default] }
+    else if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      AStyle.LineWidth := TyJsToNumber(d.AsString);
+      if IsNan(AStyle.LineWidth) then AStyle.LineWidth := 0;
+    end
+    else if (d <> nil) and (d.JSONType = jtBoolean) then
+      AStyle.LineWidth := Ord(d.AsBoolean);
   end;
   d := Get('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -1270,6 +1291,8 @@ begin
   Result.PosGroupRect := r;
   if IsNan(r.X) then Result.GroupX := Result.LocX else Result.GroupX := Result.LocX - r.X;
   if IsNan(r.Y) then Result.GroupY := Result.LocY else Result.GroupY := Result.LocY - r.Y;
+  Result.Unplaced := IsNan(Result.GroupX) or IsInfinite(Result.GroupX)
+    or IsNan(Result.GroupY) or IsInfinite(Result.GroupY);
   { the shadow groups' clips }
   if Result.ShadowDrawn then
   begin
@@ -1523,9 +1546,11 @@ var
     end;
   end;
 
-  { the element's transform to the device }
+  { the element's transform to the device -- [R7-AE] none for an unplaced
+    slider: built in its own frame, css px (Framed) }
   function Dev(ARole: TTyDzRole): TTyMat2D;
   begin
+    if ALayout.Unplaced then Exit(Ident);
     Result := TyMatMul(D, TyDzGlobal(ALayout, ARole));
   end;
 
@@ -1646,8 +1671,10 @@ var
     gi := Ord(ARole) - Ord(dzrShadowPolygon0);
     if not AClose then gi := Ord(ARole) - Ord(dzrShadowPolyline0);
     el.HasClip := True;
-    el.ClipRect := DevRect(ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip,
-      TyMatMul(D, TyDzGlobal(ALayout, TTyDzRole(Ord(dzrShadow0) + gi))));
+    { ([R7-AE] an unplaced slider's in its frame: Framed) }
+    if not ALayout.Unplaced then
+      el.ClipRect := DevRect(ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip,
+        TyMatMul(D, TyDzGlobal(ALayout, TTyDzRole(Ord(dzrShadow0) + gi))));
     if AClose then
     begin
       el.Style.HasFill := True;
@@ -1672,24 +1699,91 @@ var
   e: TTyDzElement;
   lb: TTyDzLabel;
   M: TTyMat2D;
+  n0: Integer;
   function Finite(A: Double): Boolean;
   begin
     Result := not (IsNan(A) or IsInfinite(A));
+  end;
+
+  { [R7-AE] AN UNPLACED SLIDER'S ELEMENTS, those ARole added from AFrom:
+    in their own frame -- the path the element holds (zrender's commands,
+    css px; a picture's corners as built), the transform refused
+    (cTyCanvasTransformLeft) and the canvas' own frame's origin, a
+    shadow's group clip in that frame. A handle's pen is strokeNoScale:
+    the canvas' lineWidth, dash and phase are over the line scale its
+    transform's scale and turn still have (Path.getLineScale) }
+  procedure Framed(AFrom: Integer; ARole: TTyDzRole);
+  var
+    k, j, gi: Integer;
+    pe: PTyChartElement;
+    G: TTyMat2D;
+    ls: Double;
+    c: TTyXYWH;
+  begin
+    { [R7-AE] a pen of an infinite width: the canvas refuses it and strokes
+      at the width it had (TyCanvasRunStep) [was: stroked infinitely wide] }
+    for k := AFrom to AList.Count - 1 do
+      if IsInfinite(AList.Ref(k)^.Style.StrokeWidthLogical) then
+        AList.Ref(k)^.CanvasFlags := AList.Ref(k)^.CanvasFlags or cTyCanvasWidthLeft;
+    if not ALayout.Unplaced then Exit;
+    for k := AFrom to AList.Count - 1 do
+    begin
+      pe := AList.Ref(k);
+      SetLength(pe^.FrameShape, 1);
+      if (Length(e.Path) > 0) and (pe^.Shape.Image = '') then
+        pe^.FrameShape[0] := TyMkZrShape(e.Path, Ident, False)
+      else
+        pe^.FrameShape[0] := pe^.Shape;
+      pe^.Shape := pe^.FrameShape[0];
+      pe^.FrameOrigin := TyPointF(AOriginX, AOriginY);
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasTransformLeft;
+      pe^.CanvasM := nil;
+      if ARole in [dzrShadowPolygon0..dzrShadowPolyline2] then
+      begin
+        if ARole <= dzrShadowPolygon2 then gi := Ord(ARole) - Ord(dzrShadowPolygon0)
+        else gi := Ord(ARole) - Ord(dzrShadowPolyline0);
+        c := ALayout.Kids[TTyDzRole(Ord(dzrShadow0) + gi)].Clip;
+        pe^.FrameClip := TTyDoubleArray.Create(c.X, c.Y, c.W, c.H);
+        pe^.ClipRect := TyRectF(c.X, c.Y, c.X + c.W, c.Y + c.H);
+      end;
+      if ARole in [dzrHandle0, dzrHandle1] then
+      begin
+        G := TyMatMul(ALayout.SG, ALayout.Kids[ARole].Local);
+        if (Abs(G[0] - 1) > 1e-10) and (Abs(G[3] - 1) > 1e-10) then
+          ls := Sqrt(Abs(G[0] * G[3] - G[2] * G[1]))
+        else
+          ls := 1;
+        if (ls > 1e-10) and not IsInfinite(ls) then
+        begin
+          if not IsInfinite(pe^.Style.StrokeWidthLogical) then
+          pe^.Style.StrokeWidthLogical := pe^.Style.StrokeWidthLogical / ls;
+          pe^.Style.DashLogical := Copy(pe^.Style.DashLogical, 0, Length(pe^.Style.DashLogical));
+          for j := 0 to High(pe^.Style.DashLogical) do
+            pe^.Style.DashLogical[j] := pe^.Style.DashLogical[j] / ls;
+          pe^.Style.DashOffsetLogical := pe^.Style.DashOffsetLogical / ls;
+        end;
+      end;
+    end;
   end;
 
 begin
   Result := 0;
   if not ALayout.Valid then Exit;
   { WASHED AT THE DOOR: the painter runs with the traps on, and a window
-    with no number in it has nowhere to draw }
-  if not (Finite(ALayout.GroupX) and Finite(ALayout.GroupY) and Finite(ALayout.L)
-    and Finite(ALayout.T) and Finite(ALayout.HandleEnds[0])
+    with no number in it has nowhere to draw -- [R7-AE] a group of no place
+    is drawn in the elements' own frames (Framed) }
+  if not ((Finite(ALayout.GroupX) and Finite(ALayout.GroupY)) or ALayout.Unplaced) then Exit;
+  if not (Finite(ALayout.L) and Finite(ALayout.T) and Finite(ALayout.HandleEnds[0])
     and Finite(ALayout.HandleEnds[1]) and Finite(ALayout.HandleH)) then Exit;
   D := TyZrLocal(AScale, AScale, 0, AOriginX, AOriginY);
   for p := 0 to ALayout.Painted - 1 do
   begin
     role := ALayout.Paint[p];
     e := ALayout.Kids[role];
+    n0 := AList.Count;
+    { ([R7-AE] an unplaced slider's labels: not drawn, see Framed) }
+    if ALayout.Unplaced and (role in [dzrLabel0, dzrLabel1]) then Continue;
+    try
     case role of
       dzrBackground, dzrFiller:
         begin
@@ -1858,9 +1952,13 @@ begin
           Inc(Result);
         end;
     end;
+    finally
+      Framed(n0, role);
+    end;
   end;
-  { the brush rect, added to the slider group last: silent, over the body }
-  if ALayout.HasBrush and (not IsNan(ALayout.BrushW)) then
+  { the brush rect, added to the slider group last: silent, over the body
+    ([R7-AE] an unplaced slider is never brushed) }
+  if ALayout.HasBrush and (not IsNan(ALayout.BrushW)) and not ALayout.Unplaced then
   begin
     el := Blank(dzrBackground);
     el.Z2 := 0;
@@ -1877,8 +1975,10 @@ begin
       el.Style.StrokeWidthLogical := LineWidthOr(ASpec.Brush, 0);
       PenOn(el, ASpec.Brush, el.Style.StrokeWidthLogical);
     end;
+    n0 := AList.Count;
     AList.Add(el);
     Inc(Result);
+    Framed(n0, dzrBackground);
   end;
 end;
 

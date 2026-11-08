@@ -848,6 +848,9 @@ begin
   L := FDzLayouts[ASlider];
   e := L.Kids[ARole];
   if not e.Present then Exit;
+  { [R7-AE] a group of no place: every element's transform is no number,
+    and Path.contain takes the point to NaN -- found by nothing }
+  if L.Unplaced then Exit;
   M := TyDzGlobal(L, ARole);
   if not TyMatInvert(M, inv) then Exit;
   lx := inv[0] * AX + inv[2] * AY + inv[4];

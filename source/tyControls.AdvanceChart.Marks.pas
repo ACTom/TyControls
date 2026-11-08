@@ -2602,13 +2602,22 @@ var
     poly: TTyPointFArray;
     v: TTySeriesVisual;
     el: TTyChartElement;
+    lone: Boolean;
   begin
     if n < 1 then Exit;
     { A RUN OF ONE POINT HAS NO LINE AND NO AREA, but it still has its
       marker -- and so its label. Upstream draws every point's symbol
       whatever the polyline makes of it. [Revised in batch 47: a lone
-      point drew nothing at all.] }
-    if n >= 2 then
+      point drew nothing at all.]
+      [R7-AE] WHERE NO RUN HAS TWO POINTS the series' polyline (and its
+      area polygon) is still brushed: its path is a move alone (the area's
+      the point and its base), nothing to see, and it hands the canvas its
+      pen -- width, cap, join, miterLimit, dash and phase -- and its fill,
+      in its clip, on a polar too [was: an inkless polyline of no pen, no
+      area, none on a polar] }
+    lone := (n < 2) and pointsOnly and not pointRunDone;
+    if lone then pointRunDone := True;
+    if (n >= 2) or lone then
     begin
       SetLength(up, n);
       for k := 0 to n - 1 do up[k] := pts[k];
@@ -2691,6 +2700,8 @@ var
       if AVisual.VisualLineStroke then ApplyVisualLine(v, False);
       el := MarkElement(TyShapePolyline(up), v, ABinding.SeriesIndex, -1);
       AttachPath(el.Shape, lineRuns, spec.Smooth > 0);
+      { ([R7-AE] a lone point's: no segment, nothing to point at) }
+      if lone then el.Silent := True;
       { HALF THE PEN, AT LEAST FIVE WIDE. `v.StrokeWidthLogical` is already the
         resolved width -- the default 2 was filled in a few lines up. zrender's
         Path.contain tests an unfilled stroke at max(lineWidth,
@@ -2705,26 +2716,10 @@ var
       SetClip(el);
       TagClip(el, carLineRun);
       AList.Add(el);
+      { ([R7-AE] a lone point's counts: the series' view is drawn, its pens
+        and shadows applied) }
       Inc(Result);
 
-    end
-    else if pointsOnly and not pointRunDone and (pol = nil) then
-    begin
-      { the polyline of one point: no ink, no pointer -- its clip runs (the
-        end label rides it) [R5-C] }
-      SetLength(up, 1);
-      up[0] := pts[0];
-      el := MarkElement(TyShapePolyline(up), AVisual, ABinding.SeriesIndex, -1);
-      el.Style.HasFill := False;
-      el.Style.FillGradient := Default(TTyChartGradient);
-      el.Style.FillPattern := Default(TTyChartPattern);
-      el.Style.StrokeWidthLogical := 0;
-      el.Style.StrokeGradient := Default(TTyChartGradient);
-      el.Silent := True;
-      SetClip(el);
-      TagClip(el, carLineRun);
-      AList.Add(el);
-      pointRunDone := True;
     end;
 
     { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and

@@ -1323,6 +1323,18 @@ type
       value: read off the element (an effect symbol's place, a caption's
       anchor and turn, a symbol's frame, an own-frame path's) or none }
     CanvasM: TTyDoubleArray;
+    { [R7-AE] DRAWN IN ITS OWN FRAME UNDER THE TRANSFORM THE CANVAS HAD (with
+      cTyCanvasTransformLeft): a dataZoom slider whose group has no place
+      -- its bounding rect, grown by a pen of 'Infinity', is no number, so
+      every element's transform is refused. FrameShape[0]: its path in
+      that frame, css px (a polygon carrying zrender's commands);
+      FrameOrigin: where the canvas' own frame has its origin here, device
+      px; FrameClip: [x, y, w, h] its group's clip in that frame, empty
+      none. TyCanvasRunStep maps the shape, the clip and the pen through the
+      transform the canvas kept. Empty, the zero value, everywhere else }
+    FrameShape: TTyChartShapeArray;
+    FrameOrigin: TTyPointF;
+    FrameClip: TTyDoubleArray;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
