@@ -3645,6 +3645,82 @@ begin
   end;
 end;
 
+procedure TTyCustomAdvanceChart.TrailLevelsFree;
+var i: Integer;
+begin
+  for i := 0 to High(FTrailLevels) do FreeAndNil(FTrailLevels[i].Bmp);
+  FTrailLevels := nil;
+end;
+
+procedure TTyCustomAdvanceChart.PaintTrailAt(APainter: TTyPainter; AList: TTyPaintList;
+  ALevel: Integer);
+var
+  bmp, layer: TBGRABitmap;
+  P: TTyPainter;
+  i, k: Integer;
+  el: TTyChartElement;
+  a: Double;
+  sc: TTyCanvasScale;
+begin
+  if (AList = nil) or (APainter = nil) then Exit;
+  bmp := APainter.Bitmap;
+  if bmp = nil then
+  begin
+    TyRenderPaintList(APainter, AList);
+    Exit;
+  end;
+  { the level's lastFrameAlpha: its trail series' (one key, one alpha) }
+  a := 0;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if (el.ZLevel = ALevel) and (el.Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+    begin
+      a := LinesTrailAlpha(el.Datum.SeriesIndex);
+      Break;
+    end;
+  end;
+  k := -1;
+  for i := 0 to High(FTrailLevels) do
+    if FTrailLevels[i].Level = ALevel then k := i;
+  if k < 0 then
+  begin
+    k := Length(FTrailLevels);
+    SetLength(FTrailLevels, k + 1);
+    FTrailLevels[k].Level := ALevel;
+    FTrailLevels[k].Bmp := nil;
+  end;
+  layer := FTrailLevels[k].Bmp;
+  if (layer = nil) or (layer.Width <> bmp.Width) or (layer.Height <> bmp.Height) then
+  begin
+    FreeAndNil(FTrailLevels[k].Bmp);
+    layer := TBGRABitmap.Create(bmp.Width, bmp.Height, BGRAPixelTransparent);
+    FTrailLevels[k].Bmp := layer;
+  end
+  else
+    { Layer.clear with motionBlur: the last frame drawn back at
+      lastFrameAlpha -- the whole level, every element on it }
+    layer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
+  P := NewPainter;
+  try
+    sc.Scale := APainter.DeviceScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, bmp.Width div sc.Scale, bmp.Height div sc.Scale),
+      FPaintListPPI, layer, sc);
+    { the level's elements, in paint order (the zlevel band passes them) }
+    for i := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(AList.PaintOrder(i));
+      if not el.Ignore then TyRenderElement(P, el);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  bmp.PutImage(0, 0, layer, dmDrawWithTransparency);
+end;
+
 procedure TTyCustomAdvanceChart.SolveRadars(APPI: Integer);
 var
   i, j, k, n, dim, slot: Integer;

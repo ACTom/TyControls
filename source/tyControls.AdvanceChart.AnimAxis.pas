@@ -106,6 +106,10 @@ type
     ShowMinorTicks, ShowMinorSplitLine, ShowSplitArea, ShowName: Boolean;
     MinorTickLength, MinorTickWidth, MinorSplitWidth: Double;
     MinorTicks: TTyAxisMinorTickArray;
+    { [R7-AH] the device px a css px makes (PPI / 96; 0 or 1 none): the
+      lines are snapped on the css px grid, as upstream's canvas scaled by
+      devicePixelRatio }
+    Scale: Double;
   end;
 
 { zrender's subPixelOptimize: a position put on the half pixel (an odd
@@ -129,7 +133,7 @@ function TyAxisLabelAnid(ATickValue: Double; const AByTick: TTyIntegerArray): st
 
 implementation
 
-uses tyControls.AdvanceChart.Scale;
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.ZrPath;
 
 function TySubPixelOptimize(APos, ALineWidth: Double; APositive: Boolean): Double;
 var doubled, v: Double;
@@ -207,6 +211,16 @@ var
     Push := n - 1;
   end;
 
+  { subPixelOptimizeLine of leaf AK for a pen AWidth device px wide -- on the
+    css px grid at another PPI ([R7-AH] [was: the device px grid]) }
+  procedure Snap(AK: Integer; AWidth: Double);
+  begin
+    if (AIn.Scale > 0) and (AIn.Scale <> 1) then
+      TyZrSubPixelLineAt(els[AK].X1, els[AK].Y1, els[AK].X2, els[AK].Y2, AWidth, AIn.Scale)
+    else
+      TySubPixelOptimizeLine(els[AK].X1, els[AK].Y1, els[AK].X2, els[AK].Y2, AWidth);
+  end;
+
 var
   k: Integer;
   minorEnd, prev: Double;
@@ -233,8 +247,7 @@ begin
     k := Push(aakLine, 'line', -1);
     Apply(g, fr.Ext0, 0, els[k].X1, els[k].Y1);
     Apply(g, fr.Ext1, 0, els[k].X2, els[k].Y2);
-    TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
-      AIn.LineWidth);
+    Snap(k, AIn.LineWidth);
   end;
   { the major ticks: every one built, a hidden label's too (it is ignored,
     not dropped) }
@@ -247,8 +260,7 @@ begin
       k := Push(aakTick, 'ticks_' + TyJsNumberToString(ASpec.TickMarks[i].Value), i);
       Apply(g, ASpec.TickMarks[i].Local, 0, els[k].X1, els[k].Y1);
       Apply(g, ASpec.TickMarks[i].Local, tickEnd, els[k].X2, els[k].Y2);
-      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
-        AIn.TickWidth);
+      Snap(k, AIn.TickWidth);
     end;
   end;
   { the labels upstream builds, an overlapped one too }
@@ -283,8 +295,7 @@ begin
         els[k].X2 := AIn.Plot.X + AIn.Plot.W;
         els[k].Y2 := ASpec.SplitLineMarks[i].Coord;
       end;
-      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
-        AIn.SplitWidth);
+      Snap(k, AIn.SplitWidth);
     end;
   { the break areas: rectCoordBuildBreakAxis adds them to the axis group
     [F4a] }
@@ -310,8 +321,7 @@ begin
         + TyJsNumberToString(AIn.MinorTicks[i].Value), i);
       Apply(g, AIn.MinorTicks[i].Local, 0, els[k].X1, els[k].Y1);
       Apply(g, AIn.MinorTicks[i].Local, minorEnd, els[k].X2, els[k].Y2);
-      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
-        AIn.MinorTickWidth);
+      Snap(k, AIn.MinorTickWidth);
     end;
   end;
   { [F3b] the minor split lines across the grid rect }
@@ -333,8 +343,7 @@ begin
         els[k].X2 := AIn.Plot.X + AIn.Plot.W;
         els[k].Y2 := AIn.MinorTicks[i].Global;
       end;
-      TySubPixelOptimizeLine(els[k].X1, els[k].Y1, els[k].X2, els[k].Y2,
-        AIn.MinorSplitWidth);
+      Snap(k, AIn.MinorSplitWidth);
     end;
   { [F3b] the split areas: rectCoordAxisBuildSplitArea's rects, every band
     whatever its colour; the edge carried as x + width }

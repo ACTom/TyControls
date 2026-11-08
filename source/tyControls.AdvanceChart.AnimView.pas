@@ -9357,8 +9357,9 @@ begin
   y2 := AEl.Anim.G[3];
   if AEl.Anim.G[6] = 0 then
   begin
-    { [R7-G] the path buildPath makes: on the half pixel first }
-    TyZrSubPixelOptimizeLine(x1, y1, x2, y2, AEl.Anim.G[11]);
+    { [R7-G] the path buildPath makes: on the half pixel first -- ([R7-AH]
+      the css px grid's at another PPI) }
+    TyZrSubPixelLineAt(x1, y1, x2, y2, AEl.Anim.G[11], AEl.Anim.PxScale);
     if APercent < 1 then
     begin
       x2 := x1 * (1 - APercent) + x2 * APercent;

@@ -1348,6 +1348,11 @@ begin
     ground, no fast progressive frame [was: every component on the root's
     zlevel, whatever it wrote] }
   FZMixed := ZMixedNow(FZLevels);
+  { [R7-AH] A TRAIL'S LEVEL among them in the continuous phase: what is on
+    it and above is redrawn every frame over the faded trail (its layer
+    alone has the motion blur) -- the static layer holds the levels under
+    it [was: the trail drawn over every component] }
+  { (ZCut: asked where it is used -- the series pass arms the animation) }
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   axesHere := not FZMixed and (FExporting or not AxesDynamic);
@@ -1450,6 +1455,102 @@ begin
   end;
 end;
 
+function TTyCustomAdvanceChart.ZCut: Integer;
+begin
+  if FZMixed and FAnimContinuous and not FExporting then Result := TrailCutLevel
+  else Result := MaxInt;
+end;
+
+function TTyCustomAdvanceChart.TrailCutLevel: Integer;
+var i, z: Integer;
+begin
+  Result := MaxInt;
+  for i := 0 to High(FBindings) do
+    if LinesTrailAlpha(FBindings[i].SeriesIndex) > 0 then
+    begin
+      z := SeriesZLevelOf(FBindings[i].SeriesIndex);
+      if z < Result then Result := z;
+    end;
+end;
+
+procedure TTyCustomAdvanceChart.PaintZLevelsCut(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+  APart: TTyPaintList; ACut: Integer);
+var
+  levels: TTyIntegerArray;
+  i, j, k, lv, zTop: Integer;
+  comp, trail: Boolean;
+  pe: PTyChartElement;
+
+  procedure AddLevel(AL: Integer);
+  var q, p: Integer;
+  begin
+    q := 0;
+    while (q <= High(levels)) and (levels[q] < AL) do Inc(q);
+    if (q <= High(levels)) and (levels[q] = AL) then Exit;
+    SetLength(levels, Length(levels) + 1);
+    for p := High(levels) downto q + 1 do levels[p] := levels[p - 1];
+    levels[q] := AL;
+  end;
+
+begin
+  if APart = nil then Exit;
+  zTop := ZStaticTop;
+  levels := nil;
+  for i := 0 to High(ALevels) do AddLevel(ALevels[i]);
+  for k := 0 to APart.Count - 1 do
+    if APart.Ref(k)^.ZLevel <= zTop then AddLevel(APart.Ref(k)^.ZLevel);
+  for i := 0 to High(levels) do
+  begin
+    lv := levels[i];
+    comp := False;
+    for j := 0 to High(ALevels) do
+      if ALevels[j] = lv then comp := True;
+    { the components on it: the axes first (z 0), as PaintZLevels }
+    if comp and (lv >= ACut) then
+    begin
+      FZApartOn := True;
+      FZApartLevel := lv;
+      try
+        PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
+      finally
+        FZApartOn := False;
+      end;
+    end;
+    { the part's elements of that level -- a trail's through its layer }
+    trail := False;
+    for k := 0 to APart.Count - 1 do
+    begin
+      pe := APart.Ref(k);
+      if (pe^.ZLevel = lv) and (pe^.Datum.Kind = ctkSeries)
+        and (LinesTrailAlpha(pe^.Datum.SeriesIndex) > 0) then
+      begin
+        trail := True;
+        Break;
+      end;
+    end;
+    TySetZBand(lv - 1, lv);
+    try
+      if trail then PaintTrailAt(APainter, APart, lv)
+      else TyRenderPaintList(APainter, APart);
+    finally
+      TyClearZBand;
+    end;
+    if comp and (lv >= ACut) then
+    begin
+      FZApartOn := True;
+      FZApartLevel := lv;
+      try
+        PaintBreakAreas(APainter);
+        PaintParallels(APainter, APPI, AMeasurer);
+        PaintTitles(APainter);
+      finally
+        FZApartOn := False;
+      end;
+    end;
+  end;
+end;
+
 function TTyCustomAdvanceChart.TrailZLevel(AList: TTyPaintList): Integer;
 var i: Integer; pe: PTyChartElement;
 begin
@@ -1485,6 +1586,23 @@ var
 begin
   Result := 0;
   if FOption = nil then Exit;
+  { [R7-AH] what allocateZlevels wrote into the model }
+  if ZAllocOf(AMainType, AIndex, Result) then Exit;
+  Result := 0;
+  { a marker's master model: the root's markPoint (markLine, markArea), the
+    root under it }
+  if ((AMainType = 'markPoint') or (AMainType = 'markLine') or (AMainType = 'markArea'))
+    and (FOption.ComponentCount(AMainType) = 0) and (FOption.Root is TJSONObject) then
+  begin
+    node := TJSONObject(FOption.Root).Find(AMainType);
+    d := nil;
+    if node is TJSONObject then d := TJSONObject(node).Find('zlevel');
+    if ((d = nil) or (d.JSONType = jtNull)) then d := TJSONObject(FOption.Root).Find('zlevel');
+    if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+    v := d.AsFloat;
+    if IsNan(v) or IsInfinite(v) then Exit;
+    Exit(Round(Max(Double(-100000), Min(Double(100000), v))));
+  end;
   d := nil;
   node := FOption.ComponentAt(AMainType, AIndex);
   if node is TJSONObject then d := TJSONObject(node).Find('zlevel');
@@ -1495,6 +1613,237 @@ begin
   v := d.AsFloat;
   if IsNan(v) or IsInfinite(v) then Exit;
   Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+end;
+
+const
+  cZAllocBias = 1 shl 28;
+
+function TTyCustomAdvanceChart.ZAllocOf(const AMainType: string; AIndex: Integer;
+  out ALevel: Integer): Boolean;
+var p: Pointer;
+begin
+  ALevel := 0;
+  Result := False;
+  if not FZAllocOn or (FZAlloc = nil) then Exit;
+  p := FZAlloc.Find(AMainType + '#' + IntToStr(AIndex));
+  if p = nil then Exit;
+  ALevel := Integer(PtrInt(p) - cZAllocBias);
+  Result := True;
+end;
+
+procedure TTyCustomAdvanceChart.ZAllocForget(const AMainType: string; AIndex: Integer);
+var k: Integer;
+begin
+  if FZAlloc = nil then Exit;
+  k := FZAlloc.FindIndexOf(AMainType + '#' + IntToStr(AIndex));
+  if k >= 0 then FZAlloc.Delete(k);
+  FZAllocOn := FZAlloc.Count > 0;
+end;
+
+function TTyCustomAdvanceChart.SeriesZLevelOf(ASeriesIndex: Integer): Integer;
+begin
+  Result := ModelZLevel('series', ASeriesIndex);
+end;
+
+procedure TTyCustomAdvanceChart.ZAllocSolve;
+type
+  TItem = record
+    MainType, Key: string;
+    Index: Integer;
+    ZLevel, Z: Double;
+  end;
+var
+  items: array of TItem;
+  n, t, i, j, slot, lastZl: Integer;
+  mt, lastKey: string;
+  root, node, eff: TJSONObject;
+  d: TJSONData;
+  hasKey, hasLast: Boolean;
+  tmp: TItem;
+  zl, cnt, own: Integer;
+  thr, tl: Double;
+  st: string;
+
+  { model.get(AKey) || 0 off a component's node, the root under it; ADef
+    its type's default where the node writes none }
+  function NumOf(ANode: TJSONData; const AKey: string; ADef: Double; AHasDef: Boolean): Double;
+  var x: TJSONData;
+  begin
+    x := nil;
+    if ANode is TJSONObject then x := TJSONObject(ANode).Find(AKey);
+    if ((x = nil) or (x.JSONType = jtNull)) and AHasDef then Exit(ADef);
+    if ((x = nil) or (x.JSONType = jtNull)) and (root <> nil) then x := root.Find(AKey);
+    if (x = nil) or (x.JSONType <> jtNumber) then Exit(0);
+    Result := x.AsFloat;
+    if IsNan(Result) or IsInfinite(Result) then Result := 0;
+  end;
+
+  { the z a type's default option writes (none: Model.get climbs) }
+  function DefZ(const AType, ASub: string; out AHas: Boolean): Double;
+  begin
+    AHas := True;
+    if AType = 'series' then
+    begin
+      if ASub = 'line' then Exit(3);
+      if ASub = 'treemap' then begin AHas := False; Exit(0); end;
+      Exit(2);
+    end;
+    if AType = 'parallelAxis' then Exit(10);
+    if AType = 'axisPointer' then Exit(50);
+    if AType = 'calendar' then Exit(2);
+    if AType = 'matrix' then Exit(-50);
+    if (AType = 'toolbox') or (AType = 'title') then Exit(6);
+    if (AType = 'dataZoom') or (AType = 'timeline') or (AType = 'legend')
+      or (AType = 'visualMap') then Exit(4);
+    if AType = 'tooltip' then Exit(60);
+    if AType = 'brush' then Exit(10000);
+    if (AType = 'markPoint') or (AType = 'markLine') then Exit(5);
+    if AType = 'markArea' then Exit(1);
+    if AType = 'thumbnail' then Exit(10);
+    if (AType = 'graphic') or (AType = 'dataset') or (AType = 'component') then
+    begin
+      AHas := False;
+      Exit(0);
+    end;
+    Result := 0;
+  end;
+
+  procedure Add(const AType: string; AIndex: Integer; ANode: TJSONData; const AKey: string);
+  var has: Boolean; dz: Double;
+  begin
+    SetLength(items, n + 1);
+    items[n].MainType := AType;
+    items[n].Index := AIndex;
+    items[n].Key := AKey;
+    { model.get('zlevel'): what an earlier allocation wrote into the model
+      where it did (setZLevel: option.zlevel) }
+    if ZAllocOf(AType, AIndex, own) then items[n].ZLevel := own
+    else items[n].ZLevel := NumOf(ANode, 'zlevel', 0, False);
+    dz := DefZ(AType, FOption.ComponentSubType(AType, AIndex), has);
+    items[n].Z := NumOf(ANode, 'z', dz, has);
+    Inc(n);
+  end;
+
+  function Less(const A, B: TItem): Boolean;
+  begin
+    if A.ZLevel <> B.ZLevel then Exit(A.ZLevel < B.ZLevel);
+    Result := A.Z < B.Z;
+  end;
+
+begin
+  if FZAlloc = nil then FZAlloc := TFPHashList.Create;
+  FZAllocOn := FZAlloc.Count > 0;
+  if FOption = nil then Exit;
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  items := nil;
+  n := 0;
+  hasKey := False;
+  { eachComponent: the components (their order does not move a level), the
+    series after them by index }
+  for t := 0 to TyOptionMainTypeCount - 1 do
+  begin
+    mt := TyOptionTopoType(t);
+    if mt = 'series' then Continue;
+    for i := 0 to FOption.ComponentCount(mt) - 1 do
+      if FOption.ComponentId(mt, i) <> '' then
+        Add(mt, i, FOption.ComponentAt(mt, i), '');
+    { the preprocessors' models the tree has none of: the axisPointer's
+      (always), a marker's master where a series writes that marker }
+    if FOption.ComponentCount(mt) > 0 then Continue;
+    if mt = 'axisPointer' then Add(mt, 0, nil, '')
+    else if (mt = 'markPoint') or (mt = 'markLine') or (mt = 'markArea') then
+      for i := 0 to FOption.ComponentCount('series') - 1 do
+      begin
+        node := nil;
+        if FOption.ComponentAt('series', i) is TJSONObject then
+          node := TJSONObject(FOption.ComponentAt('series', i));
+        if (node <> nil) and (node.Find(mt) is TJSONObject) then
+        begin
+          if root <> nil then Add(mt, 0, root.Find(mt), '') else Add(mt, 0, nil, '');
+          Break;
+        end;
+      end;
+  end;
+  for i := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    if FOption.ComponentId('series', i) = '' then Continue;
+    node := nil;
+    if FOption.ComponentAt('series', i) is TJSONObject then
+      node := TJSONObject(FOption.ComponentAt('series', i));
+    st := FOption.ComponentSubType('series', i);
+    { getZLevelKey: a lines series' effect shown with a trail -- its
+      trailLength (more rows than getProgressiveThreshold: its id). NOT a
+      scatter's or a trail-less lines series' of more rows than its
+      threshold (the id upstream gives them too): the incremental layer is
+      one for every run here, and the progress frames draw it over the
+      static layer -- a run on a level of its own would need its own (spec
+      288, what remains) }
+    mt := '';
+    if (st = TyLinesSeriesTypeName) and (node <> nil) then
+    begin
+      eff := nil;
+      if node.Find('effect') is TJSONObject then eff := TJSONObject(node.Find('effect'));
+      if (eff <> nil) and JsTruthy(eff.Find('show')) then
+      begin
+        d := eff.Find('trailLength');
+        if (d = nil) or (d.JSONType = jtNull) then tl := 0.2
+        else if d.JSONType = jtNumber then tl := d.AsFloat
+        else tl := NaN;
+        if tl > 0 then
+        begin
+          slot := SlotOfSeries(i);
+          cnt := 0;
+          if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+            cnt := FStores[slot].Count;
+          if root <> nil then thr := TyProgSpecOf(st, node, root).Threshold
+          else thr := TyProgSpecOf(st, node).Threshold;
+          if cnt > thr then mt := FOption.ComponentId('series', i)
+          else mt := TyJsNumberToString(tl);
+        end;
+      end;
+    end;
+    if mt <> '' then hasKey := True;
+    Add('series', i, node, mt);
+  end;
+  { NO KEY: nothing written -- what an earlier one wrote stays in the
+    models (their option.zlevel) }
+  if not hasKey then Exit;
+  FZAlloc.Clear;
+  { timsort over (zlevel, z): stable }
+  for i := 1 to n - 1 do
+  begin
+    tmp := items[i];
+    j := i - 1;
+    while (j >= 0) and Less(tmp, items[j]) do
+    begin
+      items[j + 1] := items[j];
+      Dec(j);
+    end;
+    items[j + 1] := tmp;
+  end;
+  hasLast := False;
+  lastZl := 0;
+  lastKey := '';
+  for i := 0 to n - 1 do
+  begin
+    zl := Round(Max(Double(-100000), Min(Double(100000), items[i].ZLevel)));
+    if hasLast then zl := Max(lastZl, zl);
+    if items[i].Key <> '' then
+    begin
+      if hasLast and (zl = lastZl) and (items[i].Key <> lastKey) then Inc(zl);
+      lastKey := items[i].Key;
+    end
+    else if lastKey <> '' then
+    begin
+      if hasLast and (zl = lastZl) then Inc(zl);
+      lastKey := '';
+    end;
+    lastZl := zl;
+    hasLast := True;
+    FZAlloc.Add(items[i].MainType + '#' + IntToStr(items[i].Index), Pointer(PtrInt(zl + cZAllocBias)));
+  end;
+  FZAllocOn := True;
 end;
 
 function TTyCustomAdvanceChart.AxisModelZLevel(AAxis: TTyAxis): Integer;
@@ -1658,12 +2007,16 @@ begin
       begin
         if AxesInDynamic then PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
       end
-      else if FExporting or not AxesInDynamic then
+      { ([R7-AH] a level from the trail's on is the frames', over it) }
+      else if (FExporting or not AxesInDynamic) and (lv < ZCut) then
         PaintAxes(APainter, APPI, AMeasurer, False);
       ListBand(lv - 1, lv, False);
-      if over then PaintBreakAreas(APainter);
-      PaintParallels(APainter, APPI, AMeasurer);
-      if over then PaintTitles(APainter);
+      if ADynamic or (lv < ZCut) then
+      begin
+        if over then PaintBreakAreas(APainter);
+        PaintParallels(APainter, APPI, AMeasurer);
+        if over then PaintTitles(APainter);
+      end;
     finally
       FZApartOn := False;
     end;
@@ -1689,19 +2042,40 @@ begin
   end;
 end;
 
+{ [R7-AH] the base of a component's view number (its kind's own; the
+  places come from the prepares' ranks) }
+function CompViewBase(const AMainType: string): Integer;
+begin
+  if AMainType = 'title' then Result := 7000
+  else if AMainType = 'toolbox' then Result := 7100
+  else if AMainType = 'timeline' then Result := 7200
+  else if AMainType = 'legend' then Result := 7300
+  else if AMainType = 'visualMap' then Result := 7400
+  else if AMainType = 'dataZoom' then Result := 7500
+  else if AMainType = 'thumbnail' then Result := 7600
+  else if AMainType = 'brush' then Result := 7700
+  else if AMainType = 'parallelAxis' then Result := 7800
+  else if AMainType = 'grid' then Result := 7900
+  else Result := 8000;
+end;
+
 procedure TTyCustomAdvanceChart.LevelTail(AList: TTyPaintList; AFrom: Integer;
   const AMainType: string; AIndex: Integer);
 var
-  k, z: Integer;
+  k, z, v: Integer;
   el: TTyChartElement;
 begin
   if (AList = nil) or (AFrom < 0) then Exit;
   z := ModelZLevel(AMainType, AIndex);
+  { ([R7-AH] and its view's place in the root) }
+  v := ViewNum(AMainType, AIndex, CompViewBase(AMainType) + Max(0, Min(99, AIndex)));
   for k := AFrom to AList.Count - 1 do
-    if AList.Ref(k)^.ZLevel <> z then
+    if (AList.Ref(k)^.ZLevel <> z) or not AList.Ref(k)^.ViewKnown or (AList.Ref(k)^.CompView <> v) then
     begin
       el := AList.Element(k);
       el.ZLevel := z;
+      el.CompView := v;
+      el.ViewKnown := True;
       AList.SetElement(k, el);
     end;
 end;
@@ -2645,8 +3019,9 @@ begin
 end;
 
 function TTyCustomAdvanceChart.CompViewOf(const AEl: TTyChartElement): Integer;
+var s: Integer;
 begin
-  if AEl.CompView > 0 then Exit(AEl.CompView);
+  if AEl.ViewKnown or (AEl.CompView > 0) then Exit(AEl.CompView);
   { [R7-AG] each after the views an earlier prepare made (ViewNum) }
   case AEl.Datum.Kind of
     ctkGraphic: Result := ViewNum('graphic', Max(0, AEl.Datum.ComponentIndex), 0);
@@ -2655,29 +3030,194 @@ begin
     ctkGeo: Result := ViewNum('geo', Max(0, AEl.Datum.ComponentIndex),
       4600 + Max(0, AEl.Datum.ComponentIndex));
     ctkSeries:
-      if AEl.Datum.SeriesIndex >= 0 then
-        Result := ViewNum('series', AEl.Datum.SeriesIndex, 100000 + AEl.Datum.SeriesIndex)
-      else Result := 80000;
-    ctkMarkPoint, ctkMarkLine, ctkMarkArea:
-      Result := ViewNum('series', Max(0, AEl.Datum.SeriesIndex), 90000);
+      begin
+        s := AEl.Datum.SeriesIndex;
+        { ([R7-AH] a view's own path of no datum: its series') }
+        if (s < 0) and ((AEl.Anim.Role <> carNone) or (AEl.Anim.UtTag <> 0)) then
+          s := AEl.Anim.Series;
+        if s >= 0 then Result := ViewNum('series', s, 100000 + s)
+        else Result := 80000;
+      end;
+    { ([R7-AH] a marker's: its kind's view (MarkerView, the master model's),
+      the host series' group in it [was: the series' view]) }
+    ctkMarkArea: Result := ViewNum('markArea', 0, 20000 + Max(0, AEl.Datum.ComponentIndex));
+    ctkMarkLine: Result := ViewNum('markLine', 0, 30000 + Max(0, AEl.Datum.ComponentIndex));
+    ctkMarkPoint: Result := ViewNum('markPoint', 0, 40000 + Max(0, AEl.Datum.ComponentIndex));
   else
     Result := 80000;
   end;
 end;
 
+procedure TTyCustomAdvanceChart.ViewsTag(AList: TTyPaintList);
+var k: Integer; pe: PTyChartElement; moved: Boolean;
+begin
+  if AList = nil then Exit;
+  moved := False;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.ViewKnown then Continue;
+    pe^.CompView := CompViewOf(pe^);
+    pe^.ViewKnown := True;
+    moved := True;
+  end;
+  if moved then AList.OrderChanged;
+end;
+
+function TTyCustomAdvanceChart.ViewOrderNames: TTyStringArray;
+var i, j, t: Integer; ord_: TTyIntegerArray;
+
+  function Less(A, B: Integer): Boolean;
+  begin
+    if FViews[A].Rank <> FViews[B].Rank then Exit(FViews[A].Rank < FViews[B].Rank);
+    Result := FViews[A].Index < FViews[B].Index;
+  end;
+
+begin
+  SetLength(ord_, Length(FViews));
+  for i := 0 to High(ord_) do ord_[i] := i;
+  for i := 1 to High(ord_) do
+  begin
+    t := ord_[i];
+    j := i - 1;
+    while (j >= 0) and Less(t, ord_[j]) do
+    begin
+      ord_[j + 1] := ord_[j];
+      Dec(j);
+    end;
+    ord_[j + 1] := t;
+  end;
+  SetLength(Result, Length(ord_));
+  for i := 0 to High(ord_) do
+    if FViews[ord_[i]].MainType = 'series' then Result[i] := 'S' + IntToStr(FViews[ord_[i]].Index)
+    else Result[i] := FViews[ord_[i]].MainType + IntToStr(FViews[ord_[i]].Index);
+end;
+
+function TTyCustomAdvanceChart.ZLevelOfModel(const AKey: string): Integer;
+var i: Integer; mt: string;
+begin
+  i := Length(AKey);
+  while (i > 0) and (AKey[i] in ['0'..'9']) do Dec(i);
+  mt := Copy(AKey, 1, i);
+  if mt = 'S' then Result := SeriesZLevelOf(StrToIntDef(Copy(AKey, i + 1, MaxInt), 0))
+  else Result := ModelZLevel(mt, StrToIntDef(Copy(AKey, i + 1, MaxInt), 0));
+end;
+
+function TTyCustomAdvanceChart.TrailAlphaOf(ASeriesIndex: Integer): Double;
+begin
+  Result := LinesTrailAlpha(ASeriesIndex);
+end;
+
+function TTyCustomAdvanceChart.ViewNameOfEl(const AEl: TTyChartElement): string;
+var v: Integer;
+begin
+  Result := '';
+  if not AEl.ViewKnown then Exit;
+  v := AEl.CompView mod 1000000;
+  if v >= 100000 then Exit('S' + IntToStr(v - 100000));
+  if (v >= 80000) and (v < 100000) then Exit('');
+  if v >= 40000 then Exit('markPoint0');
+  if v >= 30000 then Exit('markLine0');
+  if v >= 20000 then Exit('markArea0');
+  case v div 100 of
+    15: Exit('matrix' + IntToStr(v - 1500));
+    16: Exit('calendar' + IntToStr(v - 1600));
+    46: Exit('geo' + IntToStr(v - 4600));
+    47: Exit('radar' + IntToStr(v - 4700));
+    70: Exit('title' + IntToStr(v - 7000));
+    71: Exit('toolbox' + IntToStr(v - 7100));
+    72: Exit('timeline' + IntToStr(v - 7200));
+    73: Exit('legend' + IntToStr(v - 7300));
+    74: Exit('visualMap' + IntToStr(v - 7400));
+    75: Exit('dataZoom' + IntToStr(v - 7500));
+    76: Exit('thumbnail' + IntToStr(v - 7600));
+    77: Exit('brush' + IntToStr(v - 7700));
+    78: Exit('parallelAxis' + IntToStr(v - 7800));
+    79: Exit('grid' + IntToStr(v - 7900));
+  end;
+  if AEl.Datum.Kind = ctkGraphic then Exit('graphic' + IntToStr(Max(0, AEl.Datum.ComponentIndex)));
+end;
+
+procedure TTyCustomAdvanceChart.ViewKeysAdd(const AVisited: array of string);
+var t, i: Integer; mt: string; have: Boolean;
+begin
+  for t := 0 to TyOptionMainTypeCount - 1 do
+  begin
+    mt := TyOptionTopoType(t);
+    have := False;
+    for i := 0 to High(AVisited) do
+      if AVisited[i] = mt then have := True;
+    if not have then Continue;
+    for i := 0 to High(FViewKeys) do
+      if FViewKeys[i] = mt then have := False;
+    if not have then Continue;
+    SetLength(FViewKeys, Length(FViewKeys) + 1);
+    FViewKeys[High(FViewKeys)] := mt;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.ViewsPrepare(AFresh: Boolean);
 const
-  cTypes: array[0..10] of string = ('graphic', 'matrix', 'calendar', 'singleAxis',
-    'radiusAxis', 'angleAxis', 'geo', 'radar', 'yAxis', 'xAxis', 'series');
+  { a marker's master model (checkMarkerInSeries' `option.markPoint = {}`):
+    one view of every series' markers of that kind }
+  cMarks: array[0..2] of string = ('markArea', 'markLine', 'markPoint');
+  cMaster = #0'master';
 var
   old: array of record
     MainType, Id, Sub: string;
-    Index, Gen, Rank: Integer;
+    Index, Gen, Rank, Key: Integer;
   end;
-  t, i, j, n, found: Integer;
-  id, sub: string;
-  gens: TTyIntegerArray;
+  t, i, j, n, found, kp, s: Integer;
+  mt, id, sub: string;
+  pairs: array of Int64;
+  pv: Int64;
   have: Boolean;
+  node: TJSONData;
+
+  function Brand(const AType: string; AIndex: Integer): Boolean;
+  var q: Integer; k: string;
+  begin
+    k := AType + '#' + IntToStr(AIndex);
+    for q := 0 to High(FViewBrand) do
+      if FViewBrand[q] = k then Exit(True);
+    Result := False;
+  end;
+
+  procedure Add(const AType, AId, ASub: string; AIndex, AKey: Integer; AKeep: Boolean);
+  var q: Integer;
+  begin
+    { a view whose model stays (same id and subType: its viewId) and asks
+      for none new (__requireNewView: a replaceAll's, a replaceMerge's
+      brandNew) }
+    found := -1;
+    if AKeep and not Brand(AType, AIndex) then
+      for q := 0 to High(old) do
+        if (old[q].MainType = AType) and (old[q].Id = AId) and (old[q].Sub = ASub) then
+        begin
+          found := q;
+          Break;
+        end;
+    SetLength(FViews, n + 1);
+    FViews[n].MainType := AType;
+    FViews[n].Id := AId;
+    FViews[n].Sub := ASub;
+    FViews[n].Index := AIndex;
+    FViews[n].Key := AKey;
+    if found >= 0 then FViews[n].Gen := old[found].Gen else FViews[n].Gen := FViewsGen;
+    Inc(n);
+  end;
+
+  function KeyOf(const AType: string): Integer;
+  var q: Integer;
+  begin
+    for q := 0 to High(FViewKeys) do
+      if FViewKeys[q] = AType then Exit(q);
+    { (a type no pass reported: after the keys there are) }
+    SetLength(FViewKeys, Length(FViewKeys) + 1);
+    FViewKeys[High(FViewKeys)] := AType;
+    Result := High(FViewKeys);
+  end;
+
 begin
   if FOption = nil then Exit;
   SetLength(old, Length(FViews));
@@ -2689,61 +3229,87 @@ begin
     old[i].Index := FViews[i].Index;
     old[i].Gen := FViews[i].Gen;
     old[i].Rank := FViews[i].Rank;
+    old[i].Key := FViews[i].Key;
   end;
   FViews := nil;
   Inc(FViewsGen);
   n := 0;
-  for t := 0 to High(cTypes) do
-    for i := 0 to FOption.ComponentCount(cTypes[t]) - 1 do
-    begin
-      id := FOption.ComponentId(cTypes[t], i);
-      if id = '' then Continue;
-      sub := FOption.ComponentSubType(cTypes[t], i);
-      { a view whose model stays (same id and subType: its viewId); after
-        a notMerge only a series' }
-      found := -1;
-      if not AFresh or (cTypes[t] = 'series') then
-        for j := 0 to High(old) do
-          if (old[j].MainType = cTypes[t]) and (old[j].Id = id) and (old[j].Sub = sub) then
-          begin
-            found := j;
-            Break;
-          end;
-      SetLength(FViews, n + 1);
-      FViews[n].MainType := cTypes[t];
-      FViews[n].Id := id;
-      FViews[n].Sub := sub;
-      FViews[n].Index := i;
-      if found >= 0 then FViews[n].Gen := old[found].Gen else FViews[n].Gen := FViewsGen;
-      Inc(n);
-    end;
-  { the prepares' ranks among the live views }
-  gens := nil;
-  for i := 0 to n - 1 do
+  { [R7-AH] THE COMPONENTS IN THE componentsMap'S ORDER (eachComponent:
+    its keys as they went in, each type's models by index) -- a type a
+    pass visited with no model there is a key all the same, so one that
+    gets its first model later goes where that key is [was: a fixed order
+    of ten types]; then every main type with a model no pass reported }
+  for t := 0 to TyOptionMainTypeCount - 1 do
+    if FOption.ComponentCount(TyOptionTopoType(t)) > 0 then KeyOf(TyOptionTopoType(t));
+  for kp := 0 to High(FViewKeys) do
   begin
-    have := False;
-    for j := 0 to High(gens) do
-      if gens[j] = FViews[i].Gen then have := True;
-    if not have then
+    mt := FViewKeys[kp];
+    if mt = 'series' then Continue;
+    for i := 0 to FOption.ComponentCount(mt) - 1 do
     begin
-      SetLength(gens, Length(gens) + 1);
-      gens[High(gens)] := FViews[i].Gen;
+      id := FOption.ComponentId(mt, i);
+      if id = '' then Continue;
+      sub := FOption.ComponentSubType(mt, i);
+      Add(mt, id, sub, i, kp, not AFresh);
+    end;
+    { a marker's master model where the tree has none of its own: the
+      preprocessor's, made where a series first writes that marker }
+    for j := 0 to High(cMarks) do
+    begin
+      if (cMarks[j] <> mt) or (FOption.ComponentCount(mt) > 0) then Continue;
+      have := False;
+      for s := 0 to FOption.ComponentCount('series') - 1 do
+      begin
+        node := FOption.ComponentAt('series', s);
+        if (node is TJSONObject) and (TJSONObject(node).Find(mt) is TJSONObject) then have := True;
+      end;
+      if have then Add(mt, cMaster, '', 0, kp, not AFresh);
     end;
   end;
+  { THE SERIES after them (prepareView(ecIns, false)): a notMerge keeps a
+    series' view of the same id and type too (series is no replaceAll) }
+  for i := 0 to FOption.ComponentCount('series') - 1 do
+  begin
+    id := FOption.ComponentId('series', i);
+    if id = '' then Continue;
+    sub := FOption.ComponentSubType('series', i);
+    Add('series', id, sub, i, MaxInt div 2, True);
+  end;
+  FViewBrand := nil;
+  { the ranks of the live views' (prepare, key) pairs: a prepare's new
+    views in eachComponent's order after every view an earlier one made }
+  pairs := nil;
   for i := 0 to n - 1 do
   begin
+    pv := Int64(FViews[i].Gen) * (Int64(MaxInt) + 1) + FViews[i].Key;
+    have := False;
+    for j := 0 to High(pairs) do
+      if pairs[j] = pv then have := True;
+    if not have then
+    begin
+      SetLength(pairs, Length(pairs) + 1);
+      pairs[High(pairs)] := pv;
+    end;
+  end;
+  if FViewRank = nil then FViewRank := TFPHashList.Create else FViewRank.Clear;
+  for i := 0 to n - 1 do
+  begin
+    pv := Int64(FViews[i].Gen) * (Int64(MaxInt) + 1) + FViews[i].Key;
     FViews[i].Rank := 0;
-    for j := 0 to High(gens) do
-      if gens[j] < FViews[i].Gen then Inc(FViews[i].Rank);
+    for j := 0 to High(pairs) do
+      if pairs[j] < pv then Inc(FViews[i].Rank);
+    mt := FViews[i].MainType + '#' + IntToStr(FViews[i].Index);
+    if FViewRank.Find(mt) = nil then FViewRank.Add(mt, Pointer(PtrInt(FViews[i].Rank + 1)));
   end;
 end;
 
 function TTyCustomAdvanceChart.ViewBorn(const AMainType: string; AIndex: Integer): Integer;
-var i: Integer;
+var p: Pointer;
 begin
   Result := 0;
-  for i := 0 to High(FViews) do
-    if (FViews[i].Index = AIndex) and (FViews[i].MainType = AMainType) then Exit(FViews[i].Rank);
+  if FViewRank = nil then Exit;
+  p := FViewRank.Find(AMainType + '#' + IntToStr(AIndex));
+  if p <> nil then Result := PtrInt(p) - 1;
 end;
 
 function TTyCustomAdvanceChart.ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
@@ -2752,17 +3318,25 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
-var k: Integer;
+var k: Integer; pe: PTyChartElement;
 begin
   if AList = nil then Exit;
-  for k := Max(0, AFrom) to AList.Count - 1 do AList.Ref(k)^.CompView := AView;
+  for k := Max(0, AFrom) to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    pe^.CompView := AView;
+    pe^.ViewKnown := True;
+  end;
+  AList.OrderChanged;
 end;
 
 { [R7-AG] the place of a graphic's element (its view's prepare's rank) or a
   grid's background (0) among the views }
 function TTyCustomAdvanceChart.GfxViewOf(const AEl: TTyChartElement): Integer;
 begin
-  if AEl.Datum.Kind = ctkGraphic then
+  { ([R7-AH] a grid's background: its view's place) }
+  if AEl.ViewKnown then Result := AEl.CompView
+  else if AEl.Datum.Kind = ctkGraphic then
     Result := ViewNum('graphic', Max(0, AEl.Datum.ComponentIndex), 0)
   else
     Result := 0;
@@ -4000,6 +4574,9 @@ begin
         el.ZLevel := Round(Max(Double(-100000), Min(Double(100000), v)));
     end;
     el.Silent := True;
+    { [R7-AH] its view's place in the root (the grid's) }
+    el.CompView := ViewNum('grid', Max(0, gb.ComponentIndex), 7900 + Max(0, Min(99, gb.ComponentIndex)));
+    el.ViewKnown := True;
     AList.Add(el);
     ViewDrew(cvGrid);
   end;
@@ -4077,6 +4654,12 @@ begin
       areas and the parallel axes] }
     frame := AnimFrame;
     FZList := frame;
+    { [R7-AH] a trail among levels: level by level, the trail's through its
+      layer, the components from it on over it }
+    if ZCut < MaxInt then
+      PaintZLevelsCut(APainter, APPI, AMeasurer, FZLevels, AnimPartOf(frame, True), ZCut)
+    else
+    begin
     { [R7-AG] the axes here, with the list's elements among their parts --
       a ripple, an effect symbol of a lower z among them (FContBand: the
       axes are the dynamic layer's) }
@@ -4097,6 +4680,7 @@ begin
     PaintTitles(APainter);
     if TrailZLevel(frame) > ComponentZLevel then PaintTrailAbove(APainter, frame)
     else PaintAboveComponents(APainter, frame);
+    end;
   end
   else if FAnimLive then
   begin

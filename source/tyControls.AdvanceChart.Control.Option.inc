@@ -129,6 +129,7 @@ begin
   FreeAndNil(FProgLayer);
   ProgFastDrop;
   FreeAndNil(FTrailLayer);
+  TrailLevelsFree;
   FreeAndNil(FDzTimer);
   BrushReset;
   BrushFreeCtl(FTbBrushCtl);
@@ -142,6 +143,8 @@ begin
   AxisAnimDrop;
   TmAnimDropAll;
   FreeAndNil(FAxisProxies);
+  FreeAndNil(FViewRank);
+  FreeAndNil(FZAlloc);
   FreeAndNil(FAxisList);
   FreeAndNil(FAnimSet);
   FreeAndNil(FParSeen);
@@ -438,6 +441,15 @@ begin
   MediaViewSize;
   { a new graphic model, from the fresh tree [Batch 122] }
   FGfxFresh := True;
+  { [R7-AH] a new GlobalModel: its componentsMap's keys start with
+    'series' (initBase), each merge pass adds what it visits }
+  FViewKeys := nil;
+  SetLength(FViewKeys, 1);
+  FViewKeys[0] := 'series';
+  FViewBrand := nil;
+  { (and models with no zlevel allocated into them) }
+  if FZAlloc <> nil then FZAlloc.Clear;
+  FZAllocOn := False;
   FOption.SetOptionText(AValue, AReplace, @NotMergePass);
   { no media merge reached the thumbnails: their init's optionUpdated
     [Batch 140] }
@@ -732,8 +744,46 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
-var si, s, n, k: Integer;
+var
+  si, s, n, k: Integer;
+  written: TStringArray;
 begin
+  { [R7-AH] THE componentsMap'S NEW KEYS: what the pass visits -- the base's
+    (initBase's _mergeOption) from the main types the fresh tree writes --
+    and the brand new models a replaceMerge mapped by index }
+  if AReport.AtBase then
+  begin
+    written := nil;
+    if FOption.Root is TJSONObject then
+      for k := 0 to TJSONObject(FOption.Root).Count - 1 do
+        if TyOptionIsComponentType(TJSONObject(FOption.Root).Names[k])
+          and (TJSONObject(FOption.Root).Items[k].JSONType <> jtNull) then
+        begin
+          SetLength(written, Length(written) + 1);
+          written[High(written)] := TJSONObject(FOption.Root).Names[k];
+        end;
+    ViewKeysAdd(TyOptionVisited(written));
+  end
+  else
+  begin
+    ViewKeysAdd(AReport.Visited);
+    for si := 0 to High(AReport.Slots) do
+    begin
+      for s := 0 to High(AReport.Slots[si].Brand) do
+        if AReport.Slots[si].Brand[s] then
+        begin
+          SetLength(FViewBrand, Length(FViewBrand) + 1);
+          FViewBrand[High(FViewBrand)] := AReport.Slots[si].MainType + '#' + IntToStr(s);
+        end;
+      { [R7-AH] a new model, a removed one, or a zlevel merged in: the level
+        an allocation wrote into the model before is gone }
+      for s := 0 to High(AReport.Slots[si].Fate) do
+        if (AReport.Slots[si].Fate[s] in [mfNew, mfRemoved, mfHole])
+          or ((s <= High(AReport.Slots[si].NewOpt)) and (AReport.Slots[si].NewOpt[s] <> nil)
+          and (AReport.Slots[si].NewOpt[s].Find('zlevel') <> nil)) then
+          ZAllocForget(AReport.Slots[si].MainType, s);
+    end;
+  end;
   { [R3-B] THE BASE'S MODELS, before a frame or a media unit merges over
     them: the visualMaps' visuals completed, the graphic model's list made
     from the base's elements -- what upstream's initBase builds }
@@ -805,6 +855,9 @@ begin
     FMergeResize := False;
   end;
   if not Result then Exit;
+  { [R7-AH] resize's `needPrepare && prepare(this)`: the views the media's
+    new models make, after every one there is [was: none recorded] }
+  ViewsPrepare(False);
   { A RESIZE'S UPDATE: the models kept, merged; nothing armed -- upstream
     runs it with duration 0 -- and the Option property keeps the text
     the host wrote (its media with it) }

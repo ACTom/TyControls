@@ -156,6 +156,10 @@ function TyOptionHasSubTypes(const AMainType: string): Boolean;
 { The main types a setOption writing AWritten visits: those, the series and
   the axisPointer, and every main type that depends on a visited one. }
 function TyOptionVisited(const AWritten: array of string): TStringArray;
+{ [R7-AH] ComponentModel.topologicalTravel's order over every main type --
+  the order a merge visits them in, so the order a componentsMap key new to
+  the model goes in: AIndex's type (0 .. TyOptionMainTypeCount - 1) }
+function TyOptionTopoType(AIndex: Integer): string;
 
 { THE KEYS OF A FRESH OPTION -- a notMerge setOption, or the first one: every
   written main type replaceAll over the tree's own indices (a non-object
@@ -245,6 +249,13 @@ const
     'axisPointer', 'geo grid parallel series xAxis yAxis', '', '',
     'geo grid polar series', 'geo grid polar series', 'geo grid polar series',
     'series', 'series', 'geo series', '');
+  { [R7-AH] topologicalTravel(all, all): the dist's order }
+  cTopo: array[0..29] of string = ('dataset', 'timeline', 'title', 'toolbox',
+    'graphic', 'matrix', 'calendar', 'singleAxis', 'radiusAxis', 'angleAxis',
+    'polar', 'axisPointer', 'tooltip', 'parallelAxis', 'parallel', 'component',
+    'geo', 'radar', 'yAxis', 'xAxis', 'grid', 'series', 'thumbnail',
+    'visualMap', 'legend', 'markArea', 'markLine', 'markPoint', 'brush',
+    'dataZoom');
   cSubTyped: array[0..10] of string = ('series', 'xAxis', 'yAxis',
     'parallelAxis', 'angleAxis', 'radiusAxis', 'singleAxis', 'dataZoom',
     'timeline', 'legend', 'visualMap');
@@ -262,6 +273,11 @@ end;
 function TyOptionMainType(AIndex: Integer): string;
 begin
   Result := cMainTypes[AIndex];
+end;
+
+function TyOptionTopoType(AIndex: Integer): string;
+begin
+  Result := cTopo[AIndex];
 end;
 
 function MainTypeIndex(const AKey: string): Integer;
