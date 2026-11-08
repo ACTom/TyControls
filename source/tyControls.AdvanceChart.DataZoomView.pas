@@ -106,6 +106,10 @@ type
     { [R7-M] textStyle as written ('' none): the labels are createTextStyle
       of it, which the control resolves into the ink's block }
     TextStyleJson: string;
+    { [R7-AG] the labels' font is one the canvas refuses (textStyle's
+      fontStyle, fontWeight, fontSize, each else the root textStyle's):
+      drawn in the font the text before left }
+    FontLeft: Boolean;
   end;
 
   { What the chart knows that the option does not. CSS px. }
@@ -511,6 +515,22 @@ var
   k: Integer;
   c: TTyChartColor;
 
+  { [R7-AG] fontStyle, fontWeight, fontSize: each AOwn's, else AGlobal's --
+    whether the canvas refuses the font they make }
+  function FontRefusedIn(AOwn, AGlobal: TJSONObject): Boolean;
+  var parts: array[0..2] of TJSONData; k: Integer;
+  const cKeys: array[0..2] of string = ('fontStyle', 'fontWeight', 'fontSize');
+  begin
+    for k := 0 to 2 do
+    begin
+      parts[k] := nil;
+      if AOwn <> nil then parts[k] := AOwn.Find(cKeys[k]);
+      if ((parts[k] = nil) or (parts[k].JSONType = jtNull)) and (AGlobal <> nil) then
+        parts[k] := AGlobal.Find(cKeys[k]);
+    end;
+    Result := TyCssFontRefused(parts[0], parts[1], parts[2]);
+  end;
+
   { [R7-AC] the root's block at a path ('' the root itself) }
   function RootAt(const AKey, ASub: string): TJSONObject;
   begin
@@ -689,6 +709,8 @@ begin
   StyleOf(ObjOf(OptFind(o, 'lineStyle')), RootAt('selectedDataBackground', 'lineStyle'), '',
     'color', 'width', 'line', ['color', 'width'], Result.ShadowLine[1]);
   s := ObjOf(node.Find('textStyle'));
+  { [R7-AG] }
+  Result.FontLeft := FontRefusedIn(s, RootAt('textStyle', ''));
   if s <> nil then
   begin
     Result.TextStyleJson := s.AsJSON;
@@ -1944,6 +1966,9 @@ begin
           el.Caption.FontName := AInk.FontName;
           el.Caption.FontSizeLogical := AInk.FontSizeLogical;
           el.Caption.FontWeight := AInk.FontWeight;
+          { [R7-AG] a font the canvas refuses: the one the text before left
+            [was: its own readable parts] }
+          if ASpec.FontLeft then el.CanvasFlags := el.CanvasFlags or cTyCanvasFontLeft;
           if ASpec.HasText then el.Caption.Colour := ASpec.TextColour
           else el.Caption.Colour := AInk.Text;
           TyZrApply(M, lb.X, lb.Y, el.Caption.X, el.Caption.Y);

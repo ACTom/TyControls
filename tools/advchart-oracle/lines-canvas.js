@@ -1909,6 +1909,165 @@ function cases() {
         style: { fill: { type: 'radial', x: 0.5, y: 0.5, r: 0.5,
           colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#0000ff' }] } } }] },
     [0], { y: true }],
+    // ---- [R7-AG] (recorded as the aa- ones) ----
+    // 1. fonts the canvas refuses (recorded as the y- ones, the components'
+    //    displayables keyed as the z- ones): the font the text before left
+    //    -- a richText tooltip's spans (its name and value tokens take
+    //    textStyle's weight and size), an axis pointer's label, a dataZoom's
+    //    handle labels, a timeline's labels, a calendar's day, month and year
+    //    labels, a matrix' header labels
+    ['agy-font-tip', Object.assign(vv([{ type: 'scatter', clip: false, name: 'S', symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0,
+      position: [100, 60], textStyle: { fontWeight: 'heavy', color: '#000' } } }),
+    [0], { y: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['agy-font-tip-size', Object.assign(vv([{ type: 'scatter', clip: false, name: 'S', symbolSize: 6,
+      label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0,
+      position: [100, 60], textStyle: { fontSize: '13abcpx', color: '#000' } } }),
+    [0], { y: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['agy-font-ptr', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 1 },
+          label: { show: true, color: '#000', fontStyle: 'slanted', formatter: 'P' } } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-dz', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      dataZoom: [{ type: 'slider', xAxisIndex: 0, showDataShadow: false, handleLabel: { show: true },
+        textStyle: { fontWeight: 'heavy', color: '#000' } }] }),
+    [0], { y: true, z: true }],
+    ['agy-font-timeline', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      timeline: { axisType: 'category', left: 40, right: 40, bottom: 10, data: ['a', 'b', 'c'], autoPlay: false,
+        controlStyle: { show: false }, label: { color: '#000', fontWeight: 'heavy' } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-calendar', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      calendar: { left: 40, top: 60, cellSize: [16, 16], range: '2020-01',
+        dayLabel: { color: '#000', fontWeight: 'heavy', nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'] },
+        monthLabel: { color: '#000', fontStyle: 'slanted',
+          nameMap: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] },
+        yearLabel: { color: '#000', fontSize: '12abcpx' } } }),
+    [0], { y: true, z: true }],
+    ['agy-font-matrix', Object.assign(vv([{ type: 'scatter', clip: false, symbolSize: 6, label: { show: true, position: 'top', formatter: 'Ab', fontSize: 15, fontFamily: 'serif', fontWeight: 'bold' }, data: [[5, 5]] }]), {
+      matrix: { left: 120, top: 120, width: 160, height: 80,
+        x: { data: ['a', 'b'], label: { color: '#000', fontWeight: 'heavy' } },
+        y: { data: ['c'], label: { color: '#000', fontStyle: 'slanted' } } } }),
+    [0], { y: true, z: true }],
+    // 2. [R7-AG] a polar's and a single axis' parts each a view's, interleaved
+    //    with the other views' by z2 (the root's: single, radius, angle, y,
+    //    x): two polars' radius split lines before either's angle ones; a
+    //    cartesian x axis' line (z2 1) after a radius axis' and an angle
+    //    axis' line, before the radius axis' ticks (z2 2); a single axis'
+    //    likewise -- each refused colour the one before it in that order
+    ['ag-polar-two', { animation: false,
+      polar: [{ center: [160, 150], radius: 80 }, { center: [240, 150], radius: 80 }],
+      radiusAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10, axisLine: { show: false }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { show: true, lineStyle: { color: '#ff0000' } } },
+      { polarIndex: 1, type: 'value', min: 0, max: 10, axisLine: { show: false }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { show: true, lineStyle: { color: 'nope' } } }],
+      angleAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10, axisLine: { show: false }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { lineStyle: { color: '#00ff00' } } },
+      { polarIndex: 1, type: 'value', min: 0, max: 10, axisLine: { show: false }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { lineStyle: { color: 'bad' } } }],
+      series: [] },
+    [0], { w: true, z: true }],
+    ['ag-polar-cart', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      polar: { center: [200, 150], radius: 90 },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: '#0000ff' } },
+        axisTick: { show: true, lineStyle: { color: '#ff00ff' } }, axisLabel: { show: false }, splitLine: { show: false } },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: '#00aa00' } }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { show: false } },
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'nope' } }, axisTick: { lineStyle: { color: 'bad' } },
+        axisLabel: { show: false }, splitLine: { show: false } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false }, series: [] },
+    [0], { w: true, z: true }],
+    ['ag-single-cart', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      singleAxis: { type: 'value', min: 0, max: 10, left: 60, right: 60, top: 100, height: 100,
+        axisLine: { lineStyle: { color: '#00aa00' } }, axisTick: { lineStyle: { color: '#ff00ff' } },
+        axisLabel: { show: false }, splitLine: { show: false } },
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'nope' } }, axisTick: { lineStyle: { color: 'bad' } },
+        axisLabel: { show: false }, splitLine: { show: false } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false }, series: [] },
+    [0], { w: true, z: true }],
+    ['ag-polar-single', { animation: false,
+      polar: { center: [200, 150], radius: 90 },
+      radiusAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'nope' } },
+        axisTick: { show: true, lineStyle: { color: '#ff00ff' } }, axisLabel: { show: false }, splitLine: { show: false } },
+      angleAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: 'bad' } }, axisTick: { show: false },
+        axisLabel: { show: false }, splitLine: { show: true, lineStyle: { color: '#ffaa00' } } },
+      singleAxis: { type: 'value', min: 0, max: 10, left: 60, right: 60, top: 100, height: 100,
+        axisLine: { lineStyle: { color: '#00aa00' } }, axisTick: { lineStyle: { color: 'q' } },
+        axisLabel: { show: false }, splitLine: { show: true, lineStyle: { color: '#0000ff' } } },
+      series: [] },
+    [0], { w: true, z: true }],
+    // (§284 (b)) a parallel's axes (z 10) and a calendar (z 2) over a
+    // cartesian x axis (the parallel's clip off once its timer ran: the
+    // steady chart)
+    ['ag-parallel-cart', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      parallel: { left: 80, right: 80, top: 60, bottom: 60 },
+      parallelAxis: [{ dim: 0, min: 0, max: 10, axisLine: { lineStyle: { color: 'nope' } }, axisLabel: { color: '#112233' } },
+        { dim: 1, min: 0, max: 10, axisLine: { lineStyle: { color: '#00aa00' } }, axisTick: { lineStyle: { color: 'bad' } },
+          axisLabel: { color: '#112233' } }],
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: '#ff00ff' } }, axisLabel: { show: false },
+        splitLine: { show: false } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'parallel', lineStyle: { color: '#0000ff', width: 2 }, data: [[3, 7]] }] },
+    [0], { w: true, z: true, timers: true }],
+    ['ag-calendar-cart', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      calendar: { left: 60, top: 80, cellSize: [20, 20], range: '2020-01', dayLabel: { show: false },
+        monthLabel: { show: false }, yearLabel: { show: false },
+        splitLine: { lineStyle: { color: 'nope' } }, itemStyle: { color: '#ffffff', borderColor: 'bad' } },
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { lineStyle: { color: '#ff00ff' } }, axisLabel: { show: false },
+        splitLine: { lineStyle: { color: '#00aa00' } } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false }, series: [] },
+    [0], { w: true, z: true }],
+    // 3. [R7-AG] the root's views in the order they were made: a component a
+    //    merge brings (a radar) after every view there is, the series' too;
+    //    a notMerge makes every component view anew (replaceAll: brandNew)
+    //    after the series' views it keeps -- a series of z 0 then before the
+    //    axes at an equal z2
+    ['ag-merge-radar', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false },
+        splitLine: { lineStyle: { color: '#0000ff' } } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' } }] },
+    [0, 1], { w: true, z: true, sets: { 1: { radar: { center: [200, 150], radius: 80, splitNumber: 3,
+      indicator: [{ max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }], axisName: { show: false },
+      axisLine: { lineStyle: { color: 'nope' } }, splitLine: { lineStyle: { color: 'bad' } },
+      splitArea: { areaStyle: { color: ['q', '#eeeeee'] } } } } } }],
+    // (a bar of z 0 is z2 1, unclipped: among the axes' lines)
+    ['ag-merge-x', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: { type: 'category', data: ['a', 'b'], axisLabel: { show: false }, axisLine: { lineStyle: { color: '#00aa00' } },
+        axisTick: { show: false }, splitLine: { show: false } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'bar', z: 0, data: [3, 5], itemStyle: { color: '#ff0000', borderColor: '#ff00ff', borderWidth: 1 } }] },
+    [0, 1], { w: true, z: true, sets: { 1: { xAxis: [{}, { type: 'category', data: ['a', 'b'], position: 'top',
+      axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: 'nope' } } }] } } }],
+    ['ag-notmerge', { animation: false, grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: { type: 'category', data: ['a', 'b'], axisLabel: { show: false }, axisTick: { show: false },
+        axisLine: { lineStyle: { color: 'nope' } }, splitLine: { show: false } },
+      yAxis: { type: 'value', min: 0, max: 10, show: false },
+      series: [{ type: 'bar', z: 0, data: [3, 5], itemStyle: { color: '#ff0000', borderColor: '#ff00ff', borderWidth: 1 } }] },
+    [0, 1], { w: true, z: true, sets: { 1: '=' }, nm: { 1: true } }],
+    // 4. [R7-AG] what a running animation draws and a progressive layer: a
+    //    ripple of z -1 (its brush a stroke) before the axes' split lines,
+    //    a lines effect of z -1 too; a progressive scatter of z -1 on its
+    //    incremental layer (over the axes: the layer's zlevel + 0.01)
+    ['ag-ripple-under', Object.assign(vv([{ type: 'effectScatter', z: -1, symbolSize: 10, data: [[5, 5]],
+      itemStyle: { color: '#ff0000' }, rippleEffect: { brushType: 'stroke', period: 1, scale: 4 } }]), {
+      animation: true, animationDuration: 0, animationDurationUpdate: 0,
+      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false },
+        splitLine: { lineStyle: { color: 'nope' } } } }),
+    [0, 300, 600], { w: true, z: true, anim: true }],
+    ['ag-effect-under', Object.assign(vv([LN({ color: '#ff00ff', symbol: 'emptyCircle', symbolSize: 10, period: 1 },
+      [{ coords: [[1, 5], [9, 5]] }], { z: -1, lineStyle: { color: '#ff0000', width: 2 } })]), {
+      animation: true, animationDuration: 0, animationDurationUpdate: 0,
+      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false },
+        splitLine: { lineStyle: { color: 'nope' } } } }),
+    [0, 300, 600], { w: true, z: true, anim: true }],
+    ['ag-prog-under', Object.assign(vv([{ type: 'scatter', z: -1, symbolSize: 4, progressive: 50,
+      progressiveThreshold: 100, itemStyle: { color: '#ff0000', borderColor: '#00ff00', borderWidth: 1 },
+      data: Array.from({ length: 150 }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10]) }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false },
+        splitLine: { lineStyle: { color: 'nope' } } } }),
+    [0], { w: true, z: true }],
     // ---- [R7-AF] (recorded as the ae- ones; a text's place and alignment, a clip's path) ----
     // 1. an unplaced slider's handle labels (handleLabel.show): two texts of
     // the view group, in their own frame under the transform the canvas had
@@ -2297,7 +2456,8 @@ function run(id, option, samples, opts) {
   V2 = !!opts.v2 || !!opts.w || !!opts.y;
   W = !!opts.w || !!opts.y;
   Z = !!opts.z;
-  AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-';
+  AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-'
+    || id.slice(0, 3) === 'ag-' || id.slice(0, 4) === 'agy-';
   AF = id.slice(0, 3) === 'af-';
   AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;

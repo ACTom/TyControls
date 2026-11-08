@@ -439,8 +439,9 @@ begin
       - Min(Double(0), Result.TextH + gap);
   if (gw <= 0) or (gh <= 0) then Exit;
 
-  { getLayoutRect on the merged option with the measured block as the size }
-  raw := ASpec.Box;
+  { getLayoutRect on the merged option with the measured block as the size --
+    [R7-AG] its px css px: PPI / 96 device px each [was: device px] }
+  raw := TyBoxRawScaled(ASpec.Box, scale);
   raw.Width := TyBoxRawNum(gw);
   raw.Height := TyBoxRawNum(gh);
   mask := GetExceptionMask;

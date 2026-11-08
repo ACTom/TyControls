@@ -421,6 +421,10 @@ type
     { THE COMPENSATION SCALE: how much a node's symbol is scaled so that a
       zoom enlarges it by only ARatio of the zoom. `ARatio || 1`. }
     function NodeScale(ARatio: Double): Double;
+    { [R7-AG] the device px a css px makes (PPI / 96; nought is 1): the
+      compensation scale is the css px' scale on the device -- a node's
+      symbol, its edges' trim, a ring's shares by it }
+    var PxScale: Double;
     { A roam action on this view -- a pan by (ADX, ADY) when AHasPan, a zoom by
       AScale about (AOX, AOY) when AHasZoom -- answering the centre and zoom
       it leaves. The view is not changed; SetRoam them to apply. }
@@ -1218,6 +1222,10 @@ var
     an item's own symbolOffset is dataSymbolTask's getShallow, over the
     series' and the callback's. nil otherwise. }
   TyGraphItemNodes: TJSONArray = nil;
+  { [R7-AG] THE CSS PX' SCALE while the chart solves a graph (PPI / 96): the
+    box's and the centre's px, the force's edge length (and its repulsion,
+    a length cubed over a length: by the square) are css px. 1 otherwise. }
+  TyGraphPxScale: Double = 1;
 
 implementation
 
@@ -1384,6 +1392,7 @@ begin
   s := FOSX;
   if IsNan(s) or (s = 0) then s := 1;
   Result := ((FZoom - 1) * r + 1) / s;
+  if (PxScale > 0) and (PxScale <> 1) then Result := Result * PxScale;
 end;
 
 procedure TTyGraphView.ApplyRoam(AHasPan: Boolean; ADX, ADY: Double;
@@ -5237,6 +5246,32 @@ begin
     ASolved.Edges[i].SolvedCurveness := res[i];
 end;
 
+{ [R7-AG] A GRAPH'S CSS PX AT THE PPI: its box's px (left, top, right,
+  bottom, width, height), the force's edgeLength by AScale
+  and its repulsion by AScale squared (each step moves a node by repulsion
+  / distance: a length when the repulsion is a length squared) -- upstream
+  works in css px under a canvas scaled by devicePixelRatio }
+procedure GraphSpecAtScale(var ASpec: TTyGraphSpec; AScale: Double);
+
+  procedure Px(var AP: TTyGraphPos);
+  begin
+    if AP.Kind = gpkPx then AP.V := AP.V * AScale;
+  end;
+
+begin
+  if not (AScale > 0) or (AScale = 1) then Exit;
+  Px(ASpec.PosLeft);
+  Px(ASpec.PosTop);
+  Px(ASpec.PosRight);
+  Px(ASpec.PosBottom);
+  Px(ASpec.PosWidth);
+  Px(ASpec.PosHeight);
+  ASpec.Force.EdgeLengthLo := ASpec.Force.EdgeLengthLo * AScale;
+  ASpec.Force.EdgeLengthHi := ASpec.Force.EdgeLengthHi * AScale;
+  ASpec.Force.RepulsionLo := ASpec.Force.RepulsionLo * AScale * AScale;
+  ASpec.Force.RepulsionHi := ASpec.Force.RepulsionHi * AScale * AScale;
+end;
+
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
@@ -5272,6 +5307,8 @@ var
   i: Integer;
   initX, initY: TTyDoubleArray;
   kind: Integer;
+  { [R7-AG] }
+  centre: TTyGraphCentre;
 
   { Which pass this force layout is: 0 fresh, 1 reusing the answer, 2
     continuing from it -- the same test TyGraphLayoutForce makes. }
@@ -5367,6 +5404,8 @@ var
 begin
   Result := Default(TTyGraphSolved);
   GatherGraph(AOption, ASeriesIndex, AStore, Result, all, allEdges);
+  { [R7-AG] the view's px at the PPI [was: device px] }
+  GraphSpecAtScale(Result.Spec, TyGraphPxScale);
 
   mask := MaskFP;
   try
@@ -5399,12 +5438,26 @@ begin
     { THE ROAM, before any layout: the ring sizes its shares by the
       compensation scale the zoom makes. A roam's own centre and zoom beat
       the option's -- upstream wrote them back into it. }
+    { [R7-AG] the css px' scale on the device }
+    Result.View.PxScale := TyGraphPxScale;
     if ARoam.Valid then
       Result.View.SetRoam(ARoam.Centre, ARoam.Zoom, Result.Spec.HasLimit,
         Result.Spec.LimitMin, Result.Spec.LimitMax)
     else
-      Result.View.SetRoam(Result.Spec.Centre, Result.Spec.Zoom,
+    begin
+      { [R7-AG] the centre is in the data rect's frame: with no positions
+        written that is the view rect, css px upstream [was: device px] }
+      centre := Result.Spec.Centre;
+      if not hasData and (TyGraphPxScale > 0) and (TyGraphPxScale <> 1) then
+      begin
+        if not centre.PctX and (centre.X.Kind = gpkPx) then
+          centre.X.V := centre.X.V * TyGraphPxScale;
+        if not centre.PctY and (centre.Y.Kind = gpkPx) then
+          centre.Y.V := centre.Y.V * TyGraphPxScale;
+      end;
+      Result.View.SetRoam(centre, Result.Spec.Zoom,
         Result.Spec.HasLimit, Result.Spec.LimitMin, Result.Spec.LimitMax);
+    end;
     Result.NodeScale := Result.View.NodeScale(Result.Spec.NodeScaleRatio);
 
     case Result.Spec.Layout of
@@ -7346,10 +7399,11 @@ begin
 
     edgeAt := i;
     { [R7-R] each end's width and height (a pair where one is written) }
+    { ([R7-AG] css px: PPI / 96 device px each) }
     TyGraphEdgeSymbolBox(ASpec, AEdges[i], False, ew, eh);
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False), ew, eh, False);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False), ew * pxs, eh * pxs, False);
     TyGraphEdgeSymbolBox(ASpec, AEdges[i], True, ew, eh);
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True), ew, eh, True);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True), ew * pxs, eh * pxs, True);
   end;
 
   for i := 0 to High(ANodes) do
@@ -7401,6 +7455,7 @@ begin
       symX := AInk.Frame.SX * ANodes[i].DragScaleX;
       symY := AInk.Frame.SY * ANodes[i].DragScaleY;
     end;
+
     if (symX <> 1) or (symY <> 1) then
     begin
       sym.WidthPx := symX * (sym.WidthPx / 2) * 2;

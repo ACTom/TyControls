@@ -534,6 +534,8 @@ begin
   FLegendLoaded := False;
   { and new legend views: a first render again [Batch 98] }
   LegAnimDrop;
+  { [R7-AG] every component's view made anew, after the series' it keeps }
+  if not FOption.Error.Failed then ViewsPrepare(True);
   { A NEW OPTION ENTERS: the next render that may animate plays it }
   FAnimPending := True;
   FDirty := True;
@@ -632,6 +634,8 @@ begin
   { [R2-E] the axes whose status the piece writes again }
   OptPtrTakePiece(FOption.MergedPiece);
   FOptionText := FOption.OptionJson;
+  { [R7-AG] the views the merge's new models make, after every one there is }
+  ViewsPrepare(False);
   { AN UPDATE: the series keep their views where their ids and types do }
   FAnimPending := True;
   FDirty := True;

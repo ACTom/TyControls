@@ -124,6 +124,14 @@ type
     TextSizeLogical: Double;
     { [R5-A] textStyle.fontStyle (TyFontStyleCode) }
     TextFontStyle: Byte;
+    { [R7-AG] textStyle.fontWeight as written: the name's and the value's
+      weight (getTooltipTextStyle: `fontWeight || '400'`, `|| '900'`) [was:
+      never read -- the skin's]; and whether the canvas refuses the rich
+      tokens' font it makes with fontSize (richText: drawn in the font the
+      text before left) }
+    TextWeightSet: Boolean;
+    TextWeight: Integer;
+    TextFontLeft: Boolean;
     { [R7-AA] backgroundColor, borderColor, textStyle.color written as a
       string no colour parser reads: html mode, the browser drops the
       declaration (the background transparent, the border currentColor --
@@ -244,6 +252,9 @@ type
     NameSizeLogical: Integer;
     NameWeight: Integer;
     NameColour: TTyChartColor;
+    { [R7-AG] the name's and the value's tokens are in a font the canvas
+      refuses (richText): each run of them is marked FontLeft }
+    NameFontLeft, ValueFontLeft: Boolean;
     { The number. A separate key rather than a second weight of the first:
       upstream separates them by weight alone (400 against 900) and the whole
       typographic hierarchy of the box is in that one difference, so it has to
@@ -295,6 +306,9 @@ type
     { [R7-AC] a text run's shadow colour as the canvas settled it (richText:
       a textShadowColor no parser reads takes what the canvas had) }
     ShadowColour: TTyChartColor;
+    { [R7-AG] a token in a font the canvas refuses (richText): drawn in the
+      font the text before left -- settled into the font fields }
+    FontLeft: Boolean;
     { Set once measured. }
     X, W: Double;
   end;
@@ -435,6 +449,11 @@ type
     Gap: Double;
     Params: TTyChartParams;
     IsAxis: Boolean;
+    { [R7-AG] the device px a css px makes (PPI / 96; nought is 1): the
+      lengths above are device px, _updatePosition works in css px -- the
+      option's px, the handler's arguments and answer, the gap, the
+      calcTooltipPosition offset and refix's extra 2 }
+    PxScale: Double;
   end;
 
 { TooltipView._updatePosition, line for line: a position handler is run and
@@ -1071,6 +1090,12 @@ begin
         ASpec.TextSizeLogical := Max(Double(1), Min(Double(400), d.AsFloat));
       end;
       ASpec.TextFontStyle := TyFontStyleCode(ts.Find('fontStyle'));
+      { [R7-AG] the weight, and the rich tokens' font refused }
+      d := ts.Find('fontWeight');
+      ASpec.TextWeightSet := TyFontWeightOf(d, 0) > 0;
+      if ASpec.TextWeightSet then ASpec.TextWeight := TyFontWeightOf(d, 400)
+      else ASpec.TextWeight := 0;
+      ASpec.TextFontLeft := TyCssFontRefused(nil, d, ts.Find('fontSize'));
       { [R7-AC] the text's shadow [was: never read -- the option had no
         effect] }
       d := ts.Find('textShadowBlur');
@@ -1505,12 +1530,37 @@ begin
   Result := (AWord = 'center') or (AWord = 'middle');
 end;
 
+{ [R7-AG] the place's lengths in css px (PxScale 1) }
+function PlaceInCss(const AIn: TTyTooltipPlaceIn): TTyTooltipPlaceIn;
+var s: Double;
+begin
+  Result := AIn;
+  s := AIn.PxScale;
+  Result.PxScale := 1;
+  if not (s > 0) or (s = 1) then Exit;
+  Result.PointX := AIn.PointX / s;
+  Result.PointY := AIn.PointY / s;
+  Result.ContentW := AIn.ContentW / s;
+  Result.ContentH := AIn.ContentH / s;
+  Result.ViewW := AIn.ViewW / s;
+  Result.ViewH := AIn.ViewH / s;
+  Result.Rect := TyXYWH(AIn.Rect.X / s, AIn.Rect.Y / s, AIn.Rect.W / s, AIn.Rect.H / s);
+  Result.BorderWidth := AIn.BorderWidth / s;
+  Result.Gap := AIn.Gap / s;
+end;
+
 procedure TyTooltipRunPosition(const ASpec: TTyTooltipSpec;
   const AIn: TTyTooltipPlaceIn; out APos: TTyChartTooltipPos);
 var args: TTyChartTooltipPosArgs;
 begin
   APos := ASpec.Position;
   if ASpec.PositionHandler = '' then Exit;
+  { ([R7-AG] the handler is handed css px) }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    TyTooltipRunPosition(ASpec, PlaceInCss(AIn), APos);
+    Exit;
+  end;
   args := Default(TTyChartTooltipPosArgs);
   args.PointX := AIn.PointX;
   args.PointY := AIn.PointY;
@@ -1539,6 +1589,17 @@ var
   lay: TTyXYWH;
   mask: TFPUExceptionMask;
 begin
+  { [R7-AG] IN CSS PX, as _updatePosition places the DOM box: the place's
+    lengths divided by the PPI's scale, the answer multiplied back [was:
+    the option's px, the gap's arithmetic and the corner's offset taken
+    as device px] }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    Result := TyTooltipPlace(ASpec, PlaceInCss(AIn));
+    Result.X := Result.X * AIn.PxScale;
+    Result.Y := Result.Y * AIn.PxScale;
+    Exit;
+  end;
   w := AIn.ContentW;
   h := AIn.ContentH;
   x := AIn.PointX;
@@ -1736,6 +1797,7 @@ begin
   begin
     Result.Runs[n] := TextRun(ABlock.Name, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result.Runs[n].FontLeft := AInk.NameFontLeft;
     Inc(n);
   end;
   if not ABlock.NoValue then
@@ -1747,6 +1809,7 @@ begin
     alignRight := (ABlock.Marker <> ttmNone) or not ABlock.NoName;
     Result.Runs[n] := TextRun(ABlock.Value, AInk.ValueFontName,
       AInk.ValueSizeLogical, AInk.ValueWeight, AInk.ValueColour, alignRight);
+    Result.Runs[n].FontLeft := AInk.ValueFontLeft;
     Inc(n);
   end;
   SetLength(Result.Runs, n);
@@ -1814,6 +1877,7 @@ begin
       upstream inks it from exactly the same pair as an inline name. }
     Result[0].Runs[0] := TextRun(ABlock.Header, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result[0].Runs[0].FontLeft := AInk.NameFontLeft;
   end;
   for i := 0 to ABlock.BlockCount - 1 do
   begin

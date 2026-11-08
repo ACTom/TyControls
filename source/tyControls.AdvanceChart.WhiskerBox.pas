@@ -113,9 +113,12 @@ procedure TyBoxWidthBounds(ABoxWidth: TJSONData; ABand: Double;
 function TyWhiskerBand(AAxis: TTyAxis; const AStores: array of TTyDataStore;
   const ASeries: TTyIntegerArray): Double;
 
-{ One candle's points. ABaseIsX: the layout is horizontal. }
+{ One candle's points. ABaseIsX: the layout is horizontal. [R7-AG]
+  APxScale: the device px a css px makes (PPI / 96) -- the half pixel the
+  sides and the spine snap to is a css px' }
 function TyCandleEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
-  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double): TTyCandleEnds;
+  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double;
+  APxScale: Double = 1): TTyCandleEnds;
 
 { candlestickLayout's makeBrushRect: lowest to highest along the value axis,
   a candle wide across it, from the lowest point moved back half a candle
@@ -315,11 +318,21 @@ begin
 end;
 
 function TyCandleEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
-  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double): TTyCandleEnds;
+  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double;
+  APxScale: Double): TTyCandleEnds;
 const
   cHalf: Double = 2;
 var
   ocLow, ocHigh, lowest, highest: TTyPointF;
+
+  { [R7-AG] subPixelOptimize on the css px' half pixel: upstream lays the
+    candle out in css px under a canvas scaled by devicePixelRatio [was:
+    the device px' half pixel] }
+  function Snap(AV: Double; APos: Boolean): Double;
+  begin
+    if not (APxScale > 0) or (APxScale = 1) then Exit(TySubPixelOptimize(AV, 1, APos));
+    Result := TySubPixelOptimize(AV / APxScale, 1, APos) * APxScale;
+  end;
 
   { addBodyEnd: the point moved half a candle each way along the base, each
     side snapped to the half pixel -- the far side back, the near side on }
@@ -330,13 +343,13 @@ var
     p2 := P;
     if ABaseIsX then
     begin
-      p1.X := TySubPixelOptimize(p1.X + AWidth / cHalf, 1, False);
-      p2.X := TySubPixelOptimize(p2.X - AWidth / cHalf, 1, True);
+      p1.X := Snap(p1.X + AWidth / cHalf, False);
+      p2.X := Snap(p2.X - AWidth / cHalf, True);
     end
     else
     begin
-      p1.Y := TySubPixelOptimize(p1.Y + AWidth / cHalf, 1, False);
-      p2.Y := TySubPixelOptimize(p2.Y - AWidth / cHalf, 1, True);
+      p1.Y := Snap(p1.Y + AWidth / cHalf, False);
+      p2.Y := Snap(p2.Y - AWidth / cHalf, True);
     end;
     if AStart then
     begin
@@ -355,8 +368,8 @@ var
   function Spine(const P: TTyPointF): TTyPointF;
   begin
     Result := P;
-    if ABaseIsX then Result.X := TySubPixelOptimize(Result.X, 1, False)
-    else Result.Y := TySubPixelOptimize(Result.Y, 1, False);
+    if ABaseIsX then Result.X := Snap(Result.X, False)
+    else Result.Y := Snap(Result.Y, False);
   end;
 
 begin

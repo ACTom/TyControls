@@ -2367,6 +2367,12 @@ begin
       rowSym.WidthPx := AVisual.Sizes[raw];
       rowSym.HeightPx := AVisual.Sizes[raw];
     end;
+    { [R7-AG] the size css px: PPI / 96 device px [was: device px] }
+    if (APPI > 0) and (APPI <> 96) then
+    begin
+      rowSym.WidthPx := rowSym.WidthPx * (APPI / 96);
+      rowSym.HeightPx := rowSym.HeightPx * (APPI / 96);
+    end;
     { [R2-A] the row's label: its item's own over the series' }
     rowLabel := AVisual.Label_;
     rowItemLabel := (raw >= 0) and (raw <= High(AVisual.HasItemLabel))

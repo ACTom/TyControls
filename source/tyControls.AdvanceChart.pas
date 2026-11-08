@@ -1921,6 +1921,20 @@ type
       list's elements in the components' band (FPaintList indices) }
     FCompNp: Integer;
     FCompBand: TTyIntegerArray;
+    { [R7-AG] THE ROOT'S VIEWS IN THE ORDER THEY WERE MADE (prepareView):
+      each a component's (main type, index, id, subType) or a series' (id,
+      type), with the prepare that made it and that prepare's rank among
+      the live ones -- what CompViewOf and CompRun put first among the
+      views at an equal z and z2 }
+    FViews: array of record
+      MainType, Id, Sub: string;
+      Index, Gen, Rank: Integer;
+    end;
+    FViewsGen: Integer;
+    { [R7-AG] the band holds an element the continuous phase draws (a ripple,
+      an effect symbol, what follows them): the axes are then the dynamic
+      layer's in that phase, with every element of the list }
+    FContBand: Boolean;
     { [R7-AD] what PrepareSeries counted, for RenderSeries }
     FSerDrawn: Integer;
     FCompRects: TTyCompRectArray;
@@ -3509,8 +3523,12 @@ type
     procedure FreeSingles;
     { every single's axis view: the grid layer (split areas and lines) with
       ABelow, the line, ticks, labels and name without [Batch 118] }
+    { [R7-AG] AOnly: that single axis alone (-1 every one); AZ2: that z2's
+      parts alone -- 0 the split areas and lines, 1 the name and the line,
+      2 the ticks, 10 the labels, 11 the arrows (-1: ABelow's pass) }
     procedure PaintSingles(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer = -1;
+      AZ2: Integer = -1);
     procedure PaintSinglePointer(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
     { themeRiverLayout over every themeRiver, after the singles are laid out
@@ -3536,8 +3554,12 @@ type
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
+    { [R7-AG] AOnly: that polar alone (-1 every one); AKind 0 its radius
+      axis' view, 1 its angle axis'; AZ2: that z2's parts of it alone (-1:
+      ABelow's pass of both) }
     procedure PaintPolars(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer = -1;
+      AKind: Integer = -1; AZ2: Integer = -1);
     procedure PaintPolarPointer(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
     procedure SolveGraphs(APPI: Integer);
@@ -3595,6 +3617,18 @@ type
       4600, a radar 4700, the y axes 5000, the x axes 6000 (each plus its
       index), the list's other components after them, the series last }
     function CompViewOf(const AEl: TTyChartElement): Integer;
+    { [R7-AG] a setOption's prepareView: AFresh (a notMerge, the first, a
+      restore) makes every component's view anew (replaceAll: brandNew) and
+      keeps the series' views of the same id and type; a merge keeps every
+      view whose model it keeps (same id and subType) -- what is made is
+      after every view there is }
+    procedure ViewsPrepare(AFresh: Boolean);
+    { the rank of the prepare that made the view (0 the earliest live) }
+    function ViewBorn(const AMainType: string; AIndex: Integer): Integer;
+    { ABase after every view made by an earlier prepare: the place a view
+      of that type and index takes (CompViewOf's numbers) }
+    function ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
+    function GfxViewOf(const AEl: TTyChartElement): Integer;
     { [R7-AD] AList's elements from AFrom on: of the view AView }
     procedure CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
     procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;
