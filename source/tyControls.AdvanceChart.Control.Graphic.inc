@@ -338,9 +338,7 @@ end;
 
 procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter; APaint: Boolean);
 var
-  i, n, cut, k: Integer;
-  onTrail: Boolean;
-  tl: TTyIntegerArray;
+  i, n: Integer;
   el: TTyChartElement;
   from: TTyIntegerArray;
 begin
@@ -369,25 +367,45 @@ begin
   for i := 0 to n - 1 do FGfxPaint[from[i]] := FGfxUnder.Element(i);
   { [R7-AD] (drawn among the axes' parts: PaintAxes) }
   if not APaint then Exit;
-  { [R7-AJ] in the continuous phase, from the trail's level on the frames'
-    (PaintZLevelsCut), and on a trail's level its layer's, painted every
-    frame (AnimPartOf) }
+  for i := 0 to FGfxUnder.Count - 1 do
+  begin
+    el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
+    if el.Ignore then Continue;
+    TyRenderElement(APainter, el);
+    { [R7-Z] (CompDrawn) }
+    if el.Datum.Kind = ctkGraphic then
+      CompDrew(nil, 'graphic0', 0, el.Z2, el.Caption.FontSizeLogical <> 0, el);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
+var
+  i, k, cut: Integer;
+  pe: PTyChartElement;
+  tl: TTyIntegerArray;
+  onTrail: Boolean;
+begin
+  if (FGfxUnder = nil) or (APainter = nil) then Exit;
+  { (asked after the series pass armed the animation) }
   cut := ZCut;
   tl := nil;
   if FAnimContinuous and not FExporting then tl := TrailLevels;
   for i := 0 to FGfxUnder.Count - 1 do
   begin
-    el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
-    if el.Ignore then Continue;
-    if el.ZLevel >= cut then Continue;
+    pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(i));
+    if pe^.Ignore or (pe^.ZLevel <= ALo) or (pe^.ZLevel > AHi) then Continue;
+    { from the trail's level on the frames' (PaintZLevelsCut), and on a
+      trail's level its layer's, painted every frame (AnimPartOf) }
+    if pe^.ZLevel >= cut then Continue;
     onTrail := False;
     for k := 0 to High(tl) do
-      if tl[k] = el.ZLevel then onTrail := True;
+      if tl[k] = pe^.ZLevel then onTrail := True;
     if onTrail then Continue;
-    TyRenderElement(APainter, el);
-    { [R7-Z] (CompDrawn) }
-    if el.Datum.Kind = ctkGraphic then
-      CompDrew(nil, 'graphic0', 0, el.Z2, el.Caption.FontSizeLogical <> 0, el);
+    { (after a full paint's first blit: what its log cannot say) }
+    if FProgLogOn then FProgLogBad := True;
+    TyRenderElement(APainter, pe^);
+    if pe^.Datum.Kind = ctkGraphic then
+      CompDrew(nil, 'graphic0', 0, pe^.Z2, pe^.Caption.FontSizeLogical <> 0, pe^);
   end;
 end;
 

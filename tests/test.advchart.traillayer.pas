@@ -31,7 +31,9 @@ type
     FForm: TForm;
     FCtl: TTyStyleController;
     FChart: TTlProbe;
-    FBmp: TBGRABitmap;
+    { an opaque 24-bit canvas, as a window's }
+    FBmp: TBitmap;
+    function Pix(AX, AY: Integer): TBGRAPixel;
     procedure Play(const AOption: string; AFrames: Integer);
   protected
     procedure SetUp; override;
@@ -40,6 +42,7 @@ type
     procedure TestAGraphicUnderTheTrailIsPaintedOnItsLayer;
     procedure TestAGraphicOnTheTrailsOwnLevelIsPaintedOnIt;
     procedure TestAGraphicOverATrailOfALowerZLevelStaysOver;
+    procedure TestAGraphicUnderTheAxesIsOverALowerZLevel;
   end;
 
 implementation
@@ -47,8 +50,8 @@ implementation
 const
   cT0 = 1700000000000;
   { the lines of a trail along y 5 (150 px), from x 1 (72 px) to 9 (328 px),
-    the symbol 256 px a second; no axis drawn }
-  cBase = '{"animation":true,"animationDuration":0,"animationDurationUpdate":0,'
+    the symbol 256 px a second; no axis drawn; on an opaque white ground }
+  cBase = '{"animation":true,"animationDuration":0,"animationDurationUpdate":0,"backgroundColor":"#ffffff",'
     + '"grid":{"left":40,"right":40,"top":40,"bottom":40},'
     + '"xAxis":{"type":"value","min":0,"max":10,"show":false},'
     + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
@@ -106,7 +109,11 @@ begin
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, 400, 300);
   PinClocks(FChart, cT0);
-  FBmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  FBmp := TBitmap.Create;
+  FBmp.PixelFormat := pf24bit;
+  FBmp.SetSize(400, 300);
+  FBmp.Canvas.Brush.Color := clWhite;
+  FBmp.Canvas.FillRect(Rect(0, 0, 400, 300));
   FChart.AnimationMode := camAlways;
   FChart.SetOption(AOption, True);
   AssertEquals('parses', '', FChart.OptionError);
@@ -118,7 +125,14 @@ begin
     FChart.Layered(FBmp.Canvas, Rect(0, 0, 400, 300), 96);
   end;
   if GetEnvironmentVariable('TY_TL_SAVE') <> '' then
-    FBmp.SaveToFile(GetEnvironmentVariable('TY_TL_SAVE') + 'trail-gfx.png');
+    FBmp.SaveToFile(GetEnvironmentVariable('TY_TL_SAVE') + 'trail-gfx-' + IntToStr(Length(AOption)) + '.bmp');
+end;
+
+function TAdvChartTrailLayerTest.Pix(AX, AY: Integer): TBGRAPixel;
+var c: TColor;
+begin
+  c := ColorToRGB(FBmp.Canvas.Pixels[AX, AY]);
+  Result := BGRA(Red(c), Green(c), Blue(c), 255);
 end;
 
 function Px(const P: TBGRAPixel): string;
@@ -135,23 +149,31 @@ var p: TBGRAPixel;
 begin
   Play(Format(cBase, ['{"type":"rect","z":-5,"shape":{"x":100,"y":120,"width":60,"height":60},'
     + '"style":{"fill":"#00ff00"}},{"type":"rect","shape":{"x":250,"y":120,"width":40,"height":60},'
-    + '"style":{"fill":"#0000ff"}}', -1]), 30);
+    + '"style":{"fill":"#0000ff"}},{"type":"rect","z":-5,"shape":{"x":200,"y":60,"width":40,"height":40},'
+    + '"style":{"fill":"#00ff00","opacity":0.5}}', -1]), 30);
   AssertEquals('the lines on zlevel 0', 0, FChart.ZLevelOf('S0'));
   AssertEquals('the axes on zlevel 1', 1, FChart.ZLevelOf('xAxis0'));
   { the symbol passed x 130 some 250 ms ago: there the rect, painted after
     the fade, covers the trail }
-  p := FBmp.GetPixel(130, 146);
+  p := Pix(130, 146);
   AssertTrue('the rect under the lines over the faded trail: ' + Px(p),
     (p.green > 230) and (p.red < 30) and (p.blue < 30));
   { the frame's line over it }
-  p := FBmp.GetPixel(130, 150);
+  p := Pix(130, 150);
   AssertTrue('the line over the rect under it: ' + Px(p), (p.red > 200) and (p.green < 60));
   { the rect of z 0 over the line }
-  p := FBmp.GetPixel(270, 150);
+  p := Pix(270, 150);
   AssertTrue('the rect after the lines over them: ' + Px(p), (p.blue > 230) and (p.red < 30));
   { off the rects, the trail fades as before }
-  p := FBmp.GetPixel(180, 146);
+  p := Pix(180, 146);
   AssertTrue('the trail beside the rects: ' + Px(p), (p.red > 200) and (p.red - p.green > 40));
+  { a rect of opacity 0.5 painted every frame over the layer drawn back at
+    0.94 (trailLength 0.4): its alpha a = 0.5 + 0.5 * 0.94 * a, near 0.943
+    after 31 frames -- over white about (14, 255, 14) [was: drawn once,
+    (127, 255, 127)] }
+  p := Pix(220, 80);
+  AssertTrue('the half-clear rect on the trail''s layer, its frames summed: ' + Px(p),
+    (p.red >= 10) and (p.red <= 19) and (p.green > 250) and (Abs(p.red - p.blue) <= 2));
 end;
 
 { THE LINES OF THE DEFAULT z ON zlevel 1 (the axes on 0), a rect of the
@@ -164,12 +186,12 @@ begin
     + '"style":{"fill":"#00ff00"}}', 2]), 30);
   AssertEquals('the lines on zlevel 1', 1, FChart.ZLevelOf('S0'));
   AssertEquals('the axes on zlevel 0', 0, FChart.ZLevelOf('xAxis0'));
-  p := FBmp.GetPixel(130, 150);
+  p := Pix(130, 150);
   AssertTrue('the line over the rect of a lower z: ' + Px(p), (p.red > 200) and (p.green < 60));
-  p := FBmp.GetPixel(130, 146);
+  p := Pix(130, 146);
   AssertTrue('the rect over the faded trail: ' + Px(p),
     (p.green > 230) and (p.red < 30) and (p.blue < 30));
-  p := FBmp.GetPixel(180, 146);
+  p := Pix(180, 146);
   AssertTrue('the trail beside the rect: ' + Px(p), (p.red > 200) and (p.red - p.green > 40));
 end;
 
@@ -180,17 +202,38 @@ procedure TAdvChartTrailLayerTest.TestAGraphicOverATrailOfALowerZLevelStaysOver;
 var p: TBGRAPixel; opt: string;
 begin
   opt := StringReplace(Format(cBase, ['{"type":"rect","z":-5,"shape":{"x":100,"y":120,"width":60,"height":60},'
-    + '"style":{"fill":"#00ff00"}}', 2]), '"coordinateSystem":"cartesian2d",',
+    + '"style":{"fill":"#00ff00"}},{"type":"rect","z":-5,"shape":{"x":200,"y":60,"width":40,"height":40},'
+    + '"style":{"fill":"#00ff00","opacity":0.5}}', 2]), '"coordinateSystem":"cartesian2d",',
     '"coordinateSystem":"cartesian2d","zlevel":-1,', []);
   Play(opt, 30);
   AssertEquals('the lines on zlevel -1', -1, FChart.ZLevelOf('S0'));
   AssertEquals('the axes on zlevel 0', 0, FChart.ZLevelOf('xAxis0'));
-  p := FBmp.GetPixel(130, 150);
+  p := Pix(130, 150);
   AssertTrue('the rect over the line: ' + Px(p), (p.green > 230) and (p.red < 30));
-  p := FBmp.GetPixel(130, 146);
+  p := Pix(130, 146);
   AssertTrue('the rect over the trail: ' + Px(p), (p.green > 230) and (p.red < 30));
-  p := FBmp.GetPixel(180, 146);
+  p := Pix(180, 146);
   AssertTrue('the trail beside the rect: ' + Px(p), (p.red > 200) and (p.red - p.green > 40));
+  { a rect of opacity 0.5 on a layer of no motion blur: drawn once a frame }
+  p := Pix(220, 80);
+  AssertTrue('the half-clear rect drawn once: ' + Px(p),
+    (p.red >= 124) and (p.red <= 131) and (p.green > 250) and (Abs(p.red - p.blue) <= 2));
+end;
+
+{ AT REST, THE LEVELS DRAWN APART (a series written onto zlevel -1, the axes
+  on 0): the graphic's rect of z -5 under the axes is on zlevel 0, over the
+  series' canvas [was: drawn first of all, under it] }
+procedure TAdvChartTrailLayerTest.TestAGraphicUnderTheAxesIsOverALowerZLevel;
+var p: TBGRAPixel;
+begin
+  Play('{"animation":false,"backgroundColor":"#ffffff","grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}}],'
+    + '"series":[{"type":"scatter","zlevel":-1,"symbolSize":60,"itemStyle":{"color":"#ff0000","opacity":1},"data":[[5,5]]}]}', 0);
+  p := Pix(200, 150);
+  AssertTrue('the rect over the series of a lower zlevel: ' + Px(p), (p.green > 230) and (p.red < 30));
+  p := Pix(200, 125);
+  AssertTrue('the series round it: ' + Px(p), (p.red > 230) and (p.green < 30));
 end;
 
 initialization

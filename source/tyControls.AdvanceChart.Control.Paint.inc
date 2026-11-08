@@ -1357,8 +1357,10 @@ begin
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   axesHere := not FZMixed and (FExporting or not AxesDynamic);
   { [R7-AD] the graphic's elements under the axes drawn among their parts
-    where the axes are drawn here (PaintAxes) }
-  GfxPaintUnder(APainter, not axesHere);
+    where the axes are drawn here (PaintAxes) -- ([R7-AJ] the levels drawn
+    apart: each on its level, GfxPaintBand [was: all of them first, under
+    a lower level's list too]) }
+  GfxPaintUnder(APainter, not axesHere and not FZMixed);
   if FZMixed then
   begin
     PaintZLevels(APainter, APPI, AMeasurer, FZLevels, False, nil);
@@ -2018,14 +2020,26 @@ var
   i, lv, prev: Integer;
   over: Boolean;
 
-  procedure ListBand(ALo, AHi: Integer; AFirst: Boolean);
+  procedure ListBand(ALo, AHi: Integer; AFirst, AGfx: Boolean);
   begin
     TySetZBand(ALo, AHi);
     try
       if ADynamic then TyRenderPaintList(APainter, AFrame)
-      { the static layer's first: the series pass builds the list }
-      else if AFirst then PaintSeries(APainter, AMeasurer, APPI)
-      else RenderZList(APainter, FZList, APPI);
+      { the static layer's first: the series pass builds the list -- ([R7-AJ]
+        the graphic's elements under the axes of the band under it, once
+        the pass has armed the animation) }
+      else if AFirst then
+      begin
+        PrepareSeries(AMeasurer, APPI);
+        GfxPaintBand(APainter, ALo, AHi);
+        RenderSeries(APainter, AMeasurer, APPI);
+      end
+      else
+      begin
+        { (a level's own: drawn under its axes) }
+        if AGfx then GfxPaintBand(APainter, ALo, AHi);
+        RenderZList(APainter, FZList, APPI);
+      end;
     finally
       TyClearZBand;
     end;
@@ -2039,10 +2053,12 @@ begin
   for i := 0 to High(ALevels) do
   begin
     lv := ALevels[i];
-    ListBand(prev, lv - 1, (i = 0) and not ADynamic);
+    ListBand(prev, lv - 1, (i = 0) and not ADynamic, True);
     FZApartOn := True;
     FZApartLevel := lv;
     try
+      { ([R7-AJ] the graphic's elements under the level's axes) }
+      if not ADynamic then GfxPaintBand(APainter, lv - 1, lv);
       if ADynamic then
       begin
         if AxesInDynamic then PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
@@ -2054,7 +2070,7 @@ begin
         ProgLogFurn(1);
         PaintAxes(APainter, APPI, AMeasurer, False);
       end;
-      ListBand(lv - 1, lv, False);
+      ListBand(lv - 1, lv, False, False);
       if ADynamic or (lv < ZCut) then
       begin
         if over then
@@ -2083,6 +2099,7 @@ begin
   begin
     TySetZBand(prev, ZStaticTop);
     try
+      GfxPaintBand(APainter, prev, ZStaticTop);
       RenderZList(APainter, FZList, APPI);
     finally
       TyClearZBand;

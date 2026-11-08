@@ -4946,6 +4946,12 @@ type
     { [R7-AD] APaint False: made ready and run, not drawn (PaintAxes draws
       them among the axes' parts) }
     procedure GfxPaintUnder(APainter: TTyPainter; APaint: Boolean = True);
+    { [R7-AJ] THE ELEMENTS UNDER THE AXES OF THE ZLEVELS ALo < z <= AHi, in
+      their order -- the static layer's when the levels are drawn apart
+      (PaintZLevels): each on its level, under its axes, over a lower
+      level's list; not from the continuous phase's cut on, nor on a
+      trail's level (their layer's, painted every frame) }
+    procedure GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
     { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
     procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;
