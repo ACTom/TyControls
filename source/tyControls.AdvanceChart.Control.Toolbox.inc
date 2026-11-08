@@ -359,21 +359,25 @@ begin
     for i := 0 to High(rad) do rad[i] := FTbSpecs[t].Radius[i] * s;
     if Length(rad) > 0 then el.Shape := TyShapeRoundRect(pr, rad)
     else el.Shape := TyShapeRect(pr);
-    if TbColour(FTbSpecs[t].Background, ink.Background, c) and ((c shr 24) <> 0) then
+    { [R7-AA] makeBackground's Rect is always there: its fill the
+      backgroundColor ('transparent' by default) and its stroke the
+      borderColor, handed to the canvas at a width of nought too [was:
+      built only when it drew something] }
+    if TbColour(FTbSpecs[t].Background, ink.Background, c) then
     begin
       el.Style.HasFill := True;
       el.Style.FillColor := c;
     end;
-    if (FTbSpecs[t].BorderWidth > 0) and TbColour(FTbSpecs[t].BorderColor, ink.Border, c) then
+    if TbColour(FTbSpecs[t].BorderColor, ink.Border, c) then
     begin
       el.Style.StrokeColor := c;
-      el.Style.StrokeWidthLogical := FTbSpecs[t].BorderWidth;
+      if FTbSpecs[t].BorderWidth > 0 then el.Style.StrokeWidthLogical := FTbSpecs[t].BorderWidth;
     end;
     { [R7-X] the shadow and the border's dash, phase, cap, join and
       miterLimit [was: never drawn] }
     if FTbSpecs[t].HasShadow then TyStyleSetShadow(el.Style, FTbSpecs[t].Shadow);
     TyStyleTakeBorderKeys(el.Style, FTbSpecs[t].Look);
-    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) or ((el.Style.StrokeColor shr 24) <> 0) then
     begin
       AList.Add(el);
       Inc(Result);

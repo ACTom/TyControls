@@ -72,6 +72,14 @@ type
     Gradient: TTyChartGradient;
     { [R7-Z] the width is +Infinity (the canvas keeps the one it had) }
     WidthInf: Boolean;
+    { [R7-AA] getLineStyle's shadow, lineJoin and miterLimit: the shadow
+      key by key (ShadowKeys, TTyOptStyle's bits; Shadow holds the written
+      ones), Join -1 not written else TyJoinOfWord's (3 a word the canvas
+      refuses), Miter NaN or 0 not written else TyOptMiterLimit's }
+    ShadowKeys: Byte;
+    Shadow: TTyChartShadow;
+    Join: Integer;
+    Miter: Double;
   end;
 
   { the canvas' lineCap }
@@ -96,8 +104,22 @@ type
       cTyCanvasStrokeLeft (a colour no parser reads), cTyCanvasWidthLeft
       (+Infinity), cTyCanvasPhaseLeftFlag (a phase that is no number),
       cTyCanvasCapLeft (a word that is not a lineCap) -- settled in paint
-      order before the axis is drawn }
+      order before the axis is drawn. [R7-AA] cTyCanvasShadowLeft (a
+      shadowColor no parser reads), cTyCanvasBlurLeft (a blur below
+      nought), cTyCanvasJoinLeft, cTyCanvasMiterLeft the same }
     Left: Word;
+    { [R7-AA] ITS SHADOW, JOIN AND MITERLIMIT [was: never drawn nor handed
+      on]: HasShadow where the pen wrote a shadow key (the colour zrender's
+      '#000' where it wrote none), the join TyJoinOfWord's, the miterLimit
+      the canvas' (10 where none) }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+    Join: Byte;
+    Miter: Double;
+    { [R7-AA] a plain colour it hands the canvas as its strokeStyle -- also
+      at a width of nought, where it strokes nothing (zrender assigns every
+      string stroke, hasStroke or not) }
+    Inked: Boolean;
   end;
 
   { What an axis actually draws, once its TYPE's defaults and the `auto`
@@ -2076,6 +2098,8 @@ var c: string;
 begin
   Result := Default(TTyAxisPen);
   Result.Cap := -1;
+  Result.Join := -1;
+  Result.Miter := NaN;
   { an unreadable colour, 'auto': not written -- the skin answers (a
     gradient or a pattern is held as the solid it degrades to) }
   if AStyle.Color.Written and not AStyle.Color.IsAuto then
@@ -2099,6 +2123,11 @@ begin
   else if c = 'square' then Result.Cap := Ord(acSquare)
   else if c <> '' then Result.Cap := 3;
   Result.Opacity := AStyle.Opacity;
+  { [R7-AA] the shadow, join and miterLimit }
+  Result.ShadowKeys := AStyle.ShadowKeys;
+  Result.Shadow := AStyle.Shadow;
+  if AStyle.Join <> '' then Result.Join := TyJoinOfWord(AStyle.Join);
+  Result.Miter := AStyle.MiterLimit;
 end;
 
 function TyAxisPenOver(const ATop, ABase: TTyAxisPen): TTyAxisPen;
@@ -2128,6 +2157,18 @@ begin
   end;
   if Result.Cap < 0 then Result.Cap := ABase.Cap;
   if IsNan(Result.Opacity) then Result.Opacity := ABase.Opacity;
+  { [R7-AA] key by key, as zrender's defaults() over getLineStyle }
+  if ((Result.ShadowKeys and 1) = 0) and ((ABase.ShadowKeys and 1) <> 0) then
+    Result.Shadow.Blur := ABase.Shadow.Blur;
+  if ((Result.ShadowKeys and 2) = 0) and ((ABase.ShadowKeys and 2) <> 0) then
+    Result.Shadow.OffsetX := ABase.Shadow.OffsetX;
+  if ((Result.ShadowKeys and 4) = 0) and ((ABase.ShadowKeys and 4) <> 0) then
+    Result.Shadow.OffsetY := ABase.Shadow.OffsetY;
+  if ((Result.ShadowKeys and 8) = 0) and ((ABase.ShadowKeys and 8) <> 0) then
+    Result.Shadow.Color := ABase.Shadow.Color;
+  Result.ShadowKeys := Result.ShadowKeys or ABase.ShadowKeys;
+  if Result.Join < 0 then Result.Join := ABase.Join;
+  if IsNan(Result.Miter) or (Result.Miter = 0) then Result.Miter := ABase.Miter;
 end;
 
 function TyAxisStrokeOf(const APen: TTyAxisPen; ASkinHas: Boolean;
@@ -2181,6 +2222,33 @@ begin
   else Result.Cap := ADefaultCap;
   if IsNan(APen.Opacity) then Result.Opacity := 1
   else Result.Opacity := APen.Opacity;
+  { [R7-AA] a plain colour is the canvas' strokeStyle, stroked or not }
+  Result.Inked := (APen.HasColour and not APen.ColourNone and (APen.Gradient.Kind = cgkNone))
+    or (not APen.HasColour and ASkinHas);
+  { [R7-AA] THE SHADOW, key by key: zrender's '#000' where no colour, a
+    blur and offsets of nought where none; a colour no parser reads and a
+    blur below nought the canvas refuses }
+  if APen.ShadowKeys <> 0 then
+  begin
+    Result.HasShadow := True;
+    if (APen.ShadowKeys and 1) <> 0 then Result.Shadow.Blur := APen.Shadow.Blur;
+    if (APen.ShadowKeys and 2) <> 0 then Result.Shadow.OffsetX := APen.Shadow.OffsetX;
+    if (APen.ShadowKeys and 4) <> 0 then Result.Shadow.OffsetY := APen.Shadow.OffsetY;
+    if (APen.ShadowKeys and 8) <> 0 then Result.Shadow.Color := APen.Shadow.Color
+    else Result.Shadow.Color := TTyChartColor($FF000000);
+    if Result.Shadow.Color = cTyCanvasColourLeft then
+      Result.Left := Result.Left or cTyCanvasShadowLeft;
+    if Result.Shadow.Blur < 0 then Result.Left := Result.Left or cTyCanvasBlurLeft;
+  end;
+  { [R7-AA] the join and the miterLimit: a word, a limit the canvas
+    refuses keeps the one it had }
+  if APen.Join = cTyCanvasWordLeft then
+    Result.Left := Result.Left or cTyCanvasJoinLeft
+  else if APen.Join > 0 then Result.Join := APen.Join;
+  Result.Miter := 10;
+  if IsNan(APen.Miter) then
+  else if APen.Miter < 0 then Result.Left := Result.Left or cTyCanvasMiterLeft
+  else if APen.Miter > 0 then Result.Miter := APen.Miter;
 end;
 
 { THE AUTHOR'S PENS [R5-B] along upstream's chains (AxisBuilder's axisLine,

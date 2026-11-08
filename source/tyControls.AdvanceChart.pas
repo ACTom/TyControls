@@ -1901,6 +1901,9 @@ type
     FCompOrder: TTyIntegerArray;
     FCompNg: Integer;
     FCompRects: TTyCompRectArray;
+    { [R7-AA] how many of FCompParts CompRun made (the parallel axes' run,
+      ParRun, appends its own after them) }
+    FCompBase: Integer;
     FCompDrawn: TTyCompPartArray;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
@@ -1973,6 +1976,8 @@ type
       yet lays its box out first), and the colour it gave the box's border }
     FTipPaintGen: Integer;
     FTipBorderPainted: TTyColor;
+    { [R7-AA] the box's fill as last painted (TooltipSurfaceColour) }
+    FTipSurfacePainted: TTyColor;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R7-N] the pointer labels the last PaintAxisPointers drew }
@@ -3528,7 +3533,8 @@ type
     procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
       const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
       const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
-      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray);
+      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray;
+      const AAreaInks: TTyIntegerArray);
     procedure CompPolarSingleParts(var AParts: TTyCompPartArray);
     { an axis pen of a polar's or a single axis' as it is stroked
       (CompSettlePen), logged (CompDrawn); a text colour likewise }
@@ -3542,6 +3548,9 @@ type
     { a split line's or area's colour of the author's list (AInk) as its
       first part settled it }
     function CompInkOf(AOwner: TObject; AKind: Byte; AInk: Integer): TTyChartColor;
+    { [R7-AA] a split area band's (ABand: its count among the axis' bands)
+      colour as its part settled it }
+    function CompBandInk(AOwner: TObject; AKind: Byte; ABand: Integer): TTyChartColor;
     { the colour a text part fills with: a refused one the canvas' }
     function CompSettleFill(AOwner: TObject; AKind: Byte; AColour: TTyChartColor): TTyChartColor;
     { [R7-Z] the run of the list (FPaintList) from the ground up to the
@@ -3568,10 +3577,17 @@ type
     { [R7-AB] a text part's font the canvas refused: AStyle's font the one
       the paint order settled it to }
     procedure CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
+    { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
+      from where the list's run reaches their z: appended to FCompParts }
+    procedure ParRun;
     { [R7-Z] a title's box and text colours, the canvas refusing them }
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor);
     procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor);
+    { [R7-AA] a title line's block holds a colour the canvas refuses }
+    function TitlePiecesCarry(AIndex: Integer): Boolean;
+    { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
+    procedure CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
     { a part as drawn (CompDrawn) }
     procedure CompDrew(AOwner: TObject; const AKey: string; AKind: Byte; AZ2: Integer;
       AText: Boolean; const AEl: TTyChartElement);
@@ -3991,6 +4007,12 @@ type
     { [R2-I8] the box reads its text as html: the tooltip component's
       renderMode is not 'richText' ('auto' as TooltipAutoRichText says) }
     function TipHtmlMode: Boolean;
+    { [R7-AA] the box's and the text's colours the option writes and no
+      parser reads, as html or the canvas shows them (TooltipInk sets the
+      text's) }
+    procedure TipSettleRefused(const ASpec: TTyTooltipSpec; const AInk: TTyTooltipInk;
+      var ASurface: TTyFill; var ABorder: TTyColor; ABorderW: Double; const ASt: TTyStyleSet;
+      var ALines: TTyTooltipLineArray);
     { [R2-I8] a component item's content in the box's language: encodeHTML'd
       in html mode, as setTooltipConfig's encodeHTMLContent has it }
     function TipContentName(const AName: string): string;
@@ -4480,6 +4502,8 @@ type
     { THE COLOUR THE LAST PAINT GAVE THE BOX'S BORDER; 0 when no box was
       drawn }
     function TooltipBorderColour: TTyColor;
+    { [R7-AA] the colour the tooltip's box was last filled in }
+    function TooltipSurfaceColour: TTyColor;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;

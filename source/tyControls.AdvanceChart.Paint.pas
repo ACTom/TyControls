@@ -832,6 +832,10 @@ type
     HasEmph: Boolean;
     EmphColour, EmphStrokeColour: TTyChartColor;
     EmphStrokeWidthLogical: Double;
+    { [R7-AA] what the hover's label writes of its ink: 1 its color, 2 its
+      textBorderColor or textBorderWidth -- the state style's keys, which go
+      over a block's own (TyCaptionToEmphasis) }
+    EmphOwnInk: Byte;
     { Set by a mark whose label host is FILLED BUT TRANSPARENT -- a pictorial
       bar's target rect. Its ink is chosen as over a transparent fill, not as
       over no fill at all. }

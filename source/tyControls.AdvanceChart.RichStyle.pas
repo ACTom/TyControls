@@ -505,7 +505,9 @@ begin
     Result.HasOpacity := True;
     Result.Opacity := x;
   end;
-  if ColourRead(ts.Find('textShadowColor'), c) = crColour then
+  { [R7-AA] a colour no parser reads too: the canvas keeps the shadowColor
+    it had (the run settles cTyCanvasColourLeft) [was: none] }
+  if ColourReadText(ts.Find('textShadowColor'), c) = crColour then
   begin
     Result.HasShadowColor := True;
     Result.ShadowColor := c;
@@ -660,7 +662,8 @@ begin
   if TyCssFontRefused(Get(AOwn, 'fontStyle'), nil, nil) then S.FontLeft := S.FontLeft or 1;
   if TyCssFontRefused(nil, Get(AOwn, 'fontWeight'), nil) then S.FontLeft := S.FontLeft or 2;
   if TyCssFontRefused(nil, nil, Get(AOwn, 'fontSize')) then S.FontLeft := S.FontLeft or 4;
-  if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
+  { [R7-AA] (a refused one the canvas' own) }
+  if ColourReadText(WithGlobal('textShadowColor'), c) = crColour then
   begin
     S.HasShadowColor := True;
     S.ShadowColor := c;

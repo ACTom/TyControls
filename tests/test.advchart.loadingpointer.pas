@@ -125,6 +125,8 @@ type
     { [R5-F] its border, opacity and shadow; an image:// icon }
     procedure TestAStyledHandleAsUpstream;
     procedure TestAnImageHandleAsUpstream;
+    { [R7-AA] the option root's handle: its border, opacity and shadow }
+    procedure TestTheRootHandleAsUpstream;
     procedure TestTheHandleSlidesAsUpstream;
   end;
 
@@ -1107,6 +1109,11 @@ end;
 procedure TAdvChartPointerHandleOracleTest.TestAnImageHandleAsUpstream;
 begin
   RunCase('x-image');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestTheRootHandleAsUpstream;
+begin
+  RunCase('x-root-handle');
 end;
 
 procedure TAdvChartPointerHandleOracleTest.TestACategoryXHandleAsUpstream;

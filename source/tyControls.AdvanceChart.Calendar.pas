@@ -1716,6 +1716,12 @@ begin
   else splitStyle.Alpha := 1;
   { [R5-A] splitLine.lineStyle's shadow }
   TyStyleSetShadow(splitStyle, spec.Split.Shadow);
+  { [R7-AA] and its cap, join and miterLimit (getLineStyle's; a word, a
+    limit the canvas refuses keeps the one it had) [was: never drawn] }
+  if spec.Split.Cap <> '' then splitStyle.LineCap := TyCapOfWord(spec.Split.Cap);
+  if spec.Split.Join <> '' then splitStyle.LineJoin := TyJoinOfWord(spec.Split.Join);
+  if not IsNan(spec.Split.MiterLimit) and (spec.Split.MiterLimit <> 10) then
+    splitStyle.MiterLimit := spec.Split.MiterLimit;
   splitLw := splitLw * scale;
 
   tl := nil;

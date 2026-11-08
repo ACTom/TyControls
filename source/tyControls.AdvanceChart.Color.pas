@@ -313,6 +313,14 @@ type
       `lineWidth > 0`), the canvas refusing the width and keeping the one it
       had (BorderWidthLogical is 0) }
     WidthInf: Boolean;
+    { [R7-AA] a lineStyle's own `join` as written ('' when not), its
+      `miterLimit` (TyOptMiterLimit's: NaN not written, -1 one the canvas
+      refuses) and which of the four shadow keys it wrote (1 shadowBlur, 2
+      shadowOffsetX, 4 shadowOffsetY, 8 shadowColor) -- what getLineStyle
+      hands an axis' pieces, each key falling back on its own }
+    Join: string;
+    MiterLimit: Double;
+    ShadowKeys: Byte;
   end;
 
 { [R5-A] A SHADOW FROM THE FOUR VALUES a style block writes (nil or null: not
@@ -1713,6 +1721,19 @@ begin
   { [R5-A] getLineStyle's four shadow keys }
   TyShadowOfValues(AObj.Find('shadowBlur'), AObj.Find('shadowOffsetX'),
     AObj.Find('shadowOffsetY'), AObj.Find('shadowColor'), Result.Shadow);
+  { [R7-AA] which of them it wrote, its join and miterLimit }
+  Result.ShadowKeys := 0;
+  d := AObj.Find('shadowBlur');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.ShadowKeys := Result.ShadowKeys or 1;
+  d := AObj.Find('shadowOffsetX');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.ShadowKeys := Result.ShadowKeys or 2;
+  d := AObj.Find('shadowOffsetY');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.ShadowKeys := Result.ShadowKeys or 4;
+  d := AObj.Find('shadowColor');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.ShadowKeys := Result.ShadowKeys or 8;
+  d := AObj.Find('join');
+  if (d <> nil) and (d.JSONType = jtString) then Result.Join := d.AsString;
+  Result.MiterLimit := TyOptMiterLimit(AObj.Find('miterLimit'));
 end;
 
 function TyStyleAccessPath(const ASeriesType: string): string;

@@ -334,6 +334,8 @@ const
 
 function TyPieSpecDefault: TTyPieSpec;
 begin
+  { every field nought first, so a field no line below sets is a safe answer }
+  Result := Default(TTyPieSpec);
   Result.Box := TyBoxSpec;
   { PieSeries.ts:258-263. All four edges pinned at zero and no size given, so
     the box solves to the whole container -- which is what makes an ordinary

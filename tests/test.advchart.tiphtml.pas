@@ -27,7 +27,7 @@ unit test.advchart.tiphtml;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Graphics, Forms, BGRABitmap, BGRABitmapTypes,
-     tyControls.Controller, tyControls.AdvanceChart, tyControls.FontUnits,
+     tyControls.Controller, tyControls.AdvanceChart, tyControls.FontUnits, tyControls.Types,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Handlers,
      tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.TipHtml,
@@ -112,6 +112,7 @@ type
     procedure TestTheEventGoesFirst;
     procedure TestAnUnhandledEventFallsThroughToTheReading;
     procedure TestAnOverrideReplacesTheReading;
+    procedure TestRefusedCssColoursAsTheBrowserShowsThem;
     procedure TestTheNutrientsBoxHasNoMarkup;
     procedure TestAComponentsNameIsTextInHtml;
   end;
@@ -859,6 +860,40 @@ begin
   AssertTrue('taken', FChart.DispatchAction('{"type":"showTip","matrixIndex":0,"name":"A<B>&amp;"}'));
   Render;
   AssertEquals('richText: as written too', 'A<B>&amp;', AllText);
+end;
+
+{ [R7-AA] COLOURS NO PARSER READS IN THE HTML BOX. TooltipHTMLContent writes
+  them into the div's cssText (`background-color:nope`, `border-color:bad`
+  then `border-color:<the near point's colour, the borderColor>`,
+  `color:nope`, and the content's spans `color:nope`); a browser drops a
+  declaration whose value it cannot parse (CSS Syntax: an invalid
+  declaration is ignored), so the box shows each property's fallback: no
+  background-color is left -- CSS's initial transparent; no border-color --
+  its initial currentColor, the div's text colour; no color -- the one it
+  inherits, the page's (a browser's default black, CanvasText). Not an
+  oracle run: node has no DOM; these are CSS's own rules. }
+procedure TAdvChartTipHtmlChartTest.TestRefusedCssColoursAsTheBrowserShowsThem;
+var l: TTyTooltipLineArray; i, j: Integer;
+begin
+  Show(Format(cBar, ['"tooltip":{"backgroundColor":"nope","borderColor":"bad","textStyle":{"color":"nope"},'
+    + '"formatter":"Ab"},']));
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+  Render;
+  AssertEquals('background-color dropped: transparent', 0, TyAlphaOf(FChart.TooltipSurfaceColour));
+  AssertEquals('border-color dropped twice: currentColor, the inherited black',
+    IntToHex($FF000000, 8), IntToHex(FChart.TooltipBorderColour, 8));
+  l := FChart.Lines;
+  AssertTrue('a line', Length(l) > 0);
+  for i := 0 to High(l) do
+    for j := 0 to High(l[i].Runs) do
+      AssertEquals('color dropped: the page''s black', IntToHex($FF000000, 8),
+        IntToHex(TTyColor(l[i].Runs[j].Colour), 8));
+  { a written text colour: the border's currentColor is it }
+  Show(Format(cBar, ['"tooltip":{"borderColor":"bad","textStyle":{"color":"#123456"},"formatter":"Ab"},']));
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+  Render;
+  AssertEquals('currentColor: the text''s', IntToHex($FF123456, 8), IntToHex(FChart.TooltipBorderColour, 8));
+  AssertTrue('the background the skin''s, not dropped', TyAlphaOf(FChart.TooltipSurfaceColour) > 0);
 end;
 
 initialization
