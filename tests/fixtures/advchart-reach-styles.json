@@ -17,6 +17,10 @@
    "name": "r7acsvg2",
    "svg": true,
    "text": "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\"><path name=\"P\" d=\"M10 10 L90 10 L90 90\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/><path name=\"Q\" d=\"M110 90 L110 10 L190 10\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1\"/></svg>"
+  },
+  {
+   "name": "r7aisq",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[20,5],[30,5],[30,15],[20,15],[20,5]]]}}]}"
   }
  ],
  "charts": [
@@ -5452,6 +5456,257 @@
     },
     "at": [
      80,
+     150
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref-turned",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "group",
+      "name": "G",
+      "x": 200,
+      "y": 120,
+      "rotation": 0.6,
+      "scaleX": 1.5,
+      "scaleY": 0.7,
+      "tooltip": {
+       "show": true,
+       "formatter": "grp"
+      },
+      "children": [
+       {
+        "type": "rect",
+        "shape": {
+         "x": 0,
+         "y": 0,
+         "width": 40,
+         "height": 30
+        },
+        "style": {
+         "fill": "#ff0000"
+        }
+       },
+       {
+        "type": "circle",
+        "x": 10,
+        "shape": {
+         "cx": 70,
+         "cy": 10,
+         "r": 12
+        },
+        "style": {
+         "fill": "#0000ff"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "grp",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "grp",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "G"
+    },
+    "at": [
+     262.48165366803914,
+     89.12795836185741
+    ]
+   }
+  },
+  {
+   "id": "tip.graphic-ref-scaled",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "graphic": [
+     {
+      "type": "group",
+      "name": "G",
+      "x": 60,
+      "y": 50,
+      "scaleX": 2,
+      "scaleY": 1.5,
+      "tooltip": {
+       "show": true,
+       "formatter": "grp"
+      },
+      "children": [
+       {
+        "type": "rect",
+        "shape": {
+         "x": 0,
+         "y": 0,
+         "width": 40,
+         "height": 30
+        },
+        "style": {
+         "fill": "#ff0000"
+        }
+       },
+       {
+        "type": "rect",
+        "rotation": 0.4,
+        "shape": {
+         "x": 50,
+         "y": 10,
+         "width": 20,
+         "height": 20
+        },
+        "style": {
+         "fill": "none",
+         "stroke": "#0000ff",
+         "lineWidth": 6
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "grp",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "grp",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "graphicIndex": 0,
+     "name": "G"
+    },
+    "at": [
+     140.08825785839608,
+     56.01491597711653
+    ]
+   }
+  },
+  {
+   "id": "tip.geo-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "geo": {
+     "map": "r7aisq",
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "A",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "A",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "geoIndex": 0,
+     "name": "A"
+    },
+    "at": [
+     200,
      150
     ]
    }

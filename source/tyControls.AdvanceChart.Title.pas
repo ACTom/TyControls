@@ -61,6 +61,9 @@ type
     { CSS order: top, right, bottom, left. Kept as four because `padding` takes
       the CSS short forms and collapsing them early would lose them. }
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     ItemGap: Double;
     Align: TTyTitleAlign;
     VAlign: TTyTitleVAlign;
@@ -106,6 +109,10 @@ type
     { [R7-G] the same box in the group's own frame (the group sits at
       TextX, TextY): x and y before the group's place is added }
     FrameLX, FrameLY: Double;
+    { [R7-AI] the frame's width and height where the padding joined them as
+      strings ('16.02' + '2' + '2'): drawn at their numbers, but
+      subPixelOptimizeRect's `originX + originWidth` joins again ('' none) }
+    FrameWText, FrameHText: string;
     TextX, TextY: Double;
     SubX, SubY: Double;
     TextW, TextH: Double;
@@ -148,15 +155,34 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
 implementation
 
 uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
-  tyControls.AdvanceChart.ZrPath;
+  tyControls.AdvanceChart.ZrPath,
+  { [R7-AI] a padding written as a string }
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
 
 function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
   AScale: Double): TTyRectF;
-var r: TTyXYWH;
+var
+  r: TTyXYWH;
+  { [R7-AI] the css px a device px makes }
+  s: Double;
 begin
   { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
   r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
     ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
+  { [R7-AI] a size the padding joined as a string: `originX + originWidth`
+    joined again (`'-2' + '16.0222'`), and `originWidth === 0` never true --
+    on the same css px grid: the place, the width and the string css px }
+  if not (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
+  begin
+    if (AScale > 0) and (AScale <> 1) then s := AScale else s := 1;
+    if ALayout.FrameWText <> '' then
+      r.W := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
+        + ALayout.FrameWText), ALineWidthPx / s, False) - r.X / s, 1.0) * s;
+    if ALayout.FrameHText <> '' then
+      r.H := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
+        + ALayout.FrameHText), ALineWidthPx / s, False) - r.Y / s, 1.0) * s;
+  end;
   { through the group's transform (a translation): x + tx, the far edge
     (x + w) + tx }
   Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,
@@ -302,6 +328,8 @@ var
   node, root: TJSONObject;
   d: TJSONData;
   joinHas: Boolean;
+  { [R7-AI] a padding side }
+  k: Integer;
 begin
   Result := TyTitleSpecDefault;
   if AOption = nil then Exit;
@@ -321,6 +349,16 @@ begin
   Result.WordV := TyBoxWord(Result.Box.Top, Result.Box.Bottom);
 
   ReadPadding(node, Result.Padding);
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  d := node.Find('padding');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.PadJs := TyJsPadOf(d);
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   Result.ItemGap := NumIn(node, 'itemGap', Result.ItemGap);
   Result.Align := AlignOf(StrIn(node, 'textAlign'));
   { textBaseline is the older spelling and wins when both are present --
@@ -390,6 +428,8 @@ var
   word_: string;
   scale: Double;
   mask: TFPUExceptionMask;
+  { [R7-AI] the place and the frame's size as JS holds them }
+  xv, yv, jw, jh: TTyRtJs;
 begin
   Result := Default(TTyTitleLayout);
   if not ASpec.Show then Exit;
@@ -450,6 +490,17 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
+    if ASpec.PadJs.Js then
+    begin
+      { [R7-AI] A PADDING HELD AS JS VALUES, in css px: the place joined
+        ('20' + '2' is '202') and the size's margins joined ('2' + '2') }
+      raw := ASpec.Box;
+      raw.Width := TyBoxRawNum(gw / scale);
+      raw.Height := TyBoxRawNum(gh / scale);
+      r := TyGetLayoutRectJs(raw, AContainer.X / scale, AContainer.Y / scale,
+        AContainer.W / scale, AContainer.H / scale, ASpec.PadJs, xv, yv);
+    end
+    else
     r := TyGetLayoutRect(raw, AContainer.X, AContainer.Y,
       AContainer.W, AContainer.H,
       [pad[0], pad[1], pad[2], pad[3]]);
@@ -473,6 +524,15 @@ begin
     word_ := ASpec.WordH;
     Result.Align := AlignOf(word_);
     if Result.Align = ttaAuto then Result.Align := ttaLeft;
+    { ([R7-AI] `layoutRect.x += layoutRect.width`: joined where the place is
+      a string) }
+    if ASpec.PadJs.Js then
+    begin
+      if Result.Align = ttaRight then xv := TyRtJsAdd(xv, TyRtJsNum(r.W))
+      else if Result.Align = ttaCentre then xv := TyRtJsAdd(xv, TyRtJsNum(r.W / 2));
+      gx := xv.N;
+    end
+    else
     if Result.Align = ttaRight then
       gx := gx + r.W
     else if Result.Align = ttaCentre then
@@ -483,11 +543,27 @@ begin
   begin
     word_ := ASpec.WordV;
     Result.VAlign := VAlignOf(word_);
+    if ASpec.PadJs.Js then
+    begin
+      if Result.VAlign = ttvBottom then yv := TyRtJsAdd(yv, TyRtJsNum(r.H))
+      else if Result.VAlign = ttvMiddle then yv := TyRtJsAdd(yv, TyRtJsNum(r.H / 2));
+      gy := yv.N;
+    end
+    else
     if Result.VAlign = ttvBottom then
       gy := gy + r.H
     else if Result.VAlign = ttvMiddle then
       gy := gy + r.H / 2;
     if Result.VAlign = ttvAuto then Result.VAlign := ttvTop;
+  end;
+  { ([R7-AI] the JS path solved in css px; a place that is no number lays
+    nothing out here -- upstream's group.x NaN draws under the transform the
+    canvas kept) }
+  if ASpec.PadJs.Js then
+  begin
+    if IsNan(gx) or IsNan(gy) or IsInfinite(gx) or IsInfinite(gy) then Exit;
+    gx := gx * scale;
+    gy := gy * scale;
   end;
 
   Result.TextX := gx;
@@ -533,6 +609,19 @@ begin
   Result.FrameY := gy + (ly - pad[0]);
   Result.FrameW := gw + pad[1] + pad[3];
   Result.FrameH := lh + pad[0] + pad[2];
+  { [R7-AI] `groupRect.width + padding[1] + padding[3]`, joined where a side
+    is a string (in css px) }
+  if ASpec.PadJs.Js then
+  begin
+    jw := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(gw / scale), TyJsPadV(ASpec.PadJs, 1)),
+      TyJsPadV(ASpec.PadJs, 3));
+    jh := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(lh / scale), TyJsPadV(ASpec.PadJs, 0)),
+      TyJsPadV(ASpec.PadJs, 2));
+    Result.FrameW := jw.N * scale;
+    Result.FrameH := jh.N * scale;
+    if jw.IsStr then Result.FrameWText := jw.S;
+    if jh.IsStr then Result.FrameHText := jh.S;
+  end;
   Result.Frame := TyRectF(Result.FrameX, Result.FrameY,
     Result.FrameX + Result.FrameW, Result.FrameY + Result.FrameH);
 

@@ -23,6 +23,8 @@ type
     FRoot: TJSONData;
     FMeasurer: ITyTextMeasurer;
     FBad, FCompared, FTexts: Integer;
+    { [R7-AI] the case is one of the r7ai ones }
+    FR7ai: Boolean;
     FReport: string;
     procedure SetUp; override;
     procedure TearDown; override;
@@ -147,6 +149,7 @@ var
   { [R7-AF] a width written as a string }
   j: TJSONString;
   w: Double;
+  pad: TJSONArray;
 begin
   Result := TyRtStyleDefault;
   Result.FontSizePx := 0;
@@ -221,12 +224,22 @@ begin
     Result.HasHeight := True;
     Result.Height := Hex(d);
   end;
+  { [R7-AI] the padding zrender held, as RichStyle hands it: numbers the
+    recorder wrote as hex (beside a `paddingText` twin), anything else as
+    zrender held it -- a string, an array of strings, true }
   d := O.Find('padding');
-  if d is TJSONArray then
+  if (d is TJSONArray) and (O.Find('paddingText') <> nil) then
   begin
-    Result.HasPadding := True;
-    for k := 0 to 3 do Result.Padding[k] := Hex(TJSONArray(d).Items[k]);
-  end;
+    pad := TJSONArray.Create;
+    try
+      for k := 0 to TJSONArray(d).Count - 1 do pad.Add(Hex(TJSONArray(d).Items[k]));
+      TyRtTakePadding(pad, Result);
+    finally
+      pad.Free;
+    end;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
+    TyRtTakePadding(d, Result);
   if ColourOf(Str(O.Find('backgroundColor')), c) then
   begin
     Result.HasBackground := True;
@@ -334,6 +347,14 @@ var
   c: TTyChartColor;
   bx, by: Double;
 begin
+  { [R7-AI] A TEXT LAID OUT IN ITS HOST'S OVERFLOW AREA (a matrix cell's,
+    calcInnerTextOverflowArea): the engine is handed no such area, its
+    width `defaultOuterWidth - paddingH` -- the wiring test holds it. Only
+    the r7ai cases, whose padding is a string, are left out here. }
+  if FR7ai and (T.Find('defaultStyle') is TJSONObject)
+    and (T.Objects['defaultStyle'].Find('overflowRect') <> nil)
+    and (T.Objects['defaultStyle'].Find('overflowRect').JSONType = jtBoolean)
+    and T.Objects['defaultStyle'].Booleans['overflowRect'] then Exit;
   Inc(FTexts);
   if T.Find('style') is TJSONObject then style := StyleOf(T.Objects['style'])
   else style := StyleOf(nil);
@@ -495,6 +516,19 @@ begin
       else if q.HasStroke and not Near(q.LineWidth, Hex(p.Find('lineWidth'))) then
         Miss(where, Format('text %d stroke width %s upstream, %s here', [i,
           Str(p.Find('lineWidthText')), FloatToStr(q.LineWidth)]));
+      { [R7-AI] THE RECT rectContain READS where it holds a string: its far
+        edges joined in JS (null: no number) }
+      if p.Find('hit') is TJSONArray then
+      begin
+        Inc(FCompared);
+        if not q.HitJs then
+          Miss(where, Format('text %d "%s": a joined rect upstream, none here', [i, p.Strings['text']]))
+        else if not (Near(q.HitL, Hex(p.Arrays['hit'].Items[0])) and Near(q.HitT, Hex(p.Arrays['hit'].Items[1]))
+          and Near(q.HitR, Hex(p.Arrays['hit'].Items[2])) and Near(q.HitB, Hex(p.Arrays['hit'].Items[3]))) then
+          Miss(where, Format('text %d "%s": rect %g,%g to %g,%g upstream, %g,%g to %g,%g here', [i,
+            p.Strings['text'], Hex(p.Arrays['hit'].Items[0]), Hex(p.Arrays['hit'].Items[1]),
+            Hex(p.Arrays['hit'].Items[2]), Hex(p.Arrays['hit'].Items[3]), q.HitL, q.HitT, q.HitR, q.HitB]));
+      end;
     end;
   end;
   Inc(FCompared);
@@ -560,6 +594,7 @@ begin
           (a width that is a word): the engine does the same JS arithmetic
           and drops what lands at NaN, so it is compared like any other
           [was: skipped, spec 258] }
+        FR7ai := cases.Objects[c].Find('r7ai') <> nil;
         CheckText(cases.Objects[c].Strings['name'], texts.Objects[t]);
       except
         on E: Exception do

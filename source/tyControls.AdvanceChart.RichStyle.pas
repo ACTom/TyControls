@@ -215,6 +215,27 @@ function TyRtJoinedNum(A: Double; const AText: string): Double;
 function TyRtTakeLineWidth(AData: TJSONData; out AW: Double; out AText: string;
   out AInf: Boolean): Boolean;
 
+{ [R7-AI] A TEXT'S PADDING AS WRITTEN (nil or null: not written), into the
+  style zrender receives after normalizeCssArray (normalizeTextStyle): a
+  falsy value (0, '', false) no padding; a number all four sides; an array
+  or a STRING by its items or characters -- two or three spread as CSS
+  does, any other length taken as it is, a side it has none for undefined
+  ('4', [4], [] and true leave three or four sides undefined); an item that
+  is no number a JS value (TTyRtStyle.PaddingKind). }
+procedure TyRtTakePadding(AData: TJSONData; var S: TTyRtStyle);
+
+{ [R7-AI] JavaScript's `padding[A] + padding[B]` of a style's padding as
+  its Number (nought without one): '2' + '2' is '22', 22; a side undefined
+  NaN }
+function TyRtPadSum(const S: TTyRtStyle; A, B: Integer): Double;
+
+{ [R7-AI] A COMPONENT'S PADDING AS WRITTEN (not nil or null): getLayoutRect's
+  `normalizeCssArray(padding || 0)` -- a falsy value four noughts, else as
+  TyRtTakePadding takes a text's }
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+{ [R7-AI] a side of it is undefined }
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Option,
@@ -453,32 +474,187 @@ begin
   Result := TyFontPxOf(TyOptFontSize(A, TyFontSizeFromPx(12)));
 end;
 
-procedure SpreadPadding(A: TJSONData; var S: TTyRtStyle);
-var
-  v: array[0..3] of Double;
-  n, k: Integer;
-  x: Double;
+{ [R7-AI] String(v) of a JSON item, and whether it is a JS string in `+`
+  (a string, or an array or object, whose primitive is its text) }
+function PadItemText(A: TJSONData): string;
+var i: Integer;
 begin
-  if A = nil then Exit;
-  if NumOf(A, x) then
+  case A.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtString: Result := A.AsString;
+    jtArray:
+      begin
+        { Array.prototype.join(','): null and undefined print as nothing }
+        Result := '';
+        for i := 0 to A.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          if A.Items[i].JSONType <> jtNull then Result := Result + PadItemText(A.Items[i]);
+        end;
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+{ one side, as a JS value (nil: undefined) }
+procedure PadSide(var S: TTyRtStyle; K: Integer; A: TJSONData);
+begin
+  S.PaddingText[K] := '';
+  if A = nil then
   begin
-    for k := 0 to 3 do S.Padding[k] := x;
-    S.HasPadding := True;
+    S.PaddingKind[K] := cTyPadUndef;
+    S.Padding[K] := NaN;
     Exit;
   end;
-  if A.JSONType <> jtArray then Exit;
-  n := A.Count;
-  if n = 0 then Exit;
-  for k := 0 to 3 do v[k] := 0;
-  for k := 0 to Min(n, 4) - 1 do NumOf(A.Items[k], v[k]);
-  { normalizeCssArray: [a] -> a four times, [v, h], [t, h, b] }
-  case n of
-    1: begin v[1] := v[0]; v[2] := v[0]; v[3] := v[0]; end;
-    2: begin v[2] := v[0]; v[3] := v[1]; end;
-    3: v[3] := v[1];
+  case A.JSONType of
+    jtNumber:
+      begin
+        S.PaddingKind[K] := cTyPadNum;
+        S.Padding[K] := A.AsFloat;
+      end;
+    jtNull:
+      begin
+        S.PaddingKind[K] := cTyPadNull;
+        S.Padding[K] := 0;
+      end;
+    jtBoolean:
+      if A.AsBoolean then
+      begin
+        S.PaddingKind[K] := cTyPadTrue;
+        S.Padding[K] := 1;
+      end
+      else
+      begin
+        S.PaddingKind[K] := cTyPadFalse;
+        S.Padding[K] := 0;
+      end;
+  else
+    begin
+      S.PaddingKind[K] := cTyPadStr;
+      S.PaddingText[K] := PadItemText(A);
+      S.Padding[K] := TyJsToNumber(S.PaddingText[K]);
+    end;
   end;
-  for k := 0 to 3 do S.Padding[k] := v[k];
+end;
+
+procedure TyRtTakePadding(AData: TJSONData; var S: TTyRtStyle);
+var
+  u: UnicodeString;
+  n, k: Integer;
+  src: array[0..3] of Integer;
+  ch: array[0..3] of TJSONString;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  S.HasPadding := False;
+  S.PaddingJs := False;
+  for k := 0 to 3 do
+  begin
+    S.Padding[k] := 0;
+    S.PaddingKind[k] := cTyPadNum;
+    S.PaddingText[k] := '';
+  end;
+  { `if (textPadding)`: a falsy padding is none (parseText's `padding ? ...
+    : 0`) }
+  case AData.JSONType of
+    jtNumber: if (AData.AsFloat = 0) or IsNan(AData.AsFloat) then Exit;
+    jtString: if AData.AsString = '' then Exit;
+    jtBoolean: if not AData.AsBoolean then Exit;
+  end;
   S.HasPadding := True;
+  if AData.JSONType = jtNumber then
+  begin
+    for k := 0 to 3 do S.Padding[k] := AData.AsFloat;
+    Exit;
+  end;
+  { normalizeCssArray: the length's two and three spread, any other taken as
+    it is (val[k] undefined past its end) }
+  for k := 0 to 3 do src[k] := k;
+  if AData.JSONType = jtString then
+  begin
+    u := UTF8Decode(AData.AsString);
+    n := Length(u);
+  end
+  else if AData.JSONType = jtArray then
+    n := AData.Count
+  else
+    n := -1;
+  if n = 2 then
+  begin
+    src[2] := 0;
+    src[3] := 1;
+  end
+  else if n = 3 then
+    src[3] := 1;
+  for k := 0 to 3 do ch[k] := nil;
+  try
+    for k := 0 to 3 do
+      case AData.JSONType of
+        jtString:
+          if src[k] < n then
+          begin
+            ch[k] := TJSONString.Create(UTF8Encode(Copy(u, src[k] + 1, 1)));
+            PadSide(S, k, ch[k]);
+          end
+          else
+            PadSide(S, k, nil);
+        jtArray:
+          if src[k] < n then PadSide(S, k, AData.Items[src[k]])
+          else PadSide(S, k, nil);
+        jtObject:
+          PadSide(S, k, TJSONObject(AData).Find(IntToStr(k)));
+      else
+        { true: a boolean has no length and no items }
+        PadSide(S, k, nil);
+      end;
+  finally
+    for k := 0 to 3 do ch[k].Free;
+  end;
+  for k := 0 to 3 do
+    if S.PaddingKind[k] <> cTyPadNum then S.PaddingJs := True;
+end;
+
+function TyRtPadSum(const S: TTyRtStyle; A, B: Integer): Double;
+begin
+  if not S.HasPadding then Exit(0);
+  if not S.PaddingJs then Exit(S.Padding[A] + S.Padding[B]);
+  Result := TyRtPadJoin(S, A, B).N;
+end;
+
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+var
+  s: TTyRtStyle;
+  k: Integer;
+begin
+  Result := Default(TTyJsPad);
+  s := Default(TTyRtStyle);
+  TyRtTakePadding(AData, s);
+  if not s.HasPadding then Exit;
+  Result.Js := s.PaddingJs;
+  for k := 0 to 3 do
+  begin
+    Result.Kind[k] := s.PaddingKind[k];
+    Result.Num[k] := s.Padding[k];
+    Result.Text[k] := s.PaddingText[k];
+  end;
+end;
+
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to 3 do
+    if APad.Kind[k] = cTyPadUndef then Exit(True);
+end;
+
+procedure SpreadPadding(A: TJSONData; var S: TTyRtStyle);
+begin
+  { [R7-AI] as zrender holds it [was: a number, or an array of numbers
+    spread as CSS does -- one of one item to all four sides, a string or an
+    item that is no number nought] }
+  TyRtTakePadding(A, S);
 end;
 
 procedure SpreadRadius(A: TJSONData; var S: TTyRtStyle);
@@ -1146,6 +1322,15 @@ begin
     APieces[k].Y := APieces[k].Y + ADY;
     APieces[k].EdgeX1 := APieces[k].EdgeX1 + ADX;
     APieces[k].EdgeY1 := APieces[k].EdgeY1 + ADY;
+    { ([R7-AI] the joined corners and the pointer's rect with them) }
+    APieces[k].EdgeXR1 := APieces[k].EdgeXR1 + ADX;
+    APieces[k].EdgeXR4 := APieces[k].EdgeXR4 + ADX;
+    APieces[k].EdgeXMin := APieces[k].EdgeXMin + ADX;
+    APieces[k].EdgeXMax := APieces[k].EdgeXMax + ADX;
+    APieces[k].HitL := APieces[k].HitL + ADX;
+    APieces[k].HitR := APieces[k].HitR + ADX;
+    APieces[k].HitT := APieces[k].HitT + ADY;
+    APieces[k].HitB := APieces[k].HitB + ADY;
   end;
 end;
 
@@ -1163,6 +1348,15 @@ begin
     Result[k].Y := Result[k].Y - AHangY;
     Result[k].EdgeX1 := Result[k].EdgeX1 - AHangX;
     Result[k].EdgeY1 := Result[k].EdgeY1 - AHangY;
+    { ([R7-AI] as TyRtShiftPieces) }
+    Result[k].EdgeXR1 := Result[k].EdgeXR1 - AHangX;
+    Result[k].EdgeXR4 := Result[k].EdgeXR4 - AHangX;
+    Result[k].EdgeXMin := Result[k].EdgeXMin - AHangX;
+    Result[k].EdgeXMax := Result[k].EdgeXMax - AHangX;
+    Result[k].HitL := Result[k].HitL - AHangX;
+    Result[k].HitR := Result[k].HitR - AHangX;
+    Result[k].HitT := Result[k].HitT - AHangY;
+    Result[k].HitB := Result[k].HitB - AHangY;
   end;
 end;
 

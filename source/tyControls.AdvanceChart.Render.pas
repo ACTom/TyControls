@@ -2306,7 +2306,7 @@ end;
   plain rect }
 procedure TraceRtPiece(P: TTyPainter; const APc: TTyRtPiece; AScale: Double;
   const AR: array of Double);
-var r1, r2, r3, r4, x0, y0, x1, y1: Double;
+var r1, r2, r3, r4, x0, y0, x1, y1, xr1, xr4: Double;
 begin
   { [R7-L] the rounded path whenever borderRadius is truthy ([0, 0] too):
     with a size that was a string it runs to the joined edges }
@@ -2325,15 +2325,26 @@ begin
   y0 := APc.Y * AScale;
   x1 := APc.EdgeX1 * AScale;
   y1 := APc.EdgeY1 * AScale;
-  P.MoveTo(x0 + r1, y0);
+  { [R7-AI] `x + r1` and `x + r4` joined where the place is a string }
+  if APc.XText <> '' then
+  begin
+    xr1 := APc.EdgeXR1 * AScale;
+    xr4 := APc.EdgeXR4 * AScale;
+  end
+  else
+  begin
+    xr1 := x0 + r1;
+    xr4 := x0 + r4;
+  end;
+  P.MoveTo(xr1, y0);
   P.LineTo(x1 - r2, y0);
   if r2 > 0 then P.ArcTo(x1 - r2, y0 + r2, r2, -Pi / 2, 0, False);
   P.LineTo(x1, y1 - r3);
   if r3 > 0 then P.ArcTo(x1 - r3, y1 - r3, r3, 0, Pi / 2, False);
-  P.LineTo(x0 + r4, y1);
-  if r4 > 0 then P.ArcTo(x0 + r4, y1 - r4, r4, Pi / 2, Pi, False);
+  P.LineTo(xr4, y1);
+  if r4 > 0 then P.ArcTo(xr4, y1 - r4, r4, Pi / 2, Pi, False);
   P.LineTo(x0, y0 + r1);
-  if r1 > 0 then P.ArcTo(x0 + r1, y0 + r1, r1, Pi, Pi * 1.5, False);
+  if r1 > 0 then P.ArcTo(xr1, y0 + r1, r1, Pi, Pi * 1.5, False);
   P.ClosePath;
 end;
 

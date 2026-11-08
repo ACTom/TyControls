@@ -2446,13 +2446,9 @@ var
     baseX := AdjX(ix, iw, align, True);
     baseY := AdjY(iy, ih, valign, True);
     begin
-      padH := 0;
-      padV := 0;
-      if rt.Style.HasPadding then
-      begin
-        padH := rt.Style.Padding[1] + rt.Style.Padding[3];
-        padV := rt.Style.Padding[0] + rt.Style.Padding[2];
-      end;
+      { ([R7-AI] `padding[1] + padding[3]` in JS: '2' + '2' is 22) }
+      padH := TyRtPadSum(rt.Style, 1, 3);
+      padV := TyRtPadSum(rt.Style, 0, 2);
       if rt.Style.WidthKind = rtwNone then
       begin
         rt.Style.WidthKind := rtwNumber;

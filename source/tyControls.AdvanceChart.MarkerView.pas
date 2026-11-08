@@ -2084,6 +2084,14 @@ var
       if (B.StyleStroke <> '') and Colour(B.InkStroke, c) then el.Caption.StrokeColour := c
       else el.Caption.StrokeColour := AInk.Halo;
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+      { [R7-AI] A HALO OF 'Infinity' (a string the label wrote): stroked at
+        the width the canvas had, settled in the paint order [was: an
+        infinite pen, an invalid operation] }
+      if IsInfinite(el.Caption.StrokeWidthLogical) then
+      begin
+        el.Caption.StrokeWidthLogical := 0;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
     end;
     el.Caption.X := x;
     el.Caption.Y := y;
@@ -3403,6 +3411,12 @@ begin
       else
         el.Caption.StrokeColour := AInk.Halo;
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+      { ([R7-AI] as a markPoint's) }
+      if IsInfinite(el.Caption.StrokeWidthLogical) then
+      begin
+        el.Caption.StrokeWidthLogical := 0;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
     end;
     el.Caption.X := x;
     el.Caption.Y := y;

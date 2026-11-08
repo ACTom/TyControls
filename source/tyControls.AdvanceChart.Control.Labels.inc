@@ -1479,8 +1479,12 @@ begin
       style's -- left / top otherwise -- and one ignored at rest the one its
       host gave it when it was listed ---- }
     r := lmOf[e];
-    { [R7-L] a box at NaN: the drawn one }
-    if (r >= 0) and not FLmItems[r].DefIgnore and TyRtBoxIsFinite(FLmItems[r].RawLocal) then
+    { [R7-L] a box at NaN: the drawn one -- [R7-AI] no: zrender routes the
+      line on the box it bounds the label by, NaN and all (a plate whose
+      joined edge is no number: every candidate is NaN away, and the points
+      stay at nought), as R7-AF found for a one-run label; TyLabelLineRoute
+      masks the traps }
+    if (r >= 0) and not FLmItems[r].DefIgnore then
       rawRect := FLmItems[r].RawLocal
     else
     begin

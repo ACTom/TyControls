@@ -887,6 +887,15 @@ begin
   begin
     ASpec.EmphHasBorderWidth := True;
     ASpec.EmphBorderWidthLogical := d.AsFloat;
+  end
+  { [R7-AI] A STRING: the canvas' number of it over the normal halo ('3'
+    strokes 3, 'abc' and '0' nothing), 'Infinity' the width the canvas had
+    [was: not written] }
+  else if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    ASpec.EmphHasBorderWidth := True;
+    TyRtTakeLineWidth(d, ASpec.EmphBorderWidthLogical, s, ASpec.EmphBorderWidthInf);
+    if ASpec.EmphBorderWidthLogical < 0 then ASpec.EmphBorderWidthLogical := 0;
   end;
   s := StrIn(emph, 'textBorderColor');
   if s <> '' then
