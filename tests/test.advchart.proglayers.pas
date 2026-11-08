@@ -57,6 +57,8 @@ type
     procedure TestRunsOnTwoUserLevelsArePastedOnce;
     procedure TestFastFramesAcrossLevelsAreTheFullPaint;
     procedure TestTwoRunsOfOneLevelOutOfOrder;
+    procedure TestALevelWhoseFirstChunkDrawsNothing;
+    procedure TestRowsSelectedDuringTheRun;
   end;
 
 implementation
@@ -327,7 +329,9 @@ begin
       chunks land) }
     sb.Append('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},');
     sb.Append('"title":{"text":"Two","left":40,"top":70,"textStyle":{"fontSize":40}},');
-    sb.Append('"xAxis":{"type":"category","show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false,');
+    sb.Append('"xAxis":{"type":"category","show":false},"yAxis":{"type":"value","min":0,"max":10,');
+    sb.Append('"axisLine":{"show":false},"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":false},');
+    sb.Append('"breakArea":{"itemStyle":{"color":"#ffff00","opacity":1}},');
     sb.Append('"breaks":[{"start":6,"end":7,"gap":"8%"}]},');
     sb.Append('"graphic":[{"type":"rect","zlevel":1,"shape":{"x":200,"y":0,"width":200,"height":300},');
     sb.Append('"style":{"fill":"#0000ff"}}],');
@@ -337,6 +341,12 @@ begin
     begin
       if i > 0 then sb.Append(',');
       sb.Append('9');
+    end;
+    sb.Append(']},{"type":"line","z":1,"symbol":"none","lineStyle":{"width":4,"color":"#000000"},"data":[');
+    for i := 0 to 19 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append('5');
     end;
     sb.Append(']},{"type":"bar","zlevel":2,"large":true,"largeThreshold":5,"progressive":4,"progressiveThreshold":10,');
     sb.Append('"itemStyle":{"color":"#00ff00"},"data":[');
@@ -415,6 +425,12 @@ begin
         px := bmp.Canvas.Pixels[44, 40 + 44];
         AssertTrue(Format('fast %s: the zlevel 0 run beside the rect: %.6x', [BoolToStr(fast, True), px]),
           (Red(px) > 200) and (Blue(px) < 60));
+        { the y axis' break area (yellow) over the red bar there }
+        k := 0;
+        for n := 40 to 260 do
+          if (Red(bmp.Canvas.Pixels[44, n]) > 200) and (Green(bmp.Canvas.Pixels[44, n]) > 200)
+            and (Blue(bmp.Canvas.Pixels[44, n]) < 60) then Inc(k);
+        AssertTrue(Format('fast %s: the break area over the bar (%d px)', [BoolToStr(fast, True), k]), k > 3);
       finally
         chart.Free;
       end;
@@ -639,6 +655,153 @@ begin
     frames[False].Free;
     frames[True].Free;
     TyAdvChartListTailForTest(True);
+  end;
+end;
+
+function FrameOf(B: TBitmap): RawByteString;
+var y, w: Integer;
+begin
+  w := B.Width * 3;
+  SetLength(Result, w * B.Height);
+  for y := 0 to B.Height - 1 do Move(B.ScanLine[y]^, Result[1 + y * w], w);
+end;
+
+{ A ZLEVEL WHOSE FIRST CHUNK DRAWS NOTHING (the second run's first rows
+  empty): no layer of it at the first paint, its later chunks' layer made
+  when they come -- the picture at the end the one a whole drawing gives }
+procedure TAdvChartProgLayersTest.TestALevelWhoseFirstChunkDrawsNothing;
+var
+  chart: TPlProbe;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, j, n: Integer;
+  last: RawByteString;
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation":false,"xAxis":{"min":0,"max":60},"yAxis":{"min":0,"max":40},"series":[');
+    for j := 0 to 1 do
+    begin
+      if j > 0 then sb.Append(',');
+      sb.Append('{"type":"scatter","progressive":10,"progressiveThreshold":20,"symbolSize":12,"data":[');
+      for i := 0 to 39 do
+      begin
+        if i > 0 then sb.Append(',');
+        if (j = 1) and (i < 10) then sb.Append('[null,null]')
+        else sb.Append(Format('[%d,%d]', [(i * 37 + j * 17) mod 60, (i * 53 + j * 11) mod 40]));
+      end;
+      sb.Append(']}');
+    end;
+    sb.Append(']}');
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf24bit;
+      bmp.SetSize(400, 300);
+      chart := NewChart(400, 300, sb.ToString);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        AssertEquals('the first paint: the first run''s layer alone', 1, Length(chart.Levels));
+        n := 0;
+        while chart.ProgressiveUnfinished and (n < 20) do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+          Inc(n);
+        end;
+        AssertFalse('drawn to the end', chart.ProgressiveUnfinished);
+        AssertEquals('a layer per run', 2, Length(chart.Levels));
+        last := FrameOf(bmp);
+        { the layers dropped (another rendering and back): drawn again whole }
+        chart.ExactRendering := not chart.ExactRendering;
+        chart.ExactRendering := not chart.ExactRendering;
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        AssertTrue('the progress frames drew every row', last = FrameOf(bmp));
+      finally
+        chart.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  finally
+    sb.Free;
+  end;
+end;
+
+{ ROWS SELECTED WHILE THE RUN DRAWS: a selection lifts a symbol's z2 (9), so
+  it goes after the later chunks' rows in the order -- the chunks drawn
+  after it are under it on the layer, not what a drawing in paint order
+  gives, and the next selection draws the layer whole, as with the layer
+  regions off }
+procedure TAdvChartProgLayersTest.TestRowsSelectedDuringTheRun;
+var
+  frames: array[Boolean] of TStringList;
+  on_: Boolean;
+  chart: TPlProbe;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, k: Integer;
+  opt: string;
+
+  procedure Step(AAct: string);
+  begin
+    if AAct <> '' then chart.DispatchAction(AAct)
+    else chart.ProgressTick;
+    chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+    frames[on_].Add(FrameOf(bmp));
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {}, "yAxis": {}, "series": [');
+    sb.Append('{"type": "scatter", "progressive": 10, "progressiveThreshold": 40, "symbolSize": 22, "selectedMode": "multiple",');
+    sb.Append(' "itemStyle": {"opacity": 0.7}, "select": {"itemStyle": {"color": "#000000"}}, "data": [');
+    for i := 0 to 99 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append(Format('[%d,%d]', [(i * 7) mod 20, (i * 3) mod 12]));
+    end;
+    sb.Append(']}]}');
+    opt := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(480, 400);
+    for on_ := False to True do
+    begin
+      TyAdvChartLayerRegionForTest(on_);
+      chart := NewChart(480, 400, opt);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        Step('');
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 2}');
+        Step('');
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 3}');
+        Step('');
+        Step('');
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 4}');
+        Step('{"type": "unselect", "seriesIndex": 0, "dataIndex": 3}');
+        Step('');
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 5}');
+        while chart.ProgressiveUnfinished do Step('');
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 6}');
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('frame %d the same pixels', [k]), frames[False][k] = frames[True][k]);
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartLayerRegionForTest(True);
   end;
 end;
 

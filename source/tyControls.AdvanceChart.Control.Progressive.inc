@@ -479,6 +479,9 @@ begin
   end;
   FProgLayerOk := True;
   FProgLayerRegionOn := False;
+  { what a capture held is of the layers before: a progress frame waits for
+    the next one (it copies every layer as blitted) }
+  FProgCapOk := False;
 end;
 
 { A FRAME'S CHUNK onto its layer: what was not on it, in paint order, and
