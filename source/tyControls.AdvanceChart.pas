@@ -1604,6 +1604,9 @@ type
     FGfxW, FGfxH: Double;
     FGfxPaint: array of TTyChartElement;
     FGfxPaintEl: TTyGfxElArray;
+    { [R7-AF] the graphic group a showTip found by its name (its id): the
+      tip's datum is (ctkGraphic, 0, cGfxTipGroup) }
+    FGfxTipGroupId: string;
     FGfxUnder: TTyPaintList;
     { [R5-C] A LABEL THE LAYOUT MADE DRAGGABLE, dragged: its series and data
       index and the last point; and every label's drift so far (device px),

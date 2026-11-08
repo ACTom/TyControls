@@ -825,8 +825,19 @@ begin
     begin
       ASpec.HasBorderWidth := True;
       ASpec.BorderWidthLogical := d.AsFloat;
+      ASpec.BorderWidthText := '';
+      ASpec.BorderWidthInf := False;
       if IsNan(ASpec.BorderWidthLogical) or IsInfinite(ASpec.BorderWidthLogical)
         or (ASpec.BorderWidthLogical < 0) then ASpec.BorderWidthLogical := 0;
+    end
+    { [R7-AF] A STRING: the canvas' number of it ('3' strokes 3, 'abc' and
+      '-2' nothing), the string kept for the TSpan's rect (it joins it);
+      'Infinity' the width the canvas had [was: not written] }
+    else if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      ASpec.HasBorderWidth := True;
+      TyRtTakeLineWidth(d, ASpec.BorderWidthLogical, ASpec.BorderWidthText, ASpec.BorderWidthInf);
+      if ASpec.BorderWidthLogical < 0 then ASpec.BorderWidthLogical := 0;
     end;
     d := ALabel.Find('backgroundColor');
     ASpec.HasBackground := (d <> nil) and (d.JSONType = jtString)

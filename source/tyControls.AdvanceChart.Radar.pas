@@ -82,6 +82,10 @@ type
     Show: Boolean;
     WidthLogical: Double;
     Colours: TTyChartColorArray;
+    { [R7-AF] index-parallel to Colours: an entry written as a gradient (its
+      Colours entry the first stop), cgkNone for a colour; empty when none
+      is one [was: a gradient not read, the skin's colour drawn] }
+    Grads: TTyChartGradientArray;
     { [R5-B] the rest of the lineStyle: `type` (a word against the width,
       or lengths), `dashOffset`, `opacity` -- 1 when not written }
     Dash: TTyOptDash;
@@ -665,7 +669,8 @@ begin
   ls := ObjIn(n, 'lineStyle');
   if ls = nil then Exit;
   ALine.WidthLogical := NumIn(ls, 'width', ALine.WidthLogical);
-  ALine.Colours := ColoursIn(ls, 'color', ALine.Colours);
+  { ([R7-AF] a gradient too) }
+  ALine.Colours := AreaColoursIn(ls, 'color', ALine.Colours, ALine.Grads);
   { the rest of getLineStyle [R5-B] }
   st := TyReadOptLineStyleOf(ls);
   if st.Dash <> todNone then
@@ -1509,6 +1514,9 @@ var
   mergeColour: TTyChartColorArray;
   u: TTyRectF;
   pe: PTyChartElement;
+  { [R7-AF] the gradient rings: their list index, colour bucket and box }
+  ringEl, ringBucket: TTyIntegerArray;
+  ringBox: array of TTyRectF;
 
   { [R5-G] the size a scale label is drawn at -- and so measured at: the
     author's fontSize, else the skin's [was: measured at the skin's whatever
@@ -1653,6 +1661,9 @@ begin
   bandEl := nil;
   bandBucket := nil;
   bandBox := nil;
+  ringEl := nil;
+  ringBucket := nil;
+  ringBox := nil;
   mergeCmds := nil;
   mergePts := nil;
   mergeBox := nil;
@@ -1792,7 +1803,8 @@ begin
   { [R7-AD] BY COLOUR BUCKET, as RadarView adds them: ring i into bucket
     i mod the colours' count, each bucket one merged path, the buckets in
     order -- a ring takes the canvas' stroke after the buckets before it
-    (a colour no parser reads) [was: ring by ring outwards] }
+    (a colour no parser reads) [was: ring by ring outwards]; [R7-AF] and so
+    what the canvas is left with is the last bucket's, its gradient too }
   rnb := Max(1, Length(spec.SplitLine.Colours));
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then
     for rb := 0 to rnb - 1 do
@@ -1816,6 +1828,22 @@ begin
       end;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.SplitLine.WidthLogical;
+      { [R7-AF] a gradient: the rings of one colour are one merged path
+        upstream (mergePath), the gradient over its box (below) }
+      if Length(spec.SplitLine.Grads) > 0 then
+      begin
+        gi := k mod Length(spec.SplitLine.Grads);
+        if spec.SplitLine.Grads[gi].Kind <> cgkNone then
+        begin
+          el.Style.StrokeGradient := spec.SplitLine.Grads[gi];
+          SetLength(ringEl, Length(ringEl) + 1);
+          ringEl[High(ringEl)] := AList.Count;
+          SetLength(ringBucket, Length(ringBucket) + 1);
+          ringBucket[High(ringBucket)] := gi;
+          SetLength(ringBox, Length(ringBox) + 1);
+          ringBox[High(ringBox)] := TyShapeBounds(el.Shape);
+        end;
+      end;
       { the rest of the lineStyle [R5-B] }
       LinePen(el, spec.SplitLine);
       TyStyleSetShadow(el.Style, spec.SplitLine.Shadow);
@@ -1825,6 +1853,23 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
+  { [R7-AF] a gradient ring's box: the union of its colour's rings, grown
+    by the pen of a path that does not fill (max(width, 5)) }
+  for k := 0 to High(ringEl) do
+  begin
+    u := ringBox[k];
+    for i := 0 to High(ringEl) do
+      if ringBucket[i] = ringBucket[k] then
+      begin
+        if ringBox[i].Left < u.Left then u.Left := ringBox[i].Left;
+        if ringBox[i].Top < u.Top then u.Top := ringBox[i].Top;
+        if ringBox[i].Right > u.Right then u.Right := ringBox[i].Right;
+        if ringBox[i].Bottom > u.Bottom then u.Bottom := ringBox[i].Bottom;
+      end;
+    pe := AList.Ref(ringEl[k]);
+    pe^.Style.GradBoxSet := True;
+    pe^.Style.GradBox := TyGrowByStroke(TyRectToXYWH(u), False, pe^.Style.StrokeWidthLogical * APPI / 96);
+  end;
 
   { ---- the spokes, and the name at the end of each ---- }
   for i := 0 to n - 1 do
@@ -1839,6 +1884,9 @@ begin
       el := TyChartElement(TyShapePolyline([p, q]));
       if not TyRadarBucket(spec.AxisLine.Colours, 0, c) then c := AInk.AxisLine;
       el.Style.StrokeColor := c;
+      { [R7-AF] a gradient: over the line's own box }
+      if (Length(spec.AxisLine.Grads) > 0) and (spec.AxisLine.Grads[0].Kind <> cgkNone) then
+        el.Style.StrokeGradient := spec.AxisLine.Grads[0];
       el.Style.StrokeWidthLogical := spec.AxisLine.WidthLogical;
       LinePen(el, spec.AxisLine);
       TyStyleSetShadow(el.Style, spec.AxisLine.Shadow);

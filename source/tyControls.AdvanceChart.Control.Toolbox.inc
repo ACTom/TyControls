@@ -372,6 +372,8 @@ begin
     begin
       el.Style.StrokeColor := c;
       if FTbSpecs[t].BorderWidth > 0 then el.Style.StrokeWidthLogical := FTbSpecs[t].BorderWidth;
+      { ([R7-AF] 'Infinity': the width the canvas had) }
+      if FTbSpecs[t].BorderWidthInf then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     end;
     { [R7-X] the shadow and the border's dash, phase, cap, join and
       miterLimit [was: never drawn] }
