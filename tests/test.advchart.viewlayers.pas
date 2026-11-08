@@ -497,8 +497,8 @@ begin
   end;
   if GetEnvironmentVariable('TY_VL_SAVE') <> '' then
     FBmp.SaveToFile(GetEnvironmentVariable('TY_VL_SAVE') + 'trail-under.png');
-  { the symbol has passed x 3 (x 104 px) by 480 ms: on the split line there
-    blue, the trail red beside it }
+  { the symbol (from x 72 px at 256 px a second) has passed x 104 px by
+    480 ms: on the split line there blue, the trail red beside it }
   px := FBmp.GetPixel(104, 150);
   off := FBmp.GetPixel(104, 150 - 4);
   AssertTrue(Format('the split line over the trail: (%d,%d,%d)', [px.red, px.green, px.blue]),
