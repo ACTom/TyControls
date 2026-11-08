@@ -1170,7 +1170,7 @@ function cases() {
       yAxis: { type: 'value', min: 0, max: 10, show: false },
       handleStyle: { borderWidth: 2, borderType: 'dashed', shadowBlur: 4, shadowColor: '#ff00ff', borderCap: 'round' },
       moveHandleStyle: { borderColor: '#123456', borderWidth: 1, shadowBlur: 3, shadowColor: '#00ffff' },
-      dataBackground: { lineStyle: { type: 'dotted', shadowBlur: 2, shadowColor: '#0000ff' },
+      dataBackground: { lineStyle: { type: 'dotted', shadowBlur: 2, shadowColor: '#0000ff', width: 4 },
         areaStyle: { shadowBlur: 5, shadowColor: '#ff0000' } },
       selectedDataBackground: { lineStyle: { type: [5, 1], cap: 'round' }, areaStyle: { shadowBlur: 3, shadowColor: '#00ff00' } },
       dataZoom: [{ type: 'slider', left: 40, right: 40, bottom: 10, start: 20, end: 80, showDetail: false,
@@ -1189,12 +1189,27 @@ function cases() {
       borderWidth: 5, shadowBlur: -3, shadowColor: 'nope', shadowOffsetX: 2, shadowOffsetY: 3,
       textStyle: { color: '#333333', textShadowColor: 'nope', textShadowBlur: 2 }, formatter: 'Ab' } }),
     [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // (the box placed by the Text's bounds and calcShadowOuterSize: a blur
+    // with its offsets; a blur of a fraction as it is written)
+    ['ac-tip-shadow-place', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' } }]),
+      { tooltip: { renderMode: 'richText', showDelay: 0, transitionDuration: 0, position: [100, 60],
+        backgroundColor: '#ffffff', borderColor: '#0000ff', shadowBlur: 6.5, shadowColor: 'rgba(0,0,255,0.5)',
+        shadowOffsetX: 2, shadowOffsetY: 1, textStyle: { color: '#333333' }, formatter: 'Ab' } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
     // 4. a richText tooltip's colour marker (a token's background Rect): a
     // colour the canvas refuses is the fill it had
     ['ac-tip-marker', Object.assign(vv([{ type: 'scatter', name: 'S', data: [[5, 5]], itemStyle: { color: 'nope',
       borderColor: '#00ff00', borderWidth: 3 } }]), { tooltip: { renderMode: 'richText', showDelay: 0,
       transitionDuration: 0, position: [100, 60], backgroundColor: '#ffeedd', borderColor: '#0000ff',
       shadowBlur: 0, textStyle: { color: '#333333' } } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
+    // (a marker's Rect hands the canvas a transparent shadowColor: a span
+    // after it whose textShadowColor is refused casts that)
+    ['ac-tip-marker-shadow', Object.assign(vv([{ type: 'scatter', name: 'S', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      shadowBlur: 3, shadowColor: '#00ff00' } }]), { tooltip: { renderMode: 'richText', showDelay: 0,
+      transitionDuration: 0, position: [100, 60], backgroundColor: '#ffeedd', borderColor: '#0000ff',
+      shadowBlur: 2, shadowColor: '#ff00ff', shadowOffsetX: 1, shadowOffsetY: 2,
+      textStyle: { color: '#333333', textShadowColor: 'nope', textShadowBlur: 2 } } }),
     [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
     ['ac-tip-markers', { animation: false, xAxis: { type: 'category', data: ['a', 'b'], show: false },
       yAxis: { type: 'value', min: 0, max: 10, show: false },

@@ -7202,7 +7202,7 @@ begin
     e.Style.ShadowOffsetY := ASt.ShadowOffset.Y;
     if (ASpec.ShadowKeys and 2) <> 0 then e.Style.ShadowOffsetX := ASpec.ShadowOffsetX;
     if (ASpec.ShadowKeys and 4) <> 0 then e.Style.ShadowOffsetY := ASpec.ShadowOffsetY;
-    if ASpec.ShadowColourRefused then e.Style.ShadowColor := cTyCanvasColourLeft;
+    { (a refused colour is in ASt already: cTyCanvasColourLeft) }
   end
   else
   begin

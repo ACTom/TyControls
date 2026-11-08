@@ -92,6 +92,9 @@ type
       (the split and the minor split lines) are told apart by their pen }
     function CompPart(const AKey: string; AZ2: Integer; AText: Boolean; const AOp: string;
       out AEl: TTyChartElement; const AWant: string = ''; const AWant2: string = ''): Boolean;
+    { [R7-AC] the ANth part of AKey, AZ2 and kind as drawn (0 the first) }
+    function CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean; ANth: Integer;
+      out AEl: TTyChartElement): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { [R7-W] through the cached (dirty-rect) path }
     procedure Layered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -140,6 +143,7 @@ type
     procedure TestTheR7ACCanvasAsUpstream;
     procedure TestARichTipsBorderIsOutsideItsBox;
     procedure TestATipsTextShadowIsDrawn;
+    procedure TestARichTipsRefusedMarkerIsDrawn;
     procedure TestAnAxisPensShadowIsDrawn;
     procedure TestThePolarViewsInUpstreamsOrder;
   end;
@@ -199,6 +203,26 @@ begin
   end;
   Result := first >= 0;
   if Result then AEl := d[first].El else AEl := Default(TTyChartElement);
+end;
+
+function TLcProbe.CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean;
+  ANth: Integer; out AEl: TTyChartElement): Boolean;
+var d: TTyCompPartArray; k, n: Integer;
+begin
+  d := CompDrawn;
+  n := 0;
+  for k := 0 to High(d) do
+    if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and (d[k].IsText = AText) then
+    begin
+      if n = ANth then
+      begin
+        AEl := d[k].El;
+        Exit(True);
+      end;
+      Inc(n);
+    end;
+  AEl := Default(TTyChartElement);
+  Result := False;
 end;
 
 function TLcProbe.Frame: TTyPaintList;
@@ -1035,6 +1059,8 @@ var
   { [R7-AA] the z- and aa- cases: the cap, join and miterLimit, a dash
     where upstream strokes solid }
   strict: Boolean;
+  { [R7-AC] a component part's count among its kind ('c.<key>.<z2>.<t|p>.<n>') }
+  parts3: string;
 begin
   strict := APrefix <> 'w-';
   FBad := 0;
@@ -1127,6 +1153,9 @@ begin
         where := Format('%s t=%g %s', [id, t, key]);
         ops := rec.Arrays['ops'];
         if ops.Count = 0 then Continue;
+        { ([R7-AC] a richText tooltip's blank span: see below) }
+        if (APrefix = 'ac-') and (Copy(key, 1, 15) = 'c.tooltip0.0.t.') and (Trim(rec.Get('tx', '')) = '') then
+          Continue;
         { [R7-Z] a component's part: what the port drew of it }
         comp := Copy(key, 1, 2) = 'c.';
         if comp then
@@ -1139,6 +1168,7 @@ begin
             ckey := parts[1];
             cz2 := StrToInt(parts[2]);
             ctext := parts[3] = 't';
+            parts3 := parts[4];
           finally
             parts.Free;
           end;
@@ -1230,6 +1260,22 @@ begin
           op := o.Strings['op'];
           if comp and (op = 'fill') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['fs'], o.Strings['ss'])
           else if comp and (op = 'stroke') then FChart.CompPart(ckey, cz2, ctext, op, el, o.Strings['ss'])
+          { ([R7-AC] a richText tooltip's spans in their order: the n-th of
+            those upstream brushed, the n-th the port drew -- the blank
+            spans upstream brushes after a marker ('{marker|}  ': in the
+            Text's own fill, as the span after them) the port's marker gap) }
+          else if comp and ctext and (ckey = 'tooltip0') then
+          begin
+            n := 0;
+            for q2 := 0 to els.Count - 1 do
+              if (Copy(els.Objects[q2].Strings['key'], 1, Length(key) - Length(parts3)) =
+                Copy(key, 1, Length(key) - Length(parts3)))
+                and (els.Objects[q2].Arrays['ops'].Count > 0)
+                and (Trim(els.Objects[q2].Get('tx', '')) <> '')
+                and (StrToIntDef(Copy(els.Objects[q2].Strings['key'], Length(key) - Length(parts3) + 1, MaxInt), -1)
+                  < StrToInt(parts3)) then Inc(n);
+            FChart.CompPartNth(ckey, cz2, ctext, n, el);
+          end
           else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
@@ -2239,6 +2285,53 @@ begin
         if (px.blue > px.red + 60) and (px.blue > px.green + 60) then Inc(blue);
       end;
     AssertTrue(Format('%s: the text''s blue shadow drawn (%d px)', [m, blue]), blue > 20);
+  end;
+end;
+
+{ [R7-AC] A RICHTEXT MARKER IN A COLOUR NO PARSER READS IS DRAWN in the
+  fill the canvas had -- the header's span before it, '#333333': the box
+  looks as it does for a series in '#333333' itself, pixel for pixel (it
+  was not drawn) }
+procedure TAdvChartLinesCanvasOracleTest.TestARichTipsRefusedMarkerIsDrawn;
+var
+  a: TBGRABitmap;
+  bb: TTyRectF;
+  pass, x, y, n: Integer;
+  c: string;
+begin
+  a := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRA(255, 255, 255, 255));
+  try
+    for pass := 0 to 1 do
+    begin
+      if pass = 0 then c := 'nope' else c := '#333333';
+      FreeAndNil(FChart);
+      FChart := TLcProbe.Create(FForm);
+      FChart.Parent := FForm;
+      FChart.Controller := FCtl;
+      FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+      FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,"show":false},'
+        + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+        + '"tooltip":{"renderMode":"richText","showDelay":0,"transitionDuration":0,"position":[100,60],'
+        + '"backgroundColor":"#ffffff","borderColor":"#0000ff","shadowBlur":0,"shadowOffsetX":0,"shadowOffsetY":0,'
+        + '"textStyle":{"color":"#333333"}},'
+        + '"series":[{"type":"scatter","name":"S","symbolSize":4,"itemStyle":{"color":"' + c + '"},'
+        + '"data":[[9,9]]}]}', True);
+      FBmp.Fill(BGRA(255, 255, 255, 255));
+      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+      FBmp.Fill(BGRA(255, 255, 255, 255));
+      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      bb := FChart.TipFill;
+      AssertTrue(c + ': a box drawn', TyRectFIsValid(bb));
+      if pass = 0 then a.PutImage(0, 0, FBmp, dmSet);
+    end;
+    n := 0;
+    for y := Round(bb.Top) to Round(bb.Bottom) - 1 do
+      for x := Round(bb.Left) to Round(bb.Right) - 1 do
+        if not (a.GetPixel(x, y) = FBmp.GetPixel(x, y)) then Inc(n);
+    AssertEquals('the box as for a series in #333333', 0, n);
+  finally
+    a.Free;
   end;
 end;
 
