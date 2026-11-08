@@ -917,6 +917,14 @@ type
     El: TTyChartElement;
   end;
   TTyCompPartArray = array of TTyCompPart;
+  { [R7-AB] WHERE ONE OF A COMPONENT'S DISPLAYABLES WAS DRAWN (its paint
+    rect, device px): a dirty block's run starts with the parts that meet it }
+  TTyCompRect = record
+    Owner: TObject;
+    Kind: Byte;
+    R: TTyXYWH;
+  end;
+  TTyCompRectArray = array of TTyCompRect;
 
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
@@ -1887,6 +1895,12 @@ type
       (CompDrawn) }
     FCompParts: TTyCompPartArray;
     FCompRunOk: Boolean;
+    { [R7-AB] CompRun's order (an index below FCompNg is FGfxUnder's paint
+      order, the rest FCompParts' less FCompNg) and the rects the axes' parts
+      were drawn at (PaintAxis) }
+    FCompOrder: TTyIntegerArray;
+    FCompNg: Integer;
+    FCompRects: TTyCompRectArray;
     FCompDrawn: TTyCompPartArray;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
@@ -3534,6 +3548,17 @@ type
       elements of a z and z2 above AZ / AZ2: the canvas a component drawn
       after the series meets }
     procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+    { [R7-AB] a part of AOwner of kind AKind drawn at AR (device px: its
+      getPaintRect is taken from it) }
+    procedure CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH; APen: Double;
+      AText: Boolean);
+    { [R7-AB] THE CANVAS A DIRTY BLOCK STARTS ITS SERIES FROM: each block
+      saves the context, brushes afresh (prevEl null) from the canvas' own
+      state and restores it, and only the elements meeting it are brushed --
+      the components' among them: CompRun's order over the parts and the
+      graphic's elements that meet ABlock (a part whose rects were not
+      recorded meets every block) }
+    function CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
     { [R7-Z] a title's box and text colours, the canvas refusing them }
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor);

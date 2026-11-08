@@ -126,6 +126,9 @@ var
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
   maxW, batched: Integer;
+  { [R7-AB] the Lines of the batch, where they lie, and their pen }
+  pend: TTyZrRectArray;
+  pendW: Double;
   horiz: Boolean;
   lblH, lblW: Integer;
   scaleTicks: TTyScaleTickArray;
@@ -291,11 +294,17 @@ var
   end;
 
   procedure BatchLine(AX1, AY1, AX2, AY2: Double; AWidthLogical: Double);
+  var n: Integer;
   begin
     TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
     APainter.MoveTo(AX1, AY1);
     APainter.LineTo(AX2, AY2);
     Inc(batched);
+    { [R7-AB] a Line each: where it lies }
+    n := Length(pend);
+    SetLength(pend, n + 1);
+    pend[n] := TyRectToXYWH(TyRectF(Min(AX1, AX2), Min(AY1, AY2), Max(AX1, AX2), Max(AY1, AY2)));
+    pendW := APainter.ScaleF(AWidthLogical);
   end;
 
   { [R7-Z] a part as it is drawn (CompDrawn): its pen, or its text's fill }
@@ -331,13 +340,47 @@ var
     an empty path, which a fully thinned-away set of minor ticks produces.
     In the piece's own pen [R5-B: in the skin's colour and width]. }
   procedure StrokeBatch(const AStroke: TTyAxisStroke; AKind: Byte; AZ2: Integer);
+  var k: Integer;
   begin
     if batched > 0 then
     begin
       TyStrokeAxisPath(APainter, AStroke);
       if AStroke.Drawn then Drew(AKind, AZ2, AStroke, False, 0);
+      { [R7-AB] where its Lines are }
+      for k := 0 to High(pend) do CompRect(AAxis, AKind, pend[k], pendW, False);
     end;
     batched := 0;
+    pend := nil;
+  end;
+
+  { [R7-AB] a text of AW x AH at (AX, AY) as anchored, turned by ARot about
+    its anchor: the box round it }
+  procedure TextRect(AKind: Byte; AX, AY: Double; AW, AH: Integer; AH2: TTyTextAnchorH;
+    AV: TTyTextAnchorV; ARot: Double);
+  var b: TRect; r: TTyXYWH; c, s, x, y: Double; k: Integer;
+    xs, ys: array[0..3] of Double;
+  begin
+    b := AnchorBox(AX, AY, AW, AH, AH2, AV);
+    if Abs(ARot) < 1e-9 then
+      r := TyRectToXYWH(TyRectF(b.Left, b.Top, b.Right, b.Bottom))
+    else
+    begin
+      c := Cos(ARot);
+      s := Sin(ARot);
+      xs[0] := b.Left; ys[0] := b.Top;
+      xs[1] := b.Right; ys[1] := b.Top;
+      xs[2] := b.Right; ys[2] := b.Bottom;
+      xs[3] := b.Left; ys[3] := b.Bottom;
+      r := TyRectToXYWH(TyRectF(AX, AY, AX, AY));
+      for k := 0 to 3 do
+      begin
+        { counter-clockwise on the screen }
+        x := AX + (xs[k] - AX) * c + (ys[k] - AY) * s;
+        y := AY - (xs[k] - AX) * s + (ys[k] - AY) * c;
+        TyZrRectUnion(r, TyRectToXYWH(TyRectF(x, y, x, y)));
+      end;
+    end;
+    CompRect(AAxis, AKind, r, 0, True);
   end;
 
   { A LEAF IN ITS groupTransition [Batch 96]: the line where its proxy is
@@ -751,6 +794,12 @@ begin
         arrowInk := CompSettleFill(AAxis, cpkArrow, lineK.Colour);
         PaintAxisArrow(APainter, spec^.Arrows[i], arrowInk);
         Drew(cpkArrow, 11, lineK, False, arrowInk);
+        { [R7-AB] (its box, turned any way) }
+        CompRect(AAxis, cpkArrow, TyRectToXYWH(TyRectF(
+          spec^.Arrows[i].X - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].Y - Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].X + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75,
+          spec^.Arrows[i].Y + Max(spec^.Arrows[i].W, spec^.Arrows[i].H) * 0.75)), 0, False);
       end;
   end;
 
@@ -854,6 +903,10 @@ begin
     nrot := spec^.NamePlacement.RotationRad;
     ProxName(nx, ny, nrot);
     Drew(cpkName, 1, lineK, True, TTyChartColor(nameS.TextColor));
+    { [R7-AB] where it lies }
+    TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
+    TextRect(cpkName, nx, ny, lblW, lblH, spec^.NamePlacement.AnchorH,
+      spec^.NamePlacement.AnchorV, nrot);
     { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
       [Batch 86] }
     if Length(spec^.NamePlacement.Rt) > 0 then
@@ -914,6 +967,9 @@ begin
         Continue;
       end;
       TextSizeOf(places[i].Text, lblStyle, lblW, lblH);
+      { [R7-AB] where it lies }
+      TextRect(cpkLabel, lx, ly, lblW, lblH, places[i].AnchorH, places[i].AnchorV,
+        spec^.RotationRad);
       { BOUNDED BY axisLabel.width WHEN TRUNCATING, and only then: with no
         bound the box is exactly the text's size, so the ellipsis fitter has
         nothing to bite on and `overflow` would silently do nothing.
@@ -1970,6 +2026,9 @@ begin
     end;
     ord[j + 1] := t;
   end;
+  { [R7-AB] (the order, for a dirty block's own run) }
+  FCompOrder := Copy(ord, 0, Length(ord));
+  FCompNg := ng;
   { FROM THE CANVAS' OWN STATE (a transparent shadow, black fill and
     stroke, a width of 1), in that order }
   TyCanvasRunStart(run, TyCanvasGroundOf(0), APPI);
@@ -2007,6 +2066,83 @@ begin
     if (pe^.Z > AZ) or ((pe^.Z = AZ) and (pe^.Z2 > AZ2)) then Break;
     TyCanvasRunStep(ARun, pe^);
   end;
+end;
+
+procedure TTyCustomAdvanceChart.CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH;
+  APen: Double; AText: Boolean);
+var n: Integer; r: TTyXYWH; w: Double;
+begin
+  r := AR;
+  { getPaintRect: a stroked path's getBoundingRect grows by its width (a
+    path of no fill by max(width, strokeContainThreshold 5)), then floored
+    and ceiled and one more -- a text span's by its dirtyRectTolerance (10)
+    on every side }
+  if APen > 0 then
+  begin
+    w := Max(APen, 5);
+    r.X := r.X - w / 2;
+    r.Y := r.Y - w / 2;
+    r.W := r.W + w;
+    r.H := r.H + w;
+  end;
+  if AText then r := TyZrPaintRect(r, 0, 0, 0, cTyTextDirtyTolerance)
+  else r := TyZrPaintRect(r, 0, 0, 0, 0);
+  n := Length(FCompRects);
+  SetLength(FCompRects, n + 1);
+  FCompRects[n].Owner := AOwner;
+  FCompRects[n].Kind := AKind;
+  FCompRects[n].R := r;
+end;
+
+function TTyCustomAdvanceChart.CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
+var
+  run: TTyCanvasRun;
+  i, k, p: Integer;
+  pe: PTyChartElement;
+  el: TTyChartElement;
+  r: TTyXYWH;
+  any, meets, drawn: Boolean;
+begin
+  if not FCompRunOk or (Length(FCompOrder) = 0) then Exit(CanvasGroundState);
+  TyCanvasRunStart(run, TyCanvasGroundOf(0), APPI);
+  any := False;
+  for i := 0 to High(FCompOrder) do
+  begin
+    p := FCompOrder[i];
+    if p < FCompNg then
+    begin
+      if (FGfxUnder = nil) or (p >= FGfxUnder.Count) then Continue;
+      pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(p));
+      if pe^.ZLevel <> 0 then Continue;
+      if TyElementPaintRect(pe^, APPI, r) and not TyZrRectIntersect(r, ABlock) then Continue;
+      el := pe^;
+    end
+    else
+    begin
+      p := p - FCompNg;
+      if p > High(FCompParts) then Continue;
+      { the rects its kind was drawn at: one meeting the block; none
+        recorded, every block }
+      meets := False;
+      drawn := False;
+      for k := 0 to High(FCompRects) do
+        if (FCompRects[k].Owner = FCompParts[p].Owner) and (FCompRects[k].Kind = FCompParts[p].Kind) then
+        begin
+          drawn := True;
+          if TyZrRectIntersect(FCompRects[k].R, ABlock) then
+          begin
+            meets := True;
+            Break;
+          end;
+        end;
+      if drawn and not meets then Continue;
+      el := FCompParts[p].El;
+    end;
+    TyCanvasRunStep(run, el);
+    any := True;
+  end;
+  if any then Result := TyCanvasGroundOfRun(run)
+  else Result := TyCanvasGroundOf(0);
 end;
 
 function TTyCustomAdvanceChart.CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
@@ -2102,6 +2238,8 @@ var
   gb: TTyGridBuild;
 begin
   if FBuild = nil then Exit;
+  { [R7-AB] where the parts are drawn, afresh }
+  FCompRects := nil;
   { [R7-Z] the parts settled in upstream's order (a layer drawn without the
     static one's GfxPaintUnder: the last ones) }
   if not FCompRunOk then CompRun(APPI);
@@ -3148,7 +3286,6 @@ begin
     begin
       b0 := 0;
       b1 := n - 1;
-      ground := CanvasGroundState;
     end
     else
     begin
@@ -3166,6 +3303,9 @@ begin
     else
     begin
       box := TyRectToXYWH(TyRectF(px[blk].Left, px[blk].Top, px[blk].Right, px[blk].Bottom));
+      { [R7-AB] from the canvas' own state through the components that meet
+        the block [was: what every component left] }
+      ground := CanvasGroundIn(zr[blk], APPI);
       TyCanvasRunStart(run, ground, APPI);
     end;
     FDrWork.ClipRect := DrRaster(Rect(Round(box.X), Round(box.Y), Round(box.X + box.W),
@@ -3431,7 +3571,6 @@ begin
   if n > 0 then
   begin
     measurer := NewTextMeasurer(APPI);
-    ground := CanvasGroundState;
     P := NewPainter;
     oldClip := FDrDyn.ClipRect;
     try
@@ -3441,6 +3580,9 @@ begin
       for blk := 0 to n - 1 do
       begin
         FDrDyn.ClipRect := DrRaster(px[blk]);
+        { [R7-AB] from the canvas' own state through the components that
+          meet the block [was: what every component left] }
+        ground := CanvasGroundIn(zr[blk], APPI);
         TyCanvasRunStart(run, ground, APPI);
         TySetZBand(-MaxInt, ComponentZLevel);
         try
