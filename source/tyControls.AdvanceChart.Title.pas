@@ -128,7 +128,8 @@ type
   and the group's place (TextX, TextY) is added after. The half pixel is
   the local box's, so a title at a fractional place keeps its fraction. A
   width of nought moves nothing. }
-function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double = 1): TTyRectF;
 
 { How many titles the option carries. An object counts as one. }
 function TyTitleCount(AOption: TTyChartOption): Integer;
@@ -159,21 +160,28 @@ uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
 
-function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
-var r: TTyXYWH;
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double): TTyRectF;
+var
+  r: TTyXYWH;
+  { [R7-AI] the css px a device px makes }
+  s: Double;
 begin
-  r := TyZrSubPixelOptimizeRect(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
-    ALayout.FrameW, ALayout.FrameH), ALineWidthPx);
+  { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
+  r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
+    ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
   { [R7-AI] a size the padding joined as a string: `originX + originWidth`
-    joined again (`'-2' + '16.0222'`), and `originWidth === 0` never true }
+    joined again (`'-2' + '16.0222'`), and `originWidth === 0` never true --
+    on the same css px grid: the place, the width and the string css px }
   if not (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
   begin
+    if (AScale > 0) and (AScale <> 1) then s := AScale else s := 1;
     if ALayout.FrameWText <> '' then
-      r.W := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX)
-        + ALayout.FrameWText), ALineWidthPx, False) - r.X, 1.0);
+      r.W := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
+        + ALayout.FrameWText), ALineWidthPx / s, False) - r.X / s, 1.0) * s;
     if ALayout.FrameHText <> '' then
-      r.H := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY)
-        + ALayout.FrameHText), ALineWidthPx, False) - r.Y, 1.0);
+      r.H := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
+        + ALayout.FrameHText), ALineWidthPx / s, False) - r.Y / s, 1.0) * s;
   end;
   { through the group's transform (a translation): x + tx, the far edge
     (x + w) + tx }

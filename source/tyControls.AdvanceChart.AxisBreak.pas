@@ -74,18 +74,21 @@ function TyAxisBreakLineOn(ANode: TJSONObject): Boolean;
   along the axis, global px, in either order; AHorizontal: the axis runs
   along x, so the zigzag runs down the grid from AZMin to AZMax. ARandoms
   is the break's cache, extended from AState as the walk needs more. }
+{ [R7-AH] AScale the device px a css px makes (PPI / 96): the amplitude
+  and the spans are css px, the ends snapped on the css px grid }
 procedure TyBreakZigzag(AC0, AC1: Double; AHorizontal: Boolean;
   AZMin, AZMax, AAmplitude, AMinSpan, AMaxSpan: Double;
   var ARandoms: TTyDoubleArray; var AState: LongWord;
-  out AA, AB: TTyBreakPointArray);
+  out AA, AB: TTyBreakPointArray; AScale: Double = 1);
 
 { THE AXIS LINE CUT AT THE BREAKS (buildAxisBreakLine). AFrame is the
   axis group's frame; APairs the breaks' two ends in the axis' own frame
   (axis.dataToCoord, clamped), AIds their identities, both in the breaks'
   order; ALineWidth the axis line's width. }
+{ ([R7-AH] AScale: the ends snapped on the css px grid at another PPI) }
 function TyAxisBreakLineSegs(const AFrame: TTyAxisNameFrame;
   const APairs: array of TTyRange; const AIds: array of string;
-  ALineWidth: Double): TTyAxisLineSegArray;
+  ALineWidth: Double; AScale: Double = 1): TTyAxisLineSegArray;
 
 { adjustBreakLabelPair: AP0 / AP1 the labels of a break's start and end,
   ABox0 / ABox1 their boxes (the margin box for the overlap, the bare
@@ -102,7 +105,7 @@ implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.AxisName, tyControls.AdvanceChart.AnimAxis,
-  tyControls.AdvanceChart.Jitter;
+  tyControls.AdvanceChart.Jitter, tyControls.AdvanceChart.ZrPath;
 
 { ==================== the option ==================== }
 
@@ -431,7 +434,7 @@ end;
 procedure TyBreakZigzag(AC0, AC1: Double; AHorizontal: Boolean;
   AZMin, AZMax, AAmplitude, AMinSpan, AMaxSpan: Double;
   var ARandoms: TTyDoubleArray; var AState: LongWord;
-  out AA, AB: TTyBreakPointArray);
+  out AA, AB: TTyBreakPointArray; AScale: Double);
 var
   t, cur, pa, pb, rv, minS, maxS: Double;
   isSwap, first, last: Boolean;
@@ -446,14 +449,30 @@ begin
     AC1 := t;
   end;
   { subPixelOptimizeLine with a width of one, on a line across the grid at
-    each end: only the end along the axis is snapped }
-  AC0 := TySubPixelOptimize(AC0, 1, True);
-  AC1 := TySubPixelOptimize(AC1, 1, True);
+    each end: only the end along the axis is snapped -- ([R7-AH] a css px
+    wide, on the css px grid at another PPI [was: the device px grid]) }
+  if (AScale > 0) and (AScale <> 1) then
+  begin
+    AC0 := TyZrSubPixelOptimizeAt(AC0, AScale, True, AScale);
+    AC1 := TyZrSubPixelOptimizeAt(AC1, AScale, True, AScale);
+  end
+  else
+  begin
+    AC0 := TySubPixelOptimize(AC0, 1, True);
+    AC1 := TySubPixelOptimize(AC1, 1, True);
+  end;
   { arbitrary floors against a dead loop }
   minS := Max(Double(2), AMinSpan);
   if IsNan(AMinSpan) or (AMinSpan = 0) then minS := 2;
   maxS := Max(minS, AMaxSpan);
   if IsNan(AMaxSpan) or (AMaxSpan = 0) then maxS := minS;
+  { ([R7-AH] css px: PPI / 96 device px each [was: device px]) }
+  if (AScale > 0) and (AScale <> 1) then
+  begin
+    minS := minS * AScale;
+    maxS := maxS * AScale;
+    AAmplitude := AAmplitude * AScale;
+  end;
   isSwap := True;
   cur := AZMin;
   n := 0;
@@ -519,7 +538,7 @@ end;
 
 function TyAxisBreakLineSegs(const AFrame: TTyAxisNameFrame;
   const APairs: array of TTyRange; const AIds: array of string;
-  ALineWidth: Double): TTyAxisLineSegArray;
+  ALineWidth: Double; AScale: Double): TTyAxisLineSegArray;
 var
   ext0, ext1, segMin, tMin, tMax, t: Double;
   order: array of Integer;
@@ -540,11 +559,21 @@ var
       with it; then the two ends snapped as the axis line is }
     ApplyM(m, p1x, p1y);
     ApplyM(m, d1x, d1y);
-    TySubPixelOptimizeLine(p1x, p1y, d1x, d1y, ALineWidth);
     ApplyM(m, p2x, p2y);
     ApplyM(m, d2x, d2y);
-    TySubPixelOptimizeLine(p2x, p2y, d2x, d2y, ALineWidth);
-    TySubPixelOptimizeLine(p1x, p1y, p2x, p2y, ALineWidth);
+    { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
+    if (AScale > 0) and (AScale <> 1) then
+    begin
+      TyZrSubPixelLineAt(p1x, p1y, d1x, d1y, ALineWidth, AScale);
+      TyZrSubPixelLineAt(p2x, p2y, d2x, d2y, ALineWidth, AScale);
+      TyZrSubPixelLineAt(p1x, p1y, p2x, p2y, ALineWidth, AScale);
+    end
+    else
+    begin
+      TySubPixelOptimizeLine(p1x, p1y, d1x, d1y, ALineWidth);
+      TySubPixelOptimizeLine(p2x, p2y, d2x, d2y, ALineWidth);
+      TySubPixelOptimizeLine(p1x, p1y, p2x, p2y, ALineWidth);
+    end;
     if A1 >= 0 then s1 := AIds[A1] else s1 := #0;
     if A2 >= 0 then s2 := AIds[A2] else s2 := #0;
     SetLength(Result, n + 1);

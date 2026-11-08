@@ -460,16 +460,18 @@ procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   breaks whose breakArea is shown, the y axes (by index) before the x ones
   as upstream renders their views, each break's zigzag from the axis'
   cache and the chart's random numbers. }
+{ ([R7-AH] AScale: the device px a css px makes, PPI / 96) }
 procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  AMemory: TTyAxisMemoryStore);
+  AMemory: TTyAxisMemoryStore; AScale: Double = 1);
 { [F4a] one axis' break areas into ASpec, across ARect (a grid's plot, a
   singleAxis' rect): rectCoordBuildBreakAxis for any coordinate system }
 procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore;
+  AScale: Double = 1);
 { [F4a] buildAxisBreakLine into ASpec: the axis line cut at the breaks'
   clamped ends, the ends snapped for a line ALineWidthPx wide }
 procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  AOption: TTyChartOption; ALineWidthPx: Double);
+  AOption: TTyChartOption; ALineWidthPx: Double; AScale: Double = 1);
 
 { ---- the finishing touches [Batch 101] ---- }
 
@@ -3536,7 +3538,8 @@ begin
 end;
 
 procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore;
+  AScale: Double);
   var
     spec: PTyAxisLayoutSpec;
     opt: TTyBreakAreaOpt;
@@ -3599,7 +3602,7 @@ procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
       TyBreakZigzag(AAxis.DataToCoord(ticks[q].BreakVMin, True),
         AAxis.DataToCoord(ticks[q].BreakVMax, True), AAxis.Horizontal,
         zMin, zMax, opt.Amplitude, opt.MinSpan, opt.MaxSpan, r,
-        AMemory.RandomState^, a, b);
+        AMemory.RandomState^, a, b, AScale);
       geom.A := a;
       geom.B := b;
       { polyline B and the polygon only where the gap is something }
@@ -3630,7 +3633,7 @@ procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
 
 { buildAxisBreakLine [Batch 132; F4a: any axis with a frame] }
 procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  AOption: TTyChartOption; ALineWidthPx: Double);
+  AOption: TTyChartOption; ALineWidthPx: Double; AScale: Double);
   var
     brkTicks: TTyScaleTickArray;
     pairs: array of TTyRange;
@@ -3665,11 +3668,11 @@ procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
         Inc(n);
       end;
     lw := ALineWidthPx;
-    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw);
+    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw, AScale);
   end;
 
 procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  AMemory: TTyAxisMemoryStore);
+  AMemory: TTyAxisMemoryStore; AScale: Double);
 var
   pass, g, i, cnt, idx, n, comp, maxComp: Integer;
   gb: TTyGridBuild;
@@ -3679,7 +3682,7 @@ var
   begin
     spec := AGrid.SpecFor(AAxis);
     if spec = nil then Exit;
-    TyLayoutAxisBreakAreas(spec^, AAxis, AGrid.PlotXYWH, AOption, AMemory);
+    TyLayoutAxisBreakAreas(spec^, AAxis, AGrid.PlotXYWH, AOption, AMemory, AScale);
   end;
 
 begin
@@ -4595,7 +4598,8 @@ var
     lw := AText.AxisLineWidthLogical;
     if lw <= 0 then lw := 1;
     lw := AxisScaleF(lw, APPI);
-    TyAxisBreakLineOf(ASpec, AAxis, AOption, lw);
+    { ([R7-AH] snapped on the css px grid) }
+    TyAxisBreakLineOf(ASpec, AAxis, AOption, lw, APPI / 96);
   end;
 
   { THE FURNITURE ON THE FINAL RECT. A category axis' tick marks, split

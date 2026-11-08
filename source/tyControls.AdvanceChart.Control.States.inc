@@ -3409,6 +3409,8 @@ begin
   TmCrumbStates(FPaintList);
   MapRepatch(FPaintListPPI, True);
   StSyncMarks(FPaintList);
+  { [R7-AH] (each its view's place, as the build tagged it) }
+  ViewsTag(FPaintList);
   { [R7-Y] what the canvas is left with, in paint order: a state's refused
     value is settled as an element's own [was: only at a build] }
   if TyLinesCanvasLeftoversDue(FPaintList) then

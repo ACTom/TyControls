@@ -962,7 +962,7 @@ begin
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
       { cut at the breaks (axisLine.breakLine) [F4a] }
       TyAxisBreakLineOf(v.Spec, ax, AOption,
-        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
     end;
     marks := TickMarks(AOption, ax, v.Spec, v.Furn.TickInterval,
       v.Furn.AlignWithLabel, labelIv);
@@ -1098,7 +1098,7 @@ begin
     { THE BREAK AREAS across the single's rect (SingleAxisView's breakArea:
       rectCoordBuildBreakAxis into the view's group) [F4a] }
     if not v.Blank then
-      TyLayoutAxisBreakAreas(v.Spec, ax, S.Rect, AOption, AMemory);
+      TyLayoutAxisBreakAreas(v.Spec, ax, S.Rect, AOption, AMemory, APPI / 96);
   finally
     UnmaskFP(mask);
   end;

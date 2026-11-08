@@ -864,7 +864,9 @@ procedure TyGraphEdgeZrHit(var AEl: TTyChartElement; const AP1, AP2, ACP: TTyPoi
   upright edge goes to the half pixel of AWidth in the frame its shape is
   in -- data space on a view (the roam transform after it), pixels on axes.
   A curve, and a width of nought, are left. }
-procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double);
+{ ([R7-AH] AScale: on the css px grid, AWidth and the ends device px) }
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double;
+  AScale: Double = 1);
 
 { JavaScript's String() of an option value. }
 function TyGraphJsText(AData: TJSONData): string;
@@ -6047,7 +6049,8 @@ end;
 
 { ==================== the edge's enter [F3a] ==================== }
 
-procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double);
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double;
+  AScale: Double);
 var x1, y1, x2, y2: Double;
 begin
   if ACurved then Exit;
@@ -6055,7 +6058,7 @@ begin
   y1 := AP1.Y;
   x2 := AP2.X;
   y2 := AP2.Y;
-  TyZrSubPixelOptimizeLine(x1, y1, x2, y2, AWidth);
+  TyZrSubPixelLineAt(x1, y1, x2, y2, AWidth, AScale);
   AP1 := TyPointF(x1, y1);
   AP2 := TyPointF(x2, y2);
 end;
@@ -7326,7 +7329,9 @@ begin
       begin
         pts[0] := p1;
         pts[1] := p2;
-        TyGraphEdgeSnap(pts[0], pts[1], False, TyGraphEdgeWidth(ASpec, AEdges[i]) * pxs);
+        { ([R7-AH] on the css px grid at another PPI [was: the device px
+          grid]) }
+        TyGraphEdgeSnap(pts[0], pts[1], False, TyGraphEdgeWidth(ASpec, AEdges[i]) * pxs, pxs);
       end;
     end;
 

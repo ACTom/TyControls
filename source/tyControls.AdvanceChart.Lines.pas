@@ -346,7 +346,7 @@ function TyLinesLineBox(const AG: TTyLinesGeom; ALineWidth: Double): TTyXYWH;
 { The line from its start to percent: the straight segment, or the curve's
   first part (quadraticSubdivide) as ASteps + 1 points }
 function TyLinesPartPoints(const AG: TTyLinesGeom; APercent: Double;
-  ASteps: Integer; ASnapWidth: Double = 0): TTyPointFArray;
+  ASteps: Integer; ASnapWidth: Double = 0; AScale: Double = 1): TTyPointFArray;
 
 { ---- the effect ---- }
 
@@ -1156,7 +1156,7 @@ begin
 end;
 
 function TyLinesPartPoints(const AG: TTyLinesGeom; APercent: Double;
-  ASteps: Integer; ASnapWidth: Double): TTyPointFArray;
+  ASteps: Integer; ASnapWidth: Double; AScale: Double): TTyPointFArray;
 var
   k: Integer;
   p0, p1, p2, q0, q1: TTyPointF;
@@ -1172,7 +1172,9 @@ begin
     y1 := AG.Pts[0].Y;
     x2 := AG.Pts[1].X;
     y2 := AG.Pts[1].Y;
-    TyZrSubPixelOptimizeLine(x1, y1, x2, y2, ASnapWidth);
+    { ([R7-AH] on the css px grid at another PPI [was: the device px
+      grid]) }
+    TyZrSubPixelLineAt(x1, y1, x2, y2, ASnapWidth, AScale);
     { Line.buildPath: x1 * (1 - p) + x2 * p }
     SetLength(Result, 2);
     Result[0] := TyPointF(x1, y1);
@@ -1605,10 +1607,10 @@ begin
 end;
 
 function LinePoints(const AG: TTyLinesGeom; APoly: Boolean; APercent: Double;
-  ASnapWidth: Double): TTyPointFArray;
+  ASnapWidth: Double; AScale: Double): TTyPointFArray;
 begin
   if APoly then Exit(Copy(AG.Pts, 0, Length(AG.Pts)));
-  Result := TyLinesPartPoints(AG, APercent, cLinesCurveSteps, ASnapWidth);
+  Result := TyLinesPartPoints(AG, APercent, cLinesCurveSteps, ASnapWidth, AScale);
 end;
 
 function TyBuildLinesMarks(const ASolved: TTyLinesSolved; AEmptyFill: TTyChartColor;
@@ -1774,7 +1776,7 @@ begin
     mz2 := Max(mz2, ASolved.Z2);
     { THE LINE: a polyline's points, a line's segment, a curve sampled }
     { [R7-G] a straight line on the half pixel of its width (device px) }
-    pts := LinePoints(g, ASolved.Poly, 1, ink.Width * ASolved.Scale);
+    pts := LinePoints(g, ASolved.Poly, 1, ink.Width * ASolved.Scale, ASolved.Scale);
     el := TyChartElement(TyShapePolyline(pts));
     { [R7-F] the pointer tests the quadratic itself (BezierCurve), not the
       points it is drawn as }
@@ -1843,6 +1845,8 @@ begin
       el.Anim.G[10] := ink.AlignFlags;
       { [R7-G] the width its frames snap by (device px) }
       el.Anim.G[11] := ink.Width * ASolved.Scale;
+      { [R7-AH] ... on the css px grid }
+      el.Anim.PxScale := ASolved.Scale;
       { THE LABEL, where Line.beforeUpdate puts it at percent 1; a polyline
         has none }
       { [spec 242] the label's textConfig rides with the line: [has turn,
@@ -3247,7 +3251,7 @@ begin
     AEl.Silent := True;
     Exit;
   end;
-  AEl.Shape.Points := LinePoints(g, False, APercent, AEl.Anim.G[11]);
+  AEl.Shape.Points := LinePoints(g, False, APercent, AEl.Anim.G[11], AEl.Anim.PxScale);
   { [R7-F] the quadratic the pointer tests: the first part's control point
     (quadraticSubdivide at the percent), as the points are drawn }
   if AEl.Shape.HitQuad and g.Curved then
