@@ -2680,21 +2680,22 @@ begin
   else if cap then
   begin
     { [R7-AC] A TEXT'S BOX BEFORE ITS SPANS: each drawn box (a rect piece)
-      sets the canvas' shadowColor -- its own, 'transparent' where it casts
-      none, the one the canvas had where it is a colour no parser reads
-      (marked, CanvasLeft 4) -- and the span after it starts from there
-      [was: the box's shadow not counted, a refused one not drawn] }
+      sets the canvas' shadowColor, casting or not -- its own (RectPiece:
+      the written one, else the text style's prototype '#000'; one of no
+      alpha 'transparent'), the one the canvas had where it is a colour no
+      parser reads (marked, CanvasLeft 4) -- and the span after it starts
+      from there [was: the box's shadow not counted, a refused one not
+      drawn] }
     for k := 0 to High(AEl.Caption.RtPieces) do
     begin
       pc := @AEl.Caption.RtPieces[k];
       if (pc^.Kind <> rpkRect) or not pc^.Drawn then Continue;
-      if pc^.HasShadow and ((pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0)) then
+      if (pc^.ShadowColor = cTyCanvasColourLeft) or ((pc^.CanvasLeft and 4) <> 0) then
       begin
         pc^.CanvasLeft := pc^.CanvasLeft or 4;
         pc^.ShadowColor := ARun.Cur.Shadow;
       end
-      else if pc^.HasShadow then ARun.Cur.Shadow := pc^.ShadowColor
-      else ARun.Cur.Shadow := 0;
+      else ARun.Cur.Shadow := pc^.ShadowColor;
     end;
     CaptionShadowOf(AEl, colour, blur, ox, oy);
     { [R7-AA] a text span's shadowColor the canvas refuses: the one it had

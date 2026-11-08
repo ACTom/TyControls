@@ -143,6 +143,7 @@ type
     procedure TestTheR7ACCanvasAsUpstream;
     procedure TestARichTipsBorderIsOutsideItsBox;
     procedure TestATipsTextShadowIsDrawn;
+    procedure TestALabelBoxsRefusedColoursAreTheCanvas;
     procedure TestARichTipsRefusedMarkerIsDrawn;
     procedure TestAnAxisPensShadowIsDrawn;
     procedure TestThePolarViewsInUpstreamsOrder;
@@ -2245,46 +2246,61 @@ end;
 
 { [R7-AC] A TOOLTIP'S TEXT CASTS textStyle's SHADOW, in both modes: black
   text at 20 px on white, its shadow blue, offset 8 px down at a blur of 1
-  (html's text-shadow, richText's spans): blue ink shows in the box under
-  the glyphs (none at all before: the option had no effect) }
+  (html's text-shadow, richText's spans): the box differs from the same box
+  with a blur of nought (no shadow), by the shadow's pixels -- bluish ones
+  where the text is not (nothing at all differed before: the option had no
+  effect). Two renders compared, as the text's own edges are coloured where
+  the text is drawn with subpixel coverage }
 procedure TAdvChartLinesCanvasOracleTest.TestATipsTextShadowIsDrawn;
 var
-  mode: Integer;
-  px: TBGRAPixel;
+  mode, pass: Integer;
+  px, pa: TBGRAPixel;
   bb: TTyRectF;
-  x, y, blue: Integer;
-  m: string;
+  x, y, n: Integer;
+  m, blur: string;
+  a: TBGRABitmap;
 begin
-  for mode := 0 to 1 do
-  begin
-    if mode = 0 then m := 'html' else m := 'richText';
-    FreeAndNil(FChart);
-    FChart := TLcProbe.Create(FForm);
-    FChart.Parent := FForm;
-    FChart.Controller := FCtl;
-    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
-    FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,"show":false},'
-      + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
-      + '"tooltip":{"renderMode":"' + m + '","showDelay":0,"transitionDuration":0,"position":[60,60],'
-      + '"backgroundColor":"#ffffff","borderColor":"#ffffff","shadowBlur":0,"shadowOffsetX":0,"shadowOffsetY":0,'
-      + '"padding":[4,10,16,10],"formatter":"MMMM","textStyle":{"color":"#000000","fontSize":20,'
-      + '"textShadowColor":"#0000ff","textShadowBlur":1,"textShadowOffsetY":8}},'
-      + '"series":[{"type":"scatter","symbolSize":4,"data":[[9,9]]}]}', True);
-    FBmp.Fill(BGRA(255, 255, 255, 255));
-    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
-    FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
-    FBmp.Fill(BGRA(255, 255, 255, 255));
-    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
-    bb := FChart.TipFill;
-    AssertTrue(m + ': a box drawn', TyRectFIsValid(bb));
-    blue := 0;
-    for y := Round(bb.Top) to Round(bb.Bottom) - 1 do
-      for x := Round(bb.Left) to Round(bb.Right) - 1 do
+  a := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRA(255, 255, 255, 255));
+  try
+    for mode := 0 to 1 do
+    begin
+      if mode = 0 then m := 'html' else m := 'richText';
+      for pass := 0 to 1 do
       begin
-        px := FBmp.GetPixel(x, y);
-        if (px.blue > px.red + 60) and (px.blue > px.green + 60) then Inc(blue);
+        if pass = 0 then blur := '0' else blur := '1';
+        FreeAndNil(FChart);
+        FChart := TLcProbe.Create(FForm);
+        FChart.Parent := FForm;
+        FChart.Controller := FCtl;
+        FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+        FChart.SetOption('{"animation":false,"xAxis":{"type":"value","min":0,"max":10,"show":false},'
+          + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+          + '"tooltip":{"renderMode":"' + m + '","showDelay":0,"transitionDuration":0,"position":[60,60],'
+          + '"backgroundColor":"#ffffff","borderColor":"#ffffff","shadowBlur":0,"shadowOffsetX":0,"shadowOffsetY":0,'
+          + '"padding":[4,10,16,10],"formatter":"MMMM","textStyle":{"color":"#000000","fontSize":20,'
+          + '"textShadowColor":"#0000ff","textShadowBlur":' + blur + ',"textShadowOffsetY":8}},'
+          + '"series":[{"type":"scatter","symbolSize":4,"data":[[9,9]]}]}', True);
+        FBmp.Fill(BGRA(255, 255, 255, 255));
+        FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+        FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+        FBmp.Fill(BGRA(255, 255, 255, 255));
+        FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+        bb := FChart.TipFill;
+        AssertTrue(m + ': a box drawn', TyRectFIsValid(bb));
+        if pass = 0 then a.PutImage(0, 0, FBmp, dmSet);
       end;
-    AssertTrue(Format('%s: the text''s blue shadow drawn (%d px)', [m, blue]), blue > 20);
+      n := 0;
+      for y := Round(bb.Top) to Round(bb.Bottom) - 1 do
+        for x := Round(bb.Left) to Round(bb.Right) - 1 do
+        begin
+          px := FBmp.GetPixel(x, y);
+          pa := a.GetPixel(x, y);
+          if not (px = pa) and (px.blue > px.red + 40) and (pa.red > 200) and (pa.blue > 200) then Inc(n);
+        end;
+      AssertTrue(Format('%s: the text''s blue shadow drawn (%d px)', [m, n]), n > 20);
+    end;
+  finally
+    a.Free;
   end;
 end;
 
@@ -2330,6 +2346,68 @@ begin
       for x := Round(bb.Left) to Round(bb.Right) - 1 do
         if not (a.GetPixel(x, y) = FBmp.GetPixel(x, y)) then Inc(n);
     AssertEquals('the box as for a series in #333333', 0, n);
+  finally
+    a.Free;
+  end;
+end;
+
+{ [R7-AC] A LABEL'S BOX IN COLOURS NO PARSER READS: its background Rect
+  is filled all the same, in the fill the canvas had (the symbol's red),
+  and its shadow cast in the shadowColor the canvas had (the symbol's
+  green) -- not left out, not zrender's '#000'. A scatter symbol in red
+  with a green shadow; its label to the right, the box's backgroundColor
+  and shadowColor 'nope', the shadow 12 px down: the label looks as it does
+  with '#ff0000' and '#00ff00' written, pixel for pixel (the box was not
+  drawn) }
+procedure TAdvChartLinesCanvasOracleTest.TestALabelBoxsRefusedColoursAreTheCanvas;
+var
+  a: TBGRABitmap;
+  pass, x, y, n, red: Integer;
+  bg, sh: string;
+  px: TBGRAPixel;
+begin
+  a := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRA(255, 255, 255, 255));
+  try
+    for pass := 0 to 1 do
+    begin
+      if pass = 0 then
+      begin
+        bg := 'nope';
+        sh := 'nope';
+      end
+      else
+      begin
+        bg := '#ff0000';
+        sh := '#00ff00';
+      end;
+      FreeAndNil(FChart);
+      FChart := TLcProbe.Create(FForm);
+      FChart.Parent := FForm;
+      FChart.Controller := FCtl;
+      FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+      FChart.SetOption('{"animation":false,"grid":{"left":0,"right":0,"top":0,"bottom":0},'
+        + '"xAxis":{"type":"value","min":0,"max":400,"show":false},'
+        + '"yAxis":{"type":"value","min":0,"max":300,"show":false,"inverse":true},'
+        + '"series":[{"type":"scatter","symbolSize":10,"data":[[100,100]],'
+        + '"itemStyle":{"color":"#ff0000","shadowBlur":3,"shadowColor":"#00ff00"},'
+        + '"label":{"show":true,"position":"right","distance":30,"formatter":"Ab","color":"#000000","fontSize":16,'
+        + '"backgroundColor":"' + bg + '","padding":8,"shadowBlur":2,"shadowColor":"' + sh + '","shadowOffsetY":12}}]}',
+        True);
+      FBmp.Fill(BGRA(255, 255, 255, 255));
+      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      if pass = 0 then a.PutImage(0, 0, FBmp, dmSet);
+    end;
+    n := 0;
+    red := 0;
+    for y := 70 to 140 do
+      for x := 120 to 230 do
+      begin
+        if not (a.GetPixel(x, y) = FBmp.GetPixel(x, y)) then Inc(n);
+        px := FBmp.GetPixel(x, y);
+        if (px.red > 200) and (px.red > px.green + 100) then Inc(red);
+      end;
+    AssertTrue(Format('the written box drawn (%d px)', [red]), red > 40);
+    AssertEquals('the box and its shadow as written', 0, n);
   finally
     a.Free;
   end;

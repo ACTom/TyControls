@@ -143,11 +143,10 @@ type
     ShadowColourRefused: Boolean;
     { [R7-AC] textStyle's textShadowBlur / textShadowOffsetX / Y /
       textShadowColor (TextShadowKeys 1, 2, 4, 8): the text's shadow (a
-      colour no parser reads TextShadowColourRefused, cTyCanvasColourLeft) }
+      colour no parser reads cTyCanvasColourLeft) }
     TextShadowKeys: Byte;
     TextShadowBlur, TextShadowOffsetX, TextShadowOffsetY: Double;
     TextShadowColour: TTyChartColor;
-    TextShadowColourRefused: Boolean;
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
@@ -1102,7 +1101,6 @@ begin
       begin
         ASpec.TextShadowKeys := ASpec.TextShadowKeys or 8;
         ASpec.TextShadowColour := cTyCanvasColourLeft;
-        ASpec.TextShadowColourRefused := True;
       end;
     end;
   end;

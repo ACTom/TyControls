@@ -5437,6 +5437,9 @@ begin
   P := NewPainter;
   try
     P.BeginPaintOn(nil, R, FLastPPI, bmp);
+    { ([R7-AC] a paint of the box alone: the overlay's run from the ground,
+      not a paint's left over) }
+    FOvOn := False;
     PaintTooltip(P, R, FLastPPI, m);
     P.EndPaint;
   finally
@@ -8067,8 +8070,9 @@ begin
           begin
             if not rich then
             begin
-              if ((spec.TextShadowKeys and 8) <> 0) and not spec.TextShadowColourRefused then
-                tsc := spec.TextShadowColour;
+              { (a colour no parser reads is cTyCanvasColourLeft, of no
+                alpha: the browser drops text-shadow, nothing drawn) }
+              if (spec.TextShadowKeys and 8) <> 0 then tsc := spec.TextShadowColour;
             end
             else if frozenPic or ((spec.TextShadowKeys and 8) <> 0) then
               tsc := lines[i].Runs[j].ShadowColour;
