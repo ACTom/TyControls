@@ -108,6 +108,8 @@ type
     font -- zrender's widths and line heights in the lines-canvas run }
   TLcSixMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public
+    { [R7-AK] device px a css px (the PPI over 96): six css px a unit }
+    Scale: Double;
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
     function WrapToWidth(const AText, AFontName: string;
@@ -203,6 +205,9 @@ type
       joined rect on the right }
     procedure TestTheR7AICanvasAsUpstream;
     procedure TestTheR7AIHitsAsUpstream;
+    { [R7-AK] a title's frame whose size a string padding joined, at 144
+      PPI: the far edge joined on the css px grid, 1.5 times upstream's }
+    procedure TestAStringPaddedTitleFrameAt144PPI;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
     procedure TestAnInfiniteHaloHandsItsColourAtOnce;
@@ -315,6 +320,12 @@ begin
       Inc(n);
   AW := Max(AW, 6.0 * n);
   AH := 6.0 * lines;
+  { ([R7-AK] at another PPI: in device px) }
+  if (Scale > 0) and (Scale <> 1) then
+  begin
+    AW := AW * Scale;
+    AH := AH * Scale;
+  end;
 end;
 
 function TLcSixMeasurer.WrapToWidth(const AText, AFontName: string;
@@ -324,8 +335,14 @@ begin
 end;
 
 function TLcProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+var sixM: TLcSixMeasurer;
 begin
-  if Six then Result := TLcSixMeasurer.Create
+  if Six then
+  begin
+    sixM := TLcSixMeasurer.Create;
+    if APPI > 0 then sixM.Scale := APPI / 96;
+    Result := sixM;
+  end
   else Result := inherited NewTextMeasurer(APPI);
 end;
 
@@ -3380,6 +3397,60 @@ begin
   finally
     FCapKeys := False;
   end;
+end;
+
+{ [R7-AK] THE TITLE OF ai-comp-pad ('12', a border of 1) AT 144 PPI: the
+  frame subPixelOptimizeRect snaps on the css px grid -- its far edge
+  `originX + originWidth` joined as css px strings -- and 1.5 device px a
+  css px; upstream's frame (css px, the recording canvas at 96) times 1.5 }
+procedure TAdvChartLinesCanvasOracleTest.TestAStringPaddedTitleFrameAt144PPI;
+var
+  cs, els: TJSONArray;
+  c, rec: TJSONObject;
+  i, k: Integer;
+  pb: array[0..3] of Double;
+  b: TBGRABitmap;
+  el: TTyChartElement;
+  bb: TTyRectF;
+  found: Boolean;
+begin
+  found := False;
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'ai-comp-pad' then c := cs.Objects[i];
+  AssertTrue('the case', c <> nil);
+  els := c.Arrays['frames'].Objects[0].Arrays['els'];
+  for k := 0 to els.Count - 1 do
+  begin
+    rec := els.Objects[k];
+    if rec.Strings['key'] <> 'c.title0.0.p.0' then Continue;
+    for i := 0 to 3 do pb[i] := HexD(rec.Arrays['pb'].Strings[i]);
+    found := True;
+  end;
+  AssertTrue('upstream''s frame', found);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  PinClocks(FChart);
+  FChart.Six := True;
+  FChart.SetBounds(0, 0, 600, 450);
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  AssertEquals('parses', '', FChart.OptionError);
+  b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(b.Canvas, Rect(0, 0, 600, 450), 144);
+  finally
+    b.Free;
+  end;
+  AssertTrue('the frame drawn', FChart.CompPart('title0', 0, False, 'stroke', el));
+  bb := TyShapeBounds(el.Shape);
+  if (Abs(bb.Left - 1.5 * pb[0]) > 1e-6) or (Abs(bb.Top - 1.5 * pb[1]) > 1e-6)
+    or (Abs(bb.Right - 1.5 * pb[2]) > 1e-6) or (Abs(bb.Bottom - 1.5 * pb[3]) > 1e-6) then
+    Fail(Format('the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g) times 1.5',
+      [bb.Left, bb.Top, bb.Right, bb.Bottom, 1.5 * pb[0], 1.5 * pb[1], 1.5 * pb[2], 1.5 * pb[3]]));
+  FreeAndNil(FChart);
 end;
 
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the
