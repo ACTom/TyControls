@@ -1434,21 +1434,24 @@ end;
   when horizontal) by which half of the canvas the component's centre falls
   in, the component measured as ten long and AItemW across }
 function AutoItemAlign(const AView: TTyVmViewSpec; AItemW, ACanvasW,
-  ACanvasH: Double; const APad: array of Double): string;
+  ACanvasH: Double; const APad: array of Double; AScale: Double): string;
 var
-  b: TTyRawBox;
+  b, own: TTyRawBox;
   rr: TTyXYWH;
   m: Double;
 begin
   if (AView.Align <> '') and (AView.Align <> 'auto') then Exit(AView.Align);
+  { ([R7-AG] its px css px: AScale device px each) }
+  own := AView.Box;
+  if (AScale > 0) and (AScale <> 1) then own := TyBoxRawScaled(own, AScale);
   b := Default(TTyRawBox);
   if not AView.Horizontal then
   begin
     b.Top := TyBoxRawNum(0);
     b.Bottom.Kind := brNull;
     b.Height := TyBoxRawNum(10);
-    b.Left := AView.Box.Left;
-    b.Right := AView.Box.Right;
+    b.Left := own.Left;
+    b.Right := own.Right;
     b.Width := TyBoxRawNum(AItemW);
   end
   else
@@ -1456,8 +1459,8 @@ begin
     b.Left := TyBoxRawNum(0);
     b.Right.Kind := brNull;
     b.Width := TyBoxRawNum(10);
-    b.Top := AView.Box.Top;
-    b.Bottom := AView.Box.Bottom;
+    b.Top := own.Top;
+    b.Bottom := own.Bottom;
     b.Height := TyBoxRawNum(AItemW);
   end;
   rr := TyGetLayoutRect(b, 0, 0, ACanvasW, ACanvasH, APad);
@@ -1575,7 +1578,7 @@ begin
   { _getItemAlign: vertical asks helper.getItemAlign, horizontal is `align`
     or left }
   if not AView.Horizontal then
-    itemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad)
+    itemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad, AScale)
   else if (AView.Align = '') or (AView.Align = 'auto') then
     itemAlign := 'left'
   else
@@ -1696,8 +1699,10 @@ begin
   Accumulate(bb, have, BackgroundRect(L.Background, AView.BorderWidth), MatIdentity);
   L.BBoxPosition := bb;
 
-  { positionGroup, as the continuous view }
+  { positionGroup, as the continuous view -- [R7-AG] its px css px: AScale
+    device px each [was: device px] }
   box := AView.PosBox;
+  if (AScale > 0) and (AScale <> 1) then box := TyBoxRawScaled(box, AScale);
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -2140,7 +2145,7 @@ begin
       AModel.Extent1, 0, i1, True);
 
   { the bar group, one of four }
-  L.ItemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad);
+  L.ItemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad, AScale);
   vertical := not AView.Horizontal;
   left := L.ItemAlign = 'left';
   bottom := L.ItemAlign = 'bottom';
@@ -2227,8 +2232,10 @@ begin
   bb := GroupRect(True);
   L.BBoxPosition := bb;
 
-  { positionGroup: the box with the drawn size, on the canvas, no margin }
+  { positionGroup: the box with the drawn size, on the canvas, no margin --
+    [R7-AG] its px css px: AScale device px each [was: device px] }
   box := AView.PosBox;
+  if (AScale > 0) and (AScale <> 1) then box := TyBoxRawScaled(box, AScale);
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);

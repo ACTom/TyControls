@@ -3743,7 +3743,8 @@ begin
   SetLength(FGraphCats, Length(FBindings));
   SetLength(FGraphNodeScale, Length(FBindings));
   { [R2-J3] each slot's visual callbacks in the graph unit's scope while its
-    nodes are read }
+    nodes are read; [R7-AG] the css px' scale too }
+  if APPI > 0 then TyGraphPxScale := APPI / 96 else TyGraphPxScale := 1;
   try
   for i := 0 to High(FBindings) do
   begin
@@ -3862,11 +3863,11 @@ begin
   finally
     TyGraphItemCallbacks := nil;
     TyGraphItemNodes := nil;
+    TyGraphPxScale := 1;
   end;
   { [F3d] the edges' keys for the next update }
   SetLength(FGraphEdgeKeys, Length(FBindings));
   for i := 0 to High(FBindings) do FGraphEdgeKeys[i] := AnimGraphEdgeKeys(i);
-  if APPI < 0 then ;
 end;
 
 function TTyCustomAdvanceChart.GraphNodeName(ASlot, ANode: Integer): string;

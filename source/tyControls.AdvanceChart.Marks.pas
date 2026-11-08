@@ -1977,6 +1977,10 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    { [R7-AG] BarView's Rect is z2 1 (its background 0): at an equal z it
+      is over a z2-0 part -- a split line, a split area -- and among the
+      z2-1 ones by its view [was: the series' z2, 0] }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     el.Ignore := clipped;
     { [R6-F] the pen of an infinite border makes its bounding rect
@@ -3629,7 +3633,7 @@ begin
     { THE LAYOUT'S EIGHT POINTS: the body's sides snapped to the half pixel
       apart, the spine to the half pixel [Batch 108] }
     ce := TyCandleEndsOf(ABinding.Cart, baseHoriz, at, openV, closeV, lowV,
-      highV, width);
+      highV, width, AVisual.PxScale);
     { resolveNormalBoxClipping over all eight: none inside is not drawn,
       some outside is drawn through the plot }
     if clipOn then clipKind := TyWhiskerClipOf(area, ce.Ends) else clipKind := wcNone;
@@ -4048,6 +4052,17 @@ begin
     if AVisual.ItemCb <> nil then
       spec := TyPictorialCbSpec(spec, AVisual.ItemCb.SymOf(AStore.GetRawIndex(i)));
     spec := TyPictorialRowSpec(spec, AStore, i);
+    { [R7-AG] symbolSize, symbolOffset and symbolMargin written in px are
+      css px: PPI / 96 device px each (a percentage stays of its base)
+      [was: device px] }
+    if (AVisual.PxScale > 0) and (AVisual.PxScale <> 1) then
+    begin
+      spec.SizeW := TyBoxValueScaled(spec.SizeW, AVisual.PxScale);
+      spec.SizeH := TyBoxValueScaled(spec.SizeH, AVisual.PxScale);
+      spec.OffsetX := TyBoxValueScaled(spec.OffsetX, AVisual.PxScale);
+      spec.OffsetY := TyBoxValueScaled(spec.OffsetY, AVisual.PxScale);
+      spec.Margin := TyBoxValueScaled(spec.Margin, AVisual.PxScale);
+    end;
     lay := ABinding.Cart.DataToLayout([x, y]);
     if not TyRectFIsValid(lay.Rect) then Continue;
     if not haveCol then
@@ -4623,6 +4638,8 @@ begin
     rv := RowVisual(AVisual, AStore, i);
     el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
       ABinding.SeriesIndex, i);
+    { ([R7-AG] its Sector z2 1, as the cartesian Rect) }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     zero := TyPolarZero(s);
     if zero then

@@ -613,6 +613,21 @@ begin
       spec.Radius0 := TyBoxPercent(70);
       spec.Radius1 := TyBoxPercent(80);
     end;
+    { [R7-AG] its centre's, radius' and box's pixel counts are css px:
+      PPI / 96 device px each, as a pie's [was: device px] }
+    if (APPI > 0) and (APPI <> 96) then
+    begin
+      spec.CentreX := TyBoxValueScaled(spec.CentreX, APPI / 96);
+      spec.CentreY := TyBoxValueScaled(spec.CentreY, APPI / 96);
+      spec.Radius0 := TyBoxValueScaled(spec.Radius0, APPI / 96);
+      spec.Radius1 := TyBoxValueScaled(spec.Radius1, APPI / 96);
+      spec.Box.Left := TyBoxValueScaled(spec.Box.Left, APPI / 96);
+      spec.Box.Top := TyBoxValueScaled(spec.Box.Top, APPI / 96);
+      spec.Box.Right := TyBoxValueScaled(spec.Box.Right, APPI / 96);
+      spec.Box.Bottom := TyBoxValueScaled(spec.Box.Bottom, APPI / 96);
+      spec.Box.Width := TyBoxValueScaled(spec.Box.Width, APPI / 96);
+      spec.Box.Height := TyBoxValueScaled(spec.Box.Height, APPI / 96);
+    end;
     if AHasRef then
     begin
       { in the refContainer, by getLayoutRect on the raw box [Batch 151] }

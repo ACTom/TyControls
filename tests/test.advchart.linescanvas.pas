@@ -110,6 +110,9 @@ type
     function CompPartN(const AKey: string; AZ2: Integer; AText: Boolean; AN: Integer;
       out AEl: TTyChartElement): Boolean;
     { [R7-AC] the ANth part of AKey, AZ2 and kind as drawn (0 the first) }
+    { [R7-AG] a text part of AKey drawn with the words AText }
+    function CompPartWords(const AKey: string; AZ2: Integer; const AWords: string;
+      out AEl: TTyChartElement): Boolean;
     function CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean; ANth: Integer;
       out AEl: TTyChartElement): Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -213,6 +216,42 @@ type
       its box by the line width -- not by max(width, 5) as a Line's: at
       width 4 the rect is 3 px wider than at width 1 }
     procedure TestAMergedSplitPathGrowsByItsWidth;
+    { [R7-AG] THE REST OF AN OPTION'S CSS PX AT ANOTHER PPI, element by
+      element as TestOptionPxAtAnotherPPIAsUpstream (every element of the
+      list, a component's too): a pictorialBar's symbol, size, offset and
+      margin; a graph's box, its symbols and its edges' ends (none,
+      circular, force, on axes); a tree's and a radar series' symbols; a
+      candle's sides on the css px' half pixel; a chord's centre and radii;
+      a matrix' cells on the css px' half pixel; a legend's, a title's and a
+      visualMap's box; a tooltip's position (the option's px, the gap); an
+      axis' ticks on the css px' half pixel (the device column left of a
+      tick at css 40.5 stays clear) }
+    procedure TestTheRestOfTheOptionPxAtAnotherPPIAsUpstream;
+    { [R7-AG] the agy- cases, as the y- ones: fonts the canvas refuses in a
+      richText tooltip's spans, an axis pointer's label, a dataZoom's,
+      a timeline's, a calendar's and a matrix' labels }
+    procedure TestTheR7AGCarriesAsUpstream;
+    { [R7-AG] the ag- cases, as the aa- ones: a polar's and a single axis'
+      parts interleaved with the other views' by z2; a parallel's and a
+      calendar over a cartesian axis; the views in the order they were made
+      (a merge's new radar, a new x axis, a notMerge); a ripple, a lines
+      effect of z -1 under the axes while they move; a progressive layer }
+    procedure TestTheR7AGCanvasAsUpstream;
+    { [R7-AG] A POLAR'S AND A SINGLE AXIS' PARTS EACH IN ITS VIEW'S PLACE
+      AMONG THE OTHERS', z2 by z2, pixel by pixel where two cross: a second
+      polar's radius split circles (z2 0) under the first's angle split
+      lines (the radius views before the angle ones); a radius axis' tick
+      (z2 2) over a cartesian x axis' line (z2 1); a single axis' tick (z2
+      2) over it too }
+    procedure TestThePolarAndSingleViewsInterleaved;
+    { [R7-AG] a ripple of z -1 while it moves: under the x axis' split line
+      (zrender's one display list) [was: the dynamic layer's, over the
+      axes] }
+    procedure TestARippleUnderTheAxesWhileItMoves;
+    { [R7-AG] tooltip.textStyle.fontWeight is the tokens' weight
+      (getTooltipTextStyle) [was: not read -- the skin's]: 'normal' draws
+      the value (the skin's bold) with less ink than none written }
+    procedure TestATipsFontWeightIsTheTextStyles;
   end;
 
 implementation
@@ -288,6 +327,27 @@ begin
       if n = AN then Exit;
       Inc(n);
     end;
+end;
+
+function TLcProbe.CompPartWords(const AKey: string; AZ2: Integer; const AWords: string;
+  out AEl: TTyChartElement): Boolean;
+var d: TTyCompPartArray; k, q: Integer; s: string;
+begin
+  d := CompDrawn;
+  AEl := Default(TTyChartElement);
+  for k := 0 to High(d) do
+    if (d[k].Key = AKey) and (d[k].Z2 = AZ2) and d[k].IsText then
+    begin
+      s := d[k].El.Caption.Text;
+      if (s = '') and (Length(d[k].El.Caption.RtPieces) > 0) then
+        for q := 0 to High(d[k].El.Caption.RtPieces) do s := s + d[k].El.Caption.RtPieces[q].Text;
+      if s = AWords then
+      begin
+        AEl := d[k].El;
+        Exit(True);
+      end;
+    end;
+  Result := False;
 end;
 
 function TLcProbe.CompPartNth(const AKey: string; AZ2: Integer; AText: Boolean;
@@ -415,6 +475,18 @@ begin
   end;
 end;
 
+{ [R7-AD] the six clocks a chart reads, pinned ([R7-AG] the Run* cases'
+  too) }
+procedure PinClocks(AChart: TTyCustomAdvanceChart);
+begin
+  AChart.AnimNow := cT0;
+  AChart.TooltipNow := cT0;
+  AChart.DataZoomNow := cT0;
+  AChart.BrushNow := cT0;
+  AChart.ParallelExpandNow := cT0;
+  AChart.TimelineNow := cT0;
+end;
+
 { AWhich 0: the shadow cases (grad-*), 1: the one-number sizes (one-*) }
 procedure TAdvChartLinesCanvasOracleTest.Run(AWhich: Integer);
 var
@@ -444,7 +516,9 @@ begin
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
       or (Copy(id, 1, 2) = 'y-')
       or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ad-') or (Copy(id, 1, 4) = 'ady-')
-      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') then Continue;
+      or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-')
+      { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
+      or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -452,7 +526,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -650,7 +724,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -901,7 +975,18 @@ begin
       if not TyRectFIsValid(bb) then Continue;
       if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
         and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
+      begin
+        { ([R7-AG] of several there -- an effect symbol under its ripples
+          at their start -- the one that makes the record's first op: a
+          fill, a stroke) }
+        if (Result < 0) and (ARec.Find('ops') <> nil) and (ARec.Arrays['ops'].Count > 0)
+          and ((ARec.Arrays['ops'].Objects[0].Strings['op'] = 'fill') <> el.Style.HasFill) then
+        begin
+          Result := k;
+          Continue;
+        end;
         Exit(k);
+      end;
     end;
     Exit;
   end;
@@ -1177,7 +1262,8 @@ var
 begin
   strict := APrefix <> 'w-';
   { (and the ac-, ae- ones: R7-AC, R7-AE) }
-  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or (APrefix = 'ae-');
+  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or (APrefix = 'ae-')
+    or (APrefix = 'ag-');
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -1199,7 +1285,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.UseDirtyRect := dirty;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
@@ -1829,7 +1915,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.UseDirtyRect := True;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
@@ -2257,7 +2343,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -2365,7 +2451,19 @@ begin
               parts.Delimiter := '.';
               parts.StrictDelimiter := True;
               parts.DelimitedText := key;
-              if not FChart.CompPartN(parts[1], StrToInt(parts[2]), True, StrToInt(parts[4]), el) then
+              { ([R7-AG] a richText tooltip's span by its words: its blank
+                ones -- a marker's, the two spaces after it -- are no part
+                of the port's) }
+              if parts[1] = 'tooltip0' then
+              begin
+                if Trim(rec.Get('tx', '')) = '' then Continue;
+                if not FChart.CompPartWords(parts[1], StrToInt(parts[2]), rec.Get('tx', ''), el) then
+                begin
+                  Miss(where + ': no span');
+                  Continue;
+                end;
+              end
+              else if not FChart.CompPartN(parts[1], StrToInt(parts[2]), True, StrToInt(parts[4]), el) then
               begin
                 idx := CListOf(rec, True, StrToInt(parts[2]));
                 if idx < 0 then
@@ -2693,7 +2791,7 @@ var
     FChart.Font.PixelsPerInch := APPI;
     FChart.SetBounds(0, 0, w, h);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(AOpt, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     ABmp.Fill(BGRA(255, 255, 255, 255));
@@ -2920,16 +3018,6 @@ begin
 end;
 
 { [R7-AD] every clock of a chart a test draws pinned }
-procedure PinClocks(AChart: TTyCustomAdvanceChart);
-begin
-  AChart.AnimNow := cT0;
-  AChart.TooltipNow := cT0;
-  AChart.DataZoomNow := cT0;
-  AChart.BrushNow := cT0;
-  AChart.ParallelExpandNow := cT0;
-  AChart.TimelineNow := cT0;
-end;
-
 procedure TAdvChartLinesCanvasOracleTest.TestAMergedSplitPathGrowsByItsWidth;
 
   function WidthAt(AWidth: Integer): Double;
@@ -3212,7 +3300,7 @@ begin
       FChart.Controller := FCtl;
       FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
       FChart.AnimationMode := camAlways;
-      FChart.AnimNow := cT0;
+      PinClocks(FChart);
       FChart.SetOption(opt.AsJSON, True);
       FBmp.Fill(BGRA(255, 255, 255, 255));
       FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3251,7 +3339,7 @@ begin
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
   FChart.AnimationMode := camAlways;
-  FChart.AnimNow := cT0;
+  PinClocks(FChart);
   FChart.SetOption(c.Objects['option'].AsJSON, True);
   FBmp.Fill(BGRA(255, 255, 255, 255));
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3292,7 +3380,7 @@ begin
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
   FChart.AnimationMode := camAlways;
-  FChart.AnimNow := cT0;
+  PinClocks(FChart);
   FChart.SetOption(c.Objects['option'].AsJSON, True);
   FBmp.Fill(BGRA(255, 255, 255, 255));
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3333,7 +3421,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     FBmp.Fill(BGRA(255, 255, 255, 255));
     if pass = 0 then
@@ -3390,7 +3478,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.DataZoomNow := cT0;
     FChart.TooltipNow := cT0;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
@@ -3666,6 +3754,187 @@ begin
   RunYHeld('ady-');
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AGCarriesAsUpstream;
+begin
+  RunYHeld('agy-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AGCanvasAsUpstream;
+begin
+  RunW(False, 'ag-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestARippleUnderTheAxesWhileItMoves;
+var px: TBGRAPixel;
+begin
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  PinClocks(FChart);
+  FChart.AnimationMode := camAlways;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  { the ripple at (168, 150) on the split line there (the value 4), grown
+    over its period to 4 times 30 }
+  FChart.SetOption('{"animation":true,"animationDuration":0,"animationDurationUpdate":0,'
+    + '"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"splitLine":{"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"effectScatter","z":-1,"symbolSize":30,"data":[[4,5]],"itemStyle":{"color":"#ff0000"},'
+    + '"rippleEffect":{"brushType":"fill","period":4,"scale":4,"number":1}}]}', True);
+  AssertEquals('parses', '', FChart.OptionError);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  FChart.AnimTick(cT0 + 1000);
+  FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+    FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + 'ripple-under.png');
+  { inside the ripple's disc, on the split line }
+  px := FBmp.GetPixel(168, 150 - 22);
+  AssertTrue(Format('the split line over the moving ripple: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.blue > 150) and (px.red < 150));
+  { (and the ripple is drawn, off the line) }
+  px := FBmp.GetPixel(168 - 18, 150);
+  AssertTrue(Format('the ripple off the line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 200) and (px.green < 200));
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestATipsFontWeightIsTheTextStyles;
+
+  function Ink(const AWeight: string): Integer;
+  var r: TTyRectF; x, y: Integer; px: TBGRAPixel;
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption('{"animation":false,"xAxis":{"show":false,"type":"value","min":0,"max":10},'
+      + '"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+      + '"tooltip":{"renderMode":"richText","showDelay":0,"transitionDuration":0,"position":[100,60],'
+      + '"backgroundColor":"#ffffff","borderWidth":0,"shadowBlur":0,"textStyle":{"color":"#000000"' + AWeight + '}},'
+      + '"series":[{"type":"scatter","name":"Series","symbolSize":0,"data":[[5,5]]}]}', True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    r := FChart.TipFill;
+    Result := 0;
+    for y := Max(0, Round(r.Top)) to Min(FBmp.Height - 1, Round(r.Bottom)) do
+      for x := Max(0, Round(r.Left)) to Min(FBmp.Width - 1, Round(r.Right)) do
+      begin
+        px := FBmp.GetPixel(x, y);
+        Inc(Result, 255 - px.green);
+      end;
+  end;
+
+var none, light: Integer;
+begin
+  none := Ink('');
+  light := Ink(',"fontWeight":"normal"');
+  AssertTrue(Format('a normal weight draws less ink: %d, none written %d', [light, none]),
+    light < none - none div 20);
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestThePolarAndSingleViewsInterleaved;
+var px: TBGRAPixel; shot: Integer;
+
+  procedure Draw(const AOpt: string);
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption(AOpt, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    Inc(shot);
+    if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+      FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + 'inter-' + IntToStr(shot) + '.png');
+  end;
+
+  function Near(const APx: TBGRAPixel; R, G, B: Integer): Boolean;
+  begin
+    Result := (Abs(APx.red - R) < 40) and (Abs(APx.green - G) < 40) and (Abs(APx.blue - B) < 40);
+  end;
+
+begin
+  shot := 0;
+  { two polars: the first's angle split line east of its centre (green)
+    crosses the second's radius split circle of 32 at (208, 150) (red) }
+  Draw('{"animation":false,"polar":[{"center":[160,150],"radius":80},{"center":[240,150],"radius":80}],'
+    + '"radiusAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#0000ff","width":3,"opacity":0.5}}},'
+    + '{"polarIndex":1,"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#ff0000","width":3}}}],'
+    + '"angleAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"startAngle":0,"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '{"polarIndex":1,"type":"value","min":0,"max":10,"startAngle":0,"show":false}],"series":[]}');
+  px := FBmp.GetPixel(208, 150);
+  AssertTrue(Format('the first polar''s angle split line over the second''s radius split circle: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 0, 255, 0));
+  { the two radius views' circles of 48 cross at (200, 123.5): the second's
+    (red) over the first's (blue) }
+  px := FBmp.GetPixel(200, 124);
+  AssertTrue(Format('the second polar''s radius split circle over the first''s: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 255, 0, 0));
+  { (each view drawn once: the first's circle of 32, at half its opacity,
+    is half blue at its top, off the spokes -- blended in linear light,
+    169 of the white left; twice over, 112) }
+  px := FBmp.GetPixel(160, 118);
+  AssertTrue(Format('the first polar''s split circle drawn once: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 140) and (px.red < 200) and (px.blue > 200));
+  { A NOTMERGE MAKES THE COMPONENTS' VIEWS ANEW, after the series' it keeps:
+    a radius axis' line (z2 1, east along y = 260) under the x axis' line
+    (z2 1, its view after the radius view's) still }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"polar":{"center":[200,260],"radius":90},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"startAngle":0,"show":false},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"scatter","symbolSize":0,"data":[[5,5]]}]}');
+  FChart.SetOption(FChart.Option, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  px := FBmp.GetPixel(250, 260);
+  AssertTrue(Format('the x axis'' line over the radius axis'' after a notMerge: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 0, 255, 0));
+  { a radius axis up from (200, 260), its tick at nought along the x axis'
+    line: the tick (magenta, z2 2) over the line (green, z2 1) }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"polar":{"center":[200,260],"radius":90},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLine":{"lineStyle":{"color":"#0000ff"}},"axisLabel":{"show":false},'
+    + '"splitLine":{"show":false},"axisTick":{"length":10,"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  px := FBmp.GetPixel(195, 260);
+  AssertTrue(Format('the radius axis'' tick over the x axis'' line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 255, 0, 255));
+  { a single axis on the x axis' line: its ticks down from y = 260 cross
+    the line (the tick at the value 2, x = 104) }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"singleAxis":{"type":"value","min":0,"max":10,"left":40,"right":40,"top":220,"height":40,'
+    + '"axisLine":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":false},'
+    + '"axisTick":{"length":10,"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  px := FBmp.GetPixel(104, 260);
+  AssertTrue(Format('the single axis'' tick over the x axis'' line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 255, 0, 255));
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.TestOptionPxAtAnotherPPIAsUpstream;
 var bad: string;
 
@@ -3760,6 +4029,199 @@ begin
   if bad <> '' then Fail('at 144 PPI not the 96 PPI chart times 1.5:' + bad);
 end;
 
+procedure TAdvChartLinesCanvasOracleTest.TestTheRestOfTheOptionPxAtAnotherPPIAsUpstream;
+var bad: string;
+
+  procedure Chart(APPI: Integer; const AOpt: string; AB: TBGRABitmap);
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, AB.Width, AB.Height);
+    FChart.SetOption(AOpt, True);
+    FChart.Render(AB.Canvas, Rect(0, 0, AB.Width, AB.Height), APPI);
+  end;
+
+  { every element of the list but a text: its box at 144 PPI is the one at
+    96 times 1.5 (to ATol) }
+  procedure One(const AName, AOpt: string; ATol: Double = 0.01);
+  var ppi, k, n: Integer; b: TBGRABitmap; el: TTyChartElement; bb: TTyRectF;
+    boxes: array[0..1] of array of TTyRectF; s: string; worst: Double;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+      finally
+        b.Free;
+      end;
+      boxes[ppi] := nil;
+      for k := 0 to FChart.Frame.Count - 1 do
+      begin
+        el := FChart.Frame.Element(k);
+        if (el.Caption.FontSizeLogical <> 0) or el.Ignore then Continue;
+        bb := TyShapeBounds(el.Shape);
+        if not TyRectFIsValid(bb) then Continue;
+        n := Length(boxes[ppi]);
+        SetLength(boxes[ppi], n + 1);
+        boxes[ppi][n] := bb;
+      end;
+    end;
+    s := '';
+    worst := 0;
+    if Length(boxes[0]) <> Length(boxes[1]) then s := Format(' count %d vs %d', [Length(boxes[0]), Length(boxes[1])])
+    else
+      for k := 0 to High(boxes[0]) do
+      begin
+        worst := Max(worst, Abs(boxes[1][k].Left - 1.5 * boxes[0][k].Left));
+        worst := Max(worst, Abs(boxes[1][k].Right - 1.5 * boxes[0][k].Right));
+        worst := Max(worst, Abs(boxes[1][k].Top - 1.5 * boxes[0][k].Top));
+        worst := Max(worst, Abs(boxes[1][k].Bottom - 1.5 * boxes[0][k].Bottom));
+        if (k < 2) then s := s + Format(' [%.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f]', [boxes[0][k].Left, boxes[0][k].Top,
+          boxes[0][k].Right - boxes[0][k].Left, boxes[0][k].Bottom - boxes[0][k].Top,
+          boxes[1][k].Left, boxes[1][k].Top, boxes[1][k].Right - boxes[1][k].Left, boxes[1][k].Bottom - boxes[1][k].Top]);
+      end;
+    if (Length(boxes[0]) = 0) or (Length(boxes[0]) <> Length(boxes[1])) or (worst > ATol) then
+      bad := bad + LineEnding + Format('%s: %d elements at 96, %d at 144, off by %.3f%s',
+        [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
+  end;
+
+  { the ink's top-left corner (a title drawn alone: not in the list) at 144
+    PPI is the one at 96 times 1.5, to a pixel and a half }
+  procedure InkAt(const AName, AOpt: string);
+  var ppi, xx, yy: Integer; b: TBGRABitmap; px, bg: TBGRAPixel; ink: array[0..1] of TPoint;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+        bg := b.GetPixel(b.Width div 2, b.Height - 6);
+        ink[ppi] := Point(MaxInt, MaxInt);
+        for yy := 5 to b.Height - 6 do
+          for xx := 5 to b.Width - 6 do
+          begin
+            px := b.GetPixel(xx, yy);
+            if (Abs(px.red - bg.red) > 6) or (Abs(px.green - bg.green) > 6) or (Abs(px.blue - bg.blue) > 6) then
+            begin
+              if xx < ink[ppi].X then ink[ppi].X := xx;
+              if yy < ink[ppi].Y then ink[ppi].Y := yy;
+            end;
+          end;
+      finally
+        b.Free;
+      end;
+    end;
+    if (Abs(ink[1].X - 1.5 * ink[0].X) > 1.5) or (Abs(ink[1].Y - 1.5 * ink[0].Y) > 1.5) then
+      bad := bad + LineEnding + Format('%s: inked from (%d, %d) at 96, (%d, %d) at 144',
+        [AName, ink[0].X, ink[0].Y, ink[1].X, ink[1].Y]);
+  end;
+
+  { a tooltip shown by an action: its box' top-left at 144 PPI is the one at
+    96 times 1.5 (its size is the text's: measured at each PPI) }
+  procedure Tip(const AName, AOpt: string);
+  var ppi: Integer; b: TBGRABitmap; at: array[0..1] of TTyRectF;
+  begin
+    for ppi := 0 to 1 do
+    begin
+      if ppi = 0 then b := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255))
+      else b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+      try
+        if ppi = 0 then Chart(96, AOpt, b) else Chart(144, AOpt, b);
+        FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+        if ppi = 0 then FChart.Render(b.Canvas, Rect(0, 0, b.Width, b.Height), 96)
+        else FChart.Render(b.Canvas, Rect(0, 0, b.Width, b.Height), 144);
+      finally
+        b.Free;
+      end;
+      at[ppi] := FChart.TipFill;
+    end;
+    if not TyRectFIsValid(at[0]) or not TyRectFIsValid(at[1])
+      or (Abs(at[1].Left - 1.5 * at[0].Left) > 0.3) or (Abs(at[1].Top - 1.5 * at[0].Top) > 0.3) then
+      bad := bad + LineEnding + Format('%s: the box at (%.2f, %.2f) at 96, (%.2f, %.2f) at 144',
+        [AName, at[0].Left, at[0].Top, at[1].Left, at[1].Top]);
+  end;
+
+const
+  G = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"value","min":0,"max":10},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+  C = '"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},';
+  RTIP = '"tooltip":{"renderMode":"richText","showDelay":0,"transitionDuration":0';
+var
+  b: TBGRABitmap;
+  px: TBGRAPixel;
+  y: Integer;
+  ink: Boolean;
+begin
+  bad := '';
+  One('pictorial', '{' + C + '"series":[{"type":"pictorialBar","symbol":"rect","symbolSize":[20,10],"data":[3,5,7]}]}');
+  One('pictorial repeat', '{' + C + '"series":[{"type":"pictorialBar","symbol":"rect","symbolRepeat":true,"symbolSize":[20,10],"symbolMargin":4,"data":[3,5,7]}]}');
+  One('pictorial offset', '{' + C + '"series":[{"type":"pictorialBar","symbol":"circle","symbolSize":16,"symbolOffset":[5,-8],"barCategoryGap":"20%","data":[3,5,7]}]}');
+  One('graph none', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10},{"x":5,"y":3}],"links":[{"source":0,"target":1}]}]}');
+  One('graph circular', '{"animation":false,"series":[{"type":"graph","layout":"circular","left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":0,"target":1}]}]}');
+  One('graph force', '{"animation":false,"series":[{"type":"graph","layout":"force","force":{"repulsion":80,"edgeLength":40,"layoutAnimation":false},"left":50,"top":50,"width":300,"height":200,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"}],"links":[{"source":0,"target":1},{"source":1,"target":2},{"source":2,"target":3}]}]}');
+  { (a centre in the view rect's frame -- no positions written: css px) }
+  One('graph centre', '{"animation":false,"series":[{"type":"graph","layout":"circular","left":50,"top":50,"width":300,"height":200,"center":[150,120],"zoom":1.5,"symbolSize":14,"label":{"show":false},"data":[{"name":"a"},{"name":"b"},{"name":"c"}],"links":[{"source":0,"target":1}]}]}');
+  One('graph ends', '{"animation":false,"series":[{"type":"graph","layout":"none","left":50,"top":50,"width":300,"height":200,"symbolSize":20,"edgeSymbol":["circle","arrow"],"edgeSymbolSize":[8,14],"label":{"show":false},"data":[{"x":0,"y":0},{"x":10,"y":10}],"links":[{"source":0,"target":1}]}]}');
+  One('graph on axes', '{' + G + '"series":[{"type":"graph","coordinateSystem":"cartesian2d","symbolSize":16,"label":{"show":false},"data":[[2,2],[8,8]],"links":[{"source":0,"target":1}]}]}');
+  One('tree', '{"animation":false,"series":[{"type":"tree","left":40,"top":40,"right":40,"bottom":40,"symbolSize":10,"label":{"show":false},"data":[{"name":"r","children":[{"name":"a"},{"name":"b"}]}]}]}');
+  One('tree radial', '{"animation":false,"series":[{"type":"tree","layout":"radial","left":40,"top":40,"right":40,"bottom":40,"symbolSize":10,"label":{"show":false},"data":[{"name":"r","children":[{"name":"a"},{"name":"b"}]}]}]}');
+  One('radar symbols', '{"animation":false,"radar":{"center":[200,150],"radius":90,"indicator":[{"max":10},{"max":10},{"max":10}]},"series":[{"type":"radar","symbolSize":10,"data":[{"value":[3,5,7]}]}]}');
+  One('candle', '{' + C + '"series":[{"type":"candlestick","barWidth":15,"data":[[2,5,1,6],[3,4,2,7],[5,3,2,6]]}]}');
+  One('candle auto', '{' + C + '"series":[{"type":"candlestick","data":[[2,5,1,6],[3,4,2,7],[5,3,2,6]]}]}');
+  One('chord', '{"animation":false,"series":[{"type":"chord","center":[200,150],"radius":[60,80],"label":{"show":false},"data":[{"name":"a"},{"name":"b"}],"links":[{"source":"a","target":"b","value":3}]}]}');
+  One('matrix', '{"animation":false,"matrix":{"left":40,"top":40,"width":200,"height":120,"x":{"data":["a","b"]},"y":{"data":["c"]}},"series":[]}');
+  One('legend', '{' + G + '"legend":{"left":20,"top":10,"itemWidth":30,"itemHeight":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
+  One('legend vertical', '{' + G + '"legend":{"left":20,"top":10,"orient":"vertical","itemGap":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
+  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}');
+  { (the bar's place across is its labels' half width off the box: the
+    text measured at each PPI) }
+  One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
+  { (the box' px decide the side the labels are on: the centre at css 202
+    of 400 is right of the middle, at device 207 of 600 left of it) }
+  One('visualMap auto align', '{' + G + '"visualMap":{"left":192,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);
+  One('visualMap piecewise', '{' + G + '"visualMap":{"type":"piecewise","left":20,"top":20,"min":0,"max":10,"splitNumber":3,"itemWidth":20,"itemHeight":14},"series":[{"type":"scatter","data":[[3,3,5]]}]}');
+  InkAt('title text', '{' + G + '"title":{"text":"Tt","subtext":"Ss","left":20,"top":10},"series":[]}');
+  InkAt('title box', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#888888"},"series":[]}');
+  Tip('tooltip position', '{' + G + RTIP + ',"position":[100,60],"padding":8},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  Tip('tooltip by the point', '{' + G + RTIP + '},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  { (on an axis: by the point, the gap of 20 css px down and right) }
+  Tip('tooltip on an axis', '{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"show":false,"type":"category","data":["a","b","c"]},"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+    + RTIP + ',"trigger":"axis","axisPointer":{"type":"none"}},"series":[{"type":"bar","name":"S","data":[3,5,7]}]}');
+  Tip('tooltip html', '{' + G + '"tooltip":{"showDelay":0,"transitionDuration":0,"position":[100,60]},"series":[{"type":"scatter","name":"S","data":[[3,3]]}]}');
+  { an x axis' ticks: the first at css 40 is snapped to 40.5 (a width of 1)
+    -- device 60.75, its 1.5 px from 60 to 61.5: column 59 untouched [was:
+    snapped on the device to 60, inked from 59.25] }
+  b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
+  try
+    Chart(144, '{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},"xAxis":{"type":"value",'
+      + '"min":0,"max":10,"splitLine":{"show":false},"axisLine":{"show":false},"axisLabel":{"show":false},'
+      + '"axisTick":{"length":8,"lineStyle":{"color":"#000000"}}},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+      + '"series":[]}', b);
+    ink := False;
+    for y := 391 to 400 do
+    begin
+      px := b.GetPixel(59, y);
+      if px.red < 200 then ink := True;
+    end;
+    if ink then bad := bad + LineEnding + 'axis ticks: column 59 inked (snapped on the device px)';
+    ink := False;
+    for y := 391 to 400 do
+    begin
+      px := b.GetPixel(60, y);
+      if px.red < 100 then ink := True;
+    end;
+    if not ink then bad := bad + LineEnding + 'axis ticks: no tick in column 60';
+  finally
+    b.Free;
+  end;
+  if bad <> '' then Fail('at 144 PPI not the 96 PPI chart times 1.5:' + bad);
+end;
 
 { [R7-AD] THE COMPONENTS' BAND IN UPSTREAM'S PAINT ORDER (zrender sorts the
   display list by z, z2 and insertion -- the root's views in their order:

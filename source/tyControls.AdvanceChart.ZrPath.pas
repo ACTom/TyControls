@@ -68,6 +68,15 @@ function TyZrSubPixelOptimizeRect(const ARect: TTyXYWH;
   buildPath when its subPixelOptimize is on, in the line's own frame }
 procedure TyZrSubPixelOptimizeLine(var AX1, AY1, AX2, AY2: Double;
   ALineWidth: Double);
+{ [R7-AG] THE SAME ON THE CSS PX GRID: the device coordinates and the
+  device width AWidthPx through AScale (PPI / 96: the device px a css px
+  makes) -- upstream snaps in css px under a canvas scaled by
+  devicePixelRatio. A coordinate not snapped is left as it is; AScale 1 (or
+  none) is TyZrSubPixelOptimizeLine itself. }
+procedure TyZrSubPixelLineAt(var AX1, AY1, AX2, AY2: Double;
+  AWidthPx, AScale: Double);
+function TyZrSubPixelOptimizeAt(APosition, AWidthPx: Double;
+  APositive: Boolean; AScale: Double): Double;
 
 { createPathProxyFromString with processArc, then toStatic: AFloat32 says
   whether the data went to a Float32Array (more than eleven numbers). }
@@ -370,6 +379,36 @@ begin
     AY1 := TyZrSubPixelOptimize(AY1, ALineWidth, True);
     AY2 := AY1;
   end;
+end;
+
+procedure TyZrSubPixelLineAt(var AX1, AY1, AX2, AY2: Double;
+  AWidthPx, AScale: Double);
+begin
+  if not (AScale > 0) or (AScale = 1) then
+  begin
+    TyZrSubPixelOptimizeLine(AX1, AY1, AX2, AY2, AWidthPx);
+    Exit;
+  end;
+  if IsNan(AWidthPx) or (AWidthPx = 0) then Exit;
+  if TyJsRound(AX1 / AScale * 2) = TyJsRound(AX2 / AScale * 2) then
+  begin
+    AX1 := TyZrSubPixelOptimize(AX1 / AScale, AWidthPx / AScale, True) * AScale;
+    AX2 := AX1;
+  end;
+  if TyJsRound(AY1 / AScale * 2) = TyJsRound(AY2 / AScale * 2) then
+  begin
+    AY1 := TyZrSubPixelOptimize(AY1 / AScale, AWidthPx / AScale, True) * AScale;
+    AY2 := AY1;
+  end;
+end;
+
+function TyZrSubPixelOptimizeAt(APosition, AWidthPx: Double;
+  APositive: Boolean; AScale: Double): Double;
+begin
+  if not (AScale > 0) or (AScale = 1) then
+    Exit(TyZrSubPixelOptimize(APosition, AWidthPx, APositive));
+  if IsNan(AWidthPx) or (AWidthPx = 0) then Exit(APosition);
+  Result := TyZrSubPixelOptimize(APosition / AScale, AWidthPx / AScale, APositive) * AScale;
 end;
 
 function TyZrSubPixelOptimizeRect(const ARect: TTyXYWH;

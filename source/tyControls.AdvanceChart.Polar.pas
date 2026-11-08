@@ -235,7 +235,8 @@ function TyPolarFullTurn(AFirst, ALast: Double): Boolean;
 { getAxisLineShape: the line at AAngle between two radii, from the greater }
 function TyPolarRadialLine(APolar: TTyPolar; AR0, AR1, AAngle: Double): TTyPolarLine;
 { graphic.subPixelOptimizeLine, with Math.round }
-procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double);
+procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double;
+  AScale: Double = 1);
 { AxisBuilder's tick marks of an axis laid out by ASpec (getTicksCoords: a
   category axis' interval and band edges, axisTick.customValues, else every
   major tick), in the axis' own coordinates; and its minor ticks' --
@@ -904,8 +905,15 @@ begin
   Result.Drawn := True;
 end;
 
-procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double);
+procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double;
+  AScale: Double);
 begin
+  { ([R7-AG] on the css px grid at another PPI) }
+  if (AScale > 0) and (AScale <> 1) then
+  begin
+    TyZrSubPixelLineAt(ALine.X1, ALine.Y1, ALine.X2, ALine.Y2, AWidth, AScale);
+    Exit;
+  end;
   if IsNan(AWidth) or (AWidth = 0) then Exit;
   if TyJsRound(ALine.X1 * 2) = TyJsRound(ALine.X2 * 2) then
   begin
@@ -1161,7 +1169,7 @@ begin
     v.Line.Drawn := True;
     { [R5-G] by the width it is stroked with (the skin's where the option
       writes none) [was: the option's, else 1] }
-    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
     v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
   end;
   marks := TickMarks(AOption, ax, v.Spec, v.Furn, AMeasurer, APPI);
@@ -1179,7 +1187,7 @@ begin
       ln := Default(TTyPolarLine);
       Apply(M, hasM, marks[i].Coord, 0, ln.X1, ln.Y1);
       Apply(M, hasM, marks[i].Coord, endCoord, ln.X2, ln.Y2);
-      TyPolarSubPixelLine(ln, w);
+      TyPolarSubPixelLine(ln, w, APPI / 96);
       ln.Value := marks[i].Value;
       ln.Drawn := True;
       if (not v.Furn.MinorTickOption) and not marks[i].OnBand then
@@ -1209,7 +1217,7 @@ begin
       ln := Default(TTyPolarLine);
       Apply(M, hasM, minors[i], 0, ln.X1, ln.Y1);
       Apply(M, hasM, minors[i], endCoord, ln.X2, ln.Y2);
-      TyPolarSubPixelLine(ln, mw);
+      TyPolarSubPixelLine(ln, mw, APPI / 96);
       ln.Value := NaN;
       ln.Drawn := True;
       v.MinorTicks[i] := ln;

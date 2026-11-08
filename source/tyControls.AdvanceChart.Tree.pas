@@ -1773,9 +1773,12 @@ begin
     hh := sym.HeightPx / 2;
     { under a zoom a symbol grows by the zoom times the compensation --
       (z*ns)*(size/2) is its drawn half -- and its label does not }
-    if ASolved.HasView then
+    { ([R7-AG] the size and the offset css px: PPI / 96 device px each
+      [was: device px]) }
+    if ASolved.HasView or (AScale <> 1) then
     begin
-      vs := ASolved.VZ * ASolved.VNS;
+      vs := AScale;
+      if ASolved.HasView then vs := ASolved.VZ * ASolved.VNS * AScale;
       sym.WidthPx := 2 * (vs * (sym.WidthPx / 2));
       sym.HeightPx := 2 * (vs * (sym.HeightPx / 2));
       sym.OffsetX := vs * sym.OffsetX;

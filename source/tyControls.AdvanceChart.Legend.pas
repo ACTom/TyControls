@@ -2401,6 +2401,14 @@ begin
   for i := 0 to 3 do APad[i] := ASpec.Padding[i] * scale;
 end;
 
+{ [R7-AG] the box's px (left, top, right, bottom, width, height) are css
+  px: PPI / 96 device px each [was: device px] }
+function BoxAt(const ASpec: TTyLegendSpec; APPI: Integer): TTyRawBox;
+begin
+  if (APPI > 0) and (APPI <> 96) then Result := TyBoxRawScaled(ASpec.Box, APPI / 96)
+  else Result := ASpec.Box;
+end;
+
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
 begin
@@ -2422,7 +2430,7 @@ begin
     with no size given, so `bottom: 'bottom'` on a vertical legend leaves the
     height the switch computes from a not-a-number -- not the full height. }
   PadOf(ASpec, APPI, pad);
-  Result := TyGetLayoutRect(ASpec.Box, AContainer.X, AContainer.Y,
+  Result := TyGetLayoutRect(BoxAt(ASpec, APPI), AContainer.X, AContainer.Y,
     AContainer.W, AContainer.H, pad);
 end;
 
@@ -2436,7 +2444,7 @@ begin
   { defaults({width, height}, params): the measured pair never goes missing,
     so it wins over anything written. }
   PadOf(ASpec, APPI, pad);
-  box := ASpec.Box;
+  box := BoxAt(ASpec, APPI);
   box.Width := TyBoxRawNum(AMainW);
   box.Height := TyBoxRawNum(AMainH);
   Result := TyGetLayoutRect(box, AContainer.X, AContainer.Y,

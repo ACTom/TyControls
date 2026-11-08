@@ -4425,7 +4425,7 @@ begin
       Inc(drawn, TyBuildRadarGridTexts(FRadars[i], RadarInk, AMeasurer, APPI, list,
         radarTexts));
       { [R7-AD] its view's place in the root (CompViewOf) }
-      CompViewSet(list, n, 4700 + i);
+      CompViewSet(list, n, ViewNum('radar', i, 4700 + i));
       { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words --
         [R7-I] as the grid says it drew them: the spoke, the label's index
         and its rawLabel too }
@@ -4456,7 +4456,7 @@ begin
     begin
       n := list.Count;
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
-      CompViewSet(list, n, 1600 + i);
+      CompViewSet(list, n, ViewNum('calendar', i, 1600 + i));
     end;
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
@@ -4467,7 +4467,7 @@ begin
     begin
       n := list.Count;
       Inc(drawn, TyBuildMatrix(FMatrices[i], MatrixInk, RtGlobal, AMeasurer, APPI, list));
-      CompViewSet(list, n, 1500 + i);
+      CompViewSet(list, n, ViewNum('matrix', i, 1500 + i));
     end;
   if drawn > furniture then ViewDrew(cvMatrix);
   furniture := drawn;
@@ -4488,7 +4488,7 @@ begin
     begin
       Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
       if list.Count > n then ViewDrew(cvGeo);
-      CompViewSet(list, n, 4600 + i);
+      CompViewSet(list, n, ViewNum('geo', i, 4600 + i));
     end;
     SetLength(FGeoDraws, Length(FGeoDraws) + 1);
     FGeoDraws[High(FGeoDraws)].Geo := FGeos[i];
@@ -4596,9 +4596,11 @@ begin
             UtTagGraphNodes(list, utAt, FGraphNodes[i], FGraphNodeScale[i]);
           end
           else
+            { ([R7-AG] on a coordinate system the symbols css px: PPI / 96
+              device px [was: device px]) }
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
-              gi, FStores[i], list));
+              gi, FStores[i], list, APPI / 96, APPI / 96));
           { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
             carries only the WORDS; where they go and what they are drawn
             in is looked up by series index afterwards, so a branch that
