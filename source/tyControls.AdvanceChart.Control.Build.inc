@@ -3396,7 +3396,8 @@ begin
   for i := 0 to High(FTitles) do
   begin
     lay := FTitles[i];
-    if not lay.Valid then
+    { ([R7-AK] one placed at NaN is the list's: BuildTitlesUnplaced) }
+    if not lay.Valid or lay.Unplaced then
     begin
       FTitleFramesDrawn[i] := Default(TTyOverlayShape);
       Continue;
@@ -3424,7 +3425,9 @@ begin
     el.Datum := TyChartNoDatum;
     el.Style := FTitleSpecs[i].Look;
     for k := 0 to 3 do rad[k] := APainter.ScaleF(FTitleSpecs[i].BorderRadii[k]);
-    el.Shape := TyShapeRoundRect(frame, rad);
+    { ([R7-AK] on its joined edges where the size is a string) }
+    el.Shape := TyTitleFrameShape(lay, frame, rad, FTitleSpecs[i].BorderRounded,
+      APainter.ScaleF(FTitleSpecs[i].BorderWidth), APainter.ScaleF(1));
     { [R7-AA] THE RECT IS ALWAYS THERE: its fill the backgroundColor
       ('transparent' by default -- it hands the canvas that fillStyle), its
       stroke colour handed on at a width of nought too [was: built only to
@@ -3487,6 +3490,150 @@ begin
   end;
 end;
 
+
+{ [R7-AK] A TITLE PLACED AT NaN (a padding side undefined) IN THE LIST, as
+  TitleView's group holds it: its box (z2 0) -- a Rect at NaN, drawing
+  nothing but handing the canvas its fill and stroke -- and its words
+  (z2 10), each TSpan at its own place (x 0 aligned, y the line's middle),
+  at the title's z and zlevel; in their own frame under the transform the
+  canvas had where the group has one (UnplacedT), else at those places in
+  the canvas' frame }
+function TTyCustomAdvanceChart.BuildTitlesUnplaced(AList: TTyPaintList; APPI: Integer): Integer;
+var
+  i, line, n0, z: Integer;
+  st, subSt: TTyStyleSet;
+  lay: TTyTitleLayout;
+  el: TTyChartElement;
+  frameInk, ink: TTyColor;
+  fnt: TTyTitleFont;
+  s, ox, oy, lineTop, lh, lw: Double;
+  node, d: TJSONData;
+  txt: string;
+begin
+  Result := 0;
+  if (AList = nil) or (Length(FTitles) = 0) or ViewHidden(cvTitle) then Exit;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
+  subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '', []);
+  for i := 0 to High(FTitles) do
+  begin
+    lay := FTitles[i];
+    if not lay.Valid or not lay.Unplaced or (i > High(FTitleSpecs)) or (i > High(FTitleFonts)) then Continue;
+    ViewDrew(cvTitle);
+    { the canvas' own frame where the group has no transform }
+    if lay.UnplacedT then
+    begin
+      ox := 0;
+      oy := 0;
+    end
+    else
+    begin
+      ox := FLastRect.Left;
+      oy := FLastRect.Top;
+    end;
+    z := 6;
+    node := FOption.ComponentAt('title', i);
+    if node is TJSONObject then
+    begin
+      d := TJSONObject(node).Find('z');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+        z := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+    end;
+    n0 := AList.Count;
+    { the box: its fill, its pen's colour and width, handed to the canvas }
+    el := Default(TTyChartElement);
+    el.Silent := True;
+    el.Datum := TyChartNoDatum;
+    el.Style := FTitleSpecs[i].Look;
+    el.Shape := TyShapePolygon([]);
+    el.Style.HasFill := True;
+    if FTitleSpecs[i].HasBackground then el.Style.FillColor := FTitleSpecs[i].BackgroundColor
+    else el.Style.FillColor := 0;
+    el.Style.StrokeWidthLogical := 0;
+    if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
+    else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
+    else frameInk := st.TextColor;
+    el.Style.StrokeColor := TTyChartColor(frameInk);
+    if (FTitleSpecs[i].BorderWidth > 0) or FTitleSpecs[i].BorderWidthInf then
+    begin
+      el.Style.StrokeWidthLogical := FTitleSpecs[i].BorderWidth;
+      if FTitleSpecs[i].BorderWidthInf then
+      begin
+        el.Style.StrokeWidthLogical := 1;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
+    end;
+    TyStyleSetShadow(el.Style, FTitleSpecs[i].Shadow);
+    el.Z := z;
+    el.Z2 := 0;
+    if lay.UnplacedT then TyElementOwnFrame(el, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
+    AList.Add(el);
+    for line := 0 to 1 do
+    begin
+      fnt := FTitleFonts[i][line];
+      if line = 0 then
+      begin
+        txt := FTitleSpecs[i].Text;
+        if txt = '' then Continue;
+        if fnt.HasColour then ink := TTyColor(fnt.Colour) else ink := st.TextColor;
+        lineTop := lay.TextY;
+        lh := lay.TextH;
+        lw := lay.TextW;
+      end
+      else
+      begin
+        txt := FTitleSpecs[i].Subtext;
+        if not lay.HasSub then Continue;
+        if fnt.HasColour then ink := TTyColor(fnt.Colour) else ink := subSt.TextColor;
+        lineTop := lay.SubY;
+        lh := lay.SubH;
+        lw := lay.SubW;
+      end;
+      case lay.VAlign of
+        ttvMiddle: lineTop := lineTop - lh / 2;
+        ttvBottom: lineTop := lineTop - lh;
+      end;
+      el := Default(TTyChartElement);
+      el.Silent := True;
+      el.Datum := TyChartNoDatum;
+      el.Style.Alpha := 1;
+      el.Caption.Text := txt;
+      el.Caption.FontName := fnt.Name;
+      el.Caption.FontSizeLogical := fnt.SizeLogical;
+      el.Caption.FontWeight := fnt.Weight;
+      el.Caption.Colour := TTyChartColor(ink);
+      case lay.Align of
+        ttaCentre: el.Caption.AnchorH := tahCentre;
+        ttaRight: el.Caption.AnchorH := tahRight;
+      else
+        el.Caption.AnchorH := tahLeft;
+      end;
+      el.Caption.AnchorV := tavMiddle;
+      el.Caption.X := ox + lay.TextX;
+      el.Caption.Y := oy + lineTop + lh / 2;
+      case lay.Align of
+        ttaCentre: el.Shape := TyShapeRect(TyRectF(el.Caption.X - lw / 2, oy + lineTop, el.Caption.X + lw / 2, oy + lineTop + lh));
+        ttaRight: el.Shape := TyShapeRect(TyRectF(el.Caption.X - lw, oy + lineTop, el.Caption.X, oy + lineTop + lh));
+      else
+        el.Shape := TyShapeRect(TyRectF(el.Caption.X, oy + lineTop, el.Caption.X + lw, oy + lineTop + lh));
+      end;
+      { a font the canvas refuses: the one the text before left }
+      if node is TJSONObject then
+      begin
+        if line = 0 then d := TJSONObject(node).Find('textStyle')
+        else d := TJSONObject(node).Find('subtextStyle');
+        if FontRefusedOf([d]) then el.CanvasFlags := el.CanvasFlags or cTyCanvasFontLeft;
+      end;
+      el.Z := z;
+      el.Z2 := 10;
+      if lay.UnplacedT then TyElementOwnFrame(el, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
+      AList.Add(el);
+    end;
+    { its zlevel and its view's place }
+    LevelTail(AList, n0, 'title', i);
+    Inc(Result, AList.Count - n0);
+  end;
+end;
 
 procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor;
   const AFont: TTyTitleFont);
@@ -5831,6 +5978,8 @@ begin
     if n > 0 then ViewDrew(cvToolbox);
     Inc(Result, n);
   end;
+  { [R7-AK] a title placed at NaN: the list's }
+  Inc(Result, BuildTitlesUnplaced(AList, FLastPPI));
   { the parallel axes' covers, z 10000: their controllers' groups are
     zrender's, no view hides them [Batch 130] }
   n := AList.Count;

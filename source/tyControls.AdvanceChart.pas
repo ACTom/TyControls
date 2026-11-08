@@ -3772,6 +3772,9 @@ type
     procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
       var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont);
     procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor; const AFont: TTyTitleFont);
+    { [R7-AK] the titles placed at NaN (a padding side undefined), in the
+      list: a box that draws nothing, the words in their own frame }
+    function BuildTitlesUnplaced(AList: TTyPaintList; APPI: Integer): Integer;
     { [R7-AA] a title line's block holds a colour the canvas refuses }
     function TitlePiecesCarry(AIndex: Integer): Boolean;
     { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }

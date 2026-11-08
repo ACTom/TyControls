@@ -506,6 +506,22 @@ procedure TyPatternUnder(const AM: TTyMat2D; ADs: Double; var APm: TTyDoubleArra
 procedure TyElementGradientIn(const AEl: TTyChartElement; const AGrad: TTyChartGradient;
   ADs: Double; out AX1, AY1, AX2, AY2, AR: Double; out AFrame: TTyDoubleArray);
 
+{ [R7-AK] A SHAPE AS A PATH THROUGH M: AShape's outline as zrender builds it
+  -- a rect's, a rounded rect's, a circle's arc, an ellipse's cubics, a
+  polygon's or a polyline's points (its commands where it has them), a path
+  fitted to its box and turned -- through M, a polygon carrying the
+  commands (arcs as cubics). A shape of no points (a box at NaN) is an
+  empty polygon. }
+function TyShapeFramePath(const AShape: TTyChartShape; const M: TTyMat2D): TTyChartShape;
+{ [R7-AK] AN ELEMENT OF A GROUP WHOSE TRANSFORM THE CANVAS REFUSES (a
+  title's, a legend's, a toolbox's group placed at NaN: a padding side
+  undefined): its shape and its caption's anchor in its own frame -- device
+  px less its frame's origin AOX, AOY, over AScale (css px) -- drawn under
+  the transform the canvas had (cTyCanvasTransformLeft, AOrigin the
+  canvas' own origin, device px), never hit }
+procedure TyElementOwnFrame(var AEl: TTyChartElement; AOX, AOY, AScale: Double;
+  const AOrigin: TTyPointF);
+
 { ---- zrender's containStroke ---- }
 function TyLinesContainLine(X0, Y0, X1, Y1, ALineWidth, AX, AY: Double): Boolean;
 function TyLinesContainQuad(X0, Y0, X1, Y1, X2, Y2, ALineWidth, AX, AY: Double): Boolean;
@@ -519,7 +535,9 @@ uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl, tyControls.FontUnits,
   { [R7-AF] an own-frame path's bounds through the map }
-  tyControls.AdvanceChart.LinePath;
+  tyControls.AdvanceChart.LinePath,
+  { [R7-AK] a shape's path through a map }
+  tyControls.AdvanceChart.MarkerView;
 
 const
   cPi: Double = 3.141592653589793;
@@ -2328,6 +2346,149 @@ begin
   for k := 0 to 3 do L[k] := L[k] / ADs;
   AEl.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
   TyStyleSetPenShape(AEl.Style, L);
+end;
+
+function TyShapeFramePath(const AShape: TTyChartShape; const M: TTyMat2D): TTyChartShape;
+var
+  zp: TTyZrPath;
+  k: Integer;
+  R, T: TTyMat2D;
+  ox, oy, c, s: Double;
+  bx: TTyXYWH;
+
+  { M times AB }
+  function Mul(const A, B: TTyMat2D): TTyMat2D;
+  begin
+    Result[0] := A[0] * B[0] + A[2] * B[1];
+    Result[1] := A[1] * B[0] + A[3] * B[1];
+    Result[2] := A[0] * B[2] + A[2] * B[3];
+    Result[3] := A[1] * B[2] + A[3] * B[3];
+    Result[4] := A[0] * B[4] + A[2] * B[5] + A[4];
+    Result[5] := A[1] * B[4] + A[3] * B[5] + A[5];
+  end;
+
+  function Mat(A, B, C, D, E, F: Double): TTyMat2D;
+  begin
+    Result[0] := A; Result[1] := B; Result[2] := C;
+    Result[3] := D; Result[4] := E; Result[5] := F;
+  end;
+
+  { the commands of a polygon or a polyline as they stand }
+  function OfCmds: TTyChartShape;
+  var q: Integer;
+  begin
+    Result := TyShapePolygon(AShape.Points);
+    Result.Kind := AShape.Kind;
+    for q := 0 to High(Result.Points) do
+      TyZrApply(M, AShape.Points[q].X, AShape.Points[q].Y, Result.Points[q].X, Result.Points[q].Y);
+    Result.Cmds := Copy(AShape.Cmds, 0, Length(AShape.Cmds));
+    for q := 0 to High(Result.Cmds) do
+    begin
+      TyZrApply(M, AShape.Cmds[q].X1, AShape.Cmds[q].Y1, Result.Cmds[q].X1, Result.Cmds[q].Y1);
+      TyZrApply(M, AShape.Cmds[q].X2, AShape.Cmds[q].Y2, Result.Cmds[q].X2, Result.Cmds[q].Y2);
+      TyZrApply(M, AShape.Cmds[q].X, AShape.Cmds[q].Y, Result.Cmds[q].X, Result.Cmds[q].Y);
+    end;
+  end;
+
+begin
+  zp := nil;
+  T := M;
+  case AShape.Kind of
+    cskRect:
+      TyZrRect(zp, AShape.Bounds.Left, AShape.Bounds.Top, AShape.Bounds.Right - AShape.Bounds.Left,
+        AShape.Bounds.Bottom - AShape.Bounds.Top);
+    cskRoundRect:
+      TyZrRoundRect(zp, AShape.Bounds.Left, AShape.Bounds.Top, AShape.Bounds.Right - AShape.Bounds.Left,
+        AShape.Bounds.Bottom - AShape.Bounds.Top, AShape.Radii[0], AShape.Radii[1], AShape.Radii[2],
+        AShape.Radii[3]);
+    cskCircle:
+      begin
+        { Circle.buildPath: moveTo(cx + r, cy), arc(cx, cy, r, 0, 2 pi) }
+        TyZrMoveTo(zp, AShape.CX + AShape.R1, AShape.CY);
+        TyZrArc(zp, AShape.CX, AShape.CY, AShape.R1, 0, 2 * Pi, False);
+      end;
+    cskEllipse:
+      begin
+        { Ellipse.buildPath's four cubics }
+        ox := AShape.R0 * 0.5522848;
+        oy := AShape.R1 * 0.5522848;
+        TyZrMoveTo(zp, AShape.CX - AShape.R0, AShape.CY);
+        TyZrCubic(zp, AShape.CX - AShape.R0, AShape.CY - oy, AShape.CX - ox, AShape.CY - AShape.R1,
+          AShape.CX, AShape.CY - AShape.R1);
+        TyZrCubic(zp, AShape.CX + ox, AShape.CY - AShape.R1, AShape.CX + AShape.R0, AShape.CY - oy,
+          AShape.CX + AShape.R0, AShape.CY);
+        TyZrCubic(zp, AShape.CX + AShape.R0, AShape.CY + oy, AShape.CX + ox, AShape.CY + AShape.R1,
+          AShape.CX, AShape.CY + AShape.R1);
+        TyZrCubic(zp, AShape.CX - ox, AShape.CY + AShape.R1, AShape.CX - AShape.R0, AShape.CY + oy,
+          AShape.CX - AShape.R0, AShape.CY);
+        TyZrClose(zp);
+      end;
+    cskPolygon, cskPolyline:
+      Exit(OfCmds);
+    cskPath:
+      begin
+        bx := TyXYWH(AShape.Bounds.Left, AShape.Bounds.Top, AShape.Bounds.Right - AShape.Bounds.Left,
+          AShape.Bounds.Bottom - AShape.Bounds.Top);
+        if AShape.PathCover then zp := TyZrMakePathCover(AShape.PathData, bx)
+        else zp := TyZrMakePathCenter(AShape.PathData, bx);
+        { turned, then reflected, as the painter traces it }
+        if AShape.FlipX or AShape.FlipY then
+        begin
+          if AShape.FlipX then R := Mat(-1, 0, 0, 1, 2 * AShape.FlipCX, 0)
+          else R := Mat(1, 0, 0, 1, 0, 0);
+          if AShape.FlipY then R := Mul(Mat(1, 0, 0, -1, 0, 2 * AShape.FlipCY), R);
+          T := Mul(T, R);
+        end;
+        if AShape.RotationRad <> 0 then
+        begin
+          c := Cos(AShape.RotationRad);
+          s := Sin(AShape.RotationRad);
+          R := Mat(c, s, -s, c, AShape.RotCX - c * AShape.RotCX + s * AShape.RotCY,
+            AShape.RotCY - s * AShape.RotCX - c * AShape.RotCY);
+          T := Mul(T, R);
+        end;
+      end;
+  else
+    { (anything else: its box) }
+    TyZrRect(zp, TyShapeBounds(AShape).Left, TyShapeBounds(AShape).Top,
+      TyRectFWidth(TyShapeBounds(AShape)), TyRectFHeight(TyShapeBounds(AShape)));
+  end;
+  for k := 0 to High(zp) do
+    if IsNan(zp[k].V[0]) or IsNan(zp[k].V[1]) then
+    begin
+      zp := nil;
+      Break;
+    end;
+  if Length(zp) = 0 then
+  begin
+    Result := TyShapePolygon([]);
+    Result.Image := AShape.Image;
+    Exit;
+  end;
+  Result := TyMkZrShape(zp, T, True);
+  Result.Image := AShape.Image;
+end;
+
+procedure TyElementOwnFrame(var AEl: TTyChartElement; AOX, AOY, AScale: Double;
+  const AOrigin: TTyPointF);
+var M: TTyMat2D;
+begin
+  if not (AScale > 0) then AScale := 1;
+  M[0] := 1 / AScale; M[1] := 0; M[2] := 0; M[3] := 1 / AScale;
+  M[4] := -AOX / AScale; M[5] := -AOY / AScale;
+  SetLength(AEl.FrameShape, 1);
+  AEl.FrameShape[0] := TyShapeFramePath(AEl.Shape, M);
+  AEl.Shape := AEl.FrameShape[0];
+  if AEl.Caption.Text <> '' then
+  begin
+    AEl.Caption.X := (AEl.Caption.X - AOX) / AScale;
+    AEl.Caption.Y := (AEl.Caption.Y - AOY) / AScale;
+  end;
+  AEl.FrameOrigin := AOrigin;
+  AEl.FrameClip := nil;
+  AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasTransformLeft;
+  AEl.CanvasM := nil;
+  AEl.HitNone := True;
 end;
 
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;

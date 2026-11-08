@@ -359,6 +359,9 @@ type
       canvas refuses the width and strokes at the one it had }
     BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
+    { [R7-AK] borderRadius truthy (RectShape.r): makeBackground's path is
+      roundRect's, its far edges joined where the size is a string }
+    BorderRounded: Boolean;
     { [R5-A] the box's shadow: the legend's own shadow keys
       (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
     Shadow: TTyChartShadow;
@@ -503,6 +506,21 @@ type
     Valid: Boolean;
     { The background box, padding included. }
     Frame: TTyRectF;
+    { [R7-AK] the same in the view group's frame as makeBackground's shape
+      holds it: its place (css px), its size as the string the padding
+      joined ('' a number) -- `x + width` joins it -- and where the group's
+      origin is (device px) }
+    FrameLX, FrameLY: Double;
+    FrameWText, FrameHText: string;
+    FrameOX, FrameOY: Double;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: the group's x NaN): laid out with the group at device 0, its box
+      drawing nothing. UnplacedT: the group has a transform (a coordinate
+      not around nought), which the canvas refuses -- every part in its own
+      frame under the transform the canvas had (TyBuildLegendMarks); else
+      none -- the parts at their places in the canvas' frame (the control
+      shifts them to its origin, TyLegendLayoutShift) }
+    Unplaced, UnplacedT: Boolean;
     { The items' own extent, padding excluded. }
     Content: TTyRectF;
     Align: TTyLegendAlign;
@@ -569,6 +587,10 @@ type
       pageTextStyle.color, the skin's under the option's }
     PageIcon, PageIconInactive, PageText: TTyChartColor;
   end;
+
+{ [R7-AK] the layout moved by ADX, ADY device px: the items, the selector's
+  buttons, the pager's parts, the clip, the boxes }
+procedure TyLegendLayoutShift(var ALayout: TTyLegendLayout; ADX, ADY: Double);
 
 { How many legends the option carries. An object counts as one. }
 function TyLegendCount(AOption: TTyChartOption): Integer;
@@ -816,7 +838,13 @@ uses jsonparser, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichS
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.Color, tyControls.StrConsts,
   { [R7-AI] a padding written as a string }
-  tyControls.AdvanceChart.RichText;
+  tyControls.AdvanceChart.RichText,
+  { [R7-AK] a part in its own frame }
+  tyControls.AdvanceChart.Lines;
+
+var
+  { [R7-AK] TyLayoutLegend's traps masked for a padding side undefined }
+  GLegendMasked: Boolean;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -1204,6 +1232,7 @@ begin
   TyStTakePenKeys(Result.Look, [node, root], [], False, [spkEnds, spkDash], joinHas);
   { a number or an array (RectShape.r) [was: a number] }
   Result.BorderRadii := TyBoxRadiiOf(node.Find('borderRadius'));
+  Result.BorderRounded := TyJsTruthyOf(node.Find('borderRadius'));
   Result.Z := TyRoundOpt(NumIn(node, 'z', cDefaultZ), cDefaultZ);
   { anything written but 'auto' (null falls back to the default) }
   d := node.Find('inactiveBorderWidth');
@@ -2481,6 +2510,16 @@ begin
     TyJsPadV(ASpec.PadJs, B)).N * s;
 end;
 
+{ [R7-AK] the same as the string zrender holds ('' where it is a number) }
+function LegendFrameText(const ASpec: TTyLegendSpec; AW: Double; A, B, APPI: Integer): string;
+var s: Double; v: TTyRtJs;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  v := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(AW / s), TyJsPadV(ASpec.PadJs, A)),
+    TyJsPadV(ASpec.PadJs, B));
+  if v.IsStr then Result := v.S else Result := '';
+end;
+
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyXYWH; APPI: Integer): TTyXYWH;
 var pad: array[0..3] of Double;
@@ -3019,6 +3058,19 @@ begin
   R.IsScroll := ASpec.IsScroll;
   R.ShowController := show;
   Compose(R.GroupX, R.GroupY, 0, 0, gAx, gAy);
+  { [R7-AK] a place that is no number (a padding side undefined): where
+    the group has a transform (Compose: NaN through it), refused -- laid
+    out at device 0; else none (Compose: at 0 already) }
+  if IsNan(R.GroupX) or IsNan(R.GroupY) or IsInfinite(R.GroupX) or IsInfinite(R.GroupY) then
+  begin
+    R.Unplaced := True;
+    R.UnplacedT := IsNan(gAx) or IsNan(gAy) or IsInfinite(gAx) or IsInfinite(gAy);
+    if R.UnplacedT then
+    begin
+      gAx := 0;
+      gAy := 0;
+    end;
+  end;
 
   { the items, under the container and the content }
   R.ContentPosX := finalPos[0];
@@ -3084,8 +3136,15 @@ begin
   begin
     b.W := LegendFrameSize(ASpec, mainR.W, 1, 3, APPI);
     b.H := LegendFrameSize(ASpec, mainR.H, 0, 2, APPI);
+    { ([R7-AK] and the strings, for a path of corners) }
+    R.FrameWText := LegendFrameText(ASpec, mainR.W, 1, 3, APPI);
+    R.FrameHText := LegendFrameText(ASpec, mainR.H, 0, 2, APPI);
   end;
   R.Frame := TyRectF(gAx + b.X, gAy + b.Y, gAx + b.X + b.W, gAy + b.Y + b.H);
+  R.FrameLX := b.X / AScale;
+  R.FrameLY := b.Y / AScale;
+  R.FrameOX := gAx;
+  R.FrameOY := gAy;
   R.Content := TyRectF(gAx + mainR.X, gAy + mainR.Y, gAx + mainR.X + mainR.W,
     gAy + mainR.Y + mainR.H);
   R.Valid := True;
@@ -3146,13 +3205,30 @@ var
   iconWord: string;
   itemM: ITyTextMeasurer;
   tb: TTyRectF;
+  { [R7-AK] the traps' mask }
+  mask: TFPUExceptionMask;
 begin
   Result := Default(TTyLegendLayout);
   if not ASpec.Show then Exit;
   { [R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
-    the group draws under the transform the canvas kept -- laid out here as
-    nothing }
-  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) then Exit;
+    the group draws under the transform the canvas kept -- ([R7-AK] laid
+    out with the traps masked: the wrap room and the place NaN [was:
+    nothing laid out]) }
+  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) and not GLegendMasked then
+  begin
+    mask := GetExceptionMask;
+    SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+    GLegendMasked := True;
+    try
+      Result := TyLayoutLegend(ASpec, AEntries, AFlags, ASources, AContainer, AMeasurer,
+        AFont, APPI, ADeco);
+    finally
+      GLegendMasked := False;
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+    Exit;
+  end;
   if AMeasurer = nil then Exit;
   { a container of no place is at the canvas' edge (getLayoutRect's
     `containerRect.x || 0`); one of no size is nothing [Batch 151] }
@@ -3473,6 +3549,18 @@ begin
     corner, whatever negative overhang the items have. }
   ox := layoutBox.X - content.Left;
   oy := layoutBox.Y - content.Top;
+  { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined): the group
+    at device 0, its transform refused where it has one (needLocalTransform:
+    a coordinate not around nought, NaN around it) }
+  if IsNan(ox) or IsNan(oy) or IsInfinite(ox) or IsInfinite(oy) then
+  begin
+    Result.Unplaced := True;
+    Result.UnplacedT := (not IsNan(layoutBox.X) and (Abs(layoutBox.X / scale) > 5e-5))
+      or (not IsNan(layoutBox.Y) and (Abs(layoutBox.Y / scale) > 5e-5));
+    { (the content group at `-contentRect.x` in it) }
+    ox := -content.Left;
+    oy := -content.Top;
+  end;
 
   for i := 0 to n - 1 do
   begin
@@ -3499,8 +3587,60 @@ begin
   begin
     Result.Frame.Right := Result.Frame.Left + LegendFrameSize(ASpec, mainW, 1, 3, APPI);
     Result.Frame.Bottom := Result.Frame.Top + LegendFrameSize(ASpec, mainH, 0, 2, APPI);
+    { ([R7-AK] and the strings, for a path of corners) }
+    Result.FrameWText := LegendFrameText(ASpec, mainW, 1, 3, APPI);
+    Result.FrameHText := LegendFrameText(ASpec, mainH, 0, 2, APPI);
   end;
+  { ([R7-AK] in the group's frame: layoutInner puts the content group at
+    `-contentRect.x`, so the group is at the place solved and the main rect
+    at its origin) }
+  Result.FrameLX := (Result.Frame.Left - layoutBox.X) / scale;
+  Result.FrameLY := (Result.Frame.Top - layoutBox.Y) / scale;
+  Result.FrameOX := layoutBox.X;
+  Result.FrameOY := layoutBox.Y;
   Result.Valid := True;
+end;
+
+procedure TyLegendLayoutShift(var ALayout: TTyLegendLayout; ADX, ADY: Double);
+
+  procedure R(var A: TTyRectF);
+  begin
+    A := TyRectF(A.Left + ADX, A.Top + ADY, A.Right + ADX, A.Bottom + ADY);
+  end;
+
+  procedure Part(var A: TTyLegendPagerPart);
+  begin
+    A.X := A.X + ADX;
+    A.Y := A.Y + ADY;
+    R(A.Box);
+  end;
+
+var k: Integer;
+begin
+  if (ADX = 0) and (ADY = 0) then Exit;
+  ALayout.Items := Copy(ALayout.Items, 0, Length(ALayout.Items));
+  for k := 0 to High(ALayout.Items) do
+  begin
+    R(ALayout.Items[k].IconBox);
+    R(ALayout.Items[k].Bounds);
+    ALayout.Items[k].TextX := ALayout.Items[k].TextX + ADX;
+    ALayout.Items[k].TextY := ALayout.Items[k].TextY + ADY;
+  end;
+  ALayout.Selector := Copy(ALayout.Selector, 0, Length(ALayout.Selector));
+  for k := 0 to High(ALayout.Selector) do
+  begin
+    ALayout.Selector[k].X := ALayout.Selector[k].X + ADX;
+    ALayout.Selector[k].Y := ALayout.Selector[k].Y + ADY;
+    R(ALayout.Selector[k].Box);
+  end;
+  Part(ALayout.PagePrev);
+  Part(ALayout.PageNext);
+  Part(ALayout.PageTextPart);
+  R(ALayout.Clip);
+  R(ALayout.Content);
+  R(ALayout.Frame);
+  ALayout.FrameOX := ALayout.FrameOX + ADX;
+  ALayout.FrameOY := ALayout.FrameOY + ADY;
 end;
 
 { ==================== the marks ==================== }
@@ -3530,6 +3670,11 @@ var
   { [R7-AA] the box's stroke colour, handed by the first hit rect }
   handBorder: Boolean;
   borderInk: TTyChartColor;
+  { [R7-AK] the frame each element added is in (device px): its group's
+    origin, an item's, a button's, a pager part's }
+  curOX, curOY: Double;
+  ownX, ownY: array of Double;
+  q, k0: Integer;
 
   function Blank: TTyChartElement;
   begin
@@ -3538,6 +3683,18 @@ var
     Result.Silent := True;
     Result.Datum := TyChartNoDatum;
     Result.Style.Alpha := 1;
+  end;
+
+  { [R7-AK] an element added, and the frame it is in }
+  procedure Put(const AEl: TTyChartElement);
+  begin
+    AList.Add(AEl);
+    Inc(Result);
+    if not ALayout.Unplaced then Exit;
+    SetLength(ownX, Length(ownX) + 1);
+    SetLength(ownY, Length(ownY) + 1);
+    ownX[High(ownX)] := curOX;
+    ownY[High(ownY)] := curOY;
   end;
 
   { [Batch 98] an item's element under the scroll legend's clip }
@@ -3552,6 +3709,8 @@ var
   procedure DrawPagerIcon(const APart: TTyLegendPagerPart; ACanJump: Boolean;
     AWhich: Integer);
   begin
+    curOX := APart.X;
+    curOY := APart.Y;
     if APart.IsImage then
     begin
       { [F6a] the picture over the whole box, whether it can jump or not
@@ -3562,8 +3721,7 @@ var
         TyPointF(APart.Box.Right, APart.Box.Bottom),
         TyPointF(APart.Box.Left, APart.Box.Bottom)]);
       el.Shape.Image := APart.ImageSrc;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end
     else if Length(APart.Path) = 0 then
     begin
@@ -3580,8 +3738,7 @@ var
       el.Style.HasFill := True;
       if ACanJump then el.Style.FillColor := AInk.PageIcon
       else el.Style.FillColor := AInk.PageIconInactive;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
     { rectHover: the icon's box is its target, and it is clickable whether
       or not it can jump -- a click that cannot does nothing }
@@ -3594,8 +3751,7 @@ var
       { [F6a] `icon.cursor = canJump ? 'pointer' : 'default'`
         (ScrollableLegendView._updatePageInfoView) }
       if not ACanJump then el.Cursor := 'default';
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
   end;
 
@@ -3696,6 +3852,11 @@ begin
   if AList = nil then Exit;
   if not ALayout.Valid then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
+  ownX := nil;
+  ownY := nil;
+  curOX := 0;
+  curOY := 0;
+  k0 := AList.Count;
 
   { The frame first and UNDER everything, and only when the option asked for
     one: upstream gives a legend a transparent background and a zero border, so
@@ -3712,6 +3873,16 @@ begin
   begin
     el := Blank;
     el.Z2 := -1;
+    { ([R7-AK] a path of corners on its joined edges where the size is a
+      string [was: the rounded rect of its numbers]) }
+    { ([R7-AK] at NaN: nothing) }
+    if ALayout.Unplaced then el.Shape := TyShapePolygon([])
+    else if ASpec.BorderRounded and ((ALayout.FrameWText <> '') or (ALayout.FrameHText <> '')) then
+      el.Shape := TyJsRoundFrameShape(ALayout.FrameLX, ALayout.FrameLY,
+        TyRectFWidth(ALayout.Frame) / scale, TyRectFHeight(ALayout.Frame) / scale,
+        ALayout.FrameWText, ALayout.FrameHText, ASpec.BorderRadii, ALayout.FrameOX,
+        ALayout.FrameOY, scale)
+    else
     el.Shape := TyShapeRoundRect(ALayout.Frame,
       [ASpec.BorderRadii[0] * scale, ASpec.BorderRadii[1] * scale,
        ASpec.BorderRadii[2] * scale, ASpec.BorderRadii[3] * scale]);
@@ -3726,14 +3897,16 @@ begin
     TyStyleSetShadow(el.Style, ASpec.Shadow);
     { [R7-X] its dash, phase, cap, join and miterLimit }
     TyStyleTakeBorderKeys(el.Style, ASpec.Look);
-    AList.Add(el);
-    Inc(Result);
+    Put(el);
   end;
 
   for i := 0 to High(ALayout.Items) do
   begin
     it := ALayout.Items[i];
     if not TyRectFIsValid(it.Bounds) then Continue;
+    { ([R7-AK] its group's frame: the item at the icon box's corner) }
+    curOX := it.IconBox.Left;
+    curOY := it.IconBox.Top;
     { THE ITEM'S ONE HIT TARGET: an unpainted rect over its bounds, under
       which the icon and the words stay silent -- upstream's legend item is a
       single target too, so moving from its icon to its words is no
@@ -3766,8 +3939,7 @@ begin
         [Batch 93] }
       el.Silent := ASpec.SelectedMode = tlsOff;
       el.Datum := TyChartComponentDatum(ctkLegend, ALegendIndex, i);
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
 
     { DESELECTED IS ONE COLOUR FOR EVERYTHING -- icon, ring, rule and words.
@@ -3819,8 +3991,7 @@ begin
         { [R7-T] THE REST OF lineStyle: opacity, dash (at the width it
           strokes at), cap, join, miter limit, shadow [was: none of them] }
         TyLegendPenApply(it.RuleKeys, el.Style.StrokeWidthLogical, el.Style);
-        AList.Add(el);
-        Inc(Result);
+        Put(el);
       end;
       { The marker, four fifths of the box's height and centred in it. }
       size := TyRectFHeight(it.IconBox) * cOwnIconMarker;
@@ -3832,8 +4003,7 @@ begin
                   (it.IconBox.Left + it.IconBox.Right + size) / 2,
                   (it.IconBox.Top + it.IconBox.Bottom + size) / 2));
         Clipped(el);
-        AList.Add(el);
-        Inc(Result);
+        Put(el);
       end;
     end
     else if kind <> tsyNone then
@@ -3843,8 +4013,7 @@ begin
       { [R7-V] as written (the canvas clamps it) }
       if it.HasOpacity then
         el.Style.Alpha := it.Opacity;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
 
     if it.Text <> '' then
@@ -3905,8 +4074,7 @@ begin
             rtScale));
         end;
       end;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
   end;
 
@@ -3915,14 +4083,15 @@ begin
     whole box as the target }
   for k := 0 to High(ALayout.Selector) do
   begin
+    curOX := ALayout.Selector[k].X;
+    curOY := ALayout.Selector[k].Y;
     if ALegendIndex >= 0 then
     begin
       el := Blank;
       el.Shape := TyShapeRect(ALayout.Selector[k].Box);
       el.Silent := False;
       el.Datum := TyChartComponentDatum(ctkLegendSelector, ALegendIndex, k);
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
     if Length(ALayout.Selector[k].Pieces) = 0 then Continue;
     el := Blank;
@@ -3939,8 +4108,7 @@ begin
     if k = ASelHover then el.Caption.RtPieces := ALayout.Selector[k].EmphPieces
     else el.Caption.RtPieces := ALayout.Selector[k].Pieces;
     if APPI > 0 then el.Caption.RtScale := APPI / 96 else el.Caption.RtScale := 1;
-    AList.Add(el);
-    Inc(Result);
+    Put(el);
   end;
 
   { [Batch 98] THE PAGER, only when the items overflow: hidden, it is a
@@ -3948,6 +4116,8 @@ begin
   if ALayout.IsScroll and ALayout.ShowController then
   begin
     DrawPagerIcon(ALayout.PagePrev, ALayout.PagePrevIndex >= 0, 0);
+    curOX := ALayout.PageTextPart.X;
+    curOY := ALayout.PageTextPart.Y;
     el := Blank;
     el.Shape := TyShapeRect(ALayout.PageTextPart.Box);
     el.Caption.Text := ALayout.PageText;
@@ -3959,10 +4129,15 @@ begin
     el.Caption.Y := ALayout.PageTextPart.Y;
     el.Caption.AnchorH := tahCentre;
     el.Caption.AnchorV := tavMiddle;
-    AList.Add(el);
-    Inc(Result);
+    Put(el);
     DrawPagerIcon(ALayout.PageNext, ALayout.PageNextIndex >= 0, 1);
   end;
+  { [R7-AK] A GROUP WHOSE TRANSFORM THE CANVAS REFUSES: each element in the
+    frame it is in, under the transform the canvas had (the canvas' own
+    origin set by the control) }
+  if ALayout.Unplaced and ALayout.UnplacedT then
+    for q := 0 to High(ownX) do
+      if k0 + q < AList.Count then
+        TyElementOwnFrame(AList.Ref(k0 + q)^, ownX[q], ownY[q], scale, TyPointF(0, 0));
 end;
-
 end.

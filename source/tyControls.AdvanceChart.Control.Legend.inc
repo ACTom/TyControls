@@ -869,8 +869,18 @@ begin
         end;
       end;
     end;
+    { [R7-AK] placed at NaN with no transform: its parts at their places in
+      the canvas' frame }
+    if lay.Unplaced and not lay.UnplacedT then
+      TyLegendLayoutShift(lay, FLastRect.Left, FLastRect.Top);
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
       APPI, AList, i, AMeasurer, hov));
+    { ([R7-AK] with one the canvas refuses: in their own frames, under the
+      canvas' own origin where it had no transform) }
+    if lay.Unplaced and lay.UnplacedT then
+      for k := lt to AList.Count - 1 do
+        if Length(AList.Ref(k)^.FrameShape) > 0 then
+          AList.Ref(k)^.FrameOrigin := TyPointF(FLastRect.Left, FLastRect.Top);
     { [R7-AD] its words in a font the canvas refuses: the one the text
       before left (the legend's textStyle, an item's own over it) }
     LegendFontsLeft(AList, lt, i, lay);
