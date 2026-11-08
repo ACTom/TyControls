@@ -2172,6 +2172,51 @@ function cases() {
         label: { show: true, position: 'bottom', align: 'left', formatter: '{a|Ab}{b|Cd}\n{a|Ef}{b|Gh}', fontFamily: 'monospace',
           color: '#000000', textBorderColor: '#ff00ff', textBorderWidth: '2', rich: { a: {}, b: {} } } }]),
     [0], { w: true, z: true, probes: [[262, 170], [265, 170], [300, 200], [390, 290], [265, 160], [245, 170], [270, 158]] }],
+    // (b) a state's textBorderWidth written as a string: the hovered label's
+    // halo at its number ('3'), none for 'abc'; a selected one's
+    ['ai-emph-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 2 } },
+      { type: 'scatter', data: [[6, 5], [6, 2]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000' },
+        emphasis: { label: { textBorderColor: '#ff00ff', textBorderWidth: '3' } } }]),
+    [0], { w: true, z: true, acts: { 0: [{ type: 'highlight', seriesIndex: 1, dataIndex: 0 }] } }],
+    ['ai-emph-word', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 2 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000', textBorderColor: '#00ffff', textBorderWidth: 2 },
+        emphasis: { label: { textBorderColor: '#ff00ff', textBorderWidth: 'abc' } } }]),
+    [0], { w: true, z: true, acts: { 0: [{ type: 'highlight', seriesIndex: 1, dataIndex: 0 }] } }],
+    ['ai-select-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', selectedMode: 'single', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000' },
+        select: { itemStyle: { borderColor: '#123456' }, label: { textBorderColor: '#ff00ff', textBorderWidth: '2.5' } } }]),
+    [0], { w: true, z: true, acts: { 0: [{ type: 'select', seriesIndex: 1, dataIndex: 0 }] } }],
+    ['ai-blur-str', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' }, emphasis: { focus: 'series' } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Cd', color: '#000000', textBorderColor: '#00ffff', textBorderWidth: 1 },
+        blur: { label: { textBorderColor: '#ff0000', textBorderWidth: '3' } } }]),
+    [0], { w: true, z: true, acts: { 0: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }] } }],
+    ['ai-emph-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 3 } },
+      { type: 'scatter', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: 'Ab', color: '#000000' },
+        emphasis: { label: { textBorderColor: '#ff00ff', textBorderWidth: 'Infinity' } } }]),
+    [0], { w: true, z: true, acts: { 0: [{ type: 'highlight', seriesIndex: 1, dataIndex: 0 }] } }],
+    // (b) textBorderWidth written as a string where a component reads it its
+    // own way: a visualMap's textStyle, a timeline's label, a markPoint's
+    // label, a graphic text's style.lineWidth ('3' strokes 3); 'Infinity'
+    // the width the canvas had
+    ['ai-comp-border-str', vv([{ type: 'scatter', data: [[3, 5], [6, 2]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 2 },
+      markPoint: { symbol: 'rect', symbolSize: 8, data: [{ coord: [5, 8], value: 'Mp' }],
+        label: { show: true, position: 'right', color: '#000000', textBorderColor: '#ff00ff', textBorderWidth: '3' } } }], {
+      visualMap: { type: 'continuous', min: 0, max: 10, left: 10, bottom: 10, itemHeight: 60, calculable: false, text: ['Hi', 'Lo'],
+        textStyle: { color: '#000000', textBorderColor: '#00ffff', textBorderWidth: '3' }, inRange: { color: ['#00ff00', '#0000ff'] } },
+      timeline: { axisType: 'category', data: ['ta', 'tb'], left: 120, right: 20, bottom: 0, autoPlay: false, controlStyle: { show: false },
+        label: { color: '#000000', textBorderColor: '#ffaa00', textBorderWidth: '2' } },
+      graphic: [{ type: 'text', left: 200, top: 30, style: { text: 'Gt', fill: '#000000', stroke: '#aa00ff', lineWidth: '3' } }] }),
+    [0], { w: true, z: true }],
+    ['ai-comp-border-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 3 },
+      markPoint: { symbol: 'rect', symbolSize: 8, data: [{ coord: [5, 8], value: 'Mp' }],
+        label: { show: true, position: 'right', color: '#000000', textBorderColor: '#ff00ff', textBorderWidth: 'Infinity' } } }], {
+      graphic: [{ type: 'text', left: 200, top: 30, style: { text: 'Gt', fill: '#000000', stroke: '#aa00ff', lineWidth: 'Infinity' } }] }),
+    [0], { w: true, z: true }],
     // (b) a radar's indicator axis lines in a gradient: the box each is made over
     ['af-grad-radar-line', { animation: false, radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 },
       { name: 'c', max: 10 }], center: ['50%', '50%'], radius: 100, axisName: { show: false }, splitLine: { show: false },
