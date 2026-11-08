@@ -3885,10 +3885,11 @@ begin
   AssertTrue(Format('the second polar''s radius split circle over the first''s: (%d,%d,%d)',
     [px.red, px.green, px.blue]), Near(px, 255, 0, 0));
   { (each view drawn once: the first's circle of 32, at half its opacity,
-    is half blue at its top, off the spokes) }
+    is half blue at its top, off the spokes -- blended in linear light,
+    169 of the white left; twice over, 112) }
   px := FBmp.GetPixel(160, 118);
   AssertTrue(Format('the first polar''s split circle drawn once: (%d,%d,%d)', [px.red, px.green, px.blue]),
-    (px.red > 100) and (px.red < 180) and (px.blue > 200));
+    (px.red > 140) and (px.red < 200) and (px.blue > 200));
   { A NOTMERGE MAKES THE COMPONENTS' VIEWS ANEW, after the series' it keeps:
     a radius axis' line (z2 1, east along y = 260) under the x axis' line
     (z2 1, its view after the radius view's) still }
