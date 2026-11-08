@@ -283,6 +283,14 @@ begin
     gb := StringReplace(b.Text, LineEnding, ' ', [rfReplaceAll]);
     if (a.Count < 2) or (ga <> gb) then
       Miss(Format('%s: the views %s, upstream %s', [AWhere, gb, ga]));
+    { every view upstream made is one here (but the preprocessors' axis
+      pointer and a grid no option writes, which draw nothing) }
+    for i := 0 to up.Count - 1 do
+    begin
+      if (Copy(up.Strings[i], 1, 11) = 'axisPointer') or (Copy(up.Strings[i], 1, 4) = 'grid') then Continue;
+      if a.IndexOf(up.Strings[i]) < 0 then
+        Miss(Format('%s: no view %s', [AWhere, up.Strings[i]]));
+    end;
   finally
     a.Free;
     b.Free;
@@ -544,7 +552,7 @@ const
     + '"series":[{"type":"scatter","data":[[1,1]]}]}';
   cAnids: array[0..7] of string = ('line', 'ticks_0', 'ticks_2.5', 'ticks_5', 'line_0', 'line_2.5', 'line_5',
     'line_7.5');
-  cProps: array[0..3] of string = ('x1', 'y1', 'x2', 'y2');
+  cProps: array[0..3] of string = ('shape.x1', 'shape.y1', 'shape.x2', 'shape.y2');
 var
   vals: array[0..1] of array of Double;
   ppi, a, k, n, q: Integer;
@@ -582,6 +590,7 @@ begin
         for q := 0 to High(cProps) do
         begin
           v := p.GetAnimProp(cProps[q]);
+          AssertTrue(Format('%s %s %s: a number', [ax, cAnids[k], cProps[q]]), v.Kind = avkNumber);
           SetLength(vals[ppi], n + 1);
           vals[ppi][n] := v.Num;
           Inc(n);
