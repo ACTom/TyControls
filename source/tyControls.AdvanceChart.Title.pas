@@ -192,6 +192,8 @@ end;
 function TyTitleSpecDefault: TTyTitleSpec;
 var i: Integer;
 begin
+  { every field nought first, so a field no line below sets is a safe answer }
+  Result := Default(TTyTitleSpec);
   Result.Show := True;
   Result.Text := '';
   Result.Subtext := '';
