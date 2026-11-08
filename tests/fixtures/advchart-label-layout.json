@@ -104176,6 +104176,4801 @@
    "hover": []
   },
   {
+   "id": "text.border.inf-rich",
+   "note": "a rich token's border width of 'Infinity'",
+   "option": {
+    "animation": false,
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "label": {
+       "show": true,
+       "formatter": "{a|{c}}",
+       "textBorderColor": "#000",
+       "rich": {
+        "a": {
+         "textBorderWidth": "Infinity"
+        }
+       }
+      },
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        7,
+        13.5
+       ],
+       [
+        14,
+        10
+       ],
+       [
+        21,
+        5
+       ],
+       [
+        5,
+        1.5
+       ],
+       [
+        12,
+        15
+       ],
+       [
+        19,
+        10
+       ],
+       [
+        3,
+        6.5
+       ],
+       [
+        10,
+        3
+       ],
+       [
+        17,
+        15
+       ],
+       [
+        1,
+        11.5
+       ],
+       [
+        8,
+        8
+       ],
+       [
+        15,
+        3
+       ],
+       [
+        22,
+        16.5
+       ],
+       [
+        6,
+        13
+       ],
+       [
+        13,
+        8
+       ],
+       [
+        20,
+        4.5
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        11,
+        13
+       ],
+       [
+        18,
+        9.5
+       ],
+       [
+        2,
+        6
+       ],
+       [
+        9,
+        1
+       ],
+       [
+        16,
+        14.5
+       ],
+       [
+        0,
+        11
+       ],
+       [
+        7,
+        6
+       ],
+       [
+        14,
+        2.5
+       ],
+       [
+        21,
+        16
+       ],
+       [
+        5,
+        11
+       ],
+       [
+        12,
+        7.5
+       ],
+       [
+        19,
+        4
+       ],
+       [
+        3,
+        16
+       ],
+       [
+        10,
+        12.5
+       ],
+       [
+        17,
+        9
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        8,
+        0.5
+       ],
+       [
+        15,
+        14
+       ],
+       [
+        22,
+        9
+       ],
+       [
+        6,
+        5.5
+       ],
+       [
+        13,
+        2
+       ],
+       [
+        20,
+        14
+       ]
+      ],
+      "labelLayout": {
+       "hideOverlap": true
+      }
+     }
+    ]
+   },
+   "manager": [
+    {
+     "s": 0,
+     "d": 0,
+     "dataType": null,
+     "text": "{a|0,0}",
+     "host": [
+      "4055400000000000",
+      "4073b00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4056800000000000",
+      "y": "4074000000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4056800000000000",
+       "4074000000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4056800000000000",
+       "y": "4074000000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4056800000000000",
+      "labelY": "4074000000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": false,
+      "guideIgnore": null,
+      "labelX": "4056800000000000",
+      "labelY": "4074000000000000",
+      "emph": null,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "dataType": null,
+     "text": "{a|7,13.5}",
+     "host": [
+      "406a600000000000",
+      "405ef00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "406b000000000000",
+      "y": "4060180000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "406b000000000000",
+       "4060180000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "406b000000000000",
+       "y": "4060180000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "406b000000000000",
+      "labelY": "4060180000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "406b000000000000",
+      "labelY": "4060180000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "dataType": null,
+     "text": "{a|14,10}",
+     "host": [
+      "4075100000000000",
+      "4065aaaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4075600000000000",
+      "y": "40664aaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4075600000000000",
+       "40664aaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4075600000000000",
+       "y": "40664aaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4075600000000000",
+      "labelY": "40664aaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4075600000000000",
+      "labelY": "40664aaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "dataType": null,
+     "text": "{a|21,5}",
+     "host": [
+      "407cf00000000000",
+      "406e855555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407d400000000000",
+      "y": "406f255555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407d400000000000",
+       "406f255555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407d400000000000",
+       "y": "406f255555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407d400000000000",
+      "labelY": "406f255555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407d400000000000",
+      "labelY": "406f255555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "dataType": null,
+     "text": "{a|5,1.5}",
+     "host": [
+      "4065e00000000000",
+      "40725c0000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4066800000000000",
+      "y": "4072ac0000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4066800000000000",
+       "4072ac0000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4066800000000000",
+       "y": "4072ac0000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4066800000000000",
+      "labelY": "4072ac0000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4066800000000000",
+      "labelY": "4072ac0000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 5,
+     "dataType": null,
+     "text": "{a|12,15}",
+     "host": [
+      "4072d00000000000",
+      "4059a00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4073200000000000",
+      "y": "405ae00000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4073200000000000",
+       "405ae00000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4073200000000000",
+       "y": "405ae00000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4073200000000000",
+      "labelY": "405ae00000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4073200000000000",
+      "labelY": "405ae00000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 6,
+     "dataType": null,
+     "text": "{a|19,10}",
+     "host": [
+      "407ab00000000000",
+      "4065aaaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407b000000000000",
+      "y": "40664aaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407b000000000000",
+       "40664aaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407b000000000000",
+       "y": "40664aaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407b000000000000",
+      "labelY": "40664aaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407b000000000000",
+      "labelY": "40664aaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 7,
+     "dataType": null,
+     "text": "{a|3,6.5}",
+     "host": [
+      "4061600000000000",
+      "406bdd5555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4062000000000000",
+      "y": "406c7d5555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4062000000000000",
+       "406c7d5555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4062000000000000",
+       "y": "406c7d5555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4062000000000000",
+      "labelY": "406c7d5555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4062000000000000",
+      "labelY": "406c7d5555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 8,
+     "dataType": null,
+     "text": "{a|10,3}",
+     "host": [
+      "4070900000000000",
+      "4071080000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4070e00000000000",
+      "y": "4071580000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4070e00000000000",
+       "4071580000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4070e00000000000",
+       "y": "4071580000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4070e00000000000",
+      "labelY": "4071580000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4070e00000000000",
+      "labelY": "4071580000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 9,
+     "dataType": null,
+     "text": "{a|17,15}",
+     "host": [
+      "4078700000000000",
+      "4059a00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4078c00000000000",
+      "y": "405ae00000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4078c00000000000",
+       "405ae00000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4078c00000000000",
+       "y": "405ae00000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4078c00000000000",
+      "labelY": "405ae00000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4078c00000000000",
+      "labelY": "405ae00000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 10,
+     "dataType": null,
+     "text": "{a|1,11.5}",
+     "host": [
+      "4059c00000000000",
+      "406302aaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "405b000000000000",
+      "y": "4063a2aaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "405b000000000000",
+       "4063a2aaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "405b000000000000",
+       "y": "4063a2aaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "405b000000000000",
+      "labelY": "4063a2aaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "405b000000000000",
+      "labelY": "4063a2aaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 11,
+     "dataType": null,
+     "text": "{a|8,8}",
+     "host": [
+      "406ca00000000000",
+      "4069355555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "406d400000000000",
+      "y": "4069d55555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "406d400000000000",
+       "4069d55555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "406d400000000000",
+       "y": "4069d55555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "406d400000000000",
+      "labelY": "4069d55555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "406d400000000000",
+      "labelY": "4069d55555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 12,
+     "dataType": null,
+     "text": "{a|15,3}",
+     "host": [
+      "4076300000000000",
+      "4071080000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4076800000000000",
+      "y": "4071580000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4076800000000000",
+       "4071580000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4076800000000000",
+       "y": "4071580000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4076800000000000",
+      "labelY": "4071580000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4076800000000000",
+      "labelY": "4071580000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 13,
+     "dataType": null,
+     "text": "{a|22,16.5}",
+     "host": [
+      "407e100000000000",
+      "4054500000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407e600000000000",
+      "y": "4055900000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407e600000000000",
+       "4055900000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407e600000000000",
+       "y": "4055900000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407e600000000000",
+      "labelY": "4055900000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407e600000000000",
+      "labelY": "4055900000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 14,
+     "dataType": null,
+     "text": "{a|6,13}",
+     "host": [
+      "4068200000000000",
+      "40605aaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4068c00000000000",
+      "y": "4060faaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4068c00000000000",
+       "4060faaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4068c00000000000",
+       "y": "4060faaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4068c00000000000",
+      "labelY": "4060faaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4068c00000000000",
+      "labelY": "4060faaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 15,
+     "dataType": null,
+     "text": "{a|13,8}",
+     "host": [
+      "4073f00000000000",
+      "4069355555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4074400000000000",
+      "y": "4069d55555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4074400000000000",
+       "4069d55555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4074400000000000",
+       "y": "4069d55555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4074400000000000",
+      "labelY": "4069d55555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4074400000000000",
+      "labelY": "4069d55555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 16,
+     "dataType": null,
+     "text": "{a|20,4.5}",
+     "host": [
+      "407bd00000000000",
+      "406f680000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407c200000000000",
+      "y": "4070040000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407c200000000000",
+       "4070040000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407c200000000000",
+       "y": "4070040000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407c200000000000",
+      "labelY": "4070040000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407c200000000000",
+      "labelY": "4070040000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 17,
+     "dataType": null,
+     "text": "{a|4,1}",
+     "host": [
+      "4063a00000000000",
+      "4072cd5555555555",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4064400000000000",
+      "y": "40731d5555555555",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4064400000000000",
+       "40731d5555555555"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4064400000000000",
+       "y": "40731d5555555555",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4064400000000000",
+      "labelY": "40731d5555555555",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4064400000000000",
+      "labelY": "40731d5555555555",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 18,
+     "dataType": null,
+     "text": "{a|11,13}",
+     "host": [
+      "4071b00000000000",
+      "40605aaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4072000000000000",
+      "y": "4060faaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4072000000000000",
+       "4060faaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4072000000000000",
+       "y": "4060faaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4072000000000000",
+      "labelY": "4060faaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4072000000000000",
+      "labelY": "4060faaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 19,
+     "dataType": null,
+     "text": "{a|18,9.5}",
+     "host": [
+      "4079900000000000",
+      "40668d5555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4079e00000000000",
+      "y": "40672d5555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4079e00000000000",
+       "40672d5555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4079e00000000000",
+       "y": "40672d5555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4079e00000000000",
+      "labelY": "40672d5555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4079e00000000000",
+      "labelY": "40672d5555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 20,
+     "dataType": null,
+     "text": "{a|2,6}",
+     "host": [
+      "405e400000000000",
+      "406cc00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "405f800000000000",
+      "y": "406d600000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "405f800000000000",
+       "406d600000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "405f800000000000",
+       "y": "406d600000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "405f800000000000",
+      "labelY": "406d600000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "405f800000000000",
+      "labelY": "406d600000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 21,
+     "dataType": null,
+     "text": "{a|9,1}",
+     "host": [
+      "406ee00000000000",
+      "4072cd5555555555",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "406f800000000000",
+      "y": "40731d5555555555",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "406f800000000000",
+       "40731d5555555555"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "406f800000000000",
+       "y": "40731d5555555555",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "406f800000000000",
+      "labelY": "40731d5555555555",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "406f800000000000",
+      "labelY": "40731d5555555555",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 22,
+     "dataType": null,
+     "text": "{a|16,14.5}",
+     "host": [
+      "4077500000000000",
+      "405b655555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4077a00000000000",
+      "y": "405ca55555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4077a00000000000",
+       "405ca55555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4077a00000000000",
+       "y": "405ca55555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4077a00000000000",
+      "labelY": "405ca55555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4077a00000000000",
+      "labelY": "405ca55555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 23,
+     "dataType": null,
+     "text": "{a|0,11}",
+     "host": [
+      "4055400000000000",
+      "4063e55555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4056800000000000",
+      "y": "4064855555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4056800000000000",
+       "4064855555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4056800000000000",
+       "y": "4064855555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4056800000000000",
+      "labelY": "4064855555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4056800000000000",
+      "labelY": "4064855555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 24,
+     "dataType": null,
+     "text": "{a|7,6}",
+     "host": [
+      "406a600000000000",
+      "406cc00000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "406b000000000000",
+      "y": "406d600000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "406b000000000000",
+       "406d600000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "406b000000000000",
+       "y": "406d600000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "406b000000000000",
+      "labelY": "406d600000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "406b000000000000",
+      "labelY": "406d600000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 25,
+     "dataType": null,
+     "text": "{a|14,2.5}",
+     "host": [
+      "4075100000000000",
+      "4071795555555555",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4075600000000000",
+      "y": "4071c95555555555",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4075600000000000",
+       "4071c95555555555"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4075600000000000",
+       "y": "4071c95555555555",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4075600000000000",
+      "labelY": "4071c95555555555",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4075600000000000",
+      "labelY": "4071c95555555555",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 26,
+     "dataType": null,
+     "text": "{a|21,16}",
+     "host": [
+      "407cf00000000000",
+      "4056155555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407d400000000000",
+      "y": "4057555555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407d400000000000",
+       "4057555555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407d400000000000",
+       "y": "4057555555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407d400000000000",
+      "labelY": "4057555555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407d400000000000",
+      "labelY": "4057555555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 27,
+     "dataType": null,
+     "text": "{a|5,11}",
+     "host": [
+      "4065e00000000000",
+      "4063e55555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4066800000000000",
+      "y": "4064855555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4066800000000000",
+       "4064855555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4066800000000000",
+       "y": "4064855555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4066800000000000",
+      "labelY": "4064855555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4066800000000000",
+      "labelY": "4064855555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 28,
+     "dataType": null,
+     "text": "{a|12,7.5}",
+     "host": [
+      "4072d00000000000",
+      "406a180000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4073200000000000",
+      "y": "406ab80000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4073200000000000",
+       "406ab80000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4073200000000000",
+       "y": "406ab80000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4073200000000000",
+      "labelY": "406ab80000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4073200000000000",
+      "labelY": "406ab80000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 29,
+     "dataType": null,
+     "text": "{a|19,4}",
+     "host": [
+      "407ab00000000000",
+      "4070255555555555",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407b000000000000",
+      "y": "4070755555555555",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407b000000000000",
+       "4070755555555555"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407b000000000000",
+       "y": "4070755555555555",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407b000000000000",
+      "labelY": "4070755555555555",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407b000000000000",
+      "labelY": "4070755555555555",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 30,
+     "dataType": null,
+     "text": "{a|3,16}",
+     "host": [
+      "4061600000000000",
+      "4056155555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4062000000000000",
+      "y": "4057555555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4062000000000000",
+       "4057555555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4062000000000000",
+       "y": "4057555555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4062000000000000",
+      "labelY": "4057555555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4062000000000000",
+      "labelY": "4057555555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 31,
+     "dataType": null,
+     "text": "{a|10,12.5}",
+     "host": [
+      "4070900000000000",
+      "40613d5555555556",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4070e00000000000",
+      "y": "4061dd5555555556",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4070e00000000000",
+       "4061dd5555555556"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4070e00000000000",
+       "y": "4061dd5555555556",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4070e00000000000",
+      "labelY": "4061dd5555555556",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4070e00000000000",
+      "labelY": "4061dd5555555556",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 32,
+     "dataType": null,
+     "text": "{a|17,9}",
+     "host": [
+      "4078700000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4078c00000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4078c00000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4078c00000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4078c00000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4078c00000000000",
+      "labelY": "4068100000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 33,
+     "dataType": null,
+     "text": "{a|1,4}",
+     "host": [
+      "4059c00000000000",
+      "4070255555555555",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "405b000000000000",
+      "y": "4070755555555555",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "405b000000000000",
+       "4070755555555555"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "405b000000000000",
+       "y": "4070755555555555",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "405b000000000000",
+      "labelY": "4070755555555555",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "405b000000000000",
+      "labelY": "4070755555555555",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 34,
+     "dataType": null,
+     "text": "{a|8,0.5}",
+     "host": [
+      "406ca00000000000",
+      "40733eaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "406d400000000000",
+      "y": "40738eaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "406d400000000000",
+       "40738eaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "406d400000000000",
+       "y": "40738eaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "406d400000000000",
+      "labelY": "40738eaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "406d400000000000",
+      "labelY": "40738eaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 35,
+     "dataType": null,
+     "text": "{a|15,14}",
+     "host": [
+      "4076300000000000",
+      "405d2aaaaaaaaaac",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4076800000000000",
+      "y": "405e6aaaaaaaaaac",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4076800000000000",
+       "405e6aaaaaaaaaac"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4076800000000000",
+       "y": "405e6aaaaaaaaaac",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4076800000000000",
+      "labelY": "405e6aaaaaaaaaac",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4076800000000000",
+      "labelY": "405e6aaaaaaaaaac",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 36,
+     "dataType": null,
+     "text": "{a|22,9}",
+     "host": [
+      "407e100000000000",
+      "4067700000000000",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407e600000000000",
+      "y": "4068100000000000",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407e600000000000",
+       "4068100000000000"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407e600000000000",
+       "y": "4068100000000000",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407e600000000000",
+      "labelY": "4068100000000000",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407e600000000000",
+      "labelY": "4068100000000000",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 37,
+     "dataType": null,
+     "text": "{a|6,5.5}",
+     "host": [
+      "4068200000000000",
+      "406da2aaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4068c00000000000",
+      "y": "406e42aaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4068c00000000000",
+       "406e42aaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4068c00000000000",
+       "y": "406e42aaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4068c00000000000",
+      "labelY": "406e42aaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4068c00000000000",
+      "labelY": "406e42aaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 38,
+     "dataType": null,
+     "text": "{a|13,2}",
+     "host": [
+      "4073f00000000000",
+      "4071eaaaaaaaaaab",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "4074400000000000",
+      "y": "40723aaaaaaaaaab",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "4074400000000000",
+       "40723aaaaaaaaaab"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "4074400000000000",
+       "y": "40723aaaaaaaaaab",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "4074400000000000",
+      "labelY": "40723aaaaaaaaaab",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "4074400000000000",
+      "labelY": "40723aaaaaaaaaab",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    },
+    {
+     "s": 0,
+     "d": 39,
+     "dataType": null,
+     "text": "{a|20,14}",
+     "host": [
+      "407bd00000000000",
+      "405d2aaaaaaaaaac",
+      "4024000000000000",
+      "4024000000000000"
+     ],
+     "priority": "4059000000000000",
+     "labelRect": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "def": {
+      "ignore": false,
+      "guideIgnore": null,
+      "x": "407c200000000000",
+      "y": "405e6aaaaaaaaaac",
+      "rotation": "8000000000000000",
+      "align": null,
+      "verticalAlign": null,
+      "attachedPos": "inside",
+      "attachedRot": null
+     },
+     "layout": {
+      "hideOverlap": true
+     },
+     "entry": {
+      "rawLocal": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "marginType": null,
+      "margin": null,
+      "local": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "transform": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000",
+       "407c200000000000",
+       "405e6aaaaaaaaaac"
+      ],
+      "rect": [
+       "fff0000000000000",
+       "fff0000000000000",
+       "7ff8000000000000",
+       "7ff8000000000000"
+      ],
+      "axisAligned": true,
+      "inner": {
+       "x": "407c200000000000",
+       "y": "405e6aaaaaaaaaac",
+       "originX": "0000000000000000",
+       "originY": "0000000000000000",
+       "rotation": "0000000000000000",
+       "scaleX": "3ff0000000000000",
+       "scaleY": "3ff0000000000000"
+      },
+      "labelX": "407c200000000000",
+      "labelY": "405e6aaaaaaaaaac",
+      "position": "inside",
+      "offset": [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      "ignore": false,
+      "emph": null,
+      "guideEmph": "none"
+     },
+     "exit": {
+      "ignore": true,
+      "guideIgnore": null,
+      "labelX": "407c200000000000",
+      "labelY": "405e6aaaaaaaaaac",
+      "emph": false,
+      "guideEmph": "none"
+     }
+    }
+   ],
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "text": "{a|0,0}",
+     "ignore": false,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4056800000000000",
+      "4074000000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "text": "{a|7,13.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406b000000000000",
+      "4060180000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "text": "{a|14,10}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4075600000000000",
+      "40664aaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "text": "{a|21,5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407d400000000000",
+      "406f255555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "text": "{a|5,1.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4066800000000000",
+      "4072ac0000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 5,
+     "text": "{a|12,15}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4073200000000000",
+      "405ae00000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 6,
+     "text": "{a|19,10}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407b000000000000",
+      "40664aaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 7,
+     "text": "{a|3,6.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4062000000000000",
+      "406c7d5555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 8,
+     "text": "{a|10,3}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4070e00000000000",
+      "4071580000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 9,
+     "text": "{a|17,15}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4078c00000000000",
+      "405ae00000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 10,
+     "text": "{a|1,11.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "405b000000000000",
+      "4063a2aaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 11,
+     "text": "{a|8,8}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406d400000000000",
+      "4069d55555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 12,
+     "text": "{a|15,3}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4076800000000000",
+      "4071580000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 13,
+     "text": "{a|22,16.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407e600000000000",
+      "4055900000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 14,
+     "text": "{a|6,13}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4068c00000000000",
+      "4060faaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 15,
+     "text": "{a|13,8}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4074400000000000",
+      "4069d55555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 16,
+     "text": "{a|20,4.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407c200000000000",
+      "4070040000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 17,
+     "text": "{a|4,1}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4064400000000000",
+      "40731d5555555555"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 18,
+     "text": "{a|11,13}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4072000000000000",
+      "4060faaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 19,
+     "text": "{a|18,9.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4079e00000000000",
+      "40672d5555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 20,
+     "text": "{a|2,6}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "405f800000000000",
+      "406d600000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 21,
+     "text": "{a|9,1}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406f800000000000",
+      "40731d5555555555"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 22,
+     "text": "{a|16,14.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4077a00000000000",
+      "405ca55555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 23,
+     "text": "{a|0,11}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4056800000000000",
+      "4064855555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 24,
+     "text": "{a|7,6}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406b000000000000",
+      "406d600000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 25,
+     "text": "{a|14,2.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4075600000000000",
+      "4071c95555555555"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 26,
+     "text": "{a|21,16}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407d400000000000",
+      "4057555555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 27,
+     "text": "{a|5,11}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4066800000000000",
+      "4064855555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 28,
+     "text": "{a|12,7.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4073200000000000",
+      "406ab80000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 29,
+     "text": "{a|19,4}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407b000000000000",
+      "4070755555555555"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 30,
+     "text": "{a|3,16}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4062000000000000",
+      "4057555555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 31,
+     "text": "{a|10,12.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4070e00000000000",
+      "4061dd5555555556"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 32,
+     "text": "{a|17,9}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4078c00000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 33,
+     "text": "{a|1,4}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "405b000000000000",
+      "4070755555555555"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 34,
+     "text": "{a|8,0.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "406d400000000000",
+      "40738eaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 35,
+     "text": "{a|15,14}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4076800000000000",
+      "405e6aaaaaaaaaac"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 36,
+     "text": "{a|22,9}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407e600000000000",
+      "4068100000000000"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 37,
+     "text": "{a|6,5.5}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4068c00000000000",
+      "406e42aaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 38,
+     "text": "{a|13,2}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4074400000000000",
+      "40723aaaaaaaaaab"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    },
+    {
+     "s": 0,
+     "d": 39,
+     "text": "{a|20,14}",
+     "ignore": true,
+     "mat": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407c200000000000",
+      "405e6aaaaaaaaaac"
+     ],
+     "local": [
+      "fff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000",
+      "7ff8000000000000"
+     ],
+     "align": "center",
+     "verticalAlign": "middle",
+     "fontSize": 12,
+     "guide": null
+    }
+   ],
+   "calls": [],
+   "hover": []
+  },
+  {
    "id": "text.border.inf",
    "note": "a border width of 'Infinity': the rect is -Infinity / NaN",
    "option": {
@@ -229004,6 +233799,7 @@
     "text.border.thin",
     "text.border.str",
     "text.border.str-rich",
+    "text.border.inf-rich",
     "text.border.inf",
     "margin.min",
     "margin.text",
@@ -229110,6 +233906,7 @@
     "text.border.thin",
     "text.border.str",
     "text.border.str-rich",
+    "text.border.inf-rich",
     "text.border.inf",
     "margin.min",
     "margin.text",

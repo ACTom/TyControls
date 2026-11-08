@@ -175,6 +175,7 @@ type
     procedure TestTheR7AECanvasAsUpstream;
     procedure TestTheR7AEHitsAsUpstream;
     procedure TestTheR7AFCanvasAsUpstream;
+    procedure TestTheR7AFHitsAsUpstream;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
     procedure TestAnUnplacedSlidersPointerAsUpstream;
@@ -2932,6 +2933,13 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AFCanvasAsUpstream;
 begin
   RunW(False, 'af-');
+end;
+
+{ [R7-AF] a label's words whose rect joined a string width (or 'Infinity'):
+  found by nothing, upstream's findHover at their probes }
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AFHitsAsUpstream;
+begin
+  RunW(True, 'af-');
 end;
 
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the

@@ -5148,6 +5148,128 @@
    }
   },
   {
+   "id": "tip.axis-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "A"
+     ],
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ],
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}"
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "A",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "A",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "xAxisIndex": 0,
+     "name": "A"
+    },
+    "at": [
+     310,
+     234
+    ]
+   }
+  },
+  {
+   "id": "tip.matrix-ref-twice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "formatter": "R:{b}",
+    "matrix": {
+     "x": {
+      "data": [
+       "P",
+       "Q",
+       "P"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     },
+     "tooltip": {
+      "show": true
+     }
+    }
+   },
+   "part": "tooltip",
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "tip": {
+    "formatter": "P",
+    "borderColor": "#00ff00",
+    "padding": 20,
+    "order": null,
+    "backgroundColor": "#fff",
+    "borderRadius": 4,
+    "text": "P",
+    "stroke": "#00ff00ff",
+    "action": {
+     "type": "showTip",
+     "matrixIndex": 0,
+     "name": "P"
+    },
+    "at": [
+     160.5,
+     70.5
+    ]
+   }
+  },
+  {
    "id": "tip.graphic-ref-group",
    "option": {
     "animation": false,
