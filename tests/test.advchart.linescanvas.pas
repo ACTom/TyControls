@@ -3794,6 +3794,10 @@ begin
   px := FBmp.GetPixel(168, 150 - 22);
   AssertTrue(Format('the split line over the moving ripple: (%d,%d,%d)', [px.red, px.green, px.blue]),
     (px.blue > 150) and (px.red < 150));
+  { (and the ripple is drawn, off the line) }
+  px := FBmp.GetPixel(168 - 18, 150);
+  AssertTrue(Format('the ripple off the line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 200) and (px.green < 200));
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestATipsFontWeightIsTheTextStyles;
@@ -3866,7 +3870,7 @@ begin
     crosses the second's radius split circle of 32 at (208, 150) (red) }
   Draw('{"animation":false,"polar":[{"center":[160,150],"radius":80},{"center":[240,150],"radius":80}],'
     + '"radiusAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"axisLine":{"show":false},'
-    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#0000ff","width":3}}},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#0000ff","width":3,"opacity":0.5}}},'
     + '{"polarIndex":1,"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisTick":{"show":false},'
     + '"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#ff0000","width":3}}}],'
     + '"angleAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"startAngle":0,"axisLine":{"show":false},'
@@ -3880,6 +3884,11 @@ begin
   px := FBmp.GetPixel(200, 124);
   AssertTrue(Format('the second polar''s radius split circle over the first''s: (%d,%d,%d)',
     [px.red, px.green, px.blue]), Near(px, 255, 0, 0));
+  { (each view drawn once: the first's circle of 32, at half its opacity,
+    is half blue at its top, off the spokes) }
+  px := FBmp.GetPixel(160, 118);
+  AssertTrue(Format('the first polar''s split circle drawn once: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    (px.red > 100) and (px.red < 180) and (px.blue > 200));
   { A NOTMERGE MAKES THE COMPONENTS' VIEWS ANEW, after the series' it keeps:
     a radius axis' line (z2 1, east along y = 260) under the x axis' line
     (z2 1, its view after the radius view's) still }
@@ -3902,7 +3911,7 @@ begin
     line: the tick (magenta, z2 2) over the line (green, z2 1) }
   Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
     + '"polar":{"center":[200,260],"radius":90},'
-    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisLabel":{"show":false},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLine":{"lineStyle":{"color":"#0000ff"}},"axisLabel":{"show":false},'
     + '"splitLine":{"show":false},"axisTick":{"length":10,"lineStyle":{"color":"#ff00ff","width":3}}},'
     + '"angleAxis":{"type":"value","min":0,"max":10,"show":false},'
     + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
