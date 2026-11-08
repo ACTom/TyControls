@@ -505,10 +505,11 @@ begin
     (px.blue > 200) and (px.red < 60));
   AssertTrue(Format('the trail beside it: (%d,%d,%d)', [off.red, off.green, off.blue]),
     (off.red > 200) and (off.red - off.blue > 40));
-  { the trail's layer fades frame by frame: older, lighter }
-  old := FBmp.GetPixel(60, 150 - 4);
-  AssertTrue(Format('the older trail lighter: (%d,%d,%d) against (%d,%d,%d)', [old.red, old.green, old.blue,
-    off.red, off.green, off.blue]), old.blue > off.blue + 20);
+  { the trail's layer fades frame by frame: the newer, nearer the symbol
+    (x 180 px, a few frames ago), redder than the older }
+  old := FBmp.GetPixel(180, 150 - 4);
+  AssertTrue(Format('the older trail lighter: (%d,%d,%d) against the newer (%d,%d,%d)', [off.red, off.green, off.blue,
+    old.red, old.green, old.blue]), off.blue > old.blue + 60);
   { the axis line, at half its opacity over white: once }
   once := FBmp.GetPixel(40, 100);
   AssertTrue(Format('the axis line drawn once: (%d,%d,%d)', [once.red, once.green, once.blue]),

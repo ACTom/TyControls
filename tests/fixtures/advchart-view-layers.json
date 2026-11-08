@@ -2505,21 +2505,21 @@
      "act": {
       "type": "timelineChange",
       "currentIndex": 1,
-      "__ec_inner_15": {}
+      "__ec_inner_19": {}
      }
     },
     {
      "act": {
       "type": "timelineChange",
       "currentIndex": 2,
-      "__ec_inner_15": {}
+      "__ec_inner_19": {}
      }
     },
     {
      "act": {
       "type": "timelineChange",
       "currentIndex": 0,
-      "__ec_inner_15": {}
+      "__ec_inner_19": {}
      }
     }
    ],
@@ -3169,7 +3169,7 @@
      "act": {
       "type": "timelineChange",
       "currentIndex": 1,
-      "__ec_inner_15": {}
+      "__ec_inner_19": {}
      }
     }
    ],
@@ -6585,6 +6585,322 @@
        2,
        5,
        0,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-default-length",
+   "option": {
+    "animation": true,
+    "animationDuration": 0,
+    "animationDurationUpdate": 0,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "z": 2,
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 2,
+       "opacity": 1
+      },
+      "effect": {
+       "show": true,
+       "period": 1,
+       "symbol": "circle",
+       "symbolSize": 8,
+       "delay": 0
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          1,
+          5
+         ],
+         [
+          9,
+          5
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "anim": true,
+   "steps": [
+    {
+     "t": 100
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0,
+      "legend0": 2
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fed70a3d70a3d71"
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       2,
+       4,
+       -1,
+       false,
+       1
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0,
+      "legend0": 2
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fed70a3d70a3d71"
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       2,
+       4,
+       -1,
        false,
        1
       ]

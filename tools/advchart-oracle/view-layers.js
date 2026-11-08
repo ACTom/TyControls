@@ -254,6 +254,9 @@ function cases() {
       LN(2, { effect: { show: true, trailLength: 0.2, period: 1, symbolSize: 8 } })] })), steps: [{ t: 100 }] },
     { id: 'zl-markers', anim: true, option: A(Object.assign({}, XY, { series: [LN(2, { markPoint: { data: [{ coord: [5, 5] }] } }),
       SC([[2, 2]], { markLine: { data: [{ yAxis: 3 }] } })] })), steps: [{ t: 100 }] },
+    // an effect shown with no trailLength: the default 0.2 trails
+    { id: 'zl-default-length', anim: true, option: A(Object.assign({}, XY, { series: [LN(2, { effect: { show: true,
+      period: 1, symbol: 'circle', symbolSize: 8, delay: 0 } })], legend: {} })), steps: [{ t: 100 }] },
     // a component of the trail's z: before the series in the sort, on the level under it
     { id: 'zl-calendar', anim: true, option: A(Object.assign({}, XY, { series: [LN(2)], calendar: { range: '2020-01', top: 200 },
       legend: {} })), steps: [{ t: 100 }] },
