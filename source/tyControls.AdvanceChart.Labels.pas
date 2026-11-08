@@ -814,22 +814,23 @@ begin
   ACaption.StrokeColour := ACaption.EmphStrokeColour;
   ACaption.StrokeWidthLogical := ACaption.EmphStrokeWidthLogical;
   if Length(ACaption.RtEmph) > 0 then ACaption.RtPieces := ACaption.RtEmph;
-  { [R7-AA] A BLOCK takes the hover's ink on its text, as the state style's
-    fill and stroke go over the label's own -- a rich token's own ink stays
-    [was: the rest state's ink, laid out again or not] }
-  if Length(ACaption.RtPieces) > 0 then
+  { [R7-AA] A BLOCK takes the ink the hover's label writes on its text, as
+    the state style's fill and stroke go over the label's own -- a rich
+    token's own ink stays [was: the rest state's ink, laid out again or
+    not] }
+  if (Length(ACaption.RtPieces) > 0) and (ACaption.EmphOwnInk <> 0) then
   begin
     pcs := Copy(ACaption.RtPieces, 0, Length(ACaption.RtPieces));
     for i := 0 to High(pcs) do
     begin
       if pcs[i].Kind <> rpkText then Continue;
-      if not pcs[i].TokenFill then
+      if not pcs[i].TokenFill and ((ACaption.EmphOwnInk and 1) <> 0) then
       begin
         pcs[i].HasFill := True;
         pcs[i].Fill := ACaption.EmphColour;
         pcs[i].CanvasLeft := pcs[i].CanvasLeft and not 1;
       end;
-      if not pcs[i].TokenStroke then
+      if not pcs[i].TokenStroke and ((ACaption.EmphOwnInk and 2) <> 0) then
       begin
         pcs[i].HasStroke := ACaption.EmphStrokeWidthLogical > 0;
         pcs[i].Stroke := ACaption.EmphStrokeColour;
@@ -859,6 +860,10 @@ begin
     ACaption.EmphColour, ACaption.EmphStrokeColour,
     ACaption.EmphStrokeWidthLogical);
   ACaption.HasEmph := True;
+  ACaption.EmphOwnInk := 0;
+  if ASpec.EmphHasColour then ACaption.EmphOwnInk := ACaption.EmphOwnInk or 1;
+  if ASpec.EmphHasBorderColour or ASpec.EmphHasBorderWidth then
+    ACaption.EmphOwnInk := ACaption.EmphOwnInk or 2;
 end;
 
 function TyLabelSpecNone: TTyLabelSpec;

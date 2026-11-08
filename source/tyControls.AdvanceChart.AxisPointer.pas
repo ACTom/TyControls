@@ -877,7 +877,7 @@ end;
 function TyAxisPointerHandleOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer): TTyAxisPointerHandle;
 var
-  own, root: TJSONObject;
+  own, root, glob: TJSONObject;
 
   function HandleIn(AAp: TJSONObject): TJSONObject;
   var d: TJSONData;
@@ -888,7 +888,10 @@ var
     if d is TJSONObject then Result := TJSONObject(d);
   end;
 
-  { Model.get through the parent: the axis' key, else the component's }
+  { Model.get through the parent: the axis' key, else the component's;
+    [R7-AA] else, for a key AxisPointerModel's handle has no default for
+    (its border, opacity, shadow), the option root's `handle` --
+    getModel('handle') climbs to the GlobalModel [was: never read] }
   function Key(const AName: string): TJSONData;
   begin
     Result := nil;
@@ -897,6 +900,13 @@ var
     Result := nil;
     if root <> nil then Result := root.Find(AName);
     if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    if (Result = nil) and (glob <> nil) and (AName <> 'show') and (AName <> 'icon')
+      and (AName <> 'size') and (AName <> 'margin') and (AName <> 'throttle')
+      and (AName <> 'color') then
+    begin
+      Result := glob.Find(AName);
+      if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    end;
   end;
 
   function Num(const AName: string; ADefault: Double): Double;
@@ -921,6 +931,8 @@ begin
   if AOption = nil then Exit;
   own := HandleIn(PointerNodeIn(AOption.ComponentAt(AAxisMainType, AAxisIndex)));
   root := HandleIn(PointerNodeIn(AOption.Root));
+  glob := nil;
+  if AOption.Root is TJSONObject then glob := HandleIn(TJSONObject(AOption.Root));
   d := Key('show');
   Result.Show := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
     or ((d.JSONType = jtNumber) and (d.AsFloat <> 0))

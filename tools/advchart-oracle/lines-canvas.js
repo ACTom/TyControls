@@ -1021,6 +1021,15 @@ function cases() {
     { type: 'rect', z: 6, shape: { x: 60, y: 20, width: 30, height: 20 }, style: { fill: '#0000ff', stroke: '#ff00ff', lineWidth: 0 } },
     { type: 'circle', z: 7, shape: { cx: 120, cy: 30, r: 10 }, style: { fill: 'nope', stroke: 'bad', lineWidth: '2' } }] }),
     [0], { w: true, z: true }],
+    // a richText tooltip's own refused colours: the box's fill and border,
+    // the text's fill (TooltipRichContent: borderWidth 1, the border the
+    // near point's colour)
+    ['aa-tip-rich', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { tooltip: { renderMode: 'richText', showDelay: 0,
+      transitionDuration: 0, backgroundColor: 'nope', borderColor: 'bad', textStyle: { color: 'nope' },
+      shadowBlur: 6, shadowColor: 'rgba(0,0,255,0.5)', shadowOffsetX: 2,
+      formatter: 'Ab' } }),
+    [0], { w: true, z: true, tip: true, acts: { 0: [{ type: 'showTip', seriesIndex: 0, dataIndex: 0 }] } }],
     // 3. the polar's and the single axis' split areas, in paint order
     ['aa-polar-area', { animation: false, graphic: [{ type: 'rect', z: -1, shape: { x: 10, y: 10, width: 20, height: 20 },
       style: { fill: '#ff0000' } }], polar: { radius: 100 },
@@ -1181,11 +1190,17 @@ function track(chart) {
     // [R7-Z] every component's displayables, in paint order
     if (Z) {
       const zc = new Map();
+      // [R7-AA] a richText tooltip's element, on the root (no view's group)
+      let tipEl = null;
+      for (const v of chart._componentsViews || []) {
+        if (v && v.type === 'tooltip' && v._tooltipContent && v._tooltipContent.el) tipEl = v._tooltipContent.el;
+      }
       for (const el of chart.getZr().storage.getDisplayList(true)) {
         let p = el;
         let info = null;
         while (p) {
           if (p.__ecComponentInfo) { info = p.__ecComponentInfo; break; }
+          if (AA && tipEl && p === tipEl) { info = { mainType: 'tooltip', index: 0 }; break; }
           p = p.parent || p.__hostTarget;
         }
         if (!info || info.mainType === 'series' || map.has(el) || !el.style) continue;
@@ -1334,6 +1349,8 @@ function run(id, option, samples, opts) {
   // skips every transition)
   const nodeWas = echarts.env.node;
   if (opts.anim) echarts.env.node = false;
+  // [R7-AA] a tooltip view renders nothing under env.node
+  if (opts.tip) echarts.env.node = false;
   const chart = echarts.init(dom, null, { renderer: 'canvas', width: CW, height: CH, devicePixelRatio: 1,
     useDirtyRect: !!opts.dirty });
   // [R7-W] the repaint blocks

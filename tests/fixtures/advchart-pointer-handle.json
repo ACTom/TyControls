@@ -4586,6 +4586,101 @@
      ]
     }
    ]
+  },
+  {
+   "id": "x-root-handle",
+   "note": "the root handle: its border, opacity and shadow reach the handle, its colour and size do not",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "handle": {
+       "color": "#00ff00",
+       "size": 10,
+       "borderColor": "#0000ff",
+       "borderWidth": 3,
+       "opacity": 0.5,
+       "shadowBlur": 4,
+       "shadowColor": "#ff0000"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+       ],
+       "axisPointer": {
+        "handle": {
+         "show": true
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         3,
+         7,
+         2,
+         5,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false,
+          "type": "path",
+          "image": null,
+          "stroke": "#0000ff",
+          "lineWidth": 3,
+          "opacity": 0.5,
+          "shadowBlur": 4,
+          "shadowOffsetX": 0,
+          "shadowOffsetY": 0,
+          "shadowColor": "#ff0000"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [

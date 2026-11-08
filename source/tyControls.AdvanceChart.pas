@@ -1957,6 +1957,8 @@ type
       yet lays its box out first), and the colour it gave the box's border }
     FTipPaintGen: Integer;
     FTipBorderPainted: TTyColor;
+    { [R7-AA] the box's fill as last painted (TooltipSurfaceColour) }
+    FTipSurfacePainted: TTyColor;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
     { [R7-N] the pointer labels the last PaintAxisPointers drew }
@@ -3961,6 +3963,12 @@ type
     { [R2-I8] the box reads its text as html: the tooltip component's
       renderMode is not 'richText' ('auto' as TooltipAutoRichText says) }
     function TipHtmlMode: Boolean;
+    { [R7-AA] the box's and the text's colours the option writes and no
+      parser reads, as html or the canvas shows them (TooltipInk sets the
+      text's) }
+    procedure TipSettleRefused(const ASpec: TTyTooltipSpec; const AInk: TTyTooltipInk;
+      var ASurface: TTyFill; var ABorder: TTyColor; ABorderW: Double; const ASt: TTyStyleSet;
+      var ALines: TTyTooltipLineArray);
     { [R2-I8] a component item's content in the box's language: encodeHTML'd
       in html mode, as setTooltipConfig's encodeHTMLContent has it }
     function TipContentName(const AName: string): string;
@@ -4450,6 +4458,8 @@ type
     { THE COLOUR THE LAST PAINT GAVE THE BOX'S BORDER; 0 when no box was
       drawn }
     function TooltipBorderColour: TTyColor;
+    { [R7-AA] the colour the tooltip's box was last filled in }
+    function TooltipSurfaceColour: TTyColor;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;

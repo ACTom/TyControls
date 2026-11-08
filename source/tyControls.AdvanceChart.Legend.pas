@@ -3424,6 +3424,9 @@ var
   pts: array[0..1] of TTyPointF;
   size, pen: Double;
   colour: TTyChartColor;
+  { [R7-AA] the box's stroke colour, handed by the first hit rect }
+  handBorder: Boolean;
+  borderInk: TTyChartColor;
 
   function Blank: TTyChartElement;
   begin
@@ -3595,22 +3598,25 @@ begin
     one: upstream gives a legend a transparent background and a zero border, so
     painting a plate behind every legend would put a visible box on every
     chart in the gallery. }
-  { [R7-AA] MAKEBACKGROUND'S RECT IS ALWAYS THERE: painting nothing where
-    the option asks for none, it still hands the canvas its fill (the
-    backgroundColor, 'transparent' by default) and its stroke colour (the
-    borderColor, at a width of nought too) [was: built only when it drew] }
+  { [R7-AA] makeBackground's Rect is always there upstream: where it paints
+    nothing (no backgroundColor, a border of no width) the port builds none,
+    and the first item's hit rect -- the next element, filled 'transparent'
+    as the box is -- hands the canvas the box's stroke colour instead
+    (handBorder) [was: never handed] }
+  handBorder := not (ASpec.HasBackground or (ASpec.BorderWidth > 0));
+  if ASpec.HasBorderColour then borderInk := ASpec.BorderColour else borderInk := AInk.Border;
+  if ASpec.HasBackground or (ASpec.BorderWidth > 0) then
   begin
     el := Blank;
     el.Z2 := -1;
     el.Shape := TyShapeRoundRect(ALayout.Frame,
       [ASpec.BorderRadii[0] * scale, ASpec.BorderRadii[1] * scale,
        ASpec.BorderRadii[2] * scale, ASpec.BorderRadii[3] * scale]);
-    el.Style.HasFill := True;
-    if not ASpec.HasBackground then el.Style.FillColor := 0
-    else if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
+    el.Style.HasFill := ASpec.HasBackground;
+    if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
     else el.Style.FillColor := AInk.Background;
-    if ASpec.HasBorderColour then el.Style.StrokeColor := ASpec.BorderColour
-    else el.Style.StrokeColor := AInk.Border;
+    { (the stroke colour handed at a width of nought too) }
+    el.Style.StrokeColor := borderInk;
     if ASpec.BorderWidth > 0 then el.Style.StrokeWidthLogical := ASpec.BorderWidth;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
     { [R7-X] its dash, phase, cap, join and miterLimit }
@@ -3642,6 +3648,13 @@ begin
         canvas that fill }
       el.Style.HasFill := True;
       el.Style.FillColor := 0;
+      { [R7-AA] the first one: the box's stroke colour, where the port built
+        no box (handBorder) -- it strokes nothing }
+      if handBorder then
+      begin
+        el.Style.StrokeColor := borderInk;
+        handBorder := False;
+      end;
       { `hitRect.silent = !selectMode` (LegendView.ts:506): selectedMode
         false takes the pointer away -- no hover link, no click, and no
         legend mouse event either, its children being silent already

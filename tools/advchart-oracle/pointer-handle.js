@@ -375,6 +375,19 @@ const CASES = [
       { op: 'idle', ms: 500 },
     ],
   },
+  {
+    // [R7-AA] the option root's `handle`: getModel('handle') climbs to the
+    // GlobalModel for the keys AxisPointerModel has no default for (border,
+    // opacity, shadow); its colour and size have defaults and stop there
+    id: 'x-root-handle', note: 'the root handle: its border, opacity and shadow reach the handle, its colour and size do not', style: true,
+    charts: [{ animation: false, handle: { color: '#00ff00', size: 10, borderColor: '#0000ff', borderWidth: 3, opacity: 0.5,
+      shadowBlur: 4, shadowColor: '#ff0000' },
+      xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true } } },
+      yAxis: { type: 'value' }, series: [LINE] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+    ],
+  },
 ];
 
 // =====================================================================
