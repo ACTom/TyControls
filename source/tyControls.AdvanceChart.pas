@@ -3581,6 +3581,9 @@ type
       (CompSettlePen), logged (CompDrawn); a text colour likewise }
     function CompPen(AOwner: TTyAxis; AKind: Byte; const K: TTyAxisStroke): TTyAxisStroke;
     function CompText(AOwner: TTyAxis; AKind: Byte; AColour: TTyColor): TTyColor;
+    { [R7-AD] a polar's or a single axis' text style as it is drawn: the
+      colour and the font the paint order settled, logged so (CompDrawn) }
+    procedure CompTextDrawn(AOwner: TTyAxis; AKind: Byte; var AStyle: TTyStyleSet);
     { the part of AOwner of AKind once settled; nil for none }
     function CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
     { an axis' pen as the canvas strokes it: what it refuses, the canvas'

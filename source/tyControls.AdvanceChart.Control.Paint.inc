@@ -2332,6 +2332,22 @@ begin
     end;
 end;
 
+procedure TTyCustomAdvanceChart.CompTextDrawn(AOwner: TTyAxis; AKind: Byte;
+  var AStyle: TTyStyleSet);
+var n: Integer;
+begin
+  n := Length(FCompDrawn);
+  AStyle.TextColor := CompText(AOwner, AKind, AStyle.TextColor);
+  CompFont(AOwner, AKind, AStyle);
+  { (the font it is drawn in, on the log CompText made) }
+  if Length(FCompDrawn) > n then
+  begin
+    FCompDrawn[High(FCompDrawn)].El.Caption.FontName := AStyle.FontName;
+    FCompDrawn[High(FCompDrawn)].El.Caption.FontSizeLogical := ResolveFontSize(AStyle);
+    FCompDrawn[High(FCompDrawn)].El.Caption.FontWeight := AStyle.FontWeight;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.CompRun(APPI: Integer);
 var
   parts: TTyCompPartArray;

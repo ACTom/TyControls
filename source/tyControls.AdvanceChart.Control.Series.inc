@@ -620,12 +620,11 @@ begin
     LinesRect(v.MinorTicks, cpkMinorTick, rk, -1, -1, True);
     StrokeLines(v.MinorTicks, rk, -1, True);
     AxisTextStyles(@sp, labelS, nameS);
-    labelS.TextColor := CompText(s.Axis, cpkLabel, labelS.TextColor);
-    nameS.TextColor := CompText(s.Axis, cpkName, nameS.TextColor);
-    { [R7-AD] a font the canvas refused: the one the paint order settled
-      [was: its own readable parts] }
-    CompFont(s.Axis, cpkLabel, labelS);
-    CompFont(s.Axis, cpkName, nameS);
+    { [R7-AD] the colours and the fonts the paint order settled (a font the
+      canvas refused: the one the text before left) [was: the font its own
+      readable parts] }
+    CompTextDrawn(s.Axis, cpkLabel, labelS);
+    CompTextDrawn(s.Axis, cpkName, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
     begin
@@ -1526,9 +1525,8 @@ var
   begin
     sp := AView.Spec;
     AxisTextStyles(@sp, labelS, nameS);
-    nameS.TextColor := CompText(curAxis, cpkName, nameS.TextColor);
-    { [R7-AD] a font the canvas refused: the one the paint order settled }
-    CompFont(curAxis, cpkName, nameS);
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkName, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
     begin
@@ -1584,9 +1582,8 @@ var
     LinesRect(AView.MinorTicks, cpkMinorTick, rk, -1, -1, True, False);
     StrokeLines(AView.MinorTicks, rk, -1, True);
     AxisTextStyles(@sp, labelS, nameS);
-    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
-    { [R7-AD] }
-    CompFont(curAxis, cpkLabel, labelS);
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkLabel, labelS);
     if tpTextColor in labelS.Present then
     for q := 0 to High(sp.Placements) do
     begin
@@ -1663,9 +1660,8 @@ var
   begin
     sp := AView.Spec;
     AxisTextStyles(@sp, labelS, nameS);
-    labelS.TextColor := CompText(curAxis, cpkLabel, labelS.TextColor);
-    { [R7-AD] }
-    CompFont(curAxis, cpkLabel, labelS);
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkLabel, labelS);
     if tpTextColor in labelS.Present then
     for q := 0 to High(AView.Labels) do
     begin

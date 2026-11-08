@@ -6552,6 +6552,41 @@ begin
   { [R6-B] a map's global gradient (in the list's px: the path's own units
     through its transform at rest) carried with the group }
   if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
+    and AEl.Style.FillGradient.Global and AEl.Style.FillGradient.HasM then
+  begin
+    { [R7-AD] made in the path's own frame (GradOnBox, a transform that is
+      no similarity): the group's move on the frame, the points and the
+      radius left in the path's units -- a strokeNoScale box's shift is
+      in them already (the frame's linear part is VGradL's) }
+    AEl.Style.FillGradient.M[0] := AEl.Style.FillGradient.M[0] * fx;
+    AEl.Style.FillGradient.M[2] := AEl.Style.FillGradient.M[2] * fx;
+    AEl.Style.FillGradient.M[4] := AX + (AEl.Style.FillGradient.M[4] - AEl.Anim.VX) * fx;
+    AEl.Style.FillGradient.M[1] := AEl.Style.FillGradient.M[1] * fy;
+    AEl.Style.FillGradient.M[3] := AEl.Style.FillGradient.M[3] * fy;
+    AEl.Style.FillGradient.M[5] := AY + (AEl.Style.FillGradient.M[5] - AEl.Anim.VY) * fy;
+    if AEl.Anim.VGradNS then
+    begin
+      ga := AEl.Anim.VGradL[0] * fx;
+      gb := AEl.Anim.VGradL[1] * fy;
+      gc := AEl.Anim.VGradL[2] * fx;
+      gd := AEl.Anim.VGradL[3] * fy;
+      gdet := Sqrt(Abs(ga * gd - gc * gb));
+      if (Abs(ga - 1) > 1e-10) and (Abs(gd - 1) > 1e-10) then gls := gdet else gls := 1;
+      if gls > 1e-10 then gg := AEl.Anim.VGradG * AEl.Anim.VGradLS / gls else gg := 0;
+      gdl := gg - AEl.Anim.VGradG;
+      AEl.Style.FillGradient.X := AEl.Style.FillGradient.X + (2 * AEl.Anim.VGradFrac.X - 1) * gdl;
+      AEl.Style.FillGradient.Y := AEl.Style.FillGradient.Y + (2 * AEl.Anim.VGradFrac.Y - 1) * gdl;
+      if AEl.Anim.VGradFrac.Kind = cgkRadial then
+        AEl.Style.FillGradient.R := AEl.Anim.VGradFrac.R
+          * Min(AEl.Anim.VGradW0 + 2 * gg, AEl.Anim.VGradH0 + 2 * gg)
+      else
+      begin
+        AEl.Style.FillGradient.X2 := AEl.Style.FillGradient.X2 + (2 * AEl.Anim.VGradFrac.X2 - 1) * gdl;
+        AEl.Style.FillGradient.Y2 := AEl.Style.FillGradient.Y2 + (2 * AEl.Anim.VGradFrac.Y2 - 1) * gdl;
+      end;
+    end;
+  end
+  else if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
     and AEl.Style.FillGradient.Global then
   begin
     AEl.Style.FillGradient.X := AX + (AEl.Style.FillGradient.X - AEl.Anim.VX) * fx;
@@ -6741,7 +6776,17 @@ begin
   TyShapeScaleAbout(AEl.Shape, ox, oy, sx, sy);
   if AEl.Style.FillGradient.Kind <> cgkNone then
   begin
-    if AEl.Style.FillGradient.Global then
+    { [R7-AD] made in a frame: the scale on the frame }
+    if AEl.Style.FillGradient.Global and AEl.Style.FillGradient.HasM then
+    begin
+      AEl.Style.FillGradient.M[0] := AEl.Style.FillGradient.M[0] * sx;
+      AEl.Style.FillGradient.M[2] := AEl.Style.FillGradient.M[2] * sx;
+      AEl.Style.FillGradient.M[4] := GX(AEl.Style.FillGradient.M[4]);
+      AEl.Style.FillGradient.M[1] := AEl.Style.FillGradient.M[1] * sy;
+      AEl.Style.FillGradient.M[3] := AEl.Style.FillGradient.M[3] * sy;
+      AEl.Style.FillGradient.M[5] := GY(AEl.Style.FillGradient.M[5]);
+    end
+    else if AEl.Style.FillGradient.Global then
     begin
       AEl.Style.FillGradient.X := GX(AEl.Style.FillGradient.X);
       AEl.Style.FillGradient.Y := GY(AEl.Style.FillGradient.Y);
