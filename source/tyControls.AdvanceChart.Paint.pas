@@ -64,6 +64,13 @@ type
     { In the order they were written. Upstream neither sorts, dedupes nor
       clamps them, and emits duplicate offsets itself. }
     Stops: TTyChartGradStopArray;
+    { [R7-AB] A CANVAS GRADIENT MADE IN A FRAME (Global then): the points
+      and the radius are in the frame M [a, b, c, d, e, f] takes to device
+      px -- an element's own frame that is no similarity (a symbol scaled
+      unevenly or turned), or the frame of the element a held gradient is
+      filled under: a radial one an ellipse there, as the canvas has it }
+    HasM: Boolean;
+    M: array[0..5] of Double;
   end;
 
   { A COLOUR THAT IS AN IMAGE: zrender's ImagePatternObject -- `image`,
@@ -452,6 +459,15 @@ type
     ShadowColor: TTyChartColor;
     HasShadowColor: Boolean;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] a part written as a value the canvas refuses (`dpr * ('abc'
+      || 0)` is none -- truthy, so it wins the `||`): 1 the blur, 2 the
+      offset x, 4 the offset y, its number nought above; 8 the refused blur
+      is above nought ('Infinity': the span casts a shadow) }
+    ShadowLeft: Byte;
+    { [R7-AB] a font part written as a value the canvas' font parser refuses
+      (TyCssFontRefused): 1 the fontStyle, 2 the fontWeight, 4 the fontSize
+      -- makeFont's string is refused whole, the font the canvas had kept }
+    FontLeft: Byte;
     { [R5-A] THE BOX'S SHADOW (TEXT_PROPS_BOX' shadowBlur / shadowColor /
       shadowOffsetX / Y): the rect or the picture of the box casts it, in
       shadowColor -- 'transparent' when none (Text.ts _renderBackground) }
@@ -552,6 +568,13 @@ type
     HasShadow: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] the shadow's parts the canvas refuses (TTyRtStyle.ShadowLeft's
+      1, 2, 4): the value kept is the one it had, settled in the paint order
+      (TyLinesCanvasLeftovers) into the parts above }
+    ShadowLeft: Byte;
+    { [R7-AB] its font refused (its token's, or the block's it takes): the
+      one the canvas had, settled in the paint order into the three above }
+    FontLeft: Boolean;
     { A TEXT'S FILL OR STROKE THAT CAME FROM THE HOST'S DEFAULT (zrender's
       useDefaultFill, and the auto stroke), not from a style: what a hover
       re-inks, and what a free text whose ink is the skin's takes at paint
@@ -606,6 +629,8 @@ type
     HasShadowColor: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] its parts the canvas refuses (TTyRtStyle.ShadowLeft) }
+    ShadowLeft: Byte;
     { the root wrote richInheritPlainLabel: false -- the zero value is
       upstream's default, on }
     InheritPlainOff: Boolean;

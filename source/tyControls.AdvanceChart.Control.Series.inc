@@ -3082,17 +3082,27 @@ end;
   the canvas' motion blur -- the last frame drawn back at lastFrameAlpha,
   then the layer's elements over it -- here an alpha multiply of the kept
   layer before the series is drawn on it again. The rest of the part draws
-  as it does without a trail, over it. [Batch 121] }
+  as it does without a trail, over it. [Batch 121]
+  [R7-AB] UNDER useDirtyRect zrender clears a motion-blurred layer whole and
+  draws the last frame back (Layer.clear: `!repaintRects || haveMotionBLur`),
+  then brushes only the elements meeting the blocks round what changed,
+  each block clipped: the layer faded whole, the blocks repainted -- a line
+  away from every block fades frame by frame [was: the whole layer
+  repainted every frame]. The first frame (no snapshot) is whole. }
 procedure TTyCustomAdvanceChart.PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
 var
   bmp: TBGRABitmap;
   P: TTyPainter;
-  i, idx: Integer;
+  i, idx, blk, n: Integer;
   el: TTyChartElement;
   a: Double;
-  any: Boolean;
-  rest: TTyPaintList;
+  any, blocks: Boolean;
+  rest, trail: TTyPaintList;
   sc: TTyCanvasScale;
+  snap: TTyDirtySnap;
+  rects, zr: TTyZrRectArray;
+  px: array of TRect;
+  pr, oldClip: TRect;
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   bmp := APainter.Bitmap;
@@ -3111,33 +3121,93 @@ begin
   if (not any) or (bmp = nil) then
   begin
     FreeAndNil(FTrailLayer);
+    FTrailSnapOk := False;
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
+  blocks := False;
   if (FTrailLayer = nil) or (FTrailLayer.Width <> bmp.Width)
     or (FTrailLayer.Height <> bmp.Height) then
   begin
     FreeAndNil(FTrailLayer);
+    FTrailSnapOk := False;
     FTrailLayer := TBGRABitmap.Create(bmp.Width, bmp.Height, BGRAPixelTransparent);
   end
   else
     FTrailLayer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
   rest := TTyPaintList.Create;
+  trail := TTyPaintList.Create;
   P := NewPainter;
   try
+    { the layer's own elements, in paint order }
+    for i := 0 to AList.Count - 1 do
+    begin
+      idx := AList.PaintOrder(i);
+      el := AList.Element(idx);
+      if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+        trail.Add(el);
+    end;
+    { [R7-AB] the blocks round what changed since the last frame }
+    snap := nil;
+    rects := nil;
+    n := 0;
+    px := nil;
+    zr := nil;
+    if FUseDirtyRect and not FExporting then
+    begin
+      snap := TyDirtySnapshot(trail, FPaintListPPI);
+      if FTrailSnapOk and TyDirtyDiff(FTrailSnap, snap, rects) then
+      begin
+        blocks := True;
+        SetLength(px, Length(rects));
+        SetLength(zr, Length(rects));
+        for i := 0 to High(rects) do
+          if TyZrRectToPixels(rects[i], bmp.Width div Max(1, APainter.DeviceScale),
+            bmp.Height div Max(1, APainter.DeviceScale), pr) then
+          begin
+            px[n] := pr;
+            zr[n] := rects[i];
+            Inc(n);
+          end;
+      end;
+      FTrailSnap := snap;
+      FTrailSnapOk := True;
+    end
+    else
+      FTrailSnapOk := False;
     { the layer the size of the painter's bitmap, drawn at its device scale
       over the device-px rect (#83) }
     sc.Scale := APainter.DeviceScale;
     sc.DeviceUnits := False;
     P.BeginPaintOnScaled(nil, Rect(0, 0, bmp.Width div sc.Scale, bmp.Height div sc.Scale),
       FPaintListPPI, FTrailLayer, sc);
-    for i := 0 to AList.Count - 1 do
+    if not blocks then
     begin
-      idx := AList.PaintOrder(i);
-      el := AList.Element(idx);
-      if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+      for i := 0 to trail.Count - 1 do
       begin
+        el := trail.Element(i);
         if not el.Ignore then TyRenderElement(P, el);
+      end;
+    end
+    else
+    begin
+      oldClip := FTrailLayer.ClipRect;
+      try
+        for blk := 0 to n - 1 do
+        begin
+          FTrailLayer.ClipRect := Rect(px[blk].Left * sc.Scale, px[blk].Top * sc.Scale,
+            px[blk].Right * sc.Scale, px[blk].Bottom * sc.Scale);
+          for i := 0 to trail.Count - 1 do
+          begin
+            el := trail.Element(i);
+            if el.Ignore then Continue;
+            { an element nothing bounds is drawn wherever it is }
+            if snap[i].Bounded and not TyZrRectIntersect(snap[i].Rect, zr[blk]) then Continue;
+            TyRenderElement(P, el);
+          end;
+        end;
+      finally
+        FTrailLayer.ClipRect := oldClip;
       end;
     end;
     P.EndPaint;
@@ -3152,6 +3222,7 @@ begin
   finally
     P.Free;
     rest.Free;
+    trail.Free;
   end;
 end;
 

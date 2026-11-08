@@ -451,6 +451,10 @@ begin
   FChart.AnimationMode := camAlways;
   FChart.AnimNow := T0;
   FChart.TimelineNow := T0;
+  { [R7-AB] and the brush's and the dataZoom's, with it }
+  FChart.BrushNow := T0;
+  FChart.DataZoomNow := T0;
+  FChart.ParallelExpandNow := T0;
   FBmp := TBGRABitmap.Create(AW, AH, BGRA(255, 255, 255, 255));
 end;
 
@@ -471,6 +475,9 @@ procedure TAdvChartTimelineOracleTest.SetClock(AMs: Double);
 begin
   FChart.AnimNow := AMs;
   FChart.TimelineNow := AMs;
+  FChart.BrushNow := AMs;
+  FChart.DataZoomNow := AMs;
+  FChart.ParallelExpandNow := AMs;
 end;
 
 procedure TAdvChartTimelineOracleTest.CheckTree(ATree: TJSONData);

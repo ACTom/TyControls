@@ -171,10 +171,18 @@ begin
     AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
     StUnsettle(AEl, cTyCanvasBlurLeft);
   end;
+  { ([R7-AB] its offset the canvas' to settle afresh: an offset refused at
+    rest, a state's taken [was: still marked, the rest's carried]) }
   if not StSameNum(C.Num[stkShadowOffsetX], R.Num[stkShadowOffsetX]) then
+  begin
     AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
+    StUnsettle(AEl, cTyCanvasOffXLeft);
+  end;
   if not StSameNum(C.Num[stkShadowOffsetY], R.Num[stkShadowOffsetY]) then
+  begin
     AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
+    StUnsettle(AEl, cTyCanvasOffYLeft);
+  end;
   if C.Has[stkShadowColor] and (C.Color[stkShadowColor] <> R.Color[stkShadowColor]) then
   begin
     AEl.Style.ShadowColor := C.Color[stkShadowColor];
@@ -3788,13 +3796,14 @@ begin
       TyAnimPropPut(Result.Props, 'style.lineDashOffset', StNumValue(AM, stkDashOffset));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
-    { [R5-A] the shadow, where the state says it }
+    { [R5-A] the shadow, where the state says it -- [R7-AB] as written where
+      that is no number (a track into 'abc' discrete, set at once) }
     if AM.Has[stkShadowBlur] and P.HasStKey('style.shadowBlur') then
-      TyAnimPropPut(Result.Props, 'style.shadowBlur', TyAnimNum(AM.Num[stkShadowBlur]));
+      TyAnimPropPut(Result.Props, 'style.shadowBlur', StNumValue(AM, stkShadowBlur));
     if AM.Has[stkShadowOffsetX] and P.HasStKey('style.shadowOffsetX') then
-      TyAnimPropPut(Result.Props, 'style.shadowOffsetX', TyAnimNum(AM.Num[stkShadowOffsetX]));
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetX', StNumValue(AM, stkShadowOffsetX));
     if AM.Has[stkShadowOffsetY] and P.HasStKey('style.shadowOffsetY') then
-      TyAnimPropPut(Result.Props, 'style.shadowOffsetY', TyAnimNum(AM.Num[stkShadowOffsetY]));
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetY', StNumValue(AM, stkShadowOffsetY));
     if AM.Has[stkShadowColor] and P.HasStKey('style.shadowColor') then
       TyAnimPropPut(Result.Props, 'style.shadowColor', StColourValue(AM, stkShadowColor));
   end;
@@ -4001,11 +4010,11 @@ begin
       Seed('style.lineDashOffset', StNumValue(AEl.Rest, stkDashOffset));
     { [R5-A] the shadow's keys, where some state says one }
     if StAnyDecl(AEl, stkShadowBlur) then
-      Seed('style.shadowBlur', TyAnimNum(AEl.Rest.Num[stkShadowBlur]));
+      Seed('style.shadowBlur', StNumValue(AEl.Rest, stkShadowBlur));
     if StAnyDecl(AEl, stkShadowOffsetX) then
-      Seed('style.shadowOffsetX', TyAnimNum(AEl.Rest.Num[stkShadowOffsetX]));
+      Seed('style.shadowOffsetX', StNumValue(AEl.Rest, stkShadowOffsetX));
     if StAnyDecl(AEl, stkShadowOffsetY) then
-      Seed('style.shadowOffsetY', TyAnimNum(AEl.Rest.Num[stkShadowOffsetY]));
+      Seed('style.shadowOffsetY', StNumValue(AEl.Rest, stkShadowOffsetY));
     if StAnyDecl(AEl, stkShadowColor) then
       Seed('style.shadowColor', StColourValue(AEl.Rest, stkShadowColor));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then

@@ -350,6 +350,13 @@ begin
               or (Abs(el.Style.ShadowBlur - sb) > 1e-9) then
               Miss(Format('%s %s: shadow %x blur %g, want %s blur %g', [where, op,
                 el.Style.ShadowColor, el.Style.ShadowBlur, o.Strings['sc'], sb]));
+            { [R7-AB] and its offsets (a refused one kept) }
+            Inc(FCompared);
+            if (Abs(el.Style.ShadowOffsetX - HexD(o.Strings['sox'])) > 1e-9)
+              or (Abs(el.Style.ShadowOffsetY - HexD(o.Strings['soy'])) > 1e-9) then
+              Miss(Format('%s %s: shadow offset (%g,%g), want (%g,%g)', [where, op,
+                el.Style.ShadowOffsetX, el.Style.ShadowOffsetY, HexD(o.Strings['sox']),
+                HexD(o.Strings['soy'])]));
           end
           else if (sb = 0) and (HexD(o.Strings['sox']) = 0) and (HexD(o.Strings['soy']) = 0) then
           begin

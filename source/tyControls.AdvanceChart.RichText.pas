@@ -1258,6 +1258,11 @@ var
     p.FontFamily := tk.FontFamily;
     p.FontSizePx := tk.FontSizePx;
     p.FontWeight := tk.FontWeight;
+    { [R7-AB] `token.font = tokenStyle.font || style.font`: the token's (its
+      parts the block's where it names none), else the block's -- refused
+      whole where a part is }
+    if found then p.FontLeft := ts.FontLeft <> 0
+    else p.FontLeft := AStyle.FontLeft <> 0;
     { the TSpan's own box: its content, hung by its alignment }
     p.W := tk.ContentWidth;
     p.H := tk.ContentHeight;
@@ -1315,16 +1320,45 @@ var
     else p.Opacity := 1;
     { [R7-L] retrieve3's first: the token's own }
     p.OwnOpacity := found and ts.HasOpacity;
-    { each shadow part: the token's, else the block's, else none }
-    if found and (ts.ShadowBlur <> 0) then p.ShadowBlur := ts.ShadowBlur
-    else p.ShadowBlur := AStyle.ShadowBlur;
+    { each shadow part: the token's, else the block's, else none --
+      `token || style || 0`, a refused one truthy [R7-AB] }
+    p.ShadowLeft := 0;
+    if found and ((ts.ShadowBlur <> 0) or ((ts.ShadowLeft and 1) <> 0)) then
+    begin
+      p.ShadowBlur := ts.ShadowBlur;
+      p.ShadowLeft := p.ShadowLeft or (ts.ShadowLeft and 1);
+    end
+    else
+    begin
+      p.ShadowBlur := AStyle.ShadowBlur;
+      p.ShadowLeft := p.ShadowLeft or (AStyle.ShadowLeft and 1);
+    end;
     if found and ts.HasShadowColor then p.ShadowColor := ts.ShadowColor
     else p.ShadowColor := AStyle.ShadowColor;
-    if found and (ts.ShadowOffsetX <> 0) then p.ShadowOffsetX := ts.ShadowOffsetX
-    else p.ShadowOffsetX := AStyle.ShadowOffsetX;
-    if found and (ts.ShadowOffsetY <> 0) then p.ShadowOffsetY := ts.ShadowOffsetY
-    else p.ShadowOffsetY := AStyle.ShadowOffsetY;
-    p.HasShadow := p.ShadowBlur > 0;
+    if found and ((ts.ShadowOffsetX <> 0) or ((ts.ShadowLeft and 2) <> 0)) then
+    begin
+      p.ShadowOffsetX := ts.ShadowOffsetX;
+      p.ShadowLeft := p.ShadowLeft or (ts.ShadowLeft and 2);
+    end
+    else
+    begin
+      p.ShadowOffsetX := AStyle.ShadowOffsetX;
+      p.ShadowLeft := p.ShadowLeft or (AStyle.ShadowLeft and 2);
+    end;
+    if found and ((ts.ShadowOffsetY <> 0) or ((ts.ShadowLeft and 4) <> 0)) then
+    begin
+      p.ShadowOffsetY := ts.ShadowOffsetY;
+      p.ShadowLeft := p.ShadowLeft or (ts.ShadowLeft and 4);
+    end
+    else
+    begin
+      p.ShadowOffsetY := AStyle.ShadowOffsetY;
+      p.ShadowLeft := p.ShadowLeft or (AStyle.ShadowLeft and 4);
+    end;
+    { `tokenStyle.textShadowBlur > 0 || style.textShadowBlur > 0` [R7-AB:
+      was the chosen blur's] }
+    p.HasShadow := (found and ((ts.ShadowBlur > 0) or ((ts.ShadowLeft and 8) <> 0)))
+      or (AStyle.ShadowBlur > 0) or ((AStyle.ShadowLeft and 8) <> 0);
     AddPiece(Result, p);
   end;
 
@@ -1470,6 +1504,8 @@ var
       p.FontFamily := AStyle.FontFamily;
       p.FontSizePx := AStyle.FontSizePx;
       p.FontWeight := AStyle.FontWeight;
+      { [R7-AB] the block's font refused }
+      p.FontLeft := AStyle.FontLeft <> 0;
       { EVERY LINE'S BOX IS THE BLOCK'S WIDEST, one font height tall
         (Text.ts:658-676) }
       p.W := contentW;
@@ -1510,7 +1546,9 @@ var
       p.ShadowColor := AStyle.ShadowColor;
       p.ShadowOffsetX := AStyle.ShadowOffsetX;
       p.ShadowOffsetY := AStyle.ShadowOffsetY;
-      p.HasShadow := p.ShadowBlur > 0;
+      { [R7-AB] the parts the canvas refuses, and `style.textShadowBlur > 0` }
+      p.ShadowLeft := AStyle.ShadowLeft and 7;
+      p.HasShadow := (p.ShadowBlur > 0) or ((AStyle.ShadowLeft and 8) <> 0);
       AddPiece(Result, p);
       textYV := JAdd(textYV, lhV);
     end;

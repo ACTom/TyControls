@@ -491,7 +491,15 @@ type
       gradient somewhere upstream never puts it. }
     procedure FillPathGradient(const AStops: array of TTyGradStop;
       AX1, AY1, AX2, AY2, ARadius: Double;
-      ARule: TTyFillRule = tfrNonZero);
+      ARule: TTyFillRule = tfrNonZero); overload;
+    { The same ramp made in a frame: the points and the radius are in the
+      frame AFrame [a, b, c, d, e, f] takes to DEVICE pixels (on top of the
+      current transform) -- a radial ramp an ellipse there where the frame
+      is no similarity, a linear one's stripes slanted with it, as a canvas
+      gradient made under a transform is. }
+    procedure FillPathGradient(const AStops: array of TTyGradStop;
+      AX1, AY1, AX2, AY2, ARadius: Double; const AFrame: array of Double;
+      ARule: TTyFillRule = tfrNonZero); overload;
     { Fill the current path with AImage tiled as a canvas pattern:
       ARepetition is createPattern's ('repeat', 'repeat-x', 'repeat-y',
       'no-repeat'; anything else repeats both ways), AMatrix [a, b, c, d, e,
@@ -554,7 +562,11 @@ type
       width and a fill does not, and one procedure taking both would have a
       parameter that is meaningless half the time. }
     procedure StrokePathGradient(const AStops: array of TTyGradStop;
-      AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double);
+      AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double); overload;
+    { (in a frame, as FillPathGradient's) }
+    procedure StrokePathGradient(const AStops: array of TTyGradStop;
+      AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double;
+      const AFrame: array of Double); overload;
     { [R5-G] THE CURRENT PATH'S BOUNDING BOX in the coordinates MoveTo /
       LineTo were handed (the canvas' points taken back through the inverse
       of its transform; arcs as flattened). False for an empty path. }
@@ -5558,13 +5570,24 @@ end;
 
 { One ramp, built the same way for a fill and for a stroke. }
 function BuildGradient(ctx: TBGRACanvas2D; const AStops: array of TTyGradStop;
-  AX1, AY1, AX2, AY2, ARadius: Double): IBGRACanvasGradient2D;
+  AX1, AY1, AX2, AY2, ARadius: Double; const AFrame: array of Double): IBGRACanvasGradient2D;
 var i: Integer; px: TBGRAPixel;
 begin
-  if ARadius > 0 then
-    Result := ctx.createRadialGradient(AX1, AY1, 0, AX2, AY2, ARadius)
-  else
-    Result := ctx.createLinearGradient(AX1, AY1, AX2, AY2);
+  { [R7-AB] made in AFrame: a canvas gradient keeps the transform it was
+    made under }
+  if Length(AFrame) = 6 then
+  begin
+    ctx.save;
+    ctx.transform(AFrame[0], AFrame[1], AFrame[2], AFrame[3], AFrame[4], AFrame[5]);
+  end;
+  try
+    if ARadius > 0 then
+      Result := ctx.createRadialGradient(AX1, AY1, 0, AX2, AY2, ARadius)
+    else
+      Result := ctx.createLinearGradient(AX1, AY1, AX2, AY2);
+  finally
+    if Length(AFrame) = 6 then ctx.restore;
+  end;
   Result.setColors(nil);
   for i := 0 to High(AStops) do
   begin
@@ -5593,17 +5616,24 @@ end;
 
 procedure TTyPainter.FillPathGradient(const AStops: array of TTyGradStop;
   AX1, AY1, AX2, AY2, ARadius: Double; ARule: TTyFillRule);
+var none: array of Double;
+begin
+  none := nil;
+  FillPathGradient(AStops, AX1, AY1, AX2, AY2, ARadius, none, ARule);
+end;
+
+procedure TTyPainter.FillPathGradient(const AStops: array of TTyGradStop;
+  AX1, AY1, AX2, AY2, ARadius: Double; const AFrame: array of Double;
+  ARule: TTyFillRule);
 var
   ctx: TBGRACanvas2D;
   grad: IBGRACanvasGradient2D;
-  i: Integer;
-  px: TBGRAPixel;
 begin
   if FBmp = nil then Exit;
   if Length(AStops) = 0 then Exit;
   ctx := FBmp.Canvas2D;
   ctx.fillMode := VecFillMode(ARule);
-  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
+  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius, AFrame);
   ctx.fillStyle(grad);
   CtxFill(ctx);
 end;
@@ -5673,6 +5703,15 @@ end;
 procedure TTyPainter.StrokePathGradient(
   const AStops: array of TTyGradStop;
   AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double);
+var none: array of Double;
+begin
+  none := nil;
+  StrokePathGradient(AStops, AX1, AY1, AX2, AY2, ARadius, AWidthLogical, none);
+end;
+
+procedure TTyPainter.StrokePathGradient(
+  const AStops: array of TTyGradStop;
+  AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double; const AFrame: array of Double);
 var
   ctx: TBGRACanvas2D;
   grad: IBGRACanvasGradient2D;
@@ -5685,7 +5724,7 @@ begin
     still a hairline, not an absence. }
   if w <= 0 then Exit;
   ctx := FBmp.Canvas2D;
-  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
+  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius, AFrame);
   ctx.strokeStyle(grad);
   ctx.lineWidth := w;
   CtxStroke(ctx);

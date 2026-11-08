@@ -917,6 +917,17 @@ type
     El: TTyChartElement;
   end;
   TTyCompPartArray = array of TTyCompPart;
+  { [R7-AB] WHERE ONE OF A COMPONENT'S DISPLAYABLES WAS DRAWN (its paint
+    rect, device px): a dirty block's run starts with the parts that meet it }
+  TTyCompRect = record
+    Owner: TObject;
+    Kind: Byte;
+    R: TTyXYWH;
+    { [R7-AB after R7-AA] which of its kind's parts (a split line's mark, a
+      split area's band: the part's Datum.RawDataIndex); -1 every one }
+    Index: Integer;
+  end;
+  TTyCompRectArray = array of TTyCompRect;
 
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
@@ -1267,6 +1278,11 @@ type
     { [spec 242] the solving lines series' lineStyle.color as a gradient }
     FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
+    { [R7-AB] the trail layer's elements as last painted (FTrailSnapOk):
+      under useDirtyRect the next frame repaints the blocks round what
+      changed only, the layer faded whole }
+    FTrailSnap: TTyDirtySnap;
+    FTrailSnapOk: Boolean;
     { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
       of item roots and its last data, kept across updates for the merge
       by data id); the element each paint list entry was made from (nil for
@@ -1882,6 +1898,12 @@ type
       (CompDrawn) }
     FCompParts: TTyCompPartArray;
     FCompRunOk: Boolean;
+    { [R7-AB] CompRun's order (an index below FCompNg is FGfxUnder's paint
+      order, the rest FCompParts' less FCompNg) and the rects the axes' parts
+      were drawn at (PaintAxis) }
+    FCompOrder: TTyIntegerArray;
+    FCompNg: Integer;
+    FCompRects: TTyCompRectArray;
     { [R7-AA] how many of FCompParts CompRun made (the parallel axes' run,
       ParRun, appends its own after them) }
     FCompBase: Integer;
@@ -3538,6 +3560,28 @@ type
       elements of a z and z2 above AZ / AZ2: the canvas a component drawn
       after the series meets }
     procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+    { [R7-AB] a part of AOwner of kind AKind drawn at AR (device px: its
+      getPaintRect is taken from it) -- [R7-AB after R7-AA] AIndex which of
+      the kind's parts (-1 every one), and the shadow it casts (device px) }
+    procedure CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH; APen: Double;
+      AText: Boolean; AIndex: Integer = -1; ABlur: Double = 0; AOffX: Double = 0;
+      AOffY: Double = 0);
+    { [R7-AB] THE CANVAS A DIRTY BLOCK STARTS ITS SERIES FROM: each block
+      saves the context, brushes afresh (prevEl null) from the canvas' own
+      state and restores it, and only the elements meeting it are brushed --
+      the components' among them: CompRun's order over the parts and the
+      graphic's elements that meet ABlock (a part whose rects were not
+      recorded meets every block) }
+    function CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
+    { [R7-AB] A COMPONENT TEXT'S FONT AS THE CANVAS TAKES IT: AEl (a part's
+      pseudo-element) the font of AStyle, and marked cTyCanvasFontLeft
+      where makeFont's string would be refused -- AAxis' ABlock's own
+      fontStyle / fontWeight / fontSize, else the root textStyle's }
+    procedure CompTextFont(AAxis: TTyAxis; const ABlock: string; const AStyle: TTyStyleSet;
+      var AEl: TTyChartElement);
+    { [R7-AB] a text part's font the canvas refused: AStyle's font the one
+      the paint order settled it to }
+    procedure CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
     { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
       from where the list's run reaches their z: appended to FCompParts }
     procedure ParRun;
@@ -3558,6 +3602,11 @@ type
     function LinesTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     function LinesTrailAlpha(ASeriesIndex: Integer): Double;
     procedure PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+    { [R7-AB] the highest zlevel of a lines series with a trail (-MaxInt:
+      none), and the list above the components' zlevel drawn with that
+      trail's layer (as PaintAboveComponents draws it without one) }
+    function TrailZLevel(AList: TTyPaintList): Integer;
+    procedure PaintTrailAbove(APainter: TTyPainter; AList: TTyPaintList);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;

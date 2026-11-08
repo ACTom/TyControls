@@ -1122,21 +1122,41 @@ begin
   end;
 end;
 
+{ [R7-AB] A STATE'S SHADOW NUMBER as the canvas takes `dpr * (value ||
+  0)`: a number; a string JavaScript's Number of it ('0x4' 4, '' nought); a
+  truthy value whose Number is no finite number refused (the canvas keeps
+  its own) -- a blur -1 (the negative mark the paint order settles), an
+  offset cTyCanvasPhaseLeft -- kept as written too, so a transition into it
+  is a discrete track (Animator.addKeyframe: no number, no colour) [was:
+  nought, and a decimal string only] }
+procedure StSetShadowNum(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
+var v: Double;
+begin
+  v := ShadowNumOf(AData);
+  if AData.JSONType = jtString then v := TyOptJsNumber(AData);
+  if IsNan(v) or IsInfinite(v) then
+  begin
+    if (AData.JSONType = jtString) and (AData.AsString <> '') then
+    begin
+      if AKey = stkShadowBlur then v := -1 else v := cTyCanvasPhaseLeft;
+      TyStSetNum(AObj, AKey, v);
+      AObj.RawJson[AKey] := AData.AsJSON;
+      Exit;
+    end;
+    v := 0;
+  end;
+  { [R7-Y] a blur below nought the canvas refuses, as an element's own:
+    kept negative for the paint order to settle [was: nought] }
+  TyStSetNum(AObj, AKey, v);
+end;
+
 procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
-var
-  v: Double;
 begin
   if (AData = nil) or (AData.JSONType = jtNull) then Exit;
   if AKey = stkShadowColor then
     TyStSetColor(AObj, stkShadowColor, StShadowColourOf(AData))
   else
-  begin
-    v := ShadowNumOf(AData);
-    { [R7-Y] a blur below nought the canvas refuses, as an element's own:
-      kept negative for the paint order to settle [was: nought] }
-    if IsNan(v) or IsInfinite(v) then v := 0;
-    TyStSetNum(AObj, AKey, v);
-  end;
+    StSetShadowNum(AObj, AKey, AData);
 end;
 
 procedure TyStReadShadowKeys(const ANodes: array of TJSONObject;
@@ -1150,7 +1170,6 @@ var
   p: array of string;
   i, k: Integer;
   d: TJSONData;
-  v: Double;
 begin
   SetLength(p, Length(APath) + 1);
   for i := 0 to High(APath) do p[i] := APath[i];
@@ -1162,12 +1181,9 @@ begin
     if cSt[k] = stkShadowColor then
       TyStSetColor(AObj, stkShadowColor, StShadowColourOf(d))
     else
-    begin
-      v := ShadowNumOf(d);
-      { [R7-Y] (a blur below nought kept, as above) }
-      if IsNan(v) or IsInfinite(v) then v := 0;
-      TyStSetNum(AObj, cSt[k], v);
-    end;
+      { [R7-Y] (a blur below nought kept); [R7-AB] a string the canvas
+        refuses refused (StSetShadowNum) }
+      StSetShadowNum(AObj, cSt[k], d);
   end;
 end;
 
