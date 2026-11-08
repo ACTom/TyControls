@@ -163,6 +163,11 @@ type
       serif under them): as much ink as the same labels with that font
       written, far more than in their own readable parts' }
     procedure TestRefusedAxisFontsAreDrawnInTheFontBefore;
+    { [R7-AD] A MERGED PATH'S PAINT RECT: a single axis' split lines are one
+      mergePath with zrender's default fill ('#000'), so getPaintRect grows
+      its box by the line width -- not by max(width, 5) as a Line's: at
+      width 4 the rect is 3 px wider than at width 1 }
+    procedure TestAMergedSplitPathGrowsByItsWidth;
   end;
 
 implementation
@@ -2643,6 +2648,42 @@ begin
   AChart.BrushNow := cT0;
   AChart.ParallelExpandNow := cT0;
   AChart.TimelineNow := cT0;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestAMergedSplitPathGrowsByItsWidth;
+
+  function WidthAt(AWidth: Integer): Double;
+  var rs: TTyCompRectArray; k, n: Integer;
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption('{"animation":false,"singleAxis":{"type":"value","min":0,"max":10,'
+      + '"axisLabel":{"show":false},"axisTick":{"show":false},"axisLine":{"show":false},'
+      + '"splitLine":{"show":true,"lineStyle":{"color":"#ff0000","width":' + IntToStr(AWidth) + '}}},"series":[]}', True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    rs := FChart.CompRectsDrawn;
+    Result := -1;
+    n := 0;
+    for k := 0 to High(rs) do
+      if rs[k].Kind = cpkSplit then
+      begin
+        Result := rs[k].R.W;
+        Inc(n);
+      end;
+    AssertEquals('one merged split path at width ' + IntToStr(AWidth), 1, n);
+  end;
+
+var w1, w4: Double;
+begin
+  w1 := WidthAt(1);
+  w4 := WidthAt(4);
+  AssertTrue(Format('grown by the width: %g at 1, %g at 4', [w1, w4]), Abs((w4 - w1) - 3) <= 1);
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestRefusedAxisFontsAreDrawnInTheFontBefore;

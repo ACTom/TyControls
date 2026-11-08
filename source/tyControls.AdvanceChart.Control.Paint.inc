@@ -3099,6 +3099,11 @@ begin
   Result := FCompDrawn;
 end;
 
+function TTyCustomAdvanceChart.CompRectsDrawn: TTyCompRectArray;
+begin
+  Result := FCompRects;
+end;
+
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; AProxied: Boolean; AList: TTyPaintList; AGfx: Boolean);
 var

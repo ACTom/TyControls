@@ -4530,6 +4530,9 @@ type
       the last paint drew them: Key (mainType + index), Z2 (upstream's),
       IsText, and El the style each was drawn with }
     function CompDrawn: TTyCompPartArray;
+    { [R7-AD] where the last paint drew the components' parts (each its
+      paint rect, as a dirty block meets it) }
+    function CompRectsDrawn: TTyCompRectArray;
     { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
       as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
     procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
