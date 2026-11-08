@@ -1483,6 +1483,23 @@ begin
     end;
 end;
 
+function TTyCustomAdvanceChart.TrailLevels: TTyIntegerArray;
+var i, k, z: Integer; has: Boolean;
+begin
+  Result := nil;
+  for i := 0 to High(FBindings) do
+    if LinesTrailAlpha(FBindings[i].SeriesIndex) > 0 then
+    begin
+      z := SeriesZLevelOf(FBindings[i].SeriesIndex);
+      has := False;
+      for k := 0 to High(Result) do
+        if Result[k] = z then has := True;
+      if has then Continue;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := z;
+    end;
+end;
+
 procedure TTyCustomAdvanceChart.PaintZLevelsCut(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
   APart: TTyPaintList; ACut: Integer);
@@ -1516,17 +1533,6 @@ begin
     comp := False;
     for j := 0 to High(ALevels) do
       if ALevels[j] = lv then comp := True;
-    { the components on it: the axes first (z 0), as PaintZLevels }
-    if comp and (lv >= ACut) then
-    begin
-      FZApartOn := True;
-      FZApartLevel := lv;
-      try
-        PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
-      finally
-        FZApartOn := False;
-      end;
-    end;
     { the part's elements of that level -- a trail's through its layer }
     trail := False;
     for k := 0 to APart.Count - 1 do
@@ -1537,6 +1543,27 @@ begin
       begin
         trail := True;
         Break;
+      end;
+    end;
+    { [R7-AJ] THE GRAPHIC'S ELEMENTS UNDER THE AXES on a level from the cut
+      on that is no trail's: the static layer leaves them (GfxPaintUnder),
+      drawn here under the level's axes -- a trail's level paints them on
+      its layer, with the part (AnimPartOf) }
+    if (lv >= ACut) and not trail and (FGfxUnder <> nil) then
+      for k := 0 to FGfxUnder.Count - 1 do
+      begin
+        pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(k));
+        if (pe^.ZLevel = lv) and not pe^.Ignore then TyRenderElement(APainter, pe^);
+      end;
+    { the components on it: the axes first (z 0), as PaintZLevels }
+    if comp and (lv >= ACut) then
+    begin
+      FZApartOn := True;
+      FZApartLevel := lv;
+      try
+        PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
+      finally
+        FZApartOn := False;
       end;
     end;
     TySetZBand(lv - 1, lv);

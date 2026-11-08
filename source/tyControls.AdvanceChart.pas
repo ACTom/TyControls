@@ -3852,6 +3852,10 @@ type
     { [R7-AH] the lowest zlevel a lines series with a trail stands on
       (allocateZlevels'; MaxInt for none) }
     function TrailCutLevel: Integer;
+    { [R7-AJ] THE ZLEVELS A LINES SERIES WITH A TRAIL STANDS ON: each one
+      layer with motionBlur, every displayable on it -- a graphic's element
+      of that zlevel too -- painted again over the faded last frame }
+    function TrailLevels: TTyIntegerArray;
     { [R7-AH] the continuous phase's cut among levels (FZMixed): the trail's
       level -- the components on it and above drawn every frame over the
       trail; MaxInt: none }

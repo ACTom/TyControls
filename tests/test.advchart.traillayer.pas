@@ -39,6 +39,7 @@ type
   published
     procedure TestAGraphicUnderTheTrailIsPaintedOnItsLayer;
     procedure TestAGraphicOnTheTrailsOwnLevelIsPaintedOnIt;
+    procedure TestAGraphicOverATrailOfALowerZLevelStaysOver;
   end;
 
 implementation
@@ -168,6 +169,26 @@ begin
   p := FBmp.GetPixel(130, 146);
   AssertTrue('the rect over the faded trail: ' + Px(p),
     (p.green > 230) and (p.red < 30) and (p.blue < 30));
+  p := FBmp.GetPixel(180, 146);
+  AssertTrue('the trail beside the rect: ' + Px(p), (p.red > 200) and (p.red - p.green > 40));
+end;
+
+{ THE LINES WRITTEN ONTO zlevel -1 (the axes and the graphic on 0): the
+  graphic's rect of z -5 is on a layer over the trail's -- over the trail
+  and the line, the frames' as the trail's [was: drawn once under them] }
+procedure TAdvChartTrailLayerTest.TestAGraphicOverATrailOfALowerZLevelStaysOver;
+var p: TBGRAPixel; opt: string;
+begin
+  opt := StringReplace(Format(cBase, ['{"type":"rect","z":-5,"shape":{"x":100,"y":120,"width":60,"height":60},'
+    + '"style":{"fill":"#00ff00"}}', 2]), '"coordinateSystem":"cartesian2d",',
+    '"coordinateSystem":"cartesian2d","zlevel":-1,', []);
+  Play(opt, 30);
+  AssertEquals('the lines on zlevel -1', -1, FChart.ZLevelOf('S0'));
+  AssertEquals('the axes on zlevel 0', 0, FChart.ZLevelOf('xAxis0'));
+  p := FBmp.GetPixel(130, 150);
+  AssertTrue('the rect over the line: ' + Px(p), (p.green > 230) and (p.red < 30));
+  p := FBmp.GetPixel(130, 146);
+  AssertTrue('the rect over the trail: ' + Px(p), (p.green > 230) and (p.red < 30));
   p := FBmp.GetPixel(180, 146);
   AssertTrue('the trail beside the rect: ' + Px(p), (p.red > 200) and (p.red - p.green > 40));
 end;

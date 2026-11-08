@@ -338,7 +338,9 @@ end;
 
 procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter; APaint: Boolean);
 var
-  i, n: Integer;
+  i, n, cut, k: Integer;
+  onTrail: Boolean;
+  tl: TTyIntegerArray;
   el: TTyChartElement;
   from: TTyIntegerArray;
 begin
@@ -367,10 +369,21 @@ begin
   for i := 0 to n - 1 do FGfxPaint[from[i]] := FGfxUnder.Element(i);
   { [R7-AD] (drawn among the axes' parts: PaintAxes) }
   if not APaint then Exit;
+  { [R7-AJ] in the continuous phase, from the trail's level on the frames'
+    (PaintZLevelsCut), and on a trail's level its layer's, painted every
+    frame (AnimPartOf) }
+  cut := ZCut;
+  tl := nil;
+  if FAnimContinuous and not FExporting then tl := TrailLevels;
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
     if el.Ignore then Continue;
+    if el.ZLevel >= cut then Continue;
+    onTrail := False;
+    for k := 0 to High(tl) do
+      if tl[k] = el.ZLevel then onTrail := True;
+    if onTrail then Continue;
     TyRenderElement(APainter, el);
     { [R7-Z] (CompDrawn) }
     if el.Datum.Kind = ctkGraphic then

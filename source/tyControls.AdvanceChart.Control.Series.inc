@@ -3522,6 +3522,16 @@ var
   rects, zr: TTyZrRectArray;
   px: array of TRect;
   pr, oldClip: TRect;
+  tl: TTyIntegerArray;
+
+  function OnLevels(AZ: Integer): Boolean;
+  var q: Integer;
+  begin
+    Result := False;
+    for q := 0 to High(tl) do
+      if tl[q] = AZ then Exit(True);
+  end;
+
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   bmp := APainter.Bitmap;
@@ -3558,13 +3568,15 @@ begin
   trail := TTyPaintList.Create;
   P := NewPainter;
   try
-    { the layer's own elements, in paint order }
+    { the layer's own elements, in paint order -- [R7-AJ] every one on a
+      trail's level, a graphic's element of that zlevel too (the layer is
+      the zlevel's) [was: the trail series' alone, the rest over the layer] }
+    tl := TrailLevels;
     for i := 0 to AList.Count - 1 do
     begin
       idx := AList.PaintOrder(i);
       el := AList.Element(idx);
-      if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
-        trail.Add(el);
+      if OnLevels(el.ZLevel) then trail.Add(el);
     end;
     { [R7-AB] the blocks round what changed since the last frame }
     snap := nil;
@@ -3634,8 +3646,7 @@ begin
     for i := 0 to AList.Count - 1 do
     begin
       el := AList.Element(i);
-      if not ((el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0)) then
-        rest.Add(el);
+      if not OnLevels(el.ZLevel) then rest.Add(el);
     end;
     if rest.Count > 0 then TyRenderPaintList(APainter, rest);
   finally
