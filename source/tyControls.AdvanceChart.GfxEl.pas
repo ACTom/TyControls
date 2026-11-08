@@ -2121,7 +2121,7 @@ begin
   end
   { [R7-AI] A STRING as a label's (TyRtTakeLineWidth): the canvas' number,
     kept for the TSpan's rect; 'Infinity' the width the canvas had -- a
-    graphic text's, a timeline's label [was: not written] }
+    graphic text's style.lineWidth [was: not written] }
   else if (S.Find('lineWidth') <> nil) and (S.Find('lineWidth').JSONType = jtString) then
   begin
     R.HasLineWidth := True;
