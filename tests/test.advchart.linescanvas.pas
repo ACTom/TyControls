@@ -231,6 +231,19 @@ type
       richText tooltip's spans, an axis pointer's label, a dataZoom's,
       a timeline's, a calendar's and a matrix' labels }
     procedure TestTheR7AGCarriesAsUpstream;
+    { [R7-AG] the ag- cases, as the aa- ones: a polar's and a single axis'
+      parts interleaved with the other views' by z2; a parallel's and a
+      calendar over a cartesian axis; the views in the order they were made
+      (a merge's new radar, a new x axis, a notMerge); a ripple, a lines
+      effect of z -1 under the axes while they move; a progressive layer }
+    procedure TestTheR7AGCanvasAsUpstream;
+    { [R7-AG] A POLAR'S AND A SINGLE AXIS' PARTS EACH IN ITS VIEW'S PLACE
+      AMONG THE OTHERS', z2 by z2, pixel by pixel where two cross: a second
+      polar's radius split circles (z2 0) under the first's angle split
+      lines (the radius views before the angle ones); a radius axis' tick
+      (z2 2) over a cartesian x axis' line (z2 1); a single axis' tick (z2
+      2) over it too }
+    procedure TestThePolarAndSingleViewsInterleaved;
   end;
 
 implementation
@@ -942,7 +955,18 @@ begin
       if not TyRectFIsValid(bb) then Continue;
       if (Abs(bb.Left - HexD(pb.Strings[0])) < 0.6) and (Abs(bb.Top - HexD(pb.Strings[1])) < 0.6)
         and (Abs(bb.Right - HexD(pb.Strings[2])) < 0.6) and (Abs(bb.Bottom - HexD(pb.Strings[3])) < 0.6) then
+      begin
+        { ([R7-AG] of several there -- an effect symbol under its ripples
+          at their start -- the one that makes the record's first op: a
+          fill, a stroke) }
+        if (Result < 0) and (ARec.Find('ops') <> nil) and (ARec.Arrays['ops'].Count > 0)
+          and ((ARec.Arrays['ops'].Objects[0].Strings['op'] = 'fill') <> el.Style.HasFill) then
+        begin
+          Result := k;
+          Continue;
+        end;
         Exit(k);
+      end;
     end;
     Exit;
   end;
@@ -1218,7 +1242,8 @@ var
 begin
   strict := APrefix <> 'w-';
   { (and the ac-, ae- ones: R7-AC, R7-AE) }
-  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or (APrefix = 'ae-');
+  aaLike := (APrefix = 'aa-') or (APrefix = 'ad-') or (APrefix = 'ac-') or (APrefix = 'ae-')
+    or (APrefix = 'ag-');
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -3722,6 +3747,78 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AGCarriesAsUpstream;
 begin
   RunYHeld('agy-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AGCanvasAsUpstream;
+begin
+  RunW(False, 'ag-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestThePolarAndSingleViewsInterleaved;
+var px: TBGRAPixel; shot: Integer;
+
+  procedure Draw(const AOpt: string);
+  begin
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.SetOption(AOpt, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    Inc(shot);
+    if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
+      FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + 'inter-' + IntToStr(shot) + '.png');
+  end;
+
+  function Near(const APx: TBGRAPixel; R, G, B: Integer): Boolean;
+  begin
+    Result := (Abs(APx.red - R) < 40) and (Abs(APx.green - G) < 40) and (Abs(APx.blue - B) < 40);
+  end;
+
+begin
+  shot := 0;
+  { two polars: the first's angle split line east of its centre (green)
+    crosses the second's radius split circle of 32 at (208, 150) (red) }
+  Draw('{"animation":false,"polar":[{"center":[160,150],"radius":80},{"center":[240,150],"radius":80}],'
+    + '"radiusAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":false}},'
+    + '{"polarIndex":1,"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisTick":{"show":false},'
+    + '"axisLabel":{"show":false},"splitLine":{"show":true,"lineStyle":{"color":"#ff0000","width":3}}}],'
+    + '"angleAxis":[{"polarIndex":0,"type":"value","min":0,"max":10,"startAngle":0,"axisLine":{"show":false},'
+    + '"axisTick":{"show":false},"axisLabel":{"show":false},"splitLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '{"polarIndex":1,"type":"value","min":0,"max":10,"startAngle":0,"show":false}],"series":[]}');
+  px := FBmp.GetPixel(208, 150);
+  AssertTrue(Format('the first polar''s angle split line over the second''s radius split circle: (%d,%d,%d)',
+    [px.red, px.green, px.blue]), Near(px, 0, 255, 0));
+  { a radius axis up from (200, 260), its tick at nought along the x axis'
+    line: the tick (magenta, z2 2) over the line (green, z2 1) }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"polar":{"center":[200,260],"radius":90},'
+    + '"radiusAxis":{"type":"value","min":0,"max":10,"axisLine":{"show":false},"axisLabel":{"show":false},'
+    + '"splitLine":{"show":false},"axisTick":{"length":10,"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"angleAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  px := FBmp.GetPixel(195, 260);
+  AssertTrue(Format('the radius axis'' tick over the x axis'' line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 255, 0, 255));
+  { a single axis on the x axis' line: its ticks down from y = 260 cross
+    the line (the tick at the value 2, x = 104) }
+  Draw('{"animation":false,"grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"singleAxis":{"type":"value","min":0,"max":10,"left":40,"right":40,"top":220,"height":40,'
+    + '"axisLine":{"show":false},"axisLabel":{"show":false},"splitLine":{"show":false},'
+    + '"axisTick":{"length":10,"lineStyle":{"color":"#ff00ff","width":3}}},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"axisLabel":{"show":false},"axisTick":{"show":false},'
+    + '"splitLine":{"show":false},"axisLine":{"lineStyle":{"color":"#00ff00","width":3}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"show":false},"series":[]}');
+  px := FBmp.GetPixel(104, 260);
+  AssertTrue(Format('the single axis'' tick over the x axis'' line: (%d,%d,%d)', [px.red, px.green, px.blue]),
+    Near(px, 255, 0, 255));
 end;
 
 procedure TAdvChartLinesCanvasOracleTest.TestOptionPxAtAnotherPPIAsUpstream;

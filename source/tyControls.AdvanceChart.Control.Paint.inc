@@ -2676,7 +2676,7 @@ var
   i, k, ng, h, lz, lz2, lv, lq, firstCont, lastCand: Integer;
   pe: PTyChartElement;
   lvs, cand: TTyIntegerArray;
-  has: Boolean;
+  has, contIn: Boolean;
 
   { an element the continuous phase draws in its dynamic layer (AnimPartOf):
     a ripple, an effect symbol, a label hanging off one, a lines series'
@@ -2710,6 +2710,7 @@ begin
         end;
       end;
   FCompBand := nil;
+  FContBand := False;
   if (FPaintList = nil) or not FPaintListValid or (FPaintList.Count = 0) then Exit;
   { (the levels drawn canvas by canvas: no band) }
   if ZMixedNow(lvs) then Exit;
@@ -2768,9 +2769,26 @@ begin
       firstCont := i;
       Break;
     end;
+  { [R7-AG] AN ELEMENT OF THE CONTINUOUS PHASE AMONG THEM (a ripple, an
+    effect symbol of a lower z -- zrender's one display list draws it among
+    the axes' parts while it moves): the band takes it, and the axes go to
+    the dynamic layer in that phase with the whole list (FContBand) [was:
+    left out, drawn over the axes]. Not with a trail: its layer is
+    redrawn faded every frame. }
+  contIn := False;
+  for i := 0 to High(cand) do
+    if cand[i] >= firstCont then contIn := True;
+  if contIn then
+    for i := 0 to High(FBindings) do
+      if LinesTrailAlpha(FBindings[i].SeriesIndex) > 0 then
+      begin
+        contIn := False;
+        Break;
+      end;
+  FContBand := contIn;
   h := 0;
   for i := 0 to High(cand) do
-    if cand[i] < firstCont then
+    if (cand[i] < firstCont) or contIn then
     begin
       pe := FPaintList.Ref(cand[i]);
       pe^.GfxUnder := True;
@@ -3387,8 +3405,9 @@ var
   axes: array of TTyAxis;
   grids: array of TTyGridBuild;
   done: array of TTyAxisZ2Set;
-  sinGrid, sinAxes, polGrid, polAxes: Boolean;
-  v: Integer;
+  { [R7-AG] each single axis', radius axis', angle axis' view: its z2 drawn }
+  sinDone, radDone, angDone: array of TTyAxisZ2Set;
+  v, vi: Integer;
 
   function AxisAt(AAxis: TObject): Integer;
   var q: Integer;
@@ -3396,6 +3415,22 @@ var
     for q := 0 to High(axes) do
       if axes[q] = AAxis then Exit(q);
     Result := -1;
+  end;
+
+  { [R7-AG] a view's segments no part asked for, in z2 order (AKind -1 a
+    single axis, 0 a radius axis, 1 an angle axis) }
+  procedure Rest(AKind, AIndex: Integer; var ADone: TTyAxisZ2Set);
+  const cZ2: array[0..4] of Integer = (0, 1, 2, 10, 11);
+  var q: Integer;
+  begin
+    for q := 0 to High(cZ2) do
+    begin
+      if cZ2[q] in ADone then Continue;
+      if (AKind = 1) and (cZ2[q] > 1) then Continue;
+      Include(ADone, cZ2[q]);
+      if AKind < 0 then PaintSingles(APainter, APPI, AMeasurer, False, AIndex, cZ2[q])
+      else PaintPolars(APainter, APPI, AMeasurer, False, AIndex, AKind, cZ2[q]);
+    end;
   end;
 
 begin
@@ -3429,10 +3464,15 @@ begin
   end;
   SetLength(done, n);
   for i := 0 to n - 1 do done[i] := [];
-  sinGrid := False;
-  sinAxes := False;
-  polGrid := False;
-  polAxes := False;
+  SetLength(sinDone, Length(FSingles));
+  for i := 0 to High(sinDone) do sinDone[i] := [];
+  SetLength(radDone, Length(FPolars));
+  SetLength(angDone, Length(FPolars));
+  for i := 0 to High(radDone) do
+  begin
+    radDone[i] := [];
+    angDone[i] := [];
+  end;
   { [R7-AD] IN CompRun'S ORDER: zrender sorts the display list by z, z2 and
     insertion (the root's views in turn), so a radar's or a geo's parts, a
     series of a lower z, the graphic's elements fall among the axes' parts
@@ -3470,41 +3510,52 @@ begin
     p := p - FCompNg;
     if p > High(FCompParts) then Continue;
     v := FCompParts[p].View;
+    z2 := Max(0, Min(31, FCompParts[p].Z2));
+    { [R7-AG] A SINGLE AXIS', A RADIUS AXIS', AN ANGLE AXIS' VIEW z2 by z2,
+      each at its first part of that z2 -- interleaved with the other
+      views' parts as upstream's display list [was: every polar, every
+      single axis at the first part of any] }
     if (v >= 2000) and (v < 3000) then
     begin
-      if not sinGrid then PaintSingles(APainter, APPI, AMeasurer, True);
-      sinGrid := True;
-      if (FCompParts[p].Z2 > 0) and not sinAxes then
+      vi := v - 2000;
+      if (vi <= High(sinDone)) and not (z2 in sinDone[vi]) then
       begin
-        PaintSingles(APainter, APPI, AMeasurer, False);
-        sinAxes := True;
+        Include(sinDone[vi], z2);
+        PaintSingles(APainter, APPI, AMeasurer, False, vi, z2);
       end;
       Continue;
     end;
-    if (v >= 3000) and (v < 5000) then
+    if (v >= 3000) and (v < 4000) then
     begin
-      if not polGrid then PaintPolars(APainter, APPI, AMeasurer, True);
-      polGrid := True;
-      if (FCompParts[p].Z2 > 0) and not polAxes then
+      vi := v - 3000;
+      if (vi <= High(radDone)) and not (z2 in radDone[vi]) then
       begin
-        PaintPolars(APainter, APPI, AMeasurer, False);
-        polAxes := True;
+        Include(radDone[vi], z2);
+        PaintPolars(APainter, APPI, AMeasurer, False, vi, 0, z2);
+      end;
+      Continue;
+    end;
+    if (v >= 4000) and (v < 5000) then
+    begin
+      vi := v - 4000;
+      if (vi <= High(angDone)) and not (z2 in angDone[vi]) then
+      begin
+        Include(angDone[vi], z2);
+        PaintPolars(APainter, APPI, AMeasurer, False, vi, 1, z2);
       end;
       Continue;
     end;
     a := AxisAt(FCompParts[p].Owner);
     if a < 0 then Continue;
-    z2 := Max(0, Min(31, FCompParts[p].Z2));
     if z2 in done[a] then Continue;
     Include(done[a], z2);
     PaintAxis(APainter, axes[a], grids[a].PlotRect, APPI, grids[a], AMeasurer, [z2], AProxied);
   end;
   { WHAT NO PART ASKED FOR, as it was drawn: a view whose parts the run
     does not hold, an axis' pieces of no part }
-  if not sinGrid then PaintSingles(APainter, APPI, AMeasurer, True);
-  if not sinAxes then PaintSingles(APainter, APPI, AMeasurer, False);
-  if not polGrid then PaintPolars(APainter, APPI, AMeasurer, True);
-  if not polAxes then PaintPolars(APainter, APPI, AMeasurer, False);
+  for i := 0 to High(sinDone) do Rest(-1, i, sinDone[i]);
+  for i := 0 to High(radDone) do Rest(0, i, radDone[i]);
+  for i := 0 to High(angDone) do Rest(1, i, angDone[i]);
   for a := 0 to n - 1 do
     if done[a] <> [0..31] then
       PaintAxis(APainter, axes[a], grids[a].PlotRect, APPI, grids[a], AMeasurer,
@@ -3919,6 +3970,9 @@ begin
       areas and the parallel axes] }
     frame := AnimFrame;
     FZList := frame;
+    { [R7-AG] the axes here, with the list's elements among their parts --
+      a ripple, an effect symbol of a lower z among them (FContBand) }
+    if FContBand and not FZMixed then PaintAxes(APainter, APPI, AMeasurer, True, frame);
     TySetZBand(-MaxInt, ComponentZLevel);
     try
       { [R7-AB] a trail on a zlevel above the components' is that level's

@@ -272,7 +272,7 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer; AZ2: Integer);
 var
   i, q, ink: Integer;
   s: TTySingle;
@@ -472,12 +472,14 @@ begin
   begin
     s := FSingles[i];
     if s = nil then Continue;
+    { [R7-AG] (one axis' view alone) }
+    if (AOnly >= 0) and (i <> AOnly) then Continue;
     v := s.View;
     if not v.Shown then Continue;
     { [R5-J] on the zlevel PaintZLevels draws now }
     if not ApartIn(AxisModelZLevel(s.Axis)) then Continue;
     ViewDrew(cvSingleAxis);
-    if ABelow then
+    if (AZ2 = 0) or ((AZ2 < 0) and ABelow) then
     begin
       { [R7-AD] each band where it lies, by its count among the bands the
         run took (CompPolarSingleParts) }
@@ -580,13 +582,52 @@ begin
       Continue;
     end;
     sp := v.Spec;
+    { [R7-AG] AxisBuilder's parts z2 by z2, each where CompRun's order puts
+      it (PaintAxes): the name and the line (1, the name first), the ticks
+      (2), the labels (10), the arrows (11) [was: the line and its arrows,
+      the ticks, the name, the labels -- all at the first part above 0] }
+    AxisTextStyles(@sp, labelS, nameS);
+    if (AZ2 < 0) or (AZ2 = 1) then
+    begin
+      CompTextDrawn(s.Axis, cpkName, nameS);
+      pl := sp.NamePlacement;
+      if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
+      begin
+        { [R7-AD] where it lies }
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        CompTextRect(s.Axis, cpkName, pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV, pl.RotationRad);
+        if Length(pl.Rt) > 0 then
+          TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+            1, True, nameS.TextColor)
+        else if Abs(pl.RotationRad) < 1e-9 then
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+            pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+            nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+        end
+        else
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
+            nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+        end;
+      end;
+    end;
     lineK := TyAxisSkinStroke(v.Furn.LinePen, lineS, acRound);
-    if v.HasLine then lineK := CompPen(s.Axis, cpkLine, lineK);
+    if v.HasLine then
+    begin
+      if (AZ2 < 0) or (AZ2 = 1) then lineK := CompPen(s.Axis, cpkLine, lineK)
+      { ((the arrows' colour) as settled, recorded once) }
+      else CompSettlePen(s.Axis, cpkLine, lineK);
+    end;
     { [R7-AD] where its line lies }
-    if v.HasLine and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
+    if ((AZ2 < 0) or (AZ2 = 1)) and v.HasLine and Finite(v.Line.X1, v.Line.Y1)
+      and Finite(v.Line.X2, v.Line.Y2) then
       CompPenRect(APainter, s.Axis, cpkLine, lineK, LineBox(v.Line.X1, v.Line.Y1, v.Line.X2,
         v.Line.Y2), False);
-    if v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
+    if ((AZ2 < 0) or (AZ2 = 1)) and v.HasLine and lineK.Drawn
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
       APainter.BeginPath;
@@ -607,48 +648,29 @@ begin
         APainter.LineTo(v.Line.X2, v.Line.Y2);
       end;
       TyStrokeAxisPath(APainter, lineK);
-      if not v.Furn.LinePen.ColourNone
-        and (v.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
-        for q := 0 to High(sp.Arrows) do
-          if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
     end;
-    rk := CompPen(s.Axis, cpkTick, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt));
-    { [R7-AD] (a Line a tick, a minor tick: each where it lies) }
-    LinesRect(v.Ticks, cpkTick, rk, -1, -1, True);
-    StrokeLines(v.Ticks, rk, -1, True);
-    rk := CompPen(s.Axis, cpkMinorTick, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt));
-    LinesRect(v.MinorTicks, cpkMinorTick, rk, -1, -1, True);
-    StrokeLines(v.MinorTicks, rk, -1, True);
-    AxisTextStyles(@sp, labelS, nameS);
+    if (AZ2 < 0) or (AZ2 = 2) then
+    begin
+      rk := CompPen(s.Axis, cpkTick, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt));
+      { [R7-AD] (a Line a tick, a minor tick: each where it lies) }
+      LinesRect(v.Ticks, cpkTick, rk, -1, -1, True);
+      StrokeLines(v.Ticks, rk, -1, True);
+      rk := CompPen(s.Axis, cpkMinorTick, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt));
+      LinesRect(v.MinorTicks, cpkMinorTick, rk, -1, -1, True);
+      StrokeLines(v.MinorTicks, rk, -1, True);
+    end;
+    { the arrows (z2 11), in the line's colour }
+    if ((AZ2 < 0) or (AZ2 = 11)) and v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
+      and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2)
+      and not v.Furn.LinePen.ColourNone
+      and (v.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+      for q := 0 to High(sp.Arrows) do
+        if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
+    if (AZ2 >= 0) and (AZ2 <> 10) then Continue;
     { [R7-AD] the colours and the fonts the paint order settled (a font the
       canvas refused: the one the text before left) [was: the font its own
       readable parts] }
     CompTextDrawn(s.Axis, cpkLabel, labelS);
-    CompTextDrawn(s.Axis, cpkName, nameS);
-    pl := sp.NamePlacement;
-    if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
-    begin
-      { [R7-AD] where it lies }
-      TextSizeOf(pl.Text, nameS, lblW, lblH);
-      CompTextRect(s.Axis, cpkName, pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV, pl.RotationRad);
-      if Length(pl.Rt) > 0 then
-        TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
-          1, True, nameS.TextColor)
-      else if Abs(pl.RotationRad) < 1e-9 then
-      begin
-        TextSizeOf(pl.Text, nameS, lblW, lblH);
-        APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
-          pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
-          nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
-      end
-      else
-      begin
-        TextSizeOf(pl.Text, nameS, lblW, lblH);
-        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
-          nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
-      end;
-    end;
     if not (tpTextColor in labelS.Present) then Continue;
     for q := 0 to High(sp.Placements) do
     begin
@@ -1102,7 +1124,8 @@ end;
   every other axis. The geometry is the layout's, already on the pixel grid
   where upstream puts it there (the radius line and ticks). }
 procedure TTyCustomAdvanceChart.PaintPolars(APainter: TTyPainter; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer; AKind: Integer;
+  AZ2: Integer);
 var
   i, k, ink: Integer;
   p: TTyPolar;
@@ -1570,21 +1593,26 @@ var
   end;
 
   { [R7-AA] the rest of them: the ticks (z2 2), the labels (10), the arrows
-    (11) }
-  procedure PaintRadius(const AView: TTyPolarAxisView);
+    (11) -- [R7-AG] AZ2 the one of them (-1 all) }
+  procedure PaintRadius(const AView: TTyPolarAxisView; AZ2: Integer = -1);
   var
     q: Integer;
     sp: TTyAxisLayoutSpec;
   begin
     sp := AView.Spec;
-    { [R7-AD] (a Line a tick: each where it lies) }
-    rk := CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt));
-    LinesRect(AView.Ticks, cpkTick, rk, -1, -1, True, False);
-    StrokeLines(AView.Ticks, rk, -1, True);
-    rk := CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen, minorTickS, acButt));
-    LinesRect(AView.MinorTicks, cpkMinorTick, rk, -1, -1, True, False);
-    StrokeLines(AView.MinorTicks, rk, -1, True);
+    if (AZ2 < 0) or (AZ2 = 2) then
+    begin
+      { [R7-AD] (a Line a tick: each where it lies) }
+      rk := CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt));
+      LinesRect(AView.Ticks, cpkTick, rk, -1, -1, True, False);
+      StrokeLines(AView.Ticks, rk, -1, True);
+      rk := CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen, minorTickS, acButt));
+      LinesRect(AView.MinorTicks, cpkMinorTick, rk, -1, -1, True, False);
+      StrokeLines(AView.MinorTicks, rk, -1, True);
+    end;
     AxisTextStyles(@sp, labelS, nameS);
+    if (AZ2 < 0) or (AZ2 = 10) then
+    begin
     { [R7-AD] its colour and font as the paint order settled them }
     CompTextDrawn(curAxis, cpkLabel, labelS);
     if tpTextColor in labelS.Present then
@@ -1622,6 +1650,8 @@ var
         LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
         False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
+    end;
+    if (AZ2 >= 0) and (AZ2 <> 11) then Exit;
     lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
     if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
     if AView.HasLine and not AView.Furn.LinePen.ColourNone
@@ -1733,6 +1763,44 @@ begin
   begin
     p := FPolars[i];
     if p = nil then Continue;
+    { [R7-AG] ONE VIEW'S PARTS OF ONE z2, where CompRun's order puts them
+      (PaintAxes): a radius axis' split lines, areas and minor split lines
+      (0), its name and line (1), ticks (2), labels (10), arrows (11); an
+      angle axis' labels, ticks, split lines and areas (0), its line (1)
+      [was: every polar's views at the first part of any, z2 above nought
+      at the first such part] }
+    if (AOnly >= 0) and (i <> AOnly) then Continue;
+    if AZ2 >= 0 then
+    begin
+      if AKind = 0 then
+      begin
+        if ViewOn(1) then
+          case AZ2 of
+            0:
+              begin
+                SplitLinesOf(p.RadiusView, True);
+                FillAreas(p.RadiusView);
+                StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
+                  p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+              end;
+            1: PaintRadiusLine(p.RadiusView);
+            2, 10, 11: PaintRadius(p.RadiusView, AZ2);
+          end;
+      end
+      else if ViewOn(0) then
+        case AZ2 of
+          0:
+            begin
+              PaintAngle(p.AngleView);
+              SplitLinesOf(p.AngleView, False);
+              StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
+                p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+              FillAreas(p.AngleView);
+            end;
+          1: PaintAngleLine(p.AngleView);
+        end;
+      Continue;
+    end;
     { [R7-AA] IN UPSTREAM'S PAINT ORDER: the radius axis' view before the
       angle axis' (their components' order), each view's parts by z2 and
       then as its builders add them -- the radius view's split lines, split

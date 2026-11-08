@@ -1977,6 +1977,10 @@ begin
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    { [R7-AG] BarView's Rect is z2 1 (its background 0): at an equal z it
+      is over a z2-0 part -- a split line, a split area -- and among the
+      z2-1 ones by its view [was: the series' z2, 0] }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     el.Ignore := clipped;
     { [R6-F] the pen of an infinite border makes its bounding rect
@@ -4634,6 +4638,8 @@ begin
     rv := RowVisual(AVisual, AStore, i);
     el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
       ABinding.SeriesIndex, i);
+    { ([R7-AG] its Sector z2 1, as the cartesian Rect) }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     zero := TyPolarZero(s);
     if zero then

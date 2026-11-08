@@ -94,6 +94,8 @@ begin
     are drawn among them, the frame's }
   Result := FAnimLive and not FAnimContinuous
     and ((AnimAxisProxyCount > 0) or (Length(FCompBand) > 0));
+  { [R7-AG] and in the continuous phase while it moves among their parts }
+  if FAnimLive and FAnimContinuous and FContBand then Result := True;
 end;
 
 { Axis.getMinorTicksCoords, flat: each minor tick with the major interval
@@ -2992,6 +2994,15 @@ begin
   FAnimSplit.Clear;
   Result := FAnimSplit;
   if frame = nil then Exit;
+  { [R7-AG] AN ELEMENT OF IT AMONG THE AXES' PARTS (FContBand): the axes are
+    the dynamic layer's, and so is everything -- the static layer holds
+    none of the list }
+  if FContBand then
+  begin
+    if AContinuous then
+      for i := 0 to frame.Count - 1 do FAnimSplit.Add(frame.Ref(i)^);
+    Exit;
+  end;
   { [R5-I] AND EVERYTHING DRAWN AFTER THE FIRST OF THEM: zrender draws one
     display list in z order, so what stands over a ripple (a series of a
     higher z, a later label) is drawn over it every frame -- the static
