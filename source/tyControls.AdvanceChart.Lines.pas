@@ -2596,11 +2596,6 @@ begin
     at the clamped nought, and hands the canvas its state [was: any
     opacity not above nought skipped]) }
   if AEl.Ignore or AEl.ProgHidden or (AEl.Style.Alpha = 0) then Exit;
-  { [R7-AA] shouldBePainted's isZeroArea: a clip rect of no width or height
-    culls the element -- it hands the canvas nothing (a dataZoom's shadow
-    outside a full window) }
-  if AEl.HasClip and ((AEl.ClipRect.Right - AEl.ClipRect.Left = 0)
-    or (AEl.ClipRect.Bottom - AEl.ClipRect.Top = 0)) then Exit;
   { [R7-Y] and shouldBePainted's `m && !m[0] && !m[3]`: a transform scaled
     to nought is not brushed (a symbol of size nought, an end symbol at the
     start of its line's enter animation) [was: brushed, its transform and
