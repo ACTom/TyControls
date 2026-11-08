@@ -72,7 +72,20 @@ unit test.advchart.linescanvas;
   it; several axis pointers and their labels one after another, the
   tooltip after them; the gradient a tick or a split line hands on, over
   the last one's box; a single axis' split lines at 0.2:
-  TestTheR7ACCanvasAsUpstream, TestARichTipsBorderIsOutsideItsBox. }
+  TestTheR7ACCanvasAsUpstream, TestARichTipsBorderIsOutsideItsBox.
+
+  [R7-AE] The cases named ae-..., recorded and compared as the ac- ones and
+  more (an axis pointer's handle, a text's boxes and spans one by one, an
+  option set notMerge before a sample, a pointer the port draws where
+  upstream has none): a dataZoom slider whose group has no place (every
+  element in its own frame under the transform the canvas had, nothing of
+  it found by the pointer); a polyline of one point, an area of one point,
+  an end label after its line's clip; the pointers' handles among their
+  lines and labels; a pointer an action showed after a notMerge setOption;
+  the gradient a polar's, a single axis' and a parallel axis' line hands
+  on; a text box's token backgrounds among its spans; a label's box on a
+  translucent host: TestTheR7AECanvasAsUpstream, TestTheR7AEHitsAsUpstream,
+  TestAnUnplacedSlidersPointerAsUpstream. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, tyControls.FontUnits,
@@ -80,7 +93,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart;
 type
   TLcProbe = class(TTyAdvanceChart)
   public
@@ -101,6 +114,8 @@ type
     function Frame: TTyPaintList;
     { [R7-AC] the richText box's fill as last drawn }
     function TipFill: TTyRectF;
+    { [R7-AE] the pointers' lines and bands as last drawn }
+    function PtrShapes: TTyOverlayShapeArray;
   end;
 
   TAdvChartLinesCanvasOracleTest = class(TTestCase)
@@ -121,6 +136,7 @@ type
     function WElOf(const AKey: string; const ARec: TJSONObject): Integer;
     function CListOf(const ARec: TJSONObject; AText: Boolean; AZ2: Integer = MaxInt): Integer;
     procedure RunW(AHits: Boolean; const APrefix: string = 'w-');
+    procedure KPiece(const AWhere: string; const ARec: TJSONObject; const AKey: string);
     procedure GradMiss(const AWhere: string; const AEl: TTyChartElement; AFill: Boolean;
       AOp: TJSONObject);
     procedure CheckAreas(const AWhere: string; AEls: TJSONArray);
@@ -147,6 +163,12 @@ type
     procedure TestTheHeldPatternsAtAnotherPPIAsUpstream;
     procedure TestTheR7AACanvasAsUpstream;
     procedure TestTheR7ACCanvasAsUpstream;
+    procedure TestTheR7AECanvasAsUpstream;
+    procedure TestTheR7AEHitsAsUpstream;
+    procedure TestAnUnplacedSlidersPointerAsUpstream;
+    procedure TestALabelBoxOnATranslucentHostAsUpstream;
+    procedure TestADzWidthOfNoNumberStrokesNothing;
+    procedure TestALonePointDrawsNothing;
     procedure TestARichTipsBorderIsOutsideItsBox;
     procedure TestATipsTextShadowIsDrawn;
     procedure TestALabelBoxsRefusedColoursAreTheCanvas;
@@ -241,6 +263,11 @@ end;
 function TLcProbe.TipFill: TTyRectF;
 begin
   Result := TooltipFillBox;
+end;
+
+function TLcProbe.PtrShapes: TTyOverlayShapeArray;
+begin
+  Result := PointerShapesDrawn;
 end;
 
 function HexD(const S: string): Double;
@@ -353,7 +380,7 @@ begin
     { [R7-V] the v- cases: RunV; [R7-W] the w- cases: RunW }
     if (Copy(id, 1, 2) = 'v-') or (Copy(id, 1, 2) = 'w-') or (Copy(id, 1, 2) = 'z-')
       or (Copy(id, 1, 2) = 'y-')
-      or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ac-') then Continue;
+      or (Copy(id, 1, 3) = 'aa-') or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -1070,6 +1097,10 @@ var
   strict: Boolean;
   { [R7-AC] a component part's count among its kind ('c.<key>.<z2>.<t|p>.<n>') }
   parts3: string;
+  { [R7-AE] an option set notMerge; a pointer the port drew }
+  nm: Boolean;
+  pk: string;
+  ptrs: TTyOverlayShapeArray;
 begin
   strict := APrefix <> 'w-';
   FBad := 0;
@@ -1089,12 +1120,6 @@ begin
       port draws the axes before it builds the list radar's elements are in,
       so they come after every axis part (recorded, not held: spec 281) }
     if id = 'aa-radar-order' then Continue;
-    { [R7-AC] a dataZoom whose handle's width is 'Infinity': the slider
-      group's bounding rect -- its place -- is no number, and upstream
-      brushes every slider element in its own frame under the transform
-      the canvas had; the port draws no slider (recorded, not held: spec
-      283) }
-    if id = 'ac-dz-inf' then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     dirty := c.Find('dirty') <> nil;
     FreeAndNil(FChart);
@@ -1124,7 +1149,13 @@ begin
       if (c.Find('sets') <> nil) and (c.Objects['sets'].Find(IntToStr(j)) <> nil) then
       begin
         FChart.AnimNow := cT0 + t;
-        FChart.SetOption(c.Objects['sets'].Objects[IntToStr(j)].AsJSON, False);
+        { ([R7-AE] '=' the case's own option again; `nm` notMerge) }
+        nm := (c.Find('nm') <> nil) and (c.Objects['nm'].Find(IntToStr(j)) <> nil)
+          and c.Objects['nm'].Booleans[IntToStr(j)];
+        if c.Objects['sets'].Find(IntToStr(j)).JSONType = jtString then
+          FChart.SetOption(c.Objects['option'].AsJSON, nm)
+        else
+          FChart.SetOption(c.Objects['sets'].Objects[IntToStr(j)].AsJSON, nm);
       end;
       if (c.Find('acts') <> nil) and (c.Objects['acts'].Find(IntToStr(j)) <> nil) then
         for q := 0 to c.Objects['acts'].Arrays[IntToStr(j)].Count - 1 do
@@ -1144,6 +1175,9 @@ begin
           x := HexD(h.Strings[0]);
           y := HexD(h.Strings[1]);
           if h.Items[2].JSONType = jtNull then want := '-' else want := h.Strings[2];
+          { ([R7-AE] a dataZoom's part: the chart's own pointer finds it,
+            not the list -- TestAnUnplacedSlidersPointerAsUpstream) }
+          if Copy(want, 1, 11) = 'c.dataZoom0' then Continue;
           idx := FChart.Frame.HitTestElement(x, y, 96, False);
           if idx < 0 then got := '-' else got := KeyOfEl(idx, Copy(id, 1, 8) = 'w-zero-g');
           Inc(FCompared);
@@ -1154,7 +1188,7 @@ begin
       end;
       blocks := fr.Arrays['blocks'];
       els := fr.Arrays['els'];
-      if (APrefix = 'aa-') or (APrefix = 'ac-') then CheckAreas(Format('%s t=%g', [id, t]), els);
+      if (APrefix = 'aa-') or (APrefix = 'ac-') or (APrefix = 'ae-') then CheckAreas(Format('%s t=%g', [id, t]), els);
       for k := 0 to els.Count - 1 do
       begin
         rec := els.Objects[k];
@@ -1165,6 +1199,12 @@ begin
         { ([R7-AC] a richText tooltip's blank span: see below) }
         if (APrefix = 'ac-') and (Copy(key, 1, 15) = 'c.tooltip0.0.t.') and (Trim(rec.Get('tx', '')) = '') then
           Continue;
+        { [R7-AE] a text's box or span of its own }
+        if (APrefix = 'ae-') and (key[1] = 'k') then
+        begin
+          KPiece(where, rec, key);
+          Continue;
+        end;
         { [R7-Z] a component's part: what the port drew of it }
         comp := Copy(key, 1, 2) = 'c.';
         if comp then
@@ -1308,7 +1348,8 @@ begin
             { [R7-AA] the text's shadow where it blurs (a refused colour the
               canvas' own) }
             sb := HexD(o.Strings['sb']);
-            if ((APrefix = 'aa-') or (APrefix = 'ac-')) and (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
+            if ((APrefix = 'aa-') or (APrefix = 'ac-') or (APrefix = 'ae-')) and (sb > 0)
+              and TyTryParseChartColor(o.Strings['sc'], wc) then
             begin
               Inc(FCompared);
               n := -1;
@@ -1354,7 +1395,7 @@ begin
             if not (el.Style.StrokeWidthLogical > 0) or (Abs(plw - lw) > 1e-6) then
               Miss(Format('%s: stroke width %g, upstream %g', [where, plw, lw]));
             { [R7-AA] a gradient the canvas holds (the aa- cases) }
-            if ((APrefix = 'aa-') or (APrefix = 'ac-')) and (o.Strings['ss'] = '[grad]') then
+            if ((APrefix = 'aa-') or (APrefix = 'ac-') or (APrefix = 'ae-')) and (o.Strings['ss'] = '[grad]') then
             begin
               Inc(FCompared);
               if el.Style.StrokeGradient.Kind = cgkNone then
@@ -1415,7 +1456,7 @@ begin
               if Abs(lw - HexD(o.Strings['ml'])) > 1e-9 then
                 Miss(Format('%s: miterLimit %g, upstream %g', [where, lw, HexD(o.Strings['ml'])]));
               { [R7-AA] and the join (a word the canvas refuses: the one it had) }
-              if (APrefix = 'aa-') or (APrefix = 'ac-') then
+              if (APrefix = 'aa-') or (APrefix = 'ac-') or (APrefix = 'ae-') then
               begin
                 case el.Style.LineJoin of
                   1: want := 'round';
@@ -1433,7 +1474,7 @@ begin
             0.2) and the arguments of a gradient a series' element is
             handed (made over the box of the element that set it, in that
             element's frame) }
-          if (APrefix = 'ac-') and ((op = 'fill') or (op = 'stroke')) then
+          if ((APrefix = 'ac-') or (APrefix = 'ae-')) and ((op = 'fill') or (op = 'stroke')) then
           begin
             Inc(FCompared);
             ga := el.Style.Alpha;
@@ -1441,7 +1482,8 @@ begin
             if (op = 'stroke') and el.Style.HasStrokeOpacity then ga := ga * el.Style.StrokeOpacity;
             if Abs(ga - HexD(o.Strings['ga'])) > 1e-6 then
               Miss(Format('%s: %s at alpha %g, upstream %g', [where, op, ga, HexD(o.Strings['ga'])]));
-            if not comp and (Copy(key, 1, 2) <> 'c.') then
+            { ([R7-AE] the ae- cases: a component's part too) }
+            if (not comp and (Copy(key, 1, 2) <> 'c.')) or (APrefix = 'ae-') then
               GradMiss(where + ' ' + op, el, op = 'fill', o);
           end;
           { the shadow it casts (a refused blur or colour kept) }
@@ -1464,7 +1506,7 @@ begin
         end;
         { [R7-AC] AN AXIS POINTER'S LINE WHERE ITS SLIDE HAS GOT TO (the
           ac- cases): the drawn line's bounds }
-        if (APrefix = 'ac-') and comp and not ctext and (Pos('Pointer', ckey) > 0) and (cz2 = 0)
+        if ((APrefix = 'ac-') or (APrefix = 'ae-')) and comp and not ctext and (Pos('Pointer', ckey) > 0) and (cz2 = 0)
           and (rec.Find('pb').JSONType <> jtNull) and FChart.CompPart(ckey, cz2, ctext, 'stroke', el) then
         begin
           bb := TyShapeBounds(el.Shape);
@@ -1481,7 +1523,7 @@ begin
         { [R7-AC] A RICHTEXT TOOLTIP'S BOX where upstream fills it: the
           place moveTo was given, in by the border's width (TooltipRichContent's
           1) and the shadow's outer size }
-        if (APrefix = 'ac-') and (key = 'c.tooltip0.0.p.0') and (rec.Find('pb').JSONType <> jtNull) then
+        if ((APrefix = 'ac-') or (APrefix = 'ae-')) and (key = 'c.tooltip0.0.p.0') and (rec.Find('pb').JSONType <> jtNull) then
         begin
           bb := FChart.TipFill;
           Inc(FCompared);
@@ -1515,6 +1557,42 @@ begin
             or (Abs(bb.Top - mb.Top) > 1e-6) or (Abs(bb.Bottom - mb.Bottom) > 1e-6) then
             Miss(Format('%s: box (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, mb.Left, mb.Top, mb.Right, mb.Bottom]));
+        end;
+        { [R7-AE] A DATAZOOM'S PART WHERE IT IS BRUSHED (the ae- cases, and
+          ac-dz-inf): the drawn path's bounds -- an unplaced slider's in its
+          own frame under the transform the canvas had }
+        if (((APrefix = 'ae-') or (id = 'ac-dz-inf')) and (Copy(key, 1, 11) = 'c.dataZoom0') and not ctext
+          and not comp and (rec.Find('pb').JSONType <> jtNull)) then
+        begin
+          mb := TyRectF(HexD(rec.Arrays['pb'].Strings[0]), HexD(rec.Arrays['pb'].Strings[1]),
+            HexD(rec.Arrays['pb'].Strings[2]), HexD(rec.Arrays['pb'].Strings[3]));
+          bb := TyShapeBounds(el.Shape);
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - mb.Left) > 0.05) or (Abs(bb.Right - mb.Right) > 0.05)
+            or (Abs(bb.Top - mb.Top) > 0.05) or (Abs(bb.Bottom - mb.Bottom) > 0.05) then
+            Miss(Format('%s: drawn at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, mb.Left, mb.Top, mb.Right, mb.Bottom]));
+        end;
+      end;
+      { [R7-AE] a pointer's line or band the port drew: upstream has its
+        group's path (one an action showed is gone after a notMerge
+        setOption) }
+      if APrefix = 'ae-' then
+      begin
+        ptrs := FChart.PtrShapes;
+        for q := 0 to High(ptrs) do
+        begin
+          pk := ptrs[q].Owner;
+          n := Length(pk);
+          while (n > 0) and (pk[n] in ['0'..'9']) do Dec(n);
+          pk := 'c.' + Copy(pk, 1, n) + 'Pointer' + Copy(pk, n + 1, MaxInt) + '.';
+          nm := False;
+          for k := 0 to els.Count - 1 do
+            if (Copy(els.Objects[k].Strings['key'], 1, Length(pk)) = pk)
+              and (els.Objects[k].Arrays['ops'].Count > 0) then nm := True;
+          Inc(FCompared);
+          if not nm then
+            Miss(Format('%s t=%g: a pointer of %s drawn, upstream none', [id, t, ptrs[q].Owner]));
         end;
       end;
     end;
@@ -2700,6 +2778,354 @@ end;
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7ACCanvasAsUpstream;
 begin
   RunW(False, 'ac-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AECanvasAsUpstream;
+begin
+  RunW(False, 'ae-');
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AEHitsAsUpstream;
+begin
+  RunW(True, 'ae-');
+end;
+
+{ [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the
+  boxes drawn and the spans with words of the host's caption, in their
+  order (zrender's children: the block's Rect, then each token's Rect and
+  TSpan) -- each op's fill, a box's stroke, the shadow it casts, the alpha
+  it is made at }
+procedure TAdvChartLinesCanvasOracleTest.KPiece(const AWhere: string;
+  const ARec: TJSONObject; const AKey: string);
+var
+  host, op: string;
+  n, k, cnt, idx, q: Integer;
+  el: TTyChartElement;
+  pc: TTyRtPiece;
+  found: Boolean;
+  ops: TJSONArray;
+  o: TJSONObject;
+  wc: TTyChartColor;
+  sb, ga: Double;
+begin
+  host := Copy(AKey, 2, MaxInt);
+  k := LastDelimiter('.', host);
+  n := StrToInt(Copy(host, k + 1, MaxInt));
+  host := Copy(host, 1, k - 1);
+  { (a line's end label: the polyline's text) }
+  idx := -1;
+  if Copy(host, 1, 2) = 'ln' then
+  begin
+    q := StrToInt(Copy(host, 3, Pos('.', host) - 3));
+    for k := 0 to FChart.Frame.Count - 1 do
+      if (FChart.Frame.Element(k).Anim.Role = carEndLabel) and (FChart.Frame.Element(k).Anim.Series = q) then
+        idx := k;
+  end
+  else
+    idx := WElOf('x' + host, ARec);
+  if idx < 0 then
+  begin
+    Miss(AWhere + ': no text');
+    Exit;
+  end;
+  el := FChart.Frame.Element(idx);
+  { (a text of one run: its caption) }
+  if Length(el.Caption.RtPieces) = 0 then
+  begin
+    if n <> 0 then
+    begin
+      Miss(Format('%s: a text of one run, upstream piece %d', [AWhere, n]));
+      Exit;
+    end;
+    ops := ARec.Arrays['ops'];
+    for q := 0 to ops.Count - 1 do
+    begin
+      o := ops.Objects[q];
+      op := o.Strings['op'];
+      if (op = 'fillText') and TyTryParseChartColor(o.Strings['fs'], wc) then
+      begin
+        Inc(FCompared);
+        if not SameInkL(el.Caption.Colour, wc) then
+          Miss(Format('%s: text fill %x, upstream %s', [AWhere, el.Caption.Colour, o.Strings['fs']]));
+      end;
+      if (op = 'strokeText') and TyTryParseChartColor(o.Strings['ss'], wc) then
+      begin
+        Inc(FCompared);
+        if not SameInkL(el.Caption.StrokeColour, wc)
+          or (Abs(el.Caption.StrokeWidthLogical - HexD(o.Strings['lw'])) > 1e-6) then
+          Miss(Format('%s: text stroke %x width %g, upstream %s width %g', [AWhere,
+            el.Caption.StrokeColour, el.Caption.StrokeWidthLogical, o.Strings['ss'], HexD(o.Strings['lw'])]));
+      end;
+    end;
+    Exit;
+  end;
+  cnt := -1;
+  found := False;
+  pc := Default(TTyRtPiece);
+  for k := 0 to High(el.Caption.RtPieces) do
+  begin
+    pc := el.Caption.RtPieces[k];
+    if ((pc.Kind = rpkRect) and pc.Drawn) or ((pc.Kind = rpkText) and (pc.Text <> '')) then Inc(cnt);
+    if cnt = n then
+    begin
+      found := True;
+      Break;
+    end;
+  end;
+  if not found then
+  begin
+    Miss(Format('%s: no piece %d of %d', [AWhere, n, cnt + 1]));
+    Exit;
+  end;
+  ops := ARec.Arrays['ops'];
+  for q := 0 to ops.Count - 1 do
+  begin
+    o := ops.Objects[q];
+    op := o.Strings['op'];
+    if ((op = 'fill') or (op = 'fillText')) and TyTryParseChartColor(o.Strings['fs'], wc) then
+    begin
+      Inc(FCompared);
+      if not pc.HasFill or not SameInkL(pc.Fill, wc) then
+        Miss(Format('%s: %s %x, upstream %s', [AWhere, op, pc.Fill, o.Strings['fs']]));
+    end;
+    if (op = 'stroke') and TyTryParseChartColor(o.Strings['ss'], wc) then
+    begin
+      Inc(FCompared);
+      if not pc.HasStroke or not SameInkL(pc.Stroke, wc)
+        or (Abs(pc.LineWidth - HexD(o.Strings['lw'])) > 1e-6) then
+        Miss(Format('%s: stroke %x width %g, upstream %s width %g', [AWhere, pc.Stroke,
+          pc.LineWidth, o.Strings['ss'], HexD(o.Strings['lw'])]));
+    end;
+    sb := HexD(o.Strings['sb']);
+    if (sb > 0) and TyTryParseChartColor(o.Strings['sc'], wc) then
+    begin
+      Inc(FCompared);
+      if not pc.HasShadow or not SameInkL(pc.ShadowColor, wc) or (Abs(pc.ShadowBlur - sb) > 1e-9) then
+        Miss(Format('%s: %s shadow %x blur %g, upstream %s blur %g', [AWhere, op, pc.ShadowColor,
+          pc.ShadowBlur, o.Strings['sc'], sb]));
+    end;
+    ga := TyRtPieceDrawnAlpha(pc, el.Style.Alpha);
+    Inc(FCompared);
+    if Abs(ga - HexD(o.Strings['ga'])) > 1e-6 then
+      Miss(Format('%s: %s at alpha %g, upstream %g', [AWhere, op, ga, HexD(o.Strings['ga'])]));
+  end;
+end;
+
+{ [R7-AE] A LABEL'S BOX ON A HOST OF 0.8 (a scatter's default opacity) is
+  drawn at the alpha upstream fills it at (ae-label-alpha-px's box: black on
+  white, the record's globalAlpha) -- the same pixel as the same box on a
+  host of 1 whose label writes that opacity itself, and not the host's
+  opacity twice. (R7-AC read about 0.61 off the pixel: the painter blends
+  in its own light, a symbol filled at 0.8 shows the same.) }
+procedure TAdvChartLinesCanvasOracleTest.TestALabelBoxOnATranslucentHostAsUpstream;
+var
+  cs, els: TJSONArray;
+  c, rec, opt, s0, lbl: TJSONObject;
+  i, k, pass: Integer;
+  ga: Double;
+  pb: TJSONArray;
+  px: array[0..1] of TBGRAPixel;
+  x, y: Integer;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  rec := nil;
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'ae-label-alpha-px' then c := cs.Objects[i];
+  AssertTrue('the case', c <> nil);
+  els := c.Arrays['frames'].Objects[0].Arrays['els'];
+  for k := 0 to els.Count - 1 do
+    if els.Objects[k].Strings['key'] = 'ks0.0.0' then rec := els.Objects[k];
+  AssertTrue('the box', rec <> nil);
+  ga := HexD(rec.Arrays['ops'].Objects[0].Strings['ga']);
+  AssertEquals('upstream fills it at the host''s opacity', 0.8, ga, 1e-9);
+  pb := rec.Arrays['pb'];
+  { three px in from the box's left edge, at its middle: the padding }
+  x := Trunc(HexD(pb.Strings[0])) + 3;
+  y := Trunc((HexD(pb.Strings[1]) + HexD(pb.Strings[3])) / 2);
+  for pass := 0 to 1 do
+  begin
+    opt := TJSONObject(c.Objects['option'].Clone);
+    try
+      if pass = 1 then
+      begin
+        s0 := opt.Arrays['series'].Objects[0];
+        s0.Objects['itemStyle'].Add('opacity', 1);
+        lbl := s0.Objects['label'];
+        lbl.Add('opacity', ga);
+      end;
+      FreeAndNil(FChart);
+      FChart := TLcProbe.Create(FForm);
+      FChart.Parent := FForm;
+      FChart.Controller := FCtl;
+      FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+      FChart.AnimationMode := camAlways;
+      FChart.AnimNow := cT0;
+      FChart.SetOption(opt.AsJSON, True);
+      FBmp.Fill(BGRA(255, 255, 255, 255));
+      FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      px[pass] := FBmp.GetPixel(x, y);
+    finally
+      opt.Free;
+    end;
+  end;
+  AssertTrue(Format('the box drawn at all: (%d,%d,%d)', [px[0].red, px[0].green, px[0].blue]),
+    px[0].red < 200);
+  AssertTrue(Format('the box on a host of 0.8 (%d,%d,%d), the box at an opacity of 0.8 of its own (%d,%d,%d)',
+    [px[0].red, px[0].green, px[0].blue, px[1].red, px[1].green, px[1].blue]),
+    (Abs(px[0].red - px[1].red) <= 2) and (Abs(px[0].green - px[1].green) <= 2)
+    and (Abs(px[0].blue - px[1].blue) <= 2));
+end;
+
+{ [R7-AE] A DATAZOOM WIDTH OF NO NUMBER ('abc', ac-dz-nan's handle and
+  data shadow line) is not above nought: upstream strokes neither (no
+  stroke op for them) -- nothing of the slider strokes in the line's red,
+  and the handles stroke nothing [was: the default width stroked] }
+procedure TAdvChartLinesCanvasOracleTest.TestADzWidthOfNoNumberStrokesNothing;
+var
+  cs: TJSONArray;
+  c: TJSONObject;
+  i, k, nh: Integer;
+  el: TTyChartElement;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'ac-dz-nan' then c := cs.Objects[i];
+  AssertTrue('the case', c <> nil);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := cT0;
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  nh := 0;
+  for k := 0 to FChart.Frame.Count - 1 do
+  begin
+    el := FChart.Frame.Element(k);
+    if el.Z <> 4 then Continue;
+    AssertFalse(Format('element %d strokes the refused line red', [k]),
+      (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor = TTyChartColor($FFFF0000)));
+    if el.Style.HasFill and (el.Style.FillColor = TTyChartColor($FFFFFFFF)) and (el.Z2 = 5) then
+    begin
+      Inc(nh);
+      AssertEquals(Format('handle %d strokes', [k]), 0, el.Style.StrokeWidthLogical, 0);
+    end;
+  end;
+  AssertEquals('handles', 2, nh);
+end;
+
+{ [R7-AE] A POLYLINE OF ONE POINT (ae-one-point: a pen 3 wide, round caps)
+  strokes a move alone: the canvas draws nothing of it -- white about the
+  point -- though it holds the pen it hands on }
+procedure TAdvChartLinesCanvasOracleTest.TestALonePointDrawsNothing;
+var
+  cs: TJSONArray;
+  c: TJSONObject;
+  i, x, y: Integer;
+  px: TBGRAPixel;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'ae-one-point' then c := cs.Objects[i];
+  AssertTrue('the case', c <> nil);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := cT0;
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  for x := 206 to 214 do
+    for y := 139 to 146 do
+    begin
+      px := FBmp.GetPixel(x, y);
+      AssertTrue(Format('ink at (%d,%d): (%d,%d,%d)', [x, y, px.red, px.green, px.blue]),
+        (px.red >= 250) and (px.green >= 250) and (px.blue >= 250));
+    end;
+end;
+
+{ [R7-AE] AN UNPLACED SLIDER IS FOUND BY NOTHING (ae-dz-inf-*, ac-dz-inf):
+  every element of it has a transform that is no number, and
+  Path.contain takes the point to NaN -- upstream's findHover at each probe
+  is the target the chart's own pointer finds (a slider's part, a series'
+  element, or nothing), and a press there moves no window }
+procedure TAdvChartLinesCanvasOracleTest.TestAnUnplacedSlidersPointerAsUpstream;
+var
+  cs, hits, h: TJSONArray;
+  c: TJSONObject;
+  i, k, nCases: Integer;
+  id, want, got: string;
+  x, y: Double;
+  st0, st1: TTyDzSliderState;
+begin
+  FBad := 0;
+  FCompared := 0;
+  FReport := '';
+  nCases := 0;
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  for i := 0 to cs.Count - 1 do
+  begin
+    c := cs.Objects[i];
+    id := c.Strings['id'];
+    if Copy(id, 1, 10) <> 'ae-dz-inf-' then Continue;
+    if c.Arrays['frames'].Objects[0].Find('hits') = nil then Continue;
+    Inc(nCases);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := cT0;
+    FChart.DataZoomNow := cT0;
+    FChart.TooltipNow := cT0;
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals(id + ' parses', '', FChart.OptionError);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+    hits := c.Arrays['frames'].Objects[0].Arrays['hits'];
+    for k := 0 to hits.Count - 1 do
+    begin
+      h := hits.Arrays[k];
+      x := HexD(h.Strings[0]);
+      y := HexD(h.Strings[1]);
+      if h.Items[2].JSONType = jtNull then want := ''
+      else if Copy(h.Strings[2], 1, 11) = 'c.dataZoom0' then want := 'slider'
+      else want := 'other';
+      FChart.DataZoomPointer(dpMove, x, y, [], 0);
+      got := FChart.DataZoomHoverName;
+      if Copy(got, 1, 2) = 'dz' then got := 'slider';
+      Inc(FCompared);
+      if got <> want then
+        Miss(Format('%s (%g,%g): the pointer finds "%s", upstream "%s"', [id, x, y, got, want]));
+      { and a press where upstream finds no part of it moves nothing }
+      if want = 'slider' then Continue;
+      st0 := FChart.DataZoomSliderState(0);
+      FChart.DataZoomPointer(dpDown, x, y, [], 0);
+      FChart.DataZoomPointer(dpMove, x + 7, y, [], 0);
+      FChart.DataZoomPointer(dpUp, x + 7, y, [], 0);
+      FChart.DataZoomPointer(dpClick, x + 7, y, [], 0);
+      FChart.DataZoomTick(cT0 + 1000);
+      st1 := FChart.DataZoomSliderState(0);
+      Inc(FCompared);
+      if (st0.Ends[0] <> st1.Ends[0]) or (st0.Ends[1] <> st1.Ends[1])
+        or (st0.Range[0] <> st1.Range[0]) or (st0.Range[1] <> st1.Range[1]) then
+        Miss(Format('%s (%g,%g): a press moved the window', [id, x, y]));
+    end;
+  end;
+  FreeAndNil(FChart);
+  AssertTrue('cases', nCases >= 1);
+  if FBad > 0 then
+    Fail(Format('%d of %d differ:%s', [FBad, FCompared, FReport]));
 end;
 
 { [R7-AC] A TOOLTIP'S TEXT CASTS textStyle's SHADOW, in both modes: black
