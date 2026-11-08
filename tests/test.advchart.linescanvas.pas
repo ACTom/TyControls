@@ -178,6 +178,8 @@ type
     procedure TestTheR7AFHitsAsUpstream;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
+    procedure TestAnInfiniteHaloHandsItsColourAtOnce;
+    procedure TestTheRadarRingsShareTheirGradient;
     procedure TestAnUnplacedSlidersPointerAsUpstream;
     procedure TestALabelBoxOnATranslucentHostAsUpstream;
     procedure TestADzWidthOfNoNumberStrokesNothing;
@@ -3272,6 +3274,8 @@ var
   px: TBGRAPixel;
   m: array[0..5] of Double;
   ux, uy: Double;
+  el: TTyChartElement;
+  b: TTyRectF;
 begin
   cs := TJSONObject(FRoot).Arrays['charts'];
   c := nil;
@@ -3319,6 +3323,24 @@ begin
       end;
     AssertTrue(Format('label %d: %d red px by its place (%g,%g)', [lab, n, ux, uy]), n > 30);
     AssertEquals(Format('label %d: red px right of its place', [lab]), 0, nr);
+    { and its element's bounds are where it is drawn (a dirty block that
+      meets the words redraws them) }
+    nr := 0;
+    for k := 0 to FChart.Frame.Count - 1 do
+    begin
+      el := FChart.Frame.Element(k);
+      if (el.Caption.Text <> 'W2.00W') and (el.Caption.Text <> 'W8.00W') then Continue;
+      if (lab = 0) <> (el.Caption.Text = 'W2.00W') then Continue;
+      b := TyShapeBounds(el.Shape);
+      Inc(nr);
+      if lab = 0 then
+        AssertTrue(Format('label 0: its bounds (%g,%g)-(%g,%g) hold its words', [b.Left, b.Top, b.Right, b.Bottom]),
+          (b.Left <= ux - 10) and (b.Right >= ux - 10) and (b.Top <= uy) and (b.Bottom >= uy))
+      else
+        AssertTrue(Format('label 1: its bounds (%g,%g)-(%g,%g) hold its words', [b.Left, b.Top, b.Right, b.Bottom]),
+          (b.Left <= ux + 10) and (b.Right >= ux + 10) and (b.Top <= uy) and (b.Bottom >= uy));
+    end;
+    AssertEquals(Format('label %d: its element', [lab]), 1, nr);
   end;
 end;
 
@@ -3380,6 +3402,110 @@ begin
     end;
   end;
   AssertEquals('the shadows in their turned clips', '', bad);
+end;
+
+{ [R7-AF] A HALO OF 'Infinity' HANDS THE CANVAS ITS COLOUR AT THE FIRST PAINT
+  (af-label-inf, drawn once): the symbol after it (z 3) whose borderColor no
+  parser reads strokes in the label's '#ff00ff' -- before the paint order has
+  settled the halo's width once, too }
+procedure TAdvChartLinesCanvasOracleTest.TestAnInfiniteHaloHandsItsColourAtOnce;
+var
+  cs: TJSONArray;
+  c: TJSONObject;
+  i, k, n: Integer;
+  el: TTyChartElement;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'af-label-inf' then c := cs.Objects[i];
+  AssertTrue('af-label-inf', c <> nil);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := cT0;
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  n := 0;
+  for k := 0 to FChart.Frame.Count - 1 do
+  begin
+    el := FChart.Frame.Element(k);
+    if (el.Datum.SeriesIndex <> 2) or (el.Caption.Text <> '') then Continue;
+    Inc(n);
+    AssertEquals('the symbol after the label strokes in its halo''s colour', Integer($FFFF00FF),
+      Integer(el.Style.StrokeColor));
+  end;
+  AssertTrue('the symbol after the label', n > 0);
+end;
+
+{ [R7-AF] A RADAR'S RINGS OF ONE COLOUR ARE ONE PATH upstream (mergePath), its
+  gradient over the merged path's box (af-grad-radar-split): every ring the
+  port draws with a gradient takes the gradient of one of upstream's two
+  merged paths -- the stroke op's arguments through its transform }
+procedure TAdvChartLinesCanvasOracleTest.TestTheRadarRingsShareTheirGradient;
+var
+  cs, els: TJSONArray;
+  c, o: TJSONObject;
+  i, k, j, n, rings: Integer;
+  el: TTyChartElement;
+  m: array[0..5] of Double;
+  x1, y1, x2, y2, gr: Double;
+  ux: array[0..1, 0..3] of Double;
+  a: TJSONArray;
+  ok: Boolean;
+  bad: string;
+begin
+  cs := TJSONObject(FRoot).Arrays['charts'];
+  c := nil;
+  for i := 0 to cs.Count - 1 do
+    if cs.Objects[i].Strings['id'] = 'af-grad-radar-split' then c := cs.Objects[i];
+  AssertTrue('af-grad-radar-split', c <> nil);
+  els := c.Arrays['frames'].Objects[0].Arrays['els'];
+  n := 0;
+  for k := 0 to els.Count - 1 do
+    if Copy(els.Objects[k].Strings['key'], 1, 13) = 'c.radar0.0.p.' then
+    begin
+      AssertTrue('two merged paths upstream', n < 2);
+      o := els.Objects[k].Arrays['ops'].Objects[0];
+      for j := 0 to 5 do m[j] := HexD(o.Arrays['m'].Strings[j]);
+      a := o.Objects['so'].Arrays['a'];
+      ux[n, 0] := m[0] * HexD(a.Strings[0]) + m[2] * HexD(a.Strings[1]) + m[4];
+      ux[n, 1] := m[1] * HexD(a.Strings[0]) + m[3] * HexD(a.Strings[1]) + m[5];
+      ux[n, 2] := m[0] * HexD(a.Strings[2]) + m[2] * HexD(a.Strings[3]) + m[4];
+      ux[n, 3] := m[1] * HexD(a.Strings[2]) + m[3] * HexD(a.Strings[3]) + m[5];
+      Inc(n);
+    end;
+  AssertEquals('the merged paths upstream', 2, n);
+  FreeAndNil(FChart);
+  FChart := TLcProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := cT0;
+  FChart.SetOption(c.Objects['option'].AsJSON, True);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+  rings := 0;
+  bad := '';
+  for k := 0 to FChart.Frame.Count - 1 do
+  begin
+    el := FChart.Frame.Element(k);
+    if (el.Datum.SeriesIndex >= 0) or (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
+    Inc(rings);
+    TyResolveGradientXYWH(el.Style.StrokeGradient, TyElementGradientBox(el, 96), x1, y1, x2, y2, gr);
+    ok := False;
+    for j := 0 to n - 1 do
+      if (Abs(x1 - ux[j, 0]) < 1e-6) and (Abs(y1 - ux[j, 1]) < 1e-6) and (Abs(x2 - ux[j, 2]) < 1e-6)
+        and (Abs(y2 - ux[j, 3]) < 1e-6) then ok := True;
+    if not ok then bad := bad + Format(' ring %d: (%g,%g)-(%g,%g);', [k, x1, y1, x2, y2]);
+  end;
+  AssertEquals('the radar''s rings with a gradient', 4, rings);
+  AssertEquals('each ring in its merged path''s gradient', '', bad);
 end;
 
 { [R7-AE] AN UNPLACED SLIDER IS FOUND BY NOTHING (ae-dz-inf-*, ac-dz-inf):
