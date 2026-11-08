@@ -1253,6 +1253,33 @@ begin
   end;
 end;
 
+function TTyCustomAdvanceChart.TrailZLevel(AList: TTyPaintList): Integer;
+var i: Integer; pe: PTyChartElement;
+begin
+  Result := -MaxInt;
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(i);
+    if (pe^.Datum.Kind = ctkSeries) and (LinesTrailAlpha(pe^.Datum.SeriesIndex) > 0) then
+      Result := Max(Result, pe^.ZLevel);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.PaintTrailAbove(APainter: TTyPainter; AList: TTyPaintList);
+var zc: Integer;
+begin
+  if AList = nil then Exit;
+  zc := ZBase;
+  if TyMaxZLevelOf(AList) <= zc then Exit;
+  TySetZBand(zc, ZStaticTop);
+  try
+    PaintTrail(APainter, AList);
+  finally
+    TyClearZBand;
+  end;
+end;
+
 function TTyCustomAdvanceChart.ModelZLevel(const AMainType: string;
   AIndex: Integer): Integer;
 var
@@ -2723,14 +2750,20 @@ begin
     FZList := frame;
     TySetZBand(-MaxInt, ComponentZLevel);
     try
-      PaintTrail(APainter, AnimPartOf(frame, True));
+      { [R7-AB] a trail on a zlevel above the components' is that level's
+        layer (PaintTrailAbove) [was: drawn there with no trail at all] }
+      if TrailZLevel(frame) > ComponentZLevel then
+        TyRenderPaintList(APainter, AnimPartOf(frame, True))
+      else
+        PaintTrail(APainter, AnimPartOf(frame, True));
     finally
       TyClearZBand;
     end;
     PaintBreakAreas(APainter);
     PaintParallels(APainter, APPI, AMeasurer);
     PaintTitles(APainter);
-    PaintAboveComponents(APainter, frame);
+    if TrailZLevel(frame) > ComponentZLevel then PaintTrailAbove(APainter, frame)
+    else PaintAboveComponents(APainter, frame);
   end
   else if FAnimLive then
   begin

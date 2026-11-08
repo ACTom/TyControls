@@ -3581,6 +3581,11 @@ type
     function LinesTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     function LinesTrailAlpha(ASeriesIndex: Integer): Double;
     procedure PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+    { [R7-AB] the highest zlevel of a lines series with a trail (-MaxInt:
+      none), and the list above the components' zlevel drawn with that
+      trail's layer (as PaintAboveComponents draws it without one) }
+    function TrailZLevel(AList: TTyPaintList): Integer;
+    procedure PaintTrailAbove(APainter: TTyPainter; AList: TTyPaintList);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
