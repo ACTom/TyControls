@@ -2496,7 +2496,8 @@ begin
     end;
     if not v.Furn.ShowSplitArea then aidx := nil;
     n0 := Length(AParts);
-    CompViewParts(FSingles[i].Axis, 2000 + i, 0, v.Furn, v.Spec, v.HasLine,
+    CompViewParts(FSingles[i].Axis, ViewNum('singleAxis', Max(0, FSingles[i].Axis.ComponentIndex),
+      2000 + i), 0, v.Furn, v.Spec, v.HasLine,
       CompInksOf(Length(v.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx);
     Boxes(n0, 0, nil, nil, v.Ticks, v.MinorTicks, v.SplitLines, nil, nil,
       Length(v.Furn.SplitLineInks) > 0, v.Line, Default(TTyPolarLine), Default(TTyPolarArc));
@@ -2544,10 +2545,12 @@ begin
       end;
       n0 := Length(AParts);
       if k = 0 then
-        CompViewParts(FPolars[i].RadiusAxis, 3000 + i, 1, pv.Furn, pv.Spec, pv.HasLine,
+        CompViewParts(FPolars[i].RadiusAxis, ViewNum('radiusAxis',
+          Max(0, FPolars[i].RadiusAxis.ComponentIndex), 3000 + i), 1, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, none, AParts, aidx)
       else
-        CompViewParts(FPolars[i].AngleAxis, 4000 + i, 2, pv.Furn, pv.Spec, pv.HasLine,
+        CompViewParts(FPolars[i].AngleAxis, ViewNum('angleAxis',
+          Max(0, FPolars[i].AngleAxis.ComponentIndex), 4000 + i), 2, pv.Furn, pv.Spec, pv.HasLine,
           CompInksOf(Length(pv.Furn.SplitLineInks), idx), ticks, minors, pv.Labels, AParts, aidx);
       Boxes(n0, k + 1, pv.Ticks, pv.MinorTicks, nil, nil, nil, pv.SplitLines, pv.SplitCircles,
         Length(pv.Furn.SplitLineInks) > 0, Default(TTySingleLine), pv.Line, pv.LineArc);
@@ -2627,10 +2630,12 @@ begin
       gb := FBuild.Grid(g);
       for a := 0 to gb.YAxisCount - 1 do
         if gb.YAxis(a) <> nil then
-          CompAxisParts(gb.YAxis(a), gb, 5000 + Max(0, gb.YAxis(a).ComponentIndex), parts);
+          CompAxisParts(gb.YAxis(a), gb, ViewNum('yAxis', Max(0, gb.YAxis(a).ComponentIndex),
+            5000 + Max(0, gb.YAxis(a).ComponentIndex)), parts);
       for a := 0 to gb.XAxisCount - 1 do
         if gb.XAxis(a) <> nil then
-          CompAxisParts(gb.XAxis(a), gb, 6000 + Max(0, gb.XAxis(a).ComponentIndex), parts);
+          CompAxisParts(gb.XAxis(a), gb, ViewNum('xAxis', Max(0, gb.XAxis(a).ComponentIndex),
+            6000 + Max(0, gb.XAxis(a).ComponentIndex)), parts);
     end;
   FCompParts := parts;
   FCompBase := Length(parts);
@@ -2642,17 +2647,108 @@ end;
 function TTyCustomAdvanceChart.CompViewOf(const AEl: TTyChartElement): Integer;
 begin
   if AEl.CompView > 0 then Exit(AEl.CompView);
+  { [R7-AG] each after the views an earlier prepare made (ViewNum) }
   case AEl.Datum.Kind of
-    ctkGraphic: Result := 0;
-    ctkMatrix: Result := 1500 + Max(0, AEl.Datum.ComponentIndex);
-    ctkGeo: Result := 4600 + Max(0, AEl.Datum.ComponentIndex);
+    ctkGraphic: Result := ViewNum('graphic', Max(0, AEl.Datum.ComponentIndex), 0);
+    ctkMatrix: Result := ViewNum('matrix', Max(0, AEl.Datum.ComponentIndex),
+      1500 + Max(0, AEl.Datum.ComponentIndex));
+    ctkGeo: Result := ViewNum('geo', Max(0, AEl.Datum.ComponentIndex),
+      4600 + Max(0, AEl.Datum.ComponentIndex));
     ctkSeries:
-      if AEl.Datum.SeriesIndex >= 0 then Result := 100000 + AEl.Datum.SeriesIndex
+      if AEl.Datum.SeriesIndex >= 0 then
+        Result := ViewNum('series', AEl.Datum.SeriesIndex, 100000 + AEl.Datum.SeriesIndex)
       else Result := 80000;
-    ctkMarkPoint, ctkMarkLine, ctkMarkArea: Result := 90000;
+    ctkMarkPoint, ctkMarkLine, ctkMarkArea:
+      Result := ViewNum('series', Max(0, AEl.Datum.SeriesIndex), 90000);
   else
     Result := 80000;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.ViewsPrepare(AFresh: Boolean);
+const
+  cTypes: array[0..10] of string = ('graphic', 'matrix', 'calendar', 'singleAxis',
+    'radiusAxis', 'angleAxis', 'geo', 'radar', 'yAxis', 'xAxis', 'series');
+var
+  old: array of record
+    MainType, Id, Sub: string;
+    Index, Gen, Rank: Integer;
+  end;
+  t, i, j, n, found: Integer;
+  id, sub: string;
+  gens: TTyIntegerArray;
+  have: Boolean;
+begin
+  if FOption = nil then Exit;
+  SetLength(old, Length(FViews));
+  for i := 0 to High(FViews) do
+  begin
+    old[i].MainType := FViews[i].MainType;
+    old[i].Id := FViews[i].Id;
+    old[i].Sub := FViews[i].Sub;
+    old[i].Index := FViews[i].Index;
+    old[i].Gen := FViews[i].Gen;
+    old[i].Rank := FViews[i].Rank;
+  end;
+  FViews := nil;
+  Inc(FViewsGen);
+  n := 0;
+  for t := 0 to High(cTypes) do
+    for i := 0 to FOption.ComponentCount(cTypes[t]) - 1 do
+    begin
+      id := FOption.ComponentId(cTypes[t], i);
+      if id = '' then Continue;
+      sub := FOption.ComponentSubType(cTypes[t], i);
+      { a view whose model stays (same id and subType: its viewId); after
+        a notMerge only a series' }
+      found := -1;
+      if not AFresh or (cTypes[t] = 'series') then
+        for j := 0 to High(old) do
+          if (old[j].MainType = cTypes[t]) and (old[j].Id = id) and (old[j].Sub = sub) then
+          begin
+            found := j;
+            Break;
+          end;
+      SetLength(FViews, n + 1);
+      FViews[n].MainType := cTypes[t];
+      FViews[n].Id := id;
+      FViews[n].Sub := sub;
+      FViews[n].Index := i;
+      if found >= 0 then FViews[n].Gen := old[found].Gen else FViews[n].Gen := FViewsGen;
+      Inc(n);
+    end;
+  { the prepares' ranks among the live views }
+  gens := nil;
+  for i := 0 to n - 1 do
+  begin
+    have := False;
+    for j := 0 to High(gens) do
+      if gens[j] = FViews[i].Gen then have := True;
+    if not have then
+    begin
+      SetLength(gens, Length(gens) + 1);
+      gens[High(gens)] := FViews[i].Gen;
+    end;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    FViews[i].Rank := 0;
+    for j := 0 to High(gens) do
+      if gens[j] < FViews[i].Gen then Inc(FViews[i].Rank);
+  end;
+end;
+
+function TTyCustomAdvanceChart.ViewBorn(const AMainType: string; AIndex: Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(FViews) do
+    if (FViews[i].Index = AIndex) and (FViews[i].MainType = AMainType) then Exit(FViews[i].Rank);
+end;
+
+function TTyCustomAdvanceChart.ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
+begin
+  Result := ViewBorn(AMainType, AIndex) * 1000000 + ABase;
 end;
 
 procedure TTyCustomAdvanceChart.CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
@@ -2660,6 +2756,16 @@ var k: Integer;
 begin
   if AList = nil then Exit;
   for k := Max(0, AFrom) to AList.Count - 1 do AList.Ref(k)^.CompView := AView;
+end;
+
+{ [R7-AG] the place of a graphic's element (its view's prepare's rank) or a
+  grid's background (0) among the views }
+function TTyCustomAdvanceChart.GfxViewOf(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.Datum.Kind = ctkGraphic then
+    Result := ViewNum('graphic', Max(0, AEl.Datum.ComponentIndex), 0)
+  else
+    Result := 0;
 end;
 
 { two keys of the components' sort: z, z2, the view's place, the count }
@@ -2724,9 +2830,9 @@ begin
   begin
     pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(i));
     if pe^.ZLevel <> 0 then Continue;
-    if not has or CompKeyLess(lz, lz2, lv, lq, pe^.Z, pe^.Z2, 0, i) then
+    if not has or CompKeyLess(lz, lz2, lv, lq, pe^.Z, pe^.Z2, GfxViewOf(pe^), i) then
     begin
-      lz := pe^.Z; lz2 := pe^.Z2; lv := 0; lq := i;
+      lz := pe^.Z; lz2 := pe^.Z2; lv := GfxViewOf(pe^); lq := i;
       has := True;
     end;
   end;
@@ -2816,7 +2922,7 @@ var
       q := FGfxUnder.Ref(FGfxUnder.PaintOrder(AIdx));
       AZ := q^.Z;
       AZ2 := q^.Z2;
-      AView := 0;
+      AView := GfxViewOf(q^);
       ASeq := AIdx;
     end
     else if AIdx < ng + np then
@@ -3509,7 +3615,8 @@ begin
     end;
     p := p - FCompNg;
     if p > High(FCompParts) then Continue;
-    v := FCompParts[p].View;
+    { ([R7-AG] its kind's number: after a view the prepare's rank) }
+    v := FCompParts[p].View mod 1000000;
     z2 := Max(0, Min(31, FCompParts[p].Z2));
     { [R7-AG] A SINGLE AXIS', A RADIUS AXIS', AN ANGLE AXIS' VIEW z2 by z2,
       each at its first part of that z2 -- interleaved with the other

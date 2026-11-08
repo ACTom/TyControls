@@ -1918,6 +1918,16 @@ type
       list's elements in the components' band (FPaintList indices) }
     FCompNp: Integer;
     FCompBand: TTyIntegerArray;
+    { [R7-AG] THE ROOT'S VIEWS IN THE ORDER THEY WERE MADE (prepareView):
+      each a component's (main type, index, id, subType) or a series' (id,
+      type), with the prepare that made it and that prepare's rank among
+      the live ones -- what CompViewOf and CompRun put first among the
+      views at an equal z and z2 }
+    FViews: array of record
+      MainType, Id, Sub: string;
+      Index, Gen, Rank: Integer;
+    end;
+    FViewsGen: Integer;
     { [R7-AG] the band holds an element the continuous phase draws (a ripple,
       an effect symbol, what follows them): the axes are then the dynamic
       layer's in that phase, with every element of the list }
@@ -3604,6 +3614,18 @@ type
       4600, a radar 4700, the y axes 5000, the x axes 6000 (each plus its
       index), the list's other components after them, the series last }
     function CompViewOf(const AEl: TTyChartElement): Integer;
+    { [R7-AG] a setOption's prepareView: AFresh (a notMerge, the first, a
+      restore) makes every component's view anew (replaceAll: brandNew) and
+      keeps the series' views of the same id and type; a merge keeps every
+      view whose model it keeps (same id and subType) -- what is made is
+      after every view there is }
+    procedure ViewsPrepare(AFresh: Boolean);
+    { the rank of the prepare that made the view (0 the earliest live) }
+    function ViewBorn(const AMainType: string; AIndex: Integer): Integer;
+    { ABase after every view made by an earlier prepare: the place a view
+      of that type and index takes (CompViewOf's numbers) }
+    function ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
+    function GfxViewOf(const AEl: TTyChartElement): Integer;
     { [R7-AD] AList's elements from AFrom on: of the view AView }
     procedure CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
     procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;

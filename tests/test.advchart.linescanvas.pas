@@ -467,6 +467,18 @@ begin
   end;
 end;
 
+{ [R7-AD] the six clocks a chart reads, pinned ([R7-AG] the Run* cases'
+  too) }
+procedure PinClocks(AChart: TTyCustomAdvanceChart);
+begin
+  AChart.AnimNow := cT0;
+  AChart.TooltipNow := cT0;
+  AChart.DataZoomNow := cT0;
+  AChart.BrushNow := cT0;
+  AChart.ParallelExpandNow := cT0;
+  AChart.TimelineNow := cT0;
+end;
+
 { AWhich 0: the shadow cases (grad-*), 1: the one-number sizes (one-*) }
 procedure TAdvChartLinesCanvasOracleTest.Run(AWhich: Integer);
 var
@@ -506,7 +518,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -704,7 +716,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -1265,7 +1277,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.UseDirtyRect := dirty;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
@@ -1895,7 +1907,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.UseDirtyRect := True;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
@@ -2323,7 +2335,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -2771,7 +2783,7 @@ var
     FChart.Font.PixelsPerInch := APPI;
     FChart.SetBounds(0, 0, w, h);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(AOpt, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     ABmp.Fill(BGRA(255, 255, 255, 255));
@@ -2998,16 +3010,6 @@ begin
 end;
 
 { [R7-AD] every clock of a chart a test draws pinned }
-procedure PinClocks(AChart: TTyCustomAdvanceChart);
-begin
-  AChart.AnimNow := cT0;
-  AChart.TooltipNow := cT0;
-  AChart.DataZoomNow := cT0;
-  AChart.BrushNow := cT0;
-  AChart.ParallelExpandNow := cT0;
-  AChart.TimelineNow := cT0;
-end;
-
 procedure TAdvChartLinesCanvasOracleTest.TestAMergedSplitPathGrowsByItsWidth;
 
   function WidthAt(AWidth: Integer): Double;
@@ -3290,7 +3292,7 @@ begin
       FChart.Controller := FCtl;
       FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
       FChart.AnimationMode := camAlways;
-      FChart.AnimNow := cT0;
+      PinClocks(FChart);
       FChart.SetOption(opt.AsJSON, True);
       FBmp.Fill(BGRA(255, 255, 255, 255));
       FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3329,7 +3331,7 @@ begin
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
   FChart.AnimationMode := camAlways;
-  FChart.AnimNow := cT0;
+  PinClocks(FChart);
   FChart.SetOption(c.Objects['option'].AsJSON, True);
   FBmp.Fill(BGRA(255, 255, 255, 255));
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3370,7 +3372,7 @@ begin
   FChart.Controller := FCtl;
   FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
   FChart.AnimationMode := camAlways;
-  FChart.AnimNow := cT0;
+  PinClocks(FChart);
   FChart.SetOption(c.Objects['option'].AsJSON, True);
   FBmp.Fill(BGRA(255, 255, 255, 255));
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
@@ -3411,7 +3413,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     FBmp.Fill(BGRA(255, 255, 255, 255));
     if pass = 0 then
@@ -3468,7 +3470,7 @@ begin
     FChart.Controller := FCtl;
     FChart.SetBounds(0, 0, FBmp.Width, FBmp.Height);
     FChart.AnimationMode := camAlways;
-    FChart.AnimNow := cT0;
+    PinClocks(FChart);
     FChart.DataZoomNow := cT0;
     FChart.TooltipNow := cT0;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
