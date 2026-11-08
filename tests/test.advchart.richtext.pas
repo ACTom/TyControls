@@ -23,6 +23,8 @@ type
     FRoot: TJSONData;
     FMeasurer: ITyTextMeasurer;
     FBad, FCompared, FTexts: Integer;
+    { [R7-AI] the case is one of the r7ai ones }
+    FR7ai: Boolean;
     FReport: string;
     procedure SetUp; override;
     procedure TearDown; override;
@@ -345,6 +347,14 @@ var
   c: TTyChartColor;
   bx, by: Double;
 begin
+  { [R7-AI] A TEXT LAID OUT IN ITS HOST'S OVERFLOW AREA (a matrix cell's,
+    calcInnerTextOverflowArea): the engine is handed no such area, its
+    width `defaultOuterWidth - paddingH` -- the wiring test holds it. Only
+    the r7ai cases, whose padding is a string, are left out here. }
+  if FR7ai and (T.Find('defaultStyle') is TJSONObject)
+    and (T.Objects['defaultStyle'].Find('overflowRect') <> nil)
+    and (T.Objects['defaultStyle'].Find('overflowRect').JSONType = jtBoolean)
+    and T.Objects['defaultStyle'].Booleans['overflowRect'] then Exit;
   Inc(FTexts);
   if T.Find('style') is TJSONObject then style := StyleOf(T.Objects['style'])
   else style := StyleOf(nil);
@@ -584,6 +594,7 @@ begin
           (a width that is a word): the engine does the same JS arithmetic
           and drops what lands at NaN, so it is compared like any other
           [was: skipped, spec 258] }
+        FR7ai := cases.Objects[c].Find('r7ai') <> nil;
         CheckText(cases.Objects[c].Strings['name'], texts.Objects[t]);
       except
         on E: Exception do

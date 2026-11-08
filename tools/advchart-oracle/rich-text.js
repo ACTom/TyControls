@@ -835,7 +835,7 @@ const R7AF_CASES = [
 // undefined lays the words out at NaN (not drawn) but bounds them at
 // `style.x || 0`. Scatter labels, one per position (its alignment).
 const PAD_XY = { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } };
-const PAD_PTS = [[2, 2], [2, 8], [5, 5], [8, 2], [8, 8], [5, 8], [5, 2]];
+const PAD_PTS = [[2, 2], [2, 8], [5, 5], [8, 2], [8, 8], [5, 8], [5, 2], [2, 5], [8, 5]];
 const padScatter = (labels, extra, series) => opt(Object.assign({}, PAD_XY, {
   series: [Object.assign({ type: 'scatter', symbolSize: 6, label: { show: true, color: '#333333', formatter: 'Ab' },
     data: labels.map((l, i) => ({ value: PAD_PTS[i], label: l })) }, series)],
@@ -850,10 +850,11 @@ const R7AI_CASES = [
     option: padScatter([Object.assign({ position: 'right', padding: '12' }, PAD_BOX), Object.assign({ position: 'left', padding: '12', borderRadius: 3 }, PAD_BOX),
       Object.assign({ position: 'bottom', padding: '21', borderRadius: [2, 4] }, PAD_BOX), Object.assign({ position: 'top', padding: ['4', 2] }, PAD_BOX),
       { position: 'right', padding: ['3', '1', 2], backgroundColor: '#dddddd' }, { position: 'inside', padding: '12', backgroundColor: '#dddddd', formatter: 'Ab\nCd' }]) },
-  { name: 'strpad-undefined', looks: true, r7ai: true, note: "'4', [4], [], true, '0': a side undefined, the words at NaN (not drawn, bounded at 0); [null, 3] and [true, 2] are numbers",
+  { name: 'strpad-undefined', looks: true, r7ai: true, note: "'4', [4], [], true, '0': a side undefined, the words at NaN (not drawn, bounded at 0); [null, 3] and [true, 2] are numbers; [1, null, 2, '3']: null + '3' is 'null3'",
     option: padScatter([{ position: 'right', padding: '4' }, { position: 'left', padding: [4] }, { position: 'bottom', padding: [] },
       { position: 'top', padding: true }, Object.assign({ position: 'right', padding: '0' }, PAD_BOX), { position: 'top', padding: [null, 3], backgroundColor: '#dddddd' },
-      { position: 'bottom', padding: [true, 2], backgroundColor: '#dddddd' }]) },
+      { position: 'bottom', padding: [true, 2], backgroundColor: '#dddddd' },
+      { position: 'right', padding: [1, null, 2, '3'], backgroundColor: '#dddddd' }]) },
   { name: 'strpad-rich', looks: true, r7ai: true, note: "rich: the block's '12' joined to xLeft and lineTop (each token after it joined again), a token's '12' joined to its height and width, the line's width; right and centred tokens",
     option: padScatter([
       { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: {} } },
@@ -862,7 +863,8 @@ const R7AI_CASES = [
       { position: 'left', formatter: '{a|Ab}{b|Cd}', width: 90, rich: { a: { padding: '21', backgroundColor: '#dddddd', borderRadius: 2 }, b: { align: 'right', padding: '12' } } },
       { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { backgroundColor: '#dddddd', borderRadius: 3 }, b: { backgroundColor: '#cccccc' } } },
       { position: 'top', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: { backgroundColor: '#dddddd' } } },
-      { position: 'bottom', formatter: '{a|Ab}\n{b|Cd}', rich: { a: { padding: '4' }, b: { padding: [3] } } }]) },
+      { position: 'bottom', formatter: '{a|Ab}\n{b|Cd}', rich: { a: { padding: '4' }, b: { padding: [3] } } },
+      { position: 'top', formatter: '{a|Ab}{b|Cd}', rich: { a: { padding: '12', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } }]) },
   { name: 'strpad-wrap', looks: true, r7ai: true, note: "overflow 'break' at width 60: a token's '12' joins the accumulated width (wrapText's lastAccumWidth a string), a token of width 20 and '12'; a plain text's '12' (the width its own)",
     option: padScatter([
       { position: 'right', formatter: '{a|Hello world}{b|again and again}', width: 60, overflow: 'break', rich: { a: { padding: '12' }, b: {} } },
@@ -888,6 +890,7 @@ const R7AI_CASES = [
   { name: 'strpad-graphic-gauge', looks: true, r7ai: true, note: "a graphic text's padding '12' over a plate; a gauge detail's '12' over its default [5, 10] with a plate",
     record: ['chartText', 'other'],
     option: opt({ graphic: [{ type: 'text', left: 40, top: 40, style: { text: 'Gx', fill: '#333333', padding: '12', backgroundColor: '#eeeeee' } }],
+      matrix: { left: 20, top: 200, width: 200, height: 60, x: { data: ['Pp', 'Qq'], label: { color: '#333333', padding: '12', backgroundColor: '#eeeeee' } }, y: { data: ['U'], label: { color: '#333333' } } },
       series: [Object.assign({ type: 'gauge', center: ['70%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
         detail: { fontSize: 20, color: '#222222', backgroundColor: '#dddddd', padding: '12' } }, GAUGE_BARE, NO_AXIS)] }) },
 ];

@@ -336,9 +336,11 @@ function makeCtx(canvas) {
       if (AF && pend.length) PENDCLIP.push(pend.map(q => [hex(q[0]), hex(q[1])]));
       if (W) { pend = []; pending = false; owner = null; }
     },
-    moveTo(x, y) { put(x, y); px = x; py = y; },
-    lineTo(x, y) { put(x, y); px = x; py = y; },
-    rect(x, y, w, h) { put(x, y); put(x + w, y); put(x + w, y + h); put(x, y + h); px = x; py = y; },
+    // ([R7-AI] the arguments as the canvas takes them, WebIDL's numbers: a
+    // size zrender holds as a string ('16.0222') is its number here)
+    moveTo(x, y) { x = +x; y = +y; put(x, y); px = x; py = y; },
+    lineTo(x, y) { x = +x; y = +y; put(x, y); px = x; py = y; },
+    rect(x, y, w, h) { x = +x; y = +y; w = +w; h = +h; put(x, y); put(x + w, y); put(x + w, y + h); put(x, y + h); px = x; py = y; },
     bezierCurveTo(x1, y1, x2, y2, x, y) {
       for (let i = 1; i <= 64; i++) {
         const t = i / 64;
@@ -2209,8 +2211,19 @@ function cases() {
       visualMap: { type: 'continuous', min: 0, max: 10, left: 10, bottom: 10, itemHeight: 60, calculable: false, text: ['Hi', 'Lo'],
         textStyle: { color: '#000000', textBorderColor: '#00ffff', textBorderWidth: '3' }, inRange: { color: ['#00ff00', '#0000ff'] } },
       timeline: { axisType: 'category', data: ['ta', 'tb'], left: 120, right: 20, bottom: 0, autoPlay: false, controlStyle: { show: false },
+        lineStyle: { color: '#123456' }, itemStyle: { color: '#654321' }, checkpointStyle: { color: '#112233', borderColor: '#332211' },
+        progress: { lineStyle: { color: '#445566' }, itemStyle: { color: '#556677' } },
         label: { color: '#000000', textBorderColor: '#ffaa00', textBorderWidth: '2' } },
       graphic: [{ type: 'text', left: 200, top: 30, style: { text: 'Gt', fill: '#000000', stroke: '#aa00ff', lineWidth: '3' } }] }),
+    [0], { w: true, z: true }],
+    // (a component's padding written as a string: the place joined to its
+    // side, the background's size joined; a title's frame snapped by its
+    // border, its far edge joined again)
+    ['ai-comp-pad', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      title: { text: 'Tt', left: 10, top: 5, padding: '12', backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 1,
+        textStyle: { color: '#000000' } },
+      legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', textStyle: { color: '#000000' } },
+      toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', iconStyle: { borderColor: '#0000ff' }, feature: { restore: {} } } }),
     [0], { w: true, z: true }],
     ['ai-comp-border-inf', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000', borderColor: '#0000ff', borderWidth: 3 },
       markPoint: { symbol: 'rect', symbolSize: 8, data: [{ coord: [5, 8], value: 'Mp' }],

@@ -1163,6 +1163,10 @@ begin
   if ARec.Find('pb').JSONType <> jtNull then
   begin
     pb := ARec.Arrays['pb'];
+    { ([R7-AI] a rect whose size zrender holds as a string: the recorder's
+      bounds of its path are no number -- nothing to match it by) }
+    for k := 0 to 3 do
+      if IsNan(HexD(pb.Strings[k])) then Exit(-2);
     { ([R7-AA] the nearest within the tolerance: a frame half a pixel in
       from the background it lies on [was: the first]) }
     best := 1e9;
@@ -1879,6 +1883,23 @@ begin
             or (Abs(bb.Top - mb.Top) > 1e-6) or (Abs(bb.Bottom - mb.Bottom) > 1e-6) then
             Miss(Format('%s: box (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, mb.Left, mb.Top, mb.Right, mb.Bottom]));
+        end;
+        { [R7-AI] A TITLE'S FRAME AS DRAWN (the ai- cases): its bounds on the
+          canvas -- a padding written as a string joins the frame's size, and
+          subPixelOptimizeRect's far edge joins it again }
+        if (APrefix = 'ai-') and (key = 'c.title0.0.p.0') and (rec.Find('pb').JSONType <> jtNull)
+          and FChart.CompPart('title0', 0, False, 'stroke', el) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > 1e-6)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > 1e-6)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-6)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-6) then
+            Miss(Format('%s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
         end;
         { [R7-AF] A CLIP'S PATH ON THE CANVAS (the af- cases): the element
           whose brush set it -- each corner of upstream's ring a corner of the

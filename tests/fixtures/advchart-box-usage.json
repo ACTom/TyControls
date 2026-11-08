@@ -2562,7 +2562,7 @@
   {
    "id": "title-strpad",
    "group": "title",
-   "note": "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas)",
+   "note": "titles padded '12' at left 20 (drawn at 202, 101), '21' in a cell (its fractional place joined), ['3', 4] on the right with a border, '123' at the bottom (off the canvas), '21' on the right (its width joined to the joined place)",
    "gallery": null,
    "option": {
     "matrix": {
@@ -2641,6 +2641,17 @@
       "left": 40,
       "bottom": 20,
       "padding": "123",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16,
+       "fontFamily": "monospace"
+      },
+      "text": "Ee",
+      "right": 20,
+      "top": 160,
+      "padding": "21",
       "backgroundColor": "#eee"
      }
     ]
@@ -2734,6 +2745,24 @@
       "y": "40b4000000000000",
       "width": "40347b71758e2196",
       "height": "40ad020000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 4,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "40bccb0000000000",
+      "4099080000000000"
+     ],
+     "bg": {
+      "x": "40bcca0000000000",
+      "y": "4099000000000000",
+      "width": "40a9160000000000",
+      "height": "4099580000000000"
      },
      "align": "left",
      "verticalAlign": "top"
