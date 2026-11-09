@@ -69,6 +69,7 @@ uses
 type
   TAddOn = record
     Name, Css: string;
+    Vocab: TTyCssVocabulary;   // of Css, computed once when it is set
   end;
 
 const
@@ -80,10 +81,12 @@ var
 
 function StripComments(const S: string): string;
 var
-  i, j, n: SizeInt;
+  i, j, n, w: SizeInt;
 begin
   Result := '';
   n := Length(S);
+  SetLength(Result, n);   // the result is never longer than S
+  w := 0;
   i := 1;
   while i <= n do
   begin
@@ -99,9 +102,11 @@ begin
       end;
       { unterminated: the generator's regex does not match it either, keep the text }
     end;
-    Result := Result + S[i];
+    Inc(w);
+    Result[w] := S[i];
     Inc(i);
   end;
+  SetLength(Result, w);
 end;
 
 function IsWordCh(C: Char): Boolean;
@@ -127,6 +132,7 @@ var
   sl: TStringList;
   i, n: Integer;
 begin
+  Result := nil;
   sl := TStringList.Create;
   try
     sl.AddStrings(AItems);
@@ -233,6 +239,7 @@ begin
   if i >= 0 then
   begin
     GAddOns[i].Css := ACss;
+    GAddOns[i].Vocab := TyCssVocabularyOf(ACss);
     Exit;
   end;
   if AIndex > Length(GAddOns) then
@@ -242,6 +249,7 @@ begin
     GAddOns[k] := GAddOns[k - 1];
   GAddOns[AIndex].Name := AName;
   GAddOns[AIndex].Css := ACss;
+  GAddOns[AIndex].Vocab := TyCssVocabularyOf(ACss);
 end;
 
 procedure TyRegisterAddOnCss(const AName, ACss: string);
@@ -264,6 +272,7 @@ begin
     GAddOns[i].Name := AName;
   end;
   GAddOns[i].Css := ACss;
+  GAddOns[i].Vocab := TyCssVocabularyOf(ACss);
   { a listener may add or remove listeners; call a copy }
   n := Length(GListeners);
   SetLength(snapshot, n);
@@ -353,7 +362,7 @@ begin
       all.Add(ABase[i]);
     for i := 0 to High(GAddOns) do
     begin
-      v := TyCssVocabularyOf(GAddOns[i].Css);
+      v := GAddOns[i].Vocab;
       if AWhich then
         for k := 0 to High(v.Tokens) do all.Add(v.Tokens[k])
       else

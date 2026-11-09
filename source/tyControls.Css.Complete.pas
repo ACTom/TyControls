@@ -60,7 +60,8 @@ implementation
 
 uses
   SysUtils,
-  tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog;
+  tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
+  tyControls.Css.AddOns;
 
 function TrailingIdent(const S: string): string;
 var i: Integer;
@@ -89,7 +90,7 @@ begin
 
   if (Length(curWord) >= 1) and (curWord[1] = '-') then
   begin
-    AddAll(TyCatalogTokens);   { typing a --token }
+    AddAll(TyCatalogAllTokens);   { typing a --token: the core's and the add-ons' }
     Exit;
   end;
 
@@ -132,18 +133,20 @@ var
   reg: TStringList;
   i, j: Integer;
   inCatalog: Boolean;
+  keys: TStringArray;
 begin
   if ADest = nil then Exit;
-  for i := 0 to High(TyCatalogTypeKeys) do
-    ADest.Add(TyCatalogTypeKeys[i]);
+  keys := TyCatalogAllTypeKeys;
+  for i := 0 to High(keys) do
+    ADest.Add(keys[i]);
   reg := TStringList.Create;
   try
     TyGetRegisteredTypeKeys(reg);
     for i := 0 to reg.Count - 1 do
     begin
       inCatalog := False;
-      for j := 0 to High(TyCatalogTypeKeys) do
-        if SameText(reg[i], TyCatalogTypeKeys[j]) then begin inCatalog := True; Break; end;
+      for j := 0 to High(keys) do
+        if SameText(reg[i], keys[j]) then begin inCatalog := True; Break; end;
       if not inCatalog then
         ADest.Add(reg[i]);
     end;

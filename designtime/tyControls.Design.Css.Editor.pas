@@ -29,7 +29,7 @@ uses
   SynEdit,
   tyControls.Types, tyControls.Base, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
-  tyControls.Css.Complete, tyControls.Controller, tyControls.Dialogs,
+  tyControls.Css.Complete, tyControls.Css.AddOns, tyControls.Controller, tyControls.Dialogs,
   tyControls.Design.CssEditKit;
 
 resourcestring
@@ -162,7 +162,7 @@ begin
       end;
       Cat(rsCssEdCatPseudo, TyKnownPseudoStates);
     end;
-    Cat(rsCssEdCatTokens, TyCatalogTokens);
+    Cat(rsCssEdCatTokens, TyCatalogAllTokens);
   finally
     FList.Items.EndUpdate;
   end;

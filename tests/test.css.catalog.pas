@@ -26,6 +26,8 @@ type
     procedure GeneratedTokenCatalogMatchesLightTycss;
     procedure GeneratedTypeKeyCatalogIsSaneAndSorted;
     procedure CompletionSuggestsByContext;
+    procedure TestCompletionOffersAnAddOnToken;
+    procedure TestCompletionWithoutAddOnsIsUnchanged;
     procedure UnknownPropsAreFlaggedKnownOnesAreNot;
     procedure PropertyTemplateCarriesADefault;
     procedure ValidateCatchesBadTycss;
@@ -38,7 +40,7 @@ implementation
 
 uses
   tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser,
-  tyControls.Css.Catalog, tyControls.Css.Complete;
+  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.AddOns;
 
 { True when the resolver RECOGNISES AProp -- it entered a branch. A clean False means "unknown
   property" (the else Result:=False). A raise means it entered a branch but disliked the value,
@@ -367,6 +369,53 @@ begin
     items.Clear;
     TyCssCompletionItems('', False, items);
     AssertEquals('control level has no selector suggestions', 0, items.Count);
+  finally
+    items.Free;
+  end;
+end;
+
+procedure TCssCatalogTest.TestCompletionOffersAnAddOnToken;
+const
+  cName = 'zz-complete-test';
+var
+  items: TStringList;
+begin
+  items := TStringList.Create;
+  try
+    TyRegisterAddOnCss(cName, ':root{--zz-gap:7px;}' + LineEnding + 'TyZzWidget{color:red;}');
+    try
+      TyCssCompletionItems('color: var(--', False, items);
+      AssertTrue('the add-on token is offered', items.IndexOf('--zz-gap') >= 0);
+      AssertTrue('the core tokens still are', items.IndexOf('--accent') >= 0);
+      items.Clear;
+      TyCssSelectorTypeKeys(items);
+      AssertTrue('the add-on typeKey is offered', items.IndexOf('TyZzWidget') >= 0);
+      AssertTrue('the core typeKeys still are', items.IndexOf('TyButton') >= 0);
+    finally
+      TyRegisterAddOnCss(cName, '');
+      TyUnregisterAddOnCss(cName);
+    end;
+  finally
+    items.Free;
+  end;
+end;
+
+procedure TCssCatalogTest.TestCompletionWithoutAddOnsIsUnchanged;
+var
+  items: TStringList;
+  i: Integer;
+begin
+  AssertEquals('no add-on is registered here', 0, Length(TyAddOnNames));
+  items := TStringList.Create;
+  try
+    TyCssCompletionItems('--', False, items);
+    AssertEquals('token count', Length(TyCatalogTokens), items.Count);
+    for i := 0 to High(TyCatalogTokens) do
+      AssertEquals('token ' + IntToStr(i), TyCatalogTokens[i], items[i]);
+    items.Clear;
+    TyCssSelectorTypeKeys(items);
+    for i := 0 to High(TyCatalogTypeKeys) do
+      AssertEquals('typeKey ' + IntToStr(i), TyCatalogTypeKeys[i], items[i]);
   finally
     items.Free;
   end;
