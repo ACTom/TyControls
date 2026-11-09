@@ -277,6 +277,11 @@ begin
   Result.Measurer := Ssr;
   Result.TooltipNow := 0;
   Result.AnimNow := 0;
+  { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+  Result.DataZoomNow := 0;
+  Result.BrushNow := 0;
+  Result.ParallelExpandNow := 0;
+  Result.TimelineNow := 0;
   { [R2-E] an animated case: the chart's clock is the oracle's }
   if AAnim then Result.AnimationMode := camAlways;
   Result.SetBounds(0, 0, cW, cH);
@@ -480,6 +485,11 @@ begin
     AChart.TooltipNow := ANow;
     AChart.TooltipTick(ANow);
   end;
+  { [R7-AB] the other clocks go with it }
+  AChart.DataZoomNow := ANow;
+  AChart.BrushNow := ANow;
+  AChart.ParallelExpandNow := ANow;
+  AChart.TimelineNow := ANow;
   { [R2-E] the clips step on the oracle's clock }
   if FAnim then
   begin

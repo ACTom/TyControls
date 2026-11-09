@@ -153,10 +153,29 @@ type
     ItemSize, ItemGap: Double;
     ShowTitle: Boolean;
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     Box: TTyRawBox;
     Background, BorderColor: TTyTbColour;
     BorderWidth: Double;
+    { [R7-AF] a borderWidth of +Infinity: the box joins the group after the
+      layout (the toolbox keeps its place), the canvas refuses the width and
+      strokes at the one it had -- the paint order settles it before it is
+      drawn [was: stroked infinitely wide, the pen raised] }
+    BorderWidthInf: Boolean;
     Radius: array of Double;
+    { [R7-AK] borderRadius truthy (RectShape.r): makeBackground's path is
+      roundRect's, its far edges joined where the size is a string }
+    BorderRounded: Boolean;
+    { [R7-X] the rest of makeBackground's getItemStyle(['color',
+      'opacity']): the shadow (HasShadow) and the border's dash, phase,
+      cap, join and miterLimit (Look, TyStyleTakeBorderKeys) -- keys
+      ToolboxModel's defaults hold none of, each down to the option root's
+      top-level key [was: never drawn] }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+    Look: TTyChartElementStyle;
     Z: Integer;
     { the hover's position when the emphasis style names none }
     DefaultTextPos: string;
@@ -169,7 +188,16 @@ type
     { the group's own rect (its children's union) }
     Union: TTyXYWH;
     Background: TTyXYWH;
+    { [R7-AK] the background's size as the string the padding joined ('' a
+      number): `x + width` joins it on a path of corners }
+    BackgroundWText, BackgroundHText: string;
     ViewRect: TTyXYWH;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: positionElement's x NaN). UnplacedT: the group has a transform
+      (a coordinate not around nought), which the canvas refuses -- every
+      part in its own frame under the transform the canvas had; else none
+      -- the icons at their own places in the canvas' frame }
+    Unplaced, UnplacedT: Boolean;
   end;
 
   { A hovered title's anchor, canvas CSS px: the text's position and its
@@ -343,7 +371,9 @@ implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge,
-     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States;
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States,
+     { [R7-AI] a padding written as a string }
+     tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle;
 
 { ==================== JavaScript's arithmetic ====================
   A degenerate icon (a path with no height, say) is NaN all the way
@@ -736,9 +766,10 @@ function TyToolboxSpecOf(AOption: TTyChartOption; AIndex: Integer;
   const ATitles: TTyTbTitles; AStatus: TStrings;
   const AMagicTitle: string): TTyToolboxSpec;
 var
-  tb, feats, fm, iconMap, titleMap: TJSONObject;
+  tb, feats, fm, iconMap, titleMap, root: TJSONObject;
   d, t: TJSONData;
   i, k, n, j: Integer;
+  joinHas: Boolean;
   name, iconName, iconStr: string;
   icon: TTyTbIcon;
   defBox: TTyRawBox;
@@ -805,6 +836,15 @@ begin
   end
   else if Present(d) and NumOf(d, v) then
     for k := 0 to 3 do Result.Padding[k] := v;
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  if Present(d) then
+  begin
+    Result.PadJs := TyJsPadOf(d);
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   { the box: left 'right', top 'top', mergeLayoutParam with ignoreSize }
   defBox := Default(TTyRawBox);
   defBox.Left := TyBoxRawStr('right');
@@ -840,7 +880,15 @@ begin
   d := tb.Find('borderWidth');
   if Present(d) then NumOf(d, Result.BorderWidth) else Result.BorderWidth := 0;
   if IsNan(Result.BorderWidth) then Result.BorderWidth := 0;
+  Result.BorderWidthInf := IsInfinite(Result.BorderWidth) and (Result.BorderWidth > 0);
+  { [R7-X] the shadow and the border's keys, down to the root's }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  Result.HasShadow := TyStReadShadow([tb, root], [], [], Result.Shadow);
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [tb, root], [], False, [spkEnds, spkDash], joinHas);
   d := tb.Find('borderRadius');
+  Result.BorderRounded := TyJsTruthyOf(d);
   if d is TJSONArray then
   begin
     SetLength(Result.Radius, TJSONArray(d).Count);
@@ -1171,12 +1219,23 @@ var
   r, nr, rect, lr: TTyXYWH;
   have, hasNext, top: Boolean;
   box: TTyRawBox;
+  { [R7-AI] the place as JS holds it }
+  xv, yv: TTyRtJs;
+  { [R7-AK] the background's size as JS holds it }
+  jw, jh: TTyRtJs;
 begin
   Result := Default(TTyToolboxLayout);
   if not ASpec.Show then Exit;
+  { ([R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
+    the group draws under the transform the canvas kept -- [R7-AK] laid out:
+    Unplaced below [was: nothing]) }
   n := Length(ASpec.Icons);
   for i := 0 to n - 1 do
     ASpec.Icons[i].Rect := TyToolboxIconRect(ASpec, ASpec.Icons[i], ASpec.Icons[i].Status);
+  if ASpec.PadJs.Js then
+    Result.ViewRect := TyGetLayoutRectJs(ASpec.Box, ARef.X, ARef.Y, ARef.W, ARef.H,
+      ASpec.PadJs, xv, yv)
+  else
   Result.ViewRect := TyGetLayoutRect(ASpec.Box, ARef.X, ARef.Y, ARef.W, ARef.H,
     ASpec.Padding);
   { layout.box }
@@ -1248,14 +1307,41 @@ begin
   box := ASpec.Box;
   box.Width := TyBoxRawNum(lr.W);
   box.Height := TyBoxRawNum(lr.H);
+  { ([R7-AI] a padding held as JS values: the place joined, `layoutRect.x -
+    rect.x` its number) }
+  if ASpec.PadJs.Js then
+    r := TyGetLayoutRectJs(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.PadJs, xv, yv)
+  else
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.Padding);
   Result.GroupX := APrevX + (r.X - lr.X);
   Result.GroupY := APrevY + (r.Y - lr.Y);
+  { [R7-AK] placed at NaN: its transform refused where it has one
+    (needLocalTransform, NaN around nought) }
+  if IsNan(Result.GroupX) or IsNan(Result.GroupY) or IsInfinite(Result.GroupX)
+    or IsInfinite(Result.GroupY) then
+  begin
+    Result.Unplaced := True;
+    Result.UnplacedT := (not IsNan(Result.GroupX) and NotAroundZero(Result.GroupX))
+      or (not IsNan(Result.GroupY) and NotAroundZero(Result.GroupY));
+  end;
   { makeBackground }
   Result.Background.X := rect.X - ASpec.Padding[3];
   Result.Background.Y := rect.Y - ASpec.Padding[0];
   Result.Background.W := rect.W + ASpec.Padding[1] + ASpec.Padding[3];
   Result.Background.H := rect.H + ASpec.Padding[0] + ASpec.Padding[2];
+  { ([R7-AI] its size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    jw := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.W), TyJsPadV(ASpec.PadJs, 1)),
+      TyJsPadV(ASpec.PadJs, 3));
+    jh := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.H), TyJsPadV(ASpec.PadJs, 0)),
+      TyJsPadV(ASpec.PadJs, 2));
+    Result.Background.W := jw.N;
+    Result.Background.H := jh.N;
+    { ([R7-AK] and the strings, for a path of corners) }
+    if jw.IsStr then Result.BackgroundWText := jw.S;
+    if jh.IsStr then Result.BackgroundHText := jh.S;
+  end;
   { the titles kept on the canvas }
   for i := 0 to n - 1 do
   begin

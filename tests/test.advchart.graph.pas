@@ -51,7 +51,7 @@ type
     procedure TestAWrittenCurvenessTableIsNeverPadded;
     procedure TestAnEdgesOwnCurvenessBeatsTheSeries;
     procedure TestTheBuilderTrimsByTheNodesAveragedRadius;
-    procedure TestOnlyTheLineAndTheNodesTakeThePointer;
+    procedure TestTheArrowheadsTakeThePointerAsTheirEdge;
     procedure TestABoxWrittenFromTheFarSideIsStillCentred;
     procedure TestTheRingIsLaidOutInDataSpaceAndCarriedThroughTheMap;
     procedure TestACurvedEdgeIsTrimmedAlongItsOwnCurve;
@@ -1188,7 +1188,7 @@ begin
   end;
 end;
 
-procedure TAdvChartGraphRuleTest.TestOnlyTheLineAndTheNodesTakeThePointer;
+procedure TAdvChartGraphRuleTest.TestTheArrowheadsTakeThePointerAsTheirEdge;
 var
   view: TTyGraphView;
   nodes: TTyGraphNodeArray;
@@ -1198,8 +1198,11 @@ var
   s: TTyGraphSpec;
   i, hittable: Integer;
 begin
-  { AN ARROWHEAD IS PART OF THE LINE'S PICTURE, not a second thing to point at:
-    two hittable things for one edge report it twice. }
+  { [R7-O] AN ARROWHEAD TAKES THE POINTER AS ITS EDGE: setItemGraphicEl writes
+    the edge's ECData onto every child of the Line group and none is silent
+    (hit-stroke.js r7o.graph-ends) -- a hover on it is a hover on the edge.
+    [Was: silent, "two hittable things for one edge report it twice"; the
+    datum is the same one, so nothing is reported twice.] }
   s := SpecOf(',"edgeSymbol":["arrow","arrow"],"symbolSize":10');
   SetLength(nodes, 2);
   nodes[0] := Default(TTyGraphNode);
@@ -1222,8 +1225,14 @@ begin
     hittable := 0;
     for i := 0 to list.Count - 1 do
       if not list.Element(i).Silent then Inc(hittable);
-    AssertEquals('and three of the five answer the pointer', 3, hittable);
+    AssertEquals('and all five answer the pointer', 5, hittable);
     AssertFalse('the line is one of them', list.Element(0).Silent);
+    for i := 1 to 2 do
+    begin
+      AssertTrue('an arrowhead is the edge''s', list.Element(i).Datum.IsEdge);
+      AssertEquals('the same edge', list.Element(0).Datum.DataIndex,
+        list.Element(i).Datum.DataIndex);
+    end;
 
     { AND A NODE IS DRAWN ABOVE ITS OWN EDGES. They share a z and the list
       breaks the tie by insertion, so saying it out loud is what keeps it true

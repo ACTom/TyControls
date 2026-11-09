@@ -59,6 +59,10 @@ function TyRtGlobalOf(ARoot: TJSONObject; const AFontFamily: string;
   before paying for the resolution. }
 function TyRtNodeWantsBlock(ANode: TJSONObject): Boolean;
 
+{ [R7-AF] whether a text style writes its halo (textBorderColor, not null):
+  a site whose one run draws none (a legend's items) takes the block then }
+function TyRtNodeWritesHalo(ANode: TJSONObject): Boolean;
+
 { THE STYLES FROM A MODEL CHAIN, the most specific node first (an item's
   label, its series' label, ...). Nil nodes are skipped. The block's font is
   NOT set -- the site's is final and comes in through TyRtFinish. }
@@ -95,6 +99,31 @@ function TyRtLay(const AText: string; const ABlock: TTyRtBlockStyle;
 function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+
+{ [R7-H] THE PIECES OF A TEXT UPSTREAM PLACES BY ITS STYLE'S x / y (a
+  gauge's words: `createTextStyle(model, {x, y, ...})`), laid out at that
+  place (AHangX / AHangY, CSS px) and moved back to hang about it. zrender
+  joins a size written as a string to the place it lays the box out at
+  (x + '600'), so the place is upstream's, not (0, 0). A style with no such
+  size is TyRtLay's. }
+function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+
+{ [R7-M] the pieces moved by (ADX, ADY) CSS px, their joined edges with
+  them: a block laid out about one point and hung about another }
+procedure TyRtShiftPieces(var APieces: TTyRtPieceArray; ADX, ADY: Double);
+
+{ [R7-L] TyRtLay's text as zrender bounds it before anything at NaN is
+  dropped (TyRtLayoutJsBox), in CSS px: NaN where upstream's box is NaN. }
+function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+{ [R7-AK] the same text's TSpans laid out at NaN, as the pointer finds them
+  (TyRtLayoutNanSpans), CSS px }
+function TyRtLayNanSpans(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
 
 { THE BOX THE PIECES OCCUPY in their own frame: zrender's Text
   getBoundingRect, the union of every child -- an undrawn rect included, a
@@ -140,14 +169,131 @@ type
       AV: TTyTextAnchorV): TTyRectF;
   end;
 
+  { [R7-L] THE BOX OF A TEXT ITS STYLE PLACES AT (AHangX, AHangY) CSS px
+    (TyRtLayHung) -- a legend item's words at x: textX, y: itemHeight / 2 --
+    relative to that place, in device px: a size written as a numeric string
+    joins that place, not 0. }
+  ITyTextHungBoxMeasurer = interface
+    ['{8D41F3A6-2B95-4E07-A1C8-6F3E92B05D17}']
+    function MeasureBoxHung(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
+  end;
+
+  { [R7-L] THE BOX zrender's union gives the text (TyRtLayJsBox), hung by
+    AH / AV about (0, 0), in device px -- NaN where upstream's is. True
+    when the block holds a size written as a string, the only case it can
+    differ from MeasureBox's in more than the last bit. }
+  ITyTextJsBoxMeasurer = interface
+    ['{5C2E8A14-9B37-4D61-8F0A-2E7B4C9D1A53}']
+    function MeasureJsBox(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
+  end;
+
 { [F4c] a textBorderType (or a graphic text's lineDash) as written: a word
   as itself, a number or an array as its JSON text, anything else '' }
 function TyDashTextOf(AData: TJSONData): string;
 
+{ [R7-H] A TEXT'S WIDTH, HEIGHT AND LINE HEIGHT AS WRITTEN (nil or null: not
+  written), into the style zrender receives: a number as it is, a STRING as
+  the string (TTyRtStyle.WidthIsText) -- zrender is handed the option's
+  value and does JS arithmetic with it. A width string ending in '%' is a
+  token's percentage, 'auto' a token's unwritten width, any other a written
+  width that is no number (rtwText); on a block every string is a string. }
+procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
+procedure TyRtTakeHeight(AData: TJSONData; var S: TTyRtStyle);
+procedure TyRtTakeLineHeight(AData: TJSONData; var S: TTyRtStyle);
+
+{ [R7-AF] JAVASCRIPT'S `A + AText` READ BACK AS ITS NUMBER, AText a string:
+  the digits of A joined to it (24 + '3' is '243', 243). zrender grows a
+  TSpan's rect by its lineWidth -- `rect.width += lineWidth` -- and one
+  written as a string joins it. }
+function TyRtJoinedNum(A: Double; const AText: string): Double;
+
+{ [R7-AF] A TEXT BORDER'S WIDTH AS WRITTEN (textBorderWidth; nil or null:
+  False, not written): a number as it is (one that is no finite number
+  nought); a STRING as the canvas takes it -- its Number, nought where that
+  is none or not above nought, AInf where it is +Infinity (the width the
+  canvas had; AW nought) -- and itself in AText where it strokes, the
+  rect's arithmetic joins it; a boolean its number. }
+function TyRtTakeLineWidth(AData: TJSONData; out AW: Double; out AText: string;
+  out AInf: Boolean): Boolean;
+
+{ [R7-AI] A TEXT'S PADDING AS WRITTEN (nil or null: not written), into the
+  style zrender receives after normalizeCssArray (normalizeTextStyle): a
+  falsy value (0, '', false) no padding; a number all four sides; an array
+  or a STRING by its items or characters -- two or three spread as CSS
+  does, any other length taken as it is, a side it has none for undefined
+  ('4', [4], [] and true leave three or four sides undefined); an item that
+  is no number a JS value (TTyRtStyle.PaddingKind). }
+procedure TyRtTakePadding(AData: TJSONData; var S: TTyRtStyle);
+
+{ [R7-AI] JavaScript's `padding[A] + padding[B]` of a style's padding as
+  its Number (nought without one): '2' + '2' is '22', 22; a side undefined
+  NaN }
+function TyRtPadSum(const S: TTyRtStyle; A, B: Integer): Double;
+
+{ [R7-AI] A COMPONENT'S PADDING AS WRITTEN (not nil or null): getLayoutRect's
+  `normalizeCssArray(padding || 0)` -- a falsy value four noughts, else as
+  TyRtTakePadding takes a text's }
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+{ [R7-AI] a side of it is undefined }
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText;
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText,
+     tyControls.AdvanceChart.Data,
+     { [R7-AF] JavaScript's String of a number }
+     tyControls.AdvanceChart.Scale;
+
+function TyRtJoinedNum(A: Double; const AText: string): Double;
+begin
+  Result := TyJsToNumber(TyJsNumberToString(A) + AText);
+end;
+
+function TyRtTakeLineWidth(AData: TJSONData; out AW: Double; out AText: string;
+  out AInf: Boolean): Boolean;
+var n: Double;
+begin
+  AW := 0;
+  AText := '';
+  AInf := False;
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber:
+      begin
+        Result := True;
+        AW := AData.AsFloat;
+        if IsNan(AW) or IsInfinite(AW) then AW := 0;
+      end;
+    jtString:
+      begin
+        Result := True;
+        n := TyJsToNumber(AData.AsString);
+        if IsNan(n) then Exit;
+        if IsInfinite(n) then
+        begin
+          if n > 0 then
+          begin
+            AInf := True;
+            AText := AData.AsString;
+          end;
+          Exit;
+        end;
+        AW := n;
+        if n > 0 then AText := AData.AsString;
+      end;
+    jtBoolean:
+      begin
+        Result := True;
+        AW := Ord(AData.AsBoolean);
+      end;
+  end;
+end;
 
 function TyRtResolveOpt(AAttached: Boolean; ADisableBox: Boolean): TTyRtResolveOpt;
 begin
@@ -194,6 +340,99 @@ begin
   if Result then AV := A.AsFloat else AV := 0;
 end;
 
+{ [R7-AB] A TEXT SHADOW PART as Text.ts hands it on and the canvas takes it
+  (`dpr * (value || 0)`): written unless null; a number; a string its
+  Number ('' nought, falsy); one whose Number is no finite number refused
+  -- ALeft's bit (AV nought), and 8 with it for a blur above nought (an
+  infinity: `'Infinity' > 0`, the span casts one) [was: a JSON number only,
+  a string not written] }
+function ShadowPartOf(A: TJSONData; ABit: Byte; out AV: Double; var ALeft: Byte): Boolean;
+var n: Double;
+begin
+  AV := 0;
+  ALeft := ALeft and not ABit;
+  if ABit = 1 then ALeft := ALeft and not 8;
+  Result := (A <> nil) and (A.JSONType <> jtNull);
+  if not Result then Exit;
+  if A.JSONType = jtNumber then
+  begin
+    AV := A.AsFloat;
+    Exit;
+  end;
+  if (A.JSONType = jtString) and (A.AsString = '') then Exit;
+  n := TyOptJsNumber(A);
+  if not (IsNan(n) or IsInfinite(n)) then
+  begin
+    AV := n;
+    Exit;
+  end;
+  { (an object or an array of no number is truthy as well) }
+  ALeft := ALeft or ABit;
+  if (ABit = 1) and not IsNan(n) and (n > 0) then ALeft := ALeft or 8;
+end;
+
+procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
+var t: string;
+begin
+  if NumOf(AData, S.Width) then
+  begin
+    S.WidthKind := rtwNumber;
+    Exit;
+  end;
+  S.Width := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  t := AData.AsString;
+  S.WidthIsText := True;
+  S.WidthText := t;
+  { parseText.ts: a token's `charAt(length - 1) === '%'`, its width
+    `=== 'auto'` -- as written, no trimming [was: trimmed, and a string that
+    was neither a percentage nor 'auto' read as a number or not at all] }
+  if (t <> '') and (t[Length(t)] = '%') then
+  begin
+    S.WidthKind := rtwPercent;
+    { parsePercent's parseFloat (a wrap); the pending pass takes parseInt
+      of the text }
+    S.Width := TyJsParseFloat(t);
+  end
+  else if t = 'auto' then
+    S.WidthKind := rtwAuto
+  else
+  begin
+    S.WidthKind := rtwText;
+    S.Width := TyJsToNumber(t);
+  end;
+end;
+
+procedure TyRtTakeHeight(AData: TJSONData; var S: TTyRtStyle);
+begin
+  if NumOf(AData, S.Height) then
+  begin
+    S.HasHeight := True;
+    Exit;
+  end;
+  S.Height := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  S.HasHeight := True;
+  S.HeightIsText := True;
+  S.HeightText := AData.AsString;
+  S.Height := TyJsToNumber(S.HeightText);
+end;
+
+procedure TyRtTakeLineHeight(AData: TJSONData; var S: TTyRtStyle);
+begin
+  if NumOf(AData, S.LineHeight) then
+  begin
+    S.HasLineHeight := True;
+    Exit;
+  end;
+  S.LineHeight := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  S.HasLineHeight := True;
+  S.LineHeightIsText := True;
+  S.LineHeightText := AData.AsString;
+  S.LineHeight := TyJsToNumber(S.LineHeightText);
+end;
+
 function StrOf(A: TJSONData): string;
 begin
   if (A <> nil) and (A.JSONType = jtString) then Result := A.AsString
@@ -219,6 +458,20 @@ begin
   else Result := crNone_;
 end;
 
+{ [R7-Z] A TEXT'S FILL OR STROKE: a string no parser reads (not a callback)
+  goes to the canvas, which refuses it and keeps what it had --
+  cTyCanvasColourLeft, settled in paint order [was: 'none', not drawn] }
+function ColourReadText(A: TJSONData; out AC: TTyChartColor): TColourRead;
+begin
+  Result := ColourRead(A, AC);
+  if (Result = crNone_) and (A.AsString <> 'none') and (A.AsString <> 'transparent')
+    and not TyColourIsHandler(A.AsString) then
+  begin
+    AC := cTyCanvasColourLeft;
+    Result := crColour;
+  end;
+end;
+
 { zrender's parseFontSize and the SSR measure's reading of it: a number is
   px, '14' and '14px' are 14, anything else 12 }
 function FontPxOf(A: TJSONData): Double;
@@ -226,32 +479,187 @@ begin
   Result := TyFontPxOf(TyOptFontSize(A, TyFontSizeFromPx(12)));
 end;
 
-procedure SpreadPadding(A: TJSONData; var S: TTyRtStyle);
-var
-  v: array[0..3] of Double;
-  n, k: Integer;
-  x: Double;
+{ [R7-AI] String(v) of a JSON item, and whether it is a JS string in `+`
+  (a string, or an array or object, whose primitive is its text) }
+function PadItemText(A: TJSONData): string;
+var i: Integer;
 begin
-  if A = nil then Exit;
-  if NumOf(A, x) then
+  case A.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtString: Result := A.AsString;
+    jtArray:
+      begin
+        { Array.prototype.join(','): null and undefined print as nothing }
+        Result := '';
+        for i := 0 to A.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          if A.Items[i].JSONType <> jtNull then Result := Result + PadItemText(A.Items[i]);
+        end;
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+{ one side, as a JS value (nil: undefined) }
+procedure PadSide(var S: TTyRtStyle; K: Integer; A: TJSONData);
+begin
+  S.PaddingText[K] := '';
+  if A = nil then
   begin
-    for k := 0 to 3 do S.Padding[k] := x;
-    S.HasPadding := True;
+    S.PaddingKind[K] := cTyPadUndef;
+    S.Padding[K] := NaN;
     Exit;
   end;
-  if A.JSONType <> jtArray then Exit;
-  n := A.Count;
-  if n = 0 then Exit;
-  for k := 0 to 3 do v[k] := 0;
-  for k := 0 to Min(n, 4) - 1 do NumOf(A.Items[k], v[k]);
-  { normalizeCssArray: [a] -> a four times, [v, h], [t, h, b] }
-  case n of
-    1: begin v[1] := v[0]; v[2] := v[0]; v[3] := v[0]; end;
-    2: begin v[2] := v[0]; v[3] := v[1]; end;
-    3: v[3] := v[1];
+  case A.JSONType of
+    jtNumber:
+      begin
+        S.PaddingKind[K] := cTyPadNum;
+        S.Padding[K] := A.AsFloat;
+      end;
+    jtNull:
+      begin
+        S.PaddingKind[K] := cTyPadNull;
+        S.Padding[K] := 0;
+      end;
+    jtBoolean:
+      if A.AsBoolean then
+      begin
+        S.PaddingKind[K] := cTyPadTrue;
+        S.Padding[K] := 1;
+      end
+      else
+      begin
+        S.PaddingKind[K] := cTyPadFalse;
+        S.Padding[K] := 0;
+      end;
+  else
+    begin
+      S.PaddingKind[K] := cTyPadStr;
+      S.PaddingText[K] := PadItemText(A);
+      S.Padding[K] := TyJsToNumber(S.PaddingText[K]);
+    end;
   end;
-  for k := 0 to 3 do S.Padding[k] := v[k];
+end;
+
+procedure TyRtTakePadding(AData: TJSONData; var S: TTyRtStyle);
+var
+  u: UnicodeString;
+  n, k: Integer;
+  src: array[0..3] of Integer;
+  ch: array[0..3] of TJSONString;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  S.HasPadding := False;
+  S.PaddingJs := False;
+  for k := 0 to 3 do
+  begin
+    S.Padding[k] := 0;
+    S.PaddingKind[k] := cTyPadNum;
+    S.PaddingText[k] := '';
+  end;
+  { `if (textPadding)`: a falsy padding is none (parseText's `padding ? ...
+    : 0`) }
+  case AData.JSONType of
+    jtNumber: if (AData.AsFloat = 0) or IsNan(AData.AsFloat) then Exit;
+    jtString: if AData.AsString = '' then Exit;
+    jtBoolean: if not AData.AsBoolean then Exit;
+  end;
   S.HasPadding := True;
+  if AData.JSONType = jtNumber then
+  begin
+    for k := 0 to 3 do S.Padding[k] := AData.AsFloat;
+    Exit;
+  end;
+  { normalizeCssArray: the length's two and three spread, any other taken as
+    it is (val[k] undefined past its end) }
+  for k := 0 to 3 do src[k] := k;
+  if AData.JSONType = jtString then
+  begin
+    u := UTF8Decode(AData.AsString);
+    n := Length(u);
+  end
+  else if AData.JSONType = jtArray then
+    n := AData.Count
+  else
+    n := -1;
+  if n = 2 then
+  begin
+    src[2] := 0;
+    src[3] := 1;
+  end
+  else if n = 3 then
+    src[3] := 1;
+  for k := 0 to 3 do ch[k] := nil;
+  try
+    for k := 0 to 3 do
+      case AData.JSONType of
+        jtString:
+          if src[k] < n then
+          begin
+            ch[k] := TJSONString.Create(UTF8Encode(Copy(u, src[k] + 1, 1)));
+            PadSide(S, k, ch[k]);
+          end
+          else
+            PadSide(S, k, nil);
+        jtArray:
+          if src[k] < n then PadSide(S, k, AData.Items[src[k]])
+          else PadSide(S, k, nil);
+        jtObject:
+          PadSide(S, k, TJSONObject(AData).Find(IntToStr(k)));
+      else
+        { true: a boolean has no length and no items }
+        PadSide(S, k, nil);
+      end;
+  finally
+    for k := 0 to 3 do ch[k].Free;
+  end;
+  for k := 0 to 3 do
+    if S.PaddingKind[k] <> cTyPadNum then S.PaddingJs := True;
+end;
+
+function TyRtPadSum(const S: TTyRtStyle; A, B: Integer): Double;
+begin
+  if not S.HasPadding then Exit(0);
+  if not S.PaddingJs then Exit(S.Padding[A] + S.Padding[B]);
+  Result := TyRtPadJoin(S, A, B).N;
+end;
+
+function TyJsPadOf(AData: TJSONData): TTyJsPad;
+var
+  s: TTyRtStyle;
+  k: Integer;
+begin
+  Result := Default(TTyJsPad);
+  s := Default(TTyRtStyle);
+  TyRtTakePadding(AData, s);
+  if not s.HasPadding then Exit;
+  Result.Js := s.PaddingJs;
+  for k := 0 to 3 do
+  begin
+    Result.Kind[k] := s.PaddingKind[k];
+    Result.Num[k] := s.Padding[k];
+    Result.Text[k] := s.PaddingText[k];
+  end;
+end;
+
+function TyJsPadUndef(const APad: TTyJsPad): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to 3 do
+    if APad.Kind[k] = cTyPadUndef then Exit(True);
+end;
+
+procedure SpreadPadding(A: TJSONData; var S: TTyRtStyle);
+begin
+  { [R7-AI] as zrender holds it [was: a number, or an array of numbers
+    spread as CSS does -- one of one item to all four sides, a string or an
+    item that is no number nought] }
+  TyRtTakePadding(A, S);
 end;
 
 procedure SpreadRadius(A: TJSONData; var S: TTyRtStyle);
@@ -264,11 +672,15 @@ begin
   if NumOf(A, x) then
   begin
     for k := 0 to 3 do S.Radius[k] := x;
+    { [R7-L] `shape.r` truthy: not nought, not NaN }
+    S.RadiusTruthy := (x <> 0) and not IsNan(x);
     Exit;
   end;
   if A.JSONType <> jtArray then Exit;
   n := A.Count;
   if n = 0 then Exit;
+  { [R7-L] an array is truthy whatever it holds }
+  S.RadiusTruthy := True;
   for k := 0 to 3 do v[k] := 0;
   for k := 0 to Min(n, 4) - 1 do NumOf(A.Items[k], v[k]);
   { roundRect.ts: the CSS spread of fewer than four }
@@ -315,16 +727,17 @@ begin
   d := ARoot.Find('textStyle');
   if not (d is TJSONObject) then Exit;
   ts := TJSONObject(d);
-  if ColourRead(ts.Find('color'), c) = crColour then
+  if ColourReadText(ts.Find('color'), c) = crColour then
   begin
     Result.HasColour := True;
     Result.Colour := c;
   end;
-  case ColourRead(ts.Find('textBorderColor'), c) of
+  case ColourReadText(ts.Find('textBorderColor'), c) of
     crColour: begin Result.HasStroke := True; Result.Stroke := c; end;
     crNone_: begin Result.HasStroke := True; Result.StrokeNone := True; end;
   end;
-  if NumOf(ts.Find('textBorderWidth'), x) then
+  { ([R7-AF] a string as the canvas takes it [was: a number only]) }
+  if TyRtTakeLineWidth(ts.Find('textBorderWidth'), x, Result.LineWidthText, Result.LineWidthInf) then
   begin
     Result.HasLineWidth := True;
     Result.LineWidth := x;
@@ -341,14 +754,24 @@ begin
     Result.HasOpacity := True;
     Result.Opacity := x;
   end;
-  if ColourRead(ts.Find('textShadowColor'), c) = crColour then
+  { [R7-AA] a colour no parser reads too: the canvas keeps the shadowColor
+    it had (the run settles cTyCanvasColourLeft) [was: none] }
+  if ColourReadText(ts.Find('textShadowColor'), c) = crColour then
   begin
     Result.HasShadowColor := True;
     Result.ShadowColor := c;
   end;
-  NumOf(ts.Find('textShadowBlur'), Result.ShadowBlur);
-  NumOf(ts.Find('textShadowOffsetX'), Result.ShadowOffsetX);
-  NumOf(ts.Find('textShadowOffsetY'), Result.ShadowOffsetY);
+  { [R7-AB] as the canvas takes them (a string its Number, refused where
+    that is none) }
+  ShadowPartOf(ts.Find('textShadowBlur'), 1, Result.ShadowBlur, Result.ShadowLeft);
+  ShadowPartOf(ts.Find('textShadowOffsetX'), 2, Result.ShadowOffsetX, Result.ShadowLeft);
+  ShadowPartOf(ts.Find('textShadowOffsetY'), 4, Result.ShadowOffsetY, Result.ShadowLeft);
+end;
+
+function TyRtNodeWritesHalo(ANode: TJSONObject): Boolean;
+begin
+  Result := (ANode <> nil) and (ANode.Find('textBorderColor') <> nil)
+    and (ANode.Find('textBorderColor').JSONType <> jtNull);
 end;
 
 function TyRtNodeWantsBlock(ANode: TJSONObject): Boolean;
@@ -395,7 +818,7 @@ begin
   plainToo := AHasPlain and AInherit;
   { the fill: own, 'inherit' the site's; a free text's falls to the root
     colour, then (normal state) to the inherit colour }
-  case ColourRead(Get(AOwn, 'color'), c) of
+  case ColourReadText(Get(AOwn, 'color'), c) of
     crColour: begin S.HasFill := True; S.Fill := c; end;
     crNone_: begin S.HasFill := True; S.FillNone := True; end;
     crInherit: S.FillInherit := True;
@@ -410,7 +833,7 @@ begin
     else
       S.FillInherit := True;
   end;
-  case ColourRead(Get(AOwn, 'textBorderColor'), c) of
+  case ColourReadText(Get(AOwn, 'textBorderColor'), c) of
     crColour: begin S.HasStroke := True; S.Stroke := c; end;
     crNone_: begin S.HasStroke := True; S.StrokeNone := True; end;
     crInherit: S.StrokeInherit := True;
@@ -422,7 +845,9 @@ begin
     S.StrokeNone := AGlobal.StrokeNone;
     S.Stroke := AGlobal.Stroke;
   end;
-  if NumOf(Get(AOwn, 'textBorderWidth'), x) then
+  { ([R7-AF] a string as the canvas takes it, kept for the rect's
+    arithmetic [was: a number only, a string not written]) }
+  if TyRtTakeLineWidth(Get(AOwn, 'textBorderWidth'), x, S.LineWidthText, S.LineWidthInf) then
   begin
     S.HasLineWidth := True;
     S.LineWidth := x;
@@ -431,6 +856,8 @@ begin
   begin
     S.HasLineWidth := True;
     S.LineWidth := AGlobal.LineWidth;
+    S.LineWidthText := AGlobal.LineWidthText;
+    S.LineWidthInf := AGlobal.LineWidthInf;
   end;
   { textBorderType: retrieve2(the style's own, the global's) [F4c] }
   S.LineDash := TyDashTextOf(Get(AOwn, 'textBorderType'));
@@ -488,7 +915,14 @@ begin
       S.FontItalic := TyFontStyleIsItalic(d.AsString);
     end;
   end;
-  if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
+  { [R7-AB] the parts the canvas' font parser refuses (a rich style's own; a
+    block's, the site's font node's) }
+  S.FontLeft := 0;
+  if TyCssFontRefused(Get(AOwn, 'fontStyle'), nil, nil) then S.FontLeft := S.FontLeft or 1;
+  if TyCssFontRefused(nil, Get(AOwn, 'fontWeight'), nil) then S.FontLeft := S.FontLeft or 2;
+  if TyCssFontRefused(nil, nil, Get(AOwn, 'fontSize')) then S.FontLeft := S.FontLeft or 4;
+  { [R7-AA] (a refused one the canvas' own) }
+  if ColourReadText(WithGlobal('textShadowColor'), c) = crColour then
   begin
     S.HasShadowColor := True;
     S.ShadowColor := c;
@@ -498,45 +932,34 @@ begin
     S.HasShadowColor := True;
     S.ShadowColor := AGlobal.ShadowColor;
   end;
-  if not NumOf(WithGlobal('textShadowBlur'), S.ShadowBlur) then
+  { [R7-AB] as the canvas takes them (ShadowPartOf) [was: a JSON number
+    only, else the global's] }
+  if not ShadowPartOf(WithGlobal('textShadowBlur'), 1, S.ShadowBlur, S.ShadowLeft) then
+  begin
     S.ShadowBlur := AGlobal.ShadowBlur;
-  if not NumOf(WithGlobal('textShadowOffsetX'), S.ShadowOffsetX) then
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 9);
+  end;
+  if not ShadowPartOf(WithGlobal('textShadowOffsetX'), 2, S.ShadowOffsetX, S.ShadowLeft) then
+  begin
     S.ShadowOffsetX := AGlobal.ShadowOffsetX;
-  if not NumOf(WithGlobal('textShadowOffsetY'), S.ShadowOffsetY) then
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 2);
+  end;
+  if not ShadowPartOf(WithGlobal('textShadowOffsetY'), 4, S.ShadowOffsetY, S.ShadowLeft) then
+  begin
     S.ShadowOffsetY := AGlobal.ShadowOffsetY;
+    S.ShadowLeft := S.ShadowLeft or (AGlobal.ShadowLeft and 4);
+  end;
 
   { TEXT_PROPS_SELF }
   S.Align := AlignOfWord(StrOf(Get(AOwn, 'align')));
   d := Get(AOwn, 'verticalAlign');
   if d = nil then d := Get(AOwn, 'baseline');
   S.VAlign := VAlignOfWord(StrOf(d));
-  if NumOf(Get(AOwn, 'lineHeight'), x) then
-  begin
-    S.HasLineHeight := True;
-    S.LineHeight := x;
-  end;
-  d := Get(AOwn, 'width');
-  if NumOf(d, x) then
-  begin
-    S.WidthKind := rtwNumber;
-    S.Width := x;
-  end
-  else if (d <> nil) and (d.JSONType = jtString) then
-  begin
-    s_ := Trim(d.AsString);
-    if s_ = 'auto' then S.WidthKind := rtwAuto
-    else if (s_ <> '') and (s_[Length(s_)] = '%')
-      and TryStrToFloat(Copy(s_, 1, Length(s_) - 1), x, fs) then
-    begin
-      S.WidthKind := rtwPercent;
-      S.Width := x;
-    end;
-  end;
-  if NumOf(Get(AOwn, 'height'), x) then
-  begin
-    S.HasHeight := True;
-    S.Height := x;
-  end;
+  { [R7-H] as written: a string stays a string (TyRtTakeWidth) [was: a
+    string read as a number only when it was a percentage, else dropped] }
+  TyRtTakeLineHeight(Get(AOwn, 'lineHeight'), S);
+  TyRtTakeWidth(Get(AOwn, 'width'), S);
+  TyRtTakeHeight(Get(AOwn, 'height'), S);
   d := Get(AOwn, 'ellipsis');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
@@ -548,7 +971,34 @@ begin
   if not (AIsBlock and AOpt.DisableBox) then
   begin
     SpreadPadding(Get(AOwn, 'padding'), S);
-    if NumOf(Get(AOwn, 'borderWidth'), x) then S.BorderWidth := x;
+    if NumOf(Get(AOwn, 'borderWidth'), x) then
+    begin
+      S.BorderWidth := x;
+      S.BorderWidthInf := False;
+      S.BorderWidthWord := False;
+    end
+    else if TyOptIsPosInf(Get(AOwn, 'borderWidth')) then
+      S.BorderWidthInf := True
+    { [R7-AF] A STRING (not empty): its Number -- the canvas' lineWidth and
+      the rect's bounds take it through a product or a division, so '2' is
+      2; one that strokes nothing ('0', 'abc') is truthy all the same, and
+      the box's rect is made [was: not written] }
+    else if (Get(AOwn, 'borderWidth') <> nil) and (Get(AOwn, 'borderWidth').JSONType = jtString)
+      and (Get(AOwn, 'borderWidth').AsString <> '') then
+    begin
+      x := TyJsToNumber(Get(AOwn, 'borderWidth').AsString);
+      S.BorderWidthInf := False;
+      if not IsNan(x) and not IsInfinite(x) and (x > 0) then
+      begin
+        S.BorderWidth := x;
+        S.BorderWidthWord := False;
+      end
+      else
+      begin
+        S.BorderWidth := 0;
+        S.BorderWidthWord := True;
+      end;
+    end;
     SpreadRadius(Get(AOwn, 'borderRadius'), S);
     { [R2-F] backgroundColor: {image: src}: a picture (isImageBg) }
     d := Get(AOwn, 'backgroundColor');
@@ -557,11 +1007,14 @@ begin
       and (TJSONObject(d).Find('image').AsString <> '') then
       S.BgImage := TJSONObject(d).Find('image').AsString
     else
-      case ColourRead(d, c) of
+      { ([R7-AC] a colour no parser reads: the box's Rect is filled /
+        stroked all the same, in what the canvas had -- ColourReadText
+        [was: none]) }
+      case ColourReadText(d, c) of
         crColour: begin S.HasBackground := True; S.Background := c; end;
         crInherit: S.BackgroundInherit := True;
       end;
-    case ColourRead(Get(AOwn, 'borderColor'), c) of
+    case ColourReadText(Get(AOwn, 'borderColor'), c) of
       crColour: begin S.HasBorderColor := True; S.BorderColor := c; end;
       crInherit: S.BorderColorInherit := True;
     end;
@@ -574,7 +1027,7 @@ begin
     if NumOf(Get(AOwn, 'shadowBlur'), x) then S.BoxShadowBlur := x;
     if NumOf(Get(AOwn, 'shadowOffsetX'), x) then S.BoxShadowOffsetX := x;
     if NumOf(Get(AOwn, 'shadowOffsetY'), x) then S.BoxShadowOffsetY := x;
-    if ColourRead(Get(AOwn, 'shadowColor'), c) = crColour then
+    if ColourReadText(Get(AOwn, 'shadowColor'), c) = crColour then
     begin
       S.HasBoxShadowColor := True;
       S.BoxShadowColor := c;
@@ -739,6 +1192,13 @@ begin
   for k := 0 to High(ABlock.Rich) do
   begin
     s := ABlock.Rich[k].Style;
+    { [R7-AB] a part it takes from the block takes the block's refusal too }
+    if ABlock.InheritPlain then
+    begin
+      if not s.OwnFontStyle then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 1);
+      if not s.OwnFontWeight then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 2);
+      if not s.OwnFontSize then s.FontLeft := s.FontLeft or (ABlock.Style.FontLeft and 4);
+    end;
     if not s.OwnFontFamily then
       if ABlock.InheritPlain then s.FontFamily := AFamily
       else s.FontFamily := gfam;
@@ -842,6 +1302,84 @@ begin
     0, 0, m).Pieces;
 end;
 
+function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+var m: ITyTextMeasurer;
+begin
+  Result := TyXYWH(0, 0, 0, 0);
+  if AMeasurer = nil then Exit;
+  if (AScale > 0) and (Abs(AScale - 1) > 1e-12) then
+    m := TScaledMeasurer.Create(AMeasurer, AScale)
+  else
+    m := AMeasurer;
+  Result := TyRtLayoutJsBox(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
+    ADefault, 0, 0, m);
+end;
+
+function TyRtLayNanSpans(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
+var m: ITyTextMeasurer;
+begin
+  Result := nil;
+  if AMeasurer = nil then Exit;
+  if (AScale > 0) and (Abs(AScale - 1) > 1e-12) then
+    m := TScaledMeasurer.Create(AMeasurer, AScale)
+  else
+    m := AMeasurer;
+  Result := TyRtLayoutNanSpans(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
+    ADefault, 0, 0, m);
+end;
+
+procedure TyRtShiftPieces(var APieces: TTyRtPieceArray; ADX, ADY: Double);
+var k: Integer;
+begin
+  if (ADX = 0) and (ADY = 0) then Exit;
+  for k := 0 to High(APieces) do
+  begin
+    APieces[k].X := APieces[k].X + ADX;
+    APieces[k].Y := APieces[k].Y + ADY;
+    APieces[k].EdgeX1 := APieces[k].EdgeX1 + ADX;
+    APieces[k].EdgeY1 := APieces[k].EdgeY1 + ADY;
+    { ([R7-AI] the joined corners and the pointer's rect with them) }
+    APieces[k].EdgeXR1 := APieces[k].EdgeXR1 + ADX;
+    APieces[k].EdgeXR4 := APieces[k].EdgeXR4 + ADX;
+    APieces[k].EdgeXMin := APieces[k].EdgeXMin + ADX;
+    APieces[k].EdgeXMax := APieces[k].EdgeXMax + ADX;
+    APieces[k].HitL := APieces[k].HitL + ADX;
+    APieces[k].HitR := APieces[k].HitR + ADX;
+    APieces[k].HitT := APieces[k].HitT + ADY;
+    APieces[k].HitB := APieces[k].HitB + ADY;
+  end;
+end;
+
+function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var k: Integer;
+begin
+  if not TyRtHasStringSize(ABlock.Style, ABlock.Rich) then
+    Exit(TyRtLay(AText, ABlock, ADefault, AScale, AMeasurer));
+  Result := TyRtLayAt(AText, ABlock, ADefault, AHangX, AHangY, AScale, AMeasurer);
+  for k := 0 to High(Result) do
+  begin
+    Result[k].X := Result[k].X - AHangX;
+    Result[k].Y := Result[k].Y - AHangY;
+    Result[k].EdgeX1 := Result[k].EdgeX1 - AHangX;
+    Result[k].EdgeY1 := Result[k].EdgeY1 - AHangY;
+    { ([R7-AI] as TyRtShiftPieces) }
+    Result[k].EdgeXR1 := Result[k].EdgeXR1 - AHangX;
+    Result[k].EdgeXR4 := Result[k].EdgeXR4 - AHangX;
+    Result[k].EdgeXMin := Result[k].EdgeXMin - AHangX;
+    Result[k].EdgeXMax := Result[k].EdgeXMax - AHangX;
+    Result[k].HitL := Result[k].HitL - AHangX;
+    Result[k].HitR := Result[k].HitR - AHangX;
+    Result[k].HitT := Result[k].HitT - AHangY;
+    Result[k].HitB := Result[k].HitB - AHangY;
+  end;
+end;
+
 function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
@@ -870,7 +1408,7 @@ end;
 function TyRtBounds(const APieces: TTyRtPieceArray): TTyXYWH;
 var
   i: Integer;
-  x0, y0, x1, y1, px, py, pw, ph, g: Double;
+  x0, y0, x1, y1, px, py, pw, ph, g, ex0, ey0, ex1, ey1: Double;
   any: Boolean;
 begin
   any := False;
@@ -883,6 +1421,15 @@ begin
       py := APieces[i].Y;
       pw := APieces[i].W;
       ph := APieces[i].H;
+      { [R7-H] a size that was a string: the path's own bounds, its edges
+        joined as strings }
+      if TyRtPathBounds(APieces[i], ex0, ey0, ex1, ey1) then
+      begin
+        px := ex0;
+        py := ey0;
+        pw := ex1 - ex0;
+        ph := ey1 - ey0;
+      end;
       if pw < 0 then begin px := px + pw; pw := -pw; end;
       if ph < 0 then begin py := py + ph; ph := -ph; end;
       { Path.getBoundingRect: a stroke grows the box by its width. The
@@ -904,15 +1451,25 @@ begin
       px := AdjustX(APieces[i].X, pw, APieces[i].TextAlign);
       py := APieces[i].Y - ph / 2;
       { tSpanCreateBoundingRect2: a stroke the style gave grows the TSpan's
-        box by its width; the auto stroke is left out (Text.ts:656-676, 885) }
+        box by its width; the auto stroke is left out (Text.ts:656-676, 885)
+        -- [R7-AF] one written as a string joins the width and the height
+        as a string (the union reads the joined number) }
       if APieces[i].HasStroke and not APieces[i].DefaultStroke
         and (APieces[i].LineWidth > 0) then
       begin
         g := APieces[i].LineWidth;
         px := px - g / 2;
         py := py - g / 2;
-        pw := pw + g;
-        ph := ph + g;
+        if APieces[i].LineWidthText <> '' then
+        begin
+          pw := TyRtJoinedNum(pw, APieces[i].LineWidthText);
+          ph := TyRtJoinedNum(ph, APieces[i].LineWidthText);
+        end
+        else
+        begin
+          pw := pw + g;
+          ph := ph + g;
+        end;
       end;
     end;
     if not any then
@@ -983,7 +1540,7 @@ type
   end;
 
   TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer,
-    ITyRtInnerMeasurer)
+    ITyRtInnerMeasurer, ITyTextJsBoxMeasurer, ITyTextHungBoxMeasurer)
   private
     FInner: ITyTextMeasurer;
     FBlock: TTyRtBlockStyle;
@@ -996,6 +1553,12 @@ type
     function MeasureBox(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
       AV: TTyTextAnchorV): TTyRectF;
+    function MeasureJsBox(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
+    function MeasureBoxHung(const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
     constructor Create(const AInner: ITyTextMeasurer; const ABlock: TTyRtBlockStyle;
       const AGlobal: TTyRtGlobal; AScale: Double);
     procedure MeasureLine(const AText, AFontName: string;
@@ -1048,6 +1611,38 @@ begin
   if box.W < 0 then Exit(TyRectF(0, 0, 0, 0));
   Result := TyRectF(box.X * FScale, box.Y * FScale, (box.X + box.W) * FScale,
     (box.Y + box.H) * FScale);
+end;
+
+function TBlockMeasurer.MeasureBoxHung(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+  AV: TTyTextAnchorV; AHangX, AHangY: Double): TTyRectF;
+var
+  b: TTyRtBlockStyle;
+  box: TTyXYWH;
+begin
+  b := FBlock;
+  TyRtFinish(b, AFontName, AFontSizeLogical, AWeight, FGlobal, True, $FF000000);
+  box := TyRtBounds(TyRtLayHung(AText, b, TyRtDefaultOf(False, 0, False, 0, False,
+    AH, AV), AHangX, AHangY, FScale, FInner));
+  if box.W < 0 then Exit(TyRectF(0, 0, 0, 0));
+  Result := TyRectF(box.X * FScale, box.Y * FScale, (box.X + box.W) * FScale,
+    (box.Y + box.H) * FScale);
+end;
+
+function TBlockMeasurer.MeasureJsBox(const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
+  AV: TTyTextAnchorV; out ABox: TTyXYWH): Boolean;
+var b: TTyRtBlockStyle;
+begin
+  ABox := TyXYWH(0, 0, 0, 0);
+  b := FBlock;
+  TyRtFinish(b, AFontName, AFontSizeLogical, AWeight, FGlobal, True, $FF000000);
+  Result := TyRtHasStringSize(b.Style, b.Rich);
+  if not Result then Exit;
+  ABox := TyRtLayJsBox(AText, b, TyRtDefaultOf(False, 0, False, 0, False, AH, AV),
+    FScale, FInner);
+  { a quiet NaN multiplies without a trap }
+  ABox := TyXYWH(ABox.X * FScale, ABox.Y * FScale, ABox.W * FScale, ABox.H * FScale);
 end;
 
 function TBlockMeasurer.WrapToWidth(const AText, AFontName: string;

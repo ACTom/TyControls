@@ -16,20 +16,26 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText,
-     test.advchart.gridbounds;
+     tyControls.AdvanceChart.RichStyle, test.advchart.gridbounds;
 type
   TAdvChartRichTextEngineOracleTest = class(TTestCase)
   private
     FRoot: TJSONData;
     FMeasurer: ITyTextMeasurer;
     FBad, FCompared, FTexts: Integer;
+    { [R7-AI] the case is one of the r7ai ones }
+    FR7ai: Boolean;
     FReport: string;
     procedure SetUp; override;
     procedure TearDown; override;
     procedure Miss(const AWhere, AWhat: string);
     procedure CheckText(const ACase: string; T: TJSONObject);
+    procedure SameBox(const AWhere: string; B: TJSONObject; AX0, AY0, AX1, AY1: Double);
+    procedure CheckRectBounds(const AWhere: string; B: TJSONObject; const Q: TTyRtPiece);
+    procedure CheckBounds(const AWhere: string; B: TJSONObject; const APieces: TTyRtPieceArray);
   published
     procedure TestTheBlockAsUpstream;
+    procedure TestTheHostsTrapsAreLeftAlone;
   end;
 
 implementation
@@ -111,6 +117,28 @@ begin
   Result := TyTryParseChartColor(S, AC);
 end;
 
+{ [R7-H] a size the recorder wrote as zrender held it: a number as its hex
+  and a `<key>Text` twin, a STRING as the string -- which the engine is
+  handed as a string, as RichStyle hands it }
+function IsStrSize(O: TJSONObject; const AKey: string): Boolean;
+begin
+  Result := (O.Find(AKey) <> nil) and (O.Find(AKey).JSONType = jtString)
+    and (O.Find(AKey + 'Text') = nil);
+end;
+
+procedure TakeStr(O: TJSONObject; const AKey: string; var S: TTyRtStyle);
+var j: TJSONString;
+begin
+  j := TJSONString.Create(O.Strings[AKey]);
+  try
+    if AKey = 'width' then TyRtTakeWidth(j, S)
+    else if AKey = 'height' then TyRtTakeHeight(j, S)
+    else TyRtTakeLineHeight(j, S);
+  finally
+    j.Free;
+  end;
+end;
+
 { one zrender style object into the engine's }
 function StyleOf(O: TJSONObject): TTyRtStyle;
 var
@@ -118,6 +146,10 @@ var
   s: string;
   k: Integer;
   c: TTyChartColor;
+  { [R7-AF] a width written as a string }
+  j: TJSONString;
+  w: Double;
+  pad: TJSONArray;
 begin
   Result := TyRtStyleDefault;
   Result.FontSizePx := 0;
@@ -142,7 +174,19 @@ begin
     Result.Stroke := c;
   end;
   d := O.Find('lineWidth');
-  if (d <> nil) and (d.JSONType <> jtNull) then
+  { [R7-AF] a string as RichStyle hands it (its number, kept for the rect) }
+  if IsStrSize(O, 'lineWidth') then
+  begin
+    j := TJSONString.Create(O.Strings['lineWidth']);
+    try
+      TyRtTakeLineWidth(j, w, Result.LineWidthText, Result.LineWidthInf);
+    finally
+      j.Free;
+    end;
+    Result.HasLineWidth := True;
+    Result.LineWidth := w;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     Result.HasLineWidth := True;
     Result.LineWidth := Hex(d);
@@ -150,13 +194,15 @@ begin
   Result.Align := AlignOf(Str(O.Find('align')));
   Result.VAlign := VAlignOf(Str(O.Find('verticalAlign')));
   d := O.Find('lineHeight');
-  if (d <> nil) and (d.JSONType <> jtNull) then
+  if IsStrSize(O, 'lineHeight') then TakeStr(O, 'lineHeight', Result)
+  else if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     Result.HasLineHeight := True;
     Result.LineHeight := Hex(d);
   end;
   d := O.Find('width');
-  if (d <> nil) and (d.JSONType <> jtNull) then
+  if IsStrSize(O, 'width') then TakeStr(O, 'width', Result)
+  else if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     s := Str(d);
     if s = 'auto' then Result.WidthKind := rtwAuto
@@ -172,17 +218,28 @@ begin
     end;
   end;
   d := O.Find('height');
-  if (d <> nil) and (d.JSONType <> jtNull) then
+  if IsStrSize(O, 'height') then TakeStr(O, 'height', Result)
+  else if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     Result.HasHeight := True;
     Result.Height := Hex(d);
   end;
+  { [R7-AI] the padding zrender held, as RichStyle hands it: numbers the
+    recorder wrote as hex (beside a `paddingText` twin), anything else as
+    zrender held it -- a string, an array of strings, true }
   d := O.Find('padding');
-  if d is TJSONArray then
+  if (d is TJSONArray) and (O.Find('paddingText') <> nil) then
   begin
-    Result.HasPadding := True;
-    for k := 0 to 3 do Result.Padding[k] := Hex(TJSONArray(d).Items[k]);
-  end;
+    pad := TJSONArray.Create;
+    try
+      for k := 0 to TJSONArray(d).Count - 1 do pad.Add(Hex(TJSONArray(d).Items[k]));
+      TyRtTakePadding(pad, Result);
+    finally
+      pad.Free;
+    end;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
+    TyRtTakePadding(d, Result);
   if ColourOf(Str(O.Find('backgroundColor')), c) then
   begin
     Result.HasBackground := True;
@@ -194,7 +251,19 @@ begin
     Result.BorderColor := c;
   end;
   d := O.Find('borderWidth');
-  if (d <> nil) and (d.JSONType <> jtNull) then Result.BorderWidth := Hex(d);
+  { [R7-AF] a string: its number, or truthy and stroking nothing }
+  if IsStrSize(O, 'borderWidth') then
+  begin
+    j := TJSONString.Create(O.Strings['borderWidth']);
+    try
+      TyRtTakeLineWidth(j, w, s, Result.BorderWidthInf);
+    finally
+      j.Free;
+    end;
+    Result.BorderWidth := w;
+    Result.BorderWidthWord := not (w > 0) and not Result.BorderWidthInf and (O.Strings['borderWidth'] <> '');
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then Result.BorderWidth := Hex(d);
   d := O.Find('borderRadius');
   if d is TJSONArray then
   begin
@@ -278,6 +347,14 @@ var
   c: TTyChartColor;
   bx, by: Double;
 begin
+  { [R7-AI] A TEXT LAID OUT IN ITS HOST'S OVERFLOW AREA (a matrix cell's,
+    calcInnerTextOverflowArea): the engine is handed no such area, its
+    width `defaultOuterWidth - paddingH` -- the wiring test holds it. Only
+    the r7ai cases, whose padding is a string, are left out here. }
+  if FR7ai and (T.Find('defaultStyle') is TJSONObject)
+    and (T.Objects['defaultStyle'].Find('overflowRect') <> nil)
+    and (T.Objects['defaultStyle'].Find('overflowRect').JSONType = jtBoolean)
+    and T.Objects['defaultStyle'].Booleans['overflowRect'] then Exit;
   Inc(FTexts);
   if T.Find('style') is TJSONObject then style := StyleOf(T.Objects['style'])
   else style := StyleOf(nil);
@@ -324,6 +401,22 @@ begin
     def, bx, by, FMeasurer);
   pieces := T.Arrays['pieces'];
   where := ACase + ' "' + T.Strings['text'] + '"';
+  { [R7-H] A TEXT LAID OUT AT NaN (no box recorded) is recorded by what is
+    drawn: the engine has already dropped what sits at NaN; a line it
+    truncated to nothing draws nothing either }
+  if (T.Find('box') <> nil) and (T.Find('box').JSONType = jtNull) then
+  begin
+    n := 0;
+    for i := 0 to High(res.Pieces) do
+      if (res.Pieces[i].Kind = rpkRect) or (res.Pieces[i].Text <> '') then
+      begin
+        res.Pieces[n] := res.Pieces[i];
+        Inc(n);
+      end;
+    SetLength(res.Pieces, n);
+  end
+  else if T.Find('bounds') is TJSONObject then
+    CheckBounds(where, T.Objects['bounds'], res.Pieces);
   n := 0;
   for i := 0 to pieces.Count - 1 do
   begin
@@ -374,6 +467,21 @@ begin
             Miss(where, Format('rect %d radius %d', [i, k]));
             Break;
           end;
+      { [R7-H] a rect whose size was a string: the path's own bounds, its
+        edges joined as strings, grown by the stroke as painted }
+      { [R7-L] pathNaN: joined to NaN (an unrounded rect canvas draws at
+        its numbers) -- here the joined edges are NaN }
+      if (p.Find('pathNaN') <> nil) and p.Booleans['pathNaN'] then
+      begin
+        if not q.PathEdges or not (IsNan(q.EdgeX1) or IsNan(q.EdgeY1)) then
+          Miss(where, Format('rect %d: the path joins its size to NaN upstream, not here', [i]));
+      end
+      else if (p.Find('pathBounds') is TJSONObject) <> q.PathEdges then
+        Miss(where, Format('rect %d: the path joins its size upstream: %s, here: %s', [i,
+          BoolToStr(p.Find('pathBounds') is TJSONObject, True),
+          BoolToStr(q.PathEdges, True)]))
+      else if q.PathEdges then
+        CheckRectBounds(where + Format(' rect %d', [i]), p.Objects['pathBounds'], q);
     end
     else
     begin
@@ -408,11 +516,67 @@ begin
       else if q.HasStroke and not Near(q.LineWidth, Hex(p.Find('lineWidth'))) then
         Miss(where, Format('text %d stroke width %s upstream, %s here', [i,
           Str(p.Find('lineWidthText')), FloatToStr(q.LineWidth)]));
+      { [R7-AI] THE RECT rectContain READS where it holds a string: its far
+        edges joined in JS (null: no number) }
+      if p.Find('hit') is TJSONArray then
+      begin
+        Inc(FCompared);
+        if not q.HitJs then
+          Miss(where, Format('text %d "%s": a joined rect upstream, none here', [i, p.Strings['text']]))
+        else if not (Near(q.HitL, Hex(p.Arrays['hit'].Items[0])) and Near(q.HitT, Hex(p.Arrays['hit'].Items[1]))
+          and Near(q.HitR, Hex(p.Arrays['hit'].Items[2])) and Near(q.HitB, Hex(p.Arrays['hit'].Items[3]))) then
+          Miss(where, Format('text %d "%s": rect %g,%g to %g,%g upstream, %g,%g to %g,%g here', [i,
+            p.Strings['text'], Hex(p.Arrays['hit'].Items[0]), Hex(p.Arrays['hit'].Items[1]),
+            Hex(p.Arrays['hit'].Items[2]), Hex(p.Arrays['hit'].Items[3]), q.HitL, q.HitT, q.HitR, q.HitB]));
+      end;
     end;
   end;
   Inc(FCompared);
   if n <> Length(res.Pieces) then
     Miss(where, Format('%d pieces upstream, %d here', [pieces.Count, Length(res.Pieces)]));
+end;
+
+procedure TAdvChartRichTextEngineOracleTest.SameBox(const AWhere: string;
+  B: TJSONObject; AX0, AY0, AX1, AY1: Double);
+begin
+  Inc(FCompared);
+  if not (Near(AX0, Hex(B.Find('x'))) and Near(AY0, Hex(B.Find('y')))
+    and Near(AX1 - AX0, Hex(B.Find('width'))) and Near(AY1 - AY0, Hex(B.Find('height')))) then
+    Miss(AWhere, Format('bounds %s,%s %sx%s upstream, %s,%s %sx%s here', [
+      Str(B.Find('xText')), Str(B.Find('yText')), Str(B.Find('widthText')),
+      Str(B.Find('heightText')), FloatToStr(AX0), FloatToStr(AY0),
+      FloatToStr(AX1 - AX0), FloatToStr(AY1 - AY0)]));
+end;
+
+procedure TAdvChartRichTextEngineOracleTest.CheckRectBounds(const AWhere: string;
+  B: TJSONObject; const Q: TTyRtPiece);
+var x0, y0, x1, y1, g: Double;
+begin
+  TyRtPathBounds(Q, x0, y0, x1, y1);
+  if Q.HasStroke and (Q.LineWidth > 0) then
+  begin
+    g := Q.LineWidth / 2;
+    x0 := x0 - g; y0 := y0 - g; x1 := x1 + g; y1 := y1 + g;
+  end;
+  SameBox(AWhere, B, x0, y0, x1, y1);
+end;
+
+{ [R7-H] the Text's own bounds -- what a legend lays out and labelLayout
+  overlaps -- where a rect's size was a string (its path runs to the joined
+  edges) }
+procedure TAdvChartRichTextEngineOracleTest.CheckBounds(const AWhere: string;
+  B: TJSONObject; const APieces: TTyRtPieceArray);
+var
+  r: TTyXYWH;
+  k: Integer;
+  any: Boolean;
+begin
+  any := False;
+  for k := 0 to High(APieces) do
+    if APieces[k].PathEdges then any := True;
+  if not any then Exit;
+  r := TyRtBounds(APieces);
+  SameBox(AWhere + ' (the text)', B, r.X, r.Y, r.X + r.W, r.Y + r.H);
 end;
 
 procedure TAdvChartRichTextEngineOracleTest.TestTheBlockAsUpstream;
@@ -426,6 +590,11 @@ begin
     texts := cases.Objects[c].Arrays['texts'];
     for t := 0 to texts.Count - 1 do
       try
+        { [R7-H] a text recorded with no box was laid out at NaN upstream
+          (a width that is a word): the engine does the same JS arithmetic
+          and drops what lands at NaN, so it is compared like any other
+          [was: skipped, spec 258] }
+        FR7ai := cases.Objects[c].Find('r7ai') <> nil;
         CheckText(cases.Objects[c].Strings['name'], texts.Objects[t]);
       except
         on E: Exception do
@@ -435,6 +604,40 @@ begin
   end;
   AssertTrue(Format('%d of %d differ:%s', [FBad, FCompared, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 190);
+end;
+
+{ [R7-H] A WIDTH THAT IS A WORD is laid out with the FPU's traps masked; its
+  wrap compares against NaN, which raises the invalid-operation flag, and
+  the engine clears the flags on the way out: the host's own division by
+  zero is still reported as one }
+procedure TAdvChartRichTextEngineOracleTest.TestTheHostsTrapsAreLeftAlone;
+var
+  st: TTyRtStyle;
+  j: TJSONString;
+  res: TTyRtResult;
+  a, b, c: Double;
+  what: string;
+begin
+  st := TyRtStyleDefault;
+  j := TJSONString.Create('50%');
+  try
+    TyRtTakeWidth(j, st);
+  finally
+    j.Free;
+  end;
+  st.Overflow := rtoBreak;
+  res := TyRtLayout('never wrapped at all', st, nil, False, Default(TTyRtDefault),
+    0, 0, FMeasurer);
+  AssertEquals('one line', 1, Length(res.Pieces));
+  a := 1;
+  b := 0;
+  try
+    c := a / b;
+    what := 'no error: ' + FloatToStr(c);
+  except
+    on E: Exception do what := E.ClassName;
+  end;
+  AssertEquals('a division by zero', 'EZeroDivide', what);
 end;
 
 initialization

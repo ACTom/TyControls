@@ -937,7 +937,11 @@ var
 begin
   if FBrushInSelect then Exit;
   batch := ABatch;
-  now_ := BrushClock;
+  { [R7-AB] the clock only where a brush can throttle the call: an update
+    with no brush (every setOption's) dispatches at once, no time of its own
+    [was: the machine's clock read on every update] }
+  if (Length(FBrushSpecs) > 0) or not IsNan(FBrushNow) then now_ := BrushClock
+  else now_ := 0;
   { only the first component's throttle; none without a brush (an empty
     batch, dispatched at once) [Batch 127] }
   if Length(FBrushSpecs) > 0 then
@@ -1671,7 +1675,9 @@ var
 
   function Live(ASlot: Integer): Boolean;
   begin
-    Result := not FBindings[ASlot].Hidden;
+    { [spec 264] a refused series is out of the drawing: brushSelected
+      lists it as it lists a filtered one -- not at all }
+    Result := not FBindings[ASlot].Hidden and not SeriesRefusedAt(ASlot);
   end;
 
   function HasSelector(ASlot: Integer): Boolean;

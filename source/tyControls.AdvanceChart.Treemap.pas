@@ -105,6 +105,12 @@ type
     HasLabel: Boolean;
     LabelText: string;
     LabelX, LabelY: Double;
+    { [R7-M] the position's anchor and alignment before the padding (a
+      block's place), and the label box: the content rect less the padding,
+      device px }
+    LabelBX, LabelBY, LabelBW, LabelBH: Double;
+    LabelBAH: TTyTextAnchorH;
+    LabelBAV: TTyTextAnchorV;
     LabelAH: TTyTextAnchorH;
     LabelAV: TTyTextAnchorV;
     { cut by leafDepth: drawn as a leaf, its label behind the drill icon
@@ -118,6 +124,10 @@ type
     UpperText: string;
     UpperX, UpperY: Double;
     UpperCentre, UpperInside: Boolean;
+    { [R7-M] the strip's anchor before the padding, its label box (the
+      strip less the padding) and the padding, device px }
+    UpperBX, UpperBY, UpperBW, UpperBH: Double;
+    UpperPad: array[0..3] of Double;
     { [Batch 115] above the view root: laid out as the view root, drawing
       nothing but its group }
     AboveView: Boolean;
@@ -269,7 +279,16 @@ function TyTreemapPairRows(const AOld, ANew: TTyTreemapSolved): TTyIntegerArray;
   position table, as a frame of the drill-down places it [Batch 115]. }
 function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
   const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
-  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean; overload;
+{ [R7-N] ... and the label's box in that frame (TreemapView's beforeUpdate
+  runs every frame): the anchor before the padding (ABX / ABY, device px),
+  its alignment, and the content rect less the padding (ABW / ABH, device
+  px). AHasBox False where the row keeps no place of its own. }
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double;
+  out AHasBox: Boolean; out ABX, ABY, ABW, ABH: Double; out ABAH: TTyTextAnchorH;
+  out ABAV: TTyTextAnchorV): Boolean; overload;
 { The colour visual: APalette into levels[0] unless a level has a colour;
   ABorder is the series' default border colour. }
 procedure TyTreemapColour(var ASolved: TTyTreemapSolved;
@@ -318,7 +337,9 @@ function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSol
 implementation
 
 uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Handlers;
+  tyControls.AdvanceChart.Handlers,
+  { [R7-AK] a label's padding as JS holds it }
+  tyControls.AdvanceChart.RichStyle;
 
 const
   cEps = 5e-5;
@@ -1673,6 +1694,8 @@ function PlaceOf(const ASolved: TTyTreemapSolved; ARow: Integer;
 var
   k, j: Integer;
   d: TJSONData;
+  { [R7-AK] a padding as JS holds it }
+  jp: TTyJsPad;
 begin
   Result := Default(TTyTmLabelPlace);
   Result.Has := True;
@@ -1693,7 +1716,20 @@ begin
           j := k;
         end;
         Result.Pad[k] := JsNum(d.Items[j]) * ASolved.Scale;
-      end;
+      end
+    { [R7-AK] a string (or any other value normalizeCssArray keeps): its
+      sides as `width - textPadding[1] - textPadding[3]` reads them, the
+      numbers of its characters ('12': 1, 2, 1, 2), NaN where one is
+      undefined [was: the default 5] }
+    else if (d.JSONType <> jtNull) and TyJsTruthyOf(d) then
+    begin
+      jp := TyJsPadOf(d);
+      if jp.Js then
+        for k := 0 to 3 do Result.Pad[k] := jp.Num[k] * ASolved.Scale;
+    end
+    else if d.JSONType <> jtNull then
+      { (`padding || 0`: a falsy one is none) }
+      for k := 0 to 3 do Result.Pad[k] := 0;
   end;
   d := ChainFind(ASolved, ARow, 'label', 'distance');
   if d <> nil then Result.Dist := JsNum(d) * ASolved.Scale else Result.Dist := 0;
@@ -1716,7 +1752,9 @@ end;
 function PlaceWith(const APlace: TTyTmLabelPlace; const AText: string;
   ARX0, ARY0, ACW, ACH: Double;
   const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
-  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV;
+  out ABX, ABY, ABW, ABH: Double; out ABAH: TTyTextAnchorH;
+  out ABAV: TTyTextAnchorV): Boolean; overload;
 var
   k: Integer;
   pad, ps: string;
@@ -1793,6 +1831,14 @@ begin
     rx := 0;
     ry := 0;
   end;
+  { [R7-M] a block's place: the anchor and alignment before the padding,
+    and its width / height (TreemapView's beforeUpdate) }
+  ABX := rx;
+  ABY := ry;
+  ABAH := AAH;
+  ABAV := AAV;
+  ABW := tw;
+  ABH := th;
   { where the words start from the anchor: the plain layout pads the
     side it is aligned to; the rich one places the OUTER box and puts
     the first line at its top }
@@ -1850,6 +1896,19 @@ begin
   ALY := ry;
 end;
 
+function PlaceWith(const APlace: TTyTmLabelPlace; const AText: string;
+  ARX0, ARY0, ACW, ACH: Double;
+  const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean; overload;
+var
+  bx, by, bw, bh: Double;
+  bah: TTyTextAnchorH;
+  bav: TTyTextAnchorV;
+begin
+  Result := PlaceWith(APlace, AText, ARX0, ARY0, ACW, ACH, AMeasurer, AWords,
+    ALX, ALY, AAH, AAV, bx, by, bw, bh, bah, bav);
+end;
+
 function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
   const spec: TTyLabelSpec; const AText: string; ARX0, ARY0, ACW, ACH: Double;
   const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
@@ -1857,6 +1916,43 @@ function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
 begin
   Result := PlaceWith(PlaceOf(ASolved, ARow, spec), AText, ARX0, ARY0, ACW, ACH,
     AMeasurer, AWords, ALX, ALY, AAH, AAV);
+end;
+
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double;
+  out AHasBox: Boolean; out ABX, ABY, ABW, ABH: Double; out ABAH: TTyTextAnchorH;
+  out ABAV: TTyTextAnchorV): Boolean;
+var
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  mask: TFPUExceptionMask;
+begin
+  AText := '';
+  ALX := 0;
+  ALY := 0;
+  AHasBox := False;
+  ABX := 0;
+  ABY := 0;
+  ABW := 0;
+  ABH := 0;
+  ABAH := tahLeft;
+  ABAV := tavTop;
+  Result := False;
+  if (AMeasurer = nil) or (ARow < 0) or (ARow > High(ASolved.Nodes))
+    or not ASolved.Nodes[ARow].HasLabelRaw or not ASolved.Nodes[ARow].LabelPlace.Has then
+    Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    Result := PlaceWith(ASolved.Nodes[ARow].LabelPlace, ASolved.Nodes[ARow].LabelRaw,
+      AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av,
+      ABX, ABY, ABW, ABH, ABAH, ABAV);
+    AHasBox := True;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
 end;
 
 function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
@@ -1968,7 +2064,10 @@ begin
       ASolved.Nodes[row].HasLabel := PlaceWith(ASolved.Nodes[row].LabelPlace, text,
         bw * 1 + ASolved.Nodes[row].TX, bw * 1 + ASolved.Nodes[row].TY, cw, ch,
         AMeasurer, ASolved.Nodes[row].LabelText, ASolved.Nodes[row].LabelX,
-        ASolved.Nodes[row].LabelY, ASolved.Nodes[row].LabelAH, ASolved.Nodes[row].LabelAV);
+        ASolved.Nodes[row].LabelY, ASolved.Nodes[row].LabelAH, ASolved.Nodes[row].LabelAV,
+        ASolved.Nodes[row].LabelBX, ASolved.Nodes[row].LabelBY,
+        ASolved.Nodes[row].LabelBW, ASolved.Nodes[row].LabelBH,
+        ASolved.Nodes[row].LabelBAH, ASolved.Nodes[row].LabelBAV);
       { [R6-A] AND UNDER THE STATES' textConfig: updateInnerText lays the
         words out on the content rect by the state's position and distance
         over the normal ones, the padding and the cut the same }
@@ -1986,7 +2085,16 @@ begin
           if not PlaceWith(stPlace, text, bw * 1 + ASolved.Nodes[row].TX,
             bw * 1 + ASolved.Nodes[row].TY, cw, ch, AMeasurer, stWords,
             stTwin.Caption.X, stTwin.Caption.Y, stTwin.Caption.AnchorH,
-            stTwin.Caption.AnchorV) then Continue;
+            stTwin.Caption.AnchorV, stTwin.Caption.FixedBoxX,
+            stTwin.Caption.FixedBoxY, stTwin.Caption.FixedBoxW,
+            stTwin.Caption.FixedBoxH, stTwin.Caption.FixedBoxAH,
+            stTwin.Caption.FixedBoxAV) then Continue;
+          { [R7-M] the box under that state, CSS px }
+          stTwin.Caption.HasFixedBox := True;
+          stTwin.Caption.FixedBoxW := stTwin.Caption.FixedBoxW / ASolved.Scale;
+          stTwin.Caption.FixedBoxH := stTwin.Caption.FixedBoxH / ASolved.Scale;
+          for k := 0 to 3 do
+            stTwin.Caption.FixedBoxPad[k] := stPlace.Pad[k] / ASolved.Scale;
           SetLength(ASolved.Nodes[row].StateLabels, Length(ASolved.Nodes[row].StateLabels) + 1);
           ASolved.Nodes[row].StateLabels[High(ASolved.Nodes[row].StateLabels)] := stTwin;
         end;
@@ -2139,6 +2247,13 @@ begin
       ASolved.Nodes[row].UpperText := text;
       ASolved.Nodes[row].UpperX := tx + ax;
       ASolved.Nodes[row].UpperY := ay;
+      { [R7-M] a block's place: the anchor before the padding, and the
+        strip less the padding (beforeUpdate's width / height) }
+      ASolved.Nodes[row].UpperBX := ax;
+      ASolved.Nodes[row].UpperBY := ay;
+      ASolved.Nodes[row].UpperBW := w;
+      ASolved.Nodes[row].UpperBH := h;
+      for k := 0 to 3 do ASolved.Nodes[row].UpperPad[k] := pad[k];
       ASolved.Nodes[row].UpperCentre := inside;
       ASolved.Nodes[row].UpperInside := inside;
     end;
@@ -2654,6 +2769,16 @@ var
       el.Caption.FixedAV := tavMiddle;
       el.Caption.HasFixedZ2 := True;
       el.Caption.FixedZ2 := maxZ2 + 2;
+      { [R7-M] the strip is the label's box }
+      el.Caption.HasFixedBox := True;
+      el.Caption.FixedBoxX := nd.UpperBX;
+      el.Caption.FixedBoxY := nd.UpperBY;
+      el.Caption.FixedBoxW := nd.UpperBW / ASolved.Scale;
+      el.Caption.FixedBoxH := nd.UpperBH / ASolved.Scale;
+      if nd.UpperInside then el.Caption.FixedBoxAH := tahCentre
+      else el.Caption.FixedBoxAH := tahLeft;
+      el.Caption.FixedBoxAV := tavMiddle;
+      for k := 0 to 3 do el.Caption.FixedBoxPad[k] := nd.UpperPad[k] / ASolved.Scale;
     end;
     AList.Add(el);
     Inc(cnt);
@@ -2699,6 +2824,16 @@ var
         el.Caption.FixedAV := nd.LabelAV;
         el.Caption.HasFixedZ2 := True;
         el.Caption.FixedZ2 := maxZ2 + 2;
+        { [R7-M] the content rect is the label's box }
+        el.Caption.HasFixedBox := True;
+        el.Caption.FixedBoxX := nd.LabelBX;
+        el.Caption.FixedBoxY := nd.LabelBY;
+        el.Caption.FixedBoxW := nd.LabelBW / ASolved.Scale;
+        el.Caption.FixedBoxH := nd.LabelBH / ASolved.Scale;
+        el.Caption.FixedBoxAH := nd.LabelBAH;
+        el.Caption.FixedBoxAV := nd.LabelBAV;
+        for k := 0 to 3 do
+          el.Caption.FixedBoxPad[k] := nd.LabelPlace.Pad[k] / ASolved.Scale;
         { [R6-A] and where the states' textConfig puts them }
         el.EmphTwin := Copy(nd.StateLabels, 0, Length(nd.StateLabels));
       end;

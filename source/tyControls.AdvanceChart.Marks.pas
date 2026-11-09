@@ -83,6 +83,10 @@ type
       series colour because an area named its own colour does not make the
       LINE that colour -- they are two keys on two blocks. }
     HasAreaFill: Boolean;
+    { [R7-F] `areaStyle.color: 'none'`: the area fills nothing and the
+      pointer finds no inside (LineView: the area style's fill over the
+      visual colour, defaults keeps the 'none') [was: the series' colour] }
+    AreaNone: Boolean;
     AreaFill: TTyChartColor;
     { The classic fading area is a gradient on `areaStyle.color`, so this is
       the one place a chart gradient is written more often than not. }
@@ -133,6 +137,8 @@ type
     HasDojiBorder: Boolean;
     DojiBorder: TTyChartColor;
     BorderWidthLogical: Double;
+    { [R7-Y] the width is +Infinity (the item's own where it writes one) }
+    BorderWidthInf: Boolean;
     { [R5-B] a border WRITTEN AS null: no colour, so the pen is the body's
       (`getBorderColor(sign, itemModel) || style.fill`) -- the default border
       stays only where the key is absent }
@@ -223,6 +229,36 @@ type
       '-Infinity'): that infinity, else 0 -- no pen (StrokeWidthLogical 0),
       and a bar's getLineWidth takes it into its Math.min }
     StrokeWidthInf: Double;
+    { [R7-F] WHAT THE POINTER ASKS that the colours cannot say: FillNone,
+      the fill is 'none' (zrender's hasFill() false: no inside, the pen at
+      least strokeContainThreshold); StrokeClear, the pen is a colour of no
+      alpha ('transparent', rgba(..., 0)) that still strokes for the
+      pointer. Both False: as the colours read. The painter reads neither. }
+    FillNone, StrokeClear: Boolean;
+    { [R7-G] BarView's getLineWidth asks only whether the item model's
+      itemStyle.borderColor is truthy and not 'none' -- not whether the pen
+      draws: 'transparent', a colour of no alpha, a word the canvas does
+      not know, an object, a number other than 0 all take the border out of
+      a bar's layout. The item's own over the series' (a null climbs, ''
+      does not). [Was: a bar was inset only by a pen of some colour.] }
+    BorderLayout: Boolean;
+    { [R7-U] THE WIDTH THE LAYOUT TAKES OUT, where it is not the pen's:
+      getLineWidth's (BarView) and prepareLineWidth's (PictorialBarView)
+      itemModel.get(['itemStyle', 'borderWidth']) climbs to the root's
+      itemStyle, the visual's pen does not. LayoutHas: the root wrote a
+      style block (the series' node holds the root's under its own), and
+      the Layout* fields -- the item's own over the series' with the
+      root's -- stand for the Stroke* ones in the layout. False: the
+      layout takes the pen's, as before. }
+    LayoutHas: Boolean;
+    LayoutWidthLogical, LayoutWidthInf: Double;
+    LayoutWidthNaN, LayoutWidthSet: Boolean;
+    { [R7-U] A LINE'S SYMBOLS' OPACITY, where its polyline's is not theirs:
+      Alpha above is the lineStyle's (LineView's getLineStyle), the symbols
+      draw the visual style's (the itemStyle's). ItemAlphaSet False: Alpha
+      is both. }
+    ItemAlphaSet: Boolean;
+    ItemAlpha: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -322,7 +358,9 @@ type
     RipplePeriod: Double;
     RippleScale: Double;
     { a heatmap row's own itemStyle.borderRadius, by RAW row, when its item
-      wrote one (an array form is not a scalar the override table keeps) }
+      wrote one (an array form is not a scalar the override table keeps);
+      [R7-X] a cartesian bar's too (BarView's itemModel.get(['itemStyle',
+      'borderRadius'])), in the units of its series' Bar.Radii }
     HeatRadii: TTyCornerRadiiArray;
     { a data item's own label read over the series', by raw row }
     ItemLabels: TTyLabelSpecArray;
@@ -641,7 +679,10 @@ begin
   { [R6-E] a numeric string is its number }
   d := item.Find('borderWidth');
   if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
     Result.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
+    Result.BorderWidthInf := TyOptIsPosInf(d);
+  end;
 end;
 
 function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
@@ -689,7 +730,10 @@ begin
     Result.Spec.HasDojiBorder := True;
   d := item.Find('borderWidth');
   if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
     Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
+    Result.Spec.BorderWidthInf := TyOptIsPosInf(d);
+  end;
   d := item.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Opacity := d.AsFloat;
 end;
@@ -773,7 +817,10 @@ begin
   end;
 
   { PRESENCE IS THE SWITCH. `areaStyle: {}` fills the area; there is no
-    `show` and no default block to inherit. }
+    `show` and no default block to inherit. [R7-U] The series' own: the
+    root's areaStyle is the parent of the series' model (getAreaStyle reads
+    it) but isEmpty is the series' option alone. }
+  if not (AOption.SeriesOwnStyle(ASlot).Find('areaStyle') is TJSONObject) then Exit;
   d := node.Find('areaStyle');
   if (d = nil) or not (d is TJSONObject) then Exit;
   Result.HasArea := True;
@@ -787,6 +834,7 @@ begin
                         and not ast.Color.IsNone;
   if Result.HasAreaFill then Result.AreaFill := ast.Color.Color;
   Result.AreaGradient := ast.Color.Gradient;
+  Result.AreaNone := ast.Color.Written and ast.Color.IsNone;
 
   d := area.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -1095,6 +1143,7 @@ begin
       Result.Fill := AVisual.CbFill[raw];
       Result.FillGradient := Default(TTyChartGradient);
       Result.FillPattern := Default(TTyChartPattern);
+      Result.FillNone := False;
     end;
   end;
   { THE VISUAL PIPELINE FIRST, then the datum's own style over it: upstream's
@@ -1112,9 +1161,13 @@ begin
         Result.Fill := TyVisualToChart(vr.Color);
         Result.FillGradient := Default(TTyChartGradient);
         Result.FillPattern := Default(TTyChartPattern);
+        Result.FillNone := False;
       end;
+      { [R7-V] the opacity as written: the canvas' globalAlpha clamps it
+        (bindCommonProps, TyCanvasPartAlpha), a state's blur multiplies it
+        and a tween runs to it [was: clamped here] }
       if vr.OpacitySet and not IsNan(vr.Opacity) then
-        Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+        Result.Alpha := vr.Opacity;
     end;
   end;
   { THE PER-DATUM PALETTE (stage 4600, after the encoding and the item
@@ -1130,6 +1183,8 @@ begin
   if rf.PaletteSet then
   begin
     if rf.PaletteNone then Result.Fill := 0 else Result.Fill := rf.Palette;
+    { [R7-F] a palette entry 'none' is no fill }
+    Result.FillNone := rf.PaletteNone;
     { [R5-B] a gradient entry is the fill itself }
     Result.FillGradient := rf.PaletteGrad;
     Result.FillPattern := Default(TTyChartPattern);
@@ -1141,14 +1196,16 @@ begin
     Result.Fill := rf.ObjSolid;
     Result.FillGradient := rf.ObjGradient;
     Result.FillPattern := rf.ObjPattern;
+    Result.FillNone := False;
   end;
   { THE ITEM'S OWN OPACITY REPLACES the series' and the visualMap's alike --
     upstream extends the item style over both. [Batch 54: it was not read.] }
   if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.opacity')) then
   begin
     v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.opacity'));
+    { [R7-V] as written (the canvas clamps it) }
     if (v.Kind = dvkNumber) and not IsNan(v.Num) then
-      Result.Alpha := Min(Double(1), Max(Double(0), v.Num));
+      Result.Alpha := v.Num;
   end;
   { [R2-I2] the item's own borderDashOffset over the series' (getItemStyle
     key by key) }
@@ -1159,7 +1216,11 @@ begin
     if v.Kind <> dvkNone then
     begin
       Result.DashOffset := OverrideNumber(v);
-      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then Result.DashOffset := 0;
+      { [R7-Y] no finite number: the canvas refuses it and keeps the phase
+        it had (cTyCanvasPhaseLeft, settled in paint order), as the series'
+        own (TyOptPenOffset) [was: nought] }
+      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then
+        Result.DashOffset := cTyCanvasPhaseLeft;
     end;
   end;
   { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
@@ -1206,22 +1267,41 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
+    { [R7-G] getLineWidth's test on the item's own key: truthy and not the
+      word 'none' as written; a null climbs to the series' }
+    case v.Kind of
+      dvkText: Result.BorderLayout := (v.Text <> '') and (v.Text <> 'none');
+      dvkNumber: Result.BorderLayout := (v.Num <> 0) and not IsNan(v.Num);
+      dvkBool: Result.BorderLayout := v.Num <> 0;
+    end;
     if v.Kind = dvkText then
     begin
       if TyChartColorIsNone(v.Text) then
       begin
         Result.Stroke := 0;
         Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end
       else if v.Text = 'auto' then
       begin
         Result.Stroke := Result.Fill;
         Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end
       else if TyTryParseChartColor(v.Text, c) then
       begin
         Result.Stroke := c;
         Result.StrokeGradient := Default(TTyChartGradient);
+        { [R7-F] a clear colour strokes for the pointer }
+        Result.StrokeClear := (c shr 24) = 0;
+      end
+      { [R7-W] one no parser reads: the canvas keeps the strokeStyle it
+        had (TyLinesCanvasLeftovers) [was: the series' pen] }
+      else if (v.Text <> '') and not TyColourIsHandler(v.Text) then
+      begin
+        Result.Stroke := cTyCanvasColourLeft;
+        Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end;
     end;
   end;
@@ -1231,7 +1311,17 @@ begin
   begin
     Result.Stroke := rf.StrokeObjSolid;
     Result.StrokeGradient := rf.StrokeObjGradient;
+    Result.StrokeClear := False;
+    { an object is truthy }
+    Result.BorderLayout := True;
   end;
+  { [R7-Y] an item's own border colour where no width is written anywhere:
+    zrender's lineWidth 1 [was: no pen] }
+  if (rf.StrokeObjSet or (AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderColor'))
+    and (AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Kind = dvkText)
+    and not TyChartColorIsNone(AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderColor')).Text)))
+    and not Result.StrokeWidthSet and not (Result.StrokeWidthLogical > 0) then
+    Result.StrokeWidthLogical := 1;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
   begin
@@ -1248,6 +1338,11 @@ begin
       if IsNan(Result.StrokeWidthLogical) or IsInfinite(Result.StrokeWidthLogical) then
         Result.StrokeWidthLogical := 0;
       Result.StrokeWidthSet := True;
+      { [R7-U] the item's own is the layout's too }
+      Result.LayoutWidthLogical := Result.StrokeWidthLogical;
+      Result.LayoutWidthInf := Result.StrokeWidthInf;
+      Result.LayoutWidthNaN := Result.StrokeWidthNaN;
+      Result.LayoutWidthSet := True;
     end;
   end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
@@ -1258,6 +1353,8 @@ begin
     Result.Fill := 0;
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    { [R7-F] no fill for the pointer either }
+    Result.FillNone := True;
     Exit;
   end;
   if TyTryParseChartColor(v.Text, c) then
@@ -1268,6 +1365,16 @@ begin
     Result.Fill := c;
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
+  end
+  { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
+    (TyLinesCanvasLeftovers) [was: the series' colour] }
+  else if (v.Text <> '') and not TyColourIsHandler(v.Text) then
+  begin
+    Result.Fill := cTyCanvasColourLeft;
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
   end;
 end;
 
@@ -1288,9 +1395,11 @@ begin
     Result.Fill := TyVisualToChart(vr.Color);
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
   end;
+  { [R7-V] as written (the canvas clamps it) }
   if vr.LateOpacity and not IsNan(vr.Opacity) then
-    Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
+    Result.Alpha := vr.Opacity;
 end;
 
 { THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
@@ -1302,12 +1411,32 @@ var
   vr: TTyVisualRow;
   e: Boolean;
   p: string;
+
+  { [R7-AD] symbolSize and a pixel symbolOffset are css px: PPI / 96 device
+    px each (a percentage offset is of the size) [was: device px] }
+  procedure AtScale(var S: TTySymbolSpec);
+  begin
+    if not (AVisual.PxScale > 0) or (AVisual.PxScale = 1) then Exit;
+    S.WidthPx := S.WidthPx * AVisual.PxScale;
+    S.HeightPx := S.HeightPx * AVisual.PxScale;
+    if not S.OffsetXIsPct then S.OffsetX := S.OffsetX * AVisual.PxScale;
+    if not S.OffsetYIsPct then S.OffsetY := S.OffsetY * AVisual.PxScale;
+  end;
+
 begin
   Result := ASpec;
   ALift := 0;
-  if (AVisual.VisualRows = nil) or (AStore = nil) then Exit;
+  if (AVisual.VisualRows = nil) or (AStore = nil) then
+  begin
+    AtScale(Result);
+    Exit;
+  end;
   raw := AStore.GetRawIndex(ARow);
-  if (raw < 0) or (raw > High(AVisual.VisualRows)) then Exit;
+  if (raw < 0) or (raw > High(AVisual.VisualRows)) then
+  begin
+    AtScale(Result);
+    Exit;
+  end;
   vr := AVisual.VisualRows[raw];
   if vr.SymbolSet then
   begin
@@ -1325,6 +1454,7 @@ begin
     if IsNan(Result.HeightPx) then Result.HeightPx := 0;
   end;
   if vr.LiftZSet and not IsNan(vr.LiftZ) then ALift := vr.LiftZ;
+  AtScale(Result);
 end;
 
 { THE DECAL A VIEW ROW IS DRAWN WITH [Batch 131]: its own, else the
@@ -1400,10 +1530,29 @@ begin
   Result.Style.FillGradient := AVisual.FillGradient;
   Result.Style.StrokeGradient := AVisual.StrokeGradient;
   Result.Style.FillPattern := AVisual.FillPattern;
+  { [R7-F] what hasFill() / hasStroke() answer that the colours cannot }
+  Result.Style.HitNoFill := AVisual.FillNone and not Result.Style.HasFill;
+  Result.Style.HitClearPen := AVisual.StrokeClear;
   Result.Z := AVisual.Z;
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
   Result.Datum := TyChartDatum(ASeries, ARow);
+  { [R7-C] A PEN OF INFINITE WIDTH, which the canvas does not draw: its
+    stroked bounding rect is not-a-number upstream (x - Inf + Inf), so
+    Path.contain never answers -- every mark, not only a bar [R6-F] }
+  Result.HitNone := (AVisual.StrokeWidthInf > 0)
+    and ((AVisual.Stroke <> 0) or (AVisual.StrokeGradient.Kind <> cgkNone));
+  { [R7-W] and strokes at the lineWidth the canvas had, which refuses the
+    infinity (TyLinesCanvasLeftovers) [was: no pen] }
+  if Result.HitNone then
+  begin
+    Result.CanvasFlags := Result.CanvasFlags or cTyCanvasWidthLeft;
+    if Result.Style.DashWord <> 0 then
+    begin
+      Result.Style.DashLogical := nil;
+      Result.Style.DashWord := 0;
+    end;
+  end;
 end;
 
 { UPSTREAM'S clip.cartesian2d (BarView.ts), on the layout as upstream holds
@@ -1535,6 +1684,8 @@ var
   pb: TTyPointF;
   mat: TTyMat2D;
   bgCol: TTyBarColumn;
+  radii: TTyCornerRadii;
+  raw: Integer;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -1740,7 +1891,7 @@ begin
     { [R6-E] a border width that is no number ('abc'): getLineWidth's
       Math.min is not-a-number, so is the layout, and the bar is not drawn
       (isValidLayout) -- nor its label }
-    if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
+    if rv.StrokeWidthNaN and rv.BorderLayout then
       Continue;
     { [R6-F] getLineWidth's own number, `borderWidth || 0` in its
       Math.min: an infinite width is the bar's own width or height, which
@@ -1750,9 +1901,21 @@ begin
       below nought [was: only a width above nought, so the bar kept its
       size] }
     fixed := False;
-    if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    if rv.LayoutHas then
+    begin
+      { [R7-U] getLineWidth's width climbs to the root's }
+      if rv.LayoutWidthNaN and rv.BorderLayout then Continue;
+      if rv.LayoutWidthInf <> 0 then bw := rv.LayoutWidthInf
+      else bw := rv.LayoutWidthLogical;
+    end
+    else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    { [R7-Y] `borderWidth || 0`: a width nobody wrote is nought, whatever
+      the pen strokes at (zrender's 1 under a written colour) }
+    else if not rv.StrokeWidthSet then bw := 0
     else bw := rv.StrokeWidthLogical;
-    if (bw <> 0) and (rv.Stroke <> 0) then
+    { [R7-G] whenever a border colour is written truthy and not 'none',
+      whatever the pen draws [was: only a pen of some colour] }
+    if (bw <> 0) and rv.BorderLayout then
     begin
       fix := Min(bw * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
       if IsInfinite(fix) then Continue;
@@ -1802,17 +1965,34 @@ begin
       if (r.Bottom - r.Top <= 0) and not clipped and not fixed then Continue;
       zero := lw = 0;
     end;
-    if TyHasCorner(col.Radii) then
-      shape := TyShapeRoundRect(r, col.Radii)
+    { [R7-X] the row's own corners where its item writes them [was: the
+      series' for every row] }
+    radii := col.Radii;
+    raw := AStore.GetRawIndex(i);
+    if (raw >= 0) and (raw <= High(AVisual.HeatHasRadii)) and AVisual.HeatHasRadii[raw] then
+      radii := AVisual.HeatRadii[raw];
+    if TyHasCorner(radii) then
+      shape := TyShapeRoundRect(r, radii)
     else
       shape := TyShapeRect(r);
     el := MarkElement(shape, RowVisual(AVisual, AStore, i),
                       ABinding.SeriesIndex, i);
+    { [R7-AG] BarView's Rect is z2 1 (its background 0): at an equal z it
+      is over a z2-0 part -- a split line, a split area -- and among the
+      z2-1 ones by its view [was: the series' z2, 0] }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     el.Ignore := clipped;
     { [R6-F] the pen of an infinite border makes its bounding rect
       not-a-number upstream: the bar is never hit }
     el.HitNone := fixed and IsInfinite(bw);
+    { [R7-F] A CLEAR PEN ON A BAR THE LAYOUT DID NOT TAKE IT OUT OF: upstream
+      insets the bar by the width (getLineWidth asks only whether the
+      colour is null or 'none') and its clear pen then reaches back to the
+      full rect, which is where this rect already is -- asked again, it
+      would reach half a width past it. Where the layout insets (fixed),
+      the pen is asked as upstream's }
+    if not fixed then el.Style.HitClearPen := False;
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
@@ -1833,12 +2013,12 @@ begin
     el.Caption.LgG[1] := ly;
     el.Caption.LgG[2] := lw;
     el.Caption.LgG[3] := lh;
-    if TyHasCorner(col.Radii) then
+    if TyHasCorner(radii) then
     begin
-      el.Caption.LgG[4] := col.Radii[0];
-      el.Caption.LgG[5] := col.Radii[1];
-      el.Caption.LgG[6] := col.Radii[2];
-      el.Caption.LgG[7] := col.Radii[3];
+      el.Caption.LgG[4] := radii[0];
+      el.Caption.LgG[5] := radii[1];
+      el.Caption.LgG[6] := radii[2];
+      el.Caption.LgG[7] := radii[3];
     end;
     AList.Add(el);
     Inc(Result);
@@ -1907,8 +2087,10 @@ var
       rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
     if rs.Kind = tsyNone then Exit;
     rs := TySymbolResolveOffset(rs);
-    sh := TyBuildSymbol(rs, AP.X, AP.Y);
+    sh := TyBuildSymbolUnit(rs, AP.X, AP.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(sh, rs, AP.X, AP.Y);
     { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
       itemStyle.color. [Batch 56: every marker was the series colour.] }
     { [R2-I3] over the itemStyle's dash [was: the lineStyle's -- a dashed
@@ -1940,6 +2122,9 @@ var
       end;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
+    { [R7-P] its pen through the unit path's transform (strokeNoScale):
+      stretched where the symbol's size is not square }
+    TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
     { z2 100, as a scatter's (Symbol.ts:85): above the polyline, which a
       hover lifts by ten [Batch 88: it was the series' z2, and the hovered
       line's polyline then covered every other symbol] }
@@ -2274,9 +2459,11 @@ var
     end;
   end;
 
-  { the run's clip: the plot's rect, or a polar's sector }
+  { the run's clip: the plot's rect, or a polar's sector -- [R7-I] the
+    lineGroup's clipPath, which isHover asks: the hit is cut too }
   procedure SetClip(var AEl: TTyChartElement);
   begin
+    AEl.ClipHits := True;
     if pol = nil then
     begin
       AEl.HasClip := True;
@@ -2440,13 +2627,22 @@ var
     poly: TTyPointFArray;
     v: TTySeriesVisual;
     el: TTyChartElement;
+    lone: Boolean;
   begin
     if n < 1 then Exit;
     { A RUN OF ONE POINT HAS NO LINE AND NO AREA, but it still has its
       marker -- and so its label. Upstream draws every point's symbol
       whatever the polyline makes of it. [Revised in batch 47: a lone
-      point drew nothing at all.] }
-    if n >= 2 then
+      point drew nothing at all.]
+      [R7-AE] WHERE NO RUN HAS TWO POINTS the series' polyline (and its
+      area polygon) is still brushed: its path is a move alone (the area's
+      the point and its base), nothing to see, and it hands the canvas its
+      pen -- width, cap, join, miterLimit, dash and phase -- and its fill,
+      in its clip, on a polar too [was: an inkless polyline of no pen, no
+      area, none on a polar] }
+    lone := (n < 2) and pointsOnly and not pointRunDone;
+    if lone then pointRunDone := True;
+    if (n >= 2) or lone then
     begin
       SetLength(up, n);
       for k := 0 to n - 1 do up[k] := pts[k];
@@ -2484,7 +2680,15 @@ var
         v.FillPattern := Default(TTyChartPattern);
         v.StrokeGradient := Default(TTyChartGradient);
         { A visualMap's gradient, unless the area named its own colour. }
-        if AVisual.VisualLineArea then ApplyVisualLine(v, True);
+        if AVisual.VisualLineArea and not spec.AreaNone then ApplyVisualLine(v, True);
+        { [R7-F] an area written 'none' is no fill, to the eye and the
+          pointer }
+        if spec.AreaNone then
+        begin
+          v.Fill := 0;
+          v.FillGradient := Default(TTyChartGradient);
+          v.FillNone := True;
+        end;
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
         { the area polygon takes the series' style decal (LineView) }
         el.Style.Decal := AVisual.Decal;
@@ -2535,26 +2739,10 @@ var
       SetClip(el);
       TagClip(el, carLineRun);
       AList.Add(el);
+      { ([R7-AE] a lone point's counts: the series' view is drawn, its pens
+        and shadows applied) }
       Inc(Result);
 
-    end
-    else if pointsOnly and not pointRunDone and (pol = nil) then
-    begin
-      { the polyline of one point: no ink, no pointer -- its clip runs (the
-        end label rides it) [R5-C] }
-      SetLength(up, 1);
-      up[0] := pts[0];
-      el := MarkElement(TyShapePolyline(up), AVisual, ABinding.SeriesIndex, -1);
-      el.Style.HasFill := False;
-      el.Style.FillGradient := Default(TTyChartGradient);
-      el.Style.FillPattern := Default(TTyChartPattern);
-      el.Style.StrokeWidthLogical := 0;
-      el.Style.StrokeGradient := Default(TTyChartGradient);
-      el.Silent := True;
-      SetClip(el);
-      TagClip(el, carLineRun);
-      AList.Add(el);
-      pointRunDone := True;
     end;
 
     { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and
@@ -2585,6 +2773,8 @@ var
 begin
   Result := 0;
   symVis := AVisual;
+  { [R7-U] the visual style's opacity, not the polyline's }
+  if AVisual.ItemAlphaSet then symVis.Alpha := AVisual.ItemAlpha;
   symVis.Dash := AVisual.ItemDash;
   symVis.DashExplicit := AVisual.ItemDashExplicit;
   symVis.DashOffset := AVisual.ItemDashOffset;
@@ -2710,7 +2900,7 @@ begin
     rs := RowSymbol(AVisual, AStore, ARow, ASpec, lift);
   if rs.Kind = tsyNone then Exit;
   rs := TySymbolResolveOffset(rs);
-  shape := TyBuildSymbol(rs, AP.X, AP.Y);
+  shape := TyBuildSymbolUnit(rs, AP.X, AP.Y);
   { A SYMBOL OF NO SIZE is still an element upstream -- it paints nothing
     and carries its label, which is how a series of words alone is written
     (calendar-pie's day numbers, calendar-lunar's names) }
@@ -2719,6 +2909,9 @@ begin
     and not IsNan(AP.X + rs.OffsetX) and not IsNan(AP.Y + rs.OffsetY) then
     shape := TyShapeRect(TyRectF(AP.X + rs.OffsetX, AP.Y + rs.OffsetY,
       AP.X + rs.OffsetX, AP.Y + rs.OffsetY));
+  { [R7-F] hit in its own frame, as Symbol.ts' path -- [R7-W] one of no
+    size too (after the rect above, which would drop it) }
+  TySymbolHitFrame(shape, rs, AP.X, AP.Y);
   if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Exit;
   v := RowVisual(AVisual, AStore, ARow);
   ink := v.Fill;
@@ -2751,6 +2944,8 @@ begin
     begin
       rip := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
       rip.Style.Alpha := 1;
+      { [R7-P] the ripple's path is the symbol's, scaled with it (strokeNoScale) }
+      TyStyleNoScalePen(rip.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
       { IT LOOPS: scale 0.5 -> rippleScale / 2 and opacity 1 -> 0 over the
         period, ripple i of n started i / n of a period early, plus
         idx / count ms (EffectSymbol.ts:77-119) [Batch 92, AN4] }
@@ -2828,6 +3023,8 @@ begin
     end;
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
+  { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+  TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
   el.Z2 := 100 + Round(lift);
   SymbolHitSlop(el);
   { A SCATTER SYMBOL POPS IN: its path scales from nought to half its size
@@ -2922,8 +3119,10 @@ begin
     Asking the store rather than assuming index 2 keeps this right for a series
     bound to the second y axis. }
   sizeCol := -1;
+  { (an extra column of an encode list feeds an axis: no size [spec 255]) }
   for i := 0 to AStore.DimCount - 1 do
-    if (i <> AColX) and (i <> AColY) and (AStore.DimType(i) = ddtFloat) then
+    if (i <> AColX) and (i <> AColY) and (AStore.DimType(i) = ddtFloat)
+      and (AStore.DimCoord(i) = '') then
     begin
       sizeCol := i;
       Break;
@@ -3290,6 +3489,8 @@ var
     if clipKind <> wcPartial then Exit;
     AEl.HasClip := True;
     AEl.ClipRect := clipR;
+    { [R7-I] updateClipPath sets it on the element: isHover asks it }
+    AEl.ClipHits := True;
   end;
 
   procedure Wick(const AFrom, ATo: TTyPointF; ARole: TTyChartAnimRole);
@@ -3410,6 +3611,10 @@ begin
     v.Fill := fill;
     v.Stroke := border;
     v.StrokeWidthLogical := cs.BorderWidthLogical;
+    { [R7-Y] +Infinity, the row's own where it writes a width: stroked at
+      the lineWidth the canvas had, never hit (MarkElement) [was: the
+      series' alone] }
+    if cs.BorderWidthInf then v.StrokeWidthInf := Infinity else v.StrokeWidthInf := 0;
     { the item's own opacity (getItemStyle) [R5-B] }
     if not IsNan(rowOpacity) then v.Alpha := rowOpacity;
     { THE BRUSH'S fill and opacity (its visual stage writes style.fill, the
@@ -3428,7 +3633,7 @@ begin
     { THE LAYOUT'S EIGHT POINTS: the body's sides snapped to the half pixel
       apart, the spine to the half pixel [Batch 108] }
     ce := TyCandleEndsOf(ABinding.Cart, baseHoriz, at, openV, closeV, lowV,
-      highV, width);
+      highV, width, AVisual.PxScale);
     { resolveNormalBoxClipping over all eight: none inside is not drawn,
       some outside is drawn through the plot }
     if clipOn then clipKind := TyWhiskerClipOf(area, ce.Ends) else clipKind := wcNone;
@@ -3569,6 +3774,7 @@ var
   band: Double;
   ws, os: TTyDoubleArray;
   raw: Integer;
+  bwv: Double;
 begin
   Result := 0;
   if (AStore = nil) or (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
@@ -3643,8 +3849,9 @@ begin
     begin
       if AVisual.VisualRows[raw].ColorSet then
         v.Stroke := TyVisualToChart(AVisual.VisualRows[raw].Color);
+      { [R7-V] as written (the canvas clamps it) }
       if AVisual.VisualRows[raw].OpacitySet and not IsNan(AVisual.VisualRows[raw].Opacity) then
-        v.Alpha := Min(Double(1), Max(Double(0), AVisual.VisualRows[raw].Opacity));
+        v.Alpha := AVisual.VisualRows[raw].Opacity;
     end;
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.color')) then
     begin
@@ -3667,13 +3874,29 @@ begin
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.borderWidth')) then
     begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderWidth'));
-      if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then v.StrokeWidthLogical := dv.Num;
+      { [R7-Y] as the canvas takes it: a numeric string its number, +Infinity
+        stroked at the lineWidth the canvas had and never hit (MarkElement)
+        [was: a number only, the series' width under a string] }
+      bwv := NaN;
+      if dv.Kind = dvkNumber then bwv := dv.Num
+      else if dv.Kind = dvkText then bwv := TyJsToNumber(dv.Text);
+      if IsInfinite(bwv) then
+      begin
+        if bwv > 0 then v.StrokeWidthInf := bwv else v.StrokeWidthInf := 0;
+        v.StrokeWidthLogical := 0;
+      end
+      else if not IsNan(bwv) then
+      begin
+        v.StrokeWidthLogical := bwv;
+        v.StrokeWidthInf := 0;
+      end;
     end;
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.opacity')) then
     begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.opacity'));
+      { [R7-V] as written (the canvas clamps it) }
       if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then
-        v.Alpha := Min(Double(1), Max(Double(0), dv.Num));
+        v.Alpha := dv.Num;
     end;
     { [R5-B] THE PER-DATUM PALETTE (colorBy other than 'series', stage
       4600): on the pen, asked only by a row neither a visual channel nor
@@ -3705,6 +3928,8 @@ begin
     begin
       el.HasClip := True;
       el.ClipRect := clipR;
+      { [R7-I] the box's own clipPath: the hit too }
+      el.ClipHits := True;
     end;
     AList.Add(el);
     Inc(Result);
@@ -3743,6 +3968,8 @@ var
   cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
+  vlw, bw, rot: Double;
+  rv: TTySeriesVisual;
   lay: TTyCoordLayout;
   plot, barRect, clipRect: TTyRectF;
   col: TTyBarColumn;
@@ -3825,6 +4052,17 @@ begin
     if AVisual.ItemCb <> nil then
       spec := TyPictorialCbSpec(spec, AVisual.ItemCb.SymOf(AStore.GetRawIndex(i)));
     spec := TyPictorialRowSpec(spec, AStore, i);
+    { [R7-AG] symbolSize, symbolOffset and symbolMargin written in px are
+      css px: PPI / 96 device px each (a percentage stays of its base)
+      [was: device px] }
+    if (AVisual.PxScale > 0) and (AVisual.PxScale <> 1) then
+    begin
+      spec.SizeW := TyBoxValueScaled(spec.SizeW, AVisual.PxScale);
+      spec.SizeH := TyBoxValueScaled(spec.SizeH, AVisual.PxScale);
+      spec.OffsetX := TyBoxValueScaled(spec.OffsetX, AVisual.PxScale);
+      spec.OffsetY := TyBoxValueScaled(spec.OffsetY, AVisual.PxScale);
+      spec.Margin := TyBoxValueScaled(spec.Margin, AVisual.PxScale);
+    end;
     lay := ABinding.Cart.DataToLayout([x, y]);
     if not TyRectFIsValid(lay.Rect) then Continue;
     if not haveCol then
@@ -3957,13 +4195,40 @@ begin
       glyphLen := 0;
     end;
 
-    { UPSTREAM ADDS THE GLYPH'S OWN STROKE to the unit length, so a bordered
-      symbol takes its border's worth of room in a repeating column. NOT done
-      here, and the reason is written down rather than hidden: a stroke width
-      is LOGICAL until the renderer scales it by the screen's PPI, and this
-      builder works in device pixels. Folding a logical number in would draw
-      the right count at 96 dpi and the wrong one on every other screen. }
-    run := TyPictorialRunOf(spec, glyphLen, boundLen, cutLen, glyphLen);
+    { UPSTREAM ADDS THE GLYPH'S OWN BORDER to the unit length
+      (prepareLineWidth's valueLineWidth): itemStyle.borderWidth as
+      written, whatever the colour, through the glyph's line scale and
+      along the value axis, signed as the glyph is mirrored -- so a bordered
+      glyph makes room for its border, a repeat counts and spaces by it,
+      and a mirrored one gives it back. On the device: the width by
+      PxScale. The margin's percentage stays the glyph's own length.
+      [R7-G; was: left out, a bordered glyph a few px off] }
+    vlw := 0;
+    if not noGlyph then
+    begin
+      rv := RowVisual(AVisual, AStore, i);
+      { [R7-U] itemModel.get(BAR_BORDER_WIDTH_QUERY) climbs to the root's }
+      if rv.LayoutHas then
+      begin
+        if rv.LayoutWidthInf <> 0 then bw := rv.LayoutWidthInf
+        else if rv.LayoutWidthNaN or not rv.LayoutWidthSet then bw := 0
+        else bw := rv.LayoutWidthLogical;
+      end
+      else if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+      else if rv.StrokeWidthNaN or not rv.StrokeWidthSet then bw := 0
+      else bw := rv.StrokeWidthLogical;
+      rot := spec.RotateDeg * Pi / 180;
+      if IsNan(rot) then rot := 0;
+      if baseHoriz then
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize, glyphH / spec.PatternSize * (-1 * pxSign), rot,
+          glyphH / spec.PatternSize * (-1 * pxSign))
+      else
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize * (1 * pxSign), glyphH / spec.PatternSize, rot,
+          glyphW / spec.PatternSize * (1 * pxSign));
+    end;
+    run := TyPictorialRunOf(spec, glyphLen + vlw, boundLen, cutLen, glyphLen);
     { [R5-G] a run of none (a repeat on a bar of no length) is no glyph; the
       bar rect and its label stay [was: the item dropped] }
     if run.Count <= 0 then noGlyph := True;
@@ -4124,8 +4389,9 @@ begin
     sym.HeightPx := glyphH;
     sym.KeepAspect := spec.KeepAspect;
     { [F6a] createPath (PictorialBarView) hands createSymbol no keepAspect:
-      a picture glyph covers its box }
-    if sym.Kind = tsyImage then sym.KeepAspect := False;
+      a picture glyph covers its box -- [R7-R] and a path:// one too (its
+      square pattern box, scaled to the glyph: stretched) }
+    if sym.Kind in [tsyImage, tsyPath] then sym.KeepAspect := False;
     { THE OFFSET IS ALREADY IN THE ANCHOR and in acrossCentre. Leaving it on
       the spec as well would move every glyph twice. }
     sym.OffsetX := 0;
@@ -4167,7 +4433,7 @@ begin
         pt := TyPointF(acrossCentre + offAcross, floorPx + along)
       else
         pt := TyPointF(floorPx + along, acrossCentre + offAcross);
-      shape := TyBuildSymbol(sym, pt.X, pt.Y);
+      shape := TyBuildSymbolUnit(sym, pt.X, pt.Y);
       if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
       if mirror then
         shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
@@ -4179,6 +4445,11 @@ begin
         to the glyph's box -- as the canvas strokes a path whose
         strokeNoScale useStyle dropped }
       el.Style.PenScale := Sqrt(Abs(glyphW / spec.PatternSize * glyphH / spec.PatternSize));
+      { [R7-P] and its shape: the glyph's own scale on each axis, turned --
+        an oblong glyph's pen is stretched with it (the mirror along the
+        value axis leaves a round pen's image alone) }
+      TyStyleSetPenShape(el.Style, TyZrLocal(glyphW / spec.PatternSize,
+        glyphH / spec.PatternSize, DegToRad(spec.RotateDeg), 0, 0));
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
       { THE ENTER ANIMATION [F3a]. A symbolClip's glyphs are set where they
@@ -4367,6 +4638,8 @@ begin
     rv := RowVisual(AVisual, AStore, i);
     el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
       ABinding.SeriesIndex, i);
+    { ([R7-AG] its Sector z2 1, as the cartesian Rect) }
+    el.Z2 := AVisual.Z2 + 1;
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     zero := TyPolarZero(s);
     if zero then
@@ -4770,8 +5043,9 @@ begin
     AEl.Style.DashWord := TyDashWord(bs.Dash);
     AEl.Style.DashOffsetLogical := bs.DashOffset;
   end;
+  { [R7-V] as written (the canvas clamps it) }
   if not IsNan(bs.Opacity) then
-    AEl.Style.Alpha := Min(Double(1), Max(Double(0), bs.Opacity));
+    AEl.Style.Alpha := bs.Opacity;
 end;
 
 { createLarge: the background batch first (z2 0, silent), then the bars (z2
@@ -5189,7 +5463,8 @@ begin
   sizeCol := -1;
   if not large then
     for i := 0 to AStore.DimCount - 1 do
-      if (i <> colX) and (i <> colY) and (AStore.DimType(i) = ddtFloat) then
+      if (i <> colX) and (i <> colY) and (AStore.DimType(i) = ddtFloat)
+        and (AStore.DimCoord(i) = '') then
       begin
         sizeCol := i;
         Break;

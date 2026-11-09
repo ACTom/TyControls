@@ -1257,6 +1257,15 @@ begin
   if IsNan(Result) then Result := ADefault;
 end;
 
+{ [R7-F] a pen width of +Infinity in the chain: drawn as none, and its
+  stroked rect is not-a-number upstream -- the element is never hit }
+function ChainInf(const AChain: array of TJSONObject; const ASub, AKey: string): Boolean;
+var d: TJSONData;
+begin
+  d := ChainFind(AChain, ASub, AKey);
+  Result := TyOptIsPosInf(d);
+end;
+
 function ChainDash(const AChain: array of TJSONObject; const ASub, AKey: string;
   AWidth: Double): TTyDoubleArray;
 var
@@ -1592,6 +1601,9 @@ begin
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
+      el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1721,6 +1733,9 @@ begin
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
+      el.HitNone := ChainInf(Slice(chain, cnt), 'lineStyle', 'width');
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       el.Style.DashLogical := ChainDash(Slice(chain, cnt), 'lineStyle', 'type', w);
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
@@ -1758,15 +1773,20 @@ begin
     hh := sym.HeightPx / 2;
     { under a zoom a symbol grows by the zoom times the compensation --
       (z*ns)*(size/2) is its drawn half -- and its label does not }
-    if ASolved.HasView then
+    { ([R7-AG] the size and the offset css px: PPI / 96 device px each
+      [was: device px]) }
+    if ASolved.HasView or (AScale <> 1) then
     begin
-      vs := ASolved.VZ * ASolved.VNS;
+      vs := AScale;
+      if ASolved.HasView then vs := ASolved.VZ * ASolved.VNS * AScale;
       sym.WidthPx := 2 * (vs * (sym.WidthPx / 2));
       sym.HeightPx := 2 * (vs * (sym.HeightPx / 2));
       sym.OffsetX := vs * sym.OffsetX;
       sym.OffsetY := vs * sym.OffsetY;
     end;
-    shape := TyBuildSymbol(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
+    shape := TyBuildSymbolUnit(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(shape, sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
     { A NODE OF NO SIZE is still an element: it paints nothing and carries
       its label }
     zeroSize := (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds)
@@ -1777,6 +1797,8 @@ begin
         ASolved.Pos[row].PY + sym.OffsetY));
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     el := TyChartElement(shape);
+    { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+    TyStyleNoScalePen(el.Style, TySymbolUnitFrame(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY));
     { [R2-J3] the series' colour callback under the chain's own colour }
     cbColour := AInk.NodeColour;
     if (AInk.ItemCb <> nil) and not AInk.ItemCb.ColOf(row, cbColour) then
@@ -1802,6 +1824,9 @@ begin
       begin
         el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'itemStyle', 'borderColor', colour);
         el.Style.StrokeWidthLogical := ChainPen(Slice(chain, cnt), 'itemStyle', 'borderWidth', 1.5, True);
+        el.HitNone := ChainInf(Slice(chain, cnt), 'itemStyle', 'borderWidth');
+        { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+        if el.HitNone then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
       end;
     end;
     el.Style.Alpha := ChainNum(Slice(chain, cnt), 'itemStyle', 'opacity', 1);

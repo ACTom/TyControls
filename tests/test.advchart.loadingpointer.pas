@@ -125,6 +125,8 @@ type
     { [R5-F] its border, opacity and shadow; an image:// icon }
     procedure TestAStyledHandleAsUpstream;
     procedure TestAnImageHandleAsUpstream;
+    { [R7-AA] the option root's handle: its border, opacity and shadow }
+    procedure TestTheRootHandleAsUpstream;
     procedure TestTheHandleSlidesAsUpstream;
   end;
 
@@ -1079,6 +1081,17 @@ begin
             if ps.Image <> hh.Strings['image'] then Bad('picture ' + ps.Image + ', upstream ' + hh.Strings['image']);
           end
           else if ps.Image <> '' then Bad('a picture here, none upstream');
+          { [R7-AC] its border: the colour and the width where it strokes
+            (the root handle's reach it) }
+          if (hh.Find('stroke') <> nil) and (hh.Find('stroke').JSONType = jtString)
+            and (hh.Find('lineWidth') <> nil) and (hh.Find('lineWidth').JSONType = jtNumber)
+            and (hh.Floats['lineWidth'] > 0) and TyTryParseChartColor(hh.Strings['stroke'], shc) then
+          begin
+            Inc(FCompared);
+            if not ps.HasStroke or (ps.Stroke <> shc) then
+              Bad(Format('%s border %x, upstream %s', [hw.Strings['axis'], ps.Stroke, hh.Strings['stroke']]));
+            Near(hw.Strings['axis'] + ' border width', ps.StrokeWidth, hh.Floats['lineWidth'], 1e-9);
+          end;
         end;
       end;
     end;
@@ -1107,6 +1120,11 @@ end;
 procedure TAdvChartPointerHandleOracleTest.TestAnImageHandleAsUpstream;
 begin
   RunCase('x-image');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestTheRootHandleAsUpstream;
+begin
+  RunCase('x-root-handle');
 end;
 
 procedure TAdvChartPointerHandleOracleTest.TestACategoryXHandleAsUpstream;

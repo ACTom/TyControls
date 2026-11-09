@@ -155,6 +155,11 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
+    { [R7-Y] the font zrender joins from it (makeFont) is one the canvas
+      refuses -- a fontStyle / fontWeight that is no CSS word, a fontSize
+      string with a unit that is no length: the text is drawn in the font
+      the canvas had (TyCanvasRunStep) }
+    FontLeft: Boolean;
     { When False the ink is Colour. When True it is chosen from the host's own
       fill, the way an unset label.color is. }
     AutoColour: Boolean;
@@ -177,6 +182,12 @@ type
     { `textBorderWidth`, LOGICAL px. }
     HasBorderWidth: Boolean;
     BorderWidthLogical: Double;
+    { [R7-AF] one written as a STRING: the string where it strokes (the
+      TSpan's rect joins it to its width and height), and +Infinity, which
+      the canvas refuses -- stroked at the width it had (BorderWidthLogical
+      nought) }
+    BorderWidthText: string;
+    BorderWidthInf: Boolean;
     { [F4c] textBorderType as written ('' a solid halo) }
     BorderType: string;
     { [R2-F] textBorderDashOffset, LOGICAL px: the label's, else the global
@@ -209,6 +220,9 @@ type
     StateShow: Boolean;
     EmphHasBorderWidth: Boolean;
     EmphBorderWidthLogical: Double;
+    { [R7-AI] emphasis.label.textBorderWidth written as 'Infinity': the
+      hovered halo at the width the canvas had }
+    EmphBorderWidthInf: Boolean;
     EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
     EmphBorderColour: TTyChartColor;
     { `emphasis.itemStyle.color`: the hovered host's fill, when written;
@@ -257,6 +271,9 @@ type
       setLabelStyle hands over as defaultOpacity otherwise }
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R7-L] A VIEW THAT HANDS OVER NO defaultOpacity (sunburst, sankey,
+      themeRiver): the label is 1 under it, whatever its host's opacity }
+    NoHostOpacity: Boolean;
     { [R6-A] the states' textConfig, by TTyEmphTwin.State: emphasis, blur,
       select (TyTwinEmphasis..TyTwinSelect) }
     StateCfg: array[0..2] of TTyLabelStateCfg;
@@ -397,6 +414,30 @@ procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
   AHostHasFill, AHostGradient, AInside: Boolean;
   out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
 
+type
+  TTyAffine6 = array[0..5] of Double;
+
+{ [R7-M] A LABEL SQUASHED ON Y BEFORE ITS TURN, as one map from its own CSS
+  px to device px: anchored at (AX, AY), turned by ARot (TyRtPoint's
+  sense), AScale device px to one, y scaled by AYScale first; the device
+  box a text-frame box lays down as under it; and a one-run text's box in
+  its own frame (AW by AH, hung by the alignment) }
+procedure TyLabelAffineOf(AX, AY, ARot, AScale, AYScale: Double;
+  out A: TTyAffine6);
+function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;
+{ [R7-N] A SQUASHED CAPTION'S MAP MADE AGAIN from where it is now (its X, Y
+  and turn, a frame's or a state's): Line.beforeUpdate keeps the words
+  squashed by FixedYScale in every frame, at the place and the turn the
+  line gives them then. A caption with no such map is left as it is. }
+procedure TyCaptionAffineSync(var ACaption: TTyElementCaption);
+function TyAnchorTextRect(AW, AH: Double; AAH: TTyTextAnchorH;
+  AAV: TTyTextAnchorV): TTyXYWH;
+
+{ [R7-M] A TREEMAP'S LABEL ON ITS CELL (ACaption.HasFixedBox): the width,
+  the height and the padding TreemapView's beforeUpdate gives the label --
+  the content rect (the strip) less the padding, which the cell was cut by }
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+
 { AN ATTACHED LABEL'S BLOCK: ASpec.Rt finished in the spec's font with the
   host's fill as the inherit colour, laid out about (0, 0) with the host's
   defaults -- the automatic ink and halo TyLabelInk gives a label with no
@@ -407,6 +448,13 @@ function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+{ [R7-L] THE SAME TEXT AS zrender BOUNDS IT (TyRtLayJsBox): the label's
+  getBoundingRect, CSS px, NaN where upstream's is -- a size written as a
+  word lays a box out at NaN, which a label layout reads. }
+function TyLabelBlockJsBox(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
 
 { [R5-F] WHAT A HOVERED TEXT IS LAID OUT UNDER besides its chain: the
   normal style's keys a site set over the option -- the label layout's
@@ -490,7 +538,7 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 implementation
 
 uses fpjson, jsonparser, tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
-  tyControls.AdvanceChart.PolarBar,
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.PolarBar,
   tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Option;
 
@@ -602,6 +650,7 @@ begin
   if AOver.HasHeight and not emphHeight then
   begin
     rt.Style.HasHeight := True;
+    rt.Style.HeightIsText := False;
     rt.Style.Height := AOver.Height;
   end;
   sz := ASpec.FontSizeLogical;
@@ -623,6 +672,90 @@ begin
     TyLabelEmphOverNone);
 end;
 
+procedure TyLabelAffineOf(AX, AY, ARot, AScale, AYScale: Double;
+  out A: TTyAffine6);
+var c, s: Double;
+begin
+  { scale x diag(1, AYScale) x the turn, in zrender's order (x' = a x + c y,
+    y' = b x + d y); the turn as TyRtPoint takes it }
+  c := Cos(ARot);
+  s := Sin(ARot);
+  A[0] := AScale * c;
+  A[1] := -AScale * AYScale * s;
+  A[2] := AScale * s;
+  A[3] := AScale * AYScale * c;
+  A[4] := AX;
+  A[5] := AY;
+end;
+
+procedure TyCaptionAffineSync(var ACaption: TTyElementCaption);
+var
+  aff: TTyAffine6;
+  k: Integer;
+  sc: Double;
+begin
+  if not ACaption.HasAffine or not (ACaption.FixedYScale > 0)
+    or (ACaption.FixedYScale = 1) then Exit;
+  sc := ACaption.RtScale;
+  if not (sc > 0) then sc := 1;
+  TyLabelAffineOf(ACaption.X, ACaption.Y, ACaption.RotationRad, sc,
+    ACaption.FixedYScale, aff);
+  for k := 0 to 5 do ACaption.Affine[k] := aff[k];
+end;
+
+function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;
+var
+  xs, ys: array[0..3] of Double;
+  k: Integer;
+begin
+  if ABox.W < 0 then Exit(TyRectF(A[4], A[5], A[4], A[5]));
+  xs[0] := ABox.X; ys[0] := ABox.Y;
+  xs[1] := ABox.X + ABox.W; ys[1] := ABox.Y;
+  xs[2] := ABox.X + ABox.W; ys[2] := ABox.Y + ABox.H;
+  xs[3] := ABox.X; ys[3] := ABox.Y + ABox.H;
+  Result := TyRectF(Infinity, Infinity, NegInfinity, NegInfinity);
+  for k := 0 to 3 do
+  begin
+    Result.Left := Min(Result.Left, A[0] * xs[k] + A[2] * ys[k] + A[4]);
+    Result.Right := Max(Result.Right, A[0] * xs[k] + A[2] * ys[k] + A[4]);
+    Result.Top := Min(Result.Top, A[1] * xs[k] + A[3] * ys[k] + A[5]);
+    Result.Bottom := Max(Result.Bottom, A[1] * xs[k] + A[3] * ys[k] + A[5]);
+  end;
+end;
+
+function TyAnchorTextRect(AW, AH: Double; AAH: TTyTextAnchorH;
+  AAV: TTyTextAnchorV): TTyXYWH;
+var x, y: Double;
+begin
+  case AAH of
+    tahCentre: x := -AW / 2;
+    tahRight: x := -AW;
+  else
+    x := 0;
+  end;
+  case AAV of
+    tavMiddle: y := -AH / 2;
+    tavBottom: y := -AH;
+  else
+    y := 0;
+  end;
+  Result := TyXYWH(x, y, AW, AH);
+end;
+
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+var k: Integer;
+begin
+  if not ACaption.HasFixedBox then Exit;
+  ASpec.Rt.Style.WidthKind := rtwNumber;
+  ASpec.Rt.Style.Width := ACaption.FixedBoxW;
+  ASpec.Rt.Style.WidthIsText := False;
+  ASpec.Rt.Style.HasHeight := True;
+  ASpec.Rt.Style.Height := ACaption.FixedBoxH;
+  ASpec.Rt.Style.HeightIsText := False;
+  ASpec.Rt.Style.HasPadding := True;
+  for k := 0 to 3 do ASpec.Rt.Style.Padding[k] := ACaption.FixedBoxPad[k];
+end;
+
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
@@ -636,6 +769,11 @@ begin
   rt := ASpec.Rt;
   TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
     ASpec.RtGlobal, AHostHasFill, AHostFill);
+  { [R7-L] THE TEXT'S OWN OPACITY IS THE ELEMENT'S (its label.opacity, the
+    root textStyle's, the host's defaultOpacity) and every piece but a
+    token with its own follows it there -- in the pieces too it drew twice
+    (a label.opacity 0.5 over a box at 0.25) }
+  rt.Style.HasOpacity := False;
   autoSpec := ASpec;
   autoSpec.AutoColour := True;
   autoSpec.InheritColour := False;
@@ -648,13 +786,97 @@ begin
     autoStroke, True, AH, AV), AScale, AMeasurer);
 end;
 
+{ [R7-AK] the same text's TSpans laid out at NaN, as the pointer finds them
+  (TyRtLayNanSpans), CSS px }
+function TyLabelBlockNanSpans(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  rt.Style.HasOpacity := False;
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLayNanSpans(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
+function TyLabelBlockJsBox(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  { as TyLabelBlockPieces lays it out }
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  rt.Style.HasOpacity := False;
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLayJsBox(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
 procedure TyCaptionToEmphasis(var ACaption: TTyElementCaption);
+var
+  pcs: TTyRtPieceArray;
+  i: Integer;
 begin
   if not ACaption.HasEmph then Exit;
   ACaption.Colour := ACaption.EmphColour;
   ACaption.StrokeColour := ACaption.EmphStrokeColour;
   ACaption.StrokeWidthLogical := ACaption.EmphStrokeWidthLogical;
   if Length(ACaption.RtEmph) > 0 then ACaption.RtPieces := ACaption.RtEmph;
+  { [R7-AA] A BLOCK takes the ink the hover's label writes on its text, as
+    the state style's fill and stroke go over the label's own -- a rich
+    token's own ink stays [was: the rest state's ink, laid out again or
+    not] }
+  if (Length(ACaption.RtPieces) > 0) and (ACaption.EmphOwnInk <> 0) then
+  begin
+    pcs := Copy(ACaption.RtPieces, 0, Length(ACaption.RtPieces));
+    for i := 0 to High(pcs) do
+    begin
+      if pcs[i].Kind <> rpkText then Continue;
+      if not pcs[i].TokenFill and ((ACaption.EmphOwnInk and 1) <> 0) then
+      begin
+        pcs[i].HasFill := True;
+        pcs[i].Fill := ACaption.EmphColour;
+        pcs[i].CanvasLeft := pcs[i].CanvasLeft and not 1;
+      end;
+      if not pcs[i].TokenStroke and ((ACaption.EmphOwnInk and 2) <> 0) then
+      begin
+        pcs[i].HasStroke := ACaption.EmphStrokeWidthLogical > 0;
+        pcs[i].Stroke := ACaption.EmphStrokeColour;
+        pcs[i].LineWidth := ACaption.EmphStrokeWidthLogical;
+        pcs[i].CanvasLeft := pcs[i].CanvasLeft and not 2;
+      end;
+    end;
+    ACaption.RtPieces := pcs;
+  end;
 end;
 
 procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
@@ -674,7 +896,16 @@ begin
   TyLabelInkEmphasis(ASpec, fill, AHostHasFill, grad, AInside,
     ACaption.EmphColour, ACaption.EmphStrokeColour,
     ACaption.EmphStrokeWidthLogical);
+  { [R7-AI] a hovered halo of 'Infinity': stroked at the width the canvas
+    had (StWriteLabel marks the element) }
+  ACaption.EmphStrokeInf := ASpec.EmphHasBorderWidth and ASpec.EmphBorderWidthInf
+    and (((ACaption.EmphStrokeColour shr 24) <> 0)
+      or (ACaption.EmphStrokeColour = cTyCanvasColourLeft));
   ACaption.HasEmph := True;
+  ACaption.EmphOwnInk := 0;
+  if ASpec.EmphHasColour then ACaption.EmphOwnInk := ACaption.EmphOwnInk or 1;
+  if ASpec.EmphHasBorderColour or ASpec.EmphHasBorderWidth then
+    ACaption.EmphOwnInk := ACaption.EmphOwnInk or 2;
 end;
 
 function TyLabelSpecNone: TTyLabelSpec;
@@ -1040,8 +1271,9 @@ var
   procedure Halo(AColour: TTyChartColor);
   begin
     { A STROKE THAT IS TRANSPARENT IS NONE -- zrender drops `transparent`
-      before it paints. }
-    if (AColour shr 24) = 0 then Exit;
+      before it paints. [R7-W] A colour no parser reads is a string all
+      the same: stroked with the strokeStyle the canvas had }
+    if ((AColour shr 24) = 0) and (AColour <> cTyCanvasColourLeft) then Exit;
     AStroke := AColour;
     AStrokeWidthLogical := w;
   end;
@@ -1051,8 +1283,11 @@ begin
   AStrokeWidthLogical := 0;
   inside := AInside and AHostHasFill;
   band := TyLabelInkBand(AHostFill, AHostGradient);
-  { `textBorderWidth || 2`: a nought is two. }
-  if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
+  { `textBorderWidth || 2`: a nought is two. ([R7-AF] +Infinity is the
+    width the canvas had: nought until the paint order settles it) }
+  if ASpec.HasBorderWidth and ASpec.BorderWidthInf then
+    w := 0
+  else if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
     w := ASpec.BorderWidthLogical
   else
     w := 2;
@@ -1078,7 +1313,7 @@ begin
   if ASpec.HasBorderColour then
   begin
     if ASpec.BorderColourNone then Exit;
-    if not (ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0)) then Exit;
+    if not (ASpec.HasBorderWidth and ((ASpec.BorderWidthLogical > 0) or ASpec.BorderWidthInf)) then Exit;
     if ASpec.BorderColourInherit then Halo(AHostFill)
     else Halo(ASpec.BorderColour);
     Exit;
@@ -1124,6 +1359,9 @@ begin
   begin
     s.HasBorderWidth := True;
     s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
+    { ([R7-AI] and one of 'Infinity') }
+    s.BorderWidthInf := ASpec.EmphBorderWidthInf;
+    s.BorderWidthText := '';
   end;
   { the hover's stroke colour over the normal one: zrender merges the
     emphasis style's `stroke` over the label's (labelStyle.ts:550-583) }
@@ -1268,6 +1506,7 @@ var
   tbox: TTyRectF;
   tpieces: TTyRtPieceArray;
   tinside, tgrad: Boolean;
+  tspec: TTyLabelSpec;
   tink, tstroke: TTyChartColor;
 begin
   Result := False;
@@ -1410,8 +1649,22 @@ begin
   tpieces := nil;
   if AIn.Spec.Rt.Needed then
   begin
-    tpieces := TyLabelBlockPieces(AIn.Spec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
-      tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
+    tspec := AIn.Spec;
+    { [R7-M] a treemap's label on its cell, under the state's place }
+    if (anc >= 0) and AIn.Host.EmphTwin[anc].Caption.HasFixedBox then
+    begin
+      TyLabelFixBox(tspec, AIn.Host.EmphTwin[anc].Caption);
+      tspec.Rt.Style.Align := rtaNone;
+      tspec.Rt.Style.VAlign := rtvNone;
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, AIn.Host.EmphTwin[anc].Caption.FixedBoxAH,
+        AIn.Host.EmphTwin[anc].Caption.FixedBoxAV, AIn.Scale, AMeasurer);
+      TyRtShiftPieces(tpieces, (AIn.Host.EmphTwin[anc].Caption.FixedBoxX + toffX - tx)
+        / AIn.Scale, (AIn.Host.EmphTwin[anc].Caption.FixedBoxY + toffY - ty) / AIn.Scale);
+    end
+    else
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
     if Length(tpieces) = 0 then Exit;
     tbox := TyRtDeviceBox(tpieces, tx, ty, trot, AIn.Scale);
   end
@@ -1499,12 +1752,18 @@ var
   pieces: TTyRtPieceArray;
   raw: TTyRectF;
   hostRect, hbox: TTyXYWH;
+  rtb: TTyXYWH;
+  hitPieces: TTyRtPieceArray;
+  { [R7-AK] the TSpans laid out at NaN, as the pointer finds them }
+  nanBoxes: TTyRtBoxArray;
   hasHostRect, hasBox: Boolean;
   baseX, baseY, offX, offY, rot: Double;
   m: TTyMat2D;
   k: Integer;
   normalCfg, stCfg: TTyLabelStateCfg;
   code: Byte;
+  hasAff: Boolean;
+  aff: TTyAffine6;
 
   { [R6-A] A LINE'S LABEL: what its states write, laid out when they are
     written (the box is the Line group's as the state draws it) }
@@ -1801,9 +2060,49 @@ begin
         autoSpec.Rt.Style.Align := rtaNone;
         autoSpec.Rt.Style.VAlign := rtvNone;
       end;
-      pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
-        hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-        LabelInside(host, pos), ah, av, scale, AMeasurer);
+      { [R7-M] A TREEMAP'S LABEL ON ITS CELL: the box the cell's, laid out at
+        the position's anchor by its alignment (the padding is the block's),
+        and hung where the words' anchor is }
+      if host.Caption.HasFixedBox then
+      begin
+        TyLabelFixBox(autoSpec, host.Caption);
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), host.Caption.FixedBoxAH, host.Caption.FixedBoxAV,
+          scale, AMeasurer);
+        TyRtShiftPieces(pieces, (host.Caption.FixedBoxX + offX - x) / scale,
+          (host.Caption.FixedBoxY + offY - y) / scale);
+      end
+      else
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
+      { [R7-L] A TEXT LAID OUT WHOLLY AT NaN (a size written as a word) draws
+        nothing but is still upstream's label: the label layout weighs it by
+        its box, which can hide the others. It stands as one undrawn rect,
+        where its TSpans are bounded (style.x || 0). }
+      if (Length(pieces) = 0) and (host.Caption.Text <> '')
+        and TyRtHasStringSize(autoSpec.Rt.Style, autoSpec.Rt.Rich) then
+      begin
+        rtb := TyLabelBlockJsBox(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
+        SetLength(pieces, 1);
+        pieces[0] := Default(TTyRtPiece);
+        pieces[0].Kind := rpkRect;
+        pieces[0].Placeholder := True;
+        pieces[0].Line := -1;
+        pieces[0].Token := -1;
+        pieces[0].Opacity := 1;
+        pieces[0].ImageOpacity := 1;
+        if TyRtBoxIsFinite(rtb) then
+        begin
+          pieces[0].X := rtb.X;
+          pieces[0].Y := rtb.Y;
+          pieces[0].W := rtb.W;
+          pieces[0].H := rtb.H;
+        end;
+      end;
       if Length(pieces) = 0 then Continue;
       { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
         zrender's getBoundingRect, which the label layout reads }
@@ -1815,6 +2114,18 @@ begin
       the same rectangle, which is the whole reason the caption gets an entry
       of its own rather than a note on somebody else's. }
       box := TyAnchorBox(x, y, w, h, ah, av);
+    { [R7-M] A TEXT SQUASHED ON Y BEFORE ITS TURN (a graph's edge label in a
+      view scaled unequally): the whole map -- the turn, the device scale
+      and the ratio -- and the box it lays the text's down as }
+    hasAff := (host.Caption.FixedYScale > 0) and (host.Caption.FixedYScale <> 1);
+    if hasAff then
+    begin
+      TyLabelAffineOf(x, y, rot, scale, host.Caption.FixedYScale, aff);
+      if pieces <> nil then
+        box := TyRtAffineBox(TyRtBounds(pieces), aff)
+      else
+        box := TyRtAffineBox(TyAnchorTextRect(w / scale, h / scale, ah, av), aff);
+    end;
 
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;
@@ -1851,9 +2162,16 @@ begin
     { A WRITTEN text border is counted in the text's rect; the automatic
       halo is not (Text.ts _updatePlainTexts) }
     cap.Caption.LmStrokeW := 0;
+    cap.Caption.LmStrokeText := '';
     if spec.HasBorderColour and not spec.BorderColourNone and spec.HasBorderWidth
-      and (spec.BorderWidthLogical > 0) then
+      and ((spec.BorderWidthLogical > 0) or spec.BorderWidthInf) then
+    begin
       cap.Caption.LmStrokeW := spec.BorderWidthLogical * scale;
+      { ([R7-AF] a string joins the rect's width and height; 'Infinity'
+        takes its corner to -Infinity, its size to NaN) }
+      cap.Caption.LmStrokeText := spec.BorderWidthText;
+      if spec.BorderWidthInf then cap.Caption.LmStrokeW := Infinity;
+    end;
     cap.Caption.LmInkFill := hostFill;
     cap.Caption.LmInkHasFill := hostHasFill;
     cap.Caption.LmInkGradient := host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone);
@@ -1870,6 +2188,20 @@ begin
     cap.Caption.Colour := ink;
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
+    { [R7-AF] A HALO OF 'Infinity': the canvas refuses the width and strokes
+      at the one it had (the paint order settles it) [was: not stroked] }
+    if spec.HasBorderWidth and spec.BorderWidthInf
+      and (((stroke shr 24) <> 0) or (stroke = cTyCanvasColourLeft)) then
+      cap.CanvasFlags := cap.CanvasFlags or cTyCanvasWidthLeft;
+    { [R7-C] A PLAIN TEXT'S PEN GROWS ITS RECT by half its width on every
+      side (TSpan.getBoundingRect), which is what the pointer is tested
+      against (rectContain) -- the box above stays the words' own, as the
+      layout reads it. [R7-F] A WRITTEN pen only: Text._updatePlainTexts
+      gives the automatic halo a rect without it (usingDefaultStroke) [was:
+      the halo grew it too] }
+    if (pieces = nil) and (cap.Caption.LmStrokeW > 0) and (strokeW > 0)
+      and ((stroke shr 24) <> 0) then
+      cap.HitSlopLogical := strokeW / 2;
     cap.Caption.StrokeType := spec.BorderType;
     cap.Caption.StrokeDashOffset := spec.BorderDashOffset;
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,
@@ -1878,6 +2210,7 @@ begin
     { createTextStyle: the label's own opacity, else the host's
       (defaultOpacity) [R2-I1: a written label.opacity was not read] }
     if spec.HasOpacity then cap.Style.Alpha := spec.Opacity
+    else if spec.NoHostOpacity then cap.Style.Alpha := 1
     else cap.Style.Alpha := host.Style.Alpha;
     cap.Z := host.Z;
     { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back
@@ -1942,6 +2275,7 @@ begin
     if host.Anim.Role = carSankeyClip then
     begin
       cap.Anim.Role := carSankeyClip;
+      cap.ClipHits := True;
       cap.Anim.Index := -1;
       cap.Anim.G := host.Anim.G;
     end;
@@ -1967,10 +2301,15 @@ begin
     cap.Caption.FontName := spec.FontName;
     cap.Caption.FontSizeLogical := spec.FontSizeLogical;
     cap.Caption.FontWeight := spec.FontWeight;
+    if spec.FontLeft then cap.CanvasFlags := cap.CanvasFlags or cTyCanvasFontLeft;
     cap.Caption.X := x;
     cap.Caption.Y := y;
     cap.Caption.AnchorH := ah;
     cap.Caption.AnchorV := av;
+    { [R7-M] drawn under the whole map }
+    cap.Caption.HasAffine := hasAff;
+    if hasAff then
+      for k := 0 to 5 do cap.Caption.Affine[k] := aff[k];
     cap.Caption.RotationRad := spec.RotationRad;
     if host.Caption.HasFixedAnchor then
       cap.Caption.RotationRad := host.Caption.FixedRotationRad;
@@ -1979,6 +2318,71 @@ begin
     cap.Caption.RtPieces := pieces;
     cap.Caption.RtEmph := nil;
     cap.Caption.RtScale := scale;
+    { [R7-F] THE BOX IN THE LABEL'S OWN FRAME, about (X, Y) and unturned:
+      where the label turns, zrender tests the point taken back into that
+      frame (TSpan's and the plate's contain in local coordinates), not
+      the turned box's upright bounds }
+    cap.Caption.HasHitRel := True;
+    { [R7-AF] A WORDS' RECT THAT JOINED A STRING (a written halo's width as a
+      string, or 'Infinity') IS FOUND BY NOTHING: rectContain joins it again
+      and the edge is no number, or left of the corner [was: found in the
+      words' box] }
+    if (pieces = nil) and (cap.Caption.LmStrokeText <> '') then
+    begin
+      cap.Caption.HitRelOwn := True;
+      cap.Caption.HitRel := TyRectF(1e300, 1e300, -1e300, -1e300);
+    end
+    else if pieces <> nil then
+    begin
+      { a piece the pointer never finds is not in it }
+      { ([R7-AI] and a span whose rect rectContain reads joined to a string
+        (TTyRtPiece.HitJs) takes that rect: nothing where an edge is NaN or
+        before its start, far to the right where '12' + '243' is) }
+      hitPieces := nil;
+      for k := 0 to High(pieces) do
+        if pieces[k].NoHit or pieces[k].HitJs then cap.Caption.HitRelOwn := True
+        else
+        begin
+          SetLength(hitPieces, Length(hitPieces) + 1);
+          hitPieces[High(hitPieces)] := pieces[k];
+        end;
+      if cap.Caption.HitRelOwn then rtb := TyRtBounds(hitPieces)
+      else rtb := TyRtBounds(pieces);
+      cap.Caption.HitRel := TyRectF(rtb.X * scale, rtb.Y * scale,
+        (rtb.X + rtb.W) * scale, (rtb.Y + rtb.H) * scale);
+      if rtb.W < 0 then cap.Caption.HitRel := TyRectF(1e300, 1e300, -1e300, -1e300);
+      for k := 0 to High(pieces) do
+        if pieces[k].HitJs and not pieces[k].NoHit
+          and not (IsNan(pieces[k].HitL) or IsNan(pieces[k].HitR)
+            or IsNan(pieces[k].HitT) or IsNan(pieces[k].HitB))
+          and (pieces[k].HitR >= pieces[k].HitL) and (pieces[k].HitB >= pieces[k].HitT) then
+        begin
+          cap.Caption.HitRel.Left := Min(cap.Caption.HitRel.Left, pieces[k].HitL * scale);
+          cap.Caption.HitRel.Top := Min(cap.Caption.HitRel.Top, pieces[k].HitT * scale);
+          cap.Caption.HitRel.Right := Max(cap.Caption.HitRel.Right, pieces[k].HitR * scale);
+          cap.Caption.HitRel.Bottom := Max(cap.Caption.HitRel.Bottom, pieces[k].HitB * scale);
+        end;
+      { [R7-AK] AND THE TSPANS LAID OUT AT NaN beside what is drawn (a token
+        after one whose padding left a side undefined): each still found
+        where `style.x || 0` bounds it [was: left out] }
+      if spec.Rt.Needed and not pieces[0].Placeholder and not host.Caption.HasFixedBox
+        and TyRtHasStringSize(autoSpec.Rt.Style, autoSpec.Rt.Rich) then
+      begin
+        nanBoxes := TyLabelBlockNanSpans(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
+        for k := 0 to High(nanBoxes) do
+        begin
+          cap.Caption.HitRelOwn := True;
+          cap.Caption.HitRel.Left := Min(cap.Caption.HitRel.Left, nanBoxes[k].X * scale);
+          cap.Caption.HitRel.Top := Min(cap.Caption.HitRel.Top, nanBoxes[k].Y * scale);
+          cap.Caption.HitRel.Right := Max(cap.Caption.HitRel.Right, (nanBoxes[k].X + nanBoxes[k].W) * scale);
+          cap.Caption.HitRel.Bottom := Max(cap.Caption.HitRel.Bottom, (nanBoxes[k].Y + nanBoxes[k].H) * scale);
+        end;
+      end;
+    end
+    else
+      cap.Caption.HitRel := TyRectF(box.Left - x, box.Top - y, box.Right - x, box.Bottom - y);
     { emphasis.label's own rich styles: laid out again [R5-B]; its font or
       box too, a one-run label's as well, and a data item's own over the
       series' [R5-F: a one-run label only changed its ink] }

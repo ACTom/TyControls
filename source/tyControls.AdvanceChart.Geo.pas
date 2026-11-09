@@ -274,6 +274,13 @@ type
     { [R2-I2] borderDashOffset, px (DashOffsetHas: the style sets it) }
     DashOffsetHas: Boolean;
     DashOffset: Double;
+    { [R7-X] getItemStyle's borderCap, borderJoin and borderMiterLimit
+      (lineCap, lineJoin, miterLimit -- TTyChartElementStyle's codes; a
+      limit as TyOptMiterLimit reads it), where the style sets them [was:
+      never drawn] }
+    CapHas, JoinHas, MiterHas: Boolean;
+    Cap, Join: Byte;
+    Miter: Double;
     { [Batch 148] A STATE'S STYLE IS SPARSE: which keys it sets (the
       opacity's is HasOpacity), the token a default colour is, and an
       emphasis fill written 'inherit' (the proxy's own word). The normal
@@ -1185,10 +1192,28 @@ function GradOnBox(const AG: TTyChartGradient; const ABox: TTyXYWH;
     AX := M[0] * x + M[2] * y + M[4];
     AY := M[1] * x + M[3] * y + M[5];
   end;
+var k: Integer;
 begin
   Result := AG;
   if (AG.Kind = cgkNone) or AG.Global then Exit;
   Result.Global := True;
+  { [R7-AD] under a transform that is no similarity: made in the path's
+    frame and kept there (HasM) -- the canvas' ellipse, slanted stripes
+    [was: a circle of the area's radius] }
+  if not ((M[1] = 0) and (M[2] = 0) and (M[0] = M[3])) then
+  begin
+    Result.HasM := True;
+    for k := 0 to 5 do Result.M[k] := M[k];
+    Result.X := AG.X * ABox.W + ABox.X;
+    Result.Y := AG.Y * ABox.H + ABox.Y;
+    if AG.Kind = cgkRadial then Result.R := AG.R * Min(ABox.W, ABox.H)
+    else
+    begin
+      Result.X2 := AG.X2 * ABox.W + ABox.X;
+      Result.Y2 := AG.Y2 * ABox.H + ABox.Y;
+    end;
+    Exit;
+  end;
   Through(AG.X, AG.Y, Result.X, Result.Y);
   if AG.Kind = cgkRadial then
     Result.R := AG.R * Min(ABox.W, ABox.H) * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]))
@@ -3834,6 +3859,13 @@ begin
       Result.FillSrc := gisOption;
       Result.Fill := c;
       Result.FillGradient := g;
+    end
+    { [R7-AD] a string no parser reads: MapDraw fills with it, the canvas
+      refusing it -- the fill it had (cTyCanvasColourLeft) [was: none] }
+    else if (d.JSONType = jtString) and not none then
+    begin
+      Result.FillSrc := gisOption;
+      Result.Fill := cTyCanvasColourLeft;
     end;
   end
   else if tok <> gtkNone then
@@ -3875,6 +3907,12 @@ begin
     begin
       Result.StrokeSrc := gisOption;
       Result.Stroke := c;
+    end
+    { [R7-AD] (and the border's) }
+    else if (d.JSONType = jtString) and not none then
+    begin
+      Result.StrokeSrc := gisOption;
+      Result.Stroke := cTyCanvasColourLeft;
     end;
   end
   else if tok <> gtkNone then
@@ -3921,6 +3959,26 @@ begin
   begin
     Result.DashOffsetHas := True;
     Result.DashOffset := d.AsFloat;
+  end;
+  { [R7-X] the pen's ends }
+  d := Get('borderCap');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.CapHas := True;
+    Result.Cap := TyLineCapOf(d);
+  end;
+  d := Get('borderJoin');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.JoinHas := True;
+    Result.Join := TyLineJoinOf(d);
+  end;
+  d := Get('borderMiterLimit');
+  if d <> nil then
+  begin
+    Result.Miter := TyOptMiterLimit(d);
+    Result.MiterHas := not IsNan(Result.Miter);
+    if Result.Miter = 10 then Result.Miter := 0;
   end;
   { [R5-A] the shadow keys }
   Result.Shadow := TyStNoObject;
@@ -5090,6 +5148,14 @@ begin
 end;
 
 { [R5-A] the current shadow onto a region's path }
+{ [R7-X] a paint's ends onto a style, where it sets them }
+procedure GeoTakeEnds(var AStyle: TTyChartElementStyle; const APaint: TTyGeoPaint);
+begin
+  if APaint.CapHas then AStyle.LineCap := APaint.Cap;
+  if APaint.JoinHas then AStyle.LineJoin := APaint.Join;
+  if APaint.MiterHas then AStyle.MiterLimit := APaint.Miter;
+end;
+
 procedure GeoWriteShadow(var AEl: TTyChartElement; const C: TTyStObject);
 begin
   if not C.Has[stkShadowColor] then Exit;
@@ -6081,6 +6147,7 @@ var
     box, r: TTyXYWH;
     k: Integer;
     sn: TTyStName;
+    mlog: TTyMat2D;
     dash: TTyOptDash;
     dashLogical: TTyDoubleArray;
     optDash: Boolean;
@@ -6254,6 +6321,21 @@ var
             el.Style.StrokeColor := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
             if look.NoScale then w := lw else w := lw * det / scale;
             el.Style.StrokeWidthLogical := w;
+            { [R7-P] the pen under the shape's global transform: its shape
+              on that round pen -- the transform over its line scale where
+              the option styles it (strokeNoScale) -- stretched where the
+              SVG or the geo's aspectScale scales unequally [was: round] }
+            if hasM then
+            begin
+              if look.NoScale then
+              begin
+                mlog := m;
+                for k := 0 to 5 do mlog[k] := m[k] / scale;
+                TyStyleNoScalePen(el.Style, mlog);
+              end
+              else
+                TyStyleSetPenShape(el.Style, m);
+            end;
             { [R6-B] a stroke in the map's own units: a tween scales it }
             el.Anim.VStroke := not look.NoScale;
             { the dash: the option's (its normal, a state's over it in list
@@ -6280,6 +6362,10 @@ var
               for sn := Low(TTyStName) to High(TTyStName) do
                 if (sn in st.States) and look.StateOpt[sn].DashOffsetHas then
                   el.Style.DashOffsetLogical := look.StateOpt[sn].DashOffset;
+              { [R7-X] the ends, the normal's, a state's over them }
+              GeoTakeEnds(el.Style, look.Opt);
+              for sn := Low(TTyStName) to High(TTyStName) do
+                if sn in st.States then GeoTakeEnds(el.Style, look.StateOpt[sn]);
             end;
             if optDash then
             begin
@@ -6623,6 +6709,10 @@ begin
             for s := Low(TTyStName) to High(TTyStName) do
               if (s in it.Host.States) and p.StatePaint[s].DashOffsetHas then
                 el.Style.DashOffsetLogical := p.StatePaint[s].DashOffset;
+            { [R7-X] the ends, the normal's, a state's over them }
+            GeoTakeEnds(el.Style, p.Paint);
+            for s := Low(TTyStName) to High(TTyStName) do
+              if s in it.Host.States then GeoTakeEnds(el.Style, p.StatePaint[s]);
             { Path.contain's stroke: the width, at least
               strokeContainThreshold where there is no fill }
             lw := c.Num[stkLineWidth] * scale;

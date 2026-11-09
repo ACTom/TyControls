@@ -82,6 +82,10 @@ type
     Show: Boolean;
     WidthLogical: Double;
     Colours: TTyChartColorArray;
+    { [R7-AF] index-parallel to Colours: an entry written as a gradient (its
+      Colours entry the first stop), cgkNone for a colour; empty when none
+      is one [was: a gradient not read, the skin's colour drawn] }
+    Grads: TTyChartGradientArray;
     { [R5-B] the rest of the lineStyle: `type` (a word against the width,
       or lengths), `dashOffset`, `opacity` -- 1 when not written }
     Dash: TTyOptDash;
@@ -144,6 +148,11 @@ type
     FontSizeLogical: Integer;
     { [R5-A] fontStyle as written (TyFontStyleCode) }
     FontStyle: Byte;
+    { [R7-I] axisLabel.formatter (makeLabelFormatter on the indicator's
+      value axis): a template's first '{value}' is the rawLabel, a handler
+      ('@name') is handed the tick's value and its index }
+    HasFormatter: Boolean;
+    Formatter: string;
   end;
 
   TTyRadarSpec = record
@@ -268,6 +277,10 @@ type
     Fills: TTyChartColorArray;
     Fill: TTyChartColor;
     LineWidthLogical: Double;
+    { [R7-F] the series' lineStyle.width is +Infinity: the ring strokes
+      nothing (the canvas takes no such width) and its stroked rect is
+      not-a-number upstream -- it is never hit }
+    LineInf: Boolean;
     { [R2-B] lineStyle.type (getLineStyle's lineDash, drawn as zrender's
       normalizeLineDash against the width), the series' and -- RowLineSet --
       an item's own lineStyle width and type over it }
@@ -275,6 +288,9 @@ type
     LineDashExplicit: TTyDoubleArray;
     RowLineSet: array of Boolean;
     RowLineWidth: TTyDoubleArray;
+    { [R7-Y] an item's own lineStyle.width is +Infinity (the item's over the
+      series' LineInf, where it writes one) }
+    RowLineInf: array of Boolean;
     RowLineDash: array of TTyOptDash;
     RowLineDashExplicit: array of TTyDoubleArray;
     { [R2-I2] lineStyle.dashOffset: the series', an item's own over it }
@@ -287,6 +303,9 @@ type
     { True only when the author named a colour for it -- otherwise the area
       follows the ROW, which is the whole point of colouring by datum. }
     AreaAuthored: Boolean;
+    { [R7-F] the series' areaStyle.color is 'none': no fill, no inside for
+      the pointer (an item's own colour over it is a fill) }
+    AreaNone: Boolean;
     Area: TTyChartColor;
     AreaOpacity: Double;
     { A STATE WRITES AN areaStyle [F2b]: `emphasis`, `select` or `blur` --
@@ -346,6 +365,15 @@ type
     BorderWidthLogical: Double;
     RowBorder: array of TTyOptColor;
     RowBorderWidth: TTyDoubleArray;
+    { [R7-Y] the border's width is +Infinity, the series' and an item's own
+      over it: stroked at the lineWidth the canvas had, never hit }
+    BorderWidthInf: Boolean;
+    RowBorderWidthInf: array of Boolean;
+    { [R7-L] THE SYMBOLS' OPACITY, the item's visual style's: the series'
+      itemStyle.opacity and, per RAW row, an item's own over it; NaN where
+      none is written (1). Their labels take it (defaultOpacity). }
+    Opacity: Double;
+    RowOpacity: TTyDoubleArray;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -412,6 +440,24 @@ function TyBuildRadarGrid(ARadar: TTyRadar; const AInk: TTyRadarInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
 
+type
+  { [R7-I] AN INDICATOR'S TEXT the grid drew (an AxisBuilder's name or
+    label upstream): the list element, its spoke, its ring (a label's index
+    among the axis' labels; -1 a name), and a label's rawLabel
+    (scale.getLabel of its tick: what its eventData's value and a tooltip's
+    {c} are, the formatter's output being the drawn text) }
+  TTyRadarText = record
+    Element, Spoke, Ring: Integer;
+    IsName: Boolean;
+    Raw: string;
+  end;
+  TTyRadarTextArray = array of TTyRadarText;
+
+{ ... and the texts it drew, in the order it drew them }
+function TyBuildRadarGridTexts(ARadar: TTyRadar; const AInk: TTyRadarInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AList: TTyPaintList; out ATexts: TTyRadarTextArray): Integer;
+
 { One series: the ring, the area under it and a symbol per spoke. }
 function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
   const AVisual: TTyRadarVisual; AStore: TTyDataStore;
@@ -420,7 +466,8 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.States, tyControls.AdvanceChart.AxisLabels;
+  tyControls.AdvanceChart.States, tyControls.AdvanceChart.AxisLabels,
+  tyControls.AdvanceChart.Builder;
 
 const
   cRadian = Pi / 180;
@@ -488,6 +535,14 @@ begin
     begin
       SetLength(Result, 1);
       Result[0] := c;
+    end
+    { [R7-AD] a string no parser reads (not 'none'): RadarView strokes with
+      it, the canvas refusing it -- kept, the colour the canvas had
+      (cTyCanvasColourLeft) [was: the skin's] }
+    else if not TyChartColorIsNone(d.AsString) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := cTyCanvasColourLeft;
     end;
     Exit;
   end;
@@ -500,6 +555,13 @@ begin
       and TyTryParseChartColor(a.Items[i].AsString, c) then
     begin
       Result[n] := c;
+      Inc(n);
+    end
+    { [R7-AD] (and in a list: its bucket kept [was: dropped, the next
+      colour taking its place]) }
+    else if (a.Items[i].JSONType = jtString) and not TyChartColorIsNone(a.Items[i].AsString) then
+    begin
+      Result[n] := cTyCanvasColourLeft;
       Inc(n);
     end;
   SetLength(Result, n);
@@ -529,6 +591,12 @@ begin
     begin
       SetLength(Result, 1);
       Result[0] := c;
+    end
+    { [R7-AD] refused by the canvas: kept (ColoursIn) }
+    else if not TyChartColorIsNone(d.AsString) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := cTyCanvasColourLeft;
     end;
     Exit;
   end;
@@ -560,6 +628,13 @@ begin
       Result[n] := TyGradientSolid(g);
       AGrads[n] := g;
       any := True;
+      Inc(n);
+    end
+    { [R7-AD] refused by the canvas: its bucket kept (ColoursIn) }
+    else if (a.Items[i].JSONType = jtString) and not TyChartColorIsNone(a.Items[i].AsString) then
+    begin
+      Result[n] := cTyCanvasColourLeft;
+      AGrads[n] := Default(TTyChartGradient);
       Inc(n);
     end;
   SetLength(Result, n);
@@ -594,7 +669,8 @@ begin
   ls := ObjIn(n, 'lineStyle');
   if ls = nil then Exit;
   ALine.WidthLogical := NumIn(ls, 'width', ALine.WidthLogical);
-  ALine.Colours := ColoursIn(ls, 'color', ALine.Colours);
+  { ([R7-AF] a gradient too) }
+  ALine.Colours := AreaColoursIn(ls, 'color', ALine.Colours, ALine.Grads);
   { the rest of getLineStyle [R5-B] }
   st := TyReadOptLineStyleOf(ls);
   if st.Dash <> todNone then
@@ -677,6 +753,7 @@ begin
   Result.Z := 2;
   Result.Z2 := 0;
   Result.BorderWidthLogical := NaN;
+  Result.Opacity := NaN;
 end;
 
 function ReadIndicators(ANode: TJSONObject): TTyRadarIndicatorArray;
@@ -846,6 +923,9 @@ begin
       Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
     Result.AxisLabel.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
+    { [R7-I] its formatter [was: not read -- the labels were the rawLabel] }
+    Result.AxisLabel.Formatter := StrIn(n2, 'formatter', '');
+    Result.AxisLabel.HasFormatter := Result.AxisLabel.Formatter <> '';
     { [R5-G] the end rules' switches }
     d := n2.Find('showMinLabel');
     if (d <> nil) and (d.JSONType = jtBoolean) then
@@ -1089,8 +1169,18 @@ begin
     height separately; BOTH radii run against half the shorter side --
     parsePercent(center[0], width) + x, as upstream adds them. A cell of no
     position or no size: not-a-number, nothing drawn. }
-  FCX := TyBoxResolve(FSpec.CentreX, ARef.W) + ARef.X;
-  FCY := TyBoxResolve(FSpec.CentreY, ARef.H) + ARef.Y;
+  { [R7-AD] a pixel centre is css px too, PPI / 96 device px each (the
+    radius was) [was: device px] }
+  if APPI > 0 then
+  begin
+    FCX := TyBoxResolve(TyBoxValueScaled(FSpec.CentreX, APPI / 96), ARef.W) + ARef.X;
+    FCY := TyBoxResolve(TyBoxValueScaled(FSpec.CentreY, APPI / 96), ARef.H) + ARef.Y;
+  end
+  else
+  begin
+    FCX := TyBoxResolve(FSpec.CentreX, ARef.W) + ARef.X;
+    FCY := TyBoxResolve(FSpec.CentreY, ARef.H) + ARef.Y;
+  end;
   if IsNan(ARef.W) or IsNan(ARef.H) then base := NaN
   else base := Min(ARef.W, ARef.H) / 2;
   FR0 := TyBoxResolve(FSpec.R0V, base);
@@ -1388,6 +1478,14 @@ end;
 function TyBuildRadarGrid(ARadar: TTyRadar; const AInk: TTyRadarInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
+var texts: TTyRadarTextArray;
+begin
+  Result := TyBuildRadarGridTexts(ARadar, AInk, AMeasurer, APPI, AList, texts);
+end;
+
+function TyBuildRadarGridTexts(ARadar: TTyRadar; const AInk: TTyRadarInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AList: TTyPaintList; out ATexts: TTyRadarTextArray): Integer;
 var
   spec: TTyRadarSpec;
   n, k, i, j: Integer;
@@ -1396,7 +1494,7 @@ var
   outer, inner, band: TTyPointFArray;
   a, r, rOut, rIn, len, margin, w, h: Double;
   p, q, perp: TTyPointF;
-  words: string;
+  words, raw: string;
   anchorH: TTyTextAnchorH;
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
@@ -1405,6 +1503,8 @@ var
   bandEl, bandBucket: TTyIntegerArray;
   bandBox: array of TTyRectF;
   gi, nb: Integer;
+  { [R7-AD] the rings' colour buckets, in turn }
+  rb, rnb: Integer;
   { [R5-J] a polygon radar's bands merged by colour: the contours, the
     points, the box, the colour }
   mergeCmds: array of TTyPathCmdArray;
@@ -1414,6 +1514,9 @@ var
   mergeColour: TTyChartColorArray;
   u: TTyRectF;
   pe: PTyChartElement;
+  { [R7-AF] the gradient rings: their list index, colour bucket and box }
+  ringEl, ringBucket: TTyIntegerArray;
+  ringBox: array of TTyRectF;
 
   { [R5-G] the size a scale label is drawn at -- and so measured at: the
     author's fontSize, else the skin's [was: measured at the skin's whatever
@@ -1422,6 +1525,29 @@ var
   begin
     if spec.AxisLabel.HasFontSize then Result := spec.AxisLabel.FontSizeLogical
     else Result := AInk.LabelFontSizeLogical;
+  end;
+
+  { [R7-I] ring AQ's label on spoke AI as drawn: makeLabelFormatter over the
+    rawLabel ARaw (Interval.getLabel: the tick's own decimals, grouped) --
+    a template's first '{value}' replaced, a handler run with the value and
+    the index; the rawLabel itself without one }
+  function LabelWords(AI, AQ: Integer; const ARaw: string): string;
+  begin
+    if not spec.AxisLabel.HasFormatter then Exit(ARaw);
+    if TyChartIsHandlerRef(spec.AxisLabel.Formatter) then
+      Exit(TyAxisTickLabelAt(ARadar.GetAxis(AI), ARadar.RingValue(AI, AQ), AQ,
+        True, spec.AxisLabel.Formatter));
+    Result := TyReplaceFirst(spec.AxisLabel.Formatter, '{value}', ARaw);
+  end;
+
+  procedure AddText(ASpoke, ARing: Integer; AIsName: Boolean; const ARaw: string);
+  begin
+    SetLength(ATexts, Length(ATexts) + 1);
+    ATexts[High(ATexts)].Element := AList.Count - 1;
+    ATexts[High(ATexts)].Spoke := ASpoke;
+    ATexts[High(ATexts)].Ring := ARing;
+    ATexts[High(ATexts)].IsName := AIsName;
+    ATexts[High(ATexts)].Raw := ARaw;
   end;
 
   { [R5-G] the labels of spoke AI at angle AA as AxisBuilder weighs them:
@@ -1461,6 +1587,8 @@ var
     begin
       txt := TyScaleValueLabel(ARadar.GetAxis(AI).Scale, ARadar.RingValue(AI, q),
         Default(TTyLabelPrecision));
+      if txt = '' then Continue;
+      txt := LabelWords(AI, q, txt);
       if txt = '' then Continue;
       lp := ARadar.CoordToPoint(ARadar.RingRadiusOf(AI, q), AI);
       lp := TyPointF(lp.X - APerp.X * mg, lp.Y - APerp.Y * mg);
@@ -1516,6 +1644,7 @@ var
 
 begin
   Result := 0;
+  ATexts := nil;
   if (AList = nil) or (ARadar = nil) or not ARadar.Valid then Exit;
   spec := ARadar.Spec;
   n := ARadar.AxisCount;
@@ -1532,6 +1661,9 @@ begin
   bandEl := nil;
   bandBucket := nil;
   bandBox := nil;
+  ringEl := nil;
+  ringBucket := nil;
+  ringBox := nil;
   mergeCmds := nil;
   mergePts := nil;
   mergeBox := nil;
@@ -1668,9 +1800,17 @@ begin
   end;
 
   { ---- the rings ---- }
+  { [R7-AD] BY COLOUR BUCKET, as RadarView adds them: ring i into bucket
+    i mod the colours' count, each bucket one merged path, the buckets in
+    order -- a ring takes the canvas' stroke after the buckets before it
+    (a colour no parser reads) [was: ring by ring outwards]; [R7-AF] and so
+    what the canvas is left with is the last bucket's, its gradient too }
+  rnb := Max(1, Length(spec.SplitLine.Colours));
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then
+    for rb := 0 to rnb - 1 do
     for k := 0 to ARadar.RingCount do
     begin
+      if k mod rnb <> rb then Continue;
       if not TyRadarBucket(spec.SplitLine.Colours, k, c) then
         c := AInk.SplitLine;
       r := ARadar.RingRadius(k);
@@ -1688,6 +1828,22 @@ begin
       end;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.SplitLine.WidthLogical;
+      { [R7-AF] a gradient: the rings of one colour are one merged path
+        upstream (mergePath), the gradient over its box (below) }
+      if Length(spec.SplitLine.Grads) > 0 then
+      begin
+        gi := k mod Length(spec.SplitLine.Grads);
+        if spec.SplitLine.Grads[gi].Kind <> cgkNone then
+        begin
+          el.Style.StrokeGradient := spec.SplitLine.Grads[gi];
+          SetLength(ringEl, Length(ringEl) + 1);
+          ringEl[High(ringEl)] := AList.Count;
+          SetLength(ringBucket, Length(ringBucket) + 1);
+          ringBucket[High(ringBucket)] := gi;
+          SetLength(ringBox, Length(ringBox) + 1);
+          ringBox[High(ringBox)] := TyShapeBounds(el.Shape);
+        end;
+      end;
       { the rest of the lineStyle [R5-B] }
       LinePen(el, spec.SplitLine);
       TyStyleSetShadow(el.Style, spec.SplitLine.Shadow);
@@ -1697,6 +1853,23 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
+  { [R7-AF] a gradient ring's box: the union of its colour's rings, grown
+    by the pen of a path that does not fill (max(width, 5)) }
+  for k := 0 to High(ringEl) do
+  begin
+    u := ringBox[k];
+    for i := 0 to High(ringEl) do
+      if ringBucket[i] = ringBucket[k] then
+      begin
+        if ringBox[i].Left < u.Left then u.Left := ringBox[i].Left;
+        if ringBox[i].Top < u.Top then u.Top := ringBox[i].Top;
+        if ringBox[i].Right > u.Right then u.Right := ringBox[i].Right;
+        if ringBox[i].Bottom > u.Bottom then u.Bottom := ringBox[i].Bottom;
+      end;
+    pe := AList.Ref(ringEl[k]);
+    pe^.Style.GradBoxSet := True;
+    pe^.Style.GradBox := TyGrowByStroke(TyRectToXYWH(u), False, pe^.Style.StrokeWidthLogical * APPI / 96);
+  end;
 
   { ---- the spokes, and the name at the end of each ---- }
   for i := 0 to n - 1 do
@@ -1711,6 +1884,9 @@ begin
       el := TyChartElement(TyShapePolyline([p, q]));
       if not TyRadarBucket(spec.AxisLine.Colours, 0, c) then c := AInk.AxisLine;
       el.Style.StrokeColor := c;
+      { [R7-AF] a gradient: over the line's own box }
+      if (Length(spec.AxisLine.Grads) > 0) and (spec.AxisLine.Grads[0].Kind <> cgkNone) then
+        el.Style.StrokeGradient := spec.AxisLine.Grads[0];
       el.Style.StrokeWidthLogical := spec.AxisLine.WidthLogical;
       LinePen(el, spec.AxisLine);
       TyStyleSetShadow(el.Style, spec.AxisLine.Shadow);
@@ -1772,6 +1948,7 @@ begin
           el.Z2 := 1;
           el.Silent := True;
           AList.Add(el);
+          AddText(i, -1, True, '');
           Inc(Result);
         end;
       end;
@@ -1839,8 +2016,10 @@ begin
         { Interval.getLabel: the tick's own decimals, thousands grouped.
           [Revised in batch 48: printed with no grouping.] }
         if hidden[k] then Continue;
-        words := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
+        raw := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
           ARadar.RingValue(i, k), Default(TTyLabelPrecision));
+        if raw = '' then Continue;
+        words := LabelWords(i, k, raw);
         if words = '' then Continue;
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         p := TyPointF(p.X - perp.X * margin, p.Y - perp.Y * margin);
@@ -1868,6 +2047,7 @@ begin
         el.Z2 := 10;
         el.Silent := True;
         AList.Add(el);
+        AddText(i, k, False, raw);
         Inc(Result);
       end;
     end;
@@ -1964,7 +2144,7 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 
   { the item's visual style's pen: the series' border, an item's own over it
     key by key }
-  procedure PenOf(ARaw: Integer; var AStyle: TTyChartElementStyle);
+  function PenOf(ARaw: Integer; var AStyle: TTyChartElementStyle): Boolean;
   begin
     AStyle.StrokeColor := 0;
     AStyle.StrokeGradient := Default(TTyChartGradient);
@@ -1972,10 +2152,15 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
     TakeColour(AVisual.Border, True, AStyle);
     if not IsNan(AVisual.BorderWidthLogical) then
       AStyle.StrokeWidthLogical := AVisual.BorderWidthLogical;
+    { [R7-Y] whether the width is +Infinity: the item's where it writes one }
+    Result := AVisual.BorderWidthInf;
     if (ARaw < 0) or (ARaw > High(AVisual.RowBorder)) then Exit;
     TakeColour(AVisual.RowBorder[ARaw], False, AStyle);
     if (ARaw <= High(AVisual.RowBorderWidth)) and not IsNan(AVisual.RowBorderWidth[ARaw]) then
+    begin
       AStyle.StrokeWidthLogical := AVisual.RowBorderWidth[ARaw];
+      Result := (ARaw <= High(AVisual.RowBorderWidthInf)) and AVisual.RowBorderWidthInf[ARaw];
+    end;
   end;
 
 var
@@ -1983,12 +2168,13 @@ var
   pts, ring: TTyPointFArray;
   spoke: TTyIntegerArray;
   rowColour: TTyChartColor;
-  v: Double;
+  v, op: Double;
   el: TTyChartElement;
   sym: TTyChartShape;
   rowSym: TTySymbolSpec;
   rowArea, rowItemLabel: Boolean;
   rowLabel: TTyLabelSpec;
+  lineInf: Boolean;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or (ARadar = nil) then Exit;
@@ -2057,12 +2243,19 @@ begin
       end;
     end;
     el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
+    { [R7-Y] whether the width is +Infinity: the item's own where it writes
+      one, else the series' [was: the series' alone, and kept under an
+      item's number] }
+    lineInf := AVisual.LineInf;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }
     if (raw >= 0) and (raw <= High(AVisual.RowLineSet)) and AVisual.RowLineSet[raw] then
     begin
       if not IsNan(AVisual.RowLineWidth[raw]) then
+      begin
         el.Style.StrokeWidthLogical := AVisual.RowLineWidth[raw];
+        lineInf := (raw <= High(AVisual.RowLineInf)) and AVisual.RowLineInf[raw];
+      end;
       if AVisual.RowLineDash[raw] <> todNone then
       begin
         el.Style.DashLogical := TyDashPattern(AVisual.RowLineDash[raw],
@@ -2081,6 +2274,13 @@ begin
       el.Style.DashLogical := TyDashPattern(AVisual.LineDash, AVisual.LineDashExplicit,
         el.Style.StrokeWidthLogical);
       el.Style.DashWord := TyDashWord(AVisual.LineDash);
+    end;
+    if lineInf then
+    begin
+      el.Style.StrokeWidthLogical := 0;
+      el.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     end;
     { [R2-I2] its phase, key by key the same way }
     el.Style.DashOffsetLogical := AVisual.LineDashOffset;
@@ -2124,6 +2324,12 @@ begin
         el.Style.FillColor := AVisual.RowAreaColour[raw]
       else if AVisual.AreaAuthored then
         el.Style.FillColor := AVisual.Area
+      else if AVisual.AreaNone then
+      begin
+        el.Style.HasFill := False;
+        el.Style.FillColor := 0;
+        el.Style.HitNoFill := True;
+      end
       else
         el.Style.FillColor := rowColour;
       if (raw >= 0) and (raw <= High(AVisual.RowAreaOpacitySet))
@@ -2161,6 +2367,12 @@ begin
       rowSym.WidthPx := AVisual.Sizes[raw];
       rowSym.HeightPx := AVisual.Sizes[raw];
     end;
+    { [R7-AG] the size css px: PPI / 96 device px [was: device px] }
+    if (APPI > 0) and (APPI <> 96) then
+    begin
+      rowSym.WidthPx := rowSym.WidthPx * (APPI / 96);
+      rowSym.HeightPx := rowSym.HeightPx * (APPI / 96);
+    end;
     { [R2-A] the row's label: its item's own over the series' }
     rowLabel := AVisual.Label_;
     rowItemLabel := (raw >= 0) and (raw <= High(AVisual.HasItemLabel))
@@ -2169,13 +2381,35 @@ begin
     if rowSym.Kind <> tsyNone then
       for i := 0 to m - 1 do
       begin
-        sym := TyBuildSymbol(rowSym, pts[i].X, pts[i].Y);
+        sym := TyBuildSymbolUnit(rowSym, pts[i].X, pts[i].Y);
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
+        { [R7-F] hit in its own frame, as RadarView's createSymbol }
+        TySymbolHitFrame(sym, rowSym, pts[i].X, pts[i].Y);
         el := TyChartElement(sym);
+        { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+        TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rowSym, pts[i].X, pts[i].Y));
         el.Style.HasFill := True;
         { [R6-D] the item's visual style first (useStyle(itemStyle)): its
-          border's colour and width, zrender's 1 where none is written }
-        PenOf(raw, el.Style);
+          border's colour and width, zrender's 1 where none is written --
+          [R7-Y] a width of +Infinity strokes at the lineWidth the canvas had
+          (TyLinesCanvasLeftovers) and its stroked rect is not a number:
+          never hit [was: no pen, hit] }
+        if PenOf(raw, el.Style) then
+        begin
+          el.Style.StrokeWidthLogical := 0;
+          if ((el.Style.StrokeColor shr 24) <> 0) or (el.Style.StrokeGradient.Kind <> cgkNone) then
+          begin
+            el.HitNone := True;
+            el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+          end;
+        end;
+        { [R7-L] and its opacity, which the point's label takes as well
+          [was: never read -- the symbols opaque, their labels at 1] }
+        op := AVisual.Opacity;
+        if (raw >= 0) and (raw <= High(AVisual.RowOpacity))
+          and not IsNan(AVisual.RowOpacity[raw]) then
+          op := AVisual.RowOpacity[raw];
+        if not IsNan(op) then el.Style.Alpha := Min(Double(1), Max(Double(0), op));
         { then setColor(color): an empty symbol's pen is the colour at 2, a
           line's the colour at the border's width [was: both at 2, the
           border never drawn] }

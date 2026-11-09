@@ -13,6 +13,13 @@ those fixtures were made from; the port's tests do the same
 (tests/test.advchart.gallerytext.pas). What the functions do is
 gallery-callbacks.js' to say.
 
+[R7-K] Every oracle that feeds a gallery file to upstream takes the names
+out: datazoom-window (R7-J) and, since R7-K, calendar-layout, geo-series,
+geo-svg, heatmap-calendar, line-smooth, markers-area, markers-layout,
+markers-line, matrix2, universal-transition2, universal-transition4,
+visualmap-channels, visualmap-piecewise and visualmap-view. Only
+gallery-callbacks and gallery-renderitem read the names, on purpose.
+
 A renderItem's name ('@<id>', '@<id>#2') and a projection's
 ('@<id>.project' / '.unproject') stay: they were named before too.
 */

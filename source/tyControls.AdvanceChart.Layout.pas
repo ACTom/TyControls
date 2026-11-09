@@ -29,7 +29,11 @@ unit tyControls.AdvanceChart.Layout;
 interface
 uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
-     tyControls.AdvanceChart.Paint;
+     tyControls.AdvanceChart.Paint,
+     { [R7-AI] JavaScript's values: a padding written as a string }
+     tyControls.AdvanceChart.RichText,
+     { [R7-AK] a background's corners on its joined edges }
+     tyControls.AdvanceChart.Shape;
 
 type
   { How one edge or size is expressed. }
@@ -233,10 +237,39 @@ function TyBoxWord(const A, B: TTyBoxRaw): string;
   in CSS order. }
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const AMargin: array of Double): TTyXYWH;
+{ [R7-AI] THE SAME WITH A MARGIN zrender HOLDS AS JS VALUES (a padding written
+  as a string, TTyJsPad): `margin[1] + margin[3]` joined, a side undefined
+  NaN, and the place `(containerRect.x || 0) + left + margin[3]` joined --
+  AXV / AYV as JS holds them (a string '0202' where it joined), the result's
+  X / Y their numbers; BoundingRect's flip of a negative size joins too.
+  The traps are the caller's to mask. }
+function TyGetLayoutRectJs(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const APad: TTyJsPad; out AXV, AYV: TTyRtJs): TTyXYWH;
+{ [R7-AK] A COMPONENT'S BACKGROUND OF CORNERS WHOSE SIZE A STRING PADDING
+  JOINED (a title's Rect, makeBackground's): roundRect.ts in the group's
+  frame -- AX, AY its place, AW, AH its size (css px), AWText / AHText the
+  size as the string zrender holds ('' a number) -- so `x + width` joins
+  ('-2' + '1222'), its radii ARadii (css px, the four) cut against the
+  size's numbers; placed at the group's origin AOX, AOY (device px), AScale
+  device px a css px }
+function TyJsRoundFrameShape(AX, AY, AW, AH: Double; const AWText, AHText: string;
+  const ARadii: TTyCornerRadii; AOX, AOY, AScale: Double): TTyChartShape;
+{ [R7-AK] JavaScript's truthiness of an option value: nil, null, false, 0,
+  NaN and '' are falsy; every object and array truthy (RectShape.r: a
+  rounded path where it is truthy) }
+function TyJsTruthyOf(AData: TJSONData): Boolean;
 { A box as the shared solver holds it, back in the raw form getLayoutRect
   reads: auto absent, px a number, a percentage its text with a `%`, centre
   the word [Batch 147] }
 function TyBoxSpecRaw(const ASpec: TTyBoxSpec): TTyRawBox;
+{ [R7-AD] A RAW BOX'S PIXEL COUNTS AT AScale device px per css px (PPI /
+  96, upstream's devicePixelRatio): a number, a string read as one
+  (parseFloat: not a percentage, not a word) -- the rest as written }
+function TyBoxRawScaled(const ABox: TTyRawBox; AScale: Double): TTyRawBox;
+{ [R7-AD] a box value's (a centre's, a radius') the same }
+function TyBoxValueScaled(const AV: TTyBoxValue; AScale: Double): TTyBoxValue;
+{ [R7-AD] one raw value's (a centre's, a radius' as written) }
+function TyBoxRawOneScaled(const A: TTyBoxRaw; AScale: Double): TTyBoxRaw;
 
 { ==================== TWO-PHASE AXIS BUILD (Tier 0 item 12) ====================
   estimate the labels -> shrink the rect -> determine the placements.
@@ -861,6 +894,17 @@ function TyRectExpand(const ARect: TTyXYWH; ATop, ARight, ABottom,
 function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
   const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyLabelGeomArray;
+{ [R7-L] the same labels with their boxes as zrender's union gives them --
+  NaN where a size written as a word laid a plate out at NaN; AAnyNaN when
+  one is. Only the name layout's moves read these. }
+function TyAxisLabelGeomsJs(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; out AAnyNaN: Boolean): TTyLabelGeomArray;
+{ [R7-L] the traps masked for JS arithmetic over a box at NaN, and handed
+  back clean: the SSE flags ClearExceptions leaves on x86_64 cleared too,
+  so the host's next division by zero is still EZeroDivide }
+function TyMaskJs: TFPUExceptionMask;
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
 
 { The frame of an axis on ARect when nothing better is known: its line on
   the plot's edge, moved out by the offset. The builder, which knows about
@@ -942,7 +986,10 @@ implementation
 
 uses tyControls.AdvanceChart.AxisName, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.AxisBreak,
-  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Data;
+  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Data,
+  tyControls.AdvanceChart.RichStyle,
+  { [R7-AK] String of a number (a joined edge) }
+  tyControls.AdvanceChart.Scale;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -1508,6 +1555,63 @@ begin
   AMargin.AxisAligned := ABare.AxisAligned;
 end;
 
+function TyMaskJs: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure TyUnmaskJs(AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+{ [R7-L] THE SAME BOXES AS zrender's union gives them where the label's
+  size is written as a string: a word lays the plate out at NaN, and the
+  box is NaN there (Text.getBoundingRect). True when a box holds a NaN.
+  Only the rules that weigh labels against each other read these (the
+  ends, hideOverlap). }
+function LabelBoxesJs(const ASpec: TTyAxisLayoutSpec;
+  const APlace: TTyAxisLabelPlacement; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; var AMargin, ABare: TTyLabelBox): Boolean;
+var
+  jm: ITyTextJsBoxMeasurer;
+  box: TTyXYWH;
+  padH, padV: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := False;
+  if not Supports(LabelMeterOf(ASpec, AMeasurer), ITyTextJsBoxMeasurer, jm) then Exit;
+  if not jm.MeasureJsBox(APlace.Text, ASpec.FontName, ASpec.FontSizeLogical,
+    ASpec.FontWeight, APlace.AnchorH, APlace.AnchorV, box) then Exit;
+  if not (not IsNan(box.X) and not IsNan(box.Y) and not IsNan(box.W)
+    and not IsNan(box.H)) then
+  begin
+    Result := True;
+    mask := TyMaskJs;
+    try
+      padH := AxisScaleF(ASpec.TextMarginHLogical, APPI);
+      padV := AxisScaleF(ASpec.TextMarginVLogical, APPI);
+      ABare.LocalRect := box;
+      if ASpec.LabelMinMargin then AMargin.LocalRect := ABare.LocalRect
+      else AMargin.LocalRect := TyRectExpand(ABare.LocalRect, padV, padH, padV, padH);
+      ABare.Rect := TyRectApplyMat(ABare.LocalRect, ABare.M);
+      AMargin.Rect := TyRectApplyMat(AMargin.LocalRect, AMargin.M);
+      if ASpec.LabelMinMargin then
+      begin
+        padH := AxisScaleF(ASpec.LabelMinMarginLogical, APPI);
+        AMargin.Rect := TyRectExpand(AMargin.Rect, padH, padH, padH, padH);
+      end;
+    finally
+      TyUnmaskJs(mask);
+    end;
+  end;
+end;
+
 { The first line of a label: the auto interval measures one line's height. }
 function FirstLine(const AText: string): string;
 var p: Integer;
@@ -1587,10 +1691,13 @@ begin
   i := 0;
   while i <= n - 1 do
   begin
-    { the widest line, and one line's height }
-    LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
-      ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
-    LabelMeterOf(ASpec, AMeasurer).MeasureLine(FirstLine(ASpec.Labels[i]),
+    { the widest line, and one line's height -- [R7-L] of the words in the
+      label's font (makeAutoCategoryInterval: textContain.getBoundingRect
+      of the formatted text), not of its box: a plate, padding or a width
+      written on the label weighs nothing here [was: the block's box] }
+    TyRtInnerMeasurer(LabelMeterOf(ASpec, AMeasurer)).MeasureLine(ASpec.Labels[i],
+      ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
+    TyRtInnerMeasurer(LabelMeterOf(ASpec, AMeasurer)).MeasureLine(FirstLine(ASpec.Labels[i]),
       ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight, lw, h);
     ws[k] := w;
     hs[k] := h;
@@ -1914,6 +2021,38 @@ begin
   end;
 end;
 
+function TyBoxRawOneScaled(const A: TTyBoxRaw; AScale: Double): TTyBoxRaw;
+var p: TTyPos;
+begin
+  Result := A;
+  if (AScale = 1) or not (A.Kind in [brNumber, brString]) then Exit;
+  p := TyBoxRawPos(A);
+  if p.Kind <> tpkPx then Exit;
+  Result := TyBoxRawNum(p.V * AScale);
+end;
+
+function TyBoxRawScaled(const ABox: TTyRawBox; AScale: Double): TTyRawBox;
+
+  function One(const A: TTyBoxRaw): TTyBoxRaw;
+  begin
+    Result := TyBoxRawOneScaled(A, AScale);
+  end;
+
+begin
+  Result.Left := One(ABox.Left);
+  Result.Right := One(ABox.Right);
+  Result.Top := One(ABox.Top);
+  Result.Bottom := One(ABox.Bottom);
+  Result.Width := One(ABox.Width);
+  Result.Height := One(ABox.Height);
+end;
+
+function TyBoxValueScaled(const AV: TTyBoxValue; AScale: Double): TTyBoxValue;
+begin
+  Result := AV;
+  if AV.Kind = buPx then Result.Value := AV.Value * AScale;
+end;
+
 { One position against its base: `parseFloat(option) / 100 * base + 0`, a
   pixel count, or not-a-number. }
 function TyBoxRawResolve(const A: TTyBoxRaw; ABase: Double): Double;
@@ -2035,6 +2174,98 @@ begin
   begin
     Result.Y := Result.Y + Result.H;
     Result.H := -Result.H;
+  end;
+end;
+
+function TyGetLayoutRectJs(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const APad: TTyJsPad; out AXV, AYV: TTyRtJs): TTyXYWH;
+var
+  left, top, right, bottom, w, h, vm, hm, m0, m3: Double;
+  wordH, wordV: string;
+begin
+  left := TyBoxRawResolve(ABox.Left, ACW);
+  top := TyBoxRawResolve(ABox.Top, ACH);
+  right := TyBoxRawResolve(ABox.Right, ACW);
+  bottom := TyBoxRawResolve(ABox.Bottom, ACH);
+  w := TyBoxRawResolve(ABox.Width, ACW);
+  h := TyBoxRawResolve(ABox.Height, ACH);
+  { `margin[2] + margin[0]`, `margin[1] + margin[3]`: joined, read as numbers
+    in the subtractions below }
+  vm := TyJsPadJoin(APad, 2, 0).N;
+  hm := TyJsPadJoin(APad, 1, 3).N;
+  m0 := TyJsPadV(APad, 0).N;
+  m3 := TyJsPadV(APad, 3).N;
+  if IsNan(w) then w := ACW - right - hm - left;
+  if IsNan(h) then h := ACH - bottom - vm - top;
+  if IsNan(left) then left := ACW - right - w - hm;
+  if IsNan(top) then top := ACH - bottom - h - vm;
+  wordH := TyBoxWord(ABox.Left, ABox.Right);
+  if wordH = 'center' then left := ACW / 2 - w / 2 - m3
+  else if wordH = 'right' then left := ACW - w - hm;
+  wordV := TyBoxWord(ABox.Top, ABox.Bottom);
+  if (wordV = 'middle') or (wordV = 'center') then top := ACH / 2 - h / 2 - m0
+  else if wordV = 'bottom' then top := ACH - h - vm;
+  left := OrZero(left);
+  top := OrZero(top);
+  if IsNan(w) then w := ACW - hm - left - OrZero(right);
+  if IsNan(h) then h := ACH - vm - top - OrZero(bottom);
+  AXV := TyRtJsAdd(TyRtJsNum(OrZero(ACX) + left), TyJsPadV(APad, 3));
+  AYV := TyRtJsAdd(TyRtJsNum(OrZero(ACY) + top), TyJsPadV(APad, 0));
+  { new BoundingRect: `x = x + width` -- joined where x is a string }
+  if (not IsNan(w)) and (w < 0) then
+  begin
+    AXV := TyRtJsAdd(AXV, TyRtJsNum(w));
+    w := -w;
+  end;
+  if (not IsNan(h)) and (h < 0) then
+  begin
+    AYV := TyRtJsAdd(AYV, TyRtJsNum(h));
+    h := -h;
+  end;
+  Result.X := AXV.N;
+  Result.Y := AYV.N;
+  Result.W := w;
+  Result.H := h;
+end;
+
+function TyJsRoundFrameShape(AX, AY, AW, AH: Double; const AWText, AHText: string;
+  const ARadii: TTyCornerRadii; AOX, AOY, AScale: Double): TTyChartShape;
+var
+  xw, yh, w, h: Double;
+  r: TTyCornerRadii;
+  k: Integer;
+begin
+  if not (AScale > 0) then AScale := 1;
+  w := AW;
+  h := AH;
+  { `x + width`, `y + height`: joined where the size is a string }
+  if AWText <> '' then
+  begin
+    xw := TyJsToNumber(TyJsNumberToString(AX) + AWText);
+    w := TyJsToNumber(AWText);
+  end
+  else xw := AX + AW;
+  if AHText <> '' then
+  begin
+    yh := TyJsToNumber(TyJsNumberToString(AY) + AHText);
+    h := TyJsToNumber(AHText);
+  end
+  else yh := AY + AH;
+  for k := 0 to 3 do r[k] := ARadii[k] * AScale;
+  Result := TyShapeRoundPathJoined(AOX + AX * AScale, AOY + AY * AScale,
+    AOX + xw * AScale, AOY + yh * AScale, w * AScale, h * AScale, r);
+end;
+
+function TyJsTruthyOf(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
   end;
 end;
 
@@ -2222,10 +2453,20 @@ begin
   begin
     cx := M[0] * px[k] + M[2] * py[k] + M[4];
     cy := M[1] * px[k] + M[3] * py[k] + M[5];
-    if cx < Result.X then Result.X := cx;
-    if cy < Result.Y then Result.Y := cy;
-    if cx > maxX then maxX := cx;
-    if cy > maxY then maxY := cy;
+    { [R7-L] Math.min / Math.max: a NaN corner (a box laid out at NaN, the
+      traps masked) is NaN }
+    if IsNan(cx) then begin Result.X := NaN; maxX := NaN; end
+    else if not IsNan(Result.X) then
+    begin
+      if cx < Result.X then Result.X := cx;
+      if cx > maxX then maxX := cx;
+    end;
+    if IsNan(cy) then begin Result.Y := NaN; maxY := NaN; end
+    else if not IsNan(Result.Y) then
+    begin
+      if cy < Result.Y then Result.Y := cy;
+      if cy > maxY then maxY := cy;
+    end;
   end;
   Result.W := maxX - Result.X;
   Result.H := maxY - Result.Y;
@@ -2237,19 +2478,33 @@ begin
     or ((Abs(M[0]) < 1e-5) and (Abs(M[3]) < 1e-5));
 end;
 
+{ [R7-L] Math.min / Math.max: NaN when either is (a box at NaN, the traps
+  masked) }
+function UMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  Result := Min(A, B);
+end;
+
+function UMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  Result := Max(A, B);
+end;
+
 function TyRectUnion(const A, B: TTyXYWH): TTyXYWH;
 begin
   { A is `this`, B `other` }
-  Result.X := Min(B.X, A.X);
-  Result.Y := Min(B.Y, A.Y);
+  Result.X := UMin(B.X, A.X);
+  Result.Y := UMin(B.Y, A.Y);
   if (not IsNan(A.X)) and (not IsInfinite(A.X)) and (not IsNan(A.W))
     and (not IsInfinite(A.W)) then
-    Result.W := Max(B.X + B.W, A.X + A.W) - Result.X
+    Result.W := UMax(B.X + B.W, A.X + A.W) - Result.X
   else
     Result.W := B.W;
   if (not IsNan(A.Y)) and (not IsInfinite(A.Y)) and (not IsNan(A.H))
     and (not IsInfinite(A.H)) then
-    Result.H := Max(B.Y + B.H, A.Y + A.H) - Result.Y
+    Result.H := UMax(B.Y + B.H, A.Y + A.H) - Result.Y
   else
     Result.H := B.H;
 end;
@@ -2266,14 +2521,34 @@ end;
 
 { ==================== the labels as geometry ==================== }
 
+function AxisLabelGeomsIn(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AJs: Boolean; out AAnyNaN: Boolean): TTyLabelGeomArray; forward;
+
 function TyAxisLabelGeoms(const ASpec: TTyAxisLayoutSpec;
   const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): TTyLabelGeomArray;
+var nan: Boolean;
+begin
+  Result := AxisLabelGeomsIn(ASpec, ARect, AMeasurer, APPI, False, nan);
+end;
+
+function TyAxisLabelGeomsJs(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; out AAnyNaN: Boolean): TTyLabelGeomArray;
+begin
+  Result := AxisLabelGeomsIn(ASpec, ARect, AMeasurer, APPI, True, AAnyNaN);
+end;
+
+function AxisLabelGeomsIn(const ASpec: TTyAxisLayoutSpec;
+  const ARect: TTyRectF; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AJs: Boolean; out AAnyNaN: Boolean): TTyLabelGeomArray;
 var
   places: TTyAxisLabelPlacementArray;
   i, n: Integer;
   box, bare: TTyLabelBox;
 begin
+  AAnyNaN := False;
   Result := nil;
   if (AMeasurer = nil) or (not ASpec.ShowLabels) then Exit;
   { THE LABELS THIS RECT SHOWS: thinned on it, the hidden ends left out --
@@ -2285,6 +2560,8 @@ begin
   begin
     if (not places[i].Shown) or (places[i].Text = '') then Continue;
     LabelBoxes(ASpec, places[i], AMeasurer, APPI, box, bare);
+    if AJs and LabelBoxesJs(ASpec, places[i], AMeasurer, APPI, box, bare) then
+      AAnyNaN := True;
     Result[n].Index := i;
     Result[n].X := places[i].X;
     Result[n].Y := places[i].Y;
@@ -2718,6 +2995,8 @@ var
   offs: TTyBoolArray;
   cands: TTyLabelCandidateArray;
   byFrame: Boolean;
+  nanBox: Boolean;
+  mask: TFPUExceptionMask;
   fr: TTyAxisNameFrame;
   g, lm: TTyMat2D;
   lr: Double;
@@ -2924,21 +3203,33 @@ begin
 
   { THE BOXES the rules weigh: every one under hideOverlap, else only the
     two at each end }
+  nanBox := False;
   if AMeasurer <> nil then
     for k := 0 to m - 1 do
       if ASpec.HideOverlap or (k <= 1) or (k >= m - 2) then
       begin
         LabelBoxes(ASpec, Result[cands[k].Index], AMeasurer, APPI,
           cands[k].Margin, cands[k].Bare);
+        { [R7-L] at NaN where upstream's is }
+        if LabelBoxesJs(ASpec, Result[cands[k].Index], AMeasurer, APPI,
+          cands[k].Margin, cands[k].Bare) then nanBox := True;
         cands[k].HasBox := True;
       end;
   if AMeasurer <> nil then
   begin
-    TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
-      ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
-      ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap,
-      ASpec.CustomLabels);
-    if ASpec.HideOverlap then TyHideOverlap(cands);
+    { [R7-L] a box at NaN: BoundingRect.intersect as JS compares, every
+      comparison with NaN false -- two labels meet when their other axis
+      does }
+    if nanBox then mask := TyMaskJs;
+    try
+      TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
+        ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
+        ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap,
+        ASpec.CustomLabels);
+      if ASpec.HideOverlap then TyHideOverlap(cands);
+    finally
+      if nanBox then TyUnmaskJs(mask);
+    end;
   end;
   for k := 0 to m - 1 do
   begin

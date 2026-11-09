@@ -42,6 +42,9 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-universal-transition4.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 const MAPS_DIR = path.join(ROOT, 'examples', 'advchart', 'maps');
 
 echarts.env.node = false;
@@ -539,7 +542,7 @@ const vcart = (series, extra) => Object.assign({ color: PALETTE, xAxis: { type: 
   yAxis: { type: 'value', min: 0, max: 10 }, series }, extra || {});
 
 function galleryOption(file) {
-  const o = JSON.parse(fs.readFileSync(path.join(GALLERY, file), 'utf8'));
+  const o = withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, file), 'utf8')));
   if (o.color == null) o.color = PALETTE;
   // a map's region colours written out too
   const ser = Array.isArray(o.series) ? o.series : [o.series];

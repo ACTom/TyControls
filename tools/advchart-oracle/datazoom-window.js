@@ -49,7 +49,8 @@
 //   cases[]  one per chart:
 //     id, groups, note, width, height, gallery (file name or null), option (as
 //     fed, see above; null for the big gallery files: load the gallery file,
-//     fed verbatim)
+//     take its function names out (gallery-functions.js withoutFunctions),
+//     and feed the rest as it stands)
 //     dataZooms[] in component order (the toolbox's internal 'select' dataZooms
 //       -- one per x axis then per y axis, appended after the user's -- included):
 //       index, subType ('slider' | 'inside' | 'select'), orient, noTarget
@@ -160,6 +161,12 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-datazoom-window.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [spec 264] a gallery file as this fixture was made from it: without the
+// '@<id>.<key>' names the harvest has written for a page's functions since
+// R2-J2 (fed to upstream, a name is a formatter template that prints
+// itself -- mix-zoom-on-value's y labels then widen and shrink the grid);
+// the port's test takes them out the same way
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1006,7 +1013,7 @@ function spansRec(s) {
 }
 
 function recordCase(def) {
-  const src = def.gallery ? JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8')) : def.option;
+  const src = def.gallery ? withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8'))) : def.option;
   const optRec = recordOption(src);
   const fed = fedOption(optRec);
   CAP = { cdw: new Map(), stage: null };
@@ -1195,6 +1202,10 @@ const scatterChart = (dz, data, xAxis, extra) => Object.assign({
   xAxis: Object.assign({ type: 'value' }, xAxis || {}), yAxis: { type: 'value' },
   series: [{ type: 'scatter', data: data || XS }], dataZoom: dz,
 }, extra || {});
+// [spec 259] a dataset of four dimensions, p v g w, for the encode lists
+const LIST_SRC = [['p', 'v', 'g', 'w'], [1, 6, 'A', 9], [2, 7, 'B', 4], [3, 8, 'A', 2], [4, 5, 'B', 7], [5, 9, 'A', 1]];
+const listChart = (encode, dz) => ({ dataset: { source: JSON.parse(JSON.stringify(LIST_SRC)) },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' }, dataZoom: dz, series: [{ type: 'scatter', encode }] });
 const DAY = 86400000;
 const T0 = Date.UTC(2020, 0, 1);
 const timeData = Array.from({ length: 20 }, (_, i) => [T0 + i * DAY, V20[i]]);
@@ -1331,6 +1342,23 @@ const CASES = [
   { id: 'F6', groups: ['F'], note: 'a y zoom on a category-x bar + line chart: rows filtered by y, the category x base stays 0..n-1',
     option: { xAxis: { type: 'category', data: cat(20) }, yAxis: { type: 'value' },
       series: [{ type: 'bar', data: V20 }, { type: 'line', data: V20.map(v => v + 20) }], dataZoom: [{ yAxisIndex: 0, start: 20, end: 80 }] } },
+  // [spec 259] an encode key written as a list: every dimension it reaches
+  // is on the axis (mapDimensionsAll) -- the base spans them all, 'filter'
+  // selects on each in turn, 'weakFilter' keeps a row any of them is in
+  // the window or straddles, 'empty' NaNs each one out
+  { id: 'L1', groups: ['F', 'list'], note: "[spec 259] a dataset scatter x [0, 3] zoomed 20-60, 'filter': the base spans p and w, a row stays when both are in the window",
+    option: listChart({ x: [0, 3], y: 1 }, [{ start: 20, end: 60 }]) },
+  { id: 'L2', groups: ['F', 'list'], note: "[spec 259] the same, 'weakFilter': no row has both ends outside on one side",
+    option: listChart({ x: [0, 3], y: 1 }, [{ start: 20, end: 60, filterMode: 'weakFilter' }]) },
+  { id: 'L3', groups: ['F', 'list'], note: "[spec 259] the same, 'empty': p and w NaN'ed outside, each on its own",
+    option: listChart({ x: [0, 3], y: 1 }, [{ start: 20, end: 60, filterMode: 'empty' }]) },
+  { id: 'L4', groups: ['F', 'list'], note: '[spec 259] the same in value mode, startValue 2, endValue 6',
+    option: listChart({ x: [0, 3], y: 1 }, [{ startValue: 2, endValue: 6 }]) },
+  { id: 'L5', groups: ['F', 'list'], note: '[spec 259] a y zoom 30-70 over y [1, 3]: the y base spans v and w',
+    option: listChart({ x: 0, y: [1, 3] }, [{ yAxisIndex: 0, start: 30, end: 70 }]) },
+  { id: 'L6', groups: ['F', 'list'], note: "[spec 259] own data, a line x [0, 2] zoomed 25-75: the base spans x and x0",
+    option: { xAxis: { type: 'value' }, yAxis: { type: 'value' }, dataZoom: [{ start: 25, end: 75 }],
+      series: [{ type: 'line', encode: { x: [0, 2], y: 1 }, data: [[1, 5, 9], [2, 6, 1], [3, 7, 5], [4, 8, 3]] }] } },
   // the gallery
   { id: 'G-line-function', groups: ['gallery'], note: 'line-function (gallery), verbatim: two inside value-mode dataZooms on x and y, filterMode none', gallery: 'line-function', omitOption: true },
   { id: 'G-area-simple', groups: ['gallery'], note: 'area-simple (gallery), verbatim: inside + slider 0-10 on 20000 rows, then lttb sampling (stage differs)', gallery: 'area-simple', omitOption: true },

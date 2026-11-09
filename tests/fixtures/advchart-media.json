@@ -11131,8 +11131,7 @@
      "payload": {
       "type": "treeExpandAndCollapse",
       "seriesIndex": 0,
-      "dataIndex": 2,
-      "__ec_inner_16": {}
+      "dataIndex": 2
      },
      "w": 600,
      "h": 400,
@@ -12420,8 +12419,7 @@
      "payload": {
       "type": "treeExpandAndCollapse",
       "seriesIndex": 0,
-      "dataIndex": 2,
-      "__ec_inner_16": {}
+      "dataIndex": 2
      },
      "w": 600,
      "h": 400,
@@ -12624,8 +12622,7 @@
      "payload": {
       "type": "treeExpandAndCollapse",
       "seriesIndex": 0,
-      "dataIndex": 2,
-      "__ec_inner_16": {}
+      "dataIndex": 2
      },
      "w": 400,
      "h": 400,

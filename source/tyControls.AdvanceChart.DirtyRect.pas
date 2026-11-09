@@ -544,7 +544,6 @@ var
   nc, i, idx, k: Integer;
   el: TTyChartElement;
   pts: TTyDoubleArray;
-  slops: TTyDoubleArray;
 begin
   Result := -1;
   if (AList = nil) or not (APointerSizeLogical > 0) then Exit;
@@ -559,7 +558,6 @@ begin
     upstream too, and never the target, so it is left out here -- whose box
     meets the pointer's square }
   SetLength(cand, AList.Count);
-  SetLength(slops, AList.Count);
   nc := 0;
   for i := AList.Count - 1 downto 0 do
   begin
@@ -572,7 +570,6 @@ begin
     if not TyElementCoarseBox(el, APPI, box) then Continue;
     if not TyZrRectIntersect(box, pr) then Continue;
     cand[nc] := idx;
-    slops[nc] := el.HitSlopLogical * s;
     Inc(nc);
   end;
   if nc = 0 then Exit;
@@ -583,7 +580,7 @@ begin
     { BOTTOM FIRST: setHoverTarget walks the candidates from the end }
     { an element's own contain: a geo region's path [Batch 148] }
     for k := nc - 1 downto 0 do
-      if TyElementContains(AList.Element(cand[k]), pts[i], pts[i + 1], slops[k]) then
+      if TyElementHit(AList.Element(cand[k]), pts[i], pts[i + 1], APPI, False) then
         Exit(cand[k]);
     Inc(i, 2);
   end;
@@ -687,7 +684,7 @@ end;
 function TyElementPaintRect(const AEl: TTyChartElement; APPI: Integer;
   out ARect: TTyXYWH): Boolean;
 var
-  s, sw, halo, half, tol: Double;
+  s, sw, halo, half, tol, sb, ox, oy: Double;
   b: TTyRectF;
   box, cap: TTyXYWH;
 begin
@@ -745,6 +742,25 @@ begin
     end;
     TyZrRectUnion(box, cap);
     tol := cTyTextDirtyTolerance;
+  end;
+  { [R7-Y] THE SHADOW IT CASTS: getPaintRect grows the box by the blur on
+    every side and by the offsets -- the painter's blur reaches ceil(blur)
+    px past the shape, its offsets rounded [was: none, a moved element's
+    old shadow left behind] }
+  if TyStyleHasShadow(AEl.Style) then
+  begin
+    sb := 0;
+    if (not IsNan(AEl.Style.ShadowBlur)) and (AEl.Style.ShadowBlur > 0) then
+      sb := Ceil(AEl.Style.ShadowBlur * s) + 1;
+    ox := 0;
+    oy := 0;
+    if not (IsNan(AEl.Style.ShadowOffsetX) or IsInfinite(AEl.Style.ShadowOffsetX)
+      or TyPhaseLeft(AEl.Style.ShadowOffsetX)) then
+      ox := AEl.Style.ShadowOffsetX * s;
+    if not (IsNan(AEl.Style.ShadowOffsetY) or IsInfinite(AEl.Style.ShadowOffsetY)
+      or TyPhaseLeft(AEl.Style.ShadowOffsetY)) then
+      oy := AEl.Style.ShadowOffsetY * s;
+    box := TyZrPaintRect(box, sb, ox, oy, 0);
   end;
   { THE PORT'S PIXEL OF ANTIALIASING on every side: an edge on a whole
     pixel can still tint the pixel beside it }

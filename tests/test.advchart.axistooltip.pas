@@ -11,7 +11,15 @@ unit test.advchart.axistooltip;
   triggerEvent nor tooltip.show, or silent), when triggerEvent alone leaves
   the axis' default `tooltip.show: false`, or when there is no tooltip
   component. The control measures with zrender's width table, so the texts
-  sit where upstream's do. }
+  sit where upstream's do.
+
+  [R7-I] The other axes that build a text through setTooltipConfig: a
+  single axis (its tooltip shows by default), a polar's radius and angle
+  axes, a parallel axis and a radar's indicator names and labels (only
+  triggerEvent, or an indicator's own tooltip.show, wakes them; the
+  radar's tooltip is the next level of the cascade). Where a case records
+  the box's place (`box`, what TooltipView handed the content's moveTo),
+  the box's top-left is held to it. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -112,12 +120,22 @@ var
   c, bad, compared: Integer;
   report, id, want: string;
   pt: TJSONArray;
-  tip: TJSONData;
+  tip, bx: TJSONData;
+  boxes: Integer;
+
+  function HexF(const AHex: string): Double;
+  var q: QWord;
+  begin
+    q := StrToQWord('$' + AHex);
+    Move(q, Result, SizeOf(Result));
+  end;
+
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
   m := TJSONObject(FRoot).Objects['measure'];
   bad := 0;
   compared := 0;
+  boxes := 0;
   report := '';
   for c := 0 to cases.Count - 1 do
   begin
@@ -155,12 +173,30 @@ begin
         Inc(bad);
         report := report + LineEnding + Format('  %s: shown %s "%s"; upstream "%s"',
           [id, BoolToStr(FChart.TooltipShown, True), FChart.TooltipFormatterText, want]);
+      end
+      else
+      begin
+        { [R7-I] where the box is: the top-left TooltipView placed }
+        bx := cs.Find('box');
+        if bx is TJSONArray then
+        begin
+          Inc(boxes);
+          if (Abs(FChart.TooltipBox.Left - HexF(TJSONArray(bx).Strings[0])) > 1e-6)
+            or (Abs(FChart.TooltipBox.Top - HexF(TJSONArray(bx).Strings[1])) > 1e-6) then
+          begin
+            Inc(bad);
+            report := report + LineEnding + Format('  %s: the box at (%g, %g); upstream (%g, %g)',
+              [id, FChart.TooltipBox.Left, FChart.TooltipBox.Top,
+               HexF(TJSONArray(bx).Strings[0]), HexF(TJSONArray(bx).Strings[1])]);
+          end;
+        end;
       end;
     end;
   end;
   FreeAndNil(FChart);
-  AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 11);
+  AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 46);
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(compared) + ' differ:' + report, 0, bad);
+  AssertTrue(Format('the boxes were compared (%d)', [boxes]), boxes >= 5);
 end;
 
 initialization

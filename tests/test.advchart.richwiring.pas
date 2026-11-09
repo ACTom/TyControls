@@ -29,7 +29,15 @@ unit test.advchart.richwiring;
   'inherit' names -- must be there, not be upstream's. A text whose block
   font the skin decides differently (a title's 18px bold is the skin's 12)
   has its geometry and its inherited sizes left out; what the case authored
-  is compared regardless. }
+  is compared regardless.
+
+  [R7-B] A CASE MARKED `looks` (the gauge's words) writes every colour it
+  draws, so every colour is compared as upstream drew it, the skin's rule
+  aside; and it compares what the others leave: each piece's opacity, a
+  rect's border dash, its phase and its shadow, a text's halo dash and its
+  phase. A one-run caption's pieces take the element's alpha and the
+  caption's halo dash; [R7-L] a block's pieces are compared at the opacity
+  they are drawn at, under the element's alpha. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -39,6 +47,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Title, tyControls.AdvanceChart.RichText,
      tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.RichStyle,
+     tyControls.Painter, tyControls.AdvanceChart.Render,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -51,6 +60,8 @@ type
     DpiAware: Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    { [R7-N] the axis pointers' labels the last paint drew }
+    function PtrLabels: TTyPtrLabelDrawnArray;
   end;
 
   { one text as the port drew it }
@@ -73,8 +84,17 @@ type
     FBmp: TBGRABitmap;
     FSsr: ITyTextMeasurer;
     FBad, FCompared, FSkipped, FTexts, FOneRun: Integer;
+    { [R7-K2] the texts drawn at the skin's own size (cSkinSized, each met
+      once) and the texts upstream laid out at NaN (no bounds to compare) }
+    FSkinMet: array of Boolean;
+    FNoBounds: Integer;
     FReport, FCase: string;
+    { [R7-B] the case is a `looks` one }
+    FLooks: Boolean;
+    FLooksTexts: Integer;
     FUsed: array of Boolean;
+    { [R7-N] the pointer labels already matched }
+    FPtrUsed: array of Boolean;
     procedure SetUp; override;
     procedure TearDown; override;
     procedure Miss(const AWhat: string);
@@ -82,7 +102,7 @@ type
     function PlainDrawn(const AText, AFont: string; ASize, AWeight: Integer;
       AHasInk: Boolean; AInk: TTyChartColor; AHasHalo: Boolean;
       AHalo: TTyChartColor; AHaloW: Double; AH: TTyTextAnchorH;
-      AV: TTyTextAnchorV; AX, AY, ARot: Double): TRwDrawn;
+      AV: TTyTextAnchorV; AX, AY, ARot: Double; const AHaloText: string = ''): TRwDrawn;
     function FromCaption(const E: TTyChartElement): TRwDrawn;
     function FindDrawn(T: TJSONObject): TRwDrawn;
     procedure CheckText(T: TJSONObject);
@@ -101,6 +121,12 @@ type
     procedure TestAHoverRestrokesTheDefaultStrokeOnly;
     procedure TestASkinWithNoWeightDrawsTheNormalOne;
     procedure TestAShadowWithoutABlurIsNotDrawn;
+    procedure TestARoundedPlateRunsToItsJoinedEdge;
+    procedure TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
+    procedure TestARadiusArrayIsTruthy;
+    procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+    procedure TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+    procedure TestATreemapStateLabelStaysOnItsCell;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -122,6 +148,17 @@ implementation
   be named here with the reason; none is. }
 const
   cDeferred: array[0..0] of string = ('');
+
+  { [R7-K2] THE ONLY TEXTS WHOSE GEOMETRY IS LEFT TO THE SKIN, by case and
+    text: a title the option gives no size, which the skin draws at its
+    --font-size-title (12 px here) where upstream's title default is 18 px.
+    Their words, alignment, colours and halo are still compared; their
+    places are not. Any other text drawn at a size not upstream's fails, and
+    so does one of these drawn at upstream's (the list is then stale). }
+  cSkinSized: array[0..2] of string = (
+    'title-rich|title title0 "{a|Sales}{b| 2026}"',
+    'title-box-disabled|title title0 "Sales"',
+    'legend-rich-root-color|title title0 "{a|T}itle"');
 
   { ECharts 6's theme palette: a colour 'inherit' names is one of these, and
     the port's palette is the skin's }
@@ -168,6 +205,11 @@ end;
 function TRwProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+function TRwProbe.PtrLabels: TTyPtrLabelDrawnArray;
+begin
+  Result := PointerLabelsDrawn;
 end;
 
 { ==================== plumbing ==================== }
@@ -283,6 +325,8 @@ begin
   FBad := 0;
   FCompared := 0;
   FSkipped := 0;
+  FNoBounds := 0;
+  SetLength(FSkinMet, Length(cSkinSized));
   FTexts := 0;
   FOneRun := 0;
   FReport := '';
@@ -307,7 +351,7 @@ begin
 end;
 
 procedure TAdvChartRichWiringOracleTest.Draw(ACase: TJSONObject);
-var w, h: Integer;
+var w, h, k: Integer;
 begin
   w := ACase.Get('W', 600);
   h := ACase.Get('H', 400);
@@ -315,8 +359,17 @@ begin
   FChart.Option := ACase.Objects['option'].AsJSON;
   FChart.SetBounds(0, 0, w, h);
   FChart.Render(FBmp.Canvas, Rect(0, 0, w, h), 96);
+  { [R7-B] the case's actions, dispatched after the option, as upstream's }
+  if ACase.Find('actions') is TJSONArray then
+  begin
+    for k := 0 to ACase.Arrays['actions'].Count - 1 do
+      FChart.DispatchAction(ACase.Arrays['actions'].Objects[k].AsJSON);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, w, h), 96);
+  end;
   FUsed := nil;
   if FChart.List <> nil then SetLength(FUsed, FChart.List.Count);
+  FPtrUsed := nil;
+  SetLength(FPtrUsed, Length(FChart.PtrLabels));
 end;
 
 { ==================== the port's side ==================== }
@@ -326,7 +379,7 @@ end;
 function TAdvChartRichWiringOracleTest.PlainDrawn(const AText, AFont: string;
   ASize, AWeight: Integer; AHasInk: Boolean; AInk: TTyChartColor;
   AHasHalo: Boolean; AHalo: TTyChartColor; AHaloW: Double; AH: TTyTextAnchorH;
-  AV: TTyTextAnchorV; AX, AY, ARot: Double): TRwDrawn;
+  AV: TTyTextAnchorV; AX, AY, ARot: Double; const AHaloText: string): TRwDrawn;
 var
   st: TTyRtStyle;
   def: TTyRtDefault;
@@ -343,12 +396,22 @@ begin
   begin
     st.HasLineWidth := True;
     st.LineWidth := AHaloW;
+    { ([R7-AF] written as a string: the rect joins it) }
+    st.LineWidthText := AHaloText;
   end;
   def := Default(TTyRtDefault);
   def.HasFill := AHasInk;
   def.Fill := AInk;
   def.HasStroke := AHasHalo;
   def.Stroke := AHalo;
+  { [R7-B] a looks case's halo is its text's own (a gauge's textBorderColor),
+    not a host's: the style's stroke, which the box grows by }
+  if FLooks and AHasHalo then
+  begin
+    st.HasStroke := True;
+    st.Stroke := AHalo;
+    def.HasStroke := False;
+  end;
   case AH of
     tahCentre: def.Align := rtaCenter;
     tahRight: def.Align := rtaRight;
@@ -371,19 +434,44 @@ begin
 end;
 
 function TAdvChartRichWiringOracleTest.FromCaption(const E: TTyChartElement): TRwDrawn;
+var k: Integer;
 begin
   if Length(E.Caption.RtPieces) = 0 then
-    Exit(PlainDrawn(E.Caption.Text, E.Caption.FontName, E.Caption.FontSizeLogical,
+  begin
+    Result := PlainDrawn(E.Caption.Text, E.Caption.FontName, E.Caption.FontSizeLogical,
       E.Caption.FontWeight, True, E.Caption.Colour, E.Caption.StrokeWidthLogical > 0,
       E.Caption.StrokeColour, E.Caption.StrokeWidthLogical, E.Caption.AnchorH,
-      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad));
+      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad, E.Caption.LmStrokeText);
+    { [R7-M] drawn under a whole map }
+    Result.D.HasAffine := E.Caption.HasAffine;
+    for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
+    { [R7-B] what the one run draws besides: the element's alpha, the halo's
+      dash and phase }
+    for k := 0 to High(Result.D.Pieces) do
+    begin
+      Result.D.Pieces[k].Opacity := E.Style.Alpha;
+      if Result.D.Pieces[k].HasStroke then
+      begin
+        Result.D.Pieces[k].LineDash := E.Caption.StrokeType;
+        Result.D.Pieces[k].LineDashOffset := E.Caption.StrokeDashOffset;
+      end;
+    end;
+    Exit;
+  end;
   Result := Default(TRwDrawn);
   Result.Found := True;
-  Result.D.Pieces := E.Caption.RtPieces;
+  { [R7-L] each piece at the opacity it is drawn at: its own under the
+    element's alpha, as the renderer combines them }
+  Result.D.Pieces := Copy(E.Caption.RtPieces, 0, Length(E.Caption.RtPieces));
+  for k := 0 to High(Result.D.Pieces) do
+    Result.D.Pieces[k].Opacity := TyRtPieceDrawnAlpha(Result.D.Pieces[k], E.Style.Alpha);
   Result.D.X := E.Caption.X;
   Result.D.Y := E.Caption.Y;
   Result.D.RotationRad := E.Caption.RotationRad;
   Result.D.Scale := E.Caption.RtScale;
+  { [R7-M] drawn under a whole map }
+  Result.D.HasAffine := E.Caption.HasAffine;
+  for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
   Result.BlockPx := TyFontPxOf(E.Caption.FontSizeLogical);
   Result.BlockWeight := E.Caption.FontWeight;
 end;
@@ -408,13 +496,37 @@ var
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   x, y: Double;
+  ptrs: TTyPtrLabelDrawnArray;
 begin
   Result := Default(TRwDrawn);
   comp := T.Strings['component'];
   owner := Str(T.Find('owner'));
   text := T.Strings['text'];
+  { [R7-N] an axis pointer's label: drawn on the overlay, not in the paint
+    list -- what the last paint drew for that axis }
+  if comp = 'pointerLabel' then
+  begin
+    ptrs := FChart.PtrLabels;
+    for k := 0 to High(ptrs) do
+    begin
+      if (k <= High(FPtrUsed)) and FPtrUsed[k] then Continue;
+      if (ptrs[k].Owner <> owner) or (ptrs[k].Text <> text) then Continue;
+      if k <= High(FPtrUsed) then FPtrUsed[k] := True;
+      Result.Found := True;
+      Result.D := ptrs[k].D;
+      Result.D.Pieces := Copy(ptrs[k].D.Pieces, 0, Length(ptrs[k].D.Pieces));
+      for q := 0 to High(Result.D.Pieces) do
+        Result.D.Pieces[q].Opacity := TyRtPieceDrawnAlpha(Result.D.Pieces[q],
+          ptrs[k].Alpha);
+      Result.BlockPx := TyFontPxOf(ptrs[k].FontSizeLogical);
+      Result.BlockWeight := ptrs[k].FontWeight;
+      Exit;
+    end;
+    Exit;
+  end;
+  { [R7-H] 'other': a graphic component's text }
   if (comp = 'seriesLabel') or (comp = 'markerLabel') or (comp = 'legend')
-    or (comp = 'chartText') then
+    or (comp = 'chartText') or (comp = 'other') then
   begin
     lst := FChart.List;
     if lst = nil then Exit;
@@ -424,16 +536,21 @@ begin
     begin
       if (k <= High(FUsed)) and FUsed[k] then Continue;
       e := lst.Element(k);
-      if (e.Caption.FontSizeLogical <= 0) or (e.Caption.Text <> text) then Continue;
+      { a graphic text names no font size: its block does }
+      if ((e.Caption.FontSizeLogical <= 0) and not ((comp = 'other')
+        and (Length(e.Caption.RtPieces) > 0))) or (e.Caption.Text <> text) then Continue;
       if comp = 'seriesLabel' then
       begin
-        if (e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si) then Continue;
+        { [R7-L] a line's end label answers for no datum: its role names
+          the series }
+        if not ((e.Anim.Role = carEndLabel) and (e.Anim.Series = si))
+          and ((e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si)) then Continue;
       end
       else if comp = 'markerLabel' then
       begin
         if e.Datum.SeriesIndex >= 0 then Continue;
       end
-      else if comp = 'legend' then
+      else if (comp = 'legend') or (comp = 'other') then
       begin
         if e.Datum.SeriesIndex >= 0 then Continue;
       end;
@@ -577,6 +694,20 @@ var
   var skin: Boolean;
   begin
     Inc(FCompared);
+    { [R7-B] a looks case's colours are all its own: ARGB as upstream drew }
+    if FLooks then
+    begin
+      if not ColourOf(AUp, c) then
+      begin
+        if APortHas then
+          Miss(Format('%s: none upstream, %s here', [AWhat, IntToHex(APort, 8)]));
+      end
+      else if not APortHas then
+        Miss(Format('%s: %s upstream, none here', [AWhat, AUp]))
+      else if c <> APort then
+        Miss(Format('%s: %s upstream, %s here', [AWhat, AUp, IntToHex(APort, 8)]));
+      Exit;
+    end;
     if AUp = '' then
     begin
       if APortHas then
@@ -599,6 +730,50 @@ var
       Miss(Format('%s: %s upstream, %s here', [AWhat, AUp, IntToHex(APort, 8)]));
   end;
 
+  { [R7-B] a dash as the oracle wrote it: a word, or a number list's text }
+  function DashText(AP: TJSONObject): string;
+  var d: TJSONData; k: Integer;
+  begin
+    Result := '';
+    d := AP.Find('lineDash');
+    if (d = nil) or (d.JSONType = jtNull) then Exit;
+    if d.JSONType = jtString then Exit(d.AsString);
+    d := AP.Find('lineDashText');
+    if not (d is TJSONArray) then Exit;
+    Result := '[';
+    for k := 0 to d.Count - 1 do
+    begin
+      if k > 0 then Result := Result + ',';
+      Result := Result + d.Items[k].AsString;
+    end;
+    Result := Result + ']';
+  end;
+
+  { [R7-B] a rect's opacity and its shadow }
+  procedure LooksOf(const AWhat: string; AP: TJSONObject; const AQ: TTyRtPiece);
+  var s: TJSONObject;
+  begin
+    Inc(FCompared);
+    if not Near(AQ.Opacity, Hex(AP.Find('opacity'))) then
+      Miss(Format('%s opacity %s upstream, %g here', [AWhat, Str(AP.Find('opacityText')), AQ.Opacity]));
+    s := Obj(AP.Find('shadow'));
+    Inc(FCompared);
+    if (s <> nil) <> AQ.HasShadow then
+      Miss(Format('%s shadow %s upstream, %s here', [AWhat, BoolToStr(s <> nil, 'set', 'none'),
+        BoolToStr(AQ.HasShadow, 'set', 'none')]))
+    else if s <> nil then
+    begin
+      if not (Near(AQ.ShadowBlur, Hex(s.Find('blur'))) and Near(AQ.ShadowOffsetX, Hex(s.Find('offsetX')))
+        and Near(AQ.ShadowOffsetY, Hex(s.Find('offsetY')))) then
+        Miss(Format('%s shadow blur %s offset %s,%s upstream, %g offset %g,%g here', [AWhat,
+          Str(s.Find('blurText')), Str(s.Find('offsetXText')), Str(s.Find('offsetYText')),
+          AQ.ShadowBlur, AQ.ShadowOffsetX, AQ.ShadowOffsetY]));
+      if ColourOf(Str(s.Find('color')), c) and (c <> AQ.ShadowColor) then
+        Miss(Format('%s shadow colour %s upstream, %s here', [AWhat, Str(s.Find('color')),
+          IntToHex(AQ.ShadowColor, 8)]));
+    end;
+  end;
+
   function FillSource(AP: TJSONObject; const AKey, ABlockKey: string): TSource;
   begin
     rs := RichOf(StyleName(AP));
@@ -617,6 +792,10 @@ begin
   Inc(FCompared);
   if not dr.Found then
   begin
+    { [R7-D] upstream drew none of it either: a text whose width is a word
+      lays out at NaN (the plate, a rich text's tokens), and an empty
+      truncation draws nothing }
+    if (T.Find('pieces') is TJSONArray) and (T.Arrays['pieces'].Count = 0) then Exit;
     Miss(where + ': not drawn');
     Exit;
   end;
@@ -635,7 +814,40 @@ begin
   upBlockPx := Hex(style.Find('fontSize'));
   if IsNan(upBlockPx) then upBlockPx := 12;
   geometry := Abs(dr.BlockPx - upBlockPx) < 1e-6;
+  { [R7-B] a looks case's fonts are the option's or upstream's own sizes,
+    never the skin's: its geometry is always compared }
+  if FLooks then geometry := True;
+  if not geometry then
+  begin
+    k := High(cSkinSized);
+    while (k >= 0) and (cSkinSized[k] <> FCase + '|' + where) do Dec(k);
+    Inc(FCompared);
+    if k < 0 then
+      Miss(Format('%s: drawn at %g px, upstream %g px -- not a text the skin sizes',
+        [where, dr.BlockPx, upBlockPx]))
+    else if (T.Strings['component'] <> 'title') or (dr.BlockPx <> 12) or (upBlockPx <> 18) then
+      Miss(Format('%s: %g px here, %g px upstream -- not the title token against upstream''s 18',
+        [where, dr.BlockPx, upBlockPx]))
+    else
+      FSkinMet[k] := True;
+  end;
   pieces := T.Arrays['pieces'];
+  { [R7-H] a text laid out at NaN (no box recorded) is recorded by what is
+    drawn, and a line truncated to nothing draws nothing; [R7-L] nor is the
+    undrawn rect a text wholly at NaN stands as }
+  if (T.Find('box') <> nil) and (T.Find('box').JSONType = jtNull) then
+  begin
+    n := 0;
+    for i := 0 to High(dr.D.Pieces) do
+      if ((dr.D.Pieces[i].Kind = rpkRect) and not dr.D.Pieces[i].Placeholder)
+        or (dr.D.Pieces[i].Text <> '') then
+      begin
+        dr.D.Pieces[n] := dr.D.Pieces[i];
+        Inc(n);
+      end;
+    SetLength(dr.D.Pieces, n);
+    if (n = 0) and (pieces.Count = 0) then Exit;
+  end;
   Inc(FCompared);
   if pieces.Count <> Length(dr.D.Pieces) then
   begin
@@ -663,11 +875,11 @@ begin
         for k := 0 to 3 do
         begin
           case k of
-            0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
-            1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y, gx, gy);
-            2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y + q.H, gx, gy);
+            0: TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
+            1: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y, gx, gy);
+            2: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y + q.H, gx, gy);
           else
-            TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y + q.H, gx, gy);
+            TyRtDrawnPoint(dr.D, q.X, q.Y + q.H, gx, gy);
           end;
           Inc(FCompared);
           if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -718,6 +930,20 @@ begin
       Inc(FCompared);
       if p.Booleans['drawn'] <> q.Drawn then
         Miss(Format('%s: rect %d drawn differs', [where, i]));
+      if FLooks then
+      begin
+        LooksOf(Format('%s: rect %d', [where, i]), p, q);
+        if (up <> '') and q.HasStroke then
+        begin
+          Inc(FCompared);
+          if DashText(p) <> StringReplace(q.BorderDash, ' ', '', [rfReplaceAll]) then
+            Miss(Format('%s: rect %d border dash %s upstream, %s here', [where, i,
+              DashText(p), q.BorderDash]));
+          if (DashText(p) <> '') and not Near(q.BorderDashOffset, Hex(p.Find('lineDashOffset'))) then
+            Miss(Format('%s: rect %d dash phase %s upstream, %g here', [where, i,
+              Str(p.Find('lineDashOffsetText')), q.BorderDashOffset]));
+        end;
+      end;
       Continue;
     end;
     { a text }
@@ -731,7 +957,7 @@ begin
         Str(p.Find('textAlign')), AlignWord(q.TextAlign)]));
     if geometry then
     begin
-      TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
+      TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
       Inc(FCompared);
       if not (Near(gx, Hex(p.Find('gx'))) and Near(gy, Hex(p.Find('gy')))) then
         Miss(Format('%s: text %d "%s" at %s,%s upstream, %g,%g here', [where, i,
@@ -751,8 +977,11 @@ begin
     end;
     w := Str(p.Find('fontWeight'));
     if (w = '') and (Pos('bold', Str(p.Find('font'))) > 0) then w := 'bold';
+    { [R7-M] a looks case's heavy weight is its own: compared whatever the
+      skin's }
     if (WeightOf(w) <> WeightOf(Str(style.Find('fontWeight'))))
-      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight')))) then
+      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight'))))
+      or (FLooks and (WeightOf(Str(style.Find('fontWeight'))) > 400)) then
     begin
       Inc(FCompared);
       if WeightOf(w) <> TyFontWeightOf(q.FontWeight) then
@@ -805,6 +1034,23 @@ begin
         Miss(Format('%s: text %d "%s" shadow colour %s upstream, %s here', [where,
           i, p.Strings['text'], Str(sh.Find('color')), IntToHex(q.ShadowColor, 8)]));
     end;
+    if FLooks then
+    begin
+      Inc(FCompared);
+      if not Near(q.Opacity, Hex(p.Find('opacity'))) then
+        Miss(Format('%s: text %d "%s" opacity %s upstream, %g here', [where, i,
+          p.Strings['text'], Str(p.Find('opacityText')), q.Opacity]));
+      if (up <> '') and q.HasStroke then
+      begin
+        Inc(FCompared);
+        if DashText(p) <> StringReplace(q.LineDash, ' ', '', [rfReplaceAll]) then
+          Miss(Format('%s: text %d "%s" halo dash %s upstream, %s here', [where, i,
+            p.Strings['text'], DashText(p), q.LineDash]))
+        else if (DashText(p) <> '') and not Near(q.LineDashOffset, Hex(p.Find('lineDashOffset'))) then
+          Miss(Format('%s: text %d "%s" halo phase %s upstream, %g here', [where, i,
+            p.Strings['text'], Str(p.Find('lineDashOffsetText')), q.LineDashOffset]));
+      end;
+    end;
   end;
   { THE BOX THE PIECES OCCUPY, turned onto the canvas: upstream's Text
     getBoundingRect, a stroked rect grown by its stroke, a text by a stroke
@@ -816,11 +1062,11 @@ begin
     for k := 0 to 3 do
     begin
       case k of
-        0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y, gx, gy);
-        1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y, gx, gy);
-        2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y + bb.H, gx, gy);
+        0: TyRtDrawnPoint(dr.D, bb.X, bb.Y, gx, gy);
+        1: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y, gx, gy);
+        2: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y + bb.H, gx, gy);
       else
-        TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y + bb.H, gx, gy);
+        TyRtDrawnPoint(dr.D, bb.X, bb.Y + bb.H, gx, gy);
       end;
       Inc(FCompared);
       if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -833,8 +1079,20 @@ begin
       end;
     end;
   end
+  else if not geometry then
+    Inc(FSkipped)
   else
-    Inc(FSkipped);
+  begin
+    { [R7-K2] NO BOUNDS UPSTREAM: a text laid out at NaN somewhere (a width
+      written as a word, a reading's width null -- R7-D, R7-H) has none, and
+      no box either; its pieces are compared above. A text with a box but
+      no bounds would be a gap in the record. }
+    Inc(FCompared);
+    if T.Find('box') is TJSONObject then
+      Miss(where + ': a box upstream but no bounds')
+    else
+      Inc(FNoBounds);
+  end;
 end;
 
 procedure TAdvChartRichWiringOracleTest.TestTheBlocksAsUpstream;
@@ -853,21 +1111,45 @@ begin
     for k := 0 to High(cDeferred) do
       if FCase = cDeferred[k] then skip := True;
     if skip then Continue;
+    FLooks := (cs.Find('looks') <> nil) and (cs.Find('looks').JSONType = jtBoolean)
+      and cs.Booleans['looks'];
     try
       Draw(cs);
       texts := cs.Arrays['texts'];
       for t := 0 to texts.Count - 1 do
+      begin
+        if FLooks then Inc(FLooksTexts);
         CheckText(texts.Objects[t]);
+      end;
     except
       on E: Exception do Miss(E.ClassName + ': ' + E.Message);
     end;
   end;
+  FLooks := False;
+  AssertTrue(Format('only %d texts in the looks cases', [FLooksTexts]), FLooksTexts >= 60);
+  { [R7-K2] NOT A SILENT PASS: the geometry left to the skin is exactly
+    that of the titles in cSkinSized, every one of them met (text widths are
+    zrender's here, so nothing else differs). A text upstream laid out at
+    NaN has no bounds and is not a skipped check. }
+  for k := 0 to High(cSkinSized) do
+    AssertTrue('a text the skin sizes was not met: ' + cSkinSized[k], FSkinMet[k]);
+  AssertTrue(Format('texts without bounds upstream (%d)', [FNoBounds]), FNoBounds >= 18);
   AssertTrue(Format('%d of %d differ from upstream (%d geometry checks left to '
     + 'the skin):%s', [FBad, FCompared, FSkipped, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 200);
-  { the two texts with nothing a block is needed for -- the gauge's plain
-    title and the title whose box upstream disables -- and no others }
-  AssertEquals('texts drawn as one run', 2, FOneRun);
+  { the texts with nothing a block is needed for -- the gauge's plain title,
+    the title whose box upstream disables, [R7-B] gauge-text-inherit's plain
+    title, gauge-axislabel-plain's five labels, gauge-states-ignored's six
+    labels and two titles, gauge-font-size-string's three labels and title,
+    gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
+    halo's three labels and title, [R7-L] label-opacity-scatter's two plain
+    labels, label-opacity-root's one, label-opacity-item's end label at its
+    own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
+    numstr's seven day words, graph-edge-scale's level edge
+    label, graph-edge-scale-curve's haloed one and its 'from', vm-plain-
+    font's four visualMap words and two slider labels, [R7-AF] numstr-text-
+    border's two haloed labels -- and no others }
+  AssertEquals('texts drawn as one run', 50, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
@@ -1398,6 +1680,278 @@ procedure TAdvChartRichWiringOracleTest.TestAShadowWithoutABlurIsNotDrawn;
 begin
   AssertTrue('a blurred shadow is drawn (the count sees it)', Magenta(',"textShadowBlur":2') > 20);
   AssertEquals('no blur, no shadow', 0, Magenta(''));
+end;
+
+{ [R7-H] A ROUNDED PLATE WHOSE WIDTH WAS A STRING is drawn as zrender's
+  roundRect path draws it: from its x to x + width JOINED as a string (here
+  the joined edge lies left of x, as -600 + '1200' does), not the rect canvas
+  would draw at x, x + width }
+procedure TAdvChartRichWiringOracleTest.TestARoundedPlateRunsToItsJoinedEdge;
+var
+  b: TBGRABitmap;
+  p: TTyPainter;
+  pc: TTyRtPieceArray;
+  k: Integer;
+begin
+  SetLength(pc, 1);
+  pc[0] := Default(TTyRtPiece);
+  pc[0].Kind := rpkRect;
+  pc[0].Line := -1;
+  pc[0].Token := -1;
+  pc[0].X := 60;
+  pc[0].Y := 10;
+  pc[0].W := 30;
+  pc[0].H := 20;
+  pc[0].PathEdges := True;
+  pc[0].EdgeX1 := 10;
+  pc[0].EdgeY1 := 30;
+  for k := 0 to 3 do pc[0].Radius[k] := 3;
+  pc[0].HasFill := True;
+  pc[0].Fill := TTyChartColor($FFE02020);
+  pc[0].Drawn := True;
+  pc[0].Opacity := 1;
+  b := TBGRABitmap.Create(120, 40, BGRA(255, 255, 255, 255));
+  p := TTyPainter.Create;
+  try
+    p.BeginPaintOn(nil, Rect(0, 0, 120, 40), 96, b);
+    TyRenderRtPieces(p, pc, 0, 0, 0, 1, 1, False, TTyColor(0));
+    p.EndPaint;
+    AssertTrue('the joined path covers 10..60', b.GetPixel(35, 20).green < 100);
+    AssertTrue('the canvas rect 60..90 is not the path', b.GetPixel(75, 20).green > 200);
+  finally
+    p.Free;
+    b.Free;
+  end;
+end;
+
+{ [R7-L] borderRadius [0, 0] is truthy: zrender's Rect takes roundRect's
+  path, which runs to the joined edge -- radii nought or not }
+procedure TAdvChartRichWiringOracleTest.TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
+var
+  b: TBGRABitmap;
+  p: TTyPainter;
+  pc: TTyRtPieceArray;
+begin
+  SetLength(pc, 1);
+  pc[0] := Default(TTyRtPiece);
+  pc[0].Kind := rpkRect;
+  pc[0].Line := -1;
+  pc[0].Token := -1;
+  pc[0].X := 60;
+  pc[0].Y := 10;
+  pc[0].W := 30;
+  pc[0].H := 20;
+  pc[0].PathEdges := True;
+  pc[0].Rounded := True;
+  pc[0].EdgeX1 := 10;
+  pc[0].EdgeY1 := 30;
+  pc[0].HasFill := True;
+  pc[0].Fill := TTyChartColor($FFE02020);
+  pc[0].Drawn := True;
+  pc[0].Opacity := 1;
+  b := TBGRABitmap.Create(120, 40, BGRA(255, 255, 255, 255));
+  p := TTyPainter.Create;
+  try
+    p.BeginPaintOn(nil, Rect(0, 0, 120, 40), 96, b);
+    TyRenderRtPieces(p, pc, 0, 0, 0, 1, 1, False, TTyColor(0));
+    p.EndPaint;
+    AssertTrue('the joined path covers 10..60', b.GetPixel(35, 20).green < 100);
+    AssertTrue('the canvas rect 60..90 is not the path', b.GetPixel(75, 20).green > 200);
+  finally
+    p.Free;
+    b.Free;
+  end;
+end;
+
+{ [R7-L] the plate of a label whose borderRadius is [0, 0] takes the rounded
+  path; borderRadius 0 does not }
+procedure TAdvChartRichWiringOracleTest.TestARadiusArrayIsTruthy;
+var
+  cases: TJSONArray;
+  c, k: Integer;
+  e: TTyChartElement;
+  seenArray, seenZero: Boolean;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for c := 0 to cases.Count - 1 do
+    if cases.Objects[c].Strings['name'] = 'numstr-radius-zero-array' then
+    begin
+      FChart.Option := cases.Objects[c].Objects['option'].AsJSON;
+      FChart.SetBounds(0, 0, 600, 400);
+      FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+    end;
+  seenArray := False;
+  seenZero := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if Length(e.Caption.RtPieces) = 0 then Continue;
+    if e.Caption.Text = '120' then
+    begin
+      seenArray := True;
+      AssertTrue('[0, 0]: the rounded path', e.Caption.RtPieces[0].Rounded);
+    end
+    else if e.Caption.Text = '200' then
+    begin
+      seenZero := True;
+      AssertFalse('0: the canvas rect', e.Caption.RtPieces[0].Rounded);
+    end;
+  end;
+  AssertTrue('both labels drawn', seenArray and seenZero);
+end;
+
+{ [R7-L] a centred rich label whose width is '50%' and which has no plate
+  lays every token out at NaN: nothing is drawn, but zrender bounds its
+  TSpans at style.x || 0, so the label is still there for the label layout
+  and the pointer -- one undrawn rect, the size of its words }
+procedure TAdvChartRichWiringOracleTest.TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+var
+  k: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+begin
+  { label-layout.js' string.width.rich: no plate, no token box, so its box
+    is the TSpan's at 0 }
+  FChart.Option := '{"animation":false,"xAxis":{"type":"value","min":0,"max":10},'
+    + '"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"scatter",'
+    + '"label":{"show":true,"formatter":"L{c}"},"data":[[2,5],{"value":[8,5],'
+    + '"label":{"width":"50%","formatter":"{a|L{c}}","rich":{"a":{"color":"#333"}}}}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    { the label, not its host's caption it was expanded from }
+    if (e.Caption.Text <> '{a|L8,5}') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertEquals('one piece', 1, Length(e.Caption.RtPieces));
+    AssertTrue('a placeholder', e.Caption.RtPieces[0].Placeholder);
+    AssertFalse('not drawn', e.Caption.RtPieces[0].Drawn);
+    AssertTrue('as wide as its words', e.Caption.RtPieces[0].W > 10);
+    AssertTrue('as tall as a line', e.Caption.RtPieces[0].H > 5);
+  end;
+  AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A GRAPH'S EDGE LABEL IN A VIEW SCALED UNEQUALLY IS DRAWN SQUASHED:
+  the view's scaleX 4 and scaleY 2 leave the label at half its height
+  (Line.beforeUpdate's 1 / scaleX), its plate too -- the pixels, not only
+  the geometry the oracle cases compare. A level edge: no turn, so the
+  plate is an upright rect half as tall as it is unsquashed. }
+procedure TAdvChartRichWiringOracleTest.TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+var
+  x, y, top, bottom, left, right, k: Integer;
+  c: TBGRAPixel;
+  e: TTyChartElement;
+  seen: Boolean;
+begin
+  FBmp.Fill(BGRAWhite);
+  FChart.Option := '{"animation":false,"series":[{"type":"graph","layout":"none",'
+    + '"left":100,"top":100,"width":400,"height":200,"symbolSize":1,'
+    + '"itemStyle":{"color":"#ffffff"},"label":{"show":false},'
+    + '"lineStyle":{"width":1,"color":"#ffffff","opacity":1},'
+    + '"edgeLabel":{"show":true,"formatter":"xx","color":"#ff0000",'
+    + '"backgroundColor":"#ff0000","padding":4},'
+    + '"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":0},'
+    + '{"name":"c","x":0,"y":100}],"links":[{"source":"a","target":"b"}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  top := MaxInt;
+  bottom := -1;
+  left := MaxInt;
+  right := -1;
+  for y := 0 to 399 do
+    for x := 0 to 599 do
+    begin
+      c := FBmp.GetPixel(x, y);
+      if (c.red > 200) and (c.green < 80) and (c.blue < 80) then
+      begin
+        if y < top then top := y;
+        if y > bottom then bottom := y;
+        if x < left then left := x;
+        if x > right then right := x;
+      end;
+    end;
+  AssertTrue('the plate is drawn', bottom >= 0);
+  { 12 px of words and 8 of padding, halved; as wide as written }
+  AssertTrue(Format('half as tall: rows %d..%d', [top, bottom]),
+    (bottom - top + 1 >= 8) and (bottom - top + 1 <= 12));
+  AssertTrue(Format('as wide: columns %d..%d', [left, right]),
+    right - left + 1 >= 18);
+  { above the line at y 100, the anchor 2.5 px over it (distance 5 / 4 in
+    the data, times 2) }
+  AssertTrue(Format('above the line: bottom row %d', [bottom]),
+    (bottom >= 95) and (bottom <= 99));
+  { and the label's element is the box the map lays it down as }
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'xx') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertTrue('under the whole map', e.Caption.HasAffine);
+    AssertTrue(Format('its box half as tall: %g', [e.Shape.Bounds.Bottom - e.Shape.Bounds.Top]),
+      (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top > 9)
+      and (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top < 11));
+  end;
+  AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A TREEMAP LABEL UNDER A STATE'S PLACE IS STILL ON ITS CELL:
+  TreemapView's beforeUpdate gives the label the cell's width and height
+  whatever its position, so the emphasis twin (laid out at
+  'insideBottomRight') has the same plate as the normal label (at the
+  centre): the whole content rect, its corner at the cell's. Upstream's
+  highlight does not reach a treemap's labels in node, so this is held to
+  the normal label's plate, which the oracle cases hold to upstream. }
+procedure TAdvChartRichWiringOracleTest.TestATreemapStateLabelStaysOnItsCell;
+var
+  k, t, q: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+  nx, ny, tx, ty: Double;
+  np, tp: TTyRtPiece;
+begin
+  FChart.Option := '{"animation":false,"series":[{"type":"treemap","top":10,'
+    + '"bottom":60,"breadcrumb":{"show":false},"label":{"color":"#333333",'
+    + '"backgroundColor":"#eeeeee"},"emphasis":{"label":{"position":"insideBottomRight"}},'
+    + '"data":[{"name":"Alpha","value":3},{"name":"Beta","value":4}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'Beta') or (e.Caption.LmKind = 0) then Continue;
+    AssertTrue('the normal label is a block', Length(e.Caption.RtPieces) > 0);
+    np := e.Caption.RtPieces[0];
+    AssertTrue('its first piece the plate', np.Kind = rpkRect);
+    for t := 0 to High(e.EmphTwin) do
+    begin
+      if e.EmphTwin[t].State <> TyTwinEmphasis then Continue;
+      AssertTrue('the twin is a block', Length(e.EmphTwin[t].Caption.RtPieces) > 0);
+      tp := e.EmphTwin[t].Caption.RtPieces[0];
+      AssertTrue('its first piece the plate', tp.Kind = rpkRect);
+      seen := True;
+      AssertEquals('the plate as wide as the cell', np.W, tp.W, 1e-9);
+      AssertEquals('the plate as tall as the cell', np.H, tp.H, 1e-9);
+      { the plate's corner, on the canvas, is the cell's either way }
+      nx := e.Caption.X + np.X * e.Caption.RtScale;
+      ny := e.Caption.Y + np.Y * e.Caption.RtScale;
+      tx := e.EmphTwin[t].Caption.X + tp.X * e.EmphTwin[t].Caption.RtScale;
+      ty := e.EmphTwin[t].Caption.Y + tp.Y * e.EmphTwin[t].Caption.RtScale;
+      AssertEquals('the corner x', nx, tx, 1e-6);
+      AssertEquals('the corner y', ny, ty, 1e-6);
+      { and the words in the bottom right corner, not the centre }
+      for q := 0 to High(e.EmphTwin[t].Caption.RtPieces) do
+        if e.EmphTwin[t].Caption.RtPieces[q].Kind = rpkText then
+          AssertTrue('the words at the right',
+            e.EmphTwin[t].Caption.X + e.EmphTwin[t].Caption.RtPieces[q].X
+            * e.EmphTwin[t].Caption.RtScale > nx + np.W * e.Caption.RtScale * 0.75);
+    end;
+  end;
+  AssertTrue('the emphasis twin is there', seen);
 end;
 
 initialization

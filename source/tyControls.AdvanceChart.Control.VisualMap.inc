@@ -225,6 +225,7 @@ var
   model: TTyStyleModel;
   st: TTyStyleSet;
 begin
+  Result := Default(TTyVisualMapInk);
   model := ActiveController.Model;
   st := model.ResolveStyle('TyAdvChartVisualMap', '', []);
   Result.FontName := st.FontName;
@@ -236,6 +237,11 @@ begin
   if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
   Result.FontWeight := TyFontStyleCodeOver(AView.FontStyle, Result.FontWeight);
   if AView.HasText_ then Result.Text := AView.TextColour;
+  { [R7-M] the rest of createTextStyle: the family, the weight, the block,
+    the opacity }
+  ComponentTextBlock(AView.TextStyleJson, Result.FontName, Result.FontWeight,
+    Result.HasRt, Result.Rt, Result.RtGlobal, Result.HasOpacity, Result.Opacity);
+  if FLastPPI > 0 then Result.RtScale := FLastPPI / 96 else Result.RtScale := 1;
   if AView.HasBorder then Result.Border := AView.BorderColour
   else Result.Border := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapBorder', '', []).BorderColor);
@@ -287,6 +293,11 @@ begin
       Inc(Result, TyBuildVisualMapMarks(FVisualLayouts[k], FVisualViews[k],
         VisualMapInk(FVisualViews[k]), FLastRect.Left, FLastRect.Top, AList,
         VmLiveDraw(k)));
+      { [R7-AD] its words in a font the canvas refuses (its textStyle): the
+        one the text before left }
+      if FOption <> nil then
+        if FOption.ComponentAt('visualMap', k) is TJSONObject then
+          FontLeftFrom(AList, lt, FontRefusedOf([TJSONObject(FOption.ComponentAt('visualMap', k)).Find('textStyle')]));
       { [R5-J] its own zlevel, else the root's }
       LevelTail(AList, lt, 'visualMap', k);
     end;
@@ -590,6 +601,7 @@ procedure TTyCustomAdvanceChart.VmBuilt(AIndex: Integer);
 var
   L: TTyVisualMapLayout;
   h: Integer;
+  op: Double;
 begin
   if (AIndex < 0) or (AIndex > High(FVmLive)) then Exit;
   Inc(FVmLive[AIndex].Gen);
@@ -650,8 +662,10 @@ begin
   { [R5-I] the handle labels' opacity, for their blur's fade }
   FVmBlurBag[AIndex] := TTyAnimBag.Create;
   FVmBlurBag[AIndex].Animation := FVmAnim;
-  FVmBlurBag[AIndex].Attr(TyAnimProps([TyAnimProp('h0', TyAnimNum(1)),
-    TyAnimProp('h1', TyAnimNum(1))]));
+  { [R7-N] at the words' own opacity [was: 1] }
+  op := VmLabelOwnOpacity(AIndex);
+  FVmBlurBag[AIndex].Attr(TyAnimProps([TyAnimProp('h0', TyAnimNum(op)),
+    TyAnimProp('h1', TyAnimNum(op))]));
 end;
 
 { ContinuousView.dispose: _clearHoverLinkToSeries dispatches its downplay
@@ -1484,10 +1498,11 @@ begin
         anyChange := True;
         { [R5-I] the label's stateTransition ({duration: 200}, no easing):
           its opacity to the blur's 0.1, or back to its own, from where it
-          is [was: switched at once] }
+          is [was: switched at once]; [R7-N] its own is the normal state's,
+          textStyle's opacity [was: 1] }
         if (k <= High(FVmBlurBag)) and (FVmBlurBag[k] <> nil) then
         begin
-          if want then o := 0.1 else o := 1;
+          if want then o := 0.1 else o := VmLabelOwnOpacity(k);
           if AnimAllowed then
           begin
             { the next frame applies it }
@@ -1799,10 +1814,21 @@ begin
     end;
 end;
 
+function TTyCustomAdvanceChart.VmLabelOwnOpacity(AIndex: Integer): Double;
+var ink: TTyVisualMapInk;
+begin
+  Result := 1;
+  if (AIndex < 0) or (AIndex > High(FVisualViews)) then Exit;
+  ink := VisualMapInk(FVisualViews[AIndex]);
+  if ink.HasOpacity then Result := ink.Opacity;
+end;
+
 function TTyCustomAdvanceChart.VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
 begin
   Result := 1;
   if (AIndex < 0) or (AIndex > High(FVmLive)) or (AHandle < 0) or (AHandle > 1) then Exit;
+  { [R7-N] at rest its own [was: 1] }
+  Result := VmLabelOwnOpacity(AIndex);
   if FVmLive[AIndex].LabelBlurOn[AHandle] then Result := 0.1;
   { [R5-I] where its fade has got to }
   if (AIndex <= High(FVmBlurBag)) and (FVmBlurBag[AIndex] <> nil)

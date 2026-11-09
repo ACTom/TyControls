@@ -16,6 +16,54 @@
 //   markPoint label rich, axisLabel rich ('{a|{value}}'), axisLabel box,
 //   axis name rich and box, title / subtitle rich (and the title's disabled
 //   box), legend formatter + textStyle.rich, gauge detail box.
+//   [R7-B] a gauge's words, every key createTextStyle hands them: title and
+//   detail plain and rich (the box, its dash, phase and shadow, the halo, the
+//   text shadow, opacity, lineHeight, width / height -- the detail's of the
+//   radius --, overflow and ellipsis, the align the code fixes, an item's
+//   rich over its series', 'auto' / 'inherit'), the axis labels likewise
+//   (rotated, 'auto', rich, markup and lines without rich), the root
+//   textStyle, fontSize as a string, and the states nobody reads. These
+//   carry `looks: true`: their pieces add each one's lineDashOffset, and the
+//   Pascal side compares every colour, opacity, dash and box shadow. A case
+//   may carry `actions`, dispatched after setOption.
+//   [R7-D] a title's and an axis label's width written as a word ('50%',
+//   'auto': zrender adds the padding to it as a string, so the plate and a
+//   rich text's centred tokens sit at NaN) and a reading's width null. A
+//   text laid out at NaN somewhere records what is drawn: its pieces at
+//   finite places with words in them, and no box, bounds or lines.
+//   [R7-H] widths, heights and line heights written as strings on every
+//   kind of label (series, axis, title, pie, markPoint, graphic; plain and
+//   rich, block and token) and through labelLayout: zrender reads a word as
+//   NaN and adds the padding to a numeric word as a string ('60' + 0). A
+//   value zrender kept as a string is recorded as canvas takes it (its
+//   number); a rect whose shape holds one also records `pathBounds`, its
+//   own bounds, whose path joins it as a string (x + '600'). A text placed
+//   at NaN (a non-finite transform) records no pieces.
+//   [R7-L] a label's opacity on every series kind (`looks`): the label's
+//   own, the root textStyle's, the host's defaultOpacity (a scatter's 0.8,
+//   an itemStyle.opacity, a graph edge's or a lines' lineStyle.opacity),
+//   none at all (sunburst, sankey, themeRiver, a line's endLabel, a
+//   markArea), and a rich token's own over the Text's.
+//   [R7-N] an axis pointer's label (cartesian, single, polar; shown by its
+//   status or by a tooltip's showTip): every key createTextStyle hands it,
+//   the root textStyle's, and its place from the plain text's box.
+//   [R7-AF] a text border's width written as a string (textBorderWidth '3'
+//   on a series label, plain and rich, a legend's and a title's text): the
+//   canvas strokes its number, the TSpan's rect joins it to its width and
+//   height as a string (6.72 + '3' is '6.723'); a box's borderWidth as a
+//   string ('2': its number, doubled under a fill; '0', 'abc': the rect made,
+//   unstroked). A TSpan's lineWidth and bbox are recorded as numbers (a
+//   joined bbox is not checked against the measure).
+//   [R7-AI] a padding written as a string or as an array of other lengths
+//   (series labels plain and rich, block and token, boxed and rounded,
+//   wrapped and truncated; axis labels, legend items, a title's text, a
+//   markPoint's, a graphic text, a gauge's detail): normalizeCssArray takes a
+//   string by its characters ('12' is ['1', '2', '1', '2']) and leaves a side
+//   it has none for undefined ('4', [4], [], true), and zrender adds the
+//   sides and the places as JS does ('0' + '2' is '02': a TSpan at x '02'
+//   draws at 2). The cases carry `r7ai`: a TSpan whose rect holds a string
+//   also records `hit`, its rect as rectContain reads it -- [x0, y0, x1, y1],
+//   x1 = rect.x + rect.width in JS (joined; null where it is no number).
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -54,7 +102,8 @@
 //   cases[]    {name, note, W, H, option, record (which texts), texts[]}
 // Per text:
 //   component  seriesLabel | markerLabel | axisLabel | axisName | title |
-//              subtitle | legend | chartText | other
+//              subtitle | legend | chartText | pointerLabel (an axis
+//              pointer's label, owned by its axis) | other
 //   owner      '<mainType><componentIndex>' of its view; attached (a host's
 //              textContent); text (style.text); rich (style.rich present --
 //              zrender takes the rich path iff it is, Text.ts:389-391)
@@ -337,6 +386,661 @@ function barLabel(label, extra, series) {
 }
 const TWO = '{a|{b}}\n{v|{c}}';
 
+// ---- [R7-B] the gauge's words: title, detail and axis labels ----
+// GaugeView builds each with createTextStyle(model, {x, y, text, align,
+// verticalAlign[, width, height]}, {inheritColor}): every key of the text
+// style but the ones the code fixes. These cases carry `looks: true`: their
+// pieces also record each one's lineDashOffset, and every colour is the
+// case's own (strict ink in the Pascal comparison).
+const GAUGE_BARE = { axisLine: { show: false }, splitLine: { show: false }, axisTick: { show: false }, pointer: { show: false } };
+const gauge = (s, extra) => opt(Object.assign({ series: (Array.isArray(s) ? s : [s]).map(x => Object.assign({ type: 'gauge' }, GAUGE_BARE, x)) }, extra));
+const NO_AXIS = { axisLabel: { show: false } };
+const BOX = { backgroundColor: '#ffeecc', borderColor: '#336699', borderWidth: 2, borderRadius: [2, 4, 6, 8], padding: [3, 6],
+  borderType: 'dashed', borderDashOffset: 2, shadowBlur: 4, shadowColor: '#00000080', shadowOffsetX: 2, shadowOffsetY: 3 };
+const INK = { textBorderColor: '#ff0000', textBorderWidth: 2, textBorderType: 'dotted', textBorderDashOffset: 1,
+  textShadowColor: '#0000ff', textShadowBlur: 3, textShadowOffsetX: 1, textShadowOffsetY: 2 };
+const GAUGE_CASES = [
+  // title / detail, plain
+  { name: 'gauge-title-box', looks: true, note: 'title: the whole box, its dash, phase and shadow, the halo, the text shadow, opacity, lineHeight, width, height',
+    record: ['chartText'], match: '^Speed$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Speed' }], detail: { show: false },
+      title: Object.assign({ color: '#123456', fontSize: 14, opacity: 0.7, lineHeight: 28, width: 120, height: 40 }, BOX, INK) }, NO_AXIS)) },
+  { name: 'gauge-title-align-fixed', looks: true, note: "title align 'left', verticalAlign 'top': the code fixes them at center / middle",
+    record: ['chartText'], match: '^Name$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', align: 'left', verticalAlign: 'top', backgroundColor: '#eeeeee', padding: 4 } }, NO_AXIS)) },
+  { name: 'gauge-title-overflow', looks: true, note: "title width 50 truncate with '~'; a second gauge's width 60 break; a third's two lines at lineHeight 20",
+    record: ['chartText'], match: 'long|lines|Two',
+    option: gauge([
+      Object.assign({ center: ['20%', '50%'], radius: '30%', data: [{ value: 37, name: 'A rather long gauge name' }], detail: { show: false },
+        title: { color: '#123456', width: 50, overflow: 'truncate', ellipsis: '~', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['50%', '50%'], radius: '30%', data: [{ value: 37, name: 'Broken into lines here' }], detail: { show: false },
+        title: { color: '#123456', width: 60, overflow: 'break', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['80%', '50%'], radius: '30%', data: [{ value: 37, name: 'Two\nlines' }], detail: { show: false },
+        title: { color: '#123456', lineHeight: 20, borderColor: '#333333', borderWidth: 1 } }, NO_AXIS)]) },
+  { name: 'gauge-detail-line-height', looks: true, note: 'detail fontSize 20 under the default lineHeight 30 and width 100: the plate is 120 x 40',
+    record: ['chartText'], match: 'km',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { formatter: '{value} km/h', fontSize: 20, color: '#333333', backgroundColor: '#eeeeee' } }, NO_AXIS)) },
+  { name: 'gauge-detail-percent-size', looks: true, note: "detail width '60%', height '20%' of the radius (150), bordered",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { width: '60%', height: '20%', color: '#222222', backgroundColor: '#dddddd', borderColor: '#999999', borderWidth: 1 } }, NO_AXIS)) },
+  { name: 'gauge-detail-ink', looks: true, note: 'detail halo, text shadow, opacity, the box dash and shadow',
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: Object.assign({ color: '#c23531', opacity: 0.6 }, BOX, INK) }, NO_AXIS)) },
+  { name: 'gauge-detail-overflow', looks: true, note: "detail width 80 truncate with '..'; a second item's width 70 break",
+    record: ['chartText'], match: 'kilo',
+    option: gauge(Object.assign({ title: { show: false }, detail: { formatter: '{value} kilometres per hour', fontSize: 16, color: '#111111', width: 80, overflow: 'truncate', ellipsis: '..' },
+      data: [{ value: 37, name: 'n' }, { value: 64, name: 'm', detail: { offsetCenter: [0, '-30%'], width: 70, overflow: 'break' } }] }, NO_AXIS)) },
+  { name: 'gauge-detail-rich-cascade', looks: true, note: "series detail rich a / u; the first item's rich a over it (colour only) with a plate of its own; the second item's offset only",
+    record: ['chartText'], match: 'km',
+    option: gauge(Object.assign({ title: { show: false },
+      detail: { formatter: '{a|{value}}{u|km/h}', color: '#333333',
+        rich: { a: { color: '#c23531', fontSize: 24, fontWeight: 'bold' },
+          u: { color: '#666666', fontSize: 12, padding: [0, 0, 0, 4], backgroundColor: '#eeeeee', borderColor: '#999999', borderWidth: 1, borderRadius: 2,
+            verticalAlign: 'bottom', lineHeight: 20, width: 40, align: 'right', textBorderColor: '#ffffff', textBorderWidth: 1, textShadowColor: '#000000', textShadowBlur: 2 } } },
+      data: [{ value: 37, name: 'A', detail: { rich: { a: { color: '#008800' } }, backgroundColor: '#fafafa' } },
+        { value: 64, name: 'B', detail: { offsetCenter: [0, '-20%'] } }] }, NO_AXIS)) },
+  { name: 'gauge-title-rich', looks: true, note: "title rich n: font, colour, box, height, verticalAlign; the name carries the markup",
+    record: ['chartText'], match: 'now',
+    option: gauge(Object.assign({ detail: { show: false }, data: [{ value: 37, name: '{n|Speed} now' }],
+      title: { color: '#123456', fontSize: 14, rich: { n: { fontSize: 18, color: '#0000aa', fontFamily: 'serif', fontStyle: 'italic', backgroundColor: '#ffffcc',
+        padding: 2, height: 30, verticalAlign: 'top', textShadowColor: '#ff0000', textShadowBlur: 2, textShadowOffsetX: 1 } } } }, NO_AXIS)) },
+  { name: 'gauge-text-inherit', looks: true, note: "title 'auto' takes the band under the value; detail 'inherit' the progress arc's fill; a rich token's 'inherit' too",
+    record: ['chartText'], match: 'Speed|%',
+    option: gauge(Object.assign({ progress: { show: true }, itemStyle: { color: '#2f7ed8' },
+      axisLine: { show: false, lineStyle: { color: [[0.5, '#11aa11'], [1, '#aa1111']] } },
+      data: [{ value: 37, name: 'Speed' }], title: { color: 'auto' },
+      detail: { color: 'inherit', formatter: '{v|{value}}%', rich: { v: { color: 'inherit', backgroundColor: 'inherit', fontSize: 20 } } } }, NO_AXIS)) },
+  // axis labels
+  { name: 'gauge-axislabel-box', looks: true, note: 'axis labels with the whole box, the halo, the text shadow, opacity, lineHeight and a font',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: Object.assign({ color: '#224466', fontSize: 11, fontWeight: 'bold', fontFamily: 'serif', opacity: 0.8, lineHeight: 20 }, BOX, INK) }) },
+  { name: 'gauge-axislabel-width', looks: true, note: "axis labels width 24 truncate with '..'; align / verticalAlign the code fixes",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: { formatter: '{value} units', color: '#333333', width: 24, overflow: 'truncate', ellipsis: '..', backgroundColor: '#eeeeee', align: 'left', verticalAlign: 'top' } }) },
+  { name: 'gauge-axislabel-rich', looks: true, note: "axis labels '{a|{value}}{b|%}': a 14px red, b 9px blue at the top, padded",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: { formatter: '{a|{value}}{b|%}', color: '#333333', rich: { a: { color: '#cc0000', fontSize: 14 }, b: { color: '#0000cc', fontSize: 9, verticalAlign: 'top', padding: [0, 0, 0, 2] } } } }) },
+  { name: 'gauge-axislabel-rotate', looks: true, note: "three dials' labels turned: 30, 'tangential', 'radial', each a padded plate",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['20%', '50%'], radius: '30%', min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { rotate: 30, color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } },
+      { center: ['50%', '50%'], radius: '30%', min: 100, max: 140, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { rotate: 'tangential', color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } },
+      { center: ['80%', '50%'], radius: '30%', min: 200, max: 240, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 237 }],
+        axisLabel: { rotate: 'radial', color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } }]) },
+  { name: 'gauge-axislabel-auto', looks: true, note: "axis labels colour 'auto': the band at i / splitNumber; a second dial's rich token 'inherit' and halo 'inherit'",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLine: { show: false, lineStyle: { color: [[0.3, '#11aa11'], [0.7, '#1111aa'], [1, '#aa1111']] } },
+        axisLabel: { color: 'auto', backgroundColor: '#f4f4f4', padding: 2 } },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLine: { show: false, lineStyle: { color: [[0.5, '#aa11aa'], [1, '#11aaaa']] } },
+        axisLabel: { formatter: '{t|{value}}', color: '#333333', textBorderColor: 'inherit', textBorderWidth: 1, rich: { t: { color: 'inherit', fontSize: 13 } } } }]) },
+  { name: 'gauge-axislabel-plain', looks: true, note: 'axis labels plain: distance -10, 14px bold italic, a colour; one run',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+      axisLabel: { distance: -10, color: '#334455', fontSize: 14, fontWeight: 'bold', fontStyle: 'italic' } }) },
+  // the words take no state: GaugeView never gives them one (emphasis, blur
+  // and select of title / detail / axisLabel are read by nobody)
+  { name: 'gauge-states-ignored', looks: true, note: "emphasis (focus 'series'), blur and select colours for the words; highlighted, then selected: still the rest colours",
+    record: ['chartText'], actions: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }, { type: 'select', seriesIndex: 0, dataIndex: 0 }],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', selectedMode: 'single', min: 0, max: 40, splitNumber: 2,
+        emphasis: { focus: 'series', title: { color: '#ff0000' }, detail: { color: '#00ff00' }, axisLabel: { color: '#0000ff' } },
+        blur: { title: { color: '#ff00ff' }, detail: { color: '#ff00ff' } }, select: { title: { color: '#00ffff' }, detail: { color: '#00ffff' } },
+        title: { color: '#111111' }, detail: { color: '#222222', backgroundColor: '#eeeeee' }, axisLabel: { color: '#333333' },
+        data: [{ value: 37, name: 'A' }] },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 2, title: { color: '#444444' }, detail: { color: '#555555' },
+        axisLabel: { color: '#666666' }, data: [{ value: 137, name: 'B' }] }]) },
+  { name: 'gauge-font-size-string', looks: true, note: "fontSize written as '15' and '18px' (parseFontSize)",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', fontSize: '15' }, axisLabel: { color: '#334455', fontSize: '18px' } }) },
+  { name: 'gauge-axislabel-markup', looks: true, note: "no rich: '{a|{value}}' drawn as it is; a second dial's '{value}\nkm' on two lines",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', min: 0, max: 40, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { formatter: '{a|{value}}', color: '#334455' } },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { formatter: '{value}\nkm', color: '#334455' } }]) },
+  { name: 'gauge-plain-halo', looks: true, note: 'plain words with a dashed halo and its phase, at an opacity: one run each',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', textBorderColor: '#ff0000', textBorderWidth: 2, textBorderType: 'dashed', textBorderDashOffset: 3, opacity: 0.5 },
+      axisLabel: { color: '#334455', textBorderColor: '#00ff00', textBorderWidth: 1, textBorderType: [2, 1], opacity: 0.6 } }) },
+  { name: 'gauge-title-lines-plain', looks: true, note: 'a name of two lines, nothing else: the lines one under another, one font height apart',
+    record: ['chartText'], match: 'lines',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Two\nlines' }], detail: { show: false }, title: { color: '#123456', fontSize: 14 } }, NO_AXIS)) },
+  { name: 'gauge-detail-height', looks: true, note: "detail height '40%' of the radius (60), taller than its line: the plate is 70 tall",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { height: '40%', fontSize: 20, color: '#222222', backgroundColor: '#dddddd' } }, NO_AXIS)) },
+  { name: 'gauge-detail-number-data', looks: true, note: 'data written as plain numbers, no items: the series reading of its own',
+    record: ['chartText'], match: '^(37|64)$',
+    option: gauge(Object.assign({ data: [37, 64], title: { show: false },
+      detail: { color: '#654321', fontSize: 20, backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, offsetCenter: [0, '30%'] } }, NO_AXIS)) },
+  { name: 'gauge-root-textstyle', looks: true, note: 'the root textStyle: its halo, opacity and text shadow reach the free words',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }],
+      title: { color: '#123456' }, detail: { color: '#654321' }, axisLabel: { color: '#334455' } },
+      { textStyle: { textBorderColor: '#ff00ff', textBorderWidth: 1, opacity: 0.9, textShadowBlur: 2, textShadowColor: '#00ff00' } }) },
+  // [R7-D] the two keys R7-B left: a title's width written as a percentage
+  // goes to zrender as the string (createTextStyle hands the model's value
+  // on; only the reading's is parsePercent of the radius), and a reading's
+  // width null is parsePercent(null) = NaN, which the code turns into no
+  // width at all
+  { name: 'gauge-title-width-percent', looks: true, note: "title width '50%': a plain plate, a truncated name, a rich one with a left token in a centred block -- none of the radius",
+    record: ['chartText'], match: 'Speed|long|now',
+    option: gauge([
+      Object.assign({ center: ['20%', '50%'], radius: '30%', data: [{ value: 37, name: 'Speed' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 } }, NO_AXIS),
+      Object.assign({ center: ['50%', '50%'], radius: '30%', data: [{ value: 37, name: 'A rather long gauge name' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', overflow: 'truncate', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['80%', '50%'], radius: '30%', data: [{ value: 37, name: '{n|Speed} now' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', rich: { n: { color: '#aa0000', fontSize: 14, align: 'left' } } } }, NO_AXIS)]) },
+  { name: 'gauge-axislabel-width-percent', looks: true, note: "axis labels width '50%': no plates; a truncation keeps nothing; a rich label only its left group when left-aligned, up to a percentage token or a right one",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['20%', '50%'], radius: '30%', min: 0, max: 40, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { color: '#334455', width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, padding: [1, 3] } },
+      { center: ['50%', '50%'], radius: '30%', min: 100, max: 140, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { color: '#334455', width: '50%', overflow: 'truncate' } },
+      { center: ['80%', '30%'], radius: '20%', min: 200, max: 240, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 237 }],
+        axisLabel: { color: '#334455', width: 'auto', formatter: '{a|{value}}', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' } } } },
+      { center: ['80%', '75%'], radius: '20%', min: 300, max: 340, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 337 }],
+        axisLabel: { color: '#334455', width: '50%', formatter: '{p|{value}}{b|.}{c|r}',
+          rich: { p: { width: '50%', backgroundColor: '#dddddd', color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } },
+      { center: ['20%', '85%'], radius: '12%', min: 400, max: 440, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 437 }],
+        axisLabel: { color: '#334455', width: '50%', formatter: '{b|.}{c|r}{a|{value}}',
+          rich: { a: { color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } }]) },
+  { name: 'gauge-detail-null-defaults', looks: true, note: "detail lineHeight null and padding null: no line height, no padding (not the defaults 30 and [5, 10])",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { lineHeight: null, padding: null, fontSize: 20, color: '#222222', backgroundColor: '#dddddd' } }, NO_AXIS)) },
+  { name: 'gauge-detail-width-null', looks: true, note: "detail width null on the series: no width (not the default 100); an item's null falls through to the series' 160",
+    record: ['chartText'], match: '^(37|64)$',
+    option: gauge([
+      Object.assign({ center: ['30%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
+        detail: { width: null, fontSize: 20, color: '#222222', backgroundColor: '#dddddd', borderColor: '#999999', borderWidth: 1 } }, NO_AXIS),
+      Object.assign({ center: ['75%', '50%'], radius: '40%', title: { show: false },
+        detail: { width: 160, fontSize: 20, color: '#222222', backgroundColor: '#dddddd' },
+        data: [{ value: 64, name: 'm', detail: { width: null } }] }, NO_AXIS)]) },
+];
+
+// ---- [R7-H] a text's width, height and lineHeight WRITTEN AS STRINGS, on
+// every kind of label: createTextStyle hands them on as they are, and zrender
+// does JS arithmetic with them. A word ('50%', 'auto', 'abc') is NaN where it
+// is read as a number -- the plate is laid out at NaN, a truncation keeps
+// nothing, a wrap never breaks, a rich text's centred and right tokens sit at
+// NaN; a numeric word ('60') is its number where it is compared or divided,
+// but the padding is ADDED to it as a string ('60' + 0 = '600'): the plate
+// is 600 wide; a rich block's right edge is xLeft + '60' (a string), a plain
+// text's second line sits at textY + '20' (a string). Every colour is the
+// case's own (`looks`).
+const LBL = { show: true, color: '#333333' };
+const sLabel = (items, label, extra, series) => opt(Object.assign({
+  xAxis: xCat(), yAxis: val(),
+  series: [Object.assign({ type: 'bar', name: 'Sales', label: Object.assign({}, LBL, { position: 'top' }, label),
+    data: items.map((l, i) => (l ? { value: DATA[i], label: l } : DATA[i])) }, series)],
+}, extra));
+const SCAT = [[5, 5], [5.1, 5.1], [5.2, 5.0], [8, 8]];
+const scatLayout = (item1, layout) => opt({
+  xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+  series: [{ type: 'scatter', labelLayout: layout, label: { show: true, formatter: 'label{c}', color: '#333333', opacity: 1, backgroundColor: '#eeeeee' },
+    data: SCAT.map((v, i) => (i === 1 ? { value: v, label: item1 } : v)) }],
+});
+// ---- [R7-L] a label's opacity: setTokenTextStyle's retrieve2(its own, the
+// root textStyle's), else the host's style.opacity a view hands over as
+// defaultOpacity (a scatter's symbols are 0.8) -- the normal state only, and
+// not inside rich, where a token keeps retrieve2(its own, the root's) and
+// zrender gives every other child the Text's style.opacity (Text.ts:630,
+// 868, 966). Series kinds whose view passes no defaultOpacity keep 1.
+const OPAC_XY = { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } };
+const OPAC_LBL = { show: true, color: '#333333', formatter: 'L{c}' };
+const OPAC_BOX = { backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 };
+const opacScatter = (series, extra) => opt(Object.assign({}, OPAC_XY, { series }, extra));
+const OPAC_ITEMS = [[1, 1], { value: [3, 3], label: OPAC_BOX }, { value: [5, 5], label: Object.assign({ opacity: 0.5 }, OPAC_BOX) },
+  { value: [7, 7], label: { formatter: '{a|x}{b|y}', rich: { a: { opacity: 0.3, color: '#aa0000', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } } },
+  { value: [9, 9], label: { opacity: 0.4 } }];
+const OPAC_PIE_LBL = { show: true, color: '#333333', formatter: '{b}', backgroundColor: '#eeeeee' };
+const OPAC_HALF = { opacity: 0.5 };
+const R7L_OPACITY_CASES = [
+  { name: 'label-opacity-scatter', looks: true, note: "scatter labels: plain and boxed at the symbols' 0.8, an own 0.5 over a box, a rich text (a token's own 0.3, the other at 0.8), an own 0.4 plain",
+    option: opacScatter([{ type: 'scatter', label: OPAC_LBL, data: OPAC_ITEMS }]) },
+  { name: 'label-opacity-root', looks: true, note: "the root textStyle.opacity 0.6: a scatter label's (over the 0.8) and a rich token's own; a written token 0.3 over it",
+    option: opacScatter([{ type: 'scatter', label: OPAC_LBL, data: OPAC_ITEMS.slice(0, 4) }], { textStyle: { opacity: 0.6 } }) },
+  { name: 'label-opacity-item', looks: true, note: "itemStyle.opacity 0.4 on a scatter, 0.5 on a bar, a line (its symbols' labels) and an effectScatter: each label takes it, boxed or rich; a line's endLabel keeps 1, or its own 0.7",
+    option: opt({ xAxis: xCat(), yAxis: val(), series: [
+      { type: 'bar', itemStyle: OPAC_HALF, label: Object.assign({ position: 'top' }, OPAC_LBL, OPAC_BOX), data: DATA },
+      { type: 'line', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, { formatter: '{a|{c}}', rich: { a: { color: '#aa0000', backgroundColor: '#dddddd' } } }), data: [60, 90, 70] },
+      { type: 'effectScatter', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX), data: [30, 40, 50] },
+      { type: 'scatter', itemStyle: { opacity: 0.4 }, label: Object.assign({}, OPAC_LBL, OPAC_BOX), data: [160, 230, 180] },
+      { type: 'line', itemStyle: OPAC_HALF, lineStyle: OPAC_HALF, endLabel: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'End' }), data: [10, 20, 15] },
+      { type: 'line', endLabel: Object.assign({}, OPAC_LBL, { formatter: 'End2', opacity: 0.7 }), data: [5, 6, 7] }] }) },
+  { name: 'label-opacity-pie-funnel', looks: true, note: "itemStyle.opacity 0.5 on a pie (outside labels) and a funnel (inside): the labels take it; an item's label.opacity 0.6 over it",
+    option: opt({ series: [
+      { type: 'pie', center: ['25%', '50%'], radius: '30%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ value: 3, name: 'Alpha' }, { value: 2, name: 'Beta' }, { value: 2, name: 'Eps', label: { opacity: 0.6 } }] },
+      { type: 'funnel', left: '55%', width: '40%', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_PIE_LBL, { position: 'inside' }), data: [{ value: 3, name: 'Gamma' }, { value: 2, name: 'Delta' }, { value: 1, name: 'Zeta', label: { opacity: 0.6 } }] }] }) },
+  { name: 'label-opacity-hier', looks: true, note: "itemStyle.opacity 0.5 on a treemap (the label takes the visual opacity), a sunburst (no defaultOpacity: 1) and a tree (its symbols' labels take it)",
+    option: opt({ series: [
+      { type: 'treemap', left: 0, width: '30%', breadcrumb: { show: false }, itemStyle: OPAC_HALF, label: { show: true, color: '#333333', formatter: '{b}' }, data: [{ value: 3, name: 'Tm' }] },
+      { type: 'sunburst', center: ['50%', '50%'], radius: [0, '20%'], itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ value: 3, name: 'Sb' }] },
+      { type: 'tree', left: '70%', right: '5%', top: '20%', bottom: '20%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Tr', children: [{ name: 'Tc' }] }] }] }) },
+  { name: 'label-opacity-flow', looks: true, note: "itemStyle.opacity 0.5 on a sankey and a themeRiver (no defaultOpacity: 1); a lines series' labels at its lineStyle.opacity 0.4",
+    option: opt({ singleAxis: { top: '60%', bottom: '10%', type: 'value' }, xAxis: { type: 'value', min: 0, max: 10, show: false }, yAxis: { type: 'value', min: 0, max: 10, show: false },
+      grid: { left: '55%', top: '5%', height: '40%' },
+      series: [
+        { type: 'sankey', left: 10, top: 10, width: '40%', height: '45%', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Sa' }, { name: 'Sz' }], links: [{ source: 'Sa', target: 'Sz', value: 1 }] },
+        { type: 'themeRiver', itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [[1, 3, 'Ra'], [2, 4, 'Ra'], [3, 3, 'Ra']] },
+        { type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { opacity: 0.4, color: '#888888' }, label: { show: true, color: '#333333', formatter: 'Ln', backgroundColor: '#eeeeee' },
+          data: [{ coords: [[1, 1], [9, 9]] }] }] }) },
+  { name: 'label-opacity-markers', looks: true, note: "a markPoint's label at its itemStyle.opacity 0.5, a markLine's at its lineStyle.opacity 0.4, a markArea's at 1 whatever its itemStyle.opacity",
+    record: ['markerLabel'], option: opt({ xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', data: DATA,
+      markPoint: { itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'MP' }), data: [{ type: 'max' }] },
+      markLine: { symbol: 'none', lineStyle: { opacity: 0.4, color: '#888888' }, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'ML' }), data: [{ type: 'average' }] },
+      markArea: { itemStyle: { opacity: 0.3, color: '#cccccc' }, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'MA' }), data: [[{ xAxis: 'Mon' }, { xAxis: 'Tue' }]] } }] }) },
+  { name: 'label-opacity-graph', looks: true, note: "a graph's node labels at itemStyle.opacity 0.5, its edge labels at lineStyle.opacity 0.4; a radar's symbol labels at 0.5, an item's own 0.3; a chord's at 0.5",
+    option: opt({ radar: { center: ['75%', '50%'], radius: '30%', indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 }, { name: 'r', max: 10 }], axisName: { show: false } },
+      series: [
+        { type: 'graph', left: 20, top: 40, width: 200, height: 200, itemStyle: OPAC_HALF, lineStyle: { opacity: 0.4, color: '#888888' }, label: OPAC_PIE_LBL,
+          edgeLabel: { show: true, color: '#333333', formatter: 'e', backgroundColor: '#eeeeee' },
+          data: [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }], links: [{ source: 'Ga', target: 'Gb' }] },
+        { type: 'radar', itemStyle: OPAC_HALF, label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'R{c}' }), data: [{ value: [3, 6, 9] }, { value: [2, 4, 8], itemStyle: { opacity: 0.3 } }] },
+        { type: 'chord', center: ['45%', '20%'], radius: ['8%', '10%'], itemStyle: OPAC_HALF, label: OPAC_PIE_LBL, data: [{ name: 'Ca' }, { name: 'Cb' }], links: [{ source: 'Ca', target: 'Cb', value: 1 }] }] }) },
+  { name: 'label-opacity-heat-pict', looks: true, note: "itemStyle.opacity 0.5 on a cartesian heatmap and a pictorialBar: the labels take it",
+    option: opt({ xAxis: xCat(), yAxis: { type: 'category', data: ['u', 'v'] }, visualMap: { show: false, min: 0, max: 1, inRange: { color: ['#5470c6', '#5470c6'] } }, series: [
+      { type: 'heatmap', itemStyle: Object.assign({ color: '#5470c6' }, OPAC_HALF), label: Object.assign({}, OPAC_LBL, OPAC_BOX, { formatter: 'H' }), data: [[0, 0, 1]] },
+      { type: 'pictorialBar', symbol: 'rect', itemStyle: OPAC_HALF, label: Object.assign({ position: 'top' }, OPAC_LBL, OPAC_BOX, { formatter: 'P' }), data: [0, 1, 0] }] }) },
+];
+
+// ---- [R7-L] a legend's text is placed by its style's x / y (LegendView:
+// x: textX, y: itemHeight / 2): a size written as a numeric string is
+// joined to that place, not to 0 ----
+const HUNG_BAR = { xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }, { type: 'bar', name: 'Cost', data: [60, 70, 80] }] };
+const R7L_HUNG_CASES = [
+  { name: 'legend-numstr-width', looks: true, note: "legend textStyle width '60' with a rounded plate: the path runs from textX to textX + '600'; the items laid out by their bounds",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { textStyle: { color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }, HUNG_BAR)) },
+  { name: 'legend-numstr-lineheight', looks: true, note: "legend lineHeight '20' on two lines: the second at textY + '20' from the item's y",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { formatter: '{name}\nnext', textStyle: { color: '#333333', lineHeight: '20' } } }, HUNG_BAR)) },
+  { name: 'legend-numstr-rich', looks: true, note: "a rich legend width '80': the right token at xLeft + '80'",
+    record: ['legend'],
+    option: opt(Object.assign({ legend: { formatter: '{a|{name}}{c|R}', textStyle: { color: '#333333', width: '80', backgroundColor: '#eeeeee',
+      rich: { a: { color: '#aa0000' }, c: { align: 'right', color: '#0000aa' } } } } }, HUNG_BAR)) },
+];
+// ---- [R7-L] the extremes R7-H left: a numeric string width / height below
+// nought over a rounded plate (roundRect: x = x + width, a string), the
+// same without a radius (canvas' rect takes the number), and a radius
+// written [0, 0] (truthy: the rounded path, its edges joined) ----
+const R7L_EXTREME_CASES = [
+  { name: 'numstr-negative', looks: true, note: "width '-60' over a rounded plate (x + '-600' a string: no plate), the same unrounded (a rect to the left), height '-30' rounded",
+    option: sLabel([{ width: '-60', backgroundColor: '#eeeeee', borderRadius: 3 },
+      { width: '-60', backgroundColor: '#eeeeee' },
+      { height: '-30', backgroundColor: '#eeeeee', borderRadius: 3 }], {}) },
+  { name: 'numstr-radius-zero-array', looks: true, note: "width '60' with borderRadius [0, 0]: shape.r is truthy, so the rounded path runs to the joined edge; borderRadius 0 the canvas rect",
+    option: sLabel([{ width: '60', backgroundColor: '#eeeeee', borderRadius: [0, 0] },
+      { width: '60', backgroundColor: '#eeeeee', borderRadius: 0 },
+      { width: '60', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: [0, 0, 0, 0] }], {}) },
+];
+// ---- [R7-M] a visualMap's and a slider dataZoom's words are createTextStyle
+// of their textStyle (ContinuousView, PiecewiseView, SliderZoomView): every
+// key a label reads -- the box, its border and radius, padding, width and
+// height, lineHeight, overflow, rich, the halo and the text shadow -- placed
+// by its style's x / y (a numeric string size joins that place). Every colour
+// is the case's own (`looks`).
+const CMP_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 };
+const CMP_BAR = { xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] };
+const CMP_RICH = { color: '#333333', lineHeight: 20, textBorderColor: '#ffffff', textBorderWidth: 2,
+  textShadowColor: '#888888', textShadowBlur: 2, textShadowOffsetX: 1, textShadowOffsetY: 1,
+  rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] }, b: { color: '#0000aa', fontSize: 14 } } };
+const R7M_COMPONENT_CASES = [
+  { name: 'vm-continuous-box', looks: true, note: "a vertical continuous visualMap: the ends' text and the handle labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'], textStyle: CMP_BOX } }, CMP_BAR)) },
+  { name: 'vm-continuous-h-box', looks: true, note: "a horizontal one: the ends left and right, the handle labels centred over the handles, the words at 0.6",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', orient: 'horizontal', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: Object.assign({}, CMP_BOX, { opacity: 0.6 }) } }, CMP_BAR)) },
+  { name: 'vm-continuous-rich', looks: true, note: "handle labels '{a|{value}}{b|!}' in rich, a halo, a text shadow and lineHeight 20; an end on two lines",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['Very\nhigh', 'Low'], formatter: '{a|{value}}{b|!}',
+      textStyle: CMP_RICH } }, CMP_BAR)) },
+  { name: 'vm-continuous-size', looks: true, note: "width 30 with overflow truncate and a plate, height 24, align right: the ends and the labels cut and boxed",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 20000, calculable: true, text: ['Highest', 'Lowest'],
+      textStyle: { color: '#333333', width: 30, height: 24, overflow: 'truncate', backgroundColor: '#eeeeee', align: 'right' } } }, CMP_BAR)) },
+  { name: 'vm-continuous-numstr', looks: true, note: "width '60' over a rounded plate: the path runs from the style's x to x + '600'; the group placed by its bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, right: 10, text: ['High', 'Low'],
+      textStyle: { color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }, CMP_BAR)) },
+  { name: 'vm-piecewise-box', looks: true, note: "piecewise items with a plate and padding, bold monospace; one piece unselected (its words at 0.5); the items stacked by their bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 3, selected: { 1: false },
+      textStyle: Object.assign({ fontWeight: 'bold', fontFamily: 'monospace' }, CMP_BOX) } }, CMP_BAR)) },
+  { name: 'vm-continuous-halo', looks: true, note: "a halo alone (textBorderColor / Width) on a continuous visualMap's words, and on a slider's labels at opacity 0.7: the one-run caption draws none",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: { color: '#333333', textBorderColor: '#ffaa00', textBorderWidth: 3 } },
+      dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: { color: '#333333', textBorderColor: '#ffaa00', textBorderWidth: 3, opacity: 0.7 } }] }, CMP_BAR)) },
+  { name: 'vm-plain-font', looks: true, note: "plain words (no block) in bold monospace 14 on a continuous visualMap and a slider: the family and the weight are textStyle's",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: { color: '#333333', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 14 } },
+      dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: { color: '#333333', fontWeight: 'bold', fontFamily: 'monospace' } }] }, CMP_BAR)) },
+  { name: 'vm-piecewise-ends', looks: true, note: "piecewise with ends text, width 40 and a plate, rich items over a pieces list (showLabel), align left, the words at 0.7",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', orient: 'horizontal', text: ['Hi', 'Lo'], showLabel: true,
+      pieces: [{ min: 0, max: 100, label: '{a|low} part' }, { min: 100, max: 200, label: '{b|high}' }],
+      textStyle: Object.assign({}, CMP_RICH, { width: 40, backgroundColor: '#eeeeee', align: 'left', opacity: 0.7 }) } }, CMP_BAR)) },
+  { name: 'vm-piecewise-numstr', looks: true, note: "piecewise height '30' with a plate: each item's box joins its y (itemHeight / 2) to '30' + padding",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 2, textStyle: { color: '#333333', height: '30', backgroundColor: '#eeeeee' } } }, CMP_BAR)) },
+  { name: 'dz-slider-box', looks: true, note: "a slider's handle labels shown, with a rounded, bordered, padded plate, at opacity 0.7",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: Object.assign({ opacity: 0.7 }, CMP_BOX) }] }, CMP_BAR)) },
+  { name: 'dz-slider-vertical-rich', looks: true, note: "a vertical slider on y: labels '{a|{value}}{b|v}' in rich with a halo, a shadow and lineHeight 20",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', orient: 'vertical', yAxisIndex: 0, handleLabel: { show: true },
+      labelFormatter: '{a|{value}}{b|v}', textStyle: CMP_RICH }] }, CMP_BAR)) },
+  { name: 'dz-slider-numstr', looks: true, note: "a slider's labels width '60' over a rounded plate, joined to the style's x; lineHeight '20' on two lines",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, labelFormatter: '{value}\nend',
+      textStyle: { color: '#333333', width: '60', lineHeight: '20', backgroundColor: '#eeeeee', borderRadius: 3 } }] }, CMP_BAR)) },
+  // a calendar's labels are createTextStyle of dayLabel / monthLabel /
+  // yearLabel (CalendarView): the week and month words placed by their
+  // style's x / y, the year's by its transform (turned on a vertical one)
+  { name: 'calendar-label-box', looks: true, note: "a calendar's day, month and year labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX), monthLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX),
+      yearLabel: Object.assign({}, CMP_BOX, { opacity: 0.8 }) } }) },
+  { name: 'calendar-label-rich', looks: true, note: "a vertical calendar: rich month words with a halo and a shadow, lineHeight 20; the year turned with a plate; day words width 20 truncated",
+    record: ['other'], option: opt({ calendar: { orient: 'vertical', range: '2017-02', cellSize: 22, left: 120, top: 60,
+      monthLabel: Object.assign({ formatter: '{a|{M}}{b|m}' }, CMP_RICH),
+      yearLabel: { color: '#333333', backgroundColor: '#eeeeee', padding: 4, borderColor: '#aa0000', borderWidth: 1 },
+      dayLabel: { color: '#333333', width: 12, overflow: 'truncate', nameMap: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], backgroundColor: '#eeeeee' } } }) },
+  { name: 'calendar-label-numstr', looks: true, note: "month words width '60' over a rounded plate, joined to the style's x; the year's '40' joined to 0 (its place is its transform)",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: { nameMap: 'EN', color: '#333333' },
+      yearLabel: { color: '#333333', width: '40', backgroundColor: '#eeeeee', borderRadius: 2 },
+      monthLabel: { nameMap: 'EN', color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }) },
+  // a timeline's labels are createTextStyle of label (SliderTimelineView)
+  { name: 'timeline-label-box', looks: true, note: "a timeline's labels with a plate, rich and a halo",
+    record: ['other'], option: { baseOption: { animation: false, timeline: { data: ['2001', '2002', '2003'], label: Object.assign({ formatter: '{a|{value}}' }, CMP_BOX,
+      { rich: { a: { color: '#aa0000' } }, textBorderColor: '#ffffff', textBorderWidth: 2 }) }, xAxis: xCat(), yAxis: val(), series: [{ type: 'bar' }] },
+      options: [{ series: [{ data: DATA }] }, { series: [{ data: [1, 2, 3] }] }, { series: [{ data: [3, 2, 1] }] }] } },
+];
+// ---- [R7-M] a treemap's label is laid out on its cell: TreemapView's
+// beforeUpdate sets the label's width and height to the content rect's (the
+// upper label's strip's) less the padding (5 by default), so a plate covers
+// the whole cell; the breadcrumb's words are createTextStyle of its
+// itemStyle.textStyle ----
+const TM_DATA = [{ name: 'Alpha', children: [{ name: 'a1', value: 3 }, { name: 'a2 long name here', value: 2 }] }, { name: 'Beta', value: 4 }];
+const R7M_TREEMAP_CASES = [
+  { name: 'treemap-label-box', looks: true, note: "content labels with a plate and a border: the plate is the cell less nothing (width = cell - padding 5 + padding); upper labels' plate the strip; the breadcrumb's words boxed",
+    option: opt({ series: [{ type: 'treemap', name: 'Total', leafDepth: 2, top: 10, bottom: 60,
+      label: { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1 },
+      upperLabel: { show: true, color: '#333333', backgroundColor: '#dddddd' },
+      breadcrumb: { show: true, itemStyle: { textStyle: CMP_BOX } }, data: TM_DATA }] }) },
+  { name: 'treemap-label-pos', looks: true, note: "insideTopLeft with padding [2, 8] over a plate, rich tokens with their own box; an upper label 'inside' padded 3; a long name truncated in its cell",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { position: 'insideTopLeft', padding: [2, 8], color: '#333333', backgroundColor: '#eeeeee', formatter: '{a|{b}}',
+        rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] } } },
+      upperLabel: { show: true, position: 'inside', padding: 3, color: '#333333', backgroundColor: '#dddddd', borderRadius: 4 },
+      data: TM_DATA }] }) },
+  { name: 'treemap-label-plain-pad', looks: true, note: "a plain label with only a padding (no plate): laid out in the cell as before; a lineHeight 30 and a text shadow",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { color: '#333333', padding: 10, lineHeight: 30, textShadowColor: '#888888', textShadowBlur: 2 }, data: TM_DATA }] }) },
+];
+// ---- [R7-M] a graph's edge label in a view scaled unequally (layout
+// 'none', the nodes' extent not the view's aspect): Line.beforeUpdate scales
+// the label by 1 / every ancestor's scaleX only, so under the main group's
+// scaleX / scaleY it is drawn squashed -- and turned along a slanted edge,
+// sheared ----
+const GRAPH_NODES = [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }, { name: 'Gc', x: 100, y: 0 }, { name: 'Gd', x: 0, y: 100 }];
+const GRAPH_EDGE_LBL = { show: true, color: '#333333', formatter: 'edge' };
+// ---- [R7-N] an axis pointer's label is createTextStyle(labelModel, {text,
+// font, fill, padding, backgroundColor}) (axisPointer/viewHelper.ts
+// buildLabelElOption): every key of the label model (the axis' own
+// axisPointer.label over the tooltip's over the root's) and the root
+// textStyle's; its place is the box of the PLAIN text in the label's font
+// (getBoundingRect, markup and all) plus the padding, aligned by the axis'
+// side and confined to the chart; the Text stands at that place (x / y),
+// laid out by its own align / verticalAlign (left / top unless written) ----
+const PTR_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 2, padding: [3, 6], borderRadius: 4 };
+const PTR_BAR = o => opt(Object.assign({ xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] }, o));
+const PTR_SHOW = (value, label, extra) => Object.assign({ axisPointer: Object.assign({ show: true, value, status: 'show', label: Object.assign({ show: true }, label) }, extra) });
+// ---- [R7-AF] a border's width written as a string ----
+const R7AF_CASES = [
+  { name: 'numstr-text-border', looks: true, note: "textBorderWidth '3' and '1.5' with a written textBorderColor: the halo at its number, the TSpan's rect joined (the second's no number)",
+    option: sLabel([{ textBorderColor: '#ff0000', textBorderWidth: '3' }, { textBorderColor: '#ff0000', textBorderWidth: '1.5' }], {}) },
+  { name: 'numstr-text-border-rich', looks: true, note: "a token's textBorderWidth '2' over the block's '3'; a box round them",
+    option: sLabel([{ formatter: '{a|Ab}{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '3', rich: { a: { textBorderWidth: '2' }, b: {} } },
+      { formatter: '{a|Ab}{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '3', backgroundColor: '#eeeeee', padding: [2, 4],
+        rich: { a: { textBorderWidth: '2', color: '#0000aa' } } },
+      { formatter: '{a|Ab}\n{b|Cd}', textBorderColor: '#ff0000', textBorderWidth: '0', rich: { a: { textBorderWidth: '4' } } }], {}) },
+  { name: 'numstr-text-border-components', looks: true, note: "a legend's and a title's textBorderWidth '3': the legend's items laid out by the joined rects",
+    record: ['legend', 'title'],
+    option: opt(Object.assign({ title: { text: 'Title', textStyle: { color: '#333333', fontSize: 18, textBorderColor: '#ff0000', textBorderWidth: '3' } },
+      legend: { top: 40, textStyle: { color: '#333333', textBorderColor: '#ff0000', textBorderWidth: '3' } } }, HUNG_BAR)) },
+  { name: 'numstr-text-border-root', looks: true, note: "the root textStyle's textBorderWidth '3' under a block's written halo",
+    option: Object.assign(sLabel([{ formatter: '{a|Ab}', textBorderColor: '#ff0000', rich: { a: { color: '#0000aa' } } }], {}),
+      { textStyle: { textBorderWidth: '3' } }) },
+  { name: 'numstr-box-border', looks: true, note: "a box's borderWidth '2' (doubled under a fill), '2' unfilled, '0' (the rect made, unstroked)",
+    option: sLabel([{ backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: '2' }, { borderColor: '#333333', borderWidth: '2' },
+      { borderColor: '#333333', borderWidth: '0', padding: 3 }], {}) },
+];
+
+// ---- [R7-AI] a padding written as a string, or as an array of another
+// length: zrender's normalizeCssArray takes '12' as ['1', '2', '1', '2'] and
+// '4' (one character), [4], [] and true as themselves -- a side past the end
+// undefined -- and the layout adds them as JS does: paddingH '2' + '2' is
+// '22', the outer width 14.76 + '22', a left-aligned text's x 0 + '2' is '02'
+// (drawn at 2, its rect's right edge '02' + 14.76 far right), a top-aligned
+// one's y joined to '1' and each line after it to the line height. A side
+// undefined lays the words out at NaN (not drawn) but bounds them at
+// `style.x || 0`. Scatter labels, one per position (its alignment).
+const PAD_XY = { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 } };
+const PAD_PTS = [[2, 2], [2, 8], [5, 5], [8, 2], [8, 8], [5, 8], [5, 2], [2, 5], [8, 5]];
+const padScatter = (labels, extra, series) => opt(Object.assign({}, PAD_XY, {
+  series: [Object.assign({ type: 'scatter', symbolSize: 6, label: { show: true, color: '#333333', formatter: 'Ab' },
+    data: labels.map((l, i) => ({ value: PAD_PTS[i], label: l })) }, series)],
+}, extra));
+const PAD_BOX = { backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1 };
+const R7AI_CASES = [
+  { name: 'strpad-plain', looks: true, r7ai: true, note: "padding '12' right, left, bottom and top (two lines), '123' bottom on two lines, '1234' right, '12345' left: the x '02' joined, a top text's y joined and each line after it",
+    option: padScatter([{ position: 'right', padding: '12' }, { position: 'left', padding: '12' }, { position: 'bottom', padding: '12' },
+      { position: 'top', padding: '12', formatter: 'Ab\nCd' }, { position: 'bottom', padding: '123', formatter: 'Ab\nCd\nEf' },
+      { position: 'right', padding: '1234' }, { position: 'left', padding: '12345' }]) },
+  { name: 'strpad-box', looks: true, r7ai: true, note: "the same with a plate: its size '14.76..22' x '1211' (drawn at its numbers, its path joined), a rounded one, a border; ['4', 2] mixed",
+    option: padScatter([Object.assign({ position: 'right', padding: '12' }, PAD_BOX), Object.assign({ position: 'left', padding: '12', borderRadius: 3 }, PAD_BOX),
+      Object.assign({ position: 'bottom', padding: '21', borderRadius: [2, 4] }, PAD_BOX), Object.assign({ position: 'top', padding: ['4', 2] }, PAD_BOX),
+      { position: 'right', padding: ['3', '1', 2], backgroundColor: '#dddddd' }, { position: 'inside', padding: '12', backgroundColor: '#dddddd', formatter: 'Ab\nCd' }]) },
+  { name: 'strpad-undefined', looks: true, r7ai: true, note: "'4', [4], [], true, '0': a side undefined, the words at NaN (not drawn, bounded at 0); [null, 3] and [true, 2] are numbers; [1, null, 2, '3']: null + '3' is 'null3'",
+    option: padScatter([{ position: 'right', padding: '4' }, { position: 'left', padding: [4] }, { position: 'bottom', padding: [] },
+      { position: 'top', padding: true }, Object.assign({ position: 'right', padding: '0' }, PAD_BOX), { position: 'top', padding: [null, 3], backgroundColor: '#dddddd' },
+      { position: 'bottom', padding: [true, 2], backgroundColor: '#dddddd' },
+      { position: 'right', padding: [1, null, 2, '3'], backgroundColor: '#dddddd' }]) },
+  { name: 'strpad-rich', looks: true, r7ai: true, note: "rich: the block's '12' joined to xLeft and lineTop (each token after it joined again), a token's '12' joined to its height and width, the line's width; right and centred tokens",
+    option: padScatter([
+      { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: {} } },
+      { position: 'bottom', padding: '12', formatter: '{a|Ab}{b|Cd}\n{c|Ef}', backgroundColor: '#eeeeee', rich: { a: {}, b: { color: '#0000aa' }, c: {} } },
+      { position: 'right', formatter: '{a|Ab}{b|Cd}', rich: { a: { padding: '12', backgroundColor: '#dddddd' }, b: {} } },
+      { position: 'left', formatter: '{a|Ab}{b|Cd}', width: 90, rich: { a: { padding: '21', backgroundColor: '#dddddd', borderRadius: 2 }, b: { align: 'right', padding: '12' } } },
+      { position: 'right', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { backgroundColor: '#dddddd', borderRadius: 3 }, b: { backgroundColor: '#cccccc' } } },
+      { position: 'top', padding: '12', formatter: '{a|Ab}{b|Cd}', rich: { a: { color: '#aa0000' }, b: { backgroundColor: '#dddddd' } } },
+      { position: 'bottom', formatter: '{a|Ab}\n{b|Cd}', rich: { a: { padding: '4' }, b: { padding: [3] } } },
+      { position: 'top', formatter: '{a|Ab}{b|Cd}', rich: { a: { padding: '12', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } }]) },
+  { name: 'strpad-wrap', looks: true, r7ai: true, note: "overflow 'break' at width 60: a token's '12' joins the accumulated width (wrapText's lastAccumWidth a string), a token of width 20 and '12'; a plain text's '12' (the width its own)",
+    option: padScatter([
+      { position: 'right', formatter: '{a|Hello world}{b|again and again}', width: 60, overflow: 'break', rich: { a: { padding: '12' }, b: {} } },
+      { position: 'bottom', formatter: '{a|x}{b|y}{a|z}{b|w}', width: 50, overflow: 'break', rich: { a: { width: 20, padding: '12' }, b: {} } },
+      { position: 'left', formatter: 'never wrapped at all here', width: 60, overflow: 'break', padding: '12', backgroundColor: '#eeeeee' },
+      { position: 'right', formatter: '{a|x}{b|Hello world again}', width: 60, overflow: 'breakAll', rich: { a: { padding: '21' }, b: {} } }]) },
+  { name: 'strpad-truncate', looks: true, r7ai: true, note: "overflow 'truncate' at width 40: a token's '12' (remainTruncWidth < paddingH as numbers, the joined width), a plain text's '12'",
+    option: padScatter([
+      { position: 'right', formatter: '{a|Hello}{b|world again}', width: 40, overflow: 'truncate', rich: { a: { padding: '12' }, b: {} } },
+      { position: 'bottom', formatter: '{a|Hello world}{b|x}', width: 40, overflow: 'truncate', rich: { a: { padding: '12' }, b: { padding: '33' } } },
+      { position: 'left', formatter: 'Hello world again', width: 40, overflow: 'truncate', padding: '12', backgroundColor: '#eeeeee' }]) },
+  { name: 'strpad-halo-right', looks: true, r7ai: true, note: "item 2: monospace tokens of width 24 with textBorderWidth '2' on the second line (y >= 0): the right token's rect '23' + '242' reaches far right; the left one's and the first line's are no rect",
+    option: padScatter([
+      { position: 'bottom', formatter: '{a|Ab}{b|Cd}\n{a|Ef}{b|Gh}', fontFamily: 'monospace', textBorderColor: '#ff00ff', textBorderWidth: '2', rich: { a: {}, b: {} } },
+      { position: 'bottom', formatter: '{a|Ab}{b|Cd}', fontFamily: 'monospace', padding: [10, 0, 0, 0], textBorderColor: '#ff00ff', rich: { a: { textBorderWidth: '2' }, b: { textBorderWidth: '4' } } },
+      { position: 'right', formatter: 'Abcd', fontFamily: 'monospace', textBorderColor: '#ff00ff', textBorderWidth: '2', padding: [8, 0, 0, 3], verticalAlign: 'top' }]) },
+  { name: 'strpad-components', looks: true, r7ai: true, note: "an axis label's '12' and '21', a legend item's text padding '12'; a markPoint label's '21' with a plate",
+    record: ['seriesLabel', 'markerLabel', 'axisLabel', 'legend'],
+    option: opt({ legend: { top: 30, textStyle: { color: '#333333', padding: '12' } },
+      xAxis: xCat({ axisLabel: { color: '#333333', padding: '12' } }), yAxis: val({ axisLabel: { color: '#333333', padding: '21' } }),
+      series: [{ type: 'bar', name: 'Sales', data: DATA, markPoint: { data: [{ type: 'max', label: { color: '#333333', padding: '21', backgroundColor: '#eeeeee' } }] } },
+        { type: 'bar', name: 'Cost', data: [60, 70, 80] }] }) },
+  { name: 'strpad-graphic-gauge', looks: true, r7ai: true, note: "a graphic text's padding '12' over a plate; a gauge detail's '12' over its default [5, 10] with a plate",
+    record: ['chartText', 'other'],
+    option: opt({ graphic: [{ type: 'text', left: 40, top: 40, style: { text: 'Gx', fill: '#333333', padding: '12', backgroundColor: '#eeeeee' } }],
+      matrix: { left: 20, top: 200, width: 200, height: 60, x: { data: ['Pp', 'Qq'], label: { color: '#333333', padding: '12', backgroundColor: '#eeeeee' } }, y: { data: ['U'], label: { color: '#333333' } } },
+      series: [Object.assign({ type: 'gauge', center: ['70%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
+        detail: { fontSize: 20, color: '#222222', backgroundColor: '#dddddd', padding: '12' } }, GAUGE_BARE, NO_AXIS)] }) },
+  // [R7-AK] a treemap's label padded as a string: TreemapView's width is the
+  // cell's less normalizeCssArray(padding)'s sides as numbers ('12': less 2
+  // and 2), and the words joined as any label's
+  { name: 'strpad-treemap', looks: true, r7ai: true, note: "a treemap's labels padded '12' over a plate and '21' plain: the box the cell's less the sides as numbers, the words joined",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { color: '#333333', padding: '12', backgroundColor: '#eeeeee' },
+      levels: [{}, { label: { padding: '21', backgroundColor: null } }], data: TM_DATA }] }) },
+  // [R7-AK] an axis pointer's label padded as a string: buildLabelElOption's
+  // `textRect.width + paddings[1] + paddings[3]` joined, the place confined by
+  // the joined size, the Text padded as any label
+  { name: 'strpad-ptr', looks: true, r7ai: true, note: "x and y axis pointers' labels padded '12' and '21' over a plate: the size joined ('..22'), confined to the corner by `position[0] + width` joined; a left and a centred one",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', { color: '#333333', backgroundColor: '#eeeeee', padding: '12' })),
+      yAxis: val(PTR_SHOW(120, { color: '#333333', backgroundColor: '#eeeeee', padding: '21' })) }) },
+  { name: 'strpad-ptr-plain', looks: true, r7ai: true, note: "the same with no plate and ['3', 4]: the words joined, the box the confine's",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Wed', { color: '#333333', backgroundColor: 'rgba(0,0,0,0)', padding: ['3', 4] })) }) },
+];
+
+const R7N_POINTER_CASES = [
+  { name: 'ptr-label-font', looks: true, note: "a category x and a value y axis pointer shown by status: the label in 16 px bold monospace with a bordered, rounded, padded plate",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', Object.assign({ fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' }, PTR_BOX))),
+      yAxis: val(PTR_SHOW(120, Object.assign({ fontSize: 13, fontWeight: 'bold' }, PTR_BOX))) }) },
+  { name: 'ptr-label-rich', looks: true, note: "a rich formatter '{a|{value}}\\n{b|ptr}' with a halo, a text shadow, lineHeight 20 and opacity 0.6: the box placed by the plain markup's size",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Wed', Object.assign({ formatter: '{a|{value}}\n{b|ptr}', opacity: 0.6 }, PTR_BOX, CMP_RICH))) }) },
+  { name: 'ptr-label-size', looks: true, note: "width 70, height 28, overflow truncate and align center on a top x axis (pushed in at the right by the confine) and a right y axis",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(Object.assign({ position: 'top' }, PTR_SHOW('Wed', { formatter: 'a long pointer label {value}', width: 70, height: 28, overflow: 'truncate',
+      align: 'center', color: '#333333', backgroundColor: '#eeeeee', padding: 2 }))),
+      yAxis: val(Object.assign({ position: 'right' }, PTR_SHOW(30, { color: '#333333', backgroundColor: '#eeeeee', verticalAlign: 'middle', lineHeight: 26 }))) }) },
+  { name: 'ptr-label-root', looks: true, note: "the root textStyle's size, family, weight and opacity 0.7 reach the label; its own color and plate",
+    record: ['pointerLabel'], option: PTR_BAR({ textStyle: { fontSize: 15, fontFamily: 'monospace', fontWeight: 'bold', opacity: 0.7, color: '#00aa00' },
+      xAxis: xCat(PTR_SHOW('Mon', { color: '#333333', backgroundColor: '#eeeeee', padding: [2, 3] })) }) },
+  { name: 'ptr-label-numstr', looks: true, note: "width '60' and lineHeight '18' written as strings over a rounded plate, two lines",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', { formatter: '{value}\nday', width: '60', lineHeight: '18', color: '#333333', backgroundColor: '#eeeeee', borderRadius: 3 })) }) },
+  { name: 'ptr-label-offset-inside', looks: true, note: "an x axis offset 12 with its labels inside: the pointer label goes up inside the grid; a left y axis offset 8",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(Object.assign({ offset: 12, axisLabel: { inside: true } }, PTR_SHOW('Mon', PTR_BOX))),
+      yAxis: val(Object.assign({ offset: 8 }, PTR_SHOW(75, PTR_BOX))) }) },
+  { name: 'ptr-label-tooltip-cross', looks: true, note: "a cross tooltip's pointers moved to a point (updateAxisPointer: node has no tooltip view): both labels from tooltip.axisPointer.label (14 px, a plate, padding 4), the y axis' own fontWeight over it",
+    record: ['pointerLabel'], option: PTR_BAR({ tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { fontSize: 14, color: '#333333', backgroundColor: '#eeeeee',
+      borderColor: '#aa0000', borderWidth: 1, padding: 4 } } }, yAxis: val({ axisPointer: { label: { fontWeight: 'bold' } } }) }),
+    actions: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 300, y: 200 }] },
+  { name: 'ptr-label-confine', looks: true, note: "a right y axis' long label and an x axis' label under a grid at the very bottom: confineInContainer pulls both boxes back into the chart",
+    record: ['pointerLabel'], option: PTR_BAR({ grid: { bottom: 2, right: 40 }, xAxis: xCat(PTR_SHOW('Wed', { color: '#333333', backgroundColor: '#eeeeee' })),
+      yAxis: val(Object.assign({ position: 'right' }, PTR_SHOW(100, { formatter: '{value} units here', color: '#333333', backgroundColor: '#eeeeee' }))) }) },
+  { name: 'ptr-label-single', looks: true, note: "a single axis' pointer label with a plate, 14 px monospace",
+    record: ['pointerLabel'], option: opt({ singleAxis: { type: 'value', min: 0, max: 100, top: 80, bottom: 80, axisPointer: { show: true, value: 40, status: 'show',
+      label: Object.assign({ show: true, fontSize: 14, fontFamily: 'monospace' }, PTR_BOX) } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [10, 40, 70] }] }) },
+  { name: 'ptr-label-polar', looks: true, note: "a polar angle axis' and radius axis' pointer labels moved to a point (updateAxisPointer), with a plate, 13 px bold",
+    record: ['pointerLabel'], option: opt({ polar: {}, angleAxis: { type: 'category', data: CAT, axisPointer: { show: true,
+      label: Object.assign({ show: true, fontSize: 13, fontWeight: 'bold' }, PTR_BOX) } },
+      radiusAxis: { min: 0, max: 200, axisPointer: { show: true, label: Object.assign({ show: true, fontSize: 13 }, PTR_BOX) } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: DATA }] }),
+    actions: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 340, y: 150 }] },
+];
+const R7M_GRAPH_CASES = [
+  { name: 'graph-edge-scale', looks: true, note: "layout 'none', 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): edge labels plain, boxed and rich on a level, an upright and a slanted edge",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gc' },
+        { source: 'Ga', target: 'Gb', label: { backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 } },
+        { source: 'Gc', target: 'Gb', label: { formatter: '{a|up}{b|right}', rich: { a: { color: '#aa0000', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } } },
+        { source: 'Gd', target: 'Gb', label: { position: 'end', backgroundColor: '#eeeeee' } }] }] }) },
+  { name: 'graph-edge-scale-curve', looks: true, note: "the same view taller than wide (scaleX 1, scaleY 3): a curved edge's label insideStartTop with a halo, a rotate of its own, an end label",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 100, top: 20, width: 100, height: 300, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1, curveness: 0.3 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gb', label: { position: 'insideStartTop', textBorderColor: '#ffffff', textBorderWidth: 2 } },
+        { source: 'Gc', target: 'Gd', label: { rotate: 30, backgroundColor: '#eeeeee' } },
+        { source: 'Ga', target: 'Gd', label: { position: 'start', formatter: 'from' } }] }] }) },
+];
+const R7H_CASES = [
+  { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
+    option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
+      { width: 'abc', overflow: 'break', padding: [2, 4], formatter: 'never wrapped at all' }],
+    { width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 }) },
+  { name: 'word-width-left', looks: true, note: "left-aligned labels, width '50%': a plate (its width '50%0'); a rich one keeps its left tokens up to a percentage token; a centred rich one nothing",
+    option: sLabel([{ align: 'left', backgroundColor: '#eeeeee' },
+      { align: 'left', formatter: '{a|{c}}{p|pp}{b|x}{c|r}', rich: { a: { color: '#aa0000' }, p: { width: '50%', backgroundColor: '#dddddd', color: '#0000aa' }, b: { color: '#00aa00' }, c: { align: 'right', color: '#aa00aa' } } },
+      { formatter: '{a|{c}}{b|x}', rich: { a: { color: '#aa0000' }, b: { color: '#00aa00', backgroundColor: '#dddddd' } } }],
+    { width: '50%' }) },
+  { name: 'numstr-width', looks: true, note: "width '60' with a plate: 600 wide ('60' + 0); with padding [2, 5], a border and radius 3 '6010', the rounded path running to xLeft + '6010'; '40' truncates at 40",
+    option: sLabel([{ backgroundColor: '#eeeeee' },
+      { padding: [2, 5], backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: 3 },
+      { width: '40', overflow: 'truncate', formatter: 'a long label text' }],
+    { width: '60' }) },
+  { name: 'numstr-width-break', looks: true, note: "width '40' with overflow 'break' wraps at 40; a rich one too, its plate 400 wide",
+    option: sLabel([{ formatter: 'wrapped label words' },
+      { formatter: '{a|wrapped} {b|rich words}', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' }, b: { color: '#0000aa' } } }, null],
+    { width: '40', overflow: 'break' }) },
+  { name: 'numstr-height-lineheight', looks: true, note: "height '30' with a plate (300 high); lineHeight '20' on three lines (the second at textY + '20'); a rich one's lineHeight '18', a token's height '16' with padding, another's lineHeight '24'",
+    option: sLabel([{ height: '30', backgroundColor: '#eeeeee' },
+      { lineHeight: '20', formatter: 'a\nb\nc', backgroundColor: '#eeeeee' },
+      { lineHeight: '18', formatter: '{a|x}\n{b|y}', rich: { a: { height: '16', padding: [2, 0], backgroundColor: '#dddddd', color: '#aa0000' }, b: { lineHeight: '24', color: '#0000aa' } } }],
+    {}) },
+  { name: 'numstr-rich-width', looks: true, note: "rich width '80' with a plate: the right edge xLeft + '80' places the right token; height '40' with lineOverflow truncate over three lines; a token width '30'",
+    option: sLabel([{ formatter: '{a|L}{c|R}', width: '80', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' }, c: { align: 'right', color: '#0000aa' } } },
+      { formatter: '{a|one}\n{a|two}\n{a|three}', height: '40', lineOverflow: 'truncate', rich: { a: { color: '#aa0000', lineHeight: 16 } } },
+      { formatter: '{a|w}', rich: { a: { width: '30', color: '#aa0000', backgroundColor: '#dddddd' } } }],
+    {}) },
+  { name: 'string-size-kinds', looks: true, note: "axis labels width '50%' with a plate, x axis labels '30' truncate, the title width '40' truncate",
+    record: ['axisLabel', 'title'],
+    option: opt({ title: { text: 'A long chart title', textStyle: { color: '#222222', fontSize: 12, width: '40', overflow: 'truncate' } },
+      xAxis: xCat({ axisLabel: { color: '#444444', width: '30', overflow: 'truncate' } }),
+      yAxis: val({ axisLabel: { color: '#444444', width: '50%', backgroundColor: '#eeeeee' } }),
+      series: [{ type: 'bar', data: DATA }] }) },
+  { name: 'axis-name-width-string', looks: true, note: "the axis name's width '50%' and '60' with plates: AxisBuilder sets the width (nameTruncate's maxWidth, none here) over it",
+    record: ['axisName'],
+    option: opt({ xAxis: xCat({ name: 'Days', nameTextStyle: { color: '#555555', width: '60', backgroundColor: '#eeeeee' } }),
+      yAxis: val({ name: 'Amount', nameTextStyle: { color: '#555555', width: '50%', backgroundColor: '#eeeeee' } }),
+      series: [{ type: 'bar', data: DATA }] }) },
+  { name: 'graphic-width-string', looks: true, note: "graphic texts: width '60' with a plate (600 wide), width '50%' with a plate (at NaN), height '20' with a plate (200 high)",
+    record: ['other'],
+    option: opt({ graphic: [
+      { type: 'text', x: 100, y: 60, style: { text: 'sixty', fill: '#333333', width: '60', backgroundColor: '#eeeeee' } },
+      { type: 'text', x: 100, y: 140, style: { text: 'half', fill: '#333333', align: 'center', width: '50%', backgroundColor: '#eeeeee' } },
+      { type: 'text', x: 100, y: 220, style: { text: 'tall', fill: '#333333', height: '20', backgroundColor: '#eeeeee' } }] }) },
+  { name: 'marker-width-string', looks: true, note: "a markPoint label width '60' with a plate (600 wide)", record: ['markerLabel'],
+    option: opt({ xAxis: xCat(), yAxis: val(),
+      series: [{ type: 'bar', data: DATA, markPoint: { data: [{ type: 'max' }], label: { color: '#ffffff', width: '60', backgroundColor: '#aa0000' } } }] }) },
+  { name: 'pie-width-string', looks: true, note: "pie labels: width '120' with a plate (1200 wide, labelStyleWidth set), width '50%' truncate (nothing)",
+    option: opt({ series: [{ type: 'pie', radius: '40%', label: { color: '#333333', width: '120', backgroundColor: '#eeeeee' },
+      data: [{ value: 3, name: 'Alpha' }, { value: 2, name: 'Beta', label: { width: '50%', overflow: 'truncate', backgroundColor: null } }, { value: 1, name: 'Gamma' }] }] }) },
+  { name: 'gauge-string-sizes', looks: true, note: "a gauge's title width '120' with a plate (1200 wide), height '30' (300 high), lineHeight '20' on two lines; the reading's width '120' and height '30' (parsePercent: numbers); the axis labels' width '60' with a plate",
+    record: ['chartText'],
+    option: gauge([
+      Object.assign({ center: ['25%', '50%'], radius: '35%', data: [{ value: 37, name: 'Speed' }],
+        title: { color: '#123456', width: '120', backgroundColor: '#eeeeee' },
+        detail: { color: '#222222', fontSize: 20, width: '120', height: '30', backgroundColor: '#dddddd' } }, NO_AXIS),
+      { center: ['75%', '50%'], radius: '35%', min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Two\nlines' }],
+        title: { color: '#123456', height: '30', lineHeight: '20', backgroundColor: '#eeeeee' }, detail: { show: false },
+        axisLabel: { color: '#334455', width: '60', backgroundColor: '#eeeeee' } }]) },
+  { name: 'numstr-token-width', looks: true, note: "a token's width '30' (a string, written) emptied by a truncation at 40; a token's '25' wrapped whole at 40 (parsePercent: parseFloat); a token's '50.5%' of an 81-wide block (parseInt: 50%)",
+    option: sLabel([{ formatter: '{a|abcdefghij}', width: 40, overflow: 'truncate', rich: { a: { width: '30', color: '#aa0000' } } },
+      { formatter: '{a|one two}{b|xx}', width: 40, overflow: 'break', rich: { a: { color: '#aa0000' }, b: { width: '25', color: '#0000aa', backgroundColor: '#dddddd' } } },
+      { formatter: '{p|p}{a|q}', width: 81, backgroundColor: '#eeeeee', rich: { p: { width: '50.5%', backgroundColor: '#dddddd', color: '#aa0000' }, a: { color: '#0000aa' } } }],
+    {}) },
+  { name: 'string-lineheight-truthy', looks: true, note: "lineHeight 0 (falsy: no box rect) and '0' (a string, truthy: the undrawn rect); height '40' over a token lineHeight '16', both strings: lineOverflow compares '0' + '16' > '40' as strings",
+    option: sLabel([{ lineHeight: 0, formatter: 'zero' }, { lineHeight: '0', formatter: 'zero' },
+      { formatter: '{a|one}\n{a|two}\n{a|three}', height: '40', lineOverflow: 'truncate', rich: { a: { color: '#aa0000', lineHeight: '16' } } }],
+    {}) },
+  { name: 'word-width-hide', looks: true, note: "hideOverlap: the second label's width '50%' (its box at NaN)",
+    option: scatLayout({ width: '50%' }, { hideOverlap: true }) },
+  { name: 'numstr-width-hide', looks: true, note: "hideOverlap: the second label's width '120' (its box from xLeft to xLeft + '1200')",
+    option: scatLayout({ width: '120' }, { hideOverlap: true }) },
+  { name: 'word-width-shift', looks: true, note: "moveOverlap shiftY with the second label's width '50%'",
+    option: scatLayout({ width: '50%' }, { moveOverlap: 'shiftY' }) },
+  { name: 'numstr-width-shift', looks: true, note: "moveOverlap shiftY with the second label's width '120'",
+    option: scatLayout({ width: '120' }, { moveOverlap: 'shiftY' }) },
+];
+
 const cases = [
   // ---- rich series labels ----
   { name: 'rich-two-line', note: "top labels '{a|{b}}\\n{v|{c}}': a 14px #c23531, v bold #333",
@@ -517,6 +1221,17 @@ const cases = [
   { name: 'gauge-detail-box', note: "gauge detail bg, radius 3, padding [4,8], formatter '{a|{value}}%' rich; title plain", record: ['chartText'], match: '%|^Speed$',
     option: opt({ series: [{ type: 'gauge', data: [{ value: 62, name: 'Speed' }],
       detail: { formatter: '{a|{value}}%', backgroundColor: '#eeeeee', borderRadius: 3, padding: [4, 8], fontSize: 20, rich: { a: { color: '#c23531', fontSize: 24 } } } }] }) },
+  ...GAUGE_CASES,
+  ...R7H_CASES,
+  ...R7L_OPACITY_CASES,
+  ...R7L_HUNG_CASES,
+  ...R7L_EXTREME_CASES,
+  ...R7M_COMPONENT_CASES,
+  ...R7M_TREEMAP_CASES,
+  ...R7M_GRAPH_CASES,
+  ...R7N_POINTER_CASES,
+  ...R7AF_CASES,
+  ...R7AI_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -626,13 +1341,35 @@ function probeBox(lib, el) {
     Object.keys(st.rich).forEach(k => { rich[k] = Object.assign({}, st.rich[k]); });
     st.rich = rich;
   }
-  if (st.padding) st.padding = st.padding.slice();
+  if (Array.isArray(st.padding)) st.padding = st.padding.slice();
   st.backgroundColor = '#010203';
   probe.useStyle(st);
   probe.getBoundingRect();
   const b = probe.__richLog.bgs.filter(x => x.isBox);
   must(b.length === 1, 'the probe drew ' + b.length + ' boxes');
   return b[0];
+}
+
+// [R7-D] a child zrender can place: a TSpan at finite coordinates, a Rect
+// whose shape is four finite numbers. A text whose width is a word (a string
+// that is no number, '50%') is laid out at NaN somewhere -- the plate's width
+// is '50%0', a rich text's tokens sit at NaN -- and none of that is drawn.
+// [R7-H] what canvas makes of a value zrender kept as a string ('600', a
+// plain line's y '-7530' after textY += '20'): its number
+const num = v => (typeof v === 'string' ? +v : v);
+// [R7-L] a rounded rect (shape.r truthy: roundRect) whose path runs through a
+// joined string to NaN (x + '-600') draws nothing; an unrounded one is
+// canvas' rect at its numbers
+function finChild(c) {
+  if (c.type === 'tspan') {
+    return (c.style.x == null || Number.isFinite(num(c.style.x))) && (c.style.y == null || Number.isFinite(num(c.style.y)));
+  }
+  if (c.shape.r && ['x', 'y', 'width', 'height'].some(k => typeof c.shape[k] === 'string')) {
+    const pb = c.getBoundingRect();
+    if (![pb.x, pb.y, pb.width, pb.height].every(Number.isFinite)) return false;
+  }
+  return ['x', 'y', 'width', 'height'].every(k => (typeof c.shape[k] === 'number' || typeof c.shape[k] === 'string')
+    && Number.isFinite(num(c.shape[k])));
 }
 
 function recordText(lib, t, measureSet) {
@@ -655,8 +1392,21 @@ function recordText(lib, t, measureSet) {
 
   // the box
   const pb = probeBox(lib, el);
-  const box = put(put(put(put({}, 'x', pb.x), 'y', pb.y), 'width', pb.w), 'height', pb.h);
-  Object.assign(box, corners(m, pb.x, pb.y, pb.w, pb.h));
+  // [R7-D] such a text (its children or its probe box at NaN) records what
+  // is drawn: its pieces at finite places with words in them, no box, no
+  // bounds, no lines (all NaN upstream)
+  // [R7-H] a box zrender holds as a numeric string ('600') is its number
+  // [R7-H] a text placed at NaN (an axis name whose position comes from its
+  // own box laid out at NaN): its transform is not finite and nothing of it
+  // is placed -- it records no pieces
+  const unplaced = !!m && !m.every(Number.isFinite);
+  // [R7-L] and a text whose own bounds are NaN (an unrounded plate whose
+  // path joins a negative numeric string: drawn by canvas, bounded at NaN)
+  const ownBounds = el.getBoundingRect();
+  const wordWidth = unplaced || !children.every(finChild) || ![pb.x, pb.y, pb.w, pb.h].every(v => (typeof v === 'number' || typeof v === 'string')
+    && Number.isFinite(num(v))) || ![ownBounds.x, ownBounds.y, ownBounds.width, ownBounds.height].every(Number.isFinite);
+  const box = wordWidth ? null : put(put(put(put({}, 'x', num(pb.x)), 'y', num(pb.y)), 'width', num(pb.w)), 'height', num(pb.h));
+  if (box) Object.assign(box, corners(m, num(pb.x), num(pb.y), num(pb.w), num(pb.h)));
   const drawnBox = log.bgs.filter(b => b.isBox);
   must(drawnBox.length <= 1, where + ': two boxes');
   if (drawnBox.length) {
@@ -669,13 +1419,13 @@ function recordText(lib, t, measureSet) {
   // its lineWidth as painted, a TSpan by a stroke the style gave it
   const gbr = el.getBoundingRect();
   must(el.__richLog === log, where + ': asking the bounds laid the text out again');
-  const bounds = put(put(put(put({}, 'x', gbr.x), 'y', gbr.y), 'width', gbr.width), 'height', gbr.height);
-  Object.assign(bounds, corners(m, gbr.x, gbr.y, gbr.width, gbr.height));
+  const bounds = wordWidth ? null : put(put(put(put({}, 'x', gbr.x), 'y', gbr.y), 'width', gbr.width), 'height', gbr.height);
+  if (bounds) Object.assign(bounds, corners(m, gbr.x, gbr.y, gbr.width, gbr.height));
 
   // rich lines, rebuilt from the placement order
   const lines = [];
   const tokenPos = new Map();
-  if (log.mode === 'rich') {
+  if (log.mode === 'rich' && !wordWidth) {
     const PH = { left: 0, right: 1, center: 2 };
     let cur = null;
     log.tokens.forEach(tk => {
@@ -729,6 +1479,7 @@ function recordText(lib, t, measureSet) {
   let plainLine = 0;
   const pieces = children.map((c, i) => {
     const cs = c.style;
+    if (wordWidth && (unplaced || !finChild(c) || (c.type === 'tspan' && String(cs.text) === ''))) return null;
     if (c.type === 'tspan') {
       let own = ownerOf(i);
       if (log.mode === 'plain') {
@@ -736,7 +1487,7 @@ function recordText(lib, t, measureSet) {
         own = { of: 'line', line: plainLine++, token: null };
       }
       must(own && own.of !== 'box', where + ': a TSpan with no token');
-      const g = apply(m, cs.x || 0, cs.y || 0);
+      const g = apply(m, num(cs.x || 0), num(cs.y || 0));
       const stroke = cs.stroke == null || cs.stroke === 'none' ? null : cs.stroke;
       const bb = c.getBoundingRect();
       const lw = stroke ? cs.lineWidth : 0;
@@ -747,11 +1498,12 @@ function recordText(lib, t, measureSet) {
         ? Math.max(0, ...children.filter(x => x.type === 'tspan').map(x => ruleWidth(String(x.style.text), x.style.font)))
         : ruleWidth(String(cs.text), cs.font);
       const grow = (stroke && cs.lineWidth > 0 && bb.width !== tw) ? cs.lineWidth : 0;
-      must(Object.is(bb.width, tw + grow) || Object.is(bb.width - grow, tw),
+      // ([R7-AF] a width joined to a lineWidth written as a string is not the measure's)
+      must(typeof bb.width === 'string' || Object.is(bb.width, tw + grow) || Object.is(bb.width - grow, tw),
         where + ': TSpan ' + JSON.stringify(cs.text) + ' measures ' + bb.width + ', the rule ' + tw);
       measureSet.set(JSON.stringify([String(cs.text), pxOfFont(cs.font), isMono(cs.font)]), { text: String(cs.text), font: cs.font });
       const o = { kind: 'text', of: own.of, line: nn(own.line), token: nn(own.token), text: String(cs.text) };
-      put(o, 'x', cs.x || 0); put(o, 'y', cs.y || 0);
+      put(o, 'x', num(cs.x || 0)); put(o, 'y', num(cs.y || 0));
       put(o, 'gx', g[0]); put(o, 'gy', g[1]);
       o.font = cs.font;
       o.px = pxOfFont(cs.font);
@@ -761,14 +1513,23 @@ function recordText(lib, t, measureSet) {
       o.fontFamily = nn(cs.fontFamily);
       o.fill = nn(cs.fill);
       o.stroke = stroke;
-      put(o, 'lineWidth', stroke ? cs.lineWidth : null);
+      put(o, 'lineWidth', stroke ? num(cs.lineWidth) : null);
       put(o, 'lineDash', stroke && cs.lineDash ? cs.lineDash : null);
       o.textAlign = nn(cs.textAlign);
       o.textBaseline = nn(cs.textBaseline);
       put(o, 'opacity', cs.opacity == null ? 1 : cs.opacity);
       o.strokeFirst = !!cs.strokeFirst;
       o.shadow = shadowOf(cs);
-      o.bbox = put(put(put(put({}, 'x', bb.x), 'y', bb.y), 'width', bb.width), 'height', bb.height);
+      // ([R7-AF] a joined size that is no number: null)
+      const putN = (q, k, v) => (Number.isFinite(v) ? put(q, k, v) : Object.assign(q, { [k]: null }));
+      o.bbox = putN(putN(put(put({}, 'x', bb.x), 'y', bb.y), 'width', num(bb.width)), 'height', num(bb.height));
+      if (t.looks) put(o, 'lineDashOffset', stroke && cs.lineDash ? (cs.lineDashOffset || 0) : null);
+      // ([R7-AI] the rect rectContain reads where it holds a string: its
+      // far edges joined in JS)
+      if (t.r7ai && ['x', 'y', 'width', 'height'].some(k => typeof bb[k] === 'string')) {
+        const edge = v => (Number.isFinite(+v) ? hex(+v) : null);
+        o.hit = [edge(bb.x), edge(bb.y), edge(bb.x + bb.width), edge(bb.y + bb.height)];
+      }
       void lw;
       return o;
     }
@@ -777,12 +1538,25 @@ function recordText(lib, t, measureSet) {
       must(own, where + ': a Rect with no owner');
       const sh = c.shape;
       const o = { kind: 'rect', of: own.of, line: nn(own.line), token: nn(own.token) };
-      put(o, 'x', sh.x); put(o, 'y', sh.y); put(o, 'width', sh.width); put(o, 'height', sh.height);
-      Object.assign(o, corners(m, sh.x, sh.y, sh.width, sh.height));
+      // [R7-H] the shape as canvas takes it (a width '600' is 600); where a
+      // value is a string, the rect's own bounds too: zrender's path adds it
+      // as a string (x + '600'), so the bounds run to the joined number
+      put(o, 'x', num(sh.x)); put(o, 'y', num(sh.y)); put(o, 'width', num(sh.width)); put(o, 'height', num(sh.height));
+      Object.assign(o, corners(m, num(sh.x), num(sh.y), num(sh.width), num(sh.height)));
+      if (['x', 'y', 'width', 'height'].some(k => typeof sh[k] === 'string')) {
+        const pbr = c.getBoundingRect();
+        // [R7-L] pathNaN where they are NaN (an unrounded rect canvas draws at
+        // its numbers, its path joined to '300-600')
+        if ([pbr.x, pbr.y, pbr.width, pbr.height].every(Number.isFinite)) {
+          o.pathBounds = put(put(put(put({}, 'x', pbr.x), 'y', pbr.y), 'width', pbr.width), 'height', pbr.height);
+        } else {
+          o.pathNaN = true;
+        }
+      }
       o.fill = nn(cs.fill);
       put(o, 'fillOpacity', cs.fillOpacity);
       o.stroke = cs.stroke == null || cs.stroke === 'none' ? null : cs.stroke;
-      put(o, 'lineWidth', o.stroke ? cs.lineWidth : null);
+      put(o, 'lineWidth', o.stroke ? num(cs.lineWidth) : null);
       put(o, 'strokeOpacity', o.stroke ? cs.strokeOpacity : null);
       o.strokeFirst = !!cs.strokeFirst;
       put(o, 'lineDash', cs.lineDash || null);
@@ -791,10 +1565,11 @@ function recordText(lib, t, measureSet) {
       put(o, 'opacity', cs.opacity == null ? 1 : cs.opacity);
       o.shadow = shadowOf(cs);
       o.drawn = o.fill != null || o.stroke != null;
+      if (t.looks) put(o, 'lineDashOffset', cs.lineDash ? (cs.lineDashOffset || 0) : null);
       return o;
     }
     throw new OracleError(where + ': a child of type ' + c.type);
-  });
+  }).filter(p => p !== null);
 
   const rich = s.rich ? {} : null;
   if (rich) Object.keys(s.rich).sort().forEach(k => { rich[k] = styleOf(s.rich[k]); });
@@ -805,7 +1580,7 @@ function recordText(lib, t, measureSet) {
     text: String(s.text),
     rich: !!s.rich,
     transform: m ? m.map(hex) : null, transformText: m ? m.map(text) : null,
-    anchor: Object.assign(pt(s.x || 0, s.y || 0), { g: pt(anchor[0], anchor[1]) }),
+    anchor: Object.assign(pt(s.x || 0, s.y || 0), { g: unplaced ? null : pt(anchor[0], anchor[1]) }),
     align, verticalAlign,
     defaultStyle: t.attached ? { fill: nn(ds.fill), stroke: nn(ds.stroke), autoStroke: nn(ds.autoStroke), align: nn(ds.align), verticalAlign: nn(ds.verticalAlign), overflowRect: ds.overflowRect ? true : false } : null,
     style: styleOf(s),
@@ -813,7 +1588,7 @@ function recordText(lib, t, measureSet) {
     box,
     bounds,
     isTruncated: !!el.isTruncated,
-    lines: log.mode === 'rich' ? lines.map(ln => Object.assign(put(put({}, 'lineTop', ln.lineTop), 'lineHeight', ln.lineHeight), { tokens: ln.tokens })) : null,
+    lines: log.mode === 'rich' && !wordWidth ? lines.map(ln => Object.assign(put(put({}, 'lineTop', ln.lineTop), 'lineHeight', ln.lineHeight), { tokens: ln.tokens })) : null,
     pieces,
   };
   // raw handles for the guards (stripped before writing)
@@ -834,10 +1609,28 @@ function run(lib, c, measureSet) {
   const chart = lib.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   try {
     chart.setOption(clone(c.option));
+    (c.actions || []).forEach(a => chart.dispatchAction(clone(a)));
     const svg = chart.renderToSVGString();
     const zr = chart.getZr();
     const found = [];
     const seen = new Set();
+    // [R7-N] an axis pointer's group is a zr root of its own (BaseAxisPointer
+    // adds it to zr), held by its axis' view: its texts are the label
+    chart._componentsViews.forEach(v => {
+      const g = v && v.__model && v._axisPointer && v._axisPointer._group;
+      if (!g || g.ignore) return;
+      const owner = v.__model.mainType + v.__model.componentIndex;
+      const walkPtr = el => {
+        if (el.ignore) return;
+        if (el.type === 'text') {
+          seen.add(el);
+          if (visible(el, false, null)) found.push({ el, component: 'pointerLabel', owner, attached: false });
+          return;
+        }
+        if (el.childrenRef) el.childrenRef().forEach(walkPtr);
+      };
+      walkPtr(g);
+    });
     chart._componentsViews.forEach(v => v && v.__model && collect(v, 'component', found, seen));
     chart._chartsViews.forEach(v => v && v.__model && collect(v, 'chart', found, seen));
     const walkRoot = el => {
@@ -852,10 +1645,13 @@ function run(lib, c, measureSet) {
     };
     zr.storage.getRoots().forEach(walkRoot);
     // the harness: one <text> per non-empty TSpan of every visible text
+    // [R7-D] placed at finite coordinates (a rich text whose width is a word
+    // places its tokens at NaN, and the SVG writer drops them)
     const svgTexts = (svg.match(/<text\b/g) || []).length;
-    const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== '').length, 0);
+    const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== ''
+      && finChild(x)).length, 0);
     must(svgTexts === spans, c.name + ': the SVG has ' + svgTexts + ' <text>, the visible texts ' + spans + ' non-empty spans');
-    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, t, measureSet));
+    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, Object.assign(t, { looks: !!c.looks, r7ai: !!c.r7ai }), measureSet));
     must(texts.length > 0, c.name + ': nothing recorded');
     return { texts };
   } finally {
@@ -881,6 +1677,9 @@ function runAll() {
       productionBuild = true;
     }
     const rec = Object.assign({ name: c.name, note: c.note, W, H, option: c.option, record: c.record || ['seriesLabel'], match: c.match || null }, r);
+    if (c.looks) rec.looks = true;
+    if (c.r7ai) rec.r7ai = true;
+    if (c.actions) rec.actions = c.actions;
     if (productionBuild) rec.productionBuild = true;
     return rec;
   });

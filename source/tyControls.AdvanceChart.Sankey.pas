@@ -2029,6 +2029,13 @@ begin
         if d <> nil then sw := JsNum(d);
         if sw > 0 then
         begin
+          { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+            note), and its stroked rect is not-a-number -- never hit }
+          if IsInfinite(sw) then
+          begin
+            el.HitNone := True;
+            sw := 0;
+          end;
           el.Style.StrokeColor := sc;
           el.Style.StrokeWidthLogical := sw;
         end;
@@ -2090,6 +2097,13 @@ begin
         el.Style.FillGradient := ASolved.Nodes[i].Gradient;
       if NodeStroke(ASolved, i, sc, sw) then
       begin
+        { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+          note), and its stroked rect is not-a-number -- never hit }
+        if IsInfinite(sw) then
+        begin
+          el.HitNone := True;
+          sw := 0;
+        end;
         el.Style.StrokeColor := sc;
         el.Style.StrokeWidthLogical := sw;
       end;
@@ -2151,6 +2165,8 @@ begin
     begin
       tagged := AList.Element(k);
       tagged.Anim.Role := carSankeyClip;
+      { [R7-I] the main group's clip while it grows cuts the hit too }
+      tagged.ClipHits := True;
       tagged.Anim.Series := ASeriesIndex;
       tagged.Anim.Index := -1;
       tagged.Anim.G[0] := gbX;

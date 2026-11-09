@@ -90,7 +90,12 @@ end;
 
 function TTyCustomAdvanceChart.AxesDynamic: Boolean;
 begin
-  Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
+  { [R7-AD] and while the list moves with elements among their parts: those
+    are drawn among them, the frame's }
+  Result := FAnimLive and not FAnimContinuous
+    and ((AnimAxisProxyCount > 0) or (Length(FCompBand) > 0));
+  { [R7-AG] and in the continuous phase while it moves among their parts }
+  if FAnimLive and FAnimContinuous and FContBand then Result := True;
 end;
 
 { Axis.getMinorTicksCoords, flat: each minor tick with the major interval
@@ -182,6 +187,8 @@ var
     inp.MinorSplitWidth := PenWidth('TyAdvChartMinorSplitLine');
     if inp.ShowMinorTicks or inp.ShowMinorSplitLine then
       inp.MinorTicks := AxisMinorTicks(AAxis);
+    { [R7-AH] snapped on the css px grid, as the axis at rest }
+    inp.Scale := scale;
     els := TyAxisAnimElements(spec^, inp);
     akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
     SetLength(all_, n + Length(els));
@@ -511,26 +518,46 @@ var
     if useSrc then Result := TySourceDimIndexOf(src, AName);
   end;
 
-  { encode[AKey]'s first entry as a dimension; -1 none }
+  { one entry of encode[AKey] as a dimension; -1 none }
+  function EncEntry(AItem: TJSONData): Integer;
+  begin
+    Result := -1;
+    if AItem = nil then Exit;
+    case AItem.JSONType of
+      jtString: Result := DimByName(AItem.AsString);
+      jtNumber:
+        if (Frac(AItem.AsFloat) = 0) and (AItem.AsFloat >= 0) and (AItem.AsFloat < Width) then
+          Result := Trunc(AItem.AsFloat);
+    end;
+    if Result >= Width then Result := -1;
+  end;
+
+  { the dimension encode[AKey] gives slot 0 (getGroupIdDimension's
+    `otherDims.itemGroupId === 0`): its first entry, unless that reaches
+    nothing or is named again further on [spec 255: was the first entry
+    alone, a dimension named again included]; -1 none }
   function EncDim(const AKey: string): Integer;
-  var e: TJSONData;
+  var
+    e: TJSONData;
+    ent: TTyIntegerArray;
+    q: Integer;
   begin
     Result := -1;
     if encObj = nil then Exit;
     e := encObj.Find(AKey);
+    if e = nil then Exit;
+    ent := nil;
     if e is TJSONArray then
     begin
-      if e.Count = 0 then Exit;
-      e := e.Items[0];
+      SetLength(ent, e.Count);
+      for q := 0 to e.Count - 1 do ent[q] := EncEntry(e.Items[q]);
+    end
+    else
+    begin
+      SetLength(ent, 1);
+      ent[0] := EncEntry(e);
     end;
-    if e = nil then Exit;
-    case e.JSONType of
-      jtString: Result := DimByName(e.AsString);
-      jtNumber:
-        if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < Width) then
-          Result := Trunc(e.AsFloat);
-    end;
-    if Result >= Width then Result := -1;
+    Result := TyEncodeFirstSlot(ent);
   end;
 
   { the type the series' `dimensions` (or its dataset's) declare ('' none) }
@@ -615,7 +642,7 @@ var
     dimension holds none), as the store was filled }
   function StoreDimOf(ADim: Integer): Integer;
   var
-    k, col: Integer;
+    k, col, n: Integer;
     nm: string;
     coord: TTyCoordDimArray;
     enc: TTySeriesEncode;
@@ -625,13 +652,17 @@ var
     enc := Default(TTySeriesEncode);
     if not useSrc then
     begin
-      SetLength(coord, st.DimCount);
-      for k := 0 to st.DimCount - 1 do
+      { the coordinates: the store's columns up to its first extra one of an
+        encode list [spec 255] }
+      n := 0;
+      while (n < st.DimCount) and not TyIsSpreadDim(st.DimName(n)) do Inc(n);
+      SetLength(coord, n);
+      for k := 0 to n - 1 do
       begin
         coord[k].Name := st.DimName(k);
         coord[k].Ordinal := st.DimType(k) = ddtOrdinal;
       end;
-      enc := TyEncodeOf(FOption, ASeries, TySeriesDimsSource(FOption, ASeries), coord);
+      enc := TyEncodeOf(FOption, ASeries, TySeriesDimsSource(FOption, ASeries), coord, Width);
       if enc.Given then TyEncodeFillUnclaimed(enc, Width);
     end;
     for k := 0 to st.DimCount - 1 do
@@ -1604,6 +1635,7 @@ begin
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
       FAnimSet.OnEndLabelText := @EndLabelTextOf;
       FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
+      FAnimSet.OnGaugeDetailAt := @GaugeDetailAt;
       FAnimSet.OnUtStop := @AnimUtStopCustom;
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }
@@ -2669,7 +2701,7 @@ begin
       props := PtrProps(hit, at);
       { [R5-I] updateLabelEl: the label's x / y with the pointer's timing
         [was: the label drawn about the line where it had got to] }
-      if PtrLabelAt(hit, at, lx, ly) then
+      if PtrLabelAt(hit, lx, ly) then
       begin
         SetLength(props, Length(props) + 2);
         props[High(props) - 1] := TyAnimProp('label.x', TyAnimNum(lx));
@@ -2819,13 +2851,13 @@ begin
   end;
 end;
 
-function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit; AAt: Double;
+function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit;
   out AX, AY: Double): Boolean;
 var
   labelS: TTyStyleSet;
   txt: string;
   m: ITyTextMeasurer;
-  box: TRect;
+  lbl: TTyPtrLabel;
 begin
   Result := False;
   AX := NaN;
@@ -2838,14 +2870,11 @@ begin
   txt := PointerDrawLabelText(AHit, PointerValue(AHit));
   if txt = '' then Exit;
   m := NewTextMeasurer(FLastPPI);
-  if not PointerLabelBox(AHit, AAt, txt, Rect(Round(FLastRect.Left), Round(FLastRect.Top),
-    Round(FLastRect.Right), Round(FLastRect.Bottom)), FLastPPI, m, labelS, box) then Exit;
-  AX := box.Left;
-  AY := box.Top;
-  Result := True;
+  Result := PtrCartesianLabelPlace(AHit, txt, Round(FLastRect.Right) - Round(FLastRect.Left),
+    Round(FLastRect.Bottom) - Round(FLastRect.Top), FLastPPI, m, lbl, AX, AY);
 end;
 
-procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var AX, AY: Double);
 var
   k: Integer;
   p: TTyChartAnimProxy;
@@ -2863,7 +2892,10 @@ begin
     lx := p.Num('label.x');
     ly := p.Num('label.y');
     if not (IsNan(lx) or IsNan(ly)) then
-      OffsetRect(ABox, Round(lx) - ABox.Left, Round(ly) - ABox.Top);
+    begin
+      AX := lx;
+      AY := ly;
+    end;
     Exit;
   end;
 end;
@@ -2955,26 +2987,49 @@ function TTyCustomAdvanceChart.AnimPartOf(AFrame: TTyPaintList;
   AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
-  i, h: Integer;
+  i, h, k: Integer;
   pe: PTyChartElement;
-  cont, after: Boolean;
+  cont, after, onTrail: Boolean;
+  tl: TTyIntegerArray;
 begin
   frame := AFrame;
   if FAnimSplit = nil then FAnimSplit := TTyPaintList.Create;
   FAnimSplit.Clear;
   Result := FAnimSplit;
   if frame = nil then Exit;
+  { [R7-AG] AN ELEMENT OF IT AMONG THE AXES' PARTS (FContBand): the axes are
+    the dynamic layer's, and so is everything -- the static layer holds
+    none of the list }
+  if FContBand then
+  begin
+    if AContinuous then
+      for i := 0 to frame.Count - 1 do FAnimSplit.Add(frame.Ref(i)^);
+    Exit;
+  end;
   { [R5-I] AND EVERYTHING DRAWN AFTER THE FIRST OF THEM: zrender draws one
     display list in z order, so what stands over a ripple (a series of a
     higher z, a later label) is drawn over it every frame -- the static
     layer holds only what lies under the first continuous element [was:
     only the continuous elements were the dynamic layer's, over everything] }
   after := False;
+  { [R7-AJ] A TRAIL'S LEVEL IS ONE LAYER painted every frame over the faded
+    last one (motionBlur): what stands on it before the trail -- a
+    graphic's element of that zlevel -- goes with it [was: the static
+    layer's, drawn once under the faded trail] }
+  tl := TrailLevels;
   { read in place, copied only into the half it goes to [P2] }
   for i := 0 to frame.Count - 1 do
   begin
     pe := frame.Ref(i);
     if after then
+    begin
+      if AContinuous then FAnimSplit.Add(pe^);
+      Continue;
+    end;
+    onTrail := False;
+    for k := 0 to High(tl) do
+      if tl[k] = pe^.ZLevel then onTrail := True;
+    if onTrail then
     begin
       if AContinuous then FAnimSplit.Add(pe^);
       Continue;
@@ -3236,5 +3291,9 @@ begin
   TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind, FAnimSet, FAnimStBind);
   { a treemap's drill-down, its own wrap [Batch 115] }
   if TmAnimAny then TreemapFrame(FAnimFrame);
+  { [R7-S] what the canvas is left with, frame by frame (a symbol in its
+    delay is not brushed) }
+  if TyLinesCanvasLeftoversDue(FAnimFrame) then
+    TyLinesCanvasLeftovers(FAnimFrame, CanvasGroundState, FLastPPI);
   Result := FAnimFrame;
 end;

@@ -1,0 +1,700 @@
+{
+ "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
+ "note": "R7-S: per case and colour, the union of the global bounding rects (the path's own rect through its global transform: the box of its four corners) of the paths filled with that colour, [x, y, w, h] hex; count how many.",
+ "W": 400,
+ "H": 300,
+ "charts": [
+  {
+   "id": "legend-cover",
+   "option": {
+    "animation": false,
+    "legend": {
+     "left": 20,
+     "top": 20,
+     "icon": "path://M0 0L10 0L10 40L0 40Z",
+     "symbolKeepAspect": false,
+     "itemWidth": 40,
+     "itemHeight": 24
+    },
+    "color": [
+     "#ff00ff"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "name": "p",
+      "data": [
+       {
+        "name": "a",
+        "value": 1
+       }
+      ],
+      "radius": 0,
+      "label": {
+       "show": false
+      },
+      "labelLine": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4039000000000000",
+      "4039000000000000",
+      "4044000000000000",
+      "4038000000000000"
+     ],
+     "within": [
+      0,
+      0,
+      200,
+      100
+     ]
+    }
+   ]
+  },
+  {
+   "id": "legend-keep",
+   "option": {
+    "animation": false,
+    "legend": {
+     "left": 20,
+     "top": 20,
+     "icon": "path://M0 0L10 0L10 40L0 40Z",
+     "symbolKeepAspect": true,
+     "itemWidth": 40,
+     "itemHeight": 24
+    },
+    "color": [
+     "#ff00ff"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "name": "p",
+      "data": [
+       {
+        "name": "a",
+        "value": 1
+       }
+      ],
+      "radius": 0,
+      "label": {
+       "show": false
+      },
+      "labelLine": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4039000000000000",
+      "4039000000000000",
+      "4018000000000000",
+      "4038000000000000"
+     ],
+     "within": [
+      0,
+      0,
+      200,
+      100
+     ]
+    }
+   ]
+  },
+  {
+   "id": "legend-line-own",
+   "option": {
+    "animation": false,
+    "legend": {
+     "left": 20,
+     "top": 20,
+     "itemWidth": 40,
+     "itemHeight": 24
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ],
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "l",
+      "symbol": "path://M0 0L40 0L40 10L0 10Z",
+      "color": "#ff00ff",
+      "data": []
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4042333330000000",
+      "4039000000000000",
+      "4033333340000000",
+      "4033333338000000"
+     ],
+     "within": [
+      36,
+      0,
+      56,
+      100
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gauge-cover",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "min": 0,
+      "max": 100,
+      "radius": 120,
+      "center": [
+       200,
+       160
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "width": 4,
+        "color": [
+         [
+          1,
+          "#888888"
+         ]
+        ]
+       }
+      },
+      "axisTick": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "pointer": {
+       "icon": "path://M0 0L10 0L10 10L0 10Z",
+       "width": 30,
+       "length": 90,
+       "itemStyle": {
+        "color": "#ff00ff"
+       }
+      },
+      "anchor": {
+       "show": true,
+       "icon": "path://M0 0L40 0L40 10L0 10Z",
+       "size": 40,
+       "itemStyle": {
+        "color": "#00ffff"
+       },
+       "showAbove": false
+      },
+      "data": [
+       {
+        "value": 50
+       }
+      ]
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "40671fffffffffff",
+      "4051800000000000",
+      "403e000000000008",
+      "4056800000000000"
+     ]
+    },
+    {
+     "colour": "#00ffff",
+     "count": 1,
+     "box": [
+      "4066800000000000",
+      "4061800000000000",
+      "4044000000000000",
+      "4044000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gauge-keep",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "min": 0,
+      "max": 100,
+      "radius": 120,
+      "center": [
+       200,
+       160
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "width": 4,
+        "color": [
+         [
+          1,
+          "#888888"
+         ]
+        ]
+       }
+      },
+      "axisTick": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "detail": {
+       "show": false
+      },
+      "title": {
+       "show": false
+      },
+      "pointer": {
+       "icon": "path://M0 0L10 0L10 10L0 10Z",
+       "width": 30,
+       "length": 90,
+       "keepAspect": true,
+       "itemStyle": {
+        "color": "#ff00ff"
+       }
+      },
+      "anchor": {
+       "show": true,
+       "icon": "path://M0 0L40 0L40 10L0 10Z",
+       "size": 40,
+       "keepAspect": true,
+       "itemStyle": {
+        "color": "#00ffff"
+       },
+       "showAbove": true
+      },
+      "data": [
+       {
+        "value": 50
+       }
+      ]
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4067200000000000",
+      "4059000000000000",
+      "403e000000000000",
+      "403e000000000000"
+     ]
+    },
+    {
+     "colour": "#00ffff",
+     "count": 1,
+     "box": [
+      "4066800000000000",
+      "4063600000000000",
+      "4044000000000000",
+      "4024000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vm-piecewise",
+   "option": {
+    "animation": false,
+    "visualMap": {
+     "type": "piecewise",
+     "left": 20,
+     "top": 20,
+     "itemWidth": 40,
+     "itemHeight": 24,
+     "pieces": [
+      {
+       "min": 0,
+       "max": 10
+      }
+     ],
+     "inRange": {
+      "symbol": "path://M0 0L10 0L10 40L0 40Z",
+      "color": "#ff00ff"
+     },
+     "textStyle": {
+      "color": "#000"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": []
+     }
+    ],
+    "xAxis": {
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    }
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4041800000000000",
+      "4041800000000000",
+      "4044000000000000",
+      "4038000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "axis-arrow",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 40,
+     "right": 60,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "axisLabel": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     },
+     "splitLine": {
+      "show": false
+     },
+     "axisLine": {
+      "symbol": [
+       "none",
+       "path://M0 0L10 0L10 10L0 10Z"
+      ],
+      "symbolSize": [
+       30,
+       14
+      ],
+      "lineStyle": {
+       "color": "#ff00ff",
+       "width": 1
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "show": false
+    },
+    "series": []
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4074d00000000000",
+      "406fa00000000000",
+      "402c000000000000",
+      "402c000000000000"
+     ],
+     "within": [
+      332.5,
+      245,
+      400,
+      275
+     ]
+    }
+   ]
+  },
+  {
+   "id": "markline-ends",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [],
+      "markLine": {
+       "symbol": [
+        "path://M0 0L10 0L10 10L0 10Z",
+        "path://M0 0L10 0L10 10L0 10Z"
+       ],
+       "symbolSize": [
+        30,
+        12
+       ],
+       "label": {
+        "show": false
+       },
+       "lineStyle": {
+        "color": "#ff00ff",
+        "width": 1,
+        "type": "solid"
+       },
+       "data": [
+        [
+         {
+          "coord": [
+           2,
+           5
+          ]
+         },
+         {
+          "coord": [
+           8,
+           5
+          ]
+         }
+        ],
+        [
+         {
+          "coord": [
+           2,
+           8
+          ],
+          "symbolKeepAspect": true,
+          "lineStyle": {
+           "color": "#00ffff"
+          }
+         },
+         {
+          "coord": [
+           8,
+           8
+          ],
+          "symbolKeepAspect": true
+         }
+        ]
+       ]
+      }
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 2,
+     "box": [
+      "405c800000000000",
+      "405fe00000000000",
+      "4068000000000000",
+      "403e000000000000"
+     ],
+     "within": [
+      0,
+      110,
+      400,
+      300
+     ]
+    },
+    {
+     "colour": "#00ffff",
+     "count": 2,
+     "box": [
+      "405c800000000000",
+      "4056800000000000",
+      "4068000000000000",
+      "4028000000000000"
+     ],
+     "within": [
+      0,
+      0,
+      400,
+      110
+     ]
+    }
+   ]
+  },
+  {
+   "id": "markpoint-oblong",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [],
+      "markPoint": {
+       "symbol": "path://M0 0L10 0L10 40L0 40Z",
+       "symbolSize": [
+        40,
+        16
+       ],
+       "label": {
+        "show": false
+       },
+       "itemStyle": {
+        "color": "#ff00ff"
+       },
+       "data": [
+        {
+         "coord": [
+          3,
+          5
+         ]
+        },
+        {
+         "coord": [
+          7,
+          5
+         ],
+         "symbolKeepAspect": true,
+         "itemStyle": {
+          "color": "#00ffff"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 1,
+     "box": [
+      "4060400000000000",
+      "4060d00000000000",
+      "4044000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "colour": "#00ffff",
+     "count": 1,
+     "box": [
+      "4070900000000000",
+      "4060d00000000000",
+      "4024000000000000",
+      "4030000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "datazoom-handle",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    },
+    "dataZoom": [
+     {
+      "type": "slider",
+      "handleIcon": "path://M0 0L40 0L40 10L0 10Z",
+      "handleSize": "100%",
+      "handleStyle": {
+       "color": "#ff00ff",
+       "borderWidth": 0
+      },
+      "showDataShadow": false,
+      "showDetail": false,
+      "brushSelect": false
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        9,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "icons": [
+    {
+     "colour": "#ff00ff",
+     "count": 2,
+     "box": [
+      "4047800000000000",
+      "4070a40000000000",
+      "4074800000000000",
+      "401e000000000000"
+     ]
+    }
+   ]
+  }
+ ]
+}

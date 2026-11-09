@@ -794,6 +794,13 @@ begin
   Result.AnimNow := 1000;
   { the tooltip's clock stands with the animation's: no real time }
   Result.TooltipNow := 1000;
+  { and so do the dataZoom's throttle, the brush's, the parallel axis'
+    expand and the timeline's: on the machine's clock a drag's throttle
+    window fell differently in the two passes under load }
+  Result.DataZoomNow := 1000;
+  Result.BrushNow := 1000;
+  Result.ParallelExpandNow := 1000;
+  Result.TimelineNow := 1000;
   Result.ProgressiveStepCostMs := 1;
   Result.SetBounds(0, 0, AW, AH);
   Result.Option := AOption;
@@ -933,6 +940,18 @@ var
   mode: TTyChartAnimationMode;
   acts: TStringArray;
 
+  { every clock the chart reads goes with the animation's, and what a
+    clock holds back (a throttled dataZoom call, a brush's) runs then }
+  procedure StepClocks(AChart: THlProbe);
+  begin
+    AChart.DataZoomNow := AChart.AnimNow;
+    AChart.BrushNow := AChart.AnimNow;
+    AChart.ParallelExpandNow := AChart.AnimNow;
+    AChart.TimelineNow := AChart.AnimNow;
+    AChart.DataZoomTick(AChart.AnimNow);
+    AChart.BrushTick(AChart.AnimNow);
+  end;
+
   procedure Snap(const AWhat: string);
   begin
     chart.Layered(bmp.Canvas, Rect(0, 0, cFreshW, cFreshH));
@@ -1000,6 +1019,7 @@ begin
                 chart.TooltipNow := chart.AnimNow;
                 chart.TooltipTick(chart.AnimNow);
                 chart.AnimTick(chart.AnimNow);
+                StepClocks(chart);
                 if chart.ProgressiveUnfinished then chart.ProgressTick;
                 Snap(Format('%s +%d', [acts[a], t]));
               end;
@@ -1007,6 +1027,7 @@ begin
               chart.TooltipNow := chart.AnimNow;
               chart.TooltipTick(chart.AnimNow);
               chart.AnimTick(chart.AnimNow);
+              StepClocks(chart);
               k := 0;
               while chart.ProgressiveUnfinished and (k < 100) do
               begin

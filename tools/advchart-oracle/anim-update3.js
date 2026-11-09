@@ -86,6 +86,25 @@ A sample's rec, by probe:
   state  per series s and data index i the item's path (a bar's rect):
          'st<s>/<i>' {fill (a colour string or a gradient object with hex
          numbers), n}.
+  gsym   [R7-O] per graph series s: 'g<s>/edge<i>/fm', '/tm' an end
+         symbol drawn (not ignored): {m (its whole global transform, six
+         hex numbers), type (shape.symbolType; null for a path:// icon),
+         box [x, y, w, h] (the shape's box, createSymbol's), rect [x, y, w,
+         h] (getBoundingRect: the path's own rect grown by its pen),
+         stroked, filled (hasStroke / hasFill), lw, sns (strokeNoScale),
+         cbox [minX, minY, maxX, maxY] a path:// icon's outline on the
+         canvas, sampled 256 steps a curve};
+         'g<s>/nsym<i>' the node's path: {m, type, rect, label: {x, y,
+         align, vAlign} (the text's transform, the alignment it is drawn
+         with) or null}.
+  ppen   [R7-P] per pictorial bar series s and data index i, each glyph k
+         of its bundle: 'pp<s>:<i>/<k>' {m, lw, stroked, sns, ls}.
+  gpen   [R7-P] per graph series s, the pens of its paths as the canvas
+         draws them: 'g<s>/edge<i>/pen' the line, '/fpen', '/tpen' its end
+         symbols, 'g<s>/npen<i>' the node's path -- each {m (the whole
+         global transform), lw (lineWidth, 1 where none), stroked
+         (hasStroke), sns (strokeNoScale), ls (getLineScale)}: the pen is
+         m's linear part times a round pen of lw (over ls where sns).
 
 Guards (any failure: nothing is written, exit 1): named discriminating facts
 and the whole fixture generated twice, byte-identical.
@@ -274,6 +293,55 @@ function paint(v) {
 // ---------------------------------------------------------------------------
 // the global transform's translation and scale (after the frame's update):
 // wx, wy, ws
+// [R7-O] a path's outline through the element's transform, sampled finely
+// (256 steps a curve or an arc): its box [minX, minY, maxX, maxY]
+function sampledBox(el) {
+  const pp = new PathProxy(false);
+  pp.beginPath();
+  el.buildPath(pp, el.shape, false);
+  const d = Array.from(pp.data.slice(0, pp.len()));
+  const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const put = (x, y) => {
+    const X = m[0] * x + m[2] * y + m[4];
+    const Y = m[1] * x + m[3] * y + m[5];
+    b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y);
+  };
+  const N = 256;
+  let i = 0, x0 = 0, y0 = 0;
+  while (i < d.length) {
+    const c = d[i++];
+    if (c === 1 || c === 2) { x0 = d[i]; y0 = d[i + 1]; put(x0, y0); i += 2; }
+    else if (c === 3) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * u * x0 + 3 * u * u * t * d[i] + 3 * u * t * t * d[i + 2] + t * t * t * d[i + 4],
+          u * u * u * y0 + 3 * u * u * t * d[i + 1] + 3 * u * t * t * d[i + 3] + t * t * t * d[i + 5]);
+      }
+      x0 = d[i + 4]; y0 = d[i + 5]; i += 6;
+    }
+    else if (c === 4) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * x0 + 2 * u * t * d[i] + t * t * d[i + 2], u * u * y0 + 2 * u * t * d[i + 1] + t * t * d[i + 3]);
+      }
+      x0 = d[i + 2]; y0 = d[i + 3]; i += 4;
+    }
+    else if (c === 5) {
+      const [cx, cy, rx, ry, th, dth, psi] = d.slice(i, i + 7);
+      for (let k = 0; k <= N; k++) {
+        const a = th + dth * k / N;
+        put(cx + rx * Math.cos(a) * Math.cos(psi) - ry * Math.sin(a) * Math.sin(psi),
+          cy + rx * Math.cos(a) * Math.sin(psi) + ry * Math.sin(a) * Math.cos(psi));
+      }
+      i += 8;
+    }
+    else if (c === 6) { /* close */ }
+    else if (c === 7) { put(d[i], d[i + 1]); put(d[i] + d[i + 2], d[i + 1] + d[i + 3]); i += 4; }
+    else must(false, 'a path command ' + c);
+  }
+  return b;
+}
 const glob = (o, el) => {
   const m = el.transform || [1, 0, 0, 1, el.x, el.y];
   o.wx = hx(m[4]);
@@ -333,6 +401,103 @@ const PROBES = {
           rec[key + '/edge' + i + '/label'] = glob({ x: hx(label.x), y: hx(label.y), rotation: hx(label.rotation),
             scale: hx(label.scaleX), op: hx(label.style.opacity) }, label);
         }
+      });
+    });
+  },
+  // [R7-N] an edge label's whole global transform (six numbers): under a
+  // view whose scaleY is not its scaleX, Line.beforeUpdate's 1 / scaleX
+  // leaves the words squashed by scaleY / scaleX before their turn
+  gl(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        const label = g.getTextContent();
+        if (!label || label.ignore) return;
+        const m = label.transform || [1, 0, 0, 1, label.x, label.y];
+        rec['g' + sm.seriesIndex + '/edge' + i + '/lm'] = { m: arr(m), op: hx(label.style.opacity) };
+      });
+    });
+  },
+  // [R7-O] the end symbols' and the nodes' whole global transforms: under a
+  // view whose scaleY is not its scaleX, Line.beforeUpdate's 1 / scaleX
+  // leaves an end symbol squashed by scaleY / scaleX after its turn, and a
+  // node's path turned in its Symbol group is scaled unequally after
+  gsym(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const key = 'g' + sm.seriesIndex;
+      const rectOf = el => {
+        const r = el.getBoundingRect();
+        return arr([r.x, r.y, r.width, r.height]);
+      };
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        for (const nm of ['fromSymbol', 'toSymbol']) {
+          const sym = g.childOfName(nm);
+          if (!sym || sym.ignore || sym.invisible) continue;
+          const m = sym.transform || [1, 0, 0, 1, sym.x, sym.y];
+          const sh = sym.shape || {};
+          rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fm' : 'tm')] = {
+            m: arr(m), type: sh.symbolType || null,
+            box: sh.symbolType ? arr([sh.x, sh.y, sh.width, sh.height]) : null,
+            rect: rectOf(sym), stroked: !!sym.hasStroke(), filled: !!sym.hasFill(),
+            lw: hx(sym.style.lineWidth), sns: !!sym.style.strokeNoScale };
+          // a path:// icon (no symbolType): its outline's box on the canvas, sampled
+          if (!sh.symbolType) rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fm' : 'tm')].cbox = arr(sampledBox(sym));
+        }
+      });
+      const data = sm.getData();
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        const p = el.childAt(0);
+        const m = p.transform || [1, 0, 0, 1, p.x, p.y];
+        const o = { m: arr(m), type: (p.shape && p.shape.symbolType) || null, rect: rectOf(p), label: null };
+        const t = p.getTextContent();
+        if (t && !t.ignore && t.transform) {
+          const ds = t._defaultStyle || {};
+          o.label = { x: hx(t.transform[4]), y: hx(t.transform[5]), align: t.style.align || ds.align || 'left',
+            vAlign: t.style.verticalAlign || ds.verticalAlign || 'top' };
+        }
+        rec[key + '/nsym' + i] = o;
+      });
+    });
+  },
+  // [R7-P] the pens of a graph's paths as the canvas draws them: each one's
+  // whole global transform, its lineWidth, strokeNoScale and line scale --
+  // the canvas' pen is m's linear part times a round pen of lineWidth (over
+  // the line scale where strokeNoScale)
+  gpen(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const key = 'g' + sm.seriesIndex;
+      const penOf = el => {
+        const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+        return { m: arr(m), lw: hx(el.style.lineWidth == null ? 1 : el.style.lineWidth), stroked: !!el.hasStroke(),
+          sns: !!el.style.strokeNoScale, ls: hx(el.getLineScale()) };
+      };
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        const line = g.childOfName('line');
+        if (line && !line.ignore && !line.invisible) rec[key + '/edge' + i + '/pen'] = penOf(line);
+        for (const nm of ['fromSymbol', 'toSymbol']) {
+          const sym = g.childOfName(nm);
+          if (!sym || sym.ignore || sym.invisible) continue;
+          rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fpen' : 'tpen')] = penOf(sym);
+        }
+      });
+      const data = sm.getData();
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        rec[key + '/npen' + i] = penOf(el.childAt(0));
       });
     });
   },
@@ -406,6 +571,25 @@ const PROBES = {
       });
     });
   },
+  // [R7-P] a pictorial glyph's pen as the canvas draws it (the glyph's own
+  // frame, no strokeNoScale): its whole global transform and lineWidth
+  ppen(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'pictorialBar') return;
+      const data = sm.getData();
+      data.each(i => {
+        const bar = data.getItemGraphicEl(i);
+        if (!bar || !bar.__pictorialBundle) return;
+        let k = 0;
+        bar.__pictorialBundle.eachChild(p => {
+          const m = p.transform || [1, 0, 0, 1, p.x, p.y];
+          rec['pp' + sm.seriesIndex + ':' + i + '/' + k] = { m: arr(m), lw: hx(p.style.lineWidth == null ? 1 : p.style.lineWidth),
+            stroked: !!p.hasStroke(), sns: !!p.style.strokeNoScale, ls: hx(p.getLineScale()) };
+          k++;
+        });
+      });
+    });
+  },
   // [R2-H] every data item's label that is shown: its opacity as drawn
   labels(chart, rec) {
     chart.getModel().eachSeries(sm => {
@@ -461,6 +645,104 @@ add('graph', 'graph-legend', "layout none on a view with two categories, arrows 
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1),
     { t: T1 + 2000, do: 'action', action: { type: 'legendToggleSelect', name: 'B' } }, ...after(S_LIN, T1 + 2000)]);
+
+add('graph', 'graph-squash', "[R7-N] layout none, 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): a merge moves two nodes (1000 ms linear) -- in every frame the edge labels stay squashed by scaleY / scaleX before their turn, at the place and the turn the line has then",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeLabel: { show: true, formatter: 'edge' },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }, { source: 'd', target: 'c', label: { position: 'insideEndTop' } }] }, LIN)] },
+  ['graph', 'gl'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 60 },
+      { name: 'd', x: 30, y: 100 }] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+
+// [R7-O] the end symbols and the turned nodes under a view scaled unequally
+const SQ_NODES = [{ name: 'a', x: 0, y: 0, symbol: 'rect', symbolRotate: 30, label: { show: true, position: 'right' } },
+  { name: 'b', x: 100, y: 100, symbol: 'diamond', symbolRotate: -45, symbolSize: [16, 10], label: { show: true, position: 'bottom' } },
+  { name: 'c', x: 100, y: 0, symbol: 'emptyCircle', symbolRotate: 20, symbolSize: [18, 10], label: { show: true, position: 'top' } },
+  { name: 'd', x: 0, y: 100, label: { show: true, position: 'left' } }];
+add('graphSquash', 'graph-squash-sym', "[R7-O] layout none, 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): emptyCircle / arrow end symbols on a level, an upright, a slanted and a curved edge, a link's own diamond / emptyTriangle and rect / triangle; turned nodes (a rect, an oblong diamond, an oblong emptyCircle) with labels; a merge moves two nodes (1000 ms linear) -- in every frame the end symbols are turned by the tangent in the group's units, scaled by 1 / scaleX, squashed by scaleY / scaleX after the turn",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14], itemStyle: { borderColor: '#333', borderWidth: 2 },
+      data: SQ_NODES,
+      links: [{ source: 'a', target: 'c' }, { source: 'c', target: 'b' }, { source: 'a', target: 'b' },
+        { source: 'd', target: 'c', lineStyle: { curveness: 0.3 }, symbol: ['diamond', 'emptyTriangle'], symbolSize: [10, 12] },
+        { source: 'd', target: 'a', symbol: ['rect', 'triangle'] }] }, LIN)] },
+  ['graph', 'gsym'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [SQ_NODES[0], SQ_NODES[1], Object.assign({}, SQ_NODES[2], { x: 80, y: 30 }),
+      Object.assign({}, SQ_NODES[3], { x: 20, y: 90 })] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('graphSquash', 'graph-squash-tall', "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon (a quadratic bulging past its ends) and an emptyRect at the ends of straight and curved edges",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 100, top: 0, width: 100, height: 300, symbolSize: 8,
+      edgeSymbol: ['pin', 'roundRect'], edgeSymbolSize: [12, 10],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'c', target: 'd', lineStyle: { curveness: 0.4 } },
+        { source: 'a', target: 'c', symbol: ['path://M0,10 Q5,-10 10,10 Z', 'emptyRect'], symbolSize: [12, 10] },
+        { source: 'd', target: 'b', lineStyle: { curveness: -0.3 }, symbol: ['emptyRoundRect', 'pin'] }] }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+add('graphSquash', 'graph-squash-enter', "[R7-O] scaleX 4, scaleY 2 entering (1000 ms linear): the lines draw out, their end symbols scaled by the percent and squashed in every frame",
+  { animation: true, animationDuration: 1000, animationEasing: 'linear',
+    series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] }] },
+  ['graph', 'gsym'],
+  [...[0, 1, 100, 500, 999, 1000, 1001].map(t => ({ t, do: 'sample' }))]);
+
+add('graphSquash', 'graph-squash-tween', "[R7-O] scaleX 4, scaleY 2; a merge narrows the extent's height (b to y 50), so the main group's scaleY tweens to 4 (1000 ms linear): the end symbols' squash follows the group's ratio in every frame",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] }, LIN)] },
+  ['graph', 'gsym'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 100, y: 0 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+
+// [R7-R] end symbols sized [w, h] per end: createSymbol's real box (a circle of min(w, h) / 2, a square of min(w, h)
+// from the corner, a roundRect's corners min(w, h) / 4, a pin's head of the width), on a view scaled alike and on one
+// whose scaleY is not its scaleX
+const OB_LINKS = [{ source: 'a', target: 'c' }, { source: 'c', target: 'b', symbol: ['square', 'pin'] },
+  { source: 'a', target: 'b', symbol: ['roundRect', 'path://M0 0L10 0L5 10Z'] },
+  { source: 'd', target: 'c', lineStyle: { curveness: 0.3 }, symbol: ['emptyCircle', 'emptyRect'], symbolSize: [[30, 8], [8, 26]] }];
+const OB_NODES = [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }];
+add('graphSquash', 'graph-oblong-ends', "[R7-R] layout none, 200 x 200 over a 100 x 100 extent (scaled alike): edgeSymbolSize [[24, 10], [10, 22]] circle / rect, square / pin, roundRect / path://, a curved link's own [[30, 8], [8, 26]] emptyCircle / emptyRect",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 100, top: 50, width: 200, height: 200, symbolSize: 8,
+      edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[24, 10], [10, 22]], data: OB_NODES, links: OB_LINKS }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+add('graphSquash', 'graph-oblong-squash', "[R7-R] the same ends on 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): turned in the group's units, scaled by 1 / scaleX, squashed after the turn",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 0, top: 50, width: 400, height: 200, symbolSize: 8,
+      edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[24, 10], [10, 22]], data: OB_NODES, links: OB_LINKS }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+
+// [R7-P] the pens under a view whose scaleY is not its scaleX, in motion
+const PEN_NODES = [{ name: 'a', x: 0, y: 0, symbol: 'rect', symbolSize: [10, 16], symbolRotate: 30 },
+  { name: 'b', x: 100, y: 100, symbolSize: 12 }, { name: 'c', x: 100, y: 0, symbol: 'emptyCircle', symbolSize: [14, 8] }];
+const PEN_GRAPH = more => Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200,
+  edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14], itemStyle: { borderColor: '#333', borderWidth: 2 },
+  lineStyle: { width: 2, type: 'dashed', opacity: 1 }, data: PEN_NODES,
+  links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', lineStyle: { curveness: 0.3 } }, { source: 'c', target: 'b' }] }, LIN, more || {});
+add('graphPen', 'graph-pen-tween', "[R7-P] scaleX 4, scaleY 2; a merge narrows the extent's height (b to y 50), so the main group's scaleY tweens to 4 (1000 ms linear): the edges' pen (strokeNoScale under the group), the nodes' (an oblong, a turned oblong) and the end symbols' (their own frame) in every frame",
+  { animation: true, series: [PEN_GRAPH()] },
+  ['gpen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [PEN_NODES[0], Object.assign({}, PEN_NODES[1], { y: 50 }), PEN_NODES[2]] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('graphPen', 'graph-pen-move', "[R7-P] scaleX 4, scaleY 2; a merge moves a node (c to 60, 40; 1000 ms linear): the edges turn, their end symbols' pens with them; the extent is kept (a and b stay its corners)",
+  { animation: true, series: [PEN_GRAPH()] },
+  ['gpen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [PEN_NODES[0], PEN_NODES[1], Object.assign({}, PEN_NODES[2], { x: 60, y: 40 })] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
   { animation: true,
@@ -623,6 +905,25 @@ add('radial', 'radial-delay', "a radial tree entering with animationDelay (idx) 
     animationDuration: 1000, animationEasing: 'linear', animationDelay: { $fn: 'idx*30' } }] },
   ['tree'],
   [...[0, 1, 16, 100, 200, 250, 500, 999, 1000, 1300].map(t => ({ t, do: 'sample' }))]);
+
+// [R7-P] a pictorial glyph's pen in motion: oblong glyphs popping in (scaled
+// from nothing, a repeated one turned from 0) and a merge that changes the
+// glyph's size unequally
+add('pictorialPen', 'pict-pen-enter', "[R7-P] oblong glyphs entering (1000 ms linear): repeated rects [30, 12] turned 30 degrees (each turns from 0 as it grows), a single triangle [20, 40] on a negative value (mirrored), both with a border -- the pen grows and turns with the glyph",
+  { animation: true, animationDuration: 1000, animationEasing: 'linear',
+    xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value', min: -10, max: 10 },
+    series: [{ type: 'pictorialBar', data: [
+      { value: 6, symbol: 'rect', symbolSize: [30, 12], symbolRepeat: true, symbolRotate: 30, itemStyle: { borderColor: '#000', borderWidth: 40 } },
+      { value: -5, symbol: 'triangle', symbolSize: [20, 40], itemStyle: { borderColor: '#000', borderWidth: 60 } }] }] },
+  ['ppen'],
+  [...[0, 1, 100, 500, 999, 1000, 1001].map(t => ({ t, do: 'sample' }))]);
+add('pictorialPen', 'pict-pen-update', "[R7-P] a merge reshapes a single glyph (symbolSize [40, 10] to [10, 40], 1000 ms linear): its scale tweens unequally, its pen with it",
+  { animation: true, xAxis: { type: 'category', data: ['a'] }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [Object.assign({ type: 'pictorialBar', symbol: 'rect', symbolSize: [40, 10], symbolPosition: 'center',
+      itemStyle: { borderColor: '#000', borderWidth: 60 }, data: [6] }, LIN)] },
+  ['ppen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ symbolSize: [10, 40] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 // ---- a data item's array symbolSize ----
 add('pictorial', 'pict-item-size', "a data item's array symbolSize -- [20, '100%'] (the percent of the bar's length, symbolRepeat off), ['50%', 12] repeated (the percent of the category's width), [16] (one number, the second NaN), and a row's array symbolOffset [5, '-50%'] -- read from the item's own visual (visual/symbol.ts getShallow), not the series'",
@@ -815,6 +1116,19 @@ function guards(out) {
   guard('graph-force: a toggle slides nothing', rec('graph-force', T1 + 100, 'g0/node0').n === 0);
   guard('graph-force-anim: no path pops in', n(rec('graph-force-anim', 0, 'g0/node0').sx) > 0
     && rec('graph-force-anim', 0, 'g0/node0').n === 0 && n(rec('graph-force-anim', 0, 'g0/edge0').percent) === 1);
+  // [R7-O] squashed end symbols and turned nodes
+  guard('graph-squash-sym: a level edge\'s arrow is squashed by scaleY / scaleX after its turn', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/edge0/tm');
+    return s && Math.abs(n(s.m[1]) / n(s.m[2]) + 0.5) < 1e-12 && Math.abs(n(s.m[0])) < 1e-12;
+  })());
+  guard('graph-squash-sym: a turned node is turned, then squashed', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/nsym0');
+    return s && Math.abs(n(s.m[0]) * n(s.m[2]) + n(s.m[1]) * n(s.m[3])) > 1e-3;
+  })());
+  guard('graph-squash-sym: an empty end symbol strokes at 2 in its own frame', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/edge0/fm');
+    return s && s.stroked && s.filled && n(s.lw) === 2 && !s.sns;
+  })());
   // tree
   guard('tree-collapse: a removed node goes to the source + 1', Math.abs(n(rec('tree-collapse', T1 + 999, 'tr0/ghost3').x)
     - (n(rec('tree-collapse', T1 + 1500, 'tr0/node2').x) + 1)) < 0.1);

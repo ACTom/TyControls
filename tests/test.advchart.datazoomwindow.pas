@@ -23,10 +23,14 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Series, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TDzwProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -39,6 +43,10 @@ type
     FRoot: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared: Integer;
+    { [R7-K] series whose plot is not upstream's: their layout is not
+      compared, so none may be left }
+    FMoved: Integer;
+    FMovedIds: string;
     FReport, FName: string;
     FOpt: TJSONObject;
     procedure Miss(const AWhat: string);
@@ -55,14 +63,25 @@ type
     procedure TestTargetsAndHostsAsUpstream;
     procedure TestAlignedAxesAsUpstream;
     procedure TestFilterModesAsUpstream;
+    { [spec 259] an encode key written as a list: every dimension it reaches
+      is on the axis }
+    procedure TestEncodeListsAsUpstream;
     procedure TestGalleryAsUpstream;
+    { [spec 264] a gallery file's function names are not fed }
+    procedure TestAGalleryFileIsReadWithoutItsFunctionNames;
     procedure TestSliderMoveShiftsKeepingTheSpan;
     procedure TestAnUntypedDataZoomIsASlider;
   end;
 
 implementation
 
-uses tyControls.AdvanceChart.Complete;
+uses tyControls.AdvanceChart.Complete, test.advchart.gallerytext;
+
+function TDzwProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TDzwProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -143,6 +162,10 @@ begin
   FChart := TDzwProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
@@ -155,6 +178,8 @@ begin
   FBad := 0;
   FCompared := 0;
   FReport := '';
+  FMoved := 0;
+  FMovedIds := '';
 end;
 
 procedure TAdvChartDataZoomWindowOracleTest.TearDown;
@@ -379,7 +404,8 @@ procedure TAdvChartDataZoomWindowOracleTest.CheckSeries(ACase: TJSONObject);
 var
   arr, ri, lay, em, vals: TJSONArray;
   s, it: TJSONObject;
-  i, k, j, si, col, n, found: Integer;
+  i, k, j, si, col, n, found, place, q: Integer;
+  cols: TTyIntegerArray;
   store: TTyDataStore;
   cnt: Integer;
   typ: string;
@@ -401,19 +427,6 @@ var
     AW := Abs(xa.PxStop - xa.PxStart);
     AY := Min(ya.PxStart, ya.PxStop);
     AH := Abs(ya.PxStop - ya.PxStart);
-  end;
-
-  function Smooth(ASi: Integer): Boolean;
-  var d: TJSONData;
-  begin
-    Result := False;
-    d := FOpt.Find('series');
-    if (d = nil) or (d.JSONType <> jtArray) or (ASi >= TJSONArray(d).Count) then Exit;
-    d := TJSONArray(d).Items[ASi];
-    if d.JSONType <> jtObject then Exit;
-    d := TJSONObject(d).Find('smooth');
-    Result := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
-      or ((d.JSONType = jtNumber) and (d.AsFloat <> 0)));
   end;
 
   function SamePlot(ACs, ASer: TJSONObject): Boolean;
@@ -483,6 +496,14 @@ begin
       for j := 0 to em.Count - 1 do
       begin
         col := store.DimIndexOf(em.Objects[j].Strings['coordDim']);
+        { [spec 259] a coordinate written as a list has a dimension per
+          entry, mapDimensionsAll's order: the n-th of them is the n-th
+          column of the coordinate here }
+        place := 0;
+        for q := 0 to j - 1 do
+          if em.Objects[q].Strings['coordDim'] = em.Objects[j].Strings['coordDim'] then Inc(place);
+        cols := store.DimsOfCoord(em.Objects[j].Strings['coordDim']);
+        if place <= High(cols) then col := cols[place];
         vals := em.Objects[j].Arrays['values'];
         Inc(FCompared);
         if col < 0 then
@@ -500,16 +521,19 @@ begin
       end;
     end;
 
-    { AND DRAWN THERE -- where the plot is where upstream's is. The final
-      grid rect follows the axis labels' measured widths, and this test
-      measures with the skin's font, not zrender's; a case whose plot moved
-      for that reason is not a dataZoom question. }
+    { AND DRAWN THERE. [R7-K] The plot is upstream's: the labels are
+      measured with zrender's table (SetUp). A series whose plot still
+      differs is counted -- RunCases holds the count at none -- and its
+      layout is not compared. A smooth line's vertices are its points as
+      any line's (the curve goes through them). }
     if IsNull(s.Find('layout')) or (lst = nil) then Continue;
-    if not SamePlot(ACase, s) then Continue;
+    if not SamePlot(ACase, s) then
+    begin
+      Inc(FMoved);
+      FMovedIds := FMovedIds + Format(' %s/s%d', [FName, si]);
+      Continue;
+    end;
     lay := s.Arrays['layout'];
-    { KNOWN: a smooth line is drawn as a polyline here -- the port has no
-      smooth yet, which is not a dataZoom question }
-    if (typ = 'line') and Smooth(si) then Continue;
     if typ = 'line' then
     begin
       ring := nil;
@@ -566,6 +590,21 @@ begin
         mark := e;
       end;
       Inc(FCompared);
+      { [spec 259] A KEPT ROW WHOSE POINT IS OFF THE PLOT draws no symbol: a
+        scatter clips (SymbolDraw's symbolNeedsDraw against the grid's
+        area) -- 'weakFilter' keeps a row straddling the window }
+      if typ = 'scatter' then
+      begin
+        PlotOf(ACase, s, px, py, pw, ph);
+        x := HexOf(TJSONArray(lay.Items[k]).Items[0]);
+        y := HexOf(TJSONArray(lay.Items[k]).Items[1]);
+        if not ((x >= px) and (x <= px + pw) and (y >= py) and (y <= py + ph)) then
+        begin
+          if found <> 0 then
+            Miss(Format('s%d raw %d: off the plot upstream, %d marks here', [si, ri.Integers[k], found]));
+          Continue;
+        end;
+      end;
       if found <> 1 then
       begin
         Miss(Format('s%d raw %d: %d marks here', [si, ri.Integers[k], found]));
@@ -637,7 +676,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [spec 264] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
@@ -667,6 +708,7 @@ begin
   end;
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);
+  AssertEquals('series whose plot is not upstream''s:' + FMovedIds, 0, FMoved);
   AssertTrue('the named cases ran', ran > 0);
 end;
 
@@ -690,10 +732,64 @@ begin
   RunCases(['F']);
 end;
 
+procedure TAdvChartDataZoomWindowOracleTest.TestEncodeListsAsUpstream;
+begin
+  RunCases(['L']);
+end;
+
 procedure TAdvChartDataZoomWindowOracleTest.TestGalleryAsUpstream;
 begin
   RunCases(['G']);
   AssertTrue(Format('enough was compared (%d)', [FCompared]), FCompared > 2000);
+end;
+
+procedure TAdvChartDataZoomWindowOracleTest.TestAGalleryFileIsReadWithoutItsFunctionNames;
+var
+  cases, axes: TJSONArray;
+  cs, opt: TJSONObject;
+  sl: TStringList;
+  c, k: Integer;
+  up: Double;
+  xa: TTyAxis;
+begin
+  { [spec 264] mix-zoom-on-value names its y labels' formatter
+    ('@mix-zoom-on-value.formatter', since the harvest names a page's
+    functions). Its record was made from the file without the name -- the
+    axis' own numbers, the widest '1,400,000,000' -- so the port reads the
+    file the same way: the plot is upstream's but for the measurer's width
+    of that label (under a pixel). Read verbatim the name is a handler
+    nobody registered, its message widens the labels and the plot shrinks
+    to 326 px of upstream's 626.72. }
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  cs := nil;
+  for c := 0 to cases.Count - 1 do
+    if cases.Objects[c].Strings['id'] = 'G-mix-zoom-on-value' then cs := cases.Objects[c];
+  AssertNotNull('the case', cs);
+  up := NaN;
+  axes := cs.Arrays['axes'];
+  for k := 0 to axes.Count - 1 do
+    if (axes.Objects[k].Strings['dim'] = 'x') and (axes.Objects[k].Integers['index'] = 0) then
+      up := HexOf(axes.Objects[k].Find('pxSpanFinal'));
+  AssertFalse('upstream''s x span', IsNan(up));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
+    opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
+  finally
+    sl.Free;
+  end;
+  try
+    FChart.Option := opt.AsJSON;
+  finally
+    opt.Free;
+  end;
+  AssertEquals('parses', '', FChart.OptionError);
+  FChart.SetBounds(0, 0, cs.Integers['width'], cs.Integers['height']);
+  FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cs.Integers['width'], cs.Integers['height']), 96);
+  xa := FChart.Build.Axis('xAxis', 0);
+  AssertNotNull('the x axis', xa);
+  AssertTrue(Format('the plot %s px, upstream''s %s', [FloatToStr(xa.PxLength), FloatToStr(up)]),
+    Abs(xa.PxLength - up) < 1);
 end;
 
 procedure TAdvChartDataZoomWindowOracleTest.TestSliderMoveShiftsKeepingTheSpan;

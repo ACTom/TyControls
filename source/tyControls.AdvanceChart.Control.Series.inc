@@ -20,6 +20,23 @@ begin
     if not FBindings[i].Resolved then Continue;
     if FBindings[i].SeriesType <> TyPieSeriesTypeName then Continue;
     FPieSpecs[i] := TyPieSpecOf(FOption, FBindings[i].SeriesIndex);
+    { [R7-AD] its centre's, radius' and box's pixel counts are css px:
+      PPI / 96 device px each [was: device px] }
+    if FLastPPI > 0 then
+    begin
+      FPieSpecs[i].CentreX := TyBoxValueScaled(FPieSpecs[i].CentreX, FLastPPI / 96);
+      FPieSpecs[i].CentreY := TyBoxValueScaled(FPieSpecs[i].CentreY, FLastPPI / 96);
+      FPieSpecs[i].Radius0 := TyBoxValueScaled(FPieSpecs[i].Radius0, FLastPPI / 96);
+      FPieSpecs[i].Radius1 := TyBoxValueScaled(FPieSpecs[i].Radius1, FLastPPI / 96);
+      if FPieSpecs[i].HasBoxRaw then
+        FPieSpecs[i].BoxRaw := TyBoxRawScaled(FPieSpecs[i].BoxRaw, FLastPPI / 96);
+      FPieSpecs[i].Box.Left := TyBoxValueScaled(FPieSpecs[i].Box.Left, FLastPPI / 96);
+      FPieSpecs[i].Box.Top := TyBoxValueScaled(FPieSpecs[i].Box.Top, FLastPPI / 96);
+      FPieSpecs[i].Box.Right := TyBoxValueScaled(FPieSpecs[i].Box.Right, FLastPPI / 96);
+      FPieSpecs[i].Box.Bottom := TyBoxValueScaled(FPieSpecs[i].Box.Bottom, FLastPPI / 96);
+      FPieSpecs[i].Box.Width := TyBoxValueScaled(FPieSpecs[i].Box.Width, FLastPPI / 96);
+      FPieSpecs[i].Box.Height := TyBoxValueScaled(FPieSpecs[i].Box.Height, FLastPPI / 96);
+    end;
     dim := FStores[i].DimIndexOf(TyPieValueDim);
     { FLastRect, not a grid: a pie is laid out against the CONTROL, and its
       own left/top/right/bottom shrink that. Handing it a grid rect would
@@ -80,6 +97,22 @@ begin
     if not FBindings[i].Resolved then Continue;
     if FBindings[i].SeriesType <> TyFunnelSeriesTypeName then Continue;
     FFunnelSpecs[i] := TyFunnelSpecOf(FOption, FBindings[i].SeriesIndex);
+    { [R7-AD] its box's, sizes' and gap's pixel counts are css px: PPI / 96
+      device px each [was: device px] }
+    if FLastPPI > 0 then
+    begin
+      if FFunnelSpecs[i].HasBoxRaw then
+        FFunnelSpecs[i].BoxRaw := TyBoxRawScaled(FFunnelSpecs[i].BoxRaw, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Left := TyBoxValueScaled(FFunnelSpecs[i].Box.Left, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Top := TyBoxValueScaled(FFunnelSpecs[i].Box.Top, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Right := TyBoxValueScaled(FFunnelSpecs[i].Box.Right, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Bottom := TyBoxValueScaled(FFunnelSpecs[i].Box.Bottom, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Width := TyBoxValueScaled(FFunnelSpecs[i].Box.Width, FLastPPI / 96);
+      FFunnelSpecs[i].Box.Height := TyBoxValueScaled(FFunnelSpecs[i].Box.Height, FLastPPI / 96);
+      FFunnelSpecs[i].MinSize := TyBoxValueScaled(FFunnelSpecs[i].MinSize, FLastPPI / 96);
+      FFunnelSpecs[i].MaxSize := TyBoxValueScaled(FFunnelSpecs[i].MaxSize, FLastPPI / 96);
+      FFunnelSpecs[i].GapPx := FFunnelSpecs[i].GapPx * FLastPPI / 96;
+    end;
     dim := FStores[i].DimIndexOf(TyPieValueDim);
     { FLastRect, not a grid -- a funnel is laid out against the CONTROL and
       its own left/top/right/bottom shrink that, the same rule a pie follows
@@ -160,8 +193,86 @@ end;
 { WHAT A SINGLE AXIS VIEW DRAWS, in the skin's axis styles -- the same keys
   the grid's and the polar's axes are drawn in: upstream's single axis takes
   axisDefault like every other }
+{ [R7-AD] the bounding rect of a polar arc's path (ArcPath's commands):
+  PathProxy.getBoundingRect }
+function PolarArcBox(const A: TTyPolarArc): TTyXYWH;
+var p: TTyZrPath; r, r0, t, arcLen: Double;
+begin
+  p := nil;
+  case A.Kind of
+    pakCircle:
+      begin
+        TyZrMoveTo(p, A.CX + A.R, A.CY);
+        TyZrArc(p, A.CX, A.CY, A.R, 0, 2 * Pi, False);
+      end;
+    pakArc:
+      begin
+        r := Math.Max(A.R, 0);
+        TyZrMoveTo(p, TyJsCos(A.StartAngle) * r + A.CX, TyJsSin(A.StartAngle) * r + A.CY);
+        TyZrArc(p, A.CX, A.CY, r, A.StartAngle, A.EndAngle, not A.Clockwise);
+      end;
+    pakRing:
+      begin
+        TyZrMoveTo(p, A.CX + A.R, A.CY);
+        TyZrArc(p, A.CX, A.CY, A.R, 0, 2 * Pi, False);
+        TyZrMoveTo(p, A.CX + A.R0, A.CY);
+        TyZrArc(p, A.CX, A.CY, A.R0, 2 * Pi, 0, True);
+      end;
+    pakSector:
+      begin
+        r := Math.Max(A.R, 0);
+        r0 := Math.Max(A.R0, 0);
+        if (r > 0) or (r0 > 0) then
+        begin
+          if r <= 0 then
+          begin
+            r := r0;
+            r0 := 0;
+          end;
+          if r0 > r then
+          begin
+            t := r0;
+            r0 := r;
+            r := t;
+          end;
+          if not (IsNan(A.StartAngle) or IsNan(A.EndAngle)) then
+          begin
+            arcLen := Abs(A.EndAngle - A.StartAngle);
+            TyZrMoveTo(p, A.CX + r * TyJsCos(A.StartAngle), A.CY + r * TyJsSin(A.StartAngle));
+            TyZrArc(p, A.CX, A.CY, r, A.StartAngle, A.EndAngle, not A.Clockwise);
+            if arcLen > 2 * Pi - 1e-4 then
+            begin
+              if r0 > 1e-4 then
+              begin
+                TyZrMoveTo(p, A.CX + r0 * TyJsCos(A.EndAngle), A.CY + r0 * TyJsSin(A.EndAngle));
+                TyZrArc(p, A.CX, A.CY, r0, A.EndAngle, A.StartAngle, A.Clockwise);
+              end;
+            end
+            else if r0 > 1e-4 then
+            begin
+              TyZrLineTo(p, A.CX + r0 * TyJsCos(A.EndAngle), A.CY + r0 * TyJsSin(A.EndAngle));
+              TyZrArc(p, A.CX, A.CY, r0, A.EndAngle, A.StartAngle, A.Clockwise);
+            end
+            else
+              TyZrLineTo(p, A.CX, A.CY);
+            TyZrClose(p);
+          end;
+        end;
+      end;
+  end;
+  if Length(p) = 0 then Exit(TyRectToXYWH(TyRectF(A.CX, A.CY, A.CX, A.CY)));
+  Result := TyZrBBox(p);
+end;
+
+{ [R7-AD] a line's box }
+function LineBox(AX1, AY1, AX2, AY2: Double): TTyXYWH;
+begin
+  Result := TyRectToXYWH(TyRectF(Math.Min(AX1, AX2), Math.Min(AY1, AY2),
+    Math.Max(AX1, AX2), Math.Max(AY1, AY2)));
+end;
+
 procedure TTyCustomAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer; AZ2: Integer);
 var
   i, q, ink: Integer;
   s: TTySingle;
@@ -176,6 +287,10 @@ var
   pl: TTyAxisNamePlacement;
   { the author's pens over the skin [R5-B] }
   lineK, inkK: TTyAxisStroke;
+  { [R7-AD] }
+  rk: TTyAxisStroke;
+  bandAt: Integer;
+  pcs: TTyRtPieceArray;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -245,8 +360,9 @@ var
   var k, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
-    { [R5-G] a gradient over each tick's own box (a Line per tick) }
-    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
+    { [R5-G] a gradient over each tick's own box (a Line per tick);
+      [R7-AA] a shadow under each one }
+    AEach := AEach and ((AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow);
     n := 0;
     APainter.BeginPath;
     for k := 0 to High(ALines) do
@@ -268,6 +384,35 @@ var
     if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
+  { [R7-AD] WHERE A PART LIES (CompRect): the lines of AInk (every one
+    when AInk < 0) -- a Line each (AEach), else one merged path filled '#000'
+    (their union) }
+  procedure LinesRect(const ALines: TTySingleLineArray; AKind: Byte; const AStroke: TTyAxisStroke;
+    AInk, AIndex: Integer; AEach: Boolean);
+  var k: Integer; u: TTyXYWH; has: Boolean;
+  begin
+    if not (AStroke.Drawn or AStroke.Inked) then Exit;
+    has := False;
+    u := Default(TTyXYWH);
+    for k := 0 to High(ALines) do
+    begin
+      if not ALines[k].Drawn then Continue;
+      if not (Finite(ALines[k].X1, ALines[k].Y1) and Finite(ALines[k].X2, ALines[k].Y2)) then Continue;
+      if (AInk >= 0) and (ALines[k].ColourIndex <> AInk) then Continue;
+      if AEach then
+        CompPenRect(APainter, s.Axis, AKind, AStroke, LineBox(ALines[k].X1, ALines[k].Y1,
+          ALines[k].X2, ALines[k].Y2), False, AIndex)
+      else if not has then
+      begin
+        u := LineBox(ALines[k].X1, ALines[k].Y1, ALines[k].X2, ALines[k].Y2);
+        has := True;
+      end
+      else
+        TyZrRectUnion(u, LineBox(ALines[k].X1, ALines[k].Y1, ALines[k].X2, ALines[k].Y2));
+    end;
+    if has then CompPenRect(APainter, s.Axis, AKind, AStroke, u, True, AIndex);
+  end;
+
   { an arrow in the line's colour, the author's where written [R5-B] }
   procedure PaintArrow(const AArrow: TTyAxisArrow);
   var
@@ -275,6 +420,10 @@ var
     path: TTyZrPath;
     t: string;
   begin
+    { [R7-AD] (where it lies) }
+    CompRect(s.Axis, cpkArrow, TyRectToXYWH(TyRectF(
+      AArrow.X - Math.Max(AArrow.W, AArrow.H) * 0.75, AArrow.Y - Math.Max(AArrow.W, AArrow.H) * 0.75,
+      AArrow.X + Math.Max(AArrow.W, AArrow.H) * 0.75, AArrow.Y + Math.Max(AArrow.W, AArrow.H) * 0.75)), 0, False);
     { [F6a] a picture }
     if TyAxisArrowImage(AArrow, el) then
     begin
@@ -323,13 +472,31 @@ begin
   begin
     s := FSingles[i];
     if s = nil then Continue;
+    { [R7-AG] (one axis' view alone) }
+    if (AOnly >= 0) and (i <> AOnly) then Continue;
     v := s.View;
     if not v.Shown then Continue;
     { [R5-J] on the zlevel PaintZLevels draws now }
     if not ApartIn(AxisModelZLevel(s.Axis)) then Continue;
     ViewDrew(cvSingleAxis);
-    if ABelow then
+    if (AZ2 = 0) or ((AZ2 < 0) and ABelow) then
     begin
+      { [R7-AD] each band where it lies, by its count among the bands the
+        run took (CompPolarSingleParts) }
+      if v.Furn.ShowSplitArea then
+      begin
+        bandAt := 0;
+        for q := 0 to High(v.SplitAreas) do
+        begin
+          if (Length(v.Furn.SplitAreaInks) = 0) and (v.SplitAreas[q].ColourIndex <> 0) then Continue;
+          CompRect(s.Axis, cpkSplitArea, TyRectToXYWH(TyRectF(
+            Math.Min(v.SplitAreas[q].X, v.SplitAreas[q].X + v.SplitAreas[q].W),
+            Math.Min(v.SplitAreas[q].Y, v.SplitAreas[q].Y + v.SplitAreas[q].H),
+            Math.Max(v.SplitAreas[q].X, v.SplitAreas[q].X + v.SplitAreas[q].W),
+            Math.Max(v.SplitAreas[q].Y, v.SplitAreas[q].Y + v.SplitAreas[q].H))), 0, False, bandAt);
+          Inc(bandAt);
+        end;
+      end;
       { the split areas in their colours: the author's list, or the skin's
         colour and none in turn }
       for q := 0 to High(v.SplitAreas) do
@@ -340,6 +507,10 @@ begin
           if ink > High(v.Furn.SplitAreaInks) then ink := 0;
           if not v.Furn.SplitAreaInks[ink].Ok then Continue;
           areaColour := TTyColor(v.Furn.SplitAreaInks[ink].Colour);
+          { [R7-AA] a colour the canvas refuses: what it had at the band
+            (CompRun) [was: none filled] }
+          if v.Furn.SplitAreaInks[ink].Colour = cTyCanvasColourLeft then
+            areaColour := TTyColor(CompBandInk(s.Axis, cpkSplitArea, q));
           { [R5-J] a gradient: the band's own Rect's ramp, as the
             cartesian axis' [was: the first stop] }
           if v.Furn.SplitAreaInks[ink].Grad.Kind <> cgkNone then
@@ -364,6 +535,7 @@ begin
           Continue
         else
           areaColour := areaS.Background.Color;
+        CompDrewArea(s.Axis, TTyChartColor(areaColour));
         { areaStyle.opacity [R5-B] }
         areaColour := TyAxisAreaAlpha(areaColour, v.Furn.AreaOpacity);
         APainter.BeginPath;
@@ -377,6 +549,21 @@ begin
       end;
       { the split lines in their colours, in the split line's pen [R5-B] }
       inkK := TyAxisSkinStroke(v.Furn.SplitPen, splitS, acButt);
+      { [R7-Z] what the canvas refuses: what it had at the part (CompRun) }
+      inkK := CompPen(s.Axis, cpkSplit, inkK);
+      { [R7-AD] each colour's merged path where it lies }
+      if Length(v.Furn.SplitLineInks) > 0 then
+      begin
+        for q := 0 to High(v.Furn.SplitLineInks) do
+        begin
+          rk := inkK;
+          rk.Inked := True;
+          if not (inkK.WidthLogical > 0) then rk.Drawn := False else rk.Drawn := True;
+          LinesRect(v.SplitLines, cpkSplit, rk, q, q, False);
+        end;
+      end
+      else
+        LinesRect(v.SplitLines, cpkSplit, inkK, -1, -1, False);
       if inkK.Drawn or ((Length(v.Furn.SplitLineInks) > 0) and (inkK.WidthLogical > 0)) then
         for q := 0 to Math.Max(0, High(v.Furn.SplitLineInks)) do
         begin
@@ -384,6 +571,7 @@ begin
           begin
             if not v.Furn.SplitLineInks[q].Ok then Continue;
             inkK.Colour := v.Furn.SplitLineInks[q].Colour;
+            if inkK.Colour = cTyCanvasColourLeft then inkK.Colour := CompInkOf(s.Axis, cpkSplit, q);
             inkK.Gradient := v.Furn.SplitLineInks[q].Grad;
             inkK.Drawn := True;
             StrokeLines(v.SplitLines, inkK, q);
@@ -394,8 +582,52 @@ begin
       Continue;
     end;
     sp := v.Spec;
+    { [R7-AG] AxisBuilder's parts z2 by z2, each where CompRun's order puts
+      it (PaintAxes): the name and the line (1, the name first), the ticks
+      (2), the labels (10), the arrows (11) [was: the line and its arrows,
+      the ticks, the name, the labels -- all at the first part above 0] }
+    AxisTextStyles(@sp, labelS, nameS);
+    if (AZ2 < 0) or (AZ2 = 1) then
+    begin
+      CompTextDrawn(s.Axis, cpkName, nameS);
+      pl := sp.NamePlacement;
+      if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
+      begin
+        { [R7-AD] where it lies }
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        CompTextRect(s.Axis, cpkName, pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV, pl.RotationRad);
+        if Length(pl.Rt) > 0 then
+          TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+            1, True, nameS.TextColor)
+        else if Abs(pl.RotationRad) < 1e-9 then
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+            pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+            nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+        end
+        else
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
+            nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
+        end;
+      end;
+    end;
     lineK := TyAxisSkinStroke(v.Furn.LinePen, lineS, acRound);
-    if v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
+    if v.HasLine then
+    begin
+      if (AZ2 < 0) or (AZ2 = 1) then lineK := CompPen(s.Axis, cpkLine, lineK)
+      { ((the arrows' colour) as settled, recorded once) }
+      else CompSettlePen(s.Axis, cpkLine, lineK);
+    end;
+    { [R7-AD] where its line lies }
+    if ((AZ2 < 0) or (AZ2 = 1)) and v.HasLine and Finite(v.Line.X1, v.Line.Y1)
+      and Finite(v.Line.X2, v.Line.Y2) then
+      CompPenRect(APainter, s.Axis, cpkLine, lineK, LineBox(v.Line.X1, v.Line.Y1, v.Line.X2,
+        v.Line.Y2), False);
+    if ((AZ2 < 0) or (AZ2 = 1)) and v.HasLine and lineK.Drawn
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
       APainter.BeginPath;
@@ -416,43 +648,44 @@ begin
         APainter.LineTo(v.Line.X2, v.Line.Y2);
       end;
       TyStrokeAxisPath(APainter, lineK);
-      if not v.Furn.LinePen.ColourNone
-        and (v.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
-        for q := 0 to High(sp.Arrows) do
-          if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(v.Ticks, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt), -1, True);
-    StrokeLines(v.MinorTicks, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt), -1, True);
-    AxisTextStyles(@sp, labelS, nameS);
-    pl := sp.NamePlacement;
-    if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
+    if (AZ2 < 0) or (AZ2 = 2) then
     begin
-      if Length(pl.Rt) > 0 then
-        TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
-          1, True, nameS.TextColor)
-      else if Abs(pl.RotationRad) < 1e-9 then
-      begin
-        TextSizeOf(pl.Text, nameS, lblW, lblH);
-        APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
-          pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
-          nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
-      end
-      else
-      begin
-        TextSizeOf(pl.Text, nameS, lblW, lblH);
-        DrawRotatedNameLines(APainter, pl.Text, nameS.FontName, ResolveFontSize(nameS),
-          nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
-          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
-      end;
+      rk := CompPen(s.Axis, cpkTick, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt));
+      { [R7-AD] (a Line a tick, a minor tick: each where it lies) }
+      LinesRect(v.Ticks, cpkTick, rk, -1, -1, True);
+      StrokeLines(v.Ticks, rk, -1, True);
+      rk := CompPen(s.Axis, cpkMinorTick, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt));
+      LinesRect(v.MinorTicks, cpkMinorTick, rk, -1, -1, True);
+      StrokeLines(v.MinorTicks, rk, -1, True);
     end;
+    { the arrows (z2 11), in the line's colour }
+    if ((AZ2 < 0) or (AZ2 = 11)) and v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
+      and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2)
+      and not v.Furn.LinePen.ColourNone
+      and (v.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+      for q := 0 to High(sp.Arrows) do
+        if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
+    if (AZ2 >= 0) and (AZ2 <> 10) then Continue;
+    { [R7-AD] the colours and the fonts the paint order settled (a font the
+      canvas refused: the one the text before left) [was: the font its own
+      readable parts] }
+    CompTextDrawn(s.Axis, cpkLabel, labelS);
     if not (tpTextColor in labelS.Present) then Continue;
     for q := 0 to High(sp.Placements) do
     begin
       if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
       if not Finite(sp.Placements[q].X, sp.Placements[q].Y) then Continue;
+      { [R7-AD] where it lies }
+      TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+      CompTextRect(s.Axis, cpkLabel, sp.Placements[q].X, sp.Placements[q].Y, lblW, lblH,
+        sp.Placements[q].AnchorH, sp.Placements[q].AnchorV, sp.RotationRad);
       if Length(sp.Placements[q].Rt) > 0 then
       begin
-        TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+        { [R7-AD] its spans as the paint order settled them }
+        pcs := CompPieces(s.Axis, cpkLabel, q);
+        if Length(pcs) <> Length(sp.Placements[q].Rt) then pcs := sp.Placements[q].Rt;
+        TyRenderRtPieces(APainter, pcs, sp.Placements[q].X,
           sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
         Continue;
       end;
@@ -482,11 +715,11 @@ function TTyCustomAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTySinglePointerDraw): Boolean;
 var
-  pv, px, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  pv, px, margin, x, y, vw, vh: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  labelS: TTyStyleSet;
   scale: Double;
+  lbl: TTyPtrLabel;
 begin
   ADraw := Default(TTySinglePointerDraw);
   ADraw.Shape.Kind := spkNone;
@@ -505,24 +738,11 @@ begin
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
   ADraw.Text := PointerDrawLabelText(AHit, pv);
-  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
-  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-  if APPI > 0 then scale := APPI / 96 else scale := 1;
-  if AHit.Spec.LabelSpec.HasPadding then
-  begin
-    padL := AHit.Spec.LabelSpec.PadLeft * scale;
-    padT := AHit.Spec.LabelSpec.PadTop * scale;
-    padR := AHit.Spec.LabelSpec.PadRight * scale;
-    padB := AHit.Spec.LabelSpec.PadBottom * scale;
-  end
-  else
-  begin
-    padL := labelS.Padding.Left * scale;
-    padT := labelS.Padding.Top * scale;
-    padR := labelS.Padding.Right * scale;
-    padB := labelS.Padding.Bottom * scale;
-  end;
+  { [R7-N] buildLabelElOption's box: the plain text's bounding rect in the
+    label's font, grown by its padding [was: the skin's font, one line] }
+  lbl := PtrLabelStyle(AHit, APPI);
+  scale := lbl.Scale;
+  if not PtrLabelBoxSize(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H) then Exit;
   margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
     TyAdvChartAxisPointerMargin);
   if AHit.Spec.LabelSpec.MarginLogical <> 3 then
@@ -531,18 +751,15 @@ begin
   { buildCartesianSingleLabelElOption: getTransformedPosition, then
     buildLabelElOption's align and confineInContainer }
   TySinglePointerLabelAnchor(AHit.Single, FOption, pv, margin, x, y, ah, av);
-  ADraw.W := tw + padR + padL;
-  ADraw.H := th + padT + padB;
   if ah = tahRight then x := x - ADraw.W;
   if ah = tahCentre then x := x - ADraw.W / 2;
   if av = tavBottom then y := y - ADraw.H;
   if av = tavMiddle then y := y - ADraw.H / 2;
   vw := ARect.Right - ARect.Left;
   vh := ARect.Bottom - ARect.Top;
-  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
-  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
-  x := Math.Max(x, Double(0));
-  y := Math.Max(y, Double(0));
+  { ([R7-AK] confineInContainer: the size joined where the padding is a
+    string) }
+  PtrLabelConfine(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H, vw, vh, x, y);
   ADraw.X := x;
   ADraw.Y := y;
   ADraw.HasLabel := True;
@@ -557,9 +774,6 @@ var
   colour: TTyColor;
   w: Double;
   dash: TTyDoubleArray;
-  box: TRect;
-  corners: TTyCorners;
-  surface: TTyFill;
   ln: TTySingleLine;
 begin
   if not SinglePointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
@@ -570,6 +784,8 @@ begin
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  { [R7-AC] the shapes in one pass, the label in another (FPtrPass) }
+  if FPtrPass <> 2 then
   case d.Shape.Kind of
     spkLine:
       if tpBorderColor in lineS.Present then
@@ -587,14 +803,11 @@ begin
           ln.Y1 := d.Shape.Y1;
           ln.X2 := d.Shape.X2;
           ln.Y2 := d.Shape.Y2;
-          TySingleSubPixelLine(ln, APainter.ScaleF(w));
+          TySingleSubPixelLine(ln, APainter.ScaleF(w), APainter.ScaleF(1));
           dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
-          APainter.SetLineDash(dash);
-          APainter.BeginPath;
-          APainter.MoveTo(ln.X1, ln.Y1);
-          APainter.LineTo(ln.X2, ln.Y2);
-          APainter.StrokePath(colour, w);
-          APainter.SetLineDash([]);
+          { [R7-X] the full getLineStyle }
+          PtrShapePaint(APainter, AHit, TyShapePolyline([TyPointF(ln.X1, ln.Y1),
+            TyPointF(ln.X2, ln.Y2)]), True, colour, w, dash);
         end;
       end;
     spkRect:
@@ -602,43 +815,19 @@ begin
       begin
         colour := shadowS.Background.Color;
         if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
-        APainter.BeginPath;
-        APainter.MoveTo(d.Shape.X1, d.Shape.Y1);
-        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1);
-        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2);
-        APainter.LineTo(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2);
-        APainter.ClosePath;
-        APainter.FillPath(colour);
+        { [R7-X] the full getAreaStyle }
+        PtrShapePaint(APainter, AHit, TyShapePolygon([TyPointF(d.Shape.X1, d.Shape.Y1),
+          TyPointF(d.Shape.X1 + d.Shape.X2, d.Shape.Y1),
+          TyPointF(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2),
+          TyPointF(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2)]), False, colour, 0, nil);
       end;
   end;
+  if FPtrPass = 1 then Exit;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
-  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
-  corners := TyEffectiveCorners(labelS);
-  if AHit.Spec.LabelSpec.HasBorderRadius then
-    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
-  surface := labelS.Background;
-  if AHit.Spec.LabelSpec.HasBackground then
-  begin
-    surface.Kind := tfkSolid;
-    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
-  end;
-  APainter.FillBackground(box, surface, corners);
-  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
-    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
-    APainter.StrokeBorder(box, corners,
-      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
-      TTyColor(AHit.Spec.LabelSpec.BorderColour))
-  else if TyBorderVisible(labelS) then
-    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
-  colour := labelS.TextColor;
-  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
-  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
-    taCenter, tlCenter, False);
+  { [R7-N] the text in its block (createTextStyle), hung at the box's place }
+  PtrLabelPaint(APainter, AHit, d.Text, d.X, d.Y, PtrLabelStyle(AHit, APPI),
+    AMeasurer);
 end;
 
 { ==================== the themeRivers [Batch 118] ==================== }
@@ -749,7 +938,8 @@ begin
     name -- and shown under emphasis, unless that says otherwise }
   base.Show := True;
   base.StateShow := not RiverEmphasisLabelOff(ASlot);
-  base.FontSizeLogical := 11;
+  { [R7-L] 11 CSS px [was: 11 pt, drawn 14.67 px] }
+  base.FontSizeLogical := TyFontSizeFromPx(11);
   base.DefaultText := tldName;
   base.OutsideColour := TTyChartColor(outS.TextColor);
   base.InsideColour[0] := TTyChartColor(lightS.TextColor);
@@ -842,11 +1032,15 @@ begin
     el.Style.HasFill := True;
     el.Style.FillColor := fill;
     el.Style.Alpha := v.Alpha;
-    if (v.Stroke <> 0) and (v.StrokeWidthLogical > 0) then
-    begin
-      el.Style.StrokeColor := v.Stroke;
-      el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
-    end;
+    { [R7-Y] THE BORDER is the visual style's (polygon.useStyle): no stroke
+      until a borderColor is written, then at zrender's lineWidth 1 unless a
+      borderWidth is -- ApplySeriesPens takes the colour (a gradient, 'auto'
+      the series' palette colour, a clear one), the width (+Infinity stroked
+      at the lineWidth the canvas had, never hit), the dash and the ends
+      [was: a colour and a width both written, as a solid colour; drawn as
+      none otherwise] }
+    el.Style.StrokeColor := 0;
+    el.Style.StrokeWidthLogical := 1;
     { and that row's decal [F4a] }
     el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
@@ -878,6 +1072,9 @@ begin
     { the enter animation's clip is made from the path's own rect }
     el.Anim := Default(TTyChartAnim);
     el.Anim.Role := carRiver;
+    { [R7-I] the layer's clip while it grows cuts the hit too (isHover);
+      removeClipPath once the entering is done }
+    el.ClipHits := True;
     el.Anim.Series := si;
     el.Anim.Index := k;
     el.Anim.G[0] := pg.Box.X;
@@ -926,7 +1123,8 @@ end;
   every other axis. The geometry is the layout's, already on the pixel grid
   where upstream puts it there (the radius line and ticks). }
 procedure TTyCustomAdvanceChart.PaintPolars(APainter: TTyPainter; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer; AKind: Integer;
+  AZ2: Integer);
 var
   i, k, ink: Integer;
   p: TTyPolar;
@@ -937,6 +1135,11 @@ var
   view: TTyChartView;
   { the line's pen of the axis being drawn, for its arrows [R5-B] }
   lineK: TTyAxisStroke;
+  { [R7-Z] the axis being drawn }
+  curAxis: TTyAxis;
+  { [R7-AD] }
+  rk: TTyAxisStroke;
+  pcs: TTyRtPieceArray;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -999,8 +1202,9 @@ var
   var q, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
-    { [R5-G] a gradient over each tick's own box (a Line per tick) }
-    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
+    { [R5-G] a gradient over each tick's own box (a Line per tick);
+      [R7-AA] a shadow under each one }
+    AEach := AEach and ((AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow);
     n := 0;
     APainter.BeginPath;
     for q := 0 to High(ALines) do
@@ -1104,6 +1308,64 @@ var
     if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
+  { [R7-AD] WHERE A PART LIES (CompRect): the lines of AInk (every one when
+    AInk < 0) -- a Line each (AEach), else one merged path (AFilled: its
+    '#000' fill) over their union }
+  procedure LinesRect(const ALines: TTyPolarLineArray; AKind: Byte; const AStroke: TTyAxisStroke;
+    AInk, AIndex: Integer; AEach, AFilled: Boolean);
+  var q: Integer; u: TTyXYWH; has: Boolean;
+  begin
+    if not (AStroke.Drawn or AStroke.Inked) then Exit;
+    has := False;
+    u := Default(TTyXYWH);
+    for q := 0 to High(ALines) do
+    begin
+      if not ALines[q].Drawn then Continue;
+      if (AInk >= 0) and (ALines[q].ColourIndex <> AInk) then Continue;
+      if AEach then
+        CompPenRect(APainter, curAxis, AKind, AStroke, LineBox(ALines[q].X1, ALines[q].Y1,
+          ALines[q].X2, ALines[q].Y2), False, AIndex)
+      else if not has then
+      begin
+        u := LineBox(ALines[q].X1, ALines[q].Y1, ALines[q].X2, ALines[q].Y2);
+        has := True;
+      end
+      else
+        TyZrRectUnion(u, LineBox(ALines[q].X1, ALines[q].Y1, ALines[q].X2, ALines[q].Y2));
+    end;
+    if has then CompPenRect(APainter, curAxis, AKind, AStroke, u, AFilled, AIndex);
+  end;
+
+  { [R7-AD] ...of arcs (a radius axis' merged circles: no fill) }
+  procedure ArcsRect(const AArcs: TTyPolarArcArray; AKind: Byte; const AStroke: TTyAxisStroke;
+    AInk, AIndex: Integer);
+  var q: Integer; u: TTyXYWH; has: Boolean;
+  begin
+    if not (AStroke.Drawn or AStroke.Inked) then Exit;
+    has := False;
+    u := Default(TTyXYWH);
+    for q := 0 to High(AArcs) do
+    begin
+      if (AInk >= 0) and (AArcs[q].ColourIndex <> AInk) then Continue;
+      if not has then
+      begin
+        u := PolarArcBox(AArcs[q]);
+        has := True;
+      end
+      else
+        TyZrRectUnion(u, PolarArcBox(AArcs[q]));
+    end;
+    if has then CompPenRect(APainter, curAxis, AKind, AStroke, u, False, AIndex);
+  end;
+
+  { [R7-AD] ...of a text }
+  procedure TextAt(AKind: Byte; const AText: string; const AStyle: TTyStyleSet; AX, AY: Double;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV; ARot: Double);
+  begin
+    TextSizeOf(AText, AStyle, lblW, lblH);
+    CompTextRect(curAxis, AKind, AX, AY, lblW, lblH, AH2, AV, ARot);
+  end;
+
   { the split areas in their colours: the author's list, or the skin's
     colour and none in turn }
   procedure FillAreas(const AView: TTyPolarAxisView);
@@ -1111,7 +1373,38 @@ var
     q, g, n: Integer;
     bx, by, bw, bh: Double;
     gbox: TTyXYWH;
+    { [R7-AD] }
+    pos: Integer;
+    has: Boolean;
+    u: TTyXYWH;
   begin
+    { [R7-AD] EACH COLOUR'S MERGED PATH WHERE IT LIES, by its count among
+      the colours that have a band (CompPolarSingleParts) }
+    if AView.Furn.ShowSplitArea then
+    begin
+      pos := 0;
+      for g := 0 to Math.Max(0, High(AView.Furn.SplitAreaInks)) do
+      begin
+        has := False;
+        u := Default(TTyXYWH);
+        for q := 0 to High(AView.SplitAreas) do
+        begin
+          ink := AView.SplitAreas[q].ColourIndex;
+          if (Length(AView.Furn.SplitAreaInks) > 0) and (ink > High(AView.Furn.SplitAreaInks)) then ink := 0;
+          if ink <> g then Continue;
+          if not has then
+          begin
+            u := PolarArcBox(AView.SplitAreas[q]);
+            has := True;
+          end
+          else
+            TyZrRectUnion(u, PolarArcBox(AView.SplitAreas[q]));
+        end;
+        if not has then Continue;
+        CompRect(curAxis, cpkSplitArea, u, 0, False, pos);
+        Inc(pos);
+      end;
+    end;
     { [R5-J] THE ANGLE AND RADIUS VIEWS MERGE THE BANDS OF ONE COLOUR into
       one path (mergePath), in colour order: one fill per colour -- no seam
       between two bands of it -- and a gradient's ramp over the merged
@@ -1122,6 +1415,10 @@ var
       begin
         if not AView.Furn.SplitAreaInks[g].Ok then Continue;
         areaColour := TTyColor(AView.Furn.SplitAreaInks[g].Colour);
+        { [R7-AA] a colour the canvas refuses: what it had at that path
+          (CompRun) [was: none filled] }
+        if AView.Furn.SplitAreaInks[g].Colour = cTyCanvasColourLeft then
+          areaColour := TTyColor(CompInkOf(curAxis, cpkSplitArea, g));
       end
       { the skin's colour and none in turn: the first only }
       else if not (tpBackground in areaS.Present) then
@@ -1142,6 +1439,7 @@ var
         Inc(n);
       end;
       if n = 0 then Continue;
+      CompDrewArea(curAxis, TTyChartColor(areaColour));
       if (Length(AView.Furn.SplitAreaInks) > 0)
         and (AView.Furn.SplitAreaInks[g].Grad.Kind <> cgkNone) then
       begin
@@ -1167,6 +1465,23 @@ var
   begin
     { in the split line's pen [R5-B] }
     inkK := TyAxisSkinStroke(AView.Furn.SplitPen, splitS, acButt);
+    { [R7-Z] what the canvas refuses: what it had at the part (CompRun) }
+    inkK := CompPen(curAxis, cpkSplit, inkK);
+    { [R7-AD] each colour's merged path where it lies: the radius axis'
+      circles unfilled, the angle axis' lines filled '#000' }
+    for q := 0 to Math.Max(0, High(AView.Furn.SplitLineInks)) do
+    begin
+      rk := inkK;
+      if Length(AView.Furn.SplitLineInks) > 0 then
+      begin
+        rk.Inked := True;
+        rk.Drawn := inkK.WidthLogical > 0;
+        if ACircles then ArcsRect(AView.SplitCircles, cpkSplit, rk, q, q)
+        else LinesRect(AView.SplitLines, cpkSplit, rk, q, q, False, True);
+      end
+      else if ACircles then ArcsRect(AView.SplitCircles, cpkSplit, rk, -1, -1)
+      else LinesRect(AView.SplitLines, cpkSplit, rk, -1, -1, False, True);
+    end;
     if not (inkK.Drawn or ((Length(AView.Furn.SplitLineInks) > 0)
       and (inkK.WidthLogical > 0))) then Exit;
     for q := 0 to Math.Max(0, High(AView.Furn.SplitLineInks)) do
@@ -1177,6 +1492,7 @@ var
         inkK.Colour := AView.Furn.SplitLineInks[q].Colour;
         inkK.Gradient := AView.Furn.SplitLineInks[q].Grad;
         inkK.Drawn := True;
+        if inkK.Colour = cTyCanvasColourLeft then inkK.Colour := CompInkOf(curAxis, cpkSplit, q);
         if ACircles then StrokeArcs(AView.SplitCircles, inkK, q)
         else StrokeLines(AView.SplitLines, inkK, q);
       end
@@ -1225,32 +1541,22 @@ var
     TyRenderElement(APainter, el);
   end;
 
-  procedure PaintRadius(const AView: TTyPolarAxisView);
+  { [R7-AA] the radius axis' AxisBuilder parts of z2 1: the name, then the
+    line (the arrows, z2 11, after its labels) }
+  procedure PaintRadiusLine(const AView: TTyPolarAxisView);
   var
-    q: Integer;
     sp: TTyAxisLayoutSpec;
     pl: TTyAxisNamePlacement;
   begin
     sp := AView.Spec;
-    { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
-    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
-    if AView.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
-    begin
-      APainter.BeginPath;
-      APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
-      APainter.LineTo(AView.Line.X2, AView.Line.Y2);
-      TyStrokeAxisPath(APainter, lineK);
-      if not AView.Furn.LinePen.ColourNone
-        and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
-        for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
-    end;
-    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1, True);
-    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkName, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
     begin
+      { [R7-AD] where it lies }
+      TextAt(cpkName, pl.Text, nameS, pl.X, pl.Y, pl.AnchorH, pl.AnchorV, pl.RotationRad);
       if Length(pl.Rt) > 0 then
         TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
           1, True, nameS.TextColor)
@@ -1269,13 +1575,58 @@ var
           AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV), lblH);
       end;
     end;
-    if not (tpTextColor in labelS.Present) then Exit;
+    { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
+    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
+    { [R7-AD] where it lies }
+    if AView.HasLine then
+      CompPenRect(APainter, curAxis, cpkLine, lineK, LineBox(AView.Line.X1, AView.Line.Y1,
+        AView.Line.X2, AView.Line.Y2), False);
+    if AView.HasLine and lineK.Drawn then
+    begin
+      APainter.BeginPath;
+      APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
+      APainter.LineTo(AView.Line.X2, AView.Line.Y2);
+      TyStrokeAxisPath(APainter, lineK);
+    end;
+  end;
+
+  { [R7-AA] the rest of them: the ticks (z2 2), the labels (10), the arrows
+    (11) -- [R7-AG] AZ2 the one of them (-1 all) }
+  procedure PaintRadius(const AView: TTyPolarAxisView; AZ2: Integer = -1);
+  var
+    q: Integer;
+    sp: TTyAxisLayoutSpec;
+  begin
+    sp := AView.Spec;
+    if (AZ2 < 0) or (AZ2 = 2) then
+    begin
+      { [R7-AD] (a Line a tick: each where it lies) }
+      rk := CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt));
+      LinesRect(AView.Ticks, cpkTick, rk, -1, -1, True, False);
+      StrokeLines(AView.Ticks, rk, -1, True);
+      rk := CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen, minorTickS, acButt));
+      LinesRect(AView.MinorTicks, cpkMinorTick, rk, -1, -1, True, False);
+      StrokeLines(AView.MinorTicks, rk, -1, True);
+    end;
+    AxisTextStyles(@sp, labelS, nameS);
+    if (AZ2 < 0) or (AZ2 = 10) then
+    begin
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkLabel, labelS);
+    if tpTextColor in labelS.Present then
     for q := 0 to High(sp.Placements) do
     begin
       if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
+      { [R7-AD] where it lies }
+      TextAt(cpkLabel, sp.Placements[q].Text, labelS, sp.Placements[q].X, sp.Placements[q].Y,
+        sp.Placements[q].AnchorH, sp.Placements[q].AnchorV, sp.RotationRad);
       if Length(sp.Placements[q].Rt) > 0 then
       begin
-        TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+        { [R7-AD] its spans as the paint order settled them }
+        pcs := CompPieces(curAxis, cpkLabel, q);
+        if Length(pcs) <> Length(sp.Placements[q].Rt) then pcs := sp.Placements[q].Rt;
+        TyRenderRtPieces(APainter, pcs, sp.Placements[q].X,
           sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
         Continue;
       end;
@@ -1298,33 +1649,64 @@ var
         LevelLinesAlign(sp.Placements[q].Text, sp.Placements[q].AnchorH), tlCenter,
         False, 0, False, Pos(#10, sp.Placements[q].Text) > 0);
     end;
+    end;
+    if (AZ2 >= 0) and (AZ2 <> 11) then Exit;
+    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine then lineK := CompPen(curAxis, cpkLine, lineK);
+    if AView.HasLine and not AView.Furn.LinePen.ColourNone
+      and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+      for q := 0 to High(sp.Arrows) do
+      begin
+        { [R7-AD] (where it lies) }
+        CompRect(curAxis, cpkArrow, TyRectToXYWH(TyRectF(
+          sp.Arrows[q].X - Math.Max(sp.Arrows[q].W, sp.Arrows[q].H) * 0.75,
+          sp.Arrows[q].Y - Math.Max(sp.Arrows[q].W, sp.Arrows[q].H) * 0.75,
+          sp.Arrows[q].X + Math.Max(sp.Arrows[q].W, sp.Arrows[q].H) * 0.75,
+          sp.Arrows[q].Y + Math.Max(sp.Arrows[q].W, sp.Arrows[q].H) * 0.75)), 0, False);
+        PaintArrow(sp.Arrows[q]);
+      end;
   end;
 
+  { [R7-AA] the angle axis' own circle (z2 1): getLineStyle with no round
+    cap [R5-B] }
+  procedure PaintAngleLine(const AView: TTyPolarAxisView);
+  begin
+    if AView.HasLine then
+    begin
+      rk := CompPen(curAxis, cpkLine, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt));
+      { [R7-AD] where it lies }
+      CompPenRect(APainter, curAxis, cpkLine, rk, PolarArcBox(AView.LineArc), False);
+      APainter.BeginPath;
+      ArcPath(AView.LineArc);
+      TyStrokeAxisPath(APainter, rk);
+    end;
+  end;
+
+  { [R7-AA] AngleAxisView's parts of z2 0 before its split lines, in its
+    builders' order: the labels, the ticks, the minor ticks (one mergePath
+    each) [was: the ticks, then the labels, over every view's split lines] }
   procedure PaintAngle(const AView: TTyPolarAxisView);
   var
     q: Integer;
     sp: TTyAxisLayoutSpec;
   begin
     sp := AView.Spec;
-    { the angle axis' own circle: getLineStyle with no round cap [R5-B] }
-    if AView.HasLine then
-    begin
-      APainter.BeginPath;
-      ArcPath(AView.LineArc);
-      TyStrokeAxisPath(APainter, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt));
-    end;
-    { the angle axis' ticks are AngleAxisView's own: one mergePath each }
-    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
-    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt), -1);
     AxisTextStyles(@sp, labelS, nameS);
-    if not (tpTextColor in labelS.Present) then Exit;
+    { [R7-AD] its colour and font as the paint order settled them }
+    CompTextDrawn(curAxis, cpkLabel, labelS);
+    if tpTextColor in labelS.Present then
     for q := 0 to High(AView.Labels) do
     begin
       if AView.Labels[q].Text = '' then Continue;
+      { [R7-AD] where it lies }
+      TextAt(cpkLabel, AView.Labels[q].Text, labelS, AView.Labels[q].X, AView.Labels[q].Y,
+        AView.Labels[q].AnchorH, AView.Labels[q].AnchorV, 0);
       if Length(AView.Labels[q].Rt) > 0 then
       begin
-        TyRenderRtPieces(APainter, AView.Labels[q].Rt, AView.Labels[q].X,
+        { [R7-AD] its spans as the paint order settled them }
+        pcs := CompPieces(curAxis, cpkLabel, q);
+        if Length(pcs) <> Length(AView.Labels[q].Rt) then pcs := AView.Labels[q].Rt;
+        TyRenderRtPieces(APainter, pcs, AView.Labels[q].X,
           AView.Labels[q].Y, 0, sp.RtScale, 1, True, labelS.TextColor);
         Continue;
       end;
@@ -1336,6 +1718,35 @@ var
         LevelLinesAlign(AView.Labels[q].Text, AView.Labels[q].AnchorH), tlCenter,
         False, 0, False, Pos(#10, AView.Labels[q].Text) > 0);
     end;
+    { the angle axis' ticks are AngleAxisView's own: one mergePath each --
+      [R7-AD] filled '#000', where it lies }
+    rk := CompPen(curAxis, cpkTick, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt));
+    LinesRect(AView.Ticks, cpkTick, rk, -1, -1, False, True);
+    StrokeLines(AView.Ticks, rk, -1);
+    rk := CompPen(curAxis, cpkMinorTick, TyAxisSkinStroke(AView.Furn.MinorTickPen, minorTickS, acButt));
+    LinesRect(AView.MinorTicks, cpkMinorTick, rk, -1, -1, False, True);
+    StrokeLines(AView.MinorTicks, rk, -1);
+  end;
+
+  { [R7-AA] a view's turn: whether it draws now (shown, on this zlevel) }
+  function ViewOn(AK: Integer): Boolean;
+  var vw: TTyChartView;
+  begin
+    if AK = 0 then vw := cvAngleAxis else vw := cvRadiusAxis;
+    Result := False;
+    if ViewHidden(vw) then Exit;
+    if AK = 0 then
+    begin
+      if not ApartIn(AxisModelZLevel(p.AngleAxis)) or not p.AngleView.Shown then Exit;
+      curAxis := p.AngleAxis;
+    end
+    else
+    begin
+      if not ApartIn(AxisModelZLevel(p.RadiusAxis)) or not p.RadiusView.Shown then Exit;
+      curAxis := p.RadiusAxis;
+    end;
+    ViewDrew(vw);
+    Result := True;
   end;
 
 begin
@@ -1351,41 +1762,75 @@ begin
   begin
     p := FPolars[i];
     if p = nil then Continue;
-    for k := 0 to 1 do
+    { [R7-AG] ONE VIEW'S PARTS OF ONE z2, where CompRun's order puts them
+      (PaintAxes): a radius axis' split lines, areas and minor split lines
+      (0), its name and line (1), ticks (2), labels (10), arrows (11); an
+      angle axis' labels, ticks, split lines and areas (0), its line (1)
+      [was: every polar's views at the first part of any, z2 above nought
+      at the first such part] }
+    if (AOnly >= 0) and (i <> AOnly) then Continue;
+    if AZ2 >= 0 then
     begin
-      if k = 0 then view := cvAngleAxis else view := cvRadiusAxis;
-      if ViewHidden(view) then Continue;
-      { [R5-J] on the zlevel PaintZLevels draws now }
-      if (k = 0) and not ApartIn(AxisModelZLevel(p.AngleAxis)) then Continue;
-      if (k = 1) and not ApartIn(AxisModelZLevel(p.RadiusAxis)) then Continue;
-      if k = 0 then
+      if AKind = 0 then
       begin
-        if not p.AngleView.Shown then Continue;
-        ViewDrew(view);
-        if ABelow then
-        begin
-          FillAreas(p.AngleView);
-          StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
-            p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
-          SplitLinesOf(p.AngleView, False);
-        end
-        else
-          PaintAngle(p.AngleView);
+        if ViewOn(1) then
+          case AZ2 of
+            0:
+              begin
+                SplitLinesOf(p.RadiusView, True);
+                FillAreas(p.RadiusView);
+                StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
+                  p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+              end;
+            1: PaintRadiusLine(p.RadiusView);
+            2, 10, 11: PaintRadius(p.RadiusView, AZ2);
+          end;
       end
-      else
+      else if ViewOn(0) then
+        case AZ2 of
+          0:
+            begin
+              PaintAngle(p.AngleView);
+              SplitLinesOf(p.AngleView, False);
+              StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
+                p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+              FillAreas(p.AngleView);
+            end;
+          1: PaintAngleLine(p.AngleView);
+        end;
+      Continue;
+    end;
+    { [R7-AA] IN UPSTREAM'S PAINT ORDER: the radius axis' view before the
+      angle axis' (their components' order), each view's parts by z2 and
+      then as its builders add them -- the radius view's split lines, split
+      areas, minor split lines (z2 0); the angle view's labels, ticks, minor
+      ticks, split lines, minor split lines, split areas (all z2 0); then the
+      radius name and line, the angle line (z2 1); the radius ticks, labels,
+      arrows (2, 10, 11) [was: the angle view first, every split area under
+      every split line, the angle labels over every split line] }
+    if ABelow then
+    begin
+      if ViewOn(1) then
       begin
-        if not p.RadiusView.Shown then Continue;
-        ViewDrew(view);
-        if ABelow then
-        begin
-          FillAreas(p.RadiusView);
-          StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
-            p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
-          SplitLinesOf(p.RadiusView, True);
-        end
-        else
-          PaintRadius(p.RadiusView);
+        SplitLinesOf(p.RadiusView, True);
+        FillAreas(p.RadiusView);
+        StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
+          p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
       end;
+      if ViewOn(0) then
+      begin
+        PaintAngle(p.AngleView);
+        SplitLinesOf(p.AngleView, False);
+        StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
+          p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
+        FillAreas(p.AngleView);
+      end;
+    end
+    else
+    begin
+      if ViewOn(1) then PaintRadiusLine(p.RadiusView);
+      if ViewOn(0) then PaintAngleLine(p.AngleView);
+      if ViewOn(1) then PaintRadius(p.RadiusView);
     end;
   end;
 end;
@@ -1438,11 +1883,11 @@ function TTyCustomAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTyPolarPointerDraw): Boolean;
 var
-  pv, coord, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  pv, coord, margin, x, y, vw, vh: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  labelS: TTyStyleSet;
   scale: Double;
+  lbl: TTyPtrLabel;
 begin
   ADraw := Default(TTyPolarPointerDraw);
   ADraw.Shape.Kind := plpkNone;
@@ -1460,24 +1905,11 @@ begin
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
   ADraw.Text := PointerDrawLabelText(AHit, pv);
-  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
-  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-  if APPI > 0 then scale := APPI / 96 else scale := 1;
-  if AHit.Spec.LabelSpec.HasPadding then
-  begin
-    padL := AHit.Spec.LabelSpec.PadLeft * scale;
-    padT := AHit.Spec.LabelSpec.PadTop * scale;
-    padR := AHit.Spec.LabelSpec.PadRight * scale;
-    padB := AHit.Spec.LabelSpec.PadBottom * scale;
-  end
-  else
-  begin
-    padL := labelS.Padding.Left * scale;
-    padT := labelS.Padding.Top * scale;
-    padR := labelS.Padding.Right * scale;
-    padB := labelS.Padding.Bottom * scale;
-  end;
+  { [R7-N] buildLabelElOption's box: the plain text's bounding rect in the
+    label's font, grown by its padding [was: the skin's font, one line] }
+  lbl := PtrLabelStyle(AHit, APPI);
+  scale := lbl.Scale;
+  if not PtrLabelBoxSize(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H) then Exit;
   margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
     TyAdvChartAxisPointerMargin);
   if AHit.Spec.LabelSpec.MarginLogical <> 3 then
@@ -1486,21 +1918,40 @@ begin
   { getLabelPosition, then buildLabelElOption's align and confineInContainer }
   TyPolarPointerLabelAnchor(AHit.Polar, AHit.Axis, coord, margin,
     AHit.Polar.RadiusView.Furn.LabelRotateDeg * Pi / 180, x, y, ah, av);
-  ADraw.W := tw + padR + padL;
-  ADraw.H := th + padT + padB;
   if ah = tahRight then x := x - ADraw.W;
   if ah = tahCentre then x := x - ADraw.W / 2;
   if av = tavBottom then y := y - ADraw.H;
   if av = tavMiddle then y := y - ADraw.H / 2;
   vw := ARect.Right - ARect.Left;
   vh := ARect.Bottom - ARect.Top;
-  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
-  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
-  x := Math.Max(x, Double(0));
-  y := Math.Max(y, Double(0));
+  { ([R7-AK] confineInContainer: the size joined where the padding is a
+    string) }
+  PtrLabelConfine(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H, vw, vh, x, y);
   ADraw.X := x;
   ADraw.Y := y;
   ADraw.HasLabel := True;
+end;
+
+{ [R7-X] a polar pointer's band as a sector shape: a whole ring, or the
+  sweep closed through its inner arc or the centre }
+function PolarBandShape(const S: TTyPolarPointerShape): TTyChartShape;
+begin
+  Result := Default(TTyChartShape);
+  Result.Kind := cskSector;
+  Result.CX := S.CX;
+  Result.CY := S.CY;
+  Result.R1 := Math.Max(S.R, 0);
+  if S.R0 > 1e-4 then Result.R0 := S.R0 else Result.R0 := 0;
+  if Abs(S.EndAngle - S.StartAngle) > 2 * Pi - 1e-4 then
+  begin
+    Result.StartRad := 0;
+    Result.EndRad := 2 * Pi;
+  end
+  else
+  begin
+    Result.StartRad := S.StartAngle;
+    Result.EndRad := S.EndAngle;
+  end;
 end;
 
 procedure TTyCustomAdvanceChart.PaintPolarPointer(APainter: TTyPainter;
@@ -1512,9 +1963,6 @@ var
   colour: TTyColor;
   w: Double;
   dash: TTyDoubleArray;
-  box: TRect;
-  corners: TTyCorners;
-  surface: TTyFill;
   s: TTyPolarPointerShape;
 begin
   if not PolarPointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
@@ -1524,6 +1972,8 @@ begin
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   s := d.Shape;
+  { [R7-AC] the shapes in one pass, the label in another (FPtrPass) }
+  if FPtrPass <> 2 then
   case s.Kind of
     plpkLine, plpkCircle:
       if tpBorderColor in lineS.Present then
@@ -1535,20 +1985,13 @@ begin
         if w > 0 then
         begin
           dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
-          APainter.SetLineDash(dash);
-          APainter.BeginPath;
+          { [R7-X] the full getLineStyle }
           if s.Kind = plpkLine then
-          begin
-            APainter.MoveTo(s.X1, s.Y1);
-            APainter.LineTo(s.X2, s.Y2);
-          end
+            PtrShapePaint(APainter, AHit, TyShapePolyline([TyPointF(s.X1, s.Y1),
+              TyPointF(s.X2, s.Y2)]), True, colour, w, dash)
           else
-          begin
-            APainter.MoveTo(s.CX + s.R, s.CY);
-            APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
-          end;
-          APainter.StrokePath(colour, w);
-          APainter.SetLineDash([]);
+            PtrShapePaint(APainter, AHit, TyShapeCircle(s.CX, s.CY,
+              Math.Max(s.R, 0)), True, colour, w, dash);
         end;
       end;
     plpkSector:
@@ -1556,63 +1999,16 @@ begin
       begin
         colour := shadowS.Background.Color;
         if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
-        APainter.BeginPath;
-        if Abs(s.EndAngle - s.StartAngle) > 2 * Pi - 1e-4 then
-        begin
-          APainter.MoveTo(s.CX + s.R, s.CY);
-          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
-          if s.R0 > 1e-4 then
-          begin
-            APainter.MoveTo(s.CX + s.R0, s.CY);
-            APainter.ArcTo(s.CX, s.CY, s.R0, 2 * Pi, 0, True);
-          end;
-        end
-        else
-        begin
-          APainter.MoveTo(s.CX + s.R * TyJsCos(s.StartAngle),
-            s.CY + s.R * TyJsSin(s.StartAngle));
-          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), s.StartAngle, s.EndAngle, False);
-          if s.R0 > 1e-4 then
-          begin
-            APainter.LineTo(s.CX + s.R0 * TyJsCos(s.EndAngle),
-              s.CY + s.R0 * TyJsSin(s.EndAngle));
-            APainter.ArcTo(s.CX, s.CY, s.R0, s.EndAngle, s.StartAngle, True);
-          end
-          else
-            APainter.LineTo(s.CX, s.CY);
-          APainter.ClosePath;
-        end;
-        APainter.FillPath(colour);
+        { [R7-X] the full getAreaStyle: the same path, drawn as an element }
+        PtrShapePaint(APainter, AHit, PolarBandShape(s), False, colour, 0, nil);
       end;
   end;
+  if FPtrPass = 1 then Exit;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
-  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
-  corners := TyEffectiveCorners(labelS);
-  if AHit.Spec.LabelSpec.HasBorderRadius then
-    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
-  surface := labelS.Background;
-  if AHit.Spec.LabelSpec.HasBackground then
-  begin
-    surface.Kind := tfkSolid;
-    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
-  end;
-  APainter.FillBackground(box, surface, corners);
-  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
-    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
-    APainter.StrokeBorder(box, corners,
-      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
-      TTyColor(AHit.Spec.LabelSpec.BorderColour))
-  else if TyBorderVisible(labelS) then
-    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
-  colour := labelS.TextColor;
-  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
-  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
-    taCenter, tlCenter, False);
+  { [R7-N] the text in its block (createTextStyle), hung at the box's place }
+  PtrLabelPaint(APainter, AHit, d.Text, d.X, d.Y, PtrLabelStyle(AHit, APPI),
+    AMeasurer);
 end;
 
 { ==================== the lines series [Batch 121, C12] ====================
@@ -1632,6 +2028,15 @@ begin
   AColor := 0;
   if (AData = nil) or (AData.JSONType <> jtString) then Exit;
   Result := TyTryParseChartColor(AData.AsString, AColor);
+  { [R7-W] a string no parser reads (not '' nor 'none'): written, the
+    canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: the
+    series' colour] }
+  if not Result and (AData.AsString <> '') and (AData.AsString <> 'none')
+    and not TyColourIsHandler(AData.AsString) then
+  begin
+    AColor := cTyCanvasColourLeft;
+    Result := True;
+  end;
 end;
 
 { lineStyle.type as the dash enum }
@@ -1661,7 +2066,9 @@ begin
   end;
 end;
 
-{ a symbol size as written: a number, or the first two of an array }
+{ an effect's symbol size as EffectLine reads it: a number for both, or
+  the first two of an array -- [R7-S] a missing second is undefined, scaleY
+  not a number [was: the first again, a square] }
 procedure LnSize(AData: TJSONData; AScale: Double; out AW, AH: Double);
 begin
   AW := NaN;
@@ -1670,7 +2077,7 @@ begin
   if AData is TJSONArray then
   begin
     if AData.Count > 0 then AW := TyLinesJsNum(TJSONArray(AData).Items[0]);
-    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]) else AH := AW;
+    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]);
   end
   else
   begin
@@ -1679,6 +2086,78 @@ begin
   end;
   AW := AW * AScale;
   AH := AH * AScale;
+end;
+
+{ [R7-S] an end symbol's size as Line.createSymbol reads it --
+  normalizeSymbolSize: an array's first two (`size[0] || 0`, `size[1] ||
+  0`: a missing height is 0, a box of no height), a number for both (`+size`,
+  not a number 0); none at all (the series' pair shorter) [0, 0] [was: a
+  missing height took the width, a square] }
+procedure LnEndSize(AData: TJSONData; AScale: Double; out AW, AH: Double);
+begin
+  AW := 0;
+  AH := 0;
+  if AData = nil then Exit;
+  if AData is TJSONArray then
+  begin
+    if AData.Count > 0 then AW := TyLinesJsNum(TJSONArray(AData).Items[0]);
+    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]);
+  end
+  else
+  begin
+    AW := TyLinesJsNum(AData);
+    AH := AW;
+  end;
+  if IsNan(AW) then AW := 0;
+  if IsNan(AH) then AH := 0;
+  AW := AW * AScale;
+  AH := AH * AScale;
+end;
+
+function TTyCustomAdvanceChart.CanvasGround: TTyChartColor;
+const
+  cAxes: array[0..5] of string = ('xAxis', 'yAxis', 'radiusAxis', 'angleAxis', 'singleAxis',
+    'parallelAxis');
+var
+  i, k: Integer;
+  d, s: TJSONData;
+begin
+  Result := TTyChartColor($FF000000);
+  if FOption = nil then Exit(0);
+  for k := 0 to High(cAxes) do
+    for i := 0 to FOption.ComponentCount(cAxes[k]) - 1 do
+    begin
+      d := FOption.ComponentAt(cAxes[k], i);
+      s := nil;
+      if d is TJSONObject then s := TJSONObject(d).Find('show');
+      if not ((s <> nil) and (s.JSONType = jtBoolean) and not s.AsBoolean) then Exit;
+    end;
+  for i := 0 to FOption.ComponentCount('grid') - 1 do
+  begin
+    d := FOption.ComponentAt('grid', i);
+    if d is TJSONObject then
+    begin
+      s := TJSONObject(d).Find('show');
+      if (s <> nil) and (s.JSONType = jtBoolean) and s.AsBoolean then Exit;
+    end;
+  end;
+  { (a geo's regions and a calendar's cells are in the list itself, before
+    the series: TyLinesCanvasLeftovers sees them) }
+  Result := 0;
+end;
+
+function TTyCustomAdvanceChart.CanvasGroundState: TTyCanvasGround;
+begin
+  { [R7-Z] what the components drawn before the list left (CompRun) --
+    a shown axis the run does not model ('#000') under it [R7-W: the
+    cartesian axes' alone]; else the shadowColor alone }
+  if FCanvasGroundOk then
+  begin
+    Result := FCanvasGround;
+    if (Result.Shadow = 0) and (CanvasGround <> 0) then Result.Shadow := CanvasGround;
+    Exit;
+  end;
+  Result := TyCanvasGroundOf(CanvasGround);
 end;
 
 function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
@@ -1804,6 +2283,7 @@ function TTyCustomAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
   const ASolved: TTyLinesSolved; ARow: Integer; AStroke: TTyChartColor;
   AScale: Double; out ASpec: TTyLabelSpec): TTyLinesInk;
 var
+  vNode: TJSONObject;
   grad: TTyChartGradient;
   raw: TTyLinesRaw;
   d, own, fmt: TJSONData;
@@ -1818,6 +2298,16 @@ var
   prm: TTyChartCallbackParams;
   eff: TTyLinesEffect;
   sizes, syms: TJSONData;
+
+  { [R7-R] an effect key as the model gets it: the row's, else the
+    series' -- a null written on the row falls through to the series' }
+  function EffKey(const AKey: string): TJSONData;
+  begin
+    Result := TyLinesItemFind(raw, ['effect', AKey]);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    if Result = nil then Result := TyLinesFind(Default(TTyLinesRaw), ANode, ['effect', AKey]);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
 
   function Pair(AData: TJSONData; AIndex: Integer): TJSONData;
   begin
@@ -1875,16 +2365,20 @@ begin
     Result.StrokeGrad := grad;
     Result.Stroke := TyGradientSolid(grad);
   end;
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'width']);
+  { [R7-U] the row's visual style: its own lineStyle over the series' own
+    (ignoreParent) -- none of the root's }
+  vNode := FOption.SeriesOwnStyle(ASolved.SeriesIndex);
+  if vNode = nil then vNode := ANode;
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'width']);
   if d = nil then Result.Width := 1 else Result.Width := TyLinesJsNum(d);
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'opacity']);
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'opacity']);
   if d = nil then Result.Opacity := 0.5 else Result.Opacity := TyLinesJsNum(d);
-  LnDashOf(TyLinesFind(raw, ANode, ['lineStyle', 'type']), dash, expl);
+  LnDashOf(TyLinesFind(raw, vNode, ['lineStyle', 'type']), dash, expl);
   Result.Dash := TyDashPattern(dash, expl, Result.Width);
   { [R2-I5] a word, measured again against the width a frame draws }
   Result.DashWord := TyDashWord(dash);
   { [R2-I2] its phase, the row's else the series' }
-  d := TyLinesFind(raw, ANode, ['lineStyle', 'dashOffset']);
+  d := TyLinesFind(raw, vNode, ['lineStyle', 'dashOffset']);
   { [R6-E] as the canvas takes it: a numeric string its number }
   if d <> nil then Result.DashOffset := TyOptPenOffset(d);
   if IsNan(Result.DashOffset) then Result.DashOffset := 0;
@@ -1902,13 +2396,13 @@ begin
       Result.Sym[e].H := 10 * AScale;
     end
     else
-      LnSize(Pair(sizes, e), AScale, Result.Sym[e].W, Result.Sym[e].H);
+      LnEndSize(Pair(sizes, e), AScale, Result.Sym[e].W, Result.Sym[e].H);
     d := Pair(TyLinesItemFind(raw, ['symbol']), e);
     if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
       Result.Sym[e].Name := SymName(d);
     d := Pair(TyLinesItemFind(raw, ['symbolSize']), e);
     if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
-      LnSize(d, AScale, Result.Sym[e].W, Result.Sym[e].H);
+      LnEndSize(d, AScale, Result.Sym[e].W, Result.Sym[e].H);
   end;
   { THE LABEL: the series' spec under the row's own label; placed by the
     line, `position || 'middle'` over the series' default 'end' }
@@ -2056,6 +2550,7 @@ begin
   Result.EffColor := Result.Stroke;
   Result.EffGrad := Result.StrokeGrad;
   d := TyLinesFind(raw, ANode, ['effect', 'color']);
+  Result.EffColorNone := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'none');
   if LnColour(d, c) then
   begin
     Result.EffColor := c;
@@ -2068,6 +2563,58 @@ begin
   end;
   d := TyLinesFind(raw, ANode, ['effect', 'opacity']);
   if d = nil then Result.EffOpacity := 1 else Result.EffOpacity := TyLinesJsNum(d);
+  { [R7-R] THE REST OF effect.getItemStyle(['color']): each key the row's,
+    else the series' (a null falls through, the model's get) }
+  d := EffKey('borderColor');
+  if LnColour(d, c) then
+  begin
+    Result.EffStrokeSet := True;
+    Result.EffStroke := c;
+  end
+  else if TyTryReadGradient(d, grad) then
+  begin
+    Result.EffStrokeSet := True;
+    Result.EffStrokeGrad := grad;
+    Result.EffStroke := TyGradientSolid(grad);
+  end;
+  Result.EffLineWidth := TyOptPenWidth(EffKey('borderWidth'));
+  LnDashOf(EffKey('borderType'), dash, expl);
+  if IsNan(Result.EffLineWidth) then
+    Result.EffDash := TyDashPattern(dash, expl, 1)
+  else
+    Result.EffDash := TyDashPattern(dash, expl, Result.EffLineWidth);
+  Result.EffDashWord := TyDashWord(dash);
+  Result.EffDashOffset := TyOptPenOffset(EffKey('borderDashOffset'));
+  if IsNan(Result.EffDashOffset) then Result.EffDashOffset := 0;
+  Result.EffCap := TyLineCapOf(EffKey('borderCap'));
+  Result.EffJoin := TyLineJoinOf(EffKey('borderJoin'));
+  Result.EffMiter := TyOptMiterLimit(EffKey('borderMiterLimit'));
+  if IsNan(Result.EffMiter) then Result.EffMiter := 0;
+  { setStyle('shadowColor', color) first: the effect's colour unless the
+    effect writes its own (a gradient colour is no colour the canvas takes) }
+  d := EffKey('shadowColor');
+  Result.EffShadowSet := TyShadowOfValues(EffKey('shadowBlur'), EffKey('shadowOffsetX'),
+    EffKey('shadowOffsetY'), d, Result.EffShadow);
+  if Result.EffShadowSet and (d = nil) then
+  begin
+    if Result.EffGrad.Kind <> cgkNone then Result.EffShadow.Color := 0
+    else Result.EffShadow.Color := Result.EffColor;
+  end;
+  { [R7-S] the shadowColor it hands the canvas whether or not anything is
+    cast: the written one, else its colour -- a gradient or 'none' the
+    canvas refuses, keeping what it had (TyLinesCanvasLeftovers) [was: a
+    gradient one cast nothing] }
+  if d <> nil then
+  begin
+    Result.EffShadowLeft := not LnColour(d, Result.EffCanvasShadow)
+      { [R7-W] (one no parser reads) }
+      or (Result.EffCanvasShadow = cTyCanvasColourLeft);
+  end
+  else
+  begin
+    Result.EffShadowLeft := (Result.EffGrad.Kind <> cgkNone) or Result.EffColorNone;
+    Result.EffCanvasShadow := Result.EffColor;
+  end;
   d := TyLinesFind(raw, ANode, ['effect', 'period']);
   if d = nil then Result.EffPeriod := 4 * 1000 else Result.EffPeriod := TyLinesJsNum(d) * 1000;
   d := TyLinesFind(raw, ANode, ['effect', 'loop']);
@@ -2147,11 +2694,11 @@ begin
     if d = nil then trail := 0.2 else trail := TyLinesJsNum(d);
     if sol.Effect and (trail > 0) then sol.TrailAlpha := TyLinesTrailAlpha(trail);
     { the series' visual colour: lineStyle.color, else the palette's -- a
-      gradient object too [spec 242] }
+      gradient object too [spec 242]; [R7-U] the series' own (ignoreParent) }
     stroke := TTyChartColor(SeriesColor(si));
     FLnSeriesGrad := Default(TTyChartGradient);
-    if LnColour(LnNode(node, ['lineStyle', 'color']), c) then stroke := c
-    else if TyTryReadGradient(LnNode(node, ['lineStyle', 'color']), FLnSeriesGrad) then
+    if LnColour(LnNode(FOption.SeriesOwnStyle(si), ['lineStyle', 'color']), c) then stroke := c
+    else if TyTryReadGradient(LnNode(FOption.SeriesOwnStyle(si), ['lineStyle', 'color']), FLnSeriesGrad) then
       stroke := TyGradientSolid(FLnSeriesGrad);
     sol.Scale := scale;
     { THE CLIP: createGridClipPath widened by the series' lineStyle.width
@@ -2178,18 +2725,29 @@ begin
       lw := TyLinesJsNum(LnNode(node, ['lineStyle', 'width']));
       if IsNan(lw) or (lw = 0) then lw := 0;
       lw := lw * scale;
-      x := area.X - lw / 2;
-      y := area.Y - lw / 2;
-      cw := area.W + lw;
-      ch := area.H + lw;
-      cw := Ceil(cw);
-      if x <> Floor(x) then
+      { [R7-F] AN INFINITE WIDTH makes createGridClipPath's rect not-a-number
+        (x - Inf / 2 + Inf): it clips the whole group away. Here that
+        Ceil would raise }
+      if IsInfinite(lw) then
       begin
-        x := Floor(x);
-        cw := cw + 1;
+        sol.HasClip := True;
+        sol.Clip := TyRectF(0, 0, 0, 0);
+      end
+      else
+      begin
+        x := area.X - lw / 2;
+        y := area.Y - lw / 2;
+        cw := area.W + lw;
+        ch := area.H + lw;
+        cw := Ceil(cw);
+        if x <> Floor(x) then
+        begin
+          x := Floor(x);
+          cw := cw + 1;
+        end;
+        sol.HasClip := True;
+        sol.Clip := TyRectF(x, y, x + cw, y + ch);
       end;
-      sol.HasClip := True;
-      sol.Clip := TyRectF(x, y, x + cw, y + ch);
     end;
     FLnSlot := i;
     n := Length(sol.Raws);
@@ -2363,6 +2921,7 @@ end;
   axis is brushed, else activeOpacity / inactiveOpacity }
 procedure TTyCustomAdvanceChart.SolveParallels(APPI: Integer);
 var
+  vis: TJSONObject;
   i, a, r, raw, si: Integer;
   b: TTySeriesBinding;
   par: TTyParallel;
@@ -2375,6 +2934,7 @@ var
   rawItem: TTyRawItem;
   cell: TTyDataValue;
   v, lsWidth, opN, opA, opI, w, dashOff: Double;
+  lsInf, winf: Boolean;
   seen: TStringList;
   key: string;
   has, any, catHas: Boolean;
@@ -2441,19 +3001,23 @@ begin
       poss[a] := par.DimNums[a];
       cats[a] := par.Axis(a).AxisType = atCategory;
     end;
-    { the series' style }
+    { the series' style [R7-U: its visual style, the series' own block --
+      none of the root's] }
     base := TTyChartColor(SeriesColor(si));
+    vis := FOption.SeriesOwnStyle(si);
+    if vis = nil then vis := node;
     { [R6-E] the pen as the canvas takes it: a numeric string its number }
-    lsWidth := TyOptPenWidth(LnNode(node, ['lineStyle', 'width']));
+    lsWidth := TyOptPenWidth(LnNode(vis, ['lineStyle', 'width']));
     if IsNan(lsWidth) then lsWidth := 1;
-    d := LnNode(node, ['lineStyle', 'type']);
+    lsInf := TyOptIsPosInf(LnNode(vis, ['lineStyle', 'width']));
+    d := LnNode(vis, ['lineStyle', 'type']);
     if d = nil then dashWord := 'solid' else dashWord := DashText(d);
     LnDashOf(d, dash, expl);
     if d = nil then dash := todSolid;
     { [R2-I2] the phase }
-    dashOff := TyOptPenOffset(LnNode(node, ['lineStyle', 'dashOffset']));
+    dashOff := TyOptPenOffset(LnNode(vis, ['lineStyle', 'dashOffset']));
     if IsNan(dashOff) then dashOff := 0;
-    d := LnNode(node, ['lineStyle', 'opacity']);
+    d := LnNode(vis, ['lineStyle', 'opacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opN := d.AsFloat else opN := 0.45;
     d := LnNode(node, ['activeOpacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opA := d.AsFloat else opA := 1;
@@ -2503,6 +3067,7 @@ begin
         if (raw >= 0) and (raw <= High(vrows)) and vrows[raw].ColorSet then
           c := TyVisualToChart(vrows[raw].Color);
         w := lsWidth;
+        winf := lsInf;
         iword := dashWord;
         idash := dash;
         iexpl := expl;
@@ -2515,7 +3080,11 @@ begin
           if not IsNan(TyOptPenOffset(d)) then row.DashOffset := TyOptPenOffset(d);
           if LnColour(LnNode(item, ['lineStyle', 'color']), ic) then c := ic;
           d := LnNode(item, ['lineStyle', 'width']);
-          if not IsNan(TyOptPenWidth(d)) then w := TyOptPenWidth(d);
+          if not IsNan(TyOptPenWidth(d)) then
+          begin
+            w := TyOptPenWidth(d);
+            winf := TyOptIsPosInf(d);
+          end;
           d := LnNode(item, ['lineStyle', 'type']);
           if d <> nil then
           begin
@@ -2538,6 +3107,7 @@ begin
         end;
         row.Stroke := c;
         row.Width := w;
+        row.WidthInf := winf;
         row.DashWord := iword;
         row.Dash := TyDashPattern(idash, iexpl, w);
         sol.Rows[r] := row;
@@ -2569,6 +3139,8 @@ var
   pl: TTyAxisNamePlacement;
   { the author's pens over the skin [R5-B] }
   lineK: TTyAxisStroke;
+  { [R7-AA] the axis drawn now }
+  curAxis: TTyAxis;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -2645,8 +3217,8 @@ var
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
       { [R5-G] parallel draws only ticks here: a Line per tick, a gradient
-        over each one's box }
-      if AStroke.Gradient.Kind <> cgkNone then
+        over each one's box; [R7-AA] a shadow under each one }
+      if (AStroke.Gradient.Kind <> cgkNone) or AStroke.HasShadow then
       begin
         TyStrokeAxisPath(APainter, AStroke);
         APainter.BeginPath;
@@ -2691,7 +3263,8 @@ var
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := lineK.Colour;
+      { [R7-AA] a refused colour: the fill the canvas had }
+      el.Style.FillColor := CompSettleFill(curAxis, cpkArrow, lineK.Colour);
     end;
     TyRenderElement(APainter, el);
   end;
@@ -2699,6 +3272,8 @@ var
 begin
   if Length(FParallels) = 0 then Exit;
   if ViewHidden(cvParallelAxis) then Exit;
+  { [R7-AA] the parts settled in upstream's paint order, from the list }
+  ParRun;
   model := ActiveController.Model;
   lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
   tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
@@ -2715,9 +3290,13 @@ begin
         and not ApartIn(ModelZLevel('parallelAxis', par.AxisIndices[a])) then Continue;
       ViewDrew(cvParallelAxis);
       sp := par.Views[a].Spec;
+      curAxis := nil;
+      if a < par.AxisCount then curAxis := par.Axis(a);
       { a lone axis stands nowhere (its place is not a number) }
       if not (Fin(par.Layouts[a].PosX) and Fin(par.Layouts[a].PosY)) then Continue;
-      lineK := TyAxisSkinStroke(par.Views[a].Furn.LinePen, lineS, acRound);
+      { [R7-AA] what the canvas refuses: its value there [was: not drawn, or
+        the skin's] }
+      lineK := CompPen(par.Axis(a), cpkLine, TyAxisSkinStroke(par.Views[a].Furn.LinePen, lineS, acRound));
       if par.Views[a].HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
       begin
         APainter.BeginPath;
@@ -2728,11 +3307,13 @@ begin
           and (par.Views[a].Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
           for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
       end;
-      StrokeLines(par.Views[a].Ticks, TyAxisSkinStroke(par.Views[a].Furn.TickPen,
-        tickS, acButt));
-      StrokeLines(par.Views[a].MinorTicks, TyAxisSkinStroke(
-        par.Views[a].Furn.MinorTickPen, minorTickS, acButt));
+      StrokeLines(par.Views[a].Ticks, CompPen(par.Axis(a), cpkTick,
+        TyAxisSkinStroke(par.Views[a].Furn.TickPen, tickS, acButt)));
+      StrokeLines(par.Views[a].MinorTicks, CompPen(par.Axis(a), cpkMinorTick, TyAxisSkinStroke(
+        par.Views[a].Furn.MinorTickPen, minorTickS, acButt)));
       AxisTextStyles(@sp, labelS, nameS);
+      nameS.TextColor := CompText(par.Axis(a), cpkName, nameS.TextColor);
+      labelS.TextColor := CompText(par.Axis(a), cpkLabel, labelS.TextColor);
       pl := sp.NamePlacement;
       if pl.Shown and (tpTextColor in nameS.Present) then
       begin
@@ -2918,17 +3499,37 @@ end;
   the canvas' motion blur -- the last frame drawn back at lastFrameAlpha,
   then the layer's elements over it -- here an alpha multiply of the kept
   layer before the series is drawn on it again. The rest of the part draws
-  as it does without a trail, over it. [Batch 121] }
+  as it does without a trail, over it. [Batch 121]
+  [R7-AB] UNDER useDirtyRect zrender clears a motion-blurred layer whole and
+  draws the last frame back (Layer.clear: `!repaintRects || haveMotionBLur`),
+  then brushes only the elements meeting the blocks round what changed,
+  each block clipped: the layer faded whole, the blocks repainted -- a line
+  away from every block fades frame by frame [was: the whole layer
+  repainted every frame]. The first frame (no snapshot) is whole. }
 procedure TTyCustomAdvanceChart.PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
 var
   bmp: TBGRABitmap;
   P: TTyPainter;
-  i, idx: Integer;
+  i, idx, blk, n: Integer;
   el: TTyChartElement;
   a: Double;
-  any: Boolean;
-  rest: TTyPaintList;
+  any, blocks: Boolean;
+  rest, trail: TTyPaintList;
   sc: TTyCanvasScale;
+  snap: TTyDirtySnap;
+  rects, zr: TTyZrRectArray;
+  px: array of TRect;
+  pr, oldClip: TRect;
+  tl: TTyIntegerArray;
+
+  function OnLevels(AZ: Integer): Boolean;
+  var q: Integer;
+  begin
+    Result := False;
+    for q := 0 to High(tl) do
+      if tl[q] = AZ then Exit(True);
+  end;
+
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   bmp := APainter.Bitmap;
@@ -2947,33 +3548,95 @@ begin
   if (not any) or (bmp = nil) then
   begin
     FreeAndNil(FTrailLayer);
+    FTrailSnapOk := False;
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
+  blocks := False;
   if (FTrailLayer = nil) or (FTrailLayer.Width <> bmp.Width)
     or (FTrailLayer.Height <> bmp.Height) then
   begin
     FreeAndNil(FTrailLayer);
+    FTrailSnapOk := False;
     FTrailLayer := TBGRABitmap.Create(bmp.Width, bmp.Height, BGRAPixelTransparent);
   end
   else
     FTrailLayer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
   rest := TTyPaintList.Create;
+  trail := TTyPaintList.Create;
   P := NewPainter;
   try
+    { the layer's own elements, in paint order -- [R7-AJ] every one on a
+      trail's level, a graphic's element of that zlevel too (the layer is
+      the zlevel's) [was: the trail series' alone, the rest over the layer] }
+    tl := TrailLevels;
+    for i := 0 to AList.Count - 1 do
+    begin
+      idx := AList.PaintOrder(i);
+      el := AList.Element(idx);
+      if OnLevels(el.ZLevel) then trail.Add(el);
+    end;
+    { [R7-AB] the blocks round what changed since the last frame }
+    snap := nil;
+    rects := nil;
+    n := 0;
+    px := nil;
+    zr := nil;
+    if FUseDirtyRect and not FExporting then
+    begin
+      snap := TyDirtySnapshot(trail, FPaintListPPI);
+      if FTrailSnapOk and TyDirtyDiff(FTrailSnap, snap, rects) then
+      begin
+        blocks := True;
+        SetLength(px, Length(rects));
+        SetLength(zr, Length(rects));
+        for i := 0 to High(rects) do
+          if TyZrRectToPixels(rects[i], bmp.Width div Max(1, APainter.DeviceScale),
+            bmp.Height div Max(1, APainter.DeviceScale), pr) then
+          begin
+            px[n] := pr;
+            zr[n] := rects[i];
+            Inc(n);
+          end;
+      end;
+      FTrailSnap := snap;
+      FTrailSnapOk := True;
+    end
+    else
+      FTrailSnapOk := False;
     { the layer the size of the painter's bitmap, drawn at its device scale
       over the device-px rect (#83) }
     sc.Scale := APainter.DeviceScale;
     sc.DeviceUnits := False;
     P.BeginPaintOnScaled(nil, Rect(0, 0, bmp.Width div sc.Scale, bmp.Height div sc.Scale),
       FPaintListPPI, FTrailLayer, sc);
-    for i := 0 to AList.Count - 1 do
+    if not blocks then
     begin
-      idx := AList.PaintOrder(i);
-      el := AList.Element(idx);
-      if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+      for i := 0 to trail.Count - 1 do
       begin
+        el := trail.Element(i);
         if not el.Ignore then TyRenderElement(P, el);
+      end;
+    end
+    else
+    begin
+      oldClip := FTrailLayer.ClipRect;
+      try
+        for blk := 0 to n - 1 do
+        begin
+          FTrailLayer.ClipRect := Rect(px[blk].Left * sc.Scale, px[blk].Top * sc.Scale,
+            px[blk].Right * sc.Scale, px[blk].Bottom * sc.Scale);
+          for i := 0 to trail.Count - 1 do
+          begin
+            el := trail.Element(i);
+            if el.Ignore then Continue;
+            { an element nothing bounds is drawn wherever it is }
+            if snap[i].Bounded and not TyZrRectIntersect(snap[i].Rect, zr[blk]) then Continue;
+            TyRenderElement(P, el);
+          end;
+        end;
+      finally
+        FTrailLayer.ClipRect := oldClip;
       end;
     end;
     P.EndPaint;
@@ -2981,14 +3644,90 @@ begin
     for i := 0 to AList.Count - 1 do
     begin
       el := AList.Element(i);
-      if not ((el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0)) then
-        rest.Add(el);
+      if not OnLevels(el.ZLevel) then rest.Add(el);
     end;
     if rest.Count > 0 then TyRenderPaintList(APainter, rest);
   finally
     P.Free;
     rest.Free;
+    trail.Free;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.TrailLevelsFree;
+var i: Integer;
+begin
+  for i := 0 to High(FTrailLevels) do FreeAndNil(FTrailLevels[i].Bmp);
+  FTrailLevels := nil;
+end;
+
+procedure TTyCustomAdvanceChart.PaintTrailAt(APainter: TTyPainter; AList: TTyPaintList;
+  ALevel: Integer);
+var
+  bmp, layer: TBGRABitmap;
+  P: TTyPainter;
+  i, k: Integer;
+  el: TTyChartElement;
+  a: Double;
+  sc: TTyCanvasScale;
+begin
+  if (AList = nil) or (APainter = nil) then Exit;
+  bmp := APainter.Bitmap;
+  if bmp = nil then
+  begin
+    TyRenderPaintList(APainter, AList);
+    Exit;
+  end;
+  { the level's lastFrameAlpha: its trail series' (one key, one alpha) }
+  a := 0;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if (el.ZLevel = ALevel) and (el.Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+    begin
+      a := LinesTrailAlpha(el.Datum.SeriesIndex);
+      Break;
+    end;
+  end;
+  k := -1;
+  for i := 0 to High(FTrailLevels) do
+    if FTrailLevels[i].Level = ALevel then k := i;
+  if k < 0 then
+  begin
+    k := Length(FTrailLevels);
+    SetLength(FTrailLevels, k + 1);
+    FTrailLevels[k].Level := ALevel;
+    FTrailLevels[k].Bmp := nil;
+  end;
+  layer := FTrailLevels[k].Bmp;
+  if (layer = nil) or (layer.Width <> bmp.Width) or (layer.Height <> bmp.Height) then
+  begin
+    FreeAndNil(FTrailLevels[k].Bmp);
+    layer := TBGRABitmap.Create(bmp.Width, bmp.Height, BGRAPixelTransparent);
+    FTrailLevels[k].Bmp := layer;
+  end
+  else
+    { Layer.clear with motionBlur: the last frame drawn back at
+      lastFrameAlpha -- the whole level, every element on it }
+    layer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
+  P := NewPainter;
+  try
+    sc.Scale := APainter.DeviceScale;
+    sc.DeviceUnits := False;
+    P.BeginPaintOnScaled(nil, Rect(0, 0, bmp.Width div sc.Scale, bmp.Height div sc.Scale),
+      FPaintListPPI, layer, sc);
+    { the level's elements, in paint order (the zlevel band passes them) }
+    for i := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(AList.PaintOrder(i));
+      if not el.Ignore then TyRenderElement(P, el);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  bmp.PutImage(0, 0, layer, dmDrawWithTransparency);
 end;
 
 procedure TTyCustomAdvanceChart.SolveRadars(APPI: Integer);
@@ -3215,27 +3954,40 @@ begin
   begin
     ls := TJSONObject(d);
     d := ls.Find('width');
-    if (d <> nil) and (d.JSONType = jtNumber) then
-      Result.LineWidthLogical := d.AsFloat;
+    { [R7-Y] as the canvas takes it: a numeric string its number, one that
+      is no number or infinite no width [was: a JSON number only] }
+    if not IsNan(TyOptPenWidth(d)) then
+      Result.LineWidthLogical := TyOptPenWidth(d);
+    { [R7-F] +Infinity: drawn as none, never hit }
+    Result.LineInf := TyOptIsPosInf(d);
   end;
   { [R6-D] the symbols' pen: the series' itemStyle border ('auto' its
-    palette colour) and each item's own over it }
-  os := TyReadOptStyle(node, 'itemStyle');
+    palette colour) and each item's own over it [R7-U: the visual style's,
+    the series' own block] }
+  os := TyReadOptStyle(FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex), 'itemStyle');
   Result.Border := os.BorderColor;
   Result.BorderAuto := TTyChartColor(SeriesPaletteColor(FBindings[ASlot].SeriesIndex));
   Result.BorderWidthLogical := os.BorderWidthLogical;
+  Result.BorderWidthInf := os.BorderWidthInf > 0;
+  { [R7-L] and their opacity }
+  Result.Opacity := os.Opacity;
   d := node.Find('data');
   if d is TJSONArray then
   begin
     SetLength(Result.RowBorder, d.Count);
     SetLength(Result.RowBorderWidth, d.Count);
+    SetLength(Result.RowBorderWidthInf, d.Count);
+    SetLength(Result.RowOpacity, d.Count);
     for k := 0 to d.Count - 1 do
     begin
       Result.RowBorderWidth[k] := NaN;
+      Result.RowOpacity[k] := NaN;
       if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
       os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'itemStyle');
       Result.RowBorder[k] := os.BorderColor;
       Result.RowBorderWidth[k] := os.BorderWidthLogical;
+      Result.RowBorderWidthInf[k] := os.BorderWidthInf > 0;
+      Result.RowOpacity[k] := os.Opacity;
     end;
   end;
   { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
@@ -3251,6 +4003,7 @@ begin
   begin
     SetLength(Result.RowLineSet, d.Count);
     SetLength(Result.RowLineWidth, d.Count);
+    SetLength(Result.RowLineInf, d.Count);
     SetLength(Result.RowLineDash, d.Count);
     SetLength(Result.RowLineDashExplicit, d.Count);
     SetLength(Result.RowLineDashOffsetSet, d.Count);
@@ -3268,6 +4021,9 @@ begin
         Result.RowLineColour[k], Result.RowLineGrad[k]);
       Result.RowLineSet[k] := True;
       Result.RowLineWidth[k] := os.BorderWidthLogical;
+      { [R7-Y] the item's own width of +Infinity }
+      Result.RowLineInf[k] := TyOptIsPosInf(TJSONObject(TJSONObject(
+        TJSONArray(d).Items[k]).Find('lineStyle')).Find('width'));
       Result.RowLineDash[k] := os.Dash;
       Result.RowLineDashExplicit[k] := os.DashLogical;
       Result.RowLineDashOffsetSet[k] := os.DashOffsetHas;
@@ -3277,12 +4033,14 @@ begin
   { AN AREA ONLY WHEN THE AUTHOR ASKED FOR ONE, and `areaStyle: {}` counts as
     asking -- upstream's test is whether the option object exists at all, not
     whether it has anything in it. That is why an empty object is the documented
-    way to fill a radar. }
+    way to fill a radar. [R7-U] Whether the series' own option has one
+    (isEmpty); its keys climb to the root's (getAreaStyle), an item's area
+    over them too. }
+  Result.HasArea := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex).Find('areaStyle') is TJSONObject;
+  Result.Area := Result.Fill;
   d := node.Find('areaStyle');
   if (d <> nil) and (d.JSONType = jtObject) then
   begin
-    Result.HasArea := True;
-    Result.Area := Result.Fill;
     ar := TJSONObject(d);
     d := ar.Find('color');
     if (d <> nil) and (d.JSONType = jtString)
@@ -3290,7 +4048,11 @@ begin
     begin
       Result.Area := c;
       Result.AreaAuthored := True;
-    end;
+    end
+    { [R7-F] 'none': the area fills nothing, to the eye and the pointer
+      (RadarView: the area style's fill over the visual colour) }
+    else if (d <> nil) and (d.JSONType = jtString) and TyChartColorIsNone(d.AsString) then
+      Result.AreaNone := True;
     d := ar.Find('opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
@@ -3323,7 +4085,8 @@ begin
       if (ar.Find('opacity') <> nil) and (ar.Find('opacity').JSONType = jtNumber) then
       begin
         Result.RowAreaOpacitySet[k] := True;
-        Result.RowAreaOpacity[k] := Max(Double(0), Min(Double(1), ar.Find('opacity').AsFloat));
+        { [R7-V] as written (the canvas clamps it) }
+        Result.RowAreaOpacity[k] := ar.Find('opacity').AsFloat;
       end;
     end;
   end;
@@ -3342,6 +4105,31 @@ begin
   end;
 end;
 
+procedure TTyCustomAdvanceChart.GaugeOrdinalValue(ASlot: Integer;
+  AStore: TTyDataStore);
+var
+  pos: Integer;
+  info: TTyRawDimInfo;
+  ord_: Boolean;
+begin
+  if AStore = nil then Exit;
+  pos := AStore.RawDimPos(0);
+  if pos < 0 then Exit;
+  { a table's: its declared type, else guessOrdinal over its rows; a series'
+    own data: the declared type, else the guess over its items (an item that
+    is no array ends it) }
+  if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0)
+    and (ASlot <= High(FSources)) then
+    ord_ := TySourceDimIsOrdinal(FSources[ASlot], pos)
+  else
+  begin
+    info := AStore.RawDimInfo(pos);
+    if info.HasType then ord_ := info.DimType = ddtOrdinal
+    else ord_ := AStore.RawPosGuessOrdinal(pos, True);
+  end;
+  if ord_ then AStore.SetRawDimType(pos, ddtOrdinal);
+end;
+
 procedure TTyCustomAdvanceChart.SolveGauges(APPI: Integer);
 var
   i: Integer;
@@ -3358,6 +4146,13 @@ begin
     if not FBindings[i].Resolved then Continue;
     if FBindings[i].SeriesType <> TyGaugeSeriesTypeName then Continue;
     FGaugeSpecs[i] := TyGaugeSpecOf(FOption, FBindings[i].SeriesIndex);
+    { [R7-AD] a pixel centre is css px: PPI / 96 device px each (the radius
+      is, TyGaugeLayoutOf) [was: device px] }
+    if APPI > 0 then
+    begin
+      FGaugeSpecs[i].CentreX := TyBoxValueScaled(FGaugeSpecs[i].CentreX, APPI / 96);
+      FGaugeSpecs[i].CentreY := TyBoxValueScaled(FGaugeSpecs[i].CentreY, APPI / 96);
+    end;
     FGaugeItems[i] := TyGaugeItemsOf(FOption, FBindings[i].SeriesIndex,
       FGaugeSpecs[i]);
     { FLastRect, and unlike the pie and the funnel there is no box between the
@@ -3535,7 +4330,12 @@ begin
     begin
       ov := FStores[ASlot].GetOverrideByRaw(k, TyOverrideKey('itemStyle.color'));
       if (ov.Kind = dvkText) and TyTryParseChartColor(ov.Text, c) then
-        Result[k] := c;
+        Result[k] := c
+      { [R7-W] one no parser reads: the canvas keeps the fillStyle it had
+        [was: the ramp's] }
+      else if (ov.Kind = dvkText) and (ov.Text <> '') and not TyChartColorIsNone(ov.Text)
+        and not TyColourIsHandler(ov.Text) then
+        Result[k] := cTyCanvasColourLeft;
     end;
 end;
 
@@ -3582,14 +4382,35 @@ begin
   { AND THE BORDER the series wrote: PieSeries' itemStyle is borderWidth 1
     with no colour, so nothing is stroked until a colour is written [Batch
     105: it was never read] }
-  bst := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
-    FBindings[ASlot].SeriesIndex)), 'itemStyle');
+  { [R7-U] the visual style's: the series' own block }
+  bst := TyReadOptStyle(FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex), 'itemStyle');
   if bst.BorderColor.Written and not bst.BorderColor.IsNone
     and not bst.BorderColor.IsAuto then
   begin
     Result.Stroke := bst.BorderColor.Color;
     if IsNan(bst.BorderWidthLogical) then Result.StrokeWidthLogical := 1
     else Result.StrokeWidthLogical := bst.BorderWidthLogical;
+    { [R7-C] an infinite width: never hit }
+    Result.StrokeWidthInf := bst.BorderWidthInf;
+  end;
+  { [R7-F] A SLICE WHOSE FILL IS 'none' (the series', or its own) has no
+    inside for the pointer; a colour of its own or a visualMap's is a fill }
+  SetLength(Result.FillNones, n);
+  for k := 0 to n - 1 do
+  begin
+    Result.FillNones[k] := bst.Color.Written and bst.Color.IsNone;
+    if k > High(FPies[ASlot].Sectors) then Continue;
+    raw := FPies[ASlot].Sectors[k].RawIndex;
+    if (ASlot <= High(FVisualRows)) and (raw >= 0)
+      and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].ColorSet then
+      Result.FillNones[k] := False;
+    if (raw >= 0) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+      and FStores[ASlot].HasOverrideByRaw(raw, TyOverrideKey('itemStyle.color')) then
+    begin
+      ov := FStores[ASlot].GetOverrideByRaw(raw, TyOverrideKey('itemStyle.color'));
+      if ov.Kind = dvkText then
+        Result.FillNones[k] := TyChartColorIsNone(ov.Text);
+    end;
   end;
   if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
   { AND THE OPACITY, in the order upstream's stages write the item style:
@@ -3657,6 +4478,8 @@ begin
   if FOption = nil then Exit;
   d := FOption.ComponentAt('series', si);
   if not (d is TJSONObject) then Exit;
+  { [R7-U] the visual style: the series' own block }
+  d := FOption.SeriesOwnStyle(si);
   st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
   { [R2-J3] A FUNCTION AS itemStyle.color, not the boxplot's colour key: the
     style task gives the fill the palette's colour (`isFunction(fill) ?
@@ -3680,6 +4503,9 @@ begin
   end;
   if not IsNan(st.BorderWidthLogical) then
     AVisual.Whisker.BoxLineWidthLogical := st.BorderWidthLogical;
+  { [R7-F] a pen of +Infinity (drawn as none): the box's stroked rect is
+    not-a-number upstream, it is never hit (MarkElement) }
+  AVisual.StrokeWidthInf := st.BorderWidthInf;
 end;
 
 function TTyCustomAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;

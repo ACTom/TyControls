@@ -247,6 +247,11 @@ type
     ShadowColor: TTyChartColor;
     Image: string;
     Opacity: Double;
+    { [R7-AC] its border: HasStroke where it strokes, the colour and the
+      width (CSS px) }
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    StrokeWidth: Double;
   end;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
@@ -267,6 +272,43 @@ type
     HasLabel: Boolean;
     Text: string;
     X, Y, W, H: Double;
+  end;
+
+  { [R7-N] AN AXIS POINTER'S LABEL AS THE LAST PAINT DREW IT: its axis
+    (Owner, the axis' mainType and component index), its words, and the
+    block -- pieces in CSS px hung at D.X / D.Y (device px), D.Scale device
+    px to a CSS px -- at the element's Alpha. }
+  TTyPtrLabelDrawn = record
+    Owner: string;
+    Text: string;
+    D: TTyRtDrawn;
+    Alpha: Double;
+    FontSizeLogical, FontWeight: Integer;
+  end;
+  TTyPtrLabelDrawnArray = array of TTyPtrLabelDrawn;
+
+  { [R7-X] A SHAPE DRAWN STRAIGHT ONTO THE CANVAS, outside the paint list,
+    as the last paint drew it: an axis pointer's line or band (Owner its
+    axis, mainType and component index), a title's box (Owner 'title' and
+    its index). El is the element the renderer drew. }
+  TTyOverlayShape = record
+    Owner: string;
+    El: TTyChartElement;
+  end;
+  TTyOverlayShapeArray = array of TTyOverlayShape;
+
+  { [R7-N] AN AXIS POINTER LABEL'S TEXT STYLE as buildLabelElOption makes
+    it: createTextStyle(labelModel, {text, font, fill, padding,
+    backgroundColor}), finished in the label's font (getFont: its own parts,
+    the root textStyle's, the skin's), the element's opacity (its own, else
+    the root textStyle's) apart; Scale device px to a CSS px. }
+  TTyPtrLabel = record
+    Block: TTyRtBlockStyle;
+    Global: TTyRtGlobal;
+    Scale, Alpha: Double;
+    Ink: TTyColor;
+    FontName: string;
+    FontSizeLogical, FontWeight: Integer;
   end;
 
   { A TREE NODE EXPANDED OR COLLAPSED, as upstream's
@@ -380,6 +422,21 @@ const
   cBreakSingleKey = 900000;
 
 type
+  { [R7-AJ] an incremental layer of one zlevel (FProgLayers) }
+  TTyProgLayer = record
+    Level: Integer;
+    Bmp, Seen: TBGRABitmap;
+    LastPos: Integer;
+    InOrder, Drawn, Touched: Boolean;
+  end;
+  TTyProgLayerArray = array of TTyProgLayer;
+  { [R7-AJ] a step of the full paint after its first blit (FProgOps) }
+  TTyProgOp = record
+    Kind: Byte;
+    BandOn, ApartOn: Boolean;
+    Lo, Hi, From, Pre, Level: Integer;
+  end;
+
   { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
     component ('o' and its index) or of one `map` ('i' and the name) --
     every one of them (R, raw order) and the ones the legend left (F); the
@@ -852,6 +909,51 @@ type
     CW: Boolean;
   end;
 
+const
+  { [R7-Z] the parts of an axis (TTyCompPart.Kind) }
+  cpkSplitArea = 1;
+  cpkSplit = 2;
+  cpkMinorSplit = 3;
+  cpkName = 4;
+  cpkLine = 5;
+  cpkTick = 6;
+  cpkMinorTick = 7;
+  cpkLabel = 8;
+  cpkArrow = 9;
+
+type
+  { [R7-Z] ONE PART OF A COMPONENT DRAWN STRAIGHT ONTO THE CANVAS (an
+    axis' split lines, line, name, ticks, labels, arrows -- not in the paint
+    list): its place in upstream's paint order (z, z2, the view's order, its
+    own) and, as a pseudo-element, what it hands the canvas -- the values
+    the canvas refuses settled in that order (TyCanvasRunStep) }
+  TTyCompPart = record
+    Owner: TObject;
+    { mainType + index ('xAxis0') }
+    Key: string;
+    Kind: Byte;
+    Z, Z2, View, Seq: Integer;
+    IsText: Boolean;
+    El: TTyChartElement;
+  end;
+  TTyCompPartArray = array of TTyCompPart;
+  { [R7-AD] the z2 values a cartesian axis' part is drawn at (PaintAxis
+    draws those in the set): 0 the split areas and lines, 1 the name and
+    the line, 2 the ticks, 10 on the labels (a time axis' 10 plus the
+    level), 11 the arrows }
+  TTyAxisZ2Set = set of 0..31;
+  { [R7-AB] WHERE ONE OF A COMPONENT'S DISPLAYABLES WAS DRAWN (its paint
+    rect, device px): a dirty block's run starts with the parts that meet it }
+  TTyCompRect = record
+    Owner: TObject;
+    Kind: Byte;
+    R: TTyXYWH;
+    { [R7-AB after R7-AA] which of its kind's parts (a split line's mark, a
+      split area's band: the part's Datum.RawDataIndex); -1 every one }
+    Index: Integer;
+  end;
+  TTyCompRectArray = array of TTyCompRect;
+
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
@@ -1014,13 +1116,22 @@ type
     FDzTouched: array of Boolean;
     FDzFrozenStore: array of TTyDataStore;
     FFlushDue: Boolean;
-    { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
+    { THE INCREMENTAL LAYERS (zrender's, for `incremental` elements): every
       shown element of a progressive run painted once, onto a layer of its
       own that a frame adds its chunk to and the static layer blits where
-      the first of them stands in the paint order; whether it holds the
-      list as it stands, its PPI, and what of each element it holds (rows
-      of a growing batch, 1 for anything else, 0 for nothing) }
-    FProgLayer: TBGRABitmap;
+      the first of them stands in the paint order; whether they hold the
+      list as it stands, their PPI, and what of each element they hold
+      (rows of a growing batch, 1 for anything else, 0 for nothing).
+      [R7-AJ] ONE PER ZLEVEL, as zrender 6.1 splits a zlevel round its
+      incremental elements (zlevel2 0, 1, 2): every run of that zlevel on
+      its one layer, blitted where the zlevel's first of them stands --
+      Bmp; Seen the layer as the last capture blitted it; LastPos the last
+      paint position drawn on it and InOrder whether it is what a whole
+      drawing in paint order gives; Drawn: a frame drew on it since the
+      capture; Touched: a state patch changed it (ProgLayerRegionRedraw)
+      [was: one layer for every run, blitted on each run's zlevel] }
+    FProgLayers: TTyProgLayerArray;
+    FProgLayerW, FProgLayerH: Integer;
     FProgLayerOk: Boolean;
     FProgLayerPPI: Integer;
     FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
@@ -1036,17 +1147,27 @@ type
       FProgFastFrame: since the capture the static layer was dropped by
       progress frames alone. }
     FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
-    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: whether the layer
-      is what a whole drawing in paint order gives (FProgLayerInOrder; the
-      last position drawn on it, FProgLayerLastPos), and the box, in device
-      px, a state patch changed on it (FProgLayerRegion when
-      FProgLayerRegionOn) -- see ProgLayerRegionRedraw }
-    FProgLayerInOrder, FProgLayerRegionOn: Boolean;
-    FProgLayerLastPos: Integer;
+    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: the box, in
+      device px, a state patch changed on the layers (FProgLayerRegion when
+      FProgLayerRegionOn; the layers it changed Touched) -- see
+      ProgLayerRegionRedraw }
+    FProgLayerRegionOn: Boolean;
     FProgLayerRegion: TTyXYWH;
     FListTailAt: Integer;
-    FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
+    FProgUnder, FProgWork: TBGRABitmap;
     FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
+    { [R7-AJ] WHAT THE FULL PAINT DREW AFTER ITS FIRST BLIT (FProgBlitLevel's
+      layer at FProgBlitAt), in its order, for a progress frame to draw
+      again over FProgUnder: a run of the list (Kind 0: its band, from a
+      paint position, a level already blitted in it or -MaxInt) -- its later
+      layers blitted at their first chunks -- or a component pass on a level
+      (1 the axes, 2 the break areas, 3 the parallel axes;
+      ApartOn / Level the zlevel pass it was drawn in). FProgLogOn while
+      the full paint logs; FProgLogBad: it drew something the log cannot
+      say (no progress frame then) }
+    FProgOps: array of TTyProgOp;
+    FProgLogOn, FProgLogBad: Boolean;
+    FProgBlitLevel: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -1069,10 +1190,28 @@ type
     FGauges: array of TTyGaugeLayout;
     FGaugeSpecs: array of TTyGaugeSpec;
     FGaugeItems: array of TTyGaugeItemArray;
+    { [R7-B] the measurer and the PPI the gauges' words were laid out with,
+      for a counting reading's frames }
+    FGaugeMeasurer: ITyTextMeasurer;
+    FGaugePPI: Integer;
     { ONE PER RADAR COMPONENT, not per series -- several series share a radar
       and its spokes are theirs jointly, which is the whole reason a radar is a
       coordinate system rather than a series' private geometry. }
     FRadars: array of TTyRadar;
+    { [R7-G] a radar's indicator names and scale labels as the list was
+      built (silent elements there): their boxes, for the pointer where the
+      radar says triggerEvent -- an indicator's model has no parent, so only
+      that wakes them (isLabelSilent) }
+    FRadarTexts: array of record
+      Box: TTyRectF;
+      Radar, Z, Z2: Integer;
+      IsName: Boolean;
+      Text: string;
+      { [R7-I] the indicator (its spoke), a label's index among its axis'
+        labels (-1 a name) and its rawLabel }
+      Spoke, Ring: Integer;
+      Raw: string;
+    end;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
     { THE MATRICES, one per component [Batch 145]: built with the stores
@@ -1183,6 +1322,17 @@ type
     { [spec 242] the solving lines series' lineStyle.color as a gradient }
     FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
+    { [R7-AH] a trail's layer per zlevel (allocateZlevels gives each trail
+      key a level of its own), drawn by PaintZLevelsCut }
+    FTrailLevels: array of record
+      Level: Integer;
+      Bmp: TBGRABitmap;
+    end;
+    { [R7-AB] the trail layer's elements as last painted (FTrailSnapOk):
+      under useDirtyRect the next frame repaints the blocks round what
+      changed only, the layer faded whole }
+    FTrailSnap: TTyDirtySnap;
+    FTrailSnapOk: Boolean;
     { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
       of item roots and its last data, kept across updates for the merge
       by data id); the element each paint list entry was made from (nil for
@@ -1427,6 +1577,10 @@ type
       mean. Both index-parallel to FBindings. }
     FSeriesDataset: array of Integer;
     FEncodes: array of TTySeriesEncode;
+    { [spec 259] a series left out of the drawing: its encode gives a whisker
+      box fewer value places than it needs, which upstream throws on.
+      Index-parallel to FBindings. }
+    FSeriesRefused: array of Boolean;
     { WHAT THE AUTHOR'S PALETTE GAVE EACH SERIES, resolved once per rebuild.
       Empty where they gave it nothing, and the theme's ramp answers instead
       -- so a chart with no `color` written is still the skin's chart, and one
@@ -1490,6 +1644,9 @@ type
     FGfxW, FGfxH: Double;
     FGfxPaint: array of TTyChartElement;
     FGfxPaintEl: TTyGfxElArray;
+    { [R7-AF] the graphic group a showTip found by its name (its id): the
+      tip's datum is (ctkGraphic, 0, cGfxTipGroup) }
+    FGfxTipGroupId: string;
     FGfxUnder: TTyPaintList;
     { [R5-C] A LABEL THE LAYOUT MADE DRAGGABLE, dragged: its series and data
       index and the last point; and every label's drift so far (device px),
@@ -1784,10 +1941,81 @@ type
     FDrBase: TBGRABitmap;
     FDrBaseOk: Boolean;
     FDrCapture: Boolean;
+    { [R7-W] WHAT THE COMPONENTS DRAWN BEFORE THE LIST LEAVE ON THE CANVAS
+      -- [R7-Z] the run of FCompParts (CompRun) [was: the cartesian axes'
+      last label and pens, composed by PaintAxes] }
+    FCanvasGround: TTyCanvasGround;
+    FCanvasGroundOk: Boolean;
+    { [R7-Z] the parts of the components drawn before the list, settled in
+      upstream's paint order (CompRun); and what was drawn, for the tests
+      (CompDrawn) }
+    FCompParts: TTyCompPartArray;
+    FCompRunOk: Boolean;
+    { [R7-AB] CompRun's order (an index below FCompNg is FGfxUnder's paint
+      order, the rest FCompParts' less FCompNg) and the rects the axes' parts
+      were drawn at (PaintAxis) }
+    FCompOrder: TTyIntegerArray;
+    FCompNg: Integer;
+    { [R7-AD] how many of FCompOrder's indices from FCompNg on are
+      FCompParts' (CompRun made them); the ones past them FCompBand's, the
+      list's elements in the components' band (FPaintList indices) }
+    FCompNp: Integer;
+    FCompBand: TTyIntegerArray;
+    { [R7-AG] THE ROOT'S VIEWS IN THE ORDER THEY WERE MADE (prepareView):
+      each a component's (main type, index, id, subType) or a series' (id,
+      type), with the prepare that made it and that prepare's rank among
+      the live ones -- what CompViewOf and CompRun put first among the
+      views at an equal z and z2 }
+    FViews: array of record
+      MainType, Id, Sub: string;
+      Index, Gen, Rank: Integer;
+      { [R7-AH] its type's place among the componentsMap's keys (a series'
+        after every one): the order prepareView makes a prepare's new views
+        in }
+      Key: Integer;
+    end;
+    FViewsGen: Integer;
+    { [R7-AH] THE componentsMap'S KEYS in the order they went in: a new
+      GlobalModel's 'series', then every merge pass' visited main types new
+      to it, in topological order (a type a dependency visits goes in with
+      no model) -- the order prepareView meets the types in }
+    FViewKeys: TStringArray;
+    { [R7-AH] the models a replaceMerge mapped by index since the last
+      prepare ('<mainType>#<index>', brandNew): a new view whatever id they
+      made }
+    FViewBrand: TStringArray;
+    { [R7-AH] '<mainType>#<index>' -> 1 + the view's rank }
+    FViewRank: TFPHashList;
+    { [R7-AH] ALLOCATEZLEVELS (render's first step): where a series asks for
+      a layer of its own (getZLevelKey: a lines series with a trail, a
+      scatter or lines series of more rows than its progressiveThreshold),
+      every model's zlevel as upstream writes it back into the model --
+      '<mainType>#<index>' -> the level + cZAllocBias; FZAllocOn when it
+      ran (no key: nothing written, the option's own) }
+    FZAlloc: TFPHashList;
+    FZAllocOn: Boolean;
+
+    { [R7-AG] the band holds an element the continuous phase draws (a ripple,
+      an effect symbol, what follows them): the axes are then the dynamic
+      layer's in that phase, with every element of the list }
+    FContBand: Boolean;
+    { [R7-AD] what PrepareSeries counted, for RenderSeries }
+    FSerDrawn: Integer;
+    FCompRects: TTyCompRectArray;
+    { [R7-AA] how many of FCompParts CompRun made (the parallel axes' run,
+      ParRun, appends its own after them) }
+    FCompBase: Integer;
+    FCompDrawn: TTyCompPartArray;
     FDrSnap: TTyDirtySnap;
     FDrSnapOk: Boolean;
     FDrDyn: TBGRABitmap;
     FDrDynTiles: TTyZrRectArray;
+    { [R7-Y] THE FRAME IN MOTION AS THE DYNAMIC LAYER LAST HOLDS IT: the
+      whole frame (both layers' elements) with its paint rects, while a
+      continuous animation's frame carries a value the canvas refuses
+      (FDrAnimSnapOk) -- what the next frame's blocks are diffed against }
+    FDrAnimSnap: TTyDirtySnap;
+    FDrAnimSnapOk: Boolean;
     { the device scale of this frame (#83): FDrWork, FDrBase, FDrDyn and the
       static cache hold that many pixels per device px; the snapshot, the
       repaint pool, FDrDynTiles and FDrLastRects stay in device px }
@@ -1849,8 +2077,39 @@ type
       yet lays its box out first), and the colour it gave the box's border }
     FTipPaintGen: Integer;
     FTipBorderPainted: TTyColor;
+    { [R7-AA] the box's fill as last painted (TooltipSurfaceColour) }
+    FTipSurfacePainted: TTyColor;
+    { [R7-AC] the rect the box was last filled over (TooltipFillBox) }
+    FTipFill: TTyRectF;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
+    { [R7-N] the pointer labels the last PaintAxisPointers drew }
+    FPtrLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the pointer lines and bands the last PaintAxisPointers drew,
+      the title boxes the last PaintTitles drew }
+    FPtrShapesDrawn: TTyOverlayShapeArray;
+    { [R7-AC] THE OVERLAY'S RUN: the root's groups after the list -- the
+      axis pointers (z 50: their lines, bands and handles at z2 0, then
+      their labels at z2 10, in their groups' order), then a richText
+      tooltip (z 60) -- each element taking what the one before it left.
+      FOvPos the list's elements stepped so far; FPtrPass 1 a pointer's
+      shapes alone, 2 its label alone, 0 both }
+    FOvRun: TTyCanvasRun;
+    FOvPos: Integer;
+    FOvOn: Boolean;
+    FPtrPass: Integer;
+    { [R7-AE] the handles this paint's pointers drew in the overlay's run
+      (their keys): PaintHandles draws the rest }
+    FHdDrawn: array of string;
+    { [R7-AC] a merging setOption keeps the axis pointers' slides: the
+      views and their BaseAxisPointer stay, setStyle takes the new style at
+      once and the slide goes on (a notMerge, a resize: dropped with the
+      build, as before) }
+    FPtrSlideKeep: Boolean;
+    FTitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-AJ] each title's elements in the list: its box, its text, its
+      subtext (-1 none) }
+    FTitleAt: array of array[0..2] of Integer;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -2320,8 +2579,14 @@ type
     { while the series move, axes with proxies are drawn in the dynamic
       layer from them }
     function AxesDynamic: Boolean;
+    { [R7-AD] THE COMPONENTS' BAND IN UPSTREAM'S ORDER (CompRun's): the
+      axes' parts -- a cartesian axis' z2 by z2 (PaintAxis), a polar's and a
+      single axis' view by view --, where AGfx the graphic's elements under
+      them, and AList's elements in the band (its indices FPaintList's: the
+      list itself, or an animation frame of it) }
     procedure PaintAxes(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
+      const AMeasurer: ITyTextMeasurer; AProxied: Boolean; AList: TTyPaintList = nil;
+      AGfx: Boolean = False);
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
@@ -2353,16 +2618,20 @@ type
       place; and the shape / label as its proxy has them now }
     function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
     procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
-    { [R5-I] a cartesian pointer's label box with its value's line at AAt
-      (buildLabelElOption: the text's size and padding, the axis' side, the
-      container's confine); False where no label is drawn }
-    function PointerLabelBox(const AHit: TTyAxisHit; AAt: Double; const AText: string;
-      const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
-      const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
-    { its top-left at rest with the line at AAt, for the pointer's proxy }
-    function PtrLabelAt(const AHit: TTyAxisHit; AAt: Double; out AX, AY: Double): Boolean;
-    { the box where its slide has got to }
-    procedure PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+    { [R5-I] a cartesian pointer's label place at rest
+      (buildCartesianSingleLabelElOption: getTransformedPosition on the
+      axis' layout with the label's margin, innerTextLayout's align, then
+      buildLabelElOption's box and the container's confine) -- [R7-N] the
+      box's top-left, device px, and the label's style; False where no
+      label is drawn [was: the box laid out by the skin, about the plot's
+      edge, in whole pixels] }
+    function PtrCartesianLabelPlace(const AHit: TTyAxisHit; const AText: string;
+      AViewW, AViewH: Double; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+      out AL: TTyPtrLabel; out AX, AY: Double): Boolean;
+    { its top-left at rest, for the pointer's proxy }
+    function PtrLabelAt(const AHit: TTyAxisHit; out AX, AY: Double): Boolean;
+    { the place where its slide has got to }
+    procedure PtrLabelNow(const AHit: TTyAxisHit; var AX, AY: Double);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
@@ -2427,9 +2696,11 @@ type
       while there is one axis of each family and wrong the moment there are
       two: the second y axis' split line lands on the first one's zero and
       rubs out the x axis line that `onZero` had just put there. }
+    { [R7-AD] the parts of AZ2 [was: ABelow, the split areas and lines, or
+      everything else] }
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean = False);
+      const AMeasurer: ITyTextMeasurer; const AZ2: TTyAxisZ2Set; AProxied: Boolean = False);
     { THE BREAK AREAS [Batch 132]: over the series (zigzagZ, 100 by default),
       each break's polylines and the polygon between them }
     procedure PaintBreakAreas(APainter: TTyPainter);
@@ -2482,6 +2753,24 @@ type
       write no default of their own) }
     function ModelZLevel(const AMainType: string; AIndex: Integer): Integer;
     function AxisModelZLevel(AAxis: TTyAxis): Integer;
+    { [R7-AH] allocateZlevels over every model (FZAlloc), from the option's
+      zlevel and z and the series' keys }
+    procedure ZAllocSolve;
+    { [R7-AH] the level allocateZlevels gave model AIndex of AMainType: True
+      where it ran and wrote one }
+    function ZAllocOf(const AMainType: string; AIndex: Integer; out ALevel: Integer): Boolean;
+    { [R7-AH] a series' zlevel: allocated, else its own, else the root's }
+    function SeriesZLevelOf(ASeriesIndex: Integer): Integer;
+    { [R7-AH] a model the merge made anew or wrote a zlevel into: what an
+      allocation wrote into the old one goes }
+    procedure ZAllocForget(const AMainType: string; AIndex: Integer);
+    { [R7-AH] THE CONTINUOUS PHASE'S LEVELS UNDER A TRAIL (FZMixed): the
+      dynamic part of AFrame band by band, the trail's band through its
+      layer (PaintTrail), the components on ACut and above drawn here over
+      it -- those under it are the static layer's }
+    procedure PaintZLevelsCut(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+      APart: TTyPaintList; ACut: Integer);
     { [R5-J] whether a component drawn apart from the list stands on the
       level PaintZLevels draws now (always outside it) }
     function ApartIn(AZLevel: Integer): Boolean;
@@ -2522,6 +2811,11 @@ type
     { Every series' marks, in one list, ordered once. }
     procedure PaintSeries(APainter: TTyPainter;
       const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    { [R7-AD] ...in two halves: the list built and prepared (the components'
+      band drawn among the axes needs it), then drawn }
+    procedure PrepareSeries(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    procedure RenderSeries(APainter: TTyPainter; const AMeasurer: ITyTextMeasurer;
+      APPI: Integer);
     { The theme colour for series ASeriesIndex, from the DERIVED ramp item 18
       landed: TyAdvChartSeries1..8, all of them computed from --accent so a skin
       that restyles the accent gets a matching chart for nothing. }
@@ -2534,6 +2828,10 @@ type
     function WeakKeep(ARawIndex: Integer): Boolean;
     procedure SolveVisualMapViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
+    { [R7-M] a component's words: textStyle's font, block and opacity }
+    procedure ComponentTextBlock(const AJson: string; var AFontName: string;
+      var AFontWeight: Integer; out AHasRt: Boolean; out ART: TTyRtBlockStyle;
+      out AGlobal: TTyRtGlobal; out AHasOpacity: Boolean; out AOpacity: Double);
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
     { [R2-L] the components a list ends with, from the visual maps on --
@@ -3087,6 +3385,16 @@ type
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;
     procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
+    { [R7-AJ] the layer of a zlevel (-1 none); every layer freed; whether
+      every one is what a whole drawing in paint order gives }
+    function ProgLayerAt(ALevel: Integer): Integer;
+    { [R7-AJ] the zlevels a progressive run's shown chunks are on, in order }
+    function ProgChunkLevels: TTyIntegerArray;
+    procedure ProgLayersFree;
+    function ProgLayersInOrder: Boolean;
+    { [R7-AJ] a component pass the full paint draws after its first blit,
+      logged for the progress frames (FProgOps) }
+    procedure ProgLogFurn(AKind: Byte);
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
     { [R2-L] the paint-order position the incremental layer is blitted at:
       the first shown element of a run, -1 for none }
@@ -3126,7 +3434,23 @@ type
     function LegendDeco(AIndex: Integer; const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
     function TitleFontOf(AIndex: Integer; const AKey, AStyleKey: string;
       APick: TTyTextPick): TTyTitleFont;
-    procedure PaintTitles(APainter: TTyPainter);
+    { [R7-AJ] THE TITLES IN THE LIST (TitleView's group: the background Rect
+      z2 0, the text and the subtext z2 10, at the title's z and zlevel):
+      their parts as built (TitleParts, TitleLineEl), appended
+      (BuildTitles: FTitleAt their places), what the canvas refuses of
+      them settled by the list's run as any element's, noted as drawn
+      (TitlesNote) }
+    function TitleZ(AIndex: Integer): Integer;
+    procedure TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
+      out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
+    function TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+      const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+    function BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
+    { [R7-AK] a line of a title placed at NaN (a padding side undefined), as
+      its TSpan stands }
+    function TitleUnplacedLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+      const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+    procedure TitlesNote;
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
     { ONE COLOUR PER RAW ROW, in raw order, for a series that colours by datum.
@@ -3146,6 +3470,10 @@ type
     { Every gauge's geometry. Runs in Relayout, beside SolvePies. }
     procedure SolveGauges(APPI: Integer);
     function GaugeVisual(ASlot: Integer): TTyGaugeVisual;
+    { [R7-D] a gauge's first dimension that upstream types ordinal (declared,
+      or guessOrdinal) recorded on its raw position: its cells are read as
+      written (TyGaugeRowValue) }
+    procedure GaugeOrdinalValue(ASlot: Integer; AStore: TTyDataStore);
     { Every radar's geometry AND every spoke's value range. Both, because the
       two halves are one answer: the range of a spoke is the union over every
       series bound to that radar, which nothing else in this control is in a
@@ -3190,6 +3518,16 @@ type
     function AxisTextAt(AX, AY: Integer; out ADatum: TTyChartDatumRef): Boolean;
     function AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType, AName,
       AValue: string; out AIndex: Integer): Boolean;
+    { [R7-I] ... and ATick, a label's index among its axis' labels (the
+      list upstream builds: a category axis' every interval-th and its
+      ends, every value tick), -1 for a name }
+    function AxisTextFull(const ADatum: TTyChartDatumRef; out AMainType, AName,
+      AValue: string; out AIndex, ATick: Integer): Boolean;
+    { [R7-I] the axis' option node and the default of its model's
+      `tooltip.show` (a single axis' true; a radar's indicators have none:
+      the cascade's next level, the radar's own tooltip, then the global) }
+    function AxisTextNode(const ADatum: TTyChartDatumRef; out ANode: TJSONData;
+      out AShowDefault: Integer): Boolean;
     function AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
     function AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
     function AxisTipText(const ADatum: TTyChartDatumRef;
@@ -3296,8 +3634,12 @@ type
     procedure FreeSingles;
     { every single's axis view: the grid layer (split areas and lines) with
       ABelow, the line, ticks, labels and name without [Batch 118] }
+    { [R7-AG] AOnly: that single axis alone (-1 every one); AZ2: that z2's
+      parts alone -- 0 the split areas and lines, 1 the name and the line,
+      2 the ticks, 10 the labels, 11 the arrows (-1: ABelow's pass) }
     procedure PaintSingles(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer = -1;
+      AZ2: Integer = -1);
     procedure PaintSinglePointer(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
     { themeRiverLayout over every themeRiver, after the singles are laid out
@@ -3323,8 +3665,12 @@ type
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
+    { [R7-AG] AOnly: that polar alone (-1 every one); AKind 0 its radius
+      axis' view, 1 its angle axis'; AZ2: that z2's parts of it alone (-1:
+      ABelow's pass of both) }
     procedure PaintPolars(APainter: TTyPainter; APPI: Integer;
-      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AOnly: Integer = -1;
+      AKind: Integer = -1; AZ2: Integer = -1);
     procedure PaintPolarPointer(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
     procedure SolveGraphs(APPI: Integer);
@@ -3343,7 +3689,6 @@ type
       the paint elements; the states }
     procedure SolveCustom(APPI: Integer);
     function CustomCall(AIndexInside: Integer): TJSONData;
-    procedure CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
     function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
     function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
     procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
@@ -3360,12 +3705,166 @@ type
     { [Batch 121] }
     procedure SolveLines(APPI: Integer);
     function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
+    { [R7-S] the shadowColor the canvas of zlevel 0 holds when the list
+      begins: '#000' (zrender's, of an element with none) where a shown axis
+      or grid -- drawn outside the list, before it -- left it, else the
+      canvas' own transparent default (TyLinesCanvasLeftovers) }
+    function CanvasGround: TTyChartColor;
+    { [R7-W] what the components drawn before the list leave on the canvas }
+    function CanvasGroundState: TTyCanvasGround;
+    { [R7-Z] the parts of the cartesian, polar and single axes and the
+      graphic component's elements under them, in upstream's paint order:
+      each part's refused values settled, and the ground the list starts
+      from }
+    procedure CompRun(APPI: Integer);
+    { [R7-AD] ...its order and run again over the parts it made: the list's
+      elements in the components' band marked afresh (CompBandMark), and
+      the list settled again from the ground where AList }
+    procedure CompSettle(APPI: Integer; AList: Boolean);
+    procedure CompBandMark;
+    { [R7-AD] an element's view's place in the zr root (the sort's third
+      key at an equal z and z2): the graphic's 0, a matrix 1500, a calendar
+      1600, the single axes 2000, the radius 3000, the angle 4000, a geo
+      4600, a radar 4700, the y axes 5000, the x axes 6000 (each plus its
+      index), the list's other components after them, the series last }
+    function CompViewOf(const AEl: TTyChartElement): Integer;
+    { [R7-AG] a setOption's prepareView: AFresh (a notMerge, the first, a
+      restore) makes every component's view anew (replaceAll: brandNew) and
+      keeps the series' views of the same id and type; a merge keeps every
+      view whose model it keeps (same id and subType) -- what is made is
+      after every view there is }
+    procedure ViewsPrepare(AFresh: Boolean);
+    { the rank of the prepare that made the view (0 the earliest live) --
+      [R7-AH] of its (prepare, componentsMap key) among the live views' }
+    function ViewBorn(const AMainType: string; AIndex: Integer): Integer;
+    { [R7-AH] a merge pass' visited main types new to the componentsMap, in
+      topological order }
+    procedure ViewKeysAdd(const AVisited: array of string);
+    { ABase after every view made by an earlier prepare: the place a view
+      of that type and index takes (CompViewOf's numbers) }
+    function ViewNum(const AMainType: string; AIndex, ABase: Integer): Integer;
+    function GfxViewOf(const AEl: TTyChartElement): Integer;
+    { [R7-AD] AList's elements from AFrom on: of the view AView }
+    procedure CompViewSet(AList: TTyPaintList; AFrom, AView: Integer);
+    { [R7-AH] every element of AList whose view's place is not known yet:
+      CompViewOf's (the paint order's key after z2) }
+    procedure ViewsTag(AList: TTyPaintList);
+    procedure CompAxisParts(AAxis: TTyAxis; AGrid: TTyGridBuild; AView: Integer;
+      var AParts: TTyCompPartArray);
+    procedure CompViewParts(AAxis: TTyAxis; AView, AShape: Integer;
+      const AFurn: TTyAxisFurniture; const ASpec: TTyAxisLayoutSpec; AHasLine: Boolean;
+      const ASplitInks: TTyIntegerArray; ATicks, AMinorTicks: Boolean;
+      const ALabels: TTyPolarLabelArray; var AParts: TTyCompPartArray;
+      const AAreaInks: TTyIntegerArray);
+    procedure CompPolarSingleParts(var AParts: TTyCompPartArray);
+    { an axis pen of a polar's or a single axis' as it is stroked
+      (CompSettlePen), logged (CompDrawn); a text colour likewise }
+    function CompPen(AOwner: TTyAxis; AKind: Byte; const K: TTyAxisStroke): TTyAxisStroke;
+    function CompText(AOwner: TTyAxis; AKind: Byte; AColour: TTyColor): TTyColor;
+    { [R7-AD] a polar's or a single axis' text style as it is drawn: the
+      colour and the font the paint order settled, logged so (CompDrawn) }
+    procedure CompTextDrawn(AOwner: TTyAxis; AKind: Byte; var AStyle: TTyStyleSet);
+    { the part of AOwner of AKind once settled; nil for none }
+    function CompPartOf(AOwner: TObject; AKind: Byte): PTyChartElement;
+    { an axis' pen as the canvas strokes it: what it refuses, the canvas'
+      value at its part (the canvas' default where the part was not run) }
+    procedure CompSettlePen(AOwner: TObject; AKind: Byte; var K: TTyAxisStroke);
+    { a split line's or area's colour of the author's list (AInk) as its
+      first part settled it }
+    function CompInkOf(AOwner: TObject; AKind: Byte; AInk: Integer): TTyChartColor;
+    { [R7-AA] a split area band's (ABand: its count among the axis' bands)
+      colour as its part settled it }
+    function CompBandInk(AOwner: TObject; AKind: Byte; ABand: Integer): TTyChartColor;
+    { the colour a text part fills with: a refused one the canvas' }
+    function CompSettleFill(AOwner: TObject; AKind: Byte; AColour: TTyChartColor): TTyChartColor;
+    { [R7-Z] the run of the list (FPaintList) from the ground up to the
+      elements of a z and z2 above AZ / AZ2: the canvas a component drawn
+      after the series meets }
+    procedure CompRunTo(AZ, AZ2: Integer; out ARun: TTyCanvasRun);
+    { [R7-AB] a part of AOwner of kind AKind drawn at AR (device px: its
+      getPaintRect is taken from it) -- [R7-AB after R7-AA] AIndex which of
+      the kind's parts (-1 every one), and the shadow it casts (device px) }
+    procedure CompRect(AOwner: TObject; AKind: Byte; const AR: TTyXYWH; APen: Double;
+      AText: Boolean; AIndex: Integer = -1; ABlur: Double = 0; AOffX: Double = 0;
+      AOffY: Double = 0);
+    { [R7-AD] ...of a part stroked in K over AR (device px): a merged path
+      (AFilled: its own '#000' fill) grown by its width, a Line by max(width,
+      5), one of no width (Inked: its colour handed on, nothing stroked) not
+      at all; the shadow K casts }
+    procedure CompPenRect(APainter: TTyPainter; AOwner: TObject; AKind: Byte;
+      const K: TTyAxisStroke; const AR: TTyXYWH; AFilled: Boolean; AIndex: Integer = -1);
+    { [R7-AD] ...of a text of AW x AH hung at (AX, AY) as anchored, turned
+      by ARot about its anchor }
+    procedure CompTextRect(AOwner: TObject; AKind: Byte; AX, AY: Double; AW, AH: Integer;
+      AH2: TTyTextAnchorH; AV: TTyTextAnchorV; ARot: Double);
+    { [R7-AB] THE CANVAS A DIRTY BLOCK STARTS ITS SERIES FROM: each block
+      saves the context, brushes afresh (prevEl null) from the canvas' own
+      state and restores it, and only the elements meeting it are brushed --
+      the components' among them: CompRun's order over the parts and the
+      graphic's elements that meet ABlock (a part whose rects were not
+      recorded meets every block) }
+    function CanvasGroundIn(const ABlock: TTyXYWH; APPI: Integer): TTyCanvasGround;
+    { [R7-AB] A COMPONENT TEXT'S FONT AS THE CANVAS TAKES IT: AEl (a part's
+      pseudo-element) the font of AStyle, and marked cTyCanvasFontLeft
+      where makeFont's string would be refused -- AAxis' ABlock's own
+      fontStyle / fontWeight / fontSize, else the root textStyle's }
+    procedure CompTextFont(AAxis: TTyAxis; const ABlock: string; const AStyle: TTyStyleSet;
+      var AEl: TTyChartElement);
+    { [R7-AB] a text part's font the canvas refused: AStyle's font the one
+      the paint order settled it to }
+    procedure CompFont(AOwner: TObject; AKind: Byte; var AStyle: TTyStyleSet);
+    { [R7-AD] WHETHER A TEXT'S FONT THE CANVAS REFUSES: makeFont's string of
+      the first of ANodes (text style objects, the nearest first) that
+      writes each of fontStyle / fontWeight / fontSize, else the root
+      textStyle's -- one part the canvas does not parse refuses it all }
+    function FontRefusedOf(const ANodes: array of TJSONData): Boolean;
+    { [R7-AD] AList's captions from AFrom on (plain ones, no pieces of their
+      own) whose font the canvas refuses: marked (cTyCanvasFontLeft), the
+      run gives them the font the text before left }
+    procedure FontLeftFrom(AList: TTyPaintList; AFrom: Integer; ARefused: Boolean);
+    procedure LegendFontsLeft(AList: TTyPaintList; AFrom, AIndex: Integer;
+      const ALayout: TTyLegendLayout);
+    { [R7-AD] a label part's settled pieces (a rich label's, drawn as the
+      paint order settled them: a refused font, a refused fill); nil where
+      it has none }
+    function CompPieces(AOwner: TObject; AKind: Byte; AIndex: Integer): TTyRtPieceArray;
+    { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
+      from where the list's run reaches their z: appended to FCompParts }
+    procedure ParRun;
+    { [R7-Z] a title's line as drawn (CompDrawn) }
+    procedure TitleDrewText(AIndex, ALine: Integer; const AEl: TTyChartElement);
+    { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
+    procedure CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
+    { a part as drawn (CompDrawn) }
+    procedure CompDrew(AOwner: TObject; const AKey: string; AKind: Byte; AZ2: Integer;
+      AText: Boolean; const AEl: TTyChartElement);
     function LinesInk(ASlot: Integer; ANode: TJSONObject; const ASolved: TTyLinesSolved;
       ARow: Integer; AStroke: TTyChartColor; AScale: Double;
       out ASpec: TTyLabelSpec): TTyLinesInk;
     function LinesTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     function LinesTrailAlpha(ASeriesIndex: Integer): Double;
     procedure PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+    { [R7-AH] the trail layer of zlevel ALevel: kept, faded by its series'
+      lastFrameAlpha, AList's elements of that level drawn on it (the zlevel
+      band set), then laid over the canvas }
+    procedure PaintTrailAt(APainter: TTyPainter; AList: TTyPaintList; ALevel: Integer);
+    procedure TrailLevelsFree;
+    { [R7-AB] the highest zlevel of a lines series with a trail (-MaxInt:
+      none), and the list above the components' zlevel drawn with that
+      trail's layer (as PaintAboveComponents draws it without one) }
+    function TrailZLevel(AList: TTyPaintList): Integer;
+    { [R7-AH] the lowest zlevel a lines series with a trail stands on
+      (allocateZlevels'; MaxInt for none) }
+    function TrailCutLevel: Integer;
+    { [R7-AJ] THE ZLEVELS A LINES SERIES WITH A TRAIL STANDS ON: each one
+      layer with motionBlur, every displayable on it -- a graphic's element
+      of that zlevel too -- painted again over the faded last frame }
+    function TrailLevels: TTyIntegerArray;
+    { [R7-AH] the continuous phase's cut among levels (FZMixed): the trail's
+      level -- the components on it and above drawn every frame over the
+      trail; MaxInt: none }
+    function ZCut: Integer;
+    procedure PaintTrailAbove(APainter: TTyPainter; AList: TTyPaintList);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
@@ -3508,6 +4007,33 @@ type
       datum. A no-op for every other type. }
     procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray;
       out AEnc: TTySeriesEncode);
+    { [spec 259] A candlestick's or a boxplot's value list that reaches fewer
+      places than the type has values (candlestickLayout's
+      `vDimsI.length < 4`, boxplotLayout's `vDims.length < 5`): no item
+      layout, and upstream throws reading one. The series is left out
+      (FSeriesRefused) and a diagnostic says why. AEnc as filled up to
+      ABound dimensions. }
+    { [spec 259] a pie's or a funnel's tooltip dimensions: `encode.tooltip`,
+      or defaultedLabel -- the last value dimension its encode reaches }
+    procedure BoxTipDims(const AEnc: TTySeriesEncode; const ASource: TTyChartSource;
+      AStore: TTyDataStore);
+    procedure RefuseShortWhisker(ASlot: Integer; const AEnc: TTySeriesEncode;
+      const ADims: TTySeriesDimArray; const ACoord: TTyCoordDimArray; ABound: Integer);
+    { [spec 264] the series in slot ASlot was refused (RefuseShortWhisker):
+      it is in the model -- the legend, the axes' extents, dataZoom, the
+      option read back -- and out of the drawing: nothing addresses its
+      items, as if its index named no series (actions, showTip, the
+      keyboard, aria, brushSelected, selectchanged). False for a slot out of
+      range. }
+    function SeriesRefusedAt(ASlot: Integer): Boolean;
+    { [spec 264] a series on a matrix: its label and tooltip dimensions --
+      `encode.label` / `encode.tooltip`, else a written value's last entry a
+      label suits; a scatter with neither shows every element }
+    procedure MatrixTextDims(ASlot: Integer; const AEnc: TTySeriesEncode;
+      const ASource: TTyChartSource; AStore: TTyDataStore);
+    { [spec 264] a list's later x or y entries on a matrix parse -- and a
+      collecting tree collects -- by that tree's category list }
+    procedure MatrixExtraMeta(ASlot: Integer; AStore: TTyDataStore);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
     procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore;
@@ -3744,6 +4270,18 @@ type
     { [R2-I8] the box reads its text as html: the tooltip component's
       renderMode is not 'richText' ('auto' as TooltipAutoRichText says) }
     function TipHtmlMode: Boolean;
+    { [R7-AA] the box's and the text's colours the option writes and no
+      parser reads, as html or the canvas shows them (TooltipInk sets the
+      text's) }
+    procedure TipSettleRefused(const ASpec: TTyTooltipSpec; const AInk: TTyTooltipInk;
+      var ASurface: TTyFill; var ABorder: TTyColor; ABorderW: Double; var ASt: TTyStyleSet;
+      var ALines: TTyTooltipLineArray);
+    { [R7-AC] the overlay's run: started from the canvas' ground, the list
+      stepped up to the elements above AZ / AZ2, an element of the overlay
+      stepped there }
+    procedure OvStart;
+    procedure OvAdvance(AZ, AZ2: Integer);
+    procedure OvStep(var AEl: TTyChartElement; AZ, AZ2: Integer);
     { [R2-I8] a component item's content in the box's language: encodeHTML'd
       in html mode, as setTooltipConfig's encodeHTMLContent has it }
     function TipContentName(const AName: string): string;
@@ -3835,6 +4373,11 @@ type
     { findComponentReference: a component's element by index / id / name
       and the item's name (the port's component tooltips: a matrix cell, a
       geo region) }
+    { [R7-AE] findComponentReference for a legend's item and a toolbox's
+      icon: the event _tryShow is given at the centre of its rect }
+    function TipComponentRefMore(APayload: TJSONObject; var AEv: TTyTipEvent): Boolean;
+    function TipAxisRef(const AMainType: string; AIndex: Integer; const AName: string;
+      var AEv: TTyTipEvent): Boolean;
     function TipComponentRef(APayload: TJSONObject; out ADatum: TTyChartDatumRef;
       out AElement: Integer; out AX, AY: Double): Boolean;
     { a re-render: the hover goes; the box stays, frozen, and _keepShow
@@ -3897,6 +4440,10 @@ type
       rich one's block for words (the frames' callbacks) }
     function EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
     function EndLabelPiecesOf(ASeriesIndex: Integer; const AText: string): TTyRtPieceArray;
+    { [R7-B] a gauge reading's words at a value and its block laid out for
+      them (a count's frames) }
+    function GaugeDetailAt(ASeriesIndex, AIndex: Integer; AValue: Double;
+      out AText: string): TTyRtPieceArray;
     { [R5-C] A LABEL LINE'S lineStyle -- getLineStyle, the keys written:
       color, width, opacity, type, dashOffset, cap, join, miterLimit -- read
       down ANodes under APath (['labelLine', 'lineStyle'] or a state's) onto
@@ -4025,6 +4572,10 @@ type
     procedure DrStaticFull(const R: TRect; APPI: Integer);
     procedure DrDynamic(const R: TRect; APPI: Integer; var APool: TTyRepaintPool;
       var AFull: Boolean);
+    { [R7-Y] a continuous animation's frame that carries a value the canvas
+      refuses, repainted in the blocks round what moved (False: not one) }
+    function DrDynamicBlocks(const R: TRect; APPI: Integer;
+      var APool: TTyRepaintPool): Boolean;
     { a frame's rect of device px on its layers: FDrScale times it (#83) }
     function DrRaster(const R: TRect): TRect;
     { the static cache's APx onto ACanvas at APx (client px), and the
@@ -4172,6 +4723,60 @@ type
     function SinglePointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
       const AMeasurer: ITyTextMeasurer; APPI: Integer;
       out ADraw: TTySinglePointerDraw): Boolean;
+    { [R7-N] the axis pointers' labels as the last paint drew them }
+    function PointerLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-X] the axis pointers' lines and bands, and the titles' boxes, as
+      the last paint drew them }
+    function PointerShapesDrawn: TTyOverlayShapeArray;
+    function TitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-Z] the parts of the components drawn straight onto the canvas, as
+      the last paint drew them: Key (mainType + index), Z2 (upstream's),
+      IsText, and El the style each was drawn with }
+    function CompDrawn: TTyCompPartArray;
+    { [R7-AH] the root's views in the order upstream's prepareView leaves
+      them: '<mainType><index>', a series' 'S<index>' }
+    function ViewOrderNames: TTyStringArray;
+    { [R7-AH] a model's zlevel as the chart draws it: 'S0', 'xAxis0',
+      'markPoint0' (allocateZlevels' where it ran) }
+    function ZLevelOfModel(const AKey: string): Integer;
+    { [R7-AH] the view an element of the list is of, named as
+      ViewOrderNames names it ('' where the build gave it none) }
+    function ViewNameOfEl(const AEl: TTyChartElement): string;
+    { [R7-AH] a lines series' trail: its layer's lastFrameAlpha (0 none) }
+    function TrailAlphaOf(ASeriesIndex: Integer): Double;
+    { [R7-AJ] the zlevels the incremental layers stand on, in order (one
+      per zlevel a progressive run's shown chunks are on) }
+    function ProgLayerLevels: TTyIntegerArray;
+    { [R7-AJ] the paint position of the last element drawn on the layer of
+      AIndex (ProgLayerLevels' order; -1 for none) }
+    function ProgLayerLastPos(AIndex: Integer): Integer;
+    { [R7-AD] where the last paint drew the components' parts (each its
+      paint rect, as a dirty block meets it) }
+    function CompRectsDrawn: TTyCompRectArray;
+    { [R7-X] an axis pointer's line (APen: getLineStyle) or band (getAreaStyle)
+      as buildElStyle styles it, drawn and logged for PointerShapesDrawn }
+    procedure PtrShapePaint(APainter: TTyPainter; const AHit: TTyAxisHit;
+      const AShape: TTyChartShape; APen: Boolean; AColour: TTyColor;
+      AWidth: Double; const ADash: TTyDoubleArray);
+    { [R7-AE] the handle of AHit's axis, in the overlay's run after its
+      pointer's line or band (the root's, added after the pointer's group) }
+    procedure PtrHandlePaint(APainter: TTyPainter; const AHit: TTyAxisHit);
+    { [R7-N] an axis pointer label's text style (buildLabelElOption) }
+    function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
+    { [R7-N] the box buildLabelElOption places: the plain text's bounding
+      rect in the label's font, grown by the padding -- device px }
+    function PtrLabelBoxSize(const AL: TTyPtrLabel; const AText: string;
+      const AMeasurer: ITyTextMeasurer; out AW, AH: Double): Boolean;
+    { [R7-AK] confineInContainer on the label's box (device px), its size
+      joined where the padding is a string }
+    procedure PtrLabelConfine(const AL: TTyPtrLabel; const AText: string;
+      const AMeasurer: ITyTextMeasurer; AW, AH, AViewW, AViewH: Double; var AX, AY: Double);
+    { [R7-N] the label's text laid out in its block, hung at (AX, AY) device
+      px, drawn (APainter nil: only laid out) and logged for
+      PointerLabelsDrawn }
+    procedure PtrLabelPaint(APainter: TTyPainter; const AHit: TTyAxisHit;
+      const AText: string; AX, AY: Double; const AL: TTyPtrLabel;
+      const AMeasurer: ITyTextMeasurer);
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -4198,6 +4803,18 @@ type
     { THE COLOUR THE LAST PAINT GAVE THE BOX'S BORDER; 0 when no box was
       drawn }
     function TooltipBorderColour: TTyColor;
+    { [R7-AA] the colour the tooltip's box was last filled in }
+    function TooltipSurfaceColour: TTyColor;
+    { [R7-AC] the rect the box was last filled over, device px (invalid when
+      none was drawn): a richText box sits in from where it was placed by
+      its border and its shadow's outer size }
+    function TooltipFillBox: TTyRectF;
+    { [R7-AC] the model the last show built (its cascade resolved): what
+      its box says, whichever element opened it }
+    function TooltipShownSpec: TTyTooltipSpec;
+    { [R7-AE] the point the last show was made at (_lastX / _lastY), device
+      px; NaN none }
+    function TooltipShownAt: TTyPointF;
     { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
       px); nil when no box was drawn }
     function TooltipLines: TTyTooltipLineArray;
@@ -4248,6 +4865,19 @@ type
     { [R5-J] the search on one canvas (HitIn); ABlocked: the loading mask
       stands there, nothing under it is found }
     function EventTargetIn(AX, AY: Integer; out ABlocked: Boolean): TTyChartEventTarget;
+    { [R7-G] an axis' part that is not silent under the point (above the
+      list's element at AZ / AZ2 where AOnlyAbove) }
+    function AxisPartAt(AX, AY: Integer; AZ, AZ2: Integer; AOnlyAbove: Boolean;
+      out ATarget: TTyChartEventTarget): Boolean;
+    { [R7-I] ... and AText the text it is, where it is one (an axis name or
+      label, a radar's indicator name or label): Kind ctkAxisText,
+      ComponentIndex the axis (AxisTextOf), DataIndex the label's index
+      among its axis' labels (-1 the name); TyChartNoDatum for a part that
+      is no text (an angle axis' ticks) }
+    function AxisPartFind(AX, AY: Integer; AZ, AZ2: Integer; AOnlyAbove: Boolean;
+      out ATarget: TTyChartEventTarget; out AText: TTyChartDatumRef): Boolean;
+    { [R7-I] a label's rawLabel: scale.getLabel(tick) }
+    function AxisRawLabel(AAxis: TTyAxis; AValue: Double): string;
     function HitTestIn(AX, AY: Integer; out AElement: Integer;
       out ABlocked: Boolean): TTyChartDatumRef;
     { [R2-B] the breadcrumb item a list element is, and its target }
@@ -4283,6 +4913,13 @@ type
       an icon pointer's setColor, then pointer.itemStyle /
       progress.itemStyle over them }
     procedure ApplySeriesPens(AList: TTyPaintList);
+    { [R7-X] A CANDLESTICK'S TOP-LEVEL KEYS: candlestickVisual extends each
+      item's visual style with getItemStyle() of the item model -- the
+      item's, the series', the option root's TOP-LEVEL borderWidth,
+      opacity, shadow, borderType, borderDashOffset, borderCap, borderJoin
+      and borderMiterLimit (its fill and stroke then the item's itemStyle
+      colours) -- over what the series' and the item's itemStyle gave }
+    procedure ApplyCandleTopKeys(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on
@@ -4317,7 +4954,15 @@ type
       ready, and turned into paint elements }
     procedure GfxBuild(APPI: Integer);
     { the elements under the axes }
-    procedure GfxPaintUnder(APainter: TTyPainter);
+    { [R7-AD] APaint False: made ready and run, not drawn (PaintAxes draws
+      them among the axes' parts) }
+    procedure GfxPaintUnder(APainter: TTyPainter; APaint: Boolean = True);
+    { [R7-AJ] THE ELEMENTS UNDER THE AXES OF THE ZLEVELS ALo < z <= AHi, in
+      their order -- the static layer's when the levels are drawn apart
+      (PaintZLevels): each on its level, under its axes, over a lower
+      level's list; not from the continuous phase's cut on (the frames':
+      on a trail's level its layer's, painted every frame) }
+    procedure GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
     { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
     procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;
@@ -4431,6 +5076,15 @@ type
     { ecData.focus / blurScope of an item's element (the item, then the
       series) and of the series' own elements }
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+    { [R7-U] the chain with the series' own style blocks (SeriesOwnStyle)
+      in its node's place: what the series' visual reads (ignoreParent),
+      none of the root's blocks under it }
+    function StOwnChain(const ANodes: TTyStNodeArray; ASeriesIndex: Integer): TTyStNodeArray;
+    { [R7-U] does the view build this row's path from the item model's
+      own getItemStyle (the root's itemStyle under the series'): a tree's
+      node, a sankey's node, a sunburst's piece, a treemap's rect -- every
+      other row is drawn in its visual style }
+    function StRowClimbs(const ATyp: string; ARole: TTyChartAnimRole): Boolean;
     function GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
     function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
     function StIsSankey(ASeriesIndex: Integer): Boolean;
@@ -4548,7 +5202,14 @@ type
     { the target the element at AIndex of the list answers as }
     function TargetOfElement(AIndex: Integer): TTyChartEventTarget;
     { the series' (or the datum's) border, for its legend icon }
-    procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource);
+    { [R7-T] ANode: the datum's node where it is not the store's row (a
+      graph's category) }
+    procedure LegendBorderOf(ASlot, ARaw: Integer; var ASrc: TTyLegendSource;
+      ANode: TJSONObject = nil);
+    { [R7-T] the icon's pen keys and, for a line's own icon, its rule, as
+      getLegendStyle resolves them for legend ALegend's item AName }
+    procedure LegendPensOf(ALegend: Integer; const AName: string;
+      ASlot, ARaw: Integer; var ASrc: TTyLegendSource; ANode: TJSONObject = nil);
     procedure EmitPayloadEvent(const AType, APayloadJson: string;
       AObj: TJSONObject = nil);
     function HasChartHandler(const AType: string): Boolean;
@@ -4938,6 +5599,10 @@ type
     { [R5-I] a continuous visual map's handle label's opacity as drawn now
       (its blur's fade) }
     function VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
+    { [R7-N] a continuous visual map's words' own opacity (textStyle's,
+      else the root textStyle's, else 1): a handle label's normal state, which
+      its blur leaves and comes back to }
+    function VmLabelOwnOpacity(AIndex: Integer): Double;
     { what the pointer at (AX, AY) is over of a visualMap, as zrender would
       find it: 'vm0.inRange', 'vm0.outOfRange', 'vm0.handle1', 'vm0.label0',
       'vm0.text1', 'vm0.item3.symbol', 'vm0.item3.label', 'vm0.ends0'; ''
@@ -5748,7 +6413,9 @@ uses
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvanceChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.JsMath,
+  { [R7-N] innerTextLayout for a cartesian pointer's label }
+  tyControls.AdvanceChart.AxisName,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
   { [R5-D] the WebP export, libwebp loaded when it is asked for }

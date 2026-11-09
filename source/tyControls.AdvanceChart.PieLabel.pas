@@ -336,6 +336,8 @@ const
 
 function TyPieLabelSpecDefault: TTyPieLabelSpec;
 begin
+  { every field nought first, so a field no line below sets is a safe answer }
+  Result := Default(TTyPieLabelSpec);
   { every field, so a flag added later starts False rather than wherever
     the stack left it }
   Result := Default(TTyPieLabelSpec);

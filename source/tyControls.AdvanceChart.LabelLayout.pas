@@ -47,7 +47,7 @@ interface
 uses
   SysUtils, Math, fpjson,
   tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Handlers,
-  tyControls.AdvanceChart.AxisLabels;
+  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.DataTransform;
 
 type
   { a series' labelLayout: none, an object, or a named handler }
@@ -395,6 +395,48 @@ begin
   Result := (A > 5e-5) or (A < -5e-5);
 end;
 
+{ ---- [R7-L] a box at NaN (a label whose size was written as a word):
+  upstream's numbers are JS's, so the layout runs with the traps masked and
+  Math.min / Math.max keep the NaN ---- }
+
+function Fin(A: Double): Boolean; inline;
+begin
+  Result := not (IsNan(A) or IsInfinite(A));
+end;
+
+function RectFin(const AR: TTyXYWH): Boolean;
+begin
+  Result := Fin(AR.X) and Fin(AR.Y) and Fin(AR.W) and Fin(AR.H);
+end;
+
+function JsMin(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+function JsMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+function MaskJs: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure UnmaskJs(AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  { and the SSE flags ClearExceptions leaves on this CPU }
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
 function TyLabelLocalTransform(AX, AY, AOriginX, AOriginY, ARotation,
   AScaleX, AScaleY: Double; out AM: TTyMat2D): Boolean;
 var
@@ -440,7 +482,29 @@ begin
   AM[5] := AM[5] + (AOriginY + AY);
 end;
 
+function LabelGeometryIn(const ARawLocal: TTyXYWH; const AM: TTyMat2D;
+  AHasM: Boolean; AMarginType: Integer; const AMargin: array of Double): TTyLabelBox; forward;
+
 function TyLabelGeometry(const ARawLocal: TTyXYWH; const AM: TTyMat2D;
+  AHasM: Boolean; AMarginType: Integer; const AMargin: array of Double): TTyLabelBox;
+var
+  mask: TFPUExceptionMask;
+begin
+  { [R7-L] a box at NaN goes through as JS takes it }
+  if not RectFin(ARawLocal) then
+  begin
+    mask := MaskJs;
+    try
+      Result := LabelGeometryIn(ARawLocal, AM, AHasM, AMarginType, AMargin);
+    finally
+      UnmaskJs(mask);
+    end;
+    Exit;
+  end;
+  Result := LabelGeometryIn(ARawLocal, AM, AHasM, AMarginType, AMargin);
+end;
+
+function LabelGeometryIn(const ARawLocal: TTyXYWH; const AM: TTyMat2D;
   AHasM: Boolean; AMarginType: Integer; const AMargin: array of Double): TTyLabelBox;
 var m: array[0..3] of Double; i: Integer;
 begin
@@ -572,6 +636,36 @@ begin
   if ADim = 0 then Result := AR.W else Result := AR.H;
 end;
 
+type
+  { [R7-L] shiftLayoutOnXY's comparator, a.rect[xyDim] - b.rect[xyDim]: a
+    not-a-number difference is a tie (sortCompare), and V8's sort is run
+    whole, so a NaN lands where V8 leaves it }
+  TShiftCompare = class
+    Items: TTyLabelLayoutItemArray;
+    Dim: Integer;
+    function Compare(A, B: Integer): Integer;
+  end;
+
+function TShiftCompare.Compare(A, B: Integer): Integer;
+var d: Double;
+begin
+  if Dim = 0 then d := Items[A].Box.Rect.X - Items[B].Box.Rect.X
+  else d := Items[A].Box.Rect.Y - Items[B].Box.Rect.Y;
+  if IsNan(d) then Result := 0
+  else if d < 0 then Result := -1
+  else if d > 0 then Result := 1
+  else Result := 0;
+end;
+
+function AnyNaNBox(const AItems: TTyLabelLayoutItemArray; const AIdx: array of Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(AIdx) do
+    if not (RectFin(AItems[AIdx[i]].RawLocal) and RectFin(AItems[AIdx[i]].Box.Rect)) then
+      Exit(True);
+end;
+
 procedure TyShiftLabelsOnXY(var AItems: TTyLabelLayoutItemArray;
   const AIdx: array of Integer; ADim: Integer; AMin, AMax: Double);
 var
@@ -589,7 +683,10 @@ var
   list: array of Integer;
   len, i, j, k: Integer;
   lastPos, delta, minGap, maxGap: Double;
-  adjusted: Boolean;
+  adjusted, nanMode: Boolean;
+  mask: TFPUExceptionMask;
+  cmp: TShiftCompare;
+  tl: TTyIntegerArray;
 
   procedure Move1(AK: Integer; AD: Double);
   begin
@@ -632,13 +729,14 @@ var
     for q := 1 to len - 1 do
     begin
       prevEnd := RectPos(AItems[list[q - 1]].Box.Rect, ADim);
-      gap := Max(RectPos(AItems[list[q]].Box.Rect, ADim) - prevEnd
+      gap := JsMax(RectPos(AItems[list[q]].Box.Rect, ADim) - prevEnd
         - RectSize(AItems[list[q - 1]].Box.Rect, ADim), Double(0));
       gaps[q - 1] := gap;
       total := total + gap;
     end;
-    if total = 0 then Exit;
-    pct := Min(Abs(AD) / total, AMaxPct);
+    { `!totalGaps`: nought or NaN }
+    if (total = 0) or IsNan(total) then Exit;
+    pct := JsMin(Abs(AD) / total, AMaxPct);
     if AD > 0 then
     begin
       for q := 0 to len - 2 do ShiftList(gaps[q] * pct, 0, q + 1);
@@ -654,7 +752,7 @@ var
   begin
     if AThis < 0 then
     begin
-      moveFromMaxGap := Min(AOther, -AThis);
+      moveFromMaxGap := JsMin(AOther, -AThis);
       if moveFromMaxGap > 0 then
       begin
         ShiftList(moveFromMaxGap * ADir, 0, len);
@@ -688,9 +786,30 @@ begin
   adjusted := False;
   len := Length(AOrder);
   if len < 2 then Exit;
+  nanMode := AnyNaNBox(AItems, AOrder);
+  if nanMode then mask := MaskJs;
+  try
   SetLength(list, len);
   for i := 0 to len - 1 do list[i] := AOrder[i];
-  { a stable sort by the rect's start, as V8's is }
+  { a stable sort by the rect's start, as V8's is; [R7-L] with a NaN
+    start, V8's own sort (a tie it cannot order lands where its TimSort
+    leaves it) }
+  if nanMode then
+  begin
+    cmp := TShiftCompare.Create;
+    try
+      cmp.Items := AItems;
+      cmp.Dim := ADim;
+      tl := nil;
+      SetLength(tl, len);
+      for i := 0 to len - 1 do tl[i] := list[i];
+      TyJsArraySort(tl, @cmp.Compare);
+      for i := 0 to len - 1 do list[i] := tl[i];
+    finally
+      cmp.Free;
+    end;
+  end
+  else
   for i := 1 to len - 1 do
   begin
     k := list[i];
@@ -726,6 +845,9 @@ begin
   if maxGap < 0 then SqueezeWhenBailout(maxGap);
   for i := 0 to len - 1 do AOrder[i] := list[i];
   Result := adjusted;
+  finally
+    if nanMode then UnmaskJs(mask);
+  end;
 end;
 
 procedure TyHideOverlapLabels(var AItems: TTyLabelLayoutItemArray;
@@ -735,8 +857,14 @@ const
 var
   order, shown: array of Integer;
   i, j, k, n, ns: Integer;
-  hit: Boolean;
+  hit, nanMode: Boolean;
+  mask: TFPUExceptionMask;
 begin
+  { [R7-L] a box at NaN: BoundingRect.intersect compares as JS does -- every
+    comparison with NaN false, so only the other axis is weighed }
+  nanMode := AnyNaNBox(AItems, AIdx);
+  if nanMode then mask := MaskJs;
+  try
   n := Length(AIdx);
   { restoreIgnore }
   for i := 0 to n - 1 do
@@ -799,6 +927,9 @@ begin
       Inc(ns);
     end;
   end;
+  finally
+    if nanMode then UnmaskJs(mask);
+  end;
 end;
 
 procedure TyLayoutLabels(var AItems: TTyLabelLayoutItemArray; ALeft, ATop,
@@ -806,7 +937,16 @@ procedure TyLayoutLabels(var AItems: TTyLabelLayoutItemArray; ALeft, ATop,
 var
   i, nx, ny, nh: Integer;
   xs, ys, hs: array of Integer;
+  nanMode: Boolean;
+  mask: TFPUExceptionMask;
 begin
+  { [R7-L] a box at NaN (a size written as a word): the whole layout as JS
+    computes it }
+  nanMode := False;
+  for i := 0 to High(AItems) do
+    if not RectFin(AItems[i].RawLocal) then nanMode := True;
+  if nanMode then mask := MaskJs;
+  try
   SetLength(xs, Length(AItems));
   SetLength(ys, Length(AItems));
   SetLength(hs, Length(AItems));
@@ -837,6 +977,9 @@ begin
   TyShiftLabelsOnXY(AItems, xs, 0, ALeft, ARight);
   TyShiftLabelsOnXY(AItems, ys, 1, ATop, ABottom);
   TyHideOverlapLabels(AItems, hs);
+  finally
+    if nanMode then UnmaskJs(mask);
+  end;
 end;
 
 end.

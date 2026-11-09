@@ -294,6 +294,11 @@ begin
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
   Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, Result.FontWeight);
+  { [R7-M] the rest of createTextStyle: the family, the weight, the block,
+    the opacity }
+  ComponentTextBlock(ASpec.TextStyleJson, Result.FontName, Result.FontWeight,
+    Result.HasRt, Result.Rt, Result.RtGlobal, Result.HasOpacity, Result.Opacity);
+  if FLastPPI > 0 then Result.RtScale := FLastPPI / 96 else Result.RtScale := 1;
   Result.Filler := TTyChartColor(
     model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
   Result.Frame := TTyChartColor(
@@ -495,6 +500,10 @@ begin
       if store = nil then Break;
       cols := store.DimsOfCoord(ax.Dim);
       if Length(cols) > 0 then thisCol := cols[0] else thisCol := -1;
+      { [spec 259] a coordinate whose encode list has a gap at place 0:
+        mapDimension answers nothing and upstream throws drawing the
+        shadow -- it is left out }
+      if (thisCol >= 0) and store.DimVoid(thisCol) then Break;
       otherCol := -1;
       { a candlestick's shadow is its open }
       if b.SeriesType = 'candlestick' then otherCol := store.DimIndexOf('open');
@@ -839,6 +848,9 @@ begin
   L := FDzLayouts[ASlider];
   e := L.Kids[ARole];
   if not e.Present then Exit;
+  { [R7-AE] a group of no place: every element's transform is no number,
+    and Path.contain takes the point to NaN -- found by nothing }
+  if L.Unplaced then Exit;
   M := TyDzGlobal(L, ARole);
   if not TyMatInvert(M, inv) then Exit;
   lx := inv[0] * AX + inv[2] * AY + inv[4];

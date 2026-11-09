@@ -180,7 +180,8 @@ type
     Left, Top, Right, Bottom: TTyChartPosValue;
   end;
 
-  { What upstream hands the function, in device px of the chart: the
+  { What upstream hands the function, in css px of the chart ([R7-AG] the
+    device px over PPI / 96, as the browser's DOM is laid out): the
     pointer; the params (one record for an item tooltip, every series' for
     an axis one -- IsAxis); the hovered element's bounding rect (HasRect
     False under an axis trigger, where upstream passes undefined); and

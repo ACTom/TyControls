@@ -24,7 +24,7 @@ unit tyControls.AdvanceChart.Paint;
   testable here without a graphics stack. }
 interface
 uses SysUtils, Math, tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
-  tyControls.AdvanceChart.ZrPath;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.JsMath;
 
 type
   { $AARRGGBB, byte-identical to tyControls.Types' TTyColor. Declared again here
@@ -64,6 +64,13 @@ type
     { In the order they were written. Upstream neither sorts, dedupes nor
       clamps them, and emits duplicate offsets itself. }
     Stops: TTyChartGradStopArray;
+    { [R7-AB] A CANVAS GRADIENT MADE IN A FRAME (Global then): the points
+      and the radius are in the frame M [a, b, c, d, e, f] takes to device
+      px -- an element's own frame that is no similarity (a symbol scaled
+      unevenly or turned), or the frame of the element a held gradient is
+      filled under: a radial one an ellipse there, as the canvas has it }
+    HasM: Boolean;
+    M: array[0..5] of Double;
   end;
 
   { A COLOUR THAT IS AN IMAGE: zrender's ImagePatternObject -- `image`,
@@ -214,6 +221,38 @@ type
       scale, where the canvas strokes a stretched pen. 0, the zero value,
       and 1 are none. }
     PenScale: Double;
+    { [R7-P] THE PEN STRETCHED WITH THE SHAPE. The canvas strokes a path in
+      the space its transform maps, so where that transform scales x and y
+      unequally (or skews) the pen is the transform's linear part times a
+      round pen -- an elliptical one -- and a dash is measured along the path
+      in that space: a symbol of symbolSize [w, h] (Symbol.ts scales its unit
+      path by half the size, strokeNoScale dividing the width by the line
+      scale), a graph under a view whose scaleY is not its scaleX, a graphic
+      element's own scaleX / scaleY, a pictorial glyph, an SVG map's shape.
+      HasPenMap with PenMap (x' = PenMap[0] x + PenMap[2] y, y' = PenMap[1] x
+      + PenMap[3] y; [4], [5] unread): the pen drawn is PenMap times a round
+      pen of the width above (times PenScale where there is one), the dash
+      and its phase lengths in the same space. Set only where the map is no
+      turn and uniform scale (TyStyleSetPenMap), which a round pen draws
+      alike -- False, the zero value, is the round pen. The hit test asks
+      the same pen (a symbol's own frame, a ZrHit's local path, or the path
+      taken back through the map). }
+    HasPenMap: Boolean;
+    PenMap: TTyMat2D;
+    { [R7-F] WHAT THE HIT TEST ASKS OF THE STYLE that the paint cannot tell:
+      zrender's hasFill() is `fill != null && fill !== 'none'` and its
+      hasStroke() `stroke != null && stroke !== 'none' && lineWidth > 0`,
+      so a colour written 'transparent' or rgba(..., 0) fills and strokes
+      for the pointer while it paints nothing, and 'none' does neither.
+      The colours above hold both as transparent. HitNoFill: a closed
+      shape's fill is null or 'none' -- Path.contain asks no inside, and
+      the pen reaches at least strokeContainThreshold (an open line asks
+      HasFill, as before). HitClearPen: a pen of no alpha that is a colour
+      all the same (it strokes for the pointer at its width). The zero
+      values are the old reading: a closed shape filled, a clear pen none.
+      The painter reads neither. }
+    HitNoFill: Boolean;
+    HitClearPen: Boolean;
   end;
 
   { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
@@ -225,6 +264,46 @@ type
   end;
 
 const
+  { [R7-S] TTyChartElement.CanvasFlags }
+  cTyCanvasOwnShadow = 1;
+  cTyCanvasShadowLeft = 2;
+  cTyCanvasTransformLeft = 4;
+  { [R7-V] a value the canvas refuses, the one it had kept: a shadowBlur
+    below nought, a lineCap / lineJoin that is no word of theirs, a
+    miterLimit below nought (TyLinesCanvasLeftovers settles each in paint
+    order and marks it here) }
+  cTyCanvasBlurLeft = 8;
+  cTyCanvasCapLeft = 16;
+  cTyCanvasJoinLeft = 32;
+  cTyCanvasMiterLeft = 64;
+  { [R7-V] what a builder writes for such a value until the paint order
+    settles it: a shadowColor no colour parser takes (alpha 0: none drawn
+    meanwhile), a lineCap / lineJoin of 3 (drawn as the default meanwhile);
+    a shadowBlur or miterLimit keeps its own negative }
+  cTyCanvasColourLeft = TTyChartColor($00010203);
+  cTyCanvasWordLeft = 3;
+  { [R7-W] more of them: a fill / stroke colour no parser reads (written as
+    cTyCanvasColourLeft: the canvas keeps the fillStyle / strokeStyle it
+    had), a width of 'Infinity' (marked by its builder, drawn as none until
+    settled: the lineWidth it had), a dash phase no number or infinite
+    (written as cTyCanvasPhaseLeft: the lineDashOffset it had), a caption's
+    text fill / stroke colour or one of its pieces' (cTyCanvasColourLeft) }
+  cTyCanvasFillLeft = 128;
+  cTyCanvasStrokeLeft = 256;
+  cTyCanvasWidthLeft = 512;
+  cTyCanvasPhaseLeftFlag = 1024;
+  cTyCanvasTextFillLeft = 2048;
+  cTyCanvasTextStrokeLeft = 4096;
+  cTyCanvasPhaseLeft = -1.0e305;
+  { [R7-Y] and more: a shadowOffsetX / Y the canvas refuses (a string that
+    is no finite number: dpr times it is not one -- written as
+    cTyCanvasPhaseLeft, the offset it had), a blend (globalCompositeOperation)
+    that is none of the canvas' words (the one it had), a caption's font the
+    canvas refuses (the font the text before it left) }
+  cTyCanvasOffXLeft = 8192;
+  cTyCanvasOffYLeft = 16384;
+  cTyCanvasBlendLeft = 32768;
+  cTyCanvasFontLeft = 65536;
   { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
   cTyCapButt = 0;
   cTyCapRound = 1;
@@ -299,7 +378,10 @@ type
 
   TTyRtAlign = (rtaNone, rtaLeft, rtaCenter, rtaRight);
   TTyRtVAlign = (rtvNone, rtvTop, rtvMiddle, rtvBottom);
-  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto);
+  { [R7-H] rtwText: a token's width written as a string that is no
+    percentage and not 'auto' ('60', 'abc') -- written, so it is no width
+    the token takes from its words alone, yet no number either }
+  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto, rtwText);
   TTyRtOverflow = (rtoNone, rtoTruncate, rtoBreak, rtoBreakAll);
 
   { ONE STYLE as zrender holds it after normalizeTextStyle. `Has` flags
@@ -316,6 +398,13 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [R7-AF] textBorderWidth written as a STRING: LineWidth its Number (the
+      canvas' lineWidth takes it so), LineWidthText the string where that is
+      above nought -- a TSpan's rect adds it to its width and height as a
+      string ('243' of 24 and '3'); LineWidthInf one of +Infinity (stroked at
+      the width the canvas had, LineWidth nought) }
+    LineWidthText: string;
+    LineWidthInf: Boolean;
     { [F4c] textBorderType as written ('' none) }
     LineDash: string;
     { [R2-F] textBorderDashOffset (a graphic text's lineDashOffset), when
@@ -330,8 +419,31 @@ type
     Width: Double;          // px, or the percentage for rtwPercent
     HasHeight: Boolean;
     Height: Double;
+    { [R7-H] A WIDTH, HEIGHT OR LINE HEIGHT WRITTEN AS A STRING, as zrender
+      holds it -- createTextStyle hands the option's value on as it is, and
+      zrender does JS arithmetic with it: where it compares or divides, the
+      string is its JS number (Width / Height / LineHeight hold it, NaN for
+      a word such as '50%' or 'abc'); where it ADDS -- the padding to the
+      outer width, a block's left edge to its width, a plain line's y to the
+      line height -- the string is joined ('60' + 0 = '600'). The block's
+      width is a string whatever its kind (rtwPercent, rtwAuto and rtwText
+      alike: zrender reads no percentage on a block); a site that sets a
+      width or height of its own clears the flag. }
+    WidthIsText, HeightIsText, LineHeightIsText: Boolean;
+    WidthText, HeightText, LineHeightText: string;
     HasPadding: Boolean;
     Padding: array[0..3] of Double;   // top, right, bottom, left
+    { [R7-AI] A PADDING zrender HOLDS AS JS VALUES: normalizeCssArray takes a
+      string by its characters ('12' is ['1', '2', '1', '2']) and leaves a
+      side it has none for undefined (a string or an array of one, `[]`,
+      `true`) -- and zrender ADDS the sides as JS does ('2' + '2' is '22').
+      Padding holds each side's JS number (NaN for undefined); PaddingKind
+      what it is: cTyPadNum, cTyPadStr (PaddingText the string), cTyPadUndef,
+      cTyPadNull, cTyPadTrue, cTyPadFalse. PaddingJs: a side is not a plain
+      number -- only then can the layout join a side or meet NaN. }
+    PaddingJs: Boolean;
+    PaddingKind: array[0..3] of Byte;
+    PaddingText: array[0..3] of string;
     HasBackground: Boolean;
     Background: TTyChartColor;
     { [R2-F] backgroundColor: {image}: the picture's source ('' none) --
@@ -341,11 +453,23 @@ type
     HasBorderColor: Boolean;
     BorderColor: TTyChartColor;
     BorderWidth: Double;
+    { [R7-F] the box's borderWidth written +Infinity: drawn as none (the
+      canvas takes no such width), and the box's stroked rect is
+      not-a-number upstream -- the pointer never finds the box }
+    BorderWidthInf: Boolean;
+    { [R7-AF] a borderWidth written as a string that is truthy but strokes
+      nothing ('0', 'abc'): the box's rect is made all the same
+      (`textBorderWidth && textBorderColor`), unstroked }
+    BorderWidthWord: Boolean;
     { [R2-I2] the box's border dash as written (a label's borderType, a
       graphic text's borderDash; '' solid) and its phase (borderDashOffset) }
     BorderDash: string;
     BorderDashOffset: Double;
     Radius: array[0..3] of Double;
+    { [R7-L] borderRadius is truthy (a number not nought, any array, [0, 0]
+      too): zrender's Rect takes the rounded path (roundRect), which joins a
+      size written as a string to the corner's place }
+    RadiusTruthy: Boolean;
     HasOpacity: Boolean;
     Opacity: Double;
     Overflow: TTyRtOverflow;
@@ -357,6 +481,15 @@ type
     ShadowColor: TTyChartColor;
     HasShadowColor: Boolean;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] a part written as a value the canvas refuses (`dpr * ('abc'
+      || 0)` is none -- truthy, so it wins the `||`): 1 the blur, 2 the
+      offset x, 4 the offset y, its number nought above; 8 the refused blur
+      is above nought ('Infinity': the span casts a shadow) }
+    ShadowLeft: Byte;
+    { [R7-AB] a font part written as a value the canvas' font parser refuses
+      (TyCssFontRefused): 1 the fontStyle, 2 the fontWeight, 4 the fontSize
+      -- makeFont's string is refused whole, the font the canvas had kept }
+    FontLeft: Byte;
     { [R5-A] THE BOX'S SHADOW (TEXT_PROPS_BOX' shadowBlur / shadowColor /
       shadowOffsetX / Y): the rect or the picture of the box casts it, in
       shadowColor -- 'transparent' when none (Text.ts _renderBackground) }
@@ -405,11 +538,17 @@ type
     Line, Token: Integer;
     X, Y, W, H: Double;        // a rect's box; a text's anchor in X, Y
     Drawn: Boolean;            // a rect with no fill and no stroke is not
+    { [R7-F] a rect the pointer never finds (a box whose border is
+      +Infinity: its stroked rect is not-a-number) }
+    NoHit: Boolean;
     HasFill: Boolean;
     Fill: TTyChartColor;
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     LineWidth: Double;
+    { [R7-AF] a text's lineWidth written as a string (above nought): its
+      rect joins it to its width and height as a string (TyRtBounds) }
+    LineWidthText: string;
     { [F4c] a text's textBorderType as written ('' a solid halo) }
     LineDash: string;
     { [R2-F] its phase (lineDashOffset), px }
@@ -421,7 +560,47 @@ type
     BorderDash: string;
     BorderDashOffset: Double;
     Radius: array[0..3] of Double;
+    { [R7-H] A RECT WHOSE SIZE WAS A STRING ('600'): canvas draws a plain
+      rect at X, Y, W, H (its numbers), but zrender's path ADDS the size to
+      the corner as a string -- a rounded rect runs from X to EdgeX1 = X +
+      '600' joined, and so do the bounds of every such rect (PathProxy's
+      fromLine). EdgeX1 / EdgeY1 are those joined edges. }
+    PathEdges: Boolean;
+    EdgeX1, EdgeY1: Double;
+    { [R7-AI] A PLACE zrender HOLDS AS A STRING (a padding joined to it: a
+      rect's shape.x, a TSpan's style.x '02'): canvas draws at its number
+      (X), but the path ADDS to it as a string -- a rounded rect's
+      `x + r1` and `x + r4` (EdgeXR1 / EdgeXR4, joined) -- and so does a
+      TSpan's rect in rectContain (`rect.x + rect.width`). XText the string
+      ('' none). }
+    XText: string;
+    EdgeXR1, EdgeXR4: Double;
+    { [R7-AI] a rounded rect's path bounds on x where its place is a string:
+      the arcs about `x + r4` and `x + r1` (strings) put their ends at
+      `Math.cos(a) * r + cx` -- joined again ('-3' + '023' is -3023) --
+      PathProxy.getBoundingRect's min and max of every point }
+    EdgeXMin, EdgeXMax: Double;
+    { [R7-AI] A TSPAN'S RECT AS rectContain READS IT (HitJs): from (HitL,
+      HitT) to (HitR, HitB), the right and bottom edges `rect.x +
+      rect.width` and `rect.y + rect.height` in JS -- joined where the place
+      or a written lineWidth is a string ('12' + '243' reaches far right;
+      '-4.86' + '6.723' is no number). An edge that is NaN, or one before its
+      start, contains nothing. }
+    HitJs: Boolean;
+    HitL, HitT, HitR, HitB: Double;
+    { [R7-L] the rounded path (roundRect), radii nought or not -- see
+      TTyRtStyle.RadiusTruthy }
+    Rounded: Boolean;
     Opacity: Double;
+    { [R7-L] A TOKEN'S OWN OPACITY (its style's, the root textStyle's under
+      it): zrender gives the token retrieve3(its own, the Text's, 1), so it
+      is drawn at Opacity whatever the Text's own opacity is -- every other
+      piece follows the Text's (the element's alpha) }
+    OwnOpacity: Boolean;
+    { [R7-L] NOT ONE OF zrender's CHILDREN: the undrawn rect a label laid
+      out wholly at NaN stands as, where its TSpans are bounded, so the
+      label layout and the pointer still find it }
+    Placeholder: Boolean;
     { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
       rect's border, at ImageOpacity: the style's opacity where the picture
       is the box's only element, else zrender's own 1 }
@@ -435,6 +614,13 @@ type
     HasShadow: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] the shadow's parts the canvas refuses (TTyRtStyle.ShadowLeft's
+      1, 2, 4): the value kept is the one it had, settled in the paint order
+      (TyLinesCanvasLeftovers) into the parts above }
+    ShadowLeft: Byte;
+    { [R7-AB] its font refused (its token's, or the block's it takes): the
+      one the canvas had, settled in the paint order into the three above }
+    FontLeft: Boolean;
     { A TEXT'S FILL OR STROKE THAT CAME FROM THE HOST'S DEFAULT (zrender's
       useDefaultFill, and the auto stroke), not from a style: what a hover
       re-inks, and what a free text whose ink is the skin's takes at paint
@@ -443,8 +629,37 @@ type
     { [spec 242] a rich token's fill or stroke of its own: a state's style
       on the block (a custom text's emphasis fill) leaves it }
     TokenFill, TokenStroke: Boolean;
+    { [R7-W] its fill (1) / stroke (2) colour one the canvas refused, the
+      one it had settled in (TyLinesCanvasLeftovers) }
+    CanvasLeft: Byte;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
+
+const
+  { [R7-AI] TTyRtStyle.PaddingKind }
+  cTyPadNum = 0;
+  cTyPadStr = 1;
+  cTyPadUndef = 2;
+  cTyPadNull = 3;
+  cTyPadTrue = 4;
+  cTyPadFalse = 5;
+
+type
+  { [R7-AI] A COMPONENT'S PADDING as getLayoutRect and makeBackground hold
+    it, `normalizeCssArray(padding || 0)` (a title's, a legend's, a
+    toolbox's): Kind / Num / Text per side as TTyRtStyle.PaddingKind /
+    Padding / PaddingText; Js a side is no plain number -- only then does
+    the layout join a side to a place or a size. }
+  TTyJsPad = record
+    Js: Boolean;
+    Kind: array[0..3] of Byte;
+    Num: array[0..3] of Double;
+    Text: array[0..3] of string;
+  end;
+
+  { [R7-AK] boxes, in a text's own frame (the rects rectContain reads off
+    the TSpans laid out at NaN) }
+  TTyRtBoxArray = array of TTyXYWH;
 
 
   { A TEXT'S STYLE AS THE SITE HOLDS IT BEFORE LAYOUT: zrender's block style
@@ -476,6 +691,9 @@ type
     Stroke: TTyChartColor;
     HasLineWidth: Boolean;
     LineWidth: Double;
+    { [R7-AF] as TTyRtStyle's }
+    LineWidthText: string;
+    LineWidthInf: Boolean;
     { [F4c] the global textStyle's textBorderType ('' none) }
     LineDash: string;
     { [R2-F] and its textBorderDashOffset }
@@ -486,6 +704,8 @@ type
     HasShadowColor: Boolean;
     ShadowColor: TTyChartColor;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R7-AB] its parts the canvas refuses (TTyRtStyle.ShadowLeft) }
+    ShadowLeft: Byte;
     { the root wrote richInheritPlainLabel: false -- the zero value is
       upstream's default, on }
     InheritPlainOff: Boolean;
@@ -498,6 +718,10 @@ type
   TTyRtDrawn = record
     Pieces: TTyRtPieceArray;
     X, Y, RotationRad, Scale: Double;
+    { [R7-M] under a whole affine map instead (the caption's Affine: the
+      text's own CSS px to device px, the anchor in [4..5]) }
+    HasAffine: Boolean;
+    Affine: array[0..5] of Double;
   end;
 
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
@@ -572,6 +796,25 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [R7-M] A FIXED ANCHOR'S TEXT SQUASHED ON Y BEFORE ITS TURN: a graph's
+      edge label in a view scaled unequally (Line.beforeUpdate scales it by
+      1 / the ancestors' scaleX, so the main group's scaleY / scaleX is left
+      on it) -- the ratio; 0 (or 1) none. The label pass draws such a text
+      under the whole map (HasAffine). }
+    FixedYScale: Double;
+    { [R7-M] A TREEMAP'S LABEL ON ITS CELL: TreemapView's beforeUpdate sets
+      the label's width and height to its content rect's (an upper label's
+      strip's) less the padding, so a block's box is the whole cell. A block
+      is laid out at FixedBoxX / Y (device px: the position's anchor, before
+      the padding the one-run caption's FixedX / Y has in it) by
+      FixedBoxAH / AV, its width FixedBoxW, its height FixedBoxH and its
+      padding FixedBoxPad (top, right, bottom, left) CSS px -- the padding
+      the cell was cut by, the label's own or the treemap's default }
+    HasFixedBox: Boolean;
+    FixedBoxX, FixedBoxY, FixedBoxW, FixedBoxH: Double;
+    FixedBoxAH: TTyTextAnchorH;
+    FixedBoxAV: TTyTextAnchorV;
+    FixedBoxPad: array[0..3] of Double;
     { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
       the position and the distance (device px) it was placed by, so a
       frame can place it again on the box as drawn }
@@ -664,6 +907,12 @@ type
     HasEmph: Boolean;
     EmphColour, EmphStrokeColour: TTyChartColor;
     EmphStrokeWidthLogical: Double;
+    { [R7-AI] the hover's halo is of 'Infinity': the width the canvas had }
+    EmphStrokeInf: Boolean;
+    { [R7-AA] what the hover's label writes of its ink: 1 its color, 2 its
+      textBorderColor or textBorderWidth -- the state style's keys, which go
+      over a block's own (TyCaptionToEmphasis) }
+    EmphOwnInk: Byte;
     { Set by a mark whose label host is FILLED BUT TRANSPARENT -- a pictorial
       bar's target rect. Its ink is chosen as over a transparent fill, not as
       over no fill at all. }
@@ -676,6 +925,16 @@ type
     RtPieces: TTyRtPieceArray;
     RtEmph: TTyRtPieceArray;
     RtScale: Double;
+    { [R7-F] A SERIES LABEL'S BOX IN ITS OWN FRAME: about (X, Y), unturned,
+      device px (the block's union, or the plain words' box). Where the
+      label turns (RotationRad), the hit test takes the point back into
+      that frame and asks this box -- zrender's rectContain / Path.contain
+      in local coordinates -- not the element's upright bounds. HitRelOwn:
+      the box leaves out a piece the pointer never finds (NoHit), so it is
+      asked turned or not. }
+    HasHitRel: Boolean;
+    HitRelOwn: Boolean;
+    HitRel: TTyRectF;
     { A VALUE THAT COUNTS (label.valueAnimation, a bar's or a gauge's
       reading): the raw value (ValHas: there is one -- the next render's
       prevValue), and the words with #1 where the value goes -- upstream's
@@ -733,6 +992,9 @@ type
     LmMarginType: Integer;
     LmMargin: array[0..3] of Double;
     LmTextW, LmTextH, LmStrokeW: Double;
+    { [R7-AF] the written text border's width as a string: the TSpan's rect
+      joins it to its width and height ('' a number) }
+    LmStrokeText: string;
     LmInkFill: TTyChartColor;
     LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;
@@ -899,6 +1161,10 @@ type
     TwVals: TTyDoubleArray;
     { the role's own numbers -- see AdvanceChart.AnimView for each }
     G: array[0..11] of Double;
+    { [R7-AH] the device px a css px makes, where the role snaps a line on
+      the half pixel (a lines row's line): on the css px grid (0 or 1: the
+      device px grid) }
+    PxScale: Double;
     { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,
       upstream's whole-series layout points (flattened x, y, Float32 values,
       not-a-number where a row has no point), its stacked-on points (nil
@@ -1023,6 +1289,29 @@ type
       and whether it is that node's label -- for a reader of the list }
     SvgNode: Integer;
     SvgLabel: Boolean;
+    { [R7-O] A strokeNoScale PEN READ OFF THE STYLE AT HIT TIME (a state
+      tweens it): the stroke width is the element's StrokeWidthLogical
+      (device px), at least strokeContainThreshold, over LineScale, and Box
+      is PathBox grown by it -- a graph edge's line under a view scaled
+      unequally. False, the zero value: LineWidth and Box as written. }
+    StyleWidth: Boolean;
+    LineScale: Double;
+    PathBox: TTyXYWH;
+    { [R7-S] A GRAPHIC OR CUSTOM SERIES ELEMENT'S WHOLE Path.contain IN ITS
+      OWN FRAME: Path its path there (TyGfxPath), ToLocal the inverse of its
+      device transform, PathBox the path's rect, Fill its hasFill and Stroke
+      its hasStroke as built; the pen's width read off the style at hit time
+      (a state tweens it) as its own lineWidth -- StrokeWidthLogical over
+      LwDiv, the css px of the drawn width per unit of it; FixedLw instead
+      where it is not drawn (invisible: the style holds no pen, upstream
+      still asks it) -- at least strokeContainThreshold without a fill, over
+      LineScale (getLineScale where strokeNoScale, else 1); the rect grown by
+      that. So a segment's end box, an arc's whole width and the threshold
+      are all upstream's, in its frame [was: the drawn outline on the
+      canvas, its arcs as cubics at half the width]. }
+    OwnPen: Boolean;
+    LwDiv: Double;
+    FixedLw: Double;
   end;
 
   { [R2-I3] A TEXT AS ITS EMPHASIS STATE LAYS IT OUT: the caption and the
@@ -1091,11 +1380,56 @@ type
       of its outline and not inside. 0: the area, as every other element.
       A matrix cell written `silent: false` with no fill [Batch 147]. }
     HitStrokeBand: Double;
+    { [R7-R] STROKECONTAINTHRESHOLD IN THE ELEMENT'S OWN FRAME: Path.contain
+      takes an unfilled path's pen to at least 5 of the element's own units
+      (over its line scale where it is strokeNoScale), so where a transform
+      scales the element the threshold scales with it -- 5 times this, in
+      the space the hit test asks the pen in (the canvas, or the pen map's
+      space: the element's frame times the root of the map's determinant).
+      A graphic / custom series element under its own or a group's scale
+      (10 px at scale 2; its line scale where strokeNoScale). 0, the zero
+      value, is 1: 5 on the canvas, as every element built in px. }
+    HitMinScale: Double;
+    { [R7-S] WHAT THE CANVAS IS LEFT WITH (TyLinesCanvasLeftovers): a lines
+      effect symbol's own canvas shadowColor (CanvasShadow, where
+      CanvasFlags has cTyCanvasOwnShadow: its written shadowColor or its
+      colour, which zrender assigns even where nothing casts it); its shadow
+      in the colour the canvas had (cTyCanvasShadowLeft: its colour a
+      gradient, or no colour, the canvas refuses); its transform the one the
+      canvas had (cTyCanvasTransformLeft: a scale that is not a number, the
+      transform refused) }
+    CanvasFlags: LongWord;
+    CanvasShadow: TTyChartColor;
+    { [R7-V] THE TRANSFORM IT HANDS THE CANVAS (zrender's setTransform of its
+      own transform), device px, [a, b, c, d, e, f], where it is not read
+      off the element otherwise (a lines series' end symbol, ...): what an
+      effect symbol of no transform is drawn under after it. Nil, the zero
+      value: read off the element (an effect symbol's place, a caption's
+      anchor and turn, a symbol's frame, an own-frame path's) or none }
+    CanvasM: TTyDoubleArray;
+    { [R7-AE] DRAWN IN ITS OWN FRAME UNDER THE TRANSFORM THE CANVAS HAD (with
+      cTyCanvasTransformLeft): a dataZoom slider whose group has no place
+      -- its bounding rect, grown by a pen of 'Infinity', is no number, so
+      every element's transform is refused. FrameShape[0]: its path in
+      that frame, css px (a polygon carrying zrender's commands);
+      FrameOrigin: where the canvas' own frame has its origin here, device
+      px; FrameClip: [x, y, w, h] its group's clip in that frame, empty
+      none. TyCanvasRunStep maps the shape, the clip and the pen through the
+      transform the canvas kept. Empty, the zero value, everywhere else }
+    FrameShape: TTyChartShapeArray;
+    FrameOrigin: TTyPointF;
+    FrameClip: TTyDoubleArray;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
       NaN (a bar whose infinite border took all of its width) }
     HitNone: Boolean;
+    { [R7-C] A POINTER IN ITS OWN FRAME: the polygon is upstream's
+      PointerPath, drawn upright along its local y and turned to its angle
+      by its transform -- Path.contain's stroked bounding rect is upright in
+      that frame, so the hit test turns the polygon (its tip, Points[2], off
+      its back, Points[0]) and the point back first. False everywhere else }
+    HitUpright: Boolean;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -1158,6 +1492,22 @@ type
       group joins the zrender root first). The list's renderer skips it;
       the control paints it before the axes. Hit and ordered as any other. }
     GfxUnder: Boolean;
+    { [R7-AD] AN ELEMENT OF THE LIST IN THE COMPONENTS' BAND: on zlevel 0
+      and sorted -- by z, z2 and its view's place in the zr root -- before
+      the last of the axes' parts or of the graphic's elements under them
+      (a radar's, a geo's, a matrix's furniture, a series of a z under the
+      axes'): drawn among them in that order (PaintAxes), GfxUnder too so
+      the list's renderer and its run pass it by (CompRun marks it).
+      CompView its view's place where the build knows it (a radar, a
+      calendar, a matrix, a geo: CompViewOf), 0 to take it from the datum }
+    CompBand: Boolean;
+    CompView: Integer;
+    { [R7-AH] CompView holds the view's place (of every element of the
+      control's list once it is built): the paint order's key after z2 --
+      zrender's display list, at an equal zlevel, z and z2, is the root's
+      views in the order they were made [was: the order the port built its
+      list in] }
+    ViewKnown: Boolean;
     { [Batch 148] UPSTREAM'S OWN Path.contain, where the element asks for
       it (a geo region): the full path, not the shape's points -- see
       TTyPathHit. The shape test is not consulted then. }
@@ -1165,7 +1515,15 @@ type
     { [Batch 148] THE CLIP CUTS THE HIT TOO, as zrender's isHover asks
       every clip path up the element's parents -- for an element that
       says so (a geo region and its text). Everything else keeps the
-      rule above: the hit test ignores the clip. }
+      rule above: the hit test ignores the clip.
+      [R7-I] Its rect or its sector, wherever upstream's clip is a clipPath
+      on the element or a parent: a line's run and area (the lineGroup's),
+      a lines series' every element, a custom series' (clip: true), a candle
+      or box partly clipped (its own), a thumbnail's window (its
+      contentGroup's), and while they enter, a parallel line, a theme river
+      layer and a sankey's group (removed when the entering ends). A large
+      batch asks its own (TTyLargeGeom.ClipOn). Not a series that cuts its
+      geometry (bars, a scatter's points) or none (a graph). }
     ClipHits: Boolean;
     { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
       up its parents (and its host's, for a label), as zrender's Storage
@@ -1274,6 +1632,8 @@ type
     { Replace it in place -- a state restyles an element after the list is
       built. The paint order is worked out again. }
     procedure SetElement(AIndex: Integer; const AElement: TTyChartElement);
+    { [R7-AH] the keys of elements written through Ref changed: sorted again }
+    procedure OrderChanged;
     { The insertion index of the AIndex-th element in PAINT order (back first). }
     function PaintOrder(AIndex: Integer): Integer;
     { Topmost non-silent element containing the point, or -1. APad False
@@ -1341,6 +1701,28 @@ function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
   clip first where it asks (ClipHits), then upstream's Path.contain where it
   carries one (PathHit), else the shape with ASlopPx }
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+{ [R7-C] THE WIDTH zrender's Path.contain tests the element's stroke at,
+  device px (AScale the device px per logical one): the pen as drawn --
+  its width times the pen's own scale (PenScale) -- at least
+  strokeContainThreshold (5) where the element has no fill (an open line
+  without one: a closed shape whose fill is no colour is taken as filled
+  with a transparent one, since this port's colours cannot tell 'none' from
+  'transparent'). 0: no stroke to test (no width, or no colour as drawn);
+  -1: a pen of infinite width, whose stroked bounding rect is
+  not-a-number, so the element is never hit. }
+function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Double;
+{ [R7-C] ONE ELEMENT AT A POINT, as the list's hit tests ask it: the clips,
+  then ZrHit or PathHit where the element carries one, else zrender's
+  Path.contain over the shape -- where the element strokes, the fill (the
+  shape grown by the port's pad, APad) or the stroke within its reach of the
+  outline (TyZrShapeContainStroke at TyElementStrokeHitPx); where it does
+  not, the shape grown by the element's slop (and the pad) as before. }
+function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
+  APad: Boolean): Boolean;
+{ the sector an element's HasClipSector names, run forward as zrender's arc
+  runs it from ClipSA to ClipEA in its direction (the renderer cuts the ink
+  to it; [R7-I] where ClipHits, the hit too) }
+function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
 { [F6b] an SVG map element's zrender contain (ZrHit) at a point }
 function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
 { [R2-I1] A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach,
@@ -1350,13 +1732,50 @@ function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
   leaves out. Moved here from the marks so a graph's and a tree's node take
   it too [they had a fixed 4 px of slop]. }
 procedure TySymbolHitSlop(var AEl: TTyChartElement);
+{ [R7-P] zrender's Path.getLineScale over a transform's linear part: the
+  square root of |det|, 1 where either diagonal entry (A0, A3) is 1 }
+function TyZrLineScaleOf(A0, A1, A2, A3: Double): Double;
+{ [R7-P] THE PEN MAP onto a style (TTyChartElementStyle.PenMap): AL the
+  linear map the canvas puts on the round pen of the style's width. Kept
+  only where AL is no turn and uniform scale (nor a mirror of one) -- a
+  round pen is the same there -- and finite; else HasPenMap goes off. }
+procedure TyStyleSetPenMap(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+{ [R7-P] A strokeNoScale PATH under its whole transform AM (its unit or
+  own path to the canvas): the canvas' pen is AM over its line scale
+  (TyZrLineScaleOf) times a round pen of the style's lineWidth }
+procedure TyStyleNoScalePen(var AStyle: TTyChartElementStyle; const AM: TTyMat2D);
+{ [R7-P] THE SHAPE OF THE PEN AL puts on a path whose style's width (with
+  PenScale) already holds the round pen's size -- the root of |det AL|
+  times the width: AL over that root }
+procedure TyStyleSetPenShape(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+{ [R7-P] a strokeNoScale path's pen under a graph view's scale (ASX, ASY):
+  diag(ASX, ASY) over its line scale }
+procedure TyStyleViewPen(var AStyle: TTyChartElementStyle; ASX, ASY: Double);
+{ [R7-P] THE PEN THE RENDERER DRAWS: AE the map onto a round pen of the
+  style's StrokeWidthLogical -- PenMap times PenScale (where it is one).
+  False where it is round (no map): the width times PenScale as before. }
+function TyStylePenOf(const AStyle: TTyChartElementStyle; out AE: TTyMat2D): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
 { [R5-A] the element's style casts a shadow: a colour with alpha and a blur or an offset }
 function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+{ [R7-V] THE ALPHA A FILL (AFill) OR A PEN IS DRAWN AT: the element's
+  opacity as the canvas' globalAlpha, under its fillOpacity / strokeOpacity
+  where it has one -- the renderer's one rule for both }
+function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
+{ [R7-W] whether a dash phase is cTyCanvasPhaseLeft (scaled or not; a
+  not-a-number is not) }
+function TyPhaseLeft(AValue: Double): Boolean;
+{ [R7-Y] whether the canvas takes AWord for globalCompositeOperation: one of
+  its words exactly (case and spaces matter) }
+function TyBlendWordKnown(const AWord: string): Boolean;
 { [R5-A] AShadow onto a style, all four keys }
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
+{ [R7-X] a box's border keys -- the dash (DashWord, DashLogical), its phase,
+  LineCap, LineJoin, MiterLimit -- from ALook onto AStyle }
+procedure TyStyleTakeBorderKeys(var AStyle: TTyChartElementStyle;
+  const ALook: TTyChartElementStyle);
 { An element carrying a shape, silent and datum-less until the caller says
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
@@ -1366,6 +1785,9 @@ function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
   and turned counter-clockwise -- zrender's Text transform, as every child
   of the text shares it. [Batch 86] }
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
+  out AGX, AGY: Double);
+{ [R7-M] a drawn block's point: through its whole map where it has one }
+procedure TyRtDrawnPoint(const AD: TTyRtDrawn; ALX, ALY: Double;
   out AGX, AGY: Double);
 
 { [R5-C] a lineCap / lineJoin word as zrender's canvas takes it (anything
@@ -1471,14 +1893,20 @@ function TyCapOfWord(const S: string): Byte;
 begin
   if S = 'round' then Result := cTyCapRound
   else if S = 'square' then Result := cTyCapSquare
-  else Result := cTyCapButt;
+  { [R7-V] `style.lineCap || 'butt'`: an empty word is the default; any
+    other word the canvas refuses, keeping the one it had (settled in paint
+    order, TyLinesCanvasLeftovers) [was: the default] }
+  else if (S = 'butt') or (S = '') then Result := cTyCapButt
+  else Result := cTyCanvasWordLeft;
 end;
 
 function TyJoinOfWord(const S: string): Byte;
 begin
   if S = 'round' then Result := cTyJoinRound
   else if S = 'bevel' then Result := cTyJoinBevel
-  else Result := cTyJoinMiter;
+  { [R7-V] the same for lineJoin }
+  else if (S = 'miter') or (S = '') then Result := cTyJoinMiter
+  else Result := cTyCanvasWordLeft;
 end;
 
 function TyChartNoDatum: TTyChartDatumRef;
@@ -1554,6 +1982,17 @@ begin
   Result.Alpha := 1;
 end;
 
+procedure TyStyleTakeBorderKeys(var AStyle: TTyChartElementStyle;
+  const ALook: TTyChartElementStyle);
+begin
+  AStyle.DashWord := ALook.DashWord;
+  AStyle.DashLogical := Copy(ALook.DashLogical, 0, Length(ALook.DashLogical));
+  AStyle.DashOffsetLogical := ALook.DashOffsetLogical;
+  AStyle.LineCap := ALook.LineCap;
+  AStyle.LineJoin := ALook.LineJoin;
+  AStyle.MiterLimit := ALook.MiterLimit;
+end;
+
 procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 begin
   AStyle.ShadowBlur := AShadow.Blur;
@@ -1566,6 +2005,46 @@ function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
 begin
   Result := ((AStyle.ShadowColor shr 24) <> 0)
     and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
+end;
+
+function TyBlendWordKnown(const AWord: string): Boolean;
+const
+  cWords: array[0..25] of string = ('source-over', 'source-in', 'source-out',
+    'source-atop', 'destination-over', 'destination-in', 'destination-out',
+    'destination-atop', 'lighter', 'copy', 'xor', 'multiply', 'screen', 'overlay',
+    'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light',
+    'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity');
+var k: Integer;
+begin
+  for k := 0 to High(cWords) do
+    if AWord = cWords[k] then Exit(True);
+  Result := False;
+end;
+
+function TyPhaseLeft(AValue: Double): Boolean;
+begin
+  { (NaN first: a comparison with it raises here) }
+  Result := (not IsNan(AValue)) and (AValue < -1e290);
+end;
+
+function TyCanvasPartAlpha(const AStyle: TTyChartElementStyle; AFill: Boolean): Double;
+var p: Double;
+begin
+  { bindCommonProps: Math.max(Math.min(opacity, 1), 0), not-a-number 1 --
+    a value outside 0..1 is drawn clamped, the canvas never asked [was:
+    the same, a not-a-number nought] }
+  if IsNan(AStyle.Alpha) then Result := 1
+  else Result := Max(0.0, Min(1.0, AStyle.Alpha));
+  { [R7-V] doFillPath / doStrokePath: globalAlpha = fillOpacity * opacity,
+    the raw opacity, which the canvas refuses outside 0..1 (and not a
+    number) -- the clamped opacity stays [was: each clamped, then the
+    product] }
+  if AFill and AStyle.HasFillOpacity and (AStyle.FillOpacity <> 1) then
+    p := AStyle.FillOpacity * AStyle.Alpha
+  else if not AFill and AStyle.HasStrokeOpacity and (AStyle.StrokeOpacity <> 1) then
+    p := AStyle.StrokeOpacity * AStyle.Alpha
+  else Exit;
+  if not IsNan(p) and (p >= 0) and (p <= 1) then Result := p;
 end;
 
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
@@ -1584,6 +2063,18 @@ begin
   Result.Silent := True;
   Result.HitSlopLogical := 0;
   Result.Datum := TyChartNoDatum;
+end;
+
+procedure TyRtDrawnPoint(const AD: TTyRtDrawn; ALX, ALY: Double;
+  out AGX, AGY: Double);
+begin
+  if AD.HasAffine then
+  begin
+    AGX := AD.Affine[0] * ALX + AD.Affine[2] * ALY + AD.Affine[4];
+    AGY := AD.Affine[1] * ALX + AD.Affine[3] * ALY + AD.Affine[5];
+  end
+  else
+    TyRtPoint(AD.X, AD.Y, AD.RotationRad, AD.Scale, ALX, ALY, AGX, AGY);
 end;
 
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
@@ -1707,11 +2198,24 @@ var k: Integer;
 begin
   for k := FJrN - 1 downto 0 do
   begin
+    { [R7-AJ] its zlevel is the build's too (the series' level, a marker's,
+      allocateZlevels' -- written after the session kept the element; no
+      state writes one): it stays [was: the copy from before the build
+      wrote it put back, a patched row of a series on a zlevel of its own
+      dropped onto zlevel 0] }
+    FJrOld[k].ZLevel := FItems[FJrIdx[k]].ZLevel;
     { [R2-I6] an element whose place in the order moves }
     if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2)
       or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel)
       or (FItems[FJrIdx[k]].ZFrac <> FJrOld[k].ZFrac) then
       MarkOrderDirty(FJrIdx[k]);
+    { [R7-AH] its view's place is the build's, written after the session
+      kept the element: it stays }
+    if FItems[FJrIdx[k]].ViewKnown then
+    begin
+      FJrOld[k].CompView := FItems[FJrIdx[k]].CompView;
+      FJrOld[k].ViewKnown := True;
+    end;
     FItems[FJrIdx[k]] := FJrOld[k];
   end;
   JournalOpen;
@@ -1773,9 +2277,17 @@ begin
   { [R2-I6] the order moves only where z or z2 does [was: sorted again
     after any write] }
   if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2)
-    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac) then
+    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac)
+    or (FItems[AIndex].CompView <> AElement.CompView) then
     MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
+end;
+
+procedure TTyPaintList.OrderChanged;
+begin
+  FOrdered := False;
+  FPartial := False;
+  FDirtyN := 0;
 end;
 
 var
@@ -1902,6 +2414,12 @@ begin
     Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
+  { [R7-AH] THE VIEW'S PLACE IN THE ROOT: zrender's display list is the
+    roots' traversal sorted stably by zlevel, z and z2, so at an equal z2
+    the view made first is drawn first [was: the order the list was built
+    in, components of one z ordered by the port's builders] }
+  if FItems[A].CompView <> FItems[B].CompView then
+    Exit(FItems[A].CompView < FItems[B].CompView);
   { [R6-C] a combining host's child added after the list sorts at its
     host's place, after the host and the children before it }
   if (FItems[A].Anim.PieceOf > 0) or (FItems[B].Anim.PieceOf > 0) then
@@ -2027,6 +2545,84 @@ begin
   end;
 end;
 
+function TyZrLineScaleOf(A0, A1, A2, A3: Double): Double;
+begin
+  if (Abs(A0 - 1) > 1e-10) and (Abs(A3 - 1) > 1e-10) then
+    Result := Sqrt(Abs(A0 * A3 - A2 * A1))
+  else
+    Result := 1;
+end;
+
+procedure TyStyleSetPenMap(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+var n: Double; k: Integer;
+begin
+  AStyle.HasPenMap := False;
+  AStyle.PenMap := Default(TTyMat2D);
+  for k := 0 to 3 do
+    if IsNan(AL[k]) or IsInfinite(AL[k]) then Exit;
+  n := Max(Max(Abs(AL[0]), Abs(AL[1])), Max(Abs(AL[2]), Abs(AL[3])));
+  if not (n > 0) then Exit;
+  { a turn and a scale, or a mirror of one: the same round pen }
+  if (Abs(AL[0] - AL[3]) <= 1e-9 * n) and (Abs(AL[1] + AL[2]) <= 1e-9 * n) then Exit;
+  if (Abs(AL[0] + AL[3]) <= 1e-9 * n) and (Abs(AL[1] - AL[2]) <= 1e-9 * n) then Exit;
+  AStyle.HasPenMap := True;
+  for k := 0 to 3 do AStyle.PenMap[k] := AL[k];
+end;
+
+procedure TyStyleNoScalePen(var AStyle: TTyChartElementStyle; const AM: TTyMat2D);
+var ls: Double; L: TTyMat2D;
+begin
+  ls := TyZrLineScaleOf(AM[0], AM[1], AM[2], AM[3]);
+  if not (ls > 1e-10) or IsNan(ls) or IsInfinite(ls) then
+  begin
+    AStyle.HasPenMap := False;
+    Exit;
+  end;
+  L := Default(TTyMat2D);
+  L[0] := AM[0] / ls;
+  L[1] := AM[1] / ls;
+  L[2] := AM[2] / ls;
+  L[3] := AM[3] / ls;
+  TyStyleSetPenMap(AStyle, L);
+end;
+
+procedure TyStyleSetPenShape(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+var d: Double; L: TTyMat2D;
+begin
+  d := Sqrt(Abs(AL[0] * AL[3] - AL[1] * AL[2]));
+  if not (d > 0) or IsInfinite(d) then
+  begin
+    AStyle.HasPenMap := False;
+    Exit;
+  end;
+  L := Default(TTyMat2D);
+  L[0] := AL[0] / d;
+  L[1] := AL[1] / d;
+  L[2] := AL[2] / d;
+  L[3] := AL[3] / d;
+  TyStyleSetPenMap(AStyle, L);
+end;
+
+procedure TyStyleViewPen(var AStyle: TTyChartElementStyle; ASX, ASY: Double);
+var M: TTyMat2D;
+begin
+  M := Default(TTyMat2D);
+  M[0] := ASX;
+  M[3] := ASY;
+  TyStyleNoScalePen(AStyle, M);
+end;
+
+function TyStylePenOf(const AStyle: TTyChartElementStyle; out AE: TTyMat2D): Boolean;
+var ps: Double; k: Integer;
+begin
+  AE := Default(TTyMat2D);
+  Result := AStyle.HasPenMap;
+  if not Result then Exit;
+  ps := AStyle.PenScale;
+  if (ps <= 0) or IsNan(ps) or IsInfinite(ps) then ps := 1;
+  for k := 0 to 3 do AE[k] := AStyle.PenMap[k] * ps;
+end;
+
 procedure TySymbolHitSlop(var AEl: TTyChartElement);
 const
   cSymbolTargetLogical = 4;
@@ -2043,6 +2639,615 @@ begin
   AEl.HitPadLogical := cSymbolTargetLogical - reach;
 end;
 
+{ [R7-F] zrender's hasFill() of the element: an open line's fill as it is
+  painted, a closed shape's unless written 'none' (HitNoFill) }
+function ElFills(const AEl: TTyChartElement): Boolean; inline;
+begin
+  if AEl.Shape.Kind = cskPolyline then Result := AEl.Style.HasFill
+  else Result := not AEl.Style.HitNoFill;
+end;
+
+function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Double;
+var w, ps: Double;
+begin
+  Result := 0;
+  w := AEl.Style.StrokeWidthLogical;
+  if not (w > 0) then Exit;
+  if ((AEl.Style.StrokeColor shr 24) = 0) and (AEl.Style.StrokeGradient.Kind = cgkNone)
+    and not AEl.Style.HitClearPen then Exit;
+  if IsInfinite(w) then Exit(-1);
+  { strokeContainThreshold where Path.contain asks no fill; a symbol in its
+    own frame takes it there (SymbolHit); [R7-R] 5 of the element's own
+    units (HitMinScale) [was: 5 on the canvas whatever its scale] }
+  if not ElFills(AEl) and (AEl.Shape.HitSym = '') then
+  begin
+    if AEl.HitMinScale > 0 then w := Max(w, 5 * AEl.HitMinScale)
+    else w := Max(w, Double(5));
+  end;
+  ps := AEl.Style.PenScale;
+  if ps > 0 then w := w * ps;
+  Result := w * AScale;
+end;
+
+{ the shape's own area at a point, grown by ASlopPx: a rounded sector by
+  its path where nothing grows it (SectorContains is the plain ring) }
+function ShapeArea(const AShape: TTyChartShape; AX, AY, ASlopPx: Double): Boolean;
+begin
+  { a path by its own outline (the box grown by a slop or a pad is the
+    port's forgiving target) }
+  if (ASlopPx <= 0) and (((AShape.Kind = cskSector) and not AShape.Sausage
+    and TyHasCorner(AShape.SectorRadii)) or (AShape.Kind = cskPath)) then
+    Result := TyZrShapeContainFill(AShape, AX, AY)
+  else
+    Result := TyShapeContains(AShape, AX, AY, ASlopPx);
+end;
+
+{ [R7-C] a pointer polygon upright, and the point with it }
+procedure Upright(var AShape: TTyChartShape; var AX, AY: Double);
+var
+  a, c, s, dx, dy: Double;
+  i: Integer;
+begin
+  if (AShape.Kind <> cskPolygon) or (Length(AShape.Points) < 3) then Exit;
+  { the turn that takes the back-to-tip axis onto -y }
+  a := ArcTan2(AShape.Points[2].X - AShape.Points[0].X,
+    -(AShape.Points[2].Y - AShape.Points[0].Y));
+  c := Cos(a);
+  s := Sin(a);
+  AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+  for i := 0 to High(AShape.Points) do
+  begin
+    dx := AShape.Points[i].X;
+    dy := AShape.Points[i].Y;
+    AShape.Points[i].X := dx * c + dy * s;
+    AShape.Points[i].Y := -dx * s + dy * c;
+  end;
+  dx := AX;
+  dy := AY;
+  AX := dx * c + dy * s;
+  AY := -dx * s + dy * c;
+end;
+
+{ [R7-F] Path.contain of a quadratic edge (BezierCurve): its stroked rect --
+  the curve's own extent (fromQuadratic) grown by half the width -- then
+  quadratic.containStroke; it has no fill }
+function QuadHit(const AShape: TTyChartShape; AWidthPx, AX, AY: Double): Boolean;
+var
+  path: TTyZrPath;
+  box: TTyXYWH;
+  n: Integer;
+  old: TFPUExceptionMask;
+begin
+  Result := False;
+  n := Length(AShape.Points);
+  if (n < 2) or not (AWidthPx > 0) then Exit;
+  path := nil;
+  TyZrMoveTo(path, AShape.Points[0].X, AShape.Points[0].Y);
+  TyZrQuad(path, AShape.HitCP.X, AShape.HitCP.Y, AShape.Points[n - 1].X, AShape.Points[n - 1].Y);
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    box := TyZrBBox(path);
+    if not ((AX >= box.X - AWidthPx / 2) and (AX <= box.X - AWidthPx / 2 + (box.W + AWidthPx))
+      and (AY >= box.Y - AWidthPx / 2) and (AY <= box.Y - AWidthPx / 2 + (box.H + AWidthPx))) then Exit;
+  finally
+    TyZrRestoreFpu(old);
+  end;
+  Result := TyZrContainStroke(path, AWidthPx, AX, AY);
+end;
+
+{ [R7-F] Path.contain of a symbol in its own frame (TTyChartShape.HitSym):
+  the point taken back through HitM (transformCoordToLocal), the unit
+  path's rect grown by the pen over the line scale (getLineScale: the
+  square root of the frame's determinant, 1 where either diagonal entry is
+  1), containStroke at that width (at least strokeContainThreshold without
+  a fill), then the fill. The port's pad tests the drawn shape first. }
+{ the path part of it: the unit path's rect grown by AE, the stroke at ALw
+  (none where it is nought), the fill -- its own routine, so the managed
+  path costs nothing to the symbols refused before it }
+function SymbolPathHit(const AName: string; ALx, ALy, AE, ALw: Double;
+  AFill: Boolean; ABoxW, ABoxH: Double): Boolean;
+var
+  path: TTyZrPath;
+  box: TTyXYWH;
+  i, k: Integer;
+begin
+  Result := False;
+  { [R7-R] a real box where the shape names one; [R7-V] a collapsed one (a
+    side of nought) too }
+  if (ABoxW >= 0) and (ABoxH >= 0) and ((ABoxW > 0) or (ABoxH > 0)) then
+    path := TyZrSymbol(AName, -ABoxW / 2, -ABoxH / 2, ABoxW, ABoxH)
+  else
+    path := TyZrSymbol(AName, -1, -1, 2, 2);
+  { [R7-Y] AS THE PROXY HOLDS IT ONCE PAINTED: toStatic stores data of more
+    than eleven numbers in a Float32Array -- a point exactly on a vertex or
+    an edge is in or out by those singles [was: the doubles]. Only where
+    the path is upstream's own (the real box createSymbol made): the unit
+    path stood in for a scaled frame rounds otherwise }
+  if (ABoxW >= 0) and (ABoxH >= 0) and ((ABoxW > 0) or (ABoxH > 0))
+    and (TyZrDataLength(path) > 11) then
+    for i := 0 to High(path) do
+      for k := 0 to TyZrArgCount(path[i].Cmd) - 1 do
+        path[i].V[k] := TyJsFround(path[i].V[k]);
+  box := TyZrBBox(path);
+  if not ((ALx >= box.X - AE) and (ALx <= box.X - AE + (box.W + 2 * AE))
+    and (ALy >= box.Y - AE) and (ALy <= box.Y - AE + (box.H + 2 * AE))) then Exit;
+  if (ALw > 0) and TyZrContainStroke(path, ALw, ALx, ALy) then Exit(True);
+  if AFill then Result := TyZrContain(path, ALx, ALy);
+end;
+
+function SymbolHit(const AEl: TTyChartElement; AWidthPx, APadPx, AScale: Double;
+  AFill: Boolean; AX, AY: Double): Boolean;
+var
+  m, inv: TTyMat2D;
+  det, lx, ly, ls, w, e, hx, hy, ux, uy: Double;
+  b: TTyRectF;
+begin
+  Result := False;
+  if IsNan(AX) or IsNan(AY) then Exit;
+  m := AEl.Shape.HitM;
+  { [R7-W] A FRAME THAT DOES NOT INVERT (a side of nought): matrix.invert
+    fails and the inverse stays the one the element was made with, the
+    identity -- the unit symbol at the canvas' top left, in css px [was:
+    never hit] }
+  det := m[0] * m[3] - m[1] * m[2];
+  if (not IsNan(det)) and (det = 0) then
+    m := TyZrLocal(AScale, AScale, 0, 0, 0);
+  { [R7-R] the frame's half extents the refusal box scales by: the unit
+    box's 1, or a real box's larger half (a pin's head may stand taller
+    than its box) }
+  ux := 1;
+  uy := 1;
+  if (AEl.Shape.HitBoxW >= 0) and (AEl.Shape.HitBoxH >= 0)
+    and ((AEl.Shape.HitBoxW > 0) or (AEl.Shape.HitBoxH > 0)) then
+  begin
+    ux := Max(AEl.Shape.HitBoxW, AEl.Shape.HitBoxH) / 2;
+    uy := ux;
+  end;
+  w := AWidthPx;
+  if (w > 0) and not AFill then w := Max(w, 5 * AScale);
+  { [R7-O] a pen in the symbol's own frame: the frame's whole scale }
+  if AEl.Shape.HitPenInFrame
+    or ((Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10)) then
+    ls := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]))
+  else ls := 1;
+  e := 0;
+  if (w > 0) and (ls > 1e-10) then e := w / ls / 2;
+  { THE CHEAP REFUSAL FIRST, nothing managed here: every built-in path lies
+    in [-4/3, 4/3] x [-2, 2] of its unit box (a pin's head and an arrow's body
+    leave it upward and downward, the arrow's barbs sideways: its half width
+    is two thirds of its width [R7-O: was 1, which cut the barbs off]), and
+    the pen reaches e past it there -- a point off that box's image under the
+    frame is off the stroked rect; the pad is the drawn shape's }
+  hx := (4 / 3 * ux + e) * Abs(m[0]) + (2 * uy + e) * Abs(m[2]);
+  hy := (4 / 3 * ux + e) * Abs(m[1]) + (2 * uy + e) * Abs(m[3]);
+  if not ((Abs(AX - m[4]) <= hx) and (Abs(AY - m[5]) <= hy)) then
+  begin
+    if not ((APadPx > 0) and AFill) then Exit;
+    b := TyShapeBounds(AEl.Shape);
+    if not ((AX >= b.Left - APadPx) and (AX <= b.Right + APadPx)
+      and (AY >= b.Top - APadPx) and (AY <= b.Bottom + APadPx)) then Exit;
+    Exit(ShapeArea(AEl.Shape, AX, AY, APadPx));
+  end;
+  if (APadPx > 0) and AFill and ShapeArea(AEl.Shape, AX, AY, APadPx) then Exit(True);
+  { matrix.invert, then applyTransform }
+  det := m[0] * m[3] - m[1] * m[2];
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  det := 1 / det;
+  inv[0] := m[3] * det;
+  inv[1] := -m[1] * det;
+  inv[2] := -m[2] * det;
+  inv[3] := m[0] * det;
+  inv[4] := (m[2] * m[5] - m[3] * m[4]) * det;
+  inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
+  lx := inv[0] * AX + inv[2] * AY + inv[4];
+  ly := inv[1] * AX + inv[3] * AY + inv[5];
+  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 4 / 3 * ux + e) or (Abs(ly) > 2 * uy + e) then Exit;
+  if (w > 0) and (ls > 1e-10) then
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, w / ls, AFill, AEl.Shape.HitBoxW,
+      AEl.Shape.HitBoxH)
+  else
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, 0, AFill, AEl.Shape.HitBoxW,
+      AEl.Shape.HitBoxH);
+end;
+
+{ [R7-P] a zrender path's points through the linear map AM (no move):
+  lines, quadratics and cubics exactly; a rect as its four sides; an arc
+  as cubics of at most a quarter turn on its ellipse, then mapped }
+function MapZrPath(const APath: TTyZrPath; const AM: TTyMat2D): TTyZrPath;
+var
+  i, k, n, seg: Integer;
+  v: array[0..7] of Double;
+  x, y, cx, cy, rx, ry, a0, da, psi, cp, sp, t0, t1, kk, c0, s0, c1, s1: Double;
+  p: array[0..5] of Double;
+
+  procedure Put(var AX, AY: Double);
+  var px, py: Double;
+  begin
+    px := AX;
+    py := AY;
+    AX := AM[0] * px + AM[2] * py;
+    AY := AM[1] * px + AM[3] * py;
+  end;
+
+  function Pt(ATh: Double; out AY: Double): Double;
+  var ex, ey: Double;
+  begin
+    ex := rx * Cos(ATh);
+    ey := ry * Sin(ATh);
+    Result := cx + ex * cp - ey * sp;
+    AY := cy + ex * sp + ey * cp;
+  end;
+
+begin
+  Result := nil;
+  for i := 0 to High(APath) do
+  begin
+    for k := 0 to 7 do v[k] := APath[i].V[k];
+    case APath[i].Cmd of
+      zrM:
+        begin
+          Put(v[0], v[1]);
+          TyZrMoveTo(Result, v[0], v[1]);
+        end;
+      zrL:
+        begin
+          Put(v[0], v[1]);
+          TyZrLineTo(Result, v[0], v[1]);
+        end;
+      zrQ:
+        begin
+          Put(v[0], v[1]);
+          Put(v[2], v[3]);
+          TyZrQuad(Result, v[0], v[1], v[2], v[3]);
+        end;
+      zrC:
+        begin
+          Put(v[0], v[1]);
+          Put(v[2], v[3]);
+          Put(v[4], v[5]);
+          TyZrCubic(Result, v[0], v[1], v[2], v[3], v[4], v[5]);
+        end;
+      zrR:
+        begin
+          p[0] := v[0]; p[1] := v[1];
+          p[2] := v[0] + v[2]; p[3] := v[1] + v[3];
+          x := p[0]; y := p[1]; Put(x, y); TyZrMoveTo(Result, x, y);
+          x := p[2]; y := p[1]; Put(x, y); TyZrLineTo(Result, x, y);
+          x := p[2]; y := p[3]; Put(x, y); TyZrLineTo(Result, x, y);
+          x := p[0]; y := p[3]; Put(x, y); TyZrLineTo(Result, x, y);
+          TyZrClose(Result);
+        end;
+      zrA:
+        begin
+          cx := v[0]; cy := v[1]; rx := v[2]; ry := v[3];
+          a0 := v[4]; da := v[5]; psi := v[6];
+          cp := Cos(psi);
+          sp := Sin(psi);
+          { the pen goes to the arc's start (PathProxy's arc lines to it) }
+          x := Pt(a0, y);
+          Put(x, y);
+          if Length(Result) = 0 then TyZrMoveTo(Result, x, y)
+          else TyZrLineTo(Result, x, y);
+          n := Ceil(Abs(da) / (Pi / 2) - 1e-12);
+          if n < 1 then n := 1;
+          for seg := 0 to n - 1 do
+          begin
+            t0 := a0 + da * seg / n;
+            t1 := a0 + da * (seg + 1) / n;
+            kk := 4 / 3 * Tan((t1 - t0) / 4);
+            c0 := Cos(t0); s0 := Sin(t0);
+            c1 := Cos(t1); s1 := Sin(t1);
+            { on the unit circle, then the ellipse's radii, its turn, its centre }
+            p[0] := c0 - kk * s0; p[1] := s0 + kk * c0;
+            p[2] := c1 + kk * s1; p[3] := s1 - kk * c1;
+            p[4] := c1; p[5] := s1;
+            for k := 0 to 2 do
+            begin
+              x := rx * p[2 * k];
+              y := ry * p[2 * k + 1];
+              p[2 * k] := cx + x * cp - y * sp;
+              p[2 * k + 1] := cy + x * sp + y * cp;
+              Put(p[2 * k], p[2 * k + 1]);
+            end;
+            TyZrCubic(Result, p[0], p[1], p[2], p[3], p[4], p[5]);
+          end;
+        end;
+      zrZ: TyZrClose(Result);
+    end;
+  end;
+end;
+
+{ [R7-P] THE STROKE OF A PEN STRETCHED BY ITS MAP (TTyChartElementStyle.
+  PenMap): the canvas' pen region is the map's image of a round pen's band
+  about the path the map takes back, so the path and the point go back
+  through the map's inverse and containStroke asks AWidthPx there -- within
+  its stroked rect first, as Path.contain. [R7-R] A turned or mirrored path
+  shape (its path built in its own frame, TyZrShapePath): the point goes to
+  that frame first (TyZrShapeLocal), and the map with it -- the frame's turn
+  and reflection undone on the pen too, so the band about the path there is
+  the same region [was: not asked, the drawn outline's round pen answered]. }
+function PenMapStrokeHit(const AEl: TTyChartElement; AWidthPx, AX, AY: Double;
+  out AAsked: Boolean): Boolean;
+var
+  E, F, inv: TTyMat2D;
+  det, lx, ly, px, py, c, s: Double;
+  path: TTyZrPath;
+  box: TTyXYWH;
+  old: TFPUExceptionMask;
+begin
+  Result := False;
+  AAsked := False;
+  { the map's shape alone: AWidthPx holds PenScale already }
+  if not AEl.Style.HasPenMap then Exit;
+  E := AEl.Style.PenMap;
+  if AEl.Shape.Kind in [cskSector, cskLarge] then Exit;
+  px := AX;
+  py := AY;
+  if (AEl.Shape.Kind = cskPath) and ((AEl.Shape.RotationRad <> 0) or AEl.Shape.FlipX
+    or AEl.Shape.FlipY) then
+  begin
+    { [R7-R] into the path's own frame: the point by TyZrShapeLocal, the
+      pen by the same linear part -- the reflection, then the turn undone
+      (x' = c x + s y, y' = -s x + c y) }
+    TyZrShapeLocal(AEl.Shape, px, py);
+    if AEl.Shape.FlipX then
+    begin
+      E[0] := -E[0];
+      E[2] := -E[2];
+    end;
+    if AEl.Shape.FlipY then
+    begin
+      E[1] := -E[1];
+      E[3] := -E[3];
+    end;
+    if AEl.Shape.RotationRad <> 0 then
+    begin
+      c := Cos(AEl.Shape.RotationRad);
+      s := Sin(AEl.Shape.RotationRad);
+      F := E;
+      E[0] := c * F[0] + s * F[1];
+      E[1] := -s * F[0] + c * F[1];
+      E[2] := c * F[2] + s * F[3];
+      E[3] := -s * F[2] + c * F[3];
+    end;
+  end;
+  det := E[0] * E[3] - E[1] * E[2];
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  path := TyZrShapePath(AEl.Shape);
+  if Length(path) = 0 then Exit;
+  AAsked := True;
+  if not (AWidthPx > 0) then Exit;
+  inv := Default(TTyMat2D);
+  inv[0] := E[3] / det;
+  inv[1] := -E[1] / det;
+  inv[2] := -E[2] / det;
+  inv[3] := E[0] / det;
+  path := MapZrPath(path, inv);
+  lx := inv[0] * px + inv[2] * py;
+  ly := inv[1] * px + inv[3] * py;
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    box := TyZrBBox(path);
+    if not ((lx >= box.X - AWidthPx / 2) and (lx <= box.X - AWidthPx / 2 + (box.W + AWidthPx))
+      and (ly >= box.Y - AWidthPx / 2) and (ly <= box.Y - AWidthPx / 2 + (box.H + AWidthPx))) then Exit;
+  finally
+    TyZrRestoreFpu(old);
+  end;
+  Result := TyZrContainStroke(path, AWidthPx, lx, ly);
+end;
+
+{ Path.contain of a stroked shape: the fill (grown by the pad), then the
+  stroke -- an open line has no fill to ask }
+function StrokedHit(const AShape: TTyChartShape; AHasFill: Boolean;
+  AWidthPx, APadPx, AX, AY: Double): Boolean;
+var
+  b: TTyRectF;
+  r: Double;
+begin
+  if AShape.HitQuad then
+    Exit(((APadPx > 0) and ShapeArea(AShape, AX, AY, APadPx)) or QuadHit(AShape, AWidthPx, AX, AY));
+  { far from the shape's own bounds is far from its fill, its pad and its
+    stroked rect alike: most of a list is refused here at a compare (a turned
+    or mirrored path's bounds are in its own frame, and a poly's curves may
+    bulge past its points where it has no measured rect: those are asked
+    whole) }
+  if ((AShape.Kind <> cskPath) or ((AShape.RotationRad = 0) and not AShape.FlipX
+    and not AShape.FlipY)) and ((Length(AShape.Cmds) = 0) or AShape.HasCmdBounds) then
+  begin
+    b := TyShapeBounds(AShape);
+    r := Max(AWidthPx / 2, APadPx);
+    if not ((AX >= b.Left - r) and (AX <= b.Right + r) and (AY >= b.Top - r)
+      and (AY <= b.Bottom + r)) then Exit(False);
+  end;
+  if AHasFill and ShapeArea(AShape, AX, AY, APadPx) then
+    Exit(True);
+  Result := TyZrShapeContainStroke(AShape, AWidthPx, AX, AY);
+end;
+
+function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
+var st, en, t: Double;
+begin
+  Result := TyShapeSector(AElement.ClipCX, AElement.ClipCY, AElement.ClipR0,
+    AElement.ClipR1, 0, 1);
+  st := AElement.ClipSA;
+  en := AElement.ClipEA;
+  if AElement.ClipCW then
+  begin
+    if en - st >= 2 * Pi then en := st + 2 * Pi
+    else if st > en then en := st + (2 * Pi - (st - en - Floor((st - en) / (2 * Pi)) * 2 * Pi));
+  end
+  else
+  begin
+    if st - en >= 2 * Pi then en := st - 2 * Pi
+    else if st < en then en := st - (2 * Pi - (en - st - Floor((en - st) / (2 * Pi)) * 2 * Pi));
+    t := st;
+    st := en;
+    en := t;
+  end;
+  Result.StartRad := st;
+  Result.EndRad := en;
+end;
+
+{ [R7-I] a point outside the clip an element's hit is cut to (ClipHits):
+  its rect, or its sector (createPolarClipPath's Sector.contain) -- its own
+  routine, so the sector's shape (a managed record) costs nothing to the
+  elements that have no clip }
+function OutsideHitClip(const AEl: TTyChartElement; AX, AY: Double): Boolean;
+begin
+  Result := False;
+  if AEl.HasClip
+    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
+      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then Exit(True);
+  if AEl.HasClipSector
+    and not TyShapeContains(TyClipSectorShape(AEl), AX, AY, 0) then Exit(True);
+end;
+
+{ the same over a pointer turned upright -- its own routine, so the copy of
+  the shape (a managed record) costs nothing to the elements that need none }
+function UprightHit(const AEl: TTyChartElement; AWidthPx, APadPx, AX, AY: Double): Boolean;
+var shape: TTyChartShape;
+begin
+  shape := AEl.Shape;
+  Upright(shape, AX, AY);
+  Result := StrokedHit(shape, ElFills(AEl), AWidthPx, APadPx, AX, AY);
+end;
+
+{ [R7-O] a ZrHit whose pen is the style's now: Path.contain's stroked rect
+  and stroke at max(width, 5) over the line scale (the path has no fill) --
+  its own routine, so the managed copy costs nothing to the rest }
+function StyleZrHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer): Boolean;
+var
+  h: TTyZrHit;
+  w, s: Double;
+begin
+  Result := False;
+  w := AEl.Style.StrokeWidthLogical;
+  if not (w > 0) or (((AEl.Style.StrokeColor shr 24) = 0)
+    and (AEl.Style.StrokeGradient.Kind = cgkNone) and not AEl.Style.HitClearPen) then Exit;
+  if IsInfinite(w) then Exit;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  w := w * s;
+  if not (AEl.ZrHit.LineScale > 1e-10) then Exit;
+  h := AEl.ZrHit;
+  h.Box := TyZrStrokeRect(AEl.ZrHit.PathBox, Length(AEl.ZrHit.Path), True, False,
+    w, AEl.ZrHit.LineScale);
+  h.Stroke := True;
+  h.LineWidth := Max(w, Double(5) * s) / AEl.ZrHit.LineScale;
+  Result := TyZrHitContains(h, AX, AY);
+end;
+
+{ [R7-S] Path.contain of a graphic or custom series element in its own
+  frame (TTyZrHit.OwnPen): the pen as the style holds it now -- its own
+  routine, so the managed copy costs nothing to the rest }
+function OwnZrHit(const AEl: TTyChartElement; AX, AY: Double): Boolean;
+var
+  h: TTyZrHit;
+  lw, w: Double;
+  stroke: Boolean;
+begin
+  h := AEl.ZrHit;
+  { hasStroke() as the style is now: the pen it was built with, or one a
+    state gives it }
+  stroke := h.Stroke or ((AEl.Style.StrokeColor shr 24) <> 0)
+    or (AEl.Style.StrokeGradient.Kind <> cgkNone);
+  if not IsNan(h.FixedLw) then lw := h.FixedLw
+  else if (AEl.Style.StrokeWidthLogical > 0) and (h.LwDiv > 0) then
+    lw := AEl.Style.StrokeWidthLogical / h.LwDiv
+  else lw := 0;
+  { hasStroke(): a pen of a width above nought -- a state that takes it to
+    none takes the stroke away }
+  if not (lw > 0) then stroke := False;
+  { an infinite pen: the stroked rect is not a number, nothing is inside }
+  if stroke and IsInfinite(lw) then Exit(False);
+  w := lw;
+  if stroke and not h.Fill then w := Max(w, Double(5));
+  if not (h.LineScale > 1e-10) then stroke := False;
+  h.Box := h.PathBox;
+  if stroke then
+  begin
+    { width first, then x -- rectStroke.width += w; rectStroke.x -= w / 2 }
+    h.Box.W := h.PathBox.W + w / h.LineScale;
+    h.Box.H := h.PathBox.H + w / h.LineScale;
+    h.Box.X := h.PathBox.X - w / h.LineScale / 2;
+    h.Box.Y := h.PathBox.Y - w / h.LineScale / 2;
+    h.LineWidth := w / h.LineScale;
+  end;
+  h.Stroke := stroke;
+  Result := TyZrHitContains(h, AX, AY);
+end;
+
+function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
+  APad: Boolean): Boolean;
+var
+  k: Integer;
+  s, w, pad, padArea, c, sn, dx, dy, lx, ly, r: Double;
+  asked: Boolean;
+begin
+  if AEl.HitNone then Exit(False);
+  for k := 0 to High(AEl.ClipPaths) do
+    if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
+  { [R7-I] the rect or the sector [was: the rect alone] }
+  if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
+  { [R7-S] a graphic or custom element: all of it in its own frame }
+  if AEl.ZrHit.Active and AEl.ZrHit.OwnPen then Exit(OwnZrHit(AEl, AX, AY));
+  if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
+    Exit(StyleZrHit(AEl, AX, AY, APPI));
+  if AEl.ZrHit.Active then Exit(TyZrHitContains(AEl.ZrHit, AX, AY));
+  if AEl.PathHit.Active then Exit(TyPathHitContains(AEl.PathHit, AX, AY));
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  pad := 0;
+  if APad then pad := AEl.HitPadLogical * s;
+  w := 0;
+  if AEl.Shape.Kind in [cskRect, cskRoundRect, cskCircle, cskEllipse, cskSector,
+    cskPolyline, cskPolygon, cskPath] then
+    w := TyElementStrokeHitPx(AEl, s);
+  if w < 0 then Exit(False);
+  { [R7-F] a turned label in its own frame }
+  if AEl.Caption.HasHitRel and ((AEl.Caption.RotationRad <> 0) or AEl.Caption.HitRelOwn)
+    and (w = 0) then
+  begin
+    c := Cos(AEl.Caption.RotationRad);
+    sn := Sin(AEl.Caption.RotationRad);
+    dx := AX - AEl.Caption.X;
+    dy := AY - AEl.Caption.Y;
+    lx := dx * c - dy * sn;
+    ly := dx * sn + dy * c;
+    r := AEl.HitSlopLogical * s + pad;
+    Exit((lx >= AEl.Caption.HitRel.Left - r) and (lx <= AEl.Caption.HitRel.Right + r)
+      and (ly >= AEl.Caption.HitRel.Top - r) and (ly <= AEl.Caption.HitRel.Bottom + r));
+  end;
+  { [R7-F] THE PAD TOPS THE PEN'S REACH UP TO ITS FOUR PIXELS: the drawn
+    shape grown by both (TySymbolHitSlop's reach is the slop) -- the pen's
+    own reach alone answered past the pad [R7-C: the pad was all of it] }
+  padArea := 0;
+  if pad > 0 then padArea := AEl.HitSlopLogical * s + pad;
+  { [R7-F] a symbol in its own frame, upstream's own outline }
+  if AEl.Shape.HitSym <> '' then Exit(SymbolHit(AEl, w, padArea, s, ElFills(AEl), AX, AY));
+  { [R7-P] a pen the map stretches: its stroke in the map's own space }
+  if (w > 0) and AEl.Style.HasPenMap and not AEl.HitUpright then
+  begin
+    if ElFills(AEl) and ShapeArea(AEl.Shape, AX, AY, padArea) then Exit(True);
+    Result := PenMapStrokeHit(AEl, w, AX, AY, asked);
+    if asked then Exit;
+  end;
+  if w > 0 then
+  begin
+    { the slop the builder gave the element stood for the stroke and is not
+      asked }
+    if AEl.HitUpright then Exit(UprightHit(AEl, w, padArea, AX, AY));
+    Exit(StrokedHit(AEl.Shape, ElFills(AEl), w, padArea, AX, AY));
+  end;
+  { an open line with neither a pen nor a fill: Path.contain has nothing to
+    ask (a line written at width 0) }
+  if (AEl.Shape.Kind = cskPolyline) and not AEl.Style.HasFill
+    and not (AEl.Style.StrokeWidthLogical > 0) then Exit(False);
+  { [R7-F] nor a closed shape whose fill is 'none' and that strokes nothing }
+  if (AEl.Shape.Kind <> cskPolyline) and AEl.Style.HitNoFill then Exit(False);
+  Result := ShapeArea(AEl.Shape, AX, AY, AEl.HitSlopLogical * s + pad);
+end;
+
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 var k: Integer;
 begin
@@ -2050,10 +3255,7 @@ begin
   { [spec 242] a point outside a clip path is not over the element }
   for k := 0 to High(AEl.ClipPaths) do
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
-  if AEl.ClipHits and AEl.HasClip
-    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
-      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
-    Exit(False);
+  if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
   if AEl.ZrHit.Active then Result := TyZrHitContains(AEl.ZrHit, AX, AY)
   else if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
@@ -2084,7 +3286,7 @@ function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
   APad: Boolean): Integer;
 var
   i, idx: Integer;
-  slop, half: Double;
+  half: Double;
   b: TTyRectF;
 begin
   Result := -1;
@@ -2111,10 +3313,7 @@ begin
         Exit(idx);
       Continue;
     end;
-    slop := FItems[idx].HitSlopLogical;
-    if APad then slop := slop + FItems[idx].HitPadLogical;
-    if APPI > 0 then slop := slop * APPI / 96;
-    if TyElementContains(FItems[idx], AX, AY, slop) then
+    if TyElementHit(FItems[idx], AX, AY, APPI, APad) then
       Exit(idx);
   end;
 end;
@@ -2122,7 +3321,6 @@ end;
 function TTyPaintList.TopElementAt(AX, AY: Double; APPI: Integer): Integer;
 var
   i, idx: Integer;
-  slop: Double;
 begin
   Result := -1;
   EnsureOrder;
@@ -2130,9 +3328,7 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
-    slop := FItems[idx].HitSlopLogical + FItems[idx].HitPadLogical;
-    if APPI > 0 then slop := slop * APPI / 96;
-    if TyElementContains(FItems[idx], AX, AY, slop) then
+    if TyElementHit(FItems[idx], AX, AY, APPI, True) then
       Exit(idx);
   end;
 end;

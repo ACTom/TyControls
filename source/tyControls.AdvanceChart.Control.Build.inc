@@ -64,6 +64,12 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.RebuildBody;
+{ [spec 259] the box types whose encode lists this batch holds to upstream
+  (a gauge's and a sankey's are not looked at here) }
+function PieOrFunnel(const AType: string): Boolean;
+begin
+  Result := (AType = TyPieSeriesTypeName) or (AType = TyFunnelSeriesTypeName);
+end;
 var
   d: TJSONData;
   lnRaws: TTyLinesRawArray;
@@ -82,10 +88,10 @@ var
   pre: TTyIntegerArray;
 begin
   DropBuild;
-  FBuild := TyBuildGrids(FOption, FLastRect);
+  FBuild := TyBuildGrids(FOption, FLastRect, FLastPPI);
   { THE POLARS beside the grids: their axes, extents and centres
     [Batch 111] }
-  FPolars := TyBuildPolars(FOption, FLastRect, polarMissing);
+  FPolars := TyBuildPolars(FOption, FLastRect, polarMissing, Math.Max(1, FLastPPI) / 96);
   for i := 0 to High(polarMissing) do
   begin
     j := Pos(':', polarMissing[i]);
@@ -93,10 +99,10 @@ begin
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
   { THE SINGLE AXES: their boxes, axes and extents along them [Batch 118] }
-  FSingles := TyBuildSingles(FOption, FLastRect);
+  FSingles := TyBuildSingles(FOption, FLastRect, Math.Max(1, FLastPPI) / 96);
   { THE PARALLELS beside them: their axes, their boxes, and each axis' active
     intervals from its model [Batch 128] }
-  FParallels := TyBuildParallels(FOption, FLastRect);
+  FParallels := TyBuildParallels(FOption, FLastRect, Math.Max(1, FLastPPI) / 96);
   for i := 0 to High(FParallels) do
     if FParallels[i] <> nil then
       for j := 0 to FParallels[i].AxisCount - 1 do
@@ -134,6 +140,8 @@ begin
   SetLength(FSources, Length(FBindings));
   SetLength(FSeriesDataset, Length(FBindings));
   SetLength(FEncodes, Length(FBindings));
+  FSeriesRefused := nil;
+  SetLength(FSeriesRefused, Length(FBindings));
   if FDatasetCache = nil then FDatasetCache := TTyDatasetCache.Create
   else FDatasetCache.Clear;
   { the transforms draw from the state their option's first build found
@@ -253,6 +261,7 @@ begin
         ds := FSeriesDataset[i];
         if ds >= 0 then
         begin
+          coord := nil;
           SetLength(coord, Length(dims));
           for k := 0 to High(dims) do
           begin
@@ -267,16 +276,37 @@ begin
             TyEncodeDropPast(enc, FSources[i].DimCount);
           end;
           if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
+          { [spec 259] a list's later entries are columns too: an x or a y
+            one parsed -- and collected -- by the tree's category list, in
+            the table's order }
+          if enc.Given then
+          begin
+            TySpreadEncode(enc, dims, st);
+            MatrixExtraMeta(i, st);
+            TyEncodeStoreOrder(enc, dims, st, True);
+          end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
+          MatrixTextDims(i, enc, FSources[i], st);
         end
         else
+        begin
+          { [spec 264] ITS OWN DATA READS ITS ENCODE TOO, the way a series
+            on axes reads it: the coordinates as written (the rest from the
+            next free elements), a list's later entries parsed -- and
+            collected -- by the tree's category list, itemName [was: never
+            read, every row placed by position] }
+          SeriesDataEncode(i, dims, enc);
+          if enc.Given then
+          begin
+            TySpreadEncode(enc, dims, st);
+            MatrixExtraMeta(i, st);
+            TyEncodeStoreOrder(enc, dims, st, False);
+          end;
           TyFillSeriesStore(FOption, i, dims, st);
-        { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is
-          no coordinate dimension, x and y are ordinal: defaultedTooltip is
-          empty), so it shows every element of the item [Batch 147] }
-        if (FBindings[i].SeriesType = 'scatter') or (FBindings[i].SeriesType = 'effectScatter') then
-          st.SetTooltipPositions(nil);
+          TyOwnItemNames(enc, st);
+          MatrixTextDims(i, enc, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex), st);
+        end;
         Continue;
       end;
       if FBindings[i].RadarIndex >= 0 then
@@ -407,19 +437,47 @@ begin
           { A PIE NAMES ITS DATA RATHER THAN PLOTTING IT, so its default
             encode is the other one: a NAME dimension and a VALUE dimension,
             guessed from the table rather than counted off it. }
+          coord := nil;
           SetLength(coord, 1);
           coord[0].Name := typeInfo.Dims[0];
           coord[0].Ordinal := False;
-          enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
-            FSources[i], coord);
-          if not enc.Given then
-            enc := TyDefaultEncodeNameBased(FSources[i],
-              FSources[i].DimCount);
+          { [R7-D] A GAUGE READS NO ENCODE: GaugeSeries.getInitialData hands
+            createSeriesDataSimply its dimensions as an array, so the value
+            is the first dimension and no row has a name [was: the pie's
+            encode and its name-based default] }
+          if FBindings[i].SeriesType = TyGaugeSeriesTypeName then
+            enc := TyEncodeFirstDim
+          else
+          begin
+            enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex,
+              FSources[i], coord);
+            if not enc.Given then
+              enc := TyDefaultEncodeNameBased(FSources[i],
+                FSources[i].DimCount)
+            else if PieOrFunnel(FBindings[i].SeriesType) then
+              { [spec 259] the tooltip is defaultedLabel: the last value
+                dimension in the table, which need not be the one drawn }
+              BoxTipDims(enc, FSources[i], st);
+          end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
         end
+        else if PieOrFunnel(FBindings[i].SeriesType) then
+        begin
+          { [spec 259] a pie's or a funnel's own data reads its encode too:
+            the value, the names, the tooltip }
+          SeriesDataEncode(i, dims, enc);
+          TyFillSeriesStore(FOption, i, dims, st);
+          TyOwnItemNames(enc, st);
+          if enc.Given then
+            BoxTipDims(enc, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex), st);
+        end
         else
           TyFillSeriesStore(FOption, i, dims, st);
+        { [R7-D] a gauge's first dimension that upstream types ordinal keeps
+          its cells as written (no ordinal meta): the reading is the cell }
+        if FBindings[i].SeriesType = TyGaugeSeriesTypeName then
+          GaugeOrdinalValue(i, st);
       end;
       Continue;
     end;
@@ -452,9 +510,10 @@ begin
       other three away. The axis then sized itself from a quarter of its own
       data and the renderer found no columns to read. }
     MultiValueDims(FBindings[i], dims);
-    { a custom series' encode may spread one coordinate over several
-      columns (a span's start and end) [Batch 123] }
-    CustomDims(i, dims);
+    { [spec 259] a custom series' encode spreading one coordinate over
+      several columns (a span's start and end) is an encode list like any
+      other's: TySpreadEncode below, gaps kept [Batch 123: CustomDims, the
+      unreached entries dropped, the columns named x1, x2] }
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
@@ -483,12 +542,17 @@ begin
     if ds < 0 then
     begin
       SeriesDataEncode(i, dims, enc);
+      { [spec 255] a coordinate's list past its own column: extra columns }
+      if enc.Given then TySpreadEncode(enc, dims, st);
       { [R2-I6] the store the last build of this tree parsed, when it is
         the same recipe on the same lists }
       sig := StoreKeepSig(i, 0, -1, dims, enc);
       if StoreKeepTake(i, sig, dims) then Continue;
       StoreKeepPre(dims, pre);
+      if enc.Given then TyEncodeStoreOrder(enc, dims, st, False);
       TyFillSeriesStore(FOption, i, dims, st);
+      { [spec 259] encode.itemName names its own rows }
+      TyOwnItemNames(enc, st);
       ResolveTextDims(enc, st, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex));
       HeatmapTipDims(i, enc, st);
       StoreKeepPut(i, sig, dims, pre);
@@ -498,12 +562,16 @@ begin
       axis under it is a category one. The second is what chooses between the
       two ways of handing a table out, and it is not the same question as
       which axis is horizontal. }
+    coord := nil;
     SetLength(coord, Length(dims));
     for k := 0 to High(dims) do
     begin
       coord[k].Name := dims[k].Name;
       coord[k].Ordinal := dims[k].Kind = ddtOrdinal;
     end;
+    { [spec 255] a column feeding another coordinate answers to its key: a
+      candlestick's y list fills open, close, lowest, highest in order }
+    TyCoordKeys(dims, coord);
     enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex, FSources[i], coord);
     { THE CURSOR IS SHARED AND IT ADVANCES, which is why this has to happen
       inside the one loop that walks the series in order. Three bars on one
@@ -523,12 +591,20 @@ begin
     end;
     { A GIVEN ENCODE FILLS WHAT IT LEAVES OUT from the next free columns --
       `encode: {tooltip: [2]}` still draws x from 0 and y from 1. }
-    if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
+    { (up to the dimensions upstream counts: a table's written `dimensions`,
+      at least the coordinates' [spec 255]) }
+    if enc.Given then
+      TyEncodeFillUnclaimed(enc, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
+    RefuseShortWhisker(i, enc, dims, coord, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
+    { [spec 255] every entry of a coordinate's list past its own column is a
+      column too: the axis spans it, it may be the label }
+    TySpreadEncode(enc, dims, st);
     FEncodes[i] := enc;
     { [R2-I6] kept, as above }
     sig := StoreKeepSig(i, 1, ds, dims, enc);
     if StoreKeepTake(i, sig, dims) then Continue;
     StoreKeepPre(dims, pre);
+    TyEncodeStoreOrder(enc, dims, st, True);
     TyFillStoreFromSource(FSources[i], enc, dims, st);
     ResolveTextDims(enc, st, FSources[i]);
     HeatmapTipDims(i, enc, st);
@@ -1244,7 +1320,8 @@ begin
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
   { THE BREAK AREAS on the final rects, the zigzags from the axes' caches
     [Batch 132] }
-  TyLayoutBreakAreas(FBuild, FOption, FAxisMemory);
+  { ([R7-AH] the zigzag in css px, its ends on the css px grid) }
+  TyLayoutBreakAreas(FBuild, FOption, FAxisMemory, APPI / 96);
   { THE POLAR AXIS VIEWS, in the same fonts and gaps [Batch 111] }
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
@@ -1264,13 +1341,13 @@ begin
   { a large bar's barMinWidth defaults to half a pixel [Batch 117] }
   SetLength(largeBars, Length(FBindings));
   for i := 0 to High(largeBars) do largeBars[i] := LargeKindOf(i) = lgkBar;
-  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars);
+  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars, APPI / 96);
   { AND THE BARS ON A POLAR [Batch 113] }
   FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
   { [R5-I] what their updateStyle reads off the elements }
   PolarStyleTake;
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
-  FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
+  FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex, APPI / 96);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
   SolveMarkers(APPI);
   { THE CALENDARS AND THE MATRICES were laid out by Rebuild, before the
@@ -1296,6 +1373,10 @@ begin
     [Batch 121] }
   SolveLines(APPI);
   FreeAndNil(FTrailLayer);
+  { [R7-AH] render's allocateZlevels: the stores' counts and the trails
+    known -- every model's zlevel where a series asks for a layer }
+  ZAllocSolve;
+  TrailLevelsFree;
   { THE CUSTOM SERIES, on the coordinate systems laid out above: renderItem
     runs here, once per item shown [Batch 123] }
   SolveCustom(APPI);
@@ -1835,7 +1916,7 @@ var
   chartScope, ownScope: TTyPaletteScope;
   chartPal, ownPal: TTyPalette;
   chartLayers, ownLayers: TTyPaletteLayers;
-  node: TJSONObject;
+  node, own: TJSONObject;
   d: TJSONData;
   st: string;
   style: TTyOptStyle;
@@ -1895,7 +1976,11 @@ begin
       its stroke, so it is `itemStyle.borderColor`; `lines` and `parallel` read
       a different block entirely. A line is NOT one of the exceptions -- writing
       `lineStyle.color` on a line does not stop it taking a palette slot. }
-    style := TyReadOptStyle(node, TyStyleAccessPath(st));
+    { [R7-U] the series' own block: the style task reads it with
+      ignoreParent, the root's colour takes no slot from the palette }
+    own := FOption.SeriesOwnStyle(i);
+    if own = nil then own := node;
+    style := TyReadOptStyle(own, TyStyleAccessPath(st));
     if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
     begin
       key := style.BorderColor;
@@ -1917,7 +2002,7 @@ begin
       a slot and its callback's params carry that colour (a tree with one is
       the palette's, not lightsteelblue's) }
     isCb := False;
-    sd := node.Find(TyStyleAccessPath(st));
+    sd := own.Find(TyStyleAccessPath(st));
     if sd is TJSONObject then
     begin
       if TyStyleDrawsWithStroke(st) and (TyStyleAccessPath(st) = 'itemStyle') then
@@ -2655,8 +2740,10 @@ begin
     if not (FOption.ComponentAt('series', si) is TJSONObject) then Continue;
     node := TJSONObject(FOption.ComponentAt('series', si));
     slot := SlotOfSeries(si);
-    { eachSeries: the legend's filtered series are not met }
+    { eachSeries: the legend's filtered series are not met; [spec 264] nor
+      one refused, out of the drawing }
     if (slot >= 0) and (slot <= High(FBindings)) and FBindings[slot].Hidden then Continue;
+    if SeriesRefusedAt(slot) then Continue;
     n := Length(facts.Series);
     SetLength(facts.Series, n + 1);
     facts.Series[n].Index := si;
@@ -2676,30 +2763,44 @@ begin
     for i := 0 to st.Count - 1 do
     begin
       facts.Series[n].Rows[i].Name := st.GetItemName(i);
-      { data.getValues(i): every dimension upstream's data has -- the
-        store's own columns, then the item's positions no column reads (a
-        scatter's third `value`, NaN where the item is short), then the
-        stack's two calculated ones -- less the excluded ones }
+      { data.getValues(i): every dimension upstream's data has, in its
+        order -- the item's positions, each the column reading it or, where
+        none does, the element itself (a scatter's third `value`, NaN where
+        the item is short); a column on the row index before them, one past
+        the item after them; a column reading nothing (a gap at place 0 of
+        an encode list) is no dimension at all -- then the stack's two
+        calculated ones, less the excluded ones
+        [spec 259: was the columns first, then the positions no column
+        reads; a gap's NaN listed] }
       vals := nil;
       k := 0;
       for dim := 0 to st.DimCount - 1 do
-        if Copy(st.DimName(dim), 1, 5) <> '__ty_' then
+        if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) < 0)
+          and not st.DimVoid(dim) then
           Push(TyJsNumberToString(st.Get(dim, i)));
       for pos := 0 to st.RawWidth - 1 do
       begin
         read := False;
         for dim := 0 to st.DimCount - 1 do
           if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) = pos) then
+          begin
+            Push(TyJsNumberToString(st.Get(dim, i)));
             read := True;
+            Break;
+          end;
         if read then Continue;
-        { a position no column reads is a float dimension upstream; one it
-          guessed ordinal is not modelled here (NaN) }
-        if TTyDataStore.RawCell(st.RawItemByRaw(st.GetRawIndex(i)), pos, cell)
-          and (st.RawPosType(pos) <> ddtOrdinal) then
-          Push(TyJsNumberToString(TyParseDataValue(cell, ddtFloat)))
+        { a position no column reads is a float dimension upstream, or one
+          it guessed ordinal -- no category list, the element as it is }
+        if not TTyDataStore.RawCell(st.RawItemByRaw(st.GetRawIndex(i)), pos, cell) then
+          Push('NaN')
+        else if st.RawPosType(pos) = ddtOrdinal then
+          Push(TyJsValueText(cell, 'undefined'))
         else
-          Push('NaN');
+          Push(TyJsNumberToString(TyParseDataValue(cell, ddtFloat)));
       end;
+      for dim := 0 to st.DimCount - 1 do
+        if (Copy(st.DimName(dim), 1, 5) <> '__ty_') and (st.RawDimPos(dim) >= st.RawWidth) then
+          Push(TyJsNumberToString(st.Get(dim, i)));
       for dim := 0 to st.DimCount - 1 do
         if (Copy(st.DimName(dim), 1, 16) = '__ty_stackresult')
           or (Copy(st.DimName(dim), 1, 16) = '__ty_stackedover') then
@@ -2813,10 +2914,10 @@ end;
 procedure TTyCustomAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
   ASlot: Integer);
 var
-  node: TJSONObject;
+  node, own: TJSONObject;
   d: TJSONData;
   st: string;
-  item, line: TTyOptStyle;
+  item, line, full: TTyOptStyle;
 begin
   if FOption = nil then Exit;
   d := FOption.ComponentAt('series', ASlot);
@@ -2830,8 +2931,14 @@ begin
     settle whether this series took a palette slot, and SeriesColor handed
     the answer over -- reading it a second time here would be a second
     place that has to agree about `auto`. }
-  item := TyReadOptStyle(node, 'itemStyle');
-  line := TyReadOptStyle(node, 'lineStyle');
+  { [R7-U] the visual reads the series' own blocks (ignoreParent): none of
+    the root's -- but a line's polyline is LineView's getLineStyle of the
+    series' lineStyle model, which the root's block is the parent of }
+  own := FOption.SeriesOwnStyle(ASlot);
+  if own = nil then own := node;
+  item := TyReadOptStyle(own, 'itemStyle');
+  if st = 'line' then line := TyReadOptStyle(node, 'lineStyle')
+  else line := TyReadOptStyle(own, 'lineStyle');
 
   { `itemStyle.borderColor` / `borderWidth`. `auto` on a border means the
     palette colour, the same as it does on a fill. }
@@ -2847,6 +2954,39 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-Y] A BORDER COLOUR WRITTEN WITH NO WIDTH strokes at zrender's
+    lineWidth 1 (getItemStyle leaves the key out; the path's default style
+    has 1) [was: no pen -- a bar's, a scatter's, a heatmap's border never
+    drawn] }
+  if item.BorderColor.Written and not item.BorderColor.IsNone
+    and not AVisual.StrokeWidthSet and not (AVisual.StrokeWidthLogical > 0) then
+    AVisual.StrokeWidthLogical := 1;
+  { [R7-U] the layout's width: getLineWidth / prepareLineWidth read the
+    item model's itemStyle.borderWidth, the root's under the series' }
+  AVisual.LayoutHas := own <> node;
+  if AVisual.LayoutHas then
+  begin
+    full := TyReadOptStyle(node, 'itemStyle');
+    AVisual.LayoutWidthSet := not IsNan(full.BorderWidthLogical);
+    if AVisual.LayoutWidthSet then AVisual.LayoutWidthLogical := full.BorderWidthLogical
+    else AVisual.LayoutWidthLogical := 0;
+    AVisual.LayoutWidthNaN := full.BorderWidthNaN;
+    AVisual.LayoutWidthInf := full.BorderWidthInf;
+  end;
+  { [R7-F] 'none' is no fill and a clear colour a pen, for the pointer }
+  AVisual.FillNone := item.Color.Written and item.Color.IsNone;
+  AVisual.StrokeClear := item.BorderColor.Written and not item.BorderColor.IsNone
+    and not item.BorderColor.IsAuto and ((item.BorderColor.Color shr 24) = 0)
+    and (item.BorderColor.Gradient.Kind = cgkNone) and not item.BorderColor.Pattern.Present;
+  { [R7-G] getLineWidth's borderColor test on the series' own key: truthy
+    and not the word 'none', whatever colour it parses to }
+  d := node.Find('itemStyle');
+  if d is TJSONObject then
+    AVisual.BorderLayout := TyOptTruthy(TJSONObject(d).Find('borderColor'))
+      and not ((TJSONObject(d).Find('borderColor').JSONType = jtString)
+        and (TJSONObject(d).Find('borderColor').AsString = 'none'))
+  else
+    AVisual.BorderLayout := False;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -2857,8 +2997,11 @@ begin
   AVisual.ItemDash := item.Dash;
   AVisual.ItemDashExplicit := item.DashLogical;
   AVisual.ItemDashOffset := item.DashOffset;
+  { [R7-V] the opacity as written: the canvas' globalAlpha clamps it
+    (bindCommonProps, TyCanvasPartAlpha), a state's blur multiplies it and a
+    tween runs to it [was: clamped here] }
   if not IsNan(item.Opacity) then
-    AVisual.Alpha := Min(Double(1), Max(Double(0), item.Opacity))
+    AVisual.Alpha := item.Opacity
   else if st = 'scatter' then
     { A SCATTER'S SYMBOLS ARE FOUR FIFTHS OPAQUE unless told otherwise --
       ScatterSeries' own default, which its labels inherit. [Revised in
@@ -2910,6 +3053,9 @@ begin
     AVisual.StrokeWidthSet := not IsNan(line.BorderWidthLogical);
     AVisual.StrokeWidthNaN := False;
     AVisual.StrokeWidthInf := 0;
+    AVisual.StrokeClear := line.Color.Written and not line.Color.IsNone
+      and not line.Color.IsAuto and ((line.Color.Color shr 24) = 0)
+      and (line.Color.Gradient.Kind = cgkNone) and not line.Color.Pattern.Present;
     { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
       drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
       leaves todNone, which answers solid -- so a line series that writes only
@@ -2917,8 +3063,17 @@ begin
     AVisual.Dash := line.Dash;
     AVisual.DashExplicit := line.DashLogical;
     AVisual.DashOffset := line.DashOffset;
+    { [R7-V] as written (the canvas clamps it) }
     if not IsNan(line.Opacity) then
-      AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
+    begin
+      { [R7-U] a line's symbols keep the visual style's }
+      if st = 'line' then
+      begin
+        AVisual.ItemAlphaSet := True;
+        AVisual.ItemAlpha := AVisual.Alpha;
+      end;
+      AVisual.Alpha := line.Opacity;
+    end;
     if line.Color.Gradient.Kind <> cgkNone then
       AVisual.StrokeGradient := line.Color.Gradient
     { [R5-B] the visual colour a line is stroked with when its lineStyle
@@ -3031,6 +3186,14 @@ begin
   begin
     Result.HasColour := True;
     Result.Colour := col;
+  end
+  { [R7-Z] a colour no parser reads: the fill the canvas had there
+    (PaintTitles) [was: the theme's] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+    and not TyColourIsHandler(d.AsString) then
+  begin
+    Result.HasColour := True;
+    Result.Colour := cTyCanvasColourLeft;
   end;
 end;
 
@@ -3073,9 +3236,18 @@ begin
       begin
         if line = 0 then st := TJSONObject(node).Find('textStyle')
         else st := TJSONObject(node).Find('subtextStyle');
-        if (st is TJSONObject) and TyRtNodeWantsBlock(TJSONObject(st)) then
+        { ([R7-AA] a textBorderColor / textBorderWidth too: the block draws
+          the text's stroke [was: never drawn]) }
+        if (st is TJSONObject) and (TyRtNodeWantsBlock(TJSONObject(st))
+          or ((TJSONObject(st).Find('textBorderColor') <> nil)
+            and (TJSONObject(st).Find('textBorderColor').JSONType <> jtNull))
+          or ((TJSONObject(st).Find('textBorderWidth') <> nil)
+            and (TJSONObject(st).Find('textBorderWidth').JSONType <> jtNull))) then
+        begin
           rts[line] := TyRtResolve([TJSONObject(st)], glob,
             TyRtResolveOpt(False, True));
+          if not TyRtNodeWantsBlock(TJSONObject(st)) then rts[line].Needed := True;
+        end;
       end;
       meters[line] := nil;
       if rts[line].Needed then
@@ -3161,20 +3333,117 @@ begin
     Result := FTitleRt[AIndex][ALine];
 end;
 
-procedure TTyCustomAdvanceChart.PaintTitles(APainter: TTyPainter);
+{ [R7-AJ] the title's z: its model's (the default 6) }
+function TTyCustomAdvanceChart.TitleZ(AIndex: Integer): Integer;
+var node, d: TJSONData;
+begin
+  Result := 6;
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      Result := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+  end;
+end;
+
+{ [R7-AJ] A TITLE'S BOX AND INKS as its view builds them -- what the canvas
+  refuses of them settled by the list's run, as any element's
+  (TyLinesCanvasLeftovers) }
+procedure TTyCustomAdvanceChart.TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
+  out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
 var
-  i: Integer;
   st, subSt: TTyStyleSet;
   lay: TTyTitleLayout;
-  f0, f1: TTyTitleFont;
-  ink0, ink1: TTyColor;
-  frameFill: TTyFill;
   frameInk: TTyColor;
+  frame: TTyRectF;
+  rad: array[0..3] of Double;
+  k: Integer;
 
-  { The box DrawText wants, hung off an anchor with the title's alignment.
-    The same job AnchorBox does for an axis label; kept local because the two
-    take their alignment from different enums and one shared helper would take
-    an argument nobody could read at the call site. }
+  { the painter's ScaleF at APPI }
+  function Sc(ALogical: Double): Double;
+  begin
+    if APPI <= 0 then Exit(ALogical);
+    Result := ALogical * APPI / 96;
+  end;
+
+begin
+  st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
+  subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '',
+    []);
+  lay := FTitles[AIndex];
+  { The frame first, and only when the option asked for one: ECharts gives
+    the title a transparent background by default, and painting the surface
+    colour instead would put a visible plate behind every title on an image
+    theme. }
+  { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
+    group's frame by the border width [was: as laid out] }
+  frame := TyTitleFrameDrawn(lay, Sc(FTitleSpecs[AIndex].BorderWidth), Sc(1));
+  { [R7-X] THE BOX AS install.ts' Rect: one element of the whole
+    getItemStyle(['color', 'opacity']) -- the fill (the author's
+    backgroundColor [R5-G]), the pen (borderWidth above nought in
+    borderColor, tokens.color.primary by default -- the title's ink),
+    its dash, phase, cap, join and miterLimit, the shadow cast by both,
+    the corners of every form -- on the frame as drawn, to the fraction
+    [R7-I] [was: the fill and the pen alone, the shadow under the fill
+    only, one corner radius] }
+  AFrame := Default(TTyChartElement);
+  AFrame.Silent := True;
+  AFrame.Datum := TyChartNoDatum;
+  AFrame.Style := FTitleSpecs[AIndex].Look;
+  for k := 0 to 3 do rad[k] := Sc(FTitleSpecs[AIndex].BorderRadii[k]);
+  { ([R7-AK] on its joined edges where the size is a string; a title placed
+    at NaN -- a padding side undefined -- has its Rect at NaN, drawing
+    nothing) }
+  if lay.Unplaced then AFrame.Shape := TyShapePolygon([])
+  else
+    AFrame.Shape := TyTitleFrameShape(lay, frame, rad, FTitleSpecs[AIndex].BorderRounded,
+      Sc(FTitleSpecs[AIndex].BorderWidth), Sc(1));
+  { [R7-AA] THE RECT IS ALWAYS THERE: its fill the backgroundColor
+    ('transparent' by default -- it hands the canvas that fillStyle), its
+    stroke colour handed on at a width of nought too [was: built only to
+    draw something] }
+  AFrame.Style.HasFill := True;
+  if FTitleSpecs[AIndex].HasBackground then AFrame.Style.FillColor := FTitleSpecs[AIndex].BackgroundColor
+  else AFrame.Style.FillColor := 0;
+  AFrame.Style.StrokeWidthLogical := 0;
+  if FTitleSpecs[AIndex].HasBorderColor then frameInk := TTyColor(FTitleSpecs[AIndex].BorderColor)
+  else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
+  else frameInk := st.TextColor;
+  AFrame.Style.StrokeColor := TTyChartColor(frameInk);
+  if (FTitleSpecs[AIndex].BorderWidth > 0) or FTitleSpecs[AIndex].BorderWidthInf then
+  begin
+    AFrame.Style.StrokeWidthLogical := FTitleSpecs[AIndex].BorderWidth;
+    { [R7-Z] +Infinity strokes, at the width the canvas had }
+    if FTitleSpecs[AIndex].BorderWidthInf then
+    begin
+      AFrame.Style.StrokeWidthLogical := 1;
+      AFrame.CanvasFlags := AFrame.CanvasFlags or cTyCanvasWidthLeft;
+    end;
+  end;
+  TyStyleSetShadow(AFrame.Style, FTitleSpecs[AIndex].Shadow);
+  { in the fonts the layout measured -- the author's where written }
+  AFont0 := FTitleFonts[AIndex][0];
+  AFont1 := FTitleFonts[AIndex][1];
+  if AFont0.HasColour then AInk0 := TTyColor(AFont0.Colour) else AInk0 := st.TextColor;
+  if AFont1.HasColour then AInk1 := TTyColor(AFont1.Colour) else AInk1 := subSt.TextColor;
+end;
+
+{ [R7-AJ] A TITLE LINE AS A CAPTION OF THE LIST: the words in their box
+  (DrawText's rect, the title's alignment, from the top -- as PaintTitles
+  hung them), or a block's pieces where it is one; False where the line
+  draws nothing (no words, no subtext) }
+function TTyCustomAdvanceChart.TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+  const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+var
+  lay: TTyTitleLayout;
+  txt: string;
+  r: TRect;
+  pieces, fontLeft: Boolean;
+  node: TJSONData;
+
+  { The box DrawText wants, hung off an anchor with the title's alignment. }
   function Hang(AX, AY, AW, AH: Double; AAlign: TTyTitleAlign;
     AVAlign: TTyTitleVAlign): TRect;
   begin
@@ -3194,95 +3463,291 @@ var
     Result.Bottom := Result.Top + Round(AH);
   end;
 
-  function LclAlign(AAlign: TTyTitleAlign): TAlignment;
-  begin
-    case AAlign of
-      ttaCentre: Result := taCenter;
-      ttaRight: Result := taRightJustify;
-    else
-      Result := taLeftJustify;
-    end;
-  end;
-
 begin
-  if Length(FTitles) = 0 then Exit;
-  if ViewHidden(cvTitle) then Exit;
-  st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
-  subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '',
-    []);
+  Result := False;
+  AEl := Default(TTyChartElement);
+  lay := FTitles[AIndex];
+  pieces := (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0);
+  if ALine = 0 then
+  begin
+    txt := FTitleSpecs[AIndex].Text;
+    if not pieces and (txt = '') then Exit;
+    r := Hang(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign);
+  end
+  else
+  begin
+    txt := FTitleSpecs[AIndex].Subtext;
+    if not pieces and not lay.HasSub then Exit;
+    r := Hang(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign);
+  end;
+  Result := True;
+  AEl.Silent := True;
+  AEl.Datum := TyChartNoDatum;
+  AEl.Style.Alpha := 1;
+  { A PLAIN RECT UNDER THE WORDS, never painted: the box they are drawn in }
+  AEl.Shape := TyShapeRect(TyRectF(r.Left, r.Top, r.Right, r.Bottom));
+  AEl.Caption.Text := txt;
+  AEl.Caption.FontName := AFont.Name;
+  AEl.Caption.FontSizeLogical := AFont.SizeLogical;
+  AEl.Caption.FontWeight := AFont.Weight;
+  AEl.Caption.Colour := TTyChartColor(AInk);
+  case lay.Align of
+    ttaCentre: AEl.Caption.AnchorH := tahCentre;
+    ttaRight: AEl.Caption.AnchorH := tahRight;
+  else
+    AEl.Caption.AnchorH := tahLeft;
+  end;
+  { (several lines each aligned in the box: CaptionDrawOf sees the break) }
+  AEl.Caption.AnchorV := tavTop;
+  if ALine = 0 then
+  begin
+    AEl.Caption.X := lay.TextX;
+    AEl.Caption.Y := lay.TextY;
+  end
+  else
+  begin
+    AEl.Caption.X := lay.SubX;
+    AEl.Caption.Y := lay.SubY;
+  end;
+  { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86], about the same
+    anchor (SolveTitles places the block at the line's) }
+  if pieces then
+  begin
+    AEl.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
+    AEl.Caption.RtScale := FTitleRt[AIndex][ALine].Scale;
+  end;
+  { [R7-AD] A FONT THE CANVAS REFUSES: the one the text before left, as the
+    list's run hands it on (FontRefusedOf, as a legend's) }
+  node := nil;
+  if FOption <> nil then node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    if ALine = 0 then fontLeft := FontRefusedOf([TJSONObject(node).Find('textStyle')])
+    else fontLeft := FontRefusedOf([TJSONObject(node).Find('subtextStyle')]);
+    if fontLeft then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFontLeft;
+  end;
+  { (the canvas' transform as R7-Z handed the words on: none) }
+  AEl.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+end;
+
+{ [R7-AK] A LINE OF A TITLE PLACED AT NaN (a padding side undefined) as its
+  TSpan stands: x 0 aligned, y the line's middle (a block's pieces about
+  the line's anchor, as a placed title's), group-local -- the group at the
+  canvas' corner where it has no transform; False where the line draws
+  nothing }
+function TTyCustomAdvanceChart.TitleUnplacedLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+  const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+var
+  lay: TTyTitleLayout;
+  txt: string;
+  ox, oy, lineTop, lh, lw: Double;
+  node, d: TJSONData;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  lay := FTitles[AIndex];
+  if lay.UnplacedT then
+  begin
+    ox := 0;
+    oy := 0;
+  end
+  else
+  begin
+    ox := FLastRect.Left;
+    oy := FLastRect.Top;
+  end;
+  if ALine = 0 then
+  begin
+    txt := FTitleSpecs[AIndex].Text;
+    if txt = '' then Exit;
+    lineTop := lay.TextY;
+    lh := lay.TextH;
+    lw := lay.TextW;
+  end
+  else
+  begin
+    txt := FTitleSpecs[AIndex].Subtext;
+    if not lay.HasSub then Exit;
+    lineTop := lay.SubY;
+    lh := lay.SubH;
+    lw := lay.SubW;
+  end;
+  case lay.VAlign of
+    ttvMiddle: lineTop := lineTop - lh / 2;
+    ttvBottom: lineTop := lineTop - lh;
+  end;
+  Result := True;
+  AEl.Silent := True;
+  AEl.Datum := TyChartNoDatum;
+  AEl.Style.Alpha := 1;
+  AEl.Caption.Text := txt;
+  AEl.Caption.FontName := AFont.Name;
+  AEl.Caption.FontSizeLogical := AFont.SizeLogical;
+  AEl.Caption.FontWeight := AFont.Weight;
+  AEl.Caption.Colour := TTyChartColor(AInk);
+  case lay.Align of
+    ttaCentre: AEl.Caption.AnchorH := tahCentre;
+    ttaRight: AEl.Caption.AnchorH := tahRight;
+  else
+    AEl.Caption.AnchorH := tahLeft;
+  end;
+  AEl.Caption.AnchorV := tavMiddle;
+  AEl.Caption.X := ox + lay.TextX;
+  AEl.Caption.Y := oy + lineTop + lh / 2;
+  case lay.Align of
+    ttaCentre: AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X - lw / 2, oy + lineTop, AEl.Caption.X + lw / 2, oy + lineTop + lh));
+    ttaRight: AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X - lw, oy + lineTop, AEl.Caption.X, oy + lineTop + lh));
+  else
+    AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X, oy + lineTop, AEl.Caption.X + lw, oy + lineTop + lh));
+  end;
+  { a line that is a block: its pieces about the same anchor (SolveTitles
+    lays them out at the line's), as a placed title's }
+  if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0) then
+  begin
+    AEl.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
+    AEl.Caption.RtScale := FTitleRt[AIndex][ALine].Scale;
+    AEl.Caption.AnchorV := tavTop;
+    AEl.Caption.Y := oy + FTitleRt[AIndex][ALine].Y;
+    AEl.Caption.X := ox + FTitleRt[AIndex][ALine].X;
+  end;
+  { a font the canvas refuses: the one the text before left }
+  node := nil;
+  if FOption <> nil then node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    if ALine = 0 then d := TJSONObject(node).Find('textStyle')
+    else d := TJSONObject(node).Find('subtextStyle');
+    if FontRefusedOf([d]) then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFontLeft;
+  end;
+  { (no transform of its own: the canvas' frame, as a placed title's) }
+  AEl.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+end;
+
+{ [R7-AJ] THE TITLES IN THE LIST, as TitleView adds them to its group: the
+  text and the subtext (z2 10), the background Rect (z2 0), every one at
+  the title's z and zlevel (updateZ) and its view's place in the root -- one
+  display list sorts them with everything else [was: drawn after the whole
+  list, the break areas and the parallel axes, whatever their z] }
+function TTyCustomAdvanceChart.BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
+var
+  i, k, n0, z: Integer;
+  frame, e: TTyChartElement;
+  ink0, ink1: TTyColor;
+  f0, f1: TTyTitleFont;
+  { [R7-AK] device px a css px }
+  s: Double;
+begin
+  Result := 0;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  FTitleAt := nil;
+  SetLength(FTitleAt, Length(FTitles));
+  for i := 0 to High(FTitleAt) do
+    for k := 0 to 2 do FTitleAt[i][k] := -1;
+
+  if (AList = nil) or (Length(FTitles) = 0) or ViewHidden(cvTitle) then Exit;
   for i := 0 to High(FTitles) do
   begin
-    lay := FTitles[i];
-    if not lay.Valid then Continue;
-    { [R5-J] on the zlevel PaintZLevels draws now }
-    if not ApartIn(ModelZLevel('title', i)) then Continue;
+    if not FTitles[i].Valid or (i > High(FTitleSpecs)) or (i > High(FTitleFonts)) then Continue;
     ViewDrew(cvTitle);
-    { The frame first, and only when the option asked for one: ECharts gives
-      the title a transparent background by default, and painting the surface
-      colour instead would put a visible plate behind every title on an image
-      theme. }
-    { [R5-A] the frame's shadow, under it }
-    if FTitleSpecs[i].HasBackground then
-      TyCastFrameShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
-        TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
-    { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
-      backgroundColor) [was: the skin's surface, whatever the option wrote] }
-    if FTitleSpecs[i].HasBackground then
+    TitleParts(i, APPI, frame, ink0, ink1, f0, f1);
+    z := TitleZ(i);
+    n0 := AList.Count;
+    frame.Z := z;
+    frame.Z2 := 0;
+    FTitleAt[i][0] := AList.Count;
+    { (always there, as the Rect is: a box of no fill to see and no pen
+      draws nothing -- its shadow neither -- and hands the canvas its fill) }
+    AList.Add(frame);
+    { [R7-AK] PLACED AT NaN (a padding side undefined), where the group has
+      a transform the canvas refuses it: every part in its own frame under
+      the transform the canvas had (the box's frame the group's) }
+    if FTitles[i].Unplaced and FTitles[i].UnplacedT then
+      TyElementOwnFrame(AList.Ref(AList.Count - 1)^, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
+    for k := 0 to 1 do
     begin
-      frameFill := Default(TTyFill);
-      frameFill.Kind := tfkSolid;
-      frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
-      APainter.FillBackground(
-        Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
-             Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
-        frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
+      { ([R7-AK] a title placed at NaN: its TSpans as they stand) }
+      if FTitles[i].Unplaced then
+      begin
+        if k = 0 then
+        begin
+          if not TitleUnplacedLineEl(i, 0, ink0, f0, e) then Continue;
+        end
+        else if not TitleUnplacedLineEl(i, 1, ink1, f1, e) then Continue;
+      end
+      else if k = 0 then
+      begin
+        if not TitleLineEl(i, 0, ink0, f0, e) then Continue;
+      end
+      else if not TitleLineEl(i, 1, ink1, f1, e) then Continue;
+      e.Z := z;
+      e.Z2 := 10;
+      if FTitles[i].Unplaced and FTitles[i].UnplacedT then
+        TyElementOwnFrame(e, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
+      FTitleAt[i][k + 1] := AList.Count;
+      AList.Add(e);
     end;
-    { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
-      borderColor, tokens.color.primary by default (the title's ink)
-      [was: never drawn] }
-    if FTitleSpecs[i].BorderWidth > 0 then
-    begin
-      if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
-      else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
-      else frameInk := st.TextColor;
-      APainter.BeginPath;
-      APainter.RoundRectPath(lay.Frame.Left, lay.Frame.Top, lay.Frame.Right,
-        lay.Frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
-      APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
-    end;
-    { in the fonts the layout measured -- the author's where written }
-    f0 := FTitleFonts[i][0];
-    f1 := FTitleFonts[i][1];
-    if f0.HasColour then ink0 := TTyColor(f0.Colour) else ink0 := st.TextColor;
-    if f1.HasColour then ink1 := TTyColor(f1.Colour) else ink1 := subSt.TextColor;
-    { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86] }
-    if (i <= High(FTitleRt)) and (Length(FTitleRt[i][0].Pieces) > 0) then
-      TyRenderRtPieces(APainter, FTitleRt[i][0].Pieces, FTitleRt[i][0].X,
-        FTitleRt[i][0].Y, 0, FTitleRt[i][0].Scale, 1, True, ink0)
-    else if FTitleSpecs[i].Text <> '' then
-      APainter.DrawText(
-        Hang(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign),
-        FTitleSpecs[i].Text, f0.Name, f0.SizeLogical, f0.Weight,
-        ink0, LclAlign(lay.Align), tlTop, False, 0, False,
-        Pos(#10, FTitleSpecs[i].Text) > 0);
-    if (i <= High(FTitleRt)) and (Length(FTitleRt[i][1].Pieces) > 0) then
-      TyRenderRtPieces(APainter, FTitleRt[i][1].Pieces, FTitleRt[i][1].X,
-        FTitleRt[i][1].Y, 0, FTitleRt[i][1].Scale, 1, True, ink1)
-    else if lay.HasSub then
-      APainter.DrawText(
-        Hang(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign),
-        FTitleSpecs[i].Subtext, f1.Name, f1.SizeLogical,
-        f1.Weight, ink1, LclAlign(lay.Align), tlTop, False,
-        0, False, Pos(#10, FTitleSpecs[i].Subtext) > 0);
+    { its zlevel and its view's place }
+    LevelTail(AList, n0, 'title', i);
+    Inc(Result, AList.Count - n0);
   end;
 end;
 
+{ [R7-AJ] THE TITLES THIS PAINT DREW, as the list holds them: their boxes
+  (TitleFramesDrawn) and their parts' log (CompDrawn) }
+procedure TTyCustomAdvanceChart.TitlesNote;
+var
+  i, k: Integer;
+  e: TTyChartElement;
+begin
+  if Length(FTitleFramesDrawn) <> Length(FTitles) then
+  begin
+    FTitleFramesDrawn := nil;
+    SetLength(FTitleFramesDrawn, Length(FTitles));
+  end;
+  for i := 0 to High(FTitles) do
+  begin
+    FTitleFramesDrawn[i] := Default(TTyOverlayShape);
+    if (FPaintList = nil) or not FPaintListValid or (i > High(FTitleAt)) or (FTitleAt[i][0] < 0)
+      or (FTitleAt[i][0] >= FPaintList.Count) then Continue;
+    e := FPaintList.Element(FTitleAt[i][0]);
+    FTitleFramesDrawn[i].Owner := 'title' + IntToStr(i);
+    FTitleFramesDrawn[i].El := e;
+    { [R7-Z] (CompDrawn) }
+    CompDrew(nil, 'title' + IntToStr(i), 0, 0, False, e);
+    for k := 1 to 2 do
+    begin
+      if (FTitleAt[i][k] < 0) or (FTitleAt[i][k] >= FPaintList.Count) then Continue;
+      TitleDrewText(i, k - 1, FPaintList.Element(FTitleAt[i][k]));
+    end;
+  end;
+end;
+
+
+{ [R7-Z] a title's line as drawn (CompDrawn): [R7-AJ] its element in the
+  list, as the list's run settled it }
+procedure TTyCustomAdvanceChart.TitleDrewText(AIndex, ALine: Integer;
+  const AEl: TTyChartElement);
+var e: TTyChartElement;
+begin
+  e := Default(TTyChartElement);
+  e.Style.Alpha := 1;
+  e.Caption.Text := 'x';
+  e.Caption.Colour := AEl.Caption.Colour;
+  { [R7-AD] and the font it is drawn in }
+  e.Caption.FontName := AEl.Caption.FontName;
+  e.Caption.FontSizeLogical := AEl.Caption.FontSizeLogical;
+  e.Caption.FontWeight := AEl.Caption.FontWeight;
+  { [R7-AA] a block's pieces as drawn (their fill and stroke) }
+  if Length(AEl.Caption.RtPieces) > 0 then
+    e.Caption.RtPieces := Copy(AEl.Caption.RtPieces, 0, MaxInt);
+  CompDrew(nil, 'title' + IntToStr(AIndex), 0, 10, True, e);
+end;
 
 function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
-  i, ds: Integer;
+  i, ds, k, dd: Integer;
 begin
   Result := '';
   if FOption = nil then Exit;
@@ -3316,6 +3781,20 @@ begin
     ds := -1;
     if i <= High(FSeriesDataset) then ds := FSeriesDataset[i];
     if (ds < 0) or (i > High(FSources)) then Exit;
+    { [spec 255] A WRITTEN seriesName LIST: every dimension it reaches that
+      has a display name, joined by a space (getSeriesAutoName) }
+    if Length(FEncodes[i].SeriesNames) > 0 then
+    begin
+      for k := 0 to High(FEncodes[i].SeriesNames) do
+      begin
+        dd := FEncodes[i].SeriesNames[k];
+        if (dd < 0) or (dd > High(FSources[i].Dims)) then Continue;
+        if FSources[i].Dims[dd].DisplayName = '' then Continue;
+        if Result <> '' then Result := Result + ' ';
+        Result := Result + FSources[i].Dims[dd].DisplayName;
+      end;
+      Exit;
+    end;
     if FEncodes[i].SeriesName < 0 then Exit;
     Exit(TySourceDimName(FSources[i], FEncodes[i].SeriesName));
   end;
@@ -3325,12 +3804,119 @@ end;
   1 of each item and y element 0, exactly as it would pick table columns.
   Only the plain coordinate columns -- a multi-value series places its own,
   and a row-index column reads no element at all. }
+procedure TTyCustomAdvanceChart.BoxTipDims(const AEnc: TTySeriesEncode;
+  const ASource: TTyChartSource; AStore: TTyDataStore);
+var
+  j: Integer;
+  pos: TTyIntegerArray;
+begin
+  if Length(AEnc.Tooltip) > 0 then
+  begin
+    AStore.SetTooltipPositions(AEnc.Tooltip);
+    Exit;
+  end;
+  j := TyEncodeLastLabelDim(AEnc, 0, ASource);
+  if j < 0 then Exit;
+  pos := nil;
+  SetLength(pos, 1);
+  pos[0] := j;
+  AStore.SetTooltipPositions(pos);
+end;
+
+procedure TTyCustomAdvanceChart.MatrixExtraMeta(ASlot: Integer; AStore: TTyDataStore);
+var
+  k: Integer;
+  mx: TTyMatrix;
+begin
+  mx := FMatrices[FBindings[ASlot].MatrixIndex];
+  for k := 3 to AStore.DimCount - 1 do
+    if AStore.DimCoord(k) = TyMatrixXDim then
+      AStore.UseOrdinalMeta(k, mx.Dims[0].Meta)
+    else if AStore.DimCoord(k) = TyMatrixYDim then
+      AStore.UseOrdinalMeta(k, mx.Dims[1].Meta);
+end;
+
+procedure TTyCustomAdvanceChart.MatrixTextDims(ASlot: Integer;
+  const AEnc: TTySeriesEncode; const ASource: TTyChartSource; AStore: TTyDataStore);
+var
+  j: Integer;
+  lab, tip: TTyIntegerArray;
+begin
+  { defaultedLabel: `encode.label`, else the last coordinate dimension a
+    label suits -- x and y are ordinal, and the value is a coordinate only
+    when the encode wrote it (unwritten it is an extra dimension) [spec 259];
+    defaultedTooltip: `encode.tooltip`, else the label's }
+  lab := nil;
+  tip := nil;
+  if AEnc.Given then
+  begin
+    if Length(AEnc.Labels) > 0 then lab := Copy(AEnc.Labels)
+    else if AEnc.Explicit[2] then
+    begin
+      j := TyEncodeLastLabelDim(AEnc, 2, ASource);
+      if j >= 0 then
+      begin
+        SetLength(lab, 1);
+        lab[0] := j;
+      end;
+    end;
+    if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
+    else tip := Copy(lab);
+  end;
+  if Length(lab) > 0 then AStore.SetLabelPositions(lab);
+  if Length(tip) > 0 then AStore.SetTooltipPositions(tip)
+  { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is no
+    coordinate dimension, x and y are ordinal: defaultedTooltip is empty),
+    so it shows every element of the item [Batch 147] }
+  else if (FBindings[ASlot].SeriesType = 'scatter')
+    or (FBindings[ASlot].SeriesType = 'effectScatter') then
+    AStore.SetTooltipPositions(nil);
+end;
+
+function TTyCustomAdvanceChart.SeriesRefusedAt(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FSeriesRefused)) and FSeriesRefused[ASlot];
+end;
+
+procedure TTyCustomAdvanceChart.RefuseShortWhisker(ASlot: Integer;
+  const AEnc: TTySeriesEncode; const ADims: TTySeriesDimArray;
+  const ACoord: TTyCoordDimArray; ABound: Integer);
+var
+  k, need, reach: Integer;
+  key: string;
+  filled: TTySeriesEncode;
+begin
+  if not AEnc.Given then Exit;
+  if (FBindings[ASlot].SeriesType <> 'candlestick')
+    and (FBindings[ASlot].SeriesType <> 'boxplot') then Exit;
+  { the value coordinate: the columns that feed another one's axis }
+  key := '';
+  need := 0;
+  for k := 0 to High(ADims) do
+    if ADims[k].Coord <> '' then
+    begin
+      key := ADims[k].Coord;
+      Inc(need);
+    end;
+  if need = 0 then Exit;
+  { an unwritten one as createDimensions fills it: the next free dimensions
+    up to the count it makes }
+  filled := AEnc;
+  filled.Columns := Copy(AEnc.Columns);
+  TyEncodeFillUnclaimed(filled, ABound);
+  reach := TyEncodeKeyReach(filled, ACoord, key);
+  if reach >= need then Exit;
+  FSeriesRefused[ASlot] := True;
+  FBuild.Note(Format(rsTyChartSeriesShortEncode, [FBindings[ASlot].SeriesIndex,
+    key, reach, need, FBindings[ASlot].SeriesType]));
+end;
+
 procedure TTyCustomAdvanceChart.SeriesDataEncode(ASlot: Integer;
   var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
   coord: TTyCoordDimArray;
-  k: Integer;
-  plain: Boolean;
+  k, dimW: Integer;
+  plain, prepend: Boolean;
   node: TJSONObject;
   d: TJSONData;
 begin
@@ -3344,23 +3930,50 @@ begin
     coord[k].Name := ADims[k].Name;
     coord[k].Ordinal := ADims[k].Kind = ddtOrdinal;
   end;
-  { A NAME IN `encode` IS ONE OF THE SERIES' OWN `dimensions`. }
-  AEnc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
-    TySeriesDimsSource(FOption, FBindings[ASlot].SeriesIndex), coord);
-  if (not AEnc.Given) or not plain then Exit;
-  { EVERY COORDINATE `encode` DOES NOT NAME takes the next element nobody
-    holds, up to the width item 0 declares. }
+  TyCoordKeys(ADims, coord);
   node := nil;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if d is TJSONObject then node := TJSONObject(d);
   d := nil;
   if node <> nil then d := node.Find('data');
+  { the dimensions upstream counts: the declared ones and item 0's width
+    [spec 255: an index past the declared ones was read all the same] }
+  dimW := 0;
+  if (d <> nil) and (d is TJSONArray) then dimW := TySeriesDetectedDimCount(TJSONArray(d));
+  { A NAME IN `encode` IS ONE OF THE SERIES' OWN `dimensions`. }
+  AEnc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
+    TySeriesDimsSource(FOption, FBindings[ASlot].SeriesIndex), coord, dimW);
+  if not AEnc.Given then Exit;
+  if not plain then
+  begin
+    { [spec 255] A WHISKER BOX'S VALUE LIST, in its order: `y: [1, 4, 3, 2]`
+      puts open on element 1 and close on 4 -- past a row index put in front,
+      the index is element 0. }
+    RefuseShortWhisker(ASlot, AEnc, ADims, coord, Max(dimW, Length(coord)));
+    prepend := False;
+    for k := 0 to High(ADims) do
+      if ADims[k].FromRowIndex and (ADims[k].Kind = ddtOrdinal) then prepend := True;
+    for k := 0 to High(ADims) do
+      if (k <= High(AEnc.Columns)) and AEnc.Explicit[k] and (AEnc.Columns[k] >= 0)
+        and not ADims[k].FromRowIndex then
+      begin
+        if not prepend then ADims[k].SourceSlot := AEnc.Columns[k] + 1
+        else if AEnc.Columns[k] >= 1 then ADims[k].SourceSlot := AEnc.Columns[k];
+      end;
+    Exit;
+  end;
+  { EVERY COORDINATE `encode` DOES NOT NAME takes the next element nobody
+    holds, up to the width item 0 declares. }
   if (d <> nil) and (d is TJSONArray) then
-    TyEncodeFillUnclaimed(AEnc, TySeriesDetectedDimCount(TJSONArray(d)));
+    TyEncodeFillUnclaimed(AEnc, dimW);
   for k := 0 to High(ADims) do
-    if (k <= High(AEnc.Columns)) and (AEnc.Columns[k] >= 0)
-      and not ADims[k].FromRowIndex then
-      ADims[k].SourceSlot := AEnc.Columns[k] + 1;
+    if (k <= High(AEnc.Columns)) and not ADims[k].FromRowIndex then
+    begin
+      if AEnc.Columns[k] >= 0 then ADims[k].SourceSlot := AEnc.Columns[k] + 1
+      { WRITTEN AND REACHING NOTHING -- a gap at place 0, x: -1 -- reads no
+        element [spec 255: was its own position] }
+      else if AEnc.Explicit[k] then ADims[k].SourceSlot := -1;
+    end;
 end;
 
 function TTyCustomAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
@@ -3877,6 +4490,9 @@ function TTyCustomAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
 var
   list: TTyPaintList;
   i, drawn, furniture, n: Integer;
+  { [R7-G] a radar's texts in the list }
+  rt0, rt: Integer;
+  radarTexts: TTyRadarTextArray;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -3906,6 +4522,8 @@ begin
   else FPaintList.Clear;
   list := FPaintList;
   FListTailAt := -1;
+  { [R7-AJ] (the titles' places in it: BuildTitles) }
+  FTitleAt := nil;
   { a new list: no entry is a custom element yet, and what the last render
     removed may go [Batch 123] }
   FCustomPaintEls := nil;
@@ -3940,9 +4558,35 @@ begin
   drawn := 0;
   { a view excludeComponents names is not built, and one that builds
     something is drawn [Batch 106] }
+  FRadarTexts := nil;
   if not ViewHidden(cvRadar) then
     for i := 0 to High(FRadars) do
-      Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+    begin
+      n := list.Count;
+      Inc(drawn, TyBuildRadarGridTexts(FRadars[i], RadarInk, AMeasurer, APPI, list,
+        radarTexts));
+      { [R7-AD] its view's place in the root (CompViewOf) }
+      CompViewSet(list, n, ViewNum('radar', i, 4700 + i));
+      { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words --
+        [R7-I] as the grid says it drew them: the spoke, the label's index
+        and its rawLabel too }
+      for rt := 0 to High(radarTexts) do
+      begin
+        rt0 := radarTexts[rt].Element;
+        if (rt0 < 0) or (rt0 >= list.Count) then Continue;
+        if list.Element(rt0).Caption.Text = '' then Continue;
+        SetLength(FRadarTexts, Length(FRadarTexts) + 1);
+        FRadarTexts[High(FRadarTexts)].Box := list.Element(rt0).Shape.Bounds;
+        FRadarTexts[High(FRadarTexts)].Radar := i;
+        FRadarTexts[High(FRadarTexts)].Z := list.Element(rt0).Z;
+        FRadarTexts[High(FRadarTexts)].Z2 := list.Element(rt0).Z2;
+        FRadarTexts[High(FRadarTexts)].IsName := radarTexts[rt].IsName;
+        FRadarTexts[High(FRadarTexts)].Text := list.Element(rt0).Caption.Text;
+        FRadarTexts[High(FRadarTexts)].Spoke := radarTexts[rt].Spoke;
+        FRadarTexts[High(FRadarTexts)].Ring := radarTexts[rt].Ring;
+        FRadarTexts[High(FRadarTexts)].Raw := radarTexts[rt].Raw;
+      end;
+    end;
   if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn
     at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line
@@ -3950,14 +4594,22 @@ begin
   furniture := drawn;
   if not ViewHidden(cvCalendar) then
     for i := 0 to High(FCalendars) do
+    begin
+      n := list.Count;
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+      CompViewSet(list, n, ViewNum('calendar', i, 1600 + i));
+    end;
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
   { THE MATRICES' TOO, at their own z (-50 by default: under every series)
     [Batch 145] }
   if not ViewHidden(cvMatrix) then
     for i := 0 to High(FMatrices) do
+    begin
+      n := list.Count;
       Inc(drawn, TyBuildMatrix(FMatrices[i], MatrixInk, RtGlobal, AMeasurer, APPI, list));
+      CompViewSet(list, n, ViewNum('matrix', i, 1500 + i));
+    end;
   if drawn > furniture then ViewDrew(cvMatrix);
   furniture := drawn;
   { THE GEOS' MAPS, a component group ahead of every series [Batch 146] --
@@ -3977,6 +4629,7 @@ begin
     begin
       Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
       if list.Count > n then ViewDrew(cvGeo);
+      CompViewSet(list, n, ViewNum('geo', i, 4600 + i));
     end;
     SetLength(FGeoDraws, Length(FGeoDraws) + 1);
     FGeoDraws[High(FGeoDraws)].Geo := FGeos[i];
@@ -3999,9 +4652,19 @@ begin
     their own views upstream (a toolbox-only chart showed nothing) }
   if Length(FBindings) = 0 then
   begin
+    { [R7-AJ] the titles, in the list }
+    Inc(drawn, BuildTitles(list, APPI));
     FListTailAt := list.Count;
     Inc(drawn, BuildListTail(list, AMeasurer));
     Result := drawn + gfxCount;
+    { [R7-AH] every element its view's place: the paint order's key after z2 }
+    ViewsTag(list);
+    { [R7-AD] the list's elements among the axes' parts, and the ground
+      after them }
+    if FCompRunOk then CompSettle(APPI, False);
+    { [R7-Y] what the canvas is left with, in paint order, a chart of no
+      series too (its graphic elements) [was: never settled] }
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     Exit;
   end;
   begin
@@ -4078,9 +4741,11 @@ begin
             UtTagGraphNodes(list, utAt, FGraphNodes[i], FGraphNodeScale[i]);
           end
           else
+            { ([R7-AG] on a coordinate system the symbols css px: PPI / 96
+              device px [was: device px]) }
             Inc(drawn, TyBuildGraphMarks(FBindings[i].SeriesIndex,
               FGraphSpecs[i], FGraphNodes[i], FGraphEdges[i],
-              gi, FStores[i], list));
+              gi, FStores[i], list, APPI / 96, APPI / 96));
           { AND ITS LABEL SPEC INTO THE TABLE THE EXPANSION READS. A mark
             carries only the WORDS; where they go and what they are drawn
             in is looked up by series index afterwards, so a branch that
@@ -4226,6 +4891,8 @@ begin
           { [F3c] the dial's paths (no text): its view's, faded in where a
             universal transition morphs }
           UtTagFade(list, utAt, FBindings[i].SeriesIndex);
+          FGaugeMeasurer := AMeasurer;
+          FGaugePPI := APPI;
           Inc(drawn, TyBuildGaugeValue(FBindings[i], FGauges[i],
             FGaugeSpecs[i], FGaugeItems[i], gv, FStores[i],
             FStores[i].DimIndexOf(TyGaugeValueDim), AMeasurer, APPI, list));
@@ -4432,6 +5099,10 @@ begin
         or (FBindings[i].SeriesType = 'bar') or (FBindings[i].SeriesType = 'line')
         or (FBindings[i].SeriesType = 'pictorialBar') then
       begin
+        { [R7-X] a cartesian bar's rows' own corners, in its series' units
+          (the bar layout's, unscaled) }
+        if FBindings[i].SeriesType = 'bar' then
+          HeatmapItemRadii(FBindings[i].SeriesIndex, 96, v.HeatRadii, v.HeatHasRadii);
         { a symbol's own label over its series' [Batch 71]; a bar's, a
           line point's and a pictorial bar's too [Batch 82] }
         ItemLabelSpecs(FBindings[i].SeriesIndex, v.Label_, v.ItemLabels, v.HasItemLabel);
@@ -4517,6 +5188,8 @@ begin
         end;
         Continue;
       end;
+      { [spec 259] a whisker box upstream throws on }
+      if (i <= High(FSeriesRefused)) and FSeriesRefused[i] then Continue;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
       { no end label on a polar (LineView warns and draws none) }
@@ -4544,6 +5217,7 @@ begin
       rest values [R5-A] }
     if drawn > 0 then ApplySeriesShadows(list);
     if drawn > 0 then ApplySeriesPens(list);
+    if drawn > 0 then ApplyCandleTopKeys(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -4581,6 +5255,9 @@ begin
       if n > 0 then ViewDrew(cvLegend);
       Inc(drawn, n);
     end;
+    { [R7-AJ] THE TITLES, in the list: sorted with everything by zlevel, z,
+      z2 and their views' places [was: drawn after it all] }
+    Inc(drawn, BuildTitles(list, APPI));
     { the components from the visual maps on [R2-L: built by BuildListTail,
       which ListTailRebuild runs again on its own] }
     FListTailAt := list.Count;
@@ -4592,6 +5269,13 @@ begin
       FLineHistDue := False;
       LineHistRoll;
     end;
+    { [R7-AH] every element its view's place: the paint order's key after z2 }
+    ViewsTag(list);
+    { [R7-AD] the list's elements among the axes' parts, and the ground
+      after them }
+    if FCompRunOk then CompSettle(APPI, False);
+    { [R7-S] what the canvas is left with, in paint order }
+    if TyLinesCanvasLeftoversDue(list) then TyLinesCanvasLeftovers(list, CanvasGroundState, APPI);
     list.JournalClose;
   end;
 end;
@@ -4615,6 +5299,12 @@ var
     Result := nil;
     SetLength(Result, 1);
     Result[0] := sNode;
+  end;
+
+  { [R7-U] the series' own blocks: its visual style }
+  function SeriesOwnOnly: TTyStNodeArray;
+  begin
+    Result := StOwnChain(SeriesOnly, s);
   end;
 
 begin
@@ -4658,11 +5348,17 @@ begin
         if pe^.Shape.Kind = cskPolyline then Take(SeriesOnly, ['lineStyle'])
         else if pe^.Shape.Kind = cskPolygon then Take(SeriesOnly, ['areaStyle']);
       end
-      { a large batch: the series' visual style }
+      { a large batch: LargeLineDraw's and LargeSymbolDraw's
+        getModel(...).getLineStyle / getItemStyle (the root's block under the
+        series' [R7-U]), a large bar's visual style }
       else if pe^.Shape.Kind = cskLarge then
       begin
-        if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+        if typ = TyLinesSeriesTypeName then
           Take(SeriesOnly, ['lineStyle'])
+        else if typ = TyParallelSeriesTypeName then
+          Take(SeriesOwnOnly, ['lineStyle'])
+        else if typ = 'bar' then
+          Take(SeriesOwnOnly, ['itemStyle'])
         else
           Take(SeriesOnly, ['itemStyle']);
       end;
@@ -4688,21 +5384,85 @@ begin
       carGraphEdgeFrom, carGraphEdgeTo:
         Continue;
       { a radar item's polyline its lineStyle, its polygon its areaStyle
-        (RadarView); a tree's edge its node's lineStyle (TreeView drawEdge) }
-      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
+        (RadarView); a tree's edge its node's lineStyle (TreeView drawEdge)
+        -- getModel, the root's block under the series' [R7-U] }
+      carRadarLine, carTreeEdge:
         Take(nodes, ['lineStyle']);
+      { [R7-U] a lines' and a parallel's line: their visual style }
+      carLinesLine, carParallelLine:
+        Take(StOwnChain(nodes, s), ['lineStyle']);
       carRadarArea:
         Take(nodes, ['areaStyle']);
     else
       { a sankey's node is a rect of its own; anything else of the row --
         a bar, a symbol, a slice, a candle and its wicks, a cell -- its
-        visual style }
+        visual style [R7-U: the series' own blocks, none of the root's],
+        but a tree's node, a sankey's and a sunburst's piece their item
+        model's getItemStyle }
       if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
       if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
-        Take(nodes, ['lineStyle'])
-      else
+        Take(StOwnChain(nodes, s), ['lineStyle'])
+      else if StRowClimbs(typ, pe^.Anim.Role)
+        or ((typ = TyGraphSeriesTypeName) and (Length(nodes) > 1) and (nodes[1] <> nil)) then
+      begin
         Take(nodes, ['itemStyle']);
+        { SunburstSeries' itemStyle.shadowColor 'rgba(0, 0, 0, 0.2)', under
+          what the chain writes }
+        if (typ = TySunburstSeriesTypeName) and TyStyleHasShadow(pe^.Style)
+          and (TyStFind(nodes, ['itemStyle', 'shadowColor']) = nil) then
+          pe^.Style.ShadowColor := $33000000;
+      end
+      else
+        Take(StOwnChain(nodes, s), ['itemStyle']);
     end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplyCandleTopKeys(AList: TTyPaintList);
+var
+  k, s, slot, raw: Integer;
+  pe: PTyChartElement;
+  chain: array[0..2] of TJSONObject;
+  d: TJSONData;
+  sh: TTyChartShadow;
+  joinHas: Boolean;
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if not (pe^.Anim.Role in [carCandleBody, carCandleWickHigh, carCandleWickLow]) then Continue;
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.DataIndex < 0) then Continue;
+    s := pe^.Datum.SeriesIndex;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) or (FBindings[slot].SeriesType <> 'candlestick') then
+      Continue;
+    if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    { the item model's chain: the item (an object), the series, the root }
+    chain[0] := StItemNode(s, raw);
+    chain[1] := StSeriesNode(s);
+    if FOption.Root is TJSONObject then chain[2] := TJSONObject(FOption.Root)
+    else chain[2] := nil;
+    { lineWidth first: a dash word is measured against it }
+    d := TyStFind(chain, ['borderWidth']);
+    if d <> nil then
+    begin
+      pe^.Style.StrokeWidthLogical := TyOptPenWidth(d);
+      if (pe^.Anim.Role = carCandleBody) and (pe^.Style.StrokeWidthLogical > 0) then
+        pe^.HitSlopLogical := pe^.Style.StrokeWidthLogical / 2;
+    end;
+    d := TyStFind(chain, ['opacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      pe^.Style.Alpha := d.AsFloat;
+    if TyStReadShadow(chain, [], [], sh) then TyStyleSetShadow(pe^.Style, sh);
+    TyStTakePenKeys(pe^.Style, chain, [], False, [spkEnds, spkDash], joinHas);
+    { a dash word the canvas measures against the width it strokes at }
+    if pe^.Style.DashWord <> 0 then
+      pe^.Style.DashLogical := TyDashOfWord(pe^.Style.DashWord, pe^.Style.StrokeWidthLogical);
   end;
 end;
 
@@ -4711,8 +5471,8 @@ var
   k, s, slot, raw, e: Integer;
   pe: PTyChartElement;
   typ: string;
-  nodes: TTyStNodeArray;
-  sNode: TJSONObject;
+  nodes, vnodes: TTyStNodeArray;
+  sNode, sOwn: TJSONObject;
   joinHas: Boolean;
   fills: TTyChartColorArray;
   fillsSlot: Integer;
@@ -4750,6 +5510,7 @@ var
     oc: TTyOptColor;
     p: array of string;
   begin
+    oc := Default(TTyOptColor);
     for i := 0 to High(ANodes) do
     begin
       o := ANodes[i];
@@ -4769,7 +5530,7 @@ var
       begin
         if oc.IsAuto then
         begin
-          if AAuto and (ANodes[i] = sNode) then
+          if AAuto and ((ANodes[i] = sNode) or (ANodes[i] = sOwn)) then
             pe^.Style.StrokeColor := TTyChartColor(SeriesPaletteColor(s));
         end
         else
@@ -4786,6 +5547,39 @@ var
     { [R6-E] a numeric string is its number [was: none] }
     dd := TyStFind(ANodes, p);
     if dd <> nil then pe^.Style.StrokeWidthLogical := TyOptPenWidth(dd);
+    { [R7-F] what the pointer reads of the pen: a clear colour strokes
+      (hasStroke), and a width of +Infinity makes the stroked rect
+      not-a-number -- the element is never hit }
+    pe^.Style.HitClearPen := oc.Written and not oc.IsNone and not oc.IsAuto
+      and ((oc.Color shr 24) = 0) and (oc.Gradient.Kind = cgkNone) and not oc.Pattern.Present;
+    if TyOptIsPosInf(dd)
+      and (((pe^.Style.StrokeColor shr 24) <> 0) or (pe^.Style.StrokeGradient.Kind <> cgkNone)
+        or pe^.Style.HitClearPen) then
+    begin
+      pe^.HitNone := True;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasWidthLeft;
+    end;
+  end;
+
+  { [R7-F] A FILL WRITTEN 'none' under APath (the first node that writes the
+    colour): zrender's hasFill() is false, the pointer finds no inside. Only
+    where the element paints no fill of its own -- a visualMap's or a
+    palette's colour over it is a fill. }
+  procedure TakeFillNone(const ANodes: TTyStNodeArray; const APath: array of string);
+  var
+    i: Integer;
+    p: array of string;
+    dd: TJSONData;
+  begin
+    if ((pe^.Style.FillColor shr 24) <> 0) or (pe^.Style.FillGradient.Kind <> cgkNone)
+      or pe^.Style.FillPattern.Present then Exit;
+    SetLength(p, Length(APath) + 1);
+    for i := 0 to High(APath) do p[i] := APath[i];
+    p[High(p)] := 'color';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) and TyChartColorIsNone(dd.AsString) then
+      pe^.Style.HitNoFill := True;
   end;
 
   { the row's visual colour (an icon pointer's setColor) }
@@ -4826,6 +5620,8 @@ begin
     if (typ = TyCustomSeriesType) or (typ = 'map') or (typ = TyTreemapSeriesTypeName) then Continue;
     sNode := StSeriesNode(s);
     if sNode = nil then Continue;
+    { [R7-U] the series' own style blocks, for what its visual draws }
+    sOwn := FOption.SeriesOwnStyle(s);
     joinHas := False;
     { [R6-D] THE DASH AND ITS PHASE where the view's builder does not read
       them: a radar's symbols, a gauge's, a pie's, a funnel's, a boxplot's,
@@ -4865,10 +5661,34 @@ begin
         begin
           Take(SeriesOnly, ['lineStyle'], True);
           if not joinHas then pe^.Style.LineJoin := cTyJoinBevel;
-        end;
+        end
+        { [R7-F] its area's fill 'none' }
+        else if pe^.Shape.Kind = cskPolygon then
+          TakeFillNone(SeriesOnly, ['areaStyle']);
       end
       else if pe^.Shape.Kind = cskLarge then
-        Take(SeriesOnly, ['itemStyle'], False);
+      begin
+        { [R7-U] a large bar's visual style; LargeLineDraw's
+          getModel('lineStyle').getLineStyle and LargeSymbolDraw's /
+          a large candle's getModel('itemStyle').getItemStyle (the root's
+          under the series': the dash, its phase and the opacity too; a
+          symbol's pen; a candle's colours its own) }
+        if typ = 'bar' then Take(StOwnChain(SeriesOnly, s), ['itemStyle'], False)
+        else if typ = TyParallelSeriesTypeName then
+          Take(StOwnChain(SeriesOnly, s), ['lineStyle'], True)
+        else
+        begin
+          dashOn := True;
+          if typ = TyLinesSeriesTypeName then
+            Take(SeriesOnly, ['lineStyle'], True)
+          else
+          begin
+            if typ = 'scatter' then TakePen(SeriesOnly, ['itemStyle'], True);
+            Take(SeriesOnly, ['itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, SeriesOnly, ['itemStyle']);
+          end;
+        end;
+      end;
       Continue;
     end;
     { ---- the row ---- }
@@ -4883,13 +5703,36 @@ begin
       Take(nodes, ['labelLine', 'lineStyle'], True);
       Continue;
     end;
+    { [R7-U] what the row's visual style draws reads the series' own
+      blocks; a tree's node, a sankey's and a sunburst's piece, a radar's
+      polyline and a tree's edge their item model's (getModel climbs to the
+      root's) }
+    vnodes := StOwnChain(nodes, s);
+    if StRowClimbs(typ, pe^.Anim.Role) then vnodes := nodes;
+    { a graph node's category: categoryVisual's getItemStyle climbs }
+    if (typ = TyGraphSeriesTypeName) and (Length(nodes) > 1) and (nodes[1] <> nil) then
+      vnodes := nodes;
+    { [R7-F] a radar's or a line's area, its areaStyle's fill 'none' }
+    if pe^.Anim.Role in [carRadarArea, carLineArea] then
+      TakeFillNone(nodes, ['areaStyle']);
     case pe^.Anim.Role of
       carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
       carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
       carGaugeDetail:
         Continue;
-      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
-        Take(nodes, ['lineStyle'], True);
+      carRadarLine, carTreeEdge:
+        begin
+          Take(nodes, ['lineStyle'], True);
+          if pe^.Anim.Role = carRadarLine then
+          begin
+            { [R7-U] RadarSeries' lineStyle.join 'round' under what the chain
+              writes, and the opacity of its getLineStyle [was: neither] }
+            if not joinHas then pe^.Style.LineJoin := cTyJoinRound;
+            TyStTakeOpacity(pe^.Style, nodes, ['lineStyle']);
+          end;
+        end;
+      carLinesLine, carParallelLine:
+        Take(vnodes, ['lineStyle'], True);
       { [R6-D] GaugeView: pointer.useStyle(the item's visual style), an
         icon's setColor(the visual colour) -- an empty one strokes in it at
         2, a line in it -- then pointer.setStyle(pointer.itemStyle's
@@ -4900,7 +5743,7 @@ begin
           pe^.Style.StrokeColor := 0;
           pe^.Style.StrokeGradient := Default(TTyChartGradient);
           pe^.Style.StrokeWidthLogical := 1;
-          TakePen(nodes, ['itemStyle'], True);
+          TakePen(vnodes, ['itemStyle'], True);
           if (pe^.Anim.Role = carGaugePointer) and (pe^.Caption.LgSymbol <> '') then
             case TySymbolKindOf(pe^.Caption.LgSymbol, iconEmpty, iconBody) of
               tsyImage: ;
@@ -4920,18 +5763,18 @@ begin
           { [R6-F] and the opacity: the item's visual style's (its itemStyle
             over the series'), pointer.itemStyle's / progress.itemStyle's
             over it [was: not read] }
-          TyStTakeOpacity(pe^.Style, nodes, ['itemStyle']);
+          TyStTakeOpacity(pe^.Style, vnodes, ['itemStyle']);
           if pe^.Anim.Role = carGaugePointer then
           begin
             TakePen(nodes, ['pointer', 'itemStyle'], False);
-            Take(nodes, ['itemStyle'], False);
+            Take(vnodes, ['itemStyle'], False);
             Take(nodes, ['pointer', 'itemStyle'], False);
             TyStTakeOpacity(pe^.Style, nodes, ['pointer', 'itemStyle']);
           end
           else
           begin
             TakePen(nodes, ['progress', 'itemStyle'], False);
-            Take(nodes, ['itemStyle'], False);
+            Take(vnodes, ['itemStyle'], False);
             Take(nodes, ['progress', 'itemStyle'], False);
             TyStTakeOpacity(pe^.Style, nodes, ['progress', 'itemStyle']);
           end;
@@ -4951,13 +5794,27 @@ begin
       if typ = TyGaugeSeriesTypeName then Continue;
       if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
       if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
-        Take(nodes, ['lineStyle'], True)
+        Take(vnodes, ['lineStyle'], True)
       else
       begin
         { [R6-D] a funnel's bands: the border the author writes over the
           port's own ground-coloured one [was: never read] }
-        if typ = TyFunnelSeriesTypeName then TakePen(nodes, ['itemStyle'], True);
-        Take(nodes, ['itemStyle'], False);
+        if typ = TyFunnelSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
+        { [R7-Y] a themeRiver's layer: ThemeRiverView's polygon.useStyle(the
+          last row's visual style), the series' border [was: never read
+          here; BuildRiverMarks drew a written colour at a written width] }
+        if typ = TyThemeRiverSeriesTypeName then TakePen(vnodes, ['itemStyle'], True);
+        { [R7-F] A PIE'S SLICE, likewise: PieView's sector.useStyle(the item's
+          visual style), the item's own border over the series' ('auto' the
+          series' palette colour, seriesStyleTask) [was: the series' border
+          alone, read by PieVisual, and 'auto' none] }
+        if (typ = 'pie') and (pe^.Shape.Kind = cskSector) then TakePen(vnodes, ['itemStyle'], True);
+        Take(vnodes, ['itemStyle'], False);
+        { [R7-F] a funnel's band, a sunburst's piece, a graph's node: the
+          fill 'none' }
+        if (typ = TyFunnelSeriesTypeName) or (typ = TySunburstSeriesTypeName)
+          or (typ = TyGraphSeriesTypeName) then
+          TakeFillNone(vnodes, ['itemStyle']);
         { FunnelView: polygon.style.lineJoin = 'round' }
         if typ = TyFunnelSeriesTypeName then pe^.Style.LineJoin := cTyJoinRound;
         { [R6-D] PieSeries' itemStyle.borderJoin 'round', under what the
@@ -5016,7 +5873,8 @@ begin
     if node is TJSONObject then d := TJSONObject(node).Find('blendMode');
     if ((d = nil) or (d.JSONType = jtNull)) and (root <> nil) then d := root.Find('blendMode');
     if (d <> nil) and (d.JSONType = jtString) then blends[s] := d.AsString;
-    zl[s] := LevelOf(node, True);
+    { ([R7-AH] allocateZlevels' where it ran) }
+    zl[s] := SeriesZLevelOf(s);
     for kind := 0 to 2 do
     begin
       mk := nil;
@@ -5026,12 +5884,21 @@ begin
           1: mk := TJSONObject(node).Find('markLine');
           2: mk := TJSONObject(node).Find('markArea');
         end;
-      { [R5-J] a marker model's parent is its series: its own zlevel, else
-        the series' (the root's under it) [was: its own, else 0] }
+      { [R7-AH] a series' marker model's parent is the master marker model
+        (createMarkerModelFromSeries(markerOpt, this, ecModel)): its own
+        zlevel, else the master's -- the root's markPoint (markLine,
+        markArea), the level allocateZlevels wrote into it --, else the
+        root's [was: R5-J's own, else the series'] }
       d := nil;
       if mk is TJSONObject then d := TJSONObject(mk).Find('zlevel');
-      if (d = nil) or (d.JSONType = jtNull) then mkLevels[s][kind] := zl[s]
-      else mkLevels[s][kind] := LevelOf(mk, False);
+      if (d <> nil) and (d.JSONType <> jtNull) then mkLevels[s][kind] := LevelOf(mk, False)
+      else
+        case kind of
+          0: mkLevels[s][kind] := ModelZLevel('markPoint', 0);
+          1: mkLevels[s][kind] := ModelZLevel('markLine', 0);
+        else
+          mkLevels[s][kind] := ModelZLevel('markArea', 0);
+        end;
       if mkLevels[s][kind] <> 0 then any := True;
     end;
     if (blends[s] <> '') or (zl[s] <> 0) then any := True;
@@ -5107,13 +5974,19 @@ begin
   end;
   { the parallel axes' covers, z 10000: their controllers' groups are
     zrender's, no view hides them [Batch 130] }
+  n := AList.Count;
   Inc(Result, BuildParallelBrushes(AList));
+  { ([R7-AH] the controllers' groups: zr.add'ed in their views' init, just
+    before the views' own groups) }
+  if AList.Count > n then CompViewSet(AList, n, ViewNum('parallelAxis', 0, 7800));
   { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
     they are its controller's: BrushController.mount adds its group to
     zrender's root, outside the brush view's group, so
     `excludeComponents: ['brush']` cannot hide them and the brush view is
     never a view that drew (its group holds nothing) [milestone C14-C22] }
+  n := AList.Count;
   Inc(Result, BuildBrushes(AList));
+  if AList.Count > n then CompViewSet(AList, n, ViewNum('brush', 0, 7700));
   { THE THUMBNAILS, z 10: the copy a full update takes of its graph (a
     roam only moves the window), then the box, the copy and the window
     as elements [Batch 140] }
@@ -5141,10 +6014,12 @@ begin
     or FPaintList.JournalHoldsFrom(FListTailAt) then Exit;
   FPaintList.Truncate(FListTailAt);
   BuildListTail(FPaintList, NewTextMeasurer(FLastPPI));
+  { [R7-AH] each its view's place }
+  ViewsTag(FPaintList);
   { the incremental layer holds none of the end: what a build would draw
     on it again it holds already where it is what a whole drawing in paint
     order gives -- else drawn again, as after a build }
-  if FProgLayerInOrder and (Length(FProgPainted) >= FListTailAt) then
+  if ProgLayersInOrder and (Length(FProgPainted) >= FListTailAt) then
     SetLength(FProgPainted, FPaintList.Count)
   else
     FProgLayerOk := False;
@@ -5262,7 +6137,8 @@ begin
   Result := Result + '|e' + BoolToStr(AEnc.Given, '1', '0') + Ints(AEnc.Columns) + ';';
   for k := 0 to High(AEnc.Explicit) do Result := Result + BoolToStr(AEnc.Explicit[k], '1', '0');
   Result := Result + ';' + Ints(AEnc.Tooltip) + ';' + Ints(AEnc.Labels) + ';'
-    + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName);
+    + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName) + ';'
+    + BoolToStr(AEnc.HasNameEncode, '1', '0') + Ints(AEnc.Others);
 end;
 
 procedure TTyCustomAdvanceChart.StoreKeepPre(const ADims: TTySeriesDimArray;

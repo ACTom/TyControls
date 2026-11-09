@@ -21386,6 +21386,263 @@
    ]
   },
   {
+   "id": "vm-blur-own",
+   "group": "vmap",
+   "note": "[R7-N] the same with textStyle.opacity 0.6: the handle labels rest at 0.6, fade to the blur's 0.1 and back to 0.6 (the normal state's own opacity, not 1)",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "type": "continuous",
+     "min": 0,
+     "max": 100,
+     "calculable": true,
+     "left": 10,
+     "bottom": 20,
+     "itemHeight": 100,
+     "itemWidth": 20,
+     "textStyle": {
+      "opacity": 0.6
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        10
+       ],
+       [
+        2,
+        50
+       ],
+       [
+        3,
+        90
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "vmlab"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe3333333333333",
+       "blur": false,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3fe3333333333333",
+       "blur": false,
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "move",
+     "x": 38,
+     "y": 209
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe3333333333333",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fe3333333333333",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe3333333333333",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fe3333333333333",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fde8f5c28f5c28f",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fde8f5c28f5c28f",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fd68f5c28f5c28f",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fd68f5c28f5c28f",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3199,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fbae147ae147ae0",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fbae147ae147ae0",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fba3d70a3d70a3c",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fba3d70a3d70a3c",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3201,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": true,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": true,
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "move",
+     "x": 300,
+     "y": 50
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4001,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4100,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fd63d70a3d70a3d",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fd63d70a3d70a3d",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4201,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe3333333333333",
+       "blur": false,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3fe3333333333333",
+       "blur": false,
+       "n": 0
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "sa-dur-string",
    "group": "stanim",
    "note": "stateAnimation.duration '400': zrender's keyframe takes the string as a number -- a 400 ms tween",

@@ -2416,6 +2416,71 @@ var
     AEl.Style.Alpha := op;
   end;
 
+  { [R7-N] A LABEL ON ITS CELL IN THIS FRAME: TreemapView's beforeUpdate
+    gives the text the content rect as it is now, less the padding, every
+    frame -- the block laid out at the box's anchor (ABX / ABY, before the
+    padding) by its alignment, hung where the words' anchor (ALX / ALY) is
+    [was: the rest's block carried to the frame's place] }
+  procedure Plate(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved;
+    const ASpec: TTyLabelSpec; const AWords: string; ABX, ABY, ABW, ABH: Double;
+    ABAH: TTyTextAnchorH; ABAV: TTyTextAnchorV; ALX, ALY: Double);
+  var
+    auto: TTyLabelSpec;
+    sc: Double;
+    pieces: TTyRtPieceArray;
+  begin
+    sc := ASolved.Scale;
+    if not (sc > 0) then sc := 1;
+    auto := ASpec;
+    auto.Rt.Style.Align := rtaNone;
+    auto.Rt.Style.VAlign := rtvNone;
+    ALabel.Caption.FixedBoxX := ABX;
+    ALabel.Caption.FixedBoxY := ABY;
+    ALabel.Caption.FixedBoxW := ABW / sc;
+    ALabel.Caption.FixedBoxH := ABH / sc;
+    ALabel.Caption.FixedBoxAH := ABAH;
+    ALabel.Caption.FixedBoxAV := ABAV;
+    TyLabelFixBox(auto, ALabel.Caption);
+    pieces := TyLabelBlockPieces(auto, AWords, ALabel.Caption.LmInkFill,
+      ALabel.Caption.LmInkHasFill, ALabel.Caption.LmInkGradient,
+      ALabel.Caption.LmInkInside, ABAH, ABAV, sc, m);
+    TyRtShiftPieces(pieces, (ABX - ALX) / sc, (ABY - ALY) / sc);
+    ALabel.Caption.RtPieces := pieces;
+  end;
+
+  { [R7-N] the same where the label has a block on its cell: the words, the
+    place and the plate of this frame; False where it has none }
+  function PlateWords(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved;
+    ARow: Integer; const ASpec: TTyLabelSpec; AX0, AY0, ACW, ACH, ADX, ADY: Double;
+    AMove: Boolean): Boolean;
+  var
+    bx, by, bw, bh, plx, ply: Double;
+    bah: TTyTextAnchorH;
+    bav: TTyTextAnchorV;
+    hasBox: Boolean;
+    words: string;
+  begin
+    Result := False;
+    if not ALabel.Caption.HasFixedBox or (Length(ALabel.Caption.RtPieces) = 0) then Exit;
+    TyTreemapLabelAt(ASolved, ARow, ASpec, m, AX0, AY0, ACW, ACH, words, plx, ply,
+      hasBox, bx, by, bw, bh, bah, bav);
+    if not hasBox then Exit;
+    Result := True;
+    ALabel.Caption.Text := words;
+    if AMove then
+    begin
+      ALabel.Caption.X := plx + ADX;
+      ALabel.Caption.Y := ply + ADY;
+      Plate(ALabel, ASolved, ASpec, words, bx, by, bw, bh, bah, bav, plx, ply);
+    end
+    else
+      { not dirty yet: the plate of this frame, about where the words were }
+      Plate(ALabel, ASolved, ASpec, words, bx - plx + (ALabel.Caption.X - ADX),
+        by - ply + (ALabel.Caption.Y - ADY), bw, bh, bah, bav,
+        ALabel.Caption.X - ADX, ALabel.Caption.Y - ADY);
+    ALabel.Ignore := Length(ALabel.Caption.RtPieces) = 0;
+  end;
+
   procedure Words(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved; ARow: Integer);
   var dx, dy: Double;
   begin
@@ -2427,6 +2492,8 @@ var
     Compose(ARow);
     dx := ALabel.Caption.X - ALabel.Caption.FixedX;
     dy := ALabel.Caption.Y - ALabel.Caption.FixedY;
+    if PlateWords(ALabel, ASolved, ARow, spec, sx * 1 + T[ARow].TX, sy * 1 + T[ARow].TY,
+      sw, sh, dx, dy, True) then Exit;
     if TyTreemapLabelAt(ASolved, ARow, spec, m, sx * 1 + T[ARow].TX, sy * 1 + T[ARow].TY,
       sw, sh, wtext, lx, ly) and (wtext <> '') then
     begin
@@ -2534,7 +2601,11 @@ begin
             gy := el.Caption.Y;
             gdx := el.Caption.X - el.Caption.FixedX;
             gdy := el.Caption.Y - el.Caption.FixedY;
-            if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
+            { [R7-N] a label on its cell: its plate this frame's }
+            if PlateWords(el, A^.Old, row, FTreemapInks[slot].Label_,
+              sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, gdx, gdy,
+              A^.Stepped) then
+            else if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
               sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, wtext, lx, ly)
               and (wtext <> '') then
             begin
@@ -2628,7 +2699,7 @@ end;
 
 procedure TTyCustomAdvanceChart.TmCrumbWrite(AList: TTyPaintList);
 var
-  i, k, hi, slot: Integer;
+  i, k, hi, slot, q: Integer;
   el, cap: TTyChartElement;
 begin
   if (FTmCrumbHoverS < 0) or (FTmCrumbHoverGen <> FTmCrumbGen) then Exit;
@@ -2652,7 +2723,16 @@ begin
       if hi <> i then Continue;
       cap.Z2 := cap.Z2 + TyStZ2EmphasisLift;
       if FTreemapInks[slot].CrumbEmphHasText then
+      begin
+        { [R7-M] a block's words in the block's own ink take it too; a
+          rich token's own colour stays }
+        cap.Caption.RtPieces := Copy(cap.Caption.RtPieces, 0, Length(cap.Caption.RtPieces));
+        for q := 0 to High(cap.Caption.RtPieces) do
+          if (cap.Caption.RtPieces[q].Kind = rpkText)
+            and (cap.Caption.RtPieces[q].Fill = cap.Caption.Colour) then
+            cap.Caption.RtPieces[q].Fill := FTreemapInks[slot].CrumbEmphText;
         cap.Caption.Colour := FTreemapInks[slot].CrumbEmphText;
+      end;
       AList.SetElement(k, cap);
     end;
   end;
@@ -3475,6 +3555,8 @@ var
   ls, cs: TTyStyleSet;
   hs: TTyLabelSpecArray;
   j, k: Integer;
+  crumbTs: TJSONObject;
+  d: TJSONData;
 begin
   Result := Default(TTyTreemapInk);
   ls := ActiveController.Model.ResolveStyle('TyAdvChartTreemapLabel', '', []);
@@ -3506,6 +3588,32 @@ begin
     Result.CrumbFill := col;
   if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'itemStyle', 'textStyle', 'color'], has), col) and has then
     crumb.Colour := col;
+  { [R7-M] ITS WORDS ARE createTextStyle(textStyleModel, {text})
+    (Breadcrumb.ts): the textStyle's box, sizes, rich, halo and shadow, a
+    free text in the crumb's ink [was: the colour only] }
+  crumbTs := nil;
+  if sNode <> nil then
+  begin
+    d := sNode.Find('breadcrumb');
+    if d is TJSONObject then d := TJSONObject(d).Find('itemStyle') else d := nil;
+    if d is TJSONObject then d := TJSONObject(d).Find('textStyle') else d := nil;
+    if d is TJSONObject then crumbTs := TJSONObject(d);
+  end;
+  if crumbTs <> nil then
+  begin
+    crumb.RtGlobal := RtGlobal;
+    crumb.Rt := TyRtResolve([crumbTs], crumb.RtGlobal, TyRtResolveOpt(False));
+    if crumb.Rt.Needed or crumb.Rt.Style.HasStroke or crumb.Rt.Style.HasLineWidth then
+    begin
+      crumb.Rt.Needed := True;
+      crumb.Rt.Style.HasFill := True;
+      crumb.Rt.Style.FillNone := False;
+      crumb.Rt.Style.FillInherit := False;
+      crumb.Rt.Style.Fill := crumb.Colour;
+    end
+    else
+      crumb.Rt := Default(TTyRtBlockStyle);
+  end;
   Result.CrumbEmphFill := TTyChartColor(ActiveController.Model.ResolveStyle(
     'TyAdvChartBreadcrumb', '', [tysHover]).Background.Color);
   if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'emphasis', 'itemStyle', 'color'], has), col) and has then
@@ -3635,7 +3743,8 @@ begin
   SetLength(FGraphCats, Length(FBindings));
   SetLength(FGraphNodeScale, Length(FBindings));
   { [R2-J3] each slot's visual callbacks in the graph unit's scope while its
-    nodes are read }
+    nodes are read; [R7-AG] the css px' scale too }
+  if APPI > 0 then TyGraphPxScale := APPI / 96 else TyGraphPxScale := 1;
   try
   for i := 0 to High(FBindings) do
   begin
@@ -3754,11 +3863,11 @@ begin
   finally
     TyGraphItemCallbacks := nil;
     TyGraphItemNodes := nil;
+    TyGraphPxScale := 1;
   end;
   { [F3d] the edges' keys for the next update }
   SetLength(FGraphEdgeKeys, Length(FBindings));
   for i := 0 to High(FBindings) do FGraphEdgeKeys[i] := AnimGraphEdgeKeys(i);
-  if APPI < 0 then ;
 end;
 
 function TTyCustomAdvanceChart.GraphNodeName(ASlot, ANode: Integer): string;
@@ -3864,6 +3973,7 @@ var
   spec: TTyLabelSpec;
   has, emShow: Boolean;
   v: Double;
+  visNode: TJSONObject;
   chain: array[0..2] of TJSONObject;
   one, b: TTyOptStyle;
 begin
@@ -3896,13 +4006,17 @@ begin
     { [R2-I3] THE STYLE'S CATEGORY, which categoryVisual finds by its name
       as well as by its index -- unlike the model's parent above }
     styleCat := GraphCategoryNode(ASlot, FGraphNodes[ASlot][i].Category);
-    v := TyStReadNumber([item, styleCat, sNode], ['itemStyle', 'opacity'], has);
+    { [R7-U] the series' own block (its visual style, ignoreParent) -- but
+      a category's getItemStyle climbs through the series' to the root's }
+    if styleCat <> nil then visNode := sNode
+    else visNode := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex);
+    v := TyStReadNumber([item, styleCat, visNode], ['itemStyle', 'opacity'], has);
     if not has or IsNan(v) then v := 1;
     AInk.NodeOpacity[i] := v;
     { [R2-I3] its border, key by key down the same three }
     chain[0] := item;
     chain[1] := styleCat;
-    chain[2] := sNode;
+    chain[2] := visNode;
     b := Default(TTyOptStyle);
     b.BorderWidthLogical := NaN;
     b.Opacity := NaN;
@@ -3912,7 +4026,12 @@ begin
       if chain[j] = nil then Continue;
       one := TyReadOptStyle(chain[j], 'itemStyle');
       if one.BorderColor.Written then b.BorderColor := one.BorderColor;
-      if not IsNan(one.BorderWidthLogical) then b.BorderWidthLogical := one.BorderWidthLogical;
+      if not IsNan(one.BorderWidthLogical) then
+      begin
+        b.BorderWidthLogical := one.BorderWidthLogical;
+        { [R7-F] and whether it was +Infinity (never hit) }
+        b.BorderWidthInf := one.BorderWidthInf;
+      end;
       if one.Dash <> todNone then
       begin
         b.Dash := one.Dash;
@@ -3999,6 +4118,8 @@ begin
   SetLength(AInk.EdgeLabelOffX, n);
   SetLength(AInk.EdgeLabelOffY, n);
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  { [R7-G] a straight edge on axes snaps on the device }
+  AInk.PxScale := scale;
   { the line's frame: the view's overall transform, the label scaled back by
     1 / its scaleX (every ancestor's scaleX, and only the main group has one) }
   AInk.HasFrame := (ASlot <= High(FGraphs)) and (FGraphs[ASlot] <> nil);

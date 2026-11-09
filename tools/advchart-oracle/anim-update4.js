@@ -445,6 +445,52 @@ const PROBES = {
       rec[key + '/state'] = v._state;
     });
   },
+  // [R7-N] a content's label in this frame, its plate the content rect's
+  // less the padding (TreemapView's beforeUpdate, every frame): the box's
+  // rect (the Text's first rect child) as two corners on the canvas and its
+  // size, the first TSpan's place and words -- by raw index ('tb<s>/<i>')
+  // or, deleted, by old raw index ('tb<s>/d<i>'); null when not drawn
+  tmb(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'treemap') return;
+      const v = chart.getViewOfSeriesModel(sm);
+      const st = v._storage;
+      const cg = v._containerGroup;
+      if (!cg) return;
+      const ap = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+      const one = (el, key) => {
+        const t = el.getTextContent();
+        if (!t || t.ignore || t.invisible || el.ignore) { rec[key] = null; return; }
+        const m = t.transform || [1, 0, 0, 1, 0, 0];
+        const kids = t.childrenRef ? t.childrenRef() : [];
+        const box = kids.find(c => c.type === 'rect');
+        const span = kids.find(c => c.type === 'tspan');
+        const o = { box: null, wh: null, span: null, text: null };
+        if (box) {
+          const b = box.shape;
+          o.box = arr([...ap(m, b.x, b.y), ...ap(m, b.x + b.width, b.y + b.height)]);
+          o.wh = arr([b.width, b.height]);
+        }
+        if (span) {
+          o.span = arr(ap(m, span.style.x, span.style.y));
+          o.text = String(span.style.text);
+        }
+        rec[key] = o;
+      };
+      const live = new Set();
+      st.content.forEach((el, i) => {
+        if (!el) return;
+        live.add(el);
+        one(el, 'tb' + sm.seriesIndex + '/' + i);
+      });
+      cg.traverse(el => {
+        if (el.type !== 'rect' || live.has(el)) return;
+        const who = DELETED.get(el);
+        if (!who || who.kind !== 'content') return;
+        one(el, 'tb' + sm.seriesIndex + '/d' + who.di);
+      });
+    });
+  },
   // [R5-I] a deleted content's words as they are cut in this frame: its
   // text's lines (the TSpans the plain layout made), by old rawIndex
   tmw(chart, rec) {
@@ -641,6 +687,22 @@ add('treemap', 'tm-midway', "[R5-I] a second merge 300 ms into the first (1000 m
     { t: T1 + 300, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 3 }, { name: 'a2', value: 3 }] },
       { name: 'b', children: [{ name: 'b1', value: 2 }, { name: 'b2', value: 6 }] }, { name: 'c', value: 2 }] }] } },
     ...after([300, 301, 500, 1299, 1300, 1301], T1)]);
+add('treemap', 'tm-label-box', "[R7-N] content labels on a plate (padding 4, a border): a merge that changes the values and takes b2 away (1000 ms linear) -- every frame the plate is the content rect as it is now, less the padding, the kept and the leaving alike",
+  { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear',
+    label: { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: 4 } })] },
+  ['tm', 'tmb'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
+      { name: 'b', children: [{ name: 'b1', value: 5 }] }, { name: 'c', value: 6 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('treemap', 'tm-label-box-pos', "[R7-N] the same with insideTopLeft and padding [2, 8]: the plate is laid out at the corner, the words hang off it padded",
+  { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear',
+    label: { position: 'insideTopLeft', color: '#333333', backgroundColor: '#eeeeee', padding: [2, 8] } })] },
+  ['tm', 'tmb'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
+      { name: 'b', children: [{ name: 'b1', value: 5 }] }, { name: 'c', value: 6 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 // ---- roam ----
 const GN = [{ name: 'a', x: 10, y: 10 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 50, y: 100 }];

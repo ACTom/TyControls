@@ -217,6 +217,10 @@ type
   TTyEndLabelTextFn = function(ASeriesIndex: Integer; AValue: Double): string of object;
   TTyEndLabelPiecesFn = function(ASeriesIndex: Integer;
     const AText: string): TTyRtPieceArray of object;
+  { [R7-B] a gauge reading that counts as a block: its words at a value and
+    its block laid out for them -- the control's, by series and row }
+  TTyGaugeDetailAtFn = function(ASeriesIndex, AIndex: Integer; AValue: Double;
+    out AText: string): TTyRtPieceArray of object;
 
   TTyChartAnimEndLabel = record
     { the clip drives it: an entering clip with the label shown }
@@ -285,6 +289,8 @@ type
     FValTpl: string;
     FText: string;
     FHasText: Boolean;
+    { [R7-B] a gauge reading's block for a value (OnGaugeDetailAt) }
+    FGaugeAt: TTyGaugeDetailAtFn;
     { a line's clip: its end label }
     FEnd: TTyChartAnimEndLabel;
     { THE STATE KEYS and their rest values [Batch 94] }
@@ -741,6 +747,8 @@ type
     { [R5-C] what an end label's frames word it with }
     OnEndLabelText: TTyEndLabelTextFn;
     OnEndLabelPieces: TTyEndLabelPiecesFn;
+    { [R7-B] what a gauge reading's frames lay it out with }
+    OnGaugeDetailAt: TTyGaugeDetailAtFn;
     constructor Create(AAnimation: TTyAnimation);
     destructor Destroy; override;
     { every proxy freed, its clips taken off the driver }
@@ -811,6 +819,12 @@ function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy):
 { a packed colour as the state machine hands it to the engine: lifted (or
   not opaque) as zrender's rgba() string, else as '#rrggbb' }
 function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
+const
+  { [R7-Y] A STATE'S COLOUR NO PARSER READS as the engine holds it: a string
+    that is no colour, so its track is discrete (set at its start, as
+    zrender's track of 'nope' is), and a frame that holds it brushes the
+    colour the canvas had (cTyCanvasColourLeft) }
+  cTyAnimCanvasLeft = '[canvas]';
 { [F3d] A STATE'S GRADIENT. liftColor of a gradient value: every stop's
   r, g and b times (1 - -0.1), truncated and clamped (zrender's lift), its
   offset and alpha as they are (util/color.ts liftColor) }
@@ -939,6 +953,7 @@ procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 implementation
 
 uses tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
+  tyControls.AdvanceChart.Dataset,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.PolarBar,
@@ -2837,6 +2852,7 @@ begin
           on a first render, at the row [Batch 92] }
         if not (AEl.Caption.ValAnim and AC.Enabled) then Exit;
         p := Make(AEl.Anim.Series, idx, 'gaugeDetail');
+        p.FGaugeAt := OnGaugeDetailAt;
         StartCount(p, AEl, NaN, False, AC.Model, idx);
       end;
     carMarkPoint:
@@ -4040,6 +4056,7 @@ var
     rk: string;
     ka: Integer;
     popts: TTyAnimCallOpts;
+    keep: TTyLinesEffect;
     tmg: TTyAnimTiming;
   begin
     case AEl.Anim.Role of
@@ -4683,6 +4700,7 @@ var
           if p <> nil then Carry(p, s, r);
           if AEl.Caption.ValAnim and AC.Enabled then
             CountOn(p, oe, AEl, s, r, 'gaugeDetail', AC.Model);
+          if p <> nil then p.FGaugeAt := OnGaugeDetailAt;
         end;
       { the markers go through UpdateMarker [Batch 99] }
       carEffectSymbol:
@@ -4742,11 +4760,19 @@ var
               begin
                 a := p.FEff.T;
                 rot := p.FEff.LastT;
+                { [R7-W] the inverse its last frame left goes on }
+                keep := p.FEff;
                 TyLinesEffectOfElement(AEl, p.FEff);
                 p.FEff.T := a;
                 p.FEff.LastT := rot;
                 p.FEff.HasLastT := True;
                 p.FEff.Ignore := True;
+                p.FEff.HasInv := keep.HasInv;
+                p.FEff.InvX := keep.InvX;
+                p.FEff.InvY := keep.InvY;
+                p.FEff.InvSX := keep.InvSX;
+                p.FEff.InvSY := keep.InvSY;
+                p.FEff.InvRot := keep.InvRot;
               end
               else
               begin
@@ -5810,6 +5836,7 @@ procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Doubl
 var
   i: Integer;
   f: Double;
+  m: TTyMat2D;
 
   function SX(AV: Double): Double;
   begin
@@ -5823,6 +5850,14 @@ var
 
 begin
   f := Min(Abs(AFX), Abs(AFY));
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := AFX; m[1] := 0; m[2] := 0; m[3] := AFY;
+    m[4] := ACX - ACX * AFX;
+    m[5] := ACY - ACY * AFY;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskRect, cskRoundRect, cskPath:
       begin
@@ -5888,6 +5923,7 @@ var
   i: Integer;
   s, c, tx, ty: Double;
   r: TTyRectF;
+  m: TTyMat2D;
 
   procedure Turn(var AX, AY: Double);
   var dx, dy: Double;
@@ -5916,6 +5952,14 @@ begin
   { the symbol builder's turn (Place): the screen's y grows downward }
   s := Sin(-ARad);
   c := Cos(-ARad);
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := c; m[1] := s; m[2] := -s; m[3] := c;
+    m[4] := ACX - ACX * c + ACY * s;
+    m[5] := ACY - ACX * s - ACY * c;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskPolyline, cskPolygon:
       begin
@@ -5951,9 +5995,15 @@ begin
 end;
 
 procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
-var i: Integer;
+var i: Integer; m: TTyMat2D;
 begin
   if IsNan(ADX) or IsNan(ADY) or ((ADX = 0) and (ADY = 0)) then Exit;
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := ADX; m[5] := ADY;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskRect, cskRoundRect, cskPath:
       begin
@@ -6240,6 +6290,23 @@ end;
   number as it is; a boolean, a string's or an array's JS Number -- one that
   is no finite number nought (a state's width 'abc', which its discrete
   track sets at once). False: no value }
+{ [R7-Y] the same, JavaScript's Number as it is (not-a-number and the
+  infinities kept): what the canvas is handed }
+function PenRawNumOf(const AValue: TTyAnimValue; out ANum: Double): Boolean;
+begin
+  Result := True;
+  case AValue.Kind of
+    avkNumber, avkBool: ANum := AValue.Num;
+    avkString: ANum := TyJsToNumber(AValue.Str);
+    avkArray:
+      if Length(AValue.Arr) = 0 then ANum := 0
+      else if (Length(AValue.Arr) = 1) and (AValue.Stride = 0) then ANum := AValue.Arr[0]
+      else ANum := NaN;
+  else
+    Result := False;
+  end;
+end;
+
 function PenNumOf(const AValue: TTyAnimValue; out ANum: Double): Boolean;
 begin
   Result := True;
@@ -6409,6 +6476,7 @@ procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
 var
   fx, fy, ax0, ay0, f: Double;
   k: Integer;
+  pm, pl: TTyMat2D;
   ga, gb, gc, gd, gdet, gls, gg, gdl, gx, gy: Double;
 begin
   if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
@@ -6462,9 +6530,63 @@ begin
   end;
   TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
   TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  { [R7-P] A PEN IN THE GROUP'S FRAME under a move that scales unequally:
+    its map goes through (fx, fy), its size kept apart (the width's own
+    rule below) -- a node's or an SVG shape's, strokeNoScale or not }
+  if (AEl.Style.StrokeWidthLogical > 0) and not SameBitsD(fx, fy) and (f > 0) then
+  begin
+    if AEl.Style.HasPenMap then pm := AEl.Style.PenMap
+    else
+    begin
+      pm := Default(TTyMat2D);
+      pm[0] := 1;
+      pm[3] := 1;
+    end;
+    pl := Default(TTyMat2D);
+    pl[0] := fx * pm[0] / f;
+    pl[1] := fy * pm[1] / f;
+    pl[2] := fx * pm[2] / f;
+    pl[3] := fy * pm[3] / f;
+    TyStyleSetPenMap(AEl.Style, pl);
+  end;
   { [R6-B] a map's global gradient (in the list's px: the path's own units
     through its transform at rest) carried with the group }
   if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
+    and AEl.Style.FillGradient.Global and AEl.Style.FillGradient.HasM then
+  begin
+    { [R7-AD] made in the path's own frame (GradOnBox, a transform that is
+      no similarity): the group's move on the frame, the points and the
+      radius left in the path's units -- a strokeNoScale box's shift is
+      in them already (the frame's linear part is VGradL's) }
+    AEl.Style.FillGradient.M[0] := AEl.Style.FillGradient.M[0] * fx;
+    AEl.Style.FillGradient.M[2] := AEl.Style.FillGradient.M[2] * fx;
+    AEl.Style.FillGradient.M[4] := AX + (AEl.Style.FillGradient.M[4] - AEl.Anim.VX) * fx;
+    AEl.Style.FillGradient.M[1] := AEl.Style.FillGradient.M[1] * fy;
+    AEl.Style.FillGradient.M[3] := AEl.Style.FillGradient.M[3] * fy;
+    AEl.Style.FillGradient.M[5] := AY + (AEl.Style.FillGradient.M[5] - AEl.Anim.VY) * fy;
+    if AEl.Anim.VGradNS then
+    begin
+      ga := AEl.Anim.VGradL[0] * fx;
+      gb := AEl.Anim.VGradL[1] * fy;
+      gc := AEl.Anim.VGradL[2] * fx;
+      gd := AEl.Anim.VGradL[3] * fy;
+      gdet := Sqrt(Abs(ga * gd - gc * gb));
+      if (Abs(ga - 1) > 1e-10) and (Abs(gd - 1) > 1e-10) then gls := gdet else gls := 1;
+      if gls > 1e-10 then gg := AEl.Anim.VGradG * AEl.Anim.VGradLS / gls else gg := 0;
+      gdl := gg - AEl.Anim.VGradG;
+      AEl.Style.FillGradient.X := AEl.Style.FillGradient.X + (2 * AEl.Anim.VGradFrac.X - 1) * gdl;
+      AEl.Style.FillGradient.Y := AEl.Style.FillGradient.Y + (2 * AEl.Anim.VGradFrac.Y - 1) * gdl;
+      if AEl.Anim.VGradFrac.Kind = cgkRadial then
+        AEl.Style.FillGradient.R := AEl.Anim.VGradFrac.R
+          * Min(AEl.Anim.VGradW0 + 2 * gg, AEl.Anim.VGradH0 + 2 * gg)
+      else
+      begin
+        AEl.Style.FillGradient.X2 := AEl.Style.FillGradient.X2 + (2 * AEl.Anim.VGradFrac.X2 - 1) * gdl;
+        AEl.Style.FillGradient.Y2 := AEl.Style.FillGradient.Y2 + (2 * AEl.Anim.VGradFrac.Y2 - 1) * gdl;
+      end;
+    end;
+  end
+  else if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
     and AEl.Style.FillGradient.Global then
   begin
     AEl.Style.FillGradient.X := AX + (AEl.Style.FillGradient.X - AEl.Anim.VX) * fx;
@@ -6597,6 +6719,28 @@ begin
     AEl.Caption.Text := AProxy.FText;
 end;
 
+{ [R7-B] A COUNTING GAUGE READING: a block worded at the value and laid out
+  again (GaugeView's animateLabelValue sets the text each frame, rich or
+  not), a one-run caption its template's words }
+procedure ApplyGaugeDetail(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  pieces: TTyRtPieceArray;
+  s: string;
+begin
+  if not AProxy.FHasText then Exit;
+  if (Length(AEl.Caption.RtPieces) = 0) or not Assigned(AProxy.FGaugeAt) then
+  begin
+    ApplyText(AEl, AProxy);
+    Exit;
+  end;
+  pieces := AProxy.FGaugeAt(AEl.Anim.Series, AEl.Anim.Index, AProxy.FValInterp, s);
+  if Length(pieces) = 0 then Exit;
+  AEl.Caption.RtPieces := pieces;
+  AEl.Caption.Text := s;
+  AEl.Shape := TyShapeRect(TyRtDeviceBox(pieces, AEl.Caption.X, AEl.Caption.Y,
+    AEl.Caption.RotationRad, AEl.Caption.RtScale));
+end;
+
 function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy): TTyDoubleArray;
 var k: Integer;
 begin
@@ -6666,6 +6810,8 @@ var
   ah, ah1: TTyTextAnchorH;
   av, av1: TTyTextAnchorV;
   now_: TTyChartElement;
+  { [R7-O] scaleY / scaleX of the view at rest and now }
+  r1, rn: Double;
 begin
   if IsNan(APercent) then Exit;
   { [F3d] THE LINE AS IT IS NOW: its shape's ends and control point from the
@@ -6697,10 +6843,31 @@ begin
     carGraphEdge:
       begin
         TyGraphEdgeLine(now_, q1, q2, qc, cv);
+        { [R7-G] the shape on the half pixel before the percent, in its
+          frame (Line.buildPath with subPixelOptimize) -- ([R7-AJ] on axes
+          the css px one at another PPI [was: the device px grid]) }
+        if Length(now_.Anim.Vals) > 6 then
+          TyGraphEdgeSnap(q1, q2, cv, now_.Anim.Vals[6], AEl.Anim.PxScale);
         pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
         for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
         AEl.Shape.Points := pts;
+        { [R7-F] the quadratic the pointer tests: the first part's control
+          point (quadraticSubdivide), as the points are drawn }
+        if AEl.Shape.HitQuad then
+        begin
+          if APercent < 1 then
+            d := TyPointF((qc.X - q1.X) * APercent + q1.X, (qc.Y - q1.Y) * APercent + q1.Y)
+          else d := qc;
+          AEl.Shape.HitCP := TyGraphEdgeDev(now_, d);
+        end;
         AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
+        { [R7-O] the line in the group's units for the pointer, as drawn }
+        if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
+          TyGraphEdgeZrHit(AEl, q1, q2, qc, cv, APercent, now_.Anim.G[7],
+            now_.Anim.G[8], now_.Anim.G[9], now_.Anim.G[10]);
+        { [R7-P] the pen under this frame's view scale }
+        if AEl.Anim.InView then
+          TyStyleViewPen(AEl.Style, now_.Anim.G[7], now_.Anim.G[8]);
         if not (APercent > 0) then MakeInkless(AEl);
       end;
     carGraphEdgeFrom, carGraphEdgeTo:
@@ -6720,6 +6887,18 @@ begin
           s := (s * now_.Anim.G[7]) / (s1 * AEl.Anim.G[7])
         else
           s := APercent;
+        { [R7-O] UNDER A VIEW THAT SCALES UNEQUALLY the symbol keeps
+          scaleY / scaleX on y AFTER its turn: the rest's squash taken off
+          about its end, the scale and the turn of this frame, then this
+          frame's squash on [was: the rest's squashed outline turned] }
+        r1 := 1;
+        rn := 1;
+        if (AEl.Anim.G[7] <> 0) and not IsNan(AEl.Anim.G[7]) and not IsNan(AEl.Anim.G[8]) then
+          r1 := AEl.Anim.G[8] / AEl.Anim.G[7];
+        if (now_.Anim.G[7] <> 0) and not IsNan(now_.Anim.G[7]) and not IsNan(now_.Anim.G[8]) then
+          rn := now_.Anim.G[8] / now_.Anim.G[7];
+        if (r1 <> 1) and (r1 <> 0) and not IsInfinite(r1) then
+          TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, 1, 1 / r1);
         TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, s, s);
         { turned by the tangent's turn: setSymbolRotation reads tangentAt(0)
           or tangentAt(1), whatever the percent }
@@ -6737,6 +6916,18 @@ begin
         end;
         if not SameBitsD(rot, rot1) and not IsNan(rot) and not IsNan(rot1) then
           TyShapeRotateAbout(AEl.Shape, d1.X, d1.Y, (rot - rot1) * Pi / 180);
+        if (rn <> 1) and not IsInfinite(rn) then
+          TyShapeScaleAbout(AEl.Shape, d1.X, d1.Y, 1, rn);
+        { the pen in the symbol's frame goes with it: the root of the map's
+          determinant (the port's round pen) }
+        if (AEl.Style.StrokeWidthLogical > 0) and ((s <> 1) or (rn <> 1)) then
+          AEl.Style.PenScale := Abs(s) * Sqrt(Abs(rn));
+        { [R7-P] and its shape: this frame's turn under this frame's view
+          scale (the uniform scales come out of it) -- a view tweening
+          between equal and unequal scales too }
+        if AEl.Anim.InView and (AEl.Style.StrokeWidthLogical > 0) and not IsNan(rot) then
+          TyStyleSetPenShape(AEl.Style, TyGraphEdgeSymbolMap(rot * Pi / 180, 1,
+            now_.Anim.G[7], now_.Anim.G[8]));
         d := TyGraphEdgeDev(now_, TyPointF(x, y));
         TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
       end;
@@ -6750,6 +6941,9 @@ begin
           AEl.Caption.RotationRad := AEl.Caption.RotationRad + (rot - rot1);
         AEl.Caption.AnchorH := ah;
         AEl.Caption.AnchorV := av;
+        { [R7-N] squashed, at this frame's place and turn [was: the map of
+          the rest drawn all along] }
+        TyCaptionAffineSync(AEl.Caption);
       end;
   end;
 end;
@@ -6967,6 +7161,22 @@ begin
           if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
             TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1],
               AProxy.Num('rotation') - AEl.Anim.G[5]);
+        end;
+        { [R7-P] ITS PEN IS IN ITS FRAME (no strokeNoScale): the scale and
+          the turn it has now -- the size the root of the scale's
+          determinant, the shape the frame's over it [was: the rest's
+          pen all along, a growing glyph's as thick as the grown one's] }
+        if (AEl.Style.StrokeWidthLogical > 0) and not ((fx = 0) or (fy = 0) or IsNan(fx)
+          or IsNan(fy)) and (AEl.Anim.G[2] <> 0) and (AEl.Anim.G[3] <> 0) then
+        begin
+          if AProxy.GetAnimProp('x').Kind = avkNumber then
+            a := NumOr(AProxy, 'rotation', AEl.Anim.G[5])
+          else if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
+            a := AProxy.Num('rotation')
+          else
+            a := AEl.Anim.G[5];
+          AEl.Style.PenScale := Sqrt(Abs(AEl.Anim.G[2] * fx * AEl.Anim.G[3] * fy));
+          TyStyleSetPenShape(AEl.Style, TyZrLocal(AEl.Anim.G[2] * fx, AEl.Anim.G[3] * fy, a, 0, 0));
         end;
       end;
     carPictorialClip:
@@ -7255,7 +7465,7 @@ begin
         end;
       end;
     carGaugeDetail:
-      ApplyText(AEl, AProxy);
+      ApplyGaugeDetail(AEl, AProxy);
     carMarkPoint:
       begin
         if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
@@ -7569,6 +7779,22 @@ begin
   if StColourOf(v, c) then Result := c;
 end;
 
+{ [R7-AB] A FRAME'S SHADOW NUMBER as the canvas takes `dpr * (value || 0)`:
+  a number, a string's Number ('' nought); a not-a-number nought (falsy:
+  the first frame of a track into 'Infinity', `0 + (Infinity - 0) * 0`);
+  one the canvas refuses -- an infinity, a truthy string of no finite
+  Number (a discrete track's 'abc') -- ARefused, the mark the paint order
+  settles (the canvas keeps its own). False: no such value (an object, a
+  gradient) }
+function ShadowFrameNum(const AV: TTyAnimValue; ARefused: Double; out ANum: Double): Boolean;
+begin
+  Result := PenRawNumOf(AV, ANum);
+  if not Result then Exit;
+  if (AV.Kind = avkString) and (AV.Str = '') then ANum := 0
+  else if IsNan(ANum) and (AV.Kind <> avkString) then ANum := 0
+  else if IsNan(ANum) or IsInfinite(ANum) then ANum := ARefused;
+end;
+
 procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
   ARole: Boolean);
 var
@@ -7577,7 +7803,7 @@ var
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
   g: TTyChartGradient;
-  fx, fy, cx, cy, pn: Double;
+  fx, fy, cx, cy, pn, raw, x: Double;
   b: TTyRectF;
 
   { the role's branch draws a key its proxy rests at a layout value of }
@@ -7595,13 +7821,18 @@ var
   { [R6-F] a pen's number off its rest, as the canvas takes the two: a
     value that is no number ('abc') against a number is no colour against
     no colour to StSameValue, the same }
-  function OffPen(const AKey: string; out AV: TTyAnimValue; out ANum: Double): Boolean;
+  { [R7-Y] off its rest as the canvas is handed the two (not-a-number and
+    the infinities told apart: a phase of 'abc' over a rest of nought is
+    refused, not nought) [was: each as the canvas' nought-for-no-number] }
+  function OffPen(const AKey: string; out AV: TTyAnimValue; out ANum, ARaw: Double): Boolean;
   var r: TTyAnimValue; rn: Double;
   begin
     AV := AProxy.GetAnimProp(AKey);
-    Result := AProxy.StRestOf(AKey, r) and PenNumOf(AV, ANum)
-      and not (PenNumOf(r, rn) and ((IsNan(ANum) and IsNan(rn))
-        or (not IsNan(ANum) and not IsNan(rn) and (ANum = rn))));
+    Result := AProxy.StRestOf(AKey, r) and PenRawNumOf(AV, ARaw)
+      and not (PenRawNumOf(r, rn) and ((IsNan(ARaw) and IsNan(rn))
+        or (not IsNan(ARaw) and not IsNan(rn) and (ARaw = rn))));
+    ANum := ARaw;
+    if IsNan(ANum) or IsInfinite(ANum) then ANum := 0;
   end;
 
 begin
@@ -7614,6 +7845,8 @@ begin
       if RoleHas(key) or not Off(key, v, rest) then Continue;
       { a follower (a candle's wick) has no fill to change }
       if not AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then Continue;
+      { [R7-Y] a value the frame writes is the canvas' to settle afresh }
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasFillLeft;
       if StColourOf(v, c) then
       begin
         AEl.Style.HasFill := True;
@@ -7626,12 +7859,20 @@ begin
         AEl.Style.HasFill := True;
         AEl.Style.FillGradient := g;
       end
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+      begin
+        AEl.Style.HasFill := True;
+        AEl.Style.FillColor := cTyCanvasColourLeft;
+        AEl.Style.FillGradient := Default(TTyChartGradient);
+      end
       else
         AEl.Style.HasFill := False;
     end
     else if key = 'style.stroke' then
     begin
       if not Off(key, v, rest) then Continue;
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasStrokeLeft;
       if StColourOf(v, c) then
       begin
         AEl.Style.StrokeColor := c;
@@ -7647,13 +7888,39 @@ begin
         if not (AEl.Style.StrokeWidthLogical > 0) then
           AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
       end
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+      begin
+        AEl.Style.StrokeColor := cTyCanvasColourLeft;
+        AEl.Style.StrokeGradient := Default(TTyChartGradient);
+        if not (AEl.Style.StrokeWidthLogical > 0) then
+          AEl.Style.StrokeWidthLogical := NumOr(AProxy, 'style.lineWidth', 1);
+      end
       else
         AEl.Style.StrokeColor := 0;
     end
     else if key = 'style.lineWidth' then
     begin
       { [R6-F] a value that is no number as the canvas takes it }
-      if OffPen(key, v, pn) then AEl.Style.StrokeWidthLogical := pn;
+      if OffPen(key, v, pn, raw) then
+      begin
+        AEl.Style.StrokeWidthLogical := pn;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasWidthLeft;
+        { [R7-Y] Infinity (a tween towards it past its start): stroked at
+          the width the canvas had, never hit, a word's dash refused --
+          not-a-number (its start) strokes nothing }
+        if IsInfinite(raw) and (raw > 0) then
+        begin
+          AEl.Style.StrokeWidthLogical := 1;
+          AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
+          AEl.HitNone := (AEl.Style.StrokeColor <> 0) or (AEl.Style.StrokeGradient.Kind <> cgkNone);
+          if AEl.Style.DashWord <> 0 then
+          begin
+            AEl.Style.DashLogical := nil;
+            AEl.Style.DashWord := 0;
+          end;
+        end;
+      end;
     end
     { [R5-I] a label line's smooth, tweening: its path again at the smooth
       it has now (buildLabelLinePath) }
@@ -7666,31 +7933,61 @@ begin
     { [R2-I3] a state's dashOffset, tweening }
     else if key = 'style.lineDashOffset' then
     begin
-      if OffPen(key, v, pn) then AEl.Style.DashOffsetLogical := pn;
+      { [R7-Y] no finite number: refused, the canvas' (paint order) [was:
+        nought] }
+      if OffPen(key, v, pn, raw) then
+      begin
+        if IsNan(raw) or IsInfinite(raw) then pn := cTyCanvasPhaseLeft;
+        AEl.Style.DashOffsetLogical := pn;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasPhaseLeftFlag;
+      end;
     end
     { [R5-A] a state's shadow, tweening }
     else if key = 'style.shadowBlur' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowBlur := Max(Double(0), v.Num);
+      { ([R7-AB] off its rest as the canvas is handed the two: 'abc' over a
+        rest of 2 is refused, not the same) }
+      if not OffPen(key, v, pn, raw) then Continue;
+      { [R7-Y] below nought refused: kept negative for the paint order
+        [was: nought]; [R7-AB] a frame's value no finite number (a string
+        the canvas refuses, set at once; 'Infinity' tweened) refused the
+        same way [was: written raw, or not at all] }
+      if ShadowFrameNum(v, -1, x) then
+      begin
+        AEl.Style.ShadowBlur := x;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasBlurLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowOffsetX' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowOffsetX := v.Num;
+      if not OffPen(key, v, pn, raw) then Continue;
+      if ShadowFrameNum(v, cTyCanvasPhaseLeft, x) then
+      begin
+        AEl.Style.ShadowOffsetX := x;
+        { [R7-Y] a value the frame writes is the canvas' to settle afresh }
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffXLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowOffsetY' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.ShadowOffsetY := v.Num;
+      if not OffPen(key, v, pn, raw) then Continue;
+      if ShadowFrameNum(v, cTyCanvasPhaseLeft, x) then
+      begin
+        AEl.Style.ShadowOffsetY := x;
+        AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasOffYLeft;
+      end;
       if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
     end
     else if key = 'style.shadowColor' then
     begin
       if not Off(key, v, rest) then Continue;
-      if StColourOf(v, c) then AEl.Style.ShadowColor := c;
+      AEl.CanvasFlags := AEl.CanvasFlags and not cTyCanvasShadowLeft;
+      if StColourOf(v, c) then AEl.Style.ShadowColor := c
+      { [R7-Y] a colour no parser reads: the canvas' (paint order) }
+      else if (v.Kind = avkString) and (v.Str = cTyAnimCanvasLeft) then
+        AEl.Style.ShadowColor := cTyCanvasColourLeft;
     end
     else if key = 'style.opacity' then
     begin
@@ -8369,6 +8666,39 @@ var
   i, width: Integer;
   nm, s: string;
   told: Boolean;
+  ent: TTyIntegerArray;
+
+  { one entry: a name the series' dimensions declare, a whole index below
+    the width; -1 none }
+  function PosOf(AItem: TJSONData): Integer;
+  var q: Integer;
+  begin
+    Result := -1;
+    if AItem = nil then Exit;
+    case AItem.JSONType of
+      jtString:
+        begin
+          if dims = nil then Exit;
+          nm := AItem.AsString;
+          for q := 0 to dims.Count - 1 do
+          begin
+            def := dims.Items[q];
+            if def is TJSONObject then
+            begin
+              c := TJSONObject(def).Find('name');
+              if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
+            end
+            else if def.JSONType = jtString then s := def.AsString
+            else s := '';
+            if (s <> '') and (s = nm) then Exit(q);
+          end;
+        end;
+      jtNumber:
+        if (Frac(AItem.AsFloat) = 0) and (AItem.AsFloat >= 0) and (AItem.AsFloat < width) then
+          Result := Trunc(AItem.AsFloat);
+    end;
+  end;
+
 begin
   Result := False;
   APos := -1;
@@ -8376,11 +8706,6 @@ begin
   enc := AOwn.Find('encode');
   if not (enc is TJSONObject) then Exit;
   e := TJSONObject(enc).Find(AVisual);
-  if e is TJSONArray then
-  begin
-    if e.Count = 0 then Exit;
-    e := e.Items[0];
-  end;
   if e = nil then Exit;
   dims := AOwn.Find('dimensions');
   if not (dims is TJSONArray) then dims := nil;
@@ -8394,32 +8719,21 @@ begin
     v := UtItemValue(data.Items[0]);
     if (v is TJSONArray) and (v.Count > width) then width := v.Count;
   end;
-  case e.JSONType of
-    jtString:
-      begin
-        if dims = nil then Exit;
-        nm := e.AsString;
-        for i := 0 to dims.Count - 1 do
-        begin
-          def := dims.Items[i];
-          if def is TJSONObject then
-          begin
-            c := TJSONObject(def).Find('name');
-            if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
-          end
-          else if def.JSONType = jtString then s := def.AsString
-          else s := '';
-          if (s <> '') and (s = nm) then
-          begin
-            APos := i;
-            Break;
-          end;
-        end;
-      end;
-    jtNumber:
-      if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < width) then
-        APos := Trunc(e.AsFloat);
+  { the dimension the list gives slot 0: its first entry, unless that
+    reaches nothing or is named again further on [spec 255: was the first
+    entry alone] }
+  ent := nil;
+  if e is TJSONArray then
+  begin
+    SetLength(ent, e.Count);
+    for i := 0 to e.Count - 1 do ent[i] := PosOf(e.Items[i]);
+  end
+  else
+  begin
+    SetLength(ent, 1);
+    ent[0] := PosOf(e);
   end;
+  APos := TyEncodeFirstSlot(ent);
   if (APos < 0) or (APos >= width) then Exit;
   Result := True;
   { a declared type }
@@ -9044,6 +9358,9 @@ begin
   y2 := AEl.Anim.G[3];
   if AEl.Anim.G[6] = 0 then
   begin
+    { [R7-G] the path buildPath makes: on the half pixel first -- ([R7-AH]
+      the css px grid's at another PPI) }
+    TyZrSubPixelLineAt(x1, y1, x2, y2, AEl.Anim.G[11], AEl.Anim.PxScale);
     if APercent < 1 then
     begin
       x2 := x1 * (1 - APercent) + x2 * APercent;
@@ -9724,6 +10041,11 @@ begin
     r := TyPathCmdsRect(cmds);
     AEl.Shape.HasCmdBounds := True;
     AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+    { [R7-S] the morphing path has no transform (prepareMorphPath nulls
+      it): Path.contain asks it on the canvas, strokeContainThreshold there
+      -- not the element's own frame (TTyZrHit.OwnPen) }
+    if AEl.ZrHit.OwnPen then AEl.ZrHit := Default(TTyZrHit);
+    AEl.HitMinScale := 0;
   end;
   if AProxy.FUtStyleOn then UtApplyStyle(AEl, AProxy);
 end;
@@ -9753,6 +10075,9 @@ begin
   r := TyPathCmdsRect(cmds);
   AEl.Shape.HasCmdBounds := True;
   AEl.Shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
+  { [R7-S] a morphing child on the canvas, not in the host's own frame }
+  if AEl.ZrHit.OwnPen then AEl.ZrHit := Default(TTyZrHit);
+  AEl.HitMinScale := 0;
   { the child's own style: nothing of the host's but what it copied }
   AEl.Style.HasFill := False;
   AEl.Style.FillGradient := Default(TTyChartGradient);

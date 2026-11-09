@@ -718,7 +718,8 @@ begin
       AssertEquals('clip right', r.X + r.W, e.ClipRect.Right, 1e-9);
     end;
     if (e.Z2 = -19) and (e.Shape.Kind = cskPolyline) then Inc(lines);
-    if (e.Z2 = 0) and e.Style.HasFill and (e.Shape.Kind = cskRect) then
+    { ([R7-AA] the frame's transparent fill is not the filler) }
+    if (e.Z2 = 0) and e.Style.HasFill and (e.Shape.Kind = cskRect) and not (e.Style.StrokeWidthLogical > 0) then
     begin
       Inc(fills);
       { the theme's filler }
@@ -760,7 +761,7 @@ begin
   begin
     e := lst.Element(k);
     if e.Datum.SeriesIndex <> -1 then Continue;
-    if (e.Z2 = 0) and e.Style.HasFill and (e.Shape.Kind = cskRect) then
+    if (e.Z2 = 0) and e.Style.HasFill and (e.Shape.Kind = cskRect) and not (e.Style.StrokeWidthLogical > 0) then
     begin
       AssertEquals('filler rgb', $FF0000, Integer(e.Style.FillColor and $FFFFFF));
       AssertEquals('filler alpha', Round(255 * 0.25), Integer(e.Style.FillColor shr 24));

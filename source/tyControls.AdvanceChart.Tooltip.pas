@@ -124,6 +124,37 @@ type
     TextSizeLogical: Double;
     { [R5-A] textStyle.fontStyle (TyFontStyleCode) }
     TextFontStyle: Byte;
+    { [R7-AG] textStyle.fontWeight as written: the name's and the value's
+      weight (getTooltipTextStyle: `fontWeight || '400'`, `|| '900'`) [was:
+      never read -- the skin's]; and whether the canvas refuses the rich
+      tokens' font it makes with fontSize (richText: drawn in the font the
+      text before left) }
+    TextWeightSet: Boolean;
+    TextWeight: Integer;
+    TextFontLeft: Boolean;
+    { [R7-AA] backgroundColor, borderColor, textStyle.color written as a
+      string no colour parser reads: html mode, the browser drops the
+      declaration (the background transparent, the border currentColor --
+      the text's --, the text the page's); richText, the canvas keeps what
+      it had (settled where the box is drawn) }
+    BackgroundRefused, BorderColourRefused, TextColourRefused: Boolean;
+    { [R7-AA] the box's shadowBlur / shadowOffsetX / shadowOffsetY /
+      shadowColor where a level writes them (ShadowKeys 1, 2, 4, 8): the
+      html box-shadow, the richText box's shadow [was: never read] }
+    ShadowKeys: Byte;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColour: TTyChartColor;
+    { [R7-AC] a shadowColor no parser reads (ShadowKeys has 8; ShadowColour
+      cTyCanvasColourLeft): html drops the box-shadow declaration, the
+      canvas keeps the shadowColor it had. ShadowBlur is as written (a
+      negative one: html drops the declaration, the canvas keeps its blur) }
+    ShadowColourRefused: Boolean;
+    { [R7-AC] textStyle's textShadowBlur / textShadowOffsetX / Y /
+      textShadowColor (TextShadowKeys 1, 2, 4, 8): the text's shadow (a
+      colour no parser reads cTyCanvasColourLeft) }
+    TextShadowKeys: Byte;
+    TextShadowBlur, TextShadowOffsetX, TextShadowOffsetY: Double;
+    TextShadowColour: TTyChartColor;
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
@@ -221,6 +252,9 @@ type
     NameSizeLogical: Integer;
     NameWeight: Integer;
     NameColour: TTyChartColor;
+    { [R7-AG] the name's and the value's tokens are in a font the canvas
+      refuses (richText): each run of them is marked FontLeft }
+    NameFontLeft, ValueFontLeft: Boolean;
     { The number. A separate key rather than a second weight of the first:
       upstream separates them by weight alone (400 against 900) and the whole
       typographic hierarchy of the box is in that one difference, so it has to
@@ -269,6 +303,12 @@ type
     BoxWLogical, BoxHLogical, BoxRadiusLogical: Double;
     MarginLLogical, MarginRLogical: Double;
     LineHeightLogical: Double;
+    { [R7-AC] a text run's shadow colour as the canvas settled it (richText:
+      a textShadowColor no parser reads takes what the canvas had) }
+    ShadowColour: TTyChartColor;
+    { [R7-AG] a token in a font the canvas refuses (richText): drawn in the
+      font the text before left -- settled into the font fields }
+    FontLeft: Boolean;
     { Set once measured. }
     X, W: Double;
   end;
@@ -409,6 +449,11 @@ type
     Gap: Double;
     Params: TTyChartParams;
     IsAxis: Boolean;
+    { [R7-AG] the device px a css px makes (PPI / 96; nought is 1): the
+      lengths above are device px, _updatePosition works in css px -- the
+      option's px, the handler's arguments and answer, the gap, the
+      calcTooltipPosition offset and refix's extra 2 }
+    PxScale: Double;
   end;
 
 { TooltipView._updatePosition, line for line: a position handler is run and
@@ -793,6 +838,13 @@ begin
   end;
 end;
 
+{ [R7-AA] a colour string the option writes that no parser reads (not '',
+  not 'none', not a '@Name' callback) }
+function Refused(const S: string): Boolean;
+begin
+  Result := (S <> '') and (S <> 'none') and not TyColourIsHandler(S);
+end;
+
 { One cascade level, written into ASpec only where ASpec has not been given an
   answer yet -- which is what "read each key from the nearest level that has
   it" comes to when the levels are visited innermost first. }
@@ -930,7 +982,9 @@ begin
     begin
       ASpec.HasBackground := True;
       ASpec.Background := c;
-    end;
+    end
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+      ASpec.BackgroundRefused := True;
   end;
   if Fresh('borderColor') then
   begin
@@ -939,6 +993,54 @@ begin
     begin
       ASpec.HasBorderColour := True;
       ASpec.BorderColour := c;
+    end
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+      ASpec.BorderColourRefused := True;
+  end;
+  { [R7-AA] the box's shadow, key by key }
+  if Fresh('shadowBlur') then
+  begin
+    d := ANode.Find('shadowBlur');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 1;
+      { ([R7-AC] as written: a negative one is refused where it is drawn
+        [was: clamped to nought]) }
+      ASpec.ShadowBlur := d.AsFloat;
+    end;
+  end;
+  if Fresh('shadowOffsetX') then
+  begin
+    d := ANode.Find('shadowOffsetX');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 2;
+      ASpec.ShadowOffsetX := d.AsFloat;
+    end;
+  end;
+  if Fresh('shadowOffsetY') then
+  begin
+    d := ANode.Find('shadowOffsetY');
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 4;
+      ASpec.ShadowOffsetY := d.AsFloat;
+    end;
+  end;
+  if Fresh('shadowColor') then
+  begin
+    d := ANode.Find('shadowColor');
+    if (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 8;
+      ASpec.ShadowColour := c;
+    end
+    { [R7-AC] one no parser reads [was: not written, the skin's] }
+    else if (d.JSONType = jtString) and Refused(d.AsString) then
+    begin
+      ASpec.ShadowKeys := ASpec.ShadowKeys or 8;
+      ASpec.ShadowColour := cTyCanvasColourLeft;
+      ASpec.ShadowColourRefused := True;
     end;
   end;
   if Fresh('borderWidth') then
@@ -978,7 +1080,9 @@ begin
       begin
         ASpec.HasTextColour := True;
         ASpec.TextColour := c;
-      end;
+      end
+      else if (d <> nil) and (d.JSONType = jtString) and Refused(d.AsString) then
+        ASpec.TextColourRefused := True;
       d := ts.Find('fontSize');
       if (d <> nil) and (d.JSONType = jtNumber) then
       begin
@@ -986,7 +1090,76 @@ begin
         ASpec.TextSizeLogical := Max(Double(1), Min(Double(400), d.AsFloat));
       end;
       ASpec.TextFontStyle := TyFontStyleCode(ts.Find('fontStyle'));
+      { [R7-AG] the weight, and the rich tokens' font refused }
+      d := ts.Find('fontWeight');
+      ASpec.TextWeightSet := TyFontWeightOf(d, 0) > 0;
+      if ASpec.TextWeightSet then ASpec.TextWeight := TyFontWeightOf(d, 400)
+      else ASpec.TextWeight := 0;
+      ASpec.TextFontLeft := TyCssFontRefused(nil, d, ts.Find('fontSize'));
+      { [R7-AC] the text's shadow [was: never read -- the option had no
+        effect] }
+      d := ts.Find('textShadowBlur');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 1;
+        ASpec.TextShadowBlur := d.AsFloat;
+      end;
+      d := ts.Find('textShadowOffsetX');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 2;
+        ASpec.TextShadowOffsetX := d.AsFloat;
+      end;
+      d := ts.Find('textShadowOffsetY');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) and not IsInfinite(d.AsFloat) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 4;
+        ASpec.TextShadowOffsetY := d.AsFloat;
+      end;
+      d := ts.Find('textShadowColor');
+      if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 8;
+        ASpec.TextShadowColour := c;
+      end
+      else if (d <> nil) and (d.JSONType = jtString) and Refused(d.AsString) then
+      begin
+        ASpec.TextShadowKeys := ASpec.TextShadowKeys or 8;
+        ASpec.TextShadowColour := cTyCanvasColourLeft;
+      end;
     end;
+  end;
+end;
+
+{ [R7-X] THE OPTION ROOT UNDER THE GLOBAL TOOLTIP: buildTooltipModel's
+  last parent is the GlobalModel, so a key TooltipModel's defaults hold
+  none of -- formatter, valueFormatter, borderColor, order, position,
+  align, verticalAlign, and padding (its default is null) -- is the root's
+  top-level key where no level writes it. The defaulted ones (show,
+  trigger, backgroundColor, borderWidth, borderRadius, textStyle ...) stop
+  at the defaults. }
+procedure MergeTooltipRoot(AOption: TTyChartOption; var ASpec: TTyTooltipSpec;
+  var ASeen: TTyStringArray);
+const
+  cClimbs: array[0..7] of string = ('formatter', 'valueFormatter', 'borderColor',
+    'order', 'position', 'align', 'verticalAlign', 'padding');
+var
+  root, part: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  if (AOption = nil) or not (AOption.Root is TJSONObject) then Exit;
+  root := TJSONObject(AOption.Root);
+  part := TJSONObject.Create;
+  try
+    for i := 0 to High(cClimbs) do
+    begin
+      d := root.Find(cClimbs[i]);
+      if (d <> nil) and (d.JSONType <> jtNull) then part.Add(cClimbs[i], d.Clone);
+    end;
+    if part.Count > 0 then MergeTooltipNode(part, ASpec, ASeen);
+  finally
+    part.Free;
   end;
 end;
 
@@ -1028,6 +1201,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
@@ -1099,6 +1273,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
@@ -1179,6 +1354,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(TJSONObject(comp), Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 function TyTooltipSpecOfMatrix(AOption: TTyChartOption; AMatrixIndex: Integer;
@@ -1219,6 +1395,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
   Result.Trigger := tttItem;
 end;
 
@@ -1282,6 +1459,7 @@ begin
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;
   MergeTooltipNode(comp, Result, seen);
+  MergeTooltipRoot(AOption, Result, seen);
 end;
 
 { ============================ placement ============================ }
@@ -1352,12 +1530,37 @@ begin
   Result := (AWord = 'center') or (AWord = 'middle');
 end;
 
+{ [R7-AG] the place's lengths in css px (PxScale 1) }
+function PlaceInCss(const AIn: TTyTooltipPlaceIn): TTyTooltipPlaceIn;
+var s: Double;
+begin
+  Result := AIn;
+  s := AIn.PxScale;
+  Result.PxScale := 1;
+  if not (s > 0) or (s = 1) then Exit;
+  Result.PointX := AIn.PointX / s;
+  Result.PointY := AIn.PointY / s;
+  Result.ContentW := AIn.ContentW / s;
+  Result.ContentH := AIn.ContentH / s;
+  Result.ViewW := AIn.ViewW / s;
+  Result.ViewH := AIn.ViewH / s;
+  Result.Rect := TyXYWH(AIn.Rect.X / s, AIn.Rect.Y / s, AIn.Rect.W / s, AIn.Rect.H / s);
+  Result.BorderWidth := AIn.BorderWidth / s;
+  Result.Gap := AIn.Gap / s;
+end;
+
 procedure TyTooltipRunPosition(const ASpec: TTyTooltipSpec;
   const AIn: TTyTooltipPlaceIn; out APos: TTyChartTooltipPos);
 var args: TTyChartTooltipPosArgs;
 begin
   APos := ASpec.Position;
   if ASpec.PositionHandler = '' then Exit;
+  { ([R7-AG] the handler is handed css px) }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    TyTooltipRunPosition(ASpec, PlaceInCss(AIn), APos);
+    Exit;
+  end;
   args := Default(TTyChartTooltipPosArgs);
   args.PointX := AIn.PointX;
   args.PointY := AIn.PointY;
@@ -1386,6 +1589,17 @@ var
   lay: TTyXYWH;
   mask: TFPUExceptionMask;
 begin
+  { [R7-AG] IN CSS PX, as _updatePosition places the DOM box: the place's
+    lengths divided by the PPI's scale, the answer multiplied back [was:
+    the option's px, the gap's arithmetic and the corner's offset taken
+    as device px] }
+  if (AIn.PxScale > 0) and (AIn.PxScale <> 1) then
+  begin
+    Result := TyTooltipPlace(ASpec, PlaceInCss(AIn));
+    Result.X := Result.X * AIn.PxScale;
+    Result.Y := Result.Y * AIn.PxScale;
+    Exit;
+  end;
   w := AIn.ContentW;
   h := AIn.ContentH;
   x := AIn.PointX;
@@ -1583,6 +1797,7 @@ begin
   begin
     Result.Runs[n] := TextRun(ABlock.Name, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result.Runs[n].FontLeft := AInk.NameFontLeft;
     Inc(n);
   end;
   if not ABlock.NoValue then
@@ -1594,6 +1809,7 @@ begin
     alignRight := (ABlock.Marker <> ttmNone) or not ABlock.NoName;
     Result.Runs[n] := TextRun(ABlock.Value, AInk.ValueFontName,
       AInk.ValueSizeLogical, AInk.ValueWeight, AInk.ValueColour, alignRight);
+    Result.Runs[n].FontLeft := AInk.ValueFontLeft;
     Inc(n);
   end;
   SetLength(Result.Runs, n);
@@ -1661,6 +1877,7 @@ begin
       upstream inks it from exactly the same pair as an inline name. }
     Result[0].Runs[0] := TextRun(ABlock.Header, AInk.NameFontName,
       AInk.NameSizeLogical, AInk.NameWeight, AInk.NameColour, False);
+    Result[0].Runs[0].FontLeft := AInk.NameFontLeft;
   end;
   for i := 0 to ABlock.BlockCount - 1 do
   begin

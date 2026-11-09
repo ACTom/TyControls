@@ -179,6 +179,9 @@ const PROD = require(PROD_PATH);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-calendar-layout.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -820,7 +823,7 @@ function finishCase(def, base, side) {
   return { ground: base.ground, textStyle: base.textStyle, locale: base.locale, paintRuns: runs, calendars: cals };
 }
 
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 
 function recordCase(def, side) {
   let option = def.option;

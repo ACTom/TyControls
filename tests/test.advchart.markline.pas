@@ -19,10 +19,14 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMLineProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -57,6 +61,14 @@ type
   end;
 
 implementation
+
+uses test.advchart.gallerytext;
+
+function TMLineProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TMLineProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -147,6 +159,10 @@ begin
   FChart := TMLineProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
@@ -431,7 +447,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R7-K] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
@@ -576,8 +594,9 @@ procedure TAdvChartMarkLineOracleTest.TestGalleryMarkLinesAsUpstream;
 begin
   RunCases(True);
   AssertTrue('the gallery lines were compared', FLines >= 30);
+  { [R7-K] with zrender's widths no grid lands elsewhere }
   AssertTrue(Format('%d gallery series passed over:%s', [FSkipped, FSkipNames]),
-    FSkipped <= 3);
+    FSkipped = 0);
   AssertTrue(Format('%d of %d comparisons differ from upstream (%d series passed over):%s',
     [FBad, FCompared, FSkipped, FReport]), FBad = 0);
 end;

@@ -146,6 +146,29 @@ begin
   Result := ((ASum >= 0) and (AVal > 0)) or ((ASum <= 0) and (AVal < 0));
 end;
 
+{ [spec 255] Of ACols, the column read from the earliest place in the
+  source -- an ordinal one when AOrdinal -- or AFallback when none is read
+  from anywhere. }
+function FirstInSource(AStore: TTyDataStore; const ACols: TTyIntegerArray;
+  AFallback: Integer; AOrdinal: Boolean): Integer;
+var k, p, best: Integer;
+begin
+  Result := AFallback;
+  best := -1;
+  for k := 0 to High(ACols) do
+  begin
+    if (ACols[k] < 0) or (ACols[k] >= AStore.DimCount) then Continue;
+    if AOrdinal and (AStore.DimType(ACols[k]) <> ddtOrdinal) then Continue;
+    p := AStore.RawDimPos(ACols[k]);
+    if p < 0 then Continue;
+    if (best < 0) or (p < best) then
+    begin
+      best := p;
+      Result := ACols[k];
+    end;
+  end;
+end;
+
 type
   TStackMember = record
     Slot: Integer;         { index into ABindings / AStores }
@@ -253,7 +276,7 @@ var
   b: TTySeriesBinding;
   st: TTyDataStore;
   mem: TStackMember;
-  n, half, a: Integer;
+  n, half, a, selfCol: Integer;
   tmp: TStackMember;
 begin
   SetLength(answer, Length(ABindings));
@@ -264,6 +287,8 @@ begin
     answer[i].ResultCol := -1;
     answer[i].OverCol := -1;
     answer[i].OnSlot := -1;
+    answer[i].PileCol := -1;
+    answer[i].PileResultCol := -1;
   end;
   Result := answer;
   if AOption = nil then Exit;
@@ -304,15 +329,21 @@ begin
       more addable than a category is. Adding two dates is not a date. }
     if (b.ValueAxis.AxisType = atCategory)
       or (b.ValueAxis.AxisType = atTime) then Continue;
-    mem.ValueCol := st.DimIndexOf(b.ValueAxis.Dim);
-    if mem.ValueCol < 0 then Continue;
+    selfCol := st.DimIndexOf(b.ValueAxis.Dim);
+    if selfCol < 0 then Continue;
+    { [spec 255] THE FIRST VALUE COLUMN IN THE SOURCE: a value coordinate
+      written as a list has several, and enableDataStack takes the first
+      dimension, in the dimensions' order, that is on it }
+    mem.ValueCol := FirstInSource(st, st.DimsOfCoord(b.ValueAxis.Dim), selfCol, False);
 
     mem.Slot := i;
     mem.Store := st;
     { Stack by category when the base axis has categories, by row index
       otherwise. }
+    { (the first category column in the source, as the stacked one) }
     if b.BaseAxis.AxisType = atCategory then
-      mem.ByCol := st.DimIndexOf(b.BaseAxis.Dim)
+      mem.ByCol := FirstInSource(st, st.DimsOfCoord(b.BaseAxis.Dim),
+        st.DimIndexOf(b.BaseAxis.Dim), True)
     else
       mem.ByCol := -1;
     if (mem.ByCol >= 0) and (st.DimType(mem.ByCol) <> ddtOrdinal) then
@@ -332,9 +363,16 @@ begin
     SetLength(groups[g], n + 1);
     groups[g][n] := mem;
 
-    answer[i].Stacked := True;
-    answer[i].ResultCol := mem.ResultCol;
-    answer[i].OverCol := mem.OverCol;
+    { DRAWN STACKED only when the stacked column is the one the series
+      draws (isDimensionStacked(data, mapDimension(valueDim))) [spec 255] }
+    answer[i].Stacked := mem.ValueCol = selfCol;
+    if answer[i].Stacked then
+    begin
+      answer[i].ResultCol := mem.ResultCol;
+      answer[i].OverCol := mem.OverCol;
+    end;
+    answer[i].PileCol := mem.ValueCol;
+    answer[i].PileResultCol := mem.ResultCol;
   end;
 
   for g := 0 to High(groups) do

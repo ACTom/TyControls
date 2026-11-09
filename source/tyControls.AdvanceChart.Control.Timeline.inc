@@ -772,6 +772,9 @@ begin
     again, every series updating from where it stands }
   if FOption.TimelineReset(rep, @MergeBefore, @MergePass) then
   begin
+    { [R7-AH] prepareAndUpdate's prepare: the views the frame's new models
+      make, after every one there is [was: none recorded] }
+    ViewsPrepare(False);
     FAnimPending := True;
     FDirty := True;
     { its update renders every parallelAxis view: the payload is no

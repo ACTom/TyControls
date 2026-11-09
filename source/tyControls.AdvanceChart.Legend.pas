@@ -166,6 +166,11 @@ type
     HasBorder: Boolean;
     Border: TTyChartColor;
     BorderWidth: Double;
+    { [R7-T] itemStyle.borderColor 'auto' (the style visual's fill) and
+      borderWidth 'inherit' (the visual's width), the item's over the
+      legend's }
+    BorderAuto: Boolean;
+    BorderWidthInherit: Boolean;
     Opacity: Double;
     HasLineColour: Boolean;
     LineColour: TTyChartColor;
@@ -207,6 +212,29 @@ type
     matter -- what a legend falls back to and what it is allowed to match --
     cross a procedure boundary. }
   TTyLegendNames = array of string;
+
+  { [R7-T] A LEGEND ICON PATH'S PEN KEYS BESIDES ITS COLOURS AND ITS WIDTH,
+    as getLegendStyle (LegendView.ts) leaves them and the canvas takes them:
+    the opacity, the dash (the word or the lengths, normalised against the
+    width the path strokes at -- an unselected rule's inactiveWidth
+    included), its phase, cap, join, miter limit and the shadow. Resolved
+    False: nobody resolved them (a source made by hand) -- the zero value,
+    which draws as before. }
+  TTyLegendPen = record
+    Resolved: Boolean;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    { 0 none, 1 'dashed', 2 'dotted', 3 the lengths in DashLen }
+    DashKind: Byte;
+    DashLen: TTyDoubleArray;
+    DashOffset: Double;
+    { TyLineCapOf / TyLineJoinOf }
+    Cap, Join: Byte;
+    { the canvas' miter limit, 0 its own 10 }
+    Miter: Double;
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+  end;
 
   { What the chart can say about one name. Filled in by the control, because
     this unit asks the theme and the data nothing.
@@ -275,6 +303,21 @@ type
     { [R5-F] the series' symbolRotate visual (degrees, 0 when none): the
       icon turns by it under 'inherit' }
     SymbolRotate: Double;
+    { [R7-T] THE RULE AS getLegendStyle RESOLVES IT (a line's own icon,
+      LineSeries.getLegendIcon's setStyle(lineStyle)): LineColour and
+      LineWidthLogical above are its colour and width while selected,
+      LineGrad the colour as a gradient (cgkNone: the solid), LineNone a
+      colour that strokes nothing; RuleKeys the rest of its pen; an
+      unselected rule's width lineStyle.inactiveWidth, the item's over the
+      legend's (HasRuleInactiveWidth False: the ink's, as before) }
+    LineGrad: TTyChartGradient;
+    LineNone: Boolean;
+    RuleKeys: TTyLegendPen;
+    HasRuleInactiveWidth: Boolean;
+    RuleInactiveWidth: Double;
+    { [R7-T] the icon's (and a line's marker's) pen keys: getLegendStyle's
+      itemStyle over the series' style visual }
+    MarkKeys: TTyLegendPen;
   end;
   TTyLegendSourceArray = array of TTyLegendSource;
 
@@ -286,6 +329,9 @@ type
     Box: TTyRawBox;
     { CSS order: top, right, bottom, left. }
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     Orient: TTyLegendOrient;
     Align: TTyLegendAlign;
     ItemGap: Double;
@@ -300,11 +346,31 @@ type
     Formatter: string;
     SelectedMode: TTyLegendSelectedMode;
     HasBackground: Boolean;
+    { [R7-I] makeBackground's own colours: `backgroundColor` (style.fill)
+      and `borderColor` (getItemStyle) as written, where they read as a
+      colour -- else the skin's [was: the skin's whatever was written] }
+    HasBackgroundColour: Boolean;
+    BackgroundColour: TTyChartColor;
+    HasBorderColour: Boolean;
+    BorderColour: TTyChartColor;
     BorderWidth: Double;
+    { [R7-AF] a borderWidth of +Infinity ('Infinity'): makeBackground's Rect
+      joins the group after the layout, so the legend keeps its place; the
+      canvas refuses the width and strokes at the one it had }
+    BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
+    { [R7-AK] borderRadius truthy (RectShape.r): makeBackground's path is
+      roundRect's, its far edges joined where the size is a string }
+    BorderRounded: Boolean;
     { [R5-A] the box's shadow: the legend's own shadow keys
       (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
     Shadow: TTyChartShadow;
+    { [R7-X] the rest of it: borderType, borderDashOffset, borderCap,
+      borderJoin, borderMiterLimit (TyStyleTakeBorderKeys). These and the
+      shadow are keys LegendModel's defaults hold none of: each climbs to
+      the option root's top-level key (borderRadius, defaulted to 0, does
+      not); so do `icon` and `formatter`. }
+    Look: TTyChartElementStyle;
     { `legend.z`, so the legend sorts against the series in the one paint
       list. Default 4. }
     Z: Integer;
@@ -372,6 +438,9 @@ type
     HasRt: Boolean;
     Rt: TTyRtBlockStyle;
     TextX, TextY: Double;
+    { [R7-L] where its style places the words in the item (x: textX, y:
+      itemHeight / 2), CSS px: a size written as a numeric string joins it }
+    HangX, HangY: Double;
     TextW, TextH: Double;
     AnchorH: TTyTextAnchorH;
     { The item's own rectangle -- icon and words together, ink overhang
@@ -397,6 +466,10 @@ type
     Own: TTyLegendOwn;
     { [spec 242] the pen as a gradient, while selected }
     StrokeObj: TTyChartObjFill;
+    { [R7-T] the rule's gradient and the two paths' pen keys (the source's);
+      LineWidthLogical is the width the rule strokes at in this state }
+    LineGrad: TTyChartGradient;
+    RuleKeys, MarkKeys: TTyLegendPen;
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
@@ -433,6 +506,21 @@ type
     Valid: Boolean;
     { The background box, padding included. }
     Frame: TTyRectF;
+    { [R7-AK] the same in the view group's frame as makeBackground's shape
+      holds it: its place (css px), its size as the string the padding
+      joined ('' a number) -- `x + width` joins it -- and where the group's
+      origin is (device px) }
+    FrameLX, FrameLY: Double;
+    FrameWText, FrameHText: string;
+    FrameOX, FrameOY: Double;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: the group's x NaN): laid out with the group at device 0, its box
+      drawing nothing. UnplacedT: the group has a transform (a coordinate
+      not around nought), which the canvas refuses -- every part in its own
+      frame under the transform the canvas had (TyBuildLegendMarks); else
+      none -- the parts at their places in the canvas' frame (the control
+      shifts them to its origin, TyLegendLayoutShift) }
+    Unplaced, UnplacedT: Boolean;
     { The items' own extent, padding excluded. }
     Content: TTyRectF;
     Align: TTyLegendAlign;
@@ -499,6 +587,10 @@ type
       pageTextStyle.color, the skin's under the option's }
     PageIcon, PageIconInactive, PageText: TTyChartColor;
   end;
+
+{ [R7-AK] the layout moved by ADX, ADY device px: the items, the selector's
+  buttons, the pager's parts, the clip, the boxes }
+procedure TyLegendLayoutShift(var ALayout: TTyLegendLayout; ADX, ADY: Double);
 
 { How many legends the option carries. An object counts as one. }
 function TyLegendCount(AOption: TTyChartOption): Integer;
@@ -662,6 +754,36 @@ function TyLegendDefaultIcon(const ASeriesType, ASymbolWord: string): string;
   upstream and here; `map` is the other one upstream and this port has no map. }
 function TyLegendDrawsOwnIcon(const ASeriesType: string): Boolean;
 
+{ [R7-T] getLegendStyle's lineStyle (LegendView.ts): each lineStyle key
+  (width, color, opacity, the shadow's four, type, dashOffset, cap, join,
+  miterLimit) the item's (AItem, its `lineStyle`) over the legend's
+  (ALegend) over the LegendModel defaults (width 'auto', the rest of color
+  ... miterLimit 'inherit'); 'auto' width 2 where the visual's width is above
+  nought, else 0; every 'inherit' the visual's key (AVisual, the series'
+  legendLineStyle visual in zrender's names: lineWidth, stroke, opacity,
+  shadowBlur, shadowOffsetX, shadowOffsetY, shadowColor, lineDash,
+  lineDashOffset, lineCap, lineJoin, miterLimit), nothing where it has none;
+  colour 'auto' the style visual's fill. AVisualFill: the visual's stroke is
+  the data's fill (the series wrote no truthy lineStyle.color). Out: AKind
+  0 no colour, 1 AColour, 2 AGrad, 3 the data's fill; AWidth the width
+  (0 where it is none or no positive number) and AKeys the rest. }
+procedure TyLegendLineStyle(AItem, ALegend, AVisual: TJSONObject;
+  AVisualFill: Boolean; out AKind: Byte; out AColour: TTyChartColor;
+  out AGrad: TTyChartGradient; out AWidth: Double; out AKeys: TTyLegendPen);
+{ [R7-T] getLegendStyle's itemStyle keys besides the colours and the width:
+  opacity, the shadow's four, borderType, borderDashOffset, borderCap,
+  borderJoin, borderMiterLimit -- the item's over the legend's over the
+  defaults (opacity, borderCap, borderJoin, borderDashOffset and
+  borderMiterLimit 'inherit'); every 'inherit' AVisual's key (the series'
+  style visual in zrender's names, its opacity the one the series' draw
+  type asks for). }
+function TyLegendItemKeys(AItem, ALegend, AVisual: TJSONObject): TTyLegendPen;
+{ [R7-T] the keys onto a style that strokes at AWidth (logical px): the
+  opacity, the dash normalised against AWidth (none where it is not above
+  nought), its phase, cap, join, miter and shadow }
+procedure TyLegendPenApply(const AKeys: TTyLegendPen; AWidth: Double;
+  var AStyle: TTyChartElementStyle);
+
 { Lay one out against AContainer. AFont is the words' font, resolved from the
   theme; APPI scales the LOGICAL gaps and the item box.
 
@@ -714,7 +836,15 @@ implementation
 
 uses jsonparser, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
-  tyControls.AdvanceChart.Color, tyControls.StrConsts;
+  tyControls.AdvanceChart.Color, tyControls.StrConsts,
+  { [R7-AI] a padding written as a string }
+  tyControls.AdvanceChart.RichText,
+  { [R7-AK] a part in its own frame }
+  tyControls.AdvanceChart.Lines;
+
+var
+  { [R7-AK] TyLayoutLegend's traps masked for a padding side undefined }
+  GLegendMasked: Boolean;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -813,6 +943,10 @@ end;
 function TyLegendSpecDefault: TTyLegendSpec;
 var i: Integer;
 begin
+  { every field nought first: HasBorderColour and its kin were never set
+    here, harmless while only a border of some width read them, not since
+    R7-AA hands the box's stroke colour at a width of nought }
+  Result := Default(TTyLegendSpec);
   Result.Show := True;
   Result.Box := DefaultBox;
   for i := 0 to 3 do Result.Padding[i] := cDefaultPadding;
@@ -1023,10 +1157,12 @@ end;
 
 function TyLegendSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyLegendSpec;
 var
-  node: TJSONObject;
+  node, root: TJSONObject;
   d: TJSONData;
   w: string;
-  given: Boolean;
+  given, joinHas: Boolean;
+  { [R7-AI] a padding side }
+  k: Integer;
 begin
   Result := TyLegendSpecDefault;
   if AOption = nil then Exit;
@@ -1045,6 +1181,15 @@ begin
   TyBoxClimbRoot(Result.Box, AOption.Root);
 
   ReadPadding(node, Result.Padding);
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  if (node.Find('padding') <> nil) and (node.Find('padding').JSONType <> jtNull) then
+  begin
+    Result.PadJs := TyJsPadOf(node.Find('padding'));
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   if StrIn(node, 'orient') = 'vertical' then
     Result.Orient := tloVertical
   else
@@ -1056,23 +1201,38 @@ begin
   Result.ItemGap := NumIn(node, 'itemGap', Result.ItemGap);
   Result.ItemWidth := NumIn(node, 'itemWidth', Result.ItemWidth);
   Result.ItemHeight := NumIn(node, 'itemHeight', Result.ItemHeight);
-  Result.Icon := StrIn(node, 'icon');
+  { [R7-X] icon and formatter: LegendModel has no default for either, so
+    an unwritten (or null) one is the option root's [was: the legend's
+    alone] }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  d := TyStFind([node, root], ['icon']);
+  if (d <> nil) and (d.JSONType = jtString) then Result.Icon := d.AsString;
   d := node.Find('symbolKeepAspect');
   if (d <> nil) and (d.JSONType = jtBoolean) then Result.KeepAspect := d.AsBoolean;
   { A FUNCTION FORMATTER CANNOT SURVIVE JSON, so only the string form exists
     here and a non-string leaves the name alone. }
-  d := node.Find('formatter');
+  d := TyStFind([node, root], ['formatter']);
   if (d <> nil) and (d.JSONType = jtString) then Result.Formatter := d.AsString;
   Result.SelectedMode := SelectedModeOf(node);
 
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
-  TyStReadShadow([node], [], [], Result.Shadow);
+  if Result.HasBackground then
+    Result.HasBackgroundColour := TyTryParseChartColor(d.AsString, Result.BackgroundColour);
+  d := node.Find('borderColor');
+  if (d <> nil) and (d.JSONType = jtString) then
+    Result.HasBorderColour := TyTryParseChartColor(d.AsString, Result.BorderColour);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
-  d := node.Find('borderRadius');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderRadii := TyCornerRadii([d.AsFloat]);
+  Result.BorderWidthInf := TyOptIsPosInf(node.Find('borderWidth'));
+  { [R7-X] the shadow and the border's keys down to the root's }
+  TyStReadShadow([node, root], [], [], Result.Shadow);
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [node, root], [], False, [spkEnds, spkDash], joinHas);
+  { a number or an array (RectShape.r) [was: a number] }
+  Result.BorderRadii := TyBoxRadiiOf(node.Find('borderRadius'));
+  Result.BorderRounded := TyJsTruthyOf(node.Find('borderRadius'));
   Result.Z := TyRoundOpt(NumIn(node, 'z', cDefaultZ), cDefaultZ);
   { anything written but 'auto' (null falls back to the default) }
   d := node.Find('inactiveBorderWidth');
@@ -1158,7 +1318,15 @@ var
   begin
     Result := False;
     if (AData = nil) or (AData.JSONType <> jtString) then Exit;
-    if not TyTryParseChartColor(AData.AsString, c) then Exit;
+    if not TyTryParseChartColor(AData.AsString, c) then
+    begin
+      { [R7-W] a string no parser reads (no word of the legend's own): the
+        canvas keeps the colour it had (TyLinesCanvasLeftovers) [was: no
+        colour] }
+      if (AData.AsString = '') or (AData.AsString = 'none') or (AData.AsString = 'inherit')
+        or (AData.AsString = 'auto') or TyColourIsHandler(AData.AsString) then Exit;
+      c := cTyCanvasColourLeft;
+    end;
     AHas := True;
     AColour := c;
     Result := True;
@@ -1202,7 +1370,7 @@ begin
     Colour(AObj.Find('inactiveBorderColor'), Result.HasInactiveBorderColour,
       Result.InactiveBorderColour);
     { [R5-F] its text block where its textStyle asks for one }
-    if (st <> nil) and TyRtNodeWantsBlock(st) then Result.RtItemNode := st.AsJSON
+    if (st <> nil) and (TyRtNodeWantsBlock(st) or TyRtNodeWritesHalo(st)) then Result.RtItemNode := st.AsJSON
     else Result.RtItemNode := '';
   end;
   { [R5-F] its own tooltip (an item's; setTooltipConfig's option) }
@@ -1227,9 +1395,32 @@ begin
   st := ObjOf(AObj.Find('itemStyle'));
   if st <> nil then
   begin
+    { [R7-T] 'inherit' over the legend's colour is the visual's again }
+    d := st.Find('color');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+      Result.HasFill := False;
     Colour(st.Find('color'), Result.HasFill, Result.Fill);
-    Colour(st.Find('borderColor'), Result.HasBorder, Result.Border);
-    Result.BorderWidth := Num(st.Find('borderWidth'), Result.BorderWidth);
+    d := st.Find('borderColor');
+    if (d <> nil) and (d.JSONType = jtString)
+      and ((d.AsString = 'inherit') or (d.AsString = 'auto')) then
+    begin
+      Result.HasBorder := False;
+      Result.BorderAuto := d.AsString = 'auto';
+    end
+    else if Colour(d, Result.HasBorder, Result.Border) then
+      Result.BorderAuto := False;
+    d := st.Find('borderWidth');
+    if (d <> nil) and (d.JSONType = jtString)
+      and ((d.AsString = 'inherit') or (d.AsString = 'auto')) then
+    begin
+      Result.BorderWidth := NaN;
+      Result.BorderWidthInherit := d.AsString = 'inherit';
+    end
+    else if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      Result.BorderWidth := d.AsFloat;
+      Result.BorderWidthInherit := False;
+    end;
     Result.Opacity := Num(st.Find('opacity'), Result.Opacity);
   end;
   st := ObjOf(AObj.Find('lineStyle'));
@@ -1475,6 +1666,225 @@ end;
 function TyLegendDrawsOwnIcon(const ASeriesType: string): Boolean;
 begin
   Result := ASeriesType = 'line';
+end;
+
+const
+  { [R7-T] LINE_STYLE_KEY_MAP / ITEM_STYLE_KEY_MAP (zrender's name, the
+    option's) and LegendModel's lineStyle / itemStyle defaults }
+  cLegendLineKeys: array[0..23] of string = (
+    'lineWidth', 'width', 'stroke', 'color', 'opacity', 'opacity',
+    'shadowBlur', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetX',
+    'shadowOffsetY', 'shadowOffsetY', 'shadowColor', 'shadowColor',
+    'lineDash', 'type', 'lineDashOffset', 'dashOffset', 'lineCap', 'cap',
+    'lineJoin', 'join', 'miterLimit', 'miterLimit');
+  cLegendLineDefaults = '{"width":"auto","color":"inherit","opacity":"inherit",'
+    + '"type":"inherit","cap":"inherit","join":"inherit","dashOffset":"inherit",'
+    + '"miterLimit":"inherit"}';
+  cLegendItemKeys: array[0..19] of string = (
+    'opacity', 'opacity',
+    'shadowBlur', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetX',
+    'shadowOffsetY', 'shadowOffsetY', 'shadowColor', 'shadowColor',
+    'lineDash', 'borderType', 'lineDashOffset', 'borderDashOffset',
+    'lineCap', 'borderCap', 'lineJoin', 'borderJoin',
+    'miterLimit', 'borderMiterLimit');
+  cLegendItemDefaults = '{"opacity":"inherit","borderCap":"inherit",'
+    + '"borderJoin":"inherit","borderDashOffset":"inherit",'
+    + '"borderMiterLimit":"inherit"}';
+
+{ the style object getLineStyle / getItemStyle answers on the item's model
+  (each key the item's, else the legend's, else the default; null falls
+  through as getShallow's `== null` does), then handleCommonProps: 'auto'
+  width, every 'inherit' the visual's or gone }
+function LegendStyleObj(const AMap: array of string; const ADefaults: string;
+  AItem, ALegend, AVisual: TJSONObject): TJSONObject;
+var
+  defs, v, vis: TJSONData;
+  tmp: TJSONObject;
+  i: Integer;
+  zk, ok: string;
+  n: Double;
+begin
+  tmp := TJSONObject.Create;
+  defs := GetJSON(ADefaults);
+  try
+    i := 0;
+    while i < High(AMap) do
+    begin
+      zk := AMap[i];
+      ok := AMap[i + 1];
+      Inc(i, 2);
+      v := nil;
+      if AItem <> nil then v := AItem.Find(ok);
+      if ((v = nil) or (v.JSONType = jtNull)) and (ALegend <> nil) then
+        v := ALegend.Find(ok);
+      if (v = nil) or (v.JSONType = jtNull) then v := TJSONObject(defs).Find(ok);
+      if (v = nil) or (v.JSONType = jtNull) then Continue;
+      tmp.Add(zk, v.Clone);
+    end;
+  finally
+    defs.Free;
+  end;
+  Result := TJSONObject.Create;
+  try
+    for i := 0 to tmp.Count - 1 do
+    begin
+      zk := tmp.Names[i];
+      v := tmp.Items[i];
+      { If lineStyle.width is 'auto', it is 2 where the visual has a width
+        above nought }
+      if (zk = 'lineWidth') and (v.JSONType = jtString) and (v.AsString = 'auto') then
+      begin
+        vis := nil;
+        if AVisual <> nil then vis := AVisual.Find('lineWidth');
+        n := TyOptJsNumber(vis);
+        if not IsNan(n) and (n > 0) then Result.Add(zk, 2) else Result.Add(zk, 0);
+        Continue;
+      end;
+      if (v.JSONType = jtString) and (v.AsString = 'inherit') then
+      begin
+        vis := nil;
+        if AVisual <> nil then vis := AVisual.Find(zk);
+        if vis <> nil then Result.Add(zk, vis.Clone);
+        Continue;
+      end;
+      Result.Add(zk, v.Clone);
+    end;
+  finally
+    tmp.Free;
+  end;
+end;
+
+function LegendKeysOf(AStyle: TJSONObject): TTyLegendPen;
+var
+  d: TJSONData;
+  v: Double;
+  w: Byte;
+  dash: TTyDoubleArray;
+begin
+  Result := Default(TTyLegendPen);
+  Result.Resolved := True;
+  d := AStyle.Find('opacity');
+  if d <> nil then
+  begin
+    v := TyOptJsNumber(d);
+    if not IsNan(v) and not IsInfinite(v) then
+    begin
+      Result.HasOpacity := True;
+      Result.Opacity := v;
+    end;
+  end;
+  dash := TyLineDashOf(AStyle.Find('lineDash'), 1, w);
+  if w = 1 then Result.DashKind := 1
+  else if w = 2 then Result.DashKind := 2
+  else if Length(dash) > 0 then
+  begin
+    Result.DashKind := 3;
+    Result.DashLen := dash;
+  end;
+  Result.DashOffset := TyOptPenOffset(AStyle.Find('lineDashOffset'));
+  if IsNan(Result.DashOffset) then Result.DashOffset := 0;
+  Result.Cap := TyLineCapOf(AStyle.Find('lineCap'));
+  Result.Join := TyLineJoinOf(AStyle.Find('lineJoin'));
+  v := TyOptMiterLimit(AStyle.Find('miterLimit'));
+  if IsNan(v) or (v = 10) then Result.Miter := 0 else Result.Miter := v;
+  Result.HasShadow := TyShadowOfValues(AStyle.Find('shadowBlur'),
+    AStyle.Find('shadowOffsetX'), AStyle.Find('shadowOffsetY'),
+    AStyle.Find('shadowColor'), Result.Shadow);
+end;
+
+procedure TyLegendLineStyle(AItem, ALegend, AVisual: TJSONObject;
+  AVisualFill: Boolean; out AKind: Byte; out AColour: TTyChartColor;
+  out AGrad: TTyChartGradient; out AWidth: Double; out AKeys: TTyLegendPen);
+var
+  st: TJSONObject;
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  AKind := 0;
+  AColour := 0;
+  AGrad := Default(TTyChartGradient);
+  st := LegendStyleObj(cLegendLineKeys, cLegendLineDefaults, AItem, ALegend, AVisual);
+  try
+    AKeys := LegendKeysOf(st);
+    AWidth := TyOptPenWidth(st.Find('lineWidth'));
+    if IsNan(AWidth) or (AWidth < 0) then AWidth := 0;
+    d := st.Find('stroke');
+    { NO COLOUR LEFT is an inherited one the visual does not hold as JSON
+      (the colour always has a value: the default 'inherit'): the data's
+      fill where the visual's stroke is that, else none (a filtered
+      series' visual is empty) }
+    if d = nil then
+    begin
+      if AVisualFill then AKind := 3;
+      Exit;
+    end;
+    if (d.JSONType = jtString) and (d.AsString = 'auto') then
+    begin
+      AKind := 3;
+      Exit;
+    end;
+    if d.JSONType = jtString then
+    begin
+      { 'none' (and anything else that is no CSS colour) strokes nothing }
+      if TyTryParseChartColor(d.AsString, c) then
+      begin
+        AKind := 1;
+        AColour := c;
+      end;
+      Exit;
+    end;
+    if TyTryReadGradient(d, AGrad) then
+    begin
+      AKind := 2;
+      AColour := TyGradientSolid(AGrad);
+    end;
+  finally
+    st.Free;
+  end;
+end;
+
+function TyLegendItemKeys(AItem, ALegend, AVisual: TJSONObject): TTyLegendPen;
+var st: TJSONObject;
+begin
+  st := LegendStyleObj(cLegendItemKeys, cLegendItemDefaults, AItem, ALegend, AVisual);
+  try
+    Result := LegendKeysOf(st);
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TyLegendPenApply(const AKeys: TTyLegendPen; AWidth: Double;
+  var AStyle: TTyChartElementStyle);
+begin
+  if not AKeys.Resolved then Exit;
+  { [R7-V] as written (the canvas clamps it) }
+  if AKeys.HasOpacity then
+    AStyle.Alpha := AKeys.Opacity;
+  AStyle.DashLogical := nil;
+  AStyle.DashWord := 0;
+  if AWidth > 0 then
+    case AKeys.DashKind of
+      1:
+        begin
+          SetLength(AStyle.DashLogical, 2);
+          AStyle.DashLogical[0] := 4 * AWidth;
+          AStyle.DashLogical[1] := 2 * AWidth;
+          AStyle.DashWord := 1;
+        end;
+      2:
+        begin
+          SetLength(AStyle.DashLogical, 1);
+          AStyle.DashLogical[0] := AWidth;
+          AStyle.DashWord := 2;
+        end;
+      3: AStyle.DashLogical := Copy(AKeys.DashLen);
+    end;
+  if Length(AStyle.DashLogical) > 0 then AStyle.DashOffsetLogical := AKeys.DashOffset;
+  AStyle.LineCap := AKeys.Cap;
+  AStyle.LineJoin := AKeys.Join;
+  AStyle.MiterLimit := AKeys.Miter;
+  if AKeys.HasShadow then TyStyleSetShadow(AStyle, AKeys.Shadow);
 end;
 
 function TyLegendHides(const AEntries: TTyLegendEntryArray;
@@ -1812,20 +2222,22 @@ begin
     if a is TJSONObject then ca := TJSONObject(a) else ca := nil;
     if b is TJSONObject then cb := TJSONObject(b) else cb := nil;
     Result := TyRtResolve([ca, cb], AGlobal, TyRtResolveOpt(False));
+    { ([R7-AF] a written halo: the block draws it, the one run has none) }
+    if TyRtNodeWritesHalo(ca) or TyRtNodeWritesHalo(cb) then Result.Needed := True;
   finally
     a.Free;
     b.Free;
   end;
 end;
 
-{ The pen an `empty` icon is ringed with: the line's own width where it has
-  one, and 2 where it has not. The same fallback the datum mark builders
-  make, so a legend's marker and the markers on the line it stands for are
-  drawn with the same pen. }
+{ The pen an `empty` icon is ringed with: 2, whatever the rule's width --
+  getDefaultLegendIcon and LineSeries.getLegendIcon set `lineWidth = 2` on
+  an empty symbol after the legend style (a legend lineStyle.width of 5
+  thickens the rule and not the ring) [R7-T; was: the rule's width where
+  it had one]. }
 function RingPen(ALineWidthLogical: Double): Double;
 begin
-  Result := ALineWidthLogical;
-  if Result <= 0 then Result := 2;
+  Result := 2;
 end;
 
 { The icon's ink extent in a box at the origin, which is what the wrap
@@ -1885,19 +2297,27 @@ begin
       The rule spans the whole box at its middle; the marker is 80% of the
       box's HEIGHT and centred, so the 25 x 14 really is a padded slot here
       and not the edge-to-edge fill every other icon makes of it. }
-    Result := TyInvalidRectF;
     if ARulePx > 0 then
     begin
       grow := StrokeGrow(ARulePx);
       Result := TyRectF(-grow, AIconH / 2 - grow, AIconW + grow,
                         AIconH / 2 + grow);
-    end;
+    end
+    else
+      { [R7-T] A RULE THAT STROKES NOTHING IS STILL IN THE GROUP: its path's
+        rect, the box's width at its middle and no height [was: none] }
+      Result := TyRectF(0, AIconH / 2, AIconW, AIconH / 2);
     size := AIconH * cOwnIconMarker;
     if kind <> tsyNone then
     begin
       grow := 0;
-      if empty or (kind = tsyLine) then
-        grow := StrokeGrow(APenPx);
+      { [R7-T] the marker wears the item's style: a ring's 2, else the
+        item's pen where it strokes [was: a bare line ringed, a filled
+        marker never stroked] }
+      if empty then
+        grow := StrokeGrow(APenPx)
+      else if AStrokePx > 0 then
+        grow := StrokeGrow(AStrokePx);
       r := TyRectF((AIconW - size) / 2 - grow, (AIconH - size) / 2 - grow,
                    (AIconW + size) / 2 + grow, (AIconH + size) / 2 + grow);
       { [R5-F] the marker turned about the box's centre }
@@ -1924,12 +2344,14 @@ begin
   { A filled icon carries no pen at all -- `itemStyle.borderWidth: 'auto'`
     resolves to 0 unless the series itself has a border -- so only the ring and
     the bare rule reach past their geometry. }
-  if empty or (kind = tsyLine) then
+  if empty then
   begin
     grow := StrokeGrow(APenPx);
     Result := TyRectF(Result.Left - grow, Result.Top - grow,
                       Result.Right + grow, Result.Bottom + grow);
   end
+  { [R7-T] a bare `line` icon is stroked by the item's pen, as a filled one
+    is -- none where the series has no border [was: ringed at 2] }
   else if AStrokePx > 0 then
   begin
     { [Batch 93] A SERIES WITH A BORDER gives its icon a pen, and the icon
@@ -2031,6 +2453,14 @@ begin
   for i := 0 to 3 do APad[i] := ASpec.Padding[i] * scale;
 end;
 
+{ [R7-AG] the box's px (left, top, right, bottom, width, height) are css
+  px: PPI / 96 device px each [was: device px] }
+function BoxAt(const ASpec: TTyLegendSpec; APPI: Integer): TTyRawBox;
+begin
+  if (APPI > 0) and (APPI <> 96) then Result := TyBoxRawScaled(ASpec.Box, APPI / 96)
+  else Result := ASpec.Box;
+end;
+
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
 begin
@@ -2044,6 +2474,52 @@ begin
   Result := TyLegendPlaceRect(ASpec, TyXYWHOfRect(AContainer), AMainW, AMainH, APPI);
 end;
 
+{ [R7-AI] getLayoutRect with a padding held as JS values, in css px (ABox
+  unscaled): the place joined ('20' + '2' is '202'), the margins' sums
+  joined; back in device px. The traps masked. }
+function LegendRectJs(const ASpec: TTyLegendSpec; const AContainer: TTyXYWH;
+  const ABox: TTyRawBox; APPI: Integer): TTyXYWH;
+var
+  s: Double;
+  xv, yv: TTyRtJs;
+  mask: TFPUExceptionMask;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    Result := TyGetLayoutRectJs(ABox, AContainer.X / s, AContainer.Y / s,
+      AContainer.W / s, AContainer.H / s, ASpec.PadJs, xv, yv);
+    Result.X := Result.X * s;
+    Result.Y := Result.Y * s;
+    Result.W := Result.W * s;
+    Result.H := Result.H * s;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ [R7-AI] makeBackground's `rect.width + padding[1] + padding[3]` (and the
+  height's), joined where a side is a string, device px }
+function LegendFrameSize(const ASpec: TTyLegendSpec; AW: Double; A, B, APPI: Integer): Double;
+var s: Double;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  Result := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(AW / s), TyJsPadV(ASpec.PadJs, A)),
+    TyJsPadV(ASpec.PadJs, B)).N * s;
+end;
+
+{ [R7-AK] the same as the string zrender holds ('' where it is a number) }
+function LegendFrameText(const ASpec: TTyLegendSpec; AW: Double; A, B, APPI: Integer): string;
+var s: Double; v: TTyRtJs;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  v := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(AW / s), TyJsPadV(ASpec.PadJs, A)),
+    TyJsPadV(ASpec.PadJs, B));
+  if v.IsStr then Result := v.S else Result := '';
+end;
+
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyXYWH; APPI: Integer): TTyXYWH;
 var pad: array[0..3] of Double;
@@ -2052,7 +2528,8 @@ begin
     with no size given, so `bottom: 'bottom'` on a vertical legend leaves the
     height the switch computes from a not-a-number -- not the full height. }
   PadOf(ASpec, APPI, pad);
-  Result := TyGetLayoutRect(ASpec.Box, AContainer.X, AContainer.Y,
+  if ASpec.PadJs.Js then Exit(LegendRectJs(ASpec, AContainer, ASpec.Box, APPI));
+  Result := TyGetLayoutRect(BoxAt(ASpec, APPI), AContainer.X, AContainer.Y,
     AContainer.W, AContainer.H, pad);
 end;
 
@@ -2066,7 +2543,22 @@ begin
   { defaults({width, height}, params): the measured pair never goes missing,
     so it wins over anything written. }
   PadOf(ASpec, APPI, pad);
-  box := ASpec.Box;
+  if ASpec.PadJs.Js then
+  begin
+    box := ASpec.Box;
+    if APPI > 0 then
+    begin
+      box.Width := TyBoxRawNum(AMainW / (APPI / 96));
+      box.Height := TyBoxRawNum(AMainH / (APPI / 96));
+    end
+    else
+    begin
+      box.Width := TyBoxRawNum(AMainW);
+      box.Height := TyBoxRawNum(AMainH);
+    end;
+    Exit(LegendRectJs(ASpec, AContainer, box, APPI));
+  end;
+  box := BoxAt(ASpec, APPI);
   box.Width := TyBoxRawNum(AMainW);
   box.Height := TyBoxRawNum(AMainH);
   Result := TyGetLayoutRect(box, AContainer.X, AContainer.Y,
@@ -2566,6 +3058,19 @@ begin
   R.IsScroll := ASpec.IsScroll;
   R.ShowController := show;
   Compose(R.GroupX, R.GroupY, 0, 0, gAx, gAy);
+  { [R7-AK] a place that is no number (a padding side undefined): where
+    the group has a transform (Compose: NaN through it), refused -- laid
+    out at device 0; else none (Compose: at 0 already) }
+  if IsNan(R.GroupX) or IsNan(R.GroupY) or IsInfinite(R.GroupX) or IsInfinite(R.GroupY) then
+  begin
+    R.Unplaced := True;
+    R.UnplacedT := IsNan(gAx) or IsNan(gAy) or IsInfinite(gAx) or IsInfinite(gAy);
+    if R.UnplacedT then
+    begin
+      gAx := 0;
+      gAy := 0;
+    end;
+  end;
 
   { the items, under the container and the content }
   R.ContentPosX := finalPos[0];
@@ -2626,7 +3131,20 @@ begin
   { makeBackground(mainRect): the padding around it, group-local }
   b := TyXYWH(mainR.X - APad[3], mainR.Y - APad[0],
     mainR.W + APad[1] + APad[3], mainR.H + APad[0] + APad[2]);
+  { ([R7-AI] the size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    b.W := LegendFrameSize(ASpec, mainR.W, 1, 3, APPI);
+    b.H := LegendFrameSize(ASpec, mainR.H, 0, 2, APPI);
+    { ([R7-AK] and the strings, for a path of corners) }
+    R.FrameWText := LegendFrameText(ASpec, mainR.W, 1, 3, APPI);
+    R.FrameHText := LegendFrameText(ASpec, mainR.H, 0, 2, APPI);
+  end;
   R.Frame := TyRectF(gAx + b.X, gAy + b.Y, gAx + b.X + b.W, gAy + b.Y + b.H);
+  R.FrameLX := b.X / AScale;
+  R.FrameLY := b.Y / AScale;
+  R.FrameOX := gAx;
+  R.FrameOY := gAy;
   R.Content := TyRectF(gAx + mainR.X, gAy + mainR.Y, gAx + mainR.X + mainR.W,
     gAy + mainR.Y + mainR.H);
   R.Valid := True;
@@ -2681,14 +3199,36 @@ var
   textX, ox, oy, mainW, mainH: Double;
   drawn: Integer;
   boxM: ITyTextBoxMeasurer;
+  hungM: ITyTextHungBoxMeasurer;
   { [R5-F] the turn wanted, the icon word, the item's measurer }
   rotWant: Double;
   iconWord: string;
   itemM: ITyTextMeasurer;
   tb: TTyRectF;
+  { [R7-AK] the traps' mask }
+  mask: TFPUExceptionMask;
 begin
   Result := Default(TTyLegendLayout);
   if not ASpec.Show then Exit;
+  { [R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
+    the group draws under the transform the canvas kept -- ([R7-AK] laid
+    out with the traps masked: the wrap room and the place NaN [was:
+    nothing laid out]) }
+  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) and not GLegendMasked then
+  begin
+    mask := GetExceptionMask;
+    SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+    GLegendMasked := True;
+    try
+      Result := TyLayoutLegend(ASpec, AEntries, AFlags, ASources, AContainer, AMeasurer,
+        AFont, APPI, ADeco);
+    finally
+      GLegendMasked := False;
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+    Exit;
+  end;
   if AMeasurer = nil then Exit;
   { a container of no place is at the canvas' edge (getLayoutRect's
     `containerRect.x || 0`); one of no size is nothing [Batch 151] }
@@ -2772,6 +3312,15 @@ begin
       it is the one rule here that needs to know whether the SERIES draws a
       line, and this unit does not. Zero means no rule. }
     it.LineWidthLogical := src.LineWidthLogical;
+    { [R7-T] THE RULE'S PEN IN THIS STATE: none where its colour strokes
+      nothing; unselected, lineStyle.inactiveWidth -- the width it is
+      measured and drawn at }
+    if src.LineNone then it.LineWidthLogical := 0;
+    if (not it.Selected) and src.HasRuleInactiveWidth then
+      it.LineWidthLogical := Max(Double(0), src.RuleInactiveWidth);
+    it.LineGrad := src.LineGrad;
+    it.RuleKeys := src.RuleKeys;
+    it.MarkKeys := src.MarkKeys;
     { THE ICON'S PEN [Batch 93]: `borderWidth: 'auto'` is 2 for a series
       with a border; unselected, inactiveBorderWidth 'auto' asks for the
       series' stroke too, and any other value keeps the selected width }
@@ -2820,16 +3369,48 @@ begin
       it.HasStroke := True;
       it.Stroke := it.Own.Border;
     end;
-    if it.Selected and not IsNan(it.Own.BorderWidth) then
-      it.IconPen := Max(Double(0), it.Own.BorderWidth);
+    { [R7-T] borderColor 'auto': the style visual's fill }
+    if it.Own.BorderAuto then
+    begin
+      it.HasStroke := True;
+      it.Stroke := src.Colour;
+      if src.Obj.Present and (src.Obj.Gradient.Kind <> cgkNone) then it.StrokeObj := src.Obj
+      else it.StrokeObj := Default(TTyChartObjFill);
+    end;
+    { the width the style resolved -- a number written, or 'inherit' the
+      visual's -- which an unselected icon keeps unless inactiveBorderWidth
+      is 'auto' [R7-T; was: selected only, and no 'inherit'] }
+    if it.Selected or not ASpec.InactiveBorderAuto then
+    begin
+      if not IsNan(it.Own.BorderWidth) then
+        it.IconPen := Max(Double(0), it.Own.BorderWidth)
+      else if it.Own.BorderWidthInherit then
+        it.IconPen := Max(Double(0), src.VisualLineWidth);
+    end
+    { unselected under 'auto': 2 where the series has a width and the
+      resolved style a stroke (the legend's own borderColor included) [R7-T] }
+    else if (src.VisualLineWidth > 0) and it.HasStroke then it.IconPen := 2
+    else it.IconPen := 0;
     if not IsNan(it.Own.Opacity) then
     begin
       it.HasOpacity := True;
       it.Opacity := it.Own.Opacity;
     end;
-    if it.Own.HasLineColour then it.LineColour := it.Own.LineColour;
-    if not IsNan(it.Own.LineWidth) and (it.LineWidthLogical > 0) then
-      it.LineWidthLogical := Max(Double(0), it.Own.LineWidth);
+    { [R7-T] the opacity getLegendStyle resolved -- the item's, the
+      legend's, or the series' style visual's under 'inherit' }
+    if src.MarkKeys.Resolved then
+    begin
+      it.HasOpacity := src.MarkKeys.HasOpacity;
+      it.Opacity := src.MarkKeys.Opacity;
+    end;
+    { the rule's colour and width the item's over the legend's -- where the
+      control did not resolve the whole lineStyle [R7-T] }
+    if not src.RuleKeys.Resolved then
+    begin
+      if it.Own.HasLineColour then it.LineColour := it.Own.LineColour;
+      if not IsNan(it.Own.LineWidth) and (it.LineWidthLogical > 0) then
+        it.LineWidthLogical := Max(Double(0), it.Own.LineWidth);
+    end;
     it.FontName := AFont.Name;
     it.FontSizeLogical := AFont.SizeLogical;
     it.FontWeight := AFont.Weight;
@@ -2880,7 +3461,17 @@ begin
     { A BLOCK'S BOX WHERE IT SITS: a bordered token overhangs the anchor by
       half its stroke, and the overhang on the icon's side is inside the
       item's group already (LegendView.ts _createItem: the group's bounds) }
-    if Supports(itemM, ITyTextBoxMeasurer, boxM) then
+    { [R7-L] LegendView's x: textX, y: itemHeight / 2, CSS px }
+    it.HangX := textX / scale;
+    it.HangY := (ih / 2) / scale;
+    if Supports(itemM, ITyTextHungBoxMeasurer, hungM) then
+    begin
+      tb := hungM.MeasureBoxHung(it.Text, it.FontName, it.FontSizeLogical,
+        it.FontWeight, it.AnchorH, tavMiddle, it.HangX, it.HangY);
+      textR := TyRectF(textX + tb.Left, ih / 2 + tb.Top, textX + tb.Right,
+        ih / 2 + tb.Bottom);
+    end
+    else if Supports(itemM, ITyTextBoxMeasurer, boxM) then
     begin
       tb := boxM.MeasureBox(it.Text, it.FontName, it.FontSizeLogical, it.FontWeight,
         it.AnchorH, tavMiddle);
@@ -2958,6 +3549,18 @@ begin
     corner, whatever negative overhang the items have. }
   ox := layoutBox.X - content.Left;
   oy := layoutBox.Y - content.Top;
+  { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined): the group
+    at device 0, its transform refused where it has one (needLocalTransform:
+    a coordinate not around nought, NaN around it) }
+  if IsNan(ox) or IsNan(oy) or IsInfinite(ox) or IsInfinite(oy) then
+  begin
+    Result.Unplaced := True;
+    Result.UnplacedT := (not IsNan(layoutBox.X) and (Abs(layoutBox.X / scale) > 5e-5))
+      or (not IsNan(layoutBox.Y) and (Abs(layoutBox.Y / scale) > 5e-5));
+    { (the content group at `-contentRect.x` in it) }
+    ox := -content.Left;
+    oy := -content.Top;
+  end;
 
   for i := 0 to n - 1 do
   begin
@@ -2979,7 +3582,65 @@ begin
                           Result.Content.Top - pad[0],
                           Result.Content.Right + pad[1],
                           Result.Content.Bottom + pad[2]);
+  { ([R7-AI] makeBackground's size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    Result.Frame.Right := Result.Frame.Left + LegendFrameSize(ASpec, mainW, 1, 3, APPI);
+    Result.Frame.Bottom := Result.Frame.Top + LegendFrameSize(ASpec, mainH, 0, 2, APPI);
+    { ([R7-AK] and the strings, for a path of corners) }
+    Result.FrameWText := LegendFrameText(ASpec, mainW, 1, 3, APPI);
+    Result.FrameHText := LegendFrameText(ASpec, mainH, 0, 2, APPI);
+  end;
+  { ([R7-AK] in the group's frame: layoutInner puts the content group at
+    `-contentRect.x`, so the group is at the place solved and the main rect
+    at its origin) }
+  Result.FrameLX := (Result.Frame.Left - layoutBox.X) / scale;
+  Result.FrameLY := (Result.Frame.Top - layoutBox.Y) / scale;
+  Result.FrameOX := layoutBox.X;
+  Result.FrameOY := layoutBox.Y;
   Result.Valid := True;
+end;
+
+procedure TyLegendLayoutShift(var ALayout: TTyLegendLayout; ADX, ADY: Double);
+
+  procedure R(var A: TTyRectF);
+  begin
+    A := TyRectF(A.Left + ADX, A.Top + ADY, A.Right + ADX, A.Bottom + ADY);
+  end;
+
+  procedure Part(var A: TTyLegendPagerPart);
+  begin
+    A.X := A.X + ADX;
+    A.Y := A.Y + ADY;
+    R(A.Box);
+  end;
+
+var k: Integer;
+begin
+  if (ADX = 0) and (ADY = 0) then Exit;
+  ALayout.Items := Copy(ALayout.Items, 0, Length(ALayout.Items));
+  for k := 0 to High(ALayout.Items) do
+  begin
+    R(ALayout.Items[k].IconBox);
+    R(ALayout.Items[k].Bounds);
+    ALayout.Items[k].TextX := ALayout.Items[k].TextX + ADX;
+    ALayout.Items[k].TextY := ALayout.Items[k].TextY + ADY;
+  end;
+  ALayout.Selector := Copy(ALayout.Selector, 0, Length(ALayout.Selector));
+  for k := 0 to High(ALayout.Selector) do
+  begin
+    ALayout.Selector[k].X := ALayout.Selector[k].X + ADX;
+    ALayout.Selector[k].Y := ALayout.Selector[k].Y + ADY;
+    R(ALayout.Selector[k].Box);
+  end;
+  Part(ALayout.PagePrev);
+  Part(ALayout.PageNext);
+  Part(ALayout.PageTextPart);
+  R(ALayout.Clip);
+  R(ALayout.Content);
+  R(ALayout.Frame);
+  ALayout.FrameOX := ALayout.FrameOX + ADX;
+  ALayout.FrameOY := ALayout.FrameOY + ADY;
 end;
 
 { ==================== the marks ==================== }
@@ -3006,6 +3667,14 @@ var
   pts: array[0..1] of TTyPointF;
   size, pen: Double;
   colour: TTyChartColor;
+  { [R7-AA] the box's stroke colour, handed by the first hit rect }
+  handBorder: Boolean;
+  borderInk: TTyChartColor;
+  { [R7-AK] the frame each element added is in (device px): its group's
+    origin, an item's, a button's, a pager part's }
+  curOX, curOY: Double;
+  ownX, ownY: array of Double;
+  q, k0: Integer;
 
   function Blank: TTyChartElement;
   begin
@@ -3014,6 +3683,18 @@ var
     Result.Silent := True;
     Result.Datum := TyChartNoDatum;
     Result.Style.Alpha := 1;
+  end;
+
+  { [R7-AK] an element added, and the frame it is in }
+  procedure Put(const AEl: TTyChartElement);
+  begin
+    AList.Add(AEl);
+    Inc(Result);
+    if not ALayout.Unplaced then Exit;
+    SetLength(ownX, Length(ownX) + 1);
+    SetLength(ownY, Length(ownY) + 1);
+    ownX[High(ownX)] := curOX;
+    ownY[High(ownY)] := curOY;
   end;
 
   { [Batch 98] an item's element under the scroll legend's clip }
@@ -3028,6 +3709,8 @@ var
   procedure DrawPagerIcon(const APart: TTyLegendPagerPart; ACanJump: Boolean;
     AWhich: Integer);
   begin
+    curOX := APart.X;
+    curOY := APart.Y;
     if APart.IsImage then
     begin
       { [F6a] the picture over the whole box, whether it can jump or not
@@ -3038,8 +3721,7 @@ var
         TyPointF(APart.Box.Right, APart.Box.Bottom),
         TyPointF(APart.Box.Left, APart.Box.Bottom)]);
       el.Shape.Image := APart.ImageSrc;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end
     else if Length(APart.Path) = 0 then
     begin
@@ -3056,8 +3738,7 @@ var
       el.Style.HasFill := True;
       if ACanJump then el.Style.FillColor := AInk.PageIcon
       else el.Style.FillColor := AInk.PageIconInactive;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
     { rectHover: the icon's box is its target, and it is clickable whether
       or not it can jump -- a click that cannot does nothing }
@@ -3070,8 +3751,7 @@ var
       { [F6a] `icon.cursor = canJump ? 'pointer' : 'default'`
         (ScrollableLegendView._updatePageInfoView) }
       if not ACanJump then el.Cursor := 'default';
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
   end;
 
@@ -3101,19 +3781,41 @@ var
     { [R5-F] a path kept to its aspect in the real box (getDefaultLegendIcon's
       createSymbol) [was: stretched over it] }
     Result.Shape := TyBuildSymbolInRealBox(sp, ABox);
-    if AEmpty or (AKind = tsyLine) then
+    if AEmpty then
     begin
       Result.Style.StrokeColor := colour;
+      { [R7-T] the ring is the style's fill moved to the stroke: a gradient
+        colour rings it with the gradient [was: its solid] }
+      if it.Selected and it.Obj.Present and (it.Obj.Gradient.Kind <> cgkNone) then
+        Result.Style.StrokeGradient := it.Obj.Gradient;
       Result.Style.StrokeWidthLogical := RingPen(it.LineWidthLogical);
-      if AKind <> tsyLine then
+      Result.Style.HasFill := True;
+      Result.Style.FillColor := AInk.EmptyFill;
+      { an empty icon keeps the decal over its white: the icon's style is
+        the legend style's, decal and all, before the fill is swapped
+        (getDefaultLegendIcon, LineSeries.getLegendIcon) [F4a] }
+      Result.Style.Decal := it.Decal;
+      { [R7-T] and the rest of the legend style's pen, dashed at the 2 }
+      TyLegendPenApply(it.MarkKeys, Result.Style.StrokeWidthLogical, Result.Style);
+    end
+    else if AKind = tsyLine then
+    begin
+      { [R7-T] A BARE `line` ICON: createSymbol strokes it in the colour and
+        setStyle(itemStyle) puts the item's stroke over that -- the series'
+        border while selected, inactiveBorderColor while not, at the item's
+        pen (none where the series has no border); its fill has no area
+        [was: stroked in the colour at the ring's 2] }
+      if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then
       begin
-        Result.Style.HasFill := True;
-        Result.Style.FillColor := AInk.EmptyFill;
-        { an empty icon keeps the decal over its white: the icon's style is
-          the legend style's, decal and all, before the fill is swapped
-          (getDefaultLegendIcon, LineSeries.getLegendIcon) [F4a] }
-        Result.Style.Decal := it.Decal;
+        if it.Selected then Result.Style.StrokeColor := it.Stroke
+        else if it.Own.HasInactiveBorderColour then
+          Result.Style.StrokeColor := it.Own.InactiveBorderColour
+        else Result.Style.StrokeColor := AInk.InactiveBorder;
+        if it.Selected and it.StrokeObj.Present then
+          Result.Style.StrokeGradient := it.StrokeObj.Gradient;
+        Result.Style.StrokeWidthLogical := it.IconPen;
       end;
+      TyLegendPenApply(it.MarkKeys, Result.Style.StrokeWidthLogical, Result.Style);
     end
     else
     begin
@@ -3140,6 +3842,8 @@ var
           Result.Style.StrokeGradient := it.StrokeObj.Gradient;
         Result.Style.StrokeWidthLogical := it.IconPen;
       end;
+      { [R7-T] the legend style's opacity, dash, cap, join, miter, shadow }
+      TyLegendPenApply(it.MarkKeys, Result.Style.StrokeWidthLogical, Result.Style);
     end;
   end;
 
@@ -3148,33 +3852,61 @@ begin
   if AList = nil then Exit;
   if not ALayout.Valid then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
+  ownX := nil;
+  ownY := nil;
+  curOX := 0;
+  curOY := 0;
+  k0 := AList.Count;
 
   { The frame first and UNDER everything, and only when the option asked for
     one: upstream gives a legend a transparent background and a zero border, so
     painting a plate behind every legend would put a visible box on every
     chart in the gallery. }
-  if ASpec.HasBackground or (ASpec.BorderWidth > 0) then
+  { [R7-AA] makeBackground's Rect is always there upstream: where it paints
+    nothing (no backgroundColor, a border of no width) the port builds none,
+    and the first item's hit rect -- the next element, filled 'transparent'
+    as the box is -- hands the canvas the box's stroke colour instead
+    (handBorder) [was: never handed] }
+  handBorder := not (ASpec.HasBackground or (ASpec.BorderWidth > 0) or ASpec.BorderWidthInf);
+  if ASpec.HasBorderColour then borderInk := ASpec.BorderColour else borderInk := AInk.Border;
+  if ASpec.HasBackground or (ASpec.BorderWidth > 0) or ASpec.BorderWidthInf then
   begin
     el := Blank;
     el.Z2 := -1;
+    { ([R7-AK] a path of corners on its joined edges where the size is a
+      string [was: the rounded rect of its numbers]) }
+    { ([R7-AK] at NaN: nothing) }
+    if ALayout.Unplaced then el.Shape := TyShapePolygon([])
+    else if ASpec.BorderRounded and ((ALayout.FrameWText <> '') or (ALayout.FrameHText <> '')) then
+      el.Shape := TyJsRoundFrameShape(ALayout.FrameLX, ALayout.FrameLY,
+        TyRectFWidth(ALayout.Frame) / scale, TyRectFHeight(ALayout.Frame) / scale,
+        ALayout.FrameWText, ALayout.FrameHText, ASpec.BorderRadii, ALayout.FrameOX,
+        ALayout.FrameOY, scale)
+    else
     el.Shape := TyShapeRoundRect(ALayout.Frame,
-      ASpec.BorderRadii[0] * scale);
+      [ASpec.BorderRadii[0] * scale, ASpec.BorderRadii[1] * scale,
+       ASpec.BorderRadii[2] * scale, ASpec.BorderRadii[3] * scale]);
     el.Style.HasFill := ASpec.HasBackground;
-    el.Style.FillColor := AInk.Background;
-    if ASpec.BorderWidth > 0 then
-    begin
-      el.Style.StrokeWidthLogical := ASpec.BorderWidth;
-      el.Style.StrokeColor := AInk.Border;
-    end;
+    if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
+    else el.Style.FillColor := AInk.Background;
+    { (the stroke colour handed at a width of nought too) }
+    el.Style.StrokeColor := borderInk;
+    if ASpec.BorderWidth > 0 then el.Style.StrokeWidthLogical := ASpec.BorderWidth;
+    { ([R7-AF] 'Infinity': the width the canvas had [was: not stroked]) }
+    if ASpec.BorderWidthInf then el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
-    AList.Add(el);
-    Inc(Result);
+    { [R7-X] its dash, phase, cap, join and miterLimit }
+    TyStyleTakeBorderKeys(el.Style, ASpec.Look);
+    Put(el);
   end;
 
   for i := 0 to High(ALayout.Items) do
   begin
     it := ALayout.Items[i];
     if not TyRectFIsValid(it.Bounds) then Continue;
+    { ([R7-AK] its group's frame: the item at the icon box's corner) }
+    curOX := it.IconBox.Left;
+    curOY := it.IconBox.Top;
     { THE ITEM'S ONE HIT TARGET: an unpainted rect over its bounds, under
       which the icon and the words stay silent -- upstream's legend item is a
       single target too, so moving from its icon to its words is no
@@ -3190,14 +3922,24 @@ begin
     begin
       el := Blank;
       el.Shape := TyShapeRect(hit);
+      { [R7-W] filled 'transparent' (LegendView's hitRect): it hands the
+        canvas that fill }
+      el.Style.HasFill := True;
+      el.Style.FillColor := 0;
+      { [R7-AA] the first one: the box's stroke colour, where the port built
+        no box (handBorder) -- it strokes nothing }
+      if handBorder then
+      begin
+        el.Style.StrokeColor := borderInk;
+        handBorder := False;
+      end;
       { `hitRect.silent = !selectMode` (LegendView.ts:506): selectedMode
         false takes the pointer away -- no hover link, no click, and no
         legend mouse event either, its children being silent already
         [Batch 93] }
       el.Silent := ASpec.SelectedMode = tlsOff;
       el.Datum := TyChartComponentDatum(ctkLegend, ALegendIndex, i);
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
 
     { DESELECTED IS ONE COLOUR FOR EVERYTHING -- icon, ring, rule and words.
@@ -3226,22 +3968,30 @@ begin
         el.Shape := TyShapePolyline(pts);
         el.Style.StrokeWidthLogical := pen;
         if it.Selected then
-          el.Style.StrokeColor := it.LineColour
+        begin
+          el.Style.StrokeColor := it.LineColour;
+          { [R7-T] a gradient lineStyle.color strokes the rule with it }
+          if it.LineGrad.Kind <> cgkNone then el.Style.StrokeGradient := it.LineGrad;
+        end
         else
         begin
           { `lineStyle.inactiveColor` / `inactiveWidth` [Batch 93], the
-            item's own over the legend's [R5-B] }
+            item's own over the legend's [R5-B]; the width the layout's
+            where the control resolved it [R7-T] }
           if it.Own.HasLineInactiveColour then
             el.Style.StrokeColor := it.Own.LineInactiveColour
           else
             el.Style.StrokeColor := AInk.LineInactive;
-          if not IsNan(it.Own.LineInactiveWidth) then
+          if it.RuleKeys.Resolved then
+          else if not IsNan(it.Own.LineInactiveWidth) then
             el.Style.StrokeWidthLogical := it.Own.LineInactiveWidth
           else if AInk.LineInactiveWidth > 0 then
             el.Style.StrokeWidthLogical := AInk.LineInactiveWidth;
         end;
-        AList.Add(el);
-        Inc(Result);
+        { [R7-T] THE REST OF lineStyle: opacity, dash (at the width it
+          strokes at), cap, join, miter limit, shadow [was: none of them] }
+        TyLegendPenApply(it.RuleKeys, el.Style.StrokeWidthLogical, el.Style);
+        Put(el);
       end;
       { The marker, four fifths of the box's height and centred in it. }
       size := TyRectFHeight(it.IconBox) * cOwnIconMarker;
@@ -3253,18 +4003,17 @@ begin
                   (it.IconBox.Left + it.IconBox.Right + size) / 2,
                   (it.IconBox.Top + it.IconBox.Bottom + size) / 2));
         Clipped(el);
-        AList.Add(el);
-        Inc(Result);
+        Put(el);
       end;
     end
     else if kind <> tsyNone then
     begin
       el := Icon(kind, empty, path, it.IconBox);
       Clipped(el);
+      { [R7-V] as written (the canvas clamps it) }
       if it.HasOpacity then
-        el.Style.Alpha := Min(Double(1), Max(Double(0), it.Opacity));
-      AList.Add(el);
-      Inc(Result);
+        el.Style.Alpha := it.Opacity;
+      Put(el);
     end;
 
     if it.Text <> '' then
@@ -3314,8 +4063,9 @@ begin
         rtb.Style.HasFill := True;
         rtb.Style.FillNone := False;
         rtb.Style.Fill := el.Caption.Colour;
-        pieces := TyRtLay(it.Text, rtb, TyRtDefaultOf(False, 0, False, 0, False,
-          it.AnchorH, tavMiddle), rtScale, AMeasurer);
+        { [R7-L] laid out where its style places it in the item }
+        pieces := TyRtLayHung(it.Text, rtb, TyRtDefaultOf(False, 0, False, 0, False,
+          it.AnchorH, tavMiddle), it.HangX, it.HangY, rtScale, AMeasurer);
         if Length(pieces) > 0 then
         begin
           el.Caption.RtPieces := pieces;
@@ -3324,8 +4074,7 @@ begin
             rtScale));
         end;
       end;
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
   end;
 
@@ -3334,14 +4083,15 @@ begin
     whole box as the target }
   for k := 0 to High(ALayout.Selector) do
   begin
+    curOX := ALayout.Selector[k].X;
+    curOY := ALayout.Selector[k].Y;
     if ALegendIndex >= 0 then
     begin
       el := Blank;
       el.Shape := TyShapeRect(ALayout.Selector[k].Box);
       el.Silent := False;
       el.Datum := TyChartComponentDatum(ctkLegendSelector, ALegendIndex, k);
-      AList.Add(el);
-      Inc(Result);
+      Put(el);
     end;
     if Length(ALayout.Selector[k].Pieces) = 0 then Continue;
     el := Blank;
@@ -3358,8 +4108,7 @@ begin
     if k = ASelHover then el.Caption.RtPieces := ALayout.Selector[k].EmphPieces
     else el.Caption.RtPieces := ALayout.Selector[k].Pieces;
     if APPI > 0 then el.Caption.RtScale := APPI / 96 else el.Caption.RtScale := 1;
-    AList.Add(el);
-    Inc(Result);
+    Put(el);
   end;
 
   { [Batch 98] THE PAGER, only when the items overflow: hidden, it is a
@@ -3367,6 +4116,8 @@ begin
   if ALayout.IsScroll and ALayout.ShowController then
   begin
     DrawPagerIcon(ALayout.PagePrev, ALayout.PagePrevIndex >= 0, 0);
+    curOX := ALayout.PageTextPart.X;
+    curOY := ALayout.PageTextPart.Y;
     el := Blank;
     el.Shape := TyShapeRect(ALayout.PageTextPart.Box);
     el.Caption.Text := ALayout.PageText;
@@ -3378,10 +4129,15 @@ begin
     el.Caption.Y := ALayout.PageTextPart.Y;
     el.Caption.AnchorH := tahCentre;
     el.Caption.AnchorV := tavMiddle;
-    AList.Add(el);
-    Inc(Result);
+    Put(el);
     DrawPagerIcon(ALayout.PageNext, ALayout.PageNextIndex >= 0, 1);
   end;
+  { [R7-AK] A GROUP WHOSE TRANSFORM THE CANVAS REFUSES: each element in the
+    frame it is in, under the transform the canvas had (the canvas' own
+    origin set by the control) }
+  if ALayout.Unplaced and ALayout.UnplacedT then
+    for q := 0 to High(ownX) do
+      if k0 + q < AList.Count then
+        TyElementOwnFrame(AList.Ref(k0 + q)^, ownX[q], ownY[q], scale, TyPointF(0, 0));
 end;
-
 end.

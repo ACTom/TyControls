@@ -261,8 +261,25 @@ end;
   _showComponentItemTooltip -- the element's tooltip (a string a
   formatter), the graphic component's, a level whose formatter is the
   content, the global component. A label is its host's. }
+{ [R7-AF] a graphic element of the tree by its id (nil none) }
+function GfxElOfId(AEl: TTyGfxEl; const AId: string): TTyGfxEl;
+var j: Integer;
+begin
+  Result := nil;
+  if AEl = nil then Exit;
+  if (AEl.Id = AId) and (AEl.Parent <> nil) then Exit(AEl);
+  for j := 0 to High(AEl.Children) do
+  begin
+    Result := GfxElOfId(AEl.Children[j], AId);
+    if Result <> nil then Exit;
+  end;
+end;
+
 function TTyCustomAdvanceChart.IsGfxTipDatum(const ADatum: TTyChartDatumRef): Boolean;
 begin
+  { ([R7-AF] a group a showTip found: by its id) }
+  if (ADatum.Kind = ctkGraphic) and (FGfxView <> nil) and (ADatum.DataIndex = cGfxTipGroup) then
+    Exit(GfxElOfId(FGfxView.Root, FGfxTipGroupId) <> nil);
   Result := (ADatum.Kind = ctkGraphic) and (FGfxView <> nil) and (ADatum.DataIndex >= 0)
     and (ADatum.DataIndex <= High(FGfxPaintEl)) and (FGfxPaintEl[ADatum.DataIndex] <> nil);
 end;
@@ -271,6 +288,7 @@ function TTyCustomAdvanceChart.GfxTipEl(const ADatum: TTyChartDatumRef): TTyGfxE
 begin
   Result := nil;
   if not IsGfxTipDatum(ADatum) then Exit;
+  if ADatum.DataIndex = cGfxTipGroup then Exit(GfxElOfId(FGfxView.Root, FGfxTipGroupId));
   Result := FGfxPaintEl[ADatum.DataIndex];
   if Result.Host <> nil then Result := Result.Host;
 end;
@@ -318,22 +336,69 @@ begin
   Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(el.Name));
 end;
 
-procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter; APaint: Boolean);
 var
-  i: Integer;
+  i, n: Integer;
   el: TTyChartElement;
+  from: TTyIntegerArray;
 begin
   FGfxUnder.Clear;
+  from := nil;
   for i := 0 to High(FGfxPaint) do
-    if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+    if FGfxPaint[i].GfxUnder then
+    begin
+      FGfxUnder.Add(FGfxPaint[i]);
+      SetLength(from, Length(from) + 1);
+      from[High(from)] := i;
+    end;
   { [R5-G] THE GRIDS' BACKGROUNDS, in the same order: under the axes (their
     z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
     the grids' at an equal z and z2 }
   AddGridBackgrounds(FGfxUnder);
+  { [R7-AH] each its view's place, the order's key after z2 }
+  ViewsTag(FGfxUnder);
+  { [R7-Z] these and the axes' parts in upstream's paint order: what each
+    refuses settled, and the ground the list starts from }
+  if APainter <> nil then CompRun(APainter.PPI) else CompRun(FLastPPI);
+  { [R7-AA] what they settled, onto the elements the list copies (the list's
+    run passes them by: they are the ground's) }
+  n := Length(from);
+  if n > FGfxUnder.Count then n := FGfxUnder.Count;
+  for i := 0 to n - 1 do FGfxPaint[from[i]] := FGfxUnder.Element(i);
+  { [R7-AD] (drawn among the axes' parts: PaintAxes) }
+  if not APaint then Exit;
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
-    if not el.Ignore then TyRenderElement(APainter, el);
+    if el.Ignore then Continue;
+    TyRenderElement(APainter, el);
+    { [R7-Z] (CompDrawn) }
+    if el.Datum.Kind = ctkGraphic then
+      CompDrew(nil, 'graphic0', 0, el.Z2, el.Caption.FontSizeLogical <> 0, el);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
+var
+  i, cut: Integer;
+  pe: PTyChartElement;
+begin
+  if (FGfxUnder = nil) or (APainter = nil) then Exit;
+  { (asked after the series pass armed the animation) }
+  cut := ZCut;
+  for i := 0 to FGfxUnder.Count - 1 do
+  begin
+    pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(i));
+    if pe^.Ignore or (pe^.ZLevel <= ALo) or (pe^.ZLevel > AHi) then Continue;
+    { from the trail's level on the frames' (PaintZLevelsCut): on a trail's
+      level its layer's, painted every frame (AnimPartOf) -- the cut is the
+      lowest trail's level, so every trail's level is past it }
+    if pe^.ZLevel >= cut then Continue;
+    { (after a full paint's first blit: what its log cannot say) }
+    if FProgLogOn then FProgLogBad := True;
+    TyRenderElement(APainter, pe^);
+    if pe^.Datum.Kind = ctkGraphic then
+      CompDrew(nil, 'graphic0', 0, pe^.Z2, pe^.Caption.FontSizeLogical <> 0, pe^);
   end;
 end;
 
@@ -627,6 +692,9 @@ begin
       pe.Shape := drawn.Shape;
       pe.Style := drawn.Style;
       pe.Style.Decal := decal;
+      { [R7-S] and the pointer's frame with them (a morph took it off) }
+      pe.ZrHit := drawn.ZrHit;
+      pe.HitMinScale := drawn.HitMinScale;
     end;
     place := pe.Anim.Sub;
     { (CustomUtPath writes a transform only where there is one) }
@@ -1967,108 +2035,9 @@ begin
   Result := TJSONString.Create(TyCustomColorText(Cardinal(SeriesColor(si))));
 end;
 
-procedure TTyCustomAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
-var
-  node, enc: TJSONObject;
-  d, names: TJSONData;
-  outDims: TTySeriesDimArray;
-  dim: TTySeriesDim;
-  i, k, n: Integer;
-  pos: TTyIntegerArray;
-  spread: Boolean;
-
-  function PosOf(A: TJSONData): Integer;
-  var q: Integer; e: TJSONData; nm: string;
-  begin
-    Result := -1;
-    if A = nil then Exit;
-    if A.JSONType = jtNumber then Exit(Trunc(A.AsFloat));
-    if (A.JSONType <> jtString) or not (names is TJSONArray) then Exit;
-    for q := 0 to names.Count - 1 do
-    begin
-      e := TJSONArray(names).Items[q];
-      if e.JSONType = jtString then nm := e.AsString
-      else if (e is TJSONObject) and (TJSONObject(e).Find('name') <> nil) then
-        nm := CuText(TJSONObject(e).Find('name'))
-      else nm := '';
-      if nm = A.AsString then Exit(q);
-    end;
-  end;
-
-  procedure Positions(A: TJSONData);
-  var q, p: Integer;
-  begin
-    pos := nil;
-    if A = nil then Exit;
-    if A is TJSONArray then
-    begin
-      for q := 0 to A.Count - 1 do
-      begin
-        p := PosOf(A.Items[q]);
-        if p < 0 then Continue;
-        SetLength(pos, Length(pos) + 1);
-        pos[High(pos)] := p;
-      end;
-    end
-    else
-    begin
-      p := PosOf(A);
-      if p >= 0 then
-      begin
-        SetLength(pos, 1);
-        pos[0] := p;
-      end;
-    end;
-  end;
-
-begin
-  if FBindings[ASlot].SeriesType <> TyCustomSeriesType then Exit;
-  if FOption = nil then Exit;
-  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
-  if not (d is TJSONObject) then Exit;
-  node := TJSONObject(d);
-  enc := CuObj(node, 'encode');
-  if enc = nil then Exit;
-  names := node.Find('dimensions');
-  spread := False;
-  for i := 0 to High(ADims) do
-  begin
-    Positions(enc.Find(ADims[i].Name));
-    if Length(pos) > 1 then spread := True;
-  end;
-  if not spread then Exit;
-  { EVERY POSITION THE ENCODE NAMES IS A COLUMN, each feeding its
-    coordinate: both ends of a span size the axis and both are what a
-    dataZoom filters on }
-  outDims := nil;
-  n := 0;
-  for i := 0 to High(ADims) do
-  begin
-    Positions(enc.Find(ADims[i].Name));
-    if Length(pos) = 0 then
-    begin
-      SetLength(outDims, n + 1);
-      outDims[n] := ADims[i];
-      Inc(n);
-      Continue;
-    end;
-    for k := 0 to High(pos) do
-    begin
-      dim := ADims[i];
-      if k > 0 then dim.Name := ADims[i].Name + IntToStr(k);
-      dim.SourceSlot := pos[k] + 1;
-      dim.Coord := ADims[i].Name;
-      SetLength(outDims, n + 1);
-      outDims[n] := dim;
-      Inc(n);
-    end;
-  end;
-  ADims := outDims;
-end;
-
 procedure TTyCustomAdvanceChart.SolveCustom(APPI: Integer);
 var
-  i, si, n, p, c, k: Integer;
+  i, si, n, p, c, k, place: Integer;
   view: TTyCustomView;
   node: TJSONObject;
   d: TJSONData;
@@ -2330,7 +2299,12 @@ begin
         names[1] := 'y';
       end;
     end;
-    { wrapEncodeDef: every coordinate column's data dimension, by position }
+    { wrapEncodeDef: each coordinate's data dimensions at their places --
+      the column's own at 0, a list's later entries at theirs, a place no
+      dimension reached a gap (null) -- the coordinates in the order of
+      their first dimension
+      [spec 259: was every column of the coordinate by position, the gaps
+      dropped] }
     FCustomParams.Encode := TJSONObject.Create;
     for p := 0 to Max(st.RawWidth, st.DimCount) - 1 do
       for c := 0 to st.DimCount - 1 do
@@ -2342,6 +2316,11 @@ begin
         for k := 0 to High(names) do
           if names[k] = coord then isCoord := True;
         if not isCoord then Continue;
+        { the place: a spread column's suffix, the coordinate's own 0 }
+        place := 0;
+        if TyIsSpreadDim(st.DimName(c)) then
+          place := StrToIntDef(Copy(st.DimName(c),
+            Length(TyEncodeSpreadPrefix) + Length(coord) + 2, MaxInt), 0);
         d := FCustomParams.Encode.Find(coord);
         if not (d is TJSONArray) then
         begin
@@ -2350,7 +2329,8 @@ begin
         end
         else
           arr := TJSONArray(d);
-        arr.Add(p);
+        while arr.Count <= place do arr.Add(TJSONNull.Create);
+        arr.Items[place] := TJSONIntegerNumber.Create(p);
       end;
     d := node.Find('itemPayload');
     if CuTruthy(d) and (d is TJSONObject) then
@@ -2586,10 +2566,13 @@ var
     begin
       pe.HasClip := True;
       pe.ClipRect := clip;
+      { [R7-I] CustomView's group clipPath: the hit too }
+      pe.ClipHits := True;
     end;
     { [spec 242] a polar's sector }
     if (ASlot <= High(FCustomClipSec)) and FCustomClipSec[ASlot].On then
     begin
+      pe.ClipHits := True;
       pe.HasClipSector := True;
       pe.ClipCX := FCustomClipSec[ASlot].CX;
       pe.ClipCY := FCustomClipSec[ASlot].CY;

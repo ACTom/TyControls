@@ -70,6 +70,16 @@ type
     { [R5-G] the colour as a gradient object (Colour its first stop) --
       cgkNone for a plain colour }
     Gradient: TTyChartGradient;
+    { [R7-Z] the width is +Infinity (the canvas keeps the one it had) }
+    WidthInf: Boolean;
+    { [R7-AA] getLineStyle's shadow, lineJoin and miterLimit: the shadow
+      key by key (ShadowKeys, TTyOptStyle's bits; Shadow holds the written
+      ones), Join -1 not written else TyJoinOfWord's (3 a word the canvas
+      refuses), Miter NaN or 0 not written else TyOptMiterLimit's }
+    ShadowKeys: Byte;
+    Shadow: TTyChartShadow;
+    Join: Integer;
+    Miter: Double;
   end;
 
   { the canvas' lineCap }
@@ -90,6 +100,26 @@ type
     { [R5-G] a gradient stroke (zrender's canvas gradient over the stroked
       element's getBoundingRect -- the stroke-grown rect) }
     Gradient: TTyChartGradient;
+    { [R7-Z] what the canvas refuses of it, and keeps its own value for:
+      cTyCanvasStrokeLeft (a colour no parser reads), cTyCanvasWidthLeft
+      (+Infinity), cTyCanvasPhaseLeftFlag (a phase that is no number),
+      cTyCanvasCapLeft (a word that is not a lineCap) -- settled in paint
+      order before the axis is drawn. [R7-AA] cTyCanvasShadowLeft (a
+      shadowColor no parser reads), cTyCanvasBlurLeft (a blur below
+      nought), cTyCanvasJoinLeft, cTyCanvasMiterLeft the same }
+    Left: Word;
+    { [R7-AA] ITS SHADOW, JOIN AND MITERLIMIT [was: never drawn nor handed
+      on]: HasShadow where the pen wrote a shadow key (the colour zrender's
+      '#000' where it wrote none), the join TyJoinOfWord's, the miterLimit
+      the canvas' (10 where none) }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+    Join: Byte;
+    Miter: Double;
+    { [R7-AA] a plain colour it hands the canvas as its strokeStyle -- also
+      at a width of nought, where it strokes nothing (zrender assigns every
+      string stroke, hasStroke or not) }
+    Inked: Boolean;
   end;
 
   { What an axis actually draws, once its TYPE's defaults and the `auto`
@@ -395,7 +425,10 @@ type
 { Never raises and never returns nil: an option that says nothing buildable
   produces an empty build with diagnostics, because a design-time editor renders
   every keystroke and half-typed text is the normal state. }
-function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
+{ [R7-AD] APPI: the box's pixel counts are css px, laid out at PPI / 96
+  device px each [was: as device px] }
+function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APPI: Integer = 96): TTyChartBuild;
 { GRID AGridIndex LAID OUT IN ARef [Batch 151] -- createBoxLayoutReference
   for a grid with `coordinateSystem: 'matrix' | 'calendar'` and `coord`:
   its box by getLayoutRect in the cell (x, y, width and height as upstream
@@ -427,16 +460,18 @@ procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   breaks whose breakArea is shown, the y axes (by index) before the x ones
   as upstream renders their views, each break's zigzag from the axis'
   cache and the chart's random numbers. }
+{ ([R7-AH] AScale: the device px a css px makes, PPI / 96) }
 procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  AMemory: TTyAxisMemoryStore);
+  AMemory: TTyAxisMemoryStore; AScale: Double = 1);
 { [F4a] one axis' break areas into ASpec, across ARect (a grid's plot, a
   singleAxis' rect): rectCoordBuildBreakAxis for any coordinate system }
 procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore;
+  AScale: Double = 1);
 { [F4a] buildAxisBreakLine into ASpec: the axis line cut at the breaks'
   clamped ends, the ends snapped for a line ALineWidthPx wide }
 procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  AOption: TTyChartOption; ALineWidthPx: Double);
+  AOption: TTyChartOption; ALineWidthPx: Double; AScale: Double = 1);
 
 { ---- the finishing touches [Batch 101] ---- }
 
@@ -524,6 +559,11 @@ function TyAxisRtPieces(const ASpec: TTyAxisLayoutSpec; const ABlock: TTyRtBlock
   that formatter with its FIRST '{value}' replaced. A time axis has its own. }
 function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
   AHasFormatter: Boolean; const AFormatter: string): string;
+{ ... and a handler formatter ('@name') too, handed the tick's value and
+  AIndex (a value axis' labelFormatter(tick, idx)) [R7-I: public, for a
+  radar's indicator labels] }
+function TyAxisTickLabelAt(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string; overload;
 
 { ---- reading series data ---- }
 type
@@ -541,6 +581,8 @@ type
       field would have every column of every store silently claiming to read
       element 0. The awkward numbering is what makes the default safe. }
     SourceSlot: Integer;
+    { (-1: no element at all -- an encode that names the coordinate but
+      reaches nothing for it [spec 255]) }
     { WHICH COORDINATE THIS COLUMN FEEDS, when that is not its own name --
       handed straight to TTyDataStore.SetDimCoord. Empty for every ordinary
       column, which is every column of every series that puts one number on
@@ -630,6 +672,51 @@ function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyFillStoreFromSource(const ASource: TTyChartSource;
   const AEncode: TTySeriesEncode; const ADims: TTySeriesDimArray;
   AStore: TTyDataStore): Integer;
+
+const
+  { [spec 255] the name an extra column of a coordinate's encode list goes
+    by in a store: never one a source can collide with }
+  TyEncodeSpreadPrefix = '__ty_spread_';
+
+{ [spec 255] Whether a store column is an extra entry of a coordinate's
+  encode list (TySpreadEncode). }
+function TyIsSpreadDim(const AName: string): Boolean;
+{ [spec 255] Each column's encode key and place: a column feeding another
+  coordinate (a candlestick's open ... highest on y, a custom series' second
+  x) answers to that coordinate's key, at its place among the columns that
+  do; any other to its own name. }
+procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+{ [spec 259] How many places of one encode key reach a dimension: one past
+  the last that does, its extra entries included -- the length of upstream's
+  mapDimensionsAll for that coordinate, a gap before the last one counted. }
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
+{ [spec 259] defaultedLabel over one coordinate's dimensions: the LAST, in
+  the table's order, of the dimensions coordinate ACoordIndex reaches (its
+  column and its list's extra entries) whose type a label suits -- neither
+  time nor a category, declared or guessed. -1 for none. A pie's or a
+  funnel's tooltip, a matrix series' label and tooltip. }
+function TyEncodeLastLabelDim(const AEnc: TTySeriesEncode; ACoordIndex: Integer;
+  const ASource: TTyChartSource): Integer;
+{ [spec 259] `encode.itemName` on a series' own data: the rows a name of
+  their own does not name are named by that element (SeriesData's
+  nameDimIdx), and any entry reaching an element takes the category's name
+  away (injectOrdinalMeta's hasNameEncode). }
+procedure TyOwnItemNames(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+{ [spec 255] A COORDINATE WRITTEN AS A LIST HOLDS EVERY DIMENSION IT REACHES:
+  each extra entry of AEnc becomes a column of its coordinate's kind and
+  category list, feeding that coordinate (SetDimCoord), read from its source
+  dimension -- appended to ADims, to AEnc.Columns and, when AStore is given,
+  to the store. }
+procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
+  AStore: TTyDataStore);
+{ [spec 255] What the encode decides about a store before it is filled:
+  which column names a row with no name (an itemName list takes the
+  category's away -- AFromSource only, a dataset's; the category column
+  first in the source names it, an extra one or not [spec 264]) and, when an extra column shares a category
+  list, the order a row's columns are parsed in -- the source's. }
+procedure TyEncodeStoreOrder(const AEnc: TTySeriesEncode;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore; AFromSource: Boolean);
 
 { Which component of a family this option node names.
 
@@ -1289,7 +1376,8 @@ begin
   Result := a;
 end;
 
-function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
+function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APPI: Integer): TTyChartBuild;
 var
   build: TTyChartBuild;
   gridCount, xCount, yCount, i, j, k, gi: Integer;
@@ -1385,6 +1473,8 @@ begin
     box := GridDefaultBox;
     box := TyMergeBoxLayout(node, box);
     TyBoxClimbRoot(box, AOption.Root);
+    { [R7-AD] css px at the PPI }
+    if APPI > 0 then box := TyBoxRawScaled(box, APPI / 96);
     build.FGrids[i].FOuterXYWH := TyGetLayoutRect(box, AViewport.Left,
       AViewport.Top, AViewport.Right - AViewport.Left,
       AViewport.Bottom - AViewport.Top, []);
@@ -1639,7 +1729,16 @@ begin
   { [R5-A] and its fontStyle, in the weight's style flags }
   AWeight := TyFontStyleOver(ANode.Find('fontStyle'), AWeight);
   d := ANode.Find('color');
-  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+  { [R7-Z] A COLOUR NO PARSER READS (not a callback) is written: the canvas
+    refuses it and fills with what it had (CompRun settles it)
+    [was: not written, the theme's] }
+  if (d <> nil) and (d.JSONType = jtString) and not TyColourIsHandler(d.AsString)
+    and (d.AsString <> '') and (d.AsString <> 'none') and not TyTryParseChartColor(d.AsString, c) then
+  begin
+    AHasColour := True;
+    AColour := cTyCanvasColourLeft;
+  end
+  else if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
   begin
     AHasColour := True;
     AColour := c;
@@ -1833,6 +1932,13 @@ end;
   upstream's `areaColors.length` reads before it wraps the string; a list is
   itself. An empty list, or a colour that is not a string or cannot be read,
   is an ink that draws nothing. Nothing written: empty. }
+{ [R7-Z] a string the canvas is handed and refuses (not empty, not
+  'none', not a callback) }
+function InkLeft(const S: string): Boolean;
+begin
+  Result := (S <> '') and (S <> 'none') and not TyColourIsHandler(S);
+end;
+
 procedure InksIn(ANode: TJSONObject; const AName, AStyle: string;
   out AInks: TTyAxisInkArray; out ACount: Integer);
 var
@@ -1850,6 +1956,13 @@ begin
     SetLength(AInks, 1);
     AInks[0].Ok := TyTryParseChartColor(d.AsString, c);
     AInks[0].Colour := c;
+    { [R7-Z] a colour no parser reads: drawn, in what the canvas had
+      (CompRun) [was: not drawn] }
+    if not AInks[0].Ok and InkLeft(d.AsString) then
+    begin
+      AInks[0].Ok := True;
+      AInks[0].Colour := cTyCanvasColourLeft;
+    end;
     ACount := Length(UTF8Decode(d.AsString));
   end
   else if d is TJSONArray then
@@ -1868,6 +1981,12 @@ begin
       begin
         AInks[k].Ok := True;
         AInks[k].Colour := TyGradientSolid(AInks[k].Grad);
+      end
+      { [R7-Z] (as above) }
+      else if (a.Items[k].JSONType = jtString) and InkLeft(a.Items[k].AsString) then
+      begin
+        AInks[k].Ok := True;
+        AInks[k].Colour := cTyCanvasColourLeft;
       end;
     end;
   end
@@ -1987,6 +2106,8 @@ var c: string;
 begin
   Result := Default(TTyAxisPen);
   Result.Cap := -1;
+  Result.Join := -1;
+  Result.Miter := NaN;
   { an unreadable colour, 'auto': not written -- the skin answers (a
     gradient or a pattern is held as the solid it degrades to) }
   if AStyle.Color.Written and not AStyle.Color.IsAuto then
@@ -1997,15 +2118,24 @@ begin
     Result.Gradient := AStyle.Color.Gradient;
   end;
   Result.Width := AStyle.BorderWidthLogical;
+  Result.WidthInf := AStyle.WidthInf;
   Result.Dash := AStyle.Dash;
   Result.DashLogical := Copy(AStyle.DashLogical, 0, Length(AStyle.DashLogical));
   Result.HasDashOffset := AStyle.DashOffsetHas;
   Result.DashOffset := AStyle.DashOffset;
-  c := LowerCase(AStyle.Cap);
+  { [R7-Z] the canvas' words, as written: another (a 'Round') is refused,
+    the cap the canvas had kept (3) [was: lowercased; another the default] }
+  c := AStyle.Cap;
   if c = 'butt' then Result.Cap := Ord(acButt)
   else if c = 'round' then Result.Cap := Ord(acRound)
-  else if c = 'square' then Result.Cap := Ord(acSquare);
+  else if c = 'square' then Result.Cap := Ord(acSquare)
+  else if c <> '' then Result.Cap := 3;
   Result.Opacity := AStyle.Opacity;
+  { [R7-AA] the shadow, join and miterLimit }
+  Result.ShadowKeys := AStyle.ShadowKeys;
+  Result.Shadow := AStyle.Shadow;
+  if AStyle.Join <> '' then Result.Join := TyJoinOfWord(AStyle.Join);
+  Result.Miter := AStyle.MiterLimit;
 end;
 
 function TyAxisPenOver(const ATop, ABase: TTyAxisPen): TTyAxisPen;
@@ -2018,7 +2148,11 @@ begin
     Result.Colour := ABase.Colour;
     Result.Gradient := ABase.Gradient;
   end;
-  if IsNan(Result.Width) then Result.Width := ABase.Width;
+  if IsNan(Result.Width) then
+  begin
+    Result.Width := ABase.Width;
+    Result.WidthInf := ABase.WidthInf;
+  end;
   if Result.Dash = todNone then
   begin
     Result.Dash := ABase.Dash;
@@ -2031,6 +2165,18 @@ begin
   end;
   if Result.Cap < 0 then Result.Cap := ABase.Cap;
   if IsNan(Result.Opacity) then Result.Opacity := ABase.Opacity;
+  { [R7-AA] key by key, as zrender's defaults() over getLineStyle }
+  if ((Result.ShadowKeys and 1) = 0) and ((ABase.ShadowKeys and 1) <> 0) then
+    Result.Shadow.Blur := ABase.Shadow.Blur;
+  if ((Result.ShadowKeys and 2) = 0) and ((ABase.ShadowKeys and 2) <> 0) then
+    Result.Shadow.OffsetX := ABase.Shadow.OffsetX;
+  if ((Result.ShadowKeys and 4) = 0) and ((ABase.ShadowKeys and 4) <> 0) then
+    Result.Shadow.OffsetY := ABase.Shadow.OffsetY;
+  if ((Result.ShadowKeys and 8) = 0) and ((ABase.ShadowKeys and 8) <> 0) then
+    Result.Shadow.Color := ABase.Shadow.Color;
+  Result.ShadowKeys := Result.ShadowKeys or ABase.ShadowKeys;
+  if Result.Join < 0 then Result.Join := ABase.Join;
+  if IsNan(Result.Miter) or (Result.Miter = 0) then Result.Miter := ABase.Miter;
 end;
 
 function TyAxisStrokeOf(const APen: TTyAxisPen; ASkinHas: Boolean;
@@ -2051,14 +2197,66 @@ begin
     Result.Drawn := False;
   if IsNan(APen.Width) then Result.WidthLogical := ASkinWidthLogical
   else Result.WidthLogical := APen.Width;
-  { zrender's hasStroke: a width that is not above nought strokes nothing }
-  if not (Result.WidthLogical > 0) then Result.Drawn := False;
-  Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, Result.WidthLogical);
+  { [R7-Z] A COLOUR NO PARSER READS strokes all the same, in the colour the
+    canvas had }
+  if Result.Drawn and (APen.Gradient.Kind = cgkNone) and (Result.Colour = cTyCanvasColourLeft) then
+    Result.Left := Result.Left or cTyCanvasStrokeLeft;
+  { [R7-Z] +INFINITY strokes (hasStroke), at the width the canvas had -- a
+    word's dash, Infinity long, refused: solid [was: no stroke] }
+  if APen.WidthInf then
+  begin
+    Result.Left := Result.Left or cTyCanvasWidthLeft;
+    Result.WidthLogical := 1;
+    if APen.Dash = todExplicit then
+      Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, 1)
+    else
+      Result.Dash := nil;
+  end
+  else
+  begin
+    { zrender's hasStroke: a width that is not above nought strokes nothing }
+    if not (Result.WidthLogical > 0) then Result.Drawn := False;
+    Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, Result.WidthLogical);
+  end;
   if APen.HasDashOffset then Result.DashOffset := APen.DashOffset;
-  if APen.Cap >= 0 then Result.Cap := TTyAxisCap(APen.Cap)
+  { [R7-Z] a phase that is no number: the one the canvas had }
+  if TyPhaseLeft(Result.DashOffset) then Result.Left := Result.Left or cTyCanvasPhaseLeftFlag;
+  if APen.Cap = 3 then
+  begin
+    Result.Cap := ADefaultCap;
+    Result.Left := Result.Left or cTyCanvasCapLeft;
+  end
+  else if APen.Cap >= 0 then Result.Cap := TTyAxisCap(APen.Cap)
   else Result.Cap := ADefaultCap;
   if IsNan(APen.Opacity) then Result.Opacity := 1
   else Result.Opacity := APen.Opacity;
+  { [R7-AA] a plain colour is the canvas' strokeStyle, stroked or not }
+  Result.Inked := (APen.HasColour and not APen.ColourNone and (APen.Gradient.Kind = cgkNone))
+    or (not APen.HasColour and ASkinHas);
+  { [R7-AA] THE SHADOW, key by key: zrender's '#000' where no colour, a
+    blur and offsets of nought where none; a colour no parser reads and a
+    blur below nought the canvas refuses }
+  if APen.ShadowKeys <> 0 then
+  begin
+    Result.HasShadow := True;
+    if (APen.ShadowKeys and 1) <> 0 then Result.Shadow.Blur := APen.Shadow.Blur;
+    if (APen.ShadowKeys and 2) <> 0 then Result.Shadow.OffsetX := APen.Shadow.OffsetX;
+    if (APen.ShadowKeys and 4) <> 0 then Result.Shadow.OffsetY := APen.Shadow.OffsetY;
+    if (APen.ShadowKeys and 8) <> 0 then Result.Shadow.Color := APen.Shadow.Color
+    else Result.Shadow.Color := TTyChartColor($FF000000);
+    if Result.Shadow.Color = cTyCanvasColourLeft then
+      Result.Left := Result.Left or cTyCanvasShadowLeft;
+    if Result.Shadow.Blur < 0 then Result.Left := Result.Left or cTyCanvasBlurLeft;
+  end;
+  { [R7-AA] the join and the miterLimit: a word, a limit the canvas
+    refuses keeps the one it had }
+  if APen.Join = cTyCanvasWordLeft then
+    Result.Left := Result.Left or cTyCanvasJoinLeft
+  else if APen.Join > 0 then Result.Join := APen.Join;
+  Result.Miter := 10;
+  if IsNan(APen.Miter) then
+  else if APen.Miter < 0 then Result.Left := Result.Left or cTyCanvasMiterLeft
+  else if APen.Miter > 0 then Result.Miter := APen.Miter;
 end;
 
 { THE AUTHOR'S PENS [R5-B] along upstream's chains (AxisBuilder's axisLine,
@@ -2138,6 +2336,10 @@ begin
     `true`, no `auto` [Batch 118] }
   if ASingle then
   begin
+    { [R7-Z] SingleAxisModel's split line is dashed, at an opacity of 0.2
+      [was: solid, opaque] }
+    if Result.SplitPen.Dash = todNone then Result.SplitPen.Dash := todDashed;
+    if IsNan(Result.SplitPen.Opacity) then Result.SplitPen.Opacity := 0.2;
     Result.ShowLine := ShowIn(ANode, 'axisLine', True, False, True);
     Result.ShowTicks := ShowIn(ANode, 'axisTick', True, False, True);
     Result.ShowSplitLine := ShowIn(ANode, 'splitLine', True, False, True);
@@ -2559,6 +2761,248 @@ begin
   Result := TyFillSeriesStoreArray(AOption, ASeriesIndex, TJSONArray(d), ADims, AStore);
 end;
 
+function TyIsSpreadDim(const AName: string): Boolean;
+begin
+  Result := Pos(TyEncodeSpreadPrefix, AName) = 1;
+end;
+
+{ [spec 255] the names upstream gives the positions of a coordinate written
+  as a list when nobody named them: the coordinate's name on each, the
+  duplicates numbered in the source's order (removeDuplicates: x, x0, x1) --
+  the first entry is not always the first of them }
+procedure NameSpreadPositions(AStore: TTyDataStore; const ADims: TTySeriesDimArray);
+var
+  k, j, q, t, n: Integer;
+  key: string;
+  pos: TTyIntegerArray;
+  seen: TTyStringArray;
+  dup: Boolean;
+begin
+  seen := nil;
+  for k := 0 to High(ADims) do
+  begin
+    if not TyIsSpreadDim(ADims[k].Name) then Continue;
+    key := ADims[k].Coord;
+    dup := False;
+    for q := 0 to High(seen) do if seen[q] = key then dup := True;
+    if dup then Continue;
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := key;
+    pos := nil;
+    for j := 0 to High(ADims) do
+      if ((ADims[j].Coord = key) and TyIsSpreadDim(ADims[j].Name))
+        or ((ADims[j].Coord = '') and (ADims[j].Name = key)) then
+        if AStore.RawDimPos(j) >= 0 then
+        begin
+          n := Length(pos);
+          SetLength(pos, n + 1);
+          pos[n] := AStore.RawDimPos(j);
+          while (n > 0) and (pos[n - 1] > pos[n]) do
+          begin
+            t := pos[n - 1];
+            pos[n - 1] := pos[n];
+            pos[n] := t;
+            Dec(n);
+          end;
+        end;
+    for j := 0 to High(pos) do
+      if j = 0 then AStore.SetRawDimName(pos[j], key)
+      else AStore.SetRawDimName(pos[j], key + IntToStr(j - 1));
+  end;
+end;
+
+procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+var k, j, n: Integer;
+begin
+  for k := 0 to High(ACoord) do
+  begin
+    ACoord[k].Key := '';
+    ACoord[k].Index := 0;
+    if (k > High(ADims)) or (ADims[k].Coord = '') then Continue;
+    n := 0;
+    for j := 0 to k - 1 do
+      if ADims[j].Coord = ADims[k].Coord then Inc(n);
+    ACoord[k].Key := ADims[k].Coord;
+    ACoord[k].Index := n;
+  end;
+end;
+
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
+
+  function KeyOf(AIndex: Integer): string;
+  begin
+    if ACoord[AIndex].Key <> '' then Result := ACoord[AIndex].Key
+    else Result := ACoord[AIndex].Name;
+  end;
+
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(ACoord) do
+    if (i <= High(AEnc.Columns)) and (AEnc.Columns[i] >= 0) and (KeyOf(i) = AKey)
+      and (ACoord[i].Index + 1 > Result) then Result := ACoord[i].Index + 1;
+  for i := 0 to High(AEnc.ExtraCoord) do
+    if (AEnc.ExtraCoord[i] >= 0) and (AEnc.ExtraCoord[i] <= High(ACoord))
+      and (KeyOf(AEnc.ExtraCoord[i]) = AKey) and (AEnc.ExtraIndex[i] + 1 > Result) then
+      Result := AEnc.ExtraIndex[i] + 1;
+end;
+
+function TyEncodeLastLabelDim(const AEnc: TTySeriesEncode; ACoordIndex: Integer;
+  const ASource: TTyChartSource): Integer;
+
+  procedure Take(ADim: Integer);
+  begin
+    if ADim < 0 then Exit;
+    if (ADim <= High(ASource.Dims))
+      and ((ASource.Dims[ADim].DimType = 'time') or (ASource.Dims[ADim].DimType = 'ordinal')) then
+      Exit;
+    if ((ADim > High(ASource.Dims)) or (ASource.Dims[ADim].DimType = ''))
+      and TySourceDimIsOrdinal(ASource, ADim) then Exit;
+    if ADim > Result then Result := ADim;
+  end;
+
+var e: Integer;
+begin
+  Result := -1;
+  if (ACoordIndex < 0) or (ACoordIndex > High(AEnc.Columns)) then Exit;
+  Take(AEnc.Columns[ACoordIndex]);
+  for e := 0 to High(AEnc.ExtraCoord) do
+    if AEnc.ExtraCoord[e] = ACoordIndex then Take(AEnc.ExtraDim[e]);
+end;
+
+procedure TyOwnItemNames(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+var
+  i, raw: Integer;
+  cell: TTyDataValue;
+begin
+  if (AStore = nil) or not AEnc.Given or not AEnc.HasNameEncode then Exit;
+  AStore.NameFallback := -1;
+  if AEnc.ItemName < 0 then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    raw := AStore.GetRawIndex(i);
+    if (raw < 0) or (AStore.GetNameByRaw(raw) <> '') then Continue;
+    if not TTyDataStore.RawCell(AStore.RawItem(i), AEnc.ItemName, cell) then Continue;
+    if cell.Kind = dvkNone then Continue;
+    AStore.SetName(raw, TyJsValueText(cell, ''));
+  end;
+end;
+
+procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
+  AStore: TTyDataStore);
+var
+  e, c, n, k, j, shift: Integer;
+  dim: TTySeriesDim;
+  key: string;
+begin
+  if Length(AEnc.ExtraDim) = 0 then Exit;
+  n := Length(ADims);
+  { a row index put in front of every item (a whisker box's) moves the
+    item's elements one place on }
+  shift := 1;
+  for j := 0 to n - 1 do
+    if ADims[j].FromRowIndex and (ADims[j].Kind = ddtOrdinal) then shift := 0;
+  SetLength(AEnc.Columns, n);
+  SetLength(AEnc.Explicit, n);
+  for e := 0 to High(AEnc.ExtraDim) do
+  begin
+    c := AEnc.ExtraCoord[e];
+    if (c < 0) or (c >= n) then Continue;
+    if AEnc.ExtraDim[e] + shift < 1 then Continue;
+    dim := ADims[c];
+    key := dim.Coord;
+    if key = '' then key := dim.Name;
+    dim.Name := TyEncodeSpreadPrefix + key + '_' + IntToStr(AEnc.ExtraIndex[e]);
+    dim.Coord := key;
+    dim.FromRowIndex := False;
+    dim.SourceSlot := AEnc.ExtraDim[e] + shift;
+    k := Length(ADims);
+    SetLength(ADims, k + 1);
+    ADims[k] := dim;
+    SetLength(AEnc.Columns, k + 1);
+    SetLength(AEnc.Explicit, k + 1);
+    AEnc.Columns[k] := AEnc.ExtraDim[e];
+    AEnc.Explicit[k] := True;
+    if AStore <> nil then
+    begin
+      j := AStore.AddDimension(dim.Name, dim.Kind);
+      AStore.SetDimCoord(j, key);
+      if dim.Axis <> nil then AStore.UseOrdinalMeta(j, dim.Axis.Categories);
+    end;
+  end;
+end;
+
+procedure TyEncodeStoreOrder(const AEnc: TTySeriesEncode;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore; AFromSource: Boolean);
+var
+  k, j, t, best, n: Integer;
+  pos, order: TTyIntegerArray;
+  shared: Boolean;
+
+  { the column parses by a category list: its axis', or one the store was
+    handed (a matrix header's) [spec 259] }
+  function Listed(AK: Integer): Boolean;
+  begin
+    Result := (ADims[AK].Axis <> nil)
+      or ((AK < AStore.DimCount) and (AStore.OrdinalMeta(AK) <> nil));
+  end;
+
+begin
+  if AStore = nil then Exit;
+  if AFromSource and AEnc.Given and AEnc.HasNameEncode then
+    AStore.NameFallback := -1;
+  { where each column reads in the source }
+  SetLength(pos, Length(ADims));
+  for k := 0 to High(ADims) do
+  begin
+    pos[k] := -1;
+    if AFromSource then
+    begin
+      if k <= High(AEnc.Columns) then pos[k] := AEnc.Columns[k];
+    end
+    else if ADims[k].FromRowIndex or (ADims[k].SourceSlot < 0) then pos[k] := -1
+    else if ADims[k].SourceSlot > 0 then pos[k] := ADims[k].SourceSlot - 1
+    else pos[k] := k;
+  end;
+  { THE ROW'S NAME, with no itemName written: the category column first in
+    the source (injectOrdinalMeta's firstCategoryDimIndex) }
+  if not (AFromSource and AEnc.HasNameEncode) then
+  begin
+    best := -1;
+    for k := 0 to High(ADims) do
+      if (ADims[k].Kind = ddtOrdinal) and Listed(k) and (pos[k] >= 0)
+        and ((best < 0) or (pos[k] < pos[best])) then best := k;
+    if best >= 0 then AStore.NameFallback := best + 1;
+  end;
+  { [spec 264] (with no list too: x 1, y 0 on two category lists names the
+    rows by element 0, y's [was: only past a list, so x's]) }
+  if Length(AEnc.ExtraDim) = 0 then Exit;
+  { TWO COLUMNS ON ONE CATEGORY LIST collect its names column by column in
+    the source's order }
+  shared := False;
+  for k := 0 to High(ADims) do
+    if TyIsSpreadDim(ADims[k].Name) and Listed(k) then shared := True;
+  if not shared then Exit;
+  order := nil;
+  for k := 0 to High(ADims) do
+  begin
+    if (ADims[k].Kind <> ddtOrdinal) or not Listed(k) or (pos[k] < 0) then Continue;
+    n := Length(order);
+    SetLength(order, n + 1);
+    order[n] := k;
+    j := n;
+    while (j > 0) and (pos[order[j - 1]] > pos[order[j]]) do
+    begin
+      t := order[j - 1];
+      order[j - 1] := order[j];
+      order[j] := t;
+      Dec(j);
+    end;
+  end;
+  AStore.SetCollectOrder(order);
+end;
+
 function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
   AArray: TJSONArray; const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
 var
@@ -2566,10 +3010,11 @@ var
   d: TJSONData;
   arr: TJSONArray;
   row: array of TTyDataValue;
-  i, k, src, catDim, raw, pos: Integer;
+  i, k, src, catDim, raw, pos, q: Integer;
   item, v, cell: TJSONData;
   useIndex, prepend: Boolean;
   txt: string;
+  order: TTyIntegerArray;
 begin
   Result := 0;
   if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) or (AArray = nil) then Exit;
@@ -2593,6 +3038,11 @@ begin
     begin
       if prepend then pos := 0 else pos := -1;
     end
+    else if ADims[k].SourceSlot < 0 then
+    begin
+      pos := -1;
+      AStore.SetDimVoid(k);
+    end
     else if ADims[k].SourceSlot > 0 then
     begin
       pos := ADims[k].SourceSlot - 1;
@@ -2606,7 +3056,10 @@ begin
       makes a candlestick's tooltip rows. }
     if ADims[k].FromRowIndex and prepend then
       AStore.SetRawDimDisplay(pos, 'base');
-    if (ADims[k].Coord <> '') and (pos >= 0) and (ADims[k].Name <> '') then
+    { a column a type names (a candlestick's open) displays as it; an extra
+      entry of an encode list has no display name [spec 255] }
+    if (ADims[k].Coord <> '') and (pos >= 0) and (ADims[k].Name <> '')
+      and not TyIsSpreadDim(ADims[k].Name) then
       AStore.SetRawDimDisplay(pos, ADims[k].Name);
   end;
   { THE NAMES `{@name}` FINDS: the series' own `dimensions` when it has them
@@ -2626,6 +3079,7 @@ begin
     for k := 0 to High(ADims) do
       if (AStore.RawDimPos(k) >= 0) and (ADims[k].Name <> '') then
         AStore.SetRawDimName(AStore.RawDimPos(k), ADims[k].Name);
+    NameSpreadPositions(AStore, ADims);
     { EVERY OTHER POSITION THE DATA HAS gets a generated name, in order --
       `value`, then `value0`, `value1`, ... skipping any already taken --
       which is how `{@value}` finds a scatter's third number. }
@@ -2644,6 +3098,30 @@ begin
     end;
   end;
 
+  { [spec 255] columns sharing a category list: collected first, a column
+    at a time }
+  order := AStore.CollectOrder;
+  for q := 0 to High(order) do
+  begin
+    k := order[q];
+    if (k < 0) or (k > High(ADims)) or ADims[k].FromRowIndex or (useIndex and (k = catDim))
+      or (ADims[k].SourceSlot < 0) then
+      Continue;
+    src := k;
+    if ADims[k].SourceSlot > 0 then src := ADims[k].SourceSlot - 1;
+    for i := 0 to arr.Count - 1 do
+    begin
+      v := UnwrapItem(arr.Items[i]);
+      if (v <> nil) and (v is TJSONArray) then
+      begin
+        if src < TJSONArray(v).Count then cell := TJSONArray(v).Items[src]
+        else cell := nil;
+        AStore.PreCollect(k, CellValue(cell));
+      end
+      else
+        AStore.PreCollect(k, CellValue(v));
+    end;
+  end;
   for i := 0 to arr.Count - 1 do
   begin
     item := arr.Items[i];
@@ -2656,6 +3134,12 @@ begin
           the store-wide guess says the items are not arrays and this is the
           first category column. Every other column still reads the item. }
         row[k] := TyDataNum(i);
+        Continue;
+      end;
+      { [spec 255] an encode that reaches no element for it: nothing }
+      if ADims[k].SourceSlot < 0 then
+      begin
+        row[k] := TyDataNone;
         Continue;
       end;
       src := k;
@@ -2690,7 +3174,8 @@ function TyFillStoreFromSource(const ASource: TTyChartSource;
   AStore: TTyDataStore): Integer;
 var
   row: array of TTyDataValue;
-  i, k, n, col, raw: Integer;
+  i, k, n, col, raw, q: Integer;
+  order: TTyIntegerArray;
   cell: TJSONData;
   nm: string;
   named: Boolean;
@@ -2720,10 +3205,37 @@ begin
     col := -1;
     if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
     AStore.SetRawDimPos(k, col);
+    { a table has no row-index column: one reading no dimension is a gap }
+    if col < 0 then AStore.SetDimVoid(k);
     if (not named) and (col >= 0) and (ADims[k].Name <> '') then
       AStore.SetRawDimName(col, ADims[k].Name);
   end;
+  if not named then NameSpreadPositions(AStore, ADims);
+  { [spec 255] A COLUMN A TYPE NAMES (a candlestick's open ... highest)
+    displays as it where the table names that dimension nothing
+    (createDimensions' sysDimItemDimsDef) -- not a custom series' second x
+    (x1, its coordinate's name numbered) nor an extra entry of a list }
+  for k := 0 to High(ADims) do
+  begin
+    col := -1;
+    if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
+    if (col >= 0) and (ADims[k].Coord <> '') and (ADims[k].Name <> '')
+      and not TyIsSpreadDim(ADims[k].Name) and (Pos(ADims[k].Coord, ADims[k].Name) <> 1)
+      and (TySourceDimName(ASource, col) = '') then
+      AStore.SetRawDimDisplay(col, ADims[k].Name);
+  end;
 
+  { [spec 255] columns sharing a category list: collected first, a column
+    at a time }
+  order := AStore.CollectOrder;
+  for q := 0 to High(order) do
+  begin
+    k := order[q];
+    col := -1;
+    if (k >= 0) and (k <= High(AEncode.Columns)) then col := AEncode.Columns[k];
+    if col < 0 then Continue;
+    for i := 0 to n - 1 do AStore.PreCollect(k, CellValue(TySourceCell(ASource, i, col)));
+  end;
   for i := 0 to n - 1 do
   begin
     for k := 0 to High(ADims) do
@@ -3026,7 +3538,8 @@ begin
 end;
 
 procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore);
+  const ARect: TTyXYWH; AOption: TTyChartOption; AMemory: TTyAxisMemoryStore;
+  AScale: Double);
   var
     spec: PTyAxisLayoutSpec;
     opt: TTyBreakAreaOpt;
@@ -3089,7 +3602,7 @@ procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
       TyBreakZigzag(AAxis.DataToCoord(ticks[q].BreakVMin, True),
         AAxis.DataToCoord(ticks[q].BreakVMax, True), AAxis.Horizontal,
         zMin, zMax, opt.Amplitude, opt.MinSpan, opt.MaxSpan, r,
-        AMemory.RandomState^, a, b);
+        AMemory.RandomState^, a, b, AScale);
       geom.A := a;
       geom.B := b;
       { polyline B and the polygon only where the gap is something }
@@ -3120,7 +3633,7 @@ procedure TyLayoutAxisBreakAreas(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
 
 { buildAxisBreakLine [Batch 132; F4a: any axis with a frame] }
 procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-  AOption: TTyChartOption; ALineWidthPx: Double);
+  AOption: TTyChartOption; ALineWidthPx: Double; AScale: Double);
   var
     brkTicks: TTyScaleTickArray;
     pairs: array of TTyRange;
@@ -3155,11 +3668,11 @@ procedure TyAxisBreakLineOf(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
         Inc(n);
       end;
     lw := ALineWidthPx;
-    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw);
+    ASpec.BreakLineSegs := TyAxisBreakLineSegs(ASpec.NameFrame, pairs, ids, lw, AScale);
   end;
 
 procedure TyLayoutBreakAreas(ABuild: TTyChartBuild; AOption: TTyChartOption;
-  AMemory: TTyAxisMemoryStore);
+  AMemory: TTyAxisMemoryStore; AScale: Double);
 var
   pass, g, i, cnt, idx, n, comp, maxComp: Integer;
   gb: TTyGridBuild;
@@ -3169,7 +3682,7 @@ var
   begin
     spec := AGrid.SpecFor(AAxis);
     if spec = nil then Exit;
-    TyLayoutAxisBreakAreas(spec^, AAxis, AGrid.PlotXYWH, AOption, AMemory);
+    TyLayoutAxisBreakAreas(spec^, AAxis, AGrid.PlotXYWH, AOption, AMemory, AScale);
   end;
 
 begin
@@ -4085,7 +4598,8 @@ var
     lw := AText.AxisLineWidthLogical;
     if lw <= 0 then lw := 1;
     lw := AxisScaleF(lw, APPI);
-    TyAxisBreakLineOf(ASpec, AAxis, AOption, lw);
+    { ([R7-AH] snapped on the css px grid) }
+    TyAxisBreakLineOf(ASpec, AAxis, AOption, lw, APPI / 96);
   end;
 
   { THE FURNITURE ON THE FINAL RECT. A category axis' tick marks, split
@@ -4346,6 +4860,8 @@ var
       obBox.Top := TyBoxRawNum(0);
       obBox.Bottom := TyBoxRawNum(0);
       obBox := TyMergeBoxLayout(ob, obBox);
+      { [R7-AD] css px at the PPI }
+      if APPI > 0 then obBox := TyBoxRawScaled(obBox, APPI / 96);
       outer := TyGetLayoutRect(obBox, vp.X, vp.Y, vp.W, vp.H, [0]);
     end
     else

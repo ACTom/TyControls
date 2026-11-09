@@ -235,6 +235,11 @@ begin
   try
     chart.Parent := FForm;
     chart.Controller := FCtl;
+    { [R7-AB] every clock the chart reads stands with the test's, not the machine's }
+    chart.DataZoomNow := 1000;
+    chart.BrushNow := 1000;
+    chart.ParallelExpandNow := 1000;
+    chart.TimelineNow := 1000;
     chart.SetBounds(0, 0, cW, cH);
     chart.Option := cs.Objects['option'].AsJSON;
     chart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);

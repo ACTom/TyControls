@@ -203,6 +203,8 @@ type
       of the two words; an unreadable one is not written. }
     HasOwnWidth: Boolean;
     OwnWidth: Double;
+    { [R7-Y] the edge's own width is +Infinity }
+    OwnWidthInf: Boolean;
     HasOwnOpacity: Boolean;
     OwnOpacity: Double;
     HasOwnColour: Boolean;
@@ -220,6 +222,12 @@ type
       -- the zero value, so an edge nobody read keeps the series' ends. }
     OwnSymFrom, OwnSymTo: string;
     OwnSizeFrom, OwnSizeTo: Double;
+    { [R7-R] AN END'S OWN SIZE WRITTEN AS [w, h] (`symbolSize: [[w1, h1],
+      [w2, h2]]`): an array is truthy whatever it holds, so the pair is the
+      end's -- OwnSize the width, OwnSizeH the height (normalizeSymbolSize:
+      `size[i] || 0`). False, the zero value: one number, square }
+    OwnSizeFromPair, OwnSizeToPair: Boolean;
+    OwnSizeFromH, OwnSizeToH: Double;
     { THE EDGE DATA'S NAME: the link's `id`, else `source + ' > ' + target`
       as JavaScript concatenates the two raw values -- never its `name`
       (createGraphFromNodeEdge's linkNameList). What the b placeholder prints. }
@@ -315,6 +323,11 @@ type
     { The two ends' arrowheads and their sizes. `['none','none']` and 10. }
     EdgeSymbolFrom, EdgeSymbolTo: string;
     EdgeSizeFrom, EdgeSizeTo: Double;
+    { [R7-R] `edgeSymbolSize: [[w1, h1], [w2, h2]]`: an end's size as a
+      pair -- EdgeSize the width, EdgeSizeH the height. False, the zero
+      value: one number, square }
+    EdgeSizeFromPair, EdgeSizeToPair: Boolean;
+    EdgeSizeFromH, EdgeSizeToH: Double;
     { `lineStyle.curveness` at the series level. Beats the table, zero
       included. }
     HasCurveness: Boolean;
@@ -329,6 +342,8 @@ type
     HasAutoList: Boolean;
     AutoList: TTyDoubleArray;
     LineWidthLogical: Double;
+    { [R7-Y] the series' lineStyle.width is +Infinity }
+    LineWidthInf: Boolean;
     LineOpacity: Double;
     HasLineColour: Boolean;
     LineColour: TTyChartColor;
@@ -406,6 +421,10 @@ type
     { THE COMPENSATION SCALE: how much a node's symbol is scaled so that a
       zoom enlarges it by only ARatio of the zoom. `ARatio || 1`. }
     function NodeScale(ARatio: Double): Double;
+    { [R7-AG] the device px a css px makes (PPI / 96; nought is 1): the
+      compensation scale is the css px' scale on the device -- a node's
+      symbol, its edges' trim, a ring's shares by it }
+    var PxScale: Double;
     { A roam action on this view -- a pan by (ADX, ADY) when AHasPan, a zoom by
       AScale about (AOX, AOY) when AHasZoom -- answering the centre and zoom
       it leaves. The view is not changed; SetRoam them to apply. }
@@ -739,6 +758,10 @@ function TyGraphEdgeSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): string;
 function TyGraphEdgeSymbolSize(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): Double;
+{ [R7-R] THE END'S WIDTH AND HEIGHT, a pair where either level wrote one
+  (the edge's own where truthy -- a pair always is -- else the series') }
+procedure TyGraphEdgeSymbolBox(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean; out AW, AH: Double);
 { An end that carries a symbol: neither '' nor 'none'. }
 function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): Boolean;
@@ -826,6 +849,24 @@ function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPoin
 { the edge's line in its frame: its two ends and control point, curved }
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
   out ACurved: Boolean);
+{ [R7-O] A GRAPH EDGE'S LINE AS THE POINTER FINDS IT under a view whose
+  scaleY is not its scaleX: Path.contain in the line's own frame, the main
+  group's units -- the point taken back through the group (matrix.invert),
+  the line drawn to APercent (a curve's first part by quadraticSubdivide),
+  its pen strokeNoScale: the style's width, at least strokeContainThreshold,
+  over the line scale (the root of scaleX * scaleY where neither is one),
+  its rect grown by it. AP1, AP2, ACP: the shape as built (a straight one
+  snapped), in the group's units; AX, AY, ASX, ASY the group's transform. }
+procedure TyGraphEdgeZrHit(var AEl: TTyChartElement; const AP1, AP2, ACP: TTyPointF;
+  ACurved: Boolean; APercent, ASX, ASY, AX, AY: Double);
+{ [R7-G] A STRAIGHT EDGE'S ENDS AS ITS PATH IS BUILT: ECLinePath is made
+  with subPixelOptimize (chart/helper/Line.ts createLine), so a level or an
+  upright edge goes to the half pixel of AWidth in the frame its shape is
+  in -- data space on a view (the roam transform after it), pixels on axes.
+  A curve, and a width of nought, are left. }
+{ ([R7-AH] AScale: on the css px grid, AWidth and the ends device px) }
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double;
+  AScale: Double = 1);
 
 { JavaScript's String() of an option value. }
 function TyGraphJsText(AData: TJSONData): string;
@@ -1093,6 +1134,9 @@ type
     NodeBorder: array of TTyOptStyle;
     { the hole an empty symbol takes (symbolPathSetColor: neutral00) }
     EmptyFill: TTyChartColor;
+    { [R7-G] device px per logical px: a straight edge on axes snaps on the
+      device by its width at this scale (0: 1) }
+    PxScale: Double;
   end;
 
 { WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
@@ -1137,6 +1181,19 @@ procedure TyGraphTrimEdge(var AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
 function TyGraphArrowRotation(const ATangent: TTyPointF;
   AAtEnd: Boolean): Double;
 
+{ [R7-O] AN END SYMBOL'S MAP ON THE CANVAS (Line.beforeUpdate): its local
+  transform -- scaled by AScale (1 / every ancestor's scaleX, times the
+  percent), turned by ARotRad (zrender's rotation) -- under the main group's
+  (ASX, ASY). The linear part in AL[0..3], AL[4..5] nought. Under a view
+  whose scaleY is not its scaleX the symbol keeps scaleY / scaleX on y
+  after its turn: squashed, and sheared on a slanted edge. }
+function TyGraphEdgeSymbolMap(ARotRad, AScale, ASX, ASY: Double): TTyMat2D;
+{ [R7-O] that end symbol's rotation in radians, zrender's sign: a quarter
+  turn either way minus the tangent's angle, in the frame the tangent is
+  taken in (the view's data space) }
+function TyGraphArrowRotationRad(const ATangent: TTyPointF;
+  AAtEnd: Boolean): Double;
+
 { Append the series' edges and nodes to AList and answer how many landed.
 
   EDGES FIRST. Upstream keeps them in a group below the nodes, and a node drawn
@@ -1167,10 +1224,15 @@ var
     an item's own symbolOffset is dataSymbolTask's getShallow, over the
     series' and the callback's. nil otherwise. }
   TyGraphItemNodes: TJSONArray = nil;
+  { [R7-AG] THE CSS PX' SCALE while the chart solves a graph (PPI / 96): the
+    box's and the centre's px, the force's edge length (and its repulsion,
+    a length cubed over a length: by the square) are css px. 1 otherwise. }
+  TyGraphPxScale: Double = 1;
 
 implementation
 
-uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.LabelGuide;
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.LabelGuide,
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
 
 { ==================== the view ==================== }
 
@@ -1332,6 +1394,7 @@ begin
   s := FOSX;
   if IsNan(s) or (s = 0) then s := 1;
   Result := ((FZoom - 1) * r + 1) / s;
+  if (PxScale > 0) and (PxScale <> 1) then Result := Result * PxScale;
 end;
 
 procedure TTyGraphView.ApplyRoam(AHasPan: Boolean; ADX, ADY: Double;
@@ -1744,6 +1807,18 @@ begin
   else if Result < -cTyGraphFarPx then Result := -cTyGraphFarPx;
 end;
 
+{ [R7-R] normalizeSymbolSize of a pair: `[size[0] || 0, size[1] || 0]` --
+  a number as it is (not-a-number nought), anything else nought }
+procedure PairSize(A: TJSONArray; out AW, AH: Double);
+begin
+  AW := 0;
+  AH := 0;
+  if (A.Count > 0) and (A.Items[0].JSONType = jtNumber) then AW := A.Items[0].AsFloat;
+  if (A.Count > 1) and (A.Items[1].JSONType = jtNumber) then AH := A.Items[1].AsFloat;
+  if IsNan(AW) then AW := 0;
+  if IsNan(AH) then AH := 0;
+end;
+
 { Whether upstream's getSymbolSize comes out not-a-number for this
   `symbolSize`: an array without a number in both of its first two places --
   `(size[0] + size[1]) / 2` with an undefined in it. }
@@ -1814,6 +1889,17 @@ begin
     ASpec.EdgeSizeFrom := a.Items[0].AsFloat;
   if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
     ASpec.EdgeSizeTo := a.Items[1].AsFloat;
+  { [R7-R] an end written as [w, h] }
+  if (a.Count > 0) and (a.Items[0] is TJSONArray) then
+  begin
+    ASpec.EdgeSizeFromPair := True;
+    PairSize(TJSONArray(a.Items[0]), ASpec.EdgeSizeFrom, ASpec.EdgeSizeFromH);
+  end;
+  if (a.Count > 1) and (a.Items[1] is TJSONArray) then
+  begin
+    ASpec.EdgeSizeToPair := True;
+    PairSize(TJSONArray(a.Items[1]), ASpec.EdgeSizeTo, ASpec.EdgeSizeToH);
+  end;
 end;
 
 { JavaScript's truthiness, for an option value that is tested rather than used.
@@ -2351,6 +2437,8 @@ begin
   Result.Symbol.HeightPx := SaneSize(Result.Symbol.HeightPx);
   Result.EdgeSizeFrom := SaneSize(Result.EdgeSizeFrom);
   Result.EdgeSizeTo := SaneSize(Result.EdgeSizeTo);
+  Result.EdgeSizeFromH := SaneSize(Result.EdgeSizeFromH);
+  Result.EdgeSizeToH := SaneSize(Result.EdgeSizeToH);
 
   sub := SubObj(node, 'lineStyle');
   if sub <> nil then
@@ -2367,6 +2455,7 @@ begin
     { [R6-E] a numeric string is its number }
     if not IsNan(TyOptPenWidth(sub.Find('width'))) then
       Result.LineWidthLogical := TyOptPenWidth(sub.Find('width'));
+    Result.LineWidthInf := TyOptIsPosInf(sub.Find('width'));
     Result.LineOpacity := NumIn(sub, 'opacity', Result.LineOpacity);
     { `type`, the dash [Batch 114] }
     Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
@@ -3134,6 +3223,7 @@ begin
     AEdge.HasOwnWidth := True;
     { [R6-E] a numeric string is its number }
     AEdge.OwnWidth := TyOptPenWidth(d);
+    AEdge.OwnWidthInf := TyOptIsPosInf(d);
   end;
   d := AStyle.Find('opacity');
   if (d <> nil) and (d.JSONType <> jtNull) then
@@ -3214,12 +3304,27 @@ begin
     AEdge.OwnSymFrom := SymOf(d);
     AEdge.OwnSymTo := AEdge.OwnSymFrom;
   end;
+  AEdge.OwnSizeFromPair := False;
+  AEdge.OwnSizeToPair := False;
+  AEdge.OwnSizeFromH := 0;
+  AEdge.OwnSizeToH := 0;
   d := AItem.Find('symbolSize');
   if d is TJSONArray then
   begin
     a := TJSONArray(d);
     if a.Count > 0 then AEdge.OwnSizeFrom := SizeOf_(a.Items[0]);
     if a.Count > 1 then AEdge.OwnSizeTo := SizeOf_(a.Items[1]);
+    { [R7-R] an end written as [w, h]: truthy, the end's own }
+    if (a.Count > 0) and (a.Items[0] is TJSONArray) then
+    begin
+      AEdge.OwnSizeFromPair := True;
+      PairSize(TJSONArray(a.Items[0]), AEdge.OwnSizeFrom, AEdge.OwnSizeFromH);
+    end;
+    if (a.Count > 1) and (a.Items[1] is TJSONArray) then
+    begin
+      AEdge.OwnSizeToPair := True;
+      PairSize(TJSONArray(a.Items[1]), AEdge.OwnSizeTo, AEdge.OwnSizeToH);
+    end;
   end
   else
   begin
@@ -3231,6 +3336,8 @@ begin
   if IsNan(AEdge.OwnSizeTo) then AEdge.OwnSizeTo := 0;
   AEdge.OwnSizeFrom := SaneSize(AEdge.OwnSizeFrom);
   AEdge.OwnSizeTo := SaneSize(AEdge.OwnSizeTo);
+  AEdge.OwnSizeFromH := SaneSize(AEdge.OwnSizeFromH);
+  AEdge.OwnSizeToH := SaneSize(AEdge.OwnSizeToH);
 end;
 
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
@@ -5141,6 +5248,32 @@ begin
     ASolved.Edges[i].SolvedCurveness := res[i];
 end;
 
+{ [R7-AG] A GRAPH'S CSS PX AT THE PPI: its box's px (left, top, right,
+  bottom, width, height), the force's edgeLength by AScale
+  and its repulsion by AScale squared (each step moves a node by repulsion
+  / distance: a length when the repulsion is a length squared) -- upstream
+  works in css px under a canvas scaled by devicePixelRatio }
+procedure GraphSpecAtScale(var ASpec: TTyGraphSpec; AScale: Double);
+
+  procedure Px(var AP: TTyGraphPos);
+  begin
+    if AP.Kind = gpkPx then AP.V := AP.V * AScale;
+  end;
+
+begin
+  if not (AScale > 0) or (AScale = 1) then Exit;
+  Px(ASpec.PosLeft);
+  Px(ASpec.PosTop);
+  Px(ASpec.PosRight);
+  Px(ASpec.PosBottom);
+  Px(ASpec.PosWidth);
+  Px(ASpec.PosHeight);
+  ASpec.Force.EdgeLengthLo := ASpec.Force.EdgeLengthLo * AScale;
+  ASpec.Force.EdgeLengthHi := ASpec.Force.EdgeLengthHi * AScale;
+  ASpec.Force.RepulsionLo := ASpec.Force.RepulsionLo * AScale * AScale;
+  ASpec.Force.RepulsionHi := ASpec.Force.RepulsionHi * AScale * AScale;
+end;
+
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState): TTyGraphSolved;
@@ -5176,6 +5309,8 @@ var
   i: Integer;
   initX, initY: TTyDoubleArray;
   kind: Integer;
+  { [R7-AG] }
+  centre: TTyGraphCentre;
 
   { Which pass this force layout is: 0 fresh, 1 reusing the answer, 2
     continuing from it -- the same test TyGraphLayoutForce makes. }
@@ -5271,6 +5406,8 @@ var
 begin
   Result := Default(TTyGraphSolved);
   GatherGraph(AOption, ASeriesIndex, AStore, Result, all, allEdges);
+  { [R7-AG] the view's px at the PPI [was: device px] }
+  GraphSpecAtScale(Result.Spec, TyGraphPxScale);
 
   mask := MaskFP;
   try
@@ -5303,12 +5440,26 @@ begin
     { THE ROAM, before any layout: the ring sizes its shares by the
       compensation scale the zoom makes. A roam's own centre and zoom beat
       the option's -- upstream wrote them back into it. }
+    { [R7-AG] the css px' scale on the device }
+    Result.View.PxScale := TyGraphPxScale;
     if ARoam.Valid then
       Result.View.SetRoam(ARoam.Centre, ARoam.Zoom, Result.Spec.HasLimit,
         Result.Spec.LimitMin, Result.Spec.LimitMax)
     else
-      Result.View.SetRoam(Result.Spec.Centre, Result.Spec.Zoom,
+    begin
+      { [R7-AG] the centre is in the data rect's frame: with no positions
+        written that is the view rect, css px upstream [was: device px] }
+      centre := Result.Spec.Centre;
+      if not hasData and (TyGraphPxScale > 0) and (TyGraphPxScale <> 1) then
+      begin
+        if not centre.PctX and (centre.X.Kind = gpkPx) then
+          centre.X.V := centre.X.V * TyGraphPxScale;
+        if not centre.PctY and (centre.Y.Kind = gpkPx) then
+          centre.Y.V := centre.Y.V * TyGraphPxScale;
+      end;
+      Result.View.SetRoam(centre, Result.Spec.Zoom,
         Result.Spec.HasLimit, Result.Spec.LimitMin, Result.Spec.LimitMax);
+    end;
     Result.NodeScale := Result.View.NodeScale(Result.Spec.NodeScaleRatio);
 
     case Result.Spec.Layout of
@@ -5496,6 +5647,62 @@ begin
   begin
     Result := AEdge.OwnSizeFrom;
     if IsNan(Result) or (Result = 0) then Result := ASpec.EdgeSizeFrom;
+  end;
+end;
+
+procedure TyGraphEdgeSymbolBox(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean; out AW, AH: Double);
+var own: Boolean;
+begin
+  if AAtEnd then
+  begin
+    own := AEdge.OwnSizeToPair
+      or not (IsNan(AEdge.OwnSizeTo) or (AEdge.OwnSizeTo = 0));
+    if own and AEdge.OwnSizeToPair then
+    begin
+      AW := AEdge.OwnSizeTo;
+      AH := AEdge.OwnSizeToH;
+    end
+    else if own then
+    begin
+      AW := AEdge.OwnSizeTo;
+      AH := AW;
+    end
+    else if ASpec.EdgeSizeToPair then
+    begin
+      AW := ASpec.EdgeSizeTo;
+      AH := ASpec.EdgeSizeToH;
+    end
+    else
+    begin
+      AW := ASpec.EdgeSizeTo;
+      AH := AW;
+    end;
+  end
+  else
+  begin
+    own := AEdge.OwnSizeFromPair
+      or not (IsNan(AEdge.OwnSizeFrom) or (AEdge.OwnSizeFrom = 0));
+    if own and AEdge.OwnSizeFromPair then
+    begin
+      AW := AEdge.OwnSizeFrom;
+      AH := AEdge.OwnSizeFromH;
+    end
+    else if own then
+    begin
+      AW := AEdge.OwnSizeFrom;
+      AH := AW;
+    end
+    else if ASpec.EdgeSizeFromPair then
+    begin
+      AW := ASpec.EdgeSizeFrom;
+      AH := ASpec.EdgeSizeFromH;
+    end
+    else
+    begin
+      AW := ASpec.EdgeSizeFrom;
+      AH := AW;
+    end;
   end;
 end;
 
@@ -5841,6 +6048,20 @@ begin
 end;
 
 { ==================== the edge's enter [F3a] ==================== }
+
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double;
+  AScale: Double);
+var x1, y1, x2, y2: Double;
+begin
+  if ACurved then Exit;
+  x1 := AP1.X;
+  y1 := AP1.Y;
+  x2 := AP2.X;
+  y2 := AP2.Y;
+  TyZrSubPixelLineAt(x1, y1, x2, y2, AWidth, AScale);
+  AP1 := TyPointF(x1, y1);
+  AP2 := TyPointF(x2, y2);
+end;
 
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
   out ACurved: Boolean);
@@ -6404,6 +6625,81 @@ begin
   Result := RadToDeg(sign * Pi / 2 - ArcTan2(ATangent.Y, ATangent.X));
 end;
 
+procedure TyGraphEdgeZrHit(var AEl: TTyChartElement; const AP1, AP2, ACP: TTyPointF;
+  ACurved: Boolean; APercent, ASX, ASY, AX, AY: Double);
+var
+  path: TTyZrPath;
+  t, p01x, p01y, p12x, p12y, det: Double;
+begin
+  AEl.ZrHit := Default(TTyZrHit);
+  if IsNan(APercent) or not (APercent > 0) then Exit;
+  path := nil;
+  TyZrMoveTo(path, AP1.X, AP1.Y);
+  t := APercent;
+  if ACurved then
+  begin
+    if t < 1 then
+    begin
+      { quadraticSubdivide at the percent: the first part }
+      p01x := (ACP.X - AP1.X) * t + AP1.X;
+      p01y := (ACP.Y - AP1.Y) * t + AP1.Y;
+      p12x := (AP2.X - ACP.X) * t + ACP.X;
+      p12y := (AP2.Y - ACP.Y) * t + ACP.Y;
+      TyZrQuad(path, p01x, p01y, (p12x - p01x) * t + p01x, (p12y - p01y) * t + p01y);
+    end
+    else
+      TyZrQuad(path, ACP.X, ACP.Y, AP2.X, AP2.Y);
+  end
+  else if t < 1 then
+    TyZrLineTo(path, AP1.X * (1 - t) + AP2.X * t, AP1.Y * (1 - t) + AP2.Y * t)
+  else
+    TyZrLineTo(path, AP2.X, AP2.Y);
+  { matrix.invert of [sx, 0, 0, sy, x, y] }
+  det := ASX * ASY - 0 * 0;
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  det := 1.0 / det;
+  AEl.ZrHit.ToLocal[0] := ASY * det;
+  AEl.ZrHit.ToLocal[1] := -0 * det;
+  AEl.ZrHit.ToLocal[2] := -0 * det;
+  AEl.ZrHit.ToLocal[3] := ASX * det;
+  AEl.ZrHit.ToLocal[4] := (0 * AY - ASY * AX) * det;
+  AEl.ZrHit.ToLocal[5] := (0 * AX - ASX * AY) * det;
+  { Path.getLineScale: one where a diagonal entry is one }
+  if (Abs(ASX - 1) > 1e-10) and (Abs(ASY - 1) > 1e-10) then
+    AEl.ZrHit.LineScale := Sqrt(Abs(ASX * ASY))
+  else
+    AEl.ZrHit.LineScale := 1;
+  AEl.ZrHit.Path := path;
+  AEl.ZrHit.PathBox := TyZrBBox(path);
+  AEl.ZrHit.Fill := False;
+  AEl.ZrHit.Stroke := True;
+  AEl.ZrHit.StyleWidth := True;
+  AEl.ZrHit.Active := True;
+end;
+
+function TyGraphArrowRotationRad(const ATangent: TTyPointF;
+  AAtEnd: Boolean): Double;
+var sign: Double;
+begin
+  if AAtEnd then sign := -1 else sign := 1;
+  if (ATangent.X = 0) and (ATangent.Y = 0) then Exit(0);
+  Result := sign * Pi / 2 - ArcTan2(ATangent.Y, ATangent.X);
+end;
+
+function TyGraphEdgeSymbolMap(ARotRad, AScale, ASX, ASY: Double): TTyMat2D;
+var m: TTyMat2D;
+begin
+  { getLocalTransform (the scale, then matrix.rotate), then the parent's
+    (matrix.mul) }
+  m := TyZrLocal(AScale, AScale, ARotRad, 0, 0);
+  Result[0] := ASX * m[0];
+  Result[1] := ASY * m[1];
+  Result[2] := ASX * m[2];
+  Result[3] := ASY * m[3];
+  Result[4] := 0;
+  Result[5] := 0;
+end;
+
 function TyGraphEdgeStroke(const ASpec: TTyGraphSpec;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AAt: Integer): TTyChartColor;
@@ -6459,6 +6755,15 @@ var
     the compensation }
   edgeAnim: TTyChartAnim;
   hw, hh, offX0, offY0: Double;
+  { [R7-G] the device scale, and a straight edge's ends in its frame }
+  pxs: Double;
+  { [R7-R] an end symbol's width and height }
+  ew, eh: Double;
+  q1s, q2s: TTyPointF;
+  { [R7-O] a turned node: its turn, its map under the view }
+  nodeTurn: Boolean;
+  lm, nm: TTyMat2D;
+  sym0: TTySymbolSpec;
 
   { [R2-I3] A NODE'S PEN, as a Symbol path takes its style: the visual's
     stroke (borderColor) and lineWidth (borderWidth, zrender's 1 where none
@@ -6499,6 +6804,14 @@ var
       AEl.Style.StrokeColor := b.BorderColor.Color;
       AEl.Style.StrokeGradient := b.BorderColor.Gradient;
       AEl.Style.StrokeWidthLogical := w;
+      { [R7-F] a clear colour strokes for the pointer; a width of +Infinity
+        (drawn as none) makes the stroked rect not-a-number: never hit }
+      AEl.Style.HitClearPen := ((b.BorderColor.Color shr 24) = 0)
+        and (b.BorderColor.Gradient.Kind = cgkNone) and not b.BorderColor.Pattern.Present;
+      AEl.HitNone := b.BorderWidthInf > 0;
+      { [R7-W] stroked at the lineWidth the canvas had (TyLinesCanvasLeftovers) }
+      if AEl.HitNone and (AEl.Style.StrokeColor <> 0) then
+        AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
     end
     else
       Exit;
@@ -6556,8 +6869,15 @@ var
     A.VSY := fr.SY;
     A.VX := fr.X;
     A.VY := fr.Y;
-    { the label: [position, distance x, y, rotate, offset x, y] }
-    SetLength(A.Vals, 6);
+    { the label: [position, distance x, y, rotate, offset x, y]; [R7-G] and
+      [6] the width the line's ends snap by in its frame (the logical width
+      on a view, the device one on axes) }
+    SetLength(A.Vals, 7);
+    if A.InView then A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt])
+    else A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt]) * pxs;
+    { [R7-AJ] and the grid it snaps on: the css px one on axes (the device
+      px a css px makes), the frame's own on a view }
+    if A.InView then A.PxScale := 1 else A.PxScale := pxs;
     A.Vals[0] := -1;
     A.Vals[1] := 0;
     A.Vals[2] := 0;
@@ -6654,43 +6974,279 @@ var
     AEl.Caption.FixedAH := ah;
     AEl.Caption.FixedAV := av;
     AEl.Caption.FixedRotationRad := rot;
+    { [R7-M] Line.beforeUpdate scales the label by 1 / every ancestor's
+      scaleX: under a view whose scaleY is not its scaleX the words are
+      drawn squashed by scaleY / scaleX on y before their turn }
+    AEl.Caption.FixedYScale := 0;
+    if (fr.SX <> fr.SY) and (fr.SX <> 0) and not IsNan(fr.SX) and not IsNan(fr.SY)
+      and not IsInfinite(fr.SX) and not IsInfinite(fr.SY) then
+      AEl.Caption.FixedYScale := fr.SY / fr.SX;
   end;
 
   { The arrowhead at one end of the edge just built. }
-  procedure Arrow(const AName: string; ASize: Double; AAtEnd: Boolean);
+  procedure Arrow(const AName: string; ASize, AH: Double; AAtEnd: Boolean);
   var s: TTySymbolSpec; e: TTyChartElement; sh: TTyChartShape;
       at: TTyPointF; tg: TTyPointF; em: Boolean; pd: string;
+      { [R7-O] under a view that scales unequally }
+      sq: Boolean;
+      fr: TTyGraphLabelFrame;
+      q1, q2, qc: TTyPointF;
+      rot: Double;
+      L: TTyMat2D;
+      bx: TTyXYWH;
+      { [R7-R] sized [w, h]: createSymbol's real box, another picture }
+      oblong: Boolean;
+      { [R7-V] a box with a side of nought }
+      collapsed, inkless, nanPath: Boolean;
+      mask: TFPUExceptionMask;
+      k: Integer;
+      zp: TTyZrPath;
+      cmds: TTyPathCmdArray;
+      pts: TTyPointFArray;
+      M: TTyMat2D;
   begin
-    if (AName = '') or (AName = 'none') or (ASize <= 0) then Exit;
+    if (AName = '') or (AName = 'none') then Exit;
+    { [R7-V] A BOX WITH A SIDE OF NOUGHT (a one-number size, normalizeSymbolSize's
+      [w, 0], or [0, h]): createSymbol's path in that collapsed box -- nothing
+      to fill, though an empty symbol's pen still draws its edge, a 'line'
+      its length and a pin its head [was: never built] }
+    inkless := False;
+    nanPath := False;
+    collapsed := not IsNan(ASize) and not IsNan(AH) and (ASize >= 0) and (AH >= 0)
+      and ((ASize > 0) or (AH > 0)) and ((ASize = 0) or (AH = 0));
+    if not collapsed and ((ASize <= 0) or (AH <= 0)) then Exit;
     s := Default(TTySymbolSpec);
     s.Kind := TySymbolKindOf(AName, em, pd);
     if s.Kind = tsyNone then Exit;
     s.Empty := em;
     s.PathData := pd;
     s.WidthPx := ASize;
-    s.HeightPx := ASize;
+    s.HeightPx := AH;
+    oblong := ASize <> AH;
     if AAtEnd then at := TyGraphPointAt(p1, p2, cp, curved, 1)
     else at := TyGraphPointAt(p1, p2, cp, curved, 0);
     if AAtEnd then tg := TyGraphTangentAt(p1, p2, cp, curved, 1)
     else tg := TyGraphTangentAt(p1, p2, cp, curved, 0);
     s.RotateDeg := TyGraphArrowRotation(tg, AAtEnd);
-    sh := TyBuildSymbol(s, at.X, at.Y);
+    L := TyZrLocal(1, 1, 0, 0, 0);
+    { [R7-O] UNDER A VIEW WHOSE scaleY IS NOT ITS scaleX: Line.beforeUpdate
+      turns the symbol by the tangent in the group's units and scales it by
+      1 / scaleX alone, so on the canvas it keeps scaleY / scaleX on y after
+      its turn -- squashed, sheared on a slanted edge [was: turned by the
+      canvas' tangent, drawn at its size] }
+    sq := False;
+    fr := AInk.Frame;
+    if AInk.HasFrame and AEdges[edgeAt].HasEnds and (fr.SX <> fr.SY)
+      and (fr.SX <> 0) and not IsNan(fr.SX) and not IsNan(fr.SY)
+      and not IsInfinite(fr.SX) and not IsInfinite(fr.SY) then
+    begin
+      sq := True;
+      q1 := TyPointF(AEdges[edgeAt].TX1, AEdges[edgeAt].TY1);
+      q2 := TyPointF(AEdges[edgeAt].TX2, AEdges[edgeAt].TY2);
+      qc := TyPointF(AEdges[edgeAt].TCPX, AEdges[edgeAt].TCPY);
+      if AAtEnd then tg := TyGraphTangentAt(q1, q2, qc, curved, 1)
+      else tg := TyGraphTangentAt(q1, q2, qc, curved, 0);
+      rot := TyGraphArrowRotationRad(tg, AAtEnd);
+      L := TyGraphEdgeSymbolMap(rot, fr.InvScale, fr.SX, fr.SY);
+      if oblong then sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L)
+      else sh := TyBuildSymbolMapped(s, at.X, at.Y, L);
+    end
+    else if oblong then
+    begin
+      { [R7-R] createSymbol(type, -w / 2, -h / 2, w, h) turned by the
+        tangent: the real box's picture (a circle of min(w, h) / 2, ...)
+        [was: one size, the width, read for both] }
+      rot := TyGraphArrowRotationRad(tg, AAtEnd);
+      L := TyZrLocal(1, 1, rot, 0, 0);
+      if not collapsed then sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L);
+    end
+    else
+      sh := TyBuildSymbol(s, at.X, at.Y);
+    if collapsed then
+    begin
+      { [R7-V] symbol.ts' own path in the collapsed box, through the
+        symbol's frame and to its end: an empty symbol's pen, a 'line', a
+        pin's head show; a filled one has no area -- nothing drawn or hit,
+        though it is brushed and hands the canvas its transform: built
+        without ink }
+      inkless := not (em or (s.Kind in [tsyLine, tsyPin]));
+      mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+        exOverflow, exUnderflow, exPrecision]);
+      try
+        if s.Kind = tsyPath then zp := TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -AH / 2, ASize, AH))
+        else zp := TyZrSymbol(AName, -ASize / 2, -AH / 2, ASize, AH);
+        M := L;
+        M[4] := at.X;
+        M[5] := at.Y;
+        TyGfxPathCmds(zp, M, cmds, pts);
+      finally
+        ClearExceptions(False);
+        SetExceptionMask(mask);
+      end;
+      { a pin of no width: a head of no number (Pin.buildPath's asin of
+        nought over nought) -- nothing drawn, nothing hit, still brushed }
+      nanPath := Length(pts) = 0;
+      for k := 0 to High(pts) do
+        if IsNan(pts[k].X) or IsNan(pts[k].Y) then nanPath := True;
+      if nanPath then
+      begin
+        inkless := True;
+        sh := TyShapePolyline([TyPointF(at.X, at.Y), TyPointF(at.X, at.Y)]);
+      end
+      else
+      begin
+        if s.Kind = tsyLine then sh := TyShapePolyline(pts) else sh := TyShapePolygon(pts);
+        sh.Cmds := cmds;
+        sh.HitNonZero := True;
+      end;
+    end;
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     e := TyChartElement(sh);
-    e.Style.HasFill := True;
-    e.Style.FillColor := EdgeColour(edgeAt);
+    { [R7-V] the transform it hands the canvas: the view's squash and its
+      turn (the size is in the path), at its end }
+    if sq then M := L
+    else M := TyZrLocal(1, 1, TyGraphArrowRotationRad(tg, AAtEnd), 0, 0);
+    M[4] := at.X;
+    M[5] := at.Y;
+    e.CanvasM := TTyDoubleArray.Create(M[0], M[1], M[2], M[3], M[4], M[5]);
+    { [R7-O] symbolPathSetColor: an empty symbol is stroked in the line's
+      colour at two wide over the theme's ground, a 'line' stroked at
+      zrender's one, the rest filled [was: every one filled] }
+    if em then
+    begin
+      e.Style.HasFill := True;
+      e.Style.FillColor := AInk.EmptyFill;
+      e.Style.StrokeColor := EdgeColour(edgeAt);
+      e.Style.StrokeWidthLogical := 2;
+    end
+    else if s.Kind = tsyLine then
+    begin
+      { its fill stays zrender's default '#000': nothing to fill on a
+        line, but the pointer's pen has no strokeContainThreshold }
+      e.Style.HasFill := True;
+      e.Style.FillColor := TTyChartColor($FF000000);
+      e.Style.StrokeColor := EdgeColour(edgeAt);
+      e.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      e.Style.HasFill := True;
+      e.Style.FillColor := EdgeColour(edgeAt);
+    end;
+    { [R7-V] a collapsed box of no picture: no fill, no pen, never a target }
+    if inkless then
+    begin
+      e.Style.HasFill := False;
+      e.Style.StrokeWidthLogical := 0;
+    end;
     e.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[edgeAt]);
     e.Z := ASpec.Z;
     e.Z2 := ASpec.Z2;
-    { SILENT, like the edge it belongs to: an arrowhead is part of the line's
-      picture, not a second thing to point at. }
-    e.Silent := True;
-    { THE EDGE'S DATUM, and still silent: a hover never lands on an
-      arrowhead, but a blur or an emphasis of the edge takes its arrowheads
-      with it. [Revised in batch 46: the datum was (series, -1).] }
+    { [R7-O] A POINTER TARGET: setItemGraphicEl writes the edge's ECData onto
+      every child of its Line group, the end symbols too, and none of them
+      is silent -- a hover on one is a hover on the edge (its group is the
+      highDown dispatcher). Hit in its own frame: createSymbol's path is
+      the unit one scaled by half the size, its pen the symbol's own (no
+      strokeNoScale) [was: silent] }
+    e.Silent := False;
+    e.HitSlopLogical := 0;
+    if inkless then e.Silent := True
+    else if s.Kind <> tsyLine then
+    begin
+      if collapsed then
+      begin
+        { [R7-V] hit in the symbol's frame on the collapsed box's path (an
+          empty circle's of no radius still answers about its centre) }
+        e.Shape.HitM := M;
+        e.Shape.HitBoxW := ASize;
+        e.Shape.HitBoxH := AH;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+      end
+      else if oblong then
+      begin
+        { [R7-R] hit in that real box's frame: the path createSymbol makes
+          at the size, its pen the symbol's own }
+        e.Shape.HitM[0] := L[0];
+        e.Shape.HitM[1] := L[1];
+        e.Shape.HitM[2] := L[2];
+        e.Shape.HitM[3] := L[3];
+        e.Shape.HitM[4] := at.X;
+        e.Shape.HitM[5] := at.Y;
+        e.Shape.HitBoxW := ASize;
+        e.Shape.HitBoxH := AH;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+      end
+      else if sq then
+      begin
+        e.Shape.HitM[0] := L[0] * (ASize / 2);
+        e.Shape.HitM[1] := L[1] * (ASize / 2);
+        e.Shape.HitM[2] := L[2] * (ASize / 2);
+        e.Shape.HitM[3] := L[3] * (ASize / 2);
+        e.Shape.HitM[4] := at.X;
+        e.Shape.HitM[5] := at.Y;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+      end
+      else
+        TySymbolHitFrame(e.Shape, s, at.X, at.Y);
+      e.Shape.HitPenInFrame := e.Shape.HitSym <> '';
+    end;
+    { the pen stretched with the frame: the root of the map's determinant
+      its size, [R7-P] the map over that root its shape -- the canvas' pen
+      squashed and sheared as the symbol is [was: a round pen of that
+      size; a 'line' symbol's not scaled at all] }
+    if sq then
+    begin
+      e.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+      TyStyleSetPenShape(e.Style, L);
+    end;
     e.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[edgeAt].Row);
     { it rides the line's percent (Line.beforeUpdate) [F3a] }
     e.Anim := edgeAnim;
+    { [R7-O] Vals[7..10]: the path's own rect in the symbol's frame,
+      grown by its pen (Path.getBoundingRect: a 'line' keeps zrender's
+      default fill, so no threshold) -- what the Line group's
+      getBoundingRect takes through the symbol's local transform }
+    e.Anim.Vals := Copy(edgeAnim.Vals, 0, Length(edgeAnim.Vals));
+    SetLength(e.Anim.Vals, 11);
+    { [R7-V] (a path of no number has no rect: nought) }
+    if nanPath then bx := TyXYWH(0, 0, 0, 0)
+    else if Copy(AName, 1, 7) = 'path://' then
+      bx := TyZrBBox(TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -AH / 2, ASize, AH)))
+    else
+      bx := TyZrBBox(TyZrSymbol(AName, -ASize / 2, -AH / 2, ASize, AH));
+    bx := TyZrStrokeRect(bx, 1, e.Style.StrokeWidthLogical > 0, True,
+      e.Style.StrokeWidthLogical, 1);
+    e.Anim.Vals[7] := bx.X;
+    e.Anim.Vals[8] := bx.Y;
+    e.Anim.Vals[9] := bx.W;
+    e.Anim.Vals[10] := bx.H;
     if AAtEnd then e.Anim.Role := carGraphEdgeTo else e.Anim.Role := carGraphEdgeFrom;
     AList.Add(e);
     Inc(Result);
@@ -6702,6 +7258,8 @@ begin
     into pixels already -- by a view or by a pair of axes -- so the one
     builder serves both. }
   if AList = nil then Exit;
+  if (AInk.PxScale > 0) and not IsNan(AInk.PxScale) then pxs := AInk.PxScale
+  else pxs := 1;
 
   for i := 0 to High(AEdges) do
   begin
@@ -6756,21 +7314,76 @@ begin
         a point to itself is a stroke with nowhere to go. }
       if (p1.X = p2.X) and (p1.Y = p2.Y) then Continue;
       SetLength(pts, 2);
-      pts[0] := p1;
-      pts[1] := p2;
+      { [R7-G] ON THE HALF PIXEL OF ITS WIDTH, as ECLinePath builds it: in
+        data space on a view, then through the roam transform (so a zoom
+        carries the half pixel off the grid, as upstream's does); in
+        pixels on axes [was: the ends as laid out, half a pixel off] }
+      if AInk.HasFrame and AEdges[i].HasEnds then
+      begin
+        q1s := TyPointF(AEdges[i].TX1, AEdges[i].TY1);
+        q2s := TyPointF(AEdges[i].TX2, AEdges[i].TY2);
+        TyGraphEdgeSnap(q1s, q2s, False, TyGraphEdgeWidth(ASpec, AEdges[i]));
+        pts[0] := TyPointF(AInk.Frame.SX * q1s.X + 0 * q1s.Y + AInk.Frame.X,
+          0 * q1s.X + AInk.Frame.SY * q1s.Y + AInk.Frame.Y);
+        pts[1] := TyPointF(AInk.Frame.SX * q2s.X + 0 * q2s.Y + AInk.Frame.X,
+          0 * q2s.X + AInk.Frame.SY * q2s.Y + AInk.Frame.Y);
+      end
+      else
+      begin
+        pts[0] := p1;
+        pts[1] := p2;
+        { ([R7-AH] on the css px grid at another PPI [was: the device px
+          grid]) }
+        TyGraphEdgeSnap(pts[0], pts[1], False, TyGraphEdgeWidth(ASpec, AEdges[i]) * pxs, pxs);
+      end;
     end;
 
     el := TyChartElement(TyShapePolyline(pts));
+    { [R7-F] the pointer tests the quadratic itself (BezierCurve), not the
+      points it is drawn as }
+    if curved then
+    begin
+      el.Shape.HitQuad := True;
+      el.Shape.HitCP := cp;
+    end;
+    { [R7-O] under a view whose scaleY is not its scaleX the pen's reach is
+      unequal on the canvas: the line tested in the group's units }
+    if AInk.HasFrame and AEdges[i].HasEnds and (AInk.Frame.SX <> AInk.Frame.SY) then
+    begin
+      if curved then
+        TyGraphEdgeZrHit(el, TyPointF(AEdges[i].TX1, AEdges[i].TY1),
+          TyPointF(AEdges[i].TX2, AEdges[i].TY2), TyPointF(AEdges[i].TCPX, AEdges[i].TCPY),
+          True, 1, AInk.Frame.SX, AInk.Frame.SY, AInk.Frame.X, AInk.Frame.Y)
+      else
+        TyGraphEdgeZrHit(el, q1s, q2s, q1s, False, 1, AInk.Frame.SX, AInk.Frame.SY,
+          AInk.Frame.X, AInk.Frame.Y);
+    end;
     el.Style.HasFill := False;
     el.Style.StrokeColor := EdgeColour(i);
     { THE EDGE'S OWN width, opacity and type over the series' [Batch 114] }
     el.Style.StrokeWidthLogical := TyGraphEdgeWidth(ASpec, AEdges[i]);
+    { [R7-P] ECLinePath is strokeNoScale under the view's (scaleX, scaleY):
+      where the two differ the canvas' pen is that scale over its line
+      scale -- unequal across and along [was: a round pen of the width] }
+    if AInk.HasFrame and AEdges[i].HasEnds and (AInk.Frame.SX <> AInk.Frame.SY) then
+      TyStyleViewPen(el.Style, AInk.Frame.SX, AInk.Frame.SY);
     el.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[i]);
     el.Style.DashLogical := TyGraphEdgeDash(ASpec, AEdges[i]);
     { [R2-I4] the word, measured again where a state tweens the width }
     if AEdges[i].HasOwnDash then el.Style.DashWord := TyDashWord(AEdges[i].OwnDash)
     else el.Style.DashWord := TyDashWord(ASpec.LineDash);
     el.Style.DashOffsetLogical := TyGraphEdgeDashOffset(ASpec, AEdges[i]);
+    { [R7-Y] A WIDTH OF +Infinity, the edge's own where it writes one, else
+      the series': stroked at the lineWidth the canvas had
+      (TyLinesCanvasLeftovers), its stroked rect not a number -- never hit
+      [was: no pen] }
+    if ((AEdges[i].HasOwnWidth and AEdges[i].OwnWidthInf)
+      or (not AEdges[i].HasOwnWidth and ASpec.LineWidthInf))
+      and (((el.Style.StrokeColor shr 24) <> 0) or (el.Style.StrokeGradient.Kind <> cgkNone)) then
+    begin
+      el.HitNone := True;
+      el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+    end;
     el.Z := ASpec.Z;
     el.Z2 := ASpec.Z2;
     el.Silent := False;
@@ -6793,10 +7406,12 @@ begin
     Inc(Result);
 
     edgeAt := i;
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False),
-      TyGraphEdgeSymbolSize(ASpec, AEdges[i], False), False);
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True),
-      TyGraphEdgeSymbolSize(ASpec, AEdges[i], True), True);
+    { [R7-R] each end's width and height (a pair where one is written) }
+    { ([R7-AG] css px: PPI / 96 device px each) }
+    TyGraphEdgeSymbolBox(ASpec, AEdges[i], False, ew, eh);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False), ew * pxs, eh * pxs, False);
+    TyGraphEdgeSymbolBox(ASpec, AEdges[i], True, ew, eh);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True), ew * pxs, eh * pxs, True);
   end;
 
   for i := 0 to High(ANodes) do
@@ -6836,7 +7451,8 @@ begin
     hw := sym.WidthPx / 2;
     hh := sym.HeightPx / 2;
     sz := Min(sym.WidthPx, sym.HeightPx);
-    if IsNan(sz) or (sz <= 0) then Continue;
+    { [R7-W] a side of nought is still a node (below) [was: none] }
+    if IsNan(sz) or (sz < 0) then Continue;
     { THE SYMBOL'S HALF-EXTENTS as zrender composes them: the group's scale
       times the compensation scale, then times the half size -- or, for a
       node a drag moved, times the scale the drag re-derived [Batch 114]. }
@@ -6847,6 +7463,7 @@ begin
       symX := AInk.Frame.SX * ANodes[i].DragScaleX;
       symY := AInk.Frame.SY * ANodes[i].DragScaleY;
     end;
+
     if (symX <> 1) or (symY <> 1) then
     begin
       sym.WidthPx := symX * (sym.WidthPx / 2) * 2;
@@ -6856,14 +7473,97 @@ begin
       sym.OffsetY := symY * sym.OffsetY;
     end;
 
-    shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
+    { [R7-O] A TURNED NODE UNDER A VIEW WHOSE scaleY IS NOT ITS scaleX:
+      the path is turned in the Symbol group and the group scaled unequally
+      after -- diag(symX, symY) times the turn times the half size, not the
+      scaled size turned [was: TyBuildSymbol's turn of the scaled box] }
+    nodeTurn := (sym.RotateDeg <> 0) and not IsNan(sym.RotateDeg)
+      and not IsInfinite(sym.RotateDeg);
+    if nodeTurn then
+    begin
+      lm := TyZrLocal(1, 1, sym.RotateDeg * Pi / 180, 0, 0);
+      nm[0] := symX * lm[0];
+      nm[1] := symY * lm[1];
+      nm[2] := symX * lm[2];
+      nm[3] := symY * lm[3];
+      nm[4] := 0;
+      nm[5] := 0;
+    end;
+    if nodeTurn and (symX <> symY) and (sym.Kind <> tsyImage) then
+    begin
+      sym0 := sym;
+      sym0.WidthPx := hw * 2;
+      sym0.HeightPx := hh * 2;
+      shape := TyBuildSymbolMapped(sym0, ANodes[i].PX + sym.OffsetX,
+        ANodes[i].PY + sym.OffsetY, nm);
+    end
+    else
+      shape := TyBuildSymbolUnit(sym, ANodes[i].PX, ANodes[i].PY);
+    { [R7-W] A NODE OF NO SIZE is still an element upstream: it paints
+      nothing and is hit where its inverse says (TySymbolHitFrame) [was:
+      dropped] }
+    if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds)
+      and (sym.WidthPx >= 0) and (sym.HeightPx >= 0)
+      and ((sym.WidthPx = 0) or (sym.HeightPx = 0))
+      and not IsNan(ANodes[i].PX + sym.OffsetX) and not IsNan(ANodes[i].PY + sym.OffsetY) then
+      shape := TyShapeRect(TyRectF(ANodes[i].PX + sym.OffsetX, ANodes[i].PY + sym.OffsetY,
+        ANodes[i].PX + sym.OffsetX, ANodes[i].PY + sym.OffsetY));
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(shape, sym, ANodes[i].PX, ANodes[i].PY);
+    if nodeTurn and (symX <> symY) and (shape.HitSym <> '') then
+    begin
+      shape.HitM[0] := nm[0] * hw;
+      shape.HitM[1] := nm[1] * hw;
+      shape.HitM[2] := nm[2] * hh;
+      shape.HitM[3] := nm[3] * hh;
+    end;
     fill := 0;
     if (i >= 0) and (i <= High(AInk.NodeFills)) then fill := AInk.NodeFills[i];
     el := TyChartElement(shape);
+    { [R7-P] its pen through the unit path's whole transform (strokeNoScale):
+      the view's unequal scale, a turn under it, an oblong size }
+    if nodeTurn and (symX <> symY) and (sym.Kind <> tsyImage) then
+    begin
+      lm := Default(TTyMat2D);
+      lm[0] := nm[0] * hw;
+      lm[1] := nm[1] * hw;
+      lm[2] := nm[2] * hh;
+      lm[3] := nm[3] * hh;
+      TyStyleNoScalePen(el.Style, lm);
+    end
+    else
+      TyStyleNoScalePen(el.Style, TySymbolUnitFrame(sym, ANodes[i].PX, ANodes[i].PY));
     el.Style.HasFill := fill <> 0;
     el.Style.FillColor := fill;
     NodeBorder(el, sym, i, fill);
+    { [R7-O] A TURNED NODE'S LABEL hangs off its unit path's rect (grown by
+      the pen over the line scale) through the path's whole transform --
+      updateInnerText's layoutRect -- not off the turned outline's bounds
+      (a turned circle's rect is its turned square's) }
+    { [R7-O] AND A NODE UNDER A VIEW SCALED UNEQUALLY: its pen grows the
+      unit rect by the width over the line scale, the root of the whole
+      map's determinant -- unequal on the canvas [was: half the width on
+      every side] }
+    if (symX <> symY) and not nodeTurn then
+    begin
+      nm[0] := symX;
+      nm[1] := 0;
+      nm[2] := 0;
+      nm[3] := symY;
+    end;
+    if nodeTurn or (symX <> symY) then
+    begin
+      nm[4] := sym.OffsetX + ANodes[i].PX;
+      nm[5] := sym.OffsetY + ANodes[i].PY;
+      nm[0] := nm[0] * hw;
+      nm[1] := nm[1] * hw;
+      nm[2] := nm[2] * hh;
+      nm[3] := nm[3] * hh;
+      el.Caption.HasSymBox := True;
+      el.Caption.SymBox := TySymbolLabelBoxM(sym, nm, el.Style.StrokeWidthLogical,
+        (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
+    end;
     { the node's style.opacity [F2a] }
     el.Style.Alpha := 1;
     if i <= High(AInk.NodeOpacity) then el.Style.Alpha := AInk.NodeOpacity[i];

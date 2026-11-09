@@ -44,6 +44,9 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-universal-transition2.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 echarts.env.node = false;
 
@@ -488,7 +491,7 @@ const pieAB = (u, extra) => solo(pieS(Object.assign({ id: 'p', universalTransiti
 
 // ---------- the gallery's scatter-aggregate-bar, its own data ----------
 function gallery() {
-  const g = JSON.parse(fs.readFileSync(path.join(GALLERY, 'scatter-aggregate-bar.json'), 'utf8'));
+  const g = withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, 'scatter-aggregate-bar.json'), 'utf8')));
   const female = g.series[0].data;
   const male = g.series[1].data;
   const avg = (data, dim) => {

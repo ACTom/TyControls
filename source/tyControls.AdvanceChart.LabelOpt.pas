@@ -285,6 +285,12 @@ begin
   series := ObjOf(AOption.ComponentAt('series', ASlot));
   if series = nil then Exit;
   Result := TyLabelSpecOfNode(ObjOf(series.Find('label')), series, ABase);
+  { [R7-L] setLabelStyle with no defaultOpacity: SunburstPiece, SankeyView,
+    ThemeRiverView }
+  d := series.Find('type');
+  Result.NoHostOpacity := (d <> nil) and (d.JSONType = jtString)
+    and ((d.AsString = 'sunburst') or (d.AsString = 'sankey')
+      or (d.AsString = 'themeRiver'));
   { [R5-L] A SERIES THAT WRITES NO label STILL HAS ITS emphasis.label:
     getLabelStatesModels takes [state, 'label'] off the item model whether
     or not `label` is written (labelStyle.ts:316-318), and the state's text
@@ -355,10 +361,14 @@ var
   pos: TTyLabelPosition;
   s: string;
   v: Double;
+  fwv: Double;
+  fwfs: TFormatSettings;
 begin
   Result := ABase;
   series := ASeries;
   node := ANode;
+  fwfs := DefaultFormatSettings;
+  fwfs.DecimalSeparator := '.';
   { A STATE THAT SHOWS THE LABEL, read whether or not the series writes a
     `label` of its own: needsCreateText [Batch 88] }
   if series <> nil then
@@ -569,9 +579,19 @@ begin
     point size drew a third too large [Batch 83] }
   Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
     Result.FontSizeLogical);
-  s := StrIn(node, 'fontWeight');
+  { [R7-Y] its fontFamily, as makeFont joins it [was: not read -- the
+    skin's family whatever the label wrote] }
+  s := StrIn(node, 'fontFamily');
+  if s <> '' then Result.FontName := s;
+  { [R7-Y] a CSS word, ASCII case-insensitive, and a number written as a
+    string, as the canvas' font parser reads them [was: lower case only, a
+    string's number not read] }
+  s := LowerCase(Trim(StrIn(node, 'fontWeight')));
+  fwv := NaN;
+  if (s <> '') and TryStrToFloat(s, fwv, fwfs) and (fwv >= 1) and (fwv <= 1000) then
+    Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or TyRoundOpt(fwv, 400)
   { [R5-A] the weight only: the style flags above it are the font's style }
-  if (s = 'bold') or (s = 'bolder') then
+  else if (s = 'bold') or (s = 'bolder') then
     Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 700
   else if s = 'normal' then
     Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 400
@@ -582,6 +602,9 @@ begin
   { [R5-A] fontStyle: the label's own, else what the spec was handed (the
     series' label, the root textStyle) }
   Result.FontWeight := TyFontStyleOver(node.Find('fontStyle'), Result.FontWeight);
+  { [R7-Y] a font the canvas refuses (the one it had drawn instead) }
+  Result.FontLeft := TyCssFontRefused(node.Find('fontStyle'), node.Find('fontWeight'),
+    node.Find('fontSize'));
   ResolveBlock(node, Result);
 end;
 
@@ -762,6 +785,14 @@ begin
       ASpec.AutoColour := False;
       ASpec.InheritColour := False;
       ASpec.Colour := c;
+    end
+    { [R7-Z] a colour no parser reads: the canvas refuses it and fills with
+      what it had (the list's run settles it) [was: the automatic colour] }
+    else if (s <> '') and (s <> 'auto') and (s <> 'none') and not TyColourIsHandler(s) then
+    begin
+      ASpec.AutoColour := False;
+      ASpec.InheritColour := False;
+      ASpec.Colour := cTyCanvasColourLeft;
     end;
 
     s := StrIn(ALabel, 'textBorderColor');
@@ -771,6 +802,8 @@ begin
       if (s = 'none') or (s = 'transparent') then ASpec.BorderColourNone := True
       else if s = 'inherit' then ASpec.BorderColourInherit := True
       else if TyTryParseChartColor(s, c) then ASpec.BorderColour := c
+      { [R7-Z] (as the fill) [was: none] }
+      else if not TyColourIsHandler(s) then ASpec.BorderColour := cTyCanvasColourLeft
       else ASpec.BorderColourNone := True;
     end;
     { textBorderType as written [F4c] }
@@ -792,8 +825,19 @@ begin
     begin
       ASpec.HasBorderWidth := True;
       ASpec.BorderWidthLogical := d.AsFloat;
+      ASpec.BorderWidthText := '';
+      ASpec.BorderWidthInf := False;
       if IsNan(ASpec.BorderWidthLogical) or IsInfinite(ASpec.BorderWidthLogical)
         or (ASpec.BorderWidthLogical < 0) then ASpec.BorderWidthLogical := 0;
+    end
+    { [R7-AF] A STRING: the canvas' number of it ('3' strokes 3, 'abc' and
+      '-2' nothing), the string kept for the TSpan's rect (it joins it);
+      'Infinity' the width the canvas had [was: not written] }
+    else if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      ASpec.HasBorderWidth := True;
+      TyRtTakeLineWidth(d, ASpec.BorderWidthLogical, ASpec.BorderWidthText, ASpec.BorderWidthInf);
+      if ASpec.BorderWidthLogical < 0 then ASpec.BorderWidthLogical := 0;
     end;
     d := ALabel.Find('backgroundColor');
     ASpec.HasBackground := (d <> nil) and (d.JSONType = jtString)
@@ -828,12 +872,30 @@ begin
   begin
     ASpec.EmphHasColour := True;
     ASpec.EmphColour := c;
+  end
+  { [R7-AA] a colour no parser reads: the canvas refuses it and fills the
+    hovered text with what it had (the run settles it) [was: the normal
+    colour] }
+  else if (s <> '') and (s <> 'inherit') and (s <> 'auto') and (s <> 'none')
+    and not TyColourIsHandler(s) then
+  begin
+    ASpec.EmphHasColour := True;
+    ASpec.EmphColour := cTyCanvasColourLeft;
   end;
   d := emph.Find('textBorderWidth');
   if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat >= 0) then
   begin
     ASpec.EmphHasBorderWidth := True;
     ASpec.EmphBorderWidthLogical := d.AsFloat;
+  end
+  { [R7-AI] A STRING: the canvas' number of it over the normal halo ('3'
+    strokes 3, 'abc' and '0' nothing), 'Infinity' the width the canvas had
+    [was: not written] }
+  else if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    ASpec.EmphHasBorderWidth := True;
+    TyRtTakeLineWidth(d, ASpec.EmphBorderWidthLogical, s, ASpec.EmphBorderWidthInf);
+    if ASpec.EmphBorderWidthLogical < 0 then ASpec.EmphBorderWidthLogical := 0;
   end;
   s := StrIn(emph, 'textBorderColor');
   if s <> '' then
@@ -842,6 +904,8 @@ begin
     if (s = 'none') or (s = 'transparent') then ASpec.EmphBorderColourNone := True
     else if (s = 'inherit') or (s = 'auto') then ASpec.EmphBorderColourInherit := True
     else if TyTryParseChartColor(s, c) then ASpec.EmphBorderColour := c
+    { [R7-AA] (as the fill) [was: none] }
+    else if not TyColourIsHandler(s) then ASpec.EmphBorderColour := cTyCanvasColourLeft
     else ASpec.EmphBorderColourNone := True;
   end;
 end;
@@ -932,7 +996,10 @@ begin
       for i := 0 to High(lp) do
       begin
         if i > 0 then valueText := valueText + ' ';
-        if TTyDataStore.RawCell(it, lp[i], cell) then
+        { [spec 255] a place of encode.label no dimension reached is
+          retrieveRawValue with no dimension: the whole raw item }
+        if lp[i] < 0 then valueText := valueText + TyRawItemText(it)
+        else if TTyDataStore.RawCell(it, lp[i], cell) then
           valueText := valueText + TyJsValueText(cell, '');
       end;
     end

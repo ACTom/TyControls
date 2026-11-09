@@ -105,6 +105,8 @@ type
     Laid: Boolean;
     SeriesIndex: Integer;
     Series: TJSONObject;              // borrowed
+    { [R7-U] the series' own style blocks (its visual style), borrowed }
+    SeriesOwn: TJSONObject;
     Z: Integer;
     { device px per CSS px }
     Scale: Double;
@@ -476,6 +478,7 @@ begin
   node := AOption.ComponentAt('series', ASeriesIndex);
   if not (node is TJSONObject) then Exit;
   Result.Series := TJSONObject(node);
+  Result.SeriesOwn := AOption.SeriesOwnStyle(ASeriesIndex);
   if APPI > 0 then Result.Scale := APPI / 96 else Result.Scale := 1;
   Result.Z := 2;
   d := Result.Series.Find('z');
@@ -609,6 +612,21 @@ begin
     begin
       spec.Radius0 := TyBoxPercent(70);
       spec.Radius1 := TyBoxPercent(80);
+    end;
+    { [R7-AG] its centre's, radius' and box's pixel counts are css px:
+      PPI / 96 device px each, as a pie's [was: device px] }
+    if (APPI > 0) and (APPI <> 96) then
+    begin
+      spec.CentreX := TyBoxValueScaled(spec.CentreX, APPI / 96);
+      spec.CentreY := TyBoxValueScaled(spec.CentreY, APPI / 96);
+      spec.Radius0 := TyBoxValueScaled(spec.Radius0, APPI / 96);
+      spec.Radius1 := TyBoxValueScaled(spec.Radius1, APPI / 96);
+      spec.Box.Left := TyBoxValueScaled(spec.Box.Left, APPI / 96);
+      spec.Box.Top := TyBoxValueScaled(spec.Box.Top, APPI / 96);
+      spec.Box.Right := TyBoxValueScaled(spec.Box.Right, APPI / 96);
+      spec.Box.Bottom := TyBoxValueScaled(spec.Box.Bottom, APPI / 96);
+      spec.Box.Width := TyBoxValueScaled(spec.Box.Width, APPI / 96);
+      spec.Box.Height := TyBoxValueScaled(spec.Box.Height, APPI / 96);
     end;
     if AHasRef then
     begin
@@ -1286,19 +1304,27 @@ begin
         el.Style.GradBox := box;
       end;
       { getItemStyle: borderColor the stroke, borderWidth its width --
-        zrender's 1 where none is written }
-      d := TyChordNodeFind(S, i, 'itemStyle', 'borderColor');
+        zrender's 1 where none is written [R7-U: the visual style's, the
+        series' own block] }
+      d := ChainFind(S.Nodes[i].Obj, S.SeriesOwn, 'itemStyle', 'borderColor');
       if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
       begin
-        d := TyChordNodeFind(S, i, 'itemStyle', 'borderWidth');
+        d := ChainFind(S.Nodes[i].Obj, S.SeriesOwn, 'itemStyle', 'borderWidth');
         if d = nil then lw := 1 else lw := JsNum(d);
         if lw > 0 then
         begin
+          { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+            note), and its stroked rect is not-a-number -- never hit }
+          if IsInfinite(lw) then
+          begin
+            el.HitNone := True;
+            lw := 0;
+          end;
           el.Style.StrokeColor := c;
           el.Style.StrokeWidthLogical := lw;
         end;
       end;
-      d := TyChordNodeFind(S, i, 'itemStyle', 'opacity');
+      d := ChainFind(S.Nodes[i].Obj, S.SeriesOwn, 'itemStyle', 'opacity');
       if d <> nil then el.Style.Alpha := JsNum(d) else el.Style.Alpha := 1;
       if i <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[i];
       el.Z := S.Z;
@@ -1421,6 +1447,13 @@ begin
         if d <> nil then lw := JsNum(d);
         if lw > 0 then
         begin
+          { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's
+            note), and its stroked rect is not-a-number -- never hit }
+          if IsInfinite(lw) then
+          begin
+            el.HitNone := True;
+            lw := 0;
+          end;
           el.Style.StrokeColor := c;
           el.Style.StrokeWidthLogical := lw;
         end;

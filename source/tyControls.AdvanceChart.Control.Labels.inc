@@ -42,6 +42,19 @@ begin
       if (t = ddtOrdinal) or (t = ddtTime) then Continue;
       if p > best then best := p;
     end;
+    { [spec 255] a key no coordinate system asks for is a coordinate too
+      (`value` on a scatter): its dimension may be the last, typed as the
+      source declares or guesses it }
+    for k := 0 to High(AEnc.Others) do
+    begin
+      p := AEnc.Others[k];
+      if (p >= 0) and (p <= High(ASource.Dims))
+        and ((ASource.Dims[p].DimType = 'time') or (ASource.Dims[p].DimType = 'ordinal')) then
+        Continue;
+      if (p <= High(ASource.Dims)) and (ASource.Dims[p].DimType = '')
+        and TySourceDimIsOrdinal(ASource, p) then Continue;
+      if p > best then best := p;
+    end;
     if best >= 0 then
     begin
       SetLength(lab, 1);
@@ -58,8 +71,11 @@ begin
   if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
   else
   begin
+    { (an extra entry of an encode list is no column of the type's
+      [spec 255]) }
     for k := 0 to AStore.DimCount - 1 do
       if (AStore.DimCoord(k) <> '') and (AStore.RawDimPos(k) >= 0)
+        and not TyIsSpreadDim(AStore.DimName(k))
         and (TySourceDimName(ASource, AStore.RawDimPos(k)) = '') then
         AddSorted(tip, AStore.RawDimPos(k));
     if Length(tip) = 0 then tip := Copy(lab);
@@ -304,6 +320,10 @@ begin
   el.Caption.AnchorH := ah;
   el.Caption.AnchorV := av;
   el.Caption.ValTpl := tpl;
+  { [R7-L] ITS OWN OPACITY (the root textStyle's under it): LineView hands
+    the end label no defaultOpacity, so it is 1 otherwise [was: never read
+    -- and a block's pieces no longer carry it] }
+  if spec.HasOpacity then el.Style.Alpha := spec.Opacity;
   el.Z := AVisual.Z;
   el.Z2 := 200;
   el.Silent := True;
@@ -378,6 +398,40 @@ begin
     if (FEndLbls[i].Series = ASeriesIndex) and (FEndLbls[i].Measurer <> nil) then
       Exit(TyLabelBlockPieces(FEndLbls[i].Spec, AText, FEndLbls[i].Ink, True, False,
         False, FEndLbls[i].AH, FEndLbls[i].AV, FEndLbls[i].Scale, FEndLbls[i].Measurer));
+end;
+
+function TTyCustomAdvanceChart.GaugeDetailAt(ASeriesIndex, AIndex: Integer;
+  AValue: Double; out AText: string): TTyRtPieceArray;
+var
+  slot, raw, dim: Integer;
+  ti: TTyGaugeItem;
+  gv: TTyGaugeVisual;
+  bandC, detC: TTyChartColor;
+  hx, hy: Double;
+begin
+  Result := nil;
+  AText := '';
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGaugeSpecs)) or (slot > High(FGauges))
+    or (slot > High(FStores)) or (FStores[slot] = nil) or (FGaugeMeasurer = nil) then Exit;
+  if (AIndex < 0) or (AIndex >= FStores[slot].Count) then Exit;
+  dim := FStores[slot].DimIndexOf(TyGaugeValueDim);
+  if dim < 0 then Exit;
+  gv := GaugeVisual(slot);
+  { the row's inks are its value's, not the count's: the style stays, the
+    words change }
+  TyGaugeRowInks(FGaugeSpecs[slot], gv, FStores[slot], dim, AIndex, bandC, detC);
+  ti.Detail := FGaugeSpecs[slot].Detail;
+  raw := FStores[slot].GetRawIndex(AIndex);
+  if (slot <= High(FGaugeItems)) and (raw >= 0) and (raw <= High(FGaugeItems[slot])) then
+    ti := FGaugeItems[slot][raw];
+  AText := TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, AValue, True);
+  { [R7-H] at its place, as the drawn reading }
+  TyGaugeTextAt(ti.Detail, FGauges[slot].CX, FGauges[slot].CY, FGauges[slot].R,
+    FGaugePPI, hx, hy);
+  Result := TyGaugeTextPieces(ti.Detail, AText, FGauges[slot].R, gv.DetailColour,
+    detC, gv.DetailFontName, gv.DetailFontSizeLogical, gv.DetailFontWeight,
+    FGaugeMeasurer, FGaugePPI, hx, hy);
 end;
 
 { each data item's own `label`, read over its series' spec, by raw row }
@@ -584,8 +638,10 @@ end;
 { A ONE-RUN LABEL'S BOX in its own frame: the TSpan's (adjustTextX /
   adjustTextY about nought, a written border round it) unioned with itself,
   as ZRText.getBoundingRect unions its children }
+{ ([R7-AF] AStrokeText: the written border's width as a string, joined to
+  the width and height in CSS px -- AScale device px each) }
 function LmPlainRect(AW, AH, AStroke: Double; AAH: TTyTextAnchorH;
-  AAV: TTyTextAnchorV): TTyXYWH;
+  AAV: TTyTextAnchorV; const AStrokeText: string = ''; AScale: Double = 1): TTyXYWH;
 var x, y, w, h: Double;
 begin
   x := 0;
@@ -604,13 +660,28 @@ begin
   begin
     x := x - AStroke / 2;
     y := y - AStroke / 2;
-    w := w + AStroke;
-    h := h + AStroke;
+    if (AStrokeText <> '') and (AScale > 0) then
+    begin
+      w := TyRtJoinedNum(AW / AScale, AStrokeText) * AScale;
+      h := TyRtJoinedNum(AH / AScale, AStrokeText) * AScale;
+    end
+    else
+    begin
+      w := w + AStroke;
+      h := h + AStroke;
+    end;
   end;
   Result := TyXYWH(x, y, (x + w) - x, (y + h) - y);
 end;
 
 { a block's box in its own frame, device px }
+{ [R7-L] a box in CSS px, NaN where it is, at AScale device px (a quiet
+  NaN multiplies without a trap) }
+function LmJsRect(const ABox: TTyXYWH; AScale: Double): TTyXYWH;
+begin
+  Result := TyXYWH(ABox.X * AScale, ABox.Y * AScale, ABox.W * AScale, ABox.H * AScale);
+end;
+
 function LmBlockRect(const APieces: TTyRtPieceArray; AScale: Double): TTyXYWH;
 var b: TTyXYWH;
 begin
@@ -729,6 +800,7 @@ var
       if lo2.HasHeight and not IsNan(lo2.Height) then
       begin
         sp.Rt.Style.HasHeight := True;
+        sp.Rt.Style.HeightIsText := False;
         sp.Rt.Style.Height := lo2.Height;
       end;
       sp.Rt.Needed := True;
@@ -915,8 +987,12 @@ begin
         -c.LmOffX, -c.LmOffY, c.RotationRad, 1, 1, m0);
       TyLabelDecompose(m0, hasM0, defX, defY, defRot, defSx, defSy);
       if Length(c.RtPieces) > 0 then raw0 := LmBlockRect(c.RtPieces, c.RtScale)
-      else raw0 := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, c.AnchorH, c.AnchorV);
-      if hasM0 then labelRect := TyRectApplyMat(raw0, m0) else labelRect := raw0;
+      else raw0 := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, c.AnchorH, c.AnchorV,
+        c.LmStrokeText, c.RtScale);
+      { ([R7-AF] one at NaN through the transform as JS takes it) }
+      if hasM0 and not TyRtBoxIsFinite(raw0) then
+        labelRect := TyLabelGeometry(raw0, m0, True, 0, []).Rect
+      else if hasM0 then labelRect := TyRectApplyMat(raw0, m0) else labelRect := raw0;
       { ---- the layout for this label: the object, or the function's answer ---- }
       if lay.Kind = tlkHandler then
       begin
@@ -1046,11 +1122,14 @@ begin
         if lo.HasWidth and not IsNan(lo.Width) then
         begin
           spec.Rt.Style.WidthKind := rtwNumber;
+          { [R7-L] a number, whatever the label wrote }
+          spec.Rt.Style.WidthIsText := False;
           spec.Rt.Style.Width := lo.Width;
         end;
         if lo.HasHeight and not IsNan(lo.Height) then
         begin
           spec.Rt.Style.HasHeight := True;
+          spec.Rt.Style.HeightIsText := False;
           spec.Rt.Style.Height := lo.Height;
         end;
         spec.Rt.Needed := True;
@@ -1062,6 +1141,10 @@ begin
         refs[r].Relaid := True;
         refs[r].Scale := c.RtScale;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+        if TyRtHasStringSize(spec.Rt.Style, spec.Rt.Rich) then
+          it.RawLocal := LmJsRect(TyLabelBlockJsBox(spec, lmText, c.LmInkFill,
+            c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale,
+            AMeasurer), c.RtScale);
       end
       else if Length(c.RtPieces) = 0 then
       begin
@@ -1071,7 +1154,7 @@ begin
           AMeasurer.MeasureLine(c.Text, c.FontName, fsz, c.FontWeight, w, h);
         refs[r].TextW := w;
         refs[r].TextH := h;
-        it.RawLocal := LmPlainRect(w, h, c.LmStrokeW, ah, av);
+        it.RawLocal := LmPlainRect(w, h, c.LmStrokeW, ah, av, c.LmStrokeText, c.RtScale);
       end
       else
       begin
@@ -1092,6 +1175,29 @@ begin
           refs[r].Relaid := True;
         end;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+        { [R7-L] A SIZE WRITTEN AS A STRING: the box zrender's union gives,
+          NaN where it is -- BoundingRect.intersect then weighs the label
+          on its other axis alone. The pieces drawn keep only what is at
+          finite places. }
+        if (c.LmKind = 1) and (si <= High(ASpecs)) then
+        begin
+          spec := ASpecs[si];
+          if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+            and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+            spec := AItemSpecs[si][c.ItemSpec - 1];
+          if TyRtHasStringSize(spec.Rt.Style, spec.Rt.Rich) then
+          begin
+            spec.FontSizeLogical := fsz;
+            if refs[r].Relaid then
+            begin
+              spec.Rt.Style.Align := rtaNone;
+              spec.Rt.Style.VAlign := rtvNone;
+            end;
+            it.RawLocal := LmJsRect(TyLabelBlockJsBox(spec, c.Text, c.LmInkFill,
+              c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale,
+              AMeasurer), c.RtScale);
+          end;
+        end;
       end;
       { ---- the item ---- }
       if hasHost then it.Priority := hostRect.W * hostRect.H else it.Priority := 0;
@@ -1328,6 +1434,8 @@ begin
     { a pie's labelLine defaults: length2 30, minTurnAngle 90 }
     len := TyGuideLength2(TyStFind(nodes, ['labelLine', 'length2']), 30) * scale;
     minTurn := TyGuideJsNumber(TyStFind(nodes, ['labelLine', 'minTurnAngle']), 90);
+    { [R7-L] a box at NaN routes no line here (upstream's points are NaN) }
+    if not TyRtBoxIsFinite(FLmItems[r].RawLocal) then Continue;
     TyLabelLineRoute(FLmItems[r].RawLocal, el.Caption.LmHasM, el.Caption.LmM, gh, len, pts);
     TyLimitTurnAngle(pts, minTurn);
     SetLength(guide.Shape.Points, 3);
@@ -1371,6 +1479,11 @@ begin
       style's -- left / top otherwise -- and one ignored at rest the one its
       host gave it when it was listed ---- }
     r := lmOf[e];
+    { [R7-L] a box at NaN: the drawn one -- [R7-AI] no: zrender routes the
+      line on the box it bounds the label by, NaN and all (a plate whose
+      joined edge is no number: every candidate is NaN away, and the points
+      stay at nought), as R7-AF found for a one-run label; TyLabelLineRoute
+      masks the traps }
     if (r >= 0) and not FLmItems[r].DefIgnore then
       rawRect := FLmItems[r].RawLocal
     else
@@ -1382,7 +1495,11 @@ begin
       else if r >= 0 then av := c.LmPosAV
       else av := tavTop;
       if Length(c.RtPieces) = 0 then
-        rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av)
+      begin
+        { ([R7-AF] a rect that joined a string, NaN or not: the line is routed
+          on it as JS routes it -- TyLabelLineRoute masks the traps) }
+        rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av, c.LmStrokeText, c.RtScale);
+      end
       else if (ah = c.AnchorH) and (av = c.AnchorV) then
         rawRect := LmBlockRect(c.RtPieces, c.RtScale)
       else

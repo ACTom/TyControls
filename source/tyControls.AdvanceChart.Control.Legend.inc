@@ -187,6 +187,8 @@ var
   found: Boolean;
   perRaw: TTyChartColorArray;
   cats: TTyGraphCategoryArray;
+  catNode: TJSONObject;
+  d: TJSONData;
 begin
   SetLength(Result, Length(AEntries));
   for i := 0 to High(AEntries) do
@@ -226,14 +228,11 @@ begin
           Result[i].Decal := LegendDecalOf(ALegend, AEntries[i].Name, Default(TTyChartDecal));
       end;
       Result[i].LineColour := Result[i].Colour;
-      { THE SAME 2 THE LINE ITSELF FALLS BACK TO in BuildLine, which is also
-        what `lineStyle.width: 'auto'` resolves to upstream. When series line
-        widths become an option the two will read it from one place; until
-        then they agree by saying the same thing. }
-      if Result[i].OwnIcon then
-        Result[i].LineWidthLogical := 2
-      else
-        LegendBorderOf(j, -1, Result[i]);
+      { the series' border: a line's marker wears it too (its own icon sets
+        the item style on the marker) [R7-T; was: a line's never read] }
+      LegendBorderOf(j, -1, Result[i]);
+      { [R7-T] the rule and the pens as getLegendStyle resolves them }
+      LegendPensOf(ALegend, AEntries[i].Name, j, -1, Result[i]);
       found := True;
       Break;
     end;
@@ -278,6 +277,17 @@ begin
                 as the nodes do. }
               Result[i].Colour := TTyChartColor(SeriesColor(si));
             Result[i].LineColour := Result[i].Colour;
+            { [R7-T] THE CATEGORY'S STYLE VISUAL (categoryVisual: its
+              itemStyle model, the series' its parent): its border and its
+              pen keys under the legend style [was: none] }
+            catNode := nil;
+            d := StSeriesNode(si);
+            if d <> nil then d := TJSONObject(d).Find('categories');
+            if (d is TJSONArray) and (k < TJSONArray(d).Count)
+              and (TJSONArray(d).Items[k] is TJSONObject) then
+              catNode := TJSONObject(TJSONArray(d).Items[k]);
+            LegendBorderOf(j, -1, Result[i], catNode);
+            LegendPensOf(ALegend, AEntries[i].Name, j, -1, Result[i], catNode);
             found := True;
             Break;
           end;
@@ -340,8 +350,9 @@ begin
             FBindings[j].SeriesType, SeriesSymbolWord(j));
           Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
           Result[i].SymbolRotate := SeriesSymbolRotateOf(FBindings[j].SeriesIndex);
-          if Result[i].OwnIcon then Result[i].LineWidthLogical := 2
-          else LegendBorderOf(j, k, Result[i]);
+          LegendBorderOf(j, k, Result[i]);
+          { [R7-T] the datum's style visual under the legend style }
+          LegendPensOf(ALegend, AEntries[i].Name, j, k, Result[i]);
           found := True;
           Break;
         end;
@@ -592,10 +603,15 @@ begin
   end;
   st := TJSONObject(node).Find('textStyle');
   if not (st is TJSONObject) then Exit;
-  { the items' text block: free text [Batch 86] }
-  if TyRtNodeWantsBlock(TJSONObject(st)) then
+  { the items' text block: free text [Batch 86] -- [R7-AF] and a written
+    halo, which the one run never drew [was: textBorderColor /
+    textBorderWidth not read] }
+  if TyRtNodeWantsBlock(TJSONObject(st)) or TyRtNodeWritesHalo(TJSONObject(st)) then
+  begin
     AFont.Rt := TyRtResolve([TJSONObject(st)], AFont.RtGlobal,
       TyRtResolveOpt(False));
+    if TyRtNodeWritesHalo(TJSONObject(st)) then AFont.Rt.Needed := True;
+  end;
   d := TJSONObject(st).Find('fontFamily');
   if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
     AFont.Name := d.AsString;
@@ -605,7 +621,12 @@ begin
   AFont.Weight := TyFontStyleOver(TJSONObject(st).Find('fontStyle'), AFont.Weight);
   d := TJSONObject(st).Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
-    AInk.Text := col;
+    AInk.Text := col
+  { [R7-Z] a colour no parser reads: the fill the canvas had there (the
+    list's run settles it) [was: the theme's] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+    and (d.AsString <> 'inherit') and (d.AsString <> 'auto') and not TyColourIsHandler(d.AsString) then
+    AInk.Text := cTyCanvasColourLeft;
 end;
 
 function TTyCustomAdvanceChart.LegendInk: TTyLegendInk;
@@ -848,10 +869,57 @@ begin
         end;
       end;
     end;
+    { [R7-AK] placed at NaN with no transform: its parts at their places in
+      the canvas' frame }
+    if lay.Unplaced and not lay.UnplacedT then
+      TyLegendLayoutShift(lay, FLastRect.Left, FLastRect.Top);
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
       APPI, AList, i, AMeasurer, hov));
+    { ([R7-AK] with one the canvas refuses: in their own frames, under the
+      canvas' own origin where it had no transform) }
+    if lay.Unplaced and lay.UnplacedT then
+      for k := lt to AList.Count - 1 do
+        if Length(AList.Ref(k)^.FrameShape) > 0 then
+          AList.Ref(k)^.FrameOrigin := TyPointF(FLastRect.Left, FLastRect.Top);
+    { [R7-AD] its words in a font the canvas refuses: the one the text
+      before left (the legend's textStyle, an item's own over it) }
+    LegendFontsLeft(AList, lt, i, lay);
   end;
   if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
+end;
+
+procedure TTyCustomAdvanceChart.LegendFontsLeft(AList: TTyPaintList; AFrom, AIndex: Integer;
+  const ALayout: TTyLegendLayout);
+var
+  node, ts, data, item: TJSONData;
+  k, q: Integer;
+  pe: PTyChartElement;
+  own: TJSONData;
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  node := FOption.ComponentAt('legend', AIndex);
+  if not (node is TJSONObject) then Exit;
+  ts := TJSONObject(node).Find('textStyle');
+  data := TJSONObject(node).Find('data');
+  { each item's words in turn: the plain captions, in the items' order }
+  q := 0;
+  for k := Max(0, AFrom) to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Caption.Text = '') or (Length(pe^.Caption.RtPieces) > 0) then Continue;
+    while (q <= High(ALayout.Items)) and (ALayout.Items[q].Text <> pe^.Caption.Text) do Inc(q);
+    if q > High(ALayout.Items) then Break;
+    own := nil;
+    if (data is TJSONArray) and (ALayout.Items[q].Entry >= 0)
+      and (ALayout.Items[q].Entry < TJSONArray(data).Count) then
+    begin
+      item := TJSONArray(data).Items[ALayout.Items[q].Entry];
+      if item is TJSONObject then own := TJSONObject(item).Find('textStyle');
+    end;
+    if FontRefusedOf([own, ts]) then
+      pe^.CanvasFlags := pe^.CanvasFlags or cTyCanvasFontLeft;
+    Inc(q);
+  end;
 end;
 
 function TTyCustomAdvanceChart.LegendSelectedText(AIndex: Integer): string;
@@ -1281,8 +1349,215 @@ begin
   InvalidateFrame;
 end;
 
+procedure TTyCustomAdvanceChart.LegendPensOf(ALegend: Integer; const AName: string;
+  ASlot, ARaw: Integer; var ASrc: TTyLegendSource; ANode: TJSONObject);
+var
+  lg, row, st, src: TJSONObject;
+  nodes: array[0..1] of TJSONObject;
+  vis: TJSONObject;
+  d: TJSONData;
+  t: string;
+  k: Integer;
+  kind: Byte;
+  col: TTyChartColor;
+  grad: TTyChartGradient;
+  w: Double;
+  keys: TTyLegendPen;
+  fill: Boolean;
+
+  function Obj(AParent: TJSONObject; const AKey: string): TJSONObject;
+  var v: TJSONData;
+  begin
+    Result := nil;
+    if AParent = nil then Exit;
+    v := AParent.Find(AKey);
+    if v is TJSONObject then Result := TJSONObject(v);
+  end;
+
+  { the option's key into the visual under zrender's name, where it is not
+    null (getShallow's `!= null`) }
+  procedure Put(const AZr: string; AFrom: TJSONObject; const AKey: string);
+  var v: TJSONData;
+  begin
+    if AFrom = nil then Exit;
+    v := AFrom.Find(AKey);
+    if (v = nil) or (v.JSONType = jtNull) then Exit;
+    if vis.Find(AZr) <> nil then vis.Delete(AZr);
+    vis.Add(AZr, v.Clone);
+  end;
+
+  procedure PutShadow(AFrom: TJSONObject);
+  begin
+    Put('shadowBlur', AFrom, 'shadowBlur');
+    Put('shadowOffsetX', AFrom, 'shadowOffsetX');
+    Put('shadowOffsetY', AFrom, 'shadowOffsetY');
+    Put('shadowColor', AFrom, 'shadowColor');
+  end;
+
+  { the legend's data row named AName -- the first, as the entries are
+    deduplicated; nil for a bare name }
+  function RowOf: TJSONObject;
+  var
+    arr: TJSONData;
+    it, nm: TJSONData;
+    i: Integer;
+  begin
+    Result := nil;
+    if lg = nil then Exit;
+    arr := lg.Find('data');
+    if not (arr is TJSONArray) then Exit;
+    for i := 0 to arr.Count - 1 do
+    begin
+      it := TJSONArray(arr).Items[i];
+      case it.JSONType of
+        jtString, jtNumber: if it.AsString = AName then Exit;
+        jtObject:
+          begin
+            nm := TJSONObject(it).Find('name');
+            if (nm <> nil) and (nm.JSONType in [jtString, jtNumber])
+              and (nm.AsString = AName) then
+              Exit(TJSONObject(it));
+          end;
+      end;
+    end;
+  end;
+
+begin
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  lg := nil;
+  d := FOption.ComponentAt('legend', ALegend);
+  if d is TJSONObject then lg := TJSONObject(d);
+  row := RowOf;
+  t := FBindings[ASlot].SeriesType;
+  nodes[0] := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  nodes[1] := ANode;
+  if (ANode = nil) and (ARaw >= 0) then
+    nodes[1] := StItemNode(FBindings[ASlot].SeriesIndex, ARaw);
+
+  { THE STYLE VISUAL'S PEN KEYS: the series' style block (its access path's)
+    over the type's defaults, the datum's over the series' -- a scatter's
+    opacity 0.8, a pie's borderJoin 'round'; a series drawn with its stroke
+    hands the legend the line visual's opacity, which only a line has }
+  vis := TJSONObject.Create;
+  try
+    if t = 'scatter' then vis.Add('opacity', 0.8)
+    else if t = TyPieSeriesTypeName then vis.Add('lineJoin', 'round');
+    for k := 0 to 1 do
+    begin
+      { [R7-U] the series' own block (the style task's ignoreParent) -- but
+        a graph category's getItemStyle climbs through the series' to the
+        root's }
+      src := nodes[k];
+      if (k = 0) and (ANode = nil) then src := FOption.SeriesOwnStyle(FBindings[ASlot].SeriesIndex);
+      if TyStyleAccessPath(t) = 'lineStyle' then
+      begin
+        st := Obj(src, 'lineStyle');
+        Put('opacity', st, 'opacity');
+        Put('lineDash', st, 'type');
+        Put('lineDashOffset', st, 'dashOffset');
+        Put('lineCap', st, 'cap');
+        Put('lineJoin', st, 'join');
+        Put('miterLimit', st, 'miterLimit');
+      end
+      else
+      begin
+        st := Obj(src, 'itemStyle');
+        Put('opacity', st, 'opacity');
+        Put('lineDash', st, 'borderType');
+        Put('lineDashOffset', st, 'borderDashOffset');
+        Put('lineCap', st, 'borderCap');
+        Put('lineJoin', st, 'borderJoin');
+        Put('miterLimit', st, 'borderMiterLimit');
+      end;
+      PutShadow(st);
+    end;
+    if TyStyleDrawsWithStroke(t) and (vis.Find('opacity') <> nil) then
+      vis.Delete('opacity');
+    { a visualMap's opacity on the datum is the visual's }
+    if ASrc.HasOpacity then
+    begin
+      if vis.Find('opacity') <> nil then vis.Delete('opacity');
+      vis.Add('opacity', ASrc.Opacity);
+    end;
+    ASrc.MarkKeys := TyLegendItemKeys(Obj(row, 'itemStyle'), Obj(lg, 'itemStyle'), vis);
+  finally
+    vis.Free;
+  end;
+
+  if not ASrc.OwnIcon then Exit;
+  { A LINE'S legendLineStyle VISUAL (line/install.ts): its lineStyle over
+    LineSeries.defaultOption's (width 2, type 'solid'), the colour the
+    data's fill where none truthy is written -- and nothing at all for a
+    series the legend filtered, whose visuals are never run }
+  vis := TJSONObject.Create;
+  try
+    fill := False;
+    if not FBindings[ASlot].Hidden then
+    begin
+      vis.Add('lineWidth', 2);
+      vis.Add('lineDash', 'solid');
+      st := Obj(nodes[0], 'lineStyle');
+      Put('lineWidth', st, 'width');
+      Put('stroke', st, 'color');
+      Put('opacity', st, 'opacity');
+      PutShadow(st);
+      Put('lineDash', st, 'type');
+      Put('lineDashOffset', st, 'dashOffset');
+      Put('lineCap', st, 'cap');
+      Put('lineJoin', st, 'join');
+      Put('miterLimit', st, 'miterLimit');
+      d := vis.Find('stroke');
+      if (d = nil) or not TyJsTruthy(d) then
+      begin
+        if d <> nil then vis.Delete('stroke');
+        fill := True;
+      end;
+    end;
+    TyLegendLineStyle(Obj(row, 'lineStyle'), Obj(lg, 'lineStyle'), vis, fill,
+      kind, col, grad, w, keys);
+  finally
+    vis.Free;
+  end;
+  ASrc.LineNone := kind = 0;
+  ASrc.LineGrad := Default(TTyChartGradient);
+  case kind of
+    1: ASrc.LineColour := col;
+    2:
+      begin
+        ASrc.LineColour := col;
+        ASrc.LineGrad := grad;
+      end;
+    3:
+      begin
+        ASrc.LineColour := ASrc.Colour;
+        if ASrc.Obj.Present and (ASrc.Obj.Gradient.Kind <> cgkNone) then
+          ASrc.LineGrad := ASrc.Obj.Gradient;
+      end;
+  end;
+  ASrc.LineWidthLogical := w;
+  ASrc.RuleKeys := keys;
+  { an unselected rule's width: lineStyle.inactiveWidth, the item's over the
+    legend's over the default 2 }
+  d := nil;
+  st := Obj(row, 'lineStyle');
+  if st <> nil then d := st.Find('inactiveWidth');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    d := nil;
+    st := Obj(lg, 'lineStyle');
+    if st <> nil then d := st.Find('inactiveWidth');
+  end;
+  ASrc.HasRuleInactiveWidth := True;
+  if (d = nil) or (d.JSONType = jtNull) then ASrc.RuleInactiveWidth := 2
+  else
+  begin
+    ASrc.RuleInactiveWidth := TyOptPenWidth(d);
+    if IsNan(ASrc.RuleInactiveWidth) then ASrc.RuleInactiveWidth := 0;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.LegendBorderOf(ASlot, ARaw: Integer;
-  var ASrc: TTyLegendSource);
+  var ASrc: TTyLegendSource; ANode: TJSONObject);
 var
   s, k: Integer;
   t: string;
@@ -1324,10 +1599,12 @@ begin
     ASrc.HasStroke := True;
     ASrc.Stroke := TTyChartColor(SeriesColor(s));
   end;
-  { the series' itemStyle, then the datum's }
+  { the series' itemStyle, then the datum's [R7-U: the series' own block,
+    its visual style -- a graph category's climbs through the series'] }
   nodes[0] := StSeriesNode(s);
-  nodes[1] := nil;
-  if ARaw >= 0 then nodes[1] := StItemNode(s, ARaw);
+  if ANode = nil then nodes[0] := FOption.SeriesOwnStyle(s);
+  nodes[1] := ANode;
+  if (ANode = nil) and (ARaw >= 0) then nodes[1] := StItemNode(s, ARaw);
   for k := 0 to 1 do
   begin
     if nodes[k] = nil then Continue;
@@ -1340,6 +1617,13 @@ begin
       begin
         ASrc.HasStroke := True;
         ASrc.Stroke := col;
+      end
+      { [R7-AA] a colour no parser reads: the icon strokes in what the canvas
+        had (the run settles it) [was: no border] }
+      else if (d.AsString <> '') and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+      begin
+        ASrc.HasStroke := True;
+        ASrc.Stroke := cTyCanvasColourLeft;
       end
       else
         ASrc.HasStroke := False;

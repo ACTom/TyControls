@@ -85,7 +85,7 @@ type
     FCtl: TTyStyleController;
     FChart: TGraphRoamProbe;
     FRoot: TJSONData;
-    FBad, FCompared, FCases, FStates, FGestures: Integer;
+    FBad, FCompared, FCases, FStates, FGestures, FSnapCases: Integer;
     { nodes a gesture's pointer left in emphasis, their half not compared }
     FEmphSkipped: Integer;
     FReport, FName: string;
@@ -97,6 +97,7 @@ type
     procedure CheckState(ACase, AState: TJSONObject; AStep: Integer;
       AGesture: Boolean);
     procedure CheckSeries(ACase, ASeries: TJSONObject);
+    procedure CheckSnapCase(ACase: TJSONObject);
     procedure CheckEvents(AState: TJSONObject);
     procedure RenderNow(AW, AH: Integer);
     procedure Step(AStep: TJSONObject; out AW, AH: Integer);
@@ -253,6 +254,7 @@ begin
   FCases := 0;
   FStates := 0;
   FGestures := 0;
+  FSnapCases := 0;
   FReport := '';
 end;
 
@@ -549,11 +551,12 @@ end;
 
 { The stroke an edge was drawn as. }
 function EdgePolyline(AList: TTyPaintList; ASeries, ARow: Integer;
-  out APoints: TTyPointFArray): Boolean;
+  out APoints: TTyPointFArray; out AWidth: Double): Boolean;
 var i: Integer; el: TTyChartElement;
 begin
   Result := False;
   APoints := nil;
+  AWidth := 0;
   if AList = nil then Exit;
   for i := 0 to AList.Count - 1 do
   begin
@@ -563,9 +566,35 @@ begin
       and (Length(el.Shape.Points) >= 2) then
     begin
       APoints := el.Shape.Points;
+      AWidth := el.Style.StrokeWidthLogical;
       Exit(True);
     end;
   end;
+end;
+
+{ [R7-G] WHERE A STRAIGHT EDGE IS DRAWN: ECLinePath is built with
+  subPixelOptimize, so the shape's ends go to the half pixel of the line's
+  width in data space (a level or an upright edge, both ends), and the view's
+  overall transform takes them to the canvas; a curve is drawn through its
+  ends as they are }
+procedure DrawnEnds(AEdge, ASeries: TJSONObject; AWidth: Double; out AP1, AP2: TTyPointF);
+var q1, q2: TTyPointF; cv: Boolean; d: TJSONData;
+begin
+  d := AEdge.Find('cp');
+  cv := (d <> nil) and (d.JSONType <> jtNull);
+  q1 := TyPointF(NumAt(AEdge, 'shape', 0), NumAt(AEdge, 'shape', 1));
+  q2 := TyPointF(NumAt(AEdge, 'shape', 2), NumAt(AEdge, 'shape', 3));
+  if cv then
+  begin
+    AP1 := TyPointF(NumAt(AEdge, 'pixelEnds', 0), NumAt(AEdge, 'pixelEnds', 1));
+    AP2 := TyPointF(NumAt(AEdge, 'pixelEnds', 2), NumAt(AEdge, 'pixelEnds', 3));
+    Exit;
+  end;
+  TyGraphEdgeSnap(q1, q2, False, AWidth);
+  AP1 := TyPointF(NumAt(ASeries, 'overall', 0) * q1.X + 0 * q1.Y + NumAt(ASeries, 'overall', 2),
+    0 * q1.X + NumAt(ASeries, 'overall', 1) * q1.Y + NumAt(ASeries, 'overall', 3));
+  AP2 := TyPointF(NumAt(ASeries, 'overall', 0) * q2.X + 0 * q2.Y + NumAt(ASeries, 'overall', 2),
+    0 * q2.X + NumAt(ASeries, 'overall', 1) * q2.Y + NumAt(ASeries, 'overall', 3));
 end;
 
 function AnchorHName(A: TTyTextAnchorH): string;
@@ -618,6 +647,9 @@ var
   mid: TTyPointF;
   sd: TJSONData;
   st: TTyStItem;
+  { [R7-G] a drawn edge's width and its ends as buildPath draws them }
+  ew: Double;
+  de1, de2: TTyPointF;
 begin
   si := ASeries.Integers['index'];
   seriesLabel := False;
@@ -919,13 +951,17 @@ begin
     SameNum(Format('%s edge %d py1', [tag, i]), edges[i].EY1, o, 'pixelEnds', 1);
     SameNum(Format('%s edge %d px2', [tag, i]), edges[i].EX2, o, 'pixelEnds', 2);
     SameNum(Format('%s edge %d py2', [tag, i]), edges[i].EY2, o, 'pixelEnds', 3);
-    { AND WHAT WAS DRAWN: the stroke runs between those two points. }
-    if EdgePolyline(FChart.List, si, edges[i].Row, ends) then
+    { AND WHAT WAS DRAWN: the stroke runs between those two points -- [R7-G]
+      a straight edge's on the half pixel buildPath snaps them to (in data
+      space, then through the view) [was: those two points as they are,
+      which pinned the missing snap] }
+    if EdgePolyline(FChart.List, si, edges[i].Row, ends, ew) then
     begin
-      SameNum(Format('%s edge %d drawn from x', [tag, i]), ends[0].X, o, 'pixelEnds', 0);
-      SameNum(Format('%s edge %d drawn from y', [tag, i]), ends[0].Y, o, 'pixelEnds', 1);
-      SameNum(Format('%s edge %d drawn to x', [tag, i]), ends[High(ends)].X, o, 'pixelEnds', 2);
-      SameNum(Format('%s edge %d drawn to y', [tag, i]), ends[High(ends)].Y, o, 'pixelEnds', 3);
+      DrawnEnds(o, ASeries, ew, de1, de2);
+      Same(Format('%s edge %d drawn from x', [tag, i]), ends[0].X, de1.X);
+      Same(Format('%s edge %d drawn from y', [tag, i]), ends[0].Y, de1.Y);
+      Same(Format('%s edge %d drawn to x', [tag, i]), ends[High(ends)].X, de2.X);
+      Same(Format('%s edge %d drawn to y', [tag, i]), ends[High(ends)].Y, de2.Y);
       { A CURVE BENDS THROUGH THE TRIMMED CONTROL POINT: its middle sample is
         a quarter of each end and half the control point, carried through
         the view. A billionth -- the sample is the port's own arithmetic. }
@@ -967,6 +1003,86 @@ begin
   end;
 end;
 
+{ [R7-G] A CASE OF AXIS-ALIGNED EDGES (D10): at every state the drawn
+  polyline of each straight edge is snapPath -- the points zrender's
+  buildPath hands the context after subPixelOptimizeLine, in data units --
+  through the view's overall transform (the state's own). }
+procedure TAdvChartGraphRoamOracleTest.CheckSnapCase(ACase: TJSONObject);
+var
+  steps, states: TJSONArray;
+  st: TJSONObject;
+  k, w, h: Integer;
+
+  procedure CheckAt(AState: TJSONObject; AStep: Integer);
+  var
+    ser, eds, sp: TJSONArray;
+    s, e: TJSONObject;
+    i, j, p, si: Integer;
+    ends: TTyPointFArray;
+    ew, x, y: Double;
+  begin
+    ser := AState.Arrays['series'];
+    for j := 0 to ser.Count - 1 do
+    begin
+      s := TJSONObject(ser.Items[j]);
+      si := s.Integers['index'];
+      eds := s.Arrays['edges'];
+      for i := 0 to eds.Count - 1 do
+      begin
+        if eds.Items[i].JSONType = jtNull then Continue;
+        e := TJSONObject(eds.Items[i]);
+        if e.Find('snapPath') = nil then Continue;
+        sp := e.Arrays['snapPath'];
+        Inc(FCompared);
+        if not EdgePolyline(FChart.List, si, i, ends, ew) then
+        begin
+          Miss(Format('@%d s%d edge %d not drawn here', [AStep, si, i]));
+          Continue;
+        end;
+        if (sp.Count <> 2) or (Length(ends) <> 2) then
+        begin
+          Miss(Format('@%d s%d edge %d: %d points upstream, %d here', [AStep, si, i,
+            sp.Count, Length(ends)]));
+          Continue;
+        end;
+        for p := 0 to 1 do
+        begin
+          x := HexNum(TJSONArray(sp.Items[p]).Items[0]);
+          y := HexNum(TJSONArray(sp.Items[p]).Items[1]);
+          Same(Format('@%d s%d edge %d point %d x', [AStep, si, i, p]), ends[p].X,
+            NumAt(s, 'overall', 0) * x + 0 * y + NumAt(s, 'overall', 2));
+          Same(Format('@%d s%d edge %d point %d y', [AStep, si, i, p]), ends[p].Y,
+            0 * x + NumAt(s, 'overall', 1) * y + NumAt(s, 'overall', 3));
+        end;
+      end;
+    end;
+  end;
+
+begin
+  Inc(FSnapCases);
+  FTol := 0;
+  w := ACase.Integers['W'];
+  h := ACase.Integers['H'];
+  FChart.Option := '';
+  FChart.Option := ACase.Objects['option'].AsJSON;
+  FChart.SetBounds(0, 0, w, h);
+  FChart.Events := nil;
+  FChart.ChartEvs := nil;
+  RenderNow(w, h);
+  states := ACase.Arrays['states'];
+  steps := ACase.Arrays['steps'];
+  CheckAt(TJSONObject(states.Items[0]), 0);
+  for k := 0 to steps.Count - 1 do
+  begin
+    st := TJSONObject(steps.Items[k]);
+    FChart.Events := nil;
+    FChart.ChartEvs := nil;
+    Step(st, w, h);
+    RenderNow(w, h);
+    CheckAt(TJSONObject(states.Items[k + 1]), k + 1);
+  end;
+end;
+
 procedure TAdvChartGraphRoamOracleTest.TestEveryRoamLandsWhereUpstreamPutsIt;
 var
   cases, steps, states: TJSONArray;
@@ -979,6 +1095,15 @@ begin
   begin
     cs := TJSONObject(cases.Items[c]);
     FName := cs.Strings['name'];
+    { [R7-G] the documentary snap case (D10, the one whose edges carry a
+      snapPath): its edges as drawn, against the path zrender's buildPath
+      hands the context }
+    if cs.Get('documentary', False) and not cs.Get('deferred', False)
+      and (Pos('"snapPath"', cs.Arrays['states'].Items[0].AsJSON) > 0) then
+    begin
+      CheckSnapCase(cs);
+      Continue;
+    end;
     if cs.Get('documentary', False) or cs.Get('deferred', False) then Continue;
     Inc(FCases);
     FTol := 0;
@@ -1006,6 +1131,7 @@ begin
     end;
   end;
   AssertTrue(Format('every case ran (%d)', [FCases]), FCases >= 30);
+  AssertEquals('the snap case ran', 1, FSnapCases);
   AssertTrue(Format('the gestures ran (%d)', [FGestures]), FGestures >= 15);
   AssertTrue(Format('and a great deal was compared (%d)', [FCompared]),
     FCompared > 5000);

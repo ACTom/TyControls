@@ -859,7 +859,13 @@ begin
 end;
 
 { A HOVER SWEEP over a heatmap of ten thousand cells with a visualMap,
-  frame by frame the same with the order repaired and sorted whole }
+  frame by frame the same with the order repaired and sorted whole.
+  [R7-Q] The tooltip's clock is the test's: the last move (430, 270) is
+  under the grid, on no cell, so it arms hideLater(hideDelay = 100 ms) and
+  the box stays; on the machine's clock, a frame 15 that took 100 ms or
+  more to draw let the leave fire that hide first (frame 16 without the box
+  in one run of the two). Upstream's setTimeout is as real-time; the test
+  steps the delay itself and draws both frames: the box kept, then gone }
 procedure TAdvChartPaintOrderTest.TestAHoverSweepIsTheSameRepaired;
 var
   frames: array[Boolean] of TStringList;
@@ -911,6 +917,7 @@ begin
         chart.Controller := ctl;
         chart.AnimationMode := camOff;
         chart.AnimNow := 0;
+        chart.TooltipNow := 0;
         chart.ProgressiveStepCostMs := 1;
         chart.SetBounds(0, 0, 480, 340);
         chart.Option := opt;
@@ -931,6 +938,10 @@ begin
         chart.LeaveNow;
         chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
         frames[rep].Add(FrameText(bmp));
+        { hideDelay passed: the box hidden }
+        chart.TooltipTick(100);
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 340));
+        frames[rep].Add(FrameText(bmp));
         if rep then used := TyPaintListRepairsForTest - r0;
       finally
         chart.Free;
@@ -939,6 +950,9 @@ begin
     AssertEquals('as many frames', frames[False].Count, frames[True].Count);
     for k := 0 to frames[False].Count - 1 do
       AssertTrue(Format('frame %d the same', [k]), frames[False][k] = frames[True][k]);
+    { the box waited out hideDelay through the leave, then went }
+    AssertTrue('the leave kept the box', frames[False][15] = frames[False][16]);
+    AssertTrue('hideDelay hid it', frames[False][16] <> frames[False][17]);
     AssertTrue(Format('the order was repaired (%d)', [used]), used > 0);
   finally
     bmp.Free;

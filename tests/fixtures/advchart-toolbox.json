@@ -2297,6 +2297,183 @@
    ]
   },
   {
+   "id": "L-STRPAD",
+   "note": "padding '12' at left 10, top 20 over a background; '21' at the right edge",
+   "option": {
+    "animation": false,
+    "legend": {"show":false},
+    "xAxis": {"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210]},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+    "toolbox": [{"left":10,"top":20,"padding":"12","backgroundColor":"#eeeeee","feature":{"restore":{},"saveAsImage":{}}},{"right":10,"top":60,"padding":"21","backgroundColor":"#eeeeee","feature":{"restore":{}}}]
+   },
+   "initial": {
+    "toolboxes": [
+     {
+      "iconStatus": {},
+      "icons": [
+       {
+        "key": "restore.restore",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":null,"align":null},
+        "text": {"ignore":true,"text":"Restore","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       },
+       {
+        "key": "saveAsImage.saveAsImage",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":null,"align":null},
+        "text": {"ignore":true,"text":"Save as Image","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       }
+      ]
+     },
+     {
+      "iconStatus": {},
+      "icons": [
+       {
+        "key": "restore.restore",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":"top","align":null},
+        "text": {"ignore":true,"text":"Restore","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       }
+      ]
+     }
+    ],
+    "cursor": null,
+    "actions": [],
+    "events": [],
+    "option": {
+     "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210],"smooth":false},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+     "xAxis": [{"type":"category","boundaryGap":true,"data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]}],
+     "yAxis": [{"type":"value","boundaryGap":[0,0]}],
+     "title": []
+    },
+    "zoom": {"active":null,"history":1,"cover":null,"dataZooms":[],"extents":{"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}},
+    "dataView": null,
+    "saved": null,
+    "clicks": [],
+    "error": null,
+    "layout": [
+     {
+      "show": true,
+      "group": ["405bfd4f5a1ab44d","406a600000000000"],
+      "groupText": ["111.95796825988619","211"],
+      "background": {
+       "x": "c027ea7ad0d5a26a",
+       "xText": "-11.95796825988619",
+       "y": "c026000000000000",
+       "yText": "-11",
+       "width": "4047efb9006acecc",
+       "widthText": "47.87283330168938",
+       "height": "409f6c0000000000",
+       "heightText": "2011",
+       "r": 0,
+       "fill": "#eeeeee",
+       "stroke": "#b7b9be",
+       "lineWidth": 0
+      },
+      "icons": [
+       {
+        "key": "restore.restore",
+        "feature": "restore",
+        "name": "restore",
+        "title": "Restore",
+        "kind": "path",
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c023ea7ad0d5a26a","c023fffffd5599f2","4033ea7ad0d59d97","4033fffffd5599f2"],
+        "rectText": ["-9.95796825988619","-9.999999920558341","19.915936519767993","19.999999841116683"],
+        "pathRect": ["c01dd4f5a1ab44d5","c01dfffffaab33e4","402dd4f5a1ab3b2e","402dfffffaab33e4"],
+        "pathRectText": ["-7.457968259886191","-7.499999920558341","14.915936519767993","14.999999841116683"],
+        "data": [
+         "3ff0000000000000","c01bff6a20000000","3fed10fb40000000","3ff0000000000000","40122a9cc0000000","c007b92740000000","4000000000000000","401ca38da0000000","c007b92740000000","4000000000000000","401ca38da0000000","c016c2f1a0000000",
+         "3ff0000000000000","401c1ac540000000","c005289880000000","4008000000000000","40179dcba0000000","c01670dfc0000000","400670dfa0000000","c01f6ad2e0000000","bfeb5b4740000000","c01dd079c0000000","4008000000000000","c0129809e0000000",
+         "c01c1ac560000000","c01e594220000000","c00d7e67e0000000","c01dd079c0000000","3fc4847400000000","3ff0000000000000","c0122a9cc0000000","4007b926c0000000","4000000000000000","c01cbee900000000","4007b926c0000000","4000000000000000",
+         "c01cbee900000000","4016c2f180000000","3ff0000000000000","c01c1ac560000000","4005289880000000","4008000000000000","c0179dcbc0000000","401670dfc0000000","c00670dfe0000000","401f6ad2e0000000","3feb5b4660000000","401dd079c0000000",
+         "4008000000000000","40129809e0000000","401c1ac540000000","401e594220000000","400d7e67a0000000","401dd079c0000000","bfc4847740000000"
+        ]
+       },
+       {
+        "key": "saveAsImage.saveAsImage",
+        "feature": "saveAsImage",
+        "name": "saveAsImage",
+        "title": "Save as Image",
+        "kind": "path",
+        "x": "403cefb9006acc62",
+        "xText": "28.936416650842496",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c021f4f730000000","c024000000000000","4031f4f730000000","4034000000000000"],
+        "rectText": ["-8.978448390960693","-10","17.956896781921387","20"],
+        "pathRect": ["c019e9ee60000000","c01e000000000000","4029e9ee60000000","402e000000000000"],
+        "pathRectText": ["-6.478448390960693","-7.5","12.956896781921387","15"],
+        "data": [
+         "3ff0000000000000","c019cf72c0000000","bff93dcb20000000","4000000000000000","bfb72c2820000000","401111a7c0000000","4000000000000000","4019e9ee60000000","bff72c2360000000","3ff0000000000000","c019e9ee60000000","400e34f700000000",
+         "4000000000000000","c019e9ee60000000","401e000000000000","4000000000000000","4018fb9600000000","401e000000000000","4000000000000000","4018fb9600000000","400e34f700000000","3ff0000000000000","bfbdcb0700000000","4010a7b940000000",
+         "4000000000000000","bfbdcb0700000000","c01e000000000000"
+        ]
+       }
+      ]
+     },
+     {
+      "show": true,
+      "group": ["4081c85614bca99e","40831ffffff55668"],
+      "groupText": ["569.0420317401183","611.9999999205584"],
+      "background": {
+       "x": "c025ea7ad0d5a26a",
+       "xText": "-10.95796825988619",
+       "y": "c027fffffd5599f2",
+       "yText": "-11.999999920558341",
+       "width": "4033ea7ad0d59d97",
+       "widthText": "19.915936519767993",
+       "height": "4033fffffd5599f2",
+       "heightText": "19.999999841116683",
+       "r": 0,
+       "fill": "#eeeeee",
+       "stroke": "#b7b9be",
+       "lineWidth": 0
+      },
+      "icons": [
+       {
+        "key": "restore.restore",
+        "feature": "restore",
+        "name": "restore",
+        "title": "Restore",
+        "kind": "path",
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c023ea7ad0d5a26a","c023fffffd5599f2","4033ea7ad0d59d97","4033fffffd5599f2"],
+        "rectText": ["-9.95796825988619","-9.999999920558341","19.915936519767993","19.999999841116683"],
+        "pathRect": ["c01dd4f5a1ab44d5","c01dfffffaab33e4","402dd4f5a1ab3b2e","402dfffffaab33e4"],
+        "pathRectText": ["-7.457968259886191","-7.499999920558341","14.915936519767993","14.999999841116683"],
+        "data": [
+         "3ff0000000000000","c01bff6a20000000","3fed10fb40000000","3ff0000000000000","40122a9cc0000000","c007b92740000000","4000000000000000","401ca38da0000000","c007b92740000000","4000000000000000","401ca38da0000000","c016c2f1a0000000",
+         "3ff0000000000000","401c1ac540000000","c005289880000000","4008000000000000","40179dcba0000000","c01670dfc0000000","400670dfa0000000","c01f6ad2e0000000","bfeb5b4740000000","c01dd079c0000000","4008000000000000","c0129809e0000000",
+         "c01c1ac560000000","c01e594220000000","c00d7e67e0000000","c01dd079c0000000","3fc4847400000000","3ff0000000000000","c0122a9cc0000000","4007b926c0000000","4000000000000000","c01cbee900000000","4007b926c0000000","4000000000000000",
+         "c01cbee900000000","4016c2f180000000","3ff0000000000000","c01c1ac560000000","4005289880000000","4008000000000000","c0179dcbc0000000","401670dfc0000000","c00670dfe0000000","401f6ad2e0000000","3feb5b4660000000","401dd079c0000000",
+         "4008000000000000","40129809e0000000","401c1ac540000000","401e594220000000","400d7e67a0000000","401dd079c0000000","bfc4847740000000"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "i": 0,
+     "step": {"type":"idle"},
+     "hover": null,
+     "record": {"toolboxes":[{"iconStatus":{},"icons":[]},{"iconStatus":{},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    }
+   ]
+  },
+  {
    "id": "L-SIZE",
    "note": "itemSize 24, itemGap 2, padding [4, 12], centred; showTitle false",
    "option": {
@@ -15195,7 +15372,10 @@
    "id": "G1",
    "mutation": "the box layout adds no gap",
    "named": ["L-DEFAULT","L-SIZE"],
-   "changed": ["L-DEFAULT","L-BOTTOM","L-BOTTOM-PX","L-SIZE","L-WRAP","L-BACKGROUND","L-STYLES","L-MULTI-ICON","L-DEGENERATE","L-RESET","M-SWITCH","M-OPTIONS","M-HORIZONTAL","R-RESTORE","Z-RECT","Z-LINEX","Z-LINEX-LEFT","Z-BACK-BASE","Z-SLIDER","Z-VALUE"],
+   "changed": [
+    "L-DEFAULT","L-BOTTOM","L-BOTTOM-PX","L-STRPAD","L-SIZE","L-WRAP","L-BACKGROUND","L-STYLES","L-MULTI-ICON","L-DEGENERATE","L-RESET","M-SWITCH","M-OPTIONS","M-HORIZONTAL","R-RESTORE","Z-RECT","Z-LINEX","Z-LINEX-LEFT","Z-BACK-BASE","Z-SLIDER",
+    "Z-VALUE"
+   ],
    "ok": true
   },
   {

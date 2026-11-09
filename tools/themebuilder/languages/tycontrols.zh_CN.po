@@ -1535,6 +1535,11 @@ msgstr "series[%d]：coordinateSystem“%s”尚未实现"
 msgid "series[%d]: the \"%s\" series type is not drawn yet"
 msgstr "series[%d]：“%s”这个系列类型还画不出来"
 
+#: tycontrols.strconsts.rstychartseriesshortencode
+#, object-pascal-format
+msgid "series[%d]: encode.%s reaches %d of the %d dimensions a %s needs, so it is not drawn"
+msgstr "series[%d]：encode.%s 只到了 %d 个维，要 %d 个才能画 %s，所以不画"
+
 #: tycontrols.strconsts.rstychartcustomnorenderitem
 #, object-pascal-format
 msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"

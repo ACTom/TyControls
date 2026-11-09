@@ -379,7 +379,8 @@ implementation
 uses Classes, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Calendar,
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.GfxEl,
   tyControls.AdvanceChart.AnimAxis, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States;
+  tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States,
+  tyControls.AdvanceChart.ZrPath;
 
 { ==================== small readers ==================== }
 
@@ -2245,10 +2246,22 @@ var
     begin
       x2 := Result.X + Result.W;
       y2 := Result.Y + Result.H;
-      Result.X := TySubPixelOptimize(Result.X, lw, True);
-      Result.Y := TySubPixelOptimize(Result.Y, lw, True);
-      Result.W := TySubPixelOptimize(x2, lw, True) - Result.X;
-      Result.H := TySubPixelOptimize(y2, lw, True) - Result.Y;
+      { ([R7-AG] on the css px grid at another PPI [was: the device px
+        grid]) }
+      if (scale > 0) and (scale <> 1) then
+      begin
+        Result.X := TyZrSubPixelOptimizeAt(Result.X, lw, True, scale);
+        Result.Y := TyZrSubPixelOptimizeAt(Result.Y, lw, True, scale);
+        Result.W := TyZrSubPixelOptimizeAt(x2, lw, True, scale) - Result.X;
+        Result.H := TyZrSubPixelOptimizeAt(y2, lw, True, scale) - Result.Y;
+      end
+      else
+      begin
+        Result.X := TySubPixelOptimize(Result.X, lw, True);
+        Result.Y := TySubPixelOptimize(Result.Y, lw, True);
+        Result.W := TySubPixelOptimize(x2, lw, True) - Result.X;
+        Result.H := TySubPixelOptimize(y2, lw, True) - Result.Y;
+      end;
     end;
     el := TyChartElement(TyShapeRect(TyRectF(Result.X, Result.Y,
       Result.X + Result.W, Result.Y + Result.H)));
@@ -2277,7 +2290,11 @@ var
   procedure AddLine(AX1, AY1, AX2, AY2: Double; const S: TCellStyle; AZ2: Integer);
   var el: TTyChartElement;
   begin
-    TySubPixelOptimizeLine(AX1, AY1, AX2, AY2, S.LineWidth * scale);
+    { ([R7-AG] on the css px grid at another PPI) }
+    if (scale > 0) and (scale <> 1) then
+      TyZrSubPixelLineAt(AX1, AY1, AX2, AY2, S.LineWidth * scale, scale)
+    else
+      TySubPixelOptimizeLine(AX1, AY1, AX2, AY2, S.LineWidth * scale);
     el := TyChartElement(TyShapePolyline([TyPointF(AX1, AY1), TyPointF(AX2, AY2)]));
     el.Style.HasFill := False;
     el.Style.StrokeColor := S.Stroke;
@@ -2429,13 +2446,9 @@ var
     baseX := AdjX(ix, iw, align, True);
     baseY := AdjY(iy, ih, valign, True);
     begin
-      padH := 0;
-      padV := 0;
-      if rt.Style.HasPadding then
-      begin
-        padH := rt.Style.Padding[1] + rt.Style.Padding[3];
-        padV := rt.Style.Padding[0] + rt.Style.Padding[2];
-      end;
+      { ([R7-AI] `padding[1] + padding[3]` in JS: '2' + '2' is 22) }
+      padH := TyRtPadSum(rt.Style, 1, 3);
+      padV := TyRtPadSum(rt.Style, 0, 2);
       if rt.Style.WidthKind = rtwNone then
       begin
         rt.Style.WidthKind := rtwNumber;

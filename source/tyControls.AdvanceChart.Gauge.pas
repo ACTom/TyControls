@@ -136,6 +136,12 @@ type
     Formatter: string;
     Rotate: TTyGaugeLabelRotate;
     RotateDeg: Double;
+    { [R7-B] THE TEXT STYLE createTextStyle(labelModel, ...) makes of the
+      node: a label whose style needs the block (rich, a box, a size, a line
+      height, an overflow, a text shadow) is laid out in it, the colour band
+      under it the inherit colour; a plain one takes its halo and opacity
+      from it [was: the colour and the font only] }
+    Rt: TTyRtBlockStyle;
   end;
 
   TTyGaugePointer = record
@@ -229,12 +235,18 @@ type
     Width, Height: TTyBoxValue;
     { top, right, bottom, left -- LOGICAL px, CSS order. }
     Padding: array[0..3] of Double;
-    { THE TEXT BLOCK, when the text is rich: its styles over the node and
-      upstream's own defaults (the detail's width 100, lineHeight 30,
-      padding [5, 10], transparent plate) -- the plate is then the block's
-      own rect. Only `rich` takes this path: a plain reading keeps its plate
-      and its one run. [Batch 86] }
+    { THE TEXT BLOCK: createTextStyle's styles over the item's node, the
+      series' and upstream's own defaults (the detail's width 100, lineHeight
+      30, padding [5, 10], transparent plate) -- the plate is then the
+      block's own rect. A text whose style needs it (rich, a box, a size, a
+      line height, an overflow, a text shadow -- a reading always, by its
+      defaults) is laid out in it; a plain one takes its halo and opacity
+      from it. [Batch 86; R7-B: was rich only, and the item's chain lost the
+      series'] }
     Rt: TTyRtBlockStyle;
+    { [R7-B] the reading's: width and height are parsePercent of the radius,
+      over the block's (GaugeView: `width: isNaN(width) ? null : width`) }
+    SizeOfR: Boolean;
     { `valueAnimation` (false by default) and `precision`, read for the
       detail: the reading counts from the previous value [Batch 92, AN4] }
     ValueAnim: Boolean;
@@ -254,6 +266,20 @@ type
       pointer.itemStyle (progress.itemStyle) set over its visual style
       (itemStyle) key by key, the item's over the series' }
     NeedleShadow, ProgressShadow: TTyChartShadow;
+    { [R7-D] THE ITEM'S OWN POINTER: createPointer reads
+      itemModel.getModel('pointer') -- width, length, offsetCenter,
+      keepAspect, the item's over the series' -- and the fill pass sets
+      itemModel's pointer.itemStyle / progress.itemStyle over the visual
+      style, then turns a fill of 'auto' into the band under the value. An
+      item's own itemStyle.color 'auto' (dataStyleTask keeps the word) is
+      such a fill too. [was: the series' pointer and colours only] }
+    NeedleLen, NeedleWidth, NeedleOffsetX, NeedleOffsetY: TTyBoxValue;
+    NeedleKeepAspect: Boolean;
+    NeedleAuto, NeedleHasColour: Boolean;
+    NeedleColour: TTyChartColor;
+    ProgressAuto, ProgressHasColour: Boolean;
+    ProgressColour: TTyChartColor;
+    ColourAuto: Boolean;
   end;
   TTyGaugeItemArray = array of TTyGaugeItem;
 
@@ -391,8 +417,26 @@ function TyGaugeNeedlePoints(ACX, ACY, AAngleRad, AHalfWidth, ALen,
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
   AValue: Double; AKeepRich: Boolean = False): string;
 { formatLabel for an interpolated value: the words with #1 where the value
-  goes; '' for a handler formatter (it is not a template) [Batch 92] }
-function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean): string;
+  goes; '' for a handler formatter (it is not a template) [Batch 92];
+  AKeepRich: a block's, markup and lines kept [R7-B] }
+function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean;
+  AKeepRich: Boolean = False): string;
+{ [R7-D] formatLabel over a value whose text is AWords (`value + ''`): a
+  reading that is a cell as written prints the cell; a handler is given
+  AValue and AWords }
+function TyGaugeFormatWords(const AFormatter: string; AHasFormatter: Boolean;
+  AValue: Double; const AWords: string; AKeepRich: Boolean = False): string;
+
+{ [R7-D] A ROW'S VALUE, upstream's data.get(valueDim, idx): a number column's
+  parsed number (AWords its JS text); a first dimension upstream types
+  ordinal -- guessOrdinal or a declared type, which the store records on the
+  raw position -- keeps its cell as written (DataStore has no ordinal meta for
+  it): AWords the cell's text (true / false, '' for null), the dial's number
+  `+cell` (JS: 'Rate' NaN, '7' 7, '' and null 0, true 1). AIsCell says the
+  value is such a cell and no number -- a count would not interpolate it.
+  [R7-H] A cell the row does not have is undefined: NaN to the dial, ''. }
+function TyGaugeRowValue(AStore: TTyDataStore; ADim, ARow: Integer;
+  out AWords: string; out AIsCell: Boolean): Double;
 
 { The label at major position AIndex of ASplitNumber, computed FORWARD from
   min -- `i * (max - min) / splitNumber + min`, multiplied before dividing so
@@ -401,6 +445,28 @@ function TyGaugeLabelValue(AMin, AMax: Double; AIndex,
   ASplitNumber: Integer): Double;
 
 { ---- the drawing ---- }
+
+{ [R7-B] A GAUGE TEXT'S BLOCK laid out for AWords: the text's resolved style
+  in the site's font (the text's own parts over AFontName / AFontSize /
+  AWeight), ink the written colour, else AAutoColour for 'auto' / 'inherit',
+  else ADefaultColour; AAutoColour also the inherit colour its rich styles
+  and box take. Centred on (0, 0), CSS px; nil without a measurer. What a
+  counting reading is laid out again with at each value. }
+function TyGaugeTextPieces(const AText: TTyGaugeText; const AWords: string;
+  AR: Double; ADefaultColour, AAutoColour: TTyChartColor;
+  const AFontName: string; AFontSize, AWeight: Integer;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AHangX: Double = 0;
+  AHangY: Double = 0): TTyRtPieceArray;
+{ [R7-H] where a title or a reading hangs: the centre plus its offsetCenter
+  (device px) }
+procedure TyGaugeTextAt(const AText: TTyGaugeText; ACX, ACY, AR: Double;
+  APPI: Integer; out AX, AY: Double);
+
+{ [R7-B] A ROW'S TWO INHERIT COLOURS: the band under its value (the title's,
+  GaugeView's autoColor) and the reading's -- the progress arc's fill when
+  progress shows, else the same band }
+procedure TyGaugeRowInks(const ASpec: TTyGaugeSpec; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim, ARow: Integer; out ABand, ADetail: TTyChartColor);
 
 { The dial itself: the coloured bands, the split lines, the ticks and the scale
   labels. Once per series, whatever the data says. }
@@ -475,6 +541,92 @@ begin
   if ANode = nil then Exit;
   d := ANode.Find(AKey);
   if (d <> nil) and (d.JSONType = jtObject) then Result := TJSONObject(d);
+end;
+
+{ [R7-D] a number GaugeView reads through JS arithmetic (`+min`,
+  `-startAngle / 180 * PI`): a numeric string is its number [was: a number
+  only]. [R7-H] A string that is no number is NaN, and so is null --
+  Model.get finds the null, asks its parent, and gets undefined -- and the
+  dial is drawn with it as upstream draws it (DialIsNaN); a boolean is 1 or
+  0 [was: both left the default]. }
+function JsNumIn(ANode: TJSONObject; const AKey: string; ADefault: Double): Double;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if d = nil then Exit;
+  case d.JSONType of
+    jtNumber: Result := d.AsFloat;
+    jtString: Result := TyJsToNumber(d.AsString);
+    jtNull: Result := NaN;
+    jtBoolean: if d.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+{ [R7-H] A DIAL WITH A NaN ANGLE OR EXTENT -- startAngle, endAngle, min or
+  max written as null or as a word. Upstream computes with NaN in JS: an
+  angle NaN puts the axis line, the ticks, the labels and the arc at NaN,
+  none of them drawn, and the pointer's rotation NaN, which zrender's
+  transform reads as 0; an extent NaN labels every tick 'NaN' and maps a
+  value through linearMap's comparisons, false against NaN. Such a dial is
+  laid out and built with the FPU's traps masked, so the comparisons answer
+  as JS does, and nothing at NaN is added to the list. }
+function DialIsNaN(const ASpec: TTyGaugeSpec): Boolean;
+begin
+  Result := IsNan(ASpec.StartDeg) or IsNan(ASpec.EndDeg) or IsNan(ASpec.Min_)
+    or IsNan(ASpec.Max_);
+end;
+
+function MaskTraps: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure UnmaskTraps(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  { and the SSE flags, which ClearExceptions leaves on this CPU (Graph.pas
+    UnmaskFP) }
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+function Fin(A: Double): Boolean; inline;
+begin
+  Result := not (IsNan(A) or IsInfinite(A));
+end;
+
+{ linearMap(val, [d0, d1], [r0, r1], clamp), JS through and through: a NaN
+  domain or value answers what its comparisons, all false, leave
+  (number.ts) }
+function JsLinearMap(AValue, AD0, AD1, AR0, AR1: Double; AClamp: Boolean): Double;
+var sub, subR: Double;
+begin
+  sub := AD1 - AD0;
+  subR := AR1 - AR0;
+  if (not IsNan(sub)) and (sub = 0) then
+  begin
+    if (not IsNan(subR)) and (subR = 0) then Exit(AR0);
+    Exit((AR0 + AR1) / 2);
+  end;
+  if AClamp then
+  begin
+    if (not IsNan(sub)) and (sub > 0) then
+    begin
+      if (not IsNan(AValue)) and (not IsNan(AD0)) and (AValue <= AD0) then Exit(AR0);
+      if (not IsNan(AValue)) and (not IsNan(AD1)) and (AValue >= AD1) then Exit(AR1);
+    end
+    else
+    begin
+      if (not IsNan(AValue)) and (not IsNan(AD0)) and (AValue >= AD0) then Exit(AR0);
+      if (not IsNan(AValue)) and (not IsNan(AD1)) and (AValue <= AD1) then Exit(AR1);
+    end;
+  end;
+  Result := (AValue - AD0) / sub * subR + AR0;
 end;
 
 { A colour key that may also be the word `auto` or `inherit`. Both mean "the
@@ -596,11 +748,11 @@ begin
   AText.Show := BoolIn(n, 'show', AText.Show);
   ReadPair(n, 'offsetCenter', AText.OffsetX, AText.OffsetY);
   ReadColour(n, 'color', AText.Auto, AText.HasColour, AText.Colour);
-  v := NumIn(n, 'fontSize', -1);
-  if v > 0 then
+  { [R7-B] parseFontSize: '20' and '20px' are 20 [was: a number only] }
+  if TyOptFontSize(n.Find('fontSize'), -1) > 0 then
   begin
     AText.HasFontSize := True;
-    AText.FontSizeLogical := TyFontSizeFromPx(v);  // CSS px [Batch 83]
+    AText.FontSizeLogical := TyOptFontSize(n.Find('fontSize'), -1);  // CSS px [Batch 83]
   end;
   if StrIn(n, 'fontFamily', '') <> '' then
   begin
@@ -682,14 +834,46 @@ begin
   AText.Width := TyBoxValueOf(n, 'width', AText.Width);
   AText.Height := TyBoxValueOf(n, 'height', AText.Height);
   ReadPadding(n, 'padding', AText.Padding);
-  { a rich text's block, over upstream's defaults; free text [Batch 86] }
-  if (n.Find('rich') <> nil) and (n.Find('rich').JSONType = jtObject) then
+  { [R7-B] the block is resolved over the whole chain by the caller
+    (ResolveTextBlock) [was: here, rich only, the item's node alone] }
+end;
+
+{ [R7-B] createTextStyle's styles for a title or a reading: the item's node
+  (nil for the series' own), the series', upstream's defaults for the
+  reading; a free text, the root textStyle the global }
+procedure ResolveTextBlock(AItem, ASeries: TJSONObject; ARoot: TJSONData;
+  const AKey: string; var AText: TTyGaugeText);
+var
+  glob: TTyRtGlobal;
+  root, own, defs: TJSONObject;
+  i: Integer;
+begin
+  if ARoot is TJSONObject then root := TJSONObject(ARoot) else root := nil;
+  glob := TyRtGlobalOf(root, '', 0, 0);
+  if AKey = 'detail' then
   begin
-    if AKey = 'detail' then
-      AText.Rt := TyRtResolve([n, GDetailDefaults], Default(TTyRtGlobal),
-        TyRtResolveOpt(False))
-    else
-      AText.Rt := TyRtResolve([n], Default(TTyRtGlobal), TyRtResolveOpt(False));
+    { [R7-D] THE DEFAULTS ARE MERGED INTO THE SERIES' OPTION, not a level
+      under it: a key the series writes -- null included -- is the series'
+      (merge keeps a written null, and a null reads as unset), so `width:
+      null` there is no width, not the default 100 [was: a null fell through
+      to the defaults] }
+    own := ObjIn(ASeries, AKey);
+    defs := TJSONObject(GDetailDefaults.Clone);
+    try
+      if own <> nil then
+        for i := defs.Count - 1 downto 0 do
+          if own.IndexOfName(defs.Names[i]) >= 0 then defs.Delete(i);
+      AText.Rt := TyRtResolve([ObjIn(AItem, AKey), own, defs], glob,
+        TyRtResolveOpt(False));
+    finally
+      defs.Free;
+    end;
+    AText.SizeOfR := True;
+  end
+  else
+  begin
+    AText.Rt := TyRtResolve([ObjIn(AItem, AKey), ObjIn(ASeries, AKey)], glob,
+      TyRtResolveOpt(False));
   end;
 end;
 
@@ -697,6 +881,9 @@ function TyGaugeTextDefault: TTyGaugeText;
 begin
   Result := Default(TTyGaugeText);
   Result.Keys := TyChartStyle;
+  Result.Rt.Style.FontFamily := 'sans-serif';
+  Result.Rt.Style.FontSizePx := 12;
+  Result.Rt.Style.FontWeight := 400;
   Result.Show := True;
   Result.OffsetX := TyBoxPx(0);
   Result.OffsetY := TyBoxPx(0);
@@ -741,7 +928,9 @@ begin
   Result.AxisLabel.Show := True;
   Result.AxisLabel.Distance := 15;
   Result.AxisLabel.HasFontSize := True;
-  Result.AxisLabel.FontSizeLogical := 12;
+  { [R7-B] GaugeSeries' sizes are CSS px: 12px, not 12pt (16px) -- the
+    title's 16px and the reading's 30px alike [was: points] }
+  Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(12);
   Result.AxisLabel.Rotate := glrNumber;
   Result.AxisLabel.RotateDeg := 0;
 
@@ -766,12 +955,12 @@ begin
   Result.Title := TyGaugeTextDefault;
   Result.Title.OffsetY := TyBoxPercent(20);
   Result.Title.HasFontSize := True;
-  Result.Title.FontSizeLogical := 16;
+  Result.Title.FontSizeLogical := TyFontSizeFromPx(16);
 
   Result.Detail := TyGaugeTextDefault;
   Result.Detail.OffsetY := TyBoxPercent(40);
   Result.Detail.HasFontSize := True;
-  Result.Detail.FontSizeLogical := 30;
+  Result.Detail.FontSizeLogical := TyFontSizeFromPx(30);
   Result.Detail.HasWeight := True;
   Result.Detail.FontWeight := 700;
   Result.Detail.Width := TyBoxPx(100);
@@ -841,11 +1030,12 @@ begin
 
   ReadPair(node, 'center', Result.CentreX, Result.CentreY);
   Result.Radius := TyBoxValueOf(node, 'radius', Result.Radius);
-  Result.StartDeg := NumIn(node, 'startAngle', Result.StartDeg);
-  Result.EndDeg := NumIn(node, 'endAngle', Result.EndDeg);
+  { [R7-D] as JS numbers: '180' is 180 [was: a number only] }
+  Result.StartDeg := JsNumIn(node, 'startAngle', Result.StartDeg);
+  Result.EndDeg := JsNumIn(node, 'endAngle', Result.EndDeg);
   Result.Clockwise := BoolIn(node, 'clockwise', Result.Clockwise);
-  Result.Min_ := NumIn(node, 'min', Result.Min_);
-  Result.Max_ := NumIn(node, 'max', Result.Max_);
+  Result.Min_ := JsNumIn(node, 'min', Result.Min_);
+  Result.Max_ := JsNumIn(node, 'max', Result.Max_);
   { A COUNT, so it truncates. Floored at zero rather than at one: zero split
     lines is a legal dial and upstream draws one degenerate position for it,
     which the builders guard rather than the reader. }
@@ -879,11 +1069,11 @@ begin
     Result.AxisLabel.Distance := NumIn(n2, 'distance', Result.AxisLabel.Distance);
     ReadColour(n2, 'color', Result.AxisLabel.Auto, Result.AxisLabel.HasColour,
       Result.AxisLabel.Colour);
-    v := NumIn(n2, 'fontSize', -1);
-    if v > 0 then
+    { [R7-B] '14' and '14px' are 14 [was: a number only] }
+    if TyOptFontSize(n2.Find('fontSize'), -1) > 0 then
     begin
       Result.AxisLabel.HasFontSize := True;
-      Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
+      Result.AxisLabel.FontSizeLogical := TyOptFontSize(n2.Find('fontSize'), -1);
     end;
     s := StrIn(n2, 'fontFamily', '');
     if s <> '' then
@@ -932,10 +1122,21 @@ begin
           d.AsFloat));
       end;
     end;
+    { [R7-B] the rest of createTextStyle's: a free text's, the root
+      textStyle the global }
+    if AOption.Root is TJSONObject then
+      Result.AxisLabel.Rt := TyRtResolve([n2],
+        TyRtGlobalOf(TJSONObject(AOption.Root), '', 0, 0), TyRtResolveOpt(False))
+    else
+      Result.AxisLabel.Rt := TyRtResolve([n2], Default(TTyRtGlobal),
+        TyRtResolveOpt(False));
   end;
 
-  TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result.Needle.Shadow);
-  TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result.Progress.Shadow);
+  { [R7-U] over the visual style's: the series' own block }
+  TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'], ['itemStyle'],
+    Result.Needle.Shadow);
+  TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'], ['itemStyle'],
+    Result.Progress.Shadow);
   n2 := ObjIn(node, 'pointer');
   if n2 <> nil then
   begin
@@ -985,6 +1186,14 @@ begin
 
   ReadText(node, 'title', Result.Title, False);
   ReadText(node, 'detail', Result.Detail, True);
+  { [R7-D] the series' `detail.width: null` is no width: the defaults are
+    merged in under what the series writes, and parsePercent(null) is NaN
+    [was: the default 100]. An item's null reads its series'. }
+  n2 := ObjIn(node, 'detail');
+  if (n2 <> nil) and (n2.Find('width') <> nil) and (n2.Find('width').JSONType = jtNull) then
+    Result.Detail.Width := TyBoxAuto;
+  ResolveTextBlock(nil, node, AOption.Root, 'title', Result.Title);
+  ResolveTextBlock(nil, node, AOption.Root, 'detail', Result.Detail);
 
   n2 := ObjIn(node, 'progress');
   if n2 <> nil then
@@ -1001,13 +1210,37 @@ begin
   end;
 end;
 
+{ [R7-D] a row's pointer and colours where it has no item of its own: the
+  series' }
+function ItemOfSpec(const ASpec: TTyGaugeSpec): TTyGaugeItem;
+begin
+  Result := Default(TTyGaugeItem);
+  Result.Title := ASpec.Title;
+  Result.Detail := ASpec.Detail;
+  Result.NeedleShadow := ASpec.Needle.Shadow;
+  Result.ProgressShadow := ASpec.Progress.Shadow;
+  Result.NeedleLen := ASpec.Needle.Len;
+  Result.NeedleWidth := ASpec.Needle.WidthV;
+  Result.NeedleOffsetX := ASpec.Needle.OffsetX;
+  Result.NeedleOffsetY := ASpec.Needle.OffsetY;
+  Result.NeedleKeepAspect := ASpec.Needle.KeepAspect;
+  Result.NeedleAuto := ASpec.Needle.Auto;
+  Result.NeedleHasColour := ASpec.Needle.HasColour;
+  Result.NeedleColour := ASpec.Needle.Colour;
+  Result.ProgressAuto := ASpec.Progress.Auto;
+  Result.ProgressHasColour := ASpec.Progress.HasColour;
+  Result.ProgressColour := ASpec.Progress.Colour;
+end;
+
 function TyGaugeItemsOf(AOption: TTyChartOption; ASlot: Integer;
   const ASpec: TTyGaugeSpec): TTyGaugeItemArray;
 var
   d: TJSONData;
-  node: TJSONObject;
+  node, pn: TJSONObject;
   arr: TJSONArray;
   i: Integer;
+  dummyHas: Boolean;
+  dummyColour: TTyChartColor;
 begin
   Result := nil;
   if AOption = nil then Exit;
@@ -1020,25 +1253,50 @@ begin
   SetLength(Result, arr.Count);
   for i := 0 to arr.Count - 1 do
   begin
-    Result[i].Title := ASpec.Title;
-    Result[i].Detail := ASpec.Detail;
+    Result[i] := ItemOfSpec(ASpec);
     { [R5-A] the pointer's and the progress arc's shadows, the item's model
       over the series' }
     if arr.Items[i] is TJSONObject then
     begin
-      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['pointer', 'itemStyle'],
+      TyStReadShadowFb([TJSONObject(arr.Items[i]), node],
+        [TJSONObject(arr.Items[i]), AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'],
         ['itemStyle'], Result[i].NeedleShadow);
-      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['progress', 'itemStyle'],
+      TyStReadShadowFb([TJSONObject(arr.Items[i]), node],
+        [TJSONObject(arr.Items[i]), AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'],
         ['itemStyle'], Result[i].ProgressShadow);
     end
     else
     begin
-      TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result[i].NeedleShadow);
-      TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result[i].ProgressShadow);
+      TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['pointer', 'itemStyle'],
+        ['itemStyle'], Result[i].NeedleShadow);
+      TyStReadShadowFb([node], [AOption.SeriesOwnStyle(ASlot)], ['progress', 'itemStyle'],
+        ['itemStyle'], Result[i].ProgressShadow);
     end;
     if arr.Items[i].JSONType <> jtObject then Continue;
+    { [R7-D] the item's own pointer and part colours }
+    pn := ObjIn(TJSONObject(arr.Items[i]), 'pointer');
+    if pn <> nil then
+    begin
+      ReadPair(pn, 'offsetCenter', Result[i].NeedleOffsetX, Result[i].NeedleOffsetY);
+      Result[i].NeedleLen := TyBoxValueOf(pn, 'length', Result[i].NeedleLen);
+      Result[i].NeedleWidth := TyBoxValueOf(pn, 'width', Result[i].NeedleWidth);
+      Result[i].NeedleKeepAspect := BoolIn(pn, 'keepAspect', Result[i].NeedleKeepAspect);
+      ReadColour(ObjIn(pn, 'itemStyle'), 'color', Result[i].NeedleAuto,
+        Result[i].NeedleHasColour, Result[i].NeedleColour);
+    end;
+    ReadColour(ObjIn(ObjIn(TJSONObject(arr.Items[i]), 'progress'), 'itemStyle'), 'color',
+      Result[i].ProgressAuto, Result[i].ProgressHasColour, Result[i].ProgressColour);
+    dummyHas := False;
+    dummyColour := 0;
+    ReadColour(ObjIn(TJSONObject(arr.Items[i]), 'itemStyle'), 'color',
+      Result[i].ColourAuto, dummyHas, dummyColour);
     ReadText(TJSONObject(arr.Items[i]), 'title', Result[i].Title, False);
     ReadText(TJSONObject(arr.Items[i]), 'detail', Result[i].Detail, True);
+    { [R7-B] the item's model over the series' (its parent) }
+    ResolveTextBlock(TJSONObject(arr.Items[i]), node, AOption.Root, 'title',
+      Result[i].Title);
+    ResolveTextBlock(TJSONObject(arr.Items[i]), node, AOption.Root, 'detail',
+      Result[i].Detail);
   end;
 end;
 
@@ -1064,7 +1322,23 @@ begin
   if AValue.Kind = buPx then Result := Result * APPI / 96;
 end;
 
+function LayoutBody(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
+  APPI: Integer): TTyGaugeLayout; forward;
+
 function TyGaugeLayoutOf(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
+  APPI: Integer): TTyGaugeLayout;
+var mask: TFPUExceptionMask;
+begin
+  if not DialIsNaN(ASpec) then Exit(LayoutBody(ASpec, AViewport, APPI));
+  mask := MaskTraps;
+  try
+    Result := LayoutBody(ASpec, AViewport, APPI);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function LayoutBody(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
   APPI: Integer): TTyGaugeLayout;
 var
   base, startA, endA, frac: Double;
@@ -1081,8 +1355,20 @@ begin
     frame has y pointing down, so the sign flips. }
   startA := -ASpec.StartDeg * cRadian;
   endA := -ASpec.EndDeg * cRadian;
-  { STEP TWO, and the flag is INVERTED on the way in. }
-  TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
+  { STEP TWO, and the flag is INVERTED on the way in. [R7-H] A NaN start
+    stays NaN and takes the end with it (normalizeArcAngles' modPI2 of NaN
+    is NaN, and the end is carried by the difference); a NaN end stays NaN
+    after a start folded as ever -- every comparison after is false. }
+  if IsNan(startA) then
+    endA := NaN
+  else if IsNan(endA) then
+  begin
+    frac := startA;
+    TyNormalizeArcAngles(startA, frac, not ASpec.Clockwise);
+    endA := NaN;
+  end
+  else
+    TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
   Result.StartRad := startA;
   Result.EndRad := endA;
   Result.Span := endA - startA;
@@ -1107,7 +1393,9 @@ begin
   { NaN FIRST, because everything below compares. An ordered comparison
     against a quiet NaN raises here rather than answering False. }
   if IsNan(AValue) then Exit(ALayout.StartRad);
-  Result := TyLinearMap(AValue, AMin, AMax, ALayout.StartRad, ALayout.EndRad,
+  { [R7-H] JS's linearMap: a NaN extent answers what its comparisons leave
+    (min NaN: the end, max NaN: the start) [was: the start for either] }
+  Result := JsLinearMap(AValue, AMin, AMax, ALayout.StartRad, ALayout.EndRad,
     AClamp);
 end;
 
@@ -1225,11 +1513,18 @@ end;
 
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
   AValue: Double; AKeepRich: Boolean): string;
-var prm: TTyChartCallbackParams;
 begin
   { formatLabel: `value + ''` -- JavaScript's own text, so a missing value
     reads NaN, as upstream's dial does, and 1e21 reads 1e+21. }
-  Result := TyJsNumberToString(AValue);
+  Result := TyGaugeFormatWords(AFormatter, AHasFormatter, AValue,
+    TyJsNumberToString(AValue), AKeepRich);
+end;
+
+function TyGaugeFormatWords(const AFormatter: string; AHasFormatter: Boolean;
+  AValue: Double; const AWords: string; AKeepRich: Boolean): string;
+var prm: TTyChartCallbackParams;
+begin
+  Result := AWords;
   if not AHasFormatter then Exit;
   { a named handler is given the value, upstream's formatter(value) }
   if TyChartIsHandlerRef(AFormatter) then
@@ -1256,7 +1551,8 @@ begin
   Result := StringReplace(Result, #13, ' ', [rfReplaceAll]);
 end;
 
-function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean): string;
+function TyGaugeFormatTpl(const AFormatter: string; AHasFormatter: Boolean;
+  AKeepRich: Boolean): string;
 begin
   Result := #1;
   if AHasFormatter then
@@ -1264,6 +1560,7 @@ begin
     if TyChartIsHandlerRef(AFormatter) then Exit('');
     Result := TyReplaceFirst(AFormatter, '{value}', #1);
   end;
+  if AKeepRich then Exit;
   Result := StripRich(Result);
   Result := StringReplace(Result, #13#10, ' ', [rfReplaceAll]);
   Result := StringReplace(Result, #10, ' ', [rfReplaceAll]);
@@ -1335,7 +1632,57 @@ begin
   Result.Silent := True;
 end;
 
+{ [R7-B] A ONE-RUN CAPTION'S HALO AND OPACITY: the text laid out plain in its
+  finished block, its line's stroke (textBorderColor, its width -- 2 where
+  none is written --, textBorderType, textBorderDashOffset) and opacity }
+procedure TakeHalo(var AEl: TTyChartElement; const AWords: string;
+  const ABlock: TTyRtBlockStyle; AH: TTyTextAnchorH; AV: TTyTextAnchorV;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  pieces: TTyRtPieceArray;
+  k: Integer;
+begin
+  if AMeasurer = nil then Exit;
+  pieces := TyRtLay(AWords, ABlock, TyRtDefaultOf(False, 0, False, 0, False,
+    AH, AV), APPI / 96, AMeasurer);
+  for k := 0 to High(pieces) do
+  begin
+    if pieces[k].Kind <> rpkText then Continue;
+    if pieces[k].HasStroke and (pieces[k].LineWidth > 0) then
+    begin
+      AEl.Caption.StrokeColour := pieces[k].Stroke;
+      AEl.Caption.StrokeWidthLogical := pieces[k].LineWidth;
+      AEl.Caption.StrokeType := pieces[k].LineDash;
+      AEl.Caption.StrokeDashOffset := pieces[k].LineDashOffset;
+    end;
+    { the root textStyle's opacity too; 1 leaves what the text's keys set }
+    if pieces[k].Opacity <> 1 then AEl.Style.Alpha := pieces[k].Opacity;
+    Exit;
+  end;
+end;
+
+function AxisBody(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer; forward;
+
 function TyBuildGaugeAxis(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var mask: TFPUExceptionMask;
+begin
+  if not DialIsNaN(ASpec) then
+    Exit(AxisBody(ABinding, ALayout, ASpec, AVisual, AMeasurer, APPI, AList));
+  mask := MaskTraps;
+  try
+    Result := AxisBody(ABinding, ALayout, ASpec, AVisual, AMeasurer, APPI, AList);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function AxisBody(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
@@ -1349,11 +1696,20 @@ var
   bands: array of TTyChartElement;
   el: TTyChartElement;
   words: string;
+  autoC, ink: TTyChartColor;
+  b: TTyRtBlockStyle;
+  glob: TTyRtGlobal;
+  pieces: TTyRtPieceArray;
   anchorH: TTyTextAnchorH;
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
+  keep: ITyTextMeasurer;
 begin
   Result := 0;
+  { [R7-B] held for the call: a measurer made in the argument list has no
+    reference until something takes one, and the block's layout takes one
+    and lets it go }
+  keep := AMeasurer;
   if (AList = nil) or not ALayout.Valid then Exit;
   if not ABinding.Resolved then Exit;
 
@@ -1443,20 +1799,28 @@ begin
       about 1e-13 radians over a whole dial, which is nowhere near a pixel, and
       forward is the one that cannot drift. }
     angle := ALayout.StartRad + i * step;
+    { [R7-H] the first is the start angle itself, as upstream's running
+      angle is before its first step: a NaN step (a NaN end angle) leaves it
+      where it is, 0 * NaN would not }
+    if i = 0 then angle := ALayout.StartRad;
     unitX := Cos(angle);
     unitY := Sin(angle);
 
-    if ASpec.SplitLine.Show and (ASpec.SplitLine.WidthLogical > 0) then
+    { [R7-H] a NaN angle puts the line at NaN: not drawn }
+    if ASpec.SplitLine.Show and (ASpec.SplitLine.WidthLogical > 0) and Fin(unitX)
+      and Fin(unitY) then
     begin
       dist := ASpec.SplitLine.Distance * APPI / 96 + ALayout.AxisWidth;
       x1 := unitX * (ALayout.R - dist) + ALayout.CX;
       y1 := unitY * (ALayout.R - dist) + ALayout.CY;
       x2 := unitX * (ALayout.R - splitLen - dist) + ALayout.CX;
       y2 := unitY * (ALayout.R - splitLen - dist) + ALayout.CY;
+      { [R7-D] 'auto': the band at i / splitNumber -- with no bands of its
+        own the default band's, the track's colour [was: the split line's] }
       if ASpec.SplitLine.Auto then
         el := TickElement(x1, y1, x2, y2,
           TyGaugeStopColour(ASpec.AxisLine.Stops, i / Max(splitN, 1),
-            AVisual.SplitLine), ASpec.SplitLine.WidthLogical, AVisual.Z)
+            AVisual.Track), ASpec.SplitLine.WidthLogical, AVisual.Z)
       else if ASpec.SplitLine.HasColour then
         el := TickElement(x1, y1, x2, y2, ASpec.SplitLine.Colour,
           ASpec.SplitLine.WidthLogical, AVisual.Z)
@@ -1478,10 +1842,14 @@ begin
         * APPI / 96;
       tx := unitX * (ALayout.R - splitLen - labelDist) + ALayout.CX;
       ty := unitY * (ALayout.R - splitLen - labelDist) + ALayout.CY;
+      { [R7-B] the words as formatLabel gives them, markup and lines and all:
+        zrender draws a plain text's braces as they are and its lines one
+        under another [was: markup stripped, lines run together] }
       words := TyGaugeFormat(ASpec.AxisLabel.Formatter,
         ASpec.AxisLabel.HasFormatter,
-        TyGaugeLabelValue(ASpec.Min_, ASpec.Max_, i, splitN));
-      if words <> '' then
+        TyGaugeLabelValue(ASpec.Min_, ASpec.Max_, i, splitN), True);
+      { [R7-H] a label at NaN (a NaN angle) is not drawn }
+      if (words <> '') and Fin(tx) and Fin(ty) then
       begin
         rot := 0;
         case ASpec.AxisLabel.Rotate of
@@ -1526,7 +1894,71 @@ begin
         if ASpec.AxisLabel.HasWeight then
           fweight := (fweight and not TyChartFontWeightMask) or ASpec.AxisLabel.FontWeight;
         fweight := TyFontStyleCodeOver(ASpec.AxisLabel.FontStyle, fweight);
-        AMeasurer.MeasureLine(words, fname, fsize, fweight, w, h);
+        { [R7-B] the block: the label's style in its font, the band at
+          i / splitNumber the inherit colour, the alignment the code fixes }
+        { with no bands of its own, getColor answers the default band's --
+          the track's colour [was: the label's] }
+        autoC := TyGaugeStopColour(ASpec.AxisLine.Stops, i / Max(splitN, 1),
+          AVisual.Track);
+        if ASpec.AxisLabel.HasColour then ink := ASpec.AxisLabel.Colour
+        else if ASpec.AxisLabel.Auto then ink := autoC
+        else ink := AVisual.LabelColour;
+        b := ASpec.AxisLabel.Rt;
+        glob := Default(TTyRtGlobal);
+        glob.FontFamily := fname;
+        glob.FontSizeLogical := fsize;
+        glob.FontWeight := fweight;
+        TyRtFinish(b, fname, fsize, fweight, glob, True, autoC);
+        b.Style.HasFill := True;
+        b.Style.FillNone := False;
+        b.Style.Fill := ink;
+        case anchorH of
+          tahLeft: b.Style.Align := rtaLeft;
+          tahRight: b.Style.Align := rtaRight;
+        else
+          b.Style.Align := rtaCenter;
+        end;
+        case anchorV of
+          tavTop: b.Style.VAlign := rtvTop;
+          tavBottom: b.Style.VAlign := rtvBottom;
+        else
+          b.Style.VAlign := rtvMiddle;
+        end;
+        pieces := nil;
+        if (b.Needed or (Pos(#10, words) > 0)) and (AMeasurer <> nil) then
+        begin
+          { [R7-D] a width that is a word: no plate, a rich label or a
+            truncation nothing at all -- the text engine's JS arithmetic
+            [R7-H: was a gauge-only path] }
+          pieces := TyRtLayHung(words, b, TyRtDefaultOf(False, 0, False, 0, False,
+            anchorH, anchorV), tx / (APPI / 96), ty / (APPI / 96), APPI / 96, AMeasurer);
+          if Length(pieces) > 0 then
+          begin
+            el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, tx, ty, rot,
+              APPI / 96)));
+            el.Caption.Text := words;
+            el.Caption.FontName := fname;
+            el.Caption.FontSizeLogical := fsize;
+            el.Caption.FontWeight := fweight;
+            el.Caption.Colour := ink;
+            el.Caption.X := tx;
+            el.Caption.Y := ty;
+            el.Caption.AnchorH := anchorH;
+            el.Caption.AnchorV := anchorV;
+            el.Caption.RotationRad := rot;
+            el.Caption.RtPieces := pieces;
+            el.Caption.RtScale := APPI / 96;
+            el.Z := AVisual.Z;
+            el.Z2 := 0;
+            el.Silent := True;
+            AList.Add(el);
+            Inc(Result);
+          end;
+          w := 0;
+          h := 0;
+        end
+        else
+          AMeasurer.MeasureLine(words, fname, fsize, fweight, w, h);
         if (w > 0) and (h > 0) then
         begin
           box := TyAnchorBox(tx, ty, w, h, anchorH, anchorV);
@@ -1535,19 +1967,15 @@ begin
           el.Caption.FontName := fname;
           el.Caption.FontSizeLogical := fsize;
           el.Caption.FontWeight := fweight;
-          if ASpec.AxisLabel.HasColour then
-            el.Caption.Colour := ASpec.AxisLabel.Colour
-          else if ASpec.AxisLabel.Auto then
-            el.Caption.Colour := TyGaugeStopColour(ASpec.AxisLine.Stops,
-              i / Max(splitN, 1), AVisual.LabelColour)
-          else
-            el.Caption.Colour := AVisual.LabelColour;
+          el.Caption.Colour := ink;
           el.Caption.X := tx;
           el.Caption.Y := ty;
           el.Caption.AnchorH := anchorH;
           el.Caption.AnchorV := anchorV;
           el.Caption.RotationRad := rot;
           el.Caption.Truncate := False;
+          { [R7-B] the halo and the opacity, as the block reads them }
+          TakeHalo(el, words, b, anchorH, anchorV, APPI, AMeasurer);
           el.Z := AVisual.Z;
           el.Z2 := 0;
           el.Silent := True;
@@ -1571,16 +1999,21 @@ begin
       for j := 0 to subN do
       begin
         angle := ALayout.StartRad + (i + j / subN) * step;
+        { [R7-H] likewise the very first tick }
+        if (i = 0) and (j = 0) then angle := ALayout.StartRad;
         unitX := Cos(angle);
         unitY := Sin(angle);
         x1 := unitX * (ALayout.R - dist) + ALayout.CX;
         y1 := unitY * (ALayout.R - dist) + ALayout.CY;
         x2 := unitX * (ALayout.R - tickLen - dist) + ALayout.CX;
         y2 := unitY * (ALayout.R - tickLen - dist) + ALayout.CY;
+        { [R7-H] at NaN (a NaN angle): not drawn }
+        if not (Fin(x1) and Fin(y1) and Fin(x2) and Fin(y2)) then Continue;
+        { [R7-D] likewise the track's with no bands [was: the tick's] }
         if ASpec.AxisTick.Auto then
           el := TickElement(x1, y1, x2, y2,
             TyGaugeStopColour(ASpec.AxisLine.Stops,
-              (i + j / subN) / Max(splitN, 1), AVisual.Tick),
+              (i + j / subN) / Max(splitN, 1), AVisual.Track),
             ASpec.AxisTick.WidthLogical, AVisual.Z)
         else if ASpec.AxisTick.HasColour then
           el := TickElement(x1, y1, x2, y2, ASpec.AxisTick.Colour,
@@ -1600,6 +2033,182 @@ end;
 
 { ==================== the data ==================== }
 
+{ a gauge text's font: its own parts over the site's }
+procedure TextFont(const AText: TTyGaugeText; const AFontName: string;
+  AFontSize, AWeight: Integer; out AName: string; out ASize, AWeightOut: Integer);
+begin
+  AName := AFontName;
+  ASize := AFontSize;
+  AWeightOut := AWeight;
+  if AText.HasFontName then AName := AText.FontName;
+  if AText.HasFontSize then ASize := AText.FontSizeLogical;
+  if AText.HasWeight then
+    AWeightOut := (AWeightOut and not TyChartFontWeightMask) or AText.FontWeight;
+  AWeightOut := TyFontStyleCodeOver(AText.FontStyle, AWeightOut);
+end;
+
+{ [R7-B] the block a title or a reading is laid out in: its style in its
+  font, the inherit colour bound, the ink set, centre / middle as the code
+  fixes them, a reading's width and height parsePercent of the radius }
+function GaugeTextBlock(const AText: TTyGaugeText; AR: Double;
+  ADefaultColour, AAutoColour: TTyChartColor; const AFontName: string;
+  AFontSize, AWeight, APPI: Integer): TTyRtBlockStyle;
+var
+  glob: TTyRtGlobal;
+  ink: TTyChartColor;
+  fname: string;
+  fsize, fweight: Integer;
+  scale: Double;
+begin
+  scale := APPI / 96;
+  TextFont(AText, AFontName, AFontSize, AWeight, fname, fsize, fweight);
+  if AText.HasColour then ink := AText.Colour
+  else if AText.Auto then ink := AAutoColour
+  else ink := ADefaultColour;
+  Result := AText.Rt;
+  glob := Default(TTyRtGlobal);
+  glob.FontFamily := fname;
+  glob.FontSizeLogical := fsize;
+  glob.FontWeight := fweight;
+  TyRtFinish(Result, fname, fsize, fweight, glob, True, AAutoColour);
+  Result.Style.HasFill := True;
+  Result.Style.FillNone := False;
+  Result.Style.Fill := ink;
+  Result.Style.Align := rtaCenter;
+  Result.Style.VAlign := rtvMiddle;
+  if AText.SizeOfR then
+  begin
+    if AText.Width.Kind = buAuto then Result.Style.WidthKind := rtwNone
+    else
+    begin
+      Result.Style.WidthKind := rtwNumber;
+      Result.Style.Width := DialLen(AText.Width, AR, APPI) / scale;
+    end;
+    { the reading's sizes are the code's numbers, whatever was written
+      [R7-H] }
+    Result.Style.WidthIsText := False;
+    Result.Style.HeightIsText := False;
+    Result.Style.HasHeight := AText.Height.Kind <> buAuto;
+    if Result.Style.HasHeight then
+      Result.Style.Height := DialLen(AText.Height, AR, APPI) / scale;
+  end;
+end;
+
+function TyGaugeTextPieces(const AText: TTyGaugeText; const AWords: string;
+  AR: Double; ADefaultColour, AAutoColour: TTyChartColor;
+  const AFontName: string; AFontSize, AWeight: Integer;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AHangX: Double;
+  AHangY: Double): TTyRtPieceArray;
+begin
+  Result := nil;
+  if (AMeasurer = nil) or (AWords = '') then Exit;
+  { [R7-H] at its place (AHangX / AHangY, device px): GaugeView sets the
+    text's style x / y }
+  Result := TyRtLayHung(AWords, GaugeTextBlock(AText, AR, ADefaultColour,
+    AAutoColour, AFontName, AFontSize, AWeight, APPI),
+    TyRtDefaultOf(False, 0, False, 0, False, tahCentre, tavMiddle),
+    AHangX / (APPI / 96), AHangY / (APPI / 96), APPI / 96, AMeasurer);
+end;
+
+procedure TyGaugeTextAt(const AText: TTyGaugeText; ACX, ACY, AR: Double;
+  APPI: Integer; out AX, AY: Double);
+begin
+  AX := ACX + DialLen(AText.OffsetX, AR, APPI);
+  AY := ACY + DialLen(AText.OffsetY, AR, APPI);
+end;
+
+function TyGaugeRowValue(AStore: TTyDataStore; ADim, ARow: Integer;
+  out AWords: string; out AIsCell: Boolean): Double;
+var
+  pos: Integer;
+  info: TTyRawDimInfo;
+  it: TTyRawItem;
+  c: TTyDataValue;
+begin
+  AIsCell := False;
+  Result := AStore.Get(ADim, ARow);
+  AWords := TyJsNumberToString(Result);
+  pos := AStore.RawDimPos(ADim);
+  if pos < 0 then Exit;
+  info := AStore.RawDimInfo(pos);
+  if not (info.HasType and (info.DimType = ddtOrdinal)) then Exit;
+  it := AStore.RawItem(ARow);
+  c := Default(TTyDataValue);
+  case it.Shape of
+    rshArray, rshObject:
+      if pos <= High(it.Cells) then c := it.Cells[pos]
+      else
+      begin
+        { [R7-H] A MISSING CELL -- a row shorter than the header -- is
+          undefined to the store: `+undefined` is NaN to the dial,
+          formatLabel's text '' (value == null), and it does not count
+          [was: the store's parse, which read it as null: 0] }
+        Result := NaN;
+        AWords := '';
+        AIsCell := True;
+        Exit;
+      end;
+    rshScalar: c := it.Scalar;
+    rshNull: ;
+  else
+    Exit;
+  end;
+  case c.Kind of
+    dvkNumber:
+      begin
+        Result := c.Num;
+        AWords := TyJsNumberToString(c.Num);
+        Exit;
+      end;
+    dvkText:
+      begin
+        Result := TyJsToNumber(c.Text);
+        AWords := c.Text;
+      end;
+    dvkBool:
+      begin
+        if c.Num <> 0 then
+        begin
+          Result := 1;
+          AWords := 'true';
+        end
+        else
+        begin
+          Result := 0;
+          AWords := 'false';
+        end;
+      end;
+  else
+    { null: `+null` is 0, formatLabel's text '' }
+    Result := 0;
+    AWords := '';
+  end;
+  AIsCell := True;
+end;
+
+procedure TyGaugeRowInks(const ASpec: TTyGaugeSpec; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim, ARow: Integer; out ABand, ADetail: TTyChartColor);
+var
+  raw: Integer;
+  val, frac: Double;
+  words: string;
+  isCell: Boolean;
+begin
+  raw := AStore.GetRawIndex(ARow);
+  { [R7-D] the row's value as upstream reads it }
+  val := TyGaugeRowValue(AStore, ADim, ARow, words, isCell);
+  frac := JsLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
+  if IsNan(val) then frac := NaN;
+  ABand := TyGaugeStopColour(ASpec.AxisLine.Stops, frac, AVisual.Track);
+  ADetail := ABand;
+  { WHEN THERE IS A PROGRESS ARC, the reading's `inherit` follows IT rather
+    than the band under the value -- upstream chooses between the two on
+    progress.show alone; the title's is the band whatever it says
+    [R7-B: was the arc's for the title too] }
+  if ASpec.Progress.Show and (raw >= 0) and (raw <= High(AVisual.Fills)) then
+    ADetail := AVisual.Fills[raw];
+end;
+
 { One text block -- a name or a reading -- with its plate. }
 function AddGaugeText(const AText: TTyGaugeText; const AWords: string;
   ACX, ACY, AR: Double; ADefaultColour, AAutoColour: TTyChartColor;
@@ -1612,8 +2221,6 @@ var
   box: TTyRectF;
   fname: string;
   fsize, fweight: Integer;
-  b: TTyRtBlockStyle;
-  glob: TTyRtGlobal;
   pieces: TTyRtPieceArray;
   ink: TTyChartColor;
 begin
@@ -1623,34 +2230,19 @@ begin
   scale := APPI / 96;
   x := ACX + DialLen(AText.OffsetX, AR, APPI);
   y := ACY + DialLen(AText.OffsetY, AR, APPI);
-  fname := AFontName;
-  fsize := AFontSize;
-  fweight := AWeight;
-  if AText.HasFontName then fname := AText.FontName;
-  if AText.HasFontSize then fsize := AText.FontSizeLogical;
-  if AText.HasWeight then
-    fweight := (fweight and not TyChartFontWeightMask) or AText.FontWeight;
-  fweight := TyFontStyleCodeOver(AText.FontStyle, fweight);
+  TextFont(AText, AFontName, AFontSize, AWeight, fname, fsize, fweight);
 
-  { A RICH TEXT IS ITS BLOCK: the plate is the block's own rect, and a rich
-    style without a colour takes the automatic colour, upstream's
-    inheritColor for the gauge's words [Batch 86] }
-  if AText.Rt.Needed and (AMeasurer <> nil) then
+  { A TEXT WHOSE STYLE NEEDS IT IS ITS BLOCK: the plate is the block's own
+    rect, and a rich style without a colour takes the automatic colour,
+    upstream's inheritColor for the gauge's words [Batch 86]; [R7-B] so are
+    a text's lines }
+  if (AText.Rt.Needed or (Pos(#10, AWords) > 0)) and (AMeasurer <> nil) then
   begin
     if AText.HasColour then ink := AText.Colour
     else if AText.Auto then ink := AAutoColour
     else ink := ADefaultColour;
-    b := AText.Rt;
-    glob := Default(TTyRtGlobal);
-    glob.FontFamily := fname;
-    glob.FontSizeLogical := fsize;
-    glob.FontWeight := fweight;
-    TyRtFinish(b, fname, fsize, fweight, glob, True, AAutoColour);
-    b.Style.HasFill := True;
-    b.Style.FillNone := False;
-    b.Style.Fill := ink;
-    pieces := TyRtLay(AWords, b, TyRtDefaultOf(False, 0, False, 0, False,
-      tahCentre, tavMiddle), scale, AMeasurer);
+    pieces := TyGaugeTextPieces(AText, AWords, AR, ADefaultColour, AAutoColour,
+      AFontName, AFontSize, AWeight, AMeasurer, APPI, x, y);
     if Length(pieces) = 0 then Exit;
     el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, x, y, 0, scale)));
     el.Caption.Text := AWords;
@@ -1739,6 +2331,10 @@ begin
   el.Caption.Truncate := False;
   { [R6-F] the words at the text's opacity }
   if AText.HasOpacity then el.Style.Alpha := AText.Keys.Alpha;
+  { [R7-B] the halo, and the opacity as the block reads it (the root
+    textStyle's too) }
+  TakeHalo(el, AWords, GaugeTextBlock(AText, AR, ADefaultColour, AAutoColour,
+    AFontName, AFontSize, AWeight, APPI), tahCentre, tavMiddle, APPI, AMeasurer);
   el.Z := AZ;
   el.Z2 := AZ2;
   el.Silent := True;
@@ -1764,7 +2360,33 @@ begin
   end;
 end;
 
+function ValueBody(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer; forward;
+
 function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var mask: TFPUExceptionMask;
+begin
+  { [R7-H] a NaN dial: see DialIsNaN }
+  if not DialIsNaN(ASpec) then
+    Exit(ValueBody(ABinding, ALayout, ASpec, AItems, AVisual, AStore, ADim,
+      AMeasurer, APPI, AList));
+  mask := MaskTraps;
+  try
+    Result := ValueBody(ABinding, ALayout, ASpec, AItems, AVisual, AStore, ADim,
+      AMeasurer, APPI, AList);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function ValueBody(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
   AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
@@ -1784,20 +2406,30 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
     else Result := ASpec.Progress.Shadow;
   end;
 
+  { [R7-D] the row's item, or the series' where it has none }
+  function RowItem(ARaw: Integer): TTyGaugeItem;
+  begin
+    if (ARaw >= 0) and (ARaw <= High(AItems)) then Result := AItems[ARaw]
+    else Result := ItemOfSpec(ASpec);
+  end;
+
 var
   k, raw, n, textZ2, added: Integer;
   val, frac, angle, endA, pw, r0, r1, len, halfW, ox, oy, scale: Double;
   det: TTyChartElement;
-  fill, autoC: TTyChartColor;
+  fill, autoC, bandC, needleC: TTyChartColor;
   el: TTyChartElement;
   pts: TTyPointFArray;
-  ti: TTyGaugeItem;
+  ti, it: TTyGaugeItem;
   box: TTyRectF;
   sym: TTySymbolSpec;
-  empty: Boolean;
-  pathBody: string;
+  empty, isCell, cover: Boolean;
+  pathBody, words: string;
+  keep: ITyTextMeasurer;
 begin
   Result := 0;
+  { [R7-B] held for the call (see TyBuildGaugeAxis) }
+  keep := AMeasurer;
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
   if not ABinding.Resolved then Exit;
   if (ADim < 0) or (ADim >= AStore.DimCount) then Exit;
@@ -1813,28 +2445,22 @@ begin
   for k := 0 to n - 1 do
   begin
     raw := AStore.GetRawIndex(k);
-    val := AStore.Get(ADim, k);
-    frac := TyLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
-    if IsNan(val) then frac := NaN;
-    autoC := TyGaugeStopColour(ASpec.AxisLine.Stops, frac, AVisual.Track);
-    { WHEN THERE IS A PROGRESS ARC, `inherit` follows IT rather than the band
-      under the value -- upstream chooses between the two on progress.show
-      alone. }
-    if ASpec.Progress.Show then
-    begin
-      if (raw >= 0) and (raw <= High(AVisual.Fills)) then
-        autoC := AVisual.Fills[raw];
-    end;
+    { [R7-D] the value as upstream reads it: a cell as written prints as it
+      is [was: the parsed number, NaN for a word] }
+    val := TyGaugeRowValue(AStore, ADim, k, words, isCell);
+    { [R7-B] the title's inherit colour is the band, the reading's the arc's
+      under progress }
+    TyGaugeRowInks(ASpec, AVisual, AStore, ADim, k, bandC, autoC);
     ti.Title := ASpec.Title;
     ti.Detail := ASpec.Detail;
     if (raw >= 0) and (raw <= High(AItems)) then ti := AItems[raw];
     Inc(Result, AddGaugeText(ti.Title, AStore.GetName(k),
-      ALayout.CX, ALayout.CY, ALayout.R, AVisual.TitleColour, autoC,
+      ALayout.CX, ALayout.CY, ALayout.R, AVisual.TitleColour, bandC,
       AVisual.TitleFontName, AVisual.TitleFontSizeLogical,
       AVisual.TitleFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList));
     added := AddGaugeText(ti.Detail,
-      TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, val,
-        ti.Detail.Rt.Needed),
+      TyGaugeFormatWords(ti.Detail.Formatter, ti.Detail.HasFormatter, val,
+        words, ti.Detail.Rt.Needed),
       ALayout.CX, ALayout.CY, ALayout.R, AVisual.DetailColour, autoC,
       AVisual.DetailFontName, AVisual.DetailFontSizeLogical,
       AVisual.DetailFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList);
@@ -1850,10 +2476,17 @@ begin
       det.Anim.Index := k;
       det.Caption.ValHas := True;
       det.Caption.ValNum := val;
-      if ti.Detail.ValueAnim and not ti.Detail.Rt.Needed then
+      { a cell that is no number does not interpolate }
+      if ti.Detail.ValueAnim and not isCell then
       begin
         det.Caption.ValTpl := TyGaugeFormatTpl(ti.Detail.Formatter,
-          ti.Detail.HasFormatter);
+          ti.Detail.HasFormatter, Length(det.Caption.RtPieces) > 0);
+        { [R7-B] A BLOCK COUNTS TOO: the frames word it at each value and
+          lay it out again (the control's OnGaugeDetailAt), a named
+          formatter's words as well -- the template only says it counts
+          [was: a block or a handler did not count] }
+        if (Length(det.Caption.RtPieces) > 0) and (det.Caption.ValTpl = '') then
+          det.Caption.ValTpl := #1;
         det.Caption.ValAnim := det.Caption.ValTpl <> '';
         det.Caption.ValHasPrec := ti.Detail.HasPrecision;
         det.Caption.ValPrec := ti.Detail.Precision;
@@ -1898,12 +2531,20 @@ begin
   for k := 0 to n - 1 do
   begin
     raw := AStore.GetRawIndex(k);
-    val := AStore.Get(ADim, k);
-    frac := TyLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
+    val := TyGaugeRowValue(AStore, ADim, k, words, isCell);
+    it := RowItem(raw);
+    frac := JsLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
     if IsNan(val) then frac := NaN;
     fill := AVisual.Track;
     if (raw >= 0) and (raw <= High(AVisual.Fills)) then fill := AVisual.Fills[raw];
-    autoC := TyGaugeStopColour(ASpec.AxisLine.Stops, frac, fill);
+    { [R7-D] getColor over the default band with none written: the track's
+      colour [was: the row's own] }
+    autoC := TyGaugeStopColour(ASpec.AxisLine.Stops, frac, AVisual.Track);
+    { [R7-D] the pointer's fill: pointer.itemStyle's (the item's over the
+      series'), else the visual style's; 'auto' the band }
+    if it.NeedleHasColour then needleC := it.NeedleColour
+    else if it.NeedleAuto or it.ColourAuto then needleC := autoC
+    else needleC := fill;
 
     if ASpec.Progress.Show then
     begin
@@ -1927,8 +2568,9 @@ begin
         el := TyChartElement(TyShapeSector(ALayout.CX, ALayout.CY,
           Max(Double(0), r0), r1, ALayout.StartRad, endA));
         el.Style.HasFill := True;
-        if ASpec.Progress.HasColour then el.Style.FillColor := ASpec.Progress.Colour
-        else if ASpec.Progress.Auto then el.Style.FillColor := autoC
+        { [R7-D] progress.itemStyle's, the item's over the series' }
+        if it.ProgressHasColour then el.Style.FillColor := it.ProgressColour
+        else if it.ProgressAuto or it.ColourAuto then el.Style.FillColor := autoC
         else el.Style.FillColor := fill;
         el.Z := AVisual.Z;
         { AN INVERTED RANGE, deliberately: the SMALLEST value paints on top, so
@@ -1936,7 +2578,7 @@ begin
           because this list orders by an integer z2 -- two values within one
           per cent of each other therefore tie and fall back to data order. }
         if ASpec.Progress.Overlap then
-          el.Z2 := TyRoundOpt(TyLinearMap(val, ASpec.Min_, ASpec.Max_, 100, 0,
+          el.Z2 := TyRoundOpt(JsLinearMap(val, ASpec.Min_, ASpec.Max_, 100, 0,
             True), 0, 0, 100)
         else
           el.Z2 := 0;
@@ -1969,10 +2611,15 @@ begin
     if ASpec.Needle.Show then
     begin
       angle := TyGaugeAngleOf(ALayout, ASpec.Min_, ASpec.Max_, val, True);
-      len := DialLen(ASpec.Needle.Len, ALayout.R, APPI);
-      halfW := DialLen(ASpec.Needle.WidthV, ALayout.R, APPI);
-      ox := DialLen(ASpec.Needle.OffsetX, ALayout.R, APPI);
-      oy := DialLen(ASpec.Needle.OffsetY, ALayout.R, APPI);
+      { [R7-H] A NaN ANGLE (a NaN start angle) makes the rotation -(angle +
+        PI / 2) NaN, and zrender's transform reads `rotation || 0`: the
+        pointer is drawn at rotation 0, pointing up [was: an error] }
+      if IsNan(angle) then angle := -Pi / 2;
+      { [R7-D] the item's own pointer }
+      len := DialLen(it.NeedleLen, ALayout.R, APPI);
+      halfW := DialLen(it.NeedleWidth, ALayout.R, APPI);
+      ox := DialLen(it.NeedleOffsetX, ALayout.R, APPI);
+      oy := DialLen(it.NeedleOffsetY, ALayout.R, APPI);
       if ASpec.Needle.Icon = '' then
       begin
         pts := TyGaugeNeedlePoints(ALayout.CX, ALayout.CY, angle, halfW, len,
@@ -1980,10 +2627,10 @@ begin
         if Length(pts) = 4 then
         begin
           el := TyChartElement(TyShapePolygon(pts));
+          { [R7-C] PointerPath, upright in its own frame }
+          el.HitUpright := True;
           el.Style.HasFill := True;
-          if ASpec.Needle.HasColour then el.Style.FillColor := ASpec.Needle.Colour
-          else if ASpec.Needle.Auto then el.Style.FillColor := autoC
-          else el.Style.FillColor := fill;
+          el.Style.FillColor := needleC;
           el.Z := AVisual.Z;
           el.Z2 := 0;
           el.Silent := False;
@@ -1997,7 +2644,9 @@ begin
           el.Anim.G[0] := ALayout.CX;
           el.Anim.G[1] := ALayout.CY;
           el.Anim.G[2] := angle;
-          el.Anim.G[3] := ALayout.StartRad;
+          { it turns from the start angle; a NaN one is its rotation 0 }
+          if IsNan(ALayout.StartRad) then el.Anim.G[3] := -Pi / 2
+          else el.Anim.G[3] := ALayout.StartRad;
           { [F3c] the PointerPath's width, length and offset }
           el.Caption.LgSymbol := '';
           el.Caption.LgG[0] := halfW;
@@ -2020,7 +2669,7 @@ begin
         sym.Kind := TySymbolKindOf(ASpec.Needle.Icon, empty, pathBody);
         sym.Empty := empty;
         sym.PathData := pathBody;
-        sym.KeepAspect := ASpec.Needle.KeepAspect;
+        sym.KeepAspect := it.NeedleKeepAspect;
         box := TyRectF(ALayout.CX + ox - halfW / 2, ALayout.CY + oy - len,
           ALayout.CX + ox + halfW / 2, ALayout.CY + oy);
         el := TyChartElement(TyBuildSymbolInBox(sym, box));
@@ -2036,16 +2685,19 @@ begin
           meant to sit two thirds of the way out sitting at the centre,
           tilted. }
         if el.Shape.Kind = cskPath then
+        begin
+          { [R7-S] covering its box as built (no keepAspect) }
+          cover := el.Shape.PathCover;
           el.Shape := TyShapePath(el.Shape.PathData, el.Shape.Bounds,
-            angle + Pi / 2, ALayout.CX, ALayout.CY)
+            angle + Pi / 2, ALayout.CX, ALayout.CY);
+          el.Shape.PathCover := cover;
+        end
         else if el.Shape.Kind in [cskPolygon, cskPolyline] then
           { [F6a] a built-in icon or a picture is points: they turn about
             the hub the same way (a picture's corners carry its turn) }
           TurnAbout(el.Shape, angle + Pi / 2, ALayout.CX, ALayout.CY);
         el.Style.HasFill := True;
-        if ASpec.Needle.HasColour then el.Style.FillColor := ASpec.Needle.Colour
-        else if ASpec.Needle.Auto then el.Style.FillColor := autoC
-        else el.Style.FillColor := fill;
+        el.Style.FillColor := needleC;
         el.Z := AVisual.Z;
         el.Z2 := 0;
         el.Silent := False;
@@ -2058,10 +2710,11 @@ begin
         el.Anim.G[0] := ALayout.CX;
         el.Anim.G[1] := ALayout.CY;
         el.Anim.G[2] := angle;
-        el.Anim.G[3] := ALayout.StartRad;
+        if IsNan(ALayout.StartRad) then el.Anim.G[3] := -Pi / 2
+        else el.Anim.G[3] := ALayout.StartRad;
         { [F3c] the icon over the width and the length, at the offset }
         el.Caption.LgSymbol := ASpec.Needle.Icon;
-        el.Caption.LgKeepAspect := ASpec.Needle.KeepAspect;
+        el.Caption.LgKeepAspect := it.NeedleKeepAspect;
         el.Caption.LgG[0] := halfW;
         el.Caption.LgG[1] := len;
         el.Caption.LgG[2] := ox;

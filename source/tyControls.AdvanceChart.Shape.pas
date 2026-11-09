@@ -14,7 +14,7 @@ unit tyControls.AdvanceChart.Shape;
   That is deliberate: hit-testing is where the bugs are, and it must be testable
   without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvanceChart.Types, tyControls.SubPixel,
+uses SysUtils, Math, fpjson, tyControls.AdvanceChart.Types, tyControls.SubPixel,
   tyControls.AdvanceChart.Large;
 
 type
@@ -86,6 +86,12 @@ type
       either way. False on every other shape. }
     FlipX, FlipY: Boolean;
     FlipCX, FlipCY: Double;
+    { [R7-R] A PATH STRETCHED OVER ITS BOX (makePath 'cover'): a path://
+      symbol that keeps no aspect, which Symbol.ts builds in the unit box and
+      scales by half the size on each axis -- an oblong one is stretched.
+      False, the zero value, fits the path to the box keeping its aspect,
+      centred (makePath 'center'), as before. }
+    PathCover: Boolean;
     { A POLYLINE OR POLYGON AS UPSTREAM DRAWS IT, when that is not simply its
       points joined: a smoothed line's curves, and the points upstream drops
       (a segment under 0.7 px). Empty for every shape that has not asked --
@@ -116,6 +122,30 @@ type
       pen. Hit as the polygon, zrender's rectContain in the image's own
       frame. Empty on every other shape. }
     Image: string;
+    { [R7-F] UPSTREAM'S OWN OUTLINE FOR THE HIT TEST, where the drawn one
+      stands in for it. HitSym: a symbol as Symbol.ts makes it -- the
+      type's path in the unit box (createSymbol(HitSym, -1, -1, 2, 2), the
+      names TyZrSymbol knows) under HitM, its transform to device px (half
+      the size on each axis, the turn, the place), its pen unscaled
+      (strokeNoScale); '' none. HitQuad: an edge that is one quadratic
+      (BezierCurve), drawn as points -- the first and the last of Points
+      its ends, HitCP its control point. Every move, scale, turn and mirror
+      of the shape carries them (TyShapeHitAffine). The zero value is
+      neither: the drawn geometry is tested. }
+    HitSym: string;
+    HitM: TTyMat2D;
+    HitQuad: Boolean;
+    HitCP: TTyPointF;
+    { [R7-O] HitSym's pen is the path's own, not strokeNoScale -- a Line's
+      end symbol (its lineWidth in the symbol's frame): the line scale is
+      the whole frame's sqrt|det|, never the one zrender gives a frame with
+      a diagonal entry of one. False, the zero value, is strokeNoScale. }
+    HitPenInFrame: Boolean;
+    { [R7-R] HitSym's path in a REAL BOX (createSymbol(HitSym, -HitBoxW /
+      2, -HitBoxH / 2, HitBoxW, HitBoxH): a Line's end symbol sized [w, h]),
+      HitM then that box's frame to device px. 0, the zero value: the unit
+      box, as Symbol.ts makes it. }
+    HitBoxW, HitBoxH: Double;
   end;
   { [spec 242] an element's clip paths }
   TTyChartShapeArray = array of TTyChartShape;
@@ -149,11 +179,26 @@ function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartS
   More than four are ignored past the fourth; none at all is a plain rect. }
 function TyShapeRoundRect(const ABounds: TTyRectF;
   const ARadii: array of Double): TTyChartShape; overload;
+{ [R7-AK] roundRect.ts' PATH WITH ITS FAR EDGES GIVEN: a box whose size
+  zrender holds as a string (a component's background, a padding '12'
+  joined to it) runs from AX, AY to AXW, AYH -- `x + width` and `y +
+  height` joined, read as numbers by the canvas ('-2' + '1222' is -21222)
+  -- with its corners ARadii (the four, top-left first) cut against the
+  size's numbers AW, AH as roundRect.ts cuts them. A command whose
+  arguments are not all finite is left out, as the canvas ignores it (a
+  line after none starts the path). Arcs as cubics; a polygon of the
+  vertices carrying the commands, its bounds theirs. }
+function TyShapeRoundPathJoined(AX, AY, AXW, AYH, AW, AH: Double;
+  const ARadii: TTyCornerRadii): TTyChartShape;
 { zrender's expansion rule on its own, so a caller that has to talk about
   corners before it has a shape can. }
 function TyCornerRadii(const AValues: array of Double): TTyCornerRadii;
 { True when at least one corner is actually rounded. }
 function TyHasCorner(const ARadii: TTyCornerRadii): Boolean;
+{ [R7-X] A BOX'S borderRadius as RectShape.r takes it: a number every
+  corner, an array of numbers the short forms above (an entry that is no
+  number nought); nil or anything else none. }
+function TyBoxRadiiOf(AData: TJSONData): TTyCornerRadii;
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;
 function TyShapeEllipse(ACX, ACY, ARX, ARY: Double): TTyChartShape;
 function TyShapeSector(ACX, ACY, AR0, AR1, AStartRad, AEndRad: Double): TTyChartShape;
@@ -324,6 +369,11 @@ function TySnapShape(const AShape: TTyChartShape;
   A ratio of 1 answers the shape unchanged, and so does anything that is not a
   positive finite number -- upstream's own rule for a bad `emphasis.scale`. }
 function TyScaleShape(const AShape: TTyChartShape; ARatio: Double): TTyChartShape;
+
+{ [R7-F] the hit outline's frame (HitM, HitCP) taken through the affine map
+  A (x' = a0 x + a2 y + a4, y' = a1 x + a3 y + a5), as the drawn geometry
+  is: a frame helper that moves, scales, turns or mirrors a shape calls it }
+procedure TyShapeHitAffine(var AShape: TTyChartShape; const A: TTyMat2D);
 
 implementation
 
@@ -532,6 +582,120 @@ end;
 function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
 begin
   Result := TyShapeRoundRect(ABounds, [ARadiusPx]);
+end;
+
+function TyShapeRoundPathJoined(AX, AY, AXW, AYH, AW, AH: Double;
+  const ARadii: TTyCornerRadii): TTyChartShape;
+var
+  r: TTyCornerRadii;
+  nc, np, k: Integer;
+  hasCur: Boolean;
+  curX, curY: Double;
+
+  function Fin(A: Double): Boolean;
+  begin
+    Result := not (IsNan(A) or IsInfinite(A));
+  end;
+
+  procedure Add(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AXe, AYe: Double);
+  begin
+    if nc >= Length(Result.Cmds) then SetLength(Result.Cmds, nc * 2 + 8);
+    Result.Cmds[nc] := Default(TTyPathCmd);
+    Result.Cmds[nc].Kind := AKind;
+    Result.Cmds[nc].X1 := AX1;
+    Result.Cmds[nc].Y1 := AY1;
+    Result.Cmds[nc].X2 := AX2;
+    Result.Cmds[nc].Y2 := AY2;
+    Result.Cmds[nc].X := AXe;
+    Result.Cmds[nc].Y := AYe;
+    Inc(nc);
+    if AKind = pckClose then Exit;
+    if np >= Length(Result.Points) then SetLength(Result.Points, np * 2 + 8);
+    Result.Points[np] := TyPointF(AXe, AYe);
+    Inc(np);
+    hasCur := True;
+    curX := AXe;
+    curY := AYe;
+  end;
+
+  procedure MoveTo(APx, APy: Double);
+  begin
+    if Fin(APx) and Fin(APy) then Add(pckMove, 0, 0, 0, 0, APx, APy);
+  end;
+
+  procedure LineTo(APx, APy: Double);
+  begin
+    if not (Fin(APx) and Fin(APy)) then Exit;
+    if hasCur then Add(pckLine, 0, 0, 0, 0, APx, APy)
+    else Add(pckMove, 0, 0, 0, 0, APx, APy);
+  end;
+
+  { a quarter turn clockwise from AA0, as the canvas' arc: a line to its
+    start first (a move where nothing is drawn yet) }
+  procedure Arc(ACX, ACY, AR, AA0: Double);
+  var a1, kk, c0, s0, c1, s1: Double;
+  begin
+    if not (Fin(ACX) and Fin(ACY) and Fin(AR)) then Exit;
+    a1 := AA0 + Pi / 2;
+    c0 := Cos(AA0); s0 := Sin(AA0);
+    c1 := Cos(a1); s1 := Sin(a1);
+    LineTo(ACX + AR * c0, ACY + AR * s0);
+    kk := 4 / 3 * Tan(Pi / 8);
+    Add(pckCurve, ACX + AR * (c0 - kk * s0), ACY + AR * (s0 + kk * c0),
+      ACX + AR * (c1 + kk * s1), ACY + AR * (s1 - kk * c1), ACX + AR * c1, ACY + AR * s1);
+  end;
+
+begin
+  Result := EmptyShape(cskPolygon);
+  nc := 0;
+  np := 0;
+  hasCur := False;
+  curX := 0;
+  curY := 0;
+  r := ARadii;
+  ClampCorners(r, AW, AH);
+  MoveTo(AX + r[0], AY);
+  LineTo(AXW - r[1], AY);
+  if r[1] <> 0 then Arc(AXW - r[1], AY + r[1], r[1], -Pi / 2);
+  LineTo(AXW, AYH - r[2]);
+  if r[2] <> 0 then Arc(AXW - r[2], AYH - r[2], r[2], 0);
+  LineTo(AX + r[3], AYH);
+  if r[3] <> 0 then Arc(AX + r[3], AYH - r[3], r[3], Pi / 2);
+  LineTo(AX, AY + r[0]);
+  if r[0] <> 0 then Arc(AX + r[0], AY + r[0], r[0], Pi);
+  if hasCur then Add(pckClose, 0, 0, 0, 0, curX, curY);
+  SetLength(Result.Cmds, nc);
+  SetLength(Result.Points, np);
+  if np = 0 then Exit;
+  Result.Bounds := TyRectF(Result.Points[0].X, Result.Points[0].Y, Result.Points[0].X, Result.Points[0].Y);
+  for k := 1 to np - 1 do
+  begin
+    Result.Bounds.Left := Min(Result.Bounds.Left, Result.Points[k].X);
+    Result.Bounds.Top := Min(Result.Bounds.Top, Result.Points[k].Y);
+    Result.Bounds.Right := Max(Result.Bounds.Right, Result.Points[k].X);
+    Result.Bounds.Bottom := Max(Result.Bounds.Bottom, Result.Points[k].Y);
+  end;
+  Result.HasCmdBounds := True;
+  Result.CmdBounds := Result.Bounds;
+end;
+
+function TyBoxRadiiOf(AData: TJSONData): TTyCornerRadii;
+var
+  v: array of Double;
+  i: Integer;
+begin
+  Result := TyCornerRadii([]);
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+    Result := TyCornerRadii([AData.AsFloat])
+  else if (AData is TJSONArray) and (AData.Count > 0) then
+  begin
+    SetLength(v, Min(AData.Count, 4));
+    for i := 0 to High(v) do
+      if AData.Items[i].JSONType = jtNumber then v[i] := AData.Items[i].AsFloat
+      else v[i] := 0;
+    Result := TyCornerRadii(v);
+  end;
 end;
 
 function TyShapeCircle(ACX, ACY, AR: Double): TTyChartShape;
@@ -1027,7 +1191,7 @@ end;
 
 function TyMirrorShape(const AShape: TTyChartShape; ACX, ACY: Double;
   AFlipX, AFlipY: Boolean): TTyChartShape;
-var i: Integer;
+var i: Integer; m: TTyMat2D;
 begin
   Result := AShape;
   if not (AFlipX or AFlipY) then Exit;
@@ -1055,6 +1219,40 @@ begin
   begin
     if AFlipX then Result.Points[i].X := 2 * ACX - Result.Points[i].X;
     if AFlipY then Result.Points[i].Y := 2 * ACY - Result.Points[i].Y;
+  end;
+  m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := 0; m[5] := 0;
+  if AFlipX then
+  begin
+    m[0] := -1;
+    m[4] := 2 * ACX;
+  end;
+  if AFlipY then
+  begin
+    m[3] := -1;
+    m[5] := 2 * ACY;
+  end;
+  TyShapeHitAffine(Result, m);
+end;
+
+procedure TyShapeHitAffine(var AShape: TTyChartShape; const A: TTyMat2D);
+var m: TTyMat2D; x, y: Double;
+begin
+  if AShape.HitSym <> '' then
+  begin
+    m := AShape.HitM;
+    AShape.HitM[0] := A[0] * m[0] + A[2] * m[1];
+    AShape.HitM[1] := A[1] * m[0] + A[3] * m[1];
+    AShape.HitM[2] := A[0] * m[2] + A[2] * m[3];
+    AShape.HitM[3] := A[1] * m[2] + A[3] * m[3];
+    AShape.HitM[4] := A[0] * m[4] + A[2] * m[5] + A[4];
+    AShape.HitM[5] := A[1] * m[4] + A[3] * m[5] + A[5];
+  end;
+  if AShape.HitQuad then
+  begin
+    x := AShape.HitCP.X;
+    y := AShape.HitCP.Y;
+    AShape.HitCP.X := A[0] * x + A[2] * y + A[4];
+    AShape.HitCP.Y := A[1] * x + A[3] * y + A[5];
   end;
 end;
 
@@ -1377,10 +1575,30 @@ var
   b: TTyRectF;
   cx, cy: Double;
   i: Integer;
+  m: TTyMat2D;
 begin
   Result := AShape;
   if IsNan(ARatio) or IsInfinite(ARatio) or (ARatio <= 0) or (ARatio = 1) then
     Exit;
+  { [R7-F] the hit outline about the same centre }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    if AShape.Kind in [cskCircle, cskEllipse] then
+    begin
+      cx := AShape.CX;
+      cy := AShape.CY;
+    end
+    else
+    begin
+      b := TyShapeBounds(AShape);
+      cx := (b.Left + b.Right) / 2;
+      cy := (b.Top + b.Bottom) / 2;
+    end;
+    m[0] := ARatio; m[1] := 0; m[2] := 0; m[3] := ARatio;
+    m[4] := cx - cx * ARatio;
+    m[5] := cy - cy * ARatio;
+    TyShapeHitAffine(Result, m);
+  end;
   case AShape.Kind of
     cskCircle:
       Result.R1 := AShape.R1 * ARatio;

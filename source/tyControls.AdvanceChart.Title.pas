@@ -61,6 +61,9 @@ type
     { CSS order: top, right, bottom, left. Kept as four because `padding` takes
       the CSS short forms and collapsing them early would lose them. }
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     ItemGap: Double;
     Align: TTyTitleAlign;
     VAlign: TTyTitleVAlign;
@@ -71,11 +74,24 @@ type
     WordH, WordV: string;
     HasBackground: Boolean;
     BorderWidth: Double;
+    { [R7-Z] borderWidth is +Infinity: stroked at the width the canvas had }
+    BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
+    { [R7-AK] borderRadius truthy (RectShape.r): the Rect's path is
+      roundRect's -- its far edges joined where the size is a string --
+      however small the radii }
+    BorderRounded: Boolean;
     { [R5-A] the box's shadow: the title's own shadow keys (install.ts'
       rect, getItemStyle(['color', 'opacity'])) -- cast by the fill the
       option writes (BackgroundColor, 0 where it does not parse) }
     Shadow: TTyChartShadow;
+    { [R7-X] the rest of getItemStyle(['color', 'opacity']): borderType,
+      borderDashOffset, borderCap, borderJoin, borderMiterLimit (DashWord /
+      DashLogical at BorderWidth, DashOffsetLogical, LineCap, LineJoin,
+      MiterLimit). These, the shadow and borderRadius are keys the title's
+      defaults hold none of: each climbs to the option root's top-level key
+      (the GlobalModel is the title model's parent). }
+    Look: TTyChartElementStyle;
     BackgroundColor: TTyChartColor;
     { [R5-G] the box's pen: borderColor where written and readable
       (HasBorderColor; else tokens.color.primary -- the skin's), stroked
@@ -94,6 +110,21 @@ type
       padding, and the block's size plus the padding. }
     Frame: TTyRectF;
     FrameX, FrameY, FrameW, FrameH: Double;
+    { [R7-G] the same box in the group's own frame (the group sits at
+      TextX, TextY): x and y before the group's place is added }
+    FrameLX, FrameLY: Double;
+    { [R7-AI] the frame's width and height where the padding joined them as
+      strings ('16.02' + '2' + '2'): drawn at their numbers, but
+      subPixelOptimizeRect's `originX + originWidth` joins again ('' none) }
+    FrameWText, FrameHText: string;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: `left + margin[3]` NaN): laid out with the group at its own
+      origin (every place here group-local), its box drawing nothing.
+      UnplacedT: the group has a transform (its y, or x, not around nought
+      -- zrender's needLocalTransform, NaN around it), which the canvas
+      refuses -- every part in its own frame under the transform the canvas
+      had; else none -- the parts at their own places in the canvas' frame }
+    Unplaced, UnplacedT: Boolean;
     TextX, TextY: Double;
     SubX, SubY: Double;
     TextW, TextH: Double;
@@ -101,6 +132,25 @@ type
     Align: TTyTitleAlign;
     VAlign: TTyTitleVAlign;
   end;
+
+{ [R7-G] THE BACKGROUND AS DRAWN: title/install.ts makes it a Rect with
+  subPixelOptimize, so buildPath runs subPixelOptimizeRect on its own shape
+  -- the group's box less the padding, in the GROUP'S frame (FrameLX,
+  FrameLY, FrameW, FrameH) -- with its lineWidth (the borderWidth, in px),
+  and the group's place (TextX, TextY) is added after. The half pixel is
+  the local box's, so a title at a fractional place keeps its fraction. A
+  width of nought moves nothing. }
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double = 1): TTyRectF;
+{ [R7-AK] THE BACKGROUND'S SHAPE: AFrame (TyTitleFrameDrawn) with its
+  corners ARadiiPx (device px) -- or, where borderRadius is truthy
+  (ARounded), the border no pen (subPixelOptimizeRect leaves the size as it
+  was) and the size a string the padding joined (FrameWText / FrameHText),
+  roundRect's path in the group's frame on its joined far edges
+  ('-2' + '1222') [was: the rounded rect of the size's numbers] }
+function TyTitleFrameShape(const ALayout: TTyTitleLayout; const AFrame: TTyRectF;
+  const ARadiiPx: array of Double; ARounded: Boolean; ALineWidthPx: Double;
+  AScale: Double = 1): TTyChartShape;
 
 { How many titles the option carries. An object counts as one. }
 function TyTitleCount(AOption: TTyChartOption): Integer;
@@ -125,7 +175,85 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
 
 implementation
 
-uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color;
+uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
+  tyControls.AdvanceChart.ZrPath,
+  { [R7-AI] a padding written as a string }
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
+
+{ [R7-AK] Math.max: NaN where either is }
+function JsMaxOf(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
+  AScale: Double): TTyRectF;
+var
+  r: TTyXYWH;
+  { [R7-AI] the css px a device px makes }
+  s: Double;
+  { [R7-AK] the traps' mask: a joined size of no number compares as JS }
+  mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+  { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
+  r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
+    ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
+  { [R7-AI] a size the padding joined as a string: `originX + originWidth`
+    joined again (`'-2' + '16.0222'`), and `originWidth === 0` never true --
+    on the same css px grid: the place, the width and the string css px }
+  if not (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
+  begin
+    if (AScale > 0) and (AScale <> 1) then s := AScale else s := 1;
+    { ([R7-AK] Math.max: a far edge of two points is no number, nor is the
+      size -- the frame not drawn [was: FPC's Max, 1]) }
+    if ALayout.FrameWText <> '' then
+      r.W := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
+        + ALayout.FrameWText), ALineWidthPx / s, False) - r.X / s, 1.0) * s;
+    if ALayout.FrameHText <> '' then
+      r.H := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
+        + ALayout.FrameHText), ALineWidthPx / s, False) - r.Y / s, 1.0) * s;
+  end;
+  { through the group's transform (a translation): x + tx, the far edge
+    (x + w) + tx }
+  Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,
+    (r.X + r.W) + ALayout.TextX, (r.Y + r.H) + ALayout.TextY);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyTitleFrameShape(const ALayout: TTyTitleLayout; const AFrame: TTyRectF;
+  const ARadiiPx: array of Double; ARounded: Boolean; ALineWidthPx: Double;
+  AScale: Double): TTyChartShape;
+var
+  s: Double;
+  r: TTyCornerRadii;
+  k: Integer;
+begin
+  if ARounded and ((ALayout.FrameWText <> '') or (ALayout.FrameHText <> ''))
+    and (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
+  begin
+    if AScale > 0 then s := AScale else s := 1;
+    r := TyCornerRadii(ARadiiPx);
+    for k := 0 to 3 do r[k] := r[k] / s;
+    Exit(TyJsRoundFrameShape(ALayout.FrameLX / s, ALayout.FrameLY / s, ALayout.FrameW / s,
+      ALayout.FrameH / s, ALayout.FrameWText, ALayout.FrameHText, r, ALayout.TextX,
+      ALayout.TextY, s));
+  end;
+  { ([R7-AK] a frame of no number -- a far edge of two points -- is no
+    path: nothing drawn) }
+  if IsNan(AFrame.Left) or IsNan(AFrame.Top) or IsNan(AFrame.Right) or IsNan(AFrame.Bottom)
+    or IsInfinite(AFrame.Left) or IsInfinite(AFrame.Top) or IsInfinite(AFrame.Right)
+    or IsInfinite(AFrame.Bottom) then
+    Exit(TyShapePolygon([]));
+  Result := TyShapeRoundRect(AFrame, ARadiiPx);
+end;
 
 const
   { title's defaultOption, install.ts:106-138. `top` is tokens.size.m. }
@@ -159,6 +287,8 @@ end;
 function TyTitleSpecDefault: TTyTitleSpec;
 var i: Integer;
 begin
+  { every field nought first, so a field no line below sets is a safe answer }
+  Result := Default(TTyTitleSpec);
   Result.Show := True;
   Result.Text := '';
   Result.Subtext := '';
@@ -261,8 +391,11 @@ end;
 
 function TyTitleSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyTitleSpec;
 var
-  node: TJSONObject;
+  node, root: TJSONObject;
   d: TJSONData;
+  joinHas: Boolean;
+  { [R7-AI] a padding side }
+  k: Integer;
 begin
   Result := TyTitleSpecDefault;
   if AOption = nil then Exit;
@@ -282,6 +415,16 @@ begin
   Result.WordV := TyBoxWord(Result.Box.Top, Result.Box.Bottom);
 
   ReadPadding(node, Result.Padding);
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  d := node.Find('padding');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.PadJs := TyJsPadOf(d);
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   Result.ItemGap := NumIn(node, 'itemGap', Result.ItemGap);
   Result.Align := AlignOf(StrIn(node, 'textAlign'));
   { textBaseline is the older spelling and wins when both are present --
@@ -293,16 +436,37 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
-  TyStReadShadow([node], [], [], Result.Shadow);
   if not (Result.HasBackground and TyTryParseChartColor(d.AsString, Result.BackgroundColor)) then
     Result.BackgroundColor := 0;
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
+  Result.BorderWidthInf := TyOptIsPosInf(node.Find('borderWidth'));
+  { [R7-Z] a background no parser reads: filled, in what the canvas had
+    [was: none] }
+  if Result.HasBackground and (Result.BackgroundColor = 0)
+    and not TyTryParseChartColor(d.AsString, Result.BackgroundColor)
+    and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+    Result.BackgroundColor := cTyCanvasColourLeft;
   d := node.Find('borderColor');
   Result.HasBorderColor := (d <> nil) and (d.JSONType = jtString)
     and TyTryParseChartColor(d.AsString, Result.BorderColor);
-  d := node.Find('borderRadius');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderRadii := TyCornerRadii([d.AsFloat]);
+  { [R7-Z] a border colour no parser reads: the stroke the canvas had
+    [was: the skin's] }
+  if not Result.HasBorderColor and (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and (d.AsString <> 'none') and not TyColourIsHandler(d.AsString) then
+  begin
+    Result.HasBorderColor := True;
+    Result.BorderColor := cTyCanvasColourLeft;
+  end;
+  { [R7-X] the keys the title's defaults leave out climb to the option
+    root's [was: the title's own only] }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  TyStReadShadow([node, root], [], [], Result.Shadow);
+  Result.BorderRadii := TyBoxRadiiOf(TyStFind([node, root], ['borderRadius']));
+  Result.BorderRounded := TyJsTruthyOf(TyStFind([node, root], ['borderRadius']));
+  Result.Look := Default(TTyChartElementStyle);
+  Result.Look.Alpha := 1;
+  Result.Look.StrokeWidthLogical := Result.BorderWidth;
+  TyStTakePenKeys(Result.Look, [node, root], [], False, [spkEnds, spkDash], joinHas);
 end;
 
 { ==================== the layout ==================== }
@@ -331,6 +495,8 @@ var
   word_: string;
   scale: Double;
   mask: TFPUExceptionMask;
+  { [R7-AI] the place and the frame's size as JS holds them }
+  xv, yv, jw, jh: TTyRtJs;
 begin
   Result := Default(TTyTitleLayout);
   if not ASpec.Show then Exit;
@@ -383,13 +549,25 @@ begin
       - Min(Double(0), Result.TextH + gap);
   if (gw <= 0) or (gh <= 0) then Exit;
 
-  { getLayoutRect on the merged option with the measured block as the size }
-  raw := ASpec.Box;
+  { getLayoutRect on the merged option with the measured block as the size --
+    [R7-AG] its px css px: PPI / 96 device px each [was: device px] }
+  raw := TyBoxRawScaled(ASpec.Box, scale);
   raw.Width := TyBoxRawNum(gw);
   raw.Height := TyBoxRawNum(gh);
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
+    if ASpec.PadJs.Js then
+    begin
+      { [R7-AI] A PADDING HELD AS JS VALUES, in css px: the place joined
+        ('20' + '2' is '202') and the size's margins joined ('2' + '2') }
+      raw := ASpec.Box;
+      raw.Width := TyBoxRawNum(gw / scale);
+      raw.Height := TyBoxRawNum(gh / scale);
+      r := TyGetLayoutRectJs(raw, AContainer.X / scale, AContainer.Y / scale,
+        AContainer.W / scale, AContainer.H / scale, ASpec.PadJs, xv, yv);
+    end
+    else
     r := TyGetLayoutRect(raw, AContainer.X, AContainer.Y,
       AContainer.W, AContainer.H,
       [pad[0], pad[1], pad[2], pad[3]]);
@@ -397,7 +575,9 @@ begin
     ClearExceptions(False);
     SetExceptionMask(mask);
   end;
-  if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) then Exit;
+  { ([R7-AK] a place that is no number, a padding side undefined: below) }
+  if IsNan(r.W) or IsNan(r.H) then Exit;
+  if (IsNan(r.X) or IsNan(r.Y)) and not ASpec.PadJs.Js then Exit;
   gx := r.X;
   gy := r.Y;
 
@@ -413,6 +593,15 @@ begin
     word_ := ASpec.WordH;
     Result.Align := AlignOf(word_);
     if Result.Align = ttaAuto then Result.Align := ttaLeft;
+    { ([R7-AI] `layoutRect.x += layoutRect.width`: joined where the place is
+      a string) }
+    if ASpec.PadJs.Js then
+    begin
+      if Result.Align = ttaRight then xv := TyRtJsAdd(xv, TyRtJsNum(r.W))
+      else if Result.Align = ttaCentre then xv := TyRtJsAdd(xv, TyRtJsNum(r.W / 2));
+      gx := xv.N;
+    end
+    else
     if Result.Align = ttaRight then
       gx := gx + r.W
     else if Result.Align = ttaCentre then
@@ -423,11 +612,37 @@ begin
   begin
     word_ := ASpec.WordV;
     Result.VAlign := VAlignOf(word_);
+    if ASpec.PadJs.Js then
+    begin
+      if Result.VAlign = ttvBottom then yv := TyRtJsAdd(yv, TyRtJsNum(r.H))
+      else if Result.VAlign = ttvMiddle then yv := TyRtJsAdd(yv, TyRtJsNum(r.H / 2));
+      gy := yv.N;
+    end
+    else
     if Result.VAlign = ttvBottom then
       gy := gy + r.H
     else if Result.VAlign = ttvMiddle then
       gy := gy + r.H / 2;
     if Result.VAlign = ttvAuto then Result.VAlign := ttvTop;
+  end;
+  { ([R7-AI] the JS path solved in css px; a place that is no number lays
+    nothing out here -- upstream's group.x NaN draws under the transform the
+    canvas kept) }
+  if ASpec.PadJs.Js then
+  begin
+    { [R7-AK] a place that is no number (a padding side undefined): the
+      group at its own origin, its transform refused where it has one (a
+      coordinate not around nought) [was: nothing laid out] }
+    if IsNan(gx) or IsNan(gy) or IsInfinite(gx) or IsInfinite(gy) then
+    begin
+      Result.Unplaced := True;
+      Result.UnplacedT := (not IsNan(gx) and (Abs(gx) > 5e-5))
+        or (not IsNan(gy) and (Abs(gy) > 5e-5));
+      gx := 0;
+      gy := 0;
+    end;
+    gx := gx * scale;
+    gy := gy * scale;
   end;
 
   Result.TextX := gx;
@@ -467,10 +682,25 @@ begin
     ly := Min(sy, ly);
     lh := lb - ly;
   end;
+  Result.FrameLX := lx - pad[3];
+  Result.FrameLY := ly - pad[0];
   Result.FrameX := gx + (lx - pad[3]);
   Result.FrameY := gy + (ly - pad[0]);
   Result.FrameW := gw + pad[1] + pad[3];
   Result.FrameH := lh + pad[0] + pad[2];
+  { [R7-AI] `groupRect.width + padding[1] + padding[3]`, joined where a side
+    is a string (in css px) }
+  if ASpec.PadJs.Js then
+  begin
+    jw := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(gw / scale), TyJsPadV(ASpec.PadJs, 1)),
+      TyJsPadV(ASpec.PadJs, 3));
+    jh := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(lh / scale), TyJsPadV(ASpec.PadJs, 0)),
+      TyJsPadV(ASpec.PadJs, 2));
+    Result.FrameW := jw.N * scale;
+    Result.FrameH := jh.N * scale;
+    if jw.IsStr then Result.FrameWText := jw.S;
+    if jh.IsStr then Result.FrameHText := jh.S;
+  end;
   Result.Frame := TyRectF(Result.FrameX, Result.FrameY,
     Result.FrameX + Result.FrameW, Result.FrameY + Result.FrameH);
 

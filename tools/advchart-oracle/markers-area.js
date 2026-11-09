@@ -210,6 +210,9 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-markers-area.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1027,7 +1030,7 @@ function tagOption(option) {
   }
   return option;
 }
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 const areaed = option => seriesArray(option).map((s, i) => (s && s.markArea && s.markArea.data ? i : -1)).filter(i => i >= 0);
 const MERGE_KEYS = ['name', 'label', 'itemStyle', 'z2', 'emphasis'];
 // MarkerModel fillLabel (MarkerModel.ts:41-43, 166-178): defaultEmphasis(item, 'label', ['show']) on BOTH ends before the merge

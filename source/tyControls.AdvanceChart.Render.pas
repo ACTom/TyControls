@@ -142,6 +142,8 @@ function TyNormalizeLineDash(const AType: string; AWidth: Double;
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
+{ [R7-L] THE OPACITY A PIECE IS DRAWN AT under an element of AAlpha. }
+function TyRtPieceDrawnAlpha(const APiece: TTyRtPiece; AAlpha: Double): Double;
 { [R5-A] A FRAME'S CANVAS SHADOW (a title's): the frame's fill, its alpha, on a mask of
   its own and the painter's shadow cast from it -- the frame itself is drawn as it
   always was. ARadius as FillBackground takes it. }
@@ -208,9 +210,10 @@ function TyRectFillMemoNew: TObject;
 
 implementation
 
-uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
+uses base64, Generics.Collections, tyControls.AdvanceChart.Large, tyControls.AdvanceChart.Lines,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
-  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl,
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle;
 
 { [R6-D] a dash the canvas' setLineDash takes: every entry a finite number
   of nought or more }
@@ -1287,10 +1290,12 @@ begin
           P.RotateBy(AShape.RotationRad);
           P.Translate(-AShape.RotCX, -AShape.RotCY);
         end;
+        { [R7-R] stretched over the box (PathCover) or fitted to it }
         if TyRectFIsValid(AShape.Bounds) then
           P.SvgPathIn(AShape.PathData,
                       Rect(Round(AShape.Bounds.Left), Round(AShape.Bounds.Top),
-                           Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
+                           Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)),
+                      not AShape.PathCover)
         else
           P.SvgPath(AShape.PathData);
         if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then
@@ -2295,6 +2300,54 @@ begin
   P.ClosePath;
 end;
 
+{ [R7-H] A PIECE'S RECT: one whose size was a string and that has corners
+  runs, as zrender's roundRect path does, to its joined edges (EdgeX1 /
+  EdgeY1), its radii cut against its size as numbers; any other is the
+  plain rect }
+procedure TraceRtPiece(P: TTyPainter; const APc: TTyRtPiece; AScale: Double;
+  const AR: array of Double);
+var r1, r2, r3, r4, x0, y0, x1, y1, xr1, xr4: Double;
+begin
+  { [R7-L] the rounded path whenever borderRadius is truthy ([0, 0] too):
+    with a size that was a string it runs to the joined edges }
+  if not APc.PathEdges or (not APc.Rounded and (AR[0] + AR[1] + AR[2] + AR[3] <= 0)) then
+  begin
+    TraceRtRect(P, APc.X * AScale, APc.Y * AScale, APc.W * AScale,
+      APc.H * AScale, AR);
+    Exit;
+  end;
+  r1 := AR[0];
+  r2 := AR[1];
+  r3 := AR[2];
+  r4 := AR[3];
+  TyRtClampRadii(APc.W * AScale, APc.H * AScale, r1, r2, r3, r4);
+  x0 := APc.X * AScale;
+  y0 := APc.Y * AScale;
+  x1 := APc.EdgeX1 * AScale;
+  y1 := APc.EdgeY1 * AScale;
+  { [R7-AI] `x + r1` and `x + r4` joined where the place is a string }
+  if APc.XText <> '' then
+  begin
+    xr1 := APc.EdgeXR1 * AScale;
+    xr4 := APc.EdgeXR4 * AScale;
+  end
+  else
+  begin
+    xr1 := x0 + r1;
+    xr4 := x0 + r4;
+  end;
+  P.MoveTo(xr1, y0);
+  P.LineTo(x1 - r2, y0);
+  if r2 > 0 then P.ArcTo(x1 - r2, y0 + r2, r2, -Pi / 2, 0, False);
+  P.LineTo(x1, y1 - r3);
+  if r3 > 0 then P.ArcTo(x1 - r3, y1 - r3, r3, 0, Pi / 2, False);
+  P.LineTo(xr4, y1);
+  if r4 > 0 then P.ArcTo(xr4, y1 - r4, r4, Pi / 2, Pi, False);
+  P.LineTo(x0, y0 + r1);
+  if r1 > 0 then P.ArcTo(xr1, y0 + r1, r1, Pi, Pi * 1.5, False);
+  P.ClosePath;
+end;
+
 function RtAlign(A: TTyRtAlign): TAlignment;
 begin
   case A of
@@ -2417,6 +2470,14 @@ begin
   end;
 end;
 
+function TyRtPieceDrawnAlpha(const APiece: TTyRtPiece; AAlpha: Double): Double;
+begin
+  { [R7-L] a token's own opacity is its own (retrieve3's first); every
+    other piece is the Text's, under the element's alpha }
+  if APiece.OwnOpacity then Result := APiece.Opacity
+  else Result := APiece.Opacity * AAlpha;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -2445,7 +2506,7 @@ begin
   for i := 0 to High(APieces) do
   begin
     pc := APieces[i];
-    a := pc.Opacity * AAlpha;
+    a := TyRtPieceDrawnAlpha(pc, AAlpha);
     if pc.Kind = rpkRect then
     begin
       if not pc.Drawn then Continue;
@@ -2462,14 +2523,16 @@ begin
           if pc.HasStroke then
           begin
             P.BeginPath;
-            TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-              pc.H * AScale, radii);
+            TraceRtPiece(P, pc, AScale, radii);
             P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
           end;
         finally
           P.RestoreState;
         end;
-        RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
+        if pc.OwnOpacity then
+          RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity)
+        else
+          RtPicture(P, pc, AX, AY, ARotationRad, AScale, pc.ImageOpacity * AAlpha);
         Continue;
       end;
       P.SaveState;
@@ -2488,22 +2551,19 @@ begin
         if pc.HasStroke and pc.StrokeFirst then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
         end;
         if pc.HasFill then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.FillPath(TTyColor(pc.Fill));
         end;
         if pc.HasStroke and not pc.StrokeFirst then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
         end;
       finally
@@ -2525,7 +2585,10 @@ begin
       say), in textShadowColor ('transparent' when none), blurred, under the
       halo and the glyphs -- cast from them as they are drawn, their ink and
       opacity. [Was: an unblurred copy at the offset.] }
-    if pc.HasShadow and (pc.ShadowBlur > 0) and ((pc.ShadowColor shr 24) <> 0) then
+    { ([R7-AB] a blur the canvas refused keeps the canvas' -- of nought, the
+      offsets alone still cast one) }
+    if pc.HasShadow and ((pc.ShadowBlur > 0) or (pc.ShadowOffsetX <> 0) or (pc.ShadowOffsetY <> 0))
+      and ((pc.ShadowColor shr 24) <> 0) then
       RtTextShadow(P, TyInkText(pc.Text), pc.FontFamily,
         TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
         RtAlign(pc.TextAlign), tlCenter, hasInk, CaptionInk(ink, a),
@@ -2802,6 +2865,9 @@ procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   a: array[0..5] of Double;
   s, w, h, bl, lx, ly, mg: Double;
+  rb: TTyXYWH;
+  pk: string;
+  pc: TTyRtPiece;
   ppi, bw, bh: Integer;
   e: TTyChartElement;
   sz: TSize;
@@ -2825,6 +2891,71 @@ begin
   if not (s > 0) or IsNan(s) or IsInfinite(s) then Exit;
   ppi := Max(1, Min(9600, Round(96 * s)));
   s := ppi / 96;
+  { [R7-M] A BLOCK: its pieces' box in the text's own CSS px, drawn upright
+    about the anchor at the bitmap's scale, and laid down the same way }
+  if Length(AElement.Caption.RtPieces) > 0 then
+  begin
+    rb := TyRtBounds(AElement.Caption.RtPieces);
+    if rb.W < 0 then Exit;
+    lx := rb.X;
+    ly := rb.Y;
+    w := rb.W;
+    h := rb.H;
+    mg := 2;
+    pk := '';
+    for k := 0 to High(AElement.Caption.RtPieces) do
+    begin
+      pc := AElement.Caption.RtPieces[k];
+      mg := Max(mg, 2 + pc.LineWidth + 2 * pc.ShadowBlur + Abs(pc.ShadowOffsetX)
+        + Abs(pc.ShadowOffsetY));
+      pk := pk + IntToStr(Ord(pc.Kind)) + KeyBits(pc.X) + KeyBits(pc.Y)
+        + KeyBits(pc.W) + KeyBits(pc.H) + IntToHex(pc.Fill, 8) + IntToHex(pc.Stroke, 8)
+        + KeyBits(pc.LineWidth) + KeyBits(pc.Opacity) + KeyBits(pc.FontSizePx)
+        + IntToStr(pc.FontWeight) + ',' + pc.FontFamily + ',' + pc.Text + ';';
+    end;
+    mg := Ceil(mg);
+    bw := Ceil((w + 2 * mg) * s);
+    bh := Ceil((h + 2 * mg) * s);
+    if (bw <= 0) or (bh <= 0) or (bw > 4096) or (bh > 4096) then Exit;
+    key := 'data:tyaffineblock,' + IntToStr(ppi) + ',' + IntToStr(bw) + ','
+      + IntToStr(bh) + ',' + KeyBits(lx) + KeyBits(ly) + IntToHex(AElement.Caption.Colour, 8)
+      + ',' + pk;
+    if P.FastStrokes then key := 'data:tyaffineblockfast,' + Copy(key, 20, MaxInt);
+    if TyChartImage(key, 0, nw, nh) = nil then
+    begin
+      bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+      mp := TTyPainter.Create;
+      try
+        mp.FastStrokes := P.FastStrokes;
+        mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+        e := AElement;
+        e.Caption.HasAffine := False;
+        e.Caption.RotationRad := 0;
+        e.Caption.RtScale := s;
+        e.Caption.X := (mg - lx) * s;
+        e.Caption.Y := (mg - ly) * s;
+        e.Style.Alpha := 1;
+        TyRenderCaption(mp, e);
+        mp.EndPaint;
+      finally
+        mp.Free;
+      end;
+      TyChartImageRegisterBitmap(key, bmp);
+    end;
+    SetLength(c, 4);
+    Corner(0, lx - mg, ly - mg);
+    Corner(1, lx + w + mg, ly - mg);
+    Corner(2, lx + w + mg, ly + h + mg);
+    Corner(3, lx - mg, ly + h + mg);
+    P.SaveState;
+    try
+      if AElement.Style.Alpha < 1 then P.SetElementAlpha(Max(0.0, AElement.Style.Alpha));
+      PaintImageInto(P, key, c);
+    finally
+      P.RestoreState;
+    end;
+    Exit;
+  end;
   sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
     AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
   { the box in text units (the main painter's px at its PPI) }
@@ -3023,32 +3154,6 @@ begin
       AD.Truncate, 0, False, AD.MultiLine);
 end;
 
-{ the sector an element's HasClipSector names, run forward as zrender's arc
-  runs it from ClipSA to ClipEA in its direction }
-function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
-var st, en, t: Double;
-begin
-  Result := TyShapeSector(AElement.ClipCX, AElement.ClipCY, AElement.ClipR0,
-    AElement.ClipR1, 0, 1);
-  st := AElement.ClipSA;
-  en := AElement.ClipEA;
-  if AElement.ClipCW then
-  begin
-    if en - st >= 2 * Pi then en := st + 2 * Pi
-    else if st > en then en := st + (2 * Pi - (st - en - Floor((st - en) / (2 * Pi)) * 2 * Pi));
-  end
-  else
-  begin
-    if st - en >= 2 * Pi then en := st - 2 * Pi
-    else if st < en then en := st - (2 * Pi - (en - st - Floor((en - st) / (2 * Pi)) * 2 * Pi));
-    t := st;
-    st := en;
-    en := t;
-  end;
-  Result.StartRad := st;
-  Result.EndRad := en;
-end;
-
 var
   GZBandOn: Boolean = False;
   GZBandLo, GZBandHi: Integer;
@@ -3098,15 +3203,29 @@ begin
   end;
 end;
 
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
+  APen: Boolean; const APenMap: TTyMat2D); forward;
 procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement); forward;
 
 { [R6-E] a pen in the shape's own frame (PenScale) drawn at its scale: the
   width, the lengths of its dash and its phase }
+{ [R7-P] a pen the shape's transform stretches (PenMap): the style's width,
+  dash and phase stroked through the map, PenScale folded into it
+  (TyStylePenOf) }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   el: TTyChartElement;
   k: Integer;
+  pm: TTyMat2D;
 begin
+  if TyStylePenOf(AElement.Style, pm) then
+  begin
+    el := AElement;
+    el.Style.PenScale := 0;
+    el.Style.HasPenMap := False;
+    RenderElementAsStyled(P, el, True, pm);
+    Exit;
+  end;
   if (AElement.Style.PenScale <= 0) or (AElement.Style.PenScale = 1)
     or IsNan(AElement.Style.PenScale) or IsInfinite(AElement.Style.PenScale) then
   begin
@@ -3127,15 +3246,31 @@ begin
 end;
 
 procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement);
+begin
+  RenderElementAsStyled(P, AElement, False, Default(TTyMat2D));
+end;
+
+{ [R7-Y] a shadow offset the paint order never settled (an element drawn
+  outside it): nought, as the canvas' own }
+function ShadowOff(AValue: Double): Double;
+begin
+  if TyPhaseLeft(AValue) then Result := 0 else Result := AValue;
+end;
+
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
+  APen: Boolean; const APenMap: TTyMat2D);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
+  { [R7-AB] the frame a gradient is made in (none: device px) }
+  gfr: TTyDoubleArray;
   mlim: Double;
   stops: array of TTyGradStop;
   img: TBGRABitmap;
   pm: TTyDoubleArray;
   nw, nh, devW: Double;
   ca, cd, ctx, cty: Double;
+  em: TTyMat2D;
 
   procedure PaintPen; forward;
 
@@ -3159,8 +3294,7 @@ var
       opacity times it before the fill (and times strokeOpacity before the
       pen, PaintPen) }
     if AElement.Style.HasFillOpacity then
-      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
-        * Max(0.0, Min(1.0, AElement.Style.FillOpacity)));
+      P.SetElementAlpha(TyCanvasPartAlpha(AElement.Style, True));
     if AElement.Style.HasFill then
     begin
       if AElement.Style.FillGradient.Kind <> cgkNone then
@@ -3169,8 +3303,11 @@ var
           not the plot and not the series. So every bar ramps over itself and
           a two-stop gradient reads the same on all of them, and a stacked
           segment restarts per segment. }
-        TyResolveGradientXYWH(AElement.Style.FillGradient,
-          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
+        { [R7-AB] in the element's frame where that is no similarity (a
+          symbol scaled unevenly, turned), or the frame a held one was made
+          in: an ellipse there [was: a circle of the box's smaller side] }
+        TyElementGradientIn(AElement, AElement.Style.FillGradient, P.PPI / 96,
+          gx1, gy1, gx2, gy2, gr, gfr);
         SetLength(stops, Length(AElement.Style.FillGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -3178,7 +3315,7 @@ var
             TTyColor(AElement.Style.FillGradient.Stops[gi].Color);
           stops[gi].Pos := AElement.Style.FillGradient.Stops[gi].Offset;
         end;
-        P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, rule);
+        P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, gfr, rule);
       end
       else if AElement.Style.FillPattern.Present then
       begin
@@ -3240,6 +3377,15 @@ var
               pm[1] := pm[1] / img.Width;
               pm[2] := pm[2] / img.Height;
               pm[3] := pm[3] / img.Height;
+            end
+            { [R7-Y] a whole matrix of the image's natural px (a pattern the
+              canvas kept): at the resolution it was decoded at }
+            else if (img.Width > 0) and (img.Height > 0) and (nw > 0) and (nh > 0) then
+            begin
+              pm[0] := pm[0] * nw / img.Width;
+              pm[1] := pm[1] * nw / img.Width;
+              pm[2] := pm[2] * nh / img.Height;
+              pm[3] := pm[3] * nh / img.Height;
             end;
           end
           else
@@ -3254,6 +3400,11 @@ var
               pm[2] := pm[2] * nh / img.Height;
               pm[3] := pm[3] * nh / img.Height;
             end;
+            { [R7-Y] IN THE ELEMENT'S FRAME: createCanvasPattern's matrix is
+              taken under the transform the element hands the canvas (a
+              symbol's scale and place) [was: the canvas' own] }
+            if TyElementCanvasTransform(AElement, em) then
+              TyPatternUnder(em, P.PPI / 96, pm);
           end;
           for gi := 0 to 5 do pm[gi] := pm[gi] * P.PPI / 96;
           P.FillPathPattern(img, AElement.Style.FillPattern.Repetition, pm, rule);
@@ -3271,16 +3422,16 @@ var
   begin
     { [R6-C] strokeOpacity over the opacity -- and back from a fill's }
     if AElement.Style.HasStrokeOpacity then
-      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
-        * Max(0.0, Min(1.0, AElement.Style.StrokeOpacity)))
+      P.SetElementAlpha(TyCanvasPartAlpha(AElement.Style, False))
     else if AElement.Style.HasFillOpacity then
       P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha)));
     if AElement.Style.StrokeWidthLogical > 0 then
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then
       begin
-        TyResolveGradientXYWH(AElement.Style.StrokeGradient,
-          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
+        { ([R7-AB] in a frame, as the fill's) }
+        TyElementGradientIn(AElement, AElement.Style.StrokeGradient, P.PPI / 96,
+          gx1, gy1, gx2, gy2, gr, gfr);
         SetLength(stops, Length(AElement.Style.StrokeGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -3289,7 +3440,7 @@ var
           stops[gi].Pos := AElement.Style.StrokeGradient.Stops[gi].Offset;
         end;
         P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr,
-          AElement.Style.StrokeWidthLogical);
+          AElement.Style.StrokeWidthLogical, gfr);
       end
       else if TyRenderKeptStrokes then
         P.StrokePathKept(TTyColor(AElement.Style.StrokeColor),
@@ -3678,7 +3829,7 @@ begin
         bindContextStyle) [was: a picture cast none] }
       if TyStyleHasShadow(AElement.Style) then
         P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
-          AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+          ShadowOff(AElement.Style.ShadowOffsetX), ShadowOff(AElement.Style.ShadowOffsetY));
       PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
     finally
       P.RestoreState;
@@ -3753,12 +3904,14 @@ begin
         P.SetLineJoin(tljMiter, mlim);
       end;
     end;
+    { [R7-P] the pen through its map (the state is restored below) }
+    if APen then P.SetPenMatrix(APenMap[0], APenMap[1], APenMap[2], APenMap[3]);
     { [R5-A] THE SHADOW, under the fill and under the pen, each its own (the canvas') --
       a large batch's too, as the one path upstream's large symbol draws: through the
       path below, not the layers or the tiles }
     if TyStyleHasShadow(AElement.Style) then
       P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
-        AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+        ShadowOff(AElement.Style.ShadowOffsetX), ShadowOff(AElement.Style.ShadowOffsetY));
     { [R5-A] the series' blendMode: each fill and each stroke composited so
       -- a large batch as its one path, as upstream's }
     if AElement.Style.Blend <> '' then P.SetBlendMode(AElement.Style.Blend);

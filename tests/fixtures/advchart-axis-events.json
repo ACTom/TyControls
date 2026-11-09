@@ -1,0 +1,1981 @@
+{
+ "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
+ "note": "R7-I: per case, every axis text with an eventData at its rect's centre where findHover finds it (a tenth of a pixel round too), at most four per view and target type: the point and the eventData.",
+ "W": 400,
+ "H": 300,
+ "charts": [
+  {
+   "id": "cart.formatted",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": true,
+     "name": "Day",
+     "axisLabel": {
+      "formatter": "<{value}>"
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "triggerEvent": true,
+     "name": "Revenue",
+     "max": 20000,
+     "axisLabel": {
+      "formatter": "{value} $"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3000,
+       12000,
+       7000,
+       9000,
+       15000,
+       4000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "yAxis0",
+     "x": 44,
+     "y": 220,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 32,
+     "y": 181,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "5,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 28,
+     "y": 143,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "10,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 28,
+     "y": 104,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "15,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 60,
+     "y": 44,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "name": "Revenue",
+      "targetType": "axisName",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 85,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "Mon",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 185,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 2,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "Wed",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 285,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 4,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "Fri",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 386,
+     "y": 220,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "name": "Day",
+      "targetType": "axisName",
+      "xAxisIndex": 0
+     }
+    }
+   ],
+   "ties": 1
+  },
+  {
+   "id": "cart.interval",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": true,
+     "axisLabel": {
+      "interval": 1,
+      "formatter": "{value}!"
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "triggerEvent": true,
+     "max": 20000
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3000,
+       12000,
+       7000,
+       9000,
+       15000,
+       4000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "yAxis0",
+     "x": 49,
+     "y": 220,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 181,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "5,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 34,
+     "y": 143,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "10,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 34,
+     "y": 104,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "15,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 85,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "Mon",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 185,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 2,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "Wed",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 285,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 4,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "Fri",
+      "xAxisIndex": 0
+     }
+    }
+   ],
+   "ties": 1
+  },
+  {
+   "id": "cart.truncated",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": true,
+     "name": "A very long axis name indeed",
+     "nameLocation": "middle",
+     "nameGap": 30,
+     "nameTruncate": {
+      "maxWidth": 60
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "triggerEvent": true,
+     "name": "Revenue in dollars per day",
+     "nameTruncate": {
+      "maxWidth": 40
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3000,
+       12000,
+       7000,
+       9000,
+       15000,
+       4000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "yAxis0",
+     "x": 49,
+     "y": 220,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 189,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "3,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 158,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "6,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 127,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "9,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 60,
+     "y": 44,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "name": "Revenue in dollars per day",
+      "targetType": "axisName",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 85,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "Mon",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 135,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 1,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "Tue",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 185,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 2,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "Wed",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 235,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "dataIndex": 3,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "Thu",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 210,
+     "y": 256,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "name": "A very long axis name indeed",
+      "targetType": "axisName",
+      "xAxisIndex": 0
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "cart.time",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "time",
+     "triggerEvent": true,
+     "min": 1700000000000,
+     "max": 1700345600000,
+     "axisLabel": {
+      "formatter": "{MM}-{dd}!"
+     }
+    },
+    "yAxis": {
+     "type": "log",
+     "triggerEvent": true,
+     "min": 1,
+     "max": 100000
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1700000000000,
+        10
+       ],
+       [
+        1700172800000,
+        3000
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "yAxis0",
+     "x": 49,
+     "y": 220,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "1",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 45,
+     "y": 189,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "10",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 42,
+     "y": 158,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "100",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 127,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "yAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "1,000",
+      "yAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 78,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "2023-11-15 12:00:00",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 116,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "2023-11-16 00:00:00",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 153,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "2023-11-16 12:00:00",
+      "xAxisIndex": 0
+     }
+    },
+    {
+     "own": "xAxis0",
+     "x": 191,
+     "y": 234,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "xAxis",
+      "targetType": "axisLabel",
+      "tickIndex": 4,
+      "value": "2023-11-17 00:00:00",
+      "xAxisIndex": 0
+     }
+    }
+   ],
+   "ties": 1
+  },
+  {
+   "id": "single.value",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "singleAxis": {
+     "type": "value",
+     "max": 20000,
+     "triggerEvent": true,
+     "name": "Load",
+     "top": 80,
+     "height": 100,
+     "axisLabel": {
+      "formatter": "{value} kW"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       3000,
+       12000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "singleAxis0",
+     "x": 20,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 110,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "5,000"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 200,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "10,000"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 290,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "15,000"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "single.category",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "singleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": true,
+     "top": 80,
+     "height": 100,
+     "axisLabel": {
+      "formatter": "[{value}]"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       [
+        0,
+        3
+       ],
+       [
+        2,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "singleAxis0",
+     "x": 50,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "dataIndex": 0,
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "Mon"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 110,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "dataIndex": 1,
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "Tue"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 170,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "dataIndex": 2,
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "Wed"
+     }
+    },
+    {
+     "own": "singleAxis0",
+     "x": 230,
+     "y": 194,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "singleAxis",
+      "dataIndex": 3,
+      "singleAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "Thu"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "polar.formatted",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {
+     "radius": [
+      20,
+      120
+     ]
+    },
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": true,
+     "axisLabel": {
+      "formatter": "<{value}>"
+     }
+    },
+    "radiusAxis": {
+     "max": 20000,
+     "name": "Load",
+     "triggerEvent": true,
+     "axisLabel": {
+      "formatter": "{value} kW"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       3000,
+       12000,
+       7000,
+       9000,
+       15000,
+       4000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "radiusAxis0",
+     "x": 167,
+     "y": 105,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radiusAxis",
+      "radiusAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "5,000"
+     }
+    },
+    {
+     "own": "radiusAxis0",
+     "x": 163,
+     "y": 80,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radiusAxis",
+      "radiusAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "10,000"
+     }
+    },
+    {
+     "own": "radiusAxis0",
+     "x": 163,
+     "y": 55,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radiusAxis",
+      "radiusAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "15,000"
+     }
+    },
+    {
+     "own": "radiusAxis0",
+     "x": 163,
+     "y": 30,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radiusAxis",
+      "radiusAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 4,
+      "value": "20,000"
+     }
+    },
+    {
+     "own": "radiusAxis0",
+     "x": 200,
+     "y": 9,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radiusAxis",
+      "name": "Load",
+      "radiusAxisIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 283,
+     "y": 33,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "Mon"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 345,
+     "y": 150,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "Tue"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 283,
+     "y": 267,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "Wed"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 119,
+     "y": 267,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "Thu"
+     }
+    }
+   ],
+   "ties": 1
+  },
+  {
+   "id": "polar.value-angle",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {
+     "radius": [
+      20,
+      120
+     ]
+    },
+    "angleAxis": {
+     "type": "value",
+     "max": 20000,
+     "triggerEvent": true,
+     "axisLabel": {
+      "formatter": "{value}°"
+     }
+    },
+    "radiusAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       3000,
+       12000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "angleAxis0",
+     "x": 200,
+     "y": 16,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "0"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 296,
+     "y": 40,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "2,000"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 343,
+     "y": 104,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "4,000"
+     }
+    },
+    {
+     "own": "angleAxis0",
+     "x": 343,
+     "y": 196,
+     "ev": {
+      "angleAxisIndex": 0,
+      "componentIndex": 0,
+      "componentType": "angleAxis",
+      "targetType": "axisLabel",
+      "value": "6,000"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "parallel.formatted",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "name": "Price",
+      "max": 20000,
+      "triggerEvent": true,
+      "axisLabel": {
+       "formatter": "{value} $"
+      }
+     },
+     {
+      "dim": 1,
+      "name": "Grade",
+      "type": "category",
+      "data": [
+       "low",
+       "mid",
+       "high"
+      ],
+      "triggerEvent": true,
+      "axisLabel": {
+       "formatter": "<{value}>"
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        3000,
+        "low"
+       ],
+       [
+        12000,
+        "high"
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "parallelAxis0",
+     "x": 96,
+     "y": 240,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "parallelAxis",
+      "parallelAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0"
+     }
+    },
+    {
+     "own": "parallelAxis0",
+     "x": 108,
+     "y": 195,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "parallelAxis",
+      "parallelAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "5,000"
+     }
+    },
+    {
+     "own": "parallelAxis0",
+     "x": 112,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "parallelAxis",
+      "parallelAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "10,000"
+     }
+    },
+    {
+     "own": "parallelAxis0",
+     "x": 112,
+     "y": 105,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "parallelAxis",
+      "parallelAxisIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "15,000"
+     }
+    },
+    {
+     "own": "parallelAxis0",
+     "x": 80,
+     "y": 39,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "parallelAxis",
+      "name": "Price",
+      "parallelAxisIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "parallelAxis1",
+     "x": 344,
+     "y": 210,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "parallelAxis",
+      "dataIndex": 0,
+      "parallelAxisIndex": 1,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "low"
+     }
+    },
+    {
+     "own": "parallelAxis1",
+     "x": 345,
+     "y": 150,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "parallelAxis",
+      "dataIndex": 1,
+      "parallelAxisIndex": 1,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "mid"
+     }
+    },
+    {
+     "own": "parallelAxis1",
+     "x": 346,
+     "y": 90,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "parallelAxis",
+      "dataIndex": 2,
+      "parallelAxisIndex": 1,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "high"
+     }
+    },
+    {
+     "own": "parallelAxis1",
+     "x": 320,
+     "y": 39,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "parallelAxis",
+      "name": "Grade",
+      "parallelAxisIndex": 1,
+      "targetType": "axisName"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "radar.formatted",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "Speed",
+       "max": 20000
+      },
+      {
+       "name": "Power",
+       "max": 20000
+      },
+      {
+       "name": "Range",
+       "max": 20000
+      },
+      {
+       "name": "Grip",
+       "max": 20000
+      }
+     ],
+     "triggerEvent": true,
+     "radius": 90,
+     "axisName": {
+      "formatter": "<{value}>"
+     },
+     "axisLabel": {
+      "show": true,
+      "formatter": "{value}%"
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5000,
+         12000,
+         8000,
+         15000
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "radar0",
+     "x": 183,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 172,
+     "y": 132,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "4,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 172,
+     "y": 114,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "8,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 168,
+     "y": 96,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "12,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 200,
+     "y": 39,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "<Speed>",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 71,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "<Power>",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 200,
+     "y": 261,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "<Range>",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 323,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "<Grip>",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "radar.plain",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "Speed",
+       "max": 20000
+      },
+      {
+       "name": "Power",
+       "max": 20000
+      },
+      {
+       "name": "Range",
+       "max": 20000
+      },
+      {
+       "name": "Grip",
+       "max": 20000
+      }
+     ],
+     "triggerEvent": true,
+     "radius": 90,
+     "axisLabel": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5000,
+         12000,
+         8000,
+         15000
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "radar0",
+     "x": 189,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 0,
+      "value": "0"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 177,
+     "y": 132,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 1,
+      "value": "4,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 177,
+     "y": 114,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 2,
+      "value": "8,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 174,
+     "y": 96,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "radarIndex": 0,
+      "targetType": "axisLabel",
+      "tickIndex": 3,
+      "value": "12,000"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 200,
+     "y": 39,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Speed",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 78,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Power",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 200,
+     "y": 261,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Range",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar0",
+     "x": 316,
+     "y": 150,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Grip",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "quiet.single",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "singleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "top": 80,
+     "height": 100,
+     "name": "Days"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       [
+        0,
+        3
+       ],
+       [
+        2,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "singleAxis0",
+     "x": 50,
+     "y": 194,
+     "ev": null
+    },
+    {
+     "own": "singleAxis0",
+     "x": 110,
+     "y": 194,
+     "ev": null
+    },
+    {
+     "own": "singleAxis0",
+     "x": 170,
+     "y": 194,
+     "ev": null
+    },
+    {
+     "own": "singleAxis0",
+     "x": 230,
+     "y": 194,
+     "ev": null
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "quiet.radar-indicator",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "Speed",
+       "max": 10,
+       "tooltip": {
+        "show": true
+       }
+      },
+      {
+       "name": "Power",
+       "max": 10,
+       "triggerEvent": true
+      },
+      {
+       "name": "Range",
+       "max": 10,
+       "silent": true,
+       "triggerEvent": true
+      }
+     ],
+     "radius": 80
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "radar0",
+     "x": 200,
+     "y": 49,
+     "ev": null
+    },
+    {
+     "own": "radar0",
+     "x": 101,
+     "y": 197,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Power",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "quiet.cart",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+     ],
+     "triggerEvent": false,
+     "tooltip": {
+      "show": true
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "triggerEvent": false,
+     "max": 20000,
+     "tooltip": {
+      "show": true
+     },
+     "name": "Revenue"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3000,
+       12000,
+       7000,
+       9000,
+       15000,
+       4000
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "yAxis0",
+     "x": 49,
+     "y": 220,
+     "ev": null
+    },
+    {
+     "own": "yAxis0",
+     "x": 37,
+     "y": 181,
+     "ev": null
+    },
+    {
+     "own": "yAxis0",
+     "x": 34,
+     "y": 143,
+     "ev": null
+    },
+    {
+     "own": "yAxis0",
+     "x": 34,
+     "y": 104,
+     "ev": null
+    },
+    {
+     "own": "yAxis0",
+     "x": 60,
+     "y": 44,
+     "ev": null
+    },
+    {
+     "own": "xAxis0",
+     "x": 85,
+     "y": 234,
+     "ev": null
+    },
+    {
+     "own": "xAxis0",
+     "x": 135,
+     "y": 234,
+     "ev": null
+    },
+    {
+     "own": "xAxis0",
+     "x": 185,
+     "y": 234,
+     "ev": null
+    },
+    {
+     "own": "xAxis0",
+     "x": 235,
+     "y": 234,
+     "ev": null
+    }
+   ],
+   "ties": 0
+  },
+  {
+   "id": "radar.indicator-trigger",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": [
+     {
+      "indicator": [
+       {
+        "name": "Speed",
+        "max": 10
+       },
+       {
+        "name": "Power",
+        "max": 10,
+        "triggerEvent": true
+       },
+       {
+        "name": "Range",
+        "max": 10
+       }
+      ],
+      "radius": 60,
+      "center": [
+       "30%",
+       "50%"
+      ]
+     },
+     {
+      "indicator": [
+       {
+        "name": "a",
+        "max": 10
+       },
+       {
+        "name": "b",
+        "max": 10
+       },
+       {
+        "name": "c",
+        "max": 10
+       }
+      ],
+      "radius": 60,
+      "center": [
+       "72%",
+       "50%"
+      ],
+      "triggerEvent": true
+     }
+    ],
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       }
+      ]
+     },
+     {
+      "type": "radar",
+      "radarIndex": 1,
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "radar0",
+     "x": 38,
+     "y": 187,
+     "ev": {
+      "componentIndex": 0,
+      "componentType": "radar",
+      "name": "Power",
+      "radarIndex": 0,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar1",
+     "x": 288,
+     "y": 69,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "radar",
+      "name": "a",
+      "radarIndex": 1,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar1",
+     "x": 220,
+     "y": 187,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "radar",
+      "name": "b",
+      "radarIndex": 1,
+      "targetType": "axisName"
+     }
+    },
+    {
+     "own": "radar1",
+     "x": 356,
+     "y": 188,
+     "ev": {
+      "componentIndex": 1,
+      "componentType": "radar",
+      "name": "c",
+      "radarIndex": 1,
+      "targetType": "axisName"
+     }
+    }
+   ],
+   "ties": 0
+  }
+ ]
+}

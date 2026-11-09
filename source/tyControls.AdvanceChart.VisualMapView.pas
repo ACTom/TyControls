@@ -34,7 +34,8 @@ interface
 uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.VisualMap;
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.VisualMap,
+     tyControls.AdvanceChart.RichStyle;
 
 type
   { What the component's own option says about how it looks. }
@@ -102,6 +103,10 @@ type
     TextAlign, TextVAlign: string;
     HasTextOpacity: Boolean;
     TextOpacity: Double;
+    { [R7-M] textStyle as written ('' none): its words are createTextStyle
+      of it -- the box, the sizes, rich, the halo, the font (the control
+      resolves it into the ink's block) }
+    TextStyleJson: string;
     { INTERACTION [Batch 116]: realtime, hoverLink (truthy), hoverLinkDataSize
       (0 when falsy), hoverLinkOnHandle (Has False when null or absent: then
       realtime decides), indicatorSize (a percentage of the item width or a
@@ -122,6 +127,11 @@ type
     AlignV: TTyTextAnchorV;
     W, H: Double;
     Rect: TTyXYWH;
+    { [R7-M] the words as their block (the ink's), laid out where the
+      style places them (X, Y) and hung about that point, CSS px -- RtScale
+      device px to one; none where the ink has no block }
+    Pieces: TTyRtPieceArray;
+    RtScale: Double;
   end;
   TTyVmTextArray = array of TTyVmText;
 
@@ -255,6 +265,17 @@ type
     Shadow: TTyChartColor;
     FontName: string;
     FontSizeLogical, FontWeight: Integer;
+    { [R7-M] THE WORDS' BLOCK (HasRt): textStyle resolved as free text --
+      createTextStyle of the textStyle model, in the font above; the root's
+      side; device px per CSS px. Opacity: textStyle's own, else the root
+      textStyle's (setTokenTextStyle's retrieve2), HasOpacity False when
+      neither writes one }
+    HasRt: Boolean;
+    Rt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
+    RtScale: Double;
+    HasOpacity: Boolean;
+    Opacity: Double;
   end;
 
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
@@ -460,7 +481,7 @@ end;
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
   AIndex: Integer): TTyVmViewSpec;
 var
-  node, ts, hs, eh: TJSONObject;
+  node, ts, hs, eh, root, root2: TJSONObject;
   d: TJSONData;
   arr: TJSONArray;
   def: TTyRawBox;
@@ -502,10 +523,16 @@ begin
   d := node.Find('align');
   if (d <> nil) and (d.JSONType = jtString) then Result.Align := d.AsString;
   { resetItemSize: parseFloat of each, NaN falling back to the defaults --
-    20 x 140 continuous, 20 x 14 piecewise }
-  Result.ItemW := ParseFloatOf(node.Find('itemWidth'));
+    20 x 140 continuous, 20 x 14 piecewise. [R7-X] A continuous one's
+    defaults are null (DEFAULT_BAR_BOUND comes after), so an unwritten size
+    is the option root's itemWidth / itemHeight (get climbs to the
+    GlobalModel); a piecewise one's 20 and 14 are its own [was: the
+    visualMap's alone]. }
+  if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
+  if Result.Piecewise then root2 := nil else root2 := root;
+  Result.ItemW := ParseFloatOf(TyStFind([node, root2], ['itemWidth']));
   if IsNan(Result.ItemW) then Result.ItemW := 20;
-  Result.ItemH := ParseFloatOf(node.Find('itemHeight'));
+  Result.ItemH := ParseFloatOf(TyStFind([node, root2], ['itemHeight']));
   if IsNan(Result.ItemH) then
     if Result.Piecewise then Result.ItemH := 14 else Result.ItemH := 140;
   d := node.Find('itemGap');
@@ -560,7 +587,9 @@ begin
   end;
   d := node.Find('textGap');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.TextGap := d.AsFloat;
-  d := node.Find('text');
+  { [R7-X] `text` defaults to null for both kinds: the root's where the
+    visualMap writes none }
+  d := TyStFind([node, root], ['text']);
   if (d <> nil) and (d.JSONType = jtArray) then
   begin
     Result.HasText := True;
@@ -666,11 +695,20 @@ begin
   ts := ObjOf(node.Find('textStyle'));
   if ts <> nil then
   begin
+    Result.TextStyleJson := ts.AsJSON;
     d := ts.Find('color');
     if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
     begin
       Result.HasText_ := True;
       Result.TextColour := c;
+    end
+    { [R7-Z] a colour no parser reads: the fill the canvas had (the list's
+      run settles it) [was: the skin's] }
+    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') and (d.AsString <> 'none')
+      and not TyColourIsHandler(d.AsString) then
+    begin
+      Result.HasText_ := True;
+      Result.TextColour := cTyCanvasColourLeft;
     end;
     d := ts.Find('fontSize');
     Result.FontSize := TyOptFontSize(d, Result.FontSize);
@@ -1183,8 +1221,9 @@ function MakeText(const AText: string; AX, AY: Double; AH: TTyTextAnchorH;
   AV: TTyTextAnchorV; const AMeasurer: ITyTextMeasurer;
   const AInk: TTyVisualMapInk): TTyVmText;
 var
-  w, h, ty: Double;
-  r: TTyXYWH;
+  w, h, ty, sc: Double;
+  r, box: TTyXYWH;
+  b: TTyRtBlockStyle;
 begin
   Result := Default(TTyVmText);
   Result.Text := AText;
@@ -1192,6 +1231,39 @@ begin
   Result.Y := AY;
   Result.AlignH := AH;
   Result.AlignV := AV;
+  { [R7-M] THE BLOCK: createTextStyle(textStyleModel, {x, y, align,
+    verticalAlign, text}) -- laid out at the style's place (a numeric
+    string size joins it), aligned as the view says (what it specifies
+    overrides the model's align), its own fill the ink's; the Text's rect is
+    the union of its children }
+  if AInk.HasRt and (AMeasurer <> nil) and (AText <> '') then
+  begin
+    sc := AInk.RtScale;
+    if sc <= 0 then sc := 1;
+    b := AInk.Rt;
+    TyRtFinish(b, AInk.FontName, AInk.FontSizeLogical, AInk.FontWeight,
+      AInk.RtGlobal, False, 0);
+    b.Style.HasFill := True;
+    b.Style.FillNone := False;
+    b.Style.Fill := AInk.Text;
+    b.Style.Align := rtaNone;
+    b.Style.VAlign := rtvNone;
+    { the opacity is the element's }
+    b.Style.HasOpacity := False;
+    Result.RtScale := sc;
+    Result.Pieces := TyRtLayHung(AText, b, TyRtDefaultOf(False, 0, False, 0,
+      False, AH, AV), AX / sc, AY / sc, sc, AMeasurer);
+    box := TyRtBounds(Result.Pieces);
+    if box.W < 0 then
+    begin
+      Result.Rect := XYWH(AX, AY, 0, 0);
+      Exit;
+    end;
+    Result.W := box.W * sc;
+    Result.H := box.H * sc;
+    Result.Rect := XYWH(AX + box.X * sc, AY + box.Y * sc, box.W * sc, box.H * sc);
+    Exit;
+  end;
   w := 0;
   h := 0;
   if AMeasurer <> nil then
@@ -1362,21 +1434,24 @@ end;
   when horizontal) by which half of the canvas the component's centre falls
   in, the component measured as ten long and AItemW across }
 function AutoItemAlign(const AView: TTyVmViewSpec; AItemW, ACanvasW,
-  ACanvasH: Double; const APad: array of Double): string;
+  ACanvasH: Double; const APad: array of Double; AScale: Double): string;
 var
-  b: TTyRawBox;
+  b, own: TTyRawBox;
   rr: TTyXYWH;
   m: Double;
 begin
   if (AView.Align <> '') and (AView.Align <> 'auto') then Exit(AView.Align);
+  { ([R7-AG] its px css px: AScale device px each) }
+  own := AView.Box;
+  if (AScale > 0) and (AScale <> 1) then own := TyBoxRawScaled(own, AScale);
   b := Default(TTyRawBox);
   if not AView.Horizontal then
   begin
     b.Top := TyBoxRawNum(0);
     b.Bottom.Kind := brNull;
     b.Height := TyBoxRawNum(10);
-    b.Left := AView.Box.Left;
-    b.Right := AView.Box.Right;
+    b.Left := own.Left;
+    b.Right := own.Right;
     b.Width := TyBoxRawNum(AItemW);
   end
   else
@@ -1384,8 +1459,8 @@ begin
     b.Left := TyBoxRawNum(0);
     b.Right.Kind := brNull;
     b.Width := TyBoxRawNum(10);
-    b.Top := AView.Box.Top;
-    b.Bottom := AView.Box.Bottom;
+    b.Top := own.Top;
+    b.Bottom := own.Bottom;
     b.Height := TyBoxRawNum(AItemW);
   end;
   rr := TyGetLayoutRect(b, 0, 0, ACanvasW, ACanvasH, APad);
@@ -1475,7 +1550,9 @@ var
       ah := tahCentre;
     end;
     e.Label_ := MakeText(AText, ex, i1 / 2, ah, tavMiddle, AMeasurer, AInk);
-    e.LabelOpacity := 1;
+    { [R7-M] nothing specified: textStyle's own opacity, else the root's }
+    if AInk.HasOpacity then e.LabelOpacity := AInk.Opacity
+    else e.LabelOpacity := 1;
     hv := False;
     Accumulate(e.Rect, hv, e.Label_.Rect, MatIdentity);
     Push(e);
@@ -1501,7 +1578,7 @@ begin
   { _getItemAlign: vertical asks helper.getItemAlign, horizontal is `align`
     or left }
   if not AView.Horizontal then
-    itemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad)
+    itemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad, AScale)
   else if (AView.Align = '') or (AView.Align = 'auto') then
     itemAlign := 'left'
   else
@@ -1575,7 +1652,10 @@ begin
       if lalign = 'right' then x := -tgap else x := i0 + tgap;
       it.Label_ := MakeText(AModel.Pieces[p].Text, x, i1 / 2, WordH(lalign),
         WordV(lvalign), AMeasurer, AInk);
+      { retrieve2(textStyleModel.get('opacity'), ...): the model's get
+        reaches the root textStyle [R7-M: the root's was not read] }
       if AView.HasTextOpacity then it.LabelOpacity := AView.TextOpacity
+      else if AInk.HasOpacity then it.LabelOpacity := AInk.Opacity
       else if st = tvsOutOfRange then it.LabelOpacity := 0.5
       else it.LabelOpacity := 1;
       Accumulate(it.Rect, have, it.Label_.Rect, MatIdentity);
@@ -1619,8 +1699,10 @@ begin
   Accumulate(bb, have, BackgroundRect(L.Background, AView.BorderWidth), MatIdentity);
   L.BBoxPosition := bb;
 
-  { positionGroup, as the continuous view }
+  { positionGroup, as the continuous view -- [R7-AG] its px css px: AScale
+    device px each [was: device px] }
   box := AView.PosBox;
+  if (AScale > 0) and (AScale <> 1) then box := TyBoxRawScaled(box, AScale);
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -2063,7 +2145,7 @@ begin
       AModel.Extent1, 0, i1, True);
 
   { the bar group, one of four }
-  L.ItemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad);
+  L.ItemAlign := AutoItemAlign(AView, i0, ACanvasW, ACanvasH, pad, AScale);
   vertical := not AView.Horizontal;
   left := L.ItemAlign = 'left';
   bottom := L.ItemAlign = 'bottom';
@@ -2150,8 +2232,10 @@ begin
   bb := GroupRect(True);
   L.BBoxPosition := bb;
 
-  { positionGroup: the box with the drawn size, on the canvas, no margin }
+  { positionGroup: the box with the drawn size, on the canvas, no margin --
+    [R7-AG] its px css px: AScale device px each [was: device px] }
   box := AView.PosBox;
+  if (AScale > 0) and (AScale <> 1) then box := TyBoxRawScaled(box, AScale);
   box.Width := TyBoxRawNum(bb.W);
   box.Height := TyBoxRawNum(bb.H);
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, [0, 0, 0, 0]);
@@ -2274,6 +2358,14 @@ var
     el.Caption.Y := AText.Y + G[5];
     el.Caption.AnchorH := AText.AlignH;
     el.Caption.AnchorV := AText.AlignV;
+    { [R7-M] THE BLOCK: its pieces, at the Text's opacity }
+    if Length(AText.Pieces) > 0 then
+    begin
+      el.Caption.Colour := AInk.Text;
+      el.Caption.RtPieces := Copy(AText.Pieces, 0, Length(AText.Pieces));
+      el.Caption.RtScale := AText.RtScale;
+      el.Style.Alpha := Max(0, Min(1, AOpacity));
+    end;
     AList.Add(el);
     Inc(Result);
   end;
@@ -2283,7 +2375,7 @@ var
   bg: TTyXYWH;
   pr: TTyXYWH;
   ix, iy: array[0..3] of Double;
-  cxl, cyl, cx, cy, sw, sh: Double;
+  cxl, cyl, cx, cy, sw, sh, op: Double;
   fill: TTyVisualColor;
 
   { a piecewise child: the symbol in its box, the label or the ends text;
@@ -2454,11 +2546,19 @@ begin
     Inc(Result);
   end;
   G := T;
-  for h := 0 to High(ALayout.Texts) do Text(ALayout.Texts[h]);
+  { [R7-M] setTokenTextStyle's opacity, textStyle's own else the root's
+    [was: not read on a continuous view]; a blurred handle label's state
+    style replaces it }
+  if AInk.HasOpacity then op := AInk.Opacity else op := 1;
+  for h := 0 to High(ALayout.Texts) do Text(ALayout.Texts[h], op);
+  { [R7-N] a live handle label at the opacity its state (and its blur's
+    fade between 0.1 and its own) gives it [was: its own only where the
+    fade was at 1] }
   for h := 0 to High(ALayout.Handles) do
-    if ALive.Has and (h <= 1) then Text(ALive.Labels[h], ALive.LabelOpacity[h])
-    else Text(ALayout.Handles[h].Label_);
-  if ALive.Has and ALive.IndLabelVisible then Text(ALive.IndLabel);
+    if ALive.Has and (h <= 1) then
+      Text(ALive.Labels[h], ALive.LabelOpacity[h])
+    else Text(ALayout.Handles[h].Label_, op);
+  if ALive.Has and ALive.IndLabelVisible then Text(ALive.IndLabel, op);
 end;
 
 end.

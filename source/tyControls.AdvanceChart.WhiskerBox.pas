@@ -113,9 +113,12 @@ procedure TyBoxWidthBounds(ABoxWidth: TJSONData; ABand: Double;
 function TyWhiskerBand(AAxis: TTyAxis; const AStores: array of TTyDataStore;
   const ASeries: TTyIntegerArray): Double;
 
-{ One candle's points. ABaseIsX: the layout is horizontal. }
+{ One candle's points. ABaseIsX: the layout is horizontal. [R7-AG]
+  APxScale: the device px a css px makes (PPI / 96) -- the half pixel the
+  sides and the spine snap to is a css px' }
 function TyCandleEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
-  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double): TTyCandleEnds;
+  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double;
+  APxScale: Double = 1): TTyCandleEnds;
 
 { candlestickLayout's makeBrushRect: lowest to highest along the value axis,
   a candle wide across it, from the lowest point moved back half a candle
@@ -137,9 +140,11 @@ function TyWhiskerClipRect(const AArea: TTyXYWH): TTyRectF;
 
 { Every candlestick's and boxplot's width, offset and clip, after the axes
   have their final pixel extents. }
+{ [R7-AD] APxScale: a width's pixel count is css px, APxScale (PPI / 96)
+  device px each (a percentage is of the band) [was: device px] }
 function TySolveWhiskerLayouts(AOption: TTyChartOption;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex): TTyWhiskerLayoutArray;
+  AIndex: TTyAxisSeriesIndex; APxScale: Double = 1): TTyWhiskerLayoutArray;
 
 implementation
 
@@ -173,6 +178,10 @@ begin
   Result := (AData = nil) or (AData.JSONType = jtNull);
 end;
 
+var
+  { [R7-AD] the pixel scale the widths are read at (TySolveWhiskerLayouts) }
+  GWhiskerPx: Double = 1;
+
 function TyWhiskerParsePercent(AData: TJSONData; ABase: Double): Double;
 var s, t: string;
     v: Double;
@@ -180,8 +189,8 @@ begin
   Result := NaN;
   if Absent(AData) then Exit;
   case AData.JSONType of
-    jtNumber: Result := AData.AsFloat;
-    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtNumber: Result := AData.AsFloat * GWhiskerPx;
+    jtBoolean: if AData.AsBoolean then Result := GWhiskerPx else Result := 0;
     jtString:
       begin
         s := AData.AsString;
@@ -193,7 +202,7 @@ begin
         if (t <> '') and (t[Length(t)] = '%') then
           Result := v / 100 * ABase
         else
-          Result := v;
+          Result := v * GWhiskerPx;
       end;
   end;
 end;
@@ -207,7 +216,7 @@ begin
   { retrieve2(get('barMaxWidth'), band), retrieve2(get('barMinWidth'), 1) }
   if Absent(ABarMaxWidth) then maxW := ABand
   else maxW := TyWhiskerParsePercent(ABarMaxWidth, ABand);
-  if Absent(ABarMinWidth) then minW := 1
+  if Absent(ABarMinWidth) then minW := GWhiskerPx
   else minW := TyWhiskerParsePercent(ABarMinWidth, ABand);
   if not Absent(ABarWidth) then
     Exit(TyWhiskerParsePercent(ABarWidth, ABand));
@@ -228,8 +237,8 @@ procedure TyBoxWidthBounds(ABoxWidth: TJSONData; ABand: Double;
 begin
   if ABoxWidth = nil then
   begin
-    ALo := cBoxMin;
-    AHi := cBoxMax;
+    ALo := cBoxMin * GWhiskerPx;
+    AHi := cBoxMax * GWhiskerPx;
     Exit;
   end;
   if ABoxWidth is TJSONArray then
@@ -309,11 +318,21 @@ begin
 end;
 
 function TyCandleEndsOf(ACart: TTyCartesian2D; ABaseIsX: Boolean;
-  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double): TTyCandleEnds;
+  AAxisVal, AOpen, AClose, ALowest, AHighest, AWidth: Double;
+  APxScale: Double): TTyCandleEnds;
 const
   cHalf: Double = 2;
 var
   ocLow, ocHigh, lowest, highest: TTyPointF;
+
+  { [R7-AG] subPixelOptimize on the css px' half pixel: upstream lays the
+    candle out in css px under a canvas scaled by devicePixelRatio [was:
+    the device px' half pixel] }
+  function Snap(AV: Double; APos: Boolean): Double;
+  begin
+    if not (APxScale > 0) or (APxScale = 1) then Exit(TySubPixelOptimize(AV, 1, APos));
+    Result := TySubPixelOptimize(AV / APxScale, 1, APos) * APxScale;
+  end;
 
   { addBodyEnd: the point moved half a candle each way along the base, each
     side snapped to the half pixel -- the far side back, the near side on }
@@ -324,13 +343,13 @@ var
     p2 := P;
     if ABaseIsX then
     begin
-      p1.X := TySubPixelOptimize(p1.X + AWidth / cHalf, 1, False);
-      p2.X := TySubPixelOptimize(p2.X - AWidth / cHalf, 1, True);
+      p1.X := Snap(p1.X + AWidth / cHalf, False);
+      p2.X := Snap(p2.X - AWidth / cHalf, True);
     end
     else
     begin
-      p1.Y := TySubPixelOptimize(p1.Y + AWidth / cHalf, 1, False);
-      p2.Y := TySubPixelOptimize(p2.Y - AWidth / cHalf, 1, True);
+      p1.Y := Snap(p1.Y + AWidth / cHalf, False);
+      p2.Y := Snap(p2.Y - AWidth / cHalf, True);
     end;
     if AStart then
     begin
@@ -349,8 +368,8 @@ var
   function Spine(const P: TTyPointF): TTyPointF;
   begin
     Result := P;
-    if ABaseIsX then Result.X := TySubPixelOptimize(Result.X, 1, False)
-    else Result.Y := TySubPixelOptimize(Result.Y, 1, False);
+    if ABaseIsX then Result.X := Snap(Result.X, False)
+    else Result.Y := Snap(Result.Y, False);
   end;
 
 begin
@@ -487,7 +506,7 @@ end;
 
 function TySolveWhiskerLayouts(AOption: TTyChartOption;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
-  AIndex: TTyAxisSeriesIndex): TTyWhiskerLayoutArray;
+  AIndex: TTyAxisSeriesIndex; APxScale: Double): TTyWhiskerLayoutArray;
 var
   i, k: Integer;
   node: TJSONObject;
@@ -527,6 +546,8 @@ begin
   SetLength(Result, Length(ABindings));
   for i := 0 to High(Result) do Result[i] := Default(TTyWhiskerLayout);
   if (AOption = nil) or (AIndex = nil) then Exit;
+  GWhiskerPx := APxScale;
+  try
   SetLength(done, Length(ABindings));
   for i := 0 to High(ABindings) do
   begin
@@ -576,6 +597,9 @@ begin
         done[onIt[k]] := True;
       end;
     end;
+  end;
+  finally
+    GWhiskerPx := 1;
   end;
 end;
 

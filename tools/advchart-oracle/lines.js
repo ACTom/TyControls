@@ -309,6 +309,12 @@ C('d-symbols', 'draw', 'symbols: the series pair, an item string, an item pair w
     { coords: [[30, 20], [95, 85]], lineStyle: { curveness: 0.4 } },
     { coords: [[90, 10], [55, 25]], symbol: ['rect', 'roundRect'], symbolSize: [6, 10] },
   ] })] }));
+C('r7o-empty-pen', 'draw', "[R7-O] the end symbols' pens: an empty circle, rect and triangle stroked at symbolPathSetColor's 2 (filled with the ground), a 'line' at the default 1, a filled arrow with none",
+  base({ series: [L({ symbol: ['emptyCircle', 'emptyRect'], symbolSize: 12, data: [
+    { coords: [[10, 10], [80, 60]] },
+    { coords: [[20, 80], [90, 30]], symbol: ['emptyTriangle', 'arrow'] },
+    { coords: [[15, 50], [45, 50]], symbol: ['line', 'emptyCircle'], symbolSize: 16 },
+  ] })] }), { pen: true });
 C('d-labels', 'draw', 'labels: end with no distance, start, middle 6, insideStartTop [4, 8], insideEndBottom, insideMiddle, a reversed line, curves, the default texts',
   base({ series: [L({ label: { show: true }, data: [
     { coords: [[10, 10], [40, 30]] },
@@ -413,6 +419,29 @@ C('e-roundtrip', 'effect', 'roundTrip: __t runs to 2 over twice the period and t
     { coords: [[10, 10], [80, 60]] },
     { coords: [[20, 80], [90, 30]], lineStyle: { curveness: 0.3 } },
   ] })] }), { samples: SAMPLES_DENSE });
+// [R7-R] the effect symbol's own style: effect.getItemStyle(['color']) set
+// over it (borderColor / borderWidth / borderType / borderDashOffset /
+// borderCap / borderJoin / borderMiterLimit, the shadow, opacity), then
+// symbolPathSetColor -- an empty one stroked in the colour at 2 over the
+// ground (the border overridden), a 'line' stroked in the colour at the
+// border width (zrender's 1 unwritten), the rest filled; a border written
+// without a width is zrender's 1. Its pen is in its own frame: the frames
+// carry it with the scale (the rect / roundRect / line trail's scaleY)
+C('r7r-effect-pen', 'effect', "[R7-R] the effect symbol's pen: a dashed rect trail with a shadow, an empty circle whose border the colour overrides, a 'line' at the border width, a triangle with a border colour alone (zrender's 1), a roundRect with cap, join and miter; the series' border under an item's own",
+  base({ series: [LE({ effect: { show: true, period: 2, trailLength: 0, borderColor: '#203040', borderWidth: 0.3 }, data: [
+    { coords: [[10, 10], [80, 60]], effect: { symbol: 'rect', symbolSize: [6, 3], borderType: 'dashed', borderDashOffset: 2,
+      shadowBlur: 4, shadowOffsetX: 1, opacity: 0.6 } },
+    { coords: [[20, 80], [90, 30]], lineStyle: { curveness: 0.3 }, effect: { symbol: 'emptyCircle', symbolSize: [8, 4], color: '#00a0ff',
+      shadowBlur: 3, shadowColor: '#ff0000' } },
+    { coords: [[50, 5], [50, 95]], effect: { symbol: 'line', symbolSize: [2, 5], color: '#008800', borderWidth: 0.6 } },
+    { coords: [[90, 90], [15, 20]], effect: { symbol: 'roundRect', symbolSize: [7, 4], borderCap: 'round', borderJoin: 'bevel',
+      borderMiterLimit: 3, borderType: [1, 2] } },
+  ] }), LE({ effect: { show: true, period: 2, trailLength: 0, symbol: 'triangle', symbolSize: [10, 6], borderColor: '#405060' },
+    data: [{ coords: [[5, 50], [95, 40]] }] }),
+  // a polyline's (EffectPolyline makes the same symbol)
+  LE({ polyline: true, effect: { show: true, period: 2, trailLength: 0, symbol: 'rect', symbolSize: [5, 2],
+    borderColor: '#607080', borderWidth: 0.5, borderType: 'dotted' },
+    data: [{ coords: [[10, 30], [40, 60], [70, 20]] }] })] }), { samples: [0, 16, 300, 700, 1000, 1500, 1999, 2000, 2100], pen: true });
 C('e-item', 'effect', "an item's own effect: period 1.5 and a diamond; an item's effect.show false is ignored (the series decides)",
   base({ series: [LE({ effect: { show: true }, data: [
     { coords: [[10, 10], [80, 60]], effect: { period: 1.5, symbol: 'diamond', symbolSize: 7 } },
@@ -553,6 +582,14 @@ C('r5-gradient', 'draw', 'a gradient line colour: the series a linear one, an it
       { coords: [[30, 90], [95, 90]], lineStyle: { color: { type: 'linear', x: 100, y: 0, x2: 500, y2: 0, global: true,
         colorStops: [{ offset: 0, color: '#00ffff' }, { offset: 1, color: '#ff00ff' }] } }, value: 3 },
     ] })] }), { grad: true, legend: true, drawn: true });
+// [R7-S] a gradient over path:// end and effect symbols: the gradient's box
+// is the covered path's (createSymbol without keepAspect: makePath 'cover')
+C('r7s-gradient-path', 'draw', "[R7-S] a gradient line colour over oblong path:// end symbols and a path:// effect: the gradient's box the covered path's",
+  base({ series: [L({ symbol: ['path://M0 0L10 0L5 20Z', 'path://M0 0L20 0L20 5L0 5Z'], symbolSize: [[24, 10], [10, 24]],
+    effect: { show: true, trailLength: 0, symbol: 'path://M0 0L10 0L10 30L0 30Z', symbolSize: [16, 8] },
+    lineStyle: { width: 2, opacity: 1, color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+      colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } },
+    data: [{ coords: [[10, 10], [80, 60]], value: 1 }, { coords: [[20, 80], [70, 30]], value: 2 }] })] }), { grad: true });
 C('r5-plain-ink', 'draw', "a plain line colour: the label is the outside ink (#333 in the light theme), not the line's colour",
   base({ series: [L({ lineStyle: { color: '#00aa00' }, label: { show: true }, data: [{ coords: [[10, 10], [80, 60]], value: 1 },
     { coords: [[20, 80], [70, 30]], label: { position: 'middle', color: 'inherit' }, value: 2 },
@@ -616,12 +653,18 @@ function styleRec(s) {
   };
 }
 function symbolRec(sym) {
-  return {
-    name: sym.name, symbolType: sym.shape.symbolType,
+  const r = {
+    // (makePath's element for a path:// one has no symbolType: 'path')
+    name: sym.name, symbolType: sym.shape.symbolType === undefined ? 'path' : sym.shape.symbolType,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation), scale: hex(sym.scaleX),
-    box: [sym.shape.x, sym.shape.y, sym.shape.width, sym.shape.height].map(hex),
+    // (a path:// symbol's shape is its path data: no box, null)
+    box: [sym.shape.x, sym.shape.y, sym.shape.width, sym.shape.height].map(v => (v === undefined ? null : hex(v))),
     fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke), opacity: hexOr(sym.style.opacity, 1),
   };
+  // [R7-O] a case flagged pen: the symbol's lineWidth (symbolPathSetColor
+  // gives an empty one 2)
+  if (CUR && CUR.pen) r.lineWidth = hexOr(sym.style.lineWidth, 1);
+  return r;
 }
 // the point the text hangs from: the label's own transform applied to its
 // origin (no transform: its x / y)
@@ -647,17 +690,32 @@ function clipOf(sym) {
   const c = a && a.getClip ? a.getClip() : null;
   return c;
 }
+// [R7-R] a case flagged pen: the effect symbol's pen as its style holds it
+// (effect.getItemStyle(['color']) set over it, then symbolPathSetColor) --
+// in the symbol's own frame, which its scaleX / scaleY and rotation map
+function effPenRec(sym) {
+  const s = sym.style;
+  const dash = s.lineDash == null ? null : (Array.isArray(s.lineDash) ? s.lineDash.map(hex) : String(s.lineDash));
+  return { fill: colourOf(s.fill), stroke: colourOf(s.stroke), lineWidth: hexOr(s.lineWidth, 1), lineDash: dash,
+    lineDashOffset: hexOr(s.lineDashOffset, 0), lineCap: s.lineCap || null, lineJoin: s.lineJoin || null,
+    miterLimit: s.miterLimit == null ? null : hex(+s.miterLimit), shadowBlur: hexOr(s.shadowBlur, 0),
+    shadowOffsetX: hexOr(s.shadowOffsetX, 0), shadowOffsetY: hexOr(s.shadowOffsetY, 0),
+    shadowColor: colourOf(s.shadowColor), opacity: hexOr(s.opacity, 1), hasStroke: !!sym.hasStroke(),
+    hasFill: !!sym.hasFill() };
+}
 function effectRec(sym) {
   if (!sym) return null;
   const c = clipOf(sym);
-  return {
-    symbolType: sym.shape.symbolType, z2: sym.z2,
+  const r = {
+    symbolType: sym.shape.symbolType === undefined ? 'path' : sym.shape.symbolType, z2: sym.z2,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0), scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY),
     ignore: !!sym.ignore, fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke),
     shadowColor: colourOf(sym.style.shadowColor), opacity: hexOr(sym.style.opacity, 1),
     life: c ? hex(c._life) : null, delay: c ? (typeof c._delay === 'number' ? hex(c._delay) : 'str:' + String(c._delay)) : null, loop: c ? !!c.loop : null,
     t: sym.__t == null ? null : hex(sym.__t),
   };
+  if (CUR && CUR.pen) r.pen = effPenRec(sym);
+  return r;
 }
 function itemRec(sm, idx) {
   const data = sm.getData();
@@ -1271,6 +1329,7 @@ function frameItems(chart) {
         r.effect = sym ? { present: true, x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0),
           scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY), ignore: !!sym.ignore, t: sym.__t == null ? null : hex(sym.__t) }
           : { present: false };
+        if (sym && CUR && CUR.pen) r.effect.pen = effPenRec(sym);
       }
       else r.effect = null;
       out.push(r);

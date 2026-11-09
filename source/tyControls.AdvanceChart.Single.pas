@@ -148,14 +148,17 @@ type
 { singleCreator.create: one single per singleAxis component (a replaceMerge
   hole is nil), its axis' type, scale and categories, the rect from the box
   on AViewport and the extent along it (resize). }
-function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTySingleArray;
+{ [R7-AD] APxScale: the box's pixel counts are css px, APxScale (PPI / 96)
+  device px each [was: device px] }
+function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APxScale: Double = 1): TTySingleArray;
 { [Batch 154] Single.resize again in createBoxLayoutReference's container
   ARef -- a matrix cell or a calendar day: getLayoutRect of the box there
   (not the shared solver: a cell's edges are fractional), then _adjustAxis.
   A cell of no position or no size: the box far off the canvas
   (TyBoxNowhere), as a grid's. [spec 244: a cell of no size in one dimension keeps the rect upstream lays out, NaN in that dimension; TySingleResizeIn] }
 procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
-  const ARef: TTyXYWH);
+  const ARef: TTyXYWH; APxScale: Double = 1);
 
 { THE SERIES ON A SINGLE: every binding that resolved to one takes its axis
   -- XAxis and BaseAxis the single's axis, YAxis and ValueAxis nil -- and
@@ -185,7 +188,8 @@ function TySingleDirection(ASingle: TTySingle; AOption: TTyChartOption;
   const AWhich: string): Integer;
 
 { graphic.subPixelOptimizeLine, with Math.round }
-procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double);
+procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double;
+  AScale: Double = 1);
 
 { ---- the pointer ---- }
 type
@@ -496,14 +500,14 @@ begin
 end;
 
 procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
-  const ARef: TTyXYWH);
+  const ARef: TTyXYWH; APxScale: Double);
 var
   node: TJSONObject;
   box: TTyXYWH;
 begin
   if (AOption = nil) or (ASingle = nil) then Exit;
   node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
-  box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), ARef.X, ARef.Y,
+  box := TyGetLayoutRect(TyBoxRawScaled(SingleBoxRaw(node, AOption.Root), APxScale), ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
   { [spec 244] A CELL OF NO SIZE in one dimension: upstream lays the axis out
     on that rect as it is -- getLayoutRect's `|| 0` for a position, NaN for
@@ -514,7 +518,8 @@ begin
   SingleAdjustAxis(ASingle);
 end;
 
-function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTySingleArray;
+function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF;
+  APxScale: Double): TTySingleArray;
 var
   n, p: Integer;
   d: TJSONData;
@@ -559,7 +564,7 @@ begin
     { resize: getLayoutRect of the box params, 5% on every side by default,
       merged as mergeLayoutParam merges the option's own over them }
     { [F4c] getLayoutRect itself: the keywords and the flip }
-    box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), AViewport.Left,
+    box := TyGetLayoutRect(TyBoxRawScaled(SingleBoxRaw(node, AOption.Root), APxScale), AViewport.Left,
       AViewport.Top, AViewport.Right - AViewport.Left,
       AViewport.Bottom - AViewport.Top, []);
     s.Rect := box;
@@ -660,8 +665,15 @@ begin
   if InsideIn(node, AWhich) then Result := -Result;
 end;
 
-procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double);
+procedure TySingleSubPixelLine(var ALine: TTySingleLine; AWidth: Double;
+  AScale: Double);
 begin
+  { ([R7-AG] on the css px grid at another PPI) }
+  if (AScale > 0) and (AScale <> 1) then
+  begin
+    TyZrSubPixelLineAt(ALine.X1, ALine.Y1, ALine.X2, ALine.Y2, AWidth, AScale);
+    Exit;
+  end;
   if IsNan(AWidth) or (AWidth = 0) then Exit;
   if TyJsRound(ALine.X1 * 2) = TyJsRound(ALine.X2 * 2) then
   begin
@@ -946,11 +958,11 @@ begin
       Apply(M, hasM, fr.Ext1, 0, v.Line.X2, v.Line.Y2);
       v.Line.Value := NaN;
       v.Line.Drawn := True;
-      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
       { cut at the breaks (axisLine.breakLine) [F4a] }
       TyAxisBreakLineOf(v.Spec, ax, AOption,
-        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
+        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI), APPI / 96);
     end;
     marks := TickMarks(AOption, ax, v.Spec, v.Furn.TickInterval,
       v.Furn.AlignWithLabel, labelIv);
@@ -970,7 +982,7 @@ begin
         ln := Default(TTySingleLine);
         Apply(M, hasM, marks[i].Coord, 0, ln.X1, ln.Y1);
         Apply(M, hasM, marks[i].Coord, endCoord, ln.X2, ln.Y2);
-        TySingleSubPixelLine(ln, w);
+        TySingleSubPixelLine(ln, w, APPI / 96);
         ln.Value := marks[i].Value;
         ln.Drawn := True;
         if (not v.Furn.MinorTickOption) and not marks[i].OnBand then
@@ -1000,7 +1012,7 @@ begin
         ln := Default(TTySingleLine);
         Apply(M, hasM, minors[i], 0, ln.X1, ln.Y1);
         Apply(M, hasM, minors[i], endCoord, ln.X2, ln.Y2);
-        TySingleSubPixelLine(ln, mw);
+        TySingleSubPixelLine(ln, mw, APPI / 96);
         ln.Value := NaN;
         ln.Drawn := True;
         v.MinorTicks[i] := ln;
@@ -1034,7 +1046,7 @@ begin
           ln.X2 := r.X + r.W;
           ln.Y2 := c;
         end;
-        TySingleSubPixelLine(ln, w);
+        TySingleSubPixelLine(ln, w, APPI / 96);
         ln.Value := lineMarks[i].Value;
         ln.Drawn := True;
         ln.ColourIndex := i mod Math.Max(1, v.SplitLineInkCount);
@@ -1086,7 +1098,7 @@ begin
     { THE BREAK AREAS across the single's rect (SingleAxisView's breakArea:
       rectCoordBuildBreakAxis into the view's group) [F4a] }
     if not v.Blank then
-      TyLayoutAxisBreakAreas(v.Spec, ax, S.Rect, AOption, AMemory);
+      TyLayoutAxisBreakAreas(v.Spec, ax, S.Rect, AOption, AMemory, APPI / 96);
   finally
     UnmaskFP(mask);
   end;

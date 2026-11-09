@@ -42,8 +42,10 @@ unit test.advchart.seriesborders;
   element, '-' none); the gauge parts `line` (its split lines or ticks),
   `anchor` and `box` (the one other silent path a case shows: the anchor, a
   title's or a reading's plate) and `words` (a title's or a reading's
-  words). A pen whose width is Infinity is the canvas' to refuse and the
-  port's to draw none: not compared. }
+  words). A pen whose width is Infinity, or whose colour is a word no
+  parser reads, is the canvas' to refuse: it strokes with the width / colour
+  the element before it left ([R7-W] the port too, held to upstream's canvas
+  in test.advchart.linescanvas) -- not compared here. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -51,6 +53,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Anim,
+     tyControls.AdvanceChart.Render,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -272,6 +275,50 @@ begin
     Result := 'plain';
 end;
 
+{ [R7-B] a text block's rect, as the renderer strokes it: its border colour,
+  its width as painted (doubled under a fill), its dash normalised against
+  it, its phase, the canvas' own ends }
+function PiecePenOf(const APc: TTyRtPiece): string;
+var
+  c: Cardinal;
+  pat: TTyDoubleArray;
+  ds: string;
+  i: Integer;
+begin
+  c := Cardinal(APc.Stroke);
+  Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF, (c shr 8) and $FF,
+    c and $FF, c shr 24]));
+  ds := '';
+  if TyNormalizeLineDash(APc.BorderDash, APc.LineWidth, pat) then
+    for i := 0 to High(pat) do
+    begin
+      if i > 0 then ds := ds + ',';
+      ds := ds + NumText(pat[i]);
+    end;
+  if ds = '' then ds := 'solid';
+  Result := Result + '|' + NumText(APc.LineWidth) + '|' + ds + '|'
+    + NumText(APc.BorderDashOffset) + '|butt/miter/10';
+end;
+
+{ [R7-B] the same looks for a piece: its opacity, and a rect's shadow }
+function PieceLooksOf(const APc: TTyRtPiece): string;
+var c: Cardinal;
+begin
+  if APc.Kind = rpkRect then
+  begin
+    Result := NumText(APc.Opacity) + '|' + NumText(APc.ShadowBlur) + '|'
+      + NumText(APc.ShadowOffsetX) + '|' + NumText(APc.ShadowOffsetY) + '|';
+    if APc.HasShadow then
+    begin
+      c := Cardinal(APc.ShadowColor);
+      Result := Result + LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF,
+        (c shr 8) and $FF, c and $FF, c shr 24]));
+    end;
+  end
+  else
+    Result := NumText(APc.Opacity) + '|0|0|0|';
+end;
+
 { [R6-F] opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor, the
   colour where a shadow is cast }
 function LooksOf(const AEl: TTyChartElement): string;
@@ -329,9 +376,10 @@ var
   fix: TJSONData;
   cs, pens: TJSONArray;
   c: TJSONObject;
-  i, k, seen, n, nBad, nCases, nParts, hitEl: Integer;
+  i, k, j, seen, n, nBad, nCases, nParts, hitEl: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
+  pc: TTyRtPiece;
   got, shapes, fills, clips, looks: TStringList;
   want, have, id, bad, part, p, s: string;
   act, more: TJSONData;
@@ -439,6 +487,25 @@ begin
             + ' sub ' + IntToStr(el.Anim.Sub) + ' text "' + el.Caption.Text + '"');
         if el.Ignore or el.IsGuide or (el.Anim.Role = carLabel) then Continue;
         p := PartOf(el);
+        { [R7-B] a gauge's words laid out in their block: the block's rects
+          are the box, its texts the words (Text's children upstream) }
+        if (p = 'words') and (Length(el.Caption.RtPieces) > 0)
+          and ((part = 'box') or (part = 'words')) then
+        begin
+          for j := 0 to High(el.Caption.RtPieces) do
+          begin
+            pc := el.Caption.RtPieces[j];
+            if (part = 'words') <> (pc.Kind = rpkText) then Continue;
+            Inc(seen);
+            looks.Add(PieceLooksOf(pc));
+            if (pc.Kind = rpkRect) and pc.HasStroke and (pc.LineWidth > 0) then
+            begin
+              Inc(n);
+              got.Add(PiecePenOf(pc));
+            end;
+          end;
+          Continue;
+        end;
         { [R6-F] the one other silent path of a gauge a case shows }
         if (p = 'plain') and ((part = 'anchor') or (part = 'box')) then p := part;
         if (el.Caption.FontSizeLogical > 0) and not ((part = 'words') and (p = 'words')) then Continue;
@@ -459,6 +526,8 @@ begin
             + RoundText(el.ClipRect.Bottom - el.ClipRect.Top, 2));
         if not (el.Style.StrokeWidthLogical > 0) then Continue;
         if ((el.Style.StrokeColor shr 24) = 0) and (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
+        { [R7-W] a width or a colour the canvas carried: not compared }
+        if (el.CanvasFlags and (cTyCanvasWidthLeft or cTyCanvasStrokeLeft)) <> 0 then Continue;
         Inc(n);
         got.Add(PenOf(el));
       end;
@@ -687,8 +756,9 @@ end;
   would be black; at 4 the outer half would be 2 px) }
 procedure TAdvChartSeriesBordersTest.TestAPlateStrokesUnderItsFill;
 var
-  k: Integer;
+  k, j: Integer;
   el, plate: TTyChartElement;
+  pc: TTyRtPiece;
   b: TTyRectF;
   c: TBGRAPixel;
   my: Integer;
@@ -704,14 +774,23 @@ begin
     + '"borderColor":"#000000","borderWidth":4,"width":120,"height":40},"data":[{"value":40}]}]}';
   AssertEquals('parses', '', FChart.OptionError);
   Draw;
+  { [R7-B] the reading is laid out in its block: the plate is its rect }
   plate := Default(TTyChartElement);
+  pc := Default(TTyRtPiece);
   for k := 0 to FChart.SeriesList.Count - 1 do
   begin
     el := FChart.SeriesList.Element(k);
-    if el.Style.HasFill and (el.Style.StrokeWidthLogical > 0) and (el.Caption.Text = '') then plate := el;
+    if el.Anim.Role <> carGaugeDetail then Continue;
+    plate := el;
+    for j := 0 to High(el.Caption.RtPieces) do
+      if el.Caption.RtPieces[j].Kind = rpkRect then pc := el.Caption.RtPieces[j];
   end;
-  AssertTrue('the plate', plate.Style.StrokeFirst);
-  b := TyShapeBounds(plate.Shape);
+  AssertTrue('the plate', pc.StrokeFirst and pc.HasFill and pc.HasStroke);
+  AssertEquals('painted at twice the border', 8.0, pc.LineWidth, 0);
+  b.Left := plate.Caption.X + pc.X;
+  b.Top := plate.Caption.Y + pc.Y;
+  b.Right := b.Left + pc.W;
+  b.Bottom := b.Top + pc.H;
   my := Round((b.Top + b.Bottom) / 2);
   c := FBmp.GetPixel(Round(b.Left + 2), my);
   AssertTrue(Format('the fill at the edge (%d %d %d)', [c.red, c.green, c.blue]),
@@ -725,8 +804,9 @@ end;
   converts it); a width that is no number strokes nothing (zrender's
   `lineWidth > 0`); what the canvas refuses -- an infinite width, a phase
   that is no finite number, a miter limit that is no number above nought --
-  it would keep from the last element, and this takes as none, nought and
-  the default 10. Not written (nil, null) is not-a-number: the model's get
+  it keeps from the last element: the width reads as none here (its
+  builder marks the infinity, R7-W), the phase as cTyCanvasPhaseLeft and
+  the miter as -1, which the paint order settles. Not written (nil, null) is not-a-number: the model's get
   falls through it. }
 procedure TAdvChartSeriesBordersTest.TestThePenNumbersAsTheCanvasTakesThem;
 
@@ -779,9 +859,15 @@ begin
   W('"0"', 0); W('true', 1); W('[2]', 2); W('[]', 0); W('[1,2]', 0); W('{}', 0);
   W('"1e999"', 0); W('null', NaN); W('-2', -2);
   AssertTrue('width nil unwritten', IsNan(TyOptPenWidth(nil)));
-  O('"2"', 2); O('"abc"', 0); O('"1e999"', 0); O('""', 0); O('-3', -3); O('null', NaN);
-  M('"4"', 4); M('""', 10); M('"0"', 10); M('0', 10); M('-1', 10); M('"abc"', 10);
-  M('"1e999"', 10); M('2.5', 2.5); M('null', NaN);
+  { [R7-W] a phase that is no finite number the canvas refuses, keeping the
+    one it had: cTyCanvasPhaseLeft for the paint order to settle [was: 0] }
+  O('"2"', 2); O('"abc"', cTyCanvasPhaseLeft); O('"1e999"', cTyCanvasPhaseLeft); O('""', 0);
+  O('-3', -3); O('null', NaN);
+  { [R7-V] what `|| 10` hands on and the canvas refuses ('0', a negative,
+    'abc', infinity) keeps the canvas' last one: -1 until the paint order
+    settles it }
+  M('"4"', 4); M('""', 10); M('"0"', -1); M('0', 10); M('-1', -1); M('"abc"', -1);
+  M('"1e999"', -1); M('2.5', 2.5); M('null', NaN);
   AssertTrue('miter nil unwritten', IsNan(TyOptMiterLimit(nil)));
 end;
 

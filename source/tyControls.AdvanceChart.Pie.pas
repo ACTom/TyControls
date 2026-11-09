@@ -105,6 +105,11 @@ type
       sector has a different one -- so the values are carried as written and
       resolved per sector when the marks are built. }
     Corners: TTyBoxValueArray;
+    { [R7-X] a data item's own itemStyle.borderRadius, by raw row, where it
+      writes one (getSectorCornerRadius of the item's itemStyle model):
+      ItemCornersSet[raw] says so, ItemCorners[raw] its values as Corners }
+    ItemCorners: array of TTyBoxValueArray;
+    ItemCornersSet: array of Boolean;
   end;
 
   { One datum's wedge, in DEVICE px and canvas radians.
@@ -160,6 +165,13 @@ type
     Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
+    { [R7-C] the series' border width where it is +Infinity (which the canvas
+      does not draw): its sectors are never hit, their stroked rect is
+      not-a-number; 0 otherwise }
+    StrokeWidthInf: Double;
+    { [R7-F] per sector: its fill is 'none' (no inside for the pointer; a
+      clear pen is the style chain's, ApplySeriesPens' TakePen) }
+    FillNones: array of Boolean;
     { device px per logical px: a border grows a gradient's box by its
       width on the device [Batch 105] }
     PxScale: Double;
@@ -234,9 +246,10 @@ function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
   non-zero r wins outright. Run it with r = 80 and r0 = 30 and it answers 80,
   not the 50 the name dr suggests. Transcribed, because a port that quietly
   did the sensible thing would draw different corners from every ECharts
-  chart it is compared against. }
+  chart it is compared against. [R7-X] ARaw the slice's raw row: its item's
+  own corners where it writes them. }
 function TyPieCornersFor(const ASpec: TTyPieSpec;
-  AR0, AR1: Double): TTyDoubleArray;
+  AR0, AR1: Double; ARaw: Integer = -1): TTyDoubleArray;
 
 { ---- the marks ---- }
 { Append this pie's sectors to AList and answer how many were added. A sector
@@ -321,6 +334,8 @@ const
 
 function TyPieSpecDefault: TTyPieSpec;
 begin
+  { every field nought first, so a field no line below sets is a safe answer }
+  Result := Default(TTyPieSpec);
   Result.Box := TyBoxSpec;
   { PieSeries.ts:258-263. All four edges pinned at zero and no size given, so
     the box solves to the whole container -- which is what makes an ordinary
@@ -484,6 +499,7 @@ var
   node: TJSONObject;
   d: TJSONData;
   s: string;
+  k: Integer;
 begin
   Result := TyPieSpecDefault;
   if AOption = nil then Exit;
@@ -536,6 +552,21 @@ begin
   Result.ShowEmptyCircle :=
     BoolIn(node, 'showEmptyCircle', Result.ShowEmptyCircle);
   Result.Corners := ReadCorners(node);
+  { [R7-X] each object item's own [was: the series' for every slice] }
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.ItemCorners, d.Count);
+    SetLength(Result.ItemCornersSet, d.Count);
+    for k := 0 to d.Count - 1 do
+      if (d.Items[k] is TJSONObject) and (TJSONObject(d.Items[k]).Find('itemStyle') is TJSONObject)
+        and (TJSONObject(TJSONObject(d.Items[k]).Find('itemStyle')).Find('borderRadius') <> nil)
+        and (TJSONObject(TJSONObject(d.Items[k]).Find('itemStyle')).Find('borderRadius').JSONType <> jtNull) then
+      begin
+        Result.ItemCornersSet[k] := True;
+        Result.ItemCorners[k] := ReadCorners(TJSONObject(d.Items[k]));
+      end;
+  end;
 
   { roseType is tested for TRUTH, not for membership: pieLayout.ts:159 asks
     `roseType ?` and :119 asks `roseType !== 'area'`. So `true` behaves as
@@ -563,6 +594,7 @@ begin
   Result.Fills[0] := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
+  Result.StrokeWidthInf := 0;
   Result.PxScale := 1;
   Result.EmptyFill := AFill;
   { upstream's series z }
@@ -984,19 +1016,23 @@ end;
 { ==================== the marks ==================== }
 
 function TyPieCornersFor(const ASpec: TTyPieSpec;
-  AR0, AR1: Double): TTyDoubleArray;
+  AR0, AR1: Double; ARaw: Integer = -1): TTyDoubleArray;
 var
   i: Integer;
   dr: Double;
+  cs: TTyBoxValueArray;
 begin
   Result := nil;
-  if Length(ASpec.Corners) = 0 then Exit;
+  cs := ASpec.Corners;
+  if (ARaw >= 0) and (ARaw <= High(ASpec.ItemCornersSet)) and ASpec.ItemCornersSet[ARaw] then
+    cs := ASpec.ItemCorners[ARaw];
+  if Length(cs) = 0 then Exit;
   if AR1 <> 0 then dr := Abs(AR1)
   else if AR0 <> 0 then dr := Abs(AR0)
   else dr := 0;
-  SetLength(Result, Length(ASpec.Corners));
-  for i := 0 to High(ASpec.Corners) do
-    Result[i] := TyPieResolve(ASpec.Corners[i], dr);
+  SetLength(Result, Length(cs));
+  for i := 0 to High(cs) do
+    Result[i] := TyPieResolve(cs[i], dr);
 end;
 
 function TyBuildPieMarks(const ABinding: TTySeriesBinding;
@@ -1024,7 +1060,8 @@ begin
     sh := TyShapeSector(ALayout.Sectors[i].CX, ALayout.Sectors[i].CY,
       ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
       ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad,
-      TyPieCornersFor(ASpec, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1));
+      TyPieCornersFor(ASpec, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
+        ALayout.Sectors[i].RawIndex));
     el := TyChartElement(sh);
     el.Style.HasFill := True;
     if Length(AVisual.Fills) > 0 then
@@ -1033,6 +1070,9 @@ begin
       el.Style.FillColor := AVisual.EmptyFill;
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+    el.HitNone := AVisual.StrokeWidthInf > 0;
+    { [R7-F] hasFill() / hasStroke() as upstream answers them }
+    el.Style.HitNoFill := (i <= High(AVisual.FillNones)) and AVisual.FillNones[i];
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
       the arc's extent -- grown by the border when there is one [Batch 105] }
     if i <= High(AVisual.Decals) then el.Style.Decal := AVisual.Decals[i];

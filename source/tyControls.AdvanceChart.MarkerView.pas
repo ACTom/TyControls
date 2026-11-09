@@ -108,6 +108,8 @@ type
     Dash: TTyDoubleArray;
     DashOffset, Opacity: Double;
     LineCap, LineJoin: string;
+    { [R7-U] the lineStyle's miterLimit, NaN where none }
+    Miter: Double;
     Z2: Double;
     { [R5-A] the lineStyle's shadow (Line.ts' line.useStyle(lineStyle)); its
       end symbols take none }
@@ -264,6 +266,10 @@ type
     StyleFill, StyleStroke: string;
     StyleLineWidth, StyleOpacity, StyleDashOffset: Double;
     StyleDash: TJSONData;
+    { [R7-U] the itemStyle's borderCap, borderJoin ('' none) and
+      borderMiterLimit (NaN none) }
+    StyleCap, StyleJoin: string;
+    StyleMiter: Double;
     { [R5-A] the itemStyle's shadow (SymbolDraw's visual style) }
     StyleShadow: TTyChartShadow;
     { what the painter strokes: width and dash in the path's own units }
@@ -316,6 +322,8 @@ type
     LineWidth, Opacity, DashOffset: Double;
     Dash: TJSONData;
     LineCap, LineJoin: string;
+    { [R7-U] the itemStyle's borderMiterLimit, NaN where none }
+    Miter: Double;
     { [R5-A] the itemStyle's shadow (MarkAreaView's polygon.useStyle) }
     Shadow: TTyChartShadow;
     Lbl: TTyMkPtLabelPic;
@@ -476,6 +484,22 @@ begin
 end;
 
 { Model.get / getShallow over the levels: the first that is not null }
+{ [R7-U] A PEN'S ENDS ON THE ELEMENT, as the canvas takes them: a cap or a
+  join word it knows (any other keeps its default), a miterLimit that is a
+  number above nought (style.miterLimit else 10) }
+procedure MkSetEnds(var AStyle: TTyChartElementStyle; const ACap, AJoin: string;
+  AMiter: Double);
+begin
+  if ACap = 'round' then AStyle.LineCap := 1
+  else if ACap = 'square' then AStyle.LineCap := 2
+  else if ACap = 'butt' then AStyle.LineCap := 0;
+  if AJoin = 'round' then AStyle.LineJoin := 1
+  else if AJoin = 'bevel' then AStyle.LineJoin := 2
+  else if AJoin = 'miter' then AStyle.LineJoin := 0;
+  if not IsNan(AMiter) and not IsInfinite(AMiter) and (AMiter > 0) then
+    AStyle.MiterLimit := AMiter;
+end;
+
 function Chain(const L: TMkLevels; const AKey: string; AOwnOnly: Boolean = False): TJSONData;
 var i: Integer;
 begin
@@ -802,10 +826,15 @@ begin
     Result := (doubled + 1) / 2;
 end;
 
-function LinePath(AX1, AY1, AX2, AY2, ALineWidth: Double): TTyZrPath;
+{ ([R7-AJ] AScale the device px a css px makes: the ends and the width
+  device px, snapped on the css px grid -- ECLinePath's subPixelOptimize
+  on a canvas scaled by devicePixelRatio [was: the device px grid]) }
+function LinePath(AX1, AY1, AX2, AY2, ALineWidth, AScale: Double): TTyZrPath;
 begin
   Result := nil;
-  if (ALineWidth <> 0) and not IsNan(ALineWidth) then
+  if (AScale > 0) and (AScale <> 1) then
+    TyZrSubPixelLineAt(AX1, AY1, AX2, AY2, ALineWidth, AScale)
+  else if (ALineWidth <> 0) and not IsNan(ALineWidth) then
   begin
     if TyJsRound(AX1 * 2) = TyJsRound(AX2 * 2) then
     begin
@@ -1166,7 +1195,14 @@ var
       P.Y := L.From.Point.Y;
     end;
     P.HasTransform := LocalTransform(P.X, P.Y, P.Rotation, 0, 0, P.Transform);
-    P.Path := TyZrSymbol(P.ShapeType, P.Box.X, P.Box.Y, P.Box.W, P.Box.H);
+    { [R7-S] a path:// end: makePath 'cover' over the box unless the end's
+      symbolKeepAspect ('center') [was: always fitted to its aspect] }
+    if (Copy(P.ShapeType, 1, 7) = 'path://')
+      and not Truthy(TyMkLineVisual(ABlock, L.Index, not AIsTo, 'symbolKeepAspect')) then
+      P.Path := TyZrMakePathCover(Copy(P.ShapeType, 8, MaxInt), TyXYWH(P.Box.X, P.Box.Y,
+        P.Box.W, P.Box.H))
+    else
+      P.Path := TyZrSymbol(P.ShapeType, P.Box.X, P.Box.Y, P.Box.W, P.Box.H);
     { setColor: the line's stroke }
     P.Fill := '#000';
     P.Stroke := '';
@@ -1507,6 +1543,8 @@ var
     if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
     d := Chain(LS, 'join');
     if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+    d := Chain(LS, 'miterLimit');
+    if d <> nil then P.Miter := NumOf(d) else P.Miter := NaN;
     P.Shadow := MkShadow(LS);
     P.Stroke := stroke;
     d := Chain(itemLv, 'z2');
@@ -1515,7 +1553,7 @@ var
     P.Y1 := L.From.Point.Y;
     P.X2 := L.To_.Point.X;
     P.Y2 := L.To_.Point.Y;
-    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s);
+    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s, s);
     RunZ2(P.Z2);
     { the tangent: LinePath.tangentAt, the un-snapped shape }
     tx := P.X2 - P.X1;
@@ -1974,7 +2012,8 @@ var
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := S.LineWidth;
     end;
-    if not IsNan(S.Opacity) then el.Style.Alpha := Max(0.0, Min(1.0, S.Opacity));
+    { [R7-V] as written (the canvas clamps it) }
+    if not IsNan(S.Opacity) then el.Style.Alpha := S.Opacity;
     AList.Add(el);
     Inc(Result);
   end;
@@ -2050,6 +2089,14 @@ var
       if (B.StyleStroke <> '') and Colour(B.InkStroke, c) then el.Caption.StrokeColour := c
       else el.Caption.StrokeColour := AInk.Halo;
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+      { [R7-AI] A HALO OF 'Infinity' (a string the label wrote): stroked at
+        the width the canvas had, settled in the paint order [was: an
+        infinite pen, an invalid operation] }
+      if IsInfinite(el.Caption.StrokeWidthLogical) then
+      begin
+        el.Caption.StrokeWidthLogical := 0;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
     end;
     el.Caption.X := x;
     el.Caption.Y := y;
@@ -2139,7 +2186,10 @@ begin
       el.Style.DashLogical := Copy(APics[i].Dash);
       el.Style.DashWord := APics[i].DashWord;
       el.Style.DashOffsetLogical := APics[i].DashOffset;
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+      { [R7-U] its cap, join and miterLimit (getLineStyle) [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].Opacity;
       TyStyleSetShadow(el.Style, APics[i].Shadow);
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
         fill to its strokeContainThreshold, 5 -- a 1 px line is hit within
@@ -2964,6 +3014,13 @@ var
     P.StyleDash := Chain(IS_, 'borderType');
     d := Chain(IS_, 'borderDashOffset');
     if d <> nil then P.StyleDashOffset := NumOf(d);
+    { [R7-U] the pen's ends (getItemStyle) }
+    d := Chain(IS_, 'borderCap');
+    if d <> nil then P.StyleCap := JsStringOf(d) else P.StyleCap := '';
+    d := Chain(IS_, 'borderJoin');
+    if d <> nil then P.StyleJoin := JsStringOf(d) else P.StyleJoin := '';
+    d := Chain(IS_, 'borderMiterLimit');
+    if d <> nil then P.StyleMiter := NumOf(d) else P.StyleMiter := NaN;
     P.StyleShadow := MkShadow(IS_);
     if P.Empty then
     begin
@@ -2984,7 +3041,14 @@ var
     if P.HasGroupTransform and P.HasLocal then P.Global := MatMul(P.GroupTransform, P.Local)
     else if P.HasLocal then P.Global := P.Local
     else if P.HasGroupTransform then P.Global := P.GroupTransform;
-    P.Path := TyZrSymbol(P.ShapeType, -1, -1, 2, 2);
+    { [R7-S] a path:// one covers the unit box unless symbolKeepAspect
+      (createSymbol(type, -1, -1, 2, 2, color, keepAspect)), then scaled by
+      half the size: an oblong one stretched [was: always fitted to its
+      aspect] }
+    if (Copy(P.ShapeType, 1, 7) = 'path://') and not Truthy(Cbd(Chain(lv, 'symbolKeepAspect'))) then
+      P.Path := TyZrMakePathCover(Copy(P.ShapeType, 8, MaxInt), TyXYWH(-1, -1, 2, 2))
+    else
+      P.Path := TyZrSymbol(P.ShapeType, -1, -1, 2, 2);
     P.BBox := TyZrBBox(P.Path);
     if P.HasGlobal and (Abs(P.Global[0] - 1) > 1e-10) and (Abs(P.Global[3] - 1) > 1e-10) then
       P.LineScale := Sqrt(Abs(P.Global[0] * P.Global[3] - P.Global[2] * P.Global[1]))
@@ -3352,6 +3416,12 @@ begin
       else
         el.Caption.StrokeColour := AInk.Halo;
       if not IsNan(B.InkLineWidth) then el.Caption.StrokeWidthLogical := B.InkLineWidth;
+      { ([R7-AI] as a markPoint's) }
+      if IsInfinite(el.Caption.StrokeWidthLogical) then
+      begin
+        el.Caption.StrokeWidthLogical := 0;
+        el.CanvasFlags := el.CanvasFlags or cTyCanvasWidthLeft;
+      end;
     end;
     el.Caption.X := x;
     el.Caption.Y := y;
@@ -3521,9 +3591,15 @@ begin
       { [R2-I5] a word, measured again against the width a state draws }
       el.Style.DashWord := DashWordOf(APics[i].StyleDash);
       el.Style.DashOffsetLogical := APics[i].StyleDashOffset;
+      { [R7-U] its cap, join and miterLimit [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].StyleCap, APics[i].StyleJoin, APics[i].StyleMiter);
+      { [R7-P] its pen through the unit path's transform (strokeNoScale):
+        stretched where the symbol's size is not square }
+      if APics[i].HasGlobal then TyStyleNoScalePen(el.Style, APics[i].Global);
     end;
     if not IsNan(APics[i].StyleOpacity) then
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].StyleOpacity;
     TyStyleSetShadow(el.Style, APics[i].StyleShadow);
     if (APics[i].ScaleX <> 0) and (APics[i].ScaleY <> 0) then
     begin
@@ -3734,6 +3810,8 @@ begin
       if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
       d := Chain(IS_, 'borderJoin');
       if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+      d := Chain(IS_, 'borderMiterLimit');
+      if d <> nil then P.Miter := NumOf(d) else P.Miter := NaN;
       P.Shadow := MkShadow(IS_);
       hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
         and (P.LineWidth > 0);
@@ -3889,6 +3967,8 @@ begin
       { [R2-I5] a word, measured again against the width a state draws }
       el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
+      { [R7-U] its cap, join and miterLimit [was: not drawn] }
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
     end
     else if (APics[i].LineWidth > 0) and (APics[i].Stroke = '')
       and (APics[i].StrokeData <> nil) and TyTryReadGradient(APics[i].StrokeData, g) then
@@ -3899,12 +3979,14 @@ begin
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
       el.Style.DashWord := DashWordOf(APics[i].Dash);
       el.Style.DashOffsetLogical := APics[i].DashOffset;
+      MkSetEnds(el.Style, APics[i].LineCap, APics[i].LineJoin, APics[i].Miter);
     end;
     { getBoundingRect: the polygon's box grown by its stroke [Batch 105] }
     el.Style.GradBoxSet := True;
     el.Style.GradBox := APics[i].GradBox;
     if not IsNan(APics[i].Opacity) then
-      el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+      { [R7-V] as written (the canvas clamps it) }
+      el.Style.Alpha := APics[i].Opacity;
     TyStyleSetShadow(el.Style, APics[i].Shadow);
     AList.Add(el);
     Inc(Result);
