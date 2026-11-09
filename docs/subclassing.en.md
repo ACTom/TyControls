@@ -186,10 +186,11 @@ Hidden properties come in two kinds. Those the custom class declares `stored Fal
 | Cascader / tree-select node editors | `TTyCascader`, `TTyTreeSelect` | Double-click to edit the option tree |
 | List group editor | `TTyListGroupPanel` | Edit the groups |
 | Terminal editor | `TTyTerminalView` | Import / export a colour scheme |
-| Chart editor | `TTyAdvanceChart` | Edit `Option` (the ECharts option), edit the series and data |
 | Image collection editor | `TTyImageCollection` | Manage the images |
 | Dialog preview | each dialog | Preview |
 | Icon browser | `TTyIconFont`, `TTyLucideIconFont`, `TTyVirtualImageList`, `TTyLucideImageList` | Browse icons |
+
+The advanced chart is in a separate project, [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart), and so is its chart editor.
 
 `TTyFormSurface`'s `Purpose` and `Version` editors stay on the final class too; a surface subclass that publishes `Purpose` shows it as a plain read-only string.
 

@@ -65,7 +65,6 @@ type
     procedure TheThirdPartyNoticeCoversTheTerminalPort;
     procedure EveryAssetAShippedThemeReferencesIsShipped;
     procedure BothScriptsShipTheSameTrees;
-    procedure TheChartOptionEditorStaysAShell;
     procedure EveryUnitOnDiskIsListedInItsPackage;
     { [S1] the include files are named by no .lpk }
     procedure EveryIncludeFileAPackagedUnitNamesShips;
@@ -432,53 +431,6 @@ begin
   end;
 end;
 
-procedure TReleaseManifestTest.TheChartOptionEditorStaysAShell;
-var
-  sl: TStringList;
-  src, bad, line: string;
-  i: Integer;
-const
-  { The names of the low-level primitives. Every one of them answers a question
-    the editor must NOT answer for itself -- where the caret is structurally,
-    whether a path resolves, what the schema says about a node. The editor is
-    allowed to call the composed ones (TyOptCompletionsAt, TyOptDiagnose,
-    TyOptStatusAt, TyOptTreeInsert, TyOptCompletionInsert, TyOptSliceBefore,
-    TyOptEdgesOf, TyOptSummary, TyOptDesc) and nothing below them. }
-  cReserved: array[0..4] of string = (
-    'TyOptContextAt', 'TyOptValidate', 'TyOptFindFor', 'TyOptKeyPositions',
-    'TyOptFindNearestKey');
-begin
-  { THE RULE IS WORTH WHAT ENFORCES IT. 'The dialog only puts the list in a box'
-    is the reason four units in source/ exist at all, and nothing checked it --
-    designtime/ is outside the test build, so a judgement added in there would
-    never be noticed until it was wrong in front of a user.
-
-    This reads the file, which is all tests/ can do about that directory. It is
-    a blunt instrument and it is meant to be: the moment the editor needs one of
-    these, the answer is to add a composed function beside the others in
-    source/, where a test can reach it -- not to reach past them here. }
-  sl := TStringList.Create;
-  try
-    sl.LoadFromFile(RepoRoot + 'designtime' + PathDelim
-      + 'tyControls.Design.AdvanceChart.Editor.pas');
-    bad := '';
-    for i := 0 to sl.Count - 1 do
-    begin
-      line := Trim(sl[i]);
-      { Comments name these deliberately, and a comment decides nothing. }
-      if (Copy(line, 1, 1) = '{') or (Copy(line, 1, 2) = '//') then Continue;
-      for src in cReserved do
-        if Pos(src, line) > 0 then
-          bad := bad + LineEnding + '  line ' + IntToStr(i + 1) + ': ' + line;
-    end;
-    AssertEquals('the option editor reaches past the tested layer -- add a '
-      + 'composed function in source/ instead, where a test can see it:'
-      + bad, '', bad);
-  finally
-    sl.Free;
-  end;
-end;
-
 procedure TReleaseManifestTest.EveryUnitOnDiskIsListedInItsPackage;
 
   procedure CheckDir(const ADir, ALpk: string; ABad: TStrings);
@@ -546,7 +498,7 @@ var
   p, q, found: Integer;
 begin
   { NO MANIFEST NAMES AN INCLUDE FILE. The .lpk lists units, and both directions above walk
-    units; a unit split into include files (the terminal view, the chart control [S1]) keeps
+    units; a unit split into include files (the terminal view [S1]) keeps
     most of its code in files that only its own $I directives name. They ship today because
     both scripts copy source/ whole -- this keeps a later filter from shipping a unit without
     the files it cannot compile without. Each $I in each packaged unit, and in each include
@@ -591,7 +543,7 @@ begin
         end;
       until False;
     end;
-    AssertTrue('the units name their include files (' + IntToStr(found) + ')', found >= 40);
+    AssertTrue('the units name their include files (' + IntToStr(found) + ')', found >= 18);
     AssertEquals('include files a packaged unit needs that the release does not ship:' + bad,
       '', bad);
   finally

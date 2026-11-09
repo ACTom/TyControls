@@ -10,7 +10,6 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
-  tyControls.AdvanceChart, tyControls.Design.AdvanceChart.Editor,
   tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
@@ -1144,10 +1143,6 @@ end;
 
 procedure RegisterComponentEditors;
 begin
-  // Double-clicking the chart opens the same option dialog its property editor
-  // does. One verb, one code path -- a second entry point that assembled the
-  // dialog its own way is how the two drift apart.
-  RegisterComponentEditor(TTyAdvanceChart, TTyAdvanceChartEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // Tool window bars: New Tool Window / Show Window; tool windows: Add Actions Area / Move to

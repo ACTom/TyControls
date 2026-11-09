@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 195 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 194 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -29,8 +29,8 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 | **`TTyStringGrid`** per-column editors: check box, rating, colour, button<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
 | **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **`TTyChart`** line, bar, pie, donut<br>![chart](docs/images/chart.png) |
 | **`TTyRibbon`** ribbon, quick access toolbar, Alt key tips<br>![ribbon](docs/images/ribbon.png) | **`TTyCalendar`** week numbers, today highlight, selectable range<br>![calendar](docs/images/calendar.png) |
-| **`TTyAdvanceChart`** reads ECharts options as they are; the example runs the official gallery's<br>![ECharts-style chart](docs/images/advchart.png) | **`TTyDBGrid`** a grid on a dataset: check boxes, lookup lists, formatted amounts, multiselect<br>![data-aware grid](docs/images/dbgrid.png) |
-| **`TTyPropertyGrid`** inspects whichever control you click and writes edits back<br>![property grid](docs/images/propertygrid.png) | **Multi-thumb track bars** ranges, several values, gradient stops<br>![multi-thumb track bars](docs/images/trackbar.png) |
+| **`TTyDBGrid`** a grid on a dataset: check boxes, lookup lists, formatted amounts, multiselect<br>![data-aware grid](docs/images/dbgrid.png) | **`TTyPropertyGrid`** inspects whichever control you click and writes edits back<br>![property grid](docs/images/propertygrid.png) |
+| **Multi-thumb track bars** ranges, several values, gradient stops<br>![multi-thumb track bars](docs/images/trackbar.png) | |
 
 Every example, every tab page, in light and dark: see the [gallery](docs/gallery.en.md).
 
@@ -38,8 +38,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 
 ## Features
 
-- **195 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
-- **ECharts-style charts**: `TTyAdvanceChart` is configured with an Apache ECharts option, so the ECharts docs apply and options from its examples paste in unchanged; it draws line, bar, pie, scatter, radar, heatmap, tree, sunburst, Sankey and more, with axes and text that follow the theme
+- **194 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
 - **Data-aware controls**: a separate package, `tycontrols_db`, with 22 controls you bind to a `TDataSource` field; the data grid `TTyDBGrid` behaves like LCL's `TDBGrid`
 - **Property grid**: `TTyPropertyGrid` lists any object's published properties at run time and writes edits straight back, with multiselect, a name filter and categories
 - **Terminal**: `TTyTerminalView` parses output and encodes keys after xterm.js; in the example, hooked up to ConPTY / a PTY, it is a working shell window
@@ -87,7 +86,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-195 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+194 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -345,7 +344,7 @@ CharImage1.GlyphName := 'house';
 
 The font is embedded in the unit — nothing to ship or install, and it costs nothing if you don't use it. `TTyLucideImageList` on the palette works as a drop-in image list. Licensed ISC / MIT with no attribution required at runtime; just ship [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release.
 
-### Shapes & charts · `TyControls Shapes & Charts` (5)
+### Shapes & charts · `TyControls Shapes & Charts` (4)
 
 | Control | Description |
 |---|---|
@@ -353,7 +352,8 @@ The font is embedded in the unit — nothing to ship or install, and it costs no
 | `TTyStarShape` | Star with a configurable point count |
 | `TTyArrow` | Directional arrow |
 | `TTyChart` | Chart: line / bar / pie |
-| `TTyAdvanceChart` | Advanced chart configured by an Apache ECharts option, with dataZoom, visualMap, tooltips and a toolbox |
+
+The advanced chart is in a separate project, [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart).
 
 ### Dialogs · `TyControls Dialogs` (20)
 
@@ -380,7 +380,7 @@ The font is embedded in the unit — nothing to ship or install, and it costs no
 | `TTyNotification` | Corner toast |
 | `TTyIconBrowserDialog` | Icon browser |
 
-The bigger controls have docs of their own (in Chinese): [grid.md](docs/controls/grid.md) (`TTyStringGrid`) · [treeview.md](docs/controls/treeview.md) (`TTyTreeView`) · [ttyform.md](docs/controls/ttyform.md) (`TTyForm`) · [dbgrid.md](docs/controls/dbgrid.md) (`TTyDBGrid`) · [propertygrid.md](docs/controls/propertygrid.md) (`TTyPropertyGrid`) · [terminal.md](docs/controls/terminal.md) (`TTyTerminalView`) · [multitrackbar.md](docs/controls/multitrackbar.md) (the multi-thumb track bars) · [advancechart.md](docs/controls/advancechart.md) (`TTyAdvanceChart`).
+The bigger controls have docs of their own (in Chinese): [grid.md](docs/controls/grid.md) (`TTyStringGrid`) · [treeview.md](docs/controls/treeview.md) (`TTyTreeView`) · [ttyform.md](docs/controls/ttyform.md) (`TTyForm`) · [dbgrid.md](docs/controls/dbgrid.md) (`TTyDBGrid`) · [propertygrid.md](docs/controls/propertygrid.md) (`TTyPropertyGrid`) · [terminal.md](docs/controls/terminal.md) (`TTyTerminalView`) · [multitrackbar.md](docs/controls/multitrackbar.md) (the multi-thumb track bars).
 
 ---
 
@@ -414,7 +414,6 @@ The repository also has a theme editor, `tools/themebuilder`: the preview follow
 
 | Example | Contents |
 |---|---|
-| [advchart](examples/advchart/) | Advanced chart: the 244 options of the Apache ECharts example gallery, loaded as they are and sorted into the gallery's categories; edit an option on the right and it redraws, and anything it cannot draw yet is listed with the reason; save as PNG |
 | [antdesign](examples/antdesign/) | Ant Design Pro-style admin (sider + 6 pages), runtime theming |
 | [dbcontrols](examples/dbcontrols/) | Data-aware controls: 21 of them bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
 | [dbgrid](examples/dbgrid/) | Data grid: a thousand orders, design-time columns (check box, lookup, memo, formatted amount), sorting by title click, deleting a multiselection, a read-only switch |

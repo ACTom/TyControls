@@ -70,7 +70,6 @@ uses
   tyControls.Transfer, tyControls.TreeSelect, tyControls.Cascader, tyControls.Popover,
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox,
-  tyControls.AdvanceChart,
   { The data-aware controls (the tycontrols_db package). }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
   tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
@@ -212,7 +211,7 @@ begin
      TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',
-    [TTyShape, TTyStarShape, TTyArrow, TTyChart, TTyAdvanceChart]);
+    [TTyShape, TTyStarShape, TTyArrow, TTyChart]);
   // Dialogs: message / input family / pickers / find-replace / progress / about / file.
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,

@@ -144,9 +144,7 @@ end;
   Failing entries are reported by name so the fix is either "add it to the .pot" or "give it
   a non-empty English baseline", decided per string.
 
-  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts. The
-  chart's own (its runtime unit and its two design-time units) are checked the same way in
-  test.advchart.i18n. }
+  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts. }
 procedure TI18NTest.TestEveryStrConstsResourcestringIsInThePot;
 var
   root: string;
@@ -582,48 +580,6 @@ begin
   end;
 end;
 
-{ AdvChart's calendar carries ECharts' own name tables -- nameMap 'ZH' is these month and day
-  names, picked by the chart's option as upstream picks them -- and recognises the system's
-  Chinese day names by their prefix to shorten them. Data, not text written for a user. }
-const
-  AdvChartCalendarData: array[0..20] of string = (
-    '''1月''', '''2月''', '''3月''', '''4月''', '''5月''', '''6月''', '''7月''', '''8月''',
-    '''9月''', '''10月''', '''11月''', '''12月''',
-    '''日''', '''一''', '''二''', '''三''', '''四''', '''五''', '''六''',
-    '''周''', '''星期''');
-
-  { AdvChart's geo carries ECharts' fixes for a map registered as 'china' (src/coord/geo/fix/
-    nanhai.ts, textCoord.ts, diaoyuIsland.ts): region names matched against the map's own
-    feature names, so they must be the names the map data uses. Data, not text for a user. }
-  AdvChartGeoFixData: array[0..6] of string = (
-    '''北京''', '''南海诸岛''', '''台湾''', '''天津''', '''广东''', '''澳门''', '''香港''');
-
-{ AFound (ChineseLiterals' lines) without the lines whose literal is one of AExempt. }
-function WithoutLiterals(const AFound: string; const AExempt: array of string): string;
-var
-  lines: TStringList;
-  i, j, p: Integer;
-  lit: string;
-  keep: Boolean;
-begin
-  Result := '';
-  lines := TStringList.Create;
-  try
-    lines.Text := AFound;
-    for i := 0 to lines.Count - 1 do
-    begin
-      p := Pos(': ', lines[i]);
-      lit := Copy(lines[i], p + 2, MaxInt);
-      keep := True;
-      for j := Low(AExempt) to High(AExempt) do
-        if lit = AExempt[j] then keep := False;
-      if keep then Result := Result + lines[i] + LineEnding;
-    end;
-  finally
-    lines.Free;
-  end;
-end;
-
 { #68. Text a user reads is a resourcestring, so a catalogue can translate it (CONTRIBUTING);
   an error raised at a developer is English, as every other one in the library is. The value
   list editor's "More…" colour row and its colour dialog's title, and the ribbon's overflow
@@ -650,12 +606,7 @@ begin
       if SameText(name, 'tyControls.BuiltinThemeData.pas')
         or SameText(name, 'tyControls.DefaultTheme.pas') then Continue;
       Inc(scanned);
-      if SameText(name, 'tyControls.AdvanceChart.Calendar.pas') then
-        found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartCalendarData)
-      else if SameText(name, 'tyControls.AdvanceChart.GeoFix.pas') then
-        found := found + WithoutLiterals(ChineseLiterals(files[i]), AdvChartGeoFixData)
-      else
-        found := found + ChineseLiterals(files[i]);
+      found := found + ChineseLiterals(files[i]);
     end;
     AssertTrue('the scan read the library (' + IntToStr(scanned) + ' units)', scanned > 100);
     AssertEquals('Chinese text in a string literal -- a resourcestring if a user reads it, '

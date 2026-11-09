@@ -18,11 +18,11 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons, tyControls.ValueListEditor,
-  tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
+  tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
   tyControls.ComboBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
   tyControls.OfficeComboBox, tyControls.Grid, tyControls.Columns,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
-  tyControls.Design.Css.Editor, tyControls.Design.AdvanceChart.Editor;
+  tyControls.Design.Css.Editor;
 
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
@@ -738,11 +738,6 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
-  // The chart's whole API is this one string, so it gets the biggest editor in the
-  // package: SynEdit, catalog completion, a browsable reference and live diagnostics.
-  // On the custom class (plan D2), so a third-party chart that publishes Option gets it too.
-  RegisterPropertyEditor(TypeInfo(string), TTyCustomAdvanceChart, 'Option',
-    TTyChartOptionProperty);
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
   // On the custom classes (plan D2), so a third-party Lucide list or font that publishes
   // License gets the same '...'.

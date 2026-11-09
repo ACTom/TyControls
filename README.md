@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。194 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -29,8 +29,8 @@ Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.t
 | **`TTyStringGrid`** 按列指定编辑器:复选、星级、取色、按钮<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
 | **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **`TTyChart`** 折线、柱状、饼图、环形图<br>![图表](docs/images/chart.png) |
 | **`TTyRibbon`** 功能区、快速访问栏、Alt 键提示<br>![功能区](docs/images/ribbon.png) | **`TTyCalendar`** 周数、今日高亮、可选日期范围<br>![日历](docs/images/calendar.png) |
-| **`TTyAdvanceChart`** 直接读 ECharts 的配置,示例里是官方图库的例子<br>![ECharts 式图表](docs/images/advchart.png) | **`TTyDBGrid`** 绑数据集的表格:勾选、查找下拉、格式化金额、多选<br>![数据表格](docs/images/dbgrid.png) |
-| **`TTyPropertyGrid`** 属性表格:点哪个控件就检查哪个,改了直接写回<br>![属性表格](docs/images/propertygrid.png) | **多滑块 TrackBar** 区间、多值、渐变色标<br>![多滑块](docs/images/trackbar.png) |
+| **`TTyDBGrid`** 绑数据集的表格:勾选、查找下拉、格式化金额、多选<br>![数据表格](docs/images/dbgrid.png) | **`TTyPropertyGrid`** 属性表格:点哪个控件就检查哪个,改了直接写回<br>![属性表格](docs/images/propertygrid.png) |
+| **多滑块 TrackBar** 区间、多值、渐变色标<br>![多滑块](docs/images/trackbar.png) | |
 
 每个示例每个标签页的亮色、暗色截图都在[图库](docs/gallery.md)里。
 
@@ -38,8 +38,7 @@ Lazarus 自绘控件库。195 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **195 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
-- **ECharts 式图表**:`TTyAdvanceChart` 的配置就是 Apache ECharts 的 option,ECharts 的文档可以直接参考,示例里的配置原样贴进来;能画折线、柱状、饼图、散点、雷达、热力图、树图、旭日图、桑基图等,坐标轴和文字跟着主题换肤
+- **194 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
 - **数据感知控件**:单独的 `tycontrols_db` 包,22 个控件绑上 `TDataSource` 的字段就能用,其中数据表格 `TTyDBGrid` 的行为照 LCL `TDBGrid`
 - **属性表格**:`TTyPropertyGrid` 在程序运行时列出任意对象的 published 属性,改了直接写回,可多选、按名字过滤、分类显示
 - **终端**:`TTyTerminalView` 照 xterm.js 解析输出、编码按键;示例里接上 ConPTY / PTY 就是一个能用的 shell 窗口
@@ -87,7 +86,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-195 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+194 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -345,7 +344,7 @@ CharImage1.GlyphName := 'house';
 
 字体内嵌在单元里,不用随程序分发文件;不 `uses` 就不进最终程序。组件面板上的 `TTyLucideImageList` 可以直接当图像列表拖放使用。许可为 ISC / MIT,商用无需署名,随发布带上 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 即可。
 
-### 图形与图表 · `TyControls Shapes & Charts`(5)
+### 图形与图表 · `TyControls Shapes & Charts`(4)
 
 | 控件 | 说明 |
 |---|---|
@@ -353,7 +352,8 @@ CharImage1.GlyphName := 'house';
 | `TTyStarShape` | 星形,角数可调 |
 | `TTyArrow` | 方向箭头 |
 | `TTyChart` | 图表:折线 / 柱状 / 饼图 |
-| `TTyAdvanceChart` | 高级图表:配置照 Apache ECharts 的 option 写,带缩放、视觉映射、提示框、工具栏 |
+
+高级图表在独立项目 [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) 里。
 
 ### 对话框 · `TyControls Dialogs`(20)
 
@@ -380,7 +380,7 @@ CharImage1.GlyphName := 'house';
 | `TTyNotification` | 角落通知,自动消失 |
 | `TTyIconBrowserDialog` | 图标浏览器 |
 
-几个大控件的完整能力见各自文档:[grid.md](docs/controls/grid.md)(`TTyStringGrid`)· [treeview.md](docs/controls/treeview.md)(`TTyTreeView`)· [ttyform.md](docs/controls/ttyform.md)(`TTyForm`)· [dbgrid.md](docs/controls/dbgrid.md)(`TTyDBGrid`)· [propertygrid.md](docs/controls/propertygrid.md)(`TTyPropertyGrid`)· [terminal.md](docs/controls/terminal.md)(`TTyTerminalView`)· [multitrackbar.md](docs/controls/multitrackbar.md)(多滑块)· [advancechart.md](docs/controls/advancechart.md)(`TTyAdvanceChart`)。
+几个大控件的完整能力见各自文档:[grid.md](docs/controls/grid.md)(`TTyStringGrid`)· [treeview.md](docs/controls/treeview.md)(`TTyTreeView`)· [ttyform.md](docs/controls/ttyform.md)(`TTyForm`)· [dbgrid.md](docs/controls/dbgrid.md)(`TTyDBGrid`)· [propertygrid.md](docs/controls/propertygrid.md)(`TTyPropertyGrid`)· [terminal.md](docs/controls/terminal.md)(`TTyTerminalView`)· [multitrackbar.md](docs/controls/multitrackbar.md)(多滑块)。
 
 ---
 
@@ -414,7 +414,6 @@ CharImage1.GlyphName := 'house';
 
 | 示例 | 内容 |
 |---|---|
-| [advchart](examples/advchart/) | 高级图表:Apache ECharts 官方示例库的 244 个配置原样载入,按类别分页;右侧的配置可以直接改了重画,画不了的部分照实列出原因;可存 PNG |
 | [antdesign](examples/antdesign/) | 仿 Ant Design Pro 后台(侧边导航 + 6 页),运行时换肤 |
 | [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
 | [dbgrid](examples/dbgrid/) | 数据表格:一千条订单,设计期列(勾选、查找、备注、金额格式),标题点击排序,多选删除,只读开关 |

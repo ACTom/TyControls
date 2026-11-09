@@ -21,11 +21,7 @@ The same demo window in every built-in skin, plus green, the photo theme in `the
 
 ## Examples
 
-### advchart
-
-| Light | Dark |
-|---|---|
-| ![advchart](gallery/advchart/main-light.png) | ![advchart](gallery/advchart/main-dark.png) |
+The advanced chart is in a separate project, [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart), along with its example.
 
 ### antdesign
 

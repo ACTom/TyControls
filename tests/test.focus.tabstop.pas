@@ -43,7 +43,7 @@ uses
   tyControls.Transfer, tyControls.Steps,
   { non-focusable side, same extension }
   tyControls.GridPanel, tyControls.ScrollPanel, tyControls.CoolBar, tyControls.ToolBarEx,
-  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart,
+  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form,
   { the data-aware controls (tycontrols_db), both sides }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.DateTime,
   tyControls.DB.Navigator, tyControls.DB.Grid;
@@ -378,12 +378,6 @@ begin
       that stored it load, but it has no effect; ScrollByKey is how a host reuses the bar's
       keys. }
     TTyScrollBar,
-    { TTyAdvanceChart is a chart: it reads an option tree and draws it. Charts are pointed
-      at, not typed into -- ECharts' own keyboard story is a screen-reader description, not
-      a caret -- so it stays out of the tab order like every other display surface here.
-      Note that TTyChart is on NEITHER table, and correctly so: it is a graphic control,
-      and these tables only hold windowed classes. }
-    TTyAdvanceChart,
     { TTyTitleBar is the form's own chrome and a designer container (a menu bar, a quick
       access rail and a search box get dropped INTO it). Its buttons are TTyCaptionButtons
       with their own focus story; the bar itself is a drag handle, and a tab stop on it would

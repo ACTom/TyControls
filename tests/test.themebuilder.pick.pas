@@ -433,7 +433,7 @@ procedure TTbCoverageTests.TestWhatThePreviewShows;
 const
   cIn: array[0..7] of string = ('TyButton', 'TyTab', 'TyScrollThumb', 'TyMenuItem',
     'TyNotificationClose', 'TyCaptionButton', 'TyTitleBar', 'TyToggleKnob');
-  cOut: array[0..2] of string = ('TyRibbon', 'TyTerminal', 'TyAdvChart');
+  cOut: array[0..1] of string = ('TyRibbon', 'TyTerminal');
 var
   frame: TTbPreviewFrame;
   prev: TStringList;
@@ -783,7 +783,7 @@ var
   units: Integer;
   catalogue: TStringArray;
 begin
-  { the generated catalog and what add-ons registered (the chart's keys), as TbIsKnownTypeKey }
+  { the generated catalog and what add-ons registered, as TbIsKnownTypeKey }
   catalogue := TyCatalogAllTypeKeys;
   units := 0;
   if FindFirst(TbRepoDir + 'source' + PathDelim + 'tyControls.*.pas', faAnyFile, sr) = 0 then

@@ -406,7 +406,7 @@ var
   i: Integer;
   aside: TTyAddOnsAside;
 begin
-  aside := TySetAsideAddOns;   // the runner links the chart, which registers one at start-up
+  aside := TySetAsideAddOns;   // a linked add-on package registers itself at start-up
   items := TStringList.Create;
   try
     AssertEquals('no add-on is registered here', 0, Length(TyAddOnNames));

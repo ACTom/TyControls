@@ -1063,8 +1063,8 @@ end;
   Through a host form, as in G9 (FreshStreamBody), with clock values pinned and only the values
   read off the machine or the locale masked (CMachineValues). Sizes are measured on Windows,
   as G6's are. The classes this plan does not split
-  (CNotSplit) stay out: the forms cannot sit on a form. The calendar, the date-time picker
-  and the chart joined later, each with its own section written by its split.
+  (CNotSplit) stay out: the forms cannot sit on a form. The calendar and the date-time picker
+  joined later, each with its own section written by its split.
 
   Rewrite with TY_WRITE_FRESH_STREAMS=1 only when a change to what a form file says is the
   point of the commit (or a new class is registered); the diff of the fixture is then the
@@ -1228,8 +1228,6 @@ initialization
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog',
     // after the AdvChart merge (plan appendix B)
     'TTyCalendar', 'TTyDateTimePicker',
-    // the chart, once its fourth round had merged (2026-10-26)
-    'TTyAdvanceChart',
     // DB
     'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit', 'TTyDBCurrencyEdit',
     'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox', 'TTyDBToggleSwitch', 'TTyDBRadioGroup',

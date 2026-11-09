@@ -22,7 +22,7 @@ type
 implementation
 
 uses
-  tyControls.ActivityBar, tyControls.ActivityIndicator, tyControls.AdvanceChart, tyControls.AdvancedComboBox,
+  tyControls.ActivityBar, tyControls.ActivityIndicator, tyControls.AdvancedComboBox,
   tyControls.AdvancedListBox, tyControls.Alert, tyControls.AnalogClock, tyControls.Arrow,
   tyControls.Badge, tyControls.BalloonHint, tyControls.Bevel, tyControls.Breadcrumb,
   tyControls.Button, tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit,
@@ -62,8 +62,8 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..195] of TComponentClass = (
-    TTyAboutDialog, TTyActivityBar, TTyActivityIndicator, TTyAdvanceChart,
+  Palette: array[0..194] of TComponentClass = (
+    TTyAboutDialog, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
     TTyBreadcrumb, TTyButton, TTyButtonGroup, TTyCalcCurrencyEdit,

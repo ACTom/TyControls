@@ -21,11 +21,7 @@
 
 ## 示例
 
-### advchart
-
-| 亮色 | 暗色 |
-|---|---|
-| ![advchart](gallery/advchart/main-light.png) | ![advchart](gallery/advchart/main-dark.png) |
+高级图表在独立项目 [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) 里，它的示例也在那边。
 
 ### antdesign
 

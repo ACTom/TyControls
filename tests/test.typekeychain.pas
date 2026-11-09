@@ -733,7 +733,7 @@ begin
   { Keys registered before this test ran -- by units linked into the program, as the
     data-aware package's TyDBXxx keys are -- are on the panel list too. Count them rather than
     assume an empty registry. The catalogue is the generated one plus what add-ons linked into
-    the program registered (the chart's TyAdvChartXxx keys). }
+    the program registered. }
   catalogue := TyCatalogAllTypeKeys;
   already := 0;
   for i := 0 to FBefore.Count - 1 do

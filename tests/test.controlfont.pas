@@ -238,12 +238,7 @@ end;
   font bold. Every reading of a weight as a number goes through TyFontWeightOf or
   TyFontStylesOf; a comparison or arithmetic on a bare FontWeight / AWeight anywhere else in
   source/ is a reader that forgot. Equality between two weights compares them whole and is no
-  reading; equality with a number is.
-
-  The AdvanceChart's model units (tyControls.AdvanceChart.*.pas, but not the control's own
-  tyControls.AdvanceChart.pas) are left out: their FontWeight is an
-  ECharts text style's CSS weight, read from the option or resolved per chart part through the
-  model -- never a control's CurrentStyle, the one style the flags are laid on. }
+  reading; equality with a number is. }
 procedure TControlFontTest.TestNoUnitReadsTheWeightAsANumber;
 var files, sl: TStringList;
   i, j: Integer;
@@ -266,8 +261,6 @@ begin
     bad := '';
     for i := 0 to files.Count - 1 do
     begin
-      if (Pos('tycontrols.advancechart.', LowerCase(ExtractFileName(files[i]))) = 1)
-        and not SameText(ExtractFileName(files[i]), 'tyControls.AdvanceChart.pas') then Continue;
       sl.LoadFromFile(files[i]);
       sl.Text := TyTestCodeOnly(sl.Text);   // prose about a weight is not a reading of one
       for j := 0 to sl.Count - 1 do

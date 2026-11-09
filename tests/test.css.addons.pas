@@ -10,8 +10,8 @@ uses
   Classes, SysUtils, fpcunit, testregistry, tyControls.StyleModel;
 
 type
-  { The add-ons registered when a test starts -- this runner links the chart, whose unit
-    registers "advchart" in its initialization -- set aside so the test sees an empty registry,
+  { The add-ons registered when a test starts -- a program that links an add-on package has it
+    registered by the package's initialization -- set aside so the test sees an empty registry,
     and put back after it. Setting aside tells no listener, so a style model alive meanwhile
     keeps them in its base layer; putting back is a registration and reseeds the models alive. }
   TTyAddOnsAside = record

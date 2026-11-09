@@ -186,10 +186,11 @@ protected 的属性照样能在自己的 published 段里发布。只是想让�
 | 级联选择 / 树形选择的节点编辑器 | `TTyCascader`、`TTyTreeSelect` | 双击编辑选项树 |
 | 列表分组编辑器 | `TTyListGroupPanel` | 编辑分组 |
 | 终端编辑器 | `TTyTerminalView` | 导入 / 导出配色方案 |
-| 图表编辑器 | `TTyAdvanceChart` | 编辑 `Option`（ECharts 配置）、编辑系列和数据 |
 | 图像集合编辑器 | `TTyImageCollection` | 管理图片 |
 | 对话框预览 | 各对话框 | 预览 |
 | 图标浏览器 | `TTyIconFont`、`TTyLucideIconFont`、`TTyVirtualImageList`、`TTyLucideImageList` | 浏览图标 |
+
+高级图表在独立项目 [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) 里，它的图表编辑器也在那边。
 
 `TTyFormSurface` 的 `Purpose` 说明和 `Version` 编辑器也留在最终类上；你的表面子类发布 `Purpose` 时，它只是一个普通的只读字符串。
 

@@ -13,30 +13,9 @@ implementation
 uses
   Classes,
   tyControls.Accel,
+  tyControls.Accessible,
   tyControls.ActivityBar,
   tyControls.ActivityIndicator,
-  tyControls.AdvanceChart.BarLayout,
-  tyControls.AdvanceChart.Builder,
-  tyControls.AdvanceChart.Catalog,
-  tyControls.AdvanceChart.Complete,
-  tyControls.AdvanceChart.Coord,
-  tyControls.AdvanceChart.Data,
-  tyControls.AdvanceChart.Diagnose,
-  tyControls.AdvanceChart.Handlers,
-  tyControls.AdvanceChart.Layout,
-  tyControls.AdvanceChart.Locate,
-  tyControls.AdvanceChart.Marks,
-  tyControls.AdvanceChart.Measure,
-  tyControls.AdvanceChart.Option,
-  tyControls.AdvanceChart.Paint,
-  tyControls.AdvanceChart.Render,
-  tyControls.AdvanceChart.Scale,
-  tyControls.AdvanceChart.Series,
-  tyControls.AdvanceChart.Shape,
-  tyControls.AdvanceChart.Stack,
-  tyControls.AdvanceChart.Style,
-  tyControls.AdvanceChart.Types,
-  tyControls.AdvanceChart,
   tyControls.AdvancedComboBox,
   tyControls.AdvancedListBox,
   tyControls.Alert,
@@ -56,6 +35,7 @@ uses
   tyControls.CalcEdit,
   tyControls.Calculator,
   tyControls.Calendar,
+  tyControls.CanvasText,
   tyControls.Card,
   tyControls.Cascader,
   tyControls.CharImage,
@@ -79,6 +59,7 @@ uses
   tyControls.ControlBar,
   tyControls.Controller,
   tyControls.CoolBar,
+  tyControls.Css.AddOns,
   tyControls.Css.Catalog,
   tyControls.Css.Complete,
   tyControls.Css.Lexer,
@@ -113,8 +94,10 @@ uses
   tyControls.FilterComboBox,
   tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
+  tyControls.FontFamilies,
   tyControls.FontListBox,
   tyControls.FontSizeComboBox,
+  tyControls.FontUnits,
   tyControls.Form,
   tyControls.FormSurface,
   tyControls.Gauge,
@@ -152,6 +135,7 @@ uses
   tyControls.Memo,
   tyControls.Menu,
   tyControls.Meter,
+  tyControls.MultiTrackBar,
   tyControls.NativeStyler,
   tyControls.Notification,
   tyControls.NumericEdit,
@@ -168,6 +152,7 @@ uses
   tyControls.PopupSurface,
   tyControls.PreviewBox,
   tyControls.ProgressBar,
+  tyControls.PropertyGrid,
   tyControls.QtWS,
   tyControls.RadioGroup,
   tyControls.Rating,
@@ -204,6 +189,7 @@ uses
   tyControls.Tag,
   tyControls.Terminal,
   tyControls.Terminal.Buffer,
+  tyControls.Terminal.ColorScheme,
   tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard,
   tyControls.Terminal.Links,
@@ -248,89 +234,129 @@ end;
 
 procedure PrRegisterClasses;
 begin
+  Reg(TTyCustomActivityBar);
   Reg(TTyActivityBar);
+  Reg(TTyCustomActivityIndicator);
   Reg(TTyActivityIndicator);
-  Reg(TTyCartesian2D);
-  Reg(TTyPainterTextMeasurer);
-  Reg(TTyScaleMapperBase);
-  Reg(TTyLinearScaleMapper);
-  Reg(TTyLogScaleMapper);
-  Reg(TTyBreakScaleMapper);
-  Reg(TTyOrdinalScale);
-  Reg(TTyIntervalScale);
-  Reg(TTyNonRefCountedObject);
-  Reg(TTyAdvanceChart);
   Reg(TTyAdvancedComboPopupList);
+  Reg(TTyCustomAdvancedComboBox);
   Reg(TTyAdvancedComboBox);
+  Reg(TTyCustomAdvancedListBox);
   Reg(TTyAdvancedListBox);
+  Reg(TTyCustomAlert);
   Reg(TTyAlert);
+  Reg(TTyCustomAnalogClock);
   Reg(TTyAnalogClock);
+  Reg(TTyCustomArrow);
   Reg(TTyArrow);
+  Reg(TTyCustomBadge);
   Reg(TTyBadge);
   Reg(TTyBalloonWindow);
+  Reg(TTyCustomBalloonHint);
   Reg(TTyBalloonHint);
+  Reg(TTyCheckActionLink);
   Reg(TTyGraphicControl);
   Reg(TTyCustomControl);
+  Reg(TTyCustomBevel);
   Reg(TTyBevel);
+  Reg(TTyCustomBreadcrumb);
   Reg(TTyBreadcrumb);
+  Reg(TTyCustomButton);
   Reg(TTyButton);
+  Reg(TTyCustomButtonGroup);
   Reg(TTyButtonGroup);
+  Reg(TTyCustomCalcCurrencyEdit);
   Reg(TTyCalcCurrencyEdit);
   Reg(TTyCalcDropdown);
+  Reg(TTyCustomCalcEdit);
   Reg(TTyCalcEdit);
+  Reg(TTyCustomCalculator);
   Reg(TTyCalculator);
+  Reg(TTyCustomCalendar);
   Reg(TTyCalendar);
+  Reg(TTyCanvasTextRenderer);
+  Reg(TTyCustomCard);
   Reg(TTyCard);
   Reg(TTyCascaderNode);
   Reg(TTyCascaderNodes);
   Reg(TTyCascaderPanel);
+  Reg(TTyCustomCascader);
   Reg(TTyCascader);
+  Reg(TTyCustomCharImage);
   Reg(TTyCharImage);
   Reg(TTyChartSeriesItem);
   Reg(TTyChartSeries);
+  Reg(TTyCustomChart);
   Reg(TTyChart);
+  Reg(TTyCustomCheckBox);
   Reg(TTyCheckBox);
+  Reg(TTyCustomRadioButton);
   Reg(TTyRadioButton);
   Reg(TTyCheckComboPopupList);
+  Reg(TTyCustomCheckComboBox);
   Reg(TTyCheckComboBox);
+  Reg(TTyCustomCheckGroup);
   Reg(TTyCheckGroup);
+  Reg(TTyCustomCheckListBox);
   Reg(TTyCheckListBox);
+  Reg(TTyCustomCircularProgress);
   Reg(TTyCircularProgress);
   Reg(TTyColorPopupList);
+  Reg(TTyCustomColorBox);
   Reg(TTyColorBox);
+  Reg(TTyCustomColorButton);
   Reg(TTyColorButton);
   Reg(TTyColorMorePopupList);
+  Reg(TTyCustomColorComboBox);
   Reg(TTyColorComboBox);
+  Reg(TTyCustomColorGrid);
   Reg(TTyColorGrid);
+  Reg(TTyCustomColorListBox);
   Reg(TTyColorListBox);
   Reg(TTyColumn);
   Reg(TTyColumns);
+  Reg(TTyCustomHeader);
   Reg(TTyHeader);
+  Reg(TTyCustomComboBox);
   Reg(TTyComboBox);
   Reg(TTyComboPopupList);
   Reg(TTyComboExItem);
   Reg(TTyComboExItems);
   Reg(TTyComboBoxExPopupList);
+  Reg(TTyCustomComboBoxEx);
   Reg(TTyComboBoxEx);
+  Reg(TTyCustomComboEdit);
   Reg(TTyComboEdit);
   Reg(TTyComponent);
+  Reg(TTyCustomControlBar);
   Reg(TTyControlBar);
+  Reg(TTyCustomStyleController);
   Reg(TTyStyleController);
   Reg(TTyCoolBand);
   Reg(TTyCoolBands);
+  Reg(TTyCustomCoolBar);
   Reg(TTyCoolBar);
+  Reg(TTyCustomCurrencyEdit);
   Reg(TTyCurrencyEdit);
+  Reg(TTyCustomDateTimePicker);
   Reg(TTyDateTimePicker);
+  Reg(TTyCustomDial);
   Reg(TTyDial);
   Reg(TTyDialog);
+  Reg(TTyCustomMessage);
   Reg(TTyMessage);
+  Reg(TTyCustomInputDialog);
   Reg(TTyInputDialog);
+  Reg(TTyCustomPasswordDialog);
   Reg(TTyPasswordDialog);
   Reg(TTyTextDialogForm);
+  Reg(TTyCustomTextDialog);
   Reg(TTyTextDialog);
   Reg(TTySelectValueForm);
+  Reg(TTyCustomSelectValueDialog);
   Reg(TTySelectValueDialog);
   Reg(TTyAboutForm);
+  Reg(TTyCustomAboutDialog);
   Reg(TTyAboutDialog);
   Reg(TTyCascaderEditorForm);
   Reg(TTyHSVSquare);
@@ -352,172 +378,303 @@ begin
   Reg(TTyFontDialog);
   Reg(TTyIconGrid);
   Reg(TTyIconBrowserForm);
+  Reg(TTyCustomIconBrowserDialog);
   Reg(TTyIconBrowserDialog);
   Reg(TTyImageCollectionEditorForm);
   Reg(TTyListGroupsEditorForm);
   Reg(TTyProgressForm);
+  Reg(TTyCustomProgressDialog);
   Reg(TTyProgressDialog);
   Reg(TTySelectPathForm);
   Reg(TTySelectPathDialog);
   Reg(TTyStructureEditorForm);
   Reg(TTyTreeNodesEditorForm);
+  Reg(TTyCustomDivider);
   Reg(TTyDivider);
+  Reg(TTyCustomDropDownButton);
   Reg(TTyDropDownButton);
+  Reg(TTyCustomMenuButton);
   Reg(TTyMenuButton);
+  Reg(TTyCustomEdit);
   Reg(TTyEdit);
+  Reg(TTyCustomEmpty);
   Reg(TTyEmpty);
+  Reg(TTyCustomExPanel);
   Reg(TTyExPanel);
+  Reg(TTyCustomFilterComboBox);
   Reg(TTyFilterComboBox);
+  Reg(TTyCustomFloatSpinEdit);
   Reg(TTyFloatSpinEdit);
   Reg(TTyFontPopupList);
+  Reg(TTyCustomFontComboBox);
   Reg(TTyFontComboBox);
+  Reg(TTyCustomFontListBox);
   Reg(TTyFontListBox);
+  Reg(TTyCustomFontSizeComboBox);
   Reg(TTyFontSizeComboBox);
   Reg(TTyCaptionButton);
+  Reg(TTyCustomTitleBar);
   Reg(TTyTitleBar);
   Reg(TTyChromeEngine);
   Reg(TTyForm);
+  Reg(TTyCustomFormSurface);
   Reg(TTyFormSurface);
+  Reg(TTyCustomGauge);
   Reg(TTyGauge);
+  Reg(TTyCustomGearActivityIndicator);
   Reg(TTyGearActivityIndicator);
+  Reg(TTyCustomGearDial);
   Reg(TTyGearDial);
+  Reg(TTyCustomGlowLabel);
   Reg(TTyGlowLabel);
   Reg(TTyGlyphButtonBase);
+  Reg(TTyCustomGlyphButton);
   Reg(TTyGlyphButton);
+  Reg(TTyCustomGlyphContainerButton);
   Reg(TTyGlyphContainerButton);
+  Reg(TTyCustomSpeedButton);
   Reg(TTySpeedButton);
+  Reg(TTyCustomGlyphImageList);
   Reg(TTyGlyphImageList);
   Reg(TTyGridFilterList);
   Reg(TTyGridHeaderGroup);
   Reg(TTyGridHeaderGroups);
   Reg(TTyGridColumn);
+  Reg(TTyGridHeader);
   Reg(TTyCustomGrid);
+  Reg(TTyCustomDrawGrid);
   Reg(TTyDrawGrid);
+  Reg(TTyCustomStringGrid);
   Reg(TTyStringGrid);
   Reg(TTyGridStrings);
+  Reg(TTyCustomGridCell);
   Reg(TTyGridCell);
+  Reg(TTyCustomGridPanel);
   Reg(TTyGridPanel);
+  Reg(TTyCustomGroupBox);
   Reg(TTyGroupBox);
+  Reg(TTyCustomHSColorPicker);
   Reg(TTyHSColorPicker);
+  Reg(TTyCustomHeaderControl);
   Reg(TTyHeaderControl);
   Reg(TTyHintWindow);
+  Reg(TTyCustomHint);
   Reg(TTyHint);
+  Reg(TTyCustomHtmlLabel);
   Reg(TTyHtmlLabel);
+  Reg(TTyCustomIconFont);
   Reg(TTyIconFont);
   Reg(TTyIconPackFont);
+  Reg(TTyCustomLucideIconFont);
   Reg(TTyLucideIconFont);
+  Reg(TTyCustomLucideImageList);
   Reg(TTyLucideImageList);
+  Reg(TTyCustomImage);
   Reg(TTyImage);
   Reg(TTyImageItem);
   Reg(TTyImageItems);
   Reg(TTyImageCacheEntry);
+  Reg(TTyCustomImageCollection);
   Reg(TTyImageCollection);
+  Reg(TTyCustomVirtualImageList);
   Reg(TTyVirtualImageList);
+  Reg(TTyCustomImageView);
   Reg(TTyImageView);
+  Reg(TTyCustomLColorPicker);
   Reg(TTyLColorPicker);
+  Reg(TTyCustomLevelMeter);
   Reg(TTyLevelMeter);
+  Reg(TTyCustomLinkLabel);
   Reg(TTyLinkLabel);
+  Reg(TTyCustomListBox);
   Reg(TTyListBox);
   Reg(TTyListGroupItem);
   Reg(TTyListGroupItems);
+  Reg(TTyCustomListGroupPanel);
   Reg(TTyListGroupPanel);
   Reg(TTyListItem);
   Reg(TTyListItems);
+  Reg(TTyCustomListView);
   Reg(TTyListView);
+  Reg(TTyCustomMRUComboBox);
   Reg(TTyMRUComboBox);
+  Reg(TTyCustomMaskEdit);
   Reg(TTyMaskEdit);
+  Reg(TTyCustomMemo);
   Reg(TTyMemo);
+  Reg(TTyGlyphMenuItem);
   Reg(TTyMenuView);
   Reg(TTyMenuPopup);
+  Reg(TTyCustomMenuBar);
   Reg(TTyMenuBar);
   Reg(TTyPopupMenu);
   Reg(TTyImagesMenu);
   Reg(TTyMenuEx);
+  Reg(TTyCustomMeter);
   Reg(TTyMeter);
+  Reg(TTyMultiTrackBarBase);
+  Reg(TTyTrackRange);
+  Reg(TTyTrackRanges);
+  Reg(TTyCustomRangeTrackBar);
+  Reg(TTyRangeTrackBar);
+  Reg(TTyTrackThumbItem);
+  Reg(TTyTrackThumbs);
+  Reg(TTyTrackSegmentItem);
+  Reg(TTyTrackSegments);
+  Reg(TTyCustomMultiTrackBar);
+  Reg(TTyMultiTrackBar);
+  Reg(TTyCustomGradientTrackBar);
+  Reg(TTyGradientTrackBar);
+  Reg(TTyCustomNativeStyler);
   Reg(TTyNativeStyler);
   Reg(TTyNotificationWindow);
+  Reg(TTyCustomNotification);
   Reg(TTyNotification);
+  Reg(TTyCustomNumericEdit);
   Reg(TTyNumericEdit);
   Reg(TTyOfficeComboPopupList);
+  Reg(TTyCustomOfficeComboBox);
   Reg(TTyOfficeComboBox);
+  Reg(TTyCustomOfficeListBox);
   Reg(TTyOfficeListBox);
+  Reg(TTyCustomPageControl);
   Reg(TTyPageControl);
+  Reg(TTyCustomPagination);
   Reg(TTyPagination);
+  Reg(TTyCustomPaintPanel);
   Reg(TTyPaintPanel);
+  Reg(TTyCustomPanel);
   Reg(TTyPanel);
+  Reg(TTyPopoverFlyoutPanel);
+  Reg(TTyPopoverAnimationOptions);
   Reg(TTyPopoverWindow);
+  Reg(TTyCustomPopover);
   Reg(TTyPopover);
   Reg(TTyPopupSurface);
+  Reg(TTyCustomPreviewBox);
   Reg(TTyPreviewBox);
+  Reg(TTyCustomProgressBar);
   Reg(TTyProgressBar);
+  Reg(TTyCustomPropertyGrid);
+  Reg(TTyPropertyGrid);
+  Reg(TTyCustomRadioGroup);
   Reg(TTyRadioGroup);
+  Reg(TTyCustomRating);
   Reg(TTyRating);
+  Reg(TTyCustomRelativePanel);
   Reg(TTyRelativePanel);
+  Reg(TTyCustomRibbon);
   Reg(TTyRibbon);
+  Reg(TTyCustomRibbonPage);
   Reg(TTyRibbonPage);
+  Reg(TTyCustomRibbonGroup);
   Reg(TTyRibbonGroup);
+  Reg(TTyCustomRibbonAppMenu);
   Reg(TTyRibbonAppMenu);
+  Reg(TTyCustomRibbonBackstage);
   Reg(TTyRibbonBackstage);
   Reg(TTyGalleryGrid);
+  Reg(TTyCustomRibbonGallery);
   Reg(TTyRibbonGallery);
+  Reg(TTyCustomRibbonQuickAccess);
   Reg(TTyRibbonQuickAccess);
+  Reg(TTyCustomScrollBar);
   Reg(TTyScrollBar);
+  Reg(TTyCustomScrollBox);
   Reg(TTyScrollBox);
+  Reg(TTyCustomScrollContent);
   Reg(TTyScrollContent);
+  Reg(TTyCustomScrollPanel);
   Reg(TTyScrollPanel);
+  Reg(TTyCustomSegmented);
   Reg(TTySegmented);
+  Reg(TTyCustomShadowLabel);
   Reg(TTyShadowLabel);
+  Reg(TTyCustomShape);
   Reg(TTyShape);
+  Reg(TTyCustomShellComboBox);
   Reg(TTyShellComboBox);
   Reg(TTyShellTreeLink);
+  Reg(TTyCustomShellListView);
   Reg(TTyShellListView);
+  Reg(TTyCustomShellTreeView);
   Reg(TTyShellTreeView);
+  Reg(TTyCustomSizeBox);
   Reg(TTySizeBox);
+  Reg(TTyCustomSparkline);
   Reg(TTySparkline);
+  Reg(TTyCustomSpinEdit);
   Reg(TTySpinEdit);
   Reg(TTySplitterBand);
+  Reg(TTyCustomSplitter);
   Reg(TTySplitter);
+  Reg(TTyCustomStarShape);
   Reg(TTyStarShape);
   Reg(TTyStatusPanel);
   Reg(TTyStatusPanels);
+  Reg(TTyCustomStatusBar);
   Reg(TTyStatusBar);
+  Reg(TTyCustomSteps);
   Reg(TTySteps);
+  Reg(TTyCustomTabSet);
   Reg(TTyTabSet);
+  Reg(TTyCustomTabSheet);
   Reg(TTyTabSheet);
   Reg(TTyCustomTabStrip);
+  Reg(TTyCustomTag);
   Reg(TTyTag);
+  Reg(TTyCustomTerminalView);
   Reg(TTyTerminalView);
+  Reg(TTyTerminalColorScheme);
   Reg(TTyTerminalOscStringHandler);
   Reg(TTyTerminalDcsStringHandler);
   Reg(TTyTerminalApcStringHandler);
   Reg(TTyTextEditMenu);
   Reg(TTyThemeDirSource);
   Reg(TTyThemeZipSource);
+  Reg(TTyCustomToggleSwitch);
   Reg(TTyToggleSwitch);
+  Reg(TTyCustomToolSeparator);
   Reg(TTyToolSeparator);
+  Reg(TTyCustomToolButton);
   Reg(TTyToolButton);
+  Reg(TTyCustomToolBar);
   Reg(TTyToolBar);
+  Reg(TTyCustomToolBarEx);
   Reg(TTyToolBarEx);
+  Reg(TTyCustomToolGroupPanel);
   Reg(TTyToolGroupPanel);
+  Reg(TTyCustomToolWindow);
   Reg(TTyToolWindow);
+  Reg(TTyCustomToolWindowActions);
   Reg(TTyToolWindowActions);
   Reg(TTyToolWindowDropPreview);
+  Reg(TTyCustomToolWindowBar);
   Reg(TTyToolWindowBar);
   Reg(TTyCustomToolWindowManager);
   Reg(TTyToolWindowManager);
+  Reg(TTyCustomTrackBar);
   Reg(TTyTrackBar);
+  Reg(TTyCustomTrackEdit);
   Reg(TTyTrackEdit);
   Reg(TTyTransferArrowButton);
+  Reg(TTyCustomTransfer);
   Reg(TTyTransfer);
   Reg(TTyTreeSelectTree);
+  Reg(TTyCustomTreeSelect);
   Reg(TTyTreeSelect);
   Reg(TTyTreeNodeItem);
   Reg(TTyTreeNodes);
+  Reg(TTyCustomTreeView);
   Reg(TTyTreeView);
+  Reg(TTyCustomLabel);
   Reg(TTyLabel);
+  Reg(TTyCustomURLEdit);
   Reg(TTyURLEdit);
+  Reg(TTyCustomUpDown);
   Reg(TTyUpDown);
   Reg(TTyValueEdit);
+  Reg(TTyCustomValueListEditor);
   Reg(TTyValueListEditor);
 end;
 

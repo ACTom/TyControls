@@ -73,7 +73,6 @@ $readmePicks = [ordered]@{
   'chart.png'          = 'chart/main-light.png'
   'ribbon.png'         = 'ribbon/01-new-document-1-light.png'
   'calendar.png'       = 'calendar/main-light.png'
-  'advchart.png'       = 'advchart/main-light.png'
   'dbgrid.png'         = 'dbgrid/main-light.png'
   'propertygrid.png'   = 'propertygrid/main-light.png'
   'trackbar.png'       = 'trackbar/main-light.png'
@@ -219,7 +218,11 @@ function Write-Pages {
 
   [void]$zh.AppendLine('## 示例')
   [void]$zh.AppendLine('')
+  [void]$zh.AppendLine('高级图表在独立项目 [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) 里，它的示例也在那边。')
+  [void]$zh.AppendLine('')
   [void]$en.AppendLine('## Examples')
+  [void]$en.AppendLine('')
+  [void]$en.AppendLine('The advanced chart is in a separate project, [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart), along with its example.')
   [void]$en.AppendLine('')
   foreach ($d in (Get-ChildItem $out -Directory | Sort-Object Name)) {
     $views = Get-Views $d.FullName
