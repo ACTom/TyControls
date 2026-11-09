@@ -263,6 +263,7 @@ uses
   test.advchart.series,
   test.advchart.style,
   test.advancechart, test.advchart.devicescale,
+  test.advchart.themedump, test.advchart.theme,
   test.unicode.width,
   test.terminal.oracle, test.terminal.parser, test.terminal.buffer, test.terminal.core,
   test.terminal.keyboard, test.terminal.render, test.terminal.view, test.terminal.view.paint,

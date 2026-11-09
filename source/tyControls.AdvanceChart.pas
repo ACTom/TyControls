@@ -6407,6 +6407,9 @@ implementation
 
 uses
   tyControls.Controller,
+  { the chart's own tokens and rules (themes/advchart.tycss): that unit's initialization
+    registers them as an add-on of every style model's base layer }
+  tyControls.AdvanceChart.Theme,
   { the frame a dirty-rect window flushes before it is painted, and the
     rects it invalidates [Batch 142] }
   Forms, LCLIntf,

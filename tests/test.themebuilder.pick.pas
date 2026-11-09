@@ -64,7 +64,7 @@ implementation
 
 uses
   ExtCtrls, tyControls.Base, tyControls.Button, tyControls.Dialogs, tyControls.Notification,
-  tyControls.Css.Catalog, tyControls.StyleModel, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
+  tyControls.Css.Catalog, tyControls.Css.AddOns, tyControls.StyleModel, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
   test.themebuilder.golden;
 
 type
@@ -781,7 +781,10 @@ var
   u: string;
   prefix: Boolean;
   units: Integer;
+  catalogue: TStringArray;
 begin
+  { the generated catalog and what add-ons registered (the chart's keys), as TbIsKnownTypeKey }
+  catalogue := TyCatalogAllTypeKeys;
   units := 0;
   if FindFirst(TbRepoDir + 'source' + PathDelim + 'tyControls.*.pas', faAnyFile, sr) = 0 then
   try
@@ -794,9 +797,9 @@ begin
         begin
           if TbIsKnownTypeKey(lits[i], nil) then Continue;
           prefix := False;
-          for k := 0 to High(TyCatalogTypeKeys) do
-            if (Length(TyCatalogTypeKeys[k]) > Length(lits[i]))
-               and SameText(Copy(TyCatalogTypeKeys[k], 1, Length(lits[i])), lits[i]) then
+          for k := 0 to High(catalogue) do
+            if (Length(catalogue[k]) > Length(lits[i]))
+               and SameText(Copy(catalogue[k], 1, Length(lits[i])), lits[i]) then
               prefix := True;
           AssertTrue('CV9: ' + u + ' names ' + lits[i] + ', which is not a known typeKey', prefix);
         end;

@@ -40,7 +40,7 @@ implementation
 
 uses
   tyControls.Types, tyControls.StyleModel, tyControls.Css.Values, tyControls.Css.Parser,
-  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.AddOns;
+  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.AddOns, test.css.addons;
 
 { True when the resolver RECOGNISES AProp -- it entered a branch. A clean False means "unknown
   property" (the else Result:=False). A raise means it entered a branch but disliked the value,
@@ -404,10 +404,12 @@ procedure TCssCatalogTest.TestCompletionWithoutAddOnsIsUnchanged;
 var
   items: TStringList;
   i: Integer;
+  aside: TTyAddOnsAside;
 begin
-  AssertEquals('no add-on is registered here', 0, Length(TyAddOnNames));
+  aside := TySetAsideAddOns;   // the runner links the chart, which registers one at start-up
   items := TStringList.Create;
   try
+    AssertEquals('no add-on is registered here', 0, Length(TyAddOnNames));
     TyCssCompletionItems('--', False, items);
     AssertEquals('token count', Length(TyCatalogTokens), items.Count);
     for i := 0 to High(TyCatalogTokens) do
@@ -418,6 +420,7 @@ begin
       AssertEquals('typeKey ' + IntToStr(i), TyCatalogTypeKeys[i], items[i]);
   finally
     items.Free;
+    TyPutBackAddOns(aside);
   end;
 end;
 

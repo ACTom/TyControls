@@ -10,12 +10,26 @@ uses
   Classes, SysUtils, fpcunit, testregistry, tyControls.StyleModel;
 
 type
+  { The add-ons registered when a test starts -- this runner links the chart, whose unit
+    registers "advchart" in its initialization -- set aside so the test sees an empty registry,
+    and put back after it. Setting aside tells no listener, so a style model alive meanwhile
+    keeps them in its base layer; putting back is a registration and reseeds the models alive. }
+  TTyAddOnsAside = record
+    Names, Texts: TStringArray;
+  end;
+
+function TySetAsideAddOns: TTyAddOnsAside;
+procedure TyPutBackAddOns(const AAside: TTyAddOnsAside);
+
+type
   TTyCssAddOnsTest = class(TTestCase)
   private
     FRegistered: TStringArray;
+    FAside: TTyAddOnsAside;
     { TyRegisterAddOnCss, noting the name for TearDown }
     procedure Reg(const AName, ACss: string);
   protected
+    procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestTheVocabularyOfLightIsTheCatalog;
@@ -124,6 +138,34 @@ begin
   TyUnregisterAddOnCss(AName);
 end;
 
+function TySetAsideAddOns: TTyAddOnsAside;
+var
+  i: Integer;
+begin
+  Result.Names := TyAddOnNames;
+  Result.Texts := nil;
+  SetLength(Result.Texts, Length(Result.Names));
+  for i := 0 to High(Result.Names) do
+  begin
+    Result.Texts[i] := TyAddOnCssOf(Result.Names[i]);
+    TyUnregisterAddOnCss(Result.Names[i]);
+  end;
+end;
+
+procedure TyPutBackAddOns(const AAside: TTyAddOnsAside);
+var
+  i: Integer;
+begin
+  for i := 0 to High(AAside.Names) do
+    TyRegisterAddOnCss(AAside.Names[i], AAside.Texts[i]);
+end;
+
+procedure TTyCssAddOnsTest.SetUp;
+begin
+  inherited SetUp;
+  FAside := TySetAsideAddOns;
+end;
+
 procedure TTyCssAddOnsTest.Reg(const AName, ACss: string);
 begin
   if not Has(FRegistered, AName) then
@@ -144,6 +186,9 @@ begin
   for i := 0 to High(FRegistered) do
     ForgetAddOn(FRegistered[i]);
   FRegistered := nil;
+  TyPutBackAddOns(FAside);
+  FAside.Names := nil;
+  FAside.Texts := nil;
   inherited TearDown;
 end;
 

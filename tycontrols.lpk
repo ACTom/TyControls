@@ -1290,6 +1290,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvanceChart"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvanceChart.Theme.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Theme"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Unicode.Width.pas"/>
         <UnitName Value="tyControls.Unicode.Width"/>
       </Item>
