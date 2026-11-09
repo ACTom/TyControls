@@ -181,13 +181,25 @@ uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
 
+{ [R7-AK] Math.max: NaN where either is }
+function JsMaxOf(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
 function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
   AScale: Double): TTyRectF;
 var
   r: TTyXYWH;
   { [R7-AI] the css px a device px makes }
   s: Double;
+  { [R7-AK] the traps' mask: a joined size of no number compares as JS }
+  mask: TFPUExceptionMask;
 begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
   { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
   r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
     ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
@@ -197,17 +209,23 @@ begin
   if not (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
   begin
     if (AScale > 0) and (AScale <> 1) then s := AScale else s := 1;
+    { ([R7-AK] Math.max: a far edge of two points is no number, nor is the
+      size -- the frame not drawn [was: FPC's Max, 1]) }
     if ALayout.FrameWText <> '' then
-      r.W := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
+      r.W := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
         + ALayout.FrameWText), ALineWidthPx / s, False) - r.X / s, 1.0) * s;
     if ALayout.FrameHText <> '' then
-      r.H := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
+      r.H := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
         + ALayout.FrameHText), ALineWidthPx / s, False) - r.Y / s, 1.0) * s;
   end;
   { through the group's transform (a translation): x + tx, the far edge
     (x + w) + tx }
   Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,
     (r.X + r.W) + ALayout.TextX, (r.Y + r.H) + ALayout.TextY);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
 end;
 
 function TyTitleFrameShape(const ALayout: TTyTitleLayout; const AFrame: TTyRectF;
@@ -228,6 +246,12 @@ begin
       ALayout.FrameH / s, ALayout.FrameWText, ALayout.FrameHText, r, ALayout.TextX,
       ALayout.TextY, s));
   end;
+  { ([R7-AK] a frame of no number -- a far edge of two points -- is no
+    path: nothing drawn) }
+  if IsNan(AFrame.Left) or IsNan(AFrame.Top) or IsNan(AFrame.Right) or IsNan(AFrame.Bottom)
+    or IsInfinite(AFrame.Left) or IsInfinite(AFrame.Top) or IsInfinite(AFrame.Right)
+    or IsInfinite(AFrame.Bottom) then
+    Exit(TyShapePolygon([]));
   Result := TyShapeRoundRect(AFrame, ARadiiPx);
 end;
 
