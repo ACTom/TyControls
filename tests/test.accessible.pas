@@ -49,6 +49,8 @@ type
     FSeries: TTyAccObjectArray;
     FRows: array[0..1] of TTyAccObjectArray;
     procedure Build;
+    { a window with the keyboard focus on the host: needs the widgetset }
+    procedure NeedFocusedHost;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -62,7 +64,11 @@ type
     procedure TestACheckBoxIsCheckedNotSelected;
     procedure TestAnInvisibleControlSaysSo;
     procedure TestAccSelectAsksTheHostForTheFocus;
+    procedure TestNoFocusInTheControlMeansNoFocusToReport;
     procedure TestTheFocusIsWhatTheHostHolds;
+    procedure TestTheParentOfAnObject;
+    procedure TestTheRootsParentIsTheWindow;
+    procedure TestTheUnsupportedCallsSayNoPerMsaa;
     procedure TestHitTestFindsTheLastLeaf;
     procedure TestTheTreeIsSyncedBeforeItIsRead;
     procedure TestTheMsaaNodesOutliveNothing;
@@ -255,6 +261,12 @@ begin
   Pointer(d) := V.PVal;
   V := Default(TTyAccVariant);
   Result := d as IAccessible;
+end;
+
+function ChildCount(const A: IAccessible): LongInt;
+begin
+  Result := -1;
+  A.get_accChildCount(@Result);
 end;
 
 function RootOf(AHost: TAccHost): IAccessible;
@@ -546,16 +558,162 @@ begin
   AssertTrue(FHost.FocusedObj = FRows[0][1]);
 end;
 
-procedure TAccessibleMsaaTest.TestTheFocusIsWhatTheHostHolds;
+procedure TAccessibleMsaaTest.NeedFocusedHost;
+begin
+  { A WINDOW NEEDS THE WIDGETSET, as in TestTheWindowAnswersGetObject }
+  if not (AppInitialized in Application.Flags) then
+  begin
+    if SysUtils.GetEnvironmentVariable('TY_KEYBOARD_WINDOW') = '1' then Application.Initialize
+    else Ignore('needs an initialised widgetset (TY_KEYBOARD_WINDOW=1)');
+  end;
+  FHost.TabStop := True;
+  FForm.Show;
+  FHost.SetFocus;
+  if not FHost.Focused then Ignore('the window could not take the keyboard focus here');
+end;
+
+procedure TAccessibleMsaaTest.TestNoFocusInTheControlMeansNoFocusToReport;
 var
   root: IAccessible;
   v: TTyAccVariant;
 begin
   root := RootOf(FHost);
   v := Default(TTyAccVariant);
-  { a control that does not hold the keyboard focus has none to report }
+  { a control that does not hold the keyboard focus has none to report,
+    whatever its host says is the focused item }
+  FHost.FocusedObj := FRows[0][1];
+  AssertFalse(FHost.Focused);
   AssertEquals(S_FALSE, root.get_accFocus(@v));
   AssertEquals(TyAccVtEmpty, v.VType);
+end;
+
+procedure TAccessibleMsaaTest.TestTheFocusIsWhatTheHostHolds;
+var
+  root, f: IAccessible;
+  v: TTyAccVariant;
+begin
+  NeedFocusedHost;
+  root := RootOf(FHost);
+  { the host says no item has it: the control itself does -- child 0 }
+  FHost.FocusedObj := nil;
+  v := Default(TTyAccVariant);
+  AssertEquals(S_OK, root.get_accFocus(@v));
+  AssertEquals('the control itself: VT_I4', TyAccVtI4, v.VType);
+  AssertEquals(TyAccChildSelf, v.LVal);
+  { the host names an item: a node for it, which says what it is }
+  FHost.FocusedObj := FRows[0][1];
+  v := Default(TTyAccVariant);
+  AssertEquals(S_OK, root.get_accFocus(@v));
+  AssertEquals('an item: VT_DISPATCH', TyAccVtDispatch, v.VType);
+  f := VarDispatch(v);
+  AssertTrue(f <> nil);
+  AssertEquals('row 0b', NameOf(f, TyAccChildSelf));
+  { and its state says so: focused is the focused item's alone }
+  v := Default(TTyAccVariant);
+  ChildOf(ChildOf(root, 1), 2).get_accState(TyAccChild(TyAccChildSelf), @v);
+  AssertTrue('the focused item is focused', (v.LVal and TyAccStateFocused) <> 0);
+  ChildOf(ChildOf(root, 1), 3).get_accState(TyAccChild(TyAccChildSelf), @v);
+  AssertTrue('its neighbour is not', (v.LVal and TyAccStateFocused) = 0);
+  { the control itself is focused when no item has the focus inside it }
+  root.get_accState(TyAccChild(TyAccChildSelf), @v);
+  AssertTrue('the control holds the focus', (v.LVal and TyAccStateFocused) <> 0);
+  AssertTrue('and is focusable', (v.LVal and TyAccStateFocusable) <> 0);
+end;
+
+procedure TAccessibleMsaaTest.TestTheParentOfAnObject;
+var
+  root, s0, it, par: IAccessible;
+  p: Pointer;
+  d: IDispatch;
+begin
+  root := RootOf(FHost);
+  s0 := ChildOf(root, 1);
+  it := ChildOf(s0, 2);
+  { a row's parent is its series }
+  p := nil;
+  AssertEquals(S_OK, it.get_accParent(@p));
+  Pointer(d) := p;
+  par := d as IAccessible;
+  AssertEquals('the series', 'The 0 series.', NameOf(par, TyAccChildSelf));
+  AssertEquals('the series'' own children', 4, ChildCount(par));
+  { a series' parent is the root }
+  p := nil;
+  AssertEquals(S_OK, s0.get_accParent(@p));
+  Pointer(d) := p;
+  par := d as IAccessible;
+  AssertEquals('the control', 'Chart', NameOf(par, TyAccChildSelf));
+  AssertEquals('and it has the two series', 2, ChildCount(par));
+  { the null out-pointer is refused }
+  AssertEquals(E_POINTER, it.get_accParent(nil));
+  { without a window the root has no window object to be the child of }
+  AssertFalse(FHost.HandleAllocated);
+  p := Pointer(1);
+  AssertEquals(S_FALSE, root.get_accParent(@p));
+  AssertTrue(p = nil);
+end;
+
+procedure TAccessibleMsaaTest.TestTheRootsParentIsTheWindow;
+var
+  root, par: IAccessible;
+  p: Pointer;
+  d: IDispatch;
+begin
+  { A WINDOW NEEDS THE WIDGETSET, as in TestTheWindowAnswersGetObject }
+  if not (AppInitialized in Application.Flags) then
+  begin
+    if SysUtils.GetEnvironmentVariable('TY_KEYBOARD_WINDOW') = '1' then Application.Initialize
+    else Ignore('needs an initialised widgetset (TY_KEYBOARD_WINDOW=1)');
+  end;
+  FForm.HandleNeeded;
+  FHost.HandleNeeded;
+  root := RootOf(FHost);
+  p := nil;
+  AssertEquals(S_OK, root.get_accParent(@p));
+  AssertTrue('the window''s own object', p <> nil);
+  Pointer(d) := p;
+  par := d as IAccessible;
+  { oleacc's standard object for the window: it is not our tree, so it has
+    no child named 'The 0 series.' }
+  AssertTrue(NameOf(par, TyAccChildSelf) <> 'Chart');
+end;
+
+procedure TAccessibleMsaaTest.TestTheUnsupportedCallsSayNoPerMsaa;
+const
+  DISP_E_MEMBERNOTFOUND = HResult($80020003);
+var
+  it: IAccessible;
+  p: PWideChar;
+  i: LongInt;
+  v: TTyAccVariant;
+  self_: TTyAccVariant;
+begin
+  { MSAA: a property the server does not have comes back S_FALSE with an
+    empty out value; a method or setter it does not support is
+    DISP_E_MEMBERNOTFOUND }
+  it := ChildOf(ChildOf(RootOf(FHost), 1), 2);
+  self_ := TyAccChild(TyAccChildSelf);
+  p := PWideChar(Pointer(1));
+  AssertEquals('help', S_FALSE, it.get_accHelp(self_, @p));
+  AssertTrue(p = nil);
+  p := PWideChar(Pointer(1));
+  i := 7;
+  AssertEquals('help topic', S_FALSE, it.get_accHelpTopic(@p, self_, @i));
+  AssertTrue(p = nil);
+  AssertEquals(0, i);
+  p := PWideChar(Pointer(1));
+  AssertEquals('keyboard shortcut', S_FALSE, it.get_accKeyboardShortcut(self_, @p));
+  AssertTrue(p = nil);
+  p := PWideChar(Pointer(1));
+  AssertEquals('default action', S_FALSE, it.get_accDefaultAction(self_, @p));
+  AssertTrue(p = nil);
+  v := Default(TTyAccVariant);
+  v.VType := TyAccVtI4;
+  AssertEquals('selection', S_FALSE, it.get_accSelection(@v));
+  AssertEquals(TyAccVtEmpty, v.VType);
+  AssertEquals('do default action', DISP_E_MEMBERNOTFOUND, it.accDoDefaultAction(self_));
+  AssertEquals('set the name', DISP_E_MEMBERNOTFOUND, it.put_accName(self_, PWideChar(WideString('x'))));
+  AssertEquals('set the value', DISP_E_MEMBERNOTFOUND, it.put_accValue(self_, PWideChar(WideString('x'))));
+  AssertEquals('and the name did not change', 'row 0b', NameOf(it, TyAccChildSelf));
 end;
 
 procedure TAccessibleMsaaTest.TestHitTestFindsTheLastLeaf;
