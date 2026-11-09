@@ -5,7 +5,8 @@ unit test.subpixel;
   The invariant every case below really tests is one thing: after snapping,
   (coordinate + width/2) is a whole number. That is what makes a thin stroke
   cover one row of pixels fully instead of two rows at half alpha. The pixels
-  themselves are checked in test.advchart.render. }
+  themselves are checked where a chart draws with the unit: TyAdvanceChart's
+  own render tests, in that project. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, tyControls.SubPixel;
 type
