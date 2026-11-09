@@ -2,12 +2,12 @@ unit test.css.addons;
 {$mode objfpc}{$H+}
 
 { The add-on registry: an add-on package registers its own tycss and the core's vocabulary
-  (tokens, typeKeys) grows with it. }
+  (tokens, typeKeys) grows with it; the built-in base layer of every style model carries it. }
 
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry;
+  Classes, SysUtils, fpcunit, testregistry, tyControls.StyleModel;
 
 type
   TTyCssAddOnsTest = class(TTestCase)
@@ -22,10 +22,30 @@ type
     procedure TestCommentsAndUsagesAreNotVocabulary;
   end;
 
+  { What an add-on registered is in the built-in base layer of every style model, one made
+    before the registration included, under the user layer as light.tycss's own rules are. }
+  TTyStyleModelAddOnTest = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestAnAddOnRuleReachesANewModel;
+    procedure TestARegistrationAfterTheModelReachesIt;
+    procedure TestAUserThemeOverridesAnAddOnRule;
+    procedure TestAModeSwitchKeepsTheAddOn;
+    procedure TestARegistrationKeepsTheUserLayer;
+  end;
+
 implementation
 
 uses
-  tyControls.Css.Catalog, tyControls.Css.AddOns;
+  tyControls.Types, tyControls.Css.Catalog, tyControls.Css.AddOns;
+
+const
+  cZz = 'test.zz';
+  cZzCss = ':root{--zz-gap:7px;} TyZzThing{background:#123456;}';
+  cZzDark = ' @mode dark { :root{--zz-gap:9px;} }';
 
 var
   GHeard: Integer;
@@ -67,11 +87,20 @@ begin
     TTestCase.AssertTrue(AMsg + ' ascending at ' + IntToStr(i), A[i - 1] < A[i]);
 end;
 
+{ TyUnregisterAddOnCss tells no listener, so a style model alive across the test (a default
+  controller's, say) would keep what the test registered in its base layer. Registering the name
+  empty first reseeds every live model without it; unregistering then drops the empty entry. }
+procedure ForgetAddOn(const AName: string);
+begin
+  TyRegisterAddOnCss(AName, '');
+  TyUnregisterAddOnCss(AName);
+end;
+
 procedure TTyCssAddOnsTest.TearDown;
 begin
-  TyUnregisterAddOnCss('t1');
-  TyUnregisterAddOnCss('t2');
   TyRemoveAddOnCssListener(@Heard);
+  ForgetAddOn('t1');
+  ForgetAddOn('t2');
   inherited TearDown;
 end;
 
@@ -93,7 +122,7 @@ procedure TTyCssAddOnsTest.TestARegisteredCssJoinsTheCatalog;
 var
   t, k: TStringArray;
 begin
-  TyRegisterAddOnCss('t1', ':root{--zz-a:1px} TyZzThing{color:red}');
+  TyRegisterAddOnCss('t1', ':root{--zz-a:1px;} TyZzThing{color:#FF0000;}');
   t := TyCatalogAllTokens;
   k := TyCatalogAllTypeKeys;
   AssertTrue('--zz-a joined', Has(t, '--zz-a'));
@@ -152,7 +181,135 @@ begin
   AssertEquals('TyReal', 'TyReal', v.TypeKeys[1]);
 end;
 
+{ TTyStyleModelAddOnTest }
+
+procedure TTyStyleModelAddOnTest.TearDown;
+begin
+  FreeAndNil(FModel);
+  ForgetAddOn(cZz);
+  inherited TearDown;
+end;
+
+procedure TTyStyleModelAddOnTest.TestAnAddOnRuleReachesANewModel;
+begin
+  TyRegisterAddOnCss(cZz, cZzCss);
+  FModel := TTyStyleModel.Create;
+  AssertEquals('the add-on token', '7px', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('the add-on rule', TTyColor($FF123456),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+end;
+
+procedure TTyStyleModelAddOnTest.TestARegistrationAfterTheModelReachesIt;
+var
+  v0: Cardinal;
+begin
+  FModel := TTyStyleModel.Create;
+  { one read through each memo, so each holds the answer from before the registration }
+  AssertEquals('no token yet', '', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('no raw text yet', '', FModel.RawVar('--zz-gap'));
+  AssertEquals('no metric yet', 3, FModel.ResolveMetric('--zz-gap', 3));
+  AssertFalse('no rule yet', tpBackground in FModel.ResolveStyle('TyZzThing', '', []).Present);
+  v0 := FModel.ThemeVersion;
+  TyRegisterAddOnCss(cZz, cZzCss);
+  AssertTrue('the theme version moves', FModel.ThemeVersion <> v0);
+  AssertEquals('the token', '7px', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('the raw text', '7px', FModel.RawVar('--zz-gap'));
+  AssertEquals('the metric', 7, FModel.ResolveMetric('--zz-gap', 3));
+  AssertEquals('the rule', TTyColor($FF123456),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+end;
+
+procedure TTyStyleModelAddOnTest.TestAUserThemeOverridesAnAddOnRule;
+begin
+  TyRegisterAddOnCss(cZz, cZzCss);
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss('TyZzThing{background:#FF0000;}');
+  AssertEquals('the user rule', TTyColor($FFFF0000),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+  AssertEquals('the add-on token', '7px', FModel.ResolveToken('--zz-gap'));
+end;
+
+procedure TTyStyleModelAddOnTest.TestAModeSwitchKeepsTheAddOn;
+const
+  { The base layer's @mode blocks lie under a dual-mode user theme only (RebuildMergedVars), as
+    TyBuiltinBaseModeCss's do. This one has both modes and nothing the add-on names. }
+  cDual = '@mode light { :root{--zz-own:1px;} } @mode dark { :root{--zz-own:2px;} }';
+var
+  later: TTyStyleModel;
+
+  procedure Check(AModel: TTyStyleModel; const AWhich: string);
+  begin
+    AModel.SetMode('dark');
+    AssertEquals(AWhich + ': dark', '9px', AModel.ResolveToken('--zz-gap'));
+    AModel.SetMode('light');
+    AssertEquals(AWhich + ': light', '7px', AModel.ResolveToken('--zz-gap'));
+  end;
+
+begin
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss(cDual);
+  FModel.SetMode('light');
+  AssertEquals('nothing before', '', FModel.ResolveToken('--zz-gap'));
+  TyRegisterAddOnCss(cZz, cZzCss + cZzDark);
+  Check(FModel, 'a model made before');
+  later := TTyStyleModel.Create;
+  try
+    later.LoadFromCss(cDual);
+    Check(later, 'a model made after');
+  finally
+    later.Free;
+  end;
+end;
+
+procedure TTyStyleModelAddOnTest.TestARegistrationKeepsTheUserLayer;
+var
+  dir, asset: string;
+  sl: TStringList;
+begin
+  { a theme FILE, so the model also holds the folder its url() assets resolve against }
+  dir := IncludeTrailingPathDelimiter(GetTempDir) + 'tyaddon_' + IntToStr(GetProcessID) + '_' +
+    IntToStr(Random(1 shl 30)) + PathDelim;
+  ForceDirectories(dir);
+  sl := TStringList.Create;
+  try
+    sl.Text := 'not read';
+    sl.SaveToFile(dir + 'zz.png');
+    sl.Text := ':root{--zz-own:3px;} TyButton{background:#00FF00;} ' +
+      'TyZzPicture{background-image:url(zz.png);} ' +
+      '@mode light { :root{--zz-lit:4px;} } @mode dark { :root{--zz-lit:5px;} }';
+    sl.SaveToFile(dir + 'user.tycss');
+  finally
+    sl.Free;
+  end;
+  try
+    asset := ExtractFilePath(ExpandFileName(dir + 'user.tycss')) + 'zz.png';
+    FModel := TTyStyleModel.Create;
+    FModel.LoadFromFile(dir + 'user.tycss');
+    FModel.SetMode('dark');
+    FModel.SetVarOverride('accent', '#ABCDEF');
+    AssertEquals('the asset before', asset,
+      FModel.ResolveStyle('TyZzPicture', '', []).Background.ImagePath);
+    TyRegisterAddOnCss(cZz, cZzCss);
+    AssertEquals('the add-on token', '7px', FModel.ResolveToken('--zz-gap'));
+    AssertEquals('the user rule', TTyColor($FF00FF00),
+      FModel.ResolveStyle('TyButton', '', []).Background.Color);
+    AssertEquals('the user :root', '3px', FModel.ResolveToken('--zz-own'));
+    AssertEquals('the mode', 'dark', FModel.Mode);
+    AssertEquals('the user @mode', '5px', FModel.ResolveToken('--zz-lit'));
+    AssertEquals('the base @mode under it', '#E5E7EB', FModel.ResolveToken('--on-surface'));
+    AssertEquals('the runtime override', '#ABCDEF', FModel.VarOverride('accent'));
+    AssertEquals('the override applies', '#ABCDEF', FModel.ResolveToken('--accent'));
+    AssertEquals('the theme''s folder', asset,
+      FModel.ResolveStyle('TyZzPicture', '', []).Background.ImagePath);
+  finally
+    DeleteFile(dir + 'zz.png');
+    DeleteFile(dir + 'user.tycss');
+    RemoveDir(dir);
+  end;
+end;
+
 initialization
   RegisterTest(TTyCssAddOnsTest);
+  RegisterTest(TTyStyleModelAddOnTest);
 
 end.

@@ -162,6 +162,15 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    { Rebuilds the built-in base layer from the default skin, the tycss every add-on has
+      registered (tyControls.Css.AddOns) and the base's per-mode snippet, then bumps
+      ThemeVersion, so every memoised answer (styles, metrics, tokens, colour tokens, raw reads)
+      is dropped at its next read. The user layer stays as it is: a loaded theme's rules, :root
+      and @mode blocks, the active mode, the runtime var overrides and the folder the theme's
+      assets resolve against. Create calls it, and every registration calls it on every model
+      alive. A control picks the change up at its next paint; nothing here invalidates one.
+      Raises, the previous base intact, when the text does not load. }
+    procedure ReseedBase;
     procedure Clear;
     procedure LoadFromCss(const ASource: string);          // raises ETyCssError (replaces user layer)
     procedure LoadFromCssAdditive(const ASource: string);  // appends rules + merges vars (A6)
@@ -339,6 +348,9 @@ function TyTypeKeyChain(const ATypeKey: string): TStringArray;
 procedure TyGetRegisteredTypeKeys(AList: TStrings);
 
 implementation
+
+uses
+  tyControls.Css.AddOns;
 
 { P4 (A5 / D8). Swap any var whose VALUE is exactly the sentinel 'system-accent' /
   'system-mode' for the live OS state (a '#RRGGBB' hex / 'light'|'dark'|''). Used by
@@ -1201,6 +1213,19 @@ begin
     AList.Add(GTypeKeyParents.Names[i]);
 end;
 
+var
+  { Every TTyStyleModel alive, so a registration reaches the models made before it. }
+  GLiveModels: TFPList = nil;
+
+{ The add-on registry's listener (registered in this unit's initialization). }
+procedure ReseedLiveModels;
+var i: Integer;
+begin
+  if GLiveModels = nil then Exit;
+  for i := 0 to GLiveModels.Count - 1 do
+    TTyStyleModel(GLiveModels[i]).ReseedBase;
+end;
+
 constructor TTyStyleModel.Create;
 begin
   inherited Create;
@@ -1237,21 +1262,18 @@ begin
   FRawVarCache.CaseSensitive := True;
   FRawVarCache.Sorted := True;
   FRawVarCache.Duplicates := dupIgnore;
-  { Seed the built-in default skin once. It is never cleared by user theme
-    loads — it only applies (per-typeKey) when the user layer is silent. }
-  { Seed the light base PLUS the per-mode contrast @mode snippet, so FModeVars picks up the base's
-    per-mode --on-surface/--surface/--border. (TyBuiltinThemeCss alone is single-mode — it is
-    byte-synced to light.tycss and must not change; the @mode lives in a separate constant.) }
-  LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss + LineEnding + TyBuiltinBaseModeCss);
-  { Snapshot those base @mode blocks so they survive later (clearing) user loads and can be
-    layered under a dual-mode user theme's own @mode. Then clear FModeVars: the base @mode must
-    NOT be the ACTIVE user @mode layer (only the preserved fallback). }
-  SnapshotBaseModeVars;
-  ClearModeVars;
+  { Seed the built-in default skin. It is never cleared by user theme loads — it only applies
+    (per-typeKey) when the user layer is silent. A registration reseeds it (ReseedBase). }
+  ReseedBase;
+  if GLiveModels = nil then
+    GLiveModels := TFPList.Create;
+  GLiveModels.Add(Self);
 end;
 
 destructor TTyStyleModel.Destroy;
 begin
+  if GLiveModels <> nil then
+    GLiveModels.Remove(Self);
   ClearList(FRules);
   ClearList(FBaseRules);
   ClearModeVars;
@@ -1341,6 +1363,64 @@ begin
   SetLength(Result, FModeVars.Count);
   for i := 0 to FModeVars.Count - 1 do
     Result[i] := FModeVars[i];
+end;
+
+procedure TTyStyleModel.ReseedBase;
+var
+  oldRules: TFPList;
+  oldVars, userModes, userOverrides: TStringList;
+  userBaseDir: string;
+begin
+  { LoadInto is a REPLACE load. Besides the layer it fills it resets the @mode blocks, the
+    runtime var overrides and the asset folder, which belong to the user layer, and it
+    validates against the base vars already there. So it gets fresh lists for all of them,
+    exactly as in a new model, and the user's go back afterwards (all of it on a failure). }
+  oldRules := FBaseRules;
+  oldVars := FBaseVars;
+  userModes := FModeVars;
+  userOverrides := FVarOverrides;
+  userBaseDir := FThemeBaseDir;
+  FBaseRules := TFPList.Create;
+  FBaseVars := TStringList.Create;
+  FModeVars := TStringList.Create;
+  FVarOverrides := TStringList.Create;
+  try
+    { The light base, then what the add-ons registered, then the per-mode contrast snippet, so
+      FModeVars picks up the base's per-mode --on-surface/--surface/--border. (TyBuiltinThemeCss
+      alone is single-mode — it is byte-synced to light.tycss and must not change; the @mode
+      lives in a separate constant.) }
+    LoadInto(FBaseRules, FBaseVars,
+      TyBuiltinThemeCss + LineEnding + TyAddOnCss + LineEnding + TyBuiltinBaseModeCss);
+  except
+    ClearList(FBaseRules);
+    FBaseRules.Free;
+    FBaseVars.Free;
+    ClearModeVars;
+    FModeVars.Free;
+    FVarOverrides.Free;
+    FBaseRules := oldRules;
+    FBaseVars := oldVars;
+    FModeVars := userModes;
+    FVarOverrides := userOverrides;
+    FThemeBaseDir := userBaseDir;
+    raise;
+  end;
+  { Snapshot those base @mode blocks so they survive later (clearing) user loads and can be
+    layered under a dual-mode user theme's own @mode. Then drop them from FModeVars: the base
+    @mode must NOT be the ACTIVE user @mode layer (only the preserved fallback). }
+  SnapshotBaseModeVars;
+  ClearModeVars;
+  FModeVars.Free;
+  FVarOverrides.Free;
+  FModeVars := userModes;
+  FVarOverrides := userOverrides;
+  FThemeBaseDir := userBaseDir;
+  ClearList(oldRules);
+  oldRules.Free;
+  oldVars.Free;
+  { LoadInto bumped FVersion, the anchor every memo checks, and merged over the base's own @mode
+    blocks with no overrides; merge again over the user's. }
+  RebuildMergedVars;
 end;
 
 procedure TTyStyleModel.Clear;
@@ -2638,8 +2718,11 @@ end;
 initialization
   TySystemAccentHook := @DefaultSystemAccentHook;
   TySystemModeHook := @DefaultSystemModeHook;
+  TyAddAddOnCssListener(@ReseedLiveModels);
 
 finalization
+  TyRemoveAddOnCssListener(@ReseedLiveModels);
+  FreeAndNil(GLiveModels);
   FreeAndNil(GTypeKeyParents);
 
 end.
