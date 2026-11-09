@@ -2299,6 +2299,34 @@ function cases() {
           rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: { align: 'right' } } } }]),
     [0], { w: true, z: true, probes: [[253, 142], [259, 142], [270, 142], [290, 142], [320, 142], [330, 142], [290, 135],
       [290, 220], [130, 96], [150, 96], [158, 96], [163, 96], [120, 96], [170, 96], [150, 88], [258, 189], [300, 189]] }],
+    // 5. a bordered title's far edges joined to a place of nought ('0' sides)
+    // or to a size with a point ([0, '2.5', 0, 2]): subPixelOptimizeRect's
+    // `originX + originWidth` joined on the css px grid (the 144 and 120 PPI
+    // test draws these at 1.5 and 1.25 times)
+    ['ak-title-css', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, padding: ['0', '2', '1', '0'], backgroundColor: '#eeeeee', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } },
+      { text: 'Uu', left: 200, top: 100, padding: [0, '2.5', 0, 2], backgroundColor: '#dddddd', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } },
+      // (a far edge of two points is no number: Math.max(NaN, 1) is NaN,
+      // the frame not drawn)
+      { text: 'Vv', left: 100, top: 200, padding: [0, '2.5', 0, 2.5], backgroundColor: '#cccccc', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } }] }),
+    [0], { w: true, z: true }],
+    // 6. an axis pointer's label padded [0, 1, 0, '0']: its width '70' (6 +
+    // 1 + '0'), the centring shift by the joined width, the place confined
+    // by `position[0] + width` joined ('133' + '70' past the view: 400 - 70);
+    // one padded '12' at a place of two points: no transform, at the corner
+    ['ak-ptr-place', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 2 },
+          label: { show: true, backgroundColor: '#ffff00', color: '#000000', padding: [0, 1, 0, '0'], formatter: 'P' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6.3, status: 'show', lineStyle: { color: '#00aa00', width: 2 },
+          label: { show: true, backgroundColor: '#00ffff', color: '#000000', padding: '12', formatter: 'Q' } } } }),
+    [0], { w: true, z: true }],
     ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
       title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },
       legend: { left: 5, top: 15, padding: '4', textStyle: { color: '#000000' } } }),

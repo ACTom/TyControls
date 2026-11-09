@@ -1366,6 +1366,58 @@ end;
 
 { AHits False: the context each fill / stroke / text is made with; True:
   findHover at the probes }
+{ [R7-AK] THE AREA A SHAPE'S PATH ENCLOSES as the recorder takes it: the
+  shoelace over every point of the path in order, one ring -- a curve
+  sampled at 64 steps (the recorder samples an arc at 256) }
+function PathRingArea(const S: TTyChartShape): Double;
+var
+  xs, ys: array of Double;
+  n, k, j: Integer;
+  px, py, t, u, a: Double;
+
+  procedure Put(AX, AY: Double);
+  begin
+    SetLength(xs, n + 1);
+    SetLength(ys, n + 1);
+    xs[n] := AX;
+    ys[n] := AY;
+    Inc(n);
+  end;
+
+begin
+  n := 0;
+  px := 0;
+  py := 0;
+  if Length(S.Cmds) = 0 then
+    for k := 0 to High(S.Points) do Put(S.Points[k].X, S.Points[k].Y)
+  else
+    for k := 0 to High(S.Cmds) do
+      case S.Cmds[k].Kind of
+        pckMove, pckLine:
+          begin
+            Put(S.Cmds[k].X, S.Cmds[k].Y);
+            px := S.Cmds[k].X;
+            py := S.Cmds[k].Y;
+          end;
+        pckCurve:
+          begin
+            for j := 1 to 64 do
+            begin
+              t := j / 64;
+              u := 1 - t;
+              Put(u * u * u * px + 3 * u * u * t * S.Cmds[k].X1 + 3 * u * t * t * S.Cmds[k].X2 + t * t * t * S.Cmds[k].X,
+                u * u * u * py + 3 * u * u * t * S.Cmds[k].Y1 + 3 * u * t * t * S.Cmds[k].Y2 + t * t * t * S.Cmds[k].Y);
+            end;
+            px := S.Cmds[k].X;
+            py := S.Cmds[k].Y;
+          end;
+      end;
+  a := 0;
+  for k := 0 to n - 1 do
+    a := a + xs[k] * ys[(k + 1) mod n] - xs[(k + 1) mod n] * ys[k];
+  Result := Abs(a / 2);
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.RunW(AHits: Boolean; const APrefix: string);
 var
   { [R7-Z] a component's part: its key, z2 and kind }
@@ -1699,6 +1751,17 @@ begin
                 Miss(Format('%s: text of %gpx weight %d, upstream %s', [where,
                   TyFontPxOf(el.Caption.FontSizeLogical), el.Caption.FontWeight, o.Strings['font']]));
             end;
+            { [R7-AK] AN AXIS POINTER'S LABEL'S PLACE (the ak- cases): the
+              Text's transform (its spans under it), the port's text at
+              (AX, AY) -- confined by its joined size, at the corner where
+              it is no number }
+            if ak and comp and (Pos('Pointer', ckey) > 0) and (Length(el.CanvasM) = 6) then
+            begin
+              Inc(FCompared);
+              if (Abs(el.CanvasM[4] - m[4]) > 1e-6) or (Abs(el.CanvasM[5] - m[5]) > 1e-6) then
+                Miss(Format('%s: the label at (%g,%g), upstream (%g,%g)', [where, el.CanvasM[4],
+                  el.CanvasM[5], m[4], m[5]]));
+            end;
             CaptionInk(el, pf, ps, plw);
             if (op = 'fillText') and TyTryParseChartColor(o.Strings['fs'], wc) then
             begin
@@ -1979,6 +2042,16 @@ begin
             twentieth: its curves' bounds are the vertices', the recorder's
             the arc's) }
           if Pos('.-1.p.', key) > 0 then fps := 1e-6 else fps := 0.05;
+          { (and a background's area: a corner dropped from the path keeps
+            its bounds) }
+          if (Pos('.-1.p.', key) > 0) and (rec.Find('pa') <> nil) and (rec.Find('pa').JSONType = jtString)
+            and not IsNan(HexD(rec.Strings['pa'])) then
+          begin
+            ga := PathRingArea(el.Shape);
+            Inc(FCompared);
+            if Abs(ga - HexD(rec.Strings['pa'])) > Max(0.5, 1e-6 * HexD(rec.Strings['pa'])) then
+              Miss(Format('%s: the path encloses %g, upstream %g', [where, ga, HexD(rec.Strings['pa'])]));
+          end;
           Inc(FCompared);
           if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > fps)
             or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > fps)
@@ -3490,58 +3563,93 @@ begin
   end;
 end;
 
-{ [R7-AK] THE TITLE OF ai-comp-pad ('12', a border of 1) AT 144 PPI: the
-  frame subPixelOptimizeRect snaps on the css px grid -- its far edge
-  `originX + originWidth` joined as css px strings -- and 1.5 device px a
-  css px; upstream's frame (css px, the recording canvas at 96) times 1.5 }
+{ [R7-AK] BORDERED TITLES WHOSE SIZE A STRING PADDING JOINED, AT 144 AND 120
+  PPI -- ai-comp-pad's ('12') and ak-title-css' (sides '0' that put the
+  joined far edge right of the place; [0, '2.5', 0, 2] whose place joined in
+  device px would be a number of two points; one whose far edge is no number
+  at all): the frame subPixelOptimizeRect snaps on the css px grid -- its
+  far edge `originX + originWidth` joined as css px strings, snapped by the
+  css px pen -- and the PPI over 96 device px a css px; upstream's frame
+  (css px, the recording canvas at 96) times that, none where it is NaN }
 procedure TAdvChartLinesCanvasOracleTest.TestAStringPaddedTitleFrameAt144PPI;
 var
-  cs, els: TJSONArray;
-  c, rec: TJSONObject;
-  i, k: Integer;
-  pb: array[0..3] of Double;
-  b: TBGRABitmap;
-  el: TTyChartElement;
-  bb: TTyRectF;
-  found: Boolean;
-begin
-  found := False;
-  cs := TJSONObject(FRoot).Arrays['charts'];
-  c := nil;
-  for i := 0 to cs.Count - 1 do
-    if cs.Objects[i].Strings['id'] = 'ai-comp-pad' then c := cs.Objects[i];
-  AssertTrue('the case', c <> nil);
-  els := c.Arrays['frames'].Objects[0].Arrays['els'];
-  for k := 0 to els.Count - 1 do
+  bad: string;
+
+  procedure One(const AId: string; APPI: Integer);
+  var
+    cs, els: TJSONArray;
+    c, rec: TJSONObject;
+    i, k, w, h, n: Integer;
+    pb: array[0..3] of Double;
+    b: TBGRABitmap;
+    el: TTyChartElement;
+    bb: TTyRectF;
+    s: Double;
+    key: string;
   begin
-    rec := els.Objects[k];
-    if rec.Strings['key'] <> 'c.title0.0.p.0' then Continue;
-    for i := 0 to 3 do pb[i] := HexD(rec.Arrays['pb'].Strings[i]);
-    found := True;
+    s := APPI / 96;
+    cs := TJSONObject(FRoot).Arrays['charts'];
+    c := nil;
+    for i := 0 to cs.Count - 1 do
+      if cs.Objects[i].Strings['id'] = AId then c := cs.Objects[i];
+    AssertTrue('the case ' + AId, c <> nil);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.Six := True;
+    w := Round(400 * s);
+    h := Round(300 * s);
+    FChart.SetBounds(0, 0, w, h);
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    b := TBGRABitmap.Create(w, h, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(b.Canvas, Rect(0, 0, w, h), APPI);
+    finally
+      b.Free;
+    end;
+    els := c.Arrays['frames'].Objects[0].Arrays['els'];
+    n := 0;
+    for k := 0 to els.Count - 1 do
+    begin
+      rec := els.Objects[k];
+      key := rec.Strings['key'];
+      if (Copy(key, 1, 7) <> 'c.title') or (Copy(key, Length(key) - 5, 6) <> '.0.p.0') then Continue;
+      for i := 0 to 3 do pb[i] := HexD(rec.Arrays['pb'].Strings[i]);
+      key := Copy(key, 3, Pos('.0.p.0', key) - 3);
+      Inc(n);
+      Inc(FCompared);
+      if not FChart.CompPart(key, 0, False, 'stroke', el) then
+      begin
+        bad := bad + LineEnding + Format('%s at %d %s: no frame', [AId, APPI, key]);
+        Continue;
+      end;
+      bb := TyShapeBounds(el.Shape);
+      if IsNan(pb[0]) then
+      begin
+        if TyRectFIsValid(bb) then
+          bad := bad + LineEnding + Format('%s at %d %s: the frame at (%g,%g)-(%g,%g), upstream none',
+            [AId, APPI, key, bb.Left, bb.Top, bb.Right, bb.Bottom]);
+        Continue;
+      end;
+      if (Abs(bb.Left - s * pb[0]) > 1e-6) or (Abs(bb.Top - s * pb[1]) > 1e-6)
+        or (Abs(bb.Right - s * pb[2]) > 1e-6) or (Abs(bb.Bottom - s * pb[3]) > 1e-6) then
+        bad := bad + LineEnding + Format('%s at %d %s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g) times %g',
+          [AId, APPI, key, bb.Left, bb.Top, bb.Right, bb.Bottom, s * pb[0], s * pb[1], s * pb[2], s * pb[3], s]);
+    end;
+    AssertTrue('frames of ' + AId, n > 0);
+    FreeAndNil(FChart);
   end;
-  AssertTrue('upstream''s frame', found);
-  FreeAndNil(FChart);
-  FChart := TLcProbe.Create(FForm);
-  FChart.Parent := FForm;
-  FChart.Controller := FCtl;
-  PinClocks(FChart);
-  FChart.Six := True;
-  FChart.SetBounds(0, 0, 600, 450);
-  FChart.SetOption(c.Objects['option'].AsJSON, True);
-  AssertEquals('parses', '', FChart.OptionError);
-  b := TBGRABitmap.Create(600, 450, BGRA(255, 255, 255, 255));
-  try
-    FChart.Render(b.Canvas, Rect(0, 0, 600, 450), 144);
-  finally
-    b.Free;
-  end;
-  AssertTrue('the frame drawn', FChart.CompPart('title0', 0, False, 'stroke', el));
-  bb := TyShapeBounds(el.Shape);
-  if (Abs(bb.Left - 1.5 * pb[0]) > 1e-6) or (Abs(bb.Top - 1.5 * pb[1]) > 1e-6)
-    or (Abs(bb.Right - 1.5 * pb[2]) > 1e-6) or (Abs(bb.Bottom - 1.5 * pb[3]) > 1e-6) then
-    Fail(Format('the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g) times 1.5',
-      [bb.Left, bb.Top, bb.Right, bb.Bottom, 1.5 * pb[0], 1.5 * pb[1], 1.5 * pb[2], 1.5 * pb[3]]));
-  FreeAndNil(FChart);
+
+begin
+  bad := '';
+  FCompared := 0;
+  One('ai-comp-pad', 144);
+  One('ak-title-css', 144);
+  One('ak-title-css', 120);
+  AssertEquals('the frames at another PPI:' + bad, '', bad);
 end;
 
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the
