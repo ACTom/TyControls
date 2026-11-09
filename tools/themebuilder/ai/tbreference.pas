@@ -46,7 +46,7 @@ implementation
 
 uses
   tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.Parser, tyControls.Css.Values,
-  tyControls.StyleModel, tyControls.BuiltinThemes, tbseeds;
+  tyControls.StyleModel, tyControls.BuiltinThemes, tyControls.Css.AddOns, tbseeds;
 
 type
   TNote = record
@@ -327,6 +327,7 @@ var
   rule: TTyCssRule;
   sel: TTyCssSelector;
   inherits: Boolean;
+  allTokens: TStringArray;
 begin
   keys := TStringList.Create;
   sb := TStringList.Create;
@@ -382,13 +383,14 @@ begin
     sb.Add('## Other variables');
     sb.Add('Defined by the base theme; use them with var(), override them if needed.');
     others := '';
-    for i := 0 to High(TyCatalogTokens) do
+    allTokens := TyCatalogAllTokens;   { the catalog and what add-ons registered }
+    for i := 0 to High(allTokens) do
     begin
-      name := Copy(TyCatalogTokens[i], 3, MaxInt);
+      name := Copy(allTokens[i], 3, MaxInt);
       if listed.IndexOf(name) >= 0 then Continue;
       listed.Add(name);
       if others <> '' then others := others + ', ';
-      others := others + TyCatalogTokens[i];
+      others := others + allTokens[i];
     end;
     sb.Add(others);
     sb.Add('');
@@ -503,4 +505,9 @@ begin
   Result := Length(TbReferenceText) div 4;
 end;
 
+initialization
+  TyAddAddOnCssListener(@TbForgetReference);
+
+finalization
+  TyRemoveAddOnCssListener(@TbForgetReference);
 end.

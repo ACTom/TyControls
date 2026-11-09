@@ -333,6 +333,7 @@ uses
   test.themebuilder.aisession,
   test.themebuilder.compare,
   test.themebuilder.edit,
+  test.themebuilder.addons,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
   test.customclasses.p4,
   test.typekeychain,

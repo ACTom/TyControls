@@ -340,13 +340,17 @@ function TbFastProbe(AModel: TTyStyleModel; const AText: string; AModern: Boolea
   every declaration any combination would evaluate. False and AError (typeKey[.variant]:
   why) on a raise }
 function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
+{ the base layer and the catalog it reads are read anew by the next probe. The add-on
+  listener does this; the tests, which unregister without telling a listener, call it too }
+procedure TbForgetPreviewCaches;
 
 implementation
 
 {$R *.lfm}
 
 uses
-  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.Parser, tyControls.DefaultTheme,
+  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.Parser, tyControls.Css.AddOns,
+  tyControls.DefaultTheme,
   tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource,
   tbcoverage, tbproblems;
 
@@ -528,13 +532,14 @@ function ProbeKeys(out AOwned: Boolean): TStringList;
 var
   reg, keys: TStringList;
   i, c: Integer;
-  chain: TStringArray;
+  chain, all: TStringArray;
 begin
   if GCatalog = nil then
   begin
     GCatalog := TStringList.Create;
-    for i := 0 to High(TyCatalogTypeKeys) do
-      GCatalog.Add(LowerCase(TyCatalogTypeKeys[i]));
+    all := TyCatalogAllTypeKeys;   { the catalog and what add-ons registered }
+    for i := 0 to High(all) do
+      GCatalog.Add(LowerCase(all[i]));
     GCatalog.Sorted := True;
   end;
   AOwned := False;
@@ -654,7 +659,7 @@ var
 
 begin
   if GBaseSheet = nil then
-    GBaseSheet := ParseCss(TyBuiltinThemeCss + LineEnding + TyBuiltinBaseModeCss);
+    GBaseSheet := ParseCss(TyBuiltinThemeCss + LineEnding + TyAddOnCss + LineEnding + TyBuiltinBaseModeCss);
   if AModern and (GDensitySheet = nil) then
     GDensitySheet := ParseCss(TyDensityModernCss);
   try
@@ -1318,8 +1323,17 @@ begin
   ShowSampleWindow;
 end;
 
-finalization
+procedure TbForgetPreviewCaches;
+begin
   FreeAndNil(GBaseSheet);
-  FreeAndNil(GDensitySheet);
   FreeAndNil(GCatalog);
+end;
+
+initialization
+  TyAddAddOnCssListener(@TbForgetPreviewCaches);
+
+finalization
+  TyRemoveAddOnCssListener(@TbForgetPreviewCaches);
+  TbForgetPreviewCaches;
+  FreeAndNil(GDensitySheet);
 end.

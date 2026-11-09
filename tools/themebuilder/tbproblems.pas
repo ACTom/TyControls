@@ -56,7 +56,7 @@ function TbProblemCaption(const AProblem: TTbProblem): string;
 implementation
 
 uses
-  tyControls.StyleModel, tyControls.Css.Catalog;
+  tyControls.StyleModel, tyControls.Css.Catalog, tyControls.Css.AddOns;
 
 procedure TbBaseVarNames(ADest: TStrings);
 const
@@ -65,7 +65,9 @@ var
   model: TTyStyleModel;
   m, i: Integer;
   names: TStringList;
+  all: TStringArray;
 begin
+  all := TyCatalogAllTokens;   { the catalog and what add-ons registered }
   names := TStringList.Create;
   model := TTyStyleModel.Create;   { nothing loaded: the base layer alone }
   try
@@ -74,9 +76,9 @@ begin
     for m := 0 to High(cModes) do
     begin
       model.SetMode(cModes[m]);
-      for i := 0 to High(TyCatalogTokens) do
-        if model.RawVar(TyCatalogTokens[i]) <> '' then
-          names.Add(LowerCase(Copy(TyCatalogTokens[i], 3, MaxInt)));
+      for i := 0 to High(all) do
+        if model.RawVar(all[i]) <> '' then
+          names.Add(LowerCase(Copy(all[i], 3, MaxInt)));
     end;
     ADest.AddStrings(names);
   finally

@@ -503,6 +503,10 @@ msgstr "导出主题包(&E)…"
 msgid "&Use it in a program..."
 msgstr "在程序里怎么用(&U)…"
 
+#: ttbmainform.mnuloadaddon.caption
+msgid "Load add-on st&yles..."
+msgstr "载入附加包样式(&Y)…"
+
 #: ttbmainform.mnuseeds.caption
 msgid "&Seeds"
 msgstr "种子(&S)"
@@ -1234,6 +1238,28 @@ msgstr "%s 已存在。替换它吗？"
 #, object-pascal-format
 msgid "Exported to %s."
 msgstr "已导出到 %s。"
+
+#: tbmain.rstbaddonfilter
+msgid "Add-on styles (*.tycss)|*.tycss|All files|*"
+msgstr "附加包样式 (*.tycss)|*.tycss|所有文件|*"
+
+#: tbmain.rstbaddonfailed
+#, object-pascal-format
+msgid "Could not load the add-on styles %s: %s"
+msgstr "无法载入附加包样式 %s：%s"
+
+#: tbmain.rstbaddonloaded
+#, object-pascal-format
+msgid "Loaded the add-on styles from %s."
+msgstr "已载入 %s 里的附加包样式。"
+
+#: tbmain.rstbaddonsfailed
+msgid "Some add-on styles did not load:"
+msgstr "有些附加包样式没有载入："
+
+#: tbaddons.rstbaddonnofile
+msgid "--addon needs a file name after it."
+msgstr "--addon 后面要跟一个文件名。"
 
 #: tbseedsframe.rstbseeddark
 msgid "Dark"

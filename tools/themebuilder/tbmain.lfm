@@ -198,6 +198,10 @@ object TbMainForm: TTbMainForm
         Caption = '&Use it in a program...'
         OnClick = MnuSnippetsClick
       end
+      object MnuLoadAddOn: TMenuItem
+        Caption = 'Load add-on st&yles...'
+        OnClick = MnuLoadAddOnClick
+      end
       object MnuFileSep: TMenuItem
         Caption = '-'
       end

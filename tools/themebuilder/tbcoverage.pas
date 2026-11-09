@@ -38,6 +38,8 @@ uses
 
 procedure TbDocTypeKeys(AScan: TTbCssScan; ADest: TStrings);
 procedure TbBaseTypeKeys(ADest: TStrings);
+{ FOR THE TESTS and the add-on listener: the next TbIsKnownTypeKey / TbBaseTypeKeys build anew }
+procedure TbForgetKnownKeys;
 function TbPartKeysOfUnit(const AUnit: string): string;       { comma list, '' when no row }
 procedure TbPartKeysOfClass(AClass: TClass; ADest: TStrings); { its unit's row and every ancestor's }
 function TbPartKeyUnits: TStringArray;                          { FOR THE TESTS }
@@ -56,7 +58,8 @@ procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrin
 implementation
 
 uses
-  tyControls.Css.Parser, tyControls.Css.Catalog, tyControls.DefaultTheme, tyControls.StyleModel;
+  tyControls.Css.Parser, tyControls.Css.Catalog, tyControls.Css.AddOns, tyControls.DefaultTheme,
+  tyControls.StyleModel;
 
 type
   TTbPartRow = record
@@ -205,7 +208,8 @@ begin
     GBaseKeys.CaseSensitive := False;
     GBaseKeys.Sorted := True;
     GBaseKeys.Duplicates := dupIgnore;
-    p := TTyCssParser.Create(TyBuiltinThemeCss);
+    { the built-in base layer includes what add-ons registered }
+    p := TTyCssParser.Create(TyBuiltinThemeCss + LineEnding + TyAddOnCss);
     try
       sheet := p.Parse;
       try
@@ -313,14 +317,16 @@ function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
 var
   i, j, n: Integer;
   base: TStringList;
+  all: TStringArray;
 begin
   if GKnownKeys = nil then
   begin
     GKnownKeys := TStringList.Create;
     GKnownKeys.Sorted := True;
     GKnownKeys.Duplicates := dupIgnore;
-    for i := 0 to High(TyCatalogTypeKeys) do
-      GKnownKeys.Add(LowerCase(TyCatalogTypeKeys[i]));
+    all := TyCatalogAllTypeKeys;   { the catalog and what add-ons registered }
+    for i := 0 to High(all) do
+      GKnownKeys.Add(LowerCase(all[i]));
     for i := 0 to High(cTbPartRows) do
     begin
       n := WordCountOf(cTbPartRows[i].K);
@@ -392,7 +398,16 @@ begin
   SortKeys(ADefaultLook);
 end;
 
-finalization
+procedure TbForgetKnownKeys;
+begin
   FreeAndNil(GBaseKeys);
   FreeAndNil(GKnownKeys);
+end;
+
+initialization
+  TyAddAddOnCssListener(@TbForgetKnownKeys);
+
+finalization
+  TyRemoveAddOnCssListener(@TbForgetKnownKeys);
+  TbForgetKnownKeys;
 end.

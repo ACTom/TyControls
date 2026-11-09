@@ -40,7 +40,7 @@ uses
   tyControls.ThemeLint, tyControls.Design.CssEditKit,
   tbdocument, tbsettings, tbproblems, tbpreview, tbeditorlook, tbcssscan, tbseedsframe,
   tbcoverageform, tbexportform, tbsnippetsform, tbaisettings, tbaisession, tbaiframe,
-  tbcompareform, tbaisettingsform, tbfindbar, tyControls.TextMenu;
+  tbcompareform, tbaisettingsform, tbfindbar, tbaddons, tyControls.TextMenu;
 
 const
   cTbPreviewKeptEn = 'The preview kept the last version that worked: %s';  { for the AI }
@@ -62,6 +62,10 @@ resourcestring
   rsTbReload = 'The file %s was changed by another program. Reload it?';
   rsTbReloadLoses = 'Your unsaved changes will be lost.';
   rsTbExported = 'Exported to %s.';
+  rsTbAddOnFilter = 'Add-on styles (*.tycss)|*.tycss|All files|*';
+  rsTbAddOnFailed = 'Could not load the add-on styles %s: %s';
+  rsTbAddOnLoaded = 'Loaded the add-on styles from %s.';
+  rsTbAddOnsFailed = 'Some add-on styles did not load:';
   rsTbAiEditedSince = 'The editor changed after this was generated. Accepting replaces those changes too. Accept?';
   rsTbAiAccepted = 'Accepted the AI''s version. Ctrl+Z undoes it.';
   rsTbFormatted = 'Formatted. Ctrl+Z undoes it.';
@@ -102,6 +106,7 @@ type
     MnuExportSep: TMenuItem;
     MnuExport: TMenuItem;
     MnuSnippets: TMenuItem;
+    MnuLoadAddOn: TMenuItem;
     MnuFileSep: TMenuItem;
     MnuExit: TMenuItem;
     MnuEdit: TMenuItem;
@@ -156,6 +161,7 @@ type
     procedure MnuCoverageClick(Sender: TObject);
     procedure MnuExportClick(Sender: TObject);
     procedure MnuSnippetsClick(Sender: TObject);
+    procedure MnuLoadAddOnClick(Sender: TObject);
     procedure MnuAiClick(Sender: TObject);
     procedure MnuAiSettingsClick(Sender: TObject);
     procedure MnuEditClick(Sender: TObject);
@@ -271,6 +277,11 @@ type
     procedure NewMinimal;
     procedure NewFromBuiltin(const AName: string);
     function OpenFile(const AFileName: string): Boolean;
+    { loads an add-on's styles from a file: the vocabulary grows, the document is checked again.
+      A failure is reported like a file that does not open. }
+    function LoadAddOnFile(const AFileName: string): Boolean;
+    { the addons folder next to the exe and every --addon <file>; failures are reported once }
+    procedure LoadStartupAddOns(Data: PtrInt);
     function SaveTo(const AFileName: string): Boolean;
     function SaveDocument: Boolean;                { Save As when untitled }
     procedure CheckDiskNow;                        { what the watch timer does }
@@ -438,6 +449,8 @@ begin
     FPreview.SetDark(True, err);
     RefreshNow;
   end;
+  { add-on styles, once the loop runs: a style model is alive and a failure can be shown }
+  Application.QueueAsyncCall(@LoadStartupAddOns, 0);
 end;
 
 procedure TTbMainForm.FormDestroy(Sender: TObject);
@@ -1828,6 +1841,55 @@ begin
   finally
     f.Free;
   end;
+end;
+
+function TTbMainForm.LoadAddOnFile(const AFileName: string): Boolean;
+begin
+  try
+    TbLoadAddOnFile(AFileName);
+  except
+    on E: Exception do
+    begin
+      Ask(Format(rsTbAddOnFailed, [AFileName, E.Message]), [mbOK], mtError);
+      Exit(False);
+    end;
+  end;
+  FBaseVars.Clear;
+  TbBaseVarNames(FBaseVars);   { the add-on's variables are known ones now }
+  RefreshNow;
+  SetStatus(Format(rsTbAddOnLoaded, [AFileName]));
+  Result := True;
+end;
+
+procedure TTbMainForm.LoadStartupAddOns(Data: PtrInt);
+var
+  args, errors: TStringList;
+begin
+  args := TStringList.Create;
+  errors := TStringList.Create;
+  try
+    TbCommandLine(args);
+    if (TbLoadStartupAddOns(ExtractFilePath(ParamStr(0)), args, errors) > 0) or
+       (errors.Count > 0) then
+    begin
+      FBaseVars.Clear;
+      TbBaseVarNames(FBaseVars);
+      RefreshNow;
+    end;
+    if errors.Count > 0 then
+      Ask(rsTbAddOnsFailed + LineEnding + Trim(errors.Text), [mbOK], mtError);
+  finally
+    errors.Free;
+    args.Free;
+  end;
+end;
+
+procedure TTbMainForm.MnuLoadAddOnClick(Sender: TObject);
+begin
+  DlgOpen.Filter := rsTbAddOnFilter;
+  DlgOpen.FileName := '';
+  if DlgOpen.Execute then
+    LoadAddOnFile(DlgOpen.FileName);
 end;
 
 procedure TTbMainForm.MnuSnippetsClick(Sender: TObject);
