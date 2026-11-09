@@ -4743,6 +4743,9 @@ type
     { [R7-AJ] the zlevels the incremental layers stand on, in order (one
       per zlevel a progressive run's shown chunks are on) }
     function ProgLayerLevels: TTyIntegerArray;
+    { [R7-AJ] the paint position of the last element drawn on the layer of
+      AIndex (ProgLayerLevels' order; -1 for none) }
+    function ProgLayerLastPos(AIndex: Integer): Integer;
     { [R7-AD] where the last paint drew the components' parts (each its
       paint rect, as a dirty block meets it) }
     function CompRectsDrawn: TTyCompRectArray;

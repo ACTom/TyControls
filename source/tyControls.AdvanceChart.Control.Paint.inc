@@ -3181,6 +3181,12 @@ begin
   Result := LinesTrailAlpha(ASeriesIndex);
 end;
 
+function TTyCustomAdvanceChart.ProgLayerLastPos(AIndex: Integer): Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(FProgLayers)) then Exit(-1);
+  Result := FProgLayers[AIndex].LastPos;
+end;
+
 function TTyCustomAdvanceChart.ProgLayerLevels: TTyIntegerArray;
 var i: Integer;
 begin

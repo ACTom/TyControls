@@ -38,6 +38,7 @@ type
     procedure Cached(ACanvas: TCanvas; const ARect: TRect);
     procedure Move(AX, AY: Integer);
     function Levels: TTyIntegerArray;
+    function LastPos(AIndex: Integer): Integer;
     function List: TTyPaintList;
   end;
 
@@ -59,6 +60,8 @@ type
     procedure TestTwoRunsOfOneLevelOutOfOrder;
     procedure TestALevelWhoseFirstChunkDrawsNothing;
     procedure TestRowsSelectedDuringTheRun;
+    procedure TestALiftedRowPastARunNotYetDrawn;
+    procedure TestAPatchedRowKeepsItsZLevel;
     procedure TestAPreventedRunIsDrawnAtOnce;
   end;
 
@@ -77,6 +80,11 @@ end;
 procedure TPlProbe.Cached(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderCached(ACanvas, ARect, 96);
+end;
+
+function TPlProbe.LastPos(AIndex: Integer): Integer;
+begin
+  Result := ProgLayerLastPos(AIndex);
 end;
 
 function TPlProbe.Levels: TTyIntegerArray;
@@ -803,6 +811,164 @@ begin
     frames[False].Free;
     frames[True].Free;
     TyAdvChartLayerRegionForTest(True);
+  end;
+end;
+
+{ THE LAYER'S LAST POSITION AFTER A REGION DRAWN AGAIN (290p-14): rows
+  selected (z2 + 9: past every row of the run, drawn or not) and unselected
+  while the run draws, each patch drawing the layer again in part. The last
+  position a layer keeps -- what the next chunk's rows are held against to
+  tell a drawing in paint order -- is its last drawn row's place in the
+  order as it stands after the region, not the one before the patch
+  [was: by the mutant 290p-14, the lifted rows' place kept after they
+  dropped] }
+procedure TAdvChartProgLayersTest.TestALiftedRowPastARunNotYetDrawn;
+var
+  chart: TPlProbe;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, r0: Integer;
+  bad: string;
+
+  procedure Step(const AAct: string);
+  var q, want, lv: Integer; pe: PTyChartElement;
+  begin
+    chart.DispatchAction(AAct);
+    chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+    if Length(chart.Levels) <> 1 then
+    begin
+      bad := bad + AAct + ': layers ' + IntToStr(Length(chart.Levels)) + '; ';
+      Exit;
+    end;
+    lv := chart.Levels[0];
+    want := -1;
+    for q := 0 to chart.List.Count - 1 do
+    begin
+      pe := chart.List.Ref(chart.List.PaintOrder(q));
+      if (pe^.ProgChunk > 0) and not pe^.ProgHidden and not pe^.Ignore and (pe^.ZLevel = lv) then
+        want := q;
+    end;
+    if chart.LastPos(0) <> want then
+      bad := bad + Format('%s: last position %d, the order''s %d; ', [AAct, chart.LastPos(0), want]);
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {}, "yAxis": {}, "series": [');
+    sb.Append('{"type": "scatter", "progressive": 10, "progressiveThreshold": 40, "symbolSize": 22, "selectedMode": "multiple",');
+    sb.Append(' "itemStyle": {"opacity": 0.7}, "select": {"itemStyle": {"color": "#000000"}}, "data": [');
+    for i := 0 to 99 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append(Format('[%d,%d]', [(i * 7) mod 20, (i * 3) mod 12]));
+    end;
+    sb.Append(']}]}');
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf24bit;
+      bmp.SetSize(480, 400);
+      TyAdvChartLayerRegionForTest(True);
+      chart := NewChart(480, 400, sb.ToString);
+      try
+        bad := '';
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        chart.ProgressTick;
+        chart.Cached(bmp.Canvas, Rect(0, 0, 480, 400));
+        { (the first state change after a build: the list built again) }
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 2}');
+        r0 := TyAdvChartLayerRegionsForTest;
+        Step('{"type": "select", "seriesIndex": 0, "dataIndex": 3}');
+        Step('{"type": "unselect", "seriesIndex": 0, "dataIndex": 2}');
+        Step('{"type": "unselect", "seriesIndex": 0, "dataIndex": 3}');
+        AssertTrue('the patches drew the layer in part', TyAdvChartLayerRegionsForTest - r0 >= 2);
+        AssertEquals('the last positions as the order stands', '', bad);
+      finally
+        chart.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  finally
+    sb.Free;
+  end;
+end;
+
+{ A ROW A STATE PATCH WROTE KEEPS THE ZLEVEL THE BUILD GAVE IT: a scatter of
+  more rows than its threshold on its own zlevel (allocateZlevels), one of
+  a zlevel written into the series; a selection, a hover, and their undoing
+  patched into the list -- each row on its series' zlevel, as zrender's
+  states never touch it [was: the journal's copy from before the build
+  wrote the levels put back, the row on zlevel 0] }
+procedure TAdvChartProgLayersTest.TestAPatchedRowKeepsItsZLevel;
+var
+  chart: TPlProbe;
+  bmp: TBitmap;
+  sb: TStringBuilder;
+  i, k, want: Integer;
+  el: TTyChartElement;
+  bad: string;
+
+  procedure Check(const AWhen: string);
+  var q: Integer;
+  begin
+    for q := 0 to chart.List.Count - 1 do
+    begin
+      el := chart.List.Element(q);
+      if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0) then Continue;
+      if el.Datum.SeriesIndex = 0 then want := 1 else want := 4;
+      if el.ZLevel <> want then
+        bad := bad + Format('%s: series %d row %d on zlevel %d, not %d; ', [AWhen,
+          el.Datum.SeriesIndex, el.Datum.DataIndex, el.ZLevel, want]);
+    end;
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {}, "yAxis": {}, "series": [');
+    sb.Append('{"type": "scatter", "progressive": 10, "progressiveThreshold": 40, "symbolSize": 12, "selectedMode": "multiple",');
+    sb.Append(' "select": {"itemStyle": {"color": "#000000"}}, "data": [');
+    for i := 0 to 59 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append(Format('[%d,%d]', [(i * 7) mod 20, (i * 3) mod 12]));
+    end;
+    sb.Append(']}, {"type": "scatter", "zlevel": 4, "symbolSize": 12, "selectedMode": "multiple",');
+    sb.Append(' "select": {"itemStyle": {"color": "#000000"}}, "data": [[1, 1], [2, 2], [3, 3]]}]}');
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf24bit;
+      bmp.SetSize(400, 300);
+      chart := NewChart(400, 300, sb.ToString);
+      try
+        bad := '';
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        chart.ProgressTick;
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        Check('built');
+        for k := 0 to 2 do
+        begin
+          chart.DispatchAction(Format('{"type": "select", "seriesIndex": 0, "dataIndex": %d}', [k]));
+          chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+          chart.DispatchAction(Format('{"type": "select", "seriesIndex": 1, "dataIndex": %d}', [k]));
+          chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+          Check(Format('select %d', [k]));
+        end;
+        chart.DispatchAction('{"type": "unselect", "seriesIndex": 0, "dataIndex": 1}');
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        chart.DispatchAction('{"type": "highlight", "seriesIndex": 1, "dataIndex": 2}');
+        chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+        Check('unselect, highlight');
+        AssertEquals('every row on its series'' zlevel', '', bad);
+      finally
+        chart.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  finally
+    sb.Free;
   end;
 end;
 
