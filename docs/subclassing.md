@@ -146,6 +146,34 @@ MyTagButton { border-radius: var(--radius-pill); }
 - 在控件创建之前登记。运行到一半才登记，已经画好的控件不会自己重画。
 - 不登记也可以，那这个键就只吃主题里为它写的规则；主题一条都没写，控件就什么样式都没有。
 
+### 控件包自带默认样式
+
+自己的控件包想让控件装上就有样子，不必等每个主题都写到它，就在包里带一份 tycss，用 `TyRegisterAddOnCss` 交给 TyControls：
+
+```pascal
+uses
+  tyControls.Css.AddOns;
+
+initialization
+  TyRegisterAddOnCss('mytags', MyTagsCss);
+```
+
+`MyTagsCss` 返回这份 tycss 的文本，通常是编进程序的字符串。[TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) 的图表样式就是这样登记的。
+
+- 登记进去的是两样东西：一份默认 tycss，和从这份文本里取出的词表。
+- 默认 tycss 进每个样式模型的底层，排在 `light.tycss` 后面，所以每个主题，内置的、用户自己的，都会用到它。
+- 词表是文本里定义的 token（`--名字:`）和主题键。设计期 StyleOverride 编辑器的补全里会有它们。
+- 词表只收 `Ty` 开头的主题键（和生成内置词表的 `scripts/gen-tycss-catalog.ps1` 同一条规则）。别的名字的键照样生效，只是补全里没有。
+- 在单元的 `initialization` 里调用，赶在第一个控件创建之前。
+- 同一个名字再登记一次，就替换原来的文本。
+- 文本载入不了（语法错，或者用了谁都没定义的变量），会被拒绝，异常信息里带着登记时用的名字。
+- 已经有样式模型时，`TyRegisterAddOnCss` 当场抛这个异常，什么都不留下。
+- 还没有样式模型时（`initialization` 里通常如此），下一个建出来的样式模型会去掉它，再抛这个异常。
+- 用户主题照样能盖过它：它在底层，用户主题给同一个键或同一个 token 写了值，就以用户主题为准。
+- 不要了可以调 `TyUnregisterAddOnCss` 去掉。已经建好的样式模型会跟着去掉它的规则和 token。
+
+主题编辑器不链接你的包，要它认得这些键和 token，见 [themebuilder.md](themebuilder.md) 的「附加包的样式」。
+
 ---
 
 ## 3. Custom 类里属性的可见性

@@ -46,6 +46,30 @@ Stop typing for 0.3 seconds and the text is parsed, checked and loaded into the 
 
 The language itself is described in [tycss-reference.en.md](tycss-reference.en.md).
 
+## Add-on styles
+
+Other control packages (such as [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart)) bring tycss of their own with `TyRegisterAddOnCss`; see "Default styles in a control package" in [subclassing.en.md](subclassing.en.md). The Theme Builder does not link those packages, so you hand it that tycss as a file.
+
+Once it is loaded:
+
+- completion offers its tokens and theme keys;
+- the Problems page counts the variables it defines as defined;
+- the preview's base layer carries its rules;
+- the coverage check knows its theme keys.
+
+There are three ways to load one:
+
+- At start-up, every `*.tycss` in the `addons` folder next to the program, in file-name order.
+- The command-line option `--addon <file>` (or `--addon=<file>`), as many times as you like.
+- File → Load add-on styles…, to pick a file at any time.
+
+Worth knowing:
+
+- The file name without its extension is the add-on's name. Loading the same name again replaces the earlier text.
+- A file that does not load is reported in a message box, naming the file and saying why. At start-up the other files still load.
+- In a build from source the program sits in `tools/themebuilder/lib/<cpu>-<os>/`, so that is where the `addons` folder goes.
+- On macOS, in an `.app` bundle, "next to the program" means inside the bundle, in `Contents/MacOS/`, which is awkward to reach. There the menu or `--addon` is the easier route.
+
 ## The Edit menu and keys
 
 The Edit menu sits between File and View. Undo, Cut, Copy, Paste, Delete and Select all act on the text box that has the focus: the editor, or a Ty box such as the find box or the AI page's description. With the focus on a button or a list, their keys do nothing (the key goes to that control as usual), while choosing them from the menu acts on the editor. Cut, Copy and Delete are greyed with nothing selected, Undo with nothing to undo. Formatting and finding always act on the editor.

@@ -146,6 +146,34 @@ A few things to know:
 - Register before any control is created. A registration made later does not repaint controls already on screen.
 - Not registering is fine too: the key then gets only the rules a theme writes for it, and no style at all if the theme writes none.
 
+### Default styles in a control package
+
+A control package of your own can make its controls look right as soon as they are installed, before any theme mentions them. Ship a tycss text in the package and hand it to TyControls with `TyRegisterAddOnCss`:
+
+```pascal
+uses
+  tyControls.Css.AddOns;
+
+initialization
+  TyRegisterAddOnCss('mytags', MyTagsCss);
+```
+
+`MyTagsCss` returns the tycss text, usually a string compiled into the program. [TyAdvanceChart](https://github.com/ACTom/TyAdvanceChart) registers its chart styles this way.
+
+- It registers two things: a default tycss, and the vocabulary taken from that text.
+- The default tycss goes into the base layer of every style model, after `light.tycss`, so every theme uses it, built-in or your users' own.
+- The vocabulary is the tokens (`--name:`) and the theme keys the text defines. The design-time StyleOverride editor offers them in its completion.
+- Only theme keys that start with `Ty` join the vocabulary (the same rule as `scripts/gen-tycss-catalog.ps1`, which builds the built-in one). Keys with other names still work; completion just does not offer them.
+- Call it in the unit's `initialization`, before the first control is created.
+- Registering the same name again replaces the earlier text.
+- A text that does not load (a syntax error, or a variable nobody defines) is refused, and the exception message names the add-on.
+- When a style model already exists, `TyRegisterAddOnCss` raises that exception on the spot and leaves nothing behind.
+- When none exists yet (the usual case in `initialization`), the next style model to be created drops the text and raises it.
+- User themes still override it: it sits in the base layer, so a user theme that sets the same key or token wins.
+- `TyUnregisterAddOnCss` takes it out again. Style models that already exist drop its rules and tokens at once.
+
+The Theme Builder does not link your package. To make it know these keys and tokens, see "Add-on styles" in [themebuilder.en.md](themebuilder.en.md).
+
 ---
 
 ## 3. Visibility in the custom classes
