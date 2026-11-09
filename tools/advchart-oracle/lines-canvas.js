@@ -2286,6 +2286,19 @@ function cases() {
       toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', borderRadius: [3, 0, 2, 1], borderColor: '#00aa00',
         borderWidth: 1, feature: { saveAsImage: { title: 'Pp', icon: 'image://' + IMG } } } }),
     [0], { w: true, z: true }],
+    // 4. a rich label of which only some tokens fall at NaN by a padding (a
+    // token padded {0: 1, 2: 1}: its width NaN, the token after it at NaN):
+    // that TSpan's rect at `style.x || 0`, found there; a right-aligned one
+    // at `0 - width`
+    ['ak-part-hit', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5], [6, 2]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: '{a|A}{b|x}{c|yyyyyyyyyyyy}', color: '#000000',
+          rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: {} } } },
+      { type: 'scatter', data: [[3, 8]], symbolSize: 10, itemStyle: { color: '#0000ff' },
+        label: { show: true, position: 'right', formatter: '{a|A}{b|x}{c|yyyyyy}', color: '#000000',
+          rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: { align: 'right' } } } }]),
+    [0], { w: true, z: true, probes: [[253, 142], [259, 142], [270, 142], [290, 142], [320, 142], [330, 142], [290, 135],
+      [290, 220], [130, 96], [150, 96], [158, 96], [163, 96], [120, 96], [170, 96], [150, 88], [258, 189], [300, 189]] }],
     ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
       title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },
       legend: { left: 5, top: 15, padding: '4', textStyle: { color: '#000000' } } }),

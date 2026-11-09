@@ -3483,10 +3483,17 @@ end;
 
 { [R7-AK] a legend whose group has no transform (a padding of no side
   readable: its y NaN too): its items at their own places in the canvas'
-  frame, found there -- upstream's findHover at the probes }
+  frame, found there; a rich label's tokens at NaN (after one padded
+  {0: 1, 2: 1}): their rects at `style.x || 0`, found there --
+  upstream's findHover at the probes }
 procedure TAdvChartLinesCanvasOracleTest.TestTheR7AKHitsAsUpstream;
 begin
-  RunW(True, 'ak-');
+  FCapKeys := True;
+  try
+    RunW(True, 'ak-');
+  finally
+    FCapKeys := False;
+  end;
 end;
 
 { [R7-AK] THE TITLE OF ai-comp-pad ('12', a border of 1) AT 144 PPI: the

@@ -560,6 +560,24 @@ const CASES = [
   { id: 'pad.undef', note: "padded [4] and true: a side undefined, the words at NaN, bounded at 0",
     option: scatter([sc({ label: { show: true, padding: [4] }, labelLayout: { hideOverlap: true } }),
       sc({ label: { show: true, padding: true }, labelLayout: { hideOverlap: true }, data: pts(25, 7, 13) })]) },
+  // [R7-AK] a rich text of which only some tokens fall at NaN by a padding:
+  // a token padded {0: 1, 2: 1} (its sides 1 and 3 undefined) has a width of
+  // NaN, so the tokens after it on the left are at NaN, and a right one with
+  // them -- their TSpans bounded at `style.x || 0`, the label's rect their
+  // union with the rest
+  { id: 'pad.part', note: "a rich label whose middle token is padded {0: 1, 2: 1}: the token after it at NaN, bounded at 0",
+    option: scatter([sc({ label: { show: true, formatter: '{a|{c}}{b|x}{c|y}', rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: {} } },
+      labelLayout: { hideOverlap: true } })]) },
+  { id: 'pad.part-right', note: "the same with the last token right-aligned (the line's width NaN), and a plate on the first",
+    option: scatter([sc({ label: { show: true, formatter: '{a|{c}}{b|x}{c|y}', rich: { a: { backgroundColor: '#eee' },
+      b: { padding: { 0: 1, 2: 1 } }, c: { align: 'right' } } }, labelLayout: { moveOverlap: 'shiftY' }, data: pts(12, 7, 13) })]) },
+  { id: 'pad.part-line', note: "a moved label's line where a token after one padded {0: 2, 2: 2} is at NaN",
+    option: scatter([sc({ label: { show: true, formatter: '{a|{c}}{b|x}{c|y}', rich: { a: {}, b: { padding: { 0: 2, 2: 2 } }, c: {} } },
+      labelLine: { show: true }, labelLayout: { dx: 30, dy: -20 }, data: pts(6, 7, 13) })]) },
+  { id: 'pad.part-long', note: "on the right: the token at NaN long, its rect at 0 reaching past the others (the label's rect its union), hideOverlap on it",
+    option: scatter([sc({ label: { show: true, position: 'right', formatter: '{a|A}{b|x}{c|yyyyyyyyyyyy}',
+      rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: {} } },
+      labelLayout: { hideOverlap: true }, data: pts(20, 7, 13) })]) },
   { id: 'margin.min', note: 'label.minMargin grows the global rect',
     option: scatter([sc({ label: { show: true, minMargin: 12 }, labelLayout: { hideOverlap: true } })]) },
   { id: 'margin.text', note: 'label.textMargin grows the local rect',
