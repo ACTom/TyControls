@@ -854,7 +854,11 @@ const
     + '"xAxis":{"type":"value","min":0,"max":10,"show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
     + '"series":[{"type":"graph","coordinateSystem":"cartesian2d","symbolSize":0,'
     + '"data":[[1,5.13],[9,5.13],[%s,1.3],[%s,8.9]],"links":[{"source":0,"target":1},{"source":2,"target":3}],'
-    + '"lineStyle":{"width":1,"color":"#000000","opacity":1}}]}';
+    + '"lineStyle":{"width":1,"color":"#000000","opacity":1}},'
+    { (and on a view: snapped in data space, the same at every PPI) }
+    + '{"type":"graph","layout":"none","left":50,"top":50,"width":200,"height":150,"symbolSize":0,'
+    + '"data":[{"x":10.13,"y":20.37},{"x":90.13,"y":20.37},{"x":40.37,"y":5.1},{"x":40.37,"y":70.9}],'
+    + '"links":[{"source":0,"target":1},{"source":2,"target":3}],"lineStyle":{"width":1,"color":"#000000","opacity":1}}]}';
 var
   pts: array[0..1] of array of Double;
   ppi, k, q, n: Integer;
@@ -889,7 +893,7 @@ begin
       end;
     end;
   end;
-  AssertTrue('the edges in the frame', Length(pts[0]) >= 8);
+  AssertTrue('the edges in the frame', Length(pts[0]) >= 16);
   AssertEquals('as many points', Length(pts[0]), Length(pts[1]));
   worst := 0;
   for k := 0 to High(pts[0]) do worst := Max(worst, Abs(pts[1][k] - 1.5 * pts[0][k]));
