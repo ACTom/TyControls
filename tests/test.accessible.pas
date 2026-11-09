@@ -614,7 +614,8 @@ begin
   AssertTrue('the focused item is focused', (v.LVal and TyAccStateFocused) <> 0);
   ChildOf(ChildOf(root, 1), 3).get_accState(TyAccChild(TyAccChildSelf), @v);
   AssertTrue('its neighbour is not', (v.LVal and TyAccStateFocused) = 0);
-  { the control itself is focused when no item has the focus inside it }
+  { the root's Focused bit is the control's own Focused alone: it is set here
+    although the host names an item (row 0b) as the focused one }
   root.get_accState(TyAccChild(TyAccChildSelf), @v);
   AssertTrue('the control holds the focus', (v.LVal and TyAccStateFocused) <> 0);
   AssertTrue('and is focusable', (v.LVal and TyAccStateFocusable) <> 0);
@@ -706,10 +707,9 @@ begin
   p := PWideChar(Pointer(1));
   AssertEquals('default action', S_FALSE, it.get_accDefaultAction(self_, @p));
   AssertTrue(p = nil);
-  v := Default(TTyAccVariant);
-  v.VType := TyAccVtI4;
-  AssertEquals('selection', S_FALSE, it.get_accSelection(@v));
-  AssertEquals(TyAccVtEmpty, v.VType);
+  { get_accSelection is left out, as larColorPicker is: it answers S_FALSE
+    with nothing, though the control's items can be selected and MSAA expects
+    the selected children back. Pinning that would pin what looks like a bug }
   AssertEquals('do default action', DISP_E_MEMBERNOTFOUND, it.accDoDefaultAction(self_));
   AssertEquals('set the name', DISP_E_MEMBERNOTFOUND, it.put_accName(self_, PWideChar(WideString('x'))));
   AssertEquals('set the value', DISP_E_MEMBERNOTFOUND, it.put_accValue(self_, PWideChar(WideString('x'))));
