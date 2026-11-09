@@ -4686,6 +4686,9 @@ var
   any: Boolean;
   el: TTyChartElement;
   gfound: TTyGfxEl;
+  { [R7-AI] a graphic element's own rect through its transform, css px }
+  gr: TTyXYWH;
+  gs: Double;
 
   { [R7-AF] the last element of the name in a pre-order walk, a found one's
     children not entered }
@@ -4839,8 +4842,17 @@ begin
     u := TyRectF(0, 0, 0, 0);
     GfxRefBox(gfound, any, u, k);
     if not any then Exit;
-    AEv.X := u.Left + (u.Right - u.Left) / 2;
-    AEv.Y := u.Top + (u.Bottom - u.Top) / 2;
+    { [R7-AI] THE POINT IS THE CENTRE OF `el.getBoundingRect()` THROUGH
+      `el.transform`: its own rect (a group's the union of its children's,
+      each through its own transform, a stroked one grown by its width),
+      then the outer rect of that through its global transform [was: the
+      union of what its elements drew -- a turned or scaled group's centre
+      off] }
+    gr := TyGfxRect(gfound, NewTextMeasurer(96));
+    if gfound.HasTransform then gr := TyRectApplyMat(gr, gfound.Transform);
+    if FLastPPI > 0 then gs := FLastPPI / 96 else gs := 1;
+    AEv.X := (gr.X + gr.W / 2) * gs;
+    AEv.Y := (gr.Y + gr.H / 2) * gs;
     if gfound.IsGroup then
     begin
       FGfxTipGroupId := gfound.Id;

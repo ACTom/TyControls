@@ -2118,6 +2118,14 @@ begin
   begin
     R.HasLineWidth := True;
     R.LineWidth := x;
+  end
+  { [R7-AI] A STRING as a label's (TyRtTakeLineWidth): the canvas' number,
+    kept for the TSpan's rect; 'Infinity' the width the canvas had -- a
+    graphic text's style.lineWidth [was: not written] }
+  else if (S.Find('lineWidth') <> nil) and (S.Find('lineWidth').JSONType = jtString) then
+  begin
+    R.HasLineWidth := True;
+    TyRtTakeLineWidth(S.Find('lineWidth'), R.LineWidth, R.LineWidthText, R.LineWidthInf);
   end;
   { [R2-F] the stroke's dashes and their phase, as written (Text.ts hands
     lineDash and lineDashOffset to every TSpan that strokes) }
@@ -2134,12 +2142,10 @@ begin
   TyRtTakeLineHeight(S.Find('lineHeight'), R);
   TyRtTakeWidth(S.Find('width'), R);
   TyRtTakeHeight(S.Find('height'), R);
-  Spread4(S.Find('padding'), pad, has);
-  if has then
-  begin
-    R.HasPadding := True;
-    for k := 0 to 3 do R.Padding[k] := pad[k];
-  end;
+  { [R7-AI] as zrender's normalizeCssArray holds it (a string by its
+    characters, a side it has none for undefined) [was: a number or an
+    array of numbers, one item to all four sides] }
+  TyRtTakePadding(S.Find('padding'), R);
   if NumOf(S.Find('borderWidth'), x) then R.BorderWidth := x;
   Spread4(S.Find('borderRadius'), pad, has);
   if has then for k := 0 to 3 do R.Radius[k] := pad[k];
@@ -2306,16 +2312,9 @@ begin
     lays out nothing }
   Result := not (IsNan(ABaseX) or IsNan(ABaseY) or IsNan(ow) or IsNan(oh));
   if not Result then Exit;
-  if AStyle.HasPadding then
-  begin
-    padH := AStyle.Padding[1] + AStyle.Padding[3];
-    padV := AStyle.Padding[0] + AStyle.Padding[2];
-  end
-  else
-  begin
-    padH := 0;
-    padV := 0;
-  end;
+  { ([R7-AI] `padding[1] + padding[3]` in JS: '2' + '2' is 22) }
+  padH := TyRtPadSum(AStyle, 1, 3);
+  padV := TyRtPadSum(AStyle, 0, 2);
   if AStyle.WidthKind = rtwNone then
   begin
     AStyle.WidthKind := rtwNumber;

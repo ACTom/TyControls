@@ -29,7 +29,9 @@ unit tyControls.AdvanceChart.Layout;
 interface
 uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
-     tyControls.AdvanceChart.Paint;
+     tyControls.AdvanceChart.Paint,
+     { [R7-AI] JavaScript's values: a padding written as a string }
+     tyControls.AdvanceChart.RichText;
 
 type
   { How one edge or size is expressed. }
@@ -233,6 +235,14 @@ function TyBoxWord(const A, B: TTyBoxRaw): string;
   in CSS order. }
 function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const AMargin: array of Double): TTyXYWH;
+{ [R7-AI] THE SAME WITH A MARGIN zrender HOLDS AS JS VALUES (a padding written
+  as a string, TTyJsPad): `margin[1] + margin[3]` joined, a side undefined
+  NaN, and the place `(containerRect.x || 0) + left + margin[3]` joined --
+  AXV / AYV as JS holds them (a string '0202' where it joined), the result's
+  X / Y their numbers; BoundingRect's flip of a negative size joins too.
+  The traps are the caller's to mask. }
+function TyGetLayoutRectJs(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const APad: TTyJsPad; out AXV, AYV: TTyRtJs): TTyXYWH;
 { A box as the shared solver holds it, back in the raw form getLayoutRect
   reads: auto absent, px a number, a percentage its text with a `%`, centre
   the word [Batch 147] }
@@ -2148,6 +2158,57 @@ begin
     Result.Y := Result.Y + Result.H;
     Result.H := -Result.H;
   end;
+end;
+
+function TyGetLayoutRectJs(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
+  const APad: TTyJsPad; out AXV, AYV: TTyRtJs): TTyXYWH;
+var
+  left, top, right, bottom, w, h, vm, hm, m0, m3: Double;
+  wordH, wordV: string;
+begin
+  left := TyBoxRawResolve(ABox.Left, ACW);
+  top := TyBoxRawResolve(ABox.Top, ACH);
+  right := TyBoxRawResolve(ABox.Right, ACW);
+  bottom := TyBoxRawResolve(ABox.Bottom, ACH);
+  w := TyBoxRawResolve(ABox.Width, ACW);
+  h := TyBoxRawResolve(ABox.Height, ACH);
+  { `margin[2] + margin[0]`, `margin[1] + margin[3]`: joined, read as numbers
+    in the subtractions below }
+  vm := TyJsPadJoin(APad, 2, 0).N;
+  hm := TyJsPadJoin(APad, 1, 3).N;
+  m0 := TyJsPadV(APad, 0).N;
+  m3 := TyJsPadV(APad, 3).N;
+  if IsNan(w) then w := ACW - right - hm - left;
+  if IsNan(h) then h := ACH - bottom - vm - top;
+  if IsNan(left) then left := ACW - right - w - hm;
+  if IsNan(top) then top := ACH - bottom - h - vm;
+  wordH := TyBoxWord(ABox.Left, ABox.Right);
+  if wordH = 'center' then left := ACW / 2 - w / 2 - m3
+  else if wordH = 'right' then left := ACW - w - hm;
+  wordV := TyBoxWord(ABox.Top, ABox.Bottom);
+  if (wordV = 'middle') or (wordV = 'center') then top := ACH / 2 - h / 2 - m0
+  else if wordV = 'bottom' then top := ACH - h - vm;
+  left := OrZero(left);
+  top := OrZero(top);
+  if IsNan(w) then w := ACW - hm - left - OrZero(right);
+  if IsNan(h) then h := ACH - vm - top - OrZero(bottom);
+  AXV := TyRtJsAdd(TyRtJsNum(OrZero(ACX) + left), TyJsPadV(APad, 3));
+  AYV := TyRtJsAdd(TyRtJsNum(OrZero(ACY) + top), TyJsPadV(APad, 0));
+  { new BoundingRect: `x = x + width` -- joined where x is a string }
+  if (not IsNan(w)) and (w < 0) then
+  begin
+    AXV := TyRtJsAdd(AXV, TyRtJsNum(w));
+    w := -w;
+  end;
+  if (not IsNan(h)) and (h < 0) then
+  begin
+    AYV := TyRtJsAdd(AYV, TyRtJsNum(h));
+    h := -h;
+  end;
+  Result.X := AXV.N;
+  Result.Y := AYV.N;
+  Result.W := w;
+  Result.H := h;
 end;
 
 { ==================== zrender's matrices ==================== }

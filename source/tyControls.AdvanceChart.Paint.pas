@@ -433,6 +433,17 @@ type
     WidthText, HeightText, LineHeightText: string;
     HasPadding: Boolean;
     Padding: array[0..3] of Double;   // top, right, bottom, left
+    { [R7-AI] A PADDING zrender HOLDS AS JS VALUES: normalizeCssArray takes a
+      string by its characters ('12' is ['1', '2', '1', '2']) and leaves a
+      side it has none for undefined (a string or an array of one, `[]`,
+      `true`) -- and zrender ADDS the sides as JS does ('2' + '2' is '22').
+      Padding holds each side's JS number (NaN for undefined); PaddingKind
+      what it is: cTyPadNum, cTyPadStr (PaddingText the string), cTyPadUndef,
+      cTyPadNull, cTyPadTrue, cTyPadFalse. PaddingJs: a side is not a plain
+      number -- only then can the layout join a side or meet NaN. }
+    PaddingJs: Boolean;
+    PaddingKind: array[0..3] of Byte;
+    PaddingText: array[0..3] of string;
     HasBackground: Boolean;
     Background: TTyChartColor;
     { [R2-F] backgroundColor: {image}: the picture's source ('' none) --
@@ -556,6 +567,27 @@ type
       fromLine). EdgeX1 / EdgeY1 are those joined edges. }
     PathEdges: Boolean;
     EdgeX1, EdgeY1: Double;
+    { [R7-AI] A PLACE zrender HOLDS AS A STRING (a padding joined to it: a
+      rect's shape.x, a TSpan's style.x '02'): canvas draws at its number
+      (X), but the path ADDS to it as a string -- a rounded rect's
+      `x + r1` and `x + r4` (EdgeXR1 / EdgeXR4, joined) -- and so does a
+      TSpan's rect in rectContain (`rect.x + rect.width`). XText the string
+      ('' none). }
+    XText: string;
+    EdgeXR1, EdgeXR4: Double;
+    { [R7-AI] a rounded rect's path bounds on x where its place is a string:
+      the arcs about `x + r4` and `x + r1` (strings) put their ends at
+      `Math.cos(a) * r + cx` -- joined again ('-3' + '023' is -3023) --
+      PathProxy.getBoundingRect's min and max of every point }
+    EdgeXMin, EdgeXMax: Double;
+    { [R7-AI] A TSPAN'S RECT AS rectContain READS IT (HitJs): from (HitL,
+      HitT) to (HitR, HitB), the right and bottom edges `rect.x +
+      rect.width` and `rect.y + rect.height` in JS -- joined where the place
+      or a written lineWidth is a string ('12' + '243' reaches far right;
+      '-4.86' + '6.723' is no number). An edge that is NaN, or one before its
+      start, contains nothing. }
+    HitJs: Boolean;
+    HitL, HitT, HitR, HitB: Double;
     { [R7-L] the rounded path (roundRect), radii nought or not -- see
       TTyRtStyle.RadiusTruthy }
     Rounded: Boolean;
@@ -602,6 +634,28 @@ type
     CanvasLeft: Byte;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
+
+const
+  { [R7-AI] TTyRtStyle.PaddingKind }
+  cTyPadNum = 0;
+  cTyPadStr = 1;
+  cTyPadUndef = 2;
+  cTyPadNull = 3;
+  cTyPadTrue = 4;
+  cTyPadFalse = 5;
+
+type
+  { [R7-AI] A COMPONENT'S PADDING as getLayoutRect and makeBackground hold
+    it, `normalizeCssArray(padding || 0)` (a title's, a legend's, a
+    toolbox's): Kind / Num / Text per side as TTyRtStyle.PaddingKind /
+    Padding / PaddingText; Js a side is no plain number -- only then does
+    the layout join a side to a place or a size. }
+  TTyJsPad = record
+    Js: Boolean;
+    Kind: array[0..3] of Byte;
+    Num: array[0..3] of Double;
+    Text: array[0..3] of string;
+  end;
 
 
   { A TEXT'S STYLE AS THE SITE HOLDS IT BEFORE LAYOUT: zrender's block style
@@ -849,6 +903,8 @@ type
     HasEmph: Boolean;
     EmphColour, EmphStrokeColour: TTyChartColor;
     EmphStrokeWidthLogical: Double;
+    { [R7-AI] the hover's halo is of 'Infinity': the width the canvas had }
+    EmphStrokeInf: Boolean;
     { [R7-AA] what the hover's label writes of its ink: 1 its color, 2 its
       textBorderColor or textBorderWidth -- the state style's keys, which go
       over a block's own (TyCaptionToEmphasis) }

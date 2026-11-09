@@ -912,7 +912,32 @@ begin
     [R2-A: a declared colour was taken INSTEAD of the hover's ink, keeping
     the rest state's automatic halo and losing the hover's border] }
   if stnEmphasis in AState.States then
+  begin
     TyCaptionToEmphasis(AEl.Caption);
+    { ([R7-AI] a hovered halo of 'Infinity': the width the canvas had) }
+    if AEl.Caption.HasEmph and AEl.Caption.EmphStrokeInf then
+      AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
+  end;
+  { [R7-AI] a select or blur state's halo: its colour and width over the
+    rest's, a width of 'Infinity' the one the canvas had }
+  if c.Has[stkStroke] or c.Has[stkLineWidth] then
+  begin
+    if c.Has[stkStroke] then AEl.Caption.StrokeColour := c.Color[stkStroke];
+    if c.Has[stkLineWidth] then
+    begin
+      if IsInfinite(c.Num[stkLineWidth]) then
+      begin
+        AEl.Caption.StrokeWidthLogical := 0;
+        if (AEl.Caption.StrokeColour shr 24) <> 0 then
+          AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasWidthLeft;
+      end
+      else
+        AEl.Caption.StrokeWidthLogical := c.Num[stkLineWidth];
+    end;
+    if Length(AEl.Caption.RtPieces) > 0 then
+      AEl.Caption.RtPieces := TyRtReink(AEl.Caption.RtPieces, AEl.Caption.Colour,
+        True, AEl.Caption.StrokeColour, AEl.Caption.StrokeWidthLogical);
+  end;
   if TyStHasColour(c, stkFill) then
   begin
     AEl.Caption.Colour := c.Color[stkFill];
@@ -1249,6 +1274,11 @@ var
     txt: string;
     c: TTyChartColor;
     ss: Double;
+    { [R7-AI] a state's halo width }
+    lwd: TJSONData;
+    lw: Double;
+    lwt: string;
+    lwInf: Boolean;
   begin
     pc := AList.Ref(AIdx);
     AL.Exists := True;
@@ -1287,6 +1317,23 @@ var
       if has and (txt <> 'inherit') and (txt <> 'auto')
         and TyTryParseChartColor(txt, c) then
         TyStSetColor(obj, stkFill, c);
+      { [R7-AI] A SELECT OR BLUR STATE'S HALO (emphasis has the hover's own,
+        Caption.Emph*): textBorderColor and textBorderWidth over the rest's
+        -- a width written as a string its number, 'Infinity' the width the
+        canvas had [was: neither read] }
+      if n <> stnEmphasis then
+      begin
+        txt := TyStReadString(nodes, [cStNames[n], 'label', 'textBorderColor'], has);
+        if has and (txt <> 'inherit') and (txt <> 'auto') then
+        begin
+          if (txt = 'none') or (txt = 'transparent') then TyStSetColor(obj, stkStroke, 0)
+          else if TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
+        end;
+        lwd := TyStFind(nodes, [cStNames[n], 'label', 'textBorderWidth']);
+        if TyRtTakeLineWidth(lwd, lw, lwt, lwInf) then
+          if lwInf then TyStSetNum(obj, stkLineWidth, Infinity)
+          else TyStSetNum(obj, stkLineWidth, Max(0.0, lw));
+      end;
       { a declared opacity, the blur proxy's tenth otherwise [Batch 90] }
       ss := TyStReadNumber(nodes, [cStNames[n], 'label', 'opacity'], has);
       if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss)

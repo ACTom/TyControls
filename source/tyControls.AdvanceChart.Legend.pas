@@ -329,6 +329,9 @@ type
     Box: TTyRawBox;
     { CSS order: top, right, bottom, left. }
     Padding: array[0..3] of Double;
+    { [R7-AI] the padding as getLayoutRect holds it, where a side is no
+      plain number (a string '12'): Padding then holds the sides' numbers }
+    PadJs: TTyJsPad;
     Orient: TTyLegendOrient;
     Align: TTyLegendAlign;
     ItemGap: Double;
@@ -811,7 +814,9 @@ implementation
 
 uses jsonparser, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
-  tyControls.AdvanceChart.Color, tyControls.StrConsts;
+  tyControls.AdvanceChart.Color, tyControls.StrConsts,
+  { [R7-AI] a padding written as a string }
+  tyControls.AdvanceChart.RichText;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -1128,6 +1133,8 @@ var
   d: TJSONData;
   w: string;
   given, joinHas: Boolean;
+  { [R7-AI] a padding side }
+  k: Integer;
 begin
   Result := TyLegendSpecDefault;
   if AOption = nil then Exit;
@@ -1146,6 +1153,15 @@ begin
   TyBoxClimbRoot(Result.Box, AOption.Root);
 
   ReadPadding(node, Result.Padding);
+  { [R7-AI] a padding normalizeCssArray takes by its characters, or leaves a
+    side of undefined: as JS holds it [was: a string none, one item all
+    four sides] }
+  if (node.Find('padding') <> nil) and (node.Find('padding').JSONType <> jtNull) then
+  begin
+    Result.PadJs := TyJsPadOf(node.Find('padding'));
+    if Result.PadJs.Js then
+      for k := 0 to 3 do Result.Padding[k] := Result.PadJs.Num[k];
+  end;
   if StrIn(node, 'orient') = 'vertical' then
     Result.Orient := tloVertical
   else
@@ -2429,6 +2445,42 @@ begin
   Result := TyLegendPlaceRect(ASpec, TyXYWHOfRect(AContainer), AMainW, AMainH, APPI);
 end;
 
+{ [R7-AI] getLayoutRect with a padding held as JS values, in css px (ABox
+  unscaled): the place joined ('20' + '2' is '202'), the margins' sums
+  joined; back in device px. The traps masked. }
+function LegendRectJs(const ASpec: TTyLegendSpec; const AContainer: TTyXYWH;
+  const ABox: TTyRawBox; APPI: Integer): TTyXYWH;
+var
+  s: Double;
+  xv, yv: TTyRtJs;
+  mask: TFPUExceptionMask;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    Result := TyGetLayoutRectJs(ABox, AContainer.X / s, AContainer.Y / s,
+      AContainer.W / s, AContainer.H / s, ASpec.PadJs, xv, yv);
+    Result.X := Result.X * s;
+    Result.Y := Result.Y * s;
+    Result.W := Result.W * s;
+    Result.H := Result.H * s;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ [R7-AI] makeBackground's `rect.width + padding[1] + padding[3]` (and the
+  height's), joined where a side is a string, device px }
+function LegendFrameSize(const ASpec: TTyLegendSpec; AW: Double; A, B, APPI: Integer): Double;
+var s: Double;
+begin
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  Result := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(AW / s), TyJsPadV(ASpec.PadJs, A)),
+    TyJsPadV(ASpec.PadJs, B)).N * s;
+end;
+
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyXYWH; APPI: Integer): TTyXYWH;
 var pad: array[0..3] of Double;
@@ -2437,6 +2489,7 @@ begin
     with no size given, so `bottom: 'bottom'` on a vertical legend leaves the
     height the switch computes from a not-a-number -- not the full height. }
   PadOf(ASpec, APPI, pad);
+  if ASpec.PadJs.Js then Exit(LegendRectJs(ASpec, AContainer, ASpec.Box, APPI));
   Result := TyGetLayoutRect(BoxAt(ASpec, APPI), AContainer.X, AContainer.Y,
     AContainer.W, AContainer.H, pad);
 end;
@@ -2451,6 +2504,21 @@ begin
   { defaults({width, height}, params): the measured pair never goes missing,
     so it wins over anything written. }
   PadOf(ASpec, APPI, pad);
+  if ASpec.PadJs.Js then
+  begin
+    box := ASpec.Box;
+    if APPI > 0 then
+    begin
+      box.Width := TyBoxRawNum(AMainW / (APPI / 96));
+      box.Height := TyBoxRawNum(AMainH / (APPI / 96));
+    end
+    else
+    begin
+      box.Width := TyBoxRawNum(AMainW);
+      box.Height := TyBoxRawNum(AMainH);
+    end;
+    Exit(LegendRectJs(ASpec, AContainer, box, APPI));
+  end;
   box := BoxAt(ASpec, APPI);
   box.Width := TyBoxRawNum(AMainW);
   box.Height := TyBoxRawNum(AMainH);
@@ -3011,6 +3079,12 @@ begin
   { makeBackground(mainRect): the padding around it, group-local }
   b := TyXYWH(mainR.X - APad[3], mainR.Y - APad[0],
     mainR.W + APad[1] + APad[3], mainR.H + APad[0] + APad[2]);
+  { ([R7-AI] the size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    b.W := LegendFrameSize(ASpec, mainR.W, 1, 3, APPI);
+    b.H := LegendFrameSize(ASpec, mainR.H, 0, 2, APPI);
+  end;
   R.Frame := TyRectF(gAx + b.X, gAy + b.Y, gAx + b.X + b.W, gAy + b.Y + b.H);
   R.Content := TyRectF(gAx + mainR.X, gAy + mainR.Y, gAx + mainR.X + mainR.W,
     gAy + mainR.Y + mainR.H);
@@ -3075,6 +3149,10 @@ var
 begin
   Result := Default(TTyLegendLayout);
   if not ASpec.Show then Exit;
+  { [R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
+    the group draws under the transform the canvas kept -- laid out here as
+    nothing }
+  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) then Exit;
   if AMeasurer = nil then Exit;
   { a container of no place is at the canvas' edge (getLayoutRect's
     `containerRect.x || 0`); one of no size is nothing [Batch 151] }
@@ -3416,6 +3494,12 @@ begin
                           Result.Content.Top - pad[0],
                           Result.Content.Right + pad[1],
                           Result.Content.Bottom + pad[2]);
+  { ([R7-AI] makeBackground's size joined where a side is a string) }
+  if ASpec.PadJs.Js then
+  begin
+    Result.Frame.Right := Result.Frame.Left + LegendFrameSize(ASpec, mainW, 1, 3, APPI);
+    Result.Frame.Bottom := Result.Frame.Top + LegendFrameSize(ASpec, mainH, 0, 2, APPI);
+  end;
   Result.Valid := True;
 end;
 

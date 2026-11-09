@@ -136,6 +136,11 @@ const SVG_ENDS = '<svg width="200" height="100" viewBox="0 0 200 100">'
   + '<path name="P" d="M10 10 L90 10 L90 90" fill="none" stroke="#000000" stroke-width="1"/>'
   + '<path name="Q" d="M110 90 L110 10 L190 10" fill="none" stroke="#000000" stroke-width="1"/></svg>';
 MAPS.push({ name: 'r7acsvg1', svg: true, text: SVG_ENDS }, { name: 'r7acsvg2', svg: true, text: SVG_ENDS });
+// [R7-AI] three squares, two of one name: MapDraw puts both in one region group
+MAPS.push({ name: 'r7aisq', text: JSON.stringify({ type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [sq(0, 0, 10, 10)] } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [sq(10, 0, 20, 10)] } },
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [sq(20, 5, 30, 15)] } }] }) });
 for (const m of MAPS) echarts.registerMap(m.name, m.svg ? { svg: m.text } : m.text);
 // the pens without their (default) colours, no fills: a region's defaults are the theme's
 const NCL = { looks: true, nocolour: true };
@@ -370,6 +375,22 @@ function cases() {
       { type: 'rect', name: 'H', shape: { x: 50, y: 140, width: 60, height: 20 }, style: { fill: '#0000ff' },
         tooltip: { show: true, formatter: 'two' } }] })),
     'tooltip', { tip: { type: 'showTip', graphicIndex: 0, name: 'H' }, at: true }],
+    // [R7-AI] a graphic group turned and scaled: its rect is the union of its children's in its own
+    // frame (each through its own transform, a stroked one grown by its width), then through the
+    // group's -- the outer rect of that, its centre the point; a group only scaled, a child stroked;
+    // a geo of two regions of one name: one region group holds both
+    ['tip.graphic-ref-turned', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      graphic: [{ type: 'group', name: 'G', x: 200, y: 120, rotation: 0.6, scaleX: 1.5, scaleY: 0.7, tooltip: { show: true, formatter: 'grp' },
+        children: [{ type: 'rect', shape: { x: 0, y: 0, width: 40, height: 30 }, style: { fill: '#ff0000' } },
+          { type: 'circle', x: 10, shape: { cx: 70, cy: 10, r: 12 }, style: { fill: '#0000ff' } }] }] })),
+    'tooltip', { tip: { type: 'showTip', graphicIndex: 0, name: 'G' }, at: true }],
+    ['tip.graphic-ref-scaled', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      graphic: [{ type: 'group', name: 'G', x: 60, y: 50, scaleX: 2, scaleY: 1.5, tooltip: { show: true, formatter: 'grp' },
+        children: [{ type: 'rect', shape: { x: 0, y: 0, width: 40, height: 30 }, style: { fill: '#ff0000' } },
+          { type: 'rect', rotation: 0.4, shape: { x: 50, y: 10, width: 20, height: 20 }, style: { fill: 'none', stroke: '#0000ff', lineWidth: 6 } }] }] })),
+    'tooltip', { tip: { type: 'showTip', graphicIndex: 0, name: 'G' }, at: true }],
+    ['tip.geo-ref-twice', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',
+      geo: { map: 'r7aisq', tooltip: { show: true } } }), 'tooltip', { tip: { type: 'showTip', geoIndex: 0, name: 'A' }, at: true }],
     ['tip.series-name', bare(Object.assign({}, TIPC, { borderColor: '#00ff00', padding: 20, formatter: 'R:{b}' })),
     'tooltip', { tip: { type: 'showTip', seriesIndex: 0, name: 'C' }, at: true }],
     ['tip.geo-ref', bare({ tooltip: { renderMode: 'richText' }, borderColor: '#00ff00', padding: 20, formatter: 'R:{b}',

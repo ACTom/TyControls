@@ -220,6 +220,9 @@ type
     StateShow: Boolean;
     EmphHasBorderWidth: Boolean;
     EmphBorderWidthLogical: Double;
+    { [R7-AI] emphasis.label.textBorderWidth written as 'Infinity': the
+      hovered halo at the width the canvas had }
+    EmphBorderWidthInf: Boolean;
     EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
     EmphBorderColour: TTyChartColor;
     { `emphasis.itemStyle.color`: the hovered host's fill, when written;
@@ -865,6 +868,11 @@ begin
   TyLabelInkEmphasis(ASpec, fill, AHostHasFill, grad, AInside,
     ACaption.EmphColour, ACaption.EmphStrokeColour,
     ACaption.EmphStrokeWidthLogical);
+  { [R7-AI] a hovered halo of 'Infinity': stroked at the width the canvas
+    had (StWriteLabel marks the element) }
+  ACaption.EmphStrokeInf := ASpec.EmphHasBorderWidth and ASpec.EmphBorderWidthInf
+    and (((ACaption.EmphStrokeColour shr 24) <> 0)
+      or (ACaption.EmphStrokeColour = cTyCanvasColourLeft));
   ACaption.HasEmph := True;
   ACaption.EmphOwnInk := 0;
   if ASpec.EmphHasColour then ACaption.EmphOwnInk := ACaption.EmphOwnInk or 1;
@@ -1323,6 +1331,9 @@ begin
   begin
     s.HasBorderWidth := True;
     s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
+    { ([R7-AI] and one of 'Infinity') }
+    s.BorderWidthInf := ASpec.EmphBorderWidthInf;
+    s.BorderWidthText := '';
   end;
   { the hover's stroke colour over the normal one: zrender merges the
     emphasis style's `stroke` over the label's (labelStyle.ts:550-583) }
@@ -2294,9 +2305,12 @@ begin
     else if pieces <> nil then
     begin
       { a piece the pointer never finds is not in it }
+      { ([R7-AI] and a span whose rect rectContain reads joined to a string
+        (TTyRtPiece.HitJs) takes that rect: nothing where an edge is NaN or
+        before its start, far to the right where '12' + '243' is) }
       hitPieces := nil;
       for k := 0 to High(pieces) do
-        if pieces[k].NoHit then cap.Caption.HitRelOwn := True
+        if pieces[k].NoHit or pieces[k].HitJs then cap.Caption.HitRelOwn := True
         else
         begin
           SetLength(hitPieces, Length(hitPieces) + 1);
@@ -2306,6 +2320,18 @@ begin
       else rtb := TyRtBounds(pieces);
       cap.Caption.HitRel := TyRectF(rtb.X * scale, rtb.Y * scale,
         (rtb.X + rtb.W) * scale, (rtb.Y + rtb.H) * scale);
+      if rtb.W < 0 then cap.Caption.HitRel := TyRectF(1e300, 1e300, -1e300, -1e300);
+      for k := 0 to High(pieces) do
+        if pieces[k].HitJs and not pieces[k].NoHit
+          and not (IsNan(pieces[k].HitL) or IsNan(pieces[k].HitR)
+            or IsNan(pieces[k].HitT) or IsNan(pieces[k].HitB))
+          and (pieces[k].HitR >= pieces[k].HitL) and (pieces[k].HitB >= pieces[k].HitT) then
+        begin
+          cap.Caption.HitRel.Left := Min(cap.Caption.HitRel.Left, pieces[k].HitL * scale);
+          cap.Caption.HitRel.Top := Min(cap.Caption.HitRel.Top, pieces[k].HitT * scale);
+          cap.Caption.HitRel.Right := Max(cap.Caption.HitRel.Right, pieces[k].HitR * scale);
+          cap.Caption.HitRel.Bottom := Max(cap.Caption.HitRel.Bottom, pieces[k].HitB * scale);
+        end;
     end
     else
       cap.Caption.HitRel := TyRectF(box.Left - x, box.Top - y, box.Right - x, box.Bottom - y);
