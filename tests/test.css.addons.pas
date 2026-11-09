@@ -11,6 +11,10 @@ uses
 
 type
   TTyCssAddOnsTest = class(TTestCase)
+  private
+    FRegistered: TStringArray;
+    { TyRegisterAddOnCss, noting the name for TearDown }
+    procedure Reg(const AName, ACss: string);
   protected
     procedure TearDown; override;
   published
@@ -20,6 +24,7 @@ type
     procedure TestNoAddOnIsTheCatalogAlone;
     procedure TestAListenerHearsARegistration;
     procedure TestCommentsAndUsagesAreNotVocabulary;
+    procedure TestARefusingListenerRollsTheRegistrationBack;
   end;
 
   { What an add-on registered is in the built-in base layer of every style model, one made
@@ -35,6 +40,9 @@ type
     procedure TestAUserThemeOverridesAnAddOnRule;
     procedure TestAModeSwitchKeepsTheAddOn;
     procedure TestARegistrationKeepsTheUserLayer;
+    procedure TestAUserRuleBeforeALateRegistrationStillWins;
+    procedure TestAFreedModelLeavesTheLiveList;
+    procedure TestABrokenAddOnIsRefusedAndLeavesNothing;
   end;
 
 implementation
@@ -46,6 +54,11 @@ const
   cZz = 'test.zz';
   cZzCss = ':root{--zz-gap:7px;} TyZzThing{background:#123456;}';
   cZzDark = ' @mode dark { :root{--zz-gap:9px;} }';
+  cZzInk = ' :root{--zz-ink:#13579B;}';
+  cZzOther = ' TyZzOther{background:#654321;}';
+  { parses, but its rule names a variable nobody defines: the load refuses it }
+  cBroken = 'test.zz.broken';
+  cBrokenCss = ':root{--zz-gap:8px;} TyZzThing{background:var(--zz-nowhere);}';
 
 var
   GHeard: Integer;
@@ -53,6 +66,20 @@ var
 procedure Heard;
 begin
   Inc(GHeard);
+end;
+
+var
+  GSeen: string;
+
+procedure Saw;
+begin
+  GSeen := TyAddOnCss;
+end;
+
+procedure Refuse;
+begin
+  if Pos('REFUSE', TyAddOnCss) > 0 then
+    raise Exception.Create('refused here');
 end;
 
 function LightText: string;
@@ -96,11 +123,26 @@ begin
   TyUnregisterAddOnCss(AName);
 end;
 
+procedure TTyCssAddOnsTest.Reg(const AName, ACss: string);
+begin
+  if not Has(FRegistered, AName) then
+  begin
+    SetLength(FRegistered, Length(FRegistered) + 1);
+    FRegistered[High(FRegistered)] := AName;
+  end;
+  TyRegisterAddOnCss(AName, ACss);
+end;
+
 procedure TTyCssAddOnsTest.TearDown;
+var
+  i: Integer;
 begin
   TyRemoveAddOnCssListener(@Heard);
-  ForgetAddOn('t1');
-  ForgetAddOn('t2');
+  TyRemoveAddOnCssListener(@Saw);
+  TyRemoveAddOnCssListener(@Refuse);
+  for i := 0 to High(FRegistered) do
+    ForgetAddOn(FRegistered[i]);
+  FRegistered := nil;
   inherited TearDown;
 end;
 
@@ -122,7 +164,7 @@ procedure TTyCssAddOnsTest.TestARegisteredCssJoinsTheCatalog;
 var
   t, k: TStringArray;
 begin
-  TyRegisterAddOnCss('t1', ':root{--zz-a:1px;} TyZzThing{color:#FF0000;}');
+  Reg('t1', ':root{--zz-a:1px;} TyZzThing{color:#FF0000;}');
   t := TyCatalogAllTokens;
   k := TyCatalogAllTypeKeys;
   AssertTrue('--zz-a joined', Has(t, '--zz-a'));
@@ -134,10 +176,10 @@ end;
 
 procedure TTyCssAddOnsTest.TestReRegisteringReplaces;
 begin
-  TyRegisterAddOnCss('t1', 'FIRST{}');
-  TyRegisterAddOnCss('t1', 'SECOND{}');
+  Reg('t1', 'FIRST{}');
+  Reg('t1', 'SECOND{}');
   AssertEquals('only the second', 'SECOND{}', TyAddOnCss);
-  TyRegisterAddOnCss('t2', 'THIRD{}');
+  Reg('t2', 'THIRD{}');
   AssertEquals('registration order', 'SECOND{}' + LineEnding + 'THIRD{}', TyAddOnCss);
 end;
 
@@ -161,10 +203,10 @@ procedure TTyCssAddOnsTest.TestAListenerHearsARegistration;
 begin
   GHeard := 0;
   TyAddAddOnCssListener(@Heard);
-  TyRegisterAddOnCss('t1', 'a{}');
+  Reg('t1', 'a{}');
   AssertEquals('heard once', 1, GHeard);
   TyRemoveAddOnCssListener(@Heard);
-  TyRegisterAddOnCss('t1', 'b{}');
+  Reg('t1', 'b{}');
   AssertEquals('not after removal', 1, GHeard);
 end;
 
@@ -181,11 +223,44 @@ begin
   AssertEquals('TyReal', 'TyReal', v.TypeKeys[1]);
 end;
 
+procedure TTyCssAddOnsTest.TestARefusingListenerRollsTheRegistrationBack;
+var
+  msg: string;
+begin
+  Reg('t1', 'KEEP{}');
+  TyAddAddOnCssListener(@Saw);
+  TyAddAddOnCssListener(@Refuse);
+  msg := '';
+  try
+    Reg('t1', 'REFUSE{}');
+  except
+    on E: Exception do
+      msg := E.Message;
+  end;
+  AssertTrue('raised, naming the add-on: "' + msg + '"', Pos('"t1"', msg) > 0);
+  AssertTrue('with the listener''s own message', Pos('refused here', msg) > 0);
+  AssertEquals('the earlier text is back', 'KEEP{}', TyAddOnCss);
+  AssertEquals('a listener called before the refusal heard the rollback', 'KEEP{}', GSeen);
+end;
+
 { TTyStyleModelAddOnTest }
+
+{ The message a refused registration raised; '' when it was accepted. }
+function RefusalOf(const AName, ACss: string): string;
+begin
+  Result := '';
+  try
+    TyRegisterAddOnCss(AName, ACss);
+  except
+    on E: Exception do
+      Result := E.Message;
+  end;
+end;
 
 procedure TTyStyleModelAddOnTest.TearDown;
 begin
   FreeAndNil(FModel);
+  TyUnregisterAddOnCss(cBroken);   // only there if a refusal failed; before the reseed below
   ForgetAddOn(cZz);
   inherited TearDown;
 end;
@@ -209,9 +284,13 @@ begin
   AssertEquals('no raw text yet', '', FModel.RawVar('--zz-gap'));
   AssertEquals('no metric yet', 3, FModel.ResolveMetric('--zz-gap', 3));
   AssertFalse('no rule yet', tpBackground in FModel.ResolveStyle('TyZzThing', '', []).Present);
+  AssertEquals('no colour yet', TTyColor($FF000001),
+    FModel.ResolveColorToken('--zz-ink', TTyColor($FF000001)));
   v0 := FModel.ThemeVersion;
-  TyRegisterAddOnCss(cZz, cZzCss);
+  TyRegisterAddOnCss(cZz, cZzCss + cZzInk);
   AssertTrue('the theme version moves', FModel.ThemeVersion <> v0);
+  AssertEquals('the colour', TTyColor($FF13579B),
+    FModel.ResolveColorToken('--zz-ink', TTyColor($FF000001)));
   AssertEquals('the token', '7px', FModel.ResolveToken('--zz-gap'));
   AssertEquals('the raw text', '7px', FModel.RawVar('--zz-gap'));
   AssertEquals('the metric', 7, FModel.ResolveMetric('--zz-gap', 3));
@@ -305,6 +384,81 @@ begin
     DeleteFile(dir + 'zz.png');
     DeleteFile(dir + 'user.tycss');
     RemoveDir(dir);
+  end;
+end;
+
+procedure TTyStyleModelAddOnTest.TestAUserRuleBeforeALateRegistrationStillWins;
+begin
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss('TyZzThing { background: #FF0000; }');
+  AssertEquals('the user rule before', TTyColor($FFFF0000),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+  TyRegisterAddOnCss(cZz, cZzCss + cZzOther);
+  AssertEquals('the user rule still wins', TTyColor($FFFF0000),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+  AssertEquals('a typeKey the user left to the add-on', TTyColor($FF654321),
+    FModel.ResolveStyle('TyZzOther', '', []).Background.Color);
+end;
+
+procedure TTyStyleModelAddOnTest.TestAFreedModelLeavesTheLiveList;
+var
+  n: Integer;
+  m: TTyStyleModel;
+begin
+  n := TyLiveStyleModelCountForTest;
+  m := TTyStyleModel.Create;
+  AssertEquals('a new model is listed', n + 1, TyLiveStyleModelCountForTest);
+  m.Free;
+  AssertEquals('a freed one is not', n, TyLiveStyleModelCountForTest);
+  { a registration then reseeds the models alive only, not the freed one }
+  TyRegisterAddOnCss(cZz, cZzCss);
+  AssertEquals('still not', n, TyLiveStyleModelCountForTest);
+end;
+
+procedure TTyStyleModelAddOnTest.TestABrokenAddOnIsRefusedAndLeavesNothing;
+var
+  msg, before, good: string;
+  later: TTyStyleModel;
+  bg: TTyColor;
+begin
+  { No model of the test's own is alive. Run on its own, the suite has none alive at all, so the
+    registration is checked by the listener's trial load; in a process where another model is
+    alive, by its reseed. The outcome must be the same. }
+  before := TyAddOnCss;
+  msg := RefusalOf(cBroken, cBrokenCss);
+  AssertTrue('refused, naming the add-on: "' + msg + '"', Pos(cBroken, msg) > 0);
+  AssertEquals('nothing registered', before, TyAddOnCss);
+  later := TTyStyleModel.Create;   // raises if the text had stayed
+  try
+    AssertEquals('a new model has none of it', '', later.ResolveToken('--zz-gap'));
+  finally
+    later.Free;
+  end;
+
+  { the same with a live model }
+  FModel := TTyStyleModel.Create;
+  bg := FModel.ResolveStyle('TyButton', 'primary', []).Background.Color;
+  msg := RefusalOf(cBroken, cBrokenCss);
+  AssertTrue('refused with a live model, naming the add-on: "' + msg + '"', Pos(cBroken, msg) > 0);
+  AssertEquals('still nothing registered', before, TyAddOnCss);
+  AssertEquals('the live model has none of it', '', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('the live model resolves as before', bg,
+    FModel.ResolveStyle('TyButton', 'primary', []).Background.Color);
+
+  { a good name re-registered with a broken text keeps its good text }
+  TyRegisterAddOnCss(cZz, cZzCss);
+  good := TyAddOnCss;
+  msg := RefusalOf(cZz, cBrokenCss);
+  AssertTrue('the re-registration refused, naming the add-on: "' + msg + '"', Pos(cZz, msg) > 0);
+  AssertEquals('the good text kept', good, TyAddOnCss);
+  AssertEquals('the live model keeps the good token', '7px', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('and the good rule', TTyColor($FF123456),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+  later := TTyStyleModel.Create;
+  try
+    AssertEquals('a new model has the good text', '7px', later.ResolveToken('--zz-gap'));
+  finally
+    later.Free;
   end;
 end;
 

@@ -169,7 +169,12 @@ type
       and @mode blocks, the active mode, the runtime var overrides and the folder the theme's
       assets resolve against. Create calls it, and every registration calls it on every model
       alive. A control picks the change up at its next paint; nothing here invalidates one.
-      Raises, the previous base intact, when the text does not load. }
+      Raises, the previous base intact, when the text does not load.
+      Two things it does not redo. The user layer is not validated again against the new base:
+      a user rule that used a var the new base no longer defines (an add-on re-registered
+      without it) raises when it is resolved, not here. And the copies of base rules an
+      additive load took into the user layer (AdoptBaseRules, #106) before a late registration
+      stay copies of the old base rules. }
     procedure ReseedBase;
     procedure Clear;
     procedure LoadFromCss(const ASource: string);          // raises ETyCssError (replaces user layer)
@@ -346,6 +351,9 @@ function TyTypeKeyParent(const ATypeKey: string): string;
 function TyTypeKeyChain(const ATypeKey: string): TStringArray;
 { Appends every registered CHILD key (as registered) to AList. }
 procedure TyGetRegisteredTypeKeys(AList: TStrings);
+
+{ FOR TESTS: how many TTyStyleModel are alive, i.e. how many an add-on registration reseeds. }
+function TyLiveStyleModelCountForTest: Integer;
 
 implementation
 
@@ -1217,13 +1225,33 @@ var
   { Every TTyStyleModel alive, so a registration reaches the models made before it. }
   GLiveModels: TFPList = nil;
 
-{ The add-on registry's listener (registered in this unit's initialization). }
+{ The add-on registry's listener (registered in this unit's initialization). It raises when the
+  registered text does not load, and the registry then refuses the registration. With no model
+  alive, which is the usual case in an add-on's initialization, it builds and frees one: that
+  seed is the very load every later model would make, so a broken text fails at its
+  registration rather than at the first controller. With models alive the first reseed is that
+  load; it leaves its model as it was when it fails. }
 procedure ReseedLiveModels;
-var i: Integer;
+var
+  i: Integer;
+  trial: TTyStyleModel;
 begin
-  if GLiveModels = nil then Exit;
+  if (GLiveModels = nil) or (GLiveModels.Count = 0) then
+  begin
+    trial := TTyStyleModel.Create;
+    trial.Free;
+    Exit;
+  end;
   for i := 0 to GLiveModels.Count - 1 do
     TTyStyleModel(GLiveModels[i]).ReseedBase;
+end;
+
+function TyLiveStyleModelCountForTest: Integer;
+begin
+  if GLiveModels = nil then
+    Result := 0
+  else
+    Result := GLiveModels.Count;
 end;
 
 constructor TTyStyleModel.Create;

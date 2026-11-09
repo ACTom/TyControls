@@ -32,7 +32,11 @@ type
 function TyCssVocabularyOf(const ACss: string): TTyCssVocabulary;
 
 { Registers ACss under AName. The same name again replaces the earlier text in place; a new name
-  goes to the end. Every listener is then called once, in the order they were added. }
+  goes to the end. Every listener is then called once, in the order they were added.
+  A listener that raises refuses the registration: the earlier text goes back (or, for a new name,
+  no entry is left), every listener already called is called once more so it can put back what
+  it had applied (errors there are ignored), and the exception goes on with AName in its
+  message. StyleModel's listener loads the text, so a text that does not load fails here. }
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 
 { FOR TESTS: forgets AName's registration (no listener call). }
@@ -58,6 +62,9 @@ type
   TAddOn = record
     Name, Css: string;
   end;
+
+const
+  cAddOnRefused = 'add-on tycss "%s": %s';
 
 var
   GAddOns: array of TAddOn;
@@ -210,11 +217,17 @@ end;
 
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 var
-  i, n: Integer;
+  i, n, called: Integer;
   snapshot: array of TTyAddOnCssListener;
+  hadOld: Boolean;
+  oldCss: string;
 begin
   i := IndexOfAddOn(AName);
-  if i < 0 then
+  hadOld := i >= 0;
+  oldCss := '';
+  if hadOld then
+    oldCss := GAddOns[i].Css
+  else
   begin
     i := Length(GAddOns);
     SetLength(GAddOns, i + 1);
@@ -226,8 +239,31 @@ begin
   SetLength(snapshot, n);
   for i := 0 to n - 1 do
     snapshot[i] := GListeners[i];
-  for i := 0 to n - 1 do
-    snapshot[i]();
+  called := 0;
+  try
+    for i := 0 to n - 1 do
+    begin
+      called := i + 1;
+      snapshot[i]();
+    end;
+  except
+    on E: Exception do
+    begin
+      { refused: nothing of it may stay behind }
+      if hadOld then
+        GAddOns[IndexOfAddOn(AName)].Css := oldCss
+      else
+        TyUnregisterAddOnCss(AName);
+      for i := 0 to called - 1 do
+        try
+          snapshot[i]();
+        except
+          { the failure to report is the first one }
+        end;
+      E.Message := Format(cAddOnRefused, [AName, E.Message]);
+      raise;
+    end;
+  end;
 end;
 
 procedure TyUnregisterAddOnCss(const AName: string);
