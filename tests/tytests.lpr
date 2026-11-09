@@ -70,6 +70,7 @@ uses
   test.imagedraw,
   test.imagename,
   test.css.catalog,
+  test.css.addons,
   test.controller.styleoverride,
   test.tabsheet,
   test.pagecontrol,
