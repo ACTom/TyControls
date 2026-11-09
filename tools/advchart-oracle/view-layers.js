@@ -98,6 +98,8 @@ function viewTags(chart) {
     if (!v.__model) continue;
     const name = v.__model.mainType + v.__model.componentIndex;
     v.group.traverse(el => { m.set(el, name); });
+    // (R7-AJ) a brush's covers: its controller's group, mounted on the root apart from the view's
+    if (v._brushController && v._brushController.group) v._brushController.group.traverse(el => { if (!m.has(el)) m.set(el, name); });
   }
   for (const v of chart._chartsViews) {
     const name = 'S' + v.__model.seriesIndex;
@@ -188,6 +190,11 @@ const LN = (z, more) => Object.assign({ type: 'lines', coordinateSystem: 'cartes
   lineStyle: { color: '#ff0000', width: 2, opacity: 1 },
   effect: { show: true, trailLength: 0.4, period: 1, symbol: 'circle', symbolSize: 8, delay: 0 },
   data: [{ coords: [[1, 5], [9, 5]] }] }, more || {});
+// [R7-AJ] N scatter points, lines rows, bar values -- deterministic
+const PS = n => Array.from({ length: n }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10]);
+const PL = n => Array.from({ length: n }, (_, i) => ({ coords: [[(i * 37) % 100 / 10, (i * 53) % 100 / 10],
+  [(i * 71) % 100 / 10, (i * 29) % 100 / 10]] }));
+const PB = n => Array.from({ length: n }, (_, i) => 1 + (i * 37) % 9);
 const A = (o) => Object.assign({ animation: true, animationDuration: 0, animationDurationUpdate: 0 }, o);
 const NA = (o) => Object.assign({ animation: false }, o);
 const SQ = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'A' },
@@ -245,6 +252,31 @@ function cases() {
         { set: { timeline: { data: ['a', 'b'], left: 0, top: 0 } } }] },
     { id: 'vo-geo-radar', option: NA({ geo: { map: 'vl-sq' }, radar: { indicator: [{ max: 1 }, { max: 1 }, { max: 1 }] },
       series: [{ type: 'radar', data: [{ value: [1, 1, 1] }] }] }) },
+    // ---- R7-AJ: the title in the display list, sorted with everything else ----
+    // (TitleView: the text and the subtext z2 10, the background Rect z2 0, all at the title's z)
+    // a thumbnail (z 10) over the title (z 6)
+    { id: 'vo-title-thumb', option: NA({ title: { text: 'Title', left: 0, top: 0, backgroundColor: '#eeeeee' },
+      thumbnail: { left: 0, top: 0, width: 120, height: 80 },
+      series: [{ type: 'graph', layout: 'none', roam: true, data: [{ x: 0, y: 0 }, { x: 100, y: 50 }], links: [{ source: 0, target: 1 }] }] }) },
+    // a brush cover (z 10000) over it
+    { id: 'vo-title-brush', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 'center', top: 'middle', backgroundColor: '#eeeeee' },
+      brush: { xAxisIndex: 0 }, series: [SC()] })),
+      steps: [{ act: { type: 'brush', areas: [{ brushType: 'lineX', coordRange: [2, 8], xAxisIndex: 0 }] } }] },
+    // the toolbox at the title's z: its icons over the frame, under the text
+    { id: 'vo-title-toolbox', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 0, top: 0, backgroundColor: '#eeeeee' },
+      toolbox: { left: 0, top: 0, feature: { restore: {}, saveAsImage: {} } }, series: [SC()] })) },
+    // a parallel axis (z 10) over it
+    { id: 'vo-title-parallel', option: NA({ title: { text: 'Title', left: 'center', top: 'middle', backgroundColor: '#eeeeee' },
+      parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }], series: [{ type: 'parallel', data: [[1, 2, 3], [3, 2, 1]] }] }) },
+    // a title of z 20 over a legend of z 4, under a slider of z 30
+    { id: 'vo-title-z', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 0, top: 0, z: 20, backgroundColor: '#eeeeee' },
+      legend: { left: 0, top: 0 }, dataZoom: [{ type: 'slider', top: 0, left: 0, z: 30 }], series: [SC([[1, 1]], { name: 'A' })] })) },
+    // a title of z -1: under the axes
+    { id: 'vo-title-under', option: NA(Object.assign({}, XY, { title: { text: 'Title', left: 'center', top: 'middle', z: -1, backgroundColor: '#eeeeee' },
+      series: [SC()] })) },
+    // a title on a zlevel of its own, and one on the root's
+    { id: 'vo-title-zl', option: NA(Object.assign({}, XY, { title: [{ text: 'A', zlevel: 2 }, { text: 'B', subtext: 's', left: 'right' }],
+      legend: {}, series: [SC([[1, 1]], { name: 'A' })] })) },
     // ---- allocateZlevels ----
     { id: 'zl-under', anim: true, option: A(Object.assign({}, XY, { series: [LN(-1)], legend: {}, title: { text: 'T' } })),
       steps: [{ t: 100 }] },
@@ -267,6 +299,12 @@ function cases() {
     { id: 'zl-off', anim: true, option: A(Object.assign({}, XY, { series: [LN(2, { effect: { show: false, trailLength: 0.4 } })], legend: {} })) },
     { id: 'zl-off-after', anim: true, option: A(Object.assign({}, XY, { series: [LN(2)], legend: {} })),
       steps: [{ t: 100 }, { set: { series: [{ effect: { show: false } }] } }, { set: { legend: { zlevel: 0 } } }] },
+    // [R7-AJ] a graphic's elements written onto the trail's zlevel: on its
+    // motion-blurred layer, one before the lines (z 1), one after (z 5)
+    { id: 'zl-graphic-own', anim: true, option: A(Object.assign({}, XY, { series: [LN(2)],
+      graphic: [{ type: 'rect', zlevel: 1, z: 1, shape: { x: 10, y: 10, width: 20, height: 20 } },
+        { type: 'rect', zlevel: 1, z: 5, shape: { x: 40, y: 10, width: 20, height: 20 } }] })),
+      steps: [{ t: 100 }] },
     { id: 'zl-big', option: NA(Object.assign({}, XY, { series: [SC(Array.from({ length: 3500 }, (_, i) => [i % 10, (i * 7) % 10]))],
       legend: {}, title: { text: 'T' } })) },
     { id: 'zl-big-under', option: NA(Object.assign({}, XY, { series: [SC(Array.from({ length: 150 }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10]),
@@ -274,6 +312,50 @@ function cases() {
     { id: 'zl-graphic', anim: true, option: A(Object.assign({}, XY, { series: [LN(-1)],
       graphic: [{ type: 'rect', shape: { x: 10, y: 10, width: 20, height: 20 } }, { type: 'rect', z: -5, shape: { x: 40, y: 10, width: 20, height: 20 } }] })),
       steps: [{ t: 100 }] },
+    // ---- R7-AJ: a progressive run's own level (getZLevelKey: more rows than
+    // getProgressiveThreshold), one incremental layer per zlevel ----
+    // a lines series with no effect, more rows than its threshold, under the axes
+    { id: 'zl-prog-lines', option: NA(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d',
+      z: -1, progressive: 20, progressiveThreshold: 50, lineStyle: { color: '#ff0000', width: 1 },
+      data: PL(60) }], legend: {}, title: { text: 'T' } })) },
+    // and of the default z: the axes under it, the legend and the title over it
+    { id: 'zl-prog-lines-z2', option: NA(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d',
+      progressive: 20, progressiveThreshold: 50, data: PL(60) }], legend: {}, title: { text: 'T' } })) },
+    // two runs side by side: their keys (ids) differ -- a level each; a series between
+    { id: 'zl-prog-two', option: NA(Object.assign({}, XY, { series: [SC(PS(30), { progressive: 10, progressiveThreshold: 20 }),
+      SC(PS(30), { progressive: 10, progressiveThreshold: 20 }), { type: 'line', data: [[1, 1], [9, 9]] },
+      SC(PS(30), { z: 4, progressive: 10, progressiveThreshold: 20 })] })) },
+    // a run of no more rows than its threshold has no key
+    { id: 'zl-prog-at', option: NA(Object.assign({}, XY, { series: [SC(PS(20), { progressive: 10, progressiveThreshold: 20 }),
+      { type: 'line', data: [[1, 1], [9, 9]] }] })) },
+    // large: a scatter's threshold 1e4, a lines series' 2e4 -- unless written
+    { id: 'zl-prog-large', option: NA(Object.assign({}, XY, { series: [SC(PS(40), { large: true, largeThreshold: 10 }),
+      { type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 10, data: PL(40) },
+      SC(PS(40), { large: true, largeThreshold: 10, progressiveThreshold: 30 })] })) },
+    // progressive switched off: the key is the rows' and the threshold's alone
+    { id: 'zl-prog-off', option: NA(Object.assign({}, XY, { series: [SC(PS(30), { progressive: 0, progressiveThreshold: 20 })],
+      title: { text: 'T' } })) },
+    // two incremental runs on user zlevels 0 and 2, a graphic on 1 between: a layer each
+    { id: 'zl-prog-user', option: NA(Object.assign({}, XY, { xAxis: { type: 'category' }, series: [
+      { type: 'bar', large: true, largeThreshold: 5, progressive: 10, progressiveThreshold: 20, data: PB(40) },
+      { type: 'bar', zlevel: 2, large: true, largeThreshold: 5, progressive: 10, progressiveThreshold: 20, data: PB(40) }],
+      graphic: [{ type: 'rect', zlevel: 1, shape: { x: 0, y: 0, width: 100, height: 100 } }] })) },
+    // a dataZoom that filters the rows below the threshold: the key is the data's count
+    { id: 'zl-prog-dz', option: NA(Object.assign({}, XY, { series: [SC(PS(40), { progressive: 10, progressiveThreshold: 30 })],
+      dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'filter', startValue: 0, endValue: 4 }] })),
+      steps: [{ act: { type: 'dataZoom', startValue: 0, endValue: 10 } }] },
+    // two trails of one trailLength, more rows than their threshold: the ids
+    // their keys (a level each), not the trailLength (one shared)
+    { id: 'zl-prog-trails', anim: true, option: A(Object.assign({}, XY, { series: [
+      LN(2, { progressiveThreshold: 50, data: PL(60) }), LN(2, { progressiveThreshold: 50, data: PL(60) })] })),
+      steps: [{ t: 100 }] },
+    // preventIncremental: a heatmap on a geo (lng / lat) is not progressive, on a grid it is
+    { id: 'zl-prog-heat-geo', option: NA({ geo: { map: 'vl-sq' }, visualMap: { min: 0, max: 1, show: false },
+      xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e', 'f'] }, yAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'] },
+      series: [{ type: 'heatmap', coordinateSystem: 'geo', progressive: 10, progressiveThreshold: 20,
+        data: Array.from({ length: 30 }, (_, i) => [(i * 37) % 100 / 10, (i * 53) % 100 / 10, (i % 10) / 10]) },
+      { type: 'heatmap', progressive: 10, progressiveThreshold: 20,
+        data: Array.from({ length: 30 }, (_, i) => [i % 6, Math.floor(i / 6), (i % 10) / 10]) }] }) },
   ];
 }
 
@@ -283,8 +365,19 @@ function generate() {
   // self-checks: what the cases are for
   must(by('vo-merge-two').recs[1].roots.slice(-2).join(' ') === 'xAxis1 timeline0', 'vo-merge-two: the old key first');
   must(by('vo-rm-x').recs[1].roots[by('vo-rm-x').recs[1].roots.length - 1] === 'xAxis0', 'vo-rm-x: brand new last');
+  // (R7-AJ) the title's runs: the frame z2 0 under the toolbox's icons, the text z2 10 over them; a thumbnail over it
+  const runAt = (id, step, view, z2) => by(id).recs[step].dl.findIndex(r => r[0] === view && (z2 == null || r[3] === z2));
+  must(runAt('vo-title-toolbox', 0, 'title0', 0) < runAt('vo-title-toolbox', 0, 'toolbox0', 0)
+    && runAt('vo-title-toolbox', 0, 'toolbox0', 0) < runAt('vo-title-toolbox', 0, 'title0', 10), 'vo-title-toolbox: frame, icons, text');
+  must(runAt('vo-title-thumb', 0, 'title0', 10) < runAt('vo-title-thumb', 0, 'thumbnail0', null), 'vo-title-thumb: the thumbnail over the title');
+  must(runAt('vo-title-brush', 1, 'title0', 10) < runAt('vo-title-brush', 1, 'brush0', null), 'vo-title-brush: the cover over the title');
   must(by('zl-under').recs[0].zl.S0 === 0 && by('zl-under').recs[0].zl.xAxis0 === 1, 'zl-under: the trail under the axes');
   must(by('zl-off-after').recs[2].zl.S0 === 1, 'zl-off-after: the level stays');
+  must(by('zl-graphic-own').recs[1].layers.some(l => l[0] === 1 && l[2])
+    && by('zl-graphic-own').recs[1].dl.filter(r => r[0] === 'graphic0' && r[1] === 1).length === 2,
+    'zl-graphic-own: the graphic on the blurred layer of the trail');
+  must(by('zl-prog-lines').recs[0].zl.S0 === 0 && by('zl-prog-lines').recs[0].zl.xAxis0 === 1, 'zl-prog-lines: the run under the axes');
+  must(!by('zl-prog-at').recs[0].zl.S0 && !by('zl-prog-at').recs[0].zl.S1, 'zl-prog-at: no key at the threshold');
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node, zrender canvas painter on stand-in canvases',
     note: 'R7-AH: per case and step, the root\'s views in order, every model\'s zlevel after allocateZlevels, the '
       + 'painter\'s layers (zlevel, zlevel2, motionBlur, lastFrameAlpha) and the display list as runs of '

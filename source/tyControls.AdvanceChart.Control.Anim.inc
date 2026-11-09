@@ -2987,9 +2987,10 @@ function TTyCustomAdvanceChart.AnimPartOf(AFrame: TTyPaintList;
   AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
-  i, h: Integer;
+  i, h, k: Integer;
   pe: PTyChartElement;
-  cont, after: Boolean;
+  cont, after, onTrail: Boolean;
+  tl: TTyIntegerArray;
 begin
   frame := AFrame;
   if FAnimSplit = nil then FAnimSplit := TTyPaintList.Create;
@@ -3011,11 +3012,24 @@ begin
     layer holds only what lies under the first continuous element [was:
     only the continuous elements were the dynamic layer's, over everything] }
   after := False;
+  { [R7-AJ] A TRAIL'S LEVEL IS ONE LAYER painted every frame over the faded
+    last one (motionBlur): what stands on it before the trail -- a
+    graphic's element of that zlevel -- goes with it [was: the static
+    layer's, drawn once under the faded trail] }
+  tl := TrailLevels;
   { read in place, copied only into the half it goes to [P2] }
   for i := 0 to frame.Count - 1 do
   begin
     pe := frame.Ref(i);
     if after then
+    begin
+      if AContinuous then FAnimSplit.Add(pe^);
+      Continue;
+    end;
+    onTrail := False;
+    for k := 0 to High(tl) do
+      if tl[k] = pe^.ZLevel then onTrail := True;
+    if onTrail then
     begin
       if AContinuous then FAnimSplit.Add(pe^);
       Continue;

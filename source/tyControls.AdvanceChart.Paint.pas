@@ -2194,6 +2194,12 @@ var k: Integer;
 begin
   for k := FJrN - 1 downto 0 do
   begin
+    { [R7-AJ] its zlevel is the build's too (the series' level, a marker's,
+      allocateZlevels' -- written after the session kept the element; no
+      state writes one): it stays [was: the copy from before the build
+      wrote it put back, a patched row of a series on a zlevel of its own
+      dropped onto zlevel 0] }
+    FJrOld[k].ZLevel := FItems[FJrIdx[k]].ZLevel;
     { [R2-I6] an element whose place in the order moves }
     if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2)
       or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel)

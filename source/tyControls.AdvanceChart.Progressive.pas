@@ -345,6 +345,18 @@ begin
     if IsNan(n) or (n < 1) or (n > MaxInt) then Result.Enabled := False
     else Result.Step := Trunc(n);
   end;
+  { [R7-AJ] preventIncremental: a lines series whose effect shows, a heatmap
+    on a coordinate system of lng / lat dimensions (a geo) -- no progressive
+    pipeline (Scheduler's progressiveEnabled) [was: chunked like any other] }
+  if ANode <> nil then
+  begin
+    d := ANode.Find('effect');
+    if (AType = 'lines') and (d is TJSONObject) and JsTruthy(TJSONObject(d).Find('show')) then
+      Result.Enabled := False;
+    d := ANode.Find('coordinateSystem');
+    if (AType = 'heatmap') and (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'geo') then
+      Result.Enabled := False;
+  end;
   { progressiveChunkMode: the option's own, else a type's default 'mod',
     else the root's }
   d := nil;

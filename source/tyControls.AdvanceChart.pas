@@ -422,6 +422,21 @@ const
   cBreakSingleKey = 900000;
 
 type
+  { [R7-AJ] an incremental layer of one zlevel (FProgLayers) }
+  TTyProgLayer = record
+    Level: Integer;
+    Bmp, Seen: TBGRABitmap;
+    LastPos: Integer;
+    InOrder, Drawn, Touched: Boolean;
+  end;
+  TTyProgLayerArray = array of TTyProgLayer;
+  { [R7-AJ] a step of the full paint after its first blit (FProgOps) }
+  TTyProgOp = record
+    Kind: Byte;
+    BandOn, ApartOn: Boolean;
+    Lo, Hi, From, Pre, Level: Integer;
+  end;
+
   { [Batch 152, D14 GE4] A MAP_SERIES_GROUP: the map series on one geo
     component ('o' and its index) or of one `map` ('i' and the name) --
     every one of them (R, raw order) and the ones the legend left (F); the
@@ -1101,13 +1116,22 @@ type
     FDzTouched: array of Boolean;
     FDzFrozenStore: array of TTyDataStore;
     FFlushDue: Boolean;
-    { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
+    { THE INCREMENTAL LAYERS (zrender's, for `incremental` elements): every
       shown element of a progressive run painted once, onto a layer of its
       own that a frame adds its chunk to and the static layer blits where
-      the first of them stands in the paint order; whether it holds the
-      list as it stands, its PPI, and what of each element it holds (rows
-      of a growing batch, 1 for anything else, 0 for nothing) }
-    FProgLayer: TBGRABitmap;
+      the first of them stands in the paint order; whether they hold the
+      list as it stands, their PPI, and what of each element they hold
+      (rows of a growing batch, 1 for anything else, 0 for nothing).
+      [R7-AJ] ONE PER ZLEVEL, as zrender 6.1 splits a zlevel round its
+      incremental elements (zlevel2 0, 1, 2): every run of that zlevel on
+      its one layer, blitted where the zlevel's first of them stands --
+      Bmp; Seen the layer as the last capture blitted it; LastPos the last
+      paint position drawn on it and InOrder whether it is what a whole
+      drawing in paint order gives; Drawn: a frame drew on it since the
+      capture; Touched: a state patch changed it (ProgLayerRegionRedraw)
+      [was: one layer for every run, blitted on each run's zlevel] }
+    FProgLayers: TTyProgLayerArray;
+    FProgLayerW, FProgLayerH: Integer;
     FProgLayerOk: Boolean;
     FProgLayerPPI: Integer;
     FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
@@ -1123,17 +1147,27 @@ type
       FProgFastFrame: since the capture the static layer was dropped by
       progress frames alone. }
     FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
-    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: whether the layer
-      is what a whole drawing in paint order gives (FProgLayerInOrder; the
-      last position drawn on it, FProgLayerLastPos), and the box, in device
-      px, a state patch changed on it (FProgLayerRegion when
-      FProgLayerRegionOn) -- see ProgLayerRegionRedraw }
-    FProgLayerInOrder, FProgLayerRegionOn: Boolean;
-    FProgLayerLastPos: Integer;
+    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: the box, in
+      device px, a state patch changed on the layers (FProgLayerRegion when
+      FProgLayerRegionOn; the layers it changed Touched) -- see
+      ProgLayerRegionRedraw }
+    FProgLayerRegionOn: Boolean;
     FProgLayerRegion: TTyXYWH;
     FListTailAt: Integer;
-    FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
+    FProgUnder, FProgWork: TBGRABitmap;
     FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
+    { [R7-AJ] WHAT THE FULL PAINT DREW AFTER ITS FIRST BLIT (FProgBlitLevel's
+      layer at FProgBlitAt), in its order, for a progress frame to draw
+      again over FProgUnder: a run of the list (Kind 0: its band, from a
+      paint position, a level already blitted in it or -MaxInt) -- its later
+      layers blitted at their first chunks -- or a component pass on a level
+      (1 the axes, 2 the break areas, 3 the parallel axes;
+      ApartOn / Level the zlevel pass it was drawn in). FProgLogOn while
+      the full paint logs; FProgLogBad: it drew something the log cannot
+      say (no progress frame then) }
+    FProgOps: array of TTyProgOp;
+    FProgLogOn, FProgLogBad: Boolean;
+    FProgBlitLevel: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -2073,6 +2107,9 @@ type
       build, as before) }
     FPtrSlideKeep: Boolean;
     FTitleFramesDrawn: TTyOverlayShapeArray;
+    { [R7-AJ] each title's elements in the list: its box, its text, its
+      subtext (-1 none) }
+    FTitleAt: array of array[0..2] of Integer;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -3348,6 +3385,16 @@ type
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;
     procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
+    { [R7-AJ] the layer of a zlevel (-1 none); every layer freed; whether
+      every one is what a whole drawing in paint order gives }
+    function ProgLayerAt(ALevel: Integer): Integer;
+    { [R7-AJ] the zlevels a progressive run's shown chunks are on, in order }
+    function ProgChunkLevels: TTyIntegerArray;
+    procedure ProgLayersFree;
+    function ProgLayersInOrder: Boolean;
+    { [R7-AJ] a component pass the full paint draws after its first blit,
+      logged for the progress frames (FProgOps) }
+    procedure ProgLogFurn(AKind: Byte);
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
     { [R2-L] the paint-order position the incremental layer is blitted at:
       the first shown element of a run, -1 for none }
@@ -3387,7 +3434,19 @@ type
     function LegendDeco(AIndex: Integer; const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
     function TitleFontOf(AIndex: Integer; const AKey, AStyleKey: string;
       APick: TTyTextPick): TTyTitleFont;
-    procedure PaintTitles(APainter: TTyPainter);
+    { [R7-AJ] THE TITLES IN THE LIST (TitleView's group: the background Rect
+      z2 0, the text and the subtext z2 10, at the title's z and zlevel):
+      their parts as built (TitleParts, TitleLineEl), appended
+      (BuildTitles: FTitleAt their places), what the canvas refuses of
+      them settled by the list's run as any element's, noted as drawn
+      (TitlesNote) }
+    function TitleZ(AIndex: Integer): Integer;
+    procedure TitleParts(AIndex, APPI: Integer; out AFrame: TTyChartElement;
+      out AInk0, AInk1: TTyColor; out AFont0, AFont1: TTyTitleFont);
+    function TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+      const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+    function BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
+    procedure TitlesNote;
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
     { ONE COLOUR PER RAW ROW, in raw order, for a series that colours by datum.
@@ -3768,12 +3827,8 @@ type
     { [R7-AA] THE PARALLEL AXES' PARTS (z 10, after the series), settled
       from where the list's run reaches their z: appended to FCompParts }
     procedure ParRun;
-    { [R7-Z] a title's box and text colours, the canvas refusing them }
-    procedure TitleSettle(AIndex: Integer; var AFrame: TTyChartElement;
-      var AInk0, AInk1: TTyColor; var AFont0, AFont1: TTyTitleFont);
-    procedure TitleDrewText(AIndex, ALine: Integer; AInk: TTyColor; const AFont: TTyTitleFont);
-    { [R7-AA] a title line's block holds a colour the canvas refuses }
-    function TitlePiecesCarry(AIndex: Integer): Boolean;
+    { [R7-Z] a title's line as drawn (CompDrawn) }
+    procedure TitleDrewText(AIndex, ALine: Integer; const AEl: TTyChartElement);
     { [R7-AA] a split area (a band, a merged path) as drawn, in AColour }
     procedure CompDrewArea(AOwner: TTyAxis; AColour: TTyChartColor);
     { a part as drawn (CompDrawn) }
@@ -3797,6 +3852,10 @@ type
     { [R7-AH] the lowest zlevel a lines series with a trail stands on
       (allocateZlevels'; MaxInt for none) }
     function TrailCutLevel: Integer;
+    { [R7-AJ] THE ZLEVELS A LINES SERIES WITH A TRAIL STANDS ON: each one
+      layer with motionBlur, every displayable on it -- a graphic's element
+      of that zlevel too -- painted again over the faded last frame }
+    function TrailLevels: TTyIntegerArray;
     { [R7-AH] the continuous phase's cut among levels (FZMixed): the trail's
       level -- the components on it and above drawn every frame over the
       trail; MaxInt: none }
@@ -4681,6 +4740,12 @@ type
     function ViewNameOfEl(const AEl: TTyChartElement): string;
     { [R7-AH] a lines series' trail: its layer's lastFrameAlpha (0 none) }
     function TrailAlphaOf(ASeriesIndex: Integer): Double;
+    { [R7-AJ] the zlevels the incremental layers stand on, in order (one
+      per zlevel a progressive run's shown chunks are on) }
+    function ProgLayerLevels: TTyIntegerArray;
+    { [R7-AJ] the paint position of the last element drawn on the layer of
+      AIndex (ProgLayerLevels' order; -1 for none) }
+    function ProgLayerLastPos(AIndex: Integer): Integer;
     { [R7-AD] where the last paint drew the components' parts (each its
       paint rect, as a dirty block meets it) }
     function CompRectsDrawn: TTyCompRectArray;
@@ -4884,6 +4949,12 @@ type
     { [R7-AD] APaint False: made ready and run, not drawn (PaintAxes draws
       them among the axes' parts) }
     procedure GfxPaintUnder(APainter: TTyPainter; APaint: Boolean = True);
+    { [R7-AJ] THE ELEMENTS UNDER THE AXES OF THE ZLEVELS ALo < z <= AHi, in
+      their order -- the static layer's when the levels are drawn apart
+      (PaintZLevels): each on its level, under its axes, over a lower
+      level's list; not from the continuous phase's cut on (the frames':
+      on a trail's level its layer's, painted every frame) }
+    procedure GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
     { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
     procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;
