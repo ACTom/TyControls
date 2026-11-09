@@ -2327,6 +2327,12 @@ function cases() {
         axisPointer: { show: true, value: 6.3, status: 'show', lineStyle: { color: '#00aa00', width: 2 },
           label: { show: true, backgroundColor: '#00ffff', color: '#000000', padding: '12', formatter: 'Q' } } } }),
     [0], { w: true, z: true }],
+    // (corners of nought at the top right and bottom left: the path's top
+    // edge runs straight to the joined far edge, no arc there)
+    ['ak-round-legend-r0', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', borderRadius: [4, 0, 3, 0],
+        textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true }],
     ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
       title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },
       legend: { left: 5, top: 15, padding: '4', textStyle: { color: '#000000' } } }),
