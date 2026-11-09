@@ -3617,6 +3617,16 @@ begin
       else
         el.Shape := TyShapeRect(TyRectF(el.Caption.X, oy + lineTop, el.Caption.X + lw, oy + lineTop + lh));
       end;
+      { a line that is a block: its pieces about the same anchor (SolveTitles
+        lays them out at the line's), as a placed title's }
+      if (i <= High(FTitleRt)) and (Length(FTitleRt[i][line].Pieces) > 0) then
+      begin
+        el.Caption.RtPieces := Copy(FTitleRt[i][line].Pieces, 0, MaxInt);
+        el.Caption.RtScale := FTitleRt[i][line].Scale;
+        el.Caption.AnchorV := tavTop;
+        el.Caption.Y := oy + FTitleRt[i][line].Y;
+        el.Caption.X := ox + FTitleRt[i][line].X;
+      end;
       { a font the canvas refuses: the one the text before left }
       if node is TJSONObject then
       begin
