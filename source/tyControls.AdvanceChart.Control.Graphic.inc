@@ -380,27 +380,20 @@ end;
 
 procedure TTyCustomAdvanceChart.GfxPaintBand(APainter: TTyPainter; ALo, AHi: Integer);
 var
-  i, k, cut: Integer;
+  i, cut: Integer;
   pe: PTyChartElement;
-  tl: TTyIntegerArray;
-  onTrail: Boolean;
 begin
   if (FGfxUnder = nil) or (APainter = nil) then Exit;
   { (asked after the series pass armed the animation) }
   cut := ZCut;
-  tl := nil;
-  if FAnimContinuous and not FExporting then tl := TrailLevels;
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(i));
     if pe^.Ignore or (pe^.ZLevel <= ALo) or (pe^.ZLevel > AHi) then Continue;
-    { from the trail's level on the frames' (PaintZLevelsCut), and on a
-      trail's level its layer's, painted every frame (AnimPartOf) }
+    { from the trail's level on the frames' (PaintZLevelsCut): on a trail's
+      level its layer's, painted every frame (AnimPartOf) -- the cut is the
+      lowest trail's level, so every trail's level is past it }
     if pe^.ZLevel >= cut then Continue;
-    onTrail := False;
-    for k := 0 to High(tl) do
-      if tl[k] = pe^.ZLevel then onTrail := True;
-    if onTrail then Continue;
     { (after a full paint's first blit: what its log cannot say) }
     if FProgLogOn then FProgLogBad := True;
     TyRenderElement(APainter, pe^);

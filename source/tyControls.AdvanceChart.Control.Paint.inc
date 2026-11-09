@@ -1981,10 +1981,18 @@ begin
 end;
 
 function TTyCustomAdvanceChart.ZMixedNow(out ALevels: TTyIntegerArray): Boolean;
+var i: Integer;
 begin
   ALevels := ApartLevels;
   Result := (Length(ALevels) > 1)
     or ((Length(ALevels) = 1) and (ListMinZLevel < ALevels[0]));
+  if Result or (Length(ALevels) <> 1) then Exit;
+  { [R7-AJ] a graphic's element under the axes (zlevel 0) off their level:
+    a canvas of its own, under or over theirs [was: drawn among their
+    parts whatever its zlevel] }
+  for i := 0 to High(FGfxPaint) do
+    if FGfxPaint[i].GfxUnder and not FGfxPaint[i].Ignore
+      and (FGfxPaint[i].ZLevel <> ALevels[0]) then Exit(True);
 end;
 
 function TTyCustomAdvanceChart.ZBase: Integer;

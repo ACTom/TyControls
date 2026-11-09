@@ -43,6 +43,8 @@ type
     procedure TestAGraphicOnTheTrailsOwnLevelIsPaintedOnIt;
     procedure TestAGraphicOverATrailOfALowerZLevelStaysOver;
     procedure TestAGraphicUnderTheAxesIsOverALowerZLevel;
+    procedure TestAGraphicUnderTheAxesBetweenAndOverTheirLevels;
+    procedure TestAGraphicUnderTheCutIsDrawnOnce;
   end;
 
 implementation
@@ -224,16 +226,68 @@ end;
   on 0): the graphic's rect of z -5 under the axes is on zlevel 0, over the
   series' canvas [was: drawn first of all, under it] }
 procedure TAdvChartTrailLayerTest.TestAGraphicUnderTheAxesIsOverALowerZLevel;
-var p: TBGRAPixel;
-begin
-  Play('{"animation":false,"backgroundColor":"#ffffff","grid":{"left":40,"right":40,"top":40,"bottom":40},'
+const
+  cHalfMixed = '{"animation":false,"backgroundColor":"#ffffff","grid":{"left":40,"right":40,"top":40,"bottom":40},'
     + '"xAxis":{"type":"value","min":0,"max":10,"show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
-    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}}],'
-    + '"series":[{"type":"scatter","zlevel":-1,"symbolSize":60,"itemStyle":{"color":"#ff0000","opacity":1},"data":[[5,5]]}]}', 0);
+    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}},'
+    + '{"type":"rect","z":-5,"shape":{"x":300,"y":60,"width":40,"height":40},"style":{"fill":"#00ff00","opacity":0.5}}],'
+    + '"series":[{"type":"scatter","zlevel":-1,"symbolSize":60,"itemStyle":{"color":"#ff0000","opacity":1},"data":[[5,5]]}]}';
+var p, q: TBGRAPixel;
+begin
+  Play(cHalfMixed, 0);
   p := Pix(200, 150);
   AssertTrue('the rect over the series of a lower zlevel: ' + Px(p), (p.green > 230) and (p.red < 30));
   p := Pix(200, 125);
   AssertTrue('the series round it: ' + Px(p), (p.red > 230) and (p.green < 30));
+  { a rect of opacity 0.5 drawn once, as when nothing is drawn apart }
+  q := Pix(320, 80);
+  Play(StringReplace(cHalfMixed, '"zlevel":-1,', '', []), 0);
+  p := Pix(320, 80);
+  AssertTrue('the half-clear rect drawn once: ' + Px(q) + ' against ' + Px(p),
+    (Abs(p.red - q.red) <= 1) and (p.red < 250));
+end;
+
+{ THE AXES ON zlevels -1 AND 1, the graphic's rect of z -5 on 0 between
+  them: over the x axis' split lines, under the y axis'; the axes both on
+  -1: over them [was: under every level's] }
+procedure TAdvChartTrailLayerTest.TestAGraphicUnderTheAxesBetweenAndOverTheirLevels;
+const
+  cOpt = '{"animation":false,"backgroundColor":"#ffffff","grid":{"left":40,"right":40,"top":40,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"interval":5,"zlevel":-1,"axisLabel":{"show":false},'
+    + '"splitLine":{"lineStyle":{"color":"#0000ff","width":6}}},'
+    + '"yAxis":{"type":"value","min":0,"max":10,"interval":5,"zlevel":%d,"axisLabel":{"show":false},'
+    + '"splitLine":{"lineStyle":{"color":"#ff0000","width":6}}},'
+    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}}],'
+    + '"series":[{"type":"scatter","data":[[1,1]]}]}';
+var p: TBGRAPixel;
+begin
+  Play(Format(cOpt, [1]), 0);
+  { the x axis' split line at x 5 (200 px), the y axis' at y 5 (150 px) }
+  p := Pix(200, 140);
+  AssertTrue('the rect over the x axis'' split line: ' + Px(p), (p.green > 230) and (p.blue < 30));
+  p := Pix(190, 150);
+  AssertTrue('the y axis'' split line over the rect: ' + Px(p), (p.red > 230) and (p.green < 30));
+  Play(Format(cOpt, [-1]), 0);
+  p := Pix(190, 150);
+  AssertTrue('the rect over both: ' + Px(p), (p.green > 230) and (p.red < 30));
+end;
+
+{ THE LINES' TRAIL ON zlevel 1, the axes on 0 and 3: a graphic's rect of
+  opacity 0.5 on zlevel 0, under the cut, is the static layer's -- drawn
+  once, as with no animation }
+procedure TAdvChartTrailLayerTest.TestAGraphicUnderTheCutIsDrawnOnce;
+var p, q: TBGRAPixel; opt: string;
+begin
+  opt := StringReplace(Format(cBase, ['{"type":"rect","z":-5,"shape":{"x":200,"y":60,"width":40,"height":40},'
+    + '"style":{"fill":"#00ff00","opacity":0.5}}', 2]), '"yAxis":{"type":"value",', '"yAxis":{"zlevel":3,"type":"value",', []);
+  Play(opt, 30);
+  AssertEquals('the lines on zlevel 1', 1, FChart.ZLevelOf('S0'));
+  AssertEquals('the y axis on zlevel 3', 3, FChart.ZLevelOf('yAxis0'));
+  q := Pix(220, 80);
+  Play(StringReplace(opt, '"animation":true', '"animation":false', []), 0);
+  p := Pix(220, 80);
+  AssertTrue('the half-clear rect drawn once: ' + Px(q) + ' against ' + Px(p),
+    (Abs(p.red - q.red) <= 1) and (p.red < 250));
 end;
 
 initialization
