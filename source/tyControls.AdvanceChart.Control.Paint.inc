@@ -1357,11 +1357,14 @@ begin
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   axesHere := not FZMixed and (FExporting or not AxesDynamic);
   { [R7-AD] the graphic's elements under the axes drawn among their parts
-    where the axes are drawn here (PaintAxes) }
-  GfxPaintUnder(APainter, not axesHere);
+    where the axes are drawn here (PaintAxes) -- ([R7-AJ] the levels drawn
+    apart: each on its level, GfxPaintBand [was: all of them first, under
+    a lower level's list too]) }
+  GfxPaintUnder(APainter, not axesHere and not FZMixed);
   if FZMixed then
   begin
     PaintZLevels(APainter, APPI, AMeasurer, FZLevels, False, nil);
+    TitlesNote;
     Exit;
   end;
   { [R7-AD] THE LIST BEFORE THE AXES: what of it falls among their parts --
@@ -1397,19 +1400,28 @@ begin
     groupTransition [F4a] }
   { [R5-I] and in the continuous phase too: over the series that move there
     [was: under the ripples] }
-  if FExporting or not FAnimLive then PaintBreakAreas(APainter);
+  { ([R7-AJ] each pass after the first blit logged for the progress
+    frames: ProgLogFurn) }
+  if FExporting or not FAnimLive then
+  begin
+    ProgLogFurn(2);
+    PaintBreakAreas(APainter);
+  end;
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
-  if FExporting or not FAnimContinuous then PaintParallels(APainter, APPI, AMeasurer);
-  { AND THE TITLE LAST. It floats over the container rather than reserving
-    room, so anything it overlaps it is meant to overlap. While the series
-    move the title goes with them into the dynamic layer, so it stays over
-    them [Batch 89]. }
-  if FExporting or not FAnimLive then PaintTitles(APainter);
+  if FExporting or not FAnimContinuous then
+  begin
+    ProgLogFurn(3);
+    PaintParallels(APainter, APPI, AMeasurer);
+  end;
+  { [R7-AJ] (THE TITLE is the list's: drawn in it by its zlevel, z, z2 and
+    its view's place -- while the series move, in the frame's [was: drawn
+    here, last, whatever its z [Batch 89]]) }
   { [R5-G] AND OVER THEM, an element of a higher zlevel -- up to the loading
     mask's, when it shows over the chart }
   if FExporting or not FAnimLive then
     PaintAboveComponents(APainter, FZList);
+  TitlesNote;
 end;
 
 function TTyCustomAdvanceChart.ComponentZLevel: Integer;
@@ -1473,6 +1485,23 @@ begin
     end;
 end;
 
+function TTyCustomAdvanceChart.TrailLevels: TTyIntegerArray;
+var i, k, z: Integer; has: Boolean;
+begin
+  Result := nil;
+  for i := 0 to High(FBindings) do
+    if LinesTrailAlpha(FBindings[i].SeriesIndex) > 0 then
+    begin
+      z := SeriesZLevelOf(FBindings[i].SeriesIndex);
+      has := False;
+      for k := 0 to High(Result) do
+        if Result[k] = z then has := True;
+      if has then Continue;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := z;
+    end;
+end;
+
 procedure TTyCustomAdvanceChart.PaintZLevelsCut(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
   APart: TTyPaintList; ACut: Integer);
@@ -1506,17 +1535,6 @@ begin
     comp := False;
     for j := 0 to High(ALevels) do
       if ALevels[j] = lv then comp := True;
-    { the components on it: the axes first (z 0), as PaintZLevels }
-    if comp and (lv >= ACut) then
-    begin
-      FZApartOn := True;
-      FZApartLevel := lv;
-      try
-        PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
-      finally
-        FZApartOn := False;
-      end;
-    end;
     { the part's elements of that level -- a trail's through its layer }
     trail := False;
     for k := 0 to APart.Count - 1 do
@@ -1527,6 +1545,27 @@ begin
       begin
         trail := True;
         Break;
+      end;
+    end;
+    { [R7-AJ] THE GRAPHIC'S ELEMENTS UNDER THE AXES on a level from the cut
+      on that is no trail's: the static layer leaves them (GfxPaintUnder),
+      drawn here under the level's axes -- a trail's level paints them on
+      its layer, with the part (AnimPartOf) }
+    if (lv >= ACut) and not trail and (FGfxUnder <> nil) then
+      for k := 0 to FGfxUnder.Count - 1 do
+      begin
+        pe := FGfxUnder.Ref(FGfxUnder.PaintOrder(k));
+        if (pe^.ZLevel = lv) and not pe^.Ignore then TyRenderElement(APainter, pe^);
+      end;
+    { the components on it: the axes first (z 0), as PaintZLevels }
+    if comp and (lv >= ACut) then
+    begin
+      FZApartOn := True;
+      FZApartLevel := lv;
+      try
+        PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
+      finally
+        FZApartOn := False;
       end;
     end;
     TySetZBand(lv - 1, lv);
@@ -1543,7 +1582,6 @@ begin
       try
         PaintBreakAreas(APainter);
         PaintParallels(APainter, APPI, AMeasurer);
-        PaintTitles(APainter);
       finally
         FZApartOn := False;
       end;
@@ -1772,34 +1810,32 @@ begin
     if FOption.ComponentAt('series', i) is TJSONObject then
       node := TJSONObject(FOption.ComponentAt('series', i));
     st := FOption.ComponentSubType('series', i);
-    { getZLevelKey: a lines series' effect shown with a trail -- its
-      trailLength (more rows than getProgressiveThreshold: its id). NOT a
-      scatter's or a trail-less lines series' of more rows than its
-      threshold (the id upstream gives them too): the incremental layer is
-      one for every run here, and the progress frames draw it over the
-      static layer -- a run on a level of its own would need its own (spec
-      288, what remains) }
+    { getZLevelKey: a scatter's, a lines series' of more rows than its
+      getProgressiveThreshold (`data.count() >`, the data as the dataZoom
+      left it) its id -- [R7-AJ] a level of its own, an incremental layer
+      on it [was: a lines series' with a trail only]; else a lines series'
+      effect shown with a trail its trailLength }
     mt := '';
-    if (st = TyLinesSeriesTypeName) and (node <> nil) then
+    if ((st = 'scatter') or (st = TyLinesSeriesTypeName)) and (node <> nil) then
     begin
-      eff := nil;
-      if node.Find('effect') is TJSONObject then eff := TJSONObject(node.Find('effect'));
-      if (eff <> nil) and JsTruthy(eff.Find('show')) then
+      slot := SlotOfSeries(i);
+      cnt := 0;
+      if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+        cnt := FStores[slot].Count;
+      if root <> nil then thr := TyProgSpecOf(st, node, root).Threshold
+      else thr := TyProgSpecOf(st, node).Threshold;
+      if cnt > thr then mt := FOption.ComponentId('series', i)
+      else if st = TyLinesSeriesTypeName then
       begin
-        d := eff.Find('trailLength');
-        if (d = nil) or (d.JSONType = jtNull) then tl := 0.2
-        else if d.JSONType = jtNumber then tl := d.AsFloat
-        else tl := NaN;
-        if tl > 0 then
+        eff := nil;
+        if node.Find('effect') is TJSONObject then eff := TJSONObject(node.Find('effect'));
+        if (eff <> nil) and JsTruthy(eff.Find('show')) then
         begin
-          slot := SlotOfSeries(i);
-          cnt := 0;
-          if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
-            cnt := FStores[slot].Count;
-          if root <> nil then thr := TyProgSpecOf(st, node, root).Threshold
-          else thr := TyProgSpecOf(st, node).Threshold;
-          if cnt > thr then mt := FOption.ComponentId('series', i)
-          else mt := TyJsNumberToString(tl);
+          d := eff.Find('trailLength');
+          if (d = nil) or (d.JSONType = jtNull) then tl := 0.2
+          else if d.JSONType = jtNumber then tl := d.AsFloat
+          else tl := NaN;
+          if tl > 0 then mt := TyJsNumberToString(tl);
         end;
       end;
     end;
@@ -1902,14 +1938,15 @@ begin
     if FParallels[i] <> nil then
       for a := 0 to High(FParallels[i].AxisIndices) do
         Add(ModelZLevel('parallelAxis', FParallels[i].AxisIndices[a]));
-  for i := 0 to High(FTitles) do
-    if FTitles[i].Valid then Add(ModelZLevel('title', i));
+  { ([R7-AJ] a title is the list's, drawn in its band [was: one of these]) }
 end;
 
 function TTyCustomAdvanceChart.ListMinZLevel: Integer;
 const
-  cTypes: array[0..9] of string = ('series', 'legend', 'toolbox', 'dataZoom',
-    'visualMap', 'timeline', 'thumbnail', 'geo', 'matrix', 'radar');
+  cTypes: array[0..10] of string = ('series', 'legend', 'toolbox', 'dataZoom',
+    'visualMap', 'timeline', 'thumbnail', 'geo', 'matrix', 'radar',
+    { [R7-AJ] }
+    'title');
 var
   t, i, k, z: Integer;
   node, mk, d: TJSONData;
@@ -1944,10 +1981,18 @@ begin
 end;
 
 function TTyCustomAdvanceChart.ZMixedNow(out ALevels: TTyIntegerArray): Boolean;
+var i: Integer;
 begin
   ALevels := ApartLevels;
   Result := (Length(ALevels) > 1)
     or ((Length(ALevels) = 1) and (ListMinZLevel < ALevels[0]));
+  if Result or (Length(ALevels) <> 1) then Exit;
+  { [R7-AJ] a graphic's element under the axes (zlevel 0) off their level:
+    a canvas of its own, under or over theirs [was: drawn among their
+    parts whatever its zlevel] }
+  for i := 0 to High(FGfxPaint) do
+    if FGfxPaint[i].GfxUnder and not FGfxPaint[i].Ignore
+      and (FGfxPaint[i].ZLevel <> ALevels[0]) then Exit(True);
 end;
 
 function TTyCustomAdvanceChart.ZBase: Integer;
@@ -1963,7 +2008,12 @@ procedure TTyCustomAdvanceChart.RenderZList(APainter: TTyPainter; AList: TTyPain
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   if (AList = FPaintList) and not FExporting then ProgRenderList(APainter, AList, APPI)
-  else TyRenderPaintList(APainter, AList);
+  else
+  begin
+    { ([R7-AJ] after a full paint's first blit: what its log cannot say) }
+    if FProgLogOn then FProgLogBad := True;
+    TyRenderPaintList(APainter, AList);
+  end;
 end;
 
 function TTyCustomAdvanceChart.AxesInDynamic: Boolean;
@@ -1978,14 +2028,26 @@ var
   i, lv, prev: Integer;
   over: Boolean;
 
-  procedure ListBand(ALo, AHi: Integer; AFirst: Boolean);
+  procedure ListBand(ALo, AHi: Integer; AFirst, AGfx: Boolean);
   begin
     TySetZBand(ALo, AHi);
     try
       if ADynamic then TyRenderPaintList(APainter, AFrame)
-      { the static layer's first: the series pass builds the list }
-      else if AFirst then PaintSeries(APainter, AMeasurer, APPI)
-      else RenderZList(APainter, FZList, APPI);
+      { the static layer's first: the series pass builds the list -- ([R7-AJ]
+        the graphic's elements under the axes of the band under it, once
+        the pass has armed the animation) }
+      else if AFirst then
+      begin
+        PrepareSeries(AMeasurer, APPI);
+        GfxPaintBand(APainter, ALo, AHi);
+        RenderSeries(APainter, AMeasurer, APPI);
+      end
+      else
+      begin
+        { (a level's own: drawn under its axes) }
+        if AGfx then GfxPaintBand(APainter, ALo, AHi);
+        RenderZList(APainter, FZList, APPI);
+      end;
     finally
       TyClearZBand;
     end;
@@ -1999,23 +2061,33 @@ begin
   for i := 0 to High(ALevels) do
   begin
     lv := ALevels[i];
-    ListBand(prev, lv - 1, (i = 0) and not ADynamic);
+    ListBand(prev, lv - 1, (i = 0) and not ADynamic, True);
     FZApartOn := True;
     FZApartLevel := lv;
     try
+      { ([R7-AJ] the graphic's elements under the level's axes) }
+      if not ADynamic then GfxPaintBand(APainter, lv - 1, lv);
       if ADynamic then
       begin
         if AxesInDynamic then PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
       end
       { ([R7-AH] a level from the trail's on is the frames', over it) }
       else if (FExporting or not AxesInDynamic) and (lv < ZCut) then
+      begin
+        { ([R7-AJ] after the first blit: logged for the progress frames) }
+        ProgLogFurn(1);
         PaintAxes(APainter, APPI, AMeasurer, False);
-      ListBand(lv - 1, lv, False);
+      end;
+      ListBand(lv - 1, lv, False, False);
       if ADynamic or (lv < ZCut) then
       begin
-        if over then PaintBreakAreas(APainter);
+        if over then
+        begin
+          ProgLogFurn(2);
+          PaintBreakAreas(APainter);
+        end;
+        ProgLogFurn(3);
         PaintParallels(APainter, APPI, AMeasurer);
-        if over then PaintTitles(APainter);
       end;
     finally
       FZApartOn := False;
@@ -2035,6 +2107,7 @@ begin
   begin
     TySetZBand(prev, ZStaticTop);
     try
+      GfxPaintBand(APainter, prev, ZStaticTop);
       RenderZList(APainter, FZList, APPI);
     finally
       TyClearZBand;
@@ -3106,6 +3179,39 @@ end;
 function TTyCustomAdvanceChart.TrailAlphaOf(ASeriesIndex: Integer): Double;
 begin
   Result := LinesTrailAlpha(ASeriesIndex);
+end;
+
+function TTyCustomAdvanceChart.ProgLayerLastPos(AIndex: Integer): Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(FProgLayers)) then Exit(-1);
+  Result := FProgLayers[AIndex].LastPos;
+end;
+
+function TTyCustomAdvanceChart.ProgLayerLevels: TTyIntegerArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(FProgLayers));
+  for i := 0 to High(FProgLayers) do Result[i] := FProgLayers[i].Level;
+end;
+
+function TTyCustomAdvanceChart.ProgChunkLevels: TTyIntegerArray;
+var i, k, j, z: Integer; pe: PTyChartElement;
+begin
+  Result := nil;
+  if FPaintList = nil then Exit;
+  for i := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(i);
+    if not ProgIsLayered(pe^) then Continue;
+    z := pe^.ZLevel;
+    k := 0;
+    while (k <= High(Result)) and (Result[k] < z) do Inc(k);
+    if (k <= High(Result)) and (Result[k] = z) then Continue;
+    SetLength(Result, Length(Result) + 1);
+    for j := High(Result) downto k + 1 do Result[j] := Result[j - 1];
+    Result[k] := z;
+  end;
 end;
 
 function TTyCustomAdvanceChart.ViewNameOfEl(const AEl: TTyChartElement): string;
@@ -4677,7 +4783,6 @@ begin
     end;
     PaintBreakAreas(APainter);
     PaintParallels(APainter, APPI, AMeasurer);
-    PaintTitles(APainter);
     if TrailZLevel(frame) > ComponentZLevel then PaintTrailAbove(APainter, frame)
     else PaintAboveComponents(APainter, frame);
     end;
@@ -4708,7 +4813,6 @@ begin
     PaintBreakAreas(APainter);
     { the parallel axes over the lines in motion [Batch 128] }
     PaintParallels(APainter, APPI, AMeasurer);
-    PaintTitles(APainter);
     { [R5-G] a higher zlevel over them }
     PaintAboveComponents(APainter, frame);
     end;
@@ -4873,12 +4977,17 @@ begin
       FProgCapOk := False;
       FProgCapUnder := False;
       FProgCap := not GProgFastOff;
+      { [R7-AJ] what it draws after its first blit, logged from there }
+      FProgOps := nil;
+      FProgLogOn := False;
+      FProgLogBad := False;
       try
         PaintStatic(P, R, APPI, measurer);
       finally
         FProgCap := False;
+        FProgLogOn := False;
       end;
-      if FProgCapUnder and (P.Bitmap <> nil) and (P.Opacity = 1.0) then
+      if FProgCapUnder and not FProgLogBad and (P.Bitmap <> nil) and (P.Opacity = 1.0) then
       begin
         if FProgWork = nil then FProgWork := TBGRABitmap.Create(P.Bitmap.Width, P.Bitmap.Height)
         else FProgWork.SetSize(P.Bitmap.Width, P.Bitmap.Height);
@@ -5333,7 +5442,6 @@ begin
         { what the static paint draws over the series, as it draws it }
         PaintBreakAreas(P);
         PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
         if TyMaxZLevelOf(FDrStaticList) <= zc then Break;
         TySetZBand(zc, ZStaticTop);
       end;
@@ -5619,7 +5727,6 @@ begin
         { what the dynamic layer draws over the loops, as it draws it }
         PaintBreakAreas(P);
         PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
       end;
       FDrDyn.ClipRect := oldClip;
       P.EndPaint;

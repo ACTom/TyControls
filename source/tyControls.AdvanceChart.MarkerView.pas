@@ -826,10 +826,15 @@ begin
     Result := (doubled + 1) / 2;
 end;
 
-function LinePath(AX1, AY1, AX2, AY2, ALineWidth: Double): TTyZrPath;
+{ ([R7-AJ] AScale the device px a css px makes: the ends and the width
+  device px, snapped on the css px grid -- ECLinePath's subPixelOptimize
+  on a canvas scaled by devicePixelRatio [was: the device px grid]) }
+function LinePath(AX1, AY1, AX2, AY2, ALineWidth, AScale: Double): TTyZrPath;
 begin
   Result := nil;
-  if (ALineWidth <> 0) and not IsNan(ALineWidth) then
+  if (AScale > 0) and (AScale <> 1) then
+    TyZrSubPixelLineAt(AX1, AY1, AX2, AY2, ALineWidth, AScale)
+  else if (ALineWidth <> 0) and not IsNan(ALineWidth) then
   begin
     if TyJsRound(AX1 * 2) = TyJsRound(AX2 * 2) then
     begin
@@ -1548,7 +1553,7 @@ var
     P.Y1 := L.From.Point.Y;
     P.X2 := L.To_.Point.X;
     P.Y2 := L.To_.Point.Y;
-    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s);
+    P.Path := LinePath(P.X1, P.Y1, P.X2, P.Y2, P.LineWidth * s, s);
     RunZ2(P.Z2);
     { the tangent: LinePath.tangentAt, the un-snapped shape }
     tx := P.X2 - P.X1;

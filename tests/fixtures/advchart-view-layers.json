@@ -4723,6 +4723,1351 @@
    ]
   },
   {
+   "id": "vo-title-thumb",
+   "option": {
+    "animation": false,
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "backgroundColor": "#eeeeee"
+    },
+    "thumbnail": {
+     "left": 0,
+     "top": 0,
+     "width": 120,
+     "height": 80
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "roam": true,
+      "data": [
+       {
+        "x": 0,
+        "y": 0
+       },
+       {
+        "x": 100,
+        "y": 50
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "thumbnail0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "thumbnail0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "S0",
+       0,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       141,
+       false,
+       1
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       151,
+       false,
+       3
+      ],
+      [
+       "thumbnail0",
+       0,
+       10,
+       161,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-brush",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "backgroundColor": "#eeeeee"
+    },
+    "brush": {
+     "xAxisIndex": 0
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "act": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "lineX",
+        "coordRange": [
+         2,
+         8
+        ],
+        "xAxisIndex": 0
+       }
+      ]
+     }
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "brush0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "brush0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       4
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "brush0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "brush0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       4
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "brush0",
+       0,
+       10000,
+       10000,
+       false,
+       3
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-toolbox",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "backgroundColor": "#eeeeee"
+    },
+    "toolbox": {
+     "left": 0,
+     "top": 0,
+     "feature": {
+      "restore": {},
+      "saveAsImage": {}
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "toolbox0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "toolbox0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "toolbox0",
+       0,
+       6,
+       0,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-parallel",
+   "option": {
+    "animation": false,
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "backgroundColor": "#eeeeee"
+    },
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        3,
+        2,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "parallelAxis0",
+      "parallelAxis1",
+      "parallelAxis2",
+      "parallel0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "parallelAxis0": null,
+      "parallelAxis1": null,
+      "parallelAxis2": null,
+      "parallel0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "S0",
+       0,
+       2,
+       10,
+       false,
+       2
+      ],
+      [
+       "title0",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       6,
+       10,
+       false,
+       1
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       1,
+       false,
+       1
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       2,
+       false,
+       7
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       2,
+       false,
+       5
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       2,
+       false,
+       7
+      ],
+      [
+       "parallelAxis0",
+       0,
+       10,
+       10,
+       false,
+       7
+      ],
+      [
+       "parallelAxis1",
+       0,
+       10,
+       10,
+       false,
+       5
+      ],
+      [
+       "parallelAxis2",
+       0,
+       10,
+       10,
+       false,
+       7
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-z",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": 0,
+     "top": 0,
+     "z": 20,
+     "backgroundColor": "#eeeeee"
+    },
+    "legend": {
+     "left": 0,
+     "top": 0
+    },
+    "dataZoom": [
+     {
+      "type": "slider",
+      "top": 0,
+      "left": 0,
+      "z": 30
+     }
+    ],
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ],
+      "name": "A"
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "dataZoom0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "legend0": null,
+      "dataZoom0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       0,
+       false,
+       3
+      ],
+      [
+       "title0",
+       0,
+       20,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       20,
+       10,
+       false,
+       1
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -40,
+       false,
+       1
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -20,
+       false,
+       3
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       -19,
+       false,
+       3
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       0,
+       false,
+       6
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       5,
+       false,
+       2
+      ],
+      [
+       "dataZoom0",
+       0,
+       30,
+       10,
+       false,
+       2
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-under",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": {
+     "text": "Title",
+     "left": "center",
+     "top": "middle",
+     "z": -1,
+     "backgroundColor": "#eeeeee"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "title0",
+       0,
+       -1,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       0,
+       -1,
+       10,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "vo-title-zl",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "title": [
+     {
+      "text": "A",
+      "zlevel": 2
+     },
+     {
+      "text": "B",
+      "subtext": "s",
+      "left": "right"
+     }
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ]
+      ],
+      "name": "A"
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "title1",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "title0": 2,
+      "title1": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "legend0": null
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "legend0",
+       0,
+       4,
+       0,
+       false,
+       3
+      ],
+      [
+       "title1",
+       0,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title1",
+       0,
+       6,
+       10,
+       false,
+       2
+      ],
+      [
+       "title0",
+       2,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       2,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "zl-under",
    "option": {
     "animation": true,
@@ -8467,6 +9812,350 @@
        "S0",
        1,
        2,
+       0,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-graphic-own",
+   "option": {
+    "animation": true,
+    "animationDuration": 0,
+    "animationDurationUpdate": 0,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "z": 2,
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 2,
+       "opacity": 1
+      },
+      "effect": {
+       "show": true,
+       "trailLength": 0.4,
+       "period": 1,
+       "symbol": "circle",
+       "symbolSize": 8,
+       "delay": 0
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          1,
+          5
+         ],
+         [
+          9,
+          5
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "graphic": [
+     {
+      "type": "rect",
+      "zlevel": 1,
+      "z": 1,
+      "shape": {
+       "x": 10,
+       "y": 10,
+       "width": 20,
+       "height": 20
+      }
+     },
+     {
+      "type": "rect",
+      "zlevel": 1,
+      "z": 5,
+      "shape": {
+       "x": 40,
+       "y": 10,
+       "width": 20,
+       "height": 20
+      }
+     }
+    ]
+   },
+   "anim": true,
+   "steps": [
+    {
+     "t": 100
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "graphic0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "graphic0": 0,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "graphic0",
+       1,
+       1,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "graphic0",
+       1,
+       5,
+       0,
+       false,
+       1
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "graphic0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "graphic0": 0,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "graphic0",
+       1,
+       1,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       1
+      ],
+      [
+       "graphic0",
+       1,
+       5,
        0,
        false,
        1
@@ -23713,6 +25402,6728 @@
        10,
        false,
        6
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-lines",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "z": -1,
+      "progressive": 20,
+      "progressiveThreshold": 50,
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 1
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.7,
+          5.3
+         ],
+         [
+          7.1,
+          2.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.4,
+          0.6
+         ],
+         [
+          4.2,
+          5.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.1,
+          5.9
+         ],
+         [
+          1.3,
+          8.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.8,
+          1.2
+         ],
+         [
+          8.4,
+          1.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.5,
+          6.5
+         ],
+         [
+          5.5,
+          4.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.2,
+          1.8
+         ],
+         [
+          2.6,
+          7.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.9,
+          7.1
+         ],
+         [
+          9.7,
+          0.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.6,
+          2.4
+         ],
+         [
+          6.8,
+          3.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.3,
+          7.7
+         ],
+         [
+          3.9,
+          6.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7,
+          3
+         ],
+         [
+          1,
+          9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.7,
+          8.3
+         ],
+         [
+          8.1,
+          1.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.4,
+          3.6
+         ],
+         [
+          5.2,
+          4.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.1,
+          8.9
+         ],
+         [
+          2.3,
+          7.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.8,
+          4.2
+         ],
+         [
+          9.4,
+          0.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.5,
+          9.5
+         ],
+         [
+          6.5,
+          3.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.2,
+          4.8
+         ],
+         [
+          3.6,
+          6.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.9,
+          0.1
+         ],
+         [
+          0.7,
+          9.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.6,
+          5.4
+         ],
+         [
+          7.8,
+          2.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.3,
+          0.7
+         ],
+         [
+          4.9,
+          5.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4,
+          6
+         ],
+         [
+          2,
+          8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.7,
+          1.3
+         ],
+         [
+          9.1,
+          0.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.4,
+          6.6
+         ],
+         [
+          6.2,
+          3.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.1,
+          1.9
+         ],
+         [
+          3.3,
+          6.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.8,
+          7.2
+         ],
+         [
+          0.4,
+          9.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.5,
+          2.5
+         ],
+         [
+          7.5,
+          2.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.2,
+          7.8
+         ],
+         [
+          4.6,
+          5.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.9,
+          3.1
+         ],
+         [
+          1.7,
+          8.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.6,
+          8.4
+         ],
+         [
+          8.8,
+          1.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.3,
+          3.7
+         ],
+         [
+          5.9,
+          4.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          9
+         ],
+         [
+          3,
+          7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.7,
+          4.3
+         ],
+         [
+          0.1,
+          9.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.4,
+          9.6
+         ],
+         [
+          7.2,
+          2.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.1,
+          4.9
+         ],
+         [
+          4.3,
+          5.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.8,
+          0.2
+         ],
+         [
+          1.4,
+          8.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.5,
+          5.5
+         ],
+         [
+          8.5,
+          1.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.2,
+          0.8
+         ],
+         [
+          5.6,
+          4.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.9,
+          6.1
+         ],
+         [
+          2.7,
+          7.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.6,
+          1.4
+         ],
+         [
+          9.8,
+          0.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.3,
+          6.7
+         ],
+         [
+          6.9,
+          3.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8,
+          2
+         ],
+         [
+          4,
+          6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.7,
+          7.3
+         ],
+         [
+          1.1,
+          8.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.4,
+          2.6
+         ],
+         [
+          8.2,
+          1.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.1,
+          7.9
+         ],
+         [
+          5.3,
+          4.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.8,
+          3.2
+         ],
+         [
+          2.4,
+          7.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.5,
+          8.5
+         ],
+         [
+          9.5,
+          0.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.2,
+          3.8
+         ],
+         [
+          6.6,
+          3.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.9,
+          9.1
+         ],
+         [
+          3.7,
+          6.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.6,
+          4.4
+         ],
+         [
+          0.8,
+          9.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.3,
+          9.7
+         ],
+         [
+          7.9,
+          2.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5,
+          5
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.7,
+          0.3
+         ],
+         [
+          2.1,
+          7.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.4,
+          5.6
+         ],
+         [
+          9.2,
+          0.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.1,
+          0.9
+         ],
+         [
+          6.3,
+          3.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.8,
+          6.2
+         ],
+         [
+          3.4,
+          6.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.5,
+          1.5
+         ],
+         [
+          0.5,
+          9.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.2,
+          6.8
+         ],
+         [
+          7.6,
+          2.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.9,
+          2.1
+         ],
+         [
+          4.7,
+          5.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.6,
+          7.4
+         ],
+         [
+          1.8,
+          8.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.3,
+          2.7
+         ],
+         [
+          8.9,
+          1.1
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "legend": {},
+    "title": {
+     "text": "T"
+    }
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 0,
+      "title0": 1,
+      "axisPointer0": 1,
+      "yAxis0": 1,
+      "xAxis0": 1,
+      "grid0": 1,
+      "legend0": 1
+     },
+     "layers": [
+      [
+       0,
+       1,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "S0",
+       0,
+       -1,
+       0,
+       true,
+       20
+      ],
+      [
+       "yAxis0",
+       1,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       1,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       1,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       1,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       1,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       1,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       1,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       1,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "legend0",
+       1,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       1,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       1,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-lines-z2",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "progressive": 20,
+      "progressiveThreshold": 50,
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.7,
+          5.3
+         ],
+         [
+          7.1,
+          2.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.4,
+          0.6
+         ],
+         [
+          4.2,
+          5.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.1,
+          5.9
+         ],
+         [
+          1.3,
+          8.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.8,
+          1.2
+         ],
+         [
+          8.4,
+          1.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.5,
+          6.5
+         ],
+         [
+          5.5,
+          4.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.2,
+          1.8
+         ],
+         [
+          2.6,
+          7.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.9,
+          7.1
+         ],
+         [
+          9.7,
+          0.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.6,
+          2.4
+         ],
+         [
+          6.8,
+          3.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.3,
+          7.7
+         ],
+         [
+          3.9,
+          6.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7,
+          3
+         ],
+         [
+          1,
+          9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.7,
+          8.3
+         ],
+         [
+          8.1,
+          1.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.4,
+          3.6
+         ],
+         [
+          5.2,
+          4.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.1,
+          8.9
+         ],
+         [
+          2.3,
+          7.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.8,
+          4.2
+         ],
+         [
+          9.4,
+          0.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.5,
+          9.5
+         ],
+         [
+          6.5,
+          3.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.2,
+          4.8
+         ],
+         [
+          3.6,
+          6.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.9,
+          0.1
+         ],
+         [
+          0.7,
+          9.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.6,
+          5.4
+         ],
+         [
+          7.8,
+          2.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.3,
+          0.7
+         ],
+         [
+          4.9,
+          5.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4,
+          6
+         ],
+         [
+          2,
+          8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.7,
+          1.3
+         ],
+         [
+          9.1,
+          0.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.4,
+          6.6
+         ],
+         [
+          6.2,
+          3.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.1,
+          1.9
+         ],
+         [
+          3.3,
+          6.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.8,
+          7.2
+         ],
+         [
+          0.4,
+          9.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.5,
+          2.5
+         ],
+         [
+          7.5,
+          2.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.2,
+          7.8
+         ],
+         [
+          4.6,
+          5.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.9,
+          3.1
+         ],
+         [
+          1.7,
+          8.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.6,
+          8.4
+         ],
+         [
+          8.8,
+          1.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.3,
+          3.7
+         ],
+         [
+          5.9,
+          4.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          9
+         ],
+         [
+          3,
+          7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.7,
+          4.3
+         ],
+         [
+          0.1,
+          9.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.4,
+          9.6
+         ],
+         [
+          7.2,
+          2.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.1,
+          4.9
+         ],
+         [
+          4.3,
+          5.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.8,
+          0.2
+         ],
+         [
+          1.4,
+          8.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.5,
+          5.5
+         ],
+         [
+          8.5,
+          1.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.2,
+          0.8
+         ],
+         [
+          5.6,
+          4.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.9,
+          6.1
+         ],
+         [
+          2.7,
+          7.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.6,
+          1.4
+         ],
+         [
+          9.8,
+          0.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.3,
+          6.7
+         ],
+         [
+          6.9,
+          3.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8,
+          2
+         ],
+         [
+          4,
+          6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.7,
+          7.3
+         ],
+         [
+          1.1,
+          8.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.4,
+          2.6
+         ],
+         [
+          8.2,
+          1.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.1,
+          7.9
+         ],
+         [
+          5.3,
+          4.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.8,
+          3.2
+         ],
+         [
+          2.4,
+          7.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.5,
+          8.5
+         ],
+         [
+          9.5,
+          0.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.2,
+          3.8
+         ],
+         [
+          6.6,
+          3.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.9,
+          9.1
+         ],
+         [
+          3.7,
+          6.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.6,
+          4.4
+         ],
+         [
+          0.8,
+          9.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.3,
+          9.7
+         ],
+         [
+          7.9,
+          2.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5,
+          5
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.7,
+          0.3
+         ],
+         [
+          2.1,
+          7.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.4,
+          5.6
+         ],
+         [
+          9.2,
+          0.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.1,
+          0.9
+         ],
+         [
+          6.3,
+          3.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.8,
+          6.2
+         ],
+         [
+          3.4,
+          6.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.5,
+          1.5
+         ],
+         [
+          0.5,
+          9.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.2,
+          6.8
+         ],
+         [
+          7.6,
+          2.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.9,
+          2.1
+         ],
+         [
+          4.7,
+          5.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.6,
+          7.4
+         ],
+         [
+          1.8,
+          8.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.3,
+          2.7
+         ],
+         [
+          8.9,
+          1.1
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "legend": {},
+    "title": {
+     "text": "T"
+    }
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "legend0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "title0": 2,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0,
+      "legend0": 2
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       1,
+       false,
+       null
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       true,
+       20
+      ],
+      [
+       "legend0",
+       2,
+       4,
+       -1,
+       false,
+       1
+      ],
+      [
+       "title0",
+       2,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       2,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-two",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ]
+      ],
+      "progressive": 10,
+      "progressiveThreshold": 20
+     },
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ]
+      ],
+      "progressive": 10,
+      "progressiveThreshold": 20
+     },
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        9,
+        9
+       ]
+      ]
+     },
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ]
+      ],
+      "z": 4,
+      "progressive": 10,
+      "progressiveThreshold": 20
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1",
+      "S2",
+      "S3"
+     ],
+     "zl": {
+      "S0": 1,
+      "S1": 2,
+      "S2": 3,
+      "S3": 4,
+      "axisPointer0": 5,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       1,
+       false,
+       null
+      ],
+      [
+       2,
+       1,
+       false,
+       null
+      ],
+      [
+       3,
+       0,
+       false,
+       null
+      ],
+      [
+       4,
+       1,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       true,
+       10
+      ],
+      [
+       "S1",
+       2,
+       2,
+       100,
+       true,
+       10
+      ],
+      [
+       "S2",
+       3,
+       3,
+       10,
+       false,
+       1
+      ],
+      [
+       "S2",
+       3,
+       3,
+       100,
+       false,
+       2
+      ],
+      [
+       "S3",
+       4,
+       4,
+       100,
+       true,
+       10
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-at",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ]
+      ],
+      "progressive": 10,
+      "progressiveThreshold": 20
+     },
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        9,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1"
+     ],
+     "zl": {
+      "S0": null,
+      "S1": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       0,
+       1,
+       false,
+       null
+      ],
+      [
+       0,
+       2,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       true,
+       10
+      ],
+      [
+       "S1",
+       0,
+       3,
+       10,
+       false,
+       1
+      ],
+      [
+       "S1",
+       0,
+       3,
+       100,
+       false,
+       2
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-large",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ],
+       [
+        1,
+        9
+       ],
+       [
+        4.7,
+        4.3
+       ],
+       [
+        8.4,
+        9.6
+       ],
+       [
+        2.1,
+        4.9
+       ],
+       [
+        5.8,
+        0.2
+       ],
+       [
+        9.5,
+        5.5
+       ],
+       [
+        3.2,
+        0.8
+       ],
+       [
+        6.9,
+        6.1
+       ],
+       [
+        0.6,
+        1.4
+       ],
+       [
+        4.3,
+        6.7
+       ]
+      ],
+      "large": true,
+      "largeThreshold": 10
+     },
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "large": true,
+      "largeThreshold": 10,
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.7,
+          5.3
+         ],
+         [
+          7.1,
+          2.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.4,
+          0.6
+         ],
+         [
+          4.2,
+          5.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.1,
+          5.9
+         ],
+         [
+          1.3,
+          8.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.8,
+          1.2
+         ],
+         [
+          8.4,
+          1.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.5,
+          6.5
+         ],
+         [
+          5.5,
+          4.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.2,
+          1.8
+         ],
+         [
+          2.6,
+          7.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.9,
+          7.1
+         ],
+         [
+          9.7,
+          0.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.6,
+          2.4
+         ],
+         [
+          6.8,
+          3.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.3,
+          7.7
+         ],
+         [
+          3.9,
+          6.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7,
+          3
+         ],
+         [
+          1,
+          9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.7,
+          8.3
+         ],
+         [
+          8.1,
+          1.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.4,
+          3.6
+         ],
+         [
+          5.2,
+          4.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.1,
+          8.9
+         ],
+         [
+          2.3,
+          7.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.8,
+          4.2
+         ],
+         [
+          9.4,
+          0.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.5,
+          9.5
+         ],
+         [
+          6.5,
+          3.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.2,
+          4.8
+         ],
+         [
+          3.6,
+          6.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.9,
+          0.1
+         ],
+         [
+          0.7,
+          9.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.6,
+          5.4
+         ],
+         [
+          7.8,
+          2.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.3,
+          0.7
+         ],
+         [
+          4.9,
+          5.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4,
+          6
+         ],
+         [
+          2,
+          8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.7,
+          1.3
+         ],
+         [
+          9.1,
+          0.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.4,
+          6.6
+         ],
+         [
+          6.2,
+          3.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.1,
+          1.9
+         ],
+         [
+          3.3,
+          6.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.8,
+          7.2
+         ],
+         [
+          0.4,
+          9.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.5,
+          2.5
+         ],
+         [
+          7.5,
+          2.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.2,
+          7.8
+         ],
+         [
+          4.6,
+          5.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.9,
+          3.1
+         ],
+         [
+          1.7,
+          8.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.6,
+          8.4
+         ],
+         [
+          8.8,
+          1.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.3,
+          3.7
+         ],
+         [
+          5.9,
+          4.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          9
+         ],
+         [
+          3,
+          7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.7,
+          4.3
+         ],
+         [
+          0.1,
+          9.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.4,
+          9.6
+         ],
+         [
+          7.2,
+          2.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.1,
+          4.9
+         ],
+         [
+          4.3,
+          5.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.8,
+          0.2
+         ],
+         [
+          1.4,
+          8.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.5,
+          5.5
+         ],
+         [
+          8.5,
+          1.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.2,
+          0.8
+         ],
+         [
+          5.6,
+          4.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.9,
+          6.1
+         ],
+         [
+          2.7,
+          7.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.6,
+          1.4
+         ],
+         [
+          9.8,
+          0.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.3,
+          6.7
+         ],
+         [
+          6.9,
+          3.1
+         ]
+        ]
+       }
+      ]
+     },
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ],
+       [
+        1,
+        9
+       ],
+       [
+        4.7,
+        4.3
+       ],
+       [
+        8.4,
+        9.6
+       ],
+       [
+        2.1,
+        4.9
+       ],
+       [
+        5.8,
+        0.2
+       ],
+       [
+        9.5,
+        5.5
+       ],
+       [
+        3.2,
+        0.8
+       ],
+       [
+        6.9,
+        6.1
+       ],
+       [
+        0.6,
+        1.4
+       ],
+       [
+        4.3,
+        6.7
+       ]
+      ],
+      "large": true,
+      "largeThreshold": 10,
+      "progressiveThreshold": 30
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1",
+      "S2"
+     ],
+     "zl": {
+      "S0": 0,
+      "S1": 0,
+      "S2": 1,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       1,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S1",
+       0,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S2",
+       1,
+       2,
+       0,
+       true,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-off",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ]
+      ],
+      "progressive": 0,
+      "progressiveThreshold": 20
+     }
+    ],
+    "title": {
+     "text": "T"
+    }
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "title0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "title0": 2,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       false,
+       null
+      ],
+      [
+       2,
+       0,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       30
+      ],
+      [
+       "title0",
+       2,
+       6,
+       0,
+       false,
+       1
+      ],
+      [
+       "title0",
+       2,
+       6,
+       10,
+       false,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-user",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "large": true,
+      "largeThreshold": 5,
+      "progressive": 10,
+      "progressiveThreshold": 20,
+      "data": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "zlevel": 2,
+      "large": true,
+      "largeThreshold": 5,
+      "progressive": 10,
+      "progressiveThreshold": 20,
+      "data": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ],
+    "graphic": [
+     {
+      "type": "rect",
+      "zlevel": 1,
+      "shape": {
+       "x": 0,
+       "y": 0,
+       "width": 100,
+       "height": 100
+      }
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "graphic0",
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1"
+     ],
+     "zl": {
+      "S0": null,
+      "S1": 2,
+      "graphic0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       0,
+       1,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       false,
+       null
+      ],
+      [
+       2,
+       1,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       14
+      ],
+      [
+       "S0",
+       0,
+       2,
+       1,
+       true,
+       1
+      ],
+      [
+       "graphic0",
+       1,
+       0,
+       0,
+       false,
+       1
+      ],
+      [
+       "S1",
+       2,
+       2,
+       1,
+       true,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-dz",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3
+       ],
+       [
+        7.4,
+        0.6
+       ],
+       [
+        1.1,
+        5.9
+       ],
+       [
+        4.8,
+        1.2
+       ],
+       [
+        8.5,
+        6.5
+       ],
+       [
+        2.2,
+        1.8
+       ],
+       [
+        5.9,
+        7.1
+       ],
+       [
+        9.6,
+        2.4
+       ],
+       [
+        3.3,
+        7.7
+       ],
+       [
+        7,
+        3
+       ],
+       [
+        0.7,
+        8.3
+       ],
+       [
+        4.4,
+        3.6
+       ],
+       [
+        8.1,
+        8.9
+       ],
+       [
+        1.8,
+        4.2
+       ],
+       [
+        5.5,
+        9.5
+       ],
+       [
+        9.2,
+        4.8
+       ],
+       [
+        2.9,
+        0.1
+       ],
+       [
+        6.6,
+        5.4
+       ],
+       [
+        0.3,
+        0.7
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        7.7,
+        1.3
+       ],
+       [
+        1.4,
+        6.6
+       ],
+       [
+        5.1,
+        1.9
+       ],
+       [
+        8.8,
+        7.2
+       ],
+       [
+        2.5,
+        2.5
+       ],
+       [
+        6.2,
+        7.8
+       ],
+       [
+        9.9,
+        3.1
+       ],
+       [
+        3.6,
+        8.4
+       ],
+       [
+        7.3,
+        3.7
+       ],
+       [
+        1,
+        9
+       ],
+       [
+        4.7,
+        4.3
+       ],
+       [
+        8.4,
+        9.6
+       ],
+       [
+        2.1,
+        4.9
+       ],
+       [
+        5.8,
+        0.2
+       ],
+       [
+        9.5,
+        5.5
+       ],
+       [
+        3.2,
+        0.8
+       ],
+       [
+        6.9,
+        6.1
+       ],
+       [
+        0.6,
+        1.4
+       ],
+       [
+        4.3,
+        6.7
+       ]
+      ],
+      "progressive": 10,
+      "progressiveThreshold": 30
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "inside",
+      "xAxisIndex": 0,
+      "filterMode": "filter",
+      "startValue": 0,
+      "endValue": 4
+     }
+    ]
+   },
+   "steps": [
+    {
+     "act": {
+      "type": "dataZoom",
+      "startValue": 0,
+      "endValue": 10
+     }
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "dataZoom0",
+      "S0"
+     ],
+     "zl": {
+      "S0": null,
+      "axisPointer0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "dataZoom0": null
+     },
+     "layers": [],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       5
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       5
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       5
+      ],
+      [
+       "S0",
+       0,
+       2,
+       100,
+       false,
+       17
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "dataZoom0",
+      "S0"
+     ],
+     "zl": {
+      "S0": 1,
+      "axisPointer0": 2,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0,
+      "dataZoom0": 2
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       1,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       true,
+       10
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-trails",
+   "option": {
+    "animation": true,
+    "animationDuration": 0,
+    "animationDurationUpdate": 0,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "z": 2,
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 2,
+       "opacity": 1
+      },
+      "effect": {
+       "show": true,
+       "trailLength": 0.4,
+       "period": 1,
+       "symbol": "circle",
+       "symbolSize": 8,
+       "delay": 0
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.7,
+          5.3
+         ],
+         [
+          7.1,
+          2.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.4,
+          0.6
+         ],
+         [
+          4.2,
+          5.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.1,
+          5.9
+         ],
+         [
+          1.3,
+          8.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.8,
+          1.2
+         ],
+         [
+          8.4,
+          1.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.5,
+          6.5
+         ],
+         [
+          5.5,
+          4.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.2,
+          1.8
+         ],
+         [
+          2.6,
+          7.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.9,
+          7.1
+         ],
+         [
+          9.7,
+          0.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.6,
+          2.4
+         ],
+         [
+          6.8,
+          3.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.3,
+          7.7
+         ],
+         [
+          3.9,
+          6.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7,
+          3
+         ],
+         [
+          1,
+          9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.7,
+          8.3
+         ],
+         [
+          8.1,
+          1.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.4,
+          3.6
+         ],
+         [
+          5.2,
+          4.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.1,
+          8.9
+         ],
+         [
+          2.3,
+          7.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.8,
+          4.2
+         ],
+         [
+          9.4,
+          0.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.5,
+          9.5
+         ],
+         [
+          6.5,
+          3.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.2,
+          4.8
+         ],
+         [
+          3.6,
+          6.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.9,
+          0.1
+         ],
+         [
+          0.7,
+          9.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.6,
+          5.4
+         ],
+         [
+          7.8,
+          2.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.3,
+          0.7
+         ],
+         [
+          4.9,
+          5.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4,
+          6
+         ],
+         [
+          2,
+          8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.7,
+          1.3
+         ],
+         [
+          9.1,
+          0.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.4,
+          6.6
+         ],
+         [
+          6.2,
+          3.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.1,
+          1.9
+         ],
+         [
+          3.3,
+          6.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.8,
+          7.2
+         ],
+         [
+          0.4,
+          9.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.5,
+          2.5
+         ],
+         [
+          7.5,
+          2.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.2,
+          7.8
+         ],
+         [
+          4.6,
+          5.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.9,
+          3.1
+         ],
+         [
+          1.7,
+          8.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.6,
+          8.4
+         ],
+         [
+          8.8,
+          1.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.3,
+          3.7
+         ],
+         [
+          5.9,
+          4.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          9
+         ],
+         [
+          3,
+          7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.7,
+          4.3
+         ],
+         [
+          0.1,
+          9.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.4,
+          9.6
+         ],
+         [
+          7.2,
+          2.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.1,
+          4.9
+         ],
+         [
+          4.3,
+          5.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.8,
+          0.2
+         ],
+         [
+          1.4,
+          8.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.5,
+          5.5
+         ],
+         [
+          8.5,
+          1.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.2,
+          0.8
+         ],
+         [
+          5.6,
+          4.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.9,
+          6.1
+         ],
+         [
+          2.7,
+          7.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.6,
+          1.4
+         ],
+         [
+          9.8,
+          0.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.3,
+          6.7
+         ],
+         [
+          6.9,
+          3.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8,
+          2
+         ],
+         [
+          4,
+          6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.7,
+          7.3
+         ],
+         [
+          1.1,
+          8.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.4,
+          2.6
+         ],
+         [
+          8.2,
+          1.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.1,
+          7.9
+         ],
+         [
+          5.3,
+          4.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.8,
+          3.2
+         ],
+         [
+          2.4,
+          7.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.5,
+          8.5
+         ],
+         [
+          9.5,
+          0.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.2,
+          3.8
+         ],
+         [
+          6.6,
+          3.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.9,
+          9.1
+         ],
+         [
+          3.7,
+          6.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.6,
+          4.4
+         ],
+         [
+          0.8,
+          9.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.3,
+          9.7
+         ],
+         [
+          7.9,
+          2.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5,
+          5
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.7,
+          0.3
+         ],
+         [
+          2.1,
+          7.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.4,
+          5.6
+         ],
+         [
+          9.2,
+          0.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.1,
+          0.9
+         ],
+         [
+          6.3,
+          3.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.8,
+          6.2
+         ],
+         [
+          3.4,
+          6.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.5,
+          1.5
+         ],
+         [
+          0.5,
+          9.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.2,
+          6.8
+         ],
+         [
+          7.6,
+          2.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.9,
+          2.1
+         ],
+         [
+          4.7,
+          5.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.6,
+          7.4
+         ],
+         [
+          1.8,
+          8.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.3,
+          2.7
+         ],
+         [
+          8.9,
+          1.1
+         ]
+        ]
+       }
+      ],
+      "progressiveThreshold": 50
+     },
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "z": 2,
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 2,
+       "opacity": 1
+      },
+      "effect": {
+       "show": true,
+       "trailLength": 0.4,
+       "period": 1,
+       "symbol": "circle",
+       "symbolSize": 8,
+       "delay": 0
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.7,
+          5.3
+         ],
+         [
+          7.1,
+          2.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.4,
+          0.6
+         ],
+         [
+          4.2,
+          5.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.1,
+          5.9
+         ],
+         [
+          1.3,
+          8.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.8,
+          1.2
+         ],
+         [
+          8.4,
+          1.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.5,
+          6.5
+         ],
+         [
+          5.5,
+          4.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.2,
+          1.8
+         ],
+         [
+          2.6,
+          7.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.9,
+          7.1
+         ],
+         [
+          9.7,
+          0.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.6,
+          2.4
+         ],
+         [
+          6.8,
+          3.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.3,
+          7.7
+         ],
+         [
+          3.9,
+          6.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7,
+          3
+         ],
+         [
+          1,
+          9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.7,
+          8.3
+         ],
+         [
+          8.1,
+          1.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.4,
+          3.6
+         ],
+         [
+          5.2,
+          4.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.1,
+          8.9
+         ],
+         [
+          2.3,
+          7.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.8,
+          4.2
+         ],
+         [
+          9.4,
+          0.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.5,
+          9.5
+         ],
+         [
+          6.5,
+          3.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.2,
+          4.8
+         ],
+         [
+          3.6,
+          6.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.9,
+          0.1
+         ],
+         [
+          0.7,
+          9.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.6,
+          5.4
+         ],
+         [
+          7.8,
+          2.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.3,
+          0.7
+         ],
+         [
+          4.9,
+          5.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4,
+          6
+         ],
+         [
+          2,
+          8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.7,
+          1.3
+         ],
+         [
+          9.1,
+          0.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.4,
+          6.6
+         ],
+         [
+          6.2,
+          3.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.1,
+          1.9
+         ],
+         [
+          3.3,
+          6.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.8,
+          7.2
+         ],
+         [
+          0.4,
+          9.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.5,
+          2.5
+         ],
+         [
+          7.5,
+          2.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.2,
+          7.8
+         ],
+         [
+          4.6,
+          5.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.9,
+          3.1
+         ],
+         [
+          1.7,
+          8.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.6,
+          8.4
+         ],
+         [
+          8.8,
+          1.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.3,
+          3.7
+         ],
+         [
+          5.9,
+          4.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          9
+         ],
+         [
+          3,
+          7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.7,
+          4.3
+         ],
+         [
+          0.1,
+          9.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.4,
+          9.6
+         ],
+         [
+          7.2,
+          2.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.1,
+          4.9
+         ],
+         [
+          4.3,
+          5.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.8,
+          0.2
+         ],
+         [
+          1.4,
+          8.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.5,
+          5.5
+         ],
+         [
+          8.5,
+          1.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.2,
+          0.8
+         ],
+         [
+          5.6,
+          4.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.9,
+          6.1
+         ],
+         [
+          2.7,
+          7.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.6,
+          1.4
+         ],
+         [
+          9.8,
+          0.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.3,
+          6.7
+         ],
+         [
+          6.9,
+          3.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8,
+          2
+         ],
+         [
+          4,
+          6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.7,
+          7.3
+         ],
+         [
+          1.1,
+          8.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5.4,
+          2.6
+         ],
+         [
+          8.2,
+          1.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.1,
+          7.9
+         ],
+         [
+          5.3,
+          4.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.8,
+          3.2
+         ],
+         [
+          2.4,
+          7.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.5,
+          8.5
+         ],
+         [
+          9.5,
+          0.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.2,
+          3.8
+         ],
+         [
+          6.6,
+          3.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.9,
+          9.1
+         ],
+         [
+          3.7,
+          6.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.6,
+          4.4
+         ],
+         [
+          0.8,
+          9.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1.3,
+          9.7
+         ],
+         [
+          7.9,
+          2.1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          5,
+          5
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.7,
+          0.3
+         ],
+         [
+          2.1,
+          7.9
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          2.4,
+          5.6
+         ],
+         [
+          9.2,
+          0.8
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          6.1,
+          0.9
+         ],
+         [
+          6.3,
+          3.7
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          9.8,
+          6.2
+         ],
+         [
+          3.4,
+          6.6
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          3.5,
+          1.5
+         ],
+         [
+          0.5,
+          9.5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          7.2,
+          6.8
+         ],
+         [
+          7.6,
+          2.4
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0.9,
+          2.1
+         ],
+         [
+          4.7,
+          5.3
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.6,
+          7.4
+         ],
+         [
+          1.8,
+          8.2
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          8.3,
+          2.7
+         ],
+         [
+          8.9,
+          1.1
+         ]
+        ]
+       }
+      ],
+      "progressiveThreshold": 50
+     }
+    ]
+   },
+   "anim": true,
+   "steps": [
+    {
+     "t": 100
+    }
+   ],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1"
+     ],
+     "zl": {
+      "S0": 1,
+      "S1": 2,
+      "axisPointer0": 3,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ],
+      [
+       2,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       60
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       60
+      ],
+      [
+       "S1",
+       2,
+       2,
+       0,
+       false,
+       60
+      ],
+      [
+       "S1",
+       2,
+       2,
+       100,
+       false,
+       60
+      ]
+     ]
+    },
+    {
+     "roots": [
+      "axisPointer0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "S0",
+      "S1"
+     ],
+     "zl": {
+      "S0": 1,
+      "S1": 2,
+      "axisPointer0": 3,
+      "yAxis0": 0,
+      "xAxis0": 0,
+      "grid0": 0
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       1,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ],
+      [
+       2,
+       0,
+       true,
+       "3fee147ae147ae15"
+      ]
+     ],
+     "dl": [
+      [
+       "yAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       0,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       2,
+       false,
+       6
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       1,
+       2,
+       0,
+       false,
+       60
+      ],
+      [
+       "S0",
+       1,
+       2,
+       100,
+       false,
+       60
+      ],
+      [
+       "S1",
+       2,
+       2,
+       0,
+       false,
+       60
+      ],
+      [
+       "S1",
+       2,
+       2,
+       100,
+       false,
+       60
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zl-prog-heat-geo",
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "vl-sq"
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 1,
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "coordinateSystem": "geo",
+      "progressive": 10,
+      "progressiveThreshold": 20,
+      "data": [
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        3.7,
+        5.3,
+        0.1
+       ],
+       [
+        7.4,
+        0.6,
+        0.2
+       ],
+       [
+        1.1,
+        5.9,
+        0.3
+       ],
+       [
+        4.8,
+        1.2,
+        0.4
+       ],
+       [
+        8.5,
+        6.5,
+        0.5
+       ],
+       [
+        2.2,
+        1.8,
+        0.6
+       ],
+       [
+        5.9,
+        7.1,
+        0.7
+       ],
+       [
+        9.6,
+        2.4,
+        0.8
+       ],
+       [
+        3.3,
+        7.7,
+        0.9
+       ],
+       [
+        7,
+        3,
+        0
+       ],
+       [
+        0.7,
+        8.3,
+        0.1
+       ],
+       [
+        4.4,
+        3.6,
+        0.2
+       ],
+       [
+        8.1,
+        8.9,
+        0.3
+       ],
+       [
+        1.8,
+        4.2,
+        0.4
+       ],
+       [
+        5.5,
+        9.5,
+        0.5
+       ],
+       [
+        9.2,
+        4.8,
+        0.6
+       ],
+       [
+        2.9,
+        0.1,
+        0.7
+       ],
+       [
+        6.6,
+        5.4,
+        0.8
+       ],
+       [
+        0.3,
+        0.7,
+        0.9
+       ],
+       [
+        4,
+        6,
+        0
+       ],
+       [
+        7.7,
+        1.3,
+        0.1
+       ],
+       [
+        1.4,
+        6.6,
+        0.2
+       ],
+       [
+        5.1,
+        1.9,
+        0.3
+       ],
+       [
+        8.8,
+        7.2,
+        0.4
+       ],
+       [
+        2.5,
+        2.5,
+        0.5
+       ],
+       [
+        6.2,
+        7.8,
+        0.6
+       ],
+       [
+        9.9,
+        3.1,
+        0.7
+       ],
+       [
+        3.6,
+        8.4,
+        0.8
+       ],
+       [
+        7.3,
+        3.7,
+        0.9
+       ]
+      ]
+     },
+     {
+      "type": "heatmap",
+      "progressive": 10,
+      "progressiveThreshold": 20,
+      "data": [
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        1,
+        0,
+        0.1
+       ],
+       [
+        2,
+        0,
+        0.2
+       ],
+       [
+        3,
+        0,
+        0.3
+       ],
+       [
+        4,
+        0,
+        0.4
+       ],
+       [
+        5,
+        0,
+        0.5
+       ],
+       [
+        0,
+        1,
+        0.6
+       ],
+       [
+        1,
+        1,
+        0.7
+       ],
+       [
+        2,
+        1,
+        0.8
+       ],
+       [
+        3,
+        1,
+        0.9
+       ],
+       [
+        4,
+        1,
+        0
+       ],
+       [
+        5,
+        1,
+        0.1
+       ],
+       [
+        0,
+        2,
+        0.2
+       ],
+       [
+        1,
+        2,
+        0.3
+       ],
+       [
+        2,
+        2,
+        0.4
+       ],
+       [
+        3,
+        2,
+        0.5
+       ],
+       [
+        4,
+        2,
+        0.6
+       ],
+       [
+        5,
+        2,
+        0.7
+       ],
+       [
+        0,
+        3,
+        0.8
+       ],
+       [
+        1,
+        3,
+        0.9
+       ],
+       [
+        2,
+        3,
+        0
+       ],
+       [
+        3,
+        3,
+        0.1
+       ],
+       [
+        4,
+        3,
+        0.2
+       ],
+       [
+        5,
+        3,
+        0.3
+       ],
+       [
+        0,
+        4,
+        0.4
+       ],
+       [
+        1,
+        4,
+        0.5
+       ],
+       [
+        2,
+        4,
+        0.6
+       ],
+       [
+        3,
+        4,
+        0.7
+       ],
+       [
+        4,
+        4,
+        0.8
+       ],
+       [
+        5,
+        4,
+        0.9
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "recs": [
+    {
+     "roots": [
+      "axisPointer0",
+      "geo0",
+      "yAxis0",
+      "xAxis0",
+      "grid0",
+      "visualMap0",
+      "S0",
+      "S1"
+     ],
+     "zl": {
+      "S0": null,
+      "S1": null,
+      "axisPointer0": null,
+      "geo0": null,
+      "yAxis0": null,
+      "xAxis0": null,
+      "grid0": null,
+      "visualMap0": null
+     },
+     "layers": [
+      [
+       0,
+       0,
+       false,
+       null
+      ],
+      [
+       0,
+       1,
+       false,
+       null
+      ]
+     ],
+     "dl": [
+      [
+       "geo0",
+       0,
+       0,
+       0,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       1,
+       false,
+       1
+      ],
+      [
+       "yAxis0",
+       0,
+       0,
+       10,
+       false,
+       5
+      ],
+      [
+       "xAxis0",
+       0,
+       0,
+       10,
+       false,
+       6
+      ],
+      [
+       "S0",
+       0,
+       2,
+       0,
+       false,
+       1
+      ],
+      [
+       "S1",
+       0,
+       2,
+       0,
+       true,
+       10
       ]
      ]
     }

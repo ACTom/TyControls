@@ -1124,6 +1124,15 @@ function cases() {
       borderColor: '#00ff00', borderWidth: 3 } }]), { title: { text: 'Ab', subtext: 'Cd', left: 20, top: 10,
       textStyle: { color: 'nope' }, subtextStyle: { color: 'bad' }, backgroundColor: 'nope', borderColor: 'nope',
       borderWidth: 'Infinity' } }), [0], { w: true, z: true }],
+    // (R7-AJ) the title in the display list: a toolbox at its z, its background
+    // (z2 -1) before the title's box, its icons (z2 0, its view after the
+    // title's) between the box and the text -- what each hands the next (the
+    // toolbox's border written: the skin's is not upstream's default)
+    ['z-title-toolbox', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000',
+      borderColor: '#00ff00', borderWidth: 3 } }]), { toolbox: { left: 20, top: 10, borderColor: '#123456', feature: { restore: {} },
+      iconStyle: { borderColor: '#0000ff', color: '#ff00ff' } },
+      title: { text: 'Ab', left: 20, top: 10, textStyle: { color: 'nope' }, backgroundColor: 'nope',
+      borderColor: 'nope', borderWidth: 2 } }), [0], { w: true, z: true }],
     // 4. polar and single axes: their views' order (single, radius, angle)
     //    and parts (an angle axis' labels and merged ticks at z2 0, merged
     //    split paths filled '#000')
@@ -2332,6 +2341,15 @@ function cases() {
     ['ak-round-legend-r0', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
       legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', borderRadius: [4, 0, 3, 0],
         textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true }],
+    // (placed by the display list's order like any title: one of z 1 is
+    // drawn before the series' symbols -- under the transform of what came
+    // before it; one of z 3 after the first series of z 2 and before the
+    // second of z 4)
+    ['ak-undef-order', vv([{ type: 'scatter', z: 2, data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', z: 4, data: [[6, 5]], symbolSize: 12, itemStyle: { color: '#00ff00' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, z: 1, padding: '4', textStyle: { color: '#000000' } },
+        { text: 'Uu', left: 10, top: 50, z: 3, padding: '4', textStyle: { color: '#0000ff' } }] }),
     [0], { w: true, z: true }],
     ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
       title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },

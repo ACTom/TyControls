@@ -1702,6 +1702,15 @@ begin
                   < StrToInt(parts3)) then Inc(n);
             FChart.CompPartNth(ckey, cz2, ctext, n, el);
           end
+          { ([R7-AK] a title's words in the ak- cases: the list's element of
+            the record's text -- the subtext apart from the text -- now that
+            the title is the list's) }
+          else if ak and comp and ctext and (Copy(ckey, 1, 5) = 'title') then
+          begin
+            q2 := CListOf(rec, True, cz2);
+            if q2 >= 0 then el := FChart.Frame.Element(q2)
+            else FChart.CompPart(ckey, cz2, ctext, op, el);
+          end
           else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
@@ -1714,7 +1723,9 @@ begin
               its linear part the op's -- its alignment and font }
             { ([R7-AK] and an unplaced component's words in the list) }
             if af and (o.Find('tp') <> nil) and ((Copy(key, 1, 11) = 'c.dataZoom0')
-              or (ak and not comp and (Copy(key, 1, 2) = 'c.'))) then
+              or (ak and not comp and (Copy(key, 1, 2) = 'c.'))
+              { ([R7-AK] and a title placed at NaN: its TSpans as they stand) }
+              or (ak and comp and (Copy(ckey, 1, 5) = 'title') and (el.Caption.AnchorV = tavMiddle))) then
             begin
               ux := m[0] * HexD(o.Arrays['tp'].Strings[0]) + m[2] * HexD(o.Arrays['tp'].Strings[1]) + m[4];
               uy := m[1] * HexD(o.Arrays['tp'].Strings[0]) + m[3] * HexD(o.Arrays['tp'].Strings[1]) + m[5];
@@ -4889,7 +4900,7 @@ var bad: string;
         [AName, Length(boxes[0]), Length(boxes[1]), worst, s]);
   end;
 
-  { the ink's top-left corner (a title drawn alone: not in the list) at 144
+  { the ink's top-left corner (a title's words: no box in the list) at 144
     PPI is the one at 96 times 1.5, to a pixel and a half }
   procedure InkAt(const AName, AOpt: string);
   var ppi, xx, yy: Integer; b: TBGRABitmap; px, bg: TBGRAPixel; ink: array[0..1] of TPoint;
@@ -4976,7 +4987,9 @@ begin
   One('matrix', '{"animation":false,"matrix":{"left":40,"top":40,"width":200,"height":120,"x":{"data":["a","b"]},"y":{"data":["c"]}},"series":[]}');
   One('legend', '{' + G + '"legend":{"left":20,"top":10,"itemWidth":30,"itemHeight":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
   One('legend vertical', '{' + G + '"legend":{"left":20,"top":10,"orient":"vertical","itemGap":20},"series":[{"type":"scatter","name":"A","data":[[3,3]]},{"type":"scatter","name":"B","data":[[5,5]]}]}');
-  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}');
+  { ([R7-AJ] the title's box is the list's now: round the words measured in
+    each PPI's fonts -- its right and bottom to a pixel and a half) }
+  One('title', '{' + G + '"title":{"text":"Tt","left":20,"top":10,"padding":10,"backgroundColor":"#eee","borderWidth":2,"borderColor":"#000"},"series":[{"type":"scatter","data":[[3,3]]}]}', 1.6);
   { (the bar's place across is its labels' half width off the box: the
     text measured at each PPI) }
   One('visualMap continuous', '{' + G + '"visualMap":{"left":20,"top":20,"min":0,"max":10,"itemWidth":20,"itemHeight":100,"calculable":true},"series":[{"type":"scatter","data":[[3,3,5]]}]}', 0.6);

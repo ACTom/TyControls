@@ -352,79 +352,158 @@ begin
   Result := (AEl.ProgChunk > 0) and not AEl.ProgHidden and not AEl.Ignore;
 end;
 
+function TTyCustomAdvanceChart.ProgLayerAt(ALevel: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(FProgLayers) do
+    if FProgLayers[i].Level = ALevel then Exit(i);
+  Result := -1;
+end;
+
+procedure TTyCustomAdvanceChart.ProgLayersFree;
+var i: Integer;
+begin
+  for i := 0 to High(FProgLayers) do
+  begin
+    FreeAndNil(FProgLayers[i].Bmp);
+    FreeAndNil(FProgLayers[i].Seen);
+  end;
+  FProgLayers := nil;
+end;
+
+function TTyCustomAdvanceChart.ProgLayersInOrder: Boolean;
+var i: Integer;
+begin
+  Result := Length(FProgLayers) > 0;
+  for i := 0 to High(FProgLayers) do
+    if not FProgLayers[i].InOrder then Exit(False);
+end;
+
+procedure TTyCustomAdvanceChart.ProgLogFurn(AKind: Byte);
+var n: Integer;
+begin
+  if not FProgLogOn then Exit;
+  n := Length(FProgOps);
+  SetLength(FProgOps, n + 1);
+  FProgOps[n] := Default(TTyProgOp);
+  FProgOps[n].Kind := AKind;
+  FProgOps[n].ApartOn := FZApartOn;
+  FProgOps[n].Level := FZApartLevel;
+end;
+
 procedure TTyCustomAdvanceChart.ProgLayerBuild(AW, AH, APPI, AScale: Integer);
 var
   P: TTyPainter;
-  i, idx: Integer;
-  el: TTyChartElement;
+  i, idx, k, j: Integer;
+  pe: PTyChartElement;
   sc: TTyCanvasScale;
   kept: Boolean;
+  levels: TTyIntegerArray;
+  was: TTyProgLayerArray;
 begin
-  if (FProgLayer = nil) or (FProgLayer.Width <> AW) or (FProgLayer.Height <> AH) then
+  { [R7-AJ] A LAYER FOR EVERY ZLEVEL a shown chunk is on (zrender 6.1's
+    zlevel2 1 of that zlevel), one there was of the size cleared and kept
+    [was: one layer for every run] }
+  levels := ProgChunkLevels;
+  was := FProgLayers;
+  FProgLayers := nil;
+  SetLength(FProgLayers, Length(levels));
+  for k := 0 to High(levels) do
   begin
-    FreeAndNil(FProgLayer);
-    FProgLayer := TBGRABitmap.Create(AW, AH, BGRAPixelTransparent);
-  end
-  else
-    FProgLayer.Fill(BGRAPixelTransparent);
+    FProgLayers[k] := Default(TTyProgLayer);
+    FProgLayers[k].Level := levels[k];
+    for j := 0 to High(was) do
+      if (was[j].Level = levels[k]) and (was[j].Bmp <> nil) then
+      begin
+        FProgLayers[k].Bmp := was[j].Bmp;
+        FProgLayers[k].Seen := was[j].Seen;
+        was[j].Bmp := nil;
+        was[j].Seen := nil;
+        Break;
+      end;
+    if (FProgLayers[k].Bmp = nil) or (FProgLayers[k].Bmp.Width <> AW)
+      or (FProgLayers[k].Bmp.Height <> AH) then
+    begin
+      FreeAndNil(FProgLayers[k].Bmp);
+      FProgLayers[k].Bmp := TBGRABitmap.Create(AW, AH, BGRAPixelTransparent);
+    end
+    else
+      FProgLayers[k].Bmp.Fill(BGRAPixelTransparent);
+    FProgLayers[k].LastPos := -1;
+    { drawn whole, in paint order [R2-L] }
+    FProgLayers[k].InOrder := True;
+  end;
+  for j := 0 to High(was) do
+  begin
+    FreeAndNil(was[j].Bmp);
+    FreeAndNil(was[j].Seen);
+  end;
+  FProgLayerW := AW;
+  FProgLayerH := AH;
   FProgLayerPPI := APPI;
-  { the layer the size of the painter's bitmap, AScale of its pixels per
+  { the layers the size of the painter's bitmap, AScale of their pixels per
     device px: drawn at that scale over the device-px rect (#83) }
   FProgLayerScale := Max(1, AScale);
   FProgPainted := nil;
   SetLength(FProgPainted, FPaintList.Count);
-  P := NewPainter;
-  { a run's paths come back every time the layer is drawn again: their pens
+  { a run's paths come back every time a layer is drawn again: their pens
     and coverage kept [R2-L] }
   kept := TyRenderKeptStrokes;
   TyRenderKeptStrokes := True;
   try
     sc.Scale := FProgLayerScale;
     sc.DeviceUnits := False;
-    P.BeginPaintOnScaled(nil, Rect(0, 0, AW div FProgLayerScale, AH div FProgLayerScale), APPI,
-      FProgLayer, sc);
-    FProgLayerLastPos := -1;
-    for i := 0 to FPaintList.Count - 1 do
+    for k := 0 to High(FProgLayers) do
     begin
-      idx := FPaintList.PaintOrder(i);
-      el := FPaintList.Element(idx);
-      if not ProgIsLayered(el) then Continue;
-      TyRenderElement(P, el);
-      if el.Shape.Kind = cskLarge then FProgPainted[idx] := Max(1, TyLargeRows(el.Shape.Large))
-      else FProgPainted[idx] := 1;
-      FProgLayerLastPos := i;
+      P := NewPainter;
+      try
+        P.BeginPaintOnScaled(nil, Rect(0, 0, AW div FProgLayerScale, AH div FProgLayerScale), APPI,
+          FProgLayers[k].Bmp, sc);
+        for i := 0 to FPaintList.Count - 1 do
+        begin
+          idx := FPaintList.PaintOrder(i);
+          pe := FPaintList.Ref(idx);
+          if not ProgIsLayered(pe^) or (pe^.ZLevel <> FProgLayers[k].Level) then Continue;
+          TyRenderElement(P, pe^);
+          if pe^.Shape.Kind = cskLarge then FProgPainted[idx] := Max(1, TyLargeRows(pe^.Shape.Large))
+          else FProgPainted[idx] := 1;
+          FProgLayers[k].LastPos := i;
+        end;
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
     end;
-    P.EndPaint;
   finally
     TyRenderKeptStrokes := kept;
-    P.Free;
   end;
   FProgLayerOk := True;
-  { drawn whole, in paint order [R2-L] }
-  FProgLayerInOrder := True;
   FProgLayerRegionOn := False;
+  { what a capture held is of the layers before: a progress frame waits for
+    the next one (it copies every layer as blitted) }
+  FProgCapOk := False;
 end;
 
-{ A FRAME'S CHUNK onto the layer: what was not on it, in paint order, and
+{ A FRAME'S CHUNK onto its layer: what was not on it, in paint order, and
   the rows a growing scatter batch took on since -- on top of everything
   already there, as the canvas' incremental layer adds it }
 procedure TTyCustomAdvanceChart.ProgLayerDelta;
 var
-  P: TTyPainter;
-  i, idx, have, rows: Integer;
+  P: array of TTyPainter;
+  i, idx, have, rows, k: Integer;
   el, part: TTyChartElement;
   pe: PTyChartElement;
-  started, kept: Boolean;
+  kept: Boolean;
   sc: TTyCanvasScale;
 begin
-  if not FProgLayerOk or (FProgLayer = nil) or (FPaintList = nil) then Exit;
+  if not FProgLayerOk or (Length(FProgLayers) = 0) or (FPaintList = nil) then Exit;
   if Length(FProgPainted) <> FPaintList.Count then
   begin
     FProgLayerOk := False;
     Exit;
   end;
   P := nil;
-  started := False;
+  SetLength(P, Length(FProgLayers));
   { the paths kept for the layer's next full drawing [R2-L] }
   kept := TyRenderKeptStrokes;
   TyRenderKeptStrokes := True;
@@ -439,20 +518,28 @@ begin
       if pe^.Shape.Kind = cskLarge then rows := Max(1, TyLargeRows(pe^.Shape.Large))
       else rows := 1;
       if have >= rows then Continue;
-      el := pe^;
-      if not started then
+      { [R7-AJ] onto its zlevel's layer -- a zlevel no layer holds yet: every
+        layer drawn again at the next paint }
+      k := ProgLayerAt(pe^.ZLevel);
+      if k < 0 then
       begin
-        P := NewPainter;
+        FProgLayerOk := False;
+        Break;
+      end;
+      el := pe^;
+      if P[k] = nil then
+      begin
+        P[k] := NewPainter;
         sc.Scale := FProgLayerScale;
         sc.DeviceUnits := False;
-        P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div FProgLayerScale,
-          FProgLayer.Height div FProgLayerScale), FProgLayerPPI, FProgLayer, sc);
-        started := True;
+        P[k].BeginPaintOnScaled(nil, Rect(0, 0, FProgLayerW div FProgLayerScale,
+          FProgLayerH div FProgLayerScale), FProgLayerPPI, FProgLayers[k].Bmp, sc);
       end;
       { [R2-L] still what a whole drawing gives: each element drawn after
         every one before it in paint order, and whole }
-      if (have > 0) or (i <= FProgLayerLastPos) then FProgLayerInOrder := False;
-      if i > FProgLayerLastPos then FProgLayerLastPos := i;
+      if (have > 0) or (i <= FProgLayers[k].LastPos) then FProgLayers[k].InOrder := False;
+      if i > FProgLayers[k].LastPos then FProgLayers[k].LastPos := i;
+      FProgLayers[k].Drawn := True;
       if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol) then
       begin
         { only the rows the batch grew by }
@@ -462,7 +549,7 @@ begin
         part.Shape.Large.ChunkEnds := nil;
         part.Shape.Large.ChunkNums := nil;
         part.Shape.Large.ShownNums := 0;
-        TyRenderElement(P, part);
+        TyRenderElement(P[k], part);
       end
       else if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkLines)
         and (have < Length(el.Shape.Large.Idx)) then
@@ -474,33 +561,53 @@ begin
         part.Shape.Large.Shown := 0;
         part.Shape.Large.ChunkEnds := nil;
         TyLargeLinesIndex(part.Shape.Large);
-        TyRenderElement(P, part);
+        TyRenderElement(P[k], part);
       end
       else
-        TyRenderElement(P, el);
+        TyRenderElement(P[k], el);
       FProgPainted[idx] := rows;
     end;
   finally
     TyRenderKeptStrokes := kept;
-    if started then
-    begin
-      P.EndPaint;
-      P.Free;
-    end;
+    for k := 0 to High(P) do
+      if P[k] <> nil then
+      begin
+        P[k].EndPaint;
+        P[k].Free;
+      end;
   end;
 end;
 
-{ The series in paint order, a run's chunks as the incremental layer where
-  the first of them stands: what comes before it below, what comes after it
-  above (zrender's EL_AFTER_INCREMENTAL_INC) }
+{ The series in paint order, a zlevel's runs' chunks as that zlevel's
+  incremental layer where the first of them stands: what comes before it
+  below, what comes after it above (zrender 6.1's zlevel2 0, 1 and 2 of
+  the zlevel) }
 procedure TTyCustomAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
   APPI: Integer);
 var
   zs: TTyZBandState;
-  i, idx: Integer;
+  i, idx, k, j: Integer;
   pe: PTyChartElement;
-  any, blitted: Boolean;
+  any, sized, done: Boolean;
   bmp: TBGRABitmap;
+  blitted: TTyIntegerArray;
+
+  { [R7-AJ] this run of the list, for the progress frames: what the paint
+    draws of it from AFrom on, ALevel's layer blitted already }
+  procedure LogList(AFrom, ALevel: Integer);
+  var n: Integer;
+  begin
+    n := Length(FProgOps);
+    SetLength(FProgOps, n + 1);
+    FProgOps[n] := Default(TTyProgOp);
+    FProgOps[n].Kind := 0;
+    FProgOps[n].BandOn := zs.IsOn;
+    FProgOps[n].Lo := zs.Lo;
+    FProgOps[n].Hi := zs.Hi;
+    FProgOps[n].From := AFrom;
+    FProgOps[n].Pre := ALevel;
+  end;
+
 begin
   if (AList = nil) or (APainter = nil) then Exit;
   bmp := APainter.Bitmap;
@@ -514,15 +621,17 @@ begin
       end;
   if not any then
   begin
+    { (after a first blit: what the log cannot say) }
+    if FProgLogOn then FProgLogBad := True;
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
-  { [R5-J] the layer holds the whole run, whatever band this pass draws:
-    built in a band it lost the chunks of another zlevel for good }
+  { [R5-J] the layers hold the whole runs, whatever band this pass draws:
+    built in a band they lost the chunks of another zlevel for good }
   zs := TySuspendZBand;
   try
-    if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
-      or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
+    sized := (Length(FProgLayers) > 0) and (FProgLayerW = bmp.Width) and (FProgLayerH = bmp.Height);
+    if not FProgLayerOk or not sized or (FProgLayerPPI <> APPI)
       or (FProgLayerScale <> APainter.DeviceScale) then
       ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
     else if FProgLayerRegionOn then
@@ -530,7 +639,9 @@ begin
   finally
     TyResumeZBand(zs);
   end;
-  blitted := False;
+  { [R7-AJ] a full paint logging since its first blit: this run too }
+  if FProgLogOn then LogList(0, -MaxInt);
+  blitted := nil;
   for i := 0 to AList.Count - 1 do
   begin
     idx := AList.PaintOrder(i);
@@ -539,24 +650,49 @@ begin
     if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
     if pe^.ProgChunk > 0 then
     begin
-      { [R5-J] the run's layer in its zlevel's band only [was: blitted with
-        the first band whatever the run's zlevel] }
-      if not blitted and TyZBandHas(pe^.ZLevel) then
+      { [R5-J] a zlevel's layer in its zlevel's band only, [R7-AJ] once:
+        the layer of that zlevel alone [was: the one layer of every run,
+        on each run's zlevel -- the runs of the others pasted again] }
+      if TyZBandHas(pe^.ZLevel) then
       begin
-        { [R2-L] what is under the layer, and the layer, as they stand here }
-        if FProgCap and (FProgLayer <> nil) then
+        done := False;
+        for j := 0 to High(blitted) do
+          if blitted[j] = pe^.ZLevel then done := True;
+        if not done then
         begin
-          if FProgUnder = nil then FProgUnder := TBGRABitmap.Create(bmp.Width, bmp.Height)
-          else FProgUnder.SetSize(bmp.Width, bmp.Height);
-          FProgUnder.PutImage(0, 0, bmp, dmSet);
-          if FProgSeen = nil then FProgSeen := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height)
-          else FProgSeen.SetSize(FProgLayer.Width, FProgLayer.Height);
-          FProgSeen.PutImage(0, 0, FProgLayer, dmSet);
-          FProgBlitAt := i;
-          FProgCapUnder := True;
+          SetLength(blitted, Length(blitted) + 1);
+          blitted[High(blitted)] := pe^.ZLevel;
+          k := ProgLayerAt(pe^.ZLevel);
+          if k >= 0 then
+          begin
+            { [R2-L] THE FULL PAINT'S FIRST BLIT: what is under it, and the
+              layers as they stand here -- [R7-AJ] and from here on what the
+              paint draws, logged [was: at every blit, the last one kept] }
+            if FProgCap and not FProgCapUnder then
+            begin
+              if FProgUnder = nil then FProgUnder := TBGRABitmap.Create(bmp.Width, bmp.Height)
+              else FProgUnder.SetSize(bmp.Width, bmp.Height);
+              FProgUnder.PutImage(0, 0, bmp, dmSet);
+              for j := 0 to High(FProgLayers) do
+              begin
+                if FProgLayers[j].Seen = nil then
+                  FProgLayers[j].Seen := TBGRABitmap.Create(FProgLayerW, FProgLayerH)
+                else
+                  FProgLayers[j].Seen.SetSize(FProgLayerW, FProgLayerH);
+                FProgLayers[j].Seen.PutImage(0, 0, FProgLayers[j].Bmp, dmSet);
+                FProgLayers[j].Drawn := False;
+              end;
+              FProgBlitAt := i;
+              FProgBlitLevel := pe^.ZLevel;
+              FProgCapUnder := True;
+              FProgOps := nil;
+              FProgLogBad := False;
+              FProgLogOn := True;
+              LogList(i + 1, pe^.ZLevel);
+            end;
+            bmp.PutImage(0, 0, FProgLayers[k].Bmp, dmDrawWithTransparency);
+          end;
         end;
-        bmp.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
-        blitted := True;
       end;
       Continue;
     end;
@@ -564,12 +700,13 @@ begin
   end;
 end;
 
-{ THE BOX A STATE PATCH CHANGED ON THE LAYER [R2-L]. The elements the last
+{ THE BOX A STATE PATCH CHANGED ON THE LAYERS [R2-L]. The elements the last
   patch wrote (AIdx, as they stood before this one: AEls) and the ones this
   one wrote (the journal: each with what it was before) -- an element of a
   run that is not what it was puts its old and its new paint rect in the
-  box. False where one has no paint rect (a large batch, a rich caption):
-  the layer is drawn whole. }
+  box, and marks its zlevel's layer (Touched). False where one has no paint
+  rect (a large batch, a rich caption) or is on a zlevel no layer holds:
+  the layers are drawn whole. }
 function TTyCustomAdvanceChart.ProgPatchRegion(const AIdx: TTyIntegerArray;
   const AEls: array of TTyChartElement): Boolean;
 var
@@ -577,6 +714,14 @@ var
   seen: TTyBoolArray;
   box: TTyXYWH;
   any: Boolean;
+
+  function Touch(ALevel: Integer): Boolean;
+  var j: Integer;
+  begin
+    j := ProgLayerAt(ALevel);
+    Result := j >= 0;
+    if Result then FProgLayers[j].Touched := True;
+  end;
 
   function Take(const AOld, ANew: TTyChartElement): Boolean;
   var r: TTyXYWH;
@@ -586,13 +731,13 @@ var
     if TyElementsSame(AOld, ANew) then Exit;
     if ProgIsLayered(AOld) then
     begin
-      if not TyElementPaintRect(AOld, FPaintListPPI, r) then Exit(False);
+      if not TyElementPaintRect(AOld, FPaintListPPI, r) or not Touch(AOld.ZLevel) then Exit(False);
       if any then TyZrRectUnion(box, r) else box := r;
       any := True;
     end;
     if ProgIsLayered(ANew) then
     begin
-      if not TyElementPaintRect(ANew, FPaintListPPI, r) then Exit(False);
+      if not TyElementPaintRect(ANew, FPaintListPPI, r) or not Touch(ANew.ZLevel) then Exit(False);
       if any then TyZrRectUnion(box, r) else box := r;
       any := True;
     end;
@@ -624,20 +769,20 @@ begin
   FProgLayerRegionOn := True;
 end;
 
-{ THE LAYER DRAWN AGAIN INSIDE THE BOX [R2-L]. The layer is what a whole
-  drawing in paint order gives (FProgLayerInOrder), and only the elements
-  of the box changed: inside it, the layer is the elements that meet it
-  drawn from transparent in paint order -- an element that does not meet
-  it puts nothing there. Each is drawn whole (an antialiased fill is not
-  the same under a clip) and the pixels outside the box are the layer's
-  as it was. }
+{ THE LAYERS DRAWN AGAIN INSIDE THE BOX [R2-L]. A layer is what a whole
+  drawing in paint order gives (InOrder), and only the elements of the box
+  changed: inside it, the layer is its elements that meet it drawn from
+  transparent in paint order -- an element that does not meet it puts
+  nothing there. Each is drawn whole (an antialiased fill is not the same
+  under a clip) and the pixels outside the box are the layer's as it was.
+  [R7-AJ] Only the layers the patch changed (Touched). }
 procedure TTyCustomAdvanceChart.ProgLayerRegionRedraw;
 var
-  saved: TBGRABitmap;
+  saved, lay: TBGRABitmap;
   P: TTyPainter;
   R: TRect;
   zr, er: TTyXYWH;
-  i, idx, s: Integer;
+  i, idx, s, k: Integer;
   pe: PTyChartElement;
   sc: TTyCanvasScale;
   kept: Boolean;
@@ -645,55 +790,75 @@ var
   procedure Band(const ABand: TRect);
   begin
     if (ABand.Right > ABand.Left) and (ABand.Bottom > ABand.Top) then
-      FProgLayer.PutImagePart(ABand.Left, ABand.Top, saved, ABand, dmSet);
+      lay.PutImagePart(ABand.Left, ABand.Top, saved, ABand, dmSet);
   end;
 
 begin
   FProgLayerRegionOn := False;
-  if FProgLayer = nil then Exit;
+  if Length(FProgLayers) = 0 then Exit;
   s := Max(1, FProgLayerScale);
-  { the box in the layer's pixels, two device px out }
+  { the box in the layers' pixels, two device px out }
   zr := FProgLayerRegion;
   zr.X := zr.X - 2;
   zr.Y := zr.Y - 2;
   zr.W := zr.W + 4;
   zr.H := zr.H + 4;
   R := Rect(Max(0, Floor(zr.X * s)), Max(0, Floor(zr.Y * s)),
-    Min(FProgLayer.Width, Ceil((zr.X + zr.W) * s)),
-    Min(FProgLayer.Height, Ceil((zr.Y + zr.H) * s)));
-  if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Exit;
-  saved := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height);
-  P := NewPainter;
+    Min(FProgLayerW, Ceil((zr.X + zr.W) * s)),
+    Min(FProgLayerH, Ceil((zr.Y + zr.H) * s)));
+  if (R.Right <= R.Left) or (R.Bottom <= R.Top) then
+  begin
+    for k := 0 to High(FProgLayers) do FProgLayers[k].Touched := False;
+    Exit;
+  end;
+  saved := TBGRABitmap.Create(FProgLayerW, FProgLayerH);
   kept := TyRenderKeptStrokes;
   TyRenderKeptStrokes := True;
   try
-    saved.PutImage(0, 0, FProgLayer, dmSet);
-    FProgLayer.FillRect(R, BGRAPixelTransparent, dmSet);
-    sc.Scale := s;
-    sc.DeviceUnits := False;
-    P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div s, FProgLayer.Height div s),
-      FProgLayerPPI, FProgLayer, sc);
-    FProgLayerLastPos := -1;
+    for k := 0 to High(FProgLayers) do
+    begin
+      if not FProgLayers[k].Touched then Continue;
+      FProgLayers[k].Touched := False;
+      lay := FProgLayers[k].Bmp;
+      saved.PutImage(0, 0, lay, dmSet);
+      lay.FillRect(R, BGRAPixelTransparent, dmSet);
+      P := NewPainter;
+      try
+        sc.Scale := s;
+        sc.DeviceUnits := False;
+        P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayerW div s, FProgLayerH div s),
+          FProgLayerPPI, lay, sc);
+        for i := 0 to FPaintList.Count - 1 do
+        begin
+          idx := FPaintList.PaintOrder(i);
+          pe := FPaintList.Ref(idx);
+          if not ProgIsLayered(pe^) or (pe^.ZLevel <> FProgLayers[k].Level) then Continue;
+          if TyElementPaintRect(pe^, FProgLayerPPI, er) and not TyZrRectIntersect(er, zr) then
+            Continue;
+          TyRenderElement(P, pe^);
+        end;
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+      lay.ClipRect := Rect(0, 0, lay.Width, lay.Height);
+      Band(Rect(0, 0, lay.Width, R.Top));
+      Band(Rect(0, R.Bottom, lay.Width, lay.Height));
+      Band(Rect(0, R.Top, R.Left, R.Bottom));
+      Band(Rect(R.Right, R.Top, lay.Width, R.Bottom));
+    end;
+    { every layer's last position, as the list stands now }
+    for k := 0 to High(FProgLayers) do FProgLayers[k].LastPos := -1;
     for i := 0 to FPaintList.Count - 1 do
     begin
-      idx := FPaintList.PaintOrder(i);
-      pe := FPaintList.Ref(idx);
+      pe := FPaintList.Ref(FPaintList.PaintOrder(i));
       if not ProgIsLayered(pe^) then Continue;
-      FProgLayerLastPos := i;
-      if TyElementPaintRect(pe^, FProgLayerPPI, er) and not TyZrRectIntersect(er, zr) then
-        Continue;
-      TyRenderElement(P, pe^);
+      k := ProgLayerAt(pe^.ZLevel);
+      if k >= 0 then FProgLayers[k].LastPos := i;
     end;
-    P.EndPaint;
-    FProgLayer.ClipRect := Rect(0, 0, FProgLayer.Width, FProgLayer.Height);
-    Band(Rect(0, 0, FProgLayer.Width, R.Top));
-    Band(Rect(0, R.Bottom, FProgLayer.Width, FProgLayer.Height));
-    Band(Rect(0, R.Top, R.Left, R.Bottom));
-    Band(Rect(R.Right, R.Top, FProgLayer.Width, R.Bottom));
     Inc(GLayerRegions);
   finally
     TyRenderKeptStrokes := kept;
-    P.Free;
     saved.Free;
   end;
 end;
@@ -714,38 +879,44 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.ProgFastDrop;
+var k: Integer;
 begin
   FProgCapOk := False;
   FProgFastFrame := False;
   FreeAndNil(FProgUnder);
   FreeAndNil(FProgWork);
-  FreeAndNil(FProgSeen);
+  for k := 0 to High(FProgLayers) do FreeAndNil(FProgLayers[k].Seen);
+  FProgOps := nil;
 end;
 
 { A PROGRESS FRAME'S STATIC LAYER, from the last full paint's [R2-L].
 
-  Between two progress frames nothing but the incremental layer changed:
+  Between two progress frames nothing but the incremental layers changed:
   the same list, the same layout, the same states, more chunks on the
-  layer. What a full static paint puts at a pixel is then a function of
-  that pixel alone -- what lies under the layer there (FProgUnder: the
-  ground, the axes and the elements before the run), the layer's pixel,
-  and what the elements after the layer and the furniture after the
-  series put down there; it changes only where the layer changed. So: the
-  pixels the layer changed (their box, against FProgSeen) start from
-  FProgUnder, take the layer as the full paint blits it, and have the
-  elements after it -- those whose paint rect meets the box, or that have
-  none -- and the break areas, the parallel axes and the titles drawn
+  layers. What a full static paint puts at a pixel is then a function of
+  that pixel alone -- what lies under the first layer it blits there
+  (FProgUnder: the ground, the axes and the elements before the run), and
+  what the paint draws after that blit there (FProgOps: the list's later
+  elements in their bands, the later zlevels' layers blitted at their first
+  chunks, the axes, break areas, parallel axes and titles of the later
+  zlevels, in the paint's order); it changes only where a layer changed.
+  So: the pixels the layers changed (their box, against each layer's Seen)
+  start from FProgUnder, take the first layer as the full paint blits it,
+  and have what it drew after -- the elements whose paint rect meets the
+  box, or that have none, the layers, the components' passes -- drawn
   again, whole (an antialiased fill is not the same under a clip); every
   pixel outside the box is then the last paint's again.
   The result is blended onto the static canvas as the full paint's
   EndPaint blends its bitmap. Anything else -- a relayout, a state, an
   animation, another size, PPI or device scale, a layer built again, the
-  run's first element elsewhere in the order, a switched-off fast path --
-  leaves it to the full paint. }
+  run's first element elsewhere in the order, a paint that drew what its
+  log cannot say, a switched-off fast path -- leaves it to the full paint.
+  [R7-AJ] Across zlevels too: the levels drawn canvas by canvas, a run on
+  a zlevel above the components' [was: the full paint every frame]. }
 function TTyCustomAdvanceChart.ProgFastPaint(const R: TRect; APPI: Integer;
   const AScale: TTyCanvasScale): Boolean;
 var
-  w, h, x, y, i, idx, s: Integer;
+  w, h, x, y, i, idx, s, k, q, j, first: Integer;
   pa, pb: PLongWord;
   box, clip: TRect;
   nb: TBGRABitmap;
@@ -754,7 +925,9 @@ var
   zr, er: TTyXYWH;
   sc: TTyCanvasScale;
   measurer: ITyTextMeasurer;
-  zc, pass: Integer;
+  blitted: TTyIntegerArray;
+  done, wasOn: Boolean;
+  wasLevel: Integer;
 
   procedure Band(ADst: TBGRABitmap; const ABand: TRect);
   begin
@@ -773,16 +946,16 @@ begin
   if FExporting or FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
     or (Length(FAnimStBind) > 0) or TmAnimAny or FDrPrepDone then Exit;
   if (FPaintList = nil) or not FPaintListValid or not FProgReuse then Exit;
-  { [R5-J] the levels drawn canvas by canvas, or the run's layer blitted
-    over the components (its zlevel above theirs): what is under the layer
-    is no one capture }
-  if FZMixed or (ProgRunZLevel > ZBase) then Exit;
-  if (FProgWork = nil) or (FProgUnder = nil) or (FProgSeen = nil) or (FProgLayer = nil)
-    or not FProgLayerOk then Exit;
-  if (FProgLayer.Width <> FProgWork.Width) or (FProgLayer.Height <> FProgWork.Height)
-    or (FProgSeen.Width <> FProgWork.Width) or (FProgSeen.Height <> FProgWork.Height)
+  if FProgLogBad or (FProgWork = nil) or (FProgUnder = nil) or not FProgLayerOk
+    or (Length(FProgLayers) = 0) then Exit;
+  if (FProgLayerW <> FProgWork.Width) or (FProgLayerH <> FProgWork.Height)
     or (FProgUnder.Width <> FProgWork.Width) or (FProgUnder.Height <> FProgWork.Height)
     or (FProgLayerPPI <> APPI) or (FProgLayerScale <> s) then Exit;
+  for k := 0 to High(FProgLayers) do
+    if (FProgLayers[k].Seen = nil) or (FProgLayers[k].Seen.Width <> FProgWork.Width)
+      or (FProgLayers[k].Seen.Height <> FProgWork.Height) then Exit;
+  first := ProgLayerAt(FProgBlitLevel);
+  if first < 0 then Exit;
   if ProgBlitPos <> FProgBlitAt then Exit;
   { PaintSeries' own steps before it draws a reused list }
   FProgReuse := False;
@@ -796,23 +969,27 @@ begin
     FProgReuse := True;
     Exit;
   end;
-  { the box of the layer's changed pixels }
+  { the box of the layers' changed pixels (the ones a frame drew on) }
   box := Rect(MaxInt, MaxInt, -1, -1);
-  for y := 0 to FProgLayer.Height - 1 do
+  for k := 0 to High(FProgLayers) do
   begin
-    pa := PLongWord(FProgLayer.ScanLine[y]);
-    pb := PLongWord(FProgSeen.ScanLine[y]);
-    for x := 0 to FProgLayer.Width - 1 do
+    if not FProgLayers[k].Drawn then Continue;
+    for y := 0 to FProgLayerH - 1 do
     begin
-      if pa^ <> pb^ then
+      pa := PLongWord(FProgLayers[k].Bmp.ScanLine[y]);
+      pb := PLongWord(FProgLayers[k].Seen.ScanLine[y]);
+      for x := 0 to FProgLayerW - 1 do
       begin
-        if x < box.Left then box.Left := x;
-        if x >= box.Right then box.Right := x + 1;
-        if y < box.Top then box.Top := y;
-        if y >= box.Bottom then box.Bottom := y + 1;
+        if pa^ <> pb^ then
+        begin
+          if x < box.Left then box.Left := x;
+          if x >= box.Right then box.Right := x + 1;
+          if y < box.Top then box.Top := y;
+          if y >= box.Bottom then box.Bottom := y + 1;
+        end;
+        Inc(pa);
+        Inc(pb);
       end;
-      Inc(pa);
-      Inc(pb);
     end;
   end;
   if box.Right > box.Left then
@@ -823,12 +1000,13 @@ begin
       nb.PutImage(0, 0, FProgWork, dmSet);
       nb.ClipRect := box;
       nb.PutImage(0, 0, FProgUnder, dmSet);
-      nb.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
+      nb.PutImage(0, 0, FProgLayers[first].Bmp, dmDrawWithTransparency);
       { NOT CLIPPED to the box: BGRA's antialiased fill is not the same
         inside a clip as without one -- a slanted edge's coverage is summed
         from where the clip cuts it, and rounds differently. What meets the
         box is drawn whole, as the full paint draws it; what it puts outside
-        the box is taken back below. }
+        the box is taken back below. (A layer's blit is a pixel's own: in
+        the box only.) }
       nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
       { the box in device px, two pixels out: what meets it is drawn again }
       zr.X := Floor(box.Left / s) - 2;
@@ -837,44 +1015,81 @@ begin
       zr.H := Ceil(box.Bottom / s) + 2 - zr.Y;
       measurer := NewTextMeasurer(APPI);
       P := NewPainter;
+      wasOn := FZApartOn;
+      wasLevel := FZApartLevel;
       try
         sc.Scale := s;
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
-        { [R5-G] the two zlevel passes the full paint makes }
-        zc := ZBase;
-        for pass := 0 to 1 do
+        { [R7-AJ] WHAT THE FULL PAINT DREW AFTER ITS FIRST BLIT, in its order
+          [was: the two zlevel passes of a paint whose levels are not apart,
+          the run's layer the only one] }
+        for q := 0 to High(FProgOps) do
         begin
-          if pass = 0 then
-            TySetZBand(-MaxInt, zc)
+          if FProgOps[q].Kind = 0 then
+          begin
+            if FProgOps[q].BandOn then TySetZBand(FProgOps[q].Lo, FProgOps[q].Hi)
+            else TyClearZBand;
+            try
+              blitted := nil;
+              if FProgOps[q].Pre <> -MaxInt then
+              begin
+                SetLength(blitted, 1);
+                blitted[0] := FProgOps[q].Pre;
+              end;
+              for i := Max(0, FProgOps[q].From) to FPaintList.Count - 1 do
+              begin
+                idx := FPaintList.PaintOrder(i);
+                pe := FPaintList.Ref(idx);
+                { ProgRenderList's own skips }
+                if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
+                if pe^.ProgChunk > 0 then
+                begin
+                  { a later zlevel's layer where its first chunk stands }
+                  if not TyZBandHas(pe^.ZLevel) then Continue;
+                  done := False;
+                  for j := 0 to High(blitted) do
+                    if blitted[j] = pe^.ZLevel then done := True;
+                  if done then Continue;
+                  SetLength(blitted, Length(blitted) + 1);
+                  blitted[High(blitted)] := pe^.ZLevel;
+                  k := ProgLayerAt(pe^.ZLevel);
+                  if k < 0 then Continue;
+                  nb.ClipRect := box;
+                  nb.PutImage(0, 0, FProgLayers[k].Bmp, dmDrawWithTransparency);
+                  nb.ClipRect := clip;
+                  Continue;
+                end;
+                if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
+                TyRenderElement(P, pe^);
+                nb.ClipRect := clip;
+              end;
+            finally
+              TyClearZBand;
+            end;
+          end
           else
           begin
             { what the static paint draws over the series, as it draws it }
-            PaintBreakAreas(P);
-            PaintParallels(P, APPI, measurer);
-            PaintTitles(P);
-            if TyMaxZLevelOf(FPaintList) <= zc then Break;
-            TySetZBand(zc, ZStaticTop);
-          end;
-          try
-            for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
-            begin
-              idx := FPaintList.PaintOrder(i);
-              pe := FPaintList.Ref(idx);
-              { ProgRenderList's own skips; a run's elements are the layer's }
-              if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
-              if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
-              TyRenderElement(P, pe^);
-              nb.ClipRect := clip;
+            FZApartOn := FProgOps[q].ApartOn;
+            FZApartLevel := FProgOps[q].Level;
+            case FProgOps[q].Kind of
+              1: PaintAxes(P, APPI, measurer, False);
+              2: PaintBreakAreas(P);
+            else
+              PaintParallels(P, APPI, measurer);
             end;
-          finally
-            TyClearZBand;
+            FZApartOn := wasOn;
+            FZApartLevel := wasLevel;
+            nb.ClipRect := clip;
           end;
         end;
         nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
         P.EndPaint;
       finally
+        FZApartOn := wasOn;
+        FZApartLevel := wasLevel;
         P.Free;
       end;
       nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
@@ -884,7 +1099,6 @@ begin
       Band(nb, Rect(0, box.Bottom, nb.Width, nb.Height));
       Band(nb, Rect(0, box.Top, box.Left, box.Bottom));
       Band(nb, Rect(box.Right, box.Top, nb.Width, box.Bottom));
-      FProgSeen.PutImage(0, 0, FProgLayer, dmSet);
       FreeAndNil(FProgWork);
       FProgWork := nb;
       nb := nil;
@@ -892,6 +1106,13 @@ begin
       nb.Free;
     end;
   end;
+  { the layers as this frame blitted them }
+  for k := 0 to High(FProgLayers) do
+    if FProgLayers[k].Drawn then
+    begin
+      FProgLayers[k].Seen.PutImage(0, 0, FProgLayers[k].Bmp, dmSet);
+      FProgLayers[k].Drawn := False;
+    end;
   { blended onto the static canvas as the full paint's EndPaint blends }
   P := NewPainter;
   try

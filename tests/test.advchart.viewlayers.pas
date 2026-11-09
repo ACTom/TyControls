@@ -42,6 +42,7 @@ type
     function Trail(ASeries: Integer): Double;
     function List: TTyPaintList;
     function Titles: TTyOverlayShapeArray;
+    function Frame: TTyPaintList;
   end;
 
   TAdvChartViewLayersOracleTest = class(TTestCase)
@@ -77,6 +78,7 @@ type
     procedure TestThePositionHandlerIsHandedCssPx;
     procedure TestLinesGraphEdgesAndTitleFramesOnTheCssGrid;
     procedure TestAViewWrittenIntoAnElementMovesIt;
+    procedure TestAGraphEdgesFramesOnTheCssGrid;
   end;
 
 implementation
@@ -134,6 +136,11 @@ end;
 function TVlProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+function TVlProbe.Frame: TTyPaintList;
+begin
+  Result := AnimFrame;
 end;
 
 function TVlProbe.Titles: TTyOverlayShapeArray;
@@ -212,9 +219,6 @@ begin
     c := cs.Objects[i];
     id := c.Strings['id'];
     if (APrefix <> '') and (Copy(id, 1, Length(APrefix)) <> APrefix) then Continue;
-    { (a scatter of more rows than its threshold: upstream's level of its
-      own is not the port's -- spec 288, what remains) }
-    if Copy(id, 1, 6) = 'zl-big' then Continue;
     w := c.Get('w', 400);
     h := c.Get('h', 300);
     NewChart(w, h);
@@ -789,6 +793,10 @@ begin
     + '"lineStyle":{"width":1,"color":"#000000","opacity":1},"data":[{"coords":[[1,5.13],[9,5.13]]}]}]}');
   One('a graph edge on axes', '{"animation":false,' + cAxes + '"series":[{"type":"graph","coordinateSystem":"cartesian2d",'
     + '"symbolSize":0,"data":[[1,5.13],[9,5.13]],"links":[{"source":0,"target":1}],"lineStyle":{"width":1,"color":"#000000","opacity":1}}]}');
+  { ([R7-AJ] a mark line's: Line.ts' ECLinePath too) }
+  One('a mark line', '{"animation":false,' + cAxes + '"series":[{"type":"scatter","symbolSize":0,"data":[[1,1]],'
+    + '"markLine":{"symbol":"none","label":{"show":false},"lineStyle":{"width":1,"type":"solid","color":"#000000"},'
+    + '"data":[{"yAxis":5.13},{"xAxis":3.37}]}}]}');
   for ppi := 0 to 1 do
   begin
     Render(96 + 48 * ppi, '{"animation":false,"title":{"text":"T","left":43.3,"top":41.7,'
@@ -832,6 +840,65 @@ begin
   finally
     L.Free;
   end;
+end;
+
+{ [R7-AJ] A GRAPH'S STRAIGHT EDGE ON AXES IN ITS ENTER ANIMATION AT 144 PPI:
+  every frame's points 1.5 times the ones at 96 -- the line on the half css
+  px before the percent cuts it (Line.buildPath with subPixelOptimize on a
+  canvas scaled by devicePixelRatio) [was: the device px grid in the
+  frames, the css one at rest] }
+procedure TAdvChartViewLayersOracleTest.TestAGraphEdgesFramesOnTheCssGrid;
+const
+  cOpt = '{"animation":true,"animationDuration":1000,"animationEasing":"linear",'
+    + '"grid":{"left":43.3,"right":40,"top":41.7,"bottom":40},'
+    + '"xAxis":{"type":"value","min":0,"max":10,"show":false},"yAxis":{"type":"value","min":0,"max":10,"show":false},'
+    + '"series":[{"type":"graph","coordinateSystem":"cartesian2d","symbolSize":0,'
+    + '"data":[[1,5.13],[9,5.13],[%s,1.3],[%s,8.9]],"links":[{"source":0,"target":1},{"source":2,"target":3}],'
+    + '"lineStyle":{"width":1,"color":"#000000","opacity":1}},'
+    { (and on a view: snapped in data space, the same at every PPI) }
+    + '{"type":"graph","layout":"none","left":50,"top":50,"width":200,"height":150,"symbolSize":0,'
+    + '"data":[{"x":10.13,"y":20.37},{"x":90.13,"y":20.37},{"x":40.37,"y":5.1},{"x":40.37,"y":70.9}],'
+    + '"links":[{"source":0,"target":1},{"source":2,"target":3}],"lineStyle":{"width":1,"color":"#000000","opacity":1}}]}';
+var
+  pts: array[0..1] of array of Double;
+  ppi, k, q, n: Integer;
+  L: TTyPaintList;
+  el: TTyChartElement;
+  worst: Double;
+begin
+  for ppi := 0 to 1 do
+  begin
+    if ppi = 0 then NewChart(400, 300) else NewChart(600, 450);
+    FChart.AnimationMode := camAlways;
+    FChart.SetOption(Format(cOpt, ['3.37', '3.37']), True);
+    AssertEquals('parses', '', FChart.OptionError);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96 + 48 * ppi);
+    PinClocks(FChart, cT0 + 400);
+    FChart.AnimTick(cT0 + 400);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96 + 48 * ppi);
+    L := FChart.Frame;
+    AssertTrue('a frame', L <> nil);
+    pts[ppi] := nil;
+    n := 0;
+    for k := 0 to L.Count - 1 do
+    begin
+      el := L.Element(L.PaintOrder(k));
+      if el.Anim.Role <> carGraphEdge then Continue;
+      for q := 0 to High(el.Shape.Points) do
+      begin
+        SetLength(pts[ppi], n + 2);
+        pts[ppi][n] := el.Shape.Points[q].X;
+        pts[ppi][n + 1] := el.Shape.Points[q].Y;
+        Inc(n, 2);
+      end;
+    end;
+  end;
+  AssertTrue('the edges in the frame', Length(pts[0]) >= 16);
+  AssertEquals('as many points', Length(pts[0]), Length(pts[1]));
+  worst := 0;
+  for k := 0 to High(pts[0]) do worst := Max(worst, Abs(pts[1][k] - 1.5 * pts[0][k]));
+  AssertTrue('the edges'' frame at 144 PPI is the one at 96 times 1.5, off by ' + FloatToStr(worst),
+    worst < 1e-6);
 end;
 
 initialization
