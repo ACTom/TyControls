@@ -3078,6 +3078,8 @@ var
   col: Cardinal;
   corners: TTyCorners;
   b: TTyRtBlockStyle;
+  { [R7-AK] a padding side }
+  k: Integer;
 begin
   Result := Default(TTyPtrLabel);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
@@ -3153,6 +3155,17 @@ begin
     b.Style.Padding[1] := AHit.Spec.LabelSpec.PadRight;
     b.Style.Padding[2] := AHit.Spec.LabelSpec.PadBottom;
     b.Style.Padding[3] := AHit.Spec.LabelSpec.PadLeft;
+    { [R7-AK] a padding held as JS values: the Text's too, joined as any
+      label's }
+    if AHit.Spec.LabelSpec.PadJs.Js then
+    begin
+      b.Style.PaddingJs := True;
+      for k := 0 to 3 do
+      begin
+        b.Style.PaddingKind[k] := AHit.Spec.LabelSpec.PadJs.Kind[k];
+        b.Style.PaddingText[k] := AHit.Spec.LabelSpec.PadJs.Text[k];
+      end;
+    end;
   end
   else
   begin
@@ -3176,6 +3189,26 @@ begin
   if IsNan(Result.Alpha) or (Result.Alpha < 0) or (Result.Alpha > 1) then
     Result.Alpha := 1;
   Result.Block := b;
+end;
+
+{ [R7-AK] Math.min / Math.max: NaN where either is }
+function MinJs(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A else Result := B;
+end;
+
+function MaxJs(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+{ [R7-AK] `size + paddings[A] + paddings[B]` as JS holds it (css px) }
+function PtrLabelSizeJs(const AL: TTyPtrLabel; ASize: Double; A, B: Integer): TTyRtJs;
+begin
+  Result := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(ASize), TyRtPadV(AL.Block.Style, A)),
+    TyRtPadV(AL.Block.Style, B));
 end;
 
 function TTyCustomAdvanceChart.PtrLabelBoxSize(const AL: TTyPtrLabel;
@@ -3202,7 +3235,62 @@ begin
   end;
   AW := (bb.W + AL.Block.Style.Padding[1] + AL.Block.Style.Padding[3]) * AL.Scale;
   AH := (bb.H + AL.Block.Style.Padding[0] + AL.Block.Style.Padding[2]) * AL.Scale;
+  { [R7-AK] `textRect.width + paddings[1] + paddings[3]`, joined where a side
+    is a string ('6' + '2' + '2'), its number }
+  if AL.Block.Style.PaddingJs then
+  begin
+    AW := PtrLabelSizeJs(AL, bb.W, 1, 3).N * AL.Scale;
+    AH := PtrLabelSizeJs(AL, bb.H, 0, 2).N * AL.Scale;
+  end;
   Result := True;
+end;
+
+procedure TTyCustomAdvanceChart.PtrLabelConfine(const AL: TTyPtrLabel; const AText: string;
+  const AMeasurer: ITyTextMeasurer; AW, AH, AViewW, AViewH: Double; var AX, AY: Double);
+var
+  pb: TTyRtBlockStyle;
+  bb: TTyXYWH;
+  s: Double;
+  wv, hv: TTyRtJs;
+begin
+  if not AL.Block.Style.PaddingJs or (AMeasurer = nil) then
+  begin
+    AX := Math.Min(AX + AW, AViewW) - AW;
+    AY := Math.Min(AY + AH, AViewH) - AH;
+    AX := Math.Max(AX, Double(0));
+    AY := Math.Max(AY, Double(0));
+    Exit;
+  end;
+  { [R7-AK] confineInContainer with the size as JS holds it: `position[0] +
+    width` joined ('130' + '622'), Math.min against the view, the size taken
+    off as a number -- in css px }
+  if AL.Scale > 0 then s := AL.Scale else s := 1;
+  pb := Default(TTyRtBlockStyle);
+  pb.Style := TyRtStyleDefault;
+  TyRtFinish(pb, AL.FontName, AL.FontSizeLogical, AL.FontWeight, AL.Global, False, 0);
+  bb := TyRtBounds(TyRtLay(AText, pb, TyRtDefaultOf(False, 0, False, 0, False,
+    tahLeft, tavTop), AL.Scale, AMeasurer));
+  if bb.W < 0 then
+  begin
+    bb.W := 0;
+    bb.H := 0;
+  end;
+  wv := PtrLabelSizeJs(AL, bb.W, 1, 3);
+  hv := PtrLabelSizeJs(AL, bb.H, 0, 2);
+  AX := (MinJs(TyRtJsAdd(TyRtJsNum(AX / s), wv).N, AViewW / s) - wv.N) * s;
+  AY := (MinJs(TyRtJsAdd(TyRtJsNum(AY / s), hv).N, AViewH / s) - hv.N) * s;
+  AX := MaxJs(AX, 0);
+  AY := MaxJs(AY, 0);
+  { A PLACE THAT IS NO NUMBER ('230.5' + '18.84': two points): where the
+    other is around nought too the Text has no transform -- drawn at the
+    canvas' own corner (needLocalTransform, NaN around nought); else its
+    transform is refused, left at NaN here }
+  if IsNan(AX) or IsNan(AY) then
+  begin
+    if (not IsNan(AX) and (Abs(AX / s) > 5e-5)) or (not IsNan(AY) and (Abs(AY / s) > 5e-5)) then Exit;
+    AX := 0;
+    AY := 0;
+  end;
 end;
 
 procedure TTyCustomAdvanceChart.PtrLabelPaint(APainter: TTyPainter;
@@ -3323,10 +3411,8 @@ begin
   if ah = tahCentre then AX := AX - w / 2;
   if av = tavBottom then AY := AY - h;
   if av = tavMiddle then AY := AY - h / 2;
-  AX := Math.Min(AX + w, AViewW) - w;
-  AY := Math.Min(AY + h, AViewH) - h;
-  AX := Math.Max(AX, Double(0));
-  AY := Math.Max(AY, Double(0));
+  { ([R7-AK] the size joined where the padding is a string) }
+  PtrLabelConfine(AL, AText, AMeasurer, w, h, AViewW, AViewH, AX, AY);
   Result := not (IsNan(AX) or IsNan(AY));
 end;
 

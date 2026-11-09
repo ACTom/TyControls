@@ -77,6 +77,9 @@ type
     BorderRadiusLogical: Double;
     HasPadding: Boolean;
     PadLeft, PadTop, PadRight, PadBottom: Double;
+    { [R7-AK] the padding as normalizeCssArray(padding || 0) holds it, where
+      a side is no plain number (a string '12'): the sides' numbers above }
+    PadJs: TTyJsPad;
     { [R5-A] the label's fontStyle (TyFontStyleCode): the nearest block's,
       else the root textStyle's }
     FontStyle: Byte;
@@ -221,7 +224,9 @@ function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;
 
 implementation
 
-uses jsonparser, tyControls.AdvanceChart.States;
+uses jsonparser, tyControls.AdvanceChart.States,
+  { [R7-AK] a label's padding as JS holds it }
+  tyControls.AdvanceChart.RichStyle;
 
 { ---- reading one axisPointer block ---- }
 
@@ -490,6 +495,17 @@ begin
       ASpec.PadRight := ASpec.PadTop;
       ASpec.PadBottom := ASpec.PadTop;
       ASpec.PadLeft := ASpec.PadTop;
+    end
+    { [R7-AK] a string, or an array whose sides are no plain numbers: as
+      normalizeCssArray holds it [was: none] }
+    else if (d.JSONType <> jtNull) and TyJsPadOf(d).Js then
+    begin
+      ASpec.PadJs := TyJsPadOf(d);
+      ASpec.HasPadding := True;
+      ASpec.PadTop := ASpec.PadJs.Num[0];
+      ASpec.PadRight := ASpec.PadJs.Num[1];
+      ASpec.PadBottom := ASpec.PadJs.Num[2];
+      ASpec.PadLeft := ASpec.PadJs.Num[3];
     end
     else if d is TJSONArray then
     begin

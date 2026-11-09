@@ -337,7 +337,9 @@ function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSol
 implementation
 
 uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Handlers;
+  tyControls.AdvanceChart.Handlers,
+  { [R7-AK] a label's padding as JS holds it }
+  tyControls.AdvanceChart.RichStyle;
 
 const
   cEps = 5e-5;
@@ -1692,6 +1694,8 @@ function PlaceOf(const ASolved: TTyTreemapSolved; ARow: Integer;
 var
   k, j: Integer;
   d: TJSONData;
+  { [R7-AK] a padding as JS holds it }
+  jp: TTyJsPad;
 begin
   Result := Default(TTyTmLabelPlace);
   Result.Has := True;
@@ -1712,7 +1716,20 @@ begin
           j := k;
         end;
         Result.Pad[k] := JsNum(d.Items[j]) * ASolved.Scale;
-      end;
+      end
+    { [R7-AK] a string (or any other value normalizeCssArray keeps): its
+      sides as `width - textPadding[1] - textPadding[3]` reads them, the
+      numbers of its characters ('12': 1, 2, 1, 2), NaN where one is
+      undefined [was: the default 5] }
+    else if (d.JSONType <> jtNull) and TyJsTruthyOf(d) then
+    begin
+      jp := TyJsPadOf(d);
+      if jp.Js then
+        for k := 0 to 3 do Result.Pad[k] := jp.Num[k] * ASolved.Scale;
+    end
+    else if d.JSONType <> jtNull then
+      { (`padding || 0`: a falsy one is none) }
+      for k := 0 to 3 do Result.Pad[k] := 0;
   end;
   d := ChainFind(ASolved, ARow, 'label', 'distance');
   if d <> nil then Result.Dist := JsNum(d) * ASolved.Scale else Result.Dist := 0;

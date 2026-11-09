@@ -757,10 +757,9 @@ begin
   if av = tavMiddle then y := y - ADraw.H / 2;
   vw := ARect.Right - ARect.Left;
   vh := ARect.Bottom - ARect.Top;
-  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
-  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
-  x := Math.Max(x, Double(0));
-  y := Math.Max(y, Double(0));
+  { ([R7-AK] confineInContainer: the size joined where the padding is a
+    string) }
+  PtrLabelConfine(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H, vw, vh, x, y);
   ADraw.X := x;
   ADraw.Y := y;
   ADraw.HasLabel := True;
@@ -1925,10 +1924,9 @@ begin
   if av = tavMiddle then y := y - ADraw.H / 2;
   vw := ARect.Right - ARect.Left;
   vh := ARect.Bottom - ARect.Top;
-  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
-  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
-  x := Math.Max(x, Double(0));
-  y := Math.Max(y, Double(0));
+  { ([R7-AK] confineInContainer: the size joined where the padding is a
+    string) }
+  PtrLabelConfine(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H, vw, vh, x, y);
   ADraw.X := x;
   ADraw.Y := y;
   ADraw.HasLabel := True;

@@ -4701,6 +4701,10 @@ type
       rect in the label's font, grown by the padding -- device px }
     function PtrLabelBoxSize(const AL: TTyPtrLabel; const AText: string;
       const AMeasurer: ITyTextMeasurer; out AW, AH: Double): Boolean;
+    { [R7-AK] confineInContainer on the label's box (device px), its size
+      joined where the padding is a string }
+    procedure PtrLabelConfine(const AL: TTyPtrLabel; const AText: string;
+      const AMeasurer: ITyTextMeasurer; AW, AH, AViewW, AViewH: Double; var AX, AY: Double);
     { [R7-N] the label's text laid out in its block, hung at (AX, AY) device
       px, drawn (APainter nil: only laid out) and logged for
       PointerLabelsDrawn }
