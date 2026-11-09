@@ -141,6 +141,16 @@ function TyRtLayoutJsBox(const AText: string; const AStyle: TTyRtStyle;
   ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyXYWH;
 { [R7-L] whether AR holds a NaN or an infinity }
 function TyRtBoxIsFinite(const AR: TTyXYWH): Boolean;
+{ [R7-AK] THE RECTS rectContain READS OFF THE TSPANS LAID OUT AT NaN (a
+  token after one whose padding left a side undefined): not drawn, and so
+  not among TyRtLayout's pieces, but each still a child of the Text the
+  pointer finds -- tSpanCreateBoundingRect2's `style.x || 0`, `style.y ||
+  0` (where its place is a string, the far edges rectContain joins: none
+  where they are no number). Only those that are finite; the traps are
+  masked inside. }
+function TyRtLayoutNanSpans(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
 
 { WHETHER THE TEXT HOLDS A TAG zrender's parser takes -- a name of letters,
   digits and underscores, a bar, and a closing brace somewhere after it. A
@@ -1002,6 +1012,52 @@ begin
       end;
       Union(bx, by, bw, bh);
     end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyRtLayoutNanSpans(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
+var
+  mask: TFPUExceptionMask;
+  res: TTyRtResult;
+  i, n: Integer;
+  b: TTyXYWH;
+begin
+  Result := nil;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    res := LayoutIn(AText, AStyle, ARichStyles, ARich, ADefault, ABaseX, ABaseY,
+      AMeasurer);
+    n := 0;
+    for i := 0 to High(res.Pieces) do
+      with res.Pieces[i] do
+      begin
+        if (Kind <> rpkText) or (Text = '') then Continue;
+        { (what is drawn is TyRtLayout's: only the TSpans at NaN) }
+        if Fin(X) and Fin(Y) then Continue;
+        if HitJs then
+        begin
+          { the edges rectContain joins: none where they are no number or
+            run back before the corner }
+          if not (Fin(HitL) and Fin(HitT) and Fin(HitR) and Fin(HitB)) then Continue;
+          if (HitR < HitL) or (HitB < HitT) then Continue;
+          b := TyXYWH(HitL, HitT, HitR - HitL, HitB - HitT);
+        end
+        else
+          PieceJsBox(res.Pieces[i], b.X, b.Y, b.W, b.H);
+        if not TyRtBoxIsFinite(b) or (b.W < 0) or (b.H < 0) then Continue;
+        SetLength(Result, n + 1);
+        Result[n] := b;
+        Inc(n);
+      end;
   finally
     ClearExceptions(False);
     {$IFDEF CPUX86_64}
