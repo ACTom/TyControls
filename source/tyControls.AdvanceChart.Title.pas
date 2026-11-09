@@ -77,6 +77,10 @@ type
     { [R7-Z] borderWidth is +Infinity: stroked at the width the canvas had }
     BorderWidthInf: Boolean;
     BorderRadii: TTyCornerRadii;
+    { [R7-AK] borderRadius truthy (RectShape.r): the Rect's path is
+      roundRect's -- its far edges joined where the size is a string --
+      however small the radii }
+    BorderRounded: Boolean;
     { [R5-A] the box's shadow: the title's own shadow keys (install.ts'
       rect, getItemStyle(['color', 'opacity'])) -- cast by the fill the
       option writes (BackgroundColor, 0 where it does not parse) }
@@ -113,6 +117,14 @@ type
       strings ('16.02' + '2' + '2'): drawn at their numbers, but
       subPixelOptimizeRect's `originX + originWidth` joins again ('' none) }
     FrameWText, FrameHText: string;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: `left + margin[3]` NaN): laid out with the group at its own
+      origin (every place here group-local), its box drawing nothing.
+      UnplacedT: the group has a transform (its y, or x, not around nought
+      -- zrender's needLocalTransform, NaN around it), which the canvas
+      refuses -- every part in its own frame under the transform the canvas
+      had; else none -- the parts at their own places in the canvas' frame }
+    Unplaced, UnplacedT: Boolean;
     TextX, TextY: Double;
     SubX, SubY: Double;
     TextW, TextH: Double;
@@ -130,6 +142,15 @@ type
   width of nought moves nothing. }
 function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
   AScale: Double = 1): TTyRectF;
+{ [R7-AK] THE BACKGROUND'S SHAPE: AFrame (TyTitleFrameDrawn) with its
+  corners ARadiiPx (device px) -- or, where borderRadius is truthy
+  (ARounded), the border no pen (subPixelOptimizeRect leaves the size as it
+  was) and the size a string the padding joined (FrameWText / FrameHText),
+  roundRect's path in the group's frame on its joined far edges
+  ('-2' + '1222') [was: the rounded rect of the size's numbers] }
+function TyTitleFrameShape(const ALayout: TTyTitleLayout; const AFrame: TTyRectF;
+  const ARadiiPx: array of Double; ARounded: Boolean; ALineWidthPx: Double;
+  AScale: Double = 1): TTyChartShape;
 
 { How many titles the option carries. An object counts as one. }
 function TyTitleCount(AOption: TTyChartOption): Integer;
@@ -160,13 +181,25 @@ uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
 
+{ [R7-AK] Math.max: NaN where either is }
+function JsMaxOf(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
 function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double;
   AScale: Double): TTyRectF;
 var
   r: TTyXYWH;
   { [R7-AI] the css px a device px makes }
   s: Double;
+  { [R7-AK] the traps' mask: a joined size of no number compares as JS }
+  mask: TFPUExceptionMask;
 begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
   { ([R7-AH] on the css px grid at another PPI [was: the device px grid]) }
   r := TyZrSubPixelOptimizeRectAt(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
     ALayout.FrameW, ALayout.FrameH), ALineWidthPx, AScale);
@@ -176,17 +209,50 @@ begin
   if not (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
   begin
     if (AScale > 0) and (AScale <> 1) then s := AScale else s := 1;
+    { ([R7-AK] Math.max: a far edge of two points is no number, nor is the
+      size -- the frame not drawn [was: FPC's Max, 1]) }
     if ALayout.FrameWText <> '' then
-      r.W := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
+      r.W := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLX / s)
         + ALayout.FrameWText), ALineWidthPx / s, False) - r.X / s, 1.0) * s;
     if ALayout.FrameHText <> '' then
-      r.H := Max(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
+      r.H := JsMaxOf(TyZrSubPixelOptimize(TyJsToNumber(TyJsNumberToString(ALayout.FrameLY / s)
         + ALayout.FrameHText), ALineWidthPx / s, False) - r.Y / s, 1.0) * s;
   end;
   { through the group's transform (a translation): x + tx, the far edge
     (x + w) + tx }
   Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,
     (r.X + r.W) + ALayout.TextX, (r.Y + r.H) + ALayout.TextY);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TyTitleFrameShape(const ALayout: TTyTitleLayout; const AFrame: TTyRectF;
+  const ARadiiPx: array of Double; ARounded: Boolean; ALineWidthPx: Double;
+  AScale: Double): TTyChartShape;
+var
+  s: Double;
+  r: TTyCornerRadii;
+  k: Integer;
+begin
+  if ARounded and ((ALayout.FrameWText <> '') or (ALayout.FrameHText <> ''))
+    and (IsNan(ALineWidthPx) or (ALineWidthPx = 0)) then
+  begin
+    if AScale > 0 then s := AScale else s := 1;
+    r := TyCornerRadii(ARadiiPx);
+    for k := 0 to 3 do r[k] := r[k] / s;
+    Exit(TyJsRoundFrameShape(ALayout.FrameLX / s, ALayout.FrameLY / s, ALayout.FrameW / s,
+      ALayout.FrameH / s, ALayout.FrameWText, ALayout.FrameHText, r, ALayout.TextX,
+      ALayout.TextY, s));
+  end;
+  { ([R7-AK] a frame of no number -- a far edge of two points -- is no
+    path: nothing drawn) }
+  if IsNan(AFrame.Left) or IsNan(AFrame.Top) or IsNan(AFrame.Right) or IsNan(AFrame.Bottom)
+    or IsInfinite(AFrame.Left) or IsInfinite(AFrame.Top) or IsInfinite(AFrame.Right)
+    or IsInfinite(AFrame.Bottom) then
+    Exit(TyShapePolygon([]));
+  Result := TyShapeRoundRect(AFrame, ARadiiPx);
 end;
 
 const
@@ -396,6 +462,7 @@ begin
   if AOption.Root is TJSONObject then root := TJSONObject(AOption.Root) else root := nil;
   TyStReadShadow([node, root], [], [], Result.Shadow);
   Result.BorderRadii := TyBoxRadiiOf(TyStFind([node, root], ['borderRadius']));
+  Result.BorderRounded := TyJsTruthyOf(TyStFind([node, root], ['borderRadius']));
   Result.Look := Default(TTyChartElementStyle);
   Result.Look.Alpha := 1;
   Result.Look.StrokeWidthLogical := Result.BorderWidth;
@@ -508,7 +575,9 @@ begin
     ClearExceptions(False);
     SetExceptionMask(mask);
   end;
-  if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) then Exit;
+  { ([R7-AK] a place that is no number, a padding side undefined: below) }
+  if IsNan(r.W) or IsNan(r.H) then Exit;
+  if (IsNan(r.X) or IsNan(r.Y)) and not ASpec.PadJs.Js then Exit;
   gx := r.X;
   gy := r.Y;
 
@@ -561,7 +630,17 @@ begin
     canvas kept) }
   if ASpec.PadJs.Js then
   begin
-    if IsNan(gx) or IsNan(gy) or IsInfinite(gx) or IsInfinite(gy) then Exit;
+    { [R7-AK] a place that is no number (a padding side undefined): the
+      group at its own origin, its transform refused where it has one (a
+      coordinate not around nought) [was: nothing laid out] }
+    if IsNan(gx) or IsNan(gy) or IsInfinite(gx) or IsInfinite(gy) then
+    begin
+      Result.Unplaced := True;
+      Result.UnplacedT := (not IsNan(gx) and (Abs(gx) > 5e-5))
+        or (not IsNan(gy) and (Abs(gy) > 5e-5));
+      gx := 0;
+      gy := 0;
+    end;
     gx := gx * scale;
     gy := gy * scale;
   end;

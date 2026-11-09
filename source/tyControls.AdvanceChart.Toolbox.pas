@@ -165,6 +165,9 @@ type
       drawn [was: stroked infinitely wide, the pen raised] }
     BorderWidthInf: Boolean;
     Radius: array of Double;
+    { [R7-AK] borderRadius truthy (RectShape.r): makeBackground's path is
+      roundRect's, its far edges joined where the size is a string }
+    BorderRounded: Boolean;
     { [R7-X] the rest of makeBackground's getItemStyle(['color',
       'opacity']): the shadow (HasShadow) and the border's dash, phase,
       cap, join and miterLimit (Look, TyStyleTakeBorderKeys) -- keys
@@ -185,7 +188,16 @@ type
     { the group's own rect (its children's union) }
     Union: TTyXYWH;
     Background: TTyXYWH;
+    { [R7-AK] the background's size as the string the padding joined ('' a
+      number): `x + width` joins it on a path of corners }
+    BackgroundWText, BackgroundHText: string;
     ViewRect: TTyXYWH;
+    { [R7-AK] A PLACE THAT IS NO NUMBER (a padding side undefined, '4' or
+      [4]: positionElement's x NaN). UnplacedT: the group has a transform
+      (a coordinate not around nought), which the canvas refuses -- every
+      part in its own frame under the transform the canvas had; else none
+      -- the icons at their own places in the canvas' frame }
+    Unplaced, UnplacedT: Boolean;
   end;
 
   { A hovered title's anchor, canvas CSS px: the text's position and its
@@ -876,6 +888,7 @@ begin
   Result.Look.StrokeWidthLogical := Result.BorderWidth;
   TyStTakePenKeys(Result.Look, [tb, root], [], False, [spkEnds, spkDash], joinHas);
   d := tb.Find('borderRadius');
+  Result.BorderRounded := TyJsTruthyOf(d);
   if d is TJSONArray then
   begin
     SetLength(Result.Radius, TJSONArray(d).Count);
@@ -1208,13 +1221,14 @@ var
   box: TTyRawBox;
   { [R7-AI] the place as JS holds it }
   xv, yv: TTyRtJs;
+  { [R7-AK] the background's size as JS holds it }
+  jw, jh: TTyRtJs;
 begin
   Result := Default(TTyToolboxLayout);
   if not ASpec.Show then Exit;
-  { [R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
-    the group draws under the transform the canvas kept -- laid out here as
-    nothing }
-  if ASpec.PadJs.Js and TyJsPadUndef(ASpec.PadJs) then Exit;
+  { ([R7-AI] a padding side undefined ('4', [4]): upstream's place is NaN and
+    the group draws under the transform the canvas kept -- [R7-AK] laid out:
+    Unplaced below [was: nothing]) }
   n := Length(ASpec.Icons);
   for i := 0 to n - 1 do
     ASpec.Icons[i].Rect := TyToolboxIconRect(ASpec, ASpec.Icons[i], ASpec.Icons[i].Status);
@@ -1301,6 +1315,15 @@ begin
   r := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, ASpec.Padding);
   Result.GroupX := APrevX + (r.X - lr.X);
   Result.GroupY := APrevY + (r.Y - lr.Y);
+  { [R7-AK] placed at NaN: its transform refused where it has one
+    (needLocalTransform, NaN around nought) }
+  if IsNan(Result.GroupX) or IsNan(Result.GroupY) or IsInfinite(Result.GroupX)
+    or IsInfinite(Result.GroupY) then
+  begin
+    Result.Unplaced := True;
+    Result.UnplacedT := (not IsNan(Result.GroupX) and NotAroundZero(Result.GroupX))
+      or (not IsNan(Result.GroupY) and NotAroundZero(Result.GroupY));
+  end;
   { makeBackground }
   Result.Background.X := rect.X - ASpec.Padding[3];
   Result.Background.Y := rect.Y - ASpec.Padding[0];
@@ -1309,10 +1332,15 @@ begin
   { ([R7-AI] its size joined where a side is a string) }
   if ASpec.PadJs.Js then
   begin
-    Result.Background.W := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.W), TyJsPadV(ASpec.PadJs, 1)),
-      TyJsPadV(ASpec.PadJs, 3)).N;
-    Result.Background.H := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.H), TyJsPadV(ASpec.PadJs, 0)),
-      TyJsPadV(ASpec.PadJs, 2)).N;
+    jw := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.W), TyJsPadV(ASpec.PadJs, 1)),
+      TyJsPadV(ASpec.PadJs, 3));
+    jh := TyRtJsAdd(TyRtJsAdd(TyRtJsNum(rect.H), TyJsPadV(ASpec.PadJs, 0)),
+      TyJsPadV(ASpec.PadJs, 2));
+    Result.Background.W := jw.N;
+    Result.Background.H := jh.N;
+    { ([R7-AK] and the strings, for a path of corners) }
+    if jw.IsStr then Result.BackgroundWText := jw.S;
+    if jh.IsStr then Result.BackgroundHText := jh.S;
   end;
   { the titles kept on the canvas }
   for i := 0 to n - 1 do

@@ -657,6 +657,10 @@ type
     Text: array[0..3] of string;
   end;
 
+  { [R7-AK] boxes, in a text's own frame (the rects rectContain reads off
+    the TSpans laid out at NaN) }
+  TTyRtBoxArray = array of TTyXYWH;
+
 
   { A TEXT'S STYLE AS THE SITE HOLDS IT BEFORE LAYOUT: zrender's block style
     and its rich styles, resolved from the option by AdvanceChart.RichStyle.

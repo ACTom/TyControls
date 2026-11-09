@@ -893,6 +893,21 @@ const R7AI_CASES = [
       matrix: { left: 20, top: 200, width: 200, height: 60, x: { data: ['Pp', 'Qq'], label: { color: '#333333', padding: '12', backgroundColor: '#eeeeee' } }, y: { data: ['U'], label: { color: '#333333' } } },
       series: [Object.assign({ type: 'gauge', center: ['70%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
         detail: { fontSize: 20, color: '#222222', backgroundColor: '#dddddd', padding: '12' } }, GAUGE_BARE, NO_AXIS)] }) },
+  // [R7-AK] a treemap's label padded as a string: TreemapView's width is the
+  // cell's less normalizeCssArray(padding)'s sides as numbers ('12': less 2
+  // and 2), and the words joined as any label's
+  { name: 'strpad-treemap', looks: true, r7ai: true, note: "a treemap's labels padded '12' over a plate and '21' plain: the box the cell's less the sides as numbers, the words joined",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { color: '#333333', padding: '12', backgroundColor: '#eeeeee' },
+      levels: [{}, { label: { padding: '21', backgroundColor: null } }], data: TM_DATA }] }) },
+  // [R7-AK] an axis pointer's label padded as a string: buildLabelElOption's
+  // `textRect.width + paddings[1] + paddings[3]` joined, the place confined by
+  // the joined size, the Text padded as any label
+  { name: 'strpad-ptr', looks: true, r7ai: true, note: "x and y axis pointers' labels padded '12' and '21' over a plate: the size joined ('..22'), confined to the corner by `position[0] + width` joined; a left and a centred one",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', { color: '#333333', backgroundColor: '#eeeeee', padding: '12' })),
+      yAxis: val(PTR_SHOW(120, { color: '#333333', backgroundColor: '#eeeeee', padding: '21' })) }) },
+  { name: 'strpad-ptr-plain', looks: true, r7ai: true, note: "the same with no plate and ['3', 4]: the words joined, the box the confine's",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Wed', { color: '#333333', backgroundColor: 'rgba(0,0,0,0)', padding: ['3', 4] })) }) },
 ];
 
 const R7N_POINTER_CASES = [

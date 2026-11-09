@@ -3446,6 +3446,10 @@ type
     function TitleLineEl(AIndex, ALine: Integer; AInk: TTyColor;
       const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
     function BuildTitles(AList: TTyPaintList; APPI: Integer): Integer;
+    { [R7-AK] a line of a title placed at NaN (a padding side undefined), as
+      its TSpan stands }
+    function TitleUnplacedLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+      const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
     procedure TitlesNote;
     { One colour per SECTOR, not one per series: a pie is colorBy:data. }
     function PieVisual(ASlot: Integer): TTyPieVisual;
@@ -4763,6 +4767,10 @@ type
       rect in the label's font, grown by the padding -- device px }
     function PtrLabelBoxSize(const AL: TTyPtrLabel; const AText: string;
       const AMeasurer: ITyTextMeasurer; out AW, AH: Double): Boolean;
+    { [R7-AK] confineInContainer on the label's box (device px), its size
+      joined where the padding is a string }
+    procedure PtrLabelConfine(const AL: TTyPtrLabel; const AText: string;
+      const AMeasurer: ITyTextMeasurer; AW, AH, AViewW, AViewH: Double; var AX, AY: Double);
     { [R7-N] the label's text laid out in its block, hung at (AX, AY) device
       px, drawn (APainter nil: only laid out) and logged for
       PointerLabelsDrawn }

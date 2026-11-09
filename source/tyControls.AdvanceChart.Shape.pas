@@ -179,6 +179,17 @@ function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartS
   More than four are ignored past the fourth; none at all is a plain rect. }
 function TyShapeRoundRect(const ABounds: TTyRectF;
   const ARadii: array of Double): TTyChartShape; overload;
+{ [R7-AK] roundRect.ts' PATH WITH ITS FAR EDGES GIVEN: a box whose size
+  zrender holds as a string (a component's background, a padding '12'
+  joined to it) runs from AX, AY to AXW, AYH -- `x + width` and `y +
+  height` joined, read as numbers by the canvas ('-2' + '1222' is -21222)
+  -- with its corners ARadii (the four, top-left first) cut against the
+  size's numbers AW, AH as roundRect.ts cuts them. A command whose
+  arguments are not all finite is left out, as the canvas ignores it (a
+  line after none starts the path). Arcs as cubics; a polygon of the
+  vertices carrying the commands, its bounds theirs. }
+function TyShapeRoundPathJoined(AX, AY, AXW, AYH, AW, AH: Double;
+  const ARadii: TTyCornerRadii): TTyChartShape;
 { zrender's expansion rule on its own, so a caller that has to talk about
   corners before it has a shape can. }
 function TyCornerRadii(const AValues: array of Double): TTyCornerRadii;
@@ -571,6 +582,101 @@ end;
 function TyShapeRoundRect(const ABounds: TTyRectF; ARadiusPx: Double): TTyChartShape;
 begin
   Result := TyShapeRoundRect(ABounds, [ARadiusPx]);
+end;
+
+function TyShapeRoundPathJoined(AX, AY, AXW, AYH, AW, AH: Double;
+  const ARadii: TTyCornerRadii): TTyChartShape;
+var
+  r: TTyCornerRadii;
+  nc, np, k: Integer;
+  hasCur: Boolean;
+  curX, curY: Double;
+
+  function Fin(A: Double): Boolean;
+  begin
+    Result := not (IsNan(A) or IsInfinite(A));
+  end;
+
+  procedure Add(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AXe, AYe: Double);
+  begin
+    if nc >= Length(Result.Cmds) then SetLength(Result.Cmds, nc * 2 + 8);
+    Result.Cmds[nc] := Default(TTyPathCmd);
+    Result.Cmds[nc].Kind := AKind;
+    Result.Cmds[nc].X1 := AX1;
+    Result.Cmds[nc].Y1 := AY1;
+    Result.Cmds[nc].X2 := AX2;
+    Result.Cmds[nc].Y2 := AY2;
+    Result.Cmds[nc].X := AXe;
+    Result.Cmds[nc].Y := AYe;
+    Inc(nc);
+    if AKind = pckClose then Exit;
+    if np >= Length(Result.Points) then SetLength(Result.Points, np * 2 + 8);
+    Result.Points[np] := TyPointF(AXe, AYe);
+    Inc(np);
+    hasCur := True;
+    curX := AXe;
+    curY := AYe;
+  end;
+
+  procedure MoveTo(APx, APy: Double);
+  begin
+    if Fin(APx) and Fin(APy) then Add(pckMove, 0, 0, 0, 0, APx, APy);
+  end;
+
+  procedure LineTo(APx, APy: Double);
+  begin
+    if not (Fin(APx) and Fin(APy)) then Exit;
+    if hasCur then Add(pckLine, 0, 0, 0, 0, APx, APy)
+    else Add(pckMove, 0, 0, 0, 0, APx, APy);
+  end;
+
+  { a quarter turn clockwise from AA0, as the canvas' arc: a line to its
+    start first (a move where nothing is drawn yet) }
+  procedure Arc(ACX, ACY, AR, AA0: Double);
+  var a1, kk, c0, s0, c1, s1: Double;
+  begin
+    if not (Fin(ACX) and Fin(ACY) and Fin(AR)) then Exit;
+    a1 := AA0 + Pi / 2;
+    c0 := Cos(AA0); s0 := Sin(AA0);
+    c1 := Cos(a1); s1 := Sin(a1);
+    LineTo(ACX + AR * c0, ACY + AR * s0);
+    kk := 4 / 3 * Tan(Pi / 8);
+    Add(pckCurve, ACX + AR * (c0 - kk * s0), ACY + AR * (s0 + kk * c0),
+      ACX + AR * (c1 + kk * s1), ACY + AR * (s1 - kk * c1), ACX + AR * c1, ACY + AR * s1);
+  end;
+
+begin
+  Result := EmptyShape(cskPolygon);
+  nc := 0;
+  np := 0;
+  hasCur := False;
+  curX := 0;
+  curY := 0;
+  r := ARadii;
+  ClampCorners(r, AW, AH);
+  MoveTo(AX + r[0], AY);
+  LineTo(AXW - r[1], AY);
+  if r[1] <> 0 then Arc(AXW - r[1], AY + r[1], r[1], -Pi / 2);
+  LineTo(AXW, AYH - r[2]);
+  if r[2] <> 0 then Arc(AXW - r[2], AYH - r[2], r[2], 0);
+  LineTo(AX + r[3], AYH);
+  if r[3] <> 0 then Arc(AX + r[3], AYH - r[3], r[3], Pi / 2);
+  LineTo(AX, AY + r[0]);
+  if r[0] <> 0 then Arc(AX + r[0], AY + r[0], r[0], Pi);
+  if hasCur then Add(pckClose, 0, 0, 0, 0, curX, curY);
+  SetLength(Result.Cmds, nc);
+  SetLength(Result.Points, np);
+  if np = 0 then Exit;
+  Result.Bounds := TyRectF(Result.Points[0].X, Result.Points[0].Y, Result.Points[0].X, Result.Points[0].Y);
+  for k := 1 to np - 1 do
+  begin
+    Result.Bounds.Left := Min(Result.Bounds.Left, Result.Points[k].X);
+    Result.Bounds.Top := Min(Result.Bounds.Top, Result.Points[k].Y);
+    Result.Bounds.Right := Max(Result.Bounds.Right, Result.Points[k].X);
+    Result.Bounds.Bottom := Max(Result.Bounds.Bottom, Result.Points[k].Y);
+  end;
+  Result.HasCmdBounds := True;
+  Result.CmdBounds := Result.Bounds;
 end;
 
 function TyBoxRadiiOf(AData: TJSONData): TTyCornerRadii;

@@ -508,6 +508,15 @@
    "heightText": "12"
   },
   {
+   "text": "120.00",
+   "px": 12,
+   "mono": false,
+   "width": "40427ae147ae147b",
+   "widthText": "36.96",
+   "height": "4028000000000000",
+   "heightText": "12"
+  },
+  {
    "text": "130",
    "px": 12,
    "mono": false,
@@ -211003,6 +211012,1653 @@
         "widthText": "22.400000000000002",
         "height": "4034000000000000",
         "heightText": "20"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    }
+   ],
+   "looks": true,
+   "r7ai": true
+  },
+  {
+   "name": "strpad-treemap",
+   "note": "a treemap's labels padded '12' over a plate and '21' plain: the box the cell's less the sides as numbers, the words joined",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "treemap",
+      "top": 10,
+      "bottom": 60,
+      "breadcrumb": {
+       "show": false
+      },
+      "label": {
+       "color": "#333333",
+       "padding": "12",
+       "backgroundColor": "#eeeeee"
+      },
+      "levels": [
+       {},
+       {
+        "label": {
+         "padding": "21",
+         "backgroundColor": null
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "Alpha",
+        "children": [
+         {
+          "name": "a1",
+          "value": 3
+         },
+         {
+          "name": "a2 long name here",
+          "value": 2
+         }
+        ]
+       },
+       {
+        "name": "Beta",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "record": [
+    "seriesLabel"
+   ],
+   "match": null,
+   "texts": [
+    {
+     "component": "seriesLabel",
+     "owner": "series0",
+     "attached": true,
+     "text": "a1",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "405c555555555555",
+      "4065e00000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "113.33333333333333",
+      "175"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "405c555555555555",
+       "xText": "113.33333333333333",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": {
+      "fill": "#eee",
+      "stroke": "#5070dd",
+      "autoStroke": true,
+      "align": "center",
+      "verticalAlign": "middle",
+      "overflowRect": false
+     },
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "1",
+       "2",
+       "1",
+       "2"
+      ],
+      "width": "4066d55555555555",
+      "widthText": "182.66666666666666",
+      "height": "4074800000000000",
+      "heightText": "328",
+      "overflow": "truncate",
+      "lineOverflow": "truncate",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "c056d55555555555",
+       "xText": "-91.33333333333333",
+       "y": "c0d0056000000000",
+       "yText": "-16405.5",
+       "width": "4066d55555555555",
+       "widthText": "182.66666666666666",
+       "height": "40e0056000000000",
+       "heightText": "32811",
+       "corners": [
+        {
+         "x": "4036000000000000",
+         "xText": "22",
+         "y": "c0cfb34000000000",
+         "yText": "-16230.5"
+        },
+        {
+         "x": "4069955555555555",
+         "xText": "204.66666666666666",
+         "y": "c0cfb34000000000",
+         "yText": "-16230.5"
+        },
+        {
+         "x": "4069955555555555",
+         "xText": "204.66666666666666",
+         "y": "40d0312000000000",
+         "yText": "16580.5"
+        },
+        {
+         "x": "4036000000000000",
+         "xText": "22",
+         "y": "40d0312000000000",
+         "yText": "16580.5"
+        }
+       ],
+       "aabb": {
+        "x": "4036000000000000",
+        "xText": "22",
+        "y": "c0cfb34000000000",
+        "yText": "-16230.5",
+        "width": "4066d55555555555",
+        "widthText": "182.66666666666666",
+        "height": "40e0056000000000",
+        "heightText": "32811"
+       },
+       "pathNaN": true,
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": null,
+       "r4": [
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "r4Text": [
+        "0",
+        "0",
+        "0",
+        "0"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "a1",
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "gx": "405c555555555555",
+       "gxText": "113.33333333333333",
+       "gy": "4065e00000000000",
+       "gyText": "175",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "c01ae147ae147ae2",
+        "xText": "-6.720000000000001",
+        "y": "c018000000000000",
+        "yText": "-6",
+        "width": "402ae147ae147ae2",
+        "widthText": "13.440000000000001",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "seriesLabel",
+     "owner": "series0",
+     "attached": true,
+     "text": "a2 long name here",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "4070ce38e38e38e4",
+      "4065e00000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "268.8888888888889",
+      "175"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "4070ce38e38e38e4",
+       "xText": "268.8888888888889",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": {
+      "fill": "#eee",
+      "stroke": "#5070dd",
+      "autoStroke": true,
+      "align": "center",
+      "verticalAlign": "middle",
+      "overflowRect": false
+     },
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "1",
+       "2",
+       "1",
+       "2"
+      ],
+      "width": "405e1c71c71c71ca",
+      "widthText": "120.44444444444449",
+      "height": "4074800000000000",
+      "heightText": "328",
+      "overflow": "truncate",
+      "lineOverflow": "truncate",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "c04e1c71c71c71ca",
+       "xText": "-60.22222222222224",
+       "y": "c0d0056000000000",
+       "yText": "-16405.5",
+       "width": "405e1c71c71c71ca",
+       "widthText": "120.44444444444449",
+       "height": "40e0056000000000",
+       "heightText": "32811",
+       "corners": [
+        {
+         "x": "406a155555555556",
+         "xText": "208.66666666666669",
+         "y": "c0cfb34000000000",
+         "yText": "-16230.5"
+        },
+        {
+         "x": "407491c71c71c71d",
+         "xText": "329.11111111111114",
+         "y": "c0cfb34000000000",
+         "yText": "-16230.5"
+        },
+        {
+         "x": "407491c71c71c71d",
+         "xText": "329.11111111111114",
+         "y": "40d0312000000000",
+         "yText": "16580.5"
+        },
+        {
+         "x": "406a155555555556",
+         "xText": "208.66666666666669",
+         "y": "40d0312000000000",
+         "yText": "16580.5"
+        }
+       ],
+       "aabb": {
+        "x": "406a155555555556",
+        "xText": "208.66666666666669",
+        "y": "c0cfb34000000000",
+        "yText": "-16230.5",
+        "width": "405e1c71c71c71c8",
+        "widthText": "120.44444444444446",
+        "height": "40e0056000000000",
+        "heightText": "32811"
+       },
+       "pathNaN": true,
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": null,
+       "r4": [
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "r4Text": [
+        "0",
+        "0",
+        "0",
+        "0"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "a2 long name here",
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "gx": "4070ce38e38e38e4",
+       "gxText": "268.8888888888889",
+       "gy": "4065e00000000000",
+       "gyText": "175",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "c04923d70a3d70a3",
+        "xText": "-50.279999999999994",
+        "y": "c018000000000000",
+        "yText": "-6",
+        "width": "405923d70a3d70a3",
+        "widthText": "100.55999999999999",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    },
+    {
+     "component": "seriesLabel",
+     "owner": "series0",
+     "attached": true,
+     "text": "Beta",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407c78e38e38e38e",
+      "4065e00000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "455.55555555555554",
+      "175"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "407c78e38e38e38e",
+       "xText": "455.55555555555554",
+       "y": "4065e00000000000",
+       "yText": "175"
+      }
+     },
+     "align": "center",
+     "verticalAlign": "middle",
+     "defaultStyle": {
+      "fill": "#333",
+      "stroke": null,
+      "autoStroke": true,
+      "align": "center",
+      "verticalAlign": "middle",
+      "overflowRect": false
+     },
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "2",
+       "1",
+       "2",
+       "1"
+      ],
+      "width": "406edc71c71c71c6",
+      "widthText": "246.88888888888886",
+      "height": "4074600000000000",
+      "heightText": "326",
+      "overflow": "truncate",
+      "lineOverflow": "truncate",
+      "backgroundColor": "#eeeeee",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": null,
+     "bounds": null,
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "c05edc71c71c71c6",
+       "xText": "-123.44444444444443",
+       "y": "c0cfdb8000000000",
+       "yText": "-16311",
+       "width": "406edc71c71c71c6",
+       "widthText": "246.88888888888886",
+       "height": "40dfdb8000000000",
+       "heightText": "32622",
+       "corners": [
+        {
+         "x": "4074c1c71c71c71c",
+         "xText": "332.1111111111111",
+         "y": "c0cf840000000000",
+         "yText": "-16136"
+        },
+        {
+         "x": "4082180000000000",
+         "xText": "579",
+         "y": "c0cf840000000000",
+         "yText": "-16136"
+        },
+        {
+         "x": "4082180000000000",
+         "xText": "579",
+         "y": "40d0198000000000",
+         "yText": "16486"
+        },
+        {
+         "x": "4074c1c71c71c71c",
+         "xText": "332.1111111111111",
+         "y": "40d0198000000000",
+         "yText": "16486"
+        }
+       ],
+       "aabb": {
+        "x": "4074c1c71c71c71c",
+        "xText": "332.1111111111111",
+        "y": "c0cf840000000000",
+        "yText": "-16136",
+        "width": "406edc71c71c71c8",
+        "widthText": "246.8888888888889",
+        "height": "40dfdb8000000000",
+        "heightText": "32622"
+       },
+       "pathNaN": true,
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": null,
+       "r4": [
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "r4Text": [
+        "0",
+        "0",
+        "0",
+        "0"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "Beta",
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "gx": "407c78e38e38e38e",
+       "gxText": "455.55555555555554",
+       "gy": "4065e00000000000",
+       "gyText": "175",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "center",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "c028d70a3d70a3d8",
+        "xText": "-12.420000000000002",
+        "y": "c018000000000000",
+        "yText": "-6",
+        "width": "4038d70a3d70a3d8",
+        "widthText": "24.840000000000003",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null
+      }
+     ]
+    }
+   ],
+   "looks": true,
+   "r7ai": true
+  },
+  {
+   "name": "strpad-ptr",
+   "note": "x and y axis pointers' labels padded '12' and '21' over a plate: the size joined ('..22'), confined to the corner by `position[0] + width` joined; a left and a centred one",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisPointer": {
+      "show": true,
+      "value": "Tue",
+      "status": "show",
+      "label": {
+       "show": true,
+       "color": "#333333",
+       "backgroundColor": "#eeeeee",
+       "padding": "12"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "value": 120,
+      "status": "show",
+      "label": {
+       "show": true,
+       "color": "#333333",
+       "backgroundColor": "#eeeeee",
+       "padding": "21"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       120,
+       200,
+       150
+      ]
+     }
+    ]
+   },
+   "record": [
+    "pointerLabel"
+   ],
+   "match": null,
+   "texts": [
+    {
+     "component": "pointerLabel",
+     "owner": "yAxis0",
+     "attached": false,
+     "text": "120.00",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0"
+      }
+     },
+     "align": null,
+     "verticalAlign": null,
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "2",
+       "1",
+       "2",
+       "1"
+      ],
+      "backgroundColor": "#eeeeee",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "borderRadius": "4008000000000000",
+      "borderRadiusText": "3",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "40427b05532617c2",
+      "widthText": "36.9611",
+      "height": "4093180000000000",
+      "heightText": "1222",
+      "corners": [
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "40427b05532617c2",
+        "xText": "36.9611",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "40427b05532617c2",
+        "xText": "36.9611",
+        "y": "4093180000000000",
+        "yText": "1222"
+       },
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "4093180000000000",
+        "yText": "1222"
+       }
+      ],
+      "aabb": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40427b05532617c2",
+       "widthText": "36.9611",
+       "height": "4093180000000000",
+       "heightText": "1222"
+      }
+     },
+     "bounds": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "4042fae147ae147b",
+      "widthText": "37.96",
+      "height": "4093180000000000",
+      "heightText": "1222",
+      "corners": [
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4042fae147ae147b",
+        "xText": "37.96",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4042fae147ae147b",
+        "xText": "37.96",
+        "y": "4093180000000000",
+        "yText": "1222"
+       },
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "4093180000000000",
+        "yText": "1222"
+       }
+      ],
+      "aabb": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "4042fae147ae147b",
+       "widthText": "37.96",
+       "height": "4093180000000000",
+       "heightText": "1222"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40427b05532617c2",
+       "widthText": "36.9611",
+       "height": "4093180000000000",
+       "heightText": "1222",
+       "corners": [
+        {
+         "x": "0000000000000000",
+         "xText": "0",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "40427b05532617c2",
+         "xText": "36.9611",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "40427b05532617c2",
+         "xText": "36.9611",
+         "y": "4093180000000000",
+         "yText": "1222"
+        },
+        {
+         "x": "0000000000000000",
+         "xText": "0",
+         "y": "4093180000000000",
+         "yText": "1222"
+        }
+       ],
+       "aabb": {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "40427b05532617c2",
+        "widthText": "36.9611",
+        "height": "4093180000000000",
+        "heightText": "1222"
+       },
+       "pathBounds": {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "40427b05532617c2",
+        "widthText": "36.9611",
+        "height": "4093180000000000",
+        "heightText": "1222"
+       },
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": "4008000000000000",
+       "rRawText": "3",
+       "r4": [
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000"
+       ],
+       "r4Text": [
+        "3",
+        "3",
+        "3",
+        "3"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "120.00",
+       "x": "3ff0000000000000",
+       "xText": "1",
+       "y": "404f000000000000",
+       "yText": "62",
+       "gx": "3ff0000000000000",
+       "gxText": "1",
+       "gy": "404f000000000000",
+       "gyText": "62",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "01",
+        "y": "404c000000000000",
+        "yText": "56",
+        "width": "40427ae147ae147b",
+        "widthText": "36.96",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null,
+       "hit": [
+        "3ff0000000000000",
+        "404c000000000000",
+        "40611eb851eb851f",
+        "4051000000000000"
+       ]
+      }
+     ]
+    },
+    {
+     "component": "pointerLabel",
+     "owner": "xAxis0",
+     "attached": false,
+     "text": "Tue",
+     "rich": false,
+     "transform": null,
+     "transformText": null,
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0"
+      }
+     },
+     "align": null,
+     "verticalAlign": null,
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "1",
+       "2",
+       "1",
+       "2"
+      ],
+      "backgroundColor": "#eeeeee",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "borderRadius": "4008000000000000",
+      "borderRadiusText": "3",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "4034c31f8a0902de",
+      "widthText": "20.7622",
+      "height": "4092ec0000000000",
+      "heightText": "1211",
+      "corners": [
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4034c31f8a0902de",
+        "xText": "20.7622",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4034c31f8a0902de",
+        "xText": "20.7622",
+        "y": "4092ec0000000000",
+        "yText": "1211"
+       },
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "4092ec0000000000",
+        "yText": "1211"
+       }
+      ],
+      "aabb": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "4034c31f8a0902de",
+       "widthText": "20.7622",
+       "height": "4092ec0000000000",
+       "heightText": "1211"
+      }
+     },
+     "bounds": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "4036c28f5c28f5c3",
+      "widthText": "22.76",
+      "height": "4092ec0000000000",
+      "heightText": "1211",
+      "corners": [
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4036c28f5c28f5c3",
+        "xText": "22.76",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "4036c28f5c28f5c3",
+        "xText": "22.76",
+        "y": "4092ec0000000000",
+        "yText": "1211"
+       },
+       {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "4092ec0000000000",
+        "yText": "1211"
+       }
+      ],
+      "aabb": {
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "4036c28f5c28f5c3",
+       "widthText": "22.76",
+       "height": "4092ec0000000000",
+       "heightText": "1211"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "4034c31f8a0902de",
+       "widthText": "20.7622",
+       "height": "4092ec0000000000",
+       "heightText": "1211",
+       "corners": [
+        {
+         "x": "0000000000000000",
+         "xText": "0",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "4034c31f8a0902de",
+         "xText": "20.7622",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "4034c31f8a0902de",
+         "xText": "20.7622",
+         "y": "4092ec0000000000",
+         "yText": "1211"
+        },
+        {
+         "x": "0000000000000000",
+         "xText": "0",
+         "y": "4092ec0000000000",
+         "yText": "1211"
+        }
+       ],
+       "aabb": {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "4034c31f8a0902de",
+        "widthText": "20.7622",
+        "height": "4092ec0000000000",
+        "heightText": "1211"
+       },
+       "pathBounds": {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "4034c31f8a0902de",
+        "widthText": "20.7622",
+        "height": "4092ec0000000000",
+        "heightText": "1211"
+       },
+       "fill": "#eeeeee",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": "4008000000000000",
+       "rRawText": "3",
+       "r4": [
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000"
+       ],
+       "r4Text": [
+        "3",
+        "3",
+        "3",
+        "3"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "Tue",
+       "x": "4000000000000000",
+       "xText": "2",
+       "y": "404e800000000000",
+       "yText": "61",
+       "gx": "4000000000000000",
+       "gxText": "2",
+       "gy": "404e800000000000",
+       "gyText": "61",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "02",
+        "y": "404b800000000000",
+        "yText": "55",
+        "width": "4034c28f5c28f5c3",
+        "widthText": "20.76",
+        "height": "4028000000000000",
+        "heightText": "12"
+       },
+       "lineDashOffset": null,
+       "hit": [
+        "4000000000000000",
+        "404b800000000000",
+        "406b9851eb851eb8",
+        "4050c00000000000"
+       ]
+      }
+     ]
+    }
+   ],
+   "looks": true,
+   "r7ai": true
+  },
+  {
+   "name": "strpad-ptr-plain",
+   "note": "the same with no plate and ['3', 4]: the words joined, the box the confine's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisPointer": {
+      "show": true,
+      "value": "Wed",
+      "status": "show",
+      "label": {
+       "show": true,
+       "color": "#333333",
+       "backgroundColor": "rgba(0,0,0,0)",
+       "padding": [
+        "3",
+        4
+       ]
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       120,
+       200,
+       150
+      ]
+     }
+    ]
+   },
+   "record": [
+    "pointerLabel"
+   ],
+   "match": null,
+   "texts": [
+    {
+     "component": "pointerLabel",
+     "owner": "xAxis0",
+     "attached": false,
+     "text": "Wed",
+     "rich": false,
+     "transform": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000",
+      "407c0a3d70a3d70a",
+      "0000000000000000"
+     ],
+     "transformText": [
+      "1",
+      "0",
+      "0",
+      "1",
+      "448.64",
+      "0"
+     ],
+     "anchor": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "g": {
+       "x": "407c0a3d70a3d70a",
+       "xText": "448.64",
+       "y": "0000000000000000",
+       "yText": "0"
+      }
+     },
+     "align": null,
+     "verticalAlign": null,
+     "defaultStyle": null,
+     "style": {
+      "font": "normal normal 12px Microsoft YaHei",
+      "fontStyle": "normal",
+      "fontWeight": "normal",
+      "fontSize": "4028000000000000",
+      "fontSizeText": "12",
+      "fontFamily": "Microsoft YaHei",
+      "fill": "#333333",
+      "opacity": "3ff0000000000000",
+      "opacityText": "1",
+      "padding": [
+       "3",
+       4,
+       "3",
+       4
+      ],
+      "backgroundColor": "rgba(0,0,0,0)",
+      "borderWidth": "0000000000000000",
+      "borderWidthText": "0",
+      "borderRadius": "4008000000000000",
+      "borderRadiusText": "3",
+      "shadowColor": "#000",
+      "shadowBlur": "0000000000000000",
+      "shadowBlurText": "0",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetXText": "0",
+      "shadowOffsetY": "0000000000000000",
+      "shadowOffsetYText": "0"
+     },
+     "richStyles": null,
+     "box": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "40405c28f5c28f5c",
+      "widthText": "32.72",
+      "height": "4093440000000000",
+      "heightText": "1233",
+      "corners": [
+       {
+        "x": "407c0a3d70a3d70a",
+        "xText": "448.64",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "407e15c28f5c28f6",
+        "xText": "481.36",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "407e15c28f5c28f6",
+        "xText": "481.36",
+        "y": "4093440000000000",
+        "yText": "1233"
+       },
+       {
+        "x": "407c0a3d70a3d70a",
+        "xText": "448.64",
+        "y": "4093440000000000",
+        "yText": "1233"
+       }
+      ],
+      "aabb": {
+       "x": "407c0a3d70a3d70a",
+       "xText": "448.64",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40405c28f5c28f60",
+       "widthText": "32.72000000000003",
+       "height": "4093440000000000",
+       "heightText": "1233"
+      }
+     },
+     "bounds": {
+      "x": "0000000000000000",
+      "xText": "0",
+      "y": "0000000000000000",
+      "yText": "0",
+      "width": "40405c28f5c28f5c",
+      "widthText": "32.72",
+      "height": "4093440000000000",
+      "heightText": "1233",
+      "corners": [
+       {
+        "x": "407c0a3d70a3d70a",
+        "xText": "448.64",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "407e15c28f5c28f6",
+        "xText": "481.36",
+        "y": "0000000000000000",
+        "yText": "0"
+       },
+       {
+        "x": "407e15c28f5c28f6",
+        "xText": "481.36",
+        "y": "4093440000000000",
+        "yText": "1233"
+       },
+       {
+        "x": "407c0a3d70a3d70a",
+        "xText": "448.64",
+        "y": "4093440000000000",
+        "yText": "1233"
+       }
+      ],
+      "aabb": {
+       "x": "407c0a3d70a3d70a",
+       "xText": "448.64",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40405c28f5c28f60",
+       "widthText": "32.72000000000003",
+       "height": "4093440000000000",
+       "heightText": "1233"
+      }
+     },
+     "isTruncated": false,
+     "lines": null,
+     "pieces": [
+      {
+       "kind": "rect",
+       "of": "box",
+       "line": null,
+       "token": null,
+       "x": "0000000000000000",
+       "xText": "0",
+       "y": "0000000000000000",
+       "yText": "0",
+       "width": "40405c28f5c28f5c",
+       "widthText": "32.72",
+       "height": "4093440000000000",
+       "heightText": "1233",
+       "corners": [
+        {
+         "x": "407c0a3d70a3d70a",
+         "xText": "448.64",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "407e15c28f5c28f6",
+         "xText": "481.36",
+         "y": "0000000000000000",
+         "yText": "0"
+        },
+        {
+         "x": "407e15c28f5c28f6",
+         "xText": "481.36",
+         "y": "4093440000000000",
+         "yText": "1233"
+        },
+        {
+         "x": "407c0a3d70a3d70a",
+         "xText": "448.64",
+         "y": "4093440000000000",
+         "yText": "1233"
+        }
+       ],
+       "aabb": {
+        "x": "407c0a3d70a3d70a",
+        "xText": "448.64",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "40405c28f5c28f60",
+        "widthText": "32.72000000000003",
+        "height": "4093440000000000",
+        "heightText": "1233"
+       },
+       "pathBounds": {
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "width": "40405c28f5c28f5c",
+        "widthText": "32.72",
+        "height": "4093440000000000",
+        "heightText": "1233"
+       },
+       "fill": "rgba(0,0,0,0)",
+       "fillOpacity": "3ff0000000000000",
+       "fillOpacityText": "1",
+       "stroke": null,
+       "lineWidth": null,
+       "strokeOpacity": null,
+       "strokeFirst": false,
+       "lineDash": null,
+       "rRaw": "4008000000000000",
+       "rRawText": "3",
+       "r4": [
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000",
+        "4008000000000000"
+       ],
+       "r4Text": [
+        "3",
+        "3",
+        "3",
+        "3"
+       ],
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "shadow": null,
+       "drawn": true,
+       "lineDashOffset": null
+      },
+      {
+       "kind": "text",
+       "of": "line",
+       "line": 0,
+       "token": null,
+       "text": "Wed",
+       "x": "4010000000000000",
+       "xText": "4",
+       "y": "404f800000000000",
+       "yText": "63",
+       "gx": "407c4a3d70a3d70a",
+       "gxText": "452.64",
+       "gy": "404f800000000000",
+       "gyText": "63",
+       "font": "normal normal 12px Microsoft YaHei",
+       "px": 12,
+       "mono": false,
+       "fontStyle": "normal",
+       "fontWeight": "normal",
+       "fontSize": "12",
+       "fontFamily": "Microsoft YaHei",
+       "fill": "#333333",
+       "stroke": null,
+       "lineWidth": null,
+       "lineDash": null,
+       "textAlign": "left",
+       "textBaseline": "middle",
+       "opacity": "3ff0000000000000",
+       "opacityText": "1",
+       "strokeFirst": true,
+       "shadow": null,
+       "bbox": {
+        "x": "4010000000000000",
+        "xText": "4",
+        "y": "404c800000000000",
+        "yText": "57",
+        "width": "4038b851eb851eb8",
+        "widthText": "24.72",
+        "height": "4028000000000000",
+        "heightText": "12"
        },
        "lineDashOffset": null
       }

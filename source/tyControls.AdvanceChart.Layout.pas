@@ -31,7 +31,9 @@ uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
      tyControls.AdvanceChart.Paint,
      { [R7-AI] JavaScript's values: a padding written as a string }
-     tyControls.AdvanceChart.RichText;
+     tyControls.AdvanceChart.RichText,
+     { [R7-AK] a background's corners on its joined edges }
+     tyControls.AdvanceChart.Shape;
 
 type
   { How one edge or size is expressed. }
@@ -243,6 +245,19 @@ function TyGetLayoutRect(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   The traps are the caller's to mask. }
 function TyGetLayoutRectJs(const ABox: TTyRawBox; ACX, ACY, ACW, ACH: Double;
   const APad: TTyJsPad; out AXV, AYV: TTyRtJs): TTyXYWH;
+{ [R7-AK] A COMPONENT'S BACKGROUND OF CORNERS WHOSE SIZE A STRING PADDING
+  JOINED (a title's Rect, makeBackground's): roundRect.ts in the group's
+  frame -- AX, AY its place, AW, AH its size (css px), AWText / AHText the
+  size as the string zrender holds ('' a number) -- so `x + width` joins
+  ('-2' + '1222'), its radii ARadii (css px, the four) cut against the
+  size's numbers; placed at the group's origin AOX, AOY (device px), AScale
+  device px a css px }
+function TyJsRoundFrameShape(AX, AY, AW, AH: Double; const AWText, AHText: string;
+  const ARadii: TTyCornerRadii; AOX, AOY, AScale: Double): TTyChartShape;
+{ [R7-AK] JavaScript's truthiness of an option value: nil, null, false, 0,
+  NaN and '' are falsy; every object and array truthy (RectShape.r: a
+  rounded path where it is truthy) }
+function TyJsTruthyOf(AData: TJSONData): Boolean;
 { A box as the shared solver holds it, back in the raw form getLayoutRect
   reads: auto absent, px a number, a percentage its text with a `%`, centre
   the word [Batch 147] }
@@ -972,7 +987,9 @@ implementation
 uses tyControls.AdvanceChart.AxisName, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.AxisBreak,
   tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Data,
-  tyControls.AdvanceChart.RichStyle;
+  tyControls.AdvanceChart.RichStyle,
+  { [R7-AK] String of a number (a joined edge) }
+  tyControls.AdvanceChart.Scale;
 
 type
   TTyFixedContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -2209,6 +2226,47 @@ begin
   Result.Y := AYV.N;
   Result.W := w;
   Result.H := h;
+end;
+
+function TyJsRoundFrameShape(AX, AY, AW, AH: Double; const AWText, AHText: string;
+  const ARadii: TTyCornerRadii; AOX, AOY, AScale: Double): TTyChartShape;
+var
+  xw, yh, w, h: Double;
+  r: TTyCornerRadii;
+  k: Integer;
+begin
+  if not (AScale > 0) then AScale := 1;
+  w := AW;
+  h := AH;
+  { `x + width`, `y + height`: joined where the size is a string }
+  if AWText <> '' then
+  begin
+    xw := TyJsToNumber(TyJsNumberToString(AX) + AWText);
+    w := TyJsToNumber(AWText);
+  end
+  else xw := AX + AW;
+  if AHText <> '' then
+  begin
+    yh := TyJsToNumber(TyJsNumberToString(AY) + AHText);
+    h := TyJsToNumber(AHText);
+  end
+  else yh := AY + AH;
+  for k := 0 to 3 do r[k] := ARadii[k] * AScale;
+  Result := TyShapeRoundPathJoined(AOX + AX * AScale, AOY + AY * AScale,
+    AOX + xw * AScale, AOY + yh * AScale, w * AScale, h * AScale, r);
+end;
+
+function TyJsTruthyOf(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
 end;
 
 { ==================== zrender's matrices ==================== }

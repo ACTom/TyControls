@@ -3393,7 +3393,13 @@ begin
   AFrame.Datum := TyChartNoDatum;
   AFrame.Style := FTitleSpecs[AIndex].Look;
   for k := 0 to 3 do rad[k] := Sc(FTitleSpecs[AIndex].BorderRadii[k]);
-  AFrame.Shape := TyShapeRoundRect(frame, rad);
+  { ([R7-AK] on its joined edges where the size is a string; a title placed
+    at NaN -- a padding side undefined -- has its Rect at NaN, drawing
+    nothing) }
+  if lay.Unplaced then AFrame.Shape := TyShapePolygon([])
+  else
+    AFrame.Shape := TyTitleFrameShape(lay, frame, rad, FTitleSpecs[AIndex].BorderRounded,
+      Sc(FTitleSpecs[AIndex].BorderWidth), Sc(1));
   { [R7-AA] THE RECT IS ALWAYS THERE: its fill the backgroundColor
     ('transparent' by default -- it hands the canvas that fillStyle), its
     stroke colour handed on at a width of nought too [was: built only to
@@ -3524,6 +3530,99 @@ begin
   AEl.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
 end;
 
+{ [R7-AK] A LINE OF A TITLE PLACED AT NaN (a padding side undefined) as its
+  TSpan stands: x 0 aligned, y the line's middle (a block's pieces about
+  the line's anchor, as a placed title's), group-local -- the group at the
+  canvas' corner where it has no transform; False where the line draws
+  nothing }
+function TTyCustomAdvanceChart.TitleUnplacedLineEl(AIndex, ALine: Integer; AInk: TTyColor;
+  const AFont: TTyTitleFont; out AEl: TTyChartElement): Boolean;
+var
+  lay: TTyTitleLayout;
+  txt: string;
+  ox, oy, lineTop, lh, lw: Double;
+  node, d: TJSONData;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  lay := FTitles[AIndex];
+  if lay.UnplacedT then
+  begin
+    ox := 0;
+    oy := 0;
+  end
+  else
+  begin
+    ox := FLastRect.Left;
+    oy := FLastRect.Top;
+  end;
+  if ALine = 0 then
+  begin
+    txt := FTitleSpecs[AIndex].Text;
+    if txt = '' then Exit;
+    lineTop := lay.TextY;
+    lh := lay.TextH;
+    lw := lay.TextW;
+  end
+  else
+  begin
+    txt := FTitleSpecs[AIndex].Subtext;
+    if not lay.HasSub then Exit;
+    lineTop := lay.SubY;
+    lh := lay.SubH;
+    lw := lay.SubW;
+  end;
+  case lay.VAlign of
+    ttvMiddle: lineTop := lineTop - lh / 2;
+    ttvBottom: lineTop := lineTop - lh;
+  end;
+  Result := True;
+  AEl.Silent := True;
+  AEl.Datum := TyChartNoDatum;
+  AEl.Style.Alpha := 1;
+  AEl.Caption.Text := txt;
+  AEl.Caption.FontName := AFont.Name;
+  AEl.Caption.FontSizeLogical := AFont.SizeLogical;
+  AEl.Caption.FontWeight := AFont.Weight;
+  AEl.Caption.Colour := TTyChartColor(AInk);
+  case lay.Align of
+    ttaCentre: AEl.Caption.AnchorH := tahCentre;
+    ttaRight: AEl.Caption.AnchorH := tahRight;
+  else
+    AEl.Caption.AnchorH := tahLeft;
+  end;
+  AEl.Caption.AnchorV := tavMiddle;
+  AEl.Caption.X := ox + lay.TextX;
+  AEl.Caption.Y := oy + lineTop + lh / 2;
+  case lay.Align of
+    ttaCentre: AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X - lw / 2, oy + lineTop, AEl.Caption.X + lw / 2, oy + lineTop + lh));
+    ttaRight: AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X - lw, oy + lineTop, AEl.Caption.X, oy + lineTop + lh));
+  else
+    AEl.Shape := TyShapeRect(TyRectF(AEl.Caption.X, oy + lineTop, AEl.Caption.X + lw, oy + lineTop + lh));
+  end;
+  { a line that is a block: its pieces about the same anchor (SolveTitles
+    lays them out at the line's), as a placed title's }
+  if (AIndex <= High(FTitleRt)) and (Length(FTitleRt[AIndex][ALine].Pieces) > 0) then
+  begin
+    AEl.Caption.RtPieces := Copy(FTitleRt[AIndex][ALine].Pieces, 0, MaxInt);
+    AEl.Caption.RtScale := FTitleRt[AIndex][ALine].Scale;
+    AEl.Caption.AnchorV := tavTop;
+    AEl.Caption.Y := oy + FTitleRt[AIndex][ALine].Y;
+    AEl.Caption.X := ox + FTitleRt[AIndex][ALine].X;
+  end;
+  { a font the canvas refuses: the one the text before left }
+  node := nil;
+  if FOption <> nil then node := FOption.ComponentAt('title', AIndex);
+  if node is TJSONObject then
+  begin
+    if ALine = 0 then d := TJSONObject(node).Find('textStyle')
+    else d := TJSONObject(node).Find('subtextStyle');
+    if FontRefusedOf([d]) then AEl.CanvasFlags := AEl.CanvasFlags or cTyCanvasFontLeft;
+  end;
+  { (no transform of its own: the canvas' frame, as a placed title's) }
+  AEl.CanvasM := TTyDoubleArray.Create(1, 0, 0, 1, 0, 0);
+end;
+
 { [R7-AJ] THE TITLES IN THE LIST, as TitleView adds them to its group: the
   text and the subtext (z2 10), the background Rect (z2 0), every one at
   the title's z and zlevel (updateZ) and its view's place in the root -- one
@@ -3535,8 +3634,11 @@ var
   frame, e: TTyChartElement;
   ink0, ink1: TTyColor;
   f0, f1: TTyTitleFont;
+  { [R7-AK] device px a css px }
+  s: Double;
 begin
   Result := 0;
+  if APPI > 0 then s := APPI / 96 else s := 1;
   FTitleAt := nil;
   SetLength(FTitleAt, Length(FTitles));
   for i := 0 to High(FTitleAt) do
@@ -3556,15 +3658,31 @@ begin
     { (always there, as the Rect is: a box of no fill to see and no pen
       draws nothing -- its shadow neither -- and hands the canvas its fill) }
     AList.Add(frame);
+    { [R7-AK] PLACED AT NaN (a padding side undefined), where the group has
+      a transform the canvas refuses it: every part in its own frame under
+      the transform the canvas had (the box's frame the group's) }
+    if FTitles[i].Unplaced and FTitles[i].UnplacedT then
+      TyElementOwnFrame(AList.Ref(AList.Count - 1)^, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
     for k := 0 to 1 do
     begin
-      if k = 0 then
+      { ([R7-AK] a title placed at NaN: its TSpans as they stand) }
+      if FTitles[i].Unplaced then
+      begin
+        if k = 0 then
+        begin
+          if not TitleUnplacedLineEl(i, 0, ink0, f0, e) then Continue;
+        end
+        else if not TitleUnplacedLineEl(i, 1, ink1, f1, e) then Continue;
+      end
+      else if k = 0 then
       begin
         if not TitleLineEl(i, 0, ink0, f0, e) then Continue;
       end
       else if not TitleLineEl(i, 1, ink1, f1, e) then Continue;
       e.Z := z;
       e.Z2 := 10;
+      if FTitles[i].Unplaced and FTitles[i].UnplacedT then
+        TyElementOwnFrame(e, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
       FTitleAt[i][k + 1] := AList.Count;
       AList.Add(e);
     end;

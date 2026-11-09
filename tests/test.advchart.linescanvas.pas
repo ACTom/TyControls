@@ -108,6 +108,8 @@ type
     font -- zrender's widths and line heights in the lines-canvas run }
   TLcSixMeasurer = class(TInterfacedObject, ITyTextMeasurer)
   public
+    { [R7-AK] device px a css px (the PPI over 96): six css px a unit }
+    Scale: Double;
     procedure MeasureLine(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; out AW, AH: Double);
     function WrapToWidth(const AText, AFontName: string;
@@ -156,6 +158,8 @@ type
     FCtl: TTyStyleController;
     FChart: TLcProbe;
     FRoot: TJSONData;
+    { [R7-AK] CListOf's colour tie-break for every component (RunW's ak-) }
+    FAkTie: Boolean;
     FBmp: TBGRABitmap;
     FBad, FCompared: Integer;
     FReport: string;
@@ -203,6 +207,14 @@ type
       joined rect on the right }
     procedure TestTheR7AICanvasAsUpstream;
     procedure TestTheR7AIHitsAsUpstream;
+    { [R7-AK] a title's frame whose size a string padding joined, at 144
+      PPI: the far edge joined on the css px grid, 1.5 times upstream's }
+    procedure TestAStringPaddedTitleFrameAt144PPI;
+    { [R7-AK] the ak- cases: a component's padding with a side undefined (its
+      parts in their own frames under the transform the canvas had, or at
+      their own places), a background of corners on its joined edges }
+    procedure TestTheR7AKCanvasAsUpstream;
+    procedure TestTheR7AKHitsAsUpstream;
     procedure TestAnUnplacedSlidersLabelsAsUpstream;
     procedure TestAnUnplacedSlidersTurnedClip;
     procedure TestAnInfiniteHaloHandsItsColourAtOnce;
@@ -315,6 +327,12 @@ begin
       Inc(n);
   AW := Max(AW, 6.0 * n);
   AH := 6.0 * lines;
+  { ([R7-AK] at another PPI: in device px) }
+  if (Scale > 0) and (Scale <> 1) then
+  begin
+    AW := AW * Scale;
+    AH := AH * Scale;
+  end;
 end;
 
 function TLcSixMeasurer.WrapToWidth(const AText, AFontName: string;
@@ -324,8 +342,14 @@ begin
 end;
 
 function TLcProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+var sixM: TLcSixMeasurer;
 begin
-  if Six then Result := TLcSixMeasurer.Create
+  if Six then
+  begin
+    sixM := TLcSixMeasurer.Create;
+    if APPI > 0 then sixM.Scale := APPI / 96;
+    Result := sixM;
+  end
   else Result := inherited NewTextMeasurer(APPI);
 end;
 
@@ -592,8 +616,8 @@ begin
       or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') or (Copy(id, 1, 3) = 'af-')
       { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
       or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-')
-      { ([R7-AI] the ai- cases: RunW) }
-      or (Copy(id, 1, 3) = 'ai-') then Continue;
+      { ([R7-AI] the ai- cases: RunW; [R7-AK] the ak- ones too) }
+      or (Copy(id, 1, 3) = 'ai-') or (Copy(id, 1, 3) = 'ak-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
@@ -727,6 +751,10 @@ begin
   if (el.Caption.FontSizeLogical <> 0) and FCapKeys and (el.Datum.SeriesIndex >= 0) then
     Exit(Format('ks%d.%d', [el.Datum.SeriesIndex, el.Datum.DataIndex]));
   if el.Caption.FontSizeLogical <> 0 then Exit('other');
+  { [R7-AK] a legend item's hit rect: its item group's second path (the
+    icon the first) }
+  if el.Datum.Kind = ctkLegend then
+    Exit(Format('c.legend%d.0.p.%d', [el.Datum.ComponentIndex, 2 * el.Datum.DataIndex + 1]));
   case el.Anim.Role of
     carLinesEffect: pre := 'e';
     carLinesFrom: pre := 'f';
@@ -1190,7 +1218,9 @@ begin
         { ([R7-AC] and of those, the one in the colour of the record's
           first op: a dataZoom's shadow of the window and the ones beside
           it lie over one another) }
-        if (ops.Count > 0) and (Copy(ARec.Strings['key'], 1, 4) = 'c.da') then
+        { ([R7-AK] and in the ak- cases: an unplaced legend's icons lie
+          over one another in their own frames) }
+        if (ops.Count > 0) and ((Copy(ARec.Strings['key'], 1, 4) = 'c.da') or FAkTie) then
         begin
           if ops.Objects[0].Strings['op'] = 'fill' then
           begin
@@ -1336,6 +1366,58 @@ end;
 
 { AHits False: the context each fill / stroke / text is made with; True:
   findHover at the probes }
+{ [R7-AK] THE AREA A SHAPE'S PATH ENCLOSES as the recorder takes it: the
+  shoelace over every point of the path in order, one ring -- a curve
+  sampled at 64 steps (the recorder samples an arc at 256) }
+function PathRingArea(const S: TTyChartShape): Double;
+var
+  xs, ys: array of Double;
+  n, k, j: Integer;
+  px, py, t, u, a: Double;
+
+  procedure Put(AX, AY: Double);
+  begin
+    SetLength(xs, n + 1);
+    SetLength(ys, n + 1);
+    xs[n] := AX;
+    ys[n] := AY;
+    Inc(n);
+  end;
+
+begin
+  n := 0;
+  px := 0;
+  py := 0;
+  if Length(S.Cmds) = 0 then
+    for k := 0 to High(S.Points) do Put(S.Points[k].X, S.Points[k].Y)
+  else
+    for k := 0 to High(S.Cmds) do
+      case S.Cmds[k].Kind of
+        pckMove, pckLine:
+          begin
+            Put(S.Cmds[k].X, S.Cmds[k].Y);
+            px := S.Cmds[k].X;
+            py := S.Cmds[k].Y;
+          end;
+        pckCurve:
+          begin
+            for j := 1 to 64 do
+            begin
+              t := j / 64;
+              u := 1 - t;
+              Put(u * u * u * px + 3 * u * u * t * S.Cmds[k].X1 + 3 * u * t * t * S.Cmds[k].X2 + t * t * t * S.Cmds[k].X,
+                u * u * u * py + 3 * u * u * t * S.Cmds[k].Y1 + 3 * u * t * t * S.Cmds[k].Y2 + t * t * t * S.Cmds[k].Y);
+            end;
+            px := S.Cmds[k].X;
+            py := S.Cmds[k].Y;
+          end;
+      end;
+  a := 0;
+  for k := 0 to n - 1 do
+    a := a + xs[k] * ys[(k + 1) mod n] - xs[(k + 1) mod n] * ys[k];
+  Result := Abs(a / 2);
+end;
+
 procedure TAdvChartLinesCanvasOracleTest.RunW(AHits: Boolean; const APrefix: string);
 var
   { [R7-Z] a component's part: its key, z2 and kind }
@@ -1370,13 +1452,16 @@ var
   fps: Double;
   { [R7-AF] the af- cases: as the ae- ones, and a text's place, a clip's path }
   ae, af: Boolean;
+  { [R7-AK] the ak- cases }
+  ak: Boolean;
   fpx, ux, uy: Double;
   fw: Integer;
   ffam: string;
   ring: TJSONArray;
 begin
-  { ([R7-AI] the ai- cases as the af- ones) }
-  af := (APrefix = 'af-') or (APrefix = 'ai-');
+  { ([R7-AI] the ai- cases as the af- ones; [R7-AK] the ak- ones too) }
+  ak := Copy(APrefix, 1, 3) = 'ak-';
+  af := (APrefix = 'af-') or (APrefix = 'ai-') or ak;
   ae := (APrefix = 'ae-') or af;
   strict := APrefix <> 'w-';
   { (and the ac-, ae- ones: R7-AC, R7-AE; [R7-AF] the af- ones; [R7-AG] the ag- ones) }
@@ -1406,7 +1491,8 @@ begin
     PinClocks(FChart);
     FChart.UseDirtyRect := dirty;
     { ([R7-AI] the ai- cases measure as the recording canvas) }
-    FChart.Six := APrefix = 'ai-';
+    FChart.Six := (APrefix = 'ai-') or ak;
+    FAkTie := ak;
     FChart.SetOption(c.Objects['option'].AsJSON, True);
     AssertEquals(id + ' parses', '', FChart.OptionError);
     FBmp.Fill(BGRA(255, 255, 255, 255));
@@ -1440,6 +1526,16 @@ begin
       if t > 0 then FChart.AnimTick(cT0 + t);
       if dirty then FChart.Layered(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96)
       else FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
+      { ([R7-AK] a trace of the list's elements, TY_LC_DUMP) }
+      if GetEnvironmentVariable('TY_LC_DUMP') <> '' then
+        for k := 0 to FChart.Frame.Count - 1 do
+        begin
+          el := FChart.Frame.Element(k);
+          bb := TyShapeBounds(el.Shape);
+          WriteLn(Format('dump %s %d z%d/%d kind%d (%g,%g)-(%g,%g) fill %x txt %s fs%d', [id, k, el.Z, el.Z2,
+            Ord(el.Shape.Kind), bb.Left, bb.Top, bb.Right, bb.Bottom, el.Style.FillColor, el.Caption.Text,
+            Length(el.FrameShape)]));
+        end;
       if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
         FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
       if AHits then
@@ -1606,6 +1702,15 @@ begin
                   < StrToInt(parts3)) then Inc(n);
             FChart.CompPartNth(ckey, cz2, ctext, n, el);
           end
+          { ([R7-AK] a title's words in the ak- cases: the list's element of
+            the record's text -- the subtext apart from the text -- now that
+            the title is the list's) }
+          else if ak and comp and ctext and (Copy(ckey, 1, 5) = 'title') then
+          begin
+            q2 := CListOf(rec, True, cz2);
+            if q2 >= 0 then el := FChart.Frame.Element(q2)
+            else FChart.CompPart(ckey, cz2, ctext, op, el);
+          end
           else if comp then FChart.CompPart(ckey, cz2, ctext, op, el);
           for n := 0 to 5 do m[n] := HexD(o.Arrays['m'].Strings[n]);
           { the line scale of the transform the op is made under }
@@ -1616,7 +1721,11 @@ begin
               its anchor): the op's transform at the span's (x, y) against
               the caption's anchor -- under a whole map, the map's origin and
               its linear part the op's -- its alignment and font }
-            if af and (o.Find('tp') <> nil) and (Copy(key, 1, 11) = 'c.dataZoom0') then
+            { ([R7-AK] and an unplaced component's words in the list) }
+            if af and (o.Find('tp') <> nil) and ((Copy(key, 1, 11) = 'c.dataZoom0')
+              or (ak and not comp and (Copy(key, 1, 2) = 'c.'))
+              { ([R7-AK] and a title placed at NaN: its TSpans as they stand) }
+              or (ak and comp and (Copy(ckey, 1, 5) = 'title') and (el.Caption.AnchorV = tavMiddle))) then
             begin
               ux := m[0] * HexD(o.Arrays['tp'].Strings[0]) + m[2] * HexD(o.Arrays['tp'].Strings[1]) + m[4];
               uy := m[1] * HexD(o.Arrays['tp'].Strings[0]) + m[3] * HexD(o.Arrays['tp'].Strings[1]) + m[5];
@@ -1645,11 +1754,24 @@ begin
                 Miss(Format('%s: text aligned %s, upstream %s / %s', [where, want, o.Strings['al'], o.Strings['bl']]));
               FontOfCss(o.Strings['font'], fpx, fw, ffam);
               Inc(FCompared);
-              { (the port's weight nought is the normal one) }
-              if (Abs(TyFontPxOf(el.Caption.FontSizeLogical) - fpx) > 1e-9)
+              { (the port's weight nought is the normal one; [R7-AK] a
+                component's words in the skin's font: not compared) }
+              if (Copy(key, 1, 11) <> 'c.dataZoom0') then
+              else if (Abs(TyFontPxOf(el.Caption.FontSizeLogical) - fpx) > 1e-9)
                 or ((el.Caption.FontWeight <> fw) and not ((el.Caption.FontWeight = 0) and (fw = 400))) then
                 Miss(Format('%s: text of %gpx weight %d, upstream %s', [where,
                   TyFontPxOf(el.Caption.FontSizeLogical), el.Caption.FontWeight, o.Strings['font']]));
+            end;
+            { [R7-AK] AN AXIS POINTER'S LABEL'S PLACE (the ak- cases): the
+              Text's transform (its spans under it), the port's text at
+              (AX, AY) -- confined by its joined size, at the corner where
+              it is no number }
+            if ak and comp and (Pos('Pointer', ckey) > 0) and (Length(el.CanvasM) = 6) then
+            begin
+              Inc(FCompared);
+              if (Abs(el.CanvasM[4] - m[4]) > 1e-6) or (Abs(el.CanvasM[5] - m[5]) > 1e-6) then
+                Miss(Format('%s: the label at (%g,%g), upstream (%g,%g)', [where, el.CanvasM[4],
+                  el.CanvasM[5], m[4], m[5]]));
             end;
             CaptionInk(el, pf, ps, plw);
             if (op = 'fillText') and TyTryParseChartColor(o.Strings['fs'], wc) then
@@ -1897,6 +2019,56 @@ begin
             or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-6)
             or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-6) then
             Miss(Format('%s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
+        { [R7-AK] A TITLE'S BACKGROUND AS DRAWN (the ak- cases): its bounds on
+          the canvas -- a path of corners on its joined edges }
+        if ak and comp and not ctext and (cz2 = 0) and (Copy(key, 1, 7) = 'c.title')
+          and (rec.Find('pb').JSONType <> jtNull) and not IsNan(HexD(rec.Arrays['pb'].Strings[0]))
+          and FChart.CompPart(ckey, 0, False, 'fill', el) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > 1e-6)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > 1e-6)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > 1e-6)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > 1e-6) then
+            Miss(Format('%s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
+              bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
+              HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
+              HexD(rec.Arrays['pb'].Strings[3])]));
+        end;
+        { [R7-AK] A COMPONENT'S PATH IN THE LIST (the ak- cases): its bounds
+          on the canvas, to the millionth -- a background of corners on its
+          joined edges, a part in its own frame under the transform the
+          canvas had (CListOf matched it to a pixel) }
+        if ak and not comp and not ctext and (Copy(key, 1, 2) = 'c.')
+          and ((Pos('.-1.p.', key) > 0) or (Length(el.FrameShape) > 0))
+          and (rec.Find('pb').JSONType <> jtNull) and not IsNan(HexD(rec.Arrays['pb'].Strings[0])) then
+        begin
+          bb := TyShapeBounds(el.Shape);
+          { (a background to the millionth; a part in its own frame to a
+            twentieth: its curves' bounds are the vertices', the recorder's
+            the arc's) }
+          if Pos('.-1.p.', key) > 0 then fps := 1e-6 else fps := 0.05;
+          { (and a background's area: a corner dropped from the path keeps
+            its bounds) }
+          if (Pos('.-1.p.', key) > 0) and (rec.Find('pa') <> nil) and (rec.Find('pa').JSONType = jtString)
+            and not IsNan(HexD(rec.Strings['pa'])) then
+          begin
+            ga := PathRingArea(el.Shape);
+            Inc(FCompared);
+            if Abs(ga - HexD(rec.Strings['pa'])) > Max(0.5, 1e-6 * HexD(rec.Strings['pa'])) then
+              Miss(Format('%s: the path encloses %g, upstream %g', [where, ga, HexD(rec.Strings['pa'])]));
+          end;
+          Inc(FCompared);
+          if not TyRectFIsValid(bb) or (Abs(bb.Left - HexD(rec.Arrays['pb'].Strings[0])) > fps)
+            or (Abs(bb.Top - HexD(rec.Arrays['pb'].Strings[1])) > fps)
+            or (Abs(bb.Right - HexD(rec.Arrays['pb'].Strings[2])) > fps)
+            or (Abs(bb.Bottom - HexD(rec.Arrays['pb'].Strings[3])) > fps) then
+            Miss(Format('%s: drawn at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g)', [where,
               bb.Left, bb.Top, bb.Right, bb.Bottom, HexD(rec.Arrays['pb'].Strings[0]),
               HexD(rec.Arrays['pb'].Strings[1]), HexD(rec.Arrays['pb'].Strings[2]),
               HexD(rec.Arrays['pb'].Strings[3])]));
@@ -3380,6 +3552,115 @@ begin
   finally
     FCapKeys := False;
   end;
+end;
+
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AKCanvasAsUpstream;
+begin
+  RunW(False, 'ak-');
+end;
+
+{ [R7-AK] a legend whose group has no transform (a padding of no side
+  readable: its y NaN too): its items at their own places in the canvas'
+  frame, found there; a rich label's tokens at NaN (after one padded
+  {0: 1, 2: 1}): their rects at `style.x || 0`, found there --
+  upstream's findHover at the probes }
+procedure TAdvChartLinesCanvasOracleTest.TestTheR7AKHitsAsUpstream;
+begin
+  FCapKeys := True;
+  try
+    RunW(True, 'ak-');
+  finally
+    FCapKeys := False;
+  end;
+end;
+
+{ [R7-AK] BORDERED TITLES WHOSE SIZE A STRING PADDING JOINED, AT 144 AND 120
+  PPI -- ai-comp-pad's ('12') and ak-title-css' (sides '0' that put the
+  joined far edge right of the place; [0, '2.5', 0, 2] whose place joined in
+  device px would be a number of two points; one whose far edge is no number
+  at all): the frame subPixelOptimizeRect snaps on the css px grid -- its
+  far edge `originX + originWidth` joined as css px strings, snapped by the
+  css px pen -- and the PPI over 96 device px a css px; upstream's frame
+  (css px, the recording canvas at 96) times that, none where it is NaN }
+procedure TAdvChartLinesCanvasOracleTest.TestAStringPaddedTitleFrameAt144PPI;
+var
+  bad: string;
+
+  procedure One(const AId: string; APPI: Integer);
+  var
+    cs, els: TJSONArray;
+    c, rec: TJSONObject;
+    i, k, w, h, n: Integer;
+    pb: array[0..3] of Double;
+    b: TBGRABitmap;
+    el: TTyChartElement;
+    bb: TTyRectF;
+    s: Double;
+    key: string;
+  begin
+    s := APPI / 96;
+    cs := TJSONObject(FRoot).Arrays['charts'];
+    c := nil;
+    for i := 0 to cs.Count - 1 do
+      if cs.Objects[i].Strings['id'] = AId then c := cs.Objects[i];
+    AssertTrue('the case ' + AId, c <> nil);
+    FreeAndNil(FChart);
+    FChart := TLcProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    PinClocks(FChart);
+    FChart.Six := True;
+    w := Round(400 * s);
+    h := Round(300 * s);
+    FChart.SetBounds(0, 0, w, h);
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals('parses', '', FChart.OptionError);
+    b := TBGRABitmap.Create(w, h, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(b.Canvas, Rect(0, 0, w, h), APPI);
+    finally
+      b.Free;
+    end;
+    els := c.Arrays['frames'].Objects[0].Arrays['els'];
+    n := 0;
+    for k := 0 to els.Count - 1 do
+    begin
+      rec := els.Objects[k];
+      key := rec.Strings['key'];
+      if (Copy(key, 1, 7) <> 'c.title') or (Copy(key, Length(key) - 5, 6) <> '.0.p.0') then Continue;
+      for i := 0 to 3 do pb[i] := HexD(rec.Arrays['pb'].Strings[i]);
+      key := Copy(key, 3, Pos('.0.p.0', key) - 3);
+      Inc(n);
+      Inc(FCompared);
+      if not FChart.CompPart(key, 0, False, 'stroke', el) then
+      begin
+        bad := bad + LineEnding + Format('%s at %d %s: no frame', [AId, APPI, key]);
+        Continue;
+      end;
+      bb := TyShapeBounds(el.Shape);
+      if IsNan(pb[0]) then
+      begin
+        if TyRectFIsValid(bb) then
+          bad := bad + LineEnding + Format('%s at %d %s: the frame at (%g,%g)-(%g,%g), upstream none',
+            [AId, APPI, key, bb.Left, bb.Top, bb.Right, bb.Bottom]);
+        Continue;
+      end;
+      if (Abs(bb.Left - s * pb[0]) > 1e-6) or (Abs(bb.Top - s * pb[1]) > 1e-6)
+        or (Abs(bb.Right - s * pb[2]) > 1e-6) or (Abs(bb.Bottom - s * pb[3]) > 1e-6) then
+        bad := bad + LineEnding + Format('%s at %d %s: the frame at (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g) times %g',
+          [AId, APPI, key, bb.Left, bb.Top, bb.Right, bb.Bottom, s * pb[0], s * pb[1], s * pb[2], s * pb[3], s]);
+    end;
+    AssertTrue('frames of ' + AId, n > 0);
+    FreeAndNil(FChart);
+  end;
+
+begin
+  bad := '';
+  FCompared := 0;
+  One('ai-comp-pad', 144);
+  One('ak-title-css', 144);
+  One('ak-title-css', 120);
+  AssertEquals('the frames at another PPI:' + bad, '', bad);
 end;
 
 { [R7-AE] A TEXT'S DISPLAYABLE OF ITS OWN (k<host>.<n>): the n-th of the

@@ -119,6 +119,11 @@ procedure TyRtShiftPieces(var APieces: TTyRtPieceArray; ADX, ADY: Double);
 function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyXYWH;
+{ [R7-AK] the same text's TSpans laid out at NaN, as the pointer finds them
+  (TyRtLayoutNanSpans), CSS px }
+function TyRtLayNanSpans(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
 
 { THE BOX THE PIECES OCCUPY in their own frame: zrender's Text
   getBoundingRect, the union of every child -- an undrawn rect included, a
@@ -1309,6 +1314,21 @@ begin
   else
     m := AMeasurer;
   Result := TyRtLayoutJsBox(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
+    ADefault, 0, 0, m);
+end;
+
+function TyRtLayNanSpans(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
+var m: ITyTextMeasurer;
+begin
+  Result := nil;
+  if AMeasurer = nil then Exit;
+  if (AScale > 0) and (Abs(AScale - 1) > 1e-12) then
+    m := TScaledMeasurer.Create(AMeasurer, AScale)
+  else
+    m := AMeasurer;
+  Result := TyRtLayoutNanSpans(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
     ADefault, 0, 0, m);
 end;
 

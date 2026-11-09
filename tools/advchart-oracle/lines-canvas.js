@@ -2254,6 +2254,116 @@ function cases() {
       series: [{ type: 'radar', symbol: 'none', lineStyle: { color: 'nope', width: 2 },
         data: [{ value: [5, 6, 7] }] }] },
     [0], { w: true, z: true }],
+    // ---- [R7-AK] (recorded as the af- ones) ----
+    // 1. a component's padding with a side that cannot be read ('4', [4]):
+    // getLayoutRect's place is NaN, the group's transform refused -- every
+    // displayable drawn in its own frame under the transform the canvas had
+    ['ak-undef-title', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } }], {
+      title: { text: 'Tt', subtext: 'ss', left: 10, top: 5, padding: '4', backgroundColor: '#eeeeee', borderColor: '#ff00ff', borderWidth: 1,
+        textStyle: { color: '#000000' }, subtextStyle: { color: '#0000ff' } } }),
+    [0], { w: true, z: true }],
+    ['ak-undef-legend', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', name: 'Sf', data: [[6, 5]], symbolSize: 10, itemStyle: { color: '#00ff00' } }], {
+      legend: { left: 5, top: 15, padding: [4], backgroundColor: '#ddeeff', borderColor: '#00aaaa', borderWidth: 1,
+        textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true, probes: [[10, 22], [30, 25], [270, 150], [300, 170], [12, 7], [240, 142]] }],
+    ['ak-undef-toolbox', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } }], {
+      toolbox: { right: 30, top: 2, padding: '4', backgroundColor: '#ffeedd', iconStyle: { borderColor: '#0000ff' },
+        feature: { restore: {}, saveAsImage: {} } } }),
+    [0], { w: true, z: true }],
+    // (nothing before them but the canvas' own frame)
+    // 2. a background of corners while the padding is a string: roundRect's
+    // edges `x + width` and `y + height` joined ('-2' + '1222'), the radii
+    // cut against the joined size as numbers; a title's border snaps the size
+    // to a number first (subPixelOptimizeRect)
+    ['ak-round-title', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, padding: '12', backgroundColor: '#eeeeee', borderRadius: 4,
+        textStyle: { color: '#000000' } },
+      { text: 'Uu', left: 200, top: 100, padding: '21', backgroundColor: '#dddddd', borderRadius: [2, 3, 4, 5],
+        textStyle: { color: '#000000' } },
+      { text: 'Vv', left: 120, top: 200, padding: '12', backgroundColor: '#cccccc', borderColor: '#ff00ff', borderWidth: 1,
+        borderRadius: 3, textStyle: { color: '#000000' } }] }),
+    [0], { w: true, z: true }],
+    ['ak-round-legend', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', borderColor: '#00aaaa', borderWidth: 1,
+        borderRadius: 5, textStyle: { color: '#000000' } },
+      toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', borderRadius: 3, iconStyle: { borderColor: '#0000ff' },
+        feature: { restore: {} } } }),
+    [0], { w: true, z: true }],
+    // (a toolbox of one picture: its rect whole, the joined edge a number)
+    ['ak-round-toolbox', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      toolbox: { right: 30, top: 2, padding: '21', backgroundColor: '#ffeedd', borderRadius: [3, 0, 2, 1], borderColor: '#00aa00',
+        borderWidth: 1, feature: { saveAsImage: { title: 'Pp', icon: 'image://' + IMG } } } }),
+    [0], { w: true, z: true }],
+    // 4. a rich label of which only some tokens fall at NaN by a padding (a
+    // token padded {0: 1, 2: 1}: its width NaN, the token after it at NaN):
+    // that TSpan's rect at `style.x || 0`, found there; a right-aligned one
+    // at `0 - width`
+    ['ak-part-hit', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', data: [[6, 5], [6, 2]], symbolSize: 10, itemStyle: { color: '#00ff00' },
+        label: { show: true, position: 'right', formatter: '{a|A}{b|x}{c|yyyyyyyyyyyy}', color: '#000000',
+          rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: {} } } },
+      { type: 'scatter', data: [[3, 8]], symbolSize: 10, itemStyle: { color: '#0000ff' },
+        label: { show: true, position: 'right', formatter: '{a|A}{b|x}{c|yyyyyy}', color: '#000000',
+          rich: { a: {}, b: { padding: { 0: 1, 2: 1 } }, c: { align: 'right' } } } }]),
+    [0], { w: true, z: true, probes: [[253, 142], [259, 142], [270, 142], [290, 142], [320, 142], [330, 142], [290, 135],
+      [290, 220], [130, 96], [150, 96], [158, 96], [163, 96], [120, 96], [170, 96], [150, 88], [258, 189], [300, 189]] }],
+    // 5. a bordered title's far edges joined to a place of nought ('0' sides)
+    // or to a size with a point ([0, '2.5', 0, 2]): subPixelOptimizeRect's
+    // `originX + originWidth` joined on the css px grid (the 144 and 120 PPI
+    // test draws these at 1.5 and 1.25 times)
+    ['ak-title-css', vv([{ type: 'scatter', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, padding: ['0', '2', '1', '0'], backgroundColor: '#eeeeee', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } },
+      { text: 'Uu', left: 200, top: 100, padding: [0, '2.5', 0, 2], backgroundColor: '#dddddd', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } },
+      // (a far edge of two points is no number: Math.max(NaN, 1) is NaN,
+      // the frame not drawn)
+      { text: 'Vv', left: 100, top: 200, padding: [0, '2.5', 0, 2.5], backgroundColor: '#cccccc', borderColor: '#ff00ff',
+        borderWidth: 1, textStyle: { color: '#000000' } }] }),
+    [0], { w: true, z: true }],
+    // 6. an axis pointer's label padded [0, 1, 0, '0']: its width '70' (6 +
+    // 1 + '0'), the centring shift by the joined width, the place confined
+    // by `position[0] + width` joined ('133' + '70' past the view: 400 - 70);
+    // one padded '12' at a place of two points: no transform, at the corner
+    ['ak-ptr-place', Object.assign(vv([{ type: 'scatter', data: [[5, 5]], itemStyle: { color: '#ff0000' } }]), {
+      xAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 4, status: 'show', lineStyle: { color: '#0000ff', width: 2 },
+          label: { show: true, backgroundColor: '#ffff00', color: '#000000', padding: [0, 1, 0, '0'], formatter: 'P' } } },
+      yAxis: { type: 'value', min: 0, max: 10, axisLine: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false }, axisTick: { show: false },
+        axisPointer: { show: true, value: 6.3, status: 'show', lineStyle: { color: '#00aa00', width: 2 },
+          label: { show: true, backgroundColor: '#00ffff', color: '#000000', padding: '12', formatter: 'Q' } } } }),
+    [0], { w: true, z: true }],
+    // (corners of nought at the top right and bottom left: the path's top
+    // edge runs straight to the joined far edge, no arc there)
+    ['ak-round-legend-r0', vv([{ type: 'scatter', name: 'Se', data: [[3, 5]], symbolSize: 10, itemStyle: { color: '#ff0000' } }], {
+      legend: { left: 5, top: 15, padding: '12', backgroundColor: '#ddeeff', borderRadius: [4, 0, 3, 0],
+        textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true }],
+    // (placed by the display list's order like any title: one of z 1 is
+    // drawn before the series' symbols -- under the transform of what came
+    // before it; one of z 3 after the first series of z 2 and before the
+    // second of z 4)
+    ['ak-undef-order', vv([{ type: 'scatter', z: 2, data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#ff0000' } },
+      { type: 'scatter', z: 4, data: [[6, 5]], symbolSize: 12, itemStyle: { color: '#00ff00' } }], {
+      title: [{ text: 'Tt', left: 10, top: 5, z: 1, padding: '4', textStyle: { color: '#000000' } },
+        { text: 'Uu', left: 10, top: 50, z: 3, padding: '4', textStyle: { color: '#0000ff' } }] }),
+    [0], { w: true, z: true }],
+    ['ak-undef-own', vv([{ type: 'scatter', name: 'Aa', data: [], itemStyle: { color: '#00aa00' } }], {
+      title: { text: 'Tt', left: 10, top: 5, padding: [4], backgroundColor: '#eeeeee', textStyle: { color: '#000000' } },
+      legend: { left: 5, top: 15, padding: '4', textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true }],
+    // (no side readable at all -- [], true: the place's y NaN too, so the
+    // group has no transform: drawn at its parts' own places in the canvas'
+    // frame, a legend item found there)
+    ['ak-undef-none', vv([{ type: 'scatter', name: 'Aa', data: [[3, 5]], symbolSize: 10, symbolRotate: 30, itemStyle: { color: '#00aa00' } },
+      { type: 'scatter', name: 'Bb', data: [], itemStyle: { color: '#0000aa' } }], {
+      title: { text: 'Tt', subtext: 'ss', left: 10, top: 5, padding: [], backgroundColor: '#eeeeee', textStyle: { color: '#000000' },
+        subtextStyle: { color: '#0000aa' } },
+      legend: { left: 5, top: 15, padding: true, textStyle: { color: '#000000' } } }),
+    [0], { w: true, z: true, probes: [[12, 7], [40, 7], [62, 7], [100, 7], [12, 40], [1, 1], [20, 13], [36, 7], [45, 7], [80, 12], [82, 7], [150, 142]] }],
   ]);
 }
 // [R7-AF] an unplaced slider (its data shadow's line 'Infinity' wide), its
@@ -2555,7 +2665,7 @@ function run(id, option, samples, opts) {
   Z = !!opts.z;
   AA = id.slice(0, 3) === 'aa-' || id.slice(0, 3) === 'ad-' || id.slice(0, 4) === 'ady-'
     || id.slice(0, 3) === 'ag-' || id.slice(0, 4) === 'agy-';
-  AF = id.slice(0, 3) === 'af-' || id.slice(0, 3) === 'ai-';
+  AF = id.slice(0, 3) === 'af-' || id.slice(0, 3) === 'ai-' || id.slice(0, 3) === 'ak-';
   AE = id.slice(0, 3) === 'ae-' || AF;
   AC = id.slice(0, 3) === 'ac-' || AE;
   CLIPS = new Map();

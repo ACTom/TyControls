@@ -237,6 +237,9 @@ end;
   the epsilon is no transform at all }
 function TbNotAroundZero(V: Double): Boolean;
 begin
+  { ([R7-AK] NaN, a group placed at NaN, is around nought: both comparisons
+    false -- asked without the trap) }
+  if IsNan(V) then Exit(False);
   Result := (V > 5e-5) or (V < -5e-5);
 end;
 
@@ -321,6 +324,8 @@ var
   bx, by, bw, bh: Double;
   bg: TTyChartColor;
   box: TTyChartElement;
+  { [R7-AK] its group placed at NaN, the transform refused }
+  unT: Boolean;
 
   function Blank: TTyChartElement;
   begin
@@ -344,8 +349,12 @@ begin
     lt := AList.Count;
     lk := t;
     if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
-    { a group a degenerate icon placed at NaN draws nothing at all }
-    if IsNan(FTbLayouts[t].GroupX) or IsNan(FTbLayouts[t].GroupY) then Continue;
+    { a group a degenerate icon placed at NaN draws nothing at all ([R7-AK]
+      one a padding side undefined placed there is drawn: in its parts'
+      own frames, or at their places) }
+    if (IsNan(FTbLayouts[t].GroupX) or IsNan(FTbLayouts[t].GroupY))
+      and not FTbLayouts[t].Unplaced then Continue;
+    unT := FTbLayouts[t].Unplaced and FTbLayouts[t].UnplacedT;
     { the background, under the icons }
     r := FTbLayouts[t].Background;
     el := Blank;
@@ -357,8 +366,18 @@ begin
       FLastRect.Top + s * (FTbLayouts[t].GroupY + r.Y + r.H));
     SetLength(rad, Length(FTbSpecs[t].Radius));
     for i := 0 to High(rad) do rad[i] := FTbSpecs[t].Radius[i] * s;
+    { ([R7-AK] a path of corners on its joined edges where the size is a
+      string [was: the rounded rect of its numbers]) }
+    if FTbSpecs[t].BorderRounded and ((FTbLayouts[t].BackgroundWText <> '')
+      or (FTbLayouts[t].BackgroundHText <> '')) then
+      el.Shape := TyJsRoundFrameShape(r.X, r.Y, r.W, r.H, FTbLayouts[t].BackgroundWText,
+        FTbLayouts[t].BackgroundHText, TyCornerRadii(FTbSpecs[t].Radius),
+        FLastRect.Left + s * FTbLayouts[t].GroupX, FLastRect.Top + s * FTbLayouts[t].GroupY, s)
+    else
     if Length(rad) > 0 then el.Shape := TyShapeRoundRect(pr, rad)
     else el.Shape := TyShapeRect(pr);
+    { ([R7-AK] placed at NaN: its Rect draws nothing) }
+    if FTbLayouts[t].Unplaced then el.Shape := TyShapePolygon([]);
     { [R7-AA] makeBackground's Rect is always there: its fill the
       backgroundColor ('transparent' by default) and its stroke the
       borderColor, handed to the canvas at a width of nought too [was:
@@ -381,6 +400,7 @@ begin
     TyStyleTakeBorderKeys(el.Style, FTbSpecs[t].Look);
     if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) or ((el.Style.StrokeColor shr 24) <> 0) then
     begin
+      if unT then TyElementOwnFrame(el, 0, 0, s, TyPointF(FLastRect.Left, FLastRect.Top));
       AList.Add(el);
       Inc(Result);
     end;
@@ -392,6 +412,12 @@ begin
       if FTbSpecs[t].Icons[i].IsImage then
       begin
         TbIconOrigin(t, i, ox, oy);
+        { ([R7-AK] in its own frame) }
+        if unT then
+        begin
+          ox := FTbSpecs[t].Icons[i].X;
+          oy := FTbSpecs[t].Icons[i].Y;
+        end;
         if IsNan(ox) or IsNan(oy) then Continue;
         r := TyToolboxIconRect(FTbSpecs[t], FTbSpecs[t].Icons[i], False);
         el := Blank;
@@ -404,6 +430,8 @@ begin
         sty := TyTbStyleOf(FTbSpecs[t].Icons[i], TbEmphasised(t, i));
         if sty.HasOpacity and not IsNan(sty.Opacity) then
           el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+        if unT then TyElementOwnFrame(el, FLastRect.Left + s * ox, FLastRect.Top + s * oy, s,
+          TyPointF(FLastRect.Left, FLastRect.Top));
         AList.Add(el);
         Inc(Result);
         Continue;
@@ -415,6 +443,12 @@ begin
       emph := TbEmphasised(t, i);
       sty := TyTbStyleOf(FTbSpecs[t].Icons[i], emph);
       TbIconOrigin(t, i, ox, oy);
+      { ([R7-AK] in its own frame) }
+      if unT then
+      begin
+        ox := FTbSpecs[t].Icons[i].X;
+        oy := FTbSpecs[t].Icons[i].Y;
+      end;
       if IsNan(ox) or IsNan(oy) then Continue;
       el := Blank;
       el.Shape := TyMkZrShape(FTbSpecs[t].Icons[i].Path, TyZrLocal(s, s, 0,
@@ -437,6 +471,8 @@ begin
         el.Style.Alpha := Max(0, Min(1, sty.Opacity));
       { [R5-A] the icon style's shadow }
       TyStyleSetShadow(el.Style, TyTbShadowOf(sty));
+      if unT then TyElementOwnFrame(el, FLastRect.Left + s * ox, FLastRect.Top + s * oy, s,
+        TyPointF(FLastRect.Left, FLastRect.Top));
       AList.Add(el);
       Inc(Result);
     end;

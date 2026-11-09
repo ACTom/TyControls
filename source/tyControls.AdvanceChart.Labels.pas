@@ -786,6 +786,34 @@ begin
     autoStroke, True, AH, AV), AScale, AMeasurer);
 end;
 
+{ [R7-AK] the same text's TSpans laid out at NaN, as the pointer finds them
+  (TyRtLayNanSpans), CSS px }
+function TyLabelBlockNanSpans(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtBoxArray;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  rt.Style.HasOpacity := False;
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLayNanSpans(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
 function TyLabelBlockJsBox(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
@@ -1726,6 +1754,8 @@ var
   hostRect, hbox: TTyXYWH;
   rtb: TTyXYWH;
   hitPieces: TTyRtPieceArray;
+  { [R7-AK] the TSpans laid out at NaN, as the pointer finds them }
+  nanBoxes: TTyRtBoxArray;
   hasHostRect, hasBox: Boolean;
   baseX, baseY, offX, offY, rot: Double;
   m: TTyMat2D;
@@ -2332,6 +2362,24 @@ begin
           cap.Caption.HitRel.Right := Max(cap.Caption.HitRel.Right, pieces[k].HitR * scale);
           cap.Caption.HitRel.Bottom := Max(cap.Caption.HitRel.Bottom, pieces[k].HitB * scale);
         end;
+      { [R7-AK] AND THE TSPANS LAID OUT AT NaN beside what is drawn (a token
+        after one whose padding left a side undefined): each still found
+        where `style.x || 0` bounds it [was: left out] }
+      if spec.Rt.Needed and not pieces[0].Placeholder and not host.Caption.HasFixedBox
+        and TyRtHasStringSize(autoSpec.Rt.Style, autoSpec.Rt.Rich) then
+      begin
+        nanBoxes := TyLabelBlockNanSpans(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
+        for k := 0 to High(nanBoxes) do
+        begin
+          cap.Caption.HitRelOwn := True;
+          cap.Caption.HitRel.Left := Min(cap.Caption.HitRel.Left, nanBoxes[k].X * scale);
+          cap.Caption.HitRel.Top := Min(cap.Caption.HitRel.Top, nanBoxes[k].Y * scale);
+          cap.Caption.HitRel.Right := Max(cap.Caption.HitRel.Right, (nanBoxes[k].X + nanBoxes[k].W) * scale);
+          cap.Caption.HitRel.Bottom := Max(cap.Caption.HitRel.Bottom, (nanBoxes[k].Y + nanBoxes[k].H) * scale);
+        end;
+      end;
     end
     else
       cap.Caption.HitRel := TyRectF(box.Left - x, box.Top - y, box.Right - x, box.Bottom - y);
