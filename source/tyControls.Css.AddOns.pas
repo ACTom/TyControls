@@ -36,14 +36,22 @@ function TyCssVocabularyOf(const ACss: string): TTyCssVocabulary;
   A listener that raises refuses the registration: the earlier text goes back (or, for a new name,
   no entry is left), every listener already called is called once more so it can put back what
   it had applied (errors there are ignored), and the exception goes on with AName in its
-  message. StyleModel's listener loads the text, so a text that does not load fails here. }
+  message. StyleModel's listener reseeds the models alive, so with one alive a text that does
+  not load fails here. With none alive (an add-on's initialization) nothing loads it here, and
+  start-up pays for no load: the next TTyStyleModel.Create finds it, drops it and raises. }
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 
-{ FOR TESTS: forgets AName's registration (no listener call). }
+{ Forgets AName's registration, calling no listener. StyleModel drops an add-on whose text does
+  not load with it; tests clean up with it. }
 procedure TyUnregisterAddOnCss(const AName: string);
 
 { Every registered text, in registration order, joined by LineEnding. '' when none. }
 function TyAddOnCss: string;
+
+{ The registered names, in registration order, and the text registered under one ('' when
+  AName is not registered). }
+function TyAddOnNames: TStringArray;
+function TyAddOnCssOf(const AName: string): string;
 
 { The generated catalog arrays united with the registered add-ons' vocabularies,
   de-duplicated, ascending by byte value. }
@@ -215,15 +223,37 @@ begin
   Result := -1;
 end;
 
+{ Puts AName back with ACss: in place when it is still registered, else at AIndex (a listener
+  may have unregistered it, as StyleModel does with a text that does not load). }
+procedure PutBack(const AName, ACss: string; AIndex: Integer);
+var
+  i, k: Integer;
+begin
+  i := IndexOfAddOn(AName);
+  if i >= 0 then
+  begin
+    GAddOns[i].Css := ACss;
+    Exit;
+  end;
+  if AIndex > Length(GAddOns) then
+    AIndex := Length(GAddOns);
+  SetLength(GAddOns, Length(GAddOns) + 1);
+  for k := High(GAddOns) downto AIndex + 1 do
+    GAddOns[k] := GAddOns[k - 1];
+  GAddOns[AIndex].Name := AName;
+  GAddOns[AIndex].Css := ACss;
+end;
+
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 var
-  i, n, called: Integer;
+  i, n, called, oldIndex: Integer;
   snapshot: array of TTyAddOnCssListener;
   hadOld: Boolean;
   oldCss: string;
 begin
   i := IndexOfAddOn(AName);
   hadOld := i >= 0;
+  oldIndex := i;
   oldCss := '';
   if hadOld then
     oldCss := GAddOns[i].Css
@@ -251,7 +281,7 @@ begin
     begin
       { refused: nothing of it may stay behind }
       if hadOld then
-        GAddOns[IndexOfAddOn(AName)].Css := oldCss
+        PutBack(AName, oldCss, oldIndex)
       else
         TyUnregisterAddOnCss(AName);
       for i := 0 to called - 1 do
@@ -288,6 +318,27 @@ begin
       Result := Result + LineEnding;
     Result := Result + GAddOns[i].Css;
   end;
+end;
+
+function TyAddOnNames: TStringArray;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(GAddOns));
+  for i := 0 to High(GAddOns) do
+    Result[i] := GAddOns[i].Name;
+end;
+
+function TyAddOnCssOf(const AName: string): string;
+var
+  i: Integer;
+begin
+  i := IndexOfAddOn(AName);
+  if i < 0 then
+    Result := ''
+  else
+    Result := GAddOns[i].Css;
 end;
 
 function Unite(const ABase: array of string; AWhich: Boolean): TStringArray;

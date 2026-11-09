@@ -43,6 +43,7 @@ type
     procedure TestAUserRuleBeforeALateRegistrationStillWins;
     procedure TestAFreedModelLeavesTheLiveList;
     procedure TestABrokenAddOnIsRefusedAndLeavesNothing;
+    procedure TestARegistrationLoadsTheBaseForLiveModelsOnly;
   end;
 
 implementation
@@ -257,6 +258,21 @@ begin
   end;
 end;
 
+{ The message the construction of a model raised; '' when it was built. }
+function CreateRefusal: string;
+var
+  m: TTyStyleModel;
+begin
+  Result := '';
+  try
+    m := TTyStyleModel.Create;
+    m.Free;
+  except
+    on E: Exception do
+      Result := E.Message;
+  end;
+end;
+
 procedure TTyStyleModelAddOnTest.TearDown;
 begin
   FreeAndNil(FModel);
@@ -421,19 +437,39 @@ var
   later: TTyStyleModel;
   bg: TTyColor;
 begin
-  { No model of the test's own is alive. Run on its own, the suite has none alive at all, so the
-    registration is checked by the listener's trial load; in a process where another model is
-    alive, by its reseed. The outcome must be the same. }
+  { With no model alive nothing loads a text at its registration (start-up pays for no load);
+    the next model's seed finds the broken one, drops it and raises. A good add-on registered
+    alongside stays. Run on its own the suite has no model alive at all; in a process where
+    another one is (a serial full run), that model's reseed refuses the text at its
+    registration instead, and what is left behind must be the same. }
   before := TyAddOnCss;
-  msg := RefusalOf(cBroken, cBrokenCss);
-  AssertTrue('refused, naming the add-on: "' + msg + '"', Pos(cBroken, msg) > 0);
-  AssertEquals('nothing registered', before, TyAddOnCss);
-  later := TTyStyleModel.Create;   // raises if the text had stayed
+  TyRegisterAddOnCss(cZz, cZzCss);
+  good := TyAddOnCss;
+  if TyLiveStyleModelCountForTest = 0 then
+  begin
+    TyRegisterAddOnCss(cBroken, cBrokenCss);   // does not raise
+    AssertTrue('recorded for now', Pos(cBrokenCss, TyAddOnCss) > 0);
+    msg := CreateRefusal;
+    AssertTrue('the first model refused it, naming the add-on: "' + msg + '"',
+      Pos(cBroken, msg) > 0);
+  end
+  else
+  begin
+    msg := RefusalOf(cBroken, cBrokenCss);
+    AssertTrue('refused by the live model elsewhere, naming the add-on: "' + msg + '"',
+      Pos(cBroken, msg) > 0);
+  end;
+  AssertEquals('the broken text is gone, the good one stays', good, TyAddOnCss);
+  later := TTyStyleModel.Create;   // raises if the broken text had stayed
   try
-    AssertEquals('a new model has none of it', '', later.ResolveToken('--zz-gap'));
+    AssertEquals('the next model has the good add-on', '7px', later.ResolveToken('--zz-gap'));
+    AssertEquals('and its rule', TTyColor($FF123456),
+      later.ResolveStyle('TyZzThing', '', []).Background.Color);
   finally
     later.Free;
   end;
+  ForgetAddOn(cZz);
+  AssertEquals('back to the start', before, TyAddOnCss);
 
   { the same with a live model }
   FModel := TTyStyleModel.Create;
@@ -460,6 +496,24 @@ begin
   finally
     later.Free;
   end;
+end;
+
+procedure TTyStyleModelAddOnTest.TestARegistrationLoadsTheBaseForLiveModelsOnly;
+var
+  alive, loads: Integer;
+begin
+  { One base load per model alive and none more: with none alive (an add-on's initialization,
+    at start-up) a registration builds nothing. }
+  alive := TyLiveStyleModelCountForTest;
+  loads := TyBaseLoadsForTest;
+  TyRegisterAddOnCss(cZz, cZzCss);
+  AssertEquals('loads with ' + IntToStr(alive) + ' models alive', loads + alive,
+    TyBaseLoadsForTest);
+  FModel := TTyStyleModel.Create;
+  loads := TyBaseLoadsForTest;
+  TyRegisterAddOnCss(cZz, cZzCss + cZzInk);
+  AssertEquals('loads with one more alive', loads + alive + 1, TyBaseLoadsForTest);
+  AssertEquals('and it reached that one', '#13579B', FModel.RawVar('--zz-ink'));
 end;
 
 initialization

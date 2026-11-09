@@ -159,6 +159,11 @@ type
       AStates: TTyStateSet; var AResult: TTyStyleSet);
     function UserHasTypeKey(const ATypeKey: string): Boolean;
     procedure AdoptBaseRules(ANewRules: TFPList);
+    { Loads ACss as the base layer on fresh lists, as a new model does. AKeep: it replaces the
+      base; otherwise it is a trial and the old base goes back. The user layer goes back either
+      way, and on a failure so does the old base before the exception goes on. }
+    procedure LoadBase(const ACss: string; AKeep: Boolean);
+    function DropBrokenAddOns: string;
   public
     constructor Create;
     destructor Destroy; override;
@@ -169,7 +174,11 @@ type
       and @mode blocks, the active mode, the runtime var overrides and the folder the theme's
       assets resolve against. Create calls it, and every registration calls it on every model
       alive. A control picks the change up at its next paint; nothing here invalidates one.
-      Raises, the previous base intact, when the text does not load.
+      Raises, the previous base intact, when the text does not load. When add-ons are
+      registered it then finds which of them do not load, unregisters those and raises one
+      ETyCssError naming them all, so the next model loads with the good ones. Only that rare
+      path loads more: the base alone, then once per add-on; a load that succeeds does nothing
+      extra.
       Two things it does not redo. The user layer is not validated again against the new base:
       a user rule that used a var the new base no longer defines (an add-on re-registered
       without it) raises when it is resolved, not here. And the copies of base rules an
@@ -354,6 +363,9 @@ procedure TyGetRegisteredTypeKeys(AList: TStrings);
 
 { FOR TESTS: how many TTyStyleModel are alive, i.e. how many an add-on registration reseeds. }
 function TyLiveStyleModelCountForTest: Integer;
+{ FOR TESTS: how many times the process has loaded a base layer (a model's seed or reseed, and
+  each load of the rare path that finds a broken add-on). }
+function TyBaseLoadsForTest: Integer;
 
 implementation
 
@@ -1221,27 +1233,24 @@ begin
     AList.Add(GTypeKeyParents.Names[i]);
 end;
 
+const
+  cAddOnsDropped = 'add-on tycss that does not load was unregistered: %s';
+
 var
   { Every TTyStyleModel alive, so a registration reaches the models made before it. }
   GLiveModels: TFPList = nil;
+  GBaseLoads: Integer = 0;   // see TyBaseLoadsForTest
 
-{ The add-on registry's listener (registered in this unit's initialization). It raises when the
-  registered text does not load, and the registry then refuses the registration. With no model
-  alive, which is the usual case in an add-on's initialization, it builds and frees one: that
-  seed is the very load every later model would make, so a broken text fails at its
-  registration rather than at the first controller. With models alive the first reseed is that
-  load; it leaves its model as it was when it fails. }
+{ The add-on registry's listener (registered in this unit's initialization). With models alive
+  it reseeds them; the first reseed raises when the registered text does not load (leaving its
+  model as it was), and the registry then refuses the registration. With none alive, the usual
+  case in an add-on's initialization, it loads nothing: start-up pays for no extra base load,
+  and the next TTyStyleModel.Create, which loads the base anyway, finds a broken text. }
 procedure ReseedLiveModels;
 var
   i: Integer;
-  trial: TTyStyleModel;
 begin
-  if (GLiveModels = nil) or (GLiveModels.Count = 0) then
-  begin
-    trial := TTyStyleModel.Create;
-    trial.Free;
-    Exit;
-  end;
+  if GLiveModels = nil then Exit;
   for i := 0 to GLiveModels.Count - 1 do
     TTyStyleModel(GLiveModels[i]).ReseedBase;
 end;
@@ -1252,6 +1261,11 @@ begin
     Result := 0
   else
     Result := GLiveModels.Count;
+end;
+
+function TyBaseLoadsForTest: Integer;
+begin
+  Result := GBaseLoads;
 end;
 
 constructor TTyStyleModel.Create;
@@ -1393,16 +1407,18 @@ begin
     Result[i] := FModeVars[i];
 end;
 
-procedure TTyStyleModel.ReseedBase;
+procedure TTyStyleModel.LoadBase(const ACss: string; AKeep: Boolean);
 var
   oldRules: TFPList;
   oldVars, userModes, userOverrides: TStringList;
   userBaseDir: string;
+  loaded: Boolean;
 begin
+  Inc(GBaseLoads);
   { LoadInto is a REPLACE load. Besides the layer it fills it resets the @mode blocks, the
     runtime var overrides and the asset folder, which belong to the user layer, and it
     validates against the base vars already there. So it gets fresh lists for all of them,
-    exactly as in a new model, and the user's go back afterwards (all of it on a failure). }
+    exactly as in a new model, and the user's go back afterwards. }
   oldRules := FBaseRules;
   oldVars := FBaseVars;
   userModes := FModeVars;
@@ -1412,43 +1428,109 @@ begin
   FBaseVars := TStringList.Create;
   FModeVars := TStringList.Create;
   FVarOverrides := TStringList.Create;
+  loaded := False;
   try
-    { The light base, then what the add-ons registered, then the per-mode contrast snippet, so
-      FModeVars picks up the base's per-mode --on-surface/--surface/--border. (TyBuiltinThemeCss
-      alone is single-mode — it is byte-synced to light.tycss and must not change; the @mode
-      lives in a separate constant.) }
-    LoadInto(FBaseRules, FBaseVars,
-      TyBuiltinThemeCss + LineEnding + TyAddOnCss + LineEnding + TyBuiltinBaseModeCss);
-  except
-    ClearList(FBaseRules);
-    FBaseRules.Free;
-    FBaseVars.Free;
+    LoadInto(FBaseRules, FBaseVars, ACss);
+    loaded := True;
+    { Snapshot those base @mode blocks so they survive later (clearing) user loads and can be
+      layered under a dual-mode user theme's own @mode. They are dropped from FModeVars below:
+      the base @mode must NOT be the ACTIVE user @mode layer (only the preserved fallback). }
+    if AKeep then
+      SnapshotBaseModeVars;
+  finally
     ClearModeVars;
     FModeVars.Free;
     FVarOverrides.Free;
-    FBaseRules := oldRules;
-    FBaseVars := oldVars;
     FModeVars := userModes;
     FVarOverrides := userOverrides;
     FThemeBaseDir := userBaseDir;
-    raise;
+    if loaded and AKeep then
+    begin
+      ClearList(oldRules);
+      oldRules.Free;
+      oldVars.Free;
+    end
+    else
+    begin
+      ClearList(FBaseRules);
+      FBaseRules.Free;
+      FBaseVars.Free;
+      FBaseRules := oldRules;
+      FBaseVars := oldVars;
+    end;
+    { A load that succeeded bumped FVersion, the anchor every memo checks, and merged over the
+      fresh lists; merge again over the user's. A failed one changed neither. }
+    if loaded then
+      RebuildMergedVars;
   end;
-  { Snapshot those base @mode blocks so they survive later (clearing) user loads and can be
-    layered under a dual-mode user theme's own @mode. Then drop them from FModeVars: the base
-    @mode must NOT be the ACTIVE user @mode layer (only the preserved fallback). }
-  SnapshotBaseModeVars;
-  ClearModeVars;
-  FModeVars.Free;
-  FVarOverrides.Free;
-  FModeVars := userModes;
-  FVarOverrides := userOverrides;
-  FThemeBaseDir := userBaseDir;
-  ClearList(oldRules);
-  oldRules.Free;
-  oldVars.Free;
-  { LoadInto bumped FVersion, the anchor every memo checks, and merged over the base's own @mode
-    blocks with no overrides; merge again over the user's. }
-  RebuildMergedVars;
+end;
+
+function BaseCssWith(const AAddOnCss: string): string;
+{ The light base, then what the add-ons registered, then the per-mode contrast snippet, so the
+  base picks up its per-mode --on-surface/--surface/--border. (TyBuiltinThemeCss alone is
+  single-mode — it is byte-synced to light.tycss and must not change; the @mode lives in a
+  separate constant.) }
+begin
+  Result := TyBuiltinThemeCss + LineEnding + AAddOnCss + LineEnding + TyBuiltinBaseModeCss;
+end;
+
+function TTyStyleModel.DropBrokenAddOns: string;
+{ The rare path, after the base did not load with every add-on's text. If the base loads with
+  none, the add-ons are tried one at a time in registration order, each on top of those that
+  loaded (an add-on may build on one registered before it); each that does not load is
+  unregistered. Returns '"name": message' for each dropped one, joined by '; ', or '' when none
+  is at fault (nothing is dropped then). Every load here is a trial: the base stays as it was. }
+var
+  names: TStringArray;
+  kept, candidate: string;
+  i: Integer;
+begin
+  Result := '';
+  try
+    LoadBase(BaseCssWith(''), False);
+  except
+    Exit;   // the base itself does not load: not an add-on's fault
+  end;
+  names := TyAddOnNames;
+  kept := '';
+  for i := 0 to High(names) do
+  begin
+    if kept = '' then
+      candidate := TyAddOnCssOf(names[i])
+    else
+      candidate := kept + LineEnding + TyAddOnCssOf(names[i]);
+    try
+      LoadBase(BaseCssWith(candidate), False);
+      kept := candidate;
+    except
+      on E: Exception do
+      begin
+        TyUnregisterAddOnCss(names[i]);
+        if Result <> '' then
+          Result := Result + '; ';
+        Result := Result + '"' + names[i] + '": ' + E.Message;
+      end;
+    end;
+  end;
+end;
+
+procedure TTyStyleModel.ReseedBase;
+var
+  dropped: string;
+begin
+  try
+    LoadBase(BaseCssWith(TyAddOnCss), True);
+    Exit;
+  except
+    if Length(TyAddOnNames) = 0 then
+      raise;
+  end;
+  { Outside the handler, so the trial loads raise and catch their own exceptions on their own. }
+  dropped := DropBrokenAddOns;
+  if dropped <> '' then
+    raise ETyCssError.CreateFmt(cAddOnsDropped, [dropped]);
+  { no add-on is at fault: load again and let it raise what it raised }
+  LoadBase(BaseCssWith(TyAddOnCss), True);
 end;
 
 procedure TTyStyleModel.Clear;
