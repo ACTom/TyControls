@@ -257,11 +257,18 @@ const
     + '"splitLine":{"lineStyle":{"color":"#0000ff","width":6}}},'
     + '"yAxis":{"type":"value","min":0,"max":10,"interval":5,"zlevel":%d,"axisLabel":{"show":false},'
     + '"splitLine":{"lineStyle":{"color":"#ff0000","width":6}}},'
-    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}}],'
+    + '"graphic":[{"type":"rect","z":-5,"shape":{"x":180,"y":130,"width":40,"height":40},"style":{"fill":"#00ff00"}},'
+    + '{"type":"rect","z":-5,"shape":{"x":300,"y":60,"width":40,"height":40},"style":{"fill":"#00ff00","opacity":0.5}}],'
     + '"series":[{"type":"scatter","data":[[1,1]]}]}';
-var p: TBGRAPixel;
+var p, q: TBGRAPixel;
 begin
+  { (a rect of opacity 0.5 drawn once: as with every axis on zlevel 0) }
+  Play(StringReplace(Format(cOpt, [0]), '"zlevel":-1,', '', []), 0);
+  q := Pix(320, 80);
   Play(Format(cOpt, [1]), 0);
+  p := Pix(320, 80);
+  AssertTrue('the half-clear rect drawn once: ' + Px(p) + ' against ' + Px(q),
+    (Abs(p.red - q.red) <= 1) and (p.red < 250));
   { the x axis' split line at x 5 (200 px), the y axis' at y 5 (150 px) }
   p := Pix(200, 140);
   AssertTrue('the rect over the x axis'' split line: ' + Px(p), (p.green > 230) and (p.blue < 30));
@@ -274,7 +281,7 @@ end;
 
 { THE LINES' TRAIL ON zlevel 1, the axes on 0 and 3: a graphic's rect of
   opacity 0.5 on zlevel 0, under the cut, is the static layer's -- drawn
-  once, as with no animation }
+  once, as with no effect (no frames at all) }
 procedure TAdvChartTrailLayerTest.TestAGraphicUnderTheCutIsDrawnOnce;
 var p, q: TBGRAPixel; opt: string;
 begin
@@ -284,7 +291,7 @@ begin
   AssertEquals('the lines on zlevel 1', 1, FChart.ZLevelOf('S0'));
   AssertEquals('the y axis on zlevel 3', 3, FChart.ZLevelOf('yAxis0'));
   q := Pix(220, 80);
-  Play(StringReplace(opt, '"animation":true', '"animation":false', []), 0);
+  Play(StringReplace(opt, '"effect":{"show":true', '"effect":{"show":false', []), 0);
   p := Pix(220, 80);
   AssertTrue('the half-clear rect drawn once: ' + Px(q) + ' against ' + Px(p),
     (Abs(p.red - q.red) <= 1) and (p.red < 250));
