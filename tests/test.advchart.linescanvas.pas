@@ -616,8 +616,8 @@ begin
       or (Copy(id, 1, 3) = 'ac-') or (Copy(id, 1, 3) = 'ae-') or (Copy(id, 1, 3) = 'af-')
       { ([R7-AG] the ag- and agy- cases: RunW, RunYHeld) }
       or (Copy(id, 1, 3) = 'ag-') or (Copy(id, 1, 4) = 'agy-')
-      { ([R7-AI] the ai- cases: RunW) }
-      or (Copy(id, 1, 3) = 'ai-') then Continue;
+      { ([R7-AI] the ai- cases: RunW; [R7-AK] the ak- ones too) }
+      or (Copy(id, 1, 3) = 'ai-') or (Copy(id, 1, 3) = 'ak-') then Continue;
     if GetEnvironmentVariable('TY_LC_TRACE') <> '' then WriteLn('case ', id);
     FreeAndNil(FChart);
     FChart := TLcProbe.Create(FForm);
