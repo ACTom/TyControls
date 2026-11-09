@@ -1484,12 +1484,6 @@ begin
             Ord(el.Shape.Kind), bb.Left, bb.Top, bb.Right, bb.Bottom, el.Style.FillColor, el.Caption.Text,
             Length(el.FrameShape)]));
         end;
-      if (GetEnvironmentVariable('TY_LC_DUMP') <> '') and (FChart.LegendLayoutCount > 0) then
-        WriteLn(Format('dumplg %s lx %g ly %g w %s h %s ox %g oy %g frame (%g,%g)-(%g,%g)', [id,
-          FChart.LegendLayout(0).FrameLX, FChart.LegendLayout(0).FrameLY, FChart.LegendLayout(0).FrameWText,
-          FChart.LegendLayout(0).FrameHText, FChart.LegendLayout(0).FrameOX, FChart.LegendLayout(0).FrameOY,
-          FChart.LegendLayout(0).Frame.Left, FChart.LegendLayout(0).Frame.Top,
-          FChart.LegendLayout(0).Frame.Right, FChart.LegendLayout(0).Frame.Bottom]));
       if GetEnvironmentVariable('TY_LC_SAVE') <> '' then
         FBmp.SaveToFile(GetEnvironmentVariable('TY_LC_SAVE') + id + '-' + IntToStr(j) + '.png');
       if AHits then
