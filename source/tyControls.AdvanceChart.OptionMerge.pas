@@ -231,7 +231,7 @@ function TyJsonQuote(const AText: string): string;
 
 implementation
 
-uses tyControls.AdvanceChart.Scale, tyControls.StrConsts;
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.StrConsts;
 
 const
   cMainTypes: array[0..29] of string = ('series', 'grid', 'xAxis', 'yAxis',

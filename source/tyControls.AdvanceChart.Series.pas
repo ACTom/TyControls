@@ -488,7 +488,7 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvanceChart layer. }
-  tyControls.StrConsts, tyControls.AdvanceChart.AxisBreak;
+  tyControls.AdvanceChart.StrConsts, tyControls.AdvanceChart.AxisBreak;
 
 const
   StatDelim = '|&';

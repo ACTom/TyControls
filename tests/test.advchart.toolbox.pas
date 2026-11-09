@@ -28,7 +28,7 @@ unit test.advchart.toolbox;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, Translations,
-     tyControls.Grid, tyControls.Columns, tyControls.StrConsts, test.danglingrefs,
+     tyControls.Grid, tyControls.Columns, tyControls.AdvanceChart.StrConsts, test.danglingrefs,
      tyControls.Controller, tyControls.Dialogs, tyControls.Memo,
      tyControls.AdvanceChart.Types,
      tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Events,
@@ -2252,16 +2252,16 @@ begin
   po := TPOFile.Create(True);
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(root + 'tycontrols.strconsts.zh_CN.po');
+    sl.LoadFromFile(root + 'tycontrols.advancechart.strconsts.zh_CN.po');
     po.ReadPOText(sl.Text);
   finally
     sl.Free;
   end;
   try
-    zhTable := po.Translate('tycontrols.strconsts.rstycharttoolboxdataviewtable', 'Table');
-    zhText := po.Translate('tycontrols.strconsts.rstycharttoolboxdataviewtext', 'Text');
+    zhTable := po.Translate('tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtable', 'Table');
+    zhText := po.Translate('tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtext', 'Text');
     AssertTrue('the catalogue translates them', (zhTable <> 'Table') and (zhText <> 'Text'));
-    AssertTrue(TranslateUnitResourceStrings('tyControls.StrConsts', po));
+    AssertTrue(TranslateUnitResourceStrings('tyControls.AdvanceChart.StrConsts', po));
   finally
     po.Free;
   end;
@@ -2280,11 +2280,11 @@ begin
     try
       po.ReadPOText('msgid ""' + LineEnding + 'msgstr ""' + LineEnding
         + '"Content-Type: text/plain; charset=UTF-8\n"' + LineEnding + LineEnding
-        + '#: tycontrols.strconsts.rstycharttoolboxdataviewtable' + LineEnding
+        + '#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtable' + LineEnding
         + 'msgid "Table"' + LineEnding + 'msgstr "Table"' + LineEnding + LineEnding
-        + '#: tycontrols.strconsts.rstycharttoolboxdataviewtext' + LineEnding
+        + '#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtext' + LineEnding
         + 'msgid "Text"' + LineEnding + 'msgstr "Text"' + LineEnding);
-      TranslateUnitResourceStrings('tyControls.StrConsts', po);
+      TranslateUnitResourceStrings('tyControls.AdvanceChart.StrConsts', po);
     finally
       po.Free;
     end;

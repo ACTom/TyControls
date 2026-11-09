@@ -42,7 +42,7 @@ implementation
 
 uses
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.Jitter, tyControls.StrConsts;
+  tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.Jitter, tyControls.AdvanceChart.StrConsts;
 
 const
   { past these the port refuses where upstream would run (and run) }

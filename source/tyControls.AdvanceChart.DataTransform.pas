@@ -190,7 +190,7 @@ implementation
 
 uses
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Jitter,
-  tyControls.StrConsts, tyControls.AdvanceChart.JsRegExp;
+  tyControls.AdvanceChart.StrConsts, tyControls.AdvanceChart.JsRegExp;
 
 { ==================== JavaScript values ==================== }
 

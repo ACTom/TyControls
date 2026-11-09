@@ -251,7 +251,7 @@ function TyEditCellValue(const AText: string; AKeepString: Boolean): TJSONData;
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.StrConsts, tyControls.AdvanceChart.Option,
   tyControls.AdvanceChart.Complete, tyControls.AdvanceChart.Builder,
   tyControls.AdvanceChart.Coord;
 

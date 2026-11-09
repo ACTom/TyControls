@@ -357,7 +357,7 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
-  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
+  tyControls.AdvanceChart.StrConsts, LazUTF8, Math, tyControls.FontUnits,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
   tyControls.AdvanceChart.BackwardCompat;
 

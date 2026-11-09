@@ -86,7 +86,7 @@ uses
   fpjson,
   tyControls.AdvanceChart.Catalog, tyControls.AdvanceChart.Builder,
   tyControls.AdvanceChart.Series, tyControls.AdvanceChart.Marks,
-  tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Geo, tyControls.StrConsts;
+  tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.StrConsts;
 
 const
   { Enough that a real config's problems all fit, small enough that a pathological

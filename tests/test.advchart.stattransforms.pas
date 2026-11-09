@@ -28,7 +28,7 @@ unit test.advchart.stattransforms;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
-     tyControls.Controller, tyControls.StrConsts,
+     tyControls.Controller, tyControls.AdvanceChart.StrConsts,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Dataset,

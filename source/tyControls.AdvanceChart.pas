@@ -6415,7 +6415,7 @@ uses
   Forms, LCLIntf,
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvanceChart family keeps, invisible to a host. }
-  tyControls.StrConsts,
+  tyControls.StrConsts, tyControls.AdvanceChart.StrConsts,
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.JsMath,
   { [R7-N] innerTextLayout for a cartesian pointer's label }
   tyControls.AdvanceChart.AxisName,

@@ -102,7 +102,7 @@ type
 
 implementation
 
-uses tyControls.StrConsts;
+uses tyControls.AdvanceChart.StrConsts;
 
 const
   cW = 800;

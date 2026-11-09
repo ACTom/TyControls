@@ -76,7 +76,7 @@ type
 implementation
 
 uses Math, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Diagnose,
-  tyControls.StrConsts;
+  tyControls.AdvanceChart.StrConsts;
 
 const
   LF = #10;

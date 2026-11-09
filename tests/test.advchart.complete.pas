@@ -13,7 +13,7 @@ unit test.advchart.complete;
 interface
 uses Classes, SysUtils, fpcunit, testregistry,
      tyControls.AdvanceChart.Catalog, tyControls.AdvanceChart.Complete,
-     tyControls.StrConsts;
+     tyControls.AdvanceChart.StrConsts;
 type
   TIntArray = array of Integer;
 

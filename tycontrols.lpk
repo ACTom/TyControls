@@ -1010,6 +1010,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvanceChart.AxisBreak"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvanceChart.StrConsts.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.StrConsts"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvanceChart.Aria.pas"/>
         <UnitName Value="tyControls.AdvanceChart.Aria"/>
       </Item>

@@ -20,7 +20,7 @@ unit test.advchart.dataviewhandlers;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Forms, StdCtrls, BGRABitmap, BGRABitmapTypes,
-     tyControls.Grid, tyControls.Columns, tyControls.StrConsts, tyControls.Controller,
+     tyControls.Grid, tyControls.Columns, tyControls.StrConsts, tyControls.AdvanceChart.StrConsts, tyControls.Controller,
      tyControls.Dialogs, tyControls.Memo, tyControls.TyLabel,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Handlers,
      tyControls.AdvanceChart.Data,

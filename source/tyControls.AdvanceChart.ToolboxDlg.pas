@@ -184,7 +184,7 @@ function TyAskImageFileName(var AFileName: string; const AType: string): Boolean
 
 implementation
 
-uses tyControls.StrConsts, tyControls.Dialogs.FileDialog, tyControls.Columns,
+uses tyControls.AdvanceChart.StrConsts, tyControls.Dialogs.FileDialog, tyControls.Columns,
   tyControls.AdvanceChart.Toolbox, tyControls.AdvanceChart.TipHtml;
 
 const

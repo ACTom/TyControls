@@ -31,6 +31,10 @@ begin
   Application.Initialize;
   SetDefaultLang('', LangDir);
   TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
+  { The chart's own strings are a catalogue of their own (no dot in the file name, see
+    tyControls.AdvanceChart.StrConsts). }
+  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_advancechart',
+    'tyControls.AdvanceChart.StrConsts');
   Application.CreateForm(TMainForm, MainForm);
   Application.Run;
 end.

@@ -281,7 +281,7 @@ implementation
 uses
   { Only for the editor vocabulary below; kept out of the interface uses so this
     unit's public face still names only the AdvanceChart layer. }
-  tyControls.StrConsts, Math, tyControls.AdvanceChart.Data;
+  tyControls.AdvanceChart.StrConsts, Math, tyControls.AdvanceChart.Data;
 
 function TyOptStrAt(AIndex: Integer): string;
 begin

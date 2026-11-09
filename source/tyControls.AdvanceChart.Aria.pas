@@ -18,7 +18,7 @@ unit tyControls.AdvanceChart.Aria;
   REPLACEMENT STRING, whose dollar-ampersand, two dollars, dollar-backtick
   and dollar-quote mean what String.replace makes them mean.
 
-  The words are the port's resourcestrings (tyControls.StrConsts), whose
+  The words are the port's resourcestrings (tyControls.AdvanceChart.StrConsts), whose
   English is ECharts' EN locale (langEN.ts aria and series.typeNames) and
   whose Chinese is its ZH locale; the author's aria.label templates are
   read over them. This unit is handed the FACTS -- the series, their names,
@@ -110,7 +110,7 @@ function TyAriaRowPhrase(const ALocale: TTyAriaLocale; const ARow: TTyAriaRow): 
 
 implementation
 
-uses tyControls.StrConsts, tyControls.AdvanceChart.Convert;
+uses tyControls.AdvanceChart.StrConsts, tyControls.AdvanceChart.Convert;
 
 const
   { both locales' series.single.prefix and data.withoutName: the same in

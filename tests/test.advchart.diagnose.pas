@@ -50,7 +50,7 @@ type
 
 implementation
 
-uses tyControls.StrConsts, tyControls.AdvanceChart.Geo;
+uses tyControls.AdvanceChart.StrConsts, tyControls.AdvanceChart.Geo;
 
 { the rows of a kind -- an untyped series, a build problem }
 type

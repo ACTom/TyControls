@@ -487,7 +487,7 @@ implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.DataTransform, tyControls.AdvanceChart.Jitter,
-  tyControls.AdvanceChart.Handlers, tyControls.StrConsts;
+  tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.StrConsts;
 
 const
   { Source.ts:351 -- `10 is an experience number, avoid long loop.` }

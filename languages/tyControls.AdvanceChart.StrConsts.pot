@@ -1,0 +1,790 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.advancechart.strconsts.rstychartaccbrush
+msgid "Brush"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccbrushareas
+#, object-pascal-format
+msgid "%d selected areas"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccdatazoom
+msgid "Data zoom"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartacchandleend
+msgid "End handle"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartacchandlestart
+msgid "Start handle"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartacclegend
+msgid "Legend"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccmarkarea
+msgid "Mark area"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccmarkers
+msgid "Markers"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccmarkline
+msgid "Mark line"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccmarkpoint
+msgid "Mark point"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccpercentrange
+#, object-pascal-format
+msgid "%s%% to %s%%"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartacctimeline
+msgid "Timeline"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartacctoolbox
+msgid "Toolbox"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaccvisualmap
+msgid "Visual map"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariaalldata
+msgid "The data is as follows: "
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariadatawithname
+msgid "the data for {name} is {value}"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariamultipleprefix
+msgid ". It consists of {seriesCount} series count."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariamultiplewithname
+msgid " The {seriesId} series is a {seriesType} representing {seriesName}."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariamultiplewithoutname
+msgid " The {seriesId} series is a {seriesType}."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariapartialdata
+msgid "The first {displayCnt} items are: "
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariaseparators
+msgid "||, |. "
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariasinglewithname
+msgid " with type {seriesType} named {seriesName}."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariasinglewithoutname
+msgid " with type {seriesType}."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariawithouttitle
+msgid "This is a chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartariawithtitle
+msgid "This is a chart about \"{title}\""
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaxistypeunknown
+#, object-pascal-format
+msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartaxiswithoutpair
+msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartcustomnorenderitem
+#, object-pascal-format
+msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartcustomrenderitemfailed
+#, object-pascal-format
+msgid "series[%d]: renderItem \"%s\" failed: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartdatasetnotable
+#, object-pascal-format
+msgid "dataset[%d] has no table: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartgridonedirection
+#, object-pascal-format
+msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.advancechart.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartlegendselectinverse
+msgid "Inv"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartloading
+msgid "loading"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartmapnotregistered
+#, object-pascal-format
+msgid "%s: no map is registered as \"%s\", so nothing is drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartnosuchhandler
+#, object-pascal-format
+msgid "No formatter named '%s' is registered."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesaxessplit
+#, object-pascal-format
+msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesbadtype
+#, object-pascal-format
+msgid "series[%d]: \"%s\" is not a series type"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriescoordsys
+#, object-pascal-format
+msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesnoaxis
+#, object-pascal-format
+msgid "series[%d] names an axis that does not exist"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesnotype
+#, object-pascal-format
+msgid "series[%d] has no type, so it is not drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartseriesshortencode
+#, object-pascal-format
+msgid "series[%d]: encode.%s reaches %d of the %d dimensions a %s needs, so it is not drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbar
+msgid "Switch to Bar Chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxdataview
+msgid "Data View"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewbad
+#, object-pascal-format
+msgid "The data view's text could not be read back: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewrefresh
+msgid "Refresh"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtable
+msgid "Table"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxdataviewtext
+msgid "Text"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboximagefilter
+msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxline
+msgid "Switch to Line Chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxrestore
+msgctxt "tycontrols.advancechart.strconsts.rstycharttoolboxrestore"
+msgid "Restore"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxsaveasimage
+msgid "Save as Image"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxstack
+msgid "Stack"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxtiled
+msgid "Tile"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxzoom
+msgid "Zoom"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttoolboxzoomback
+msgid "Zoom Reset"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypebar
+msgid "Bar chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypeboxplot
+msgid "Boxplot"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypecandlestick
+msgid "Candlestick"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypechart
+msgid "Chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypecustom
+msgid "Custom chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypeeffectscatter
+msgid "Ripple scatter plot"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypefunnel
+msgid "Funnel chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypegauge
+msgid "Gauge"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypegraph
+msgid "Relationship graph"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypeheatmap
+msgid "Heat map"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypek
+msgid "K line chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypeline
+msgid "Line chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypelines
+msgid "Line graph"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypemap
+msgid "Map"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypeparallel
+msgid "Parallel coordinate map"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypepictorialbar
+msgid "Pictorial bar"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypepie
+msgid "Pie chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttyperadar
+msgid "Radar chart"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypesankey
+msgid "Sankey diagram"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypescatter
+msgid "Scatter plot"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypesunburst
+msgid "Sunburst"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypethemeriver
+msgid "Theme River Map"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypetree
+msgid "Tree"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstycharttypetreemap
+msgid "Treemap"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartxaxisnogrid
+#, object-pascal-format
+msgid "xAxis[%d] names no grid, so it is not drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstychartyaxisnogrid
+#, object-pascal-format
+msgid "yAxis[%d] names no grid, so it is not drawn"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsbadresult
+msgid "a transform result is not a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsboxplotrows
+msgid "the boxplot reads only a table of arrays"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondandor
+#, object-pascal-format
+msgid "\"%s\" must be a non-empty list of conditions"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondbadoperator
+#, object-pascal-format
+msgid "\"%s\" is not a filter operator"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondneedsnumber
+#, object-pascal-format
+msgid "\"%s\" compares with a number only"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondnodimension
+msgid "a filter condition has no dimension"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondnooperator
+msgid "a filter condition has no operator"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondnot
+msgid "\"not\" must be a condition object"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondnotobject
+msgid "a filter condition is not an object"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondreg
+#, object-pascal-format
+msgid "\"reg\" is not a regular expression: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscondregslow
+#, object-pascal-format
+msgid "the regular expression in \"reg\" runs too long: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydscopyhasnometa
+msgid "it reads a fromTransformResult copy, which has no dimensions to pass on"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsduplicatedim
+#, object-pascal-format
+msgid "the dimension name \"%s\" is used twice"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsemptypipe
+msgid "the transform list is empty"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydskeyednodims
+msgid "its upstream table of columns has no dimensions"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsnodimension
+#, object-pascal-format
+msgid "there is no dimension %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsnoresult
+#, object-pascal-format
+msgid "its upstream has no result %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsnotobject
+msgid "a transform is not an object"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsnotsupported
+#, object-pascal-format
+msgid "%s is not available to a transform registered outside ECharts"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsoneupstream
+msgid "fromTransformResult needs exactly one upstream dataset"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsreadsitself
+msgid "it reads itself"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsrownotlist
+msgid "a row of the table is not a list"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortempty
+msgid "the sort has no config"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortformat
+msgid "the sort reads only a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortincomparable
+msgid "\"incomparable\" must be \"min\" or \"max\""
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortnodimension
+msgid "a sort key has no dimension"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortorder
+msgid "a sort key's order must be \"asc\" or \"desc\""
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydssortparser
+#, object-pascal-format
+msgid "\"%s\" is not a parser"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsunknowntype
+#, object-pascal-format
+msgid "no transform is registered as \"%s\""
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsupstreambyrow
+msgid "its upstream is laid out by row"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsupstreamfailed
+#, object-pascal-format
+msgid "dataset[%d], which it reads, has no table"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsupstreamformat
+msgid "its upstream is not a table"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstydsupstreammissing
+msgid "a transform has no input"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagallclear
+msgid "The option is understood."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagsomenotpainted
+#, object-pascal-format
+msgid "The option is understood. Not painted yet: %s."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptfunctionvalue
+msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptmergenotobject
+msgid "An option to merge must be an object."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcaption
+#, object-pascal-format
+msgid "%d: %s"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcaptionnamed
+#, object-pascal-format
+msgid "%d: %s \"%s\""
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcolcategory
+#, object-pascal-format
+msgid "%s category"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcoldim
+#, object-pascal-format
+msgid "dim %d"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcolname
+msgid "name"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredcolvalue
+msgid "value"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredemptyliteral
+msgid "Write a value here, or clear the field to remove the key."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredhole
+msgid "(empty slot)"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotboolean
+#, object-pascal-format
+msgid "\"%s\" is neither true nor false."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotecategory
+#, object-pascal-format
+msgid "Each row is a category of %s. Deleting a row deletes that category, and its value in every series on that axis."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotedatasetform
+msgid "This dataset is not a table of rows; edit it as text."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotehole
+msgid "This slot holds no object, so there is nothing to edit in it."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotenodata
+msgid "This series has no data of its own and reads a dataset. Rows added here give it data of its own, which then wins over the dataset."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotenotlist
+msgid "This data is not a list; edit it as text."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotetransform
+msgid "This dataset is made from another one by a transform; edit the source dataset instead."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotetree
+msgid "This data is a tree (items have children); edit it as text."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotinteger
+#, object-pascal-format
+msgid "\"%s\" is not a whole number."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotobject
+msgid "The option is not an object, so it has no series to edit."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyserednotype
+msgid "(no type)"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstyseredonevalue
+msgid "Write exactly one value here."
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatbinlayout
+msgid "the bins cannot be laid out over these values"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatbinmethod
+#, object-pascal-format
+msgid "\"%s\" is not a binning method"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatbinprecision
+msgid "the bins are finer than 20 decimal places"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatclustercount
+msgid "\"clusterCount\" must be a number of 2 or more"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatclusterindex
+msgid "\"outputClusterIndexDimension\" is required, as a number"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatdimhole
+msgid "a dimension of the result is left undefined"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatindexnotnumber
+msgid "the index of a new dimension must be written as a number"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatindextoofar
+#, object-pascal-format
+msgid "a new dimension's index is past %d"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatnewdim
+msgid "a new dimension must be an index or { name, index }"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatnoconverge
+msgid "k-means did not settle"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatnosplit
+msgid "no cluster could be split"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatpolyorder
+#, object-pascal-format
+msgid "the polynomial order must be a whole number from -1 to %d"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatregmethod
+#, object-pascal-format
+msgid "\"%s\" is not a regression method"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystattoomanybins
+#, object-pascal-format
+msgid "more than %d bins"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystattoomanyclusters
+#, object-pascal-format
+msgid "more than %d clusters"
+msgstr ""
+
+#: tycontrols.advancechart.strconsts.rstystatunassigned
+msgid "a point belongs to no cluster"
+msgstr ""
+

@@ -536,7 +536,7 @@ uses
   tyControls.AdvanceChart.Scale,
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. }
-  tyControls.StrConsts;
+  tyControls.AdvanceChart.StrConsts;
 
 type
   TFormatterEntry = record

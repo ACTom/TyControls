@@ -836,7 +836,7 @@ implementation
 
 uses jsonparser, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
-  tyControls.AdvanceChart.Color, tyControls.StrConsts,
+  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.StrConsts,
   { [R7-AI] a padding written as a string }
   tyControls.AdvanceChart.RichText,
   { [R7-AK] a part in its own frame }
