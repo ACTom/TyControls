@@ -30,6 +30,7 @@ type
     procedure TestTheStartUpLoadNeverRaises;
     procedure TestTheBaseVariablesIncludeAnAddOnsToken;
     procedure TestTheBaseTypeKeysIncludeAnAddOnsKey;
+    procedure TestUnregisteringForgetsWhatItAdded;
   end;
 
   TTbAddOnFormTests = class(TTestCase)
@@ -50,7 +51,7 @@ implementation
 
 uses
   FileUtil, Forms, Dialogs, tyControls.Controller, tyControls.Css.AddOns, tbaddons, tbcoverage,
-  tbproblems, tbreference, tbpreview;
+  tbproblems, tbreference;
 
 const
   cZzCss = ':root{--zz-gap:7px;} TyZzThing{background:#123456;}';
@@ -86,12 +87,10 @@ procedure ForgetAddOns(const ANames: array of string);
 var
   i: Integer;
 begin
+  { an unregistration calls the listeners, which forget the lists built meanwhile
+    (TestUnregisteringForgetsWhatItAdded checks that they do) }
   for i := 0 to High(ANames) do
     TyUnregisterAddOnCss(ANames[i]);
-  { unregistering tells no listener: the lists built meanwhile are forgotten by hand }
-  TbForgetKnownKeys;
-  TbForgetPreviewCaches;
-  TbForgetReference;
 end;
 
 { ---- TTbAddOnTests ---- }
@@ -335,6 +334,38 @@ begin
     TbBaseTypeKeys(keys);
     AssertTrue('after: a key of the base layer''s rules', keys.IndexOf('TyZzThing') >= 0);
   finally
+    keys.Free;
+  end;
+end;
+
+{ The lists are built while the add-on is there, then it is unregistered: each list answers as
+  if it had never been loaded. Nothing here forgets them by hand. }
+procedure TTbAddOnTests.TestUnregisteringForgetsWhatItAdded;
+var
+  keys, names: TStringList;
+begin
+  keys := TStringList.Create;
+  names := TStringList.Create;
+  try
+    WriteFile('zzfile.tycss', cZzCss);
+    TbLoadAddOnFile(FDir + 'zzfile.tycss');
+    AssertTrue('loaded: a known typeKey', TbIsKnownTypeKey('TyZzThing', nil));
+    AssertTrue('in the AI reference', Pos('--zz-gap', TbReferenceText) > 0);
+    TbBaseTypeKeys(keys);
+    AssertTrue('a base typeKey', keys.IndexOf('TyZzThing') >= 0);
+    TbBaseVarNames(names);
+    AssertTrue('a base variable', names.IndexOf('zz-gap') >= 0);
+    TyUnregisterAddOnCss('zzfile');
+    AssertFalse('unregistered: not a known typeKey', TbIsKnownTypeKey('TyZzThing', nil));
+    AssertEquals('not in the AI reference', 0, Pos('--zz-gap', TbReferenceText));
+    keys.Clear;
+    TbBaseTypeKeys(keys);
+    AssertTrue('not a base typeKey', keys.IndexOf('TyZzThing') < 0);
+    names.Clear;
+    TbBaseVarNames(names);
+    AssertTrue('not a base variable', names.IndexOf('zz-gap') < 0);
+  finally
+    names.Free;
     keys.Free;
   end;
 end;

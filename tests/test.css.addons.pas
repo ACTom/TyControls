@@ -12,8 +12,8 @@ uses
 type
   { The add-ons registered when a test starts -- a program that links an add-on package has it
     registered by the package's initialization -- set aside so the test sees an empty registry,
-    and put back after it. Setting aside tells no listener, so a style model alive meanwhile
-    keeps them in its base layer; putting back is a registration and reseeds the models alive. }
+    and put back after it. Setting aside is an unregistration and putting back a registration:
+    each reseeds the style models alive. }
   TTyAddOnsAside = record
     Names, Texts: TStringArray;
   end;
@@ -37,6 +37,7 @@ type
     procedure TestReRegisteringReplaces;
     procedure TestNoAddOnIsTheCatalogAlone;
     procedure TestAListenerHearsARegistration;
+    procedure TestAListenerHearsAnUnregistration;
     procedure TestCommentsAndUsagesAreNotVocabulary;
     procedure TestARefusingListenerRollsTheRegistrationBack;
   end;
@@ -58,6 +59,8 @@ type
     procedure TestAFreedModelLeavesTheLiveList;
     procedure TestABrokenAddOnIsRefusedAndLeavesNothing;
     procedure TestARegistrationLoadsTheBaseForLiveModelsOnly;
+    procedure TestUnregisteringDropsItFromALiveModel;
+    procedure TestUnregisteringWhatAnotherBuildsOnDropsBoth;
   end;
 
 implementation
@@ -74,6 +77,9 @@ const
   { parses, but its rule names a variable nobody defines: the load refuses it }
   cBroken = 'test.zz.broken';
   cBrokenCss = ':root{--zz-gap:8px;} TyZzThing{background:var(--zz-nowhere);}';
+  { builds on cZz: its rule reads cZzInk's variable, so it loads only while cZz is there }
+  cUser = 'test.zz.user';
+  cUserCss = 'TyZzUser{background:var(--zz-ink);}';
 
 var
   GHeard: Integer;
@@ -129,12 +135,10 @@ begin
     TTestCase.AssertTrue(AMsg + ' ascending at ' + IntToStr(i), A[i - 1] < A[i]);
 end;
 
-{ TyUnregisterAddOnCss tells no listener, so a style model alive across the test (a default
-  controller's, say) would keep what the test registered in its base layer. Registering the name
-  empty first reseeds every live model without it; unregistering then drops the empty entry. }
+{ An unregistration reseeds every live model, so a style model alive across the test (a default
+  controller's, say) drops what the test registered from its base layer. }
 procedure ForgetAddOn(const AName: string);
 begin
-  TyRegisterAddOnCss(AName, '');
   TyUnregisterAddOnCss(AName);
 end;
 
@@ -256,6 +260,22 @@ begin
   AssertEquals('not after removal', 1, GHeard);
 end;
 
+procedure TTyCssAddOnsTest.TestAListenerHearsAnUnregistration;
+begin
+  Reg('t1', 'a{}');
+  Reg('t2', 'b{}');
+  GHeard := 0;
+  GSeen := 'not called';
+  TyAddAddOnCssListener(@Heard);
+  TyAddAddOnCssListener(@Saw);
+  TyUnregisterAddOnCss('t1');
+  AssertEquals('heard once', 1, GHeard);
+  AssertEquals('after the name was forgotten', 'b{}', GSeen);
+  TyUnregisterAddOnCss('t1');
+  TyUnregisterAddOnCss('never registered');
+  AssertEquals('a name that is not registered tells no one', 1, GHeard);
+end;
+
 procedure TTyCssAddOnsTest.TestCommentsAndUsagesAreNotVocabulary;
 var
   v: TTyCssVocabulary;
@@ -321,7 +341,8 @@ end;
 procedure TTyStyleModelAddOnTest.TearDown;
 begin
   FreeAndNil(FModel);
-  TyUnregisterAddOnCss(cBroken);   // only there if a refusal failed; before the reseed below
+  TyUnregisterAddOnCss(cBroken);   // only there if a refusal failed
+  ForgetAddOn(cUser);              // only there if an unregistration failed to drop it
   ForgetAddOn(cZz);
   inherited TearDown;
 end;
@@ -559,6 +580,70 @@ begin
   TyRegisterAddOnCss(cZz, cZzCss + cZzInk);
   AssertEquals('loads with one more alive', loads + alive + 1, TyBaseLoadsForTest);
   AssertEquals('and it reached that one', '#13579B', FModel.RawVar('--zz-ink'));
+end;
+
+procedure TTyStyleModelAddOnTest.TestUnregisteringDropsItFromALiveModel;
+var
+  v0: Cardinal;
+  later: TTyStyleModel;
+begin
+  { A third party that unregisters its add-on: the models alive drop it, as a registration
+    reaches them. Each memo is read first, so a reseed that left one stale shows. }
+  TyRegisterAddOnCss(cZz, cZzCss + cZzInk);
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss('TyButton{background:#00FF00;}');
+  AssertEquals('the token before', '7px', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('the raw text before', '7px', FModel.RawVar('--zz-gap'));
+  AssertEquals('the metric before', 7, FModel.ResolveMetric('--zz-gap', 3));
+  AssertEquals('the colour before', TTyColor($FF13579B),
+    FModel.ResolveColorToken('--zz-ink', TTyColor($FF000001)));
+  AssertEquals('the rule before', TTyColor($FF123456),
+    FModel.ResolveStyle('TyZzThing', '', []).Background.Color);
+  v0 := FModel.ThemeVersion;
+  TyUnregisterAddOnCss(cZz);
+  AssertEquals('forgotten', '', TyAddOnCssOf(cZz));
+  AssertTrue('the theme version moves', FModel.ThemeVersion <> v0);
+  AssertEquals('the token is gone', '', FModel.ResolveToken('--zz-gap'));
+  AssertEquals('the raw text is gone', '', FModel.RawVar('--zz-gap'));
+  AssertEquals('the metric falls back', 3, FModel.ResolveMetric('--zz-gap', 3));
+  AssertEquals('the colour falls back', TTyColor($FF000001),
+    FModel.ResolveColorToken('--zz-ink', TTyColor($FF000001)));
+  AssertFalse('the rule is gone', tpBackground in FModel.ResolveStyle('TyZzThing', '', []).Present);
+  AssertEquals('the user layer stays', TTyColor($FF00FF00),
+    FModel.ResolveStyle('TyButton', '', []).Background.Color);
+  later := TTyStyleModel.Create;
+  try
+    AssertEquals('a new model has none of it either', '', later.ResolveToken('--zz-gap'));
+  finally
+    later.Free;
+  end;
+end;
+
+procedure TTyStyleModelAddOnTest.TestUnregisteringWhatAnotherBuildsOnDropsBoth;
+var
+  msg: string;
+begin
+  { cUser's rule reads cZz's variable. Without cZz its text does not load, so the reseed drops
+    it too; the models alive must end up with neither, not with the base they had. }
+  TyRegisterAddOnCss(cZz, cZzCss + cZzInk);
+  TyRegisterAddOnCss(cUser, cUserCss);
+  FModel := TTyStyleModel.Create;
+  AssertEquals('the second builds on the first', TTyColor($FF13579B),
+    FModel.ResolveStyle('TyZzUser', '', []).Background.Color);
+  msg := '';
+  try
+    TyUnregisterAddOnCss(cZz);
+  except
+    on E: Exception do
+      msg := E.Message;
+  end;
+  AssertTrue('raised, naming the add-on unregistered: "' + msg + '"',
+    Pos('"' + cZz + '"', msg) > 0);
+  AssertTrue('and the one dropped with it', Pos('"' + cUser + '"', msg) > 0);
+  AssertEquals('both are forgotten', '', TyAddOnCssOf(cZz) + TyAddOnCssOf(cUser));
+  AssertEquals('the live model has neither token', '', FModel.ResolveToken('--zz-gap'));
+  AssertFalse('nor rule', tpBackground in FModel.ResolveStyle('TyZzUser', '', []).Present);
+  AssertFalse('nor the first one''s', tpBackground in FModel.ResolveStyle('TyZzThing', '', []).Present);
 end;
 
 initialization

@@ -392,7 +392,6 @@ begin
       AssertTrue('the add-on typeKey is offered', items.IndexOf('TyZzWidget') >= 0);
       AssertTrue('the core typeKeys still are', items.IndexOf('TyButton') >= 0);
     finally
-      TyRegisterAddOnCss(cName, '');
       TyUnregisterAddOnCss(cName);
     end;
   finally

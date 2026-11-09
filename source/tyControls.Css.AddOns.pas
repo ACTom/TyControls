@@ -25,7 +25,7 @@ type
     Tokens, TypeKeys: TStringArray;
   end;
 
-  { A plain procedure called after every registration. }
+  { A plain procedure called after every registration and every unregistration. }
   TTyAddOnCssListener = procedure;
 
 { The tokens and typeKeys ACss defines, de-duplicated, ascending by byte value. }
@@ -41,9 +41,21 @@ function TyCssVocabularyOf(const ACss: string): TTyCssVocabulary;
   start-up pays for no load: the next TTyStyleModel.Create finds it, drops it and raises. }
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 
-{ Forgets AName's registration, calling no listener. StyleModel drops an add-on whose text does
-  not load with it; tests clean up with it. }
+{ Forgets AName's registration. Every listener is then called once, in the order they were
+  added, as after a registration: StyleModel's reseeds the models alive, so they drop its rules
+  and tokens. A name that is not registered: nothing, and no listener is called.
+  The name stays forgotten even when a listener raises. The other listeners are still called,
+  then every listener once more (errors there are ignored), because the one that raised may
+  have changed the registry: StyleModel's drops an add-on whose text no longer loads without
+  this one (a text that used its variables, say). Then the first exception goes on with AName
+  in its message. }
 procedure TyUnregisterAddOnCss(const AName: string);
+
+{ Forgets AName's registration and calls no listener. For StyleModel only: it drops an add-on
+  whose text does not load while it seeds or reseeds a model, and its own listener is among the
+  ones that would be called, so calling them from there would run it inside itself. Everything
+  else calls TyUnregisterAddOnCss. }
+procedure TyUnregisterAddOnCssSilently(const AName: string);
 
 { Every registered text, in registration order, joined by LineEnding. '' when none. }
 function TyAddOnCss: string;
@@ -71,13 +83,14 @@ type
     Name, Css: string;
     Vocab: TTyCssVocabulary;   // of Css, computed once when it is set
   end;
+  TTyAddOnCssListenerArray = array of TTyAddOnCssListener;
 
 const
   cAddOnRefused = 'add-on tycss "%s": %s';
 
 var
   GAddOns: array of TAddOn;
-  GListeners: array of TTyAddOnCssListener;
+  GListeners: TTyAddOnCssListenerArray;
 
 function StripComments(const S: string): string;
 var
@@ -252,10 +265,22 @@ begin
   GAddOns[AIndex].Vocab := TyCssVocabularyOf(ACss);
 end;
 
+{ The listeners as they are now: a listener may add or remove listeners, so the caller calls
+  a copy. }
+function ListenerSnapshot: TTyAddOnCssListenerArray;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(GListeners));
+  for i := 0 to High(GListeners) do
+    Result[i] := GListeners[i];
+end;
+
 procedure TyRegisterAddOnCss(const AName, ACss: string);
 var
   i, n, called, oldIndex: Integer;
-  snapshot: array of TTyAddOnCssListener;
+  snapshot: TTyAddOnCssListenerArray;
   hadOld: Boolean;
   oldCss: string;
 begin
@@ -273,11 +298,8 @@ begin
   end;
   GAddOns[i].Css := ACss;
   GAddOns[i].Vocab := TyCssVocabularyOf(ACss);
-  { a listener may add or remove listeners; call a copy }
-  n := Length(GListeners);
-  SetLength(snapshot, n);
-  for i := 0 to n - 1 do
-    snapshot[i] := GListeners[i];
+  snapshot := ListenerSnapshot;
+  n := Length(snapshot);
   called := 0;
   try
     for i := 0 to n - 1 do
@@ -292,7 +314,7 @@ begin
       if hadOld then
         PutBack(AName, oldCss, oldIndex)
       else
-        TyUnregisterAddOnCss(AName);
+        TyUnregisterAddOnCssSilently(AName);   // the listeners are called just below
       for i := 0 to called - 1 do
         try
           snapshot[i]();
@@ -305,7 +327,7 @@ begin
   end;
 end;
 
-procedure TyUnregisterAddOnCss(const AName: string);
+procedure TyUnregisterAddOnCssSilently(const AName: string);
 var
   i, k: Integer;
 begin
@@ -314,6 +336,38 @@ begin
   for k := i to High(GAddOns) - 1 do
     GAddOns[k] := GAddOns[k + 1];
   SetLength(GAddOns, Length(GAddOns) - 1);
+end;
+
+procedure TyUnregisterAddOnCss(const AName: string);
+var
+  i: Integer;
+  snapshot: TTyAddOnCssListenerArray;
+  failure: Exception;
+begin
+  if IndexOfAddOn(AName) < 0 then Exit;
+  TyUnregisterAddOnCssSilently(AName);
+  snapshot := ListenerSnapshot;
+  failure := nil;
+  for i := 0 to High(snapshot) do
+    try
+      snapshot[i]();
+    except
+      on E: Exception do
+        if failure = nil then
+        begin
+          E.Message := Format(cAddOnRefused, [AName, E.Message]);
+          failure := Exception(AcquireExceptionObject);
+        end;
+    end;
+  if failure = nil then Exit;
+  { the registry may have changed under the listeners called before the one that raised }
+  for i := 0 to High(snapshot) do
+    try
+      snapshot[i]();
+    except
+      { the failure to report is the first one }
+    end;
+  raise failure;
 end;
 
 function TyAddOnCss: string;

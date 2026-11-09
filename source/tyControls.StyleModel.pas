@@ -1505,7 +1505,7 @@ begin
     except
       on E: Exception do
       begin
-        TyUnregisterAddOnCss(names[i]);
+        TyUnregisterAddOnCssSilently(names[i]);   // the listeners would reseed this model inside its own seed
         if Result <> '' then
           Result := Result + '; ';
         Result := Result + '"' + names[i] + '": ' + E.Message;
