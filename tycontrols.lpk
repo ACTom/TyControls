@@ -889,6 +889,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Terminal.ColorScheme.pas"/>
         <UnitName Value="tyControls.Terminal.ColorScheme"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.Text.pas"/>
+        <UnitName Value="tyControls.RichEdit.Text"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

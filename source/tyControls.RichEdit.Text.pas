@@ -1,0 +1,1965 @@
+unit tyControls.RichEdit.Text;
+
+{ Text storage for TTyRichEdit: a piece table whose pieces sit, in document order, in the
+  leaves of a B+ tree, and that tree is the paragraph index as well.
+
+  Pieces refer to bytes that never move: the original buffer (referenced, never copied),
+  the append-only add buffer, or a lazy source - a paragraph known only by its byte range
+  in the original file and its character count, whose text a TTyRichTextProvider decodes
+  the first time somebody reads or edits it (the RTF reader's paragraphs).
+
+  Counting: positions are code points. CR, LF and CRLF are each one separator and one
+  character; a separator is always the last thing in its piece, so a paragraph is a run of
+  pieces ending with one that carries a separator, and the last paragraph is the run after
+  the last separator (it has none). A byte that is not part of a valid UTF-8 sequence is one
+  character on its own and is kept as it is, so a file goes back out byte for byte. A
+  separator, once stored, is never re-paired: an LF inserted after a lone CR stays a second
+  separator.
+
+  Inner nodes keep, per child, the number of pieces, separators, characters, bytes and the
+  sum of paragraph heights, so position, paragraph and height lookups walk one root-to-leaf
+  path. Each paragraph has a height and a pointer-sized data slot, kept on the piece that
+  carries its separator (the last paragraph's live in the object), so they move with the
+  paragraph when paragraphs before it come and go. }
+
+{$mode objfpc}{$H+}
+{$modeswitch advancedrecords}
+{$inline on}
+
+interface
+
+uses
+  Classes, SysUtils, Generics.Collections;
+
+const
+  TyRichLeafCap = 128;
+  TyRichInnerCap = 64;
+  TyRichMaxDepth = 24;
+
+type
+  TTyRichPos = Int64;
+
+  ETyRichText = class(Exception);
+
+  TTyRichPieceKind = (rpkOriginal, rpkAdded, rpkLazy);
+  TTyRichSeparator = (rsNone, rsCR, rsLF, rsCRLF);
+
+  PTyRichPiece = ^TTyRichPiece;
+
+  { One piece. In the live tree FHeight/FData are the paragraph's when the piece carries a
+    separator (zero/nil otherwise). In a TTyRichPieces snapshot FHeight is 0 and FData of a
+    separator piece is the data of the paragraph that FOLLOWS that separator, which is what
+    RestorePieces needs to put a deleted range's paragraph data back. }
+  TTyRichPiece = packed record
+  private
+    FSrc: Int64;        // source offset in the low 56 bits, kind and separator above
+    FBytes: LongInt;    // bytes in the source (a lazy piece: in the original file)
+    FChars: LongInt;    // characters, the separator included
+    FHeight: LongInt;
+    FData: Pointer;
+  public
+    function Kind: TTyRichPieceKind;
+    function Separator: TTyRichSeparator;
+    function SrcOffset: Int64;
+    function ByteCount: Integer;
+    function CharCount: Integer;
+    function Data: Pointer;
+  end;
+
+  TTyRichPieceArray = array of TTyRichPiece;
+
+  { What a command keeps to put a range back: piece references, never text. }
+  TTyRichPieces = record
+    Pieces: TTyRichPieceArray;
+    CharCount: Int64;
+  end;
+
+  { One stretch of bytes a writer can copy. Bytes is nil for a lazy run (the bytes are in
+    the original file at SrcOffset, which the text does not hold) and is valid only during
+    the callback. A run of the whole of a paragraph that is still rpkOriginal or rpkLazy is
+    that paragraph's untouched source. }
+  TTyRichByteRun = record
+    Kind: TTyRichPieceKind;
+    SrcOffset: Int64;
+    ByteCount: Int64;
+    CharCount: Int64;
+    Separator: TTyRichSeparator;  // the run ends with this separator (its bytes included)
+    Bytes: PByte;
+  end;
+
+  TTyRichRunEvent = procedure(const ARun: TTyRichByteRun; var AContinue: Boolean) of object;
+  TTyRichParasChangedEvent = procedure(Sender: TObject; AFirst, AOldCount, ANewCount: Integer)
+    of object;
+  TTyRichParaDataEvent = procedure(Sender: TObject; AData: Pointer) of object;
+
+  { Decodes one lazy paragraph: its text WITHOUT the separator, exactly ACharCount
+    characters minus the separator, containing no CR or LF. }
+  TTyRichTextProvider = class
+  public
+    function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+      virtual; abstract;
+  end;
+
+  TTyRichSum = record
+    Entries: LongInt;
+    Seps: LongInt;
+    Chars: Int64;
+    Bytes: Int64;
+    Height: Int64;
+  end;
+
+  PTyRichNode = ^TTyRichNode;
+  TTyRichNode = record
+    Count: LongInt;
+    IsLeaf: Boolean;
+    Pad: array[0..2] of Byte;
+  end;
+
+  PTyRichLeaf = ^TTyRichLeaf;
+  TTyRichLeaf = record
+    Count: LongInt;
+    IsLeaf: Boolean;
+    Pad: array[0..2] of Byte;
+    Items: array[0..TyRichLeafCap - 1] of TTyRichPiece;
+  end;
+
+  PTyRichInner = ^TTyRichInner;
+  TTyRichInner = record
+    Count: LongInt;
+    IsLeaf: Boolean;
+    Pad: array[0..2] of Byte;
+    Child: array[0..TyRichInnerCap - 1] of PTyRichNode;
+    Sum: array[0..TyRichInnerCap - 1] of TTyRichSum;
+  end;
+
+  TTyRichStep = record
+    Node: PTyRichNode;
+    Index: LongInt;
+  end;
+
+  TTyRichPath = record
+    Steps: array[0..TyRichMaxDepth] of TTyRichStep;
+  end;
+
+  TTyRichSeek = (rskEntry, rskChar, rskSep, rskHeight);
+
+  TTyRichDecoded = record
+    AddOff: Int64;
+    Bytes: LongInt;
+  end;
+
+  TTyRichDecodedMap = specialize TDictionary<Int64, TTyRichDecoded>;
+
+  TTyRichText = class
+  private
+    FOrig: TBytes;
+    FAdd: TBytes;
+    FAddLen: Int64;
+    FRoot: PTyRichNode;
+    FDepth: Integer;
+    FTotal: TTyRichSum;
+    FLastData: Pointer;
+    FLastHeight: LongInt;
+    FNodeVisits: Int64;
+    FProvider: TTyRichTextProvider;
+    FOwnsProvider: Boolean;
+    FDecoded: TTyRichDecodedMap;
+    FLoading: Boolean;
+    FLoadLeaf: PTyRichLeaf;
+    FLoadLeaves: TFPList;
+    FLoadLastSep: Boolean;
+    FLoadLastSrc: Int64;
+    FScanToLoad: Boolean;
+    FScan: TTyRichPieceArray;
+    FScanCount: Integer;
+    FOnParasChanged: TTyRichParasChangedEvent;
+    FOnParaDataDropped: TTyRichParaDataEvent;
+    // tree
+    function NewNode(ALeaf: Boolean): PTyRichNode;
+    procedure FreeNode(ANode: PTyRichNode);
+    function NodeSum(ANode: PTyRichNode): TTyRichSum;
+    function Descend(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
+      out ABefore: TTyRichSum): Boolean;
+    procedure Find(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
+      out ABefore: TTyRichSum);
+    function ItemAt(const APath: TTyRichPath): PTyRichPiece;
+    function Advance(var APath: TTyRichPath): Boolean;
+    procedure FixUp(var APath: TTyRichPath; ALevel: Integer);
+    procedure SplitNode(var APath: TTyRichPath; ALevel, AAt: Integer);
+    procedure RemoveNode(var APath: TTyRichPath; ALevel: Integer);
+    procedure Rebalance(var APath: TTyRichPath; ALevel: Integer);
+    procedure CollapseRoot;
+    procedure InsertEntries(AAt: LongInt; const AItems: array of TTyRichPiece);
+    procedure DeleteEntries(AFirst, ACount: LongInt);
+    // loading
+    procedure LoadPiece(ASrc: Int64; ABytes, AChars: LongInt; AKind: Byte; ASep: Byte); inline;
+    procedure FinishLoad;
+    procedure Emit(ASrc: Int64; ABytes, AChars: LongInt; AKind, ASep: Byte); inline;
+    procedure Scan(ABuf: PByte; ACount: Int64; ABase: Int64; AKind: Byte);
+    // pieces
+    function AppendAdd(AData: Pointer; ACount: Int64): Int64;
+    function DecodedOf(AItem: PTyRichPiece): TTyRichDecoded;
+    function PieceText(AItem: PTyRichPiece; out ALen: LongInt): PByte;
+    procedure ConvertToAdded(var APath: TTyRichPath);
+    function SplitAt(APos: TTyRichPos): LongInt;
+    procedure CheckJunction(APos: TTyRichPos);
+    procedure TrimPiece(AItem: PTyRichPiece; AFrom, ATo: LongInt; out APiece: TTyRichPiece);
+    procedure InsertPieces(APos: TTyRichPos; var APieces: TTyRichPieceArray; ACount: Integer;
+      const AFollow: array of Pointer);
+    // paragraphs
+    procedure CheckReady;
+    procedure CheckPara(AIndex: Integer);
+    procedure CheckRange(APos, ALen: TTyRichPos);
+    function GetParaData(AIndex: Integer): Pointer;
+    procedure SetParaData(AIndex: Integer; AValue: Pointer);
+    procedure SetParaRaw(AIndex: Integer; AData: Pointer; AHeight: LongInt);
+    procedure DoParasChanged(AFirst, AOldCount, ANewCount: Integer);
+    function CheckNode(ANode: PTyRichNode; ALevel: Integer; var APrevSep: Boolean;
+      var APrevLazyOpen: Boolean): string;
+  public
+    constructor Create;
+    { The buffer is referenced, not copied; it must not change afterwards. }
+    constructor CreateFromUtf8(const ABuffer: TBytes);
+    { A text built from lazy paragraphs: call AppendLazyParagraph for each paragraph in
+      order (source offsets strictly increasing; only the last may have rsNone), then
+      EndLazyLoad. Nothing is decoded until it is read or edited. }
+    constructor CreateLazy(AProvider: TTyRichTextProvider; AOwnsProvider: Boolean);
+    procedure AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
+      ASeparator: TTyRichSeparator);
+    procedure EndLazyLoad;
+    destructor Destroy; override;
+
+    procedure Insert(APos: TTyRichPos; const AText: UTF8String);
+    procedure Delete(APos, ALen: TTyRichPos);
+    function Length: TTyRichPos;
+    { Bytes the pieces cover; a lazy piece counts its bytes in the original file. }
+    function ByteCount: Int64;
+    { The stored bytes, separators as they are (a CRLF comes back as two bytes). }
+    function GetText(APos, ALen: TTyRichPos): UTF8String;
+    procedure ForEachRun(APos, ALen: TTyRichPos; AProc: TTyRichRunEvent);
+
+    function ParaCount: Integer;
+    function ParaStart(AIndex: Integer): TTyRichPos;
+    function ParaLength(AIndex: Integer): TTyRichPos;
+    function ParaOfPos(APos: TTyRichPos): Integer;
+    function ParaSeparator(AIndex: Integer): TTyRichSeparator;
+
+    function PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
+    procedure RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
+
+    procedure SetParaHeight(AIndex: Integer; AHeight: Int64);
+    function ParaHeight(AIndex: Integer): Int64;
+    function ParaTop(AIndex: Integer): Int64;
+    function ParaAtHeight(AY: Int64): Integer;
+    function TotalHeight: Int64;
+
+    function PieceCount: Integer;
+    { Levels of inner nodes above the leaves (for tests). }
+    function TreeDepth: Integer;
+    { '' when every summary and invariant holds, else the first problem (for tests). }
+    function CheckIntegrity: string;
+
+    { nil by default. A split leaves it with the first part and gives the new paragraph
+      nil; a merge keeps the first paragraph's and reports the others to OnParaDataDropped
+      (the text never frees anything, also not on Destroy). }
+    property ParaData[AIndex: Integer]: Pointer read GetParaData write SetParaData;
+    property AddedBytes: Int64 read FAddLen;
+    { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
+    property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
+    property OnParasChanged: TTyRichParasChangedEvent read FOnParasChanged
+      write FOnParasChanged;
+    property OnParaDataDropped: TTyRichParaDataEvent read FOnParaDataDropped
+      write FOnParaDataDropped;
+  end;
+
+implementation
+
+const
+  SrcMask = (Int64(1) shl 56) - 1;
+  // stored kinds; a decoded lazy piece still reads as rpkLazy outside
+  kOrig = 0;
+  kAdded = 1;
+  kLazy = 2;
+  kLazyDecoded = 3;
+  // stored separators match Ord(TTyRichSeparator)
+  sNone = 0;
+  sCR = 1;
+  sLF = 2;
+  sCRLF = 3;
+  // a piece never grows past this, so its counts fit a LongInt
+  MaxPieceBytes = 1 shl 30;
+
+{ ---- pieces ---- }
+
+function PKind(const P: TTyRichPiece): Byte; inline;
+begin
+  Result := (P.FSrc shr 56) and 3;
+end;
+
+function PSep(const P: TTyRichPiece): Byte; inline;
+begin
+  Result := (P.FSrc shr 58) and 3;
+end;
+
+function POff(const P: TTyRichPiece): Int64; inline;
+begin
+  Result := P.FSrc and SrcMask;
+end;
+
+function MakeSrc(AOff: Int64; AKind, ASep: Byte): Int64; inline;
+begin
+  Result := AOff or (Int64(AKind) shl 56) or (Int64(ASep) shl 58);
+end;
+
+function SepBytes(ASep: Byte): Integer; inline;
+begin
+  case ASep of
+    sCR, sLF: Result := 1;
+    sCRLF: Result := 2;
+  else
+    Result := 0;
+  end;
+end;
+
+function IsLazy(const P: TTyRichPiece): Boolean; inline;
+begin
+  Result := PKind(P) >= kLazy;
+end;
+
+function TTyRichPiece.Kind: TTyRichPieceKind;
+begin
+  case PKind(Self) of
+    kOrig: Result := rpkOriginal;
+    kAdded: Result := rpkAdded;
+  else
+    Result := rpkLazy;
+  end;
+end;
+
+function TTyRichPiece.Separator: TTyRichSeparator;
+begin
+  Result := TTyRichSeparator(PSep(Self));
+end;
+
+function TTyRichPiece.SrcOffset: Int64;
+begin
+  Result := POff(Self);
+end;
+
+function TTyRichPiece.ByteCount: Integer;
+begin
+  Result := FBytes;
+end;
+
+function TTyRichPiece.CharCount: Integer;
+begin
+  Result := FChars;
+end;
+
+function TTyRichPiece.Data: Pointer;
+begin
+  Result := FData;
+end;
+
+{ ---- UTF-8 ---- }
+
+{ The length of the valid UTF-8 sequence at P, or 1 when the byte there does not start one
+  (it is then a character on its own). Strict: no overlongs, surrogates or > U+10FFFF. }
+function SeqLen(P: PByte; AAvail: PtrInt): Integer; inline;
+var
+  b0, b1: Byte;
+begin
+  b0 := P^;
+  if b0 < $C2 then Exit(1);
+  if b0 < $E0 then
+  begin
+    if (AAvail >= 2) and (P[1] and $C0 = $80) then Exit(2);
+    Exit(1);
+  end;
+  if b0 < $F0 then
+  begin
+    if AAvail < 3 then Exit(1);
+    b1 := P[1];
+    if (b1 and $C0 <> $80) or (P[2] and $C0 <> $80) then Exit(1);
+    if (b0 = $E0) and (b1 < $A0) then Exit(1);
+    if (b0 = $ED) and (b1 > $9F) then Exit(1);
+    Exit(3);
+  end;
+  if b0 < $F5 then
+  begin
+    if AAvail < 4 then Exit(1);
+    b1 := P[1];
+    if (b1 and $C0 <> $80) or (P[2] and $C0 <> $80) or (P[3] and $C0 <> $80) then Exit(1);
+    if (b0 = $F0) and (b1 < $90) then Exit(1);
+    if (b0 = $F4) and (b1 > $8F) then Exit(1);
+    Exit(4);
+  end;
+  Result := 1;
+end;
+
+function CountChars(P: PByte; ACount: PtrInt): PtrInt;
+var
+  stop: PByte;
+begin
+  Result := 0;
+  stop := P + ACount;
+  while P < stop do
+  begin
+    if P^ < $80 then Inc(P) else Inc(P, SeqLen(P, stop - P));
+    Inc(Result);
+  end;
+end;
+
+{ Byte offset of character AChars in the separator-free bytes P[0..ACount). This is the
+  scan inside one piece every position lookup ends with, so ASCII goes eight bytes at a
+  time and CJK's three-byte sequences are checked inline. }
+{$PUSH}{$Q-}{$R-}
+function ByteOfChar(P: PByte; ACount: PtrInt; AChars: PtrInt): PtrInt;
+var
+  q, stop: PByte;
+  b: Byte;
+begin
+  q := P;
+  stop := P + ACount;
+  while (AChars > 0) and (q < stop) do
+  begin
+    if (AChars >= 8) and (stop - q >= 8) and
+       (unaligned(PQWord(q)^) and QWord($8080808080808080) = 0) then
+    begin
+      Inc(q, 8);
+      Dec(AChars, 8);
+      Continue;
+    end;
+    b := q^;
+    if b < $80 then
+      Inc(q)
+    else if (b and $F0 = $E0) and (b <> $E0) and (b <> $ED) and (stop - q >= 3) and
+            (unaligned(PWord(q + 1)^) and $C0C0 = $8080) then
+      Inc(q, 3)
+    else
+      Inc(q, SeqLen(q, stop - q));
+    Dec(AChars);
+  end;
+  Result := q - P;
+end;
+{$POP}
+
+function HasBreak(P: PByte; ACount: PtrInt): Boolean;
+var
+  i: PtrInt;
+begin
+  for i := 0 to ACount - 1 do
+    if (P[i] = 10) or (P[i] = 13) then Exit(True);
+  Result := False;
+end;
+
+{ ---- TTyRichText: tree ---- }
+
+function TTyRichText.NewNode(ALeaf: Boolean): PTyRichNode;
+begin
+  if ALeaf then
+    Result := GetMem(SizeOf(TTyRichLeaf))
+  else
+    Result := GetMem(SizeOf(TTyRichInner));
+  Result^.Count := 0;
+  Result^.IsLeaf := ALeaf;
+end;
+
+procedure TTyRichText.FreeNode(ANode: PTyRichNode);
+var
+  i: Integer;
+begin
+  if ANode = nil then Exit;
+  if not ANode^.IsLeaf then
+    for i := 0 to ANode^.Count - 1 do
+      FreeNode(PTyRichInner(ANode)^.Child[i]);
+  FreeMem(ANode);
+end;
+
+function TTyRichText.NodeSum(ANode: PTyRichNode): TTyRichSum;
+var
+  i: Integer;
+  leaf: PTyRichLeaf;
+  inner: PTyRichInner;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  if ANode^.IsLeaf then
+  begin
+    leaf := PTyRichLeaf(ANode);
+    Result.Entries := leaf^.Count;
+    for i := 0 to leaf^.Count - 1 do
+    begin
+      if PSep(leaf^.Items[i]) <> sNone then Inc(Result.Seps);
+      Inc(Result.Chars, leaf^.Items[i].FChars);
+      Inc(Result.Bytes, leaf^.Items[i].FBytes);
+      Inc(Result.Height, leaf^.Items[i].FHeight);
+    end;
+  end
+  else
+  begin
+    inner := PTyRichInner(ANode);
+    for i := 0 to inner^.Count - 1 do
+    begin
+      Inc(Result.Entries, inner^.Sum[i].Entries);
+      Inc(Result.Seps, inner^.Sum[i].Seps);
+      Inc(Result.Chars, inner^.Sum[i].Chars);
+      Inc(Result.Bytes, inner^.Sum[i].Bytes);
+      Inc(Result.Height, inner^.Sum[i].Height);
+    end;
+  end;
+end;
+
+{ Walks one root-to-leaf path to the piece the key falls in: the AKey-th piece, the piece
+  holding character AKey, the AKey-th separator piece, or the piece whose height range
+  holds AKey. ABefore sums everything in front of it. When the key is past the end the
+  path ends one past the last piece and the result is False. }
+function TTyRichText.Descend(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
+  out ABefore: TTyRichSum): Boolean;
+var
+  node: PTyRichNode;
+  inner: PTyRichInner;
+  leaf: PTyRichLeaf;
+  lvl, i: Integer;
+  hit: Boolean;
+begin
+  FillChar(ABefore, SizeOf(ABefore), 0);
+  node := FRoot;
+  lvl := 0;
+  while not node^.IsLeaf do
+  begin
+    Inc(FNodeVisits);
+    inner := PTyRichInner(node);
+    i := 0;
+    while i < inner^.Count - 1 do
+    begin
+      with inner^.Sum[i] do
+      begin
+        case AMode of
+          rskEntry: hit := AKey < Entries;
+          rskChar: hit := AKey < Chars;
+          rskSep: hit := AKey < Seps;
+        else
+          hit := AKey < Height;
+        end;
+        if hit then Break;
+        case AMode of
+          rskEntry: Dec(AKey, Entries);
+          rskChar: Dec(AKey, Chars);
+          rskSep: Dec(AKey, Seps);
+        else
+          Dec(AKey, Height);
+        end;
+        Inc(ABefore.Entries, Entries);
+        Inc(ABefore.Seps, Seps);
+        Inc(ABefore.Chars, Chars);
+        Inc(ABefore.Bytes, Bytes);
+        Inc(ABefore.Height, Height);
+      end;
+      Inc(i);
+    end;
+    APath.Steps[lvl].Node := node;
+    APath.Steps[lvl].Index := i;
+    node := inner^.Child[i];
+    Inc(lvl);
+  end;
+  Inc(FNodeVisits);
+  leaf := PTyRichLeaf(node);
+  APath.Steps[lvl].Node := node;
+  for i := 0 to leaf^.Count - 1 do
+    with leaf^.Items[i] do
+    begin
+      case AMode of
+        rskEntry: hit := AKey = 0;
+        rskChar: hit := AKey < FChars;
+        rskSep: hit := (PSep(leaf^.Items[i]) <> sNone) and (AKey = 0);
+      else
+        hit := AKey < FHeight;
+      end;
+      if hit then
+      begin
+        APath.Steps[lvl].Index := i;
+        Exit(True);
+      end;
+      case AMode of
+        rskEntry: Dec(AKey);
+        rskChar: Dec(AKey, FChars);
+        rskSep: if PSep(leaf^.Items[i]) <> sNone then Dec(AKey);
+      else
+        Dec(AKey, FHeight);
+      end;
+      Inc(ABefore.Entries);
+      if PSep(leaf^.Items[i]) <> sNone then Inc(ABefore.Seps);
+      Inc(ABefore.Chars, FChars);
+      Inc(ABefore.Bytes, FBytes);
+      Inc(ABefore.Height, FHeight);
+    end;
+  APath.Steps[lvl].Index := leaf^.Count;
+  Result := False;
+end;
+
+{ Descend for a key that must be inside the text. A miss means the summaries are broken;
+  using the path then would read and write past a leaf's pieces. }
+procedure TTyRichText.Find(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
+  out ABefore: TTyRichSum);
+begin
+  if not Descend(AMode, AKey, APath, ABefore) then
+    raise ETyRichText.Create('Rich text index is inconsistent');
+end;
+
+function TTyRichText.ItemAt(const APath: TTyRichPath): PTyRichPiece;
+begin
+  Result := @PTyRichLeaf(APath.Steps[FDepth].Node)^.Items[APath.Steps[FDepth].Index];
+end;
+
+{ Moves the path to the next piece; False at the end. }
+function TTyRichText.Advance(var APath: TTyRichPath): Boolean;
+var
+  l, d: Integer;
+begin
+  Inc(APath.Steps[FDepth].Index);
+  if APath.Steps[FDepth].Index < APath.Steps[FDepth].Node^.Count then Exit(True);
+  l := FDepth;
+  repeat
+    Dec(l);
+    if l < 0 then Exit(False);
+    Inc(APath.Steps[l].Index);
+  until APath.Steps[l].Index < APath.Steps[l].Node^.Count;
+  for d := l + 1 to FDepth do
+  begin
+    APath.Steps[d].Node := PTyRichInner(APath.Steps[d - 1].Node)^.Child[APath.Steps[d - 1].Index];
+    APath.Steps[d].Index := 0;
+  end;
+  Result := True;
+end;
+
+{ Recomputes the summaries from the node at ALevel up to the root. }
+procedure TTyRichText.FixUp(var APath: TTyRichPath; ALevel: Integer);
+var
+  l: Integer;
+begin
+  for l := ALevel downto 1 do
+    PTyRichInner(APath.Steps[l - 1].Node)^.Sum[APath.Steps[l - 1].Index] :=
+      NodeSum(APath.Steps[l].Node);
+  FTotal := NodeSum(FRoot);
+end;
+
+{ Splits the node at ALevel into [0, AAt) and [AAt, Count), the new right half going in
+  after it in the parent (split first when full). The path stays valid at every level: it
+  follows its own index into whichever half holds it. }
+procedure TTyRichText.SplitNode(var APath: TTyRichPath; ALevel, AAt: Integer);
+var
+  root, pa: PTyRichInner;
+  n, n2: PTyRichNode;
+  l, idx, oldDepth, moved: Integer;
+begin
+  if ALevel = 0 then
+  begin
+    if FDepth >= TyRichMaxDepth then
+      raise ETyRichText.Create('Rich text index too deep');
+    root := PTyRichInner(NewNode(False));
+    root^.Count := 1;
+    root^.Child[0] := FRoot;
+    root^.Sum[0] := NodeSum(FRoot);
+    FRoot := PTyRichNode(root);
+    for l := FDepth downto 0 do
+      APath.Steps[l + 1] := APath.Steps[l];
+    APath.Steps[0].Node := PTyRichNode(root);
+    APath.Steps[0].Index := 0;
+    Inc(FDepth);
+    ALevel := 1;
+  end;
+  pa := PTyRichInner(APath.Steps[ALevel - 1].Node);
+  if pa^.Count = TyRichInnerCap then
+  begin
+    oldDepth := FDepth;
+    SplitNode(APath, ALevel - 1, TyRichInnerCap div 2);
+    Inc(ALevel, FDepth - oldDepth);
+    pa := PTyRichInner(APath.Steps[ALevel - 1].Node);
+  end;
+  n := APath.Steps[ALevel].Node;
+  idx := APath.Steps[ALevel - 1].Index;
+  n2 := NewNode(n^.IsLeaf);
+  moved := n^.Count - AAt;
+  if n^.IsLeaf then
+  begin
+    if moved > 0 then
+      Move(PTyRichLeaf(n)^.Items[AAt], PTyRichLeaf(n2)^.Items[0], moved * SizeOf(TTyRichPiece));
+  end
+  else if moved > 0 then
+  begin
+    Move(PTyRichInner(n)^.Child[AAt], PTyRichInner(n2)^.Child[0], moved * SizeOf(PTyRichNode));
+    Move(PTyRichInner(n)^.Sum[AAt], PTyRichInner(n2)^.Sum[0], moved * SizeOf(TTyRichSum));
+  end;
+  n2^.Count := moved;
+  n^.Count := AAt;
+  if idx + 1 < pa^.Count then
+  begin
+    Move(pa^.Child[idx + 1], pa^.Child[idx + 2], (pa^.Count - idx - 1) * SizeOf(PTyRichNode));
+    Move(pa^.Sum[idx + 1], pa^.Sum[idx + 2], (pa^.Count - idx - 1) * SizeOf(TTyRichSum));
+  end;
+  pa^.Child[idx + 1] := n2;
+  pa^.Sum[idx] := NodeSum(n);
+  pa^.Sum[idx + 1] := NodeSum(n2);
+  Inc(pa^.Count);
+  if APath.Steps[ALevel].Index >= AAt then
+  begin
+    APath.Steps[ALevel].Node := n2;
+    Dec(APath.Steps[ALevel].Index, AAt);
+    APath.Steps[ALevel - 1].Index := idx + 1;
+  end;
+end;
+
+{ Unlinks and frees the (empty) node at ALevel, and its parent too when that empties. }
+procedure TTyRichText.RemoveNode(var APath: TTyRichPath; ALevel: Integer);
+var
+  pa: PTyRichInner;
+  idx: Integer;
+begin
+  pa := PTyRichInner(APath.Steps[ALevel - 1].Node);
+  idx := APath.Steps[ALevel - 1].Index;
+  FreeNode(APath.Steps[ALevel].Node);
+  if idx < pa^.Count - 1 then
+  begin
+    Move(pa^.Child[idx + 1], pa^.Child[idx], (pa^.Count - idx - 1) * SizeOf(PTyRichNode));
+    Move(pa^.Sum[idx + 1], pa^.Sum[idx], (pa^.Count - idx - 1) * SizeOf(TTyRichSum));
+  end;
+  Dec(pa^.Count);
+  if (pa^.Count = 0) and (ALevel - 1 > 0) then
+    RemoveNode(APath, ALevel - 1)
+  else
+  begin
+    if pa^.Count > 0 then
+      APath.Steps[ALevel - 1].Index := 0;
+    FixUp(APath, ALevel - 1);
+    Rebalance(APath, ALevel - 1);
+  end;
+end;
+
+{ Merges a node that fell under a quarter full into a neighbour when both fit in one. }
+procedure TTyRichText.Rebalance(var APath: TTyRichPath; ALevel: Integer);
+var
+  n, nl, nr: PTyRichNode;
+  pa: PTyRichInner;
+  idx, li, ri, cap: Integer;
+begin
+  if ALevel <= 0 then Exit;
+  n := APath.Steps[ALevel].Node;
+  if n^.IsLeaf then cap := TyRichLeafCap else cap := TyRichInnerCap;
+  if n^.Count >= cap div 4 then Exit;
+  pa := PTyRichInner(APath.Steps[ALevel - 1].Node);
+  idx := APath.Steps[ALevel - 1].Index;
+  if idx + 1 < pa^.Count then
+  begin
+    li := idx;
+    ri := idx + 1;
+  end
+  else if idx > 0 then
+  begin
+    li := idx - 1;
+    ri := idx;
+  end
+  else
+    Exit;
+  nl := pa^.Child[li];
+  nr := pa^.Child[ri];
+  if nl^.Count + nr^.Count > cap then Exit;
+  if nl^.IsLeaf then
+    Move(PTyRichLeaf(nr)^.Items[0], PTyRichLeaf(nl)^.Items[nl^.Count],
+      nr^.Count * SizeOf(TTyRichPiece))
+  else
+  begin
+    Move(PTyRichInner(nr)^.Child[0], PTyRichInner(nl)^.Child[nl^.Count],
+      nr^.Count * SizeOf(PTyRichNode));
+    Move(PTyRichInner(nr)^.Sum[0], PTyRichInner(nl)^.Sum[nl^.Count],
+      nr^.Count * SizeOf(TTyRichSum));
+  end;
+  Inc(nl^.Count, nr^.Count);
+  FreeMem(nr);
+  pa^.Sum[li] := NodeSum(nl);
+  if ri < pa^.Count - 1 then
+  begin
+    Move(pa^.Child[ri + 1], pa^.Child[ri], (pa^.Count - ri - 1) * SizeOf(PTyRichNode));
+    Move(pa^.Sum[ri + 1], pa^.Sum[ri], (pa^.Count - ri - 1) * SizeOf(TTyRichSum));
+  end;
+  Dec(pa^.Count);
+  APath.Steps[ALevel - 1].Index := li;
+  APath.Steps[ALevel].Node := nl;
+  FixUp(APath, ALevel - 1);
+  Rebalance(APath, ALevel - 1);
+end;
+
+procedure TTyRichText.CollapseRoot;
+var
+  child: PTyRichNode;
+begin
+  while (FDepth > 0) and (FRoot^.Count = 1) do
+  begin
+    child := PTyRichInner(FRoot)^.Child[0];
+    FreeMem(FRoot);
+    FRoot := child;
+    Dec(FDepth);
+  end;
+  if (FDepth > 0) and (FRoot^.Count = 0) then
+  begin
+    FreeMem(FRoot);
+    FRoot := NewNode(True);
+    FDepth := 0;
+  end;
+  FTotal := NodeSum(FRoot);
+end;
+
+{ Puts AItems in front of piece AAt (AAt = PieceCount appends). When they do not fit in
+  the leaf, the leaf's tail is set aside and everything is appended leaf after full leaf,
+  so a big restore packs the leaves instead of leaving them half full. }
+procedure TTyRichText.InsertEntries(AAt: LongInt; const AItems: array of TTyRichPiece);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  leaf: PTyRichLeaf;
+  idx, n: Integer;
+  tail: TTyRichPieceArray;
+
+  procedure AppendRun(const ASrc: array of TTyRichPiece; AFrom, ACount: Integer);
+  var
+    k: Integer;
+  begin
+    while ACount > 0 do
+    begin
+      leaf := PTyRichLeaf(p.Steps[FDepth].Node);
+      if leaf^.Count = TyRichLeafCap then
+      begin
+        // no FixUp needed first: the split recomputes both halves from their contents,
+        // and the FixUp after the last run covers the path it ends on
+        p.Steps[FDepth].Index := leaf^.Count;
+        SplitNode(p, FDepth, leaf^.Count);
+        leaf := PTyRichLeaf(p.Steps[FDepth].Node);
+      end;
+      k := TyRichLeafCap - leaf^.Count;
+      if k > ACount then k := ACount;
+      Move(ASrc[AFrom], leaf^.Items[leaf^.Count], k * SizeOf(TTyRichPiece));
+      Inc(leaf^.Count, k);
+      p.Steps[FDepth].Index := leaf^.Count;
+      Inc(AFrom, k);
+      Dec(ACount, k);
+    end;
+  end;
+
+begin
+  n := System.Length(AItems);
+  if n = 0 then Exit;
+  Descend(rskEntry, AAt, p, before);
+  leaf := PTyRichLeaf(p.Steps[FDepth].Node);
+  idx := p.Steps[FDepth].Index;
+  if leaf^.Count + n <= TyRichLeafCap then
+  begin
+    if idx < leaf^.Count then
+      Move(leaf^.Items[idx], leaf^.Items[idx + n], (leaf^.Count - idx) * SizeOf(TTyRichPiece));
+    Move(AItems[0], leaf^.Items[idx], n * SizeOf(TTyRichPiece));
+    Inc(leaf^.Count, n);
+    FixUp(p, FDepth);
+    Exit;
+  end;
+  tail := nil;
+  SetLength(tail, leaf^.Count - idx);
+  if System.Length(tail) > 0 then
+    Move(leaf^.Items[idx], tail[0], System.Length(tail) * SizeOf(TTyRichPiece));
+  leaf^.Count := idx;
+  AppendRun(AItems, 0, n);
+  if System.Length(tail) > 0 then
+    AppendRun(tail, 0, System.Length(tail));
+  FixUp(p, FDepth);
+end;
+
+procedure TTyRichText.DeleteEntries(AFirst, ACount: LongInt);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  leaf: PTyRichLeaf;
+  idx, k: Integer;
+begin
+  while ACount > 0 do
+  begin
+    Descend(rskEntry, AFirst, p, before);
+    leaf := PTyRichLeaf(p.Steps[FDepth].Node);
+    idx := p.Steps[FDepth].Index;
+    k := leaf^.Count - idx;
+    if k > ACount then k := ACount;
+    // only a broken summary can point past a leaf's pieces; looping on it would hang
+    if k <= 0 then
+      raise ETyRichText.Create('Rich text index is inconsistent');
+    if (k = leaf^.Count) and (FDepth > 0) then
+      RemoveNode(p, FDepth)
+    else
+    begin
+      if idx + k < leaf^.Count then
+        Move(leaf^.Items[idx + k], leaf^.Items[idx], (leaf^.Count - idx - k) * SizeOf(TTyRichPiece));
+      Dec(leaf^.Count, k);
+      FixUp(p, FDepth);
+      Rebalance(p, FDepth);
+    end;
+    Dec(ACount, k);
+  end;
+  CollapseRoot;
+end;
+
+{ ---- loading ---- }
+
+procedure TTyRichText.LoadPiece(ASrc: Int64; ABytes, AChars: LongInt; AKind: Byte; ASep: Byte);
+var
+  it: PTyRichPiece;
+begin
+  if FLoadLeaf^.Count = TyRichLeafCap then
+  begin
+    FLoadLeaves.Add(FLoadLeaf);
+    FLoadLeaf := PTyRichLeaf(NewNode(True));
+  end;
+  it := @FLoadLeaf^.Items[FLoadLeaf^.Count];
+  it^.FSrc := MakeSrc(ASrc, AKind, ASep);
+  it^.FBytes := ABytes;
+  it^.FChars := AChars;
+  it^.FHeight := 0;
+  it^.FData := nil;
+  Inc(FLoadLeaf^.Count);
+end;
+
+{ Builds the inner levels over the packed leaves, bottom up. }
+procedure TTyRichText.FinishLoad;
+var
+  level, next: TFPList;
+  groups, g, size, i, k: Integer;
+  inner: PTyRichInner;
+begin
+  if (FLoadLeaf^.Count > 0) or (FLoadLeaves.Count = 0) then
+    FLoadLeaves.Add(FLoadLeaf)
+  else
+    FreeMem(FLoadLeaf);
+  FLoadLeaf := nil;
+  level := FLoadLeaves;
+  FLoadLeaves := nil;
+  FDepth := 0;
+  try
+    while level.Count > 1 do
+    begin
+      next := TFPList.Create;
+      groups := (level.Count + TyRichInnerCap - 1) div TyRichInnerCap;
+      i := 0;
+      for g := 0 to groups - 1 do
+      begin
+        size := level.Count div groups;
+        if g < level.Count mod groups then Inc(size);
+        inner := PTyRichInner(NewNode(False));
+        for k := 0 to size - 1 do
+        begin
+          inner^.Child[k] := PTyRichNode(level[i]);
+          inner^.Sum[k] := NodeSum(PTyRichNode(level[i]));
+          Inc(i);
+        end;
+        inner^.Count := size;
+        next.Add(inner);
+      end;
+      level.Free;
+      level := next;
+      Inc(FDepth);
+    end;
+    FRoot := PTyRichNode(level[0]);
+  finally
+    level.Free;
+  end;
+  FTotal := NodeSum(FRoot);
+  FLoading := False;
+end;
+
+procedure TTyRichText.Emit(ASrc: Int64; ABytes, AChars: LongInt; AKind, ASep: Byte);
+begin
+  if FScanToLoad then
+    LoadPiece(ASrc, ABytes, AChars, AKind, ASep)
+  else
+  begin
+    if FScanCount = System.Length(FScan) then
+      SetLength(FScan, FScanCount * 2 + 4);
+    with FScan[FScanCount] do
+    begin
+      FSrc := MakeSrc(ASrc, AKind, ASep);
+      FBytes := ABytes;
+      FChars := AChars;
+      FHeight := 0;
+      FData := nil;
+    end;
+    Inc(FScanCount);
+  end;
+end;
+
+{ The one pass over a whole document the UI thread is allowed: a tight loop, a call per
+  paragraph, nothing per character. Pieces end at separators and at MaxPieceBytes. A run
+  of printable ASCII is skipped eight bytes at a time (no high bit, none below 14) and
+  counted by its length; a run of non-ASCII checks the three-byte sequences CJK text is
+  made of inline and leaves the rest to SeqLen. }
+{$PUSH}{$Q-}{$R-}
+procedure TTyRichText.Scan(ABuf: PByte; ACount: Int64; ABase: Int64; AKind: Byte);
+const
+  High8 = QWord($8080808080808080);
+  Below14 = QWord($0E0E0E0E0E0E0E0E);
+var
+  p, q, bufEnd, start, chunkEnd: PByte;
+  chars: PtrInt;
+  b, sep: Byte;
+  x: QWord;
+begin
+  p := ABuf;
+  bufEnd := ABuf + ACount;
+  start := p;
+  chars := 0;
+  while p < bufEnd do
+  begin
+    if bufEnd - start > MaxPieceBytes then chunkEnd := start + MaxPieceBytes
+    else chunkEnd := bufEnd;
+    while p < chunkEnd do
+    begin
+      b := p^;
+      if (b > 13) and (b < $80) then
+      begin
+        q := p;
+        while chunkEnd - p >= 8 do
+        begin
+          x := unaligned(PQWord(p)^);
+          if (x or ((x - Below14) and not x)) and High8 <> 0 then Break;
+          Inc(p, 8);
+        end;
+        while (p < chunkEnd) and (p^ > 13) and (p^ < $80) do Inc(p);
+        Inc(chars, p - q);
+      end
+      else if b >= $80 then
+        repeat
+          if (p^ and $F0 = $E0) and (p^ <> $E0) and (p^ <> $ED) and (bufEnd - p >= 3) and
+             (unaligned(PWord(p + 1)^) and $C0C0 = $8080) then
+            Inc(p, 3)
+          else
+            Inc(p, SeqLen(p, bufEnd - p));
+          Inc(chars);
+        until (p >= chunkEnd) or (p^ < $80)
+      else if (b = 10) or (b = 13) then
+      begin
+        Inc(p);
+        if b = 10 then sep := sLF
+        else if (p < bufEnd) and (p^ = 10) then
+        begin
+          Inc(p);
+          sep := sCRLF;
+        end
+        else
+          sep := sCR;
+        Emit(ABase + (start - ABuf), p - start, chars + 1, AKind, sep);
+        start := p;
+        chars := 0;
+        if bufEnd - start > MaxPieceBytes then chunkEnd := start + MaxPieceBytes
+        else chunkEnd := bufEnd;
+      end
+      else
+      begin
+        Inc(p);
+        Inc(chars);
+      end;
+    end;
+    if (p < bufEnd) and (p > start) then
+    begin
+      Emit(ABase + (start - ABuf), p - start, chars, AKind, sNone);
+      start := p;
+      chars := 0;
+    end;
+  end;
+  if p > start then
+    Emit(ABase + (start - ABuf), p - start, chars, AKind, sNone);
+end;
+{$POP}
+
+{ ---- construction ---- }
+
+constructor TTyRichText.Create;
+begin
+  inherited Create;
+  FRoot := NewNode(True);
+  FDepth := 0;
+  FTotal := NodeSum(FRoot);
+end;
+
+constructor TTyRichText.CreateFromUtf8(const ABuffer: TBytes);
+begin
+  inherited Create;
+  FOrig := ABuffer;
+  FLoading := True;
+  FLoadLeaves := TFPList.Create;
+  FLoadLeaf := PTyRichLeaf(NewNode(True));
+  FScanToLoad := True;
+  if System.Length(FOrig) > 0 then
+    Scan(@FOrig[0], System.Length(FOrig), 0, kOrig);
+  FScanToLoad := False;
+  FinishLoad;
+end;
+
+constructor TTyRichText.CreateLazy(AProvider: TTyRichTextProvider; AOwnsProvider: Boolean);
+begin
+  inherited Create;
+  FProvider := AProvider;
+  FOwnsProvider := AOwnsProvider;
+  FLoading := True;
+  FLoadLeaves := TFPList.Create;
+  FLoadLeaf := PTyRichLeaf(NewNode(True));
+  FLoadLastSep := True;
+  FLoadLastSrc := -1;
+end;
+
+procedure TTyRichText.AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
+  ASeparator: TTyRichSeparator);
+var
+  chars: Int64;
+begin
+  if not FLoading or (FProvider = nil) then
+    raise ETyRichText.Create('AppendLazyParagraph outside a lazy load');
+  if not FLoadLastSep then
+    raise ETyRichText.Create('Only the last lazy paragraph may have no separator');
+  if (ASrcOffset <= FLoadLastSrc) or (ASrcOffset > SrcMask) then
+    raise ETyRichText.Create('Lazy paragraph source offsets must increase');
+  chars := ACharCount;
+  if ASeparator <> rsNone then Inc(chars);
+  if (ACharCount < 0) or (chars >= MaxPieceBytes) or (ASrcBytes < 0) or
+     (ASrcBytes >= MaxPieceBytes) then
+    raise ETyRichText.Create('Lazy paragraph out of range');
+  FLoadLastSep := ASeparator <> rsNone;
+  FLoadLastSrc := ASrcOffset;
+  if chars > 0 then
+    LoadPiece(ASrcOffset, ASrcBytes, chars, kLazy, Ord(ASeparator));
+end;
+
+procedure TTyRichText.EndLazyLoad;
+begin
+  if not FLoading then
+    raise ETyRichText.Create('EndLazyLoad outside a lazy load');
+  FinishLoad;
+end;
+
+destructor TTyRichText.Destroy;
+var
+  i: Integer;
+begin
+  FreeNode(FRoot);
+  if FLoadLeaves <> nil then
+  begin
+    for i := 0 to FLoadLeaves.Count - 1 do
+      FreeMem(FLoadLeaves[i]);
+    FLoadLeaves.Free;
+  end;
+  if FLoadLeaf <> nil then FreeMem(FLoadLeaf);
+  FDecoded.Free;
+  if FOwnsProvider then FProvider.Free;
+  inherited Destroy;
+end;
+
+{ ---- pieces ---- }
+
+function TTyRichText.AppendAdd(AData: Pointer; ACount: Int64): Int64;
+var
+  cap: Int64;
+begin
+  Result := FAddLen;
+  if FAddLen + ACount > System.Length(FAdd) then
+  begin
+    cap := System.Length(FAdd) * 2;
+    if cap < FAddLen + ACount then cap := FAddLen + ACount;
+    if cap < 4096 then cap := 4096;
+    SetLength(FAdd, cap);
+  end;
+  if ACount > 0 then
+    Move(AData^, FAdd[FAddLen], ACount);
+  Inc(FAddLen, ACount);
+end;
+
+{ Where a lazy piece's decoded text lives in the add buffer, decoding it the first time.
+  The piece itself keeps pointing at its source range, so a writer can still copy an
+  unedited paragraph verbatim after it has been read. }
+function TTyRichText.DecodedOf(AItem: PTyRichPiece): TTyRichDecoded;
+var
+  s: UTF8String;
+  sep: Byte;
+  content: PtrInt;
+  sepText: array[0..1] of Byte;
+begin
+  if PKind(AItem^) = kLazyDecoded then
+  begin
+    if FDecoded.TryGetValue(POff(AItem^), Result) then Exit;
+    raise ETyRichText.Create('Decoded lazy paragraph lost its text');
+  end;
+  sep := PSep(AItem^);
+  content := AItem^.FChars;
+  if sep <> sNone then Dec(content);
+  s := FProvider.DecodeParagraph(POff(AItem^), AItem^.FBytes, content);
+  if (System.Length(s) > 0) and
+     (HasBreak(@s[1], System.Length(s)) or (CountChars(@s[1], System.Length(s)) <> content)) then
+    raise ETyRichText.CreateFmt('Lazy paragraph at %d decoded to the wrong text',
+      [POff(AItem^)]);
+  if (System.Length(s) = 0) and (content <> 0) then
+    raise ETyRichText.CreateFmt('Lazy paragraph at %d decoded to the wrong text',
+      [POff(AItem^)]);
+  if FDecoded = nil then FDecoded := TTyRichDecodedMap.Create;
+  if System.Length(s) > 0 then
+    Result.AddOff := AppendAdd(@s[1], System.Length(s))
+  else
+    Result.AddOff := FAddLen;
+  case sep of
+    sCR: sepText[0] := 13;
+    sLF: sepText[0] := 10;
+    sCRLF:
+      begin
+        sepText[0] := 13;
+        sepText[1] := 10;
+      end;
+  end;
+  AppendAdd(@sepText[0], SepBytes(sep));
+  Result.Bytes := System.Length(s) + SepBytes(sep);
+  FDecoded.AddOrSetValue(POff(AItem^), Result);
+  AItem^.FSrc := MakeSrc(POff(AItem^), kLazyDecoded, sep);
+end;
+
+{ The bytes of a piece's text (decoding a lazy one); valid until the add buffer grows. }
+function TTyRichText.PieceText(AItem: PTyRichPiece; out ALen: LongInt): PByte;
+var
+  d: TTyRichDecoded;
+begin
+  case PKind(AItem^) of
+    kOrig:
+      begin
+        ALen := AItem^.FBytes;
+        Result := @FOrig[POff(AItem^)];
+      end;
+    kAdded:
+      begin
+        ALen := AItem^.FBytes;
+        Result := @FAdd[POff(AItem^)];
+      end;
+  else
+    d := DecodedOf(AItem);
+    ALen := d.Bytes;
+    Result := @FAdd[d.AddOff];
+  end;
+end;
+
+{ A lazy piece about to be edited becomes an ordinary add-buffer piece. }
+procedure TTyRichText.ConvertToAdded(var APath: TTyRichPath);
+var
+  it: PTyRichPiece;
+  d: TTyRichDecoded;
+begin
+  it := ItemAt(APath);
+  if not IsLazy(it^) then Exit;
+  d := DecodedOf(it);
+  it^.FSrc := MakeSrc(d.AddOff, kAdded, PSep(it^));
+  it^.FBytes := d.Bytes;
+  FixUp(APath, FDepth);
+end;
+
+{ Makes APos a piece boundary and returns the index of the piece that starts there. }
+function TTyRichText.SplitAt(APos: TTyRichPos): LongInt;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  left: TTyRichPiece;
+  off, bo: PtrInt;
+  sep, kind: Byte;
+begin
+  if APos >= FTotal.Chars then Exit(FTotal.Entries);
+  Find(rskChar, APos, p, before);
+  off := APos - before.Chars;
+  Result := before.Entries;
+  if off = 0 then Exit;
+  ConvertToAdded(p);
+  it := ItemAt(p);
+  sep := PSep(it^);
+  kind := PKind(it^);
+  if kind = kOrig then
+    bo := ByteOfChar(@FOrig[POff(it^)], it^.FBytes - SepBytes(sep), off)
+  else
+    bo := ByteOfChar(@FAdd[POff(it^)], it^.FBytes - SepBytes(sep), off);
+  left.FSrc := MakeSrc(POff(it^), kind, sNone);
+  left.FBytes := bo;
+  left.FChars := off;
+  left.FHeight := 0;
+  left.FData := nil;
+  it^.FSrc := MakeSrc(POff(it^) + bo, kind, sep);
+  Dec(it^.FBytes, bo);
+  Dec(it^.FChars, off);
+  FixUp(p, FDepth);
+  InsertEntries(Result, [left]);
+  Inc(Result);
+end;
+
+{ A lazy piece must stay a whole paragraph: preceded by a separator (or the start) and
+  ending with one (or the text). An edit that glues something to it decodes it. }
+procedure TTyRichText.CheckJunction(APos: TTyRichPos);
+var
+  pr, pl: TTyRichPath;
+  br, bl: TTyRichSum;
+  r, l: PTyRichPiece;
+begin
+  if (APos <= 0) or (APos >= FTotal.Chars) then Exit;
+  Find(rskChar, APos, pr, br);
+  Find(rskChar, APos - 1, pl, bl);
+  r := ItemAt(pr);
+  l := ItemAt(pl);
+  if PSep(l^) <> sNone then Exit;
+  if IsLazy(l^) then ConvertToAdded(pl);
+  if IsLazy(r^) then ConvertToAdded(pr);
+end;
+
+{ Characters [AFrom, ATo) of a piece as a piece of their own; a lazy piece that is cut
+  is decoded and the cut refers to its decoded bytes. }
+procedure TTyRichText.TrimPiece(AItem: PTyRichPiece; AFrom, ATo: LongInt; out APiece: TTyRichPiece);
+var
+  text: PByte;
+  len: LongInt;
+  content, b0, b1: PtrInt;
+  sep, kind: Byte;
+  src: Int64;
+  d: TTyRichDecoded;
+begin
+  APiece := AItem^;
+  APiece.FHeight := 0;
+  APiece.FData := nil;
+  if (AFrom = 0) and (ATo = AItem^.FChars) then Exit;
+  sep := PSep(AItem^);
+  text := PieceText(AItem, len);
+  if IsLazy(AItem^) then
+  begin
+    d := DecodedOf(AItem);
+    src := d.AddOff;
+    kind := kAdded;
+  end
+  else
+  begin
+    src := POff(AItem^);
+    kind := PKind(AItem^);
+  end;
+  content := len - SepBytes(sep);
+  b0 := ByteOfChar(text, content, AFrom);
+  if ATo = AItem^.FChars then
+    b1 := len
+  else
+    b1 := b0 + ByteOfChar(text + b0, content - b0, ATo - AFrom);
+  if ATo <> AItem^.FChars then sep := sNone;
+  APiece.FSrc := MakeSrc(src + b0, kind, sep);
+  APiece.FBytes := b1 - b0;
+  APiece.FChars := ATo - AFrom;
+end;
+
+{ Splits paragraph k (holding APos) by the separators in APieces. Paragraph k keeps its
+  data and height on the first part; the paragraphs after the i-th separator get
+  AFollow[i] (nil when AFollow is empty) and height 0. }
+procedure TTyRichText.InsertPieces(APos: TTyRichPos; var APieces: TTyRichPieceArray;
+  ACount: Integer; const AFollow: array of Pointer);
+var
+  k, s, i, j: Integer;
+  chars: Int64;
+  oldData: Pointer;
+  oldHeight: LongInt;
+  e: LongInt;
+begin
+  k := ParaOfPos(APos);
+  s := 0;
+  chars := 0;
+  for i := 0 to ACount - 1 do
+  begin
+    if PSep(APieces[i]) <> sNone then Inc(s);
+    Inc(chars, APieces[i].FChars);
+  end;
+  if s > 0 then
+  begin
+    oldData := GetParaData(k);
+    oldHeight := ParaHeight(k);
+    j := 0;
+    for i := 0 to ACount - 1 do
+    begin
+      APieces[i].FHeight := 0;
+      APieces[i].FData := nil;
+      if PSep(APieces[i]) <> sNone then
+      begin
+        if j = 0 then
+        begin
+          APieces[i].FData := oldData;
+          APieces[i].FHeight := oldHeight;
+        end
+        else if System.Length(AFollow) > 0 then
+          APieces[i].FData := AFollow[j - 1];
+        Inc(j);
+      end;
+    end;
+  end
+  else
+    for i := 0 to ACount - 1 do
+    begin
+      APieces[i].FHeight := 0;
+      APieces[i].FData := nil;
+    end;
+  e := SplitAt(APos);
+  InsertEntries(e, APieces[0..ACount - 1]);
+  if s > 0 then
+  begin
+    if System.Length(AFollow) > 0 then
+      SetParaRaw(k + s, AFollow[s - 1], 0)
+    else
+      SetParaRaw(k + s, nil, 0);
+  end;
+  CheckJunction(APos);
+  CheckJunction(APos + chars);
+  DoParasChanged(k, 1, 1 + s);
+end;
+
+{ ---- checks ---- }
+
+procedure TTyRichText.CheckReady;
+begin
+  if FLoading then
+    raise ETyRichText.Create('Rich text used before EndLazyLoad');
+end;
+
+procedure TTyRichText.CheckPara(AIndex: Integer);
+begin
+  CheckReady;
+  if (AIndex < 0) or (AIndex > FTotal.Seps) then
+    raise ETyRichText.CreateFmt('Paragraph index %d out of range', [AIndex]);
+end;
+
+procedure TTyRichText.CheckRange(APos, ALen: TTyRichPos);
+begin
+  CheckReady;
+  if (APos < 0) or (ALen < 0) or (APos + ALen > FTotal.Chars) then
+    raise ETyRichText.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FTotal.Chars]);
+end;
+
+{ ---- editing ---- }
+
+procedure TTyRichText.Insert(APos: TTyRichPos; const AText: UTF8String);
+var
+  base: Int64;
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  k: Integer;
+begin
+  CheckRange(APos, 0);
+  if AText = '' then Exit;
+  base := AppendAdd(@AText[1], System.Length(AText));
+  FScanCount := 0;
+  Scan(@FAdd[base], System.Length(AText), base, kAdded);
+  // typing: the piece just before APos ends where this text was appended, so it grows
+  if (FScanCount = 1) and (PSep(FScan[0]) = sNone) and (APos > 0) then
+  begin
+    Find(rskChar, APos - 1, p, before);
+    it := ItemAt(p);
+    if (before.Chars + it^.FChars = APos) and (PKind(it^) = kAdded) and
+       (PSep(it^) = sNone) and (POff(it^) + it^.FBytes = base) and
+       (it^.FBytes + FScan[0].FBytes <= MaxPieceBytes) then
+    begin
+      k := before.Seps;
+      Inc(it^.FBytes, FScan[0].FBytes);
+      Inc(it^.FChars, FScan[0].FChars);
+      FixUp(p, FDepth);
+      DoParasChanged(k, 1, 1);
+      Exit;
+    end;
+  end;
+  InsertPieces(APos, FScan, FScanCount, []);
+end;
+
+procedure TTyRichText.Delete(APos, ALen: TTyRichPos);
+var
+  a, b: TTyRichPos;
+  k, m, i: Integer;
+  dk: Pointer;
+  hk: LongInt;
+  ea, eb: LongInt;
+  dropped: TFPList;
+  p: TTyRichPath;
+  before: TTyRichSum;
+  firstSep: Boolean;
+  it: PTyRichPiece;
+begin
+  CheckRange(APos, ALen);
+  if ALen = 0 then Exit;
+  a := APos;
+  b := APos + ALen;
+  k := ParaOfPos(a);
+  m := ParaOfPos(b);
+  dk := nil;
+  hk := 0;
+  dropped := nil;
+  try
+    if m > k then
+    begin
+      dk := GetParaData(k);
+      hk := ParaHeight(k);
+      dropped := TFPList.Create;
+    end;
+    ea := SplitAt(a);
+    eb := SplitAt(b);
+    if m > k then
+    begin
+      // the separators in the range end paragraphs k..m-1; k's data moves to the merged
+      // paragraph, the data of k+1..m goes
+      Find(rskEntry, ea, p, before);
+      firstSep := True;
+      for i := ea to eb - 1 do
+      begin
+        it := ItemAt(p);
+        if PSep(it^) <> sNone then
+        begin
+          if not firstSep and (it^.FData <> nil) then dropped.Add(it^.FData);
+          firstSep := False;
+        end;
+        if (i < eb - 1) and not Advance(p) then
+          raise ETyRichText.Create('Rich text index is inconsistent');
+      end;
+      if GetParaData(m) <> nil then dropped.Add(GetParaData(m));
+    end;
+    DeleteEntries(ea, eb - ea);
+    if m > k then
+      SetParaRaw(k, dk, hk);
+    CheckJunction(a);
+    if (dropped <> nil) and Assigned(FOnParaDataDropped) then
+      for i := 0 to dropped.Count - 1 do
+        FOnParaDataDropped(Self, dropped[i]);
+  finally
+    dropped.Free;
+  end;
+  DoParasChanged(k, m - k + 1, 1);
+end;
+
+function TTyRichText.Length: TTyRichPos;
+begin
+  Result := FTotal.Chars;
+end;
+
+function TTyRichText.ByteCount: Int64;
+begin
+  Result := FTotal.Bytes;
+end;
+
+function TTyRichText.PieceCount: Integer;
+begin
+  Result := FTotal.Entries;
+end;
+
+function TTyRichText.TreeDepth: Integer;
+begin
+  Result := FDepth;
+end;
+
+function TTyRichText.GetText(APos, ALen: TTyRichPos): UTF8String;
+type
+  TSeg = record
+    Src: Byte;   // kOrig or kAdded
+    Off: Int64;
+    Len: Int64;
+  end;
+var
+  segs: array of TSeg;
+  nseg, i: Integer;
+  total, pos, stop, start: Int64;
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  piece: TTyRichPiece;
+  from, upto: LongInt;
+  dst: Int64;
+  d: TTyRichDecoded;
+begin
+  Result := '';
+  CheckRange(APos, ALen);
+  if ALen = 0 then Exit;
+  segs := nil;
+  nseg := 0;
+  total := 0;
+  stop := APos + ALen;
+  Find(rskChar, APos, p, before);
+  start := before.Chars;
+  pos := APos;
+  repeat
+    it := ItemAt(p);
+    from := pos - start;
+    if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
+    TrimPiece(it, from, upto, piece);
+    if nseg = System.Length(segs) then SetLength(segs, nseg * 2 + 4);
+    if IsLazy(piece) then
+    begin
+      d := DecodedOf(it);
+      segs[nseg].Src := kAdded;
+      segs[nseg].Off := d.AddOff;
+      segs[nseg].Len := d.Bytes;
+    end
+    else
+    begin
+      segs[nseg].Src := PKind(piece);
+      segs[nseg].Off := POff(piece);
+      segs[nseg].Len := piece.FBytes;
+    end;
+    Inc(total, segs[nseg].Len);
+    Inc(nseg);
+    Inc(start, it^.FChars);
+    pos := start;
+  until (pos >= stop) or not Advance(p);
+  SetLength(Result, total);
+  dst := 1;
+  for i := 0 to nseg - 1 do
+  begin
+    if segs[i].Len = 0 then Continue;
+    if segs[i].Src = kOrig then
+      Move(FOrig[segs[i].Off], Result[dst], segs[i].Len)
+    else
+      Move(FAdd[segs[i].Off], Result[dst], segs[i].Len);
+    Inc(dst, segs[i].Len);
+  end;
+end;
+
+procedure TTyRichText.ForEachRun(APos, ALen: TTyRichPos; AProc: TTyRichRunEvent);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  piece: TTyRichPiece;
+  run: TTyRichByteRun;
+  pos, stop, start: Int64;
+  from, upto: LongInt;
+  goOn: Boolean;
+begin
+  CheckRange(APos, ALen);
+  if ALen = 0 then Exit;
+  stop := APos + ALen;
+  Find(rskChar, APos, p, before);
+  start := before.Chars;
+  pos := APos;
+  goOn := True;
+  repeat
+    it := ItemAt(p);
+    from := pos - start;
+    if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
+    TrimPiece(it, from, upto, piece);
+    run.Kind := piece.Kind;
+    run.SrcOffset := POff(piece);
+    run.ByteCount := piece.FBytes;
+    run.CharCount := piece.FChars;
+    run.Separator := piece.Separator;
+    case PKind(piece) of
+      kOrig: run.Bytes := @FOrig[POff(piece)];
+      kAdded: run.Bytes := @FAdd[POff(piece)];
+    else
+      run.Bytes := nil;
+    end;
+    AProc(run, goOn);
+    Inc(start, it^.FChars);
+    pos := start;
+  until not goOn or (pos >= stop) or not Advance(p);
+end;
+
+function TTyRichText.PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
+var
+  p, p2: TTyRichPath;
+  before, before2: TTyRichSum;
+  it: PTyRichPiece;
+  n, i, pending: Integer;
+  pos, stop, start: Int64;
+  from, upto: LongInt;
+begin
+  Result.Pieces := nil;
+  Result.CharCount := 0;
+  CheckRange(APos, ALen);
+  if ALen = 0 then Exit;
+  stop := APos + ALen;
+  Find(rskChar, APos, p, before);
+  Find(rskChar, stop - 1, p2, before2);
+  n := before2.Entries - before.Entries + 1;
+  SetLength(Result.Pieces, n);
+  Result.CharCount := ALen;
+  start := before.Chars;
+  pos := APos;
+  pending := -1;
+  for i := 0 to n - 1 do
+  begin
+    it := ItemAt(p);
+    from := pos - start;
+    if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
+    if PSep(it^) <> sNone then
+    begin
+      // this separator ends the paragraph that followed the previous one
+      if pending >= 0 then Result.Pieces[pending].FData := it^.FData;
+    end;
+    TrimPiece(it, from, upto, Result.Pieces[i]);
+    if PSep(Result.Pieces[i]) <> sNone then pending := i;
+    Inc(start, it^.FChars);
+    pos := start;
+    if (i < n - 1) and not Advance(p) then
+      raise ETyRichText.Create('Rich text index is inconsistent');
+  end;
+  if pending >= 0 then
+    Result.Pieces[pending].FData := GetParaData(ParaOfPos(stop));
+end;
+
+procedure TTyRichText.RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
+var
+  items: TTyRichPieceArray;
+  follow: array of Pointer;
+  i, s: Integer;
+begin
+  CheckRange(APos, 0);
+  if System.Length(P.Pieces) = 0 then Exit;
+  items := Copy(P.Pieces);
+  follow := nil;
+  SetLength(follow, System.Length(items));
+  s := 0;
+  for i := 0 to High(items) do
+    if PSep(items[i]) <> sNone then
+    begin
+      follow[s] := items[i].FData;
+      Inc(s);
+    end;
+  SetLength(follow, s);
+  if s = 0 then
+    InsertPieces(APos, items, System.Length(items), [])
+  else
+    InsertPieces(APos, items, System.Length(items), follow);
+end;
+
+{ ---- paragraphs ---- }
+
+function TTyRichText.ParaCount: Integer;
+begin
+  Result := FTotal.Seps + 1;
+end;
+
+function TTyRichText.ParaStart(AIndex: Integer): TTyRichPos;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = 0 then Exit(0);
+  Find(rskSep, AIndex - 1, p, before);
+  Result := before.Chars + ItemAt(p)^.FChars;
+end;
+
+function TTyRichText.ParaLength(AIndex: Integer): TTyRichPos;
+begin
+  if AIndex = FTotal.Seps then
+    Result := FTotal.Chars - ParaStart(AIndex)
+  else
+    Result := ParaStart(AIndex + 1) - 1 - ParaStart(AIndex);
+end;
+
+function TTyRichText.ParaOfPos(APos: TTyRichPos): Integer;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckRange(APos, 0);
+  if Descend(rskChar, APos, p, before) then
+    Result := before.Seps
+  else
+    Result := FTotal.Seps;
+end;
+
+function TTyRichText.ParaSeparator(AIndex: Integer): TTyRichSeparator;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = FTotal.Seps then Exit(rsNone);
+  Find(rskSep, AIndex, p, before);
+  Result := TTyRichSeparator(PSep(ItemAt(p)^));
+end;
+
+function TTyRichText.GetParaData(AIndex: Integer): Pointer;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = FTotal.Seps then Exit(FLastData);
+  Find(rskSep, AIndex, p, before);
+  Result := ItemAt(p)^.FData;
+end;
+
+procedure TTyRichText.SetParaData(AIndex: Integer; AValue: Pointer);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = FTotal.Seps then
+    FLastData := AValue
+  else
+  begin
+    Find(rskSep, AIndex, p, before);
+    ItemAt(p)^.FData := AValue;
+  end;
+end;
+
+procedure TTyRichText.SetParaRaw(AIndex: Integer; AData: Pointer; AHeight: LongInt);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  if AIndex = FTotal.Seps then
+  begin
+    FLastData := AData;
+    FLastHeight := AHeight;
+  end
+  else
+  begin
+    Find(rskSep, AIndex, p, before);
+    ItemAt(p)^.FData := AData;
+    ItemAt(p)^.FHeight := AHeight;
+    FixUp(p, FDepth);
+  end;
+end;
+
+procedure TTyRichText.SetParaHeight(AIndex: Integer; AHeight: Int64);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if (AHeight < 0) or (AHeight > High(LongInt)) then
+    raise ETyRichText.CreateFmt('Paragraph height %d out of range', [AHeight]);
+  if AIndex = FTotal.Seps then
+    FLastHeight := AHeight
+  else
+  begin
+    Find(rskSep, AIndex, p, before);
+    ItemAt(p)^.FHeight := AHeight;
+    FixUp(p, FDepth);
+  end;
+end;
+
+function TTyRichText.ParaHeight(AIndex: Integer): Int64;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = FTotal.Seps then Exit(FLastHeight);
+  Find(rskSep, AIndex, p, before);
+  Result := ItemAt(p)^.FHeight;
+end;
+
+function TTyRichText.ParaTop(AIndex: Integer): Int64;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckPara(AIndex);
+  if AIndex = 0 then Exit(0);
+  Find(rskSep, AIndex - 1, p, before);
+  Result := before.Height + ItemAt(p)^.FHeight;
+end;
+
+function TTyRichText.ParaAtHeight(AY: Int64): Integer;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  CheckReady;
+  if AY < 0 then Exit(0);
+  if Descend(rskHeight, AY, p, before) then
+    Result := before.Seps
+  else
+    Result := FTotal.Seps;
+end;
+
+function TTyRichText.TotalHeight: Int64;
+begin
+  Result := FTotal.Height + FLastHeight;
+end;
+
+procedure TTyRichText.DoParasChanged(AFirst, AOldCount, ANewCount: Integer);
+begin
+  if Assigned(FOnParasChanged) then
+    FOnParasChanged(Self, AFirst, AOldCount, ANewCount);
+end;
+
+{ ---- integrity ---- }
+
+function TTyRichText.CheckNode(ANode: PTyRichNode; ALevel: Integer; var APrevSep: Boolean;
+  var APrevLazyOpen: Boolean): string;
+var
+  i: Integer;
+  it: PTyRichPiece;
+  text: PByte;
+  len: LongInt;
+  sep: Byte;
+  content: PtrInt;
+  s: TTyRichSum;
+begin
+  Result := '';
+  if (ANode <> FRoot) and (ANode^.Count = 0) then Exit('empty node');
+  if ANode^.IsLeaf <> (ALevel = FDepth) then Exit('leaves at different depths');
+  if not ANode^.IsLeaf then
+  begin
+    for i := 0 to ANode^.Count - 1 do
+    begin
+      s := NodeSum(PTyRichInner(ANode)^.Child[i]);
+      with PTyRichInner(ANode)^.Sum[i] do
+        if (s.Entries <> Entries) or (s.Seps <> Seps) or (s.Chars <> Chars) or
+           (s.Bytes <> Bytes) or (s.Height <> Height) then
+          Exit(Format('stale summary at level %d child %d', [ALevel, i]));
+      Result := CheckNode(PTyRichInner(ANode)^.Child[i], ALevel + 1, APrevSep, APrevLazyOpen);
+      if Result <> '' then Exit;
+    end;
+    Exit;
+  end;
+  for i := 0 to ANode^.Count - 1 do
+  begin
+    it := @PTyRichLeaf(ANode)^.Items[i];
+    sep := PSep(it^);
+    if APrevLazyOpen then Exit('a lazy last paragraph is followed by a piece');
+    if it^.FChars <= 0 then Exit('empty piece');
+    if (sep = sNone) and ((it^.FHeight <> 0) or (it^.FData <> nil)) then
+      Exit('height or data on a piece without a separator');
+    if IsLazy(it^) then
+    begin
+      if not APrevSep then Exit('a lazy piece does not start its paragraph');
+      APrevLazyOpen := sep = sNone;
+    end
+    else
+    begin
+      text := PieceText(it, len);
+      if len <> it^.FBytes then Exit('byte count');
+      content := len - SepBytes(sep);
+      if content < 0 then Exit('separator longer than the piece');
+      if HasBreak(text, content) then Exit('a separator inside a piece');
+      case sep of
+        sCR: if text[content] <> 13 then Exit('separator bytes');
+        sLF: if text[content] <> 10 then Exit('separator bytes');
+        sCRLF: if (text[content] <> 13) or (text[content + 1] <> 10) then
+            Exit('separator bytes');
+      end;
+      if CountChars(text, content) + Ord(sep <> sNone) <> it^.FChars then
+        Exit(Format('character count %d of a piece', [it^.FChars]));
+    end;
+    APrevSep := sep <> sNone;
+  end;
+end;
+
+function TTyRichText.CheckIntegrity: string;
+var
+  s: TTyRichSum;
+  prevSep, lazyOpen: Boolean;
+begin
+  CheckReady;
+  s := NodeSum(FRoot);
+  if (s.Entries <> FTotal.Entries) or (s.Seps <> FTotal.Seps) or (s.Chars <> FTotal.Chars) or
+     (s.Bytes <> FTotal.Bytes) or (s.Height <> FTotal.Height) then
+    Exit('stale total');
+  prevSep := True;
+  lazyOpen := False;
+  Result := CheckNode(FRoot, 0, prevSep, lazyOpen);
+end;
+
+end.

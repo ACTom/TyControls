@@ -1,0 +1,1107 @@
+unit test.richedit.text;
+
+{ The text storage under TTyRichEdit: a piece table whose pieces hang in a paragraph index
+  tree. Positions are code points, a separator (CR, LF or CRLF) is one character, the
+  original buffer is referenced and never copied, and every lookup walks O(log n) tree
+  nodes. TTyRichLazyTextTest covers pieces whose text a provider decodes on demand (the
+  RTF reader's paragraphs, known at load time only by their byte range in the file). }
+
+{$mode objfpc}{$H+}
+{$codepage utf8}
+
+interface
+
+uses
+  Classes, SysUtils, Math, fpcunit, testregistry,
+  tyControls.RichEdit.Text;
+
+type
+  TRefUnits = array of UTF8String;
+  TPosArray = array of Int64;
+
+  TTyRichTextTest = class(TTestCase)
+  private
+    FSeed: Cardinal;
+    FChanges: TStringList;
+    FDropped: TList;
+    FRuns: array of TTyRichByteRun;
+    function NextRandom(AMax: Integer): Integer;
+    function RandomText(AMaxUnits: Integer): UTF8String;
+    procedure ParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
+    procedure DataDropped(Sender: TObject; AData: Pointer);
+    procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+    procedure CheckSame(const AWhat: string; AText: TTyRichText; const ARef: TRefUnits;
+      AFull: Boolean);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestInsertDeleteKeepsTextAndParaIndex;
+    procedure TestPositionsAreCodePoints;
+    procedure TestCrLfIsOneSeparator;
+    procedure TestIndexIsLogarithmic;
+    procedure TestOriginalBufferIsNotCopied;
+    procedure TestDeletingEverythingStoresPiecesNotText;
+    procedure TestSeparatorsAreNotRepaired;
+    procedure TestInvalidUtf8BytesAreKeptAsCharacters;
+    procedure TestParaDataStaysWithItsParagraph;
+    procedure TestSnapshotRestorePutsParaDataBack;
+    procedure TestRunsTellOriginalFromEdited;
+    procedure TestHeightIndex;
+    procedure TestManyEditsKeepTheTreeConsistent;
+    procedure TestDeepTreeStaysConsistent;
+  end;
+
+  { Decodes paragraph i from a table; the "file offset" of paragraph i is i*1000+7, so the
+    calls it records tell exactly which paragraphs were decoded. }
+  TFakeRichProvider = class(TTyRichTextProvider)
+  public
+    Texts: array of UTF8String;
+    Calls: TStringList;
+    WrongCount: Boolean;
+    constructor Create(ACount: Integer);
+    destructor Destroy; override;
+    function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
+    function CallLog: string;
+  end;
+
+  TTyRichLazyTextTest = class(TTestCase)
+  private
+    FProvider: TFakeRichProvider;
+    FText: TTyRichText;
+    FRuns: array of TTyRichByteRun;
+    procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+    procedure BuildLazy(ACount: Integer);
+    function ParaText(AIndex: Integer): UTF8String;
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestLazyIndexNeedsNoDecoding;
+    procedure TestLazyDecodesOnlyWhatIsRead;
+    procedure TestLazyDecodesOnlyWhatIsEdited;
+    procedure TestLazySnapshotRestoreKeepsPiecesLazy;
+    procedure TestLazyRunsKeepSourceRanges;
+    procedure TestLazyCountMismatchRaises;
+  end;
+
+implementation
+
+const
+  LazyStride = 1000;
+  LazyBase = 7;
+
+{ ---- helpers ---- }
+
+function Bytes(const S: UTF8String): TBytes;
+begin
+  Result := nil;
+  SetLength(Result, System.Length(S));
+  if S <> '' then
+    Move(S[1], Result[0], System.Length(S));
+end;
+
+function FromBytes(const B: array of Byte): UTF8String;
+begin
+  Result := '';
+  SetLength(Result, System.Length(B));
+  if System.Length(B) > 0 then
+    Move(B[0], Result[1], System.Length(B));
+end;
+
+function Esc(const S: UTF8String): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to System.Length(S) do
+    if (Ord(S[i]) < 32) or (Ord(S[i]) > 126) then
+      Result := Result + '#' + IntToStr(Ord(S[i]))
+    else
+      Result := Result + S[i];
+end;
+
+{ On a mismatch the message shows the first differing byte and a little around it: the
+  texts can be megabytes long. }
+procedure AssertBytesEqual(const AMsg: string; const AExpected, AActual: UTF8String);
+var
+  i, n: Integer;
+begin
+  if (System.Length(AExpected) = System.Length(AActual)) and
+     ((AExpected = '') or CompareMem(@AExpected[1], @AActual[1], System.Length(AExpected))) then
+    Exit;
+  n := System.Length(AExpected);
+  if System.Length(AActual) < n then n := System.Length(AActual);
+  i := 1;
+  while (i <= n) and (AExpected[i] = AActual[i]) do Inc(i);
+  raise EAssertionFailedError.CreateFmt('%s: lengths %d and %d, first difference at byte %d: ' +
+    'expected <%s> but was <%s>', [AMsg, System.Length(AExpected), System.Length(AActual), i,
+    Esc(Copy(AExpected, Max(1, i - 20), 60)), Esc(Copy(AActual, Max(1, i - 20), 60))]);
+end;
+
+{ The reference model splits text into characters the way the storage does for valid
+  UTF-8: CRLF is one unit, a lead byte says how long its sequence is. }
+function SplitUnits(const S: UTF8String): TRefUnits;
+var
+  i, n, len, cnt: Integer;
+  b: Byte;
+begin
+  Result := nil;
+  SetLength(Result, System.Length(S));
+  cnt := 0;
+  i := 1;
+  n := System.Length(S);
+  while i <= n do
+  begin
+    b := Ord(S[i]);
+    if (b = 13) and (i < n) and (S[i + 1] = #10) then len := 2
+    else if b < $C0 then len := 1
+    else if b < $E0 then len := 2
+    else if b < $F0 then len := 3
+    else len := 4;
+    Result[cnt] := Copy(S, i, len);
+    Inc(cnt);
+    Inc(i, len);
+  end;
+  SetLength(Result, cnt);
+end;
+
+function IsSepUnit(const U: UTF8String): Boolean;
+begin
+  Result := (U = #13) or (U = #10) or (U = #13#10);
+end;
+
+function RefText(const R: TRefUnits): UTF8String;
+var
+  i, total, p: Integer;
+begin
+  total := 0;
+  for i := 0 to High(R) do Inc(total, System.Length(R[i]));
+  Result := '';
+  SetLength(Result, total);
+  p := 1;
+  for i := 0 to High(R) do
+  begin
+    Move(R[i][1], Result[p], System.Length(R[i]));
+    Inc(p, System.Length(R[i]));
+  end;
+end;
+
+procedure RefInsert(var R: TRefUnits; APos: Integer; const AText: UTF8String);
+var
+  ins: TRefUnits;
+  i, n: Integer;
+begin
+  ins := SplitUnits(AText);
+  n := System.Length(R);
+  SetLength(R, n + System.Length(ins));
+  for i := n - 1 downto APos do
+    R[i + System.Length(ins)] := R[i];
+  for i := 0 to High(ins) do
+    R[APos + i] := ins[i];
+end;
+
+procedure RefDelete(var R: TRefUnits; APos, ALen: Integer);
+var
+  i: Integer;
+begin
+  for i := APos to System.Length(R) - ALen - 1 do
+    R[i] := R[i + ALen];
+  SetLength(R, System.Length(R) - ALen);
+end;
+
+function RefParaStarts(const R: TRefUnits): TPosArray;
+var
+  i, cnt: Integer;
+begin
+  Result := nil;
+  SetLength(Result, System.Length(R) + 1);
+  Result[0] := 0;
+  cnt := 1;
+  for i := 0 to High(R) do
+    if IsSepUnit(R[i]) then
+    begin
+      Result[cnt] := i + 1;
+      Inc(cnt);
+    end;
+  SetLength(Result, cnt);
+end;
+
+function Utf8Chars(const S: UTF8String): Integer;
+begin
+  Result := System.Length(SplitUnits(S));
+end;
+
+{ A buffer of ACount lines of mixed Chinese and English, each ending with the separator
+  ACount mod 3 picks, so the original pieces carry all three kinds. }
+procedure AddStr(var ABuf: UTF8String; var ALen: Integer; const S: UTF8String);
+begin
+  if S = '' then Exit;
+  if ALen + System.Length(S) > System.Length(ABuf) then
+    SetLength(ABuf, Max(2 * System.Length(ABuf), ALen + System.Length(S) + 1024));
+  Move(S[1], ABuf[ALen + 1], System.Length(S));
+  Inc(ALen, System.Length(S));
+end;
+
+function MixedLines(ACount: Integer; ASeed: Integer): UTF8String;
+const
+  Words: array[0..7] of UTF8String = ('alpha', '中文', 'β', 'line', '混排', '😀', 'x', ' ');
+  Seps: array[0..2] of UTF8String = (#13#10, #10, #13);
+var
+  i, j, len: Integer;
+begin
+  Result := '';
+  len := 0;
+  for i := 0 to ACount - 1 do
+  begin
+    for j := 0 to (i * 7 + ASeed) mod 6 do
+      AddStr(Result, len, Words[(i * 3 + j * 5 + ASeed) mod 8]);
+    AddStr(Result, len, Seps[i mod 3]);
+  end;
+  SetLength(Result, len);
+end;
+
+{ ---- TTyRichTextTest ---- }
+
+procedure TTyRichTextTest.SetUp;
+begin
+  FSeed := 20261111;
+  FChanges := TStringList.Create;
+  FDropped := TList.Create;
+  FRuns := nil;
+end;
+
+procedure TTyRichTextTest.TearDown;
+begin
+  FChanges.Free;
+  FDropped.Free;
+  FRuns := nil;
+end;
+
+function TTyRichTextTest.NextRandom(AMax: Integer): Integer;
+begin
+  {$PUSH}{$Q-}{$R-}
+  FSeed := FSeed * 1103515245 + 12345;
+  {$POP}
+  Result := Integer((FSeed shr 8) mod Cardinal(AMax));
+end;
+
+function TTyRichTextTest.RandomText(AMaxUnits: Integer): UTF8String;
+const
+  Pool: array[0..10] of UTF8String = ('a', 'b', 'Z', ' ', '中', '文', '😀', 'é', #13, #10, #13#10);
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to NextRandom(AMaxUnits) do
+    Result := Result + Pool[NextRandom(11)];
+end;
+
+procedure TTyRichTextTest.ParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
+begin
+  FChanges.Add(Format('%d,%d,%d', [AFirst, AOldCount, ANewCount]));
+end;
+
+procedure TTyRichTextTest.DataDropped(Sender: TObject; AData: Pointer);
+begin
+  FDropped.Add(AData);
+end;
+
+procedure TTyRichTextTest.CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+begin
+  SetLength(FRuns, System.Length(FRuns) + 1);
+  FRuns[High(FRuns)] := ARun;
+end;
+
+procedure TTyRichTextTest.CheckSame(const AWhat: string; AText: TTyRichText;
+  const ARef: TRefUnits; AFull: Boolean);
+var
+  starts: TPosArray;
+  i: Integer;
+  len, stop: Int64;
+  integrity: string;
+begin
+  integrity := AText.CheckIntegrity;
+  AssertEquals(AWhat + ': tree integrity', '', integrity);
+  AssertEquals(AWhat + ': Length', System.Length(ARef), AText.Length);
+  AssertBytesEqual(AWhat + ': text', RefText(ARef), AText.GetText(0, AText.Length));
+  starts := RefParaStarts(ARef);
+  AssertEquals(AWhat + ': ParaCount', System.Length(starts), AText.ParaCount);
+  if not AFull then Exit;
+  for i := 0 to High(starts) do
+  begin
+    AssertEquals(Format('%s: ParaStart(%d)', [AWhat, i]), starts[i], AText.ParaStart(i));
+    if i < High(starts) then stop := starts[i + 1] - 1 else stop := System.Length(ARef);
+    len := stop - starts[i];
+    AssertEquals(Format('%s: ParaLength(%d)', [AWhat, i]), len, AText.ParaLength(i));
+    AssertEquals(Format('%s: ParaOfPos(start of %d)', [AWhat, i]), i,
+      AText.ParaOfPos(starts[i]));
+    AssertEquals(Format('%s: ParaOfPos(end of %d)', [AWhat, i]), i,
+      AText.ParaOfPos(stop));
+  end;
+end;
+
+procedure TTyRichTextTest.TestInsertDeleteKeepsTextAndParaIndex;
+var
+  t: TTyRichText;
+  ref: TRefUnits;
+  buf: UTF8String;
+  op, pos, len, kind: Integer;
+  s: UTF8String;
+begin
+  buf := MixedLines(600, 1);
+  ref := SplitUnits(buf);
+  t := TTyRichText.CreateFromUtf8(Bytes(buf));
+  try
+    CheckSame('loaded', t, ref, True);
+    for op := 1 to 200 do
+    begin
+      kind := NextRandom(10);
+      if (kind < 6) or (t.Length = 0) then
+      begin
+        s := RandomText(6);
+        case NextRandom(4) of
+          0: pos := 0;
+          1: pos := t.Length;
+          2: pos := t.ParaStart(NextRandom(t.ParaCount));
+        else
+          pos := NextRandom(t.Length + 1);
+        end;
+        t.Insert(pos, s);
+        RefInsert(ref, pos, s);
+      end
+      else
+      begin
+        pos := NextRandom(t.Length);
+        if NextRandom(10) = 0 then
+          len := 1 + NextRandom(t.Length - pos)
+        else
+          len := 1 + NextRandom(Min(30, t.Length - pos));
+        t.Delete(pos, len);
+        RefDelete(ref, pos, len);
+      end;
+      CheckSame(Format('op %d', [op]), t, ref, True);
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestPositionsAreCodePoints;
+var
+  t: TTyRichText;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('中a😀'));
+  try
+    AssertEquals('three code points', 3, t.Length);
+    AssertEquals('bytes stay bytes', 8, t.ByteCount);
+    t.Insert(1, 'b');
+    AssertBytesEqual('inserted after the first code point', '中ba😀', t.GetText(0, t.Length));
+    AssertBytesEqual('a range of code points', 'a😀', t.GetText(2, 2));
+    t.Delete(3, 1);
+    AssertBytesEqual('the emoji goes as one', '中ba', t.GetText(0, t.Length));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestCrLfIsOneSeparator;
+var
+  t: TTyRichText;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('a'#13#10'b'#10'c'#13'd'));
+  try
+    AssertEquals('paragraphs', 4, t.ParaCount);
+    AssertEquals('length', 7, t.Length);
+    AssertEquals('para 1 starts after CRLF', 2, t.ParaStart(1));
+    AssertEquals('para 3 starts after CR', 6, t.ParaStart(3));
+    AssertEquals('separator kind 0', Ord(rsCRLF), Ord(t.ParaSeparator(0)));
+    AssertEquals('separator kind 1', Ord(rsLF), Ord(t.ParaSeparator(1)));
+    AssertEquals('separator kind 2', Ord(rsCR), Ord(t.ParaSeparator(2)));
+    AssertEquals('the last paragraph has none', Ord(rsNone), Ord(t.ParaSeparator(3)));
+    AssertBytesEqual('the CRLF is one character', 'a'#13#10'b', t.GetText(0, 3));
+    t.Delete(1, 1);
+    AssertBytesEqual('deleting it removes both bytes', 'ab'#10'c'#13'd', t.GetText(0, t.Length));
+    AssertEquals('three paragraphs left', 3, t.ParaCount);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestIndexIsLogarithmic;
+const
+  Lines = 2000000;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  i, k, limit, got: Integer;
+  v: Int64;
+  y: Int64;
+begin
+  buf := nil;
+  SetLength(buf, Lines * 3);
+  for i := 0 to Lines - 1 do
+  begin
+    buf[i * 3] := Ord('a');
+    buf[i * 3 + 1] := Ord('b');
+    buf[i * 3 + 2] := 10;
+  end;
+  t := TTyRichText.CreateFromUtf8(buf);
+  try
+    AssertEquals('paragraphs', Lines + 1, t.ParaCount);
+    k := 0;
+    while k < t.ParaCount do
+    begin
+      t.SetParaHeight(k, 16);
+      Inc(k, 16);
+    end;
+    limit := Floor(4 * Log2(t.ParaCount));
+    for i := 1 to 1000 do
+    begin
+      k := NextRandom(t.ParaCount);
+      v := t.NodeVisits;
+      AssertEquals('ParaStart value', Int64(3) * k, t.ParaStart(k));
+      AssertTrue(Format('ParaStart(%d) visited %d nodes, limit %d', [k, t.NodeVisits - v, limit]),
+        t.NodeVisits - v <= limit);
+      v := t.NodeVisits;
+      got := t.ParaOfPos(Min(Int64(3) * k + 1, t.Length));
+      AssertTrue(Format('ParaOfPos visited %d nodes, limit %d', [t.NodeVisits - v, limit]),
+        t.NodeVisits - v <= limit);
+      if k < Lines then
+        AssertEquals('ParaOfPos value', k, got);
+      y := NextRandom(t.TotalHeight);
+      v := t.NodeVisits;
+      got := t.ParaAtHeight(y);
+      AssertTrue(Format('ParaAtHeight visited %d nodes, limit %d', [t.NodeVisits - v, limit]),
+        t.NodeVisits - v <= limit);
+      AssertEquals('ParaAtHeight value', (y div 16) * 16, got);
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestOriginalBufferIsNotCopied;
+const
+  Size = 100 * 1024 * 1024;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  line: UTF8String;
+  lines, i, rest, lineChars: Integer;
+  h0, h1, budget: Int64;
+begin
+  line := 'Mixed 中文 and English, 混排的一行文字 line '#10;
+  lineChars := Utf8Chars(line);
+  lines := Size div System.Length(line);
+  rest := Size - lines * System.Length(line);
+  buf := nil;
+  SetLength(buf, Size);
+  for i := 0 to lines - 1 do
+    Move(line[1], buf[i * System.Length(line)], System.Length(line));
+  for i := lines * System.Length(line) to Size - 1 do
+    buf[i] := Ord('x');
+  h0 := GetFPCHeapStatus.CurrHeapUsed;
+  t := TTyRichText.CreateFromUtf8(buf);
+  try
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertEquals('paragraphs', lines + 1, t.ParaCount);
+    AssertEquals('length', Int64(lines) * lineChars + rest, t.Length);
+    budget := Int64(t.ParaCount) * 32 + 1024 * 1024;
+    AssertTrue(Format('the text allocated %d bytes for %d paragraphs, budget %d',
+      [h1 - h0, t.ParaCount, budget]), h1 - h0 <= budget);
+    buf[0] := Ord('Q');
+    AssertBytesEqual('the buffer is referenced, not copied', 'Qixed', t.GetText(0, 5));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestDeletingEverythingStoresPiecesNotText;
+const
+  Sentence: UTF8String = 'A line of 中文 and English text. ';
+var
+  t: TTyRichText;
+  buf, line, expected: UTF8String;
+  i, len: Integer;
+  p: TTyRichPieces;
+  h0, h1, added: Int64;
+begin
+  line := '';
+  for i := 1 to 10 do line := line + Sentence;
+  line := line + #13#10;
+  buf := '';
+  len := 0;
+  for i := 1 to 20000 do AddStr(buf, len, line);
+  SetLength(buf, len);
+  t := TTyRichText.CreateFromUtf8(Bytes(buf));
+  try
+    t.Insert(5, 'edit');
+    t.Insert(t.ParaStart(100), 'new'#13#10);
+    t.Delete(t.ParaStart(200) + 3, 400);
+    expected := t.GetText(0, t.Length);
+    added := t.AddedBytes;
+    h0 := GetFPCHeapStatus.CurrHeapUsed;
+    p := t.PieceSnapshot(0, t.Length);
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertTrue(Format('the snapshot allocated %d bytes for %d pieces of %d bytes', [h1 - h0,
+      System.Length(p.Pieces), SizeOf(TTyRichPiece)]),
+      h1 - h0 <= Int64(System.Length(p.Pieces)) * SizeOf(TTyRichPiece) + 64 * 1024);
+    AssertTrue('the pieces are far smaller than the text', h1 - h0 < System.Length(buf) div 4);
+    AssertEquals('the snapshot covers the whole text', t.Length, p.CharCount);
+    t.Delete(0, t.Length);
+    AssertEquals('empty', 0, t.Length);
+    AssertEquals('one empty paragraph', 1, t.ParaCount);
+    t.RestorePieces(0, p);
+    AssertEquals('no text was copied into the add buffer', added, t.AddedBytes);
+    AssertBytesEqual('restored', expected, t.GetText(0, t.Length));
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestSeparatorsAreNotRepaired;
+var
+  t: TTyRichText;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('a'#13'b'));
+  try
+    t.Insert(2, #10'x');
+    AssertBytesEqual('the bytes are adjacent', 'a'#13#10'xb', t.GetText(0, t.Length));
+    AssertEquals('but the separators stay two characters', 5, t.Length);
+    AssertEquals('three paragraphs', 3, t.ParaCount);
+    AssertEquals('the old one is still a CR', Ord(rsCR), Ord(t.ParaSeparator(0)));
+    AssertEquals('the new one is an LF', Ord(rsLF), Ord(t.ParaSeparator(1)));
+    t.Insert(0, 'p'#13#10'q');
+    AssertEquals('within one inserted string CRLF is one separator', 8, t.Length);
+    AssertEquals('four paragraphs', 4, t.ParaCount);
+    AssertEquals('kind CRLF', Ord(rsCRLF), Ord(t.ParaSeparator(0)));
+    t.Delete(2, 3);
+    AssertBytesEqual('deleting q, a and the CR', 'p'#13#10#10'xb', t.GetText(0, t.Length));
+    AssertEquals('the CRLF and the LF are still two', 3, t.ParaCount);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestInvalidUtf8BytesAreKeptAsCharacters;
+var
+  t: TTyRichText;
+  raw: UTF8String;
+begin
+  // a, FF, truncated E4 B8, b, overlong C0 80, surrogate ED A0 80, then a real 中
+  raw := FromBytes([Ord('a'), $FF, $E4, $B8, Ord('b'), $C0, $80, $ED, $A0, $80,
+    $E4, $B8, $AD, 13, $E4]);
+  t := TTyRichText.CreateFromUtf8(Bytes(raw));
+  try
+    AssertEquals('each stray byte is one character', 13, t.Length);
+    AssertEquals('two paragraphs', 2, t.ParaCount);
+    AssertEquals('the trailing lone lead byte is a paragraph of one', 1, t.ParaLength(1));
+    AssertBytesEqual('kept as they are', raw, t.GetText(0, t.Length));
+    t.Insert(3, 'z');
+    AssertBytesEqual('inserting between the stray bytes',
+      FromBytes([Ord('a'), $FF, $E4, Ord('z'), $B8, Ord('b'), $C0, $80, $ED, $A0, $80,
+        $E4, $B8, $AD, 13, $E4]), t.GetText(0, t.Length));
+    t.Delete(1, 1);
+    AssertBytesEqual('deleting one stray byte deletes one byte', FromBytes([Ord('a'), $E4,
+      Ord('z'), $B8]), t.GetText(0, 4));
+    AssertBytesEqual('the real character is one', FromBytes([$E4, $B8, $AD]), t.GetText(10, 1));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestParaDataStaysWithItsParagraph;
+var
+  t: TTyRichText;
+  i: Integer;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('p0'#10'p1'#10'p2'#10'p3'#10'p4'));
+  try
+    t.OnParasChanged := @ParasChanged;
+    t.OnParaDataDropped := @DataDropped;
+    for i := 0 to 4 do
+    begin
+      AssertTrue('nil by default', t.ParaData[i] = nil);
+      t.ParaData[i] := Pointer(PtrUInt(100 + i));
+    end;
+    // split paragraph 0 at its start: the first part keeps the data, the new one is nil
+    t.Insert(0, 'new'#10);
+    AssertEquals('event for the split', '0,1,2', FChanges[0]);
+    AssertTrue('the first part keeps the data', t.ParaData[0] = Pointer(100));
+    AssertTrue('the new paragraph gets nil', t.ParaData[1] = nil);
+    for i := 1 to 4 do
+      AssertTrue(Format('paragraph p%d moved down with its data', [i]),
+        t.ParaData[i + 1] = Pointer(PtrUInt(100 + i)));
+    // the last paragraph's slot follows the same rule
+    t.Insert(t.Length, #10'tail');
+    AssertTrue('the last paragraph keeps its data when split', t.ParaData[5] = Pointer(104));
+    AssertTrue('the new last paragraph is nil', t.ParaData[6] = nil);
+    // merge p1..p3 (paragraphs 2..4): the first keeps its data, the others are reported
+    t.Delete(t.ParaStart(2) + 1, t.ParaStart(4) + 1 - (t.ParaStart(2) + 1));
+    AssertEquals('event for the merge', '2,3,1', FChanges[FChanges.Count - 1]);
+    AssertBytesEqual('merged text', 'p3', t.GetText(t.ParaStart(2), t.ParaLength(2)));
+    AssertTrue('the merged paragraph keeps the first one''s data', t.ParaData[2] = Pointer(101));
+    AssertEquals('two dropped', 2, FDropped.Count);
+    AssertTrue('p2 dropped', FDropped[0] = Pointer(102));
+    AssertTrue('p3 dropped', FDropped[1] = Pointer(103));
+    AssertTrue('p4 still has its data', t.ParaData[3] = Pointer(104));
+    // a delete inside one paragraph changes one paragraph and drops nothing
+    t.Delete(t.ParaStart(3), 1);
+    AssertEquals('one paragraph changed', '3,1,1', FChanges[FChanges.Count - 1]);
+    AssertEquals('nothing more dropped', 2, FDropped.Count);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestSnapshotRestorePutsParaDataBack;
+var
+  t: TTyRichText;
+  p: TTyRichPieces;
+  a, b: Int64;
+  i: Integer;
+  before: UTF8String;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('p0'#10'p1'#10'p2'#10'p3'#10'p4'));
+  try
+    t.OnParaDataDropped := @DataDropped;
+    for i := 0 to 4 do
+      t.ParaData[i] := Pointer(PtrUInt(100 + i));
+    before := t.GetText(0, t.Length);
+    // from inside p1 to inside p3: paragraphs 1..3 merge
+    a := t.ParaStart(1) + 1;
+    b := t.ParaStart(3) + 1;
+    p := t.PieceSnapshot(a, b - a);
+    t.Delete(a, b - a);
+    AssertEquals('three paragraphs', 3, t.ParaCount);
+    AssertEquals('p2 and p3 dropped', 2, FDropped.Count);
+    t.RestorePieces(a, p);
+    AssertBytesEqual('text back', before, t.GetText(0, t.Length));
+    for i := 0 to 4 do
+      AssertTrue(Format('data of p%d back', [i]), t.ParaData[i] = Pointer(PtrUInt(100 + i)));
+    // the same across the end of the text (the last paragraph's slot)
+    a := t.ParaStart(3);
+    p := t.PieceSnapshot(a, t.Length - a);
+    t.Delete(a, t.Length - a);
+    t.RestorePieces(a, p);
+    AssertBytesEqual('text back again', before, t.GetText(0, t.Length));
+    for i := 0 to 4 do
+      AssertTrue(Format('data of p%d back again', [i]), t.ParaData[i] = Pointer(PtrUInt(100 + i)));
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestRunsTellOriginalFromEdited;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  i: Integer;
+  total: Int64;
+begin
+  buf := Bytes('ab'#13#10'cd'#10'ef');
+  t := TTyRichText.CreateFromUtf8(buf);
+  try
+    t.ForEachRun(0, t.Length, @CollectRun);
+    AssertEquals('one run per untouched paragraph', 3, System.Length(FRuns));
+    AssertEquals('original', Ord(rpkOriginal), Ord(FRuns[0].Kind));
+    AssertEquals('offset 0', 0, FRuns[0].SrcOffset);
+    AssertEquals('with its CRLF', 4, FRuns[0].ByteCount);
+    AssertEquals('chars', 3, FRuns[0].CharCount);
+    AssertEquals('ends with CRLF', Ord(rsCRLF), Ord(FRuns[0].Separator));
+    AssertTrue('points into the buffer', FRuns[0].Bytes = @buf[0]);
+    AssertEquals('second at offset 4', 4, FRuns[1].SrcOffset);
+    AssertTrue('second points into the buffer', FRuns[1].Bytes = @buf[4]);
+    AssertEquals('third', 7, FRuns[2].SrcOffset);
+    AssertEquals('third ends the text', Ord(rsNone), Ord(FRuns[2].Separator));
+    // edit paragraph 1: its runs are no longer one original run
+    t.Insert(4, 'X');
+    FRuns := nil;
+    t.ForEachRun(t.ParaStart(1), t.ParaLength(1) + 1, @CollectRun);
+    AssertEquals('c, X, d+LF', 3, System.Length(FRuns));
+    AssertEquals('c original', Ord(rpkOriginal), Ord(FRuns[0].Kind));
+    AssertEquals('X added', Ord(rpkAdded), Ord(FRuns[1].Kind));
+    AssertTrue('added bytes are readable', FRuns[1].Bytes^ = Ord('X'));
+    AssertEquals('d original at 5', 5, FRuns[2].SrcOffset);
+    // a partial range reports partial runs
+    FRuns := nil;
+    t.ForEachRun(1, 3, @CollectRun);
+    total := 0;
+    for i := 0 to High(FRuns) do Inc(total, FRuns[i].ByteCount);
+    AssertEquals('b, CRLF, c', 4, total);
+    AssertEquals('starts at b', 1, FRuns[0].SrcOffset);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestHeightIndex;
+var
+  t: TTyRichText;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('a'#10'b'#10'c'#10'd'));
+  try
+    t.SetParaHeight(0, 10);
+    t.SetParaHeight(1, 20);
+    t.SetParaHeight(3, 5);
+    AssertEquals('total', 35, t.TotalHeight);
+    AssertEquals('top of 2', 30, t.ParaTop(2));
+    AssertEquals('top of 3', 30, t.ParaTop(3));
+    AssertEquals('height of 1', 20, t.ParaHeight(1));
+    AssertEquals('y 0', 0, t.ParaAtHeight(0));
+    AssertEquals('y 9', 0, t.ParaAtHeight(9));
+    AssertEquals('y 10', 1, t.ParaAtHeight(10));
+    AssertEquals('y 30 skips the empty-height paragraph', 3, t.ParaAtHeight(30));
+    AssertEquals('below the end is the last', 3, t.ParaAtHeight(1000));
+    AssertEquals('above the start is the first', 0, t.ParaAtHeight(-4));
+    // a split leaves the height with the first part
+    t.Insert(t.ParaStart(1) + 1, #10);
+    AssertEquals('first part keeps 20', 20, t.ParaHeight(1));
+    AssertEquals('new paragraph 0', 0, t.ParaHeight(2));
+    AssertEquals('total unchanged', 35, t.TotalHeight);
+    // a merge keeps the first one's height
+    t.Delete(t.ParaStart(1), 3);
+    AssertEquals('merged keeps 20', 20, t.ParaHeight(1));
+    AssertEquals('total', 35, t.TotalHeight);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestManyEditsKeepTheTreeConsistent;
+var
+  t: TTyRichText;
+  ref: TRefUnits;
+  buf, s: UTF8String;
+  op, pos, len, kind: Integer;
+  p: TTyRichPieces;
+begin
+  buf := MixedLines(3000, 2);
+  ref := SplitUnits(buf);
+  t := TTyRichText.CreateFromUtf8(Bytes(buf));
+  try
+    for op := 1 to 1500 do
+    begin
+      kind := NextRandom(20);
+      if (kind < 8) or (t.Length = 0) then
+      begin
+        s := RandomText(40);
+        pos := NextRandom(t.Length + 1);
+        t.Insert(pos, s);
+        RefInsert(ref, pos, s);
+      end
+      else if kind < 14 then
+      begin
+        pos := NextRandom(t.Length);
+        len := 1 + NextRandom(Min(3000, t.Length - pos));
+        t.Delete(pos, len);
+        RefDelete(ref, pos, len);
+      end
+      else if kind < 19 then
+      begin
+        // what an undo of a delete does: the range comes back from its pieces
+        pos := NextRandom(t.Length);
+        len := 1 + NextRandom(Min(5000, t.Length - pos));
+        p := t.PieceSnapshot(pos, len);
+        t.Delete(pos, len);
+        t.RestorePieces(pos, p);
+      end
+      else
+      begin
+        // delete everything and put it back
+        p := t.PieceSnapshot(0, t.Length);
+        t.Delete(0, t.Length);
+        AssertEquals('emptied', 0, t.Length);
+        t.RestorePieces(0, p);
+      end;
+      CheckSame(Format('op %d', [op]), t, ref, op mod 100 = 0);
+    end;
+    CheckSame('end', t, ref, True);
+  finally
+    t.Free;
+  end;
+end;
+
+{ Big edits on a tree two inner levels deep, so inner nodes split, merge and empty. The
+  expected text comes from the state before each edit. }
+procedure TTyRichTextTest.TestDeepTreeStaysConsistent;
+var
+  t: TTyRichText;
+  buf, s, expected: UTF8String;
+  op, pos, len: Integer;
+  p: TTyRichPieces;
+begin
+  buf := MixedLines(40000, 3);
+  t := TTyRichText.CreateFromUtf8(Bytes(buf));
+  try
+    AssertTrue('two inner levels', t.TreeDepth >= 2);
+    for op := 1 to 300 do
+    begin
+      case NextRandom(3) of
+        0:
+          begin
+            s := RandomText(3000);
+            pos := NextRandom(t.Length + 1);
+            expected := t.GetText(0, pos) + s + t.GetText(pos, t.Length - pos);
+            t.Insert(pos, s);
+          end;
+        1:
+          begin
+            pos := NextRandom(t.Length);
+            len := 1 + NextRandom(Min(200000, t.Length - pos));
+            expected := t.GetText(0, pos) + t.GetText(pos + len, t.Length - pos - len);
+            t.Delete(pos, len);
+          end;
+      else
+        pos := NextRandom(t.Length);
+        len := 1 + NextRandom(t.Length - pos);
+        expected := t.GetText(0, t.Length);
+        p := t.PieceSnapshot(pos, len);
+        t.Delete(pos, len);
+        AssertEquals(Format('op %d: integrity after the delete', [op]), '', t.CheckIntegrity);
+        t.RestorePieces(pos, p);
+      end;
+      AssertEquals(Format('op %d: integrity', [op]), '', t.CheckIntegrity);
+      AssertBytesEqual(Format('op %d: text', [op]), expected, t.GetText(0, t.Length));
+      if t.Length < 100000 then
+        t.Insert(t.Length, buf);
+    end;
+    // take it all apart from the front, a leaf's worth and more at a time
+    while t.Length > 0 do
+    begin
+      t.Delete(0, Min(t.Length, 1 + NextRandom(50000)));
+      AssertEquals('integrity while emptying', '', t.CheckIntegrity);
+    end;
+    AssertEquals('one empty paragraph', 1, t.ParaCount);
+    AssertEquals('depth collapses', 0, t.TreeDepth);
+  finally
+    t.Free;
+  end;
+end;
+
+{ ---- TFakeRichProvider ---- }
+
+constructor TFakeRichProvider.Create(ACount: Integer);
+const
+  Han: UTF8String = ' 中文';
+var
+  i: Integer;
+begin
+  inherited Create;
+  Calls := TStringList.Create;
+  Texts := nil;
+  SetLength(Texts, ACount);
+  for i := 0 to ACount - 1 do
+    Texts[i] := 'para ' + UTF8String(IntToStr(i)) + Han + UTF8String(Copy('xyzzy', 1, i mod 5));
+end;
+
+destructor TFakeRichProvider.Destroy;
+begin
+  Calls.Free;
+  inherited Destroy;
+end;
+
+function TFakeRichProvider.DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+var
+  idx: Integer;
+begin
+  idx := (ASrcOffset - LazyBase) div LazyStride;
+  Calls.Add(IntToStr(idx));
+  Result := Texts[idx];
+  if WrongCount then Result := Result + 'extra';
+end;
+
+function TFakeRichProvider.CallLog: string;
+begin
+  Calls.Delimiter := ',';
+  Result := Calls.DelimitedText;
+end;
+
+{ ---- TTyRichLazyTextTest ---- }
+
+procedure TTyRichLazyTextTest.TearDown;
+begin
+  FreeAndNil(FText);
+  FreeAndNil(FProvider);
+  FRuns := nil;
+end;
+
+procedure TTyRichLazyTextTest.CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+begin
+  SetLength(FRuns, System.Length(FRuns) + 1);
+  FRuns[High(FRuns)] := ARun;
+end;
+
+procedure TTyRichLazyTextTest.BuildLazy(ACount: Integer);
+var
+  i: Integer;
+  sep: TTyRichSeparator;
+begin
+  FProvider := TFakeRichProvider.Create(ACount);
+  FText := TTyRichText.CreateLazy(FProvider, False);
+  for i := 0 to ACount - 1 do
+  begin
+    if i < ACount - 1 then sep := rsCR else sep := rsNone;
+    FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[i]), i * LazyStride + LazyBase,
+      40 + i mod 9, sep);
+  end;
+  FText.EndLazyLoad;
+end;
+
+function TTyRichLazyTextTest.ParaText(AIndex: Integer): UTF8String;
+begin
+  Result := FText.GetText(FText.ParaStart(AIndex), FText.ParaLength(AIndex));
+end;
+
+procedure TTyRichLazyTextTest.TestLazyIndexNeedsNoDecoding;
+var
+  i: Integer;
+  start, total, bytes: Int64;
+begin
+  BuildLazy(1000);
+  start := 0;
+  bytes := 0;
+  for i := 0 to 999 do
+  begin
+    AssertEquals(Format('ParaStart(%d)', [i]), start, FText.ParaStart(i));
+    AssertEquals(Format('ParaLength(%d)', [i]), Utf8Chars(FProvider.Texts[i]), FText.ParaLength(i));
+    AssertEquals(Format('ParaOfPos(%d)', [i]), i, FText.ParaOfPos(start));
+    Inc(start, Utf8Chars(FProvider.Texts[i]) + 1);
+    Inc(bytes, 40 + i mod 9);
+  end;
+  total := start - 1;
+  AssertEquals('Length', total, FText.Length);
+  AssertEquals('ParaCount', 1000, FText.ParaCount);
+  AssertEquals('byte count is the source byte count', bytes, FText.ByteCount);
+  AssertEquals('separator kind', Ord(rsCR), Ord(FText.ParaSeparator(3)));
+  AssertEquals('integrity', '', FText.CheckIntegrity);
+  AssertEquals('nothing decoded', '', FProvider.CallLog);
+end;
+
+procedure TTyRichLazyTextTest.TestLazyDecodesOnlyWhatIsRead;
+var
+  a, b: Int64;
+  expected: UTF8String;
+begin
+  BuildLazy(100);
+  AssertBytesEqual('paragraph 5', FProvider.Texts[5], ParaText(5));
+  AssertEquals('decoded 5', '5', FProvider.CallLog);
+  AssertBytesEqual('paragraph 5 again', FProvider.Texts[5], ParaText(5));
+  AssertEquals('decoded once', '5', FProvider.CallLog);
+  a := FText.ParaStart(7) + 1;
+  b := FText.ParaStart(10);
+  expected := Copy(FProvider.Texts[7], 2, MaxInt) + #13 + FProvider.Texts[8] + #13 +
+    FProvider.Texts[9] + #13;
+  AssertBytesEqual('across paragraphs', expected, FText.GetText(a, b - a));
+  AssertEquals('decoded 7, 8, 9', '5,7,8,9', FProvider.CallLog);
+end;
+
+procedure TTyRichLazyTextTest.TestLazyDecodesOnlyWhatIsEdited;
+var
+  a, b: Int64;
+  count: Integer;
+begin
+  BuildLazy(100);
+  FText.Insert(FText.ParaStart(20) + 2, 'X');
+  AssertEquals('editing inside decodes that paragraph', '20', FProvider.CallLog);
+  AssertBytesEqual('edited', Copy(FProvider.Texts[20], 1, 2) + 'X' +
+    Copy(FProvider.Texts[20], 3, MaxInt), ParaText(20));
+  FText.Insert(FText.ParaStart(30), 'Y');
+  AssertEquals('typing at its start decodes it', '20,30', FProvider.CallLog);
+  FText.Insert(FText.ParaStart(35), 'Z'#13);
+  AssertEquals('a whole new paragraph before it leaves it alone', '20,30', FProvider.CallLog);
+  count := FText.ParaCount;
+  a := FText.ParaStart(40);
+  FText.Delete(a, FText.ParaStart(50) - a);
+  AssertEquals('deleting whole paragraphs decodes nothing', '20,30', FProvider.CallLog);
+  AssertEquals('ten fewer', count - 10, FText.ParaCount);
+  a := FText.ParaStart(60) + 1;
+  b := FText.ParaStart(62) + 1;
+  FText.Delete(a, b - a);
+  // paragraphs 60 and 62 are the provider's 69 and 71: one paragraph was inserted before
+  // them and ten were deleted
+  AssertEquals('a merge decodes the two paragraphs it cuts, not the one between',
+    '20,30,69,71', FProvider.CallLog);
+  AssertEquals('integrity', '', FText.CheckIntegrity);
+end;
+
+procedure TTyRichLazyTextTest.TestLazySnapshotRestoreKeepsPiecesLazy;
+var
+  a, b: Int64;
+  p: TTyRichPieces;
+  starts: array of Int64;
+  i: Integer;
+begin
+  BuildLazy(50);
+  starts := nil;
+  SetLength(starts, 50);
+  for i := 0 to 49 do starts[i] := FText.ParaStart(i);
+  a := FText.ParaStart(10);
+  b := FText.ParaStart(20);
+  p := FText.PieceSnapshot(a, b - a);
+  FText.Delete(a, b - a);
+  AssertEquals('forty left', 40, FText.ParaCount);
+  FText.RestorePieces(a, p);
+  AssertEquals('fifty again', 50, FText.ParaCount);
+  for i := 0 to 49 do
+    AssertEquals(Format('ParaStart(%d)', [i]), starts[i], FText.ParaStart(i));
+  AssertEquals('nothing decoded', '', FProvider.CallLog);
+  FText.ForEachRun(FText.ParaStart(12), FText.ParaLength(12) + 1, @CollectRun);
+  AssertEquals('one run', 1, System.Length(FRuns));
+  AssertEquals('still lazy', Ord(rpkLazy), Ord(FRuns[0].Kind));
+  AssertEquals('its source offset', 12 * LazyStride + LazyBase, FRuns[0].SrcOffset);
+  AssertBytesEqual('paragraph 15 reads right', FProvider.Texts[15], ParaText(15));
+  AssertEquals('decoded only 15', '15', FProvider.CallLog);
+end;
+
+procedure TTyRichLazyTextTest.TestLazyRunsKeepSourceRanges;
+var
+  i: Integer;
+begin
+  BuildLazy(20);
+  FText.ForEachRun(0, FText.Length, @CollectRun);
+  AssertEquals('a run per paragraph', 20, System.Length(FRuns));
+  for i := 0 to 19 do
+  begin
+    AssertEquals('lazy', Ord(rpkLazy), Ord(FRuns[i].Kind));
+    AssertEquals('offset', i * LazyStride + LazyBase, FRuns[i].SrcOffset);
+    AssertEquals('source bytes', 40 + i mod 9, FRuns[i].ByteCount);
+    AssertTrue('no bytes in memory', FRuns[i].Bytes = nil);
+  end;
+  AssertEquals('walking decodes nothing', '', FProvider.CallLog);
+  // read but unchanged: still the original source range, so a writer copies it verbatim
+  ParaText(3);
+  FRuns := nil;
+  FText.ForEachRun(FText.ParaStart(3), FText.ParaLength(3) + 1, @CollectRun);
+  AssertEquals('one run', 1, System.Length(FRuns));
+  AssertEquals('decoded but unchanged is still lazy', Ord(rpkLazy), Ord(FRuns[0].Kind));
+  AssertEquals('its offset', 3 * LazyStride + LazyBase, FRuns[0].SrcOffset);
+  FText.Insert(FText.ParaStart(3) + 1, 'Q');
+  FRuns := nil;
+  FText.ForEachRun(FText.ParaStart(3), FText.ParaLength(3) + 1, @CollectRun);
+  for i := 0 to High(FRuns) do
+    AssertTrue('edited is no longer lazy', FRuns[i].Kind <> rpkLazy);
+  AssertEquals('decoded once', '3', FProvider.CallLog);
+end;
+
+procedure TTyRichLazyTextTest.TestLazyCountMismatchRaises;
+var
+  raised: Boolean;
+begin
+  BuildLazy(5);
+  FProvider.WrongCount := True;
+  raised := False;
+  try
+    ParaText(2);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('a provider that breaks the character count is an error', raised);
+end;
+
+initialization
+  RegisterTest(TTyRichTextTest);
+  RegisterTest(TTyRichLazyTextTest);
+end.
