@@ -638,46 +638,51 @@ begin
   ATextBox := Rect(ACell.Left + inset, ACell.Top, ACell.Right - inset, ACell.Bottom);
   AControlBox := Rect(ATextBox.Left, ACell.Top, ATextBox.Left, ACell.Top);
   c := APanel.Control;
-  if c = nil then Exit;
-  { The control's size is in the bar's own device px; a paint at another PPI (a preview)
-    scales it along with everything else. }
-  own := APanel.ControlOwnSize;
-  w := own.cx;
-  h := own.cy;
-  if APPI <> BarPPI then
+  if c <> nil then
   begin
-    w := MulDiv(w, APPI, BarPPI);
-    h := MulDiv(h, APPI, BarPPI);
-  end;
-  cellH := ACell.Bottom - ACell.Top;
-  { At its own size unless the cell is smaller. An AutoSize control keeps its size: it would
-    only take it back, and the two would resize it in turn on every layout pass. }
-  if not c.AutoSize then
-  begin
-    room := ATextBox.Right - ATextBox.Left;
-    if room < 0 then room := 0;
-    if w > room then w := room;
-    if h > cellH then h := cellH;
-  end;
-  { At the leading edge, where the text would start, and reflected inside the text box for a
-    right-to-left bar -- so the control and the text can never trade places. }
-  AControlBox := Bounds(ATextBox.Left, ACell.Top + (cellH - h) div 2, w, h);
-  if ARightToLeft then AControlBox := BidiFlipRect(AControlBox, ATextBox, True);
-  { A hidden control takes no room. IsControlVisible, not Visible: the designer shows a
-    control whatever its Visible says, so there the text has to make room for it. }
-  if c.IsControlVisible and (w > 0) then
-  begin
-    gap := MulDiv(StyleMetric('--statusbar-control-gap', CStatusControlGap), APPI, 96);
-    if ARightToLeft then
+    { The control's size is in the bar's own device px; a paint at another PPI (a preview)
+      scales it along with everything else. }
+    own := APanel.ControlOwnSize;
+    w := own.cx;
+    h := own.cy;
+    if APPI <> BarPPI then
     begin
-      ATextBox.Right := AControlBox.Left - gap;
-      if ATextBox.Right < ATextBox.Left then ATextBox.Right := ATextBox.Left;   // no room left
-    end
-    else
-    begin
-      ATextBox.Left := AControlBox.Right + gap;
-      if ATextBox.Left > ATextBox.Right then ATextBox.Left := ATextBox.Right;
+      w := MulDiv(w, APPI, BarPPI);
+      h := MulDiv(h, APPI, BarPPI);
     end;
+    cellH := ACell.Bottom - ACell.Top;
+    { At its own size unless the cell is smaller. An AutoSize control keeps its size: it
+      would only take it back, and the two would resize it in turn on every layout pass. }
+    if not c.AutoSize then
+    begin
+      room := ATextBox.Right - ATextBox.Left;
+      if room < 0 then room := 0;
+      if w > room then w := room;
+      if h > cellH then h := cellH;
+    end;
+    { At the leading edge, where the text would start, and reflected inside the text box for
+      a right-to-left bar -- so the control and the text can never trade places. }
+    AControlBox := Bounds(ATextBox.Left, ACell.Top + (cellH - h) div 2, w, h);
+    if ARightToLeft then AControlBox := BidiFlipRect(AControlBox, ATextBox, True);
+    { A hidden control takes no room. IsControlVisible, not Visible: the designer shows a
+      control whatever its Visible says, so there the text has to make room for it. }
+    if c.IsControlVisible and (w > 0) then
+    begin
+      gap := MulDiv(StyleMetric('--statusbar-control-gap', CStatusControlGap), APPI, 96);
+      if ARightToLeft then
+        ATextBox.Right := AControlBox.Left - gap
+      else
+        ATextBox.Left := AControlBox.Right + gap;
+    end;
+  end;
+  { No room at all -- a collapsed cell, or a control that fills its cell: an empty box at the
+    end the text runs to, never one turned inside out. }
+  if ATextBox.Right < ATextBox.Left then
+  begin
+    if ARightToLeft then
+      ATextBox.Right := ATextBox.Left
+    else
+      ATextBox.Left := ATextBox.Right;
   end;
 end;
 
@@ -690,7 +695,6 @@ begin
   cells := PanelCells(ClientWidth, ClientHeight, BarPPI, IsRightToLeft);
   if (AIndex < 0) or (AIndex > High(cells)) then Exit;
   PanelParts(FPanels[AIndex], cells[AIndex], BarPPI, IsRightToLeft, box, Result);
-  if Result.Right < Result.Left then Result.Right := Result.Left;   // no room at all
 end;
 
 procedure TTyCustomStatusBar.PlacePanelControls;

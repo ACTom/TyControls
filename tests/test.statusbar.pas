@@ -44,6 +44,10 @@ type
       moved, resized or changed Visible (headless nothing calls it). }
     procedure LayoutPass;
     procedure Designing;
+    { The three states a form file and a destructor put a component in. }
+    procedure BeginLoading;
+    procedure EndLoading;
+    procedure BeginDestroying;
     function PreferredHeight: Integer;
   public
     Invalidations: Integer;   // how often the whole bar was asked to repaint
@@ -139,6 +143,9 @@ type
     procedure TestASizeTheApplicationSetsIsItsOwnSizeFromThenOn;
     procedure TestANewControlInThePanelBringsItsOwnSize;
     procedure TestALayoutPassStartedByThePlacementKeepsTheOwnSize;
+    procedure TestAHeightOrAWidthSetAloneIsTheOwnSizeToo;
+    procedure TestNothingIsPlacedWhileTheFormLoads;
+    procedure TestABarBeingDestroyedLeavesItsControlsAlone;
     procedure TestAnAutoSizeControlKeepsItsSize;
     procedure TestSimplePanelModeLeavesTheControlNoRoom;
     procedure TestTheDesignerKeepsTheControlsSizeInSimplePanelMode;
@@ -347,6 +354,21 @@ end;
 procedure TStatusBarProbe.Designing;
 begin
   SetDesigning(True, False);
+end;
+
+procedure TStatusBarProbe.BeginLoading;
+begin
+  Loading;
+end;
+
+procedure TStatusBarProbe.EndLoading;
+begin
+  Loaded;
+end;
+
+procedure TStatusBarProbe.BeginDestroying;
+begin
+  Destroying;
 end;
 
 function TStatusBarProbe.PreferredHeight: Integer;
@@ -985,6 +1007,47 @@ begin
   AssertRect('squeezed', Bounds(8, 0, 26, 22), box.BoundsRect);
   FBar.Panels[0].Width := 100;
   AssertRect('and back to its own width', Bounds(8, 0, 50, 22), box.BoundsRect);
+end;
+
+procedure TStatusBarPanelControlTest.TestAHeightOrAWidthSetAloneIsTheOwnSizeToo;
+var
+  box: TStatusBarTestBox;
+begin
+  box := NewBox(16, 12);
+  FBar.Panels[1].Control := box;
+  box.Height := 8;
+  FBar.LayoutPass;
+  AssertRect('a new height alone', Bounds(108, 7, 16, 8), box.BoundsRect);
+  box.Width := 30;
+  FBar.LayoutPass;
+  AssertRect('a new width alone', Bounds(108, 7, 30, 8), box.BoundsRect);
+end;
+
+procedure TStatusBarPanelControlTest.TestNothingIsPlacedWhileTheFormLoads;
+var
+  box: TStatusBarTestBox;
+begin
+  { While a form is read the bar's own bounds and panels are still arriving: the control
+    stays where the file put it until the bar has loaded. }
+  box := NewBox(16, 12);
+  FBar.BeginLoading;
+  FBar.Panels[1].Control := box;
+  AssertSame('the bar''s child already', FBar, box.Parent);
+  AssertRect('but not moved yet', Bounds(200, 3, 16, 12), box.BoundsRect);
+  FBar.EndLoading;
+  AssertRect('in its cell once the bar has loaded', Bounds(108, 5, 16, 12), box.BoundsRect);
+end;
+
+procedure TStatusBarPanelControlTest.TestABarBeingDestroyedLeavesItsControlsAlone;
+var
+  box: TStatusBarTestBox;
+begin
+  box := NewBox(16, 12);
+  FBar.Panels[1].Control := box;
+  box.SetBounds(150, 0, 16, 12);
+  FBar.BeginDestroying;              // what the destructor does first
+  FBar.LayoutPass;
+  AssertRect('not put back', Bounds(150, 0, 16, 12), box.BoundsRect);
 end;
 
 procedure TStatusBarPanelControlTest.TestAnAutoSizeControlKeepsItsSize;
