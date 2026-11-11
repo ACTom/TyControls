@@ -370,6 +370,7 @@
   --scrollbar-auto-hide: -1;
   --scrollbar-size: 12px;
   --segmented-pad: 2px;
+  --statusbar-control-gap: 4px;
   --steps-connector-gap: 8px;
   --steps-connector-length: 32px;
   --steps-gap: 8px;

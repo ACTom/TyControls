@@ -9625,6 +9625,7 @@ type
     property AutoHint;
     property OnHint;
     property OnDrawPanel;
+    property OnPanelClick;
     property Align;
     property Anchors;
   end;

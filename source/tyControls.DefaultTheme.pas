@@ -403,6 +403,7 @@ begin
     '  --scrollbar-auto-hide: -1;' + LineEnding +
     '  --scrollbar-size: 12px;' + LineEnding +
     '  --segmented-pad: 2px;' + LineEnding +
+    '  --statusbar-control-gap: 4px;' + LineEnding +
     '  --steps-connector-gap: 8px;' + LineEnding +
     '  --steps-connector-length: 32px;' + LineEnding +
     '  --steps-gap: 8px;' + LineEnding +

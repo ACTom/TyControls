@@ -2,9 +2,12 @@ unit tyControls.StatusBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 type
+  TTyCustomStatusBar = class;
+  TTyStatusBar = class;
+
   { How a panel's content is produced. psText (the default) draws the panel's own Text with
     the resolved theme style; psOwnerDraw hands the cell to the bar's OnDrawPanel and draws
     nothing itself. Named for LCL's TStatusPanelStyle (comctrls.pp:45) so a `Style :=
@@ -17,10 +20,20 @@ type
     FWidth: Integer;
     FAlignment: TAlignment;
     FStyle: TTyStatusPanelStyle;
+    FControl: TControl;
+    { The control's own size -- the one it had when the bar last found it at a size the bar
+      had not given it -- and the size the bar last gave it. A cell too small for the control
+      shrinks it; this is how it gets its size back when the cell grows. -1: never placed. }
+    FOwnWidth, FOwnHeight: Integer;
+    FPlacedWidth, FPlacedHeight: Integer;
     procedure SetText(const AValue: TCaption);
     procedure SetWidth(AValue: Integer);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetStyle(AValue: TTyStatusPanelStyle);
+    procedure SetControl(AValue: TControl);
+    function OwnerBar: TTyCustomStatusBar;
+    { The control's own size, in the bar's device px. }
+    function ControlOwnSize: TSize;
   public
     constructor Create(ACollection: TCollection); override;
   published
@@ -32,13 +45,18 @@ type
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     { psOwnerDraw makes this cell the application's: the bar paints the panel background and
       separators as usual, then fires OnDrawPanel for the cell rect and draws no text of its
-      own. That is the only way to put a progress bar, a lock icon or a coloured state dot in
-      a status cell -- before this, a panel could be plain text and nothing else. }
+      own. That is how a lock icon or a coloured state dot gets into a status cell; a control
+      of its own goes in through Control. }
     property Style: TTyStatusPanelStyle read FStyle write SetStyle default psText;
+    { A control that lives in this panel: a spinner beside the text, a small button, a
+      progress bar. Assigning it makes it a child of the bar, and the bar keeps it in the
+      panel's cell from then on -- at the leading edge (the right one when the bar reads right
+      to left), vertically centred, at its own size unless the cell is smaller. A psText
+      panel's text starts after it, --statusbar-control-gap further on, and keeps its
+      Alignment in the room that is left; a hidden control takes no room. One control serves
+      one panel, and a control that is freed or moved to another parent leaves its panel. }
+    property Control: TControl read FControl write SetControl;
   end;
-
-  TTyCustomStatusBar = class;
-  TTyStatusBar = class;
 
   TTyStatusPanels = class(TOwnedCollection)
   private
@@ -61,6 +79,9 @@ type
   TTyDrawPanelEvent = procedure(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
     APainter: TTyPainter; const ARect: TRect) of object;
 
+  { Fired when a panel is clicked; APanel.Index is its position. }
+  TTyPanelClickEvent = procedure(Sender: TObject; APanel: TTyStatusPanel) of object;
+
   TTyCustomStatusBar = class(TTyCustomControl)
   private
     FPanels: TTyStatusPanels;
@@ -70,12 +91,25 @@ type
     FAutoHint: Boolean;
     FOnHint: TNotifyEvent;
     FOnDrawPanel: TTyDrawPanelEvent;
+    FOnPanelClick: TTyPanelClickEvent;
+    FPressedPanelID: Integer;   // ID of the panel the left button went down on; -1 none
+    FPlacing: Boolean;          // PlacePanelControls is moving the controls
+    FPlacedSignature: string;   // where the panels' controls were last put, and which showed
     FSavedCursor: TCursor;
     FShowResizeCur: Boolean;
     procedure SetPanels(AValue: TTyStatusPanels);
     procedure SetSimplePanel(AValue: Boolean);
     procedure SetSimpleText(const AValue: TCaption);
     procedure SetSizeGrip(AValue: Boolean);
+    function BarPPI: Integer;
+    { The point is on the size grip as it is painted: the grip's corner box, when the grip
+      is shown. }
+    function OverSizeGrip(X, Y: Integer): Boolean;
+    { What every text on the bar is drawn through: a panel's Text, SimpleText, DrawPanelText. }
+    procedure DrawTextWith(APainter: TTyPainter; const AStyle: TTyStyleSet; AFontSize: Integer;
+      const ARect: TRect; const AText: string; AAlignment: TAlignment);
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    procedure CMControlChange(var Message: TCMControlChange); message CM_CONTROLCHANGE;
   protected
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -102,18 +136,70 @@ type
     { Fires OnDrawPanel for one psOwnerDraw cell. Protected virtual so a descendant can
       paint a cell without stealing the application's event slot. }
     procedure DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect); virtual;
+    { Fires OnPanelClick. Protected virtual so a descendant can act on a panel click without
+      taking the application's event slot. }
+    procedure DoPanelClick(APanel: TTyStatusPanel); virtual;
+    { Hands a left press on the size grip or the bottom strip (AEdge: ResizeHitAt's answer) to
+      the window, to be dragged as a resize; True when the window took it, and the press is
+      then no click. Protected virtual so a descendant can resize its window another way, or
+      not at all. }
+    function StartWindowResize(AEdge: Integer): Boolean; virtual;
+    { The panel a click at (X, Y) is a click on: the one PanelAtPos finds, unless the point is
+      on the painted size grip or on a child control. nil when there is none. }
+    function ClickPanelAt(X, Y: Integer): TTyStatusPanel;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { The panels' widths in DEVICE px at APPI -- what the paint and the hit test both lay
       the cells out from. }
     function PanelWidthsPx(APPI: Integer): TIntegerDynArray;
+    { The panels' cells in a bar AWidth x AHeight device px at APPI: the one layout the paint,
+      PanelAtPos, PanelRect and the panels' controls all read. Empty in SimplePanel mode. }
+    function PanelCells(AWidth, AHeight, APPI: Integer; ARightToLeft: Boolean): TTyRectArray;
+    { Inside ACell: the box APanel's Control goes in (empty without one) and the box its text
+      is drawn in -- after the control when that is showing. }
+    procedure PanelParts(APanel: TTyStatusPanel; const ACell: TRect; APPI: Integer;
+      ARightToLeft: Boolean; out AControlBox, ATextBox: TRect);
+    { Puts every panel's Control in its cell. Whatever moves the cells ends here: a resize, a
+      panel's width, the PPI, the reading direction, SimplePanel, and each LCL layout pass. }
+    procedure PlacePanelControls;
+    { A panel was added, removed or changed. }
+    procedure PanelsChanged;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    procedure Loaded; override;
+    procedure BoundsChanged; override;
+    procedure StyleLayoutChanged; override;
+    procedure AlignControls(AControl: TControl; var RemainingClientRect: TRect); override;
+    { The bar accepts controls and still draws its own content, so BorderWidth stays padding. }
+    function BorderWidthIsPadding: Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function PanelAtPos(X, Y: Integer): Integer;   // -1 outside any panel / SimplePanel mode
+    { Panel AIndex's cell in client coordinates, exactly as it is painted and as PanelAtPos
+      answers for it; it follows the reading direction. Empty for an index that is no panel
+      and in SimplePanel mode. }
+    function PanelRect(AIndex: Integer): TRect;
+    { Where panel AIndex's text goes, in client coordinates: its cell less the text inset and
+      less the room its Control takes. What a psOwnerDraw handler draws into to stay clear of
+      the control. Empty where PanelRect is. }
+    function PanelTextRect(AIndex: Integer): TRect;
+    { The resolved style the bar draws panel text with -- its colour, font name and weight --
+      for an OnDrawPanel handler that draws in the bar's own ink. }
+    function PanelTextStyle: TTyStyleSet;
+    { The font size of panel text, as a TTyPainter text call takes it (AFontSizeLogical). }
+    function PanelFontSize: Integer;
+    { The same size as a font height in device px at the bar's PPI, for a handler that sizes
+      a glyph or an image to the text. }
+    function PanelFontHeightPx: Integer;
+    { Draws AText into ARect the way a psText panel draws its Text: PanelTextStyle's colour
+      and font, vertically centred, AAlignment by reading order, cut with an ellipsis when it
+      does not fit. Call it from OnDrawPanel with the painter the handler was given;
+      PanelTextRect is the box a panel's own text gets. }
+    procedure DrawPanelText(APainter: TTyPainter; const ARect: TRect; const AText: string;
+      AAlignment: TAlignment = taLeftJustify);
     { LCL's name for PanelAtPos (comctrls.pp:171) -- same signature, same client-space
       coordinates, same -1 sentinel. It is an alias and not a rename because PanelAtPos
       is this library's own published surface and forms already call it; without the LCL
@@ -141,6 +227,10 @@ type
     property OnHint: TNotifyEvent read FOnHint write FOnHint;
     { Paints a psOwnerDraw panel. See TTyDrawPanelEvent for the painter contract. }
     property OnDrawPanel: TTyDrawPanelEvent read FOnDrawPanel write FOnDrawPanel;
+    { A left click on a panel: the button went down and came up on the same one. Not fired
+      for a press that resized the window (the size grip, the bottom strip), on the painted
+      size grip, on a child control, or in SimplePanel mode. OnClick fires as it always did. }
+    property OnPanelClick: TTyPanelClickEvent read FOnPanelClick write FOnPanelClick;
     property Align default alBottom;
   end;
 
@@ -204,6 +294,7 @@ type
     property AutoHint;
     property OnHint;
     property OnDrawPanel;
+    property OnPanelClick;
     property Align;
     property Anchors;
   end;
@@ -237,10 +328,15 @@ implementation
 
 uses
   Forms,                      // Application.Hint + TCustomHintAction (the hint-action sink)
+  LCLStrConsts,               // LCL's own "a control can't have itself as a parent"
   tyControls.WindowEffects;   // TyStartNativeResize / TyWindowResizable (Windows-gated inside)
 
 const
   CStatusBarPadX = 6;   // logical-px horizontal padding (panels + simple text)
+  CStatusPanelInset = 2;   // logical px between a cell's edges and what is in it
+  { The gap between a panel's control and its text when the theme has no
+    --statusbar-control-gap (light.tycss carries the same 4). }
+  CStatusControlGap = 4;
   { Logical-px side of the size-grip corner, and its device-px floor. The GRAB zone, which is
     deliberately larger than the three dots drawn inside it. }
   CStatusGripZone = 18;
@@ -310,6 +406,8 @@ begin
   inherited Create(ACollection);
   FWidth := 50;
   FAlignment := taLeftJustify;
+  FPlacedWidth := -1;
+  FPlacedHeight := -1;
 end;
 procedure TTyStatusPanel.SetText(const AValue: TCaption);
 begin if FText = AValue then Exit; FText := AValue; Changed(False); end;
@@ -320,6 +418,69 @@ begin if FAlignment = AValue then Exit; FAlignment := AValue; Changed(False); en
 procedure TTyStatusPanel.SetStyle(AValue: TTyStatusPanelStyle);
 begin if FStyle = AValue then Exit; FStyle := AValue; Changed(False); end;
 
+function TTyStatusPanel.OwnerBar: TTyCustomStatusBar;
+begin
+  if (Collection <> nil) and (Collection.Owner is TTyCustomStatusBar) then
+    Result := TTyCustomStatusBar(Collection.Owner)
+  else
+    Result := nil;
+end;
+
+function TTyStatusPanel.ControlOwnSize: TSize;
+begin
+  Result.cx := 0;
+  Result.cy := 0;
+  if FControl = nil then Exit;
+  { A size the bar did not give it is the control's own: the application set it, or the
+    control resized itself. }
+  if (FControl.Width <> FPlacedWidth) or (FControl.Height <> FPlacedHeight) then
+  begin
+    Result.cx := FControl.Width;
+    Result.cy := FControl.Height;
+  end
+  else
+  begin
+    Result.cx := FOwnWidth;
+    Result.cy := FOwnHeight;
+  end;
+end;
+
+procedure TTyStatusPanel.SetControl(AValue: TControl);
+var
+  bar: TTyCustomStatusBar;
+  other: TTyStatusPanel;
+  i: Integer;
+begin
+  if FControl = AValue then Exit;
+  bar := OwnerBar;
+  if (AValue <> nil) and (bar <> nil) then
+  begin
+    { The bar cannot sit in itself, and neither can anything the bar sits in. While a form is
+      being read the reference is dropped instead: a setter that raises there stops the whole
+      form from loading. }
+    if (AValue = bar) or ((AValue is TWinControl) and TWinControl(AValue).IsParentOf(bar)) then
+    begin
+      if csLoading in bar.ComponentState then Exit;
+      raise EInvalidOperation.Create(rsAControlCanNotHaveItselfAsParent);
+    end;
+    { One control serves one panel. }
+    for i := 0 to Collection.Count - 1 do
+    begin
+      other := TTyStatusPanel(Collection.Items[i]);
+      if (other <> Self) and (other.FControl = AValue) then other.SetControl(nil);
+    end;
+    { The cell places it: an Align would have LCL place it as well. Then it becomes the bar's
+      child, as LCL's TCoolBand.SetControl makes a band's control the cool bar's -- which also
+      takes it out of a panel of another bar (that bar's CMControlChange). }
+    AValue.Align := alNone;
+    if AValue.Parent <> bar then AValue.Parent := bar;
+  end;
+  FControl := AValue;
+  FPlacedWidth := -1;     // not placed yet: the size it comes with is its own
+  FPlacedHeight := -1;
+  Changed(False);
+end;
+
 { TTyStatusPanels }
 function TTyStatusPanels.GetItem(AIndex: Integer): TTyStatusPanel;
 begin Result := TTyStatusPanel(inherited Items[AIndex]); end;
@@ -329,7 +490,7 @@ begin Result := TTyStatusPanel(inherited Add); end;
 procedure TTyStatusPanels.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
-  if GetOwner is TTyCustomStatusBar then TTyCustomStatusBar(GetOwner).Invalidate;
+  if GetOwner is TTyCustomStatusBar then TTyCustomStatusBar(GetOwner).PanelsChanged;
 end;
 
 { TTyCustomStatusBar }
@@ -337,7 +498,10 @@ constructor TTyCustomStatusBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FFitsToStyle := True;   // AutoSize follows the theme (#114)
+  { A panel's Control is a child of the bar, so the designer has to be able to drop one in. }
+  ControlStyle := ControlStyle + [csAcceptsControls];
   FPanels := TTyStatusPanels.Create(Self, TTyStatusPanel);
+  FPressedPanelID := -1;
   FSizeGrip := True;
   Align := alBottom;
   Width := 200;
@@ -362,11 +526,17 @@ begin
 end;
 destructor TTyCustomStatusBar.Destroy;
 begin
-  FPanels.Free;
+  FreeAndNil(FPanels);   // nil, not dangling: the children still leave one by one (CMControlChange)
   inherited Destroy;
 end;
 procedure TTyCustomStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
-procedure TTyCustomStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
+procedure TTyCustomStatusBar.SetSimplePanel(AValue: Boolean);
+begin
+  if FSimplePanel = AValue then Exit;
+  FSimplePanel := AValue;
+  PlacePanelControls;   // the cells are gone, or back
+  Invalidate;
+end;
 procedure TTyCustomStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel or (FPanels.Count = 0) then Invalidate; end;
 procedure TTyCustomStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
 
@@ -415,20 +585,250 @@ begin
   Result := PanelAtPos(X, Y);
 end;
 
+function TTyCustomStatusBar.BarPPI: Integer;
+begin
+  Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
+function TTyCustomStatusBar.PanelCells(AWidth, AHeight, APPI: Integer;
+  ARightToLeft: Boolean): TTyRectArray;
+var
+  i: Integer;
+begin
+  { ONE layout. PanelAtPos and the paint each called TyStatusPanelRects themselves, with a
+    padding each of them scaled itself; an application that wanted a panel's rectangle had to
+    do it a third time, with a copy of the padding. }
+  Result := nil;
+  if FSimplePanel or (FPanels.Count = 0) then Exit;
+  if APPI <= 0 then APPI := 96;
+  Result := TyStatusPanelRects(PanelWidthsPx(APPI), AWidth, MulDiv(CStatusBarPadX, APPI, 96),
+    ARightToLeft);
+  for i := 0 to High(Result) do
+    Result[i].Bottom := AHeight;
+end;
+
+function TTyCustomStatusBar.PanelRect(AIndex: Integer): TRect;
+var
+  cells: TTyRectArray;
+begin
+  Result := Rect(0, 0, 0, 0);
+  cells := PanelCells(ClientWidth, ClientHeight, BarPPI, IsRightToLeft);
+  if (AIndex >= 0) and (AIndex <= High(cells)) then Result := cells[AIndex];
+end;
+
 function TTyCustomStatusBar.PanelAtPos(X, Y: Integer): Integer;
 var
-  rects: TTyRectArray;
-  ws: TIntegerDynArray;
+  cells: TTyRectArray;
   i: Integer;
 begin
   Result := -1;
-  if FSimplePanel or (FPanels.Count = 0) then Exit;
-  if (Y < 0) or (Y >= ClientHeight) then Exit;
-  ws := PanelWidthsPx(Font.PixelsPerInch);
-  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96),
-    IsRightToLeft);
-  for i := 0 to High(rects) do
-    if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
+  cells := PanelCells(ClientWidth, ClientHeight, BarPPI, IsRightToLeft);
+  for i := 0 to High(cells) do
+    if PtInRect(cells[i], Types.Point(X, Y)) then Exit(i);
+end;
+
+procedure TTyCustomStatusBar.PanelParts(APanel: TTyStatusPanel; const ACell: TRect;
+  APPI: Integer; ARightToLeft: Boolean; out AControlBox, ATextBox: TRect);
+var
+  inset, room, gap, w, h, cellH: Integer;
+  own: TSize;
+  c: TControl;
+begin
+  if APPI <= 0 then APPI := 96;
+  inset := MulDiv(CStatusPanelInset, APPI, 96);
+  ATextBox := Rect(ACell.Left + inset, ACell.Top, ACell.Right - inset, ACell.Bottom);
+  AControlBox := Rect(ATextBox.Left, ACell.Top, ATextBox.Left, ACell.Top);
+  c := APanel.Control;
+  if c = nil then Exit;
+  { The control's size is in the bar's own device px; a paint at another PPI (a preview)
+    scales it along with everything else. }
+  own := APanel.ControlOwnSize;
+  w := own.cx;
+  h := own.cy;
+  if APPI <> BarPPI then
+  begin
+    w := MulDiv(w, APPI, BarPPI);
+    h := MulDiv(h, APPI, BarPPI);
+  end;
+  cellH := ACell.Bottom - ACell.Top;
+  { At its own size unless the cell is smaller. An AutoSize control keeps its size: it would
+    only take it back, and the two would resize it in turn on every layout pass. }
+  if not c.AutoSize then
+  begin
+    room := ATextBox.Right - ATextBox.Left;
+    if room < 0 then room := 0;
+    if w > room then w := room;
+    if h > cellH then h := cellH;
+  end;
+  { At the leading edge, where the text would start, and reflected inside the text box for a
+    right-to-left bar -- so the control and the text can never trade places. }
+  AControlBox := Bounds(ATextBox.Left, ACell.Top + (cellH - h) div 2, w, h);
+  if ARightToLeft then AControlBox := BidiFlipRect(AControlBox, ATextBox, True);
+  { A hidden control takes no room. IsControlVisible, not Visible: the designer shows a
+    control whatever its Visible says, so there the text has to make room for it. }
+  if c.IsControlVisible and (w > 0) then
+  begin
+    gap := MulDiv(StyleMetric('--statusbar-control-gap', CStatusControlGap), APPI, 96);
+    if ARightToLeft then
+      ATextBox.Right := AControlBox.Left - gap
+    else
+      ATextBox.Left := AControlBox.Right + gap;
+  end;
+end;
+
+function TTyCustomStatusBar.PanelTextRect(AIndex: Integer): TRect;
+var
+  cells: TTyRectArray;
+  box: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  cells := PanelCells(ClientWidth, ClientHeight, BarPPI, IsRightToLeft);
+  if (AIndex < 0) or (AIndex > High(cells)) then Exit;
+  PanelParts(FPanels[AIndex], cells[AIndex], BarPPI, IsRightToLeft, box, Result);
+  if Result.Right < Result.Left then Result.Right := Result.Left;   // no room at all
+end;
+
+procedure TTyCustomStatusBar.PlacePanelControls;
+var
+  cells: TTyRectArray;
+  i, ppi: Integer;
+  rtl: Boolean;
+  p: TTyStatusPanel;
+  c: TControl;
+  box, txt: TRect;
+  own: TSize;
+  sig: string;
+begin
+  if FPlacing or (FPanels = nil) or ([csLoading, csDestroying] * ComponentState <> []) then
+    Exit;
+  sig := '';
+  FPlacing := True;
+  try
+    ppi := BarPPI;
+    rtl := IsRightToLeft;
+    cells := PanelCells(ClientWidth, ClientHeight, ppi, rtl);
+    for i := 0 to FPanels.Count - 1 do
+    begin
+      p := FPanels[i];
+      c := p.Control;
+      if c = nil then Continue;
+      own := p.ControlOwnSize;   // read before the bar resizes it: see FOwnWidth
+      p.FOwnWidth := own.cx;
+      p.FOwnHeight := own.cy;
+      if i <= High(cells) then
+        PanelParts(p, cells[i], ppi, rtl, box, txt)
+      else
+        box := Rect(0, 0, 0, 0);   // SimplePanel mode: no cell, so no room
+      { In the designer a cell with no room leaves the control as it is: what the designer
+        shows is what the form file gets, and a control saved 0 x 0 has lost its own size. }
+      if not (IsRectEmpty(box) and (csDesigning in ComponentState)) then
+      begin
+        c.SetBounds(box.Left, box.Top, box.Right - box.Left, box.Bottom - box.Top);
+        p.FPlacedWidth := c.Width;    // read back: a constraint may have had its say
+        p.FPlacedHeight := c.Height;
+      end;
+      sig := sig + Format('%d:%d,%d,%d,%d,%d;',
+        [i, c.Left, c.Top, c.Width, c.Height, Ord(c.IsControlVisible)]);
+    end;
+  finally
+    FPlacing := False;
+  end;
+  { A control that was shown, hidden, moved or resized changed the room its panel's text has,
+    and its own invalidation covers only its own rectangle: repaint the bar. }
+  if sig <> FPlacedSignature then
+  begin
+    FPlacedSignature := sig;
+    Invalidate;
+  end;
+end;
+
+procedure TTyCustomStatusBar.PanelsChanged;
+begin
+  PlacePanelControls;
+  Invalidate;
+end;
+
+procedure TTyCustomStatusBar.Loaded;
+begin
+  inherited Loaded;
+  PlacePanelControls;   // held back while the form was read
+end;
+
+procedure TTyCustomStatusBar.BoundsChanged;
+begin
+  inherited BoundsChanged;
+  PlacePanelControls;
+end;
+
+procedure TTyCustomStatusBar.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  PlacePanelControls;   // the PPI came with the font
+end;
+
+procedure TTyCustomStatusBar.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+begin
+  { Every LCL layout pass comes through here -- a child was moved, resized, shown or hidden.
+    After LCL's own pass, so the cell has the last word over an anchor. }
+  inherited AlignControls(AControl, RemainingClientRect);
+  PlacePanelControls;
+end;
+
+function TTyCustomStatusBar.BorderWidthIsPadding: Boolean;
+begin
+  Result := True;
+end;
+
+procedure TTyCustomStatusBar.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;
+  PlacePanelControls;   // the cells are mirrored
+end;
+
+procedure TTyCustomStatusBar.CMControlChange(var Message: TCMControlChange);
+var
+  i: Integer;
+begin
+  inherited;
+  { A child that leaves the bar leaves its panel: one moved to another parent, and one that
+    is freed, which LCL takes out of its parent first. }
+  if Message.Inserting or (FPanels = nil) or (csDestroying in ComponentState) then Exit;
+  for i := 0 to FPanels.Count - 1 do
+    if FPanels[i].FControl = Message.Control then
+      FPanels[i].SetControl(nil);
+end;
+
+function TTyCustomStatusBar.PanelTextStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;
+end;
+
+function TTyCustomStatusBar.PanelFontSize: Integer;
+begin
+  Result := ResolveFontSize(PanelTextStyle);
+end;
+
+function TTyCustomStatusBar.PanelFontHeightPx: Integer;
+begin
+  Result := TyFontHeightPx(PanelFontSize, BarPPI);
+end;
+
+procedure TTyCustomStatusBar.DrawTextWith(APainter: TTyPainter; const AStyle: TTyStyleSet;
+  AFontSize: Integer; const ARect: TRect; const AText: string; AAlignment: TAlignment);
+begin
+  APainter.DrawText(ARect, AText, AStyle.FontName, AFontSize, AStyle.FontWeight,
+    AStyle.TextColor, AAlignment, tlCenter, True);
+end;
+
+procedure TTyCustomStatusBar.DrawPanelText(APainter: TTyPainter; const ARect: TRect;
+  const AText: string; AAlignment: TAlignment);
+var
+  S: TTyStyleSet;
+begin
+  if APainter = nil then Exit;
+  S := PanelTextStyle;
+  DrawTextWith(APainter, S, ResolveFontSize(S), ARect, AText, AAlignment);
 end;
 
 function TTyCustomStatusBar.PanelWidthsPx(APPI: Integer): TIntegerDynArray;
@@ -456,9 +856,8 @@ var
   W, H, i, padX, sepW, fs, bw, gx, gy, k: Integer;
   bg, grip: TTyFill;
   rects: TTyRectArray;
-  ws: TIntegerDynArray;
   rtl: Boolean;
-  sep, gripBox: TRect;
+  sep, gripBox, ctlBox, textBox: TRect;
 begin
   P := TTyPainter.Create;
   try
@@ -490,11 +889,10 @@ begin
     { #128: SimpleText also on a bar with no panels -- SimplePanel defaults to False here (True
       in LCL), so a bar that was only ever given SimpleText showed nothing at all. }
     if FSimplePanel or (FPanels.Count = 0) then
-      P.DrawText(Rect(padX, 0, W - padX, H), FSimpleText, S.FontName, fs, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True)
+      DrawTextWith(P, S, fs, Rect(padX, 0, W - padX, H), FSimpleText, taLeftJustify)
     else
     begin
-      ws := PanelWidthsPx(APPI);
-      rects := TyStatusPanelRects(ws, W, padX, rtl);
+      rects := PanelCells(W, H, APPI, rtl);
       sepW := P.Scale(1); if sepW < 1 then sepW := 1;
       for i := 0 to High(rects) do
       begin
@@ -514,11 +912,12 @@ begin
           the Canvas from a handler would be wiped by EndPaint (see TTyDrawPanelEvent). }
         if FPanels[i].Style = psOwnerDraw then
         begin
-          DrawPanel(FPanels[i], P, Rect(rects[i].Left, 0, rects[i].Right, H));
+          DrawPanel(FPanels[i], P, rects[i]);
           Continue;
         end;
-        P.DrawText(Rect(rects[i].Left + P.Scale(2), 0, rects[i].Right - P.Scale(2), H),
-          FPanels[i].Text, S.FontName, fs, S.FontWeight, S.TextColor, FPanels[i].Alignment, tlCenter, True);
+        { The text starts after the panel's control, when it has one that is showing. }
+        PanelParts(FPanels[i], rects[i], APPI, rtl, ctlBox, textBox);
+        DrawTextWith(P, S, fs, textBox, FPanels[i].Text, FPanels[i].Alignment);
       end;
     end;
     if GripShown then    // 3 diagonal dots in the trailing bottom corner, in muted text color
@@ -615,13 +1014,77 @@ begin
 end;
 
 procedure TTyCustomStatusBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  pressed: TTyStatusPanel;
 begin
   { The status bar covers the form's bottom edge, so the OS never sees a resize-border hit there.
     On the size grip / bottom edge, hand the drag to the OS window resize the way any custom resize
     grip does (Windows-only, resizable, non-maximized -- all gated inside TyStartNativeResize). }
-  if (Button = mbLeft) and TyStartNativeResize(Self, ResizeHitAt(X, Y)) then
+  if Button = mbLeft then FPressedPanelID := -1;
+  if (Button = mbLeft) and StartWindowResize(ResizeHitAt(X, Y)) then
     Exit;   // the OS now owns the drag; don't run the normal click path
+  if Button = mbLeft then
+  begin
+    pressed := ClickPanelAt(X, Y);
+    if pressed <> nil then FPressedPanelID := pressed.ID;
+  end;
   inherited MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyCustomStatusBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  id: Integer;
+  released: TTyStatusPanel;
+begin
+  id := -1;
+  if Button = mbLeft then
+  begin
+    id := FPressedPanelID;
+    FPressedPanelID := -1;
+  end;
+  { OnMouseUp first, and the bar's own pressed state put down: a panel click is where an
+    application opens a menu or a dialog, and that should not run in the middle of a release. }
+  inherited MouseUp(Button, Shift, X, Y);
+  if id < 0 then Exit;
+  { The panel is remembered by its ID, not its index: a handler that ran between the press
+    and the release may have added or removed panels, and the one under the pointer now is
+    then not the one that was pressed. }
+  released := ClickPanelAt(X, Y);
+  if (released <> nil) and (released.ID = id) then DoPanelClick(released);
+end;
+
+function TTyCustomStatusBar.StartWindowResize(AEdge: Integer): Boolean;
+begin
+  Result := TyStartNativeResize(Self, AEdge);
+end;
+
+function TTyCustomStatusBar.OverSizeGrip(X, Y: Integer): Boolean;
+begin
+  Result := GripShown and PtInRect(
+    TyStatusGripRect(Width, Height, TyStatusGripZonePx(BarPPI), IsRightToLeft),
+    Types.Point(X, Y));
+end;
+
+function TTyCustomStatusBar.ClickPanelAt(X, Y: Integer): TTyStatusPanel;
+var
+  i: Integer;
+begin
+  Result := nil;
+  i := PanelAtPos(X, Y);
+  if i < 0 then Exit;
+  { The grip is the window's, also where pressing it resizes nothing (the bar starts a resize
+    on Windows only): it is painted over the last panel, not part of it. }
+  if OverSizeGrip(X, Y) then Exit;
+  { LCL hands a press on an enabled child to that child and the bar never sees it. A
+    disabled one it does not: that press arrives here, on a point the child covers. }
+  if ControlAtPos(Types.Point(X, Y), [capfAllowDisabled, capfAllowWinControls]) <> nil then
+    Exit;
+  Result := FPanels[i];
+end;
+
+procedure TTyCustomStatusBar.DoPanelClick(APanel: TTyStatusPanel);
+begin
+  if Assigned(FOnPanelClick) then FOnPanelClick(Self, APanel);
 end;
 
 procedure TTyCustomStatusBar.MouseMove(Shift: TShiftState; X, Y: Integer);
