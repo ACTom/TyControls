@@ -415,7 +415,9 @@ begin
     '  --tab-gap: 6px;' + LineEnding +
     '  --tab-margin: 6px;' + LineEnding +
     '  --tab-min-width: 48px;' + LineEnding +
+    '  --tab-modified-dot-size: 8px;' + LineEnding +
     '  --tab-padding: 12px;' + LineEnding +
+    '  --tab-preview-font-style: italic;' + LineEnding +
     '  --tag-close-size: 14px;' + LineEnding +
     '  --tag-gap: 4px;' + LineEnding +
     '  --terminal-cursor-width: 1px;' + LineEnding +

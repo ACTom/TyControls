@@ -382,7 +382,9 @@
   --tab-gap: 6px;
   --tab-margin: 6px;
   --tab-min-width: 48px;
+  --tab-modified-dot-size: 8px;
   --tab-padding: 12px;
+  --tab-preview-font-style: italic;
   --tag-close-size: 14px;
   --tag-gap: 4px;
   --terminal-cursor-width: 1px;
