@@ -102,8 +102,19 @@ type
   TTyRtfSlot = (sloNone, sloLoch, sloHich, sloDbch, sloOther);
   TTyRtfAbsorb = (absNone, absLast, absCurrent);
 
-  // What a group saves and restores. Fragments (Extra) are byte ranges of the file; the arrays
-  // are only ever replaced, never written into, so copies of the record can share them.
+  // One entry of the lists the properties keep (Extra fragments, tab stops, a row's \cellx):
+  // a fragment is the bytes [A, B), a tab stop is at A with B = alignment or leader shl 8, a
+  // \cellx is A. Lists are linked backwards (Prev, -1 ends) and never change once made, so a
+  // group's saved properties and the current ones share their common part, and saving a group
+  // copies no list.
+  TTyRtfNode = record
+    A, B: Int64;
+    Prev: Integer;
+  end;
+  TTyRtfNodes = array of TTyRtfNode;
+
+  // What a group saves and restores. Nothing in it is managed, so a group costs one plain copy
+  // of the record; the lists are indices into the parser's node pool (-1: empty).
   TTyRtfProps = record
     Dest: TTyRtfDest;
     DestOwner: Boolean;          // this group began Dest (its end finishes it)
@@ -117,13 +128,13 @@ type
     Bold, Italic, Underline, Strike: Boolean;
     VertAlign: TTyVertAlign;
     ColorIdx, HighlightIdx: Integer;
-    CharExtra: TTyRtfRanges;
+    CharExtra: Integer;
     // paragraph
     Align: TTyParaAlign;
     LeftIndent, RightIndent, FirstIndent, SpaceBefore, SpaceAfter: Integer;
     Sl, SlMult: Integer;
     SlTok, SlMultTok: TTyRtfRange;
-    Tabs: TTyTabStops;
+    Tabs: Integer;
     TabAlign: TTyTabAlign;
     TabLeader: TTyTabLeader;
     RtlPar, InTable: Boolean;
@@ -131,20 +142,20 @@ type
     ListKind: TTyListKind;
     ListLevel, ListStart: Integer;
     Ls, Ilvl: Integer;
-    ParaExtra: TTyRtfRanges;
+    ParaExtra: Integer;
   end;
 
   TTyRtfRowDef = record
-    Cellx: array of Integer;
+    Cellx: Integer;              // a node list, the last \cellx first
     Merged: Boolean;
     Raw: TTyRtfRange;
   end;
 
-  // Everything the parse depends on, at any point of the file (with the header's tables).
-  TTyRtfState = record
+  // Everything the parse depends on at a point between two tokens, but the group stack and
+  // the node pool (the parser holds those; a TTyRtfState carries copies).
+  TTyRtfCore = record
     Pos: PtrInt;                 // the next token
     Props: TTyRtfProps;
-    Stack: array of TTyRtfProps;
     Depth: Integer;              // groups open, the document's included
     Overflow: Integer;           // groups past MaxDepth, counted only
     GroupOpen, Star: Boolean;    // just after a brace (and its \*)
@@ -172,8 +183,26 @@ type
     RowDef: TTyRtfRowDef;
     CellIdx, RowMax: Integer;
     TableOpen, Nested: Boolean;
-    // A copy that shares nothing the parse writes into.
-    function Snapshot: TTyRtfState;
+  end;
+
+  // A snapshot: everything the parse depends on at a point between two tokens (with the
+  // header's tables, which the parser that resumes copies separately). Its node pool holds
+  // only what its lists use.
+  TTyRtfState = record
+    Core: TTyRtfCore;
+    Stack: array of TTyRtfProps;   // Core.Depth entries (at most MaxDepth)
+    Nodes: TTyRtfNodes;
+    TablesGen: Integer;            // the parser's table generation when it was taken
+    // Bytes it holds.
+    function MemSize: Int64;
+  end;
+  TTyRtfStateArray = array of TTyRtfState;
+
+  // Where a table's paragraphs are: global paragraph indices and the bytes from the start of
+  // its first paragraph to the end of its last.
+  TTyRtfTableExtent = record
+    FirstPara, LastPara: Integer;
+    Start, Stop: Int64;
   end;
 
   TTyRtfFont = record
@@ -203,6 +232,8 @@ type
     Format: TTyParaFormatId;
     Runs: TTyRunArray;
     Table, Row, Cell: Integer;   // Table -1: not in a table
+    TextStart: PtrInt;           // building: its UTF-8 in the parser's output (no separator)
+    TextLen: Integer;
   end;
 
   TTyRtfRowRec = record
@@ -229,7 +260,11 @@ type
     FBuf: PByte;
     FLen: PtrInt;
     FLex: TTyRtfLexer;
-    FS: TTyRtfState;
+    FS: TTyRtfCore;
+    FStack: array of TTyRtfProps;
+    FNodes: TTyRtfNodes;
+    FNodeN: Integer;
+    FCompactAt: Integer;
     FPool: TTyFormatPool;
     FTok: TTyRtfToken;
     FTokStop: PtrInt;
@@ -237,6 +272,9 @@ type
     FFinished: Boolean;
     FTrailerStart: PtrInt;
     // the header's tables
+    FTablesGen: Integer;         // changes whenever one of them does
+    FVersions: TFPList;          // parsers holding the tables in effect at a snapshot
+    FVersionGen: Integer;
     FAnsiCp: Integer;
     FAnsiCpSet: Boolean;
     FDeff: Integer;
@@ -265,6 +303,8 @@ type
     FDecNum, FDecGen: Integer;
     FDecCp: Integer;
     FDecTable: Pointer;
+    FDecCls: PByte;               // its byte classes and pairs, for the scan
+    FDecPairs: PByte;
     // a picture being read
     FPicFormat: TTyRichPictureFormat;
     FPicData: TBytes;
@@ -285,19 +325,35 @@ type
     // what was read
     FOut: TBytes;
     FOutLen: PtrInt;
+    FParaTextStart: PtrInt;
     FSep: RawByteString;
     FRuns: TTyRunArray;
     FRunN: Integer;
     FCurChars: Int64;
     FParas: array of TTyRtfParaRec;
     FParaN: Integer;
+    FParaBase: Integer;          // paragraphs handed out with DropParas
     FTables: array of TTyRtfTableRec;
     FTableN: Integer;
+    FExtents: array of TTyRtfTableExtent;
+    FExtentN: Integer;
     FObjects: TFPList;           // every object made, for freeing the ones not used
     FKeepSnapshots: Boolean;
+    FSnapshotEvery: Int64;
+    FNextSnapshotAt: Int64;
     FSnapshots: array of TTyRtfState;
+    FSnapshotN: Integer;
     function Counting: Boolean; inline;
     procedure InitState;
+    // the node pool
+    function Push(AList: Integer; A, B: Int64): Integer;
+    function ListNodes(AList: Integer): TTyRtfNodes;
+    procedure Compact;
+    procedure TakeSnapshot;
+    function FastRun(AStopPos: PtrInt): Boolean;
+    procedure MarkContent; inline;
+    procedure TablesChanged; inline;
+    procedure SetSnapshotEvery(AValue: Int64);
     // tokens
     procedure DoGroupStart;
     function DoGroupEnd: Boolean;
@@ -374,6 +430,10 @@ type
     destructor Destroy; override;
     // Reads from where the state stands to the end of the document.
     procedure Parse;
+    // Reads on until the document ends (then True), or stops after the token that reaches
+    // AStopPos, or once AStopParas paragraphs (counted from the start of the document) have
+    // ended and no table row is still open (-1: no such limit).
+    function ParseUntil(AStopPos: PtrInt; AStopParas: Integer): Boolean;
     // The state, as a snapshot to resume from.
     function SaveState: TTyRtfState;
     // Goes on from AState (taken by a parser over the same bytes); copy the header's tables
@@ -383,15 +443,39 @@ type
     function DefaultCharFormat: TTyCharFormat;
     // The UTF-8 text read, paragraphs separated by the platform's line break.
     function TextBytes: TBytes;
+    // Paragraph AIndex's text (building only), without its separator.
+    function ParaText(AIndex: Integer): RawByteString;
+    // The paragraphs this parser read (after a Resume: ParaRec(0) is the first after the
+    // snapshot), the dropped ones included.
     function ParaCount: Integer;
     function ParaRec(AIndex: Integer): TTyRtfParaRec;
+    // A paragraph's bytes and characters (no record with a managed field copied).
+    procedure ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out AChars: Int64);
+    // The first paragraph ParaRec still has.
+    property FirstParaRec: Integer read FParaBase;
+    // Forgets the records of the paragraphs before AIndex (an index scan keeps no record of
+    // the whole document). The last paragraph that ended stays: its range may still grow.
+    procedure DropParas(AIndex: Integer);
     function TableCount: Integer;
     function TableRec(AIndex: Integer): TTyRtfTableRec;
+    // Where each table that ended is (also when counting).
+    function TableExtentCount: Integer;
+    function TableExtent(AIndex: Integer): TTyRtfTableExtent;
     function HeaderEnd: PtrInt;
     function TrailerStart: PtrInt;
+    function BodyStarted: Boolean;
+    function Finished: Boolean;
+    function Position: PtrInt;
     function SnapshotCount: Integer;
     function Snapshot(AIndex: Integer): TTyRtfState;
+    // Hands the snapshots taken so far over (they are no longer the parser's).
+    function TakeSnapshots: TTyRtfStateArray;
+    // A parser holding the header's tables as they were when the snapshots of generation
+    // AGen were taken (owned by this parser).
+    function TablesOf(AGen: Integer): TTyRtfParser;
     function FragmentOf(const R: TTyRtfRange): RawByteString;
+    // The objects made, as owned by the caller from now on (each with one reference taken).
+    function TakeObjects: TFPList;
     property Bytes: TBytes read FBytes;
     property PaperWidth: Integer read FPaperW;
     property PaperHeight: Integer read FPaperH;
@@ -400,13 +484,162 @@ type
     // Keep the state after each token that ended a paragraph (resuming from it reads the
     // rest exactly as the whole parse did).
     property KeepSnapshots: Boolean read FKeepSnapshots write FKeepSnapshots;
+    // Keep the state at the first paragraph end (outside a table row) at least this many
+    // bytes after the one before: an index scan's resume points. 0: none.
+    property SnapshotEvery: Int64 read FSnapshotEvery write SetSnapshotEvery;
+  end;
+
+const
+  // An index scan keeps a snapshot at the first paragraph end after every this many bytes;
+  // parsing on demand reads from the snapshot before a paragraph to the next one.
+  CRtfSnapshotBytes = 65536;
+  // A table whose rows take more bytes than this is not parsed as a whole when one of its
+  // paragraphs is needed: each stretch between snapshots becomes a table of its own
+  // (StructureLocked), so that a giant table cannot make one paragraph slow to show.
+  CRtfBigTableBytes = 1 shl 20;
+  // How many snapshot intervals stay parsed (their formats set, their text decoded) before
+  // the least recently used ones go back to unparsed.
+  CRtfResidentIntervals = 16;
+  // What TyRichBeginLoadRtf indexes before it returns (then Step goes on).
+  CRtfFirstSliceBytes = 4 shl 20;
+
+type
+  TTyRtfProgressEvent = procedure(Sender: TObject; ADone, ATotal: Int64) of object;
+
+  TTyRtfGroup = class;
+
+  // An RTF document being loaded, and then parsed on demand: the file's bytes, the header's
+  // tables (through the scan), the snapshots, the header and trailer ranges and where the
+  // tables are. It lives as long as its document's content does (the document owns it through
+  // its paragraph loader).
+  TTyRtfLoad = class
+  private
+    FDoc: TTyRichDocument;
+    FBytes: TBytes;
+    FScan: TTyRtfParser;             // the index scan; it also keeps the header's tables
+    FSep: TTyRichSeparator;          // what separates paragraphs in the text
+    // Interval i: the bytes from FIntervalPos[i] (its snapshot, FSnaps[i]; interval 0 is read
+    // from the start of the file) to the next interval's start; its first paragraph
+    FSnaps: TTyRtfStateArray;
+    FIntervalPos: array of Int64;
+    FIntervalPara: array of Integer;
+    FIntervalN: Integer;
+    FSnapBytes: Int64;
+    FAppended: Integer;              // paragraphs in the document's text
+    FDone, FCancelled: Boolean;
+    FHeaderEnd: Int64;
+    FTrailer: TTyRtfRange;
+    FMap: TTyRtfSourceMap;           // ranges for the caller of TyRichLoadRtf
+    FMapN: Integer;
+    FQuiet: Boolean;                 // no OnChange per slice (the caller reports once)
+    FGroups: TFPList;                // parsed groups of intervals, most recently used last
+    FResident: Integer;              // intervals the groups hold
+    FMaxResident: Integer;
+    FStamp: Int64;
+    FParsedBytes: Int64;
+    FParseCount: Integer;
+    FOnLoadProgress: TTyRtfProgressEvent;
+    procedure Index(ABudget: Int64; AMinParas: Integer);
+    procedure Collect;
+    procedure Append(AFrom, ATo: Integer);
+    procedure AddMapRange(const R: TTyRtfRange);
+    procedure Finish;
+    function IntervalOf(ASrc: Int64): Integer;
+    function IntervalOfPara(APara: Integer): Integer;
+    function IntervalParaStop(AIndex: Integer): Integer;
+    function IntervalStop(AIndex: Integer): Int64;
+    function IsBig(const X: TTyRtfTableExtent): Boolean;
+    function ExtentAt(APara: Integer): Integer;
+    function GroupOf(ASrc: Int64): TTyRtfGroup;
+    function GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
+    function ParseGroup(AInterval: Integer): TTyRtfGroup;
+    procedure Touch(AGroup: TTyRtfGroup);
+    procedure Apply(AGroup: TTyRtfGroup);
+    procedure Drop(AGroup: TTyRtfGroup; AReset: Boolean);
+    procedure FreeGroup(AGroup: TTyRtfGroup);
+    function Decode(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+    procedure LoadParagraph(AIndex: Integer);
+  public
+    constructor Create(ADoc: TTyRichDocument; const ABytes: TBytes);
+    destructor Destroy; override;
+    // Indexes about AByteBudget more bytes of the file (at least one token) and appends the
+    // paragraphs found to the document (OnChange: they come after its last paragraph); True
+    // when the whole file is indexed - the document can then be changed. Deterministic: a
+    // byte budget, not a clock (the control calls it from idle time and watches the clock).
+    function Step(AByteBudget: Int64): Boolean;
+    // Stops indexing: the document keeps what was indexed and stays read-only, Incomplete
+    // (a writer must refuse to save it - the rest of the file is not in it).
+    procedure Cancel;
+    // Sends the least recently used parsed intervals back to unparsed until at most
+    // MaxResidentIntervals remain (does nothing while a command runs). Reading formats does
+    // this by itself.
+    procedure Trim;
+    // For a writer: paragraph AIndex is still the file's own, untouched (its text and formats
+    // never changed), at ARange of Bytes.
+    function ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolean;
+    property Bytes: TBytes read FBytes;
+    // Before the first paragraph: the tables, the document's properties.
+    function Header: TTyRtfRange;
+    // After the last paragraph to the end of the file (Start = Stop = -1 until Done).
+    property Trailer: TTyRtfRange read FTrailer;
+    property Done: Boolean read FDone;
+    property Cancelled: Boolean read FCancelled;
+    function BytesIndexed: Int64;
+    function BytesTotal: Int64;
+    property OnLoadProgress: TTyRtfProgressEvent read FOnLoadProgress write FOnLoadProgress;
+    // What parsing on demand did (tests and probes)
+    property ParsedBytes: Int64 read FParsedBytes;
+    property ParseCount: Integer read FParseCount;
+    function SnapshotCount: Integer;
+    // Interval i (0 .. IntervalCount - 1): its bytes start at IntervalStart (interval 0 at
+    // the start of the file, the others at their snapshot); its first paragraph.
+    function IntervalCount: Integer;
+    function IntervalStart(AIndex: Integer): Int64;
+    function IntervalFirstPara(AIndex: Integer): Integer;
+    property SnapshotBytes: Int64 read FSnapBytes;
+    property ResidentIntervals: Integer read FResident;
+    property MaxResidentIntervals: Integer read FMaxResident write FMaxResident;
+  end;
+
+  // Intervals parsed together: one, or more when a table crosses their boundaries (internal).
+  TTyRtfGroup = class
+  public
+    FirstSnap, LastSnap: Integer;
+    FirstSrc, StopSrc: Int64;        // its paragraphs start in [FirstSrc, StopSrc)
+    Recs: array of TTyRtfParaRec;    // as parsed (Table is an index into Tables)
+    Texts: array of RawByteString;   // each paragraph's text, without its separator
+    States: array of Byte;           // set by us (Values holds the value, held), or not
+    Values: array of Pointer;
+    Tables: array of TTyRichTable;   // held
+    Objects: TFPList;                // held
+    Stamp: Int64;                    // when it was last used
+    function Find(ASrc: Int64): Integer;
+    function HasValues: Boolean;
   end;
 
 // Replaces ADoc's content with the RTF document in AStream, from its position to its end (as
 // loading, not as a change: the history goes and Modified is False). Raises ETyRichRtf when
-// the bytes do not start with the RTF signature; anything after that loads as far as it goes, however
-// broken. AMap, when given, gets the file's bytes and how they were cut.
+// the bytes do not start with the RTF signature; anything after that loads as far as it goes,
+// however broken.
+//
+// The load only indexes the file: one fast scan finds every paragraph's bytes and characters
+// and keeps a snapshot of the parse state every CRtfSnapshotBytes; a paragraph's formats and
+// text are parsed the first time somebody reads them (TTyRichDocument.EnsureParsed, or the
+// text), from the snapshot before it to the next. TyRichBeginLoadRtf indexes about AFirstSlice
+// bytes (and at least the header and two paragraphs) and returns; the document then holds
+// what was indexed, can be read but not changed (Loading), and Step indexes the rest. The
+// returned object belongs to the document.
+function TyRichBeginLoadRtf(ADoc: TTyRichDocument; AStream: TStream;
+  AFirstSlice: Int64 = CRtfFirstSliceBytes): TTyRtfLoad;
+// TyRichBeginLoadRtf and then Step to the end, raising OnChange once. AMap, when given, gets
+// the file's bytes and how they were cut.
 procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap = nil);
+// The whole document parsed at once, as before parsing on demand: for comparison (tests) and
+// for callers that want every paragraph read right away.
+procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap = nil);
+// The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
+// TyRichBeginLoadRtf), or after it was replaced.
+function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
 
 implementation
 
@@ -596,17 +829,28 @@ const
     (N: 'oldcprops'; K: kwDCharExtra), (N: 'oldpprops'; K: kwDParaExtra)
   );
 
-var
-  WordSlots: array[0..2047] of SmallInt;   // index + 1 into WordTable, 0 empty
+type
+  // WordTable as the lookup reads it: one small block per word, nothing managed
+  TWordKey = record
+    Len: Integer;
+    K: Integer;
+    Name: array[0..31] of Byte;
+  end;
 
-{$PUSH}{$Q-}{$R-}
-function HashName(P: PByte; ALen: Integer): Cardinal;
 var
-  i: Integer;
+  WordSlots: array[0..4095] of SmallInt;   // index + 1 into WordTable, 0 empty
+  WordKeys: array[0..High(WordTable)] of TWordKey;
+  LetterTab: array[0..255] of Byte;          // 1: a letter a control word is made of
+
+// A word's slot: from its length and its first two and last two letters, so that it costs
+// the same for every word (the letters are compared after it anyway).
+{$PUSH}{$Q-}{$R-}
+function WordHash(P: PByte; ALen: Integer): Cardinal; inline;
 begin
-  Result := 2166136261;
-  for i := 0 to ALen - 1 do
-    Result := (Result xor P[i]) * 16777619;
+  Result := (Cardinal(ALen) shl 24) xor (Cardinal(P[0]) shl 16) xor
+    (Cardinal(P[(ALen - 1) shr 1]) shl 8) xor Cardinal(P[ALen - 1]) xor
+    (Cardinal(P[ALen shr 1]) shl 4);
+  Result := (Result * 2654435761) shr 20;
 end;
 {$POP}
 
@@ -616,38 +860,61 @@ var
   h: Cardinal;
 begin
   FillChar(WordSlots, SizeOf(WordSlots), 0);
+  for i := 0 to 255 do
+    LetterTab[i] := Ord(((i >= Ord('a')) and (i <= Ord('z'))) or ((i >= Ord('A')) and (i <= Ord('Z'))));
   for i := 0 to High(WordTable) do
   begin
-    h := HashName(PByte(PChar(WordTable[i].N)), Length(WordTable[i].N)) and High(WordSlots);
+    WordKeys[i].Len := Length(WordTable[i].N);
+    WordKeys[i].K := WordTable[i].K;
+    FillChar(WordKeys[i].Name, SizeOf(WordKeys[i].Name), 0);
+    Move(WordTable[i].N[1], WordKeys[i].Name[0], Length(WordTable[i].N));
+    h := WordHash(@WordKeys[i].Name[0], WordKeys[i].Len) and High(WordSlots);
     while WordSlots[h] <> 0 do h := (h + 1) and High(WordSlots);
     WordSlots[h] := i + 1;
   end;
 end;
 
+// Every word goes through here: no call per byte, no string touched.
 function LookupWord(P: PByte; ALen: Integer): Integer;
 var
   h: Cardinal;
-  s: Integer;
+  s, i: Integer;
 begin
-  h := HashName(P, ALen) and High(WordSlots);
+  h := WordHash(P, ALen) and High(WordSlots);
   repeat
     s := WordSlots[h];
     if s = 0 then Exit(kwUnknown);
-    if (Length(WordTable[s - 1].N) = ALen) and
-       CompareMem(P, PChar(WordTable[s - 1].N), ALen) then
-      Exit(WordTable[s - 1].K);
+    with WordKeys[s - 1] do
+      if Len = ALen then
+      begin
+        i := 0;
+        while (i < ALen) and (P[i] = Name[i]) do Inc(i);
+        if i = ALen then Exit(K);
+      end;
     h := (h + 1) and High(WordSlots);
   until False;
 end;
 
-function NameStarts(P: PByte; ALen: Integer; const APrefix: string): Boolean;
+function NameStarts(P: PByte; ALen: Integer; const APrefix: string): Boolean; inline;
+var
+  i: Integer;
 begin
-  Result := (ALen >= Length(APrefix)) and CompareMem(P, PChar(APrefix), Length(APrefix));
+  if ALen < Length(APrefix) then Exit(False);
+  for i := 1 to Length(APrefix) do
+    if P[i - 1] <> Ord(APrefix[i]) then Exit(False);
+  Result := True;
 end;
 
 // A table row's own words: kept in the row's definition, never on a paragraph or run.
 function IsRowWord(P: PByte; ALen: Integer; AInRowDef: Boolean): Boolean;
 begin
+  // most words a reader does not know start with none of these letters
+  case P^ of
+    Ord('t'), Ord('c'), Ord('i'), Ord('l'), Ord('r'), Ord('b'):
+      ;
+  else
+    Exit(False);
+  end;
   Result := NameStarts(P, ALen, 'tr') or NameStarts(P, ALen, 'cl') or
     NameStarts(P, ALen, 'irow') or NameStarts(P, ALen, 'lastrow') or
     NameStarts(P, ALen, 'ltrrow') or NameStarts(P, ALen, 'rtlrow');
@@ -661,6 +928,7 @@ end;
 // Paragraph borders and shading: the paragraph's Extra.
 function IsParaPrefixWord(P: PByte; ALen: Integer): Boolean;
 begin
+  if P^ <> Ord('b') then Exit(False);
   Result := NameStarts(P, ALen, 'brdr') or NameStarts(P, ALen, 'brsp') or
     NameStarts(P, ALen, 'bg');
 end;
@@ -700,20 +968,6 @@ function Range(AStart, AStop: Int64): TTyRtfRange; inline;
 begin
   Result.Start := AStart;
   Result.Stop := AStop;
-end;
-
-// A new array with R at the end: the old one may be shared by a saved group or a snapshot.
-procedure AppendRange(var A: TTyRtfRanges; const R: TTyRtfRange);
-var
-  n: Integer;
-  b: TTyRtfRanges;
-begin
-  n := Length(A);
-  b := nil;
-  SetLength(b, n + 1);
-  if n > 0 then Move(A[0], b[0], n * SizeOf(TTyRtfRange));
-  b[n] := R;
-  A := b;
 end;
 
 procedure UtfPut(var ABuf: TBytes; var ALen: PtrInt; ACode: Cardinal); inline;
@@ -918,11 +1172,10 @@ end;
 
 // ---- TTyRtfState ----
 
-function TTyRtfState.Snapshot: TTyRtfState;
+function TTyRtfState.MemSize: Int64;
 begin
-  Result := Self;
-  Result.Stack := Copy(Stack, 0, Length(Stack));
-  Result.RowDef.Cellx := Copy(RowDef.Cellx, 0, Length(RowDef.Cellx));
+  Result := SizeOf(TTyRtfState) + Int64(Length(Stack)) * SizeOf(TTyRtfProps) +
+    Int64(Length(Nodes)) * SizeOf(TTyRtfNode);
 end;
 
 // ---- TTyRtfParser: life ----
@@ -935,6 +1188,8 @@ begin
   if FLen > 0 then FBuf := @FBytes[0] else FBuf := nil;
   FPool := APool;
   FObjects := TFPList.Create;
+  FCompactAt := 4096;
+  FVersionGen := -1;
   FAnsiCp := 1252;
   FDeff := -1;
   FFirstFont := -1;
@@ -957,7 +1212,133 @@ begin
   for i := 0 to FObjects.Count - 1 do
     if TTyRichObject(FObjects[i]).RefCount = 0 then TTyRichObject(FObjects[i]).Free;
   FObjects.Free;
+  if FVersions <> nil then
+    for i := 0 to FVersions.Count - 1 do TTyRtfParser(FVersions[i]).Free;
+  FVersions.Free;
   inherited Destroy;
+end;
+
+function TTyRtfParser.TakeObjects: TFPList;
+var
+  i: Integer;
+begin
+  Result := FObjects;
+  for i := 0 to Result.Count - 1 do TTyRichObject(Result[i]).AddRef;
+  FObjects := TFPList.Create;
+end;
+
+// ---- the node pool ----
+
+function TTyRtfParser.Push(AList: Integer; A, B: Int64): Integer;
+begin
+  if FNodeN = Length(FNodes) then SetLength(FNodes, FNodeN * 2 + 64);
+  FNodes[FNodeN].A := A;
+  FNodes[FNodeN].B := B;
+  FNodes[FNodeN].Prev := AList;
+  Result := FNodeN;
+  Inc(FNodeN);
+end;
+
+// Keeps only the nodes the state's lists use (the pool only grows otherwise), renumbering
+// them in their order, so a list's earlier nodes still come before it.
+procedure TTyRtfParser.Compact;
+var
+  remap: array of Integer;
+  i, k, d: Integer;
+
+  procedure Mark(R: Integer);
+  begin
+    while (R >= 0) and (remap[R] = -1) do
+    begin
+      remap[R] := -2;
+      R := FNodes[R].Prev;
+    end;
+  end;
+
+  procedure MarkProps(const P: TTyRtfProps);
+  begin
+    Mark(P.CharExtra);
+    Mark(P.Tabs);
+    Mark(P.ParaExtra);
+  end;
+
+  function Renum(R: Integer): Integer; inline;
+  begin
+    if R < 0 then Result := R else Result := remap[R];
+  end;
+
+  procedure MapProps(var P: TTyRtfProps);
+  begin
+    P.CharExtra := Renum(P.CharExtra);
+    P.Tabs := Renum(P.Tabs);
+    P.ParaExtra := Renum(P.ParaExtra);
+  end;
+
+begin
+  remap := nil;
+  SetLength(remap, FNodeN);
+  for i := 0 to FNodeN - 1 do remap[i] := -1;
+  d := FS.Depth;
+  if d > Length(FStack) then d := Length(FStack);
+  MarkProps(FS.Props);
+  Mark(FS.RowDef.Cellx);
+  for i := 0 to d - 1 do MarkProps(FStack[i]);
+  k := 0;
+  for i := 0 to FNodeN - 1 do
+    if remap[i] = -2 then
+    begin
+      remap[i] := k;
+      FNodes[k] := FNodes[i];
+      // the node before is earlier, so it already has its new number
+      if FNodes[k].Prev >= 0 then FNodes[k].Prev := remap[FNodes[k].Prev];
+      Inc(k);
+    end;
+  FNodeN := k;
+  MapProps(FS.Props);
+  FS.RowDef.Cellx := Renum(FS.RowDef.Cellx);
+  for i := 0 to d - 1 do MapProps(FStack[i]);
+  FCompactAt := FNodeN * 2 + 4096;
+end;
+
+procedure TTyRtfParser.TablesChanged;
+begin
+  Inc(FTablesGen);
+end;
+
+procedure TTyRtfParser.SetSnapshotEvery(AValue: Int64);
+begin
+  FSnapshotEvery := AValue;
+  FNextSnapshotAt := FLex.Position + AValue;
+end;
+
+function TTyRtfParser.TablesOf(AGen: Integer): TTyRtfParser;
+var
+  i: Integer;
+begin
+  Result := nil;
+  if FVersions <> nil then
+    for i := 0 to FVersions.Count - 1 do
+      if TTyRtfParser(FVersions[i]).FTablesGen = AGen then Exit(TTyRtfParser(FVersions[i]));
+end;
+
+procedure TTyRtfParser.TakeSnapshot;
+var
+  v: TTyRtfParser;
+begin
+  // the tables a parse resuming here must start from (a font table in the middle of the
+  // body makes a new generation)
+  if FTablesGen <> FVersionGen then
+  begin
+    if FVersions = nil then FVersions := TFPList.Create;
+    v := TTyRtfParser.Create(FBytes, nil);
+    v.CopyTablesFrom(Self);
+    v.FTablesGen := FTablesGen;
+    FVersions.Add(v);
+    FVersionGen := FTablesGen;
+  end;
+  if FSnapshotN = Length(FSnapshots) then SetLength(FSnapshots, FSnapshotN * 2 + 16);
+  FSnapshots[FSnapshotN] := SaveState;
+  Inc(FSnapshotN);
 end;
 
 function TTyRtfParser.Counting: Boolean;
@@ -967,7 +1348,9 @@ end;
 
 procedure TTyRtfParser.InitState;
 begin
-  FS := Default(TTyRtfState);
+  FS := Default(TTyRtfCore);
+  FNodeN := 0;
+  FS.RowDef.Cellx := -1;
   FS.Props.Dest := rdNormal;
   FS.Props.Uc := 1;
   FS.PendingLead := -1;
@@ -997,7 +1380,7 @@ begin
     VertAlign := vaNone;
     ColorIdx := 0;
     HighlightIdx := 0;
-    CharExtra := nil;
+    CharExtra := -1;
   end;
   CharChanged;
 end;
@@ -1016,7 +1399,7 @@ begin
     SlMult := 0;
     SlTok := Range(-1, -1);
     SlMultTok := Range(-1, -1);
-    Tabs := nil;
+    Tabs := -1;
     TabAlign := ttaLeft;
     TabLeader := ttlNone;
     RtlPar := False;
@@ -1027,7 +1410,7 @@ begin
     ListStart := 0;
     Ls := 0;
     Ilvl := 0;
-    ParaExtra := nil;
+    ParaExtra := -1;
   end;
   ParaChanged;
 end;
@@ -1045,23 +1428,39 @@ begin
 end;
 
 function TTyRtfParser.SaveState: TTyRtfState;
+var
+  d: Integer;
 begin
   FS.Pos := FLex.Position;
-  Result := FS.Snapshot;
+  Compact;
+  Result.Core := FS;
+  d := FS.Depth;
+  if d > Length(FStack) then d := Length(FStack);
+  Result.Stack := Copy(FStack, 0, d);
+  Result.Nodes := Copy(FNodes, 0, FNodeN);
+  Result.TablesGen := FTablesGen;
 end;
 
 procedure TTyRtfParser.Resume(const AState: TTyRtfState);
 begin
-  FS := AState.Snapshot;
+  FS := AState.Core;
+  FStack := Copy(AState.Stack, 0, Length(AState.Stack));
+  FNodes := Copy(AState.Nodes, 0, Length(AState.Nodes));
+  FNodeN := Length(FNodes);
+  FCompactAt := FNodeN * 2 + 4096;
   FLex.Init(FBuf, FS.Pos, FLen);
   FFinished := False;
   FDecNum := -100;
+  // ParaRec(0) is the first paragraph after the snapshot
+  FParaBase := 0;
+  FParaN := 0;
   CharChanged;
   ParaChanged;
 end;
 
 procedure TTyRtfParser.CopyTablesFrom(AOther: TTyRtfParser);
 begin
+  TablesChanged;
   FAnsiCp := AOther.FAnsiCp;
   FAnsiCpSet := AOther.FAnsiCpSet;
   FDeff := AOther.FDeff;
@@ -1087,12 +1486,271 @@ end;
 // ---- the loop ----
 
 procedure TTyRtfParser.Parse;
+begin
+  ParseUntil(High(PtrInt), -1);
+end;
+
+// StartContent once the body has started.
+procedure TTyRtfParser.MarkContent;
+begin
+  FS.HasContent := True;
+  FS.CurEnd := FTokStop;
+  FS.Absorb := absCurrent;
+  FContent := True;
+end;
+
+// The index scan's own way through the commonest tokens - text, \'xx, braces - with nothing
+// to build: exactly what the token loop below does with them (DoText, DoHex, DoGroupStart,
+// DoGroupEnd and the bookkeeping after each), only without a token record, a call per byte
+// or a call per token. It stops at the first token it does not take (a control word or
+// symbol, a destination's closing brace, any state out of the ordinary), which the token
+// loop then reads. False: it is at AStopPos or the end.
+function TTyRtfParser.FastRun(AStopPos: PtrInt): Boolean;
+var
+  p, e, q: PtrInt;
+  b: Byte;
+  h1, h2, kw, nameLen: Integer;
+  any, counted, neg: Boolean;
+  buf: PByte;
+  v: Int64;
+begin
+  buf := FBuf;
+  p := FLex.Position;
+  e := FLen;
+  Result := True;
+  while p < e do
+  begin
+    if p >= AStopPos then
+    begin
+      FLex.Position := p;
+      Exit(False);
+    end;
+    // only plain body text in an ordinary state
+    if (FS.Props.Dest <> rdNormal) or (FS.UcSkip <> 0) or (FS.PendingHigh <> 0) or
+       not FS.BodyStarted or (FS.Overflow <> 0) or FS.DocClosed then
+      Break;
+    b := buf[p];
+    if (b = Ord('\')) and (p + 1 < e) and IsLetter(buf[p + 1]) then
+    begin
+      // a control word, read as the lexer reads it
+      q := p + 2;
+      while (q < e) and (LetterTab[buf[q]] <> 0) do Inc(q);
+      nameLen := q - p - 1;
+      // \bin carries data
+      if (nameLen = 3) and (buf[p + 1] = Ord('b')) and (buf[p + 2] = Ord('i')) and
+         (buf[p + 3] = Ord('n')) then
+        Break;
+      kw := LookupWord(@buf[p + 1], nameLen);
+      // only words that set properties: the rest (paragraph ends, destinations, tables, a
+      // group's first word that may begin a destination) are the token loop's
+      case kw of
+        kwUnknown, kwParaExtra, kwUc, kwU, kwPlain..kwLtrCh, kwPard..kwRtlPar, kwIntbl..kwIlvl,
+        kwTrowd, kwCellx, kwClMerge: ;
+      else
+        Break;
+      end;
+      if FS.GroupOpen and FS.Star then Break;
+      FTok.Kind := rtkWord;
+      FTok.Start := p;
+      FTok.NameStart := p + 1;
+      FTok.NameLen := nameLen;
+      FTok.HasParam := False;
+      FTok.Param := 0;
+      neg := False;
+      if (q + 1 < e) and (buf[q] = Ord('-')) and IsDigit(buf[q + 1]) then
+      begin
+        neg := True;
+        Inc(q);
+      end;
+      if (q < e) and IsDigit(buf[q]) then
+      begin
+        FTok.HasParam := True;
+        v := 0;
+        while (q < e) and IsDigit(buf[q]) do
+        begin
+          if v < 100000000000 then v := v * 10 + (buf[q] - Ord('0'));
+          Inc(q);
+        end;
+        if neg then v := -v;
+        if v > High(Integer) then v := High(Integer)
+        else if v < -High(Integer) then v := -High(Integer);
+        FTok.Param := Integer(v);
+      end;
+      if (q < e) and (buf[q] = Ord(' ')) then Inc(q);
+      FTok.Stop := q;
+      FTokStop := q;
+      p := q;
+      FContent := False;
+      // DoWord: (not a destination) then BodyWord
+      FS.GroupOpen := False;
+      FS.UcSkip := 0;
+      if FS.InRowDef and (kw <> kwTrowd) and (kw <> kwCellx) and (kw <> kwClMerge) and
+         not IsRowWord(@buf[FTok.NameStart], nameLen, True) then
+        EndRowDef;
+      if kw = kwUnknown then
+      begin
+        if IsRowWord(@buf[FTok.NameStart], nameLen, FS.InRowDef) then
+        begin
+          if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
+        end
+        else if IsParaPrefixWord(@buf[FTok.NameStart], nameLen) then
+          AddParaExtra(FTok.Start, FTok.Stop)
+        else
+          AddCharExtra(FTok.Start, FTok.Stop);
+      end
+      else if kw = kwParaExtra then
+        AddParaExtra(FTok.Start, FTok.Stop)
+      else
+        BodyWord(kw);
+      if not FContent then FS.Absorb := absNone;
+      if FNodeN > FCompactAt then Compact;
+    end
+    else if b = Ord('\') then
+    begin
+      // \'xx with both digits
+      if (p + 3 >= e) or (buf[p + 1] <> Ord('''')) then Break;
+      h1 := HexVal(buf[p + 2]);
+      h2 := HexVal(buf[p + 3]);
+      if (h1 < 0) or (h2 < 0) then Break;
+      b := (h1 shl 4) or h2;
+      FS.GroupOpen := False;
+      FS.InRowDef := False;
+      FTok.Start := p;
+      Inc(p, 4);
+      FTokStop := p;
+      FTok.Stop := p;
+      FContent := False;
+      if (b = 0) or (b = 10) or (b = 13) then
+      begin
+        FS.Absorb := absNone;
+        Continue;
+      end;
+      if (FS.PendingLead < 0) and (b < $80) then
+      begin
+        if (b >= $20) or (b = 9) then
+        begin
+          MarkContent;
+          FS.OneShot.Start := -1;
+          Inc(FCurChars);
+        end;
+      end
+      else
+      begin
+        if (FDecNum <> FS.Props.FontNum) or (FDecGen <> FFontGen) then UpdateDecoder;
+        if FS.PendingLead >= 0 then
+        begin
+          // the trail byte of a pair the table knows: one character
+          h1 := (FS.PendingLead shl 8) or b;
+          if (FS.PendingLeadFont = FS.Props.FontNum) and (FDecPairs <> nil) and
+             (FDecPairs[h1 shr 3] and (1 shl (h1 and 7)) <> 0) then
+          begin
+            FS.PendingLead := -1;
+            MarkContent;
+            FS.OneShot.Start := -1;
+            Inc(FCurChars);
+          end
+          else
+            ProcessByte(b);
+        end
+        else if (FDecCls <> nil) and (FDecCls[b] = 2) then
+        begin
+          FS.PendingLead := b;
+          FS.PendingLeadFont := FS.Props.FontNum;
+          MarkContent;
+        end
+        else if (FDecCls <> nil) and (FDecCls[b] = 1) then
+        begin
+          MarkContent;
+          FS.OneShot.Start := -1;
+          Inc(FCurChars);
+        end
+        else
+          ProcessByte(b);
+      end;
+      if not FContent then FS.Absorb := absNone;
+    end
+    else if b = Ord('{') then
+    begin
+      FTok.Start := p;
+      Inc(p);
+      FTok.Stop := p;
+      FTokStop := p;
+      DoGroupStart;
+      FS.Absorb := absNone;
+    end
+    else if b = Ord('}') then
+    begin
+      // a group that began a destination ends it: the token loop's
+      if FS.Props.DestOwner or (FS.Depth <= 1) then Break;
+      FTok.Start := p;
+      Inc(p);
+      FTok.Stop := p;
+      FTokStop := p;
+      FContent := False;
+      PopGroup;
+      Extend(True);
+    end
+    else
+    begin
+      // a run of text: ASCII counted here, the rest by ProcessByte
+      FS.GroupOpen := False;
+      FTok.Start := p;
+      q := p;
+      repeat
+        Inc(q);
+      until (q >= e) or (buf[q] = Ord('\')) or (buf[q] = Ord('{')) or (buf[q] = Ord('}'));
+      FTok.Stop := q;
+      FTokStop := q;
+      FContent := False;
+      any := False;
+      counted := False;
+      while p < q do
+      begin
+        b := buf[p];
+        Inc(p);
+        if (b = 13) or (b = 10) or (b = 0) then Continue;
+        if not any then
+        begin
+          any := True;
+          FS.InRowDef := False;
+        end;
+        if (b < $80) and (FS.PendingLead < 0) and (FS.UcSkip = 0) then
+        begin
+          if (b >= $20) or (b = 9) then
+          begin
+            Inc(FCurChars);
+            counted := True;
+          end;
+        end
+        else
+          ProcessByte(b);
+      end;
+      if counted then
+      begin
+        MarkContent;
+        FS.OneShot.Start := -1;
+      end;
+      if not any then Extend(False)
+      else if not FContent then FS.Absorb := absNone;
+    end;
+  end;
+  FLex.Position := p;
+  if p >= e then Result := p < e;
+end;
+
+function TTyRtfParser.ParseUntil(AStopPos: PtrInt; AStopParas: Integer): Boolean;
 var
   absorbable: Boolean;
   paras: Integer;
 begin
-  while not FS.DocClosed and FLex.Next(FTok) do
+  while not FS.DocClosed do
   begin
+    if Counting and not FastRun(AStopPos) then
+    begin
+      if FLex.Position >= FLen then Break;
+      Exit(False);
+    end;
+    if not FLex.Next(FTok) then Break;
     FTokStop := FTok.Stop;
     FContent := False;
     FCommitted := False;
@@ -1110,14 +1768,35 @@ begin
     if not (FContent or FCommitted) then
       if absorbable then Extend(FTok.Kind = rtkGroupEnd)
       else FS.Absorb := absNone;
-    // after the token that ended a paragraph, all of it done (a row's end included)
-    if FKeepSnapshots and (FS.Paras <> paras) then
+    if FS.Paras <> paras then
     begin
-      SetLength(FSnapshots, Length(FSnapshots) + 1);
-      FSnapshots[High(FSnapshots)] := SaveState;
+      // after the token that ended a paragraph, all of it done (a row's end included)
+      if FKeepSnapshots then
+        TakeSnapshot
+      else if (FSnapshotEvery > 0) and (FTokStop >= FNextSnapshotAt) and (FS.CellIdx = 0) and
+        (FS.RowMax = 0) then
+      begin
+        // not inside a table row: a parse resuming here starts at a row
+        TakeSnapshot;
+        FNextSnapshotAt := FTokStop + FSnapshotEvery;
+      end;
+    end
+    else if (FS.CellIdx = 0) and (FS.RowMax = 0) and (FSnapshotEvery > 0) and
+      (FTokStop >= FNextSnapshotAt) and (FTok.Kind = rtkWord) and FS.TableOpen and
+      (FS.Absorb = absLast) and not FS.HasContent then
+    begin
+      // a row just ended (its \row belongs to the last cell): also a place to resume from
+      TakeSnapshot;
+      FNextSnapshotAt := FTokStop + FSnapshotEvery;
     end;
+    if FNodeN > FCompactAt then Compact;
+    if (AStopParas >= 0) and (FS.Paras >= AStopParas) and (FS.CellIdx = 0) and
+       (FS.RowMax = 0) then
+      Exit(False);
+    if FLex.Position >= AStopPos then Exit(False);
   end;
   Finish;
+  Result := True;
 end;
 
 // A closing brace or a run of line breaks after a paragraph's end (or after its last
@@ -1155,8 +1834,8 @@ begin
     FS.PendingGroup := FTok.Start;
     FS.PendingGroupDepth := FS.Depth;
   end;
-  if Length(FS.Stack) <= FS.Depth then SetLength(FS.Stack, FS.Depth * 2 + 8);
-  FS.Stack[FS.Depth] := FS.Props;
+  if Length(FStack) <= FS.Depth then SetLength(FStack, FS.Depth * 2 + 8);
+  FStack[FS.Depth] := FS.Props;
   Inc(FS.Depth);
   FS.Props.DestOwner := False;
   FS.GroupOpen := True;
@@ -1167,6 +1846,7 @@ end;
 procedure TTyRtfParser.PopGroup;
 var
   old: TTyRtfProps;
+  owner: Boolean;
 begin
   FS.UcSkip := 0;
   FS.GroupOpen := False;
@@ -1176,8 +1856,9 @@ begin
     Exit;
   end;
   if FS.Depth <= 0 then Exit;
-  old := FS.Props;
-  FS.Props := FS.Stack[FS.Depth - 1];
+  owner := FS.Props.DestOwner;
+  if owner then old := FS.Props;
+  FS.Props := FStack[FS.Depth - 1];
   Dec(FS.Depth);
   CharChanged;
   ParaChanged;
@@ -1188,7 +1869,7 @@ begin
     FS.DocClosed := True;
     FS.DocCloseAt := FTok.Start;
   end;
-  if old.DestOwner then EndDest(old);
+  if owner then EndDest(old);
 end;
 
 function TTyRtfParser.DoGroupEnd: Boolean;
@@ -1642,6 +2323,7 @@ begin
         if FListCount = Length(FLists) then SetLength(FLists, FListCount * 2 + 4);
         FLists[FListCount] := FCurList;
         Inc(FListCount);
+        TablesChanged;
       end;
     rdOverride:
       begin
@@ -1653,6 +2335,7 @@ begin
         FOverrideLs[FOverrideCount] := FCurOvLs;
         FOverrideId[FOverrideCount] := FCurOvId;
         Inc(FOverrideCount);
+        TablesChanged;
       end;
     rdPn:
       begin
@@ -1739,6 +2422,7 @@ begin
   end;
   FFonts[n] := FEntry;
   Inc(FFontGen);
+  TablesChanged;
   CharChanged;
 end;
 
@@ -1760,6 +2444,7 @@ begin
   end;
   FFontsSorted := True;
   Inc(FFontGen);
+  TablesChanged;
   CharChanged;
 end;
 
@@ -1878,6 +2563,7 @@ begin
   FColorG := 0;
   FColorB := 0;
   FColorAny := False;
+  TablesChanged;
   CharChanged;
 end;
 
@@ -1988,14 +2674,37 @@ end;
 
 procedure TTyRtfParser.AddCharExtra(AStart, AStop: PtrInt);
 begin
-  AppendRange(FS.Props.CharExtra, Range(AStart, AStop));
+  FS.Props.CharExtra := Push(FS.Props.CharExtra, AStart, AStop);
   CharChanged;
 end;
 
 procedure TTyRtfParser.AddParaExtra(AStart, AStop: PtrInt);
 begin
-  AppendRange(FS.Props.ParaExtra, Range(AStart, AStop));
+  FS.Props.ParaExtra := Push(FS.Props.ParaExtra, AStart, AStop);
   ParaChanged;
+end;
+
+// A node list's entries, first to last.
+function TTyRtfParser.ListNodes(AList: Integer): TTyRtfNodes;
+var
+  n, i: Integer;
+begin
+  n := 0;
+  i := AList;
+  while i >= 0 do
+  begin
+    Inc(n);
+    i := FNodes[i].Prev;
+  end;
+  Result := nil;
+  SetLength(Result, n);
+  i := AList;
+  while i >= 0 do
+  begin
+    Dec(n);
+    Result[n] := FNodes[i];
+    i := FNodes[i].Prev;
+  end;
 end;
 
 procedure TTyRtfParser.EndRowDef;
@@ -2007,7 +2716,6 @@ procedure TTyRtfParser.BodyWord(AKw: Integer);
 var
   p: Integer;
   onOff: Boolean;
-  t: TTyTabStops;
   inPn, normal: Boolean;
 begin
   p := FTok.Param;
@@ -2023,25 +2731,42 @@ begin
     end;
   case AKw of
     // document
-    kwAnsi: if not FAnsiCpSet then FAnsiCp := 1252;
-    kwMac: if not FAnsiCpSet then FAnsiCp := 10000;
-    kwPc: if not FAnsiCpSet then FAnsiCp := 437;
-    kwPca: if not FAnsiCpSet then FAnsiCp := 850;
+    kwAnsi, kwMac, kwPc, kwPca:
+      if not FAnsiCpSet then
+      begin
+        case AKw of
+          kwAnsi: FAnsiCp := 1252;
+          kwMac: FAnsiCp := 10000;
+          kwPc: FAnsiCp := 437;
+        else
+          FAnsiCp := 850;
+        end;
+        TablesChanged;
+      end;
     kwAnsiCpg:
       begin
         if TyRichCodePageSupported(p) then FAnsiCp := p else FAnsiCp := 1252;
         FAnsiCpSet := True;
         Inc(FFontGen);
+        TablesChanged;
       end;
     kwDeff:
       begin
         FDeff := p;
+        TablesChanged;
         CharChanged;
       end;
-    kwPaperW: if p > 0 then FPaperW := p;
-    kwPaperH: if p > 0 then FPaperH := p;
-    kwMargL: if p >= 0 then FMargL := p;
-    kwMargR: if p >= 0 then FMargR := p;
+    kwPaperW, kwPaperH, kwMargL, kwMargR:
+      begin
+        case AKw of
+          kwPaperW: if p > 0 then FPaperW := p;
+          kwPaperH: if p > 0 then FPaperH := p;
+          kwMargL: if p >= 0 then FMargL := p;
+        else
+          if p >= 0 then FMargR := p;
+        end;
+        TablesChanged;
+      end;
     kwUc: if p >= 0 then FS.Props.Uc := p;
     kwU: EmitUnicode(p);
     // character
@@ -2190,12 +2915,8 @@ begin
     kwTlEq: FS.Props.TabLeader := ttlEqual;
     kwTx:
       begin
-        t := Copy(FS.Props.Tabs, 0, Length(FS.Props.Tabs));
-        SetLength(t, Length(t) + 1);
-        t[High(t)].Position := p;
-        t[High(t)].Align := FS.Props.TabAlign;
-        t[High(t)].Leader := FS.Props.TabLeader;
-        FS.Props.Tabs := t;
+        FS.Props.Tabs := Push(FS.Props.Tabs, p,
+          Ord(FS.Props.TabAlign) or (Ord(FS.Props.TabLeader) shl 8));
         FS.Props.TabAlign := ttaLeft;
         FS.Props.TabLeader := ttlNone;
         ParaChanged;
@@ -2259,15 +2980,13 @@ begin
     kwTrowd:
       begin
         FS.InRowDef := True;
-        FS.RowDef.Cellx := nil;
+        FS.RowDef.Cellx := -1;
         FS.RowDef.Merged := False;
         FS.RowDef.Raw := Range(FTok.Start, FTok.Stop);
       end;
     kwCellx:
       begin
-        FS.RowDef.Cellx := Copy(FS.RowDef.Cellx, 0, Length(FS.RowDef.Cellx));
-        SetLength(FS.RowDef.Cellx, Length(FS.RowDef.Cellx) + 1);
-        FS.RowDef.Cellx[High(FS.RowDef.Cellx)] := p;
+        FS.RowDef.Cellx := Push(FS.RowDef.Cellx, p, 0);
         if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
       end;
     kwClMerge:
@@ -2548,6 +3267,16 @@ begin
     FDecCp := 1252;
     FDecTable := TyRichCodePageTable(1252);
   end;
+  if FDecTable <> nil then
+  begin
+    FDecCls := TyRichCodePageClasses(FDecTable);
+    FDecPairs := TyRichCodePagePairs(FDecTable);
+  end
+  else
+  begin
+    FDecCls := nil;
+    FDecPairs := nil;
+  end;
 end;
 
 procedure TTyRtfParser.EmitObject(AObj: TTyRichObject);
@@ -2578,29 +3307,52 @@ end;
 
 procedure TTyRtfParser.EndParagraph(AKind: TTyRtfParaKind);
 var
-  rec: TTyRtfParaRec;
+  rec: ^TTyRtfParaRec;
   inTable: Boolean;
   i: Integer;
 begin
   if FS.InRowDef then EndRowDef;
   Flush;
   EnsureBody;
-  rec := Default(TTyRtfParaRec);
-  rec.Table := -1;
-  rec.Chars := FCurChars;
+  // the record is filled where it goes (no record with a managed field is copied per
+  // paragraph: the index scan ends millions of them)
+  if FParaN = Length(FParas) then SetLength(FParas, FParaN * 2 + 16);
+  rec := @FParas[FParaN];
+  rec^.Table := -1;
+  rec^.Row := 0;
+  rec^.Cell := 0;
+  rec^.Format := 0;
+  rec^.TextStart := 0;
+  rec^.TextLen := 0;
+  rec^.Chars := FCurChars;
+  rec^.Src := Range(FS.Boundary, FTok.Stop);
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
-    rec.Runs := Copy(FRuns, 0, FRunN);
-    rec.Format := ParaFormatId;
+    rec^.Runs := Copy(FRuns, 0, FRunN);
+    rec^.Format := ParaFormatId;
+    rec^.TextStart := FParaTextStart;
+    rec^.TextLen := FOutLen - FParaTextStart;
     for i := 1 to Length(FSep) do PutOut(Ord(FSep[i]));
-  end;
+    FParaTextStart := FOutLen;
+  end
+  else if rec^.Runs <> nil then
+    rec^.Runs := nil;
   inTable := (AKind <> rpkPar) or FS.Props.InTable or (FS.Props.Itap > 0);
   if inTable then
   begin
     // (a parse resumed inside a table starts a record of its own for the rest of it)
     if not FS.TableOpen or (not Counting and (FTableN = 0)) then
     begin
+      if not FS.TableOpen then
+      begin
+        if FExtentN = Length(FExtents) then SetLength(FExtents, FExtentN * 2 + 4);
+        FExtents[FExtentN].FirstPara := FParaBase + FParaN;
+        FExtents[FExtentN].LastPara := -1;
+        FExtents[FExtentN].Start := rec^.Src.Start;
+        FExtents[FExtentN].Stop := -1;
+        Inc(FExtentN);
+      end;
       FS.TableOpen := True;
       if not Counting then
       begin
@@ -2611,18 +3363,15 @@ begin
     end;
     if not Counting then
     begin
-      rec.Table := FTableN - 1;
-      rec.Row := FTables[FTableN - 1].RowCount;
-      rec.Cell := FS.CellIdx;
+      rec^.Table := FTableN - 1;
+      rec^.Row := FTables[FTableN - 1].RowCount;
+      rec^.Cell := FS.CellIdx;
     end;
     if FS.CellIdx + 1 > FS.RowMax then FS.RowMax := FS.CellIdx + 1;
     if AKind = rpkCell then Inc(FS.CellIdx);
   end
   else if FS.TableOpen then
     CloseTable;
-  rec.Src := Range(FS.Boundary, FTok.Stop);
-  if FParaN = Length(FParas) then SetLength(FParas, FParaN * 2 + 16);
-  FParas[FParaN] := rec;
   Inc(FParaN);
   FS.LastStartDepth := FS.BoundaryDepth;
   FS.Boundary := FTok.Stop;
@@ -2657,8 +3406,9 @@ end;
 
 procedure TTyRtfParser.FinishRow;
 var
-  n: Integer;
+  n, i: Integer;
   r: TTyRtfRowRec;
+  nodes: TTyRtfNodes;
 begin
   n := FS.CellIdx;
   if FS.RowMax > n then n := FS.RowMax;
@@ -2667,7 +3417,10 @@ begin
   if (n = 0) or Counting or (FTableN = 0) then Exit;
   r.CellCount := n;
   r.Raw := FS.RowDef.Raw;
-  r.Cellx := Copy(FS.RowDef.Cellx, 0, Length(FS.RowDef.Cellx));
+  nodes := ListNodes(FS.RowDef.Cellx);
+  r.Cellx := nil;
+  SetLength(r.Cellx, Length(nodes));
+  for i := 0 to High(nodes) do r.Cellx[i] := nodes[i].A;
   with FTables[FTableN - 1] do
   begin
     if RowCount = Length(Rows) then SetLength(Rows, RowCount * 2 + 4);
@@ -2683,6 +3436,12 @@ begin
   if not Counting and (FTableN > 0) and FS.Nested then FTables[FTableN - 1].Locked := True;
   FS.TableOpen := False;
   FS.Nested := False;
+  // the table's last paragraph is the last one that ended
+  if (FExtentN > 0) and (FExtents[FExtentN - 1].LastPara < 0) and (FParaN > 0) then
+  begin
+    FExtents[FExtentN - 1].LastPara := FParaBase + FParaN - 1;
+    FExtents[FExtentN - 1].Stop := FParas[FParaN - 1].Src.Stop;
+  end;
 end;
 
 procedure TTyRtfParser.Finish;
@@ -2763,6 +3522,7 @@ end;
 function TTyRtfParser.BuildCharFormat(AClass: TTyRtfCharClass; AOneShot: Boolean): TTyCharFormat;
 var
   num, i: Integer;
+  nodes: TTyRtfNodes;
 begin
   Result := TyDefaultCharFormat;
   num := FS.Props.FontNum;
@@ -2785,8 +3545,9 @@ begin
   Result.VertAlign := FS.Props.VertAlign;
   Result.Color := ColorOf(FS.Props.ColorIdx, clDefault);
   Result.HighlightColor := ColorOf(FS.Props.HighlightIdx, clNone);
-  for i := 0 to High(FS.Props.CharExtra) do
-    Result.Extra.Add(Fragment(FS.Props.CharExtra[i]));
+  nodes := ListNodes(FS.Props.CharExtra);
+  for i := 0 to High(nodes) do
+    Result.Extra.Add(Fragment(Range(nodes[i].A, nodes[i].B)));
   if AOneShot then Result.Extra.Add(Fragment(FS.OneShot));
 end;
 
@@ -2844,8 +3605,20 @@ function TTyRtfParser.BuildParaFormat: TTyParaFormat;
 var
   i: Integer;
   slExtra: Boolean;
+  nodes: TTyRtfNodes;
 begin
   Result := TyDefaultParaFormat;
+  nodes := ListNodes(FS.Props.Tabs);
+  if Length(nodes) > 0 then
+  begin
+    SetLength(Result.Tabs, Length(nodes));
+    for i := 0 to High(nodes) do
+    begin
+      Result.Tabs[i].Position := nodes[i].A;
+      Result.Tabs[i].Align := TTyTabAlign(nodes[i].B and $FF);
+      Result.Tabs[i].Leader := TTyTabLeader(nodes[i].B shr 8);
+    end;
+  end;
   with FS.Props do
   begin
     Result.Align := Align;
@@ -2854,7 +3627,6 @@ begin
     Result.FirstIndent := FirstIndent;
     Result.SpaceBefore := SpaceBefore;
     Result.SpaceAfter := SpaceAfter;
-    Result.Tabs := Tabs;
     Result.RtlPar := RtlPar;
     slExtra := False;
     if Sl <> 0 then
@@ -2886,7 +3658,8 @@ begin
       Result.List.StartAt := ListStart;
       if (ListKind <> lkBullet) and (ListStart = 0) then Result.List.StartAt := 1;
     end;
-    for i := 0 to High(ParaExtra) do Result.Extra.Add(Fragment(ParaExtra[i]));
+    nodes := ListNodes(ParaExtra);
+    for i := 0 to High(nodes) do Result.Extra.Add(Fragment(Range(nodes[i].A, nodes[i].B)));
     if slExtra then
     begin
       Result.Extra.Add(Fragment(SlTok));
@@ -2931,14 +3704,45 @@ begin
   Result := Copy(FOut, 0, n);
 end;
 
+function TTyRtfParser.ParaText(AIndex: Integer): RawByteString;
+var
+  r: ^TTyRtfParaRec;
+begin
+  r := @FParas[AIndex - FParaBase];
+  Result := '';
+  SetLength(Result, r^.TextLen);
+  if r^.TextLen > 0 then Move(FOut[r^.TextStart], Result[1], r^.TextLen);
+end;
+
 function TTyRtfParser.ParaCount: Integer;
 begin
-  Result := FParaN;
+  Result := FParaBase + FParaN;
 end;
 
 function TTyRtfParser.ParaRec(AIndex: Integer): TTyRtfParaRec;
 begin
-  Result := FParas[AIndex];
+  Result := FParas[AIndex - FParaBase];
+end;
+
+procedure TTyRtfParser.ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out AChars: Int64);
+begin
+  ASrc := FParas[AIndex - FParaBase].Src;
+  AChars := FParas[AIndex - FParaBase].Chars;
+end;
+
+procedure TTyRtfParser.DropParas(AIndex: Integer);
+var
+  n, i: Integer;
+begin
+  n := AIndex - FParaBase;
+  if n > FParaN - 1 then n := FParaN - 1;
+  if n <= 0 then Exit;
+  for i := 0 to FParaN - n - 1 do FParas[i] := FParas[i + n];
+  // counting has no runs to let go of; the slots are filled again in place
+  if not Counting then
+    for i := FParaN - n to FParaN - 1 do FParas[i] := Default(TTyRtfParaRec);
+  Dec(FParaN, n);
+  Inc(FParaBase, n);
 end;
 
 function TTyRtfParser.TableCount: Integer;
@@ -2951,6 +3755,16 @@ begin
   Result := FTables[AIndex];
 end;
 
+function TTyRtfParser.TableExtentCount: Integer;
+begin
+  Result := FExtentN;
+end;
+
+function TTyRtfParser.TableExtent(AIndex: Integer): TTyRtfTableExtent;
+begin
+  Result := FExtents[AIndex];
+end;
+
 function TTyRtfParser.HeaderEnd: PtrInt;
 begin
   Result := FS.HeaderEnd;
@@ -2961,14 +3775,36 @@ begin
   Result := FTrailerStart;
 end;
 
+function TTyRtfParser.BodyStarted: Boolean;
+begin
+  Result := FS.BodyStarted;
+end;
+
+function TTyRtfParser.Finished: Boolean;
+begin
+  Result := FFinished;
+end;
+
+function TTyRtfParser.Position: PtrInt;
+begin
+  Result := FLex.Position;
+end;
+
 function TTyRtfParser.SnapshotCount: Integer;
 begin
-  Result := Length(FSnapshots);
+  Result := FSnapshotN;
 end;
 
 function TTyRtfParser.Snapshot(AIndex: Integer): TTyRtfState;
 begin
-  Result := FSnapshots[AIndex].Snapshot;
+  Result := FSnapshots[AIndex];
+end;
+
+function TTyRtfParser.TakeSnapshots: TTyRtfStateArray;
+begin
+  Result := Copy(FSnapshots, 0, FSnapshotN);
+  FSnapshots := nil;
+  FSnapshotN := 0;
 end;
 
 function TTyRtfParser.FragmentOf(const R: TTyRtfRange): RawByteString;
@@ -3046,24 +3882,30 @@ begin
   if Assigned(handler) then handler(ADoc, change);
 end;
 
-procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+function ReadRtfBytes(AStream: TStream): TBytes;
 const
   Signature: array[0..4] of Char = '{\rtf';
 var
-  bytes: TBytes;
   n: Int64;
+begin
+  n := AStream.Size - AStream.Position;
+  Result := nil;
+  if n > 0 then
+  begin
+    SetLength(Result, n);
+    AStream.ReadBuffer(Result[0], n);
+  end;
+  if (n < 5) or not CompareMem(@Result[0], @Signature[0], 5) then
+    raise ETyRichRtf.Create('This is no RTF: it does not start with {\rtf');
+end;
+
+procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+var
+  bytes: TBytes;
   p: TTyRtfParser;
   i: Integer;
 begin
-  n := AStream.Size - AStream.Position;
-  bytes := nil;
-  if n > 0 then
-  begin
-    SetLength(bytes, n);
-    AStream.ReadBuffer(bytes[0], n);
-  end;
-  if (n < 5) or not CompareMem(@bytes[0], @Signature[0], 5) then
-    raise ETyRichRtf.Create('This is no RTF: it does not start with {\rtf');
+  bytes := ReadRtfBytes(AStream);
   p := TTyRtfParser.Create(bytes, ADoc.Formats);
   try
     p.Parse;
@@ -3074,11 +3916,828 @@ begin
       AMap.Header := Range(0, p.HeaderEnd);
       SetLength(AMap.Paras, p.ParaCount);
       for i := 0 to p.ParaCount - 1 do AMap.Paras[i] := p.ParaRec(i).Src;
-      AMap.Trailer := Range(p.TrailerStart, n);
+      AMap.Trailer := Range(p.TrailerStart, Length(bytes));
     end;
   finally
     p.Free;
   end;
+end;
+
+// ---- parsing on demand ----
+
+type
+  // The text storage's way to the load: decodes a paragraph from the parse of its interval.
+  TRtfProvider = class(TTyRichTextProvider)
+  public
+    Load: TTyRtfLoad;
+    function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
+  end;
+
+  // The document's way to the load, which it owns through this.
+  TRtfLoader = class(TTyRichParaLoader)
+  public
+    Load: TTyRtfLoad;
+    destructor Destroy; override;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+  TRtfBuild = class(TTyRichDocBuilder)
+  end;
+
+const
+  StateNew = 0;          // a group's paragraph: not set in the document yet
+  StateOurs = 1;         // set by the load, its value held
+  StateSkipped = 2;      // not set by the load (edited before, or not in the text)
+  IndexChunk = 1 shl 20; // the scan hands its paragraphs over at least this often
+
+function TRtfProvider.DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+begin
+  Result := Load.Decode(ASrcOffset, ASrcBytes, ACharCount);
+end;
+
+destructor TRtfLoader.Destroy;
+begin
+  Load.Free;
+  inherited Destroy;
+end;
+
+procedure TRtfLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+  Load.LoadParagraph(AIndex);
+end;
+
+function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
+begin
+  if (ADoc <> nil) and (ADoc.Loader is TRtfLoader) then
+    Result := TRtfLoader(ADoc.Loader).Load
+  else
+    Result := nil;
+end;
+
+// ---- TTyRtfGroup ----
+
+function TTyRtfGroup.Find(ASrc: Int64): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := High(Recs);
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if Recs[mid].Src.Start = ASrc then Exit(mid);
+    if Recs[mid].Src.Start < ASrc then lo := mid + 1 else hi := mid - 1;
+  end;
+  Result := -1;
+end;
+
+function TTyRtfGroup.HasValues: Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(States) do
+    if States[i] = StateOurs then Exit(True);
+  Result := False;
+end;
+
+// ---- TTyRtfLoad ----
+
+constructor TTyRtfLoad.Create(ADoc: TTyRichDocument; const ABytes: TBytes);
+begin
+  inherited Create;
+  FDoc := ADoc;
+  FBytes := ABytes;
+  FScan := TTyRtfParser.Create(ABytes, nil);
+  FScan.SnapshotEvery := CRtfSnapshotBytes;
+  FGroups := TFPList.Create;
+  FMaxResident := CRtfResidentIntervals;
+  FTrailer := Range(-1, -1);
+  FSep := TyRichPlatformLineBreak;
+  // interval 0 is read from the start of the file: it reads the header's tables itself
+  SetLength(FIntervalPos, 16);
+  SetLength(FIntervalPara, 16);
+  SetLength(FSnaps, 16);
+  FIntervalPos[0] := 0;
+  FIntervalPara[0] := 0;
+  FIntervalN := 1;
+end;
+
+destructor TTyRtfLoad.Destroy;
+var
+  i: Integer;
+begin
+  // the document's values are gone or going (it owns this through its loader): only what
+  // the groups hold besides them is let go of
+  for i := 0 to FGroups.Count - 1 do FreeGroup(TTyRtfGroup(FGroups[i]));
+  FGroups.Free;
+  FScan.Free;
+  inherited Destroy;
+end;
+
+procedure TTyRtfLoad.FreeGroup(AGroup: TTyRtfGroup);
+var
+  i: Integer;
+begin
+  for i := 0 to High(AGroup.Tables) do
+    if AGroup.Tables[i] <> nil then AGroup.Tables[i].Release;
+  if AGroup.Objects <> nil then
+  begin
+    for i := 0 to AGroup.Objects.Count - 1 do TTyRichObject(AGroup.Objects[i]).Release;
+    AGroup.Objects.Free;
+  end;
+  AGroup.Free;
+end;
+
+function TTyRtfLoad.Header: TTyRtfRange;
+begin
+  Result := Range(0, FHeaderEnd);
+end;
+
+function TTyRtfLoad.BytesIndexed: Int64;
+begin
+  if FDone then Result := Length(FBytes) else Result := FScan.Position;
+end;
+
+function TTyRtfLoad.BytesTotal: Int64;
+begin
+  Result := Length(FBytes);
+end;
+
+function TTyRtfLoad.SnapshotCount: Integer;
+begin
+  Result := FIntervalN - 1;
+end;
+
+function TTyRtfLoad.IntervalCount: Integer;
+begin
+  Result := FIntervalN;
+end;
+
+function TTyRtfLoad.IntervalStart(AIndex: Integer): Int64;
+begin
+  Result := FIntervalPos[AIndex];
+end;
+
+function TTyRtfLoad.IntervalFirstPara(AIndex: Integer): Integer;
+begin
+  Result := FIntervalPara[AIndex];
+end;
+
+// ---- indexing ----
+
+// Takes what the scan found since the last time: snapshots, and the paragraphs that can go
+// into the text (all but the last one that ended, whose range may still grow - unless the
+// file is done).
+procedure TTyRtfLoad.Collect;
+var
+  snaps: TTyRtfStateArray;
+  i, upto: Integer;
+begin
+  snaps := FScan.TakeSnapshots;
+  for i := 0 to High(snaps) do
+  begin
+    if FIntervalN >= Length(FSnaps) then
+    begin
+      SetLength(FIntervalPos, FIntervalN * 2 + 16);
+      SetLength(FIntervalPara, FIntervalN * 2 + 16);
+      SetLength(FSnaps, FIntervalN * 2 + 16);
+    end;
+    FSnaps[FIntervalN] := snaps[i];
+    FIntervalPos[FIntervalN] := snaps[i].Core.Pos;
+    FIntervalPara[FIntervalN] := snaps[i].Core.Paras;
+    Inc(FSnapBytes, snaps[i].MemSize);
+    Inc(FIntervalN);
+  end;
+  upto := FScan.ParaCount;
+  if not FScan.Finished then Dec(upto);
+  if upto > FAppended then Append(FAppended, upto);
+  FScan.DropParas(upto);
+end;
+
+// Puts paragraphs AFrom..ATo-1 of the scan into the document's text after the ones there
+// (the last of them without a separator).
+procedure TTyRtfLoad.Append(AFrom, ATo: Integer);
+var
+  text: TTyRichText;
+  i, oldParas: Integer;
+  oldLen, chars: Int64;
+  src: TTyRtfRange;
+  sep: TTyRichSeparator;
+  c: TTyRichChange;
+begin
+  text := FDoc.Text;
+  oldLen := text.Length;
+  oldParas := text.ParaCount;
+  text.ReopenLazyLoad(FSep);
+  try
+    for i := AFrom to ATo - 1 do
+    begin
+      FScan.ParaSpan(i, src, chars);
+      if i < ATo - 1 then sep := FSep else sep := rsNone;
+      text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep);
+      if FMap <> nil then AddMapRange(src);
+    end;
+  finally
+    text.EndLazyLoad;
+  end;
+  FAppended := ATo;
+  if FQuiet then Exit;
+  // the last paragraph got its separator and the new ones follow it
+  c := Default(TTyRichChange);
+  c.Kinds := [rckText, rckStructure];
+  c.Pos := oldLen;
+  c.OldLen := 0;
+  c.NewLen := text.Length - oldLen;
+  c.FirstPara := oldParas - 1;
+  c.OldParaCount := 1;
+  c.NewParaCount := text.ParaCount - oldParas + 1;
+  TRtfBuild.ReportLoad(FDoc, c);
+end;
+
+procedure TTyRtfLoad.AddMapRange(const R: TTyRtfRange);
+var
+  n: Integer;
+begin
+  n := Length(FMap.Paras);
+  if FMapN = n then SetLength(FMap.Paras, n * 2 + 64);
+  FMap.Paras[FMapN] := R;
+  Inc(FMapN);
+end;
+
+// Scans about ABudget bytes (and on until AMinParas paragraphs have ended), handing what it
+// finds over every IndexChunk bytes.
+procedure TTyRtfLoad.Index(ABudget: Int64; AMinParas: Integer);
+var
+  stop, chunk: Int64;
+  ended: Boolean;
+begin
+  if ABudget < 1 then ABudget := 1;
+  if ABudget > High(Int64) - FScan.Position then stop := High(Int64)
+  else stop := FScan.Position + ABudget;
+  repeat
+    chunk := FScan.Position + IndexChunk;
+    if chunk > stop then chunk := stop;
+    ended := FScan.ParseUntil(chunk, -1);
+    if ended then Break;
+    if FAppended > 0 then Collect;
+  until (FScan.Position >= stop) and (FScan.ParaCount >= AMinParas);
+  if ended then Finish else Collect;
+end;
+
+procedure TTyRtfLoad.Finish;
+begin
+  Collect;
+  FDone := True;
+  FHeaderEnd := FScan.HeaderEnd;
+  FTrailer := Range(FScan.TrailerStart, Length(FBytes));
+  TRtfBuild.SetLoadState(FDoc, False, False);
+end;
+
+function TTyRtfLoad.Step(AByteBudget: Int64): Boolean;
+begin
+  if not (FDone or FCancelled) then
+  begin
+    Index(AByteBudget, 0);
+    if Assigned(FOnLoadProgress) then FOnLoadProgress(Self, BytesIndexed, BytesTotal);
+  end;
+  Result := FDone;
+end;
+
+procedure TTyRtfLoad.Cancel;
+var
+  c: TTyRichChange;
+begin
+  if FDone or FCancelled then Exit;
+  FCancelled := True;
+  // the last paragraph that ended is as long as it gets now
+  if FScan.ParaCount > FAppended then Append(FAppended, FScan.ParaCount);
+  FHeaderEnd := FScan.HeaderEnd;
+  TRtfBuild.SetLoadState(FDoc, False, True);
+  if FQuiet then Exit;
+  // nothing more comes: a view that waits for the end can stop waiting
+  c := Default(TTyRichChange);
+  c.Kinds := [rckStructure];
+  c.FirstPara := FDoc.Text.ParaCount - 1;
+  c.OldParaCount := 1;
+  c.NewParaCount := 1;
+  c.Pos := FDoc.Text.Length;
+  TRtfBuild.ReportLoad(FDoc, c);
+end;
+
+// ---- parsing on demand ----
+
+// The interval whose bytes hold ASrc: the last one starting at or before it.
+function TTyRtfLoad.IntervalOf(ASrc: Int64): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FIntervalN - 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if FIntervalPos[mid] <= ASrc then lo := mid else hi := mid - 1;
+  end;
+  Result := lo;
+end;
+
+function TTyRtfLoad.IntervalOfPara(APara: Integer): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FIntervalN - 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if FIntervalPara[mid] <= APara then lo := mid else hi := mid - 1;
+  end;
+  Result := lo;
+end;
+
+// Paragraphs before the end of interval AIndex (the last: all that the scan has ended).
+function TTyRtfLoad.IntervalParaStop(AIndex: Integer): Integer;
+begin
+  if AIndex + 1 < FIntervalN then Result := FIntervalPara[AIndex + 1]
+  else Result := FScan.ParaCount;
+end;
+
+function TTyRtfLoad.IntervalStop(AIndex: Integer): Int64;
+begin
+  if AIndex + 1 < FIntervalN then Result := FIntervalPos[AIndex + 1]
+  else Result := High(Int64);
+end;
+
+function TTyRtfLoad.IsBig(const X: TTyRtfTableExtent): Boolean;
+var
+  stop: Int64;
+begin
+  stop := X.Stop;
+  if X.LastPara < 0 then stop := FScan.Position;
+  Result := stop - X.Start > CRtfBigTableBytes;
+end;
+
+// The last table to start at or before paragraph APara, -1 none.
+function TTyRtfLoad.ExtentAt(APara: Integer): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FScan.TableExtentCount - 1;
+  Result := -1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if FScan.TableExtent(mid).FirstPara <= APara then
+    begin
+      Result := mid;
+      lo := mid + 1;
+    end
+    else
+      hi := mid - 1;
+  end;
+end;
+
+function TTyRtfLoad.GroupOf(ASrc: Int64): TTyRtfGroup;
+var
+  i: Integer;
+begin
+  for i := FGroups.Count - 1 downto 0 do
+  begin
+    Result := TTyRtfGroup(FGroups[i]);
+    if (ASrc >= Result.FirstSrc) and (ASrc < Result.StopSrc) then Exit;
+  end;
+  Result := nil;
+end;
+
+// Parses the intervals around AInterval that must be parsed together: a table is parsed
+// from its first paragraph to its last, so that it is one table (unless it is big).
+function TTyRtfLoad.ParseGroup(AInterval: Integer): TTyRtfGroup;
+var
+  s, e, i, j, k, firstPara, lastPara, n: Integer;
+  x: TTyRtfTableExtent;
+  changed: Boolean;
+  p: TTyRtfParser;
+  start: PtrInt;
+  tr: TTyRtfTableRec;
+  t: TTyRichTable;
+  global: Int64;
+begin
+  s := AInterval;
+  e := AInterval;
+  repeat
+    changed := False;
+    firstPara := FIntervalPara[s];
+    lastPara := IntervalParaStop(e) - 1;
+    // tables follow each other: the ones in these paragraphs are the last one starting in
+    // them and those before it, back to the first that ends before them
+    i := ExtentAt(lastPara);
+    while (i >= 0) and not changed do
+    begin
+      x := FScan.TableExtent(i);
+      if x.LastPara < 0 then x.LastPara := FScan.ParaCount - 1;
+      if x.LastPara < firstPara then Break;
+      if not IsBig(x) then
+      begin
+        if x.FirstPara < firstPara then
+        begin
+          s := IntervalOfPara(x.FirstPara);
+          changed := True;
+        end;
+        if x.LastPara > lastPara then
+        begin
+          e := IntervalOfPara(x.LastPara);
+          changed := True;
+        end;
+      end;
+      Dec(i);
+    end;
+  until not changed;
+  // one group per interval: what overlaps this one goes (it was parsed while the file was
+  // still being indexed, or before a table it shares was known in full)
+  for i := FGroups.Count - 1 downto 0 do
+    with TTyRtfGroup(FGroups[i]) do
+      if (FirstSnap <= e) and (LastSnap >= s) then Drop(TTyRtfGroup(FGroups[i]), True);
+  p := TTyRtfParser.Create(FBytes, FDoc.Formats);
+  try
+    if s > 0 then
+    begin
+      p.CopyTablesFrom(FScan.TablesOf(FSnaps[s].TablesGen));
+      p.Resume(FSnaps[s]);
+    end;
+    start := p.Position;
+    p.ParseUntil(High(PtrInt), IntervalParaStop(e));
+    Inc(FParsedBytes, p.Position - start);
+    Inc(FParseCount);
+    Result := TTyRtfGroup.Create;
+    Result.FirstSnap := s;
+    Result.LastSnap := e;
+    Result.FirstSrc := FIntervalPos[s];
+    Result.StopSrc := IntervalStop(e);
+    // from the first paragraph after snapshot s to the last before snapshot e + 1 (the last
+    // interval: to the last paragraph the scan has ended)
+    n := p.ParaCount;
+    SetLength(Result.Recs, n);
+    SetLength(Result.Texts, n);
+    SetLength(Result.Values, n);
+    SetLength(Result.States, n);
+    for i := 0 to n - 1 do
+    begin
+      Result.Recs[i] := p.ParaRec(i);
+      Result.Texts[i] := p.ParaText(i);
+    end;
+    Result.Objects := p.TakeObjects;
+    // the tables, as Fill makes them; one that is big, or still open at the end of what is
+    // indexed, is only a part of its table: it cannot grow
+    SetLength(Result.Tables, p.TableCount);
+    for i := 0 to p.TableCount - 1 do
+    begin
+      tr := p.TableRec(i);
+      j := -1;
+      for k := 0 to n - 1 do
+        if Result.Recs[k].Table = i then
+        begin
+          j := k;
+          Break;
+        end;
+      if j >= 0 then
+      begin
+        global := FIntervalPara[s] + j;
+        k := ExtentAt(global);
+        if k >= 0 then
+        begin
+          x := FScan.TableExtent(k);
+          if (x.LastPara < 0) or ((x.LastPara >= global) and IsBig(x)) then tr.Locked := True;
+        end;
+      end;
+      if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
+      else t := TTyRichTable.Create([], tr.Locked);
+      t.AddRef;
+      Result.Tables[i] := t;
+      for j := 0 to tr.RowCount - 1 do
+        t.AddRow(tr.Rows[j].CellCount, p.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx);
+    end;
+  finally
+    p.Free;
+  end;
+  FGroups.Add(Result);
+  Inc(FResident, e - s + 1);
+  Touch(Result);
+end;
+
+procedure TTyRtfLoad.Touch(AGroup: TTyRtfGroup);
+begin
+  Inc(FStamp);
+  AGroup.Stamp := FStamp;
+  if FGroups[FGroups.Count - 1] <> Pointer(AGroup) then
+  begin
+    FGroups.Remove(AGroup);
+    FGroups.Add(AGroup);
+  end;
+end;
+
+// The group that has paragraph ASrc, parsed if need be.
+function TTyRtfLoad.GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
+begin
+  Result := GroupOf(ASrc);
+  if Result <> nil then
+  begin
+    AIndex := Result.Find(ASrc);
+    if AIndex >= 0 then Exit;
+  end;
+  // not parsed, or parsed before the scan reached this paragraph
+  Result := ParseGroup(IntervalOf(ASrc));
+  AIndex := Result.Find(ASrc);
+end;
+
+// Sets the formats of the group's paragraphs that are still unparsed (found through their
+// source in the text: an edit before them moves them, an undo may bring them back).
+procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
+var
+  i, j: Integer;
+  rec: ^TTyRtfParaRec;
+  cell: TTyRichCell;
+  t: TTyRichTable;
+  v: Pointer;
+begin
+  for i := 0 to High(AGroup.Recs) do
+  begin
+    if AGroup.States[i] <> StateNew then Continue;
+    rec := @AGroup.Recs[i];
+    j := FDoc.Text.ParaOfLazySource(rec^.Src.Start);
+    if j < 0 then Continue;
+    cell := nil;
+    if (rec^.Table >= 0) and (rec^.Table <= High(AGroup.Tables)) then
+    begin
+      t := AGroup.Tables[rec^.Table];
+      if (rec^.Row < t.RowCount) and (rec^.Cell < t.Rows[rec^.Row].CellCount) then
+        cell := t.Rows[rec^.Row].Cells[rec^.Cell];
+    end;
+    if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell) then
+    begin
+      v := TRtfBuild.ParagraphValue(FDoc, j);
+      TRtfBuild.HoldValue(FDoc, v);
+      AGroup.Values[i] := v;
+      AGroup.States[i] := StateOurs;
+    end
+    else
+      AGroup.States[i] := StateSkipped;
+  end;
+end;
+
+// Lets the group go. AReset: its paragraphs that are still as it set them go back to
+// unparsed (only while no command runs - values read before may be in use); a table whose
+// paragraphs are not all still ours stays as it is (it is one object for all of them).
+procedure TTyRtfLoad.Drop(AGroup: TTyRtfGroup; AReset: Boolean);
+var
+  i, j: Integer;
+  keep: array of Boolean;
+  idx: array of Integer;
+  text: TTyRichText;
+begin
+  text := FDoc.Text;
+  if AReset and TRtfBuild.DocumentBusy(FDoc) then AReset := False;
+  keep := nil;
+  SetLength(keep, Length(AGroup.Tables));
+  idx := nil;
+  SetLength(idx, Length(AGroup.Recs));
+  for i := 0 to High(AGroup.Recs) do
+  begin
+    idx[i] := -1;
+    if AGroup.States[i] <> StateOurs then
+    begin
+      if (AGroup.Recs[i].Table >= 0) and (AGroup.States[i] = StateSkipped) then
+        keep[AGroup.Recs[i].Table] := True;
+      Continue;
+    end;
+    if AReset then
+    begin
+      j := text.ParaOfLazySource(AGroup.Recs[i].Src.Start);
+      if (j >= 0) and (TRtfBuild.ParagraphValue(FDoc, j) = AGroup.Values[i]) then
+        idx[i] := j
+      else if AGroup.Recs[i].Table >= 0 then
+        keep[AGroup.Recs[i].Table] := True;
+    end;
+  end;
+  for i := 0 to High(AGroup.Recs) do
+  begin
+    if AGroup.States[i] = StateOurs then
+    begin
+      if (idx[i] >= 0) and ((AGroup.Recs[i].Table < 0) or not keep[AGroup.Recs[i].Table]) then
+        TRtfBuild.UnsetParagraph(FDoc, idx[i], AGroup.Values[i]);
+      TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i]);
+    end;
+    text.ForgetDecoded(AGroup.Recs[i].Src.Start);
+  end;
+  FGroups.Remove(AGroup);
+  Dec(FResident, AGroup.LastSnap - AGroup.FirstSnap + 1);
+  FreeGroup(AGroup);
+end;
+
+procedure TTyRtfLoad.Trim;
+var
+  g: TTyRtfGroup;
+begin
+  if TRtfBuild.DocumentBusy(FDoc) then Exit;
+  // the most recently used group always stays
+  while (FResident > FMaxResident) and (FGroups.Count > 1) do
+  begin
+    g := TTyRtfGroup(FGroups[0]);
+    Drop(g, True);
+  end;
+end;
+
+function TTyRtfLoad.Decode(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+var
+  g: TTyRtfGroup;
+  i, k: Integer;
+begin
+  g := GroupFor(ASrcOffset, i);
+  if i < 0 then
+    raise ETyRichRtf.CreateFmt('RTF reader: no paragraph starts at byte %d', [ASrcOffset]);
+  Result := g.Texts[i];
+  Touch(g);
+  // reading text alone (no formats asked) must not keep every interval: groups nothing was
+  // set from can go at any time, slots are not touched
+  if FResident div 2 > FMaxResident then
+  begin
+    k := 0;
+    while (FResident > FMaxResident) and (k < FGroups.Count - 1) do
+    begin
+      if not TTyRtfGroup(FGroups[k]).HasValues then
+        Drop(TTyRtfGroup(FGroups[k]), False)
+      else
+        Inc(k);
+    end;
+  end;
+end;
+
+procedure TTyRtfLoad.LoadParagraph(AIndex: Integer);
+var
+  src, nbytes: Int64;
+  g: TTyRtfGroup;
+  i: Integer;
+begin
+  if not FDoc.Text.ParaLazySource(AIndex, src, nbytes) then Exit;
+  g := GroupFor(src, i);
+  if i < 0 then Exit;
+  Apply(g);
+  Touch(g);
+  Trim;
+end;
+
+function TTyRtfLoad.ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolean;
+var
+  src, nbytes: Int64;
+  v: Pointer;
+  g: TTyRtfGroup;
+  i: Integer;
+begin
+  ARange := Range(-1, -1);
+  if not FDoc.Text.ParaLazySource(AIndex, src, nbytes) then Exit(False);
+  v := TRtfBuild.ParagraphValue(FDoc, AIndex);
+  if v <> nil then
+  begin
+    // parsed: untouched while it still has the value this load gave it
+    g := GroupOf(src);
+    if g = nil then Exit(False);
+    i := g.Find(src);
+    if (i < 0) or (g.States[i] <> StateOurs) or (g.Values[i] <> v) then Exit(False);
+  end;
+  ARange := Range(src, src + nbytes);
+  Result := True;
+end;
+
+// ---- the entry points ----
+
+function BeginLoad(ADoc: TTyRichDocument; AStream: TStream; AFirstSlice: Int64;
+  AMap: TTyRtfSourceMap): TTyRtfLoad;
+var
+  bytes: TBytes;
+  load: TTyRtfLoad;
+  loader: TRtfLoader;
+  provider: TRtfProvider;
+  text, owned: TTyRichText;
+  handler: TTyRichChangeEvent;
+  change: TTyRichChange;
+  src: TTyRtfRange;
+  chars: Int64;
+  i, n: Integer;
+begin
+  bytes := ReadRtfBytes(AStream);
+  load := TTyRtfLoad.Create(ADoc, bytes);
+  loader := nil;
+  text := nil;
+  change := Default(TTyRichChange);
+  change.Kinds := [rckText, rckFormat, rckStructure];
+  change.OldLen := ADoc.Text.Length;
+  change.OldParaCount := ADoc.Text.ParaCount;
+  // the one change is reported when the document is all set up
+  handler := ADoc.OnChange;
+  ADoc.OnChange := nil;
+  try
+    try
+      load.FQuiet := True;
+      if AMap <> nil then
+      begin
+        load.FMap := AMap;
+        AMap.Paras := nil;
+      end;
+      // the header and two paragraphs at least: the text starts with one (the last that
+      // ended is held back while its range may still grow)
+      if AFirstSlice < IndexChunk then load.FScan.ParseUntil(AFirstSlice, -1)
+      else load.FScan.ParseUntil(IndexChunk, -1);
+      while not load.FScan.Finished and (load.FScan.ParaCount < 2) do
+        load.FScan.ParseUntil(load.FScan.Position + IndexChunk, -1);
+      provider := TRtfProvider.Create;
+      provider.Load := load;
+      text := TTyRichText.CreateLazy(provider, True);
+      n := load.FScan.ParaCount;
+      if not load.FScan.Finished then Dec(n);
+      for i := 0 to n - 1 do
+      begin
+        load.FScan.ParaSpan(i, src, chars);
+        if i < n - 1 then
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep)
+        else
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, rsNone);
+        if AMap <> nil then load.AddMapRange(src);
+      end;
+      text.EndLazyLoad;
+      load.FAppended := n;
+      load.FHeaderEnd := load.FScan.HeaderEnd;
+      // the document takes the text over, also when it refuses it (and frees it then)
+      owned := text;
+      text := nil;
+      TRtfBuild.ReplaceText(ADoc, owned);
+      loader := TRtfLoader.Create;
+      loader.Load := load;
+      ADoc.InstallLoader(loader, True);
+      TRtfBuild.SetDefaultCharFormat(ADoc, load.FScan.DefaultCharFormat);
+      TRtfBuild.SetPage(ADoc, load.FScan.PaperWidth, load.FScan.PaperHeight,
+        load.FScan.MarginLeft, load.FScan.MarginRight);
+      if load.FScan.Finished then
+        load.Finish
+      else
+      begin
+        load.Collect;
+        TRtfBuild.SetLoadState(ADoc, True, False);
+        // the rest of the first slice
+        if AFirstSlice > load.FScan.Position then
+          load.Index(AFirstSlice - load.FScan.Position, 0);
+      end;
+      load.FQuiet := False;
+    except
+      text.Free;
+      if loader = nil then load.Free;
+      raise;
+    end;
+  finally
+    ADoc.OnChange := handler;
+  end;
+  change.NewLen := ADoc.Text.Length;
+  change.NewParaCount := ADoc.Text.ParaCount;
+  if Assigned(handler) then handler(ADoc, change);
+  Result := load;
+end;
+
+function TyRichBeginLoadRtf(ADoc: TTyRichDocument; AStream: TStream;
+  AFirstSlice: Int64): TTyRtfLoad;
+begin
+  Result := BeginLoad(ADoc, AStream, AFirstSlice, nil);
+end;
+
+procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+var
+  load: TTyRtfLoad;
+  handler: TTyRichChangeEvent;
+  change: TTyRichChange;
+begin
+  change := Default(TTyRichChange);
+  change.Kinds := [rckText, rckFormat, rckStructure];
+  change.OldLen := ADoc.Text.Length;
+  change.OldParaCount := ADoc.Text.ParaCount;
+  handler := ADoc.OnChange;
+  ADoc.OnChange := nil;
+  try
+    load := BeginLoad(ADoc, AStream, High(Int64) div 2, AMap);
+    load.FQuiet := True;
+    while not load.Step(High(Int64) div 2) do ;
+    load.FQuiet := False;
+  finally
+    ADoc.OnChange := handler;
+  end;
+  if AMap <> nil then
+  begin
+    AMap.Bytes := load.FBytes;
+    SetLength(AMap.Paras, load.FMapN);
+    load.FMap := nil;
+    AMap.Header := load.Header;
+    AMap.Trailer := load.Trailer;
+  end;
+  change.NewLen := ADoc.Text.Length;
+  change.NewParaCount := ADoc.Text.ParaCount;
+  if Assigned(handler) then handler(ADoc, change);
 end;
 
 initialization

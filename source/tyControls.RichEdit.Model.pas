@@ -368,6 +368,25 @@ type
     class procedure ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText;
       AEncoding: TTyTextEncoding; ACodePage: Integer; AHasBom: Boolean;
       ALineBreak: TTyRichSeparator); overload;
+    { A reader that loads in slices: while ALoading the document can be read but not changed
+      (Execute returns False); AIncomplete: the load stopped before the end of the file, and
+      the document stays read-only (a writer must not save it as the file). ReplaceText
+      clears both. }
+    class procedure SetLoadState(ADoc: TTyRichDocument; ALoading, AIncomplete: Boolean);
+    { Raises OnChange for what a slice of loading added (no undo, Modified untouched). }
+    class procedure ReportLoad(ADoc: TTyRichDocument; const AChange: TTyRichChange);
+    { For a loader that sends parsed paragraphs back to unparsed. ParagraphValue: the
+      paragraph's value as it is, without parsing it (nil: none). HoldValue/ReleaseValue
+      keep a value alive (so that its identity means "unchanged" while held). UnsetParagraph:
+      when the paragraph still has AValue, it becomes unparsed (True). }
+    class function ParagraphValue(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
+    class procedure HoldValue(ADoc: TTyRichDocument; AValue: Pointer);
+    class procedure ReleaseValue(ADoc: TTyRichDocument; AValue: Pointer);
+    class function UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
+      AValue: Pointer): Boolean;
+    { A command is running or the text is being changed: values read earlier are in use, and
+      nothing may be sent back to unparsed. }
+    class function DocumentBusy(ADoc: TTyRichDocument): Boolean;
   end;
 
   { Parses paragraphs on demand. EnsureParsed calls LoadParagraph for a paragraph that has no
@@ -508,6 +527,8 @@ type
     FSourceCodePage: Integer;
     FSourceHasBom: Boolean;
     FDominantLineBreak: TTyRichSeparator;
+    FLoadingContent: Boolean;
+    FIncomplete: Boolean;
     procedure Init;
     procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
       AHasBom: Boolean; ALineBreak: TTyRichSeparator);
@@ -597,8 +618,9 @@ type
     function CellParas(AIndex: Integer; ACell: TTyRichCell; out AFirst, ALast: Integer): Boolean;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
-      returns False or raises. False: ACmd.CanExecute said no, and nothing changed. A command
-      that changed nothing is not kept. Consecutive typing merges into one step until
+      returns False or raises. False: ACmd.CanExecute said no, or the document is Loading or
+      Incomplete, and nothing changed. A command that changed nothing is not kept.
+      Consecutive typing merges into one step until
       BreakMerge, an Undo or Redo, or any other command. A new command drops the redo side.
       Outside BeginUpdate .. EndUpdate it raises OnChange once. Raises inside a running
       command; if ACmd raises, what it did is reverted first. }
@@ -652,6 +674,12 @@ type
       the inserted text into it; the breaks already there stay as they are). The file's
       majority kind; a new document, a tie or a text without one: the platform's. }
     property DominantLineBreak: TTyRichSeparator read FDominantLineBreak;
+    { A reader is still loading the content in slices: what is there can be read, scrolled
+      and laid out, but not changed (Execute returns False) until the last slice is in. }
+    property Loading: Boolean read FLoadingContent;
+    { The load was cancelled: the document holds only the part of the file read before, and
+      stays read-only; a writer must refuse to save it in place of that file. }
+    property Incomplete: Boolean read FIncomplete;
   end;
 
 function TyDefaultCharFormat: TTyCharFormat;
@@ -1460,6 +1488,47 @@ begin
   ADoc.ResetContent(AText, AEncoding, ACodePage, AHasBom, ALineBreak);
 end;
 
+class procedure TTyRichDocBuilder.SetLoadState(ADoc: TTyRichDocument; ALoading,
+  AIncomplete: Boolean);
+begin
+  ADoc.FLoadingContent := ALoading;
+  ADoc.FIncomplete := AIncomplete;
+end;
+
+class procedure TTyRichDocBuilder.ReportLoad(ADoc: TTyRichDocument; const AChange: TTyRichChange);
+begin
+  if Assigned(ADoc.FOnChange) then ADoc.FOnChange(ADoc, AChange);
+end;
+
+class function TTyRichDocBuilder.ParagraphValue(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
+begin
+  Result := ADoc.SlotData(AIndex);
+end;
+
+class procedure TTyRichDocBuilder.HoldValue(ADoc: TTyRichDocument; AValue: Pointer);
+begin
+  ADoc.AcquireData(TTyRichParaData(AValue));
+end;
+
+class procedure TTyRichDocBuilder.ReleaseValue(ADoc: TTyRichDocument; AValue: Pointer);
+begin
+  ADoc.ReleaseData(TTyRichParaData(AValue));
+end;
+
+class function TTyRichDocBuilder.UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
+  AValue: Pointer): Boolean;
+begin
+  // without a loader nil means plain, not unparsed
+  Result := (ADoc.FLoader <> nil) and (AValue <> nil) and
+    (Pointer(ADoc.SlotData(AIndex)) = AValue);
+  if Result then ADoc.PutData(AIndex, TTyRichParaData(AValue), nil);
+end;
+
+class function TTyRichDocBuilder.DocumentBusy(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := (ADoc.FRunning <> nil) or (ADoc.FEditing > 0);
+end;
+
 { ---- TTyRichDocument: life ---- }
 
 constructor TTyRichDocument.Create;
@@ -1551,6 +1620,8 @@ begin
   if ALineBreak = rsNone then ALineBreak := TyRichPlatformLineBreak;
   FDominantLineBreak := ALineBreak;
   FModified := False;
+  FLoadingContent := False;
+  FIncomplete := False;
   c.NewLen := FText.Length;
   c.NewParaCount := FText.ParaCount;
   if Assigned(FOnChange) then FOnChange(Self, c);
@@ -2942,7 +3013,8 @@ begin
     raise ETyRichModel.Create('Execute needs a command');
   try
     CheckIdle('Execute');
-    ok := ACmd.CanExecute(Self);
+    // a document still loading (or cut short) is read-only
+    ok := not FLoadingContent and not FIncomplete and ACmd.CanExecute(Self);
   except
     ACmd.Free;
     raise;

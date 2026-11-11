@@ -80,6 +80,13 @@ function TyRichCodePageIsLead(ATable: Pointer; AByte: Byte): Boolean;
   is no character. Unlike a text file, where only the first of two sequences that read as
   the same character counts as text, both read as that character here. }
 function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;
+{ For the RTF index scan, which only counts characters and must not make a call per byte:
+  the table's 256 byte classes (0 ASCII, 1 a character of its own, 2 a lead byte, 3 no
+  character the table knows - ask TyRichCodePageChar), and its pairs as bits (bit
+  (lead shl 8) or trail set: the pair is a character the table knows; clear: ask
+  TyRichCodePageChar), nil for a single-byte code page. Valid while the table is. }
+function TyRichCodePageClasses(ATable: Pointer): PByte;
+function TyRichCodePagePairs(ATable: Pointer): PByte;
 
 implementation
 
@@ -112,6 +119,7 @@ type
     Single: array[0..255] of Cardinal;
     Pair: array of Cardinal;
     Rev: array of Word;
+    PairBits: array of Byte;   // bit (lead shl 8) or trail: Pair has a character (built on first use)
   end;
 
   TTextIOBuilder = class(TTyRichDocBuilder)
@@ -468,6 +476,29 @@ end;
 function TyRichCodePageIsLead(ATable: Pointer; AByte: Byte): Boolean;
 begin
   Result := TCodePageTable(ATable).Cls[AByte] = 2;
+end;
+
+function TyRichCodePageClasses(ATable: Pointer): PByte;
+begin
+  Result := @TCodePageTable(ATable).Cls[0];
+end;
+
+function TyRichCodePagePairs(ATable: Pointer): PByte;
+var
+  t: TCodePageTable;
+  i: Integer;
+begin
+  t := TCodePageTable(ATable);
+  if t.Pair = nil then Exit(nil);
+  // 8 KB instead of the 256 KB of Pair: counting pairs stays in the first-level cache
+  if t.PairBits = nil then
+  begin
+    SetLength(t.PairBits, 65536 div 8);
+    for i := 0 to 65535 do
+      if t.Pair[i] <> 0 then
+        t.PairBits[i shr 3] := t.PairBits[i shr 3] or (1 shl (i and 7));
+  end;
+  Result := @t.PairBits[0];
 end;
 
 function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;

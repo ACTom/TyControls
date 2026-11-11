@@ -112,6 +112,7 @@ type
     Chars: Int64;
     Bytes: Int64;
     Height: Int64;
+    LazyMax: Int64;    // the highest source offset of a lazy piece, -1 none
   end;
 
   PTyRichNode = ^TTyRichNode;
@@ -149,12 +150,8 @@ type
 
   TTyRichSeek = (rskEntry, rskChar, rskSep, rskHeight);
 
-  TTyRichDecoded = record
-    AddOff: Int64;
-    Bytes: LongInt;
-  end;
-
-  TTyRichDecodedMap = specialize TDictionary<Int64, TTyRichDecoded>;
+  { Decoded lazy paragraphs by source offset: their text and separator bytes. }
+  TTyRichDecodedMap = specialize TDictionary<Int64, RawByteString>;
 
   TTyRichText = class
   private
@@ -170,11 +167,18 @@ type
     FProvider: TTyRichTextProvider;
     FOwnsProvider: Boolean;
     FDecoded: TTyRichDecodedMap;
+    FDecodedBytes: Int64;
     FLoading: Boolean;
     FLoadLeaf: PTyRichLeaf;
     FLoadLeaves: TFPList;
     FLoadLastSep: Boolean;
     FLoadLastSrc: Int64;
+    FLoadLastBytes: Int64;
+    FLoadLastChars: Int64;
+    FReopened: Boolean;                // ReopenLazyLoad .. EndLazyLoad
+    FLazyTail: Boolean;                // the last paragraph is the empty lazy one appended last
+    FAppend: TTyRichPieceArray;
+    FAppendCount: Integer;
     FScanToLoad: Boolean;
     FScan: TTyRichPieceArray;
     FScanCount: Integer;
@@ -209,7 +213,9 @@ type
     procedure Scan(ABuf: PByte; ACount: Int64; ABase: Int64; AKind: Byte);
     // pieces
     function AppendAdd(AData: Pointer; ACount: Int64): Int64;
-    function DecodedOf(AItem: PTyRichPiece): TTyRichDecoded;
+    function DecodedOf(AItem: PTyRichPiece): RawByteString;
+    procedure LazySlice(AItem: PTyRichPiece; AFrom, ATo: LongInt; out AText: RawByteString;
+      out AByte0, AByte1: PtrInt);
     function PieceText(AItem: PTyRichPiece; out ALen: LongInt): PByte;
     procedure ConvertToAdded(var APath: TTyRichPath);
     function SplitAt(APos: TTyRichPos): LongInt;
@@ -239,6 +245,12 @@ type
     procedure AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
       ASeparator: TTyRichSeparator);
     procedure EndLazyLoad;
+    { Goes on with a lazy load that has ended, for a reader that indexes a file in slices
+      while the part indexed so far is read: the last paragraph - still the one appended
+      last, unedited - gets ALastSeparator, and the paragraphs AppendLazyParagraph adds
+      until the next EndLazyLoad follow it (the text cannot be read in between). Its data
+      and height move with it. Raises when the last paragraph is no longer that one. }
+    procedure ReopenLazyLoad(ALastSeparator: TTyRichSeparator);
     { A text over a buffer whose pieces the reader finds itself while it writes the buffer
       (a converted file: decoding and indexing in one pass, with no scan afterwards). Call
       AppendScanned for every piece in order - each starts where the one before ended - and
@@ -266,6 +278,19 @@ type
     function ParaLength(AIndex: Integer): TTyRichPos;
     function ParaOfPos(APos: TTyRichPos): Integer;
     function ParaSeparator(AIndex: Integer): TTyRichSeparator;
+    { True when paragraph AIndex is a lazy paragraph that was never edited (it may have been
+      read): its bytes in the original file. }
+    function ParaLazySource(AIndex: Integer; out ASrcOffset, ASrcBytes: Int64): Boolean;
+    { The paragraph that is the unedited lazy paragraph from ASrcOffset, or -1. One
+      root-to-leaf walk: lazy pieces stay in the order of their offsets (edits make new
+      pieces; a restore puts pieces back where they were). }
+    function ParaOfLazySource(ASrcOffset: Int64): Integer;
+    { Lets the decoded text of the lazy paragraph from ASrcOffset go (it is decoded again
+      when it is read again); does nothing when it is not decoded. }
+    procedure ForgetDecoded(ASrcOffset: Int64);
+    function IsDecoded(ASrcOffset: Int64): Boolean;
+    { Bytes of decoded lazy text held (separators included). }
+    property DecodedBytes: Int64 read FDecodedBytes;
     { How many separators of the kind CreateFromUtf8's scan found in the buffer (0 for
       rsNone and for the other constructors). Counted during that one pass, so a file's
       majority line break costs nothing more; edits do not change it. }
@@ -313,11 +338,11 @@ implementation
 
 const
   SrcMask = (Int64(1) shl 56) - 1;
-  // stored kinds; a decoded lazy piece still reads as rpkLazy outside
+  // stored kinds (3 is unused: whether a lazy piece is decoded is FDecoded's business, so
+  // its text can be let go of again)
   kOrig = 0;
   kAdded = 1;
   kLazy = 2;
-  kLazyDecoded = 3;
   // stored separators match Ord(TTyRichSeparator)
   sNone = 0;
   sCR = 1;
@@ -359,7 +384,7 @@ end;
 
 function IsLazy(const P: TTyRichPiece): Boolean; inline;
 begin
-  Result := PKind(P) >= kLazy;
+  Result := PKind(P) = kLazy;
 end;
 
 function TTyRichPiece.Kind: TTyRichPieceKind;
@@ -519,6 +544,7 @@ var
   inner: PTyRichInner;
 begin
   FillChar(Result, SizeOf(Result), 0);
+  Result.LazyMax := -1;
   if ANode^.IsLeaf then
   begin
     leaf := PTyRichLeaf(ANode);
@@ -529,6 +555,8 @@ begin
       Inc(Result.Chars, leaf^.Items[i].FChars);
       Inc(Result.Bytes, leaf^.Items[i].FBytes);
       Inc(Result.Height, leaf^.Items[i].FHeight);
+      if IsLazy(leaf^.Items[i]) and (POff(leaf^.Items[i]) > Result.LazyMax) then
+        Result.LazyMax := POff(leaf^.Items[i]);
     end;
   end
   else
@@ -541,6 +569,7 @@ begin
       Inc(Result.Chars, inner^.Sum[i].Chars);
       Inc(Result.Bytes, inner^.Sum[i].Bytes);
       Inc(Result.Height, inner^.Sum[i].Height);
+      if inner^.Sum[i].LazyMax > Result.LazyMax then Result.LazyMax := inner^.Sum[i].LazyMax;
     end;
   end;
 end;
@@ -1158,7 +1187,7 @@ procedure TTyRichText.AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int
 var
   chars: Int64;
 begin
-  if not FLoading or (FProvider = nil) then
+  if not (FLoading or FReopened) or FScanned or (FProvider = nil) then
     raise ETyRichText.Create('AppendLazyParagraph outside a lazy load');
   if not FLoadLastSep then
     raise ETyRichText.Create('Only the last lazy paragraph may have no separator');
@@ -1171,15 +1200,98 @@ begin
     raise ETyRichText.Create('Lazy paragraph out of range');
   FLoadLastSep := ASeparator <> rsNone;
   FLoadLastSrc := ASrcOffset;
-  if chars > 0 then
+  FLoadLastBytes := ASrcBytes;
+  FLoadLastChars := chars;
+  // an empty last paragraph has no piece to carry its source: the text remembers it
+  FLazyTail := chars = 0;
+  if chars = 0 then Exit;
+  if FReopened then
+  begin
+    if FAppendCount = System.Length(FAppend) then
+      SetLength(FAppend, FAppendCount * 2 + 64);
+    with FAppend[FAppendCount] do
+    begin
+      FSrc := MakeSrc(ASrcOffset, kLazy, Ord(ASeparator));
+      FBytes := ASrcBytes;
+      FChars := chars;
+      FHeight := 0;
+      FData := nil;
+    end;
+    Inc(FAppendCount);
+  end
+  else
     LoadPiece(ASrcOffset, ASrcBytes, chars, kLazy, Ord(ASeparator));
 end;
 
 procedure TTyRichText.EndLazyLoad;
 begin
+  if FReopened then
+  begin
+    FReopened := False;
+    if FAppendCount > 0 then
+      // appended leaf after full leaf, as a load packs them
+      InsertEntries(FTotal.Entries, FAppend[0..FAppendCount - 1]);
+    FAppend := nil;
+    FAppendCount := 0;
+    Exit;
+  end;
   if not FLoading or FScanned then
     raise ETyRichText.Create('EndLazyLoad outside a lazy load');
   FinishLoad;
+end;
+
+procedure TTyRichText.ReopenLazyLoad(ALastSeparator: TTyRichSeparator);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  piece: TTyRichPiece;
+  last: Integer;
+begin
+  if FLoading or FReopened or FScanned or (FProvider = nil) or FLoadLastSep or
+     (FLoadLastSrc < 0) or (ALastSeparator = rsNone) then
+    raise ETyRichText.Create('ReopenLazyLoad needs an ended lazy load whose last paragraph ' +
+      'has no separator');
+  CheckNotWalking;
+  last := FTotal.Seps;
+  if FLoadLastChars > 0 then
+  begin
+    // the last paragraph must still be the lazy piece appended last
+    if FTotal.Entries = 0 then
+      raise ETyRichText.Create('The last lazy paragraph was edited');
+    Find(rskEntry, FTotal.Entries - 1, p, before);
+    it := ItemAt(p);
+    if not IsLazy(it^) or (PSep(it^) <> sNone) or (POff(it^) <> FLoadLastSrc) or
+       (before.Seps <> last) then
+      raise ETyRichText.Create('The last lazy paragraph was edited');
+    if it^.FChars + 1 >= MaxPieceBytes then
+      raise ETyRichText.Create('Lazy paragraph out of range');
+    // its decoded text has no separator yet
+    ForgetDecoded(POff(it^));
+    it^.FSrc := MakeSrc(POff(it^), kLazy, Ord(ALastSeparator));
+    Inc(it^.FChars);
+    it^.FData := FLastData;
+    it^.FHeight := FLastHeight;
+    FixUp(p, FDepth);
+  end
+  else
+  begin
+    // an empty last paragraph has no piece: it gets one, of its separator only
+    if not FLazyTail or (FTotal.Chars <> ParaStart(last)) then
+      raise ETyRichText.Create('The last lazy paragraph was edited');
+    FLazyTail := False;
+    piece.FSrc := MakeSrc(FLoadLastSrc, kLazy, Ord(ALastSeparator));
+    piece.FBytes := FLoadLastBytes;
+    piece.FChars := 1;
+    piece.FHeight := FLastHeight;
+    piece.FData := FLastData;
+    InsertEntries(FTotal.Entries, [piece]);
+  end;
+  FLastData := nil;
+  FLastHeight := 0;
+  FLoadLastSep := True;
+  FReopened := True;
+  FAppendCount := 0;
 end;
 
 constructor TTyRichText.CreateScanned;
@@ -1253,21 +1365,18 @@ begin
   Inc(FAddLen, ACount);
 end;
 
-{ Where a lazy piece's decoded text lives in the add buffer, decoding it the first time.
-  The piece itself keeps pointing at its source range, so a writer can still copy an
-  unedited paragraph verbatim after it has been read. }
-function TTyRichText.DecodedOf(AItem: PTyRichPiece): TTyRichDecoded;
+{ A lazy piece's decoded text with its separator bytes, decoding it the first time. It is
+  kept apart from the add buffer, so that it can be let go of again (ForgetDecoded) while
+  the paragraph is unedited; the piece itself keeps pointing at its source range, so a
+  writer can still copy an unedited paragraph verbatim after it has been read. }
+function TTyRichText.DecodedOf(AItem: PTyRichPiece): RawByteString;
 var
   s: UTF8String;
   sep: Byte;
   content: PtrInt;
-  sepText: array[0..1] of Byte;
+  len: PtrInt;
 begin
-  if PKind(AItem^) = kLazyDecoded then
-  begin
-    if FDecoded.TryGetValue(POff(AItem^), Result) then Exit;
-    raise ETyRichText.Create('Decoded lazy paragraph lost its text');
-  end;
+  if (FDecoded <> nil) and FDecoded.TryGetValue(POff(AItem^), Result) then Exit;
   sep := PSep(AItem^);
   content := AItem^.FChars;
   if sep <> sNone then Dec(content);
@@ -1280,29 +1389,47 @@ begin
     raise ETyRichText.CreateFmt('Lazy paragraph at %d decoded to the wrong text',
       [POff(AItem^)]);
   if FDecoded = nil then FDecoded := TTyRichDecodedMap.Create;
-  if System.Length(s) > 0 then
-    Result.AddOff := AppendAdd(@s[1], System.Length(s))
-  else
-    Result.AddOff := FAddLen;
-  case sep of
-    sCR: sepText[0] := 13;
-    sLF: sepText[0] := 10;
-    sCRLF:
-      begin
-        sepText[0] := 13;
-        sepText[1] := 10;
-      end;
+  Result := s;
+  len := System.Length(s);
+  if sep <> sNone then
+  begin
+    SetLength(Result, len + SepBytes(sep));
+    case sep of
+      sCR: Result[len + 1] := #13;
+      sLF: Result[len + 1] := #10;
+      sCRLF:
+        begin
+          Result[len + 1] := #13;
+          Result[len + 2] := #10;
+        end;
+    end;
   end;
-  AppendAdd(@sepText[0], SepBytes(sep));
-  Result.Bytes := System.Length(s) + SepBytes(sep);
   FDecoded.AddOrSetValue(POff(AItem^), Result);
-  AItem^.FSrc := MakeSrc(POff(AItem^), kLazyDecoded, sep);
+  Inc(FDecodedBytes, System.Length(Result));
 end;
 
-{ The bytes of a piece's text (decoding a lazy one); valid until the add buffer grows. }
+{ Characters [AFrom, ATo) of a lazy piece: its decoded text and their bytes in it. }
+procedure TTyRichText.LazySlice(AItem: PTyRichPiece; AFrom, ATo: LongInt;
+  out AText: RawByteString; out AByte0, AByte1: PtrInt);
+var
+  content: PtrInt;
+  text: PByte;
+begin
+  AText := DecodedOf(AItem);
+  text := PByte(Pointer(AText));
+  content := System.Length(AText) - SepBytes(PSep(AItem^));
+  AByte0 := ByteOfChar(text, content, AFrom);
+  if ATo = AItem^.FChars then
+    AByte1 := System.Length(AText)
+  else
+    AByte1 := AByte0 + ByteOfChar(text + AByte0, content - AByte0, ATo - AFrom);
+end;
+
+{ The bytes of a piece's text (decoding a lazy one); valid until the add buffer grows, and
+  for a lazy one until it is forgotten. }
 function TTyRichText.PieceText(AItem: PTyRichPiece; out ALen: LongInt): PByte;
 var
-  d: TTyRichDecoded;
+  s: RawByteString;
 begin
   case PKind(AItem^) of
     kOrig:
@@ -1316,9 +1443,10 @@ begin
         Result := @FAdd[POff(AItem^)];
       end;
   else
-    d := DecodedOf(AItem);
-    ALen := d.Bytes;
-    Result := @FAdd[d.AddOff];
+    // the map holds the string, so the pointer outlives s
+    s := DecodedOf(AItem);
+    ALen := System.Length(s);
+    Result := PByte(Pointer(s));
   end;
 end;
 
@@ -1326,14 +1454,31 @@ end;
 procedure TTyRichText.ConvertToAdded(var APath: TTyRichPath);
 var
   it: PTyRichPiece;
-  d: TTyRichDecoded;
+  s: RawByteString;
+  src: Int64;
 begin
   it := ItemAt(APath);
   if not IsLazy(it^) then Exit;
-  d := DecodedOf(it);
-  it^.FSrc := MakeSrc(d.AddOff, kAdded, PSep(it^));
-  it^.FBytes := d.Bytes;
+  s := DecodedOf(it);
+  src := POff(it^);
+  it^.FSrc := MakeSrc(AppendAdd(Pointer(s), System.Length(s)), kAdded, PSep(it^));
+  it^.FBytes := System.Length(s);
+  ForgetDecoded(src);
   FixUp(APath, FDepth);
+end;
+
+procedure TTyRichText.ForgetDecoded(ASrcOffset: Int64);
+var
+  s: RawByteString;
+begin
+  if (FDecoded = nil) or not FDecoded.TryGetValue(ASrcOffset, s) then Exit;
+  Dec(FDecodedBytes, System.Length(s));
+  FDecoded.Remove(ASrcOffset);
+end;
+
+function TTyRichText.IsDecoded(ASrcOffset: Int64): Boolean;
+begin
+  Result := (FDecoded <> nil) and FDecoded.ContainsKey(ASrcOffset);
 end;
 
 { Makes APos a piece boundary and returns the index of the piece that starts there. }
@@ -1391,7 +1536,8 @@ begin
 end;
 
 { Characters [AFrom, ATo) of a piece as a piece of their own; a lazy piece that is cut
-  is decoded and the cut refers to its decoded bytes. }
+  is decoded, its text copied into the add buffer (a piece's bytes must not go away), and
+  the cut refers to that copy. }
 procedure TTyRichText.TrimPiece(AItem: PTyRichPiece; AFrom, ATo: LongInt; out APiece: TTyRichPiece);
 var
   text: PByte;
@@ -1399,22 +1545,24 @@ var
   content, b0, b1: PtrInt;
   sep, kind: Byte;
   src: Int64;
-  d: TTyRichDecoded;
+  s: RawByteString;
 begin
   APiece := AItem^;
   APiece.FHeight := 0;
   APiece.FData := nil;
   if (AFrom = 0) and (ATo = AItem^.FChars) then Exit;
   sep := PSep(AItem^);
-  text := PieceText(AItem, len);
   if IsLazy(AItem^) then
   begin
-    d := DecodedOf(AItem);
-    src := d.AddOff;
+    s := DecodedOf(AItem);
+    len := System.Length(s);
+    src := AppendAdd(Pointer(s), len);
+    text := @FAdd[src];
     kind := kAdded;
   end
   else
   begin
+    text := PieceText(AItem, len);
     src := POff(AItem^);
     kind := PKind(AItem^);
   end;
@@ -1496,7 +1644,7 @@ end;
 
 procedure TTyRichText.CheckReady;
 begin
-  if FLoading then
+  if FLoading or FReopened then
     raise ETyRichText.Create('Rich text used before EndLazyLoad');
 end;
 
@@ -1534,6 +1682,7 @@ begin
   CheckRange(APos, 0);
   CheckNotWalking;
   if AText = '' then Exit;
+  if APos = FTotal.Chars then FLazyTail := False;
   base := AppendAdd(@AText[1], System.Length(AText));
   FScanCount := 0;
   Scan(@FAdd[base], System.Length(AText), base, kAdded);
@@ -1575,6 +1724,7 @@ begin
   if ALen = 0 then Exit;
   a := APos;
   b := APos + ALen;
+  if b = FTotal.Chars then FLazyTail := False;
   k := ParaOfPos(a);
   m := ParaOfPos(b);
   dk := nil;
@@ -1644,9 +1794,10 @@ end;
 function TTyRichText.GetText(APos, ALen: TTyRichPos): UTF8String;
 type
   TSeg = record
-    Src: Byte;   // kOrig or kAdded
+    Src: Byte;   // kOrig, kAdded, or kLazy: Text
     Off: Int64;
     Len: Int64;
+    Text: RawByteString;
   end;
 var
   segs: array of TSeg;
@@ -1658,7 +1809,7 @@ var
   piece: TTyRichPiece;
   from, upto: LongInt;
   dst: Int64;
-  d: TTyRichDecoded;
+  b0, b1: PtrInt;
 begin
   Result := '';
   CheckRange(APos, ALen);
@@ -1674,17 +1825,18 @@ begin
     it := ItemAt(p);
     from := pos - start;
     if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
-    TrimPiece(it, from, upto, piece);
     if nseg = System.Length(segs) then SetLength(segs, nseg * 2 + 4);
-    if IsLazy(piece) then
+    if IsLazy(it^) then
     begin
-      d := DecodedOf(it);
-      segs[nseg].Src := kAdded;
-      segs[nseg].Off := d.AddOff;
-      segs[nseg].Len := d.Bytes;
+      // read from the decoded text itself: a part of it is not copied anywhere
+      LazySlice(it, from, upto, segs[nseg].Text, b0, b1);
+      segs[nseg].Src := kLazy;
+      segs[nseg].Off := b0;
+      segs[nseg].Len := b1 - b0;
     end
     else
     begin
+      TrimPiece(it, from, upto, piece);
       segs[nseg].Src := PKind(piece);
       segs[nseg].Off := POff(piece);
       segs[nseg].Len := piece.FBytes;
@@ -1699,10 +1851,12 @@ begin
   for i := 0 to nseg - 1 do
   begin
     if segs[i].Len = 0 then Continue;
-    if segs[i].Src = kOrig then
-      Move(FOrig[segs[i].Off], Result[dst], segs[i].Len)
+    case segs[i].Src of
+      kOrig: Move(FOrig[segs[i].Off], Result[dst], segs[i].Len);
+      kAdded: Move(FAdd[segs[i].Off], Result[dst], segs[i].Len);
     else
-      Move(FAdd[segs[i].Off], Result[dst], segs[i].Len);
+      Move(segs[i].Text[segs[i].Off + 1], Result[dst], segs[i].Len);
+    end;
     Inc(dst, segs[i].Len);
   end;
 end;
@@ -1717,6 +1871,8 @@ var
   pos, stop, start: Int64;
   from, upto: LongInt;
   goOn: Boolean;
+  s: RawByteString;
+  b0, b1: PtrInt;
 begin
   CheckRange(APos, ALen);
   if ALen = 0 then Exit;
@@ -1729,17 +1885,31 @@ begin
     it := ItemAt(p);
     from := pos - start;
     if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
-    TrimPiece(it, from, upto, piece);
-    run.Kind := piece.Kind;
-    run.SrcOffset := POff(piece);
-    run.ByteCount := piece.FBytes;
-    run.CharCount := piece.FChars;
-    run.Separator := piece.Separator;
-    case PKind(piece) of
-      kOrig: run.Bytes := @FOrig[POff(piece)];
-      kAdded: run.Bytes := @FAdd[POff(piece)];
+    if IsLazy(it^) and ((from > 0) or (upto < it^.FChars)) then
+    begin
+      // part of a lazy paragraph: its decoded bytes, which are no source of their own
+      LazySlice(it, from, upto, s, b0, b1);
+      run.Kind := rpkAdded;
+      run.SrcOffset := -1;
+      run.ByteCount := b1 - b0;
+      run.CharCount := upto - from;
+      if upto = it^.FChars then run.Separator := it^.Separator else run.Separator := rsNone;
+      run.Bytes := PByte(Pointer(s)) + b0;
+    end
     else
-      run.Bytes := nil;
+    begin
+      TrimPiece(it, from, upto, piece);
+      run.Kind := piece.Kind;
+      run.SrcOffset := POff(piece);
+      run.ByteCount := piece.FBytes;
+      run.CharCount := piece.FChars;
+      run.Separator := piece.Separator;
+      case PKind(piece) of
+        kOrig: run.Bytes := @FOrig[POff(piece)];
+        kAdded: run.Bytes := @FAdd[POff(piece)];
+      else
+        run.Bytes := nil;
+      end;
     end;
     AProc(run, goOn);
     Inc(start, it^.FChars);
@@ -1799,6 +1969,7 @@ begin
   CheckRange(APos, 0);
   CheckNotWalking;
   if System.Length(P.Pieces) = 0 then Exit;
+  if APos = FTotal.Chars then FLazyTail := False;
   items := Copy(P.Pieces);
   follow := nil;
   SetLength(follow, System.Length(items));
@@ -1852,6 +2023,83 @@ begin
     Result := before.Seps
   else
     Result := FTotal.Seps;
+end;
+
+function TTyRichText.ParaLazySource(AIndex: Integer; out ASrcOffset, ASrcBytes: Int64): Boolean;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+begin
+  CheckPara(AIndex);
+  ASrcOffset := -1;
+  ASrcBytes := 0;
+  if FLazyTail and (AIndex = FTotal.Seps) then
+  begin
+    ASrcOffset := FLoadLastSrc;
+    ASrcBytes := FLoadLastBytes;
+    Exit(True);
+  end;
+  if AIndex = 0 then
+  begin
+    if FTotal.Entries = 0 then Exit(False);
+    Find(rskEntry, 0, p, before);
+  end
+  else
+  begin
+    // the piece after the separator that ends the paragraph before
+    Find(rskSep, AIndex - 1, p, before);
+    if not Advance(p) then Exit(False);
+  end;
+  it := ItemAt(p);
+  // a lazy piece is always a whole paragraph
+  Result := IsLazy(it^);
+  if Result then
+  begin
+    ASrcOffset := POff(it^);
+    ASrcBytes := it^.FBytes;
+  end;
+end;
+
+function TTyRichText.ParaOfLazySource(ASrcOffset: Int64): Integer;
+var
+  node: PTyRichNode;
+  inner: PTyRichInner;
+  leaf: PTyRichLeaf;
+  i: Integer;
+  seps: Int64;
+begin
+  CheckReady;
+  if FLazyTail and (ASrcOffset = FLoadLastSrc) then Exit(FTotal.Seps);
+  if (ASrcOffset < 0) or (FTotal.LazyMax < ASrcOffset) then Exit(-1);
+  node := FRoot;
+  seps := 0;
+  while not node^.IsLeaf do
+  begin
+    Inc(FNodeVisits);
+    inner := PTyRichInner(node);
+    i := 0;
+    // the first subtree whose lazy pieces reach the offset holds it, if anything does
+    while (i < inner^.Count) and (inner^.Sum[i].LazyMax < ASrcOffset) do
+    begin
+      Inc(seps, inner^.Sum[i].Seps);
+      Inc(i);
+    end;
+    if i = inner^.Count then Exit(-1);
+    node := inner^.Child[i];
+  end;
+  Inc(FNodeVisits);
+  leaf := PTyRichLeaf(node);
+  for i := 0 to leaf^.Count - 1 do
+  begin
+    if IsLazy(leaf^.Items[i]) then
+    begin
+      if POff(leaf^.Items[i]) = ASrcOffset then Exit(seps);
+      if POff(leaf^.Items[i]) > ASrcOffset then Exit(-1);
+    end;
+    if PSep(leaf^.Items[i]) <> sNone then Inc(seps);
+  end;
+  Result := -1;
 end;
 
 function TTyRichText.LoadedSeparators(ASep: TTyRichSeparator): Int64;
@@ -2047,7 +2295,7 @@ begin
       s := NodeSum(PTyRichInner(ANode)^.Child[i]);
       with PTyRichInner(ANode)^.Sum[i] do
         if (s.Entries <> Entries) or (s.Seps <> Seps) or (s.Chars <> Chars) or
-           (s.Bytes <> Bytes) or (s.Height <> Height) then
+           (s.Bytes <> Bytes) or (s.Height <> Height) or (s.LazyMax <> LazyMax) then
           Exit(Format('stale summary at level %d child %d', [ALevel, i]));
       Result := CheckNode(PTyRichInner(ANode)^.Child[i], ALevel + 1, APrevSep, APrevLazyOpen);
       if Result <> '' then Exit;
@@ -2095,7 +2343,8 @@ begin
   CheckReady;
   s := NodeSum(FRoot);
   if (s.Entries <> FTotal.Entries) or (s.Seps <> FTotal.Seps) or (s.Chars <> FTotal.Chars) or
-     (s.Bytes <> FTotal.Bytes) or (s.Height <> FTotal.Height) then
+     (s.Bytes <> FTotal.Bytes) or (s.Height <> FTotal.Height) or
+     (s.LazyMax <> FTotal.LazyMax) then
     Exit('stale total');
   prevSep := True;
   lazyOpen := False;
