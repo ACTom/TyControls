@@ -25,6 +25,13 @@ type
   private
     FChildren: array of TTyValueRow;
     FParent: TTyValueRow;    // back-reference (NOT owned); nil for a root row
+    { The editor's notes while its FilterText is set (TTyCustomValueListEditor.FilterText), kept
+      apart from Hidden and Expanded, which are the application's: left out by the filter; looked
+      at by it, with the Expanded it had before; opened by it for a match below. }
+    FFilterHidden: Boolean;
+    FFilterSeen: Boolean;
+    FFilterOpened: Boolean;
+    FPreFilterExpanded: Boolean;
     function GetChild(AIndex: Integer): TTyValueRow;
   public
     Key: string;
@@ -69,6 +76,29 @@ type
     LCL raises a ShowMessage from inside the control (valedit.pas:1614); a control library
     must not, so the refusal is reported here and the app decides whether to say anything. }
   TTyKeyRejectedEvent = procedure(Sender: TObject; ARow: TTyValueRow; const AKey: string) of object;
+
+  { Asked before a commit changes ARow's value, on every route a value takes into a row (the
+    inline editor, a pick from a list, the colour and font dialogs, SetRowValue, Values[] and
+    ValueFromIndex[]). AText is the text about to be stored: rewrite it into the form the value
+    really takes ('007' into '7'), or set AAllow to False to refuse it -- the editor closes, the
+    row keeps the value it had and OnValueChanged does not fire. The place for a host whose
+    values live somewhere else (another process, a file, a device) to try the write first.
+    The handler must not free ARow or rebuild the rows. }
+  TTyValueChangingEvent = procedure(Sender: TObject; ARow: TTyValueRow; var AText: string;
+    var AAllow: Boolean) of object;
+
+  { FilterText's question about one row. AFilter is the text looked for, trimmed and in lower
+    case; AMatch arrives holding the editor's own answer (the row's Key or DisplayKey holds it;
+    a heading never matches by itself) and the handler may change it either way. }
+  TTyFilterRowEvent = procedure(Sender: TObject; ARow: TTyValueRow; const AFilter: string;
+    var AMatch: Boolean) of object;
+
+  { The colours a colour row's list is about to offer: AColors holds them (the name in
+    AColors[i], the TColor in Objects[i], as TyAddColorItem and TyBuildColorPalette in
+    tyControls.ColorBox store them) and the handler may add, remove or replace entries.
+    The colour the row holds is added after it returns when the list is without it, then
+    "More…". }
+  TTyRowColorsEvent = procedure(Sender: TObject; ARow: TTyValueRow; AColors: TStrings) of object;
 
   { Input restriction for the inline editor: vnmInteger allows only digits + a leading '-';
     vnmFloat additionally allows a single '.'. }
@@ -161,6 +191,12 @@ type
     FOnKeyChanged: TTyValueEditEvent;      // a keyEdit rename committed
     FOnKeyRejected: TTyKeyRejectedEvent;   // a keyUnique collision refused a rename
     FOnEditRow: TTyValueEditEvent;    // vekDialog: the app shows a dialog + sets ARow.Value
+    FOnValueChanging: TTyValueChangingEvent;
+    FOnFilterRow: TTyFilterRowEvent;
+    FOnGetRowColors: TTyRowColorsEvent;
+    FFilterText: string;
+    FUpdateCount: Integer;            // BeginUpdate nesting
+    FUpdatePending: Boolean;          // a rebuild of the visible list was put off until EndUpdate
     { The state set the row loop resolved for the row it is painting (ItemStatesFor hands it over
       just before PaintItemContent): a heading row draws its band only at rest. }
     FPaintRow: Integer;
@@ -176,8 +212,14 @@ type
     function OverSplit(AX: Integer): Boolean;
     { Over the divider where one is drawn: not on a heading row, which has none (#183). }
     function SplitHit(AX, AY: Integer): Boolean;
-    procedure RebuildFlat;
+    { The visible list again from the tree. Put off while BeginUpdate holds, unless AForce: a
+      caller that has just freed rows cannot leave the old list pointing at them. }
+    procedure RebuildFlat(AForce: Boolean = False);
     procedure AppendFlat(ARow: TTyValueRow; ALevel: Integer);
+    procedure SetFilterText(const AValue: string);
+    function FilterMatch(ARow: TTyValueRow; const AFilter: string): Boolean;
+    { FilterText's marks on every row, and the rows above a match opened (once each). }
+    procedure MarkFilter;
     procedure FreeRows;
     function GetKey(AIndex: Integer): string;
     procedure SetKey(AIndex: Integer; const AValue: string);
@@ -263,8 +305,14 @@ type
       children follow only when the answer is True. Without children the font row commits like
       any other row, 'Name, Size', with CommitFont set too.
 
-      An override must not free ARow (or rebuild the rows) from in here. Default: True. }
+      An override must not free ARow (or rebuild the rows) from in here. The default asks
+      OnValueChanging (True when it is not assigned): an override that still wants the event
+      asked calls inherited. }
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; virtual;
+    { The editor's own answer to "does ARow match the filter" (AFilter: trimmed, lower case):
+      its Key or its DisplayKey holds the text, and a heading never matches by itself.
+      OnFilterRow is asked after it, whatever a descendant makes of this. }
+    function RowMatchesFilter(ARow: TTyValueRow; const AFilter: string): Boolean; virtual;
     { The font the font dialog opens on, for a font row (#183). From the row's own children by
       default; a host that holds the real font -- the property grid -- starts from that, so
       what the rows do not show (CharSet, Pitch, Quality, Orientation) is not lost on OK. }
@@ -283,9 +331,6 @@ type
       choice back into it; ExecuteColorDialog likewise for AColor. True = the user confirmed. }
     function ExecuteFontDialog(AFont: TFont): Boolean; virtual;
     function ExecuteColorDialog(var AColor: TColor): Boolean; virtual;
-    { The font the font dialog picked, while CanCommitValue is being asked about it; nil at any
-      other time. }
-    property CommitFont: TFont read FCommitFont;
     { The pick list currently dropped (the boolean / enum list or the colour list), nil when none
       is. Protected for the same reason DropdownHeightFor is: a guard picks an entry the way the
       user's click does. }
@@ -378,6 +423,45 @@ type
     // Set a row's value programmatically (by identity): fires OnValueChanged and propagates to
     // composite ancestors (a Font/Style parent's value re-summarises from its children).
     procedure SetRowValue(ARow: TTyValueRow; const AText: string);
+    { Build many rows at the cost of one: between the two the visible list is not rebuilt for
+      every AddRow / InsertRowAt / UpdateRows / SetExpanded / RestoreExpanded, only once when the
+      last EndUpdate is reached. They nest. Removing rows (Clear, DeleteRow, RowCount) still
+      rebuilds at once, so the list never names a row that is gone. }
+    procedure BeginUpdate;
+    procedure EndUpdate;
+    { Where a row is, from the root: the keys joined by dots ('Font.Style.fsBold'); a key that
+      starts with '[' is joined without one ('Items[0].Caption'); a heading is no part of the
+      paths of the rows under it ('Caption', not '@Appearance.Caption'), and its own path is
+      '@' and its key ('@Appearance'). These are the paths TTyPropertyGrid gives its rows.
+      '' for nil. Rows that share a key under one parent share a path. }
+    function RowPath(ARow: TTyValueRow): string; virtual;
+    { The first row whose RowPath is APath, ignoring case; nil when there is none. It need not
+      be on display (inside a closed row, Hidden, or left out by FilterText). }
+    function FindRow(const APath: string): TTyValueRow;
+    { The row at a display position -- what ItemIndex, EditingRow and BeginEdit count in -- and
+      the position of a row; nil / -1 for a row that has none (inside a closed row, Hidden, or
+      left out by FilterText). }
+    function DisplayRow(AIndex: Integer): TTyValueRow;
+    function DisplayIndexOf(ARow: TTyValueRow): Integer;
+    { The row the selection is on, nil when none. }
+    function SelectedRow: TTyValueRow;
+    { Which rows are open, by path, kept across a rebuild of the rows. SaveExpanded brings a
+      list up to date with the rows there are: an open row's path goes on it, a closed row's
+      comes off, and a path no row has now stays for the next rows that do. RestoreExpanded
+      opens the rows whose path is listed and closes the others. So a host that rebuilds its
+      rows for another object keeps one list:
+
+        VLE.SaveExpanded(FOpen);  VLE.BeginUpdate;  VLE.Clear;  ...AddRow...
+        VLE.RestoreExpanded(FOpen);  VLE.EndUpdate;
+
+      Only rows that have rows below them count. While FilterText is set, both deal in what was
+      open before the filter (what the rows go back to when it is cleared), not in what the
+      filter has opened. }
+    procedure SaveExpanded(APaths: TStrings);
+    procedure RestoreExpanded(APaths: TStrings);
+    { The font the font dialog picked, while CanCommitValue / OnValueChanging is being asked
+      about it; nil at any other time. }
+    property CommitFont: TFont read FCommitFont;
     { Number of rows that CURRENTLY HAVE A DISPLAY POSITION — root rows plus the descendants
       of expanded ones. A DATA metric: collapsing a node lowers it, resizing the control never
       does. This used to be called VisibleRowCount, which is a different measurement one class
@@ -461,6 +545,23 @@ type
     property OnKeyRejected: TTyKeyRejectedEvent read FOnKeyRejected write FOnKeyRejected;
     // Fires for a vekDialog row (click its value / '…'): show a custom dialog and set ARow.Value.
     property OnEditRow: TTyValueEditEvent read FOnEditRow write FOnEditRow;
+    { Only the rows whose key holds this text, ignoring case ('' = every row): a row that
+      neither matches, nor has a match below it, nor sits below a match is left out; the rows
+      above a match are opened for it (the user can still close them), and a matching row keeps
+      the rows below it. Clear it and every row is open or closed as it was before the filter.
+      OnFilterRow decides what a match is.
+
+      It leaves the rows' own Hidden and Expanded to the application: a row the application has
+      hidden stays out, and is no match for the rows above it. Rows added or rebuilt while it is
+      set are filtered as they come. Not published: it is the text of a search box, not a
+      setting. (TTyPropertyGrid has a FilterText of its own, over property names.) }
+    property FilterText: string read FFilterText write SetFilterText;
+    { Asked before any commit changes a row's value; see TTyValueChangingEvent. }
+    property OnValueChanging: TTyValueChangingEvent read FOnValueChanging write FOnValueChanging;
+    property OnFilterRow: TTyFilterRowEvent read FOnFilterRow write FOnFilterRow;
+    { The colours a colour row offers, after the editor's own (the 16 basic ones): see
+      TTyRowColorsEvent. }
+    property OnGetRowColors: TTyRowColorsEvent read FOnGetRowColors write FOnGetRowColors;
   end;
 
   { TTyValueListEditor publishes TTyCustomValueListEditor's properties; everything lives in TTyCustomValueListEditor. }
@@ -537,6 +638,9 @@ type
     property OnKeyChanged;
     property OnKeyRejected;
     property OnEditRow;
+    property OnValueChanging;
+    property OnFilterRow;
+    property OnGetRowColors;
   end;
 
 { Parse a 'Name, Size' font descriptor defensively. The LAST comma-separated token that is a
@@ -548,7 +652,7 @@ function TyParseFontDescriptor(const ADesc: string; out AName: string; out ASize
 implementation
 
 uses
-  TypInfo, Forms, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
+  TypInfo, Forms, LazUTF8, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
   tyControls.ColorBox, tyControls.ColorComboBox,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font, tyControls.StrConsts;
 
@@ -745,7 +849,7 @@ end;
 procedure TTyCustomValueListEditor.AppendFlat(ARow: TTyValueRow; ALevel: Integer);
 var i, n: Integer;
 begin
-  if ARow.Hidden then Exit;   // and everything below it
+  if ARow.Hidden or ARow.FFilterHidden then Exit;   // and everything below it
   n := Length(FFlatRow);
   SetLength(FFlatRow, n + 1);
   SetLength(FFlatLevel, n + 1);
@@ -756,10 +860,16 @@ begin
       AppendFlat(ARow.Child[i], ALevel + 1);
 end;
 
-procedure TTyCustomValueListEditor.RebuildFlat;
+procedure TTyCustomValueListEditor.RebuildFlat(AForce: Boolean);
 var i, j, newIdx: Integer; sel: TTyValueRow; picked: array of TTyValueRow;
 begin
   if FRebuilding then Exit;
+  if (FUpdateCount > 0) and not AForce then
+  begin
+    FUpdatePending := True;   // EndUpdate does it
+    Exit;
+  end;
+  FUpdatePending := False;
   if FEditFlat >= 0 then EndEdit(True);   // commit before the flat indices change
   FRebuilding := True;
   try
@@ -779,6 +889,7 @@ begin
           picked[High(picked)] := FFlatRow[i];
         end;
     if FSortRows then SortRoots;
+    MarkFilter;
     SetLength(FFlatRow, 0);
     SetLength(FFlatLevel, 0);
     for i := 0 to High(FRoot) do
@@ -1033,7 +1144,7 @@ procedure TTyCustomValueListEditor.Clear;
 begin
   if FEditFlat >= 0 then EndEdit(False);
   FreeRows;
-  RebuildFlat;
+  RebuildFlat(True);   // inside BeginUpdate too: the rows are gone
 end;
 
 function TTyCustomValueListEditor.GetRowCount: Integer;
@@ -1058,7 +1169,7 @@ begin
     FRoot[i] := TTyValueRow.Create;   // grown rows are blank; the caller names them
     Inc(i);
   end;
-  RebuildFlat;
+  RebuildFlat(True);   // inside BeginUpdate too: trimmed rows are gone
 end;
 
 function TTyCustomValueListEditor.DisplayRowCount: Integer;
@@ -1187,7 +1298,7 @@ begin
   FRoot[AIndex].Free;
   for i := AIndex to High(FRoot) - 1 do FRoot[i] := FRoot[i + 1];
   SetLength(FRoot, Length(FRoot) - 1);
-  RebuildFlat;
+  RebuildFlat(True);   // inside BeginUpdate too: the row is gone
 end;
 
 procedure TTyCustomValueListEditor.SetExpanded(ARow: TTyValueRow; AExpanded: Boolean);
@@ -1271,6 +1382,259 @@ begin
   if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
 end;
 
+{ ---- rows by path, expansion, filter, batch ---- }
+
+procedure TTyCustomValueListEditor.BeginUpdate;
+begin
+  Inc(FUpdateCount);
+end;
+
+procedure TTyCustomValueListEditor.EndUpdate;
+begin
+  if FUpdateCount = 0 then Exit;   // one too many: nothing to end
+  Dec(FUpdateCount);
+  if (FUpdateCount = 0) and FUpdatePending then RebuildFlat;
+end;
+
+function TTyCustomValueListEditor.RowPath(ARow: TTyValueRow): string;
+var p: TTyValueRow;
+begin
+  Result := '';
+  if ARow = nil then Exit;
+  if ARow.Heading then Result := '@' + ARow.Key else Result := ARow.Key;
+  p := ARow.Parent;
+  while p <> nil do
+  begin
+    { A heading groups rows; it is not one of the things they are a part of. }
+    if not p.Heading then
+    begin
+      if Copy(Result, 1, 1) = '[' then Result := p.Key + Result   // 'Items' + '[0]'
+      else Result := p.Key + '.' + Result;
+    end;
+    p := p.Parent;
+  end;
+end;
+
+function TTyCustomValueListEditor.FindRow(const APath: string): TTyValueRow;
+
+  function Find(R: TTyValueRow): TTyValueRow;
+  var j: Integer;
+  begin
+    if SameText(RowPath(R), APath) then Exit(R);
+    Result := nil;
+    for j := 0 to R.ChildCount - 1 do
+    begin
+      Result := Find(R.Child[j]);
+      if Result <> nil then Exit;
+    end;
+  end;
+
+var i: Integer;
+begin
+  Result := nil;
+  if APath = '' then Exit;
+  for i := 0 to High(FRoot) do
+  begin
+    Result := Find(FRoot[i]);
+    if Result <> nil then Exit;
+  end;
+end;
+
+function TTyCustomValueListEditor.DisplayRow(AIndex: Integer): TTyValueRow;
+begin
+  if (AIndex >= 0) and (AIndex <= High(FFlatRow)) then Result := FFlatRow[AIndex]
+  else Result := nil;
+end;
+
+function TTyCustomValueListEditor.DisplayIndexOf(ARow: TTyValueRow): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if ARow = nil then Exit;
+  for i := 0 to High(FFlatRow) do
+    if FFlatRow[i] = ARow then Exit(i);
+end;
+
+function TTyCustomValueListEditor.SelectedRow: TTyValueRow;
+begin
+  Result := DisplayRow(ItemIndex);
+end;
+
+procedure TTyCustomValueListEditor.SaveExpanded(APaths: TStrings);
+
+  procedure Each(R: TTyValueRow);
+  var
+    j, at: Integer;
+    p: string;
+    open: Boolean;
+  begin
+    if R.HasChildren then
+    begin
+      p := RowPath(R);
+      if p <> '' then
+      begin
+        { While a filter is set, what the row goes back to when it is cleared. }
+        if R.FFilterSeen then open := R.FPreFilterExpanded else open := R.Expanded;
+        at := APaths.IndexOf(p);
+        if open then
+        begin
+          if at < 0 then APaths.Add(p);
+        end
+        else if at >= 0 then
+          APaths.Delete(at);
+      end;
+    end;
+    for j := 0 to R.ChildCount - 1 do Each(R.Child[j]);
+  end;
+
+var i: Integer;
+begin
+  if APaths = nil then Exit;
+  APaths.BeginUpdate;
+  try
+    for i := 0 to High(FRoot) do Each(FRoot[i]);
+  finally
+    APaths.EndUpdate;
+  end;
+end;
+
+procedure TTyCustomValueListEditor.RestoreExpanded(APaths: TStrings);
+var filtering: Boolean;
+
+  procedure Each(R: TTyValueRow);
+  var
+    j: Integer;
+    p: string;
+  begin
+    if R.HasChildren then
+    begin
+      p := RowPath(R);
+      if p <> '' then
+      begin
+        R.Expanded := APaths.IndexOf(p) >= 0;
+        if filtering then
+        begin
+          { This is the state the filter gives back; it may still open the row for a match. }
+          R.FFilterSeen := True;
+          R.FPreFilterExpanded := R.Expanded;
+          R.FFilterOpened := False;
+        end;
+      end;
+    end;
+    for j := 0 to R.ChildCount - 1 do Each(R.Child[j]);
+  end;
+
+var i: Integer;
+begin
+  if APaths = nil then Exit;
+  filtering := Trim(FFilterText) <> '';
+  for i := 0 to High(FRoot) do Each(FRoot[i]);
+  RebuildFlat;
+end;
+
+function TTyCustomValueListEditor.RowMatchesFilter(ARow: TTyValueRow; const AFilter: string): Boolean;
+begin
+  Result := not ARow.Heading and ((Pos(AFilter, UTF8LowerCase(ARow.Key)) > 0)
+    or (Pos(AFilter, UTF8LowerCase(ARow.DisplayKey)) > 0));
+end;
+
+function TTyCustomValueListEditor.FilterMatch(ARow: TTyValueRow; const AFilter: string): Boolean;
+begin
+  Result := RowMatchesFilter(ARow, AFilter);
+  if Assigned(FOnFilterRow) then FOnFilterRow(Self, ARow, AFilter, Result);
+end;
+
+procedure TTyCustomValueListEditor.MarkFilter;
+var
+  f: string;
+  i: Integer;
+
+  { True when R or a row below it matches. }
+  function Mark(R: TTyValueRow; AUnderMatch: Boolean): Boolean;
+  var
+    own, below: Boolean;
+    j: Integer;
+  begin
+    { A row the application has hidden is out whatever the filter says, the rows below it
+      too, and it is no match for the rows above it. }
+    if R.Hidden then Exit(False);
+    own := FilterMatch(R, f);
+    below := False;
+    for j := 0 to R.ChildCount - 1 do
+      if Mark(R.Child[j], AUnderMatch or own) then below := True;
+    R.FFilterHidden := not (own or below or AUnderMatch);
+    { Opened for a match below it, once for each text: the user may close it again. }
+    if below and not R.FFilterOpened then
+    begin
+      R.FFilterOpened := True;
+      if not R.Expanded then
+      begin
+        if not R.FFilterSeen then
+        begin
+          R.FFilterSeen := True;   // a row made after the filter was set: closed is how it was made
+          R.FPreFilterExpanded := False;
+        end;
+        R.Expanded := True;
+      end;
+    end;
+    Result := own or below;
+  end;
+
+begin
+  f := UTF8LowerCase(Trim(FFilterText));
+  if f = '' then Exit;
+  for i := 0 to High(FRoot) do Mark(FRoot[i], False);
+end;
+
+procedure TTyCustomValueListEditor.SetFilterText(const AValue: string);
+var
+  wasOn, nowOn: Boolean;
+
+  procedure Each(R: TTyValueRow);
+  var j: Integer;
+  begin
+    if nowOn then
+    begin
+      if not wasOn then
+      begin
+        R.FFilterSeen := True;   // what the row goes back to when the filter is cleared
+        R.FPreFilterExpanded := R.Expanded;
+      end;
+      R.FFilterOpened := False;  // another text opens the rows above its matches again
+    end
+    else
+    begin
+      if R.FFilterSeen then R.Expanded := R.FPreFilterExpanded;
+      R.FFilterSeen := False;
+      R.FFilterOpened := False;
+      R.FFilterHidden := False;
+    end;
+    for j := 0 to R.ChildCount - 1 do Each(R.Child[j]);
+  end;
+
+var i, at, shown: Integer;
+begin
+  if FFilterText = AValue then Exit;
+  wasOn := Trim(FFilterText) <> '';
+  nowOn := Trim(AValue) <> '';
+  if not (wasOn or nowOn) then
+  begin
+    FFilterText := AValue;   // one blank text for another
+    Exit;
+  end;
+  { An edit in progress is committed while its row is where it was. }
+  if (FEditFlat >= 0) or FDropMode then EndEdit(True);
+  FFilterText := AValue;
+  for i := 0 to High(FRoot) do Each(FRoot[i]);
+  RebuildFlat;
+  { Another search starts at the top, with the current row in view when it is still shown. }
+  TopIndex := 0;
+  at := ItemIndex;
+  shown := VisibleRowCount;
+  if shown < 1 then shown := 1;
+  if at >= shown then TopIndex := at - shown + 1;
+end;
+
 { ---- inline editor ---- }
 
 procedure TTyCustomValueListEditor.CommitEditor(AFlat: Integer; const AText: string);
@@ -1347,6 +1711,7 @@ end;
 function TTyCustomValueListEditor.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;
 begin
   Result := True;
+  if Assigned(FOnValueChanging) then FOnValueChanging(Self, ARow, AText, Result);
 end;
 
 function TTyCustomValueListEditor.ExecuteFontDialog(AFont: TFont): Boolean;
@@ -1705,6 +2070,7 @@ begin
   FDropSeeding := True;
   FColorList.Items.Clear;
   GetRowColors(FFlatRow[AFlat], FColorList.Items);
+  if Assigned(FOnGetRowColors) then FOnGetRowColors(Self, FFlatRow[AFlat], FColorList.Items);
   cur := StringToColorDef(FFlatRow[AFlat].Value, clBlack);
   { The entry that IS the value first: clDefault, clNone and a system colour have an RGB of
     another entry's (clDefault's is black's). Else by RGB, or added. }

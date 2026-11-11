@@ -11391,6 +11391,9 @@ type
     property OnKeyChanged;
     property OnKeyRejected;
     property OnEditRow;
+    property OnValueChanging;
+    property OnFilterRow;
+    property OnGetRowColors;
   end;
 
   TGenVirtualImageList = class(TTyCustomVirtualImageList)
