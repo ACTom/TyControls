@@ -202,6 +202,18 @@ begin
   Result := TTyRichDocument.CreateFromUtf8(Bytes(AText));
 end;
 
+{ The bytes an inserted line break is stored as in ADoc: its majority kind, which for a
+  document without any break is the platform's. }
+function BreakOf(ADoc: TTyRichDocument): UTF8String;
+begin
+  case ADoc.DominantLineBreak of
+    rsCR: Result := #13;
+    rsLF: Result := #10;
+  else
+    Result := #13#10;
+  end;
+end;
+
 function TTyRichCommandsTest.ColorId(ADoc: TTyRichDocument; AColor: TColor): TTyCharFormatId;
 var
   f: TTyCharFormat;
@@ -439,7 +451,7 @@ begin
     AssertEquals('typing after an undo starts a new step', 7, d.UndoDepth);
     AssertEquals('the redo side went', 0, d.RedoDepth);
     d.Undo;
-    AssertEquals('the run after the undo', 'a b'#13#10'cpastedd', AllText(d));
+    AssertEquals('the run after the undo', 'a b' + BreakOf(d) + 'cpastedd', AllText(d));
   finally
     d.Free;
   end;
@@ -542,7 +554,7 @@ begin
     r := sneak.ChangedRange;
     AssertEquals('range start', 1, r.Pos);
     AssertEquals('range length: the seven characters inserted (a separator is one)', 7, r.Len);
-    AssertTrue('the text', AllText(d) = 'a-- '#13#10'Tombc');
+    AssertTrue('the text', AllText(d) = 'a-- ' + BreakOf(d) + 'Tombc');
   finally
     d.Free;
   end;

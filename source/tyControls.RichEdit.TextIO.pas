@@ -10,7 +10,9 @@ unit tyControls.RichEdit.TextIO;
   is). Every other encoding is converted to UTF-8 a chunk at a time, straight from the
   stream, so neither the whole file nor a second copy of the text is ever held. The
   conversion is a table per code page (built once from LazUtils' LConvEncoding tables, which
-  are the same on every platform) and a tight loop over it.
+  are the same on every platform) and a tight loop over it, which also finds the text's
+  pieces (paragraphs) as it writes them, so a converted file is decoded and indexed in one
+  pass, with no scan of the converted text afterwards (TTyRichText.CreateScanned).
 
   A byte the conversion cannot carry as text - one that is no character in the code page, a
   lone surrogate or an odd last byte in UTF-16, or one of two byte sequences that read as
@@ -30,6 +32,11 @@ interface
 
 uses
   Classes, SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+
+const
+  { Bytes a converted file is read in at a time (a lead byte, a surrogate or a CR at the
+    end of one is carried to the next; tests put them there). }
+  TyRichTextChunkSize = 1 shl 20;
 
 type
   ETyRichTextIO = class(Exception);
@@ -69,7 +76,7 @@ uses
   {$IFDEF MSWINDOWS}Windows,{$ENDIF} LConvEncoding;
 
 const
-  ChunkSize = 1 shl 20;       // bytes read from the stream at a time
+  ChunkSize = TyRichTextChunkSize;
   SaveBufSize = 256 * 1024;   // the saver's working buffer
   // the most UTF-8 bytes one input byte turns into (a high single byte in a code page: 3;
   // an escaped byte: 2), plus room for the decoders' 3-byte stores
@@ -479,22 +486,44 @@ begin
 end;
 
 {$PUSH}{$Q-}{$R-}
-procedure Escape(B: Byte; var D: PByte); inline;
+{ The decoders write UTF-8 and find the text's pieces in the same pass, exactly as
+  TTyRichText's load scan would find them in what they write (TTyRichText.CreateScanned):
+  a piece ends with each separator, and without one where it reaches TyRichMaxPieceBytes.
+  The decoded characters are all valid UTF-8; an escaped byte is two bytes that start no
+  sequence, so two characters and two invalid bytes, as the scan counts them. }
+type
+  TScanState = record
+    Text: TTyRichText;
+    Start: Int64;          // where the piece being built starts in the output
+    Chars: PtrInt;         // its characters so far
+    Invalid: Int64;        // escaped bytes written: two each
+  end;
+
+{ Ends the piece at D: a separator piece (ASep, ACharsWithSep counted) or one cut at the
+  size limit. }
+procedure EndPiece(var S: TScanState; D: PByte; var APStart, ALim: PByte; AChars: PtrInt;
+  ASep: TTyRichSeparator); inline;
 begin
-  D[0] := $F8 or (B shr 6);
-  D[1] := $80 or (B and $3F);
-  Inc(D, 2);
+  S.Text.AppendScanned(D - APStart, AChars, ASep);
+  APStart := D;
+  ALim := D + TyRichMaxPieceBytes;
 end;
 
 { Converts ACount bytes of the code page at Src to UTF-8 at D and returns how many it took:
-  all of them when ALast, else it may leave a lead byte whose trail is in the next chunk. }
+  all of them when ALast, else it may leave a lead byte or a CR whose partner is in the next
+  chunk. ABase: the output buffer, which S.Start is relative to. }
 function DecodeAnsiChunk(T: TCodePageTable; Src: PByte; ACount: PtrInt; ALast: Boolean;
-  var D: PByte): PtrInt;
+  ABase: PByte; var D: PByte; var S: TScanState): PtrInt;
+const
+  Below14 = QWord($0E0E0E0E0E0E0E0E);
 var
-  p, e, d0, cls: PByte;
+  p, q, e, stop, d0, cls, pstart, lim: PByte;
   single, pair: PCardinal;
   b: Byte;
   v: Cardinal;
+  x: QWord;
+  chars: PtrInt;
+  sep: TTyRichSeparator;
 begin
   // the tables as plain pointers, so the loop reads no object or array header
   cls := @T.Cls[0];
@@ -503,21 +532,51 @@ begin
   p := Src;
   e := Src + ACount;
   d0 := D;
+  pstart := ABase + S.Start;
+  lim := pstart + TyRichMaxPieceBytes;
+  chars := S.Chars;
   while p < e do
   begin
     b := p^;
-    if b < $80 then
+    if (b > 13) and (b < $80) then
     begin
-      repeat
-        d0^ := p^;
-        Inc(p);
-        Inc(d0);
-      until (p >= e) or (p^ >= $80);
+      // printable ASCII: one byte (a space between words) costs one store; a run goes
+      // eight at a time, up to the piece limit
+      d0^ := b;
+      Inc(d0);
+      Inc(p);
+      Inc(chars);
+      if (p < e) and (p^ > 13) and (p^ < $80) and (d0 < lim) then
+      begin
+        if lim - d0 < e - p then stop := p + (lim - d0) else stop := e;
+        q := p;
+        while stop - p >= 8 do
+        begin
+          x := unaligned(PQWord(p)^);
+          if (x or ((x - Below14) and not x)) and High8 <> 0 then Break;
+          PQWord(d0)^ := x;
+          Inc(p, 8);
+          Inc(d0, 8);
+        end;
+        while (p < stop) and (p^ > 13) and (p^ < $80) do
+        begin
+          d0^ := p^;
+          Inc(p);
+          Inc(d0);
+        end;
+        Inc(chars, p - q);
+      end;
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
       Continue;
     end;
-    case cls[b] of
-      2:
-        begin
+    if b >= $80 then
+    begin
+      case cls[b] of
+        2:
           if p + 1 < e then
           begin
             v := pair[(Cardinal(b) shl 8) or p[1]];
@@ -529,30 +588,112 @@ begin
               d0[2] := Byte(v shr 16);
               Inc(d0, v shr 24);
               Inc(p, 2);
+              Inc(chars);
+              if d0 >= lim then
+              begin
+                EndPiece(S, d0, pstart, lim, chars, rsNone);
+                chars := 0;
+              end;
               Continue;
             end;
           end
           else if not ALast then
             Break;
-        end;
-      1:
-        begin
-          v := single[b];
-          d0[0] := Byte(v);
-          d0[1] := Byte(v shr 8);
-          d0[2] := Byte(v shr 16);
-          Inc(d0, v shr 24);
-          Inc(p);
-          Continue;
-        end;
+        1:
+          begin
+            v := single[b];
+            d0[0] := Byte(v);
+            d0[1] := Byte(v shr 8);
+            d0[2] := Byte(v shr 16);
+            Inc(d0, v shr 24);
+            Inc(p);
+            Inc(chars);
+            if d0 >= lim then
+            begin
+              EndPiece(S, d0, pstart, lim, chars, rsNone);
+              chars := 0;
+            end;
+            Continue;
+          end;
+      end;
+      // no text: escaped, two characters (the limit may fall between them)
+      d0^ := $F8 or (b shr 6);
+      Inc(d0);
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      d0^ := $80 or (b and $3F);
+      Inc(d0);
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      Inc(S.Invalid, 2);
+      Inc(p);
+      Continue;
     end;
-    // no text: escaped
-    d0[0] := $F8 or (b shr 6);
-    d0[1] := $80 or (b and $3F);
-    Inc(d0, 2);
-    Inc(p);
+    // b <= 13: a line break, or a control character
+    if b = 10 then
+    begin
+      d0^ := 10;
+      Inc(d0);
+      Inc(p);
+      sep := rsLF;
+    end
+    else if b = 13 then
+    begin
+      if p + 1 < e then
+      begin
+        if p[1] = 10 then
+        begin
+          d0[0] := 13;
+          d0[1] := 10;
+          Inc(d0, 2);
+          Inc(p, 2);
+          sep := rsCRLF;
+        end
+        else
+        begin
+          d0^ := 13;
+          Inc(d0);
+          Inc(p);
+          sep := rsCR;
+        end;
+      end
+      else if not ALast then
+        Break   // its LF may be the next chunk's first byte
+      else
+      begin
+        d0^ := 13;
+        Inc(d0);
+        Inc(p);
+        sep := rsCR;
+      end;
+    end
+    else
+    begin
+      d0^ := b;
+      Inc(d0);
+      Inc(p);
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      Continue;
+    end;
+    EndPiece(S, d0, pstart, lim, chars + 1, sep);
+    chars := 0;
   end;
   D := d0;
+  S.Start := pstart - ABase;
+  S.Chars := chars;
   Result := p - Src;
 end;
 
@@ -586,29 +727,74 @@ begin
   end;
 end;
 
-{ The same for UTF-16: it may leave an odd last byte, or a high surrogate whose partner is
-  in the next chunk. }
+{ The same for UTF-16: it may leave an odd last byte, a high surrogate whose partner is in
+  the next chunk, or a CR whose LF may be there. }
 function DecodeUtf16Chunk(ABig: Boolean; Src: PByte; ACount: PtrInt; ALast: Boolean;
-  var D: PByte): PtrInt;
+  ABase: PByte; var D: PByte; var S: TScanState): PtrInt;
 var
-  p, e, d0: PByte;
+  p, e, d0, pstart, lim: PByte;
   u, u2: Cardinal;
+  chars: PtrInt;
+  k, nesc: Integer;
+  esc: array[0..3] of Byte;
+  sep: TTyRichSeparator;
 begin
   p := Src;
   e := Src + ACount;
   d0 := D;
+  pstart := ABase + S.Start;
+  lim := pstart + TyRichMaxPieceBytes;
+  chars := S.Chars;
   while e - p >= 2 do
   begin
     if ABig then u := (Cardinal(p[0]) shl 8) or p[1] else u := p[0] or (Cardinal(p[1]) shl 8);
-    if u < $80 then
+    nesc := 0;
+    if (u > 13) and ((u < $D800) or (u > $DFFF)) then
+    begin
+      PutCode(u, d0);
+      Inc(p, 2);
+    end
+    else if u = 10 then
+    begin
+      d0^ := 10;
+      Inc(d0);
+      Inc(p, 2);
+      EndPiece(S, d0, pstart, lim, chars + 1, rsLF);
+      chars := 0;
+      Continue;
+    end
+    else if u = 13 then
+    begin
+      if e - p < 4 then
+      begin
+        if not ALast then Break;   // its LF may be in the next chunk
+        u2 := 0;
+      end
+      else if ABig then u2 := (Cardinal(p[2]) shl 8) or p[3]
+      else u2 := p[2] or (Cardinal(p[3]) shl 8);
+      if u2 = 10 then
+      begin
+        d0[0] := 13;
+        d0[1] := 10;
+        Inc(d0, 2);
+        Inc(p, 4);
+        sep := rsCRLF;
+      end
+      else
+      begin
+        d0^ := 13;
+        Inc(d0);
+        Inc(p, 2);
+        sep := rsCR;
+      end;
+      EndPiece(S, d0, pstart, lim, chars + 1, sep);
+      chars := 0;
+      Continue;
+    end
+    else if u <= 13 then
     begin
       d0^ := u;
       Inc(d0);
-      Inc(p, 2);
-    end
-    else if (u < $D800) or (u > $DFFF) then
-    begin
-      PutCode(u, d0);
       Inc(p, 2);
     end
     else if u <= $DBFF then
@@ -628,35 +814,83 @@ begin
       else
       begin
         // a lone high surrogate: no character, its two bytes travel escaped
-        Escape(p[0], d0);
-        Escape(p[1], d0);
+        esc[0] := p[0];
+        esc[1] := p[1];
+        nesc := 2;
         Inc(p, 2);
       end;
     end
     else
     begin
-      Escape(p[0], d0);
-      Escape(p[1], d0);
+      esc[0] := p[0];
+      esc[1] := p[1];
+      nesc := 2;
       Inc(p, 2);
+    end;
+    if nesc = 0 then
+    begin
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      Continue;
+    end;
+    for k := 0 to nesc - 1 do
+    begin
+      d0^ := $F8 or (esc[k] shr 6);
+      Inc(d0);
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      d0^ := $80 or (esc[k] and $3F);
+      Inc(d0);
+      Inc(chars);
+      if d0 >= lim then
+      begin
+        EndPiece(S, d0, pstart, lim, chars, rsNone);
+        chars := 0;
+      end;
+      Inc(S.Invalid, 2);
     end;
   end;
   if (e - p = 1) and ALast then
   begin
-    Escape(p^, d0);
+    // an odd last byte
+    d0^ := $F8 or (p^ shr 6);
+    Inc(d0);
+    Inc(chars);
+    if d0 >= lim then
+    begin
+      EndPiece(S, d0, pstart, lim, chars, rsNone);
+      chars := 0;
+    end;
+    d0^ := $80 or (p^ and $3F);
+    Inc(d0);
+    Inc(chars);
+    Inc(S.Invalid, 2);
     Inc(p);
   end;
   D := d0;
+  S.Start := pstart - ABase;
+  S.Chars := chars;
   Result := p - Src;
 end;
 {$POP}
 
 { Converts ACount bytes of AStream, a chunk at a time, into one UTF-8 buffer just big enough,
-  and makes the text over it. ATable nil: UTF-16 (ABig: big-endian). }
+  finding the text's pieces as it goes, and makes the text over it. ATable nil: UTF-16
+  (ABig: big-endian). }
 function ConvertStream(AStream: TStream; ACount: Int64; ATable: TCodePageTable;
   ABig: Boolean): TTyRichText;
 var
   chunk: TBytes;
   o: TOutBuf;
+  s: TScanState;
   left, consumed: Int64;
   carry, got, avail, took: PtrInt;
   d: PByte;
@@ -666,28 +900,42 @@ begin
   SetLength(chunk, ChunkSize + 4);
   o.Data := nil;
   o.Used := 0;
-  left := ACount;
-  consumed := 0;
-  carry := 0;
-  repeat
-    if left > ChunkSize then got := ChunkSize else got := left;
-    if got > 0 then AStream.ReadBuffer(chunk[carry], got);
-    Dec(left, got);
-    avail := carry + got;
-    last := left = 0;
-    Reserve(o, Int64(avail) * MaxGrowth + StoreSlack, left, consumed);
-    d := PByte(o.Data) + o.Used;
-    if ATable <> nil then took := DecodeAnsiChunk(ATable, PByte(chunk), avail, last, d)
-    else took := DecodeUtf16Chunk(ABig, PByte(chunk), avail, last, d);
-    o.Used := d - PByte(o.Data);
-    Inc(consumed, took);
-    carry := avail - took;
-    if carry > 0 then Move(chunk[took], chunk[0], carry);
-  until last;
-  chunk := nil;
-  // the slack goes back before the text holds on to the buffer
-  SetLength(o.Data, o.Used);
-  Result := TTyRichText.CreateFromUtf8(o.Data);
+  s.Text := TTyRichText.CreateScanned;
+  try
+    s.Start := 0;
+    s.Chars := 0;
+    s.Invalid := 0;
+    left := ACount;
+    consumed := 0;
+    carry := 0;
+    repeat
+      if left > ChunkSize then got := ChunkSize else got := left;
+      if got > 0 then AStream.ReadBuffer(chunk[carry], got);
+      Dec(left, got);
+      avail := carry + got;
+      last := left = 0;
+      Reserve(o, Int64(avail) * MaxGrowth + StoreSlack, left, consumed);
+      d := PByte(o.Data) + o.Used;
+      if ATable <> nil then
+        took := DecodeAnsiChunk(ATable, PByte(chunk), avail, last, PByte(o.Data), d, s)
+      else
+        took := DecodeUtf16Chunk(ABig, PByte(chunk), avail, last, PByte(o.Data), d, s);
+      o.Used := d - PByte(o.Data);
+      Inc(consumed, took);
+      carry := avail - took;
+      if carry > 0 then Move(chunk[took], chunk[0], carry);
+    until last;
+    chunk := nil;
+    if o.Used > s.Start then
+      s.Text.AppendScanned(o.Used - s.Start, s.Chars, rsNone);
+    // the slack goes back before the text holds on to the buffer
+    SetLength(o.Data, o.Used);
+    s.Text.EndScanned(o.Data, s.Invalid);
+  except
+    s.Text.Free;
+    raise;
+  end;
+  Result := s.Text;
 end;
 
 procedure TyRichLoadText(ADoc: TTyRichDocument; AStream: TStream;
@@ -960,7 +1208,14 @@ begin
           Break;
         if rev <> nil then
         begin
-          if code < $80 then r := code else r := rev[code];
+          // ASCII is itself, NUL included (a Rev entry of 0 means "none")
+          if code < $80 then
+          begin
+            d^ := code;
+            Inc(d);
+            Continue;
+          end;
+          r := rev[code];
           if r = 0 then
           begin
             d^ := Ord('?');

@@ -35,6 +35,10 @@ const
   TyRichLeafCap = 128;
   TyRichInnerCap = 64;
   TyRichMaxDepth = 24;
+  { A piece never grows past this many bytes (plus the rest of the character that crosses
+    it), so its counts fit a LongInt: the load scan ends a piece there, without a separator,
+    and so must a reader that finds the pieces itself (CreateScanned). }
+  TyRichMaxPieceBytes = 1 shl 30;
 
 type
   TTyRichPos = Int64;
@@ -176,6 +180,8 @@ type
     FScanCount: Integer;
     FLoadSeps: array[0..3] of Int64;   // separators the load scan found, by stored kind
     FLoadInvalid: Int64;               // bytes the load scan found that start no UTF-8
+    FScanned: Boolean;                 // CreateScanned .. EndScanned
+    FScannedBytes: Int64;              // bytes the appended pieces cover so far
     FWalking: Integer;
     FOnParasChanged: TTyRichParasChangedEvent;
     FOnParaDataDropped: TTyRichParaDataEvent;
@@ -233,6 +239,17 @@ type
     procedure AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
       ASeparator: TTyRichSeparator);
     procedure EndLazyLoad;
+    { A text over a buffer whose pieces the reader finds itself while it writes the buffer
+      (a converted file: decoding and indexing in one pass, with no scan afterwards). Call
+      AppendScanned for every piece in order - each starts where the one before ended - and
+      then EndScanned with the buffer they cover, which is referenced as CreateFromUtf8's.
+      The pieces must be what CreateFromUtf8's scan would make of that buffer: one per
+      separator (which ends it, its bytes included and counted as one character), and a
+      piece without one where a paragraph reaches TyRichMaxPieceBytes and at the end; a byte
+      that starts no valid UTF-8 sequence is one character, AInvalid of them in all. }
+    constructor CreateScanned;
+    procedure AppendScanned(ABytes, AChars: LongInt; ASeparator: TTyRichSeparator);
+    procedure EndScanned(const ABuffer: TBytes; AInvalid: Int64);
     destructor Destroy; override;
 
     procedure Insert(APos: TTyRichPos; const AText: UTF8String);
@@ -306,8 +323,7 @@ const
   sCR = 1;
   sLF = 2;
   sCRLF = 3;
-  // a piece never grows past this, so its counts fit a LongInt
-  MaxPieceBytes = 1 shl 30;
+  MaxPieceBytes = TyRichMaxPieceBytes;
 
 { ---- pieces ---- }
 
@@ -1161,8 +1177,43 @@ end;
 
 procedure TTyRichText.EndLazyLoad;
 begin
-  if not FLoading then
+  if not FLoading or FScanned then
     raise ETyRichText.Create('EndLazyLoad outside a lazy load');
+  FinishLoad;
+end;
+
+constructor TTyRichText.CreateScanned;
+begin
+  inherited Create;
+  FLoading := True;
+  FScanned := True;
+  FLoadLeaves := TFPList.Create;
+  FLoadLeaf := PTyRichLeaf(NewNode(True));
+end;
+
+procedure TTyRichText.AppendScanned(ABytes, AChars: LongInt; ASeparator: TTyRichSeparator);
+begin
+  if not FScanned then
+    raise ETyRichText.Create('AppendScanned outside a scanned load');
+  // a UTF-8 character is at least one byte; a separator is one character of 1 or 2 bytes
+  if (ABytes <= 0) or (AChars <= 0) or (AChars > ABytes) or
+     (ABytes > MaxPieceBytes + 4) then
+    raise ETyRichText.Create('Scanned piece out of range');
+  LoadPiece(FScannedBytes, ABytes, AChars, kOrig, Ord(ASeparator));
+  Inc(FScannedBytes, ABytes);
+  if ASeparator <> rsNone then Inc(FLoadSeps[Ord(ASeparator)]);
+end;
+
+procedure TTyRichText.EndScanned(const ABuffer: TBytes; AInvalid: Int64);
+begin
+  if not FScanned then
+    raise ETyRichText.Create('EndScanned outside a scanned load');
+  if FScannedBytes <> System.Length(ABuffer) then
+    raise ETyRichText.CreateFmt('The scanned pieces cover %d bytes of a buffer of %d',
+      [FScannedBytes, System.Length(ABuffer)]);
+  FOrig := ABuffer;
+  FLoadInvalid := AInvalid;
+  FScanned := False;
   FinishLoad;
 end;
 

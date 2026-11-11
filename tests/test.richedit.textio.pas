@@ -49,7 +49,12 @@ type
   TTyRichTextIOTest = class(TTestCase)
   private
     FChanges: array of TTyRichChange;
+    FRuns: array of TTyRichByteRun;
+    FRunCount: Integer;
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
+    procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+    function RunsOf(AText: TTyRichText): string;
+    procedure CheckIndexedLikeAScan(const AMsg: string; ADoc: TTyRichDocument);
     function Fixture(const AName: string): TBytes;
     function LoadBytes(const ABytes: TBytes; AEncoding: TTyTextEncoding = teAuto;
       ACodePage: Integer = 0): TTyRichDocument;
@@ -69,6 +74,7 @@ type
     procedure TestLoadingUtf8KeepsOneCopy;
     procedure TestLoadingGbkKeepsNoOriginal;
     procedure TestSavingUsesAFixedBuffer;
+    procedure TestConvertedTextIsIndexedLikeAScan;
   end;
 
 implementation
@@ -179,6 +185,17 @@ begin
   Result := ADoc.Text.GetText(ADoc.Text.ParaStart(AIndex), ADoc.Text.ParaLength(AIndex));
 end;
 
+function BreakBytes(ASep: TTyRichSeparator): RawByteString;
+begin
+  case ASep of
+    rsCR: Result := #13;
+    rsLF: Result := #10;
+    rsCRLF: Result := #13#10;
+  else
+    Result := '';
+  end;
+end;
+
 function HeapUsed: PtrUInt;
 begin
   Result := GetFPCHeapStatus.CurrHeapUsed;
@@ -241,6 +258,70 @@ begin
   if ((Origin = soCurrent) and (Offset = 0)) or ((Origin = soBeginning) and (Offset = FPos)) then
     Exit(FPos);
   raise EStreamError.Create('TCheckingStream does not seek');
+end;
+
+procedure TTyRichTextIOTest.CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+begin
+  if FRunCount = System.Length(FRuns) then SetLength(FRuns, FRunCount * 2 + 16);
+  FRuns[FRunCount] := ARun;
+  Inc(FRunCount);
+end;
+
+{ Every piece as kind, source offset, bytes, characters and separator. }
+function TTyRichTextIOTest.RunsOf(AText: TTyRichText): string;
+var
+  sb: TStringBuilder;
+  i: Integer;
+begin
+  FRunCount := 0;
+  AText.ForEachRun(0, AText.Length, @CollectRun);
+  sb := TStringBuilder.Create;
+  try
+    for i := 0 to FRunCount - 1 do
+      with FRuns[i] do
+        sb.Append(Ord(Kind)).Append(':').Append(SrcOffset).Append('+').Append(ByteCount)
+          .Append('/').Append(CharCount).Append('s').Append(Ord(Separator)).Append(' ');
+    Result := sb.ToString;
+  finally
+    sb.Free;
+  end;
+end;
+
+{ ADoc's text, which the converting reader indexed while it decoded, against the text the
+  load scan makes of the very same UTF-8 bytes. }
+procedure TTyRichTextIOTest.CheckIndexedLikeAScan(const AMsg: string; ADoc: TTyRichDocument);
+var
+  t, ref: TTyRichText;
+  i: Integer;
+  sep: TTyRichSeparator;
+begin
+  t := ADoc.Text;
+  ref := TTyRichText.CreateFromUtf8(BytesOf(t.GetText(0, t.Length)));
+  try
+    AssertEquals(AMsg + ': integrity', '', t.CheckIntegrity);
+    AssertEquals(AMsg + ': reference integrity', '', ref.CheckIntegrity);
+    AssertEquals(AMsg + ': length', ref.Length, t.Length);
+    AssertEquals(AMsg + ': bytes', ref.ByteCount, t.ByteCount);
+    AssertEquals(AMsg + ': paragraphs', ref.ParaCount, t.ParaCount);
+    for i := 0 to t.ParaCount - 1 do
+    begin
+      if t.ParaStart(i) <> ref.ParaStart(i) then
+        Fail(Format('%s: paragraph %d starts at %d, the scan says %d', [AMsg, i, t.ParaStart(i),
+          ref.ParaStart(i)]));
+      if t.ParaSeparator(i) <> ref.ParaSeparator(i) then
+        Fail(Format('%s: paragraph %d ends with separator %d, the scan says %d', [AMsg, i,
+          Ord(t.ParaSeparator(i)), Ord(ref.ParaSeparator(i))]));
+    end;
+    for sep := rsCR to rsCRLF do
+      AssertEquals(Format('%s: separators of kind %d', [AMsg, Ord(sep)]),
+        ref.LoadedSeparators(sep), t.LoadedSeparators(sep));
+    AssertEquals(AMsg + ': bytes that are no UTF-8', ref.LoadedInvalidBytes, t.LoadedInvalidBytes);
+    AssertEquals(AMsg + ': pieces', ref.PieceCount, t.PieceCount);
+    AssertTrue(AMsg + ': the same pieces', RunsOf(t) = RunsOf(ref));
+    AssertText(AMsg + ': text', ref.GetText(0, ref.Length), t.GetText(0, t.Length));
+  finally
+    ref.Free;
+  end;
 end;
 
 procedure TTyRichTextIOTest.DocChanged(Sender: TObject; const AChange: TTyRichChange);
@@ -555,6 +636,7 @@ procedure TTyRichTextIOTest.TestNewDocumentIsUtf8WithThePlatformBreak;
 var
   d: TTyRichDocument;
   platformBreak: TTyRichSeparator;
+  brk: RawByteString;
 begin
   if sLineBreak = #13#10 then platformBreak := rsCRLF
   else if sLineBreak = #13 then platformBreak := rsCR
@@ -567,10 +649,11 @@ begin
     AssertEquals('no code page', 0, d.SourceCodePage);
     AssertTrue('the platform break', d.DominantLineBreak = platformBreak);
     d.Execute(TTyRichInsertText.Create(0, 'a'#13'b'#10'c'#13#10'd'));
-    AssertText('typed breaks are the platform kind', 'a' + sLineBreak + 'b' + sLineBreak + 'c' +
-      sLineBreak + 'd', d.Text.GetText(0, d.Text.Length));
-    AssertSameBytes('saved as UTF-8 without a BOM', BytesOf('a' + sLineBreak + 'b' + sLineBreak +
-      'c' + sLineBreak + 'd'), SaveBytes(d));
+    brk := BreakBytes(d.DominantLineBreak);
+    AssertText('typed breaks are the document''s kind', 'a' + brk + 'b' + brk + 'c' + brk + 'd',
+      d.Text.GetText(0, d.Text.Length));
+    AssertSameBytes('saved as UTF-8 without a BOM', BytesOf('a' + brk + 'b' + brk + 'c' + brk + 'd'),
+      SaveBytes(d));
   finally
     d.Free;
   end;
@@ -678,8 +761,123 @@ procedure TTyRichTextIOTest.TestSavingUsesAFixedBuffer;
 begin
   Check('UTF-8', Repeated(Fixture('utf8-bom.txt'), 16 * 1024 * 1024), teAuto, 0);
   Check('GBK', Repeated(Fixture('gbk.txt'), 16 * 1024 * 1024), teAnsi, 936);
-  Check('UTF-16', Concat(BytesOf(#$FF#$FE), Repeated(Copy(Fixture('utf16le.txt'), 2, MaxInt),
+  Check('UTF-16', Concat(BytesOf(FromBytes([$FF, $FE])), Repeated(Copy(Fixture('utf16le.txt'), 2, MaxInt),
     16 * 1024 * 1024)), teAuto, 0);
+end;
+
+procedure TTyRichTextIOTest.TestConvertedTextIsIndexedLikeAScan;
+const
+  C = TyRichTextChunkSize;
+var
+  d: TTyRichDocument;
+  gbk, g, u16, unitsLine: TBytes;
+  i, n, k: Integer;
+
+  procedure Check(const AMsg: string; const ABytes: TBytes; AEnc: TTyTextEncoding;
+    ACodePage: Integer; const AMustHave: RawByteString = '');
+  begin
+    d := LoadBytes(ABytes, AEnc, ACodePage);
+    try
+      CheckIndexedLikeAScan(AMsg, d);
+      // a character split by a chunk end is read as that character, not as two escapes
+      if AMustHave <> '' then
+        AssertTrue(AMsg + ': ' + Shown(AMustHave) + ' decoded',
+          Pos(AMustHave, RawByteString(d.Text.GetText(0, d.Text.Length))) > 0);
+      AssertSameBytes(AMsg + ': opened and saved', ABytes, SaveBytes(d));
+    finally
+      FreeAndNil(d);
+    end;
+  end;
+
+  procedure PutAscii(var B: TBytes; AAt: Integer; const S: RawByteString);
+  begin
+    Move(S[1], B[AAt], System.Length(S));
+  end;
+
+  procedure PutUnit(var B: TBytes; AAt: Integer; AUnit: Word);
+  begin
+    B[AAt] := Byte(AUnit);
+    B[AAt + 1] := AUnit shr 8;
+  end;
+
+begin
+  Check('gbk.txt', Fixture('gbk.txt'), teAuto, 936);
+  Check('gbk-badbytes.txt', Fixture('gbk-badbytes.txt'), teAuto, 936);
+  Check('utf16le.txt', Fixture('utf16le.txt'), teAuto, 0);
+  Check('utf16be.txt', Fixture('utf16be.txt'), teAuto, 0);
+
+  // GBK over five chunks: CR, LF and CRLF lines, stray FF bytes, control characters, and at
+  // the chunk ends (the data starts at offset 0): a pair split by the end, a CRLF split by
+  // it, a lead byte with a line break after it, a lone CR
+  gbk := Fixture('gbk.txt');
+  n := 5 * C + 1000;
+  g := nil;
+  SetLength(g, n);
+  i := 0;
+  k := 0;
+  while i < n do
+  begin
+    g[i] := gbk[k];
+    Inc(i);
+    k := (k + 1) mod System.Length(gbk);
+    if (k = 40) and (i < n - 2) then
+    begin
+      // vary the line breaks and add bytes that are no text
+      case (i div 137) mod 4 of
+        0: begin g[i] := 13; Inc(i); end;
+        1: begin g[i] := 10; Inc(i); end;
+        2: begin g[i] := $FF; Inc(i); end;
+        3: begin g[i] := 9; g[i + 1] := 0; Inc(i, 2); end;
+      end;
+    end;
+  end;
+  // (raw bytes through FromBytes: a #$xx literal would be taken as a code point here)
+  PutAscii(g, C - 4, FromBytes([$61, $61, $61, $B5, $DA]));      // 第 split by the first end
+  PutAscii(g, 2 * C - 4, 'aaa'#13#10);                            // CRLF split by the second
+  PutAscii(g, 3 * C - 4, FromBytes([$61, $61, $61, $81, 13, 10])); // lead byte, CRLF, third
+  PutAscii(g, 4 * C - 4, 'aaa'#13'x');                            // a lone CR at the fourth
+  PutAscii(g, n - 1, FromBytes([$81]));                           // a lead byte at the end
+  Check('generated GBK', g, teAnsi, 936,
+    FromBytes([$61, $61, $E7, $AC, $AC]));   // the byte before may take the first a as trail
+
+  // UTF-16LE over five chunks (the data starts after the BOM): a surrogate pair split by
+  // the first chunk end, a CRLF by the second, a lone high surrogate before the third, a
+  // lone CR at the fourth, and an odd last byte
+  unitsLine := Copy(Fixture('utf16le.txt'), 2, MaxInt);
+  n := 2 + 5 * C + 1000;
+  u16 := nil;
+  SetLength(u16, n + 1);
+  u16[0] := $FF;
+  u16[1] := $FE;
+  i := 2;
+  k := 0;
+  while i < n do
+  begin
+    u16[i] := unitsLine[k];
+    u16[i + 1] := unitsLine[k + 1];
+    Inc(i, 2);
+    k := (k + 2) mod System.Length(unitsLine);
+    if (k = 60) and (i < n - 4) then
+    begin
+      case (i div 211) mod 4 of
+        0: PutUnit(u16, i, 13);
+        1: PutUnit(u16, i, 10);
+        2: PutUnit(u16, i, $DC00);              // a lone low surrogate
+        3: PutUnit(u16, i, 0);
+      end;
+      Inc(i, 2);
+    end;
+  end;
+  for k := 1 to 4 do
+    for i := 0 to 2 do PutUnit(u16, 2 + k * C - 8 + 2 * i, Ord('a'));
+  PutUnit(u16, 2 + C - 2, $D83D);  PutUnit(u16, 2 + C, $DE00);           // U+1F600 split
+  PutUnit(u16, 2 + 2 * C - 2, 13); PutUnit(u16, 2 + 2 * C, 10);          // CRLF split
+  PutUnit(u16, 2 + 3 * C - 2, $D800); PutUnit(u16, 2 + 3 * C, Ord('b')); // lone high
+  PutUnit(u16, 2 + 4 * C - 2, 13); PutUnit(u16, 2 + 4 * C, Ord('x'));    // lone CR
+  u16[n] := $41;                                                         // odd last byte
+  Check('generated UTF-16LE', u16, teAuto, 0, FromBytes([$61, $61, $61, $F0, $9F, $98, $80]));
+  // (A piece is also cut where a paragraph reaches TyRichMaxPieceBytes, 1 GB: not tried
+  // here, a test of that would need a file over a gigabyte.)
 end;
 
 initialization
