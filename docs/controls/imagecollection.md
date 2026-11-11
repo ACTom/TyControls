@@ -138,7 +138,9 @@ Coll.Images.Count;                     // -> 3(三张母版)
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Collection` | `TTyCustomImageCollection` | `nil` | 光栅图像源。赋值时注册 `FreeNotification`,集合被先释放时引用自动置 `nil`。 |
-| `Names` | `TStrings` | 空 | 要暴露的图像**名字**(有序,每行一个)——每个都是 `Collection` 中的键。 |
+| `IconFont` | `TTyCustomIconFont` | `nil` | 第二个来源:图标字体。`Names` 里的名字先在 `Collection` 里找,找不到再按字形名到字体里找,所以一个列表可以图片和字形混用。 |
+| `Names` | `TStrings` | 空 | 要暴露的图像**名字**(有序,每行一个)——`Collection` 中的键,或 `IconFont` 里的字形名。 |
+| `GlyphColor` | `TTyColor` | `TyGlyphColorDefault` | 字形的颜色。默认值表示不指定颜色,跟着画它的那一行的文字色走;设成别的值就固定用这个颜色。只管字形,图片自带颜色。见[字形图标的颜色](#字形图标的颜色40-起)。 |
 | `DefaultSize` | `Integer` | `16` | 默认项边长(**逻辑**像素),供不传尺寸的消费方使用。 |
 | `MultiResolution` | `Boolean` | `True` | 除基础尺寸外,再预先画 1.5x、2x、3x 三个尺寸给 LCL 原生控件用。见 [批量添加](#批量添加)。 |
 
@@ -149,10 +151,11 @@ Coll.Images.Count;                     // -> 3(三张母版)
 | `function Count: Integer` | 暴露项数(= `Names.Count`)。 |
 | `function NameOf(AIndex: Integer): string` | `AIndex` 处的名字;越界返回 `''`。 |
 | `function IndexOf(const AName: string): Integer` | 名字索引;不存在返回 `-1`。 |
-| `function RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 从 `Collection` 渲染第 `AIndex` 项到 `ASizePx` 见方。**调用方拥有**返回位图。`Collection` 未设 / 索引越界 / 名字缺失时返回空透明方块(**永不为 `nil`**);`ASizePx <= 0` 夹紧为 1px。 |
-| `function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 第 `AIndex` 项在 `Collection` 渲染缓存中的结果——**借用引用**:**不要 `Free`、不要改像素**,也不要跨下一次调用继续持有。没什么可画时(`Collection` 未设 / 索引越界 / 名字缺失)返回 `nil`。这是绘制代码的**零分配**路径;需要拥有或修改位图时才用 `RenderIndex`。`ASizePx <= 0` 夹紧为 1px。 |
+| `function RenderIndex(AIndex, ASizePx: Integer; AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap` | 从 `Collection` 渲染第 `AIndex` 项到 `ASizePx` 见方。**调用方拥有**返回位图。`Collection` 未设 / 索引越界 / 名字缺失时返回空透明方块(**永不为 `nil`**);`ASizePx <= 0` 夹紧为 1px。`AInk` 是旁边文字的颜色,见[字形图标的颜色](#字形图标的颜色40-起)。 |
+| `function CachedIndex(AIndex, ASizePx: Integer; AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap` | 第 `AIndex` 项在渲染缓存中的结果——**借用引用**:**不要 `Free`、不要改像素**,也不要跨下一次调用继续持有。没什么可画时(`Collection` 未设 / 索引越界 / 名字缺失)返回 `nil`。这是绘制代码的**零分配**路径;需要拥有或修改位图时才用 `RenderIndex`。`ASizePx <= 0` 夹紧为 1px。 |
+| `function TakesHostInk(AIndex: Integer): Boolean` | 这一项是不是跟着文字色画:它是字形,而且 `GlyphColor` 还是默认值。图片、指定了颜色的字形、越界的序号都返回 `False`。 |
 | `procedure Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer; AEnabled: Boolean = True)` | **LCL 签名**(`imglist.pp:356`,逐参数一致)。按 `DefaultSize` 绘制第 `AIndex` 项到 `(AX, AY)`。`AEnabled = False` 画**变淡**的一版(见下)。守护所有边界情况(`nil` 画布 / 集合、坏索引),**永不抛异常**。 |
-| `procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False)` | 带**显式像素尺寸**的一版——本库的绘制代码需要它(尺寸随 DPI 与行高变化),而 LCL 的 `Draw` 没地方放。走 `CachedIndex`,常规绘制无临时位图;`AGhosted = True` 时复制一份缓存位图再淡化,多一次分配。注意 `AGhosted` 是 `Draw` 里 `AEnabled` 的**反义**。 |
+| `procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False; AInk: TTyColor = TyGlyphColorDefault)` | 带**显式像素尺寸**的一版——本库的绘制代码需要它(尺寸随 DPI 与行高变化),而 LCL 的 `Draw` 没地方放。走 `CachedIndex`,常规绘制无临时位图;`AGhosted = True` 时复制一份缓存位图再淡化,多一次分配。注意 `AGhosted` 是 `Draw` 里 `AEnabled` 的**反义**。 |
 
 > ### ⚠ 3.0 破坏性变更:`Draw` 的参数顺序
 >
@@ -174,6 +177,50 @@ Coll.Images.Count;                     // -> 3(三张母版)
 | `procedure TyFadeBitmapAlpha(ABmp: TBGRABitmap; AFactor: Byte)` | 把每个像素的 alpha 按 `AFactor/255` 缩放(**就地修改**),连抗锯齿边缘一起均匀变淡。单元级导出,因为这是全库唯一的"不可用"观感,别的绘制代码也应当用它。 |
 
 只改 alpha、不改颜色:图标保留自己的配色而失去存在感,这才是"不可用"该有的样子——换色说的是"另一个东西",不是"淡出"。`DrawIndex` 内部会先 `Duplicate` 再淡化:缓存位图是**共享**的,就地淡化会让这个图标从此在所有地方(包括别的控件里)都变淡。
+
+### 字形图标的颜色(4.0 起)
+
+适用于 `TTyVirtualImageList` 和 `TTyLucideImageList`。
+
+来自 `IconFont` 的字形本身没有颜色,画成什么颜色看 `GlyphColor`:
+
+- **`TyGlyphColorDefault`(默认)**:跟着画它的那一行走。Ty 控件画图标时会把旁边文字的颜色一起传进来,图标就和文字同色:普通行是普通文字色,选中行是选中行的文字色,禁用行是禁用色。换主题、切深色模式都不用再管图标。
+- **其他值**:固定用这个颜色。不管放进哪个控件、行处于什么状态,都是它。
+- 来自 `Collection` 的**图片**自带颜色,任何情况下都不染色。一棵用彩色文件类型图标的树还是彩色的。
+
+没有人传文字色的地方,默认值画成不透明黑色:LCL 原生控件(`TToolBar`、`TMainMenu` 等)画的是预先画好的位图,拿不到所在行的颜色;自己写的绘制代码没传颜色时也一样。
+
+会传文字色的控件:
+
+| 控件 | 用的颜色 |
+|------|------|
+| `TTyTreeView` | 节点行的文字色(`TyTreeNode`)。选中时只有开了 `toFullRowSelect` 才用选中色,否则高亮只盖住标题,图标还在普通底色上。列头图标用列头的文字色 |
+| `TTyListView` | 项的文字色(`TyListViewItem`),列头图标用列头的文字色 |
+| `TTyAdvancedListBox`、`TTyAdvancedComboBox` | 行的文字色(`TyListItem`),下拉框的输入区用输入区的文字色 |
+| `TTyComboBoxEx` | 同上,叠加图标也一样 |
+| 网格(`TTyStringGrid` 等) | 列头图标用列头文字色,图片单元格用该单元格的文字色 |
+| `TTyListGroupPanel` | 分组行、项各用自己的文字色 |
+| 菜单(`TTyMenuBar`、`TTyPopupMenu` 等) | 菜单项的文字色。把本库的列表赋给 LCL 菜单自己的 `Images` 时也一样 |
+| `TTyTabSet`、`TTyPageControl` 等标签页 | 标签的文字色 |
+| `TTyValueListEditor` | 值那一列的文字色 |
+| `TTyDBNavigator` | 按钮图形的颜色 |
+| `TTyImage` | 控件自己的文字色(和 `TTyCharImage` 一样) |
+| `TTyToolWindowBar` | 图标条每一格的颜色(这个控件一直如此) |
+
+**变淡。** 跟着文字色画的字形不再叠加变淡:禁用行的文字色本身就是禁用色,再淡一次就看不清了。图片和指定了颜色的字形照旧变淡。剪切的列表项(`lisCut`)和 `OnGetImageIndex` 里设了 `Ghosted` 的树节点,文字不变,图标变淡,这时字形和图片一样淡。
+
+**自己画图标**时把文字色作为最后一个参数传进去:
+
+```pascal
+Icons.DrawIndex(Canvas, Index, X, Y, 16, False, TextColor);   // 直接画
+Bmp := Icons.CachedIndex(Index, 16, TextColor);               // 借用位图,自己合成
+```
+
+`tyControls.ImageDraw` 里的 `TyDrawImage`、`TyBlitImageScaled` 等也多了同样的参数。不传就和以前一样。行被画成变淡、而文字没有变淡时(比如剪切的项),传 `TyGhostInk(TextColor)`。
+
+同一个字形按(名字、尺寸、颜色)缓存,最多 `TyGlyphCacheCapacity`(64)份,所以一屏里几种行状态各用各的颜色,不会每行都重新渲染字体。
+
+> **从 3.x 升级。** `GlyphColor` 的默认值从不透明黑色(`$FF000000`)改成了 `TyGlyphColorDefault`。没设过 `GlyphColor` 的列表,放在 Ty 控件里的字形图标会从黑色变成跟随文字色。想保持黑色就把 `GlyphColor` 设成 `$FF000000`。`.lfm` 里已经写了 `GlyphColor` 的不受影响。以前为了适配深色主题、在换主题时改 `GlyphColor` 的代码可以删掉;留着也行,设了具体颜色就一直用那个颜色,只是选中行和禁用行不会跟着变。
 
 ### 批量添加
 
@@ -225,7 +272,7 @@ Icons.Names.Text := TyIconHouse + LineEnding + TyIconSearch;
 - **`AddBitmap` 取副本** —— 传入的 `TBGRABitmap` 被 `Duplicate`;调用方之后可自由释放 / 复用自己那份。
 - **集合拥有 master** —— 每张 master 由集合持有,`Clear` / 析构时全部释放,无泄漏。
 - **`GetBitmap` / `RenderIndex` 返回值归调用方** —— 用完必须 `Free`(见示例)。它们返回的是缓存渲染的**副本**,可以随意就地修改。
-- **`GetCachedBitmap` / `CachedIndex` 返回值是借用的** —— 归集合的渲染缓存所有:**不要 `Free`、不要改像素**,blit 完即弃,别跨下一次调用继续持有(可能已被 LRU 淘汰或因变更失效)。绘制路径用它可以做到每个图标零分配、零重采样。
+- **`GetCachedBitmap` / `CachedIndex` 返回值是借用的** —— 归集合的渲染缓存所有(字形归列表自己的缓存):**不要 `Free`、不要改像素**,blit 完即弃,别跨下一次调用继续持有(可能已被 LRU 淘汰或因变更失效)。绘制路径用它可以做到每个图标零分配、零重采样。
 - **`Draw` / `DrawIndex` 自行管理** —— 走借用路径直接绘制,调用方无需理会;淡化时内部自建并释放一份副本,缓存不受污染。
 
 ---

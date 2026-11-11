@@ -6,6 +6,8 @@ TTyGlyphImageList 是一个**非可视组件**:一份有序的图标字体字形
 
 `Glyphs` 里存的是字形**名字**(一行一个),每个名字都是所引用 `IconFont.Glyphs` 映射表里的键。渲染时按名字在 IconFont 中查找并委托 `TTyIconFont.RenderGlyph` 光栅化——因此这里的"名字↔序号"记账是纯逻辑、可无字体在无头环境下单元测试;真正的像素则需要真机 + 已注册的字体(与字体本身同一约定)。
 
+> Ty 控件的 `Images` 属性接的是 [`TTyVirtualImageList`](imagecollection.md)(`TTyLucideImageList` 也是它),不是本组件。那个列表里的字形默认跟着所在行的文字色画,见 [字形图标的颜色](imagecollection.md#字形图标的颜色40-起)。本组件的颜色由调用方每次传入,或取 `DefaultColor`。
+
 ```pascal
 uses tyControls.GlyphImageList;
 ```

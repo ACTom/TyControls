@@ -148,7 +148,7 @@ LV.Sort;
 | `RowSelect` | `Boolean` | `True` | 整行高亮,而非仅第 0 列 |
 | `HotTrack` | `Boolean` | `False` | 鼠标悬停高亮(分组视图下也高亮指针下面那一项) |
 | `LargeImages` | `TCustomImageList` | `nil` | `lvsIcon` / `lvsTile` 用 |
-| `SmallImages` | `TCustomImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它 |
+| `SmallImages` | `TCustomImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它。列表是 `TTyVirtualImageList` / `TTyLucideImageList` 时，其中的字形图标跟着该项的文字色画（选中、禁用时也跟着变），图片不染色，见 [imagecollection.md](imagecollection.md#字形图标的颜色40-起)；`LargeImages`、`Header.Images` 同理 |
 | `Header.Images` | `TCustomImageList` | `nil` | **列头图标**的图像源，按 `TTyColumn.ImageIndex` 取图；为空时回退到 `SmallImages` |
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来之后要不要淡出,转发给它们。默认跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
 

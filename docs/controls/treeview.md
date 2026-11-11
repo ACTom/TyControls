@@ -41,7 +41,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `DefaultNodeHeight` | `Integer` | `18` | 未启用变高时每行的逻辑像素高度 |
 | `RootNodeCount` | `Cardinal` | `0` | 根级（顶层）节点数量。写入即创建这么多未初始化的根节点骨架 |
 | `Indent` | `Integer` | `16` | 每一层的缩进逻辑像素 |
-| `Images` | `TCustomImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用。类型是 `TCustomImageList`（对齐 LCL），任何派生自它的列表都能赋值 |
+| `Images` | `TCustomImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用。类型是 `TCustomImageList`（对齐 LCL），任何派生自它的列表都能赋值。列表是 `TTyVirtualImageList` / `TTyLucideImageList` 时，其中的字形图标跟着该行的文字色画（选中、禁用时也跟着变），图片不染色，见 [imagecollection.md](imagecollection.md#字形图标的颜色40-起) |
 | `EmptyListMessage` | `TCaption` | `''` | 树为空时在内容区居中显示的提示文字 |
 | `ShowButtons` | `Boolean` | `True` | 是否绘制展开 / 折叠按钮（±方块） |
 | `ShowTreeLines` | `Boolean` | `True` | 是否绘制树线（总开关）；画成什么样由主题令牌决定，见上文「树线与展开符号」 |
