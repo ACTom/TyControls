@@ -34,6 +34,9 @@ type
     FDone: Integer;
     FAllow: Boolean;
     FHandle: Boolean;
+    FValueAsked: TStringList;   // OnValueChanging: 'key=text'
+    FValueAllow: Boolean;
+    FValueRewrite: string;
     procedure Changing(Sender: TObject; AInstance: TPersistent; const APropName,
       ANewValue: string; var AAllow: Boolean);
     procedure Changed(Sender: TObject; AInstance: TPersistent; const APropName: string);
@@ -54,6 +57,10 @@ type
       ARow: TTyValueRow);
     procedure EditCount(Sender: TObject; ARow: TTyValueRow; AInstance: TPersistent;
       const APropName: string; var AHandled: Boolean);
+    procedure ValueChanging(Sender: TObject; ARow: TTyValueRow; var AText: string;
+      var AAllow: Boolean);
+    procedure ValueChangingRebuilds(Sender: TObject; ARow: TTyValueRow; var AText: string;
+      var AAllow: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -98,6 +105,11 @@ type
     procedure TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
     procedure TestOnEditingDoneComesOnceWhenAnEditEnds;
     procedure TestAnEditOnAComponentBeingFreedIsDropped;
+    { the value list editor's row API, on the grid }
+    procedure TestOnValueChangingIsAskedBeforeThePropertyIsWritten;
+    procedure TestAnOnValueChangingHandlerThatRebuildsTheRowsEndsTheWrite;
+    procedure TestFindRowGoesByTheGridsPaths;
+    procedure TestSaveAndRestoreExpandedGoByTheGridsPaths;
   end;
 
 implementation
@@ -140,6 +152,9 @@ begin
   FChangedInstance := nil;
   FAllow := True;
   FHandle := False;
+  FValueAsked := TStringList.Create;
+  FValueAllow := True;
+  FValueRewrite := '';
 end;
 
 procedure TPropertyGridControlTest.TearDown;
@@ -147,6 +162,7 @@ begin
   FForm.Free;
   FObj.Free;
   FHolder.Free;
+  FValueAsked.Free;
 end;
 
 procedure TPropertyGridControlTest.Changing(Sender: TObject; AInstance: TPersistent;
@@ -157,6 +173,21 @@ begin
   FSeenName := APropName;
   FSeenValue := ANewValue;
   AAllow := FAllow;
+end;
+
+procedure TPropertyGridControlTest.ValueChanging(Sender: TObject; ARow: TTyValueRow;
+  var AText: string; var AAllow: Boolean);
+begin
+  FValueAsked.Add(ARow.Key + '=' + AText);
+  if FValueRewrite <> '' then AText := FValueRewrite;
+  AAllow := FValueAllow;
+end;
+
+procedure TPropertyGridControlTest.ValueChangingRebuilds(Sender: TObject; ARow: TTyValueRow;
+  var AText: string; var AAllow: Boolean);
+begin
+  FValueAsked.Add(ARow.Key + '=' + AText);
+  FGrid.Rebuild;   // every row, ARow among them, is made anew
 end;
 
 procedure TPropertyGridControlTest.Changed(Sender: TObject; AInstance: TPersistent;
@@ -938,6 +969,91 @@ begin
   AssertEquals('nothing was written into it', 0, FChanging);
   AssertEquals('the editor is closed', -1, FGrid.EditingRow);
   AssertNull('the selection let go', FGrid.SelectedObject);
+end;
+
+{ The value list editor's OnValueChanging is asked on the grid too, before the write and before
+  OnPropertyChanging: about the row, with the text as typed. }
+procedure TPropertyGridControlTest.TestOnValueChangingIsAskedBeforeThePropertyIsWritten;
+begin
+  FGrid.OnValueChanging := @ValueChanging;
+  FGrid.OnPropertyChanging := @Changing;
+  FAllow := True;
+  FValueAllow := False;
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('asked about the row, with the text typed', 'Zeta=42', FValueAsked.CommaText);
+  AssertEquals('refused: nothing is written', 0, FObj.Zeta);
+  AssertEquals('and the write was never started', 0, FChanging);
+  AssertEquals('the row keeps its value', '0', FGrid.RowAt('Zeta').Value);
+  FValueAllow := True;
+  FValueRewrite := '7';
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('allowed: the text the handler left is what is written', 7, FObj.Zeta);
+  AssertEquals('OnPropertyChanging came after it', 1, FChanging);
+  AssertEquals('with that text', '7', FSeenValue);
+  AssertEquals('and the row reads the object', '7', FGrid.RowAt('Zeta').Value);
+  FGrid.OnValueChanging := nil;
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('without a handler the grid writes as ever', 42, FObj.Zeta);
+end;
+
+{ A handler that rebuilds the rows takes the row being committed with them: the write stops there,
+  as it does when OnPropertyChanging rebuilds them. OnPropertyChanging refuses here, so a write
+  that did go on would be seen and still change nothing. }
+procedure TPropertyGridControlTest.TestAnOnValueChangingHandlerThatRebuildsTheRowsEndsTheWrite;
+begin
+  FGrid.OnValueChanging := @ValueChangingRebuilds;
+  FGrid.OnPropertyChanging := @Changing;
+  FAllow := False;
+  FGrid.TypeInto(FGrid.RowAt('Zeta'), '42');
+  AssertEquals('the handler was asked', 'Zeta=42', FValueAsked.CommaText);
+  AssertEquals('the write was not gone on with on rows that are gone', 0, FChanging);
+  AssertEquals('nothing is written', 0, FObj.Zeta);
+  AssertEquals('the new row shows the object', '0', FGrid.RowAt('Zeta').Value);
+end;
+
+procedure TPropertyGridControlTest.TestFindRowGoesByTheGridsPaths;
+var stray: TTyValueRow;
+begin
+  FGrid.SelectedObject := FHolder;
+  AssertSame('a property', FGrid.RowAt('Flags'), FGrid.FindRow('Flags'));
+  AssertSame('a set''s element, in any case', FGrid.RowAt('Flags.pfB'), FGrid.FindRow('flags.PFB'));
+  AssertSame('a collection item, spelled as the grid spells it', FGrid.RowAt('Items.[1]'),
+    FGrid.FindRow('Items[1]'));
+  AssertSame('a property of an item', FGrid.RowAt('Items.[1].Caption'),
+    FGrid.FindRow('Items[1].Caption'));
+  AssertNull('no such property', FGrid.FindRow('Nothing'));
+  AssertNull('nothing is selected yet', FGrid.SelectedRow);
+  FGrid.Select(FGrid.RowAt('Flags'));
+  AssertSame('SelectedRow is the row the selection is on', FGrid.RowAt('Flags'), FGrid.SelectedRow);
+  AssertEquals('whose path the grid gives', 'Flags', FGrid.RowPath(FGrid.SelectedRow));
+  stray := FGrid.AddRow('Stray', 'x');   // not one of the grid's
+  AssertEquals('a row the grid did not build has no path', '', FGrid.RowPath(stray));
+  AssertNull('and is not found by its key', FGrid.FindRow('Stray'));
+end;
+
+procedure TPropertyGridControlTest.TestSaveAndRestoreExpandedGoByTheGridsPaths;
+var open: TStringList;
+begin
+  FGrid.SelectedObject := FHolder;
+  FGrid.ClickTriangle(FGrid.RowAt('Items'));
+  FGrid.ClickTriangle(FGrid.RowAt('Items.[0]'));
+  open := TStringList.Create;
+  try
+    FGrid.SaveExpanded(open);
+    open.Sort;
+    AssertEquals('the open rows, by the grid''s paths', 'Items,Items[0]', open.CommaText);
+    AssertEquals('which is what ExpandedProperties holds', open.CommaText,
+      FGrid.ExpandedProperties.CommaText);
+    open.Clear;
+    open.Add('Flags');
+    FGrid.RestoreExpanded(open);
+    AssertTrue('the listed row is opened', FGrid.RowAt('Flags').Expanded);
+    AssertFalse('the others are closed', FGrid.RowAt('Items').Expanded);
+    AssertEquals('and ExpandedProperties follows the rows', 'Flags',
+      FGrid.ExpandedProperties.CommaText);
+  finally
+    open.Free;
+  end;
 end;
 
 initialization

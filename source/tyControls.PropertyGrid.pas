@@ -542,11 +542,10 @@ type
     procedure DeleteCollectionItem(const APath: string);
     { Move the item at APath by ADelta places (-1 up, 1 down), stopping at either end. }
     procedure MoveCollectionItem(const APath: string; ADelta: Integer);
-    { The row the selection is on, nil when none. }
-    function SelectedRow: TTyValueRow;
     { The dotted path of one of the grid's rows, as ExpandedProperties and the collection
-      methods spell it ('Font.Size', 'Items[1].Caption'); '' for a row the grid did not build. }
-    function RowPath(ARow: TTyValueRow): string;
+      methods spell it ('Font.Size', 'Items[1].Caption'); '' for a row the grid did not build.
+      The value list editor's FindRow, SaveExpanded and RestoreExpanded go by it here too. }
+    function RowPath(ARow: TTyValueRow): string; override;
     { The property ARow edits: the object that has it and its name (for a set's element, the
       set). False for a collection item's row and for a row the grid did not build. }
     function PropertyAt(ARow: TTyValueRow; out AInstance: TPersistent;
@@ -599,7 +598,9 @@ type
     { Only the properties whose name holds this text, ignoring case (a sub-property or a set's
       element too: the rows above it are shown and opened for it, and a matching row keeps the
       rows below it). OnFilterProperty is asked first; this filters what it lets through. Clear
-      it and the rows are opened and closed as they were before it was set. '' by default. }
+      it and the rows are opened and closed as they were before it was set. '' by default.
+      The grid's own filter, in place of the value list editor's: it goes by the property's
+      name as the rows are built, and that editor's OnFilterRow is not asked. }
     property FilterText: string read GetFilterText write SetFilterText;
     property OnFilterProperty: TTyFilterPropertyEvent read GetOnFilterProperty
       write SetOnFilterProperty;
@@ -2929,12 +2930,20 @@ begin
 end;
 
 function TTyCustomPropertyGrid.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;
-var nd: TTyPropertyNode;
+var
+  nd: TTyPropertyNode;
+  gen: Integer;
 begin
   if FRows = nil then Exit(inherited CanCommitValue(ARow, AText));   // being destroyed
   nd := FRows.NodeOf(ARow);
   if nd = nil then Exit(inherited CanCommitValue(ARow, AText));
   if nd.Kind = pnkCategory then Exit(False);   // a heading has no value to write
+  { The value list editor's OnValueChanging first, about the row and its text as typed; then
+    the write, with OnPropertyChanging about each object. A handler that rebuilt the rows took
+    ARow and nd with them: nothing is written. }
+  gen := FBuildCount;
+  if not inherited CanCommitValue(ARow, AText) then Exit(False);
+  if gen <> FBuildCount then Exit(False);
   if (CommitFont <> nil) and (nd.Kind = pnkFont) then
     Result := WriteProperty(nd, pwkFont, CommitFont, ARow, AText)   // the font dialog's pick, whole
   else
@@ -3232,11 +3241,6 @@ end;
 procedure TTyCustomPropertyGrid.MoveCollectionItem(const APath: string; ADelta: Integer);
 begin
   DoCollectionAction(caMove, APath, ADelta);
-end;
-
-function TTyCustomPropertyGrid.SelectedRow: TTyValueRow;
-begin
-  Result := FlatRowAt(ItemIndex);
 end;
 
 function TTyCustomPropertyGrid.RowPath(ARow: TTyValueRow): string;
