@@ -1,6 +1,6 @@
 unit tyControls.Design.NewItems;
 {$mode objfpc}{$H+}
-{ The IDE's File > New integration: the TyControls Form / Main Form / Dialog unit
+{ The IDE's File > New integration: the TyControls Form / Main Form / Dialog / Frame unit
   templates and the TyControls Application project descriptor, plus the one procedure
   that registers them (RegisterNewItems, called from tyControls.Design.Register).
 
@@ -9,7 +9,7 @@ interface
 uses
   Classes, SysUtils, Controls, Forms,
   ProjectIntf, LazIDEIntf,
-  tyControls.Form, tyControls.Dialogs;
+  tyControls.Form, tyControls.Dialogs, tyControls.Frame;
 
 type
   { File > New entry that creates a unit whose form descends from TTyForm —a borderless
@@ -55,6 +55,18 @@ type
     function GetLocalizedDescription: string; override;
   end;
 
+  { File > New entry that creates a unit whose frame descends from TTyFrame: an embeddable view
+    designed like a form and put on a host at run time. As the IDE's own Frame template
+    (TFileDescPascalUnitWithFrame, ide/mainintf.pas): no global variable, no CreateForm
+    statement, and the .lfm is the IDE's -- a bare frame -- since nothing is pre-placed on it. }
+  TTyFrameFileDescriptor = class(TFileDescPascalUnitWithResource)
+  public
+    constructor Create; override;
+    function GetInterfaceUsesSection: string; override;
+    function GetLocalizedName: string; override;
+    function GetLocalizedDescription: string; override;
+  end;
+
   { File > New > Project > "TyControls Application": a normal LCL GUI app whose main form is
     a themed TTyForm (title bar + style controller), with the tycontrols package dependency
     pre-added. Mirrors the IDE's built-in Application descriptor. }
@@ -85,6 +97,10 @@ resourcestring
   rsDtDialogName        = 'TyControls Dialog';
   rsDtDialogDescription = 'A themed custom-drawn modal dialog (TTyDialog): borderless, ' +
     'close-only, non-resizable, centered —design your own dialog content and buttons.';
+  rsDtFrameName        = 'TyControls Frame';
+  rsDtFrameDescription = 'An embeddable view descending from TTyFrame: design it like a form ' +
+    'and put it on a TyControls host at run time. It shows the host''s themed background, and ' +
+    'the controls on it blend into the host.';
   rsDtAppName        = 'TyControls Application';
   rsDtAppDescription = 'A graphical TyControls application. The main form is a themed TTyForm ' +
     '(custom title bar + style controller); the tycontrols package is added automatically.';
@@ -294,6 +310,35 @@ begin
   Result := rsDtDialogDescription;
 end;
 
+{ TTyFrameFileDescriptor }
+
+constructor TTyFrameFileDescriptor.Create;
+begin
+  inherited Create;
+  Name := 'TyControls frame';       // internal id (File > New list)
+  ResourceClass := TTyFrame;        // generated class descends from TTyFrame
+  UseCreateFormStatements := False; // a frame is created by the view that hosts it
+  DeclareClassVariable := False;    // ... so it has no global instance either
+  // The generated `uses tyControls.Frame` has to resolve in a project that has no TyControls
+  // form yet.
+  RequiredPackages := 'tycontrols';
+end;
+
+function TTyFrameFileDescriptor.GetInterfaceUsesSection: string;
+begin
+  Result := inherited GetInterfaceUsesSection + ', Forms, Controls, tyControls.Frame';
+end;
+
+function TTyFrameFileDescriptor.GetLocalizedName: string;
+begin
+  Result := rsDtFrameName;
+end;
+
+function TTyFrameFileDescriptor.GetLocalizedDescription: string;
+begin
+  Result := rsDtFrameDescription;
+end;
+
 { TTyApplicationDescriptor }
 
 constructor TTyApplicationDescriptor.Create;
@@ -389,6 +434,8 @@ begin
   // File > New > "TyControls Dialog": a unit whose form descends from TTyDialog (close-only,
   // non-resizable modal), pre-fitted with a top-aligned title bar.
   RegisterProjectFileDescriptor(TTyDialogFileDescriptor.Create);
+  // File > New > "TyControls Frame": a unit whose frame descends from TTyFrame.
+  RegisterProjectFileDescriptor(TTyFrameFileDescriptor.Create);
   // The themed main form (title bar + style controller). Intentionally NOT registered as a
   // New-item (so it doesn't appear in File > New) —it only makes sense as an application's
   // root window. The instance is kept alive for the whole IDE session because the "TyControls

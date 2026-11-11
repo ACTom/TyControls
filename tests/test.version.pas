@@ -24,7 +24,7 @@ uses
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface, tyControls.Frame,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
   tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
   tyControls.GridPanel, tyControls.GroupBox, tyControls.HSColorPicker,
@@ -503,7 +503,7 @@ initialization
     TTySavePictureDialog, TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification,
     TTyIconBrowserDialog]);
   Reg([
-    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog,
+    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog, TTyFrame,
     TTyToolWindowBar, TTyToolWindowManager, TTyToolWindow, TTyToolWindowActions]);
   { The data-aware controls (tycontrols_db). }
   Reg([

@@ -48,7 +48,7 @@ function TbPartKeyUnits: TStringArray;                          { FOR THE TESTS 
   parent of one, or one of APreview (nil: none). The coverage
   check marks the rest "not a known typeKey" -- most often a typo. The catalogue alone is
   not enough: it is generated from light.tycss and leaves out what the base deliberately
-  does not define (TyFormSurface, TyGridPanel). }
+  does not define (TyFormSurface, TyGridPanel, TyFrame). }
 function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
 { ANotShown: in ADoc, not in APreview nor up the type key chain of a key in it.
   ADefaultLook: in APreview, and neither it nor any key up its chain in ADoc or ABase.
@@ -71,7 +71,7 @@ const
   { Checked against the sources by TTbCoverageTests.TestThePartTableMatchesTheSources: every
     typeKey a unit names in a string literal is in its row; what a row adds by hand (keys
     built by concatenation) must be a catalogue typeKey. }
-  cTbPartRows: array[0..52] of TTbPartRow = (
+  cTbPartRows: array[0..53] of TTbPartRow = (
     (U: 'tyControls.ActivityIndicator'; K: 'TyActivityIndicator,TyActivityIndicatorFill'),
     (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertAction,TyAlertClose'),
     (U: 'tyControls.Badge'; K: 'TyBadge'),
@@ -91,6 +91,7 @@ const
     (U: 'tyControls.ExPanel'; K: 'TyExPanel,TyExPanelHeader'),
     (U: 'tyControls.Form'; K: 'TyCaptionButton,TyForm,TyTitleBar'),
     (U: 'tyControls.FormSurface'; K: 'TyFormSurface'),
+    (U: 'tyControls.Frame'; K: 'TyForm,TyFrame'),
     (U: 'tyControls.GlyphButtons'; K: 'TyGlyphContainerButton,TySpeedButton'),
     (U: 'tyControls.Grid'; K: 'TyGrid,TyGridActiveCell,TyGridButton,TyGridCell,TyGridCellAlt,' +
       'TyGridCellMarked,TyGridCellSelectedHover,TyGridCellSelectedInactive,TyGridCellSorted,' +

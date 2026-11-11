@@ -29,6 +29,7 @@ uses
   { The classes the registrations name. Resolved by NAME through the class registry (the
     initialization block below), the same trick test.version.pas uses. }
   tyControls.Base, tyControls.Component, tyControls.Controller, tyControls.Form,
+  tyControls.Frame,
   tyControls.FormSurface, tyControls.Menu, tyControls.Popover, tyControls.IconFont,
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
@@ -604,6 +605,7 @@ initialization
     designtime/tyControls.Design.pas. }
   RegisterClasses([
     TTyGraphicControl, TTyCustomControl, TTyComponent, TTyStyleController, TTyForm,
+    TTyFrame,
     TTyFormSurface, TTyPopupMenu, TTyPopover, TTyIconFont, TTyCharImage, TTyGlyphButtonBase,
     TTyRibbonPage, TTyCustomFileDialog, TTyFilterComboBox, TTySelectPathDialog,
     TTyShellComboBox, TTyShellListView, TTyShellTreeView,

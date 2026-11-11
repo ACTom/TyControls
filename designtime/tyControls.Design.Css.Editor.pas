@@ -27,7 +27,7 @@ implementation
 uses
   Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics, Dialogs, TypInfo,
   SynEdit,
-  tyControls.Types, tyControls.Base, tyControls.StyleModel,
+  tyControls.Types, tyControls.Base, tyControls.Frame, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
   tyControls.Css.Complete, tyControls.Css.AddOns, tyControls.Controller, tyControls.Dialogs,
   tyControls.Design.CssEditKit;
@@ -272,7 +272,8 @@ begin
     { the control's own controller (published), or the process-wide default -- either way a model
       whose base layer is the default theme, so DefaultValueFor resolves "theme, then default". }
     if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
-    else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
+    else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller
+    else if comp is TTyFrame then ctrl := TTyFrame(comp).Controller;
     if ctrl = nil then ctrl := TyDefaultController;
   end;
   dlg := TTyStyleOverrideDialog.CreateFor(ctrl, typeKey, selectorMode);

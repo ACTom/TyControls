@@ -69,9 +69,10 @@ const
     + 'fresh-streams.txt';
 
   { The classes not split, each with its reason. }
-  CNotSplit: array[0..16] of string = (
+  CNotSplit: array[0..17] of string = (
     'TTyForm',              // designer base classes, the TForm role (plan Q5)
     'TTyDialog',            // same
+    'TTyFrame',             // designer base class, the TFrame role
     'TTyPopupMenu',         // LCL does not split TPopupMenu (menus.pp:465)
     'TTyImagesMenu',        // same family
     'TTyMenuEx',            // same family

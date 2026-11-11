@@ -33,6 +33,14 @@ msgstr "TyControls 对话框"
 msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered —design your own dialog content and buttons."
 msgstr "一个主题化的自绘模态对话框（TTyDialog）：无边框、仅含关闭按钮、不可缩放、居中显示——在其中设计你自己的对话框内容与按钮。"
 
+#: tycontrols.design.newitems.rsdtframename
+msgid "TyControls Frame"
+msgstr "TyControls 框架"
+
+#: tycontrols.design.newitems.rsdtframedescription
+msgid "An embeddable view descending from TTyFrame: design it like a form and put it on a TyControls host at run time. It shows the host's themed background, and the controls on it blend into the host."
+msgstr "一个继承自 TTyFrame 的可嵌入视图：像窗体一样在设计器里设计，运行时放进 TyControls 的宿主。它显示宿主的主题背景，上面的控件与宿主融为一体。"
+
 #: tycontrols.design.newitems.rsdtappname
 msgid "TyControls Application"
 msgstr "TyControls 应用程序"

@@ -30,7 +30,7 @@ uses
   tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.Calculator, tyControls.CalcEdit,
   tyControls.CalcCurrencyEdit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
-  tyControls.ScrollBar, tyControls.Form,
+  tyControls.ScrollBar, tyControls.Form, tyControls.Frame,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
   tyControls.CircularProgress, tyControls.ActivityIndicator, tyControls.ActivityBar,
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
@@ -122,6 +122,9 @@ begin
     // TTyDialog is a distinct designer base class (close-only modal dialog): register it so
     // `class(TTyDialog)` resolves as an ancestor and the OI shows its chrome, same as TTyForm.
     FormEditingHook.RegisterDesignerBaseClass(TTyDialog);
+    // TTyFrame, the frame counterpart: `class(TTyFrame)` opens as a frame with Controller,
+    // StyleClass and StyleOverride in the OI, not as a plain TFrame without them.
+    FormEditingHook.RegisterDesignerBaseClass(TTyFrame);
   end;
   // The palette is split into functional groups so no single tab is overcrowded. NOTE: both
   // scripts/gen-icons.ps1 and tests/test.paletteicons.pas parse EVERY

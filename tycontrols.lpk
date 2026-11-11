@@ -246,6 +246,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.FormSurface"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Frame.pas"/>
+        <UnitName Value="tyControls.Frame"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ListBox.pas"/>
         <UnitName Value="tyControls.ListBox"/>
       </Item>

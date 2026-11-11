@@ -13,7 +13,7 @@ uses
   tyControls.Types, tyControls.Component, tyControls.Base, tyControls.Controller,
   tyControls.StyleModel, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
-  tyControls.Ribbon, tyControls.Popover, tyControls.Form, tyControls.Menu,
+  tyControls.Ribbon, tyControls.Popover, tyControls.Form, tyControls.Frame, tyControls.Menu,
   tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
@@ -342,7 +342,8 @@ begin
     key := sty.GetStyleTypeKey;
     // Both base classes expose a published Controller but share no ancestor.
     if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
-    else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
+    else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller
+    else if comp is TTyFrame then ctrl := TTyFrame(comp).Controller;
   end
   else if comp is TTyCustomPopover then   { any popover, a third party's too }
   begin
@@ -711,6 +712,9 @@ begin
   // variant list was plain free text. Same editor —it knows the popover's way in.
   RegisterPropertyEditor(TypeInfo(string), TTyCustomPopover, 'StyleClass',
     TTyStyleClassPropertyEditor);
+  // TTyFrame descends from TFrame, off both control bases; it is styleable like them.
+  RegisterPropertyEditor(TypeInfo(string), TTyFrame, 'StyleClass',
+    TTyStyleClassPropertyEditor);
   { === Guided string properties ===============================================================
     A published string with a KNOWN vocabulary is unusable in the Object Inspector until an
     editor offers it: the inspector shows a bare edit box, and nothing on screen says what may
@@ -738,6 +742,8 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyFrame, 'StyleOverride',
+    TTyStyleOverrideProperty);       // control-level, as on the two bases
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
   // On the custom classes (plan D2), so a third-party Lucide list or font that publishes
   // License gets the same '...'.
@@ -809,10 +815,11 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupListBox, 'KeyField', TLookupFieldProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupListBox, 'ListField', TLookupFieldProperty);
   // Version: read-only version display + design-time About dialog, on every registered class.
-  // FIVE base classes cover the whole library through inheritance: the two control bases take
+  // A few base classes cover the whole library through inheritance: the two control bases take
   // every visual control, TTyComponent every non-visual one (TTyStyleController included —
-  // it descends from TTyComponent), and the last two are the odd ancestries that cannot
-  // (TTyPopupMenu descends from TPopupMenu, TTyForm from TForm), so they need their own line.
+  // it descends from TTyComponent), and the rest are the odd ancestries that cannot
+  // (TTyPopupMenu descends from TPopupMenu, TTyForm from TForm, TTyFrame from TFrame), so
+  // they need their own line.
   // tests/test.version.pas READS THESE LINES: it parses the designtime sources for the
   // registrations and asserts every registered component descends from one of them, so a
   // component that gains the property off this tree —and would therefore show a dead entry
@@ -828,6 +835,7 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyCustomVirtualImageList, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'Version', TTyVersionEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyFrame, 'Version', TTyVersionEditor);
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —
   // hide it from the Object Inspector so it is neither shown nor editable.
   RegisterPropertyEditor(TypeInfo(TFormBorderStyle), TTyForm, 'BorderStyle', THiddenPropertyEditor);
