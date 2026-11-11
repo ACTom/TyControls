@@ -19,7 +19,8 @@
 |---|---|
 | `TyTabSet` | 外框键。**但本控件是"纯标题条"，只用到它的 `border-color` + `border-width`**——那条页签下方的基线。见下方说明 |
 | `TyTab` | 每个页签头：`:normal` / `:hover` / `:active`（选中）。溢出时的左右滚动箭头也取 `TyTab:normal` 的文字色 |
-| `TyTabClose` | 关闭 × 悬停时垫在字形下的底片 |
+| `TyTab.preview` | 预览页签（状态里 `Preview = True`）的页签头；内置主题不写这条规则，斜体来自令牌 `--tab-preview-font-style` |
+| `TyTabClose` | 关闭 × 悬停时垫在字形下的底片（图钉上也有） |
 
 > **它此前借的 `'TyTabControl'` 是一个不对应任何控件的名字。** 全库只有三个页签族键声明：
 > `TyPageControl`（`TTyPageControl`）、`TyTabSheet`（`TTyTabSheet`）、以及本控件——库里根本没有
@@ -71,6 +72,7 @@ uses tyControls.TabSet;
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
+| `MiddleClickClose` | `Boolean` | `True` | 鼠标中键点页签即关闭它，走的是关闭 × 的同一条路（`OnTabClose` 照样可以否决）。只在 `TabsClosable = True` 时生效，固定（Pinned）的页签不会被中键关掉。见 §6。 |
 | `Images` | `TCustomImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
 | `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
 | `OnGetImageIndex` | 事件 | `nil` | `procedure(Sender; AIndex; var AImageIndex)`；`-1` = 无图标。 |
@@ -114,6 +116,8 @@ uses tyControls.TabSet;
 | `OnChanging` | `TTyTabChangingEvent` | 切换**之前**；签名 `(Sender; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即可**否决**切换（不改 `TabIndex`、不触发 `OnChange`、无淡入）。`csLoading` 流式加载期间**不**触发。 |
 | `OnTabClose` | `TTyTabCloseEvent` | 点击页签头关闭 × 时触发；签名 `(Sender; AIndex: Integer; var AllowClose: Boolean)`，进入时 `AllowClose = True`。放行则控件自动从 `Tabs` 移除该页签并修正 `TabIndex`；置 `False` 否决关闭。 |
 | `OnReorder` | `TTyTabReorderEvent` | 一次拖拽重排手势提交后触发一次；签名 `(Sender; AFromIndex, AToIndex: Integer)` 报告净移动。纯点击不触发。 |
+| `OnGetTabState` | `TTyTabGetStateEvent` | 逐个页签提供状态；签名 `(Sender; AIndex: Integer; var AState: TTyTabState)`。控件每次量尺寸、绘制、命中测试都会来问，不保存答案，所以处理器必须便宜、不能有副作用。见 §6「逐页签状态」。 |
+| `OnTabPinClick` | `TTyTabPinClickEvent` | 点了固定页签上的图钉；签名 `(Sender; AIndex: Integer)`。控件自己什么都不做（不关闭、不切换），要不要取消固定由宿主决定。 |
 
 > 除上表外，`TTyTabSet` 还暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
@@ -217,6 +221,38 @@ end;
 ```
 
 `TabCaption(AIndex)`（基类 public 方法）安全返回指定索引的标题，越界返回 `''`。
+
+### 逐页签状态
+
+`Tabs` 只是一串字符串，页签的"未保存 / 预览 / 固定 / 提示 / 颜色"没有地方存，所以都由 `OnGetTabState` 现问现答：
+
+```pascal
+uses tyControls.Types, tyControls.TabStrip, tyControls.TabSet;
+
+Bar.TabsClosable    := True;
+Bar.OnGetTabState   := @BarGetTabState;
+Bar.OnTabPinClick   := @BarTabPinClick;
+
+procedure TMainForm.BarGetTabState(Sender: TObject; AIndex: Integer; var AState: TTyTabState);
+var
+  doc: TDocument;
+begin
+  doc := FDocuments[AIndex];            // 自己的数据，和 Tabs 同序
+  AState.Modified := doc.Dirty;         // 关闭 × 的位置画圆点，指针移上来变回 ×
+  AState.Preview  := doc.IsPreview;     // 标题斜体（主题的 --tab-preview-font-style）
+  AState.Pinned   := doc.Pinned;        // 关闭 × 的位置画图钉
+  AState.Hint     := doc.FileName;      // 指针停在这个页签上时的提示（要 ShowHint）
+  if doc.ReadOnly then AState.TextColor := TyRGB(160, 110, 0);
+end;
+
+procedure TMainForm.BarTabPinClick(Sender: TObject; AIndex: Integer);
+begin
+  FDocuments[AIndex].Pinned := False;   // 点图钉不会关闭页签，做什么由这里决定
+  Bar.InvalidateTabStates;              // 数据变了，叫控件重新来问
+end;
+```
+
+处理器会被调用得很频繁，只做读取；数据变了调 `InvalidateTabStates`。控件**不会**把固定的页签自己排到前面——顺序是 `Tabs` 的，固定时由程序 `Tabs.Move` 到前面；拖拽时固定的那一段不会被拖散。中键点页签关闭它（`MiddleClickClose`，默认开，要 `TabsClosable = True`，固定的页签不关）。完整规则、主题令牌和扩展点见 [`pagecontrol.md` §6「逐页签状态」](pagecontrol.md)。
 
 ---
 

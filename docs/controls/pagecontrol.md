@@ -19,6 +19,7 @@
 | 页控件外框 | `TyPageControl` | `.tycss` 中控件本体的选择器前缀 |
 | 页面板 | `TyTabSheet` | 每页背景 |
 | 页签头 | `TyTab` | 单个标签头（`:active` 为当前页） |
+| 预览页签头 | `TyTab.preview` | 状态里 `Preview = True` 的页签头用这个变体；内置主题没有写这条规则，斜体来自令牌 `--tab-preview-font-style`（见 §6「逐页签状态」） |
 | 关闭 × 底片 | `TyTabClose` | `TabsClosable = True` 时悬停底片 |
 
 （标签头沿用 `TyTab` / `TyTabClose` 选择器；控件本体用 `TyPageControl`，主题未显式定义时由 seed 派生默认值。）
@@ -44,6 +45,10 @@
 | `RaggedRight` | `Boolean`（published, 默认 False） | `MultiLine` 打开时，一行内的页签是否保持自然宽度、行尾留白。**默认 False = 拉伸铺满整行**——这是 LCL 的极性（`TCS_RAGGEDRIGHT` 这个样式位是属性为 **True** 时才设的，不设它 comctl32 才拉伸）。`MultiLine` 关着时无效 |
 | `RowCount` | `Integer`（public, **只读**） | 折出来的行数：无页签时 0，`MultiLine` 关着时恒 1。行数是布局的**结果**不是输入，所以没有 setter；也正因为没有 setter 才不能 published（`TWriter.WriteProperty` 会跳过无 setter 的属性，对象检查器则报"无法读取"） |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
+| `MiddleClickClose` | `Boolean`（published, 默认 True） | 鼠标中键点页签即关闭它，与点关闭 × 走同一条路（`OnTabClose` 照样可以否决）。只在 `TabsClosable = True` 时生效；固定的页签不会被中键关掉。见 §6「逐页签状态」 |
+| `OnGetTabState` | `procedure(Sender; AIndex; var AState: TTyTabState)` | 逐个页签提供状态：未保存、预览、固定、提示文字、文字颜色。见 §6「逐页签状态」 |
+| `OnTabPinClick` | `procedure(Sender; AIndex)` | 点了固定页签上的图钉。控件自己什么都不做，要不要取消固定由宿主决定 |
+| `TabState(i)` / `TabSlotMark(i)` / `TabSlotRect(i)` / `InvalidateTabStates` | public 方法 | 读某个页签此刻的状态、它的槽位此刻画的是什么、槽位的矩形；状态变了叫控件重新来问。见 §6「逐页签状态」 |
 | `Images` | `TCustomImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型照 LCL 写 `TCustomImageList`：本库的 `TTyVirtualImageList`（和 Lucide 图像列表）是它的后代，按需渲染矢量图；LCL 自己的 `TImageList` 也能赋，按位图画。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil。列表自己发出的变化（换图、删图、挪图）同样会重新量页签并重画 |
 | `ImagesWidth` | `Integer`（published, 默认 0） | 图标渲染边长（逻辑像素）。`0` = 跟随主题令牌 `--tab-icon-size`（默认 16），密度换挡时图标跟着走；非 0 = 钉死。LCL 的 `ImagesWidth` 是从多分辨率列表里**挑一档**，本库的虚拟列表要多大画多大，所以这里是一个尺寸请求。负值按 0 处理 |
 | `OnGetImageIndex` | `procedure(Sender; AIndex; var AImageIndex)` | 图标索引的**最终决定权**。在读过该页自己的 `ImageIndex` **之后**触发，`AImageIndex` 以那个值作**种子**——所以处理器看得见自己在覆盖什么，没有处理器时逐页的值原样生效。与 `TTyTreeView.OnGetImageIndex` 同一条优先级规则（控件级列表 → 逐项覆盖 → 事件最后），不另立第三套 |
@@ -128,6 +133,42 @@ PageCtrl.ActivePage := Pg;           // 切到该页
   - 折出来的行会一直吃条带厚度，行数够多时页面体会被挤没（`InsetForBand` 会把体裁到零）。comctl32 同样如此。
 
 - **页签图标**：`Images`（控件级列表）+ 每页的 `ImageIndex`（逐项覆盖）+ `OnGetImageIndex`（最终决定权），三层的顺序与 `TTyListView` / `TTyTreeView` 一致。图标槽位在**测量阶段**就预留进标题盒（`--tab-icon-size` + `--tab-icon-gap`），所以页签会按图标宽度**变宽**，它旁边的页签一个像素都不动。没有 `Images` 时整条路径不产生任何开销、也不改变任何一个像素。`tpLeft` / `tpRight` 或 `MultiLine` 下，标题、图标、页签的显示与增删会改变条带的厚度，页面随即按新厚度重新排布（从前要等下一次改尺寸）。
+
+- **逐页签状态（编辑器式页签）**：未保存的圆点、预览页签的斜体、固定页签的图钉、每个页签自己的提示和文字颜色，都由 `OnGetTabState` 一个事件逐个页签提供——和 `OnGetImageIndex` 是同一个思路，所以页签只是一串字符串的 `TTyTabSet` 也用得上。
+
+  ```pascal
+  type
+    TTyTabState = record
+      Modified: Boolean;     // 未保存
+      Preview: Boolean;      // 预览页签
+      Pinned: Boolean;       // 固定
+      Hint: string;          // 指针停在这个页签上时的提示
+      TextColor: TTyColor;   // 标题颜色；alpha 为 0（没填过）= 用主题的
+    end;
+
+  procedure TMainForm.TabsGetTabState(Sender: TObject; AIndex: Integer; var AState: TTyTabState);
+  var
+    doc: TDocument;
+  begin
+    doc := FDocuments[AIndex];
+    AState.Modified := doc.Dirty;
+    AState.Preview  := doc.IsPreview;
+    AState.Pinned   := doc.Pinned;
+    AState.Hint     := doc.FileName;
+    if doc.ReadOnly then AState.TextColor := TyRGB(160, 110, 0);
+  end;
+  ```
+
+  - **控件不保存任何状态，每次量尺寸、绘制、命中测试都重新问一遍。** 所以页签重排、关闭、改名之后不会有哪个答案对不上号；代价是处理器会被调用得很频繁，**必须便宜、不能有副作用**：从自己的数据里读出答案就返回，不要在里面查文件、改控件，也不要反过来问控件的几何（`TabRect`、`TabSlotRect` 这些会重新布局，又会回到这个事件里）。读标题用 `TabCaption(i)` 是安全的。进入时 `AState` 是空的（子类可以重写 `GetTabStateAt` 先填上页签自己带的状态，事件仍然最后说了算）。
+  - **数据变了要告诉控件**：调 `InvalidateTabStates`。状态会改变页签的宽度（多出一个槽位、换了字体），在侧边或折行的条带上还会改变条带厚度，这个调用把重新布局和重画都做了。
+  - **槽位**：关闭 × 所在的那个方块。`Modified` 的页签在这里画一个圆点；指针移到这个页签上，圆点变回关闭 ×，点它照常关闭。`Pinned` 的页签在这里画图钉；既固定又未保存的画圆点，指针移上去变图钉。`TabsClosable = False` 的条带上，有圆点或图钉要画的页签同样会留出这个槽位，位置和关闭 × 的位置一样（只有这几个页签变宽）；那里的圆点只是个标记，点它等于点页签。`TabSlotMark(i)` 返回槽位此刻画的是什么（`tsmNone` / `tsmClose` / `tsmModified` / `tsmPin`），`TabSlotRect(i)` 返回槽位的矩形——画标记用的和判断点击用的是同一个矩形，四个 `TabPosition` 和镜像下都是。
+  - **点图钉**触发 `OnTabPinClick(Sender, AIndex)`，**不会关闭页签**，也不切换选中；没接事件就什么都不发生。要不要取消固定由宿主决定（改自己的数据，再调 `InvalidateTabStates`）。
+  - **预览**：标题用主题给预览页签的样子。字体样式是令牌 `--tab-preview-font-style`（内置主题里是 `italic`；写 `normal` 就不倾斜），其余的写在变体规则 `TyTab.preview { … }` 里（颜色、字重、字号、背景，以及 `TyTab.preview:hover` / `:active`）。页签的宽度按它实际用的字体量。用令牌而不是规则来管斜体，是因为 tycss 没有 `font-style` 属性；令牌放在基础主题里，所有皮肤都能拿到，也可以在单个控件的 `StyleOverride` 里写 `--tab-preview-font-style: normal;` 单独关掉。
+  - **固定的页签不会自己排到前面。** 页签的顺序是宿主的（`Tabs` 里的字符串、加进来的页），控件不会背着程序改索引。固定一个页签时由宿主把它挪到前面（`MovePage` / `Tabs.Move`）。控件管的是拖拽：拖动时，没固定的页签越不过它前面的固定页签，固定的页签也越不过它后面没固定的页签，会停在最后一个不违反这两条的位置——宿主排好的那一段固定页签，用户拖不散。`OnReorder` 报的是实际停下的位置。`TyPinnedDropIndex(from, to)` 是这条规则本身，可以单独调用。
+  - **提示**：指针停在一个页签上，而它的 `Hint` 不为空，显示的就是它；为空则显示控件自己的 `Hint`。移到另一个页签会重新问一次。和别的提示一样受 `ShowHint`（或 `ParentShowHint`）控制，`OnShowHint` 仍然最后经手。
+  - **文字颜色**：`TextColor` 是这个页签标题的颜色，平时、指针悬停、选中时都用它（悬停时换回主题色的话，靠颜色标出来的页签会随着指针一闪一闪）；未保存的圆点跟标题同色，关闭 × 和图钉保持主题的颜色。控件禁用时一律用主题的颜色。
+  - **中键关闭**：`MiddleClickClose`（默认 `True`）。中键在同一个页签上按下并松开，就像点了它的关闭 ×：先问 `OnTabClose`，没被否决才关。只在这个页签本来就能关（`TabsClosable = True`）时有效；固定的页签不关。
+  - **主题**：圆点直径是 `--tab-modified-dot-size`（默认 8px）；圆点和图钉可以用图标字体换掉，令牌是 `--glyph-tab-modified` 和 `--glyph-tab-pin`（用法同 `--glyph-close`）。槽位的大小和位置还是 `--tab-close-size` / `--tab-gap` / `--tab-margin`，悬停底片还是 `TyTabClose`（图钉上也有）。要画别的标记（转圈、锁），子类重写 `DrawTabSlotMark`。
 
 - **右到左镜像**：`BiDiMode := bdRightToLeft` 时整条标签带镜像——第 0 页的页签在**最右**，往左排；关闭 × 挪到每个页签头的**左**边（图标也跟着挪到右边）；两个溢出箭头对调两端并且各自转向（"上一批"那个永远在阅读起点，也就是镜像时的右端）；向后滚动时标签带往**右**滑；`←/→` 跟着眼睛走（左键=下一页）。`Home/End` 与 `Ctrl+Tab` 是**逻辑**首尾/循环，不翻。
   **左/右边标签的镜像是"换边"，不是"倒序"**：镜像反射的是**屏幕横轴**。顶/底条带的主轴就是横轴，所以反射把页签顺序倒过来（一直如此）；左/右条带的主轴是竖的，横轴反射碰不到它——反射到的是**次轴**，于是 `tpLeft` 的条带整条搬到**右**边（`tpRight` 搬到左边），条带内每一行里的关闭 × 与图标也各自换端，而**上下顺序不变**，`↑/↓` 也不对调。这与"`Home/End` 是逻辑首尾"是同一条判据：横向反射不可能给一条竖着走的行程重新排序。相应地，页面体现在会被扣在**镜像后**的那条边上。
