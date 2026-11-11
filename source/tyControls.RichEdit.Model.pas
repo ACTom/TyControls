@@ -15,9 +15,12 @@ unit tyControls.RichEdit.Model;
   When a loader is installed (the on-demand RTF reader), nil means "not parsed yet" instead,
   and every reader goes through EnsureParsed, which asks the loader for that paragraph.
 
-  The only public way to change a document is a command (TTyRichDocument.Execute, added by the
-  commands task). The primitives commands are built from are protected here; each returns a
-  TTyRichUndoData that Revert puts back exactly. }
+  The only public way to change a document is a command: TTyRichDocument.Execute runs it and
+  keeps it in the document's undo history. The primitives commands are built from are
+  protected here; each returns a TTyRichUndoData that Revert puts back exactly. TTyRichCommand
+  hands them on to its subclasses (built-in ones in tyControls.RichEdit.Commands, or a
+  program's own), only while the document is running that command, and keeps what they
+  return, so undo is the records reverted newest first and redo is the command run again. }
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
@@ -301,6 +304,13 @@ type
 
   TTyRichDocument = class;
 
+  { Count paragraphs in a row that had the same old value: a format change over two million
+    plain paragraphs keeps one entry, not two million pointers. }
+  TTyRichOldData = record
+    Data: TTyRichParaData;
+    Count: Integer;
+  end;
+
   { What a primitive took away, kept so that Revert can put it back: the removed text's pieces
     (with the data of the paragraphs that followed their separators) and the old data of the
     paragraphs that survived. It holds references, no text. Free it when the command that made
@@ -312,7 +322,10 @@ type
     FInserted: TTyRichPos;        // characters the change put at FChange.Pos
     FRemoved: TTyRichPieces;      // what it took away there
     FFirstPara: Integer;
-    FOldData: array of TTyRichParaData;
+    FOldData: array of TTyRichOldData;   // run-length: one reference per entry
+    FOldCount: Integer;
+    procedure AddOld(D: TTyRichParaData);
+    procedure SealOld;
   public
     destructor Destroy; override;
     { Bytes this record keeps alive, for the history's memory limit (the paragraph values
@@ -345,7 +358,111 @@ type
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); virtual; abstract;
   end;
 
+  TTyRichRange = record
+    Pos: TTyRichPos;
+    Len: TTyRichPos;
+  end;
+
+  { A change to a document, and the one way to make one: TTyRichDocument.Execute runs it and
+    keeps it for undo. A subclass changes the document in DoExecute through the protected
+    InsertText .. MarkTable below - they work only while the document runs this command, and
+    each keeps what its primitive returned. So the inherited DoUndo (revert those records,
+    newest first) and DoRedo (DoExecute again: after an exact undo the same arguments give
+    the same result) are already right for a command that only calls them. }
+  TTyRichCommand = class
+  private
+    FRecords: array of TTyRichUndoData;
+    FRecordCount: Integer;
+    FSummary: TTyRichChange;
+    FChanged: Boolean;
+    FDoc: TTyRichDocument;    // the document running this command, nil otherwise
+    procedure CheckRunning(ADoc: TTyRichDocument);
+    function Keep(AUndo: TTyRichUndoData): TTyRichChange;
+    procedure AddSummary(const AChange: TTyRichChange);
+    procedure ResetSummary;
+    procedure FreeRecords;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); virtual; abstract;
+    { Reverts the kept records, newest first. }
+    procedure DoUndo(ADoc: TTyRichDocument); virtual;
+    { Runs DoExecute again. }
+    procedure DoRedo(ADoc: TTyRichDocument); virtual;
+
+    { The document's primitives (see TTyRichDocument), for DoExecute. Each returns what the
+      change did. Called when this command is not being run by ADoc, they raise. }
+    function InsertText(ADoc: TTyRichDocument; APos: TTyRichPos; const AText: UTF8String;
+      AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichChange;
+    function InsertObject(ADoc: TTyRichDocument; APos: TTyRichPos; AObject: TTyRichObject;
+      AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichChange;
+    function DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichChange;
+    function ApplyCharFormat(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+      AMask: TTyCharFormatMask; const AValue: TTyCharFormat): TTyRichChange;
+    function ApplyParaFormat(ADoc: TTyRichDocument; AFirstPara, ALastPara: Integer;
+      AMask: TTyParaFormatMask; const AValue: TTyParaFormat): TTyRichChange;
+    function MarkTable(ADoc: TTyRichDocument; AFirstPara: Integer; ATable: TTyRichTable;
+      const ACellParas: array of Integer): TTyRichChange;
+
+    { For a command made of commands: runs, undoes or redoes AChild as part of this one, and
+      counts its change as this command's. A child whose execute or redo raises is reverted
+      first. }
+    procedure ExecuteChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+    procedure UndoChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+    procedure RedoChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+    { Counts the change of AChild, which has already run, as this command's. }
+    procedure AdoptChange(AChild: TTyRichCommand);
+    { For TryMerge: takes ANext's records (they are reverted before this command's own) and
+      its change. }
+    procedure TakeOver(ANext: TTyRichCommand);
+    property RecordCount: Integer read FRecordCount;
+  public
+    destructor Destroy; override;
+    { False: Execute leaves the document alone and frees the command. }
+    function CanExecute(ADoc: TTyRichDocument): Boolean; virtual;
+    { ANext ran right after this command; True when this command took it over (TakeOver),
+      and the history then frees ANext. }
+    function TryMerge(ANext: TTyRichCommand): Boolean; virtual;
+    { For the undo menu. }
+    function Description: string; virtual;
+    { The characters the command changed, in the document as it left it. }
+    function ChangedRange: TTyRichRange;
+    { Bytes the history keeps for it (MaxUndoBytes). }
+    function MemSize: Int64; virtual;
+    { Its last run changed something; one that did not is not kept in the history. }
+    property Changed: Boolean read FChanged;
+  end;
+
+  TTyRichHistoryEntry = record
+    Cmd: TTyRichCommand;
+    Bytes: Int64;
+  end;
+
   TTyRichDocument = class
+  private
+    // history
+    FUndo: array of TTyRichHistoryEntry;
+    FUndoCount: Integer;
+    FRedo: array of TTyRichHistoryEntry;
+    FRedoCount: Integer;
+    FHistoryBytes: Int64;
+    FMaxUndoBytes: Int64;
+    FMergeBroken: Boolean;
+    FRunning: TTyRichCommand;
+    FUpdateCount: Integer;
+    FBlock: array of TTyRichCommand;
+    FBlockCount: Integer;
+    FBlockDescription: string;
+    FHold: Integer;
+    FPending: TTyRichChange;
+    FHasPending: Boolean;
+    procedure RunStep(ACmd: TTyRichCommand; AStep: Integer);
+    procedure Flush;
+    procedure PushUndo(ACmd: TTyRichCommand);
+    procedure DropOldestUndo;
+    procedure ClearRedo;
+    procedure ClearHistory;
+    procedure TrimHistory;
+    procedure SetMaxUndoBytes(AValue: Int64);
+    procedure CheckIdle(const AWhat: string);
   private
     FText: TTyRichText;
     FFormats: TTyFormatPool;
@@ -366,6 +483,7 @@ type
     FFirstData: TTyRichParaData;
     FLiveData: Integer;
     FEditing: Integer;
+    FValuesGone: Boolean;
     procedure Init;
     procedure SetDefaults(const AFormat: TTyCharFormat);
     procedure TextParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
@@ -452,6 +570,37 @@ type
       between AIndex and the cell. }
     function CellParas(AIndex: Integer; ACell: TTyRichCell; out AFirst, ALast: Integer): Boolean;
 
+    { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
+      returns False or raises. False: ACmd.CanExecute said no, and nothing changed. A command
+      that changed nothing is not kept. Consecutive typing merges into one step until
+      BreakMerge, an Undo or Redo, or any other command. A new command drops the redo side.
+      Outside BeginUpdate .. EndUpdate it raises OnChange once. Raises inside a running
+      command; if ACmd raises, what it did is reverted first. }
+    function Execute(ACmd: TTyRichCommand): Boolean;
+    { One step back / forward, one OnChange. Nothing to undo / redo: nothing happens. They
+      raise inside BeginUpdate .. EndUpdate or a running command. }
+    procedure Undo;
+    procedure Redo;
+    function CanUndo: Boolean;
+    function CanRedo: Boolean;
+    function UndoDescription: string;    // '' when there is nothing
+    function RedoDescription: string;
+    { Nested. The commands executed until the outermost EndUpdate become one undo step
+      (TTyRichCompositeCommand, described by ADescription of the outermost BeginUpdate, or by
+      its only command), and that EndUpdate raises the block's one OnChange covering all of
+      it. A block that changed nothing keeps nothing and raises nothing. }
+    procedure BeginUpdate(const ADescription: string = '');
+    procedure EndUpdate;
+    { The caret moved: the next typing does not merge with the typing before. }
+    procedure BreakMerge;
+    property UndoDepth: Integer read FUndoCount;
+    property RedoDepth: Integer read FRedoCount;
+    { What the undo and redo steps keep, as their MemSize when they were stored. }
+    property HistoryBytes: Int64 read FHistoryBytes;
+    { The history's limit: past it the oldest undo steps go, never the newest. 0 or less: no
+      limit. }
+    property MaxUndoBytes: Int64 read FMaxUndoBytes write SetMaxUndoBytes;
+
     { Read it; changing it directly bypasses the model (no undo, no OnChange: the touched
       paragraph's runs are only clipped to its text, new paragraphs are plain). }
     property Text: TTyRichText read FText;
@@ -478,6 +627,16 @@ function TyMergeParaFormat(const ABase: TTyParaFormat; AMask: TTyParaFormatMask;
 function TyRichObjectChar: UTF8String;
 
 implementation
+
+uses
+  tyControls.StrConsts, tyControls.RichEdit.Commands;
+
+const
+  // RunStep
+  StepExecute = 0;
+  StepUndo = 1;
+  StepRedo = 2;
+  DefaultMaxUndoBytes = 64 * 1024 * 1024;
 
 // hashes wrap around on purpose, also in a build with overflow and range checks
 {$PUSH}{$Q-}{$R-}
@@ -1009,7 +1168,7 @@ destructor TTyRichUndoData.Destroy;
 var
   i: Integer;
 begin
-  for i := 0 to High(FOldData) do FDoc.ReleaseData(FOldData[i]);
+  for i := 0 to FOldCount - 1 do FDoc.ReleaseData(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
     if (FRemoved.Pieces[i].Separator <> rsNone) and (FRemoved.Pieces[i].Data <> nil) then
       FDoc.ReleaseData(TTyRichParaData(FRemoved.Pieces[i].Data));
@@ -1019,7 +1178,26 @@ end;
 function TTyRichUndoData.MemSize: Int64;
 begin
   Result := InstanceSize + Length(FRemoved.Pieces) * SizeOf(TTyRichPiece) +
-    Length(FOldData) * SizeOf(Pointer);
+    Length(FOldData) * SizeOf(TTyRichOldData);
+end;
+
+procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
+begin
+  if (FOldCount > 0) and (FOldData[FOldCount - 1].Data = D) then
+  begin
+    Inc(FOldData[FOldCount - 1].Count);
+    Exit;
+  end;
+  if FOldCount = Length(FOldData) then SetLength(FOldData, FOldCount * 2 + 1);
+  FOldData[FOldCount].Data := D;
+  FOldData[FOldCount].Count := 1;
+  Inc(FOldCount);
+  FDoc.AcquireData(D);
+end;
+
+procedure TTyRichUndoData.SealOld;
+begin
+  SetLength(FOldData, FOldCount);
 end;
 
 { ---- runs ---- }
@@ -1184,6 +1362,7 @@ begin
   FPaperHeight := 15840;
   FMarginLeft := 1800;
   FMarginRight := 1800;
+  FMaxUndoBytes := DefaultMaxUndoBytes;
   FText.OnParasChanged := @TextParasChanged;
   FText.OnParaDataDropped := @TextDataDropped;
 end;
@@ -1192,13 +1371,18 @@ destructor TTyRichDocument.Destroy;
 var
   d: TTyRichParaData;
 begin
+  // the history first: its records hold references to the values disposed below
+  ClearHistory;
   if FText <> nil then
   begin
     FText.OnParasChanged := nil;
     FText.OnParaDataDropped := nil;
   end;
   // nothing may outlive the document (the history goes first), so every value still alive is
-  // the text's or the plain sentinel; the text itself never frees data
+  // the text's or the plain sentinel; the text itself never frees data. From here on a
+  // release can only come from a record that outlived its document: it raises instead of
+  // writing into a freed value
+  FValuesGone := True;
   while FFirstData <> nil do
   begin
     d := FFirstData;
@@ -1304,6 +1488,8 @@ end;
 procedure TTyRichDocument.ReleaseData(D: TTyRichParaData);
 begin
   if D = nil then Exit;
+  if FValuesGone then
+    raise ETyRichModel.Create('An undo record outlived the values of its document');
   if D.FRefCount <= 0 then
     raise ETyRichModel.Create('Paragraph data released more often than referenced');
   Dec(D.FRefCount);
@@ -1543,10 +1729,246 @@ begin
   Result.FChange := AChange;
 end;
 
+{ A then B, as one change: the span of both, in the coordinates before A (old) and after B
+  (new). Outside the span the two documents differ only by the shift A and B made. }
+procedure ComposeChange(var A: TTyRichChange; var AHas: Boolean; const B: TTyRichChange);
+var
+  s, e: TTyRichPos;
+  ps, pe: Integer;
+begin
+  if not AHas then
+  begin
+    A := B;
+    AHas := True;
+    Exit;
+  end;
+  s := A.Pos;
+  if B.Pos < s then s := B.Pos;
+  e := A.Pos + A.NewLen;
+  if B.Pos + B.OldLen > e then e := B.Pos + B.OldLen;
+  A.OldLen := (e - s) - (A.NewLen - A.OldLen);
+  A.NewLen := (e - s) + (B.NewLen - B.OldLen);
+  A.Pos := s;
+  ps := A.FirstPara;
+  if B.FirstPara < ps then ps := B.FirstPara;
+  pe := A.FirstPara + A.NewParaCount;
+  if B.FirstPara + B.OldParaCount > pe then pe := B.FirstPara + B.OldParaCount;
+  A.OldParaCount := (pe - ps) - (A.NewParaCount - A.OldParaCount);
+  A.NewParaCount := (pe - ps) + (B.NewParaCount - B.OldParaCount);
+  A.FirstPara := ps;
+  A.Kinds := A.Kinds + B.Kinds;
+end;
+
 procedure TTyRichDocument.Notify(const AChange: TTyRichChange);
 begin
   FModified := True;
+  // inside a command the observers hear one change at the end (Flush; in an update block,
+  // at the outermost EndUpdate)
+  if FHold > 0 then
+  begin
+    ComposeChange(FPending, FHasPending, AChange);
+    Exit;
+  end;
   if Assigned(FOnChange) then FOnChange(Self, AChange);
+end;
+
+{ ---- format walks (one MapParaData pass, see ApplyCharFormat) ---- }
+
+type
+  TTyRichCharWalk = class
+  public
+    Doc: TTyRichDocument;
+    Undo: TTyRichUndoData;
+    K, Last: Integer;
+    APos, B: Int64;
+    PsK, LenK, PsLast, LenLast: Int64;
+    Mask: TTyCharFormatMask;
+    Value: TTyCharFormat;
+    FromIds, ToIds: array of TTyCharFormatId;
+    PrevD, PrevNew: TTyRichParaData;
+    function MapId(AId: TTyCharFormatId): TTyCharFormatId;
+    function Map(AIndex: Integer; AData: Pointer): Pointer;
+  end;
+
+  TTyRichParaWalk = class
+  public
+    Doc: TTyRichDocument;
+    Undo: TTyRichUndoData;
+    First: Integer;
+    Mask: TTyParaFormatMask;
+    Value: TTyParaFormat;
+    FromIds, ToIds: array of TTyParaFormatId;
+    PrevD, PrevNew: TTyRichParaData;
+    function Map(AIndex: Integer; AData: Pointer): Pointer;
+  end;
+
+  TTyRichRevertWalk = class
+  public
+    Doc: TTyRichDocument;
+    Undo: TTyRichUndoData;
+    Run: Integer;
+    Left: Integer;
+    function Map(AIndex: Integer; AData: Pointer): Pointer;
+  end;
+
+function TTyRichCharWalk.MapId(AId: TTyCharFormatId): TTyCharFormatId;
+var
+  x: Integer;
+begin
+  for x := 0 to High(FromIds) do
+    if FromIds[x] = AId then Exit(ToIds[x]);
+  Result := Doc.FFormats.InternChar(TyMergeCharFormat(Doc.FFormats.CharFormat(AId), Mask, Value));
+  SetLength(FromIds, Length(FromIds) + 1);
+  SetLength(ToIds, Length(ToIds) + 1);
+  FromIds[High(FromIds)] := AId;
+  ToIds[High(ToIds)] := Result;
+end;
+
+function TTyRichCharWalk.Map(AIndex: Integer; AData: Pointer): Pointer;
+var
+  d, nd: TTyRichParaData;
+  r, runs: TTyRunArray;
+  whole: Boolean;
+  j, n: Integer;
+  ps, len, lo, hi, s, e: Int64;
+begin
+  d := TTyRichParaData(AData);
+  // not parsed yet: parse it (the slot then holds d)
+  if (d = nil) and (Doc.FLoader <> nil) then d := Doc.DataOf(AIndex);
+  Undo.AddOld(d);
+  Result := d;
+  r := Doc.RunsOfData(d);
+  whole := (AIndex > K) and (AIndex < Last);
+  runs := nil;
+  n := 0;
+  if whole then
+  begin
+    // a paragraph inside the range: every run, no lengths needed; equal values (plain
+    // paragraphs) map to one shared result
+    if (AIndex > K + 1) and (d = PrevD) then
+      nd := PrevNew
+    else
+    begin
+      for j := 0 to High(r) do AppendRun(runs, n, r[j].Start, MapId(r[j].Format), r[j].Obj);
+      SetLength(runs, n);
+      if SameRuns(runs, r) then nd := d
+      else nd := Doc.MakeData(Doc.FormatOfData(d), runs, Doc.CellOfData(d));
+      PrevD := d;
+      PrevNew := nd;
+    end;
+  end
+  else
+  begin
+    if AIndex = K then
+    begin
+      ps := PsK;
+      len := LenK;
+    end
+    else
+    begin
+      ps := PsLast;
+      len := LenLast;
+    end;
+    lo := APos - ps;
+    if lo < 0 then lo := 0;
+    hi := B - ps;
+    if hi > len then hi := len;
+    if len = 0 then
+    begin
+      if (APos <= ps) and (ps < B) then
+        AppendRun(runs, n, 0, MapId(r[0].Format), nil)
+      else
+        Exit;
+    end
+    else if lo >= hi then
+      Exit
+    else
+      for j := 0 to High(r) do
+      begin
+        s := r[j].Start;
+        e := RunEnd(r, j, len);
+        if (s < lo) then AppendRun(runs, n, s, r[j].Format, r[j].Obj);
+        if (e > lo) and (s < hi) then
+        begin
+          if s < lo then s := lo;
+          AppendRun(runs, n, s, MapId(r[j].Format), r[j].Obj);
+        end;
+        if e > hi then
+        begin
+          if s < hi then s := hi;
+          AppendRun(runs, n, s, r[j].Format, r[j].Obj);
+        end;
+      end;
+    SetLength(runs, n);
+    if SameRuns(runs, r) then nd := d
+    else nd := Doc.MakeData(Doc.FormatOfData(d), runs, Doc.CellOfData(d));
+  end;
+  if nd <> d then
+  begin
+    // the slot's reference moves to the new value; the record keeps d alive
+    Doc.AcquireData(nd);
+    Doc.ReleaseData(d);
+  end;
+  Result := nd;
+end;
+
+function TTyRichParaWalk.Map(AIndex: Integer; AData: Pointer): Pointer;
+var
+  d, nd: TTyRichParaData;
+  oldFmt, newFmt: TTyParaFormatId;
+  x: Integer;
+begin
+  d := TTyRichParaData(AData);
+  if (d = nil) and (Doc.FLoader <> nil) then d := Doc.DataOf(AIndex);
+  Undo.AddOld(d);
+  if (AIndex > First) and (d = PrevD) then
+    nd := PrevNew
+  else
+  begin
+    oldFmt := Doc.FormatOfData(d);
+    newFmt := -1;
+    for x := 0 to High(FromIds) do
+      if FromIds[x] = oldFmt then newFmt := ToIds[x];
+    if newFmt < 0 then
+    begin
+      newFmt := Doc.FFormats.InternPara(TyMergeParaFormat(Doc.FFormats.ParaFormat(oldFmt), Mask,
+        Value));
+      SetLength(FromIds, Length(FromIds) + 1);
+      SetLength(ToIds, Length(ToIds) + 1);
+      FromIds[High(FromIds)] := oldFmt;
+      ToIds[High(ToIds)] := newFmt;
+    end;
+    // the runs are immutable, so the new value shares them
+    if newFmt = oldFmt then nd := d
+    else nd := Doc.MakeData(newFmt, Doc.RunsOfData(d), Doc.CellOfData(d));
+    PrevD := d;
+    PrevNew := nd;
+  end;
+  if nd <> d then
+  begin
+    Doc.AcquireData(nd);
+    Doc.ReleaseData(d);
+  end;
+  Result := nd;
+end;
+
+function TTyRichRevertWalk.Map(AIndex: Integer; AData: Pointer): Pointer;
+var
+  old: TTyRichParaData;
+begin
+  old := Undo.FOldData[Run].Data;
+  Dec(Left);
+  if (Left = 0) and (Run + 1 < Undo.FOldCount) then
+  begin
+    Inc(Run);
+    Left := Undo.FOldData[Run].Count;
+  end;
+  if Pointer(old) <> AData then
+  begin
+    Doc.AcquireData(old);
+    Doc.ReleaseData(TTyRichParaData(AData));
+  end;
+  Result := old;
 end;
 
 function TTyRichDocument.InsertCore(APos: TTyRichPos; const AText: UTF8String;
@@ -1581,9 +2003,8 @@ begin
   Result := NewUndo(c);
   try
     Result.FFirstPara := k;
-    SetLength(Result.FOldData, 1);
-    Result.FOldData[0] := d;
-    AcquireData(d);
+    Result.AddOld(d);
+    Result.SealOld;
     Inc(FEditing);
     try
       FText.Insert(APos, AText);
@@ -1737,9 +2158,8 @@ begin
          (Result.FRemoved.Pieces[i].Data <> nil) then
         AcquireData(TTyRichParaData(Result.FRemoved.Pieces[i].Data));
     Result.FFirstPara := k;
-    SetLength(Result.FOldData, 1);
-    Result.FOldData[0] := dk;
-    AcquireData(dk);
+    Result.AddOld(dk);
+    Result.SealOld;
     AcquireData(merged);   // it may be dm, whose slot the delete drops
     try
       Inc(FEditing);
@@ -1770,112 +2190,43 @@ function TTyRichDocument.ApplyCharFormat(APos, ALen: TTyRichPos; AMask: TTyCharF
   const AValue: TTyCharFormat): TTyRichUndoData;
 var
   c: TTyRichChange;
-  k, last, i, j, n: Integer;
-  b, ps, len, lo, hi, s, e: Int64;
-  d, nd, prevD, prevNew: TTyRichParaData;
-  r, runs: TTyRunArray;
-  whole, changed: Boolean;
-  fromIds, toIds: array of TTyCharFormatId;
-
-  function MapId(AId: TTyCharFormatId): TTyCharFormatId;
-  var
-    x: Integer;
-  begin
-    for x := 0 to High(fromIds) do
-      if fromIds[x] = AId then Exit(toIds[x]);
-    Result := FFormats.InternChar(TyMergeCharFormat(FFormats.CharFormat(AId), AMask, AValue));
-    SetLength(fromIds, Length(fromIds) + 1);
-    SetLength(toIds, Length(toIds) + 1);
-    fromIds[High(fromIds)] := AId;
-    toIds[High(toIds)] := Result;
-  end;
-
+  k, last: Integer;
+  w: TTyRichCharWalk;
 begin
   c := Default(TTyRichChange);
   c.Pos := APos;
   if (APos < 0) or (ALen < 0) or (APos + ALen > FText.Length) then
     raise ETyRichModel.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FText.Length]);
   if (ALen = 0) or (AMask = []) then Exit(NewUndo(c));
-  b := APos + ALen;
   k := FText.ParaOfPos(APos);
-  last := FText.ParaOfPos(b);
-  if (last > k) and (FText.ParaStart(last) = b) then Dec(last);
-  fromIds := nil;
-  toIds := nil;
-  prevD := nil;
-  prevNew := nil;
+  last := FText.ParaOfPos(APos + ALen);
+  if (last > k) and (FText.ParaStart(last) = APos + ALen) then Dec(last);
   Result := NewUndo(c);
+  w := TTyRichCharWalk.Create;
   try
-    Result.FFirstPara := k;
-    SetLength(Result.FOldData, last - k + 1);
-    for i := k to last do
-    begin
-      d := DataOf(i);
-      Result.FOldData[i - k] := d;
-      AcquireData(d);
-      r := RunsOfData(d);
-      whole := (i > k) and (i < last);
-      runs := nil;
-      n := 0;
-      if whole then
-      begin
-        // a paragraph inside the range: every run, no lengths needed; equal values (plain
-        // paragraphs) map to one shared result
-        if (i > k + 1) and (d = prevD) then
-        begin
-          PutData(i, d, prevNew);
-          Continue;
-        end;
-        for j := 0 to High(r) do AppendRun(runs, n, r[j].Start, MapId(r[j].Format), r[j].Obj);
-      end
-      else
-      begin
-        ps := FText.ParaStart(i);
-        len := FText.ParaLength(i);
-        lo := APos - ps;
-        if lo < 0 then lo := 0;
-        hi := b - ps;
-        if hi > len then hi := len;
-        if len = 0 then
-        begin
-          if (APos <= ps) and (ps < b) then
-            AppendRun(runs, n, 0, MapId(r[0].Format), nil)
-          else
-            Continue;
-        end
-        else if lo >= hi then
-          Continue
-        else
-          for j := 0 to High(r) do
-          begin
-            s := r[j].Start;
-            e := RunEnd(r, j, len);
-            if (s < lo) then AppendRun(runs, n, s, r[j].Format, r[j].Obj);
-            if (e > lo) and (s < hi) then
-            begin
-              if s < lo then s := lo;
-              AppendRun(runs, n, s, MapId(r[j].Format), r[j].Obj);
-            end;
-            if e > hi then
-            begin
-              if s < hi then s := hi;
-              AppendRun(runs, n, s, r[j].Format, r[j].Obj);
-            end;
-          end;
-      end;
-      SetLength(runs, n);
-      changed := not SameRuns(runs, r);
-      if changed then nd := MakeData(FormatOfData(d), runs, CellOfData(d)) else nd := d;
-      PutData(i, d, nd);
-      if whole then
-      begin
-        prevD := d;
-        prevNew := nd;
-      end;
+    try
+      w.Doc := Self;
+      w.Undo := Result;
+      w.K := k;
+      w.Last := last;
+      w.APos := APos;
+      w.B := APos + ALen;
+      w.Mask := AMask;
+      w.Value := AValue;
+      // only the two end paragraphs need their place; the walk itself does no lookups
+      w.PsK := FText.ParaStart(k);
+      w.LenK := FText.ParaLength(k);
+      w.PsLast := FText.ParaStart(last);
+      w.LenLast := FText.ParaLength(last);
+      Result.FFirstPara := k;
+      FText.MapParaData(k, last, @w.Map);
+      Result.SealOld;
+    except
+      Result.Free;
+      raise;
     end;
-  except
-    Result.Free;
-    raise;
+  finally
+    w.Free;
   end;
   c.Kinds := [rckFormat];
   c.OldLen := ALen;
@@ -1891,10 +2242,7 @@ function TTyRichDocument.ApplyParaFormat(AFirstPara, ALastPara: Integer;
   AMask: TTyParaFormatMask; const AValue: TTyParaFormat): TTyRichUndoData;
 var
   c: TTyRichChange;
-  i, x: Integer;
-  d, nd, prevD, prevNew: TTyRichParaData;
-  oldFmt, newFmt: TTyParaFormatId;
-  fromIds, toIds: array of TTyParaFormatId;
+  w: TTyRichParaWalk;
 begin
   c := Default(TTyRichChange);
   if (AFirstPara < 0) or (ALastPara < AFirstPara) or (ALastPara >= FText.ParaCount) then
@@ -1902,47 +2250,24 @@ begin
       [AFirstPara, ALastPara, FText.ParaCount - 1]);
   c.Pos := FText.ParaStart(AFirstPara);
   if AMask = [] then Exit(NewUndo(c));
-  fromIds := nil;
-  toIds := nil;
-  prevD := nil;
-  prevNew := nil;
   Result := NewUndo(c);
+  w := TTyRichParaWalk.Create;
   try
-    Result.FFirstPara := AFirstPara;
-    SetLength(Result.FOldData, ALastPara - AFirstPara + 1);
-    for i := AFirstPara to ALastPara do
-    begin
-      d := DataOf(i);
-      Result.FOldData[i - AFirstPara] := d;
-      AcquireData(d);
-      if (i > AFirstPara) and (d = prevD) then
-      begin
-        PutData(i, d, prevNew);
-        Continue;
-      end;
-      oldFmt := FormatOfData(d);
-      newFmt := -1;
-      for x := 0 to High(fromIds) do
-        if fromIds[x] = oldFmt then newFmt := toIds[x];
-      if newFmt < 0 then
-      begin
-        newFmt := FFormats.InternPara(TyMergeParaFormat(FFormats.ParaFormat(oldFmt), AMask,
-          AValue));
-        SetLength(fromIds, Length(fromIds) + 1);
-        SetLength(toIds, Length(toIds) + 1);
-        fromIds[High(fromIds)] := oldFmt;
-        toIds[High(toIds)] := newFmt;
-      end;
-      // the runs are immutable, so the new value shares them
-      if newFmt = oldFmt then nd := d
-      else nd := MakeData(newFmt, RunsOfData(d), CellOfData(d));
-      PutData(i, d, nd);
-      prevD := d;
-      prevNew := nd;
+    try
+      w.Doc := Self;
+      w.Undo := Result;
+      w.First := AFirstPara;
+      w.Mask := AMask;
+      w.Value := AValue;
+      Result.FFirstPara := AFirstPara;
+      FText.MapParaData(AFirstPara, ALastPara, @w.Map);
+      Result.SealOld;
+    except
+      Result.Free;
+      raise;
     end;
-  except
-    Result.Free;
-    raise;
+  finally
+    w.Free;
   end;
   c.Kinds := [rckFormat];
   c.OldLen := FText.ParaStart(ALastPara) + FText.ParaLength(ALastPara) - c.Pos;
@@ -2002,14 +2327,13 @@ begin
   Result := NewUndo(c);
   try
     Result.FFirstPara := AFirstPara;
-    SetLength(Result.FOldData, total);
     for i := 0 to total - 1 do
     begin
       d := DataOf(AFirstPara + i);
-      Result.FOldData[i] := d;
-      AcquireData(d);
+      Result.AddOld(d);
       PutData(AFirstPara + i, d, NewData(FormatOfData(d), RunsOfData(d), cells[i]));
     end;
+    Result.SealOld;
   except
     Result.Free;
     raise;
@@ -2028,7 +2352,8 @@ procedure TTyRichDocument.Revert(var AUndo: TTyRichUndoData);
 var
   u: TTyRichUndoData;
   c: TTyRichChange;
-  i: Integer;
+  i, total: Integer;
+  w: TTyRichRevertWalk;
 begin
   u := AUndo;
   if u = nil then Exit;
@@ -2048,8 +2373,21 @@ begin
             AcquireData(TTyRichParaData(u.FRemoved.Pieces[i].Data));
         FText.RestorePieces(u.FChange.Pos, u.FRemoved);
       end;
-      for i := 0 to High(u.FOldData) do
-        PutData(u.FFirstPara + i, SlotData(u.FFirstPara + i), u.FOldData[i]);
+      if u.FOldCount > 0 then
+      begin
+        total := 0;
+        for i := 0 to u.FOldCount - 1 do Inc(total, u.FOldData[i].Count);
+        w := TTyRichRevertWalk.Create;
+        try
+          w.Doc := Self;
+          w.Undo := u;
+          w.Run := 0;
+          w.Left := u.FOldData[0].Count;
+          FText.MapParaData(u.FFirstPara, u.FFirstPara + total - 1, @w.Map);
+        finally
+          w.Free;
+        end;
+      end;
     finally
       Dec(FEditing);
     end;
@@ -2065,6 +2403,517 @@ begin
   finally
     u.Free;
   end;
+end;
+
+{ ---- TTyRichCommand ---- }
+
+destructor TTyRichCommand.Destroy;
+begin
+  FreeRecords;
+  inherited Destroy;
+end;
+
+procedure TTyRichCommand.FreeRecords;
+begin
+  while FRecordCount > 0 do
+  begin
+    Dec(FRecordCount);
+    FRecords[FRecordCount].Free;
+    FRecords[FRecordCount] := nil;
+  end;
+  FRecords := nil;
+end;
+
+procedure TTyRichCommand.CheckRunning(ADoc: TTyRichDocument);
+begin
+  // the guarantee that every change is in the history: a command changes a document only
+  // while that document runs it
+  if (ADoc = nil) or (FDoc <> ADoc) then
+    raise ETyRichModel.CreateFmt('%s changes a document only while the document runs it',
+      [ClassName]);
+end;
+
+procedure TTyRichCommand.AddSummary(const AChange: TTyRichChange);
+begin
+  ComposeChange(FSummary, FChanged, AChange);
+end;
+
+procedure TTyRichCommand.ResetSummary;
+begin
+  FSummary := Default(TTyRichChange);
+  FChanged := False;
+end;
+
+function TTyRichCommand.Keep(AUndo: TTyRichUndoData): TTyRichChange;
+begin
+  Result := AUndo.Change;
+  if Result.Kinds = [] then
+  begin
+    // a no-op: nothing to put back
+    AUndo.Free;
+    Exit;
+  end;
+  if FRecordCount = Length(FRecords) then SetLength(FRecords, FRecordCount * 2 + 2);
+  FRecords[FRecordCount] := AUndo;
+  Inc(FRecordCount);
+  AddSummary(Result);
+end;
+
+procedure TTyRichCommand.DoUndo(ADoc: TTyRichDocument);
+begin
+  // newest first: each record was made on the document the later ones changed again
+  while FRecordCount > 0 do
+  begin
+    Dec(FRecordCount);
+    ADoc.Revert(FRecords[FRecordCount]);
+  end;
+end;
+
+procedure TTyRichCommand.DoRedo(ADoc: TTyRichDocument);
+begin
+  DoExecute(ADoc);
+end;
+
+function TTyRichCommand.InsertText(ADoc: TTyRichDocument; APos: TTyRichPos;
+  const AText: UTF8String; AFormat: TTyCharFormatId): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.InsertText(APos, AText, AFormat));
+end;
+
+function TTyRichCommand.InsertObject(ADoc: TTyRichDocument; APos: TTyRichPos;
+  AObject: TTyRichObject; AFormat: TTyCharFormatId): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.InsertObject(APos, AObject, AFormat));
+end;
+
+function TTyRichCommand.DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.DeleteRange(APos, ALen));
+end;
+
+function TTyRichCommand.ApplyCharFormat(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+  AMask: TTyCharFormatMask; const AValue: TTyCharFormat): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.ApplyCharFormat(APos, ALen, AMask, AValue));
+end;
+
+function TTyRichCommand.ApplyParaFormat(ADoc: TTyRichDocument; AFirstPara, ALastPara: Integer;
+  AMask: TTyParaFormatMask; const AValue: TTyParaFormat): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.ApplyParaFormat(AFirstPara, ALastPara, AMask, AValue));
+end;
+
+function TTyRichCommand.MarkTable(ADoc: TTyRichDocument; AFirstPara: Integer;
+  ATable: TTyRichTable; const ACellParas: array of Integer): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.MarkTable(AFirstPara, ATable, ACellParas));
+end;
+
+procedure TTyRichCommand.AdoptChange(AChild: TTyRichCommand);
+begin
+  if AChild.FChanged then AddSummary(AChild.FSummary);
+end;
+
+procedure TTyRichCommand.ExecuteChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+begin
+  CheckRunning(ADoc);
+  AChild.FreeRecords;
+  AChild.ResetSummary;
+  AChild.FDoc := ADoc;
+  try
+    try
+      AChild.DoExecute(ADoc);
+    except
+      // what the child did so far goes back before the error travels on
+      try
+        AChild.DoUndo(ADoc);
+      except
+      end;
+      raise;
+    end;
+  finally
+    AChild.FDoc := nil;
+  end;
+  AdoptChange(AChild);
+end;
+
+procedure TTyRichCommand.UndoChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+begin
+  CheckRunning(ADoc);
+  AChild.FDoc := ADoc;
+  try
+    AChild.DoUndo(ADoc);
+  finally
+    AChild.FDoc := nil;
+  end;
+  // records a DoUndo override left are stale: redo runs the child again
+  AChild.FreeRecords;
+end;
+
+procedure TTyRichCommand.RedoChild(ADoc: TTyRichDocument; AChild: TTyRichCommand);
+begin
+  CheckRunning(ADoc);
+  AChild.FreeRecords;
+  AChild.ResetSummary;
+  AChild.FDoc := ADoc;
+  try
+    try
+      AChild.DoRedo(ADoc);
+    except
+      try
+        AChild.DoUndo(ADoc);
+      except
+      end;
+      raise;
+    end;
+  finally
+    AChild.FDoc := nil;
+  end;
+  AdoptChange(AChild);
+end;
+
+procedure TTyRichCommand.TakeOver(ANext: TTyRichCommand);
+var
+  i: Integer;
+begin
+  for i := 0 to ANext.FRecordCount - 1 do
+  begin
+    if FRecordCount = Length(FRecords) then SetLength(FRecords, FRecordCount * 2 + 2);
+    FRecords[FRecordCount] := ANext.FRecords[i];
+    Inc(FRecordCount);
+    ANext.FRecords[i] := nil;
+  end;
+  ANext.FRecordCount := 0;
+  AdoptChange(ANext);
+end;
+
+function TTyRichCommand.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := True;
+end;
+
+function TTyRichCommand.TryMerge(ANext: TTyRichCommand): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyRichCommand.Description: string;
+begin
+  Result := rsRichUndoEdit;
+end;
+
+function TTyRichCommand.ChangedRange: TTyRichRange;
+begin
+  Result.Pos := FSummary.Pos;
+  Result.Len := FSummary.NewLen;
+end;
+
+function TTyRichCommand.MemSize: Int64;
+var
+  i: Integer;
+begin
+  Result := InstanceSize + Length(FRecords) * SizeOf(Pointer);
+  for i := 0 to FRecordCount - 1 do Inc(Result, FRecords[i].MemSize);
+end;
+
+{ ---- TTyRichDocument: commands and the history ---- }
+
+procedure TTyRichDocument.CheckIdle(const AWhat: string);
+begin
+  if FRunning <> nil then
+    raise ETyRichModel.CreateFmt('%s while a command runs', [AWhat]);
+end;
+
+procedure TTyRichDocument.Flush;
+var
+  c: TTyRichChange;
+begin
+  if (FHold > 0) or (FUpdateCount > 0) or not FHasPending then Exit;
+  c := FPending;
+  FHasPending := False;
+  FPending := Default(TTyRichChange);
+  if Assigned(FOnChange) then FOnChange(Self, c);
+end;
+
+{ Runs one step of ACmd with the notifications held; a failed execute or redo is reverted
+  before the error travels on. }
+procedure TTyRichDocument.RunStep(ACmd: TTyRichCommand; AStep: Integer);
+begin
+  Inc(FHold);
+  FRunning := ACmd;
+  ACmd.FDoc := Self;
+  try
+    if AStep = StepUndo then
+    begin
+      ACmd.DoUndo(Self);
+      ACmd.FreeRecords;
+    end
+    else
+    begin
+      ACmd.FreeRecords;
+      ACmd.ResetSummary;
+      try
+        if AStep = StepExecute then ACmd.DoExecute(Self) else ACmd.DoRedo(Self);
+      except
+        try
+          ACmd.DoUndo(Self);
+        except
+        end;
+        raise;
+      end;
+    end;
+  finally
+    ACmd.FDoc := nil;
+    FRunning := nil;
+    Dec(FHold);
+  end;
+end;
+
+procedure TTyRichDocument.PushUndo(ACmd: TTyRichCommand);
+var
+  e: TTyRichHistoryEntry;
+begin
+  e.Cmd := ACmd;
+  e.Bytes := ACmd.MemSize;
+  if FUndoCount = Length(FUndo) then SetLength(FUndo, FUndoCount * 2 + 8);
+  FUndo[FUndoCount] := e;
+  Inc(FUndoCount);
+  Inc(FHistoryBytes, e.Bytes);
+end;
+
+procedure TTyRichDocument.DropOldestUndo;
+var
+  i: Integer;
+begin
+  Dec(FHistoryBytes, FUndo[0].Bytes);
+  FUndo[0].Cmd.Free;
+  for i := 1 to FUndoCount - 1 do FUndo[i - 1] := FUndo[i];
+  Dec(FUndoCount);
+end;
+
+procedure TTyRichDocument.ClearRedo;
+begin
+  while FRedoCount > 0 do
+  begin
+    Dec(FRedoCount);
+    Dec(FHistoryBytes, FRedo[FRedoCount].Bytes);
+    FRedo[FRedoCount].Cmd.Free;
+  end;
+end;
+
+procedure TTyRichDocument.ClearHistory;
+begin
+  ClearRedo;
+  while FUndoCount > 0 do
+  begin
+    Dec(FUndoCount);
+    Dec(FHistoryBytes, FUndo[FUndoCount].Bytes);
+    FUndo[FUndoCount].Cmd.Free;
+  end;
+  while FBlockCount > 0 do
+  begin
+    Dec(FBlockCount);
+    FBlock[FBlockCount].Free;
+  end;
+  FUndo := nil;
+  FRedo := nil;
+  FBlock := nil;
+  FHistoryBytes := 0;
+end;
+
+procedure TTyRichDocument.TrimHistory;
+begin
+  // the newest step always stays, however big
+  while (FMaxUndoBytes > 0) and (FHistoryBytes > FMaxUndoBytes) and (FUndoCount > 1) do
+    DropOldestUndo;
+end;
+
+procedure TTyRichDocument.SetMaxUndoBytes(AValue: Int64);
+begin
+  FMaxUndoBytes := AValue;
+  TrimHistory;
+end;
+
+function TTyRichDocument.Execute(ACmd: TTyRichCommand): Boolean;
+var
+  ok: Boolean;
+  top: TTyRichCommand;
+begin
+  if ACmd = nil then
+    raise ETyRichModel.Create('Execute needs a command');
+  try
+    CheckIdle('Execute');
+    ok := ACmd.CanExecute(Self);
+  except
+    ACmd.Free;
+    raise;
+  end;
+  if not ok then
+  begin
+    ACmd.Free;
+    Exit(False);
+  end;
+  Result := True;
+  try
+    RunStep(ACmd, StepExecute);
+  except
+    ACmd.Free;
+    Flush;
+    raise;
+  end;
+  if not ACmd.Changed then
+  begin
+    ACmd.Free;
+    Exit;
+  end;
+  if FUpdateCount > 0 then
+  begin
+    if FBlockCount = Length(FBlock) then SetLength(FBlock, FBlockCount * 2 + 4);
+    FBlock[FBlockCount] := ACmd;
+    Inc(FBlockCount);
+    Exit;
+  end;
+  ClearRedo;
+  // typing merges as the Memo's undo stack does: not across BreakMerge, Undo or Redo
+  if (not FMergeBroken) and (FUndoCount > 0) then
+  begin
+    top := FUndo[FUndoCount - 1].Cmd;
+    if top.TryMerge(ACmd) then
+    begin
+      ACmd.Free;
+      Dec(FHistoryBytes, FUndo[FUndoCount - 1].Bytes);
+      FUndo[FUndoCount - 1].Bytes := top.MemSize;
+      Inc(FHistoryBytes, FUndo[FUndoCount - 1].Bytes);
+      ACmd := nil;
+    end;
+  end;
+  if ACmd <> nil then PushUndo(ACmd);
+  FMergeBroken := False;
+  TrimHistory;
+  Flush;
+end;
+
+procedure TTyRichDocument.Undo;
+var
+  cmd: TTyRichCommand;
+  e: TTyRichHistoryEntry;
+begin
+  CheckIdle('Undo');
+  if FUpdateCount > 0 then
+    raise ETyRichModel.Create('Undo inside BeginUpdate .. EndUpdate');
+  if FUndoCount = 0 then Exit;
+  Dec(FUndoCount);
+  cmd := FUndo[FUndoCount].Cmd;
+  Dec(FHistoryBytes, FUndo[FUndoCount].Bytes);
+  FMergeBroken := True;
+  try
+    RunStep(cmd, StepUndo);
+  except
+    // the document no longer matches the history: drop it all
+    cmd.Free;
+    ClearHistory;
+    Flush;
+    raise;
+  end;
+  e.Cmd := cmd;
+  e.Bytes := cmd.MemSize;
+  if FRedoCount = Length(FRedo) then SetLength(FRedo, FRedoCount * 2 + 8);
+  FRedo[FRedoCount] := e;
+  Inc(FRedoCount);
+  Inc(FHistoryBytes, e.Bytes);
+  Flush;
+end;
+
+procedure TTyRichDocument.Redo;
+var
+  cmd: TTyRichCommand;
+begin
+  CheckIdle('Redo');
+  if FUpdateCount > 0 then
+    raise ETyRichModel.Create('Redo inside BeginUpdate .. EndUpdate');
+  if FRedoCount = 0 then Exit;
+  Dec(FRedoCount);
+  cmd := FRedo[FRedoCount].Cmd;
+  Dec(FHistoryBytes, FRedo[FRedoCount].Bytes);
+  FMergeBroken := True;
+  try
+    RunStep(cmd, StepRedo);
+  except
+    // reverted; the steps after it were made on top of it
+    cmd.Free;
+    ClearRedo;
+    Flush;
+    raise;
+  end;
+  PushUndo(cmd);
+  TrimHistory;
+  Flush;
+end;
+
+function TTyRichDocument.CanUndo: Boolean;
+begin
+  Result := (FUndoCount > 0) and (FUpdateCount = 0) and (FRunning = nil);
+end;
+
+function TTyRichDocument.CanRedo: Boolean;
+begin
+  Result := (FRedoCount > 0) and (FUpdateCount = 0) and (FRunning = nil);
+end;
+
+function TTyRichDocument.UndoDescription: string;
+begin
+  if FUndoCount = 0 then Result := '' else Result := FUndo[FUndoCount - 1].Cmd.Description;
+end;
+
+function TTyRichDocument.RedoDescription: string;
+begin
+  if FRedoCount = 0 then Result := '' else Result := FRedo[FRedoCount - 1].Cmd.Description;
+end;
+
+procedure TTyRichDocument.BeginUpdate(const ADescription: string);
+begin
+  CheckIdle('BeginUpdate');
+  Inc(FUpdateCount);
+  if FUpdateCount = 1 then FBlockDescription := ADescription;
+end;
+
+procedure TTyRichDocument.EndUpdate;
+var
+  cmds: array of TTyRichCommand;
+  comp: TTyRichCompositeCommand;
+  i: Integer;
+begin
+  CheckIdle('EndUpdate');
+  if FUpdateCount = 0 then
+    raise ETyRichModel.Create('EndUpdate without BeginUpdate');
+  Dec(FUpdateCount);
+  if FUpdateCount > 0 then Exit;
+  if FBlockCount > 0 then
+  begin
+    cmds := nil;
+    SetLength(cmds, FBlockCount);
+    for i := 0 to FBlockCount - 1 do cmds[i] := FBlock[i];
+    FBlockCount := 0;
+    FBlock := nil;
+    comp := TTyRichCompositeCommand.CreateExecuted(FBlockDescription, cmds);
+    ClearRedo;
+    PushUndo(comp);
+    FMergeBroken := False;
+    TrimHistory;
+  end;
+  FBlockDescription := '';
+  Flush;
+end;
+
+procedure TTyRichDocument.BreakMerge;
+begin
+  FMergeBroken := True;
 end;
 
 end.

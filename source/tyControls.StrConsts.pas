@@ -284,6 +284,17 @@ resourcestring
   rsTextMenuPaste     = 'Paste';
   rsTextMenuSelectAll = 'Select All';
 
+  { --- TTyRichEdit undo steps -----------------------------------------------
+    What an undo step did, for an "Undo <what>" menu item (TTyRichCommand.Description,
+    tyControls.RichEdit.Commands). }
+  rsRichUndoEdit         = 'Edit';
+  rsRichUndoTyping       = 'Typing';
+  rsRichUndoInsertText   = 'Insert text';
+  rsRichUndoDelete       = 'Delete';
+  rsRichUndoCharFormat   = 'Font formatting';
+  rsRichUndoParaFormat   = 'Paragraph formatting';
+  rsRichUndoInsertObject = 'Insert object';
+
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
     its fourth item, which clears the scrollback. }

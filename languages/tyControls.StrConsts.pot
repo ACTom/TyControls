@@ -667,6 +667,35 @@ msgstr ""
 msgid "More groups"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundocharformat
+msgid "Font formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodelete
+msgctxt "tycontrols.strconsts.rsrichundodelete"
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoedit
+msgid "Edit"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertobject
+msgid "Insert object"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinserttext
+msgid "Insert text"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoparaformat
+msgid "Paragraph formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundotyping
+msgid "Typing"
+msgstr ""
+
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"

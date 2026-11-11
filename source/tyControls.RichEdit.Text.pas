@@ -91,6 +91,8 @@ type
   TTyRichParasChangedEvent = procedure(Sender: TObject; AFirst, AOldCount, ANewCount: Integer)
     of object;
   TTyRichParaDataEvent = procedure(Sender: TObject; AData: Pointer) of object;
+  { One step of MapParaData: paragraph AIndex holds AData; what it returns goes in its slot. }
+  TTyRichParaDataMap = function(AIndex: Integer; AData: Pointer): Pointer of object;
 
   { Decodes one lazy paragraph: its text WITHOUT the separator, exactly ACharCount
     characters minus the separator, containing no CR or LF. }
@@ -172,6 +174,7 @@ type
     FScanToLoad: Boolean;
     FScan: TTyRichPieceArray;
     FScanCount: Integer;
+    FWalking: Integer;
     FOnParasChanged: TTyRichParasChangedEvent;
     FOnParaDataDropped: TTyRichParaDataEvent;
     // tree
@@ -210,6 +213,7 @@ type
     procedure CheckReady;
     procedure CheckPara(AIndex: Integer);
     procedure CheckRange(APos, ALen: TTyRichPos);
+    procedure CheckNotWalking;
     function GetParaData(AIndex: Integer): Pointer;
     procedure SetParaData(AIndex: Integer; AValue: Pointer);
     procedure SetParaRaw(AIndex: Integer; AData: Pointer; AHeight: LongInt);
@@ -263,6 +267,12 @@ type
       nil; a merge keeps the first paragraph's and reports the others to OnParaDataDropped
       (the text never frees anything, also not on Destroy). }
     property ParaData[AIndex: Integer]: Pointer read GetParaData write SetParaData;
+    { Gives the data of paragraphs AFirst..ALast, in order, to AMap and puts what it returns
+      in each slot. One descent, then leaf by leaf: n paragraphs cost O(log n + n), not a
+      lookup each (a format change over the whole document). AMap may read the text and set
+      paragraph data or heights; changing the text (Insert, Delete, RestorePieces) raises
+      while the walk runs. Nodes the walk moves into count in NodeVisits. }
+    procedure MapParaData(AFirst, ALast: Integer; AMap: TTyRichParaDataMap);
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
@@ -1434,6 +1444,13 @@ begin
     raise ETyRichText.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FTotal.Chars]);
 end;
 
+procedure TTyRichText.CheckNotWalking;
+begin
+  // the walk holds a path into the tree; a structural change would leave it dangling
+  if FWalking > 0 then
+    raise ETyRichText.Create('The text cannot change during MapParaData');
+end;
+
 { ---- editing ---- }
 
 procedure TTyRichText.Insert(APos: TTyRichPos; const AText: UTF8String);
@@ -1445,6 +1462,7 @@ var
   k: Integer;
 begin
   CheckRange(APos, 0);
+  CheckNotWalking;
   if AText = '' then Exit;
   base := AppendAdd(@AText[1], System.Length(AText));
   FScanCount := 0;
@@ -1483,6 +1501,7 @@ var
   it: PTyRichPiece;
 begin
   CheckRange(APos, ALen);
+  CheckNotWalking;
   if ALen = 0 then Exit;
   a := APos;
   b := APos + ALen;
@@ -1708,6 +1727,7 @@ var
   i, s: Integer;
 begin
   CheckRange(APos, 0);
+  CheckNotWalking;
   if System.Length(P.Pieces) = 0 then Exit;
   items := Copy(P.Pieces);
   follow := nil;
@@ -1798,6 +1818,51 @@ begin
   begin
     Find(rskSep, AIndex, p, before);
     ItemAt(p)^.FData := AValue;
+  end;
+end;
+
+procedure TTyRichText.MapParaData(AFirst, ALast: Integer; AMap: TTyRichParaDataMap);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  prev: array[0..TyRichMaxDepth] of PTyRichNode;
+  i, l: Integer;
+  crossing: Boolean;
+begin
+  CheckPara(AFirst);
+  CheckPara(ALast);
+  if ALast < AFirst then Exit;
+  Inc(FWalking);
+  try
+    i := AFirst;
+    if i < FTotal.Seps then
+    begin
+      // data lives on the separator pieces: find the first one, then walk the pieces on
+      Find(rskSep, i, p, before);
+      repeat
+        it := ItemAt(p);
+        if PSep(it^) <> sNone then
+        begin
+          // AMap may set other slots through ParaData; that changes no node, so it stays valid
+          it^.FData := AMap(i, it^.FData);
+          Inc(i);
+          if (i > ALast) or (i >= FTotal.Seps) then Break;
+        end;
+        crossing := p.Steps[FDepth].Index = p.Steps[FDepth].Node^.Count - 1;
+        if crossing then
+          for l := 1 to FDepth do prev[l] := p.Steps[l].Node;
+        if not Advance(p) then
+          raise ETyRichText.Create('Rich text index is inconsistent');
+        if crossing then
+          for l := 1 to FDepth do
+            if p.Steps[l].Node <> prev[l] then Inc(FNodeVisits);
+      until False;
+    end;
+    if (i <= ALast) and (i = FTotal.Seps) then
+      FLastData := AMap(i, FLastData);
+  finally
+    Dec(FWalking);
   end;
 end;
 

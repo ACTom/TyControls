@@ -283,7 +283,8 @@ uses
   test.db.typekeys,
   test.textground,
   test.richedit.text,
-  test.richedit.model;
+  test.richedit.model,
+  test.richedit.commands;
 
 type
   TTyTestRunner = class(TTestRunner)
