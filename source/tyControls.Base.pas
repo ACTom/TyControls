@@ -112,6 +112,17 @@ type
     function ThemedBgColor(out AColor: TTyColor): Boolean;
   end;
 
+  { Implemented by a themed container that cannot be a TTyCustomControl -- TTyFrame, which
+    has to descend from TFrame -- so that TyResolveParentBgFill treats it as one. True and
+    the background its own style gives it (any kind, alpha as the theme wrote it), laid out
+    over its client rect; False when it has none: it shows what is behind it, and the
+    resolution goes on to its parent with the rectangle translated. Declared here so Base
+    need not use the Frame unit. }
+  ITyBackgroundHost = interface
+    ['{5E0C7B42-9A1D-4F63-8B2E-6D4A1C3F7E90}']
+    function OwnBackground(out AFill: TTyFill): Boolean;
+  end;
+
   { A container's own look does not change between the frames a moving CHILD forces out of it.
     A graphic control's Invalidate damages its PARENT (that is how it gets a background), and
     the parent's Paint then renders its WHOLE client area -- measured at ~23 ns/px once warm,
@@ -718,6 +729,13 @@ function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Inte
   Exposed for tests. }
 function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
   out AFill: TTyFill): Boolean;
+{ The styled-parent half of the above, for a container asking about itself: the opaque
+  backdrop AContainer shows over ARect (in its own client space) when it is drawn in AStyle.
+  No background, or a fully transparent one, is what is behind the container; a partly
+  transparent one is composited over that; a gradient is the slice ARect covers. False when
+  nothing can be said (an image background, or no background and no parent). }
+function TyStyledBackdropFill(AContainer: TControl; const AStyle: TTyStyleSet;
+  const ARect: TRect; out AFill: TTyFill): Boolean;
 
 { The one-colour form of the above, for callers that can only take a TTyColor: an erase
   brush, an opacity floor, the corner gaps outside a rounded silhouette. Samples the fill
@@ -1845,14 +1863,87 @@ begin
   Result := True;
 end;
 
+function TyStyledBackdropFill(AContainer: TControl; const AStyle: TTyStyleSet;
+  const ARect: TRect; out AFill: TTyFill): Boolean;
+var
+  back: TTyFill;
+  under: TTyColor;
+  pr: TRect;
+  pw, ph: Integer;
+begin
+  Result := False;
+  AFill := Default(TTyFill);
+  AFill.Kind := tfkSolid;
+  if AContainer = nil then Exit;
+  { A container with NO background, or a fully TRANSPARENT one (e.g. TyGroupBox
+    bg = alpha(#FFFFFF,0)), shows whatever is behind IT — so walk up to the next
+    opaque backdrop. Otherwise a child's corner-gap / parent fill would resolve to
+    a transparent color and the Win10 DWM glass would show through (an Edit inside
+    a group box had system-colored corners). The rect goes up translated, so the
+    grandparent's own gradient is still sampled where the CHILD sits. }
+  if not (tpBackground in AStyle.Present) then
+    Exit(TyResolveParentBgFill(AContainer, ARect, AFill));
+  case AStyle.Background.Kind of
+    tfkSolid:
+      if TyAlphaOf(AStyle.Background.Color) = 0 then
+        Exit(TyResolveParentBgFill(AContainer, ARect, AFill))
+      else if TyAlphaOf(AStyle.Background.Color) < 255 then
+      begin
+        { A PARTLY transparent container shows the backdrop through itself, so the opaque
+          background this function promises is that container COMPOSITED OVER what is behind
+          it. Returning its raw value instead breaks the promise in a way that only shows
+          up on a widgetset which never clears a damaged region: the child fills with a
+          non-opaque "background", its finished bitmap is therefore non-opaque, and every
+          repaint composites onto the previous one instead of replacing it. That is the
+          GTK3 smearing on exactly the controls that DO call TyFillParentBg. Throwing the
+          alpha away instead would keep it opaque but at the wrong hue. }
+        if not TyResolveParentBgFill(AContainer, ARect, AFill) then
+        begin
+          AFill := Default(TTyFill);
+          AFill.Kind := tfkSolid;
+          AFill.Color := TyRGB(255, 255, 255);
+        end;
+        TyCompositeFill(AFill, AStyle.Background.Color, False);
+        Result := True;
+      end
+      else
+      begin
+        AFill.Kind := tfkSolid;
+        AFill.Color := AStyle.Background.Color;
+        Result := True;
+      end;
+    tfkLinearGradient:
+      begin
+        { The ramp is laid over the container's client rect. Headless, and before a handle
+          exists, ClientWidth is the bounds width; the fallback is for the reverse case of a
+          control asked about before it has been sized at all. }
+        pw := AContainer.ClientWidth;  if pw <= 0 then pw := AContainer.Width;
+        ph := AContainer.ClientHeight; if ph <= 0 then ph := AContainer.Height;
+        pr := Rect(0, 0, pw, ph);
+        AFill := TyRebaseGradient(AStyle.Background, pr, ARect);
+        { A gradient may carry alpha stops, and the opaque promise above is the same one
+          here for the same reason. Flatten onto the backdrop behind the parent, sampled
+          where the child sits so a translucent ramp over a ramp still tracks position. }
+        if TyFillHasAlpha(AFill) then
+        begin
+          if TyResolveParentBgFill(AContainer, ARect, back) then
+            under := TyFillCentreColor(back, ARect)
+          else
+            under := TyRGB(255, 255, 255);
+          TyCompositeFill(AFill, under, True);
+        end;
+        Result := True;
+      end;
+  end;
+end;
+
 function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
   out AFill: TTyFill): Boolean;
 var
   st: TTyStyleSet;
   r, g, b: Byte;
-  back: TTyFill;
-  under: TTyColor;
   tb: ITyThemedBackground;
+  bh: ITyBackgroundHost;
   par: TControl;
   pr, cr: TRect;
   pw, ph: Integer;
@@ -1877,62 +1968,15 @@ begin
   ph := par.ClientHeight; if ph <= 0 then ph := par.Height;
   pr := Rect(0, 0, pw, ph);
   if par is TTyCustomControl then
+    Result := TyStyledBackdropFill(par, TTyCustomControl(par).CurrentStyle, cr, AFill)
+  { A themed container of another lineage (TTyFrame): the same rules, on the background it
+    says is its own. Asked before ITyThemedBackground, which such a container may answer
+    too and which carries one colour only. }
+  else if Supports(par, ITyBackgroundHost, bh) then
   begin
-    st := TTyCustomControl(par).CurrentStyle;
-    { A container with NO background, or a fully TRANSPARENT one (e.g. TyGroupBox
-      bg = alpha(#FFFFFF,0)), shows whatever is behind IT — so walk up to the next
-      opaque backdrop. Otherwise a child's corner-gap / parent fill would resolve to
-      a transparent color and the Win10 DWM glass would show through (an Edit inside
-      a group box had system-colored corners). The rect goes up translated, so the
-      grandparent's own gradient is still sampled where the CHILD sits. }
-    if not (tpBackground in st.Present) then
-      Exit(TyResolveParentBgFill(par, cr, AFill));
-    case st.Background.Kind of
-      tfkSolid:
-        if TyAlphaOf(st.Background.Color) = 0 then
-          Exit(TyResolveParentBgFill(par, cr, AFill))
-        else if TyAlphaOf(st.Background.Color) < 255 then
-        begin
-          { A PARTLY transparent container shows the backdrop through itself, so the opaque
-            background this function promises is that container COMPOSITED OVER what is behind
-            it. Returning its raw value instead breaks the promise in a way that only shows
-            up on a widgetset which never clears a damaged region: the child fills with a
-            non-opaque "background", its finished bitmap is therefore non-opaque, and every
-            repaint composites onto the previous one instead of replacing it. That is the
-            GTK3 smearing on exactly the controls that DO call TyFillParentBg. Throwing the
-            alpha away instead would keep it opaque but at the wrong hue. }
-          if not TyResolveParentBgFill(par, cr, AFill) then
-          begin
-            AFill := Default(TTyFill);
-            AFill.Kind := tfkSolid;
-            AFill.Color := TyRGB(255, 255, 255);
-          end;
-          TyCompositeFill(AFill, st.Background.Color, False);
-          Result := True;
-        end
-        else
-        begin
-          AFill.Kind := tfkSolid;
-          AFill.Color := st.Background.Color;
-          Result := True;
-        end;
-      tfkLinearGradient:
-        begin
-          AFill := TyRebaseGradient(st.Background, pr, cr);
-          { A gradient may carry alpha stops, and the opaque promise above is the same one
-            here for the same reason. Flatten onto the backdrop behind the parent, sampled
-            where the child sits so a translucent ramp over a ramp still tracks position. }
-          if TyFillHasAlpha(AFill) then
-          begin
-            if TyResolveParentBgFill(par, cr, back) then
-              under := TyFillCentreColor(back, cr)
-            else
-              under := TyRGB(255, 255, 255);
-            TyCompositeFill(AFill, under, True);
-          end;
-          Result := True;
-        end;
-    end;
+    st := Default(TTyStyleSet);
+    if bh.OwnBackground(st.Background) then Include(st.Present, tpBackground);
+    Result := TyStyledBackdropFill(par, st, cr, AFill);
   end
   // A TTyForm parent: use its THEMED TyForm bg (correct at design time too — the LCL
   // Color is only themed by ApplyChromeTheme at runtime). Same value as Color at runtime.
