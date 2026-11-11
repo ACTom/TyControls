@@ -73,7 +73,7 @@ const
     built by concatenation) must be a catalogue typeKey. }
   cTbPartRows: array[0..52] of TTbPartRow = (
     (U: 'tyControls.ActivityIndicator'; K: 'TyActivityIndicator,TyActivityIndicatorFill'),
-    (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertClose'),
+    (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertAction,TyAlertClose'),
     (U: 'tyControls.Badge'; K: 'TyBadge'),
     (U: 'tyControls.Base'; K: 'TyForm'),
     (U: 'tyControls.Breadcrumb'; K: 'TyBreadcrumb,TyBreadcrumbItem'),

@@ -266,6 +266,7 @@ begin
     '  --pad-datetime:        4px 6px;' + LineEnding +
     '  --pad-segmented:       4px 10px;' + LineEnding +
     '  --pad-alert:           8px 12px;' + LineEnding +
+    '  --pad-alert-action:    2px 8px;' + LineEnding +
     '  --pad-notification:    12px 14px;' + LineEnding +
     '  --pad-group-header:    0px 14px;' + LineEnding +
     '' + LineEnding +
@@ -282,6 +283,7 @@ begin
     '     classic value == each control''s Pascal constant today; the modern' + LineEnding +
     '     density pack overrides these names. Runtime geometry is not in the' + LineEnding +
     '     golden, so the guard is value==constant + full suite green. */' + LineEnding +
+    '  --alert-action-gap: 8px;' + LineEnding +
     '  --alert-close-gap: 8px;' + LineEnding +
     '  --alert-close-size: 14px;' + LineEnding +
     '  --alert-icon-gap: 8px;' + LineEnding +
@@ -1229,6 +1231,16 @@ begin
     '' + LineEnding +
     'TyAlertClose       { color: var(--muted); }' + LineEnding +
     'TyAlertClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
+    '' + LineEnding +
+    '/* The banner''s actions ("Reload", "Keep Mine"): quiet text buttons. No `color` at rest, on' + LineEnding +
+    '   purpose — an action that sets none is written in the bar''s ink, so each of the four tints' + LineEnding +
+    '   inks its own actions and they read wherever the message does; bold is what tells them from' + LineEnding +
+    '   the message. The chip appears under the pointer, like the close glyph''s. A skin that wants' + LineEnding +
+    '   them outlined or filled gives this key a border or a background. */' + LineEnding +
+    'TyAlertAction          { border-radius: var(--radius-sm); font-weight: var(--font-weight-bold); padding: var(--pad-alert-action); }' + LineEnding +
+    'TyAlertAction:hover    { background: var(--overlay-hover); }' + LineEnding +
+    'TyAlertAction:active   { background: alpha(var(--on-surface), 0.20); }' + LineEnding +
+    'TyAlertAction:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     '/* The corner toast. Shaped like TyCard (its nearest kin: a titled surface) so the two agree.' + LineEnding +
     '   The variant''s `color` is the MARK''s ink; the card''s own `color` inks title + message. */' + LineEnding +

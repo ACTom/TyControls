@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..243] of string = (
+  GGRID: array[0..244] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -617,7 +617,7 @@ const
     { 下面这批一直在册外 —— GGRID 停在 TyTreeCheckBox,于是 AntD 那批控件、
       整个 Grid、Card/Popover/Steps 全都没有任何像素守卫。补齐到与
       light.tycss 的 typeKey 一一对应。 }
-    'TyAlert|', 'TyAlertClose|', 'TyBadge|', 'TyBreadcrumb|',
+    'TyAlert|', 'TyAlertClose|', 'TyAlertAction|', 'TyBadge|', 'TyBreadcrumb|',
     'TyBreadcrumbItem|', 'TyCard|', 'TyCardActions|', 'TyCardHeader|',
     'TyCascader|', 'TyCascaderItem|', 'TyCascaderPanel|', 'TyChartTooltip|',
     'TyChartSeries1|', 'TyChartSeries2|', 'TyChartSeries3|', 'TyChartSeries4|',
@@ -684,7 +684,8 @@ const
     'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
     'TyToolWindowBadge|', 'TyToolWindowDropZone|');
 
-  GMETRICS: array[0..132] of string = (
+  GMETRICS: array[0..133] of string = (
+    '--alert-action-gap',
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',

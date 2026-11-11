@@ -548,6 +548,11 @@ TyAlertClose||1 => pres[0,1,4,] bg=k1/24FFFFFF ut=0 txt=FFE5E7EB bd=00000000/0/0
 TyAlertClose||2 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyAlertClose||3 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyAlertClose||4 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAlertAction||0 => pres[4,5,8,] bg=k0 ut=0 txt=00000000 bd=00000000/0/0 rad=3/3,3,3,3 pad=8,2,8,2 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAlertAction||1 => pres[0,4,5,8,] bg=k1/24FFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=3/3,3,3,3 pad=8,2,8,2 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAlertAction||2 => pres[0,4,5,8,] bg=k1/33E5E7EB ut=0 txt=00000000 bd=00000000/0/0 rad=3/3,3,3,3 pad=8,2,8,2 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAlertAction||3 => pres[4,5,8,] bg=k0 ut=0 txt=00000000 bd=00000000/0/0 rad=3/3,3,3,3 pad=8,2,8,2 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAlertAction||4 => pres[1,4,5,8,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=3/3,3,3,3 pad=8,2,8,2 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyBadge||0 => pres[0,1,4,5,7,8,] bg=k1/FF60A5FA ut=0 txt=FF0B1120 bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyBadge||1 => pres[0,1,4,5,7,8,] bg=k1/FF60A5FA ut=0 txt=FF0B1120 bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyBadge||2 => pres[0,1,4,5,7,8,] bg=k1/FF60A5FA ut=0 txt=FF0B1120 bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1218,6 +1223,7 @@ TyToolWindowDropZone||1 => pres[0,1,2,3,] bg=k1/3860A5FA ut=0 txt=FFE5E7EB bd=FF
 TyToolWindowDropZone||2 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||3 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+metric --alert-action-gap => 8
 metric --alert-close-gap => 8
 metric --alert-close-size => 14
 metric --alert-icon-gap => 8

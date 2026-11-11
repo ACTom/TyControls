@@ -1426,6 +1426,7 @@ key; they share one rule block.
 | `TyTagClose` | The tag's close × | `TTyTag` | `:hover` |
 | `TyAlert` | Inline alert strip | `TTyAlert` | `:disabled`; variants `.info` `.success` `.warning` `.error` (**hard contract**: `AlertType` maps directly onto these four names) |
 | `TyAlertClose` | The alert's close × | `TTyAlert` | `:hover` |
+| `TyAlertAction` | An action on the alert (a text button); takes the alert's `color` and font where it sets none | `TTyAlert` | `:hover` `:active` `:disabled`; resolved under the alert's variant (`.info` `.success` `.warning` `.error`) |
 | `TyNotification` | Corner overlay notification | `TTyNotification` | `:hover`; variants `.info` `.success` `.warning` `.error` (the variant's `color` is the **icon ink**) |
 | `TyNotificationClose` | The notification's close × | `TTyNotification` | `:hover` |
 | `TyEmpty` | Empty-state placeholder (transparent, resting on the empty list's own surface) | `TTyEmpty` | `:disabled` |

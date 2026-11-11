@@ -1395,6 +1395,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyTagClose` | 标签的关闭 × | `TTyTag` | `:hover` |
 | `TyAlert` | 内嵌提示条 | `TTyAlert` | `:disabled`;变体 `.info` `.success` `.warning` `.error`(**硬契约**:`AlertType` 直接映射到这四个名字) |
 | `TyAlertClose` | 提示条的关闭 × | `TTyAlert` | `:hover` |
+| `TyAlertAction` | 提示条上的操作(文字按钮);没写 `color` 和字体时沿用提示条的 | `TTyAlert` | `:hover` `:active` `:disabled`;跟着提示条的变体解析(`.info` `.success` `.warning` `.error`) |
 | `TyNotification` | 角落浮层通知 | `TTyNotification` | `:hover`;变体 `.info` `.success` `.warning` `.error`(变体的 `color` 是**图标墨色**) |
 | `TyNotificationClose` | 通知的关闭 × | `TTyNotification` | `:hover` |
 | `TyEmpty` | 空状态占位(透明,躺在空列表自己的表面上) | `TTyEmpty` | `:disabled` |

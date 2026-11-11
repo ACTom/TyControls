@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (331 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (333 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (245 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (246 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,10 +18,11 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..330] of string = (
+  TyCatalogTokens: array[0..332] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
+    '--alert-action-gap',
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',
@@ -194,6 +195,7 @@ const
     '--over-parent-chrome',
     '--overlay-hover',
     '--pad-alert',
+    '--pad-alert-action',
     '--pad-badge',
     '--pad-breadcrumb',
     '--pad-breadcrumb-item',
@@ -351,12 +353,13 @@ const
     '--treeview-margin',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..244] of string = (
+  TyCatalogTypeKeys: array[0..245] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
     'TyActivityIndicatorFill',
     'TyAlert',
+    'TyAlertAction',
     'TyAlertClose',
     'TyAnalogClock',
     'TyAnalogClockHand',
