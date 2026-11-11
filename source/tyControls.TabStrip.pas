@@ -5,6 +5,7 @@ uses
   Classes, SysUtils, ImgList, Types, Math, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   ComCtrls,                          // TTabPosition -- LCL's type, so a port streams
   LCLProc,                           // OwnerFormDesignerModified -- design-time switches ping the IDE
+  LCLVersion,                        // LCL_FULLVERSION -- per-tab hints before LCL 4.0
   BGRABitmap, BGRABitmapTypes,       // the borrowed bitmap CachedIndex hands back
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.Animation, tyControls.Accel, tyControls.ImageCollection, tyControls.ImageDraw;
@@ -32,7 +33,45 @@ const
   TyTabIconSize = 16;
   TyTabIconGap  = 6;
 
+  { Fallback for --tab-modified-dot-size, the diameter of a modified tab's dot, in logical
+    px. The theme's value is the one in use; this is what a theme without the token gets. }
+  TyTabModifiedDotSize = 8;
+
 type
+  { What a tab IS besides its caption and icon, as the application sees it -- the editor-tab
+    states. All of it is the host's data: the strip keeps none of it and asks through
+    OnGetTabState whenever it measures, paints or hit-tests a tab.
+
+      Modified   the close slot shows a dot; under the pointer it is the close glyph again.
+      Preview    the caption takes the theme's preview look (TyTab.preview; italic in the
+                 built-in themes through --tab-preview-font-style).
+      Pinned     the close slot shows a pin. A click on it fires OnTabPinClick and never
+                 closes; a middle click does not close the tab either.
+      Hint       the strip's hint while the pointer is over this tab ('' = the strip's own).
+      TextColor  the caption's ink, and the dot's. Alpha 0 -- which is what an untouched
+                 record holds -- means the theme's. }
+  TTyTabState = record
+    Modified: Boolean;
+    Preview: Boolean;
+    Pinned: Boolean;
+    Hint: string;
+    TextColor: TTyColor;
+  end;
+
+  { Supplies a tab's state. AState arrives holding what the tab itself carries (nothing, for
+    a strip whose tabs are strings) and the handler has the last word, as OnGetImageIndex has
+    over the icon. It is called on every measure, paint and hit test, so it must be cheap and
+    change nothing: read the answer off the application's own data and return. }
+  TTyTabGetStateEvent = procedure(Sender: TObject; AIndex: Integer;
+    var AState: TTyTabState) of object;
+
+  { A click on a pinned tab's pin. The strip does nothing by itself -- unpinning, if that is
+    what the click means, is the host's to do. }
+  TTyTabPinClickEvent = procedure(Sender: TObject; AIndex: Integer) of object;
+
+  { What a tab's slot -- the square at its trailing end where the close glyph goes -- shows. }
+  TTyTabSlotMark = (tsmNone, tsmClose, tsmModified, tsmPin);
+
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
 
@@ -100,6 +139,13 @@ type
     FImagesWidth: Integer;
     FOnGetImageIndex: TTyTabGetImageIndexEvent;
 
+    { Per-tab state: nothing of it is kept here -- see TabState. FMiddleTab is the tab a
+      middle press landed on (-1 = none), for the release to close. }
+    FOnGetTabState: TTyTabGetStateEvent;
+    FOnTabPinClick: TTyTabPinClickEvent;
+    FMiddleClickClose: Boolean;
+    FMiddleTab: Integer;
+
     { Drag-reorder gesture state. FDragTab is the collection index of the tab a
       press armed as a drag candidate (-1 = none). FDragStartMain is the device-px
       MAIN-AXIS coordinate of that press (x on a top/bottom band, y on a left/right
@@ -141,6 +187,18 @@ type
     function  IconPx(APPI: Integer): Integer;
     function  TabCaptionWidth(const ACaption: string;
                               const AStyle: TTyStyleSet; APPI: Integer): Integer;
+    { The font-style flags (TyFontItalic ...) the theme gives a preview tab's caption. Read
+      once per layout and once per paint, and handed to TabTextStyle. }
+    function  PreviewFontFlags: Integer;
+    { The style a tab's caption is MEASURED and DRAWN with -- the one definition both use, so
+      the box a caption is given is the box its own font needs. }
+    function  TabTextStyle(APreview: Boolean; APreviewFlags: Integer;
+                           const AStates: TTyStateSet; AInk: Boolean): TTyStyleSet;
+    { What the slot shows: AHot is whether the pointer is over the tab. }
+    function  SlotMarkOf(AIndex: Integer; const AState: TTyTabState; AHot: Boolean): TTyTabSlotMark;
+    { A rect with no tab in it that holds APt, for the hint to be asked again on leaving. }
+    function  TabFreeRectAt(const APt: TPoint): TRect;
+    procedure SetOnGetTabState(const AValue: TTyTabGetStateEvent);
     { Half-open point-in-rect, spelled out rather than borrowed from Types.PtInRect so the
       [Left,Right) x [Top,Bottom) convention every hit test in this unit already uses is
       visible at the one place it is now shared from. }
@@ -209,6 +267,19 @@ type
       return the page's ImageIndex. This is the value TabImageIndex seeds OnGetImageIndex
       with -- the event is the override, this is what it overrides. }
     function GetTabImageIndex(AIndex: Integer): Integer; virtual;
+    { The per-tab half of the state rule, as GetTabImageIndex is of the icon rule: what the
+      TAB carries, laid into AState before OnGetTabState is asked. The base owns no tab data
+      and adds nothing; a subclass whose tabs are objects fills AState from them here, and the
+      event still has the last word. Same contract as the event: cheap, and changes nothing. }
+    procedure GetTabStateAt(AIndex: Integer; var AState: TTyTabState); virtual;
+    { A click on a pinned tab's pin. Default: OnTabPinClick, and nothing without a handler. }
+    procedure DoTabPinClick(AIndex: Integer); virtual;
+    { Paints AMark into ASlot, the tab's slot as drawn. ACaptionInk is the ink of the tab's
+      caption (its TextColor when the state gives one), which the dot shares; AGlyphInk is
+      the theme's tab ink, which the close glyph and the pin keep. Override to draw a mark of
+      your own -- a spinner, a lock -- and call inherited for the rest. }
+    procedure DrawTabSlotMark(APainter: TTyPainter; AIndex: Integer; const ASlot: TRect;
+      AMark: TTyTabSlotMark; ACaptionInk, AGlyphInk: TTyColor); virtual;
     { Fired after the Images list is (re)assigned, before the relayout. The base does nothing;
       TTyPageControl overrides it to re-resolve every page's pending ImageIndex against the new
       list, so a name-keyed page icon survives a list that arrives after the pages. }
@@ -291,6 +362,9 @@ type
     { Applies a streamed TabIndex: the other half of SetTabIndex's csLoading capture. }
     procedure Loaded; override;
     procedure CMDesignHitTest(var Message: TCMDesignHitTest); message CM_DESIGNHITTEST;
+    { Over a tab whose state has a Hint, that is the hint; and the hint is asked for again
+      when the pointer leaves the tab, so each tab shows its own. }
+    procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
                       X, Y: Integer); override;
@@ -414,6 +488,24 @@ type
       rect when this tab draws no icon. }
     function TabImageRect(AIndex: Integer): TRect;
 
+    { --- Per-tab state ----------------------------------------------------------------
+
+      TabState: what tab AIndex is right now -- GetTabStateAt (the tab's own data), then
+        OnGetTabState with the last word. Asked afresh on every call: the strip stores no
+        answer, so there is none to go stale when tabs are reordered, closed or renamed.
+        An index out of range answers the empty state without asking anyone.
+      InvalidateTabStates: the host's way of saying "what you would be told has changed".
+        Measures and paints again -- a state can change a tab's width (a slot appearing, a
+        preview font) and through it a side band's thickness.
+      TabSlotMark: what the tab's slot shows at this moment, pointer included -- a modified
+        tab's dot is the close glyph (or the pin) while the pointer is over the tab.
+      TabSlotRect: the slot as drawn (device px, mirror applied), or an empty rect for a tab
+        that has none. The one rect the mark is painted in and a click is tested against. }
+    function TabState(AIndex: Integer): TTyTabState;
+    procedure InvalidateTabStates;
+    function TabSlotMark(AIndex: Integer): TTyTabSlotMark;
+    function TabSlotRect(AIndex: Integer): TRect;
+
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
@@ -464,11 +556,19 @@ type
     function TyDragThresholdPx(APPI: Integer): Integer;
     function TyDropIndexAt(X, APPI: Integer): Integer;
     function TyDropIndexAtPoint(const APt: TPoint; APPI: Integer): Integer;
+    { Where a drag may carry tab AFromIndex when it asks for AToIndex, pinned tabs
+      considered: an unpinned tab is not carried in front of a pinned one, and a pinned tab
+      is not carried behind an unpinned one -- it stops at the last place that breaks
+      neither. So a block of pinned tabs the host has put first stays a block under the
+      user's hands. The strip does not sort: the order of the tabs is the host's, and only
+      the drag gesture goes through this (MovePage and the host's own moves do not). }
+    function TyPinnedDropIndex(AFromIndex, AToIndex: Integer): Integer;
 
-    { The tab index whose close (x) button the pointer currently hovers, or -1
-      when none. Distinct from whole-tab hover (FHoverTab): the x lights up on
-      its own so the buyer's user sees a precise close affordance. Read-only;
-      driven by MouseMove/MouseLeave. }
+    { The tab index whose slot the pointer is on, when a click there would act -- the close
+      glyph, or a pin -- or -1. Distinct from whole-tab hover (FHoverTab): the mark lights up
+      on its own so the user sees a precise target. A dot nothing can be done with (a
+      modified tab on a strip without close buttons) is not one. Read-only; driven by
+      MouseMove/MouseLeave. }
     property TyTabHoverClose: Integer read FHoverClose;
 
     { On by default. When enabled and the control has a window handle, switching
@@ -576,7 +676,15 @@ type
       reload -- the band would silently come back. }
     property TabHeight: Integer read GetTabHeight write SetTabHeight stored FTabHeightExplicit;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
+    { A middle click on a tab closes it, by the same road as its close glyph -- OnTabClose
+      and its veto included -- when the button comes up over the tab it went down on. Only
+      where the tab can be closed at all (TabsClosable), and never a pinned tab. }
+    property MiddleClickClose: Boolean read FMiddleClickClose write FMiddleClickClose default True;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
+    { The state of each tab -- see TTyTabState and TabState. Called on every measure, paint
+      and hit test: keep the handler cheap and free of side effects. }
+    property OnGetTabState: TTyTabGetStateEvent read FOnGetTabState write SetOnGetTabState;
+    property OnTabPinClick: TTyTabPinClickEvent read FOnTabPinClick write FOnTabPinClick;
     property OnChanging: TTyTabChangingEvent read FOnChanging write FOnChanging;
     property OnReorder: TTyTabReorderEvent read FOnReorder write FOnReorder;
   protected
@@ -585,6 +693,11 @@ type
   end;
 
 implementation
+
+{$IF LCL_FULLVERSION < 4000000}
+uses
+  Forms;   // Application.ActivateHint -- see MouseMove
+{$ENDIF}
 
 type
   TTyDialogCharAccess = class(TControl);   // DialogChar is protected
@@ -612,6 +725,8 @@ begin
   FRaggedRight := False;
   FRowCount := 0;
   FImagesWidth := 0;
+  FMiddleClickClose := True;
+  FMiddleTab := -1;
   FAnimationsEnabled := True;
   { Active-tab header cross-fade: rests at 1 (settled = active style), ~120ms full
     traversal, decelerating. Mirrors the Button hover-fade timing. }
@@ -1099,6 +1214,10 @@ var
   Boxes: array of Integer;   // pass 1: each tab's measured caption box
   Mains: array of Integer;   // pass 2: each tab's FINAL main-axis extent (post-justification)
   Rows:  array of Integer;   // pass 2: which row each tab folded into
+  Slots: array of Boolean;   // pass 1: does the tab have a slot (close glyph, dot or pin)
+  St: TTyTabState;
+  PreviewStyle: TTyStyleSet;
+  HavePreviewStyle: Boolean;
   Band: TRect;
   dispCap: string;
   mpm: Integer;
@@ -1123,12 +1242,14 @@ begin
     IconGap := 0;
   IconSlot  := IconSize + IconGap;              // 0 without a list -> pre-icon arithmetic
 
-  TabStyle := PartStyle('TyTab', '', [tysNormal]);   // the strip's font (#113)
+  TabStyle := TabTextStyle(False, 0, [tysNormal], True);   // the strip's font (#113)
+  HavePreviewStyle := False;
 
   { Pass 1 -- measure each tab's CAPTION BOX. This is the number the old single-position
     builder called TW and used directly as the header width; it still is, and on a
     top/bottom band nothing below changes it. }
   SetLength(Boxes, GetTabCount);
+  SetLength(Slots, GetTabCount);
   RowThick := TabH;
   for I := 0 to GetTabCount - 1 do
   begin
@@ -1137,12 +1258,30 @@ begin
     if not GetTabVisibleAt(I) then
     begin
       Boxes[I] := 0;
+      Slots[I] := False;
       Continue;
     end;
+    { The tab's state is asked for once per layout and used here only: the slot a close
+      glyph, a modified dot or a pin needs is the same slot, at the same place, so a strip
+      without close buttons grows one for the tabs that have something to show in it. }
+    St := TabState(I);
+    Slots[I] := GetTabClosableAt(I) or St.Modified or St.Pinned;
     TyParseMnemonic(GetTabCaption(I), dispCap, mpm);
-    TW := TabCaptionWidth(dispCap, TabStyle, APPI) + 2 * Pad;
+    if St.Preview then
+    begin
+      { A preview tab is measured in the font it is drawn in. Resolved once per layout, and
+        only when there is a preview tab to measure. }
+      if not HavePreviewStyle then
+      begin
+        PreviewStyle := TabTextStyle(True, PreviewFontFlags, [tysNormal], True);
+        HavePreviewStyle := True;
+      end;
+      TW := TabCaptionWidth(dispCap, PreviewStyle, APPI) + 2 * Pad;
+    end
+    else
+      TW := TabCaptionWidth(dispCap, TabStyle, APPI) + 2 * Pad;
     if (IconSize > 0) and (TabImageIndex(I) >= 0) then Inc(TW, IconSlot);
-    if GetTabClosableAt(I) then
+    if Slots[I] then
     begin
       Inc(TW, CloseSlot);
       if TW < (MinW + CloseSlot) then TW := MinW + CloseSlot;
@@ -1268,7 +1407,7 @@ begin
     CrossHi := CrossLo + RowThick;
     FHeaderRects[I] := Rect(X, CrossLo, X + MainExt, CrossHi);
 
-    if GetTabClosableAt(I) and GetTabVisibleAt(I) then
+    if Slots[I] then
     begin
       if Vert then
       begin
@@ -1910,6 +2049,244 @@ begin
   Result := ToScreenRect(FIconRects[AIndex]);
 end;
 
+{ --- Per-tab state ----------------------------------------------------------------- }
+
+{ The tab's own data first, the event last -- TabImageIndex's order. Nothing is remembered:
+  the answer is the host's and can change, or move to another index, without the strip
+  hearing of it, so the only safe copy is none. }
+function TTyCustomTabStrip.TabState(AIndex: Integer): TTyTabState;
+begin
+  Result := Default(TTyTabState);
+  if (AIndex < 0) or (AIndex >= GetTabCount) then Exit;
+  GetTabStateAt(AIndex, Result);
+  if Assigned(FOnGetTabState) then
+    FOnGetTabState(Self, AIndex, Result);
+end;
+
+procedure TTyCustomTabStrip.GetTabStateAt(AIndex: Integer; var AState: TTyTabState);
+begin
+  { The base owns no tab data, so it has no state to give. }
+end;
+
+procedure TTyCustomTabStrip.SetOnGetTabState(const AValue: TTyTabGetStateEvent);
+begin
+  FOnGetTabState := AValue;
+  { A handler arriving or leaving changes what every tab is. Not while the strip is torn
+    down, when a host clearing its handlers must not start a layout. }
+  if not (csDestroying in ComponentState) then
+    TabsChanged;
+end;
+
+{ A state can give a tab a slot it had not, or another font: a LAYOUT change, and on a side
+  or folded band one that moves the pages too. TabsChanged is that rule already. }
+procedure TTyCustomTabStrip.InvalidateTabStates;
+begin
+  TabsChanged;
+end;
+
+{ What the slot shows. A modified tab shows its dot until the pointer is over the tab; then
+  the slot is what it would have been without the dot -- the pin of a pinned tab, else the
+  close glyph where the tab can be closed. With neither behind it the dot has nothing to
+  give way to and stays. }
+function TTyCustomTabStrip.SlotMarkOf(AIndex: Integer; const AState: TTyTabState;
+  AHot: Boolean): TTyTabSlotMark;
+begin
+  if AState.Modified and not AHot then Exit(tsmModified);
+  if AState.Pinned then Exit(tsmPin);
+  if GetTabClosableAt(AIndex) then Exit(tsmClose);
+  if AState.Modified then Exit(tsmModified);
+  Result := tsmNone;
+end;
+
+function TTyCustomTabStrip.TabSlotMark(AIndex: Integer): TTyTabSlotMark;
+begin
+  if (AIndex < 0) or (AIndex >= GetTabCount) or not GetTabVisibleAt(AIndex) then
+    Exit(tsmNone);
+  Result := SlotMarkOf(AIndex, TabState(AIndex), AIndex = FHoverTab);
+end;
+
+function TTyCustomTabStrip.TabSlotRect(AIndex: Integer): TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FCloseRects)) then Exit(Rect(0, 0, 0, 0));
+  if FCloseRects[AIndex].Right <= FCloseRects[AIndex].Left then Exit(Rect(0, 0, 0, 0));
+  Result := ToScreenRect(FCloseRects[AIndex]);
+end;
+
+procedure TTyCustomTabStrip.DoTabPinClick(AIndex: Integer);
+begin
+  if Assigned(FOnTabPinClick) then
+    FOnTabPinClick(Self, AIndex);
+end;
+
+{ The three marks. The close glyph is the painter's. The dot and the pin are drawn here
+  with the painter's path calls -- neither is a TTyGlyphKind -- behind the same icon-font
+  override seam every glyph has: --glyph-tab-modified and --glyph-tab-pin.
+
+  The pin is a thumbtack seen from the side, on an 8 x 8 grid: cap, body, flange, needle.
+  Every edge is rounded to a whole pixel, so it is crisp at any slot size. }
+procedure TTyCustomTabStrip.DrawTabSlotMark(APainter: TTyPainter; AIndex: Integer;
+  const ASlot: TRect; AMark: TTyTabSlotMark; ACaptionInk, AGlyphInk: TTyColor);
+var
+  w, h, side, n, l, t, d: Integer;
+
+  function GX(AUnits: Integer): Integer;
+  begin
+    Result := l + (AUnits * n + 4) div 8;
+  end;
+
+  function GY(AUnits: Integer): Integer;
+  begin
+    Result := t + (AUnits * n + 4) div 8;
+  end;
+
+begin
+  w := ASlot.Right - ASlot.Left;
+  h := ASlot.Bottom - ASlot.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  case AMark of
+    tsmClose:
+      APainter.DrawGlyph(ASlot, tgClose, AGlyphInk, 1);
+    tsmModified:
+      if not TyTryDrawGlyphOverride(APainter, ActiveController, ASlot,
+               '--glyph-tab-modified', ACaptionInk) then
+      begin
+        d := MulDiv(StyleMetric('--tab-modified-dot-size', TyTabModifiedDotSize),
+                    APainter.PPI, 96);
+        if d > Min(w, h) then d := Min(w, h);
+        if d < 1 then d := 1;
+        APainter.BeginPath;
+        APainter.CirclePath((ASlot.Left + ASlot.Right) / 2, (ASlot.Top + ASlot.Bottom) / 2, d / 2);
+        APainter.FillPath(ACaptionInk);
+      end;
+    tsmPin:
+      if not TyTryDrawGlyphOverride(APainter, ActiveController, ASlot,
+               '--glyph-tab-pin', AGlyphInk) then
+      begin
+        side := Min(w, h);
+        n := side - 2 * MulDiv(side, 3, 14);   { the close glyph's share of the slot }
+        if n < 4 then n := side;
+        l := ASlot.Left + (w - n) div 2;
+        t := ASlot.Top + (h - n) div 2;
+        APainter.BeginPath;
+        APainter.RectPath(GX(1), GY(0), GX(7), GY(1));   { cap }
+        APainter.RectPath(GX(2), GY(1), GX(6), GY(4));   { body }
+        APainter.RectPath(GX(0), GY(4), GX(8), GY(5));   { flange }
+        APainter.RectPath(GX(3), GY(5), GX(5), GY(8));   { needle }
+        APainter.FillPath(AGlyphInk);
+      end;
+  end;
+end;
+
+{ --tab-preview-font-style: italic (or oblique) slants a preview tab's caption; anything
+  else, or no token, leaves the font as the style gives it. A token because tycss has no
+  font-style property a TyTab.preview rule could carry -- and one in the base theme reaches
+  every theme, where a rule would be dropped by each skin that writes a TyTab rule. }
+function TTyCustomTabStrip.PreviewFontFlags: Integer;
+var
+  v: string;
+begin
+  Result := 0;
+  v := LowerCase(Trim(StyleToken('--tab-preview-font-style', '')));
+  if (v = 'italic') or (v = 'oblique') then Result := TyFontItalic;
+end;
+
+function TTyCustomTabStrip.TabTextStyle(APreview: Boolean; APreviewFlags: Integer;
+  const AStates: TTyStateSet; AInk: Boolean): TTyStyleSet;
+begin
+  if not APreview then
+    Exit(PartStyle('TyTab', '', AStates, AInk));
+  Result := PartStyle('TyTab', 'preview', AStates, AInk);
+  if APreviewFlags <> 0 then
+  begin
+    Result.FontWeight := Result.FontWeight or APreviewFlags;
+    Include(Result.Present, tpFontWeight);
+  end;
+end;
+
+function TTyCustomTabStrip.TyPinnedDropIndex(AFromIndex, AToIndex: Integer): Integer;
+var
+  I: Integer;
+  Pinned: Boolean;
+begin
+  Result := AToIndex;
+  if (AFromIndex < 0) or (AFromIndex >= GetTabCount) then Exit;
+  if (AToIndex < 0) or (AToIndex >= GetTabCount) or (AToIndex = AFromIndex) then Exit;
+  Pinned := TabState(AFromIndex).Pinned;
+  if AToIndex < AFromIndex then
+  begin
+    { Toward the front the tab passes everything in [ATo, AFrom). An unpinned one stops
+      behind the nearest pinned tab on its way. }
+    if not Pinned then
+      for I := AFromIndex - 1 downto AToIndex do
+        if GetTabVisibleAt(I) and TabState(I).Pinned then Exit(I + 1);
+  end
+  else
+    { Toward the back it passes everything in (AFrom, ATo]. A pinned one stops in front of
+      the nearest unpinned tab on its way. }
+    if Pinned then
+      for I := AFromIndex + 1 to AToIndex do
+        if GetTabVisibleAt(I) and not TabState(I).Pinned then Exit(I - 1);
+end;
+
+{ The largest rect around APt that no tab reaches into: every tab is cut away along the
+  axis on which it lies clear of the point. Leaving it is reaching a tab (or the control's
+  edge), which is when the hint has to be asked for again. }
+function TTyCustomTabStrip.TabFreeRectAt(const APt: TPoint): TRect;
+var
+  I: Integer;
+  R: TRect;
+begin
+  Result := Rect(0, 0, Width, Height);
+  RebuildLayout(Font.PixelsPerInch);
+  for I := 0 to GetTabCount - 1 do
+  begin
+    if not GetTabVisibleAt(I) then Continue;
+    R := ToScreenRect(FHeaderRects[I]);
+    if R.Right <= APt.X then
+    begin
+      if R.Right > Result.Left then Result.Left := R.Right;
+    end
+    else if R.Left > APt.X then
+    begin
+      if R.Left < Result.Right then Result.Right := R.Left;
+    end
+    else if R.Bottom <= APt.Y then
+    begin
+      if R.Bottom > Result.Top then Result.Top := R.Bottom;
+    end
+    else if R.Top > APt.Y then
+      if R.Top < Result.Bottom then Result.Bottom := R.Top;
+  end;
+end;
+
+{ LCL asks the control under the pointer what to show (only where ShowHint is on, its own
+  or its parent's), and asks again when the pointer leaves CursorRect. So: over a tab, the
+  tab's hint if its state has one -- else the strip's own stays -- and the tab's rect; off
+  the tabs, the strip's own hint and the tab-free rect around the pointer. OnShowHint still
+  gets the last word (inherited). }
+procedure TTyCustomTabStrip.CMHintShow(var Message: TLMessage);
+var
+  Info: PHintInfo;
+  Idx: Integer;
+  TabHint: string;
+begin
+  Info := PHintInfo(Message.LParam);
+  if Info <> nil then
+  begin
+    Idx := IndexOfTabAt(Info^.CursorPos);
+    if Idx >= 0 then
+    begin
+      TabHint := TabState(Idx).Hint;
+      if TabHint <> '' then Info^.HintStr := TabHint;
+      Info^.CursorRect := TabRect(Idx);
+    end
+    else
+      Info^.CursorRect := TabFreeRectAt(Info^.CursorPos);
+  end;
+  inherited;
+end;
+
 procedure TTyCustomTabStrip.DoCloseClick(AIndex: Integer);
 var
   AllowClose: Boolean;
@@ -2060,6 +2437,12 @@ var
   disp: string;
   mp: Integer;
   Rtl: Boolean;
+  St: TTyTabState;
+  HasSlot: Boolean;
+  Mark: TTyTabSlotMark;
+  CaptionInk: TTyColor;
+  PreviewFlags: Integer;
+  VariantClass: string;
 begin
   P := TTyPainter.Create;
   try
@@ -2127,6 +2510,7 @@ begin
 
     { Draw each tab header }
     RebuildLayout(APPI);
+    PreviewFlags := PreviewFontFlags;   { the theme's, read once for the frame }
 
     { When overflowing, clip the header strip to the stretch of band between the two arrow
       affordances so shifted headers do not paint over the arrows or past the
@@ -2155,9 +2539,14 @@ begin
     begin
       if not GetTabVisibleAt(I) then Continue;   // zero-wide, but skip the ink too
       HdrRect   := HeaderRectShifted(I);
+      { The slot -- close glyph, modified dot or pin -- as RebuildLayout placed it. The one
+        rect: it is what the caption steps aside for, what the mark is painted in, and what
+        the mouse tests (TabSlotRect). }
       CloseRect := FCloseRects[I];
-      if GetTabClosableAt(I) then
+      HasSlot := CloseRect.Right > CloseRect.Left;
+      if HasSlot then
         CloseRect := ToScreenRect(CloseRect);
+      St := TabState(I);
 
       { Determine state }
       TabStates := [];
@@ -2168,8 +2557,18 @@ begin
       else
         Include(TabStates, tysNormal);
 
-      { The strip's font (#113); the current tab keeps the theme's ink, as a native tab does. }
-      TabStyle := PartStyle('TyTab', '', TabStates, not (tysActive in TabStates));
+      { The strip's font (#113); the current tab keeps the theme's ink, as a native tab does.
+        A preview tab takes the theme's preview look -- the style RebuildLayout measured it
+        with. }
+      TabStyle := TabTextStyle(St.Preview, PreviewFlags, TabStates, not (tysActive in TabStates));
+      { The caption's ink: the state's TextColor where it gives one -- at rest, under the
+        pointer and selected alike, so a tab marked by its colour does not lose the mark as
+        the pointer crosses it -- and the theme's otherwise. A disabled strip keeps the
+        theme's ink throughout: a colour that says "look here" has no place on a control that
+        cannot be used. The dot takes this ink; the close glyph and the pin keep the theme's. }
+      CaptionInk := TabStyle.TextColor;
+      if (TyAlphaOf(St.TextColor) <> 0) and IsEnabled then
+        CaptionInk := St.TextColor;
 
       { Active-tab header cross-fade. For the newly-active tab only, while the
         fade is mid-flight, blend the inactive TyTab background into the active
@@ -2183,8 +2582,9 @@ begin
         FadeEased := FTabFade.Eased;
         if (FadeEased > 0) and (FadeEased < 1) and (TabStyle.Background.Kind = tfkSolid) then
         begin
-          InactiveS := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
-          ActiveS   := ActiveController.Model.ResolveStyle('TyTab', '', [tysActive]);
+          if St.Preview then VariantClass := 'preview' else VariantClass := '';
+          InactiveS := ActiveController.Model.ResolveStyle('TyTab', VariantClass, [tysNormal]);
+          ActiveS   := ActiveController.Model.ResolveStyle('TyTab', VariantClass, [tysActive]);
           if (InactiveS.Background.Kind = tfkSolid) and (ActiveS.Background.Kind = tfkSolid) then
             TabStyle.Background.Color :=
               TyLerpColor(InactiveS.Background.Color, ActiveS.Background.Color, FadeEased);
@@ -2202,7 +2602,7 @@ begin
         SCREEN rects and the caption is upright in every TabPosition, so this rule needs no
         branch for a side band: the reflection has already decided which end is which. }
       TextRect := HdrRect;
-      if GetTabClosableAt(I) then
+      if HasSlot then
       begin
         if Rtl then
           TextRect.Left := CloseRect.Right
@@ -2234,14 +2634,14 @@ begin
       P.DrawText(TextRect,
         disp,
         TabStyle.FontName, ResolveFontSize(TabStyle), TabStyle.FontWeight,
-        TabStyle.TextColor,
+        CaptionInk,
         taCenter, tlCenter, True, TyAccelGatePos(mp));
 
-      if GetTabClosableAt(I) then
+      if HasSlot then
       begin
-        { Independent close (x) hover highlight: a token-driven chip behind the
-          glyph (TyTabClose = var(--overlay-hover) fill + var(--radius)) plus the
-          glyph at full opacity, so the x lights up on its own when the pointer
+        { Independent slot hover highlight: a token-driven chip behind the mark
+          (TyTabClose = var(--overlay-hover) fill + var(--radius)) plus the mark at full
+          opacity, so the close glyph -- or the pin -- lights up on its own when the pointer
           is precisely over it. The glyph itself correctly stays TextColor (the
           tier-b "ink" of the convention). }
         if I = FHoverClose then
@@ -2252,7 +2652,9 @@ begin
           CloseHi.Color := CloseS.Background.Color;
           P.FillBackground(CloseRect, CloseHi, CloseS.BorderRadius);
         end;
-        P.DrawGlyph(CloseRect, tgClose, TabStyle.TextColor, 1);
+        Mark := SlotMarkOf(I, St, I = FHoverTab);
+        if Mark <> tsmNone then
+          DrawTabSlotMark(P, I, CloseRect, Mark, CaptionInk, TabStyle.TextColor);
       end;
     end;
 
@@ -2374,9 +2776,14 @@ procedure TTyCustomTabStrip.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   PPI, Step, I: Integer;
   HdrRect, CloseRect: TRect;
+  OnSlot: Boolean;
 begin
   if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
+  { A middle press only remembers its tab; the release closes (see MouseUp). Not at design
+    time, for the reason a click on the close glyph does not close there. }
+  if (Button = mbMiddle) and not (csDesigning in ComponentState) then
+    FMiddleTab := IndexOfTabAt(X, Y);
   { A design-time press only ever reaches us through the CM_DESIGNHITTEST pass
     (i.e. it landed on a tab): arm the gesture so every consultation until the
     release stays with the control, and capture so the moves keep flowing here
@@ -2419,8 +2826,15 @@ begin
           { Not at design time: closing there would delete the page behind the
             designer's back (no Modified, no undo) -- the click selects instead.
             Page management belongs to the component editor. }
-          if GetTabClosableAt(I) and HitRect(CloseRect, X, Y)
-            and not (csDesigning in ComponentState) then
+          OnSlot := (FCloseRects[I].Right > FCloseRects[I].Left) and HitRect(CloseRect, X, Y)
+            and not (csDesigning in ComponentState);
+          { What a click on the slot DOES is the tab's state, not what the slot happens to
+            be showing: a pinned tab's slot is its pin whether or not the pointer was seen
+            arriving, and a pin never closes. A slot that holds only a dot (a modified tab
+            where nothing closes) is not a button: the click is the tab's. }
+          if OnSlot and TabState(I).Pinned then
+            DoTabPinClick(I)
+          else if OnSlot and GetTabClosableAt(I) then
             DoCloseClick(I)
           else
           begin
@@ -2480,7 +2894,9 @@ begin
         would leave the drag resolving against a coordinate the paint never used. That is
         the one desync this control is most prone to -- the header and the body have come
         apart here before -- so the drag takes the same transform the paint does. }
-      Target := TyDropIndexAtPoint(Point(X, Y), PPI);
+      { ... and then no further than the pinned tabs let this one go: the order is the
+        host's, and a pinned block it has built is not taken apart by a drag. }
+      Target := TyPinnedDropIndex(FDragTab, TyDropIndexAtPoint(Point(X, Y), PPI));
       if (Target >= 0) and (Target <> FDragTab) then
       begin
         DoReorderTabs(FDragTab, Target); // subclass reseats its own tab data
@@ -2511,13 +2927,16 @@ begin
         if HitRect(HdrRect, X, Y) then     // both axes -- see IndexOfTabAt
         begin
           NewHover := I;
-          { Independent close (x) hover: only when closable and the pointer is
-            inside this tab's shifted close rect. Mirrors the MouseDown hit-test
-            so the highlight and the actual close target stay in lockstep. }
-          if GetTabClosableAt(I) then
+          { Independent slot hover: only when the pointer is inside this tab's shifted
+            slot rect and a click there would act -- close the tab, or reach its pin.
+            Mirrors the MouseDown hit-test so the highlight and the actual target stay
+            in lockstep. }
+          if FCloseRects[I].Right > FCloseRects[I].Left then
           begin
             CloseRect := ToScreenRect(FCloseRects[I]);
-            if HitRect(CloseRect, X, Y) then NewHoverClose := I;
+            if HitRect(CloseRect, X, Y)
+               and (GetTabClosableAt(I) or TabState(I).Pinned) then
+              NewHoverClose := I;
           end;
           Break;
         end;
@@ -2532,6 +2951,14 @@ begin
   begin
     FHoverTab := NewHover;
     Invalidate;
+    {$IF LCL_FULLVERSION < 4000000}
+    { Each tab has its own hint (CMHintShow), and LCL 4 asks for it again by itself when the
+      pointer leaves the rect the last answer named. Before 4.0 it asks again only on reaching
+      another CONTROL, so the first tab's hint stayed up over every other tab: start the hint
+      over when the pointer reaches another tab. }
+    if ShowHint and (Application <> nil) then
+      Application.ActivateHint(Mouse.CursorPos);
+    {$ENDIF}
   end;
 end;
 
@@ -2541,7 +2968,7 @@ end;
 procedure TTyCustomTabStrip.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  FromIdx, ToIdx: Integer;
+  FromIdx, ToIdx, MidIdx: Integer;
 begin
   if FDesignTabGesture then
   begin
@@ -2549,6 +2976,19 @@ begin
     if HandleAllocated then MouseCapture := False;
   end;
   inherited MouseUp(Button, Shift, X, Y);
+  { Middle-click close: the button comes up over the tab it went down on. The tab goes by
+    the road its close glyph takes -- DoCloseClick, so OnTabClose can still refuse -- and
+    only where that glyph would be there to click: a tab that can be closed. A pinned tab
+    stays; that is what pinning it is for. }
+  if Button = mbMiddle then
+  begin
+    MidIdx := FMiddleTab;
+    FMiddleTab := -1;
+    if FMiddleClickClose and (MidIdx >= 0) and IsEnabled
+       and (IndexOfTabAt(X, Y) = MidIdx) and GetTabClosableAt(MidIdx)
+       and not TabState(MidIdx).Pinned then
+      DoCloseClick(MidIdx);
+  end;
   { A committed reorder fires OnReorder exactly once for the whole gesture, with
     the net from (press) -> to (final) move. FDragging only flips True once the
     pointer crossed the threshold and reseated the tab, so a plain click never
@@ -2573,6 +3013,7 @@ begin
   FDragTab    := -1;
   FDragOrigin := -1;
   FDragging   := False;
+  FMiddleTab  := -1;   { a middle press that left is not a click }
   if (FHoverTab <> -1) or (FHoverClose <> -1) then
   begin
     FHoverTab   := -1;

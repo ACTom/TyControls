@@ -159,7 +159,12 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property MiddleClickClose;
     property OnTabClose;
+    { Per-tab state -- modified, preview, pinned, hint, ink -- asked of the host tab by tab.
+      See TTyTabState in tyControls.TabStrip. }
+    property OnGetTabState;
+    property OnTabPinClick;
     property OnChange;
     property OnChanging;
     property OnReorder;

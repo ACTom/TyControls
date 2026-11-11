@@ -7217,7 +7217,10 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property MiddleClickClose;
     property OnTabClose;
+    property OnGetTabState;
+    property OnTabPinClick;
     property OnChange;
     property OnChanging;
     property OnReorder;
@@ -9934,7 +9937,10 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property MiddleClickClose;
     property OnTabClose;
+    property OnGetTabState;
+    property OnTabPinClick;
     property OnChange;
     property OnChanging;
     property OnReorder;

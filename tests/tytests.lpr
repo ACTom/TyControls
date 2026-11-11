@@ -39,7 +39,7 @@ uses
   test.trackbar.ticklabels,
   test.multitrackbar,
   test.groupbox,
-  test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline,
+  test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline, test.tabstrip.states,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
   test.floatspinedit, test.spinbuttons, test.freewhileownerlives, test.danglingrefs, test.combobox.editor, test.translatable, test.componentleaks, test.wheelevents, test.examplelfm,
   test.memo.props,
