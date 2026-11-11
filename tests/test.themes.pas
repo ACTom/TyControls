@@ -682,7 +682,7 @@ const
     'TyToolWindowActions|', 'TyToolWindowTabRow|', 'TyToolWindowTab|',
     'TyToolWindowTabIndicator|', 'TyToolWindowOverflow|', 'TyToolWindowButton|',
     'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
-    'TyToolWindowBadge|', 'TyToolWindowDropZone|');
+    'TyToolWindowBadge|', 'TyToolWindowDropZone|', 'TyToolWindowStripCommand|');
 
   GMETRICS: array[0..133] of string = (
     '--alert-action-gap',

@@ -47,6 +47,8 @@ type
   published
     procedure TestHoveringTheOtherStripShowsTheSlotThere;
     procedure TestTheOtherBarsContentMeansTheEnd;
+    { 图标条末端的命令项不是插入槽:源栏自己的命令项上没有目标,另一侧栏的命令项上 = 条尾。 }
+    procedure TestCommandCellsAreNotSlotsOnEitherBar;
     procedure TestTheEditorAndTheBottomBarAreNoTargets;
     procedure TestTheTargetIsAskedOncePerGesture;
     procedure TestAVetoedBarIsNoTarget;
@@ -281,6 +283,26 @@ begin
   MoveTo(RightContent);
   AssertTrue('内容区也是目标', FRight.ForeignDropForTest);
   AssertEquals('内容区 = 最后一个图标之后', 1, FRight.DropSlotForTest);
+end;
+
+procedure TTyToolWindowCrossDragTests.TestCommandCellsAreNotSlotsOnEitherBar;
+var
+  own, other: TRect;
+begin
+  FBar.Commands.Add;
+  FRight.Commands.Add;
+  own := FBar.CommandRect(0);
+  other := FRight.CommandRect(0);
+  AssertTrue('前提:两条栏的命令项都排上了', not IsRectEmpty(own) and not IsRectEmpty(other));
+  StartDrag(1);
+  MoveTo(ScreenOf(FBar, Point(own.CenterPoint.X, own.Top - 4)));
+  AssertEquals('前提:命令项上面的空白是源栏的条尾', 3, FBar.DropSlotForTest);
+  MoveTo(ScreenOf(FBar, own.CenterPoint));
+  AssertNoDropAnywhere('源栏自己的命令项');
+  AssertEquals('是禁止光标', Ord(crNoDrop), Ord(FBar.DragCursorForTest));
+  MoveTo(ScreenOf(FRight, other.CenterPoint));
+  AssertTrue('另一侧栏的命令项上:那条栏是目标', FRight.ForeignDropForTest);
+  AssertEquals('落在最后一个图标之后,不是命令项之间', 1, FRight.DropSlotForTest);
 end;
 
 procedure TTyToolWindowCrossDragTests.TestTheEditorAndTheBottomBarAreNoTargets;

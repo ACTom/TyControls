@@ -10819,6 +10819,8 @@ type
     property OnCollapse;
     property OnExpand;
     property HideWhenEmpty;
+    property Commands;
+    property OnCommandClick;
   end;
 
   TGenTrackBar = class(TTyCustomTrackBar)

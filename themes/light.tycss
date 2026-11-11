@@ -1428,6 +1428,11 @@ TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }
 TyToolWindowStripItem:disabled { color: var(--muted); }
 TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }
+/* 图标条末端的命令项(Commands): 默认跟窗口图标一个样子, 只是没有 :selected。 */
+TyToolWindowStripCommand          { color: var(--toolwindow-strip-ink); }
+TyToolWindowStripCommand:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }
+TyToolWindowStripCommand:active   { background: var(--toolwindow-overlay-active); }
+TyToolWindowStripCommand:disabled { color: var(--muted); }
 /* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar
    的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */
 TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }

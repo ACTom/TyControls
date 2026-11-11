@@ -1223,6 +1223,11 @@ TyToolWindowDropZone||1 => pres[0,1,2,3,] bg=k1/383B82F6 ut=0 txt=FF1F2937 bd=FF
 TyToolWindowDropZone||2 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||3 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||0 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||1 => pres[0,1,] bg=k1/1F1F2937 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||2 => pres[0,1,] bg=k1/331F2937 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 metric --alert-action-gap => 8
 metric --alert-close-gap => 8
 metric --alert-close-size => 14

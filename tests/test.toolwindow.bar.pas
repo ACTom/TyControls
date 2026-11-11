@@ -79,7 +79,12 @@ type
     procedure CallConstrainedResize(var AMinW, AMinH, AMaxW, AMaxH: TConstraintSize);
     { 对齐锁的层数(DisableAlign 一次加一层;protected 的 AutoSizingLockCount)。 }
     function AlignLockForTest: Integer;
+  public
+    { 命令项的菜单被请了几次、最近一次是哪一项(DropCommandMenu;无头没有句柄,不真的弹)。 }
+    MenuDrops: Integer;
+    LastDropped: TTyToolWindowCommand;
   protected
+    procedure DropCommandMenu(ACommand: TTyToolWindowCommand); override;
     procedure BeginLayoutBatch; override;
     function PointerInClient(out APoint: TPoint): Boolean; override;
     function TickNow: QWord; override;
@@ -488,6 +493,13 @@ procedure TBarAccess.BeginLayoutBatch;
 begin
   if RaiseOnLayoutBatch then raise Exception.Create('probe: BeginLayoutBatch');
   inherited BeginLayoutBatch;
+end;
+
+procedure TBarAccess.DropCommandMenu(ACommand: TTyToolWindowCommand);
+begin
+  Inc(MenuDrops);
+  LastDropped := ACommand;
+  inherited DropCommandMenu(ACommand);
 end;
 
 function TBarAccess.AlignLockForTest: Integer;

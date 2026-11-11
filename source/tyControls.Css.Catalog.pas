@@ -581,6 +581,7 @@ const
     'TyToolWindowOverflow',
     'TyToolWindowSeparator',
     'TyToolWindowStrip',
+    'TyToolWindowStripCommand',
     'TyToolWindowStripIndicator',
     'TyToolWindowStripItem',
     'TyToolWindowTab',

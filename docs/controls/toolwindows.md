@@ -53,6 +53,7 @@ end
 | `TyToolWindowStrip` | 图标条底色，靠内容区一侧的界线（border-color / border-width） |
 | `TyToolWindowStripItem` | 图标格；`:hover` `:selected` `:active` `:disabled` |
 | `TyToolWindowStripIndicator` | 当前图标旁的指示条 |
+| `TyToolWindowStripCommand` | 图标条末端的命令项（§9）；`:hover` `:active` `:disabled`，没有 `:selected` |
 | `TyToolWindowEdge` | 拉宽边，也是贴着编辑区的分隔线；`:hover` `:active` |
 | `TyToolWindow` | 窗口正文底色 |
 | `TyToolWindowHeader` | 侧栏标题行：底色、标题墨色和字体、可选底线（border-color + border-width） |
@@ -109,7 +110,10 @@ end
 | `Maximized` | 底栏最大化（public，不进 .lfm，也不进布局串） |
 | `Windows[i]` / `WindowCount` / `IndexOfWindow(W)` | 窗口列表，顺序就是 `Controls` 顺序 |
 | `WindowAtPos(X, Y)` / `ContextWindow` | 某点下的图标 / 标签对应的窗口；最近一次右键落在哪个窗口上（不在图标或标签上是 nil） |
-| `OnChange` / `OnCollapse` / `OnExpand` | 见 §4 |
+| `Commands` | 图标条末端的命令项，见 §9。只有侧栏画它们 |
+| `CommandAtPos(X, Y)` / `CommandRect(序号)` / `ContextCommand` | 某点下的命令项；`Commands[序号]` 在栏上的格子（没排上是空矩形）；最近一次右键落在哪个命令项上 |
+| `ClickCommand(命令项)` | 等于在它上面点一下，同命令项自己的 `Click` |
+| `OnChange` / `OnCollapse` / `OnExpand` / `OnCommandClick` | 见 §4 |
 
 4.0 起栏交出的窗口（`Windows[i]`、`ActiveWindow`、`WindowAtPos`、`ContextWindow`）类型是 `TTyCustomToolWindow`：栏收任何从它派生的窗口，交出来的就是放进去的那一个。`IndexOfWindow`、`ActivateWindow` 的参数同理。
 
@@ -130,6 +134,22 @@ end
 | `FocusFirst` | 把焦点给正文里第一个能聚焦的控件（跳过操作区） |
 | `OnShow` / `OnHide` | 这一页显示 / 藏起。`OnShow` 里栏和这一页已经是显示出来的位置和尺寸 |
 
+### TTyToolWindowCommand
+
+`Commands` 里的一项（§9）。
+
+| 成员 | 说明 |
+|---|---|
+| `ImageName` / `ImageIndex` | 图标，规矩同工具窗口：`ImageName` 是持久键，在栏的 `Images`（为空时 `Manager.Images`）里按名字找，找不到就不画 |
+| `Hint` | 提示。空的时候用 `Caption` |
+| `Caption` | 这一项的名字：`Hint` 为空时拿它当提示，对象查看器的集合编辑器里也显示它。图标条上不画文字 |
+| `Enabled` | 默认 True。False 时变灰，不接悬停，点了没反应 |
+| `Visible` | 默认 True。False 时不占格子，其余的补上来 |
+| `DropDownMenu` | 点击没被 `OnCommandClick` 处理掉时弹出的菜单 |
+| `Tag` | 随你用 |
+| `Click` | 等于在它上面点一下 |
+| `HintText` / `Bar` | 此刻的提示文字；所在的栏 |
+
 ### TTyToolWindowActions
 
 只有 `Controller`（不进 .lfm，对象查看器里藏着）和通常的外观属性。位置和尺寸由窗口排，`Align` 钉死在 `alCustom`，子控件由它自己从左往右排成一排、垂直居中。
@@ -141,9 +161,9 @@ end
 | `MoveWindow(W, 目标栏, 序号 = -1)` | 把窗口挪到另一条栏（或同一条栏里调顺序）。-1 = 末尾。答 False 表示什么都没改 |
 | `CanMoveWindow(W, 目标栏)` | 结构检查 + `OnCanMoveWindow`，没有副作用 |
 | `UsableBar(Placement)` | 此刻这一侧的可用栏；没有答 nil。「移到另一侧」就问它要目标 |
-| `IsBarUsable(栏)` | 这条栏可不可用（见 §12 Placement 冲突） |
+| `IsBarUsable(栏)` | 这条栏可不可用（见 §13 Placement 冲突） |
 | `CancelDrag` / `IsDragging` | 取消此刻的图标拖动；有没有在拖 |
-| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §9 |
+| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §10 |
 | `Images` | 两侧共用的图标列表 |
 | `OnCanMoveWindow` / `OnWindowMoved` / `OnLayoutApplied` | 见 §4 |
 
@@ -153,6 +173,7 @@ end
 |---|---|---|
 | 栏 `OnChange` | 运行时当前页换了窗口（点击、代码、`MoveWindow`、直接改 Parent、当前页离开本栏） | 设计期；加载中和 `Loaded`；布局应用；只是调顺序 |
 | 栏 `OnCollapse` / `OnExpand` | 运行时 `Collapsed` 真的变了 | 设计期；加载中；布局应用 |
+| 栏 `OnCommandClick` | 命令项被点了：鼠标在同一项上按下并松开，或者代码调了 `Click` | 设计期；栏或那一项禁用着；右键；双击的第二下 |
 | 窗口 `OnShow` / `OnHide` | 运行时显示 / 藏起（切页、收起、展开）；普通的布局读取里照发 | 设计期；启动时栏在 `Loaded` 里显示的那一页；加载结束时应用挂起布局的那一批（见下） |
 | manager `OnCanMoveWindow` | 跨栏：拖到某条栏上、松开、调 `MoveWindow`、排队的移动执行前 | 同栏调顺序；直接改 Parent；布局应用；设计期 |
 | manager `OnWindowMoved` | 运行时窗口的栏或序号真的变了：手势、`MoveWindow`、`WindowIndex`、同一 manager 下直接改 Parent | 加载中；设计期；读布局 / 恢复默认 |
@@ -215,7 +236,44 @@ end
 - 底栏标签的宽按静止、选中、禁用三种样子里最宽的量：禁用、启用一页，标签不跳，也不会被截。
 - Win32 上点禁用页的正文，这一下会落到栏上：栏的 `OnClick` 不会触发，`DragMode = dmAutomatic` 也不会拖起栏，`OnMouseDown` / `OnMouseUp` 会；指针停在禁用页上不显示栏自己的 `Hint`。GTK、Cocoa 上这一下直接丢掉。
 
-## 9. 布局保存
+## 9. 图标条上的命令项
+
+侧栏的图标条末端可以放几个命令项：点它是运行一个命令或者打开一个菜单，不显示工具窗口，就像 VS Code 活动栏底部的「账户」和「管理」齿轮。
+
+```pascal
+with LeftBar.Commands.Add do
+begin
+  ImageName := 'settings';
+  Hint := 'Manage';
+  DropDownMenu := ManageMenu;      // 点一下就弹这个菜单
+end;
+
+// 不用菜单、或者想先拦一下的，写栏的 OnCommandClick
+procedure TMainForm.LeftBarCommandClick(Sender: TObject; ACommand: TTyToolWindowCommand;
+  var AHandled: Boolean);
+begin
+  if ACommand = AccountsCommand then
+  begin
+    ShowAccounts;
+    AHandled := True;              // 这一下处理完了，菜单不用弹
+  end;
+end;
+```
+
+- 设计期在对象查看器里点 `Commands` 旁边的「…」增删，照常存进 .lfm。没有命令项的栏，.lfm 里不多出任何东西。
+- 排在图标条的末端（左栏、右栏都是条的底部），按集合里的顺序从上到下，最后一项贴着条尾。格子和窗口图标一样大，图标从同一个列表里取。
+- 在同一项上按下并松开才算点击。先发栏的 `OnCommandClick`；处理器没把 `AHandled` 设成 True、这一项又有 `DropDownMenu`，就贴着这一格往内容区那一侧弹出菜单：左栏往右开，右栏往左开。弹之前栏会把菜单的 `PopupComponent` 设成自己、`Alignment` 设成开向内容区的那一个。连点两下只算一次。
+- 命令项没有「当前」状态，不显示工具窗口，也不参加拖动：按住它拖不起来；拖着窗口图标经过它时那里不是落点，在上面松手等于取消（拖到另一侧栏的命令项上，等于拖到那条栏的最后）。
+- 条不够长时，窗口图标先收进溢出菜单，命令项留着。只给窗口留最少的位置：有窗口留一格，不止一个再留一格给溢出按钮。连这样也排不下全部命令项时，留靠条尾的那几项，前面的不显示也点不到。所以最要紧的那一项放最后。
+- 有看得见的命令项的侧栏不算「空」：窗口都挪走以后图标条照样留着，`HideWhenEmpty`（§7）只在一个看得见的命令项都没有时才把整条藏起来。
+- 右键落在命令项上时 `ContextWindow` 是 nil，`ContextCommand` 是那一项；栏的 `PopupMenu` 和 `OnContextPopup` 照常。
+- 提示用 `Hint`，空的时候用 `Caption`，跟着栏的 `ShowHint`。
+- 样式键是 `TyToolWindowStripCommand`，默认和窗口图标一个样子；想让它们看着不一样，写这个键的规则。
+- 不进布局串：`SaveLayoutToString` 只管工具窗口。
+- 底栏没有图标条，`Commands` 对它没有效果。
+- 派生类可以重写 `DoCommandClick`（在事件前后插一手）和 `DropCommandMenu`（换成自己的弹出层）。
+
+## 10. 布局保存
 
 | 方法 | 说明 |
 |---|---|
@@ -258,7 +316,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 
 不保存的：底栏最大化；窗口里的内容（筛选框文字、终端会话、滚动位置）。
 
-## 10. 设计器里使用
+## 11. 设计器里使用
 
 - 从「TyControls Containers」页放一条栏和一个 manager 到窗体上，栏的 `Manager` 指向它。在对象查看器里改 `Placement`，栏自己挪到那一边。
 - **栏的右键菜单**
@@ -276,7 +334,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - **粘贴要先选中栏**：侧栏点图标条，底栏点标签行后面的空白处或拉宽边。选中的是当前页窗口的正文时，粘贴会落进窗口里。
 - 窗口和操作区在对象查看器里没有 `Controller`，它们用栏的。
 
-## 11. 流式化
+## 12. 流式化
 
 ```
 object BottomBar: TTyToolWindowBar
@@ -305,11 +363,11 @@ end
 - 窗口的 `Left`、`Top`、`Width`、`Height`、`TabOrder`、`Visible`、`Controller` 不进 .lfm；栏沿轴向的那一边（侧栏的 `Width`、底栏的 `Height`）也不进，由 `ExpandedSize` 推出来。
 - 窗口顺序就是它们在 `Controls` 里的顺序，也就是 .lfm 里的先后。
 
-## 12. 注意事项
+## 13. 注意事项
 
 - `Controller` 由栏推给窗口、窗口再推给操作区。代码里直接赋给窗口的值会被下一次推送盖掉，要换主题请设栏的 `Controller`。
 - 图标条的提示跟着栏的 `ShowHint`，底栏标签的提示跟着各窗口的 `ShowHint`；当前页被禁用、标签行由栏来画的时候，跟着栏的 `ShowHint`。提示文字用 `StripHint`，**不要用 `Hint`**：窗口的 `Hint` 会冒到它里面所有没设 `Hint` 的控件上。
-- 栏的 `PopupMenu` 和 `OnContextPopup` 管图标、标签、图标条空白处和拉宽边上的右键，不在图标或标签上时 `ContextWindow` 是 nil。正文里的控件冒上来的右键不经过栏，直接交给窗体。栏没有 `PopupMenu` 时，图标和标签上的右键也接着交给窗体。
+- 栏的 `PopupMenu` 和 `OnContextPopup` 管图标、标签、命令项、图标条空白处和拉宽边上的右键，不在图标或标签上时 `ContextWindow` 是 nil（落在命令项上时看 `ContextCommand`）。正文里的控件冒上来的右键不经过栏，直接交给窗体。栏没有 `PopupMenu` 时，图标和标签上的右键也接着交给窗体。
 - 操作区不发布 `AutoSize`、`ChildSizing`、`BorderSpacing`：它的位置和尺寸由窗口排，子控件由它自己排。3.x 窗体里存过的这几个值，载入时丢掉。
 - 启动时显示出来的当前页收不到 `OnShow`。首次填充内容请放在 FormCreate 里。
 - `OnShow` / `OnHide` 里可以改 `ActiveWindow` 和 `Collapsed`，以处理器改的为准，`OnChange` 只报处理器那一次。
@@ -321,14 +379,14 @@ end
 - 排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏（§5）。
 - 窗体显示之后调的 `LoadLayoutFromString` / `ResetLayout` 也会排队；排着的布局执行时会盖掉这段时间里的同步改动，也会顶掉已经排着的移动。
 - 跨栏移动（`MoveWindow`、拖放、读布局、恢复默认）会重建窗口里所有控件的句柄：输入法组字、光标位置、原生子窗口的状态都不保留。
-- 改了名的窗口当成新窗口（§9）；翻译 `Caption` 不影响布局。
+- 改了名的窗口当成新窗口（§10）；翻译 `Caption` 不影响布局。
 - `Bar.Manager` 是基类类型。经它调 `MoveWindow` 或布局方法要转型成 `TTyToolWindowManager`，或者直接用窗体上的 manager 字段；用到 manager 的单元要 uses `tyControls.ToolWindows.Manager`。
 - 继承窗体上读用户布局，请在 FormCreate 里调：祖先层加载中调的会被子孙层流进来的值盖掉。
 - 同一个 manager 下 `Placement` 相同的栏都不可用：不参与跨栏拖动、`MoveWindow` 和布局保存，栏内调顺序照常。
 - 不支持：manager 放在数据模块里、栏分布在多个窗体上。
 - 删掉一个工具窗口或操作区后撤销 / 重做，它会被建到**窗体**上：窗口显示成孤儿，右键「移回栏里 ▸」；操作区用 IDE 的「改变父控件」放回窗口。
 
-## 13. 和 VS Code / JetBrains 的差异
+## 14. 和 VS Code / JetBrains 的差异
 
 - 两侧都有图标条（VS Code 右侧栏用标题行里的标签切换）。
 - 侧栏和底栏之间不能互拖（VS Code 三处互通）。
@@ -342,7 +400,7 @@ end
 - 图标和标签松开才切。库里单纯做切换的控件（`TTySegmented`、`TTyTabSet` 这类标签条、`TTyPagination`）是按下就切；这里按下之后可能是要拖，所以等松开。TreeView、Grid 的表头点击也改成了松开才算。
 - `OnWindowMoved` 对 `MoveWindow`、改 `WindowIndex` 也发。Grid 的 `OnRowMove`、TreeView 的 `OnNodeMoved`、标签条的 `OnReorder` 只在手势里发；这里是想给程序一个「布局变了」的信号，比如拿来自动保存。
 
-## 14. 示例
+## 15. 示例
 
 `examples/toolwindows`：一个类 IDE 窗体，左边 Explorer / Search，右边 Outline，编辑区下面 Problems / Output / Terminal。能跨侧拖、最大化和收起底栏、保存 / 读取 / 恢复布局（关掉再开回到上次的样子）、换肤、换密度；Output 页里是事件日志。
 

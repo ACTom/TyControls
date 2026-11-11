@@ -77,6 +77,8 @@ const
   { E 期(spec §12):图标 / 标签上的角标、隐藏侧栏的放置预览。 }
   TyToolWindowBadgeKey           = 'TyToolWindowBadge';
   TyToolWindowDropZoneKey        = 'TyToolWindowDropZone';
+  { 图标条末端的命令项(TTyToolWindowBar.Commands):自己的键,主题分得清它和窗口图标。 }
+  TyToolWindowStripCommandKey    = 'TyToolWindowStripCommand';
 
   { 点击防抖(毫秒)。拖动阈值在 tyControls.ToolWindows.Layout。 }
   TyToolWindowClickGuardMs    = 300;
@@ -587,6 +589,88 @@ type
     property Controller;
   end;
 
+  TTyToolWindowCommands = class;
+
+  { 侧栏图标条末端的一个命令项:点它是运行一个命令或打开一个菜单,不显示工具窗口(VS Code 活动栏
+    底部的 Accounts、Manage 齿轮)。格子和窗口图标一样大,样式键是 TyToolWindowStripCommand,
+    没有「当前」状态;不参加拖动调顺序、不是落点,也不进布局串。
+    图标的规矩同工具窗口:ImageName 是持久键,在栏的生效列表(Images,为空时 Manager.Images)里
+    按名字解析,找不到就不画;ImageIndex 是它的视图。 }
+  TTyToolWindowCommand = class(TCollectionItem)
+  private
+    FCaption: TTranslateString;
+    FHint: TTranslateString;
+    FImageName: string;
+    FImageIndex: Integer;         { 最近一次按序号写进来的值;名字给不出答案时的回落 }
+    FImageIndexPending: Boolean;  { 同 TTyCustomToolWindow.FImageIndexPending }
+    FEnabled: Boolean;
+    FVisible: Boolean;
+    FDropDownMenu: TPopupMenu;
+    FTag: PtrInt;
+    function GetBar: TTyCustomToolWindowBar;
+    function ImageIndexIsStored: Boolean;
+    function GetImageIndex: TImageIndex;
+    procedure SetImageIndex(AValue: TImageIndex);
+    procedure SetImageName(const AValue: string);
+    procedure SetCaption(const AValue: TTranslateString);
+    procedure SetHint(const AValue: TTranslateString);
+    procedure SetEnabled(AValue: Boolean);
+    procedure SetVisible(AValue: Boolean);
+    procedure SetDropDownMenu(AValue: TPopupMenu);
+    { 挂起的 ImageIndex 换成生效列表里那一格的名字(同 TTyCustomToolWindow.ResolveImageIndex)。 }
+    procedure ResolveImageIndex;
+  protected
+    function GetDisplayName: string; override;
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(Source: TPersistent); override;
+    { 等于在它上面点一下(TTyCustomToolWindowBar.ClickCommand):栏或它自己禁用时什么都不做。 }
+    procedure Click;
+    { 图标条要画的那一格:ImageName 非空就按名字在栏的生效列表里找,找不到是 -1(不许乱画
+      一个);名字为空才用序号(同 TTyCustomToolWindowBar.ResolvedImageIndex)。 }
+    function ResolvedImageIndex: Integer;
+    { 提示的文字:Hint,空的时候 Caption。 }
+    function HintText: string;
+    property Bar: TTyCustomToolWindowBar read GetBar;
+  published
+    { 提示在 Hint 为空时用它;也是这一项给辅助技术的名字。 }
+    property Caption: TTranslateString read FCaption write SetCaption;
+    { 点击没被 OnCommandClick 处理掉时,贴着这一格、往内容区那一侧弹出的菜单。栏弹它之前把它的
+      PopupComponent 设成栏、Alignment 设成开向内容区的那一个。 }
+    property DropDownMenu: TPopupMenu read FDropDownMenu write SetDropDownMenu;
+    property Enabled: Boolean read FEnabled write SetEnabled default True;
+    property Hint: TTranslateString read FHint write SetHint;
+    property ImageIndex: TImageIndex read GetImageIndex write SetImageIndex
+      stored ImageIndexIsStored default -1;
+    property ImageName: string read FImageName write SetImageName;
+    property Tag: PtrInt read FTag write FTag default 0;
+    { False:不占格子,后面的命令项补上来。 }
+    property Visible: Boolean read FVisible write SetVisible default True;
+  end;
+
+  { 栏的命令项,按集合顺序排在图标条末端(最后一项贴着条尾)。 }
+  TTyToolWindowCommands = class(TOwnedCollection)
+  private
+    FBar: TTyCustomToolWindowBar;
+    function GetItem(AIndex: Integer): TTyToolWindowCommand;
+    procedure SetItem(AIndex: Integer; AValue: TTyToolWindowCommand);
+  protected
+    { 增删、挪动、任何一项的属性变了:栏重排、重画。 }
+    procedure Update(Item: TCollectionItem); override;
+    { 一项正在离开:栏清掉指着它的悬停、按下、右键记录。 }
+    procedure Notify(Item: TCollectionItem; Action: TCollectionNotification); override;
+  public
+    constructor Create(ABar: TTyCustomToolWindowBar);
+    function Add: TTyToolWindowCommand;
+    property Bar: TTyCustomToolWindowBar read FBar;
+    property Items[AIndex: Integer]: TTyToolWindowCommand read GetItem write SetItem; default;
+  end;
+
+  { 命令项被点了(鼠标在同一项上按下并松开,或程序调 Click)。AHandled 置 True = 这一下处理完了,
+    栏不再弹它的 DropDownMenu;没有菜单的命令项不看它。 }
+  TTyToolWindowCommandClickEvent = procedure(Sender: TObject; ACommand: TTyToolWindowCommand;
+    var AHandled: Boolean) of object;
+
   { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
     内容区下限、设计期提示行高。下限也在这里:推导按它钳内容项,只换
     --toolwindow-content-min 的主题也得重推。提示行高(借 --toolwindow-header-height)同理:
@@ -617,12 +701,18 @@ type
     Content: TRect;
     { 图标条整条(含靠内容区那一侧的界线);底栏为空。 }
     Strip: TRect;
-    { 图标条里排图标的那一段:Strip 去掉界线。 }
+    { 图标条里排窗口图标的那一段:Strip 去掉界线,再去掉条尾的命令项(CommandCells)。拖放的
+      落点、插入线都只在这一段里。 }
     Cells: TRect;
     { 排上条的图标,ItemIndex 是**窗口序号**,ItemRect 已换成栏坐标。 }
     Slots: TTyToolWindowSlots;
     { 有窗口放不下时,紧跟在最后一个图标后面的溢出按钮。 }
     Overflow: TRect;
+    { 排上条的命令项,按集合顺序从上到下、最后一项贴着条尾;ItemIndex 是它在 Commands 里的
+      序号,ItemRect 是栏坐标。看不见的(Visible = False)和排不下的不在里面。 }
+    Commands: TTyToolWindowSlots;
+    { 命令项占的那一段,紧接在 Cells 下面;一项都没排上时为空。 }
+    CommandCells: TRect;
     { 拉宽边 / 贴编辑区的分隔线。运行时收起或没有窗口时为空(它这时不起作用,也不占宽)。 }
     Edge: TRect;
     { 设计期没有窗口:「添加工具窗口」提示画在这里。 }
@@ -642,9 +732,9 @@ type
 
   { 栏上一个点落在哪个部件上(TTyToolWindowBar.PartAt)。图标和底栏标签共用 twbpItem、两种溢出
     共用 twbpOverflow:一条栏只会有其中一种,手势引擎和点击分派因此不用分两套。最大化 / 收起 /
-    分隔线只在底栏标签行上有。 }
+    分隔线只在底栏标签行上有;命令项(twbpCommand)只在侧栏图标条上有。 }
   TTyToolWindowBarPart = (twbpNone, twbpItem, twbpOverflow, twbpEdge,
-    twbpMaximize, twbpCollapse, twbpSeparator);
+    twbpMaximize, twbpCollapse, twbpSeparator, twbpCommand);
 
   { MoveWindow / 直接改 Parent 期间先记下、之后按 spec §6.6 的顺序发的栏事件。 }
   TTyToolWindowBarEvent = (twbeChange, twbeExpand, twbeCollapse);
@@ -1279,6 +1369,31 @@ type
     { 栏被禁用或藏起来:拉到一半的边和拖到一半的图标都作废(照常调继承)。 }
     procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
     procedure CMVisibleChanged(var Message: TLMessage); message CM_VISIBLECHANGED;
+  private
+    { --- 图标条末端的命令项(TTyToolWindowCommand) --- }
+    FCommands: TTyToolWindowCommands;
+    FOnCommandClick: TTyToolWindowCommandClickEvent;
+    { 悬停、按下、最近一次右键落在的那一项。记引用不记序号:项可以增删、挪动;项离开集合时
+      CommandLeaving 清掉。按下的那一项和手势引擎的记录(Part = twbpCommand)同生同灭。 }
+    FCommandHover: TTyToolWindowCommand;
+    FCommandPressed: TTyToolWindowCommand;
+    FContextCommand: TTyToolWindowCommand;
+    procedure SetCommands(AValue: TTyToolWindowCommands);
+    { 空集合不进 .lfm(已有窗体写出来的流一个字节不变)。继承来的栏(csAncestor)照写:
+      子孙窗体把祖先的命令项删光了,得写出一个空集合才记得住,比不比得上祖先由 writer 判。 }
+    function CommandsStored: Boolean;
+    { 集合变了(增删、挪动、某一项的属性):有没有看得见的命令项决定空栏藏不藏(HiddenAsEmpty),
+      所以重推尺寸,再重画。加载中、析构中不做(Loaded 统一来一遍)。 }
+    procedure CommandsChanged;
+    { 一项正在离开集合(删除、Clear、集合析构)。 }
+    procedure CommandLeaving(ACommand: TTyToolWindowCommand);
+    { ACommand 还在集合里(只比指针,不解引用:处理器里可能已经把它删了)。 }
+    function HasCommand(ACommand: TTyToolWindowCommand): Boolean;
+    { 至少有一个看得见的命令项。 }
+    function HasVisibleCommands: Boolean;
+    { 命令项的状态:disabled / hover / active;没有 :selected。 }
+    function CommandStates(ACommand: TTyToolWindowCommand): TTyStateSet;
+    procedure SetCommandHover(ACommand: TTyToolWindowCommand);
   protected
     { 图标条上悬停 / 按下的那一格(窗口序号,-1 = 没有)。悬停由 UpdateHoverAt / RecheckHover /
       MouseLeave 写,按下由手势写;窗口离开时按新的序号重新对上(UnregisterWindow)。 }
@@ -1362,6 +1477,12 @@ type
       这里模拟某一条栏进门时抛异常。 }
     procedure BeginLayoutBatch; virtual;
     procedure EndLayoutBatch; virtual;
+    { 命令项被点了:发 OnCommandClick。派生类重写它可以在事件之前 / 之后插一手,或者整个接管
+      (AHandled 置 True 就不弹菜单)。 }
+    procedure DoCommandClick(ACommand: TTyToolWindowCommand; var AHandled: Boolean); virtual;
+    { 弹 ACommand 的 DropDownMenu:PopupComponent 设成栏,锚点和对齐方式取 CommandMenuAnchor
+      (贴着那一格、开向内容区);没有句柄不弹(无头)。派生类重写它可以换成自己的弹出层。 }
+    procedure DropCommandMenu(ACommand: TTyToolWindowCommand); virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1406,7 +1527,19 @@ type
     function PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
     { (X, Y) 上的图标对应的窗口;不在图标上答 nil(同 IndexOfTabAt,spec §6.8)。 }
     function WindowAtPos(X, Y: Integer): TTyCustomToolWindow;
-    { 提示的纯查询:图标上答 True,给文字(StripHint,空则 Caption)和那一格的矩形。 }
+    { (X, Y) 上的命令项;不在命令项上答 nil。 }
+    function CommandAtPos(X, Y: Integer): TTyToolWindowCommand;
+    { Commands[AIndex] 在栏上的格子;没排上条(看不见、排不下、底栏、越界)答空矩形。 }
+    function CommandRect(AIndex: Integer): TRect;
+    { ACommand 的菜单挂在哪、怎么对齐(栏客户区坐标):贴着它那一格、开向内容区,算法同溢出菜单
+      (TyToolWindowOverflowMenuAnchor)。没排上条答 False。 }
+    function CommandMenuAnchor(ACommand: TTyToolWindowCommand; out APoint: TPoint;
+      out AAlignment: TPopupAlignment): Boolean;
+    { 等于在 ACommand 上点一下:先 DoCommandClick(OnCommandClick);没处理掉、它又有 DropDownMenu,
+      就弹菜单。栏禁用、它禁用、设计期、不是本栏的命令项:什么都不做。 }
+    procedure ClickCommand(ACommand: TTyToolWindowCommand);
+    { 提示的纯查询:图标上答 True,给文字(StripHint,空则 Caption)和那一格的矩形;命令项上
+      同样答 True,文字是它的 Hint(空则 Caption)。 }
     function StripHintAt(X, Y: Integer; out AText: string; out ARect: TRect): Boolean;
     { 收进溢出菜单的窗口(窗口序号,按窗口顺序)。 }
     function OverflowWindows: TTyToolWindowPlan;
@@ -1418,6 +1551,8 @@ type
     function OverflowMenuAnchorIn(out APoint: TPoint; out AAlignment: TPopupAlignment): TWinControl;
     { 最近一次右键落在哪个窗口的图标上;不在图标上是 nil(spec §6.8)。只读。 }
     property ContextWindow: TTyCustomToolWindow read FContextWindow;
+    { 最近一次右键落在哪个命令项上;不在命令项上是 nil(这时 ContextWindow 也是 nil)。只读。 }
+    property ContextCommand: TTyToolWindowCommand read FContextCommand;
     { 拉宽边(= BarLayout.Edge):运行时收起、没有窗口时为空。 }
     function EdgeRect: TRect;
     { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
@@ -1520,6 +1655,11 @@ type
       窗口时本来就高 0。设计期永远不隐藏。隐藏的栏照样可用(IsBarUsable / UsableBar /
       MoveWindow),拖动时在它的位置显示放置预览(spec §6.9 / §9.8)。 }
     property HideWhenEmpty: Boolean read FHideWhenEmpty write SetHideWhenEmpty default True;
+    { 图标条末端的命令项(见 TTyToolWindowCommand)。只有侧栏画它们;底栏没有图标条,这个属性对它
+      没有效果。有看得见的命令项的侧栏不算「空」:没有窗口时也留着图标条(HideWhenEmpty)。 }
+    property Commands: TTyToolWindowCommands read FCommands write SetCommands stored CommandsStored;
+    property OnCommandClick: TTyToolWindowCommandClickEvent read FOnCommandClick
+      write FOnCommandClick;
   published
     { 沿栏轴向的那一边由 ExpandedSize 推出来,不进 .lfm。 }
     property Width stored WidthIsStored;
@@ -1590,6 +1730,8 @@ type
     property OnCollapse;
     property OnExpand;
     property HideWhenEmpty;
+    property Commands;
+    property OnCommandClick;
   end;
 
   { spec §9.9:跨栏移动之前问一次(拖动悬停、放下、MoveWindow、排队的移动执行前)。 }
@@ -3376,6 +3518,7 @@ begin
   inherited Create(AOwner);
   { 第一句:下面的 DeriveSize 会走到 SizesAsCollapsed(读吸附标志)。 }
   FGesture := TTyToolWindowGesture.Create(Self);
+  FCommands := TTyToolWindowCommands.Create(Self);
   ControlStyle := ControlStyle + [csAcceptsControls, csTripleClicks, csQuadClicks];
   FPlacement := twpLeft;
   FExpandedSize := TyToolWindowDefaultExpandedSize;
@@ -3422,6 +3565,9 @@ begin
     Application.RemoveAllHandlersOfObject(Self);
   if Screen <> nil then Screen.RemoveAllHandlersOfObject(Self);
   inherited Destroy;
+  { 命令项在继承析构之后放:继承析构里的推导、排布还会问「有没有看得见的命令项」。项离开时
+    回调栏的只清几个引用(CommandLeaving),集合的 Update 看见 csDestroying 就不动。 }
+  FreeAndNil(FCommands);
   { 最后一句:继承析构里注销窗口还会经 UnregisterWindow 走到 ResetGesture。引擎挂在
     Application / Screen 上的处理器由它自己的析构摘(上面那两句摘的是栏自己的)。 }
   FreeAndNil(FGesture);
@@ -3482,6 +3628,10 @@ begin
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
   for i := 0 to High(FRegistered) do
     FRegistered[i].ResolveImageIndex;
+  { 命令项同一条规矩:没有列表、加载中写进来的序号,这时换成名字。 }
+  if FCommands = nil then Exit;
+  for i := 0 to FCommands.Count - 1 do
+    FCommands[i].ResolveImageIndex;
 end;
 
 procedure TTyCustomToolWindowBar.ImagesChanged;
@@ -3621,8 +3771,11 @@ end;
 function TTyCustomToolWindowBar.HiddenAsEmpty: Boolean;
 begin
   { FAssumeShown:算放置预览的宽时按「有一个窗口」答(只在 ShownAxisPx 里置位)。 }
+  { 有看得见的命令项的侧栏不算空:窗口都挪走了,「管理」那个齿轮还得够得着 —— 留着图标条
+    (同 HideWhenEmpty = False 的空栏,照旧可以往条上拖)。 }
   Result := FHideWhenEmpty and (FPlacement <> twpBottom) and not FAssumeShown
-    and not (csDesigning in ComponentState) and (WindowCount = 0);
+    and not (csDesigning in ComponentState) and (WindowCount = 0)
+    and not HasVisibleCommands;
 end;
 
 function TTyCustomToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
@@ -4262,8 +4415,9 @@ var
   m: TTyToolWindowBarMetrics;
   R: TRect;
   stripS: TTyStyleSet;
-  bw, itemPx, bandH, i: Integer;
+  bw, itemPx, bandH, i, n, keep, fit: Integer;
   slots: TTyToolWindowSlots;
+  cmds: array of Integer;
 
   procedure ClampRect(var ARect: TRect);
   begin
@@ -4370,6 +4524,40 @@ begin
     ClampRect(Result.Cells);
   end;
   itemPx := TokenPxAt(TyToolWindowStripItemSizeVar, TyToolWindowStripItemSizeDef, APPI);
+  { 条尾的命令项:看得见的按集合顺序排成一段、最后一项贴着条尾,一格和窗口图标一样大。条不够
+    长时窗口图标先收进溢出;只给窗口留最少的位置 —— 有窗口就留一格,不止一个再留一格(当前页的
+    图标和溢出按钮都得够得着)—— 剩下的整格给命令项。连这也排不下全部命令项时,留靠条尾的那几项
+    (最后一项通常是「管理」),前面的不排:不画、不命中。 }
+  if (itemPx > 0) and HasVisibleCommands then
+  begin
+    cmds := nil;
+    SetLength(cmds, FCommands.Count);
+    n := 0;
+    for i := 0 to FCommands.Count - 1 do
+      if FCommands[i].Visible then
+      begin
+        cmds[n] := i;
+        Inc(n);
+      end;
+    keep := WindowCount;
+    if keep > 2 then keep := 2;
+    fit := (Result.Cells.Bottom - Result.Cells.Top - keep * itemPx) div itemPx;
+    if fit > n then fit := n;
+    if fit > 0 then
+    begin
+      Result.CommandCells := Rect(Result.Cells.Left, Result.Cells.Bottom - fit * itemPx,
+        Result.Cells.Right, Result.Cells.Bottom);
+      SetLength(Result.Commands, fit);
+      for i := 0 to fit - 1 do
+      begin
+        Result.Commands[i].ItemIndex := cmds[n - fit + i];
+        Result.Commands[i].ItemRect := Rect(Result.Cells.Left,
+          Result.CommandCells.Top + i * itemPx, Result.Cells.Right,
+          Result.CommandCells.Top + (i + 1) * itemPx);
+      end;
+      Result.Cells.Bottom := Result.CommandCells.Top;
+    end;
+  end;
   { 溢出按钮跟图标一样大。 }
   slots := TyToolWindowStripLayout(Result.Cells.Right - Result.Cells.Left,
     Result.Cells.Bottom - Result.Cells.Top, itemPx, itemPx, WindowCount, IndexOfWindow(FActive));
@@ -4482,7 +4670,34 @@ var
   bpt: TPoint;
   btxt: string;
   bdot: Boolean;
+  cmd: TTyToolWindowCommand;
   i, idx, glyphPx, indPx, bw, pad: Integer;
+
+  { 图标条一格里的图标(窗口图标和命令项同一种画法):列表里第 AIndex 格,居中,着成 AInk。 }
+  procedure DrawGlyph(const ACell: TRect; AIndex: Integer; AInk: TTyColor);
+  begin
+    if (list = nil) or (AIndex < 0) or (glyphPx <= 0) then Exit;
+    { 图标按画家的光栅尺寸要(#83):glyphPx 是布局像素,出来的位图是 S 倍。 }
+    bmp := TyRenderImageScaled(P, list, AIndex, glyphPx, False);
+    if bmp = nil then Exit;
+    try
+      { 本库的列表出来的是列表自己的 GlyphColor,不是墨色 —— 着成这一格状态的墨色。
+        TyRenderImage 给的是调用方持有的拷贝,就地染不污染缓存。外来列表不染
+        (部分 widgetset 物化出来的位图丢了 alpha,染了就是一个实心方块,spec §8)。 }
+      if not TyImageIsBaked(list) then
+      begin
+        TyTintBitmapAlpha(bmp, AInk);
+        if TyAlphaOf(AInk) < 255 then TyFadeBitmapAlpha(bmp, TyAlphaOf(AInk));
+      end;
+      { 直接落在层上,所以按光栅坐标居中。 }
+      P.Bitmap.PutImage(P.Dev(ACell.Left) + (P.Dev(ACell.Right - ACell.Left) - bmp.Width) div 2,
+        P.Dev(ACell.Top) + (P.Dev(ACell.Bottom - ACell.Top) - bmp.Height) div 2, bmp,
+        dmDrawWithTransparency);
+    finally
+      bmp.Free;
+    end;
+  end;
+
 begin
   P := TTyPainter.Create;
   try
@@ -4536,31 +4751,9 @@ begin
           P.FillBackground(cell, itemS.Background, 0);
         { 图标序号只从 ResolvedImageIndex 来:窗口的 ImageIndex 在名字找不到时会退回写过的
           序号,而 spec §8 要的是「找不到就不画」。 }
-        idx := ResolvedImageIndex(w);
-        if (list <> nil) and (idx >= 0) and (glyphPx > 0) then
-        begin
-          { 图标按画家的光栅尺寸要(#83):glyphPx 是布局像素,出来的位图是 S 倍。 }
-          bmp := TyRenderImageScaled(P, list, idx, glyphPx, False);
-          if bmp <> nil then
-          try
-            { 本库的列表出来的是列表自己的 GlyphColor,不是墨色 —— 着成这一格状态的墨色。
-              TyRenderImage 给的是调用方持有的拷贝,就地染不污染缓存。外来列表不染
-              (部分 widgetset 物化出来的位图丢了 alpha,染了就是一个实心方块,spec §8)。 }
-            if not TyImageIsBaked(list) then
-            begin
-              if tpTextColor in itemS.Present then ink := itemS.TextColor
-              else ink := stripS.TextColor;
-              TyTintBitmapAlpha(bmp, ink);
-              if TyAlphaOf(ink) < 255 then TyFadeBitmapAlpha(bmp, TyAlphaOf(ink));
-            end;
-            { 直接落在层上,所以按光栅坐标居中。 }
-            P.Bitmap.PutImage(P.Dev(cell.Left) + (P.Dev(cell.Right - cell.Left) - bmp.Width) div 2,
-              P.Dev(cell.Top) + (P.Dev(cell.Bottom - cell.Top) - bmp.Height) div 2, bmp,
-              dmDrawWithTransparency);
-          finally
-            bmp.Free;
-          end;
-        end;
+        if tpTextColor in itemS.Present then ink := itemS.TextColor
+        else ink := stripS.TextColor;
+        DrawGlyph(cell, ResolvedImageIndex(w), ink);
         { 当前格的指示条:贴在靠内容区那一侧,粗细 0 = 不画。 }
         if (tysSelected in states) and (indPx > 0) then
         begin
@@ -4614,6 +4807,23 @@ begin
         { 溢出按钮打开一个列表:用全库统一的下拉标记(和下拉字段同一个 V,--glyph-chevron-size
           定大小),不是撑满字形框的 V。 }
         TyDrawChevron(P, ActiveController, gr, tgChevronDown, ink);
+      end;
+
+      { 条尾的命令项:格子和图标的画法同窗口图标,样式取自己的键(TyToolWindowStripCommand)。
+        没有「当前」,所以没有指示条;也没有角标。 }
+      for i := 0 to High(L.Commands) do
+      begin
+        cell := L.Commands[i].ItemRect;
+        if (cell.Right <= cell.Left) or (cell.Bottom <= cell.Top) then Continue;
+        if (L.Commands[i].ItemIndex < 0) or (L.Commands[i].ItemIndex >= FCommands.Count) then Continue;
+        cmd := FCommands[L.Commands[i].ItemIndex];
+        states := CommandStates(cmd);
+        itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripCommandKey, cls, states);
+        if tpBackground in itemS.Present then
+          P.FillBackground(cell, itemS.Background, 0);
+        if tpTextColor in itemS.Present then ink := itemS.TextColor
+        else ink := stripS.TextColor;
+        DrawGlyph(cell, cmd.ResolvedImageIndex, ink);
       end;
     end;
 
@@ -5699,6 +5909,12 @@ begin
       Exit(twbpItem);
     end;
   if PtInRect(L.Overflow, pt) then Exit(twbpOverflow);
+  for i := 0 to High(L.Commands) do
+    if PtInRect(L.Commands[i].ItemRect, pt) then
+    begin
+      AIndex := L.Commands[i].ItemIndex;
+      Exit(twbpCommand);
+    end;
   { 最大化期间边缘区不起作用(spec §6.4):不命中、不借调整光标;那条贴编辑区的线照画。 }
   if PtInRect(L.Edge, pt) and not FMaximized then Exit(twbpEdge);
 end;
@@ -5718,10 +5934,21 @@ var
 begin
   AText := '';
   ARect := Rect(0, 0, 0, 0);
-  Result := PartAt(X, Y, idx) = twbpItem;
-  if not Result then Exit;
-  AText := StripHintText(Windows[idx]);
-  ARect := StripItemRect(idx);
+  Result := True;
+  case PartAt(X, Y, idx) of
+    twbpItem:
+      begin
+        AText := StripHintText(Windows[idx]);
+        ARect := StripItemRect(idx);
+      end;
+    twbpCommand:
+      begin
+        AText := FCommands[idx].HintText;
+        ARect := CommandRect(idx);
+      end;
+  else
+    Result := False;
+  end;
 end;
 
 function TTyCustomToolWindowBar.OverflowWindows: TTyToolWindowPlan;
@@ -5827,10 +6054,11 @@ end;
 
 procedure TTyCustomToolWindowBar.GestureCleared(ATabRow: Boolean);
 begin
-  if (FStripPressed <> -1) or FOverflowPressed then
+  if (FStripPressed <> -1) or FOverflowPressed or (FCommandPressed <> nil) then
   begin
     FStripPressed := -1;
     FOverflowPressed := False;
+    FCommandPressed := nil;
     if not (csDestroying in ComponentState) then Invalidate;
   end;
   { 标签行的按下态是从引擎读的(HeaderPressed):收尾之后当前页得重画掉它。 }
@@ -5851,6 +6079,7 @@ procedure TTyCustomToolWindowBar.UpdateHoverAt(X, Y: Integer);
 var
   part: TTyToolWindowBarPart;
   idx: Integer;
+  cmd: TTyToolWindowCommand;
 begin
   { 设计期不做悬停:设计期控件收不到 enter / leave(spec §7.4)。 }
   if csDesigning in ComponentState then Exit;
@@ -5872,8 +6101,12 @@ begin
     SetEdgeHover(part = twbpEdge);
     Exit;
   end;
+  { 命令项:禁用的不接悬停。 }
+  if (part = twbpCommand) and FCommands[idx].Enabled then cmd := FCommands[idx]
+  else cmd := nil;
   if part <> twbpItem then idx := -1;
   SetStripHover(idx, part = twbpOverflow);
+  SetCommandHover(cmd);
   SetEdgeHover(part = twbpEdge);
 end;
 
@@ -5888,6 +6121,7 @@ begin
   else
   begin
     SetStripHover(-1, False);
+    SetCommandHover(nil);
     SetHeaderHover(twbpNone, -1);
     if not EdgeResizing then SetEdgeHover(False);
   end;
@@ -5996,6 +6230,15 @@ begin
     end;
     Invalidate;
   end
+  else if part = twbpCommand then
+  begin
+    { 命令项:按下只武装,在同一项上松开才算点击;不是拖动把手。禁用的只吞
+      (SwallowClick 上面已经置了)。多击的按下同图标:阈值以内松开不算点击。 }
+    if not FCommands[idx].Enabled then Exit;
+    FGesture.Press(part, nil, False, Self, X, Y, Shift);
+    FCommandPressed := FCommands[idx];
+    Invalidate;
+  end
   else if part = twbpEdge then
     BeginEdgeDrag(X, Y);
 end;
@@ -6021,6 +6264,7 @@ begin
     twgmDragStart:
       begin
         SetStripHover(-1, False);
+        SetCommandHover(nil);
         DragTo(X, Y);
       end;
     twgmDrag: DragTo(X, Y);
@@ -6036,6 +6280,7 @@ var
   commit: Boolean;
   idx, slot: Integer;
   tgt, cross: TTyCustomToolWindowBar;
+  cmdUp, cmdDown: TTyToolWindowCommand;
 begin
   { 手势在继承之后收尾(spec §9.2);用户的 OnMouseUp 抛异常的话,残局在这里收掉再往外抛。 }
   try
@@ -6082,6 +6327,9 @@ begin
   end;
   part := PartAt(X, Y, idx);
   if part = twbpItem then w := Windows[idx] else w := nil;
+  { 命令项:松开点上的那一项和按下的那一项都在引擎收尾之前取(收尾会清掉按下的记录)。 }
+  if part = twbpCommand then cmdUp := FCommands[idx] else cmdUp := nil;
+  cmdDown := FCommandPressed;
   { 引擎判完、收尾,答案拷在局部:动作放最后,它引起的事件里就算重新按下也是一条新记录。 }
   rel := FGesture.Release(part, w);
   case rel.Kind of
@@ -6112,6 +6360,9 @@ begin
         case rel.Part of
           twbpItem: StripClick(rel.Window);
           twbpOverflow: ShowOverflowMenu;
+          { 引擎只认「同一种部件」;是不是同一项在这里比。 }
+          twbpCommand:
+            if (cmdUp <> nil) and (cmdUp = cmdDown) then ClickCommand(cmdUp);
         end;
       end;
   else
@@ -6125,6 +6376,7 @@ begin
   { 只清悬停,**不**解除武装:捕获期间 Win32 的 WM_MOUSELEAVE 可能在捕获者身上触发一次
     (spec §9.2)。拉宽中边缘区的悬停态(和借来的调整光标)留着。 }
   SetStripHover(-1, False);
+  SetCommandHover(nil);
   if not EdgeResizing then SetEdgeHover(False);
   { 让出来的标签行(spec §3.7):悬停记在标签行那一份上,一起清。 }
   if HostsTabRow then SetHeaderHover(twbpNone, -1);
@@ -6201,14 +6453,23 @@ begin
      and PtInRect(BarLayout.TabRow, MousePos) and (WindowAtPos(MousePos.X, MousePos.Y) = nil) then
   begin
     FContextWindow := nil;
+    FContextCommand := nil;
     FPopupBlocked := False;
     Handled := True;
     Exit;
   end;
   if (MousePos.X <> -1) or (MousePos.Y <> -1) then
-    FContextWindow := WindowAtPos(MousePos.X, MousePos.Y)
+  begin
+    FContextWindow := WindowAtPos(MousePos.X, MousePos.Y);
+    { 命令项上:ContextWindow 是 nil,落在哪一项记在 ContextCommand。它在图标条里、不在内容区,
+      所以栏的 OnContextPopup 和菜单照常。 }
+    FContextCommand := CommandAtPos(MousePos.X, MousePos.Y);
+  end
   else
+  begin
     FContextWindow := nil;
+    FContextCommand := nil;
+  end;
   { 挡的只是正文里的子控件冒上来的请求(落点在内容区,或菜单键的 (-1, -1):栏不拿焦点),好让它
     接着冒到窗体(spec §6.8)。图标条的空白、拉宽边是栏自己的像素:OnContextPopup、栏的菜单照常,
     ContextWindow 是 nil。 }
@@ -7375,6 +7636,10 @@ begin
     for i := High(FWatched) downto 0 do
       if FWatched[i] = AComponent then UnwatchAt(i);
   if (Operation = opRemove) and (AComponent = FZeroInner) then FZeroInner := nil;
+  { 命令项的菜单被释放(或从 Owner 摘走):集合项收不到通知,栏替它们清引用。 }
+  if (Operation = opRemove) and (AComponent is TPopupMenu) and (FCommands <> nil) then
+    for i := 0 to FCommands.Count - 1 do
+      if FCommands[i].FDropDownMenu = AComponent then FCommands[i].FDropDownMenu := nil;
   { 窗口被释放(含设计期删除):LCL 在 SetParent(nil) 时它已经 csDestroying,
     注销那一步跳过了,走到这里。 }
   if (Operation = opRemove) and (AComponent is TTyCustomToolWindow) then
@@ -7504,6 +7769,361 @@ begin
     调一次。 }
   { spec §10.5:最后一句。谁最后一个离开 csLoading,谁收尾(manager 那边判)。 }
   if FManager <> nil then FManager.TryFinishLoading;
+end;
+
+{ --- 命令项 -------------------------------------------------------------------- }
+
+constructor TTyToolWindowCommand.Create(ACollection: TCollection);
+begin
+  { 先设默认值再进集合:继承的构造里进集合那一步就会通知栏,那时这一项得已经是「看得见、
+    可用、没有图标」的样子。 }
+  FImageIndex := -1;
+  FEnabled := True;
+  FVisible := True;
+  inherited Create(ACollection);
+end;
+
+function TTyToolWindowCommand.GetBar: TTyCustomToolWindowBar;
+begin
+  if Collection is TTyToolWindowCommands then Result := TTyToolWindowCommands(Collection).Bar
+  else Result := nil;
+end;
+
+function TTyToolWindowCommand.GetDisplayName: string;
+begin
+  if FCaption <> '' then Result := FCaption
+  else if FHint <> '' then Result := FHint
+  else if FImageName <> '' then Result := FImageName
+  else Result := inherited GetDisplayName;
+end;
+
+procedure TTyToolWindowCommand.Assign(Source: TPersistent);
+var
+  src: TTyToolWindowCommand;
+begin
+  if Source is TTyToolWindowCommand then
+  begin
+    src := TTyToolWindowCommand(Source);
+    FCaption := src.FCaption;
+    FHint := src.FHint;
+    FImageName := src.FImageName;
+    FImageIndex := src.FImageIndex;
+    FImageIndexPending := src.FImageIndexPending;
+    FEnabled := src.FEnabled;
+    FVisible := src.FVisible;
+    FTag := src.FTag;
+    SetDropDownMenu(src.FDropDownMenu);
+    Changed(False);
+  end
+  else
+    inherited Assign(Source);
+end;
+
+function TTyToolWindowCommand.HintText: string;
+begin
+  if FHint <> '' then Result := FHint
+  else Result := FCaption;
+end;
+
+procedure TTyToolWindowCommand.Click;
+var
+  b: TTyCustomToolWindowBar;
+begin
+  b := Bar;
+  if b <> nil then b.ClickCommand(Self);
+end;
+
+function TTyToolWindowCommand.ImageIndexIsStored: Boolean;
+begin
+  { 名字是持久键,序号只在名字给不出答案时才进流。 }
+  Result := (FImageName = '') and (FImageIndex >= 0);
+end;
+
+function TTyToolWindowCommand.GetImageIndex: TImageIndex;
+var
+  b: TTyCustomToolWindowBar;
+  n: Integer;
+begin
+  { 名字能在生效列表里解析就答那一格,否则答最近一次写进来的序号(同工具窗口)。画什么看
+    ResolvedImageIndex:名字解析不出来时那边答 -1。 }
+  if FImageName <> '' then
+  begin
+    b := Bar;
+    if b <> nil then
+    begin
+      n := TyImageIndexOfName(b.EffectiveImages, FImageName);
+      if n >= 0 then Exit(n);
+    end;
+  end;
+  Result := FImageIndex;
+end;
+
+function TTyToolWindowCommand.ResolvedImageIndex: Integer;
+var
+  b: TTyCustomToolWindowBar;
+begin
+  if FImageName = '' then Exit(FImageIndex);
+  b := Bar;
+  if b = nil then Exit(-1);
+  Result := TyImageIndexOfName(b.EffectiveImages, FImageName);
+end;
+
+procedure TTyToolWindowCommand.SetImageIndex(AValue: TImageIndex);
+begin
+  if AValue < -1 then AValue := -1;   { 「没有图标」只有一个值 }
+  FImageIndex := AValue;
+  { 先记挂起:栏此刻没有列表、或者还在加载,这个请求照样成立(同工具窗口)。 }
+  FImageIndexPending := True;
+  ResolveImageIndex;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.SetImageName(const AValue: string);
+begin
+  { 后写的算:按名字设了,之前挂起的那个序号就作废。 }
+  FImageIndexPending := False;
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.ResolveImageIndex;
+var
+  b: TTyCustomToolWindowBar;
+  list: TCustomImageList;
+begin
+  if not FImageIndexPending then Exit;   { 没有挂起的:绝不碰已经设好的 ImageName }
+  b := Bar;
+  if (b = nil) or (csLoading in b.ComponentState) then Exit;
+  list := b.EffectiveImages;
+  if list = nil then Exit;               { 栏还没有列表:设列表时再来 }
+  FImageIndexPending := False;
+  { 外来列表、越界、-1:名字是 '',序号就是键。 }
+  if FImageIndex < 0 then FImageName := ''
+  else FImageName := TyImageNameOfIndex(list, FImageIndex);
+end;
+
+procedure TTyToolWindowCommand.SetCaption(const AValue: TTranslateString);
+begin
+  if FCaption = AValue then Exit;
+  FCaption := AValue;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.SetHint(const AValue: TTranslateString);
+begin
+  if FHint = AValue then Exit;
+  FHint := AValue;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.SetEnabled(AValue: Boolean);
+begin
+  if FEnabled = AValue then Exit;
+  FEnabled := AValue;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.SetVisible(AValue: Boolean);
+begin
+  if FVisible = AValue then Exit;
+  FVisible := AValue;
+  Changed(False);
+end;
+
+procedure TTyToolWindowCommand.SetDropDownMenu(AValue: TPopupMenu);
+var
+  b: TTyCustomToolWindowBar;
+begin
+  if FDropDownMenu = AValue then Exit;
+  FDropDownMenu := AValue;
+  { 菜单被释放时由栏来清这个引用(集合项收不到通知)。换掉旧菜单时**不**撤通知:栏自己的
+    PopupMenu、别的命令项可能指着同一个菜单,撤了它们就收不到了;多留一条通知没有害处。 }
+  b := Bar;
+  if (AValue <> nil) and (b <> nil) then AValue.FreeNotification(b);
+end;
+
+constructor TTyToolWindowCommands.Create(ABar: TTyCustomToolWindowBar);
+begin
+  inherited Create(ABar, TTyToolWindowCommand);
+  FBar := ABar;
+end;
+
+function TTyToolWindowCommands.Add: TTyToolWindowCommand;
+begin
+  Result := TTyToolWindowCommand(inherited Add);
+end;
+
+function TTyToolWindowCommands.GetItem(AIndex: Integer): TTyToolWindowCommand;
+begin
+  Result := TTyToolWindowCommand(inherited GetItem(AIndex));
+end;
+
+procedure TTyToolWindowCommands.SetItem(AIndex: Integer; AValue: TTyToolWindowCommand);
+begin
+  inherited SetItem(AIndex, AValue);
+end;
+
+procedure TTyToolWindowCommands.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if FBar <> nil then FBar.CommandsChanged;
+end;
+
+procedure TTyToolWindowCommands.Notify(Item: TCollectionItem; Action: TCollectionNotification);
+begin
+  if (Action in [cnExtracting, cnDeleting]) and (FBar <> nil) then
+    FBar.CommandLeaving(TTyToolWindowCommand(Item));
+  inherited Notify(Item, Action);
+end;
+
+procedure TTyCustomToolWindowBar.SetCommands(AValue: TTyToolWindowCommands);
+begin
+  FCommands.Assign(AValue);
+end;
+
+function TTyCustomToolWindowBar.CommandsStored: Boolean;
+begin
+  Result := (FCommands.Count > 0) or (csAncestor in ComponentState);
+end;
+
+function TTyCustomToolWindowBar.HasCommand(ACommand: TTyToolWindowCommand): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if (ACommand = nil) or (FCommands = nil) then Exit;
+  for i := 0 to FCommands.Count - 1 do
+    if FCommands[i] = ACommand then Exit(True);
+end;
+
+function TTyCustomToolWindowBar.HasVisibleCommands: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  { 构造到一半(继承构造里的推导)、析构的尾巴上都会问到:那时没有集合。 }
+  if FCommands = nil then Exit;
+  for i := 0 to FCommands.Count - 1 do
+    if FCommands[i].Visible then Exit(True);
+end;
+
+procedure TTyCustomToolWindowBar.CommandsChanged;
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  { 刚被藏起来 / 禁用的那一项:悬停清掉,武装在它身上的那一下作废(松开不算点击)。 }
+  if (FCommandHover <> nil) and not (FCommandHover.Visible and FCommandHover.Enabled) then
+    FCommandHover := nil;
+  if (FCommandPressed <> nil) and not (FCommandPressed.Visible and FCommandPressed.Enabled) then
+    ResetGesture(twgeCancel);
+  { 有没有看得见的命令项决定没有窗口的侧栏藏不藏(HiddenAsEmpty):重推尺寸。 }
+  Relayout;
+  Invalidate;
+end;
+
+procedure TTyCustomToolWindowBar.CommandLeaving(ACommand: TTyToolWindowCommand);
+begin
+  if ACommand = FCommandHover then FCommandHover := nil;
+  if ACommand = FContextCommand then FContextCommand := nil;
+  if ACommand = FCommandPressed then
+  begin
+    FCommandPressed := nil;
+    { 按下的那一项走了:手势记录清掉,之后的松开不许算成点击(同窗口离开,spec §9.7)。
+      栏析构中只清引用。 }
+    if not (csDestroying in ComponentState) then ResetGesture(twgeDiscard);
+  end;
+end;
+
+function TTyCustomToolWindowBar.CommandStates(ACommand: TTyToolWindowCommand): TTyStateSet;
+begin
+  { 同 StripItemStates,少一个 :selected:命令项没有「当前」。 }
+  Result := [];
+  if not IsEnabled or (ACommand = nil) or not ACommand.Enabled then
+    Include(Result, tysDisabled)
+  else
+  begin
+    if ACommand = FCommandHover then Include(Result, tysHover);
+    if ACommand = FCommandPressed then Include(Result, tysActive);
+  end;
+  if Result = [] then Include(Result, tysNormal);
+end;
+
+procedure TTyCustomToolWindowBar.SetCommandHover(ACommand: TTyToolWindowCommand);
+begin
+  if ACommand = FCommandHover then Exit;
+  FCommandHover := ACommand;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+function TTyCustomToolWindowBar.CommandRect(AIndex: Integer): TRect;
+var
+  L: TTyToolWindowBarLayout;
+  i: Integer;
+begin
+  L := BarLayout;
+  for i := 0 to High(L.Commands) do
+    if L.Commands[i].ItemIndex = AIndex then Exit(L.Commands[i].ItemRect);
+  Result := Rect(0, 0, 0, 0);
+end;
+
+function TTyCustomToolWindowBar.CommandAtPos(X, Y: Integer): TTyToolWindowCommand;
+var
+  idx: Integer;
+begin
+  if PartAt(X, Y, idx) = twbpCommand then Result := FCommands[idx]
+  else Result := nil;
+end;
+
+function TTyCustomToolWindowBar.CommandMenuAnchor(ACommand: TTyToolWindowCommand;
+  out APoint: TPoint; out AAlignment: TPopupAlignment): Boolean;
+var
+  r: TRect;
+begin
+  APoint := Point(0, 0);
+  AAlignment := paLeft;
+  Result := False;
+  if not HasCommand(ACommand) then Exit;
+  r := CommandRect(ACommand.Index);
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  { 同溢出菜单:贴着那一格、开向内容区,左栏从右沿往右、右栏从左沿往左。 }
+  TyToolWindowOverflowMenuAnchor(r, FPlacement, IsRightToLeft, APoint, AAlignment);
+  Result := True;
+end;
+
+procedure TTyCustomToolWindowBar.DoCommandClick(ACommand: TTyToolWindowCommand;
+  var AHandled: Boolean);
+begin
+  if Assigned(FOnCommandClick) then FOnCommandClick(Self, ACommand, AHandled);
+end;
+
+procedure TTyCustomToolWindowBar.DropCommandMenu(ACommand: TTyToolWindowCommand);
+var
+  menu: TPopupMenu;
+  pt: TPoint;
+  menuAlign: TPopupAlignment;
+begin
+  menu := ACommand.DropDownMenu;
+  if (menu = nil) or not CommandMenuAnchor(ACommand, pt, menuAlign) then Exit;
+  menu.PopupComponent := Self;
+  menu.Alignment := menuAlign;
+  { 只在有句柄时弹(同溢出菜单)。菜单开出屏幕的那一截由菜单自己挪回来。 }
+  if not HandleAllocated then Exit;
+  pt := ClientToScreen(pt);
+  menu.PopUp(pt.X, pt.Y);
+end;
+
+procedure TTyCustomToolWindowBar.ClickCommand(ACommand: TTyToolWindowCommand);
+var
+  handled: Boolean;
+begin
+  if not HasCommand(ACommand) or (csDesigning in ComponentState) then Exit;
+  if not IsEnabled or not ACommand.Enabled then Exit;
+  { 用户的事件在前、内置的菜单在后,事件拦得住它。 }
+  handled := False;
+  DoCommandClick(ACommand, handled);
+  { 处理器里可能把这一项删了:只比指针,在集合里才接着用它。 }
+  if handled or not HasCommand(ACommand) then Exit;
+  if ACommand.DropDownMenu <> nil then DropCommandMenu(ACommand);
 end;
 
 { --- TTyToolWindowGesture ------------------------------------------------------ }

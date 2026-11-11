@@ -7,7 +7,7 @@ unit test.toolwindow.window;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LMessages,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, Menus, LCLType, LMessages,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Controller, tyControls.ToolWindows,
@@ -140,6 +140,8 @@ type
     procedure TestAConflictWhileLoadingDoesNotRaise;
     { StripHint 换成 TTranslateString 之后照样一字不差地往返(中文也是)。 }
     procedure TestStripHintRoundTrips;
+    { 图标条末端的命令项:空集合不进流;有命令项时各项的值和菜单引用都往返。 }
+    procedure TestCommandsRoundTripAndAnEmptyCollectionStaysOutOfTheStream;
   end;
 
 implementation
@@ -1324,10 +1326,73 @@ begin
   end;
 end;
 
+procedure TTyToolWindowStreamingTests.TestCommandsRoundTripAndAnEmptyCollectionStaysOutOfTheStream;
+var
+  src, dst: TForm;
+  ms: TMemoryStream;
+  bar, dbar: TTyToolWindowBar;
+  menu: TPopupMenu;
+  c: TTyToolWindowCommand;
+  txt: string;
+begin
+  src := NewHost;
+  dst := TToolWindowHostForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    bar := NewBar(src);
+    AddWindow(src, bar, 'W1');
+    ms.WriteComponent(src);
+    AssertEquals('没有命令项:流里没有 Commands(已有窗体写出来的不变)', 0,
+      CountOf('Commands', StreamText(ms)));
+    menu := TPopupMenu.Create(src);
+    menu.Name := 'ManageMenu';
+    c := bar.Commands.Add;
+    c.Caption := '账户';
+    c.Hint := 'Accounts';
+    c.ImageName := 'user';
+    c := bar.Commands.Add;
+    c.Caption := 'Manage';
+    c.ImageIndex := 3;          { 栏没有列表:名字换不出来,序号就是键,照样进流 }
+    c.Enabled := False;
+    c.Visible := False;
+    c.Tag := 42;
+    c.DropDownMenu := menu;
+    ms.Clear;
+    ms.WriteComponent(src);
+    txt := StreamText(ms);
+    AssertEquals('集合写进了流', 1, CountOf('Commands = <', txt));
+    AssertEquals('菜单引用按名字写', 1, CountOf('DropDownMenu = ManageMenu', txt));
+    AssertEquals('有名字的那一项不写序号', 1, CountOf('ImageIndex = ', txt));
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    dbar := dst.FindComponent('Bar') as TTyToolWindowBar;
+    AssertNotNull('栏读回来了', dbar);
+    AssertEquals('两项都读回来', 2, dbar.Commands.Count);
+    AssertEquals('标题一字不差(中文也是)', '账户', dbar.Commands[0].Caption);
+    AssertEquals('提示', 'Accounts', dbar.Commands[0].Hint);
+    AssertEquals('图标名', 'user', dbar.Commands[0].ImageName);
+    AssertTrue('默认值没写也没变', dbar.Commands[0].Enabled and dbar.Commands[0].Visible);
+    AssertTrue('没设菜单的还是 nil', dbar.Commands[0].DropDownMenu = nil);
+    AssertEquals('第二项的标题', 'Manage', dbar.Commands[1].Caption);
+    AssertEquals('只有序号的那一项:序号读回来', 3, dbar.Commands[1].ImageIndex);
+    AssertEquals('名字还是空的', '', dbar.Commands[1].ImageName);
+    AssertFalse('Enabled', dbar.Commands[1].Enabled);
+    AssertFalse('Visible', dbar.Commands[1].Visible);
+    AssertEquals('Tag', 42, dbar.Commands[1].Tag);
+    AssertSame('菜单引用指向读回来的那个菜单', dst.FindComponent('ManageMenu'),
+      dbar.Commands[1].DropDownMenu);
+    AssertSame('读回来的项属于读回来的栏', dbar, dbar.Commands[1].Bar);
+  finally
+    ms.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
 initialization
   { 流式测试读回来时按类名实例化:工具窗口四个类在 tyControls.ToolWindows 自己的
     initialization 里注册,测试用的正文控件和控制器在这里补上。 }
-  RegisterClasses([TBodyChild, TTyStyleController]);
+  RegisterClasses([TBodyChild, TTyStyleController, TPopupMenu]);
   RegisterTest(TTyToolWindowTests);
   RegisterTest(TTyToolWindowStreamingTests);
 end.

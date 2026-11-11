@@ -238,7 +238,7 @@ uses
   test.toolwindow.reorder, test.toolwindow.bottom, test.toolwindow.manager,
   test.toolwindow.crossdrag, test.toolwindow.layouttext, test.toolwindow.layoutapply,
   test.toolwindow.design, test.toolwindow.disabled, test.toolwindow.badge,
-  test.toolwindow.hide,
+  test.toolwindow.hide, test.toolwindow.commands,
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
