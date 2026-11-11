@@ -653,6 +653,9 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    '/* A row its list turned off (ItemEnabled of the check list and the rich list): the ink of a' + LineEnding +
+    '   disabled tree node. */' + LineEnding +
+    'TyListItem:disabled, TyValueListEditorRow:disabled { color: var(--muted); }' + LineEnding +
     '/* A heading row of the value list editor (TTyValueRow.Heading: the property grid''s categories),' + LineEnding +
     '   hung on TyValueListEditorRow. Only its REST look is read here -- the band, the ink, the' + LineEnding +
     '   weight; hovered or selected it is drawn as the row''s :hover / :active, so the selection reads' + LineEnding +

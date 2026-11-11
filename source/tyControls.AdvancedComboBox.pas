@@ -174,12 +174,12 @@ begin
     would be too late. Inert unless the combo has both an owner-draw Style and a handler. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // The Owner is the combo (Create(Self) in CreatePopupList); it supplies the Images
-  // reference. The image index rides in Objects[] (copied from the combo via Items.Assign):
-  // PtrInt(Objects[i]) - 1, so 0 => -1 (no image).
+  // reference. The image index rides in Objects[] (copied from the combo via Items.Assign),
+  // read the way the rich list box reads it: the rows may have come from one.
   if Owner is TTyCustomAdvancedComboBox then
   begin
     imgs := TTyCustomAdvancedComboBox(Owner).ImagesRef;
-    TyDrawAdvancedRow(P, ARowRect, Items[AIndex], PtrInt(Items.Objects[AIndex]) - 1,
+    TyDrawAdvancedRow(P, ARowRect, Items[AIndex], TyAdvancedItemImageIndex(Items.Objects[AIndex]),
       imgs, AStyle, ResolveFontSize(AStyle), RtlRowLayout);   // #153
   end
   else
@@ -242,7 +242,7 @@ end;
 function TTyCustomAdvancedComboBox.ImageIndexOf(AIndex: Integer): Integer;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then
-    Result := PtrInt(Items.Objects[AIndex]) - 1
+    Result := TyAdvancedItemImageIndex(Items.Objects[AIndex])
   else
     Result := -1;
 end;

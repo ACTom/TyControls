@@ -188,6 +188,9 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    '/* A row its list turned off (ItemEnabled of the check list and the rich list): the ink of a' + LineEnding +
+    '   disabled tree node. */' + LineEnding +
+    'TyListItem:disabled, TyValueListEditorRow:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
@@ -840,6 +843,9 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* A row its list turned off (ItemEnabled of the check list and the rich list): the ink of a' + LineEnding +
+    '   disabled tree node. */' + LineEnding +
+    'TyListItem:disabled, TyValueListEditorRow:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
@@ -4678,6 +4684,9 @@ begin
     '}' + LineEnding +
     'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    '/* A row its list turned off (ItemEnabled of the check list and the rich list): the ink of a' + LineEnding +
+    '   disabled tree node. */' + LineEnding +
+    'TyListItem:disabled, TyValueListEditorRow:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +

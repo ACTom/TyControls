@@ -57,7 +57,7 @@ uses tyControls.CheckListBox;
 - **点击勾选框列**(行左侧约一个行高宽的区域)→ 选中该行 + 切换勾选。
 - **空格键**(选中行)→ 切换勾选。禁用行上空格**仍被吃掉**(该行就是当前行,放行会触发窗体的默认按钮)。
 - 点击文字区 → 只选择(不切换)。
-- 被 `ItemEnabled[i] := False` 关掉的行:点击、空格、`Toggle` 都不动它,并按 disabled 样式渲染。
+- 被 `ItemEnabled[i] := False` 关掉的行:点击、空格、`Toggle` 都不动它,并按 disabled 样式渲染(行文字用 `TyListItem:disabled` 的禁用色,勾选框用 `TyCheckBox:disabled`)。
 
 ---
 

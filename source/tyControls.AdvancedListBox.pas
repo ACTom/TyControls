@@ -11,6 +11,10 @@ unit tyControls.AdvancedListBox;
       Items.Assign (which is how a combo popup reads the same rows).
     * The image INDEX rides in Items.Objects[i] as TObject(PtrInt(AImageIndex + 1))
       (0 => no image), intrinsically aligned with its row through any reorder.
+    * A row that ItemEnabled turned OFF has bit 30 set in that same slot, so the flag goes
+      wherever the row and its image index go. A row that is on -- every row until it is
+      turned off -- keeps exactly the value above. Read the slot through
+      TyAdvancedItemImageIndex / TyAdvancedItemEnabled rather than by subtracting 1.
   Sorting keys on the WHOLE joined string (Title first, so it sorts by title), which is
   the expected order.
 
@@ -36,6 +40,12 @@ uses
   the same way. }
 procedure TySplitAdvancedItem(const AJoined: string; out ATitle, ASubtitle: string);
 
+{ What a rich row keeps in its Items.Objects[] slot (the unit header, DATA MODEL): the image
+  index, -1 for none, and whether the row is on. For the list box and for anything that
+  holds rows copied from one -- the rich combo and its popup. }
+function TyAdvancedItemImageIndex(AObject: TObject): Integer;
+function TyAdvancedItemEnabled(AObject: TObject): Boolean;
+
 { Shared rich-row draw into ARect on P.Bitmap: an optional left image (from AImages at
   AImageIndex; AImageIndex < 0 or AImages = nil => text only), then the bold TITLE line
   and, below it, the dim SUBTITLE line. All colours/sizes derive from AStyle — the
@@ -43,10 +53,12 @@ procedure TySplitAdvancedItem(const AJoined: string; out ATitle, ASubtitle: stri
   list box rows and a combo's popup rows so the layout lives in one place. }
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
   AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
-  AFontSize: Integer; ARightToLeft: Boolean = False);
+  AFontSize: Integer; ARightToLeft: Boolean = False; AGhosted: Boolean = False);
 { #153: ARightToLeft -- a list row's RtlRowLayout -- puts the image on the right and the text
   against it, right-aligned. A painter already armed for mirroring turns the row itself (a
-  combo's field), so it passes False. }
+  combo's field), so it passes False.
+  AGhosted: the row is turned off, AStyle being its disabled style. Its image is drawn faded;
+  a font glyph already wears the disabled ink and is not faded on top of it. }
 
 type
   { A list box whose rows are image + bold title + dim subtitle. Build it with
@@ -56,14 +68,18 @@ type
   private
     FImages: TCustomImageList;
     procedure SetImages(const AValue: TCustomImageList);
+    function GetItemEnabled(AIndex: Integer): Boolean;
+    procedure SetItemEnabled(AIndex: Integer; AValue: Boolean);
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
+    function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     { Append a rich row. ATitle + ASubtitle are stored joined by LineEnding (ASubtitle may
-      be ''); AImageIndex < 0 => no image. The image index lives in Items.Objects[]. }
+      be ''); AImageIndex < 0 => no image. The image index lives in Items.Objects[]. The row
+      starts on (ItemEnabled). }
     procedure AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer);
     { The title of row AIndex ('' when out of range). }
     function TitleOf(AIndex: Integer): string;
@@ -71,6 +87,12 @@ type
     function SubtitleOf(AIndex: Integer): string;
     { The image index stored for row AIndex, or -1 when it has no image / is out of range. }
     function ImageIndexOf(AIndex: Integer): Integer;
+    { Turn one row off: it is drawn in the theme's disabled row style -- its text in the
+      disabled ink, its image ghosted -- like a row TTyCheckListBox.ItemEnabled turns off.
+      It is a look, as in LCL's check list: the row can still be selected and clicked, and
+      what a click on it does is the application's to decide. True for every row until it
+      is set, and for an index out of range. }
+    property ItemEnabled[AIndex: Integer]: Boolean read GetItemEnabled write SetItemEnabled;
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
     property Images: TCustomImageList read FImages write SetImages;
@@ -164,9 +186,30 @@ begin
   end;
 end;
 
+const
+  { Bit 30 of a row's slot: the row is turned off. Above any image index + 1 a list can hold,
+    and inside a PtrInt on a 32-bit target. }
+  AdvancedItemOff = PtrInt(1) shl 30;
+
+function TyAdvancedItemEnabled(AObject: TObject): Boolean;
+begin
+  { A slot that is not positive is a row with no image, written before the flag existed or
+    with a negative index: it has no flag to read. }
+  Result := (PtrInt(AObject) <= 0) or ((PtrInt(AObject) and AdvancedItemOff) = 0);
+end;
+
+function TyAdvancedItemImageIndex(AObject: TObject): Integer;
+var
+  v: PtrInt;
+begin
+  v := PtrInt(AObject);
+  if v > 0 then v := v and not AdvancedItemOff;
+  Result := v - 1;
+end;
+
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
   AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
-  AFontSize: Integer; ARightToLeft: Boolean);
+  AFontSize: Integer; ARightToLeft: Boolean; AGhosted: Boolean);
 var
   titleText, subText: string;
   x, sz, rowH, textLeft, textRight, midY, pad: Integer;
@@ -191,12 +234,12 @@ begin
     if ARightToLeft then
     begin
       TyBlitImageScaled(P, AImages, AImageIndex, textRight - sz, ARect.Top + ((rowH - sz) div 2),
-        sz, False, AStyle.TextColor);
+        sz, AGhosted, AStyle.TextColor);
       textRight := textRight - sz - pad;
     end
     else
     begin
-      TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False,
+      TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, AGhosted,
         AStyle.TextColor);
       x := x + sz + pad;
     end;
@@ -294,16 +337,53 @@ end;
 function TTyCustomAdvancedListBox.ImageIndexOf(AIndex: Integer): Integer;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then
-    Result := PtrInt(Items.Objects[AIndex]) - 1
+    Result := TyAdvancedItemImageIndex(Items.Objects[AIndex])
   else
     Result := -1;
+end;
+
+function TTyCustomAdvancedListBox.GetItemEnabled(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex < 0) or (AIndex >= Items.Count)
+    or TyAdvancedItemEnabled(Items.Objects[AIndex]);
+end;
+
+procedure TTyCustomAdvancedListBox.SetItemEnabled(AIndex: Integer; AValue: Boolean);
+var
+  v: PtrInt;
+begin
+  if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
+  if GetItemEnabled(AIndex) = AValue then Exit;
+  v := PtrInt(Items.Objects[AIndex]);
+  if AValue then
+    v := v and not AdvancedItemOff   { back to the bare image index + 1 }
+  else
+  begin
+    if v < 0 then v := 0;            { "no image" written as a negative index }
+    v := v or AdvancedItemOff;
+  end;
+  Items.Objects[AIndex] := TObject(v);   { the list's own change notice repaints }
+end;
+
+function TTyCustomAdvancedListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
+begin
+  Result := inherited ItemStatesFor(AIndex, ABaseStates);
+  { A row that is off resolves the row style's :disabled, as TTyCheckListBox's does. It keeps
+    tysActive: it can still be the selected row. }
+  if not GetItemEnabled(AIndex) then
+  begin
+    Exclude(Result, tysNormal);
+    Exclude(Result, tysHover);
+    Include(Result, tysDisabled);
+  end;
 end;
 
 procedure TTyCustomAdvancedListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   TyDrawAdvancedRow(P, ARowRect, Items[AIndex], ImageIndexOf(AIndex), FImages, AStyle,
-    ResolveFontSize(AStyle), RtlRowLayout);   // #153
+    ResolveFontSize(AStyle), RtlRowLayout,   // #153
+    not GetItemEnabled(AIndex));
 end;
 
 end.

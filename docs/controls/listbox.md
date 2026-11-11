@@ -206,6 +206,7 @@ TyListItem {
 }
 TyListItem:hover  { background: darken(--surface, 5%); }
 TyListItem:active { background: var(--accent); color: #FFFFFF; }
+TyListItem:disabled { color: var(--muted); }   /* 被 ItemEnabled 关掉的单行(勾选列表、富行列表) */
 ```
 
 > **圆角行（Batch ④）：** `TyListItem` 现内置 `border-radius: var(--radius)` 与 `padding: 4px`，使悬停 / 选中行呈现圆角胶囊外观（而非贴满整行宽度的直角条）。`padding` 让行背景沿四周内缩留白，与 `TyListBox` 自身的圆角风格一致。要回到旧版直角满宽行，把 `TyListItem { border-radius: 0; padding: 2px 4px; }` 即可。

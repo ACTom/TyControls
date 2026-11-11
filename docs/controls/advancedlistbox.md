@@ -10,8 +10,9 @@ TTyAdvancedListBox 是一个**富行(rich row)列表框**:每一行可带一张*
 
 - 两行文字**合并**存进一个 item 字符串:`Title + LineEnding + Subtitle`(副标题可为空)。
 - 图片索引存进 `Items.Objects[i]`,值为 `TObject(PtrInt(AImageIndex + 1))`(`0` 表示无图)。
+- 被 `ItemEnabled` 关掉的行,在同一个槽位里多置一位(第 30 位)。没关过的行,槽位的值和以前完全一样。
 
-因此标题、副标题、图片索引三者天然与该行绑定,经 `Sorted` / `Delete` 都不会错位,并被 `Items.Assign` 原样复制(供 combo 弹出列表读同一批行)。排序按整段合并串比较(标题在前,故等价于按标题排序)。
+因此标题、副标题、图片索引、是否关掉这几样天然与该行绑定,经 `Sorted` / `Delete` / `Insert` / `Move` / `Exchange` 都不会错位,并被 `Items.Assign` 原样复制(供 combo 弹出列表读同一批行)。排序按整段合并串比较(标题在前,故等价于按标题排序)。
 
 ---
 
@@ -22,7 +23,7 @@ TTyAdvancedListBox 是一个**富行(rich row)列表框**:每一行可带一张*
 | 单元 | `tyControls.AdvancedListBox` |
 | typeKey | `'TyListBox'`(继承)/ 行样式 `'TyListItem'`(继承)|
 
-无新增 `.tycss`。副标题**复用 `TyListItem` 的 `TextColor`**,只降低 alpha 以示弱化,颜色仍随主题变化。
+副标题**复用 `TyListItem` 的 `TextColor`**,只降低 alpha 以示弱化,颜色仍随主题变化。被关掉的行用 `TyListItem:disabled`。
 
 ```pascal
 uses tyControls.AdvancedListBox;
@@ -39,6 +40,7 @@ uses tyControls.AdvancedListBox;
 | `TitleOf(AIndex): string` | 该行的标题(越界返回 `''`)。 |
 | `SubtitleOf(AIndex): string` | 该行的副标题(无副标题 / 越界返回 `''`)。 |
 | `ImageIndexOf(AIndex): Integer` | 该行的图片索引;无图 / 越界返回 `-1`。 |
+| `ItemEnabled[AIndex]: Boolean` | 把某一行关掉(默认 `True`):这一行按主题的禁用行样式画,文字用禁用色,图片变淡。**只是外观**,和 LCL 的 `TCheckListBox.ItemEnabled` 一样:关掉的行照样能选中、能点击,`OnClick` / `OnChange` 照常触发,点了之后做不做事由程序自己判断。越界的序号读出来是 `True`,写入被忽略。 |
 
 另继承 `Items` / `ItemIndex` / `Sorted` / `MultiSelect` / `OnChange` / `Align` / `Anchors` / `StyleClass` / `Controller` 等。构造时 `ItemHeight` 默认设为 **40**(容纳两行)。
 
@@ -48,6 +50,7 @@ uses tyControls.AdvancedListBox;
 
 - 与 [TTyListBox](../../source/tyControls.ListBox.pas) 一致:左键点击选中行、滚轮 / 方向键滚动、`Sorted` 排序、可选多选。
 - 富行绘制:左图(方形,行高减内边距,垂直居中)→ 标题(加粗 700,上半)→ 副标题(小一号、暗一档,下半);无副标题时标题在整行垂直居中。
+- `ItemEnabled[i] := False` 的行只是看起来不可用:它不响应悬停高亮,但点击、方向键照样能选中它。要让它点了没反应,在 `OnClick` / `OnChange` 里判断 `ItemEnabled[ItemIndex]`。
 
 ---
 
@@ -56,6 +59,8 @@ uses tyControls.AdvancedListBox;
 - **标题** — `TyListItem` 的 `FontName` / `TextColor`,字重固定 `700`(加粗)。
 - **副标题** — 同一 `FontName`,字号 = `ResolveFontSize - 2`,颜色 = `TextColor` 降低 alpha(仍是主题色)。
 - **行背景 / 悬停 / 选中** — 由基类按 `TyListItem` 各状态填充。
+- **关掉的行** — `TyListItem:disabled`。内置主题都给了它禁用文字色(`color: var(--muted)`);自己的主题想换个样子,写这一条规则就行,比如 `TyListItem:disabled { color: #999; }`。行里的图片变淡;来自图标字体的字形直接用禁用文字色,不再叠加变淡。
+- **图标** — `Images` 是 `TTyVirtualImageList` / `TTyLucideImageList` 时,其中的字形图标跟着该行的文字色画(选中行、关掉的行也跟着变),图片不染色,见 [imagecollection.md](imagecollection.md#字形图标的颜色40-起)。
 
 所有 chrome 颜色 / 尺寸均由主题 token 驱动,未硬编码。
 
@@ -87,6 +92,8 @@ begin
   LB.AddItem('Alice', 'Senior Engineer', 0);
   LB.AddItem('Bob',   'Product Designer', 1);
   LB.AddItem('Carol', '', -1);   // 无副标题、无图
+
+  LB.ItemEnabled[1] := False;    // Bob 这一行画成不可用(仍可选中)
 end;
 ```
 
@@ -95,6 +102,6 @@ end;
 ## 7. 注意事项
 
 - **两行合并成一个 item:** 用 `AddItem` / `TitleOf` / `SubtitleOf` 存取,不要直接改 `Items[i]`,否则要自行维护 `Title + LineEnding + Subtitle` 的约定。
-- **图片索引在 `Objects[]` 里(偏移 +1):** 存的是 `AImageIndex + 1`,`0` 才代表无图——这样 `Sorted` 重排后仍与该行同步,不用并行数组。
+- **图片索引在 `Objects[]` 里(偏移 +1):** 存的是 `AImageIndex + 1`,`0` 才代表无图——这样 `Sorted` 重排后仍与该行同步,不用并行数组。关掉的行在这个值上多一位,所以读图片索引请用 `ImageIndexOf`(或 `TyAdvancedItemImageIndex(Items.Objects[i])`),别自己减 1。
 - **副标题颜色来自主题:** 只降低 `TextColor` 的 alpha,不硬编码灰色;换主题时副标题颜色随之变化。
 - **绘制是真机验证项:** 数据逻辑(拆分标题 / 副标题、图片索引读写、排序保序)已 headless 单测;图片渲染与两行排版需真机眼验。

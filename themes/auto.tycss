@@ -162,6 +162,9 @@ TyListItem, TyValueListEditorRow {
 }
 TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }
 TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }
+/* A row its list turned off (ItemEnabled of the check list and the rich list): the ink of a
+   disabled tree node. */
+TyListItem:disabled, TyValueListEditorRow:disabled { color: var(--muted); }
 
 TyProgressBar {
   background: var(--surface-sunk);
