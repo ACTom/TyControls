@@ -1016,7 +1016,7 @@ TyButton.primary {
 | | 数量 |
 |---|---|
 | `light.tycss` 已定义的 typeKey | **183** |
-| 控件解析、但基础层**刻意不定义**的键（§8.4） | 8 |
+| 控件解析、但基础层**刻意不定义**的键（§8.4） | 9 |
 | 主题里有定义、但**没有任何代码解析**的死键（§8.6） | 3 |
 
 > **v3 起的重大变化。** 此前 51 个控件解析的是**别的控件**的 typeKey,主题层根本够不着它们
@@ -1080,6 +1080,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 |---|---|---|---|
 | `TyForm` | 窗体背景;经 `ApplyChromeTheme` 写进窗体 `Color`。内置 `background: var(--form-bg)`,比内容表面略深。窗口圆角 `border-radius`、阴影 `window-shadow` 见 [ttyform.md](controls/ttyform.md) §8;macOS 上窗口圆角由系统决定,`border-radius` 不起作用,`window-shadow` 照样生效 | `TTyForm` | — |
 | `TyFormSurface` | **刻意不定义**(§8.4) | `TTyFormSurface` | — |
+| `TyFrame` | **刻意不定义**(§8.4) | `TTyFrame` | — |
 | `TyTitleBar` | 自绘标题栏条带(与 `TyRibbonQuickAccess` 共用一个规则块) | `TTyTitleBar` | — |
 | `TyCaptionButton` | 标题栏系统按钮 | `TTyCaptionButton` | `:hover` `:active`;变体 `.close`(`:hover`/`:active`)、`.min`(`:hover`)、`.max`(`:hover`) |
 
@@ -1450,6 +1451,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | typeKey | 谁解析 | 不定义的理由 / 兜底 |
 |---|---|---|
 | `TyGridPanel` | `TTyGridPanel` | **格子布局宿主不是一块面。**没有主题背景时 `DrawFrame` 走 `TyFillParentBg`,于是格子之间的间隔取父容器的颜色,而不是在承载它的东西上戳出一块白面板。`tests/test.gridpanel.pas` 断言**没有任何内置主题**给这个键背景。想要可见的网格面,自己写 `TyGridPanel { background: …; border: … }` 即可 |
+| `TyFrame` | `TTyFrame` | **可嵌入的视图是脚手架，不是一块面。**没有主题背景时它画宿主的背景（渐变宿主取它盖住的那一片），上面的控件透过它取色，见 [controls/frame.md](controls/frame.md)。`tests/test.frame.pas` 断言**没有任何内置主题**给这个键背景。想让视图自成一块面，写 `TyFrame { background: …; }`，或者给单个 frame 设 `StyleClass` / `StyleOverride` |
 | `TyFormSurface` | `TTyFormSurface` | **它没有自己的 CSS。**Surface 渲染的是宿主窗体的 `form` 背景(见其 `Paint`),并承载各自解析样式的子控件。中性键的意义是:不要让 `TyForm` 的 padding / border 意外套到 surface 自己的布局上 |
 | `TyListViewLine` | `TTyListView` | `background` → 否则取列表视图外框的 `border-color` |
 | `TyListViewMarquee` | `TTyListView` | `background` → 否则取 `TyListViewItem:selected` 的背景(色相跟主题走、alpha 是常数) |

@@ -1043,7 +1043,7 @@ Current scale:
 | | Count |
 |---|---|
 | typeKeys defined in `light.tycss` | **183** |
-| Keys controls resolve but the base layer **deliberately leaves undefined** (§8.4) | 8 |
+| Keys controls resolve but the base layer **deliberately leaves undefined** (§8.4) | 9 |
 | Dead keys defined in themes but **resolved by no code at all** (§8.6) | 3 |
 
 > **The big change in v3.** Previously 51 controls resolved **another control's** typeKey, leaving them unreachable from the
@@ -1108,6 +1108,7 @@ entry, and covers every stylesheet under `themes/` and `examples/theming/`. Home
 |---|---|---|---|
 | `TyForm` | Form background; written into the form's `Color` via `ApplyChromeTheme`. Built-in `background: var(--form-bg)`, slightly darker than content surfaces. Window corners (`border-radius`) and shadow (`window-shadow`): see [ttyform.md](controls/ttyform.md) §8. On macOS the system draws the window's corners and `border-radius` has no effect there; `window-shadow` still applies | `TTyForm` | — |
 | `TyFormSurface` | **Deliberately undefined** (§8.4) | `TTyFormSurface` | — |
+| `TyFrame` | **Deliberately undefined** (§8.4) | `TTyFrame` | — |
 | `TyTitleBar` | The self-drawn title bar strip (shares one rule block with `TyRibbonQuickAccess`) | `TTyTitleBar` | — |
 | `TyCaptionButton` | Title bar system buttons | `TTyCaptionButton` | `:hover` `:active`; variants `.close` (`:hover`/`:active`), `.min` (`:hover`), `.max` (`:hover`) |
 
@@ -1484,6 +1485,7 @@ stays silent so the fallbacks keep working.
 | typeKey | Resolved by | Why undefined / the fallback |
 |---|---|---|
 | `TyGridPanel` | `TTyGridPanel` | **A grid layout host is not a slab.** With no themed background, `DrawFrame` takes `TyFillParentBg`, so the gaps between cells take the parent container's color instead of punching a white panel into whatever hosts it. `tests/test.gridpanel.pas` asserts that **no built-in theme** gives this key a background. For a visible grid face, write `TyGridPanel { background: …; border: … }` yourself |
+| `TyFrame` | `TTyFrame` | **An embeddable view is scaffolding, not a slab.** With no themed background it paints its host's background (on a gradient host, the slice it covers), and the controls on it resolve their colors through it; see [controls/frame.md](controls/frame.md). `tests/test.frame.pas` asserts that **no built-in theme** gives this key a background. To make views a face of their own, write `TyFrame { background: …; }`, or set `StyleClass` / `StyleOverride` on a single frame |
 | `TyFormSurface` | `TTyFormSurface` | **It has no CSS of its own.** The surface renders the host form's `form` background (see its `Paint`) and hosts children that resolve their own styles. The point of the neutral key: keep `TyForm`'s padding / border from accidentally applying to the surface's own layout |
 | `TyListViewLine` | `TTyListView` | `background` → otherwise the list view frame's `border-color` |
 | `TyListViewMarquee` | `TTyListView` | `background` → otherwise the `TyListViewItem:selected` background (hue follows the theme, alpha is a constant) |

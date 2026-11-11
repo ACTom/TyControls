@@ -11,6 +11,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [TTyForm](ttyform.md) | 自绘无边框窗体基类，`BorderIcons` 驱动 caption 按钮 |
+| [TTyFrame](frame.md) | 可嵌入视图的设计器祖类（`TFrame` 的主题化版本），透出宿主的主题背景 |
 | [TTyTitleBar](titlebar.md) | 可关联的标题栏（`Form.TitleBar` 模式） |
 | [caption 按钮](captionbutton.md) | 标题栏的最小化 / 最大化 / 关闭按钮 |
 | [窗口镶边总览](formchrome.md) | 窗口镶边整体机制与配置 |
