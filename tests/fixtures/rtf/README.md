@@ -37,7 +37,41 @@ Each `hand-*.rtf` ends the way WordPad ends a file: `}`, CR LF, and one NUL byte
 | `gbk-badbytes.txt` | GBK with a lone FF and a lead byte 81 right before a line end |
 | `utf8-badbytes.txt` | UTF-8 (to be read with the encoding forced) with an overlong C0 AF, a lone 80, and a sequence cut short at the end of the file |
 
-## Saved by WordPad and by Word
+## Written by WordPad's engine (`scripts/gen-richedit-fixtures-msftedit.py`)
 
-Not here yet; this section lists each one when it is added: the program and its version, the
-fonts, and what the file is for.
+WordPad is a window around the system RichEdit control (msftedit.dll): what it saves is what
+that control streams out. The script gives the control a short RTF source, lets it stream the
+document back out (EM_STREAMOUT, SF_RTF), and keeps that output: the engine's own font table,
+`\'xx` for text in the font's code page, `\uN?` for the rest, `\pntext` / `{\*\pn ...}` lists,
+`{\pict{\*\picprop ...}\pngblip ...}`, `\trowd ... \cell ... \row`, and the `}` CR LF NUL ending.
+The control lives in a message-only window; nothing was typed, clicked or pasted. Made on
+Windows 10 19044, code page 936, `Riched20 10.0.19041`. `re-*.expected.txt` is the text the
+control itself reports (EM_GETTEXTEX, raw), with a cell end counted as a paragraph end and the
+row marks dropped; a picture is U+FFFC.
+
+| File | Fonts | What it is for |
+|---|---|---|
+| `re-zh-plain.rtf` | 宋体 | Chinese only; full-width punctuation (the engine writes `\ldblquote`, `\rdblquote`, `\emdash`); an empty paragraph. |
+| `re-zh-mixed.rtf` | 宋体, 黑体, 楷体, Arial, Segoe UI Symbol | Chinese and English mixed, font changes inside a paragraph, rare characters, one character outside the BMP (written as two `\uN?` in a font the engine picked). |
+| `re-zh-list.rtf` | 宋体, Symbol | A bulleted list and a numbered list, with plain paragraphs around them. |
+| `re-zh-picture.rtf` | 宋体, Segoe UI | Two PNG pictures (48 x 32, made by the script), one starting a paragraph and one inside a line. |
+| `re-zh-table.rtf` | 宋体 | A 3 x 3 table between two paragraphs. |
+| `re-styles.rtf` | 宋体 | Bold, italic, underline, strike-out, subscript, superscript, two text colours, a highlight, three sizes; centred, right, justified; indents, hanging indent; 1.5, double and exact line spacing; space before and after; left, centre and right tab stops. |
+
+## In Word's writing, by hand (`scripts/gen-richedit-fixtures.py`)
+
+Not saved by Word: written after the way Word writes RTF (the long header with `\stshf...`,
+`\panose` and `\falt`, `\defchp`, a style sheet, `\rsidtbl`, `\info`; `\pard\plain` and the full
+property list on every paragraph; one group per run; blocks after the last paragraph). The
+system RichEdit reads all three and reports the same text and the same table structure.
+
+| File | What it is for |
+|---|---|
+| `hand-word-zh.rtf` | The three font slots: Latin text `\hich\af37\dbch\af13\loch\f37`, East Asian text `\loch\af37\hich\af37\dbch\f13`, high-ANSI text `\loch\af37\dbch\af13\hich\f37` (é, ï in code page 1252). `\uc2` from the header with `\uN\'xx\'xx`; one character outside the code page under a local `\uc1`. |
+| `hand-word-unknown.rtf` | One each of what phase 1 keeps without understanding: a style (`\s1`, the style sheet), a field (`\field`, hyperlink), a tracked insertion and deletion (`\revised`, `\deleted`, `\revtbl`), a comment (`\atrfstart` ... `\annotation`), a footnote, a formula (`\mmath`), a bookmark; and Word's blocks after the last paragraph (`\themedata`, `\latentstyles`, `\datastore`). `hand-word-unknown.visible.txt` is the paragraphs' text with every U+FFFC taken out (the field's result is inside its object, so it is not in that text). |
+| `hand-word-table-merged.rtf` | A 3 x 3 table: a cell spanning two columns (`\clmgf`, `\clmrg`), a cell spanning two rows (`\clvmgf`, `\clvmrg`), and a nested 1 x 2 table (`\itap2`, `\nestcell`, `\nesttableprops`, `\nestrow`) in the last cell. The expected text has an empty paragraph for each swallowed cell and for the last cell's own paragraph after the nested table. |
+
+## Saved from WordPad's window and by Word
+
+Not here yet (`wp-*.rtf`, `word-*.rtf`): they need the desktop. This section lists each one when
+it is added: the program and its version, the fonts, and what the file is for.

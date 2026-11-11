@@ -3,9 +3,10 @@
 one must read as, hand-*.expected.txt, UTF-8, one paragraph per LF-ended line) and
 tests/fixtures/txt/*.txt.
 
-The WordPad and Word samples in the same folders are NOT made here: they were saved by those
-programs (tests/fixtures/rtf/README.md says how). Every byte these files hold is spelled out
-below, so a rerun gives the same files; the tests read the files, not this script.
+The other samples in the same folders are NOT made here: re-*.rtf come out of WordPad's engine
+(gen-richedit-fixtures-msftedit.py), wp-*.rtf and word-*.rtf were saved by those programs
+(tests/fixtures/rtf/README.md says how). Every byte these files hold is spelled out below, so a
+rerun gives the same files; the tests read the files, not this script.
 
     python scripts/gen-richedit-fixtures.py
 """
@@ -150,6 +151,218 @@ split = (
     '}\r\n\x00')
 put(RTF, 'hand-split-dbcs.rtf', split.encode('ascii'))
 expected('hand-split-dbcs.expected.txt', split_paras)
+
+# ---------------------------------------------------------------- hand-word-*.rtf
+# RTF the way Word writes it, by hand: the long header (\stshf..., \panose and \falt in the
+# font table, \defchp, a style sheet, \rsidtbl, \info), \pard\plain with the full property
+# list on every paragraph, one group per run with \rtlch\fcs1 ... \ltrch\fcs0, and the three
+# font slots -- the run's own class takes \fN, the other two \afN:
+#     Latin text        \hich\af37\dbch\af13\loch\f37 text
+#     East Asian text   \loch\af37\hich\af37\dbch\f13 \'xx\'xx
+#     high ANSI text    \loch\af37\dbch\af13\hich\f37 \'xx
+# The header says \uc2, so a \uN is followed by the character's two GBK bytes. These files are
+# NOT saved by Word; the ones Word saved are word-*.rtf (README.md).
+
+
+def gbk(text):
+    return hexed(text, 'gbk')
+
+
+W_FONTS = (
+    '{\\fonttbl{\\f0\\fbidi \\froman\\fcharset0\\fprq2{\\*\\panose 02020603050405020304}Times New Roman;}'
+    '{\\f13\\fbidi \\fnil\\fcharset134\\fprq2{\\*\\panose 02010600030101010101}' + gbk('宋体')
+    + '{\\*\\falt SimSun};}\r\n'
+    '{\\f34\\fbidi \\froman\\fcharset0\\fprq2{\\*\\panose 02040503050406030204}Cambria Math;}'
+    '{\\f37\\fbidi \\fswiss\\fcharset0\\fprq2{\\*\\panose 020f0502020204030204}Calibri;}'
+    '{\\f38\\fbidi \\fnil\\fcharset134\\fprq2{\\*\\panose 02010600030101010101}@' + gbk('宋体') + ';}}')
+W_PAPF = ('\\li0\\ri0\\nowidctlpar\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright\\rin0\\lin0\\itap0 ')
+W_CHPF = ('\\rtlch\\fcs1 \\af0\\afs24\\alang1025 \\ltrch\\fcs0 \\fs21\\lang1033\\langfe2052\\kerning2'
+          '\\loch\\af37\\hich\\af37\\dbch\\af13\\cgrid\\langnp1033\\langfenp2052 ')
+W_STYLES = (
+    '{\\stylesheet{\\qj ' + W_PAPF + '\\rtlch\\fcs1 \\af0\\afs24\\alang1025 \\ltrch\\fcs0 '
+    '\\fs21\\lang1033\\langfe2052\\kerning2\\loch\\f37\\hich\\af37\\dbch\\af13\\cgrid\\langnp1033\\langfenp2052 '
+    '\\snext0 \\sqformat \\spriority0 Normal;}\r\n'
+    '{\\s1\\qj \\li0\\ri0\\sb340\\sa330\\sl578\\slmult1\\keep\\keepn\\nowidctlpar\\wrapdefault\\aspalpha\\aspnum'
+    '\\faauto\\outlinelevel0\\adjustright\\rin0\\lin0\\itap0 \\rtlch\\fcs1 \\ab\\af0\\afs44\\alang1025 \\ltrch\\fcs0 '
+    '\\b\\fs44\\lang1033\\langfe2052\\kerning44\\loch\\f37\\hich\\af37\\dbch\\af13\\cgrid\\langnp1033\\langfenp2052 '
+    '\\sbasedon0 \\snext0 \\slink19 \\sqformat \\spriority9 heading 1;}'
+    '{\\*\\cs10 \\additive \\ssemihidden \\sunhideused \\spriority1 Default Paragraph Font;}\r\n'
+    '{\\*\\cs15 \\additive \\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\ul\\cf2 \\sbasedon10 \\sunhideused Hyperlink;}'
+    '{\\*\\cs16 \\additive \\rtlch\\fcs1 \\af0\\afs21 \\ltrch\\fcs0 \\fs21 \\sbasedon10 \\ssemihidden '
+    '\\sunhideused annotation reference;}'
+    '{\\*\\cs17 \\additive \\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\super \\sbasedon10 \\ssemihidden \\sunhideused '
+    'footnote reference;}}')
+
+
+def w_head(extra=''):
+    return (
+        '{\\rtf1\\adeflang1025\\ansi\\ansicpg936\\uc2\\adeff0\\deff0\\stshfdbch13\\stshfloch37\\stshfhich37'
+        '\\stshfbi0\\deflang1033\\deflangfe2052' + W_FONTS
+        + '{\\colortbl;\\red0\\green0\\blue0;\\red0\\green0\\blue255;\\red255\\green0\\blue0;}\r\n'
+        '{\\*\\defchp \\fs21\\kerning2\\loch\\af37\\hich\\af37\\dbch\\af13 }'
+        '{\\*\\defpap \\ql \\li0\\ri0\\widctlpar\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright\\rin0\\lin0\\itap0 }'
+        '\\noqfpromote ' + W_STYLES + extra
+        + '{\\*\\rsidtbl \\rsid2103427\\rsid9764852}{\\*\\generator hand-written for TyControls;}\r\n'
+        '{\\info{\\author TyControls}{\\operator TyControls}{\\creatim\\yr2026\\mo11\\dy11\\hr10\\min0}'
+        '{\\version1}{\\edmins0}{\\nofpages1}{\\nofwords0}{\\nofchars0}{\\vern49167}}'
+        '\\paperw11906\\paperh16838\\margl1800\\margr1800\\margt1440\\margb1440\\gutter0\\ltrsect \r\n'
+        '\\deftab420\\ftnbj\\aenddoc\\formshade\\horzdoc\\dghspace180\\dgvspace156\\dghorigin1800\\dgvorigin1440'
+        '\\dghshow0\\dgvshow2\\jcompress\\viewkind1\\viewscale100\\rsidroot2103427 \\fet0'
+        '{\\*\\wgrffmtfilter 2450}\\ilfomacatclnup0\\ltrpar \\sectd \\ltrsect\\linex0\\headery851\\footery992'
+        '\\colsx425\\endnhere\\sectlinegrid312\\sectspecifyl\\sectrsid2103427\\sftnbj ')
+
+
+# What Word puts after the last paragraph: blocks no reader of ours knows.
+W_TAIL = ('{\\*\\themedata 504b030414000600080000002100}\r\n'
+          '{\\*\\colorschememapping 3c3f786d6c2076657273696f6e3d22312e30223f3e}\r\n'
+          '{\\*\\latentstyles\\lsdstimax371\\lsdlockeddef0\\lsdsemihiddendef0\\lsdunhideuseddef0\\lsdqformatdef0'
+          '\\lsdprioritydef99{\\lsdlockedexcept \\lsdqformat1 \\lsdpriority0 \\lsdlocked0 Normal;'
+          '\\lsdqformat1 \\lsdpriority9 \\lsdlocked0 heading 1;}}{\\*\\datastore 0105000002000000}}')
+W_PARD = '\\pard\\plain \\ltrpar\\qj ' + W_PAPF + W_CHPF
+W_RUN = '{\\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\insrsid2103427 '
+W_PAR = W_RUN + '\\par }'
+
+
+def w_latin(text, props=''):
+    return (W_RUN[:-1] + props + ' ' if props else W_RUN) + '\\hich\\af37\\dbch\\af13\\loch\\f37 ' + text + '}'
+
+
+def w_cjk(text, props=''):
+    return (W_RUN[:-1] + props + ' ' if props else W_RUN) + '\\loch\\af37\\hich\\af37\\dbch\\f13 ' + gbk(text) + '}'
+
+
+def w_high(text):
+    return W_RUN + '\\loch\\af37\\dbch\\af13\\hich\\f37 ' + hexed(text, 'cp1252') + '}'
+
+
+# hand-word-zh.rtf: the three font slots, \uc2 with its two fallback bytes, and one character
+# outside the code page under a local \uc1.
+wzh_paras = [
+    'TyControls 的富文本控件 4.0',
+    'café 和 naïve 里的重音字母',
+    '中文也可以这样写',
+    '表情 \U0001F600 不在代码页里',
+    '最后一段，后面跟着 Word 的收尾块。',
+]
+wzh = (
+    w_head()
+    + W_PARD + w_latin('TyControls ') + w_cjk('的富文本控件') + w_latin(' 4.0') + '\r\n' + W_PAR
+    + W_PARD + w_latin('caf') + w_high('é') + w_latin(' ') + w_cjk('和') + w_latin(' na')
+    + w_high('ï') + w_latin('ve ') + w_cjk('里的重音字母') + W_PAR + '\r\n'
+    + W_PARD + W_RUN + '\\loch\\af37\\hich\\af37\\dbch\\f13 '
+    + ''.join("\\u%d%s" % (u16(c)[0], hexed(c, 'gbk')) for c in '中文也可以这样写') + '}' + W_PAR
+    + W_PARD + w_cjk('表情') + w_latin(' ') + W_RUN + '\\hich\\af37\\dbch\\af13\\loch\\f37 \\uc1\\u%d?\\u%d?}' % tuple(u16('\U0001F600'))
+    + w_latin(' ') + w_cjk('不在代码页里') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('最后一段，后面跟着') + w_latin(' Word ') + w_cjk('的收尾块。') + W_PAR
+    + W_TAIL)
+put(RTF, 'hand-word-zh.rtf', wzh.encode('ascii'))
+expected('hand-word-zh.expected.txt', wzh_paras)
+
+# hand-word-unknown.rtf: one each of what phase 1 does not understand and must keep -- a style
+# (\s1 and the style sheet), a field, a tracked insertion and deletion, a comment, a footnote,
+# a formula, a bookmark. hand-word-unknown.visible.txt is the text of the paragraphs with every
+# object character (U+FFFC) taken out: how many objects the blocks become is the reader's
+# business, the text around them is not.
+W_REVTBL = '{\\*\\revtbl {Unknown;}{TyControls;}}'
+W_FIELD = (
+    '{\\field{\\*\\fldinst ' + W_RUN + '\\hich\\af37\\dbch\\af13\\loch\\f37  HYPERLINK "https://example.com/" }}'
+    '{\\fldrslt ' + w_cjk('链接', '\\cs15\\ul\\cf2') + '}}')
+W_COMMENT = (
+    '{\\*\\atrfstart 1}' + w_cjk('这几个字') + '{\\*\\atrfend 1}{\\*\\atnid TY}{\\*\\atnauthor TyControls}\\chatn '
+    '{\\*\\annotation{\\*\\atnref 1}{\\*\\atndate \\yr2026\\mo11\\dy11\\hr10\\min0}\\pard\\plain \\ltrpar\\ql '
+    + W_PAPF + W_CHPF + '{\\rtlch\\fcs1 \\af0\\afs21 \\ltrch\\fcs0 \\cs16\\fs21\\insrsid2103427 \\chatn }'
+    + w_cjk('批注的内容') + '}')
+W_FOOTNOTE = (
+    '{\\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\cs17\\super\\insrsid2103427 \\chftn {\\footnote \\ltrpar \\pard\\plain '
+    '\\ltrpar\\ql ' + W_PAPF + W_CHPF + '{\\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\cs17\\super\\insrsid2103427 \\chftn }'
+    + w_cjk('脚注的内容') + '}}')
+W_MATH = (
+    '{\\mmath {\\*\\moMath {\\mr\\mscr0\\msty2 \\rtlch\\fcs1 \\af34 \\ltrch\\fcs0 \\i\\f34\\insrsid2103427 E=m}'
+    '{\\msSup{\\msSupPr{\\mctrlPr\\rtlch\\fcs1 \\af34 \\ltrch\\fcs0 \\i\\f34 }}{\\me{\\mr\\mscr0\\msty2 '
+    '\\rtlch\\fcs1 \\af34 \\ltrch\\fcs0 \\i\\f34\\insrsid2103427 c}}{\\msup{\\mr\\mscr0\\msty2 \\rtlch\\fcs1 '
+    '\\af34 \\ltrch\\fcs0 \\i\\f34\\insrsid2103427 2}}}}}')
+wun_visible = [
+    '不认识的内容',
+    '这里有一个。',
+    '修订：新加的字删掉的字',
+    '批注在这几个字上。',
+    '脚注在这里。',
+    '公式：。',
+    '书签里的字',
+]
+wun = (
+    w_head(W_REVTBL)
+    + '\\pard\\plain \\ltrpar\\s1\\qj \\li0\\ri0\\sb340\\sa330\\sl578\\slmult1\\keep\\keepn\\nowidctlpar\\wrapdefault'
+    '\\aspalpha\\aspnum\\faauto\\outlinelevel0\\adjustright\\rin0\\lin0\\itap0 \\rtlch\\fcs1 \\ab\\af0\\afs44\\alang1025 '
+    '\\ltrch\\fcs0 \\b\\fs44\\lang1033\\langfe2052\\kerning44\\loch\\af37\\hich\\af37\\dbch\\af13\\cgrid\\langnp1033'
+    '\\langfenp2052 ' + w_cjk('不认识的内容') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('这里有一个') + W_FIELD + w_cjk('。') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('修订：')
+    + w_cjk('新加的字', '\\revised\\revauth1\\revdttm1184567890')
+    + w_cjk('删掉的字', '\\deleted\\revauthdel1\\revdttmdel1184567890') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('批注在') + W_COMMENT + w_cjk('上。') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('脚注在这里') + W_FOOTNOTE + w_cjk('。') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('公式：') + W_MATH + w_cjk('。') + W_PAR + '\r\n'
+    + W_PARD + '{\\*\\bkmkstart mark1}' + w_cjk('书签里的字') + '{\\*\\bkmkend mark1}' + W_PAR
+    + W_TAIL)
+put(RTF, 'hand-word-unknown.rtf', wun.encode('ascii'))
+put(RTF, 'hand-word-unknown.visible.txt', ''.join(p + '\n' for p in wun_visible).encode('utf-8'))
+
+# hand-word-table-merged.rtf: a 3 x 3 table. Row 1: the first cell spans two columns (\clmgf,
+# then \clmrg on the cell it swallowed, which still has its own empty \cell). Rows 2 and 3:
+# the first column is merged down (\clvmgf, \clvmrg). The last cell holds a nested 1 x 2 table
+# (\itap2, \nestcell, \nesttableprops ... \nestrow) and then its own empty last paragraph.
+W_TROW = ('\\ltrrow\\ts11\\trgaph108\\trleft-108\\trbrdrt\\brdrs\\brdrw10 \\trbrdrl\\brdrs\\brdrw10 \\trbrdrb'
+          '\\brdrs\\brdrw10 \\trbrdrr\\brdrs\\brdrw10 \\trbrdrh\\brdrs\\brdrw10 \\trbrdrv\\brdrs\\brdrw10 \r\n'
+          '\\trftsWidth1\\trftsWidthB3\\trautofit1\\trpaddl108\\trpaddr108\\trpaddfl3\\trpaddfr3\\tblind0\\tblindtype3 ')
+W_CELLB = ('\\clbrdrt\\brdrs\\brdrw10 \\clbrdrl\\brdrs\\brdrw10 \\clbrdrb\\brdrs\\brdrw10 \\clbrdrr\\brdrs\\brdrw10 '
+           '\\cltxlrtb\\clftsWidth3\\clwWidth2840\\clshdrawnil ')
+
+
+def w_rowdef(index, merges, last=False, edges=(2732, 5572, 8412)):
+    return ('\\trowd \\irow%d\\irowband%d' % (index, index) + ('\\lastrow ' if last else '') + W_TROW
+            + ''.join(m + '\\clvertalt' + W_CELLB + '\\cellx%d' % x for m, x in zip(merges, edges)))
+
+
+W_TPAPF = '\\li0\\ri0\\nowidctlpar\\intbl\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright\\rin0\\lin0 '
+
+
+def w_cell(run):
+    """One cell holding one run: Word closes it with \\cell inside the run's group."""
+    return run[:-1] + '\\cell }' if run else W_RUN + '\\cell }'
+
+
+def w_row(index, merges, cells, last=False):
+    rowdef = w_rowdef(index, merges, last)
+    return (rowdef + '\\pard\\plain \\ltrpar\\qj ' + W_TPAPF + W_CHPF + ''.join(cells)
+            + '\\pard\\plain \\ltrpar\\ql \\li0\\ri0\\widctlpar\\intbl\\wrapdefault\\aspalpha\\aspnum\\faauto'
+            '\\adjustright\\rin0\\lin0 ' + W_CHPF + W_RUN + rowdef + '\\row }\r\n')
+
+
+W_NESTED = (
+    '\\pard\\plain \\ltrpar\\qj \\li0\\ri0\\nowidctlpar\\intbl\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright'
+    '\\rin0\\lin0\\itap2 ' + W_CHPF
+    + w_cjk('内一')[:-1] + '\\nestcell }' + w_cjk('内二')[:-1] + '\\nestcell }'
+    + '\\pard\\plain \\ltrpar\\ql \\li0\\ri0\\widctlpar\\intbl\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright'
+    '\\rin0\\lin0\\itap2 ' + W_CHPF + W_RUN
+    + '{\\*\\nesttableprops\\trowd \\irow0\\irowband0\\lastrow ' + W_TROW
+    + '\\clvertalt' + W_CELLB + '\\cellx1300\\clvertalt' + W_CELLB + '\\cellx2600\\nestrow}'
+    '{\\nonesttables\\par }}'
+    + '\\pard\\plain \\ltrpar\\qj ' + W_TPAPF + W_CHPF + W_RUN + '\\cell }')
+wtb_paras = ['表格前', '跨两列', '', 'C', '跨两行', 'E', 'F', '', 'G', '内一', '内二', '', '表格后']
+wtb = (
+    w_head()
+    + W_PARD + w_cjk('表格前') + W_PAR + '\r\n'
+    + w_row(0, ('\\clmgf', '\\clmrg', ''), [w_cell(w_cjk('跨两列')), w_cell(''), w_cell(w_latin('C'))])
+    + w_row(1, ('\\clvmgf', '', ''), [w_cell(w_cjk('跨两行')), w_cell(w_latin('E')), w_cell(w_latin('F'))])
+    + w_rowdef(2, ('\\clvmrg', '', ''), True) + '\\pard\\plain \\ltrpar\\qj ' + W_TPAPF + W_CHPF
+    + w_cell('') + w_cell(w_latin('G')) + W_NESTED
+    + '\\pard\\plain \\ltrpar\\ql \\li0\\ri0\\widctlpar\\intbl\\wrapdefault\\aspalpha\\aspnum\\faauto\\adjustright'
+    '\\rin0\\lin0 ' + W_CHPF + W_RUN + w_rowdef(2, ('\\clvmrg', '', ''), True) + '\\row }\r\n'
+    + W_PARD + w_cjk('表格后') + W_PAR
+    + W_TAIL)
+put(RTF, 'hand-word-table-merged.rtf', wtb.encode('ascii'))
+expected('hand-word-table-merged.expected.txt', wtb_paras)
 
 # ---------------------------------------------------------------- txt
 lines = [
