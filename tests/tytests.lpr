@@ -282,7 +282,8 @@ uses
   test.db.grid.events,
   test.db.typekeys,
   test.textground,
-  test.richedit.text;
+  test.richedit.text,
+  test.richedit.model;
 
 type
   TTyTestRunner = class(TTestRunner)

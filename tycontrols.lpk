@@ -893,6 +893,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RichEdit.Text.pas"/>
         <UnitName Value="tyControls.RichEdit.Text"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.Model.pas"/>
+        <UnitName Value="tyControls.RichEdit.Model"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
