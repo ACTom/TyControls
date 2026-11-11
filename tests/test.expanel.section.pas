@@ -99,6 +99,11 @@ type
     procedure TestTheAreaTakesThePanelsController;
     procedure TestTheAreaRefusesPanelsAndAreas;
     procedure TestTheBodyStillStartsUnderTheHeader;
+    procedure TestAddingAButtonMakesRoomAtOnce;
+    procedure TestTheAreaLaysItsChildrenOutInARow;
+    procedure TestAChildCountsAtItsMinimumWidth;
+    procedure TestAnAreaWithItsOwnBackgroundDrawsNoBand;
+    procedure TestAnEmptyAreaShowsItsSlotInTheDesignerOnly;
     { clicks }
     procedure TestHitTestTellsTheParts;
     procedure TestAClickOnTheActionsNeverToggles;
@@ -120,6 +125,7 @@ type
     procedure TestTabStopKeepsItsDefault;
     { focus ring }
     procedure TestAFocusedHeaderDrawsItsRingAroundTheBand;
+    procedure TestACollapsedHeadersRingStaysInsideTheFrame;
     procedure TestTheRingGoesOnUnderTheActions;
     procedure TestAHeaderBorderIsALineAlongItsTopEdge;
     procedure TestTheDefaultThemeGivesTheHeaderAFocusRing;
@@ -663,6 +669,134 @@ begin
   AssertEquals('it is cut at the header''s height', 26, act.Height);
 end;
 
+procedure TTyExPanelSectionTest.TestAddingAButtonMakesRoomAtOnce;
+var
+  act: TTyCustomExPanelActions;
+  one: TTabChild;
+begin
+  Flat;
+  act := FPanel.EnsureHeaderActions;
+  one := NewChild(act, 20, 20);
+  { no layout pass is asked for: the area tells the header itself }
+  AssertEquals('one button: its row', 3 + 20 + 3, act.Width);
+  AssertEquals('at the trailing end', 200, act.Left + act.Width);
+  NewChild(act, 30, 20);
+  AssertEquals('a second one: the row grew', 3 + 20 + 5 + 30 + 3, act.Width);
+  AssertEquals('still at the trailing end', 200, act.Left + act.Width);
+  one.Visible := False;
+  AssertEquals('one hidden: the row shrank', 3 + 30 + 3, act.Width);
+end;
+
+procedure TTyExPanelSectionTest.TestTheAreaLaysItsChildrenOutInARow;
+var
+  act: TActionsProbe;
+  a, b: TTabChild;
+begin
+  Flat;
+  act := TActionsProbe.Create(FForm);
+  act.Parent := FPanel;
+  a := NewChild(act, 20, 16);
+  b := NewChild(act, 30, 10);
+  { wherever they were put, and whatever they ask for }
+  a.SetBounds(70, 9, 20, 16);
+  b.Align := alClient;
+  FPanel.CallAlign;
+  act.CallAlign;
+  AssertEquals('the first after the pad', 3, a.Left);
+  AssertEquals('centred on the band', 5, a.Top);
+  AssertEquals('the second after the gap', 28, b.Left);
+  AssertEquals('at its own width, whatever its Align says', 30, b.Width);
+  AssertEquals('centred at its own height', 8, b.Top);
+  AssertEquals('which it keeps', 10, b.Height);
+  FPanel.BiDiMode := bdRightToLeft;
+  FPanel.CallAlign;
+  act.CallAlign;
+  AssertEquals('right to left the area is at the left end', 0, act.Left);
+  AssertEquals('and its first child at its right', act.Width - 3, a.Left + a.Width);
+  AssertEquals('the second to the left of it', act.Width - 28, b.Left + b.Width);
+end;
+
+procedure TTyExPanelSectionTest.TestAChildCountsAtItsMinimumWidth;
+var
+  act: TActionsProbe;
+  a, b: TTabChild;
+begin
+  Flat;
+  act := TActionsProbe.Create(FForm);
+  act.Parent := FPanel;
+  a := NewChild(act, 20, 16);
+  b := NewChild(act, 30, 16);
+  FPanel.CallAlign;
+  AssertEquals('setup: the row of 20 and 30', 61, act.Width);
+  { a button sets its minimum from its caption; its Width follows only when it is next placed }
+  a.Constraints.MinWidth := 44;
+  FPanel.CallAlign;
+  act.CallAlign;
+  AssertEquals('the row is measured with the minimum', 3 + 44 + 5 + 30 + 3, act.Width);
+  AssertEquals('and the next child starts after it', 3 + 44 + 5, b.Left);
+end;
+
+procedure TTyExPanelSectionTest.TestAnAreaWithItsOwnBackgroundDrawsNoBand;
+var
+  act: TActionsProbe;
+  part: TBGRABitmap;
+begin
+  { the header has a red top line; an area with no background carries it on, one with a
+    background of its own is not a piece of the header }
+  FCtl.LoadThemeCss(
+    'TyExPanel { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; }' +
+    'TyExPanelHeader { color: #000000; border-color: #FF0000; border-width: 2px; }');
+  act := TActionsProbe.Create(FForm);
+  act.Parent := FPanel;
+  NewChild(act, 30, 10);
+  FPanel.CallAlign;
+  part := TBGRABitmap.Create(act.Width, act.Height);
+  try
+    act.Shot(part);
+    AssertTrue('setup: without a background the line is carried on',
+      RedIn(part, Rect(0, 0, act.Width, 2)) > 0);
+    FCtl.LoadThemeCss(
+      'TyExPanel { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; }' +
+      'TyExPanelHeader { color: #000000; border-color: #FF0000; border-width: 2px; }' +
+      'TyExPanelActions { background: #00FF00; }');
+    act.Shot(part);
+    AssertEquals('with its own background: no line', 0, RedIn(part, Rect(0, 0, act.Width, 26)));
+    AssertTrue('its own background instead', part.GetPixel(5, 1).green > 200);
+  finally
+    part.Free;
+  end;
+end;
+
+procedure TTyExPanelSectionTest.TestAnEmptyAreaShowsItsSlotInTheDesignerOnly;
+var
+  act: TActionsProbe;
+  part: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(
+    ':root { --border: #FF0000; }' +
+    'TyExPanel { background: #FFFFFF; color: #000000; border-width: 0px; padding: 0px; }');
+  act := TActionsProbe.Create(FForm);
+  act.Parent := FPanel;
+  act.MarkDesigning(True);
+  FPanel.CallAlign;
+  AssertEquals('setup: the slot', 26, act.Width);
+  part := TBGRABitmap.Create(26, 26);
+  try
+    act.Shot(part);
+    AssertTrue('design time, empty: the slot is outlined',
+      RedIn(part, Rect(0, 0, 26, 1)) >= 20);
+    NewChild(act, 20, 20);
+    act.Shot(part);
+    AssertEquals('with a child in it: no outline', 0, RedIn(part, Rect(0, 0, 26, 26)));
+    act.Controls[0].Free;
+    act.MarkDesigning(False);
+    act.Shot(part);
+    AssertEquals('run time: no outline', 0, RedIn(part, Rect(0, 0, 26, 26)));
+  finally
+    part.Free;
+  end;
+end;
+
 { ---- clicks ---- }
 
 procedure TTyExPanelSectionTest.TestHitTestTellsTheParts;
@@ -795,6 +929,9 @@ begin
   FPanel.Pointer := Point(act.Left + 5, -4);
   FPanel.Perform(CM_MOUSELEAVE, 0, LParam(act));
   AssertFalse('and off them it is not hot', FPanel.HeaderHot);
+  { a move the panel sees itself over that stretch (no child window there) counts the same }
+  FPanel.MoveTo(act.Left + 5, 13);
+  AssertTrue('the stretch of the actions is header', FPanel.HeaderHot);
 end;
 
 procedure TTyExPanelSectionTest.TestTheCaptionTakesTheRoomOfHiddenActions;
@@ -868,6 +1005,8 @@ begin
   AssertEquals('Up is not, outside a stack', VK_UP, FPanel.KeyLeft(VK_UP));
   AssertEquals('Ctrl+Space is a chord', VK_SPACE, FPanel.KeyLeft(VK_SPACE, [ssCtrl]));
   AssertEquals('Alt+Left is a chord', VK_LEFT, FPanel.KeyLeft(VK_LEFT, [ssAlt]));
+  AssertEquals('Shift+Enter is a chord', VK_RETURN, FPanel.KeyLeft(VK_RETURN, [ssShift]));
+  AssertEquals('Meta+Space is a chord', VK_SPACE, FPanel.KeyLeft(VK_SPACE, [ssMeta]));
   AssertFalse('and none of them toggled', FPanel.Collapsed);
 end;
 
@@ -931,6 +1070,42 @@ begin
     AssertEquals('nothing inside it', 0, RedIn(shot, Rect(2, 2, 198, 24)));
     AssertEquals('and nothing round the body: the ring is the header''s', 0,
       RedIn(shot, Rect(0, 26, 200, 140)));
+  finally
+    shot.Free;
+  end;
+end;
+
+procedure TTyExPanelSectionTest.TestACollapsedHeadersRingStaysInsideTheFrame;
+var
+  shot: TBGRABitmap;
+begin
+  { a 3px grey frame; collapsed, the band is the whole panel and the frame's bottom line
+    runs through it }
+  FCtl.LoadThemeCss(
+    'TyExPanel { background: #FFFFFF; color: #000000; border-color: #808080; ' +
+    '  border-width: 3px; border-radius: 0px; padding: 0px; }' +
+    'TyExPanelHeader { color: #000000; }' +
+    'TyExPanelHeader:focus { outline: 2px #FF0000; }');
+  FPanel.FakeFocus := True;
+  shot := TBGRABitmap.Create(200, 140);
+  try
+    FPanel.Shot(shot);
+    AssertEquals('open: the ring''s top is under the frame''s', 194 * 2,
+      RedIn(shot, Rect(3, 3, 197, 5)));
+    AssertEquals('open: its bottom is the band''s', 194 * 2, RedIn(shot, Rect(3, 24, 197, 26)));
+    AssertEquals('open: nothing on the frame', 0, RedIn(shot, Rect(0, 0, 200, 3)));
+  finally
+    shot.Free;
+  end;
+  FPanel.Collapsed := True;
+  AssertEquals('setup: collapsed to the header', 26, FPanel.Height);
+  shot := TBGRABitmap.Create(200, 26);
+  try
+    FPanel.Shot(shot);
+    AssertEquals('collapsed: its bottom is above the frame''s bottom line', 194 * 2,
+      RedIn(shot, Rect(3, 21, 197, 23)));
+    AssertEquals('collapsed: nothing on the frame''s bottom line', 0,
+      RedIn(shot, Rect(0, 23, 200, 26)));
   finally
     shot.Free;
   end;
