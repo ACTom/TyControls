@@ -95,6 +95,11 @@ const
     walks many sizes evicts rather than growing without limit. }
   TyImageCacheDefaultCapacity = 64;
 
+  { How many rendered icon-font glyphs a TTyVirtualImageList keeps, each one (name, size,
+    colour). Sized for a screenful of rows in a few states over a couple of controls; past
+    it the least recently used is rendered again when next asked for. }
+  TyGlyphCacheCapacity = 64;
+
 type
   TTyImageCollection = class;
   TTyCustomImageCollection = class;
@@ -360,6 +365,16 @@ type
       in the size a user actually sees. DefaultSize is now a view of Width. }
   TTyCustomVirtualImageList = class(TCustomImageList)
   private
+    type
+      { One rendered glyph: what it shows (name, size, colour) and when it was last asked for. }
+      TGlyphSlot = record
+        Bmp: TBGRABitmap;   // owned
+        Name: string;
+        Size: Integer;
+        Color: TTyColor;
+        Tick: Int64;
+      end;
+  private
     FCollection: TTyCustomImageCollection;
     FIconFont: TTyCustomIconFont;
     FNames: TStrings;          // ordered image NAMES to expose (a TStringList)
@@ -370,12 +385,13 @@ type
     FGlyphColor: TTyColor;
     { The borrowed-bitmap contract of CachedIndex has to hold for glyphs too, and an icon
       font has no cache of its own to borrow from -- RenderGlyph mints a new bitmap every
-      call. One slot is enough for the paint loops this feeds (a toolbar draws one icon at a
-      time at one size), and it keeps the promise without a second cache to invalidate. }
-    FGlyphCache: TBGRABitmap;
-    FGlyphCacheName: string;
-    FGlyphCacheSize: Integer;
-    FGlyphCacheColor: TTyColor;
+      call. A few slots keyed on (name, size, colour), the least recently used going first: a
+      tree draws a handful of different glyphs per frame, each in the ink of its row's state,
+      and with one slot every row of every frame went back to the font. All of them belong to
+      one font ChangeStamp and are dropped together when it moves. }
+    FGlyphCache: array of TGlyphSlot;
+    FGlyphCacheCount: Integer;
+    FGlyphCacheTick: Int64;
     FGlyphCacheVersion: Integer;
     { What the baked side holds, so that a name added at the end can render on its own instead of
       clearing and rendering the whole list. That rebuild made a loop of N adds cost 2N^2 renders
@@ -409,6 +425,11 @@ type
     procedure SetGlyphColor(AValue: TTyColor);
     procedure SetNames(AValue: TStrings);
     procedure DropGlyphCache;
+    { The colour a font glyph is drawn in for a host that passes AInk: GlyphColor when it
+      names one, else the host's ink, else opaque black. }
+    function GlyphInk(AInk: TTyColor): TTyColor;
+    { The font glyph AName at ASizePx in AColor, from the glyph cache. Borrowed. }
+    function CachedGlyph(const AName: string; ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
     { True when every baked slot is still what its name draws, and the names only grew at the end. }
     function BakedSlotsStillStand: Boolean;
     { Render the names from AFrom on into new slots. }
@@ -436,14 +457,26 @@ type
       preserved, centered on transparent). Caller OWNS the returned bitmap. Never
       nil: an empty transparent square when Collection is unset, AIndex is out of
       range, or the name is missing. ASizePx <= 0 is clamped to a 1px square. }
-    function RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+    function RenderIndex(AIndex, ASizePx: Integer;
+      AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap;
     { The Collection's cached render of item AIndex at ASizePx — a BORROWED
       reference: do NOT Free it, do NOT modify its pixels, and do not hold it
       across another CachedIndex call. Returns nil when there is nothing to draw
       (no Collection, AIndex out of range, or the name is missing). This is the
       allocation-free path for paint code; use RenderIndex when you need to own or
-      mutate the bitmap. ASizePx <= 0 is clamped to a 1px square. }
-    function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+      mutate the bitmap. ASizePx <= 0 is clamped to a 1px square.
+
+      AInk, here and on RenderIndex and DrawIndex, is the ink of whoever is drawing: the
+      colour of the text the icon sits beside, for that row's state. Only an item that
+      TakesHostInk is drawn in it; every other item, and every item when AInk is left at
+      TyGlyphColorDefault, comes out exactly as without it. }
+    function CachedIndex(AIndex, ASizePx: Integer;
+      AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap;
+    { True when item AIndex is drawn in the ink its host passes: an icon-font glyph, with
+      GlyphColor left at TyGlyphColorDefault. False for an image from the Collection (it
+      carries its own colours), for a glyph once GlyphColor names a colour, and for an index
+      that draws nothing. }
+    function TakesHostInk(AIndex: Integer): Boolean;
     { Paint item AIndex onto ACanvas at (AX, AY) at the list's DefaultSize.
 
       DELIBERATELY LCL's signature, argument for argument (imglist.pp:356
@@ -469,9 +502,11 @@ type
       that the two orders cannot be confused -- paint code in this library needs an
       explicit pixel size (it scales with DPI and with the row height), and LCL's Draw
       has nowhere to put one. AGhosted is the NEGATION of Draw's AEnabled, kept in that
-      polarity because that is what the callers upstream of it carry. }
+      polarity because that is what the callers upstream of it carry. An item drawn in AInk
+      (see CachedIndex) is not dimmed by AGhosted: an unavailable row's ink is already its
+      unavailable ink. }
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
-      AGhosted: Boolean = False);
+      AGhosted: Boolean = False; AInk: TTyColor = TyGlyphColorDefault);
     { Re-render every BAKED slot from the names. Automatic on load and whenever a change can reach
       a slot that is already baked; names added at the end render on their own. An explicit call
       is only for a source this component cannot observe. }
@@ -520,12 +555,14 @@ type
     property Version: string read GetTyVersion stored False;
     { Ink for glyphs taken from IconFont. Raster images carry their own colour and ignore it.
 
-      Defaults to OPAQUE black, not 0. TTyColor is $AARRGGBB, so 0 is fully TRANSPARENT: a
-      zero default would have shipped a property whose out-of-the-box value draws nothing at
-      all, and "my icons are invisible" is a much worse first experience than "my icons are
-      the wrong colour". The same trap already cost this library a ShowValue readout nobody
-      could see in any theme. Set it from the theme's ink on a dark background. }
-    property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default $FF000000;
+      TyGlyphColorDefault (the default) names no colour: the glyph takes the ink of whoever
+      draws it. A Ty control passes the colour of the text the icon sits beside, for that
+      row's state, so the icons of a tree follow the theme, the selection and a disabled row.
+      Where nothing supplies an ink -- an LCL control drawing the baked rasters, a caller
+      that passes none -- such a glyph is opaque black; it is never invisible.
+
+      Any other value is that colour, in every host and every row state. }
+    property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphColorDefault;
   end;
 
   { TTyVirtualImageList publishes TTyCustomVirtualImageList's properties; everything lives in TTyCustomVirtualImageList. }
@@ -1343,7 +1380,7 @@ begin
   FMultiResolution := True;
   { Lets LCL pick a registered resolution per monitor instead of stretching the base one. }
   Scaled := True;
-  FGlyphColor := $FF000000;   { opaque black -- see the property's note }
+  FGlyphColor := TyGlyphColorDefault;   { the ink of whoever draws -- see the property's note }
   FGlyphCacheVersion := -1;
 end;
 
@@ -1359,9 +1396,71 @@ begin
 end;
 
 procedure TTyCustomVirtualImageList.DropGlyphCache;
+var
+  i: Integer;
 begin
-  FreeAndNil(FGlyphCache);
-  FGlyphCacheName := '';
+  for i := 0 to FGlyphCacheCount - 1 do
+    FreeAndNil(FGlyphCache[i].Bmp);
+  FGlyphCacheCount := 0;
+end;
+
+const
+  { What a glyph left at TyGlyphColorDefault is drawn in when no host supplies an ink: the
+    baked rasters an LCL control draws, a caller that passes none. Opaque, so it is never
+    invisible. }
+  GlyphInkWithoutHost = TTyColor($FF000000);
+
+function TTyCustomVirtualImageList.GlyphInk(AInk: TTyColor): TTyColor;
+begin
+  if FGlyphColor <> TyGlyphColorDefault then
+    Result := FGlyphColor
+  else if AInk <> TyGlyphColorDefault then
+    Result := AInk
+  else
+    Result := GlyphInkWithoutHost;
+end;
+
+function TTyCustomVirtualImageList.CachedGlyph(const AName: string; ASizePx: Integer;
+  AColor: TTyColor): TBGRABitmap;
+var
+  i, slot: Integer;
+begin
+  { The font's ChangeStamp is part of the key: editing its Glyphs or swapping its file changes
+    what a name draws, and a cache that ignored that would keep serving the old glyph. }
+  if FGlyphCacheVersion <> FIconFont.ChangeStamp then
+  begin
+    DropGlyphCache;
+    FGlyphCacheVersion := FIconFont.ChangeStamp;
+  end;
+  Inc(FGlyphCacheTick);
+  for i := 0 to FGlyphCacheCount - 1 do
+    if (FGlyphCache[i].Size = ASizePx) and (FGlyphCache[i].Color = AColor)
+       and (FGlyphCache[i].Name = AName) then
+    begin
+      FGlyphCache[i].Tick := FGlyphCacheTick;
+      Exit(FGlyphCache[i].Bmp);
+    end;
+  { Rendered before a slot is touched, so a render that raises leaves the cache as it was. }
+  Result := FIconFont.RenderGlyph(AName, ASizePx, AColor);
+  if FGlyphCacheCount < TyGlyphCacheCapacity then
+  begin
+    if FGlyphCacheCount = Length(FGlyphCache) then
+      SetLength(FGlyphCache, FGlyphCacheCount + 8);
+    slot := FGlyphCacheCount;
+    Inc(FGlyphCacheCount);
+  end
+  else
+  begin
+    slot := 0;
+    for i := 1 to FGlyphCacheCount - 1 do
+      if FGlyphCache[i].Tick < FGlyphCache[slot].Tick then slot := i;
+    FGlyphCache[slot].Bmp.Free;
+  end;
+  FGlyphCache[slot].Bmp := Result;
+  FGlyphCache[slot].Name := AName;
+  FGlyphCache[slot].Size := ASizePx;
+  FGlyphCache[slot].Color := AColor;
+  FGlyphCache[slot].Tick := FGlyphCacheTick;
 end;
 
 procedure TTyCustomVirtualImageList.SetCollection(AValue: TTyCustomImageCollection);
@@ -1624,7 +1723,8 @@ begin
   Result := FNames.IndexOf(AName);
 end;
 
-function TTyCustomVirtualImageList.RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+function TTyCustomVirtualImageList.RenderIndex(AIndex, ASizePx: Integer;
+  AInk: TTyColor): TBGRABitmap;
 var
   nm: string;
 begin
@@ -1633,13 +1733,14 @@ begin
   // transparent square of the requested size. Never nil, as before.
   case ResolveSource(AIndex, nm) of
     1: Result := FCollection.GetBitmap(nm, ASizePx);
-    2: Result := FIconFont.RenderGlyph(nm, ASizePx, FGlyphColor);
+    2: Result := FIconFont.RenderGlyph(nm, ASizePx, GlyphInk(AInk));
   else
     Result := TBGRABitmap.Create(ASizePx, ASizePx, BGRAPixelTransparent);
   end;
 end;
 
-function TTyCustomVirtualImageList.CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+function TTyCustomVirtualImageList.CachedIndex(AIndex, ASizePx: Integer;
+  AInk: TTyColor): TBGRABitmap;
 var
   nm: string;
 begin
@@ -1650,23 +1751,16 @@ begin
       // Borrowed: owned by the collection's render cache (nil when the name is missing).
       Result := FCollection.GetCachedBitmap(nm, ASizePx);
     2:
-      begin
-        { The font has no cache to borrow from, so keep one slot here. The font's ChangeStamp is
-          part of the key: editing its Glyphs or swapping its file changes what a name draws,
-          and a cache that ignored that would keep serving the old glyph. }
-        if (FGlyphCache = nil) or (FGlyphCacheName <> nm) or (FGlyphCacheSize <> ASizePx)
-           or (FGlyphCacheColor <> FGlyphColor) or (FGlyphCacheVersion <> FIconFont.ChangeStamp) then
-        begin
-          FreeAndNil(FGlyphCache);
-          FGlyphCache := FIconFont.RenderGlyph(nm, ASizePx, FGlyphColor);
-          FGlyphCacheName := nm;
-          FGlyphCacheSize := ASizePx;
-          FGlyphCacheColor := FGlyphColor;
-          FGlyphCacheVersion := FIconFont.ChangeStamp;
-        end;
-        Result := FGlyphCache;
-      end;
+      // Borrowed: the font has no cache of its own, so the list keeps the glyphs it rendered.
+      Result := CachedGlyph(nm, ASizePx, GlyphInk(AInk));
   end;
+end;
+
+function TTyCustomVirtualImageList.TakesHostInk(AIndex: Integer): Boolean;
+var
+  nm: string;
+begin
+  Result := (FGlyphColor = TyGlyphColorDefault) and (ResolveSource(AIndex, nm) = 2);
 end;
 
 procedure TTyCustomVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
@@ -1678,7 +1772,7 @@ begin
 end;
 
 procedure TTyCustomVirtualImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
-  AGhosted: Boolean);
+  AGhosted: Boolean; AInk: TTyColor);
 var
   bmp, dim: TBGRABitmap;
 begin
@@ -1687,8 +1781,11 @@ begin
   // Borrowed, so nothing to free. nil means "nothing to draw" (no Collection / bad
   // index / missing name) — where we previously blitted a fully transparent square,
   // which was a visual no-op anyway. The False keeps the icon's alpha.
-  bmp := CachedIndex(AIndex, ASizePx);
+  bmp := CachedIndex(AIndex, ASizePx, AInk);
   if bmp = nil then Exit;
+  { A glyph drawn in the host's ink is not dimmed as well: see the declaration. }
+  if AGhosted and (AInk <> TyGlyphColorDefault) and TakesHostInk(AIndex) then
+    AGhosted := False;
   if not AGhosted then
   begin
     bmp.Draw(ACanvas, AX, AY, False);

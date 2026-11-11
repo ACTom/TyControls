@@ -829,8 +829,10 @@ begin
   box := Rect(cx - side div 2, cy - side div 2, cx - side div 2 + side, cy - side div 2 + side);
 
   if (FImages <> nil) and (Ord(AButton) < TyImageCount(FImages)) then
-    { at the painter's device scale: box and side are layout pixels (#83) }
-    TyBlitImageScaled(APainter, FImages, Ord(AButton), box.Left, box.Top, side, not usable)
+    { at the painter's device scale: box and side are layout pixels (#83). A font glyph of our
+      own list takes the mark's ink, which is the disabled one on a button that cannot be
+      used -- so only an image that carries its own colours is ghosted. }
+    TyBlitImageScaled(APainter, FImages, Ord(AButton), box.Left, box.Top, side, not usable, ink)
   else if not TyTryDrawGlyphOverride(APainter, ActiveController, box,
     TyDBNavGlyphTokens[AButton], ink) then
     DrawNavMark(APainter, box, AButton, ink,

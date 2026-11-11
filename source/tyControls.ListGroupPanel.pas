@@ -269,8 +269,9 @@ type
     function EffHeaderHPx(APPI: Integer): Integer;
     function EffItemHPx(APPI: Integer): Integer;
     { Draw the AImages icon AIndex, sized to fit, left-aligned at AX, vertically centred in
-      [ATop, ATop+ARowH); returns the x just past it (AX unchanged if nothing drawn). }
-    function DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
+      [ATop, ATop+ARowH); returns the x just past it (AX unchanged if nothing drawn). AInk is
+      the row's text colour: a font glyph of our own list is drawn in it. }
+    function DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer; AInk: TTyColor): Integer;
     { Build the pure shapes array from the live group model. }
     function BuildShapes: TTyListGroupShapes;
     { The device-space layout (content coords, no scroll applied), for the current client width. }
@@ -1026,7 +1027,8 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyCustomListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
+function TTyCustomListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer;
+  AInk: TTyColor): Integer;
 var
   sz: Integer;
 begin
@@ -1036,7 +1038,7 @@ begin
   if sz < 1 then sz := 1;
   { In-layer, both branches: our list renders the vector at sz, a foreign list is materialised.
     APPI: this control composites at device px, so P's PPI is the device PPI. }
-  TyBlitImageScaled(P, FImages, AIndex, AX, ATop + (ARowH - sz) div 2, sz, False);
+  TyBlitImageScaled(P, FImages, AIndex, AX, ATop + (ARowH - sz) div 2, sz, False, AInk);
   Result := AX + sz + P.Scale(ActiveController.Metric(TyListGroupIconGapVar, TyListGroupDefaultIconGap));
 end;
 
@@ -1380,7 +1382,7 @@ begin
           railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
           railX := (partR.Left + partR.Right - railIcon) div 2;
           if DrawRowIcon(P, railX, partR.Top, partR.Bottom - partR.Top,
-            FGroups[parts[i].GroupIndex].ImageIndex) = railX then
+            FGroups[parts[i].GroupIndex].ImageIndex, HdrStyle.TextColor) = railX then
             // No icon: the caption's first glyph keeps the slot identifiable.
             P.DrawText(partR, TyListGroupRailChar(GetGroupCaption(parts[i].GroupIndex)),
               HdrStyle.FontName, ResolveFontSize(HdrStyle), HdrStyle.FontWeight,
@@ -1402,7 +1404,7 @@ begin
         // Optional group icon on the left, then the caption between icon and chevron.
         contentL := partR.Left + P.Scale(HdrStyle.Padding.Left);
         contentL := DrawRowIcon(P, contentL, partR.Top, partR.Bottom - partR.Top,
-          FGroups[parts[i].GroupIndex].ImageIndex);
+          FGroups[parts[i].GroupIndex].ImageIndex, HdrStyle.TextColor);
         cap := GetGroupCaption(parts[i].GroupIndex);
         if cap <> '' then
         begin
@@ -1442,7 +1444,7 @@ begin
           railIcon := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
           railX := (partR.Left + partR.Right - railIcon) div 2;
           if DrawRowIcon(P, railX, partR.Top, partR.Bottom - partR.Top,
-            ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex)) = railX then
+            ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex), ItemStyle.TextColor) = railX then
             // No icon: the caption's first glyph keeps the slot identifiable.
             P.DrawText(partR, TyListGroupRailChar(ItemCaption(parts[i].GroupIndex, parts[i].ItemIndex)),
               ItemStyle.FontName, ResolveFontSize(ItemStyle), ItemStyle.FontWeight,
@@ -1457,7 +1459,7 @@ begin
         contentL := pillR.Left + P.Scale(ItemStyle.Padding.Left)
           + P.Scale(ActiveController.Metric(TyListGroupItemIndentVar, TyListGroupDefaultItemIndent));
         contentL := DrawRowIcon(P, contentL, partR.Top, partR.Bottom - partR.Top,
-          ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex));
+          ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex), ItemStyle.TextColor);
         cap := ItemCaption(parts[i].GroupIndex, parts[i].ItemIndex);
         textR := Rect(contentL, partR.Top, pillR.Right - P.Scale(ItemStyle.Padding.Right),
           partR.Bottom);

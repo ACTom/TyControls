@@ -23,14 +23,24 @@ unit tyControls.ImageDraw;
     host's image list, permanently, once per distinct pixel size a control ever computes
     (measured 4 -> 5 for one 20px request against [16,24,32,48]). The measure helper here only
     ever reads (WidthForPPI/HeightForPPI bottom out in FData.Find), and the DRAW helper routes
-    through FindResolution -- it never hands a raw pixel size to ResolutionForPPI. }
+    through FindResolution -- it never hands a raw pixel size to ResolutionForPPI.
+
+  * the ink. An icon-font glyph of our list has no colour of its own (GlyphColor left at
+    TyGlyphColorDefault): it is drawn in AInk, the colour of the text the caller draws beside
+    it for that row's state -- normal, selected, hot, disabled. Every draw here takes it, last
+    and optional, so the rule is written once: an image from a collection is never tinted, a
+    glyph whose list names a GlyphColor keeps that colour in every host, and without an ink
+    (the default, and always for a baked list) such a glyph is opaque black. A glyph drawn in
+    the ink is not faded by AGhosted as well -- the ink of an unavailable row is already its
+    unavailable ink; where the row is ghosted and its text is not (a cut item), pass
+    TyGhostInk of the text colour. }
 
 interface
 
 uses
   Classes, SysUtils, Types, Graphics, ImgList, GraphType, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.ImageCollection, tyControls.Painter;
+  tyControls.Types, tyControls.ImageCollection, tyControls.Painter;
 
 const
   { LCL's EffectMap (imglist.inc) written BACKWARDS: it indexes by Enabled, this library carries
@@ -62,29 +72,34 @@ function TyImageSizePx(AList: TCustomImageList; APreferredPx, APPI: Integer): TS
 
 { THE helper. Draw item AIndex of AList onto ACanvas, centred in the ASizePx square at (AX,AY).
   MUST be called AFTER TTyPainter.EndPaint (the baked branch is a GDI blit EndPaint would
-  erase). AGhosted, never AEnabled. Guards nil canvas, nil list, bad index, empty slot, zero
-  slot; never raises. }
+  erase). AGhosted, never AEnabled. AInk: the unit header, "the ink". Guards nil canvas, nil
+  list, bad index, empty slot, zero slot; never raises. }
 procedure TyDrawImage(ACanvas: TCanvas; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault);
 
 { The in-layer fast path, for the paint pass BEFORE EndPaint -- composited into ADest (pass
   P.Bitmap) with no GDI. RESULT IS NOT DECORATION: False means AList is baked and this icon is
   STILL UNDRAWN, so collect it and hand it to TyDrawImage after EndPaint. True means done,
   including the legitimate "nothing to draw" cases. }
 function TyPutImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx: Integer; AGhosted: Boolean): Boolean;
+  AX, AY, ASizePx: Integer; AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault): Boolean;
 
 { Draw item AIndex into ADest during the paint, BOTH branches in-layer -- for a control that
   has no post-EndPaint pass and would rather materialise a foreign list than grow a deferral
   array. See the body for the alpha caveat materialising carries (our own list never hits it).
   Centres in the ASizePx slot; guards everything; never raises. }
 procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault);
 { TyBlitImage onto a painter's layer, with the position and size in LAYOUT pixels: they are
   mapped by the painter's device scale and the icon is taken at its raster PPI, so it stays
   sharp on a Retina layer (#83). At S = 1 it is TyBlitImage(P.Bitmap, ..., P.PPI, ...). }
 procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx: Integer; AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault);
+
+{ AInk at the ghosted strength, for a row that is ghosted while its text is not (a cut item):
+  a glyph drawn in the ink is not faded by AGhosted, so the fade goes into the ink and the
+  glyph dims by as much as the images beside it. }
+function TyGhostInk(AInk: TTyColor): TTyColor;
 { ARes's item AIndex into ADst (LAYOUT pixels) on ACanvas, drawing with AEffect. At S = 1 it is
   ARes.Draw at ADst's corner. At a device scale ARes is the resolution the caller picked for the
   raster PPI; an item not S times ADst's size is stretched to it (an unscaled list hands back
@@ -102,15 +117,27 @@ function TyForeignScaledCacheCount: Integer;
   renders the vector; a foreign list is materialised. nil when there is nothing to draw. The
   caller frees it. }
 function TyRenderImage(AList: TCustomImageList; AIndex, ASizePx, APPI: Integer;
-  AGhosted: Boolean): TBGRABitmap;
+  AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap;
 { TyRenderImage for a painter's layer: ASizePx in LAYOUT pixels, the result in raster pixels --
   DeviceScale times the size the image has at S = 1 (#83). Our list renders the vector at that
   size; a foreign list hands its resolution for that size when it has one, else its S = 1
   bitmap stretched (the right size, if not the sharpest). The caller frees it. }
 function TyRenderImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex, ASizePx: Integer;
-  AGhosted: Boolean): TBGRABitmap;
+  AGhosted: Boolean; AInk: TTyColor = TyGlyphColorDefault): TBGRABitmap;
 
 implementation
+
+function TyGhostInk(AInk: TTyColor): TTyColor;
+begin
+  Result := (AInk and $00FFFFFF)
+    or (TTyColor((TyAlphaOf(AInk) * TyGhostedAlpha) div 255) shl 24);
+end;
+
+{ True when AList draws item AIndex in AInk: the one case AGhosted does not fade. }
+function TyDrawnInInk(AList: TTyCustomVirtualImageList; AIndex: Integer; AInk: TTyColor): Boolean;
+begin
+  Result := (AInk <> TyGlyphColorDefault) and AList.TakesHostInk(AIndex);
+end;
 
 
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
@@ -203,15 +230,17 @@ end;
 { The Ty branch of both draw entry points. Returns the bitmap to blit; ADim is a bitmap the
   caller must free (nil when the borrowed one is used directly). CachedIndex hands back the
   collection's OWN cache entry -- borrowed -- so fading it in place would ghost that icon in
-  every control that draws it; hence the duplicate when ghosting. }
+  every control that draws it; hence the duplicate when ghosting. A glyph drawn in AInk comes
+  from the list in that colour and is not ghosted on top of it. }
 function TyTakeVectorBitmap(AList: TTyCustomVirtualImageList; AIndex, ASizePx: Integer;
-  AGhosted: Boolean; out ADim: TBGRABitmap): TBGRABitmap;
+  AGhosted: Boolean; AInk: TTyColor; out ADim: TBGRABitmap): TBGRABitmap;
 begin
   ADim := nil;
   Result := nil;
   if (AIndex < 0) or (AIndex >= AList.Names.Count) then Exit;
-  Result := AList.CachedIndex(AIndex, ASizePx);   { borrowed; nil = nothing to draw }
+  Result := AList.CachedIndex(AIndex, ASizePx, AInk);   { borrowed; nil = nothing to draw }
   if (Result = nil) or (not AGhosted) then Exit;
+  if TyDrawnInInk(AList, AIndex, AInk) then Exit;
   ADim := Result.Duplicate as TBGRABitmap;
   TyFadeBitmapAlpha(ADim, TyGhostedAlpha);
   Result := ADim;
@@ -235,7 +264,7 @@ begin
 end;
 
 procedure TyDrawImage(ACanvas: TCanvas; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean; AInk: TTyColor);
 var
   bmp, dim: TBGRABitmap;
   res: TScaledImageListResolution;
@@ -257,7 +286,7 @@ begin
     if AList is TTyCustomVirtualImageList then
     begin
       bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx * sc.Scale,
-        AGhosted, dim);
+        AGhosted, AInk, dim);
       lw := ASizePx;
       lh := ASizePx;
     end
@@ -279,7 +308,8 @@ begin
   begin
     dim := nil;
     try
-      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted,
+        AInk, dim);
       if bmp = nil then Exit;
       { The square is already ASizePx (RenderMaster centres the aspect-preserved master in it),
         so no second centring. False = blend with alpha, do not paint opaque. }
@@ -307,7 +337,7 @@ begin
 end;
 
 function TyPutImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx: Integer; AGhosted: Boolean): Boolean;
+  AX, AY, ASizePx: Integer; AGhosted: Boolean; AInk: TTyColor): Boolean;
 var
   bmp, dim: TBGRABitmap;
 begin
@@ -320,7 +350,8 @@ begin
 
   dim := nil;
   try
-    bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+    bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted,
+      AInk, dim);
     if bmp = nil then Exit;
     ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
   finally
@@ -329,7 +360,7 @@ begin
 end;
 
 procedure TyBlitImage(ADest: TBGRABitmap; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx, APPI: Integer; AGhosted: Boolean; AInk: TTyColor);
 var
   bmp, dim, wrap: TBGRABitmap;
   res: TScaledImageListResolution;
@@ -354,7 +385,8 @@ begin
   begin
     dim := nil;
     try
-      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted,
+        AInk, dim);
       if bmp = nil then Exit;
       ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
     finally
@@ -386,7 +418,7 @@ begin
 end;
 
 function TyRenderImage(AList: TCustomImageList; AIndex, ASizePx, APPI: Integer;
-  AGhosted: Boolean): TBGRABitmap;
+  AGhosted: Boolean; AInk: TTyColor): TBGRABitmap;
 var
   res: TScaledImageListResolution;
   tmp: TBitmap;
@@ -400,9 +432,12 @@ begin
   begin
     if AIndex >= TTyCustomVirtualImageList(AList).Names.Count then Exit;
     { RenderIndex returns a caller-owned square; that IS the contract here. Ghosting is applied
-      to the owned copy -- no borrowed cache to protect, unlike the blit path. }
-    Result := TTyCustomVirtualImageList(AList).RenderIndex(AIndex, ASizePx);
-    if (Result <> nil) and AGhosted then TyFadeBitmapAlpha(Result, TyGhostedAlpha);
+      to the owned copy -- no borrowed cache to protect, unlike the blit path -- and not to a
+      glyph drawn in the ink. }
+    Result := TTyCustomVirtualImageList(AList).RenderIndex(AIndex, ASizePx, AInk);
+    if (Result <> nil) and AGhosted
+       and not TyDrawnInInk(TTyCustomVirtualImageList(AList), AIndex, AInk) then
+      TyFadeBitmapAlpha(Result, TyGhostedAlpha);
     Exit;
   end;
 
@@ -570,7 +605,7 @@ begin
 end;
 
 procedure TyBlitImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex: Integer;
-  AX, AY, ASizePx: Integer; AGhosted: Boolean);
+  AX, AY, ASizePx: Integer; AGhosted: Boolean; AInk: TTyColor);
 var
   bmp: TBGRABitmap;
   lw, lh: Integer;
@@ -579,7 +614,7 @@ begin
   begin
     { S = 1 is TyBlitImage exactly; our own list renders the vector at the raster size. }
     TyBlitImage(P.Bitmap, AList, AIndex, P.Dev(AX), P.Dev(AY), P.Dev(ASizePx), P.RasterPPI,
-      AGhosted);
+      AGhosted, AInk);
     Exit;
   end;
   if P.Bitmap = nil then Exit;
@@ -632,12 +667,12 @@ begin
 end;
 
 function TyRenderImageScaled(P: TTyPainter; AList: TCustomImageList; AIndex, ASizePx: Integer;
-  AGhosted: Boolean): TBGRABitmap;
+  AGhosted: Boolean; AInk: TTyColor): TBGRABitmap;
 var
   lw, lh: Integer;
 begin
   if (P.DeviceScale <= 1) or (AList is TTyCustomVirtualImageList) then
-    Exit(TyRenderImage(AList, AIndex, P.Dev(ASizePx), P.RasterPPI, AGhosted));
+    Exit(TyRenderImage(AList, AIndex, P.Dev(ASizePx), P.RasterPPI, AGhosted, AInk));
   Result := ForeignScaled(AList, AIndex, ASizePx, P.PPI, P.DeviceScale, AGhosted, lw, lh);
   if Result <> nil then Result := Result.Duplicate as TBGRABitmap;   // the caller's to free
 end;

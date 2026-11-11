@@ -68,6 +68,8 @@ uses
   test.virtualimagelist.iconfont,
   test.virtualimagelist.baked,
   test.imagedraw,
+  test.imageink,
+  test.imageink.hosts,
   test.imagename,
   test.css.catalog,
   test.css.addons,

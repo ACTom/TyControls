@@ -477,9 +477,12 @@ type
       const AStyle: TTyStyleSet);
     procedure RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
       const AStyle: TTyStyleSet);
-    { AGhosted: drawn faded, as Explorer draws a cut item's icon (lisCut, #165). }
+    { AGhosted: drawn faded, as Explorer draws a cut item's icon (lisCut, #165). AInk: the
+      colour of the text beside the icon, which a font glyph of our own list is drawn in; a
+      cut item's label is not faded, so the fade goes into the glyph's ink. }
     procedure DrawImage(P: TTyPainter; AList: TCustomImageList;
-      AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False);
+      AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False;
+      AInk: TTyColor = TyGlyphColorDefault);
     procedure RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 
     { inline rename }
@@ -3167,13 +3170,14 @@ end;
   --------------------------------------------------------------------------- }
 
 procedure TTyCustomListView.DrawImage(P: TTyPainter; AList: TCustomImageList;
-  AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean);
+  AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean; AInk: TTyColor);
 begin
   if (AList = nil) or (AImageIndex < 0) or (AImageIndex >= TyImageCount(AList)) or (ASizePx <= 0) then Exit;
   { Both branches in-layer. Our list is the hot path (HotTrack repaints on every mouse move),
     borrowed from the collection cache with no per-icon allocation; a foreign list is
     materialised. }
-  TyBlitImageScaled(P, AList, AImageIndex, AX, AY, ASizePx, AGhosted);
+  if AGhosted then AInk := TyGhostInk(AInk);
+  TyBlitImageScaled(P, AList, AImageIndex, AX, AY, ASizePx, AGhosted, AInk);
 end;
 
 function TTyCustomListView.CheckRectForCell(const ACell: TRect): TRect;
@@ -3338,7 +3342,7 @@ begin
         if RtlLayout then Dec(imgLead, imgPx);
         DrawImage(P, FSmallImages, ii, imgLead,
           ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx,
-          lisCut in GetItemState(AIndex));
+          lisCut in GetItemState(AIndex), tc);
         gap := ScaleI(StyleMetric('--listview-icon-gap', TyLvIconGap));
         textLead := lead + sign * (cbShift + margin + imgPx + gap);
       end;
@@ -3394,7 +3398,7 @@ begin
           rect run to the cell bottom gives the label its full LabelH plus the recovered pad. }
         ix := ACell.Left + (ACell.Right - ACell.Left - imgPx) div 2;
         iy := ACell.Top + pad;
-        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
+        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex), tc);
         tr := Rect(ACell.Left + pad, iy + imgPx + pad, ACell.Right - pad, ACell.Bottom);
         if tr.Top < tr.Bottom then
           P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
@@ -3405,7 +3409,7 @@ begin
         { icon at the reading start, two text lines after it }
         ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
         iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
-        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
+        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex), tc);
         sub := GetItemText(AIndex, 1);
         tr := FlowLabelRect(ACell, ix, imgPx, pad,
                 ACell.Top + pad,
@@ -3423,7 +3427,7 @@ begin
       { lvsSmallIcon / lvsList: icon at the reading start, single label after it }
       ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
       iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
-      DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
+      DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex), tc);
       tr := FlowLabelRect(ACell, ix, imgPx, pad, ACell.Top, ACell.Bottom);
       if tr.Left < tr.Right then
         P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
@@ -3574,7 +3578,7 @@ begin
     begin
       if IsRightToLeft then icoLeft := textLead - icoPx else icoLeft := textLead;
       DrawImage(P, icoList, col.ImageIndex, icoLeft,
-        (M.HeaderH - icoPx) div 2, icoPx);
+        (M.HeaderH - icoPx) div 2, icoPx, False, tc);
       Inc(textLead, sign * (icoPx + icoGap));
     end;
     { The sort glyph's gutter comes off the cell's OTHER end -- see the sortR block. }

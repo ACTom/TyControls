@@ -1644,30 +1644,45 @@ begin
           shadows TMenu.Images so the two cannot collide by accident from the designer.
           It is a GDI list, so it is collected and drawn after EndPaint. }
         IconRes := FRows[i].LCLImages.ResolutionForPPI[FRows[i].LCLImagesWidth, APPI, 1];
-        if pendingIconCount = Length(pendingIcon) then
-          SetLength(pendingIcon, Length(pendingIcon) + 8);
-        if P.DeviceScale > 1 then
-          pendingIcon[pendingIconCount].Res := FRows[i].LCLImages.ResolutionForPPI[
-            FRows[i].LCLImagesWidth, APPI * P.DeviceScale, 1]
+        if (FRows[i].LCLImages is TTyCustomVirtualImageList)
+           and TTyCustomVirtualImageList(FRows[i].LCLImages).TakesHostInk(FRows[i].ImageIndex) then
+        begin
+          { The LCL menu's list is one of ours and this item is a font glyph with no colour of
+            its own: the baked raster would be black on any ground. Rendered in the layer
+            instead, at the size the LCL contract resolved, in the row's ink -- which a
+            disabled row already greys. }
+          TyBlitImageScaled(P, FRows[i].LCLImages, FRows[i].ImageIndex,
+            Slot.Left + ((Slot.Right - Slot.Left) - IconRes.Width) div 2,
+            RowRect.Top + (rowH - IconRes.Height) div 2, IconRes.Width, False,
+            RowStyle.TextColor);
+        end
         else
-          pendingIcon[pendingIconCount].Res := IconRes;
-        pendingIcon[pendingIconCount].W := IconRes.Width;
-        pendingIcon[pendingIconCount].H := IconRes.Height;
-        pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
-        { The GDI pass runs after EndPaint, on the composited canvas, and it has to be
-          mirrored HERE with everything else: it is the only piece of a row whose position is
-          carried out of the loop as a bare point rather than a rect. Centred in the slot the
-          check glyph would have used, so an icon row and a checked row line up either way. }
-        pendingIcon[pendingIconCount].X :=
-          Slot.Left + ((Slot.Right - Slot.Left) - IconRes.Width) div 2;
-        pendingIcon[pendingIconCount].Y := RowRect.Top + (rowH - IconRes.Height) div 2;
-        { NOTE the parameter. TScaledImageListResolution.Draw's 5th argument is AEnabled,
-          NOT "greyed" -- it also has a TGraphicsDrawEffect overload, so passing the wrong
-          sense here compiles cleanly and draws every icon disabled. A disabled row wants
-          the greyed icon, which is Enabled = False. }
-        pendingIcon[pendingIconCount].Enabled := FRows[i].Enabled;
-        pendingIcon[pendingIconCount].Clip := RowRect;
-        Inc(pendingIconCount);
+        begin
+          if pendingIconCount = Length(pendingIcon) then
+            SetLength(pendingIcon, Length(pendingIcon) + 8);
+          if P.DeviceScale > 1 then
+            pendingIcon[pendingIconCount].Res := FRows[i].LCLImages.ResolutionForPPI[
+              FRows[i].LCLImagesWidth, APPI * P.DeviceScale, 1]
+          else
+            pendingIcon[pendingIconCount].Res := IconRes;
+          pendingIcon[pendingIconCount].W := IconRes.Width;
+          pendingIcon[pendingIconCount].H := IconRes.Height;
+          pendingIcon[pendingIconCount].Idx := FRows[i].ImageIndex;
+          { The GDI pass runs after EndPaint, on the composited canvas, and it has to be
+            mirrored HERE with everything else: it is the only piece of a row whose position is
+            carried out of the loop as a bare point rather than a rect. Centred in the slot the
+            check glyph would have used, so an icon row and a checked row line up either way. }
+          pendingIcon[pendingIconCount].X :=
+            Slot.Left + ((Slot.Right - Slot.Left) - IconRes.Width) div 2;
+          pendingIcon[pendingIconCount].Y := RowRect.Top + (rowH - IconRes.Height) div 2;
+          { NOTE the parameter. TScaledImageListResolution.Draw's 5th argument is AEnabled,
+            NOT "greyed" -- it also has a TGraphicsDrawEffect overload, so passing the wrong
+            sense here compiles cleanly and draws every icon disabled. A disabled row wants
+            the greyed icon, which is Enabled = False. }
+          pendingIcon[pendingIconCount].Enabled := FRows[i].Enabled;
+          pendingIcon[pendingIconCount].Clip := RowRect;
+          Inc(pendingIconCount);
+        end;
       end
       else if FRows[i].GlyphVisible and (FImages <> nil) and (FRows[i].ImageIndex >= 0)
               and (FRows[i].ImageIndex < TyImageCount(FImages)) then
@@ -1675,10 +1690,11 @@ begin
         iconSz := leftSlot - P.Scale(2);
         if iconSz < P.Scale(8) then iconSz := P.Scale(8);
         { In-layer, both branches: our own list renders the vector exactly at iconSz, a foreign
-          list is materialised. Centred in the iconSz slot the check glyph would have used. }
+          list is materialised. Centred in the iconSz slot the check glyph would have used. A
+          font glyph of our own list is drawn in the row's text colour, like a theme glyph. }
         TyBlitImageScaled(P, FImages, FRows[i].ImageIndex,
           Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2,
-          RowRect.Top + (rowH - iconSz) div 2, iconSz, False);
+          RowRect.Top + (rowH - iconSz) div 2, iconSz, False, RowStyle.TextColor);
       end
       else if FRows[i].GlyphVisible and FRows[i].HasThemeGlyph then
       begin

@@ -2219,8 +2219,9 @@ begin
          (FIconRects[I].Right > FIconRects[I].Left) then
       begin
         IconRect := ToScreenRect(FIconRects[I]);
+        { a font glyph of our own list in the tab's ink, like its caption }
         TyBlitImageScaled(P, FImages, IconIdx, IconRect.Left, IconRect.Top,
-          IconRect.Right - IconRect.Left, False);
+          IconRect.Right - IconRect.Left, False, TabStyle.TextColor);
         if Rtl then
         begin
           if IconRect.Left < TextRect.Right then TextRect.Right := IconRect.Left;

@@ -945,8 +945,9 @@ begin
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
     if sz < P.Scale(8) then sz := P.Scale(8);
+    { a font glyph of our own list in the caption's ink }
     TyBlitImageScaled(P, FImages, AImageIndex,
-      x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, False);
+      x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, False, AStyle.TextColor);
     x := x + sz + P.Scale(4);
   end;
   textR := Rect(x, ARect.Top, ARect.Right - P.Scale(4), ARect.Bottom);
@@ -981,7 +982,7 @@ begin
   if sz < P.Scale(8) then sz := P.Scale(8);
   x := R.Left + P.Scale(4);
   y := R.Top + ((R.Bottom - R.Top - sz) div 2);
-  TyBlitImageScaled(P, FImages, AItem.OverlayImageIndex, x, y, sz, False);
+  TyBlitImageScaled(P, FImages, AItem.OverlayImageIndex, x, y, sz, False, AStyle.TextColor);
 end;
 
 procedure TTyCustomComboBoxEx.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;

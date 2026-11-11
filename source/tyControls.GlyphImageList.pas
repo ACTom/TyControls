@@ -96,7 +96,8 @@ begin
   FDefaultSize := 16;
   { Opaque black, NOT 0. TTyColor is $AARRGGBB, so 0 is fully transparent -- this component
     used to render every glyph invisible unless the caller happened to set a colour, which the
-    icons example does and nothing else did. Same trap, same fix, as TTyVirtualImageList.GlyphColor. }
+    icons example does and nothing else did. (TTyVirtualImageList.GlyphColor avoids the same
+    trap another way: its 0 means "the ink of whoever draws", and black where nobody does.) }
   FDefaultColor := $FF000000;
 end;
 

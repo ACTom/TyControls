@@ -183,6 +183,7 @@ begin
 
   // Optional left image: a square sized to the row height minus vertical padding,
   // vertically centered. CachedIndex borrows the collection's render — nothing to free.
+  // A font glyph of our own list is drawn in the row's ink, like the title beside it.
   if (AImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(AImages)) then
   begin
     sz := rowH - P.Scale(8);
@@ -190,12 +191,13 @@ begin
     if ARightToLeft then
     begin
       TyBlitImageScaled(P, AImages, AImageIndex, textRight - sz, ARect.Top + ((rowH - sz) div 2),
-        sz, False);
+        sz, False, AStyle.TextColor);
       textRight := textRight - sz - pad;
     end
     else
     begin
-      TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False);
+      TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False,
+        AStyle.TextColor);
       x := x + sz + pad;
     end;
   end;

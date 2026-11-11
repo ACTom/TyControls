@@ -43,7 +43,7 @@ type
     procedure CacheFollowsTheFontsVersion;
     procedure CacheFollowsTheColour;
     procedure FreeingTheFontLeavesNoDanglingCache;
-    procedure GlyphColorDefaultsToSomethingVisible;
+    procedure TheDefaultGlyphColorStillDrawsSomethingVisible;
     { #202. }
     procedure AddingANameRendersOnlyThatName;
     procedure ALoadRendersEachNameOnce;
@@ -364,13 +364,29 @@ begin
   AssertEquals('both slots are there', 2, FList.Count);
 end;
 
-procedure TVilIconFontTest.GlyphColorDefaultsToSomethingVisible;
+procedure TVilIconFontTest.TheDefaultGlyphColorStillDrawsSomethingVisible;
+var
+  bmp: TBGRABitmap;
+  x, y, opaque: Integer;
 begin
-  { TTyColor is $AARRGGBB, so a 0 default would be fully TRANSPARENT and every glyph would
-    come out invisible until the caller thought to set a colour. This library has already
+  { TTyColor is $AARRGGBB, so a 0 taken as a colour is fully TRANSPARENT and every glyph
+    would come out invisible until the caller thought to set one. This library has already
     shipped that exact bug once (the track bar's ShowValue readout, invisible in every theme
-    for as long as it existed), which is why the default is asserted rather than assumed. }
-  AssertEquals('opaque by default', 255, TyAlphaOf(FList.GlyphColor));
+    for as long as it existed). The default IS 0 now -- TyGlyphColorDefault, "the ink of
+    whoever draws" -- so what is asserted is what it draws when nobody supplies an ink:
+    opaque pixels, not nothing. (The ink itself: test.imageink.) }
+  FList.IconFont := FFont;
+  FList.Names.Text := 'glyph-a';
+  bmp := FList.RenderIndex(0, 32);
+  try
+    opaque := 0;
+    for y := 0 to bmp.Height - 1 do
+      for x := 0 to bmp.Width - 1 do
+        if bmp.GetPixel(x, y).alpha = 255 then Inc(opaque);
+    AssertTrue('a list left at its defaults draws opaque ink', opaque > 0);
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

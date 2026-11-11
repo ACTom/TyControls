@@ -5388,6 +5388,14 @@ end;
 
 { ── C3 ── RenderTo / Paint ──────────────────────────────────────────────── }
 
+{ The ink a node's icon takes when it is a font glyph of our own list: the row's. A node the
+  application ghosts keeps its caption as it is, so the fade goes into the icon's ink. }
+function NodeIconInk(const ARow: TTyStyleSet; AGhosted: Boolean): TTyColor;
+begin
+  Result := ARow.TextColor;
+  if AGhosted then Result := TyGhostInk(Result);
+end;
+
 { RenderTo — paint the VISIBLE window only (performance is the point).
 
   Algorithm:
@@ -5430,6 +5438,7 @@ var
   ptName: string;            // #166: the text font OnPaintText may change
   ptSize, ptWeight: Integer;
   ptColor: TTyColor;
+  hdrInk: TTyColor;
   ghosted: Boolean;
   imgIdx: Integer;
   selIdx, ovlIdx: Integer;      { ikSelected / ikOverlay answers for the current row }
@@ -5651,7 +5660,9 @@ var
     icons are drawn later in one post-EndPaint GDI pass, so the flag has to be carried
     rather than re-asked. It used to be collected into a local and dropped, which is why
     a `var Ghosted := True` from an app had no effect anywhere. }
-  pendingIcons: array of record X, Y, Idx, Sz: Integer; Ghost: Boolean; end;
+  { Ink too: a font glyph of our own list is drawn in the row's ink, the one its expander
+    takes -- the selection's only where the row ground is the selection's. }
+  pendingIcons: array of record X, Y, Idx, Sz: Integer; Ghost: Boolean; Ink: TTyColor; end;
   pendingCount: Integer;
   iIcon: Integer;
   icoPx: Integer;
@@ -5831,6 +5842,10 @@ begin
                            clipR.Right - colMargin - sortGlyphSize,
                            headerBandRect.Bottom);
 
+        { The caption's ink, which a font glyph of the column's icon takes too. }
+        if tpTextColor in headerSecStyle.Present then hdrInk := headerSecStyle.TextColor
+        else hdrInk := S.TextColor;
+
         { #155: the column's icon from Header.Images, at the caption's reading start -- the
           header never drew one. }
         if (FHeader.Images <> nil) and (col.ImageIndex >= 0)
@@ -5845,14 +5860,14 @@ begin
             begin
               TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Right - hdrIco,
                 headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
-                hdrIco, False);
+                hdrIco, False, hdrInk);
               Dec(textRect.Right, hdrIco + P.Scale(4));
             end
             else
             begin
               TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Left,
                 headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
-                hdrIco, False);
+                hdrIco, False, hdrInk);
               Inc(textRect.Left, hdrIco + P.Scale(4));
             end;
           end;
@@ -6278,6 +6293,7 @@ begin
                 pendingIcons[pendingCount].Idx := imgIdx;
                 pendingIcons[pendingCount].Sz  := icoPx;
                 pendingIcons[pendingCount].Ghost := ghosted;
+                pendingIcons[pendingCount].Ink := NodeIconInk(ChromeStyle, ghosted);
                 Inc(pendingCount);
                 if (ovlIdx >= 0) and (ovlIdx < TyImageCount(FImages)) then
                 begin
@@ -6552,6 +6568,7 @@ begin
               0-column tree `var Ghosted := True` still reached nothing. Same fix, this
               side of the branch. }
             pendingIcons[pendingCount].Ghost := ghosted;
+            pendingIcons[pendingCount].Ink := NodeIconInk(ChromeStyle, ghosted);
             Inc(pendingCount);
             if (ovlIdx >= 0) and (ovlIdx < TyImageCount(FImages)) then
             begin
@@ -6742,7 +6759,7 @@ begin
             box. }
           TyDrawImage(ACanvas, FImages, pendingIcons[iIcon].Idx,
             pendingIcons[iIcon].X, pendingIcons[iIcon].Y, pendingIcons[iIcon].Sz, APPI,
-            pendingIcons[iIcon].Ghost);
+            pendingIcons[iIcon].Ghost, pendingIcons[iIcon].Ink);
       finally
         ACanvas.RestoreHandleState;
       end;

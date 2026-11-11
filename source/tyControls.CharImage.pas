@@ -24,11 +24,10 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.IconFont;
 
 const
-  { Sentinel GlyphColor meaning "use the resolved theme TextColor". A fully
-    transparent value ($00000000) can never be a meaningful visible glyph color,
-    so it doubles as the unambiguous "not set" marker (mirrors the alpha=0 =
-    "unset" idiom used elsewhere in the library). }
-  TyGlyphColorDefault = tyTransparent;
+  { Sentinel GlyphColor meaning "use the resolved theme TextColor". The constant itself
+    lives in tyControls.Types now -- the image list's GlyphColor shares it -- and is named
+    again here so that code which only uses this unit keeps compiling. }
+  TyGlyphColorDefault = tyControls.Types.TyGlyphColorDefault;
 
   { Default logical padding (each side) subtracted from the client box when
     GlyphSize is 0 (auto-fit). Scaled by PPI at paint time. }

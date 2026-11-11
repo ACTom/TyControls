@@ -142,6 +142,14 @@ type
 const
   tyTransparent = TTyColor($00000000);
 
+  { The GlyphColor that names no colour: "the ink of whoever draws me". A fully transparent
+    value can never be a visible glyph colour, so it doubles as the "not set" marker (the
+    alpha 0 = unset idiom). TTyCharImage resolves it to its own text colour; a
+    TTyVirtualImageList's icon-font glyphs take the ink of the row that draws them, and
+    opaque black where nothing supplies one. Also the "no ink" value of the image-draw
+    helpers' AInk. }
+  TyGlyphColorDefault = tyTransparent;
+
   // Library identity — surfaced by every component's read-only `Version` property and
   // the design-time About dialog. Bump TyVersion on each release. The stable line is
   // 3-part (major.minor.patch); a pre-release appends a `-Beta`/`-RC` suffix, which is

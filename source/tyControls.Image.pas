@@ -690,8 +690,11 @@ begin
         src := TBGRABitmap.Create(tmp);
       end
       else
-        { An image-list icon is rendered for the layer: DeviceScale times its S = 1 size (#83). }
-        src := TyRenderImageScaled(P, FImages, GetImageIndex, ImageEdgeAt(APPI), False);
+        { An image-list icon is rendered for the layer: DeviceScale times its S = 1 size (#83).
+          A font glyph of our own list has no colour of its own: it takes this control's text
+          colour, as TTyCharImage's glyph does. }
+        src := TyRenderImageScaled(P, FImages, GetImageIndex, ImageEdgeAt(APPI), False,
+          S.TextColor);
       if (src = nil) or (src.Width <= 0) or (src.Height <= 0) then
       begin
         P.EndPaint;

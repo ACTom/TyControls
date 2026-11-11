@@ -8486,7 +8486,7 @@ begin
           imgR := ToScreenRect(Rect(rr.Left + ScaleI(4), 0,
             rr.Left + ScaleI(4) + imgSz, 0));
           TyBlitImageScaled(P, imgList, imgIdx,
-            imgR.Left, bandTop + (AHeaderH - imgSz) div 2, imgSz, False);
+            imgR.Left, bandTop + (AHeaderH - imgSz) div 2, imgSz, False, hdrInk);
           Inc(imgPad, imgSz + ScaleI(4));
         end;
       end;
@@ -12522,13 +12522,18 @@ procedure TTyCustomStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer
   const AFrame: TTyStyleSet);
 var
   r: TRect;
-  idx, sz, cx, cy: Integer;
+  idx, sz, cx, cy, pos: Integer;
+  ink: TTyColor;
 begin
   if FImages = nil then Exit;
   r := CellVisibleRect(ACol, ARow);
   if IsRectEmpty(r) then Exit;
   idx := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
   if (idx < 0) or (idx >= TyImageCount(FImages)) then Exit;
+  { The ink this cell's text would have, for a font glyph of our own list. }
+  ink := TyGlyphColorDefault;
+  pos := DataToDisplay(ARow);
+  if pos >= 0 then ink := CellAppearance(ACol, ARow, pos, AFrame).TextColor;
 
   sz := ScaleI(16);
   if sz > (r.Bottom - r.Top) - ScaleI(2) then sz := (r.Bottom - r.Top) - ScaleI(2);
@@ -12536,7 +12541,7 @@ begin
   if sz <= 0 then Exit;
   cx := (r.Left + r.Right) div 2;
   cy := (r.Top + r.Bottom) div 2;
-  TyBlitImageScaled(P, FImages, idx, cx - sz div 2, cy - sz div 2, sz, False);
+  TyBlitImageScaled(P, FImages, idx, cx - sz div 2, cy - sz div 2, sz, False, ink);
 end;
 
 { ---- 单元格图形 ----------------------------------------------------------- }
