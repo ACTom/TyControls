@@ -34,6 +34,7 @@ type
     { The real route: what TWinControl.PaintHandler calls with the window's DC. }
     procedure PaintOn(ADC: HDC);
     procedure Designing;
+    property OnPaint;
   end;
 
   { A frame as an application writes one: its own class, a form file, a published field. }
@@ -52,6 +53,8 @@ type
     FForm: TForm;
     FPanel: TTyPanel;
     FFrame: TFrameAccess;
+    FOnPaints: Integer;
+    procedure CountOnPaint(Sender: TObject);
     procedure MakeFixture(const ACss: string);
     { RenderTo over the frame's own size, on a magenta ground a frame that paints nothing
       leaves showing. }
@@ -81,6 +84,9 @@ type
     procedure TestThemedBgColorAnswersOnlyASolidColour;
     procedure TestAThemeChangeReachesTheFrame;
     procedure TestAFrameNeverGivenAControllerFollowsTheDefault;
+    procedure TestAFreedFrameIsForgottenByItsController;
+    procedure TestADisabledFrameTakesTheDisabledRule;
+    procedure TestPaintStillFiresOnPaint;
     procedure TestTheFrameFollowsItsOwnController;
     procedure TestFreeingTheControllerLeavesTheFrameOnTheDefault;
     procedure TestStyleClassAndStyleOverrideRepaint;
@@ -130,9 +136,14 @@ begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
+var
+  { Counted outside the instance: a controller that still holds a freed frame calls into it. }
+  GFrameInvalidates: Integer = 0;
+
 procedure TFrameAccess.Invalidate;
 begin
   Inc(Invalidates);
+  Inc(GFrameInvalidates);
   inherited Invalidate;
 end;
 
@@ -637,6 +648,61 @@ begin
   end;
   { and once it is gone the controller no longer holds it }
   TyDefaultController.Changed;
+end;
+
+procedure TTyFrameTest.TestAFreedFrameIsForgottenByItsController;
+var
+  f: TFrameAccess;
+  own: TTyStyleController;
+  n: Integer;
+begin
+  { on the default controller }
+  f := TFrameAccess.Create(nil);
+  f.Free;
+  n := GFrameInvalidates;
+  TyDefaultController.Changed;
+  AssertEquals('the default controller does not call a frame that is gone',
+    n, GFrameInvalidates);
+  { on a controller of its own }
+  own := TTyStyleController.Create(nil);
+  try
+    f := TFrameAccess.Create(nil);
+    f.Controller := own;
+    f.Free;
+    n := GFrameInvalidates;
+    own.Changed;
+    AssertEquals('nor does its own controller', n, GFrameInvalidates);
+  finally
+    own.Free;
+  end;
+end;
+
+procedure TTyFrameTest.TestADisabledFrameTakesTheDisabledRule;
+begin
+  MakeFixture(cSolidHost + 'TyFrame:disabled { background: #808080; }');
+  AssertRgb('enabled: no rule, the host', $20, $40, $60, PixelAt(100, 60));
+  FFrame.Enabled := False;
+  AssertRgb('disabled: the :disabled rule', $80, $80, $80, PixelAt(100, 60));
+  FFrame.Enabled := True;
+  FPanel.Enabled := False;
+  AssertRgb('and on a disabled host too, as every control looks disabled there',
+    $80, $80, $80, PixelAt(100, 60));
+end;
+
+procedure TTyFrameTest.CountOnPaint(Sender: TObject);
+begin
+  Inc(FOnPaints);
+end;
+
+procedure TTyFrameTest.TestPaintStillFiresOnPaint;
+begin
+  MakeFixture(cSolidHost);
+  FFrame.OnPaint := @CountOnPaint;
+  FOnPaints := 0;
+  PaintShot.Free;
+  AssertEquals('a rendered paint fires OnPaint', 1, FOnPaints);
+  PaintShot.Free;
+  AssertEquals('and so does one that only shows the kept frame', 2, FOnPaints);
 end;
 
 procedure TTyFrameTest.TestTheFrameFollowsItsOwnController;
