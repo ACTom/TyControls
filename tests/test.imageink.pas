@@ -77,6 +77,7 @@ type
     { the glyph cache }
     procedure TestInkingPerStateDoesNotGoBackToTheFont;
     procedure TestTheGlyphCacheKeepsTheMostRecentlyUsed;
+    procedure TestTheGlyphCacheTellsSizesAndNamesApart;
     { the form file }
     procedure TestAStoredGlyphColorLoadsUnchanged;
     procedure TestTheDefaultIsNotWrittenToTheForm;
@@ -640,6 +641,23 @@ begin
     list.Free;
     TyUnregisterGlyphResolver(@CountingResolver);
   end;
+end;
+
+procedure TImageInkTest.TestTheGlyphCacheTellsSizesAndNamesApart;
+var
+  small, big, other: TBGRABitmap;
+begin
+  { One ink throughout: only the size, then only the name, differs. }
+  FFont.MapGlyph('dot', Ord('.'));
+  FList.Names.Add('dot');
+  big := FList.CachedIndex(GLYPH, 32, InkA);
+  AssertEquals('32 px when 32 was asked', 32, big.Width);
+  small := FList.CachedIndex(GLYPH, 16, InkA);
+  AssertEquals('16 px when 16 was asked', 16, small.Width);
+  AssertEquals('and 32 again', 32, FList.CachedIndex(GLYPH, 32, InkA).Width);
+  AssertEquals('the block is solid in its middle', Int64(InkA), Mid(FList.CachedIndex(GLYPH, 32, InkA)));
+  other := FList.CachedIndex(2, 32, InkA);
+  AssertTrue('a full stop is not: another name is another glyph', Mid(other) <> Int64(InkA));
 end;
 
 { ---- the form file ------------------------------------------------------------------------ }

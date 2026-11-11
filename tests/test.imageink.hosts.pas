@@ -57,6 +57,9 @@ type
     function NewListView(AStyle: TTyListViewStyle): TTyListView;
     function NewRichList: TTyAdvancedListBox;
     function NewMenu(AOnTheLclMenu: Boolean; AEnabled: Boolean = True): TTyMenuView;
+    function NewTreeHeader: TTyTreeView;
+    function NewListGroup(AGlyphOnTheHeader, ACollapsed: Boolean): TTyListGroupPanel;
+    procedure CheckTreeSelectedRow(ATree: TTyTreeView);
     procedure TreeImage(Sender: TTyCustomTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
       Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
     procedure TabImage(Sender: TObject; AIndex: Integer; var AImageIndex: Integer);
@@ -69,7 +72,9 @@ type
     procedure TestTreeNodes;
     procedure TestTreeNodesInAColumnTree;
     procedure TestTreeHeader;
+    procedure TestTreeHeaderRightToLeft;
     procedure TestTreeSelectedRowTakesTheSelectionsInkOnlyWhereTheRowIsTheSelections;
+    procedure TestColumnTreeSelectedRowLikewise;
     procedure TestTreeDisabledIsTheDisabledInkOnce;
     procedure TestTreeGhostedNodeFadesTheGlyphToo;
     procedure TestTreeDoesNotGoBackToTheFontEveryFrame;
@@ -88,10 +93,13 @@ type
     procedure TestRichComboField;
     { the rest }
     procedure TestComboBoxExField;
+    procedure TestComboBoxExOverlay;
     procedure TestGridHeader;
     procedure TestGridImageCell;
-    procedure TestListGroupPanel;
-    procedure TestListGroupPanelCollapsed;
+    procedure TestListGroupItem;
+    procedure TestListGroupHeader;
+    procedure TestListGroupItemCollapsed;
+    procedure TestListGroupHeaderCollapsed;
     procedure TestMenu;
     procedure TestMenuOnTheLclMenusOwnList;
     procedure TestMenuDisabledItemIsTheDisabledInkOnce;
@@ -340,41 +348,62 @@ begin
   CheckFollowsTheInk('tree with columns', 'TyTreeNode { color: %s; }');
 end;
 
-procedure TImageInkHostsTest.TestTreeHeader;
+function TImageInkHostsTest.NewTreeHeader: TTyTreeView;
 var
-  t: TTyTreeView;
   c: TTyColumn;
 begin
-  t := TTyTreeView.Create(FForm);
-  t.Controller := FCtl;
-  Place(t, 240, 120);
-  t.Header.Images := FList;
-  t.Header.Options := t.Header.Options + [hoVisible];
-  c := t.Header.Columns.Add as TTyColumn;
+  Result := TTyTreeView.Create(FForm);
+  Result.Controller := FCtl;
+  Place(Result, 240, 120);
+  Result.Header.Images := FList;
+  Result.Header.Options := Result.Header.Options + [hoVisible];
+  c := Result.Header.Columns.Add as TTyColumn;
   c.Width := 100;
   c.ImageIndex := GLYPH;
-  c := t.Header.Columns.Add as TTyColumn;
+  c := Result.Header.Columns.Add as TTyColumn;
   c.Width := 100;
   c.ImageIndex := IMAGE;
+end;
+
+procedure TImageInkHostsTest.TestTreeHeader;
+begin
+  NewTreeHeader;
   CheckFollowsTheInk('tree header', 'TyTreeHeaderSection { color: %s; }');
-  t.BiDiMode := bdRightToLeft;
+end;
+
+procedure TImageInkHostsTest.TestTreeHeaderRightToLeft;
+begin
+  NewTreeHeader.BiDiMode := bdRightToLeft;
   CheckFollowsTheInk('tree header, right to left', 'TyTreeHeaderSection { color: %s; }');
 end;
 
+procedure TImageInkHostsTest.CheckTreeSelectedRow(ATree: TTyTreeView);
+begin
+  FCtl.StyleOverride := Format('TyTreeNode { color: %s; } TyTreeNode:selected { color: %s; }',
+    [Css(InkA), Css(InkSel)]);
+  ATree.Selected := ATree.GetFirst;
+  { The highlight is the caption's: the icon stands on the plain row. }
+  CheckGlyphIs('without full-row select the icon keeps the plain row''s ink', InkA);
+  ATree.Options := ATree.Options + [toFullRowSelect];
+  CheckGlyphIs('with it the icon stands on the selection and takes its ink', InkSel);
+  ATree.Selected := nil;
+  CheckGlyphIs('and gives it back when the row is no longer selected', InkA);
+end;
+
 procedure TImageInkHostsTest.TestTreeSelectedRowTakesTheSelectionsInkOnlyWhereTheRowIsTheSelections;
+begin
+  CheckTreeSelectedRow(NewTree);
+end;
+
+procedure TImageInkHostsTest.TestColumnTreeSelectedRowLikewise;
 var
   t: TTyTreeView;
 begin
   t := NewTree;
-  FCtl.StyleOverride := Format('TyTreeNode { color: %s; } TyTreeNode:selected { color: %s; }',
-    [Css(InkA), Css(InkSel)]);
-  t.Selected := t.GetFirst;
-  { The highlight is the caption's: the icon stands on the plain row. }
-  CheckGlyphIs('without full-row select the icon keeps the plain row''s ink', InkA);
-  t.Options := t.Options + [toFullRowSelect];
-  CheckGlyphIs('with it the icon stands on the selection and takes its ink', InkSel);
-  t.Selected := nil;
-  CheckGlyphIs('and gives it back when the row is no longer selected', InkA);
+  (t.Header.Columns.Add as TTyColumn).Width := 120;
+  (t.Header.Columns.Add as TTyColumn).Width := 80;
+  t.Header.MainColumn := 0;
+  CheckTreeSelectedRow(t);
 end;
 
 procedure TImageInkHostsTest.TestTreeDisabledIsTheDisabledInkOnce;
@@ -636,7 +665,6 @@ end;
 procedure TImageInkHostsTest.TestComboBoxExField;
 var
   cb: TTyComboBoxEx;
-  it: TTyComboExItem;
 begin
   cb := TTyComboBoxEx.Create(FForm);
   cb.Controller := FCtl;
@@ -645,10 +673,18 @@ begin
   cb.ItemsEx.AddItem('', GLYPH);
   cb.ItemIndex := 0;
   CheckFollowsTheInk('image combo field', 'TyComboBox { color: %s; }', False);
+end;
+
+procedure TImageInkHostsTest.TestComboBoxExOverlay;
+var
+  cb: TTyComboBoxEx;
+begin
   { the overlay, stamped on a row image that carries its own colours }
-  cb.ItemsEx.Clear;
-  it := cb.ItemsEx.AddItem('', IMAGE);
-  it.OverlayImageIndex := GLYPH;
+  cb := TTyComboBoxEx.Create(FForm);
+  cb.Controller := FCtl;
+  Place(cb, 200, 40);
+  cb.Images := FList;
+  cb.ItemsEx.AddItem('', IMAGE).OverlayImageIndex := GLYPH;
   cb.ItemIndex := 0;
   CheckFollowsTheInk('image combo overlay', 'TyComboBox { color: %s; }', False);
 end;
@@ -708,44 +744,54 @@ begin
   end;
 end;
 
-procedure TImageInkHostsTest.TestListGroupPanel;
+function TImageInkHostsTest.NewListGroup(AGlyphOnTheHeader, ACollapsed: Boolean): TTyListGroupPanel;
 var
-  p: TTyListGroupPanel;
   g: TTyListGroup;
 begin
-  p := TTyListGroupPanel.Create(FForm);
-  p.Controller := FCtl;
-  Place(p, 240, 200);
-  p.Images := FList;
-  g := p.Groups.Add;
-  g.ImageIndex := IMAGE;
-  g.Items.Add.ImageIndex := GLYPH;
-  CheckFollowsTheInk('list group item', 'TyListGroupItem { color: %s; }');
-  g.ImageIndex := GLYPH;
-  g.Items[0].ImageIndex := IMAGE;
-  { an open group's header resolves :selected }
-  CheckFollowsTheInk('list group header',
-    'TyListGroupHeader { color: %0:s; } TyListGroupHeader:selected { color: %0:s; }');
+  Result := TTyListGroupPanel.Create(FForm);
+  Result.Controller := FCtl;
+  Place(Result, 240, 200);
+  Result.Images := FList;
+  Result.Collapsed := ACollapsed;
+  g := Result.Groups.Add;
+  if AGlyphOnTheHeader then
+  begin
+    g.ImageIndex := GLYPH;
+    g.Items.Add.ImageIndex := IMAGE;
+  end
+  else
+  begin
+    g.ImageIndex := IMAGE;
+    g.Items.Add.ImageIndex := GLYPH;
+  end;
 end;
 
-procedure TImageInkHostsTest.TestListGroupPanelCollapsed;
-var
-  p: TTyListGroupPanel;
-  g: TTyListGroup;
+const
+  { an open group's header resolves :selected }
+  GroupHeaderRule = 'TyListGroupHeader { color: %0:s; } TyListGroupHeader:selected { color: %0:s; }';
+
+procedure TImageInkHostsTest.TestListGroupItem;
 begin
-  p := TTyListGroupPanel.Create(FForm);
-  p.Controller := FCtl;
-  Place(p, 240, 200);
-  p.Images := FList;
-  p.Collapsed := True;
-  g := p.Groups.Add;
-  g.ImageIndex := IMAGE;
-  g.Items.Add.ImageIndex := GLYPH;
+  NewListGroup(False, False);
+  CheckFollowsTheInk('list group item', 'TyListGroupItem { color: %s; }');
+end;
+
+procedure TImageInkHostsTest.TestListGroupHeader;
+begin
+  NewListGroup(True, False);
+  CheckFollowsTheInk('list group header', GroupHeaderRule);
+end;
+
+procedure TImageInkHostsTest.TestListGroupItemCollapsed;
+begin
+  NewListGroup(False, True);
   CheckFollowsTheInk('collapsed list group item', 'TyListGroupItem { color: %s; }');
-  g.ImageIndex := GLYPH;
-  g.Items[0].ImageIndex := IMAGE;
-  CheckFollowsTheInk('collapsed list group header',
-    'TyListGroupHeader { color: %0:s; } TyListGroupHeader:selected { color: %0:s; }');
+end;
+
+procedure TImageInkHostsTest.TestListGroupHeaderCollapsed;
+begin
+  NewListGroup(True, True);
+  CheckFollowsTheInk('collapsed list group header', GroupHeaderRule);
 end;
 
 function TImageInkHostsTest.NewMenu(AOnTheLclMenu: Boolean; AEnabled: Boolean): TTyMenuView;
@@ -799,6 +845,10 @@ begin
     try
       AssertTrue('a disabled item: the disabled ink, at full strength', HasBlock(bmp, InkDis));
       AssertFalse('and not the enabled one', HasBlock(bmp, InkA));
+      { Only the glyph leaves the LCL list's own drawing: an image of it is still greyed the
+        way that list greys a disabled item. }
+      if onLcl then
+        AssertFalse('the LCL menu''s image is greyed by its list', HasBlock(bmp, Photo));
     finally
       bmp.Free;
     end;
