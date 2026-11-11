@@ -80,6 +80,7 @@ type
     procedure TestAChildOnATranslucentFrameSeesItOverTheHost;
     procedure TestThemedBgColorAnswersOnlyASolidColour;
     procedure TestAThemeChangeReachesTheFrame;
+    procedure TestAFrameNeverGivenAControllerFollowsTheDefault;
     procedure TestTheFrameFollowsItsOwnController;
     procedure TestFreeingTheControllerLeavesTheFrameOnTheDefault;
     procedure TestStyleClassAndStyleOverrideRepaint;
@@ -615,6 +616,27 @@ begin
   FCtl.LoadThemeCss(cGradientHost);
   AssertTrue('a theme loaded into its controller invalidates the frame',
     FFrame.Invalidates > n);
+end;
+
+procedure TTyFrameTest.TestAFrameNeverGivenAControllerFollowsTheDefault;
+var
+  f: TFrameAccess;
+  n: Integer;
+begin
+  { the common case: no Controller property set anywhere, the application themes the
+    default controller }
+  f := TFrameAccess.Create(nil);
+  try
+    AssertNull('no controller of its own', f.Controller);
+    n := f.Invalidates;
+    TyDefaultController.Changed;
+    AssertTrue('a change of the default controller''s theme invalidates it',
+      f.Invalidates > n);
+  finally
+    f.Free;
+  end;
+  { and once it is gone the controller no longer holds it }
+  TyDefaultController.Changed;
 end;
 
 procedure TTyFrameTest.TestTheFrameFollowsItsOwnController;
