@@ -52,7 +52,11 @@ type
 
   { A plain graphic child: something to put in a panel. Registered, so a form file can name it. }
   TStatusBarTestBox = class(TGraphicControl)
+  protected
+    procedure BoundsChanged; override;
   public
+    { Fired from inside SetBounds, where a live LCL starts the parent's layout pass. }
+    OnMoved: TNotifyEvent;
     procedure Designing;
   end;
 
@@ -72,6 +76,7 @@ type
     procedure HandleMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
     procedure HandleClick(Sender: TObject);
+    procedure HandleBoxMoved(Sender: TObject);
     procedure HandleNoteRect(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
       APainter: TTyPainter; const ARect: TRect);
     procedure HandleDrawAsText(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
@@ -97,6 +102,7 @@ type
     procedure TestTheSizeGripIsNotPartOfAPanel;
     procedure TestTheMirroredSizeGripIsNotPartOfAPanel;
     procedure TestAPanelDeletedUnderThePressIsNotClicked;
+    procedure TestAReleaseCountsOnlyForTheLastPress;
     procedure TestThePanelClickComesAfterOnMouseUp;
     procedure TestARealClickFiresOnClickAndThenThePanelClick;
   end;
@@ -111,6 +117,7 @@ type
     procedure TestPanelRectIsTheCellThePaintHandsOut;
     procedure TestPanelRectFollowsTheReadingDirection;
     procedure TestPanelRectIsEmptyForABadIndexAndInSimplePanelMode;
+    procedure TestPanelTextRectIsNeverInsideOut;
   end;
 
   TStatusBarPanelControlTest = class(TStatusBarPanelFixture)
@@ -119,6 +126,7 @@ type
     procedure CheckLoadedForm(const ATag, AText: string);
   published
     procedure TestAssigningAControlMakesItAChildOfTheBar;
+    procedure TestAssigningAControlTakesItsAlignAway;
     procedure TestTheControlSitsAtTheLeadingEdgeOfItsCellVerticallyCentred;
     procedure TestMirroredTheControlSitsAtTheRightOfItsCell;
     procedure TestTheControlFollowsItsCellWhenAPanelChangesWidth;
@@ -129,11 +137,14 @@ type
     procedure TestALayoutPassRepaintsTheBarOnlyWhenAControlChanged;
     procedure TestTheControlIsClampedToItsCellAndGetsItsOwnSizeBack;
     procedure TestASizeTheApplicationSetsIsItsOwnSizeFromThenOn;
+    procedure TestANewControlInThePanelBringsItsOwnSize;
+    procedure TestALayoutPassStartedByThePlacementKeepsTheOwnSize;
     procedure TestAnAutoSizeControlKeepsItsSize;
     procedure TestSimplePanelModeLeavesTheControlNoRoom;
     procedure TestTheDesignerKeepsTheControlsSizeInSimplePanelMode;
     procedure TestTheTextStartsAfterAVisibleControl;
     procedure TestAHiddenControlTakesNoRoom;
+    procedure TestAControlWithNoWidthTakesNoRoom;
     procedure TestTheDesignerMakesRoomForAHiddenControl;
     procedure TestMirroredTheTextEndsBeforeTheControl;
     procedure TestTheGapComesFromTheTheme;
@@ -146,12 +157,14 @@ type
     procedure TestAControlMovedOffTheBarLeavesItsPanel;
     procedure TestDeletingThePanelKeepsTheControl;
     procedure TestTheBarAndItsParentsCannotSitInAPanel;
+    procedure TestAPanelChangeRepaintsTheBar;
     procedure TestTheBarAcceptsControlsInTheDesigner;
     procedure TestBorderWidthStillPadsTheBar;
     procedure TestAChildResolvesTheBarsThemedBackground;
     procedure TestAFormFileLoadsWithTheControlBeforeTheBar;
     procedure TestAFormFileLoadsWithTheControlAfterTheBar;
     procedure TestAFormFileLoadsWithTheControlInsideTheBar;
+    procedure TestAFormFileNamingTheBarAsItsOwnControlStillLoads;
     procedure TestThePanelsControlSurvivesAStreamRoundTrip;
   end;
 
@@ -161,6 +174,7 @@ type
     procedure CheckOwnerDrawMatchesText(const ATag: string; AHandler: TTyDrawPanelEvent);
   published
     procedure TestPanelTextStyleIsTheStyleThePanelTextIsDrawnWith;
+    procedure TestPanelTextStyleFollowsTheBarsState;
     procedure TestPanelFontSizeFollowsTheStyle;
     procedure TestPanelFontHeightPxFollowsThePPI;
     procedure TestDrawPanelTextMatchesATextPanelPixelForPixel;
@@ -355,6 +369,12 @@ begin
   SetDesigning(True, False);
 end;
 
+procedure TStatusBarTestBox.BoundsChanged;
+begin
+  inherited BoundsChanged;
+  if Assigned(OnMoved) then OnMoved(Self);
+end;
+
 { --------------------------------------------------------------- the fixture -- }
 
 const
@@ -413,6 +433,11 @@ end;
 procedure TStatusBarPanelFixture.HandleClick(Sender: TObject);
 begin
   FClicks.Add('click');
+end;
+
+procedure TStatusBarPanelFixture.HandleBoxMoved(Sender: TObject);
+begin
+  FBar.LayoutPass;
 end;
 
 procedure TStatusBarPanelFixture.HandleNoteRect(AStatusBar: TTyCustomStatusBar;
@@ -605,6 +630,23 @@ begin
   AssertEquals('a whole click on the one that took its place', '1', FClicks.CommaText);
 end;
 
+procedure TStatusBarPanelClickTest.TestAReleaseCountsOnlyForTheLastPress;
+begin
+  FBar.Press(150, 11);               // on the fill panel; its release never arrives
+  FBar.Press(2, 11);                 // the next press is on the bar's padding
+  FBar.Release(150, 11);
+  AssertEquals('the press this release belongs to was on no panel', '', FClicks.CommaText);
+  FBar.SizeGrip := True;
+  FBar.Press(150, 11);
+  FBar.WindowTakesResize := True;
+  FBar.Press(150, 21);               // taken for a resize
+  FBar.Release(150, 11);
+  AssertEquals('nor does a press the window took leave the one before it armed', '',
+    FClicks.CommaText);
+  FBar.PressAndRelease(150, 11);
+  AssertEquals('a whole click still counts', '1', FClicks.CommaText);
+end;
+
 procedure TStatusBarPanelClickTest.TestThePanelClickComesAfterOnMouseUp;
 begin
   FBar.OnMouseUp := @HandleMouseUp;
@@ -732,6 +774,26 @@ begin
   AssertRect('and no text boxes', Rect(0, 0, 0, 0), FBar.PanelTextRect(2));
 end;
 
+procedure TStatusBarPanelRectTest.TestPanelTextRectIsNeverInsideOut;
+var
+  box: TStatusBarTestBox;
+  r: TRect;
+begin
+  { A control that fills its cell leaves the text an empty box at the cell's far end, not one
+    whose left edge has passed its right. }
+  box := NewBox(50, 12);
+  FBar.Panels[0].Width := 30;        // the cell is [6,36), its text box [8,34)
+  FBar.Panels[0].Control := box;
+  AssertRect('left to right', Rect(34, 0, 34, 22), FBar.PanelTextRect(0));
+  FBar.BiDiMode := bdRightToLeft;    // the cell is [264,294), its text box [266,292)
+  AssertRect('mirrored', Rect(266, 0, 266, 22), FBar.PanelTextRect(0));
+  { And a cell with no width at all: the second of two fill panels. }
+  FBar.BiDiMode := bdLeftToRight;
+  FBar.Panels[2].Width := 0;
+  r := FBar.PanelTextRect(2);
+  AssertEquals('a collapsed cell has no text box', r.Left, r.Right);
+end;
+
 { ------------------------------------------------------- a control in a panel -- }
 
 procedure TStatusBarPanelControlTest.TestAssigningAControlMakesItAChildOfTheBar;
@@ -743,6 +805,17 @@ begin
   FBar.Panels[1].Control := box;
   AssertSame('the panel holds it', box, FBar.Panels[1].Control);
   AssertSame('and it is the bar''s child', FBar, box.Parent);
+end;
+
+procedure TStatusBarPanelControlTest.TestAssigningAControlTakesItsAlignAway;
+var
+  box: TStatusBarTestBox;
+begin
+  { The cell places it; an Align would have LCL place it as well, on every layout pass. }
+  box := NewBox(16, 12);
+  box.Align := alRight;
+  FBar.Panels[1].Control := box;
+  AssertTrue('alNone', box.Align = alNone);
 end;
 
 procedure TStatusBarPanelControlTest.TestTheControlSitsAtTheLeadingEdgeOfItsCellVerticallyCentred;
@@ -882,6 +955,38 @@ begin
     box.BoundsRect);
 end;
 
+procedure TStatusBarPanelControlTest.TestANewControlInThePanelBringsItsOwnSize;
+var
+  first, second: TStatusBarTestBox;
+begin
+  { The second control comes at exactly the size the first was squeezed to: that is its own
+    size, not a squeezed one, and it must not grow into the first one's when there is room. }
+  first := NewBox(50, 40);
+  FBar.Panels[0].Width := 30;
+  FBar.Panels[0].Control := first;
+  AssertRect('the first, squeezed', Bounds(8, 0, 26, 22), first.BoundsRect);
+  second := NewBox(26, 22);
+  FBar.Panels[0].Control := second;
+  FBar.Panels[0].Width := 100;
+  AssertRect('the second keeps the size it came with', Bounds(8, 0, 26, 22), second.BoundsRect);
+  AssertRect('and the first is left where it was', Bounds(8, 0, 26, 22), first.BoundsRect);
+end;
+
+procedure TStatusBarPanelControlTest.TestALayoutPassStartedByThePlacementKeepsTheOwnSize;
+var
+  box: TStatusBarTestBox;
+begin
+  { In a live window, moving the control starts a layout pass, and the pass comes back to the
+    bar while it is still placing. It must not take the squeezed size for the control's own. }
+  box := NewBox(50, 40);
+  box.OnMoved := @HandleBoxMoved;
+  FBar.Panels[0].Width := 30;
+  FBar.Panels[0].Control := box;
+  AssertRect('squeezed', Bounds(8, 0, 26, 22), box.BoundsRect);
+  FBar.Panels[0].Width := 100;
+  AssertRect('and back to its own width', Bounds(8, 0, 50, 22), box.BoundsRect);
+end;
+
 procedure TStatusBarPanelControlTest.TestAnAutoSizeControlKeepsItsSize;
 var
   box: TStatusBarTestBox;
@@ -944,6 +1049,17 @@ begin
   AssertEquals('hidden', 108, FBar.PanelTextRect(1).Left);
   box.Visible := True;
   AssertEquals('shown again', 128, FBar.PanelTextRect(1).Left);
+end;
+
+procedure TStatusBarPanelControlTest.TestAControlWithNoWidthTakesNoRoom;
+var
+  box: TStatusBarTestBox;
+begin
+  box := NewBox(0, 12);
+  FBar.Panels[1].Control := box;
+  AssertEquals('no gap for a control that is not there to see', 108, FBar.PanelTextRect(1).Left);
+  box.SetBounds(box.Left, box.Top, 1, 12);
+  AssertEquals('one px of control and the gap', 113, FBar.PanelTextRect(1).Left);
 end;
 
 procedure TStatusBarPanelControlTest.TestTheDesignerMakesRoomForAHiddenControl;
@@ -1181,6 +1297,18 @@ begin
   AssertSame(box, FBar.Panels[1].Control);
 end;
 
+procedure TStatusBarPanelControlTest.TestAPanelChangeRepaintsTheBar;
+var
+  n: Integer;
+begin
+  n := FBar.Invalidations;
+  FBar.Panels[0].Text := 'Saved';
+  AssertTrue('a new text', FBar.Invalidations > n);
+  n := FBar.Invalidations;
+  FBar.Panels.Add;
+  AssertTrue('a new panel', FBar.Invalidations > n);
+end;
+
 procedure TStatusBarPanelControlTest.TestTheBarAcceptsControlsInTheDesigner;
 begin
   AssertTrue('csAcceptsControls: the designer drops a control into the bar',
@@ -1313,6 +1441,26 @@ begin
   CheckLoadedForm('control inside', CFormHead + CFormBarHead + CFormBox + CFormBarTail + CFormTail);
 end;
 
+procedure TStatusBarPanelControlTest.TestAFormFileNamingTheBarAsItsOwnControlStillLoads;
+var
+  f: TForm;
+  bar: TTyStatusBar;
+begin
+  { A hand-edited form file. A setter that raises while the references are resolved stops the
+    whole form from loading, so here the bad reference is dropped instead. }
+  f := LoadForm(StringReplace(CFormHead + CFormBarHead + CFormBarTail + CFormTail,
+    'Control = Ind', 'Control = Bar', []));
+  try
+    bar := f.FindComponent('Bar') as TTyStatusBar;
+    AssertNotNull('the bar loaded', bar);
+    AssertEquals('with both panels', 2, bar.Panels.Count);
+    AssertTrue('and without the control it cannot hold', bar.Panels[1].Control = nil);
+    AssertSame('still on the form', f, bar.Parent);
+  finally
+    f.Free;
+  end;
+end;
+
 procedure TStatusBarPanelControlTest.TestThePanelsControlSurvivesAStreamRoundTrip;
 var
   box: TStatusBarTestBox;
@@ -1414,6 +1562,19 @@ begin
   FBar.StyleOverride := 'color: #0000FF';
   AssertEquals('this bar''s own blue', Integer(TyRGB(0, 0, 255)), Integer(FBar.PanelTextStyle.TextColor));
   AssertTrue('which is what the panels are drawn in', BlueInk > 20);
+end;
+
+procedure TStatusBarPanelInkTest.TestPanelTextStyleFollowsTheBarsState;
+begin
+  { A disabled bar draws its panels in the theme's disabled ink, and that is the ink a
+    handler is given: the style is the one the paint resolves, not the bar's at rest. }
+  FCtl.LoadThemeCss(CPanelCss + ' TyStatusBar:disabled { background: #FFFFFF; ' +
+    'color: #0000C0; border-color: #FF0000; border-width: 1px; font-size: 12px; }');
+  FillPanelsForText;
+  AssertEquals('enabled', Integer(TyRGB(0, $C0, 0)), Integer(FBar.PanelTextStyle.TextColor));
+  FBar.Enabled := False;
+  AssertEquals('disabled', Integer(TyRGB(0, 0, $C0)), Integer(FBar.PanelTextStyle.TextColor));
+  CheckOwnerDrawMatchesText('disabled', @HandleDrawByHand);
 end;
 
 procedure TStatusBarPanelInkTest.TestPanelFontSizeFollowsTheStyle;

@@ -22,8 +22,8 @@ type
     FStyle: TTyStatusPanelStyle;
     FControl: TControl;
     { The control's own size -- the one it had when the bar last found it at a size the bar
-      had not given it -- and the size the bar last gave it. A cell too small for the control
-      shrinks it; this is how it gets its size back when the cell grows. -1: never placed. }
+      had not given it -- and the size the bar last gave it (-1: not placed yet). A cell too
+      small for the control shrinks it; this is how it gets its size back when the cell grows. }
     FOwnWidth, FOwnHeight: Integer;
     FPlacedWidth, FPlacedHeight: Integer;
     procedure SetText(const AValue: TCaption);
@@ -406,8 +406,6 @@ begin
   inherited Create(ACollection);
   FWidth := 50;
   FAlignment := taLeftJustify;
-  FPlacedWidth := -1;
-  FPlacedHeight := -1;
 end;
 procedure TTyStatusPanel.SetText(const AValue: TCaption);
 begin if FText = AValue then Exit; FText := AValue; Changed(False); end;
@@ -526,7 +524,7 @@ begin
 end;
 destructor TTyCustomStatusBar.Destroy;
 begin
-  FreeAndNil(FPanels);   // nil, not dangling: the children still leave one by one (CMControlChange)
+  FPanels.Free;
   inherited Destroy;
 end;
 procedure TTyCustomStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
@@ -671,9 +669,15 @@ begin
   begin
     gap := MulDiv(StyleMetric('--statusbar-control-gap', CStatusControlGap), APPI, 96);
     if ARightToLeft then
-      ATextBox.Right := AControlBox.Left - gap
+    begin
+      ATextBox.Right := AControlBox.Left - gap;
+      if ATextBox.Right < ATextBox.Left then ATextBox.Right := ATextBox.Left;   // no room left
+    end
     else
+    begin
       ATextBox.Left := AControlBox.Right + gap;
+      if ATextBox.Left > ATextBox.Right then ATextBox.Left := ATextBox.Right;
+    end;
   end;
 end;
 
@@ -792,8 +796,9 @@ var
 begin
   inherited;
   { A child that leaves the bar leaves its panel: one moved to another parent, and one that
-    is freed, which LCL takes out of its parent first. }
-  if Message.Inserting or (FPanels = nil) or (csDestroying in ComponentState) then Exit;
+    is freed, which LCL takes out of its parent first (TControl.Destroy). A control is in no
+    panel before it is the bar's child, so the message that it arrived finds nothing; and a
+    bar that is being destroyed lets its children go without this message. }
   for i := 0 to FPanels.Count - 1 do
     if FPanels[i].FControl = Message.Control then
       FPanels[i].SetControl(nil);
