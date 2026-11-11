@@ -1622,11 +1622,9 @@ begin
     FFilterText := AValue;   // one blank text for another
     Exit;
   end;
-  { An edit in progress is committed while its row is where it was. }
-  if (FEditFlat >= 0) or FDropMode then EndEdit(True);
   FFilterText := AValue;
   for i := 0 to High(FRoot) do Each(FRoot[i]);
-  RebuildFlat;
+  RebuildFlat;   // commits an edit in progress first, as every rebuild does
   { Another search starts at the top, with the current row in view when it is still shown. }
   TopIndex := 0;
   at := ItemIndex;
