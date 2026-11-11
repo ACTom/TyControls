@@ -1,0 +1,5 @@
+宋体的中文，接着是 Arial English text，再回到宋体。
+黑体的一段：TyControls 版本 4.0 的富文本控件。
+楷体的一段，里面夹着数字 2026 和符号 &、%、@。
+Arial paragraph with a few CJK characters: 中文 and 黑体.
+宋体里的生僻一点的字：龘、鱻，和一个表情 😀。

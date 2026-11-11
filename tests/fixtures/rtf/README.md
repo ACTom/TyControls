@@ -71,7 +71,28 @@ system RichEdit reads all three and reports the same text and the same table str
 | `hand-word-unknown.rtf` | One each of what phase 1 keeps without understanding: a style (`\s1`, the style sheet), a field (`\field`, hyperlink), a tracked insertion and deletion (`\revised`, `\deleted`, `\revtbl`), a comment (`\atrfstart` ... `\annotation`), a footnote, a formula (`\mmath`), a bookmark; and Word's blocks after the last paragraph (`\themedata`, `\latentstyles`, `\datastore`). `hand-word-unknown.visible.txt` is the paragraphs' text with every U+FFFC taken out (the field's result is inside its object, so it is not in that text). |
 | `hand-word-table-merged.rtf` | A 3 x 3 table: a cell spanning two columns (`\clmgf`, `\clmrg`), a cell spanning two rows (`\clvmgf`, `\clvmrg`), and a nested 1 x 2 table (`\itap2`, `\nestcell`, `\nesttableprops`, `\nestrow`) in the last cell. The expected text has an empty paragraph for each swallowed cell and for the last cell's own paragraph after the nested table. |
 
-## Saved from WordPad's window and by Word
+## Saved by WordPad (`wp-*.rtf`)
 
-Not here yet (`wp-*.rtf`, `word-*.rtf`): they need the desktop. This section lists each one when
-it is added: the program and its version, the fonts, and what the file is for.
+Saved by the real wordpad.exe (Windows 10 19044, system code page 936) through its File > Save
+command, 2026-11-11. `wp-*.expected.txt` is the text the system RichEdit reports for the saved
+file, by the rules of the `re-*` files; for `wp-zh-picture.rtf` the two U+FFFC were put in by
+hand, because the control does not load these pictures in a message-only window.
+
+| File | How | What it shows |
+|---|---|---|
+| `wp-zh-plain.rtf`, `wp-zh-mixed.rtf`, `wp-zh-list.rtf`, `wp-styles.rtf` | The `re-` file of the same name opened in WordPad and saved. | WordPad's file is the engine's output with one difference: `\ansicpg54936` (GB18030) where the engine alone writes `\ansicpg936`. |
+| `wp-zh-table.rtf` | A 2 x 3 table copied in Word and pasted into WordPad between two paragraphs. | A table as WordPad keeps one that came from Word: borders (`\trbrdr...`, `\clbrdr...`), `\trleft`, Word's paragraph properties in the cells, the font 等线. |
+| `wp-zh-picture.rtf` | A bitmap pasted from the clipboard (96 x 64, drawn by a script, not a screenshot), then a PNG of the same picture inserted with the Picture button. | Both are saved as `{\pict{\*\picprop}\wmetafile8 ...}`: a metafile holding one bitmap. That is how every picture in a WordPad file arrives. |
+
+## Saved by Word (`word-*.rtf`, `scripts/gen-richedit-fixtures-word.ps1`)
+
+Made in Word 16.0.17932 through its object model (the script; Word stays invisible) and saved by
+Word as RTF, 2026-11-11. One change after saving, because these files are public: the name and
+initials Word wrote for whoever ran it (`\author`, `\operator`, `\revtbl`, `\atnauthor`, `\atnid`)
+are `TyControls` / `TY`; no other byte differs from what Word wrote.
+
+| File | What it is for |
+|---|---|
+| `word-zh.rtf` | Word's font slots on real output: Latin in Calibri, Chinese in 宋体 and 黑体; é written as the GBK pair `\'a8\'a6` in the East Asian font, ï as `\hich\f37 ...\'ef\loch\f37` in the middle of a run; a character outside the BMP; bold. `word-zh.expected.txt` is the text that was typed (the system RichEdit reports the same). |
+| `word-unknown.rtf` | A heading style, a hyperlink field, a tracked insertion and deletion, a comment, a footnote, a formula (`{\mmath{\*\moMathPara ...}{\mmathPict ...}}` with a PNG and a WMF picture of it), a bookmark, and Word's own header and tail (57 KB of font table, style sheet, `\latentstyles`, `\themedata`, `\datastore`). `word-unknown.visible.txt`: the paragraphs' text with every U+FFFC taken out. |
+| `word-table-merged.rtf` | A 3 x 3 table with borders: the first two cells of row 1 merged (Word writes one wider cell, no `\clmgf`), the first cells of rows 2 and 3 merged (`\clvmgf`, `\clvmrg`), and a nested 1 x 2 table in the last cell. |

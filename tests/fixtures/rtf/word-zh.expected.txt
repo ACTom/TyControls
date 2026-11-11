@@ -1,0 +1,5 @@
+TyControls 的富文本控件 4.0，用 Word 保存。
+café 和 naïve 里的重音字母，还有全角标点：“引号”、《书名号》。
+这一段的中文用黑体，English stays Calibri。
+表情 😀 和生僻字 龘 不一定在代码页里。
+粗体的中文 and bold English，后面是普通的。
