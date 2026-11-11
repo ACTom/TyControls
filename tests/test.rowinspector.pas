@@ -152,6 +152,8 @@ type
     procedure TestABlankFilterIsNoFilter;
     procedure TestTheSelectionStaysOnItsRowThroughAFilter;
     procedure TestWhileFilteringSaveAndRestoreDealInTheStateBeforeIt;
+    procedure TestAFilterChangeStartsAtTheTopWithTheCurrentRowInView;
+    procedure TestAnEditInProgressIsCommittedWhenTheFilterChanges;
     procedure TestOnValueChangingIsAskedOnTheProgrammaticRoutes;
     procedure TestOnValueChangingSeesTheFontTheDialogPicked;
     procedure TestOnGetRowColorsReplacesTheListAColourRowOffers;
@@ -983,6 +985,12 @@ begin
   FView.EndUpdate;   // one too many: ignored
   FView.AddRow('D', '');
   AssertEquals('and the editor is not left holding updates back', 5, FView.DisplayRowCount);
+  FView.BeginUpdate;
+  FView.AddRow('E', '');
+  AssertEquals('nor is the next BeginUpdate cancelled by the stray EndUpdate', 5,
+    FView.DisplayRowCount);
+  FView.EndUpdate;
+  AssertEquals('(shown at its end)', 6, FView.DisplayRowCount);
 end;
 
 procedure TValueListRowsTest.TestRowsRemovedInsideAnUpdateLeaveTheListAtOnce;
@@ -990,14 +998,18 @@ begin
   FView.AddRow('A', '');
   FView.AddRow('B', '');
   FView.AddRow('C', '');
+  FView.ItemIndex := 2;
   FView.BeginUpdate;
   FView.DeleteRow(0);
   AssertEquals('a deleted row is off the display at once', 'B,C', FView.Shown);
   AssertEquals('(the first position is the next row)', 'B', FView.DisplayRow(0).Key);
+  AssertEquals('(the selection moved up with its row)', 'C', FView.SelectedRow.Key);
   FView.Clear;
   AssertEquals('and so are cleared rows: nothing on display names a row that is gone', 0,
     FView.DisplayRowCount);
   AssertNull('(no row at position 0)', FView.DisplayRow(0));
+  AssertEquals('the list the control lays out is empty too', '', FView.Shown);
+  AssertEquals('and nothing is selected', -1, FView.ItemIndex);
   FView.AddRow('New', '');
   AssertEquals('adding is still put off', 0, FView.DisplayRowCount);
   FView.EndUpdate;
@@ -1151,16 +1163,58 @@ begin
     AssertEquals('saved while filtering: what was open before it, not what it opened', 'Other',
       open.CommaText);
     open.Clear;
+    FView.RestoreExpanded(open);   // nothing is to be open
+    AssertEquals('restored closed while filtering: the filter opens the row for its match again',
+      'Group,Width', FView.Shown);
     open.Add('Group');
     FView.RestoreExpanded(open);
-    AssertEquals('restored while filtering: the filter still shows its matches', 'Group,Width',
-      FView.Shown);
+    AssertEquals('restored open: the same', 'Group,Width', FView.Shown);
     FView.FilterText := '';
     AssertTrue('and what was restored is what the rows go back to: Group open', grp.Expanded);
     AssertFalse('Other closed', other.Expanded);
   finally
     open.Free;
   end;
+end;
+
+procedure TValueListRowsTest.TestAnEditInProgressIsCommittedWhenTheFilterChanges;
+var w: TTyValueRow;
+begin
+  w := FView.AddRow('Width', '1');
+  FView.AddRow('Height', '2');
+  FView.ClickValue(w);
+  AssertEquals('the cell is open', 0, FView.EditingRow);
+  TInspectorEditAccess(FView.InlineEditor).TypeText('5');
+  FView.FilterText := 'hei';
+  AssertEquals('the editor is closed', -1, FView.EditingRow);
+  AssertEquals('what was typed went into the row it was typed on', '5', w.Value);
+  AssertEquals('and the filter shows its match', 'Height', FView.Shown);
+end;
+
+procedure TValueListRowsTest.TestAFilterChangeStartsAtTheTopWithTheCurrentRowInView;
+var
+  i: Integer;
+  r: TRect;
+begin
+  FView.BeginUpdate;
+  for i := 0 to 59 do FView.AddRow(Format('Row%.2d', [i]), '');
+  FView.EndUpdate;
+  AssertTrue('more rows than the control shows', FView.VisibleRowCount < 40);
+  FView.TopIndex := 20;
+  AssertEquals('scrolled down', 20, FView.TopIndex);
+  FView.FilterText := '   ';
+  AssertEquals('one blank text for another is no change: the list stays where it is', 20,
+    FView.TopIndex);
+  FView.FilterText := 'row';
+  AssertEquals('every row still matches', 60, FView.DisplayRowCount);
+  AssertEquals('a new search starts at the top', 0, FView.TopIndex);
+  FView.ItemIndex := 50;
+  FView.TopIndex := 0;
+  FView.FilterText := 'ro';
+  AssertEquals('the current row is still the current row', 50, FView.ItemIndex);
+  r := FView.ItemRect(50);
+  AssertTrue('and it is in view after the change', (r.Top >= 0) and (r.Bottom <= FView.ClientHeight));
+  AssertTrue('(scrolled no further than it takes)', FView.TopIndex < 50);
 end;
 
 procedure TValueListRowsTest.TestOnValueChangingIsAskedOnTheProgrammaticRoutes;
