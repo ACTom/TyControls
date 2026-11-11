@@ -33,6 +33,7 @@
     Height = 40
     Top = 0
     Width = 320
+    Actions = <>
   end
 # TTyAnalogClock
     Left = 0

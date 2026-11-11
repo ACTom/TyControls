@@ -352,7 +352,9 @@ type
     property Description;
     property ShowIcon;
     property Closable;
+    property Actions;
     property OnClose;
+    property OnAction;
     property Align;
     property Anchors;
   end;
