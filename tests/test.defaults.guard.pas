@@ -62,7 +62,7 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..194] of TComponentClass = (
+  Palette: array[0..195] of TComponentClass = (
     TTyAboutDialog, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
@@ -80,7 +80,7 @@ const
     TTyDBNumericEdit, TTyDBRadioGroup, TTyDBRating, TTyDBSegmented,
     TTyDBSpinEdit, TTyDBText, TTyDBToggleSwitch, TTyDial,
     TTyDivider, TTyDrawGrid, TTyDropDownButton, TTyEdit,
-    TTyEmpty, TTyExPanel, TTyFilterComboBox, TTyFindDialog,
+    TTyEmpty, TTyExPanel, TTyExPanelActions, TTyFilterComboBox, TTyFindDialog,
     TTyFloatSpinEdit, TTyFontComboBox, TTyFontDialog, TTyFontListBox,
     TTyFontSizeComboBox, TTyFormSurface, TTyGauge, TTyGearActivityIndicator,
     TTyGearDial, TTyGlowLabel, TTyGlyphButton, TTyGlyphContainerButton,

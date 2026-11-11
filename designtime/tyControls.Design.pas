@@ -177,7 +177,7 @@ begin
   // Containers & layout.
   RegisterComponents('TyControls Containers',
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
-     TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyGridPanel, TTyRelativePanel,
+     TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyExPanelActions, TTyGridPanel, TTyRelativePanel,
      TTyToolGroupPanel, TTyListGroupPanel,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
      TTyCard, TTyEmpty, TTyToolWindowBar, TTyToolWindowManager]);

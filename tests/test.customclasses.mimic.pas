@@ -4520,6 +4520,32 @@ type
     property AnimationDuration;
     property OnExpand;
     property OnCollapse;
+    property ActionsVisibility;
+  end;
+
+  TGenExPanelActions = class(TTyCustomExPanelActions)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property ParentShowHint;
+    property PopupMenu;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnContextPopup;
+    property OnResize;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
   end;
 
   TGenFilterComboBox = class(TTyCustomFilterComboBox)
@@ -11422,7 +11448,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..183, 0..1] of TClass = (
+  CGenMimics: array[0..184, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11491,6 +11517,7 @@ const
     (TGenEdit, TTyEdit),
     (TGenEmpty, TTyEmpty),
     (TGenExPanel, TTyExPanel),
+    (TGenExPanelActions, TTyExPanelActions),
     (TGenFilterComboBox, TTyFilterComboBox),
     (TGenFloatSpinEdit, TTyFloatSpinEdit),
     (TGenFontComboBox, TTyFontComboBox),

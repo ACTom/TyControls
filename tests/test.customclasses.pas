@@ -1186,7 +1186,8 @@ initialization
     // T10 dials and sliders
     'TTyRating', 'TTyDial', 'TTyGearDial', 'TTyAnalogClock', 'TTyTrackBar',
     // T12 panels
-    'TTyPanel', 'TTyPaintPanel', 'TTyExPanel', 'TTyGridPanel', 'TTyRelativePanel', 'TTyScrollBox',
+    'TTyPanel', 'TTyPaintPanel', 'TTyExPanel', 'TTyExPanelActions', 'TTyGridPanel',
+    'TTyRelativePanel', 'TTyScrollBox',
     'TTyScrollPanel', 'TTyControlBar', 'TTyCoolBar', 'TTyGridCell', 'TTyScrollContent',
     // T13 groups and decoration
     'TTyGroupBox', 'TTyRadioGroup', 'TTyCheckGroup', 'TTyToolGroupPanel', 'TTyCard', 'TTyEmpty',

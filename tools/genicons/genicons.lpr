@@ -417,6 +417,16 @@ begin
   Line(b,11,7.4,17,7.4,Ink,1.2); Line(b,6,13,18,13,Faint,1.2); Line(b,6,16.5,15,16.5,Faint,1.2);
 end;
 
+{ TTyExPanelActions: a header band with its caption line and, at the far end, two accent
+  buttons -- the action area of a collapsible panel's header }
+procedure GExPanelActions(b: TBGRABitmap);
+begin
+  RRect(b,3,7,21,17,2,Ink);
+  Line(b,6,12,11,12,Faint,1.3);
+  FillRRect(b,13,9.5,16,14.5,0.8,Acc);
+  FillRRect(b,17,9.5,20,14.5,0.8,Acc);
+end;
+
 { TTyGridPanel: a rounded frame carved into a 3x2 cell grid, top-left cell accent-filled }
 procedure GGridPanel(b: TBGRABitmap);
 begin
@@ -997,7 +1007,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..193] of TGlyph = (
+  Glyphs: array[0..194] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1127,6 +1137,7 @@ const
     (Name:'TTyScrollBox';         Draw:@GScrollBox),
     (Name:'TTyScrollPanel';       Draw:@GScrollPanel),
     (Name:'TTyExPanel';           Draw:@GExPanel),
+    (Name:'TTyExPanelActions';    Draw:@GExPanelActions),
     (Name:'TTyGridPanel';         Draw:@GGridPanel),
     (Name:'TTyRelativePanel';     Draw:@GRelativePanel),
     (Name:'TTyToolBarEx';         Draw:@GToolBarEx),

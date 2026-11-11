@@ -396,6 +396,9 @@ begin
       page (csNoFocus, like TTyTabSheet) whose body holds the real controls; the actions area
       is a row that hosts buttons. }
     TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions,
+    { The action area of a collapsible panel's header: a row that hosts buttons, never the
+      focus itself. }
+    TTyExPanelActions,
     { TTyDBRadioGroup is a radio group: its buttons take the focus, as TTyRadioGroup's do. }
     TTyDBRadioGroup,
     { TTyDBNavigator's buttons are painted rects, not windows, and a record command acts on the
