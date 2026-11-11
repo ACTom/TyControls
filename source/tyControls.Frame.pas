@@ -112,9 +112,6 @@ end;
 constructor TTyFrame.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  if ClassType = TTyFrame then   // TCustomFrame.Create sizes TFrame only
-    with GetControlClassDefaultSize do
-      SetInitialBounds(0, 0, CX, CY);
   { One offscreen buffer, blitted once: no erase flash before the themed fill. }
   DoubleBuffered := True;
   { After the form file is read: a Controller it names is the one to listen to. }
