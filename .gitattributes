@@ -21,3 +21,8 @@ tests/fixtures/terminal-zmodem/**  -text
 
 # The AI samples: hand-written streams, byte for byte (one of them uses CRLF on purpose).
 tests/fixtures/themebuilder/ai/**  -text
+
+# The TTyRichEdit samples: RTF and text files whose bytes are the test (code pages, BOMs,
+# CR LF against LF, a NUL at the end). scripts/gen-richedit-fixtures.py and README.md there.
+tests/fixtures/rtf/**  -text
+tests/fixtures/txt/**  -text

@@ -1,0 +1,5 @@
+﻿TyControls 富文本控件的文本样本。
+第二行：中英混排 mixed text，全角标点“”，和一个表情 😀。
+
+第四行前面是一个空行。
+The last line is plain ASCII.

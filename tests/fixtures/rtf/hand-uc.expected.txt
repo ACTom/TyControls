@@ -1,0 +1,7 @@
+，a
+中b
+中c
+中文
+€d
+😀e
+plain ASCII
