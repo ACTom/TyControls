@@ -141,6 +141,11 @@ TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyCo
   padding: 10px;
   shadow: 0px 1px 3px #0000001F;
 }
+/* A panel as a section of a stack: no frame of its own (see light.tycss) -- and here no
+   shadow either, which the variant would otherwise inherit from the rule above. Repeated
+   because this theme's TyExPanel rule replaces the built-in set for the key, variants
+   included. */
+TyExPanel.embedded { border-width: 0; border-radius: 0; shadow: 0 0 0 #00000000; }
 
 TyComboBox {
   background: var(--input-bg);

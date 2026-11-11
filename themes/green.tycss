@@ -138,6 +138,10 @@ TyPanel, TyScrollBox, TyExPanel, TyChart, TyCalculator, TyBevel, TySizeBox, TyCo
   border-radius: var(--radius);
   padding: 8px;
 }
+/* A panel as a section of a stack: no frame of its own (see light.tycss). Repeated here
+   because this theme's TyExPanel rule replaces the built-in set for the key, variants
+   included. */
+TyExPanel.embedded { border-width: 0; border-radius: 0; }
 
 TyComboBox {
   background: alpha(#FFFFFF, 0);

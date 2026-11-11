@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (335 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (337 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (247 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (248 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..334] of string = (
+  TyCatalogTokens: array[0..336] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -66,6 +66,8 @@ const
     '--empty-action-height',
     '--empty-gap',
     '--empty-image-size',
+    '--expander-actions-gap',
+    '--expander-actions-pad',
     '--expander-header-height',
     '--field-button-width',
     '--focus-ring',
@@ -355,7 +357,7 @@ const
     '--treeview-margin',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..246] of string = (
+  TyCatalogTypeKeys: array[0..247] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -416,6 +418,7 @@ const
     'TyEmpty',
     'TyEmptyImage',
     'TyExPanel',
+    'TyExPanelActions',
     'TyExPanelHeader',
     'TyForm',
     'TyGauge',

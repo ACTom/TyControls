@@ -123,6 +123,10 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 8px;' + LineEnding +
     '}' + LineEnding +
+    '/* A panel as a section of a stack: no frame of its own (see light.tycss). Repeated here' + LineEnding +
+    '   because this theme''s TyExPanel rule replaces the built-in set for the key, variants' + LineEnding +
+    '   included. */' + LineEnding +
+    'TyExPanel.embedded { border-width: 0; border-radius: 0; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -780,6 +784,10 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 8px;' + LineEnding +
     '}' + LineEnding +
+    '/* A panel as a section of a stack: no frame of its own (see light.tycss). Repeated here' + LineEnding +
+    '   because this theme''s TyExPanel rule replaces the built-in set for the key, variants' + LineEnding +
+    '   included. */' + LineEnding +
+    'TyExPanel.embedded { border-width: 0; border-radius: 0; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -4618,6 +4626,11 @@ begin
     '  padding: 10px;' + LineEnding +
     '  shadow: 0px 1px 3px #0000001F;' + LineEnding +
     '}' + LineEnding +
+    '/* A panel as a section of a stack: no frame of its own (see light.tycss) -- and here no' + LineEnding +
+    '   shadow either, which the variant would otherwise inherit from the rule above. Repeated' + LineEnding +
+    '   because this theme''s TyExPanel rule replaces the built-in set for the key, variants' + LineEnding +
+    '   included. */' + LineEnding +
+    'TyExPanel.embedded { border-width: 0; border-radius: 0; shadow: 0 0 0 #00000000; }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +

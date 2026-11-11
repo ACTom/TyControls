@@ -88,7 +88,7 @@ const
     (U: 'tyControls.Divider'; K: 'TyDivider'),
     (U: 'tyControls.Edit'; K: 'TyEdit,TyTextHint,TyTextSelection'),
     (U: 'tyControls.Empty'; K: 'TyEmpty,TyEmptyImage'),
-    (U: 'tyControls.ExPanel'; K: 'TyExPanel,TyExPanelHeader'),
+    (U: 'tyControls.ExPanel'; K: 'TyExPanel,TyExPanelActions,TyExPanelHeader'),
     (U: 'tyControls.Form'; K: 'TyCaptionButton,TyForm,TyTitleBar'),
     (U: 'tyControls.FormSurface'; K: 'TyFormSurface'),
     (U: 'tyControls.Frame'; K: 'TyForm,TyFrame'),

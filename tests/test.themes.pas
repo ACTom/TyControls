@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..245] of string = (
+  GGRID: array[0..248] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -659,6 +659,8 @@ const
       resolved surface per theme; test.modecoherence additionally holds it OPAQUE in both
       modes across every built-in skin (an absent resolve is the defect, not a style). }
     'TyScrollBox|', 'TyScrollContent|', 'TyExPanel|', 'TyExPanelHeader|',
+    { the panel as a section: its borderless variant, and the header's action area }
+    'TyExPanel|embedded', 'TyExPanelHeader|embedded', 'TyExPanelActions|',
     'TyToolGroupPanel|', 'TyToolSeparator|',
     'TySpeedButton|', 'TyGlyphContainerButton|',
     'TyRibbonAppMenu|', 'TyRibbonAppMenu|primary',
@@ -684,7 +686,7 @@ const
     'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
     'TyToolWindowBadge|', 'TyToolWindowDropZone|', 'TyToolWindowStripCommand|');
 
-  GMETRICS: array[0..133] of string = (
+  GMETRICS: array[0..135] of string = (
     '--alert-action-gap',
     '--alert-close-gap',
     '--alert-close-size',
@@ -720,6 +722,8 @@ const
     '--empty-action-height',
     '--empty-gap',
     '--empty-image-size',
+    '--expander-actions-gap',
+    '--expander-actions-pad',
     '--expander-header-height',
     '--field-button-width',
     '--font-size-sm',

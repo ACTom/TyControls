@@ -1021,8 +1021,23 @@ TyExPanel||4 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=802E1065 bd=FFC4B5
 TyExPanelHeader||0 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanelHeader||1 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanelHeader||2 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyExPanelHeader||3 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelHeader||3 => pres[1,12,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF7C3AED/2/0
 TyExPanelHeader||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanel|embedded|0 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanel|embedded|1 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanel|embedded|2 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanel|embedded|3 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanel|embedded|4 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=802E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=10,10,10,10 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelHeader|embedded|0 => pres[0,1,2,3,] bg=k1/FFEBE9F5 ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelHeader|embedded|1 => pres[0,1,2,3,] bg=k1/FFEBE9F5 ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelHeader|embedded|2 => pres[0,1,2,3,] bg=k1/FFEBE9F5 ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelHeader|embedded|3 => pres[0,1,2,3,12,] bg=k1/FFEBE9F5 ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF7C3AED/2/0
+TyExPanelHeader|embedded|4 => pres[0,1,2,3,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelActions||0 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelActions||1 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelActions||2 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelActions||3 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyExPanelActions||4 => pres[1,] bg=k0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||0 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||1 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||2 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1263,6 +1278,8 @@ metric --drop-arrow-width => 18
 metric --empty-action-height => 32
 metric --empty-gap => 8
 metric --empty-image-size => 48
+metric --expander-actions-gap => 2
+metric --expander-actions-pad => 4
 metric --expander-header-height => 26
 metric --field-button-width => 18
 metric --font-size-sm => 9

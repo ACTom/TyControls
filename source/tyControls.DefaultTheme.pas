@@ -318,6 +318,8 @@ begin
     '  --empty-action-height: 32px;' + LineEnding +
     '  --empty-gap: 8px;' + LineEnding +
     '  --empty-image-size: 48px;' + LineEnding +
+    '  --expander-actions-gap: 2px;' + LineEnding +
+    '  --expander-actions-pad: 4px;' + LineEnding +
     '  --expander-header-height: 26px;' + LineEnding +
     '  --field-button-width: 18px;' + LineEnding +
     '  --gallery-arrow-width: 18px;' + LineEnding +
@@ -588,6 +590,27 @@ begin
     '   '':hover'' on this key is the new axis — the control has tracked band hover all along' + LineEnding +
     '   but had no name to repaint through. */' + LineEnding +
     'TyExPanelHeader { color: var(--on-surface); }' + LineEnding +
+    '/* The header takes the keyboard (Space / Enter / Left / Right) when the panel is a tab stop,' + LineEnding +
+    '   so the focus ring is the band''s: round the header, inside the panel''s frame, not round the' + LineEnding +
+    '   whole panel. */' + LineEnding +
+    'TyExPanelHeader:focus { outline: 2px var(--focus-ring); }' + LineEnding +
+    '/* The header''s action area (TTyExPanelActions): a container at the trailing end of the band' + LineEnding +
+    '   for the section''s small buttons. No background ON PURPOSE -- without one it carries on the' + LineEnding +
+    '   band (tint, hover, focus ring) under its children; give it one to set the buttons apart.' + LineEnding +
+    '   Its row reads --expander-actions-pad / --expander-actions-gap. */' + LineEnding +
+    'TyExPanelActions { color: var(--on-surface); }' + LineEnding +
+    '/* A panel as a SECTION of a stack (StyleClass ''embedded'', as an embedded edit is one inside' + LineEnding +
+    '   its host): no frame and no rounding of its own, so sections stacked in a TTyAccordion read' + LineEnding +
+    '   as one surface, and the header band is what divides them -- tinted here, where the plain' + LineEnding +
+    '   panel''s is not, with a line along its top edge (on this key border-color / border-width' + LineEnding +
+    '   are that line, as on TyStatusBar; a tint alone is lost on a dark surface). A theme that' + LineEnding +
+    '   writes any TyExPanel rule of its own has to repeat the first line: its rule replaces the' + LineEnding +
+    '   whole built-in set for the key, variants included' + LineEnding +
+    '   (TestEveryBuiltinThemeCarriesTheEmbeddedSection). */' + LineEnding +
+    'TyExPanel.embedded             { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyExPanelHeader.embedded       { background: var(--surface-chrome); border-color: var(--border);' + LineEnding +
+    '                                 border-width: var(--input-border-width); }' + LineEnding +
+    'TyExPanelHeader.embedded:hover { background: var(--surface-hover); }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +

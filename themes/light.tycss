@@ -285,6 +285,8 @@
   --empty-action-height: 32px;
   --empty-gap: 8px;
   --empty-image-size: 48px;
+  --expander-actions-gap: 2px;
+  --expander-actions-pad: 4px;
   --expander-header-height: 26px;
   --field-button-width: 18px;
   --gallery-arrow-width: 18px;
@@ -555,6 +557,27 @@ TyScrollContent { background: var(--surface); }
    ':hover' on this key is the new axis — the control has tracked band hover all along
    but had no name to repaint through. */
 TyExPanelHeader { color: var(--on-surface); }
+/* The header takes the keyboard (Space / Enter / Left / Right) when the panel is a tab stop,
+   so the focus ring is the band's: round the header, inside the panel's frame, not round the
+   whole panel. */
+TyExPanelHeader:focus { outline: 2px var(--focus-ring); }
+/* The header's action area (TTyExPanelActions): a container at the trailing end of the band
+   for the section's small buttons. No background ON PURPOSE -- without one it carries on the
+   band (tint, hover, focus ring) under its children; give it one to set the buttons apart.
+   Its row reads --expander-actions-pad / --expander-actions-gap. */
+TyExPanelActions { color: var(--on-surface); }
+/* A panel as a SECTION of a stack (StyleClass 'embedded', as an embedded edit is one inside
+   its host): no frame and no rounding of its own, so sections stacked in a TTyAccordion read
+   as one surface, and the header band is what divides them -- tinted here, where the plain
+   panel's is not, with a line along its top edge (on this key border-color / border-width
+   are that line, as on TyStatusBar; a tint alone is lost on a dark surface). A theme that
+   writes any TyExPanel rule of its own has to repeat the first line: its rule replaces the
+   whole built-in set for the key, variants included
+   (TestEveryBuiltinThemeCarriesTheEmbeddedSection). */
+TyExPanel.embedded             { border-width: 0; border-radius: 0; }
+TyExPanelHeader.embedded       { background: var(--surface-chrome); border-color: var(--border);
+                                 border-width: var(--input-border-width); }
+TyExPanelHeader.embedded:hover { background: var(--surface-hover); }
 
 TyComboBox {
   background: var(--input-bg);
