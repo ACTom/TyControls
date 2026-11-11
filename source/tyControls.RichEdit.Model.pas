@@ -302,6 +302,10 @@ type
 
   TTyRichChangeEvent = procedure(Sender: TObject; const AChange: TTyRichChange) of object;
 
+  { How a plain text file is encoded (tyControls.RichEdit.TextIO reads and writes it).
+    teAuto only asks the reader to find out; teAnsi's code page is a number beside it. }
+  TTyTextEncoding = (teAuto, teUtf8, teUtf8Bom, teUtf16LE, teUtf16BE, teAnsi);
+
   TTyRichDocument = class;
 
   { Count paragraphs in a row that had the same old value: a format change over two million
@@ -348,6 +352,19 @@ type
     class procedure SetDefaultCharFormat(ADoc: TTyRichDocument; const AFormat: TTyCharFormat);
     class procedure SetPage(ADoc: TTyRichDocument; APaperWidth, APaperHeight, AMarginLeft,
       AMarginRight: Integer);
+    { Puts AText in place of ADoc's whole content - a file opened into an existing document.
+      ADoc takes AText over, also when this raises; AText must be one no document has used
+      (its paragraph slots nil). The history goes, every paragraph value of the old content
+      is let go of, an installed loader goes with the content it parsed, Modified becomes
+      False, and the source metadata is set; then OnChange reports one change of everything:
+      Kinds [rckText, rckFormat, rckStructure], Pos 0, the old and new lengths, paragraphs 0
+      with the old and new counts (a view throws all its layout away on it). Raises
+      ETyRichModel while a command runs or inside BeginUpdate .. EndUpdate. Without the
+      metadata: UTF-8 without a BOM, and the majority line break of AText's load scan. }
+    class procedure ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText); overload;
+    class procedure ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText;
+      AEncoding: TTyTextEncoding; ACodePage: Integer; AHasBom: Boolean;
+      ALineBreak: TTyRichSeparator); overload;
   end;
 
   { Parses paragraphs on demand. EnsureParsed calls LoadParagraph for a paragraph that has no
@@ -484,7 +501,13 @@ type
     FLiveData: Integer;
     FEditing: Integer;
     FValuesGone: Boolean;
+    FSourceEncoding: TTyTextEncoding;
+    FSourceCodePage: Integer;
+    FSourceHasBom: Boolean;
+    FDominantLineBreak: TTyRichSeparator;
     procedure Init;
+    procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
+      AHasBom: Boolean; ALineBreak: TTyRichSeparator);
     procedure SetDefaults(const AFormat: TTyCharFormat);
     procedure TextParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
     procedure TextDataDropped(Sender: TObject; AData: Pointer);
@@ -615,6 +638,17 @@ type
     property Loader: TTyRichParaLoader read FLoader;
     property Modified: Boolean read FModified write FModified;
     property OnChange: TTyRichChangeEvent read FOnChange write FOnChange;
+
+    { Where the content came from, so a text file goes back out as it came in; set by the
+      reader through TTyRichDocBuilder.ReplaceText. A new document: teUtf8, no BOM, code
+      page 0 (it is the ANSI code page only for teAnsi). }
+    property SourceEncoding: TTyTextEncoding read FSourceEncoding;
+    property SourceCodePage: Integer read FSourceCodePage;
+    property SourceHasBom: Boolean read FSourceHasBom;
+    { The kind of line break every inserted one becomes (InsertText turns CR, LF and CRLF in
+      the inserted text into it; the breaks already there stay as they are). The file's
+      majority kind; a new document, a tie or a text without one: the platform's. }
+    property DominantLineBreak: TTyRichSeparator read FDominantLineBreak;
   end;
 
 function TyDefaultCharFormat: TTyCharFormat;
@@ -625,6 +659,11 @@ function TyMergeParaFormat(const ABase: TTyParaFormat; AMask: TTyParaFormatMask;
   const AValue: TTyParaFormat): TTyParaFormat;
 { U+FFFC in UTF-8, the character an object occupies. }
 function TyRichObjectChar: UTF8String;
+{ The platform's line break (sLineBreak) as a separator kind. }
+function TyRichPlatformLineBreak: TTyRichSeparator;
+{ The kind most of the counted breaks are; a tie for the most, or no break at all: the
+  platform's. }
+function TyRichMajorityLineBreak(ACR, ALF, ACRLF: Int64): TTyRichSeparator;
 
 implementation
 
@@ -678,6 +717,81 @@ begin
   Result[1] := Chr($EF);
   Result[2] := Chr($BF);
   Result[3] := Chr($BC);
+end;
+
+function TyRichPlatformLineBreak: TTyRichSeparator;
+var
+  s: string;
+begin
+  // through a variable: comparing the constant itself leaves unreachable branches
+  s := sLineBreak;
+  if s = #13#10 then Result := rsCRLF
+  else if s = #13 then Result := rsCR
+  else Result := rsLF;
+end;
+
+function TyRichMajorityLineBreak(ACR, ALF, ACRLF: Int64): TTyRichSeparator;
+var
+  top: Int64;
+  n: Integer;
+begin
+  top := ACR;
+  if ALF > top then top := ALF;
+  if ACRLF > top then top := ACRLF;
+  n := 0;
+  if ACR = top then Inc(n);
+  if ALF = top then Inc(n);
+  if ACRLF = top then Inc(n);
+  if (top = 0) or (n > 1) then Result := TyRichPlatformLineBreak
+  else if ACRLF = top then Result := rsCRLF
+  else if ALF = top then Result := rsLF
+  else Result := rsCR;
+end;
+
+{ AText with every CR, LF and CRLF in it made ABreak; AText itself when it holds none. A CR
+  or LF byte is always a break in UTF-8 (no multi-byte sequence contains one). }
+function WithBreaks(const AText: UTF8String; ABreak: TTyRichSeparator): UTF8String;
+var
+  i, n, k: Integer;
+  found: Boolean;
+begin
+  found := False;
+  for i := 1 to Length(AText) do
+    if (AText[i] = #13) or (AText[i] = #10) then
+    begin
+      found := True;
+      Break;
+    end;
+  if not found then Exit(AText);
+  Result := '';
+  SetLength(Result, Length(AText) * 2);
+  n := Length(AText);
+  i := 1;
+  k := 0;
+  while i <= n do
+  begin
+    if (AText[i] = #13) or (AText[i] = #10) then
+    begin
+      if (AText[i] = #13) and (i < n) and (AText[i + 1] = #10) then Inc(i);
+      if ABreak <> rsLF then
+      begin
+        Inc(k);
+        Result[k] := #13;
+      end;
+      if ABreak <> rsCR then
+      begin
+        Inc(k);
+        Result[k] := #10;
+      end;
+    end
+    else
+    begin
+      Inc(k);
+      Result[k] := AText[i];
+    end;
+    Inc(i);
+  end;
+  SetLength(Result, k);
 end;
 
 { ---- TTyOpaqueAttrs ---- }
@@ -1327,6 +1441,21 @@ begin
   ADoc.FMarginRight := AMarginRight;
 end;
 
+class procedure TTyRichDocBuilder.ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText);
+begin
+  if AText = nil then
+    raise ETyRichModel.Create('ReplaceText needs a text');
+  ADoc.ResetContent(AText, teUtf8, 0, False, TyRichMajorityLineBreak(
+    AText.LoadedSeparators(rsCR), AText.LoadedSeparators(rsLF), AText.LoadedSeparators(rsCRLF)));
+end;
+
+class procedure TTyRichDocBuilder.ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText;
+  AEncoding: TTyTextEncoding; ACodePage: Integer; AHasBom: Boolean;
+  ALineBreak: TTyRichSeparator);
+begin
+  ADoc.ResetContent(AText, AEncoding, ACodePage, AHasBom, ALineBreak);
+end;
+
 { ---- TTyRichDocument: life ---- }
 
 constructor TTyRichDocument.Create;
@@ -1365,6 +1494,62 @@ begin
   FMaxUndoBytes := DefaultMaxUndoBytes;
   FText.OnParasChanged := @TextParasChanged;
   FText.OnParaDataDropped := @TextDataDropped;
+  FSourceEncoding := teUtf8;
+  FSourceCodePage := 0;
+  FSourceHasBom := False;
+  // over a buffer: the majority of its breaks; empty or lazy: none counted, the platform's
+  FDominantLineBreak := TyRichMajorityLineBreak(FText.LoadedSeparators(rsCR),
+    FText.LoadedSeparators(rsLF), FText.LoadedSeparators(rsCRLF));
+end;
+
+procedure TTyRichDocument.ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding;
+  ACodePage: Integer; AHasBom: Boolean; ALineBreak: TTyRichSeparator);
+var
+  c: TTyRichChange;
+begin
+  if AText = nil then
+    raise ETyRichModel.Create('ReplaceText needs a text');
+  if AText = FText then
+    raise ETyRichModel.Create('ReplaceText needs a new text');
+  if (FRunning <> nil) or (FUpdateCount > 0) or FInLoad then
+  begin
+    AText.Free;
+    // the history being built refers to the old content's paragraphs and pieces
+    raise ETyRichModel.Create('A document cannot be replaced while a command runs or ' +
+      'inside BeginUpdate .. EndUpdate');
+  end;
+  c := Default(TTyRichChange);
+  c.Kinds := [rckText, rckFormat, rckStructure];
+  c.OldLen := FText.Length;
+  c.OldParaCount := FText.ParaCount;
+  // as in Destroy: the history first, its records hold references to the values
+  ClearHistory;
+  FMergeBroken := False;
+  FHasPending := False;
+  FPending := Default(TTyRichChange);
+  FText.OnParasChanged := nil;
+  FText.OnParaDataDropped := nil;
+  FValuesGone := True;
+  while FFirstData <> nil do
+    DisposeData(FFirstData);
+  FValuesGone := False;
+  FText.Free;
+  FText := AText;
+  FText.OnParasChanged := @TextParasChanged;
+  FText.OnParaDataDropped := @TextDataDropped;
+  // a loader parses the content it was made for
+  if FOwnsLoader then FLoader.Free;
+  FLoader := nil;
+  FOwnsLoader := False;
+  FSourceEncoding := AEncoding;
+  FSourceCodePage := ACodePage;
+  FSourceHasBom := AHasBom;
+  if ALineBreak = rsNone then ALineBreak := TyRichPlatformLineBreak;
+  FDominantLineBreak := ALineBreak;
+  FModified := False;
+  c.NewLen := FText.Length;
+  c.NewParaCount := FText.ParaCount;
+  if Assigned(FOnChange) then FOnChange(Self, c);
 end;
 
 destructor TTyRichDocument.Destroy;
@@ -1983,11 +2168,15 @@ var
   fmt: TTyParaFormatId;
   cell: TTyRichCell;
   oldCount: Integer;
+  txt: UTF8String;
 begin
   c := Default(TTyRichChange);
   c.Pos := APos;
   FText.ParaOfPos(APos);   // range check before anything changes
   if AText = '' then Exit(NewUndo(c));
+  // new breaks take the document's majority kind, so saving writes the stored bytes as they
+  // are: the breaks already there stay what they were in the file
+  txt := WithBreaks(AText, FDominantLineBreak);
   if AFormat <> TyRichInheritFormat then CheckCharId(AFormat);
   k := FText.ParaOfPos(APos);
   d := DataOf(k);
@@ -2007,7 +2196,7 @@ begin
     Result.SealOld;
     Inc(FEditing);
     try
-      FText.Insert(APos, AText);
+      FText.Insert(APos, txt);
     finally
       Dec(FEditing);
     end;

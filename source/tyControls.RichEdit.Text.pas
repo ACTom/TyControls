@@ -174,6 +174,8 @@ type
     FScanToLoad: Boolean;
     FScan: TTyRichPieceArray;
     FScanCount: Integer;
+    FLoadSeps: array[0..3] of Int64;   // separators the load scan found, by stored kind
+    FLoadInvalid: Int64;               // bytes the load scan found that start no UTF-8
     FWalking: Integer;
     FOnParasChanged: TTyRichParasChangedEvent;
     FOnParaDataDropped: TTyRichParaDataEvent;
@@ -247,6 +249,14 @@ type
     function ParaLength(AIndex: Integer): TTyRichPos;
     function ParaOfPos(APos: TTyRichPos): Integer;
     function ParaSeparator(AIndex: Integer): TTyRichSeparator;
+    { How many separators of the kind CreateFromUtf8's scan found in the buffer (0 for
+      rsNone and for the other constructors). Counted during that one pass, so a file's
+      majority line break costs nothing more; edits do not change it. }
+    function LoadedSeparators(ASep: TTyRichSeparator): Int64;
+    { Bytes of the buffer CreateFromUtf8's scan found that are not part of a valid UTF-8
+      sequence (each is a character of its own); 0: the buffer is valid UTF-8. Counted in
+      the same pass, so telling UTF-8 from other text costs no pass of its own. }
+    property LoadedInvalidBytes: Int64 read FLoadInvalid;
 
     function PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
     procedure RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
@@ -1011,12 +1021,14 @@ const
   Below14 = QWord($0E0E0E0E0E0E0E0E);
 var
   p, q, bufEnd, start, chunkEnd: PByte;
-  chars: PtrInt;
+  chars, bad: PtrInt;
+  n: Integer;
   b, sep: Byte;
   x: QWord;
 begin
   p := ABuf;
   bufEnd := ABuf + ACount;
+  bad := 0;
   start := p;
   chars := 0;
   while p < bufEnd do
@@ -1044,7 +1056,12 @@ begin
              (unaligned(PWord(p + 1)^) and $C0C0 = $8080) then
             Inc(p, 3)
           else
-            Inc(p, SeqLen(p, bufEnd - p));
+          begin
+            n := SeqLen(p, bufEnd - p);
+            // a byte from $80 up that starts no sequence: the buffer is not valid UTF-8
+            if n = 1 then Inc(bad);
+            Inc(p, n);
+          end;
           Inc(chars);
         until (p >= chunkEnd) or (p^ < $80)
       else if (b = 10) or (b = 13) then
@@ -1058,6 +1075,7 @@ begin
         end
         else
           sep := sCR;
+        if FScanToLoad then Inc(FLoadSeps[sep]);
         Emit(ABase + (start - ABuf), p - start, chars + 1, AKind, sep);
         start := p;
         chars := 0;
@@ -1079,6 +1097,7 @@ begin
   end;
   if p > start then
     Emit(ABase + (start - ABuf), p - start, chars, AKind, sNone);
+  if FScanToLoad then Inc(FLoadInvalid, bad);
 end;
 {$POP}
 
@@ -1782,6 +1801,11 @@ begin
     Result := before.Seps
   else
     Result := FTotal.Seps;
+end;
+
+function TTyRichText.LoadedSeparators(ASep: TTyRichSeparator): Int64;
+begin
+  if ASep = rsNone then Result := 0 else Result := FLoadSeps[Ord(ASep)];
 end;
 
 function TTyRichText.ParaSeparator(AIndex: Integer): TTyRichSeparator;
