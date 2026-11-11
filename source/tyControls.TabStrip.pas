@@ -2213,20 +2213,22 @@ begin
   if (AFromIndex < 0) or (AFromIndex >= GetTabCount) then Exit;
   if (AToIndex < 0) or (AToIndex >= GetTabCount) or (AToIndex = AFromIndex) then Exit;
   Pinned := TabState(AFromIndex).Pinned;
+  { A hidden tab counts like any other: it is still in the host's order, and the block has
+    to be whole when the tab shows again. }
   if AToIndex < AFromIndex then
   begin
     { Toward the front the tab passes everything in [ATo, AFrom). An unpinned one stops
       behind the nearest pinned tab on its way. }
     if not Pinned then
       for I := AFromIndex - 1 downto AToIndex do
-        if GetTabVisibleAt(I) and TabState(I).Pinned then Exit(I + 1);
+        if TabState(I).Pinned then Exit(I + 1);
   end
   else
     { Toward the back it passes everything in (AFrom, ATo]. A pinned one stops in front of
       the nearest unpinned tab on its way. }
     if Pinned then
       for I := AFromIndex + 1 to AToIndex do
-        if GetTabVisibleAt(I) and not TabState(I).Pinned then Exit(I - 1);
+        if not TabState(I).Pinned then Exit(I - 1);
 end;
 
 { The largest rect around APt that no tab reaches into: every tab is cut away along the
