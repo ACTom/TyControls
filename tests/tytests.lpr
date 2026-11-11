@@ -21,7 +21,7 @@ uses
   test.bevel, test.divider, test.paintpanel, test.sizebox,
   test.radiogroup, test.checkgroup, test.toolgrouppanel,
   test.scrollbox, test.scrollpanel, test.expanel,
-  test.gridpanel, test.gridcell, test.relativepanel, test.frame,
+  test.gridpanel, test.gridcell, test.relativepanel, test.frame, test.themedcolor,
   test.toolbarex, test.controlbar, test.coolbar,
   test.headercontrol, test.listgrouppanel, test.listgrouppanel.entries,
   test.listgrouppanel.editor, test.structureeditors,

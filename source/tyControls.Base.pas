@@ -453,6 +453,32 @@ type
     FStyleLayoutDirty: Boolean;// #146: StyleClass, StyleOverride, Controller or Font changed
     FInStyleLayout: Boolean;
     procedure CheckStyleLayout;
+  private
+    { The LCL Color this control last gave itself (KeepColorThemed). A Color that is no
+      longer this one was set by somebody else, and is theirs. }
+    FThemedColor: TColor;
+    FThemedColorSet: Boolean;
+    FInThemedColor: Boolean;
+    function ColorIsThemed: Boolean;
+    function ParentColorIsStored: Boolean;
+    { A CONTAINER'S LCL COLOR IS WHAT IS BEHIND ITS CHILDREN. At run time, never in the
+      designer. A plain LCL control with ParentColor paints its parent's LCL Color, and a
+      TyControls control on such a plain control fills the corners outside its shape with
+      that colour (TyResolveParentBgFill, GetColorResolvingParent). On a themed container
+      that was the widgetset's default -- clBtnFace under a dark panel -- because the theme
+      paints the container and never told LCL. So a control that takes children carries the
+      colour: its own background when solid, composited over what is behind it when
+      translucent, what is behind it when it has none, the centre of a gradient (the exact
+      slice is what TTyFrame is for). Read in the REST state, so a hover does not move it.
+
+      Called where the answer can change and nowhere else: from CheckStyleLayout (the theme,
+      StyleClass, StyleOverride, Controller -- once per change, never from a paint), when
+      the parent's colour changes or the control gets a parent (CM_PARENTCOLORCHANGED, which
+      LCL sends for both and which carries a change down a chain of containers), and once
+      the form file is read. It assigns only a colour that differs, and only over a colour
+      that is not somebody else's: a Color the application set stays until it is set back
+      to clDefault. }
+    procedure KeepColorThemed;
   protected
     FHover, FPressed: Boolean;
     { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
@@ -460,6 +486,16 @@ type
     FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
     procedure RefitToStyle;
+    { Whether this control keeps its LCL Color themed for the controls on it
+      (KeepColorThemed): by default, a control that accepts child controls. One that gives
+      itself a Color for its own reasons answers False. }
+    function ThemesChildBackdrop: Boolean; virtual;
+    { The colour KeepColorThemed assigned is derived, not set: it is not written to a form
+      file, nor is the ParentColor = False that comes with assigning one -- in a descendant
+      that publishes them, at run time, the only place the colour exists. }
+    function ColorIsStored: Boolean; override;
+    property ParentColor stored ParentColorIsStored;
+    procedure Loaded; override;
     { #146: the theme, StyleClass, StyleOverride, Controller or Font changed, so what the style
       decides about the layout -- padding, a border, a caption band, a row pitch -- may have
       moved. Once per change, from Invalidate (a theme switch reaches a control only as that).
@@ -726,16 +762,20 @@ function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Inte
   needs -- a windowed child gets its own SLICE of the sweep instead of one flat colour, so
   it stops reading as a rectangular hole punched in the ramp. The returned fill is always
   OPAQUE (see the alpha notes in the body).
+
+  ARest asks for the backdrop as it is at REST: every styled parent on the way up is read in
+  its normal state, not the hover or focus it happens to be in. For an answer that is kept
+  (the LCL Color a container carries for its plain children), not painted now.
   Exposed for tests. }
 function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
-  out AFill: TTyFill): Boolean;
+  out AFill: TTyFill; ARest: Boolean = False): Boolean;
 { The styled-parent half of the above, for a container asking about itself: the opaque
   backdrop AContainer shows over ARect (in its own client space) when it is drawn in AStyle.
   No background, or a fully transparent one, is what is behind the container; a partly
   transparent one is composited over that; a gradient is the slice ARect covers. False when
   nothing can be said (an image background, or no background and no parent). }
 function TyStyledBackdropFill(AContainer: TControl; const AStyle: TTyStyleSet;
-  const ARect: TRect; out AFill: TTyFill): Boolean;
+  const ARect: TRect; out AFill: TTyFill; ARest: Boolean = False): Boolean;
 
 { The one-colour form of the above, for callers that can only take a TTyColor: an erase
   brush, an opacity floor, the corner gaps outside a rounded silhouette. Samples the fill
@@ -1864,7 +1904,7 @@ begin
 end;
 
 function TyStyledBackdropFill(AContainer: TControl; const AStyle: TTyStyleSet;
-  const ARect: TRect; out AFill: TTyFill): Boolean;
+  const ARect: TRect; out AFill: TTyFill; ARest: Boolean): Boolean;
 var
   back: TTyFill;
   under: TTyColor;
@@ -1882,11 +1922,11 @@ begin
     a group box had system-colored corners). The rect goes up translated, so the
     grandparent's own gradient is still sampled where the CHILD sits. }
   if not (tpBackground in AStyle.Present) then
-    Exit(TyResolveParentBgFill(AContainer, ARect, AFill));
+    Exit(TyResolveParentBgFill(AContainer, ARect, AFill, ARest));
   case AStyle.Background.Kind of
     tfkSolid:
       if TyAlphaOf(AStyle.Background.Color) = 0 then
-        Exit(TyResolveParentBgFill(AContainer, ARect, AFill))
+        Exit(TyResolveParentBgFill(AContainer, ARect, AFill, ARest))
       else if TyAlphaOf(AStyle.Background.Color) < 255 then
       begin
         { A PARTLY transparent container shows the backdrop through itself, so the opaque
@@ -1897,7 +1937,7 @@ begin
           repaint composites onto the previous one instead of replacing it. That is the
           GTK3 smearing on exactly the controls that DO call TyFillParentBg. Throwing the
           alpha away instead would keep it opaque but at the wrong hue. }
-        if not TyResolveParentBgFill(AContainer, ARect, AFill) then
+        if not TyResolveParentBgFill(AContainer, ARect, AFill, ARest) then
         begin
           AFill := Default(TTyFill);
           AFill.Kind := tfkSolid;
@@ -1926,7 +1966,7 @@ begin
           where the child sits so a translucent ramp over a ramp still tracks position. }
         if TyFillHasAlpha(AFill) then
         begin
-          if TyResolveParentBgFill(AContainer, ARect, back) then
+          if TyResolveParentBgFill(AContainer, ARect, back, ARest) then
             under := TyFillCentreColor(back, ARect)
           else
             under := TyRGB(255, 255, 255);
@@ -1938,7 +1978,7 @@ begin
 end;
 
 function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
-  out AFill: TTyFill): Boolean;
+  out AFill: TTyFill; ARest: Boolean): Boolean;
 var
   st: TTyStyleSet;
   r, g, b: Byte;
@@ -1968,7 +2008,13 @@ begin
   ph := par.ClientHeight; if ph <= 0 then ph := par.Height;
   pr := Rect(0, 0, pw, ph);
   if par is TTyCustomControl then
-    Result := TyStyledBackdropFill(par, TTyCustomControl(par).CurrentStyle, cr, AFill)
+  begin
+    if ARest then
+      st := TTyCustomControl(par).StyleInState([tysNormal])
+    else
+      st := TTyCustomControl(par).CurrentStyle;
+    Result := TyStyledBackdropFill(par, st, cr, AFill, ARest);
+  end
   { A themed container of another lineage (TTyFrame): the same rules, on the background it
     says is its own. Asked before ITyThemedBackground, which such a container may answer
     too and which carries one colour only. }
@@ -1976,7 +2022,7 @@ begin
   begin
     st := Default(TTyStyleSet);
     if bh.OwnBackground(st.Background) then Include(st.Present, tpBackground);
-    Result := TyStyledBackdropFill(par, st, cr, AFill);
+    Result := TyStyledBackdropFill(par, st, cr, AFill, ARest);
   end
   // A TTyForm parent: use its THEMED TyForm bg (correct at design time too — the LCL
   // Color is only themed by ApplyChromeTheme at runtime). Same value as Color at runtime.
@@ -2603,6 +2649,7 @@ begin
   try
     FStyleLayoutDirty := False;
     FStyleLayoutVer := ver;
+    KeepColorThemed;
     StyleLayoutChanged;
   finally
     FInStyleLayout := False;
@@ -2612,6 +2659,67 @@ end;
 procedure TTyCustomControl.StyleLayoutChanged;
 begin
   if ControlCount > 0 then ReAlign;
+end;
+
+function TTyCustomControl.ThemesChildBackdrop: Boolean;
+begin
+  Result := csAcceptsControls in ControlStyle;
+end;
+
+procedure TTyCustomControl.KeepColorThemed;
+var
+  f: TTyFill;
+  r: TRect;
+  w, h: Integer;
+  c: TColor;
+begin
+  if FInThemedColor or ([csDesigning, csLoading, csDestroying] * ComponentState <> []) then
+    Exit;
+  if not ThemesChildBackdrop then Exit;
+  { Ours to set while nobody else has: it still follows the parent, was never set, or is
+    the colour this procedure assigned last. }
+  if not (ParentColor or (Color = clDefault) or ColorIsThemed) then
+  begin
+    FThemedColorSet := False;
+    Exit;
+  end;
+  w := ClientWidth;  if w <= 0 then w := Width;
+  h := ClientHeight; if h <= 0 then h := Height;
+  r := Rect(0, 0, w, h);
+  if not TyStyledBackdropFill(Self, StyleInState([tysNormal]), r, f, True) then Exit;
+  c := TyColorToLCL(TyFillCentreColor(f, r));
+  if Color = c then Exit;   // already there, by ParentColor or from last time
+  FInThemedColor := True;   // SetColor invalidates, which comes back through CheckStyleLayout
+  try
+    Color := c;
+    FThemedColor := c;
+    FThemedColorSet := True;
+  finally
+    FInThemedColor := False;
+  end;
+end;
+
+function TTyCustomControl.ColorIsThemed: Boolean;
+begin
+  Result := FThemedColorSet and (Color = FThemedColor);
+end;
+
+function TTyCustomControl.ColorIsStored: Boolean;
+begin
+  Result := inherited ColorIsStored and not ColorIsThemed;
+end;
+
+function TTyCustomControl.ParentColorIsStored: Boolean;
+begin
+  Result := not ColorIsThemed;
+end;
+
+procedure TTyCustomControl.Loaded;
+begin
+  inherited Loaded;
+  { LCL has just copied the parent's colour into a ParentColor control (TControl.Loaded),
+    and will into this control's children, which are loaded after it. }
+  KeepColorThemed;
 end;
 
 procedure TTyCustomControl.FontChanged(Sender: TObject);
@@ -2734,7 +2842,13 @@ begin
     else if not TyResolveParentBg(Self, c) then
       Exit;
     if Color <> TyColorToLCL(c) then
+    begin
       Color := TyColorToLCL(c);
+      { a derived colour, like KeepColorThemed's: that one may replace it, and it is not
+        written to a form file either }
+      FThemedColor := Color;
+      FThemedColorSet := True;
+    end;
   finally
     FInEraseRefresh := False;
   end;
@@ -3737,6 +3851,14 @@ begin
   inherited WndProc(TheMessage);
   if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
     TyParentChainFontChanged(Self);   // #112
+  { The parent's colour changed, or this control was put on a parent: what is behind it may
+    be another colour now. After LCL's own handling, which copies the parent's colour into a
+    ParentColor control. }
+  if TheMessage.Msg = CM_PARENTCOLORCHANGED then
+    KeepColorThemed;
+  { Color := clDefault hands back a colour the application had set. }
+  if (TheMessage.Msg = CM_COLORCHANGED) and (Color = clDefault) then
+    KeepColorThemed;
   { #118: a control looks disabled when it OR a parent is (IsEnabled), and LCL repaints only
     the control whose Enabled changed -- so its windowed children are told too. Its graphic
     children repaint with it. }

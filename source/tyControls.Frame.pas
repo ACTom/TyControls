@@ -9,10 +9,13 @@ unit tyControls.Frame;
   A frame is scaffolding, not a surface: the default theme gives the TyFrame key no rule, so
   it paints what is behind it -- its host's themed background, the slice of it the frame
   covers -- and the controls on it see the host through it. A theme, a StyleClass or a
-  StyleOverride that gives it a background makes it a surface of its own. }
+  StyleOverride that gives it a background makes it a surface of its own.
+
+  Plain LCL controls on it (ParentColor) take its LCL Color, which at run time is the colour
+  behind them, as on every themed container. }
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.StyleModel;
 type
@@ -34,6 +37,17 @@ type
       and what it was rendered for. }
     FPaintCache: TTyPaintCache;
     FPaintKey: string;
+    { The LCL Color the frame last gave itself: see TTyCustomControl.KeepColorThemed, whose
+      twin this is. A frame's Invalidate is not the hot path a control's is (it has no
+      hover, no caret), so the frame asks on every one and needs no version to compare. }
+    FThemedColor: TColor;
+    FThemedColorSet: Boolean;
+    FInThemedColor: Boolean;
+    function ColorIsThemed: Boolean;
+    function ThemedColorNotStored: Boolean;
+    procedure KeepColorThemed;
+    procedure CMParentColorChanged(var Message: TLMessage); message CM_PARENTCOLORCHANGED;
+    procedure CMColorChanged(var Message: TLMessage); message CM_COLORCHANGED;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     { What is behind the frame when nothing themed is: its LCL colour, resolved. }
@@ -68,6 +82,8 @@ type
     function PaintKey: string;
     procedure Paint; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    function ColorIsStored: Boolean; override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -84,6 +100,10 @@ type
     { A CSS declaration block for THIS frame only, over the theme: 'background: var(--surface);'
       makes it a surface. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
+    { TFrame publishes these two, and assigning a Color switches both off. The colour a
+      themed frame gives itself at run time is derived, so none of it goes to a form file. }
+    property ParentBackground stored ThemedColorNotStored;
+    property ParentColor stored ThemedColorNotStored;
   end;
 
 implementation
@@ -136,6 +156,78 @@ begin
   { Everything that changes the frame's own look ends here; a child's damage does not. }
   if FPaintCache <> nil then FPaintCache.Drop;
   inherited Invalidate;
+  KeepColorThemed;   // a theme change reaches the frame only as this
+end;
+
+procedure TTyFrame.KeepColorThemed;
+var
+  st: TTyStyleSet;
+  f: TTyFill;
+  r: TRect;
+  w, h: Integer;
+  c: TColor;
+begin
+  if FInThemedColor or ([csDesigning, csLoading, csDestroying] * ComponentState <> []) then
+    Exit;
+  if not (ParentColor or (Color = clDefault) or ColorIsThemed) then
+  begin
+    FThemedColorSet := False;   // somebody else's colour
+    Exit;
+  end;
+  st := Default(TTyStyleSet);
+  if OwnBackground(st.Background) then Include(st.Present, tpBackground);
+  w := ClientWidth;  if w <= 0 then w := Width;
+  h := ClientHeight; if h <= 0 then h := Height;
+  r := Rect(0, 0, w, h);
+  if not TyStyledBackdropFill(Self, st, r, f, True) then Exit;
+  c := TyColorToLCL(TyFillCentreColor(f, r));
+  { A frame without a background on a themed host is already there: its host carries the
+    colour and the frame follows it by ParentColor. }
+  if Color = c then Exit;
+  FInThemedColor := True;
+  try
+    Color := c;
+    FThemedColor := c;
+    FThemedColorSet := True;
+  finally
+    FInThemedColor := False;
+  end;
+end;
+
+function TTyFrame.ColorIsThemed: Boolean;
+begin
+  Result := FThemedColorSet and (Color = FThemedColor);
+end;
+
+function TTyFrame.ColorIsStored: Boolean;
+begin
+  Result := inherited ColorIsStored and not ColorIsThemed;
+end;
+
+function TTyFrame.ThemedColorNotStored: Boolean;
+begin
+  Result := not ColorIsThemed;
+end;
+
+procedure TTyFrame.CMParentColorChanged(var Message: TLMessage);
+begin
+  inherited;
+  KeepColorThemed;   // a new parent, or the parent's colour moved
+end;
+
+procedure TTyFrame.CMColorChanged(var Message: TLMessage);
+begin
+  inherited;
+  if Color = clDefault then
+    KeepColorThemed;   // handed back
+end;
+
+procedure TTyFrame.Loaded;
+begin
+  inherited Loaded;
+  { a frame read as part of a form gets its parent's colour here without a message, and
+    without a repaint when that colour is the one it had }
+  KeepColorThemed;
 end;
 
 function TTyFrame.GetVersion: string;
