@@ -127,6 +127,7 @@ type
     procedure TheSlotPaintsTheMarkItNames;
     procedure TheSlotHitRectIsThePaintedRectOnEveryBand;
     procedure TheSlotFollowsItsTabWhenTheStripScrollsOrFolds;
+    procedure TheCaptionStepsAsideForTheSlot;
     { --- clicks ------------------------------------------------------------------------ }
     procedure AClickOnThePinFiresOnTabPinClickAndDoesNotClose;
     procedure APinWithoutAHandlerDoesNothing;
@@ -145,6 +146,7 @@ type
     procedure ThePreviewFontStyleIsTheThemesToken;
     procedure ThePreviewLookIsAVariantOfTheTabStyle;
     procedure APreviewCaptionIsMeasuredWithTheFontItIsDrawnIn;
+    procedure APreviewTabFadesBetweenItsOwnLooks;
     { --- ink --------------------------------------------------------------------------- }
     procedure TextColorInksTheCaptionAndTheDot;
     procedure TextColorLeavesTheCloseGlyphAndThePinToTheTheme;
@@ -922,6 +924,38 @@ begin
   AssertEquals('folded: and a click there is the pin of tab 7', 7, FPin.LastIndex);
 end;
 
+procedure TTabStatesTest.TheCaptionStepsAsideForTheSlot;
+var
+  bmp: TBGRABitmap;
+  tab, slot, ink: TRect;
+  plainOffset, plainWidth: Integer;
+begin
+  Build(False);
+  bmp := Shot;
+  try
+    tab := FStrip.TabRect(1);
+    ink := InkBounds(bmp, tab);
+    plainOffset := ink.Left - tab.Left;
+    plainWidth := ink.Right - ink.Left;
+  finally
+    bmp.Free;
+  end;
+  { The slot is added to the tab; the caption's own box is what it was, so the caption is
+    where it was in it -- not centred across a tab that now holds a dot as well. }
+  FProbe.ModifiedCaps := '|Beta|';
+  bmp := Shot;
+  try
+    tab := FStrip.TabRect(1);
+    slot := FStrip.TabSlotRect(1);
+    ink := InkBounds(bmp, Rect(tab.Left, tab.Top, slot.Left, tab.Bottom));
+    AssertEquals('the caption starts where it did', plainOffset, ink.Left - tab.Left);
+    AssertEquals('and is all there', plainWidth, ink.Right - ink.Left);
+    AssertTrue('clear of the slot', ink.Right < slot.Left);
+  finally
+    bmp.Free;
+  end;
+end;
+
 { --- clicks --------------------------------------------------------------------------- }
 
 procedure TTabStatesTest.AClickOnThePinFiresOnTabPinClickAndDoesNotClose;
@@ -1193,6 +1227,41 @@ begin
   end;
   AssertEquals('the italic caption is measured as italic',
     italic - upright, TabWidth(3) - TabWidth(4));
+end;
+
+procedure TTabStatesTest.APreviewTabFadesBetweenItsOwnLooks;
+var
+  bmp: TBGRABitmap;
+  tab: TRect;
+  p: TBGRAPixel;
+begin
+  { A preview look with grounds of its own: black at rest, red when selected. The selected
+    tab's cross-fade has to run between THOSE two, not between the plain tab's. }
+  Build(False, tpTop, False,
+    'TyTab.preview { background: #000000; color: #FFFFFF; }' +
+    'TyTab.preview:active { background: #FF0000; color: #FFFFFF; }');
+  FProbe.PreviewCaps := '|Beta|';
+  FStrip.TabIndex := 1;
+  tab := FStrip.TabRect(1);
+  bmp := Shot;
+  try
+    p := bmp.GetPixel(tab.Left + 2, tab.Top + 2);
+    AssertTrue('settled: the preview tab''s selected ground',
+      (p.red > 240) and (p.green < 15) and (p.blue < 15));
+  finally
+    bmp.Free;
+  end;
+  FStrip.DoArmFade;
+  FStrip.DoAdvance(40);
+  AssertTrue('fixture: the fade is in flight', (FStrip.FadeEased > 0) and (FStrip.FadeEased < 1));
+  bmp := Shot;
+  try
+    p := bmp.GetPixel(tab.Left + 2, tab.Top + 2);
+    AssertTrue('in flight: somewhere between black and red -- no white of the plain tab in it',
+      (p.green < 15) and (p.blue < 15) and (p.red > 15) and (p.red < 240));
+  finally
+    bmp.Free;
+  end;
 end;
 
 { --- ink ------------------------------------------------------------------------------ }
