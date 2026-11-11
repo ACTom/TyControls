@@ -905,6 +905,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RichEdit.TextIO.pas"/>
         <UnitName Value="tyControls.RichEdit.TextIO"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.RtfRead.pas"/>
+        <UnitName Value="tyControls.RichEdit.RtfRead"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

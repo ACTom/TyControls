@@ -70,6 +70,17 @@ function TyRichCodePageSupported(ACodePage: Integer): Boolean;
 { Strict: no overlongs, no surrogates, nothing above U+10FFFF, nothing cut short. }
 function TyRichIsUtf8(ABuf: PByte; ACount: PtrInt): Boolean;
 
+{ For the RTF reader, which decodes bytes one at a time by the code page of the font in
+  effect: the code page's table (the one text files are converted with, the same on every
+  platform), found once; nil when the code page is not supported. }
+function TyRichCodePageTable(ACodePage: Integer): Pointer;
+{ AByte starts a two-byte character in the table's code page. }
+function TyRichCodePageIsLead(ATable: Pointer; AByte: Byte): Boolean;
+{ The code point of the single byte ALead (ATrail < 0) or of the pair ALead ATrail; 0 when it
+  is no character. Unlike a text file, where only the first of two sequences that read as
+  the same character counts as text, both read as that character here. }
+function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;
+
 implementation
 
 uses
@@ -446,6 +457,48 @@ begin
   // a UTF-8 system has no ANSI code page; text that is not UTF-8 there is most likely
   // Windows Western
   if (Result = 65001) or not TyRichCodePageSupported(Result) then Result := 1252;
+end;
+
+function TyRichCodePageTable(ACodePage: Integer): Pointer;
+begin
+  if not TyRichCodePageSupported(ACodePage) then Exit(nil);
+  Result := TableFor(ACodePage);
+end;
+
+function TyRichCodePageIsLead(ATable: Pointer; AByte: Byte): Boolean;
+begin
+  Result := TCodePageTable(ATable).Cls[AByte] = 2;
+end;
+
+function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;
+var
+  t: TCodePageTable;
+  e, code: Cardinal;
+  s: string;
+begin
+  t := TCodePageTable(ATable);
+  if ATrail < 0 then
+  begin
+    case t.Cls[ALead] of
+      0: Exit(ALead);
+      1: Exit(CodeOf(t.Single[ALead]));
+    end;
+    s := Chr(ALead);
+  end
+  else
+  begin
+    if ATrail > 255 then Exit(0);
+    if t.Pair <> nil then
+    begin
+      e := t.Pair[(ALead shl 8) or ATrail];
+      if e <> 0 then Exit(CodeOf(e));
+    end;
+    s := Chr(ALead) + Chr(ATrail);
+  end;
+  // the table leaves out what does not write back as it was read (the second of two
+  // sequences for one character); ask the converter itself about that rare case
+  Result := 0;
+  if PackChar(ConvOf(t.CodePage)(s), code) <> 0 then Result := code;
 end;
 
 { ---- reading ---- }

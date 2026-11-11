@@ -193,10 +193,13 @@ type
   TTyRichOpaque = class(TTyRichObject)
   private
     FBytes: RawByteString;
+    FDisplayText: UTF8String;
   public
-    constructor Create(const ABytes: RawByteString);
+    constructor Create(const ABytes: RawByteString; const ADisplayText: UTF8String = '');
     function Clone: TTyRichObject; override;
     property Bytes: RawByteString read FBytes;
+    // what stands for it on screen, as plain text: a field's result ('' for most blocks)
+    property DisplayText: UTF8String read FDisplayText;
   end;
 
   TTyRichTable = class;
@@ -1146,15 +1149,16 @@ begin
   Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf);
 end;
 
-constructor TTyRichOpaque.Create(const ABytes: RawByteString);
+constructor TTyRichOpaque.Create(const ABytes: RawByteString; const ADisplayText: UTF8String);
 begin
   inherited Create;
   FBytes := ABytes;
+  FDisplayText := ADisplayText;
 end;
 
 function TTyRichOpaque.Clone: TTyRichObject;
 begin
-  Result := TTyRichOpaque.Create(FBytes);
+  Result := TTyRichOpaque.Create(FBytes, FDisplayText);
 end;
 
 { ---- tables ---- }

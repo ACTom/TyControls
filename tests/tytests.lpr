@@ -285,7 +285,8 @@ uses
   test.richedit.text,
   test.richedit.model,
   test.richedit.commands,
-  test.richedit.textio;
+  test.richedit.textio,
+  test.richedit.rtfread;
 
 type
   TTyTestRunner = class(TTestRunner)
