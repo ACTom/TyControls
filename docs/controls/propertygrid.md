@@ -13,6 +13,8 @@ PropGrid.SelectObjects([Button1, Button2]);      // 同时改两个按钮
 
 它建在 [TTyValueListEditor](valuelisteditor.md) 上,外观、键盘操作、两列布局和可拖的分隔条都和值列表编辑器一样。不同的是行由表格自己生成:从对象的 RTTI 读出来,写回也走 RTTI。只用 RTL 的 `TypInfo`,不依赖 IDE 的 `PropEdits`,所以就在主包 `tycontrols` 里,运行时程序直接能用。
 
+**对象不在你的进程里怎么办。** 属性表格要的是本进程里的一个 `TPersistent`。被检查的东西在另一个进程里(界面设计器里被设计的窗体)、不是 Pascal 对象,或者它的类没有编译进你的程序,属性表格就读不到它。这种情况直接用值列表编辑器:按对象的描述建行,在 `OnValueChanging` 里把改动交给对面,分类、过滤、展开状态、多个对象都有对应的做法,见[不靠 RTTI 的对象检查器](valuelisteditor.md#8-不靠-rtti-的对象检查器)。
+
 完整演示见 [examples/propertygrid](../../examples/propertygrid/):左边几个控件,点哪个右边就检查哪个,按住 Ctrl 点可以多选;顶部有过滤框(`FilterText`)、「只看可写的」(`OnFilterProperty`)、「分类」和「显示事件」几个开关;检查左边的字符串表格时,可以给它增删列。
 
 ---
@@ -70,6 +72,7 @@ PropGrid.SelectObjects([Button1, Button2]);      // 同时改两个按钮
 | `Refresh` | 只重读每一行的值,不重建。对象被代码改过之后调它。如果对象的结构变了(集合多了一项、子对象从无到有),它会自动重建,同样保留展开状态和当前行 |
 | `PropertyAt(ARow, out AInstance, out APropName): Boolean` | 这一行改的是哪个对象的哪个属性。集合元素那一行返回整个集合属性;集合项本身那一行、分类标题行、以及不是表格生成的行返回 False |
 | `SelectedRow`、`RowPath(ARow)` | 当前行;一行的点号路径(格式同 `ExpandedProperties`,集合项是 `Items[1]`) |
+| `FindRow(APath)`、`DisplayRow(i)`、`DisplayIndexOf(ARow)` | 从值列表编辑器继承来的:按路径找行(`Font.Size`、`Items[1].Caption`、`@Layout`),显示位置和行互相换算 |
 | `AddCollectionItem` / `DeleteCollectionItem` / `MoveCollectionItem` | 用代码增删、移动集合项,参数是路径(§8) |
 | `PropertyOrder` | `poAlphabetical`(默认,和对象查看器一样按名字排序,不区分大小写)或 `poDeclared`(按类里声明的顺序,祖先的在前) |
 | `TypeFilter: TTypeKinds` | 显示哪些种类的属性。默认是除 `tkMethod` 以外的全部,也就是不显示事件 |
@@ -128,6 +131,8 @@ OnPropertyError(Sender; AInstance: TPersistent; const APropName: string; E: Exce
 - 选了多个对象时,每个对象各问、各发一次(§7)。
 
 一个属性的 setter 常常会顺带改别的属性(`AutoSize` 改 `Width`、`Constraints` 改尺寸),所以每次写回之后,表格会把同一对象的其他行全部重读一遍。
+
+值列表编辑器的 `OnValueChanging(Sender, ARow, var AText, var AAllow)` 在属性表格上也会问,排在 `OnPropertyChanging` 前面:它看到的是行和用户输入的原文,可以改写文字或者拒绝。它没有发布,要用就在代码里挂。一般用 `OnPropertyChanging` 就够了,它告诉你的是对象和属性名。
 
 ### 5.3 改造行:`OnGetPropertyRow`
 
@@ -387,6 +392,8 @@ end;
 - **清空之后恢复原来的展开状态。** 开始过滤时表格记下当时的 `ExpandedProperties`,清空时原样放回。过滤期间手动展开、收起的行,清空后不保留。
 - 和 `OnFilterProperty` 同时生效:先问事件,事件留下的再按文字过滤。
 - 被过滤掉的行只是藏起来,对象、值、展开状态都还在;当前行如果还看得见,清空前后都保持不变。
+
+这是属性表格自己的过滤:按属性名,在生成行的时候做。值列表编辑器的 `OnFilterRow` 在这里不会被问到,要按别的条件筛用 `OnFilterProperty`(§5.1)。
 
 表格里不内置搜索框:一个自绘控件里嵌编辑框,要牵扯焦点、Tab 顺序和主题,而且只要一个表格的场合会凭空多出一块。放一个 `TTyEdit`,在 `OnChange` 里设 `FilterText`,就是上面那几行。
 
