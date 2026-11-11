@@ -379,10 +379,14 @@ const
   cName = 'zz-complete-test';
 var
   items: TStringList;
+  model: TTyStyleModel;
 begin
+  { A model alive loads the text on registration. Without one nothing loads it, and whether a
+    suite that ran before left one alive would decide if a text that does not load is refused. }
+  model := TTyStyleModel.Create;
   items := TStringList.Create;
   try
-    TyRegisterAddOnCss(cName, ':root{--zz-gap:7px;}' + LineEnding + 'TyZzWidget{color:red;}');
+    TyRegisterAddOnCss(cName, ':root{--zz-gap:7px;}' + LineEnding + 'TyZzWidget{color:#ff0000;}');
     try
       TyCssCompletionItems('color: var(--', False, items);
       AssertTrue('the add-on token is offered', items.IndexOf('--zz-gap') >= 0);
@@ -396,6 +400,7 @@ begin
     end;
   finally
     items.Free;
+    model.Free;
   end;
 end;
 
