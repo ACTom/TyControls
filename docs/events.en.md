@@ -116,7 +116,7 @@ TyControls' hard rule is that visuals belong to the theme (`.tycss`): colors, fo
 
 | Not exposed | Why |
 |--------------|------|
-| `Color` / `ParentColor` | Background comes from the theme's `background` token |
+| `Color` / `ParentColor` | Background comes from the theme's `background` token. At run time a container sets its `Color` to the themed colour behind its children, for the plain LCL controls on it to inherit; see "Mixing in plain LCL controls" in [lcl-differences.en.md](lcl-differences.en.md) |
 | `ParentFont` (`Font` is published) | A name, style, colour or size set on the control, or on a container it sits in, wins over the theme, and `StyleOverride` wins over that. The form's own font does not count: the form-wide font is the theme's `--font-family` / `--font-size-base`. A value set equal to the container's is the container's. The same goes for the text inside a control (list rows, cells, tabs, headers), except that the selected or current item keeps the theme's highlight colour |
 | `Brush` | Fills come from the painter + theme |
 | `Bevel*` (Inner/Outer/Kind/Width/Edges) | Native 3D borders conflict with theme border semantics |

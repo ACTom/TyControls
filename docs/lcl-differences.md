@@ -34,6 +34,27 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **`TTyColorDialog.Color` 是 `TTyColor`(`$AARRGGBB`,带透明度),不是 `TColor`。** 直接把 `clRed` 赋给它，得到的是一个透明的蓝色;要按 `TColor` 读写，用 `LCLColor`。
 - **在 `TTyDateTimePicker` 里按 `Delete` 会把整个日期清成 NULL**,和 `N` 键一样(LCL 只认 `N`)。不想让用户清空，设 `NullInputAllowed := False`。
 
+## 与普通 LCL 控件混用
+
+主题化的容器上可以直接放普通的 LCL 控件(`TPanel`、`TFrame`、`TScrollBox` ……)。运行时，能放子控件的 TyControls 容器(面板、分组框、卡片、工具窗口、页面等)会让自己的 LCL `Color` 等于**子控件身后的那个颜色**:
+
+| 容器的主题背景 | 它的 `Color` |
+|------|------|
+| 纯色 | 这个颜色 |
+| 半透明 | 叠在容器身后的颜色上之后的结果 |
+| 没有(比如分组框) | 容器身后的颜色 |
+| 渐变 | 渐变中点的颜色 |
+
+`ParentColor = True` 的普通控件于是自己就画成这个颜色，再放到它上面的 TyControls 控件，圆角外侧取到的也是它，不再是 `clBtnFace`。换主题、换 `Controller`、改 `StyleClass` / `StyleOverride`、把容器挪到别的父控件上，颜色都跟着变。
+
+- **只在运行时。** 设计器里容器的 `Color` 不动，这个颜色也不会写进 `.lfm`。
+- **取静止状态的样式。** 鼠标悬停、获得焦点不会改它。
+- **你设过的 `Color` 归你。** 给容器的 `Color` 赋过值之后库不再碰它;赋回 `clDefault`(`TTyFrame` 也可以设 `ParentColor := True`)就重新跟主题。
+- **渐变只能给一个平色。** 普通 LCL 控件只会画一种颜色。要在渐变宿主上看不出接缝，把视图做成 [TTyFrame](controls/frame.md),它画的是宿主背景在自己位置上的那一片。
+- 自己写的容器不想要这个行为，重写 `ThemesChildBackdrop` 返回 `False`。
+
+窗体(`TTyForm`)一直是这样做的:`ApplyChromeTheme` 把纯色的窗体背景写进窗体的 `Color`。
+
 ## `AutoSize` 不起作用的控件
 
 下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`、`TTyTerminalView`（要固定行列用 `SizeForGrid`）。

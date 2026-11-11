@@ -34,6 +34,27 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 - **`TTyColorDialog.Color` is a `TTyColor` (`$AARRGGBB`, with alpha), not a `TColor`.** `clRed` assigned to it is a transparent blue; use `LCLColor` to read and write a `TColor`.
 - **`Delete` in a `TTyDateTimePicker` clears the whole date to NULL**, as `N` does (LCL knows only `N`). Set `NullInputAllowed := False` to keep the user from clearing it.
 
+## Mixing in plain LCL controls
+
+Plain LCL controls (`TPanel`, `TFrame`, `TScrollBox`, ...) can sit directly on a themed container. At run time a TyControls container that takes child controls (a panel, a group box, a card, a tool window, a page, ...) keeps its LCL `Color` equal to **the colour behind its children**:
+
+| The container's themed background | Its `Color` |
+|------|------|
+| Solid | That colour |
+| Translucent | That colour composited over what is behind the container |
+| None (a group box, say) | What is behind the container |
+| Gradient | The colour at the middle of the gradient |
+
+A plain control with `ParentColor = True` therefore paints that colour itself, and a TyControls control placed on it takes the same colour outside its rounded corners, where it used to get `clBtnFace`. The colour follows a theme switch, another `Controller`, a change of `StyleClass` / `StyleOverride`, and a move to another parent.
+
+- **At run time only.** In the designer the container's `Color` is left alone, and the colour is never written to an `.lfm`.
+- **Read from the style at rest.** Hovering or focusing the container does not move it.
+- **A `Color` you set is yours.** Once you assign the container's `Color` the library leaves it alone; assign `clDefault` (on a `TTyFrame`, `ParentColor := True` works too) and it follows the theme again.
+- **A gradient becomes one flat colour.** A plain LCL control paints a single colour. For a view that is seamless on a gradient host, make it a [TTyFrame](controls/frame.md): it paints the slice of the host's background it covers.
+- A container of your own that does not want this overrides `ThemesChildBackdrop` to return `False`.
+
+The form (`TTyForm`) has always done this: `ApplyChromeTheme` writes a solid form background into the form's `Color`.
+
 ## Controls `AutoSize` does not apply to
 
 These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`, `TTyTerminalView` (use `SizeForGrid` for a fixed grid).

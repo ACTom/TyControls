@@ -26,7 +26,7 @@ FView.Align := alClient;
 - 放在它上面的控件透过它看到宿主。圆角按钮四个角外侧、透明的标签和分组框，取到的都是宿主的背景，不是 `clBtnFace`。
 - 想让它自己成为一块面，在主题里给 `TyFrame` 写规则，或者给这一个 frame 设 `StyleClass` / `StyleOverride`。
 
-普通的 `TFrame` 仍然可以用，只是它不参与主题：它画的是自己的 LCL 颜色，上面的 TyControls 控件四角取到的也是这个颜色。
+普通的 `TFrame` 仍然可以用，只是它不参与主题：它画的是从容器继承来的 LCL 颜色(见 [../lcl-differences.md](../lcl-differences.md)「与普通 LCL 控件混用」)，上面的 TyControls 控件四角取到的也是这个颜色，渐变宿主上是一块平色。
 
 ## 2. 单元与 typeKey
 
@@ -96,8 +96,10 @@ TyFrame.side { background: var(--surface-chrome); border-width: 1px; border-colo
 
 - frame 的绘制有缓存：子控件引起的重绘只贴缓存，不重画整块。frame 自己的样式、宿主的背景或 frame 的位置变了，下一次绘制会重画。
 - 图片主题（窗体背景是图片）下，frame 画的是窗体照片在它所在位置的那一片，这种情况不走缓存。
+- 放在 frame 上的普通 LCL 控件(`ParentColor = True`)和别的主题化容器上一样，取到 frame 身后的颜色：运行时 frame 的 LCL `Color` 等于它自己的纯色背景，没有背景时跟着宿主。这个颜色只在运行时有，不写进 `.lfm`。
 
 ## 8. 相关文档
 
 - [ttyform.md](ttyform.md) —— 窗口的祖类
 - [../tycss-reference.md](../tycss-reference.md) §8.4 —— `TyFrame` 是基础层刻意不定义的键
+- [../lcl-differences.md](../lcl-differences.md) —— 与普通 LCL 控件混用
