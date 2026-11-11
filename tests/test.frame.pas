@@ -738,6 +738,7 @@ end;
 procedure TTyFrameTest.TestFreeingTheControllerLeavesTheFrameOnTheDefault;
 var
   other: TTyStyleController;
+  n: Integer;
 begin
   MakeFixture(cSolidHost);
   other := TTyStyleController.Create(nil);
@@ -747,6 +748,9 @@ begin
   other.Free;
   AssertNull('the reference is dropped with the controller', FFrame.Controller);
   AssertRgb('and the frame paints on: the host', $20, $40, $60, PixelAt(100, 60));
+  n := FFrame.Invalidates;
+  TyDefaultController.Changed;
+  AssertTrue('listening to the default controller from then on', FFrame.Invalidates > n);
 end;
 
 procedure TTyFrameTest.TestStyleClassAndStyleOverrideRepaint;
@@ -805,7 +809,8 @@ begin
     AssertEquals('a fresh frame writes no StyleClass', 0, Pos('StyleClass', txt));
     AssertEquals('nor a StyleOverride', 0, Pos('StyleOverride', txt));
     AssertEquals('nor a Controller', 0, Pos('Controller', txt));
-    AssertEquals('nor a Version', 0, Pos('Version =', txt));
+    { '  Version', not 'Version': Lazarus 3.0 writes TFrame's own LCLVersion here }
+    AssertEquals('nor a Version', 0, Pos('  Version =', txt));
     f.StyleClass := 'side';
     f.StyleOverride := 'background: #102030;';
     txt := Streamed;
