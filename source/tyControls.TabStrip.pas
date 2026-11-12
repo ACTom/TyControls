@@ -72,6 +72,21 @@ type
   { What a tab's slot -- the square at its trailing end where the close glyph goes -- shows. }
   TTyTabSlotMark = (tsmNone, tsmClose, tsmModified, tsmPin);
 
+  { #223. Which closable tabs show their close button: the token --tab-close-show.
+    tcsAlways: every one. tcsActive: the current tab. tcsHover: the current tab and the tab
+    under the pointer. A button that is not shown keeps its slot, so no tab changes width. }
+  TTyTabCloseShow = (tcsAlways, tcsActive, tcsHover);
+
+  { #223. How one strip's close buttons look, read once for a paint. A Has... that is False
+    leaves that part as the theme draws it: the mark in the tab's ink, no chip at rest, the
+    TyTabClose chip under the pointer. Radius is in logical px; -1 is the TyTabClose rule's. }
+  TTyTabCloseLook = record
+    Show: TTyTabCloseShow;
+    HasInk, HasChip, HasHoverInk, HasHoverChip: Boolean;
+    Ink, Chip, HoverInk, HoverChip: TTyColor;
+    Radius: Integer;
+  end;
+
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
 
@@ -184,6 +199,11 @@ type
     procedure SetImagesWidth(AValue: Integer);
     procedure RebuildLayout(APPI: Integer);
     procedure DoCloseClick(AIndex: Integer);
+    { #223: see the implementations. }
+    function  CloseShowMode: TTyTabCloseShow;
+    function  CloseShown(AIndex, AHoverTab: Integer; AShow: TTyTabCloseShow): Boolean;
+    function  CloseColorToken(const AName: string; out AColor: TTyColor): Boolean;
+    procedure ReadCloseLook(out ALook: TTyTabCloseLook);
     function  TabHPx(APPI: Integer): Integer;
     function  IconPx(APPI: Integer): Integer;
     function  TabCaptionWidth(const ACaption: string;
@@ -195,8 +215,10 @@ type
       the box a caption is given is the box its own font needs. }
     function  TabTextStyle(APreview: Boolean; APreviewFlags: Integer;
                            const AStates: TTyStateSet; AInk: Boolean): TTyStyleSet;
-    { What the slot shows: AHot is whether the pointer is over the tab. }
-    function  SlotMarkOf(AIndex: Integer; const AState: TTyTabState; AHot: Boolean): TTyTabSlotMark;
+    { What the slot shows: AHot is whether the pointer is over the tab, AShow which closable
+      tabs show their close button (--tab-close-show, #223). }
+    function  SlotMarkOf(AIndex: Integer; const AState: TTyTabState; AHot: Boolean;
+                         AShow: TTyTabCloseShow): TTyTabSlotMark;
     { A rect with no tab in it that holds APt, for the hint to be asked again on leaving. }
     function  TabFreeRectAt(const APt: TPoint): TRect;
     procedure SetOnGetTabState(const AValue: TTyTabGetStateEvent);
@@ -277,7 +299,8 @@ type
     procedure DoTabPinClick(AIndex: Integer); virtual;
     { Paints AMark into ASlot, the tab's slot as drawn. ACaptionInk is the ink of the tab's
       caption (its TextColor when the state gives one), which the dot shares; AGlyphInk is
-      the theme's tab ink, which the close glyph and the pin keep. Override to draw a mark of
+      the mark's own ink: the theme's tab ink for the pin, and for the close glyph that or
+      the colour --tab-close-color names (#223). Override to draw a mark of
       your own -- a spinner, a lock -- and call inherited for the rest. }
     procedure DrawTabSlotMark(APainter: TTyPainter; AIndex: Integer; const ASlot: TRect;
       AMark: TTyTabSlotMark; ACaptionInk, AGlyphInk: TTyColor); virtual;
@@ -395,7 +418,9 @@ type
 
     function TabCount: Integer;
     function TabCaption(AIndex: Integer): string;
-    { Public pure-ish geometry for tests: device px, (0,0)-local }
+    { Public pure-ish geometry for tests: device px, (0,0)-local. The close rect is the
+      tab's close SLOT: a closable tab has it whether or not --tab-close-show shows a
+      button in it (#223). }
     function TyTabHeaderRect(AIndex: Integer): TRect;
     function TyTabCloseRect(AIndex: Integer): TRect;
     { Header overflow scroll geometry (device px, (0,0)-local).
@@ -499,7 +524,8 @@ type
         Measures and paints again -- a state can change a tab's width (a slot appearing, a
         preview font) and through it a side band's thickness.
       TabSlotMark: what the tab's slot shows at this moment, pointer included -- a modified
-        tab's dot is the close glyph (or the pin) while the pointer is over the tab.
+        tab's dot is the close glyph (or the pin) while the pointer is over the tab. Not the
+        close glyph of a tab whose button --tab-close-show keeps off screen (#223).
       TabSlotRect: the slot as drawn (device px, mirror applied), or an empty rect for a tab
         that has none. The one rect the mark is painted in and a click is tested against. }
     function TabState(AIndex: Integer): TTyTabState;
@@ -568,8 +594,8 @@ type
     { The tab index whose slot the pointer is on, when a click there would act -- the close
       glyph, or a pin -- or -1. Distinct from whole-tab hover (FHoverTab): the mark lights up
       on its own so the user sees a precise target. A dot nothing can be done with (a
-      modified tab on a strip without close buttons) is not one. Read-only; driven by
-      MouseMove/MouseLeave. }
+      modified tab on a strip without close buttons) is not one, nor is a close button
+      --tab-close-show keeps off screen (#223). Read-only; driven by MouseMove/MouseLeave. }
     property TyTabHoverClose: Integer read FHoverClose;
 
     { On by default. When enabled and the control has a window handle, switching
@@ -693,6 +719,8 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+function TyTabCloseShowOf(const AText: string): TTyTabCloseShow;
+
 implementation
 
 {$IF LCL_FULLVERSION < 4000000}
@@ -702,6 +730,20 @@ uses
 
 type
   TTyDialogCharAccess = class(TControl);   // DialogChar is protected
+
+{ #223. The word of --tab-close-show. Anything else, and nothing, is 'always'. }
+function TyTabCloseShowOf(const AText: string): TTyTabCloseShow;
+var
+  v: string;
+begin
+  v := LowerCase(Trim(AText));
+  if v = 'active' then
+    Result := tcsActive
+  else if v = 'hover' then
+    Result := tcsHover
+  else
+    Result := tcsAlways;
+end;
 
 { TTyCustomTabStrip }
 
@@ -811,6 +853,51 @@ end;
 function TTyCustomTabStrip.GetTabClosableAt(AIndex: Integer): Boolean;
 begin
   Result := FTabsClosable;
+end;
+
+{ #223. --tab-close-show as this strip reads it: its own StyleOverride, then the theme. }
+function TTyCustomTabStrip.CloseShowMode: TTyTabCloseShow;
+begin
+  Result := TyTabCloseShowOf(StyleToken('--tab-close-show', 'always'));
+end;
+
+{ #223. Whether a CLOSABLE tab's button is on screen. AHoverTab is the tab the pointer is on:
+  FHoverTab for a paint, and the tab itself for a press or a move that landed on it -- the
+  pointer is on that tab whether or not a move was seen first (after a close the next tab
+  slides under a pointer that never moved). The paint, the hover scan and the press ask
+  here, so a button that is not drawn is never lit and never closes. }
+function TTyCustomTabStrip.CloseShown(AIndex, AHoverTab: Integer;
+  AShow: TTyTabCloseShow): Boolean;
+begin
+  case AShow of
+    tcsActive: Result := AIndex = FTabIndex;
+    tcsHover:  Result := (AIndex = FTabIndex) or (AIndex = AHoverTab);
+  else
+    Result := True;
+  end;
+end;
+
+{ #223. A colour token that may not be set. StyleColor answers a missing token, and one
+  whose value is no colour, with the default it was handed, so the token is read against
+  two different defaults: a real colour comes back the same both times. }
+function TTyCustomTabStrip.CloseColorToken(const AName: string; out AColor: TTyColor): Boolean;
+const
+  ProbeA = TTyColor($01020304);
+  ProbeB = TTyColor($04030201);
+begin
+  AColor := StyleColor(AName, ProbeA);
+  Result := (AColor <> ProbeA) or (StyleColor(AName, ProbeB) = ProbeA);
+end;
+
+{ #223. The close-button tokens a paint needs, read once for it. }
+procedure TTyCustomTabStrip.ReadCloseLook(out ALook: TTyTabCloseLook);
+begin
+  ALook.Show := CloseShowMode;
+  ALook.HasInk       := CloseColorToken('--tab-close-color', ALook.Ink);
+  ALook.HasChip      := CloseColorToken('--tab-close-background', ALook.Chip);
+  ALook.HasHoverInk  := CloseColorToken('--tab-close-hover-color', ALook.HoverInk);
+  ALook.HasHoverChip := CloseColorToken('--tab-close-hover-background', ALook.HoverChip);
+  ALook.Radius := StyleMetric('--tab-close-radius', -1);
 end;
 
 procedure TTyCustomTabStrip.DoSelectTab(AIndex: Integer);
@@ -1232,7 +1319,7 @@ begin
   TabH      := TabHPx(APPI);
   Pad       := MulDiv(ActiveController.Metric('--tab-padding', TyTabPad), APPI, 96);
   MinW      := MulDiv(ActiveController.Metric('--tab-min-width', TyTabMinWidth), APPI, 96);
-  CloseSize := MulDiv(ActiveController.Metric('--tab-close-size', TyTabCloseSize), APPI, 96);
+  CloseSize := MulDiv(StyleMetric('--tab-close-size', TyTabCloseSize), APPI, 96);   // #223
   Gap       := MulDiv(ActiveController.Metric('--tab-gap', TyTabGap),  APPI, 96);
   Margin    := MulDiv(ActiveController.Metric('--tab-margin', TyTabMargin),  APPI, 96);
   CloseSlot := CloseSize + Gap;
@@ -2098,13 +2185,20 @@ end;
 { What the slot shows. A modified tab shows its dot until the pointer is over the tab; then
   the slot is what it would have been without the dot -- the pin of a pinned tab, else the
   close glyph where the tab can be closed. With neither behind it the dot has nothing to
-  give way to and stays. }
+  give way to and stays.
+
+  #223: the close glyph is there only where --tab-close-show puts a button. A closable tab
+  whose button is kept off screen shows nothing -- and a modified one keeps its dot, pointer
+  or not, as it has nothing to give way to. The pin is not a close button and always shows. }
 function TTyCustomTabStrip.SlotMarkOf(AIndex: Integer; const AState: TTyTabState;
-  AHot: Boolean): TTyTabSlotMark;
+  AHot: Boolean; AShow: TTyTabCloseShow): TTyTabSlotMark;
+var
+  hoverTab: Integer;
 begin
   if AState.Modified and not AHot then Exit(tsmModified);
   if AState.Pinned then Exit(tsmPin);
-  if GetTabClosableAt(AIndex) then Exit(tsmClose);
+  if AHot then hoverTab := AIndex else hoverTab := -1;
+  if GetTabClosableAt(AIndex) and CloseShown(AIndex, hoverTab, AShow) then Exit(tsmClose);
   if AState.Modified then Exit(tsmModified);
   Result := tsmNone;
 end;
@@ -2113,7 +2207,7 @@ function TTyCustomTabStrip.TabSlotMark(AIndex: Integer): TTyTabSlotMark;
 begin
   if (AIndex < 0) or (AIndex >= GetTabCount) or not GetTabVisibleAt(AIndex) then
     Exit(tsmNone);
-  Result := SlotMarkOf(AIndex, TabState(AIndex), AIndex = FHoverTab);
+  Result := SlotMarkOf(AIndex, TabState(AIndex), AIndex = FHoverTab, CloseShowMode);
 end;
 
 function TTyCustomTabStrip.TabSlotRect(AIndex: Integer): TRect;
@@ -2130,7 +2224,9 @@ begin
     FOnTabPinClick(Self, AIndex);
 end;
 
-{ The three marks. The close glyph is the painter's. The dot and the pin are drawn here
+{ The three marks. The close glyph is the painter's, unless the tabs have an icon-font glyph
+  of their own (--glyph-tab-close, which one strip can set for itself; #223) or the theme
+  has one for every close mark (--glyph-close). The dot and the pin are drawn here
   with the painter's path calls -- neither is a TTyGlyphKind -- behind the same icon-font
   override seam every glyph has: --glyph-tab-modified and --glyph-tab-pin.
 
@@ -2157,7 +2253,9 @@ begin
   if (w <= 0) or (h <= 0) then Exit;
   case AMark of
     tsmClose:
-      APainter.DrawGlyph(ASlot, tgClose, AGlyphInk, 1);
+      if not TyTryDrawGlyphText(APainter, ASlot, StyleToken('--glyph-tab-close', ''),
+               AGlyphInk) then
+        TyDrawGlyph(APainter, ActiveController, ASlot, tgClose, AGlyphInk, 1);
     tsmModified:
       if not TyTryDrawGlyphOverride(APainter, ActiveController, ASlot,
                '--glyph-tab-modified', ACaptionInk) then
@@ -2446,6 +2544,10 @@ var
   TabStates: TTyStateSet;
   CloseHi, BaseFill: TTyFill;
   BaseW, IconIdx: Integer;
+  Look: TTyTabCloseLook;
+  LookRead, OnClose: Boolean;
+  CloseInk: TTyColor;
+  CloseRadius: Integer;
   FadeEased: Single;
   disp: string;
   mp: Integer;
@@ -2548,6 +2650,7 @@ begin
       ClipBand := Band;
     P.Bitmap.ClipRect := P.Dev(ClipBand);   // the layer counts device pixels (#83)
 
+    LookRead := False;
     for I := 0 to GetTabCount - 1 do
     begin
       if not GetTabVisibleAt(I) then Continue;   // zero-wide, but skip the ink too
@@ -2652,22 +2755,58 @@ begin
 
       if HasSlot then
       begin
-        { Independent slot hover highlight: a token-driven chip behind the mark
-          (TyTabClose = var(--overlay-hover) fill + var(--radius)) plus the mark at full
-          opacity, so the close glyph -- or the pin -- lights up on its own when the pointer
-          is precisely over it. The glyph itself correctly stays TextColor (the
-          tier-b "ink" of the convention). }
-        if I = FHoverClose then
+        { #223. The close-button tokens are read at the first slot, so a strip without one
+          pays nothing for them. They are the close glyph's: a pin and a dot keep the tab's
+          ink, and a pin takes only the theme's chip under the pointer. }
+        if not LookRead then
+        begin
+          ReadCloseLook(Look);
+          LookRead := True;
+        end;
+        Mark := SlotMarkOf(I, St, I = FHoverTab, Look.Show);
+        { Lit only while what the pointer came for is still there: a slot whose close
+          button went off screen under a resting pointer (the selection moved) is not. }
+        OnClose := (I = FHoverClose) and (Mark in [tsmClose, tsmPin]);
+
+        { The mark's ink: the tab's own (the tier-b "ink" of the convention) unless a token
+          names one for the close glyph. }
+        CloseInk := TabStyle.TextColor;
+        if Mark = tsmClose then
+        begin
+          if Look.HasInk then CloseInk := Look.Ink;
+          if OnClose and Look.HasHoverInk then CloseInk := Look.HoverInk;
+        end;
+
+        { The chip behind the mark, so the close glyph -- or the pin -- lights up on its own
+          when the pointer is precisely over it. At rest there is one only behind a close
+          glyph, when --tab-close-background names it. Under the pointer it is
+          --tab-close-hover-background, alone; without that token, and for a pin, it is the
+          theme's TyTabClose fill (var(--overlay-hover), an overlay made to tint what is
+          under it), laid over the resting chip when there is one. }
+        if OnClose or ((Mark = tsmClose) and Look.HasChip) then
         begin
           CloseS := ActiveController.Model.ResolveStyle('TyTabClose', '', []);
+          CloseRadius := CloseS.BorderRadius;
+          if Look.Radius >= 0 then CloseRadius := Look.Radius;
           CloseHi := Default(TTyFill);
-          CloseHi.Kind  := tfkSolid;
-          CloseHi.Color := CloseS.Background.Color;
-          P.FillBackground(CloseRect, CloseHi, CloseS.BorderRadius);
+          CloseHi.Kind := tfkSolid;
+          if (Mark = tsmClose) and Look.HasChip and not (OnClose and Look.HasHoverChip) then
+          begin
+            CloseHi.Color := Look.Chip;
+            P.FillBackground(CloseRect, CloseHi, CloseRadius);
+          end;
+          if OnClose then
+          begin
+            if (Mark = tsmClose) and Look.HasHoverChip then
+              CloseHi.Color := Look.HoverChip
+            else
+              CloseHi.Color := CloseS.Background.Color;
+            P.FillBackground(CloseRect, CloseHi, CloseRadius);
+          end;
         end;
-        Mark := SlotMarkOf(I, St, I = FHoverTab);
+
         if Mark <> tsmNone then
-          DrawTabSlotMark(P, I, CloseRect, Mark, CaptionInk, TabStyle.TextColor);
+          DrawTabSlotMark(P, I, CloseRect, Mark, CaptionInk, CloseInk);
       end;
     end;
 
@@ -2847,7 +2986,8 @@ begin
             where nothing closes) is not a button: the click is the tab's. }
           if OnSlot and TabState(I).Pinned then
             DoTabPinClick(I)
-          else if OnSlot and GetTabClosableAt(I) then
+          else if OnSlot and GetTabClosableAt(I)
+                  and CloseShown(I, I, CloseShowMode) then   { #223: a hidden button selects }
             DoCloseClick(I)
           else
           begin
@@ -2948,7 +3088,8 @@ begin
           begin
             CloseRect := ToScreenRect(FCloseRects[I]);
             if HitRect(CloseRect, X, Y)
-               and (GetTabClosableAt(I) or TabState(I).Pinned) then
+               and (TabState(I).Pinned
+                    or (GetTabClosableAt(I) and CloseShown(I, I, CloseShowMode))) then   { #223 }
               NewHoverClose := I;
           end;
           Break;

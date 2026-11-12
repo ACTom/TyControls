@@ -246,7 +246,8 @@ Controls that read their tokens this way so far: `TTyListView` (and `TTyShellLis
 length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
 §3.5; `TTyMemo`, for `--memo-tab-size`; `TTyPopover`, for its six `--popover-*` tokens (it is not a
-control, but its `StyleOverride` follows the same rule). Other controls take the theme's values only,
+control, but its `StyleOverride` follows the same rule); `TTyTabSet` and `TTyPageControl`, for the
+close-button tokens of §3.8. Other controls take the theme's values only,
 for now -- except for `--over-parent-chrome` (§3.6), which every control reads.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
@@ -420,6 +421,61 @@ Each part's `-bg`, `-color`, `-font-size` and `-font-weight` work in a `StyleOve
 
 The row height is `DefaultRowHeight`, or `--row-height` when the host did not set it. Row-number slot
 width is `IndicatorWidth`. Scroll bars are themed as everywhere else (`TyScrollBar`, `--scrollbar-size`).
+
+### 3.8 The close button of a tab
+
+With `TabsClosable` on, these tokens decide which tabs of a `TTyTabSet` or a `TTyPageControl` show a
+close button and what it looks like. Like the tokens of §3.4, they go in the theme, or in one
+control's `StyleOverride`.
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--tab-close-show` | `always` / `active` / `hover` | `always` | Which closable tabs show the button. `always`: all of them. `active`: the current tab only. `hover`: the current tab and the tab under the pointer. |
+| `--tab-close-size` | a length | `14px` | The side of the button's slot. |
+| `--tab-close-color` | a colour | the tab's text colour | The colour of the close mark. |
+| `--tab-close-background` | a colour | none | A chip behind the mark while the pointer is elsewhere. |
+| `--tab-close-hover-color` | a colour | `--tab-close-color` | The colour of the mark while the pointer is on the button. |
+| `--tab-close-hover-background` | a colour | the `background` of the `TyTabClose` rule | The chip while the pointer is on the button. When set, it is the only chip drawn; otherwise the `TyTabClose` background is drawn, over the resting chip if there is one. |
+| `--tab-close-radius` | a length | the `border-radius` of the `TyTabClose` rule | The corner radius of the chip. More than half the slot makes a circle, e.g. `999px`. |
+| `--glyph-tab-close` | an icon-font glyph, written as in §9 item 16 | `--glyph-close`, then the built-in × | The close mark on tabs. |
+
+A button that is not shown keeps its slot: the tab is as wide as with it, so tabs do not shift when
+the selection or the pointer moves. A click where a hidden button would be selects the tab and does
+not fire `OnTabClose`.
+
+A modified tab's dot and a pinned tab's pin (the tab states) are drawn in the same slot. These tokens
+are the close mark's only: a modified tab whose button is hidden keeps its dot; a pin always shows
+and takes its click, in the tab's text colour, over the `TyTabClose` chip under the pointer; and a
+middle click (`MiddleClickClose`) closes a tab whatever `--tab-close-show` says.
+
+```css
+/* the whole application: only the current tab has a close button */
+:root { --tab-close-show: active; }
+```
+
+A round red button on one tab strip, in its `StyleOverride`:
+
+```text
+--tab-close-background: #e5484d; --tab-close-color: #ffffff;
+--tab-close-radius: 999px; --tab-close-hover-background: #c62828;
+```
+
+Like every other strip until the pointer is on the button, then red:
+
+```text
+--tab-close-hover-background: #e5484d; --tab-close-hover-color: #ffffff; --tab-close-radius: 999px;
+```
+
+Another icon, here `circle-x` from the bundled Lucide set. That font is registered by the first
+Lucide component: a `TTyLucideImageList` or a `TTyLucideIconFont` on a form, or a call to
+`TyLucideFont`.
+
+```text
+--glyph-tab-close: "lucide" "\e084";
+```
+
+Before 3.0.5 there were only `--tab-close-size` and the `TyTabClose` rule, `--tab-close-size` was
+read from the theme only, and the close mark on tabs did not follow `--glyph-close`.
 
 ---
 
@@ -1642,6 +1698,8 @@ Engine-level limitations (each expanded in the sections above):
     - `--glyph-check` / `--glyph-check-indeterminate` — check box check mark / indeterminate state;
     - `--glyph-radio` — radio button dot;
     - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — title bar button icons;
+      `--glyph-close` is also the close mark of `TTyTag`, `TTyAlert`, `TTyNotification` and of tabs;
+    - `--glyph-tab-close` — the close mark on tabs only (§3.8); without it tabs use `--glyph-close`;
     - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / scroll bar arrows;
     - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` / `--glyph-chevron-up` — expand/collapse
       chevrons: tree view, grid tree column, list view groups, ListGroupPanel, ExPanel, the inspector (ValueListEditor /
