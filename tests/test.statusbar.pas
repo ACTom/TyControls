@@ -159,6 +159,7 @@ type
     procedure TestAPaintAtAnotherPPIScalesTheControlsRoom;
     procedure TestTheTextKeepsItsAlignmentInTheSpaceThatIsLeft;
     procedure TestOneControlServesOnePanel;
+    procedure TestAssigningPanelsCopiesThemButLeavesTheirControls;
     procedure TestAControlTakenByAnotherBarLeavesThisOne;
     procedure TestFreeingTheControlClearsThePanel;
     procedure TestAControlMovedOffTheBarLeavesItsPanel;
@@ -1274,6 +1275,34 @@ begin
   AssertTrue('panel 0 let go of it', FBar.Panels[0].Control = nil);
   AssertSame('panel 1 has it', box, FBar.Panels[1].Control);
   AssertEquals('and it moved there', 108, box.Left);
+end;
+
+{ `Bar.Panels := Other.Panels` is the published property's own setter, and it raised: a panel had
+  no Assign, so TPersistent refused to copy one into another. A panel's Control is not copied --
+  one control serves one panel, so the copy would only take it away from the original. }
+procedure TStatusBarPanelControlTest.TestAssigningPanelsCopiesThemButLeavesTheirControls;
+var
+  box: TStatusBarTestBox;
+  other: TStatusBarProbe;
+begin
+  box := NewBox(16, 12);
+  FBar.Panels[1].Control := box;
+  FBar.Panels[1].Text := 'two';
+  FBar.Panels[1].Width := 77;
+  FBar.Panels[1].Alignment := taRightJustify;
+  FBar.Panels[2].Style := psOwnerDraw;
+  other := TStatusBarProbe.Create(FForm);
+  other.Parent := FForm;
+  other.Panels.Add;
+  other.Panels := FBar.Panels;
+  AssertEquals('as many panels', FBar.Panels.Count, other.Panels.Count);
+  AssertEquals('text', 'two', other.Panels[1].Text);
+  AssertEquals('width', 77, other.Panels[1].Width);
+  AssertTrue('alignment', other.Panels[1].Alignment = taRightJustify);
+  AssertTrue('style', other.Panels[2].Style = psOwnerDraw);
+  AssertTrue('the copy has no control', other.Panels[1].Control = nil);
+  AssertSame('the original keeps its control', box, FBar.Panels[1].Control);
+  AssertSame('which stays on its own bar', FBar, box.Parent);
 end;
 
 procedure TStatusBarPanelControlTest.TestAControlTakenByAnotherBarLeavesThisOne;
