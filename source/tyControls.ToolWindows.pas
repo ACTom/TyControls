@@ -7691,13 +7691,9 @@ begin
     ResetGesture(twgeDiscard);
   if AWindow = FGesture.DesignWindow then FGesture.DisarmDesign;
   if AWindow = FContextWindow then FContextWindow := nil;
-  { 键盘的焦点项、按着的激活键记着它:清掉(焦点项回到默认的落点,那一下按键作废)。 }
+  { 键盘的焦点项记着它:清掉,焦点项回到默认的落点。按着的激活键记着的那一站不用清 —— 松开时
+    它得还是焦点项才算数(KeyUp),而焦点项刚清掉了。 }
   if AWindow = FKeyStop.Window then FKeyStop := Default(TTyToolWindowStripStop);
-  if AWindow = FKeyArmedStop.Window then
-  begin
-    FKeyArmedStop := Default(TTyToolWindowStripStop);
-    FKeyArmed := 0;
-  end;
   { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废;最大化的底栏先还原(spec §6.4)。 }
   if EdgeResizing and (Length(FRegistered) = 0) then ResetGesture(twgeCancel);
   if Length(FRegistered) = 0 then Maximized := False;
@@ -8149,11 +8145,6 @@ begin
   if ACommand = FCommandHover then FCommandHover := nil;
   if ACommand = FContextCommand then FContextCommand := nil;
   if ACommand = FKeyStop.Command then FKeyStop := Default(TTyToolWindowStripStop);
-  if ACommand = FKeyArmedStop.Command then
-  begin
-    FKeyArmedStop := Default(TTyToolWindowStripStop);
-    FKeyArmed := 0;
-  end;
   if ACommand = FCommandPressed then
   begin
     FCommandPressed := nil;
@@ -8481,7 +8472,6 @@ begin
   { 每次进来都落在当前页的图标上(没有就第一站),不记上一次停在哪;鼠标点进来的,MouseDown
     接着把它挪到按下的那一项。 }
   FKeyStop := DefaultStop(StripStops);
-  FKeyArmed := 0;
   inherited DoEnter;
 end;
 

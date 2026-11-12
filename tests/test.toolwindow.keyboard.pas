@@ -715,6 +715,11 @@ begin
   AssertEquals('前提:在第二个窗口上', 'w1', Here);
   b.Free;
   AssertEquals('窗口走了:回到当前页的图标', 'w0', Here);
+  { 同上:新建的窗口多半落在刚释放的那块内存上。它一进来是当前页,把当前页换回第一个再看。 }
+  b := NewWindow;
+  FBar.ActiveWindow := a;
+  AssertEquals('新建的窗口不继承走掉那个窗口的焦点', 'w0', Here);
+  b.Free;
   a.Free;
   AssertEquals('一站都没有了', '-', Here);
   AssertFalse('没有站:Down 不吃', FBar.Tap(VK_DOWN));
