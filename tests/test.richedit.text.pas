@@ -16,6 +16,8 @@ uses
   tyControls.RichEdit.Text;
 
 type
+  ETestStop = class(Exception);
+
   TRefUnits = array of UTF8String;
   TPosArray = array of Int64;
 
@@ -25,6 +27,15 @@ type
     FChanges: TStringList;
     FDropped: TList;
     FRuns: array of TTyRichByteRun;
+    FWalkText: TTyRichText;
+    FWalkPieces: TTyRichPieces;
+    FWalkTried, FWalkRefused: Integer;
+    FWalkRaise: Boolean;
+    procedure TryEdits;
+    function EditInMap(AIndex: Integer; AData: Pointer): Pointer;
+    procedure EditInWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    procedure EditInRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
     function NextRandom(AMax: Integer): Integer;
     function RandomText(AMaxUnits: Integer): UTF8String;
     procedure ParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
@@ -52,6 +63,7 @@ type
     procedure TestDeepTreeStaysConsistent;
     procedure TestSmallInsertsDoNotMakeALeafEach;
     procedure TestTypingNeverJoinsBytesCountedApart;
+    procedure TestWalksRefuseAnEditFromTheirCallback;
   end;
 
   { Decodes paragraph i from a table; the "file offset" of paragraph i is i*1000+7, so the
@@ -1010,6 +1022,104 @@ begin
     AssertBytesEqual('typed', 'a中éb', t.GetText(0, t.Length));
     AssertEquals('integrity of the typed piece', '', t.CheckIntegrity);
   finally
+    t.Free;
+  end;
+end;
+
+{ What a walk's callback may not do: every way of changing the text, each tried once. They
+  all aim at the end of a text of one leaf, so that a walk without its guard goes on over
+  memory that is still there and the test fails instead of crashing. }
+procedure TTyRichTextTest.TryEdits;
+var
+  kind: Integer;
+begin
+  if FWalkText.GetText(0, 1) <> 'p' then
+    raise Exception.Create('a walk must let its callback read the text');
+  for kind := 0 to 2 do
+  begin
+    Inc(FWalkTried);
+    try
+      case kind of
+        0: FWalkText.Insert(FWalkText.Length, 'z');
+        1: FWalkText.Delete(FWalkText.Length - 1, 1);
+      else
+        FWalkText.RestorePieces(FWalkText.Length, FWalkPieces);
+      end;
+    except
+      on ETyRichText do Inc(FWalkRefused);
+    end;
+  end;
+  if FWalkRaise then raise ETestStop.Create('stop');
+end;
+
+function TTyRichTextTest.EditInMap(AIndex: Integer; AData: Pointer): Pointer;
+begin
+  TryEdits;
+  Result := AData;
+end;
+
+procedure TTyRichTextTest.EditInWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+begin
+  AContinue := False;
+  TryEdits;
+end;
+
+procedure TTyRichTextTest.EditInRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+begin
+  AContinue := False;
+  TryEdits;
+end;
+
+{ All three walks hold their place in the tree while foreign code runs: an edit from the
+  callback is refused (a defined failure, not a walk over freed nodes), and the refusal ends
+  with the walk - also when the callback raises. }
+procedure TTyRichTextTest.TestWalksRefuseAnEditFromTheirCallback;
+const
+  Names: array[0..2] of string = ('MapParaData', 'WalkParas', 'ForEachRun');
+var
+  t: TTyRichText;
+  before: UTF8String;
+  walk: Integer;
+  raising, stopped: Boolean;
+  what: string;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('p0'#10'p1'#10'p2'#10'p3'#10'p4'));
+  try
+    FWalkText := t;
+    FWalkPieces := t.PieceSnapshot(0, 1);
+    before := t.GetText(0, t.Length);
+    for walk := 0 to 2 do
+      for raising := False to True do
+      begin
+        what := Names[walk];
+        if raising then what := what + ' (callback raises)';
+        FWalkTried := 0;
+        FWalkRefused := 0;
+        FWalkRaise := raising;
+        stopped := False;
+        try
+          case walk of
+            0: t.MapParaData(0, 0, @EditInMap);
+            1: t.WalkParas(0, @EditInWalk);
+          else
+            t.ForEachRun(0, t.Length, @EditInRun);
+          end;
+        except
+          on ETestStop do stopped := True;
+        end;
+        AssertEquals(what + ': the callback ran once', 3, FWalkTried);
+        AssertEquals(what + ': every edit was refused', 3, FWalkRefused);
+        AssertEquals(what + ': the callback''s exception came out', raising, stopped);
+        AssertBytesEqual(what + ': the text is as it was', before, t.GetText(0, t.Length));
+        // the walk is over: the text can change again
+        t.Insert(0, 'q');
+        t.Delete(0, 1);
+        AssertBytesEqual(what + ': edits work after the walk', before, t.GetText(0, t.Length));
+        AssertEquals(what + ': integrity', '', t.CheckIntegrity);
+      end;
+  finally
+    FWalkText := nil;
     t.Free;
   end;
 end;

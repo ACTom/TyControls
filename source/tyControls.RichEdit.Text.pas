@@ -276,6 +276,11 @@ type
     function ByteCount: Int64;
     { The stored bytes, separators as they are (a CRLF comes back as two bytes). }
     function GetText(APos, ALen: TTyRichPos): UTF8String;
+    { Shows AProc the bytes of the range, piece by piece (see TTyRichByteRun). AProc may read
+      the text - GetText, the lookups, paragraph data - and set paragraph data and heights.
+      Changing the text (Insert, Delete, RestorePieces, ReopenLazyLoad) raises ETyRichText
+      while the walk runs, as in MapParaData and WalkParas: a walk holds its place in the
+      tree while foreign code runs, and an edit would leave it on freed nodes. }
     procedure ForEachRun(APos, ALen: TTyRichPos; AProc: TTyRichRunEvent);
 
     function ParaCount: Integer;
@@ -1689,7 +1694,8 @@ procedure TTyRichText.CheckNotWalking;
 begin
   // the walk holds a path into the tree; a structural change would leave it dangling
   if FWalking > 0 then
-    raise ETyRichText.Create('The text cannot change during MapParaData');
+    raise ETyRichText.Create('The text cannot change during a walk (MapParaData, WalkParas, ' +
+      'ForEachRun)');
 end;
 
 { ---- editing ---- }
@@ -1904,44 +1910,50 @@ begin
   CheckRange(APos, ALen);
   if ALen = 0 then Exit;
   stop := APos + ALen;
-  Find(rskChar, APos, p, before);
-  start := before.Chars;
-  pos := APos;
-  goOn := True;
-  repeat
-    it := ItemAt(p);
-    from := pos - start;
-    if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
-    if IsLazy(it^) and ((from > 0) or (upto < it^.FChars)) then
-    begin
-      // part of a lazy paragraph: its decoded bytes, which are no source of their own
-      LazySlice(it, from, upto, s, b0, b1);
-      run.Kind := rpkAdded;
-      run.SrcOffset := -1;
-      run.ByteCount := b1 - b0;
-      run.CharCount := upto - from;
-      if upto = it^.FChars then run.Separator := it^.Separator else run.Separator := rsNone;
-      run.Bytes := PByte(Pointer(s)) + b0;
-    end
-    else
-    begin
-      TrimPiece(it, from, upto, piece);
-      run.Kind := piece.Kind;
-      run.SrcOffset := POff(piece);
-      run.ByteCount := piece.FBytes;
-      run.CharCount := piece.FChars;
-      run.Separator := piece.Separator;
-      case PKind(piece) of
-        kOrig: run.Bytes := @FOrig[POff(piece)];
-        kAdded: run.Bytes := @FAdd[POff(piece)];
+  // the piece is read again after the callback and the path is advanced from where it stood
+  Inc(FWalking);
+  try
+    Find(rskChar, APos, p, before);
+    start := before.Chars;
+    pos := APos;
+    goOn := True;
+    repeat
+      it := ItemAt(p);
+      from := pos - start;
+      if stop - start < it^.FChars then upto := stop - start else upto := it^.FChars;
+      if IsLazy(it^) and ((from > 0) or (upto < it^.FChars)) then
+      begin
+        // part of a lazy paragraph: its decoded bytes, which are no source of their own
+        LazySlice(it, from, upto, s, b0, b1);
+        run.Kind := rpkAdded;
+        run.SrcOffset := -1;
+        run.ByteCount := b1 - b0;
+        run.CharCount := upto - from;
+        if upto = it^.FChars then run.Separator := it^.Separator else run.Separator := rsNone;
+        run.Bytes := PByte(Pointer(s)) + b0;
+      end
       else
-        run.Bytes := nil;
+      begin
+        TrimPiece(it, from, upto, piece);
+        run.Kind := piece.Kind;
+        run.SrcOffset := POff(piece);
+        run.ByteCount := piece.FBytes;
+        run.CharCount := piece.FChars;
+        run.Separator := piece.Separator;
+        case PKind(piece) of
+          kOrig: run.Bytes := @FOrig[POff(piece)];
+          kAdded: run.Bytes := @FAdd[POff(piece)];
+        else
+          run.Bytes := nil;
+        end;
       end;
-    end;
-    AProc(run, goOn);
-    Inc(start, it^.FChars);
-    pos := start;
-  until not goOn or (pos >= stop) or not Advance(p);
+      AProc(run, goOn);
+      Inc(start, it^.FChars);
+      pos := start;
+    until not goOn or (pos >= stop) or not Advance(p);
+  finally
+    Dec(FWalking);
+  end;
 end;
 
 function TTyRichText.PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
