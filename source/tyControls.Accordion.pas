@@ -436,7 +436,8 @@ begin
   SetLength(doc, Length(segs));
   for i := 1 to High(segs) - 1 do
   begin
-    if (segs[i] = '') or (segs[i] = 'end') then Exit;
+    { key=value, the key not empty. An empty segment and an 'end' before the end have no
+      '=' and go out here too. }
     p := Pos('=', segs[i]);
     if p <= 1 then Exit;
     key := Copy(segs[i], 1, p - 1);

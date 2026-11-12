@@ -531,6 +531,7 @@ end;
 procedure TTyAccordionTest.TestALayoutTextIsReadStrictly;
 var
   doc: TTyAccordionLayoutDoc;
+  long: string;
 
   procedure Bad(const AWhat, AText: string);
   begin
@@ -562,7 +563,11 @@ begin
   Bad('an empty flag', 'TYACCORDION/1|A=10,|end');
   Bad('a name twice', 'TYACCORDION/1|A=10,0|A=20,1|end');
   Bad('a name twice in another case', 'TYACCORDION/1|Abc=10,0|aBC=20,1|end');
-  Bad('too long', 'TYACCORDION/1|A=10,0|' + StringOfChar('x', TyAccordionLayoutMaxLength) + '|end');
+  { too long, and otherwise a good layout: the long segment is a later version's key }
+  long := 'TYACCORDION/1|A=10,0|@pad=' + StringOfChar('x', TyAccordionLayoutMaxLength) + '|end';
+  Bad('too long', long);
+  AssertTrue('the same text, short enough, is a layout',
+    TyAccordionLayoutParse('TYACCORDION/1|A=10,0|@pad=' + StringOfChar('x', 100) + '|end', doc));
   AssertTrue('five digits are fine', TyAccordionLayoutParse('TYACCORDION/1|A=99999,0|end', doc));
   AssertEquals('99999', 99999, doc[0].Weight);
 end;
@@ -824,6 +829,10 @@ begin
   AssertTrue('half the time: B is between 97 and 20, was ' + IntToStr(mid),
     (mid < 97) and (mid > 20));
   AssertTrue('still on its way', FAcc.Animating);
+  { the gaps beside B are closing with it: B is collapsed, so they are not strips to drag }
+  AssertTrue('setup: there still is a gap above B', FB.Top > FA.Top + FA.Height);
+  AssertEquals('and it is no strip', 0, FAcc.SplitterCount);
+  AssertEquals('nothing to hit there', -1, FAcc.SplitterAt(50, FB.Top - 1));
   FAcc.Step(100);
   AssertFalse('the time is up', FAcc.Animating);
   AssertEquals('and the stack is where it was going', '127,20,253', Heights);
@@ -1479,7 +1488,11 @@ begin
   FAcc.Lay;
   was := Pointer(FB);
   FreeAndNil(FB);
-  d := NewSection('SecD', 100);
+  { made as the designer makes one -- created and parented, nothing set on it that would
+    have the stack laid out before the designer's check sees it }
+  d := TSecProbe.Create(FForm);
+  d.Name := 'SecD';
+  d.Parent := FAcc;
   if Pointer(d) <> was then
     Ignore('the heap did not hand the freed address out again');
   { the designer's check: the new section is new, not the old one "dragged" to the top }
