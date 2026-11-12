@@ -864,17 +864,8 @@ begin
       AssertRaw(msg + ' text', ParaText(d, i), ParaText(r, i));
       pd := d.Formats.ParaFormat(d.ParaFormatOf(i));
       pr := r.Formats.ParaFormat(r.ParaFormatOf(i));
-      if pd.List.Kind <> lkNone then
-      begin
-        // a list made by a command is written as RichEdit writes one, and the words of
-        // {\*\pn} the model has no field for come back as Extra
-        AssertEquals(msg + ' the list''s own words: ' + DescribePara(pr), 3, pr.Extra.Count);
-        AssertTrue(msg + ' \pnf', Copy(pr.Extra.Item(0), 1, 4) = '\pnf');
-        AssertRaw(msg + ' \pnindent', '\pnindent0', pr.Extra.Item(1));
-        if pd.List.Kind = lkBullet then AssertRaw(msg + ' bullet', '{\pntxtb\''B7}', pr.Extra.Item(2))
-        else AssertRaw(msg + ' number', '{\pntxta.}', pr.Extra.Item(2));
-        pr.Extra.Clear;
-      end;
+      // (a list made by a command is written as RichEdit writes one, and read back it is
+      // the list format alone: the reader keeps nothing beside it)
       AssertTrue(Format('%s paragraph format %s / %s', [msg, DescribePara(pd), DescribePara(pr)]),
         pd.Equals(pr));
       rd := d.RunsOf(i);
@@ -1942,7 +1933,7 @@ begin
     o := SaveDoc(d, info);
     text := StrOf(o, info.Stretches[0].OutStart, info.Stretches[0].OutStop - info.Stretches[0].OutStart);
     AssertTrue('the third item of the numbered list: ' + Shown(text),
-      PosRaw('{\pntext\f0 3.\tab}{\*\pn\pnlvlbody\pndec\pnstart1\pnf0\pnindent0{\pntxta.}}', text) > 0);
+      PosRaw('{\pntext\f0 3.\tab}{\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}', text) > 0);
     SetPara(d, 3, [pffSpaceBefore], p);
     o := SaveDoc(d, info);
     text := StrOf(o, info.Stretches[0].OutStart, info.Stretches[0].OutStop - info.Stretches[0].OutStart);

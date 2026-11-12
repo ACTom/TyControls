@@ -56,6 +56,8 @@ type
     // the review of batch A
     procedure TestALaterUnknownWordReplacesTheEarlierOne;
     procedure TestARowThatHoldsANestedTableIsMarked;
+    procedure TestThemeFontEntriesAreRead;
+    procedure TestAListAsRichEditWritesItLeavesNothingBeside;
   end;
 
 implementation
@@ -1276,9 +1278,10 @@ begin
     end;
     AssertEquals('list indent', 720, ParaFmt(d, 1).LeftIndent);
     AssertEquals('list hanging', -360, ParaFmt(d, 1).FirstIndent);
-    // what TTyListFormat cannot say stays on the paragraph
-    AssertTrue('bullet font', HasFragment(ParaFmt(d, 1).Extra, '\pnf1'));
-    AssertTrue('bullet text', HasFragment(ParaFmt(d, 1).Extra, '{\pntxtb\''B7}'));
+    // RichEdit's own way of writing a list is what TTyListFormat says: nothing beside it
+    // (TestAListAsRichEditWritesItLeavesNothingBeside has what stays)
+    AssertEquals('nothing kept beside a bullet', 0, ParaFmt(d, 1).Extra.Count);
+    AssertEquals('nothing kept beside a number', 0, ParaFmt(d, 5).Extra.Count);
   finally
     d.Free;
   end;
@@ -1897,6 +1900,139 @@ begin
   try
     for p := 0 to d.Text.ParaCount - 1 do
       AssertFalse(Format('re-zh-table paragraph %d', [p]), Marked(p));
+  finally
+    d.Free;
+  end;
+end;
+
+{ Word writes the fonts of its theme with their role first (\fhiminor\f31506 ... in a group).
+  They are font table entries like the others - the body text of a Word file is in them. }
+procedure TTyRtfReadTest.TestThemeFontEntriesAreRead;
+var
+  d: TTyRichDocument;
+  scan: TTyRtfParser;
+  i: Integer;
+  nums: string;
+begin
+  d := LoadBytes(Fixture('word-table-merged.rtf'));
+  try
+    // \dbch\f31505 is {\fdbminor\f31505 ...}: DengXian, by its Chinese name
+    AssertText('the paragraph before the table', U('表格前'), ParaText(d, 0));
+    AssertText('its font', U('等线'), CharAt(d, 0, 0).FontName);
+    AssertEquals('its charset', 134, CharAt(d, 0, 0).Charset);
+    for i := 0 to d.Text.ParaCount - 1 do
+      if d.Text.ParaLength(i) > 0 then
+        AssertTrue(Format('paragraph %d has a font', [i]), CharAt(d, i, 0).FontName <> '');
+  finally
+    d.Free;
+  end;
+  d := LoadString('{\rtf1\ansi\ansicpg1252{\fonttbl{\f0 Arial;}{\flomajor\f1 Times New Roman;}' +
+    '{\fhiminor\f31506\fbidi \fnil\fcharset134\fprq2{\*\panose 02010600030101010101}' +
+    '\''b5\''c8\''cf\''df{\*\falt DengXian};}{\fdbminor Nothing;}{\xyz\f9 Skipped;}' +
+    '{\fxxmajor\f9 Skipped;}{\flomiddl\f9 Skipped;}' +
+    '{\fbimajor\f7\fcharset0 Seven;}}\f1 a\f31506 \''d6\''d0\f9 b\f7 c\par}');
+  try
+    CheckParas('theme fonts', d, ['a中bc']);
+    AssertText('a role and a number', 'Times New Roman', CharAt(d, 0, 0).FontName);
+    AssertText('a name in the entry''s code page', U('等线'), CharAt(d, 0, 1).FontName);
+    AssertEquals('the entry''s charset', 134, CharAt(d, 0, 1).Charset);
+    AssertText('an entry that begins with another word is still skipped', '', CharAt(d, 0, 2).FontName);
+    AssertText('the entry after it', 'Seven', CharAt(d, 0, 3).FontName);
+    // the table as a writer sees it: by number
+    scan := TyRichRtfLoadOf(d).Scan;
+    nums := '';
+    for i := 0 to scan.FontCount - 1 do nums := nums + IntToStr(scan.Font(i).Num) + ' ';
+    AssertEquals('the entries read', '0 1 7 31506 ', nums);
+  finally
+    d.Free;
+  end;
+  // an entry still open when a role's group begins ends there
+  d := LoadString('{\rtf1{\fonttbl\f0 Arial{\fdbminor Nothing;}{\f1 B;}}\f0 a\f1 b\par}');
+  try
+    AssertText('the entry before a role without a number', 'Arial', CharAt(d, 0, 0).FontName);
+    AssertText('the entry after it', 'B', CharAt(d, 0, 1).FontName);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A list RichEdit wrote says in its \pn group, beside the kind and the start, the
+  number's or bullet's font, an indent of 0 and the text around the number ("." after it, the
+  bullet character before nothing). The model's list format means exactly that, and a writer
+  makes these words from it: they are not kept beside it. Anything else in the group is what
+  the list format cannot say, and then the whole group's words stay. }
+procedure TTyRtfReadTest.TestAListAsRichEditWritesItLeavesNothingBeside;
+const
+  Head = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil\fcharset2 Symbol;}}';
+var
+  d: TTyRichDocument;
+
+  procedure Check(const AWhat: string; const APn: RawByteString; AKind: TTyListKind;
+    const AExtra: RawByteString);
+  begin
+    d := LoadString(Head + '\pard{\pntext\f1\''B7\tab}{\*\pn' + APn + '}\fi-360\li720 x\par}');
+    try
+      AssertTrue(AWhat + ': the kind', ParaFmt(d, 0).List.Kind = AKind);
+      AssertText(AWhat + ': kept beside the list format', AExtra, Joined(ParaFmt(d, 0).Extra));
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  // RichEdit's own
+  Check('a bullet', '\pnlvlblt\pnf1\pnindent0{\pntxtb\''B7}', lkBullet, '');
+  Check('a bullet, lower-case hex', '\pnlvlblt\pnf1\pnindent0{\pntxtb\''b7}', lkBullet, '');
+  Check('a number', '\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}', lkDecimal, '');
+  Check('a letter', '\pnlvlbody\pnf0\pnindent0\pnstart3\pnlcltr{\pntxta.}', lkLowerAlpha, '');
+  Check('a roman number, level 2', '\pnlvl2\pnf1\pnindent0\pnstart1\pnucrm{\pntxta.}', lkUpperRoman, '');
+  // what the list format cannot say keeps the group's words together
+  Check('another bullet character', '\pnlvlblt\pnf1\pnindent0{\pntxtb -}', lkBullet,
+    '\pnf1|\pnindent0|{\pntxtb -}');
+  Check('a bullet in a text font', '\pnlvlblt\pnf0\pnindent0{\pntxtb\''B7}', lkBullet,
+    '\pnf0|\pnindent0|{\pntxtb\''B7}');
+  Check('a bullet in a font the table lacks', '\pnlvlblt\pnf5\pnindent0{\pntxtb\''B7}', lkBullet,
+    '\pnf5|\pnindent0|{\pntxtb\''B7}');
+  Check('an indent', '\pnlvlbody\pnf0\pnindent360\pnstart1\pndec{\pntxta.}', lkDecimal,
+    '\pnf0|\pnindent360|{\pntxta.}');
+  Check('a bracket after the number', '\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta)}', lkDecimal,
+    '\pnf0|\pnindent0|{\pntxta)}');
+  Check('text before the number', '\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxtb (}{\pntxta.}',
+    lkDecimal, '\pnf0|\pnindent0|{\pntxtb (}|{\pntxta.}');
+  Check('a hanging number', '\pnlvlbody\pnf0\pnindent0\pnhang\pnstart1\pndec{\pntxta.}', lkDecimal,
+    '\pnf0|\pnindent0|\pnhang|{\pntxta.}');
+  Check('no font named', '\pnlvlbody\pnindent0\pnstart1\pndec{\pntxta.}', lkDecimal,
+    '\pnindent0|{\pntxta.}');
+  Check('no indent named', '\pnlvlbody\pnf0\pnstart1\pndec{\pntxta.}', lkDecimal,
+    '\pnf0|{\pntxta.}');
+  Check('no text named', '\pnlvlbody\pnf0\pnindent0\pnstart1\pndec', lkDecimal,
+    '\pnf0|\pnindent0');
+  Check('only the text after', '\pnlvlbody\pndec{\pntxta.}', lkDecimal, '{\pntxta.}');
+  Check('a bullet''s text for a number', '\pnlvlbody\pnf0\pnindent0\pndec{\pntxtb\''B7}', lkDecimal,
+    '\pnf0|\pnindent0|{\pntxtb\''B7}');
+  // the samples: WordPad's lists
+  d := LoadBytes(Fixture('wp-zh-list.rtf'));
+  try
+    AssertEquals('a bullet of the sample', 0, ParaFmt(d, 1).Extra.Count);
+    AssertEquals('a number of the sample', 0, ParaFmt(d, 5).Extra.Count);
+  finally
+    d.Free;
+  end;
+  // a list from Word's list table that carries the old words too: they are its fallback,
+  // not what the list format was made from
+  d := LoadString(Head + '\pard\ls2{\pntext\f1\''B7\tab}{\*\pn\pnlvlblt\pnf1\pnindent0' +
+    '{\pntxtb\''B7}}x\par}');
+  try
+    AssertText('beside a list table reference', '\ls2|\pnf1|\pnindent0|{\pntxtb\''B7}',
+      Joined(ParaFmt(d, 0).Extra));
+  finally
+    d.Free;
+  end;
+  // a paragraph's other words stay, in a list or not
+  d := LoadString(Head + '\pard\keep{\pntext\f1\''B7\tab}{\*\pn\pnlvlblt\pnf1\pnindent0' +
+    '{\pntxtb\''B7}}\s3 x\par}');
+  try
+    AssertText('the paragraph''s own words', '\keep|\s3 ', Joined(ParaFmt(d, 0).Extra));
   finally
     d.Free;
   end;

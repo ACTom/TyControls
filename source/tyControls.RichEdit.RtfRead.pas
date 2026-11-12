@@ -423,6 +423,7 @@ type
     function ClassOf(ACode: Cardinal; AFromPair: Boolean): TTyRtfCharClass;
     function BuildCharFormat(AClass: TTyRtfCharClass; AOneShot: Boolean): TTyCharFormat;
     function CharFormatFor(AClass: TTyRtfCharClass): TTyCharFormatId;
+    function PlainListWords(const ANodes: TTyRtfNodes): Boolean;
     function BuildParaFormat: TTyParaFormat;
     function ParaFormatId: TTyParaFormatId;
     function Fragment(const R: TTyRtfRange): RawByteString;
@@ -1019,6 +1020,15 @@ begin
       NameStarts(P, ALen, 'ts') or NameStarts(P, ALen, 'tbl') or NameStarts(P, ALen, 'tp') or
       NameStarts(P, ALen, 'tdfrmtxt') or NameStarts(P, ALen, 'tabsnoovrlp') or
       NameStarts(P, ALen, 'taprtl');
+end;
+
+// The roles of Word's theme fonts: a font table entry may begin with one, before its \f.
+function IsThemeFontRole(P: PByte; ALen: Integer): Boolean;
+begin
+  Result := (ALen = 8) and (P[0] = Ord('f')) and
+    (NameStarts(P + 3, 5, 'major') or NameStarts(P + 3, 5, 'minor')) and
+    (NameStarts(P + 1, 2, 'lo') or NameStarts(P + 1, 2, 'hi') or NameStarts(P + 1, 2, 'db') or
+     NameStarts(P + 1, 2, 'bi'));
 end;
 
 // Paragraph borders and shading: the paragraph's Extra.
@@ -2223,6 +2233,15 @@ begin
       begin
         BeginDest(rdFontEntry);
         BeginFontEntry(FTok.Param);
+        Exit;
+      end
+      else if IsThemeFontRole(@FBuf[FTok.NameStart], FTok.NameLen) then
+      begin
+        // {\fhiminor\f31506 ...}: Word's theme fonts, which its body text is in. The entry
+        // begins at the \f that follows the role (FontWord); the role itself is the header's
+        // bytes, which go back out as they are
+        if FEntryOn then FinishFontEntry;
+        BeginDest(rdFontEntry);
         Exit;
       end
       else
@@ -3995,11 +4014,60 @@ begin
     end;
 end;
 
+// The paragraph's {\*\pn ...} group holds, beside what the list format has, exactly what
+// RichEdit writes for a list of that kind - the font of the bullet (a Symbol font) or of the
+// number, \pnindent0, and {\pntxtb\'B7} for a bullet or {\pntxta.} for a number - and
+// nothing else. Then the list format says all of it (a writer makes these words from it),
+// and they are not kept beside it. One thing more or less in the group, and all of them stay.
+function TTyRtfParser.PlainListWords(const ANodes: TTyRtfNodes): Boolean;
+var
+  i, k, param: Integer;
+  frag: RawByteString;
+  hasFont, hasIndent, hasText: Boolean;
+begin
+  Result := False;
+  if (FS.Props.Ls > 0) or (FS.Props.ListKind = lkNone) then Exit;
+  hasFont := False;
+  hasIndent := False;
+  hasText := False;
+  for i := 0 to High(ANodes) do
+  begin
+    frag := Fragment(Range(ANodes[i].A, ANodes[i].B));
+    if TyRtfParaExtraKind(frag, param) <> pekPn then Continue;
+    if TyRtfFragmentIsWord(frag, 'pnf') then
+    begin
+      if FS.Props.ListKind = lkBullet then
+      begin
+        k := FontIndex(param);
+        if (k < 0) or (FFonts[k].Charset <> 2) then Exit;
+      end;
+      hasFont := True;
+    end
+    else if TyRtfFragmentIsWord(frag, 'pnindent') then
+    begin
+      if param <> 0 then Exit;
+      hasIndent := True;
+    end
+    else if FS.Props.ListKind = lkBullet then
+    begin
+      if (frag <> '{\pntxtb\''B7}') and (frag <> '{\pntxtb\''b7}') then Exit;
+      hasText := True;
+    end
+    else
+    begin
+      if frag <> '{\pntxta.}' then Exit;
+      hasText := True;
+    end;
+  end;
+  Result := hasFont and hasIndent and hasText;
+end;
+
 function TTyRtfParser.BuildParaFormat: TTyParaFormat;
 var
-  i: Integer;
-  slExtra: Boolean;
+  i, param: Integer;
+  slExtra, plain: Boolean;
   nodes: TTyRtfNodes;
+  frag: RawByteString;
 begin
   Result := TyDefaultParaFormat;
   nodes := ListNodes(FS.Props.Tabs);
@@ -4053,7 +4121,13 @@ begin
       if (ListKind <> lkBullet) and (ListStart = 0) then Result.List.StartAt := 1;
     end;
     nodes := ListNodes(ParaExtra);
-    for i := 0 to High(nodes) do Result.Extra.Add(Fragment(Range(nodes[i].A, nodes[i].B)));
+    plain := PlainListWords(nodes);
+    for i := 0 to High(nodes) do
+    begin
+      frag := Fragment(Range(nodes[i].A, nodes[i].B));
+      if plain and (TyRtfParaExtraKind(frag, param) = pekPn) then Continue;
+      Result.Extra.Add(frag);
+    end;
     if slExtra then
     begin
       Result.Extra.Add(Fragment(SlTok));
