@@ -33,6 +33,7 @@ begin
     '  --radius-pill: 12px;' + LineEnding +
     '  --radius-round: 16px;' + LineEnding +
     '  --radius-scroll: 6px;' + LineEnding +
+    '  --alert-action-gap: 12px;' + LineEnding +
     '  --alert-close-gap: 12px;' + LineEnding +
     '  --alert-close-size: 18px;' + LineEnding +
     '  --alert-icon-gap: 10px;' + LineEnding +
@@ -115,6 +116,7 @@ begin
     '  --notification-stack-gap: 12px;' + LineEnding +
     '  --notification-width: 408px;' + LineEnding +
     '  --pad-alert: 16px 20px;' + LineEnding +
+    '  --pad-alert-action: 4px 12px;' + LineEnding +
     '  --pad-badge: 2px 8px;' + LineEnding +
     '  --pad-breadcrumb-item: 2px 8px;' + LineEnding +
     '  --pad-breadcrumb: 4px 8px;' + LineEnding +
@@ -153,6 +155,7 @@ begin
     '  --scrollbar-size: 17px;' + LineEnding +
     '  --segmented-pad: 4px;' + LineEnding +
     '  --segmented-height: 44px;' + LineEnding +
+    '  --statusbar-control-gap: 6px;' + LineEnding +
     '  --steps-connector-gap: 12px;' + LineEnding +
     '  --steps-connector-length: 45px;' + LineEnding +
     '  --steps-gap: 12px;' + LineEnding +
@@ -161,6 +164,7 @@ begin
     '  --tab-close-size: 18px;' + LineEnding +
     '  --tab-gap: 10px;' + LineEnding +
     '  --tab-margin: 10px;' + LineEnding +
+    '  --tab-modified-dot-size: 10px;' + LineEnding +
     '  --tab-min-width: 67px;' + LineEnding +
     '  --tab-padding: 20px;' + LineEnding +
     '  --tag-close-size: 18px;' + LineEnding +

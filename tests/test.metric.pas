@@ -483,6 +483,20 @@ begin
     AssertEquals('现代 checkbox 20', 20, c.Metric('--checkbox-size', 99));
     AssertEquals('现代 row-height 40', 40, c.Metric('--row-height', 99));
     AssertEquals('现代 font-size-base 14', 14, c.Metric('--font-size-base', 99));
+    { the gaps and slots that sit inside rows the pack already makes roomier }
+    AssertEquals('modern alert action gap', 12, c.Metric('--alert-action-gap', 99));
+    AssertEquals('modern tab dot', 10, c.Metric('--tab-modified-dot-size', 99));
+    AssertEquals('modern status bar control gap', 6, c.Metric('--statusbar-control-gap', 99));
+    AssertEquals('modern alert action padding, across', 12,
+      c.Model.ResolveStyle('TyAlertAction', '', []).Padding.Left);
+    AssertEquals('modern alert action padding, down', 4,
+      c.Model.ResolveStyle('TyAlertAction', '', []).Padding.Top);
+    c.Density := tdClassic;
+    AssertEquals('classic alert action gap', 8, c.Metric('--alert-action-gap', 99));
+    AssertEquals('classic tab dot', 8, c.Metric('--tab-modified-dot-size', 99));
+    AssertEquals('classic status bar control gap', 4, c.Metric('--statusbar-control-gap', 99));
+    AssertEquals('classic alert action padding, across', 8,
+      c.Model.ResolveStyle('TyAlertAction', '', []).Padding.Left);
   finally
     c.Free;
   end;
