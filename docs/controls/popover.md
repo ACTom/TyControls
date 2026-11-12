@@ -12,7 +12,7 @@
 
 凡是**规则**的部分——弹窗落在哪、往哪边翻、框里装什么——都是接受纯整数的自由函数,所以整套几何**无窗口、无屏幕**即可验证。只有「把窗口真正立起来」需要真机;**观感必须在真机上核对**。
 
-除了气泡,它还能淡入淡出、移入(§9),单个实例可以用 `StyleOverride` 改外观(§10),也可以换成贴在目标控件某条边上的 Flyout 面板(§11)。从 DevExpress 的 `TdxCalloutPopup` 迁过来,看 §12 的对照表。
+除了气泡,它还能淡入淡出、移入(§9),单个实例可以用 `StyleOverride` 改外观(§10),也可以换成贴在目标控件某条边上的 Flyout 面板(§11)。从 DevExpress 的 `TdxCalloutPopup` 迁过来,看 §12 的对照表。要让弹出它的那个按钮再点一下就把它关掉,看 §13。
 
 ---
 
@@ -42,12 +42,12 @@ uses tyControls.Popover;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Target` | `TControl` | `nil` | 弹窗所属、并指向的控件。`Show` 用它;`ShowFor` / `ShowAt` 可以**单次**越过它而**不打扰**它。设了 `FreeNotification`——`Target` 被销毁时置 `nil`。 |
+| `Target` | `TControl` | `nil` | 弹窗所属、并指向的控件。`Show` 用它;`ShowFor` / `ShowAt` 可以**单次**越过它而**不打扰**它。设了 `FreeNotification`——`Target` 被销毁时置 `nil`。按在 `Target` 上不算「点击别处」:弹窗留给 `Target` 自己的处理函数,所以 `Target` 的 `OnClick` 可以开关弹窗(§13)。 |
 | `Content` | `TWinControl` | `nil` | 弹窗展示的**容器**。在设计器里填好它(典型是一个塞了按钮的 `TTyPanel`,在窗体上留 `Visible=False`),然后把本属性指过来:`Show` 时它被**重新挂进**弹窗窗口、摆在框的 content rect 上,`Hide` 时**原样**回到自己的窗体。**弹窗按它的设计期尺寸测量**,所以要调大小请调容器,不是调 popover。 |
 | `Placement` | `TTyPopoverPlacement` | `ppBottom` | 弹窗**偏好**落在 `Target` 的哪一侧、以及沿该侧如何对齐。**只是偏好**:那一侧放不下就翻到对面(见 §5)。 |
 | `Title` | `string` | `''` | 内容上方可选的标题行,用解析后的 `TyPopoverTitle` 样式绘制。空 = 无标题,内容占满主体。**单行 + 省略号截断**;**不解析助记符**——标题不激活任何东西,`&` 就是字面字符。 |
 | `ShowArrow` | `Boolean` | `True` | 画出指向 `Target` 的箭头。关掉 = 一张普通浮动卡片,**照样**按同一套规则定位与翻转,只是没有箭头条(**也不占那条厚度**)。 |
-| `CloseOnClickOutside` | `Boolean` | `True` | 点击别处(即弹窗窗口失活)时关闭。默认开——flyout 本该如此。**关掉它**用于「内容必须被回答」的弹窗:此时它只能靠 `Hide` 或 Escape 消失。 |
+| `CloseOnClickOutside` | `Boolean` | `True` | 点击别处(即弹窗窗口失活)时关闭。默认开——flyout 本该如此。**关掉它**用于「内容必须被回答」的弹窗:此时它只能靠 `Hide` 或 Escape 消失。按在 `Target` 上不算点击别处,见 §13。 |
 | `CloseOnEscape` | `Boolean` | `True` | 按 Escape 关闭。**刻意与 `CloseOnClickOutside` 分开**:这样「必须回答」的弹窗仍然保留每个用户都期待的键盘退路,而不会有误触退路。 |
 | `AnimationsEnabled` | `Boolean` | `True` | 动画总开关,和 `TTyToggleSwitch` 等控件同名同义。关掉后弹出、收起都是立即的,和加动画之前一模一样。动画进行中关掉,当场播完。见 §9。 |
 | `AnimationOptions` | `TTyPopoverAnimationOptions` | 见 §9 | 淡入淡出、移入,以及显示 / 隐藏各用多少毫秒。成员和 DevExpress 的同名。 |
@@ -64,6 +64,7 @@ uses tyControls.Popover;
 |------|------|------|
 | `Showing` | `Boolean`(只读) | 弹窗当前是否立着。调用 `Hide` 的那一刻就变成 `False`,哪怕窗口还在淡出。 |
 | `Animating` | `Boolean`(只读) | 显示或隐藏动画正在播。 |
+| `HideReason` | `TTyPopoverHideReason`(只读) | 弹窗上一次是怎么收起的:`phrCode`(程序调了 `Hide`,或者 `Content` 在弹窗立着时被销毁、被换掉)、`phrClickOutside`(点击别处)、`phrEscape`(按了 Escape)。收起一开始就记下,所以 `Showing` 变成 `False` 时就能读;在 `OnHide` 里读到的是这一次的原因,有淡出也一样。一直保留到下一次弹出;还没收起过时是 `phrCode`。 |
 
 ---
 
@@ -72,7 +73,7 @@ uses tyControls.Popover;
 | 事件 | 触发时机 |
 |------|----------|
 | `OnShow` | `TNotifyEvent`。在弹窗**已经上屏之后**触发(且在内容**已被收养进去之后**,所以处理函数里可以给内部某个控件设焦点)。有动画时在动画**开始**时触发,不等它播完。 |
-| `OnHide` | `TNotifyEvent`。**每次消失触发一次**,不论起因:点击别处、Escape、还是 `Hide`。**组件被销毁时不触发**——组件消失不等于用户关掉了弹窗(且此时处理函数所在的窗体可能已经拆了一半)。有淡出时在淡出**结束后**触发,这时内容已经回到原来的窗体。淡出途中又在同一位置 `Show`,弹窗原路淡回来,这次的 `OnHide` 不会来,也不会多一次 `OnShow`——它根本没有消失过。 |
+| `OnHide` | `TNotifyEvent`。**每次消失触发一次**,不论起因:点击别处、Escape、还是 `Hide`;是哪一种,读 `HideReason`。**组件被销毁时不触发**——组件消失不等于用户关掉了弹窗(且此时处理函数所在的窗体可能已经拆了一半)。有淡出时在淡出**结束后**触发,这时内容已经回到原来的窗体。淡出途中又在同一位置 `Show`,弹窗原路淡回来,这次的 `OnHide` 不会来,也不会多一次 `OnShow`——它根本没有消失过。 |
 
 > **`OnHide` 会晚到。** 默认开着淡出,`Hide` 返回时 `OnHide` 还没触发。处理函数要是读「此刻」的状态(比如哪一列的筛选、用户点的是确定还是取消),而这些状态在淡出期间可能被下一次操作改掉,就把 `AnimationsEnabled` 关掉,或者在按钮的 `OnClick` 里先把结果记下来。`TTyStringGrid` 的列头筛选下拉就是因为这个关掉了动画。
 
@@ -292,6 +293,31 @@ begin
 end;
 ```
 
+开关式的按钮,点一下弹出,再点一下收起(§13):
+
+```pascal
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  PopFilter.Target := BtnFilter;    // 必须设:按在 Target 上才不算「点击别处」
+  PopFilter.Content := PanelFilter;
+end;
+
+procedure TForm1.BtnFilterClick(Sender: TObject);
+begin
+  if PopFilter.Showing then
+    PopFilter.Hide
+  else
+    PopFilter.Show;
+end;
+
+procedure TForm1.PopFilterHide(Sender: TObject);
+begin
+  // 点别处或按 Escape 关掉的,当作取消;按钮自己关的(phrCode)不算
+  if PopFilter.HideReason <> phrCode then
+    RevertFilterEdits;
+end;
+```
+
 锚定「非控件之物」(网格单元、一个字形):
 
 ```pascal
@@ -408,3 +434,42 @@ PopDanger.StyleOverride := 'background: var(--danger); color: var(--on-accent);'
 | `FlyoutPanel.Active` / `FlyoutPanel.Align` | 同名,在 `FlyoutPanel` 里 |
 | `OnShow` / `OnHide` | 同名 |
 | `LookAndFeel` | 不提供:外观跟着主题走,单个实例用 `StyleClass` / `StyleOverride` |
+
+---
+
+## 13. 用 Target 开关弹窗
+
+`CloseOnClickOutside` 开着时,弹窗窗口一失活就收起。点 `Target` 也会让弹窗窗口失活,而且失活发生在 `Target` 收到这次按下**之前**。如果弹窗在这一刻就收起,`Target` 的 `OnClick` 看到的 `Showing` 已经是 `False`,`if Pop.Showing then Pop.Hide else Pop.Show` 会把它重新弹出来——弹窗没法用弹出它的那个按钮关掉。
+
+所以失活时指针在 `Target` 上,弹窗**先不收起**,留给 `Target` 的处理函数。等这次点击处理完,再看结果:
+
+| `Target` 的处理函数做了什么 | 结果 |
+|------|------|
+| 调了 `Hide`(开关的写法) | 收起,`HideReason = phrCode` |
+| 又调了 `Show` / `ShowFor` / `ShowAt` | 留着 |
+| 什么都没做,但弹窗窗口重新拿到了焦点(比如处理函数给内容里的控件设了焦点) | 留着,之后点别处照常收起 |
+| 什么都没做(`Target` 只是个锚点) | 当作点击别处收起,`HideReason = phrClickOutside` |
+
+弹窗不会落到「开着、没有焦点、点哪儿都关不掉」的状态。
+
+开关的写法见 §7:
+
+```pascal
+if Pop.Showing then Pop.Hide else Pop.Show;
+```
+
+- **必须设 `Target`。** 没设 `Target`、用 `ShowAt` 弹在一个矩形旁边的弹窗,行为和以前完全一样:一失活就收起。设了 `Target` 之后,不管弹窗是用 `Show`、`ShowFor` 还是 `ShowAt` 弹出的,按在 `Target` 上都不算点击别处。
+- **「在 `Target` 上」按位置判断:** 指针在 `Target` 的屏幕矩形里(就是 `ShowFor` 用的那个矩形),`Target` 可见,而且指针不在弹窗自己的窗口上(Flyout 面板盖在 `Target` 上面)。左键、右键、中键都一样。
+- **`CloseOnClickOutside = False` 的弹窗不受影响:** 它本来就不因为失活收起。
+- **点击什么时候算处理完:** LCL 把每条鼠标消息交给控件之前会先通知应用;弹窗看到鼠标键抬起,就排在这条消息后面结算,这时 `OnClick` 已经跑完。抬起的消息没到(比如焦点是被键盘或程序移走的,指针只是恰好停在 `Target` 上),由一个 50 ms 的计时器兜底:连续两次查到鼠标键都松开了,就结算。这种情况下弹窗会晚 0.1 秒左右收起,而不是立即收起。
+- **连点两下:** 第一下让弹窗开始淡出,第二下赶在淡出结束前又调了 `Show`,弹窗原路淡回来(§9),同时重新拿到焦点,之后点别处照常收起。
+- **和以前不一样的地方:** `Target` 的 `OnClick` 如果写的是 `if not Pop.Showing then Pop.Show`,以前在弹窗开着时再点一下,弹窗先收起、又被弹出,最后是开着的;现在点击期间弹窗一直开着,处理函数什么都不做,点击结束后弹窗收起。想要「点了总是开着」,在 `OnClick` 里直接调 `Pop.Show`。
+
+派生类可以覆盖的受保护虚方法:
+
+| 方法 | 说明 |
+|------|------|
+| `PointerPressedOn(AControl: TControl): Boolean` | 指针此刻是不是按在 `AControl` 上。弹窗窗口失活时拿 `Target` 来问。覆盖它,可以把更多地方算作「不是点击别处」(比如一组按钮),也可以收窄。 |
+| `PointerButtonHeld: Boolean` | 有没有鼠标键按着。只有兜底的计时器用。 |
+| `ActivateWindow` | 把弹窗窗口提到最前并让它拿到焦点。每次 `Show` 的最后一步,包括只是把淡出掉头的那一次。 |
+| `WindowActive: Boolean` | 弹窗窗口是不是当前有焦点的窗体(`Screen.FocusedForm`)。结算时用它判断弹窗之后还能不能被「点击别处」关掉。 |
