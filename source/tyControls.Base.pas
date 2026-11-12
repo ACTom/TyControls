@@ -210,6 +210,15 @@ type
       AInk: Boolean = True): TTyStyleSet;
     { FOvrCache, parsed again only when the override text or the theme changed. }
     procedure RefreshOverride(AModel: TTyStyleModel);
+    { #225. What this control's OWN StyleOverride says for a token, the theme left out: False
+      when the override does not declare it, or declares a value that leads nowhere
+      (OwnStyleToken), is no colour (OwnStyleColor) or no length (OwnStyleMetric). For a
+      control that lays its own tokens over a part's style, where the theme's value has
+      already been taken through the part's rule. Answered from what the control keeps
+      (#224): asked again, it parses nothing. }
+    function OwnStyleToken(const AName: string; out AText: string): Boolean;
+    function OwnStyleColor(const AName: string; out AColor: TTyColor): Boolean;
+    function OwnStyleMetric(const AName: string; out AValue: Integer): Boolean;
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
       plans/2026-08-08-permonitor-dpi.md) =====================================
 
@@ -542,6 +551,15 @@ type
       AInk: Boolean = True): TTyStyleSet;
     { FOvrCache, parsed again only when the override text or the theme changed. }
     procedure RefreshOverride(AModel: TTyStyleModel);
+    { #225. What this control's OWN StyleOverride says for a token, the theme left out: False
+      when the override does not declare it, or declares a value that leads nowhere
+      (OwnStyleToken), is no colour (OwnStyleColor) or no length (OwnStyleMetric). For a
+      control that lays its own tokens over a part's style, where the theme's value has
+      already been taken through the part's rule. Answered from what the control keeps
+      (#224): asked again, it parses nothing. }
+    function OwnStyleToken(const AName: string; out AText: string): Boolean;
+    function OwnStyleColor(const AName: string; out AColor: TTyColor): Boolean;
+    function OwnStyleMetric(const AName: string; out AValue: Integer): Boolean;
     { ===== PER-MONITOR DPI: the size floor ===================================
       The twin of the block on TTyGraphicControl -- read it there. Duplicated, not shared,
       because the two bases descend from TGraphicControl and TCustomControl and have no
@@ -1203,10 +1221,10 @@ end;
   depend on the default a reader passes; the theme's answer is the model's to keep (#203). }
 type
   TTyOverrideRead = record
-    Key: string;        // 't' + name for a word, 'c' + name for a colour
     Found: Boolean;
     Text: string;
     Color: TTyColor;
+    Metric: Integer;
   end;
 
   TTyOverrideReads = class
@@ -1216,12 +1234,33 @@ type
     FVer: Cardinal;
     FItems: array of TTyOverrideRead;
     FCount: Integer;
+    { 't' + name for a word, 'c' + name for a colour, 'm' + name for a length -> its place in
+      FItems. Sorted: a grid asks for some two hundred part tokens on every paint (#225). }
+    FKeys: TStringList;
     function Slot(const AKey: string; out AIsNew: Boolean): Integer;
   public
+    constructor Create;
+    destructor Destroy; override;
     procedure Freshen(const AText: string; AModel: TTyStyleModel);
     function Token(const AName: string; out AText: string): Boolean;
     function Color(const AName: string; out AColor: TTyColor): Boolean;
+    function Metric(const AName: string; out AValue: Integer): Boolean;
   end;
+
+constructor TTyOverrideReads.Create;
+begin
+  inherited Create;
+  FKeys := TStringList.Create;
+  FKeys.CaseSensitive := True;
+  FKeys.UseLocale := False;
+  FKeys.Sorted := True;
+end;
+
+destructor TTyOverrideReads.Destroy;
+begin
+  FKeys.Free;
+  inherited Destroy;
+end;
 
 procedure TTyOverrideReads.Freshen(const AText: string; AModel: TTyStyleModel);
 begin
@@ -1230,20 +1269,19 @@ begin
   FModel := AModel;
   FVer := AModel.ThemeVersion;
   FCount := 0;
+  FKeys.Clear;
 end;
 
 function TTyOverrideReads.Slot(const AKey: string; out AIsNew: Boolean): Integer;
 var
   i: Integer;
 begin
-  AIsNew := False;
-  for i := 0 to FCount - 1 do
-    if FItems[i].Key = AKey then
-      Exit(i);
-  AIsNew := True;
+  AIsNew := not FKeys.Find(AKey, i);
+  if not AIsNew then
+    Exit(Integer(PtrInt(FKeys.Objects[i])));
   Result := FCount;
-  if FCount = Length(FItems) then SetLength(FItems, FCount + 8);
-  FItems[Result].Key := AKey;
+  if FCount = Length(FItems) then SetLength(FItems, FCount * 2 + 8);
+  FKeys.AddObject(AKey, TObject(PtrInt(Result)));
   Inc(FCount);
 end;
 
@@ -1268,6 +1306,18 @@ begin
   if isNew then
     FItems[i].Color := FModel.ResolveOverrideColor(FText, AName, 0, FItems[i].Found);
   AColor := FItems[i].Color;
+  Result := FItems[i].Found;
+end;
+
+function TTyOverrideReads.Metric(const AName: string; out AValue: Integer): Boolean;
+var
+  i: Integer;
+  isNew: Boolean;
+begin
+  i := Slot('m' + AName, isNew);
+  if isNew then
+    FItems[i].Metric := FModel.ResolveOverrideMetric(FText, AName, 0, FItems[i].Found);
+  AValue := FItems[i].Metric;
   Result := FItems[i].Found;
 end;
 
@@ -1555,6 +1605,27 @@ begin
   if (FStyleOverride = '')
      or not TyOverrideReads(FOvrReads, FStyleOverride, model).Color(AName, Result) then
     Result := model.ResolveColorToken(AName, ADefault);
+end;
+
+function TTyGraphicControl.OwnStyleToken(const AName: string; out AText: string): Boolean;
+begin
+  AText := '';
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Token(AName, AText);
+end;
+
+function TTyGraphicControl.OwnStyleColor(const AName: string; out AColor: TTyColor): Boolean;
+begin
+  AColor := 0;
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Color(AName, AColor);
+end;
+
+function TTyGraphicControl.OwnStyleMetric(const AName: string; out AValue: Integer): Boolean;
+begin
+  AValue := 0;
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Metric(AName, AValue);
 end;
 
 function TTyGraphicControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
@@ -2927,6 +2998,27 @@ begin
   if (FStyleOverride = '')
      or not TyOverrideReads(FOvrReads, FStyleOverride, model).Color(AName, Result) then
     Result := model.ResolveColorToken(AName, ADefault);
+end;
+
+function TTyCustomControl.OwnStyleToken(const AName: string; out AText: string): Boolean;
+begin
+  AText := '';
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Token(AName, AText);
+end;
+
+function TTyCustomControl.OwnStyleColor(const AName: string; out AColor: TTyColor): Boolean;
+begin
+  AColor := 0;
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Color(AName, AColor);
+end;
+
+function TTyCustomControl.OwnStyleMetric(const AName: string; out AValue: Integer): Boolean;
+begin
+  AValue := 0;
+  Result := (FStyleOverride <> '')
+    and TyOverrideReads(FOvrReads, FStyleOverride, ActiveController.Model).Metric(AName, AValue);
 end;
 
 function TTyCustomControl.StyleMetric(const AName: string; ADefault: Integer): Integer;

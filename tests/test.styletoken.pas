@@ -48,9 +48,17 @@ type
     procedure TestAnOverridesColourDoesNotDependOnTheDefault;
     procedure TestAnotherControllerIsReadAgain;
     procedure TestAWordAndAColourOfOneNameAreKeptApart;
+    procedure TestTheOverridesOwnAnswerLeavesTheThemeOut;
+    procedure TestTheOverridesOwnAnswerIsParsedOncePerToken;
+    procedure TestTheOverridesOwnAnswerFollowsTheTextAndTheTheme;
   end;
 
 implementation
+
+type
+  { reach the protected OwnStyle... readers of the two bases }
+  TButtonCrack = class(TTyButton);
+  TLabelCrack = class(TTyLabel);
 
 const
   { tokens no theme defines, so the theme's answer is the default the caller passes }
@@ -393,6 +401,108 @@ begin
   FOther.StyleOverride := COL + ': #0000ff;';
   CheckColor('the colour first', BLUE, FOther.StyleColor(COL, GREY));
   AssertEquals('then the text', '#0000ff', FOther.StyleToken(COL, 'x'));
+end;
+
+{ #225. OwnStyleToken / OwnStyleColor / OwnStyleMetric answer for the control's own
+  StyleOverride and nothing else: a grid lays its part tokens over a style the theme has
+  already filled in, so the theme's value must not come back a second time. }
+procedure TStyleTokenTest.TestTheOverridesOwnAnswerLeavesTheThemeOut;
+const
+  LEN = '--test-style-length';
+var
+  b: TButtonCrack;
+  txt: string;
+  c: TTyColor;
+  v: Integer;
+begin
+  b := TButtonCrack(FButton);
+  FCtl.StyleOverride := ':root { ' + TOK + ': dotted; ' + COL + ': #0000ff; ' + LEN + ': 7px; }';
+  AssertFalse('no override: no word', b.OwnStyleToken(TOK, txt));
+  AssertFalse('no override: no colour', b.OwnStyleColor(COL, c));
+  AssertFalse('no override: no length', b.OwnStyleMetric(LEN, v));
+
+  FButton.StyleOverride := 'font-size: 12px;';
+  AssertFalse('the theme has the word, the override does not', b.OwnStyleToken(TOK, txt));
+  AssertFalse('nor the colour', b.OwnStyleColor(COL, c));
+  AssertFalse('nor the length', b.OwnStyleMetric(LEN, v));
+
+  FButton.StyleOverride := TOK + ': classic; ' + COL + ': #ff0000; ' + LEN + ': 12px; --test-banana: banana;';
+  AssertTrue('the override''s word', b.OwnStyleToken(TOK, txt));
+  AssertEquals('classic', txt);
+  AssertTrue('the override''s colour', b.OwnStyleColor(COL, c));
+  CheckColor('red', RED, c);
+  AssertTrue('the override''s length', b.OwnStyleMetric(LEN, v));
+  AssertEquals(12, v);
+  AssertFalse('a value that is no colour', b.OwnStyleColor('--test-banana', c));
+  AssertFalse('a value that is no length', b.OwnStyleMetric('--test-banana', v));
+  AssertTrue('though it is a word', b.OwnStyleToken('--test-banana', txt));
+  AssertEquals('banana', txt);
+  { one name asked three ways: each answer is kept on its own }
+  AssertFalse('a length is no colour', b.OwnStyleColor(LEN, c));
+  AssertTrue('and is still a length afterwards', b.OwnStyleMetric(LEN, v));
+  AssertEquals(12, v);
+  AssertTrue('and a word', b.OwnStyleToken(LEN, txt));
+  AssertEquals('12px', txt);
+
+  FLabel.StyleOverride := LEN + ': 9px; ' + COL + ': #0000ff;';
+  AssertTrue('TTyGraphicControl: the length', TLabelCrack(FLabel).OwnStyleMetric(LEN, v));
+  AssertEquals(9, v);
+  AssertTrue('TTyGraphicControl: the colour', TLabelCrack(FLabel).OwnStyleColor(COL, c));
+  CheckColor('blue', BLUE, c);
+  AssertFalse('TTyGraphicControl: a word it does not declare', TLabelCrack(FLabel).OwnStyleToken(TOK, txt));
+end;
+
+{ #225. A grid with --grid- tokens in its StyleOverride asked about 130 times a paint, and
+  each question parsed the override again: 6.8 ms a paint where 2.6 would do. }
+procedure TStyleTokenTest.TestTheOverridesOwnAnswerIsParsedOncePerToken;
+const
+  LEN = '--test-style-length';
+var
+  txt: string;
+  c: TTyColor;
+  v, before, i: Integer;
+begin
+  FButton.StyleOverride := TOK + ': classic; ' + COL + ': #ff0000; ' + LEN + ': 12px;';
+  FLabel.StyleOverride := FButton.StyleOverride;
+  before := FCtl.Model.OverrideParsesForTest;
+  for i := 1 to 10 do
+  begin
+    TButtonCrack(FButton).OwnStyleToken(TOK, txt);
+    TButtonCrack(FButton).OwnStyleColor(COL, c);
+    TButtonCrack(FButton).OwnStyleMetric(LEN, v);
+    TButtonCrack(FButton).OwnStyleColor('--test-undeclared', c);
+    TButtonCrack(FButton).OwnStyleMetric('--test-undeclared', v);
+    TLabelCrack(FLabel).OwnStyleMetric(LEN, v);
+    TLabelCrack(FLabel).OwnStyleToken('--test-undeclared', txt);
+  end;
+  AssertEquals('one parse for each token of each control, not one for each read', 7,
+    FCtl.Model.OverrideParsesForTest - before);
+  AssertEquals('and the answers are the override''s', 12, v);
+end;
+
+procedure TStyleTokenTest.TestTheOverridesOwnAnswerFollowsTheTextAndTheTheme;
+const
+  LEN = '--test-style-length';
+var
+  b: TButtonCrack;
+  v: Integer;
+begin
+  b := TButtonCrack(FButton);
+  FButton.StyleOverride := LEN + ': 12px;';
+  AssertTrue(b.OwnStyleMetric(LEN, v));
+  AssertEquals(12, v);
+  FButton.StyleOverride := LEN + ': 20px;';
+  AssertTrue('a new text is read again', b.OwnStyleMetric(LEN, v));
+  AssertEquals(20, v);
+  FCtl.StyleOverride := ':root { --test-root: 5px; }';
+  FButton.StyleOverride := LEN + ': var(--test-root);';
+  AssertTrue(b.OwnStyleMetric(LEN, v));
+  AssertEquals('through a theme variable', 5, v);
+  FCtl.StyleOverride := ':root { --test-root: 8px; }';
+  AssertTrue('a theme change is read again', b.OwnStyleMetric(LEN, v));
+  AssertEquals(8, v);
+  FButton.StyleOverride := '';
+  AssertFalse('no override, no answer', b.OwnStyleMetric(LEN, v));
 end;
 
 initialization

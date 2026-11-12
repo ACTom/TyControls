@@ -28,6 +28,7 @@ type
     procedure TestAStatusBarWithNoPanelsShowsSimpleText;
     procedure TestTheHintGoesToSimpleTextWithNoPanels;
     procedure TestACoolBandHandsItsWidthAndVisibleToItsControl;
+    procedure TestTheOverridesItemHeightIsReadOnce;
     procedure TestItemHeightWinsOverTheThemeOnceSet;
     procedure TestHeightsSetToTheDefaultSurviveTheFormFile;
     procedure TestZoomMaxReclampsTheZoom;
@@ -117,6 +118,42 @@ begin
     AssertFalse('and Visible', btn.Visible);
   finally
     bar.Free;
+  end;
+end;
+
+{ #225: the panel's own StyleOverride beats a height the host set, and is not parsed again
+  for every row it lays out. }
+procedure TMiscPropsTest.TestTheOverridesItemHeightIsReadOnce;
+var
+  ctl: TTyStyleController;
+  g: TGroupProbe;
+  before: Integer;
+begin
+  ctl := TTyStyleController.Create(nil);
+  g := TGroupProbe.Create(nil);
+  try
+    ctl.LoadThemeCss(':root { --listgroup-header-height: 26px; --listgroup-item-height: 40px; }');
+    g.Controller := ctl;
+    g.Font.PixelsPerInch := 96;
+    g.SetBounds(0, 0, 200, 300);
+    g.AddGroup('G');
+    g.AddItem(0, 'a');
+    g.AddItem(0, 'b');
+    g.AddItem(0, 'c');
+    g.ToggleGroup(0);   // groups start closed
+    g.ItemHeight := 50;
+    g.StyleOverride := '--listgroup-item-height: 30px;';
+    g.Click(20, 26 + 30 + 5);   // inside the second row, if rows are 30 tall
+    AssertEquals('the rows are as tall as the override says', 1, g.SelectedItem);
+    before := ctl.Model.OverrideParsesForTest;
+    g.Click(20, 26 + 5);
+    g.Click(20, 26 + 60 + 5);
+    AssertEquals('the third row', 2, g.SelectedItem);
+    AssertEquals('later clicks parse the override no more', 0,
+      ctl.Model.OverrideParsesForTest - before);
+  finally
+    g.Free;
+    ctl.Free;
   end;
 end;
 

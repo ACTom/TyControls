@@ -937,16 +937,12 @@ end;
   ItemHeight set on one panel are no longer lost under a skin that sets the token. }
 function TTyListGroupPanel.BandHeight(const AToken: string; AValue: Integer;
   AExplicit: Boolean): Integer;
-var
-  found: Boolean;
 begin
   if not AExplicit then Exit(StyleMetric(AToken, AValue));
-  Result := AValue;
-  if StyleOverride <> '' then
-  begin
-    Result := ActiveController.Model.ResolveOverrideMetric(StyleOverride, AToken, AValue, found);
-    if not found then Result := AValue;
-  end;
+  { #225: through OwnStyleMetric, which keeps the override's answer; every row laid out
+    comes here. }
+  if not OwnStyleMetric(AToken, Result) then
+    Result := AValue;
 end;
 
 function TTyListGroupPanel.EffHeaderHPx(APPI: Integer): Integer;
