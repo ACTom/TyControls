@@ -534,6 +534,13 @@ type
 
   TTyRtfGroup = class;
 
+  // A paragraph value the load set that outlived its group: the paragraph at ASrc still
+  // has Value (held), and is the file's own while it does.
+  TTyRtfKept = record
+    Src: Int64;
+    Value: Pointer;
+  end;
+
   // An RTF document being loaded, and then parsed on demand: the file's bytes, the header's
   // tables (through the scan), the snapshots, the header and trailer ranges and where the
   // tables are. It lives as long as its document's content does (the document owns it through
@@ -562,6 +569,13 @@ type
     FResident: Integer;              // intervals the groups hold
     FMaxResident: Integer;
     FStamp: Int64;
+    FKept: array of TTyRtfKept;      // by Src
+    FKeptN: Integer;
+    // the group the last read used, and the paragraphs that are its own while the text has
+    // FUsedParas paragraphs and FUsedLength characters
+    FUsedGroup: TTyRtfGroup;
+    FUsedFirst, FUsedStop, FUsedParas: Integer;
+    FUsedLength: Int64;
     FParsedBytes: Int64;
     FParseCount: Integer;
     FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
@@ -581,6 +595,10 @@ type
     function GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
     function ParseGroup(AInterval: Integer): TTyRtfGroup;
     procedure Touch(AGroup: TTyRtfGroup);
+    procedure Used(AIndex: Integer);
+    function KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
+    procedure KeepValue(ASrc: Int64; AValue: Pointer);
+    procedure Unkeep(AIndex: Integer);
     procedure Apply(AGroup: TTyRtfGroup);
     procedure Drop(AGroup: TTyRtfGroup; AReset: Boolean);
     procedure FreeGroup(AGroup: TTyRtfGroup);
@@ -598,15 +616,24 @@ type
     // (a writer must refuse to save it - the rest of the file is not in it).
     procedure Cancel;
     // Sends the least recently used parsed intervals back to unparsed until at most
-    // MaxResidentIntervals remain (does nothing while a command runs). Reading formats does
-    // this by itself.
+    // MaxResidentIntervals remain. Used means read: a read of a paragraph that is parsed
+    // counts as much as the read that parsed it. Does nothing while a command runs or a read
+    // scope is open (TTyRichDocument.BeginRead): the tables, cells and objects of an
+    // interval go with it, and whoever reads inside a scope still holds them. A read that
+    // parses does this by itself, and so does the end of the outermost read scope.
+    //
+    // A table of which a paragraph was changed stays as it is when its interval goes (it is
+    // one object for all its paragraphs): those paragraphs keep their values, and the load
+    // keeps a record of each, so that they are still known as the file's own (ParaSource,
+    // OwnsValue) and are the group's again when the interval is next parsed.
     procedure Trim;
     // For a writer: paragraph AIndex is still the file's own, untouched (its text and formats
     // never changed), at ARange of Bytes.
     function ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolean;
     // The second half of ParaSource, for a writer that walks the paragraphs itself: the
     // unedited lazy paragraph from ASrcOffset, whose value is AValue, still has the formats
-    // the file gives it (AValue nil - never parsed - or the very value this load set).
+    // the file gives it (AValue nil - never parsed - or the very value this load set,
+    // whether its interval is parsed at the moment or not).
     function OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
     // For a writer: the reader's state at byte APos of the file - a paragraph's start, or the
     // trailer's - scanned from the snapshot before it (no paragraph is parsed, nothing is
@@ -4289,6 +4316,8 @@ type
     Load: TTyRtfLoad;
     destructor Destroy; override;
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+    procedure ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer); override;
+    procedure ReadsEnded(ADoc: TTyRichDocument); override;
   end;
 
   TRtfBuild = class(TTyRichDocBuilder)
@@ -4314,6 +4343,17 @@ end;
 procedure TRtfLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
 begin
   Load.LoadParagraph(AIndex);
+end;
+
+procedure TRtfLoader.ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+  Load.Used(AIndex);
+end;
+
+procedure TRtfLoader.ReadsEnded(ADoc: TTyRichDocument);
+begin
+  // what the scope kept parsed past the limit can go now
+  Load.Trim;
 end;
 
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
@@ -4822,6 +4862,87 @@ begin
   end;
 end;
 
+// A read found paragraph AIndex parsed: its group is the one used last. Reads come in runs
+// over neighbouring paragraphs, so the group of the read before and the paragraphs that are
+// its own are remembered - good while the text has as many paragraphs and characters as it
+// had then (an edit that moves paragraphs changes one or the other; a wrong guess would
+// only make another interval go first).
+procedure TTyRtfLoad.Used(AIndex: Integer);
+var
+  text: TTyRichText;
+  src, nbytes: Int64;
+  g: TTyRtfGroup;
+  i: Integer;
+begin
+  text := FDoc.Text;
+  if (FUsedGroup <> nil) and (AIndex >= FUsedFirst) and (AIndex < FUsedStop) and
+     (text.ParaCount = FUsedParas) and (text.Length = FUsedLength) then
+  begin
+    if FGroups[FGroups.Count - 1] <> Pointer(FUsedGroup) then Touch(FUsedGroup);
+    Exit;
+  end;
+  if not text.ParaLazySource(AIndex, src, nbytes) then Exit;
+  g := GroupOf(src);
+  if g = nil then Exit;
+  i := g.Find(src);
+  if i < 0 then Exit;
+  Touch(g);
+  FUsedGroup := g;
+  FUsedFirst := AIndex - i;
+  FUsedStop := FUsedFirst + Length(g.Recs);
+  FUsedParas := text.ParaCount;
+  FUsedLength := text.Length;
+end;
+
+// The record of the paragraph at ASrc; False: none, and AIndex is where it would go.
+function TTyRtfLoad.KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FKeptN - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if FKept[mid].Src = ASrc then
+    begin
+      AIndex := mid;
+      Exit(True);
+    end;
+    if FKept[mid].Src < ASrc then lo := mid + 1 else hi := mid - 1;
+  end;
+  AIndex := lo;
+  Result := False;
+end;
+
+// Records that the paragraph at ASrc keeps AValue though its group goes. The group's hold
+// on the value becomes the record's.
+procedure TTyRtfLoad.KeepValue(ASrc: Int64; AValue: Pointer);
+var
+  k: Integer;
+begin
+  if KeptAt(ASrc, k) then
+  begin
+    // an older record: that value is no longer the paragraph's
+    TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+    FKept[k].Value := AValue;
+    Exit;
+  end;
+  if FKeptN = Length(FKept) then SetLength(FKept, FKeptN * 2 + 16);
+  if k < FKeptN then Move(FKept[k], FKept[k + 1], (FKeptN - k) * SizeOf(TTyRtfKept));
+  FKept[k].Src := ASrc;
+  FKept[k].Value := AValue;
+  Inc(FKeptN);
+end;
+
+// Takes record AIndex out (its hold is the caller's now).
+procedure TTyRtfLoad.Unkeep(AIndex: Integer);
+begin
+  Dec(FKeptN);
+  if AIndex < FKeptN then
+    Move(FKept[AIndex + 1], FKept[AIndex], (FKeptN - AIndex) * SizeOf(TTyRtfKept));
+end;
+
 // The group that has paragraph ASrc, parsed if need be.
 function TTyRtfLoad.GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
 begin
@@ -4840,7 +4961,7 @@ end;
 // source in the text: an edit before them moves them, an undo may bring them back).
 procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
 var
-  i, j: Integer;
+  i, j, k: Integer;
   rec: ^TTyRtfParaRec;
   cell: TTyRichCell;
   t: TTyRichTable;
@@ -4866,14 +4987,32 @@ begin
       AGroup.Values[i] := v;
       AGroup.States[i] := StateOurs;
     end
+    else if KeptAt(rec^.Src.Start, k) then
+    begin
+      // set already, by this load: the group that set it went and it stayed. While it has
+      // that value it is this group's again (the record's hold comes with it)
+      if FKept[k].Value = TRtfBuild.ParagraphValue(FDoc, j) then
+      begin
+        AGroup.Values[i] := FKept[k].Value;
+        AGroup.States[i] := StateOurs;
+      end
+      else
+      begin
+        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+        AGroup.States[i] := StateSkipped;
+      end;
+      Unkeep(k);
+    end
     else
       AGroup.States[i] := StateSkipped;
   end;
 end;
 
 // Lets the group go. AReset: its paragraphs that are still as it set them go back to
-// unparsed (only while no command runs - values read before may be in use); a table whose
-// paragraphs are not all still ours stays as it is (it is one object for all of them).
+// unparsed (only while the document is not busy - values read before may be in use); a
+// table whose paragraphs are not all still ours stays as it is (it is one object for all of
+// them). A paragraph that keeps the value the group gave it is recorded (KeepValue): it is still
+// the file's own.
 procedure TTyRtfLoad.Drop(AGroup: TTyRtfGroup; AReset: Boolean);
 var
   i, j: Integer;
@@ -4892,8 +5031,9 @@ begin
     idx[i] := -1;
     if AGroup.States[i] <> StateOurs then
     begin
-      if (AGroup.Recs[i].Table >= 0) and (AGroup.States[i] = StateSkipped) then
-        keep[AGroup.Recs[i].Table] := True;
+      // not set by this group: changed before it was parsed (its text - then it is not
+      // found by its source and was never asked about - or its formats)
+      if AGroup.Recs[i].Table >= 0 then keep[AGroup.Recs[i].Table] := True;
       Continue;
     end;
     if AReset then
@@ -4909,12 +5049,23 @@ begin
   begin
     if AGroup.States[i] = StateOurs then
     begin
-      if (idx[i] >= 0) and ((AGroup.Recs[i].Table < 0) or not keep[AGroup.Recs[i].Table]) then
+      if not AReset then
+        // nothing was looked at: it may well still be the paragraph's value
+        KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
+      else if idx[i] < 0 then
+        // the paragraph has another value by now, or is gone
+        TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i])
+      else if (AGroup.Recs[i].Table >= 0) and keep[AGroup.Recs[i].Table] then
+        KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
+      else
+      begin
         TRtfBuild.UnsetParagraph(FDoc, idx[i], AGroup.Values[i]);
-      TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i]);
+        TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i]);
+      end;
     end;
     text.ForgetDecoded(AGroup.Recs[i].Src.Start);
   end;
+  if FUsedGroup = AGroup then FUsedGroup := nil;
   FGroups.Remove(AGroup);
   Dec(FResident, AGroup.LastSnap - AGroup.FirstSnap + 1);
   FreeGroup(AGroup);
@@ -4991,11 +5142,15 @@ var
   i: Integer;
 begin
   if AValue = nil then Exit(True);
-  // parsed: untouched while it still has the value this load gave it
+  // parsed: untouched while it still has the value this load gave it - which a group
+  // knows, or, for a paragraph that stayed set when its group went, the record kept then
   g := GroupOf(ASrcOffset);
-  if g = nil then Exit(False);
-  i := g.Find(ASrcOffset);
-  Result := (i >= 0) and (g.States[i] = StateOurs) and (g.Values[i] = AValue);
+  if g <> nil then
+  begin
+    i := g.Find(ASrcOffset);
+    if (i >= 0) and (g.States[i] = StateOurs) and (g.Values[i] = AValue) then Exit(True);
+  end;
+  Result := KeptAt(ASrcOffset, i) and (FKept[i].Value = AValue);
 end;
 
 function TTyRtfLoad.LastParaOpen: Boolean;

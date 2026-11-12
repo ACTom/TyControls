@@ -396,17 +396,25 @@ type
     class procedure ReleaseValue(ADoc: TTyRichDocument; AValue: Pointer);
     class function UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
       AValue: Pointer): Boolean;
-    { A command is running or the text is being changed: values read earlier are in use, and
-      nothing may be sent back to unparsed. }
+    { A command is running, the text is being changed, or a read scope is open
+      (TTyRichDocument.BeginRead): values read earlier are in use, and nothing may be sent
+      back to unparsed. }
     class function DocumentBusy(ADoc: TTyRichDocument): Boolean;
   end;
 
   { Parses paragraphs on demand. EnsureParsed calls LoadParagraph for a paragraph that has no
     formatting yet; it sets that paragraph's (and, if it likes, its neighbours') formatting with
-    SetParagraph. A paragraph it leaves unset counts as plain and is not asked about again. }
+    SetParagraph. A paragraph it leaves unset counts as plain and is not asked about again.
+    A loader that sends parsed paragraphs back to unparsed (UnsetParagraph) does so only
+    while DocumentBusy is False - never inside a read scope, never while a command runs. }
   TTyRichParaLoader = class(TTyRichDocBuilder)
   public
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); virtual; abstract;
+    { A read found paragraph AIndex parsed already: it is in use (for a loader that keeps
+      the most recently used paragraphs parsed). Called for every such read: keep it cheap. }
+    procedure ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer); virtual;
+    { The outermost read scope ended: nothing read inside it is held any longer. }
+    procedure ReadsEnded(ADoc: TTyRichDocument); virtual;
   end;
 
   TTyRichRange = record
@@ -534,6 +542,7 @@ type
     FFirstData: TTyRichParaData;
     FLiveData: Integer;
     FEditing: Integer;
+    FReading: Integer;
     FValuesGone: Boolean;
     FSourceEncoding: TTyTextEncoding;
     FSourceCodePage: Integer;
@@ -616,6 +625,18 @@ type
     { Install right after creating the document, before anything reads it. }
     procedure InstallLoader(ALoader: TTyRichParaLoader; AOwnsLoader: Boolean);
     procedure EnsureParsed(AIndex: Integer);
+    { A read scope, counted (BeginRead .. EndRead may nest; pair them with try .. finally).
+      In a document that parses on demand, a read may send paragraphs read earlier back to
+      unparsed, and the tables, cells and objects they gave out go with them: what TableAt,
+      CellAt or a run's Obj returned is good until the next read. Inside a read scope nothing
+      is sent back: everything read stays as it was returned until the outermost EndRead.
+      So whoever holds a table, a cell or an object across another read does it inside one -
+      a layout pass over the visible paragraphs, a save, TableParas and CellParas themselves.
+      (Format ids, RunsOf's copy and text are values: they need no scope. A running command
+      is a scope by itself.) A scope costs nothing to open; keep it as short as the pass it
+      protects: parsed paragraphs only pile up while it is open. }
+    procedure BeginRead;
+    procedure EndRead;
 
     function ParaFormatOf(AIndex: Integer): TTyParaFormatId;
     { A copy: the paragraph's runs. A plain paragraph has one run in DefaultCharFormatId. }
@@ -628,7 +649,8 @@ type
       paragraphs. }
     function TableParas(AIndex: Integer; out AFirst, ALast: Integer): Boolean;
     { The paragraph range of ACell, a cell of the table AIndex is in. Walks the paragraphs
-      between AIndex and the cell. }
+      between AIndex and the cell. In a document that parses on demand, read ACell and call
+      this inside one read scope (BeginRead). }
     function CellParas(AIndex: Integer; ACell: TTyRichCell; out AFirst, ALast: Integer): Boolean;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
@@ -1582,7 +1604,17 @@ end;
 
 class function TTyRichDocBuilder.DocumentBusy(ADoc: TTyRichDocument): Boolean;
 begin
-  Result := (ADoc.FRunning <> nil) or (ADoc.FEditing > 0);
+  Result := (ADoc.FRunning <> nil) or (ADoc.FEditing > 0) or (ADoc.FReading > 0);
+end;
+
+{ ---- TTyRichParaLoader ---- }
+
+procedure TTyRichParaLoader.ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+end;
+
+procedure TTyRichParaLoader.ReadsEnded(ADoc: TTyRichDocument);
+begin
 end;
 
 { ---- TTyRichDocument: life ---- }
@@ -1852,7 +1884,13 @@ end;
 function TTyRichDocument.DataOf(AIndex: Integer): TTyRichParaData;
 begin
   Result := SlotData(AIndex);
-  if (Result <> nil) or (FLoader = nil) or FInLoad then Exit;
+  if (FLoader = nil) or FInLoad then Exit;
+  if Result <> nil then
+  begin
+    // parsed already: the loader hears that it is in use
+    FLoader.ParagraphRead(Self, AIndex);
+    Exit;
+  end;
   FInLoad := True;
   try
     FLoader.LoadParagraph(Self, AIndex);
@@ -1931,6 +1969,19 @@ begin
   DataOf(AIndex);
 end;
 
+procedure TTyRichDocument.BeginRead;
+begin
+  Inc(FReading);
+end;
+
+procedure TTyRichDocument.EndRead;
+begin
+  if FReading <= 0 then
+    raise ETyRichModel.Create('EndRead without BeginRead');
+  Dec(FReading);
+  if (FReading = 0) and (FLoader <> nil) and not FInLoad then FLoader.ReadsEnded(Self);
+end;
+
 function TTyRichDocument.ParaFormatOf(AIndex: Integer): TTyParaFormatId;
 begin
   Result := FormatOfData(DataOf(AIndex));
@@ -1969,14 +2020,20 @@ var
 begin
   AFirst := -1;
   ALast := -1;
-  t := TableAt(AIndex);
-  if t = nil then Exit(False);
-  AFirst := AIndex;
-  while (AFirst > 0) and (TableAt(AFirst - 1) = t) do Dec(AFirst);
-  ALast := AIndex;
-  last := FText.ParaCount - 1;
-  while (ALast < last) and (TableAt(ALast + 1) = t) do Inc(ALast);
-  Result := True;
+  // t is held across the reads of its neighbours
+  BeginRead;
+  try
+    t := TableAt(AIndex);
+    if t = nil then Exit(False);
+    AFirst := AIndex;
+    while (AFirst > 0) and (TableAt(AFirst - 1) = t) do Dec(AFirst);
+    ALast := AIndex;
+    last := FText.ParaCount - 1;
+    while (ALast < last) and (TableAt(ALast + 1) = t) do Inc(ALast);
+    Result := True;
+  finally
+    EndRead;
+  end;
 end;
 
 function TTyRichDocument.CellParas(AIndex: Integer; ACell: TTyRichCell;
@@ -1995,24 +2052,30 @@ var
 begin
   AFirst := -1;
   ALast := -1;
-  t := TableAt(AIndex);
-  if (t = nil) or (ACell = nil) or (ACell.Table <> t) then Exit(False);
-  last := FText.ParaCount - 1;
-  i := AIndex;
-  c := CellAt(i);
-  // walk towards the cell: cells lie in row order
-  while c <> ACell do
-  begin
-    if Before(c, ACell) then Inc(i) else Dec(i);
-    if (i < 0) or (i > last) then Exit(False);
+  // (ACell is the caller's: it reads it and calls this inside one read scope)
+  BeginRead;
+  try
+    t := TableAt(AIndex);
+    if (t = nil) or (ACell = nil) or (ACell.Table <> t) then Exit(False);
+    last := FText.ParaCount - 1;
+    i := AIndex;
     c := CellAt(i);
-    if (c = nil) or (c.Table <> t) then Exit(False);
+    // walk towards the cell: cells lie in row order
+    while c <> ACell do
+    begin
+      if Before(c, ACell) then Inc(i) else Dec(i);
+      if (i < 0) or (i > last) then Exit(False);
+      c := CellAt(i);
+      if (c = nil) or (c.Table <> t) then Exit(False);
+    end;
+    AFirst := i;
+    while (AFirst > 0) and (CellAt(AFirst - 1) = ACell) do Dec(AFirst);
+    ALast := i;
+    while (ALast < last) and (CellAt(ALast + 1) = ACell) do Inc(ALast);
+    Result := True;
+  finally
+    EndRead;
   end;
-  AFirst := i;
-  while (AFirst > 0) and (CellAt(AFirst - 1) = ACell) do Dec(AFirst);
-  ALast := i;
-  while (ALast < last) and (CellAt(ALast + 1) = ACell) do Inc(ALast);
-  Result := True;
 end;
 
 function TTyRichDocument.ParaDataOf(AIndex: Integer): Pointer;

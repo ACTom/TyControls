@@ -16,7 +16,7 @@ unit test.richedit.rtflazy;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry,
+  Classes, SysUtils, Graphics, fpcunit, testregistry,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
 
@@ -58,6 +58,10 @@ type
     procedure TestTablesOneAfterAnotherDoNotChain;
     procedure TestReadingInsideATableWhileItLoads;
     procedure TestAGroupParsedWhileLoadingAnswersForItsIntervalOnly;
+    procedure TestAReadScopeKeepsWhatWasRead;
+    procedure TestTheLeastRecentlyUsedIntervalGoes;
+    procedure TestUntouchedCellsStayTheFilesOwnAfterTheirIntervalGoes;
+    procedure TestAnIntervalParsedAgainInsideAScopeKeepsItsParagraphs;
   end;
 
 implementation
@@ -1420,6 +1424,364 @@ begin
     AssertTrue('the last paragraph kept its value', TBuilderAccess.Value(d, last) = v);
     AssertTrue('and is the file''s own', load.ParaSource(last, r));
     AssertTrue(Format('%d intervals parsed', [load.ResidentIntervals]), load.ResidentIntervals <= 3);
+  finally
+    d.Free;
+    s.Free;
+  end;
+end;
+
+{ A read that parses may send the least recently used intervals back to unparsed, and their
+  tables and cells go with them - but not inside a read scope: what was read there stays
+  until the scope ends. TableParas holds a table while it reads the table's neighbours, so
+  it is one. }
+procedure TTyRtfLazyTest.TestAReadScopeKeepsWhatWasRead;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  firstCell, a, z, parses: Integer;
+  t: TTyRichTable;
+  c: TTyRichCell;
+  raised: Boolean;
+begin
+  // the table starts right after the first snapshot (taken at the first \par that ends at
+  // or after 64 KB; a paragraph of the padding ends with \par CR LF): its first paragraph
+  // begins interval 1
+  b := TableDocument(CRtfSnapshotBytes + 2, 30);
+  d := LoadWith(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('intervals', load.IntervalCount >= 2);
+    firstCell := load.IntervalFirstPara(1);
+    d.BeginRead;
+    try
+      t := d.TableAt(firstCell);
+      AssertTrue('the table begins the second interval', t <> nil);
+      AssertTrue('the paragraph before it is outside', d.TableAt(firstCell - 1) = nil);
+      // two intervals are parsed now, one more than may stay: nothing went
+      AssertEquals('both intervals parsed', 2, load.ParseCount);
+      AssertEquals('both stay inside the scope', 2, load.ResidentIntervals);
+      AssertTrue('the table is still the paragraph''s', d.TableAt(firstCell) = t);
+      AssertEquals('its rows', 30, t.RowCount);
+      AssertEquals('no parse to see it again', 2, load.ParseCount);
+      // scopes nest
+      d.BeginRead;
+      d.EndRead;
+      AssertEquals('an inner scope ends nothing', 2, load.ResidentIntervals);
+    finally
+      d.EndRead;
+    end;
+    AssertEquals('the scope ended: one interval stays', 1, load.ResidentIntervals);
+    raised := False;
+    try
+      d.EndRead;
+    except
+      on ETyRichModel do raised := True;
+    end;
+    AssertTrue('EndRead without BeginRead raises', raised);
+    // TableParas reads the paragraph before the table (the other interval) in the middle
+    // of its walk: each interval is parsed once for it, and the table is found whole
+    d.EnsureParsed(firstCell + 4);
+    parses := load.ParseCount;
+    AssertTrue('in a table', d.TableParas(firstCell + 4, a, z));
+    AssertEquals('the table''s first paragraph', firstCell, a);
+    AssertEquals('the table''s last paragraph', firstCell + 89, z);
+    AssertTrue(Format('TableParas parsed %d times', [load.ParseCount - parses]),
+      load.ParseCount - parses <= 1);
+    AssertEquals('one interval stays after it', 1, load.ResidentIntervals);
+    // CellParas the same, from the last row to a cell of the first
+    d.BeginRead;
+    try
+      c := d.CellAt(firstCell + 1);
+      parses := load.ParseCount;
+      AssertTrue('the cell is found', d.CellParas(firstCell + 88, c, a, z));
+      AssertEquals('the cell''s paragraph', firstCell + 1, a);
+      AssertEquals('one paragraph', firstCell + 1, z);
+      AssertEquals('no parse inside the table', parses, load.ParseCount);
+    finally
+      d.EndRead;
+    end;
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    d.Free;
+  end;
+end;
+
+{ "Least recently used" means used: reading a paragraph that is parsed already counts. }
+procedure TTyRtfLazyTest.TestTheLeastRecentlyUsedIntervalGoes;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  p1, p3, p5, p7, p9, q: Integer;
+begin
+  b := Generate('re-zh-mixed.rtf', MB);
+  d := LoadWith(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 2;
+    AssertTrue('intervals', load.IntervalCount >= 11);
+    p1 := load.IntervalFirstPara(1) + 1;
+    p3 := load.IntervalFirstPara(3) + 1;
+    p5 := load.IntervalFirstPara(5) + 1;
+    p7 := load.IntervalFirstPara(7) + 1;
+    p9 := load.IntervalFirstPara(9) + 1;
+    d.EnsureParsed(p1);
+    d.EnsureParsed(p3);
+    AssertEquals('two parses', 2, load.ParseCount);
+    // the first one again: parsed already, and now the one used last
+    d.ParaFormatOf(p1);
+    AssertEquals('no parse', 2, load.ParseCount);
+    d.EnsureParsed(p5);
+    AssertEquals('two intervals stay', 2, load.ResidentIntervals);
+    AssertTrue('the interval read last before it stays', TBuilderAccess.Value(d, p1) <> nil);
+    AssertTrue('the one not read since went', TBuilderAccess.Value(d, p3) = nil);
+    AssertTrue('the new one is there', TBuilderAccess.Value(d, p5) <> nil);
+    // a run of reads in one interval, another interval parsed between two of them
+    d.RunsOf(p1);
+    d.EnsureParsed(p7);
+    AssertTrue('the interval of the run stays', TBuilderAccess.Value(d, p1) <> nil);
+    AssertTrue('the other went', TBuilderAccess.Value(d, p5) = nil);
+    d.RunsOf(p1 + 1);
+    d.EnsureParsed(p9);
+    AssertTrue('the run goes on: its interval stays again', TBuilderAccess.Value(d, p1) <> nil);
+    AssertTrue('the one parsed between went', TBuilderAccess.Value(d, p7) = nil);
+    AssertEquals('five parses in all', 5, load.ParseCount);
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    d.Free;
+  end;
+  // an edit moves the paragraphs: a read after it still finds the interval it reads
+  d := LoadWith(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 2;
+    p1 := load.IntervalFirstPara(1) + 1;
+    p3 := load.IntervalFirstPara(3) + 1;
+    d.EnsureParsed(p1);
+    d.ParaFormatOf(p1);
+    // two paragraphs typed before everything (the first interval is parsed for it): what
+    // was the second interval's first paragraph is now the first interval's last but one
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(0, 'a' + #13#10 + 'b' + #13#10)));
+    AssertEquals('two intervals parsed', 2, load.ResidentIntervals);
+    q := load.IntervalFirstPara(1);
+    AssertTrue('parsed with the first interval', TBuilderAccess.Value(d, q) <> nil);
+    d.ParaFormatOf(q);
+    d.EnsureParsed(p3 + 2);
+    AssertEquals('two stay', 2, load.ResidentIntervals);
+    AssertTrue('after the edit: the interval read last stays', TBuilderAccess.Value(d, q) <> nil);
+    AssertTrue('after the edit: the second interval went', TBuilderAccess.Value(d, p1 + 2) = nil);
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    d.Free;
+  end;
+end;
+
+{ One cell of a table edited: the table's other paragraphs stay as the load set them, also
+  when their interval is sent back to unparsed (the table is one object for all of them, so
+  they stay set). They are still the file's own then - a save copies their bytes - however
+  far the reader went before saving. }
+procedure TTyRtfLazyTest.TestUntouchedCellsStayTheFilesOwnAfterTheirIntervalGoes;
+var
+  bb: TByteBuilder;
+  b, o: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  s: TBytesStream;
+  i, k, cA, cB, otherA, otherB, round, paras: Integer;
+  tableA, secondRowA, tableB, secondRowB, tail, mid, at: Int64;
+  r: TTyRtfRange;
+  vA, vB: Pointer;
+  msg: string;
+  bold: TTyCharFormat;
+
+  function Find(const AHay: TBytes; AFrom: Int64; const ANeedle: TBytes; ANeedleAt, ACount: Int64): Int64;
+  var
+    p: Int64;
+  begin
+    for p := AFrom to Int64(Length(AHay)) - ACount do
+      if (AHay[p] = ANeedle[ANeedleAt]) and CompareMem(@AHay[p], @ANeedle[ANeedleAt], ACount) then
+        Exit(p);
+    Result := -1;
+  end;
+
+begin
+  // 30 paragraphs, a table of 10 rows, paragraphs up to 1.5 MB, a table of 5 rows,
+  // paragraphs up to 3 MB
+  bold := TyDefaultCharFormat;
+  bold.Style := [fsBold];
+  bb := Default(TByteBuilder);
+  bb.Add(PlainHead);
+  for i := 0 to 29 do bb.Add('Paragraph ' + IntToStr(i) + ' before the table.\par' + #13#10);
+  cA := 30;
+  tableA := bb.Len;
+  AddRows(bb, 1);
+  secondRowA := bb.Len;
+  AddRows(bb, 9);
+  bb.Add('\pard ');
+  paras := cA + 30;
+  while bb.Len < 3 * MB div 2 do
+  begin
+    bb.Add('Paragraph ' + IntToStr(paras) + ' between the tables, with some text \''d6\''d0 in it.\par' + #13#10);
+    Inc(paras);
+  end;
+  cB := paras;
+  tableB := bb.Len;
+  AddRows(bb, 1);
+  secondRowB := bb.Len;
+  AddRows(bb, 4);
+  bb.Add('\pard ');
+  i := 0;
+  while bb.Len < 3 * MB do
+  begin
+    bb.Add('Paragraph ' + IntToStr(i) + ' after the tables, with some text \''d6\''d0 in it.\par' + #13#10);
+    Inc(i);
+  end;
+  bb.Add('}');
+  b := bb.Done;
+  d := LoadWith(b, False);
+  s := TBytesStream.Create;
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('the first table''s first cell', (d.CellAt(cA) <> nil) and (d.CellAt(cA - 1) = nil));
+    AssertTrue('the second table''s first cell', (d.CellAt(cB) <> nil) and (d.CellAt(cB - 1) = nil));
+    otherA := cA + 7;   // a cell of the third row
+    otherB := cB + 4;   // a cell of the second row
+    AssertTrue('before the edit: the file''s own', load.ParaSource(otherA, r));
+    // a cell of the second table first, then one of the first: the second table's interval
+    // goes first, and the first table's records come before its own
+    AssertTrue('typed into the second table', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(cB), 'Y')));
+    AssertTrue('typed into the first table', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(cA), 'X')));
+    AssertFalse('an edited cell is not the file''s own', load.ParaSource(cA, r));
+    AssertTrue('after the edit: the file''s own', load.ParaSource(otherA, r));
+    vA := TBuilderAccess.Value(d, otherA);
+    vB := TBuilderAccess.Value(d, otherB);
+    AssertTrue('parsed', (vA <> nil) and (vB <> nil));
+    for round := 1 to 2 do
+    begin
+      msg := Format('round %d: ', [round]);
+      // every interval but the tables' read: theirs go back to unparsed
+      for k := 1 to load.IntervalCount - 1 do
+      begin
+        if k + 1 < load.IntervalCount then paras := load.IntervalFirstPara(k + 1)
+        else paras := d.Text.ParaCount;
+        if (load.IntervalFirstPara(k) > cB + 15) or (paras <= cB) then
+          d.EnsureParsed(load.IntervalFirstPara(k) + 1);
+      end;
+      AssertEquals(msg + 'one interval stays parsed', 1, load.ResidentIntervals);
+      AssertTrue(msg + 'a paragraph beside the first table went back to unparsed',
+        TBuilderAccess.Value(d, 3) = nil);
+      AssertTrue(msg + 'a paragraph beside the second table went back to unparsed',
+        TBuilderAccess.Value(d, cB - 2) = nil);
+      AssertTrue(msg + 'the tables'' cells stay as they were set',
+        (TBuilderAccess.Value(d, otherA) = vA) and (TBuilderAccess.Value(d, otherB) = vB));
+      for i := cA + 1 to cA + 29 do
+        AssertTrue(Format('%sparagraph %d of the first table is still the file''s own', [msg, i]),
+          load.ParaSource(i, r));
+      for i := cB + 1 to cB + 14 do
+        AssertTrue(Format('%sparagraph %d of the second table is still the file''s own', [msg, i]),
+          load.ParaSource(i, r));
+      AssertFalse(msg + 'the edited cells are not', load.ParaSource(cA, r) or load.ParaSource(cB, r));
+      // the first table's interval read again: its paragraphs are the load's as before
+      d.EnsureParsed(3);
+      AssertTrue(msg + 'parsed again, the cell keeps its value', TBuilderAccess.Value(d, otherA) = vA);
+      AssertTrue(msg + 'parsed again, still the file''s own', load.ParaSource(otherA, r));
+      AssertTrue(msg + 'the second table too', load.ParaSource(otherB, r));
+    end;
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    // saved: everything but the two edited rows is the file's bytes
+    TyRichSaveRtf(d, s);
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertTrue('the file up to the first table', (Length(o) > tableA) and
+      CompareMem(@o[0], @b[0], tableA));
+    tail := Length(b) - secondRowB;
+    AssertTrue('the output holds the rest', Length(o) > tableA + tail);
+    AssertTrue('from the second table''s second row on: the file''s bytes',
+      CompareMem(@o[Length(o) - tail], @b[secondRowB], tail));
+    // between them: from the first table's second row to the second table
+    mid := tableB - secondRowA;
+    at := Find(o, tableA, b, secondRowA, 200);
+    AssertTrue('the first table''s second row is in the output', at >= tableA);
+    AssertTrue('from there to the second table: the file''s bytes',
+      (at + mid <= Length(o)) and CompareMem(@o[at], @b[secondRowA], mid));
+    AssertTrue(Format('the first edited row is all that was rewritten there (%d bytes for %d)',
+      [at - tableA, secondRowA - tableA]), at - tableA < 4 * (secondRowA - tableA) + 400);
+    AssertTrue(Format('and the second (%d bytes for %d)',
+      [Length(o) - tail - (at + mid), secondRowB - tableB]),
+      Length(o) - tail - (at + mid) < 4 * (secondRowB - tableB) + 400);
+    // a format changed in a cell whose interval is not parsed: it has another value than
+    // the one recorded, and is no longer the file's own
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    load.Trim;
+    AssertTrue('the second table''s interval is not parsed',
+      (load.ResidentIntervals = 1) and (TBuilderAccess.Value(d, cB - 2) = nil));
+    AssertTrue('before the change', load.ParaSource(otherB, r));
+    AssertTrue('made bold', d.Execute(TTyRichSetCharFormat.Create(
+      TyRichRange(d.Text.ParaStart(otherB), d.Text.ParaLength(otherB)), [cffBold], bold)));
+    AssertFalse('a changed cell is not the file''s own', load.ParaSource(otherB, r));
+    AssertTrue('its neighbour is', load.ParaSource(otherB + 1, r));
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    s.Free;
+    d.Free;
+  end;
+end;
+
+{ An interval parsed while the file was still loading holds the paragraphs indexed by then.
+  When a later paragraph of it is read, it is parsed again - and inside a read scope (or a
+  command) the paragraphs set before must stay as they are: they keep their values and are
+  still the file's own. }
+procedure TTyRtfLazyTest.TestAnIntervalParsedAgainInsideAScopeKeepsItsParagraphs;
+var
+  bb: TByteBuilder;
+  b: TBytes;
+  s: TBytesStream;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  i, p0, k0, parses: Integer;
+  v: Pointer;
+  r: TTyRtfRange;
+begin
+  bb := Default(TByteBuilder);
+  bb.Add(PlainHead);
+  i := 0;
+  while bb.Len < MB do
+  begin
+    bb.Add('Paragraph ' + IntToStr(i) + ' with some text \''d6\''d0 in it.\par' + #13#10);
+    Inc(i);
+  end;
+  bb.Add('}');
+  b := bb.Done;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create(b);
+  try
+    load := TyRichBeginLoadRtf(d, s, 300 * 1024);
+    p0 := d.Text.ParaCount - 1;
+    d.EnsureParsed(p0);
+    v := TBuilderAccess.Value(d, p0);
+    AssertTrue('parsed while loading', v <> nil);
+    while not load.Step(64 * MB) do ;
+    k0 := 0;
+    while (k0 + 1 < load.IntervalCount) and (load.IntervalFirstPara(k0 + 1) <= p0) do Inc(k0);
+    AssertTrue('the interval got more paragraphs after that',
+      load.IntervalFirstPara(k0 + 1) > p0 + 5);
+    AssertTrue('one of them is not parsed', TBuilderAccess.Value(d, p0 + 5) = nil);
+    parses := load.ParseCount;
+    d.BeginRead;
+    try
+      d.EnsureParsed(p0 + 5);
+      AssertEquals('the interval is parsed again', parses + 1, load.ParseCount);
+      AssertTrue('the later paragraph is set', TBuilderAccess.Value(d, p0 + 5) <> nil);
+      AssertTrue('the paragraph set before keeps its value', TBuilderAccess.Value(d, p0) = v);
+      AssertTrue('and is the file''s own', load.ParaSource(p0, r));
+      AssertTrue('as the paragraph before it is', load.ParaSource(p0 - 1, r));
+    finally
+      d.EndRead;
+    end;
+    AssertTrue('after the scope too', load.ParaSource(p0, r));
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
   finally
     d.Free;
     s.Free;
