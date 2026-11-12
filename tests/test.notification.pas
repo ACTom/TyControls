@@ -103,6 +103,9 @@ type
   TTyNotificationHostTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
+    FAreaAsks: Integer;
+    FTrim: TRect;          // what HandleHostArea takes off each edge
+    procedure HandleHostArea(Sender: TObject; var AArea: TRect);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -129,6 +132,9 @@ type
     procedure TestFreeingTheHostClearsHostForm;
     procedure TestFreeingTheHostSendsItsShowingToastToTheScreen;
     procedure TestAToastOwnedByItsHostGoesDownWithItNotToTheScreen;
+    procedure TestOnGetHostAreaTrimsTheArea;
+    procedure TestOnGetHostAreaIsNotAskedWithoutAUsableWindow;
+    procedure TestAnAreaTrimmedBelowTheCardFallsBack;
     procedure TestHostFormSurvivesTheFormFile;
   end;
 
@@ -139,8 +145,10 @@ type
   private
     FCtl: TTyStyleController;
     FForm: TForm;
+    FAreaAsks: Integer;
     function ClientOnScreen: TRect;
     procedure Pump;
+    procedure HandleHostArea(Sender: TObject; var AArea: TRect);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -151,6 +159,7 @@ type
     procedure TestTheToastFollowsItsHostWhenItMovesAndResizes;
     procedure TestAHiddenHostSendsItsToastToTheScreenAndTakesItBack;
     procedure TestAToastShownWhileItsHostIsMinimisedGoesToTheScreen;
+    procedure TestOnGetHostAreaIsNotAskedOfAMinimisedWindow;
     procedure TestFreeingTheHostSendsItsToastsToTheScreen;
   end;
 
@@ -1443,11 +1452,22 @@ procedure TTyNotificationHostTest.SetUp;
 begin
   FCtl := TTyStyleController.Create(nil);
   FCtl.LoadThemeCss(ThemeCss);
+  FAreaAsks := 0;
+  FTrim := Rect(0, 0, 0, 0);
 end;
 
 procedure TTyNotificationHostTest.TearDown;
 begin
   FCtl.Free;
+end;
+
+procedure TTyNotificationHostTest.HandleHostArea(Sender: TObject; var AArea: TRect);
+begin
+  Inc(FAreaAsks);
+  Inc(AArea.Left, FTrim.Left);
+  Inc(AArea.Top, FTrim.Top);
+  Dec(AArea.Right, FTrim.Right);
+  Dec(AArea.Bottom, FTrim.Bottom);
 end;
 
 procedure TTyNotificationHostTest.TestHostFormDefaultsToNoHost;
@@ -2087,6 +2107,79 @@ begin
   end;
 end;
 
+procedure TTyNotificationHostTest.TestOnGetHostAreaTrimsTheArea;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    // A title bar across the top, a status bar across the bottom, uneven sides.
+    FTrim := Rect(11, 32, 7, 22);
+    N.OnGetHostArea := @HandleHostArea;
+    AssertEquals('top edge below what the host took off', CHostAT + 32 + 16, N.SlotRect(96).Top);
+    AssertEquals('right edge inside it', CHostAL + CHostAW - 7 - 16, N.SlotRect(96).Right);
+    N.Position := npBottomLeft;
+    AssertEquals('bottom edge above it', CHostAT + CHostAH - 22 - 16, N.SlotRect(96).Bottom);
+    AssertEquals('left edge inside it', CHostAL + 11 + 16, N.SlotRect(96).Left);
+    AssertTrue('the handler was asked', FAreaAsks > 0);
+    N.OnGetHostArea := nil;
+    AssertEquals('no handler: the whole client area', CHostAT + CHostAH - 16, N.SlotRect(96).Bottom);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestOnGetHostAreaIsNotAskedWithoutAUsableWindow;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, nil);
+  try
+    N.OnGetHostArea := @HandleHostArea;
+    N.SlotRect(96);
+    AssertEquals('no host: nothing to ask about', 0, FAreaAsks);
+    N.HostForm := H;
+    H.SimVisible := False;
+    N.SlotRect(96);
+    AssertEquals('a host that is not on screen has no area to trim', 0, FAreaAsks);
+    H.SimVisible := True;
+    H.SimMinimized := True;
+    N.SlotRect(96);
+    AssertEquals('nor has a minimised one', 0, FAreaAsks);
+    H.SimMinimized := False;
+    N.SlotRect(96);
+    AssertTrue('on screen: asked', FAreaAsks > 0);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAnAreaTrimmedBelowTheCardFallsBack;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    N.OnGetHostArea := @HandleHostArea;
+    FTrim := Rect(CHostAW - 340, 0, 0, 0);
+    AssertEquals('what is left is exactly the card''s width: still the host',
+      CHostAL + CHostAW - 340, N.SlotRect(96).Left);
+    FTrim := Rect(CHostAW - 339, 0, 0, 0);
+    AssertEquals('one px less: the screen', CWorkR - 16, N.SlotRect(96).Right);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
 procedure TTyNotificationHostTest.TestHostFormSurvivesTheFormFile;
 var
   Src, Dst: TForm;
@@ -2330,6 +2423,34 @@ begin
     AssertEquals('restored and moved: in the host', CA.Right - Px(16), N.WindowRect.Right);
     AssertEquals('in its corner', CA.Top + Px(16), N.WindowRect.Top);
     N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.HandleHostArea(Sender: TObject; var AArea: TRect);
+begin
+  Inc(FAreaAsks);
+end;
+
+procedure TTyNotificationHostWindowTest.TestOnGetHostAreaIsNotAskedOfAMinimisedWindow;
+var
+  N: THostedNote;
+begin
+  // Where the toast lands cannot tell whether the window was read as minimised: on Windows an
+  // icon's client area is empty, so it is too small for the card either way. Whether the host
+  // is asked for its area can.
+  N := NewWindowed(FCtl, FForm);
+  try
+    N.OnGetHostArea := @HandleHostArea;
+    FAreaAsks := 0;
+    N.SlotRect(Screen.PixelsPerInch);
+    AssertTrue('setup: a window on screen is asked', FAreaAsks > 0);
+    FForm.WindowState := wsMinimized;
+    Pump;
+    FAreaAsks := 0;
+    N.SlotRect(Screen.PixelsPerInch);
+    AssertEquals('an icon has no area to narrow', 0, FAreaAsks);
   finally
     N.Free;
   end;

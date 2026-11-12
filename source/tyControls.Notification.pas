@@ -94,6 +94,11 @@ type
     ClientArea: TRect;    // the client area, in SCREEN coordinates
   end;
 
+  { Asked each time a hosted toast is placed, with the host's client area in screen
+    coordinates: take off whatever a card must not cover (a title bar drawn in the client
+    area, a status bar). See TTyCustomNotification.OnGetHostArea. }
+  TTyNotificationHostAreaEvent = procedure(Sender: TObject; var AArea: TRect) of object;
+
   { The heights (device px) of the cards already stacked in one corner. }
   TTyNotificationHeights = array of Integer;
 
@@ -224,6 +229,7 @@ type
     FPlacedHost: TCustomForm;  // the area the last placement used: the host, or nil = the screen
     FOnClose: TNotifyEvent;
     FOnClick: TNotifyEvent;
+    FOnGetHostArea: TTyNotificationHostAreaEvent;
     FWin: TTyNotificationWindow;
     FTimer: TTimer;
     FShowing: Boolean;
@@ -333,12 +339,14 @@ type
     property Window: TTyNotificationWindow read FWin;
     { HostForm as the placement rules need it. This is the one place that reads the form's
       window, and it decides nothing (TyNotificationHostUsable does). Override it for a host
-      whose usable area is not its whole client area; the tests stand in for a window through
-      it. Only called with a HostForm set. }
+      whose usable area is not something OnGetHostArea can express; the tests stand in for a
+      window through it. Only called with a HostForm set. }
     function HostState: TTyNotificationHostState; virtual;
     { Where a toast goes that has no host, or whose host cannot take it: the work area of the
       primary monitor. Override to send such toasts elsewhere (another monitor's work area). }
     function ScreenArea: TRect; virtual;
+    { Fires OnGetHostArea. Only called for a host that is on screen and not minimised. }
+    procedure DoGetHostArea(var AArea: TRect); virtual;
     { The host moved, was resized, shown or hidden while this toast is up: put the toast where
       it belongs now. LCL reports a form's move or resize on the next message, so the toast
       lands a moment after the form does. }
@@ -371,7 +379,7 @@ type
       testable without a screen — Show passes the real one. }
     function SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;
     { The area this toast is placed in right now, and whose it is: HostForm and its client
-      area (screen coordinates) when the host can take the card; nil and
+      area (screen coordinates, after OnGetHostArea) when the host can take the card; nil and
       the screen work area when there is no host or it cannot. }
     function PlacementArea(APPI: Integer; out AArea: TRect): TCustomForm;
     { Where this toast's card belongs right now, in screen coordinates: SlotRectIn of its
@@ -425,6 +433,14 @@ type
     { Fired when the CARD is clicked — never for a click on the x (that gesture is a close and
       nothing else). Does not dismiss: what a click means is the host's business. }
     property OnClick: TNotifyEvent read FOnClick write FOnClick;
+    { Narrows the area a hosted toast is placed in. AArea arrives as HostForm's client area in
+      screen coordinates; take off what a card must not cover -- a TTyTitleBar (it is a control
+      in the client area, so the top-right corner of the client area is its caption buttons),
+      a status bar, a side bar. What is left is the area the corner, the margin and the stack
+      are worked out in; if it is smaller than the card the toast goes to the screen. Asked on
+      every placement, so keep it to arithmetic, and do not show or hide a toast from it. Not
+      asked for a toast with no host, or while the host is not on screen. }
+    property OnGetHostArea: TTyNotificationHostAreaEvent read FOnGetHostArea write FOnGetHostArea;
   end;
 
   { TTyNotification publishes TTyCustomNotification's properties; everything lives in TTyCustomNotification. }
@@ -443,6 +459,7 @@ type
     property HostForm;
     property OnClose;
     property OnClick;
+    property OnGetHostArea;
   end;
 
 { Fire-and-forget toast: build one, show it, and let this unit own it. The house's global-
@@ -1044,6 +1061,11 @@ begin
   Result := Screen.WorkAreaRect;
 end;
 
+procedure TTyCustomNotification.DoGetHostArea(var AArea: TRect);
+begin
+  if Assigned(FOnGetHostArea) then FOnGetHostArea(Self, AArea);
+end;
+
 function TTyCustomNotification.AreaFor(const ASize: TSize; out AArea: TRect): TCustomForm;
 var
   st: TTyNotificationHostState;
@@ -1051,6 +1073,8 @@ begin
   if FHostForm <> nil then
   begin
     st := HostState;
+    // Only a host with a client area on screen has one to narrow.
+    if st.Visible and not st.Minimized then DoGetHostArea(st.ClientArea);
     if TyNotificationHostUsable(st, ASize.cx, ASize.cy) then
     begin
       AArea := st.ClientArea;

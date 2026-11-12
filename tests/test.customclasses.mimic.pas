@@ -6950,6 +6950,7 @@ type
     property HostForm;
     property OnClose;
     property OnClick;
+    property OnGetHostArea;
   end;
 
   TGenNumericEdit = class(TTyCustomNumericEdit)
