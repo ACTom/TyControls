@@ -1943,8 +1943,10 @@ begin
         AStyle.FontName, ResolveFontSize(AStyle) + 2, 700, valDef, taCenter, tlCenter, False);
       valR.Right := valR.Right - P.Scale(18);
     end;
-    // colour swatch for a colour row.
-    if r.EditorKind = vekColor then
+    { colour swatch for a colour row -- one that HAS a colour. A row with no value (several
+      objects that disagree, a value not read yet) is drawn like any other empty value:
+      StringToColorDef's fallback would paint it black, which reads as "the colour is black". }
+    if (r.EditorKind = vekColor) and (r.Value <> '') then
     begin
       sw := (ARowRect.Bottom - ARowRect.Top) - P.Scale(8);
       if sw < 6 then sw := 6;
