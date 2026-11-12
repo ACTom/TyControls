@@ -2,9 +2,11 @@ unit test.popover;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit,
+  testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Popover,
+  tyControls.Popup,    // TyPopupWorkArea: the work area ShowAt places in
   test.danglingrefs;   // BeginPoison / EndPoison: freeing a popover mid-animation
 
 type
@@ -130,6 +132,52 @@ type
     procedure TestFlyoutMovesInFromItsEdge;
   end;
 
+  { How a popover goes away: the press on its Target that it lets through and settles once the
+    click is over, the reason it reports, and OnHide's count. Headless: where the pointer is,
+    which buttons are down and whether the window has the activation are answered by the test
+    (TPopAccess), and the window's own OnDeactivate / KeyDown are what the tests call. }
+  TTyPopoverDismissTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+    FForm: TForm;
+    FPanel: TWinControl;    // the content
+    FButton: TWinControl;   // the popover's Target
+    FOther: TWinControl;    // somewhere else on the form
+    FPop: TTyPopover;       // a TPopAccess
+    FHidden: Integer;       // OnHide fire count
+    FReasonInOnHide: TTyPopoverHideReason;   // HideReason as OnHide saw it
+    procedure HandleHide(Sender: TObject);
+    { The docs' toggle idiom, as the Target's OnClick. }
+    procedure ToggleClick(Sender: TObject);
+    procedure ShowIt;        // the headless show
+    procedure Deactivate;    // the popup window loses the activation
+    procedure PressEscape;   // Escape reaches the popup window
+    procedure Pump(AMs: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestPressElsewhereDismissesAtOnce;
+    procedure TestPressOnTheTargetIsNotAnOutsideClick;
+    procedure TestTheTargetsClickClosesItAndItStaysClosed;
+    procedure TestAnUntouchedPopoverDismissesWhenTheClickIsOver;
+    procedure TestShownAgainByTheTargetItStays;
+    procedure TestActiveAgainItStaysAndCanStillBeDismissed;
+    procedure TestWithoutATargetEveryDeactivationDismisses;
+    procedure TestCloseOnClickOutsideOffNothingDismisses;
+    procedure TestHideReasonNamesEachWayOfHiding;
+    procedure TestHideReasonIsTheOneThatStartedTheFade;
+    procedure TestEscapeDismissesOnlyWhenAllowed;
+    procedure TestButtonUpSettlesAfterTheClickNotInsideIt;
+    procedure TestButtonUpThenTheToggleHidesOnce;
+    procedure TestTicksSettleOnceTheButtonsStayUp;
+    procedure TestTheTimerRunsWhileAPressWaits;
+    procedure TestShowDuringTheFadeOutTakesTheActivationBack;
+    procedure TestFreeingWithAPressWaitingLeavesNothingBehind;
+    procedure TestTargetFreedMidPressStillSettles;
+    procedure TestPointerIsOnAControlByItsScreenRect;
+  end;
+
 implementation
 
 const
@@ -186,12 +234,37 @@ type
     procedure ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
     function TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
     function CanDriveAnimation: Boolean; override;
+    function PointerPressedOn(AControl: TControl): Boolean; override;
+    function PointerButtonHeld: Boolean; override;
+    function WindowActive: Boolean; override;
+    procedure ActivateWindow; override;
+    procedure SettleTargetPress;
+    procedure TargetPressTick;
+    function PressWaiting: Boolean;
     function Win: TForm;
   public
     { The headless runner cannot put the window on screen, so it answers "the window is up"
       for the hide animation by this switch. Off (the default) = what a hidden window says. }
     Drive: Boolean;
+    { Where the pointer is, for the dismissal tests: on PressOn (nil = on no control), or on
+      whatever the popover asks about when PressAnywhere is set. }
+    PressOn: TControl;
+    PressAnywhere: Boolean;
+    Held: Boolean;     // a mouse button is down
+    Active: Boolean;   // the popup window has the activation
+    Activations: Integer;   // how often a Show gave the window the activation
   end;
+
+  { The seams' own answers: nothing overridden. }
+  TPopDefaults = class(TTyPopover)
+  public
+    function BeginShowing(const AAnchorScreen, AWorkArea: TRect;
+      APPI: Integer): TTyPopoverGeometry;
+    function PointerPressedOn(AControl: TControl): Boolean; override;
+    function Win: TForm;
+  end;
+
+  TFormAccess = class(TForm);
 
 function TPopAccess.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
   APPI: Integer): TTyPopoverGeometry;
@@ -235,7 +308,58 @@ begin
   Result := Drive;
 end;
 
+function TPopAccess.PointerPressedOn(AControl: TControl): Boolean;
+begin
+  Result := PressAnywhere or ((AControl <> nil) and (AControl = PressOn));
+end;
+
+function TPopAccess.PointerButtonHeld: Boolean;
+begin
+  Result := Held;
+end;
+
+function TPopAccess.WindowActive: Boolean;
+begin
+  Result := Active;
+end;
+
+procedure TPopAccess.ActivateWindow;
+begin
+  Inc(Activations);   // counted, not done: there is no window to bring to the front
+end;
+
+procedure TPopAccess.SettleTargetPress;
+begin
+  inherited SettleTargetPress;
+end;
+
+procedure TPopAccess.TargetPressTick;
+begin
+  inherited TargetPressTick;
+end;
+
+function TPopAccess.PressWaiting: Boolean;
+begin
+  Result := TargetPressPending;
+end;
+
 function TPopAccess.Win: TForm;
+begin
+  Result := PopupWindow;
+end;
+
+function TPopDefaults.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
+  APPI: Integer): TTyPopoverGeometry;
+begin
+  Result := inherited BeginShowing(AAnchorScreen, AWorkArea, APPI);
+end;
+
+function TPopDefaults.PointerPressedOn(AControl: TControl): Boolean;
+begin
+  Result := inherited PointerPressedOn(AControl);
+end;
+
+function TPopDefaults.Win: TForm;
 begin
   Result := PopupWindow;
 end;
@@ -2436,7 +2560,634 @@ begin
   end;
 end;
 
+{ ============================== TTyPopoverDismissTest ============================== }
+
+procedure TTyPopoverDismissTest.SetUp;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(ThemeCss);
+  FForm := TForm.CreateNew(nil);
+  FPanel := TWinControl.Create(FForm);
+  FPanel.Parent := FForm;
+  FPanel.SetBounds(CPanelL, CPanelT, CContentW, CContentH);
+  FPanel.Visible := False;
+  FButton := TWinControl.Create(FForm);
+  FButton.Parent := FForm;
+  FButton.SetBounds(100, 100, 80, 24);
+  FOther := TWinControl.Create(FForm);
+  FOther.Parent := FForm;
+  FOther.SetBounds(400, 300, 80, 24);
+  FPop := TPopAccess.Create(nil);
+  FPop.Controller := FCtl;
+  FPop.Content := FPanel;
+  FPop.Target := FButton;
+  FPop.OnHide := @HandleHide;
+  FHidden := 0;
+  FReasonInOnHide := phrCode;
+end;
+
+procedure TTyPopoverDismissTest.TearDown;
+begin
+  FPop.Free;
+  FForm.Free;
+  FCtl.Free;
+end;
+
+procedure TTyPopoverDismissTest.HandleHide(Sender: TObject);
+begin
+  Inc(FHidden);
+  FReasonInOnHide := FPop.HideReason;
+end;
+
+procedure TTyPopoverDismissTest.ToggleClick(Sender: TObject);
+begin
+  // BeginShowing stands in for Show: the headless runner cannot put the window up.
+  if FPop.Showing then
+    FPop.Hide
+  else
+    TPopAccess(FPop).BeginShowing(CAnchor, CWork, 96);
+end;
+
+procedure TTyPopoverDismissTest.ShowIt;
+begin
+  TPopAccess(FPop).BeginShowing(CAnchor, CWork, 96);
+end;
+
+procedure TTyPopoverDismissTest.Deactivate;
+var
+  w: TForm;
+begin
+  // What LCL does when another form takes the focus: the window's OnDeactivate.
+  w := TPopAccess(FPop).Win;
+  AssertTrue('the window listens for its deactivation', Assigned(w.OnDeactivate));
+  w.OnDeactivate(w);
+end;
+
+procedure TTyPopoverDismissTest.PressEscape;
+var
+  k: Word;
+begin
+  k := VK_ESCAPE;
+  TFormAccess(TPopAccess(FPop).Win).KeyDown(k, []);
+end;
+
+procedure TTyPopoverDismissTest.Pump(AMs: Integer);
+var
+  t0: QWord;
+begin
+  t0 := GetTickCount64;
+  repeat
+    Application.ProcessMessages;
+    Sleep(5);
+  until GetTickCount64 - t0 > QWord(AMs);
+end;
+
+{ TestPressElsewhereDismissesAtOnce
+  The rule that was always there, and the contrast for every test below: the window loses the
+  activation with the pointer somewhere else, and the popover is down before the call returns. }
+procedure TTyPopoverDismissTest.TestPressElsewhereDismissesAtOnce;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FOther;
+  Deactivate;
+  AssertFalse('down at once', P.Showing);
+  AssertEquals('its OnHide', 1, FHidden);
+  AssertTrue('a click away', P.HideReason = phrClickOutside);
+  AssertFalse('nothing left waiting', P.PressWaiting);
+  AssertSame('the content is home', FForm, FPanel.Parent);
+end;
+
+{ TestPressOnTheTargetIsNotAnOutsideClick
+  The same deactivation with the pointer pressed on Target: the press belongs to the Target,
+  so the popover is still up -- and still holds its content -- when the Target sees it. }
+procedure TTyPopoverDismissTest.TestPressOnTheTargetIsNotAnOutsideClick;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  AssertTrue('still up for the Target to see', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+  AssertTrue('the press waits to be settled', P.PressWaiting);
+  AssertTrue('the content stays in the popup', FPanel.Parent <> FForm);
+end;
+
+{ TestTheTargetsClickClosesItAndItStaysClosed
+  The toggle: the Target's OnClick finds the popover showing and hides it; settling the press
+  afterwards changes nothing; and the next click opens it. One OnHide, and the reason is the
+  handler's Hide, not a click away. }
+procedure TTyPopoverDismissTest.TestTheTargetsClickClosesItAndItStaysClosed;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  ToggleClick(FButton);
+  AssertFalse('the click on its own trigger closed it', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+  AssertTrue('hidden by the handler', P.HideReason = phrCode);
+  AssertFalse('the handler answered the press', P.PressWaiting);
+  Deactivate;   // a window going down may report its deactivation once more
+  AssertFalse('a hidden popover holds no press', P.PressWaiting);
+  P.SettleTargetPress;
+  P.TargetPressTick;
+  P.TargetPressTick;
+  AssertFalse('and it stays closed', P.Showing);
+  AssertEquals('still one OnHide', 1, FHidden);
+  AssertTrue('nor is that a second dismissal with a reason of its own', P.HideReason = phrCode);
+  AssertSame('the content is home', FForm, FPanel.Parent);
+  ToggleClick(FButton);
+  AssertTrue('the next click opens it', P.Showing);
+end;
+
+{ TestAnUntouchedPopoverDismissesWhenTheClickIsOver
+  The Target is only an anchor: its click does nothing to the popover, the window does not get
+  the activation back, and so the press was a click away after all -- once it is settled. }
+procedure TTyPopoverDismissTest.TestAnUntouchedPopoverDismissesWhenTheClickIsOver;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  AssertTrue('up until the click is over', P.Showing);
+  P.SettleTargetPress;
+  AssertFalse('then it goes, like any click away', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+  AssertTrue('the reason OnHide saw', FReasonInOnHide = phrClickOutside);
+  AssertTrue('and the one that stays', P.HideReason = phrClickOutside);
+  AssertFalse('settled', P.PressWaiting);
+  P.SettleTargetPress;
+  AssertEquals('settling twice adds nothing', 1, FHidden);
+end;
+
+{ TestShownAgainByTheTargetItStays
+  The Target's handler shows the popover again (an "open" button rather than a toggle). That
+  answers the press: settling it does not take the popover down, active window or not. }
+procedure TTyPopoverDismissTest.TestShownAgainByTheTargetItStays;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  ShowIt;
+  AssertFalse('a Show answers the press', P.PressWaiting);
+  P.Active := False;
+  P.SettleTargetPress;
+  P.TargetPressTick;
+  P.TargetPressTick;
+  AssertTrue('it stays', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+end;
+
+{ TestActiveAgainItStaysAndCanStillBeDismissed
+  Nothing hid or showed it, but its window has the activation again when the click is over
+  (the handler put the focus into the content): it stays -- and, being active, the next click
+  away still takes it down. The same settle with the window inactive is the previous test's
+  dismissal, so it is the activation that decides. }
+procedure TTyPopoverDismissTest.TestActiveAgainItStaysAndCanStillBeDismissed;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  P.Active := True;
+  P.SettleTargetPress;
+  AssertTrue('active again: it stays', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+  AssertFalse('settled', P.PressWaiting);
+  P.Active := False;
+  P.PressOn := FOther;
+  Deactivate;
+  AssertFalse('the next click away dismisses it', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+end;
+
+{ TestWithoutATargetEveryDeactivationDismisses
+  No Target (a popover shown at a rect): nothing is exempt, wherever the pointer is -- exactly
+  as before. With the Target set, the same pointer keeps it up. }
+procedure TTyPopoverDismissTest.TestWithoutATargetEveryDeactivationDismisses;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  P.PressAnywhere := True;
+  P.Target := nil;
+  ShowIt;
+  Deactivate;
+  AssertFalse('no Target: down at once', P.Showing);
+  AssertEquals('its OnHide', 1, FHidden);
+  AssertFalse('nothing waiting', P.PressWaiting);
+  P.Target := FButton;
+  ShowIt;
+  Deactivate;
+  AssertTrue('with the Target the same press keeps it up', P.Showing);
+end;
+
+{ TestCloseOnClickOutsideOffNothingDismisses
+  A "must answer" popover: no deactivation takes it down, on the Target or off it, and no
+  press is left waiting to take it down later. Switched off while a press waits, the settle
+  leaves it up too. }
+procedure TTyPopoverDismissTest.TestCloseOnClickOutsideOffNothingDismisses;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  P.CloseOnClickOutside := False;
+  ShowIt;
+  P.PressOn := FOther;
+  Deactivate;
+  AssertTrue('a click away leaves it up', P.Showing);
+  P.PressOn := FButton;
+  Deactivate;
+  AssertTrue('so does one on the Target', P.Showing);
+  AssertFalse('and nothing waits', P.PressWaiting);
+  P.SettleTargetPress;
+  P.TargetPressTick;
+  P.TargetPressTick;
+  AssertTrue('still up', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+
+  P.CloseOnClickOutside := True;
+  Deactivate;
+  AssertTrue('a press waits', P.PressWaiting);
+  P.CloseOnClickOutside := False;
+  P.SettleTargetPress;
+  AssertTrue('switched off meanwhile: it stays', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+end;
+
+{ TestHideReasonNamesEachWayOfHiding
+  Three dismissals in a row, each by a different way, each read inside OnHide and afterwards. }
+procedure TTyPopoverDismissTest.TestHideReasonNamesEachWayOfHiding;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FOther;
+  Deactivate;
+  AssertEquals('hidden', 1, FHidden);
+  AssertTrue('click away, inside OnHide', FReasonInOnHide = phrClickOutside);
+  AssertTrue('click away, afterwards', P.HideReason = phrClickOutside);
+
+  ShowIt;
+  PressEscape;
+  AssertEquals('hidden', 2, FHidden);
+  AssertTrue('Escape, inside OnHide', FReasonInOnHide = phrEscape);
+  AssertTrue('Escape, afterwards', P.HideReason = phrEscape);
+
+  ShowIt;
+  P.Hide;
+  AssertEquals('hidden', 3, FHidden);
+  AssertTrue('Hide, inside OnHide', FReasonInOnHide = phrCode);
+  AssertTrue('Hide, afterwards', P.HideReason = phrCode);
+
+  P.Hide;
+  AssertEquals('a Hide on a hidden popover is not a dismissal', 3, FHidden);
+end;
+
+{ TestHideReasonIsTheOneThatStartedTheFade
+  With a fade-out the reason is known as soon as Showing drops, and it is the one OnHide sees
+  when the fade ends -- a Hide called meanwhile does not rename a dismissal already under way. }
+procedure TTyPopoverDismissTest.TestHideReasonIsTheOneThatStartedTheFade;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(FPop);
+  P.Drive := True;
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(160);
+  P.PressOn := FOther;
+  Deactivate;
+  AssertFalse('Showing drops at once', P.Showing);
+  AssertTrue('fading out', P.Animating);
+  AssertEquals('no OnHide yet', 0, FHidden);
+  AssertTrue('the reason is already there', P.HideReason = phrClickOutside);
+  P.Hide;
+  P.AdvanceAnimation(80);
+  AssertEquals('OnHide once, at the end', 1, FHidden);
+  AssertTrue('the reason that started it', FReasonInOnHide = phrClickOutside);
+
+  // And the other way round: a Hide's fade is not renamed by Escape.
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(160);
+  P.Hide;
+  PressEscape;
+  P.AdvanceAnimation(80);
+  AssertEquals('the second dismissal', 2, FHidden);
+  AssertTrue('hidden by code', FReasonInOnHide = phrCode);
+end;
+
+procedure TTyPopoverDismissTest.TestEscapeDismissesOnlyWhenAllowed;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  P.CloseOnEscape := False;
+  ShowIt;
+  PressEscape;
+  AssertTrue('Escape switched off: it stays', P.Showing);
+  AssertEquals('no OnHide', 0, FHidden);
+  P.CloseOnEscape := True;
+  PressEscape;
+  AssertFalse('Escape takes it down', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+  AssertTrue('by Escape', P.HideReason = phrEscape);
+end;
+
+{ TestButtonUpSettlesAfterTheClickNotInsideIt
+  The wiring that settles a press in a running application: LCL announces every mouse message
+  before the control gets it. A move or a button going down settles nothing; a button coming
+  up -- any button, whichever control the widgetset names -- does, but only once that message
+  has been handled, because the click fires inside it. Held is on throughout, so it is not
+  the timer that settles. }
+procedure TTyPopoverDismissTest.TestButtonUpSettlesAfterTheClickNotInsideIt;
+const
+  CUps: array[0..3] of Cardinal = (LM_LBUTTONUP, LM_RBUTTONUP, LM_MBUTTONUP, LM_XBUTTONUP);
+  CDowns: array[0..3] of Cardinal = (LM_LBUTTONDOWN, LM_RBUTTONDOWN, LM_MBUTTONDOWN,
+    LM_XBUTTONDOWN);
+var
+  P: TPopAccess;
+  i: Integer;
+  tag: string;
+begin
+  P := TPopAccess(FPop);
+  P.Held := True;
+  P.PressOn := FButton;
+  for i := 0 to High(CUps) do
+  begin
+    tag := Format('button %d: ', [i]);
+    FHidden := 0;
+    ShowIt;
+    Deactivate;
+    Application.NotifyUserInputHandler(FButton, LM_MOUSEMOVE);
+    Application.NotifyUserInputHandler(FButton, CDowns[i]);
+    Application.ProcessMessages;
+    AssertTrue(tag + 'a move and a button down settle nothing', P.Showing);
+    AssertTrue(tag + 'still waiting', P.PressWaiting);
+    Application.NotifyUserInputHandler(FForm, CUps[i]);
+    AssertTrue(tag + 'not inside the notification: the click is not delivered yet', P.Showing);
+    AssertTrue(tag + 'still waiting', P.PressWaiting);
+    Application.ProcessMessages;
+    AssertFalse(tag + 'settled once the message is done', P.Showing);
+    AssertEquals(tag + 'one OnHide', 1, FHidden);
+    AssertTrue(tag + 'a click away', P.HideReason = phrClickOutside);
+    AssertFalse(tag + 'nothing waiting', P.PressWaiting);
+  end;
+end;
+
+{ TestButtonUpThenTheToggleHidesOnce
+  The whole toggle in the order a running application sees it: deactivation, the button-up
+  announcement, the Target's OnClick, then the queue. One OnHide, by the handler. }
+procedure TTyPopoverDismissTest.TestButtonUpThenTheToggleHidesOnce;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  P.Held := True;
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+  ToggleClick(FButton);
+  Application.ProcessMessages;
+  AssertFalse('closed', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+  AssertTrue('by the handler', P.HideReason = phrCode);
+  // The popover no longer listens: a later button-up is nobody's business.
+  ShowIt;
+  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+  Application.ProcessMessages;
+  AssertTrue('a click that deactivated nothing settles nothing', P.Showing);
+end;
+
+{ TestTicksSettleOnceTheButtonsStayUp
+  The safety net for a press whose button-up never reaches LCL: the popover polls the buttons.
+  Nothing settles while one is down, nor on the first tick that sees them up (its click may
+  not be delivered yet); a button seen down again starts that over. }
+procedure TTyPopoverDismissTest.TestTicksSettleOnceTheButtonsStayUp;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  // An earlier press, answered after one tick had seen the buttons up, leaves nothing over.
+  Deactivate;
+  P.TargetPressTick;
+  ShowIt;
+  Deactivate;
+  P.TargetPressTick;
+  AssertTrue('a new press waits its own two ticks', P.Showing);
+  ShowIt;
+
+  P.Held := True;
+  Deactivate;
+  P.TargetPressTick;
+  P.TargetPressTick;
+  P.TargetPressTick;
+  AssertTrue('held: nothing settles', P.Showing);
+  P.Held := False;
+  P.TargetPressTick;
+  AssertTrue('up for one tick: not yet', P.Showing);
+  P.Held := True;
+  P.TargetPressTick;
+  P.Held := False;
+  P.TargetPressTick;
+  AssertTrue('down again in between: the wait starts over', P.Showing);
+  P.TargetPressTick;
+  AssertFalse('up for two ticks: settled', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+  AssertTrue('a click away', P.HideReason = phrClickOutside);
+  AssertFalse('nothing waiting', P.PressWaiting);
+end;
+
+{ TestTheTimerRunsWhileAPressWaits
+  The polling is really running: with no button-up announced and the buttons up, a waiting
+  press is settled by the popover's own timer. With a button held it waits however long. }
+procedure TTyPopoverDismissTest.TestTheTimerRunsWhileAPressWaits;
+var
+  P: TPopAccess;
+  t0: QWord;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  P.Held := True;
+  Deactivate;
+  Pump(250);
+  AssertTrue('held: the timer settles nothing', P.Showing);
+  P.Held := False;
+  t0 := GetTickCount64;
+  while P.PressWaiting and (GetTickCount64 - t0 < 3000) do
+    Pump(20);
+  AssertFalse('the timer settled it', P.PressWaiting);
+  AssertFalse('as a click away', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+
+  // And the next press gets the timer too: settling the first one stopped it.
+  ShowIt;
+  Deactivate;
+  t0 := GetTickCount64;
+  while P.PressWaiting and (GetTickCount64 - t0 < 3000) do
+    Pump(20);
+  AssertFalse('the timer settled the second press', P.PressWaiting);
+  AssertEquals('a second OnHide', 2, FHidden);
+end;
+
+{ TestShowDuringTheFadeOutTakesTheActivationBack
+  A quick second click on a toggle: the first click's Hide is still fading out when the
+  second one calls Show. The popup turns round where it is -- and since the press on Target
+  took the activation from its window before the fade began, the Show gives it back. Without
+  that the popover would be up, inactive, and out of reach of any click away.
+  This is ShowAt itself, with the work area and PPI it uses, so the turn-round is the same
+  place and no window is ever put up; a Hide that finished (no fade) would be a fresh show
+  instead, which the Visible check rules out. }
+procedure TTyPopoverDismissTest.TestShowDuringTheFadeOutTakesTheActivationBack;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  ppi: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(FPop);
+  P.Drive := True;
+  ppi := Screen.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  g := P.BeginShowing(CAnchor, TyPopupWorkArea(CAnchor), ppi);
+  P.ArmShowAnimation(g, ppi);
+  P.AdvanceAnimation(160);
+  P.PressOn := FButton;
+  Deactivate;
+  P.Hide;
+  AssertTrue('fading out', P.Animating);
+  AssertFalse('down for now', P.Showing);
+  AssertEquals('a Hide activates nothing', 0, P.Activations);
+  P.ShowAt(CAnchor);
+  AssertTrue('turned round', P.Showing);
+  AssertEquals('it never went away: no OnHide', 0, FHidden);
+  AssertFalse('nor was a window put up', P.Win.Visible);
+  AssertEquals('and the Show gave its window the activation back', 1, P.Activations);
+end;
+
+{ TestFreeingWithAPressWaitingLeavesNothingBehind
+  Freed while a press waits: no OnHide, the content goes home, and neither the input handler,
+  the queued settle nor the timer reaches the freed popover -- its memory is poisoned, so one
+  that did would fault. }
+procedure TTyPopoverDismissTest.TestFreeingWithAPressWaitingLeavesNothingBehind;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  P.Held := True;   // the timer settles nothing before the Free
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  Deactivate;   // the window came back and left again while the press waited
+  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);   // a settle is queued
+  AssertTrue('waiting', P.PressWaiting);
+  BeginPoison;
+  try
+    FPop.Free;
+    FPop := nil;
+    Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+    Pump(150);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('destroying is not a dismissal: no OnHide', 0, FHidden);
+  AssertSame('the content is home', FForm, FPanel.Parent);
+end;
+
+procedure TTyPopoverDismissTest.TestTargetFreedMidPressStillSettles;
+var
+  P: TPopAccess;
+begin
+  P := TPopAccess(FPop);
+  ShowIt;
+  P.PressOn := FButton;
+  Deactivate;
+  FreeAndNil(FButton);
+  AssertNull('the Target reference is dropped', P.Target);
+  AssertTrue('still up', P.Showing);
+  P.SettleTargetPress;
+  AssertFalse('settled as a click away', P.Showing);
+  AssertEquals('one OnHide', 1, FHidden);
+end;
+
+{ TestPointerIsOnAControlByItsScreenRect
+  The popover's own answer to "is the pointer pressed on this control": the pointer is inside
+  the control's screen rect, the control is visible, and the pointer is not on the popup's own
+  window. The host has no handle, so its client origin is (0,0) and the child's screen rect is
+  its bounds; the rects are laid around wherever the real pointer happens to be. }
+procedure TTyPopoverDismissTest.TestPointerIsOnAControlByItsScreenRect;
+var
+  D: TPopDefaults;
+  host, btn: TWinControl;
+  loose: TGraphicControl;
+  pos: TPoint;
+begin
+  host := TWinControl.Create(nil);
+  D := TPopDefaults.Create(nil);
+  try
+    btn := TWinControl.Create(host);
+    btn.Parent := host;
+    D.Controller := FCtl;
+    D.Target := btn;
+    pos := Mouse.CursorPos;
+    btn.SetBounds(pos.X - 4000, pos.Y - 4000, 8000, 8000);
+    AssertTrue('the pointer is inside its rect', D.PointerPressedOn(btn));
+    btn.SetBounds(pos.X + 9000, pos.Y - 4000, 8000, 8000);
+    AssertFalse('the pointer is beside it', D.PointerPressedOn(btn));
+    btn.SetBounds(pos.X - 4000, pos.Y - 4000, 8000, 8000);
+    btn.Visible := False;
+    AssertFalse('a hidden control is not under the pointer', D.PointerPressedOn(btn));
+    btn.Visible := True;
+    AssertTrue('visible again', D.PointerPressedOn(btn));
+    // A flyout lies over its target: a pointer on the popup itself is not on the target.
+    D.BeginShowing(CAnchor, CWork, 96);
+    D.Win.SetBounds(pos.X - 4000, pos.Y - 4000, 8000, 8000);
+    AssertFalse('the pointer is on the popup window', D.PointerPressedOn(btn));
+    D.Win.SetBounds(pos.X + 9000, pos.Y - 4000, 100, 100);
+    AssertTrue('the popup is elsewhere', D.PointerPressedOn(btn));
+    AssertFalse('no control, no press', D.PointerPressedOn(nil));
+    // A graphic control that is on no parent is nowhere on screen: no press, and no raise.
+    loose := TGraphicControl.Create(nil);
+    try
+      loose.SetBounds(pos.X - 4000, pos.Y - 4000, 8000, 8000);
+      AssertFalse('a control with no parent', D.PointerPressedOn(loose));
+      loose.Parent := host;
+      AssertTrue('the same control once it is on the host', D.PointerPressedOn(loose));
+    finally
+      loose.Free;
+    end;
+  finally
+    D.Free;
+    host.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyPopoverRulesTest);
   RegisterTest(TTyPopoverComponentTest);
+  RegisterTest(TTyPopoverDismissTest);
 end.

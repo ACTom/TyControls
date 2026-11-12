@@ -91,6 +91,13 @@ type
     nothing else in the library or the LCL spells them). }
   TTyFlyoutPanelAlign = (fpaTop, fpaBottom, fpaLeft, fpaRight);
 
+  { What took a popover down.
+      phrCode         -- the application: Hide, or anything that hides on its behalf (the
+                         Content being freed or replaced while it is up).
+      phrClickOutside -- CloseOnClickOutside: the popup window lost the activation.
+      phrEscape       -- CloseOnEscape: Escape in the popup window. }
+  TTyPopoverHideReason = (phrCode, phrClickOutside, phrEscape);
+
   { Where the popup window goes and where its arrow points. Frame/TipX/TipY are in the SAME
     coordinate space as the work area handed to TyPopoverPlace (screen px at runtime; the
     tests pass a synthetic rect, which is exactly why it is a parameter).
@@ -387,6 +394,29 @@ type
     FAnimTimer: TTimer;
     FRestFrame: TRect;     // where the frame lands: the placement, untouched by the animation
     FMoveDX, FMoveDY: Integer;   // MoveEffect's start, relative to FRestFrame (device px)
+    FHideReason: TTyPopoverHideReason;
+    { A press on Target took the activation away and the popover let it through: it waits,
+      still up, until that click is over (SettleTargetPress). FPressTimer polls the buttons in
+      case the button-up never reaches LCL; FPressUpSeen: the last poll saw them all up;
+      FSettleQueued: a button-up was announced and its settle may still be in the async
+      queue. }
+    FTargetPress: Boolean;
+    FPressUpSeen: Boolean;
+    FSettleQueued: Boolean;
+    FPressTimer: TTimer;
+    { The hide, with its reason: Hide is Dismiss(phrCode). The reason is recorded when the
+      dismissal starts (Showing drops), not when a fade-out ends. }
+    procedure Dismiss(AReason: TTyPopoverHideReason);
+    { The popup window lost the activation (its OnDeactivate). }
+    procedure WindowDeactivated;
+    { Start / stop waiting for the press on Target to be over. Dropping it settles nothing. }
+    procedure HoldForTargetPress;
+    procedure DropTargetPress;
+    procedure PressTimerTick(Sender: TObject);
+    { LCL announces every mouse and key message here before the control gets it: a button
+      coming up ends the press, and the settle is queued behind that message. }
+    procedure AppUserInput(Sender: TObject; Msg: Cardinal);
+    procedure AsyncSettle(Data: PtrInt);
     procedure SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
     procedure SetFlyoutPanel(AValue: TTyPopoverFlyoutPanel);
     { Whether the arrow (and its strip) is part of the frame: ShowArrow, and never in the
@@ -460,6 +490,39 @@ type
     { Whether a hide may be animated: the window is really up. The tests answer for a window
       that cannot be shown headlessly. }
     function CanDriveAnimation: Boolean; virtual;
+    { Bring the popup window to the front and give it the activation: the last step of every
+      Show, also of one that only turns a fade-out round. A popover that is up must have the
+      activation, or no click away would ever reach CloseOnClickOutside. }
+    procedure ActivateWindow; virtual;
+    { Whether the pointer is pressed on AControl right now. The popover asks it about Target
+      when its window loses the activation: a press there belongs to the Target, not to
+      CloseOnClickOutside. The answer is by position -- the pointer is inside the control's
+      screen rect (the one ShowFor anchors to), the control is visible, and the pointer is
+      not on the popup itself -- and not by the buttons: the activation leaves before the
+      press is delivered, and the widgetsets do not agree on whether a button already reads
+      as down by then. A deactivation that was no press (the keyboard, the application's own
+      code) while the pointer rests on Target is therefore held too, and dismissed a moment
+      later by the settle. Override to exempt more than the Target's rect, or less. }
+    function PointerPressedOn(AControl: TControl): Boolean; virtual;
+    { Whether a mouse button is down. Only the safety net reads it (TargetPressTick). }
+    function PointerButtonHeld: Boolean; virtual;
+    { Whether the popup window has the activation, i.e. whether a click away would still
+      reach CloseOnClickOutside: it is the form LCL will send the next deactivation to. }
+    function WindowActive: Boolean; virtual;
+    { The click of the press that was let through is over. Whatever answered it -- a Hide
+      (the toggle) or a Show -- has already dropped it and nothing happens here. Otherwise
+      the popover stays if its window is active again, and is dismissed as a click away
+      (phrClickOutside) if not: the Target was only an anchor. A running application gets
+      here by itself, right after the button-up message has been handled. }
+    procedure SettleTargetPress;
+    { The safety net for a press whose button-up never reaches LCL (the pointer was only
+      resting on Target, the release went to another application): polled by a timer while
+      a press waits, it settles once the buttons have been up for two polls running -- two,
+      because where the widgetset reports the physical buttons the first may come before the
+      button-up message, and its click, are delivered. }
+    procedure TargetPressTick;
+    { True between a press on Target taking the activation away and its settle. }
+    property TargetPressPending: Boolean read FTargetPress;
     { The window, for the tests (its opacity and bounds are what the animation drives). }
     property PopupWindow: TTyPopoverWindow read FWin;
     { How far in from each end of its edge the arrow's base must stay so it leaves the
@@ -534,8 +597,13 @@ type
     property Showing: Boolean read FShowing;
     { True while a show or hide animation is running. }
     property Animating: Boolean read FAnimActive;
+    { What took the popover down the last time. Set when the dismissal starts, so it is
+      there as soon as Showing drops, inside OnHide (even one a fade-out delays), and until
+      the popover is shown again; phrCode before the first dismissal. }
+    property HideReason: TTyPopoverHideReason read FHideReason;
     { The control the popover belongs to and points at. Show uses it; ShowFor/ShowAt override
-      it for one call without disturbing it. }
+      it for one call without disturbing it. A press on it is not a click outside (see
+      CloseOnClickOutside), whichever of the three put the popover up. }
     property Target: TControl read FTarget write SetTarget;
     { The container whose controls the popup shows. Fill it in the designer (a TTyPanel with
       your buttons in it, typically left Visible=False on the form) and point this at it: on
@@ -555,7 +623,11 @@ type
     property ShowArrow: Boolean read FShowArrow write SetShowArrow default True;
     { Dismiss when the user clicks away (the popup's window deactivating). On by default: that
       is what a flyout does. Turn it OFF for a popover whose content the user must answer —
-      it then stays until Hide, or Escape. }
+      it then stays until Hide, or Escape.
+      A press on Target is not a click away: the popover stays up for the Target's own
+      handler, so `if P.Showing then P.Hide else P.Show` in the Target's OnClick toggles it.
+      Once that click is over, a popover the handler did not touch -- and whose window did
+      not get the activation back -- is dismissed like any other click away. }
     property CloseOnClickOutside: Boolean read FCloseOnClickOutside
       write FCloseOnClickOutside default True;
     { Dismiss on Escape. Kept separate from CloseOnClickOutside so a "must answer" popover can
@@ -589,11 +661,11 @@ type
       handler may focus a control inside). With an animation it fires as the animation
       STARTS, not when it ends: the content is already live. }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
-    { Fired once per dismissal, whatever caused it: a click away, Escape, or Hide. NOT fired
-      when the component is destroyed — a component going away is not a popover the user
-      dismissed. With a fade-out it fires when the fade ENDS (the content is back home by
-      then); a Show that catches the popup still fading turns it round and the OnHide never
-      comes, because the popup never went away. }
+    { Fired once per dismissal, whatever caused it: a click away, Escape, or Hide (HideReason
+      says which). NOT fired when the component is destroyed — a component going away is not
+      a popover the user dismissed. With a fade-out it fires when the fade ENDS (the content
+      is back home by then); a Show that catches the popup still fading turns it round and
+      the OnHide never comes, because the popup never went away. }
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
   end;
 
@@ -621,9 +693,15 @@ type
 implementation
 
 uses
-  BGRABitmapTypes, BGRACanvas2D,
+  LMessages, BGRABitmapTypes, BGRACanvas2D,
   tyControls.PlatformWS,   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
   tyControls.Popup;        // TyPopupWorkArea (#148)
+
+const
+  { How often a press on Target that was let through polls the mouse buttons, in ms. Only
+    the safety net runs on it (TTyCustomPopover.TargetPressTick): a click is settled by its
+    own button-up message. }
+  CTargetPressPollMs = 50;
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -1149,9 +1227,9 @@ end;
 
 procedure TTyPopoverWindow.DoDeactivate(Sender: TObject);
 begin
-  // Lost focus (a click outside) -> dismiss, like any flyout — unless the app said not to.
-  if (FOwnerPop <> nil) and FOwnerPop.CloseOnClickOutside then
-    FOwnerPop.Hide;
+  // Lost focus -> the popover decides: a click outside dismisses it, like any flyout (unless
+  // the app said not to); a press on its Target does not.
+  if FOwnerPop <> nil then FOwnerPop.WindowDeactivated;
 end;
 
 procedure TTyPopoverWindow.KeyDown(var Key: Word; Shift: TShiftState);
@@ -1160,7 +1238,7 @@ begin
   if (Key = VK_ESCAPE) and (FOwnerPop <> nil) and FOwnerPop.CloseOnEscape then
   begin
     Key := 0;
-    FOwnerPop.Hide;
+    FOwnerPop.Dismiss(phrEscape);
   end;
 end;
 
@@ -1238,9 +1316,10 @@ begin
   // anything it would call into goes away.
   FOnHide := nil;
   if FHiding then FinishHide;
-  Hide;
+  Hide;   // drops a press that was waiting too: its input handler and its queued settle
   StopAnimation;
   FreeAndNil(FAnimTimer);
+  FreeAndNil(FPressTimer);
   FreeAndNil(FWin);   // CreateNew(nil): owned by us, not by a form
   FreeAndNil(FAnimationOptions);
   FreeAndNil(FFlyoutPanel);
@@ -1552,6 +1631,7 @@ var
   Lay: TTyPopoverLayout;
 begin
   if APPI <= 0 then APPI := 96;
+  DropTargetPress;   // a Show while a press on Target waits is that press's answer: it stays
   EnsureWindow;
   Result := GeometryIn(AAnchorScreen, AWorkArea, APPI);
   FWin.FSide := Result.Side;
@@ -1580,13 +1660,19 @@ begin
   ShowFor(FTarget);
 end;
 
-procedure TTyCustomPopover.ShowFor(AControl: TControl);
+{ A control's rect on screen: what ShowFor anchors to, and what counts as "on the Target". }
+function ControlScreenRect(AControl: TControl): TRect;
 var
   tl: TPoint;
 begin
-  if AControl = nil then Exit;
   tl := AControl.ClientToScreen(Point(0, 0));
-  ShowAt(Rect(tl.X, tl.Y, tl.X + AControl.Width, tl.Y + AControl.Height));
+  Result := Rect(tl.X, tl.Y, tl.X + AControl.Width, tl.Y + AControl.Height);
+end;
+
+procedure TTyCustomPopover.ShowFor(AControl: TControl);
+begin
+  if AControl = nil then Exit;
+  ShowAt(ControlScreenRect(AControl));
 end;
 
 procedure TTyCustomPopover.ShowAt(const AAnchorScreen: TRect);
@@ -1599,7 +1685,14 @@ begin
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   // Still fading out from the last Hide: turn round in place, or finish that dismissal first.
-  if FHiding and TurnBackHide(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi) then Exit;
+  if FHiding and TurnBackHide(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi) then
+  begin
+    { It never went away, but its window may have lost the activation before it began to
+      fade -- a press on Target does that, and a quick second click on a toggle lands here.
+      Up again, it must be a window a click away still reaches. }
+    ActivateWindow;
+    Exit;
+  end;
   wasShowing := FShowing;
   geo := BeginShowing(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi);   // #148: its monitor
   if not wasShowing then
@@ -1608,7 +1701,7 @@ begin
     FRestFrame := geo.Frame;     // re-placed mid-animation: it now settles HERE
   TyRaisePopupWindow(FWin);   // macOS: above a modal dialog it opens in (#104)
   FWin.Show;
-  FWin.BringToFront;
+  ActivateWindow;
   // A bsNone form can be re-placed by the WM on show (TTyBalloonHint / TTyNotification re-set
   // for the same reason), so assert the rect again once it is up -- the animation's current
   // frame while one runs.
@@ -1622,7 +1715,17 @@ begin
   if Assigned(FOnShow) then FOnShow(Self);
 end;
 
+procedure TTyCustomPopover.ActivateWindow;
+begin
+  if FWin <> nil then FWin.BringToFront;
+end;
+
 procedure TTyCustomPopover.Hide;
+begin
+  Dismiss(phrCode);
+end;
+
+procedure TTyCustomPopover.Dismiss(AReason: TTyPopoverHideReason);
 var
   dur: Integer;
 begin
@@ -1636,6 +1739,8 @@ begin
     Exit;
   end;
   FShowing := False;   // set FIRST: hiding the window can fire OnDeactivate straight back here
+  FHideReason := AReason;
+  DropTargetPress;     // whatever hid it has answered a press on Target that was waiting
   dur := HideDurationMs;
   if WantsFade and (dur > 0) and CanDriveAnimation
      and not (csDestroying in ComponentState) then
@@ -1664,6 +1769,126 @@ begin
   ReleaseContent;
   if (FWin <> nil) and FWin.Visible then FWin.Hide;
   if Assigned(FOnHide) then FOnHide(Self);
+end;
+
+// ---------------------------------------------------------------------------
+// Losing the activation: a click away, or a press on Target
+// ---------------------------------------------------------------------------
+procedure TTyCustomPopover.WindowDeactivated;
+begin
+  if not FCloseOnClickOutside then Exit;
+  { A press on Target is the Target's to answer -- its handler may be this popover's toggle,
+    and must find it still showing. Hold the dismissal until that click is over. }
+  if FShowing and (FTarget <> nil) and PointerPressedOn(FTarget) then
+    HoldForTargetPress
+  else
+    Dismiss(phrClickOutside);
+end;
+
+function TTyCustomPopover.PointerPressedOn(AControl: TControl): Boolean;
+var
+  p: TPoint;
+begin
+  Result := False;
+  if (AControl = nil) or not AControl.IsVisible then Exit;
+  // A graphic control with no parent is nowhere on screen (and ClientToScreen would raise).
+  if (AControl.Parent = nil) and not (AControl is TWinControl) then Exit;
+  p := Mouse.CursorPos;
+  // On the popup itself (a flyout lies over its target): that is no press on the Target.
+  if (FWin <> nil) and PtInRect(FWin.BoundsRect, p) then Exit;
+  Result := PtInRect(ControlScreenRect(AControl), p);
+end;
+
+function TTyCustomPopover.PointerButtonHeld: Boolean;
+begin
+  Result := (GetKeyState(VK_LBUTTON) < 0) or (GetKeyState(VK_RBUTTON) < 0)
+    or (GetKeyState(VK_MBUTTON) < 0);
+end;
+
+function TTyCustomPopover.WindowActive: Boolean;
+begin
+  Result := (FWin <> nil) and (Screen.FocusedForm = FWin);
+end;
+
+procedure TTyCustomPopover.HoldForTargetPress;
+begin
+  { May be waiting already (the window came back and left again): the wait starts over, and
+    LCL keeps one copy of a handler however often it is added. }
+  FPressUpSeen := False;
+  FTargetPress := True;
+  Application.AddOnUserInputHandler(@AppUserInput);
+  if FPressTimer = nil then
+  begin
+    FPressTimer := TTimer.Create(nil);   // freed in Destroy
+    FPressTimer.Interval := CTargetPressPollMs;
+    FPressTimer.OnTimer := @PressTimerTick;
+  end;
+  FPressTimer.Enabled := True;
+end;
+
+procedure TTyCustomPopover.DropTargetPress;
+begin
+  if not FTargetPress then Exit;
+  FTargetPress := False;
+  if FPressTimer <> nil then FPressTimer.Enabled := False;
+  if Application <> nil then
+  begin
+    Application.RemoveOnUserInputHandler(@AppUserInput);
+    if FSettleQueued then Application.RemoveAsyncCalls(Self);
+  end;
+  FSettleQueued := False;
+end;
+
+procedure TTyCustomPopover.AppUserInput(Sender: TObject; Msg: Cardinal);
+begin
+  if not FTargetPress then Exit;
+  { Any button, on any control: the widgetset names the windowed control that got the
+    message, which is not the Target when that is a graphic control. }
+  case Msg of
+    LM_LBUTTONUP, LM_RBUTTONUP, LM_MBUTTONUP, LM_XBUTTONUP:
+      begin
+        // The click fires while the control handles this message: settle behind it.
+        FSettleQueued := True;
+        Application.QueueAsyncCall(@AsyncSettle, 0);
+      end;
+  end;
+end;
+
+procedure TTyCustomPopover.AsyncSettle(Data: PtrInt);
+begin
+  { Always this press's: dropping a press takes its queued settles out with it (and LCL takes
+    each call off the queue before making it, so dropping from inside one is safe). }
+  SettleTargetPress;
+end;
+
+procedure TTyCustomPopover.SettleTargetPress;
+begin
+  if not FTargetPress then Exit;
+  DropTargetPress;
+  { Still up, so nothing answered the press. With the activation back it stays, and the next
+    click away finds it; without, nothing would ever dismiss it -- the Target was only an
+    anchor, and the press was a click away after all. }
+  if FShowing and FCloseOnClickOutside and not WindowActive then
+    Dismiss(phrClickOutside);
+end;
+
+procedure TTyCustomPopover.TargetPressTick;
+begin
+  if not FTargetPress then Exit;
+  if PointerButtonHeld then
+    FPressUpSeen := False
+  else if not FPressUpSeen then
+    FPressUpSeen := True
+  else
+    SettleTargetPress;
+end;
+
+procedure TTyCustomPopover.PressTimerTick(Sender: TObject);
+begin
+  if FTargetPress then
+    TargetPressTick
+  else
+    FPressTimer.Enabled := False;
 end;
 
 // ---------------------------------------------------------------------------
