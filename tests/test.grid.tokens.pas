@@ -84,6 +84,10 @@ type
     procedure TestTheCursorsRowNumber;
     { the theme engine }
     procedure TestAVarMayNameNoneOrAnotherVar;
+    procedure TestAGridsOverrideIsNotParsedAgainOnEveryPaint;
+    procedure TestOneGridsHeaderBorderColourFromItsOverride;
+    procedure TestOneGridsSelectionFrameWidthFromItsOverride;
+    procedure TestOneGridsHeaderFontFromItsOverride;
   end;
 
 implementation
@@ -1047,6 +1051,91 @@ begin
   AssertEquals('a length through two names', 17, s.FontSize);
   s := FCtl.Model.ResolveStyle('TyY', '', []);
   AssertTrue('a gradient through a name', s.Background.Kind <> tfkSolid);
+end;
+
+{ #225. A grid with --grid- tokens in its own StyleOverride parsed that override about 130
+  times a paint -- every part style asked the model directly, seven tokens at a time -- and
+  painted in 6.8 ms where 2.6 would do. What the override answers is the control's to keep. }
+procedure TGridTokensTest.TestAGridsOverrideIsNotParsedAgainOnEveryPaint;
+var
+  g: TTyStringGrid;
+  before: Integer;
+begin
+  Theme('');
+  g := MakeGrid;
+  g.StyleOverride := '--grid-header-bg: #FF0000; --grid-cell-bg: #00FF00; --grid-line-v-width: 0; --grid-hover: row;';
+  Render(g);
+  AssertTrue('setup: the header takes the override''s fill', IsColor(40, 10, 255, 0, 0));
+  AssertTrue('setup: and so do the cells', IsColor(40, 24 + 3 * 20 + 10, 0, 255, 0));
+  before := FCtl.Model.OverrideParsesForTest;
+  Render(g);
+  Render(g);
+  AssertEquals('a second and a third paint parse the override no more', 0,
+    FCtl.Model.OverrideParsesForTest - before);
+  AssertTrue('and still paint by it', IsColor(40, 10, 255, 0, 0));
+
+  g.StyleOverride := '--grid-header-bg: #0000FF;';
+  Render(g);
+  AssertTrue('a new override is read: the header', IsColor(40, 10, 0, 0, 255));
+  AssertFalse('a new override is read: the cells are the theme''s again', IsColor(40, 24 + 3 * 20 + 10, 0, 255, 0));
+end;
+
+{ #225. A part's -border-color, -border-width, -font-size and -font-weight in one grid's own
+  StyleOverride (the reference promises them beside -bg and -color): each is seen in the
+  picture. The header's border colour is what its separators are drawn in. }
+procedure TGridTokensTest.TestOneGridsHeaderBorderColourFromItsOverride;
+var
+  g: TTyStringGrid;
+begin
+  Theme(':root { --grid-header-rule-width: 0; --grid-header-separator-width: 2px; --grid-header-separator-height: 50%; }');
+  g := MakeGrid;
+  Render(g);
+  AssertEquals('the theme''s separator is not red', 0, CountCol(79, 0, 23, 255, 0, 0));
+  g.StyleOverride := '--grid-header-border-color: #FF0000';
+  Render(g);
+  AssertEquals('the separator is drawn in the override''s colour', 12, CountCol(79, 0, 23, 255, 0, 0));
+end;
+
+procedure TGridTokensTest.TestOneGridsSelectionFrameWidthFromItsOverride;
+var
+  g: TTyStringGrid;
+  thin, thick: Integer;
+begin
+  Theme('TyGridSelectionFrame { border-color: #FF0000; border-width: 1px; }');
+  g := MakeGrid(False);
+  g.SelectionMode := gsmCell;
+  g.Col := 0;
+  g.Row := 1;
+  Render(g);
+  { across the frame's right edge, half way down the cell }
+  thin := CountRow(30, 60, 90, 255, 0, 0);
+  g.StyleOverride := '--grid-selection-frame-border-width: 3px';
+  Render(g);
+  thick := CountRow(30, 60, 90, 255, 0, 0);
+  AssertEquals('the theme''s frame is one pixel', 1, thin);
+  AssertEquals('the override''s is three', 3, thick);
+end;
+
+procedure TGridTokensTest.TestOneGridsHeaderFontFromItsOverride;
+var
+  g: TTyStringGrid;
+  plain, bold, large: Integer;
+begin
+  Theme('');
+  g := MakeGrid;
+  TTyColumn(g.Header.Columns.Items[0]).Text := 'HHHH';
+  g.StyleOverride := '--grid-header-color: #FF0000';
+  Render(g);
+  plain := Reddish(Rect(0, 0, 80, 24));
+  g.StyleOverride := '--grid-header-color: #FF0000; --grid-header-font-weight: 700';
+  Render(g);
+  bold := Reddish(Rect(0, 0, 80, 24));
+  g.StyleOverride := '--grid-header-color: #FF0000; --grid-header-font-size: 20px';
+  Render(g);
+  large := Reddish(Rect(0, 0, 80, 24));
+  AssertTrue('setup: the caption is drawn', plain > 20);
+  AssertTrue(Format('a bold caption has more ink: %d against %d', [bold, plain]), bold > plain + 5);
+  AssertTrue(Format('a larger caption has more ink: %d against %d', [large, plain]), large > plain + 20);
 end;
 
 initialization

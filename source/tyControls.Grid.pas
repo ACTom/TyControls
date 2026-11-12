@@ -5649,55 +5649,50 @@ end;
 procedure TTyCustomGrid.ApplyPartTokens(var AStyle: TTyStyleSet; const AKey: string;
   const AStates: TTyStateSet);
 var
-  pre: string;
+  pre, word: string;
   c: TTyColor;
   v: Integer;
-  found: Boolean;
 begin
   if Pos('--grid-', StyleOverride) = 0 then Exit;
   pre := TyGridPartTokens(AKey, AStates);
   if pre = '' then Exit;
-  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-bg', 0, found);
-  if found then
+  { #225: asked through OwnStyle..., which keep what the override answered. A paint comes
+    here for some thirty part styles; asking the model each time parsed the override about
+    130 times a paint. }
+  if OwnStyleColor(pre + '-bg', c) then
   begin
     AStyle.Background := Default(TTyFill);
     AStyle.Background.Kind := tfkSolid;
     AStyle.Background.Color := c;
     Include(AStyle.Present, tpBackground);
   end
-  else if SameText(Trim(ActiveController.Model.ResolveOverrideToken(StyleOverride, pre + '-bg', found)), 'none')
-    and found then
+  else if OwnStyleToken(pre + '-bg', word) and SameText(Trim(word), 'none') then
   begin
     AStyle.Background := Default(TTyFill);
     AStyle.Background.Kind := tfkNone;
     Include(AStyle.Present, tpBackground);
   end;
-  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-color', 0, found);
-  if found then
+  if OwnStyleColor(pre + '-color', c) then
   begin
     AStyle.TextColor := c;
     Include(AStyle.Present, tpTextColor);
   end;
-  c := ActiveController.Model.ResolveOverrideColor(StyleOverride, pre + '-border-color', 0, found);
-  if found then
+  if OwnStyleColor(pre + '-border-color', c) then
   begin
     AStyle.BorderColor := c;
     Include(AStyle.Present, tpBorderColor);
   end;
-  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-border-width', 0, found);
-  if found then
+  if OwnStyleMetric(pre + '-border-width', v) then
   begin
     AStyle.BorderWidth := v;
     Include(AStyle.Present, tpBorderWidth);
   end;
-  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-font-size', 0, found);
-  if found then
+  if OwnStyleMetric(pre + '-font-size', v) then
   begin
     AStyle.FontSize := v;
     Include(AStyle.Present, tpFontSize);
   end;
-  v := ActiveController.Model.ResolveOverrideMetric(StyleOverride, pre + '-font-weight', 0, found);
-  if found then
+  if OwnStyleMetric(pre + '-font-weight', v) then
   begin
     AStyle.FontWeight := v;
     Include(AStyle.Present, tpFontWeight);
@@ -5717,12 +5712,9 @@ begin
 end;
 
 function TTyCustomGrid.OverrideColor(const AName: string; ADefault: TTyColor): TTyColor;
-var
-  found: Boolean;
 begin
-  Result := ADefault;
-  if Pos('--grid-', StyleOverride) > 0 then
-    Result := ActiveController.Model.ResolveOverrideColor(StyleOverride, AName, ADefault, found);
+  if (Pos('--grid-', StyleOverride) = 0) or not OwnStyleColor(AName, Result) then
+    Result := ADefault;
 end;
 
 procedure TTyCustomGrid.PutRule(P: TTyPainter; const ARect: TRect; AHorizontal: Boolean;
