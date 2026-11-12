@@ -6947,6 +6947,7 @@ type
     property ShowIcon;
     property PauseOnHover;
     property Controller;
+    property HostForm;
     property OnClose;
     property OnClick;
   end;

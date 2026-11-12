@@ -79,10 +79,20 @@ type
     in tyControls.Alert — code naming atInfo also uses that unit. }
   TTyNotificationType = tyControls.Alert.TTyAlertType;
 
-  { Which corner of the screen work area the toast floats in. Screen corners, not form
-    corners: a toast outlives the click that raised it and may report on something the user
-    has already navigated away from. }
+  { Which corner the toast floats in: a corner of the screen work area, or, for a toast with a
+    HostForm, of that form's client area. The screen is the default because a toast outlives
+    the click that raised it and may report on something the user has already navigated away
+    from; a host is for the application whose window is not the whole screen, where a card in
+    the screen's corner appears far from the window it is about. }
   TTyNotificationPosition = (npTopLeft, npTopRight, npBottomLeft, npBottomRight);
+
+  { What the placement rules need to know about a host form, as plain values -- so the rules
+    run with no window, and the one method that reads a real form (HostState) decides nothing. }
+  TTyNotificationHostState = record
+    Visible: Boolean;     // on screen: shown, with a window of its own
+    Minimized: Boolean;   // shown as an icon: there is no client area on screen to stand in
+    ClientArea: TRect;    // the client area, in SCREEN coordinates
+  end;
 
   { The heights (device px) of the cards already stacked in one corner. }
   TTyNotificationHeights = array of Integer;
@@ -129,6 +139,12 @@ function TyNotificationStackOffset(const APriorHeights: array of Integer; AGap: 
   card is clamped, so a newcomer overlaps its elders instead of vanishing. }
 function TyNotificationRect(APosition: TTyNotificationPosition; const AWorkArea: TRect;
   AW, AH, AMargin, AStackOffset: Integer): TRect;
+
+{ Whether a host form can take an AW x AH card right now. It cannot when it is not on screen,
+  when it is minimised, or when its client area is narrower or shorter than the card; the
+  toast then goes to the screen work area instead. The margin is not part of the test: in an
+  area that only just holds the card, TyNotificationRect lets the margin give way. }
+function TyNotificationHostUsable(const AHost: TTyNotificationHostState; AW, AH: Integer): Boolean;
 
 { The card's natural height in DEVICE px, from already-measured text metrics:
     ATitleH     — the title line height (ignored when AHasTitle is False);
@@ -204,6 +220,8 @@ type
     FShowIcon: Boolean;
     FPauseOnHover: Boolean;
     FController: TTyCustomStyleController;
+    FHostForm: TCustomForm;
+    FPlacedHost: TCustomForm;  // the area the last placement used: the host, or nil = the screen
     FOnClose: TNotifyEvent;
     FOnClick: TNotifyEvent;
     FWin: TTyNotificationWindow;
@@ -221,6 +239,16 @@ type
     procedure SetClosable(AValue: Boolean);
     procedure SetShowIcon(AValue: Boolean);
     procedure SetController(AValue: TTyCustomStyleController);
+    procedure SetHostForm(AValue: TCustomForm);
+    { Watch the host while the toast is up, through LCL's handler LISTS: the form's own
+      OnChangeBounds / OnShow / OnHide stay the application's. }
+    procedure HookHost;
+    procedure UnhookHost;
+    procedure HostEvent(Sender: TObject);
+    { The area a card of ASize is placed in right now, and whose it is: the host and its
+      client area when the host can take the card, else nil and the screen work area. }
+    function AreaFor(const ASize: TSize; out AArea: TRect): TCustomForm;
+    function SlotIn(const AArea: TRect; AHost: TCustomForm; const ASize: TSize; APPI: Integer): TRect;
     { The theme metrics, in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function WidthLogical: Integer;
@@ -243,9 +271,10 @@ type
     function LineHeightAt(APPI, AWeight: Integer): Integer;
     function TitleHeightAt(APPI: Integer): Integer;
     function PtOnClose(X, Y, AClientW, AClientH, APPI: Integer): Boolean;
-    { The heights of the showing toasts that entered MY corner before me. The stack list is in
-      show order, so everything after Self in it is stacked below Self. }
-    function PriorHeights(APPI: Integer): TTyNotificationHeights;
+    { The heights of the showing toasts that entered MY stack before me: the ones in my corner
+      of the same area (AHost; nil = the screen). The stack list is in show order, so
+      everything after Self in it is stacked below Self. }
+    function PriorHeights(APPI: Integer; AHost: TCustomForm): TTyNotificationHeights;
     procedure EnterStack;
     procedure LeaveStack;
     procedure EnsureTimer;
@@ -297,6 +326,23 @@ type
     function ActiveController: TTyCustomStyleController;
     { Move the live window onto the slot the rules give it. No-op with no window. }
     procedure PlaceWindow;
+    { Make the toast's window (not shown yet). Show does this; split out so the placement of
+      the WINDOW is drivable with nothing on screen. }
+    procedure NeedWindow;
+    { The toast's window: nil until the first Show. }
+    property Window: TTyNotificationWindow read FWin;
+    { HostForm as the placement rules need it. This is the one place that reads the form's
+      window, and it decides nothing (TyNotificationHostUsable does). Override it for a host
+      whose usable area is not its whole client area; the tests stand in for a window through
+      it. Only called with a HostForm set. }
+    function HostState: TTyNotificationHostState; virtual;
+    { Where a toast goes that has no host, or whose host cannot take it: the work area of the
+      primary monitor. Override to send such toasts elsewhere (another monitor's work area). }
+    function ScreenArea: TRect; virtual;
+    { The host moved, was resized, shown or hidden while this toast is up: put the toast where
+      it belongs now. LCL reports a form's move or resize on the next message, so the toast
+      lands a moment after the form does. }
+    procedure HostChanged; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -320,9 +366,17 @@ type
       + message + mark need. }
     function MeasureAtPPI(APPI: Integer): TSize;
     { Where this toast's card belongs inside AWorkArea, accounting for the toasts already
-      stacked in its corner. The work area is a PARAMETER (not Screen.WorkAreaRect) so the
-      placement rules are testable without a screen — Show passes the real one. }
+      stacked in its corner (of the area it is placed in: its host's toasts, or the screen's).
+      The work area is a PARAMETER (not Screen.WorkAreaRect) so the placement rules are
+      testable without a screen — Show passes the real one. }
     function SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;
+    { The area this toast is placed in right now, and whose it is: HostForm and its client
+      area (screen coordinates) when the host can take the card; nil and
+      the screen work area when there is no host or it cannot. }
+    function PlacementArea(APPI: Integer; out AArea: TRect): TCustomForm;
+    { Where this toast's card belongs right now, in screen coordinates: SlotRectIn of its
+      PlacementArea. This is the rect Show puts the window on. }
+    function SlotRect(APPI: Integer): TRect;
     { The close-glyph slot in device px, (0,0)-local, for a card of AClientW x AClientH — the
       exact rect the paint fills and the hit-test measures against. Empty when not Closable. }
     function CloseRectIn(AClientW, AClientH, APPI: Integer): TRect;
@@ -340,8 +394,19 @@ type
     { Auto-dismiss delay in ms. 0 = stay until Hide / the x — which is why a Duration=0 toast
       really ought to keep Closable True. }
     property Duration: Integer read FDuration write SetDuration default TyNotificationDuration;
-    { Which screen corner it floats in. Toasts sharing a corner stack in show order. }
+    { Which corner it floats in: of the screen work area, or of HostForm's client area. Toasts
+      sharing a corner of the same area stack in show order. }
     property Position: TTyNotificationPosition read FPosition write SetPosition default npTopRight;
+    { The form the toast is placed in. nil (the default) = the screen work area. With a host,
+      Position is a corner of the host's client area, and the toast stacks only with the other
+      toasts of that form: two forms' toasts do not push each other, nor do a form's and the
+      screen's. The toast is still a window of its own, so while it is up it follows the host
+      when the host moves or is resized. A host that is not on screen, is minimised, or whose
+      client area is smaller than the card cannot take the toast: the toast is then a screen
+      toast (it goes to the screen's corner and stacks there). Which of the two it is is
+      settled each time it is placed -- on Show, and when the host moves, is resized, shown or
+      hidden -- so a toast shown before its form appears joins the form when it does. }
+    property HostForm: TCustomForm read FHostForm write SetHostForm;
     { Show the close (x). On by default: a toast the user cannot dismiss early is a toast that
       is in the way. }
     property Closable: Boolean read FClosable write SetClosable default True;
@@ -375,6 +440,7 @@ type
     property ShowIcon;
     property PauseOnHover;
     property Controller;
+    property HostForm;
     property OnClose;
     property OnClick;
   end;
@@ -451,6 +517,13 @@ begin
   if x < AWorkArea.Left then x := AWorkArea.Left;
 
   Result := Rect(x, y, x + AW, y + AH);
+end;
+
+function TyNotificationHostUsable(const AHost: TTyNotificationHostState; AW, AH: Integer): Boolean;
+begin
+  Result := AHost.Visible and not AHost.Minimized
+    and (AHost.ClientArea.Right - AHost.ClientArea.Left >= AW)
+    and (AHost.ClientArea.Bottom - AHost.ClientArea.Top >= AH);
 end;
 
 function TyNotificationHeight(ATitleH, ALineH, ALineCount, APadT, APadB, AGap, AIconSize: Integer;
@@ -570,14 +643,16 @@ end;
 // ---------------------------------------------------------------------------
 // The live stack: every showing toast, in show order (which IS the stacking order).
 // A plain unit-level list, because a corner is a screen-wide resource that no single
-// component owns.
+// component owns. One list holds every area's toasts: which stack a toast is in (the
+// screen's, or a host form's) is asked of the toast when it is placed.
 // ---------------------------------------------------------------------------
 var
   UStack: TFPList = nil;   // showing toasts (does NOT own them)
   UAuto: TFPList = nil;    // toasts TyNotify created and must therefore free
 
-{ Re-place every showing toast in APosition: one closing out of the middle of a stack must not
-  leave a hole. Only toasts with a live window move — a never-shown one has nothing to place. }
+{ Re-place every showing toast in APosition, whichever area it is in: one closing out of the
+  middle of a stack must not leave a hole. Only toasts with a live window move — a never-shown
+  one has nothing to place. }
 procedure ReflowStack(APosition: TTyNotificationPosition);
 var
   i: Integer;
@@ -918,10 +993,12 @@ begin
   if UStack <> nil then UStack.Remove(Self);
 end;
 
-function TTyCustomNotification.PriorHeights(APPI: Integer): TTyNotificationHeights;
+function TTyCustomNotification.PriorHeights(APPI: Integer; AHost: TCustomForm): TTyNotificationHeights;
 var
   i, n: Integer;
   other: TTyCustomNotification;
+  sz: TSize;
+  area: TRect;
 begin
   SetLength(Result, 0);
   if UStack = nil then Exit;
@@ -932,34 +1009,150 @@ begin
     if other = Self then Break;   // show order = stack order: everything past me is below me
     if other.FShowing and (other.FPosition = FPosition) then
     begin
+      // A stack is a corner OF AN AREA: the same corner of another form, or of the screen,
+      // is another stack. Asked of the other toast as it stands now (not as it was last
+      // placed), so a reflow comes out the same whichever toast is re-placed first.
+      sz := other.MeasureAtPPI(APPI);
+      if other.AreaFor(sz, area) <> AHost then Continue;
       SetLength(Result, n + 1);
-      Result[n] := other.MeasureAtPPI(APPI).cy;
+      Result[n] := sz.cy;
       Inc(n);
     end;
   end;
 end;
 
+function TTyCustomNotification.HostState: TTyNotificationHostState;
+var
+  o: TPoint;
+begin
+  Result.Visible := False;
+  Result.Minimized := False;
+  Result.ClientArea := Rect(0, 0, 0, 0);
+  if FHostForm = nil then Exit;
+  // Visible alone is not "on screen": a form being shown is Visible before its window exists
+  // (and that is when LCL reports the change), and only a window has a client area in screen
+  // coordinates.
+  if not (FHostForm.HandleAllocated and FHostForm.IsVisible) then Exit;
+  Result.Visible := True;
+  Result.Minimized := FHostForm.WindowState = wsMinimized;
+  o := FHostForm.ClientOrigin;
+  Result.ClientArea := Bounds(o.X, o.Y, FHostForm.ClientWidth, FHostForm.ClientHeight);
+end;
+
+function TTyCustomNotification.ScreenArea: TRect;
+begin
+  Result := Screen.WorkAreaRect;
+end;
+
+function TTyCustomNotification.AreaFor(const ASize: TSize; out AArea: TRect): TCustomForm;
+var
+  st: TTyNotificationHostState;
+begin
+  if FHostForm <> nil then
+  begin
+    st := HostState;
+    if TyNotificationHostUsable(st, ASize.cx, ASize.cy) then
+    begin
+      AArea := st.ClientArea;
+      Exit(FHostForm);
+    end;
+  end;
+  AArea := ScreenArea;
+  Result := nil;
+end;
+
+function TTyCustomNotification.PlacementArea(APPI: Integer; out AArea: TRect): TCustomForm;
+begin
+  if FHostForm = nil then
+  begin
+    AArea := ScreenArea;   // no host, so no card to fit into one: nothing to measure
+    Exit(nil);
+  end;
+  if APPI <= 0 then APPI := 96;
+  Result := AreaFor(MeasureAtPPI(APPI), AArea);
+end;
+
+function TTyCustomNotification.SlotIn(const AArea: TRect; AHost: TCustomForm; const ASize: TSize;
+  APPI: Integer): TRect;
+begin
+  Result := TyNotificationRect(FPosition, AArea, ASize.cx, ASize.cy,
+    MulDiv(MarginLogical, APPI, 96),
+    TyNotificationStackOffset(PriorHeights(APPI, AHost), MulDiv(StackGapLogical, APPI, 96)));
+end;
+
 function TTyCustomNotification.SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;
 var
   sz: TSize;
+  area: TRect;
 begin
   if APPI <= 0 then APPI := 96;
   sz := MeasureAtPPI(APPI);
-  Result := TyNotificationRect(FPosition, AWorkArea, sz.cx, sz.cy,
-    MulDiv(MarginLogical, APPI, 96),
-    TyNotificationStackOffset(PriorHeights(APPI), MulDiv(StackGapLogical, APPI, 96)));
+  Result := SlotIn(AWorkArea, AreaFor(sz, area), sz, APPI);
+end;
+
+function TTyCustomNotification.SlotRect(APPI: Integer): TRect;
+var
+  sz: TSize;
+  area: TRect;
+  host: TCustomForm;
+begin
+  if APPI <= 0 then APPI := 96;
+  sz := MeasureAtPPI(APPI);
+  host := AreaFor(sz, area);
+  Result := SlotIn(area, host, sz, APPI);
 end;
 
 procedure TTyCustomNotification.PlaceWindow;
 var
-  R: TRect;
+  R, area: TRect;
+  sz: TSize;
   ppi: Integer;
 begin
   if FWin = nil then Exit;
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  R := SlotRectIn(Screen.WorkAreaRect, ppi);
+  sz := MeasureAtPPI(ppi);
+  // Remembered: by it HostChanged tells a toast that changed stacks from one that only moved
+  // with its host.
+  FPlacedHost := AreaFor(sz, area);
+  R := SlotIn(area, FPlacedHost, sz, ppi);
   FWin.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
+end;
+
+procedure TTyCustomNotification.HookHost;
+begin
+  if FHostForm = nil then Exit;
+  // LCL keeps a handler LIST per control beside the OnXxx property, so the form's own events
+  // are untouched (TTyBadge follows its Target the same way).
+  FHostForm.AddHandlerOnChangeBounds(@HostEvent);
+  FHostForm.AddHandlerOnVisibleChanged(@HostEvent);
+end;
+
+procedure TTyCustomNotification.UnhookHost;
+begin
+  if FHostForm = nil then Exit;
+  // Taking off a handler that is not on the list does nothing, so this needs no "am I on it".
+  FHostForm.RemoveHandlerOnChangeBounds(@HostEvent);
+  FHostForm.RemoveHandlerOnVisibleChanged(@HostEvent);
+end;
+
+procedure TTyCustomNotification.HostEvent(Sender: TObject);
+begin
+  HostChanged;
+end;
+
+procedure TTyCustomNotification.HostChanged;
+var
+  was: TCustomForm;
+begin
+  if not FShowing then Exit;
+  was := FPlacedHost;
+  PlaceWindow;
+  // Every toast of the host hears of the change itself, so a host that only moved needs no
+  // more than this. One that stopped (or started) being able to take the card has sent this
+  // toast to another stack: the stack it left has a gap to close and the one it joined a
+  // newcomer to make room for, and the screen's toasts hear of nothing by themselves.
+  if FPlacedHost <> was then ReflowStack(FPosition);
 end;
 
 procedure TTyCustomNotification.InvalidateWindow;
@@ -987,6 +1180,14 @@ begin
   FPointerInside := False;
   FShowing := True;
   EnterStack;
+  HookHost;
+end;
+
+procedure TTyCustomNotification.NeedWindow;
+begin
+  if FWin <> nil then Exit;
+  FWin := TTyNotificationWindow.CreateNew(nil);
+  FWin.FOwnerNote := Self;
 end;
 
 procedure TTyCustomNotification.Show;
@@ -995,11 +1196,7 @@ var
 begin
   if csDesigning in ComponentState then Exit;   // a toast is a runtime event, not a preview
   BeginShowing;
-  if FWin = nil then
-  begin
-    FWin := TTyNotificationWindow.CreateNew(nil);
-    FWin.FOwnerNote := Self;
-  end;
+  NeedWindow;
   { The TTyPopupSurface lesson: a bare borderless form never sets Color, so it keeps the OS
     default clBtnFace — which is near-BLACK on a dark-mode OS. Every pixel the card does not
     cover erases to it: the corners outside the themed radius, and (on Wayland, where the shape
@@ -1025,6 +1222,7 @@ begin
   FShowing := False;
   pos := FPosition;            // a handler may move us; the corner we LEAVE is this one
   if FTimer <> nil then FTimer.Enabled := False;
+  UnhookHost;                  // nothing to follow until the next Show
   LeaveStack;
   FHoverClose := False;
   FClosePressed := False;
@@ -1291,11 +1489,32 @@ begin
   Restyle;
 end;
 
+procedure TTyCustomNotification.SetHostForm(AValue: TCustomForm);
+begin
+  if FHostForm = AValue then Exit;
+  UnhookHost;
+  if FHostForm <> nil then FHostForm.RemoveFreeNotification(Self);
+  FHostForm := AValue;
+  if FHostForm <> nil then FHostForm.FreeNotification(Self);
+  if FShowing then HookHost;   // a host is only watched while the toast is up
+  Restyle;   // a live toast moves at once; its corner holds both the stack it left and the one it joined
+end;
+
 procedure TTyCustomNotification.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent = FController) then
+  if Operation <> opRemove then Exit;
+  if AComponent = FController then
     FController := nil;   // fall back to TyDefaultController rather than dangle
+  if AComponent = FHostForm then
+  begin
+    // Dropped WITHOUT unhooking: the form is mid-destruction and takes its handler lists down
+    // with it (TTyBadge's Target, the same way).
+    FHostForm := nil;
+    // A toast that is up outlives its host as a screen toast -- unless it is going down with
+    // it (a toast owned by the form is the usual case).
+    if not (csDestroying in ComponentState) then Restyle;
+  end;
 end;
 
 // ---------------------------------------------------------------------------

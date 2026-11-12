@@ -2,8 +2,9 @@ unit test.notification;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
+  test.danglingrefs,  // BeginPoison / EndPoison
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Notification,
   tyControls.Alert;   // atInfo..atError — TTyNotificationType is an ALIAS of TTyAlertType,
                       // so the enum VALUES still live in the aliased unit.
@@ -42,6 +43,10 @@ type
     procedure TestAdvanceIgnoresNonPositiveTick;
     procedure TestExpiredAtOrPastDuration;
     procedure TestZeroDurationNeverExpires;
+    procedure TestAHostOnScreenWithRoomIsUsable;
+    procedure TestAHostNotOnScreenIsNotUsable;
+    procedure TestAMinimisedHostIsNotUsable;
+    procedure TestAHostNarrowerOrShorterThanTheCardIsNotUsable;
   end;
 
   { Headless component behaviour: typeKeys, defaults, theme-driven geometry + inks, the
@@ -89,6 +94,64 @@ type
     procedure TestCardRendersThemeBackground;
     procedure TestCloseGlyphRendersThemeInk;
     procedure TestNoThemedBackgroundDrawsNothing;
+  end;
+
+  { A toast placed inside a form (HostForm), with no window on screen: the host's window is
+    stood in for (see THostStub), so every rule -- which area, which stack, when it falls back
+    to the screen, when it is re-placed -- runs headless. The hosts are real TForms, never
+    shown, for their identity and for LCL's own change-handler lists. }
+  TTyNotificationHostTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHostFormDefaultsToNoHost;
+    procedure TestWithoutAHostTheSlotIsTheScreenCornerAsBefore;
+    procedure TestWithoutAHostTheRealScreenWorkAreaIsUsed;
+    procedure TestAHostedSlotHugsEachCornerOfTheHostArea;
+    procedure TestToastsOfOneHostStack;
+    procedure TestToastsOfTwoHostsDoNotPushEachOther;
+    procedure TestScreenAndHostedToastsDoNotPushEachOther;
+    procedure TestSlotRectInCountsOnlyTheToastsOwnStack;
+    procedure TestTheSlotMovesWithTheHostArea;
+    procedure TestAHostNotOnScreenSendsItsToastToTheScreen;
+    procedure TestAMinimisedHostSendsItsToastToTheScreen;
+    procedure TestAHostSmallerThanTheCardSendsItsToastToTheScreen;
+    procedure TestAFormNeverShownIsNotAHost;
+    procedure TestAToastSentToTheScreenStacksWithTheScreenToasts;
+    procedure TestAMovedHostRePlacesItsShowingToasts;
+    procedure TestAHostIsWatchedOnlyWhileItsToastIsUp;
+    procedure TestChangingHostFormMovesTheToastAndTheWatch;
+    procedure TestAHostComingBackTakesItsToastBack;
+    procedure TestAFreedToastIsOffItsHostsHandlerLists;
+    procedure TestFreeingTheHostClearsHostForm;
+    procedure TestFreeingTheHostSendsItsShowingToastToTheScreen;
+    procedure TestAToastOwnedByItsHostGoesDownWithItNotToTheScreen;
+    procedure TestHostFormSurvivesTheFormFile;
+  end;
+
+  { The same, against real windows: a form shown off screen, a toast really shown in it. What
+    the headless suite cannot reach is here -- that the placement reads the real form's client
+    area in screen coordinates, and that LCL really reports a move, a resize and a hide. }
+  TTyNotificationHostWindowTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+    FForm: TForm;
+    function ClientOnScreen: TRect;
+    procedure Pump;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAToastOpensInItsHostsCorner;
+    procedure TestAHostsScrollBarsAreNotPartOfItsArea;
+    procedure TestAToastShownBeforeItsHostJoinsItWhenTheHostAppears;
+    procedure TestTheToastFollowsItsHostWhenItMovesAndResizes;
+    procedure TestAHiddenHostSendsItsToastToTheScreenAndTakesItBack;
+    procedure TestAToastShownWhileItsHostIsMinimisedGoesToTheScreen;
+    procedure TestFreeingTheHostSendsItsToastsToTheScreen;
   end;
 
 implementation
@@ -486,6 +549,45 @@ begin
   // 0 = "stay until closed": the whole contract of a toast the user must acknowledge.
   AssertFalse(TyNotificationExpired(0, 0));
   AssertFalse(TyNotificationExpired(999999, 0));
+end;
+
+function HostAt(AVisible, AMinimized: Boolean; const AArea: TRect): TTyNotificationHostState;
+begin
+  Result.Visible := AVisible;
+  Result.Minimized := AMinimized;
+  Result.ClientArea := AArea;
+end;
+
+procedure TTyNotificationRulesTest.TestAHostOnScreenWithRoomIsUsable;
+begin
+  AssertTrue('a roomy client area takes the card',
+    TyNotificationHostUsable(HostAt(True, False, Rect(300, 200, 1100, 800)), 340, 80));
+  // Exactly the card: it still goes in (the margin gives way before the host does).
+  AssertTrue('an area exactly the card''s size still takes it',
+    TyNotificationHostUsable(HostAt(True, False, Rect(300, 200, 640, 280)), 340, 80));
+end;
+
+procedure TTyNotificationRulesTest.TestAHostNotOnScreenIsNotUsable;
+begin
+  // The same roomy area as above: only the window not being on screen says no.
+  AssertFalse('a form that is not on screen has no corner to stand in',
+    TyNotificationHostUsable(HostAt(False, False, Rect(300, 200, 1100, 800)), 340, 80));
+end;
+
+procedure TTyNotificationRulesTest.TestAMinimisedHostIsNotUsable;
+begin
+  AssertFalse('a minimised form has no client area on screen',
+    TyNotificationHostUsable(HostAt(True, True, Rect(300, 200, 1100, 800)), 340, 80));
+end;
+
+procedure TTyNotificationRulesTest.TestAHostNarrowerOrShorterThanTheCardIsNotUsable;
+begin
+  AssertFalse('one px narrower than the card',
+    TyNotificationHostUsable(HostAt(True, False, Rect(300, 200, 639, 800)), 340, 80));
+  AssertFalse('one px shorter than the card',
+    TyNotificationHostUsable(HostAt(True, False, Rect(300, 200, 1100, 279)), 340, 80));
+  AssertFalse('an empty area',
+    TyNotificationHostUsable(HostAt(True, False, Rect(300, 200, 300, 200)), 340, 80));
 end;
 
 { ========================= TTyNotificationComponentTest ========================= }
@@ -1185,7 +1287,1092 @@ begin
   end;
 end;
 
+{ ============================ TTyNotificationHostTest ============================ }
+
+const
+  { Two host areas: neither at the origin, neither the size of the other or of the screen, so
+    a rect worked out against the wrong area cannot land on the right numbers. }
+  CHostAL = 300;
+  CHostAT = 200;
+  CHostAW = 800;
+  CHostAH = 600;
+  CHostBL = 1200;
+  CHostBT = 100;
+  CHostBW = 700;
+  CHostBH = 500;
+  { Where the real-window suite puts "the screen": far off it, so a toast that falls back
+    does not flash on the desktop the tests run on. }
+  COffL = -9000;
+  COffT = -9000;
+  COffR = -7000;
+  COffB = -8000;
+
+type
+  { A stand-in host: a real TForm for its identity and for LCL's own change-handler lists,
+    never shown. What a toast would read from the window comes from here instead: the "client
+    area" is the form's own bounds (so SetBounds both moves the area and makes LCL report the
+    change), and on-screen / minimised are plain switches. }
+  THostStub = class(TForm)
+  public
+    SimVisible: Boolean;
+    SimMinimized: Boolean;
+    { What LCL does when Visible changes, without putting a window on screen. }
+    procedure FireVisibleChanged;
+  end;
+
+  { A toast that reads a THostStub instead of a window and a pinned rect instead of the
+    screen. Any other form (and an empty WorkArea) goes to the real thing. }
+  THostedNote = class(TNoteAccess)
+  public
+    WorkArea: TRect;       // stands in for the screen work area
+    StateReads: Integer;   // how often the host window was looked at
+    Changes: Integer;      // how often the host reported a change
+    function HostState: TTyNotificationHostState; override;
+    function ScreenArea: TRect; override;
+    procedure HostChanged; override;
+    { Up, with a window to place but none on screen. }
+    procedure ShowWindowless;
+    procedure PlaceWindow;
+    function WindowRect: TRect;
+    function WindowShown: Boolean;
+  end;
+
+procedure THostStub.FireVisibleChanged;
+begin
+  VisibleChanged;
+end;
+
+function THostedNote.HostState: TTyNotificationHostState;
+begin
+  Inc(StateReads);
+  if HostForm is THostStub then
+  begin
+    Result.Visible := THostStub(HostForm).SimVisible;
+    Result.Minimized := THostStub(HostForm).SimMinimized;
+    Result.ClientArea := HostForm.BoundsRect;
+  end
+  else
+    Result := inherited HostState;
+end;
+
+var
+  { How often a toast that is being destroyed was placed on the screen. Counted here because
+    the toast itself is gone by the time a test could ask it. }
+  GDyingScreenAsks: Integer = 0;
+
+function THostedNote.ScreenArea: TRect;
+begin
+  if csDestroying in ComponentState then Inc(GDyingScreenAsks);
+  if IsRectEmpty(WorkArea) then
+    Result := inherited ScreenArea
+  else
+    Result := WorkArea;
+end;
+
+procedure THostedNote.HostChanged;
+begin
+  Inc(Changes);
+  inherited HostChanged;
+end;
+
+procedure THostedNote.ShowWindowless;
+begin
+  BeginShowing;
+  NeedWindow;
+  inherited PlaceWindow;
+end;
+
+procedure THostedNote.PlaceWindow;
+begin
+  inherited PlaceWindow;
+end;
+
+function THostedNote.WindowRect: TRect;
+begin
+  Result := Window.BoundsRect;
+end;
+
+function THostedNote.WindowShown: Boolean;
+begin
+  Result := (Window <> nil) and Window.Visible;
+end;
+
+{ A stand-in host at the given "client area", on screen. }
+function NewHost(AL, AT, AW, AH: Integer): THostStub;
+begin
+  Result := THostStub.CreateNew(nil);
+  Result.SetBounds(AL, AT, AW, AH);
+  Result.SimVisible := True;
+  // LCL reports a form's bounds change on the next message; this one is the fixture's, not
+  // the test's, so let it go by before anything listens.
+  Forms.Application.ProcessMessages;
+end;
+
+function NewHostA: THostStub;
+begin
+  Result := NewHost(CHostAL, CHostAT, CHostAW, CHostAH);
+end;
+
+function NewHostB: THostStub;
+begin
+  Result := NewHost(CHostBL, CHostBT, CHostBW, CHostBH);
+end;
+
+{ A toast in AHost (nil = none), themed by ACtl, with the fixture's screen. }
+function NewHosted(ACtl: TTyStyleController; AHost: TCustomForm): THostedNote;
+begin
+  Result := THostedNote.Create(nil);
+  Result.Controller := ACtl;
+  Result.WorkArea := Rect(CWorkL, CWorkT, CWorkR, CWorkB);
+  Result.Title := 'saved';
+  Result.HostForm := AHost;
+end;
+
+{ Logical px -> the px PlaceWindow works in. }
+function Px(AValue: Integer): Integer;
+begin
+  Result := MulDiv(AValue, Screen.PixelsPerInch, 96);
+end;
+
+function RectStr(const R: TRect): string;
+begin
+  Result := Format('(%d,%d)-(%d,%d)', [R.Left, R.Top, R.Right, R.Bottom]);
+end;
+
+procedure TTyNotificationHostTest.SetUp;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(ThemeCss);
+end;
+
+procedure TTyNotificationHostTest.TearDown;
+begin
+  FCtl.Free;
+end;
+
+procedure TTyNotificationHostTest.TestHostFormDefaultsToNoHost;
+var
+  N: TTyNotification;
+begin
+  N := TTyNotification.Create(nil);
+  try
+    AssertNull('no host until one is set', N.HostForm);
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestWithoutAHostTheSlotIsTheScreenCornerAsBefore;
+var
+  H: THostStub;
+  N1, N2: THostedNote;
+  cy: Integer;
+  WA: TRect;
+begin
+  // A usable host exists, but nobody set it: the toast must not so much as look at one.
+  WA := Rect(CWorkL, CWorkT, CWorkR, CWorkB);
+  H := NewHostA;
+  N1 := NewHosted(FCtl, nil);
+  N2 := NewHosted(FCtl, nil);
+  try
+    cy := N1.MeasureAtPPI(96).cy;
+    AssertEquals('top-right', RectStr(Rect(CWorkR - 16 - 340, CWorkT + 16, CWorkR - 16, CWorkT + 16 + cy)),
+      RectStr(N1.SlotRect(96)));
+    N1.Position := npTopLeft;
+    AssertEquals('top-left', RectStr(Rect(CWorkL + 16, CWorkT + 16, CWorkL + 16 + 340, CWorkT + 16 + cy)),
+      RectStr(N1.SlotRect(96)));
+    N1.Position := npBottomLeft;
+    AssertEquals('bottom-left', RectStr(Rect(CWorkL + 16, CWorkB - 16 - cy, CWorkL + 16 + 340, CWorkB - 16)),
+      RectStr(N1.SlotRect(96)));
+    N1.Position := npBottomRight;
+    AssertEquals('bottom-right', RectStr(Rect(CWorkR - 16 - 340, CWorkB - 16 - cy, CWorkR - 16, CWorkB - 16)),
+      RectStr(N1.SlotRect(96)));
+    // And stacked: the second is one themed gap further from the corner.
+    N2.Position := npBottomRight;
+    N1.BeginShowing;
+    N2.BeginShowing;
+    AssertEquals('the second, stacked',
+      RectStr(Rect(CWorkR - 16 - 340, CWorkB - 16 - cy - 8 - cy, CWorkR - 16, CWorkB - 16 - cy - 8)),
+      RectStr(N2.SlotRect(96)));
+    AssertEquals('which is what SlotRectIn gives for that area',
+      RectStr(N2.SlotRectIn(WA, 96)), RectStr(N2.SlotRect(96)));
+    AssertEquals('a toast with no host never looks at one', 0, N1.StateReads + N2.StateReads);
+    AssertFalse('and asked outright, no host is not a host on screen', N1.HostState.Visible);
+  finally
+    N2.Free;
+    N1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestWithoutAHostTheRealScreenWorkAreaIsUsed;
+var
+  N: TTyNotification;
+begin
+  // No stand-in at all: the area is the one the unit has always used.
+  N := TTyNotification.Create(nil);
+  try
+    N.Controller := FCtl;
+    N.Title := 'saved';
+    // Every corner: a task bar takes one edge only, so one corner alone could not tell the
+    // work area from the whole screen.
+    AssertEquals('top-right', RectStr(N.SlotRectIn(Screen.WorkAreaRect, 96)), RectStr(N.SlotRect(96)));
+    N.Position := npTopLeft;
+    AssertEquals('top-left', RectStr(N.SlotRectIn(Screen.WorkAreaRect, 96)), RectStr(N.SlotRect(96)));
+    N.Position := npBottomLeft;
+    AssertEquals('bottom-left', RectStr(N.SlotRectIn(Screen.WorkAreaRect, 96)), RectStr(N.SlotRect(96)));
+    N.Position := npBottomRight;
+    AssertEquals('bottom-right', RectStr(N.SlotRectIn(Screen.WorkAreaRect, 96)), RectStr(N.SlotRect(96)));
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAHostedSlotHugsEachCornerOfTheHostArea;
+var
+  H: THostStub;
+  N: THostedNote;
+  cy: Integer;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    cy := N.MeasureAtPPI(96).cy;
+    AssertEquals('top-right of the host',
+      RectStr(Rect(CHostAL + CHostAW - 16 - 340, CHostAT + 16, CHostAL + CHostAW - 16, CHostAT + 16 + cy)),
+      RectStr(N.SlotRect(96)));
+    N.Position := npTopLeft;
+    AssertEquals('top-left of the host',
+      RectStr(Rect(CHostAL + 16, CHostAT + 16, CHostAL + 16 + 340, CHostAT + 16 + cy)),
+      RectStr(N.SlotRect(96)));
+    N.Position := npBottomLeft;
+    AssertEquals('bottom-left of the host',
+      RectStr(Rect(CHostAL + 16, CHostAT + CHostAH - 16 - cy, CHostAL + 16 + 340, CHostAT + CHostAH - 16)),
+      RectStr(N.SlotRect(96)));
+    N.Position := npBottomRight;
+    AssertEquals('bottom-right of the host',
+      RectStr(Rect(CHostAL + CHostAW - 16 - 340, CHostAT + CHostAH - 16 - cy,
+        CHostAL + CHostAW - 16, CHostAT + CHostAH - 16)),
+      RectStr(N.SlotRect(96)));
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestToastsOfOneHostStack;
+var
+  H: THostStub;
+  N1, N2: THostedNote;
+  R1, R2: TRect;
+begin
+  H := NewHostA;
+  N1 := NewHosted(FCtl, H);
+  N2 := NewHosted(FCtl, H);
+  try
+    N1.Position := npBottomLeft;
+    N2.Position := npBottomLeft;
+    N1.BeginShowing;
+    N2.BeginShowing;
+    R1 := N1.SlotRect(96);
+    R2 := N2.SlotRect(96);
+    AssertEquals('the elder keeps the host''s corner', CHostAT + CHostAH - 16, R1.Bottom);
+    AssertEquals('the newcomer sits one themed gap above it', R1.Top - 8, R2.Bottom);
+    AssertEquals('against the same edge of the host', CHostAL + 16, R2.Left);
+  finally
+    N2.Free;
+    N1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestToastsOfTwoHostsDoNotPushEachOther;
+var
+  HA, HB: THostStub;
+  A1, B1, A2: THostedNote;
+begin
+  HA := NewHostA;
+  HB := NewHostB;
+  A1 := NewHosted(FCtl, HA);
+  B1 := NewHosted(FCtl, HB);
+  A2 := NewHosted(FCtl, HA);
+  try
+    A1.BeginShowing;
+    B1.BeginShowing;
+    A2.BeginShowing;
+    AssertEquals('the other form''s toast has its own corner', CHostBT + 16, B1.SlotRect(96).Top);
+    AssertEquals('in its own form', CHostBL + CHostBW - 16, B1.SlotRect(96).Right);
+    AssertEquals('and is not counted between the two that share a form',
+      A1.SlotRect(96).Bottom + 8, A2.SlotRect(96).Top);
+  finally
+    A2.Free;
+    B1.Free;
+    A1.Free;
+    HB.Free;
+    HA.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestScreenAndHostedToastsDoNotPushEachOther;
+var
+  H: THostStub;
+  S1, A1, S2, A2: THostedNote;
+begin
+  H := NewHostA;
+  S1 := NewHosted(FCtl, nil);
+  A1 := NewHosted(FCtl, H);
+  S2 := NewHosted(FCtl, nil);
+  A2 := NewHosted(FCtl, H);
+  try
+    S1.BeginShowing;
+    A1.BeginShowing;
+    S2.BeginShowing;
+    A2.BeginShowing;
+    AssertEquals('the first screen toast has the screen corner', CWorkT + 16, S1.SlotRect(96).Top);
+    AssertEquals('the first form toast has the form''s, not a place under it',
+      CHostAT + 16, A1.SlotRect(96).Top);
+    AssertEquals('the second screen toast counts only the first screen toast',
+      S1.SlotRect(96).Bottom + 8, S2.SlotRect(96).Top);
+    AssertEquals('the second form toast counts only the first form toast',
+      A1.SlotRect(96).Bottom + 8, A2.SlotRect(96).Top);
+  finally
+    A2.Free;
+    S2.Free;
+    A1.Free;
+    S1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestSlotRectInCountsOnlyTheToastsOwnStack;
+var
+  H: THostStub;
+  S1, A1, A2, S2, S3: THostedNote;
+  Any: TRect;
+  cy: Integer;
+begin
+  // SlotRectIn takes whatever area it is handed, but whose toasts are stacked before this one
+  // is still the toast's own business: a form toast counts its form's, a screen toast the
+  // screen's. Two screen toasts come before the form's second toast and one form toast, so
+  // counting the wrong stack (2), or both (3), cannot give the right number (1); and the last
+  // screen toast has two of its own before it and four in all.
+  Any := Rect(5000, 3000, 6000, 4000);
+  H := NewHostA;
+  S1 := NewHosted(FCtl, nil);
+  S2 := NewHosted(FCtl, nil);
+  A1 := NewHosted(FCtl, H);
+  A2 := NewHosted(FCtl, H);
+  S3 := NewHosted(FCtl, nil);
+  try
+    cy := S1.MeasureAtPPI(96).cy;
+    S1.BeginShowing;
+    S2.BeginShowing;
+    A1.BeginShowing;
+    A2.BeginShowing;
+    S3.BeginShowing;
+    AssertEquals('the second form toast is behind one card', 3000 + 16 + (cy + 8),
+      A2.SlotRectIn(Any, 96).Top);
+    AssertEquals('the third screen toast behind two', 3000 + 16 + 2 * (cy + 8),
+      S3.SlotRectIn(Any, 96).Top);
+  finally
+    S3.Free;
+    S2.Free;
+    A2.Free;
+    A1.Free;
+    S1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestTheSlotMovesWithTheHostArea;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    AssertEquals('setup', CHostAL + CHostAW - 16, N.SlotRect(96).Right);
+    // Moved AND resized, by different amounts on each axis.
+    H.SetBounds(CHostAL + 250, CHostAT - 70, CHostAW - 100, CHostAH + 40);
+    AssertEquals('the right edge went with the host''s', CHostAL + 250 + CHostAW - 100 - 16,
+      N.SlotRect(96).Right);
+    AssertEquals('and the top with its top', CHostAT - 70 + 16, N.SlotRect(96).Top);
+    N.Position := npBottomLeft;
+    AssertEquals('the bottom with its bottom', CHostAT - 70 + CHostAH + 40 - 16,
+      N.SlotRect(96).Bottom);
+    AssertEquals('the left with its left', CHostAL + 250 + 16, N.SlotRect(96).Left);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAHostNotOnScreenSendsItsToastToTheScreen;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    AssertEquals('setup: on screen, the host has it', CHostAT + 16, N.SlotRect(96).Top);
+    H.SimVisible := False;
+    AssertEquals('not on screen: the screen corner', CWorkT + 16, N.SlotRect(96).Top);
+    AssertEquals('of the screen work area', CWorkR - 16, N.SlotRect(96).Right);
+    AssertSame('and the property still names the host', H, N.HostForm);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAMinimisedHostSendsItsToastToTheScreen;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    H.SimMinimized := True;
+    AssertEquals('minimised: the screen corner', CWorkT + 16, N.SlotRect(96).Top);
+    AssertEquals('of the screen work area', CWorkR - 16, N.SlotRect(96).Right);
+    H.SimMinimized := False;
+    AssertEquals('restored: the host again', CHostAT + 16, N.SlotRect(96).Top);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAHostSmallerThanTheCardSendsItsToastToTheScreen;
+var
+  H: THostStub;
+  N: THostedNote;
+  cy: Integer;
+begin
+  H := NewHost(CHostAL, CHostAT, 339, CHostAH);
+  N := NewHosted(FCtl, H);
+  try
+    cy := N.MeasureAtPPI(96).cy;
+    AssertEquals('one px narrower than the card: the screen', CWorkR - 16, N.SlotRect(96).Right);
+    H.SetBounds(CHostAL, CHostAT, 340, CHostAH);
+    // The margin gives way: the card fills the host edge to edge.
+    AssertEquals('exactly the card''s width: the host', CHostAL + 340, N.SlotRect(96).Right);
+    H.SetBounds(CHostAL, CHostAT, CHostAW, cy - 1);
+    AssertEquals('one px shorter than the card: the screen', CWorkT + 16, N.SlotRect(96).Top);
+    H.SetBounds(CHostAL, CHostAT, CHostAW, cy);
+    AssertEquals('exactly the card''s height: the host', CHostAT, N.SlotRect(96).Top);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAFormNeverShownIsNotAHost;
+var
+  F: TForm;
+  N: THostedNote;
+begin
+  // No stand-in: a plain form, read the way the unit really reads one. It has never been
+  // shown, so it has no client area on screen to stand in.
+  F := TForm.CreateNew(nil);
+  N := NewHosted(FCtl, F);
+  try
+    F.SetBounds(CHostAL, CHostAT, CHostAW, CHostAH);
+    AssertEquals('the screen corner', CWorkR - 16, N.SlotRect(96).Right);
+    AssertEquals('not the form''s', CWorkT + 16, N.SlotRect(96).Top);
+    AssertTrue('and it did ask the form', N.StateReads > 0);
+  finally
+    N.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAToastSentToTheScreenStacksWithTheScreenToasts;
+var
+  H: THostStub;
+  S1, T, S2: THostedNote;
+begin
+  H := NewHostA;
+  H.SimVisible := False;
+  S1 := NewHosted(FCtl, nil);
+  T := NewHosted(FCtl, H);
+  S2 := NewHosted(FCtl, nil);
+  try
+    S1.BeginShowing;
+    T.BeginShowing;
+    S2.BeginShowing;
+    AssertEquals('it queues under the screen toast before it', S1.SlotRect(96).Bottom + 8,
+      T.SlotRect(96).Top);
+    AssertEquals('on the screen', CWorkR - 16, T.SlotRect(96).Right);
+    AssertEquals('and the screen toast after it queues under it', T.SlotRect(96).Bottom + 8,
+      S2.SlotRect(96).Top);
+  finally
+    S2.Free;
+    T.Free;
+    S1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAMovedHostRePlacesItsShowingToasts;
+var
+  H: THostStub;
+  N1, N2, S: THostedNote;
+  RS: TRect;
+begin
+  H := NewHostA;
+  N1 := NewHosted(FCtl, H);
+  N2 := NewHosted(FCtl, H);
+  S := NewHosted(FCtl, nil);
+  try
+    N1.ShowWindowless;
+    N2.ShowWindowless;
+    S.ShowWindowless;
+    AssertEquals('setup: the window is in the host''s corner', CHostAL + CHostAW - Px(16),
+      N1.WindowRect.Right);
+    AssertEquals('setup', CHostAT + Px(16), N1.WindowRect.Top);
+    RS := S.WindowRect;
+    AssertEquals('setup: the screen toast is in the screen''s', CWorkT + Px(16), RS.Top);
+
+    H.SetBounds(CHostAL + 250, CHostAT - 70, CHostAW - 100, CHostAH);
+    Forms.Application.ProcessMessages;
+
+    AssertEquals('the window went with the host''s right edge',
+      CHostAL + 250 + CHostAW - 100 - Px(16), N1.WindowRect.Right);
+    AssertEquals('and with its top', CHostAT - 70 + Px(16), N1.WindowRect.Top);
+    AssertEquals('the second went along', CHostAL + 250 + CHostAW - 100 - Px(16),
+      N2.WindowRect.Right);
+    AssertEquals('still one gap below the first', N1.WindowRect.Bottom + Px(8), N2.WindowRect.Top);
+    AssertEquals('the screen toast stayed where it was', RectStr(RS), RectStr(S.WindowRect));
+
+    // Dismissed, a toast is not re-placed any more, even told outright that its host changed.
+    RS := N1.WindowRect;
+    N1.Hide;
+    H.SetBounds(CHostAL, CHostAT, CHostAW, CHostAH);
+    Forms.Application.ProcessMessages;
+    N1.HostChanged;
+    AssertEquals('a dismissed toast''s window is left alone', RectStr(RS), RectStr(N1.WindowRect));
+    AssertEquals('and the one still up took the corner it left', CHostAT + Px(16), N2.WindowRect.Top);
+  finally
+    S.Free;
+    N2.Free;
+    N1.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAHostIsWatchedOnlyWhileItsToastIsUp;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    H.SetBounds(CHostAL + 10, CHostAT, CHostAW, CHostAH);
+    Forms.Application.ProcessMessages;
+    H.FireVisibleChanged;
+    AssertEquals('a toast that is not up follows nothing', 0, N.Changes);
+
+    N.BeginShowing;
+    H.SetBounds(CHostAL + 20, CHostAT, CHostAW, CHostAH);
+    Forms.Application.ProcessMessages;
+    AssertEquals('up: the host''s move reaches it', 1, N.Changes);
+    H.FireVisibleChanged;
+    AssertEquals('and so does the host being shown or hidden', 2, N.Changes);
+
+    N.Hide;
+    H.SetBounds(CHostAL + 30, CHostAT, CHostAW, CHostAH);
+    Forms.Application.ProcessMessages;
+    H.FireVisibleChanged;
+    AssertEquals('dismissed: it has let go of the host', 2, N.Changes);
+
+    // Up again: watched again, once (not once per Show).
+    N.BeginShowing;
+    N.BeginShowing;
+    H.FireVisibleChanged;
+    AssertEquals('shown again: watched again, once', 3, N.Changes);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestChangingHostFormMovesTheToastAndTheWatch;
+var
+  HA, HB: THostStub;
+  N: THostedNote;
+begin
+  HA := NewHostA;
+  HB := NewHostB;
+  N := NewHosted(FCtl, HA);
+  try
+    N.ShowWindowless;
+    AssertEquals('setup: in the first host', CHostAL + CHostAW - Px(16), N.WindowRect.Right);
+
+    N.HostForm := HB;
+    AssertEquals('re-placed into the new host at once', CHostBL + CHostBW - Px(16),
+      N.WindowRect.Right);
+    AssertEquals('in its corner', CHostBT + Px(16), N.WindowRect.Top);
+
+    N.Changes := 0;
+    HA.SetBounds(CHostAL + 10, CHostAT, CHostAW, CHostAH);
+    Forms.Application.ProcessMessages;
+    HA.FireVisibleChanged;
+    AssertEquals('the host it left is no longer watched', 0, N.Changes);
+    HB.SetBounds(CHostBL + 10, CHostBT, CHostBW, CHostBH);
+    Forms.Application.ProcessMessages;
+    AssertEquals('the host it joined is', 1, N.Changes);
+    AssertEquals('and followed', CHostBL + 10 + CHostBW - Px(16), N.WindowRect.Right);
+
+    N.HostForm := nil;
+    AssertEquals('no host: the screen corner', CWorkR - Px(16), N.WindowRect.Right);
+    AssertEquals('of the work area', CWorkT + Px(16), N.WindowRect.Top);
+    N.Changes := 0;
+    HB.SetBounds(CHostBL + 20, CHostBT, CHostBW, CHostBH);
+    Forms.Application.ProcessMessages;
+    HB.FireVisibleChanged;
+    AssertEquals('and nothing is watched', 0, N.Changes);
+  finally
+    N.Free;
+    HB.Free;
+    HA.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAHostComingBackTakesItsToastBack;
+var
+  H: THostStub;
+  T, S: THostedNote;
+begin
+  H := NewHostA;
+  H.SimVisible := False;
+  T := NewHosted(FCtl, H);
+  S := NewHosted(FCtl, nil);
+  try
+    T.ShowWindowless;
+    S.ShowWindowless;
+    AssertEquals('setup: shown while its host is away, it took the screen corner',
+      CWorkT + Px(16), T.WindowRect.Top);
+    AssertEquals('setup: and the screen toast queued under it', T.WindowRect.Bottom + Px(8),
+      S.WindowRect.Top);
+
+    H.SimVisible := True;
+    H.FireVisibleChanged;
+    AssertEquals('the host took its toast back', CHostAL + CHostAW - Px(16), T.WindowRect.Right);
+    AssertEquals('into its corner', CHostAT + Px(16), T.WindowRect.Top);
+    AssertEquals('and the screen toast closed the gap it left', CWorkT + Px(16), S.WindowRect.Top);
+
+    H.SimVisible := False;
+    H.FireVisibleChanged;
+    AssertEquals('away again: back on the screen, ahead of the toast shown after it',
+      CWorkT + Px(16), T.WindowRect.Top);
+    AssertEquals('which makes room', T.WindowRect.Bottom + Px(8), S.WindowRect.Top);
+  finally
+    S.Free;
+    T.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAFreedToastIsOffItsHostsHandlerLists;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  try
+    N := NewHosted(FCtl, H);
+    N.BeginShowing;
+    // Freed while up, with the freed memory poisoned: a handler left on the host's lists
+    // would be called into it.
+    BeginPoison;
+    try
+      N.Free;
+      H.FireVisibleChanged;
+      H.SetBounds(CHostAL + 10, CHostAT, CHostAW, CHostAH);
+      Forms.Application.ProcessMessages;
+    finally
+      EndPoison;
+    end;
+  finally
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestFreeingTheHostClearsHostForm;
+var
+  H: THostStub;
+  N: THostedNote;
+begin
+  H := NewHostA;
+  N := NewHosted(FCtl, H);
+  try
+    AssertSame('setup', H, N.HostForm);
+    FreeAndNil(H);
+    AssertNull('a freed host is let go of', N.HostForm);
+    AssertEquals('and the toast is a screen toast again', CWorkR - 16, N.SlotRect(96).Right);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestFreeingTheHostSendsItsShowingToastToTheScreen;
+var
+  H: THostStub;
+  T, S: THostedNote;
+begin
+  H := NewHostA;
+  T := NewHosted(FCtl, H);
+  S := NewHosted(FCtl, nil);
+  try
+    T.ShowWindowless;
+    S.ShowWindowless;
+    AssertEquals('setup: in the host', CHostAT + Px(16), T.WindowRect.Top);
+    AssertEquals('setup: the screen toast has the screen corner', CWorkT + Px(16), S.WindowRect.Top);
+    BeginPoison;
+    try
+      FreeAndNil(H);
+      AssertEquals('the toast it held went to the screen', CWorkR - Px(16), T.WindowRect.Right);
+      AssertEquals('to its corner', CWorkT + Px(16), T.WindowRect.Top);
+      AssertEquals('and the screen toast shown after it made room', T.WindowRect.Bottom + Px(8),
+        S.WindowRect.Top);
+      T.PlaceWindow;   // nothing left that reads the freed form
+      T.Hide;
+    finally
+      EndPoison;
+    end;
+  finally
+    S.Free;
+    T.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestAToastOwnedByItsHostGoesDownWithItNotToTheScreen;
+var
+  H: THostStub;
+  T, S: THostedNote;
+begin
+  // The usual arrangement: the toast is a component ON its host form. Freeing the form frees
+  // the toast; it must not first be sent to the screen's corner for the moment in between.
+  H := NewHostA;
+  T := THostedNote.Create(H);
+  T.Controller := FCtl;
+  T.WorkArea := Rect(CWorkL, CWorkT, CWorkR, CWorkB);
+  T.Title := 'saved';
+  T.HostForm := H;
+  S := NewHosted(FCtl, nil);
+  try
+    T.ShowWindowless;
+    S.ShowWindowless;
+    AssertEquals('setup: in the host', CHostAT + Px(16), T.WindowRect.Top);
+    GDyingScreenAsks := 0;
+    BeginPoison;
+    try
+      FreeAndNil(H);   // takes T with it
+    finally
+      EndPoison;
+    end;
+    AssertEquals('a toast going down with its form is not placed on the screen on the way',
+      0, GDyingScreenAsks);
+    AssertEquals('and the screen toast is where it was', CWorkT + Px(16), S.WindowRect.Top);
+  finally
+    S.Free;
+    H.Free;
+  end;
+end;
+
+procedure TTyNotificationHostTest.TestHostFormSurvivesTheFormFile;
+var
+  Src, Dst: TForm;
+  N: TTyNotification;
+  MS: TMemoryStream;
+  SS: TStringStream;
+  Back: TComponent;
+begin
+  // The usual arrangement: the toast sits on the form it is shown in.
+  Src := TForm.CreateNew(nil);
+  Dst := TForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostRoot';   // as in the designer: a reference to a nameless form is not written
+    N := TTyNotification.Create(Src);
+    N.Name := 'Toast';
+    N.HostForm := Src;
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    SS := TStringStream.Create('');
+    try
+      ObjectBinaryToText(MS, SS);
+      AssertTrue('written as the form file''s reference to its own form: ' + SS.DataString,
+        Pos('HostForm = Owner', SS.DataString) > 0);
+    finally
+      SS.Free;
+    end;
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    Back := Dst.FindComponent('Toast');
+    AssertNotNull('the toast came back', Back);
+    AssertSame('hosted by the form it was read into', Dst, (Back as TTyNotification).HostForm);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
+end;
+
+{ ========================== TTyNotificationHostWindowTest ========================== }
+
+procedure TTyNotificationHostWindowTest.SetUp;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(ThemeCss);
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 640, 480);   // off screen, but really shown
+  FForm.Show;
+  Pump;
+end;
+
+procedure TTyNotificationHostWindowTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  Pump;
+  FCtl.Free;
+end;
+
+procedure TTyNotificationHostWindowTest.Pump;
+begin
+  // Twice: LCL reports a form's bounds change through a queued call, and what that call does
+  // (moving the toast's window) is itself delivered as messages.
+  Forms.Application.ProcessMessages;
+  Forms.Application.ProcessMessages;
+end;
+
+function TTyNotificationHostWindowTest.ClientOnScreen: TRect;
+var
+  O: TPoint;
+begin
+  O := FForm.ClientOrigin;
+  Result := Bounds(O.X, O.Y, FForm.ClientWidth, FForm.ClientHeight);
+end;
+
+function NewWindowed(ACtl: TTyStyleController; AHost: TCustomForm): THostedNote;
+begin
+  Result := NewHosted(ACtl, AHost);
+  Result.WorkArea := Rect(COffL, COffT, COffR, COffB);
+  Result.Duration := 0;   // nothing here waits, so nothing may time out under it
+end;
+
+procedure TTyNotificationHostWindowTest.TestAToastOpensInItsHostsCorner;
+var
+  N: THostedNote;
+  CA: TRect;
+begin
+  N := NewWindowed(FCtl, FForm);
+  try
+    N.Show;
+    Pump;
+    CA := ClientOnScreen;
+    AssertTrue('setup: the client area is not the window''s outer rect (it has a caption)',
+      CA.Top > FForm.Top);
+    AssertTrue('the toast is on screen', N.WindowShown);
+    AssertEquals('one margin inside the client area''s right edge', CA.Right - Px(16),
+      N.WindowRect.Right);
+    AssertEquals('one margin below its top', CA.Top + Px(16), N.WindowRect.Top);
+    N.Position := npBottomLeft;
+    Pump;
+    AssertEquals('one margin inside its left edge', CA.Left + Px(16), N.WindowRect.Left);
+    AssertEquals('one margin above its bottom', CA.Bottom - Px(16), N.WindowRect.Bottom);
+    N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestAHostsScrollBarsAreNotPartOfItsArea;
+var
+  N: THostedNote;
+  CA: TRect;
+begin
+  // An LCL form's Width and Height ARE its client size until it shows scroll bars; with them
+  // the client area is what is left inside the bars, and that is where the corner is.
+  FForm.HorzScrollBar.Range := 3000;
+  FForm.VertScrollBar.Range := 3000;
+  Pump;
+  AssertTrue(Format('setup: both bars take room (client %dx%d of %dx%d)',
+    [FForm.ClientWidth, FForm.ClientHeight, FForm.Width, FForm.Height]),
+    (FForm.ClientWidth < FForm.Width) and (FForm.ClientHeight < FForm.Height));
+  N := NewWindowed(FCtl, FForm);
+  try
+    N.Position := npBottomRight;
+    N.Show;
+    Pump;
+    CA := ClientOnScreen;
+    AssertEquals('one margin inside the vertical bar', CA.Right - Px(16), N.WindowRect.Right);
+    AssertEquals('one margin above the horizontal bar', CA.Bottom - Px(16), N.WindowRect.Bottom);
+    N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestAToastShownBeforeItsHostJoinsItWhenTheHostAppears;
+var
+  Late: TForm;
+  N: THostedNote;
+  O: TPoint;
+begin
+  // A toast raised from the host's OnCreate: the form has no window yet.
+  Late := TForm.CreateNew(nil);
+  N := NewWindowed(FCtl, Late);
+  try
+    Late.SetBounds(-3000, -4000, 500, 400);
+    N.Show;
+    Pump;
+    AssertEquals('setup: no window to stand in yet, so the screen''s corner', COffR - Px(16),
+      N.WindowRect.Right);
+    // LCL makes the window when auto-sizing is let go, after Visible is already True -- and
+    // it is in that gap that it reports the visible change.
+    Late.DisableAutoSizing;
+    try
+      Late.Visible := True;
+      AssertFalse('setup: Visible, and its window not made yet', Late.HandleAllocated);
+      AssertEquals('Visible is not yet on screen: still the screen''s corner', COffR - Px(16),
+        N.SlotRect(Screen.PixelsPerInch).Right);
+    finally
+      Late.EnableAutoSizing;
+    end;
+    Pump;
+    O := Late.ClientOrigin;
+    AssertEquals('the host appeared: the toast is in it', O.X + Late.ClientWidth - Px(16),
+      N.WindowRect.Right);
+    AssertEquals('in its corner', O.Y + Px(16), N.WindowRect.Top);
+    N.Hide;
+  finally
+    N.Free;
+    Late.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestTheToastFollowsItsHostWhenItMovesAndResizes;
+var
+  N: THostedNote;
+  Was, CA: TRect;
+begin
+  N := NewWindowed(FCtl, FForm);
+  try
+    N.Show;
+    Pump;
+    Was := ClientOnScreen;
+    FForm.SetBounds(-3600, -3900, 700, 520);
+    Pump;
+    CA := ClientOnScreen;
+    AssertTrue('setup: the corner really moved on both axes',
+      (CA.Right <> Was.Right) and (CA.Top <> Was.Top));
+    AssertEquals('the toast went with the right edge', CA.Right - Px(16), N.WindowRect.Right);
+    AssertEquals('and with the top', CA.Top + Px(16), N.WindowRect.Top);
+    N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestAHiddenHostSendsItsToastToTheScreenAndTakesItBack;
+var
+  N: THostedNote;
+  CA: TRect;
+begin
+  N := NewWindowed(FCtl, FForm);
+  try
+    N.Show;
+    Pump;
+    FForm.Hide;
+    Pump;
+    AssertEquals('host hidden: the screen''s corner', COffR - Px(16), N.WindowRect.Right);
+    AssertEquals('of the work area', COffT + Px(16), N.WindowRect.Top);
+    FForm.Show;
+    Pump;
+    CA := ClientOnScreen;
+    AssertEquals('host shown again: back in it', CA.Right - Px(16), N.WindowRect.Right);
+    AssertEquals('in its corner', CA.Top + Px(16), N.WindowRect.Top);
+    N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestAToastShownWhileItsHostIsMinimisedGoesToTheScreen;
+var
+  N: THostedNote;
+  CA: TRect;
+begin
+  N := NewWindowed(FCtl, FForm);
+  try
+    FForm.WindowState := wsMinimized;
+    Pump;
+    N.Show;
+    Pump;
+    AssertEquals('shown while its host is an icon: the screen''s corner', COffR - Px(16),
+      N.WindowRect.Right);
+    AssertEquals('of the work area', COffT + Px(16), N.WindowRect.Top);
+    // LCL reports neither the minimise nor the restore to a form's change handlers, so the
+    // toast goes back at the host's next move or resize (or the toast's own next Show).
+    FForm.WindowState := wsNormal;
+    Pump;
+    FForm.SetBounds(-3600, -3900, 700, 520);
+    Pump;
+    CA := ClientOnScreen;
+    AssertEquals('restored and moved: in the host', CA.Right - Px(16), N.WindowRect.Right);
+    AssertEquals('in its corner', CA.Top + Px(16), N.WindowRect.Top);
+    N.Hide;
+  finally
+    N.Free;
+  end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestFreeingTheHostSendsItsToastsToTheScreen;
+var
+  N1, N2: THostedNote;
+begin
+  // Two toasts up in a real form, neither owned by it, and the form freed under them: each
+  // hears of it in turn, and the one told first re-stacks the other while that one still
+  // names the dying form.
+  N1 := NewWindowed(FCtl, FForm);
+  N2 := NewWindowed(FCtl, FForm);
+  try
+    N1.Show;
+    N2.Show;
+    Pump;
+    AssertEquals('setup: both in the host', ClientOnScreen.Right - Px(16), N2.WindowRect.Right);
+    BeginPoison;
+    try
+      FreeAndNil(FForm);
+      Pump;
+      AssertNull('the first let go of it', N1.HostForm);
+      AssertNull('and the second', N2.HostForm);
+      AssertEquals('the first is in the screen''s corner', COffT + Px(16), N1.WindowRect.Top);
+      AssertEquals('of the work area', COffR - Px(16), N1.WindowRect.Right);
+      AssertEquals('the second one gap below it', N1.WindowRect.Bottom + Px(8), N2.WindowRect.Top);
+    finally
+      EndPoison;
+    end;
+    N1.Hide;
+    N2.Hide;
+  finally
+    N2.Free;
+    N1.Free;
+  end;
+end;
+
 initialization
+  RegisterClass(TTyNotification);
   RegisterTest(TTyNotificationRulesTest);
   RegisterTest(TTyNotificationComponentTest);
+  RegisterTest(TTyNotificationHostTest);
+  RegisterTest(TTyNotificationHostWindowTest);
 end.
