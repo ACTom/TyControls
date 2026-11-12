@@ -42,6 +42,13 @@ type
     procedure Designing;
   end;
 
+  { A container whose key no theme has a rule for: no background at all, where a group box
+    has a transparent one. }
+  TBareContainer = class(TTyCustomPanel)
+  public
+    function GetStyleTypeKey: string; override;
+  end;
+
   TThemedContainerColorTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
@@ -59,6 +66,7 @@ type
     procedure TestATyControlOnThePlainPanelResolvesIt;
     procedure TestStyleOverrideStyleClassAndControllerAreFollowed;
     procedure TestAContainerWithoutABackgroundShowsWhatIsBehindIt;
+    procedure TestWhatIsBehindIsReadAtRestWhateverTheContainersBackground;
     procedure TestReparentingIsFollowed;
     procedure TestATranslucentBackgroundIsCompositedOverWhatIsBehind;
     procedure TestAGradientGivesItsCentre;
@@ -107,6 +115,11 @@ end;
 procedure TCountingPanel.Hover;
 begin
   MouseEnter;
+end;
+
+function TBareContainer.GetStyleTypeKey: string;
+begin
+  Result := 'TyThemedColorTestBare';
 end;
 
 { TThemedColorFrame }
@@ -258,6 +271,58 @@ begin
   box.StyleClass := 'anything';   // the group box works its colour out again
   AssertLcl('under a hovered outer container the group box still shows its rest colour',
     $20, $40, $60, inner.GetColorResolvingParent);
+end;
+
+procedure TThemedContainerColorTest.TestWhatIsBehindIsReadAtRestWhateverTheContainersBackground;
+var
+  bare: TBareContainer;
+  tinted, swept: TCountingPanel;
+  fr: TThemedColorFrame;
+  st: TTyStyleSet;
+
+  function PlainOn(AParent: TWinControl): TPanel;
+  begin
+    Result := TPanel.Create(FForm);
+    Result.Parent := AParent;
+  end;
+
+begin
+  { the outer container is hovered, and its hover background is white: nothing put on it
+    may take white for what is behind it }
+  MakeFixture(cBlueHost + 'TyPanel:hover { background: #FFFFFF; }');
+  FHost.Hover;
+  { no background at all }
+  bare := TBareContainer.Create(FForm);
+  bare.Controller := FCtl;
+  st := FCtl.Model.ResolveStyle(bare.GetStyleTypeKey, '', [tysNormal]);
+  AssertFalse('precondition: the bare container has no background', tpBackground in st.Present);
+  bare.Parent := FHost;
+  AssertLcl('a container without a background', $20, $40, $60,
+    PlainOn(bare).GetColorResolvingParent);
+  { a translucent one: half white over the rest colour #204060 }
+  tinted := TCountingPanel.Create(FForm);
+  tinted.Controller := FCtl;
+  tinted.StyleOverride := 'background: rgba(255, 255, 255, 0.5);';
+  tinted.Parent := FHost;
+  AssertLcl('a translucent container', $90, $A0, $B0, PlainOn(tinted).GetColorResolvingParent);
+  { a gradient with alpha in it: the same tint, as a sweep }
+  swept := TCountingPanel.Create(FForm);
+  swept.Controller := FCtl;
+  swept.StyleOverride :=
+    'background: linear-gradient(90deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5));';
+  st := FCtl.Model.ResolveOverride(swept.StyleOverride);
+  AssertTrue('precondition: the override is a gradient with alpha',
+    (tpBackground in st.Present) and (st.Background.Kind = tfkLinearGradient)
+    and (TyAlphaOf(st.Background.GradFrom) < 255));
+  swept.Parent := FHost;
+  AssertLcl('a translucent gradient', $90, $A0, $B0, PlainOn(swept).GetColorResolvingParent);
+  { and a frame, which shows its host }
+  fr := TThemedColorFrame.Create(FForm);
+  fr.Controller := FCtl;
+  fr.Parent := FHost;
+  fr.StyleClass := 'anything';   // the frame works its colour out again, the host still hovered
+  AssertLcl('a frame without a background', $20, $40, $60,
+    PlainOn(fr).GetColorResolvingParent);
 end;
 
 procedure TThemedContainerColorTest.TestReparentingIsFollowed;

@@ -47,7 +47,6 @@ type
     function ThemedColorNotStored: Boolean;
     procedure KeepColorThemed;
     procedure CMParentColorChanged(var Message: TLMessage); message CM_PARENTCOLORCHANGED;
-    procedure CMColorChanged(var Message: TLMessage); message CM_COLORCHANGED;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     { What is behind the frame when nothing themed is: its LCL colour, resolved. }
@@ -156,7 +155,9 @@ begin
   { Everything that changes the frame's own look ends here; a child's damage does not. }
   if FPaintCache <> nil then FPaintCache.Drop;
   inherited Invalidate;
-  KeepColorThemed;   // a theme change reaches the frame only as this
+  { A theme change reaches the frame only as this; so does a Color the application sets
+    back to clDefault, which hands the colour back. }
+  KeepColorThemed;
 end;
 
 procedure TTyFrame.KeepColorThemed;
@@ -213,13 +214,6 @@ procedure TTyFrame.CMParentColorChanged(var Message: TLMessage);
 begin
   inherited;
   KeepColorThemed;   // a new parent, or the parent's colour moved
-end;
-
-procedure TTyFrame.CMColorChanged(var Message: TLMessage);
-begin
-  inherited;
-  if Color = clDefault then
-    KeepColorThemed;   // handed back
 end;
 
 procedure TTyFrame.Loaded;
