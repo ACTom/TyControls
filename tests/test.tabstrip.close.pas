@@ -24,7 +24,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.TabStrip, tyControls.TabSet, tyControls.PageControl,
-  tyControls.Icons.Lucide;
+  tyControls.Ribbon, tyControls.Icons.Lucide;
 
 type
   TSlotInk = (siBlue, siRed, siBlack, siYellow, siCyan, siLime);
@@ -66,6 +66,7 @@ type
     procedure InHoverModeAPressOnTheButtonClosesWithoutAMoveFirst;
     procedure OneStripHidesItsButtonsOnItsOwn;
     procedure APageControlHidesItsButtonsToo;
+    procedure ARibbonHidesItsButtonsToo;
     { what the button looks like }
     procedure WithNoTokenTheButtonIsTheThemeOne;
     procedure TheMarkTakesItsOwnColour;
@@ -434,6 +435,33 @@ begin
   Theme('--tab-close-show: active;');
   AssertTrue('the current page', InSlot(0, siBlue) > 3);
   AssertEquals('another page', 0, InSlot(1, siBlue));
+end;
+
+{ The ribbon is the third control on the tab strip: its page tabs are the same tabs. }
+procedure TTabStripCloseTest.ARibbonHidesItsButtonsToo;
+var
+  rb: TTyRibbon;
+begin
+  rb := TTyRibbon.Create(FForm);
+  rb.Parent := FForm;
+  rb.Controller := FCtl;
+  rb.Font.PixelsPerInch := 96;
+  rb.SetBounds(0, 40, STRIP_W, 150);
+  rb.TabsClosable := True;
+  rb.AddPage('Alpha');
+  rb.AddPage('Beta');
+  rb.AddPage('Gamma');
+  rb.ActivePageIndex := 0;
+  FTarget := rb;
+
+  AssertTrue('every page shows its button first', InSlot(1, siBlue) > 3);
+  Theme('--tab-close-show: active;');
+  AssertTrue('the current page', InSlot(0, siBlue) > 3);
+  AssertEquals('another page', 0, InSlot(1, siBlue));
+
+  Theme('--tab-close-color: #FF0000; --tab-close-background: #FFFF00;');
+  AssertTrue('its mark takes the token''s colour', InSlot(1, siRed) > 3);
+  AssertTrue('and its chip', InSlot(1, siYellow) > 60);
 end;
 
 { ---- what the button looks like ---- }

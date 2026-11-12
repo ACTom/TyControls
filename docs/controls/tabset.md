@@ -170,7 +170,7 @@ TyTab:active { background: var(--surface); color: var(--accent); }  /* 选中：
 
 ### 关闭按钮
 
-`TabsClosable = True` 时，默认每个页签都有关闭按钮：一个 ×，颜色跟页签文字，指针移上去时垫一块 `TyTabClose` 底片。下面的令牌可以改这些。写在主题的 `:root` 里，对所有页签条和 `TTyPageControl` 生效；写在某个控件的 `StyleOverride` 里，只对它生效。
+`TabsClosable = True` 时，默认每个页签都有关闭按钮：一个 ×，颜色跟页签文字，指针移上去时垫一块 `TyTabClose` 底片。下面的令牌可以改这些。写在主题的 `:root` 里，对所有页签条、`TTyPageControl` 和 `TTyRibbon` 的页签生效；写在某个控件的 `StyleOverride` 里，只对它生效。
 
 | 令牌 | 取值 | 默认 | 含义 |
 |------|------|------|------|

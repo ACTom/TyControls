@@ -422,8 +422,8 @@ width is `IndicatorWidth`. Scroll bars are themed as everywhere else (`TyScrollB
 ### 3.8 The close button of a tab
 
 With `TabsClosable` on, these tokens decide which tabs of a `TTyTabSet` or a `TTyPageControl` show a
-close button and what it looks like. Like the tokens of §3.4, they go in the theme, or in one
-control's `StyleOverride`.
+close button and what it looks like. A `TTyRibbon`'s page tabs are the same tabs and take the same
+tokens. Like the tokens of §3.4, they go in the theme, or in one control's `StyleOverride`.
 
 | Token | Values | Default | Meaning |
 |---|---|---|---|
