@@ -51,6 +51,8 @@ type
     procedure TestMalformedInput;
     // for the on-demand reader (Task 6)
     procedure TestCountingAgreesAndResumesFromASnapshot;
+    // what the real WordPad and Word files showed
+    procedure TestGb18030AsTheFileCodePage;
   end;
 
 implementation
@@ -194,6 +196,29 @@ begin
   for i := AFrom to Int64(Length(AHay)) - Length(ANeedle) do
     if CompareMem(@AHay[i], @ANeedle[1], Length(ANeedle)) then Exit(i);
   Result := -1;
+end;
+
+{ Where the group whose brace is at AStart ends (after its closing brace), counted on the file
+  itself: control symbols are skipped, so an escaped brace or backslash is no brace. }
+function GroupEnd(const AB: TBytes; AStart: Int64): Int64;
+var
+  depth: Integer;
+begin
+  depth := 0;
+  Result := AStart;
+  while Result < Length(AB) do
+  begin
+    case Chr(AB[Result]) of
+      '\': Inc(Result);
+      '{': Inc(depth);
+      '}':
+        begin
+          Dec(depth);
+          if depth = 0 then Exit(Result + 1);
+        end;
+    end;
+    Inc(Result);
+  end;
 end;
 
 function RunIndex(const ARuns: TTyRunArray; AOffset: Integer): Integer;
@@ -384,83 +409,103 @@ begin
 end;
 
 procedure TTyRtfReadTest.TestFormatsOfStyleSample;
+const
+  Files: array[0..1] of string = ('re-styles.rtf', 'wp-styles.rtf');
 var
-  d: TTyRichDocument;
-  c: TTyCharFormat;
-  p: TTyParaFormat;
   i: Integer;
-begin
-  d := LoadBytes(Fixture('re-styles.rtf'));
-  try
-    AssertEquals('paragraphs', 12, d.Text.ParaCount);
-    // paragraph 0: 普通，粗体，斜体，下划线，删除线，粗斜体。
-    c := CharAt(d, 0, 0);
-    AssertText('font', U('宋体'), c.FontName);
-    AssertEquals('charset', 134, c.Charset);
-    AssertEquals('size', 24, c.SizeHalfPt);
-    AssertTrue('普 plain', c.Style = []);
-    AssertTrue('粗 bold', CharAt(d, 0, 3).Style = [fsBold]);
-    AssertTrue('， after bold plain', CharAt(d, 0, 5).Style = []);
-    AssertTrue('斜 italic', CharAt(d, 0, 6).Style = [fsItalic]);
-    AssertTrue('下 underlined', CharAt(d, 0, 9).Style = [fsUnderline]);
-    AssertTrue('删 struck', CharAt(d, 0, 13).Strike);
-    AssertFalse('， after strike', CharAt(d, 0, 16).Strike);
-    AssertTrue('粗斜 bold italic', CharAt(d, 0, 17).Style = [fsBold, fsItalic]);
-    AssertTrue('。 plain', CharAt(d, 0, 20).Style = []);
-    // paragraph 1: H2O, E=mc2, 红字, 蓝字, 黄底, 大字, 小字.
-    AssertTrue('H', CharAt(d, 1, 0).VertAlign = vaNone);
-    AssertTrue('2 subscript', CharAt(d, 1, 1).VertAlign = vaSub);
-    AssertTrue('O', CharAt(d, 1, 2).VertAlign = vaNone);
-    AssertTrue('2 superscript', CharAt(d, 1, 9).VertAlign = vaSuper);
-    AssertEquals('红 red', RGBToColor(255, 0, 0), CharAt(d, 1, 12).Color);
-    AssertEquals(', auto colour', clDefault, CharAt(d, 1, 14).Color);
-    AssertEquals('蓝 blue', RGBToColor(0, 112, 192), CharAt(d, 1, 16).Color);
-    AssertEquals('黄 highlight', RGBToColor(255, 255, 0), CharAt(d, 1, 20).HighlightColor);
-    AssertEquals(', no highlight', clNone, CharAt(d, 1, 22).HighlightColor);
-    AssertEquals('大 18 pt', 36, CharAt(d, 1, 24).SizeHalfPt);
-    AssertEquals('小 8 pt', 16, CharAt(d, 1, 28).SizeHalfPt);
-    AssertEquals('. 12 pt', 24, CharAt(d, 1, 30).SizeHalfPt);
-    // paragraph formats
-    for i := 0 to 1 do
-    begin
-      p := ParaFmt(d, i);
-      AssertTrue(Format('paragraph %d left', [i]), p.Align = paraLeft);
-      AssertEquals(Format('paragraph %d indent', [i]), 0, p.LeftIndent);
-      AssertTrue(Format('paragraph %d single', [i]), p.LineSpacing = lsSingle);
+  errors: string;
+
+  procedure Check(const AName: string);
+  var
+    d: TTyRichDocument;
+    c: TTyCharFormat;
+    p: TTyParaFormat;
+    i: Integer;
+  begin
+    d := LoadBytes(Fixture(AName));
+    try
+      AssertEquals('paragraphs', 12, d.Text.ParaCount);
+      // paragraph 0: 普通，粗体，斜体，下划线，删除线，粗斜体。
+      c := CharAt(d, 0, 0);
+      AssertText('font', U('宋体'), c.FontName);
+      AssertEquals('charset', 134, c.Charset);
+      AssertEquals('size', 24, c.SizeHalfPt);
+      AssertTrue('普 plain', c.Style = []);
+      AssertTrue('粗 bold', CharAt(d, 0, 3).Style = [fsBold]);
+      AssertTrue('， after bold plain', CharAt(d, 0, 5).Style = []);
+      AssertTrue('斜 italic', CharAt(d, 0, 6).Style = [fsItalic]);
+      AssertTrue('下 underlined', CharAt(d, 0, 9).Style = [fsUnderline]);
+      AssertTrue('删 struck', CharAt(d, 0, 13).Strike);
+      AssertFalse('， after strike', CharAt(d, 0, 16).Strike);
+      AssertTrue('粗斜 bold italic', CharAt(d, 0, 17).Style = [fsBold, fsItalic]);
+      AssertTrue('。 plain', CharAt(d, 0, 20).Style = []);
+      // paragraph 1: H2O, E=mc2, 红字, 蓝字, 黄底, 大字, 小字.
+      AssertTrue('H', CharAt(d, 1, 0).VertAlign = vaNone);
+      AssertTrue('2 subscript', CharAt(d, 1, 1).VertAlign = vaSub);
+      AssertTrue('O', CharAt(d, 1, 2).VertAlign = vaNone);
+      AssertTrue('2 superscript', CharAt(d, 1, 9).VertAlign = vaSuper);
+      AssertEquals('红 red', RGBToColor(255, 0, 0), CharAt(d, 1, 12).Color);
+      AssertEquals(', auto colour', clDefault, CharAt(d, 1, 14).Color);
+      AssertEquals('蓝 blue', RGBToColor(0, 112, 192), CharAt(d, 1, 16).Color);
+      AssertEquals('黄 highlight', RGBToColor(255, 255, 0), CharAt(d, 1, 20).HighlightColor);
+      AssertEquals(', no highlight', clNone, CharAt(d, 1, 22).HighlightColor);
+      AssertEquals('大 18 pt', 36, CharAt(d, 1, 24).SizeHalfPt);
+      AssertEquals('小 8 pt', 16, CharAt(d, 1, 28).SizeHalfPt);
+      AssertEquals('. 12 pt', 24, CharAt(d, 1, 30).SizeHalfPt);
+      // paragraph formats
+      for i := 0 to 1 do
+      begin
+        p := ParaFmt(d, i);
+        AssertTrue(Format('paragraph %d left', [i]), p.Align = paraLeft);
+        AssertEquals(Format('paragraph %d indent', [i]), 0, p.LeftIndent);
+        AssertTrue(Format('paragraph %d single', [i]), p.LineSpacing = lsSingle);
+      end;
+      AssertTrue('centred', ParaFmt(d, 2).Align = paraCenter);
+      AssertTrue('right', ParaFmt(d, 3).Align = paraRight);
+      AssertTrue('justified', ParaFmt(d, 4).Align = paraJustify);
+      p := ParaFmt(d, 5);
+      AssertTrue('5 left again', p.Align = paraLeft);
+      AssertEquals('5 first', 360, p.FirstIndent);
+      AssertEquals('5 left', 720, p.LeftIndent);
+      AssertEquals('5 right', 360, p.RightIndent);
+      p := ParaFmt(d, 6);
+      AssertEquals('6 hanging', -360, p.FirstIndent);
+      AssertEquals('6 left', 720, p.LeftIndent);
+      AssertEquals('6 right', 0, p.RightIndent);
+      AssertTrue('7 1.5', ParaFmt(d, 7).LineSpacing = ls15);
+      AssertTrue('8 double', ParaFmt(d, 8).LineSpacing = lsDouble);
+      p := ParaFmt(d, 9);
+      AssertTrue('9 exact', p.LineSpacing = lsExact);
+      AssertEquals('9 20 pt', 400, p.LineSpacingValue);
+      p := ParaFmt(d, 10);
+      AssertEquals('10 before', 240, p.SpaceBefore);
+      AssertEquals('10 after', 120, p.SpaceAfter);
+      AssertTrue('10 single', p.LineSpacing = lsSingle);
+      p := ParaFmt(d, 11);
+      AssertEquals('11 tabs', 3, Length(p.Tabs));
+      AssertEquals('tab 1', 1440, p.Tabs[0].Position);
+      AssertTrue('tab 1 left', p.Tabs[0].Align = ttaLeft);
+      AssertEquals('tab 2', 4320, p.Tabs[1].Position);
+      AssertTrue('tab 2 centre', p.Tabs[1].Align = ttaCenter);
+      AssertEquals('tab 3', 8640, p.Tabs[2].Position);
+      AssertTrue('tab 3 right', p.Tabs[2].Align = ttaRight);
+      AssertEquals('10 has no tabs', 0, Length(ParaFmt(d, 10).Tabs));
+    finally
+      d.Free;
     end;
-    AssertTrue('centred', ParaFmt(d, 2).Align = paraCenter);
-    AssertTrue('right', ParaFmt(d, 3).Align = paraRight);
-    AssertTrue('justified', ParaFmt(d, 4).Align = paraJustify);
-    p := ParaFmt(d, 5);
-    AssertTrue('5 left again', p.Align = paraLeft);
-    AssertEquals('5 first', 360, p.FirstIndent);
-    AssertEquals('5 left', 720, p.LeftIndent);
-    AssertEquals('5 right', 360, p.RightIndent);
-    p := ParaFmt(d, 6);
-    AssertEquals('6 hanging', -360, p.FirstIndent);
-    AssertEquals('6 left', 720, p.LeftIndent);
-    AssertEquals('6 right', 0, p.RightIndent);
-    AssertTrue('7 1.5', ParaFmt(d, 7).LineSpacing = ls15);
-    AssertTrue('8 double', ParaFmt(d, 8).LineSpacing = lsDouble);
-    p := ParaFmt(d, 9);
-    AssertTrue('9 exact', p.LineSpacing = lsExact);
-    AssertEquals('9 20 pt', 400, p.LineSpacingValue);
-    p := ParaFmt(d, 10);
-    AssertEquals('10 before', 240, p.SpaceBefore);
-    AssertEquals('10 after', 120, p.SpaceAfter);
-    AssertTrue('10 single', p.LineSpacing = lsSingle);
-    p := ParaFmt(d, 11);
-    AssertEquals('11 tabs', 3, Length(p.Tabs));
-    AssertEquals('tab 1', 1440, p.Tabs[0].Position);
-    AssertTrue('tab 1 left', p.Tabs[0].Align = ttaLeft);
-    AssertEquals('tab 2', 4320, p.Tabs[1].Position);
-    AssertTrue('tab 2 centre', p.Tabs[1].Align = ttaCenter);
-    AssertEquals('tab 3', 8640, p.Tabs[2].Position);
-    AssertTrue('tab 3 right', p.Tabs[2].Align = ttaRight);
-    AssertEquals('10 has no tabs', 0, Length(ParaFmt(d, 10).Tabs));
-  finally
-    d.Free;
   end;
+
+begin
+  // what WordPad's engine streams out, and what WordPad itself saved from it (the same but for
+  // \ansicpg54936); both are checked, and a failure names every file that failed
+  errors := '';
+  for i := 0 to High(Files) do
+    try
+      Check(Files[i]);
+    except
+      on E: EAssertionFailedError do errors := errors + Files[i] + ': ' + E.Message + '; ';
+    end;
+  if errors <> '' then Fail(errors);
 end;
 
 procedure TTyRtfReadTest.TestBig5AndShiftJis;
@@ -610,6 +655,43 @@ begin
   finally
     d.Free;
   end;
+  // the same in what Word itself saved
+  d := LoadBytes(Fixture('word-zh.rtf'));
+  try
+    // TyControls 的富文本控件 4.0，用 Word 保存。
+    c := CharAt(d, 0, 0);
+    AssertText('Word: Latin', 'Calibri', c.FontName);
+    AssertEquals('Word: Latin charset', 0, c.Charset);
+    c := CharAt(d, 0, 11);
+    AssertText('Word: Chinese', U('宋体'), c.FontName);
+    AssertEquals('Word: Chinese charset', 134, c.Charset);
+    AssertText('Word: 4.0', 'Calibri', CharAt(d, 0, 18).FontName);
+    AssertText('Word: ，', U('宋体'), CharAt(d, 0, 21).FontName);
+    AssertText('Word: Word', 'Calibri', CharAt(d, 0, 24).FontName);
+    // café 和 naïve ...: é is the GBK pair a8 a6 in the East Asian font; ï is \'ef in the
+    // high-ANSI slot in the middle of a Latin run
+    AssertText('Word: é decoded', U('café 和 naïve'), Copy(ParaText(d, 1), 1, Length(U('café 和 naïve'))));
+    AssertText('Word: c', 'Calibri', CharAt(d, 1, 0).FontName);
+    AssertText('Word: é in the East Asian font', U('宋体'), CharAt(d, 1, 3).FontName);
+    AssertText('Word: 和', U('宋体'), CharAt(d, 1, 5).FontName);
+    AssertText('Word: ï', 'Calibri', CharAt(d, 1, 9).FontName);
+    AssertText('Word: v after ï', 'Calibri', CharAt(d, 1, 10).FontName);
+    // 这一段的中文用黑体，English stays Calibri。
+    AssertText('Word: 黑体', U('黑体'), CharAt(d, 2, 0).FontName);
+    AssertText('Word: English in 黑体''s paragraph', 'Calibri', CharAt(d, 2, 10).FontName);
+    AssertText('Word: 。 in 黑体', U('黑体'), CharAt(d, 2, 31).FontName);
+    // 表情 😀 和生僻字 龘 ...: the emoji is one character
+    AssertEquals('Word: the emoji is one character', 21, d.Text.ParaLength(3));
+    AssertText('Word: the emoji', U(UC($1F600)), Copy(ParaText(d, 3), 8, 4));
+    AssertText('Word: 和 after it', U('宋体'), CharAt(d, 3, 5).FontName);
+    // 粗体的中文 and bold English，后面是普通的。
+    AssertTrue('Word: bold Chinese', fsBold in CharAt(d, 4, 0).Style);
+    AssertTrue('Word: bold English', fsBold in CharAt(d, 4, 21).Style);
+    AssertText('Word: bold English in Calibri', 'Calibri', CharAt(d, 4, 21).FontName);
+    AssertFalse('Word: ， plain', fsBold in CharAt(d, 4, 22).Style);
+  finally
+    d.Free;
+  end;
   // one run, three slots: each character takes the font of its class
   d := LoadString('{\rtf1\ansi\ansicpg936{\fonttbl{\f0\fcharset134 S;}{\f1\fcharset0 L;}}' +
     '\loch\af1\hich\af1\dbch\f0 ab\''d6\''d0\par}');
@@ -628,11 +710,11 @@ var
   m: TTyRtfSourceMap;
   d: TTyRichDocument;
   o: TTyRichOpaque;
-  header, trailer: RawByteString;
-  r: TTyRunArray;
-  i: Integer;
-  revised, deleted: Boolean;
+  formula: RawByteString;
+  errors: string;
 
+  { The object's bytes are where they are in the file, inside its paragraph; a group is the
+    whole group, from its brace to the one that closes it. }
   procedure CheckOpaque(const AWhat: string; APara: Integer; const APrefix: RawByteString);
   var
     at: Int64;
@@ -642,56 +724,95 @@ var
     at := IndexOfStr(b, o.Bytes, m.Paras[APara].Start);
     AssertTrue(AWhat + ': its bytes are in the file', at >= 0);
     AssertTrue(AWhat + ': inside its paragraph', at + Length(o.Bytes) <= m.Paras[APara].Stop);
+    if o.Bytes[1] = '{' then
+      AssertEquals(AWhat + ': the whole group', GroupEnd(b, at), at + Length(o.Bytes));
+  end;
+
+  procedure Check(const AName: string; const AField, AAnchor, AComment, AFormula,
+    ADataStore: RawByteString; ADeletedStop: Integer);
+  var
+    header, trailer: RawByteString;
+    r: TTyRunArray;
+    i: Integer;
+    revised, deleted: Boolean;
+  begin
+    b := Fixture(AName);
+    m := TTyRtfSourceMap.Create;
+    d := LoadBytes(b, m);
+    try
+      header := StrOf(b, m.Header.Start, m.Header.Stop - m.Header.Start);
+      trailer := StrOf(b, m.Trailer.Start, m.Trailer.Stop - m.Trailer.Start);
+      // the style: the style sheet in the header, \s1 on the paragraph
+      AssertTrue('style sheet in the header', Pos('{\stylesheet{', header) > 0);
+      AssertTrue('\s1 on the heading', HasFragment(ParaFmt(d, 0).Extra, '\s1'));
+      AssertFalse('no \s1 on the next paragraph', HasFragment(ParaFmt(d, 1).Extra, '\s1'));
+      // the field
+      CheckOpaque('field', 1, AField);
+      AssertText('field result', U('链接'), o.DisplayText);
+      AssertText('the field''s bytes', '}}}', Copy(o.Bytes, Length(o.Bytes) - 2, 3));
+      // the revisions: the table in the header, the marks on the runs
+      AssertTrue('revision table in the header',
+        Pos('{\*\revtbl {Unknown;}{TyControls;}}', header) > 0);
+      r := d.RunsOf(2);
+      revised := False;
+      deleted := False;
+      for i := 0 to High(r) do
+      begin
+        if HasFragment(d.Formats.CharFormat(r[i].Format).Extra, '\revised') then revised := True;
+        if HasFragment(d.Formats.CharFormat(r[i].Format).Extra, '\deleted') then deleted := True;
+      end;
+      AssertTrue('inserted text marked', revised);
+      AssertTrue('deleted text marked', deleted);
+      // 修订：新加的字原来的字。
+      AssertTrue('the inserted text''s run', HasFragment(CharAt(d, 2, 3).Extra, '\revised'));
+      AssertFalse('text before it is no revision', HasFragment(CharAt(d, 2, 0).Extra, '\revised'));
+      AssertTrue('the deleted text''s run', HasFragment(CharAt(d, 2, 7).Extra, '\deleted'));
+      AssertFalse('the deleted text is no insertion', HasFragment(CharAt(d, 2, 7).Extra, '\revised'));
+      if ADeletedStop < d.Text.ParaLength(2) then
+        AssertFalse('text after it is no deletion',
+          HasFragment(CharAt(d, 2, ADeletedStop).Extra, '\deleted'));
+      // the comment
+      CheckOpaque('comment anchor', 3, AAnchor);
+      CheckOpaque('comment end', 3, '{\*\atrfend ');
+      CheckOpaque('comment', 3, AComment);
+      CheckOpaque('comment mark', 3, '\chatn ');
+      // the footnote, the formula, the bookmark
+      CheckOpaque('footnote mark', 4, '\chftn ');
+      CheckOpaque('footnote', 4, '{\footnote \ltrpar');
+      CheckOpaque('formula', 5, AFormula);
+      formula := o.Bytes;
+      CheckOpaque('bookmark', 6, '{\*\bkmkstart mark1}');
+      CheckOpaque('bookmark end', 6, '{\*\bkmkend mark1}');
+      // Word's blocks after the last paragraph
+      AssertTrue('theme', Pos('{\*\themedata 504b', trailer) = 1);
+      AssertTrue('data store', Pos(ADataStore, trailer) > 0);
+      AssertTrue('latent styles', Pos('{\*\latentstyles', trailer) > 0);
+      CheckTiles(AName, b, d, m);
+    finally
+      d.Free;
+      m.Free;
+    end;
   end;
 
 begin
-  b := Fixture('hand-word-unknown.rtf');
-  m := TTyRtfSourceMap.Create;
-  d := LoadBytes(b, m);
+  // both files are checked; a failure names every file that failed
+  errors := '';
   try
-    header := StrOf(b, m.Header.Start, m.Header.Stop - m.Header.Start);
-    trailer := StrOf(b, m.Trailer.Start, m.Trailer.Stop - m.Trailer.Start);
-    // the style: the style sheet in the header, \s1 on the paragraph
-    AssertTrue('style sheet in the header', Pos('{\stylesheet{', header) > 0);
-    AssertTrue('\s1 on the heading', HasFragment(ParaFmt(d, 0).Extra, '\s1'));
-    AssertFalse('no \s1 on the next paragraph', HasFragment(ParaFmt(d, 1).Extra, '\s1'));
-    // the field
-    CheckOpaque('field', 1, '{\field{\*\fldinst');
-    AssertText('field result', U('链接'), o.DisplayText);
-    AssertText('the field''s bytes', '}}}', Copy(o.Bytes, Length(o.Bytes) - 2, 3));
-    // the revisions: the table in the header, the marks on the runs
-    AssertTrue('revision table in the header', Pos('{\*\revtbl {Unknown;}{TyControls;}}', header) > 0);
-    r := d.RunsOf(2);
-    revised := False;
-    deleted := False;
-    for i := 0 to High(r) do
-    begin
-      if HasFragment(d.Formats.CharFormat(r[i].Format).Extra, '\revised') then revised := True;
-      if HasFragment(d.Formats.CharFormat(r[i].Format).Extra, '\deleted') then deleted := True;
-    end;
-    AssertTrue('inserted text marked', revised);
-    AssertTrue('deleted text marked', deleted);
-    AssertTrue('the inserted text''s run', HasFragment(CharAt(d, 2, 3).Extra, '\revised'));
-    AssertFalse('text before it is no revision', HasFragment(CharAt(d, 2, 0).Extra, '\revised'));
-    // the comment
-    CheckOpaque('comment anchor', 3, '{\*\atrfstart 1}');
-    CheckOpaque('comment', 3, '{\*\annotation{\*\atnref 1}');
-    CheckOpaque('comment mark', 3, '\chatn ');
-    // the footnote, the formula, the bookmark
-    CheckOpaque('footnote mark', 4, '\chftn ');
-    CheckOpaque('footnote', 4, '{\footnote \ltrpar');
-    CheckOpaque('formula', 5, '{\mmath {\*\moMath');
-    CheckOpaque('bookmark', 6, '{\*\bkmkstart mark1}');
-    CheckOpaque('bookmark end', 6, '{\*\bkmkend mark1}');
-    // Word's blocks after the last paragraph
-    AssertTrue('theme', Pos('{\*\themedata 504b', trailer) = 1);
-    AssertTrue('data store', Pos('{\*\datastore 0105000002000000}}', trailer) > 0);
-    AssertTrue('latent styles', Pos('{\*\latentstyles', trailer) > 0);
-    CheckTiles('hand-word-unknown', b, d, m);
-  finally
-    d.Free;
-    m.Free;
+    Check('hand-word-unknown.rtf', '{\field{\*\fldinst', '{\*\atrfstart 1}',
+      '{\*\annotation{\*\atnref 1}', '{\mmath {\*\moMath', '{\*\datastore 0105000002000000}}', 11);
+  except
+    on E: EAssertionFailedError do errors := errors + 'hand-word-unknown.rtf: ' + E.Message + '; ';
   end;
+  // what Word saved: a field Word may edit, a comment numbered by Word, the formula with its
+  // picture fallback (\mmathPict: a PNG and a metafile of it) inside the one object
+  try
+    Check('word-unknown.rtf', '{\field\fldedit{\*\fldinst', '{\*\atrfstart 2028305068}',
+      '{\*\annotation{\*\atnref 2028305068}', '{\mmath{\*\moMath', '{\*\datastore 01050000'#13#10, 9);
+    AssertTrue('the formula keeps its fallback picture', Pos('{\mmathPict{\*\shppict', formula) > 0);
+  except
+    on E: EAssertionFailedError do errors := errors + 'word-unknown.rtf: ' + E.Message + '; ';
+  end;
+  if errors <> '' then Fail(errors);
 end;
 
 procedure TTyRtfReadTest.TestTablesRead;
@@ -700,6 +821,58 @@ var
   t: TTyRichTable;
   i, f, l: Integer;
 begin
+  // the real files first, so that a reader change shows on them before the stand-ins
+  // a table copied from Word and pasted into WordPad, as WordPad saved it
+  d := LoadBytes(Fixture('wp-zh-table.rtf'));
+  try
+    CheckParas('wp table', d, ['表格是从 Word 复制来的：', '品名', '数量', '单价', '铅笔 pencil',
+      '12', '1.50', '', '表格后的段落。']);
+    AssertNull('wp: before the table', d.TableAt(0));
+    t := d.TableAt(1);
+    AssertNotNull('wp: a table', t);
+    for i := 1 to 6 do
+      AssertSame(Format('wp: one table, paragraph %d', [i]), t, d.TableAt(i));
+    AssertNull('wp: after the table', d.TableAt(7));
+    AssertNull('wp: the last paragraph', d.TableAt(8));
+    AssertFalse('wp: not locked', t.StructureLocked);
+    AssertEquals('wp: rows', 2, t.RowCount);
+    AssertEquals('wp: cells', 6, t.CellCount);
+    for i := 1 to 6 do
+    begin
+      AssertSame(Format('wp: paragraph %d row', [i]), t.Rows[(i - 1) div 3], d.CellAt(i).Row);
+      AssertEquals(Format('wp: paragraph %d cell', [i]), (i - 1) mod 3, d.CellAt(i).Index);
+    end;
+    AssertTrue('wp: Word''s borders in the row', Pos('\trbrdr', t.Rows[0].RawFormat) > 0);
+  finally
+    d.Free;
+  end;
+  // what Word saved: two cells merged across are one wider cell
+  d := LoadBytes(Fixture('word-table-merged.rtf'));
+  try
+    CheckParas('Word merged', d, ['表格前', '跨两列', 'C', '跨两行', 'E', 'F', '', 'G', '内一',
+      '内二', '', '表格后']);
+    t := d.TableAt(1);
+    AssertNotNull('Word merged: a table', t);
+    AssertNull('Word merged: before', d.TableAt(0));
+    AssertNull('Word merged: after', d.TableAt(11));
+    for i := 1 to 10 do
+      AssertSame(Format('Word merged: one table, paragraph %d', [i]), t, d.TableAt(i));
+    AssertTrue('Word merged: locked', t.StructureLocked);
+    AssertEquals('Word merged: rows', 3, t.RowCount);
+    AssertEquals('Word merged: row 1 is two cells', 2, t.Rows[0].CellCount);
+    AssertEquals('Word merged: row 2', 3, t.Rows[1].CellCount);
+    AssertEquals('Word merged: row 3', 3, t.Rows[2].CellCount);
+    AssertSame('Word merged: 跨两列', t.Rows[0], d.CellAt(1).Row);
+    AssertEquals('Word merged: 跨两列 is cell 0', 0, d.CellAt(1).Index);
+    AssertEquals('Word merged: C is cell 1', 1, d.CellAt(2).Index);
+    AssertSame('Word merged: the cell merged down', t.Rows[2], d.CellAt(6).Row);
+    AssertEquals('Word merged: G', 1, d.CellAt(7).Index);
+    AssertTrue('Word merged: the last cell', d.CellParas(1, t.Rows[2].Cells[2], f, l));
+    AssertEquals('Word merged: the last cell: first', 8, f);
+    AssertEquals('Word merged: the last cell: last', 10, l);
+  finally
+    d.Free;
+  end;
   d := LoadBytes(Fixture('re-zh-table.rtf'));
   try
     AssertEquals('paragraphs', 11, d.Text.ParaCount);
@@ -1439,6 +1612,46 @@ begin
   end;
   AssertTrue('samples', files >= 12);
   for i := 0 to High(Inline) do Check(Shown(Inline[i]), BytesOf(Inline[i]));
+end;
+
+{ ---- what the real WordPad and Word files showed ---- }
+
+procedure TTyRtfReadTest.TestGb18030AsTheFileCodePage;
+var
+  d: TTyRichDocument;
+begin
+  // WordPad on a Chinese system writes \ansicpg54936; a font that names no charset reads in it
+  d := LoadString('{\rtf1\ansi\ansicpg54936\deff0{\fonttbl{\f0\fnil Arial;}}\f0 \''d6\''d0' +
+    '\''ce\''c4\par}');
+  try
+    CheckParas('\ansicpg54936', d, ['中文']);
+  finally
+    d.Free;
+  end;
+  // ... and so does the font's name
+  d := LoadString('{\rtf1\ansi\ansicpg54936{\fonttbl{\f0\fnil\fcharset1 \''cb\''ce\''cc\''e5;}}' +
+    '\f0 a\par}');
+  try
+    AssertText('font name in GB18030', U('宋体'), CharAt(d, 0, 0).FontName);
+  finally
+    d.Free;
+  end;
+  // a font's own \cpg54936 in a Western file
+  d := LoadString('{\rtf1\ansi\ansicpg1252{\fonttbl{\f0\fnil\cpg54936 X;}{\f1\fnil Y;}}' +
+    '\f0 \''d6\''d0\f1 \''e9\par}');
+  try
+    CheckParas('\cpg54936', d, ['中é']);
+  finally
+    d.Free;
+  end;
+  // a four-byte GB18030 sequence (81 30 81 30 is U+0080) is not decoded: the lead byte reads
+  // '?' and the digit byte as itself, as in a GBK file; WordPad writes such characters as \u
+  d := LoadString('{\rtf1\ansi\ansicpg54936{\fonttbl{\f0\fnil A;}}\f0 x\''81\''30\''81\''30y\par}');
+  try
+    CheckParas('four bytes', d, ['x?0?0y']);
+  finally
+    d.Free;
+  end;
 end;
 
 initialization

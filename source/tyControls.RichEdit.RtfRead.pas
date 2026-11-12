@@ -1042,6 +1042,16 @@ begin
   end;
 end;
 
+// A code page as \ansicpg or \cpg names it, to the one whose table decodes it. WordPad on a
+// Chinese system writes \ansicpg54936 (GB18030): its one- and two-byte sequences are GBK's.
+// Its four-byte sequences (a lead byte, then 30-39) are not decoded: WordPad writes such
+// characters as \uN, and in a file that has them anyway the lead byte reads as '?' and each
+// 30-39 byte as its digit, as in a GBK file.
+function RtfCodePage(ACodePage: Integer): Integer;
+begin
+  if ACodePage = 54936 then Result := 936 else Result := ACodePage;
+end;
+
 // ---- TTyRtfSourceMap ----
 
 function TTyRtfSourceMap.ParaCount: Integer;
@@ -2481,6 +2491,7 @@ end;
 
 function TTyRtfParser.ResolveCodePage(ACharset, ACpg: Integer): Integer;
 begin
+  ACpg := RtfCodePage(ACpg);
   if (ACpg > 0) and TyRichCodePageSupported(ACpg) then Exit(ACpg);
   Result := CharsetCodePage(ACharset);
   if Result = CpSymbol then Exit;
@@ -2745,6 +2756,7 @@ begin
       end;
     kwAnsiCpg:
       begin
+        p := RtfCodePage(p);
         if TyRichCodePageSupported(p) then FAnsiCp := p else FAnsiCp := 1252;
         FAnsiCpSet := True;
         Inc(FFontGen);
