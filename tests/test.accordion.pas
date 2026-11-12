@@ -132,6 +132,7 @@ type
     procedure TestAtRunTimeAMovedSectionIsPutBack;
     { housekeeping }
     procedure TestAFreedSectionLeavesTheStack;
+    procedure TestASectionMadeWhereAFreedOneWasIsNotTakenForIt;
     procedure TestTheDefaultThemeStylesTheStack;
   end;
 
@@ -1462,6 +1463,48 @@ begin
   FAcc.MarkDesigning(True);
   FAcc.Lay;
   AssertEquals('the designer''s check goes over what is left', 131, FA.Height);
+end;
+
+procedure TTyAccordionTest.TestASectionMadeWhereAFreedOneWasIsNotTakenForIt;
+var
+  was: Pointer;
+  d: TSecProbe;
+  at0: Integer;
+begin
+  { The stack remembers its children by address. Free one and make another of the same
+    class straight away, and the heap gives the new one the old address -- which is the
+    case this is about. When it does not, there is nothing to tell here. }
+  Three;
+  FAcc.MarkDesigning(True);
+  FAcc.Lay;
+  was := Pointer(FB);
+  FreeAndNil(FB);
+  d := NewSection('SecD', 100);
+  if Pointer(d) <> was then
+    Ignore('the heap did not hand the freed address out again');
+  { the designer's check: the new section is new, not the old one "dragged" to the top }
+  FAcc.Lay;
+  AssertTrue('the new section is last, where new children go',
+    (FAcc.Section(0) = FA) and (FAcc.Section(1) = FC) and (FAcc.Section(2) = d));
+  AssertEquals('and the weights are as they were', 100, FA.ExpandedHeight);
+  FAcc.MarkDesigning(False);
+  { the same on the way to a new distribution: the new section is not eased in from where
+    the old one stood }
+  FAcc.Eases := True;
+  FA.AnimationDuration := 200;
+  FA.Collapsed := True;
+  was := Pointer(d);
+  FreeAndNil(d);
+  d := NewSection('SecE', 100);
+  if Pointer(d) <> was then
+    Ignore('the heap did not hand the freed address out again');
+  FAcc.Lay;
+  { a child the move knows nothing of is put where it is going at once; taken for the old
+    one, it would start from where that one stood }
+  at0 := d.Top;
+  FAcc.Step(200);
+  AssertFalse('setup: the move is over', FAcc.Animating);
+  AssertEquals('the new section was where it belongs from the start', d.Top, at0);
 end;
 
 procedure TTyAccordionTest.TestTheDefaultThemeStylesTheStack;

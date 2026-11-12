@@ -272,7 +272,7 @@ implementation
 function TyAccordionDistribute(const AItems: array of TTyAccordionItem;
   AHeight, ASplitter: Integer): TTyAccordionSlots;
 var
-  n, i, y, rest, sumMin, prev, cur: Integer;
+  n, i, y, rest, prev, cur: Integer;
   w, acc, total: Int64;
   pinned: array of Boolean;
   again: Boolean;
@@ -297,12 +297,9 @@ begin
   if ASplitter < 0 then ASplitter := 0;
   // What is not to share: the fixed heights, the collapsed headers, the drag strips.
   rest := AHeight;
-  sumMin := 0;
   for i := 0 to n - 1 do
   begin
-    if AItems[i].Kind = aikExpanded then
-      Inc(sumMin, AItems[i].MinSize)
-    else
+    if AItems[i].Kind <> aikExpanded then
     begin
       Result[i].Height := AItems[i].Size;
       if Result[i].Height < 0 then Result[i].Height := 0;
@@ -310,61 +307,48 @@ begin
     end;
     if SplitterAfter(i) then Dec(rest, ASplitter);
   end;
-  if rest < 0 then rest := 0;
   pinned := nil;
   SetLength(pinned, n);
-  if sumMin >= rest then
-  begin
-    // Not even the minimums fit: everyone gets theirs, and the stack is cut at the bottom.
+  { A section whose share is under its minimum is pinned at the minimum, which takes room
+    from the others -- so the shares are worked out again, until nobody is under. Each round
+    pins at least one, so it ends; and when not even the minimums fit, it ends with every
+    section pinned at its minimum and the stack taller than the room. }
+  repeat
+    again := False;
+    total := 0;
     for i := 0 to n - 1 do
-      if AItems[i].Kind = aikExpanded then
+      if (AItems[i].Kind = aikExpanded) and not pinned[i] then Inc(total, WeightOf(i));
+    for i := 0 to n - 1 do
+      if (AItems[i].Kind = aikExpanded) and not pinned[i]
+         and (rest * WeightOf(i) < Int64(AItems[i].MinSize) * total) then
       begin
-        Result[i].Height := AItems[i].MinSize;
         pinned[i] := True;
+        Result[i].Height := AItems[i].MinSize;
+        again := True;
       end;
-  end
-  else
-  begin
-    { A section whose share is under its minimum is pinned at the minimum, which takes room
-      from the others -- so the shares are worked out again, until nobody is under. It ends:
-      each round pins at least one, and the minimums of all fit in the rest. }
-    repeat
-      again := False;
-      total := 0;
+    if again then
+    begin
+      rest := AHeight;
       for i := 0 to n - 1 do
-        if (AItems[i].Kind = aikExpanded) and not pinned[i] then Inc(total, WeightOf(i));
-      for i := 0 to n - 1 do
-        if (AItems[i].Kind = aikExpanded) and not pinned[i]
-           and (rest * WeightOf(i) < Int64(AItems[i].MinSize) * total) then
-        begin
-          pinned[i] := True;
-          Result[i].Height := AItems[i].MinSize;
-          again := True;
-        end;
-      if again then
       begin
-        rest := AHeight;
-        for i := 0 to n - 1 do
-        begin
-          if (AItems[i].Kind <> aikExpanded) or pinned[i] then Dec(rest, Result[i].Height);
-          if SplitterAfter(i) then Dec(rest, ASplitter);
-        end;
+        if (AItems[i].Kind <> aikExpanded) or pinned[i] then Dec(rest, Result[i].Height);
+        if SplitterAfter(i) then Dec(rest, ASplitter);
       end;
-    until not again;
-    { The shares, rounded so that they add up to the rest exactly: each boundary is rounded,
-      not each height, and a height is the difference of two boundaries. }
-    acc := 0;
-    prev := 0;
-    for i := 0 to n - 1 do
-      if (AItems[i].Kind = aikExpanded) and not pinned[i] then
-      begin
-        w := WeightOf(i);
-        Inc(acc, w);
-        cur := (Int64(rest) * acc * 2 + total) div (total * 2);
-        Result[i].Height := cur - prev;
-        prev := cur;
-      end;
-  end;
+    end;
+  until not again;
+  { The shares, rounded so that they add up to the rest exactly: each boundary is rounded,
+    not each height, and a height is the difference of two boundaries. }
+  acc := 0;
+  prev := 0;
+  for i := 0 to n - 1 do
+    if (AItems[i].Kind = aikExpanded) and not pinned[i] then
+    begin
+      w := WeightOf(i);
+      Inc(acc, w);
+      cur := (Int64(rest) * acc * 2 + total) div (total * 2);
+      Result[i].Height := cur - prev;
+      prev := cur;
+    end;
   y := 0;
   for i := 0 to n - 1 do
   begin
@@ -693,7 +677,7 @@ begin
     Constraints) would otherwise be taken for a new change on every pass. }
   moved := nil;
   for i := 0 to High(FPlaced) do
-    if (FPlaced[i].Control.Parent = Self)
+    if (GetControlIndex(FPlaced[i].Control) >= 0)
        and not EqualRect(FPlaced[i].Control.BoundsRect, FPlaced[i].Bounds) then
     begin
       if moved <> nil then Exit;   // more than one: a layout pass of LCL's, not a gesture
@@ -712,7 +696,7 @@ begin
     others := nil;
     pos := 0;
     for i := 0 to High(FPlaced) do
-      if (FPlaced[i].Control <> moved) and (FPlaced[i].Control.Parent = Self) then
+      if (FPlaced[i].Control <> moved) and (GetControlIndex(FPlaced[i].Control) >= 0) then
       begin
         j := Length(others);
         SetLength(others, j + 1);
@@ -786,7 +770,9 @@ procedure TTyCustomAccordion.RemoveControl(AControl: TControl);
 var
   i, n: Integer;
 begin
-  // Nothing remembered may outlive the child.
+  { Nothing remembered may outlive the child. What is kept is its address, and the heap hands
+    a freed address out again: the next section made would be taken for this one -- found
+    "moved" by the designer's check, or eased in from where this one stood. }
   n := 0;
   for i := 0 to High(FPlaced) do
     if FPlaced[i].Control <> AControl then
