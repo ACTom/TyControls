@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 194 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 196 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -36,7 +36,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 
 ## Features
 
-- **194 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
+- **196 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
 - **Data-aware controls**: a separate package, `tycontrols_db`, with 22 controls you bind to a `TDataSource` field; the data grid `TTyDBGrid` behaves like LCL's `TDBGrid`
 - **Property grid**: `TTyPropertyGrid` lists any object's published properties at run time and writes edits straight back, with multiselect, a name filter and categories
 - **Terminal**: `TTyTerminalView` parses output and encodes keys after xterm.js; in the example, hooked up to ConPTY / a PTY, it is a working shell window
@@ -72,7 +72,7 @@ Open `tycontrols_dt.lpk` in Lazarus and click **Use → Install**; the IDE rebui
 
 **File → New… → Project → TyControls Application**
 
-The template creates a main form with a custom-drawn title bar, the content container `Surface`, and a style controller already wired up. Put your controls on `Surface` — a `TTyForm`'s visual controls all live there, and graphic controls must (see the [TTyForm docs](docs/controls/ttyform.md)). To add a form to an existing project, use **File → New… → Form → TyControls Form**.
+The template creates a main form with a custom-drawn title bar, the content container `Surface`, and a style controller already wired up. Put your controls on `Surface` — a `TTyForm`'s visual controls all live there, and graphic controls must (see the [TTyForm docs](docs/controls/ttyform.md)). To add a form to an existing project, use **File → New… → Form → TyControls Form**; for a view you embed elsewhere, use **TyControls Frame** (`TTyFrame`, see [frame.md](docs/controls/frame.md)).
 
 **3. Switch themes**
 
@@ -84,7 +84,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-194 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+196 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -225,7 +225,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyBreadcrumb` | Breadcrumb trail |
 | `TTyHeaderControl` | Standalone column header strip |
 
-### Containers & layout · `TyControls Containers` (22)
+### Containers & layout · `TyControls Containers` (24)
 
 | Control | Description |
 |---|---|
@@ -233,6 +233,8 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyGroupBox` | Group box |
 | `TTyCard` | Card: title / content / actions |
 | `TTyExPanel` | Collapsible panel |
+| `TTyExPanelActions` | Action area in a collapsible panel's header, for that section's own buttons |
+| `TTyAccordion` | Stacks collapsible panels as the sections of a side bar: height shared by weight, draggable boundaries, savable layout |
 | `TTyScrollBox` | Scrollable container |
 | `TTyScrollPanel` | Container that auto-scrolls near its edges |
 | `TTyGridPanel` | Designer grid container; drop controls straight into its cells |

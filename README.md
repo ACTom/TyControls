@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。194 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。196 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -36,7 +36,7 @@ Lazarus 自绘控件库。194 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **194 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
+- **196 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、22 个数据感知控件,一套配齐
 - **数据感知控件**:单独的 `tycontrols_db` 包,22 个控件绑上 `TDataSource` 的字段就能用,其中数据表格 `TTyDBGrid` 的行为照 LCL `TDBGrid`
 - **属性表格**:`TTyPropertyGrid` 在程序运行时列出任意对象的 published 属性,改了直接写回,可多选、按名字过滤、分类显示
 - **终端**:`TTyTerminalView` 照 xterm.js 解析输出、编码按键;示例里接上 ConPTY / PTY 就是一个能用的 shell 窗口
@@ -72,7 +72,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 **File → New… → Project → TyControls 应用程序**
 
-模板生成的主窗体已带自绘标题栏、内容容器 `Surface` 和样式控制器。控件放在 `Surface` 里(`TTyForm` 的可视控件都放它上面,图形控件必须放进去,详见 [TTyForm 文档](docs/controls/ttyform.md))。给已有工程加窗体用 **File → New… → Form → TyControls 窗体**。
+模板生成的主窗体已带自绘标题栏、内容容器 `Surface` 和样式控制器。控件放在 `Surface` 里(`TTyForm` 的可视控件都放它上面,图形控件必须放进去,详见 [TTyForm 文档](docs/controls/ttyform.md))。给已有工程加窗体用 **File → New… → Form → TyControls 窗体**;要做能嵌进别处的视图,用 **TyControls Frame**(`TTyFrame`,见 [frame.md](docs/controls/frame.md))。
 
 **3. 换主题**
 
@@ -84,7 +84,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-194 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+196 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -225,7 +225,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyBreadcrumb` | 面包屑导航 |
 | `TTyHeaderControl` | 独立列头条 |
 
-### 容器与布局 · `TyControls Containers`(22)
+### 容器与布局 · `TyControls Containers`(24)
 
 | 控件 | 说明 |
 |---|---|
@@ -233,6 +233,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyGroupBox` | 分组框 |
 | `TTyCard` | 卡片:标题 / 内容 / 操作 |
 | `TTyExPanel` | 可折叠面板 |
+| `TTyExPanelActions` | 可折叠面板标题栏里的操作区,放这一节自己的按钮 |
+| `TTyAccordion` | 把可折叠面板上下堆叠成侧栏的各节,按权重分高度,边界可拖动,布局可保存 |
 | `TTyScrollBox` | 滚动容器 |
 | `TTyScrollPanel` | 拖到边缘自动滚动的容器 |
 | `TTyGridPanel` | 设计器网格容器,格子可直接拖入控件 |
