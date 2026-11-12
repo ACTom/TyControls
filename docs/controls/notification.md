@@ -10,6 +10,8 @@
 
 语义种类由 `NotificationType` 决定（`atInfo` / `atSuccess` / `atWarning` / `atError`），它同时挑选**标记字形**和**标记墨色**（经由 `TyNotification.<type>` 这个 StyleClass，见第 6 节）。
 
+默认浮在屏幕工作区的角上。设了 `HostForm` 就放进那个窗体的客户区里，见第 7 节。
+
 ---
 
 ## 2. 单元与 typeKey
@@ -40,13 +42,15 @@ uses tyControls.Notification;
 | `Message` | `string` | `''` | 正文。作者写的换行照留，比卡片文字栏宽的行**自动折行**（按空格，中日韩文字逐字可断）。 |
 | `NotificationType` | `TTyNotificationType` | `atInfo` | `atInfo` / `atSuccess` / `atWarning` / `atError`。挑标记字形 + 标记墨色（第 6 节）。 |
 | `Duration` | `Integer` | `4500`（= `TyNotificationDuration`，AntD 的 4.5 秒） | 自动消失延时（毫秒）。**`0` = 不自动消失**，只能由 `Hide` / `x` 关掉——所以 `Duration = 0` 时务必保持 `Closable = True`。负值被夹成 `0`。 |
-| `Position` | `TTyNotificationPosition` | `npTopRight` | `npTopLeft` / `npTopRight` / `npBottomLeft` / `npBottomRight`——**屏幕工作区**的四角（不是窗体的角：toast 活得比弹它的那次点击长，用户可能早就切走了）。同角的 toast 按弹出顺序**堆叠**。 |
+| `Position` | `TTyNotificationPosition` | `npTopRight` | `npTopLeft` / `npTopRight` / `npBottomLeft` / `npBottomRight`。默认是**屏幕工作区**的四角；设了 `HostForm` 就是那个窗体客户区的四角。同一区域同一个角的 toast 按弹出顺序**堆叠**。 |
+| `HostForm` | `TCustomForm` | `nil` | toast 放在哪个窗体里。`nil` = 屏幕工作区。规则见第 7 节。所指窗体被释放时自动置 `nil`。 |
 | `Closable` | `Boolean` | `True` | 显示并启用关闭（`x`）。默认开：关不掉的 toast 就是挡路的 toast。 |
 | `ShowIcon` | `Boolean` | `True` | 显示语义标记。关掉 = 纯文字卡片（`NotificationType` 此时只影响主题）。 |
 | `PauseOnHover` | `Boolean` | `True` | 指针停在卡片上时**冻结**倒计时，免得 toast 从正在读它（或正伸手去点 `x`）的人眼皮底下消失。 |
 | `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 | `OnClose` | `TNotifyEvent` | `nil` | 见第 4 节。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 见第 4 节。 |
+| `OnGetHostArea` | `TTyNotificationHostAreaEvent` | `nil` | 见第 4 节和第 7 节。 |
 
 > **没有 `StyleClass`：** class 这条通道被 `NotificationType` **独占**（`TyNotification.info` / `.success` / `.warning` / `.error`），不开放第二个来源，避免两者打架。要做实例级微调用不上 class 的话，改主题令牌。
 
@@ -58,6 +62,11 @@ uses tyControls.Notification;
 |------|----------|
 | `OnClose` | **每次消失触发一次**，不论起因：倒计时到、点 `x`、还是代码 `Hide`。**幂等**——对已经消失的 toast 再 `Hide` 不会再触发。组件被销毁时**不触发**（组件没了 ≠ 用户关了它）。 |
 | `OnClick` | 点击卡片**除 `x` 以外**的区域。点 `x` 的手势**不会**触发它。**点击不会让 toast 消失**——一次点击是什么意思是宿主的事。 |
+| `OnGetHostArea` | 每次摆放带 `HostForm` 的 toast 时。`AArea` 是宿主客户区的屏幕坐标，可以改小，让出标题栏、状态栏这些不该被盖住的地方。没有宿主、宿主不在屏幕上或已最小化时不触发。 |
+
+```pascal
+TTyNotificationHostAreaEvent = procedure(Sender: TObject; var AArea: TRect) of object;
+```
 
 > **`OnClose` 里不要 `Free` 这个组件：** 超时消失是从**倒计时定时器自己的 tick** 里走到 `OnClose` 的，而那个定时器正属于你要 `Free` 的组件。要「弹完就不管」的 toast 请用 `TyNotify`（第 5 节），它自己回收。
 
@@ -82,6 +91,7 @@ function TyNotificationStacksDown(APosition: TTyNotificationPosition): Boolean;
 function TyNotificationStackOffset(const APriorHeights: array of Integer; AGap: Integer): Integer;
 function TyNotificationRect(APosition: TTyNotificationPosition; const AWorkArea: TRect;
   AW, AH, AMargin, AStackOffset: Integer): TRect;
+function TyNotificationHostUsable(const AHost: TTyNotificationHostState; AW, AH: Integer): Boolean;
 function TyNotificationHeight(ATitleH, ALineH, ALineCount, APadT, APadB, AGap, AIconSize: Integer;
   AHasIcon, AHasTitle: Boolean): Integer;
 function TyNotificationLayout(AClientWidth, AClientHeight: Integer;
@@ -96,6 +106,7 @@ function TyNotificationExpired(AElapsedMs, ADurationMs: Integer): Boolean;
 - **堆叠方向**：栈永远朝着「第一张卡片贴的那条边」的**反方向**长——上面两个角往下堆，下面两个角往上堆，于是**最老的那张守住角落**，新来的绝不会把别人挤出屏幕。
 - **堆叠偏移** = 同角、比我早进栈的每张卡片的 `高度 + AGap` 之和。高度 ≤ 0 的卡片什么都不占，因此也**不吃一个 gap**（不能为一张没人看得见的卡片推开栈）。
 - **越界钳制**：栈比工作区还高 / 卡片比工作区还大 → 堆在远端那条边上，新卡片压住老卡片，而不是列队走出屏幕。
+- **宿主能不能用**：`TyNotificationHostUsable` 在宿主不在屏幕上、已最小化、或客户区比卡片窄或矮时返回 `False`。边距不算在内：客户区刚好放下卡片时，`TyNotificationRect` 的钳制会把边距让出来。
 - **卡片高度**：`padT + [标题] + [gap] + 行数×行高 + padB`；gap **只存在于标题和正文之间**（没标题就没 gap）。标记在文字**旁边**，所以「内容高度」有一个 `AIconSize` 的**下限**——一行字的 toast 也得装得下标记。宽度**完全不量**：卡片就是主题宽度（`--notification-width`），于是一列 toast 是一列一样宽的卡片。
 - **卡片内部的空间分配次序（close > 标记 > 文字）**：
   1. `x` 贴内容带**右上角**，**最先**占位——`Duration = 0` 时它是唯一的出口（和 `TTyTag` 的 `x` 优先同一个理由）；
@@ -115,22 +126,44 @@ procedure Hide;      // 立刻消失：停倒计时、退栈（下面的 toast �
 function AdvanceTime(AMs: Integer): Boolean;  // 倒计时推进 AMs，返回「本次 tick 是否让它消失了」
 function MeasureAtPPI(APPI: Integer): TSize;  // 卡片自然尺寸（主题宽度 + 内容所需高度），设备像素
 function SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;  // 它该落在 AWorkArea 的哪里（已计入同角已有的堆叠）
+function PlacementArea(APPI: Integer; out AArea: TRect): TCustomForm;  // 现在放在哪个区域：返回宿主和它的客户区，或 nil 和屏幕工作区
+function SlotRect(APPI: Integer): TRect;      // 现在该落在哪里（屏幕坐标）= SlotRectIn(PlacementArea)，Show 就把窗口放在这里
 function CloseRectIn(AClientW, AClientH, APPI: Integer): TRect;     // x 槽位（设备像素，(0,0)-local）；非 Closable 时为空
 property Showing: Boolean;                    // 当前是否浮着
 ```
 
 - **`AdvanceTime` 是可步进的测试缝**（和 `TTyButton.AdvanceAnimation` 同一套路，同一个理由）：运行期由那个懒创建的 `TTimer` 每 tick 调它，测试则直接调——**没有任何测试需要 sleep**。
-- **`SlotRectIn` 把工作区当参数收**（而不是自己去读 `Screen.WorkAreaRect`），所以摆放规则不需要屏幕就能测；`Show` 传真的那个进去。
+- **`SlotRectIn` 把工作区当参数收**（而不是自己去读 `Screen.WorkAreaRect`），所以摆放规则不需要屏幕就能测；`Show` 传真的那个进去。前面排了几张卡片，按 toast 自己所在的那一栈算：带宿主的数宿主里的，不带的数屏幕上的。
+
+### 可重写的方法（protected）
+
+| 方法 | 作用 |
+|------|------|
+| `function HostState: TTyNotificationHostState; virtual;` | 读宿主窗口：是否在屏幕上、是否最小化、客户区的屏幕坐标。只读不判断，判断在 `TyNotificationHostUsable`。 |
+| `function ScreenArea: TRect; virtual;` | 没有宿主或宿主用不了时放在哪里。默认是主显示器的工作区；想放到别的显示器就重写它。 |
+| `procedure DoGetHostArea(var AArea: TRect); virtual;` | 触发 `OnGetHostArea`。 |
+| `procedure HostChanged; virtual;` | 宿主移动、改变大小、显示或隐藏时调用，重新摆放这张 toast。 |
+| `procedure NeedWindow;` / `property Window` | 创建 toast 的窗口（不显示）/ 访问它。 |
+
+```pascal
+TTyNotificationHostState = record
+  Visible: Boolean;     // 在屏幕上：已显示，而且有自己的窗口
+  Minimized: Boolean;   // 最小化了
+  ClientArea: TRect;    // 客户区，屏幕坐标
+end;
+```
 
 ### 全局便捷函数
 
 ```pascal
 procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType = atInfo;
   APosition: TTyNotificationPosition = npTopRight;
-  ADurationMs: Integer = TyNotificationDuration);
+  ADurationMs: Integer = TyNotificationDuration; AHostForm: TCustomForm = nil);
 ```
 
 弹完就不管：自己造一个 toast、弹出、并由单元负责回收（沿用 `tyControls.Dialogs` 的 `TyShowMessage` / `TyMessageDlg` 那套全局函数惯例）。**回收发生在下一次 `TyNotify` 调用**（以及单元 finalization），**不是**在 toast 自己的关闭路径上——那条路径正跑在要被 `Free` 的那个组件的定时器 tick / 鼠标处理里。
+
+`AHostForm` 就是这张 toast 的 `HostForm`。`TyNotify` 造出来的 toast 挂不了 `OnGetHostArea`，要让出标题栏就用窗体上的组件。
 
 ---
 
@@ -203,7 +236,52 @@ TyNotificationClose:hover { background: var(--overlay-hover); color: var(--on-su
 
 ---
 
-## 7. 代码示例
+## 7. 放进窗体（HostForm）
+
+默认情况下 toast 浮在屏幕工作区的角上。应用窗口没有最大化时，这个角可能离窗口很远。设置 `HostForm` 后，toast 放在这个窗体的客户区里。
+
+```pascal
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  Toast.HostForm := Self;
+end;
+```
+
+- `Position` 的四个角是宿主客户区的四个角。边距和堆叠间距不变（`--notification-margin`、`--notification-stack-gap`）。
+- 堆叠按区域分开。同一个窗体同一个角的 toast 互相让位。两个窗体的 toast 互不影响，窗体里的和屏幕上的也互不影响。
+- toast 仍然是独立的置顶窗口，不会被窗体里的控件挡住，也不抢焦点。
+- 弹出期间宿主移动或改变大小，toast 跟着走。LCL 在下一条消息里才报告窗体位置的变化，所以 toast 比窗体晚一拍到位。
+- 宿主不在屏幕上、已最小化、或者客户区比卡片小时，toast 放到屏幕工作区的角上，和屏幕上的 toast 一起堆叠。`HostForm` 属性不变。
+- 放在哪里在每次摆放时决定：`Show` 时，以及宿主移动、改变大小、显示、隐藏时。窗体显示之前弹出的 toast，窗体一出现就回到窗体里。
+- 宿主被释放时 `HostForm` 自动置 `nil`，还浮着的 toast 变成屏幕 toast。
+- `HostForm = nil` 时和以前完全一样。
+
+### 让出标题栏和状态栏
+
+客户区的角不一定能放卡片。`TTyTitleBar` 是客户区里的控件，客户区右上角正是它的窗口按钮；状态栏占着客户区的底边。用 `OnGetHostArea` 把这些地方让出来：
+
+```pascal
+procedure TMainForm.ToastGetHostArea(Sender: TObject; var AArea: TRect);
+begin
+  Inc(AArea.Top, TitleBar.Height);
+  Dec(AArea.Bottom, StatusBar.Height);
+end;
+```
+
+`AArea` 传进来时是宿主客户区的屏幕坐标。改完剩下的矩形用来算角、边距和堆叠；它比卡片小时 toast 放到屏幕上。每次摆放都会调用这个事件，里面只做加减，不要在里面弹出或关闭 toast。
+
+### 在设计器里
+
+对象查看器的下拉列表不列出组件所在的窗体本身，只列出其他窗体。要放进自己所在的窗体，在 `FormCreate` 里赋值。已经写进 `.lfm` 的 `HostForm = Owner` 能正常读回。
+
+### 限制
+
+- 最小化和还原不会触发重新摆放（LCL 不把这两件事报告给窗体的监听列表）。toast 弹出后宿主才最小化，toast 留在原处。宿主最小化期间弹出的 toast 在屏幕角上，等宿主下一次移动或改变大小时回到窗体里。
+- 卡片尺寸按主显示器的 DPI 计算，和不设宿主时一样。
+
+---
+
+## 8. 代码示例
 
 ```pascal
 uses tyControls.Controller, tyControls.Notification;
@@ -235,6 +313,17 @@ Toast.OnClose := @HandleToastClose;
 Toast.Show;     // 同一个组件可以反复 Show：每次重新开始倒计时
 ```
 
+放进主窗体，而不是屏幕的角上：
+
+```pascal
+Toast.HostForm := Self;                 // 窗体上的组件，通常写在 FormCreate 里
+Toast.Position := npBottomRight;
+Toast.Show;
+
+TyNotify('构建成功', '0 个错误，2 个警告。', atSuccess, npBottomRight,
+         TyNotificationDuration, Self);  // 弹完就不管的写法，最后一个参数是宿主窗体
+```
+
 点击 toast 打开详情（点击**不会**让它消失，所以自己 `Hide`）：
 
 ```pascal
@@ -247,14 +336,14 @@ end;
 
 ---
 
-## 8. 注意事项
+## 9. 注意事项
 
 - **`TTyNotification` 不是 `TTyMessage` 的轻量版：** 后者是模态对话框（拦住用户、要回答），toast 谁也不拦、不要回答、自己会走。要一个**行内**常驻的警告条，那是 `TTyAlert`。
 - **两个手势互不串味：** 点 `x` **只**触发 `OnClose`，绝不触发 `OnClick`；按下 `x` 拖开再抬起 = 取消（不关闭，也不产生 `OnClick`——这次按下从来就不属于卡片）。
 - **`OnClose` 里不要 `Free` 组件**（见第 4 节）；要「弹完就不管」用 `TyNotify`。
 - **正文自动折行：** 作者写的换行照留，过宽的行在卡片固定的 `--notification-width` 里折行（中日韩文字逐字可断）；高度装不下的行直接不画（绝不溢出卡片）。
 - **窗口被裁成卡片的圆角轮廓**（`SetWindowRgn`），所以主题给 `TyNotification` 写的 `shadow` **看不见**——阴影会连同轮廓外的一切被裁掉。顶层窗口的「浮起感」是 OS 的活。**Wayland 上没有 XShape**，`setMask` 会被静默忽略 → 卡片退化成直角（与 `TTyBalloonHint` 同样的降级）；窗口的 `Color` 会被设成卡片的表面色，所以那些切不掉的像素读起来仍然是卡片，而不是一块黑角（暗色 OS 上 LCL 默认的 `clBtnFace` 就是近黑）。
-- **`Position` 是屏幕工作区的角，不是窗体的角：** toast 活得比弹它的那次点击长，用户可能早就切走了。当前用**主显示器**的工作区（`Screen.WorkAreaRect`）。
-- **堆叠是按角分开的**：只有同一个角的 toast 才互相让位；中间那张消失后，下面的会自动补上空位。
+- **`Position` 默认是屏幕工作区的角，不是窗体的角：** toast 活得比弹它的那次点击长，用户可能早就切走了。用的是**主显示器**的工作区（`Screen.WorkAreaRect`）。要放进窗体就设 `HostForm`（第 7 节）。
+- **堆叠是按区域和角分开的**：只有同一区域（屏幕，或同一个宿主窗体）同一个角的 toast 才互相让位；中间那张消失后，下面的会自动补上空位。
 - **设计期 `Show` 无效**：toast 是一次运行期事件，不是可预览的外观。
 - **可无窗口驱动的部分**：卡片的绘制、命中、手势、倒计时、堆叠全都不需要窗口（组件持有状态，窗口只是把自己的 client 尺寸递进来），因此这些规则全部有 headless 测试守护。真正需要真机验证的只有「把窗口摆上屏幕」这一步和最终观感。
