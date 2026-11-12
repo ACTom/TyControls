@@ -333,6 +333,7 @@ begin
     '  --steps-gap: 8px;' + LineEnding +
     '  --steps-marker-size: 24px;' + LineEnding +
     '  --tab-arrow-band: 16px;' + LineEnding +
+    '  --tab-close-show: always;' + LineEnding +
     '  --tab-close-size: 14px;' + LineEnding +
     '  --tab-gap: 6px;' + LineEnding +
     '  --tab-margin: 6px;' + LineEnding +

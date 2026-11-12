@@ -908,6 +908,12 @@ procedure TyFillSubElement(APainter: TTyPainter; const ARect: TRect; const AStyl
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
 function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
+{ #223. The same for a glyph token's TEXT ('"Family" "\e5ca"') that the caller has read
+  itself -- a control that takes the token from its own StyleOverride, through StyleToken --
+  where TyTryDrawGlyphOverride looks a name up in the theme. False for '' and for a text that
+  is no glyph token. }
+function TyTryDrawGlyphText(APainter: TTyPainter; const ARect: TRect; const AToken: string;
+  AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 { The largest CENTRED SQUARE inside ARect. A spinner's button half is wide and short (18 x 14
   on a 28px field), and DrawGlyph derives its mark from min(width, height) AFTER the pad comes
@@ -2302,19 +2308,23 @@ function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleContr
   glyph into ARect and return True (honoured even if it renders blank — the theme asked for
   it); else return False so the caller draws its OWN default (a vector glyph, DrawDropChevron,
   …). This is the seam controls that don't use a plain vector kind (e.g. the drop chevron) hook. }
+begin
+  Result := (AController <> nil)
+    and TyTryDrawGlyphText(APainter, ARect, AController.Model.RawVar(ATokenName), AColor);
+end;
+
+function TyTryDrawGlyphText(APainter: TTyPainter; const ARect: TRect; const AToken: string;
+  AColor: TTyColor): Boolean;
 var
-  token: string;
   sz: Integer;
   bmp: TBGRABitmap;
 begin
   Result := False;
-  if AController = nil then Exit;
-  token := AController.Model.RawVar(ATokenName);
-  if token = '' then Exit;
+  if AToken = '' then Exit;
   sz := ARect.Right - ARect.Left;
   if ARect.Bottom - ARect.Top < sz then sz := ARect.Bottom - ARect.Top;
   { Rendered for the layer: Dev(sz) raster pixels, which DrawGlyphBitmap places 1:1 (#83). }
-  bmp := TyRenderGlyphToken(token, APainter.Dev(sz), AColor);   // nil when the token is malformed
+  bmp := TyRenderGlyphToken(AToken, APainter.Dev(sz), AColor);   // nil when the token is malformed
   if bmp = nil then Exit;
   try
     APainter.DrawGlyphBitmap(ARect, bmp);

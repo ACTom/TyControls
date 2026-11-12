@@ -19,7 +19,7 @@
 | 页控件外框 | `TyPageControl` | `.tycss` 中控件本体的选择器前缀 |
 | 页面板 | `TyTabSheet` | 每页背景 |
 | 页签头 | `TyTab` | 单个标签头（`:active` 为当前页） |
-| 关闭 × 底片 | `TyTabClose` | `TabsClosable = True` 时悬停底片 |
+| 关闭 × 底片 | `TyTabClose` | `TabsClosable = True` 时悬停底片。按钮的其余样式用 `--tab-close-*` 令牌 |
 
 （标签头沿用 `TyTab` / `TyTabClose` 选择器；控件本体用 `TyPageControl`，主题未显式定义时由 seed 派生默认值。）
 
@@ -106,7 +106,7 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 | `DisplayRect` | 页面**体**在控件内占的矩形（控件局部设备像素，标签条以下）。此前这个内缩只存在于 `AdjustClientRect` 内部，没有任何对外访问点 |
 | `IndexOfTabAt(X, Y)` / `IndexOfTabAt(P)` | 某点下是哪个页签，无则 **-1**。`TyDropIndexAt` 不是它、也不能拿来当它用：那是拖拽重排的落点解析器，按偏移后的中点找**最近的槽位**并裁剪进 `[0, Count-1]`，因此**永远说不出"这里没有页签"**——问它"右键点在最后一个页签之后的空白条带上是哪个"，它会回答最后一个页签。基于它做右键菜单或逐页签 tooltip，菜单就会开在用户根本没瞄准的页签上。本方法命中的是真实的偏移后页签矩形，要求点落在条带内，其余一律返回 -1（含两个溢出箭头——它们不是页签） |
 | `ScrollTabs(Delta)` | 按 **Delta 个页签**滚动标签条——LCL 的单位（`comctrls.pp:711/862`），不是我们的。`SetHeaderScroll` 收的是**设备像素**，所以把移植来的 `ScrollTabs(2)` 机械改名过去会滚动两个像素，看上去像什么都没发生。实现落在页签边界上而不是按平均页签宽度换算，因为各页签的标题宽度通常差别很大 |
-- **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。
+- **可关闭页签**：`TabsClosable = True` 时每页签头右侧有关闭 ×，点击触发 `OnTabClose`（可否决）。只让当前页签显示按钮（`--tab-close-show: active`）、换颜色、做成圆形或换图标，用 `--tab-close-*` 令牌，写在主题里或本控件的 `StyleOverride` 里；令牌表和写法见 [`tabset.md` §5「关闭按钮」](tabset.md)，两个控件完全一样。
 - **活动页交叉淡入**：切页时活动页签头背景从非活动样式淡入活动样式（仅页签头颜色淡入，页内容瞬时切换）。
 - **键盘**：`←/→` 上一/下一页（右到左镜像时两键对调，见下），`Home/End` 首/末页，`Ctrl+Tab` / `Ctrl+PageUp/PageDown` 切页。
 - **`TabPosition`——标签条贴哪条边**：`tpTop`（默认）/ `tpBottom` / `tpLeft` / `tpRight`。四种形态走**同一套布局与同一个坐标变换**：`RebuildLayout` 始终把标签排成一条**一维的行程**（沿"主轴"，阅读序，第 0 个在起点），`ToScreenRect` 再把这条行程嵌进控件的方框里。`tpTop` 时那个嵌入是恒等映射，所以默认形态与加这个属性之前**逐字节相同**。

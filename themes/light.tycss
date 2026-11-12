@@ -300,6 +300,7 @@
   --steps-gap: 8px;
   --steps-marker-size: 24px;
   --tab-arrow-band: 16px;
+  --tab-close-show: always;
   --tab-close-size: 14px;
   --tab-gap: 6px;
   --tab-margin: 6px;

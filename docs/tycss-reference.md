@@ -239,7 +239,8 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
-`--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`。
+`--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`;
+`TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8)。
 其他控件暂时只认主题里的值。另外,每个控件都认 §3.6 的 `--over-parent-chrome`。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
@@ -405,6 +406,53 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 行高是 `DefaultRowHeight`,程序没设时是 `--row-height`。行号槽宽度是 `IndicatorWidth`。滚动条和其他地方
 一样(`TyScrollBar`、`--scrollbar-size`)。
+
+### 3.8 页签的关闭按钮
+
+`TTyTabSet` 和 `TTyPageControl` 打开 `TabsClosable` 后,哪些页签显示关闭按钮、按钮长什么样,由下面的令牌
+决定。和 §3.4 的令牌一样,可以写在主题里,也可以只写进某一个控件的 `StyleOverride`。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--tab-close-show` | `always` / `active` / `hover` | `always` | 哪些可关闭的页签显示按钮。`always`:全部。`active`:只有当前页签。`hover`:当前页签,加上指针所在的页签。 |
+| `--tab-close-size` | 长度 | `14px` | 按钮槽位的边长。 |
+| `--tab-close-color` | 颜色 | 页签的文字色 | 关闭符号的颜色。 |
+| `--tab-close-background` | 颜色 | 没有 | 指针不在按钮上时,垫在符号下面的底片。 |
+| `--tab-close-hover-color` | 颜色 | `--tab-close-color` | 指针在按钮上时符号的颜色。 |
+| `--tab-close-hover-background` | 颜色 | `TyTabClose` 规则的 `background` | 指针在按钮上时的底片。设了就只画它;不设就画 `TyTabClose` 的底色,平时有底片的话叠在那上面。 |
+| `--tab-close-radius` | 长度 | `TyTabClose` 规则的 `border-radius` | 底片的圆角。超过槽位边长的一半就是圆形,比如 `999px`。 |
+| `--glyph-tab-close` | 图标字体字形,写法见 §9 第 16 条 | `--glyph-close`,再没有就是内置的 × | 页签上的关闭符号。 |
+
+按钮不显示时槽位照留:页签的宽度不变,切换页签、移动指针时页签不会左右跳。按钮没显示的位置点下去
+是选中这个页签,不触发 `OnTabClose`。
+
+```css
+/* 整个应用:只有当前页签有关闭按钮 */
+:root { --tab-close-show: active; }
+```
+
+某一个页签条用红色圆形按钮,在它的 `StyleOverride` 里写:
+
+```text
+--tab-close-background: #e5484d; --tab-close-color: #ffffff;
+--tab-close-radius: 999px; --tab-close-hover-background: #c62828;
+```
+
+平时和别的页签条一样,指针移上去才变红:
+
+```text
+--tab-close-hover-background: #e5484d; --tab-close-hover-color: #ffffff; --tab-close-radius: 999px;
+```
+
+换一个图标,比如库里带的 Lucide 图标 `circle-x`。这个字体要程序里用了 Lucide 才注册:窗体上有
+`TTyLucideImageList` 或 `TTyLucideIconFont`,或者代码里调用过 `TyLucideFont`。
+
+```text
+--glyph-tab-close: "lucide" "\e084";
+```
+
+3.0.5 以前只有 `--tab-close-size` 和 `TyTabClose` 规则,`--tab-close-size` 只认主题里的值,页签上的关闭符号
+也不认 `--glyph-close`。
 
 ---
 
@@ -1494,6 +1542,8 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--glyph-check` / `--glyph-check-indeterminate` — 复选框勾号 / 中间态;
     - `--glyph-radio` — 单选钮圆点;
     - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标;
+      `--glyph-close` 也是 `TTyTag`、`TTyAlert`、`TTyNotification` 和页签上的关闭符号;
+    - `--glyph-tab-close` — 只换页签上的关闭符号(§3.8),不设就用 `--glyph-close`;
     - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / 滚动条箭头;
     - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` / `--glyph-chevron-up` — 展开/折叠
       chevron:树、Grid 树列、列表视图分组、ListGroupPanel、ExPanel、属性检查器(ValueListEditor /

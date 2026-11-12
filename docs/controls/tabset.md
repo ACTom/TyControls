@@ -19,7 +19,7 @@
 |---|---|
 | `TyTabSet` | 外框键。**但本控件是"纯标题条"，只用到它的 `border-color` + `border-width`**——那条页签下方的基线。见下方说明 |
 | `TyTab` | 每个页签头：`:normal` / `:hover` / `:active`（选中）。溢出时的左右滚动箭头也取 `TyTab:normal` 的文字色 |
-| `TyTabClose` | 关闭 × 悬停时垫在字形下的底片 |
+| `TyTabClose` | 关闭 × 悬停时垫在字形下的底片（底色、圆角）。按钮的其余样式用 `--tab-close-*` 令牌，见 §5「关闭按钮」 |
 
 > **它此前借的 `'TyTabControl'` 是一个不对应任何控件的名字。** 全库只有三个页签族键声明：
 > `TyPageControl`（`TTyPageControl`）、`TyTabSheet`（`TTyTabSheet`）、以及本控件——库里根本没有
@@ -70,7 +70,7 @@ uses tyControls.TabSet;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
-| `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
+| `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。只让当前页签显示、换颜色或换图标，用 `--tab-close-*` 令牌，见 §5「关闭按钮」。 |
 | `Images` | `TTyVirtualImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
 | `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
 | `OnGetImageIndex` | 事件 | `nil` | `procedure(Sender; AIndex; var AImageIndex)`；`-1` = 无图标。 |
@@ -168,7 +168,55 @@ TyTab:active { background: var(--surface); color: var(--accent); }  /* 选中：
 /* TyTabClose：关闭 × 悬停时的令牌驱动底片（--overlay-hover 填充 + --radius 圆角） */
 ```
 
-**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabSet` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
+### 关闭按钮
+
+`TabsClosable = True` 时，默认每个页签都有关闭按钮：一个 ×，颜色跟页签文字，指针移上去时垫一块 `TyTabClose` 底片。下面的令牌可以改这些。写在主题的 `:root` 里，对所有页签条和 `TTyPageControl` 生效；写在某个控件的 `StyleOverride` 里，只对它生效。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|------|------|------|------|
+| `--tab-close-show` | `always` / `active` / `hover` | `always` | 哪些可关闭的页签显示按钮。`always`：全部。`active`：只有当前页签。`hover`：当前页签，加上指针所在的页签。 |
+| `--tab-close-size` | 长度 | `14px` | 按钮槽位的边长。 |
+| `--tab-close-color` | 颜色 | 页签的文字色 | 关闭符号的颜色。 |
+| `--tab-close-background` | 颜色 | 没有 | 指针不在按钮上时，垫在符号下面的底片。 |
+| `--tab-close-hover-color` | 颜色 | `--tab-close-color` | 指针在按钮上时符号的颜色。 |
+| `--tab-close-hover-background` | 颜色 | `TyTabClose` 的 `background` | 指针在按钮上时的底片。设了就只画它；不设就画 `TyTabClose` 的底色，平时有底片的话叠在那上面。 |
+| `--tab-close-radius` | 长度 | `TyTabClose` 的 `border-radius` | 底片的圆角。超过槽位边长的一半就是圆形，比如 `999px`。 |
+| `--glyph-tab-close` | 图标字体字形 | `--glyph-close`，再没有就是内置的 × | 页签上的关闭符号，写法是 `"字体族名" "\码点"`。 |
+
+按钮不显示时槽位照留：页签的宽度不变，切换页签、移动指针时页签不会左右跳。按钮没显示的位置点下去是选中这个页签，不触发 `OnTabClose`，`TyTabHoverClose` 也不会指向它。
+
+```pascal
+// 只有当前页签显示关闭按钮
+Bar.StyleOverride := '--tab-close-show: active;';
+
+// 红色圆形按钮，指针移上去颜色加深
+Bar.StyleOverride :=
+  '--tab-close-background: #e5484d; --tab-close-color: #ffffff; ' +
+  '--tab-close-radius: 999px; --tab-close-hover-background: #c62828;';
+
+// 平时和别的页签条一样，指针移上去才变红
+Bar.StyleOverride :=
+  '--tab-close-hover-background: #e5484d; --tab-close-hover-color: #ffffff; ' +
+  '--tab-close-radius: 999px;';
+
+// 换成 Lucide 的 circle-x 图标。这个字体要程序里用了 Lucide 才注册：
+// 窗体上有 TTyLucideImageList 或 TTyLucideIconFont，或者代码里调用过 TyLucideFont
+Bar.StyleOverride := '--glyph-tab-close: "lucide" "\e084";';
+```
+
+整个应用都这样，就写进主题：
+
+```css
+:root {
+  --tab-close-show: hover;
+  --tab-close-hover-background: #e5484d;
+  --tab-close-hover-color: #ffffff;
+}
+```
+
+3.0.5 以前只有 `--tab-close-size` 和 `TyTabClose` 规则，`--tab-close-size` 只认主题里的值，页签上的关闭符号也不认 `--glyph-close`。
+
+**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabSet` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 默认用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片，都可以用上面「关闭按钮」的令牌改。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
 
 ---
 
