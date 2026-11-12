@@ -146,7 +146,6 @@ type
     FBuf: PByte;
     FLen: Integer;
     FPos: Int64;               // characters written
-    FLazyChars: Int64;         // the lazy run ForEachRun stopped at (0: none)
     FPrefix: Integer;          // an escape's first byte waiting for the next run, or -1
     procedure Flush;
     procedure Room(AMore: Integer); inline;
@@ -1354,36 +1353,26 @@ end;
 {$POP}
 
 procedure TTextSaver.Run(const ARun: TTyRichByteRun; var AContinue: Boolean);
+var
+  s: UTF8String;
 begin
   if ARun.Bytes = nil then
   begin
-    // a lazy paragraph: read it outside the walk
-    FLazyChars := ARun.CharCount;
-    AContinue := False;
-    Exit;
-  end;
-  Put(ARun.Bytes, ARun.ByteCount);
+    // a lazy paragraph has no bytes in memory: its decoded text, read where the walk stands
+    // (a walk lets its callback read; leaving it here and coming back would cost a second
+    // descent for every such paragraph)
+    s := FText.GetText(FPos, ARun.CharCount);
+    Put(PByte(s), Length(s));
+  end
+  else
+    Put(ARun.Bytes, ARun.ByteCount);
   Inc(FPos, ARun.CharCount);
 end;
 
 procedure TTextSaver.Save;
-var
-  len: TTyRichPos;
-  s: UTF8String;
 begin
-  len := FText.Length;
   FPos := 0;
-  while FPos < len do
-  begin
-    FLazyChars := 0;
-    FText.ForEachRun(FPos, len - FPos, @Run);
-    if FLazyChars > 0 then
-    begin
-      s := FText.GetText(FPos, FLazyChars);
-      Put(PByte(s), Length(s));
-      Inc(FPos, FLazyChars);
-    end;
-  end;
+  FText.ForEachRun(0, FText.Length, @Run);
   if FPrefix >= 0 then PutUnknown;
   FPrefix := -1;
   Flush;

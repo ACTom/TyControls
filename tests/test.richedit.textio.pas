@@ -26,6 +26,13 @@ type
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
   end;
 
+  { A lazy text's paragraphs: paragraph i sits at "file offset" i * 100 + 1. }
+  TIOLazyProvider = class(TTyRichTextProvider)
+  public
+    Calls: Integer;
+    function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
+  end;
+
   { A stream that only compares what is written with the bytes expected, and notes the
     highest heap use seen while it is written to: the saver's working memory. }
   TCheckingStream = class(TStream)
@@ -75,6 +82,7 @@ type
     procedure TestLoadingGbkKeepsNoOriginal;
     procedure TestSavingUsesAFixedBuffer;
     procedure TestConvertedTextIsIndexedLikeAScan;
+    procedure TestSavingLazyParagraphsStaysInTheWalk;
   end;
 
 implementation
@@ -217,6 +225,17 @@ end;
 
 procedure TIONullLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
 begin
+end;
+
+function LazyLine(AIndex: Integer): UTF8String;
+begin
+  Result := U('第') + UTF8String(IntToStr(AIndex)) + U('行 line');
+end;
+
+function TIOLazyProvider.DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
+begin
+  Inc(Calls);
+  Result := LazyLine((ASrcOffset - 1) div 100);
 end;
 
 constructor TCheckingStream.Create(const AExpected: TBytes);
@@ -878,6 +897,53 @@ begin
   Check('generated UTF-16LE', u16, teAuto, 0, FromBytes([$61, $61, $61, $F0, $9F, $98, $80]));
   // (A piece is also cut where a paragraph reaches TyRichMaxPieceBytes, 1 GB: not tried
   // here, a test of that would need a file over a gigabyte.)
+end;
+
+{ A document whose paragraphs are still lazy (an RTF file saved as text): the saver reads
+  each of them where the walk stands. Reading is what a walk allows, so it does not leave
+  the walk and find its way back in for every paragraph. }
+procedure TTyRichTextIOTest.TestSavingLazyParagraphsStaysInTheWalk;
+const
+  Paras = 3000;
+var
+  prov: TIOLazyProvider;
+  text: TTyRichText;
+  d: TTyRichDocument;
+  i: Integer;
+  sep: TTyRichSeparator;
+  line, expected: UTF8String;
+  v, limit: Int64;
+begin
+  prov := TIOLazyProvider.Create;
+  text := TTyRichText.CreateLazy(prov, True);
+  expected := '';
+  for i := 0 to Paras - 1 do
+  begin
+    line := LazyLine(i);
+    if i < Paras - 1 then sep := rsCRLF else sep := rsNone;
+    // two Chinese characters, the digits and ' line'
+    text.AppendLazyParagraph(7 + System.Length(IntToStr(i)), i * 100 + 1, 50, sep);
+    if i = 10 then Insert('X', line, 4);
+    expected := expected + line;
+    if i < Paras - 1 then expected := expected + #13#10;
+  end;
+  text.EndLazyLoad;
+  d := TTyRichDocument.CreateOnText(text);
+  try
+    // one edited paragraph among the lazy ones: its pieces have bytes of their own
+    d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(10) + 1, 'X'));
+    AssertEquals('only the edited paragraph was decoded', 1, prov.Calls);
+    v := d.Text.NodeVisits;
+    AssertSameBytes('saved', BytesOf(expected), SaveBytes(d));
+    AssertEquals('every other paragraph decoded once', Paras, prov.Calls);
+    // one descent for the walk, one for each paragraph read; leaving the walk at every lazy
+    // paragraph took a second one each to come back
+    limit := Int64(Paras + 8) * (d.Text.TreeDepth + 1);
+    AssertTrue(Format('saving %d lazy paragraphs visited %d nodes, limit %d',
+      [Paras, d.Text.NodeVisits - v, limit]), d.Text.NodeVisits - v <= limit);
+  finally
+    d.Free;
+  end;
 end;
 
 initialization
