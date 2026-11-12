@@ -96,3 +96,16 @@ are `TyControls` / `TY`; no other byte differs from what Word wrote.
 | `word-zh.rtf` | Word's font slots on real output: Latin in Calibri, Chinese in 宋体 and 黑体; é written as the GBK pair `\'a8\'a6` in the East Asian font, ï as `\hich\f37 ...\'ef\loch\f37` in the middle of a run; a character outside the BMP; bold. `word-zh.expected.txt` is the text that was typed (the system RichEdit reports the same). |
 | `word-unknown.rtf` | A heading style, a hyperlink field, a tracked insertion and deletion, a comment, a footnote, a formula (`{\mmath{\*\moMathPara ...}{\mmathPict ...}}` with a PNG and a WMF picture of it), a bookmark, and Word's own header and tail (57 KB of font table, style sheet, `\latentstyles`, `\themedata`, `\datastore`). `word-unknown.visible.txt`: the paragraphs' text with every U+FFFC taken out. |
 | `word-table-merged.rtf` | A 3 x 3 table with borders: the first two cells of row 1 merged (Word writes one wider cell, no `\clmgf`), the first cells of rows 2 and 3 merged (`\clvmgf`, `\clvmrg`), and a nested 1 x 2 table in the last cell. |
+
+## Where the reader leaves the RTF specification, on purpose
+
+- A control word inside the fallback of a `\u` ends the fallback. The specification counts a
+  control word as one fallback item; the reader takes it as what it says, so that a `\par`
+  right after a `\u` written without its fallback still ends the paragraph. `hand-uc.rtf` has
+  the case (`\uc` ending with its group, a `\'xx` as the one fallback).
+- A `\par` inside a field's result (`\fldrslt`) ends no paragraph. A field is one object in
+  its paragraph: the text it shows runs the result's paragraphs together (a table of contents
+  reads as one line). The field's bytes are kept as they are, so a save loses nothing.
+- A row that holds a table in one of its cells (`\itap2`, `\nestcell`, `\nestrow`,
+  `\nesttableprops`) is kept as the file has it: its inner cells read as paragraphs of the
+  outer cell, and the editor does not let its text change (`TTyRichRow.HoldsNestedTable`).

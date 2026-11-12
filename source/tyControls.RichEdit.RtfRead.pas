@@ -641,6 +641,9 @@ type
     // paragraphs found to the document (OnChange: they come after its last paragraph); True
     // when the whole file is indexed - the document can then be changed. Deterministic: a
     // byte budget, not a clock (the control calls it from idle time and watches the clock).
+    // The document's OnChange and OnLoadProgress run inside it: a handler must not put
+    // other content into the document (that frees this object, which Step still uses).
+    // Whoever keeps a load across such events asks TyRichRtfLoadOf(document) for it again.
     function Step(AByteBudget: Int64): Boolean;
     // Stops indexing: the document keeps what was indexed and stays read-only, Incomplete
     // (a writer must refuse to save it - the rest of the file is not in it).

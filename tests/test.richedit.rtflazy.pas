@@ -1002,6 +1002,9 @@ begin
     base := GetFPCHeapStatus.CurrHeapUsed;
     TyRichLoadRtf(d, s);
     load := TyRichRtfLoadOf(d);
+    // (a memory manager that does not count would let every bound below pass)
+    AssertTrue('the heap is counted: the file''s bytes are in it',
+      GetFPCHeapStatus.CurrHeapUsed - base >= Length(b));
     n := d.Text.ParaCount;
     grown := GetFPCHeapStatus.CurrHeapUsed - base;
     bound := Int64(Length(b)) + 40 * Int64(n) + load.SnapshotBytes + MB;
@@ -1148,6 +1151,9 @@ procedure TTyRtfLazyTest.TestWordPadsOwnWritingStaysBounded;
       base := GetFPCHeapStatus.CurrHeapUsed;
       TyRichLoadRtf(d, s);
       load := TyRichRtfLoadOf(d);
+      // (a memory manager that does not count would let every bound below pass)
+      AssertTrue(ASample + ': the heap is counted: the file''s bytes are in it',
+        GetFPCHeapStatus.CurrHeapUsed - base >= Length(b));
       n := d.Text.ParaCount;
       loaded := GetFPCHeapStatus.CurrHeapUsed - base;
       AssertTrue(Format('%s: after loading %d bytes for %d paragraphs, file %d', [ASample, loaded,
