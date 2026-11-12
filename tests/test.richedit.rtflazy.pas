@@ -64,6 +64,7 @@ type
     procedure TestAnIntervalParsedAgainInsideAScopeKeepsItsParagraphs;
     procedure TestARowWithANestedTableIsSavedAsItWas;
     procedure TestTheFullLoadIsOneParseThatStays;
+    procedure TestDeletedParagraphsUndoneAfterTheirIntervalWentAreStillTheFilesOwn;
   end;
 
 implementation
@@ -313,6 +314,17 @@ type
   public
     class function Value(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
   end;
+
+  // A document that says how many paragraph values are alive.
+  TCountingDoc = class(TTyRichDocument)
+  public
+    function Live: Integer;
+  end;
+
+function TCountingDoc.Live: Integer;
+begin
+  Result := LiveParaData;
+end;
 
 class function TBuilderAccess.Value(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
 begin
@@ -2013,6 +2025,189 @@ begin
     lazy.Free;
     full.Free;
     m.Free;
+  end;
+end;
+
+{ Paragraphs that are deleted take their values out of the text; an undo brings both back.
+  When their interval is sent back to unparsed in between, they must still be the file's
+  own afterwards: a writer copies them as their bytes. For a row that holds a nested table
+  - which may be deleted whole, and cannot be written from the model - that decides
+  whether the document can be saved at all. And what the load keeps for it is let go of
+  when no undo can bring the paragraphs back any more. }
+procedure TTyRtfLazyTest.TestDeletedParagraphsUndoneAfterTheirIntervalWentAreStillTheFilesOwn;
+
+  function Save(ADoc: TTyRichDocument): TBytes;
+  var
+    s: TBytesStream;
+  begin
+    s := TBytesStream.Create;
+    try
+      TyRichSaveRtf(ADoc, s);
+      Result := Copy(s.Bytes, 0, s.Size);
+    finally
+      s.Free;
+    end;
+  end;
+
+var
+  b, o: TBytes;
+  d: TCountingDoc;
+  s: TBytesStream;
+  load: TTyRtfLoad;
+  i, n, first, last, plain, live0, parses: Integer;
+  row: TTyRichRow;
+  range: TTyRtfRange;
+  values: array of Pointer;
+  fmt: TTyParaFormat;
+  text: RawByteString;
+begin
+  // the sample with a nested table, its body repeated: many intervals
+  b := Generate('hand-word-table-merged.rtf', 1536 * 1024);
+  d := TCountingDoc.Create;
+  s := TBytesStream.Create(b);
+  try
+    TyRichLoadRtf(d, s);
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('many intervals', load.IntervalCount > 10);
+    n := d.Text.ParaCount;
+    // the first row that holds a nested table, and a paragraph in no table further down
+    first := -1;
+    for i := 0 to 100 do
+      if (d.CellAt(i) <> nil) and d.CellAt(i).Row.HoldsNestedTable then
+      begin
+        first := i;
+        Break;
+      end;
+    AssertTrue('there is such a row', first >= 0);
+    d.BeginRead;
+    try
+      row := d.CellAt(first).Row;
+      last := first;
+      while (d.CellAt(last + 1) <> nil) and (d.CellAt(last + 1).Row = row) do Inc(last);
+    finally
+      d.EndRead;
+    end;
+    AssertTrue('the row has several paragraphs', last > first);
+    plain := -1;
+    for i := load.IntervalFirstPara(3) + 1 to load.IntervalFirstPara(4) - 2 do
+      if d.CellAt(i) = nil then
+      begin
+        plain := i;
+        Break;
+      end;
+    AssertTrue('there is a paragraph in no table in the fourth interval', plain >= 0);
+    // delete that paragraph, then the whole row (two undo steps)
+    AssertTrue('the plain paragraph deleted', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(plain),
+      d.Text.ParaStart(plain + 1) - d.Text.ParaStart(plain))));
+    d.BreakMerge;
+    // (the row is parsed when it goes: its paragraphs have the values the load gave them)
+    d.EnsureParsed(first);
+    SetLength(values, last - first + 1);
+    for i := first to last do
+    begin
+      values[i - first] := TBuilderAccess.Value(d, i);
+      AssertTrue(Format('paragraph %d of the row is parsed', [i]), values[i - first] <> nil);
+    end;
+    AssertTrue('the whole row deleted', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(first),
+      d.Text.ParaStart(last + 1) - d.Text.ParaStart(first))));
+    AssertEquals('paragraphs left', n - 1 - (last - first + 1), d.Text.ParaCount);
+    // reading far away: the intervals of both go
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    d.EnsureParsed(d.Text.ParaCount div 2);
+    AssertTrue('their intervals went', load.ResidentIntervals <= 2);
+    d.Undo;
+    d.Undo;
+    AssertEquals('undone: every paragraph is back', n, d.Text.ParaCount);
+    for i := first to last do
+    begin
+      AssertTrue(Format('undone: paragraph %d of the row has the value it had', [i]),
+        TBuilderAccess.Value(d, i) = values[i - first]);
+      AssertTrue(Format('undone: paragraph %d of the row is the file''s own', [i]),
+        load.ParaSource(i, range));
+    end;
+    AssertTrue('undone: the plain paragraph is the file''s own', load.ParaSource(plain, range));
+    // so the file is saved as it was (the row could not be written from the model)
+    o := Save(d);
+    AssertEquals('saved: as long as the file', Length(b), Length(o));
+    AssertTrue('saved: the file', CompareMem(@b[0], @o[0], Length(b)));
+    // their interval parsed again (a paragraph of it that went back to unparsed is read):
+    // they are that interval's own as before
+    parses := load.ParseCount;
+    d.EnsureParsed(0);
+    AssertTrue('the interval is parsed again', load.ParseCount > parses);
+    AssertTrue('parsed again: still the value', TBuilderAccess.Value(d, first) = values[0]);
+    AssertTrue('parsed again: still the file''s own', load.ParaSource(first, range));
+    // deleted for good - no undo step left that could bring the row back - the values go
+    // when their interval is next parsed
+    AssertTrue('the whole row deleted again', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(first),
+      d.Text.ParaStart(last + 1) - d.Text.ParaStart(first))));
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    d.EnsureParsed(d.Text.ParaCount div 2);
+    d.BreakMerge;
+    AssertTrue('typed elsewhere', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'X')));
+    d.MaxUndoBytes := 1;
+    AssertEquals('one undo step is left', 1, d.UndoDepth);
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    d.EnsureParsed(d.Text.ParaCount div 2);
+    live0 := d.Live;
+    d.EnsureParsed(0);
+    d.EnsureParsed(d.Text.ParaCount - 1);
+    d.EnsureParsed(d.Text.ParaCount div 2);
+    // (the row's paragraphs, and the value of the paragraph after the row, which the undo
+    // step of the delete held as well)
+    AssertEquals('the deleted row''s values are let go of, and the one after it',
+      live0 - (last - first + 2), d.Live);
+  finally
+    s.Free;
+    d.Free;
+  end;
+  // a paragraph that was given another format, its interval gone, parsed again and gone
+  // again: undone, it is the file's own
+  d := TCountingDoc.Create;
+  s := TBytesStream.Create(b);
+  try
+    TyRichLoadRtf(d, s);
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    n := d.Text.ParaCount;
+    fmt := TyDefaultParaFormat;
+    fmt.SpaceBefore := 77;
+    AssertTrue('a format', d.Execute(TTyRichSetParaFormat.Create(plain, plain, [pffSpaceBefore], fmt)));
+    AssertFalse('changed: not the file''s own', load.ParaSource(plain, range));
+    d.EnsureParsed(n - 1);
+    d.EnsureParsed(plain + 1);
+    d.EnsureParsed(n - 1);
+    AssertFalse('changed, its interval parsed again and gone: still not the file''s own',
+      load.ParaSource(plain, range));
+    d.Undo;
+    AssertTrue('undone: the file''s own again', load.ParaSource(plain, range));
+    o := Save(d);
+    AssertTrue('undone: saved as the file', (Length(o) = Length(b)) and CompareMem(@b[0], @o[0], Length(b)));
+  finally
+    s.Free;
+    d.Free;
+  end;
+  // plain paragraphs all share one value, which says nothing about any one of them: no
+  // record is ever kept of it, however many of them come and go
+  text := '{\rtf1 ';
+  for i := 1 to 60000 do text := text + 'a\par ';
+  text := text + '}';
+  d := TCountingDoc.Create;
+  s := TBytesStream.Create(BytesOf(text));
+  try
+    TyRichLoadRtf(d, s);
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('several intervals', load.IntervalCount > 4);
+    AssertTrue('a paragraph deleted', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(5),
+      d.Text.ParaStart(6) - d.Text.ParaStart(5))));
+    for i := 0 to load.IntervalCount - 1 do d.EnsureParsed(load.IntervalFirstPara(i) + 1);
+    for i := load.IntervalCount - 1 downto 0 do d.EnsureParsed(load.IntervalFirstPara(i) + 1);
+    AssertEquals('no record of a plain paragraph', 0, load.KeptValues);
+  finally
+    s.Free;
+    d.Free;
   end;
 end;
 

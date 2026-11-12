@@ -671,7 +671,12 @@ type
     // A table of which a paragraph was changed stays as it is when its interval goes (it is
     // one object for all its paragraphs): those paragraphs keep their values, and the load
     // keeps a record of each, so that they are still known as the file's own (ParaSource,
-    // OwnsValue) and are the group's again when the interval is next parsed.
+    // OwnsValue) and are the group's again when the interval is next parsed. A record is
+    // kept, too, of a value that an undo step still holds when its interval goes - of a
+    // deleted paragraph, of the paragraph after a deleted range, of a paragraph that was
+    // given another format: undone, the paragraph has that value again and is the file's
+    // own again. Such a record goes when nothing but itself holds the value any more and
+    // the interval is parsed again.
     procedure Trim;
     // For a writer: paragraph AIndex is still the file's own, untouched (its text and formats
     // never changed), at ARange of Bytes.
@@ -713,6 +718,8 @@ type
     function IntervalStart(AIndex: Integer): Int64;
     function IntervalFirstPara(AIndex: Integer): Integer;
     property SnapshotBytes: Int64 read FSnapBytes;
+    // Paragraph values recorded as the file's own though their group went (see Trim).
+    property KeptValues: Integer read FKeptN;
     property ResidentIntervals: Integer read FResident;
     property MaxResidentIntervals: Integer read FMaxResident write FMaxResident;
   end;
@@ -5292,7 +5299,18 @@ begin
     if AGroup.States[i] <> StateNew then Continue;
     rec := @AGroup.Recs[i];
     j := FDoc.Text.ParaOfLazySource(rec^.Src.Start);
-    if j < 0 then Continue;
+    if j < 0 then
+    begin
+      // Not in the text: deleted, or its text was edited. A record kept of it (see Drop)
+      // is of use only while an undo can still bring the paragraph back with that value;
+      // when the record alone keeps the value alive, both go.
+      if KeptAt(rec^.Src.Start, k) and not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
+      begin
+        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+        Unkeep(k);
+      end;
+      Continue;
+    end;
     cell := nil;
     if (rec^.Table >= 0) and (rec^.Table <= High(AGroup.Tables)) then
     begin
@@ -5306,6 +5324,13 @@ begin
       TRtfBuild.HoldValue(FDoc, v);
       AGroup.Values[i] := v;
       AGroup.States[i] := StateOurs;
+      // (a record of an earlier value stays while an undo can still give that one back)
+      if (FKeptN > 0) and KeptAt(rec^.Src.Start, k) and
+         not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
+      begin
+        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+        Unkeep(k);
+      end;
     end
     else if KeptAt(rec^.Src.Start, k) then
     begin
@@ -5318,8 +5343,11 @@ begin
       end
       else
       begin
-        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+        // another value now: changed - unless an undo can still give the recorded one
+        // back (something else holds it), and then the record stays for that day
         AGroup.States[i] := StateSkipped;
+        if TRtfBuild.ValueShared(FDoc, FKept[k].Value) then Continue;
+        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
       end;
       Unkeep(k);
     end
@@ -5332,7 +5360,11 @@ end;
 // unparsed (only while the document is not busy - values read before may be in use); a
 // table whose paragraphs are not all still ours stays as it is (it is one object for all of
 // them). A paragraph that keeps the value the group gave it is recorded (KeepValue): it is still
-// the file's own.
+// the file's own. So is one whose value something else still keeps alive when the group
+// lets go of it - an undo record: an undo can give the value back (a deleted paragraph
+// comes back with it, and so does the paragraph after a deleted range), and then the
+// paragraph must be the file's own again. A writer copies it; a row that holds a nested
+// table cannot be written any other way.
 procedure TTyRtfLoad.Drop(AGroup: TTyRtfGroup; AReset: Boolean);
 var
   i, j: Integer;
@@ -5372,15 +5404,24 @@ begin
       if not AReset then
         // nothing was looked at: it may well still be the paragraph's value
         KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
+      else if (idx[i] < 0) and TRtfBuild.ValueShared(FDoc, AGroup.Values[i]) then
+        // the paragraph has another value by now, or is gone - and something else still
+        // holds the value: an undo may give it back
+        KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
       else if idx[i] < 0 then
-        // the paragraph has another value by now, or is gone
+        // changed or gone for good
         TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i])
       else if (AGroup.Recs[i].Table >= 0) and keep[AGroup.Recs[i].Table] then
         KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
       else
       begin
         TRtfBuild.UnsetParagraph(FDoc, idx[i], AGroup.Values[i]);
-        TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i]);
+        // (an undo record of a delete right before the paragraph holds its value too, and
+        // puts it back: the paragraph must be the file's own then)
+        if TRtfBuild.ValueShared(FDoc, AGroup.Values[i]) then
+          KeepValue(AGroup.Recs[i].Src.Start, AGroup.Values[i])
+        else
+          TRtfBuild.ReleaseValue(FDoc, AGroup.Values[i]);
       end;
     end;
     text.ForgetDecoded(AGroup.Recs[i].Src.Start);

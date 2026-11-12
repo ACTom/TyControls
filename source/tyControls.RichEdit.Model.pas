@@ -412,6 +412,10 @@ type
     class function ParagraphValue(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
     class procedure HoldValue(ADoc: TTyRichDocument; AValue: Pointer);
     class procedure ReleaseValue(ADoc: TTyRichDocument; AValue: Pointer);
+    { Somebody besides the caller's own hold keeps AValue alive: a paragraph has it, or an
+      undo record that can put it back. Never True for the one value all plain parsed
+      paragraphs share: it says nothing about any one of them. }
+    class function ValueShared(ADoc: TTyRichDocument; AValue: Pointer): Boolean;
     class function UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
       AValue: Pointer): Boolean;
     { A command is running, the text is being changed, or a read scope is open
@@ -1653,6 +1657,12 @@ end;
 class procedure TTyRichDocBuilder.ReleaseValue(ADoc: TTyRichDocument; AValue: Pointer);
 begin
   ADoc.ReleaseData(TTyRichParaData(AValue));
+end;
+
+class function TTyRichDocBuilder.ValueShared(ADoc: TTyRichDocument; AValue: Pointer): Boolean;
+begin
+  Result := (AValue <> nil) and (AValue <> Pointer(ADoc.FPlainParsed)) and
+    (TTyRichParaData(AValue).FRefCount > 1);
 end;
 
 class function TTyRichDocBuilder.UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
