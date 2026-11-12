@@ -1460,12 +1460,15 @@ begin
     'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowStripItem:disabled { color: var(--muted); }' + LineEnding +
+    '/* 键盘的焦点项(栏拿着焦点时): 焦点环画在格子里面, 让开当前格贴边的指示条。 */' + LineEnding +
+    'TyToolWindowStripItem:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }' + LineEnding +
     'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
     '/* 图标条末端的命令项(Commands): 默认跟窗口图标一个样子, 只是没有 :selected。 */' + LineEnding +
     'TyToolWindowStripCommand          { color: var(--toolwindow-strip-ink); }' + LineEnding +
     'TyToolWindowStripCommand:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
     'TyToolWindowStripCommand:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowStripCommand:disabled { color: var(--muted); }' + LineEnding +
+    'TyToolWindowStripCommand:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }' + LineEnding +
     '/* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar' + LineEnding +
     '   的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */' + LineEnding +
     'TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }' + LineEnding +
@@ -1488,6 +1491,8 @@ begin
     'TyToolWindowOverflow:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowOverflow:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
     'TyToolWindowOverflow:disabled { color: var(--muted); }' + LineEnding +
+    '/* 只有图标条上的溢出按钮会拿到 :focus(底栏的标签行不拿焦点)。 */' + LineEnding +
+    'TyToolWindowOverflow:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }' + LineEnding +
     'TyToolWindowButton          { color: var(--toolwindow-tab-ink); }' + LineEnding +
     'TyToolWindowButton:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
     'TyToolWindowButton:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +

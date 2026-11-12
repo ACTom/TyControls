@@ -1427,12 +1427,15 @@ TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); co
 TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }
 TyToolWindowStripItem:disabled { color: var(--muted); }
+/* 键盘的焦点项(栏拿着焦点时): 焦点环画在格子里面, 让开当前格贴边的指示条。 */
+TyToolWindowStripItem:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }
 TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }
 /* 图标条末端的命令项(Commands): 默认跟窗口图标一个样子, 只是没有 :selected。 */
 TyToolWindowStripCommand          { color: var(--toolwindow-strip-ink); }
 TyToolWindowStripCommand:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }
 TyToolWindowStripCommand:active   { background: var(--toolwindow-overlay-active); }
 TyToolWindowStripCommand:disabled { color: var(--muted); }
+TyToolWindowStripCommand:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }
 /* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar
    的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */
 TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }
@@ -1455,6 +1458,8 @@ TyToolWindowOverflow          { color: var(--toolwindow-tab-ink); }
 TyToolWindowOverflow:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowOverflow:active   { background: var(--toolwindow-overlay-active); }
 TyToolWindowOverflow:disabled { color: var(--muted); }
+/* 只有图标条上的溢出按钮会拿到 :focus(底栏的标签行不拿焦点)。 */
+TyToolWindowOverflow:focus    { outline: 2px var(--focus-ring); outline-offset: 2px; }
 TyToolWindowButton          { color: var(--toolwindow-tab-ink); }
 TyToolWindowButton:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }
 TyToolWindowButton:active   { background: var(--toolwindow-overlay-active); }

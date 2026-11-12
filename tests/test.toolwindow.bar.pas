@@ -83,7 +83,19 @@ type
     { 命令项的菜单被请了几次、最近一次是哪一项(DropCommandMenu;无头没有句柄,不真的弹)。 }
     MenuDrops: Integer;
     LastDropped: TTyToolWindowCommand;
+  public
+    { 键盘:无头没有句柄,Focused 恒假。设了 FakeFocus,StripHasFocus 就答「栏拿着焦点」。 }
+    FakeFocus: Boolean;
+    { 真实的 KeyDown / KeyUp(protected)。答 True = 这个键被吃掉了(Key 置成了 0)。 }
+    function CallKeyDown(AKey: Word; AShift: TShiftState = []): Boolean;
+    function CallKeyUp(AKey: Word; AShift: TShiftState = []): Boolean;
+    { 按下再松开;答按下那一拍吃没吃。 }
+    function Tap(AKey: Word; AShift: TShiftState = []): Boolean;
+    { 真实的 DoEnter / DoExit(protected)。 }
+    procedure CallDoEnter;
+    procedure CallDoExit;
   protected
+    function StripHasFocus: Boolean; override;
     procedure DropCommandMenu(ACommand: TTyToolWindowCommand); override;
     procedure BeginLayoutBatch; override;
     function PointerInClient(out APoint: TPoint): Boolean; override;
@@ -493,6 +505,39 @@ procedure TBarAccess.BeginLayoutBatch;
 begin
   if RaiseOnLayoutBatch then raise Exception.Create('probe: BeginLayoutBatch');
   inherited BeginLayoutBatch;
+end;
+
+function TBarAccess.StripHasFocus: Boolean;
+begin
+  Result := FakeFocus or inherited StripHasFocus;
+end;
+
+function TBarAccess.CallKeyDown(AKey: Word; AShift: TShiftState): Boolean;
+begin
+  KeyDown(AKey, AShift);
+  Result := AKey = 0;
+end;
+
+function TBarAccess.CallKeyUp(AKey: Word; AShift: TShiftState): Boolean;
+begin
+  KeyUp(AKey, AShift);
+  Result := AKey = 0;
+end;
+
+function TBarAccess.Tap(AKey: Word; AShift: TShiftState): Boolean;
+begin
+  Result := CallKeyDown(AKey, AShift);
+  CallKeyUp(AKey, AShift);
+end;
+
+procedure TBarAccess.CallDoEnter;
+begin
+  DoEnter;
+end;
+
+procedure TBarAccess.CallDoExit;
+begin
+  DoExit;
 end;
 
 procedure TBarAccess.DropCommandMenu(ACommand: TTyToolWindowCommand);

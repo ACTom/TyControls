@@ -1151,7 +1151,7 @@ TyToolWindowStrip||4 => pres[0,1,2,3,] bg=k1/FFEBE9F5 ut=0 txt=802E1065 bd=FFC4B
 TyToolWindowStripItem||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripItem||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripItem||2 => pres[0,1,] bg=k1/332E1065 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowStripItem||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||3 => pres[1,12,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF7C3AED/2/2
 TyToolWindowStripItem||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripIndicator||0 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripIndicator||1 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1191,7 +1191,7 @@ TyToolWindowTabIndicator||4 => pres[0,] bg=k1/FF7C3AED ut=0 txt=00000000 bd=0000
 TyToolWindowOverflow||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowOverflow||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowOverflow||2 => pres[0,1,] bg=k1/332E1065 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowOverflow||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||3 => pres[1,12,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF7C3AED/2/2
 TyToolWindowOverflow||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowButton||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowButton||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1226,7 +1226,7 @@ TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A7C3AED ut=0 txt=FF2E1065 bd=FF
 TyToolWindowStripCommand||0 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||1 => pres[0,1,] bg=k1/2EFFFFFF ut=0 txt=FF2E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||2 => pres[0,1,] bg=k1/332E1065 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToolWindowStripCommand||3 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripCommand||3 => pres[1,12,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF7C3AED/2/2
 TyToolWindowStripCommand||4 => pres[1,] bg=k0 ut=0 txt=802E1065 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 metric --alert-action-gap => 8
 metric --alert-close-gap => 8

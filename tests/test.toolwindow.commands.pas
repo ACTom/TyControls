@@ -558,7 +558,11 @@ begin
   AssertEquals('禁用的命令项点了没反应', 0, FCmdClicks);
   c.Click;
   AssertEquals('程序里调 Click 也一样', 0, FCmdClicks);
+  { 按下时它是禁用的:这一下没有武装,松开之前启用了也不算点击。 }
+  FBar.CallMouseDown(FBar.CommandRect(0).CenterPoint.X, FBar.CommandRect(0).CenterPoint.Y);
   c.Enabled := True;
+  FBar.CallMouseUp(FBar.CommandRect(0).CenterPoint.X, FBar.CommandRect(0).CenterPoint.Y);
+  AssertEquals('按在禁用的命令项上:不武装', 0, FCmdClicks);
   ClickCommandCell(0);
   AssertEquals('启用了就响', 1, FCmdClicks);
   c.Click;
@@ -696,6 +700,14 @@ begin
   bmp := RenderCell(FBar.CommandRect(0));
   try
     AssertEquals('补上来的那一项没有悬停', 0, CountExact(bmp, Cyan));
+  finally
+    bmp.Free;
+  end;
+  { 紧接着新建的一项多半落在刚释放的那块内存上:记着的悬停要是没清,它一出生就是悬停的。 }
+  NewCommand('Reborn');
+  bmp := RenderCell(FBar.CommandRect(1));
+  try
+    AssertEquals('新建的一项不继承走掉那一项的悬停', 0, CountExact(bmp, Cyan));
   finally
     bmp.Free;
   end;

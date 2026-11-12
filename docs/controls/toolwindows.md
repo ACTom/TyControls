@@ -51,9 +51,9 @@ end
 |---|---|
 | `TyToolWindowBar` | 栏底色 |
 | `TyToolWindowStrip` | 图标条底色，靠内容区一侧的界线（border-color / border-width） |
-| `TyToolWindowStripItem` | 图标格；`:hover` `:selected` `:active` `:disabled` |
+| `TyToolWindowStripItem` | 图标格；`:hover` `:selected` `:active` `:disabled`，键盘的焦点项是 `:focus`（§10） |
 | `TyToolWindowStripIndicator` | 当前图标旁的指示条 |
-| `TyToolWindowStripCommand` | 图标条末端的命令项（§9）；`:hover` `:active` `:disabled`，没有 `:selected` |
+| `TyToolWindowStripCommand` | 图标条末端的命令项（§9）；`:hover` `:active` `:disabled` `:focus`，没有 `:selected` |
 | `TyToolWindowEdge` | 拉宽边，也是贴着编辑区的分隔线；`:hover` `:active` |
 | `TyToolWindow` | 窗口正文底色 |
 | `TyToolWindowHeader` | 侧栏标题行：底色、标题墨色和字体、可选底线（border-color + border-width） |
@@ -61,7 +61,7 @@ end
 | `TyToolWindowTabRow` | 底栏标签行底色 |
 | `TyToolWindowTab` | 底栏标签；`:hover` `:selected` `:disabled` |
 | `TyToolWindowTabIndicator` | 当前标签的下划线 |
-| `TyToolWindowOverflow` | 溢出按钮（图标条和标签行共用） |
+| `TyToolWindowOverflow` | 溢出按钮（图标条和标签行共用）；图标条上的那一个是键盘焦点项时带 `:focus` |
 | `TyToolWindowButton` | 底栏的最大化 / 还原、收起按钮 |
 | `TyToolWindowSeparator` | 底栏标题行里固定按钮前的竖线（border-color + border-width） |
 | `TyToolWindowDropIndicator` | 拖放插入线 |
@@ -113,6 +113,8 @@ end
 | `Commands` | 图标条末端的命令项，见 §9。只有侧栏画它们 |
 | `CommandAtPos(X, Y)` / `CommandRect(序号)` / `ContextCommand` | 某点下的命令项；`Commands[序号]` 在栏上的格子（没排上是空矩形）；最近一次右键落在哪个命令项上 |
 | `ClickCommand(命令项)` | 等于在它上面点一下，同命令项自己的 `Click` |
+| `TabStop` | 默认 False。设成 True，侧栏的图标条就能用键盘操作，见 §10 |
+| `StripStops` / `FocusedStop` / `FocusStop(站)` / `ActivateStop(站)` | 键盘走的顺序；键盘的焦点项；挪焦点项；做 Enter 做的那件事。见 §10 |
 | `OnChange` / `OnCollapse` / `OnExpand` / `OnCommandClick` | 见 §4 |
 
 4.0 起栏交出的窗口（`Windows[i]`、`ActiveWindow`、`WindowAtPos`、`ContextWindow`）类型是 `TTyCustomToolWindow`：栏收任何从它派生的窗口，交出来的就是放进去的那一个。`IndexOfWindow`、`ActivateWindow` 的参数同理。
@@ -161,9 +163,9 @@ end
 | `MoveWindow(W, 目标栏, 序号 = -1)` | 把窗口挪到另一条栏（或同一条栏里调顺序）。-1 = 末尾。答 False 表示什么都没改 |
 | `CanMoveWindow(W, 目标栏)` | 结构检查 + `OnCanMoveWindow`，没有副作用 |
 | `UsableBar(Placement)` | 此刻这一侧的可用栏；没有答 nil。「移到另一侧」就问它要目标 |
-| `IsBarUsable(栏)` | 这条栏可不可用（见 §13 Placement 冲突） |
+| `IsBarUsable(栏)` | 这条栏可不可用（见 §14 Placement 冲突） |
 | `CancelDrag` / `IsDragging` | 取消此刻的图标拖动；有没有在拖 |
-| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §10 |
+| `SaveLayoutToString` / `LoadLayoutFromString` / `ResetLayout` / `CaptureDefaultLayout` | 见 §11 |
 | `Images` | 两侧共用的图标列表 |
 | `OnCanMoveWindow` / `OnWindowMoved` / `OnLayoutApplied` | 见 §4 |
 
@@ -173,7 +175,7 @@ end
 |---|---|---|
 | 栏 `OnChange` | 运行时当前页换了窗口（点击、代码、`MoveWindow`、直接改 Parent、当前页离开本栏） | 设计期；加载中和 `Loaded`；布局应用；只是调顺序 |
 | 栏 `OnCollapse` / `OnExpand` | 运行时 `Collapsed` 真的变了 | 设计期；加载中；布局应用 |
-| 栏 `OnCommandClick` | 命令项被点了：鼠标在同一项上按下并松开，或者代码调了 `Click` | 设计期；栏或那一项禁用着；右键；双击的第二下 |
+| 栏 `OnCommandClick` | 命令项被点了：鼠标在同一项上按下并松开，键盘焦点在它上面时按了 Enter / 空格（§10），或者代码调了 `Click` | 设计期；栏或那一项禁用着；右键；双击的第二下 |
 | 窗口 `OnShow` / `OnHide` | 运行时显示 / 藏起（切页、收起、展开）；普通的布局读取里照发 | 设计期；启动时栏在 `Loaded` 里显示的那一页；加载结束时应用挂起布局的那一批（见下） |
 | manager `OnCanMoveWindow` | 跨栏：拖到某条栏上、松开、调 `MoveWindow`、排队的移动执行前 | 同栏调顺序；直接改 Parent；布局应用；设计期 |
 | manager `OnWindowMoved` | 运行时窗口的栏或序号真的变了：手势、`MoveWindow`、`WindowIndex`、同一 manager 下直接改 Parent | 加载中；设计期；读布局 / 恢复默认 |
@@ -273,7 +275,28 @@ end;
 - 底栏没有图标条，`Commands` 对它没有效果。
 - 派生类可以重写 `DoCommandClick`（在事件前后插一手）和 `DropCommandMenu`（换成自己的弹出层）。
 
-## 10. 布局保存
+## 10. 用键盘操作图标条
+
+侧栏的图标条可以拿焦点，用键盘操作。默认不拿：`TabStop` 默认 False，已有的窗体不变。把栏的 `TabStop` 设成 True，它就进了 Tab 顺序；代码里也可以直接 `LeftBar.SetFocus`，比如给「聚焦活动栏」配一个快捷键。
+
+| 键 | 作用 |
+|---|---|
+| Tab 进来 | 落在当前页的图标上；没有窗口就落在第一项 |
+| ↑ / ↓ | 上一项 / 下一项。顺序是窗口图标、溢出按钮（有的话）、命令项；禁用的、藏起来的跳过；到头停住，不绕回去 |
+| Home / End | 第一项 / 最后一项 |
+| Enter / 空格 | 等于点一下焦点项：窗口图标是切过去（已经是当前页就收起 / 展开），溢出按钮是弹出溢出菜单，命令项是 `OnCommandClick`、没处理掉再弹它的菜单。松开键时才动手，按住不放不会连发 |
+| 菜单键 / Shift+F10 | 等于在焦点项上右键：`ContextWindow` / `ContextCommand` 设好，发 `OnContextPopup`（`MousePos` 是那一格的中心），再在那里弹栏的 `PopupMenu` |
+
+- 焦点项画一圈焦点环，来自 `TyToolWindowStripItem:focus`、`TyToolWindowStripCommand:focus`、`TyToolWindowOverflow:focus` 的 `outline`：默认 2px 的 `--focus-ring`，往格子里缩 2px。只在栏自己拿着焦点时画。
+- 鼠标照旧。`TabStop` 关着时点图标不会把焦点拿走；开着时按下就把焦点拿过来，焦点项是按下的那一项。
+- Enter 切页之后焦点留在图标条上，再按 Tab 才进到窗口里。
+- 禁用的当前页的图标照样停得住：点它是收起 / 展开，那是栏的动作。
+- 栏先发自己的 `OnKeyDown` / `OnKeyUp`，处理器把 `Key` 置 0 就拦住上面这些。用到的键都被栏吃掉；← / →、Esc、带 Ctrl / Alt / Shift 的方向键原样放过。
+- 代码里对应的是 `StripStops`（此刻走的顺序）、`FocusedStop`（焦点项）、`FocusStop(站)`（挪焦点项，不替你 `SetFocus`）、`ActivateStop(站)`（做 Enter 做的那件事）。「站」是 `TTyToolWindowStripStop`：`Kind` 是 `twskWindow` / `twskOverflow` / `twskCommand`，`Window` 或 `Command` 是那一项。
+- 只管侧栏的图标条。底栏的标签行画在当前页里，不拿焦点，照旧给它配菜单项或快捷键。
+- 设计期不起作用。
+
+## 11. 布局保存
 
 | 方法 | 说明 |
 |---|---|
@@ -316,7 +339,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 
 不保存的：底栏最大化；窗口里的内容（筛选框文字、终端会话、滚动位置）。
 
-## 11. 设计器里使用
+## 12. 设计器里使用
 
 - 从「TyControls Containers」页放一条栏和一个 manager 到窗体上，栏的 `Manager` 指向它。在对象查看器里改 `Placement`，栏自己挪到那一边。
 - **栏的右键菜单**
@@ -334,7 +357,7 @@ TYTOOLLAYOUT/1|left=240,0|leftWins=Explorer,Search|leftActive=Explorer|right=300
 - **粘贴要先选中栏**：侧栏点图标条，底栏点标签行后面的空白处或拉宽边。选中的是当前页窗口的正文时，粘贴会落进窗口里。
 - 窗口和操作区在对象查看器里没有 `Controller`，它们用栏的。
 
-## 12. 流式化
+## 13. 流式化
 
 ```
 object BottomBar: TTyToolWindowBar
@@ -363,7 +386,7 @@ end
 - 窗口的 `Left`、`Top`、`Width`、`Height`、`TabOrder`、`Visible`、`Controller` 不进 .lfm；栏沿轴向的那一边（侧栏的 `Width`、底栏的 `Height`）也不进，由 `ExpandedSize` 推出来。
 - 窗口顺序就是它们在 `Controls` 里的顺序，也就是 .lfm 里的先后。
 
-## 13. 注意事项
+## 14. 注意事项
 
 - `Controller` 由栏推给窗口、窗口再推给操作区。代码里直接赋给窗口的值会被下一次推送盖掉，要换主题请设栏的 `Controller`。
 - 图标条的提示跟着栏的 `ShowHint`，底栏标签的提示跟着各窗口的 `ShowHint`；当前页被禁用、标签行由栏来画的时候，跟着栏的 `ShowHint`。提示文字用 `StripHint`，**不要用 `Hint`**：窗口的 `Hint` 会冒到它里面所有没设 `Hint` 的控件上。
@@ -376,31 +399,33 @@ end
 - 事件处理器里不要释放栏、窗口或 manager，要释放请用 `Application.ReleaseComponent`。
 - 只设了 `ImageIndex`、没设 `ImageName` 的窗口要在两侧之间移动，就得用 manager 上的共享列表。只在 manager 上设列表时，对象查看器里 `ImageIndex` 的下拉是空的（它只看栏自己的 `Images`），这时请设 `ImageName`。
 - 拖动中按 Esc 只吃掉 KeyDown，Esc 的 KeyUp 照样会到焦点控件。
+- 运行时才把栏的 `TabStop` 设成 True，LCL 会把它排到 Tab 顺序的最后；要它留在原来的位置，接着设一次 `TabOrder`。在 .lfm 里设的没有这个问题。
+- `TabStop` 开着的栏在没有东西可停的时候（没有窗口也没有命令项、整条隐藏着，或者条上的全禁用着）照样占一个 Tab 停靠点：什么都不画，什么键都不吃，再按一次 Tab 就过去了。介意的话在那时把 `TabStop` 关掉。
 - 排队时 `MoveWindow` 返回之后 `W.Bar` 还是旧栏（§5）。
 - 窗体显示之后调的 `LoadLayoutFromString` / `ResetLayout` 也会排队；排着的布局执行时会盖掉这段时间里的同步改动，也会顶掉已经排着的移动。
 - 跨栏移动（`MoveWindow`、拖放、读布局、恢复默认）会重建窗口里所有控件的句柄：输入法组字、光标位置、原生子窗口的状态都不保留。
-- 改了名的窗口当成新窗口（§10）；翻译 `Caption` 不影响布局。
+- 改了名的窗口当成新窗口（§11）；翻译 `Caption` 不影响布局。
 - `Bar.Manager` 是基类类型。经它调 `MoveWindow` 或布局方法要转型成 `TTyToolWindowManager`，或者直接用窗体上的 manager 字段；用到 manager 的单元要 uses `tyControls.ToolWindows.Manager`。
 - 继承窗体上读用户布局，请在 FormCreate 里调：祖先层加载中调的会被子孙层流进来的值盖掉。
 - 同一个 manager 下 `Placement` 相同的栏都不可用：不参与跨栏拖动、`MoveWindow` 和布局保存，栏内调顺序照常。
 - 不支持：manager 放在数据模块里、栏分布在多个窗体上。
 - 删掉一个工具窗口或操作区后撤销 / 重做，它会被建到**窗体**上：窗口显示成孤儿，右键「移回栏里 ▸」；操作区用 IDE 的「改变父控件」放回窗口。
 
-## 14. 和 VS Code / JetBrains 的差异
+## 15. 和 VS Code / JetBrains 的差异
 
 - 两侧都有图标条（VS Code 右侧栏用标题行里的标签切换）。
 - 侧栏和底栏之间不能互拖（VS Code 三处互通）。
 - 图标和标签都在松开时切换，不在按下时。
 - 拖空的侧栏默认整条隐藏（`HideWhenEmpty`），拖动一开始那一侧就显示放置区域，不等指针靠近边缘；不拖动时不会弹出来。
 - 一侧只显示一个窗口，不做上下 / 左右分屏（JetBrains 可以）。
-- 不做：不拖动时指针靠近边缘弹出隐藏的栏、每个窗口各记一个尺寸、键盘操作图标条、浮动 / 独立窗口、跨窗体拖动、内置右键菜单、从标题行拖动窗口。
+- 不做：不拖动时指针靠近边缘弹出隐藏的栏、每个窗口各记一个尺寸、用键盘操作底栏的标签行、`&` 助记符、浮动 / 独立窗口、跨窗体拖动、内置右键菜单、从标题行拖动窗口。
 
 和库里其他控件的习惯也有两处不同：
 
 - 图标和标签松开才切。库里单纯做切换的控件（`TTySegmented`、`TTyTabSet` 这类标签条、`TTyPagination`）是按下就切；这里按下之后可能是要拖，所以等松开。TreeView、Grid 的表头点击也改成了松开才算。
 - `OnWindowMoved` 对 `MoveWindow`、改 `WindowIndex` 也发。Grid 的 `OnRowMove`、TreeView 的 `OnNodeMoved`、标签条的 `OnReorder` 只在手势里发；这里是想给程序一个「布局变了」的信号，比如拿来自动保存。
 
-## 15. 示例
+## 16. 示例
 
 `examples/toolwindows`：一个类 IDE 窗体，左边 Explorer / Search，右边 Outline，编辑区下面 Problems / Output / Terminal。能跨侧拖、最大化和收起底栏、保存 / 读取 / 恢复布局（关掉再开回到上次的样子）、换肤、换密度；Output 页里是事件日志。
 

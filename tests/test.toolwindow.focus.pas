@@ -84,6 +84,10 @@ type
     procedure TestSwitchingToAPageThatCannotTakeTheFocusMovesItPastTheBar;
     { OnShow 里这一页已经在对齐引擎给它的位置上(展开、第一个窗口进了空栏):对齐引擎要真句柄。 }
     procedure TestOnShowSeesThePageWhereTheAlignerPutsIt;
+    { 图标条的键盘,真消息那一半:默认 Tab 越过栏、点图标不拿焦点;TabStop 开着,Tab 落在栏上、
+      点图标把焦点拿过来,方向键 / Enter / 菜单键被栏吃掉(CN_KEYDOWN / CN_KEYUP 答 1),
+      焦点留在栏上。 }
+    procedure TestTheStripTakesTheFocusOnlyAsATabStopAndEatsItsKeys;
   end;
 
 implementation
@@ -586,6 +590,64 @@ begin
   Pump;
   AssertTrue('前提:来了窗口,这一页在内容区里', w.Width > 0);
   AssertTrue('第一个窗口进空栏:OnShow 里已经在位', EqualRect(w.BoundsRect, FShowRect));
+end;
+
+procedure TTyToolWindowFocusTests.TestTheStripTakesTheFocusOnlyAsATabStopAndEatsItsKeys;
+var
+  p: TPoint;
+
+  function Coords(const APoint: TPoint): PtrInt;
+  begin
+    Result := PtrInt((APoint.Y shl 16) or (APoint.X and $FFFF));
+  end;
+
+begin
+  p := FBar.StripItemRect(1).CenterPoint;
+  { 默认(TabStop 关,已有的窗体就是这样):Tab 越过栏,点图标照常切页、不把焦点拿走。 }
+  FBefore.SetFocus;
+  FForm.SelectNext(FBefore, True, True);
+  AssertTrue('默认:Tab 越过栏', FForm.ActiveControl <> TWinControl(FBar));
+  FOutside.SetFocus;
+  FBar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, Coords(p));
+  FBar.Perform(LM_LBUTTONUP, 0, Coords(p));
+  AssertNothingRaised('点图标');
+  AssertTrue('前提:这一下点击切了页', FBar.ActiveWindow = TTyCustomToolWindow(FWin2));
+  AssertSame('默认:点图标不拿焦点', FOutside, FForm.ActiveControl);
+  { 打开 TabStop:Tab 落在栏上,焦点项是当前页的图标。 }
+  FBar.TabStop := True;
+  { 运行时才打开 TabStop,LCL 把它排到 Tab 顺序的最后(SetTabStop → UpdateTabOrder):摆回
+    FBefore 后面。.lfm 里设的不受这个影响,TabOrder 是照流里的值来的。 }
+  FBar.TabOrder := FBefore.TabOrder + 1;
+  FBefore.SetFocus;
+  FForm.SelectNext(FBefore, True, True);
+  AssertTrue('TabStop 开着:Tab 落在栏上', FForm.ActiveControl = TWinControl(FBar));
+  AssertTrue('焦点项是当前页的图标', FBar.FocusedStop.Window = TTyCustomToolWindow(FWin2));
+  { 真实的按键消息:方向键被栏吃掉(答 1,LCL 就不再拿它去把焦点挪给兄弟),焦点项挪了,
+    焦点还在栏上。 }
+  AssertTrue('Up 被吃掉', FBar.Perform(CN_KEYDOWN, VK_UP, 0) <> 0);
+  AssertTrue('焦点项挪到上一个图标', FBar.FocusedStop.Window = TTyCustomToolWindow(FWin));
+  AssertTrue('焦点没被方向键带走', FForm.ActiveControl = TWinControl(FBar));
+  AssertTrue('到头了的 Up 照样吃掉', FBar.Perform(CN_KEYDOWN, VK_UP, 0) <> 0);
+  AssertTrue('Left 不归它:放过', FBar.Perform(CN_KEYDOWN, VK_LEFT, 0) = 0);
+  { Enter 的按下、松开都吃掉;松开时切到焦点项的窗口,焦点留在栏上。 }
+  AssertTrue('Enter 按下被吃掉', FBar.Perform(CN_KEYDOWN, VK_RETURN, 0) <> 0);
+  AssertTrue('按下不切', FBar.ActiveWindow = TTyCustomToolWindow(FWin2));
+  AssertTrue('Enter 松开被吃掉', FBar.Perform(CN_KEYUP, VK_RETURN, 0) <> 0);
+  AssertNothingRaised('Enter');
+  AssertTrue('松开切到焦点项的窗口', FBar.ActiveWindow = TTyCustomToolWindow(FWin));
+  AssertTrue('焦点留在栏上', FForm.ActiveControl = TWinControl(FBar));
+  { 菜单键的按下、松开都吃掉:松开交给平台的话,Win32 会再补一条 WM_CONTEXTMENU。 }
+  AssertTrue('菜单键按下被吃掉', FBar.Perform(CN_KEYDOWN, VK_APPS, 0) <> 0);
+  AssertTrue('菜单键松开被吃掉', FBar.Perform(CN_KEYUP, VK_APPS, 0) <> 0);
+  AssertNothingRaised('菜单键');
+  { TabStop 开着:按在图标上就把焦点拿过来,焦点项是按下的那一个。 }
+  FOutside.SetFocus;
+  p := FBar.StripItemRect(1).CenterPoint;
+  FBar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, Coords(p));
+  AssertTrue('TabStop 开着:按下就把焦点拿过来', FForm.ActiveControl = TWinControl(FBar));
+  AssertTrue('焦点项是按下的那个图标', FBar.FocusedStop.Window = TTyCustomToolWindow(FWin2));
+  FBar.Perform(LM_LBUTTONUP, 0, Coords(p));
+  AssertNothingRaised('TabStop 开着点图标');
 end;
 
 initialization

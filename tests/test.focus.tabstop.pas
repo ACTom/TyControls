@@ -390,8 +390,9 @@ begin
       below found it on the first run. That is the argument for deriving the population at
       run time in one line rather than parsing sources cleverly. }
     TTyTitleBar,
-    { The tool window workbench. The bar is chrome whose icon strip is deliberately not a tab
-      stop (spec §6.7: every action has an API, there is no keyboard strip); a tool window is a
+    { The tool window workbench. The bar is chrome whose icon strip is not a tab stop unless the
+      application asks (spec §6.7: every action has an API; with TabStop turned on the strip is
+      operated by Up / Down / Enter, and existing forms keep the default); a tool window is a
       page (csNoFocus, like TTyTabSheet) whose body holds the real controls; the actions area
       is a row that hosts buttons. }
     TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions,

@@ -666,10 +666,20 @@ type
     property Items[AIndex: Integer]: TTyToolWindowCommand read GetItem write SetItem; default;
   end;
 
-  { 命令项被点了(鼠标在同一项上按下并松开,或程序调 Click)。AHandled 置 True = 这一下处理完了,
+  { 命令项被点了(鼠标在同一项上按下并松开、键盘焦点在它上面时 Enter / 空格,或程序调 Click)。
+    AHandled 置 True = 这一下处理完了,
     栏不再弹它的 DropDownMenu;没有菜单的命令项不看它。 }
   TTyToolWindowCommandClickEvent = procedure(Sender: TObject; ACommand: TTyToolWindowCommand;
     var AHandled: Boolean) of object;
+
+  { 侧栏图标条上键盘走得到的一站:一个窗口图标、溢出按钮、或一个命令项。 }
+  TTyToolWindowStripStopKind = (twskNone, twskWindow, twskOverflow, twskCommand);
+  TTyToolWindowStripStop = record
+    Kind: TTyToolWindowStripStopKind;
+    Window: TTyCustomToolWindow;      { twskWindow;其余 nil }
+    Command: TTyToolWindowCommand;    { twskCommand;其余 nil }
+  end;
+  TTyToolWindowStripStops = array of TTyToolWindowStripStop;
 
   { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
     内容区下限、设计期提示行高。下限也在这里:推导按它钳内容项,只换
@@ -1394,6 +1404,33 @@ type
     { 命令项的状态:disabled / hover / active;没有 :selected。 }
     function CommandStates(ACommand: TTyToolWindowCommand): TTyStateSet;
     procedure SetCommandHover(ACommand: TTyToolWindowCommand);
+  private
+    { --- 用键盘操作图标条(侧栏)。栏默认不是 Tab 停靠点(spec §6.7 的默认没变);应用把 TabStop
+      打开或者调 SetFocus,焦点才进得来。
+      没有一站可停的栏(底栏、整条隐藏的空栏)**不**靠收窄 CanFocus 挡在 Tab 顺序外面:收起、
+      禁用当前页时把焦点交给「Tab 顺序里栏后面的那一个」用的是 form.SelectNext(栏)(spec §5.3),
+      它在 Tab 顺序表里拿栏当起点,而那张表只收 CanFocus 的控件(wincontrol.inc 的
+      GetTabOrderList)—— 栏不在表里,焦点就交给表头那一个了。 --- }
+    { 键盘的焦点项。只在它还是一站时算数(FocusedStop 现查),不是了就回到默认的落点;窗口注销、
+      命令项离开时清掉,不留悬垂引用。 }
+    FKeyStop: TTyToolWindowStripStop;
+    { 按下着、等松开的那个键(Enter / 空格 = 激活,菜单键 / Shift+F10 = 右键菜单)和按下那一刻
+      的焦点项;0 = 没有。松开时焦点项还是它才动手(同 TTyButton:按住只等,松开才算)。 }
+    FKeyArmed: Word;
+    FKeyArmedStop: TTyToolWindowStripStop;
+    { AStop 在 AStops 里的位置;不在是 -1。 }
+    function IndexOfStop(const AStops: TTyToolWindowStripStops;
+      const AStop: TTyToolWindowStripStop): Integer;
+    { 默认的落点:当前页的图标;它不是一站(没有窗口)就第一站;一站都没有答 twskNone。 }
+    function DefaultStop(const AStops: TTyToolWindowStripStops): TTyToolWindowStripStop;
+    { 写焦点项并重画(不检查它是不是一站)。 }
+    procedure SetKeyStop(const AStop: TTyToolWindowStripStop);
+    { 那一站在栏上的格子。 }
+    function StopRect(const AStop: TTyToolWindowStripStop): TRect;
+    { 在焦点项上「右键」:按那一格的中心走 DoContextPopup(设 ContextWindow / ContextCommand、
+      发 OnContextPopup),没处理掉就在那里弹栏的 PopupMenu;栏没有菜单就把请求接着往上交。
+      没有焦点项答 False。 }
+    function KeyContextMenu: Boolean;
   protected
     { 图标条上悬停 / 按下的那一格(窗口序号,-1 = 没有)。悬停由 UpdateHoverAt / RecheckHover /
       MouseLeave 写,按下由手势写;窗口离开时按新的序号重新对上(UnregisterWindow)。 }
@@ -1414,11 +1451,12 @@ type
       不用靠「无头起 LCL 拖动会抛异常」当判据。 }
     procedure StartLclAutoDrag; virtual;
     { spec §6.8:图标上的右键先设 ContextWindow 再走继承(OnContextPopup、PopupMenu);图标条的空白、
-      拉宽边是栏自己的像素,ContextWindow 置 nil 照样走继承。内容区里的 —— 以及键盘菜单键的
-      (-1, -1),栏不拿焦点,这种请求一定来自子控件 —— 不调继承
+      拉宽边是栏自己的像素,ContextWindow 置 nil 照样走继承。内容区里的 —— 以及栏自己没拿着焦点时
+      键盘菜单键的 (-1, -1),这种请求来自子控件 —— 不调继承
       (不发 OnContextPopup,Handled 留 False),ContextWindow 置 nil,并挡住 GetPopupMenu,
       子控件的右键请求照样冒泡到窗体。两处都要挡:LCL 先调 DoContextPopup 再调
-      GetPopupMenu(control.inc:2484-2492),只改后者挡不住 OnContextPopup。 }
+      GetPopupMenu(control.inc:2484-2492),只改后者挡不住 OnContextPopup。
+      栏自己拿着焦点时的 (-1, -1) 是冲着焦点项来的:走 KeyContextMenu。 }
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     function GetPopupMenu: TPopupMenu; override;
     { 让出来的标签行上的滚轮吞掉(spec §3.7,同页那一路 TTyToolWindow.DoMouseWheel);别处走继承。 }
@@ -1483,6 +1521,17 @@ type
     { 弹 ACommand 的 DropDownMenu:PopupComponent 设成栏,锚点和对齐方式取 CommandMenuAnchor
       (贴着那一格、开向内容区);没有句柄不弹(无头)。派生类重写它可以换成自己的弹出层。 }
     procedure DropCommandMenu(ACommand: TTyToolWindowCommand); virtual;
+    { 栏自己(不是它里面的控件)此刻拿着键盘焦点:焦点项只在这时画 :focus。默认 = Focused;
+      无头测试的探针重写它(没有句柄就没有焦点)。 }
+    function StripHasFocus: Boolean; virtual;
+    { 图标条的键盘(只有侧栏;继承的在前,OnKeyDown 把 Key 置 0 就拦住内置的):Up / Down 在各站
+      之间走,到头停住;Home / End 到两端;Enter / 空格松开时激活焦点项(ActivateStop);菜单键 /
+      Shift+F10 松开时在焦点项上弹右键菜单。用到的键都吃掉,别的原样放过。 }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    { 焦点进来:落在当前页的图标上(没有就第一站)。 }
+    procedure DoEnter; override;
+    procedure DoExit; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1538,6 +1587,17 @@ type
     { 等于在 ACommand 上点一下:先 DoCommandClick(OnCommandClick);没处理掉、它又有 DropDownMenu,
       就弹菜单。栏禁用、它禁用、设计期、不是本栏的命令项:什么都不做。 }
     procedure ClickCommand(ACommand: TTyToolWindowCommand);
+    { 键盘走的顺序:排在条上、点得动的窗口图标(可用的,或者当前页 —— 禁用的当前页照样点它收起),
+      然后溢出按钮(有的话),然后排上条的可用命令项。底栏为空。 }
+    function StripStops: TTyToolWindowStripStops;
+    { 键盘的焦点项;一站都没有答 Kind = twskNone。栏没拿着焦点时照样答(只是不画)。 }
+    function FocusedStop: TTyToolWindowStripStop;
+    { 把焦点项挪到 AStop;它不是此刻的一站答 False、什么都不动。不替你 SetFocus。 }
+    function FocusStop(const AStop: TTyToolWindowStripStop): Boolean;
+    { Enter / 空格做的那件事:窗口图标 = 点它(没到当前页就切过去并展开,是当前页就收起 / 展开,
+      同样的 300 ms 防抖);溢出按钮 = 弹溢出菜单;命令项 = ClickCommand。不是此刻的一站、
+      栏禁用、设计期答 False。 }
+    function ActivateStop(const AStop: TTyToolWindowStripStop): Boolean;
     { 提示的纯查询:图标上答 True,给文字(StripHint,空则 Caption)和那一格的矩形;命令项上
       同样答 True,文字是它的 Hint(空则 Caption)。 }
     function StripHintAt(X, Y: Integer; out AText: string; out ARect: TRect): Boolean;
@@ -4671,7 +4731,30 @@ var
   btxt: string;
   bdot: Boolean;
   cmd: TTyToolWindowCommand;
+  focus: TTyToolWindowStripStop;
   i, idx, glyphPx, indPx, bw, pad: Integer;
+
+  procedure MarkFocused(var AStates: TTyStateSet);
+  begin
+    Exclude(AStates, tysNormal);
+    Include(AStates, tysFocused);
+  end;
+
+  { 键盘焦点项的焦点环:样式解析出 outline 才有(主题的 `:focus { outline: … }`),画在那一格里面,
+    画法同 TyDrawTrackThumb。 }
+  procedure DrawFocusRing(const ACell: TRect; const AStyle: TTyStyleSet);
+  var
+    off, rad: Integer;
+    ring: TRect;
+  begin
+    if not (tpOutline in AStyle.Present) or (AStyle.OutlineWidth <= 0) then Exit;
+    off := P.Scale(AStyle.OutlineOffset);
+    ring := Rect(ACell.Left + off, ACell.Top + off, ACell.Right - off, ACell.Bottom - off);
+    if (ring.Right <= ring.Left) or (ring.Bottom <= ring.Top) then Exit;
+    rad := AStyle.BorderRadius - AStyle.OutlineOffset;
+    if rad < 0 then rad := 0;
+    P.StrokeBorder(ring, rad, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 
   { 图标条一格里的图标(窗口图标和命令项同一种画法):列表里第 AIndex 格,居中,着成 AInk。 }
   procedure DrawGlyph(const ACell: TRect; AIndex: Integer; AInk: TTyColor);
@@ -4713,6 +4796,9 @@ begin
     cls := TyStyleClassFor(Self, StyleClass);
     fill := Default(TTyFill);
     fill.Kind := tfkSolid;
+    { 键盘的焦点项:只在栏自己拿着焦点时画 :focus。一次取好 —— 逐格现查就是每格排一遍布局。 }
+    focus := Default(TTyToolWindowStripStop);
+    if StripHasFocus then focus := FocusedStop;
 
     if L.Strip.Right > L.Strip.Left then
     begin
@@ -4746,6 +4832,7 @@ begin
         if (L.Slots[i].ItemIndex < 0) or (L.Slots[i].ItemIndex > High(wins)) then Continue;
         w := wins[L.Slots[i].ItemIndex];
         states := StripItemStates(L.Slots[i].ItemIndex, w);
+        if (focus.Kind = twskWindow) and (focus.Window = w) then MarkFocused(states);
         itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripItemKey, cls, states);
         if tpBackground in itemS.Present then
           P.FillBackground(cell, itemS.Background, 0);
@@ -4778,6 +4865,7 @@ begin
             TyBidiFlipBadgePosition(bpTopRight, P.RightToLeft));
           DrawBadgeIn(P, Rect(bpt.X, bpt.Y, bpt.X + bsz.cx, bpt.Y + bsz.cy), btxt, bdot);
         end;
+        DrawFocusRing(cell, itemS);
       end;
 
       { 溢出按钮:图标大小的一格,中间一个字形大小的下箭头(主题可换,--glyph-chevron-down)。 }
@@ -4787,6 +4875,7 @@ begin
           墨色取图标条的墨色(图标项按同一组状态解析)—— TyToolWindowOverflow 的 color 是给
           底栏标签行的(--toolwindow-tab-ink),皮肤只调了图标条的墨色时,条上的箭头得跟着图标走。 }
         states := OverflowStates;
+        if focus.Kind = twskOverflow then MarkFocused(states);
         partS := ActiveController.Model.ResolveStyle(TyToolWindowOverflowKey, cls, states);
         if tpBackground in partS.Present then
           P.FillBackground(L.Overflow, partS.Background, 0);
@@ -4807,6 +4896,7 @@ begin
         { 溢出按钮打开一个列表:用全库统一的下拉标记(和下拉字段同一个 V,--glyph-chevron-size
           定大小),不是撑满字形框的 V。 }
         TyDrawChevron(P, ActiveController, gr, tgChevronDown, ink);
+        DrawFocusRing(L.Overflow, partS);
       end;
 
       { 条尾的命令项:格子和图标的画法同窗口图标,样式取自己的键(TyToolWindowStripCommand)。
@@ -4818,12 +4908,14 @@ begin
         if (L.Commands[i].ItemIndex < 0) or (L.Commands[i].ItemIndex >= FCommands.Count) then Continue;
         cmd := FCommands[L.Commands[i].ItemIndex];
         states := CommandStates(cmd);
+        if (focus.Kind = twskCommand) and (focus.Command = cmd) then MarkFocused(states);
         itemS := ActiveController.Model.ResolveStyle(TyToolWindowStripCommandKey, cls, states);
         if tpBackground in itemS.Present then
           P.FillBackground(cell, itemS.Background, 0);
         if tpTextColor in itemS.Present then ink := itemS.TextColor
         else ink := stripS.TextColor;
         DrawGlyph(cell, cmd.ResolvedImageIndex, ink);
+        DrawFocusRing(cell, itemS);
       end;
     end;
 
@@ -6101,8 +6193,8 @@ begin
     SetEdgeHover(part = twbpEdge);
     Exit;
   end;
-  { 命令项:禁用的不接悬停。 }
-  if (part = twbpCommand) and FCommands[idx].Enabled then cmd := FCommands[idx]
+  { 命令项:指针在谁上面就记谁;禁用的那一项不画悬停(CommandStates)。 }
+  if part = twbpCommand then cmd := FCommands[idx]
   else cmd := nil;
   if part <> twbpItem then idx := -1;
   SetStripHover(idx, part = twbpOverflow);
@@ -6176,6 +6268,7 @@ var
   idx: Integer;
   inStrip: Boolean;
   w: TTyCustomToolWindow;
+  stop: TTyToolWindowStripStop;
 begin
   { 每次按下都新建一条记录。上一次手势丢了松开留下的一切 —— 临时光标、处理器、计时器、
     拉到一半的边 —— 在这里一次收干净,而且在继承之前:用户的 OnMouseDown 看到的是
@@ -6210,6 +6303,23 @@ begin
     if HostsTabRow then RowDown(TabRowHost, Button, Shift, X, Y);
     Exit;
   end;
+  { 键盘的焦点项跟着按下的那一项走(栏拿着焦点时才看得见;TabStop 开着的话,继承的 MouseDown
+    刚把焦点拿过来、落在默认的那一站上)。按在不是一站的东西上(禁用的)不动。 }
+  stop := Default(TTyToolWindowStripStop);
+  case part of
+    twbpItem:
+      begin
+        stop.Kind := twskWindow;
+        stop.Window := Windows[idx];
+      end;
+    twbpOverflow: stop.Kind := twskOverflow;
+    twbpCommand:
+      begin
+        stop.Kind := twskCommand;
+        stop.Command := FCommands[idx];
+      end;
+  end;
+  if stop.Kind <> twskNone then FocusStop(stop);
   if part in [twbpItem, twbpOverflow] then
   begin
     { 按下只武装,什么都不激活(spec §9.3「为什么松开才切」)。多击的按下照常武装
@@ -6458,6 +6568,15 @@ begin
     Handled := True;
     Exit;
   end;
+  { 键盘的右键请求((-1, -1))落在拿着焦点的栏自己身上 —— 不是子控件冒上来的:按焦点项走同一条路。
+    平时菜单键 / Shift+F10 在 KeyDown / KeyUp 里就吃掉了,到不了这里;这一支接的是平台不经按键、
+    直接发来的那一种。菜单由 KeyContextMenu 弹在那一格上(交给 LCL 的话弹在栏的左上角),所以答
+    「处理掉了」。 }
+  if (MousePos.X = -1) and (MousePos.Y = -1) and StripHasFocus and KeyContextMenu then
+  begin
+    Handled := True;
+    Exit;
+  end;
   if (MousePos.X <> -1) or (MousePos.Y <> -1) then
   begin
     FContextWindow := WindowAtPos(MousePos.X, MousePos.Y);
@@ -6470,7 +6589,7 @@ begin
     FContextWindow := nil;
     FContextCommand := nil;
   end;
-  { 挡的只是正文里的子控件冒上来的请求(落点在内容区,或菜单键的 (-1, -1):栏不拿焦点),好让它
+  { 挡的只是正文里的子控件冒上来的请求(落点在内容区,或栏自己没拿着焦点时菜单键的 (-1, -1)),好让它
     接着冒到窗体(spec §6.8)。图标条的空白、拉宽边是栏自己的像素:OnContextPopup、栏的菜单照常,
     ContextWindow 是 nil。 }
   FPopupBlocked := (FContextWindow = nil) and (((MousePos.X = -1) and (MousePos.Y = -1))
@@ -7572,6 +7691,13 @@ begin
     ResetGesture(twgeDiscard);
   if AWindow = FGesture.DesignWindow then FGesture.DisarmDesign;
   if AWindow = FContextWindow then FContextWindow := nil;
+  { 键盘的焦点项、按着的激活键记着它:清掉(焦点项回到默认的落点,那一下按键作废)。 }
+  if AWindow = FKeyStop.Window then FKeyStop := Default(TTyToolWindowStripStop);
+  if AWindow = FKeyArmedStop.Window then
+  begin
+    FKeyArmedStop := Default(TTyToolWindowStripStop);
+    FKeyArmed := 0;
+  end;
   { 最后一个窗口走了:边缘区不再起作用,拉到一半的也作废;最大化的底栏先还原(spec §6.4)。 }
   if EdgeResizing and (Length(FRegistered) = 0) then ResetGesture(twgeCancel);
   if Length(FRegistered) = 0 then Maximized := False;
@@ -8011,12 +8137,9 @@ end;
 procedure TTyCustomToolWindowBar.CommandsChanged;
 begin
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  { 刚被藏起来 / 禁用的那一项:悬停清掉,武装在它身上的那一下作废(松开不算点击)。 }
-  if (FCommandHover <> nil) and not (FCommandHover.Visible and FCommandHover.Enabled) then
-    FCommandHover := nil;
-  if (FCommandPressed <> nil) and not (FCommandPressed.Visible and FCommandPressed.Enabled) then
-    ResetGesture(twgeCancel);
-  { 有没有看得见的命令项决定没有窗口的侧栏藏不藏(HiddenAsEmpty):重推尺寸。 }
+  { 有没有看得见的命令项决定没有窗口的侧栏藏不藏(HiddenAsEmpty):重推尺寸。悬停、按下记在
+    某一项上的,它被禁用 / 藏起来之后不用在这里清:禁用的不画这两种状态、点了也不响
+    (CommandStates、ClickCommand),藏起来的没有格子。 }
   Relayout;
   Invalidate;
 end;
@@ -8025,6 +8148,12 @@ procedure TTyCustomToolWindowBar.CommandLeaving(ACommand: TTyToolWindowCommand);
 begin
   if ACommand = FCommandHover then FCommandHover := nil;
   if ACommand = FContextCommand then FContextCommand := nil;
+  if ACommand = FKeyStop.Command then FKeyStop := Default(TTyToolWindowStripStop);
+  if ACommand = FKeyArmedStop.Command then
+  begin
+    FKeyArmedStop := Default(TTyToolWindowStripStop);
+    FKeyArmed := 0;
+  end;
   if ACommand = FCommandPressed then
   begin
     FCommandPressed := nil;
@@ -8124,6 +8253,243 @@ begin
   { 处理器里可能把这一项删了:只比指针,在集合里才接着用它。 }
   if handled or not HasCommand(ACommand) then Exit;
   if ACommand.DropDownMenu <> nil then DropCommandMenu(ACommand);
+end;
+
+{ --- 用键盘操作图标条 ----------------------------------------------------------- }
+
+function SameStripStop(const A, B: TTyToolWindowStripStop): Boolean;
+begin
+  Result := (A.Kind = B.Kind) and (A.Window = B.Window) and (A.Command = B.Command);
+end;
+
+function TTyCustomToolWindowBar.StripHasFocus: Boolean;
+begin
+  Result := Focused;
+end;
+
+function TTyCustomToolWindowBar.StripStops: TTyToolWindowStripStops;
+var
+  L: TTyToolWindowBarLayout;
+  wins: TTyToolWindowArray;
+  w: TTyCustomToolWindow;
+  r: TRect;
+  i, n: Integer;
+begin
+  Result := nil;
+  { 底栏没有图标条。构造到一半、析构的尾巴上(没有命令项集合)也答空。 }
+  if (FPlacement = twpBottom) or (FCommands = nil) then Exit;
+  L := BarLayout;
+  wins := WindowList(nil);
+  SetLength(Result, Length(L.Slots) + 1 + Length(L.Commands));
+  n := 0;
+  for i := 0 to High(L.Slots) do
+  begin
+    if (L.Slots[i].ItemIndex < 0) or (L.Slots[i].ItemIndex > High(wins)) then Continue;
+    r := L.Slots[i].ItemRect;
+    if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Continue;   { 被条裁没了的格子 }
+    w := wins[L.Slots[i].ItemIndex];
+    { 点得动的才停:可用的窗口,或者当前页(禁用了也照样点它收起 / 展开,spec §3.7)。 }
+    if not (WindowClickable(w) or (w = FActive)) then Continue;
+    Result[n].Kind := twskWindow;
+    Result[n].Window := w;
+    Inc(n);
+  end;
+  if (L.Overflow.Right > L.Overflow.Left) and (L.Overflow.Bottom > L.Overflow.Top) then
+  begin
+    Result[n].Kind := twskOverflow;
+    Inc(n);
+  end;
+  for i := 0 to High(L.Commands) do
+  begin
+    if (L.Commands[i].ItemIndex < 0) or (L.Commands[i].ItemIndex >= FCommands.Count) then Continue;
+    if not FCommands[L.Commands[i].ItemIndex].Enabled then Continue;
+    Result[n].Kind := twskCommand;
+    Result[n].Command := FCommands[L.Commands[i].ItemIndex];
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
+function TTyCustomToolWindowBar.IndexOfStop(const AStops: TTyToolWindowStripStops;
+  const AStop: TTyToolWindowStripStop): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  if AStop.Kind = twskNone then Exit;
+  for i := 0 to High(AStops) do
+    if SameStripStop(AStops[i], AStop) then Exit(i);
+end;
+
+function TTyCustomToolWindowBar.DefaultStop(
+  const AStops: TTyToolWindowStripStops): TTyToolWindowStripStop;
+var
+  i: Integer;
+begin
+  Result := Default(TTyToolWindowStripStop);
+  if Length(AStops) = 0 then Exit;
+  for i := 0 to High(AStops) do
+    if (AStops[i].Kind = twskWindow) and (AStops[i].Window = FActive) then Exit(AStops[i]);
+  Result := AStops[0];
+end;
+
+function TTyCustomToolWindowBar.FocusedStop: TTyToolWindowStripStop;
+var
+  stops: TTyToolWindowStripStops;
+begin
+  stops := StripStops;
+  { 记着的那一站还在就是它;被禁用、藏起来、收进溢出了,就回到默认的落点。 }
+  if IndexOfStop(stops, FKeyStop) >= 0 then Result := FKeyStop
+  else Result := DefaultStop(stops);
+end;
+
+procedure TTyCustomToolWindowBar.SetKeyStop(const AStop: TTyToolWindowStripStop);
+begin
+  if SameStripStop(FKeyStop, AStop) then Exit;
+  FKeyStop := AStop;
+  if not (csDestroying in ComponentState) then Invalidate;
+end;
+
+function TTyCustomToolWindowBar.FocusStop(const AStop: TTyToolWindowStripStop): Boolean;
+begin
+  Result := IndexOfStop(StripStops, AStop) >= 0;
+  if Result then SetKeyStop(AStop);
+end;
+
+function TTyCustomToolWindowBar.StopRect(const AStop: TTyToolWindowStripStop): TRect;
+begin
+  case AStop.Kind of
+    twskWindow: Result := StripItemRect(IndexOfWindow(AStop.Window));
+    twskOverflow: Result := BarLayout.Overflow;
+    twskCommand: Result := CommandRect(AStop.Command.Index);
+  else
+    Result := Rect(0, 0, 0, 0);
+  end;
+end;
+
+function TTyCustomToolWindowBar.ActivateStop(const AStop: TTyToolWindowStripStop): Boolean;
+begin
+  Result := (IndexOfStop(StripStops, AStop) >= 0) and IsEnabled
+    and not (csDesigning in ComponentState);
+  if not Result then Exit;
+  { 每一种都是鼠标松开那一拍调的同一个入口:键盘激活就是点一下。 }
+  case AStop.Kind of
+    twskWindow: StripClick(AStop.Window);
+    twskOverflow: ShowOverflowMenu;
+    twskCommand: ClickCommand(AStop.Command);
+  end;
+end;
+
+function TTyCustomToolWindowBar.KeyContextMenu: Boolean;
+var
+  stop: TTyToolWindowStripStop;
+  r: TRect;
+  p: TPoint;
+  handled: Boolean;
+  menu: TPopupMenu;
+begin
+  Result := False;
+  stop := FocusedStop;
+  if stop.Kind = twskNone then Exit;
+  r := StopRect(stop);
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  Result := True;
+  { 等于在那一格的中心右键:同一个 DoContextPopup(按位置认出窗口 / 命令项、发 OnContextPopup),
+    处理器照鼠标那样用 MousePos、ContextWindow、ContextCommand 就行。 }
+  p := r.CenterPoint;
+  handled := False;
+  DoContextPopup(p, handled);
+  if handled then Exit;
+  { DoContextPopup 只发事件;弹菜单本来是 LCL 的 WM_CONTEXTMENU 在它之后做的,这里没有那一层,
+    自己补(同 HeaderContextPopup)。只在有句柄时弹。 }
+  menu := GetPopupMenu;
+  if menu = nil then
+  begin
+    { 栏没有菜单:同鼠标那一路,请求接着往上交(窗体的 PopupMenu)。 }
+    if HandleAllocated then PassContextPopupUp(ClientToScreen(p));
+    Exit;
+  end;
+  if not menu.AutoPopup or not HandleAllocated then Exit;
+  menu.PopupComponent := Self;
+  p := ClientToScreen(p);
+  menu.PopUp(p.X, p.Y);
+end;
+
+procedure TTyCustomToolWindowBar.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  stops: TTyToolWindowStripStops;
+  mods: TShiftState;
+  idx: Integer;
+begin
+  { 用户的 OnKeyDown 在前,把 Key 置 0 就拦住下面这些。 }
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or (csDesigning in ComponentState) or not IsEnabled then Exit;
+  stops := StripStops;
+  { 底栏、空条:一个键都不吃。 }
+  if Length(stops) = 0 then Exit;
+  mods := Shift * [ssShift, ssAlt, ssCtrl, ssMeta];
+  { 激活键和菜单键:按下只记着(按住不放的自动重复也只是再记一遍),松开才动手。吃掉按下:
+    Enter 不再去点窗体的默认按钮,Shift+F10 不再由平台另发一条右键请求。 }
+  if (((Key = VK_RETURN) or (Key = VK_SPACE) or (Key = VK_APPS)) and (mods = []))
+     or ((Key = VK_F10) and (mods = [ssShift])) then
+  begin
+    FKeyArmed := Key;
+    FKeyArmedStop := FocusedStop;
+    Key := 0;
+    Exit;
+  end;
+  if mods <> [] then Exit;
+  idx := IndexOfStop(stops, FocusedStop);
+  { 图标条是竖的:Up / Down 沿着它走,Left / Right 不归它。到头停住、不绕回去(同 TTyTabSet 的
+    方向键),键照样吃掉 —— 漏出去的方向键会被 LCL 拿去把焦点挪给兄弟控件。 }
+  case Key of
+    VK_UP: Dec(idx);
+    VK_DOWN: Inc(idx);
+    VK_HOME: idx := 0;
+    VK_END: idx := High(stops);
+  else
+    Exit;
+  end;
+  Key := 0;
+  if idx < 0 then idx := 0;
+  if idx > High(stops) then idx := High(stops);
+  SetKeyStop(stops[idx]);
+end;
+
+procedure TTyCustomToolWindowBar.KeyUp(var Key: Word; Shift: TShiftState);
+var
+  pressed: Word;
+  stop: TTyToolWindowStripStop;
+begin
+  pressed := Key;
+  inherited KeyUp(Key, Shift);
+  if (pressed = 0) or (pressed <> FKeyArmed) then Exit;
+  stop := FKeyArmedStop;
+  FKeyArmed := 0;
+  { 用户的 OnKeyUp 拦掉了。 }
+  if Key = 0 then Exit;
+  { 吃掉松开:菜单键的松开交给平台的话,它会再发一条 (-1, -1) 的右键请求。 }
+  Key := 0;
+  { 按下之后焦点项换了(挪走了、那一站没了):这一下作废。 }
+  if not SameStripStop(stop, FocusedStop) then Exit;
+  if (pressed = VK_APPS) or (pressed = VK_F10) then KeyContextMenu
+  else ActivateStop(stop);
+end;
+
+procedure TTyCustomToolWindowBar.DoEnter;
+begin
+  { 每次进来都落在当前页的图标上(没有就第一站),不记上一次停在哪;鼠标点进来的,MouseDown
+    接着把它挪到按下的那一项。 }
+  FKeyStop := DefaultStop(StripStops);
+  FKeyArmed := 0;
+  inherited DoEnter;
+end;
+
+procedure TTyCustomToolWindowBar.DoExit;
+begin
+  { 按着的键跟着焦点走了,松开不会再到这里。 }
+  FKeyArmed := 0;
+  inherited DoExit;
 end;
 
 { --- TTyToolWindowGesture ------------------------------------------------------ }
@@ -8283,7 +8649,8 @@ begin
   FCursor := crDrag;
   Screen.BeginTempCursor(FCursor);
   FCursorPushed := True;
-  { 图标条 / 标签行不拿焦点,Esc 到不了控件的 KeyDown:挂在 Application 的 KeyDownBefore 上。 }
+  { 拖动时焦点多半不在图标条 / 标签行上(标签行从不拿焦点,图标条默认不是 Tab 停靠点),Esc 到不了
+    控件的 KeyDown:挂在 Application 的 KeyDownBefore 上。 }
   Application.AddOnKeyDownBeforeHandler(@KeyDownBefore);
   Screen.AddHandlerActiveFormChanged(@ActiveFormChanged);
   FHooked := True;
