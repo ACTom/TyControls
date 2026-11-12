@@ -1063,6 +1063,18 @@ begin
   end;
 end;
 
+// The character \uN names: N as it is, a negative N as N + 65536 (a 16-bit number written
+// signed). A number that is no character - a damaged file - reads as U+FFFD: one character
+// for the index scan and for the text, never bytes that are no UTF-8.
+function UnicodeOfParam(AParam: Integer): Cardinal;
+var
+  v: Int64;
+begin
+  v := AParam;
+  if v < 0 then Inc(v, 65536);
+  if (v < 0) or (v > $10FFFF) then Result := $FFFD else Result := v;
+end;
+
 // CJK ideographs, kana, Hangul, Bopomofo, CJK punctuation and the full-width forms: the
 // characters Word gives the double-byte font.
 function IsEastAsian(ACode: Cardinal): Boolean;
@@ -2608,6 +2620,11 @@ begin
 end;
 
 procedure TTyRtfParser.FontWord(AKw: Integer);
+var
+  code: Cardinal;
+  buf: TBytes;
+  len: PtrInt;
+  utf: UTF8String;
 begin
   case AKw of
     kwF: BeginFontEntry(FTok.Param);
@@ -2620,10 +2637,15 @@ begin
         FEntry.Name := FEntry.Name + DecodeRaw(FEntryRaw,
           ResolveCodePage(FEntry.Charset, FEntry.Cpg));
         FEntryRaw := '';
-        if FTok.Param < 0 then
-          FEntry.Name := FEntry.Name + UTF8Encode(WideChar(FTok.Param + 65536))
-        else
-          FEntry.Name := FEntry.Name + UTF8Encode(WideChar(FTok.Param));
+        // (a name has no place for a surrogate pair: a half reads as U+FFFD)
+        code := UnicodeOfParam(FTok.Param);
+        if (code >= $D800) and (code <= $DFFF) then code := $FFFD;
+        buf := nil;
+        len := 0;
+        UtfPut(buf, len, code);
+        SetLength(utf, len);
+        Move(buf[0], utf[1], len);
+        FEntry.Name := FEntry.Name + utf;
         FS.UcSkip := FS.Props.Uc;
       end;
   end;
@@ -3476,7 +3498,7 @@ var
   c: Cardinal;
 begin
   if not (FS.Props.Dest in [rdNormal, rdFieldResult]) then Exit;
-  if AValue < 0 then c := AValue + 65536 else c := AValue;
+  c := UnicodeOfParam(AValue);
   if FS.PendingLead >= 0 then
   begin
     FS.PendingLead := -1;

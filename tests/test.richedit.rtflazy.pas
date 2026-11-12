@@ -652,7 +652,7 @@ end;
 
 procedure TTyRtfLazyTest.TestIndexCountsAreTheFullParse;
 const
-  Inline: array[0..6] of RawByteString = (
+  Inline: array[0..9] of RawByteString = (
     // the halves of a pair in two fonts of one code page do not join
     '{\rtf1\ansi\ansicpg936{\fonttbl{\f0\fcharset134 S;}{\f1\fcharset134 H;}}' +
       '\f0 x\''d6\f1\''d0 z\par}',
@@ -667,7 +667,11 @@ const
     // \bin data, unknown words and symbols in the body
     '{\rtf1 a\foo7\bar-3 b{\*\baz q}\|c{\pict\pngblip\bin3 {}} d\par e}',
     // a group that opens with an unknown word, groups with nothing in them
-    '{\rtf1 {\qwe a}{{}}\par{\b\par}{\i x}}');
+    '{\rtf1 {\qwe a}{{}}\par{\b\par}{\i x}}',
+    // \u with a number that is no character: counted as the one character it reads as
+    '{\rtf1 a\u1114112?b\par c\par}',
+    '{\rtf1 a\u-70000?b\u70000?\par c\par}',
+    '{\rtf1 a\u2147483647?b\par c\par}');
 var
   sr: TSearchRec;
   b: TBytes;

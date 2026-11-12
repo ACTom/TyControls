@@ -1439,10 +1439,13 @@ begin
 end;
 
 procedure TTyRtfReadTest.TestMalformedInput;
+const
+  OutOfRange: array[0..3] of string = ('1114112', '-70000', '2147483647', '-99999999999999');
 var
   d: TTyRichDocument;
   m: TTyRtfSourceMap;
   raised: Boolean;
+  i: Integer;
 begin
   // not RTF
   raised := False;
@@ -1509,6 +1512,54 @@ begin
     '\fs99999999999999 b\par}');
   try
     CheckParas('deep', d, ['ab']);
+  finally
+    d.Free;
+  end;
+  // \u with a number no character has (one too many, below the 16-bit range, saturated):
+  // U+FFFD, one character in the index and in the text alike
+  for i := 0 to High(OutOfRange) do
+  begin
+    d := LoadString('{\rtf1 a\u' + OutOfRange[i] + '?b\par c\par}');
+    try
+      CheckParas('\u' + OutOfRange[i], d, ['a' + UC($FFFD) + 'b', 'c']);
+      AssertEquals('\u' + OutOfRange[i] + ': characters', 3, d.Text.ParaLength(0));
+    finally
+      d.Free;
+    end;
+  end;
+  // ... and in a font's name
+  d := LoadString('{\rtf1{\fonttbl{\f0 A\u1114112?B;}}\f0 x\par}');
+  try
+    AssertText('a font name with \u out of range', U('A' + UC($FFFD) + 'B'), CharAt(d, 0, 0).FontName);
+  finally
+    d.Free;
+  end;
+  d := LoadString('{\rtf1{\fonttbl{\f0 A\u-10179?B;}}\f0 x\par}');
+  try
+    AssertText('a font name with half a surrogate pair', U('A' + UC($FFFD) + 'B'),
+      CharAt(d, 0, 0).FontName);
+  finally
+    d.Free;
+  end;
+  // a huge \uc: the fallback runs to the next control word, no further
+  d := LoadString('{\rtf1 a\uc99999999999999\u20013 xyz\par b\par}');
+  try
+    CheckParas('huge \uc', d, ['a' + UC(20013), 'b']);
+  finally
+    d.Free;
+  end;
+  // \bin with a negative count has no data; one too long for a number takes what is there
+  d := LoadString('{\rtf1 a{\pict\pngblip\bin-5 4142}b\par}');
+  try
+    CheckParas('\bin-5', d, ['a' + ObjChar + 'b']);
+    AssertEquals('\bin-5: the hex after it is the data', 2, Length((ObjAt(d, 0, 1) as TTyRichPicture).Data));
+  finally
+    d.Free;
+  end;
+  d := LoadString('{\rtf1 a{\pict\pngblip\bin99999999999999999999 xy}b\par}');
+  try
+    CheckParas('\bin saturated', d, ['a' + ObjChar]);
+    AssertEquals('\bin saturated: to the end of the file', 9, Length((ObjAt(d, 0, 1) as TTyRichPicture).Data));
   finally
     d.Free;
   end;
