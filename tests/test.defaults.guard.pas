@@ -37,7 +37,7 @@ uses
   tyControls.Dialogs.About, tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.ExPanel, tyControls.Accordion, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
@@ -62,8 +62,8 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..195] of TComponentClass = (
-    TTyAboutDialog, TTyActivityBar, TTyActivityIndicator,
+  Palette: array[0..196] of TComponentClass = (
+    TTyAboutDialog, TTyAccordion, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
     TTyBreadcrumb, TTyButton, TTyButtonGroup, TTyCalcCurrencyEdit,

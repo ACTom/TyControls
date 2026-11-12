@@ -26,7 +26,7 @@ $classes = @(
   # Phase 5 containers & layout
   'TTyBevel','TTyDivider','TTyPaintPanel','TTySizeBox',
   'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel',
-  'TTyScrollBox','TTyScrollPanel','TTyExPanel','TTyExPanelActions',
+  'TTyScrollBox','TTyScrollPanel','TTyExPanel','TTyExPanelActions','TTyAccordion',
   'TTyGridPanel','TTyRelativePanel',
   'TTyToolBarEx','TTyControlBar','TTyCoolBar',
   'TTyHeaderControl','TTyListGroupPanel','TTyToolWindowBar','TTyToolWindowManager',

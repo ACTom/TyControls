@@ -22,7 +22,7 @@ uses
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
   tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
+  tyControls.ExPanel, tyControls.Accordion, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface, tyControls.Frame,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
@@ -486,7 +486,8 @@ initialization
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,
-    TTySizeBox, TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyExPanelActions, TTyGridPanel,
+    TTySizeBox, TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyExPanelActions, TTyAccordion,
+    TTyGridPanel,
     TTyRelativePanel,
     TTyToolGroupPanel, TTyListGroupPanel, TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
     TTyCard, TTyEmpty, TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView,

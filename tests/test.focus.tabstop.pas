@@ -37,7 +37,7 @@ uses
   tyControls.Panel, tyControls.Card, tyControls.GroupBox, tyControls.TabSheet,
   tyControls.FormSurface, tyControls.ToolBar, tyControls.StatusBar,
   tyControls.Ribbon, tyControls.RibbonQuickAccess, tyControls.Empty,
-  tyControls.Splitter, tyControls.ExPanel, tyControls.CheckGroup,
+  tyControls.Splitter, tyControls.ExPanel, tyControls.Accordion, tyControls.CheckGroup,
   tyControls.RadioGroup, tyControls.ToolGroupPanel, tyControls.ScrollBox,
   tyControls.RelativePanel, tyControls.PaintPanel, tyControls.ControlBar,
   tyControls.Transfer, tyControls.Steps,
@@ -399,6 +399,9 @@ begin
     { The action area of a collapsible panel's header: a row that hosts buttons, never the
       focus itself. }
     TTyExPanelActions,
+    { A stack of collapsible panels: the headers of its sections take the focus (when the
+      form makes them tab stops), the stack itself never does. }
+    TTyAccordion,
     { TTyDBRadioGroup is a radio group: its buttons take the focus, as TTyRadioGroup's do. }
     TTyDBRadioGroup,
     { TTyDBNavigator's buttons are painted rects, not windows, and a record command acts on the

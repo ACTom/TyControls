@@ -59,7 +59,7 @@ uses
   tyControls.Chart, tyControls.HtmlLabel,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
-  tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
+  tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel, tyControls.Accordion,
   tyControls.GridPanel, tyControls.GridCell, tyControls.RelativePanel,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
@@ -177,7 +177,8 @@ begin
   // Containers & layout.
   RegisterComponents('TyControls Containers',
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
-     TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyExPanelActions, TTyGridPanel, TTyRelativePanel,
+     TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyExPanelActions, TTyAccordion, TTyGridPanel,
+     TTyRelativePanel,
      TTyToolGroupPanel, TTyListGroupPanel,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
      TTyCard, TTyEmpty, TTyToolWindowBar, TTyToolWindowManager]);

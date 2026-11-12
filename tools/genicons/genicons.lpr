@@ -427,6 +427,21 @@ begin
   FillRRect(b,17,9.5,20,14.5,0.8,Acc);
 end;
 
+{ TTyAccordion: three section headers stacked in one frame, each with its chevron -- the
+  middle section open (accent chevron pointing down, its body under it), the other two closed }
+procedure GAccordion(b: TBGRABitmap);
+begin
+  RRect(b,3,3.5,21,20.5,2,Ink);
+  Line(b,3,8,21,8,Ink,1); Line(b,3,16,21,16,Ink,1);
+  PolyL(b,[PointF(5.6,4.9),PointF(7,5.8),PointF(5.6,6.7)],Ink,1.2);
+  Line(b,9.2,5.8,16.5,5.8,Faint,1.2);
+  PolyL(b,[PointF(5.1,9.8),PointF(6.2,11.1),PointF(7.3,9.8)],Acc,1.4);
+  Line(b,9.2,10.4,16.5,10.4,Ink,1.2);
+  Line(b,6,13.4,17.5,13.4,Faint,1.2);
+  PolyL(b,[PointF(5.6,17.3),PointF(7,18.2),PointF(5.6,19.1)],Ink,1.2);
+  Line(b,9.2,18.2,16.5,18.2,Faint,1.2);
+end;
+
 { TTyGridPanel: a rounded frame carved into a 3x2 cell grid, top-left cell accent-filled }
 procedure GGridPanel(b: TBGRABitmap);
 begin
@@ -1007,7 +1022,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..194] of TGlyph = (
+  Glyphs: array[0..195] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1138,6 +1153,7 @@ const
     (Name:'TTyScrollPanel';       Draw:@GScrollPanel),
     (Name:'TTyExPanel';           Draw:@GExPanel),
     (Name:'TTyExPanelActions';    Draw:@GExPanelActions),
+    (Name:'TTyAccordion';         Draw:@GAccordion),
     (Name:'TTyGridPanel';         Draw:@GGridPanel),
     (Name:'TTyRelativePanel';     Draw:@GRelativePanel),
     (Name:'TTyToolBarEx';         Draw:@GToolBarEx),

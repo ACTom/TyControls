@@ -14,6 +14,7 @@ uses
   Classes,
   tyControls.Accel,
   tyControls.Accessible,
+  tyControls.Accordion,
   tyControls.ActivityBar,
   tyControls.ActivityIndicator,
   tyControls.AdvancedComboBox,
@@ -234,6 +235,8 @@ end;
 
 procedure PrRegisterClasses;
 begin
+  Reg(TTyCustomAccordion);
+  Reg(TTyAccordion);
   Reg(TTyCustomActivityBar);
   Reg(TTyActivityBar);
   Reg(TTyCustomActivityIndicator);
@@ -399,6 +402,8 @@ begin
   Reg(TTyEdit);
   Reg(TTyCustomEmpty);
   Reg(TTyEmpty);
+  Reg(TTyCustomExPanelActions);
+  Reg(TTyExPanelActions);
   Reg(TTyCustomExPanel);
   Reg(TTyExPanel);
   Reg(TTyCustomFilterComboBox);
