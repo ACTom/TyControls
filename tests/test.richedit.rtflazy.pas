@@ -63,6 +63,7 @@ type
     procedure TestUntouchedCellsStayTheFilesOwnAfterTheirIntervalGoes;
     procedure TestAnIntervalParsedAgainInsideAScopeKeepsItsParagraphs;
     procedure TestARowWithANestedTableIsSavedAsItWas;
+    procedure TestTheFullLoadIsOneParseThatStays;
   end;
 
 implementation
@@ -1916,6 +1917,103 @@ procedure TTyRtfLazyTest.TestARowWithANestedTableIsSavedAsItWas;
 begin
   Check('hand-word-table-merged.rtf', 7);
   Check('word-table-merged.rtf', 6);
+end;
+
+{ TyRichLoadRtfFull is what the other tests compare parsing on demand with: it must not be
+  that same path under another name. The whole file is read by one parse from its first
+  byte - no snapshot is resumed, no table is cut where intervals meet - and what it set
+  stays, whatever the limit of parsed intervals. The document still has its load (a writer
+  copies its paragraphs as the file's own bytes). }
+procedure TTyRtfLazyTest.TestTheFullLoadIsOneParseThatStays;
+var
+  b, o: TBytes;
+  full, lazy: TTyRichDocument;
+  load: TTyRtfLoad;
+  i, n, first, last: Integer;
+  t: TTyRichTable;
+  s: TBytesStream;
+  range: TTyRtfRange;
+  m: TTyRtfSourceMap;
+begin
+  // a table of 1.5 MB (parsed on demand it is cut into parts) between plain paragraphs
+  b := TableDocument(400, 12000);
+  m := TTyRtfSourceMap.Create;
+  full := LoadWith(b, True, m);
+  lazy := LoadWith(b, False);
+  try
+    load := TyRichRtfLoadOf(full);
+    AssertTrue('the document has its load', load <> nil);
+    AssertTrue('which says it was parsed as a whole', load.Whole);
+    AssertFalse('a document parsed on demand does not', TyRichRtfLoadOf(lazy).Whole);
+    AssertTrue('the file has many intervals', load.IntervalCount > 20);
+    AssertEquals('one parse', 1, load.ParseCount);
+    AssertTrue(Format('of the whole file: %d bytes', [load.ParsedBytes]),
+      (load.ParsedBytes >= load.Trailer.Start) and (load.ParsedBytes <= Length(b)));
+    AssertEquals('every interval is parsed', load.IntervalCount, load.ResidentIntervals);
+    AssertEquals('nothing was parsed in the other document', 0, TyRichRtfLoadOf(lazy).ParseCount);
+    AssertFalse('loading is no change', full.Modified);
+    AssertFalse('it can be changed', full.Loading);
+    n := full.Text.ParaCount;
+    AssertEquals('as many paragraphs', lazy.Text.ParaCount, n);
+    // every paragraph has its formats before anybody reads it; parsed on demand none has
+    for i := 0 to n - 1 do
+    begin
+      if TBuilderAccess.Value(full, i) = nil then Fail(Format('paragraph %d is set by the load', [i]));
+      if TBuilderAccess.Value(lazy, i) <> nil then Fail(Format('paragraph %d is not set on demand yet', [i]));
+    end;
+    // the map is the index's
+    AssertEquals('the map has every paragraph', n, m.ParaCount);
+    AssertEquals('the map''s header', load.Header.Stop, m.Header.Stop);
+    AssertEquals('the map''s trailer', load.Trailer.Start, m.Trailer.Start);
+    // the table is one table: not cut, not locked
+    first := -1;
+    for i := 0 to n - 1 do
+      if full.TableAt(i) <> nil then
+      begin
+        first := i;
+        Break;
+      end;
+    AssertTrue('there is a table', first >= 0);
+    t := full.TableAt(first);
+    AssertTrue('its paragraphs', full.TableParas(first, i, last));
+    AssertEquals('it starts where it was found', first, i);
+    AssertEquals('all its rows are one table''s', 12000, t.RowCount);
+    AssertFalse('which is whole', t.StructureLocked);
+    AssertTrue('parsed on demand it is a part', lazy.TableAt(first).StructureLocked);
+    // reading everything parses nothing more, and nothing goes when the limit is one
+    load.MaxResidentIntervals := 1;
+    for i := 0 to n - 1 do
+    begin
+      full.EnsureParsed(i);
+      if i mod 997 = 0 then ParaText(full, i);
+    end;
+    load.Trim;
+    AssertEquals('still one parse', 1, load.ParseCount);
+    AssertEquals('still every interval', load.IntervalCount, load.ResidentIntervals);
+    AssertTrue('the table is the object it was', full.TableAt(first) = t);
+    AssertTrue('and its last paragraph has it too', full.TableAt(last) = t);
+    // every paragraph is the file's own: saved, it is the file
+    for i := 0 to n - 1 do
+      if not load.ParaSource(i, range) then Fail(Format('paragraph %d is the file''s own', [i]));
+    s := TBytesStream.Create;
+    try
+      TyRichSaveRtf(full, s);
+      o := Copy(s.Bytes, 0, s.Size);
+    finally
+      s.Free;
+    end;
+    AssertEquals('saved: as long as the file', Length(b), Length(o));
+    AssertTrue('saved: the file', CompareMem(@b[0], @o[0], Length(b)));
+    // an edit, and undoing it: nothing is parsed for either
+    AssertTrue('typed', full.Execute(TTyRichInsertText.Create(full.Text.ParaStart(first), 'X')));
+    AssertFalse('the edited paragraph is no longer the file''s', load.ParaSource(first, range));
+    AssertTrue('its neighbour is', load.ParaSource(first + 1, range));
+    AssertEquals('an edit parses nothing', 1, load.ParseCount);
+  finally
+    lazy.Free;
+    full.Free;
+    m.Free;
+  end;
 end;
 
 initialization

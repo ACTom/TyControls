@@ -614,6 +614,9 @@ type
     FUsedLength: Int64;
     FParsedBytes: Int64;
     FParseCount: Integer;
+    FWhole: Boolean;
+    FCheck: TTyRtfGroup;             // ParseWhole: the group being compared with the index
+    FCheckBad: Integer;
     FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
     FOnLoadProgress: TTyRtfProgressEvent;
     procedure Index(ABudget: Int64; AMinParas: Integer);
@@ -630,6 +633,10 @@ type
     function GroupOf(ASrc: Int64): TTyRtfGroup;
     function GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
     function ParseGroup(AInterval: Integer): TTyRtfGroup;
+    function GroupFrom(AParser: TTyRtfParser; AFirst, ALast: Integer): TTyRtfGroup;
+    procedure ParseWhole;
+    procedure CheckWhole(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
     procedure Touch(AGroup: TTyRtfGroup);
     procedure Used(AIndex: Integer);
     function KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
@@ -696,6 +703,9 @@ type
     // What parsing on demand did (tests and probes)
     property ParsedBytes: Int64 read FParsedBytes;
     property ParseCount: Integer read FParseCount;
+    // The file was parsed as a whole (TyRichLoadRtfFull): one parse from its first byte to
+    // its last set every paragraph, and nothing is ever sent back to unparsed.
+    property Whole: Boolean read FWhole;
     function SnapshotCount: Integer;
     // Interval i (0 .. IntervalCount - 1): its bytes start at IntervalStart (interval 0 at
     // the start of the file, the others at their snapshot); its first paragraph.
@@ -739,8 +749,12 @@ function TyRichBeginLoadRtf(ADoc: TTyRichDocument; AStream: TStream;
 // TyRichBeginLoadRtf and then Step to the end, raising OnChange once. AMap, when given, gets
 // the file's bytes and how they were cut.
 procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap = nil);
-// The whole document parsed at once, as before parsing on demand: for comparison (tests) and
-// for callers that want every paragraph read right away.
+// As TyRichLoadRtf, and then the whole file parsed at once: one parse from the first byte to
+// the last - not interval by interval from the snapshots - sets every paragraph's formats
+// and text, and they stay (TTyRtfLoad.Whole). For comparison (tests) and for callers that
+// want every paragraph read right away. The document has its load like any other read from
+// RTF, so it is saved as its file: unchanged paragraphs as their bytes, with the file's
+// header. Raises ETyRichRtf when the parse and the index do not find the same paragraphs.
 procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap = nil);
 // The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
 // TyRichBeginLoadRtf), or after it was replaced.
@@ -4520,75 +4534,6 @@ end;
 
 // ---- loading ----
 
-type
-  TRtfFiller = class(TTyRichDocBuilder)
-  public
-    class procedure Fill(ADoc: TTyRichDocument; AParser: TTyRtfParser);
-  end;
-
-class procedure TRtfFiller.Fill(ADoc: TTyRichDocument; AParser: TTyRtfParser);
-var
-  text: TTyRichText;
-  handler: TTyRichChangeEvent;
-  change: TTyRichChange;
-  tables: array of TTyRichTable;
-  i, j: Integer;
-  rec: TTyRtfParaRec;
-  tr: TTyRtfTableRec;
-  cell: TTyRichCell;
-  t: TTyRichTable;
-begin
-  text := TTyRichText.CreateFromUtf8(AParser.TextBytes);
-  if text.ParaCount <> AParser.ParaCount then
-  begin
-    text.Free;
-    raise ETyRichRtf.CreateFmt('RTF reader: %d paragraphs read, but the text has %d',
-      [AParser.ParaCount, text.ParaCount]);
-  end;
-  change := Default(TTyRichChange);
-  change.Kinds := [rckText, rckFormat, rckStructure];
-  change.OldLen := ADoc.Text.Length;
-  change.OldParaCount := ADoc.Text.ParaCount;
-  // the one change is reported when the formats are in place, not while the text is plain
-  handler := ADoc.OnChange;
-  ADoc.OnChange := nil;
-  tables := nil;
-  try
-    ReplaceText(ADoc, text);
-    SetDefaultCharFormat(ADoc, AParser.DefaultCharFormat);
-    SetPage(ADoc, AParser.PaperWidth, AParser.PaperHeight, AParser.MarginLeft,
-      AParser.MarginRight);
-    SetLength(tables, AParser.TableCount);
-    for i := 0 to AParser.TableCount - 1 do
-    begin
-      tr := AParser.TableRec(i);
-      if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
-      else t := TTyRichTable.Create([], tr.Locked);
-      tables[i] := t;
-      for j := 0 to tr.RowCount - 1 do
-        t.AddRow(tr.Rows[j].CellCount, AParser.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
-          tr.Rows[j].Nested);
-    end;
-    for i := 0 to AParser.ParaCount - 1 do
-    begin
-      rec := AParser.ParaRec(i);
-      cell := nil;
-      if (rec.Table >= 0) and (rec.Table < Length(tables)) and
-         (rec.Row < tables[rec.Table].RowCount) and
-         (rec.Cell < tables[rec.Table].Rows[rec.Row].CellCount) then
-        cell := tables[rec.Table].Rows[rec.Row].Cells[rec.Cell];
-      SetParagraph(ADoc, i, rec.Format, rec.Runs, cell);
-    end;
-  finally
-    for i := 0 to High(tables) do
-      if (tables[i] <> nil) and (tables[i].RefCount = 0) then tables[i].Free;
-    ADoc.OnChange := handler;
-  end;
-  change.NewLen := ADoc.Text.Length;
-  change.NewParaCount := ADoc.Text.ParaCount;
-  if Assigned(handler) then handler(ADoc, change);
-end;
-
 function ReadRtfBytes(AStream: TStream): TBytes;
 const
   Signature: array[0..4] of Char = '{\rtf';
@@ -4604,30 +4549,6 @@ begin
   end;
   if (n < 5) or not CompareMem(@Result[0], @Signature[0], 5) then
     raise ETyRichRtf.Create('This is no RTF: it does not start with {\rtf');
-end;
-
-procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
-var
-  bytes: TBytes;
-  p: TTyRtfParser;
-  i: Integer;
-begin
-  bytes := ReadRtfBytes(AStream);
-  p := TTyRtfParser.Create(bytes, ADoc.Formats);
-  try
-    p.Parse;
-    TRtfFiller.Fill(ADoc, p);
-    if AMap <> nil then
-    begin
-      AMap.Bytes := bytes;
-      AMap.Header := Range(0, p.HeaderEnd);
-      SetLength(AMap.Paras, p.ParaCount);
-      for i := 0 to p.ParaCount - 1 do AMap.Paras[i] := p.ParaRec(i).Src;
-      AMap.Trailer := Range(p.TrailerStart, Length(bytes));
-    end;
-  finally
-    p.Free;
-  end;
 end;
 
 // ---- parsing on demand ----
@@ -5092,13 +5013,9 @@ end;
 // there.
 function TTyRtfLoad.ParseGroup(AInterval: Integer): TTyRtfGroup;
 var
-  s, e, lo, hi, i, j, k, n, lastPara: Integer;
-  x: TTyRtfTableExtent;
+  s, e, lo, hi, i: Integer;
   p: TTyRtfParser;
   start: PtrInt;
-  tr: TTyRtfTableRec;
-  t: TTyRichTable;
-  global: Int64;
 begin
   if not Linked(AInterval, 0, FIntervalN - 1, CRtfGroupIntervals, s, e) then
   begin
@@ -5107,7 +5024,6 @@ begin
     if hi > FIntervalN - 1 then hi := FIntervalN - 1;
     Linked(AInterval, lo, hi, MaxInt, s, e);
   end;
-  lastPara := IntervalParaStop(e) - 1;
   // one group per interval: what overlaps this one goes (it was parsed while the file was
   // still being indexed, or before a table it shares was known in full)
   for i := FGroups.Count - 1 downto 0 do
@@ -5124,62 +5040,135 @@ begin
     p.ParseUntil(High(PtrInt), IntervalParaStop(e));
     Inc(FParsedBytes, p.Position - start);
     Inc(FParseCount);
-    Result := TTyRtfGroup.Create;
-    Result.FirstSnap := s;
-    Result.LastSnap := e;
-    // from the first paragraph after snapshot s to the last before snapshot e + 1 (the last
-    // interval: to the last paragraph the scan has ended)
-    n := p.ParaCount;
-    SetLength(Result.Recs, n);
-    SetLength(Result.Texts, n);
-    SetLength(Result.Values, n);
-    SetLength(Result.States, n);
-    for i := 0 to n - 1 do
-    begin
-      Result.Recs[i] := p.ParaRec(i);
-      Result.Texts[i] := p.ParaText(i);
-    end;
-    Result.Objects := p.TakeObjects;
-    // the tables, as Fill makes them; one that reaches outside these intervals (a big one,
-    // one cut at a block's end), or is still open at the end of what is indexed, is only a
-    // part of its table: it cannot grow
-    SetLength(Result.Tables, p.TableCount);
-    for i := 0 to p.TableCount - 1 do
-    begin
-      tr := p.TableRec(i);
-      j := -1;
-      for k := 0 to n - 1 do
-        if Result.Recs[k].Table = i then
-        begin
-          j := k;
-          Break;
-        end;
-      if j >= 0 then
-      begin
-        global := FIntervalPara[s] + j;
-        k := ExtentAt(global);
-        if k >= 0 then
-        begin
-          x := FScan.TableExtent(k);
-          if (x.LastPara < 0) or ((x.LastPara >= global) and
-             ((x.FirstPara < FIntervalPara[s]) or (x.LastPara > lastPara))) then
-            tr.Locked := True;
-        end;
-      end;
-      if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
-      else t := TTyRichTable.Create([], tr.Locked);
-      t.AddRef;
-      Result.Tables[i] := t;
-      for j := 0 to tr.RowCount - 1 do
-        t.AddRow(tr.Rows[j].CellCount, p.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
-          tr.Rows[j].Nested);
-    end;
+    Result := GroupFrom(p, s, e);
   finally
     p.Free;
   end;
   FGroups.Add(Result);
   Inc(FResident, e - s + 1);
   Touch(Result);
+end;
+
+// What a parser read of intervals AFirst .. ALast, as a group: its paragraphs, their texts,
+// its objects and its tables.
+function TTyRtfLoad.GroupFrom(AParser: TTyRtfParser; AFirst, ALast: Integer): TTyRtfGroup;
+var
+  i, j, k, n, lastPara: Integer;
+  x: TTyRtfTableExtent;
+  tr: TTyRtfTableRec;
+  t: TTyRichTable;
+  global: Int64;
+begin
+  lastPara := IntervalParaStop(ALast) - 1;
+  Result := TTyRtfGroup.Create;
+  Result.FirstSnap := AFirst;
+  Result.LastSnap := ALast;
+  // from the first paragraph after snapshot AFirst to the last before snapshot ALast + 1
+  // (the last interval: to the last paragraph the scan has ended)
+  n := AParser.ParaCount;
+  SetLength(Result.Recs, n);
+  SetLength(Result.Texts, n);
+  SetLength(Result.Values, n);
+  SetLength(Result.States, n);
+  for i := 0 to n - 1 do
+  begin
+    Result.Recs[i] := AParser.ParaRec(i);
+    Result.Texts[i] := AParser.ParaText(i);
+  end;
+  Result.Objects := AParser.TakeObjects;
+  // the tables; one that reaches outside these intervals (a big one, one cut at a block's
+  // end), or is still open at the end of what is indexed, is only a part of its table: it
+  // cannot grow
+  SetLength(Result.Tables, AParser.TableCount);
+  for i := 0 to AParser.TableCount - 1 do
+  begin
+    tr := AParser.TableRec(i);
+    j := -1;
+    for k := 0 to n - 1 do
+      if Result.Recs[k].Table = i then
+      begin
+        j := k;
+        Break;
+      end;
+    if j >= 0 then
+    begin
+      global := FIntervalPara[AFirst] + j;
+      k := ExtentAt(global);
+      if k >= 0 then
+      begin
+        x := FScan.TableExtent(k);
+        if (x.LastPara < 0) or ((x.LastPara >= global) and
+           ((x.FirstPara < FIntervalPara[AFirst]) or (x.LastPara > lastPara))) then
+          tr.Locked := True;
+      end;
+    end;
+    if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
+    else t := TTyRichTable.Create([], tr.Locked);
+    t.AddRef;
+    Result.Tables[i] := t;
+    for j := 0 to tr.RowCount - 1 do
+      t.AddRow(tr.Rows[j].CellCount, AParser.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
+        tr.Rows[j].Nested);
+  end;
+end;
+
+procedure TTyRtfLoad.CheckWhole(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+  var AContinue: Boolean);
+begin
+  if (AIndex > High(FCheck.Recs)) or (FCheck.Recs[AIndex].Src.Start <> ASrcOffset) or
+     (FCheck.Recs[AIndex].Src.Stop - FCheck.Recs[AIndex].Src.Start <> ASrcBytes) then
+  begin
+    FCheckBad := AIndex;
+    AContinue := False;
+  end;
+end;
+
+// The whole file parsed in one go, from its first byte: every paragraph gets its formats
+// from that one parse, and its text when it is read. The index (the scan that found the
+// paragraphs' bytes) and this parse are two readings of the file by the same rules; they
+// must find the same paragraphs, and are compared. The one group this makes holds every
+// interval and is the only one, so it is never the least recently used: it stays.
+procedure TTyRtfLoad.ParseWhole;
+var
+  p: TTyRtfParser;
+  g: TTyRtfGroup;
+  i, n: Integer;
+begin
+  for i := FGroups.Count - 1 downto 0 do Drop(TTyRtfGroup(FGroups[i]), True);
+  p := TTyRtfParser.Create(FBytes, FDoc.Formats);
+  try
+    p.Parse;
+    Inc(FParsedBytes, p.Position);
+    Inc(FParseCount);
+    n := p.ParaCount;
+    if (n <> FDoc.Text.ParaCount) or (p.HeaderEnd <> FHeaderEnd) or
+       (p.TrailerStart <> FTrailer.Start) then
+      raise ETyRichRtf.CreateFmt('RTF reader: the whole parse found %d paragraphs in bytes ' +
+        '%d to %d, the index %d in bytes %d to %d', [n, Int64(p.HeaderEnd), Int64(p.TrailerStart),
+        FDoc.Text.ParaCount, FHeaderEnd, FTrailer.Start]);
+    g := GroupFrom(p, 0, FIntervalN - 1);
+    // the defaults as this parse read them
+    TRtfBuild.SetDefaultCharFormat(FDoc, p.DefaultCharFormat);
+    TRtfBuild.SetPage(FDoc, p.PaperWidth, p.PaperHeight, p.MarginLeft, p.MarginRight);
+  finally
+    p.Free;
+  end;
+  FGroups.Add(g);
+  Inc(FResident, FIntervalN);
+  Touch(g);
+  FCheck := g;
+  FCheckBad := -1;
+  FDoc.Text.WalkParas(0, @CheckWhole);
+  FCheck := nil;
+  if FCheckBad >= 0 then
+  begin
+    i := FCheckBad;
+    Drop(g, True);
+    raise ETyRichRtf.CreateFmt('RTF reader: the whole parse and the index do not agree ' +
+      'on the bytes of paragraph %d', [i]);
+  end;
+  FWhole := True;
+  Apply(g);
 end;
 
 procedure TTyRtfLoad.Touch(AGroup: TTyRtfGroup);
@@ -5616,7 +5605,9 @@ begin
   Result := BeginLoad(ADoc, AStream, AFirstSlice, nil);
 end;
 
-procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+// The whole file indexed in one call; AWhole: and parsed (TTyRtfLoad.ParseWhole).
+procedure LoadAll(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap;
+  AWhole: Boolean);
 var
   load: TTyRtfLoad;
   handler: TTyRichChangeEvent;
@@ -5632,6 +5623,7 @@ begin
     load := BeginLoad(ADoc, AStream, High(Int64) div 2, AMap);
     load.FQuiet := True;
     while not load.Step(High(Int64) div 2) do ;
+    if AWhole then load.ParseWhole;
     load.FQuiet := False;
   finally
     ADoc.OnChange := handler;
@@ -5647,6 +5639,16 @@ begin
   change.NewLen := ADoc.Text.Length;
   change.NewParaCount := ADoc.Text.ParaCount;
   if Assigned(handler) then handler(ADoc, change);
+end;
+
+procedure TyRichLoadRtf(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+begin
+  LoadAll(ADoc, AStream, AMap, False);
+end;
+
+procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
+begin
+  LoadAll(ADoc, AStream, AMap, True);
 end;
 
 // ---- for the writer ----

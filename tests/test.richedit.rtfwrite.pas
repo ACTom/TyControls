@@ -894,6 +894,18 @@ begin
       finally
         d.Free;
       end;
+      // and loaded with the whole file parsed at once: the same document, saved the same
+      d := LoadDoc(b, True);
+      try
+        o := SaveDoc(d, info);
+        AssertTrue(msg + ': loaded in full, ' + FirstDiff(b, o), SameBytes(b, o));
+        AssertEquals(msg + ': loaded in full, nothing rewritten', 0, Length(info.Stretches));
+        AssertEquals(msg + ': loaded in full, every paragraph copied', d.Text.ParaCount,
+          info.VerbatimParas);
+        AssertFalse(msg + ': loaded in full, saving is no change', d.Modified);
+      finally
+        d.Free;
+      end;
     end;
   finally
     names.Free;
