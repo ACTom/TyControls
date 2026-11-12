@@ -1571,18 +1571,19 @@ begin
     p1 := load.IntervalFirstPara(1) + 1;
     p3 := load.IntervalFirstPara(3) + 1;
     d.EnsureParsed(p1);
-    d.ParaFormatOf(p1);
-    // two paragraphs typed before everything (the first interval is parsed for it): what
-    // was the second interval's first paragraph is now the first interval's last but one
-    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(0, 'a' + #13#10 + 'b' + #13#10)));
+    // the first two paragraphs go (the first interval is parsed for it, and its paragraphs
+    // are the ones read last: the command read them). What was the second interval's second
+    // paragraph is now two places up - where the first interval's paragraphs were
+    AssertTrue('deleted', d.Execute(TTyRichDelete.Create(0, d.Text.ParaStart(2))));
     AssertEquals('two intervals parsed', 2, load.ResidentIntervals);
-    q := load.IntervalFirstPara(1);
-    AssertTrue('parsed with the first interval', TBuilderAccess.Value(d, q) <> nil);
+    q := p1 - 2;
+    AssertTrue('the second interval''s paragraph is there', TBuilderAccess.Value(d, q) <> nil);
+    AssertTrue('a paragraph of the first interval is there', TBuilderAccess.Value(d, 5) <> nil);
     d.ParaFormatOf(q);
-    d.EnsureParsed(p3 + 2);
+    d.EnsureParsed(p3 - 2);
     AssertEquals('two stay', 2, load.ResidentIntervals);
     AssertTrue('after the edit: the interval read last stays', TBuilderAccess.Value(d, q) <> nil);
-    AssertTrue('after the edit: the second interval went', TBuilderAccess.Value(d, p1 + 2) = nil);
+    AssertTrue('after the edit: the first interval went', TBuilderAccess.Value(d, 5) = nil);
     AssertEquals('integrity', '', d.Text.CheckIntegrity);
   finally
     d.Free;
