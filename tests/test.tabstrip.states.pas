@@ -28,9 +28,16 @@ type
     ChangedCalls: Integer;
     procedure RemoveTabForStates(AIndex: Integer);
     property OnShowHint;
+    property OnMouseUp;
   end;
 
   { An OnShowHint handler that marks what it was handed, to show it still gets its turn. }
+  { A host that already closes a tab on a middle click, in its own OnMouseUp. }
+  THostCloser = class
+  public
+    procedure Handle(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+  end;
+
   THintMarker = class
   public
     procedure Handle(Sender: TObject; HintInfo: PHintInfo);
@@ -47,6 +54,7 @@ type
     HintPrefix: string;      // '' = no hints; else the hint is HintPrefix + caption
     HintCaps: string;        // '' = every tab has one; else only the captions listed
     PreviewIndex: Integer;   // one tab by index, for twins that share a caption; -1 = none
+    AskGeometry: Boolean;    // the handler asks the strip where the tab is -- which it should not
     constructor Create;
     procedure Handle(Sender: TObject; AIndex: Integer; var AState: TTyTabState);
   end;
@@ -118,6 +126,7 @@ type
     { --- the event --------------------------------------------------------------------- }
     procedure StateComesFromTheEventAndIsNothingWithoutOne;
     procedure StateIsAskedEveryTimeAndNeverKept;
+    procedure AHandlerThatAsksTheStripForGeometryDoesNotRecurse;
     procedure StateFollowsItsTabThroughAReorderAndAClose;
     procedure InvalidateTabStatesTakesTheTabsChangedPath;
     { --- the slot ---------------------------------------------------------------------- }
@@ -141,6 +150,7 @@ type
     procedure MiddleClickNeedsClosingEnabled;
     procedure MiddleClickLeavesAPinnedTab;
     procedure MiddleClickCloseCanBeSwitchedOff;
+    procedure AHostThatClosesOnMiddleClickItselfLosesOneTabNotTwo;
     { --- preview ----------------------------------------------------------------------- }
     procedure APreviewCaptionIsItalicInTheBuiltInTheme;
     procedure ThePreviewFontStyleIsTheThemesToken;
@@ -220,12 +230,25 @@ var
 begin
   Inc(Calls);
   cap := (Sender as TTyCustomTabStrip).TabCaption(AIndex);
+  if AskGeometry then (Sender as TTyCustomTabStrip).TabRect(AIndex);
   if Listed(ModifiedCaps, cap) then AState.Modified := True;
   if Listed(PinnedCaps, cap) then AState.Pinned := True;
   if Listed(PreviewCaps, cap) or (AIndex = PreviewIndex) then AState.Preview := True;
   if Listed(InkCaps, cap) then AState.TextColor := Ink;
   if (HintPrefix <> '') and ((HintCaps = '') or Listed(HintCaps, cap)) then
     AState.Hint := HintPrefix + cap;
+end;
+
+{ THostCloser }
+
+procedure THostCloser.Handle(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  strip: TStateStrip;
+begin
+  if Button <> mbMiddle then Exit;
+  strip := Sender as TStateStrip;
+  strip.RemoveTabForStates(strip.IndexOfTabAt(X, Y));
 end;
 
 { THintMarker }
@@ -614,6 +637,22 @@ begin
   FProbe.ModifiedCaps := '';
   AssertEquals(Ord(tsmNone), Ord(FStrip.TabSlotMark(1)));
   AssertTrue(IsRectEmpty(FStrip.TabSlotRect(1)));
+end;
+
+procedure TTabStatesTest.AHandlerThatAsksTheStripForGeometryDoesNotRecurse;
+var
+  r: TRect;
+begin
+  { Geometry is laid out FROM the states, so a handler that asks for it is asking the
+    strip to ask the handler. The documentation says not to; a handler that does must still
+    come back. }
+  Build(False);
+  FProbe.ModifiedCaps := '|Beta|';
+  FProbe.AskGeometry := True;
+  r := FStrip.TabSlotRect(1);
+  AssertFalse('the layout was built, and Beta has its slot', IsRectEmpty(r));
+  AssertEquals(Ord(tsmModified), Ord(FStrip.TabSlotMark(1)));
+  AssertTrue('the state is still the handler''s', FStrip.TabState(1).Modified);
 end;
 
 procedure TTabStatesTest.StateFollowsItsTabThroughAReorderAndAClose;
@@ -1115,6 +1154,26 @@ begin
   FStrip.MiddleClickClose := True;
   Click(OnCaption(1), mbMiddle);
   AssertEquals(1, FClose.Count);
+end;
+
+procedure TTabStatesTest.AHostThatClosesOnMiddleClickItselfLosesOneTabNotTwo;
+var
+  host: THostCloser;
+begin
+  { An application written before MiddleClickClose existed closes the tab in its own
+    OnMouseUp. The strip's turn comes after the handler's: the tab it would close is gone,
+    and the one that slid under the pointer was never clicked. }
+  Build(True);
+  host := THostCloser.Create;
+  try
+    FStrip.OnMouseUp := @host.Handle;
+    Click(OnCaption(0), mbMiddle);
+    AssertEquals('one middle click, one tab', 2, FStrip.TabCount);
+    AssertEquals('Beta', FStrip.TabCaption(0));
+    AssertEquals('the strip asked to close nothing more', 0, FClose.Count);
+  finally
+    host.Free;
+  end;
 end;
 
 { --- preview -------------------------------------------------------------------------- }

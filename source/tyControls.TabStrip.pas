@@ -145,6 +145,7 @@ type
     FOnTabPinClick: TTyTabPinClickEvent;
     FMiddleClickClose: Boolean;
     FMiddleTab: Integer;
+    FAskingTabState: Boolean;   // TabState is on the stack -- see there
 
     { Drag-reorder gesture state. FDragTab is the collection index of the tab a
       press armed as a drag candidate (-1 = none). FDragStartMain is the device-px
@@ -2058,9 +2059,19 @@ function TTyCustomTabStrip.TabState(AIndex: Integer): TTyTabState;
 begin
   Result := Default(TTyTabState);
   if (AIndex < 0) or (AIndex >= GetTabCount) then Exit;
-  GetTabStateAt(AIndex, Result);
-  if Assigned(FOnGetTabState) then
-    FOnGetTabState(Self, AIndex, Result);
+  { The layout is built FROM the states, so a handler that asks the strip for geometry
+    (TabRect, TabSlotRect ...) is asking it to ask the handler again. It should not; one
+    that does gets its answer from a layout with no states in it, instead of the stack
+    running out inside a paint. }
+  if FAskingTabState then Exit;
+  FAskingTabState := True;
+  try
+    GetTabStateAt(AIndex, Result);
+    if Assigned(FOnGetTabState) then
+      FOnGetTabState(Self, AIndex, Result);
+  finally
+    FAskingTabState := False;
+  end;
 end;
 
 procedure TTyCustomTabStrip.GetTabStateAt(AIndex: Integer; var AState: TTyTabState);
@@ -2970,23 +2981,28 @@ end;
 procedure TTyCustomTabStrip.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  FromIdx, ToIdx, MidIdx: Integer;
+  FromIdx, ToIdx, MidIdx, TabsBefore: Integer;
 begin
   if FDesignTabGesture then
   begin
     FDesignTabGesture := False;
     if HandleAllocated then MouseCapture := False;
   end;
+  TabsBefore := GetTabCount;
   inherited MouseUp(Button, Shift, X, Y);
   { Middle-click close: the button comes up over the tab it went down on. The tab goes by
     the road its close glyph takes -- DoCloseClick, so OnTabClose can still refuse -- and
     only where that glyph would be there to click: a tab that can be closed. A pinned tab
-    stays; that is what pinning it is for. }
+    stays; that is what pinning it is for.
+
+    OnMouseUp has just run (inherited). A host written before this existed may close the tab
+    there itself; the tab now under the pointer is then one nobody clicked, so a release
+    during which the tabs changed closes nothing more. }
   if Button = mbMiddle then
   begin
     MidIdx := FMiddleTab;
     FMiddleTab := -1;
-    if FMiddleClickClose and (MidIdx >= 0) and IsEnabled
+    if FMiddleClickClose and (MidIdx >= 0) and IsEnabled and (GetTabCount = TabsBefore)
        and (IndexOfTabAt(X, Y) = MidIdx) and GetTabClosableAt(MidIdx)
        and not TabState(MidIdx).Pinned then
       DoCloseClick(MidIdx);
