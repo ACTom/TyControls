@@ -637,6 +637,60 @@ begin
   finally
     d.Free;
   end;
+  // the separator of an EMPTY paragraph (a blank line above a centred title, Backspace at
+  // the title's start): the empty paragraph goes, what follows keeps its format and runs
+  d := NewDoc(#13#10'bbb');
+  try
+    Align(d, 0, 0, paraCenter);
+    Align(d, 1, 1, paraRight);
+    Paint(d, 1, 3, clBlue);
+    u := d.DeleteRange(0, 1);
+    AssertEquals('empty before: paragraphs', 1, d.Text.ParaCount);
+    AssertEquals('empty before: text', 'bbb', ParaText(d, 0));
+    AssertEquals('empty before: the following paragraph''s format', AlignId(d, paraRight),
+      d.ParaFormatOf(0));
+    AssertEquals('empty before: and its runs', SampleRuns(d, '0:%d', [clBlue]), RunsStr(d, 0));
+    d.Revert(u);
+    AssertEquals('empty before, undone: paragraphs', 2, d.Text.ParaCount);
+    AssertEquals('empty before, undone: the empty one is centred again',
+      AlignId(d, paraCenter), d.ParaFormatOf(0));
+    AssertEquals('empty before, undone: the other is right', AlignId(d, paraRight),
+      d.ParaFormatOf(1));
+  finally
+    d.Free;
+  end;
+  // two empty paragraphs: the first one's separator goes, the second one's format stays
+  d := NewDoc(#13#10#13#10'ccc');
+  try
+    Align(d, 0, 0, paraCenter);
+    Align(d, 1, 1, paraRight);
+    Align(d, 2, 2, paraJustify);
+    u := d.DeleteRange(0, 1);
+    u.Free;
+    AssertEquals('two empty: paragraphs', 2, d.Text.ParaCount);
+    AssertEquals('two empty: the second one''s format', AlignId(d, paraRight), d.ParaFormatOf(0));
+    AssertEquals('two empty: the text after keeps its own', AlignId(d, paraJustify),
+      d.ParaFormatOf(1));
+  finally
+    d.Free;
+  end;
+  // the paragraph BEFORE the separator is not empty, the one after is: the one before gives it
+  d := NewDoc('aaa'#13#10#13#10'ccc');
+  try
+    Align(d, 0, 0, paraCenter);
+    Align(d, 1, 1, paraRight);
+    Align(d, 2, 2, paraJustify);
+    u := d.DeleteRange(3, 1);
+    u.Free;
+    AssertEquals('empty after: paragraphs', 2, d.Text.ParaCount);
+    AssertEquals('empty after: text', 'aaa', ParaText(d, 0));
+    AssertEquals('empty after: the paragraph before gives the format', AlignId(d, paraCenter),
+      d.ParaFormatOf(0));
+    AssertEquals('empty after: the text after keeps its own', AlignId(d, paraJustify),
+      d.ParaFormatOf(1));
+  finally
+    d.Free;
+  end;
   // inside one paragraph: the runs after the range move left, an emptied run goes
   d := NewSample;
   try

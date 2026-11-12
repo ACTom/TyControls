@@ -582,8 +582,9 @@ type
     function InsertObject(APos: TTyRichPos; AObject: TTyRichObject;
       AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichUndoData;
     { Across paragraphs (as WordPad): the merged paragraph takes the format of the paragraph
-      the range ends in, except when the range is one separator and nothing else - then the
-      format of the paragraph before it. }
+      the range ends in, except when the range is one separator and nothing else and the
+      paragraph before it is not empty - then the format of that paragraph. (The separator
+      of an empty paragraph takes the empty paragraph away: what follows stays as it is.) }
     function DeleteRange(APos, ALen: TTyRichPos): TTyRichUndoData;
     { Changes only the AMask fields of every run in the range (an empty paragraph whose
       separator is in the range: its one run). }
@@ -2409,6 +2410,7 @@ var
   e, psk, lenk, ok, lenm, om: Int64;
   fmt: TTyParaFormatId;
   cell: TTyRichCell;
+  join: Boolean;
 begin
   c := Default(TTyRichChange);
   c.Pos := APos;
@@ -2439,9 +2441,12 @@ begin
     rm := RunsOfData(dm);
     lenm := FText.ParaLength(m);
     om := e - FText.ParaStart(m);
-    if (m = k + 1) and (ALen = 1) then
+    // one separator and nothing else, after text: the paragraph before it gives the format.
+    // After an empty paragraph it does not (measured in WordPad's engine): that is the
+    // empty paragraph going, a whole paragraph like any other
+    join := (m = k + 1) and (ALen = 1) and (lenk > 0);
+    if join then
     begin
-      // one separator and nothing else: the paragraph before it gives the format
       fmt := FormatOfData(dk);
       cell := CellOfData(dk);
     end
@@ -2451,7 +2456,7 @@ begin
       fmt := FormatOfData(dm);
       cell := CellOfData(dm);
     end;
-    if (ok = 0) and (om = 0) and not ((m = k + 1) and (ALen = 1)) then
+    if (ok = 0) and (om = 0) and not join then
       merged := dm   // whole paragraphs went: the next one is untouched
     else
     begin
