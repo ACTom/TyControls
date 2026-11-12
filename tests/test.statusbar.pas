@@ -563,6 +563,9 @@ procedure TStatusBarPanelClickTest.TestOnlyTheLeftButtonClicksAPanel;
 begin
   FBar.PressAndRelease(150, 11, mbRight);
   AssertEquals('the right button', '', FClicks.CommaText);
+  FBar.Press(150, 11, mbRight);
+  FBar.Release(150, 11, mbLeft);
+  AssertEquals('a left release that follows a right press only', '', FClicks.CommaText);
   FBar.Press(150, 11, mbLeft);
   FBar.Release(150, 11, mbRight);
   AssertEquals('a right release under a held left button', '', FClicks.CommaText);

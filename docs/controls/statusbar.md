@@ -83,7 +83,7 @@ TTyStatusBar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | `OnHint` | `TNotifyEvent` | `AutoHint = True` 时，状态栏收到应用提示后**先**触发本事件。它是**接管**而非通知：一旦赋值，状态栏自己就不再写 `SimpleText` / `Panels[0]`，由处理器决定提示放到哪、怎么排版（例如"就绪 — <hint>"放进 2 号面板）。文本从 `Application.Hint` 读。语义与 LCL `TStatusBar.OnHint`（`statusbar.inc:70-88`）一致。 |
 | `OnDrawPanel` | `TTyDrawPanelEvent = procedure(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect) of object` | 为每个 `Style = psOwnerDraw` 的面板触发一次，`ARect` 是该格在状态栏绘制坐标系里的设备像素矩形。**必须通过 `APainter` 绘制，不要用状态栏的 `Canvas`**：`TTyPainter` 画进 BGRA 图层，`EndPaint` 才合成到画布上，先画到 `Canvas` 的内容会被整个覆盖。这与 `TTyPaintPanel.OnPaintSurface` 是同一套约定；LCL 的 `TDrawPanelEvent` 只给矩形、要求处理器自己去取 `StatusBar.Canvas`，在自绘管线下不成立。 |
 
-| `OnPanelClick` | `TTyPanelClickEvent = procedure(Sender: TObject; APanel: TTyStatusPanel) of object` | 鼠标左键在同一个面板上按下并松开时触发，`APanel` 是被点的面板，序号是 `APanel.Index`。按下后拖到别的面板再松开不算点击。以下几种情况不触发：按在尺寸手柄或底边调整窗口大小的那一条上；点在面板里的子控件上（那次点击归子控件，要响应就接它自己的 `OnClick`）；`SimplePanel` 模式。`OnClick` 照旧触发，两者互不影响。 |
+| `OnPanelClick` | `TTyPanelClickEvent = procedure(Sender: TObject; APanel: TTyStatusPanel) of object` | 鼠标左键在同一个面板上按下并松开时触发，`APanel` 是被点的面板，序号是 `APanel.Index`。按下后拖到别的面板再松开不算点击。以下几种情况不触发：按在尺寸手柄或底边调整窗口大小的那一条上；点在面板里的子控件上（那次点击归子控件，要响应就接它自己的 `OnClick`）；`SimplePanel` 模式。`OnClick` 照旧触发，两者互不影响；一次点击里的先后是 `OnClick`、`OnMouseUp`、`OnPanelClick`，所以在处理器里弹菜单或对话框时，这次松开已经处理完了。 |
 
 > 除以上自有事件外，`TTyStatusBar` 暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整基线清单见 [../events.md](../events.md)。
 
