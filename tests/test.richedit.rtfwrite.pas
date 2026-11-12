@@ -52,6 +52,7 @@ type
     procedure TestOnlyTheEditedRowIsRewrittenAfterItsIntervalWent;
     procedure TestTheSaveHoldsWhatItReadsUntilItIsDone;
     procedure TestNewFontNumbersAreFreeInTheFile;
+    procedure TestAListItemAfterFormatsTheSaveHasNotSeen;
   end;
 
 implementation
@@ -2291,6 +2292,77 @@ end;
 
 { ---- the review ---- }
 
+{ A memory manager for a piece of code under test: a block that is resized always moves,
+  and what is given back is filled with garbage first. Memory used after it was let go of
+  then shows - on an ordinary heap it mostly still holds what it held, and the test passes
+  by luck. It hands everything on to the manager that was there, so blocks made before,
+  inside and after are all the same heap's. }
+var
+  PoisonBase: TMemoryManager;
+  PoisonOn: Boolean = False;
+
+function PoisonFreeMem(P: Pointer): PtrUInt;
+begin
+  if P <> nil then FillChar(P^, PoisonBase.MemSize(P), $E5);
+  Result := PoisonBase.FreeMem(P);
+end;
+
+function PoisonFreeMemSize(P: Pointer; ASize: PtrUInt): PtrUInt;
+begin
+  if P <> nil then FillChar(P^, PoisonBase.MemSize(P), $E5);
+  Result := PoisonBase.FreeMemSize(P, ASize);
+end;
+
+function PoisonReAllocMem(var P: Pointer; ASize: PtrUInt): Pointer;
+var
+  q: Pointer;
+  old: PtrUInt;
+begin
+  if P = nil then Exit(PoisonBase.ReAllocMem(P, ASize));
+  old := PoisonBase.MemSize(P);
+  if ASize = 0 then
+  begin
+    FillChar(P^, old, $E5);
+    Exit(PoisonBase.ReAllocMem(P, ASize));
+  end;
+  q := PoisonBase.GetMem(ASize);
+  if old > ASize then Move(P^, q^, ASize) else Move(P^, q^, old);
+  FillChar(P^, old, $E5);
+  PoisonBase.FreeMem(P);
+  P := q;
+  Result := q;
+end;
+
+procedure PoisonHeap(AOn: Boolean);
+var
+  mm: TMemoryManager;
+begin
+  if AOn = PoisonOn then Exit;
+  if AOn then
+  begin
+    GetMemoryManager(PoisonBase);
+    mm := PoisonBase;
+    mm.FreeMem := @PoisonFreeMem;
+    mm.FreeMemSize := @PoisonFreeMemSize;
+    mm.ReAllocMem := @PoisonReAllocMem;
+    SetMemoryManager(mm);
+  end
+  else
+    SetMemoryManager(PoisonBase);
+  PoisonOn := AOn;
+end;
+
+// SaveDoc on a heap that shows memory used after it was let go of.
+function SaveDocPoisoned(ADoc: TTyRichDocument; out AInfo: TTyRtfWriteInfo): TBytes;
+begin
+  PoisonHeap(True);
+  try
+    Result := SaveDoc(ADoc, AInfo);
+  finally
+    PoisonHeap(False);
+  end;
+end;
+
 function StretchText(const AOut: TBytes; const AInfo: TTyRtfWriteInfo): RawByteString;
 begin
   Result := StretchBytes(AOut, AInfo);
@@ -2858,6 +2930,63 @@ begin
       StrOf(o, 0, info.HeaderStop));
   finally
     d.Free;
+  end;
+end;
+
+{ The number of a list item counts the items before it, and those may be paragraphs the
+  save has not looked at yet - paragraphs it copies - whose formats it then meets for the
+  first time while it is in the middle of writing the item. What it knows of the item's
+  own format must still be there after that. (On a heap that moves what grows and fills
+  what is let go of: see PoisonHeap.) }
+procedure TTyRtfWriteTest.TestAListItemAfterFormatsTheSaveHasNotSeen;
+const
+  Head = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 ';
+  Tail: array[0..1] of string = ('.', ')');
+var
+  kind, i: Integer;
+  src, item, text, words: RawByteString;
+  d, r: TTyRichDocument;
+  o: TBytes;
+  info: TTyRtfWriteInfo;
+begin
+  // the text after the number: RichEdit's own '.' (the reader keeps nothing beside the list
+  // format and the writer makes the words), and ')' (the file's words are kept and written)
+  for kind := 0 to 1 do
+  begin
+    item := '\pard{\pntext\f0 1' + Tail[kind] + '\tab}{\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta' +
+      Tail[kind] + '}}\fi-360\li720\f0\fs24 ';
+    src := Head;
+    Cat(src, item);
+    Cat(src, 'L0\par ');
+    // sixty paragraphs, each with a format of its own, that the save only copies
+    for i := 1 to 60 do
+      Cat(src, '\pard\li' + IntToStr(i * 10) + '\tx' + IntToStr(i * 100) + ' q' + IntToStr(i) + '\par ');
+    Cat(src, item);
+    Cat(src, 'L1\par {\pntext\f0 2' + Tail[kind] + '\tab}L2\par {\pntext\f0 3' + Tail[kind] + '\tab}L3\par}');
+    d := LoadDoc(BytesOf(src), False);
+    r := nil;
+    try
+      AssertEquals('paragraphs', 64, d.Text.ParaCount);
+      AssertTrue('typed in the last item', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'X')));
+      o := SaveDocPoisoned(d, info);
+      AssertEquals('one paragraph rewritten', 1, info.RewrittenParas);
+      text := StretchText(o, info);
+      if kind = 0 then
+        words := '{\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}'
+      else
+        words := '{\*\pn\pnlvlbody\pndec\pnstart1\pnf0\pnindent0{\pntxta)}}';
+      AssertRaw(Format('kind %d: the item as it is written', [kind]),
+        '\uc1\pard{\pntext\f0 3' + Tail[kind] + '\tab}' + words + '\fi-360\li720\plain\f0\fs24 L3X\par' + #13#10,
+        text);
+      r := LoadDoc(o, True);
+      AssertEquals(Format('kind %d: read back', [kind]), 64, r.Text.ParaCount);
+      AssertRaw(Format('kind %d: read back: the item', [kind]), 'L3X', ParaText(r, 63));
+      AssertTrue(Format('kind %d: read back: its format', [kind]),
+        d.Formats.ParaFormat(d.ParaFormatOf(63)).Equals(r.Formats.ParaFormat(r.ParaFormatOf(63))));
+    finally
+      r.Free;
+      d.Free;
+    end;
   end;
 end;
 

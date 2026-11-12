@@ -165,8 +165,12 @@ type
     FColorN, FOldColorN: Integer;
     FDefNames: array of TDefName;
     FDefNameN: Integer;
-    FChars: array of TCharInfo;
-    FParas: array of TParaInfo;
+    // What is known of each format id, made the first time the id is met. The arrays hold
+    // pointers: a record is handed out and used while other ids are met (a list item's
+    // number looks at the paragraphs before it), and an array of records would move under
+    // the pointer when it grows.
+    FChars: array of PCharInfo;
+    FParas: array of PParaInfo;
     FSymbolNeeded: Boolean;
     FSymbol: Integer;
     // the plan
@@ -263,6 +267,7 @@ type
     procedure SaveOurs;
   public
     constructor Create(ADoc: TTyRichDocument; AStream: TStream);
+    destructor Destroy; override;
     procedure Run;
     property Info: TTyRtfWriteInfo read FInfo;
   end;
@@ -509,6 +514,17 @@ begin
   FCleanPos := -1;
   FUc := 1;
   SetLength(FBuf, OutBufSize);
+end;
+
+destructor TRtfWriter.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FChars) do
+    if FChars[i] <> nil then Dispose(FChars[i]);
+  for i := 0 to High(FParas) do
+    if FParas[i] <> nil then Dispose(FParas[i]);
+  inherited Destroy;
 end;
 
 procedure TRtfWriter.Flush;
@@ -781,7 +797,13 @@ begin
     if n <= AId then n := AId + 1;
     SetLength(FChars, n);
   end;
-  Result := @FChars[AId];
+  if FChars[AId] = nil then
+  begin
+    New(Result);
+    Result^ := Default(TCharInfo);
+    FChars[AId] := Result;
+  end;
+  Result := FChars[AId];
   if Result^.Seen then Exit;
   EnsureTables;
   f := FPool.CharFormat(AId);
@@ -820,7 +842,13 @@ begin
     if n <= AId then n := AId + 1;
     SetLength(FParas, n);
   end;
-  Result := @FParas[AId];
+  if FParas[AId] = nil then
+  begin
+    New(Result);
+    Result^ := Default(TParaInfo);
+    FParas[AId] := Result;
+  end;
+  Result := FParas[AId];
   if Result^.Seen then Exit;
   Result^.Seen := True;
   Result^.Fmt := FPool.ParaFormat(AId);
