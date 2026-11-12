@@ -91,6 +91,12 @@ function TyRichCodePagePairs(ATable: Pointer): PByte;
 { For the RTF writer's font names, the other way round: the bytes the table's code page
   writes ACode as - one byte, or a pair as lead shl 8 or trail - and 0 when it has none. }
 function TyRichCodePageBytes(ATable: Pointer; ACode: Cardinal): Integer;
+{ A checksum of everything the code page decodes: per byte from 80 its class and character,
+  and for a double-byte page per pair its character and whether the table itself holds it.
+  The tables are made from LazUtils' converters, which are not the same in every Lazarus;
+  a test compares this with a constant, so that a converter that drifts shows. 0 when the
+  code page is not supported. }
+function TyRichCodePageChecksum(ACodePage: Integer): Cardinal;
 
 implementation
 
@@ -352,6 +358,32 @@ begin
   if DecodeUtf8(@s[0], AEntry shr 24, Result) = 0 then Result := 0;
 end;
 
+{ What the code page's converter makes of one byte - except where the converters of the
+  supported Lazarus versions disagree. Those bytes are stated here, so that a table is the
+  same whatever LazUtils it was built with:
+  - 932, the bytes A1..DF: the half-width katakana block, U+FF61 + (byte - A1). Lazarus 3.0's
+    converter has no single bytes above 7F at all (they read as '?'), 4.x has them.
+  - 932, the bytes A0, FD, FE, FF: U+F8F0..U+F8F3, as Windows reads them and 4.x does; 3.0
+    has none of them either.
+  Pairs are the same in every version (TestCodePageTablesArePinned holds a checksum of each
+  table). }
+function ConvByte(ACodePage: Integer; AConv: TCpConv; AByte: Byte): string;
+var
+  code: Cardinal;
+begin
+  code := 0;
+  if ACodePage = 932 then
+    case AByte of
+      $A0: code := $F8F0;
+      $A1..$DF: code := $FF61 + (AByte - $A1);
+      $FD..$FF: code := $F8F1 + (AByte - $FD);
+    end;
+  if code = 0 then Exit(AConv(Chr(AByte)));
+  // all of them are three bytes of UTF-8
+  Result := Chr($E0 or (code shr 12)) + Chr($80 or ((code shr 6) and $3F)) +
+    Chr($80 or (code and $3F));
+end;
+
 { Asks LConvEncoding about every byte and every pair once. }
 function BuildTable(ACodePage: Integer): TCodePageTable;
 var
@@ -369,7 +401,7 @@ begin
   for b := 0 to 127 do Result.Cls[b] := 0;
   for b := 128 to 255 do
   begin
-    v := PackChar(conv(Chr(b)), code);
+    v := PackChar(ConvByte(ACodePage, conv, b), code);
     if v <> 0 then
     begin
       Result.Cls[b] := 1;
@@ -518,28 +550,64 @@ var
   s: string;
 begin
   t := TCodePageTable(ATable);
+  Result := 0;
   if ATrail < 0 then
   begin
     case t.Cls[ALead] of
       0: Exit(ALead);
       1: Exit(CodeOf(t.Single[ALead]));
     end;
-    s := Chr(ALead);
+    s := ConvByte(t.CodePage, ConvOf(t.CodePage), ALead);
   end
   else
   begin
-    if ATrail > 255 then Exit(0);
-    if t.Pair <> nil then
-    begin
-      e := t.Pair[(ALead shl 8) or ATrail];
-      if e <> 0 then Exit(CodeOf(e));
-    end;
-    s := Chr(ALead) + Chr(ATrail);
+    // only a lead byte starts a pair. (Asked about a single byte and what follows it, some
+    // converters drop the second byte and answer the first one's character.)
+    if (ATrail > 255) or (t.Cls[ALead] <> 2) then Exit;
+    e := t.Pair[(ALead shl 8) or ATrail];
+    if e <> 0 then Exit(CodeOf(e));
+    s := ConvOf(t.CodePage)(Chr(ALead) + Chr(ATrail));
   end;
   // the table leaves out what does not write back as it was read (the second of two
   // sequences for one character); ask the converter itself about that rare case
-  Result := 0;
-  if PackChar(ConvOf(t.CodePage)(s), code) <> 0 then Result := code;
+  if PackChar(s, code) <> 0 then Result := code;
+end;
+
+function TyRichCodePageChecksum(ACodePage: Integer): Cardinal;
+var
+  t: TCodePageTable;
+  b, tr: Integer;
+
+  procedure Add(AValue: Cardinal; ABytes: Integer);
+  var
+    i: Integer;
+  begin
+    // FNV-1a
+    for i := 1 to ABytes do
+    begin
+      {$PUSH}{$Q-}{$R-}
+      Result := (Result xor (AValue and $FF)) * 16777619;
+      {$POP}
+      AValue := AValue shr 8;
+    end;
+  end;
+
+begin
+  if not TyRichCodePageSupported(ACodePage) then Exit(0);
+  t := TableFor(ACodePage);
+  Result := 2166136261;
+  for b := 128 to 255 do
+  begin
+    Add(t.Cls[b], 1);
+    Add(TyRichCodePageChar(t, b, -1), 4);
+  end;
+  if t.Pair <> nil then
+    for b := 128 to 255 do
+      for tr := 0 to 255 do
+      begin
+        Add(Ord(t.Pair[(b shl 8) or tr] <> 0), 1);
+        Add(TyRichCodePageChar(t, b, tr), 4);
+      end;
 end;
 
 { ---- reading ---- }

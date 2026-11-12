@@ -87,6 +87,7 @@ type
     procedure TestALoneOrCutBomRoundTrips;
     procedure TestOtherCodePagesRoundTrip;
     procedure TestACharacterTheCodePageLacksIsAQuestionMark;
+    procedure TestCodePageTablesArePinned;
   end;
 
 implementation
@@ -1094,6 +1095,74 @@ begin
     d.Execute(TTyRichInsertText.Create(3, U('中😀')));
     AssertSameBytes('GBK writes the Chinese and not the emoji',
       BytesOf('abc' + FromBytes([$D6, $D0]) + '?'), SaveBytes(d));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The code page tables are made from LazUtils' converters, and those are not the same in
+  every Lazarus: 3.0's CP932 has no single bytes above 7F, 4.x reads them. What the
+  supported versions disagree on is stated in TextIO (ConvByte); the checksums here pin
+  every table as a whole, so that a converter that drifts in another version shows in this
+  test and not in somebody's file. They are the tables of Lazarus 4.4; 3.0 gives the same. }
+procedure TTyRichTextIOTest.TestCodePageTablesArePinned;
+const
+  Pages: array[0..32] of Integer = (437, 850, 852, 865, 866, 874, 932, 936, 949, 950,
+    1250, 1251, 1252, 1253, 1254, 1255, 1256, 1257, 1258, 10000, 20866,
+    28591, 28592, 28593, 28594, 28595, 28597, 28599, 28600, 28603, 28604, 28605, 28606);
+  Sums: array[0..32] of Cardinal = ($B70D54EB, $FEF2AD63, $D4BAE352, $322659A3, $E9262C75,
+    $947109E7, $561A886E, $32C0F1DD, $90728160, $9FAEE20F,
+    $65F33658, $E845EA25, $47A2D988, $035EEB2C, $A8F3F724, $6A5CAFEF, $96B2D6D0, $05CC09A7,
+    $E31A7B54, $2FC75DCF, $A6AA41E2,
+    $5A3293C5, $03BF3D26, $37E287C6, $5FB36E4A, $12364760, $9A5D63A3, $3443EE98, $A5631B1F,
+    $356E87D2, $BC3930A5, $46A7842C, $D4684F7C);
+var
+  i: Integer;
+  t: Pointer;
+  d: TTyRichDocument;
+  original: TBytes;
+begin
+  for i := 0 to High(Pages) do
+  begin
+    AssertTrue(Format('code page %d is supported', [Pages[i]]), TyRichCodePageSupported(Pages[i]));
+    AssertEquals(Format('the table of code page %d', [Pages[i]]), IntToHex(Sums[i], 8),
+      IntToHex(TyRichCodePageChecksum(Pages[i]), 8));
+  end;
+  AssertEquals('a code page without a table', '00000000',
+    IntToHex(TyRichCodePageChecksum(12345), 8));
+
+  // what is stated for 932: the half-width katakana block and the four bytes around it
+  t := TyRichCodePageTable(932);
+  AssertEquals('A1', $FF61, Integer(TyRichCodePageChar(t, $A1, -1)));
+  AssertEquals('B1', $FF71, Integer(TyRichCodePageChar(t, $B1, -1)));
+  AssertEquals('DF', $FF9F, Integer(TyRichCodePageChar(t, $DF, -1)));
+  AssertEquals('A0', $F8F0, Integer(TyRichCodePageChar(t, $A0, -1)));
+  AssertEquals('FD', $F8F1, Integer(TyRichCodePageChar(t, $FD, -1)));
+  AssertEquals('FF', $F8F3, Integer(TyRichCodePageChar(t, $FF, -1)));
+  AssertEquals('80 is no character', 0, Integer(TyRichCodePageChar(t, $80, -1)));
+  AssertFalse('a half-width katakana is no lead byte', TyRichCodePageIsLead(t, $B1));
+  AssertEquals('and starts no pair, whatever follows it', 0,
+    Integer(TyRichCodePageChar(t, $B1, $82)));
+  AssertEquals('nor with a NUL after it', 0, Integer(TyRichCodePageChar(t, $B1, 0)));
+  AssertEquals('it is written back as its one byte', $B1, TyRichCodePageBytes(t, $FF71));
+  AssertEquals('a pair is still a pair', $3042, Integer(TyRichCodePageChar(t, $82, $A0)));
+  // in a single-byte page nothing is a pair
+  t := TyRichCodePageTable(1252);
+  AssertEquals('1252: no pairs', 0, Integer(TyRichCodePageChar(t, $E9, $41)));
+
+  // and through a file: all 63 of the block, between a pair and ASCII
+  original := nil;
+  SetLength(original, 2 + 63 + 1);
+  original[0] := $82;
+  original[1] := $A0;
+  for i := 0 to 62 do original[2 + i] := $A1 + i;
+  original[65] := Ord('.');
+  d := LoadBytes(original, teAnsi, 932);
+  try
+    AssertEquals('a character each', Int64(65), d.Text.Length);
+    AssertText('the first of the block', U('｡'), d.Text.GetText(1, 1));
+    AssertText('the last of the block', U('ﾟ'), d.Text.GetText(63, 1));
+    AssertSameBytes('opened and saved', original, SaveBytes(d));
   finally
     d.Free;
   end;
