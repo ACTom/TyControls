@@ -83,6 +83,7 @@ type
     Texts: array of UTF8String;
     Calls: TStringList;
     WrongCount: Boolean;
+    EditOnce: TTyRichText;   // a text to change from inside the next decode
     constructor Create(ACount: Integer);
     destructor Destroy; override;
     function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
@@ -109,6 +110,7 @@ type
     procedure TestReopenGoesOnOnlyFromAnUntouchedEnd;
     procedure TestLazySourceLookupMissesEditedParagraphs;
     procedure TestIntegritySeesLazyPiecesOutOfOrder;
+    procedure TestAProviderCannotChangeTheText;
   end;
 
 implementation
@@ -1781,9 +1783,16 @@ end;
 function TFakeRichProvider.DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
 var
   idx: Integer;
+  t: TTyRichText;
 begin
   idx := (ASrcOffset - LazyBase) div LazyStride;
   Calls.Add(IntToStr(idx));
+  if EditOnce <> nil then
+  begin
+    t := EditOnce;
+    EditOnce := nil;
+    t.Insert(t.Length, 'x');
+  end;
   Result := Texts[idx];
   if WrongCount then Result := Result + 'extra';
 end;
@@ -2072,6 +2081,30 @@ begin
   // the same pieces again, in front of paragraph 2
   FText.RestorePieces(FText.ParaStart(2), p);
   AssertEquals('pieces put elsewhere', 'lazy pieces out of source order', FText.CheckIntegrity);
+end;
+
+{ The text holds its place in a leaf while the provider decodes: a provider that changes the
+  text is refused like a walk's callback, and the read that asked fails with it. }
+procedure TTyRichLazyTextTest.TestAProviderCannotChangeTheText;
+var
+  raised: Boolean;
+  len: Int64;
+begin
+  BuildLazy(5);
+  len := FText.Length;
+  FProvider.EditOnce := FText;
+  raised := False;
+  try
+    ParaText(2);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('an edit from inside DecodeParagraph must raise', raised);
+  AssertEquals('the text did not change', len, FText.Length);
+  AssertBytesEqual('and reads as before', FProvider.Texts[2], ParaText(2));
+  FText.Insert(0, 'q');
+  AssertBytesEqual('edits work afterwards', 'q' + FProvider.Texts[0], ParaText(0));
+  AssertEquals('integrity', '', FText.CheckIntegrity);
 end;
 
 initialization

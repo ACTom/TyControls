@@ -109,7 +109,8 @@ type
     var AContinue: Boolean) of object;
 
   { Decodes one lazy paragraph: its text WITHOUT the separator, exactly ACharCount
-    characters minus the separator, containing no CR or LF. }
+    characters minus the separator, containing no CR or LF. It may read the text and set
+    paragraph data; changing the text from inside it raises. }
   TTyRichTextProvider = class
   public
     function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
@@ -1568,7 +1569,14 @@ begin
   sep := PSep(AItem^);
   content := AItem^.FChars;
   if sep <> sNone then Dec(content);
-  s := FProvider.DecodeParagraph(POff(AItem^), AItem^.FBytes, content);
+  // the provider is foreign code and AItem points into a leaf: as in a walk, an edit from
+  // inside it is refused
+  Inc(FWalking);
+  try
+    s := FProvider.DecodeParagraph(POff(AItem^), AItem^.FBytes, content);
+  finally
+    Dec(FWalking);
+  end;
   if (System.Length(s) > 0) and
      (HasBreak(@s[1], System.Length(s)) or (CountChars(@s[1], System.Length(s)) <> content)) then
     raise ETyRichText.CreateFmt('Lazy paragraph at %d decoded to the wrong text',
