@@ -46,6 +46,8 @@ type
     procedure TestSavingAnUnchangedBigDocumentCopiesRanges;
     procedure TestTheLastParagraphWithoutATerminator;
     procedure TestRefusesWhatItCannotSave;
+    // the review
+    procedure TestKeptBlocksGoBackUnderTheirOwnUc;
   end;
 
 implementation
@@ -318,7 +320,7 @@ end;
 const
   // State that RTF carries from one paragraph to the next, each in a file small enough to
   // read: what the bytes after a rewritten paragraph depend on.
-  InlineSources: array[0..7] of RawByteString = (
+  InlineSources: array[0..8] of RawByteString = (
     // the font, the size and the paragraph properties are named once
     '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}{\f1\fswiss\fcharset0 Arial;}}' +
       '{\colortbl ;\red255\green0\blue0;}\viewkind4\uc1 ' +
@@ -352,7 +354,15 @@ const
       '\pard\f0\fs24 top\par \trowd\trgaph108\cellx2000\cellx4000 \pard\intbl a\cell b1\par b2\cell\row ' +
       '\trowd\trgaph108\cellx2000\cellx4000 \pard\intbl\b c\cell d\cell\row \pard\b0 bottom\par}',
     // no font table at all, and the last paragraph has no terminator
-    '{\rtf1 A\par B\par C}'
+    '{\rtf1 A\par B\par C}',
+    // \uc2, and kept blocks that hold \u with its two fallback bytes: a field, an unknown
+    // block, a list's bullet text; one run sets \uc1 for itself, as Word's runs do
+    '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}{\f1\fnil\fcharset2 Symbol;}}\uc2 ' +
+      '\pard\f0\fs24 a{\field{\*\fldinst HYPERLINK "x"}{\fldrslt \' + 'u20013\''d6\''d0}}b\par ' +
+      'c{\*\tyblock \' + 'u25991\''ce\''c4}d{\uc1 e{\*\tyblock \' + 'u25991?}f}g\par ' +
+      '\pard{\pntext\f1\' + 'u8226\''a1\''f1\tab}{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\' +
+      'u8226\''a1\''f1}}\fi-360\li720 x \' + 'u20013\''d6\''d0\par ' +
+      '{\pntext\f1\' + 'u8226\''a1\''f1\tab}y\par \pard after \' + 'u25991\''ce\''c4\par}'
   );
 
 function InlineName(AIndex: Integer): string;
@@ -366,6 +376,8 @@ var
 begin
   if (A = nil) or (B = nil) then Exit(A = B);
   if A.ClassType <> B.ClassType then Exit(False);
+  // (the \uc its bytes were read under is part of what they mean)
+  if A.RawUc <> B.RawUc then Exit(False);
   if A is TTyRichOpaque then
     Exit(SameRaw(TTyRichOpaque(A).Bytes, TTyRichOpaque(B).Bytes) and
       SameRaw(TTyRichOpaque(A).DisplayText, TTyRichOpaque(B).DisplayText));
@@ -2147,6 +2159,259 @@ begin
     end;
   finally
     o.Free;
+    d.Free;
+  end;
+end;
+
+{ ---- the review ---- }
+
+// The stretches of a save, one after the other.
+function StretchText(const AOut: TBytes; const AInfo: TTyRtfWriteInfo): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(AInfo.Stretches) do
+    Cat(Result, StrOf(AOut, AInfo.Stretches[i].OutStart,
+      AInfo.Stretches[i].OutStop - AInfo.Stretches[i].OutStart));
+end;
+
+// The one object of paragraph AIndex (nil: none).
+function ObjectOf(ADoc: TTyRichDocument; AIndex: Integer): TTyRichObject;
+var
+  runs: TTyRunArray;
+  j: Integer;
+begin
+  Result := nil;
+  runs := ADoc.RunsOf(AIndex);
+  for j := 0 to High(runs) do
+    if runs[j].Obj <> nil then Exit(runs[j].Obj);
+end;
+
+{ A kept block is the file's bytes, and a \uN in them is followed by as many fallback bytes
+  as the \uc in effect where they were read says. A stretch is written under \uc1: a block
+  read under another \uc goes back between that \uc and \uc1, or its second fallback byte
+  would be read as text. }
+procedure TTyRtfWriteTest.TestKeptBlocksGoBackUnderTheirOwnUc;
+const
+  Head = '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}{\f1\fnil\fcharset2 Symbol;}}';
+  Field = '{\field{\*\fldinst HYPERLINK "x"}{\fldrslt \' + 'u20013\''d6\''d0}}';
+  Block2 = '{\*\tyblock \' + 'u25991\''ce\''c4}';
+  Block1 = '{\*\tyblock \' + 'u25991?}';
+  Block0 = '{\*\tyblock \' + 'u25991}';
+  Pict = '{\pict\pngblip\picwgoal300\pichgoal200 89504e470d0a1a0a}';
+  // Word's pair: one picture, the first; its bytes are both groups
+  Pair = '{\*\shppict' + Pict + '}{\nonshppict{\pict\wmetafile8 0100}}';
+  PnText = '{\pntxtb\' + 'u8226\''a1\''f1}';
+  ParaProps = '{\*\oldpprops \' + 'u1\''a1\''a1\qc}';
+  CharProps = '{\*\oldcprops \ul\' + 'u-1\''a1\''a1}';
+  PlainProps = '{\*\oldcprops \ul\up6}';
+var
+  b, o: TBytes;
+  d, r, full: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  text, expected: RawByteString;
+  p, pf: TTyParaFormat;
+  i: Integer;
+  obj: TTyRichObject;
+begin
+  // the reader says under which \uc it read a block
+  b := BytesOf(Head + '\uc2 \pard\f0\fs24 a' + Field + 'b\par c' + Block2 + 'd\par {\uc1 e' +
+    Block1 + 'f\par}\uc0 g' + Block0 + 'h\par i' + Pict + 'j\par\uc7 k' + Pict + 'l\par m' +
+    Pair + 'n\par}');
+  full := LoadDoc(b, True);
+  try
+    AssertEquals('seven paragraphs', 7, full.Text.ParaCount);
+    AssertEquals('a field under \uc2', 2, ObjectOf(full, 0).RawUc);
+    AssertRaw('its result is one character', ZhZhong, TTyRichOpaque(ObjectOf(full, 0)).DisplayText);
+    AssertEquals('a block under \uc2', 2, ObjectOf(full, 1).RawUc);
+    AssertEquals('a block in a group that set \uc1', 1, ObjectOf(full, 2).RawUc);
+    AssertEquals('a block under \uc0', 0, ObjectOf(full, 3).RawUc);
+    AssertTrue('a picture', ObjectOf(full, 4) is TTyRichPicture);
+    AssertEquals('a picture under \uc0', 0, ObjectOf(full, 4).RawUc);
+    AssertEquals('a picture under \uc7', 7, ObjectOf(full, 5).RawUc);
+    AssertTrue('Word''s pair is a picture', ObjectOf(full, 6) is TTyRichPicture);
+    AssertEquals('the pair under \uc7', 7, ObjectOf(full, 6).RawUc);
+    obj := ObjectOf(full, 1).Clone;
+    try
+      AssertEquals('a copy keeps it', 2, obj.RawUc);
+    finally
+      obj.Free;
+    end;
+    obj := ObjectOf(full, 5).Clone;
+    try
+      AssertEquals('a picture''s copy keeps it', 7, obj.RawUc);
+    finally
+      obj.Free;
+    end;
+    // every paragraph typed in: the block goes back under its \uc, and reads as it did
+    d := LoadDoc(b, False);
+    r := nil;
+    try
+      for i := 0 to 6 do
+        AssertTrue(Format('typed in paragraph %d', [i]),
+          d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(i), 'X')));
+      o := SaveDoc(d, info);
+      text := StretchText(o, info);
+      AssertEquals('all seven rewritten', 7, info.RewrittenParas);
+      AssertTrue('the field between \uc2 and \uc1: ' + Shown(text),
+        PosRaw('Xa\uc2' + Field + '\uc1 b\par', text) > 0);
+      AssertTrue('the block between \uc2 and \uc1: ' + Shown(text),
+        PosRaw('Xc\uc2' + Block2 + '\uc1 d\par', text) > 0);
+      AssertTrue('a block read under \uc1 as it is: ' + Shown(text),
+        PosRaw('Xe' + Block1 + 'f\par', text) > 0);
+      AssertTrue('the block between \uc0 and \uc1: ' + Shown(text),
+        PosRaw('Xg\uc0' + Block0 + '\uc1 h\par', text) > 0);
+      AssertTrue('a picture too: ' + Shown(text), PosRaw('Xi\uc0' + Pict + '\uc1 j\par', text) > 0);
+      AssertTrue('and under \uc7: ' + Shown(text), PosRaw('Xk\uc7' + Pict + '\uc1 l\par', text) > 0);
+      AssertTrue('the pair: ' + Shown(text), PosRaw('Xm\uc7' + Pair + '\uc1 n\par', text) > 0);
+      r := LoadDoc(o, True);
+      AssertEquals('read back: paragraphs', 7, r.Text.ParaCount);
+      for i := 0 to 6 do
+      begin
+        expected := 'X';
+        Cat(expected, ParaText(full, i));
+        AssertRaw(Format('read back: paragraph %d has the typed character and nothing else', [i]),
+          expected, ParaText(r, i));
+        AssertTrue(Format('read back: the object of paragraph %d', [i]),
+          SameObject(ObjectOf(full, i), ObjectOf(r, i)));
+      end;
+    finally
+      r.Free;
+      d.Free;
+    end;
+  finally
+    full.Free;
+  end;
+  // an object made here was read under no \uc: nothing around it
+  d := TTyRichDocument.Create;
+  try
+    d.Execute(TTyRichInsertText.Create(0, 'ab'));
+    d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create('{\*\tyunknown thing}')));
+    AssertEquals('made here', 1, ObjectOf(d, 0).RawUc);
+    o := SaveDoc(d, info);
+    text := StrOf(o, 0, Length(o));
+    AssertTrue('as its bytes: ' + Shown(text), PosRaw('a{\*\tyunknown thing}b\par', text) > 0);
+  finally
+    d.Free;
+  end;
+  // one that says so (pasted from a file read under \uc2) is written between the two words
+  // in a document of our own too
+  d := TTyRichDocument.Create;
+  r := nil;
+  try
+    d.Execute(TTyRichInsertText.Create(0, 'ab'));
+    d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create(Field, ZhZhong, 2)));
+    d.Execute(TTyRichInsertObject.Create(3,
+      TTyRichPicture.Create(rpfPng, PngBytes, 300, 200, Pict, 2)));
+    o := SaveDoc(d, info);
+    text := StrOf(o, 0, Length(o));
+    AssertTrue('between \uc2 and \uc1: ' + Shown(text),
+      PosRaw('a\uc2' + Field + '\uc1 b\uc2' + Pict + '\uc1\par', text) > 0);
+    r := LoadDoc(o, True);
+    AssertRaw('read back', ParaText(d, 0), ParaText(r, 0));
+  finally
+    r.Free;
+    d.Free;
+  end;
+  // a kept fragment that is a group can hold \u as well: the text of a list's bullet. It
+  // goes back under the \uc the file has in effect where the stretch begins, inside
+  // {\pntext} and around {\*\pn}
+  b := BytesOf(Head + '\uc2 \pard\f0\fs24 before\par ' +
+    '\pard{\pntext\f1\' + 'u8226\''a1\''f1\tab}{\*\pn\pnlvlblt\pnf1\pnindent0' + PnText +
+    '}\fi-360\li720 x\par {\pntext\f1\' + 'u8226\''a1\''f1\tab}y\par \pard after\par}');
+  full := LoadDoc(b, True);
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    p := TyDefaultParaFormat;
+    p.SpaceBefore := 77;
+    SetPara(d, 1, [pffSpaceBefore], p);
+    AssertTrue('typed in the second item',
+      d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(2), 'X')));
+    o := SaveDoc(d, info);
+    text := StretchText(o, info);
+    AssertTrue('the list''s words under \uc2: ' + Shown(text),
+      PosRaw('\pard{\pntext\uc2\f1\' + 'u8226\''a1\''f1\tab}\uc2{\*\pn\pnlvlblt\pnf1\pnindent0' +
+        PnText + '}\uc1\fi-360\li720\sb77', text) > 0);
+    AssertTrue('the next item''s text too: ' + Shown(text),
+      PosRaw('{\pntext\uc2\f1\' + 'u8226\''a1\''f1\tab}', text, PosRaw('\sb77', text)) > 0);
+    r := LoadDoc(o, True);
+    AssertEquals('read back: paragraphs', 4, r.Text.ParaCount);
+    AssertRaw('read back: the first item', 'x', ParaText(r, 1));
+    AssertRaw('read back: the second', 'Xy', ParaText(r, 2));
+    pf := full.Formats.ParaFormat(full.ParaFormatOf(1));
+    pf.SpaceBefore := 77;
+    AssertTrue('read back: the first item''s format ' +
+      DescribePara(r.Formats.ParaFormat(r.ParaFormatOf(1))),
+      pf.Equals(r.Formats.ParaFormat(r.ParaFormatOf(1))));
+    AssertEquals('read back: the last paragraph', '', ParaDiff(full, 3, r, 3));
+  finally
+    r.Free;
+    d.Free;
+    full.Free;
+  end;
+  // a property group kept on a paragraph or on a run: the same, when it holds a \uN (\ul
+  // and \up are other words)
+  b := BytesOf(Head + '\uc2 \pard' + ParaProps + '\f0\fs24 ' + CharProps + 'A\par ' +
+    '\pard\plain\f0\fs24 ' + PlainProps + 'B\par}');
+  full := LoadDoc(b, True);
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    AssertEquals('the paragraph''s group is kept', 1,
+      full.Formats.ParaFormat(full.ParaFormatOf(0)).Extra.Count);
+    AssertRaw('as its bytes', ParaProps, full.Formats.ParaFormat(full.ParaFormatOf(0)).Extra.Item(0));
+    AssertRaw('the run''s too', CharProps,
+      full.Formats.CharFormat(full.RunsOf(0)[0].Format).Extra.Item(0));
+    AssertRaw('and the one without a \uN', PlainProps,
+      full.Formats.CharFormat(full.RunsOf(1)[0].Format).Extra.Item(0));
+    for i := 0 to 1 do
+      AssertTrue(Format('typed in paragraph %d', [i]),
+        d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(i), 'X')));
+    o := SaveDoc(d, info);
+    text := StretchText(o, info);
+    AssertTrue('the paragraph''s group between \uc2 and \uc1: ' + Shown(text),
+      PosRaw('\pard\uc2' + ParaProps + '\uc1\plain', text) > 0);
+    AssertTrue('the run''s group too: ' + Shown(text),
+      PosRaw('\plain\uc2' + CharProps + '\uc1\f0\fs24 XA\par', text) > 0);
+    AssertTrue('a group without a \uN as it is: ' + Shown(text),
+      PosRaw('\plain' + PlainProps + '\f0\fs24 XB\par', text) > 0);
+    r := LoadDoc(o, True);
+    for i := 0 to 1 do
+    begin
+      AssertTrue(Format('read back: paragraph %d''s format', [i]),
+        full.Formats.ParaFormat(full.ParaFormatOf(i)).Equals(r.Formats.ParaFormat(r.ParaFormatOf(i))));
+      AssertTrue(Format('read back: paragraph %d''s run', [i]),
+        full.Formats.CharFormat(full.RunsOf(i)[0].Format).Equals(
+          r.Formats.CharFormat(r.RunsOf(i)[0].Format)));
+    end;
+    AssertRaw('read back: the first paragraph', 'XA', ParaText(r, 0));
+    AssertRaw('read back: the second', 'XB', ParaText(r, 1));
+  finally
+    r.Free;
+    d.Free;
+    full.Free;
+  end;
+  // under \uc1 - every file WordPad writes - nothing is added
+  b := BytesOf(Head + '\uc1 \pard\f0\fs24 before\par ' +
+    '\pard{\pntext\f1\' + 'u8226?\tab}{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\' + 'u8226?}' +
+    '}\fi-360\li720 x\par \pard{\*\oldpprops \' + 'u1?\qc}{\*\oldcprops \' + 'u2?}after\par}');
+  d := LoadDoc(b, False);
+  try
+    p := TyDefaultParaFormat;
+    p.SpaceBefore := 77;
+    SetPara(d, 1, [pffSpaceBefore], p);
+    SetPara(d, 2, [pffSpaceBefore], p);
+    o := SaveDoc(d, info);
+    text := StretchText(o, info);
+    AssertTrue('as before: ' + Shown(text),
+      PosRaw('\uc1\pard{\pntext\f1\' + 'u8226?\tab}{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\' +
+        'u8226?}}\fi-360\li720\sb77', text) > 0);
+    AssertTrue('the property groups as they are: ' + Shown(text),
+      PosRaw('\pard{\*\oldpprops \' + 'u1?\qc}\sb77\plain{\*\oldcprops \' + 'u2?}\f0\fs24 after\par',
+        text) > 0);
+  finally
     d.Free;
   end;
 end;

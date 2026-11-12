@@ -164,8 +164,16 @@ type
     run list. Immutable once created - an undo record may still show the old one, so a change
     (a resized picture) is a new object (Clone and change). }
   TTyRichObject = class(TTyRichRefCounted)
+  private
+    FRawUc: Integer;
   public
+    constructor Create;
     function Clone: TTyRichObject; virtual; abstract;
+    { For an object that keeps RTF bytes as they were read (TTyRichOpaque.Bytes,
+      TTyRichPicture.RawRtf): the \ucN in effect where they were read - how many fallback
+      bytes follow each \uN in them, which the bytes themselves do not say. A writer puts
+      them back under that \uc. 1 (RTF's default) for an object made here. }
+    property RawUc: Integer read FRawUc;
   end;
 
   TTyRichPictureFormat = (rpfUnknown, rpfPng, rpfJpeg, rpfBmp, rpfDib, rpfEmf, rpfWmf);
@@ -182,7 +190,8 @@ type
     FShowStart, FShowCount: Integer;
   public
     constructor Create(AFormat: TTyRichPictureFormat; const AData: TBytes;
-      AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString = '');
+      AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString = '';
+      ARawUc: Integer = 1);
     function Clone: TTyRichObject; override;
     { What an image decoder can show of this picture: the format to decode as and the part of
       Data to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP and DIB pictures are their
@@ -205,7 +214,8 @@ type
     FBytes: RawByteString;
     FDisplayText: UTF8String;
   public
-    constructor Create(const ABytes: RawByteString; const ADisplayText: UTF8String = '');
+    constructor Create(const ABytes: RawByteString; const ADisplayText: UTF8String = '';
+      ARawUc: Integer = 1);
     function Clone: TTyRichObject; override;
     property Bytes: RawByteString read FBytes;
     // what stands for it on screen, as plain text: a field's result ('' for most blocks)
@@ -1228,8 +1238,14 @@ end;
 
 { ---- objects ---- }
 
+constructor TTyRichObject.Create;
+begin
+  inherited Create;
+  FRawUc := 1;
+end;
+
 constructor TTyRichPicture.Create(AFormat: TTyRichPictureFormat; const AData: TBytes;
-  AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString);
+  AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString; ARawUc: Integer);
 begin
   inherited Create;
   FFormat := AFormat;
@@ -1237,11 +1253,12 @@ begin
   FWidthTwips := AWidthTwips;
   FHeightTwips := AHeightTwips;
   FRawRtf := ARawRtf;
+  if ARawUc >= 0 then FRawUc := ARawUc;
 end;
 
 function TTyRichPicture.Clone: TTyRichObject;
 begin
-  Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf);
+  Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf, FRawUc);
 end;
 
 function TTyRichPicture.DisplayData(out AFormat: TTyRichPictureFormat;
@@ -1282,16 +1299,18 @@ begin
   ACount := FShowCount;
 end;
 
-constructor TTyRichOpaque.Create(const ABytes: RawByteString; const ADisplayText: UTF8String);
+constructor TTyRichOpaque.Create(const ABytes: RawByteString; const ADisplayText: UTF8String;
+  ARawUc: Integer);
 begin
   inherited Create;
   FBytes := ABytes;
   FDisplayText := ADisplayText;
+  if ARawUc >= 0 then FRawUc := ARawUc;
 end;
 
 function TTyRichOpaque.Clone: TTyRichObject;
 begin
-  Result := TTyRichOpaque.Create(FBytes, FDisplayText);
+  Result := TTyRichOpaque.Create(FBytes, FDisplayText, FRawUc);
 end;
 
 { ---- tables ---- }

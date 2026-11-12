@@ -126,6 +126,7 @@ type
     Kinds: array of TTyRtfParaExtraKind;
     PnFont: Integer;                 // \pnfN among the fragments, -1 none
     PnBefore, PnAfter: RawByteString; // what {\pntxtb ...} and {\pntxta ...} hold
+    PnUc: Boolean;                   // a fragment of {\*\pn} holds a \uN
   end;
   PParaInfo = ^TParaInfo;
 
@@ -187,6 +188,7 @@ type
     FStartRowDef: RawByteString;   // the row definition in effect where the stretch began
     FNumPara, FNum: Integer;
     FNumList: TTyListFormat;
+    FUc: Integer;            // the \uc the file has in effect where the stretch begins
     // output
     procedure Flush;
     procedure Put(P: PByte; ACount: Int64);
@@ -199,6 +201,8 @@ type
     procedure Sym(const S: string);
     procedure Lit(B: Byte);
     procedure Raw(const S: RawByteString);
+    procedure RawUnder(const S: RawByteString; AUc: Integer);
+    procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
     procedure Hex(B: Byte);
@@ -435,6 +439,32 @@ begin
   Result := Odd(slashes);
 end;
 
+// A kept group that holds a \uN: how many of the bytes after it are its fallback is said by
+// the \uc in effect, not by the group, so it reads the same only under the \uc it was read
+// under.
+function HoldsUnicodeEscape(const S: RawByteString): Boolean;
+var
+  i, n: Integer;
+begin
+  Result := False;
+  n := Length(S);
+  if (n < 4) or (S[1] <> '{') then Exit;
+  i := 2;
+  while i < n do
+  begin
+    if S[i] <> '\' then
+    begin
+      Inc(i);
+      Continue;
+    end;
+    // \u123 or \u-123; any other word or symbol is passed over (\\ is a symbol)
+    if (S[i + 1] = 'u') and (i + 2 <= n) and
+       ((S[i + 2] in ['0'..'9']) or ((S[i + 2] = '-') and (i + 3 <= n) and (S[i + 3] in ['0'..'9']))) then
+      Exit(True);
+    Inc(i, 2);
+  end;
+end;
+
 // What a {\pntxta ...} or {\pntxtb ...} fragment holds.
 function PnTextOf(const AFragment: RawByteString; const AWord: string): RawByteString;
 var
@@ -471,6 +501,7 @@ begin
   FLoad := TyRichRtfLoadOf(ADoc);
   FSymbol := -1;
   FCleanPos := -1;
+  FUc := 1;
   SetLength(FBuf, OutBufSize);
 end;
 
@@ -573,6 +604,29 @@ begin
   PutRaw(S);
   FNeedDelim := False;
   FRawOpen := EndsInOpenWord(S);
+end;
+
+// A kept group, read under \ucAUc. What is written here is under \uc1 (one fallback
+// character after each \uN); the group's own \uN have as many as AUc says, so it goes
+// between that \uc and ours. (One control word kept as an object holds no \uN.)
+procedure TRtfWriter.RawUnder(const S: RawByteString; AUc: Integer);
+begin
+  if (AUc = 1) or (S = '') or (S[1] <> '{') then
+  begin
+    Raw(S);
+    Exit;
+  end;
+  WordN('uc', AUc);
+  Raw(S);
+  Word('uc1');
+end;
+
+// A fragment of a format's Extra. The format does not say under which \uc a group among
+// them was read: it is taken to be the one in effect where the stretch begins in the file,
+// which is the paragraph's own in all but files that change \uc between paragraphs.
+procedure TRtfWriter.Fragment(const S: RawByteString);
+begin
+  if (FUc <> 1) and HoldsUnicodeEscape(S) then RawUnder(S, FUc) else Raw(S);
 end;
 
 // Bytes of RTF text taken from a fragment, after a word of ours.
@@ -761,6 +815,7 @@ begin
   Result^.PnFont := -1;
   Result^.PnBefore := '';
   Result^.PnAfter := '';
+  Result^.PnUc := False;
   n := Result^.Fmt.Extra.Count;
   SetLength(Result^.Kinds, n);
   hasPn := False;
@@ -784,6 +839,7 @@ begin
           if TyRtfFragmentIsWord(frag, 'pnf') then Result^.PnFont := param
           else if PnTextOf(frag, 'pntxtb') <> '' then Result^.PnBefore := PnTextOf(frag, 'pntxtb')
           else if PnTextOf(frag, 'pntxta') <> '' then Result^.PnAfter := PnTextOf(frag, 'pntxta');
+          if HoldsUnicodeEscape(frag) then Result^.PnUc := True;
         end;
     end;
   end;
@@ -1492,6 +1548,8 @@ var
 begin
   Sym('{');
   Word('pntext');
+  // the bullet's or number's text as the file has it may hold \uN (see Fragment)
+  if (AInfo^.Mode <> lmGen) and AInfo^.PnUc and (FUc <> 1) then WordN('uc', FUc);
   if AInfo^.Fmt.List.Kind = lkBullet then
   begin
     if AInfo^.Mode = lmGen then
@@ -1528,8 +1586,16 @@ const
   TabLeaderWord: array[TTyTabLeader] of string = ('', 'tldot', 'tlhyph', 'tlul', 'tlth', 'tleq');
 var
   i: Integer;
-  inPn, pnDone: Boolean;
+  inPn, pnDone, pnUc: Boolean;
   list: TTyListFormat;
+
+  procedure ClosePn;
+  begin
+    Sym('}');
+    if pnUc then Word('uc1');
+    inPn := False;
+  end;
+
 begin
   Word('pard');
   if AInCell then Word('intbl');
@@ -1570,6 +1636,8 @@ begin
     pnDone := True;
   end;
   inPn := False;
+  // a {\pntxtb ...} with a \uN in it: the whole {\*\pn} goes between the file's \uc and ours
+  pnUc := AInfo^.PnUc and (FUc <> 1);
   for i := 0 to AInfo^.Fmt.Extra.Count - 1 do
   begin
     // \ls and \ilvl name a list of the file's table: only while that is still the list
@@ -1578,21 +1646,22 @@ begin
     begin
       if not inPn then
       begin
+        if pnUc then WordN('uc', FUc);
         Sym('{\*');
         Word('pn');
         if not pnDone and (AInfo^.Mode = lmPn) then WritePnWords(list);
         pnDone := True;
         inPn := True;
       end;
+      Raw(AInfo^.Fmt.Extra.Item(i));
     end
-    else if inPn then
+    else
     begin
-      Sym('}');
-      inPn := False;
+      if inPn then ClosePn;
+      Fragment(AInfo^.Fmt.Extra.Item(i));
     end;
-    Raw(AInfo^.Fmt.Extra.Item(i));
   end;
-  if inPn then Sym('}');
+  if inPn then ClosePn;
   with AInfo^.Fmt do
   begin
     case Align of
@@ -1643,7 +1712,7 @@ begin
   font := FontOf(AId);
   ci := CharInfo(AId);
   Word('plain');
-  for i := 0 to ci^.Fmt.Extra.Count - 1 do Raw(ci^.Fmt.Extra.Item(i));
+  for i := 0 to ci^.Fmt.Extra.Count - 1 do Fragment(ci^.Fmt.Extra.Item(i));
   if font >= 0 then WordN('f', FFonts[font].Num)
   else if FNoFontNum >= 0 then WordN('f', FNoFontNum);
   FCurSymbol := (font >= 0) and (FFonts[font].Charset = SYMBOL_CHARSET);
@@ -1740,10 +1809,10 @@ end;
 procedure TRtfWriter.WriteObject(AObj: TTyRichObject);
 begin
   if AObj is TTyRichOpaque then
-    Raw(TTyRichOpaque(AObj).Bytes)
+    RawUnder(TTyRichOpaque(AObj).Bytes, AObj.RawUc)
   else if AObj is TTyRichPicture then
   begin
-    if TTyRichPicture(AObj).RawRtf <> '' then Raw(TTyRichPicture(AObj).RawRtf)
+    if TTyRichPicture(AObj).RawRtf <> '' then RawUnder(TTyRichPicture(AObj).RawRtf, AObj.RawUc)
     else WritePicture(TTyRichPicture(AObj));
   end
   else
@@ -1763,7 +1832,9 @@ var
   d: Integer;
 begin
   FStartRowDef := '';
+  FUc := 1;
   if not FLoad.StateAt(APos, st) then Exit;
+  FUc := st.Core.Props.Uc;
   for d := 2 to st.Core.Depth do PutB(Ord('}'));
   FStartRowDef := BytesOfRange(FLoad.Bytes, st.Core.RowDef.Raw);
   FNeedDelim := False;

@@ -357,6 +357,7 @@ var
 begin
   if (A = nil) or (B = nil) then Exit(A = B);
   if A.ClassType <> B.ClassType then Exit(False);
+  if A.RawUc <> B.RawUc then Exit(False);
   if A is TTyRichOpaque then
     Exit((TTyRichOpaque(A).Bytes = TTyRichOpaque(B).Bytes) and
       (TTyRichOpaque(A).DisplayText = TTyRichOpaque(B).DisplayText));

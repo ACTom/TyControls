@@ -2564,7 +2564,7 @@ begin
         if FHeld <> nil then
         begin
           pic := TTyRichPicture.Create(FHeld.PictureFormat, FHeld.Data, FHeld.WidthTwips,
-            FHeld.HeightTwips, Fragment(Range(AOld.DestStart, stop)));
+            FHeld.HeightTwips, Fragment(Range(AOld.DestStart, stop)), FS.Props.Uc);
           FObjects.Add(pic);
           FHeld := nil;
           EmitObject(pic);
@@ -2888,8 +2888,9 @@ begin
   if w > High(Integer) then w := High(Integer) else if w < 0 then w := 0;
   if h > High(Integer) then h := High(Integer) else if h < 0 then h := 0;
   data := Copy(FPicData, 0, FPicLen);
+  // (its group has ended: the \uc in effect now is the one it was opened under)
   Result := TTyRichPicture.Create(FPicFormat, data, Integer(w), Integer(h),
-    Fragment(Range(AStart, AStop)));
+    Fragment(Range(AStart, AStop)), FS.Props.Uc);
   FObjects.Add(Result);
   FPicData := nil;
   FPicLen := 0;
@@ -3904,13 +3905,18 @@ end;
 procedure TTyRtfParser.EmitOpaque(AStart, AStop: PtrInt; const ADisplay: UTF8String);
 var
   o: TTyRichOpaque;
+  uc: Integer;
 begin
   if Counting then
   begin
     EmitObject(nil);
     Exit;
   end;
-  o := TTyRichOpaque.Create(Fragment(Range(AStart, AStop)), ADisplay);
+  // the block is a group that has ended: the \uc in effect here is the one its bytes were
+  // read under, and they only read the same again under that one. (One control word kept
+  // as an object - a page number - holds no \uN: it reads the same anywhere.)
+  if FBuf[AStart] = Ord('{') then uc := FS.Props.Uc else uc := 1;
+  o := TTyRichOpaque.Create(Fragment(Range(AStart, AStop)), ADisplay, uc);
   FObjects.Add(o);
   EmitObject(o);
 end;
