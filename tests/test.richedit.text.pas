@@ -50,6 +50,7 @@ type
     procedure TestHeightIndex;
     procedure TestManyEditsKeepTheTreeConsistent;
     procedure TestDeepTreeStaysConsistent;
+    procedure TestSmallInsertsDoNotMakeALeafEach;
   end;
 
   { Decodes paragraph i from a table; the "file offset" of paragraph i is i*1000+7, so the
@@ -876,6 +877,83 @@ begin
     end;
     AssertEquals('one empty paragraph', 1, t.ParaCount);
     AssertEquals('depth collapses', 0, t.TreeDepth);
+  finally
+    t.Free;
+  end;
+end;
+
+{ After a load every leaf is full. A character typed inside a paragraph adds two pieces to
+  its leaf; the index may grow by about those pieces, not by a leaf for each of them. }
+procedure TTyRichTextTest.TestSmallInsertsDoNotMakeALeafEach;
+const
+  Lines = 20000;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  ref: UTF8String;
+  i, len: Integer;
+  h0, h1, h2, index, pieces0, added, budget: Int64;
+begin
+  buf := nil;
+  SetLength(buf, Lines * 5);
+  for i := 0 to Lines - 1 do
+  begin
+    buf[i * 5] := Ord('a');
+    buf[i * 5 + 1] := Ord('b');
+    buf[i * 5 + 2] := Ord('c');
+    buf[i * 5 + 3] := Ord('d');
+    buf[i * 5 + 4] := 10;
+  end;
+  h0 := GetFPCHeapStatus.CurrHeapUsed;
+  t := TTyRichText.CreateFromUtf8(buf);
+  try
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    index := h1 - h0;
+    pieces0 := t.PieceCount;
+    // sparse: one insert in every leaf's worth of paragraphs. However few pieces come in, a
+    // leaf that splits leaves two half-full ones, so the index can at most double
+    i := 0;
+    while i < Lines do
+    begin
+      t.Insert(t.ParaStart(i) + 2, 'x');
+      Inc(i, 64);
+    end;
+    h2 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertTrue(Format('sparse inserts grew an index of %d bytes by %d', [index, h2 - h1]),
+      h2 - h1 <= index + 64 * 1024);
+    // dense: a character typed inside every paragraph
+    for i := 0 to Lines - 1 do
+      if i mod 64 <> 0 then
+        t.Insert(t.ParaStart(i) + 2, 'x');
+    h2 := GetFPCHeapStatus.CurrHeapUsed;
+    added := t.PieceCount - pieces0;
+    AssertEquals('two pieces per insert', Int64(2) * Lines, added);
+    // leaves at least half full, the inner nodes and the add buffer on top
+    budget := added * 3 * SizeOf(TTyRichPiece) + 128 * 1024;
+    AssertTrue(Format('%d pieces added grew the heap by %d bytes (%d each), budget %d',
+      [added, h2 - h1, (h2 - h1) div added, budget]), h2 - h1 <= budget);
+    AssertEquals('integrity', '', t.CheckIntegrity);
+    ref := '';
+    len := 0;
+    for i := 0 to Lines - 1 do AddStr(ref, len, 'abxcd'#10);
+    SetLength(ref, len);
+    AssertBytesEqual('text', ref, t.GetText(0, t.Length));
+  finally
+    t.Free;
+  end;
+  // lines added at the end one by one still pack the leaves: the full leaf is left alone
+  h0 := GetFPCHeapStatus.CurrHeapUsed;
+  t := TTyRichText.Create;
+  try
+    for i := 0 to Lines - 1 do
+      t.Insert(t.Length, 'abcd'#10);
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertEquals('a piece per line', Lines, t.PieceCount);
+    // the add buffer doubles, so it holds at most twice its text
+    budget := Int64(Lines) * SizeOf(TTyRichPiece) * 5 div 4 + 2 * t.AddedBytes + 64 * 1024;
+    AssertTrue(Format('%d appended pieces took %d bytes, budget %d', [Lines, h1 - h0, budget]),
+      h1 - h0 <= budget);
+    AssertEquals('integrity after appends', '', t.CheckIntegrity);
   finally
     t.Free;
   end;

@@ -885,8 +885,11 @@ begin
 end;
 
 { Puts AItems in front of piece AAt (AAt = PieceCount appends). When they do not fit in
-  the leaf, the leaf's tail is set aside and everything is appended leaf after full leaf,
-  so a big restore packs the leaves instead of leaving them half full. }
+  the leaf: a few pieces going inside it (typing, a replace - and after a load every leaf is
+  full) split the leaf in the middle and go in place, so both halves have room for the
+  inserts that follow; a big run, or one at the leaf's end, sets the leaf's tail aside and
+  is appended leaf after full leaf, so a big restore and a load that goes on pack the
+  leaves instead of leaving them half full. }
 procedure TTyRichText.InsertEntries(AAt: LongInt; const AItems: array of TTyRichPiece);
 var
   p: TTyRichPath;
@@ -926,6 +929,15 @@ begin
   Descend(rskEntry, AAt, p, before);
   leaf := PTyRichLeaf(p.Steps[FDepth].Node);
   idx := p.Steps[FDepth].Index;
+  if (leaf^.Count + n > TyRichLeafCap) and (n <= TyRichLeafCap div 2) and
+     (idx < leaf^.Count) then
+  begin
+    // packing here would leave this leaf full and put the one piece that no longer fits
+    // in a leaf of its own - again at the next insert into it, a leaf per piece
+    SplitNode(p, FDepth, leaf^.Count div 2);
+    leaf := PTyRichLeaf(p.Steps[FDepth].Node);
+    idx := p.Steps[FDepth].Index;
+  end;
   if leaf^.Count + n <= TyRichLeafCap then
   begin
     if idx < leaf^.Count then
