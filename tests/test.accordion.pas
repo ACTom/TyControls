@@ -860,6 +860,13 @@ begin
     AssertTrue('step ' + IntToStr(i) + ': B is under A', FB.Top >= FA.Top + FA.Height);
     AssertTrue('step ' + IntToStr(i) + ': C is under B', FC.Top >= FB.Top + FB.Height);
     AssertEquals('step ' + IntToStr(i) + ': C ends at the bottom', 400, FC.Top + FC.Height);
+    { B is collapsed from the moment it was toggled: the gaps closing above and below it
+      are not strips, whichever of its neighbours is open }
+    AssertEquals('step ' + IntToStr(i) + ': no strip beside the closing section', 0,
+      FAcc.SplitterCount);
+    if i = 1 then
+      AssertTrue('setup: at the first step both gaps are still open',
+        (FB.Top > FA.Top + FA.Height) and (FC.Top > FB.Top + FB.Height));
   end;
 end;
 
