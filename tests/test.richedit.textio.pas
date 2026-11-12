@@ -83,6 +83,10 @@ type
     procedure TestSavingUsesAFixedBuffer;
     procedure TestConvertedTextIsIndexedLikeAScan;
     procedure TestSavingLazyParagraphsStaysInTheWalk;
+    procedure TestAPartialDocumentIsNotSavedOrEdited;
+    procedure TestALoneOrCutBomRoundTrips;
+    procedure TestOtherCodePagesRoundTrip;
+    procedure TestACharacterTheCodePageLacksIsAQuestionMark;
   end;
 
 implementation
@@ -960,6 +964,136 @@ begin
     limit := Int64(Paras + 8) * (d.Text.TreeDepth + 1);
     AssertTrue(Format('saving %d lazy paragraphs visited %d nodes, limit %d',
       [Paras, d.Text.NodeVisits - v, limit]), d.Text.NodeVisits - v <= limit);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A document that is still being loaded, or whose load was cancelled, holds a part of its
+  file: saving it would put that part in the file's place, and it cannot be edited. }
+procedure TTyRichTextIOTest.TestAPartialDocumentIsNotSavedOrEdited;
+var
+  d: TTyRichDocument;
+  original: TBytes;
+  s: TBytesStream;
+  state: Integer;
+  raised: Boolean;
+begin
+  original := BytesOf(FromBytes([$EF, $BB, $BF]) + 'abc'#13#10'def');
+  d := LoadBytes(original);
+  s := TBytesStream.Create;
+  try
+    for state := 0 to 1 do
+    begin
+      // 0: a slice is still to come; 1: the load was cancelled
+      TIONullLoader.SetLoadState(d, state = 0, state = 1);
+      raised := False;
+      try
+        TyRichSaveText(d, s);
+      except
+        on ETyRichTextIO do raised := True;
+      end;
+      AssertTrue(Format('state %d: saving must raise', [state]), raised);
+      AssertEquals(Format('state %d: nothing was written, not even the BOM', [state]),
+        Int64(0), s.Size);
+      AssertFalse(Format('state %d: a command is refused', [state]),
+        d.Execute(TTyRichInsertText.Create(0, 'x')));
+      AssertEquals(Format('state %d: the text is as it was', [state]), Int64(7), d.Text.Length);
+    end;
+    TIONullLoader.SetLoadState(d, False, False);
+    AssertSameBytes('whole again: saved as read', original, SaveBytes(d));
+    AssertTrue('and a command runs', d.Execute(TTyRichInsertText.Create(0, 'x')));
+  finally
+    s.Free;
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTextIOTest.TestALoneOrCutBomRoundTrips;
+
+  procedure Check(const AMsg: string; const AOriginal: TBytes; AEnc: TTyTextEncoding;
+    ABom: Boolean; const AText: UTF8String);
+  var
+    d: TTyRichDocument;
+  begin
+    // 1252 for the ANSI fallback, so the result does not depend on the system
+    d := LoadBytes(AOriginal, teAuto, 1252);
+    try
+      AssertTrue(AMsg + ': encoding ' + IntToStr(Ord(d.SourceEncoding)), d.SourceEncoding = AEnc);
+      AssertEquals(AMsg + ': BOM', ABom, d.SourceHasBom);
+      AssertEquals(AMsg + ': paragraphs', 1, d.Text.ParaCount);
+      AssertText(AMsg + ': text', AText, d.Text.GetText(0, d.Text.Length));
+      AssertSameBytes(AMsg + ': opened and saved', AOriginal, SaveBytes(d));
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  // a file that is its BOM and nothing else
+  Check('UTF-8 BOM alone', BytesOf(FromBytes([$EF, $BB, $BF])), teUtf8Bom, True, '');
+  Check('UTF-16LE BOM alone', BytesOf(FromBytes([$FF, $FE])), teUtf16LE, True, '');
+  Check('UTF-16BE BOM alone', BytesOf(FromBytes([$FE, $FF])), teUtf16BE, True, '');
+  // two bytes of the UTF-8 BOM are no BOM and no UTF-8: two ANSI characters
+  Check('a cut UTF-8 BOM', BytesOf(FromBytes([$EF, $BB])), teAnsi, False, U('ï»'));
+  // one byte of a UTF-16 BOM likewise
+  Check('a cut UTF-16 BOM', BytesOf(FromBytes([$FF])), teAnsi, False, U('ÿ'));
+  // UTF-16 without a BOM is not looked for: its bytes are valid UTF-8, NULs and all
+  Check('UTF-16LE without a BOM', BytesOf(FromBytes([$61, 0, $62, 0])), teUtf8, False,
+    FromBytes([$61, 0, $62, 0]));
+end;
+
+procedure TTyRichTextIOTest.TestOtherCodePagesRoundTrip;
+
+  procedure Check(ACodePage: Integer; const AOriginal: array of Byte; const AText: UTF8String);
+  var
+    d: TTyRichDocument;
+    original: TBytes;
+    msg: string;
+  begin
+    msg := 'cp' + IntToStr(ACodePage);
+    original := BytesOf(FromBytes(AOriginal));
+    d := LoadBytes(original, teAnsi, ACodePage);
+    try
+      AssertEquals(msg + ': code page', ACodePage, d.SourceCodePage);
+      AssertText(msg + ': decoded', AText, d.Text.GetText(0, d.Text.Length));
+      AssertSameBytes(msg + ': opened and saved', original, SaveBytes(d));
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  // Shift-JIS: hiragana A, a half-width katakana (one byte), a kanji
+  Check(932, [$82, $A0, $B1, $93, $FA, 13, 10, $41], U('あｱ日'#13#10'A'));
+  // Korean
+  Check(949, [$B0, $A1, $41, $B3, $AA], U('가A나'));
+  // Big5
+  Check(950, [$A4, $A4, $A4, $E5, 10, $42], U('中文'#10'B'));
+  // a single-byte page: the euro sign and an accented letter
+  Check(1252, [$80, $E9, $41, 13, $FC], U('€éA'#13'ü'));
+  // Cyrillic
+  Check(1251, [$CF, $F0, $E8, $E2, $E5, $F2], U('Привет'));
+end;
+
+procedure TTyRichTextIOTest.TestACharacterTheCodePageLacksIsAQuestionMark;
+var
+  d: TTyRichDocument;
+begin
+  d := LoadBytes(BytesOf('abc'), teAnsi, 1252);
+  try
+    // 1252 has the e acute; it has no Chinese and nothing beyond the first plane
+    d.Execute(TTyRichInsertText.Create(1, U('中é😀')));
+    AssertSameBytes('what the page lacks is one ? each',
+      BytesOf('a?' + FromBytes([$E9]) + '?bc'), SaveBytes(d));
+  finally
+    d.Free;
+  end;
+  d := LoadBytes(BytesOf('abc'), teAnsi, 936);
+  try
+    d.Execute(TTyRichInsertText.Create(3, U('中😀')));
+    AssertSameBytes('GBK writes the Chinese and not the emoji',
+      BytesOf('abc' + FromBytes([$D6, $D0]) + '?'), SaveBytes(d));
   finally
     d.Free;
   end;

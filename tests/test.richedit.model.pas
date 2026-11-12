@@ -83,6 +83,7 @@ type
     procedure TestChangesAreReported;
     procedure TestDocumentDefaults;
     procedure TestEditsThroughTextKeepRunsInside;
+    procedure TestTableIndexesAndEmptyTablesAreRefused;
   end;
 
 implementation
@@ -1151,6 +1152,57 @@ begin
       RunsStr(d, 0));
     AssertTrue('it is a modification', d.Modified);
   finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichModelTest.TestTableIndexesAndEmptyTablesAreRefused;
+var
+  d: TDocAccess;
+  t: TTyRichTable;
+  row: TTyRichRow;
+  before: string;
+
+  procedure Refused(const AWhat: string; AKind: Integer);
+  var
+    raised: Boolean;
+  begin
+    raised := False;
+    try
+      case AKind of
+        0: t.ColBoundaries[2];
+        1: t.ColBoundaries[-1];
+        2: row.Boundaries[3];
+        3: row.Boundaries[-1];
+        4: d.MarkTable(0, t, []).Free;
+        5: d.MarkTable(2, t, []).Free;
+      end;
+    except
+      on ETyRichModel do raised := True;
+    end;
+    AssertTrue(AWhat + ' must raise ETyRichModel', raised);
+  end;
+
+begin
+  d := NewDoc('p0'#13#10'p1'#13#10'p2');
+  t := TCountedTable.Create([1440, 2880]);
+  t.AddRef;
+  try
+    // a table without a row has no cell to give a paragraph to
+    before := Dump(d);
+    Refused('marking an empty table at the start', 4);
+    Refused('marking an empty table further down', 5);
+    AssertEquals('the document is as it was', before, Dump(d));
+    AssertFalse('and not modified', d.Modified);
+    row := t.AddRow(2, '', [0, 1440, 2880]);
+    AssertEquals('the last column boundary', 2880, t.ColBoundaries[1]);
+    AssertEquals('the last row boundary', 2880, row.Boundaries[2]);
+    Refused('a column boundary past the last', 0);
+    Refused('a column boundary before the first', 1);
+    Refused('a row boundary past the last', 2);
+    Refused('a row boundary before the first', 3);
+  finally
+    t.Release;
     d.Free;
   end;
 end;

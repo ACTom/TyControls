@@ -1265,6 +1265,8 @@ end;
 
 function TTyRichRow.GetBoundary(AIndex: Integer): Integer;
 begin
+  if (AIndex < 0) or (AIndex > High(FBoundaries)) then
+    raise ETyRichModel.CreateFmt('Boundary index %d out of range', [AIndex]);
   Result := FBoundaries[AIndex];
 end;
 
@@ -1339,6 +1341,8 @@ end;
 
 function TTyRichTable.GetColBoundary(AIndex: Integer): Integer;
 begin
+  if (AIndex < 0) or (AIndex > High(FColBoundaries)) then
+    raise ETyRichModel.CreateFmt('Column boundary index %d out of range', [AIndex]);
   Result := FColBoundaries[AIndex];
 end;
 
@@ -2630,6 +2634,9 @@ begin
       raise ETyRichModel.Create('Every cell needs at least one paragraph');
     Inc(total, ACellParas[i]);
   end;
+  // no row yet: there is no paragraph range to mark (and none to report as changed)
+  if total = 0 then
+    raise ETyRichModel.Create('A table without cells cannot be marked');
   lastPara := AFirstPara + total - 1;
   if (AFirstPara < 0) or (lastPara >= FText.ParaCount) then
     raise ETyRichModel.CreateFmt('Paragraphs %d..%d out of 0..%d',

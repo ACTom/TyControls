@@ -57,7 +57,8 @@ procedure TyRichLoadText(ADoc: TTyRichDocument; AStream: TStream;
   the line breaks as they are stored. Streams through a fixed buffer. A character the code
   page has no bytes for is written '?' (ANSI); a stored byte that is not UTF-8 is written as
   it is (UTF-8), '?' (ANSI) or U+FFFD (UTF-16), unless it is an escape (see the unit
-  comment). }
+  comment). Raises ETyRichTextIO, and writes nothing, when ADoc is Incomplete (a cancelled
+  load: the rest of the file is not in it) or still Loading. }
 procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream);
 
 { The code page teAnsi uses for ACodePage: ACodePage itself, or for 0 the system's ANSI code
@@ -1390,6 +1391,13 @@ var
 begin
   if (ADoc = nil) or (AStream = nil) then
     raise ETyRichTextIO.Create('TyRichSaveText needs a document and a stream');
+  // a part of the file written in the file's place would lose the rest of it
+  if ADoc.Incomplete then
+    raise ETyRichTextIO.Create('This document holds only a part of its file (the load was ' +
+      'cancelled): it cannot be saved as text');
+  if ADoc.Loading then
+    raise ETyRichTextIO.Create('This document is still being loaded: it cannot be saved ' +
+      'before the load has ended');
   enc := ADoc.SourceEncoding;
   if enc = teAuto then enc := teUtf8;
   table := nil;
