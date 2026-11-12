@@ -120,6 +120,7 @@ type
       reference; the text is kept in FTokenTexts the same way. }
     FRawVarCache: TStringList;
     FTokenLookups: Integer;       // token reads that walked FMergedVars; see TokenLookupsForTest
+    FOverrideParses: Integer;     // override texts parsed for one token; see OverrideParsesForTest
     procedure InvalidateResolveCache;
     { #14. The memo is current when it was built against THIS theme version AND this state of
       the process-wide type key chain registry. ReanchorCache drops it and records both. }
@@ -236,6 +237,10 @@ type
     { FOR THE TESTS: how many token reads (ResolveToken, ResolveColorToken, ResolveMetric,
       RawVar) have walked the theme's variables to find their answer, since the model was made. }
     function TokenLookupsForTest: Integer;
+    { FOR THE TESTS (#224): how many times a control's own StyleOverride has been parsed to
+      answer one token (ResolveOverrideMetric, ResolveOverrideToken, ResolveOverrideColor),
+      since the model was made. }
+    function OverrideParsesForTest: Integer;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
       block's vars overlay the user :root in the merged var set. SetMode re-runs the merge
@@ -2659,7 +2664,9 @@ var
 begin
   Result := '';
   AFound := False;
-  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  if Trim(ASource) = '' then Exit;
+  Inc(FOverrideParses);
+  if not TyParseOverride(ASource, decls) then Exit;
   want := TyNormVarName(AName);
   if not TyDeclaresVar(decls, want) then Exit;
   vars := OverrideVarsOver(decls);
@@ -2680,7 +2687,9 @@ var
 begin
   Result := ADefault;
   AFound := False;
-  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  if Trim(ASource) = '' then Exit;
+  Inc(FOverrideParses);
+  if not TyParseOverride(ASource, decls) then Exit;
   want := TyNormVarName(AName);
   if not TyDeclaresVar(decls, want) then Exit;
   vars := OverrideVarsOver(decls);
@@ -2721,6 +2730,11 @@ begin
   Inc(FTokenLookups);
   Result := TyFollowVarRef(FMergedVars.Values[key], FMergedVars);
   FTokenCache.AddObject(key, TObject(PtrInt(FTokenTexts.Add(Result))));
+end;
+
+function TTyStyleModel.OverrideParsesForTest: Integer;
+begin
+  Result := FOverrideParses;
 end;
 
 function TTyStyleModel.TokenLookupsForTest: Integer;
@@ -2788,7 +2802,9 @@ var
 begin
   Result := ADefault;
   AFound := False;
-  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  if Trim(ASource) = '' then Exit;
+  Inc(FOverrideParses);
+  if not TyParseOverride(ASource, decls) then Exit;
   { only a token the BLOCK declares is the block's answer; a theme-only name is the theme's }
   want := TyNormVarName(AName);
   if not TyDeclaresVar(decls, want) then Exit;
