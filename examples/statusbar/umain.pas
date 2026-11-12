@@ -5,8 +5,8 @@ unit umain;
   - A panel with Width <=0 auto-fills the remaining space (fill panel)
   - SizeGrip -- bottom-right resize handle
   - SimplePanel/SimpleText: switch to a single full-width text mode
-  - PanelAtPos: the bar's only hit-test -- there is no OnPanelClick, so a click on one specific
-    panel is resolved from OnMouseDown
+  - OnPanelClick: a click on one panel, reported with the panel itself (PanelAtPos / PanelRect
+    are there for a handler that needs the geometry)
   - SizeGrip can be switched off at run time (the corner dots go, and so does the OS resize drag)
   - Panels is a live collection: Add/Delete it while the app runs and the bar re-lays out
   - Clicking a button updates a panel's text (multi-panel mode) or the whole-bar text (simple mode)
@@ -44,8 +44,7 @@ type
     procedure ToggleGrip(Sender: TObject);        // toggle the size grip on/off
     procedure AddPanel(Sender: TObject);          // Panels.Add at run time
     procedure RemovePanel(Sender: TObject);       // Panels.Delete at run time
-    procedure StatusBarMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);         // hit-test the click with PanelAtPos
+    procedure StatusBarPanelClick(Sender: TObject; APanel: TTyStatusPanel);   // a click on a panel
   private
     FClicks: Integer;
   end;
@@ -154,17 +153,11 @@ begin
     StatusBar.Panels.Delete(StatusBar.Panels.Count - 1);
 end;
 
-procedure TMainForm.StatusBarMouseDown(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
-var
-  i: Integer;
+procedure TMainForm.StatusBarPanelClick(Sender: TObject; APanel: TTyStatusPanel);
 begin
-  // PanelAtPos is the bar's only public API method: there is no OnPanelClick, so this is how
-  // a click is attributed to one panel. It answers -1 outside every panel and in SimplePanel
-  // mode (where there are no panel rectangles to hit).
-  i := StatusBar.PanelAtPos(X, Y);
-  if i >= 0 then
-    StatusBar.Panels[0].Text := Format(rsClickedPanelFmt, [i]);
+  // The bar reports a click that went down and came up on the same panel. It reports none in
+  // SimplePanel mode (there are no panels to hit) and none for the size grip.
+  StatusBar.Panels[0].Text := Format(rsClickedPanelFmt, [APanel.Index]);
 end;
 
 end.

@@ -48,7 +48,7 @@ object MainForm: TMainForm
       Height = 40
       Top = 56
       Width = 472
-      Caption = 'Bottom status bar: multiple panels + size grip. Click a panel to see PanelAtPos report its index; the buttons edit the bar at run time.'
+      Caption = 'Bottom status bar: multiple panels + size grip. Click a panel to see OnPanelClick report it; the buttons edit the bar at run time.'
       WordWrap = True
     end
     object BtnUpdate: TTyButton
@@ -107,7 +107,7 @@ object MainForm: TMainForm
       Width = 520
       Align = alBottom
       SizeGrip = True
-      OnMouseDown = StatusBarMouseDown
+      OnPanelClick = StatusBarPanelClick
       Panels = <
         item
           Text = 'Ready'
