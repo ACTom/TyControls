@@ -1736,6 +1736,8 @@ var
   r: TTyRunArray;
   src: RawByteString;
   i, last: Integer;
+  m: TTyRtfSourceMap;
+  st: TTyRtfState;
 begin
   d := LoadString('{\rtf1 \pard\lang1033 a\lang2052 b\lang1033 c\kerning2 d\lang1033\kerning0 e\par}');
   try
@@ -1747,7 +1749,7 @@ begin
     AssertEquals('five runs', 5, Length(r));
     AssertEquals('c has a''s very format again', r[0].Format, r[2].Format);
     AssertText('d: a second word joins', '\lang1033 |\kerning2 ', Joined(CharAt(d, 0, 3).Extra));
-    AssertText('e: in the order they were last written', '\lang1033|\kerning0 ',
+    AssertText('e: a word written again as it is stays, another value comes last', '\lang1033 |\kerning0 ',
       Joined(CharAt(d, 0, 4).Extra));
   finally
     d.Free;
@@ -1773,7 +1775,8 @@ begin
     d.Free;
   end;
   // Word's pair for the other writing direction: \fcs says which of the two it follows, so
-  // both stay - and written again, the same five take the old ones' place
+  // both stay - and written again, the five words change nothing. The other way round, the
+  // direction named last comes last, with what was first written after it
   d := LoadString('{\rtf1 \pard\rtlch\fcs1 \af0 \ltrch\fcs0 a\rtlch\fcs1 \af0 \ltrch\fcs0 b' +
     '\ltrch\fcs1 \af0 \rtlch\fcs0 c\par}');
   try
@@ -1781,8 +1784,17 @@ begin
     r := d.RunsOf(0);
     AssertEquals('two runs', 2, Length(r));
     AssertEquals('b: the same format', 2, r[1].Start);
-    AssertText('c: the other direction', '\ltrch|\fcs1 |\af0 |\rtlch|\fcs0 ',
+    AssertText('c: the other direction', '\ltrch|\fcs1 |\rtlch|\fcs0 |\af0 ',
       Joined(CharAt(d, 0, 2).Extra));
+  finally
+    d.Free;
+  end;
+  // a word that belongs to a direction is looked for under that direction only
+  d := LoadString('{\rtf1 \pard\rtlch\ltrch\fcs0 a\rtlch\fcs0 b\par}');
+  try
+    AssertText('a', '\rtlch|\ltrch|\fcs0 ', Joined(CharAt(d, 0, 0).Extra));
+    AssertText('b: \rtlch gets a \fcs of its own', '\ltrch|\fcs0 |\rtlch|\fcs0 ',
+      Joined(CharAt(d, 0, 1).Extra));
   finally
     d.Free;
   end;
@@ -1795,7 +1807,8 @@ begin
     d.Free;
   end;
   // the paragraph's words: the same word again replaces; a bar tab is one of several, and
-  // a border's words belong to the side named before them
+  // a border's words belong to the side named before them (a side named again comes last
+  // and keeps its words, but for the ones written anew)
   d := LoadString('{\rtf1 \pard\keep\s1 a\par\keep\s2 b\par' +
     '\pard\tb100\tb200\tb100 c\par' +
     '\pard\brdrt\brdrs\brdrw10 \brdrb\brdrs\brdrw20 d\par\brdrt\brdrdb\brdrw30 e\par' +
@@ -1803,12 +1816,80 @@ begin
   try
     AssertText('a', '\keep|\s1 ', Joined(ParaFmt(d, 0).Extra));
     AssertText('b: the later style', '\keep|\s2 ', Joined(ParaFmt(d, 1).Extra));
-    AssertText('c: two bar tabs', '\tb200|\tb100 ', Joined(ParaFmt(d, 2).Extra));
+    AssertText('c: two bar tabs', '\tb100|\tb200', Joined(ParaFmt(d, 2).Extra));
     AssertText('d: two borders', '\brdrt|\brdrs|\brdrw10 |\brdrb|\brdrs|\brdrw20 ',
       Joined(ParaFmt(d, 3).Extra));
-    AssertText('e: the top border again', '\brdrb|\brdrs|\brdrw20 |\brdrt|\brdrdb|\brdrw30 ',
+    AssertText('e: the top border again', '\brdrb|\brdrs|\brdrw20 |\brdrt|\brdrs|\brdrw30 |\brdrdb',
       Joined(ParaFmt(d, 4).Extra));
     AssertText('f: the later list', '\ilvl0|\ls2 ', Joined(ParaFmt(d, 5).Extra));
+  finally
+    d.Free;
+  end;
+  // Word names the words of its paragraph again in every run's group, with a space after
+  // them or without: nothing changes, and the run has the paragraph's very format
+  d := LoadString('{\rtf1 \pard\rtlch\fcs1 \af0\afs24 \ltrch\fcs0 \lang1033 a' +
+    '{\rtlch\fcs1 \af0 \ltrch\fcs0 \lang1033\afs24 b}{\rtlch\fcs1 \af0 \ltrch\fcs0 \insrsid7 c}\par}');
+  try
+    r := d.RunsOf(0);
+    AssertEquals('ab is one run, c another', 2, Length(r));
+    AssertEquals('c starts the second', 2, r[1].Start);
+    AssertText('the paragraph''s words', '\rtlch|\fcs1 |\af0|\afs24 |\ltrch|\fcs0 |\lang1033 ',
+      Joined(CharAt(d, 0, 0).Extra));
+    AssertText('and one more for c', '\rtlch|\fcs1 |\af0|\afs24 |\ltrch|\fcs0 |\lang1033 |\insrsid7 ',
+      Joined(CharAt(d, 0, 2).Extra));
+  finally
+    d.Free;
+  end;
+  // the direction named last comes last, also where no text follows it before a group, a
+  // paragraph end or a snapshot: the words that restore the state there (a writer's) say so
+  m := TTyRtfSourceMap.Create;
+  d := LoadString('{\rtf1 \pard\rtlch\fcs1 \ltrch\fcs0 a\par\rtlch{\b b\par c\par}\par d\par}', m);
+  try
+    AssertTrue('the state where c starts', TyRichRtfLoadOf(d).StateAt(m.Paras[2].Start, st));
+    AssertEquals('inside the group', 2, st.Core.Depth);
+    AssertTrue('the group''s saved words: rtlch last',
+      Pos('\ltrch\fcs0 \rtlch\fcs1 ', TyRtfStateWords(st, m.Bytes, 1)) > 0);
+    AssertTrue('the words in effect: rtlch last',
+      Pos('\ltrch\fcs0 \rtlch\fcs1 ', TyRtfStateWords(st, m.Bytes)) > 0);
+    AssertText('b', '\ltrch|\fcs0 |\rtlch|\fcs1 ', Joined(CharAt(d, 1, 0).Extra));
+  finally
+    d.Free;
+    m.Free;
+  end;
+  // ... and with no group: the direction named, an empty paragraph, then text
+  m := TTyRtfSourceMap.Create;
+  d := LoadString('{\rtf1 \pard\rtlch\fcs1 \ltrch\fcs0 a\par\rtlch\par d\par}', m);
+  try
+    AssertTrue('the state where d starts', TyRichRtfLoadOf(d).StateAt(m.Paras[2].Start, st));
+    AssertTrue('the words in effect there: rtlch last',
+      Pos('\ltrch\fcs0 \rtlch\fcs1 ', TyRtfStateWords(st, m.Bytes)) > 0);
+    AssertText('d', '\ltrch|\fcs0 |\rtlch|\fcs1 ', Joined(CharAt(d, 2, 0).Extra));
+  finally
+    d.Free;
+    m.Free;
+  end;
+  // many changes later (the parser has tidied its lists up in between) the direction word
+  // named last is still the one the next \fcs belongs to
+  src := '{\rtf1 \pard\keep ';
+  for i := 1 to 2500 do src := src + '\lang1033 a\lang2052 b';
+  src := src + '\rtlch\fcs1 \ltrch\fcs0 ';
+  for i := 1 to 2500 do src := src + '\lang1033 a\lang2052 b';
+  d := LoadString(src + '\fcs1 c\par}');
+  try
+    last := d.Text.ParaLength(0) - 1;
+    AssertText('c: \fcs1 took the place of \ltrch''s \fcs0', '\rtlch|\fcs1 |\ltrch|\fcs1 |\lang2052 ',
+      Joined(CharAt(d, 0, last).Extra));
+  finally
+    d.Free;
+  end;
+  // a border's side stays the current one through a list's group that changes the words
+  // before it
+  d := LoadString('{\rtf1{\fonttbl{\f0 A;}{\f1 B;}{\f2 C;}}\pard{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb -}}' +
+    '\brdrt\brdrs a\par{\*\pn\pnlvlblt\pnf2\pnindent0{\pntxtb -}}\brdrs\brdrw10 b\par}');
+  try
+    AssertText('a', '\pnf1|\pnindent0|{\pntxtb -}|\brdrt|\brdrs ', Joined(ParaFmt(d, 0).Extra));
+    AssertText('b: the side''s own words once', '\pnindent0|{\pntxtb -}|\brdrt|\brdrs |\pnf2|\brdrw10 ',
+      Joined(ParaFmt(d, 1).Extra));
   finally
     d.Free;
   end;
