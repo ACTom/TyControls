@@ -168,6 +168,9 @@ type
     FOvrMetricText: string;
     FOvrMetricModel: TObject;
     FOvrMetricVer: Cardinal;
+    { #224: what StyleToken and StyleColor read from the override -- a TTyOverrideReads, see
+      the implementation }
+    FOvrReads: TObject;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyStyleController);
@@ -370,8 +373,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
-      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203),
+      and the StyleOverride's until its text, the theme or the controller changes (#224). }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
@@ -478,6 +481,9 @@ type
     FOvrMetricText: string;
     FOvrMetricModel: TObject;
     FOvrMetricVer: Cardinal;
+    { #224: what StyleToken and StyleColor read from the override -- a TTyOverrideReads, see
+      the implementation }
+    FOvrReads: TObject;
     { ITyChromeHost: the chrome as this host last painted it -- its ChromeSignature
       (the one the windowed children were last repainted for) and its ChromeFreeRect. The
       children's bands read these instead of asking the host again; FChromeKnown says they
@@ -641,8 +647,8 @@ type
       list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
       declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
       value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
-      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203); a
-      StyleOverride is parsed on every read, so read it once per paint, not once per row. }
+      leads nowhere is no answer. The theme's answer is kept until the theme changes (#203),
+      and the StyleOverride's until its text, the theme or the controller changes (#224). }
     function StyleToken(const AName: string; const ADefault: string = ''): string;
     { #101. A colour token as this control reads it, the same way round; a value that is not
       a colour is no answer. }
@@ -1183,6 +1189,91 @@ begin
 end;
 
 
+{ #224. What one control's own StyleOverride answered for the word and colour tokens it read:
+  for one override text, under one theme version of one model. Answering parses the override
+  and, for a token it declares, lays it over a copy of the theme's whole variable table --
+  about a millisecond -- and a paint reads the same few tokens every time. StyleMetric keeps
+  lengths the same way (FOvrMetrics). Only the override's own answer is kept, so it does not
+  depend on the default a reader passes; the theme's answer is the model's to keep (#203). }
+type
+  TTyOverrideRead = record
+    Key: string;        // 't' + name for a word, 'c' + name for a colour
+    Found: Boolean;
+    Text: string;
+    Color: TTyColor;
+  end;
+
+  TTyOverrideReads = class
+  private
+    FText: string;
+    FModel: TTyStyleModel;
+    FVer: Cardinal;
+    FItems: array of TTyOverrideRead;
+    FCount: Integer;
+    function Slot(const AKey: string; out AIsNew: Boolean): Integer;
+  public
+    procedure Freshen(const AText: string; AModel: TTyStyleModel);
+    function Token(const AName: string; out AText: string): Boolean;
+    function Color(const AName: string; out AColor: TTyColor): Boolean;
+  end;
+
+procedure TTyOverrideReads.Freshen(const AText: string; AModel: TTyStyleModel);
+begin
+  if (FModel = AModel) and (FVer = AModel.ThemeVersion) and (FText = AText) then Exit;
+  FText := AText;
+  FModel := AModel;
+  FVer := AModel.ThemeVersion;
+  FCount := 0;
+end;
+
+function TTyOverrideReads.Slot(const AKey: string; out AIsNew: Boolean): Integer;
+var
+  i: Integer;
+begin
+  AIsNew := False;
+  for i := 0 to FCount - 1 do
+    if FItems[i].Key = AKey then
+      Exit(i);
+  AIsNew := True;
+  Result := FCount;
+  if FCount = Length(FItems) then SetLength(FItems, FCount + 8);
+  FItems[Result].Key := AKey;
+  Inc(FCount);
+end;
+
+function TTyOverrideReads.Token(const AName: string; out AText: string): Boolean;
+var
+  i: Integer;
+  isNew: Boolean;
+begin
+  i := Slot('t' + AName, isNew);
+  if isNew then
+    FItems[i].Text := FModel.ResolveOverrideToken(FText, AName, FItems[i].Found);
+  AText := FItems[i].Text;
+  Result := FItems[i].Found;
+end;
+
+function TTyOverrideReads.Color(const AName: string; out AColor: TTyColor): Boolean;
+var
+  i: Integer;
+  isNew: Boolean;
+begin
+  i := Slot('c' + AName, isNew);
+  if isNew then
+    FItems[i].Color := FModel.ResolveOverrideColor(FText, AName, 0, FItems[i].Found);
+  AColor := FItems[i].Color;
+  Result := FItems[i].Found;
+end;
+
+{ The keeper behind a control's FOvrReads, made on first use and brought up to date. }
+function TyOverrideReads(var AHolder: TObject; const AOverride: string;
+  AModel: TTyStyleModel): TTyOverrideReads;
+begin
+  if AHolder = nil then AHolder := TTyOverrideReads.Create;
+  Result := TTyOverrideReads(AHolder);
+  Result.Freshen(AOverride, AModel);
+end;
+
 { TTyGraphicControl }
 
 { The font TyBornAtDesignPPI is writing, while it writes: both bases' FontChanged pass over it. }
@@ -1291,6 +1382,7 @@ begin
   else
     TyDefaultController.UnregisterStyleable(Self);
   FreeAndNil(FOvrMetrics);
+  FreeAndNil(FOvrReads);
   inherited Destroy;
 end;
 
@@ -1438,28 +1530,25 @@ end;
 
 function TTyGraphicControl.StyleToken(const AName: string; const ADefault: string): string;
 var
-  found: Boolean;
+  model: TTyStyleModel;
 begin
-  found := False;
+  model := ActiveController.Model;
   Result := '';
-  if FStyleOverride <> '' then
-    Result := ActiveController.Model.ResolveOverrideToken(FStyleOverride, AName, found);
-  if not found then
-    Result := ActiveController.Model.ResolveToken(AName);
+  if (FStyleOverride = '')
+     or not TyOverrideReads(FOvrReads, FStyleOverride, model).Token(AName, Result) then
+    Result := model.ResolveToken(AName);
   if Result = '' then
     Result := ADefault;
 end;
 
 function TTyGraphicControl.StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
 var
-  found: Boolean;
+  model: TTyStyleModel;
 begin
-  found := False;
-  Result := ADefault;
-  if FStyleOverride <> '' then
-    Result := ActiveController.Model.ResolveOverrideColor(FStyleOverride, AName, ADefault, found);
-  if not found then
-    Result := ActiveController.Model.ResolveColorToken(AName, ADefault);
+  model := ActiveController.Model;
+  if (FStyleOverride = '')
+     or not TyOverrideReads(FOvrReads, FStyleOverride, model).Color(AName, Result) then
+    Result := model.ResolveColorToken(AName, ADefault);
 end;
 
 function TTyGraphicControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
@@ -2581,6 +2670,7 @@ begin
   else
     TyDefaultController.UnregisterStyleable(Self);
   FreeAndNil(FOvrMetrics);
+  FreeAndNil(FOvrReads);
   FreeAndNil(FChromeCache);
   inherited Destroy;
 end;
@@ -2808,28 +2898,25 @@ end;
 
 function TTyCustomControl.StyleToken(const AName: string; const ADefault: string): string;
 var
-  found: Boolean;
+  model: TTyStyleModel;
 begin
-  found := False;
+  model := ActiveController.Model;
   Result := '';
-  if FStyleOverride <> '' then
-    Result := ActiveController.Model.ResolveOverrideToken(FStyleOverride, AName, found);
-  if not found then
-    Result := ActiveController.Model.ResolveToken(AName);
+  if (FStyleOverride = '')
+     or not TyOverrideReads(FOvrReads, FStyleOverride, model).Token(AName, Result) then
+    Result := model.ResolveToken(AName);
   if Result = '' then
     Result := ADefault;
 end;
 
 function TTyCustomControl.StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
 var
-  found: Boolean;
+  model: TTyStyleModel;
 begin
-  found := False;
-  Result := ADefault;
-  if FStyleOverride <> '' then
-    Result := ActiveController.Model.ResolveOverrideColor(FStyleOverride, AName, ADefault, found);
-  if not found then
-    Result := ActiveController.Model.ResolveColorToken(AName, ADefault);
+  model := ActiveController.Model;
+  if (FStyleOverride = '')
+     or not TyOverrideReads(FOvrReads, FStyleOverride, model).Color(AName, Result) then
+    Result := model.ResolveColorToken(AName, ADefault);
 end;
 
 function TTyCustomControl.StyleMetric(const AName: string; ADefault: Integer): Integer;

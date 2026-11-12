@@ -42,6 +42,12 @@ type
     procedure TestANewThemeIsReadAgain;
     procedure TestAModelNobodyElseReadsReadsANewThemeAgain;
     procedure TestTheDefaultIsPartOfAColoursAnswer;
+    procedure TestAnOwnOverrideIsParsedOncePerToken;
+    procedure TestTheGraphicTwinParsesItsOverrideOncePerTokenToo;
+    procedure TestEachControlKeepsItsOwnOverridesAnswer;
+    procedure TestAnOverridesColourDoesNotDependOnTheDefault;
+    procedure TestAnotherControllerIsReadAgain;
+    procedure TestAWordAndAColourOfOneNameAreKeptApart;
   end;
 
 implementation
@@ -283,6 +289,110 @@ begin
   CheckColor('not a colour, another default: that one', RED, FOther.StyleColor(COL, RED));
   AssertEquals('an unset text: the reader''s default', 'a', FOther.StyleToken(TOK, 'a'));
   AssertEquals('another reader''s default', 'b', FOther.StyleToken(TOK, 'b'));
+end;
+
+{ #224. A control's own StyleOverride answers a token once, not on every read. Answering
+  parses the override and, for a token it declares, lays it over a copy of the theme's whole
+  variable table: about 1 ms. A paint reads the same tokens every time -- a tab strip with
+  its close-button tokens in its StyleOverride spent 6.8 ms of every paint reading them. }
+procedure TStyleTokenTest.TestAnOwnOverrideIsParsedOncePerToken;
+var
+  before, i: Integer;
+begin
+  FButton.StyleOverride := TOK + ': classic; ' + COL + ': #ff0000;';
+  before := FCtl.Model.OverrideParsesForTest;
+  for i := 1 to 10 do
+  begin
+    AssertEquals('the override''s text', 'classic', FButton.StyleToken(TOK, 'x'));
+    CheckColor('the override''s colour', RED, FButton.StyleColor(COL, GREY));
+    AssertEquals('a word it does not declare', 'dflt', FButton.StyleToken('--test-undeclared', 'dflt'));
+    CheckColor('a colour it does not declare', GREY, FButton.StyleColor('--test-undeclared-colour', GREY));
+  end;
+  AssertEquals('the override is parsed once for each token, not for each read', 4,
+    FCtl.Model.OverrideParsesForTest - before);
+end;
+
+procedure TStyleTokenTest.TestTheGraphicTwinParsesItsOverrideOncePerTokenToo;
+var
+  before, i: Integer;
+begin
+  FLabel.StyleOverride := TOK + ': classic; ' + COL + ': #ff0000;';
+  before := FCtl.Model.OverrideParsesForTest;
+  for i := 1 to 10 do
+  begin
+    AssertEquals('the override''s text', 'classic', FLabel.StyleToken(TOK, 'x'));
+    CheckColor('the override''s colour', RED, FLabel.StyleColor(COL, GREY));
+  end;
+  AssertEquals('TTyGraphicControl: once for each token', 2,
+    FCtl.Model.OverrideParsesForTest - before);
+end;
+
+{ #224: what is kept is one control's, for one override text. }
+procedure TStyleTokenTest.TestEachControlKeepsItsOwnOverridesAnswer;
+begin
+  FButton.StyleOverride := TOK + ': classic; ' + COL + ': #ff0000;';
+  FOther.StyleOverride := TOK + ': none; ' + COL + ': #0000ff;';
+  AssertEquals('classic', FButton.StyleToken(TOK, 'x'));
+  AssertEquals('none', FOther.StyleToken(TOK, 'x'));
+  CheckColor('the first control''s', RED, FButton.StyleColor(COL, GREY));
+  CheckColor('the second control''s', BLUE, FOther.StyleColor(COL, GREY));
+  AssertEquals('and again, after the other was read', 'classic', FButton.StyleToken(TOK, 'x'));
+  CheckColor('and again', RED, FButton.StyleColor(COL, GREY));
+
+  FButton.StyleOverride := '';
+  AssertEquals('an override taken away answers nothing', 'x', FButton.StyleToken(TOK, 'x'));
+  CheckColor('nor a colour', GREY, FButton.StyleColor(COL, GREY));
+  AssertEquals('the other control keeps its own', 'none', FOther.StyleToken(TOK, 'x'));
+end;
+
+{ #224: a colour the override sets is that colour whatever default the reader passes; one
+  it does not set, or sets to no colour, is each reader's own default. }
+procedure TStyleTokenTest.TestAnOverridesColourDoesNotDependOnTheDefault;
+begin
+  FButton.StyleOverride := COL + ': #ff0000; --test-banana: banana;';
+  CheckColor('set: red for a reader defaulting to grey', RED, FButton.StyleColor(COL, GREY));
+  CheckColor('set: red for a reader defaulting to blue', RED, FButton.StyleColor(COL, BLUE));
+  CheckColor('unset: grey', GREY, FButton.StyleColor('--test-unset', GREY));
+  CheckColor('unset: blue for the next reader', BLUE, FButton.StyleColor('--test-unset', BLUE));
+  CheckColor('unset: grey again', GREY, FButton.StyleColor('--test-unset', GREY));
+  CheckColor('no colour: grey', GREY, FButton.StyleColor('--test-banana', GREY));
+  CheckColor('no colour: blue for the next reader', BLUE, FButton.StyleColor('--test-banana', BLUE));
+end;
+
+{ #224: what is kept is for one controller's theme. The same override under another
+  controller is read against that one's variables. }
+procedure TStyleTokenTest.TestAnotherControllerIsReadAgain;
+var
+  second: TTyStyleController;
+begin
+  second := TTyStyleController.Create(nil);
+  try
+    FCtl.StyleOverride := ':root { --test-root: #ff0000; --test-word: classic; }';
+    second.StyleOverride := ':root { --test-root: #0000ff; --test-word: none; }';
+    FButton.StyleOverride := COL + ': var(--test-root); ' + TOK + ': var(--test-word);';
+    CheckColor('under the first controller', RED, FButton.StyleColor(COL, GREY));
+    AssertEquals('classic', FButton.StyleToken(TOK, 'x'));
+    FButton.Controller := second;
+    CheckColor('under the second', BLUE, FButton.StyleColor(COL, GREY));
+    AssertEquals('none', FButton.StyleToken(TOK, 'x'));
+    FButton.Controller := FCtl;
+    CheckColor('and back', RED, FButton.StyleColor(COL, GREY));
+    AssertEquals('classic', FButton.StyleToken(TOK, 'x'));
+  finally
+    FButton.Controller := FCtl;
+    second.Free;
+  end;
+end;
+
+{ #224: the same token can be read as its text and as a colour; one answer is not the other's. }
+procedure TStyleTokenTest.TestAWordAndAColourOfOneNameAreKeptApart;
+begin
+  FButton.StyleOverride := COL + ': #ff0000;';
+  AssertEquals('the text first', '#ff0000', FButton.StyleToken(COL, 'x'));
+  CheckColor('then the colour', RED, FButton.StyleColor(COL, GREY));
+  FOther.StyleOverride := COL + ': #0000ff;';
+  CheckColor('the colour first', BLUE, FOther.StyleColor(COL, GREY));
+  AssertEquals('then the text', '#0000ff', FOther.StyleToken(COL, 'x'));
 end;
 
 initialization
