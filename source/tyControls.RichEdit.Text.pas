@@ -1709,8 +1709,12 @@ begin
   base := AppendAdd(@AText[1], System.Length(AText));
   FScanCount := 0;
   Scan(@FAdd[base], System.Length(AText), base, kAdded);
-  // typing: the piece just before APos ends where this text was appended, so it grows
-  if (FScanCount = 1) and (PSep(FScan[0]) = sNone) and (APos > 0) then
+  // typing: the piece just before APos ends where this text was appended, so it grows.
+  // Not when the text starts with a continuation byte: it was counted on its own here, but
+  // joined to a lead byte the piece ends with it would read as fewer characters, and the
+  // piece's count would disagree with its bytes. It stays a piece of its own then
+  if (FScanCount = 1) and (PSep(FScan[0]) = sNone) and (APos > 0) and
+     (FAdd[base] and $C0 <> $80) then
   begin
     Find(rskChar, APos - 1, p, before);
     it := ItemAt(p);

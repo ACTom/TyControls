@@ -51,6 +51,7 @@ type
     procedure TestManyEditsKeepTheTreeConsistent;
     procedure TestDeepTreeStaysConsistent;
     procedure TestSmallInsertsDoNotMakeALeafEach;
+    procedure TestTypingNeverJoinsBytesCountedApart;
   end;
 
   { Decodes paragraph i from a table; the "file offset" of paragraph i is i*1000+7, so the
@@ -954,6 +955,60 @@ begin
     AssertTrue(Format('%d appended pieces took %d bytes, budget %d', [Lines, h1 - h0, budget]),
       h1 - h0 <= budget);
     AssertEquals('integrity after appends', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+{ Each insert is counted on its own, and a lookup counts the bytes of a piece together. So
+  the piece typing extends must not take text that completes a sequence its own bytes began:
+  the joined bytes would be fewer characters than the two counts say. }
+procedure TTyRichTextTest.TestTypingNeverJoinsBytesCountedApart;
+const
+  // a three-byte, a two-byte and a four-byte character
+  Whole: array[0..2] of UTF8String = ('中', 'é', '😀');
+var
+  t: TTyRichText;
+  w, cut, i: Integer;
+  first, second, all: UTF8String;
+begin
+  for w := 0 to High(Whole) do
+    for cut := 1 to System.Length(Whole[w]) - 1 do
+    begin
+      first := Copy(Whole[w], 1, cut);
+      second := Copy(Whole[w], cut + 1, MaxInt);
+      all := first + second;
+      t := TTyRichText.Create;
+      try
+        t.Insert(0, first);
+        t.Insert(cut, second);
+        AssertEquals(Format('%d/%d: every stray byte is a character', [w, cut]),
+          System.Length(all), t.Length);
+        AssertEquals(Format('%d/%d: integrity', [w, cut]), '', t.CheckIntegrity);
+        for i := 1 to System.Length(all) do
+          AssertBytesEqual(Format('%d/%d: character %d', [w, cut, i - 1]), Copy(all, i, 1),
+            t.GetText(i - 1, 1));
+        // what undoing the second insert does
+        t.Delete(cut, System.Length(second));
+        AssertEquals(Format('%d/%d: length after the undo', [w, cut]), cut, t.Length);
+        AssertBytesEqual(Format('%d/%d: text after the undo', [w, cut]), first,
+          t.GetText(0, t.Length));
+        AssertEquals(Format('%d/%d: integrity after the undo', [w, cut]), '', t.CheckIntegrity);
+      finally
+        t.Free;
+      end;
+    end;
+  // typing whole characters still grows the one piece
+  t := TTyRichText.Create;
+  try
+    t.Insert(0, 'a');
+    t.Insert(1, '中');
+    t.Insert(2, 'é');
+    t.Insert(3, 'b');
+    AssertEquals('typing is one piece', 1, t.PieceCount);
+    AssertEquals('four characters', 4, t.Length);
+    AssertBytesEqual('typed', 'a中éb', t.GetText(0, t.Length));
+    AssertEquals('integrity of the typed piece', '', t.CheckIntegrity);
   finally
     t.Free;
   end;
