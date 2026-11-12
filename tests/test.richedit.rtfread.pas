@@ -53,6 +53,8 @@ type
     procedure TestCountingAgreesAndResumesFromASnapshot;
     // what the real WordPad and Word files showed
     procedure TestGb18030AsTheFileCodePage;
+    // the review of batch A
+    procedure TestALaterUnknownWordReplacesTheEarlierOne;
   end;
 
 implementation
@@ -1649,6 +1651,109 @@ begin
   d := LoadString('{\rtf1\ansi\ansicpg54936{\fonttbl{\f0\fnil A;}}\f0 x\''81\''30\''81\''30y\par}');
   try
     CheckParas('four bytes', d, ['x?0?0y']);
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- the review of batch A ---- }
+
+{ An Extra list's fragments, one after the other with | between them. }
+function Joined(const A: TTyOpaqueAttrs): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to A.Count - 1 do
+  begin
+    if i > 0 then Result := Result + '|';
+    Result := Result + A.Item(i);
+  end;
+end;
+
+{ WordPad writes character properties as bare words at the top level and never resets them:
+  \lang2052 ... \lang1033 ... \lang2052. Every such word must take the place of the one of
+  its name the run already carries, or the list (and with it every format, every snapshot)
+  grows with the document. }
+procedure TTyRtfReadTest.TestALaterUnknownWordReplacesTheEarlierOne;
+var
+  d: TTyRichDocument;
+  r: TTyRunArray;
+  src: RawByteString;
+  i, last: Integer;
+begin
+  d := LoadString('{\rtf1 \pard\lang1033 a\lang2052 b\lang1033 c\kerning2 d\lang1033\kerning0 e\par}');
+  try
+    CheckParas('toggles', d, ['abcde']);
+    AssertText('a', '\lang1033 ', Joined(CharAt(d, 0, 0).Extra));
+    AssertText('b: the later value alone', '\lang2052 ', Joined(CharAt(d, 0, 1).Extra));
+    AssertText('c', '\lang1033 ', Joined(CharAt(d, 0, 2).Extra));
+    r := d.RunsOf(0);
+    AssertEquals('five runs', 5, Length(r));
+    AssertEquals('c has a''s very format again', r[0].Format, r[2].Format);
+    AssertText('d: a second word joins', '\lang1033 |\kerning2 ', Joined(CharAt(d, 0, 3).Extra));
+    AssertText('e: in the order they were last written', '\lang1033|\kerning0 ',
+      Joined(CharAt(d, 0, 4).Extra));
+  finally
+    d.Free;
+  end;
+  // the reviewer's file: plain WordPad-style paragraphs, no group, no \plain
+  src := '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}'#13#10 +
+    '\pard\f0\fs24 ';
+  for i := 0 to 299 do
+    src := src + '\lang2052\''d6\''d0\''ce\''c4 ' + IntToStr(i) +
+      ' \lang1033 with some English words in it.\par'#13#10;
+  d := LoadString(src + '}');
+  try
+    AssertEquals('paragraphs', 300, d.Text.ParaCount);
+    last := d.Text.ParaCount - 1;
+    AssertText('the last run carries one word', '\lang1033 ',
+      Joined(CharAt(d, last, d.Text.ParaLength(last) - 1).Extra));
+    AssertText('the first run of the last paragraph too', '\lang2052',
+      Joined(CharAt(d, last, 0).Extra));
+    for i := 0 to last do d.EnsureParsed(i);
+    AssertTrue(Format('%d character formats for two kinds of run', [d.Formats.CharCount]),
+      d.Formats.CharCount <= 8);
+  finally
+    d.Free;
+  end;
+  // Word's pair for the other writing direction: \fcs says which of the two it follows, so
+  // both stay - and written again, the same five take the old ones' place
+  d := LoadString('{\rtf1 \pard\rtlch\fcs1 \af0 \ltrch\fcs0 a\rtlch\fcs1 \af0 \ltrch\fcs0 b' +
+    '\ltrch\fcs1 \af0 \rtlch\fcs0 c\par}');
+  try
+    AssertText('Word''s pair', '\rtlch|\fcs1 |\af0 |\ltrch|\fcs0 ', Joined(CharAt(d, 0, 0).Extra));
+    r := d.RunsOf(0);
+    AssertEquals('two runs', 2, Length(r));
+    AssertEquals('b: the same format', 2, r[1].Start);
+    AssertText('c: the other direction', '\ltrch|\fcs1 |\af0 |\rtlch|\fcs0 ',
+      Joined(CharAt(d, 0, 2).Extra));
+  finally
+    d.Free;
+  end;
+  // a control symbol and a property group are replaced by their like
+  d := LoadString('{\rtf1 a\|b\|c{\*\oldcprops \b}d{\*\oldcprops \i}e\par}');
+  try
+    AssertText('one symbol', '\|', Joined(CharAt(d, 0, 2).Extra));
+    AssertText('the later group', '\||{\*\oldcprops \i}', Joined(CharAt(d, 0, 4).Extra));
+  finally
+    d.Free;
+  end;
+  // the paragraph's words: the same word again replaces; a bar tab is one of several, and
+  // a border's words belong to the side named before them
+  d := LoadString('{\rtf1 \pard\keep\s1 a\par\keep\s2 b\par' +
+    '\pard\tb100\tb200\tb100 c\par' +
+    '\pard\brdrt\brdrs\brdrw10 \brdrb\brdrs\brdrw20 d\par\brdrt\brdrdb\brdrw30 e\par' +
+    '\pard\ls1\ilvl0\ls2 f\par}');
+  try
+    AssertText('a', '\keep|\s1 ', Joined(ParaFmt(d, 0).Extra));
+    AssertText('b: the later style', '\keep|\s2 ', Joined(ParaFmt(d, 1).Extra));
+    AssertText('c: two bar tabs', '\tb200|\tb100 ', Joined(ParaFmt(d, 2).Extra));
+    AssertText('d: two borders', '\brdrt|\brdrs|\brdrw10 |\brdrb|\brdrs|\brdrw20 ',
+      Joined(ParaFmt(d, 3).Extra));
+    AssertText('e: the top border again', '\brdrb|\brdrs|\brdrw20 |\brdrt|\brdrdb|\brdrw30 ',
+      Joined(ParaFmt(d, 4).Extra));
+    AssertText('f: the later list', '\ilvl0|\ls2 ', Joined(ParaFmt(d, 5).Extra));
   finally
     d.Free;
   end;

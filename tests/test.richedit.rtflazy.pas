@@ -53,6 +53,8 @@ type
     procedure TestABigTableIsSplitIntoLockedParts;
     procedure TestScrollingThroughEverythingStaysBounded;
     procedure TestDeletedUnparsedParagraphsComeBackOnUndo;
+    // the review of batch A
+    procedure TestWordPadsOwnWritingStaysBounded;
   end;
 
 implementation
@@ -520,6 +522,9 @@ begin
   // a font table again in the middle of the body: what comes after it decodes by it, what
   // comes before by the header's
   CheckLazyAgainstFull('a font table in the body', FontTableInTheBody, True);
+  // what WordPad itself saved: character words never reset, a table from Word in every
+  // screenful
+  CheckLazyAgainstFull('wp-zh-table x 1 MB', Generate('wp-zh-table.rtf', MB), True);
 end;
 
 procedure TTyRtfLazyTest.TestOpeningParsesOnlyWhatIsShown;
@@ -693,6 +698,7 @@ begin
   CheckIndex('re-zh-mixed x 3 MB', b);
   CheckIndex('hand-word-zh x 3 MB', Generate('hand-word-zh.rtf', 3 * MB));
   CheckIndex('re-zh-table x 3 MB', Generate('re-zh-table.rtf', 3 * MB));
+  CheckIndex('wp-zh-table x 2 MB', Generate('wp-zh-table.rtf', 2 * MB));
   Prefixes('hand-uc.rtf');
   Prefixes('re-zh-table.rtf');
 end;
@@ -1064,6 +1070,81 @@ begin
   finally
     full.Free;
   end;
+end;
+
+{ ---- the review of batch A ---- }
+
+{ WordPad's files, as large ones: it writes character properties as bare words and resets
+  none (the table sample toggles LANG and KERNING in every screenful). The parse state must
+  not grow with the document: a snapshot is as small at the end as at the start, a read
+  parses its interval, a run carries the words in effect and no more, the formats are the
+  few the file has, and reading everything leaves no more than the usual behind. }
+procedure TTyRtfLazyTest.TestWordPadsOwnWritingStaysBounded;
+
+  procedure Check(const ASample: string; ATarget: Int64);
+  var
+    b: TBytes;
+    s: TBytesStream;
+    d: TTyRichDocument;
+    load: TTyRtfLoad;
+    base, loaded, grown, before: Int64;
+    n, i, j, extra, maxExtra: Integer;
+    r: TTyRunArray;
+  begin
+    b := Generate(ASample, ATarget);
+    s := TBytesStream.Create(b);
+    d := TTyRichDocument.Create;
+    try
+      base := GetFPCHeapStatus.CurrHeapUsed;
+      TyRichLoadRtf(d, s);
+      load := TyRichRtfLoadOf(d);
+      n := d.Text.ParaCount;
+      loaded := GetFPCHeapStatus.CurrHeapUsed - base;
+      AssertTrue(Format('%s: after loading %d bytes for %d paragraphs, file %d', [ASample, loaded,
+        n, Length(b)]), loaded <= Int64(Length(b)) + 40 * Int64(n) + load.SnapshotBytes + MB);
+      AssertTrue(ASample + ': snapshots', load.SnapshotCount >= ATarget div CRtfSnapshotBytes - 2);
+      AssertTrue(Format('%s: %d snapshots hold %d bytes', [ASample, load.SnapshotCount,
+        load.SnapshotBytes]), load.SnapshotBytes <= Int64(load.SnapshotCount) * 1024);
+      // one read parses one interval (two when a table lies across its end)
+      before := load.ParsedBytes;
+      d.EnsureParsed(n - 1);
+      AssertTrue(Format('%s: reading the last paragraph parsed %d bytes', [ASample,
+        load.ParsedBytes - before]), load.ParsedBytes - before <= 3 * CRtfSnapshotBytes);
+      before := load.ParsedBytes;
+      d.EnsureParsed(n div 2);
+      AssertTrue(Format('%s: reading a middle paragraph parsed %d bytes', [ASample,
+        load.ParsedBytes - before]), load.ParsedBytes - before <= 3 * CRtfSnapshotBytes);
+      maxExtra := 0;
+      for i := 0 to n - 1 do
+      begin
+        r := d.RunsOf(i);
+        for j := 0 to High(r) do
+        begin
+          extra := d.Formats.CharFormat(r[j].Format).Extra.Count;
+          if extra > maxExtra then maxExtra := extra;
+        end;
+        ParaText(d, i);
+      end;
+      AssertTrue(Format('%s: a run carries %d kept words', [ASample, maxExtra]), maxExtra <= 2);
+      AssertTrue(Format('%s: %d character formats', [ASample, d.Formats.CharCount]),
+        d.Formats.CharCount <= 16);
+      AssertTrue(Format('%s: %d intervals stay parsed', [ASample, load.ResidentIntervals]),
+        load.ResidentIntervals <= load.MaxResidentIntervals);
+      // what stays is what the load left and the intervals still parsed, whatever the size
+      // of the file (an interval's paragraphs, runs, cells and text: a few times its bytes)
+      grown := GetFPCHeapStatus.CurrHeapUsed - base;
+      AssertTrue(Format('%s: after reading everything %d bytes, after loading %d', [ASample, grown,
+        loaded]), grown <= loaded + Int64(load.MaxResidentIntervals) * 8 * CRtfSnapshotBytes);
+      AssertEquals(ASample + ': integrity', '', d.Text.CheckIntegrity);
+    finally
+      d.Free;
+      s.Free;
+    end;
+  end;
+
+begin
+  Check('wp-zh-table.rtf', 3 * MB);
+  Check('wp-zh-mixed.rtf', 3 * MB);
 end;
 
 initialization

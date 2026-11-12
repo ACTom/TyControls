@@ -349,6 +349,8 @@ type
     procedure InitState;
     // the node pool
     function Push(AList: Integer; A, B: Int64): Integer;
+    function KeepFragment(AList: Integer; AStart, AStop: PtrInt; APara: Boolean;
+      out AChanged: Boolean): Integer;
     function ListNodes(AList: Integer): TTyRtfNodes;
     procedure Compact;
     procedure TakeSnapshot;
@@ -2771,16 +2773,237 @@ end;
 
 // ---- body words ----
 
-procedure TTyRtfParser.AddCharExtra(AStart, AStop: PtrInt);
+type
+  // How a fragment that goes into an Extra list takes the place of what the list holds.
+  TKeepRule = (
+    krName,     // the fragment of the same control word goes: the later value is in effect
+    krExact,    // only its like goes - the same word with the same number, or the same bytes
+    krHeader,   // the same word goes, and the members that followed it
+    krMember);  // the same word goes if it is a member of the last header
+
+  // What a kept fragment is: its control word (a group's: its destination), with the number
+  // after it. NameLen 0: no word - a control symbol - which is its bytes.
+  TFragKey = record
+    Name: PtrInt;
+    NameLen: Integer;
+    HasParam: Boolean;
+    Param: Int64;
+    Rule: TKeepRule;
+  end;
+
+// The sides of a paragraph border: the words after one (\brdrs, \brdrw10, \brsp20, ...)
+// describe that side.
+function IsBorderSide(P: PByte; ALen: Integer): Boolean;
 begin
-  FS.Props.CharExtra := Push(FS.Props.CharExtra, AStart, AStop);
-  CharChanged;
+  case ALen of
+    3: Result := NameStarts(P, ALen, 'box');
+    5: Result := NameStarts(P, ALen, 'brdr') and (P[4] in [Ord('t'), Ord('b'), Ord('l'), Ord('r')]);
+    7: Result := NameStarts(P, ALen, 'brdrbtw') or NameStarts(P, ALen, 'brdrbar');
+  else
+    Result := False;
+  end;
+end;
+
+function FragKey(ABuf: PByte; AStart, AStop: PtrInt; APara: Boolean): TFragKey;
+var
+  p: PtrInt;
+  neg: Boolean;
+  name: PByte;
+begin
+  Result.Name := AStart;
+  Result.NameLen := 0;
+  Result.HasParam := False;
+  Result.Param := 0;
+  Result.Rule := krExact;
+  p := AStart;
+  if (p < AStop) and (ABuf[p] = Ord('{')) then
+  begin
+    // a group kept as a whole: {\*\oldcprops ...}, {\pntxtb ...}
+    Inc(p);
+    if (p + 1 < AStop) and (ABuf[p] = Ord('\')) and (ABuf[p + 1] = Ord('*')) then Inc(p, 2);
+  end;
+  if (p + 1 >= AStop) or (ABuf[p] <> Ord('\')) or (LetterTab[ABuf[p + 1]] = 0) then Exit;
+  Inc(p);
+  Result.Name := p;
+  while (p < AStop) and (LetterTab[ABuf[p]] <> 0) do Inc(p);
+  Result.NameLen := p - Result.Name;
+  neg := (p + 1 < AStop) and (ABuf[p] = Ord('-'));
+  if neg then Inc(p);
+  while (p < AStop) and IsDigit(ABuf[p]) do
+  begin
+    Result.HasParam := True;
+    if Result.Param < 100000000000 then Result.Param := Result.Param * 10 + (ABuf[p] - Ord('0'));
+    Inc(p);
+  end;
+  if neg then Result.Param := -Result.Param;
+  name := ABuf + Result.Name;
+  Result.Rule := krName;
+  if APara then
+  begin
+    // several words describe one border, and the same ones the next: they go with their
+    // side. \tbN is one bar tab of several.
+    if IsBorderSide(name, Result.NameLen) then Result.Rule := krHeader
+    else if NameStarts(name, Result.NameLen, 'brdr') or NameStarts(name, Result.NameLen, 'brsp') then
+      Result.Rule := krMember
+    else if (Result.NameLen = 2) and NameStarts(name, 2, 'tb') then Result.Rule := krExact;
+  end
+  else
+  begin
+    // Word's \rtlch\fcs1 ... \ltrch\fcs0 ...: \fcs says which of the two it follows
+    if (Result.NameLen = 5) and (NameStarts(name, 5, 'rtlch') or NameStarts(name, 5, 'ltrch')) then
+      Result.Rule := krHeader
+    else if (Result.NameLen = 3) and NameStarts(name, 3, 'fcs') then
+      Result.Rule := krMember;
+  end;
+end;
+
+// Adds the fragment [AStart, AStop) to an Extra list and returns the new list. What it
+// replaces goes (see TKeepRule): WordPad writes \lang2052 ... \lang1033 ... \lang2052 as
+// bare words and never resets them, so a list that only grew would grow with the document,
+// and every format and every snapshot with it. The list stays in the order its fragments
+// were last written. AChanged False: the list already ended with these very bytes.
+function TTyRtfParser.KeepFragment(AList: Integer; AStart, AStop: PtrInt; APara: Boolean;
+  out AChanged: Boolean): Integer;
+const
+  Small = 32;
+var
+  few: array[0..Small - 1] of Integer;
+  many: array of Integer;
+  ix: PInteger;
+  n, i, j, first, header: Integer;
+  key, k: TFragKey;
+
+  function KeyOf(AIndex: Integer): TFragKey;
+  begin
+    Result := FragKey(FBuf, FNodes[ix[AIndex]].A, FNodes[ix[AIndex]].B, APara);
+  end;
+
+  function SameName(const AKey: TFragKey): Boolean;
+  begin
+    Result := (AKey.NameLen = key.NameLen) and (AKey.NameLen > 0) and
+      CompareMem(FBuf + AKey.Name, FBuf + key.Name, AKey.NameLen);
+  end;
+
+  function SameBytes(AIndex: Integer): Boolean;
+  begin
+    Result := (FNodes[ix[AIndex]].B - FNodes[ix[AIndex]].A = AStop - AStart) and
+      CompareMem(FBuf + FNodes[ix[AIndex]].A, FBuf + AStart, AStop - AStart);
+  end;
+
+  procedure Drop(AIndex: Integer);
+  begin
+    if first < 0 then first := AIndex;
+    ix[AIndex] := -1;
+  end;
+
+begin
+  AChanged := True;
+  if AList < 0 then Exit(Push(AList, AStart, AStop));
+  n := 0;
+  i := AList;
+  while i >= 0 do
+  begin
+    Inc(n);
+    i := FNodes[i].Prev;
+  end;
+  many := nil;
+  if n <= Small then ix := @few[0]
+  else
+  begin
+    SetLength(many, n);
+    ix := @many[0];
+  end;
+  // the list's nodes, the earliest first
+  i := AList;
+  for j := n - 1 downto 0 do
+  begin
+    ix[j] := i;
+    i := FNodes[i].Prev;
+  end;
+  key := FragKey(FBuf, AStart, AStop, APara);
+  first := -1;
+  case key.Rule of
+    krName:
+      for i := 0 to n - 1 do
+        if SameName(KeyOf(i)) then Drop(i);
+    krExact:
+      for i := 0 to n - 1 do
+        if key.NameLen = 0 then
+        begin
+          if SameBytes(i) then Drop(i);
+        end
+        else
+        begin
+          k := KeyOf(i);
+          if SameName(k) and (k.HasParam = key.HasParam) and (k.Param = key.Param) then Drop(i);
+        end;
+    krHeader:
+      begin
+        i := 0;
+        while i < n do
+        begin
+          k := KeyOf(i);
+          Inc(i);
+          if not SameName(k) then Continue;
+          Drop(i - 1);
+          // its members: up to the next header
+          while i < n do
+          begin
+            k := KeyOf(i);
+            if k.Rule = krHeader then Break;
+            if k.Rule = krMember then Drop(i);
+            Inc(i);
+          end;
+        end;
+      end;
+    krMember:
+      begin
+        header := -1;
+        for i := n - 1 downto 0 do
+          if KeyOf(i).Rule = krHeader then
+          begin
+            header := i;
+            Break;
+          end;
+        for i := header + 1 to n - 1 do
+        begin
+          k := KeyOf(i);
+          if (k.Rule = krMember) and SameName(k) then Drop(i);
+        end;
+      end;
+  end;
+  if first < 0 then Exit(Push(AList, AStart, AStop));
+  if (first = n - 1) and (FNodes[AList].B - FNodes[AList].A = AStop - AStart) and
+     CompareMem(FBuf + FNodes[AList].A, FBuf + AStart, AStop - AStart) then
+  begin
+    // written again as it stands: nothing changes, and no format is made anew
+    AChanged := False;
+    Exit(AList);
+  end;
+  // the nodes before the first that goes are shared as they are; the ones that stay after
+  // it follow in their order, then the new one
+  i := AList;
+  for j := n - 1 downto first + 1 do i := FNodes[i].Prev;
+  Result := FNodes[i].Prev;
+  for i := first + 1 to n - 1 do
+    if ix[i] >= 0 then Result := Push(Result, FNodes[ix[i]].A, FNodes[ix[i]].B);
+  Result := Push(Result, AStart, AStop);
+end;
+
+procedure TTyRtfParser.AddCharExtra(AStart, AStop: PtrInt);
+var
+  changed: Boolean;
+begin
+  FS.Props.CharExtra := KeepFragment(FS.Props.CharExtra, AStart, AStop, False, changed);
+  if changed then CharChanged;
 end;
 
 procedure TTyRtfParser.AddParaExtra(AStart, AStop: PtrInt);
+var
+  changed: Boolean;
 begin
-  FS.Props.ParaExtra := Push(FS.Props.ParaExtra, AStart, AStop);
-  ParaChanged;
+  FS.Props.ParaExtra := KeepFragment(FS.Props.ParaExtra, AStart, AStop, True, changed);
+  if changed then ParaChanged;
 end;
 
 // A node list's entries, first to last.
