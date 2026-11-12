@@ -177,10 +177,20 @@ type
     FWidthTwips: Integer;
     FHeightTwips: Integer;
     FRawRtf: RawByteString;
+    FShown: Byte;      // 0 not worked out yet, 1 shown, 2 a placeholder
+    FShowFormat: TTyRichPictureFormat;
+    FShowStart, FShowCount: Integer;
   public
     constructor Create(AFormat: TTyRichPictureFormat; const AData: TBytes;
       AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString = '');
     function Clone: TTyRichObject; override;
+    { What an image decoder can show of this picture: the format to decode as and the part of
+      Data to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP and DIB pictures are their
+      data; a metafile whose whole drawing is one bitmap is that bitmap (rpfDib, the
+      BITMAPINFO inside the metafile). False for any other metafile, and for an unknown or
+      empty picture: the layout draws a placeholder. Nothing is decoded or copied here, and
+      PictureFormat and Data stay what the file had (writing is unchanged). }
+    function DisplayData(out AFormat: TTyRichPictureFormat; out AStart, ACount: Integer): Boolean;
     property PictureFormat: TTyRichPictureFormat read FFormat;
     property Data: TBytes read FData;              // the image file's bytes; do not change
     property WidthTwips: Integer read FWidthTwips;  // display size
@@ -699,7 +709,7 @@ function TyRichMajorityLineBreak(ACR, ALF, ACRLF: Int64): TTyRichSeparator;
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.RichEdit.Commands;
+  tyControls.StrConsts, tyControls.RichEdit.Commands, tyControls.RichEdit.Wmf;
 
 const
   // RunStep
@@ -1175,6 +1185,44 @@ end;
 function TTyRichPicture.Clone: TTyRichObject;
 begin
   Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf);
+end;
+
+function TTyRichPicture.DisplayData(out AFormat: TTyRichPictureFormat;
+  out AStart, ACount: Integer): Boolean;
+var
+  bm: TTyWmfBitmap;
+begin
+  // the picture never changes, so the metafile's records are walked once
+  if FShown = 0 then
+  begin
+    FShown := 2;
+    FShowFormat := rpfUnknown;
+    FShowStart := 0;
+    FShowCount := 0;
+    if Length(FData) > 0 then
+      case FFormat of
+        rpfPng, rpfJpeg, rpfBmp, rpfDib:
+          begin
+            FShown := 1;
+            FShowFormat := FFormat;
+            FShowCount := Length(FData);
+          end;
+        rpfWmf:
+          if TyWmfSingleBitmap(FData, bm) then
+          begin
+            FShown := 1;
+            FShowFormat := rpfDib;
+            FShowStart := bm.DibStart;
+            FShowCount := bm.DibCount;
+          end;
+      else
+        ;  // EMF and other metafiles are drawn by nothing in phase 1
+      end;
+  end;
+  Result := FShown = 1;
+  AFormat := FShowFormat;
+  AStart := FShowStart;
+  ACount := FShowCount;
 end;
 
 constructor TTyRichOpaque.Create(const ABytes: RawByteString; const ADisplayText: UTF8String);
