@@ -26,6 +26,7 @@ type
     function CurrentStates: TTyStateSet; override;
     function PointerPos: TPoint; override;
     procedure CallAlign;
+    function AlignAnswer(AControl: TControl): TRect;
     procedure ClickAt(X, Y: Integer);
     procedure MoveTo(X, Y: Integer);
     procedure Leave;
@@ -91,6 +92,8 @@ type
     { the action area in a panel }
     procedure TestTheActionsSnapIntoTheHeader;
     procedure TestTheActionsStayInsideTheBorder;
+    procedure TestTheAlignmentPassIsGivenTheSameBox;
+    procedure TestAHiddenAreaTakesNoRoom;
     procedure TestTheActionsReadTheirTokens;
     procedure TestAnEmptyAreaTakesNoWidthAtRunTimeAndASlotAtDesignTime;
     procedure TestOnlyTheFirstAreaIsTheHeaders;
@@ -199,6 +202,23 @@ var
 begin
   r := ClientRect;
   AlignControls(nil, r);
+end;
+
+function TSectionProbe.AlignAnswer(AControl: TControl): TRect;
+var
+  l, t, w, h: Integer;
+  r: TRect;
+  info: TAlignInfo;
+begin
+  { what LCL's alignment pass asks for an alCustom child, and nothing else }
+  l := AControl.Left;
+  t := AControl.Top;
+  w := AControl.Width;
+  h := AControl.Height;
+  r := ClientRect;
+  info := Default(TAlignInfo);
+  CustomAlignPosition(AControl, l, t, w, h, r, info);
+  Result := Bounds(l, t, w, h);
 end;
 
 procedure TSectionProbe.ClickAt(X, Y: Integer);
@@ -530,6 +550,43 @@ begin
   FPanel.Collapsed := True;
   FPanel.CallAlign;
   AssertEquals('collapsed: it stops above the bottom border', 23, act.Top + act.Height);
+end;
+
+procedure TTyExPanelSectionTest.TestTheAlignmentPassIsGivenTheSameBox;
+var
+  act: TTyCustomExPanelActions;
+  r: TRect;
+begin
+  { The panel places the area itself as things change; LCL's alignment asks the panel too,
+    and has to be told the same place, or the two would move it back and forth. }
+  Flat;
+  act := FPanel.EnsureHeaderActions;
+  NewChild(act, 20, 20);
+  r := FPanel.AlignAnswer(act);
+  AssertEquals('left', 174, r.Left);
+  AssertEquals('top: in the header, not in the body', 0, r.Top);
+  AssertEquals('width', 26, r.Right - r.Left);
+  AssertEquals('height', 26, r.Bottom - r.Top);
+  AssertTrue('the box the panel reports', EqualRect(r, FPanel.ActionsRect));
+end;
+
+procedure TTyExPanelSectionTest.TestAHiddenAreaTakesNoRoom;
+var
+  act: TTyCustomExPanelActions;
+begin
+  Flat;
+  act := FPanel.EnsureHeaderActions;
+  NewChild(act, 20, 20);
+  FPanel.CallAlign;
+  AssertEquals('setup: the caption ends at the actions', 174, FPanel.HeaderGeom.Caption.Right);
+  act.Visible := False;
+  AssertFalse('hidden by the application: not showing', FPanel.ActionsShowing);
+  AssertEquals('and the caption has the whole header', 200, FPanel.HeaderGeom.Caption.Right);
+  AssertEquals('a click where it was is a click on the header', Ord(ephHeader),
+    Ord(FPanel.HitTest(190, 13)));
+  act.Visible := True;
+  AssertTrue('shown again', FPanel.ActionsShowing);
+  AssertEquals('the caption gives the room back', 174, FPanel.HeaderGeom.Caption.Right);
 end;
 
 procedure TTyExPanelSectionTest.TestTheActionsReadTheirTokens;
@@ -916,6 +973,7 @@ end;
 procedure TTyExPanelSectionTest.TestThePointerOnTheActionsLightsTheHeader;
 var
   act: TTyCustomExPanelActions;
+  body: TTabChild;
 begin
   Flat;
   act := FPanel.EnsureHeaderActions;
@@ -929,6 +987,12 @@ begin
   FPanel.Pointer := Point(act.Left + 5, -4);
   FPanel.Perform(CM_MOUSELEAVE, 0, LParam(act));
   AssertFalse('and off them it is not hot', FPanel.HeaderHot);
+  { a control of the body is not the header: its enter, passed up the same way, lights nothing }
+  body := NewChild(FPanel, 50, 20);
+  FPanel.Pointer := Point(20, 80);
+  FPanel.Perform(CM_MOUSEENTER, 0, LParam(body));
+  AssertFalse('the pointer on a body control does not light the header', FPanel.HeaderHot);
+  FPanel.Perform(CM_MOUSELEAVE, 0, LParam(body));
   { a move the panel sees itself over that stretch (no child window there) counts the same }
   FPanel.MoveTo(act.Left + 5, 13);
   AssertTrue('the stretch of the actions is header', FPanel.HeaderHot);
