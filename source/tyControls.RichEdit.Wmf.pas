@@ -90,7 +90,7 @@ end;
 function ValidDib(P: PByte; ACount: PtrInt; out AWidth, AHeight: Integer): Boolean;
 var
   hdr, bpp, compression, colours, entry, masks: Cardinal;
-  w, h, need, bits: Int64;
+  w, h, need, bits, stride: Int64;
 begin
   Result := False;
   AWidth := 0;
@@ -152,10 +152,15 @@ begin
   begin
     need := W32(P, 20);    // biSizeImage: an RLE bitmap's bits say their own length
     if need = 0 then Exit;
+    if need > ACount - bits then Exit;
   end
   else
-    need := ((w * bpp + 31) div 32) * 4 * h;
-  if bits + need > ACount then Exit;
+  begin
+    // rows of whole 32-bit words. Compared by dividing: a header may announce more rows
+    // than any number holds when multiplied by their length
+    stride := ((w * bpp + 31) div 32) * 4;
+    if h > (ACount - bits) div stride then Exit;
+  end;
   AWidth := Integer(w);
   AHeight := Integer(h);
   Result := True;
@@ -165,12 +170,15 @@ end;
 function BitmapOf(P: PByte; AAt, ABytes: PtrInt; AFunction: Cardinal;
   var ABitmap: TTyWmfBitmap): Boolean;
 var
-  prm, dib, words: PtrInt;
+  prm, dib, words, src, org: PtrInt;
   rop, usage: Cardinal;
 begin
   Result := False;
   prm := AAt + RecordHeadBytes;
   words := ABytes div 2;
+  // where the source rectangle's height and width are, and its y and x (-1: right after)
+  src := prm;
+  org := -1;
   usage := 0;
   rop := SrcCopy;
   case AFunction of
@@ -181,6 +189,7 @@ begin
         if ABytes < RecordHeadBytes + dib then Exit;
         rop := W32(P, prm);
         usage := W16(P, prm + 4);
+        src := prm + 6;
       end;
     MetaDibStretchBlt, MetaDibBitBlt:
       begin
@@ -190,18 +199,25 @@ begin
         if AFunction = MetaDibStretchBlt then dib := 20 else dib := 16;
         if ABytes < RecordHeadBytes + dib then Exit;
         rop := W32(P, prm);
+        // (BitBlt: the source's y/x, then the height/width it copies)
+        if AFunction = MetaDibStretchBlt then src := prm + 4 else src := prm + 8;
+        if AFunction = MetaDibStretchBlt then org := prm + 8 else org := prm + 4;
       end;
     MetaSetDibToDev:
       begin
-        // ColorUse, ScanCount, StartScan, ...: the whole bitmap, from its first scan line
+        // ColorUse, ScanCount, StartScan, the source's y/x, height/width, destination y/x:
+        // the whole bitmap, from its first scan line
         dib := 18;
         if ABytes < RecordHeadBytes + dib then Exit;
         usage := W16(P, prm);
         if W16(P, prm + 4) <> 0 then Exit;
+        org := prm + 6;
+        src := prm + 10;
       end;
   else
     Exit;
   end;
+  if org < 0 then org := src + 4;
   // another raster operation would combine the bitmap with what is below it; palette indices
   // instead of colours need the metafile's palette
   if (rop <> SrcCopy) or (usage <> 0) then Exit;
@@ -210,6 +226,11 @@ begin
   if not ValidDib(P + ABitmap.DibStart, ABitmap.DibCount, ABitmap.Width, ABitmap.Height) then
     Exit;
   if (AFunction = MetaSetDibToDev) and (PtrInt(W16(P, prm + 2)) <> ABitmap.Height) then Exit;
+  // the source rectangle is the whole bitmap: a record that draws a part of its bitmap
+  // would show as all of it
+  if (W16(P, org) <> 0) or (W16(P, org + 2) <> 0) or (PtrInt(W16(P, src)) <> ABitmap.Height) or
+     (PtrInt(W16(P, src + 2)) <> ABitmap.Width) then
+    Exit;
   Result := True;
 end;
 

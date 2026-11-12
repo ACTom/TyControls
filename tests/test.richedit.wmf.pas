@@ -163,15 +163,45 @@ begin
   PutBytes(B, AParams);
 end;
 
-function StretchDib(ARop: Cardinal = SrcCopy): TBytes;
+{ META_STRETCHDIB's parameters and the 2 x 2 bitmap; the source rectangle is the whole
+  bitmap unless the caller names another. }
+function StretchDib(ARop: Cardinal = SrcCopy; ASrcHeight: Integer = 2; ASrcWidth: Integer = 2;
+  ASrcY: Integer = 0; ASrcX: Integer = 0): TBytes;
 var
   i: Integer;
 begin
   Result := nil;
   Put32(Result, ARop);
   Put16(Result, 0);       // DIB_RGB_COLORS
-  for i := 1 to 8 do Put16(Result, 2);
+  Put16(Result, ASrcHeight);
+  Put16(Result, ASrcWidth);
+  Put16(Result, ASrcY);
+  Put16(Result, ASrcX);
+  for i := 1 to 4 do Put16(Result, 2);   // the destination: height, width, y, x
   PutBytes(Result, SmallDib);
+end;
+
+{ A metafile whose one record is the bitmap record AFunction with AParams. }
+function WmfOf(AFunction: Integer; const AParams: TBytes): TBytes;
+begin
+  Result := MetaHeader;
+  PutRecord(Result, AFunction, AParams);
+  PutRecord(Result, 0, nil);
+end;
+
+{ A 32-bit DIB header that announces AWidth x AHeight, followed by 16 bytes of bits. }
+function LyingDib(AWidth, AHeight: Cardinal): TBytes;
+var
+  i: Integer;
+begin
+  Result := nil;
+  Put32(Result, 40);
+  Put32(Result, AWidth);
+  Put32(Result, AHeight);
+  Put16(Result, 1);
+  Put16(Result, 32);
+  for i := 1 to 6 do Put32(Result, 0);
+  for i := 1 to 8 do Put16(Result, $7F7F);
 end;
 
 function TwoWords(A, B: Integer): TBytes;
@@ -213,6 +243,39 @@ begin
   TAssert.AssertEquals(AMsg + ': width', AWidth, U32(AData, AStart + 4));
   TAssert.AssertEquals(AMsg + ': height', AHeight, U32(AData, AStart + 8));
   TAssert.AssertEquals(AMsg + ': bit count', ABits, U16(AData, AStart + 14));
+end;
+
+{ META_STRETCHDIB of a 2 x 2 bitmap of 8 bits, RLE-compressed, two colours, six bytes of
+  bits; its header announces ASizeImage bytes. }
+function RleRecord(ASizeImage: Cardinal): TBytes;
+var
+  i: Integer;
+begin
+  Result := nil;
+  Put32(Result, SrcCopy);
+  Put16(Result, 0);
+  Put16(Result, 2);
+  Put16(Result, 2);
+  Put16(Result, 0);
+  Put16(Result, 0);
+  for i := 1 to 4 do Put16(Result, 2);
+  Put32(Result, 40);
+  Put32(Result, 2);
+  Put32(Result, 2);
+  Put16(Result, 1);
+  Put16(Result, 8);
+  Put32(Result, 1);            // BI_RLE8
+  Put32(Result, ASizeImage);
+  Put32(Result, 0);
+  Put32(Result, 0);
+  Put32(Result, 2);            // two colours
+  Put32(Result, 0);
+  Put32(Result, 0);
+  Put32(Result, $00FFFFFF);
+  // two pixels of colour 1, end of line; the same; end of bitmap
+  Put16(Result, $0102);
+  Put16(Result, $0000);
+  Put16(Result, $0100);
 end;
 
 { ---- tests ---- }
@@ -339,6 +402,16 @@ begin
   AssertFalse('an unknown record', TyWmfSingleBitmap(Wmf([$0999], []), bm));
   AssertFalse('combined with what is below (SRCAND)',
     TyWmfSingleBitmap(Wmf([], [], $008800C6), bm));
+  // a part of the bitmap drawn is not the bitmap: the source rectangle must be all of it
+  AssertTrue('the whole source', TyWmfSingleBitmap(WmfOf(FnStretchDib, StretchDib), bm));
+  AssertFalse('the left column only',
+    TyWmfSingleBitmap(WmfOf(FnStretchDib, StretchDib(SrcCopy, 2, 1)), bm));
+  AssertFalse('the top row only',
+    TyWmfSingleBitmap(WmfOf(FnStretchDib, StretchDib(SrcCopy, 1, 2)), bm));
+  AssertFalse('from the second column on',
+    TyWmfSingleBitmap(WmfOf(FnStretchDib, StretchDib(SrcCopy, 2, 2, 0, 1)), bm));
+  AssertFalse('from the second row on',
+    TyWmfSingleBitmap(WmfOf(FnStretchDib, StretchDib(SrcCopy, 2, 2, 1, 0)), bm));
   // no bitmap at all
   b := MetaHeader;
   PutRecord(b, FnWindowExt, TwoWords(2, 2));
@@ -424,6 +497,48 @@ begin
   b := Copy(data);
   b[dib + 34] := $FF;
   AssertFalse('a colour table past the end', TyWmfSingleBitmap(b, bm));
+  // a header whose width times height is past any number: 16 bytes of bits are not
+  // 2147483647 x 1073741825 pixels (the product must not wrap into "fits")
+  b := nil;
+  Put32(b, SrcCopy);
+  Put16(b, 0);
+  for n := 1 to 8 do Put16(b, 0);
+  PutBytes(b, LyingDib($7FFFFFFF, $40000001));
+  AssertFalse('a bitmap of 2^61 pixels in 16 bytes', TyWmfSingleBitmap(WmfOf($0F43, b), bm));
+  AssertEquals('nothing reported', 0, bm.Width);
+  b := nil;
+  Put32(b, SrcCopy);
+  Put16(b, 0);
+  for n := 1 to 8 do Put16(b, 0);
+  PutBytes(b, LyingDib(2, $7FFFFFFF));
+  AssertFalse('two billion rows of 8 bytes', TyWmfSingleBitmap(WmfOf($0F43, b), bm));
+  // the same header with what it announces: 2 x 2, 16 bytes
+  b := nil;
+  Put32(b, SrcCopy);
+  Put16(b, 0);
+  Put16(b, 2);
+  Put16(b, 2);
+  Put16(b, 0);
+  Put16(b, 0);
+  for n := 1 to 4 do Put16(b, 2);
+  PutBytes(b, LyingDib(2, 2));
+  AssertTrue('2 x 2 in 16 bytes', TyWmfSingleBitmap(WmfOf($0F43, b), bm));
+  // one row more than the bits hold, the source rectangle agreeing with the header
+  b := nil;
+  Put32(b, SrcCopy);
+  Put16(b, 0);
+  Put16(b, 3);
+  Put16(b, 2);
+  Put16(b, 0);
+  Put16(b, 0);
+  for n := 1 to 4 do Put16(b, 2);
+  PutBytes(b, LyingDib(2, 3));
+  AssertFalse('2 x 3 in 16 bytes', TyWmfSingleBitmap(WmfOf($0F43, b), bm));
+  // a compressed bitmap says how long its bits are: longer than the record is a lie
+  AssertTrue('RLE8: 6 bytes of bits', TyWmfSingleBitmap(WmfOf($0F43, RleRecord(6)), bm));
+  AssertEquals('RLE8: width', 2, bm.Width);
+  AssertFalse('RLE8: 7 bytes announced, 6 there', TyWmfSingleBitmap(WmfOf($0F43, RleRecord(7)), bm));
+  AssertFalse('RLE8: no length', TyWmfSingleBitmap(WmfOf($0F43, RleRecord(0)), bm));
 end;
 
 procedure TTyRichWmfTest.TestWhatEachFormatDisplays;
