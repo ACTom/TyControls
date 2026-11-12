@@ -2,7 +2,7 @@ unit test.notification;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, ExtCtrls, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   test.danglingrefs,  // BeginPoison / EndPoison
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Notification,
@@ -133,6 +133,7 @@ type
     procedure TestFreeingTheHostSendsItsShowingToastToTheScreen;
     procedure TestAToastOwnedByItsHostGoesDownWithItNotToTheScreen;
     procedure TestOnGetHostAreaTrimsTheArea;
+    procedure TestTheHostsOwnTitleBarIsNotPartOfTheArea;
     procedure TestOnGetHostAreaIsNotAskedWithoutAUsableWindow;
     procedure TestAnAreaTrimmedBelowTheCardFallsBack;
     procedure TestHostFormSurvivesTheFormFile;
@@ -1352,6 +1353,15 @@ begin
   VisibleChanged;
 end;
 
+type
+  { A host with a title bar of its own, named the way TTyForm names it: a published TitleBar. }
+  TBarHostStub = class(THostStub)
+  private
+    FTitleBar: TControl;
+  published
+    property TitleBar: TControl read FTitleBar write FTitleBar;
+  end;
+
 function THostedNote.HostState: TTyNotificationHostState;
 begin
   Inc(StateReads);
@@ -2127,6 +2137,58 @@ begin
     AssertTrue('the handler was asked', FAreaAsks > 0);
     N.OnGetHostArea := nil;
     AssertEquals('no handler: the whole client area', CHostAT + CHostAH - 16, N.SlotRect(96).Bottom);
+  finally
+    N.Free;
+    H.Free;
+  end;
+end;
+
+{ The default top-right corner of a TTyForm's client area is its caption buttons. A title bar is
+  the window's chrome, not a place for a toast, so the area starts below it -- with no handler,
+  which is the only way a TyNotify toast can be kept off it. }
+procedure TTyNotificationHostTest.TestTheHostsOwnTitleBarIsNotPartOfTheArea;
+var
+  H: TBarHostStub;
+  Bar, Inner: TPanel;
+  N: THostedNote;
+begin
+  H := TBarHostStub.CreateNew(nil);
+  H.SetBounds(CHostAL, CHostAT, CHostAW, CHostAH);
+  H.SimVisible := True;
+  Forms.Application.ProcessMessages;
+  Bar := TPanel.Create(H);
+  Bar.Parent := H;
+  Bar.SetBounds(0, 0, CHostAW, 34);
+  N := NewHosted(FCtl, H);
+  try
+    AssertEquals('no title bar named: the whole client area', CHostAT + 16, N.SlotRect(96).Top);
+    H.TitleBar := Bar;
+    AssertEquals('the area starts below the title bar', CHostAT + 34 + 16, N.SlotRect(96).Top);
+    N.Position := npBottomRight;
+    AssertEquals('the bottom is where it was', CHostAT + CHostAH - 16, N.SlotRect(96).Bottom);
+    N.Position := npTopRight;
+    // The handler has the last word, and is handed the area already below the bar.
+    FTrim := Rect(0, 5, 0, 0);
+    N.OnGetHostArea := @HandleHostArea;
+    AssertEquals('the handler trims what is left', CHostAT + 34 + 5 + 16, N.SlotRect(96).Top);
+    N.OnGetHostArea := nil;
+    Bar.Visible := False;
+    AssertEquals('a hidden bar takes nothing', CHostAT + 16, N.SlotRect(96).Top);
+    Bar.Visible := True;
+    // A bar that is not across the top edge (docked elsewhere by the application) is content.
+    Bar.SetBounds(0, 120, CHostAW, 34);
+    AssertEquals('a bar away from the top takes nothing', CHostAT + 16, N.SlotRect(96).Top);
+    // One level down (on a surface that fills the form) it is still the form's bar.
+    Inner := TPanel.Create(H);
+    Inner.Parent := H;
+    Inner.SetBounds(2, 2, CHostAW - 4, CHostAH - 4);
+    Bar.Parent := Inner;
+    Bar.SetBounds(0, 0, CHostAW - 4, 34);
+    AssertEquals('measured from the form, through its parent', CHostAT + 2 + 34 + 16,
+      N.SlotRect(96).Top);
+    // A control of another form is not this host's bar.
+    Bar.Parent := nil;
+    AssertEquals('a bar that is not on the host takes nothing', CHostAT + 16, N.SlotRect(96).Top);
   finally
     N.Free;
     H.Free;

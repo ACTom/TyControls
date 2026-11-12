@@ -62,7 +62,7 @@ uses tyControls.Notification;
 |------|----------|
 | `OnClose` | **每次消失触发一次**，不论起因：倒计时到、点 `x`、还是代码 `Hide`。**幂等**——对已经消失的 toast 再 `Hide` 不会再触发。组件被销毁时**不触发**（组件没了 ≠ 用户关了它）。 |
 | `OnClick` | 点击卡片**除 `x` 以外**的区域。点 `x` 的手势**不会**触发它。**点击不会让 toast 消失**——一次点击是什么意思是宿主的事。 |
-| `OnGetHostArea` | 每次摆放带 `HostForm` 的 toast 时。`AArea` 是宿主客户区的屏幕坐标，可以改小，让出标题栏、状态栏这些不该被盖住的地方。没有宿主、宿主不在屏幕上或已最小化时不触发。 |
+| `OnGetHostArea` | 每次摆放带 `HostForm` 的 toast 时。`AArea` 是宿主客户区的屏幕坐标（宿主自己的标题栏已经让出），可以改小，让出状态栏、工具栏这些不该被盖住的地方。没有宿主、宿主不在屏幕上或已最小化时不触发。 |
 
 ```pascal
 TTyNotificationHostAreaEvent = procedure(Sender: TObject; var AArea: TRect) of object;
@@ -141,7 +141,7 @@ property Showing: Boolean;                    // 当前是否浮着
 |------|------|
 | `function HostState: TTyNotificationHostState; virtual;` | 读宿主窗口：是否在屏幕上、是否最小化、客户区的屏幕坐标。只读不判断，判断在 `TyNotificationHostUsable`。 |
 | `function ScreenArea: TRect; virtual;` | 没有宿主或宿主用不了时放在哪里。默认是主显示器的工作区；想放到别的显示器就重写它。 |
-| `procedure DoGetHostArea(var AArea: TRect); virtual;` | 触发 `OnGetHostArea`。 |
+| `procedure DoGetHostArea(var AArea: TRect); virtual;` | 先让出宿主自己的标题栏，再触发 `OnGetHostArea`。 |
 | `procedure HostChanged; virtual;` | 宿主移动、改变大小、显示或隐藏时调用，重新摆放这张 toast。 |
 | `procedure NeedWindow;` / `property Window` | 创建 toast 的窗口（不显示）/ 访问它。 |
 
@@ -163,7 +163,7 @@ procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType = 
 
 弹完就不管：自己造一个 toast、弹出、并由单元负责回收（沿用 `tyControls.Dialogs` 的 `TyShowMessage` / `TyMessageDlg` 那套全局函数惯例）。**回收发生在下一次 `TyNotify` 调用**（以及单元 finalization），**不是**在 toast 自己的关闭路径上——那条路径正跑在要被 `Free` 的那个组件的定时器 tick / 鼠标处理里。
 
-`AHostForm` 就是这张 toast 的 `HostForm`。`TyNotify` 造出来的 toast 挂不了 `OnGetHostArea`，要让出标题栏就用窗体上的组件。
+`AHostForm` 就是这张 toast 的 `HostForm`。宿主自己的标题栏会自动让出；`TyNotify` 造出来的 toast 挂不了 `OnGetHostArea`，还要让出状态栏之类就用窗体上的组件。
 
 ---
 
@@ -258,17 +258,18 @@ end;
 
 ### 让出标题栏和状态栏
 
-客户区的角不一定能放卡片。`TTyTitleBar` 是客户区里的控件，客户区右上角正是它的窗口按钮；状态栏占着客户区的底边。用 `OnGetHostArea` 把这些地方让出来：
+客户区的角不一定能放卡片。`TTyTitleBar` 是客户区里的控件，客户区右上角正是它的窗口按钮；状态栏占着客户区的底边。
+
+标题栏不用管：宿主有一个发布的 `TitleBar` 属性（`TTyForm` 就是这样）、它指向的控件可见并且横在客户区顶边时，可用区域从它下面开始。其余的用 `OnGetHostArea` 让出来：
 
 ```pascal
 procedure TMainForm.ToastGetHostArea(Sender: TObject; var AArea: TRect);
 begin
-  Inc(AArea.Top, TitleBar.Height);
   Dec(AArea.Bottom, StatusBar.Height);
 end;
 ```
 
-`AArea` 传进来时是宿主客户区的屏幕坐标。改完剩下的矩形用来算角、边距和堆叠；它比卡片小时 toast 放到屏幕上。每次摆放都会调用这个事件，里面只做加减，不要在里面弹出或关闭 toast。
+`AArea` 传进来时是宿主客户区的屏幕坐标，标题栏已经让出。改完剩下的矩形用来算角、边距和堆叠；它比卡片小时 toast 放到屏幕上。每次摆放都会调用这个事件，里面只做加减，不要在里面弹出或关闭 toast。
 
 ### 在设计器里
 

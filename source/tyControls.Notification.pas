@@ -345,7 +345,9 @@ type
     { Where a toast goes that has no host, or whose host cannot take it: the work area of the
       primary monitor. Override to send such toasts elsewhere (another monitor's work area). }
     function ScreenArea: TRect; virtual;
-    { Fires OnGetHostArea. Only called for a host that is on screen and not minimised. }
+    { Narrows the host's client area to where a toast may go: leaves out the host's own title
+      bar (a published TitleBar control across the top, as on TTyForm), then fires
+      OnGetHostArea. Only called for a host that is on screen and not minimised. }
     procedure DoGetHostArea(var AArea: TRect); virtual;
     { The host moved, was resized, shown or hidden while this toast is up: put the toast where
       it belongs now. LCL reports a form's move or resize on the next message, so the toast
@@ -473,6 +475,7 @@ procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType = 
 implementation
 
 uses
+  TypInfo,                                  // the host's TitleBar, by name
   tyControls.QtWS, tyControls.PlatformWS;   // TyIsWayland — the shape gate
 
 // ---------------------------------------------------------------------------
@@ -1062,8 +1065,43 @@ begin
   Result := Screen.WorkAreaRect;
 end;
 
+{ The host's own title bar, when it has one across the top of its client area: a TTyForm's is a
+  control INSIDE the client area, so the default top-right corner would be its caption buttons.
+  Found by name -- a published TitleBar holding a control -- so this unit does not have to use
+  the form unit, and any form that names its bar that way is understood. Measured from the
+  form's client origin through whatever the bar sits on (a surface that fills the form). }
+function TyHostTitleBarBottom(AHost: TCustomForm): Integer;
+var
+  o: TObject;
+  bar, c: TControl;
+  top: Integer;
+begin
+  Result := 0;
+  if (AHost = nil) or not IsPublishedProp(AHost, 'TitleBar') then Exit;
+  if PropType(AHost, 'TitleBar') <> tkClass then Exit;
+  o := GetObjectProp(AHost, 'TitleBar');
+  if not (o is TControl) then Exit;
+  bar := TControl(o);
+  if not (bar.Visible and AHost.IsParentOf(bar)) then Exit;
+  { Summed up the parent chain rather than asked of the windows, so it needs no handle. }
+  top := 0;
+  c := bar;
+  while (c <> nil) and (c <> AHost) do
+  begin
+    Inc(top, c.Top);
+    c := c.Parent;
+  end;
+  { Across the top edge: a bar the application docked lower down is content like any other. }
+  if top >= bar.Height then Exit;
+  Result := top + bar.Height;
+  if Result < 0 then Result := 0;
+end;
+
 procedure TTyCustomNotification.DoGetHostArea(var AArea: TRect);
 begin
+  { The title bar first, so a handler is handed what is left and has the last word -- and so a
+    toast that can have no handler (TyNotify's) stays off the caption buttons too. }
+  Inc(AArea.Top, TyHostTitleBarBottom(FHostForm));
   if Assigned(FOnGetHostArea) then FOnGetHostArea(Self, AArea);
 end;
 
