@@ -1248,14 +1248,14 @@ TyToolWindowDropZone||1 => pres[0,1,2,3,] bg=k1/3860A5FA ut=0 txt=FFE5E7EB bd=FF
 TyToolWindowDropZone||2 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||3 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-metric --accordion-min-body-height => 48
-metric --accordion-splitter-size => 4
 TyToolWindowStripCommand||0 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||1 => pres[0,1,] bg=k1/24FFFFFF ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||2 => pres[0,1,] bg=k1/33E5E7EB ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||3 => pres[1,12,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF60A5FA/2/2
 TyToolWindowStripCommand||4 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 metric --alert-action-gap => 8
+metric --accordion-min-body-height => 48
+metric --accordion-splitter-size => 4
 metric --alert-close-gap => 8
 metric --alert-close-size => 14
 metric --alert-icon-gap => 8
