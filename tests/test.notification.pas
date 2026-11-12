@@ -161,6 +161,7 @@ type
     procedure TestAToastShownWhileItsHostIsMinimisedGoesToTheScreen;
     procedure TestOnGetHostAreaIsNotAskedOfAMinimisedWindow;
     procedure TestFreeingTheHostSendsItsToastsToTheScreen;
+    procedure TestTyNotifyTakesAHost;
   end;
 
 implementation
@@ -2488,6 +2489,36 @@ begin
     N2.Free;
     N1.Free;
   end;
+end;
+
+procedure TTyNotificationHostWindowTest.TestTyNotifyTakesAHost;
+var
+  CA, R: TRect;
+  i: Integer;
+  W: TCustomForm;
+  t0: QWord;
+begin
+  CA := ClientOnScreen;
+  // A second: long enough that a busy machine cannot run it out before the first look.
+  TyNotify('Saved', 'To disk.', atInfo, npTopRight, 1000, FForm);
+  Pump;
+  W := nil;
+  for i := 0 to Screen.CustomFormCount - 1 do
+    if (Screen.CustomForms[i] is TTyNotificationWindow) and Screen.CustomForms[i].Visible then
+      W := Screen.CustomForms[i];
+  AssertNotNull('the toast is up', W);
+  R := W.BoundsRect;
+  // The host is far off screen, so a toast in the screen's corner cannot be mistaken for it.
+  AssertTrue(Format('inside the host''s client area: %s in %s', [RectStr(R), RectStr(CA)]),
+    (R.Left >= CA.Left) and (R.Top >= CA.Top) and (R.Right <= CA.Right) and (R.Bottom <= CA.Bottom));
+  // Wait it out: nothing else can dismiss a toast TyNotify owns, and it must not outlive the
+  // host this test is about to free.
+  t0 := GetTickCount64;
+  repeat
+    Forms.Application.ProcessMessages;
+    Sleep(10);
+  until (not W.Visible) or (GetTickCount64 - t0 > 5000);
+  AssertFalse('it dismissed itself', W.Visible);
 end;
 
 initialization

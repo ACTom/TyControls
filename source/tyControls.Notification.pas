@@ -464,10 +464,11 @@ type
 
 { Fire-and-forget toast: build one, show it, and let this unit own it. The house's global-
   function convenience (tyControls.Dialogs' TyShowMessage / TyMessageDlg), for the very common
-  "report this and get out of the way" call that does not want a component on a form. }
+  "report this and get out of the way" call that does not want a component on a form.
+  AHostForm places it in that form instead of on the screen (TTyCustomNotification.HostForm). }
 procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType = atInfo;
   APosition: TTyNotificationPosition = npTopRight;
-  ADurationMs: Integer = TyNotificationDuration);
+  ADurationMs: Integer = TyNotificationDuration; AHostForm: TCustomForm = nil);
 
 implementation
 
@@ -1565,7 +1566,7 @@ begin
 end;
 
 procedure TyNotify(const ATitle, AMessage: string; AType: TTyNotificationType;
-  APosition: TTyNotificationPosition; ADurationMs: Integer);
+  APosition: TTyNotificationPosition; ADurationMs: Integer; AHostForm: TCustomForm);
 var
   n: TTyNotification;
 begin
@@ -1577,6 +1578,7 @@ begin
   n.NotificationType := AType;
   n.Position := APosition;
   n.Duration := ADurationMs;
+  n.HostForm := AHostForm;
   UAuto.Add(n);
   n.Show;
 end;
