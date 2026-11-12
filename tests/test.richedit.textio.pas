@@ -608,6 +608,14 @@ begin
     AssertTrue('there is something to undo', d.CanUndo);
     AssertTrue('and to redo', d.CanRedo);
     AssertTrue('formatted paragraphs are alive', d.LiveParaData > 0);
+    // what an RTF file opened before left on the document: its default font and its page
+    f := TyDefaultCharFormat;
+    f.FontName := 'Times New Roman';
+    f.SizeHalfPt := 24;
+    f.Color := clRed;
+    TIONullLoader.SetDefaultCharFormat(d, f);
+    TIONullLoader.SetPage(d, 11906, 16838, 1440, 1000);
+    AssertEquals('the old default is in place', 'Times New Roman', d.DefaultCharFormat.FontName);
     oldLen := d.Text.Length;
     d.OnChange := @DocChanged;
     FChanges := nil;
@@ -635,6 +643,17 @@ begin
     AssertEquals('the old values are gone', 0, d.LiveParaData);
     AssertNull('the loader of the old content is gone', d.Loader);
     AssertEquals('the new paragraphs are plain', d.DefaultParaFormatId, d.ParaFormatOf(1));
+    // a text file has no font and no page of its own: a new document's, not the old file's
+    AssertEquals('the default font is the theme''s again', '', d.DefaultCharFormat.FontName);
+    AssertEquals('the default size is the theme''s again', 0, d.DefaultCharFormat.SizeHalfPt);
+    AssertEquals('the default colour is the theme''s again', clDefault, d.DefaultCharFormat.Color);
+    AssertTrue('the default id is that format',
+      d.Formats.CharFormat(d.DefaultCharFormatId).Equals(TyDefaultCharFormat));
+    AssertEquals('plain text shows in it', d.DefaultCharFormatId, d.RunsOf(0)[0].Format);
+    AssertEquals('paper width', 12240, d.PaperWidth);
+    AssertEquals('paper height', 15840, d.PaperHeight);
+    AssertEquals('left margin', 1800, d.MarginLeft);
+    AssertEquals('right margin', 1800, d.MarginRight);
     AssertEquals('one change', 1, System.Length(FChanges));
     AssertTrue('everything changed', FChanges[0].Kinds = [rckText, rckFormat, rckStructure]);
     AssertEquals('from the start', Int64(0), FChanges[0].Pos);

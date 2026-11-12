@@ -368,8 +368,10 @@ type
     { Puts AText in place of ADoc's whole content - a file opened into an existing document.
       ADoc takes AText over, also when this raises; AText must be one no document has used
       (its paragraph slots nil). The history goes, every paragraph value of the old content
-      is let go of, an installed loader goes with the content it parsed, Modified becomes
-      False, and the source metadata is set; then OnChange reports one change of everything:
+      is let go of, an installed loader goes with the content it parsed, the default
+      character format and the page go back to a new document's (a reader that has its own
+      sets them afterwards), Modified becomes False, and the source metadata is set; then
+      OnChange reports one change of everything:
       Kinds [rckText, rckFormat, rckStructure], Pos 0, the old and new lengths, paragraphs 0
       with the old and new counts (a view throws all its layout away on it). Raises
       ETyRichModel while a command runs or inside BeginUpdate .. EndUpdate. Without the
@@ -543,6 +545,7 @@ type
     procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
       AHasBom: Boolean; ALineBreak: TTyRichSeparator);
     procedure SetDefaults(const AFormat: TTyCharFormat);
+    procedure SetDefaultPage;
     procedure TextParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
     procedure TextDataDropped(Sender: TObject; AData: Pointer);
     // paragraph values
@@ -1608,11 +1611,7 @@ begin
   FFormats := TTyFormatPool.Create;
   FDefaultParaId := FFormats.InternPara(TyDefaultParaFormat);
   SetDefaults(TyDefaultCharFormat);
-  // WordPad's page: US Letter, 1.25" left and right margins
-  FPaperWidth := 12240;
-  FPaperHeight := 15840;
-  FMarginLeft := 1800;
-  FMarginRight := 1800;
+  SetDefaultPage;
   FMaxUndoBytes := DefaultMaxUndoBytes;
   FText.OnParasChanged := @TextParasChanged;
   FText.OnParaDataDropped := @TextDataDropped;
@@ -1663,6 +1662,10 @@ begin
   if FOwnsLoader then FLoader.Free;
   FLoader := nil;
   FOwnsLoader := False;
+  // the default font and the page were the old content's (an RTF file's): a text file
+  // loaded next has neither, and would show in them
+  SetDefaults(TyDefaultCharFormat);
+  SetDefaultPage;
   FSourceEncoding := AEncoding;
   FSourceCodePage := ACodePage;
   FSourceHasBom := AHasBom;
@@ -1701,6 +1704,15 @@ begin
   FFormats.Free;
   if FOwnsLoader then FLoader.Free;
   inherited Destroy;
+end;
+
+procedure TTyRichDocument.SetDefaultPage;
+begin
+  // WordPad's page: US Letter, 1.25" left and right margins
+  FPaperWidth := 12240;
+  FPaperHeight := 15840;
+  FMarginLeft := 1800;
+  FMarginRight := 1800;
 end;
 
 procedure TTyRichDocument.SetDefaults(const AFormat: TTyCharFormat);
