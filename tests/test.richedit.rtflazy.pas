@@ -62,6 +62,7 @@ type
     procedure TestTheLeastRecentlyUsedIntervalGoes;
     procedure TestUntouchedCellsStayTheFilesOwnAfterTheirIntervalGoes;
     procedure TestAnIntervalParsedAgainInsideAScopeKeepsItsParagraphs;
+    procedure TestARowWithANestedTableIsSavedAsItWas;
   end;
 
 implementation
@@ -411,6 +412,8 @@ begin
       AssertEquals(msg + ' cell', cf.Index, cl.Index);
       AssertEquals(msg + ' row', cf.Row.Index, cl.Row.Index);
       AssertEquals(msg + ' row''s cells', cf.Row.CellCount, cl.Row.CellCount);
+      AssertEquals(msg + ' row holds a nested table', cf.Row.HoldsNestedTable,
+        cl.Row.HoldsNestedTable);
       AssertText(msg + ' row format', cf.Row.RawFormat, cl.Row.RawFormat);
       AssertEquals(msg + ' rows', cf.Table.RowCount, cl.Table.RowCount);
       AssertEquals(msg + ' locked', cf.Table.StructureLocked, cl.Table.StructureLocked);
@@ -1786,6 +1789,123 @@ begin
     d.Free;
     s.Free;
   end;
+end;
+
+{ Word's table with a table in one cell: the row that holds it cannot be typed into, and
+  "select all, make it bold" changes everything but that row - so the row is saved as the
+  file has it, nested table and all, whatever is done around it. }
+procedure TTyRtfLazyTest.TestARowWithANestedTableIsSavedAsItWas;
+
+  function Count(const AHay: TBytes; const ANeedle: RawByteString): Integer;
+  var
+    i: Integer;
+  begin
+    Result := 0;
+    for i := 0 to Length(AHay) - Length(ANeedle) do
+      if (AHay[i] = Byte(ANeedle[1])) and CompareMem(@AHay[i], @ANeedle[1], Length(ANeedle)) then
+        Inc(Result);
+  end;
+
+  function Save(ADoc: TTyRichDocument): TBytes;
+  var
+    s: TBytesStream;
+  begin
+    s := TBytesStream.Create;
+    try
+      TyRichSaveRtf(ADoc, s);
+      Result := Copy(s.Bytes, 0, s.Size);
+    finally
+      s.Free;
+    end;
+  end;
+
+  procedure Check(const AName: string; AFirst: Integer);
+  var
+    b, o: TBytes;
+    d, r: TTyRichDocument;
+    load: TTyRtfLoad;
+    i, j, at: Integer;
+    range, last: TTyRtfRange;
+    bold: TTyCharFormat;
+    runs: TTyRunArray;
+    found: Boolean;
+  begin
+    b := Fixture(AName);
+    d := LoadWith(b, False);
+    r := nil;
+    try
+      load := TyRichRtfLoadOf(d);
+      AssertTrue(AName + ': the row is marked', d.CellAt(AFirst).Row.HoldsNestedTable);
+      // typing into G, deleting a character of the nested cell, the row's last paragraph
+      AssertFalse(AName + ': no typing in the row',
+        d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(AFirst + 1), 'X')));
+      AssertFalse(AName + ': no deleting in the row',
+        d.Execute(TTyRichDelete.Create(d.Text.ParaStart(AFirst + 2), 1)));
+      AssertFalse(AName + ': the row does not lose its last paragraph',
+        d.Execute(TTyRichDelete.Create(d.Text.ParaStart(AFirst + 4) - 1, 1)));
+      AssertFalse(AName + ': no object in the row', d.Execute(TTyRichInsertObject.Create(
+        d.Text.ParaStart(AFirst + 1), TTyRichOpaque.Create('{\*\x}'))));
+      AssertFalse(AName + ': nothing changed', d.Modified);
+      AssertFalse(AName + ': nothing to undo', d.CanUndo);
+      o := Save(d);
+      AssertTrue(AName + ': saved as it was', (Length(o) = Length(b)) and
+        CompareMem(@o[0], @b[0], Length(b)));
+      // select all, bold
+      bold := TyDefaultCharFormat;
+      bold.Style := [fsBold];
+      AssertTrue(AName + ': bold over everything', d.Execute(TTyRichSetCharFormat.Create(
+        TyRichRange(0, d.Text.Length), [cffBold], bold)));
+      for i := AFirst to AFirst + 4 do
+        AssertTrue(Format('%s: paragraph %d of the row is still the file''s own', [AName, i]),
+          load.ParaSource(i, range));
+      AssertFalse(AName + ': the paragraph before the table was changed', load.ParaSource(0, range));
+      AssertFalse(AName + ': a cell of another row was changed', load.ParaSource(AFirst - 1, range));
+      AssertTrue(AName + ': the row''s first paragraph', load.ParaSource(AFirst, range));
+      AssertTrue(AName + ': the row''s last paragraph', load.ParaSource(AFirst + 4, last));
+      o := Save(d);
+      // the row's bytes are in the output as they are in the file
+      found := False;
+      for at := 0 to Length(o) - (last.Stop - range.Start) do
+        if (o[at] = b[range.Start]) and CompareMem(@o[at], @b[range.Start], last.Stop - range.Start) then
+        begin
+          found := True;
+          Break;
+        end;
+      AssertTrue(AName + ': the row is in the output byte for byte', found);
+      AssertEquals(AName + ': the inner cells', Count(b, '\nestcell'), Count(o, '\nestcell'));
+      AssertEquals(AName + ': the inner table''s properties', Count(b, 'nesttableprops'),
+        Count(o, 'nesttableprops'));
+      AssertTrue(AName + ': the sample has them', (Count(b, '\nestcell') = 2) and
+        (Count(b, 'nesttableprops') = 1));
+      // read again: the same paragraphs, bold all but the row's
+      r := LoadWith(o, True);
+      AssertEquals(AName + ': paragraphs', d.Text.ParaCount, r.Text.ParaCount);
+      for i := 0 to r.Text.ParaCount - 1 do
+      begin
+        AssertText(Format('%s: paragraph %d', [AName, i]), ParaText(d, i), ParaText(r, i));
+        runs := r.RunsOf(i);
+        for j := 0 to High(runs) do
+          AssertEquals(Format('%s: paragraph %d run %d bold', [AName, i, j]),
+            (i < AFirst) or (i > AFirst + 4),
+            fsBold in r.Formats.CharFormat(runs[j].Format).Style);
+        AssertEquals(Format('%s: paragraph %d marked', [AName, i]),
+          (i >= AFirst) and (i <= AFirst + 4),
+          (r.CellAt(i) <> nil) and r.CellAt(i).Row.HoldsNestedTable);
+      end;
+      // undone: the file again
+      d.Undo;
+      o := Save(d);
+      AssertTrue(AName + ': undone, saved as it was', (Length(o) = Length(b)) and
+        CompareMem(@o[0], @b[0], Length(b)));
+    finally
+      r.Free;
+      d.Free;
+    end;
+  end;
+
+begin
+  Check('hand-word-table-merged.rtf', 7);
+  Check('word-table-merged.rtf', 6);
 end;
 
 initialization

@@ -19,7 +19,9 @@ type
   { Inserts text (paragraph separators allowed) at APos; AFormat as TTyRichDocument's
     InsertText. Typing - mergeable text without a separator - merges with the typing right
     before it into one undo step, as TTyMemo's undo stack does: a paste passes
-    AMergeable = False, and Enter (a separator) never merges. }
+    AMergeable = False, and Enter (a separator) never merges.
+    The insert and delete commands do not run where the document keeps the text as the
+    file has it (TTyRichDocument.CanChange): Execute returns False and nothing changes. }
   TTyRichInsertText = class(TTyRichCommand)
   private
     FPos: array of TTyRichPos;      // one entry per merged insert, in order
@@ -31,6 +33,7 @@ type
   public
     constructor Create(APos: TTyRichPos; const AText: UTF8String;
       AFormat: TTyCharFormatId = TyRichInheritFormat; AMergeable: Boolean = True);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function TryMerge(ANext: TTyRichCommand): Boolean; override;
     function Description: string; override;
     function MemSize: Int64; override;
@@ -47,6 +50,7 @@ type
     procedure DoExecute(ADoc: TTyRichDocument); override;
   public
     constructor Create(APos, ALen: TTyRichPos);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
   end;
 
@@ -92,6 +96,7 @@ type
     constructor Create(APos: TTyRichPos; AObject: TTyRichObject;
       AFormat: TTyCharFormatId = TyRichInheritFormat);
     destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
     property RichObject: TTyRichObject read FObject;
   end;
@@ -161,6 +166,12 @@ begin
   FTyping := AMergeable and (AText <> '') and not HasSeparator(AText);
 end;
 
+function TTyRichInsertText.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  // (asked before the first run, when there is one insert; a redo replays what ran)
+  Result := ADoc.CanChange(FPos[0], 0);
+end;
+
 procedure TTyRichInsertText.DoExecute(ADoc: TTyRichDocument);
 var
   i: Integer;
@@ -211,6 +222,11 @@ begin
   inherited Create;
   FPos := APos;
   FLen := ALen;
+end;
+
+function TTyRichDelete.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := ADoc.CanChange(FPos, FLen);
 end;
 
 procedure TTyRichDelete.DoExecute(ADoc: TTyRichDocument);
@@ -287,6 +303,11 @@ begin
   // the paragraph values that use the object hold their own references
   if FObject <> nil then FObject.Release;
   inherited Destroy;
+end;
+
+function TTyRichInsertObject.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := ADoc.CanChange(FPos, 0);
 end;
 
 procedure TTyRichInsertObject.DoExecute(ADoc: TTyRichDocument);

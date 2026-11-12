@@ -55,6 +55,7 @@ type
     procedure TestGb18030AsTheFileCodePage;
     // the review of batch A
     procedure TestALaterUnknownWordReplacesTheEarlierOne;
+    procedure TestARowThatHoldsANestedTableIsMarked;
   end;
 
 implementation
@@ -1805,6 +1806,97 @@ begin
     AssertText('e: the top border again', '\brdrb|\brdrs|\brdrw20 |\brdrt|\brdrdb|\brdrw30 ',
       Joined(ParaFmt(d, 4).Extra));
     AssertText('f: the later list', '\ilvl0|\ls2 ', Joined(ParaFmt(d, 5).Extra));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The model has no table inside a cell: the inner cells' paragraphs are the outer cell's.
+  The row that holds one is marked (the model then keeps it as the file has it), and only
+  that row. }
+procedure TTyRtfReadTest.TestARowThatHoldsANestedTableIsMarked;
+const
+  // a row of two cells, and what its second cell holds besides its own paragraph
+  Before = '{\rtf1 \trowd\cellx100\cellx200\pard\intbl a\cell ';
+  After = '\pard\intbl c\cell\row\trowd\cellx100\cellx200\pard\intbl d\cell e\cell\row' +
+    '\pard f\par}';
+  Signs: array[0..5] of RawByteString = (
+    '\pard\intbl\itap2 b\par',
+    'b\nestcell ',
+    '{\*\nesttableprops\trowd\cellx50\nestrow}b\par',
+    '\nestrow b\par',
+    '{\nonesttables\par}b\par',
+    // the level named and taken back before a paragraph ends at it
+    '\itap2\pard\intbl b\par');
+var
+  d: TTyRichDocument;
+  i, p: Integer;
+
+  function Marked(APara: Integer): Boolean;
+  begin
+    Result := (d.CellAt(APara) <> nil) and d.CellAt(APara).Row.HoldsNestedTable;
+  end;
+
+  procedure Check(const AName: string; AFirst, ALast: Integer);
+  var
+    k: Integer;
+  begin
+    d := LoadBytes(Fixture(AName));
+    try
+      for k := 0 to d.Text.ParaCount - 1 do
+        AssertEquals(Format('%s paragraph %d is in the row that holds the nested table',
+          [AName, k]), (k >= AFirst) and (k <= ALast), Marked(k));
+      AssertText(AName + ': the outer cell before the nested table', 'G', ParaText(d, AFirst + 1));
+      AssertTrue(AName + ': one row', d.CellAt(AFirst).Row = d.CellAt(ALast).Row);
+      AssertTrue(AName + ': the row before it is another', d.CellAt(AFirst - 1).Row <> d.CellAt(AFirst).Row);
+      AssertTrue(AName + ': such a table is locked', d.TableAt(AFirst).StructureLocked);
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  // the third row: an empty cell, G, and the cell with the 1 x 2 table and its own paragraph
+  Check('hand-word-table-merged.rtf', 7, 11);
+  Check('word-table-merged.rtf', 6, 10);
+  // each sign by itself marks the row it is in, and not the row after it
+  for i := 0 to High(Signs) do
+  begin
+    d := LoadString(Before + Signs[i] + After);
+    try
+      CheckParas(Format('sign %d', [i]), d, ['a', 'b', 'c', 'd', 'e', 'f']);
+      for p := 0 to 5 do
+        AssertEquals(Format('sign %d: paragraph %d marked', [i, p]), p <= 2, Marked(p));
+    finally
+      d.Free;
+    end;
+  end;
+  // a nesting level set in one row and never taken back holds in the next
+  d := LoadString('{\rtf1 \trowd\cellx100\pard\intbl\itap2 a\cell\row' +
+    '\trowd\cellx100 b\cell\row\trowd\cellx100\pard\intbl c\cell\row\pard d\par}');
+  try
+    CheckParas('a level that lasts', d, ['a', 'b', 'c', 'd']);
+    AssertTrue('the row it was set in', Marked(0));
+    AssertTrue('the row after it', Marked(1));
+    AssertFalse('the row that set it back', Marked(2));
+  finally
+    d.Free;
+  end;
+  // a sign after a table's last row is no row's: the next table starts clean
+  d := LoadString('{\rtf1 \trowd\cellx100\pard\intbl a\cell\row\nestrow\pard b\par' +
+    '\trowd\cellx100\pard\intbl c\cell\row\pard d\par}');
+  try
+    CheckParas('a stray sign', d, ['a', 'b', 'c', 'd']);
+    AssertFalse('the row before it', Marked(0));
+    AssertFalse('the next table''s row', Marked(2));
+  finally
+    d.Free;
+  end;
+  // no sign, no mark: a table as RichEdit writes one
+  d := LoadBytes(Fixture('re-zh-table.rtf'));
+  try
+    for p := 0 to d.Text.ParaCount - 1 do
+      AssertFalse(Format('re-zh-table paragraph %d', [p]), Marked(p));
   finally
     d.Free;
   end;

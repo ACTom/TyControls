@@ -1290,6 +1290,14 @@ begin
           p.RightIndent := 77;
           SetPara(d, k, [pffRightIndent], p);
           o := SaveDoc(d, info);
+          if (d.CellAt(k) <> nil) and d.CellAt(k).Row.HoldsNestedTable then
+          begin
+            // such a row stays as the file has it: a format leaves it alone
+            AssertEquals(Format('%s paragraph %d: nothing rewritten', [names[i], k]), 0,
+              info.RewrittenParas);
+            Inc(k, step);
+            Continue;
+          end;
           AssertTrue(Format('%s paragraph %d: something was rewritten', [names[i], k]),
             info.RewrittenParas >= 1);
           AssertTrue(Format('%s paragraph %d: the control read it', [names[i], k]), RichEditText(o, got));
@@ -1429,6 +1437,13 @@ begin
         end;
       ekDelete:
         changed := d.Execute(TTyRichDelete.Create(start, len + 1));
+    end;
+    // a row that holds a nested table stays as the file has it: typing there is refused
+    // and a format leaves its paragraphs alone, so the file is saved as it was
+    if (AFull.CellAt(APara) <> nil) and AFull.CellAt(APara).Row.HoldsNestedTable then
+    begin
+      if AKind = ekInsert then AssertFalse(msg + ': refused in a row with a nested table', changed);
+      changed := False;
     end;
     o := SaveDoc(d, info);
     if not changed then
@@ -1598,8 +1613,17 @@ begin
             SetPara(d, k, [pffSpaceAfter], p);
             o := SaveDoc(d, info);
             AssertTrue(Format('%s paragraph %d: saved', [msg, k]), Length(o) > 0);
-            AssertEquals(Format('%s paragraph %d: one stretch', [msg, k]), 1, Length(info.Stretches));
             cell := full.CellAt(k);
+            if (cell <> nil) and cell.Row.HoldsNestedTable then
+            begin
+              // such a row stays as the file has it: a format leaves it alone
+              AssertEquals(Format('%s paragraph %d: nothing rewritten', [msg, k]), 0,
+                Length(info.Stretches));
+              AssertEquals(Format('%s paragraph %d: every paragraph copied', [msg, k]), n,
+                info.VerbatimParas);
+              Continue;
+            end;
+            AssertEquals(Format('%s paragraph %d: one stretch', [msg, k]), 1, Length(info.Stretches));
             // the paragraphs of its table row; outside a table itself alone - also where
             // a group spans paragraphs (it is closed and opened again around the stretch)
             row := 0;

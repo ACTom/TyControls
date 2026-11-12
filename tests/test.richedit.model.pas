@@ -84,6 +84,7 @@ type
     procedure TestDocumentDefaults;
     procedure TestEditsThroughTextKeepRunsInside;
     procedure TestTableIndexesAndEmptyTablesAreRefused;
+    procedure TestARowThatHoldsANestedTableStaysAsItIs;
   end;
 
 implementation
@@ -1205,6 +1206,142 @@ begin
     t.Release;
     d.Free;
   end;
+end;
+
+{ A row whose cell holds a table of its own is more in the file than in the model, so it
+  stays as it is: its paragraphs' text cannot be changed, the row cannot lose a part of
+  itself, and a format passes it over. It can go as a whole. }
+procedure TTyRichModelTest.TestARowThatHoldsANestedTableStaysAsItIs;
+var
+  d: TDocAccess;
+  t: TTyRichTable;
+  mark, u: TTyRichUndoData;
+  before: string;
+  i: Integer;
+  o: TTyRichObject;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
+  data: array[0..9] of Pointer;
+
+  function P(AIndex: Integer): TTyRichPos;
+  begin
+    Result := d.Text.ParaStart(AIndex);
+  end;
+
+  procedure Refused(const AWhat: string; APos, ALen: TTyRichPos);
+  var
+    raised: Boolean;
+  begin
+    AssertFalse(AWhat + ': CanChange says no', d.CanChange(APos, ALen));
+    raised := False;
+    try
+      if ALen = 0 then d.InsertText(APos, 'Z').Free else d.DeleteRange(APos, ALen).Free;
+    except
+      on E: ETyRichModel do
+      begin
+        raised := True;
+        AssertTrue(AWhat + ': the message says why: ' + E.Message, Pos('nested table', E.Message) > 0);
+      end;
+    end;
+    AssertTrue(AWhat + ': raises', raised);
+    AssertEquals(AWhat + ': nothing changed', before, Dump(d));
+    AssertFalse(AWhat + ': not modified', d.Modified);
+  end;
+
+  procedure Allowed(const AWhat: string; APos, ALen: TTyRichPos; AParasAfter: Integer);
+  begin
+    AssertTrue(AWhat + ': CanChange says yes', d.CanChange(APos, ALen));
+    if ALen = 0 then u := d.InsertText(APos, 'Z') else u := d.DeleteRange(APos, ALen);
+    AssertEquals(AWhat + ': paragraphs', AParasAfter, d.Text.ParaCount);
+    d.Revert(u);
+    AssertEquals(AWhat + ': reverted', before, Dump(d));
+    d.Modified := False;
+  end;
+
+begin
+  // 0 before | 1 a0 | 2 b0 || 3 x1 | 4 in1, 5 in2, 6 own || 7 a2 | 8 b2 || 9 after
+  d := NewDoc('before'#13#10'a0'#13#10'b0'#13#10'x1'#13#10'in1'#13#10'in2'#13#10'own'#13#10 +
+    'a2'#13#10'b2'#13#10'after');
+  t := TTyRichTable.Create([1440, 2880]);
+  try
+    t.AddRow(2);
+    t.AddRow(2, '', [], True);
+    t.AddRow(2);
+    AssertFalse('an ordinary row', t.Rows[0].HoldsNestedTable);
+    AssertTrue('the marked row', t.Rows[1].HoldsNestedTable);
+    mark := d.MarkTable(1, t, [1, 1, 1, 3, 1, 1]);
+    d.Modified := False;
+    before := Dump(d);
+    // typing: nowhere in the row, anywhere around it
+    Refused('at the start of the row', P(3), 0);
+    Refused('inside the nested cell', P(5) + 1, 0);
+    Refused('at the end of the row', P(6) + 3, 0);
+    Allowed('at the end of the row before', P(3) - 1, 0, 10);
+    Allowed('at the start of the row after', P(7), 0, 10);
+    o := TCountedOpaque.Create('{x}');
+    try
+      try
+        d.InsertObject(P(4), o).Free;
+        Fail('an object in the row must raise');
+      except
+        on ETyRichModel do ;
+      end;
+    finally
+      o.Free;
+    end;
+    AssertEquals('an object: nothing changed', before, Dump(d));
+    // deleting: not a character of it, not its join with a neighbour, not a part of it
+    Refused('a character of it', P(4), 1);
+    Refused('the break before it', P(3) - 1, 1);
+    Refused('the break after it', P(7) - 1, 1);
+    Refused('its first two paragraphs', P(3), P(5) - P(3));
+    Refused('its last three paragraphs', P(4), P(7) - P(4));
+    Refused('the paragraph before it and its first', P(2), P(4) - P(2));
+    Refused('the paragraph before it and its first character', P(2), P(3) + 1 - P(2));
+    Refused('from inside it to the end', P(5), d.Text.Length - P(5));
+    Refused('from before it into it', P(2) + 1, P(5) - P(2));
+    // ... but all of it, alone or with what is around it
+    Allowed('the whole row', P(3), P(7) - P(3), 6);
+    Allowed('the whole table', P(1), P(9) - P(1), 2);
+    Allowed('from inside the row before to inside the row after', P(2) + 1, P(7) - P(2), 5);
+    Allowed('everything', 0, d.Text.Length, 1);
+    // a range that is not in the text is the primitive's to refuse
+    AssertTrue('before the text', d.CanChange(-1, 0));
+    AssertTrue('past the text', d.CanChange(0, d.Text.Length + 1));
+    // a format over everything passes the row over
+    for i := 0 to 9 do data[i] := d.ParaDataOf(i);
+    f := TyDefaultCharFormat;
+    f.Color := clRed;
+    u := d.ApplyCharFormat(0, d.Text.Length, [cffColor], f);
+    for i := 0 to 9 do
+      if (i >= 3) and (i <= 6) then
+        AssertTrue(Format('paragraph %d of the row keeps its value', [i]), d.ParaDataOf(i) = data[i])
+      else
+        AssertEquals(Format('paragraph %d is red', [i]), SampleRuns(d, '0:%d', [clRed]), RunsStr(d, i));
+    d.Revert(u);
+    AssertEquals('character format reverted', before, Dump(d));
+    pf := TyDefaultParaFormat;
+    pf.Align := paraCenter;
+    u := d.ApplyParaFormat(0, 9, [pffAlign], pf);
+    for i := 0 to 9 do
+      if (i >= 3) and (i <= 6) then
+        AssertTrue(Format('paragraph %d of the row keeps its value', [i]), d.ParaDataOf(i) = data[i])
+      else
+        AssertEquals(Format('paragraph %d is centred', [i]), AlignId(d, paraCenter), d.ParaFormatOf(i));
+    d.Revert(u);
+    AssertEquals('paragraph format reverted', before, Dump(d));
+    // inside the row alone: nothing changes
+    u := d.ApplyCharFormat(P(4), 2, [cffColor], f);
+    AssertEquals('a format inside the row', before, Dump(d));
+    u.Free;
+    u := d.ApplyParaFormat(4, 5, [pffAlign], pf);
+    AssertEquals('a paragraph format inside the row', before, Dump(d));
+    u.Free;
+    d.Revert(mark);
+  finally
+    d.Free;
+  end;
+  AssertEquals('no object leaks', 0, TCountedOpaque.Live);
 end;
 
 initialization

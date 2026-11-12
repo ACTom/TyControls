@@ -183,6 +183,7 @@ type
     RowDef: TTyRtfRowDef;
     CellIdx, RowMax: Integer;
     TableOpen, Nested: Boolean;
+    RowNested: Boolean;          // the row being read holds a nested table
   end;
 
   // A snapshot: everything the parse depends on at a point between two tokens (with the
@@ -240,6 +241,7 @@ type
     CellCount: Integer;
     Raw: TTyRtfRange;
     Cellx: array of Integer;
+    Nested: Boolean;             // one of its cells holds a table (TTyRichRow.HoldsNestedTable)
   end;
 
   TTyRtfTableRec = record
@@ -380,6 +382,7 @@ type
     procedure DoRow;
     procedure FinishRow;
     procedure CloseTable;
+    procedure MarkNested; inline;
     procedure EndRowDef;
     procedure Finish;
     // characters
@@ -2325,7 +2328,7 @@ begin
     kwDDocSkip, kwDFldInst, kwDFldRslt, kwDPnText, kwDUd: SkipAndPop;
     kwDNestSkip:
       begin
-        FS.Nested := True;
+        MarkNested;
         SkipAndPop;
       end;
     kwDListText:
@@ -3087,6 +3090,15 @@ begin
   FS.InRowDef := False;
 end;
 
+// A sign of a table inside a cell (\itap of 2 or more, \nestcell, \nestrow, the nested
+// table's properties): the table cannot be edited as a grid, and the row being read holds
+// more than the model has of it - it is marked, so that it stays as the file has it.
+procedure TTyRtfParser.MarkNested;
+begin
+  FS.Nested := True;
+  FS.RowNested := True;
+end;
+
 procedure TTyRtfParser.BodyWord(AKw: Integer);
 var
   p: Integer;
@@ -3310,7 +3322,7 @@ begin
     kwItap:
       begin
         FS.Props.Itap := p;
-        if p >= 2 then FS.Nested := True;
+        if p >= 2 then MarkNested;
         ParaChanged;
       end;
     kwLs, kwIlvl:
@@ -3374,10 +3386,10 @@ begin
     kwNestCell:
       if normal then
       begin
-        FS.Nested := True;
+        MarkNested;
         EndParagraph(rpkNestCell);
       end;
-    kwNestRow: FS.Nested := True;
+    kwNestRow: MarkNested;
     kwRow: if normal then DoRow;
     // characters
     kwPar: if normal then EndParagraph(rpkPar);
@@ -3745,6 +3757,8 @@ begin
     end;
     if FS.CellIdx + 1 > FS.RowMax then FS.RowMax := FS.CellIdx + 1;
     if AKind = rpkCell then Inc(FS.CellIdx);
+    // (the level may have been set in a row before this one)
+    if FS.Props.Itap >= 2 then MarkNested;
   end
   else if FS.TableOpen then
     CloseTable;
@@ -3790,6 +3804,8 @@ begin
   if FS.RowMax > n then n := FS.RowMax;
   FS.CellIdx := 0;
   FS.RowMax := 0;
+  r.Nested := FS.RowNested;
+  FS.RowNested := False;
   if (n = 0) or Counting or (FTableN = 0) then Exit;
   r.CellCount := n;
   r.Raw := FS.RowDef.Raw;
@@ -3812,6 +3828,7 @@ begin
   if not Counting and (FTableN > 0) and FS.Nested then FTables[FTableN - 1].Locked := True;
   FS.TableOpen := False;
   FS.Nested := False;
+  FS.RowNested := False;
   // the table's last paragraph is the last one that ended
   if (FExtentN > 0) and (FExtents[FExtentN - 1].LastPara < 0) and (FParaN > 0) then
   begin
@@ -4237,7 +4254,8 @@ begin
       else t := TTyRichTable.Create([], tr.Locked);
       tables[i] := t;
       for j := 0 to tr.RowCount - 1 do
-        t.AddRow(tr.Rows[j].CellCount, AParser.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx);
+        t.AddRow(tr.Rows[j].CellCount, AParser.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
+          tr.Rows[j].Nested);
     end;
     for i := 0 to AParser.ParaCount - 1 do
     begin
@@ -4841,7 +4859,8 @@ begin
       t.AddRef;
       Result.Tables[i] := t;
       for j := 0 to tr.RowCount - 1 do
-        t.AddRow(tr.Rows[j].CellCount, p.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx);
+        t.AddRow(tr.Rows[j].CellCount, p.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
+          tr.Rows[j].Nested);
     end;
   finally
     p.Free;

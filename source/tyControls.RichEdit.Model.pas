@@ -232,6 +232,7 @@ type
     FCells: array of TTyRichCell;
     FBoundaries: array of Integer;
     FRawFormat: RawByteString;
+    FHoldsNestedTable: Boolean;
     function GetCell(AIndex: Integer): TTyRichCell;
     function GetBoundary(AIndex: Integer): Integer;
   public
@@ -243,6 +244,12 @@ type
     property Boundaries[AIndex: Integer]: Integer read GetBoundary;
     { The row's \trowd ... \cellx fragment as read, '' for a new row. }
     property RawFormat: RawByteString read FRawFormat;
+    { One of the row's cells holds a table of its own. The model has no nested tables: the
+      inner cells' paragraphs are paragraphs of the outer cell, and what made them a table is
+      only in the file's bytes. So the row stays as the file has it: the primitives refuse to
+      change the text of its paragraphs and leave their formats alone (see
+      TTyRichDocument.CanChange). }
+    property HoldsNestedTable: Boolean read FHoldsNestedTable;
     property Table: TTyRichTable read FTable;
     property Index: Integer read FIndex;
   end;
@@ -265,7 +272,8 @@ type
     function AddRow(ACellCount: Integer; const ARawFormat: RawByteString = ''): TTyRichRow;
       overload;
     function AddRow(ACellCount: Integer; const ARawFormat: RawByteString;
-      const ABoundaries: array of Integer): TTyRichRow; overload;
+      const ABoundaries: array of Integer; AHoldsNestedTable: Boolean = False): TTyRichRow;
+      overload;
     function RowCount: Integer;
     function CellCount: Integer;
     function ColBoundaryCount: Integer;
@@ -580,11 +588,22 @@ type
       AObj: TTyRichObject): TTyRichUndoData;
     procedure CheckCharId(AId: TTyCharFormatId);
     procedure CheckParaId(AId: TTyParaFormatId);
+    function DeleteCore(APos, ALen: TTyRichPos): TTyRichUndoData;
+    function FixedData(D: TTyRichParaData): Boolean; inline;
+    function FixedRowAt(AIndex: Integer): TTyRichRow;
+    function RowAt(AIndex: Integer): TTyRichRow;
+    function ChangeRefused(APos, ALen: TTyRichPos): Boolean;
   protected
     { The modification primitives. Each changes the document, raises OnChange, sets Modified
       and returns what Revert needs to undo it exactly (never nil; a no-op returns an empty
       record and notifies nothing). Undo records must be reverted in the reverse order they
-      were made. A redo runs the primitive again. }
+      were made. A redo runs the primitive again.
+
+      A row that holds a nested table (TTyRichRow.HoldsNestedTable) stays as it is:
+      InsertText, InsertObject and DeleteRange raise ETyRichModel, before anything changes,
+      when they would change a paragraph of such a row or take away a part of the row
+      (CanChange says which); ApplyCharFormat and ApplyParaFormat leave the paragraphs of
+      such rows as they are and change the rest of their range. }
 
     { AText may hold paragraph separators. A split gives every part the paragraph's format and
       cell; the runs split at APos. AFormat: a character format id, or TyRichInheritFormat. }
@@ -599,9 +618,11 @@ type
       of an empty paragraph takes the empty paragraph away: what follows stays as it is.) }
     function DeleteRange(APos, ALen: TTyRichPos): TTyRichUndoData;
     { Changes only the AMask fields of every run in the range (an empty paragraph whose
-      separator is in the range: its one run). }
+      separator is in the range: its one run). Paragraphs of a row that holds a nested
+      table are passed over. }
     function ApplyCharFormat(APos, ALen: TTyRichPos; AMask: TTyCharFormatMask;
       const AValue: TTyCharFormat): TTyRichUndoData;
+    { Paragraphs of a row that holds a nested table are passed over. }
     function ApplyParaFormat(AFirstPara, ALastPara: Integer; AMask: TTyParaFormatMask;
       const AValue: TTyParaFormat): TTyRichUndoData;
     { Makes the paragraphs from AFirstPara on a table: ACellParas[i] paragraphs for each cell,
@@ -652,6 +673,16 @@ type
       between AIndex and the cell. In a document that parses on demand, read ACell and call
       this inside one read scope (BeginRead). }
     function CellParas(AIndex: Integer; ACell: TTyRichCell; out AFirst, ALast: Integer): Boolean;
+    { May the text change here: False when inserting at APos (ALen 0) or deleting ALen
+      characters from APos would be refused because of a row that holds a nested table
+      (TTyRichRow.HoldsNestedTable). Inserting is refused inside a paragraph of such a row.
+      Deleting is refused when a paragraph of such a row would lose characters or be joined
+      with another, or when the row would lose some of its paragraphs but not all: a range
+      that takes whole such rows away, with whatever is around them, is fine. A range that
+      is not inside the text is not this question (True; the primitive raises). Parses the
+      paragraphs at the range's ends. A command asks this in CanExecute; the insert and
+      delete commands do. }
+    function CanChange(APos, ALen: TTyRichPos): Boolean;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
       returns False or raises. False: ACmd.CanExecute said no, or the document is Loading or
@@ -1327,7 +1358,7 @@ begin
 end;
 
 function TTyRichTable.AddRow(ACellCount: Integer; const ARawFormat: RawByteString;
-  const ABoundaries: array of Integer): TTyRichRow;
+  const ABoundaries: array of Integer; AHoldsNestedTable: Boolean): TTyRichRow;
 var
   i: Integer;
   c: TTyRichCell;
@@ -1340,6 +1371,7 @@ begin
   Result.FTable := Self;
   Result.FIndex := Length(FRows);
   Result.FRawFormat := ARawFormat;
+  Result.FHoldsNestedTable := AHoldsNestedTable;
   SetLength(Result.FBoundaries, Length(ABoundaries));
   for i := 0 to High(ABoundaries) do Result.FBoundaries[i] := ABoundaries[i];
   SetLength(Result.FCells, ACellCount);
@@ -2005,6 +2037,73 @@ begin
   Result := CellOfData(DataOf(AIndex));
 end;
 
+{ ---- rows that hold a nested table ---- }
+
+const
+  SNestedRow = 'This row holds a nested table and is kept as the file has it: ' +
+    'its text cannot be changed';
+
+function TTyRichDocument.FixedData(D: TTyRichParaData): Boolean;
+begin
+  Result := (D <> nil) and (D.FCell <> nil) and D.FCell.FRow.FHoldsNestedTable;
+end;
+
+function TTyRichDocument.RowAt(AIndex: Integer): TTyRichRow;
+var
+  c: TTyRichCell;
+begin
+  c := CellOfData(DataOf(AIndex));
+  if c = nil then Result := nil else Result := c.FRow;
+end;
+
+function TTyRichDocument.FixedRowAt(AIndex: Integer): TTyRichRow;
+begin
+  Result := RowAt(AIndex);
+  if (Result <> nil) and not Result.FHoldsNestedTable then Result := nil;
+end;
+
+{ What a delete leaves of the paragraphs k .. m its range lies in: one paragraph, made of
+  k's head and m's tail. A paragraph is changed when it loses characters or is joined with
+  another; the ones between, and k when the range starts at its start, go whole. Only k and
+  m are read (the delete reads them anyway), and a neighbour of one that is in such a row:
+  paragraphs that go whole are not parsed for this. }
+function TTyRichDocument.ChangeRefused(APos, ALen: TTyRichPos): Boolean;
+var
+  k, m: Integer;
+  e: TTyRichPos;
+  headOfK, headOfM: Boolean;
+  rk, rm: TTyRichRow;
+begin
+  Result := False;
+  if (APos < 0) or (ALen < 0) or (APos + ALen > FText.Length) then Exit;
+  BeginRead;
+  try
+    k := FText.ParaOfPos(APos);
+    if ALen = 0 then Exit(FixedRowAt(k) <> nil);
+    e := APos + ALen;
+    m := FText.ParaOfPos(e);
+    if m = k then Exit(FixedRowAt(k) <> nil);
+    headOfK := APos > FText.ParaStart(k);      // k keeps a head: it is joined with m's tail
+    headOfM := e > FText.ParaStart(m);         // m loses a head
+    rk := FixedRowAt(k);
+    rm := FixedRowAt(m);
+    if headOfK and (rk <> nil) then Exit(True);
+    if (headOfK or headOfM) and (rm <> nil) then Exit(True);
+    // a row among the paragraphs that go whole must go whole too. A row is a run of
+    // paragraphs, so it is cut only where a paragraph of it stays just outside them: the
+    // one before k (when k goes), or m (when the one before m goes with it)
+    if not headOfK and (rk <> nil) and (k > 0) and (RowAt(k - 1) = rk) then Exit(True);
+    if (rm <> nil) and (RowAt(m - 1) = rm) then Exit(True);
+  finally
+    EndRead;
+  end;
+end;
+
+function TTyRichDocument.CanChange(APos, ALen: TTyRichPos): Boolean;
+begin
+  Result := not ChangeRefused(APos, ALen);
+end;
+
 function TTyRichDocument.TableAt(AIndex: Integer): TTyRichTable;
 var
   c: TTyRichCell;
@@ -2225,6 +2324,8 @@ begin
   if (d = nil) and (Doc.FLoader <> nil) then d := Doc.DataOf(AIndex);
   Undo.AddOld(d);
   Result := d;
+  // a row that holds a nested table stays as the file has it
+  if Doc.FixedData(d) then Exit;
   r := Doc.RunsOfData(d);
   whole := (AIndex > K) and (AIndex < Last);
   runs := nil;
@@ -2309,6 +2410,8 @@ begin
   d := TTyRichParaData(AData);
   if (d = nil) and (Doc.FLoader <> nil) then d := Doc.DataOf(AIndex);
   Undo.AddOld(d);
+  // a row that holds a nested table stays as the file has it
+  if Doc.FixedData(d) then Exit(d);
   if (AIndex > First) and (d = PrevD) then
     nd := PrevNew
   else
@@ -2377,6 +2480,7 @@ begin
   c.Pos := APos;
   FText.ParaOfPos(APos);   // range check before anything changes
   if AText = '' then Exit(NewUndo(c));
+  if ChangeRefused(APos, 0) then raise ETyRichModel.Create(SNestedRow);
   // new breaks take the document's majority kind, so saving writes the stored bytes as they
   // are: the breaks already there stay what they were in the file
   txt := WithBreaks(AText, FDominantLineBreak);
@@ -2481,6 +2585,20 @@ begin
 end;
 
 function TTyRichDocument.DeleteRange(APos, ALen: TTyRichPos): TTyRichUndoData;
+begin
+  if (APos < 0) or (ALen < 0) or (APos + ALen > FText.Length) then
+    raise ETyRichModel.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FText.Length]);
+  if (ALen > 0) and ChangeRefused(APos, ALen) then raise ETyRichModel.Create(SNestedRow);
+  // the values of the two end paragraphs are held while the other is read
+  BeginRead;
+  try
+    Result := DeleteCore(APos, ALen);
+  finally
+    EndRead;
+  end;
+end;
+
+function TTyRichDocument.DeleteCore(APos, ALen: TTyRichPos): TTyRichUndoData;
 var
   c: TTyRichChange;
   k, m, n, i: Integer;
@@ -2493,8 +2611,6 @@ var
 begin
   c := Default(TTyRichChange);
   c.Pos := APos;
-  if (APos < 0) or (ALen < 0) or (APos + ALen > FText.Length) then
-    raise ETyRichModel.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FText.Length]);
   if ALen = 0 then Exit(NewUndo(c));
   e := APos + ALen;
   k := FText.ParaOfPos(APos);
