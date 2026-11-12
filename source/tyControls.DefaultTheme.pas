@@ -283,6 +283,8 @@ begin
     '     classic value == each control''s Pascal constant today; the modern' + LineEnding +
     '     density pack overrides these names. Runtime geometry is not in the' + LineEnding +
     '     golden, so the guard is value==constant + full suite green. */' + LineEnding +
+    '  --accordion-min-body-height: 48px;' + LineEnding +
+    '  --accordion-splitter-size: 4px;' + LineEnding +
     '  --alert-action-gap: 8px;' + LineEnding +
     '  --alert-close-gap: 8px;' + LineEnding +
     '  --alert-close-size: 14px;' + LineEnding +
@@ -1031,6 +1033,26 @@ begin
     '  background: var(--surface-hover);' + LineEnding +
     '  color: var(--accent);' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    '/* TTyAccordion: a column of collapsible panels (TTyExPanel) as the sections of a side bar.' + LineEnding +
+    '   The container is a plain surface with no frame of its own -- it usually fills a tool' + LineEnding +
+    '   window or a side panel that has one. TyAccordionSplitter is the strip between two expanded' + LineEnding +
+    '   neighbours that the user drags: nothing of its own at rest (the container''s surface' + LineEnding +
+    '   shows), lit under the pointer and while dragged. Its thickness is' + LineEnding +
+    '   --accordion-splitter-size; --accordion-min-body-height is the least body an expanded' + LineEnding +
+    '   section is left with. Whether the sections have frames is theirs to say: StyleClass' + LineEnding +
+    '   ''embedded'' on the panels (TyExPanel.embedded) makes the stack one surface. */' + LineEnding +
+    'TyAccordion {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 0;' + LineEnding +
+    '  border-radius: 0;' + LineEnding +
+    '  padding: 0;' + LineEnding +
+    '}' + LineEnding +
+    'TyAccordionSplitter        { background: none; }' + LineEnding +
+    'TyAccordionSplitter:hover  { background: var(--border); }' + LineEnding +
+    'TyAccordionSplitter:active { background: var(--accent); }' + LineEnding +
     '' + LineEnding +
     'TyStatusBar {' + LineEnding +
     '  background: var(--chrome-bar-bg);' + LineEnding +

@@ -1038,6 +1038,16 @@ TyExPanelActions||1 => pres[1,] bg=k0 ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,
 TyExPanelActions||2 => pres[1,] bg=k0 ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanelActions||3 => pres[1,] bg=k0 ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyExPanelActions||4 => pres[1,] bg=k0 ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordion||0 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordion||1 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordion||2 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordion||3 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordion||4 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordionSplitter||0 => pres[0,] bg=k0 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordionSplitter||1 => pres[0,] bg=k1/FF3F3F46 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordionSplitter||2 => pres[0,] bg=k1/FF60A5FA ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordionSplitter||3 => pres[0,] bg=k0 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyAccordionSplitter||4 => pres[0,] bg=k0 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||0 => pres[0,1,2,3,4,5,] bg=k1/00000000 ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||1 => pres[0,1,2,3,4,5,] bg=k1/00000000 ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolGroupPanel||2 => pres[0,1,2,3,4,5,] bg=k1/00000000 ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1238,6 +1248,8 @@ TyToolWindowDropZone||1 => pres[0,1,2,3,] bg=k1/3860A5FA ut=0 txt=FFE5E7EB bd=FF
 TyToolWindowDropZone||2 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||3 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A60A5FA ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+metric --accordion-min-body-height => 48
+metric --accordion-splitter-size => 4
 TyToolWindowStripCommand||0 => pres[1,] bg=k0 ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||1 => pres[0,1,] bg=k1/24FFFFFF ut=0 txt=FFE5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToolWindowStripCommand||2 => pres[0,1,] bg=k1/33E5E7EB ut=0 txt=80E5E7EB bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

@@ -71,7 +71,8 @@ const
   { Checked against the sources by TTbCoverageTests.TestThePartTableMatchesTheSources: every
     typeKey a unit names in a string literal is in its row; what a row adds by hand (keys
     built by concatenation) must be a catalogue typeKey. }
-  cTbPartRows: array[0..53] of TTbPartRow = (
+  cTbPartRows: array[0..54] of TTbPartRow = (
+    (U: 'tyControls.Accordion'; K: 'TyAccordion,TyAccordionSplitter'),
     (U: 'tyControls.ActivityIndicator'; K: 'TyActivityIndicator,TyActivityIndicatorFill'),
     (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertAction,TyAlertClose'),
     (U: 'tyControls.Badge'; K: 'TyBadge'),

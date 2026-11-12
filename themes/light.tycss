@@ -250,6 +250,8 @@
      classic value == each control's Pascal constant today; the modern
      density pack overrides these names. Runtime geometry is not in the
      golden, so the guard is value==constant + full suite green. */
+  --accordion-min-body-height: 48px;
+  --accordion-splitter-size: 4px;
   --alert-action-gap: 8px;
   --alert-close-gap: 8px;
   --alert-close-size: 14px;
@@ -998,6 +1000,26 @@ TySplitter:hover {
   background: var(--surface-hover);
   color: var(--accent);
 }
+
+/* TTyAccordion: a column of collapsible panels (TTyExPanel) as the sections of a side bar.
+   The container is a plain surface with no frame of its own -- it usually fills a tool
+   window or a side panel that has one. TyAccordionSplitter is the strip between two expanded
+   neighbours that the user drags: nothing of its own at rest (the container's surface
+   shows), lit under the pointer and while dragged. Its thickness is
+   --accordion-splitter-size; --accordion-min-body-height is the least body an expanded
+   section is left with. Whether the sections have frames is theirs to say: StyleClass
+   'embedded' on the panels (TyExPanel.embedded) makes the stack one surface. */
+TyAccordion {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 0;
+  border-radius: 0;
+  padding: 0;
+}
+TyAccordionSplitter        { background: none; }
+TyAccordionSplitter:hover  { background: var(--border); }
+TyAccordionSplitter:active { background: var(--accent); }
 
 TyStatusBar {
   background: var(--chrome-bar-bg);

@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..248] of string = (
+  GGRID: array[0..250] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -661,6 +661,8 @@ const
     'TyScrollBox|', 'TyScrollContent|', 'TyExPanel|', 'TyExPanelHeader|',
     { the panel as a section: its borderless variant, and the header's action area }
     'TyExPanel|embedded', 'TyExPanelHeader|embedded', 'TyExPanelActions|',
+    { the stack of sections and its drag strip }
+    'TyAccordion|', 'TyAccordionSplitter|',
     'TyToolGroupPanel|', 'TyToolSeparator|',
     'TySpeedButton|', 'TyGlyphContainerButton|',
     'TyRibbonAppMenu|', 'TyRibbonAppMenu|primary',
@@ -686,8 +688,10 @@ const
     'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
     'TyToolWindowBadge|', 'TyToolWindowDropZone|', 'TyToolWindowStripCommand|');
 
-  GMETRICS: array[0..135] of string = (
+  GMETRICS: array[0..137] of string = (
     '--alert-action-gap',
+    '--accordion-min-body-height',
+    '--accordion-splitter-size',
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',

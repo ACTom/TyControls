@@ -654,6 +654,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ExPanel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Accordion.pas"/>
+        <UnitName Value="tyControls.Accordion"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.GridPanel.pas"/>
         <UnitName Value="tyControls.GridPanel"/>
       </Item>
