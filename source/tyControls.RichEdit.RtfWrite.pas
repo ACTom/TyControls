@@ -1418,7 +1418,7 @@ end;
 
 procedure TRtfWriter.WriteStretch(AFirst, ACount: Integer);
 var
-  i, stop: Integer;
+  i, stop, k: Integer;
   pos, len: Int64;
   cell, next: TTyRichCell;
   prevRow: TTyRichRow;
@@ -1440,7 +1440,19 @@ begin
   for i := AFirst to stop - 1 do
   begin
     if i + 1 < stop then next := FDoc.CellAt(i + 1) else next := nil;
-    if (cell <> nil) and (cell.Row <> prevRow) then WriteRowDef(cell.Row);
+    if (cell <> nil) and (cell.Row <> prevRow) then
+    begin
+      WriteRowDef(cell.Row);
+      // A row is all its cells, each in its place. The model lets a cell lose its only
+      // paragraph: such a cell is written empty - here those before the row's first
+      // paragraph - or the cells after it would move left.
+      if cell.Index > 0 then
+      begin
+        Word('pard');
+        Word('intbl');
+        for k := 1 to cell.Index do Word('cell');
+      end;
+    end;
     len := FDoc.Text.ParaLength(i);
     WritePara(i, pos, len, cell <> nil);
     if (cell = nil) or (next = cell) then
@@ -1453,11 +1465,16 @@ begin
       Word('cell');
       if (next = nil) or (next.Row <> cell.Row) then
       begin
+        // the cells after the row's last paragraph
+        for k := cell.Index + 1 to cell.Row.CellCount - 1 do Word('cell');
         Word('row');
         NewLine;
         // what follows a row starts from \pard
         FCurPara := -1;
-      end;
+      end
+      else
+        // the cells between this paragraph's and the next one's
+        for k := cell.Index + 1 to next.Index - 1 do Word('cell');
     end;
     if cell <> nil then prevRow := cell.Row else prevRow := nil;
     Inc(pos, len + 1);

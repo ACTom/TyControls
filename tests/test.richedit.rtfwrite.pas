@@ -53,6 +53,7 @@ type
     procedure TestTheSaveHoldsWhatItReadsUntilItIsDone;
     procedure TestNewFontNumbersAreFreeInTheFile;
     procedure TestAListItemAfterFormatsTheSaveHasNotSeen;
+    procedure TestACellWithNoParagraphKeepsItsPlace;
   end;
 
 implementation
@@ -2988,6 +2989,83 @@ begin
       d.Free;
     end;
   end;
+end;
+
+{ The model lets a command take a cell's only paragraph away. The row is still its cells,
+  in their places: a cell without a paragraph is written as an empty cell, or the cells
+  after it would move left and the row would end short of its definition. }
+procedure TTyRtfWriteTest.TestACellWithNoParagraphKeepsItsPlace;
+const
+  RowDef = '\trowd\trgaph108\cellx1000\cellx2000\cellx3000 ';
+  Source = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f0\fs24 top\par ' +
+    RowDef + '\pard\intbl a\cell b\cell c\cell\row ' +
+    RowDef + '\pard\intbl d\cell e\cell f\cell\row \pard bottom\par}';
+
+  // Deletes paragraphs AFirst .. ALast whole (with their separators), saves, and reads the
+  // result: ACells are the texts of the two rows' cells then, AWritten what the save wrote
+  // for the row that lost cells.
+  procedure Check(const AMsg: string; AFirst, ALast: Integer; const ACells: array of string;
+    const AWritten: RawByteString);
+  var
+    d, r: TTyRichDocument;
+    o, o2: TBytes;
+    info: TTyRtfWriteInfo;
+    i, row, idx: Integer;
+    text: RawByteString;
+    c: TTyRichCell;
+  begin
+    d := LoadDoc(BytesOf(Source), False);
+    r := nil;
+    try
+      AssertEquals(AMsg + ': eight paragraphs', 8, d.Text.ParaCount);
+      AssertTrue(AMsg + ': deleted', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(AFirst),
+        d.Text.ParaStart(ALast + 1) - d.Text.ParaStart(AFirst))));
+      AssertEquals(AMsg + ': paragraphs left', 8 - (ALast - AFirst + 1), d.Text.ParaCount);
+      o := SaveDoc(d, info);
+      text := StrOf(o, 0, Length(o));
+      AssertTrue(AMsg + ': the row as it is written: ' + Shown(text), PosRaw(AWritten, text) > 0);
+      r := LoadDoc(o, True);
+      // top, six cells, bottom: every cell has a paragraph again, an empty one where it had none
+      AssertEquals(AMsg + ': read back: paragraphs in ' + Shown(text), 8, r.Text.ParaCount);
+      AssertRaw(AMsg + ': read back: before the table', 'top', ParaText(r, 0));
+      AssertRaw(AMsg + ': read back: after the table', 'bottom', ParaText(r, 7));
+      for i := 0 to 5 do
+      begin
+        row := i div 3;
+        idx := i mod 3;
+        AssertRaw(Format('%s: read back: row %d cell %d', [AMsg, row, idx]), ACells[i], ParaText(r, 1 + i));
+        c := r.CellAt(1 + i);
+        AssertTrue(Format('%s: read back: row %d cell %d is in the table', [AMsg, row, idx]), c <> nil);
+        AssertEquals(Format('%s: read back: row %d cell %d: its place', [AMsg, row, idx]), idx, c.Index);
+        AssertEquals(Format('%s: read back: row %d cell %d: its row', [AMsg, row, idx]), row, c.Row.Index);
+        AssertEquals(Format('%s: read back: row %d: three cells', [AMsg, row]), 3, c.Row.CellCount);
+      end;
+      FreeAndNil(r);
+      r := LoadDoc(o, False);
+      o2 := SaveBytes(r);
+      AssertTrue(AMsg + ': saved again, ' + FirstDiff(o, o2), SameBytes(o, o2));
+    finally
+      r.Free;
+      d.Free;
+    end;
+  end;
+
+begin
+  // paragraphs: 0 top, 1 a, 2 b, 3 c, 4 d, 5 e, 6 f, 7 bottom
+  Check('the middle cell', 2, 2, ['a', '', 'c', 'd', 'e', 'f'],
+    'a\cell\cell c\cell\row');
+  Check('the first cell', 1, 1, ['', 'b', 'c', 'd', 'e', 'f'],
+    '\cellx3000 \pard\intbl\cell\pard\intbl\plain\f0\fs24 b\cell c\cell\row');
+  Check('the last cell, another row after it', 3, 3, ['a', 'b', '', 'd', 'e', 'f'],
+    'a\cell b\cell\cell\row');
+  Check('the last cell of the last row', 6, 6, ['a', 'b', 'c', 'd', 'e', ''],
+    'd\cell e\cell\cell\row');
+  Check('the first two cells', 1, 2, ['', '', 'c', 'd', 'e', 'f'],
+    '\cellx3000 \pard\intbl\cell\cell\pard\intbl\plain\f0\fs24 c\cell\row');
+  Check('the last two cells', 5, 6, ['a', 'b', 'c', 'd', '', ''],
+    'd\cell\cell\cell\row');
+  Check('the end of one row and the start of the next', 3, 4, ['a', 'b', '', '', 'e', 'f'],
+    'a\cell b\cell\cell\row' + #13#10 + RowDef + '\pard\intbl\cell\pard\intbl e\cell f\cell\row');
 end;
 
 initialization
