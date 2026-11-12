@@ -16,11 +16,12 @@ unit tyControls.RichEdit.Text;
   separator, once stored, is never re-paired: an LF inserted after a lone CR stays a second
   separator.
 
-  Inner nodes keep, per child, the number of pieces, separators, characters, bytes and the
-  sum of paragraph heights, so position, paragraph and height lookups walk one root-to-leaf
-  path. Each paragraph has a height and a pointer-sized data slot, kept on the piece that
-  carries its separator (the last paragraph's live in the object), so they move with the
-  paragraph when paragraphs before it come and go. }
+  Inner nodes keep, per child, the number of pieces, separators, characters, bytes, how many
+  paragraphs have a measured height and the sum of those heights, so position, paragraph
+  and height lookups walk one root-to-leaf path. Each paragraph has a height - measured, or
+  not yet: then it counts as DefaultParaHeight - and a pointer-sized data slot, kept on the
+  piece that carries its separator (the last paragraph's live in the object), so they move
+  with the paragraph when paragraphs before it come and go. }
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
@@ -39,6 +40,8 @@ const
     it), so its counts fit a LongInt: the load scan ends a piece there, without a separator,
     and so must a reader that finds the pieces itself (CreateScanned). }
   TyRichMaxPieceBytes = 1 shl 30;
+  { The highest height a paragraph can be given (a piece stores it plus one in a LongInt). }
+  TyRichMaxParaHeight = High(LongInt) - 1;
 
 type
   TTyRichPos = Int64;
@@ -51,9 +54,11 @@ type
   PTyRichPiece = ^TTyRichPiece;
 
   { One piece. In the live tree FHeight/FData are the paragraph's when the piece carries a
-    separator (zero/nil otherwise). In a TTyRichPieces snapshot FHeight is 0 and FData of a
-    separator piece is the data of the paragraph that FOLLOWS that separator, which is what
-    RestorePieces needs to put a deleted range's paragraph data back. }
+    separator (zero/nil otherwise); FHeight is the measured height plus one, 0 while the
+    paragraph is not measured, so that a piece made from nothing is unmeasured. In a
+    TTyRichPieces snapshot FHeight is 0 and FData of a separator piece is the data of the
+    paragraph that FOLLOWS that separator, which is what RestorePieces needs to put a
+    deleted range's paragraph data back. }
   TTyRichPiece = packed record
   private
     FSrc: Int64;        // source offset in the low 56 bits, kind and separator above
@@ -116,15 +121,20 @@ type
     Seps: LongInt;
     Chars: Int64;
     Bytes: Int64;
-    Height: Int64;
+    Height: Int64;     // of the measured paragraphs only
     LazyMax: Int64;    // the highest source offset of a lazy piece, -1 none
+    Measured: LongInt; // separators whose paragraph has a measured height
   end;
 
+  { The heights a node holds - a leaf's FHeight, an inner node's Height and Measured per
+    child - count only while HeightEpoch is the text's: UnmeasureAll moves the text's on,
+    and a node left behind drops its heights when it is next entered (Settle). }
   PTyRichNode = ^TTyRichNode;
   TTyRichNode = record
     Count: LongInt;
     IsLeaf: Boolean;
     Pad: array[0..2] of Byte;
+    HeightEpoch: Int64;
   end;
 
   PTyRichLeaf = ^TTyRichLeaf;
@@ -132,6 +142,7 @@ type
     Count: LongInt;
     IsLeaf: Boolean;
     Pad: array[0..2] of Byte;
+    HeightEpoch: Int64;
     Items: array[0..TyRichLeafCap - 1] of TTyRichPiece;
   end;
 
@@ -140,6 +151,7 @@ type
     Count: LongInt;
     IsLeaf: Boolean;
     Pad: array[0..2] of Byte;
+    HeightEpoch: Int64;
     Child: array[0..TyRichInnerCap - 1] of PTyRichNode;
     Sum: array[0..TyRichInnerCap - 1] of TTyRichSum;
   end;
@@ -167,8 +179,11 @@ type
     FDepth: Integer;
     FTotal: TTyRichSum;
     FLastData: Pointer;
-    FLastHeight: LongInt;
+    FLastHeight: LongInt;              // as a piece's FHeight
+    FDefaultHeight: Int64;
+    FHeightEpoch: Int64;
     FNodeVisits: Int64;
+    FSumScans: Int64;
     FProvider: TTyRichTextProvider;
     FOwnsProvider: Boolean;
     FDecoded: TTyRichDecodedMap;
@@ -198,12 +213,17 @@ type
     function NewNode(ALeaf: Boolean): PTyRichNode;
     procedure FreeNode(ANode: PTyRichNode);
     function NodeSum(ANode: PTyRichNode): TTyRichSum;
+    procedure Settle(ANode: PTyRichNode); inline;
+    procedure DropHeights(ANode: PTyRichNode);
+    function SumHeight(const ASum: TTyRichSum): Int64; inline;
+    function PieceHeight(const APiece: TTyRichPiece): Int64; inline;
+    procedure AddToPath(const APath: TTyRichPath; AHeight: Int64; AMeasured: Integer);
     function Descend(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
       out ABefore: TTyRichSum): Boolean;
     procedure Find(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
       out ABefore: TTyRichSum);
     function ItemAt(const APath: TTyRichPath): PTyRichPiece;
-    function Advance(var APath: TTyRichPath): Boolean;
+    function Advance(var APath: TTyRichPath; ACountVisits: Boolean = False): Boolean;
     procedure FixUp(var APath: TTyRichPath; ALevel: Integer);
     procedure SplitNode(var APath: TTyRichPath; ALevel, AAt: Integer);
     procedure RemoveNode(var APath: TTyRichPath; ALevel: Integer);
@@ -236,6 +256,9 @@ type
     function GetParaData(AIndex: Integer): Pointer;
     procedure SetParaData(AIndex: Integer; AValue: Pointer);
     procedure SetParaRaw(AIndex: Integer; AData: Pointer; AHeight: LongInt);
+    function GetParaRawHeight(AIndex: Integer): LongInt;
+    procedure PutHeights(AFirst, ALast: Integer; AHeights: PInt64);
+    procedure SetDefaultParaHeight(AValue: Int64);
     procedure DoParasChanged(AFirst, AOldCount, ANewCount: Integer);
     function CheckNode(ANode: PTyRichNode; ALevel: Integer; var APrevSep: Boolean;
       var APrevLazyOpen: Boolean): string;
@@ -313,11 +336,47 @@ type
     function PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
     procedure RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
 
+    { The height index. A paragraph is measured - it has a height the layout gave it,
+      0..TyRichMaxParaHeight, and 0 is a height like any other - or unmeasured: every
+      paragraph is until a height is set (after a load, a restore, and the paragraphs a
+      split adds), and an unmeasured paragraph counts as DefaultParaHeight everywhere below.
+      So the layout sets one estimate and measures only what it shows; nothing here ever
+      needs a pass over the document.
+
+      Edits do not touch heights: a paragraph whose text changed keeps its height (now an
+      estimate; OnParasChanged names it), a split leaves the height with the first part, a
+      merge keeps the first paragraph's.
+
+      Costs: SetParaHeight one descent, the sums on the path changed by the difference (no
+      node is recomputed); SetParaHeights and UnmeasureParas one descent, then leaf by
+      leaf; UnmeasureAll, DefaultParaHeight, TotalHeight and MeasuredParaCount O(1);
+      ParaHeight, ParaMeasured, ParaTop and ParaAtHeight one descent. }
     procedure SetParaHeight(AIndex: Integer; AHeight: Int64);
+    { Paragraphs AFirst .. AFirst + Length(AHeights) - 1 get the heights given, in order. }
+    procedure SetParaHeights(AFirst: Integer; const AHeights: array of Int64);
+    { Paragraphs AFirst..ALast lose their measured height. }
+    procedure UnmeasureParas(AFirst, ALast: Integer);
+    { Every paragraph loses its measured height (the width or the zoom changed). Nothing is
+      walked: each node drops its heights when a lookup next enters it. }
+    procedure UnmeasureAll;
+    function ParaMeasured(AIndex: Integer): Boolean;
+    function MeasuredParaCount: Integer;
+    { The measured height, or DefaultParaHeight for an unmeasured paragraph. }
     function ParaHeight(AIndex: Integer): Int64;
+    { The sum of ParaHeight of the paragraphs before AIndex. }
     function ParaTop(AIndex: Integer): Int64;
+    { The paragraph that covers row AY: the first one, in order, with
+      ParaTop + ParaHeight > AY. A paragraph of height 0 covers no row, so it is never the
+      answer for a row inside the document; it sits at its successor's top
+      (ParaTop(i) = ParaTop(i + 1)). AY < 0 answers 0. AY at or past TotalHeight answers
+      the last paragraph - also when the total is 0, which is every AY while nothing is
+      measured and DefaultParaHeight is 0: set the default before asking. }
     function ParaAtHeight(AY: Int64): Integer;
+    { The sum of ParaHeight over all paragraphs. }
     function TotalHeight: Int64;
+    { What an unmeasured paragraph counts as; 0 at first. Setting it changes ParaHeight,
+      ParaTop, ParaAtHeight and TotalHeight at once and touches no node. }
+    property DefaultParaHeight: Int64 read FDefaultHeight write SetDefaultParaHeight;
 
     function PieceCount: Integer;
     { Levels of inner nodes above the leaves (for tests). }
@@ -344,6 +403,9 @@ type
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
+    { Nodes whose summary was recomputed from their contents, for tests: an edit does that
+      along its path, setting a height must not. }
+    property SumScans: Int64 read FSumScans;
     property OnParasChanged: TTyRichParasChangedEvent read FOnParasChanged
       write FOnParasChanged;
     property OnParaDataDropped: TTyRichParaDataEvent read FOnParaDataDropped
@@ -540,6 +602,7 @@ begin
     Result := GetMem(SizeOf(TTyRichInner));
   Result^.Count := 0;
   Result^.IsLeaf := ALeaf;
+  Result^.HeightEpoch := FHeightEpoch;
 end;
 
 procedure TTyRichText.FreeNode(ANode: PTyRichNode);
@@ -558,9 +621,13 @@ var
   i: Integer;
   leaf: PTyRichLeaf;
   inner: PTyRichInner;
+  heights: Boolean;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.LazyMax := -1;
+  Inc(FSumScans);
+  // a node UnmeasureAll left behind holds no heights, whatever is still written in it
+  heights := ANode^.HeightEpoch = FHeightEpoch;
   if ANode^.IsLeaf then
   begin
     leaf := PTyRichLeaf(ANode);
@@ -570,7 +637,11 @@ begin
       if PSep(leaf^.Items[i]) <> sNone then Inc(Result.Seps);
       Inc(Result.Chars, leaf^.Items[i].FChars);
       Inc(Result.Bytes, leaf^.Items[i].FBytes);
-      Inc(Result.Height, leaf^.Items[i].FHeight);
+      if heights and (leaf^.Items[i].FHeight > 0) then
+      begin
+        Inc(Result.Measured);
+        Inc(Result.Height, leaf^.Items[i].FHeight - 1);
+      end;
       if IsLazy(leaf^.Items[i]) and (POff(leaf^.Items[i]) > Result.LazyMax) then
         Result.LazyMax := POff(leaf^.Items[i]);
     end;
@@ -584,16 +655,73 @@ begin
       Inc(Result.Seps, inner^.Sum[i].Seps);
       Inc(Result.Chars, inner^.Sum[i].Chars);
       Inc(Result.Bytes, inner^.Sum[i].Bytes);
-      Inc(Result.Height, inner^.Sum[i].Height);
+      if heights then
+      begin
+        Inc(Result.Measured, inner^.Sum[i].Measured);
+        Inc(Result.Height, inner^.Sum[i].Height);
+      end;
       if inner^.Sum[i].LazyMax > Result.LazyMax then Result.LazyMax := inner^.Sum[i].LazyMax;
     end;
   end;
 end;
 
+{ Brings a node UnmeasureAll left behind up to date: its heights are gone. Everything that
+  reads or writes a height in a node, or moves its contents into another, settles it first;
+  a path made by Descend and moved by Advance holds settled nodes only. }
+procedure TTyRichText.Settle(ANode: PTyRichNode);
+begin
+  if ANode^.HeightEpoch <> FHeightEpoch then DropHeights(ANode);
+end;
+
+procedure TTyRichText.DropHeights(ANode: PTyRichNode);
+var
+  i: Integer;
+begin
+  if ANode^.IsLeaf then
+    for i := 0 to ANode^.Count - 1 do
+      PTyRichLeaf(ANode)^.Items[i].FHeight := 0
+  else
+    for i := 0 to ANode^.Count - 1 do
+    begin
+      PTyRichInner(ANode)^.Sum[i].Height := 0;
+      PTyRichInner(ANode)^.Sum[i].Measured := 0;
+    end;
+  ANode^.HeightEpoch := FHeightEpoch;
+end;
+
+{ The height of what a summary covers: its measured heights, and the default for the rest. }
+function TTyRichText.SumHeight(const ASum: TTyRichSum): Int64;
+begin
+  Result := ASum.Height + Int64(ASum.Seps - ASum.Measured) * FDefaultHeight;
+end;
+
+{ The height of the paragraph a separator piece ends. }
+function TTyRichText.PieceHeight(const APiece: TTyRichPiece): Int64;
+begin
+  if APiece.FHeight > 0 then Result := APiece.FHeight - 1 else Result := FDefaultHeight;
+end;
+
+{ A height changed in the leaf the path ends in: the sums above it change by the difference. }
+procedure TTyRichText.AddToPath(const APath: TTyRichPath; AHeight: Int64; AMeasured: Integer);
+var
+  l: Integer;
+begin
+  if (AHeight = 0) and (AMeasured = 0) then Exit;
+  for l := FDepth downto 1 do
+    with PTyRichInner(APath.Steps[l - 1].Node)^.Sum[APath.Steps[l - 1].Index] do
+    begin
+      Inc(Height, AHeight);
+      Inc(Measured, AMeasured);
+    end;
+  Inc(FTotal.Height, AHeight);
+  Inc(FTotal.Measured, AMeasured);
+end;
+
 { Walks one root-to-leaf path to the piece the key falls in: the AKey-th piece, the piece
   holding character AKey, the AKey-th separator piece, or the piece whose height range
-  holds AKey. ABefore sums everything in front of it. When the key is past the end the
-  path ends one past the last piece and the result is False. }
+  holds AKey (an unmeasured paragraph being DefaultParaHeight high). ABefore sums everything
+  in front of it. When the key is past the end the path ends one past the last piece and
+  the result is False. Every node on the path is settled. }
 function TTyRichText.Descend(AMode: TTyRichSeek; AKey: Int64; out APath: TTyRichPath;
   out ABefore: TTyRichSum): Boolean;
 var
@@ -601,14 +729,17 @@ var
   inner: PTyRichInner;
   leaf: PTyRichLeaf;
   lvl, i: Integer;
-  hit: Boolean;
+  hit, sep: Boolean;
+  h: Int64;
 begin
   FillChar(ABefore, SizeOf(ABefore), 0);
+  h := 0;
   node := FRoot;
   lvl := 0;
   while not node^.IsLeaf do
   begin
     Inc(FNodeVisits);
+    Settle(node);
     inner := PTyRichInner(node);
     i := 0;
     while i < inner^.Count - 1 do
@@ -620,7 +751,8 @@ begin
           rskChar: hit := AKey < Chars;
           rskSep: hit := AKey < Seps;
         else
-          hit := AKey < Height;
+          h := Height + Int64(Seps - Measured) * FDefaultHeight;
+          hit := AKey < h;
         end;
         if hit then Break;
         case AMode of
@@ -628,13 +760,14 @@ begin
           rskChar: Dec(AKey, Chars);
           rskSep: Dec(AKey, Seps);
         else
-          Dec(AKey, Height);
+          Dec(AKey, h);
         end;
         Inc(ABefore.Entries, Entries);
         Inc(ABefore.Seps, Seps);
         Inc(ABefore.Chars, Chars);
         Inc(ABefore.Bytes, Bytes);
         Inc(ABefore.Height, Height);
+        Inc(ABefore.Measured, Measured);
       end;
       Inc(i);
     end;
@@ -644,17 +777,21 @@ begin
     Inc(lvl);
   end;
   Inc(FNodeVisits);
+  Settle(node);
   leaf := PTyRichLeaf(node);
   APath.Steps[lvl].Node := node;
   for i := 0 to leaf^.Count - 1 do
     with leaf^.Items[i] do
     begin
+      sep := PSep(leaf^.Items[i]) <> sNone;
       case AMode of
         rskEntry: hit := AKey = 0;
         rskChar: hit := AKey < FChars;
-        rskSep: hit := (PSep(leaf^.Items[i]) <> sNone) and (AKey = 0);
+        rskSep: hit := sep and (AKey = 0);
       else
-        hit := AKey < FHeight;
+        // only a separator piece stands for a paragraph; a height of 0 holds no key
+        if sep then h := PieceHeight(leaf^.Items[i]) else h := 0;
+        hit := AKey < h;
       end;
       if hit then
       begin
@@ -664,15 +801,19 @@ begin
       case AMode of
         rskEntry: Dec(AKey);
         rskChar: Dec(AKey, FChars);
-        rskSep: if PSep(leaf^.Items[i]) <> sNone then Dec(AKey);
+        rskSep: if sep then Dec(AKey);
       else
-        Dec(AKey, FHeight);
+        Dec(AKey, h);
       end;
       Inc(ABefore.Entries);
-      if PSep(leaf^.Items[i]) <> sNone then Inc(ABefore.Seps);
+      if sep then Inc(ABefore.Seps);
       Inc(ABefore.Chars, FChars);
       Inc(ABefore.Bytes, FBytes);
-      Inc(ABefore.Height, FHeight);
+      if FHeight > 0 then
+      begin
+        Inc(ABefore.Height, FHeight - 1);
+        Inc(ABefore.Measured);
+      end;
     end;
   APath.Steps[lvl].Index := leaf^.Count;
   Result := False;
@@ -692,8 +833,9 @@ begin
   Result := @PTyRichLeaf(APath.Steps[FDepth].Node)^.Items[APath.Steps[FDepth].Index];
 end;
 
-{ Moves the path to the next piece; False at the end. }
-function TTyRichText.Advance(var APath: TTyRichPath): Boolean;
+{ Moves the path to the next piece; False at the end. The nodes it enters are settled, and
+  counted in NodeVisits when asked. }
+function TTyRichText.Advance(var APath: TTyRichPath; ACountVisits: Boolean): Boolean;
 var
   l, d: Integer;
 begin
@@ -709,7 +851,9 @@ begin
   begin
     APath.Steps[d].Node := PTyRichInner(APath.Steps[d - 1].Node)^.Child[APath.Steps[d - 1].Index];
     APath.Steps[d].Index := 0;
+    Settle(APath.Steps[d].Node);
   end;
+  if ACountVisits then Inc(FNodeVisits, FDepth - l);
   Result := True;
 end;
 
@@ -759,6 +903,7 @@ begin
   end;
   n := APath.Steps[ALevel].Node;
   idx := APath.Steps[ALevel - 1].Index;
+  // n is on the path, so it is settled: what moves into the new node counts as it stands
   n2 := NewNode(n^.IsLeaf);
   moved := n^.Count - AAt;
   if n^.IsLeaf then
@@ -844,6 +989,9 @@ begin
   nl := pa^.Child[li];
   nr := pa^.Child[ri];
   if nl^.Count + nr^.Count > cap then Exit;
+  // the neighbour is not on the path: it may still hold heights UnmeasureAll took away
+  Settle(nl);
+  Settle(nr);
   if nl^.IsLeaf then
     Move(PTyRichLeaf(nr)^.Items[0], PTyRichLeaf(nl)^.Items[nl^.Count],
       nr^.Count * SizeOf(TTyRichPiece))
@@ -1608,7 +1756,7 @@ end;
 
 { Splits paragraph k (holding APos) by the separators in APieces. Paragraph k keeps its
   data and height on the first part; the paragraphs after the i-th separator get
-  AFollow[i] (nil when AFollow is empty) and height 0. }
+  AFollow[i] (nil when AFollow is empty) and are unmeasured. }
 procedure TTyRichText.InsertPieces(APos: TTyRichPos; var APieces: TTyRichPieceArray;
   ACount: Integer; const AFollow: array of Pointer);
 var
@@ -1629,7 +1777,7 @@ begin
   if s > 0 then
   begin
     oldData := GetParaData(k);
-    oldHeight := ParaHeight(k);
+    oldHeight := GetParaRawHeight(k);
     j := 0;
     for i := 0 to ACount - 1 do
     begin
@@ -1767,7 +1915,7 @@ begin
     if m > k then
     begin
       dk := GetParaData(k);
-      hk := ParaHeight(k);
+      hk := GetParaRawHeight(k);
       dropped := TFPList.Create;
     end;
     ea := SplitAt(a);
@@ -2318,33 +2466,163 @@ begin
   end;
 end;
 
+{ The stored height of a paragraph: the measured height plus one, 0 unmeasured. }
+function TTyRichText.GetParaRawHeight(AIndex: Integer): LongInt;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+begin
+  if AIndex = FTotal.Seps then Exit(FLastHeight);
+  Find(rskSep, AIndex, p, before);
+  Result := ItemAt(p)^.FHeight;
+end;
+
+{ Gives paragraphs AFirst..ALast their stored heights: AHeights^[i - AFirst] measured, or
+  none of them (nil). One descent, then piece by piece; what changed in a leaf goes up its
+  path by the difference when the walk leaves it, so no summary is recomputed. }
+procedure TTyRichText.PutHeights(AFirst, ALast: Integer; AHeights: PInt64);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  i: Integer;
+  dh: Int64;
+  dm: Integer;
+
+  function Next: LongInt;
+  begin
+    if AHeights = nil then Result := 0 else Result := AHeights[i - AFirst] + 1;
+  end;
+
+begin
+  if ALast < AFirst then Exit;
+  i := AFirst;
+  if i < FTotal.Seps then
+  begin
+    Find(rskSep, i, p, before);
+    dh := 0;
+    dm := 0;
+    repeat
+      it := ItemAt(p);
+      if PSep(it^) <> sNone then
+      begin
+        if it^.FHeight > 0 then
+        begin
+          Dec(dh, it^.FHeight - 1);
+          Dec(dm);
+        end;
+        it^.FHeight := Next;
+        if it^.FHeight > 0 then
+        begin
+          Inc(dh, it^.FHeight - 1);
+          Inc(dm);
+        end;
+        Inc(i);
+        if (i > ALast) or (i >= FTotal.Seps) then Break;
+      end;
+      if p.Steps[FDepth].Index = p.Steps[FDepth].Node^.Count - 1 then
+      begin
+        // the path is about to move to the next leaf
+        AddToPath(p, dh, dm);
+        dh := 0;
+        dm := 0;
+      end;
+      if not Advance(p, True) then
+        raise ETyRichText.Create('Rich text index is inconsistent');
+    until False;
+    AddToPath(p, dh, dm);
+  end;
+  if (i <= ALast) and (i = FTotal.Seps) then
+    FLastHeight := Next;
+end;
+
 procedure TTyRichText.SetParaHeight(AIndex: Integer; AHeight: Int64);
 var
   p: TTyRichPath;
   before: TTyRichSum;
+  it: PTyRichPiece;
+  dh: Int64;
+  dm: Integer;
 begin
   CheckPara(AIndex);
-  if (AHeight < 0) or (AHeight > High(LongInt)) then
+  if (AHeight < 0) or (AHeight > TyRichMaxParaHeight) then
     raise ETyRichText.CreateFmt('Paragraph height %d out of range', [AHeight]);
   if AIndex = FTotal.Seps then
-    FLastHeight := AHeight
+    FLastHeight := AHeight + 1
   else
   begin
     Find(rskSep, AIndex, p, before);
-    ItemAt(p)^.FHeight := AHeight;
-    FixUp(p, FDepth);
+    it := ItemAt(p);
+    dh := AHeight;
+    dm := 1;
+    if it^.FHeight > 0 then
+    begin
+      Dec(dh, it^.FHeight - 1);
+      dm := 0;
+    end;
+    it^.FHeight := AHeight + 1;
+    // by the difference, not FixUp: the layout sets heights by the thousand while it
+    // scrolls, and recomputing a leaf and its ancestors for each took 3 us
+    AddToPath(p, dh, dm);
   end;
+end;
+
+procedure TTyRichText.SetParaHeights(AFirst: Integer; const AHeights: array of Int64);
+var
+  i: Integer;
+begin
+  CheckPara(AFirst);
+  if System.Length(AHeights) = 0 then Exit;
+  CheckPara(AFirst + High(AHeights));
+  // all of them before the first is stored: a refused call changes nothing
+  for i := 0 to High(AHeights) do
+    if (AHeights[i] < 0) or (AHeights[i] > TyRichMaxParaHeight) then
+      raise ETyRichText.CreateFmt('Paragraph height %d out of range', [AHeights[i]]);
+  PutHeights(AFirst, AFirst + High(AHeights), @AHeights[0]);
+end;
+
+procedure TTyRichText.UnmeasureParas(AFirst, ALast: Integer);
+begin
+  CheckPara(AFirst);
+  CheckPara(ALast);
+  PutHeights(AFirst, ALast, nil);
+end;
+
+procedure TTyRichText.UnmeasureAll;
+begin
+  CheckReady;
+  // every node is now behind and holds no heights; the totals say so already
+  Inc(FHeightEpoch);
+  FTotal.Height := 0;
+  FTotal.Measured := 0;
+  FLastHeight := 0;
+end;
+
+procedure TTyRichText.SetDefaultParaHeight(AValue: Int64);
+begin
+  if (AValue < 0) or (AValue > TyRichMaxParaHeight) then
+    raise ETyRichText.CreateFmt('Paragraph height %d out of range', [AValue]);
+  FDefaultHeight := AValue;
+end;
+
+function TTyRichText.ParaMeasured(AIndex: Integer): Boolean;
+begin
+  CheckPara(AIndex);
+  Result := GetParaRawHeight(AIndex) > 0;
+end;
+
+function TTyRichText.MeasuredParaCount: Integer;
+begin
+  Result := FTotal.Measured + Ord(FLastHeight > 0);
 end;
 
 function TTyRichText.ParaHeight(AIndex: Integer): Int64;
 var
-  p: TTyRichPath;
-  before: TTyRichSum;
+  raw: LongInt;
 begin
   CheckPara(AIndex);
-  if AIndex = FTotal.Seps then Exit(FLastHeight);
-  Find(rskSep, AIndex, p, before);
-  Result := ItemAt(p)^.FHeight;
+  raw := GetParaRawHeight(AIndex);
+  if raw > 0 then Result := raw - 1 else Result := FDefaultHeight;
 end;
 
 function TTyRichText.ParaTop(AIndex: Integer): Int64;
@@ -2355,7 +2633,7 @@ begin
   CheckPara(AIndex);
   if AIndex = 0 then Exit(0);
   Find(rskSep, AIndex - 1, p, before);
-  Result := before.Height + ItemAt(p)^.FHeight;
+  Result := SumHeight(before) + PieceHeight(ItemAt(p)^);
 end;
 
 function TTyRichText.ParaAtHeight(AY: Int64): Integer;
@@ -2373,7 +2651,8 @@ end;
 
 function TTyRichText.TotalHeight: Int64;
 begin
-  Result := FTotal.Height + FLastHeight;
+  Result := SumHeight(FTotal);
+  if FLastHeight > 0 then Inc(Result, FLastHeight - 1) else Inc(Result, FDefaultHeight);
 end;
 
 procedure TTyRichText.DoParasChanged(AFirst, AOldCount, ANewCount: Integer);
@@ -2394,10 +2673,14 @@ var
   sep: Byte;
   content: PtrInt;
   s: TTyRichSum;
+  heights: Boolean;
 begin
   Result := '';
   if (ANode <> FRoot) and (ANode^.Count = 0) then Exit('empty node');
   if ANode^.IsLeaf <> (ALevel = FDepth) then Exit('leaves at different depths');
+  if ANode^.HeightEpoch > FHeightEpoch then Exit('a node ahead of the height epoch');
+  // a node UnmeasureAll left behind holds no heights: what is written there is not looked at
+  heights := ANode^.HeightEpoch = FHeightEpoch;
   if not ANode^.IsLeaf then
   begin
     for i := 0 to ANode^.Count - 1 do
@@ -2405,7 +2688,8 @@ begin
       s := NodeSum(PTyRichInner(ANode)^.Child[i]);
       with PTyRichInner(ANode)^.Sum[i] do
         if (s.Entries <> Entries) or (s.Seps <> Seps) or (s.Chars <> Chars) or
-           (s.Bytes <> Bytes) or (s.Height <> Height) or (s.LazyMax <> LazyMax) then
+           (s.Bytes <> Bytes) or (s.LazyMax <> LazyMax) or
+           (heights and ((s.Height <> Height) or (s.Measured <> Measured))) then
           Exit(Format('stale summary at level %d child %d', [ALevel, i]));
       Result := CheckNode(PTyRichInner(ANode)^.Child[i], ALevel + 1, APrevSep, APrevLazyOpen);
       if Result <> '' then Exit;
@@ -2418,8 +2702,9 @@ begin
     sep := PSep(it^);
     if APrevLazyOpen then Exit('a lazy last paragraph is followed by a piece');
     if it^.FChars <= 0 then Exit('empty piece');
-    if (sep = sNone) and ((it^.FHeight <> 0) or (it^.FData <> nil)) then
+    if (sep = sNone) and ((heights and (it^.FHeight <> 0)) or (it^.FData <> nil)) then
       Exit('height or data on a piece without a separator');
+    if heights and (it^.FHeight < 0) then Exit('negative height');
     if IsLazy(it^) then
     begin
       if not APrevSep then Exit('a lazy piece does not start its paragraph');
@@ -2454,8 +2739,9 @@ begin
   s := NodeSum(FRoot);
   if (s.Entries <> FTotal.Entries) or (s.Seps <> FTotal.Seps) or (s.Chars <> FTotal.Chars) or
      (s.Bytes <> FTotal.Bytes) or (s.Height <> FTotal.Height) or
-     (s.LazyMax <> FTotal.LazyMax) then
+     (s.Measured <> FTotal.Measured) or (s.LazyMax <> FTotal.LazyMax) then
     Exit('stale total');
+  if FLastHeight < 0 then Exit('negative height');
   prevSep := True;
   lazyOpen := False;
   Result := CheckNode(FRoot, 0, prevSep, lazyOpen);

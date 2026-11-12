@@ -20,6 +20,8 @@ type
 
   TRefUnits = array of UTF8String;
   TPosArray = array of Int64;
+  { The reference for the height index: a paragraph's measured height, -1 unmeasured. }
+  THeightRef = array of Int64;
 
   TTyRichTextTest = class(TTestCase)
   private
@@ -43,6 +45,7 @@ type
     procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
     procedure CheckSame(const AWhat: string; AText: TTyRichText; const ARef: TRefUnits;
       AFull: Boolean);
+    procedure CheckHeights(const AWhat: string; AText: TTyRichText; const ARef: THeightRef);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -59,6 +62,10 @@ type
     procedure TestSnapshotRestorePutsParaDataBack;
     procedure TestRunsTellOriginalFromEdited;
     procedure TestHeightIndex;
+    procedure TestUnmeasuredParagraphsCountAsTheDefault;
+    procedure TestHeightIndexAgainstAReference;
+    procedure TestSettingHeightsRecomputesNothing;
+    procedure TestUnmeasureAllHoldsThroughAMerge;
     procedure TestManyEditsKeepTheTreeConsistent;
     procedure TestDeepTreeStaysConsistent;
     procedure TestSmallInsertsDoNotMakeALeafEach;
@@ -272,6 +279,77 @@ begin
     AddStr(Result, len, Seps[i mod 3]);
   end;
   SetLength(Result, len);
+end;
+
+{ ---- the height reference ---- }
+
+function RefH(const R: THeightRef; ADefault: Int64; AIndex: Integer): Int64;
+begin
+  if R[AIndex] < 0 then Result := ADefault else Result := R[AIndex];
+end;
+
+function RefTop(const R: THeightRef; ADefault: Int64; AIndex: Integer): Int64;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to AIndex - 1 do Inc(Result, RefH(R, ADefault, i));
+end;
+
+{ The first paragraph whose bottom is below the row, else the last. }
+function RefAtHeight(const R: THeightRef; ADefault, AY: Int64): Integer;
+var
+  i: Integer;
+  bottom: Int64;
+begin
+  bottom := 0;
+  for i := 0 to High(R) do
+  begin
+    Inc(bottom, RefH(R, ADefault, i));
+    if bottom > AY then Exit(i);
+  end;
+  Result := High(R);
+end;
+
+function RefMeasured(const R: THeightRef): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(R) do
+    if R[i] >= 0 then Inc(Result);
+end;
+
+procedure RefRemove(var R: THeightRef; AFirst, ACount: Integer);
+var
+  i: Integer;
+begin
+  for i := AFirst to System.Length(R) - ACount - 1 do R[i] := R[i + ACount];
+  SetLength(R, System.Length(R) - ACount);
+end;
+
+procedure RefInsertUnmeasured(var R: THeightRef; AAt, ACount: Integer);
+var
+  i, n: Integer;
+begin
+  n := System.Length(R);
+  SetLength(R, n + ACount);
+  for i := n - 1 downto AAt do R[i + ACount] := R[i];
+  for i := AAt to AAt + ACount - 1 do R[i] := -1;
+end;
+
+function LinesOf(ACount: Integer): TBytes;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, ACount * 3);
+  for i := 0 to ACount - 1 do
+  begin
+    Result[i * 3] := Ord('a');
+    Result[i * 3 + 1] := Ord('b');
+    Result[i * 3 + 2] := 10;
+  end;
 end;
 
 { ---- TTyRichTextTest ---- }
@@ -779,6 +857,455 @@ begin
     t.Delete(t.ParaStart(1), 3);
     AssertEquals('merged keeps 20', 20, t.ParaHeight(1));
     AssertEquals('total', 35, t.TotalHeight);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.CheckHeights(const AWhat: string; AText: TTyRichText;
+  const ARef: THeightRef);
+var
+  d, total, y: Int64;
+  i, k, last: Integer;
+begin
+  d := AText.DefaultParaHeight;
+  last := High(ARef);
+  AssertEquals(AWhat + ': ParaCount', System.Length(ARef), AText.ParaCount);
+  total := RefTop(ARef, d, System.Length(ARef));
+  AssertEquals(AWhat + ': TotalHeight', total, AText.TotalHeight);
+  AssertEquals(AWhat + ': MeasuredParaCount', RefMeasured(ARef), AText.MeasuredParaCount);
+  for i := 0 to 5 do
+  begin
+    // the two ends, and anywhere
+    case i of
+      0: k := 0;
+      1: k := last;
+    else
+      k := NextRandom(System.Length(ARef));
+    end;
+    AssertEquals(Format('%s: ParaMeasured(%d)', [AWhat, k]), ARef[k] >= 0, AText.ParaMeasured(k));
+    AssertEquals(Format('%s: ParaHeight(%d)', [AWhat, k]), RefH(ARef, d, k), AText.ParaHeight(k));
+    AssertEquals(Format('%s: ParaTop(%d)', [AWhat, k]), RefTop(ARef, d, k), AText.ParaTop(k));
+    y := NextRandom(total + 5);
+    AssertEquals(Format('%s: ParaAtHeight(%d)', [AWhat, y]), RefAtHeight(ARef, d, y),
+      AText.ParaAtHeight(y));
+  end;
+end;
+
+{ A paragraph is measured or not. Unmeasured ones count as DefaultParaHeight in every
+  lookup; a measured height of 0 is a height (the default does not replace it). }
+procedure TTyRichTextTest.TestUnmeasuredParagraphsCountAsTheDefault;
+var
+  t: TTyRichText;
+
+  procedure Refused(const AWhat: string; AKind: Integer);
+  var
+    raised: Boolean;
+  begin
+    raised := False;
+    try
+      case AKind of
+        0: t.SetParaHeights(2, [4, -1]);
+        1: t.SetParaHeights(3, [1, 1]);
+        2: t.SetParaHeight(0, Int64(TyRichMaxParaHeight) + 1);
+        3: t.SetParaHeight(0, -1);
+        4: t.DefaultParaHeight := -1;
+        5: t.UnmeasureParas(2, 4);
+      end;
+    except
+      on ETyRichText do raised := True;
+    end;
+    AssertTrue(AWhat + ' must raise', raised);
+  end;
+
+var
+  p: TTyRichPieces;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('a'#10'b'#10'c'#10'd'));
+  try
+    // nothing measured and no default yet: no paragraph has a row
+    AssertEquals('nothing measured', 0, t.MeasuredParaCount);
+    AssertEquals('no height at all', 0, t.TotalHeight);
+    AssertEquals('every row is past the end then', 3, t.ParaAtHeight(0));
+    t.DefaultParaHeight := 7;
+    AssertEquals('four defaults', 28, t.TotalHeight);
+    AssertEquals('still nothing measured', 0, t.MeasuredParaCount);
+    AssertFalse('paragraph 1 is not measured', t.ParaMeasured(1));
+    AssertEquals('it counts as the default', 7, t.ParaHeight(1));
+    AssertEquals('top of 2', 14, t.ParaTop(2));
+    AssertEquals('row 0', 0, t.ParaAtHeight(0));
+    AssertEquals('row 6', 0, t.ParaAtHeight(6));
+    AssertEquals('row 7', 1, t.ParaAtHeight(7));
+    AssertEquals('the last row', 3, t.ParaAtHeight(27));
+    AssertEquals('past the end is the last', 3, t.ParaAtHeight(28));
+    AssertEquals('above the start is the first', 0, t.ParaAtHeight(-1));
+    // measured ones, the last paragraph among them, next to unmeasured ones
+    t.SetParaHeight(1, 20);
+    t.SetParaHeight(3, 5);
+    AssertEquals('7 + 20 + 7 + 5', 39, t.TotalHeight);
+    AssertEquals('two measured', 2, t.MeasuredParaCount);
+    AssertTrue('paragraph 1 is measured', t.ParaMeasured(1));
+    AssertTrue('the last one too', t.ParaMeasured(3));
+    AssertEquals('top of 2 after the measured 1', 27, t.ParaTop(2));
+    AssertEquals('top of 3', 34, t.ParaTop(3));
+    AssertEquals('row 26', 1, t.ParaAtHeight(26));
+    AssertEquals('row 27', 2, t.ParaAtHeight(27));
+    AssertEquals('row 34', 3, t.ParaAtHeight(34));
+    // a measured 0 is a height: the default no longer applies, and no row is its own
+    t.SetParaHeight(2, 0);
+    AssertTrue('0 is measured', t.ParaMeasured(2));
+    AssertEquals('and is 0', 0, t.ParaHeight(2));
+    AssertEquals('7 + 20 + 0 + 5', 32, t.TotalHeight);
+    AssertEquals('three measured', 3, t.MeasuredParaCount);
+    AssertEquals('it sits at the top of its successor', t.ParaTop(3), t.ParaTop(2));
+    AssertEquals('the row at its top is the successor''s', 3, t.ParaAtHeight(27));
+    // the default moves the unmeasured paragraphs only
+    t.DefaultParaHeight := 100;
+    AssertEquals('100 + 20 + 0 + 5', 125, t.TotalHeight);
+    AssertEquals('top of 1', 100, t.ParaTop(1));
+    AssertEquals('the measured 0 stays 0', 0, t.ParaHeight(2));
+    // back to unmeasured: one paragraph, then a range with the last paragraph
+    t.UnmeasureParas(2, 2);
+    AssertFalse('paragraph 2 is unmeasured again', t.ParaMeasured(2));
+    AssertEquals('100 + 20 + 100 + 5', 225, t.TotalHeight);
+    AssertEquals('row 120 is its own now', 2, t.ParaAtHeight(120));
+    t.UnmeasureParas(1, 3);
+    AssertEquals('four defaults again', 400, t.TotalHeight);
+    AssertEquals('none measured', 0, t.MeasuredParaCount);
+    // several at once, up to the last paragraph
+    t.SetParaHeights(1, [1, 2, 3]);
+    AssertEquals('100 + 1 + 2 + 3', 106, t.TotalHeight);
+    AssertEquals('top of 3 after a range', 103, t.ParaTop(3));
+    AssertEquals('three measured again', 3, t.MeasuredParaCount);
+    AssertEquals('the last got the last', 3, t.ParaHeight(3));
+    // a refused call changes nothing
+    Refused('a negative height in a range', 0);
+    AssertEquals('the height before the bad one was not stored', 2, t.ParaHeight(2));
+    Refused('a range past the last paragraph', 1);
+    Refused('a height above the maximum', 2);
+    Refused('a negative height', 3);
+    Refused('a negative default', 4);
+    Refused('unmeasuring past the last paragraph', 5);
+    AssertEquals('all as before', 106, t.TotalHeight);
+    t.SetParaHeight(0, TyRichMaxParaHeight);
+    AssertEquals('the maximum is stored', Int64(TyRichMaxParaHeight), t.ParaHeight(0));
+    AssertEquals('and summed', Int64(TyRichMaxParaHeight) + 6, t.TotalHeight);
+    // everything at once
+    t.UnmeasureAll;
+    AssertEquals('all unmeasured', 0, t.MeasuredParaCount);
+    AssertEquals('four defaults after the reset', 400, t.TotalHeight);
+    AssertEquals('top of 3 after the reset', 300, t.ParaTop(3));
+    AssertFalse('the last paragraph was reset too', t.ParaMeasured(3));
+    // a split leaves the height with the first part; what it adds is unmeasured
+    t.SetParaHeight(1, 20);
+    t.Insert(t.ParaStart(1) + 1, #10);
+    AssertTrue('the first part is still measured', t.ParaMeasured(1));
+    AssertEquals('with its height', 20, t.ParaHeight(1));
+    AssertFalse('the new paragraph is not', t.ParaMeasured(2));
+    AssertEquals('100 + 20 + 100 + 100 + 100', 420, t.TotalHeight);
+    // paragraphs that come back from a snapshot are unmeasured
+    t.SetParaHeights(0, [1, 2, 3, 4, 5]);
+    p := t.PieceSnapshot(t.ParaStart(1), t.ParaStart(4) - t.ParaStart(1));
+    t.Delete(t.ParaStart(1), t.ParaStart(4) - t.ParaStart(1));
+    // paragraphs 1..4 are one now
+    AssertEquals('the merged paragraph keeps the first one''s height', 2, t.ParaHeight(1));
+    AssertEquals('1 + 2', 3, t.TotalHeight);
+    t.RestorePieces(t.ParaStart(1), p);
+    AssertEquals('five paragraphs again', 5, t.ParaCount);
+    AssertEquals('1 + 2 + 100 + 100 + 100', 303, t.TotalHeight);
+    AssertEquals('only the two in front are measured', 2, t.MeasuredParaCount);
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+{ Every way of setting and dropping heights, mixed with splits, merges and restores on a
+  tree two inner levels deep, against a plain array. }
+procedure TTyRichTextTest.TestHeightIndexAgainstAReference;
+const
+  Lines = 20000;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  more: UTF8String;
+  ref: THeightRef;
+  hs: array of Int64;
+  op, kind, i, k, c, n: Integer;
+  a, b: Int64;
+  p: TTyRichPieces;
+begin
+  buf := LinesOf(Lines);
+  more := '';
+  SetLength(more, System.Length(buf));
+  Move(buf[0], more[1], System.Length(buf));
+  t := TTyRichText.CreateFromUtf8(buf);
+  try
+    AssertTrue('two inner levels', t.TreeDepth >= 2);
+    ref := nil;
+    RefInsertUnmeasured(ref, 0, t.ParaCount);
+    hs := nil;
+    CheckHeights('loaded', t, ref);
+    for op := 1 to 600 do
+    begin
+      n := t.ParaCount;
+      kind := NextRandom(20);
+      if (kind = 12) and (NextRandom(3) > 0) then kind := 0;
+      if (kind >= 15) and (n < 3) then kind := 0;
+      case kind of
+        0..5:
+          begin
+            k := NextRandom(n);
+            c := NextRandom(40);
+            t.SetParaHeight(k, c);
+            ref[k] := c;
+          end;
+        6..8:
+          begin
+            k := NextRandom(n);
+            c := 1 + NextRandom(Min(700, n - k));
+            SetLength(hs, c);
+            for i := 0 to c - 1 do hs[i] := NextRandom(40);
+            t.SetParaHeights(k, hs);
+            for i := 0 to c - 1 do ref[k + i] := hs[i];
+          end;
+        9..10:
+          begin
+            k := NextRandom(n);
+            c := NextRandom(Min(700, n - k));
+            t.UnmeasureParas(k, k + c);
+            for i := k to k + c do ref[i] := -1;
+          end;
+        11: t.DefaultParaHeight := NextRandom(30);
+        12:
+          begin
+            t.UnmeasureAll;
+            for i := 0 to High(ref) do ref[i] := -1;
+          end;
+        13..14:
+          begin
+            // a split by two separators: the first part keeps the height
+            k := NextRandom(n);
+            t.Insert(t.ParaStart(k) + NextRandom(t.ParaLength(k) + 1), 'x'#10'y'#13#10'z');
+            RefInsertUnmeasured(ref, k + 1, 2);
+          end;
+      else
+        // paragraphs k..k+c merge (now and then enough of them to empty inner nodes)
+        k := NextRandom(n - 1);
+        if NextRandom(10) = 0 then c := 1 + NextRandom(Min(6000, n - 1 - k))
+        else c := 1 + NextRandom(Min(300, n - 1 - k));
+        a := t.ParaStart(k) + NextRandom(t.ParaLength(k) + 1);
+        b := t.ParaStart(k + c) + NextRandom(t.ParaLength(k + c) + 1);
+        if kind <= 17 then
+        begin
+          t.Delete(a, b - a);
+          RefRemove(ref, k + 1, c);
+        end
+        else
+        begin
+          // and come back: what a restore brings is unmeasured
+          p := t.PieceSnapshot(a, b - a);
+          t.Delete(a, b - a);
+          t.RestorePieces(a, p);
+          for i := k + 1 to k + c do ref[i] := -1;
+        end;
+      end;
+      CheckHeights(Format('op %d (kind %d)', [op, kind]), t, ref);
+      if op mod 20 = 0 then
+        AssertEquals(Format('op %d: integrity', [op]), '', t.CheckIntegrity);
+      if t.ParaCount < 8000 then
+      begin
+        t.Insert(t.Length, more);
+        RefInsertUnmeasured(ref, System.Length(ref), Lines);
+        CheckHeights(Format('op %d: refilled', [op]), t, ref);
+      end;
+    end;
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+{ The layout sets heights while it scrolls and drops them all when the width changes, in a
+  document of millions of paragraphs: a height costs one descent and recomputes no node, a
+  range goes leaf by leaf, and the default and the reset touch nothing at all. }
+procedure TTyRichTextTest.TestSettingHeightsRecomputesNothing;
+const
+  Lines = 2000000;
+  Singles = 10000;
+  RangeFirst = 500000;
+  RangeCount = 1000000;
+var
+  t: TTyRichText;
+  ref, tops, hs: array of Int64;
+  n, i, k, depth, lo, hi, mid: Integer;
+  v, s, limit, y: Int64;
+
+  procedure Sum;
+  var
+    j: Integer;
+  begin
+    tops[0] := 0;
+    for j := 0 to n - 1 do
+      if ref[j] < 0 then tops[j + 1] := tops[j] + t.DefaultParaHeight
+      else tops[j + 1] := tops[j] + ref[j];
+  end;
+
+  procedure Lookups(const AWhat: string);
+  var
+    j: Integer;
+  begin
+    AssertEquals(AWhat + ': TotalHeight', tops[n], t.TotalHeight);
+    for j := 1 to 200 do
+    begin
+      k := NextRandom(n);
+      v := t.NodeVisits;
+      AssertEquals(Format('%s: ParaTop(%d)', [AWhat, k]), tops[k], t.ParaTop(k));
+      AssertTrue(Format('%s: ParaTop visited %d nodes', [AWhat, t.NodeVisits - v]),
+        t.NodeVisits - v <= depth + 1);
+      // every height here is above 0, so each row has one paragraph
+      y := tops[k] + NextRandom(tops[k + 1] - tops[k]);
+      v := t.NodeVisits;
+      AssertEquals(Format('%s: ParaAtHeight(%d)', [AWhat, y]), k, t.ParaAtHeight(y));
+      AssertTrue(Format('%s: ParaAtHeight visited %d nodes', [AWhat, t.NodeVisits - v]),
+        t.NodeVisits - v <= depth + 1);
+    end;
+    AssertEquals(AWhat + ': no summary was recomputed', s, t.SumScans);
+  end;
+
+begin
+  t := TTyRichText.CreateFromUtf8(LinesOf(Lines));
+  try
+    n := t.ParaCount;
+    depth := t.TreeDepth;
+    ref := nil;
+    SetLength(ref, n);
+    for i := 0 to n - 1 do ref[i] := -1;
+    tops := nil;
+    SetLength(tops, n + 1);
+    s := t.SumScans;
+
+    // the estimate for everything: no node is touched
+    v := t.NodeVisits;
+    t.DefaultParaHeight := 20;
+    AssertEquals('the default visits nothing', v, t.NodeVisits);
+    Sum;
+    AssertEquals('every paragraph counts as the default', Int64(20) * n, tops[n]);
+    Lookups('default');
+
+    // single heights: a descent each
+    v := t.NodeVisits;
+    for i := 1 to Singles do
+    begin
+      t.SetParaHeight(i * 199, 16);
+      ref[i * 199] := 16;
+    end;
+    limit := Int64(Singles) * (depth + 1);
+    AssertTrue(Format('%d heights visited %d nodes, limit %d', [Singles, t.NodeVisits - v, limit]),
+      t.NodeVisits - v <= limit);
+    AssertEquals('measured', Singles, t.MeasuredParaCount);
+    Sum;
+    Lookups('single heights');
+
+    // a range: one descent, then leaf by leaf
+    hs := nil;
+    SetLength(hs, RangeCount);
+    for i := 0 to RangeCount - 1 do
+    begin
+      hs[i] := 10 + i mod 7;
+      ref[RangeFirst + i] := hs[i];
+    end;
+    v := t.NodeVisits;
+    t.SetParaHeights(RangeFirst, hs);
+    limit := RangeCount div 100 + 4 * (depth + 1);
+    AssertTrue(Format('a range of %d visited %d nodes, limit %d', [RangeCount, t.NodeVisits - v,
+      limit]), t.NodeVisits - v <= limit);
+    Sum;
+    Lookups('range');
+
+    // a range dropped again
+    v := t.NodeVisits;
+    t.UnmeasureParas(100000, 899999);
+    limit := 800000 div 100 + 4 * (depth + 1);
+    AssertTrue(Format('unmeasuring 800000 visited %d nodes, limit %d', [t.NodeVisits - v, limit]),
+      t.NodeVisits - v <= limit);
+    for i := 100000 to 899999 do ref[i] := -1;
+    Sum;
+    Lookups('range dropped');
+
+    // everything dropped: nothing is walked
+    v := t.NodeVisits;
+    t.UnmeasureAll;
+    AssertEquals('the reset visits nothing', v, t.NodeVisits);
+    AssertEquals('nothing is measured', 0, t.MeasuredParaCount);
+    for i := 0 to n - 1 do ref[i] := -1;
+    Sum;
+    AssertEquals('every paragraph counts as the default again', Int64(20) * n, tops[n]);
+    Lookups('reset');
+
+    // heights set after the reset hold, also in leaves the range walk is the first to enter
+    t.SetParaHeights(700000, hs[0..49999]);
+    for i := 0 to 49999 do ref[700000 + i] := hs[i];
+    t.SetParaHeight(n - 1, 5);
+    ref[n - 1] := 5;
+    t.SetParaHeight(3, 8);
+    ref[3] := 8;
+    AssertEquals('measured after the reset', 50002, t.MeasuredParaCount);
+    Sum;
+    Lookups('after the reset');
+    // a second reset right after
+    t.UnmeasureAll;
+    t.SetParaHeight(1500000, 9);
+    for i := 0 to n - 1 do ref[i] := -1;
+    ref[1500000] := 9;
+    Sum;
+    Lookups('second reset');
+    AssertEquals('integrity', '', t.CheckIntegrity);
+
+    // the reference's own search, so the test does not lean on its own expectations only
+    y := tops[n] div 3;
+    lo := 0;
+    hi := n - 1;
+    while lo < hi do
+    begin
+      mid := (lo + hi) div 2;
+      if tops[mid + 1] > y then hi := mid else lo := mid + 1;
+    end;
+    AssertEquals('a row a third down', lo, t.ParaAtHeight(y));
+  finally
+    t.Free;
+  end;
+end;
+
+{ UnmeasureAll walks nothing, so a leaf nobody has entered since still has its old heights
+  written in it. When a neighbour takes its pieces in, they must not come along. }
+procedure TTyRichTextTest.TestUnmeasureAllHoldsThroughAMerge;
+var
+  t: TTyRichText;
+  hs: array of Int64;
+  i: Integer;
+begin
+  // one piece per paragraph, 128 to a leaf: leaf 1 is paragraphs 128..255, leaf 2 256..383
+  t := TTyRichText.CreateFromUtf8(LinesOf(1000));
+  try
+    hs := nil;
+    SetLength(hs, t.ParaCount);
+    for i := 0 to High(hs) do hs[i] := 10;
+    t.SetParaHeights(0, hs);
+    AssertEquals('all measured', 10010, t.TotalHeight);
+    // thin leaf 2 out while its heights still count
+    t.Delete(t.ParaStart(260), t.ParaStart(381) - t.ParaStart(260));
+    AssertEquals('121 paragraphs fewer', 8800, t.TotalHeight);
+    t.DefaultParaHeight := 3;
+    t.UnmeasureAll;
+    AssertEquals('all unmeasured', Int64(3) * 880, t.TotalHeight);
+    // thin leaf 1 out: it takes leaf 2 in, which no lookup has entered since the reset
+    t.Delete(t.ParaStart(130), t.ParaStart(251) - t.ParaStart(130));
+    AssertEquals('paragraphs', 759, t.ParaCount);
+    AssertEquals('nothing is measured', 0, t.MeasuredParaCount);
+    AssertEquals('every paragraph is the default', Int64(3) * 759, t.TotalHeight);
+    AssertEquals('top of a paragraph behind the merge', 600, t.ParaTop(200));
+    AssertEquals('integrity', '', t.CheckIntegrity);
   finally
     t.Free;
   end;
