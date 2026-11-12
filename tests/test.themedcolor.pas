@@ -323,6 +323,12 @@ begin
   fr.StyleClass := 'anything';   // the frame works its colour out again, the host still hovered
   AssertLcl('a frame without a background', $20, $40, $60,
     PlainOn(fr).GetColorResolvingParent);
+  { and through the frame: a container on it looks past it at the same host }
+  bare := TBareContainer.Create(FForm);
+  bare.Controller := FCtl;
+  bare.Parent := fr;
+  AssertLcl('a container on that frame', $20, $40, $60,
+    PlainOn(bare).GetColorResolvingParent);
 end;
 
 procedure TThemedContainerColorTest.TestReparentingIsFollowed;
