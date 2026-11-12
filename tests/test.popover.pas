@@ -2,7 +2,7 @@ unit test.popover;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LCLVersion, LMessages, fpcunit,
   testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Popover,
@@ -179,6 +179,23 @@ type
   end;
 
 implementation
+
+{ What a widgetset does for every mouse and key message before the control gets it. LCL's
+  own call takes the message number up to Lazarus 4.x and the message itself from 5.0. }
+procedure AnnounceInput(ASender: TObject; AMsg: Cardinal);
+{$IF LCL_FULLVERSION >= 4990000}
+var
+  m: TLMessage;
+begin
+  m := Default(TLMessage);
+  m.Msg := AMsg;
+  Application.NotifyUserInputHandler(ASender, m);
+end;
+{$ELSE}
+begin
+  Application.NotifyUserInputHandler(ASender, AMsg);
+end;
+{$ENDIF}
 
 const
   { The content the component tests wrap, and a work area of round numbers so a frame rect is
@@ -2938,12 +2955,12 @@ begin
     FHidden := 0;
     ShowIt;
     Deactivate;
-    Application.NotifyUserInputHandler(FButton, LM_MOUSEMOVE);
-    Application.NotifyUserInputHandler(FButton, CDowns[i]);
+    AnnounceInput(FButton, LM_MOUSEMOVE);
+    AnnounceInput(FButton, CDowns[i]);
     Application.ProcessMessages;
     AssertTrue(tag + 'a move and a button down settle nothing', P.Showing);
     AssertTrue(tag + 'still waiting', P.PressWaiting);
-    Application.NotifyUserInputHandler(FForm, CUps[i]);
+    AnnounceInput(FForm, CUps[i]);
     AssertTrue(tag + 'not inside the notification: the click is not delivered yet', P.Showing);
     AssertTrue(tag + 'still waiting', P.PressWaiting);
     Application.ProcessMessages;
@@ -2966,7 +2983,7 @@ begin
   ShowIt;
   P.PressOn := FButton;
   Deactivate;
-  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+  AnnounceInput(FButton, LM_LBUTTONUP);
   ToggleClick(FButton);
   Application.ProcessMessages;
   AssertFalse('closed', P.Showing);
@@ -2974,7 +2991,7 @@ begin
   AssertTrue('by the handler', P.HideReason = phrCode);
   // The popover no longer listens: a later button-up is nobody's business.
   ShowIt;
-  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+  AnnounceInput(FButton, LM_LBUTTONUP);
   Application.ProcessMessages;
   AssertTrue('a click that deactivated nothing settles nothing', P.Showing);
 end;
@@ -3103,13 +3120,13 @@ begin
   P.PressOn := FButton;
   Deactivate;
   Deactivate;   // the window came back and left again while the press waited
-  Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);   // a settle is queued
+  AnnounceInput(FButton, LM_LBUTTONUP);   // a settle is queued
   AssertTrue('waiting', P.PressWaiting);
   BeginPoison;
   try
     FPop.Free;
     FPop := nil;
-    Application.NotifyUserInputHandler(FButton, LM_LBUTTONUP);
+    AnnounceInput(FButton, LM_LBUTTONUP);
     Pump(150);
   finally
     EndPoison;

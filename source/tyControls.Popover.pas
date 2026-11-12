@@ -34,6 +34,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, ExtCtrls, LCLType, LCLIntf,
+  LCLVersion, LMessages,   // the user-input handler's signature differs by LCL version
   tyControls.Types, tyControls.Animation, tyControls.Component, tyControls.Painter, tyControls.Base,
   tyControls.Controller, tyControls.StyleModel;
 
@@ -414,8 +415,15 @@ type
     procedure DropTargetPress;
     procedure PressTimerTick(Sender: TObject);
     { LCL announces every mouse and key message here before the control gets it: a button
-      coming up ends the press, and the settle is queued behind that message. }
+      coming up ends the press, and the settle is queued behind that message. The handler's
+      type is LCL's and changed with Lazarus 5.0 (a message number before, the message
+      itself from then on), so the handler only hands the number on. }
+    {$IF LCL_FULLVERSION >= 4990000}
+    procedure AppUserInput(Sender: TObject; var Msg: TLMessage);
+    {$ELSE}
     procedure AppUserInput(Sender: TObject; Msg: Cardinal);
+    {$ENDIF}
+    procedure UserInputMessage(AMsg: Cardinal);
     procedure AsyncSettle(Data: PtrInt);
     procedure SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
     procedure SetFlyoutPanel(AValue: TTyPopoverFlyoutPanel);
@@ -693,7 +701,7 @@ type
 implementation
 
 uses
-  LMessages, BGRABitmapTypes, BGRACanvas2D,
+  BGRABitmapTypes, BGRACanvas2D,
   tyControls.PlatformWS,   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
   tyControls.Popup;        // TyPopupWorkArea (#148)
 
@@ -1839,12 +1847,24 @@ begin
   FSettleQueued := False;
 end;
 
+{$IF LCL_FULLVERSION >= 4990000}
+procedure TTyCustomPopover.AppUserInput(Sender: TObject; var Msg: TLMessage);
+begin
+  UserInputMessage(Msg.Msg);
+end;
+{$ELSE}
 procedure TTyCustomPopover.AppUserInput(Sender: TObject; Msg: Cardinal);
+begin
+  UserInputMessage(Msg);
+end;
+{$ENDIF}
+
+procedure TTyCustomPopover.UserInputMessage(AMsg: Cardinal);
 begin
   if not FTargetPress then Exit;
   { Any button, on any control: the widgetset names the windowed control that got the
     message, which is not the Target when that is a graphic control. }
-  case Msg of
+  case AMsg of
     LM_LBUTTONUP, LM_RBUTTONUP, LM_MBUTTONUP, LM_XBUTTONUP:
       begin
         // The click fires while the control handles this message: settle behind it.
