@@ -880,8 +880,21 @@ var
   ci: PCharInfo;
   pi: PParaInfo;
   look: Boolean;
+  cell: TTyRichCell;
 begin
   EnsureTables;
+  // A row that holds a nested table is more in the file than in the model: written from
+  // the model it would lose the inner table without a word. The model lets nothing change
+  // in such a row, so this is not reached through commands; it is asked here all the same,
+  // while nothing has been written yet.
+  if FLoad <> nil then
+  begin
+    cell := FDoc.CellAt(AIndex);
+    if (cell <> nil) and cell.Row.HoldsNestedTable then
+      raise ETyRichRtfWrite.CreateFmt('RTF writer: paragraph %d is in a table row that holds ' +
+        'a nested table and has changed: written from the model, the row would lose that table',
+        [AIndex]);
+  end;
   runs := FDoc.RunsOf(AIndex);
   look := False;
   for j := 0 to High(runs) do
@@ -1954,8 +1967,16 @@ end;
 procedure TRtfWriter.Run;
 begin
   FParaCount := FDoc.Text.ParaCount;
-  if FLoad <> nil then SaveFile else SaveOurs;
-  Flush;
+  // one read scope for the whole save: the cells, rows and objects read for a paragraph
+  // are used while its neighbours are read, and a read that parses could otherwise send
+  // the interval they belong to back to unparsed
+  FDoc.BeginRead;
+  try
+    if FLoad <> nil then SaveFile else SaveOurs;
+    Flush;
+  finally
+    FDoc.EndRead;
+  end;
   SetLength(FInfo.Stretches, FStretchN);
 end;
 

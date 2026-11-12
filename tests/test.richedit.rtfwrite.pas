@@ -48,6 +48,9 @@ type
     procedure TestRefusesWhatItCannotSave;
     // the review
     procedure TestKeptBlocksGoBackUnderTheirOwnUc;
+    procedure TestAChangedRowWithANestedTableIsNotWritten;
+    procedure TestOnlyTheEditedRowIsRewrittenAfterItsIntervalWent;
+    procedure TestTheSaveHoldsWhatItReadsUntilItIsDone;
   end;
 
 implementation
@@ -508,6 +511,24 @@ type
     constructor Create(AFirst: Integer; ATable: TTyRichTable; const ACells: array of Integer);
   end;
 
+  // What a reader does: a paragraph's formats put in as loading, not as a change.
+  TPutParagraph = class(TTyRichDocBuilder)
+  public
+    class function Put(ADoc: TTyRichDocument; AIndex: Integer; ACell: TTyRichCell): Boolean;
+  end;
+
+  // Counts what is written; while it is written, reads a paragraph of the document that
+  // was not parsed yet, and notes how many intervals are parsed then.
+  TReadingStream = class(TStream)
+  public
+    Doc: TTyRichDocument;
+    Para: Integer;
+    Total: Int64;
+    Resident: Integer;
+    function Write(const Buffer; Count: LongInt): LongInt; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
   // Compares what is written with the bytes it should be, without keeping it; counts the
   // writes and watches the heap while the writer works.
   TCheckStream = class(TStream)
@@ -539,6 +560,36 @@ end;
 procedure TMarkTableCommand.DoExecute(ADoc: TTyRichDocument);
 begin
   MarkTable(ADoc, FFirst, FTable, FCells);
+end;
+
+class function TPutParagraph.Put(ADoc: TTyRichDocument; AIndex: Integer;
+  ACell: TTyRichCell): Boolean;
+var
+  runs: TTyRunArray;
+begin
+  runs := nil;
+  SetLength(runs, 1);
+  runs[0].Start := 0;
+  runs[0].Format := ADoc.DefaultCharFormatId;
+  runs[0].Obj := nil;
+  Result := SetParagraph(ADoc, AIndex, ADoc.DefaultParaFormatId, runs, ACell);
+end;
+
+function TReadingStream.Write(const Buffer; Count: LongInt): LongInt;
+begin
+  if Para >= 0 then
+  begin
+    Doc.EnsureParsed(Para);
+    Resident := TyRichRtfLoadOf(Doc).ResidentIntervals;
+    Para := -1;
+  end;
+  Inc(Total, Count);
+  Result := Count;
+end;
+
+function TReadingStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  Result := Total;
 end;
 
 constructor TCheckStream.Create(const AExpected: TBytes);
@@ -2412,6 +2463,184 @@ begin
       PosRaw('\pard{\*\oldpprops \' + 'u1?\qc}\sb77\plain{\*\oldcprops \' + 'u2?}\f0\fs24 after\par',
         text) > 0);
   finally
+    d.Free;
+  end;
+end;
+
+{ A row that holds a nested table is more in the file than in the model, and the model does
+  not let it change. Should a value of such a row be changed all the same, writing the row
+  from the model would lose the inner table without a word: the save refuses, before it
+  writes anything. The situation is made the way a reader makes a document. }
+procedure TTyRtfWriteTest.TestAChangedRowWithANestedTableIsNotWritten;
+const
+  Source = '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fswiss\fcharset0 Arial;}}\uc1 ' +
+    '\pard\f0\fs24 top\par \trowd\trgaph108\cellx2000\cellx4000 \pard\intbl a\cell b\cell\row ' +
+    '\pard bottom\par}';
+  RowWords = '\trowd\trgaph108\cellx2000\cellx4000';
+var
+  marked: Boolean;
+  d, r: TTyRichDocument;
+  t: TTyRichTable;
+  s: TBytesStream;
+  raised: string;
+  info: TTyRtfWriteInfo;
+begin
+  for marked := False to True do
+  begin
+    d := LoadDoc(BytesOf(Source), False);
+    s := TBytesStream.Create;
+    r := nil;
+    try
+      AssertEquals('four paragraphs', 4, d.Text.ParaCount);
+      // the row's two paragraphs get a value that is not the file's
+      t := TTyRichTable.Create([2000, 4000]);
+      t.AddRow(2, RowWords, [2000, 4000], marked);
+      AssertTrue('the first cell is set', TPutParagraph.Put(d, 1, t.Rows[0].Cells[0]));
+      AssertTrue('the second cell is set', TPutParagraph.Put(d, 2, t.Rows[0].Cells[1]));
+      AssertEquals('the row is marked', marked, d.CellAt(1).Row.HoldsNestedTable);
+      raised := '';
+      try
+        TyRichSaveRtf(d, s, info);
+      except
+        on E: ETyRichRtfWrite do raised := E.Message;
+      end;
+      if marked then
+      begin
+        AssertTrue('the save refuses: ' + raised, Pos('nested table', raised) > 0);
+        AssertTrue('and says which paragraph: ' + raised, Pos('paragraph 1', raised) > 0);
+        AssertEquals('nothing was written', 0, s.Size);
+        // the document is as it was, and no read scope is left open
+        AssertEquals('still four paragraphs', 4, d.Text.ParaCount);
+        raised := '';
+        try
+          d.EndRead;
+        except
+          on E: ETyRichModel do raised := E.Message;
+        end;
+        AssertTrue('the refusal left no read scope open', raised <> '');
+      end
+      else
+      begin
+        // the same row without the mark is written from the model
+        AssertEquals('not marked: saved', '', raised);
+        AssertEquals('not marked: the row is rewritten', 2, info.RewrittenParas);
+        r := LoadDoc(Copy(s.Bytes, 0, s.Size), True);
+        AssertEquals('not marked: read back', 4, r.Text.ParaCount);
+        AssertRaw('not marked: the first cell', 'a', ParaText(r, 1));
+        AssertRaw('not marked: the row''s words', RowWords, r.CellAt(1).Row.RawFormat);
+      end;
+    finally
+      r.Free;
+      s.Free;
+      d.Free;
+    end;
+  end;
+end;
+
+{ A table of which one cell was changed stays parsed when its interval goes, and its other
+  rows are still the file's own (the reader keeps a record of them): a save after the reader
+  has gone on through the document rewrites the edited row and nothing else. }
+procedure TTyRtfWriteTest.TestOnlyTheEditedRowIsRewrittenAfterItsIntervalWent;
+var
+  src: RawByteString;
+  b, o: TBytes;
+  d, r: TTyRichDocument;
+  load: TTyRtfLoad;
+  info: TTyRtfWriteInfo;
+  p: TTyParaFormat;
+  i, n, k: Integer;
+begin
+  src := '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fswiss\fcharset0 Arial;}}\uc1 \pard\f0\fs24 top\par ' +
+    '\trowd\trgaph108\cellx2000\cellx4000 \pard\intbl a\cell b\cell\row ' +
+    '\trowd\trgaph108\cellx2000\cellx4000 \pard\intbl c\cell d\cell\row ' +
+    '\trowd\trgaph108\cellx2000\cellx4000 \pard\intbl e\cell f\cell\row \pard ';
+  while Length(src) < 3 * MB do
+    Cat(src, 'The quick brown fox jumps over the lazy dog, again and again and again.\par ');
+  Cat(src, 'end\par}');
+  b := BytesOf(src);
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('the file has many intervals', load.IntervalCount > 20);
+    p := TyDefaultParaFormat;
+    p.SpaceBefore := 77;
+    // the second row's first cell
+    SetPara(d, 3, [pffSpaceBefore], p);
+    o := SaveDoc(d, info);
+    AssertEquals('saved at once: one stretch', 1, Length(info.Stretches));
+    AssertEquals('saved at once: the row', 2, info.RewrittenParas);
+    // reading on: a paragraph of every other interval
+    n := d.Text.ParaCount;
+    k := 0;
+    i := 1;
+    while i < load.IntervalCount do
+    begin
+      d.EnsureParsed(load.IntervalFirstPara(i));
+      Inc(k);
+      Inc(i, 2);
+    end;
+    AssertTrue('intervals were read', k > 10);
+    AssertEquals('one interval stays parsed', 1, load.ResidentIntervals);
+    o := SaveDoc(d, info);
+    AssertEquals('after reading on: one stretch', 1, Length(info.Stretches));
+    AssertEquals('after reading on: it starts at the edited row', 3, info.Stretches[0].FirstPara);
+    AssertEquals('after reading on: the edited row and nothing else', 2, info.RewrittenParas);
+    AssertEquals('after reading on: every other paragraph is the file''s bytes', n - 2,
+      info.VerbatimParas);
+    CheckVerbatim('after reading on', d, b, o, info);
+    r := LoadDoc(o, False);
+    AssertEquals('read back: paragraphs', n, r.Text.ParaCount);
+    AssertEquals('read back: the edited cell', 77,
+      r.Formats.ParaFormat(r.ParaFormatOf(3)).SpaceBefore);
+    AssertEquals('read back: the row before it', '', ParaDiff(d, 1, r, 1));
+    AssertEquals('read back: the row after it', '', ParaDiff(d, 5, r, 5));
+  finally
+    r.Free;
+    d.Free;
+  end;
+end;
+
+{ What the writer reads of a paragraph - its cell, its row, its objects - belongs to the
+  paragraph's parsed interval, and another read may send that interval back to unparsed. The
+  save therefore runs inside one read scope: whatever is read while it runs stays parsed
+  until it is done, also past the limit; when it ends the limit holds again. }
+procedure TTyRtfWriteTest.TestTheSaveHoldsWhatItReadsUntilItIsDone;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  s: TReadingStream;
+  raised: Boolean;
+begin
+  b := Generate('re-zh-mixed.rtf', 1 * MB);
+  d := LoadDoc(b, False);
+  s := TReadingStream.Create;
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('several intervals', load.IntervalCount > 4);
+    AssertTrue('typed in the first paragraph', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    AssertEquals('one interval is parsed', 1, load.ResidentIntervals);
+    // while the save writes, somebody reads a paragraph of the last interval
+    s.Doc := d;
+    s.Para := d.Text.ParaCount - 1;
+    s.Resident := -1;
+    TyRichSaveRtf(d, s);
+    AssertTrue('the stream was written to', s.Total > Length(b));
+    AssertEquals('during the save both intervals stay parsed', 2, s.Resident);
+    AssertEquals('after it one is left', 1, load.ResidentIntervals);
+    raised := False;
+    try
+      d.EndRead;
+    except
+      on E: ETyRichModel do raised := True;
+    end;
+    AssertTrue('the save closed its read scope', raised);
+    AssertTrue('and the document can be changed', d.Execute(TTyRichInsertText.Create(0, 'Y')));
+  finally
+    s.Free;
     d.Free;
   end;
 end;
