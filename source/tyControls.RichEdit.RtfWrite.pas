@@ -25,6 +25,10 @@ unit tyControls.RichEdit.RtfWrite;
 // - the header is only added to: a font or a colour the rewritten paragraphs need and the
 //   file's tables lack goes in at the end of its table.
 // The same holds where paragraphs were deleted: the bytes after the gap get their state back.
+// Two things of a file's state are not put back, and are rare enough to leave so: a font or
+// colour table that stands inside the body (numbers are looked up in the tables as they are
+// at the end of the file), and an "in a table" that an open group saved before a paragraph
+// in no table. The row definition in effect is put back only before a paragraph of a table.
 //
 // A document with no file behind it is one stretch with a header of its own, in WordPad's
 // writing: every character above 7F as \uN? under \uc1 (nothing written here is a byte

@@ -21,7 +21,7 @@ uses
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
 
 type
-  TEditKind = (ekInsert, ekCharFormat, ekParaFormat, ekDelete);
+  TEditKind = (ekInsert, ekCharFormat, ekParaFormat, ekDelete, ekSplit, ekJoin);
 
   // One call of a save's progress callback, and how much the stream held then.
   TSaveTick = record
@@ -1400,9 +1400,8 @@ begin
           AssertTrue(Format('%s paragraph %d: something was rewritten', [names[i], k]),
             info.RewrittenParas >= 1);
           AssertTrue(Format('%s paragraph %d: the control read it', [names[i], k]), RichEditText(o, got));
-          // paragraph by paragraph (a cell end ends one; a row written from the model has
-          // no nested table, but its cells' paragraphs are all there): a rewritten one is
-          // the model's text, the others are what the control makes of the sample itself
+          // paragraph by paragraph (a cell end ends one): a rewritten one is the model's
+          // text, the others are what the control makes of the sample itself
           gotParas := SplitParas(AsParagraphs(got));
           origParas := SplitParas(AsParagraphs(original));
           modelParas := SplitParas(AsParagraphs(ModelAsRichEditText(d)));
@@ -1499,6 +1498,23 @@ begin
   Result := False;
 end;
 
+// What a stretch ends with: the words written after its last paragraph, which put the
+// reader back in the state the file's next bytes were read in. (A paragraph written from
+// the model ends with \par or \row and a line break.)
+function RestoredWords(const AOut: TBytes; const AStretch: TTyRtfWriteStretch): RawByteString;
+var
+  s: RawByteString;
+  i: Integer;
+begin
+  s := StrOf(AOut, AStretch.OutStart, AStretch.OutStop - AStretch.OutStart);
+  Result := s;
+  if AStretch.ParaCount = 0 then Exit;
+  for i := Length(s) - 1 downto 5 do
+    if (s[i] = #13) and (s[i + 1] = #10) and
+       ((Copy(s, i - 4, 4) = '\par') or (Copy(s, i - 4, 4) = '\row')) then
+      Exit(Copy(s, i + 2, Length(s) - i - 1));
+end;
+
 { Where every paragraph that was not rewritten is in the output: the file's own bytes, one
   after the other, with the stretches between them; then the file's trailer. }
 procedure TTyRtfWriteTest.CheckVerbatim(const AMsg: string; ADoc: TTyRichDocument;
@@ -1560,13 +1576,13 @@ procedure TTyRtfWriteTest.CheckEdit(const AName: string; const ABytes: TBytes;
   AFull: TTyRichDocument; APara: Integer; AKind: TEditKind);
 const
   KindName: array[TEditKind] of string = ('insert', 'character format', 'paragraph format',
-    'delete');
+    'delete', 'split', 'join');
 var
   d, w, w2: TTyRichDocument;
   o, o2: TBytes;
   info: TTyRtfWriteInfo;
   msg, diff: string;
-  n, len, mid, i, shift, c: Integer;
+  n, len, len2, mid, i, shift, c, part: Integer;
   start: Int64;
   f, e: TTyCharFormat;
   p, pe: TTyParaFormat;
@@ -1610,12 +1626,19 @@ begin
         end;
       ekDelete:
         changed := d.Execute(TTyRichDelete.Create(start, len + 1));
+      ekSplit:
+        // Enter in the middle of the paragraph
+        changed := d.Execute(TTyRichInsertText.Create(start + mid, #10));
+      ekJoin:
+        // Delete at its end: the next paragraph is joined to it
+        changed := d.Execute(TTyRichDelete.Create(start + len, 1));
     end;
     // a row that holds a nested table stays as the file has it: typing there is refused
     // and a format leaves its paragraphs alone, so the file is saved as it was
     if (AFull.CellAt(APara) <> nil) and AFull.CellAt(APara).Row.HoldsNestedTable then
     begin
-      if AKind = ekInsert then AssertFalse(msg + ': refused in a row with a nested table', changed);
+      if AKind in [ekInsert, ekSplit] then
+        AssertFalse(msg + ': refused in a row with a nested table', changed);
       changed := False;
     end;
     o := SaveDoc(d, info);
@@ -1628,17 +1651,94 @@ begin
     CheckVerbatim(msg, d, ABytes, o, info);
     AssertEquals(msg + ': every group the output opens it closes, as the file does',
       OpenGroups(ABytes), OpenGroups(o));
+    // The words that put the reader back after a stretch name no table when the paragraph
+    // that follows is in none: the file's own bytes end whatever "in a table" was in
+    // effect there, and the system's RichEdit drops a paragraph that follows an \intbl or
+    // a row definition with no cell.
+    for i := 0 to High(info.Stretches) do
+      if (info.Stretches[i].FirstPara + info.Stretches[i].ParaCount < d.Text.ParaCount) and
+         (d.CellAt(info.Stretches[i].FirstPara + info.Stretches[i].ParaCount) = nil) then
+      begin
+        tail := RestoredWords(o, info.Stretches[i]);
+        AssertTrue(Format('%s: stretch %d: no \intbl put back before a paragraph in no table: %s',
+          [msg, i, Shown(tail)]), PosRaw('\intbl', tail) = 0);
+        AssertTrue(Format('%s: stretch %d: no row definition put back there: %s',
+          [msg, i, Shown(tail)]), PosRaw('\trowd', tail) = 0);
+      end;
     w := LoadDoc(o, True);
     shift := 0;
-    if AKind = ekDelete then shift := -1;
+    case AKind of
+      ekDelete, ekJoin: shift := -1;
+      ekSplit: shift := 1;
+    end;
     AssertEquals(msg + ': paragraphs', n + shift, w.Text.ParaCount);
     for i := 0 to n - 1 do
     begin
-      if i = APara then Continue;
+      if (i = APara) or ((AKind = ekJoin) and (i = APara + 1)) then Continue;
       if i < APara then diff := ParaDiff(AFull, i, w, i) else diff := ParaDiff(AFull, i, w, i + shift);
       AssertEquals(Format('%s: paragraph %d is what it was', [msg, i]), '', diff);
     end;
-    if AKind <> ekDelete then
+    if AKind = ekSplit then
+    begin
+      // two paragraphs with the one's format and cell; every character keeps its format
+      // and its object (a part with no character has none to say it)
+      expected := ParaText(AFull, APara);
+      i := CharOffset(expected, mid);
+      AssertRaw(msg + ': the first part', Copy(expected, 1, i), ParaText(w, APara));
+      AssertRaw(msg + ': the second part', Copy(expected, i + 1, Length(expected) - i), ParaText(w, APara + 1));
+      pe := AFull.Formats.ParaFormat(AFull.ParaFormatOf(APara));
+      so := SpotsOf(AFull, APara);
+      for part := 0 to 1 do
+      begin
+        AssertTrue(Format('%s: part %d: its paragraph format %s / %s', [msg, part, DescribePara(pe),
+          DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara + part)))]),
+          pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara + part))));
+        AssertEquals(Format('%s: part %d: its cell', [msg, part]), DescribeCell(AFull, APara),
+          DescribeCell(w, APara + part));
+        if part = 0 then len2 := mid else len2 := len - mid;
+        if len2 = 0 then Continue;
+        sw := SpotsOf(w, APara + part);
+        AssertEquals(Format('%s: part %d: its characters', [msg, part]), len2, Length(sw));
+        for c := 0 to len2 - 1 do
+        begin
+          e := so[part * mid + c].Format;
+          AssertTrue(Format('%s: part %d: character %d: %s / %s', [msg, part, c, DescribeChar(e),
+            DescribeChar(sw[c].Format)]), e.Equals(sw[c].Format));
+          AssertTrue(Format('%s: part %d: character %d: object', [msg, part, c]),
+            SameObject(so[part * mid + c].Obj, sw[c].Obj));
+        end;
+      end;
+    end
+    else if AKind = ekJoin then
+    begin
+      // one paragraph: the first one's format, the characters of both as they were
+      len2 := AFull.Text.ParaLength(APara + 1);
+      expected := ParaText(AFull, APara);
+      Cat(expected, ParaText(AFull, APara + 1));
+      AssertRaw(msg + ': the joined text', expected, ParaText(w, APara));
+      pe := AFull.Formats.ParaFormat(AFull.ParaFormatOf(APara));
+      AssertTrue(Format('%s: the first paragraph''s format %s / %s', [msg, DescribePara(pe),
+        DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara)))]),
+        pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara))));
+      sw := SpotsOf(w, APara);
+      AssertEquals(msg + ': its characters', len + len2, Length(sw));
+      for part := 0 to 1 do
+      begin
+        if part = 1 then
+          if len2 = 0 then Break else so := SpotsOf(AFull, APara + 1)
+        else
+          so := SpotsOf(AFull, APara);
+        for c := 0 to High(so) do
+        begin
+          e := so[c].Format;
+          AssertTrue(Format('%s: paragraph %d''s character %d: %s / %s', [msg, APara + part, c,
+            DescribeChar(e), DescribeChar(sw[part * len + c].Format)]), e.Equals(sw[part * len + c].Format));
+          AssertTrue(Format('%s: paragraph %d''s character %d: object', [msg, APara + part, c]),
+            SameObject(so[c].Obj, sw[part * len + c].Obj));
+        end;
+      end;
+    end
+    else if AKind <> ekDelete then
     begin
       // the changed paragraph: the change, and the rest as it was
       expected := ParaText(AFull, APara);
@@ -1735,6 +1835,12 @@ begin
             // a whole paragraph is deleted where that leaves the others as they are: not
             // the last one (the one before it would take its format), not one in a table
             if (kind = ekDelete) and ((k = n - 1) or (full.CellAt(k) <> nil)) then Continue;
+            // two paragraphs are joined where neither is in a table and the first has
+            // text (the separator of an empty paragraph takes that paragraph away, which
+            // is the delete above)
+            if (kind = ekJoin) and ((k = n - 1) or (full.CellAt(k) <> nil) or
+               (full.CellAt(k + 1) <> nil) or (full.Text.ParaLength(k) = 0)) then
+              Continue;
             CheckEdit(msg, b, full, k, kind);
           end;
           Inc(k, step);
