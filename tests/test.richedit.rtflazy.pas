@@ -55,6 +55,9 @@ type
     procedure TestDeletedUnparsedParagraphsComeBackOnUndo;
     // the review of batch A
     procedure TestWordPadsOwnWritingStaysBounded;
+    procedure TestTablesOneAfterAnotherDoNotChain;
+    procedure TestReadingInsideATableWhileItLoads;
+    procedure TestAGroupParsedWhileLoadingAnswersForItsIntervalOnly;
   end;
 
 implementation
@@ -239,6 +242,42 @@ begin
       '\pard\intbl r' + IntToStr(i) + ' a\cell r' + IntToStr(i) + ' \b b\b0\cell r' +
       IntToStr(i) + ' \''d6\''d0\cell\row' + #13#10);
   bb.Add('\pard after the table\par' + #13#10 + '}' + #13#10);
+  Result := bb.Done;
+end;
+
+const
+  // a header for generated documents: one Chinese font
+  PlainHead = '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}' + #13#10 +
+    '\pard\f0\fs24 ';
+
+{ ARows rows of three cells, as RichEdit writes them. }
+procedure AddRows(var ABuilder: TByteBuilder; ARows: Integer);
+var
+  i: Integer;
+begin
+  for i := 0 to ARows - 1 do
+    ABuilder.Add('\trowd\trgaph108\cellx2400\cellx4800\cellx7200' + #13#10 +
+      '\pard\intbl r' + IntToStr(i) + ' a\cell r' + IntToStr(i) + ' b\cell r' +
+      IntToStr(i) + ' c\cell\row' + #13#10);
+end;
+
+{ One paragraph and a table of ARows rows, again and again up to ATarget bytes: almost every
+  snapshot lies inside a table. }
+function TablesDocument(ARows: Integer; ATarget: Int64): TBytes;
+var
+  bb: TByteBuilder;
+  k: Integer;
+begin
+  bb := Default(TByteBuilder);
+  bb.Add(PlainHead);
+  k := 0;
+  while bb.Len < ATarget do
+  begin
+    bb.Add('\pard between tables ' + IntToStr(k) + '\par' + #13#10);
+    AddRows(bb, ARows);
+    Inc(k);
+  end;
+  bb.Add('\pard the end\par' + #13#10 + '}');
   Result := bb.Done;
 end;
 
@@ -1149,6 +1188,242 @@ procedure TTyRtfLazyTest.TestWordPadsOwnWritingStaysBounded;
 begin
   Check('wp-zh-table.rtf', 3 * MB);
   Check('wp-zh-mixed.rtf', 3 * MB);
+end;
+
+{ A document that is mostly tables has a table across almost every snapshot. Tables that
+  lie in the same intervals are parsed together, so that each is one table - but only up to
+  CRtfGroupIntervals intervals: past that the tables are a chain (each links two intervals,
+  the next links on), and a read parses its block of CRtfGroupIntervals intervals, the
+  tables cut at the block's ends being parts that cannot grow. }
+procedure TTyRtfLazyTest.TestTablesOneAfterAnotherDoNotChain;
+
+  procedure Check(ARows: Integer; AChain: Boolean);
+  var
+    b: TBytes;
+    d, full: TTyRichDocument;
+    load: TTyRtfLoad;
+    i, k, lo, hi, mid, locked, rows, fullRows: Integer;
+    before, limit: Int64;
+    tables: TFPList;
+    t: TTyRichTable;
+    msg: string;
+  begin
+    msg := Format('tables of %d rows', [ARows]);
+    b := TablesDocument(ARows, 4 * MB);
+    full := LoadWith(b, True);
+    d := LoadWith(b, False);
+    tables := TFPList.Create;
+    try
+      load := TyRichRtfLoadOf(d);
+      AssertTrue(msg + ': intervals', load.IntervalCount >= 40);
+      // a block, and the row or the paragraph that ends it
+      limit := Int64(CRtfGroupIntervals + 1) * CRtfSnapshotBytes;
+      // (a paragraph inside a block, not at its start)
+      mid := d.Text.ParaCount * 5 div 8;
+      d.EnsureParsed(mid);
+      AssertEquals(msg + ': one parse', 1, load.ParseCount);
+      AssertTrue(Format('%s: reading one paragraph parsed %d bytes', [msg, load.ParsedBytes]),
+        load.ParsedBytes <= limit);
+      AssertTrue(Format('%s: %d intervals parsed for it', [msg, load.ResidentIntervals]),
+        load.ResidentIntervals <= CRtfGroupIntervals);
+      if AChain then
+      begin
+        // the block is the same whichever of its paragraphs is asked for: its first and
+        // its last are there
+        k := 0;
+        while (k + 1 < load.IntervalCount) and (load.IntervalFirstPara(k + 1) <= mid) do Inc(k);
+        lo := k - k mod CRtfGroupIntervals;
+        hi := lo + CRtfGroupIntervals;
+        AssertTrue(Format('%s: interval %d is inside its block', [msg, k]), (k > lo) and (k < hi - 1));
+        d.EnsureParsed(load.IntervalFirstPara(lo));
+        if hi < load.IntervalCount then d.EnsureParsed(load.IntervalFirstPara(hi) - 1)
+        else d.EnsureParsed(d.Text.ParaCount - 1);
+        AssertEquals(msg + ': the block''s first and last paragraph were parsed with it', 1,
+          load.ParseCount);
+        AssertTrue(msg + ': the block''s first paragraph is set',
+          TBuilderAccess.Value(d, load.IntervalFirstPara(lo)) <> nil);
+      end;
+      // its neighbours in the block are there; the next block is one more parse of a block
+      before := load.ParsedBytes;
+      d.EnsureParsed(mid + 1);
+      d.EnsureParsed(mid - 1);
+      AssertTrue(msg + ': the paragraphs beside it', load.ParseCount <= 2);
+      d.EnsureParsed(d.Text.ParaCount - 1);
+      d.EnsureParsed(0);
+      AssertTrue(Format('%s: two more reads parsed %d bytes', [msg, load.ParsedBytes - before]),
+        load.ParsedBytes - before <= 2 * limit);
+      // everything read: the text and the cells of the full parse, every row in one table
+      // or one part, and what is cut is locked
+      load.MaxResidentIntervals := MaxInt;
+      locked := 0;
+      rows := 0;
+      fullRows := 0;
+      for i := 0 to full.Text.ParaCount - 1 do
+      begin
+        AssertText(Format('%s paragraph %d', [msg, i]), ParaText(full, i), ParaText(d, i));
+        AssertEquals(Format('%s paragraph %d in a table', [msg, i]), full.CellAt(i) <> nil,
+          d.CellAt(i) <> nil);
+        if full.CellAt(i) = nil then Continue;
+        AssertEquals(Format('%s paragraph %d cell', [msg, i]), full.CellAt(i).Index, d.CellAt(i).Index);
+        if (full.CellAt(i).Index = 0) then Inc(fullRows);
+        t := d.CellAt(i).Table;
+        if tables.IndexOf(t) >= 0 then Continue;
+        tables.Add(t);
+        Inc(rows, t.RowCount);
+        if t.RowCount <> ARows then
+        begin
+          AssertTrue(Format('%s paragraph %d: a part of a table cannot grow', [msg, i]),
+            t.StructureLocked);
+          Inc(locked);
+        end
+        else
+          AssertFalse(Format('%s paragraph %d: a whole table is not locked', [msg, i]),
+            t.StructureLocked);
+      end;
+      AssertEquals(msg + ': every row in one table or part', fullRows, rows);
+      if AChain then AssertTrue(Format('%s: %d parts', [msg, locked]), locked >= 2);
+      // at most the one table at each block's end is cut, in two
+      AssertTrue(Format('%s: %d parts for %d intervals', [msg, locked, load.IntervalCount]),
+        locked <= 2 * (load.IntervalCount div CRtfGroupIntervals + 1));
+      AssertEquals(msg + ': integrity', '', d.Text.CheckIntegrity);
+    finally
+      tables.Free;
+      d.Free;
+      full.Free;
+    end;
+  end;
+
+begin
+  // 2 KB tables (now and then a snapshot falls between two of them), and tables longer
+  // than an interval (one chain from the first to the last)
+  Check(20, False);
+  Check(1000, True);
+end;
+
+{ A table still open where the scan stands is as long as the scan has come: once that is
+  more than a big table, reading one of its paragraphs parses that paragraph's interval,
+  not the table from its start. }
+procedure TTyRtfLazyTest.TestReadingInsideATableWhileItLoads;
+var
+  bb: TByteBuilder;
+  b: TBytes;
+  s: TBytesStream;
+  d, full: TTyRichDocument;
+  load: TTyRtfLoad;
+  before: Int64;
+  i, n: Integer;
+begin
+  bb := Default(TByteBuilder);
+  bb.Add(PlainHead);
+  bb.Add('first\par' + #13#10);
+  AddRows(bb, 30000);
+  bb.Add('\pard the end\par' + #13#10 + '}');
+  b := bb.Done;
+  AssertTrue('a table of 3 MB', Length(b) > 3 * MB);
+  full := LoadWith(b, True);
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create(b);
+  try
+    load := TyRichBeginLoadRtf(d, s, 3 * MB div 2);
+    AssertTrue('still loading', d.Loading);
+    // near the start, and near the end of what is indexed
+    d.EnsureParsed(5);
+    AssertTrue(Format('reading paragraph 5 parsed %d bytes', [load.ParsedBytes]),
+      load.ParsedBytes <= 2 * CRtfSnapshotBytes);
+    before := load.ParsedBytes;
+    n := d.Text.ParaCount;
+    d.EnsureParsed(n - 5);
+    AssertTrue(Format('reading near the indexed end parsed %d bytes', [load.ParsedBytes - before]),
+      load.ParsedBytes - before <= 2 * CRtfSnapshotBytes);
+    AssertTrue('a part of the table', d.CellAt(n - 5).Table.StructureLocked);
+    AssertTrue(Format('%d intervals parsed', [load.ResidentIntervals]), load.ResidentIntervals <= 2);
+    load.Step(MB);
+    before := load.ParsedBytes;
+    n := d.Text.ParaCount;
+    d.EnsureParsed(n - 5);
+    AssertTrue(Format('after a slice: reading near the indexed end parsed %d bytes',
+      [load.ParsedBytes - before]), load.ParsedBytes - before <= 2 * CRtfSnapshotBytes);
+    while not load.Step(64 * MB) do ;
+    before := load.ParsedBytes;
+    d.EnsureParsed(d.Text.ParaCount div 2);
+    AssertTrue(Format('after the load: reading a middle paragraph parsed %d bytes',
+      [load.ParsedBytes - before]), load.ParsedBytes - before <= 2 * CRtfSnapshotBytes);
+    AssertTrue(Format('%d intervals stay parsed', [load.ResidentIntervals]),
+      load.ResidentIntervals <= 5);
+    // and what was read while it loaded is what the whole file says
+    load.MaxResidentIntervals := MaxInt;
+    AssertEquals('paragraphs', full.Text.ParaCount, d.Text.ParaCount);
+    for i := 0 to full.Text.ParaCount - 1 do
+    begin
+      if (i mod 97 <> 0) and (i > 20) and (i < full.Text.ParaCount - 20) then Continue;
+      AssertText(Format('paragraph %d', [i]), ParaText(full, i), ParaText(d, i));
+      AssertEquals(Format('paragraph %d in a table', [i]), full.CellAt(i) <> nil, d.CellAt(i) <> nil);
+      if full.CellAt(i) <> nil then
+        AssertEquals(Format('paragraph %d cell', [i]), full.CellAt(i).Index, d.CellAt(i).Index);
+    end;
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    d.Free;
+    s.Free;
+    full.Free;
+  end;
+end;
+
+{ An interval parsed while it was the last one indexed answers for its own paragraphs, not
+  for everything after it: a paragraph of a later interval that is parsed is found there. }
+procedure TTyRtfLazyTest.TestAGroupParsedWhileLoadingAnswersForItsIntervalOnly;
+var
+  bb: TByteBuilder;
+  b: TBytes;
+  s: TBytesStream;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  i, p0, k0, last, parses: Integer;
+  v: Pointer;
+  r: TTyRtfRange;
+begin
+  bb := Default(TByteBuilder);
+  bb.Add(PlainHead);
+  i := 0;
+  while bb.Len < 2 * MB do
+  begin
+    bb.Add('Paragraph ' + IntToStr(i) + ' with some text \''d6\''d0 in it.\par' + #13#10);
+    Inc(i);
+  end;
+  bb.Add('}');
+  b := bb.Done;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create(b);
+  try
+    load := TyRichBeginLoadRtf(d, s, 300 * 1024);
+    // the last paragraph there is, read while the file loads
+    p0 := d.Text.ParaCount - 1;
+    d.EnsureParsed(p0);
+    ParaText(d, p0);
+    while not load.Step(64 * MB) do ;
+    k0 := 0;
+    while (k0 + 1 < load.IntervalCount) and (load.IntervalFirstPara(k0 + 1) <= p0) do Inc(k0);
+    AssertTrue('p0 is not in the last interval', k0 < load.IntervalCount - 2);
+    // the document's last paragraph: its interval is parsed
+    last := d.Text.ParaCount - 1;
+    d.EnsureParsed(last);
+    ParaText(d, last);
+    v := TBuilderAccess.Value(d, last);
+    AssertTrue('the last paragraph is parsed', v <> nil);
+    // a paragraph of the interval parsed while loading (its group is the latest used now)
+    ParaText(d, load.IntervalFirstPara(k0));
+    parses := load.ParseCount;
+    // another paragraph of the last interval: parsed already
+    ParaText(d, last - 1);
+    d.EnsureParsed(last - 1);
+    AssertEquals('no parse for a paragraph of a parsed interval', parses, load.ParseCount);
+    AssertTrue('the last paragraph kept its value', TBuilderAccess.Value(d, last) = v);
+    AssertTrue('and is the file''s own', load.ParaSource(last, r));
+    AssertTrue(Format('%d intervals parsed', [load.ResidentIntervals]), load.ResidentIntervals <= 3);
+  finally
+    d.Free;
+    s.Free;
+  end;
 end;
 
 initialization

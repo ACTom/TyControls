@@ -518,6 +518,11 @@ const
   // paragraphs is needed: each stretch between snapshots becomes a table of its own
   // (StructureLocked), so that a giant table cannot make one paragraph slow to show.
   CRtfBigTableBytes = 1 shl 20;
+  // Intervals that share a table are parsed together, so that the table is one table - up to
+  // this many. Tables that follow each other closely can link interval to interval through
+  // the whole file; such a chain is parsed in blocks of this many intervals, and a table cut
+  // where a block ends is two parts (StructureLocked), as a big table's are.
+  CRtfGroupIntervals = CRtfBigTableBytes div CRtfSnapshotBytes;
   // How many snapshot intervals stay parsed (their formats set, their text decoded) before
   // the least recently used ones go back to unparsed.
   CRtfResidentIntervals = 16;
@@ -569,8 +574,8 @@ type
     function IntervalOf(ASrc: Int64): Integer;
     function IntervalOfPara(APara: Integer): Integer;
     function IntervalParaStop(AIndex: Integer): Integer;
-    function IntervalStop(AIndex: Integer): Int64;
     function IsBig(const X: TTyRtfTableExtent): Boolean;
+    function Linked(AInterval, ALo, AHi, AMax: Integer; out AFirst, ALast: Integer): Boolean;
     function ExtentAt(APara: Integer): Integer;
     function GroupOf(ASrc: Int64): TTyRtfGroup;
     function GroupFor(ASrc: Int64; out AIndex: Integer): TTyRtfGroup;
@@ -639,8 +644,7 @@ type
   // Intervals parsed together: one, or more when a table crosses their boundaries (internal).
   TTyRtfGroup = class
   public
-    FirstSnap, LastSnap: Integer;
-    FirstSrc, StopSrc: Int64;        // its paragraphs start in [FirstSrc, StopSrc)
+    FirstSnap, LastSnap: Integer;    // its intervals
     Recs: array of TTyRtfParaRec;    // as parsed (Table is an index into Tables)
     Texts: array of RawByteString;   // each paragraph's text, without its separator
     States: array of Byte;           // set by us (Values holds the value, held), or not
@@ -4609,12 +4613,6 @@ begin
   else Result := FScan.ParaCount;
 end;
 
-function TTyRtfLoad.IntervalStop(AIndex: Integer): Int64;
-begin
-  if AIndex + 1 < FIntervalN then Result := FIntervalPos[AIndex + 1]
-  else Result := High(Int64);
-end;
-
 function TTyRtfLoad.IsBig(const X: TTyRtfTableExtent): Boolean;
 var
   stop: Int64;
@@ -4645,61 +4643,101 @@ begin
   end;
 end;
 
+// The parsed group that has the interval ASrc lies in. By interval, not by bytes: a group
+// parsed while its interval was the last one indexed would answer for every byte after it.
 function TTyRtfLoad.GroupOf(ASrc: Int64): TTyRtfGroup;
 var
-  i: Integer;
+  i, k: Integer;
 begin
+  k := IntervalOf(ASrc);
   for i := FGroups.Count - 1 downto 0 do
   begin
     Result := TTyRtfGroup(FGroups[i]);
-    if (ASrc >= Result.FirstSrc) and (ASrc < Result.StopSrc) then Exit;
+    if (k >= Result.FirstSnap) and (k <= Result.LastSnap) then Exit;
   end;
   Result := nil;
 end;
 
-// Parses the intervals around AInterval that must be parsed together: a table is parsed
-// from its first paragraph to its last, so that it is one table (unless it is big).
-function TTyRtfLoad.ParseGroup(AInterval: Integer): TTyRtfGroup;
+// The intervals around AInterval that share a table with it, directly or through the
+// tables between: AFirst .. ALast, never outside ALo .. AHi (a table that reaches further is
+// cut there). False as soon as they number more than AMax. A big table links nothing.
+function TTyRtfLoad.Linked(AInterval, ALo, AHi, AMax: Integer; out AFirst, ALast: Integer): Boolean;
 var
-  s, e, i, j, k, firstPara, lastPara, n: Integer;
+  i, k, firstPara, lastPara: Integer;
   x: TTyRtfTableExtent;
-  changed: Boolean;
-  p: TTyRtfParser;
-  start: PtrInt;
-  tr: TTyRtfTableRec;
-  t: TTyRichTable;
-  global: Int64;
+  changed, big: Boolean;
 begin
-  s := AInterval;
-  e := AInterval;
+  AFirst := AInterval;
+  ALast := AInterval;
   repeat
     changed := False;
-    firstPara := FIntervalPara[s];
-    lastPara := IntervalParaStop(e) - 1;
+    firstPara := FIntervalPara[AFirst];
+    lastPara := IntervalParaStop(ALast) - 1;
     // tables follow each other: the ones in these paragraphs are the last one starting in
     // them and those before it, back to the first that ends before them
     i := ExtentAt(lastPara);
     while (i >= 0) and not changed do
     begin
       x := FScan.TableExtent(i);
+      // (as the scan gave it: a table still open is as long as the scan has come)
+      big := IsBig(x);
       if x.LastPara < 0 then x.LastPara := FScan.ParaCount - 1;
       if x.LastPara < firstPara then Break;
-      if not IsBig(x) then
+      if not big then
       begin
         if x.FirstPara < firstPara then
         begin
-          s := IntervalOfPara(x.FirstPara);
-          changed := True;
+          k := IntervalOfPara(x.FirstPara);
+          if k < ALo then k := ALo;
+          if k < AFirst then
+          begin
+            AFirst := k;
+            changed := True;
+          end;
         end;
         if x.LastPara > lastPara then
         begin
-          e := IntervalOfPara(x.LastPara);
-          changed := True;
+          k := IntervalOfPara(x.LastPara);
+          if k > AHi then k := AHi;
+          if k > ALast then
+          begin
+            ALast := k;
+            changed := True;
+          end;
         end;
       end;
       Dec(i);
     end;
+    if ALast - AFirst + 1 > AMax then Exit(False);
   until not changed;
+  Result := True;
+end;
+
+// Parses the intervals around AInterval that must be parsed together: a table is parsed
+// from its first paragraph to its last, so that it is one table - unless it is big, or its
+// intervals and the ones linked to them through other tables are more than
+// CRtfGroupIntervals. Then the block of CRtfGroupIntervals intervals AInterval lies in is
+// the limit (blocks are counted from the first interval, so the same intervals are parsed
+// together whichever of them is asked for), and a table that crosses a block's end is cut
+// there.
+function TTyRtfLoad.ParseGroup(AInterval: Integer): TTyRtfGroup;
+var
+  s, e, lo, hi, i, j, k, n, lastPara: Integer;
+  x: TTyRtfTableExtent;
+  p: TTyRtfParser;
+  start: PtrInt;
+  tr: TTyRtfTableRec;
+  t: TTyRichTable;
+  global: Int64;
+begin
+  if not Linked(AInterval, 0, FIntervalN - 1, CRtfGroupIntervals, s, e) then
+  begin
+    lo := AInterval - AInterval mod CRtfGroupIntervals;
+    hi := lo + CRtfGroupIntervals - 1;
+    if hi > FIntervalN - 1 then hi := FIntervalN - 1;
+    Linked(AInterval, lo, hi, MaxInt, s, e);
+  end;
+  lastPara := IntervalParaStop(e) - 1;
   // one group per interval: what overlaps this one goes (it was parsed while the file was
   // still being indexed, or before a table it shares was known in full)
   for i := FGroups.Count - 1 downto 0 do
@@ -4719,8 +4757,6 @@ begin
     Result := TTyRtfGroup.Create;
     Result.FirstSnap := s;
     Result.LastSnap := e;
-    Result.FirstSrc := FIntervalPos[s];
-    Result.StopSrc := IntervalStop(e);
     // from the first paragraph after snapshot s to the last before snapshot e + 1 (the last
     // interval: to the last paragraph the scan has ended)
     n := p.ParaCount;
@@ -4734,8 +4770,9 @@ begin
       Result.Texts[i] := p.ParaText(i);
     end;
     Result.Objects := p.TakeObjects;
-    // the tables, as Fill makes them; one that is big, or still open at the end of what is
-    // indexed, is only a part of its table: it cannot grow
+    // the tables, as Fill makes them; one that reaches outside these intervals (a big one,
+    // one cut at a block's end), or is still open at the end of what is indexed, is only a
+    // part of its table: it cannot grow
     SetLength(Result.Tables, p.TableCount);
     for i := 0 to p.TableCount - 1 do
     begin
@@ -4754,7 +4791,9 @@ begin
         if k >= 0 then
         begin
           x := FScan.TableExtent(k);
-          if (x.LastPara < 0) or ((x.LastPara >= global) and IsBig(x)) then tr.Locked := True;
+          if (x.LastPara < 0) or ((x.LastPara >= global) and
+             ((x.FirstPara < FIntervalPara[s]) or (x.LastPara > lastPara))) then
+            tr.Locked := True;
         end;
       end;
       if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
