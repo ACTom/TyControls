@@ -18,7 +18,9 @@ interface
 
 uses
   Classes, SysUtils, LCLType, Controls, Graphics, Forms, fpcunit, testregistry, TypInfo,
-  tyControls.ListBox, tyControls.ValueListEditor, tyControls.ColorBox;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.ListBox, tyControls.ValueListEditor, tyControls.ColorBox,
+  test.devicescale.support;
 
 type
   TFarKind = (fkText, fkInteger, fkFloat, fkEnum, fkColor, fkSet, fkObject);
@@ -158,6 +160,7 @@ type
     procedure TestOnValueChangingSeesTheFontTheDialogPicked;
     procedure TestOnGetRowColorsReplacesTheListAColourRowOffers;
     procedure TestTheEventsArePublishedAndFilterTextIsNot;
+    procedure TestAColourRowWithNoValueDrawsNoSwatch;
   end;
 
 implementation
@@ -1293,6 +1296,42 @@ begin
   AssertTrue('OnGetRowColors', IsPublishedProp(TTyValueListEditor, 'OnGetRowColors'));
   AssertFalse('FilterText is a search box''s text, not a setting',
     IsPublishedProp(TTyValueListEditor, 'FilterText'));
+end;
+
+{ A colour row with no value is what a host shows when the selected objects disagree. It used to
+  paint a black swatch -- StringToColorDef's fallback -- which reads as "the colour is black". }
+procedure TValueListRowsTest.TestAColourRowWithNoValueDrawsNoSwatch;
+var
+  r: TTyValueRow;
+  asText, asEmpty, asRed: TBGRABitmap;
+  x, y, differ, red: Integer;
+  a, b: TBGRAPixel;
+begin
+  r := FView.AddRow('Color', '');
+  asText := TyPaintOwnSurface(FView, 1);
+  r.EditorKind := vekColor;
+  asEmpty := TyPaintOwnSurface(FView, 1);
+  r.Value := 'clRed';
+  asRed := TyPaintOwnSurface(FView, 1);
+  try
+    differ := 0;
+    red := 0;
+    for y := 0 to asText.Height - 1 do
+      for x := 0 to asText.Width - 1 do
+      begin
+        a := asText.GetPixel(x, y);
+        b := asEmpty.GetPixel(x, y);
+        if (a.red <> b.red) or (a.green <> b.green) or (a.blue <> b.blue) then Inc(differ);
+        b := asRed.GetPixel(x, y);
+        if (b.red = 255) and (b.green = 0) and (b.blue = 0) then Inc(red);
+      end;
+    AssertEquals('no value: the row is drawn as a text row with no value is', 0, differ);
+    AssertTrue('a value: its swatch is drawn (' + IntToStr(red) + ' red px)', red >= 16);
+  finally
+    asText.Free;
+    asEmpty.Free;
+    asRed.Free;
+  end;
 end;
 
 initialization
