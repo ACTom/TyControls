@@ -23,6 +23,8 @@ type
     procedure SetStyle(AValue: TTyStatusPanelStyle);
   public
     constructor Create(ACollection: TCollection); override;
+    { Copies what a panel says and how it is drawn. }
+    procedure Assign(Source: TPersistent); override;
   published
     property Text: TCaption read FText write SetText;
     { LOGICAL px, like every other size a designer types into this library: the bar scales
@@ -249,6 +251,21 @@ begin
   inherited Create(ACollection);
   FWidth := 50;
   FAlignment := taLeftJustify;
+end;
+procedure TTyStatusPanel.Assign(Source: TPersistent);
+var
+  src: TTyStatusPanel;
+begin
+  if not (Source is TTyStatusPanel) then
+  begin
+    inherited Assign(Source);
+    Exit;
+  end;
+  src := TTyStatusPanel(Source);
+  Text := src.Text;
+  Width := src.Width;
+  Alignment := src.Alignment;
+  Style := src.Style;
 end;
 procedure TTyStatusPanel.SetText(const AValue: TCaption);
 begin if FText = AValue then Exit; FText := AValue; Changed(False); end;

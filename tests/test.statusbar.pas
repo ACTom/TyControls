@@ -26,6 +26,12 @@ type
   published
     procedure TestBodyPixelIsDark;
   end;
+
+  { #221: Panels as a property that can be assigned. }
+  TStatusBarPanelsTest = class(TTestCase)
+  published
+    procedure TestPanelsCanBeAssignedFromAnotherBar;
+  end;
 implementation
 procedure TStatusBarGeomTest.TestPanelRectsFixed;
 var r: TTyRectArray;
@@ -151,7 +157,49 @@ begin
   end;
 end;
 
+{ #221. Bar.Panels := Other.Panels raised 'Cannot assign a TTyStatusPanel to a TTyStatusPanel':
+  the property's setter assigns the collection, and a panel had no Assign. }
+procedure TStatusBarPanelsTest.TestPanelsCanBeAssignedFromAnotherBar;
+var
+  bar, other: TTyStatusBar;
+  p: TTyStatusPanel;
+begin
+  bar := TTyStatusBar.Create(nil);
+  other := TTyStatusBar.Create(nil);
+  try
+    p := bar.Panels.Add;
+    p.Text := 'Ready';
+    p.Width := 120;
+    p.Alignment := taRightJustify;
+    p.Style := psOwnerDraw;
+    p := bar.Panels.Add;
+    p.Text := 'Ln 1';
+    p.Width := 0;
+    p.Alignment := taCenter;
+    other.Panels.Add.Text := 'what the other bar had';
+
+    other.Panels := bar.Panels;
+
+    AssertEquals('the panels of the first bar, not its own', 2, other.Panels.Count);
+    AssertEquals('text', 'Ready', other.Panels[0].Text);
+    AssertEquals('width', 120, other.Panels[0].Width);
+    AssertTrue('alignment', other.Panels[0].Alignment = taRightJustify);
+    AssertTrue('style', other.Panels[0].Style = psOwnerDraw);
+    AssertEquals('the second panel''s text', 'Ln 1', other.Panels[1].Text);
+    AssertEquals('its width', 0, other.Panels[1].Width);
+    AssertTrue('its alignment', other.Panels[1].Alignment = taCenter);
+    AssertTrue('its style', other.Panels[1].Style = psText);
+
+    other.Panels[0].Text := 'changed';
+    AssertEquals('a copy: the first bar keeps its own panel', 'Ready', bar.Panels[0].Text);
+  finally
+    other.Free;
+    bar.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TStatusBarPanelsTest);
   RegisterTest(TStatusBarGeomTest);
   RegisterTest(TStatusBarPixelTest);
 end.
