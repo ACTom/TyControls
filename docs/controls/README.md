@@ -130,7 +130,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyToolGroupPanel](toolgrouppanel.md) | 带标题的工具按钮组（Ribbon 组风格,流式换行 + `AddButton`） |
 | [TTyScrollBox](scrollbox.md) | 滚动视口容器（内容溢出自动显示内嵌滚动条） |
 | [TTyScrollPanel](scrollpanel.md) | 自动平移滚动容器（拖到视口边缘朝该边自动滚） |
-| [TTyExPanel](expanel.md) | 可折叠/展开面板（点标题栏折叠,高度缓动动画） |
+| [TTyExPanel](expanel.md) | 可折叠/展开面板（点标题栏折叠,高度缓动动画；标题栏可带操作区、可用键盘操作） |
+| [TTyAccordion](accordion.md) | 堆叠容器（把 `TTyExPanel` 当作一节节上下堆叠,按权重分高度,拖动边界,保存 / 恢复布局） |
 | [TTyGridPanel](gridpanel.md) | 固定网格布局（列×行轨道:绝对/百分比/star,`SetCell` 跨格摆放） |
 | [TTyRelativePanel](relativepanel.md) | 相对布局（子控件按规则相对兄弟/父容器摆放,拓扑求解,环安全） |
 | [TTyToolBarEx](toolbarex.md) | 带溢出 `»` 折叠的工具条（非换行时尾部按钮收进弹出浮层） |

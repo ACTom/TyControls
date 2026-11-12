@@ -1220,7 +1220,10 @@ This block has **no state rules**. To fade a disabled image you must write
 
 | typeKey | What it paints | Resolved by | States |
 |---|---|---|---|
-| `TyExPanelHeader` | The collapsible panel's header band: arrow + caption ink and font; `background` **is optional** (declared: fills the band; undeclared: the panel surface shows through) | `TTyExPanel` | `:hover` (hover within the band; not in the built-in theme, works as soon as you write it) |
+| `TyExPanelHeader` | The collapsible panel's header band: arrow + caption ink and font; `background` **is optional** (declared: fills the band; undeclared: the panel surface shows through); `border-color` + `border-width` are **a line along the band's top edge**; the `outline` of `:focus` is the band's focus ring. Variant `.embedded` (built in): a tinted band with the top line, which with `TyExPanel.embedded` (no border, no radius) makes stacked sections one surface | `TTyExPanel` | `:hover` (hover within the band; built in only for `.embedded`), `:focus` (the panel itself focused; built in: a 2px focus ring) |
+| `TyExPanelActions` | The action area at the trailing end of a collapsible panel's header. No built-in `background`: it then carries on the band's fill, top line and focus ring; with one it paints its own. Its row of children reads `--expander-actions-pad` / `--expander-actions-gap` | `TTyExPanelActions` | — |
+| `TyAccordion` | The stacking container's frame (built in: the surface colour, no border) | `TTyAccordion` | — |
+| `TyAccordionSplitter` | The drag strip between two neighbouring expanded sections of a stack (built in at rest: `background: none`); its thickness is `--accordion-splitter-size` | `TTyAccordion` | `:hover` (pointer on the strip), `:active` (while dragged) |
 | `TyGroupBox` | Group box (**must declare `background`**, used to mask the border line behind the caption) | `TTyGroupBox`, `TTyRadioGroup`, `TTyCheckGroup`; the group caption bands of `TTyOfficeListBox`/`TTyOfficeComboBox` also resolve it | — |
 | `TyToolGroupPanel` | Ribbon-style command cluster (shares a block with `TyGroupBox`) | `TTyToolGroupPanel` | — |
 | `TyGridPanel` | **Deliberately undefined** (§8.4) | `TTyGridPanel` | — |

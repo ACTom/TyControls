@@ -1191,7 +1191,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 |
 |---|---|---|---|
-| `TyExPanelHeader` | 折叠面板的标题带:箭头 + 标题墨色与字体;`background` **是选择性的**(写了才填带底,不写则透出面板表面) | `TTyExPanel` | `:hover`(带内悬停,内置未写,写了即生效) |
+| `TyExPanelHeader` | 折叠面板的标题带:箭头 + 标题墨色与字体;`background` **是选择性的**(写了才填带底,不写则透出面板表面);`border-color` + `border-width` 是标题带**顶边的一条线**;`:focus` 的 `outline` 是标题带的焦点环。变体 `.embedded`(内置):带底色和顶边线,配合 `TyExPanel.embedded`(无边框、无圆角)把堆叠的各节连成一块表面 | `TTyExPanel` | `:hover`(带内悬停,内置只给了 `.embedded`)、`:focus`(面板自己有焦点时,内置是 2px 焦点环) |
+| `TyExPanelActions` | 折叠面板标题带末端的操作区。内置不给 `background`:这时它接着画标题带的底、顶边线和焦点环;给了就按自己的画。子控件的排布读 `--expander-actions-pad` / `--expander-actions-gap` | `TTyExPanelActions` | — |
+| `TyAccordion` | 堆叠容器的外框(内置:表面色、无边框) | `TTyAccordion` | — |
+| `TyAccordionSplitter` | 堆叠容器里相邻两个展开节之间的拖动条(内置静止时 `background: none`);粗细读 `--accordion-splitter-size` | `TTyAccordion` | `:hover`(鼠标在条上)、`:active`(拖动中) |
 | `TyGroupBox` | 分组框(**必须声明 `background`**,用于遮盖标题处的边框线) | `TTyGroupBox`、`TTyRadioGroup`、`TTyCheckGroup`;`TTyOfficeListBox`/`TTyOfficeComboBox` 的分组标题带也解析它 | — |
 | `TyToolGroupPanel` | Ribbon 风格的命令簇(与 `TyGroupBox` 共块) | `TTyToolGroupPanel` | — |
 | `TyGridPanel` | **刻意不定义**(§8.4) | `TTyGridPanel` | — |
