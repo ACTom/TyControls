@@ -818,6 +818,34 @@ msgstr "全选"
 msgid "Undo"
 msgstr "撤销"
 
+#: tycontrols.strconsts.rsrichundoedit
+msgid "Edit"
+msgstr "编辑"
+
+#: tycontrols.strconsts.rsrichundotyping
+msgid "Typing"
+msgstr "键入"
+
+#: tycontrols.strconsts.rsrichundoinserttext
+msgid "Insert text"
+msgstr "插入文字"
+
+#: tycontrols.strconsts.rsrichundodelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsrichundocharformat
+msgid "Font formatting"
+msgstr "设置字体格式"
+
+#: tycontrols.strconsts.rsrichundoparaformat
+msgid "Paragraph formatting"
+msgstr "设置段落格式"
+
+#: tycontrols.strconsts.rsrichundoinsertobject
+msgid "Insert object"
+msgstr "插入对象"
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"
