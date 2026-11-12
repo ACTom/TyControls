@@ -51,6 +51,7 @@ type
     procedure TestAChangedRowWithANestedTableIsNotWritten;
     procedure TestOnlyTheEditedRowIsRewrittenAfterItsIntervalWent;
     procedure TestTheSaveHoldsWhatItReadsUntilItIsDone;
+    procedure TestNewFontNumbersAreFreeInTheFile;
   end;
 
 implementation
@@ -1392,15 +1393,78 @@ end;
 
 { ---- the rulings ---- }
 
+// The stretches of a save, one after the other.
+function StretchBytes(const AOut: TBytes; const AInfo: TTyRtfWriteInfo): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(AInfo.Stretches) do
+    Cat(Result, StrOf(AOut, AInfo.Stretches[i].OutStart,
+      AInfo.Stretches[i].OutStop - AInfo.Stretches[i].OutStart));
+end;
+
+// ANew is AOld with AAdded put in at one place.
+function HeaderAdded(const AOld, ANew: RawByteString; out AAdded: RawByteString): Boolean;
+var
+  i, tail: Integer;
+begin
+  AAdded := '';
+  if Length(ANew) < Length(AOld) then Exit(False);
+  i := 0;
+  while (i < Length(AOld)) and (AOld[i + 1] = ANew[i + 1]) do Inc(i);
+  tail := Length(AOld) - i;
+  Result := (tail = 0) or CompareMem(@AOld[i + 1], @ANew[Length(ANew) - tail + 1], tail);
+  if Result then AAdded := Copy(ANew, i + 1, Length(ANew) - Length(AOld));
+end;
+
+// {\fN\fnil ;} - alone, or as the one entry of a font table.
+function IsNoFontEntry(const S: RawByteString; out ANum: Integer): Boolean;
+var
+  t: RawByteString;
+  i: Integer;
+begin
+  ANum := -1;
+  t := S;
+  if (Length(t) > 10) and (Copy(t, 1, 9) = '{\fonttbl') and (t[Length(t)] = '}') then
+    t := Copy(t, 10, Length(t) - 10);
+  if Copy(t, 1, 3) <> '{\f' then Exit(False);
+  i := 4;
+  ANum := 0;
+  while (i <= Length(t)) and (t[i] in ['0'..'9']) do
+  begin
+    ANum := ANum * 10 + Ord(t[i]) - Ord('0');
+    Inc(i);
+  end;
+  Result := (i > 4) and (Copy(t, i, MaxInt) = '\fnil ;}');
+end;
+
+// The bytes hold \fN (and not as the start of a longer number).
+function WritesFont(const S: RawByteString; ANum: Integer): Boolean;
+var
+  w: RawByteString;
+  at: Integer;
+begin
+  w := '\f' + IntToStr(ANum);
+  at := PosRaw(w, S);
+  while at > 0 do
+  begin
+    if (at + Length(w) > Length(S)) or not (S[at + Length(w)] in ['0'..'9']) then Exit(True);
+    at := PosRaw(w, S, at + 1);
+  end;
+  Result := False;
+end;
+
 { Where every paragraph that was not rewritten is in the output: the file's own bytes, one
   after the other, with the stretches between them; then the file's trailer. }
 procedure TTyRtfWriteTest.CheckVerbatim(const AMsg: string; ADoc: TTyRichDocument;
   const ABytes, AOut: TBytes; const AInfo: TTyRtfWriteInfo);
 var
   load: TTyRtfLoad;
-  j, s, n: Integer;
+  j, s, n, num: Integer;
   cursor: Int64;
   r: TTyRtfRange;
+  header, got, added: RawByteString;
 begin
   load := TyRichRtfLoadOf(ADoc);
   n := ADoc.Text.ParaCount;
@@ -1431,7 +1495,18 @@ begin
   AssertEquals(AMsg + ': the trailer follows', cursor, AInfo.TrailerStart);
   AssertRaw(AMsg + ': the trailer', StrOf(ABytes, load.Trailer.Start, Length(ABytes) - load.Trailer.Start),
     StrOf(AOut, AInfo.TrailerStart, Length(AOut) - AInfo.TrailerStart));
-  AssertRaw(AMsg + ': the header', StrOf(ABytes, 0, load.Header.Stop), StrOf(AOut, 0, AInfo.HeaderStop));
+  // the header is the file's; what a save may add to it when no font or colour is new is
+  // the entry of the number that text with no font is written in
+  header := StrOf(ABytes, 0, load.Header.Stop);
+  got := StrOf(AOut, 0, AInfo.HeaderStop);
+  if not SameRaw(header, got) then
+  begin
+    AssertTrue(AMsg + ': the header is only added to: ' + Shown(got), HeaderAdded(header, got, added));
+    AssertTrue(AMsg + ': what is added is the entry of text with no font: ' + Shown(added),
+      IsNoFontEntry(added, num));
+    AssertTrue(AMsg + ': and that number is written: ' + Shown(added),
+      WritesFont(StretchBytes(AOut, AInfo), num));
+  end;
 end;
 
 { Changes paragraph APara of the file ABytes (AFull: its full parse), saves, parses the
@@ -2216,15 +2291,9 @@ end;
 
 { ---- the review ---- }
 
-// The stretches of a save, one after the other.
 function StretchText(const AOut: TBytes; const AInfo: TTyRtfWriteInfo): RawByteString;
-var
-  i: Integer;
 begin
-  Result := '';
-  for i := 0 to High(AInfo.Stretches) do
-    Cat(Result, StrOf(AOut, AInfo.Stretches[i].OutStart,
-      AInfo.Stretches[i].OutStop - AInfo.Stretches[i].OutStart));
+  Result := StretchBytes(AOut, AInfo);
 end;
 
 // The one object of paragraph AIndex (nil: none).
@@ -2641,6 +2710,153 @@ begin
     AssertTrue('and the document can be changed', d.Execute(TTyRichInsertText.Create(0, 'Y')));
   finally
     s.Free;
+    d.Free;
+  end;
+end;
+
+// The font of paragraph AIndex's first run.
+function FontOfPara(ADoc: TTyRichDocument; AIndex: Integer): string;
+begin
+  Result := ADoc.Formats.CharFormat(ADoc.RunsOf(AIndex)[0].Format).FontName;
+end;
+
+{ A font the writer adds gets a number no entry of the file's font table has - also not an
+  entry the reader passes over - and the number it writes for text that has no font is
+  defined (an entry with no name), so that the next save counts it and does not give it to
+  a font. }
+procedure TTyRtfWriteTest.TestNewFontNumbersAreFreeInTheFile;
+const
+  Consolas = '{\f2\fnil\fcharset0 Consolas;}';
+var
+  b, o, o2, o3: TBytes;
+  d, r: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  text, header: RawByteString;
+  load: TTyRtfLoad;
+
+  procedure SetConsolas(ADoc: TTyRichDocument; APara: Integer);
+  begin
+    SetChars(ADoc, ADoc.Text.ParaStart(APara), 1, [cffFontName, cffCharset], Fmt('Consolas', 0, 0));
+  end;
+
+begin
+  // an entry the reader passes over (its group begins with a word that is neither \f nor a
+  // theme font's role) has number 1: a new font is \f2, and the text in \f1 stays as it is
+  b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\fbogus\f1 Times New Roman;}}\uc1 ' +
+    '\pard\f1\fs24 A\par \f0 B\par}');
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    AssertEquals('the reader does not know that entry', '', FontOfPara(d, 0));
+    SetConsolas(d, 1);
+    o := SaveDoc(d, info);
+    text := StrOf(o, 0, info.HeaderStop);
+    AssertRaw('the new font after every number of the table',
+      '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\fbogus\f1 Times New Roman;}' + Consolas + '}\uc1 ', text);
+    r := LoadDoc(o, True);
+    AssertEquals('read back: the new font', 'Consolas', FontOfPara(r, 1));
+    AssertEquals('read back: the paragraph in the font the reader does not know', '', FontOfPara(r, 0));
+  finally
+    FreeAndNil(r);
+    d.Free;
+  end;
+  // numbers anywhere between the table's braces count; \fcharset, \fprq, a hex byte and an
+  // escaped backslash are no font numbers
+  b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset134\fprq2 Sim\''669\\f99;}' +
+    '{\*\skipped{\f41 X;}}}\uc1 \pard\f0\fs24 A\par B\par}');
+  d := LoadDoc(b, False);
+  try
+    SetConsolas(d, 1);
+    o := SaveDoc(d, info);
+    text := StrOf(o, 0, info.HeaderStop);
+    AssertTrue('above the number inside a group the reader skips: ' + Shown(text),
+      PosRaw('{\*\skipped{\f41 X;}}{\f42\fnil\fcharset0 Consolas;}}', text) > 0);
+  finally
+    d.Free;
+  end;
+  b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset134\fprq2 Sim\''669\\f99;}}' +
+    '\uc1 \pard\f0\fs24 A\par B\par}');
+  d := LoadDoc(b, False);
+  try
+    SetConsolas(d, 1);
+    o := SaveDoc(d, info);
+    text := StrOf(o, 0, info.HeaderStop);
+    AssertTrue('only \fN is a font number: ' + Shown(text),
+      PosRaw('\\f99;}{\f1\fnil\fcharset0 Consolas;}}', text) > 0);
+  finally
+    d.Free;
+  end;
+  // text in a font number the table lacks, rewritten: its number gets an entry with no
+  // name, and the next save numbers a new font above it
+  b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f5\fs24 A\par \f0 B\par}');
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    AssertEquals('no font', '', FontOfPara(d, 0));
+    AssertTrue('typed in it', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    o := SaveDoc(d, info);
+    header := StrOf(o, 0, info.HeaderStop);
+    AssertRaw('the number is defined', '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}}\uc1 ', header);
+    text := StretchText(o, info);
+    AssertTrue('and written: ' + Shown(text), PosRaw('\plain\f1\fs24 XA\par', text) > 0);
+    // the second save: a new font
+    r := LoadDoc(o, False);
+    AssertEquals('second save: still no font', '', FontOfPara(r, 0));
+    header := StrOf(o, 0, TyRichRtfLoadOf(r).Header.Stop);
+    SetConsolas(r, 1);
+    o2 := SaveDoc(r, info);
+    // (the words the first save wrote before its paragraph are the header's now)
+    AssertRaw('second save: the new font above it',
+      '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}' + Consolas + '}' +
+        Copy(header, Length('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}}') + 1, MaxInt),
+      StrOf(o2, 0, info.HeaderStop));
+    FreeAndNil(r);
+    r := LoadDoc(o2, True);
+    AssertEquals('second save, read back: no font', '', FontOfPara(r, 0));
+    AssertRaw('second save, read back: its text', 'XA', ParaText(r, 0));
+    AssertEquals('second save, read back: the new font', 'Consolas', FontOfPara(r, 1));
+    // the third: the entry with no name is the file's now, and is used again
+    FreeAndNil(r);
+    r := LoadDoc(o2, False);
+    load := TyRichRtfLoadOf(r);
+    header := StrOf(o2, 0, load.Header.Stop);
+    AssertTrue('third save: typed again', r.Execute(TTyRichInsertText.Create(0, 'Y')));
+    o3 := SaveDoc(r, info);
+    AssertRaw('third save: the header as it is', header, StrOf(o3, 0, info.HeaderStop));
+    AssertTrue('third save: the same number: ' + Shown(StretchText(o3, info)),
+      PosRaw('\plain\f1\fs24 YXA\par', StretchText(o3, info)) > 0);
+  finally
+    r.Free;
+    d.Free;
+  end;
+  // a file with no font table: the table that is added has that entry, and only that
+  b := BytesOf('{\rtf1 A\par B\par}');
+  d := LoadDoc(b, False);
+  r := nil;
+  try
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    o := SaveDoc(d, info);
+    AssertRaw('a font table with the one entry', '{\rtf1 {\fonttbl{\f0\fnil ;}}',
+      StrOf(o, 0, info.HeaderStop));
+    r := LoadDoc(o, False);
+    AssertRaw('read back', 'XA', ParaText(r, 0));
+    AssertEquals('read back: no font', '', FontOfPara(r, 0));
+    AssertEquals('read back: B has none either', '', FontOfPara(r, 1));
+    o2 := SaveBytes(r);
+    AssertTrue('saved again: ' + FirstDiff(o, o2), SameBytes(o, o2));
+  finally
+    r.Free;
+    d.Free;
+  end;
+  // text with a font needs no such entry
+  b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f0\fs24 A\par B\par}');
+  d := LoadDoc(b, False);
+  try
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    o := SaveDoc(d, info);
+    AssertRaw('the header as it is', '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 ',
+      StrOf(o, 0, info.HeaderStop));
+  finally
     d.Free;
   end;
 end;

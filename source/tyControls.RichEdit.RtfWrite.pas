@@ -155,7 +155,12 @@ type
     FTablesReady, FFrozen: Boolean;
     FFonts: array of TFontRec;
     FFontN, FOldFontN, FNextFontNum: Integer;
-    FNoFontNum: Integer;     // a font number the table never defines: text with no font
+    // Text with no font (a font number the file's table lacks) is written with a number of
+    // its own - without \f it would take the file's default font. The number is an entry
+    // with no name: the file's own when it has one, else one this save adds (FNoFontDefine)
+    // when such text is written (FNoFontUsed), so that the next save finds the number taken.
+    FNoFontNum: Integer;
+    FNoFontUsed, FNoFontDefine: Boolean;
     FColors: array of TColorRec;
     FColorN, FOldColorN: Integer;
     FDefNames: array of TDefName;
@@ -220,6 +225,7 @@ type
     procedure ScanText(AIndex: Integer; const ARuns: TTyRunArray);
     procedure FinishTables;
     procedure WriteFontEntry(const F: TFontRec; AAnsiCp: Integer);
+    procedure WriteNoFontEntry;
     procedure WriteFonts(AFrom: Integer; AWhole: Boolean; AAnsiCp: Integer);
     procedure WriteColors(AFrom: Integer; AWhole: Boolean);
     procedure WriteHeaderOfFile;
@@ -682,7 +688,13 @@ begin
     FFonts[i].Charset := f.Charset;
     FFonts[i].Num := f.Num;
     if f.Num >= FNextFontNum then FNextFontNum := f.Num + 1;
+    // an entry with no name and no charset is what text with no font is written in
+    if (FNoFontNum < 0) and (f.Name = '') and (f.Charset < 0) then FNoFontNum := f.Num;
   end;
+  // the reader passes over entries it cannot read (and what is inside them): their numbers
+  // are taken all the same, so new fonts are numbered above every \fN of the table's bytes
+  i := scan.FontTableHighest;
+  if i >= FNextFontNum then FNextFontNum := i + 1;
   // a number \deff names without a font of that number must stay without one
   if scan.DefaultFont >= FNextFontNum then FNextFontNum := scan.DefaultFont + 1;
   FColorN := scan.ColorCount;
@@ -900,6 +912,7 @@ begin
   for j := 0 to High(runs) do
   begin
     ci := CharInfo(runs[j].Format);
+    if ci^.Font = -1 then FNoFontUsed := True;
     if (ci^.DefName >= 0) and not FDefNames[ci^.DefName].Known and
        not FDefNames[ci^.DefName].Kana then
       look := True;
@@ -983,10 +996,13 @@ begin
     k := FontOf(FDoc.DefaultCharFormatId);
     if k >= 0 then FFonts[k].Num := 0;
   end
-  else
-    // text the file gives no font (a number its table lacks) is written with a number that
-    // stays undefined - the first one free: without \f it would take the file's default font
+  else if FNoFontNum < 0 then
+  begin
+    // the file has no entry without a name: the first number free (every font this save
+    // adds has its number by now), defined when it is used
     FNoFontNum := FNextFontNum;
+    FNoFontDefine := FNoFontUsed;
+  end;
   FFrozen := True;
 end;
 
@@ -1048,23 +1064,29 @@ begin
   Sym(';}');
 end;
 
+// {\fN\fnil ;} - the entry of text with no font.
+procedure TRtfWriter.WriteNoFontEntry;
+begin
+  Sym('{');
+  WordN('f', FNoFontNum);
+  Word('fnil');
+  Sym(' ;}');
+end;
+
 procedure TRtfWriter.WriteFonts(AFrom: Integer; AWhole: Boolean; AAnsiCp: Integer);
 var
   order: array of Integer;
   i, j, t: Integer;
+  first: Boolean;
 begin
+  first := False;
   if AWhole then
   begin
     Sym('{\fonttbl');
-    if (FLoad <> nil) and (FLoad.Scan.DefaultFont < 0) then
-    begin
-      // a file with no font table and no \deff: its text has no font, and a reader takes
-      // the first font of a table for such text - so the first is one with no name
-      Sym('{');
-      WordN('f', FNoFontNum);
-      Word('fnil');
-      Sym(' ;}');
-    end;
+    // a file with no font table and no \deff: its text has no font, and a reader takes
+    // the first font of a table for such text - so the first is the one with no name
+    first := (FLoad <> nil) and (FLoad.Scan.DefaultFont < 0);
+    if first then WriteNoFontEntry;
   end;
   // in the order of their numbers
   order := nil;
@@ -1082,6 +1104,7 @@ begin
     order[j + 1] := t;
   end;
   for i := 0 to High(order) do WriteFontEntry(FFonts[order[i]], AAnsiCp);
+  if FNoFontDefine and not first then WriteNoFontEntry;
   if AWhole then Sym('}');
 end;
 
@@ -1150,7 +1173,7 @@ begin
     fClose := FLoad.Scan.FontTableClose;
     cClose := FLoad.Scan.ColorTableClose;
     ansi := FLoad.Scan.AnsiCodePage;
-    if FFontN > FOldFontN then
+    if (FFontN > FOldFontN) or FNoFontDefine then
       if fClose >= 0 then fAt := fClose else fAt := FHeaderStop;
     if FColorN > FOldColorN then
       if cClose >= 0 then cAt := cClose

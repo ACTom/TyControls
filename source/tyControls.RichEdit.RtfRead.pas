@@ -312,6 +312,7 @@ type
     FColorR, FColorG, FColorB: Integer;
     FColorAny: Boolean;
     FFontTblClose, FColorTblClose: PtrInt;   // the header's tables' closing braces, -1 none
+    FFontTblOpen: PtrInt;                    // the font table's opening brace, -1 none
     FLastOpen: Boolean;          // the last paragraph ended without a terminator
     FLists: array of TTyRtfList;
     FListCount: Integer;
@@ -524,6 +525,11 @@ type
     // position of their closing brace), -1 when the header has none.
     property FontTableClose: PtrInt read FFontTblClose;
     property ColorTableClose: PtrInt read FColorTblClose;
+    // The highest N of the \fN words between the braces of that font table: of every entry,
+    // also of those this reader passes over (a group that begins with neither \f nor a
+    // theme font's role) and of groups inside them. A writer numbers new fonts above it.
+    // -1: no font table, or no \fN in it.
+    function FontTableHighest: Integer;
     // After the parse: the last paragraph has no terminator (its bytes run to the trailer),
     // so nothing can be written after it as it is.
     property LastParaOpen: Boolean read FLastOpen;
@@ -1348,6 +1354,7 @@ begin
   FCompactAt := 4096;
   FVersionGen := -1;
   FFontTblClose := -1;
+  FFontTblOpen := -1;
   FColorTblClose := -1;
   FAnsiCp := 1252;
   FDeff := -1;
@@ -2497,7 +2504,11 @@ begin
         FinishFontEntry;
         SortFonts;
         // (a writer adds the fonts a changed paragraph needs before this brace)
-        if not FS.BodyStarted and (FFontTblClose < 0) then FFontTblClose := FTok.Start;
+        if not FS.BodyStarted and (FFontTblClose < 0) then
+        begin
+          FFontTblClose := FTok.Start;
+          FFontTblOpen := AOld.DestStart;
+        end;
       end;
     rdColorTable:
       begin
@@ -2785,6 +2796,22 @@ end;
 function TTyRtfParser.Font(AIndex: Integer): TTyRtfFont;
 begin
   Result := FFonts[AIndex];
+end;
+
+function TTyRtfParser.FontTableHighest: Integer;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+begin
+  Result := -1;
+  if (FFontTblOpen < 0) or (FFontTblClose <= FFontTblOpen) then Exit;
+  // every token between the braces, whatever group it is in: \f is the only word whose
+  // name is "f" (\fcharset, \fprq, \fs are other words; \'66 and \\ are no words)
+  lex.Init(FBuf, FFontTblOpen, FFontTblClose);
+  while lex.Next(t) do
+    if (t.Kind = rtkWord) and (t.NameLen = 1) and (FBuf[t.NameStart] = Ord('f')) and
+       t.HasParam and (t.Param > Result) then
+      Result := t.Param;
 end;
 
 function TTyRtfParser.ColorCount: Integer;
