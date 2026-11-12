@@ -4950,13 +4950,13 @@ begin
   else Result := FScan.ParaCount;
 end;
 
+// The table is parsed in parts, interval by interval: one too long to parse as a whole for
+// a single read, and one still open where the scan stands - how long it gets is not known,
+// what is parsed of it now is a part of it in any case, and a read while the file loads
+// must stay small.
 function TTyRtfLoad.IsBig(const X: TTyRtfTableExtent): Boolean;
-var
-  stop: Int64;
 begin
-  stop := X.Stop;
-  if X.LastPara < 0 then stop := FScan.Position;
-  Result := stop - X.Start > CRtfBigTableBytes;
+  Result := (X.LastPara < 0) or (X.Stop - X.Start > CRtfBigTableBytes);
 end;
 
 // The last table to start at or before paragraph APara, -1 none.
@@ -5016,7 +5016,7 @@ begin
     while (i >= 0) and not changed do
     begin
       x := FScan.TableExtent(i);
-      // (as the scan gave it: a table still open is as long as the scan has come)
+      // (asked of the extent as the scan gave it: an open one has no last paragraph yet)
       big := IsBig(x);
       if x.LastPara < 0 then x.LastPara := FScan.ParaCount - 1;
       if x.LastPara < firstPara then Break;

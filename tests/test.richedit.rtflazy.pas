@@ -1337,8 +1337,10 @@ begin
   d := TTyRichDocument.Create;
   s := TBytesStream.Create(b);
   try
-    load := TyRichBeginLoadRtf(d, s, 3 * MB div 2);
+    // (the table is not yet as long as a big one when the first read comes)
+    load := TyRichBeginLoadRtf(d, s, MB);
     AssertTrue('still loading', d.Loading);
+    AssertTrue('less than a big table is indexed', load.BytesIndexed <= CRtfBigTableBytes + 4096);
     // near the start, and near the end of what is indexed
     d.EnsureParsed(5);
     AssertTrue(Format('reading paragraph 5 parsed %d bytes', [load.ParsedBytes]),
