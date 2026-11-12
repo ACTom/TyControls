@@ -71,6 +71,9 @@ type
     procedure TestSmallInsertsDoNotMakeALeafEach;
     procedure TestTypingNeverJoinsBytesCountedApart;
     procedure TestWalksRefuseAnEditFromTheirCallback;
+    procedure TestABigInsertKeepsNoScanBuffer;
+    procedure TestControlCharactersAreCharacters;
+    procedure TestScannedPiecesMustBePossible;
   end;
 
   { Decodes paragraph i from a table; the "file offset" of paragraph i is i*1000+7, so the
@@ -103,6 +106,9 @@ type
     procedure TestLazySnapshotRestoreKeepsPiecesLazy;
     procedure TestLazyRunsKeepSourceRanges;
     procedure TestLazyCountMismatchRaises;
+    procedure TestReopenGoesOnOnlyFromAnUntouchedEnd;
+    procedure TestLazySourceLookupMissesEditedParagraphs;
+    procedure TestIntegritySeesLazyPiecesOutOfOrder;
   end;
 
 implementation
@@ -1651,6 +1657,105 @@ begin
   end;
 end;
 
+{ The pieces of an insert are found in a buffer of the text's; after a paste of many lines
+  that buffer is as big as the index it filled, and must not stay for the object's life. }
+procedure TTyRichTextTest.TestABigInsertKeepsNoScanBuffer;
+const
+  Lines = 100000;
+var
+  t: TTyRichText;
+  buf: TBytes;
+  s: UTF8String;
+  h0, h1, budget: Int64;
+begin
+  buf := LinesOf(Lines);
+  s := '';
+  SetLength(s, System.Length(buf));
+  Move(buf[0], s[1], System.Length(buf));
+  buf := nil;
+  h0 := GetFPCHeapStatus.CurrHeapUsed;
+  t := TTyRichText.Create;
+  try
+    t.Insert(0, s);
+    h1 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertEquals('a piece per line', Lines, t.PieceCount);
+    // the packed index and the text in the add buffer
+    budget := Int64(Lines) * SizeOf(TTyRichPiece) * 5 div 4 + 2 * t.AddedBytes + 64 * 1024;
+    AssertTrue(Format('an insert of %d lines left %d bytes, budget %d', [Lines, h1 - h0, budget]),
+      h1 - h0 <= budget);
+    // and the next insert still works
+    t.Insert(1, 'x'#10'y');
+    AssertBytesEqual('inserted after the big one', 'ax'#10'yb'#10, t.GetText(0, 6));
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTyRichTextTest.TestControlCharactersAreCharacters;
+var
+  t: TTyRichText;
+begin
+  t := TTyRichText.CreateFromUtf8(Bytes('ab'));
+  try
+    t.Insert(1, #0#9#0);
+    AssertEquals('NUL and TAB are a character each', 5, t.Length);
+    AssertEquals('and no separator', 1, t.ParaCount);
+    AssertBytesEqual('kept as they are', 'a'#0#9#0'b', t.GetText(0, t.Length));
+    AssertBytesEqual('one of them', #9, t.GetText(2, 1));
+    t.Delete(1, 1);
+    AssertBytesEqual('a NUL deleted', 'a'#9#0'b', t.GetText(0, t.Length));
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
+{ A reader that finds the pieces itself hands them in unchecked against the bytes (that would
+  be the scan it saves); what cannot be a piece at all is refused. }
+procedure TTyRichTextTest.TestScannedPiecesMustBePossible;
+
+  procedure Refused(const AWhat: string; ABytes, AChars: LongInt; ASep: TTyRichSeparator);
+  var
+    t: TTyRichText;
+    raised: Boolean;
+  begin
+    t := TTyRichText.CreateScanned;
+    try
+      raised := False;
+      try
+        t.AppendScanned(ABytes, AChars, ASep);
+      except
+        on ETyRichText do raised := True;
+      end;
+      AssertTrue(AWhat + ' must raise', raised);
+    finally
+      t.Free;
+    end;
+  end;
+
+var
+  t: TTyRichText;
+begin
+  Refused('no bytes', 0, 0, rsNone);
+  Refused('more characters than bytes', 2, 3, rsNone);
+  Refused('a CRLF in one byte', 1, 1, rsCRLF);
+  Refused('two characters before a CRLF in three bytes', 3, 3, rsCRLF);
+  Refused('two characters before an LF in two bytes', 2, 3, rsLF);
+  t := TTyRichText.CreateScanned;
+  try
+    t.AppendScanned(2, 1, rsCRLF);
+    t.AppendScanned(4, 2, rsLF);
+    t.AppendScanned(1, 1, rsNone);
+    t.EndScanned(Bytes(#13#10'中'#10'x'), 0);
+    AssertEquals('three paragraphs', 3, t.ParaCount);
+    AssertEquals('four characters', 4, t.Length);
+    AssertEquals('integrity', '', t.CheckIntegrity);
+  finally
+    t.Free;
+  end;
+end;
+
 { ---- TFakeRichProvider ---- }
 
 constructor TFakeRichProvider.Create(ACount: Integer);
@@ -1869,6 +1974,104 @@ begin
     on ETyRichText do raised := True;
   end;
   AssertTrue('a provider that breaks the character count is an error', raised);
+end;
+
+{ A load that goes on (a file indexed in slices) picks up at the last paragraph: while it
+  is open the text cannot be read, and it cannot be opened once that paragraph was edited. }
+procedure TTyRichLazyTextTest.TestReopenGoesOnOnlyFromAnUntouchedEnd;
+var
+  i: Integer;
+  sep: TTyRichSeparator;
+  raised: Boolean;
+begin
+  FProvider := TFakeRichProvider.Create(8);
+  FText := TTyRichText.CreateLazy(FProvider, False);
+  for i := 0 to 4 do
+  begin
+    if i < 4 then sep := rsCR else sep := rsNone;
+    FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[i]), i * LazyStride + LazyBase, 40, sep);
+  end;
+  FText.EndLazyLoad;
+  FText.ParaData[4] := Pointer(44);
+  FText.SetParaHeight(4, 9);
+  AssertBytesEqual('readable after the first slice', FProvider.Texts[4], ParaText(4));
+
+  FText.ReopenLazyLoad(rsCR);
+  raised := False;
+  try
+    FText.GetText(0, 1);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('the text cannot be read while the load is open', raised);
+  raised := False;
+  try
+    FText.ParaStart(1);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('nor looked up', raised);
+  FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[5]), 5 * LazyStride + LazyBase, 40, rsCR);
+  FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[6]), 6 * LazyStride + LazyBase, 40, rsNone);
+  FText.EndLazyLoad;
+  AssertEquals('seven paragraphs', 7, FText.ParaCount);
+  AssertBytesEqual('the old last paragraph', FProvider.Texts[4], ParaText(4));
+  AssertEquals('it has its separator now', Ord(rsCR), Ord(FText.ParaSeparator(4)));
+  AssertTrue('its data moved with it', FText.ParaData[4] = Pointer(44));
+  AssertEquals('and its height', 9, FText.ParaHeight(4));
+  AssertTrue('measured', FText.ParaMeasured(4));
+  AssertFalse('the new last paragraph is not', FText.ParaMeasured(6));
+  AssertBytesEqual('the new last paragraph', FProvider.Texts[6], ParaText(6));
+  AssertEquals('integrity', '', FText.CheckIntegrity);
+
+  // the last paragraph edited: the load cannot go on behind it
+  FText.Insert(FText.Length, 'z');
+  raised := False;
+  try
+    FText.ReopenLazyLoad(rsCR);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('reopening after an edit of the last paragraph must raise', raised);
+  AssertBytesEqual('and the text stays readable', FProvider.Texts[6] + 'z', ParaText(6));
+end;
+
+procedure TTyRichLazyTextTest.TestLazySourceLookupMissesEditedParagraphs;
+begin
+  BuildLazy(6);
+  AssertEquals('by its source', 3, FText.ParaOfLazySource(3 * LazyStride + LazyBase));
+  AssertEquals('no paragraph starts there', -1, FText.ParaOfLazySource(3 * LazyStride + LazyBase + 1));
+  AssertEquals('before the first', -1, FText.ParaOfLazySource(0));
+  AssertEquals('past the last', -1, FText.ParaOfLazySource(6 * LazyStride + LazyBase));
+  ParaText(3);
+  AssertEquals('read is not edited', 3, FText.ParaOfLazySource(3 * LazyStride + LazyBase));
+  FText.Insert(FText.ParaStart(3) + 1, 'X');
+  AssertEquals('an edited paragraph is no longer the file''s', -1,
+    FText.ParaOfLazySource(3 * LazyStride + LazyBase));
+  FText.Delete(FText.ParaStart(1), FText.ParaStart(2) - FText.ParaStart(1));
+  AssertEquals('a deleted paragraph is not found', -1,
+    FText.ParaOfLazySource(1 * LazyStride + LazyBase));
+  AssertEquals('the ones behind it moved up', 1, FText.ParaOfLazySource(2 * LazyStride + LazyBase));
+  AssertEquals('the last one', 4, FText.ParaOfLazySource(5 * LazyStride + LazyBase));
+end;
+
+{ ParaOfLazySource finds a paragraph by walking towards its offset, so lazy pieces must stay
+  in the order of their offsets. A restore puts pieces back where they were; pieces put
+  somewhere else break the order, and the integrity check says so. }
+procedure TTyRichLazyTextTest.TestIntegritySeesLazyPiecesOutOfOrder;
+var
+  p: TTyRichPieces;
+  a: Int64;
+begin
+  BuildLazy(20);
+  a := FText.ParaStart(5);
+  p := FText.PieceSnapshot(a, FText.ParaStart(8) - a);
+  FText.Delete(a, FText.ParaStart(8) - a);
+  FText.RestorePieces(a, p);
+  AssertEquals('back where they were', '', FText.CheckIntegrity);
+  // the same pieces again, in front of paragraph 2
+  FText.RestorePieces(FText.ParaStart(2), p);
+  AssertEquals('pieces put elsewhere', 'lazy pieces out of source order', FText.CheckIntegrity);
 end;
 
 initialization

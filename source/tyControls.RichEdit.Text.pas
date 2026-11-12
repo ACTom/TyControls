@@ -261,7 +261,7 @@ type
     procedure SetDefaultParaHeight(AValue: Int64);
     procedure DoParasChanged(AFirst, AOldCount, ANewCount: Integer);
     function CheckNode(ANode: PTyRichNode; ALevel: Integer; var APrevSep: Boolean;
-      var APrevLazyOpen: Boolean): string;
+      var APrevLazyOpen: Boolean; var APrevLazy: Int64): string;
   public
     constructor Create;
     { The buffer is referenced, not copied; it must not change afterwards. }
@@ -272,6 +272,8 @@ type
     constructor CreateLazy(AProvider: TTyRichTextProvider; AOwnsProvider: Boolean);
     procedure AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
       ASeparator: TTyRichSeparator);
+    { Ends the load, and one that was reopened: the paragraphs appended since come into the
+      text without OnParasChanged - the reader that appended them reports its own change. }
     procedure EndLazyLoad;
     { Goes on with a lazy load that has ended, for a reader that indexes a file in slices
       while the part indexed so far is read: the last paragraph - still the one appended
@@ -334,6 +336,10 @@ type
     property LoadedInvalidBytes: Int64 read FLoadInvalid;
 
     function PieceSnapshot(APos, ALen: TTyRichPos): TTyRichPieces;
+    { Puts a snapshot's pieces back at APos - the position it was taken from, after the range
+      was deleted (an undo). Lazy pieces must stay in the order of their source offsets,
+      which ParaOfLazySource walks by: pieces put anywhere else, or a second time, break it
+      and CheckIntegrity says so. }
     procedure RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
 
     { The height index. A paragraph is measured - it has a height the layout gave it,
@@ -427,6 +433,8 @@ const
   sLF = 2;
   sCRLF = 3;
   MaxPieceBytes = TyRichMaxPieceBytes;
+  // an insert's scan buffer is kept for the next insert up to this many pieces
+  ScanKeep = 1024;
 
 { ---- pieces ---- }
 
@@ -1480,12 +1488,16 @@ begin
 end;
 
 procedure TTyRichText.AppendScanned(ABytes, AChars: LongInt; ASeparator: TTyRichSeparator);
+var
+  sb: Integer;
 begin
   if not FScanned then
     raise ETyRichText.Create('AppendScanned outside a scanned load');
-  // a UTF-8 character is at least one byte; a separator is one character of 1 or 2 bytes
-  if (ABytes <= 0) or (AChars <= 0) or (AChars > ABytes) or
-     (ABytes > MaxPieceBytes + 4) then
+  // a UTF-8 character is at least one byte; a separator is one character of 1 or 2 bytes,
+  // and the piece holds all of them
+  sb := SepBytes(Ord(ASeparator));
+  if (ABytes <= 0) or (AChars <= 0) or (ABytes < sb) or
+     (AChars - Ord(sb > 0) > ABytes - sb) or (ABytes > MaxPieceBytes + 4) then
     raise ETyRichText.Create('Scanned piece out of range');
   LoadPiece(FScannedBytes, ABytes, AChars, kOrig, Ord(ASeparator));
   Inc(FScannedBytes, ABytes);
@@ -1885,6 +1897,8 @@ begin
     end;
   end;
   InsertPieces(APos, FScan, FScanCount, []);
+  // typing reuses the buffer; a paste of many lines made it as big as the index it filled
+  if System.Length(FScan) > ScanKeep then FScan := nil;
 end;
 
 procedure TTyRichText.Delete(APos, ALen: TTyRichPos);
@@ -2664,7 +2678,7 @@ end;
 { ---- integrity ---- }
 
 function TTyRichText.CheckNode(ANode: PTyRichNode; ALevel: Integer; var APrevSep: Boolean;
-  var APrevLazyOpen: Boolean): string;
+  var APrevLazyOpen: Boolean; var APrevLazy: Int64): string;
 var
   i: Integer;
   it: PTyRichPiece;
@@ -2691,7 +2705,8 @@ begin
            (s.Bytes <> Bytes) or (s.LazyMax <> LazyMax) or
            (heights and ((s.Height <> Height) or (s.Measured <> Measured))) then
           Exit(Format('stale summary at level %d child %d', [ALevel, i]));
-      Result := CheckNode(PTyRichInner(ANode)^.Child[i], ALevel + 1, APrevSep, APrevLazyOpen);
+      Result := CheckNode(PTyRichInner(ANode)^.Child[i], ALevel + 1, APrevSep, APrevLazyOpen,
+        APrevLazy);
       if Result <> '' then Exit;
     end;
     Exit;
@@ -2708,6 +2723,9 @@ begin
     if IsLazy(it^) then
     begin
       if not APrevSep then Exit('a lazy piece does not start its paragraph');
+      // ParaOfLazySource walks towards an offset
+      if POff(it^) <= APrevLazy then Exit('lazy pieces out of source order');
+      APrevLazy := POff(it^);
       APrevLazyOpen := sep = sNone;
     end
     else
@@ -2734,6 +2752,7 @@ function TTyRichText.CheckIntegrity: string;
 var
   s: TTyRichSum;
   prevSep, lazyOpen: Boolean;
+  prevLazy: Int64;
 begin
   CheckReady;
   s := NodeSum(FRoot);
@@ -2744,7 +2763,8 @@ begin
   if FLastHeight < 0 then Exit('negative height');
   prevSep := True;
   lazyOpen := False;
-  Result := CheckNode(FRoot, 0, prevSep, lazyOpen);
+  prevLazy := -1;
+  Result := CheckNode(FRoot, 0, prevSep, lazyOpen, prevLazy);
 end;
 
 end.
