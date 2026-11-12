@@ -910,6 +910,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.RichEdit.RtfRead"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.RichEdit.RtfWrite.pas"/>
+        <UnitName Value="tyControls.RichEdit.RtfWrite"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.RichEdit.Wmf.pas"/>
         <UnitName Value="tyControls.RichEdit.Wmf"/>
       </Item>

@@ -97,6 +97,11 @@ type
   TTyRichParaDataEvent = procedure(Sender: TObject; AData: Pointer) of object;
   { One step of MapParaData: paragraph AIndex holds AData; what it returns goes in its slot. }
   TTyRichParaDataMap = function(AIndex: Integer; AData: Pointer): Pointer of object;
+  { One step of WalkParas: paragraph AIndex holds AData, and when it is a lazy paragraph that
+    was never edited its bytes in the original file are ASrcBytes from ASrcOffset (-1
+    otherwise). AContinue False ends the walk. }
+  TTyRichParaWalk = procedure(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+    var AContinue: Boolean) of object;
 
   { Decodes one lazy paragraph: its text WITHOUT the separator, exactly ACharCount
     characters minus the separator, containing no CR or LF. }
@@ -325,6 +330,12 @@ type
       paragraph data or heights; changing the text (Insert, Delete, RestorePieces) raises
       while the walk runs. Nodes the walk moves into count in NodeVisits. }
     procedure MapParaData(AFirst, ALast: Integer; AMap: TTyRichParaDataMap);
+    { Shows AProc every paragraph from AFirst on, in order: its data and, for one that is
+      still the unedited lazy paragraph, where its bytes are in the original file - what
+      ParaData and ParaLazySource give, without a lookup per paragraph (one descent, then
+      piece by piece: a writer goes through millions of them). AProc may read the text and
+      set paragraph data; changing the text raises while the walk runs. }
+    procedure WalkParas(AFirst: Integer; AProc: TTyRichParaWalk);
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
@@ -2184,6 +2195,77 @@ begin
     end;
     if (i <= ALast) and (i = FTotal.Seps) then
       FLastData := AMap(i, FLastData);
+  finally
+    Dec(FWalking);
+  end;
+end;
+
+procedure TTyRichText.WalkParas(AFirst: Integer; AProc: TTyRichParaWalk);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  i: Integer;
+  src, n: Int64;
+  atStart, more, go: Boolean;
+begin
+  CheckPara(AFirst);
+  Inc(FWalking);
+  try
+    i := AFirst;
+    go := True;
+    more := FTotal.Entries > 0;
+    if more then
+      if i = 0 then
+        Find(rskEntry, 0, p, before)
+      else
+      begin
+        // the piece after the separator that ends the paragraph before
+        Find(rskSep, i - 1, p, before);
+        more := Advance(p);
+      end;
+    atStart := True;
+    src := -1;
+    n := 0;
+    while more do
+    begin
+      it := ItemAt(p);
+      if atStart then
+      begin
+        // a lazy piece is always a whole paragraph
+        if IsLazy(it^) then
+        begin
+          src := POff(it^);
+          n := it^.FBytes;
+        end
+        else
+        begin
+          src := -1;
+          n := 0;
+        end;
+        atStart := False;
+      end;
+      if PSep(it^) <> sNone then
+      begin
+        AProc(i, it^.FData, src, n, go);
+        if not go then Exit;
+        Inc(i);
+        atStart := True;
+      end;
+      more := Advance(p);
+    end;
+    // the last paragraph: what follows the last separator
+    if atStart then
+    begin
+      src := -1;
+      n := 0;
+    end;
+    if FLazyTail then
+    begin
+      src := FLoadLastSrc;
+      n := FLoadLastBytes;
+    end;
+    AProc(i, FLastData, src, n, go);
   finally
     Dec(FWalking);
   end;

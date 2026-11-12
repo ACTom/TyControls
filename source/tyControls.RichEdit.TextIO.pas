@@ -87,6 +87,9 @@ function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Card
   TyRichCodePageChar), nil for a single-byte code page. Valid while the table is. }
 function TyRichCodePageClasses(ATable: Pointer): PByte;
 function TyRichCodePagePairs(ATable: Pointer): PByte;
+{ For the RTF writer's font names, the other way round: the bytes the table's code page
+  writes ACode as - one byte, or a pair as lead shl 8 or trail - and 0 when it has none. }
+function TyRichCodePageBytes(ATable: Pointer; ACode: Cardinal): Integer;
 
 implementation
 
@@ -499,6 +502,13 @@ begin
         t.PairBits[i shr 3] := t.PairBits[i shr 3] or (1 shl (i and 7));
   end;
   Result := @t.PairBits[0];
+end;
+
+function TyRichCodePageBytes(ATable: Pointer; ACode: Cardinal): Integer;
+begin
+  if ACode < $80 then Exit(ACode);
+  if ACode > $FFFF then Exit(0);
+  Result := TCodePageTable(ATable).Rev[ACode];
 end;
 
 function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;

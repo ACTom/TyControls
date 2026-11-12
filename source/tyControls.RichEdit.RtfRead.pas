@@ -288,6 +288,8 @@ type
     FColorCount: Integer;
     FColorR, FColorG, FColorB: Integer;
     FColorAny: Boolean;
+    FFontTblClose, FColorTblClose: PtrInt;   // the header's tables' closing braces, -1 none
+    FLastOpen: Boolean;          // the last paragraph ended without a terminator
     FLists: array of TTyRtfList;
     FListCount: Integer;
     FOverrideLs, FOverrideId: array of Integer;
@@ -418,7 +420,6 @@ type
     function CharFormatFor(AClass: TTyRtfCharClass): TTyCharFormatId;
     function BuildParaFormat: TTyParaFormat;
     function ParaFormatId: TTyParaFormatId;
-    procedure ResolveList(var AList: TTyListFormat);
     function Fragment(const R: TTyRtfRange): RawByteString;
     // pictures
     procedure BeginPicture;
@@ -476,6 +477,24 @@ type
     function FragmentOf(const R: TTyRtfRange): RawByteString;
     // The objects made, as owned by the caller from now on (each with one reference taken).
     function TakeObjects: TFPList;
+    // For a writer - the header's tables as they were read: the fonts (in the order of their
+    // numbers once their table has ended), the colours (AAuto: the entry names no colour),
+    // and what a paragraph's \lsN \ilvlN mean through the list tables (AList is left as it
+    // is when N names no list).
+    function FontCount: Integer;
+    function Font(AIndex: Integer): TTyRtfFont;
+    function ColorCount: Integer;
+    function Color(AIndex: Integer; out AAuto: Boolean): TColor;
+    procedure ResolveListRef(ALs, AIlvl: Integer; var AList: TTyListFormat);
+    property AnsiCodePage: Integer read FAnsiCp;
+    property DefaultFont: Integer read FDeff;     // \deff, -1 none
+    // Where the first font table and the first colour table before the body close (the
+    // position of their closing brace), -1 when the header has none.
+    property FontTableClose: PtrInt read FFontTblClose;
+    property ColorTableClose: PtrInt read FColorTblClose;
+    // After the parse: the last paragraph has no terminator (its bytes run to the trailer),
+    // so nothing can be written after it as it is.
+    property LastParaOpen: Boolean read FLastOpen;
     property Bytes: TBytes read FBytes;
     property PaperWidth: Integer read FPaperW;
     property PaperHeight: Integer read FPaperH;
@@ -538,6 +557,7 @@ type
     FStamp: Int64;
     FParsedBytes: Int64;
     FParseCount: Integer;
+    FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
     FOnLoadProgress: TTyRtfProgressEvent;
     procedure Index(ABudget: Int64; AMinParas: Integer);
     procedure Collect;
@@ -577,6 +597,19 @@ type
     // For a writer: paragraph AIndex is still the file's own, untouched (its text and formats
     // never changed), at ARange of Bytes.
     function ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolean;
+    // The second half of ParaSource, for a writer that walks the paragraphs itself: the
+    // unedited lazy paragraph from ASrcOffset, whose value is AValue, still has the formats
+    // the file gives it (AValue nil - never parsed - or the very value this load set).
+    function OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
+    // For a writer: the reader's state at byte APos of the file - a paragraph's start, or the
+    // trailer's - scanned from the snapshot before it (no paragraph is parsed, nothing is
+    // set in the document). Asking for rising positions goes on from the last one. False
+    // when the scan cannot stop exactly there, or the file ends before it.
+    function StateAt(APos: Int64; out AState: TTyRtfState): Boolean;
+    // The index scan, for the header's tables (TTyRtfParser.Font, Color, ...).
+    property Scan: TTyRtfParser read FScan;
+    // The file's last paragraph has no terminator: what follows it in the file is the trailer.
+    function LastParaOpen: Boolean;
     property Bytes: TBytes read FBytes;
     // Before the first paragraph: the tables, the document's properties.
     function Header: TTyRtfRange;
@@ -640,6 +673,33 @@ procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRt
 // The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
 // TyRichBeginLoadRtf), or after it was replaced.
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
+
+type
+  // Where the reader finds a fragment of TTyParaFormat.Extra: among a paragraph's own words
+  // (pekTop; \lsN and \ilvlN apart, with N), or inside its {\*\pn ...} group (pekPn) - which
+  // is where a writer has to put it back for the reader to keep it on the paragraph again.
+  TTyRtfParaExtraKind = (pekTop, pekPn, pekLs, pekIlvl);
+
+function TyRtfParaExtraKind(const AFragment: RawByteString; out AParam: Integer): TTyRtfParaExtraKind;
+// True when the fragment is the control word AName (with any parameter).
+function TyRtfFragmentIsWord(const AFragment: RawByteString; const AName: string): Boolean;
+// The reverse of the reader, for a writer that has written something of its own and now
+// copies the file's bytes again from the place AState was taken at (TTyRtfLoad.StateAt): the
+// control words - beginning with \pard\plain, ending with a control word and no delimiter -
+// that leave a reader with exactly the properties those bytes were read with: \uc, the font
+// and Word's three font slots, the character and paragraph properties, and every unknown
+// word kept as Extra, in its order. ALevel -1: the properties in effect at that place;
+// 0 .. Depth - 1: the properties the group open at that depth saved (AState.Stack), which
+// come back when the file's bytes close it - a writer puts them in effect and then opens the
+// group again. ATable False leaves out \intbl and \itap: for a place where the paragraph
+// that follows is in no table, so that whatever "in a table" was in effect there ends
+// before the paragraph does and changes nothing - while the system's RichEdit loses the
+// paragraph after an \intbl that no cell follows. ABytes is the file AState was taken from.
+function TyRtfStateWords(const AState: TTyRtfState; const ABytes: TBytes;
+  ALevel: Integer = -1; ATable: Boolean = True): RawByteString;
+// The code page the reader decodes a font's bytes (and its name) with: its \fcharset's, else
+// the file's \ansicpg; 0 for the Symbol charset, which has none.
+function TyRtfCharsetCodePage(ACharset, AAnsiCodePage: Integer): Integer;
 
 implementation
 
@@ -1200,6 +1260,8 @@ begin
   FObjects := TFPList.Create;
   FCompactAt := 4096;
   FVersionGen := -1;
+  FFontTblClose := -1;
+  FColorTblClose := -1;
   FAnsiCp := 1252;
   FDeff := -1;
   FFirstFont := -1;
@@ -2320,9 +2382,14 @@ begin
       begin
         FinishFontEntry;
         SortFonts;
+        // (a writer adds the fonts a changed paragraph needs before this brace)
+        if not FS.BodyStarted and (FFontTblClose < 0) then FFontTblClose := FTok.Start;
       end;
     rdColorTable:
-      if FColorAny then AddColor;
+      begin
+        if FColorAny then AddColor;
+        if not FS.BodyStarted and (FColorTblClose < 0) then FColorTblClose := FTok.Start;
+      end;
     rdListLevel:
       begin
         SetLength(FCurList.Levels, Length(FCurList.Levels) + 1);
@@ -2582,6 +2649,27 @@ function TTyRtfParser.ColorOf(AIndex: Integer; ADefault: TColor): TColor;
 begin
   if (AIndex <= 0) or (AIndex >= FColorCount) or FColorAuto[AIndex] then Result := ADefault
   else Result := FColors[AIndex];
+end;
+
+function TTyRtfParser.FontCount: Integer;
+begin
+  Result := FFontCount;
+end;
+
+function TTyRtfParser.Font(AIndex: Integer): TTyRtfFont;
+begin
+  Result := FFonts[AIndex];
+end;
+
+function TTyRtfParser.ColorCount: Integer;
+begin
+  Result := FColorCount;
+end;
+
+function TTyRtfParser.Color(AIndex: Integer; out AAuto: Boolean): TColor;
+begin
+  AAuto := FColorAuto[AIndex];
+  Result := FColors[AIndex];
 end;
 
 procedure TTyRtfParser.ListWord(AKw: Integer);
@@ -3483,6 +3571,7 @@ begin
     FS.HeaderEnd := FS.DocCloseAt;
     FS.Boundary := FS.HeaderEnd;
   end;
+  FLastOpen := FS.HasContent or (FS.Paras = 0);
   if FS.HasContent then
   begin
     FTok.Stop := FS.CurEnd;
@@ -3579,13 +3668,13 @@ begin
   Result := FCharId[AClass];
 end;
 
-procedure TTyRtfParser.ResolveList(var AList: TTyListFormat);
+procedure TTyRtfParser.ResolveListRef(ALs, AIlvl: Integer; var AList: TTyListFormat);
 var
   i, id, lvl: Integer;
 begin
   id := -1;
   for i := 0 to FOverrideCount - 1 do
-    if FOverrideLs[i] = FS.Props.Ls then
+    if FOverrideLs[i] = ALs then
     begin
       id := FOverrideId[i];
       Break;
@@ -3594,7 +3683,7 @@ begin
   for i := 0 to FListCount - 1 do
     if FLists[i].Id = id then
     begin
-      lvl := FS.Props.Ilvl;
+      lvl := AIlvl;
       if lvl < 0 then lvl := 0;
       AList.Level := lvl;
       if lvl > High(FLists[i].Levels) then Exit;
@@ -3662,7 +3751,7 @@ begin
         Result.LineSpacingValue := Sl;
       end;
     if Ls > 0 then
-      ResolveList(Result.List)
+      ResolveListRef(Ls, Ilvl, Result.List)
     else if ListKind <> lkNone then
     begin
       Result.List.Kind := ListKind;
@@ -4042,6 +4131,7 @@ begin
   // the groups hold besides them is let go of
   for i := 0 to FGroups.Count - 1 do FreeGroup(TTyRtfGroup(FGroups[i]));
   FGroups.Free;
+  FWalk.Free;
   FScan.Free;
   inherited Destroy;
 end;
@@ -4602,22 +4692,59 @@ function TTyRtfLoad.ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolea
 var
   src, nbytes: Int64;
   v: Pointer;
-  g: TTyRtfGroup;
-  i: Integer;
 begin
   ARange := Range(-1, -1);
   if not FDoc.Text.ParaLazySource(AIndex, src, nbytes) then Exit(False);
   v := TRtfBuild.ParagraphValue(FDoc, AIndex);
-  if v <> nil then
-  begin
-    // parsed: untouched while it still has the value this load gave it
-    g := GroupOf(src);
-    if g = nil then Exit(False);
-    i := g.Find(src);
-    if (i < 0) or (g.States[i] <> StateOurs) or (g.Values[i] <> v) then Exit(False);
-  end;
+  if not OwnsValue(src, v) then Exit(False);
   ARange := Range(src, src + nbytes);
   Result := True;
+end;
+
+function TTyRtfLoad.OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
+var
+  g: TTyRtfGroup;
+  i: Integer;
+begin
+  if AValue = nil then Exit(True);
+  // parsed: untouched while it still has the value this load gave it
+  g := GroupOf(ASrcOffset);
+  if g = nil then Exit(False);
+  i := g.Find(ASrcOffset);
+  Result := (i >= 0) and (g.States[i] = StateOurs) and (g.Values[i] = AValue);
+end;
+
+function TTyRtfLoad.LastParaOpen: Boolean;
+begin
+  Result := FDone and FScan.LastParaOpen;
+end;
+
+function TTyRtfLoad.StateAt(APos: Int64; out AState: TTyRtfState): Boolean;
+var
+  k: Integer;
+begin
+  AState := Default(TTyRtfState);
+  if (APos < 0) or (APos > Length(FBytes)) then Exit(False);
+  k := IntervalOf(APos);
+  // the scan kept from the last call goes on when the position is ahead of it and no
+  // snapshot is nearer
+  if (FWalk = nil) or FWalk.Finished or (FWalk.Position > APos) or
+     (FIntervalPos[k] > FWalk.Position) then
+  begin
+    FreeAndNil(FWalk);
+    FWalk := TTyRtfParser.Create(FBytes, nil);
+    if k > 0 then
+    begin
+      FWalk.CopyTablesFrom(FScan.TablesOf(FSnaps[k].TablesGen));
+      FWalk.Resume(FSnaps[k]);
+    end;
+  end;
+  if FWalk.Position < APos then FWalk.ParseUntil(APos, -1);
+  // (a scan that reached the end of the file has closed every group: not a state to go on from)
+  Result := (FWalk.Position = APos) and not FWalk.Finished;
+  if Result then AState := FWalk.SaveState;
+  // it keeps no record of the paragraphs it went over
+  FWalk.DropParas(FWalk.ParaCount);
 end;
 
 // ---- the entry points ----
@@ -4750,6 +4877,289 @@ begin
   change.NewLen := ADoc.Text.Length;
   change.NewParaCount := ADoc.Text.ParaCount;
   if Assigned(handler) then handler(ADoc, change);
+end;
+
+// ---- for the writer ----
+
+function TyRtfCharsetCodePage(ACharset, AAnsiCodePage: Integer): Integer;
+begin
+  Result := CharsetCodePage(ACharset);
+  if Result = CpSymbol then Exit(0);
+  if (Result = 0) or not TyRichCodePageSupported(Result) then Result := AAnsiCodePage;
+end;
+
+function TyRtfFragmentIsWord(const AFragment: RawByteString; const AName: string): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  p: PByte;
+begin
+  Result := False;
+  if AFragment = '' then Exit;
+  p := PByte(PAnsiChar(AFragment));
+  lex.Init(p, 0, Length(AFragment));
+  if not lex.Next(t) or (t.Kind <> rtkWord) then Exit;
+  Result := (t.NameLen = Length(AName)) and NameStarts(p + t.NameStart, t.NameLen, AName);
+end;
+
+// By the same tests BodyWord and HandleDestination make when they put a fragment into the
+// paragraph's Extra.
+function TyRtfParaExtraKind(const AFragment: RawByteString; out AParam: Integer): TTyRtfParaExtraKind;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  p: PByte;
+  got: Boolean;
+begin
+  AParam := 0;
+  if AFragment = '' then Exit(pekTop);
+  p := PByte(PAnsiChar(AFragment));
+  lex.Init(p, 0, Length(AFragment));
+  if not lex.Next(t) then Exit(pekTop);
+  Result := pekPn;
+  if t.Kind = rtkGroupStart then
+  begin
+    // a group: {\*\oldpprops ...} among the paragraph's words, {\pntxta ...} and
+    // {\pntxtb ...} inside {\*\pn}
+    got := lex.Next(t);
+    while got and (t.Kind = rtkSymbol) and (t.Value = Ord('*')) do got := lex.Next(t);
+    if got and (t.Kind = rtkWord) and
+       (LookupWord(p + t.NameStart, t.NameLen) = kwDParaExtra) then
+      Result := pekTop;
+    Exit;
+  end;
+  if t.Kind <> rtkWord then Exit;
+  AParam := t.Param;
+  case LookupWord(p + t.NameStart, t.NameLen) of
+    kwLs: Result := pekLs;
+    kwIlvl: Result := pekIlvl;
+    kwParaExtra, kwSl, kwSlMult: Result := pekTop;
+    kwUnknown:
+      // borders and shading; any other unknown word is the paragraph's only inside {\*\pn}
+      if IsParaPrefixWord(p + t.NameStart, t.NameLen) then Result := pekTop;
+  end;
+end;
+
+type
+  // Control words put together as bytes (fragments of the file go in as they are: no string
+  // of one code page is ever joined to one of another).
+  TWordBuf = record
+    Data: TBytes;
+    Len: PtrInt;
+    procedure Add(const S: string);
+    procedure AddWord(const AName: string; AValue: Integer);
+    procedure AddBytes(P: PByte; ACount: PtrInt);
+  end;
+
+procedure TWordBuf.AddBytes(P: PByte; ACount: PtrInt);
+begin
+  if ACount <= 0 then Exit;
+  if Len + ACount > Length(Data) then SetLength(Data, (Len + ACount) * 2 + 64);
+  Move(P^, Data[Len], ACount);
+  Inc(Len, ACount);
+end;
+
+procedure TWordBuf.Add(const S: string);
+begin
+  if S <> '' then AddBytes(PByte(PChar(S)), Length(S));
+end;
+
+procedure TWordBuf.AddWord(const AName: string; AValue: Integer);
+begin
+  Add('\' + AName + IntToStr(AValue));
+end;
+
+function TyRtfStateWords(const AState: TTyRtfState; const ABytes: TBytes;
+  ALevel: Integer; ATable: Boolean): RawByteString;
+const
+  TabAlignWord: array[TTyTabAlign] of string = ('', '\tqc', '\tqr', '\tqdec');
+  TabLeaderWord: array[TTyTabLeader] of string = ('', '\tldot', '\tlhyph', '\tlul', '\tlth',
+    '\tleq');
+var
+  b: TWordBuf;
+  p: TTyRtfProps;
+  nodes: TTyRtfNodes;
+  i, split, param: Integer;
+  inPn, pnDone: Boolean;
+
+  // A node list's entries, first to last.
+  function ListOf(AList: Integer): TTyRtfNodes;
+  var
+    n, k: Integer;
+  begin
+    n := 0;
+    k := AList;
+    while (k >= 0) and (k <= High(AState.Nodes)) do
+    begin
+      Inc(n);
+      k := AState.Nodes[k].Prev;
+    end;
+    Result := nil;
+    SetLength(Result, n);
+    k := AList;
+    while n > 0 do
+    begin
+      Dec(n);
+      Result[n] := AState.Nodes[k];
+      k := AState.Nodes[k].Prev;
+    end;
+  end;
+
+  function Fragment(const R: TTyRtfNode): RawByteString;
+  begin
+    Result := '';
+    if (R.A < 0) or (R.B > Length(ABytes)) or (R.B <= R.A) then Exit;
+    SetLength(Result, R.B - R.A);
+    Move(ABytes[R.A], Result[1], R.B - R.A);
+  end;
+
+  procedure Put(AStart, AStop: Int64);
+  begin
+    if (AStart >= 0) and (AStop <= Length(ABytes)) and (AStop > AStart) then
+      b.AddBytes(@ABytes[AStart], AStop - AStart);
+  end;
+
+  // What {\*\pn ...} sets apart from the fragments it leaves in Extra.
+  procedure PnWords;
+  begin
+    if p.ListKind = lkBullet then
+      b.Add('\pnlvlblt')
+    else if p.ListKind <> lkNone then
+    begin
+      if p.ListLevel > 0 then b.AddWord('pnlvl', p.ListLevel + 1) else b.Add('\pnlvlbody');
+      case p.ListKind of
+        lkDecimal: b.Add('\pndec');
+        lkLowerAlpha: b.Add('\pnlcltr');
+        lkUpperAlpha: b.Add('\pnucltr');
+        lkLowerRoman: b.Add('\pnlcrm');
+        lkUpperRoman: b.Add('\pnucrm');
+      end;
+    end;
+    if p.ListStart <> 0 then b.AddWord('pnstart', p.ListStart);
+  end;
+
+begin
+  b := Default(TWordBuf);
+  if (ALevel >= 0) and (ALevel <= High(AState.Stack)) then p := AState.Stack[ALevel]
+  else p := AState.Core.Props;
+  b.Add('\pard\plain');
+  b.AddWord('uc', p.Uc);
+  // the paragraph
+  case p.Align of
+    paraCenter: b.Add('\qc');
+    paraRight: b.Add('\qr');
+    paraJustify: b.Add('\qj');
+  end;
+  if p.FirstIndent <> 0 then b.AddWord('fi', p.FirstIndent);
+  if p.LeftIndent <> 0 then b.AddWord('li', p.LeftIndent);
+  if p.RightIndent <> 0 then b.AddWord('ri', p.RightIndent);
+  if p.SpaceBefore <> 0 then b.AddWord('sb', p.SpaceBefore);
+  if p.SpaceAfter <> 0 then b.AddWord('sa', p.SpaceAfter);
+  // the line spacing as its own tokens: an unnamed multiple goes into Extra as they are
+  Put(p.SlTok.Start, p.SlTok.Stop);
+  Put(p.SlMultTok.Start, p.SlMultTok.Stop);
+  nodes := ListOf(p.Tabs);
+  for i := 0 to High(nodes) do
+  begin
+    b.Add(TabAlignWord[TTyTabAlign(nodes[i].B and $FF)]);
+    b.Add(TabLeaderWord[TTyTabLeader(nodes[i].B shr 8)]);
+    b.AddWord('tx', Integer(nodes[i].A));
+  end;
+  // a kind named for a tab stop that has not come yet
+  b.Add(TabAlignWord[p.TabAlign]);
+  b.Add(TabLeaderWord[p.TabLeader]);
+  if p.RtlPar then b.Add('\rtlpar');
+  if ATable then
+  begin
+    if p.InTable then b.Add('\intbl');
+    if p.Itap <> 0 then b.AddWord('itap', p.Itap);
+  end;
+  // the paragraph's unknown words in their order, those read inside {\*\pn} inside one
+  // again (outside it the reader would take them for character words)
+  nodes := ListOf(p.ParaExtra);
+  inPn := False;
+  pnDone := False;
+  for i := 0 to High(nodes) do
+  begin
+    if TyRtfParaExtraKind(Fragment(nodes[i]), param) = pekPn then
+    begin
+      if not inPn then
+      begin
+        b.Add('{\*\pn');
+        if not pnDone then PnWords;
+        pnDone := True;
+        inPn := True;
+      end;
+    end
+    else if inPn then
+    begin
+      b.Add('}');
+      inPn := False;
+    end;
+    Put(nodes[i].A, nodes[i].B);
+  end;
+  if inPn then b.Add('}');
+  if not pnDone and ((p.ListKind <> lkNone) or (p.ListStart <> 0)) then
+  begin
+    b.Add('{\*\pn');
+    PnWords;
+    b.Add('}');
+  end;
+  // the characters. \f first: no slot is named yet, so it sets the font and no slot. Then
+  // the unknown words - an \af among them is one only while no slot is named - then the
+  // slots (\af: the font stays), and last what names the slot in effect: the slot's own
+  // word, or, when \rtlch or \ltrch was the last to name one, the unknown words from the
+  // last of those on.
+  if p.FontNum >= 0 then b.AddWord('f', p.FontNum);
+  nodes := ListOf(p.CharExtra);
+  split := Length(nodes);
+  if (p.Slot = sloOther) and ((p.LochNum >= 0) or (p.HichNum >= 0) or (p.DbchNum >= 0)) then
+    for i := High(nodes) downto 0 do
+      if TyRtfFragmentIsWord(Fragment(nodes[i]), 'rtlch') or
+         TyRtfFragmentIsWord(Fragment(nodes[i]), 'ltrch') then
+      begin
+        split := i;
+        Break;
+      end;
+  for i := 0 to split - 1 do Put(nodes[i].A, nodes[i].B);
+  if p.LochNum >= 0 then
+  begin
+    b.Add('\loch');
+    b.AddWord('af', p.LochNum);
+  end;
+  if p.HichNum >= 0 then
+  begin
+    b.Add('\hich');
+    b.AddWord('af', p.HichNum);
+  end;
+  if p.DbchNum >= 0 then
+  begin
+    b.Add('\dbch');
+    b.AddWord('af', p.DbchNum);
+  end;
+  if split < Length(nodes) then
+    for i := split to High(nodes) do Put(nodes[i].A, nodes[i].B)
+  else
+    case p.Slot of
+      sloLoch: b.Add('\loch');
+      sloHich: b.Add('\hich');
+      sloDbch: b.Add('\dbch');
+    end;
+  if p.Bold then b.Add('\b');
+  if p.Italic then b.Add('\i');
+  if p.Underline then b.Add('\ul');
+  if p.Strike then b.Add('\strike');
+  case p.VertAlign of
+    vaSuper: b.Add('\super');
+    vaSub: b.Add('\sub');
+  end;
+  if p.ColorIdx <> 0 then b.AddWord('cf', p.ColorIdx);
+  if p.HighlightIdx <> 0 then b.AddWord('highlight', p.HighlightIdx);
+  // (the size last: whatever came before it, the words end with one of the reader's own)
+  b.AddWord('fs', p.Size);
+  Result := '';
+  SetLength(Result, b.Len);
+  if b.Len > 0 then Move(b.Data[0], Result[1], b.Len);
 end;
 
 initialization

@@ -18,7 +18,7 @@ interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RtfRead;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
 
 type
   TTyRtfLazyTest = class(TTestCase)
@@ -588,14 +588,59 @@ begin
 end;
 
 procedure TTyRtfLazyTest.TestAnEditAtTheEndOfALazyDocumentSavesTheRestVerbatim;
+var
+  b, o: TBytes;
+  d, r: TTyRichDocument;
+  load: TTyRtfLoad;
+  s: TBytesStream;
+  last, i: Integer;
+  parsed, cursor: Int64;
+  range: TTyRtfRange;
+  before: RawByteString;
 begin
-  // With Task 7's writer: open the 5 MB document of the test above, type 'X' at its end,
-  // save it with TyRichSaveRtf into a TBytesStream, and assert that the saved bytes are
-  // load.Header's bytes, then every paragraph but the last copied from load.ParaSource's
-  // range byte for byte (the file's bytes up to the start of the last paragraph), then the
-  // last paragraph rewritten (its text with the X, in the model's formats), then the
-  // trailer's bytes - and that load.ParsedBytes did not grow while saving.
-  Ignore('needs the RTF writer (Task 7)');
+  // the 5 MB document of the test above, 'X' typed at its end, saved
+  b := Generate('re-zh-mixed.rtf', 5 * MB);
+  d := LoadWith(b, False);
+  r := nil;
+  s := TBytesStream.Create;
+  try
+    load := TyRichRtfLoadOf(d);
+    last := d.Text.ParaCount - 1;
+    before := ParaText(d, last);
+    AssertTrue('typed at the end', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'X')));
+    parsed := load.ParsedBytes;
+    TyRichSaveRtf(d, s);
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertEquals('saving parsed nothing', parsed, load.ParsedBytes);
+    // the header's bytes, then every paragraph but the last from its range, byte for byte
+    AssertTrue('the header', (Length(o) > load.Header.Stop) and
+      CompareMem(@o[0], @b[0], load.Header.Stop));
+    cursor := load.Header.Stop;
+    for i := 0 to last - 1 do
+    begin
+      AssertTrue(Format('paragraph %d is the file''s', [i]), load.ParaSource(i, range));
+      AssertEquals(Format('paragraph %d follows the one before', [i]), cursor, range.Start);
+      if not CompareMem(@o[range.Start], @b[range.Start], range.Stop - range.Start) then
+        Fail(Format('paragraph %d was not copied as it is', [i]));
+      cursor := range.Stop;
+    end;
+    // then the last paragraph rewritten, then the trailer's bytes
+    AssertTrue('the trailer', CompareMem(@o[Length(o) - (Length(b) - load.Trailer.Start)],
+      @b[load.Trailer.Start], Length(b) - load.Trailer.Start));
+    AssertTrue('the rewritten paragraph is all that lies between',
+      Length(o) - (Length(b) - load.Trailer.Start) - cursor < 2000);
+    r := LoadWith(o, True);
+    AssertEquals('read back: paragraphs', d.Text.ParaCount, r.Text.ParaCount);
+    // (as bytes: joining it to a literal would convert between code pages)
+    SetLength(before, Length(before) + 1);
+    before[Length(before)] := 'X';
+    AssertText('read back: the last paragraph, with the X', before, ParaText(r, last));
+    CheckAgreeAt('read back: in the model''s formats', d, r, last, last, 1);
+  finally
+    s.Free;
+    r.Free;
+    d.Free;
+  end;
 end;
 
 { ---- the rulings ---- }

@@ -288,6 +288,7 @@ uses
   test.richedit.textio,
   test.richedit.rtfread,
   test.richedit.rtflazy,
+  test.richedit.rtfwrite,
   test.richedit.wmf;
 
 type
