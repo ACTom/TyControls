@@ -32,6 +32,17 @@ unit tyControls.RichEdit.RtfWrite;
 //
 // Saving reads the model; it changes nothing in the document (a paragraph it has to write
 // from the model is parsed if it was not).
+//
+// What is written from the model is as long as the model: the save goes through those
+// paragraphs in walks of the text that hand out each paragraph's value and text together,
+// streams through one buffer, and - asked to - reports how far it is and stops when told
+// (TTyRtfSaveProgress).
+//
+// What the model keeps of a file beside what it understands - the fragments of a format's
+// Extra, an object's bytes, a row's RawFormat - means something only next to the header it
+// was read with: they name fonts, colours, styles and lists by the numbers of that file's
+// tables. They are written back into that file. (For whoever carries content from one
+// document to another: such fragments cannot simply go along.)
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
@@ -45,6 +56,17 @@ uses
 
 type
   ETyRichRtfWrite = class(ETyRichRtf);
+  // A save was cancelled by its progress callback. An EAbort: it shows no message when it
+  // reaches the application's exception handler.
+  ETyRichSaveCancelled = class(EAbort);
+
+  // A save's progress: ADone of ATotal paragraphs are in the output. Called about every
+  // 256 KB written, and every 65536 paragraphs while the save plans (it writes nothing
+  // then, and ADone stays 0) - not at all for a save shorter than that. False cancels the
+  // save: it raises ETyRichSaveCancelled and leaves a part of the file in the stream. The
+  // handler may let the application handle its messages; it must not change the document
+  // or put other content into it.
+  TTyRtfSaveProgress = function(ADone, ATotal: Int64): Boolean of object;
 
   // Paragraphs written from the model: ParaCount of them from FirstPara (none where only a
   // deletion was closed), as the bytes [OutStart, OutStop) of the output - the words that
@@ -65,12 +87,27 @@ type
     VerbatimParas: Int64;         // copied from the file
   end;
 
-// Writes ADoc to AStream as RTF. Raises ETyRichRtfWrite, and writes nothing, when ADoc is
-// Incomplete (a cancelled load: the rest of the file is not in it) or still Loading (finish
-// the load first: TTyRtfLoad.Step).
-procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream); overload;
-procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; out AInfo: TTyRtfWriteInfo);
-  overload;
+// Writes ADoc to AStream as RTF.
+//
+// Raises ETyRichRtfWrite before anything is written when ADoc is Incomplete (a cancelled
+// load: the rest of the file is not in it) or still Loading (finish the load first:
+// TTyRtfLoad.Step), and when a paragraph that has to be written from the model lies in a
+// table row that holds a nested table (TTyRichRow.HoldsNestedTable; the model lets no
+// command change such a row). Any other exception - the stream's, ETyRichSaveCancelled -
+// leaves a part of the file in the stream: save to a temporary file and put it in the
+// place of the real one when this has returned.
+//
+// AOnProgress: see TTyRtfSaveProgress. Without it a file that was not changed goes out in
+// three writes; with it in pieces of 256 KB.
+//
+// In a rewritten stretch of a file, the table row definition in effect is put back after
+// the stretch only before a paragraph of a table (see RestoreAt). A character of a text
+// file that was read as U+FFFD (bytes that are no text in the file's encoding) is written
+// as U+FFFD: the bytes it stood for are not in the RTF.
+procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream;
+  AOnProgress: TTyRtfSaveProgress = nil); overload;
+procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; out AInfo: TTyRtfWriteInfo;
+  AOnProgress: TTyRtfSaveProgress = nil); overload;
 
 implementation
 
@@ -79,6 +116,10 @@ uses
 
 const
   OutBufSize = 64 * 1024;
+  // how often the progress callback is asked: every so many bytes written, and while the
+  // save plans every so many paragraphs (a power of two)
+  ProgressBytes = 256 * 1024;
+  PlanEvery = 65536;
   // How far back a numbered paragraph's place in its list is counted (its number is only
   // text for readers that do not number themselves).
   MaxListWalk = 10000;
@@ -135,6 +176,7 @@ type
     First, Count: Integer;   // paragraphs
     Start, Stop: Int64;      // a block: its bytes; a stretch: the file position it begins at
                              // and the one the file goes on from (-1: the end of the body)
+    Look: Boolean;           // a stretch: a font of it gets its charset from the text
   end;
 
   TRtfWriter = class
@@ -145,6 +187,11 @@ type
     FPool: TTyFormatPool;
     FInfo: TTyRtfWriteInfo;
     FStretchN: Integer;
+    // progress
+    FOnProgress: TTyRtfSaveProgress;
+    FProgressAt: Int64;      // bytes written when the callback was last asked
+    FDone: Int64;            // paragraphs in the output
+    FCopyParas, FCopyBytes, FCopyStart: Int64;   // a block of the file that is going out
     // output
     FBuf: array of Byte;
     FBufLen: Integer;
@@ -181,6 +228,7 @@ type
     FTrailer: TTyRtfRange;
     FLastOpen: Boolean;
     FInStretch: Boolean;
+    FStretchLook: Boolean;   // the text of the stretch being planned has to be looked at
     FStretchFirst: Integer;
     FStretchX: Int64;
     FBlockFirst: Integer;
@@ -195,14 +243,20 @@ type
     FWroteRow: Boolean;
     FLastRowDef: RawByteString;
     FStartRowDef: RawByteString;   // the row definition in effect where the stretch began
+    // the paragraph written last: its list and its number in it
     FNumPara, FNum: Integer;
     FNumList: TTyListFormat;
     FUc: Integer;            // the \uc the file has in effect where the stretch begins
+    FHavePrev: Boolean;      // a paragraph of the stretch is written and not yet ended
+    FPrevCell: TTyRichCell;  // its cell
     // output
     procedure Flush;
+    procedure Tick;
+    procedure PlanTick(AIndex: Integer); inline;
     procedure Put(P: PByte; ACount: Int64);
     procedure PutB(B: Byte); inline;
     procedure PutS(const S: string);
+    procedure PutInt(AValue: Int64);
     procedure PutRaw(const S: RawByteString);
     function OutPos: Int64;
     procedure Word(const AName: string);
@@ -225,8 +279,14 @@ type
     function ParaInfo(AId: Integer): PParaInfo;
     function FontOf(AId: Integer): Integer;
     function FontNumOf(AId: Integer): Integer;
-    procedure NotePara(AIndex: Integer);
-    procedure ScanText(AIndex: Integer; const ARuns: TTyRunArray);
+    function Unsettled(ADefName: Integer): Boolean;
+    procedure ReadPara(AIndex: Integer; AData: Pointer; out AFormat: TTyParaFormatId;
+      out ARuns: TTyRunArray; out ACell: TTyRichCell);
+    procedure Note(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
+      ACell: TTyRichCell);
+    procedure NotePara(AIndex: Integer; AData: Pointer);
+    procedure LookPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
     procedure FinishTables;
     procedure WriteFontEntry(const F: TFontRec; AAnsiCp: Integer);
     procedure WriteNoFontEntry;
@@ -247,12 +307,16 @@ type
     procedure PlanFile;
     // paragraphs from the model
     procedure WriteStretch(AFirst, ACount: Integer);
+    procedure StretchPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+    procedure StartRow(ACell: TTyRichCell);
+    procedure EndPara(ACell, ANext: TTyRichCell);
     procedure WriteRowDef(ARow: TTyRichRow);
-    procedure WritePara(AIndex: Integer; APos, ALen: Int64; AInCell: Boolean);
-    procedure WriteParaFormat(AIndex: Integer; AInfo: PParaInfo; AInCell: Boolean;
-      AFirstFont: Integer);
+    procedure WritePara(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
+      AInCell: Boolean; AText: PByte; ALen: PtrInt);
+    procedure WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont, ANumber: Integer);
     procedure WritePnWords(const AList: TTyListFormat);
-    procedure WritePnText(AIndex: Integer; AInfo: PParaInfo; AFirstFont: Integer);
+    procedure WritePnText(AInfo: PParaInfo; AFirstFont, ANumber: Integer);
     function ListNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
     procedure WriteCharFormat(AId: Integer);
     procedure WriteChar(ACode: Cardinal);
@@ -271,6 +335,18 @@ type
     procedure Run;
     property Info: TTyRtfWriteInfo read FInfo;
   end;
+
+var
+  // bytes of text that are written as they are: printable ASCII but \ { }
+  PlainByte: array[Byte] of Boolean;
+
+procedure InitPlainBytes;
+var
+  b: Integer;
+begin
+  for b := 0 to 255 do
+    PlainByte[b] := (b >= $20) and (b <= $7E) and not (b in [Ord('\'), Ord('{'), Ord('}')]);
+end;
 
 // ---- small helpers ----
 
@@ -533,27 +609,52 @@ begin
   FStream.WriteBuffer(FBuf[0], FBufLen);
   Inc(FWritten, FBufLen);
   FBufLen := 0;
+  if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
+end;
+
+// Asks the progress callback: how many paragraphs are in the output - of a block of the
+// file that is going out, its share by bytes. False from it ends the save.
+procedure TRtfWriter.Tick;
+var
+  done: Int64;
+begin
+  FProgressAt := FWritten;
+  done := FDone;
+  if (FCopyBytes > 0) and (FWritten > FCopyStart) then
+    Inc(done, FCopyParas * (FWritten - FCopyStart) div FCopyBytes);
+  if done > FParaCount then done := FParaCount;
+  if not FOnProgress(done, FParaCount) then
+    raise ETyRichSaveCancelled.Create('The save was cancelled');
+end;
+
+// While the save plans nothing is written: the callback is asked every so many paragraphs.
+procedure TRtfWriter.PlanTick(AIndex: Integer);
+begin
+  if Assigned(FOnProgress) and (AIndex and (PlanEvery - 1) = PlanEvery - 1) then Tick;
 end;
 
 procedure TRtfWriter.Put(P: PByte; ACount: Int64);
 const
-  Chunk = 256 * 1024 * 1024;
+  BigChunk = 256 * 1024 * 1024;
 var
-  n: Int64;
+  n, chunk: Int64;
 begin
   if ACount <= 0 then Exit;
   if ACount >= OutBufSize then
   begin
-    // a block of the file goes out as it is, not through the buffer
+    // a block of the file goes out as it is, not through the buffer: in one write - or,
+    // when the progress is watched, in pieces with the callback between them
     Flush;
+    if Assigned(FOnProgress) then chunk := ProgressBytes else chunk := BigChunk;
     while ACount > 0 do
     begin
       n := ACount;
-      if n > Chunk then n := Chunk;
+      if n > chunk then n := chunk;
       FStream.WriteBuffer(P^, n);
       Inc(FWritten, n);
       Inc(P, n);
       Dec(ACount, n);
+      if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
     end;
     Exit;
   end;
@@ -592,9 +693,41 @@ begin
   FRawOpen := False;
 end;
 
+// A number's digits, straight into the buffer (a save writes one for every character that
+// is not ASCII: no string is made for it).
+procedure TRtfWriter.PutInt(AValue: Int64);
+var
+  digits: array[0..19] of Byte;
+  n: Integer;
+  v: QWord;
+begin
+  if AValue < 0 then
+  begin
+    PutB(Ord('-'));
+    v := QWord(-(AValue + 1)) + 1;
+  end
+  else
+    v := AValue;
+  n := 0;
+  repeat
+    digits[n] := Ord('0') + v mod 10;
+    v := v div 10;
+    Inc(n);
+  until v = 0;
+  while n > 0 do
+  begin
+    Dec(n);
+    PutB(digits[n]);
+  end;
+end;
+
 procedure TRtfWriter.WordN(const AName: string; AValue: Int64);
 begin
-  Word(AName + IntToStr(AValue));
+  PutB(Ord('\'));
+  PutS(AName);
+  PutInt(AValue);
+  FNeedDelim := True;
+  FRawOpen := False;
 end;
 
 // A brace, a control symbol, \'xx: needs no delimiter and leaves none open.
@@ -912,69 +1045,107 @@ begin
   if k >= 0 then Result := FFonts[k].Num else Result := -1;
 end;
 
+// A font name with no charset whose charset the text written in it can still say (kana
+// settles it: Japanese text has ideographs too).
+function TRtfWriter.Unsettled(ADefName: Integer): Boolean;
+begin
+  Result := not FDefNames[ADefName].Known and not FDefNames[ADefName].Kana;
+end;
+
+// What paragraph AIndex holds. AData is its value as a walk of the text hands it out: read
+// without a lookup. A paragraph with no value in a document that parses on demand is one
+// of the file's that was never parsed (a stretch takes it along: its row, the way back to
+// a clean place); it is read by its index, which parses it.
+procedure TRtfWriter.ReadPara(AIndex: Integer; AData: Pointer; out AFormat: TTyParaFormatId;
+  out ARuns: TTyRunArray; out ACell: TTyRichCell);
+begin
+  if FDoc.ReadValue(AData, AFormat, ARuns, ACell) then Exit;
+  AFormat := FDoc.ParaFormatOf(AIndex);
+  ARuns := FDoc.RunsOf(AIndex);
+  ACell := FDoc.CellAt(AIndex);
+end;
+
 // A paragraph that will be written from the model: the fonts and colours it needs.
-procedure TRtfWriter.NotePara(AIndex: Integer);
+procedure TRtfWriter.Note(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
+  ACell: TTyRichCell);
 var
-  runs: TTyRunArray;
   j: Integer;
   ci: PCharInfo;
   pi: PParaInfo;
-  look: Boolean;
-  cell: TTyRichCell;
 begin
   EnsureTables;
   // A row that holds a nested table is more in the file than in the model: written from
   // the model it would lose the inner table without a word. The model lets nothing change
   // in such a row, so this is not reached through commands; it is asked here all the same,
   // while nothing has been written yet.
-  if FLoad <> nil then
+  if (FLoad <> nil) and (ACell <> nil) and ACell.Row.HoldsNestedTable then
+    raise ETyRichRtfWrite.CreateFmt('RTF writer: paragraph %d is in a table row that holds ' +
+      'a nested table and has changed: written from the model, the row would lose that table',
+      [AIndex]);
+  for j := 0 to High(ARuns) do
   begin
-    cell := FDoc.CellAt(AIndex);
-    if (cell <> nil) and cell.Row.HoldsNestedTable then
-      raise ETyRichRtfWrite.CreateFmt('RTF writer: paragraph %d is in a table row that holds ' +
-        'a nested table and has changed: written from the model, the row would lose that table',
-        [AIndex]);
-  end;
-  runs := FDoc.RunsOf(AIndex);
-  look := False;
-  for j := 0 to High(runs) do
-  begin
-    ci := CharInfo(runs[j].Format);
+    ci := CharInfo(ARuns[j].Format);
     if ci^.Font = -1 then FNoFontUsed := True;
-    if (ci^.DefName >= 0) and not FDefNames[ci^.DefName].Known and
-       not FDefNames[ci^.DefName].Kana then
-      look := True;
+    // the text written in such a font is looked at when the plan is made (LookPara)
+    if (ci^.DefName >= 0) and Unsettled(ci^.DefName) then FStretchLook := True;
   end;
-  if look then ScanText(AIndex, runs);
-  pi := ParaInfo(FDoc.ParaFormatOf(AIndex));
+  pi := ParaInfo(AFormat);
   // a bullet made here is the Symbol font's
   if (pi^.Mode = lmGen) and (pi^.Fmt.List.Kind = lkBullet) then FSymbolNeeded := True;
 end;
 
-// What the text written in a font that names no charset says about it.
-procedure TRtfWriter.ScanText(AIndex: Integer; const ARuns: TTyRunArray);
+procedure TRtfWriter.NotePara(AIndex: Integer; AData: Pointer);
 var
-  text: UTF8String;
-  p, n, len: PtrInt;
+  pf: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+begin
+  ReadPara(AIndex, AData, pf, runs, cell);
+  Note(AIndex, pf, runs, cell);
+end;
+
+// One step of the walk over a stretch whose text is looked at: what the text written in a
+// font that names no charset says about it.
+procedure TRtfWriter.LookPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+  var AContinue: Boolean);
+var
+  pf: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  p, n: PtrInt;
   ch: Int64;
   r, d: Integer;
   code: Cardinal;
+  any: Boolean;
 begin
-  text := FDoc.Text.GetText(FDoc.Text.ParaStart(AIndex), FDoc.Text.ParaLength(AIndex));
-  len := Length(text);
-  p := 1;
+  PlanTick(AIndex);
+  // (in a document of our own a paragraph with no value is plain, and was not noted)
+  if (AData = nil) and (FLoad = nil) then Exit;
+  ReadPara(AIndex, AData, pf, runs, cell);
+  any := False;
+  for r := 0 to High(runs) do
+  begin
+    d := CharInfo(runs[r].Format)^.DefName;
+    if (d >= 0) and Unsettled(d) then any := True;
+  end;
+  if not any then Exit;
+  p := 0;
   ch := 0;
   r := 0;
-  while p <= len do
+  while p < ALen do
   begin
-    while (r < High(ARuns)) and (ARuns[r + 1].Start <= ch) do Inc(r);
-    n := NextChar(@text[p], len - p + 1, code);
-    d := CharInfo(ARuns[r].Format)^.DefName;
+    while (r < High(runs)) and (runs[r + 1].Start <= ch) do Inc(r);
+    n := NextChar(AText + p, ALen - p, code);
+    d := CharInfo(runs[r].Format)^.DefName;
     if d >= 0 then
       with FDefNames[d] do Classify(code, Kana, Hangul, Han);
     Inc(p, n);
     Inc(ch);
   end;
+  // when no name is left that the text could still say more about, the walk can end
+  for d := 0 to FDefNameN - 1 do
+    if Unsettled(d) then Exit;
+  AContinue := False;
 end;
 
 // Every use has been seen: the names without a charset get their entries.
@@ -1276,6 +1447,7 @@ begin
   FPlan[FPlanN].Count := ACount;
   FPlan[FPlanN].Start := AStart;
   FPlan[FPlanN].Stop := AStop;
+  FPlan[FPlanN].Look := False;
   Inc(FPlanN);
 end;
 
@@ -1345,14 +1517,17 @@ begin
   if a = FBlockFirst then x := FBlockStart;
   if x > FBlockStart then AddItem(False, FBlockFirst, a - FBlockFirst, FBlockStart, x);
   FInStretch := True;
+  FStretchLook := False;
   FStretchFirst := a;
   FStretchX := x;
-  for k := a to AIndex - 1 do NotePara(k);
+  // (paragraphs of the file the walk has passed: read by their index)
+  for k := a to AIndex - 1 do NotePara(k, nil);
 end;
 
 procedure TRtfWriter.CloseStretch(AIndex: Integer; AStop: Int64);
 begin
   AddItem(True, FStretchFirst, AIndex - FStretchFirst, FStretchX, AStop);
+  FPlan[FPlanN - 1].Look := FStretchLook;
   FInStretch := False;
 end;
 
@@ -1361,6 +1536,7 @@ procedure TRtfWriter.PlanPara(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcB
 var
   own: Boolean;
 begin
+  PlanTick(AIndex);
   // the file's own: its text is the unedited lazy paragraph and its formats are the file's.
   // The file's last paragraph, when it has no terminator, can only be copied as the last.
   own := (ASrcOffset >= FHeaderStop) and (ASrcOffset + ASrcBytes <= FTrailer.Start) and
@@ -1385,10 +1561,13 @@ begin
     FFilePos := ASrcOffset + ASrcBytes;
   end
   else
-    NotePara(AIndex);
+    NotePara(AIndex, AData);
 end;
 
 procedure TRtfWriter.PlanFile;
+var
+  k: Integer;
+  item: TPlanItem;
 begin
   FHeaderStop := FLoad.Header.Stop;
   FTrailer := FLoad.Trailer;
@@ -1404,24 +1583,29 @@ begin
     CloseStretch(FParaCount, -1)
   else if FFilePos > FBlockStart then
     AddItem(False, FBlockFirst, FParaCount - FBlockFirst, FBlockStart, FFilePos);
+  // the text of the stretches that have a font whose charset the text decides
+  for k := 0 to FPlanN - 1 do
+  begin
+    item := FPlan[k];
+    if item.Stretch and item.Look and (item.Count > 0) then
+      FDoc.Text.WalkParaTexts(item.First, item.First + item.Count - 1, @LookPara);
+  end;
   FinishTables;
 end;
 
 procedure TRtfWriter.NoteWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
   var AContinue: Boolean);
 begin
+  PlanTick(AIndex);
   // (a paragraph with no value is plain: the default formats, noted once)
-  if AData <> nil then NotePara(AIndex);
+  if AData <> nil then NotePara(AIndex, AData);
 end;
 
 // ---- paragraphs from the model ----
 
+// Paragraphs AFirst .. AFirst + ACount - 1 from the model, in one walk of the text that
+// hands out each paragraph's value and text together (StretchPara).
 procedure TRtfWriter.WriteStretch(AFirst, ACount: Integer);
-var
-  i, stop, k: Integer;
-  pos, len: Int64;
-  cell, next: TTyRichCell;
-  prevRow: TTyRichRow;
 begin
   FCurChar := -1;
   FCurSymbol := False;
@@ -1432,54 +1616,75 @@ begin
   if ACount = 0 then Exit;
   // whatever \uc the file left in effect here: ours is one fallback character
   if FLoad <> nil then Word('uc1');
-  stop := AFirst + ACount;
-  pos := FDoc.Text.ParaStart(AFirst);
-  cell := FDoc.CellAt(AFirst);
   // (the stretch starts and ends between rows: the plan saw to that)
-  prevRow := nil;
-  for i := AFirst to stop - 1 do
+  FHavePrev := False;
+  FPrevCell := nil;
+  FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
+  EndPara(FPrevCell, nil);
+end;
+
+// One paragraph of a stretch. How a paragraph ends depends on the one after it (\par inside
+// a cell, \cell at its end, \row after the row's last cell), so each one first ends the
+// paragraph before it.
+procedure TRtfWriter.StretchPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+  var AContinue: Boolean);
+var
+  pf: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+begin
+  ReadPara(AIndex, AData, pf, runs, cell);
+  if FHavePrev then EndPara(FPrevCell, cell);
+  if (cell <> nil) and (not FHavePrev or (FPrevCell = nil) or (FPrevCell.Row <> cell.Row)) then
+    StartRow(cell);
+  WritePara(AIndex, pf, runs, cell <> nil, AText, ALen);
+  FPrevCell := cell;
+  FHavePrev := True;
+  Inc(FDone);
+end;
+
+// A row begins: its definition. A row is all its cells, each in its place, and the model
+// lets a cell lose its only paragraph: such a cell is written empty - here those before
+// the cell of the row's first paragraph, in EndPara the others - or the cells after it
+// would move left.
+procedure TRtfWriter.StartRow(ACell: TTyRichCell);
+var
+  k: Integer;
+begin
+  WriteRowDef(ACell.Row);
+  if ACell.Index > 0 then
   begin
-    if i + 1 < stop then next := FDoc.CellAt(i + 1) else next := nil;
-    if (cell <> nil) and (cell.Row <> prevRow) then
-    begin
-      WriteRowDef(cell.Row);
-      // A row is all its cells, each in its place. The model lets a cell lose its only
-      // paragraph: such a cell is written empty - here those before the row's first
-      // paragraph - or the cells after it would move left.
-      if cell.Index > 0 then
-      begin
-        Word('pard');
-        Word('intbl');
-        for k := 1 to cell.Index do Word('cell');
-      end;
-    end;
-    len := FDoc.Text.ParaLength(i);
-    WritePara(i, pos, len, cell <> nil);
-    if (cell = nil) or (next = cell) then
-    begin
-      Word('par');
-      NewLine;
-    end
-    else
-    begin
-      Word('cell');
-      if (next = nil) or (next.Row <> cell.Row) then
-      begin
-        // the cells after the row's last paragraph
-        for k := cell.Index + 1 to cell.Row.CellCount - 1 do Word('cell');
-        Word('row');
-        NewLine;
-        // what follows a row starts from \pard
-        FCurPara := -1;
-      end
-      else
-        // the cells between this paragraph's and the next one's
-        for k := cell.Index + 1 to next.Index - 1 do Word('cell');
-    end;
-    if cell <> nil then prevRow := cell.Row else prevRow := nil;
-    Inc(pos, len + 1);
-    cell := next;
+    Word('pard');
+    Word('intbl');
+    for k := 1 to ACell.Index do Word('cell');
   end;
+end;
+
+// The end of a paragraph in ACell (nil: in no table) that ANext's paragraph follows (nil:
+// one outside a table, or none).
+procedure TRtfWriter.EndPara(ACell, ANext: TTyRichCell);
+var
+  k: Integer;
+begin
+  if (ACell = nil) or (ANext = ACell) then
+  begin
+    Word('par');
+    NewLine;
+    Exit;
+  end;
+  Word('cell');
+  if (ANext = nil) or (ANext.Row <> ACell.Row) then
+  begin
+    // the cells after the row's last paragraph
+    for k := ACell.Index + 1 to ACell.Row.CellCount - 1 do Word('cell');
+    Word('row');
+    NewLine;
+    // what follows a row starts from \pard
+    FCurPara := -1;
+  end
+  else
+    // the cells between this paragraph's and the next one's
+    for k := ACell.Index + 1 to ANext.Index - 1 do Word('cell');
 end;
 
 // \trowd and the row's own words as they were read; a row made here: \trgaph108 and its
@@ -1519,57 +1724,84 @@ begin
   FCurPara := -1;
 end;
 
-procedure TRtfWriter.WritePara(AIndex: Integer; APos, ALen: Int64; AInCell: Boolean);
+procedure TRtfWriter.WritePara(AIndex: Integer; AFormat: TTyParaFormatId;
+  const ARuns: TTyRunArray; AInCell: Boolean; AText: PByte; ALen: PtrInt);
 var
-  pf: TTyParaFormatId;
-  runs: TTyRunArray;
   pi: PParaInfo;
-  text: UTF8String;
-  p, n, len: PtrInt;
+  p, q, stop, n: PtrInt;
   ch, runEnd: Int64;
-  r, firstFont: Integer;
+  r, firstFont, number: Integer;
   code: Cardinal;
 begin
-  pf := FDoc.ParaFormatOf(AIndex);
-  runs := FDoc.RunsOf(AIndex);
-  pi := ParaInfo(pf);
+  pi := ParaInfo(AFormat);
   firstFont := -1;
-  if Length(runs) > 0 then firstFont := FontNumOf(runs[0].Format);
-  if (pf <> FCurPara) or (AInCell <> FCurInCell) then
+  if Length(ARuns) > 0 then firstFont := FontNumOf(ARuns[0].Format);
+  // The item's number - and for every paragraph, which list it is of: the next item's
+  // number goes on from it (ListNumber). A number that is not written (Word's list table
+  // says it) is worked out only when that costs nothing.
+  number := 0;
+  if pi^.Fmt.List.Kind in [lkNone, lkBullet] then
   begin
-    WriteParaFormat(AIndex, pi, AInCell, firstFont);
-    FCurPara := pf;
+    FNumPara := AIndex;
+    FNumList := pi^.Fmt.List;
+    FNum := 0;
+  end
+  else if (pi^.Mode in [lmPn, lmGen]) or (FNumPara = AIndex - 1) then
+    number := ListNumber(AIndex, pi^.Fmt.List)
+  else
+    FNumPara := -2;
+  if (AFormat <> FCurPara) or (AInCell <> FCurInCell) then
+  begin
+    WriteParaFormat(pi, AInCell, firstFont, number);
+    FCurPara := AFormat;
     FCurInCell := AInCell;
   end
   else if (pi^.Mode in [lmPn, lmGen]) and (pi^.Fmt.List.Kind <> lkNone) then
     // the same list goes on: only the item's own text
-    WritePnText(AIndex, pi, firstFont);
-  if ALen > 0 then text := FDoc.Text.GetText(APos, ALen) else text := '';
-  len := Length(text);
-  p := 1;
+    WritePnText(pi, firstFont, number);
+  p := 0;
   ch := 0;
-  for r := 0 to High(runs) do
+  for r := 0 to High(ARuns) do
   begin
-    if r < High(runs) then runEnd := runs[r + 1].Start else runEnd := ALen;
-    if runs[r].Format <> FCurChar then WriteCharFormat(runs[r].Format);
-    if runs[r].Obj <> nil then
+    if r < High(ARuns) then runEnd := ARuns[r + 1].Start else runEnd := High(Int64);
+    if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
+    if ARuns[r].Obj <> nil then
     begin
-      WriteObject(runs[r].Obj);
+      WriteObject(ARuns[r].Obj);
       // its one character
-      if p <= len then
+      if p < ALen then
       begin
-        Inc(p, NextChar(@text[p], len - p + 1, code));
+        Inc(p, NextChar(AText + p, ALen - p, code));
         Inc(ch);
       end;
       Continue;
     end;
-    while (ch < runEnd) and (p <= len) do
-    begin
-      n := NextChar(@text[p], len - p + 1, code);
-      WriteChar(code);
-      Inc(p, n);
-      Inc(ch);
-    end;
+    while (ch < runEnd) and (p < ALen) do
+      if PlainByte[AText[p]] and not FCurSymbol then
+      begin
+        // printable ASCII goes out as it is, a run of it at once
+        q := p + 1;
+        stop := ALen;
+        if runEnd - ch < stop - p then stop := p + (runEnd - ch);
+        while (q < stop) and PlainByte[AText[q]] do Inc(q);
+        // (what Lit does before a byte of text)
+        if FNeedDelim then
+          PutB(Ord(' '))
+        else if FRawOpen then
+          PutS('{}');
+        FNeedDelim := False;
+        FRawOpen := False;
+        Put(AText + p, q - p);
+        Inc(ch, q - p);
+        p := q;
+      end
+      else
+      begin
+        n := NextChar(AText + p, ALen - p, code);
+        WriteChar(code);
+        Inc(p, n);
+        Inc(ch);
+      end;
   end;
 end;
 
@@ -1594,17 +1826,22 @@ begin
 end;
 
 // The paragraph's place in its list: its number counts the paragraphs of the same list
-// right before it.
+// right before it. Inside a stretch the paragraph before was written just now, and its
+// list and number are known (WritePara notes them for every paragraph); only a stretch's
+// first paragraph has to look back at the paragraphs before it, each by a lookup - at most
+// MaxListWalk of them (the number is only text for readers that do not number themselves).
 function TRtfWriter.ListNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
 var
   k, steps: Integer;
 begin
-  if (FNumPara = AIndex - 1) and SameList(FNumList, AList) then
-    Result := FNum + 1
+  Result := AList.StartAt;
+  if Result <= 0 then Result := 1;
+  if FNumPara = AIndex - 1 then
+  begin
+    if SameList(FNumList, AList) then Result := FNum + 1;
+  end
   else
   begin
-    Result := AList.StartAt;
-    if Result <= 0 then Result := 1;
     k := AIndex - 1;
     steps := 0;
     while (k >= 0) and (steps < MaxListWalk) and
@@ -1622,7 +1859,7 @@ end;
 
 // {\pntext\f1\'B7\tab} or {\pntext\f0 1.\tab}: the bullet or number as text, for readers
 // that do not make it themselves.
-procedure TRtfWriter.WritePnText(AIndex: Integer; AInfo: PParaInfo; AFirstFont: Integer);
+procedure TRtfWriter.WritePnText(AInfo: PParaInfo; AFirstFont, ANumber: Integer);
 var
   font, i: Integer;
   s: string;
@@ -1649,7 +1886,7 @@ begin
     if AInfo^.Mode = lmGen then font := AFirstFont else font := AInfo^.PnFont;
     if font >= 0 then WordN('f', font);
     if AInfo^.Mode = lmPn then RawText(AInfo^.PnBefore);
-    s := ListNumberText(AInfo^.Fmt.List.Kind, ListNumber(AIndex, AInfo^.Fmt.List));
+    s := ListNumberText(AInfo^.Fmt.List.Kind, ANumber);
     for i := 1 to Length(s) do Lit(Ord(s[i]));
     if AInfo^.Mode = lmGen then Lit(Ord('.')) else RawText(AInfo^.PnAfter);
   end;
@@ -1660,8 +1897,8 @@ end;
 // \pard and everything of the paragraph format: the list, the fragments of Extra where the
 // reader finds them again, then the properties the model has (after the fragments, so that
 // the model's value is the one that holds).
-procedure TRtfWriter.WriteParaFormat(AIndex: Integer; AInfo: PParaInfo; AInCell: Boolean;
-  AFirstFont: Integer);
+procedure TRtfWriter.WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont,
+  ANumber: Integer);
 const
   TabAlignWord: array[TTyTabAlign] of string = ('', 'tqc', 'tqr', 'tqdec');
   TabLeaderWord: array[TTyTabLeader] of string = ('', 'tldot', 'tlhyph', 'tlul', 'tlth', 'tleq');
@@ -1682,7 +1919,7 @@ begin
   if AInCell then Word('intbl');
   list := AInfo^.Fmt.List;
   if (AInfo^.Mode in [lmPn, lmGen]) and (list.Kind <> lkNone) then
-    WritePnText(AIndex, AInfo, AFirstFont);
+    WritePnText(AInfo, AFirstFont, ANumber);
   pnDone := False;
   if AInfo^.Mode = lmGen then
   begin
@@ -1812,13 +2049,45 @@ begin
   if ci^.OneShot then FCurChar := -1 else FCurChar := AId;
 end;
 
+// \uN? for one UTF-16 code unit, N signed as RTF has it. A text that is not ASCII is one
+// of these for every character, so its bytes go straight into the buffer: no string, no
+// call a byte.
 procedure TRtfWriter.WriteUnit(AUnit: Cardinal);
 var
-  n: Integer;
+  digits: array[0..4] of Byte;
+  n, k: Integer;
+  w, q: Cardinal;
+  p: PByte;
 begin
-  n := AUnit;
-  if n > 32767 then Dec(n, 65536);
-  PutS('\u' + IntToStr(n) + '?');
+  // at most \u-32768? - nine bytes
+  if FBufLen + 9 > OutBufSize then Flush;
+  p := @FBuf[FBufLen];
+  p[0] := Ord('\');
+  p[1] := Ord('u');
+  k := 2;
+  w := AUnit and $FFFF;
+  if w > 32767 then
+  begin
+    p[k] := Ord('-');
+    Inc(k);
+    w := 65536 - w;
+  end;
+  n := 0;
+  repeat
+    // (w div 10, exact below 81920)
+    q := (w * 52429) shr 19;
+    digits[n] := Ord('0') + (w - q * 10);
+    w := q;
+    Inc(n);
+  until w = 0;
+  while n > 0 do
+  begin
+    Dec(n);
+    p[k] := digits[n];
+    Inc(k);
+  end;
+  p[k] := Ord('?');
+  Inc(FBufLen, k + 1);
   FNeedDelim := False;
   FRawOpen := False;
 end;
@@ -2003,7 +2272,13 @@ begin
     end
     else
     begin
+      // (for the progress: the block's paragraphs count as its bytes go out)
+      FCopyParas := item.Count;
+      FCopyBytes := item.Stop - item.Start;
+      FCopyStart := OutPos;
       Put(@bytes[item.Start], item.Stop - item.Start);
+      FCopyBytes := 0;
+      Inc(FDone, item.Count);
       Inc(FInfo.VerbatimParas, item.Count);
       FNeedDelim := False;
       FRawOpen := False;
@@ -2020,7 +2295,9 @@ var
 begin
   EnsureTables;
   CharInfo(FDoc.DefaultCharFormatId);
+  FStretchLook := False;
   FDoc.Text.WalkParas(0, @NoteWalk);
+  if FStretchLook then FDoc.Text.WalkParaTexts(0, FParaCount - 1, @LookPara);
   FinishTables;
   WriteHeaderOfOurs;
   FInfo.HeaderStop := OutPos;
@@ -2050,7 +2327,8 @@ end;
 
 // ---- the entry points ----
 
-procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; out AInfo: TTyRtfWriteInfo);
+procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; out AInfo: TTyRtfWriteInfo;
+  AOnProgress: TTyRtfSaveProgress);
 var
   w: TRtfWriter;
 begin
@@ -2063,6 +2341,7 @@ begin
       'This document is still being loaded: it cannot be saved before the load has ended');
   w := TRtfWriter.Create(ADoc, AStream);
   try
+    w.FOnProgress := AOnProgress;
     w.Run;
     AInfo := w.Info;
   finally
@@ -2070,11 +2349,13 @@ begin
   end;
 end;
 
-procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream);
+procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; AOnProgress: TTyRtfSaveProgress);
 var
   info: TTyRtfWriteInfo;
 begin
-  TyRichSaveRtf(ADoc, AStream, info);
+  TyRichSaveRtf(ADoc, AStream, info, AOnProgress);
 end;
 
+initialization
+  InitPlainBytes;
 end.

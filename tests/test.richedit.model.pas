@@ -85,6 +85,7 @@ type
     procedure TestEditsThroughTextKeepRunsInside;
     procedure TestTableIndexesAndEmptyTablesAreRefused;
     procedure TestARowThatHoldsANestedTableStaysAsItIs;
+    procedure TestAValueIsReadWithoutALookup;
   end;
 
 implementation
@@ -1342,6 +1343,78 @@ begin
     d.Free;
   end;
   AssertEquals('no object leaks', 0, TCountedOpaque.Live);
+end;
+
+{ ReadValue says what ParaFormatOf, RunsOf and CellAt say, from the value a walk of the text
+  hands out: no lookup in the text, no parse, and the loader is not told. }
+procedure TTyRichModelTest.TestAValueIsReadWithoutALookup;
+var
+  d: TDocAccess;
+  t: TTyRichTable;
+  loader: TFakeLoader;
+  i, j: Integer;
+  pf: TTyParaFormatId;
+  runs, byIndex: TTyRunArray;
+  cell: TTyRichCell;
+  visits: Int64;
+  data: Pointer;
+  u: TTyRichUndoData;
+begin
+  d := NewDoc('aaa'#13#10'bbb'#13#10'ccc'#13#10'ddd');
+  t := TCountedTable.Create([1440, 2880]);
+  try
+    t.AddRow(2);
+    u := d.MarkTable(1, t, [1, 1]);
+    u.Free;
+    Paint(d, d.Text.ParaStart(1) + 1, 2, clRed);
+    Align(d, 3, 3, paraCenter);
+    for i := 0 to d.Text.ParaCount - 1 do
+    begin
+      data := d.Text.ParaData[i];
+      visits := d.Text.NodeVisits;
+      AssertTrue(Format('paragraph %d: there is an answer', [i]), d.ReadValue(data, pf, runs, cell));
+      AssertEquals(Format('paragraph %d: no lookup', [i]), visits, d.Text.NodeVisits);
+      AssertEquals(Format('paragraph %d: its format', [i]), d.ParaFormatOf(i), pf);
+      AssertTrue(Format('paragraph %d: its cell', [i]), d.CellAt(i) = cell);
+      byIndex := d.RunsOf(i);
+      AssertEquals(Format('paragraph %d: its runs', [i]), Length(byIndex), Length(runs));
+      for j := 0 to High(runs) do
+      begin
+        AssertEquals(Format('paragraph %d run %d: start', [i, j]), byIndex[j].Start, runs[j].Start);
+        AssertEquals(Format('paragraph %d run %d: format', [i, j]), byIndex[j].Format, runs[j].Format);
+        AssertTrue(Format('paragraph %d run %d: object', [i, j]), byIndex[j].Obj = runs[j].Obj);
+      end;
+    end;
+    AssertTrue('one of them is in the table', d.CellAt(1) <> nil);
+    // a paragraph with no value is plain
+    AssertTrue('a plain paragraph has no value', d.Text.ParaData[0] = nil);
+    AssertTrue('and that is an answer', d.ReadValue(nil, pf, runs, cell));
+    AssertEquals('plain: the default paragraph format', d.DefaultParaFormatId, pf);
+    AssertEquals('plain: one run', 1, Length(runs));
+    AssertEquals('plain: in the default character format', d.DefaultCharFormatId, runs[0].Format);
+    AssertTrue('plain: in no table', cell = nil);
+  finally
+    d.Free;
+  end;
+  // in a document that parses on demand a paragraph with no value is not parsed yet
+  d := NewDoc('p0'#13#10'p1'#13#10'p2');
+  loader := TFakeLoader.Create;
+  try
+    loader.ParaFmt := AlignId(d, paraRight);
+    loader.CharFmt := ColorId(d, clBlue);
+    d.InstallLoader(loader, False);
+    AssertFalse('not parsed: no answer', d.ReadValue(d.Text.ParaData[1], pf, runs, cell));
+    AssertEquals('and the loader was not asked', 0, loader.Calls.Count);
+    d.EnsureParsed(1);
+    AssertEquals('asked once, by the read', 1, loader.Calls.Count);
+    AssertTrue('parsed: an answer', d.ReadValue(d.Text.ParaData[1], pf, runs, cell));
+    AssertEquals('parsed: the loader''s format', loader.ParaFmt, pf);
+    AssertEquals('parsed: the loader''s run', loader.CharFmt, runs[0].Format);
+    AssertEquals('the loader was not asked again', 1, loader.Calls.Count);
+  finally
+    d.Free;
+    loader.Free;
+  end;
 end;
 
 initialization

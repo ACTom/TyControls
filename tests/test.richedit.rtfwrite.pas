@@ -23,8 +23,17 @@ uses
 type
   TEditKind = (ekInsert, ekCharFormat, ekParaFormat, ekDelete);
 
+  // One call of a save's progress callback, and how much the stream held then.
+  TSaveTick = record
+    Done, Total, Written: Int64;
+  end;
+
   TTyRtfWriteTest = class(TTestCase)
   private
+    FTicks: array of TSaveTick;
+    FTickStream: TStream;
+    FCancelAt: Integer;       // the call that says stop (-1: none)
+    function SaveProgress(ADone, ATotal: Int64): Boolean;
     procedure CheckEdit(const AName: string; const ABytes: TBytes; AFull: TTyRichDocument;
       APara: Integer; AKind: TEditKind);
     procedure CheckVerbatim(const AMsg: string; ADoc: TTyRichDocument; const ABytes,
@@ -54,6 +63,8 @@ type
     procedure TestNewFontNumbersAreFreeInTheFile;
     procedure TestAListItemAfterFormatsTheSaveHasNotSeen;
     procedure TestACellWithNoParagraphKeepsItsPlace;
+    procedure TestSavingFromTheModelWalksTheParagraphs;
+    procedure TestASaveReportsItsProgressAndCanBeCancelled;
   end;
 
 implementation
@@ -842,6 +853,18 @@ begin
   SetChars(d, Start(16), 4, [cffBold], f);
 end;
 
+function TTyRtfWriteTest.SaveProgress(ADone, ATotal: Int64): Boolean;
+var
+  n: Integer;
+begin
+  n := Length(FTicks);
+  SetLength(FTicks, n + 1);
+  FTicks[n].Done := ADone;
+  FTicks[n].Total := ATotal;
+  FTicks[n].Written := FTickStream.Size;
+  Result := (FCancelAt < 0) or (n < FCancelAt);
+end;
+
 { ---- the brief ---- }
 
 procedure TTyRtfWriteTest.TestOpenSaveIsByteIdentical;
@@ -1042,6 +1065,13 @@ begin
       if o[i] > $7F then Fail(Format('byte %d of the rewritten paragraph is %x', [i, o[i]]));
     AssertTrue('the typed character as \uN?', PosRaw(BS + 'u20013?',
       StrOf(o, info.Stretches[0].OutStart, info.Stretches[0].OutStop - info.Stretches[0].OutStart)) > 0);
+    // a font that names no charset, given to Chinese text of the file: the entry that is
+    // added for it has the charset its text says - in a file, too, the text is looked at
+    SetChars(d, d.Text.ParaStart(2), d.Text.ParaLength(2), [cffFontName, cffCharset],
+      Fmt('Brand New', DEFAULT_CHARSET, 0));
+    o := SaveDoc(d, info);
+    AssertTrue('a new font on Chinese text of a file: ' + Shown(StrOf(o, 0, info.HeaderStop)),
+      PosRaw('\fnil\fcharset134 Brand New;}', StrOf(o, 0, info.HeaderStop)) > 0);
   finally
     d.Free;
   end;
@@ -2075,6 +2105,27 @@ begin
   finally
     d.Free;
   end;
+  // a list that a paragraph of another kind interrupts starts again after it
+  d := TTyRichDocument.Create;
+  try
+    d.Execute(TTyRichInsertText.Create(0, 'one' + #10 + 'two' + #10 + 'between' + #10 + 'three' + #10 + 'four'));
+    SetChars(d, 0, d.Text.Length, AllChar, Fmt('Arial', 0, 24));
+    p := TyDefaultParaFormat;
+    p.List.Kind := lkDecimal;
+    p.List.StartAt := 1;
+    d.Execute(TTyRichSetParaFormat.Create(0, 1, AllPara, p));
+    d.Execute(TTyRichSetParaFormat.Create(3, 4, AllPara, p));
+    o := SaveBytes(d);
+    text := StrOf(o, 0, Length(o));
+    AssertTrue('the first list: ' + Shown(text), PosRaw('{\pntext\f1 1.\tab}', text) > 0);
+    AssertTrue('its second item: ' + Shown(text), PosRaw('{\pntext\f1 2.\tab}two', text) > 0);
+    AssertTrue('after the paragraph between, the list starts again: ' + Shown(text),
+      PosRaw('between\par' + #13#10 +
+        '\pard{\pntext\f1 1.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart1\pndec{\pntxta.}}three', text) > 0);
+    AssertTrue('and goes on: ' + Shown(text), PosRaw('{\pntext\f1 2.\tab}four', text) > 0);
+  finally
+    d.Free;
+  end;
   // an item of a file's list rewritten: its number is its place in the list
   b := ReadFileBytes(FixtureDir + 're-zh-list.rtf');
   d := LoadDoc(b, False);
@@ -2367,6 +2418,50 @@ begin
   else
     SetMemoryManager(PoisonBase);
   PoisonOn := AOn;
+end;
+
+{ And one that counts: how many blocks a piece of code asks the heap for. }
+var
+  CountBase: TMemoryManager;
+  CountOn: Boolean = False;
+  HeapAllocs: Int64;
+
+function CountGetMem(ASize: PtrUInt): Pointer;
+begin
+  Inc(HeapAllocs);
+  Result := CountBase.GetMem(ASize);
+end;
+
+function CountAllocMem(ASize: PtrUInt): Pointer;
+begin
+  Inc(HeapAllocs);
+  Result := CountBase.AllocMem(ASize);
+end;
+
+function CountReAllocMem(var P: Pointer; ASize: PtrUInt): Pointer;
+begin
+  Inc(HeapAllocs);
+  Result := CountBase.ReAllocMem(P, ASize);
+end;
+
+procedure CountHeap(AOn: Boolean);
+var
+  mm: TMemoryManager;
+begin
+  if AOn = CountOn then Exit;
+  if AOn then
+  begin
+    GetMemoryManager(CountBase);
+    mm := CountBase;
+    mm.GetMem := @CountGetMem;
+    mm.AllocMem := @CountAllocMem;
+    mm.ReAllocMem := @CountReAllocMem;
+    HeapAllocs := 0;
+    SetMemoryManager(mm);
+  end
+  else
+    SetMemoryManager(CountBase);
+  CountOn := AOn;
 end;
 
 // SaveDoc on a heap that shows memory used after it was let go of.
@@ -3082,6 +3177,407 @@ begin
     'd\cell\cell\cell\row');
   Check('the end of one row and the start of the next', 3, 4, ['a', 'b', '', '', 'e', 'f'],
     'a\cell b\cell\cell\row' + #13#10 + RowDef + '\pard\intbl\cell\pard\intbl e\cell f\cell\row');
+end;
+
+type
+  // Counts what is written and keeps none of it.
+  TCountStream = class(TStream)
+  public
+    Total: Int64;
+    Writes: Integer;
+    function Write(const Buffer; Count: LongInt): LongInt; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
+function TCountStream.Write(const Buffer; Count: LongInt): LongInt;
+begin
+  Inc(Total, Count);
+  Inc(Writes);
+  Result := Count;
+end;
+
+function TCountStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  Result := Total;
+end;
+
+{ A document written from the model - one with no file behind it, or a file of which every
+  paragraph was changed - is as long as the document is, so what each paragraph costs
+  counts. The save goes through the paragraphs in walks that hand out value and text
+  together: it does not look each one up in the text's tree (a lookup enters three or four
+  nodes; five lookups a paragraph were most of a save's time), and it writes numbers and
+  characters into its buffer without making a string for each (three heap strings for
+  every character that is not ASCII were the rest). }
+procedure TTyRtfWriteTest.TestSavingFromTheModelWalksTheParagraphs;
+const
+  N = 60000;
+var
+  d, r: TTyRichDocument;
+  text: UTF8String;
+  i, k: Integer;
+  f: TTyCharFormat;
+  p: TTyParaFormat;
+  s: TCountStream;
+  visits: Int64;
+  b, o: TBytes;
+  info: TTyRtfWriteInfo;
+  load: TTyRtfLoad;
+begin
+  // a document of our own: text in a font that names no charset (its charset is found from
+  // the text), some paragraphs with runs and formats of their own
+  text := '';
+  for i := 0 to N - 1 do
+  begin
+    text := text + 'Line ' + IntToStr(i) + ' ' + ZhZhong + ZhWen + ' and on';
+    if i < N - 1 then text := text + #10;
+  end;
+  d := TTyRichDocument.Create;
+  r := nil;
+  s := TCountStream.Create;
+  try
+    d.Execute(TTyRichInsertText.Create(0, text));
+    SetChars(d, 0, d.Text.Length, [cffFontName, cffSize], Fmt(ZhSongTi, DEFAULT_CHARSET, 24));
+    f := TyDefaultCharFormat;
+    f.Style := [fsBold];
+    p := TyDefaultParaFormat;
+    p.Align := paraCenter;
+    d.BeginUpdate;
+    try
+      k := 0;
+      while k < N do
+      begin
+        SetChars(d, d.Text.ParaStart(k) + 2, 3, [cffBold], f);
+        SetPara(d, k + 1, [pffAlign], p);
+        Inc(k, 600);
+      end;
+      // every other paragraph of the second half is indented: a paragraph format with a
+      // number in it is written for each paragraph there
+      p := TyDefaultParaFormat;
+      p.LeftIndent := 720;
+      k := N div 2 + 3;
+      while k < N do
+      begin
+        SetPara(d, k, [pffLeftIndent], p);
+        Inc(k, 2);
+      end;
+    finally
+      d.EndUpdate;
+    end;
+    AssertEquals('paragraphs', N, d.Text.ParaCount);
+    visits := d.Text.NodeVisits;
+    CountHeap(True);
+    try
+      TyRichSaveRtf(d, s);
+    finally
+      CountHeap(False);
+    end;
+    AssertTrue(Format('our own document: %d tree nodes entered for %d paragraphs',
+      [d.Text.NodeVisits - visits, N]), d.Text.NodeVisits - visits <= N div 8);
+    AssertTrue(Format('our own document: %d blocks asked of the heap for %d paragraphs',
+      [HeapAllocs, N]), HeapAllocs <= N div 20);
+    AssertTrue('our own document: written', s.Total > Length(text));
+    // and what was written is the document
+    o := SaveDoc(d, info);
+    AssertEquals('our own document: all of it from the model', N, info.RewrittenParas);
+    r := LoadDoc(o, False);
+    AssertEquals('read back: paragraphs', N, r.Text.ParaCount);
+    // (the font named no charset; written, it has the one its text says)
+    k := 0;
+    while k < N do
+    begin
+      AssertRaw(Format('read back: paragraph %d', [k]), ParaText(d, k), ParaText(r, k));
+      AssertEquals(Format('read back: paragraph %d: its runs', [k]), 3, Length(r.RunsOf(k)));
+      AssertEquals(Format('read back: paragraph %d: the bold run starts', [k]), 2, r.RunsOf(k)[1].Start);
+      AssertTrue(Format('read back: paragraph %d: the bold run', [k]),
+        fsBold in r.Formats.CharFormat(r.RunsOf(k)[1].Format).Style);
+      AssertEquals(Format('read back: paragraph %d: after it', [k]), 5, r.RunsOf(k)[2].Start);
+      AssertRaw(Format('read back: paragraph %d', [k + 1]), ParaText(d, k + 1), ParaText(r, k + 1));
+      AssertTrue(Format('read back: paragraph %d is centred', [k + 1]),
+        r.Formats.ParaFormat(r.ParaFormatOf(k + 1)).Align = paraCenter);
+      AssertTrue(Format('read back: paragraph %d is not', [k + 2]),
+        r.Formats.ParaFormat(r.ParaFormatOf(k + 2)).Align = paraLeft);
+      Inc(k, 600);
+    end;
+    AssertRaw('read back: the last paragraph', ParaText(d, N - 1), ParaText(r, N - 1));
+    AssertEquals('read back: the font''s name', ZhSongTi,
+      r.Formats.CharFormat(r.RunsOf(5)[0].Format).FontName);
+    AssertEquals('read back: the font''s charset is the text''s', 134,
+      r.Formats.CharFormat(r.RunsOf(5)[0].Format).Charset);
+  finally
+    s.Free;
+    r.Free;
+    d.Free;
+  end;
+  // a file of which every paragraph was given a format: all of it is written from the model
+  b := Generate('re-zh-mixed.rtf', 3 * MB);
+  d := LoadDoc(b, False);
+  r := nil;
+  s := TCountStream.Create;
+  try
+    load := TyRichRtfLoadOf(d);
+    k := d.Text.ParaCount;
+    p := TyDefaultParaFormat;
+    p.SpaceBefore := 77;
+    AssertTrue('every paragraph formatted',
+      d.Execute(TTyRichSetParaFormat.Create(0, k - 1, [pffSpaceBefore], p)));
+    // (the command parsed every interval; sending those past the limit back to unparsed
+    // is the reader's work, looked up paragraph by paragraph, and not the save's)
+    load.Trim;
+    visits := d.Text.NodeVisits;
+    TyRichSaveRtf(d, s);
+    AssertTrue(Format('a changed file: %d tree nodes entered for %d paragraphs',
+      [d.Text.NodeVisits - visits, k]), d.Text.NodeVisits - visits <= k div 8);
+    AssertTrue('a changed file: the limit of parsed intervals holds after the save',
+      load.ResidentIntervals <= load.MaxResidentIntervals);
+    o := SaveDoc(d, info);
+    AssertEquals('a changed file: one stretch', 1, Length(info.Stretches));
+    AssertEquals('a changed file: all of it from the model', k, info.RewrittenParas);
+    r := LoadDoc(o, False);
+    AssertEquals('a changed file, read back: paragraphs', k, r.Text.ParaCount);
+    i := 0;
+    while i < k do
+    begin
+      AssertEquals(Format('a changed file, read back: paragraph %d', [i]), '', ParaDiff(d, i, r, i));
+      Inc(i, 499);
+    end;
+    AssertEquals('a changed file, read back: the last paragraph', '', ParaDiff(d, k - 1, r, k - 1));
+  finally
+    s.Free;
+    r.Free;
+    d.Free;
+  end;
+end;
+
+{ A save that is as long as the document tells its caller how far it is - about every
+  256 KB written, and now and then while it plans - and stops when the caller says so: it
+  raises ETyRichSaveCancelled, the stream holds a part of the file, the document is as it
+  was. Without a callback nothing changes: a file that was not changed goes out in three
+  writes. }
+procedure TTyRtfWriteTest.TestASaveReportsItsProgressAndCanBeCancelled;
+const
+  N = 70000;
+  Step = 256 * 1024;
+  Buffer = 64 * 1024;
+var
+  d: TTyRichDocument;
+  text: UTF8String;
+  i, planned: Integer;
+  plain, o: TBytes;
+  s: TBytesStream;
+  cs: TCountStream;
+  raised: Boolean;
+  b: TBytes;
+  load: TTyRtfLoad;
+  info: TTyRtfWriteInfo;
+  parses: Integer;
+  f2: TTyParaFormat;
+
+  // The calls made while something was being written: ADone and what the stream held rise
+  // together, a call about every Step bytes.
+  procedure CheckTicks(const AMsg: string; ATotal, AWritten: Int64);
+  var
+    k, first: Integer;
+  begin
+    first := planned;
+    AssertTrue(AMsg + ': several calls', Length(FTicks) - first >= 4);
+    for k := 0 to High(FTicks) do
+      AssertEquals(Format('%s: call %d: of all the paragraphs', [AMsg, k]), ATotal, FTicks[k].Total);
+    for k := first to High(FTicks) do
+    begin
+      AssertTrue(Format('%s: call %d: paragraphs done %d', [AMsg, k, FTicks[k].Done]),
+        (FTicks[k].Done > 0) and (FTicks[k].Done <= ATotal));
+      if k > first then
+      begin
+        AssertTrue(Format('%s: call %d: paragraphs done rise (%d after %d)', [AMsg, k, FTicks[k].Done,
+          FTicks[k - 1].Done]), FTicks[k].Done >= FTicks[k - 1].Done);
+        AssertTrue(Format('%s: call %d: %d bytes after the call before', [AMsg, k,
+          FTicks[k].Written - FTicks[k - 1].Written]),
+          (FTicks[k].Written - FTicks[k - 1].Written >= Step) and
+          (FTicks[k].Written - FTicks[k - 1].Written < Step + Buffer));
+      end
+      else
+        AssertTrue(Format('%s: the first call after %d bytes', [AMsg, FTicks[k].Written]),
+          (FTicks[k].Written >= Step) and (FTicks[k].Written < Step + Buffer));
+    end;
+    AssertTrue(Format('%s: the last call %d bytes before the end', [AMsg,
+      AWritten - FTicks[High(FTicks)].Written]), AWritten - FTicks[High(FTicks)].Written < Step + Buffer);
+    AssertTrue(AMsg + ': the paragraphs done at the last call are most of them',
+      FTicks[High(FTicks)].Done >= ATotal - ATotal div 4);
+  end;
+
+begin
+  // a document of our own, all of it written from the model
+  text := '';
+  for i := 0 to N - 1 do
+  begin
+    text := text + 'Line ' + IntToStr(i) + ' of a text that is saved, ' + ZhZhong + ZhWen + '.';
+    if i < N - 1 then text := text + #10;
+  end;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create;
+  try
+    d.Execute(TTyRichInsertText.Create(0, text));
+    // (a font with no charset: the save looks at the text before it writes)
+    SetChars(d, 0, d.Text.Length, [cffFontName, cffSize], Fmt(ZhSongTi, DEFAULT_CHARSET, 24));
+    plain := SaveBytes(d);
+    AssertTrue('a few megabytes', Length(plain) > 12 * Step);
+    FTickStream := s;
+    FTicks := nil;
+    FCancelAt := -1;
+    TyRichSaveRtf(d, s, @SaveProgress);
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertTrue('with a callback the same bytes: ' + FirstDiff(plain, o), SameBytes(plain, o));
+    // while it plans: nothing is written yet, and the callback is asked every 65536
+    // paragraphs - once in the walk that notes the formats, once in the one that looks at
+    // the text
+    planned := 0;
+    while (planned < Length(FTicks)) and (FTicks[planned].Written = 0) do Inc(planned);
+    AssertEquals('our own: calls while it plans', 2, planned);
+    for i := 0 to planned - 1 do
+      AssertEquals(Format('our own: planning call %d: nothing done yet', [i]), 0, FTicks[i].Done);
+    CheckTicks('our own', N, Length(plain));
+    // cancelled at the fifth call: the third while it writes
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := 4;
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    AssertTrue('cancelled: the save raises', raised);
+    AssertEquals('cancelled: no call after the one that said stop', 5, Length(FTicks));
+    AssertTrue(Format('cancelled: a part is written (%d bytes)', [s.Size]),
+      (s.Size >= 3 * Step) and (s.Size < 3 * (Step + Buffer)));
+    AssertTrue('cancelled: what is written is the start of the file',
+      CompareMem(s.Memory, @plain[0], s.Size));
+    // the document is as it was: no read scope left open, it can be changed and saved
+    raised := False;
+    try
+      d.EndRead;
+    except
+      on E: ETyRichModel do raised := True;
+    end;
+    AssertTrue('cancelled: the read scope is closed', raised);
+    o := SaveBytes(d);
+    AssertTrue('cancelled: saved again, ' + FirstDiff(plain, o), SameBytes(plain, o));
+    AssertTrue('cancelled: the document can be changed', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    // cancelled while it plans: nothing is written
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := 0;
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    AssertTrue('cancelled while planning: the save raises', raised);
+    AssertEquals('cancelled while planning: one call', 1, Length(FTicks));
+    AssertEquals('cancelled while planning: nothing written', 0, s.Size);
+    // ETyRichSaveCancelled is silent for an application's handler
+    AssertTrue('the exception is an EAbort', ETyRichSaveCancelled.InheritsFrom(EAbort));
+  finally
+    FTickStream := nil;
+    s.Free;
+    d.Free;
+  end;
+  // a file that was not changed: its bytes go out in pieces, with the callback between
+  // them; nothing is parsed, the bytes are the file
+  b := Generate('re-zh-mixed.rtf', 5 * MB);
+  d := LoadDoc(b, False);
+  s := TBytesStream.Create;
+  cs := TCountStream.Create;
+  try
+    load := TyRichRtfLoadOf(d);
+    parses := load.ParseCount;
+    FTickStream := s;
+    FTicks := nil;
+    FCancelAt := -1;
+    planned := 0;
+    TyRichSaveRtf(d, s, info, @SaveProgress);
+    AssertTrue('unchanged: the file', (s.Size = Length(b)) and CompareMem(s.Memory, @b[0], Length(b)));
+    AssertEquals('unchanged: nothing parsed', parses, load.ParseCount);
+    AssertEquals('unchanged: nothing rewritten', 0, Length(info.Stretches));
+    CheckTicks('unchanged', d.Text.ParaCount, Length(b));
+    // (the paragraphs of a block that is going out count as its bytes do)
+    AssertTrue(Format('unchanged: about half the paragraphs at the middle call (%d of %d)',
+      [FTicks[Length(FTicks) div 2].Done, d.Text.ParaCount]),
+      Abs(FTicks[Length(FTicks) div 2].Done - d.Text.ParaCount div 2) < d.Text.ParaCount div 8);
+    // without a callback: the header, the body, the trailer
+    TyRichSaveRtf(d, cs);
+    AssertEquals('unchanged, no callback: all of it', Length(b), cs.Total);
+    AssertTrue(Format('unchanged, no callback: %d writes', [cs.Writes]), cs.Writes <= 4);
+    // cancelled in the middle of the block
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := 5;
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    AssertTrue('unchanged, cancelled: the save raises', raised);
+    AssertTrue(Format('unchanged, cancelled: a part is written (%d bytes)', [s.Size]),
+      (s.Size >= 6 * Step) and (s.Size < 6 * (Step + Buffer)));
+    AssertFalse('unchanged, cancelled: the document is not modified', d.Modified);
+    // the second half of the file formatted: a block of the file, then a long stretch -
+    // the paragraphs done go on from the block's
+    i := d.Text.ParaCount;
+    f2 := TyDefaultParaFormat;
+    f2.SpaceBefore := 77;
+    AssertTrue('half formatted', d.Execute(TTyRichSetParaFormat.Create(i div 2, i - 1, [pffSpaceBefore], f2)));
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := -1;
+    TyRichSaveRtf(d, s, info, @SaveProgress);
+    AssertEquals('half formatted: one stretch', 1, Length(info.Stretches));
+    CheckTicks('half formatted', i, s.Size);
+    AssertTrue('half formatted: more than the block''s paragraphs at the last call',
+      FTicks[High(FTicks)].Done > i div 2);
+  finally
+    FTickStream := nil;
+    cs.Free;
+    s.Free;
+    d.Free;
+  end;
+  // a file of many short paragraphs: the plan alone goes through 65536 of them before
+  // anything is written, and asks
+  text := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f0\fs24 ';
+  for i := 1 to N do text := text + 'a\par ';
+  text := text + '}';
+  d := LoadDoc(BytesOf(text), False);
+  s := TBytesStream.Create;
+  try
+    FTickStream := s;
+    FTicks := nil;
+    FCancelAt := -1;
+    TyRichSaveRtf(d, s, @SaveProgress);
+    AssertTrue('many paragraphs: the file', (s.Size = Length(text)) and
+      CompareMem(s.Memory, @text[1], Length(text)));
+    AssertTrue('many paragraphs: calls', Length(FTicks) >= 2);
+    AssertEquals('many paragraphs: the first call comes while it plans', 0, FTicks[0].Written);
+    AssertEquals('many paragraphs: nothing done then', 0, FTicks[0].Done);
+    AssertTrue('many paragraphs: the next one while it writes', FTicks[1].Written > 0);
+    // and can be stopped there
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := 0;
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    AssertTrue('many paragraphs, cancelled while planning: the save raises', raised);
+    AssertEquals('many paragraphs, cancelled while planning: nothing written', 0, s.Size);
+  finally
+    FTickStream := nil;
+    s.Free;
+    d.Free;
+  end;
 end;
 
 initialization

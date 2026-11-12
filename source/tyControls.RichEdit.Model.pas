@@ -683,6 +683,17 @@ type
       between AIndex and the cell. In a document that parses on demand, read ACell and call
       this inside one read scope (BeginRead). }
     function CellParas(AIndex: Integer; ACell: TTyRichCell; out AFirst, ALast: Integer): Boolean;
+    { What a paragraph's value holds, for a reader that walks the text itself and has the
+      value from the walk (AData of TTyRichText.WalkParas and WalkParaTexts): the
+      paragraph's format, runs and cell with no lookup, nothing parsed, and without the
+      loader hearing of a read. A paragraph with no value (AData nil) is plain - but in a
+      document that parses on demand it is one not parsed yet: False then, and the caller
+      reads it by its index (ParaFormatOf, RunsOf, CellAt), which parses it. ARuns is the
+      value's own array, not a copy: it is not to be changed. What is returned is good
+      while the value is the paragraph's: until the document is changed, and for a cell or
+      an object inside a read scope (BeginRead). }
+    function ReadValue(AData: Pointer; out AFormat: TTyParaFormatId; out ARuns: TTyRunArray;
+      out ACell: TTyRichCell): Boolean;
     { May the text change here: False when inserting at APos (ALen 0) or deleting ALen
       characters from APos would be refused because of a row that holds a nested table
       (TTyRichRow.HoldsNestedTable). Inserting is refused inside a paragraph of such a row.
@@ -2054,6 +2065,18 @@ end;
 function TTyRichDocument.CellAt(AIndex: Integer): TTyRichCell;
 begin
   Result := CellOfData(DataOf(AIndex));
+end;
+
+function TTyRichDocument.ReadValue(AData: Pointer; out AFormat: TTyParaFormatId;
+  out ARuns: TTyRunArray; out ACell: TTyRichCell): Boolean;
+var
+  d: TTyRichParaData;
+begin
+  d := TTyRichParaData(AData);
+  Result := (d <> nil) or (FLoader = nil);
+  AFormat := FormatOfData(d);
+  ARuns := RunsOfData(d);
+  ACell := CellOfData(d);
 end;
 
 { ---- rows that hold a nested table ---- }
