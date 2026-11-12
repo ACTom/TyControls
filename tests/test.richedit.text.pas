@@ -33,11 +33,20 @@ type
     FWalkPieces: TTyRichPieces;
     FWalkTried, FWalkRefused: Integer;
     FWalkRaise: Boolean;
+    // what WalkParaTexts showed (CollectPara), and where it is told to stop (-1: nowhere)
+    FSeenIndex: array of Integer;
+    FSeenData: array of Pointer;
+    FSeenText: array of UTF8String;
+    FSeenStop: Integer;
     procedure TryEdits;
     function EditInMap(AIndex: Integer; AData: Pointer): Pointer;
     procedure EditInWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
     procedure EditInRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+    procedure EditInTextWalk(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+    procedure CollectPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
     function NextRandom(AMax: Integer): Integer;
     function RandomText(AMaxUnits: Integer): UTF8String;
     procedure ParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
@@ -71,6 +80,7 @@ type
     procedure TestSmallInsertsDoNotMakeALeafEach;
     procedure TestTypingNeverJoinsBytesCountedApart;
     procedure TestWalksRefuseAnEditFromTheirCallback;
+    procedure TestWalkParaTextsShowsDataAndText;
     procedure TestABigInsertKeepsNoScanBuffer;
     procedure TestControlCharactersAreCharacters;
     procedure TestScannedPiecesMustBePossible;
@@ -84,6 +94,7 @@ type
     Calls: TStringList;
     WrongCount: Boolean;
     EditOnce: TTyRichText;   // a text to change from inside the next decode
+    SetData: TTyRichText;    // a text whose paragraph gets data from inside its decode
     constructor Create(ACount: Integer);
     destructor Destroy; override;
     function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
@@ -95,12 +106,18 @@ type
     FProvider: TFakeRichProvider;
     FText: TTyRichText;
     FRuns: array of TTyRichByteRun;
+    FSeenText: array of UTF8String;
+    FSeenData: array of Pointer;
+    FSeenLog: array of string;      // the provider's calls so far, at each step
     procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
+    procedure CollectPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
     procedure BuildLazy(ACount: Integer);
     function ParaText(AIndex: Integer): UTF8String;
   protected
     procedure TearDown; override;
   published
+    procedure TestWalkParaTextsDecodesAsItGoes;
     procedure TestLazyIndexNeedsNoDecoding;
     procedure TestLazyDecodesOnlyWhatIsRead;
     procedure TestLazyDecodesOnlyWhatIsEdited;
@@ -1606,12 +1623,154 @@ begin
   TryEdits;
 end;
 
+procedure TTyRichTextTest.EditInTextWalk(AIndex: Integer; AData: Pointer; AText: PByte;
+  ALen: PtrInt; var AContinue: Boolean);
+begin
+  AContinue := False;
+  TryEdits;
+end;
+
+procedure TTyRichTextTest.CollectPara(AIndex: Integer; AData: Pointer; AText: PByte;
+  ALen: PtrInt; var AContinue: Boolean);
+var
+  n: Integer;
+begin
+  n := System.Length(FSeenIndex);
+  SetLength(FSeenIndex, n + 1);
+  SetLength(FSeenData, n + 1);
+  SetLength(FSeenText, n + 1);
+  FSeenIndex[n] := AIndex;
+  FSeenData[n] := AData;
+  FSeenText[n] := '';
+  SetLength(FSeenText[n], ALen);
+  if ALen > 0 then Move(AText^, FSeenText[n][1], ALen);
+  // the callback may read the text and set data while the walk stands on a piece
+  if FWalkText <> nil then
+  begin
+    if FWalkText.ParaLength(AIndex) < 0 then raise Exception.Create('unreachable');
+    FWalkText.ParaData[AIndex] := AData;
+  end;
+  if AIndex = FSeenStop then AContinue := False;
+end;
+
+{ WalkParaTexts is ParaData and GetText of each paragraph, in order: over paragraphs of one
+  piece (shown where they are), of many pieces (gathered), empty ones, the last one with
+  and without text, from any paragraph to any other, stopped where the callback says. }
+procedure TTyRichTextTest.TestWalkParaTextsShowsDataAndText;
+var
+  t: TTyRichText;
+  round, i, a, b, n, k: Integer;
+  visits: Int64;
+  what: string;
+
+  procedure Walk(AFirst, ALast, AStop: Integer);
+  begin
+    FSeenIndex := nil;
+    FSeenData := nil;
+    FSeenText := nil;
+    FSeenStop := AStop;
+    t.WalkParaTexts(AFirst, ALast, @CollectPara);
+  end;
+
+  procedure Check(const AMsg: string; AFirst, ALast: Integer);
+  var
+    j: Integer;
+  begin
+    AssertEquals(AMsg + ': paragraphs shown', ALast - AFirst + 1, System.Length(FSeenIndex));
+    for j := 0 to High(FSeenIndex) do
+    begin
+      AssertEquals(Format('%s: step %d is paragraph', [AMsg, j]), AFirst + j, FSeenIndex[j]);
+      AssertTrue(Format('%s: paragraph %d: its data', [AMsg, AFirst + j]),
+        FSeenData[j] = t.ParaData[AFirst + j]);
+      AssertBytesEqual(Format('%s: paragraph %d: its text', [AMsg, AFirst + j]),
+        t.GetText(t.ParaStart(AFirst + j), t.ParaLength(AFirst + j)), FSeenText[j]);
+    end;
+  end;
+
+begin
+  // an empty text is one empty paragraph
+  t := TTyRichText.Create;
+  try
+    Walk(0, 0, -1);
+    AssertEquals('empty: one paragraph', 1, System.Length(FSeenIndex));
+    AssertBytesEqual('empty: no text', '', FSeenText[0]);
+  finally
+    t.Free;
+  end;
+  FSeed := 20261112;
+  for round := 0 to 5 do
+  begin
+    t := TTyRichText.CreateFromUtf8(Bytes(RandomText(400)));
+    try
+      FWalkText := t;
+      // edits make paragraphs of several pieces, and empty ones
+      for i := 0 to 60 do
+      begin
+        if NextRandom(3) = 0 then
+        begin
+          if t.Length > 0 then
+          begin
+            a := NextRandom(Integer(t.Length));
+            t.Delete(a, 1 + NextRandom(Integer(t.Length) - a));
+          end;
+        end
+        else
+          t.Insert(NextRandom(Integer(t.Length) + 1), RandomText(12));
+      end;
+      // the last paragraph: with text in even rounds, empty in odd ones
+      if Odd(round) then t.Insert(t.Length, #10) else t.Insert(t.Length, #10 + 'tail');
+      n := t.ParaCount;
+      for i := 0 to n - 1 do
+        if i mod 3 <> 1 then t.ParaData[i] := Pointer(PtrUInt(1000 + i));
+      what := Format('round %d (%d paragraphs, %d pieces)', [round, n, t.PieceCount]);
+      AssertTrue(what + ': more pieces than paragraphs', t.PieceCount > n);
+      Walk(0, n - 1, -1);
+      Check(what + ', all', 0, n - 1);
+      for k := 0 to 20 do
+      begin
+        a := NextRandom(n);
+        b := a + NextRandom(n - a);
+        Walk(a, b, -1);
+        Check(Format('%s, %d..%d', [what, a, b]), a, b);
+      end;
+      Walk(n - 1, n - 1, -1);
+      Check(what + ', the last alone', n - 1, n - 1);
+      // stopped by the callback
+      if n > 3 then
+      begin
+        Walk(1, n - 1, 2);
+        Check(what + ', stopped at 2', 1, 2);
+      end;
+      AssertEquals(what + ': integrity', '', t.CheckIntegrity);
+    finally
+      FWalkText := nil;
+      t.Free;
+    end;
+  end;
+  // one descent, then piece by piece: a walk over all of a big text enters each node once
+  t := TTyRichText.CreateFromUtf8(LinesOf(50000));
+  try
+    FSeenStop := -1;
+    visits := t.NodeVisits;
+    FSeenIndex := nil;
+    FSeenData := nil;
+    FSeenText := nil;
+    t.WalkParaTexts(0, t.ParaCount - 1, @CollectPara);
+    AssertEquals('big: every paragraph', t.ParaCount, System.Length(FSeenIndex));
+    AssertTrue(Format('big: %d nodes entered for %d pieces', [t.NodeVisits - visits, t.PieceCount]),
+      t.NodeVisits - visits <= t.PieceCount div 32 + 2 * (t.TreeDepth + 1));
+    AssertTrue('big: and the leaves it crossed were counted', t.NodeVisits - visits >= t.PieceCount div 256);
+  finally
+    t.Free;
+  end;
+end;
+
 { All three walks hold their place in the tree while foreign code runs: an edit from the
   callback is refused (a defined failure, not a walk over freed nodes), and the refusal ends
   with the walk - also when the callback raises. }
 procedure TTyRichTextTest.TestWalksRefuseAnEditFromTheirCallback;
 const
-  Names: array[0..2] of string = ('MapParaData', 'WalkParas', 'ForEachRun');
+  Names: array[0..3] of string = ('MapParaData', 'WalkParas', 'ForEachRun', 'WalkParaTexts');
 var
   t: TTyRichText;
   before: UTF8String;
@@ -1624,7 +1783,7 @@ begin
     FWalkText := t;
     FWalkPieces := t.PieceSnapshot(0, 1);
     before := t.GetText(0, t.Length);
-    for walk := 0 to 2 do
+    for walk := 0 to 3 do
       for raising := False to True do
       begin
         what := Names[walk];
@@ -1637,8 +1796,9 @@ begin
           case walk of
             0: t.MapParaData(0, 0, @EditInMap);
             1: t.WalkParas(0, @EditInWalk);
+            2: t.ForEachRun(0, t.Length, @EditInRun);
           else
-            t.ForEachRun(0, t.Length, @EditInRun);
+            t.WalkParaTexts(0, t.ParaCount - 1, @EditInTextWalk);
           end;
         except
           on ETestStop do stopped := True;
@@ -1793,6 +1953,8 @@ begin
     EditOnce := nil;
     t.Insert(t.Length, 'x');
   end;
+  // (what a reader that parses on demand does: the decode sets the paragraph's data)
+  if SetData <> nil then SetData.ParaData[idx] := Pointer(PtrUInt(5000 + idx));
   Result := Texts[idx];
   if WrongCount then Result := Result + 'extra';
 end;
@@ -1810,12 +1972,76 @@ begin
   FreeAndNil(FText);
   FreeAndNil(FProvider);
   FRuns := nil;
+  FSeenText := nil;
+  FSeenData := nil;
+  FSeenLog := nil;
 end;
 
 procedure TTyRichLazyTextTest.CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
 begin
   SetLength(FRuns, System.Length(FRuns) + 1);
   FRuns[High(FRuns)] := ARun;
+end;
+
+procedure TTyRichLazyTextTest.CollectPara(AIndex: Integer; AData: Pointer; AText: PByte;
+  ALen: PtrInt; var AContinue: Boolean);
+var
+  n: Integer;
+begin
+  n := System.Length(FSeenText);
+  SetLength(FSeenText, n + 1);
+  SetLength(FSeenData, n + 1);
+  SetLength(FSeenLog, n + 1);
+  FSeenText[n] := '';
+  SetLength(FSeenText[n], ALen);
+  if ALen > 0 then Move(AText^, FSeenText[n][1], ALen);
+  FSeenData[n] := AData;
+  FSeenLog[n] := FProvider.CallLog;
+  // the bytes shown stay good though the paragraph's decoded text is let go of meanwhile
+  FText.ForgetDecoded(AIndex * LazyStride + LazyBase);
+  if (ALen > 0) and not CompareMem(AText, @FSeenText[n][1], ALen) then
+    raise Exception.Create('the text shown changed during the call');
+end;
+
+{ Over lazy paragraphs the walk decodes each as it reaches it - not the ones before the
+  first or after the last - and shows the data as it is after the decode (a reader that
+  parses on demand sets it there). }
+procedure TTyRichLazyTextTest.TestWalkParaTextsDecodesAsItGoes;
+var
+  i: Integer;
+  log: string;
+begin
+  BuildLazy(40);
+  FProvider.SetData := FText;
+  FText.WalkParaTexts(10, 14, @CollectPara);
+  AssertEquals('five paragraphs', 5, System.Length(FSeenText));
+  log := '';
+  for i := 0 to 4 do
+  begin
+    AssertBytesEqual(Format('paragraph %d', [10 + i]), FProvider.Texts[10 + i], FSeenText[i]);
+    AssertTrue(Format('paragraph %d: the data its decode set', [10 + i]),
+      FSeenData[i] = Pointer(PtrUInt(5010 + i)));
+    // decoded when it was reached: the one shown is the last one decoded
+    if log <> '' then log := log + ',';
+    log := log + IntToStr(10 + i);
+    AssertEquals(Format('paragraph %d: what was decoded by then', [10 + i]), log, FSeenLog[i]);
+  end;
+  // the last paragraph (no separator), and one that was edited before
+  FProvider.SetData := nil;
+  FProvider.Calls.Clear;
+  FSeenText := nil;
+  FSeenData := nil;
+  FSeenLog := nil;
+  FText.Insert(FText.ParaStart(38) + 2, 'XY');
+  FProvider.Calls.Clear;
+  FText.WalkParaTexts(37, 39, @CollectPara);
+  AssertEquals('three paragraphs', 3, System.Length(FSeenText));
+  AssertBytesEqual('37', FProvider.Texts[37], FSeenText[0]);
+  AssertBytesEqual('38, edited', Copy(FProvider.Texts[38], 1, 2) + 'XY' + Copy(FProvider.Texts[38], 3, MaxInt),
+    FSeenText[1]);
+  AssertBytesEqual('39, the last', FProvider.Texts[39], FSeenText[2]);
+  AssertEquals('the edited one is not decoded again', '37,39', FProvider.CallLog);
+  AssertEquals('integrity', '', FText.CheckIntegrity);
 end;
 
 procedure TTyRichLazyTextTest.BuildLazy(ACount: Integer);

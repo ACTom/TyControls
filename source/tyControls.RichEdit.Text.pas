@@ -107,6 +107,11 @@ type
     otherwise). AContinue False ends the walk. }
   TTyRichParaWalk = procedure(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
     var AContinue: Boolean) of object;
+  { One step of WalkParaTexts: paragraph AIndex holds AData, and its text - without its
+    separator - is the ALen bytes at AText, which are good only during the call (they are
+    the text's own bytes, or gathered in the walk's buffer). AContinue False ends the walk. }
+  TTyRichParaTextWalk = procedure(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+    var AContinue: Boolean) of object;
 
   { Decodes one lazy paragraph: its text WITHOUT the separator, exactly ACharCount
     characters minus the separator, containing no CR or LF. It may read the text and set
@@ -305,8 +310,8 @@ type
     { Shows AProc the bytes of the range, piece by piece (see TTyRichByteRun). AProc may read
       the text - GetText, the lookups, paragraph data - and set paragraph data and heights.
       Changing the text (Insert, Delete, RestorePieces, ReopenLazyLoad) raises ETyRichText
-      while the walk runs, as in MapParaData and WalkParas: a walk holds its place in the
-      tree while foreign code runs, and an edit would leave it on freed nodes. }
+      while the walk runs, as in MapParaData, WalkParas and WalkParaTexts: a walk holds its
+      place in the tree while foreign code runs, and an edit would leave it on freed nodes. }
     procedure ForEachRun(APos, ALen: TTyRichPos; AProc: TTyRichRunEvent);
 
     function ParaCount: Integer;
@@ -405,8 +410,17 @@ type
       still the unedited lazy paragraph, where its bytes are in the original file - what
       ParaData and ParaLazySource give, without a lookup per paragraph (one descent, then
       piece by piece: a writer goes through millions of them). AProc may read the text and
-      set paragraph data; changing the text raises while the walk runs. }
+      set paragraph data; changing the text raises while the walk runs. Nodes the walk moves
+      into count in NodeVisits. }
     procedure WalkParas(AFirst: Integer; AProc: TTyRichParaWalk);
+    { Shows AProc paragraphs AFirst .. ALast in order, each with its data and its text: what
+      ParaData and GetText of the paragraph give, without a lookup per paragraph (one
+      descent, then piece by piece) and without a copy where the paragraph is one piece. A
+      lazy paragraph is decoded as the walk reaches it, and its data is read after that (a
+      provider may set it). AProc may read the text and set paragraph data and heights;
+      changing the text raises while the walk runs. Nodes the walk moves into count in
+      NodeVisits. }
+    procedure WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk);
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
@@ -1863,7 +1877,7 @@ begin
   // the walk holds a path into the tree; a structural change would leave it dangling
   if FWalking > 0 then
     raise ETyRichText.Create('The text cannot change during a walk (MapParaData, WalkParas, ' +
-      'ForEachRun)');
+      'WalkParaTexts, ForEachRun)');
 end;
 
 { ---- editing ---- }
@@ -2420,7 +2434,7 @@ begin
       begin
         // the piece after the separator that ends the paragraph before
         Find(rskSep, i - 1, p, before);
-        more := Advance(p);
+        more := Advance(p, True);
       end;
     atStart := True;
     src := -1;
@@ -2450,7 +2464,7 @@ begin
         Inc(i);
         atStart := True;
       end;
-      more := Advance(p);
+      more := Advance(p, True);
     end;
     // the last paragraph: what follows the last separator
     if atStart then
@@ -2464,6 +2478,113 @@ begin
       n := FLoadLastBytes;
     end;
     AProc(i, FLastData, src, n, go);
+  finally
+    Dec(FWalking);
+  end;
+end;
+
+procedure TTyRichText.WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk);
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  i, pieces: Integer;
+  buf: TBytes;             // a paragraph of several pieces is gathered here
+  used, oneLen: PtrInt;
+  one, txt: PByte;         // a paragraph of one piece is shown where it is
+  len: LongInt;
+  held: RawByteString;     // a lazy piece's decoded text, kept while AProc has its bytes
+  sep: Byte;
+  more, go: Boolean;
+
+  procedure Add(AText: PByte; ALen: PtrInt);
+  begin
+    if pieces = 0 then
+    begin
+      one := AText;
+      oneLen := ALen;
+    end
+    else
+    begin
+      if pieces = 1 then
+      begin
+        used := 0;
+        if System.Length(buf) < oneLen + ALen then SetLength(buf, (oneLen + ALen) * 2 + 256);
+        if oneLen > 0 then Move(one^, buf[0], oneLen);
+        used := oneLen;
+      end;
+      if System.Length(buf) < used + ALen then SetLength(buf, (used + ALen) * 2 + 256);
+      if ALen > 0 then Move(AText^, buf[used], ALen);
+      Inc(used, ALen);
+    end;
+    Inc(pieces);
+  end;
+
+  procedure Show(AData: Pointer);
+  begin
+    if pieces <= 1 then
+    begin
+      if pieces = 0 then
+      begin
+        one := nil;
+        oneLen := 0;
+      end;
+      AProc(i, AData, one, oneLen, go);
+    end
+    else
+      AProc(i, AData, @buf[0], used, go);
+    pieces := 0;
+  end;
+
+begin
+  CheckPara(AFirst);
+  CheckPara(ALast);
+  if ALast < AFirst then Exit;
+  buf := nil;
+  held := '';
+  Inc(FWalking);
+  try
+    i := AFirst;
+    go := True;
+    pieces := 0;
+    used := 0;
+    more := FTotal.Entries > 0;
+    if more then
+      if i = 0 then
+        Find(rskEntry, 0, p, before)
+      else
+      begin
+        // the piece after the separator that ends the paragraph before
+        Find(rskSep, i - 1, p, before);
+        more := Advance(p, True);
+      end;
+    while more do
+    begin
+      it := ItemAt(p);
+      if IsLazy(it^) then
+      begin
+        // (a lazy piece is always a whole paragraph)
+        held := DecodedOf(it);
+        txt := PByte(Pointer(held));
+        len := System.Length(held);
+      end
+      else
+        txt := PieceText(it, len);
+      sep := PSep(it^);
+      if sep <> sNone then
+      begin
+        Add(txt, len - SepBytes(sep));
+        // (the data is read now: decoding the paragraph may have set it)
+        Show(it^.FData);
+        if not go or (i >= ALast) then Exit;
+        Inc(i);
+      end
+      else
+        Add(txt, len);
+      more := Advance(p, True);
+    end;
+    // the last paragraph: what follows the last separator
+    Show(FLastData);
   finally
     Dec(FWalking);
   end;

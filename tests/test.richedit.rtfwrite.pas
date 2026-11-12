@@ -2126,9 +2126,13 @@ begin
     end;
     AssertEquals('no interval parsed', 0, load.ParseCount);
     AssertEquals('no paragraph rewritten', 0, Length(info.Stretches));
-    // the paragraphs are walked, not looked up one by one
+    // the paragraphs are walked, not looked up one by one: the walk enters each leaf once
+    // (a leaf holds up to 128 paragraphs; a lookup alone would enter three or four nodes
+    // for every paragraph), and the leaves it enters are counted
     AssertTrue(Format('%d tree nodes visited for %d paragraphs', [d.Text.NodeVisits - visits,
-      d.Text.ParaCount]), d.Text.NodeVisits - visits < 1000);
+      d.Text.ParaCount]), d.Text.NodeVisits - visits <= d.Text.ParaCount div 64 + 16);
+    AssertTrue(Format('the walk''s own nodes count: %d for %d paragraphs', [d.Text.NodeVisits - visits,
+      d.Text.ParaCount]), d.Text.NodeVisits - visits >= d.Text.ParaCount div 256);
   finally
     d.Free;
   end;
