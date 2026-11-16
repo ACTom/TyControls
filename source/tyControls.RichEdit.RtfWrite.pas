@@ -67,10 +67,11 @@ type
   // A save's progress: ADone of ATotal paragraphs are in the output. Called about every
   // 256 KB written, and every 65536 paragraphs while the save plans (it writes nothing
   // then, and ADone stays 0) - not at all for a save shorter than that. False cancels the
-  // save: it raises ETyRichSaveCancelled and leaves a part of the file in the stream. The
-  // handler may let the application handle its messages: the document is Saving meanwhile,
-  // and refuses every command, undo and redo (TTyRichDocument.BeginSave). It must not put
-  // other content into the document.
+  // save: it raises ETyRichSaveCancelled and leaves a part of the file in the stream. It is
+  // asked before a write, never once everything is written. The handler may let the
+  // application handle its messages: the document is Saving meanwhile, and refuses every
+  // command, undo and redo (TTyRichDocument.BeginSave). It must not put other content into
+  // the document.
   TTyRtfSaveProgress = function(ADone, ATotal: Int64): Boolean of object;
 
   // Paragraphs written from the model: ParaCount of them from FirstPara (none where only a
@@ -608,13 +609,16 @@ begin
   inherited Destroy;
 end;
 
+// The callback is asked before a write, when enough went out since it was asked last - not
+// after one: after the last write nothing is left to report, and a False there would
+// cancel a save that is complete.
 procedure TRtfWriter.Flush;
 begin
   if FBufLen = 0 then Exit;
+  if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
   FStream.WriteBuffer(FBuf[0], FBufLen);
   Inc(FWritten, FBufLen);
   FBufLen := 0;
-  if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
 end;
 
 // Asks the progress callback: how many paragraphs are in the output - of a block of the
@@ -655,11 +659,11 @@ begin
     begin
       n := ACount;
       if n > chunk then n := chunk;
+      if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
       FStream.WriteBuffer(P^, n);
       Inc(FWritten, n);
       Inc(P, n);
       Dec(ACount, n);
-      if Assigned(FOnProgress) and (FWritten - FProgressAt >= ProgressBytes) then Tick;
     end;
     Exit;
   end;

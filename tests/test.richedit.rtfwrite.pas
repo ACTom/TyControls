@@ -36,6 +36,7 @@ type
     // a document SaveProgress tries to change at every call, and what came of it
     FEditDoc: TTyRichDocument;
     FEditTries, FEditRefused, FHistoryHeld, FSavingSeen: Integer;
+    FStopAtEnd: Int64;        // SaveProgress says stop when the stream holds this many bytes
     function SaveProgress(ADone, ATotal: Int64): Boolean;
     procedure CheckEdit(const AName: string; const ABytes: TBytes; AFull: TTyRichDocument;
       APara: Integer; AKind: TEditKind);
@@ -70,6 +71,7 @@ type
     procedure TestASaveReportsItsProgressAndCanBeCancelled;
     // sweep B0
     procedure TestASaveInProgressRefusesEdits;
+    procedure TestNoProgressCallAfterTheLastByte;
   end;
 
 implementation
@@ -868,6 +870,7 @@ begin
   FTicks[n].Total := ATotal;
   FTicks[n].Written := FTickStream.Size;
   Result := (FCancelAt < 0) or (n < FCancelAt);
+  if (FStopAtEnd > 0) and (FTickStream.Size >= FStopAtEnd) then Result := False;
   if FEditDoc <> nil then
   begin
     // what a handler that lets the application run might let through
@@ -3824,6 +3827,110 @@ begin
     d.Undo;
     AssertEquals('our own: undone', 0, d.Text.Length);
     AssertTrue('our own: the edit goes through now', d.Execute(TTyRichInsertText.Create(0, 'X')));
+  finally
+    FTickStream := nil;
+    s.Free;
+    d.Free;
+  end;
+end;
+
+{ The callback is asked between writes, never once everything is written: a False there
+  would cancel a save that is complete. Documents of growing size put the last bytes at
+  every place between two calls; a callback that says stop only when the stream holds the
+  whole file never stops a save. }
+procedure TTyRtfWriteTest.TestNoProgressCallAfterTheLastByte;
+const
+  Step = 256 * 1024;
+  Base = 30000;
+  Steps = 24;
+  StepLines = 500;
+var
+  d: TTyRichDocument;
+  text: UTF8String;
+  i, k, calls: Integer;
+  plain, o: TBytes;
+  s: TBytesStream;
+  raised: Boolean;
+
+  function TickPlaces: string;
+  var
+    j: Integer;
+  begin
+    Result := '';
+    for j := 0 to High(FTicks) do Result := Result + ' ' + IntToStr(FTicks[j].Written);
+  end;
+
+begin
+  calls := 0;
+  for k := 0 to Steps - 1 do
+  begin
+    text := '';
+    for i := 0 to Base + k * StepLines do text := text + 'Line ' + IntToStr(i) + ' of a text that is saved.'#10;
+    d := TTyRichDocument.Create;
+    s := TBytesStream.Create;
+    try
+      d.Execute(TTyRichInsertText.Create(0, text));
+      plain := SaveBytes(d);
+      FTickStream := s;
+      FTicks := nil;
+      FCancelAt := -1;
+      FStopAtEnd := Length(plain);
+      raised := False;
+      try
+        TyRichSaveRtf(d, s, @SaveProgress);
+      except
+        on E: ETyRichSaveCancelled do raised := True;
+      end;
+      FStopAtEnd := 0;
+      AssertFalse(Format('%d bytes: the complete save was not cancelled (calls at %s)',
+        [Length(plain), TickPlaces]), raised);
+      o := Copy(s.Bytes, 0, s.Size);
+      AssertTrue(Format('%d bytes: the whole file: %s', [Length(plain), FirstDiff(plain, o)]),
+        SameBytes(plain, o));
+      AssertTrue(Format('%d bytes: calls', [Length(plain)]), Length(FTicks) >= 3);
+      for i := 0 to High(FTicks) do
+        AssertTrue(Format('%d bytes: call %d with %d bytes written', [Length(plain), i,
+          FTicks[i].Written]), FTicks[i].Written < Length(plain));
+      Inc(calls, Length(FTicks));
+    finally
+      FTickStream := nil;
+      s.Free;
+      d.Free;
+    end;
+  end;
+  AssertTrue('calls in all', calls > Steps * 3);
+  // a file that ends with its last paragraph (no closing brace, so no trailer): its last
+  // bytes are a block of the file, which goes out in pieces of 256 KB - the body exactly
+  // so many pieces long
+  text := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f0\fs24 ';
+  for i := 0 to Base do text := text + 'Line ' + IntToStr(i) + ' of a text that is saved.\par ';
+  d := LoadDoc(BytesOf(text + 'end\par'), False);
+  k := TyRichRtfLoadOf(d).Header.Stop;
+  d.Free;
+  i := Length(text + 'end\par') - k;
+  text := text + StringOfChar('x', (4 * Step - i mod Step) mod Step) + 'end\par';
+  d := LoadDoc(BytesOf(text), False);
+  s := TBytesStream.Create;
+  try
+    AssertEquals('no trailer', Length(text), TyRichRtfLoadOf(d).Trailer.Start);
+    AssertEquals('the body is whole pieces', 0, (Length(text) - TyRichRtfLoadOf(d).Header.Stop) mod Step);
+    FTickStream := s;
+    FTicks := nil;
+    FCancelAt := -1;
+    FStopAtEnd := Length(text);
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    FStopAtEnd := 0;
+    AssertFalse('no trailer: the complete save was not cancelled (calls at' + TickPlaces + ')', raised);
+    AssertTrue('no trailer: the file', (s.Size = Length(text)) and CompareMem(s.Memory, @text[1], Length(text)));
+    AssertTrue('no trailer: calls', Length(FTicks) >= 3);
+    for i := 0 to High(FTicks) do
+      AssertTrue(Format('no trailer: call %d with %d bytes written', [i, FTicks[i].Written]),
+        FTicks[i].Written < Length(text));
   finally
     FTickStream := nil;
     s.Free;
