@@ -13,7 +13,8 @@ interface
 
 uses
   Classes, SysUtils, Graphics, fpcunit, testregistry,
-  tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
+  tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
 
 type
   TDocAccess = class(TTyRichDocument)
@@ -48,9 +49,23 @@ type
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
   end;
 
+  { A stream whose every Write calls OnWrite first: what a save's stream that lets the
+    application run might let through. }
+  TTryingStream = class(TMemoryStream)
+  public
+    OnWrite: TNotifyEvent;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
   TTyRichModelTest = class(TTestCase)
   private
     FChanges: array of TTyRichChange;
+    // a document a save's callback or stream tries to load into, and what came of it
+    FLoadDoc: TTyRichDocument;
+    FLoadTries, FLoadRefused: Integer;
+    procedure TryLoads;
+    function SaveTryingLoads(ADone, ATotal: Int64): Boolean;
+    procedure WriteTryingLoads(Sender: TObject);
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
     function NewDoc(const AText: UTF8String): TDocAccess;
     function NewSample: TDocAccess;
@@ -86,6 +101,8 @@ type
     procedure TestTableIndexesAndEmptyTablesAreRefused;
     procedure TestARowThatHoldsANestedTableStaysAsItIs;
     procedure TestAValueIsReadWithoutALookup;
+    // fix wave W2
+    procedure TestALoadIsRefusedWhileSavingOrReading;
   end;
 
 implementation
@@ -1414,6 +1431,150 @@ begin
   finally
     d.Free;
     loader.Free;
+  end;
+end;
+
+function TTryingStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if Assigned(OnWrite) then OnWrite(Self);
+  Result := inherited Write(Buffer, Count);
+end;
+
+procedure TTyRichModelTest.TryLoads;
+var
+  src: TBytesStream;
+begin
+  if FLoadDoc = nil then Exit;
+  // a text load and an RTF load: both are refused, and free what they built
+  Inc(FLoadTries);
+  src := TBytesStream.Create(Bytes('another text'));
+  try
+    try
+      TyRichLoadText(FLoadDoc, src);
+    except
+      on E: ETyRichModel do Inc(FLoadRefused);
+    end;
+  finally
+    src.Free;
+  end;
+  Inc(FLoadTries);
+  src := TBytesStream.Create(Bytes('{\rtf1\ansi another file\par}'));
+  try
+    try
+      TyRichLoadRtf(FLoadDoc, src);
+    except
+      on E: ETyRichModel do Inc(FLoadRefused);
+    end;
+  finally
+    src.Free;
+  end;
+end;
+
+function TTyRichModelTest.SaveTryingLoads(ADone, ATotal: Int64): Boolean;
+begin
+  TryLoads;
+  Result := True;
+end;
+
+procedure TTyRichModelTest.WriteTryingLoads(Sender: TObject);
+begin
+  TryLoads;
+end;
+
+{ A load frees the text and the loader of the content it replaces. A save walks that text and
+  copies from that loader, and a read scope holds tables, cells and objects of it - so a load
+  (a progress callback or a stream that lets the application run, where the user picks Open)
+  is refused while the document is saving or inside a read scope: ETyRichModel, the document
+  and the save go on as they were. After that it goes through. }
+procedure TTyRichModelTest.TestALoadIsRefusedWhileSavingOrReading;
+var
+  d: TTyRichDocument;
+  text: UTF8String;
+  plain, o: TBytes;
+  s: TBytesStream;
+  ts: TTryingStream;
+  i: Integer;
+  len: Int64;
+  raised: Boolean;
+  src: TBytesStream;
+begin
+  text := '';
+  for i := 0 to 40000 do text := text + 'Line ' + IntToStr(i) + ' of a text that is saved.'#10;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create;
+  ts := TTryingStream.Create;
+  try
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(0, text)));
+    len := d.Text.Length;
+    TyRichSaveRtf(d, s);
+    plain := Copy(s.Bytes, 0, s.Size);
+    // the RTF writer's progress callback
+    s.Clear;
+    FLoadTries := 0;
+    FLoadRefused := 0;
+    FLoadDoc := d;
+    try
+      TyRichSaveRtf(d, s, @SaveTryingLoads);
+    finally
+      FLoadDoc := nil;
+    end;
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertTrue('rtf: the callback was called', FLoadTries > 0);
+    AssertEquals('rtf: every load was refused', FLoadTries, FLoadRefused);
+    AssertTrue('rtf: the bytes of a plain save', (Length(o) = Length(plain)) and
+      CompareMem(@o[0], @plain[0], Length(o)));
+    AssertEquals('rtf: the text is the one saved', len, d.Text.Length);
+    AssertEquals('rtf: the step is still there', 1, d.UndoDepth);
+    // the text writer's stream
+    s.Clear;
+    TyRichSaveText(d, s);
+    plain := Copy(s.Bytes, 0, s.Size);
+    FLoadTries := 0;
+    FLoadRefused := 0;
+    ts.OnWrite := @WriteTryingLoads;
+    FLoadDoc := d;
+    try
+      TyRichSaveText(d, ts);
+    finally
+      FLoadDoc := nil;
+      ts.OnWrite := nil;
+    end;
+    AssertTrue('txt: the stream was written to', FLoadTries > 0);
+    AssertEquals('txt: every load was refused', FLoadTries, FLoadRefused);
+    AssertTrue('txt: the bytes of a plain save', (ts.Size = Length(plain)) and
+      CompareMem(ts.Memory, @plain[0], Length(plain)));
+    AssertEquals('txt: the text is the one saved', len, d.Text.Length);
+    // inside a read scope
+    FLoadTries := 0;
+    FLoadRefused := 0;
+    FLoadDoc := d;
+    d.BeginRead;
+    try
+      TryLoads;
+    finally
+      d.EndRead;
+      FLoadDoc := nil;
+    end;
+    AssertEquals('read scope: both loads were refused', 2, FLoadRefused);
+    AssertEquals('read scope: the text is as it was', len, d.Text.Length);
+    // the scope is over: a load goes through
+    src := TBytesStream.Create(Bytes('another text'));
+    try
+      raised := False;
+      try
+        TyRichLoadText(d, src);
+      except
+        on E: ETyRichModel do raised := True;
+      end;
+    finally
+      src.Free;
+    end;
+    AssertFalse('afterwards: the load goes through', raised);
+    AssertEquals('afterwards: the new text', 'another text', string(d.Text.GetText(0, d.Text.Length)));
+  finally
+    ts.Free;
+    s.Free;
+    d.Free;
   end;
 end;
 

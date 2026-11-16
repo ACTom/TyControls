@@ -392,7 +392,8 @@ type
       OnChange reports one change of everything:
       Kinds [rckText, rckFormat, rckStructure], Pos 0, the old and new lengths, paragraphs 0
       with the old and new counts (a view throws all its layout away on it). Raises
-      ETyRichModel while a command runs or inside BeginUpdate .. EndUpdate. Without the
+      ETyRichModel while a command runs, inside BeginUpdate .. EndUpdate, while the document
+      is being saved or inside a read scope (BeginRead) - it frees AText then. Without the
       metadata: UTF-8 without a BOM, and the majority line break of AText's load scan. }
     class procedure ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText); overload;
     class procedure ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText;
@@ -666,7 +667,8 @@ type
       In a document that parses on demand, a read may send paragraphs read earlier back to
       unparsed, and the tables, cells and objects they gave out go with them: what TableAt,
       CellAt or a run's Obj returned is good until the next read. Inside a read scope nothing
-      is sent back: everything read stays as it was returned until the outermost EndRead.
+      is sent back, and a load into the document is refused (ETyRichModel): everything read
+      stays as it was returned until the outermost EndRead.
       So whoever holds a table, a cell or an object across another read does it inside one -
       a layout pass over the visible paragraphs, a save, TableParas and CellParas themselves.
       (Format ids, RunsOf's copy and text are values: they need no scope. A running command
@@ -678,7 +680,9 @@ type
       themselves). A save plans with the paragraphs as they are when it starts, and its
       progress callback or its stream may let the application run - so in between nothing
       may change the document: Execute returns False, Undo and Redo do nothing (CanUndo and
-      CanRedo are False), as while the document is Loading. Reading is fine. }
+      CanRedo are False), as while the document is Loading, and a load into it (any reader's,
+      through TTyRichDocBuilder.ReplaceText) raises ETyRichModel and leaves it as it was.
+      Reading is fine. }
     procedure BeginSave;
     procedure EndSave;
 
@@ -1758,6 +1762,14 @@ begin
     // the history being built refers to the old content's paragraphs and pieces
     raise ETyRichModel.Create('A document cannot be replaced while a command runs or ' +
       'inside BeginUpdate .. EndUpdate');
+  end;
+  if (FSaving > 0) or (FReading > 0) then
+  begin
+    AText.Free;
+    // a save walks the text and copies from the loader this would free; a read scope holds
+    // tables, cells and objects of the content this would free
+    raise ETyRichModel.Create('A document cannot be loaded into while it is being saved ' +
+      'or read (inside BeginRead .. EndRead)');
   end;
   c := Default(TTyRichChange);
   c.Kinds := [rckText, rckFormat, rckStructure];
