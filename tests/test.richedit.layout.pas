@@ -93,6 +93,11 @@ type
     procedure TestMergedCellsAreShownMerged;
     procedure TestARowInALazyDocumentSurvivesEviction;
     procedure TestTheRowFormatIsRead;
+    // 8b: pictures
+    procedure TestPicturesAreDecodedWhenDrawnAndKept;
+    procedure TestThePictureCacheIsBoundedByBytes;
+    procedure TestPicturesThatCannotBeShownArePlaceholders;
+    procedure TestTheWordPadPictureShowsItsBitmap;
   end;
 
 implementation
@@ -186,6 +191,36 @@ begin
   runs[0].Obj := nil;
   SetParagraph(ADoc, AIndex, ParaFmt, runs,
     Table.Rows[AIndex div Cells].Cells[AIndex mod Cells]);
+end;
+
+{ A ground no painting produces (magenta), so that "painted" and "not painted" are told
+  apart. }
+function Sentinel: TBGRAPixel;
+begin
+  Result := BGRA(255, 0, 255, 255);
+end;
+
+function SamePx(const A, B: TBGRAPixel): Boolean;
+begin
+  Result := (A.red = B.red) and (A.green = B.green) and (A.blue = B.blue) and
+    (A.alpha = B.alpha);
+end;
+
+{ A PNG of AW x AH pixels of one colour. }
+function PngBytes(AW, AH: Integer; AColor: TBGRAPixel): TBytes;
+var
+  b: TBGRABitmap;
+  st: TBytesStream;
+begin
+  b := TBGRABitmap.Create(AW, AH, AColor);
+  st := TBytesStream.Create;
+  try
+    b.SaveToStreamAsPng(st);
+    Result := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+    b.Free;
+  end;
 end;
 
 function FixtureBytes(const AName: string): TBytes;
@@ -2088,6 +2123,224 @@ begin
   AssertEquals('Word''s half gap', 108, r.HalfGap);
   AssertTrue('a line on every side', r.Cells[1].Borders = [rcsLeft, rcsTop, rcsRight, rcsBottom]);
   AssertEquals('a thin one', 10, r.Cells[1].BorderWidth[rcsLeft]);
+end;
+
+{ ---- 8b: pictures ---- }
+
+{ A picture is decoded the first time it is drawn - never at layout - and kept: drawn again,
+  it is not decoded again; drawn at another size it is scaled once to that size and the
+  scaled image kept. The cache holds a reference to the picture and lets go of it when it
+  is emptied. }
+procedure TTyRichLayoutTest.TestPicturesAreDecodedWhenDrawnAndKept;
+var
+  d: TTyRichDocument;
+  pic: TTyRichPicture;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  green: TBGRAPixel;
+  n: Integer;
+begin
+  green := BGRA(0, 200, 0, 255);
+  st := TyRichDefaultPaintStyle;
+  pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, green), 300, 150);
+  pic.AddRef;
+  try
+    d := NewDoc('ab');
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(1, pic)));
+    L := Lay(d, 0, 1000);
+    AssertEquals('20 x 10 px', 20, FragAt(L, 1).Width);
+    AssertEquals('laid out, not decoded', 0, FLayouter.PictureDecodes);
+    bmp := TBGRABitmap.Create(60, 40, Sentinel);
+    try
+      AssertTrue('shown', FLayouter.DrawPicture(bmp, pic, Rect(5, 5, 25, 15), 1, st));
+      AssertEquals('decoded once', 1, FLayouter.PictureDecodes);
+      AssertEquals('at its own size: not scaled', 0, FLayouter.PictureScales);
+      AssertTrue('its pixels', SamePx(green, bmp.GetPixel(15, 10)));
+      AssertTrue('outside its box the ground', SamePx(Sentinel, bmp.GetPixel(30, 20)));
+      FLayouter.DrawPicture(bmp, pic, Rect(5, 5, 25, 15), 1, st);
+      AssertEquals('kept: not decoded again', 1, FLayouter.PictureDecodes);
+      // twice the size (at 200 %): scaled once, and kept at that size
+      AssertTrue('shown larger', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 40, 20), 1, st));
+      AssertEquals('scaled', 1, FLayouter.PictureScales);
+      AssertTrue('scaled pixels', SamePx(green, bmp.GetPixel(35, 18)));
+      FLayouter.DrawPicture(bmp, pic, Rect(10, 10, 50, 30), 1, st);
+      AssertEquals('the same size again: not scaled again', 1, FLayouter.PictureScales);
+      AssertEquals('still decoded once', 1, FLayouter.PictureDecodes);
+    finally
+      bmp.Free;
+    end;
+    AssertEquals('one kept', 1, FLayouter.PictureCacheCount);
+    n := pic.RefCount;
+    FLayouter.Clear;
+    AssertEquals('emptied', 0, FLayouter.PictureCacheCount);
+    AssertEquals('it let go of the picture', n - 1, pic.RefCount);
+  finally
+    pic.Release;
+  end;
+end;
+
+{ At most PictureCacheLimit bytes of decoded and scaled images (and the pictures held for
+  them): the least recently drawn go first and are decoded again when drawn again; the one
+  drawn last stays even when it alone is over the bound. }
+procedure TTyRichLayoutTest.TestThePictureCacheIsBoundedByBytes;
+const
+  N = 40;
+var
+  pics: array[0..N - 1] of TTyRichPicture;
+  big: TTyRichPicture;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  i: Integer;
+  dec: Int64;
+begin
+  st := TyRichDefaultPaintStyle;
+  AssertEquals('the default bound', CRichPictureCacheBytes, FLayouter.PictureCacheLimit);
+  FLayouter.PictureCacheLimit := 64 * 1024;
+  for i := 0 to N - 1 do pics[i] := nil;
+  big := nil;
+  bmp := TBGRABitmap.Create(300, 300, Sentinel);
+  try
+    for i := 0 to N - 1 do
+    begin
+      pics[i] := TTyRichPicture.Create(rpfPng, PngBytes(32, 32, BGRA(i * 6, 0, 0, 255)), 480, 480);
+      pics[i].AddRef;
+      AssertTrue('shown', FLayouter.DrawPicture(bmp, pics[i], Rect(0, 0, 32, 32), 1, st));
+      AssertTrue(Format('%d bytes kept', [FLayouter.PictureCacheBytes]),
+        FLayouter.PictureCacheBytes <= FLayouter.PictureCacheLimit);
+    end;
+    AssertEquals('each decoded once', N, FLayouter.PictureDecodes);
+    AssertTrue(Format('%d kept', [FLayouter.PictureCacheCount]),
+      (FLayouter.PictureCacheCount >= 8) and (FLayouter.PictureCacheCount < N));
+    dec := FLayouter.PictureDecodes;
+    FLayouter.DrawPicture(bmp, pics[N - 1], Rect(0, 0, 32, 32), 1, st);
+    AssertEquals('the newest is kept', dec, FLayouter.PictureDecodes);
+    FLayouter.DrawPicture(bmp, pics[0], Rect(0, 0, 32, 32), 1, st);
+    AssertEquals('the oldest went: decoded again', dec + 1, FLayouter.PictureDecodes);
+    AssertEquals('the pictures that went were let go of', 1, pics[1].RefCount);
+    big := TTyRichPicture.Create(rpfPng, PngBytes(256, 256, BGRABlack), 3840, 3840);
+    big.AddRef;
+    AssertTrue('a picture over the bound', FLayouter.DrawPicture(bmp, big, Rect(0, 0, 256, 256),
+      1, st));
+    AssertEquals('it alone stays', 1, FLayouter.PictureCacheCount);
+    AssertEquals('held', 2, big.RefCount);
+  finally
+    bmp.Free;
+    for i := 0 to N - 1 do
+      if pics[i] <> nil then pics[i].Release;
+    if big <> nil then big.Release;
+  end;
+end;
+
+{ What cannot be shown is a placeholder of the box - filled, framed ALinePx thick - and never
+  raises: bytes that do not decode (tried once, not on every paint), a metafile that draws
+  more than one bitmap, an EMF, no bytes at all. }
+procedure TTyRichLayoutTest.TestPicturesThatCannotBeShownArePlaceholders;
+var
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  broken, emf, wmf, empty: TTyRichPicture;
+  fill, frame: TBGRAPixel;
+begin
+  st := TyRichDefaultPaintStyle;
+  fill := BGRA(1, 2, 3, 255);
+  frame := BGRA(4, 5, 6, 255);
+  st.PlaceholderFill := fill;
+  st.PlaceholderFrame := frame;
+  broken := TTyRichPicture.Create(rpfPng, ByteArray([$89, $50, $4E, $47, $0D, $0A, 1, 2, 3]),
+    300, 300);
+  emf := TTyRichPicture.Create(rpfEmf, ByteArray([1, 0, 0, 0, 88, 0, 0, 0]), 300, 300);
+  // a metafile that draws a line: its header, LineTo(10, 10), the end record
+  wmf := TTyRichPicture.Create(rpfWmf, ByteArray([1, 0, 9, 0, 0, 3, 17, 0, 0, 0, 0, 0, 5, 0,
+    0, 0, 0, 0, 5, 0, 0, 0, $13, $02, 10, 0, 10, 0, 3, 0, 0, 0, 0, 0]), 300, 300);
+  empty := TTyRichPicture.Create(rpfPng, nil, 300, 300);
+  broken.AddRef;
+  emf.AddRef;
+  wmf.AddRef;
+  empty.AddRef;
+  bmp := TBGRABitmap.Create(40, 40, Sentinel);
+  try
+    AssertFalse('bytes that do not decode', FLayouter.DrawPicture(bmp, broken,
+      Rect(5, 5, 25, 25), 2, st));
+    AssertTrue('filled', SamePx(fill, bmp.GetPixel(15, 15)));
+    AssertTrue('framed', SamePx(frame, bmp.GetPixel(5, 15)));
+    AssertTrue('two pixels thick', SamePx(frame, bmp.GetPixel(6, 15)));
+    AssertTrue('and no more', SamePx(fill, bmp.GetPixel(7, 15)));
+    AssertTrue('the bottom', SamePx(frame, bmp.GetPixel(15, 24)));
+    AssertTrue('outside it the ground', SamePx(Sentinel, bmp.GetPixel(30, 30)));
+    AssertEquals('tried', 1, FLayouter.PictureDecodes);
+    AssertFalse('again', FLayouter.DrawPicture(bmp, broken, Rect(5, 5, 25, 25), 2, st));
+    AssertEquals('not tried again', 1, FLayouter.PictureDecodes);
+    bmp.FillRect(0, 0, 40, 40, Sentinel, dmSet);
+    AssertFalse('an EMF', FLayouter.DrawPicture(bmp, emf, Rect(5, 5, 25, 25), 1, st));
+    AssertTrue('its placeholder', SamePx(fill, bmp.GetPixel(15, 15)));
+    AssertFalse('a metafile with a line', FLayouter.DrawPicture(bmp, wmf, Rect(5, 5, 25, 25),
+      1, st));
+    AssertFalse('no bytes', FLayouter.DrawPicture(bmp, empty, Rect(5, 5, 25, 25), 1, st));
+    AssertEquals('nothing to decode in them', 1, FLayouter.PictureDecodes);
+  finally
+    bmp.Free;
+    broken.Release;
+    emf.Release;
+    wmf.Release;
+    empty.Release;
+  end;
+end;
+
+{ WordPad saves every picture as a metafile holding one DIB (wp-zh-picture.rtf): it shows as
+  that bitmap, not a placeholder. }
+procedure TTyRichLayoutTest.TestTheWordPadPictureShowsItsBitmap;
+var
+  d: TTyRichDocument;
+  runs: TTyRunArray;
+  i, j, q, x, y, shown: Integer;
+  pic: TTyRichPicture;
+  L: TTyParaLayout;
+  fr: TTyRichFragment;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  fmt: TTyRichPictureFormat;
+  a, c: Integer;
+  px: TBGRAPixel;
+begin
+  st := TyRichDefaultPaintStyle;
+  d := LoadFixture('wp-zh-picture.rtf');
+  pic := nil;
+  q := -1;
+  for i := 0 to d.Text.ParaCount - 1 do
+  begin
+    runs := d.RunsOf(i);
+    for j := 0 to High(runs) do
+      if (pic = nil) and (runs[j].Obj is TTyRichPicture) then
+      begin
+        pic := TTyRichPicture(runs[j].Obj);
+        q := i;
+      end;
+  end;
+  AssertTrue('a picture', pic <> nil);
+  AssertTrue('a metafile', pic.PictureFormat = rpfWmf);
+  AssertTrue('with one bitmap', pic.DisplayData(fmt, a, c) and (fmt = rpfDib));
+  L := Lay(d, q, 4000);
+  fr.Width := 0;
+  for i := 0 to L.FragmentCount - 1 do
+    if L.Fragments[i].Obj = pic then fr := L.Fragments[i];
+  AssertTrue('its box', (fr.Width > 0) and (fr.Ascent > 0));
+  bmp := TBGRABitmap.Create(fr.Width, fr.Ascent, Sentinel);
+  try
+    AssertTrue('shown', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, fr.Width, fr.Ascent), 1, st));
+    AssertEquals('decoded', 1, FLayouter.PictureDecodes);
+    shown := 0;
+    for y := 0 to bmp.Height - 1 do
+      for x := 0 to bmp.Width - 1 do
+      begin
+        px := bmp.GetPixel(x, y);
+        if not SamePx(Sentinel, px) and not SamePx(st.PlaceholderFill, px) then Inc(shown);
+      end;
+    AssertTrue(Format('%d of %d pixels its own', [shown, bmp.Width * bmp.Height]),
+      shown >= bmp.Width * bmp.Height * 9 div 10);
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

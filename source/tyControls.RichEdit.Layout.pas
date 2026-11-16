@@ -77,6 +77,11 @@ const
   CRichListOrdinalCache = 65536;
   { A table cell whose right edge neither the row nor the table gives is this wide (twips). }
   CRichDefaultCellTwips = 1440;
+  { Pictures the layouter has drawn are kept decoded (and scaled to the size they were drawn
+    at) up to this many bytes - their pixels, and the bytes of the pictures held for them -
+    the least recently drawn going first, the one drawn last always staying: a document of
+    thousands of pictures keeps decoded only what was on screen lately. }
+  CRichPictureCacheBytes = 64 * 1024 * 1024;
 
   { Line-breaking rules (kinsoku), after the common practice of JIS X 4051 and GB/T 15834:
     the characters a line must not start with (closing brackets and quotes, sentence and
@@ -461,6 +466,19 @@ type
     Shift: Integer;
   end;
 
+  { The colours painting takes from the control's theme - the layouter never looks at a theme;
+    the control fills this in, a test by hand. A run's own colour and highlight are the
+    document's, not these. }
+  TTyRichPaintStyle = record
+    TextColor: TBGRAPixel;          // text in clDefault (the theme's text colour)
+    SelectionBack: TBGRAPixel;
+    SelectionText: TBGRAPixel;
+    PlaceholderFill: TBGRAPixel;    // a picture that cannot be shown
+    PlaceholderFrame: TBGRAPixel;
+    ObjectFrame: TBGRAPixel;        // around a selected picture
+    TableBorder: TBGRAPixel;
+  end;
+
   { A list item's number, remembered with the kind and level it was counted for. }
   TTyRichListOrdinal = record
     Kind: TTyListKind;
@@ -497,10 +515,22 @@ type
     FListWalkSteps: Int64;
     FWalkData: array of Pointer;
     FWalkFirst, FWalkLast: Integer;
+    // decoded pictures: by picture, LRU order (most recent first), bounded by bytes
+    FPictures: specialize TDictionary<Pointer, TObject>;
+    FPicFirst, FPicLast: TObject;
+    FPictureBytes: Int64;
+    FPictureLimit: Int64;
+    FPictureDecodes: Int64;
+    FPictureScales: Int64;
     procedure WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
     function ListOfFormat(ADoc: TTyRichDocument; AFormat: TTyParaFormatId): TTyListFormat;
     procedure DropNumbersFrom(AFirst: Integer);
+    procedure PictureUnlink(AEntry: TObject);
+    procedure PicturePushFront(AEntry: TObject);
+    procedure PictureDrop(AEntry: TObject);
+    procedure PictureTrim(AKeep: TObject);
+    procedure SetPictureLimit(AValue: Int64);
     procedure SetBaseFontName(const AValue: string);
     procedure SetBaseFontSizeHalfPt(AValue: Integer);
     procedure FallbackFontsChanged(Sender: TObject);
@@ -578,6 +608,22 @@ type
     property CachedChars: Int64 read FCachedChars;
     { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
     property ListWalkSteps: Int64 read FListWalkSteps;
+    { Draws APicture into ABox of ATarget (the target's pixels, its ClipRect respected): its
+      image - decoded the first time the picture is drawn (never at layout), scaled straight
+      to the box's pixels once per size, both kept - or, for a picture that cannot be shown
+      (a metafile that is not one bitmap, an unknown format, no bytes, bytes that do not
+      decode), a placeholder: the box filled and framed ALinePx thick. Never raises for what
+      a picture's bytes are. True when the image was drawn. The kept pictures are held by a
+      counted reference until they leave the cache (Clear empties it). }
+    function DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture; const ABox: TRect;
+      ALinePx: Integer; const AStyle: TTyRichPaintStyle): Boolean;
+    { Bytes the decoded pictures may hold (CRichPictureCacheBytes to start with). }
+    property PictureCacheLimit: Int64 read FPictureLimit write SetPictureLimit;
+    property PictureCacheBytes: Int64 read FPictureBytes;
+    function PictureCacheCount: Integer;
+    { Pictures decoded and images scaled, for the tests that check when that happens. }
+    property PictureDecodes: Int64 read FPictureDecodes;
+    property PictureScales: Int64 read FPictureScales;
   end;
 
 { The width LayoutPara takes for a wrap mode: rwmWindow AAvailWidth (at least 1), rwmPage
@@ -599,11 +645,15 @@ procedure TyRichDefaultFallbackFonts(AList: TStrings);
   in base 26 with no zero); i, ii, ... (roman up to 3999). A number the kind cannot write
   (below 1, or past 3999 in roman) is written in digits. '' for no list. }
 function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int64): UTF8String;
+{ Black text, a blue selection with white text, grey placeholders and table lines: what a
+  test or a probe paints with when it has no theme. }
+function TyRichDefaultPaintStyle: TTyRichPaintStyle;
 
 implementation
 
 uses
-  Math, LCLType, LCLIntf, tyControls.Types, tyControls.FontUnits, tyControls.Painter;
+  Math, LCLType, LCLIntf, BGRAReadPng, BGRAReadJpeg, BGRAReadBMP, tyControls.Types,
+  tyControls.FontUnits, tyControls.Painter;
 
 const
   ckText = 0;
@@ -1870,7 +1920,7 @@ begin
   end
   else
     Result := FItems[k].Layout.CaretRect(APos - FItems[k].Pos);
-  OffsetRect(Result, FItems[k].X, FItems[k].Y);
+  Types.OffsetRect(Result, FItems[k].X, FItems[k].Y);
 end;
 
 function TTyRowLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
@@ -1892,7 +1942,7 @@ begin
     for i := 0 to High(rs) do
     begin
       Result[n] := rs[i];
-      OffsetRect(Result[n], FItems[k].X, FItems[k].Y);
+      Types.OffsetRect(Result[n], FItems[k].X, FItems[k].Y);
       Inc(n);
     end;
   end;
@@ -2915,6 +2965,286 @@ begin
   SetLength(Layout.FFrags, Layout.FFragCount);
 end;
 
+{ ---- pictures ---- }
+
+type
+  { A picture the layouter drew: its image decoded (nil: it cannot be shown), the image at the
+    size it was drawn last, and what it costs to keep. It holds a counted reference to the
+    picture, so the key stays this picture's for as long as the entry lives (a picture let go
+    of by everything else is not freed under it, and its address is not reused for another). }
+  TTyPictureEntry = class
+  public
+    Pic: TTyRichPicture;
+    Image: TBGRABitmap;
+    Scaled: TBGRABitmap;
+    Bytes: Int64;
+    Prev, Next: TTyPictureEntry;
+    destructor Destroy; override;
+  end;
+
+destructor TTyPictureEntry.Destroy;
+begin
+  Scaled.Free;
+  Image.Free;
+  if Pic <> nil then Pic.Release;
+  inherited Destroy;
+end;
+
+function LE16(const B: TBytes; AAt: PtrInt): Cardinal; inline;
+begin
+  if (AAt < 0) or (AAt + 2 > System.Length(B)) then Exit(0);
+  Result := Cardinal(B[AAt]) or (Cardinal(B[AAt + 1]) shl 8);
+end;
+
+function LE32(const B: TBytes; AAt: PtrInt): Cardinal; inline;
+begin
+  if (AAt < 0) or (AAt + 4 > System.Length(B)) then Exit(0);
+  Result := Cardinal(B[AAt]) or (Cardinal(B[AAt + 1]) shl 8) or (Cardinal(B[AAt + 2]) shl 16) or
+    (Cardinal(B[AAt + 3]) shl 24);
+end;
+
+{ The BITMAPFILEHEADER a DIB (a BITMAPINFO and its bits, as a metafile carries one) needs to be
+  read as a .bmp file: 'BM', the file's size, and where the bits start - after the header,
+  the colour table and, for bit fields, the masks. }
+procedure WriteBmpFileHeader(AStream: TStream; const AData: TBytes; AStart, ACount: Integer);
+var
+  hs, bits, comp, used, entry, pal, off: Cardinal;
+  h: array[0..13] of Byte;
+
+  procedure Put32(AAt: Integer; AValue: Cardinal);
+  begin
+    h[AAt] := AValue and $FF;
+    h[AAt + 1] := (AValue shr 8) and $FF;
+    h[AAt + 2] := (AValue shr 16) and $FF;
+    h[AAt + 3] := (AValue shr 24) and $FF;
+  end;
+
+begin
+  hs := LE32(AData, AStart);
+  if hs = 12 then
+  begin
+    // BITMAPCOREHEADER: three bytes a colour
+    bits := LE16(AData, AStart + 10);
+    comp := 0;
+    used := 0;
+    entry := 3;
+  end
+  else
+  begin
+    bits := LE16(AData, AStart + 14);
+    comp := LE32(AData, AStart + 16);
+    if hs >= 36 then used := LE32(AData, AStart + 32) else used := 0;
+    entry := 4;
+  end;
+  if (used = 0) and (bits >= 1) and (bits <= 8) then used := Cardinal(1) shl bits;
+  if used > 65536 then used := 0;
+  pal := used * entry;
+  // BI_BITFIELDS / BI_ALPHABITFIELDS after a 40-byte header: the masks follow it
+  if (hs = 40) and (comp = 3) then Inc(pal, 12)
+  else if (hs = 40) and (comp = 6) then Inc(pal, 16);
+  off := 14 + hs + pal;
+  FillChar(h, SizeOf(h), 0);
+  h[0] := Ord('B');
+  h[1] := Ord('M');
+  Put32(2, 14 + Cardinal(ACount));
+  Put32(10, off);
+  AStream.WriteBuffer(h, SizeOf(h));
+end;
+
+{ The picture's image, decoded from what DisplayData says can be shown; nil when it says
+  nothing can, or the bytes do not decode (anything a decoder raises is taken as that). }
+function DecodePicture(APicture: TTyRichPicture): TBGRABitmap;
+var
+  fmt: TTyRichPictureFormat;
+  start, count: Integer;
+  data: TBytes;
+  st: TMemoryStream;
+begin
+  Result := nil;
+  if not APicture.DisplayData(fmt, start, count) then Exit;
+  data := APicture.Data;
+  if (start < 0) or (count <= 0) or (Int64(start) + count > System.Length(data)) then Exit;
+  st := TMemoryStream.Create;
+  try
+    try
+      if fmt = rpfDib then WriteBmpFileHeader(st, data, start, count);
+      st.WriteBuffer(data[start], count);
+      st.Position := 0;
+      Result := TBGRABitmap.Create;
+      Result.LoadFromStream(st);
+      if (Result.Width <= 0) or (Result.Height <= 0) then FreeAndNil(Result);
+    except
+      FreeAndNil(Result);
+    end;
+  finally
+    st.Free;
+  end;
+end;
+
+function ImageBytes(AImage: TBGRABitmap): Int64; inline;
+begin
+  if AImage = nil then Exit(0);
+  Result := Int64(AImage.Width) * AImage.Height * SizeOf(TBGRAPixel);
+end;
+
+procedure DrawPlaceholder(ATarget: TBGRABitmap; const ABox: TRect; ALinePx: Integer;
+  const AStyle: TTyRichPaintStyle);
+var
+  t: Integer;
+begin
+  ATarget.FillRect(ABox.Left, ABox.Top, ABox.Right, ABox.Bottom, AStyle.PlaceholderFill,
+    dmDrawWithTransparency);
+  t := Max(1, Min(ALinePx, Min(ABox.Right - ABox.Left, ABox.Bottom - ABox.Top) div 2));
+  ATarget.FillRect(ABox.Left, ABox.Top, ABox.Right, ABox.Top + t, AStyle.PlaceholderFrame,
+    dmDrawWithTransparency);
+  ATarget.FillRect(ABox.Left, ABox.Bottom - t, ABox.Right, ABox.Bottom, AStyle.PlaceholderFrame,
+    dmDrawWithTransparency);
+  ATarget.FillRect(ABox.Left, ABox.Top + t, ABox.Left + t, ABox.Bottom - t,
+    AStyle.PlaceholderFrame, dmDrawWithTransparency);
+  ATarget.FillRect(ABox.Right - t, ABox.Top + t, ABox.Right, ABox.Bottom - t,
+    AStyle.PlaceholderFrame, dmDrawWithTransparency);
+end;
+
+function TyRichDefaultPaintStyle: TTyRichPaintStyle;
+begin
+  Result.TextColor := BGRABlack;
+  Result.SelectionBack := BGRA(51, 153, 255, 255);
+  Result.SelectionText := BGRAWhite;
+  Result.PlaceholderFill := BGRA(240, 240, 240, 255);
+  Result.PlaceholderFrame := BGRA(160, 160, 160, 255);
+  Result.ObjectFrame := BGRA(51, 153, 255, 255);
+  Result.TableBorder := BGRA(128, 128, 128, 255);
+end;
+
+{ ---- layouter: pictures ---- }
+
+procedure TTyRichLayouter.PictureUnlink(AEntry: TObject);
+var
+  e: TTyPictureEntry;
+begin
+  e := TTyPictureEntry(AEntry);
+  if e.Prev <> nil then e.Prev.Next := e.Next else FPicFirst := e.Next;
+  if e.Next <> nil then e.Next.Prev := e.Prev else FPicLast := e.Prev;
+  e.Prev := nil;
+  e.Next := nil;
+end;
+
+procedure TTyRichLayouter.PicturePushFront(AEntry: TObject);
+var
+  e: TTyPictureEntry;
+begin
+  e := TTyPictureEntry(AEntry);
+  e.Prev := nil;
+  e.Next := TTyPictureEntry(FPicFirst);
+  if FPicFirst <> nil then TTyPictureEntry(FPicFirst).Prev := e;
+  FPicFirst := e;
+  if FPicLast = nil then FPicLast := e;
+end;
+
+procedure TTyRichLayouter.PictureDrop(AEntry: TObject);
+var
+  e: TTyPictureEntry;
+begin
+  e := TTyPictureEntry(AEntry);
+  PictureUnlink(e);
+  FPictures.Remove(e.Pic);
+  Dec(FPictureBytes, e.Bytes);
+  e.Free;
+end;
+
+procedure TTyRichLayouter.PictureTrim(AKeep: TObject);
+begin
+  while (FPicLast <> nil) and (FPicLast <> AKeep) and (FPictureBytes > FPictureLimit) do
+    PictureDrop(FPicLast);
+end;
+
+procedure TTyRichLayouter.SetPictureLimit(AValue: Int64);
+begin
+  if AValue < 0 then AValue := 0;
+  FPictureLimit := AValue;
+  PictureTrim(FPicFirst);
+end;
+
+function TTyRichLayouter.PictureCacheCount: Integer;
+begin
+  Result := FPictures.Count;
+end;
+
+function TTyRichLayouter.DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture;
+  const ABox: TRect; ALinePx: Integer; const AStyle: TTyRichPaintStyle): Boolean;
+var
+  o: TObject;
+  e: TTyPictureEntry;
+  w, h: Integer;
+  fmt: TTyRichPictureFormat;
+  start, count: Integer;
+  img: TBGRABitmap;
+begin
+  Result := False;
+  w := ABox.Right - ABox.Left;
+  h := ABox.Bottom - ABox.Top;
+  if (ATarget = nil) or (APicture = nil) or (w <= 0) or (h <= 0) then Exit;
+  if FPictures.TryGetValue(APicture, o) then
+  begin
+    e := TTyPictureEntry(o);
+    PictureUnlink(e);
+    PicturePushFront(e);
+  end
+  else
+  begin
+    // the first time it is drawn: decoded now, never at layout
+    e := TTyPictureEntry.Create;
+    e.Pic := APicture;
+    APicture.AddRef;
+    if APicture.DisplayData(fmt, start, count) then
+    begin
+      Inc(FPictureDecodes);
+      e.Image := DecodePicture(APicture);
+    end;
+    e.Bytes := e.InstanceSize + System.Length(APicture.Data) + ImageBytes(e.Image);
+    FPictures.Add(APicture, e);
+    PicturePushFront(e);
+    Inc(FPictureBytes, e.Bytes);
+  end;
+  if e.Image = nil then
+    DrawPlaceholder(ATarget, ABox, ALinePx, AStyle)
+  else
+  begin
+    if (e.Image.Width = w) and (e.Image.Height = h) then
+      img := e.Image
+    else
+    begin
+      { Scaled straight from the decoded pixels to the box's device pixels (the layout is in
+        device pixels: HiDPI and zoom are in the box already), and kept for that size: a
+        paint of an unchanged size does not resample again. }
+      if (e.Scaled = nil) or (e.Scaled.Width <> w) or (e.Scaled.Height <> h) then
+      begin
+        Dec(e.Bytes, ImageBytes(e.Scaled));
+        Dec(FPictureBytes, ImageBytes(e.Scaled));
+        FreeAndNil(e.Scaled);
+        try
+          e.Image.ResampleFilter := rfBestQuality;
+          e.Scaled := e.Image.Resample(w, h, rmFineResample) as TBGRABitmap;
+        except
+          FreeAndNil(e.Scaled);
+        end;
+        Inc(FPictureScales);
+        Inc(e.Bytes, ImageBytes(e.Scaled));
+        Inc(FPictureBytes, ImageBytes(e.Scaled));
+      end;
+      img := e.Scaled;
+    end;
+    if img <> nil then
+    begin
+      ATarget.PutImage(ABox.Left, ABox.Top, img, dmDrawWithTransparency);
+      Result := True;
+    end
+    else
+      DrawPlaceholder(ATarget, ABox, ALinePx, AStyle);
+  end;
+  PictureTrim(e);
+end;
+
 { ---- the layouter ---- }
 
 constructor TTyRichLayouter.Create(ADevice: TTyRichTextDevice; AOwnsDevice: Boolean);
@@ -2933,12 +3263,15 @@ begin
   FFormatFonts := specialize TDictionary<Integer, TTyRichFormatFont>.Create;
   FOrdinals := specialize TDictionary<Integer, TTyRichListOrdinal>.Create;
   FListOfFormat := specialize TDictionary<Integer, TTyListFormat>.Create;
+  FPictures := specialize TDictionary<Pointer, TObject>.Create;
+  FPictureLimit := CRichPictureCacheBytes;
   FFontPPI := -1;
 end;
 
 destructor TTyRichLayouter.Destroy;
 begin
   Clear;
+  FPictures.Free;
   FListOfFormat.Free;
   FOrdinals.Free;
   FFormatFonts.Free;
@@ -3037,6 +3370,8 @@ begin
   FFormatFonts.Clear;
   FOrdinals.Clear;
   FListOfFormat.Clear;
+  // the decoded pictures, and the references held for them
+  while FPicFirst <> nil do PictureDrop(FPicFirst);
   FFontPPI := -1;
 end;
 
