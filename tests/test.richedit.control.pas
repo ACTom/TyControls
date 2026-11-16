@@ -331,6 +331,10 @@ type
     procedure TestAChangeLeavesTheCaretOnACaretPlace;
     procedure TestAPaintAndABlinkInsideAnUpdate;
     procedure TestAnEditFromTheLastStepMovesTheCaret;
+    procedure TestTheReplaceFallbackAndRefusal;
+    procedure TestAStateLeavingTheLayerPathRepaints;
+    procedure TestAStateFontIsALayoutChange;
+    procedure TestAHoverAsksForARepaint;
   end;
 
 implementation
@@ -6606,6 +6610,143 @@ begin
   AssertEquals('the command ran in the last step''s handler', 1, FLastStepEdits);
   AssertEquals('the caret moved as for any edit', Int64(8), FRich.CaretPos);
   AssertEquals('the edit was reported, the slices were not', 1, FChanges);
+end;
+
+{$IFDEF MSWINDOWS}
+var
+  GReplaceError: DWord;
+
+procedure W6SetLastError(AError: DWord); stdcall; external 'kernel32' name 'SetLastError';
+
+function W6FailingReplace(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
+  AExclude, AReserved: Pointer): LongBool; stdcall;
+begin
+  W6SetLastError(GReplaceError);
+  Result := False;
+end;
+{$ENDIF}
+
+{ H2-M9: the replace call made to fail (the seam TyRichReplaceFileW). For a reason other than
+  access or sharing (a volume without ReplaceFileW) the plain replace saves: the new content
+  is there, no temporary file is left. For access or sharing: the control's own refusal, the
+  target untouched, nothing left. The Unix order (owner, then mode) is compile-checked only. }
+procedure TTyRichEditControlTest.TestTheReplaceFallbackAndRefusal;
+{$IFDEF MSWINDOWS}
+const
+  Codes: array[0..1] of DWord = (5, 32);
+var
+  path: string;
+  orig, before: TBytes;
+  saved: TTyRichReplaceFileFunc;
+  raised: Boolean;
+  k: Integer;
+begin
+  orig := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 Saved text.\par}');
+  path := TempFile('fallback.rtf', orig);
+  FRich.LoadFromFile(path);
+  AssertTrue('changed', FRich.Document.Execute(TTyRichInsertText.Create(0, 'New ')));
+  saved := TyRichReplaceFileW;
+  try
+    TyRichReplaceFileW := @W6FailingReplace;
+    GReplaceError := 1; // ERROR_INVALID_FUNCTION
+    FRich.SaveToFile(path);
+    AssertFalse('saved', FRich.Modified);
+    AssertFalse('the new content', SameBytes(orig, FileBytes(path)));
+    AssertTrue('its text', Pos('New Saved', ReadStream(path)) > 0);
+    AssertEquals('no temporary file left', 1, FileCount);
+    for k := 0 to High(Codes) do
+    begin
+      AssertTrue('changed again', FRich.Document.Execute(TTyRichInsertText.Create(0, 'More ')));
+      before := FileBytes(path);
+      GReplaceError := Codes[k];
+      raised := False;
+      try
+        FRich.SaveToFile(path);
+      except
+        on E: ETyRichEdit do raised := E.Message = Format(rsRichEditCannotReplace, [path]);
+      end;
+      AssertTrue(Format('error %d: the control''s refusal', [Codes[k]]), raised);
+      AssertTrue(Format('error %d: the target untouched', [Codes[k]]), SameBytes(before, FileBytes(path)));
+      AssertEquals(Format('error %d: no temporary file left', [Codes[k]]), 1, FileCount);
+      AssertTrue(Format('error %d: still modified', [Codes[k]]), FRich.Modified);
+    end;
+  finally
+    TyRichReplaceFileW := saved;
+  end;
+end;
+{$ELSE}
+begin
+  Ignore('Windows only (ReplaceFileW); the Unix path is compile-checked');
+end;
+{$ENDIF}
+
+{ A3-M1: a hover whose look takes the layer path (an opacity): leaving it asks for a repaint,
+  and the paint draws the normal look whole. }
+procedure TTyRichEditControlTest.TestAStateLeavingTheLayerPathRepaints;
+begin
+  SetLinesOf(50, 'Line ');
+  FCtl.LoadThemeCss('TyRichEdit:hover { opacity: 0.9; }');
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.Hover(True);
+  AssertTrue('entering: a repaint asked for', FRich.Invalidates > 0);
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.Hover(False);
+  AssertTrue('leaving: a repaint asked for', FRich.Invalidates > 0);
+  PaintAll(True);
+  AssertEquals('the normal look drawn whole', 1, FRich.FramePaints);
+end;
+
+{ A3-M2: a state that changes the font asks for a repaint, and the paint lays the text out in
+  that font. Both states name a font, so only the value differs (not which properties are
+  present); a family, not a size: a size also moves what is given in em (padding), which the
+  signature holds anyway, and would not show whether the font itself is in it. }
+procedure TTyRichEditControlTest.TestAStateFontIsALayoutChange;
+var
+  h0: Integer;
+begin
+  SetLinesOf(50, 'Line ');
+  { The theme's hover changes the border: here it keeps it, so a hover that looks the same asks
+    for nothing, and what follows sees the font alone. }
+  FCtl.LoadThemeCss('TyRichEdit { font-family: Arial; } TyRichEdit:hover { font-family: Arial; ' +
+    'border-color: var(--input-border); }');
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.Hover(True);
+  AssertEquals('a hover that looks the same', 0, FRich.Invalidates);
+  FRich.Hover(False);
+  FCtl.LoadThemeCss('TyRichEdit { font-family: Arial; } TyRichEdit:hover { font-family: Tahoma; ' +
+    'border-color: var(--input-border); }');
+  PaintAll(True);
+  AssertEquals('the normal font', 'Arial', FRich.Layouter.BaseFontName);
+  h0 := FRich.VisibleBlocks[0].Height;
+  FRich.ResetCounts;
+  FRich.Hover(True);
+  AssertTrue('a repaint asked for', FRich.Invalidates > 0);
+  PaintAll(True);
+  AssertEquals('laid out in the hover''s font', 'Tahoma', FRich.Layouter.BaseFontName);
+  AssertTrue('a layout', FRich.VisibleBlocks[0].Height > 0);
+  if h0 = 0 then Fail('no block before');
+end;
+
+{ A3-M3: PointerStateChanged asks for the window's repaint when the look changes - a hover that
+  changes the border, on entering and on leaving - and not for a press that looks the same. }
+procedure TTyRichEditControlTest.TestAHoverAsksForARepaint;
+begin
+  SetLinesOf(50, 'Line ');
+  FCtl.LoadThemeCss('TyRichEdit:hover { border-color: #FF0000; }');
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.Down;
+  FRich.Up;
+  AssertEquals('a press that looks the same: none', 0, FRich.Invalidates);
+  FRich.Hover(True);
+  AssertTrue('entering: a repaint asked for', FRich.Invalidates > 0);
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.Hover(False);
+  AssertTrue('leaving: a repaint asked for', FRich.Invalidates > 0);
 end;
 
 initialization

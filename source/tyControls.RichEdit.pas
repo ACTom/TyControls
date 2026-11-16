@@ -855,6 +855,17 @@ type
   the system's rich-text type is the toolkit's, not LCL's - those pairs are not verified. }
 function TyRichClipboardRtfName: string;
 
+{$IFDEF MSWINDOWS}
+type
+  TTyRichReplaceFileFunc = function(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
+    AExclude, AReserved: Pointer): LongBool; stdcall;
+
+var
+  { The call that puts a saved file in its target's place: kernel32's ReplaceFileW. A test
+    seam (a test makes it fail with an error of its choice); nothing else sets it. }
+  TyRichReplaceFileW: TTyRichReplaceFileFunc;
+{$ENDIF}
+
 implementation
 
 uses
@@ -4761,8 +4772,8 @@ begin
   {$IFDEF MSWINDOWS}
   if FileExists(ATarget) then
   begin
-    Result := ReplaceFileW(PWideChar(UnicodeString(ATarget)), PWideChar(UnicodeString(ASource)),
-      nil, REPLACEFILE_IGNORE_MERGE_ERRORS, nil, nil);
+    Result := TyRichReplaceFileW(PWideChar(UnicodeString(ATarget)),
+      PWideChar(UnicodeString(ASource)), nil, REPLACEFILE_IGNORE_MERGE_ERRORS, nil, nil);
     if not Result then
     begin
       { Refused for the target's sake (no right to it, someone holds it): so it stays. Any other
@@ -5238,6 +5249,12 @@ begin
   Mix(Cardinal(st.Padding.Top));
   Mix(Cardinal(st.Padding.Right));
   Mix(Cardinal(st.Padding.Bottom));
+  { The base font the text is laid out in (CheckLayoutParams reads the current style, so a
+    state's font-size or font-family takes effect): a state that changes it is a layout
+    change, which the paint then does (A3-M2). }
+  Mix(Cardinal(ResolveFontSize(st)));
+  Mix(Cardinal(Length(st.FontName)));
+  for k := 1 to Length(st.FontName) do Mix(Ord(st.FontName[k]));
   cr := TyEffectiveCorners(st);
   if (cr.TL > 0) or (cr.TR > 0) or (cr.BR > 0) or (cr.BL > 0) or (tpShadow in st.Present) then
   begin
@@ -5678,6 +5695,10 @@ begin
   begin
     PaintLayer(ACanvas, ARect, clip, APPI, ADefer, sc);
     InvalidateSurface;
+    { The kept frame signature is not this paint's: a state that leaves the layer path (a
+      hover with an opacity ending) must paint again even when its look equals the one the
+      surface was last drawn with (A3-M1). }
+    FFrameSigValid := False;
   end
   else
   begin
@@ -5846,6 +5867,9 @@ begin
 end;
 
 initialization
+  {$IFDEF MSWINDOWS}
+  TyRichReplaceFileW := @ReplaceFileW;
+  {$ENDIF}
   TyTryRegisterTypeKeyParent('TyRichEdit', 'TyMemo');
 
 finalization
