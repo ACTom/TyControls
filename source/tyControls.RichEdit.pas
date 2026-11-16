@@ -78,7 +78,8 @@ type
   ETyRichEdit = class(Exception);
 
   { What a stream holds: rfAuto finds out (RTF when it starts with the RTF signature, after an
-    optional UTF-8 BOM and white space; anything else is text). }
+    optional UTF-8 BOM and white space; anything else is text). RTF, found or named, may have
+    such bytes before its signature: they are kept and saved back in front of it. }
   TTyRichFormat = (rfAuto, rfRtf, rfText);
 
   { Loading: bytes of the file indexed; saving: paragraphs written. ACancel True stops it. }
@@ -154,6 +155,10 @@ type
     FLinesStored: Boolean;
     FSourceFile: string;
     FSourceFormat: TTyRichFormat;
+    { What the RTF file had before its signature (a UTF-8 BOM, blank lines, spaces), exactly as
+      read: written first whenever the content is saved as RTF (R40). A load of anything else
+      and a Lines replacement forget it. }
+    FRtfPrefix: TBytes;
     // the view
     FAnchorPara: Integer;
     FAnchorOffset: Int64;
@@ -303,8 +308,7 @@ type
     procedure LoadAs(AStream: TStream; AFormat: TTyRichFormat);
     { The content replaced with AText as plain text (Lines); not refused by ReadOnly. }
     procedure SetPlainText(const AText: string);
-    { What the stream holds, by its first bytes (the position is left where the RTF signature
-      starts, or where it was). }
+    { What the stream holds, by its first bytes (the position is left where it was). }
     function DetectFormat(AStream: TStream): TTyRichFormat;
     { One piece of the background work: a load slice, else one picture made ready. False when
       there was nothing to do. What the timer runs, a few milliseconds a turn. }
@@ -2390,12 +2394,31 @@ begin
   i := 0;
   if (n >= 3) and (buf[0] = $EF) and (buf[1] = $BB) and (buf[2] = $BF) then i := 3;
   while (i < n) and (buf[i] in [9, 10, 13, 32]) do Inc(i);
-  if (i + 5 <= n) and CompareMem(@buf[i], @Sig[0], 5) then
-  begin
-    Result := rfRtf;
-    // the reader starts at the signature
-    AStream.Position := start + i;
-  end;
+  if (i + 5 <= n) and CompareMem(@buf[i], @Sig[0], 5) then Result := rfRtf;
+end;
+
+{ The bytes before the RTF signature - a UTF-8 BOM, then blanks - as they are, the stream left
+  at the signature (where the reader starts); none, and the stream where it was, when the
+  signature does not follow them. }
+function ReadRtfPrefix(AStream: TStream): TBytes;
+const
+  Sig: array[0..4] of Char = ('{', '\', 'r', 't', 'f');
+var
+  buf: array[0..255] of Byte;
+  n, i: Integer;
+  start: Int64;
+begin
+  Result := nil;
+  start := AStream.Position;
+  n := AStream.Read(buf, SizeOf(buf));
+  AStream.Position := start;
+  i := 0;
+  if (n >= 3) and (buf[0] = $EF) and (buf[1] = $BB) and (buf[2] = $BF) then i := 3;
+  while (i < n) and (buf[i] in [9, 10, 13, 32]) do Inc(i);
+  if (i = 0) or (i + 5 > n) or not CompareMem(@buf[i], @Sig[0], 5) then Exit;
+  SetLength(Result, i);
+  Move(buf[0], Result[0], i);
+  AStream.Position := start + i;
 end;
 
 { A load, a Lines replacement or Clear frees what a running step or save still uses. }
@@ -2407,19 +2430,23 @@ end;
 procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat);
 var
   load: TTyRtfLoad;
+  prefix: TBytes;
 begin
   CheckReplaceable;
   FCancelRequested := False;
   if AFormat = rfRtf then
   begin
+    prefix := ReadRtfPrefix(AStream);
     load := TyRichBeginLoadRtf(FDoc, AStream, FFirstSliceBytes);
     load.OnLoadProgress := @LoadProgress;
     FSourceFormat := rfRtf;
+    FRtfPrefix := prefix;
   end
   else
   begin
     TyRichLoadText(FDoc, AStream, FTextEncoding, FTextCodePage);
     FSourceFormat := rfText;
+    FRtfPrefix := nil;
   end;
   FLinesStored := False;
   FSourceFile := '';
@@ -2468,6 +2495,7 @@ begin
   end;
   // a text of one line break is one empty line, no text at all is none
   FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
+  FRtfPrefix := nil;
   FSourceFormat := rfText;
   FSourceFile := '';
   FLinesStored := True;
@@ -2536,7 +2564,11 @@ begin
     if AFormat = rfText then
       TyRichSaveText(FDoc, AStream)
     else
+    begin
+      // the file's own first bytes, before the signature, as they came
+      if Length(FRtfPrefix) > 0 then AStream.WriteBuffer(FRtfPrefix[0], Length(FRtfPrefix));
       TyRichSaveRtf(FDoc, AStream, @SaveProgress);
+    end;
   finally
     Dec(FSaving);
   end;

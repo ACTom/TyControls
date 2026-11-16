@@ -147,6 +147,8 @@ type
     procedure TestAChangeInARowDropsItsPendingPicture;
     procedure TestAFallbackFontChangeLaysTheViewOutAgain;
     procedure TestHugeBlocksKeepTheArithmeticInRange;
+    // R40
+    procedure TestTheBytesBeforeTheRtfAreKept;
   end;
 
 implementation
@@ -2449,6 +2451,101 @@ begin
   pos := FRich.PositionAtPoint(FRich.Area.Left + 2, FRich.Area.Top + 2);
   AssertTrue(Format('a point in it is in it (%d)', [pos]), (pos >= t.ParaStart(2)) and
     (pos <= t.ParaStart(2) + t.ParaLength(2)));
+end;
+
+{ R40: the bytes before the RTF signature (a UTF-8 BOM, blank lines, spaces) are the file's:
+  saved back as they were, to a stream and over the file, after an edit too; rfRtf takes such a
+  file as rfAuto does; a text file's BOM is the text reader's and is written once. }
+procedure TTyRichEditControlTest.TestTheBytesBeforeTheRtfAreKept;
+const
+  Body = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 Some text.\par}';
+var
+  prefixes: array[0..2] of RawByteString;
+  i: Integer;
+  orig, saved: TBytes;
+  path: string;
+  ms: TMemoryStream;
+  st: TBytesStream;
+  s: RawByteString;
+begin
+  prefixes[0] := #$EF#$BB#$BF;
+  prefixes[1] := #13#10'   ';
+  prefixes[2] := #$EF#$BB#$BF#13#10#9' '#10;
+  for i := 0 to 2 do
+  begin
+    orig := BytesOf(prefixes[i] + Body);
+    path := TempFile(Format('prefix%d.rtf', [i]), orig);
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    FRich.LoadFromFile(path);
+    AssertTrue(Format('%d: read as RTF', [i]), FRich.SourceFormat = rfRtf);
+    ms := TMemoryStream.Create;
+    try
+      FRich.SaveToStream(ms);
+      AssertTrue(Format('%d: to a stream as it came', [i]), SameBytes(orig, StreamBytes(ms)));
+    finally
+      ms.Free;
+    end;
+    FRich.SaveToFile(path);
+    AssertTrue(Format('%d: over its file', [i]), SameBytes(orig, FileBytes(path)));
+    // after an edit the prefix still comes first
+    AssertTrue('changed', FRich.Document.Execute(TTyRichInsertText.Create(0, 'New ')));
+    FRich.SaveToFile(path);
+    saved := FileBytes(path);
+    AssertTrue(Format('%d: an edited save starts with it', [i]),
+      (Length(saved) > Length(prefixes[i]) + 5) and
+      CompareMem(@saved[0], @prefixes[i][1], Length(prefixes[i])) and
+      (saved[Length(prefixes[i])] = Ord('{')));
+    // the explicit format reads the same bytes the same way
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    st := TBytesStream.Create(orig);
+    try
+      FRich.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    AssertEquals(Format('%d: rfRtf reads it', [i]), 'Some text.', FRich.Lines[0]);
+    ms := TMemoryStream.Create;
+    try
+      FRich.SaveToStream(ms);
+      AssertTrue(Format('%d: and keeps it', [i]), SameBytes(orig, StreamBytes(ms)));
+      // saved as text: no prefix
+      ms.Clear;
+      FRich.SaveToStream(ms, rfText);
+      SetString(s, PChar(ms.Memory), ms.Size);
+      AssertEquals(Format('%d: as text, the text first', [i]), 1, Pos('Some text.', s));
+    finally
+      ms.Free;
+    end;
+    // a replacement forgets it
+    FRich.Lines.Text := 'plain';
+    ms := TMemoryStream.Create;
+    try
+      FRich.SaveToStream(ms, rfRtf);
+      AssertEquals(Format('%d: a new content has none', [i]), Ord('{'), PByte(ms.Memory)^);
+    finally
+      ms.Free;
+    end;
+  end;
+  // a text file that starts with a BOM: written once
+  orig := BytesOf(#$EF#$BB#$BF'just text'#13#10'two');
+  path := TempFile('bom.txt', orig);
+  FreeAndNil(FRich);
+  FRich := NewProbe;
+  FRich.LoadFromFile(FTemp + 'prefix0.rtf');
+  FRich.LoadFromFile(path);
+  AssertTrue('read as text', FRich.SourceFormat = rfText);
+  ms := TMemoryStream.Create;
+  try
+    FRich.SaveToStream(ms);
+    AssertTrue('its BOM written once', SameBytes(orig, StreamBytes(ms)));
+    ms.Clear;
+    FRich.SaveToStream(ms, rfRtf);
+    AssertEquals('the RTF before it is forgotten', Ord('{'), PByte(ms.Memory)^);
+  finally
+    ms.Free;
+  end;
 end;
 
 initialization
