@@ -364,6 +364,55 @@ wtb = (
 put(RTF, 'hand-word-table-merged.rtf', wtb.encode('ascii'))
 expected('hand-word-table-merged.expected.txt', wtb_paras)
 
+# hand-word-list.rtf: a numbered list interrupted by ordinary paragraphs -- the list table (one
+# level, decimal "%1."), the override table, three items of \ls1 with a body paragraph between
+# them, each item's {\listtext ... N.\tab} saying the number Word counts across the paragraphs
+# between (1., 2., 3.; counting the items one after another would restart at 1 after each body
+# paragraph). The mechanism test of the file's own markers, short and in its own header (not
+# w_head): the group sits after the paragraph's \pard and properties, where WordPad's \pntext
+# sits; word-list.rtf (saved by Word) has it where Word writes it, before the \pard.
+WL_PAPF = '\\ltrpar\\ql \\li0\\ri0\\widctlpar\\wrapdefault\\faauto\\rin0\\lin0\\itap0 '
+WL_ITEM = '\\ltrpar\\ql \\fi-360\\li720\\ri0\\widctlpar\\wrapdefault\\faauto\\ls1\\rin0\\lin720\\itap0 '
+WL_CHPF = '\\rtlch\\fcs1 \\af0\\afs24 \\ltrch\\fcs0 \\fs24\\loch\\f1 '
+
+
+def wl_body(text, end='\\par\r\n'):
+    return '\\pard\\plain ' + WL_PAPF + WL_CHPF + text + end
+
+
+def wl_item(number, text):
+    return ('\\pard\\plain ' + WL_ITEM + WL_CHPF + '{\\listtext\\pard\\plain\\ltrpar ' + WL_CHPF
+            + '%d.\\tab}' % number + text + '\\par\r\n')
+
+
+wl_paras = [
+    'Steps to follow',
+    'Open the file.',
+    'This explains the first step; it is no list item.',
+    'Change what is needed.',
+    'Another paragraph between the steps.',
+    'Save the file.',
+    'The end.',
+]
+wl = (
+    '{\\rtf1\\adeflang1025\\ansi\\ansicpg1252\\uc1\\adeff0\\deff0{\\fonttbl{\\f0\\fbidi \\froman\\fcharset0'
+    '\\fprq2 Times New Roman;}{\\f1\\fbidi \\fswiss\\fcharset0\\fprq2 Calibri;}}\r\n'
+    '{\\colortbl;\\red0\\green0\\blue0;}\r\n'
+    '{\\*\\listtable{\\list\\listtemplateid1033\\listhybrid{\\listlevel\\levelnfc0\\levelnfcn0\\leveljc0'
+    '\\leveljcn0\\levelfollow0\\levelstartat1\\levelspace0\\levelindent0{\\leveltext\\\'02\\\'00.;}'
+    '{\\levelnumbers\\\'01;}\\rtlch\\fcs1 \\af0 \\ltrch\\fcs0 \\fi-360\\li720\\lin720 }{\\listname ;}'
+    '\\listid100}}\r\n'
+    '{\\*\\listoverridetable{\\listoverride\\listid100\\listoverridecount0\\ls1}}\r\n'
+    + wl_body(wl_paras[0])
+    + wl_item(1, wl_paras[1])
+    + wl_body(wl_paras[2])
+    + wl_item(2, wl_paras[3])
+    + wl_body(wl_paras[4])
+    + wl_item(3, wl_paras[5])
+    + wl_body(wl_paras[6], '\\par}\r\n\x00'))
+put(RTF, 'hand-word-list.rtf', wl.encode('ascii'))
+expected('hand-word-list.expected.txt', wl_paras)
+
 # ---------------------------------------------------------------- txt
 lines = [
     'TyControls 富文本控件的文本样本。',

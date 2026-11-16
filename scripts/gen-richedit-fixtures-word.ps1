@@ -1,13 +1,15 @@
-# Makes tests/fixtures/rtf/word-*.rtf: three documents built through Word's object model (Word
+# Makes tests/fixtures/rtf/word-*.rtf: four documents built through Word's object model (Word
 # stays invisible) and saved by Word as RTF. Needs Word; the files in the repository were made
-# with Word 16.0.17932 on 2026-11-11 -- do not rerun it to "refresh" them, the bytes would
-# change (revision ids, dates). tests/fixtures/rtf/README.md says what each file is for.
+# with Word 16.0.17932 (word-zh, word-unknown, word-table-merged on 2026-11-11, word-list on
+# 2026-11-16) -- do not rerun it to "refresh" them, the bytes would change (revision ids,
+# dates). tests/fixtures/rtf/README.md says what each file is for.
 #
-#     pwsh scripts/gen-richedit-fixtures-word.ps1 -Out <folder> [-CopyTable]
+#     pwsh scripts/gen-richedit-fixtures-word.ps1 -Out <folder> [-Only zh,unknown,table,list] [-CopyTable]
 #
-# -CopyTable also leaves a 2 x 3 table on the clipboard (it was pasted into WordPad for
-# wp-zh-table.rtf).
-param([Parameter(Mandatory)][string]$Out, [switch]$CopyTable)
+# -Only makes just the files named (all four by default). -CopyTable also leaves a 2 x 3 table
+# on the clipboard (it was pasted into WordPad for wp-zh-table.rtf).
+param([Parameter(Mandatory)][string]$Out, [switch]$CopyTable,
+  [ValidateSet('zh', 'unknown', 'table', 'list')][string[]]$Only = @('zh', 'unknown', 'table', 'list'))
 $ErrorActionPreference = 'Stop'
 $wdFormatRTF = 6
 $word = New-Object -ComObject Word.Application
@@ -18,6 +20,7 @@ $userName = $word.UserName
 $userInitials = $word.UserInitials
 try {
   # ---------------------------------------------------------------- word-zh.rtf
+  if ($Only -contains 'zh') {
   $doc = $word.Documents.Add()
   $sel = $word.Selection
   $sel.Font.NameAscii = 'Calibri'; $sel.Font.NameOther = 'Calibri'; $sel.Font.NameFarEast = '宋体'
@@ -33,8 +36,10 @@ try {
   $sel.TypeText('，后面是普通的。')
   $doc.SaveAs2([ref]"$Out\word-zh.rtf", [ref]$wdFormatRTF)
   $doc.Close([ref]0)
+  }
 
   # ---------------------------------------------------------------- word-unknown.rtf
+  if ($Only -contains 'unknown') {
   $doc = $word.Documents.Add()
   $sel = $word.Selection
   $sel.Style = $doc.Styles.Item(-2)            # wdStyleHeading1
@@ -71,8 +76,10 @@ try {
   $m = $doc.OMaths.Add($doc.Range($at, $at + 6)); $doc.OMaths.BuildUp()
   $doc.SaveAs2([ref]"$Out\word-unknown.rtf", [ref]$wdFormatRTF)
   $doc.Close([ref]0)
+  }
 
   # ---------------------------------------------------------------- word-table-merged.rtf
+  if ($Only -contains 'table') {
   $doc = $word.Documents.Add()
   $sel = $word.Selection
   $sel.TypeText('表格前'); $sel.TypeParagraph(); $sel.TypeParagraph()
@@ -90,6 +97,66 @@ try {
   $inner.Cell(1, 2).Range.Text = '内二'
   $doc.SaveAs2([ref]"$Out\word-table-merged.rtf", [ref]$wdFormatRTF)
   $doc.Close([ref]0)
+  }
+
+  # ---------------------------------------------------------------- word-list.rtf
+  # Numbered headings (Heading 1: "1.", Heading 2: "2.1.": one outline-numbered list whose
+  # items are interrupted by body paragraphs) and a bulleted list. The text goes in through
+  # ranges, not typed, so that Word's typing rules (a line typed like an item becomes a list)
+  # play no part. Beside the file: word-list.expected.txt (each paragraph's text) and
+  # word-list.markers.txt (the marker Word shows before it, Range.ListFormat.ListString; an
+  # empty line for a paragraph with none).
+  if ($Only -contains 'list') {
+  $doc = $word.Documents.Add()
+  $h1 = $doc.Styles.Item(-2)                     # wdStyleHeading1
+  $h2 = $doc.Styles.Item(-3)                     # wdStyleHeading2
+  $body = $doc.Styles.Item(-1)                   # wdStyleNormal
+  # level: 0 none, 1 or 2 the outline list, -1 a bullet
+  $paras = @(
+    @($h1, 1, '概述 Overview'),
+    @($body, 0, '这一段是正文，不是列表项。This body paragraph is no list item.'),
+    @($h1, 1, '安装 Installation'),
+    @($h2, 2, '下载 Download'),
+    @($body, 0, '正文打断了第二级。Body text between two second-level headings.'),
+    @($h2, 2, '解压 Unpack'),
+    @($h1, 1, '使用 Usage'),
+    @($body, 0, '要点如下：'),
+    @($body, -1, '苹果 apples'),
+    @($body, -1, '橘子 oranges'),
+    @($body, 0, '最后一段。The end.'))
+  $doc.Content.Text = (($paras | ForEach-Object { $_[2] }) -join "`r")
+  $doc.Content.Font.NameAscii = 'Calibri'; $doc.Content.Font.NameOther = 'Calibri'
+  $doc.Content.Font.NameFarEast = '宋体'
+  $lt = $doc.ListTemplates.Add($true)
+  $lv = $lt.ListLevels.Item(1)
+  $lv.NumberFormat = '%1.'; $lv.NumberStyle = 0; $lv.StartAt = 1; $lv.TrailingCharacter = 0
+  $lv = $lt.ListLevels.Item(2)
+  $lv.NumberFormat = '%1.%2.'; $lv.NumberStyle = 0; $lv.StartAt = 1; $lv.TrailingCharacter = 0
+  $first = $true
+  for ($k = 0; $k -lt $paras.Count; $k++) {
+    $pr = $doc.Paragraphs.Item($k + 1).Range
+    $pr.Style = $paras[$k][0]
+    $level = $paras[$k][1]
+    if ($level -gt 0) {
+      # wdListApplyToWholeList 0, wdWord10ListBehavior 2; every item after the first continues the list
+      $pr.ListFormat.ApplyListTemplateWithLevel($lt, (-not $first), 0, 2, $level)
+      $first = $false
+    }
+  }
+  $r = $doc.Range($doc.Paragraphs.Item(9).Range.Start, $doc.Paragraphs.Item(10).Range.End)
+  $r.ListFormat.ApplyBulletDefault()
+  $texts = @(); $marks = @()
+  for ($k = 1; $k -le $doc.Paragraphs.Count; $k++) {
+    $pr = $doc.Paragraphs.Item($k).Range
+    $texts += $pr.Text.TrimEnd([char]13)
+    $marks += [string]$pr.ListFormat.ListString
+  }
+  $doc.SaveAs2([ref]"$Out\word-list.rtf", [ref]$wdFormatRTF)
+  $doc.Close([ref]0)
+  $utf8 = New-Object Text.UTF8Encoding $false
+  [IO.File]::WriteAllText("$Out\word-list.expected.txt", (($texts | ForEach-Object { "$_`n" }) -join ''), $utf8)
+  [IO.File]::WriteAllText("$Out\word-list.markers.txt", (($marks | ForEach-Object { "$_`n" }) -join ''), $utf8)
+  }
 
   if ($CopyTable) {
     # a simple 2 x 3 table left on the clipboard, for WordPad to paste
