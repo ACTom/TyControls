@@ -93,6 +93,28 @@ type
   empty). An empty/blank fragment yields True with zero declarations. }
 function TyParseOverride(const ASource: string; out ADecls: TTyCssDeclarationArray): Boolean;
 
+{ #226. AOverride -- a StyleOverride fragment -- with ONE declaration changed, and the rest
+  handed back as it was written: every other declaration, its spacing, its comments and its
+  line breaks, byte for byte. For a property that is a view of a token in the control's own
+  StyleOverride (TTyTabCloseButton): the form's author may have typed the rest by hand.
+
+    AValue <> ''   the declaration of AName gets that value where it stands (the LAST one,
+                   which is the one the engine reads; a value it already has changes nothing).
+                   With none, 'AName: AValue;' is added after the last declaration -- on a line
+                   of its own when the override is written over several lines.
+    AValue = ''    every declaration of AName is taken out, with its semicolon. A comment in
+                   front of it stays.
+
+  AName is the whole name, '--' included, and is matched without case, as the engine matches
+  it; a declaration keeps the spelling its author gave it. A ';' inside a string, inside
+  parentheses or inside a comment separates nothing. AValue is written as given: it is the
+  caller's to keep free of ';'. The text is scanned, not parsed -- an override the parser
+  refuses is rewritten the same way and stays refused. }
+function TyOverrideWith(const AOverride, AName, AValue: string): string;
+{ #226. The value AOverride declares for AName, as written (trimmed; of several, the last).
+  False, and '', when it declares none. Not resolved: 'var(--x)' comes back as that. }
+function TyOverrideDeclared(const AOverride, AName: string; out AValue: string): Boolean;
+
 const
   { The pseudo-class names a selector may carry -- an enumerable mirror of PseudoToState (this
     unit). Unknown pseudo-classes raise, so this is what an editor should offer for the ':' part
@@ -580,6 +602,208 @@ begin
       Result := False;   // malformed fragment -> empty override, never propagate
     end;
   end;
+end;
+
+{ ---- #226: one declaration of an override, rewritten in place ---- }
+
+type
+  { One stretch of an override between two top-level semicolons. Its text is
+    Copy(S, Start, Stop - Start); Stop is where its ';' stands (Closed) or one past the end.
+    NameAt = 0 when it declares nothing (blank, or a comment alone). ValueAt is the first
+    character after the ':'. }
+  TTyOvrSeg = record
+    Start, Stop: Integer;
+    Closed: Boolean;
+    NameAt, NameLen, ValueAt: Integer;
+  end;
+  TTyOvrSegArray = array of TTyOvrSeg;
+
+const
+  TyOvrBlank = [' ', #9, #10, #13];
+
+{ Past the blanks and the comments that start at APos, never beyond AStop. }
+function TyOvrSkipBlank(const S: string; APos, AStop: Integer): Integer;
+begin
+  Result := APos;
+  while Result < AStop do
+    if S[Result] in TyOvrBlank then
+      Inc(Result)
+    else if (S[Result] = '/') and (Result + 1 < AStop) and (S[Result + 1] = '*') then
+    begin
+      Inc(Result, 2);
+      while (Result < AStop) and not ((S[Result] = '*') and (Result + 1 < AStop)
+                                      and (S[Result + 1] = '/')) do
+        Inc(Result);
+      Inc(Result, 2);
+      if Result > AStop then Result := AStop;
+    end
+    else
+      Break;
+end;
+
+procedure TyOvrScan(const S: string; out ASegs: TTyOvrSegArray);
+var
+  i, n, depth, start, count: Integer;
+  quote: Char;
+
+  procedure Add(AStop: Integer; AClosed: Boolean);
+  var
+    p: Integer;
+  begin
+    if count = Length(ASegs) then SetLength(ASegs, count * 2 + 8);
+    ASegs[count].Start := start;
+    ASegs[count].Stop := AStop;
+    ASegs[count].Closed := AClosed;
+    ASegs[count].NameAt := 0;
+    ASegs[count].NameLen := 0;
+    ASegs[count].ValueAt := 0;
+    p := TyOvrSkipBlank(S, start, AStop);
+    ASegs[count].NameAt := p;
+    while (p < AStop) and (S[p] in ['a'..'z', 'A'..'Z', '0'..'9', '_', '-']) do Inc(p);
+    ASegs[count].NameLen := p - ASegs[count].NameAt;
+    p := TyOvrSkipBlank(S, p, AStop);
+    if (ASegs[count].NameLen > 0) and (p < AStop) and (S[p] = ':') then
+      ASegs[count].ValueAt := p + 1
+    else
+    begin
+      ASegs[count].NameAt := 0;
+      ASegs[count].NameLen := 0;
+    end;
+    Inc(count);
+  end;
+
+begin
+  SetLength(ASegs, 0);
+  count := 0;
+  n := Length(S);
+  start := 1;
+  depth := 0;
+  i := 1;
+  while i <= n do
+  begin
+    case S[i] of
+      '/':
+        if (i < n) and (S[i + 1] = '*') then
+        begin
+          Inc(i, 2);
+          while (i <= n) and not ((S[i] = '*') and (i < n) and (S[i + 1] = '/')) do Inc(i);
+          Inc(i);   // onto the '/', or past the end of a comment that never closes
+        end;
+      '"', '''':
+        begin
+          quote := S[i];
+          Inc(i);
+          while (i <= n) and (S[i] <> quote) do Inc(i);
+        end;
+      '(': Inc(depth);
+      ')': if depth > 0 then Dec(depth);
+      ';':
+        if depth = 0 then
+        begin
+          Add(i, True);
+          start := i + 1;
+        end;
+    end;
+    Inc(i);
+  end;
+  if start <= n then Add(n + 1, False);
+  SetLength(ASegs, count);
+end;
+
+function TyOvrDeclares(const S: string; const ASeg: TTyOvrSeg; const AName: string): Boolean;
+begin
+  Result := (ASeg.NameAt > 0) and (ASeg.NameLen = Length(AName))
+    and SameText(Copy(S, ASeg.NameAt, ASeg.NameLen), AName);
+end;
+
+function TyOvrIsBlank(const S: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(S) do
+    if not (S[i] in TyOvrBlank) then Exit(False);
+  Result := True;
+end;
+
+function TyOverrideDeclared(const AOverride, AName: string; out AValue: string): Boolean;
+var
+  segs: TTyOvrSegArray;
+  i: Integer;
+begin
+  AValue := '';
+  Result := False;
+  TyOvrScan(AOverride, segs);
+  for i := High(segs) downto 0 do
+    if TyOvrDeclares(AOverride, segs[i], AName) then
+    begin
+      AValue := Trim(Copy(AOverride, segs[i].ValueAt, segs[i].Stop - segs[i].ValueAt));
+      Exit(True);
+    end;
+end;
+
+function TyOverrideWith(const AOverride, AName, AValue: string): string;
+var
+  segs: TTyOvrSegArray;
+  i, last: Integer;
+  body, lead, nl, tail: string;
+begin
+  TyOvrScan(AOverride, segs);
+  last := -1;
+  for i := 0 to High(segs) do
+    if TyOvrDeclares(AOverride, segs[i], AName) then last := i;
+
+  if AValue = '' then
+  begin
+    if last < 0 then Exit(AOverride);
+    Result := '';
+    for i := 0 to High(segs) do
+      if TyOvrDeclares(AOverride, segs[i], AName) then
+      begin
+        { The declaration goes with the blanks before it and its ';'. What stands before
+          it and is not blank -- a comment -- stays. }
+        lead := Copy(AOverride, segs[i].Start, segs[i].NameAt - segs[i].Start);
+        if not TyOvrIsBlank(lead) then Result := Result + TrimRight(lead);
+      end
+      else
+      begin
+        Result := Result + Copy(AOverride, segs[i].Start, segs[i].Stop - segs[i].Start);
+        if segs[i].Closed then Result := Result + ';';
+      end;
+    { What followed the first declaration now comes first: without the blank that parted
+      them. Blanks the override began with before another declaration are its author's. }
+    if TyOvrDeclares(AOverride, segs[0], AName)
+       and TyOvrIsBlank(Copy(AOverride, segs[0].Start, segs[0].NameAt - segs[0].Start)) then
+      Result := TrimLeft(Result);
+    Exit;
+  end;
+
+  if last >= 0 then
+  begin
+    if Trim(Copy(AOverride, segs[last].ValueAt, segs[last].Stop - segs[last].ValueAt)) = AValue then
+      Exit(AOverride);
+    Exit(Copy(AOverride, 1, segs[last].NameAt + segs[last].NameLen - 1) + ': ' + AValue
+         + Copy(AOverride, segs[last].Stop, MaxInt));
+  end;
+
+  body := TrimRight(AOverride);
+  if body = '' then Exit(AName + ': ' + AValue + ';');
+  if Pos(#13#10, AOverride) > 0 then nl := #13#10
+  else if Pos(#10, AOverride) > 0 then nl := #10
+  else nl := '';
+  tail := '';
+  if (nl <> '') and (Pos(#10, Copy(AOverride, Length(body) + 1, MaxInt)) > 0) then tail := nl;
+  { An open last declaration is closed first. Asked of the scan, not of the last character:
+    a ';' that ends a comment or a string closes nothing -- and a comment standing alone
+    after the last ';' is nothing to close: a ';' put after it would be an empty declaration,
+    which the parser refuses, and the whole override with it. }
+  if (Length(segs) > 0) and not segs[High(segs)].Closed
+     and (TyOvrSkipBlank(AOverride, segs[High(segs)].Start, segs[High(segs)].Stop)
+          < segs[High(segs)].Stop) then
+    body := body + ';';
+  if nl = '' then
+    Result := body + ' ' + AName + ': ' + AValue + ';'
+  else
+    Result := body + nl + AName + ': ' + AValue + ';' + tail;
 end;
 
 end.
