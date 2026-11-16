@@ -260,8 +260,9 @@ type
     FBlinkMs: Integer;
     FCaretDrawn: TRect;
     { A left button held since a press on the text: the selection follows the pointer, by
-      characters (1), words (2: after a double click) or paragraphs (3: a triple click) - the
-      unit FDragFrom .. FDragTo the press selected stays selected. }
+      characters (1), words (2: after a double click), paragraphs (3: a triple click) or from
+      an object pressed (4: by characters) - the unit FDragFrom .. FDragTo the press selected
+      stays selected. }
     FDragging: Boolean;
     FDragUnit: Integer;
     FDragFrom, FDragTo: TTyRichPos;
@@ -272,6 +273,18 @@ type
     FTextMenu: TTyTextEditMenu;
     FCopyWaitChars: Int64;
     FSavedCursor: TCursor;
+    { A document change moved the caret or the anchor by arithmetic alone: the next paint or
+      settled query puts them on caret places (S-M10). }
+    FSnapPending: Boolean;
+    { The text's length and paragraph count when the view last heard of a change: the text
+      differs from them only while the document holds back its changes (inside BeginUpdate ..
+      EndUpdate, inside a running command), when the view's blocks may name paragraphs that
+      are gone. }
+    FKnownLength: Int64;
+    FKnownParas: Integer;
+    {$IFDEF LCLWin32}
+    FOldWndProc: Pointer;
+    {$ENDIF}
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -382,10 +395,28 @@ type
       first or last one above or below them), and its affinity; -1 when none is held. }
     function HitRaster(AX, AY: Int64; out AAtEnd: Boolean): TTyRichPos;
     function HitClient(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
+    { The caret place at layout x AX on the first (ADown) or the last line of the block after
+      (before) held block AK, laid out here when it is not held; -1 when there is none. }
+    function HitNeighbour(AK: Integer; ADown: Boolean; AX: Integer; out AAtEnd: Boolean): TTyRichPos;
+    { The caret place on the line below (above) the caret's at the wished x: the line in its
+      block, else the block after (before) it, held or not; -1 when there is none. The caret's
+      rectangle is AR (CaretRaster). }
+    function LineFrom(const AR: TRect; ADown: Boolean; out AAtEnd: Boolean): TTyRichPos;
     { APos clamped to the document and moved back to a caret place (a cluster's start, an
       object's or an escaped byte's first character, out of a cell merged away); a place in a
       cut paragraph's hidden tail is kept (it shows at the cut). }
     function SnapPos(APos: TTyRichPos): TTyRichPos;
+    { The user's moves never leave the caret or the anchor in a cut paragraph's hidden tail. }
+    function OutOfTail(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+    { The caret and the anchor a document change moved, put on caret places (S-M10). }
+    procedure SnapAfterChange;
+    { The text changed and the view has not heard of it yet (FKnownLength). }
+    function ViewBehind: Boolean;
+    procedure StartBlink;
+    {$IFDEF LCLWin32}
+    procedure HookWindow;
+    procedure UnhookWindow;
+    {$ENDIF}
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -531,6 +562,18 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     property TextMenu: TTyTextEditMenu read FTextMenu;
     property DragTimer: TTimer read FDragTimer;
+    { The caret's blink: made on entering with a window, gone with the window. }
+    property BlinkTimer: TTimer read FBlinkTimer;
+    { Windows: the set-cursor message for the client area is answered here (LCL's own answer
+      shows the control's Cursor everywhere, the I-beam over the padding too): over the
+      padding, while the published Cursor is the I-beam and not in the designer, the arrow is
+      shown and True returned; otherwise LCL goes on. Elsewhere SetTempCursor does it (from
+      MouseMove). }
+    function AnswerSetCursor: Boolean;
+    { Where the pointer is, in client pixels (the system's cursor position; a test seam). }
+    function PointerClientPos: TPoint; virtual;
+    { Shows the arrow now (LCLIntf.SetCursor; a test seam). }
+    procedure ShowArrowCursor; virtual;
     property Dragging: Boolean read FDragging;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -601,11 +644,15 @@ type
 
       The document position at client point (X, Y) of the view, through the visible blocks: the
       nearest caret place of the block under Y (the first or last visible one above or below
-      them). -1 when nothing is laid out. }
-    function PositionAtPoint(X, Y: Integer): TTyRichPos;
-    { The caret rectangle of document position APos in client pixels; an empty rectangle when
-      APos is in no visible block. }
-    function PositionRect(APos: TTyRichPos): TRect;
+      them). -1 when nothing is laid out. AAtLineEnd: the place is the end of a wrapped line
+      the point is on (past its end), which is also the next line's start - pass it on to
+      PositionRect to have the caret on the line the point was on. What a click does. }
+    function PositionAtPoint(X, Y: Integer): TTyRichPos; overload;
+    function PositionAtPoint(X, Y: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload;
+    { The caret rectangle of document position APos in client pixels - with AAtLineEnd, at a
+      wrapped line's end rather than the next line's start; an empty rectangle when APos is in
+      no visible block. Unclipped: the caret drawn (CaretClientRect) is kept inside the text. }
+    function PositionRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect;
     { The client rectangle of the visible block paragraph AIndex is in (as wide as the text
       area); empty when it is not laid out in the view. }
     function ParagraphRect(AIndex: Integer): TRect;
@@ -638,7 +685,10 @@ type
       the caret with a line's height of room). }
     procedure ScrollCaretIntoView;
     { The caret's rectangle in client pixels (empty when its block is not laid out in the view):
-      where it is drawn, what an input method is told. }
+      where it is drawn, what an input method is told, what a blink paints again. A caret at
+      or past the text's right edge (the end of a justified, right-aligned or full line, whose
+      x is the layout width or past it) with nothing to scroll to that way is drawn inside
+      the text, against that edge; the same at the left edge. }
     function CaretClientRect: TRect;
     { The selection as plain text: RangeText(SelStart, SelLength). Read only in this version
       (replacing the selection is editing, Task 10). }
@@ -820,6 +870,18 @@ const
 // kernel32 itself: the Windows unit's RECT type would hide Types.Rect in this unit
 function MoveFileExW(AExisting, ANew: PWideChar; AFlags: DWord): LongBool; stdcall;
   external 'kernel32' name 'MoveFileExW';
+{$ENDIF}
+
+{$IFDEF LCLWin32}
+const
+  GWLP_WNDPROC = -4;
+  CRichHTClient = 1;
+  CRichWmSetCursor = $0020;
+
+function TyRichSetWndProc(AWnd: HWND; AIndex: Integer; AValue: PtrInt): PtrInt; stdcall;
+  external 'user32' name {$IFDEF CPU64}'SetWindowLongPtrW'{$ELSE}'SetWindowLongW'{$ENDIF};
+function TyRichCallWndProc(AProc: Pointer; AWnd: HWND; AMsg: Cardinal; AW: WPARAM;
+  AL: LPARAM): LRESULT; stdcall; external 'user32' name 'CallWindowProcW';
 {$ENDIF}
 
 function FloorDiv(A: Int64; B: Integer): Int64;
@@ -1031,6 +1093,8 @@ begin
   FViewPPI := 0;
   FDoc := CreateDocument;
   FText := FDoc.Text;
+  FKnownLength := FText.Length;
+  FKnownParas := FText.ParaCount;
   FDoc.OnChange := @DocChanged;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
@@ -1371,9 +1435,13 @@ end;
 
 procedure TTyCustomRichEdit.SetSelLength(AValue: TTyRichPos);
 var
-  s: TTyRichPos;
+  s, len: TTyRichPos;
 begin
   s := GetSelStart;
+  // clamped before the sum: SelLength := High(Int64) means "to the end", not an overflow
+  len := FDoc.Text.Length;
+  if AValue > len - s then AValue := len - s
+  else if AValue < -s then AValue := -s;
   Select(s, SnapPos(s + AValue), False);
   Moved(False);
 end;
@@ -1385,7 +1453,9 @@ end;
 
 procedure TTyCustomRichEdit.SelectAll;
 begin
-  // the document's end, as the text has it: no layout, no walk
+  { The document's end, as the text has it: no layout, no walk. During a lazy load that is
+    what is indexed so far, and the selection stays there when more comes (slices move
+    nothing): a Select All after the load takes the rest. }
   Select(0, FDoc.Text.Length, False);
   FWishValid := False;
   CaretMoved;
@@ -1432,17 +1502,21 @@ function TTyCustomRichEdit.CaretRaster(APos: TTyRichPos; AAtEnd: Boolean; out AR
 var
   k: Integer;
   r: TRect;
-  bt: Int64;
+
+  function Fit(V: Int64): Integer;
+  begin
+    // a held block is within a few screens of the view; a huge one may still reach far
+    Result := Integer(Math.Max(Int64(-MaxInt div 4), Math.Min(V, Int64(MaxInt div 4))));
+  end;
+
 begin
   ARect := Rect(0, 0, 0, 0);
   k := HeldBlockOf(APos);
   if k < 0 then Exit(False);
   if APos < 0 then APos := 0;
   r := FBlocks[k].Layout.CaretRect(APos - FDoc.Text.ParaStart(FBlocks[k].FirstPara), AAtEnd);
-  // a held block is within a few screens of the view: its top fits an Integer
-  bt := Math.Max(Int64(-MaxInt div 4), Math.Min(FBlocks[k].Top, Int64(MaxInt div 4)));
-  ARect := Rect(r.Left - FScrollX, Integer(bt) + r.Top, r.Right - FScrollX,
-    Integer(bt) + r.Bottom);
+  ARect := Rect(r.Left - FScrollX, Fit(FBlocks[k].Top + r.Top), r.Right - FScrollX,
+    Fit(FBlocks[k].Top + r.Bottom));
   Result := True;
 end;
 
@@ -1463,14 +1537,70 @@ begin
     FBlocks[k].Layout.PosAtPoint(Integer(AX), Integer(by), AAtEnd);
 end;
 
-function TTyCustomRichEdit.HitClient(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
+function TTyCustomRichEdit.HitNeighbour(AK: Integer; ADown: Boolean; AX: Integer;
+  out AAtEnd: Boolean): TTyRichPos;
 var
-  area: TRect;
+  t: TTyRichText;
+  b: TTyBlockLayout;
+  p, y: Integer;
 begin
-  Settle;
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  Result := HitRaster((Int64(X) - area.Left) * FScale + FScrollX, (Int64(Y) - area.Top) * FScale,
-    AAtEnd);
+  Result := -1;
+  AAtEnd := False;
+  t := FDoc.Text;
+  if ADown then p := FBlocks[AK].LastPara + 1 else p := FBlocks[AK].FirstPara - 1;
+  if (p < 0) or (p >= t.ParaCount) then Exit;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    b := LayoutBlockAt(p);
+    try
+      if ADown then y := 0 else y := Math.Max(0, b.Height - 1);
+      Result := t.ParaStart(b.FirstPara) + b.PosAtPoint(AX, y, AAtEnd);
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.LineFrom(const AR: TRect; ADown: Boolean; out AAtEnd: Boolean): TTyRichPos;
+var
+  k: Integer;
+  y: Int64;
+  r2: TRect;
+
+  function Went(AQ: TTyRichPos): Boolean;
+  begin
+    Result := (AQ >= 0) and CaretRaster(AQ, AAtEnd, r2) and
+      ((ADown and (r2.Top > AR.Top)) or (not ADown and (r2.Top < AR.Top)));
+  end;
+
+begin
+  k := HeldBlockOf(FCaret);
+  // the line below (above) the caret's, at the kept x: the cell under it in a row
+  if ADown then y := AR.Bottom else y := AR.Top - 1;
+  Result := HitRaster(FWishX, y, AAtEnd);
+  if Went(Result) then Exit;
+  Result := -1;
+  if k < 0 then Exit;
+  { Still the same line: a cell's last (first) line in a row taller than it, or the
+    document's end. The block after (before) the caret's, at that x. A block reaching two
+    views below the view's top (a tall picture, a long cell beside a short one) leaves the
+    one after it unheld: that one is laid out here (S-I3), and the move scrolls to it. }
+  if (ADown and (k < FBlockCount - 1)) or (not ADown and (k > 0)) then
+  begin
+    if ADown then y := FBlocks[k].Top + FBlocks[k].Height else y := FBlocks[k].Top - 1;
+    Result := HitRaster(FWishX, y, AAtEnd);
+    if not Went(Result) then Result := -1;
+  end
+  else
+    Result := HitNeighbour(k, ADown, FWishX, AAtEnd);
+end;
+
+function TTyCustomRichEdit.HitClient(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
+begin
+  Result := PositionAtPoint(X, Y, AAtEnd);
 end;
 
 function TTyCustomRichEdit.SnapPos(APos: TTyRichPos): TTyRichPos;
@@ -1494,6 +1624,43 @@ begin
       // one step back from the next character: the caret place at or before APos
       r := b.NextCaretPos(APos - start + 1, False);
       if r >= 0 then Result := start + r;
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+{ The rule for every move a user makes (keys, clicks, drags, word and paragraph selections):
+  the caret and the anchor are never left in a cut paragraph's hidden tail - past its
+  LastCaretPos nothing is shown, and a caret there would stand at the cut while it moves. A
+  place there goes forward to the next block's start (the cut when there is none) or back to
+  the cut. The steps (CaretStep, NextCaretPos), Home / End (LineBounds) and the hit test keep
+  to it by themselves; word steps, Ctrl+Home / Ctrl+End, a collapse and a word's or a
+  paragraph's end go through here. SelectAll and the setters (SelStart, SelLength, CaretPos)
+  keep such a place: it shows at the cut, and copying takes the tail. }
+function TTyCustomRichEdit.OutOfTail(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+var
+  t: TTyRichText;
+  b: TTyBlockLayout;
+  start: TTyRichPos;
+begin
+  t := FDoc.Text;
+  if APos < 0 then APos := 0;
+  if APos > t.Length then APos := t.Length;
+  Result := APos;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    b := LayoutBlockAt(t.ParaOfPos(APos));
+    try
+      start := t.ParaStart(b.FirstPara);
+      if not (b is TTyParaLayout) or (APos - start <= b.LastCaretPos) then Exit;
+      if AForward and (b.LastPara < t.ParaCount - 1) then
+        Result := t.ParaStart(b.LastPara + 1)
+      else
+        Result := start + b.LastCaretPos;
     finally
       b.Release;
     end;
@@ -1600,11 +1767,11 @@ begin
   i := Integer(APos - a);
   if AForward then
   begin
-    // the paragraph's end: the next one's start
+    { The paragraph's end: the next caret place - the next paragraph's start, or in a row the
+      next cell shown (a cell merged away is passed over, as Right passes it). }
     if APos >= pe then
     begin
-      p := t.ParaOfPos(APos);
-      if p < t.ParaCount - 1 then Result := t.ParaStart(p + 1);
+      Result := CaretStep(APos, True);
       Exit;
     end;
     // as the memo: past this word (an object is one by itself), then past what is no word
@@ -1620,7 +1787,10 @@ begin
     begin
       p := t.ParaOfPos(APos);
       if p = 0 then Exit;
-      APos := ps - 1;
+      { The caret place before: a cell merged away is passed over (its empty paragraph is no
+        place). A cut paragraph's end is in its hidden tail: the step ends at the cut. }
+      if OutOfTail(ps - 1, False) <> ps - 1 then Exit(OutOfTail(ps - 1, False));
+      APos := CaretStep(APos, False);
       WordWindow(t, APos, a, ps, pe, codes);
       i := Integer(APos - a);
     end;
@@ -1629,7 +1799,8 @@ begin
     else
       while (i > 0) and (WordClass(codes[i - 1]) = 1) do Dec(i);
   end;
-  Result := SnapPos(a + i);
+  // a word in a cut paragraph's hidden tail: on to the next block, or back to the cut
+  Result := SnapPos(OutOfTail(a + i, AForward));
 end;
 
 procedure TTyCustomRichEdit.ParaRangeAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -1750,14 +1921,23 @@ end;
 
 function TTyCustomRichEdit.CaretClientRect: TRect;
 var
-  r, area: TRect;
+  tw: TRect;
+  w: Integer;
 begin
-  Result := Rect(0, 0, 0, 0);
-  Settle;
-  if not CaretRaster(FCaret, FCaretAtEnd, r) then Exit;
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  Result := ClientOf(area, r.Left, r.Top, r.Left + 1, r.Bottom);
-  Result.Right := Result.Left + Math.Max(1, MulDiv(1, ViewPPI, 96));
+  Result := PositionRect(FCaret, FCaretAtEnd);
+  if (Result.Bottom <= Result.Top) then Exit(Rect(0, 0, 0, 0));
+  w := Math.Max(1, MulDiv(1, ViewPPI, 96));
+  Result.Right := Result.Left + w;
+  { A line's end at the layout width or past it (a justified or right-aligned line, a full
+    one, a wrapped line's hanging spaces) puts the caret on the text's right edge or beyond
+    it, where the clip would take it away; with nothing to scroll to that way it is drawn
+    inside, against the edge (S-I1). The same at the left edge. }
+  tw := TextWindowRect;
+  if tw.Right - tw.Left < w then Exit;
+  if (Result.Right > tw.Right) and (FScrollX >= Math.Max(0, FWidestSeen - FViewW)) then
+    Types.OffsetRect(Result, tw.Right - Result.Right, 0)
+  else if (Result.Left < tw.Left) and (FScrollX <= 0) then
+    Types.OffsetRect(Result, tw.Left - Result.Left, 0);
 end;
 
 procedure TTyCustomRichEdit.CaretMoved;
@@ -1840,18 +2020,9 @@ end;
 
 procedure TTyCustomRichEdit.MoveVertical(ADown, AExtend: Boolean);
 var
-  r, r2: TRect;
-  k: Integer;
-  y: Int64;
+  r: TRect;
   q: TTyRichPos;
   atEnd: Boolean;
-
-  function Went: Boolean;
-  begin
-    Result := (q >= 0) and CaretRaster(q, atEnd, r2) and
-      ((ADown and (r2.Top > r.Top)) or (not ADown and (r2.Top < r.Top)));
-  end;
-
 begin
   ScrollCaretIntoView;
   Settle;
@@ -1861,18 +2032,8 @@ begin
     FWishX := r.Left + FScrollX;
     FWishValid := True;
   end;
-  k := HeldBlockOf(FCaret);
-  // the line below (above) the caret's, at the kept x: the cell under it in a row
-  if ADown then y := r.Bottom else y := r.Top - 1;
-  q := HitRaster(FWishX, y, atEnd);
-  if not Went then
-  begin
-    { Still the same line: a cell's last (first) line in a row taller than it, or the
-      document's end. The block after (before) the caret's, at that x. }
-    if ADown then y := FBlocks[k].Top + FBlocks[k].Height else y := FBlocks[k].Top - 1;
-    q := HitRaster(FWishX, y, atEnd);
-    if not Went then Exit;
-  end;
+  q := LineFrom(r, ADown, atEnd);
+  if q < 0 then Exit;
   if AExtend then Select(FSelAnchor, q, atEnd) else Select(q, q, atEnd);
 end;
 
@@ -1904,12 +2065,12 @@ end;
 
 procedure TTyCustomRichEdit.MovePage(ADown, AExtend: Boolean);
 var
-  r: TRect;
+  r, r2: TRect;
   y: Int64;
   page, para: Integer;
   off: Int64;
-  q: TTyRichPos;
-  atEnd: Boolean;
+  q, q2: TTyRichPos;
+  atEnd, atEnd2: Boolean;
 begin
   ScrollCaretIntoView;
   Settle;
@@ -1931,6 +2092,18 @@ begin
     if ADown then Inc(y, page) else Dec(y, page);
   q := HitRaster(FWishX, y, atEnd);
   if q < 0 then Exit;
+  { A line taller than the page (a picture): the page lands on the caret's own line, and
+    showing the caret would scroll back to it - a line on instead, as Down / Up goes. }
+  if CaretRaster(FCaret, FCaretAtEnd, r) and CaretRaster(q, atEnd, r2) and
+    ((ADown and (r2.Top <= r.Top)) or (not ADown and (r2.Top >= r.Top))) then
+  begin
+    q2 := LineFrom(r, ADown, atEnd2);
+    if q2 >= 0 then
+    begin
+      q := q2;
+      atEnd := atEnd2;
+    end;
+  end;
   if AExtend then Select(FSelAnchor, q, atEnd) else Select(q, q, atEnd);
 end;
 
@@ -1944,8 +2117,9 @@ var
   r: TRect;
 begin
   FCaretDrawn := Rect(0, 0, 0, 0);
+  // (inside the document's update the view knows nothing of the change yet: no query)
   if not HasCaretFocus or not FCaretShown or HasSelection or
-    (csDesigning in ComponentState) then Exit;
+    (csDesigning in ComponentState) or ViewBehind then Exit;
   r := CaretClientRect;
   if IsRectEmpty(r) or not IntersectRect(r, r, TextWindowRect) then Exit;
   ACanvas.Brush.Style := bsSolid;
@@ -1959,6 +2133,9 @@ var
   vis: Boolean;
   r: TRect;
 begin
+  { Inside the document's update (an application pumping messages between BeginUpdate and
+    EndUpdate) the blocks may name paragraphs that are gone: the blink waits (S-M11). }
+  if ViewBehind then Exit;
   Inc(FBlinkMs, CRichBlinkMs);
   vis := TyCaretVisible(FBlinkMs, CRichBlinkMs);
   if vis = FCaretShown then Exit;
@@ -1968,21 +2145,24 @@ begin
   if not IsRectEmpty(r) then InvalidateArea(r);
 end;
 
+procedure TTyCustomRichEdit.StartBlink;
+begin
+  if not HandleAllocated then Exit;
+  if FBlinkTimer = nil then
+  begin
+    FBlinkTimer := TTimer.Create(nil);
+    FBlinkTimer.Interval := CRichBlinkMs;
+    FBlinkTimer.OnTimer := @BlinkTick;
+  end;
+  FBlinkTimer.Enabled := True;
+end;
+
 procedure TTyCustomRichEdit.DoEnter;
 begin
   inherited DoEnter;
   FCaretShown := True;
   FBlinkMs := 0;
-  if HandleAllocated then
-  begin
-    if FBlinkTimer = nil then
-    begin
-      FBlinkTimer := TTimer.Create(nil);
-      FBlinkTimer.Interval := CRichBlinkMs;
-      FBlinkTimer.OnTimer := @BlinkTick;
-    end;
-    FBlinkTimer.Enabled := True;
-  end;
+  StartBlink;
   CaretMoved;
 end;
 
@@ -2002,6 +2182,69 @@ begin
   else
     Result := crDefault;
 end;
+
+function TTyCustomRichEdit.AnswerSetCursor: Boolean;
+var
+  p: TPoint;
+begin
+  Result := False;
+  if (Cursor <> crIBeam) or (csDesigning in ComponentState) then Exit;
+  p := PointerClientPos;
+  if CursorAt(p.X, p.Y) = crIBeam then Exit;
+  ShowArrowCursor;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.PointerClientPos: TPoint;
+begin
+  Result := ScreenToClient(Mouse.CursorPos);
+end;
+
+procedure TTyCustomRichEdit.ShowArrowCursor;
+begin
+  LCLIntf.SetCursor(Screen.Cursors[crArrow]);
+end;
+
+{$IFDEF LCLWin32}
+{ LCL-Win32 answers WM_SETCURSOR itself before the control hears of it (the control's Cursor,
+  the I-beam, over the whole client area; TWin32WSWinControl.SetCursor ignores a temporary
+  cursor and sends that message too): the window is subclassed, and the client area's
+  set-cursor message is the control's first (AnswerSetCursor); the rest goes on to LCL. }
+var
+  // LCL's window procedure, the one every control window has (what a hook replaced)
+  GRichLclWndProc: Pointer = nil;
+
+function TyRichWndProc(AWnd: HWND; AMsg: Cardinal; AW: WPARAM; AL: LPARAM): LRESULT; stdcall;
+var
+  c: TWinControl;
+  old: Pointer;
+begin
+  c := FindControl(AWnd);
+  old := GRichLclWndProc;
+  if c is TTyCustomRichEdit then
+  begin
+    if TTyCustomRichEdit(c).FOldWndProc <> nil then old := TTyCustomRichEdit(c).FOldWndProc;
+    if (AMsg = CRichWmSetCursor) and (HWND(AW) = AWnd) and ((AL and $FFFF) = CRichHTClient) and
+      TTyCustomRichEdit(c).AnswerSetCursor then
+      Exit(1);
+  end;
+  Result := TyRichCallWndProc(old, AWnd, AMsg, AW, AL);
+end;
+
+procedure TTyCustomRichEdit.HookWindow;
+begin
+  if FOldWndProc <> nil then Exit;
+  FOldWndProc := Pointer(TyRichSetWndProc(Handle, GWLP_WNDPROC, PtrInt(@TyRichWndProc)));
+  if GRichLclWndProc = nil then GRichLclWndProc := FOldWndProc;
+end;
+
+procedure TTyCustomRichEdit.UnhookWindow;
+begin
+  if FOldWndProc = nil then Exit;
+  if HandleAllocated then TyRichSetWndProc(Handle, GWLP_WNDPROC, PtrInt(FOldWndProc));
+  FOldWndProc := nil;
+end;
+{$ENDIF}
 
 procedure TTyCustomRichEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
@@ -2042,22 +2285,41 @@ begin
       FLastClickTick, FClickCount, ViewPPI);
     if clicks = 2 then
     begin
-      WordAt(q, a, b);
+      // the object under the pointer is the word (on its right half too: S-M3)
+      o := ObjectAt(X, Y, q);
+      if o >= 0 then
+      begin
+        a := o;
+        b := o + 1;
+      end
+      else
+      begin
+        WordAt(q, a, b);
+        b := OutOfTail(b, False);
+      end;
       Select(a, b, False);
       FDragUnit := 2;
     end
     else if clicks = 3 then
     begin
       ParaRangeAt(q, a, b);
-      Select(a, b, False);
+      Select(a, OutOfTail(b, False), False);
       FDragUnit := 3;
     end
     else
     begin
       if clicks > 3 then FClickCount := 1;
-      // a click on an object selects it (its handles come with editing)
+      { A click on an object selects it (its handles come with editing). The object is the
+        pressed unit, as a word is after a double click: it stays selected while the pointer
+        moves on it, and a drag extends from it (S-I2). }
       o := ObjectAt(X, Y, q);
-      if o >= 0 then Select(o, o + 1, False) else Select(q, q, atEnd);
+      if o >= 0 then
+      begin
+        Select(o, o + 1, False);
+        FDragUnit := 4;
+      end
+      else
+        Select(q, q, atEnd);
     end;
   end;
   FDragFrom := GetSelStart;
@@ -2071,7 +2333,7 @@ end;
 procedure TTyCustomRichEdit.ExtendDragTo(X, Y: Integer);
 var
   area: TRect;
-  q, a, b: TTyRichPos;
+  q, a, b, o: TTyRichPos;
   atEnd: Boolean;
 begin
   // the pointer held to the text: past an edge, the line along that edge
@@ -2081,8 +2343,33 @@ begin
   q := HitClient(X, Y, atEnd);
   if q < 0 then Exit;
   case FDragUnit of
-    2: WordAt(q, a, b);
-    3: ParaRangeAt(q, a, b);
+    2:
+      begin
+        o := ObjectAt(X, Y, q);
+        if o >= 0 then
+        begin
+          a := o;
+          b := o + 1;
+        end
+        else
+        begin
+          WordAt(q, a, b);
+          b := OutOfTail(b, False);
+        end;
+      end;
+    3:
+      begin
+        ParaRangeAt(q, a, b);
+        b := OutOfTail(b, False);
+      end;
+    4:
+      begin
+        // from the object pressed: on it (either half) it stays selected
+        if q >= FDragTo then Select(FDragFrom, q, atEnd)
+        else if q <= FDragFrom then Select(FDragTo, q, atEnd)
+        else Select(FDragFrom, FDragTo, False);
+        Exit;
+      end;
   else
     begin
       Select(FSelAnchor, q, atEnd);
@@ -2145,6 +2432,8 @@ begin
     StopDrag;
     Exit;
   end;
+  // inside the document's update: no query, the drag waits (S-M11)
+  if ViewBehind then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   est := Math.Max(1, FEstimate div Math.Max(1, FScale));
   // a line a tick, and one more for every line's height the pointer is further out
@@ -2682,8 +2971,29 @@ end;
 
 procedure TTyCustomRichEdit.Settle;
 begin
-  if FViewValid then Exit;
-  EnsureView(ViewPPI);
+  if not FViewValid then EnsureView(ViewPPI);
+  if FSnapPending then SnapAfterChange;
+end;
+
+procedure TTyCustomRichEdit.SnapAfterChange;
+var
+  c, a: TTyRichPos;
+begin
+  FSnapPending := False;
+  c := SnapPos(FCaret);
+  a := SnapPos(FSelAnchor);
+  if (c = FCaret) and (a = FSelAnchor) then Exit;
+  Select(a, c, False);
+  CaretMoved;
+  DoSelectionChange;
+end;
+
+function TTyCustomRichEdit.ViewBehind: Boolean;
+var
+  t: TTyRichText;
+begin
+  t := FDoc.Text;
+  Result := (t <> FText) or (t.Length <> FKnownLength) or (t.ParaCount <> FKnownParas);
 end;
 
 procedure TTyCustomRichEdit.AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
@@ -2802,6 +3112,9 @@ begin
     FLayoutZoom := z;
     FEstimate := est;
     FViewValid := False;
+    // the wished x is a raster x of the old layout (a zoom, a width, a scale): Up / Down
+    // start again from where the caret is now (S-M5)
+    FWishValid := False;
   end;
   if FDoc.Text.DefaultParaHeight <> FEstimate then FDoc.Text.DefaultParaHeight := FEstimate;
 end;
@@ -2964,34 +3277,51 @@ end;
 
 procedure TTyCustomRichEdit.DocChanged(Sender: TObject; const AChange: TTyRichChange);
 var
-  was: TTyRichPos;
+  was, wasAnchor: TTyRichPos;
+  loadOwn: Boolean;
 begin
   { The load's own change: one made while the step runs AND the document still loads. A
     slice is appended before the last step ends the loading; a command run from the last
-    step's progress handler (the document no longer loads there) is an edit. }
-  FLayouter.DocumentChanged(AChange, FInStep and FDoc.Loading);
+    step's progress handler (the document no longer loads there) is an edit - for the
+    layouter's trust, the caret and the anchor, and the change report alike (S-X1). }
+  loadOwn := FInStep and FDoc.Loading;
+  FLayouter.DocumentChanged(AChange, loadOwn);
   if FDoc.Text <> FText then
     ContentReplaced
   else
   begin
-    { The caret and the anchor follow the text (no query: inside the document's update the
-      view knows nothing yet). A format change moves neither; the slices a lazy load appends
-      come after everything. }
-    if (rckText in AChange.Kinds) and not FInStep then
+    { The caret and the anchor follow the text by arithmetic alone (no query: inside the
+      document's update the view knows nothing yet); the next paint or settled query puts
+      them on caret places (FSnapPending). A format change moves neither; the slices a lazy
+      load appends come after everything.
+      For Task 10: inside BeginUpdate .. EndUpdate the view hears one merged change (the
+      union of the ranges, their kinds together), so a caret between two edits of one update
+      goes to the first edit's start, and a format change joined with an inserted character
+      moves a caret anywhere in that range. Right for a viewer; editing commands place the
+      caret themselves (S-M9). }
+    FKnownLength := FDoc.Text.Length;
+    FKnownParas := FDoc.Text.ParaCount;
+    if (rckText in AChange.Kinds) and not loadOwn then
     begin
       was := FCaret;
+      wasAnchor := FSelAnchor;
       ShiftForChange(FCaret, AChange);
       ShiftForChange(FSelAnchor, AChange);
       FCaret := Math.Max(Int64(0), Math.Min(FCaret, FDoc.Text.Length));
       FSelAnchor := Math.Max(Int64(0), Math.Min(FSelAnchor, FDoc.Text.Length));
       if FCaret <> was then FCaretAtEnd := False;
+      { Snapped later also when it did not move: text taken away right after it can leave it
+        before a combining mark. }
+      if (FCaret <> was) or (FSelAnchor <> wasAnchor) or (AChange.Pos <= FCaret + 1) or
+        (AChange.Pos <= FSelAnchor + 1) then
+        FSnapPending := True;
       FWishValid := False;
     end;
     ChangeInView(AChange);
   end;
   if (FLines <> nil) and (FDoc.Text.Length > 0) then FLines.FEmptyLine := False;
   // the slices a lazy load adds are its progress, not changes of the content
-  if not FInStep then
+  if not loadOwn then
   begin
     DoChange;
     DoSelectionChange;
@@ -3001,6 +3331,9 @@ end;
 procedure TTyCustomRichEdit.ContentReplaced;
 begin
   FText := FDoc.Text;
+  FKnownLength := FText.Length;
+  FKnownParas := FText.ParaCount;
+  FSnapPending := False;
   ReleaseBlocks;
   ClearPending;
   ClearFailed;
@@ -3838,49 +4171,35 @@ end;
 
 { ---- points and positions ---- }
 
+{ One implementation of point -> position and position -> rectangle (S-M8): the control's own
+  moves, clicks and caret go through these too (HitRaster, CaretRaster, with the affinity). }
 function TTyCustomRichEdit.PositionAtPoint(X, Y: Integer): TTyRichPos;
 var
-  area: TRect;
-  k: Integer;
-  vy, by: Int64;
+  atEnd: Boolean;
 begin
-  Settle;
-  Result := -1;
-  if FBlockCount = 0 then Exit;
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  vy := (Int64(Y) - area.Top) * FScale;
-  k := 0;
-  while (k < FBlockCount - 1) and (vy >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
-  // inside the block (or just outside it): within its height, an Integer
-  by := Math.Max(Int64(-1), Math.Min(vy - FBlocks[k].Top, Int64(FBlocks[k].Height)));
-  Result := FDoc.Text.ParaStart(FBlocks[k].FirstPara) +
-    FBlocks[k].Layout.PosAtPoint((X - area.Left) * FScale + FScrollX, Integer(by));
+  Result := PositionAtPoint(X, Y, atEnd);
 end;
 
-function TTyCustomRichEdit.PositionRect(APos: TTyRichPos): TRect;
+function TTyCustomRichEdit.PositionAtPoint(X, Y: Integer; out AAtLineEnd: Boolean): TTyRichPos;
 var
   area: TRect;
-  k: Integer;
-  start, stop: TTyRichPos;
-  t: TTyRichText;
-  r: TRect;
+begin
+  Settle;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  Result := HitRaster((Int64(X) - area.Left) * FScale + FScrollX, (Int64(Y) - area.Top) * FScale,
+    AAtLineEnd);
+end;
+
+function TTyCustomRichEdit.PositionRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
+var
+  area, r: TRect;
 begin
   Settle;
   Result := Rect(0, 0, 0, 0);
-  t := FDoc.Text;
+  if (APos < 0) or (APos > FDoc.Text.Length) then Exit;
+  if not CaretRaster(APos, AAtLineEnd, r) then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  for k := 0 to FBlockCount - 1 do
-  begin
-    start := t.ParaStart(FBlocks[k].FirstPara);
-    stop := t.ParaStart(FBlocks[k].LastPara) + t.ParaLength(FBlocks[k].LastPara);
-    if (APos >= start) and (APos <= stop) then
-    begin
-      r := FBlocks[k].Layout.CaretRect(APos - start);
-      Result := ClientOf(area, r.Left - FScrollX, FBlocks[k].Top + r.Top, r.Right - FScrollX,
-        FBlocks[k].Top + r.Bottom);
-      Exit;
-    end;
-  end;
+  Result := ClientOf(area, r.Left, r.Top, r.Right, r.Bottom);
 end;
 
 function TTyCustomRichEdit.ParagraphRect(AIndex: Integer): TRect;
@@ -4146,6 +4465,9 @@ end;
 procedure TTyCustomRichEdit.InitializeWnd;
 begin
   inherited InitializeWnd;
+  {$IFDEF LCLWin32}
+  HookWindow;
+  {$ENDIF}
   if HasBackgroundWork then StartBackground;
 end;
 
@@ -4979,6 +5301,9 @@ end;
 
 procedure TTyCustomRichEdit.DestroyWnd;
 begin
+  {$IFDEF LCLWin32}
+  UnhookWindow;
+  {$ENDIF}
   inherited DestroyWnd;
   // the window is gone: what it showed is drawn again when it comes back, and the background
   // work waits for it (InitializeWnd starts it again) or for FinishLoading
@@ -5319,6 +5644,19 @@ begin
   if not IntersectRect(clip, AClip, ARect) then Exit;
   sc := TyCanvasDeviceScale(ACanvas);
   if sc.Scale < 1 then sc.Scale := 1;
+  { Inside the document's update (the text changed, the view has not heard of it: its blocks
+    may name paragraphs that are gone) nothing is laid out, drawn or asked: the paint shows
+    the kept surface as it is - the last picture, which the change at EndUpdate brings up to
+    date. With no surface yet (or one of another scale) it shows nothing (S-M11). }
+  if ViewBehind then
+  begin
+    if (FSurface <> nil) and (FSurfScale = sc.Scale) and
+      IntersectRect(clip, clip, Rect(ARect.Left, ARect.Top, ARect.Left + FSurfW,
+      ARect.Top + FSurfH)) then
+      BlitSurface(ACanvas, Rect(clip.Left - ARect.Left, clip.Top - ARect.Top,
+        clip.Right - ARect.Left, clip.Bottom - ARect.Top), clip.Left, clip.Top, sc);
+    Exit;
+  end;
   // the layout follows the device: a new scale is a PPI change (CheckLayoutParams)
   FScale := sc.Scale;
   { A window paint (ADefer) whose clip holds the whole text area blits whatever the layout
@@ -5334,6 +5672,8 @@ begin
     FPaintCoversText := False;
   end;
   ClampScrollX;
+  // a caret or an anchor a change moved: on a caret place before it is drawn (S-M10)
+  if FSnapPending then SnapAfterChange;
   if not SurfaceUsable(CurrentStyle) then
   begin
     PaintLayer(ACanvas, ARect, clip, APPI, ADefer, sc);
@@ -5391,9 +5731,11 @@ begin
         Settle;
         if HasSelection and not ext and not byWord then
         begin
-          // a selection collapses to the side the arrow points at
+          // a selection collapses to the side the arrow points at (shown at a cut, if past it)
           if Key = VK_RIGHT then q := GetSelStart + GetSelLength else q := GetSelStart;
-          Select(q, q, False);
+          q := OutOfTail(q, False);
+          // onto the caret itself: it stays where it is drawn, at a line's end too (S-M4)
+          if q = FCaret then Select(q, q, FCaretAtEnd) else Select(q, q, False);
         end
         else
         begin
@@ -5413,7 +5755,7 @@ begin
         Settle;
         if toDoc then
         begin
-          if Key = VK_HOME then q := 0 else q := FDoc.Text.Length;
+          if Key = VK_HOME then q := 0 else q := OutOfTail(FDoc.Text.Length, False);
           if ext then Select(FSelAnchor, q, False) else Select(q, q, False);
         end
         else
