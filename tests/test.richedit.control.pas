@@ -7737,10 +7737,10 @@ procedure TTyRichEditControlTest.TestASlicesCostDoesNotGrowWithTheDocument;
 
 const
   { Empirical, not derived: twice the larger of the counts measured when it was written (5 and
-    8). A full walk from the root would not fit under it (log2 of 800,000 is about 20): the
-    appends do not walk the tree's whole depth. NodeVisits counts only the walks of Text.pas
-    that increment it; a cost per slice that goes through another accessor would not show
-    here. }
+    8). The tree is 64/128-ary, about 4 levels deep at 800,000 paragraphs: 16 allows a few
+    walks from the root per slice and no walk proportional to the document. NodeVisits
+    counts only the walks of Text.pas that increment it; a cost per slice that goes through
+    another accessor would not show here. }
   CRichSliceVisitBound = 16;
 var
   small, big: Int64;
