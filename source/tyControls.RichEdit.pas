@@ -519,7 +519,9 @@ type
       when it holds neither. For pasting (editing comes with Task 10). }
     function ReadClipboard(out ARtf: RawByteString; out AText: string): Boolean; virtual;
     { Around a copy of more than CopyWaitChars characters: the wait cursor (Screen.Cursor),
-      put back after it whatever happened. }
+      put back after it whatever happened. On Windows LCL sets the cursor at once; whether
+      GTK or Cocoa show it before their event loop turns again - the copy lets no message in
+      - is not known (not verified on either). }
     procedure BeginWait; virtual;
     procedure EndWait; virtual;
     property CopyWaitChars: Int64 read FCopyWaitChars write FCopyWaitChars;
@@ -653,7 +655,11 @@ type
       (RangeText), through WriteClipboard. Nothing selected: nothing is put there (what the
       clipboard held stays). More than CopyWaitChars characters: the wait cursor meanwhile;
       the copy runs at once and lets no message in. A range the RTF writer refuses (a
-      changed row holding a nested table) goes as text alone. }
+      changed row holding a nested table) goes as text alone.
+      Memory: both flavours are made whole in memory before the clipboard gets them (for a
+      whole 100 MB file about its size each), and the system's clipboard then makes copies
+      of its own (on Windows the text again as UTF-16, and each flavour in a global block) -
+      a copy of a very large selection needs several times its size for a moment. }
     procedure CopyToClipboard;
     { ITyTextEditActions: Copy and Select All; Undo, Redo, Cut and Paste are not available in
       the viewer (TeIsReadOnly, TeCanUndo False ...). }
@@ -793,7 +799,10 @@ type
 
 { The name a copy's RTF goes to the clipboard under: Windows' registered "Rich Text Format";
   on a Mac (LCL's Cocoa clipboard keeps a name it has no mapping of as the pasteboard type
-  itself) the type public.rtf, NSPasteboardTypeRTF's; elsewhere the MIME type text/rtf. }
+  itself) the type public.rtf, NSPasteboardTypeRTF's; elsewhere the MIME type text/rtf.
+  Chosen by platform, not by widgetset: LCL's Qt clipboard hands the name to Qt as a MIME type
+  and GTK's makes an atom of it, and how Qt on Windows or Qt / GTK on a Mac map such a name to
+  the system's rich-text type is the toolkit's, not LCL's - those pairs are not verified. }
 function TyRichClipboardRtfName: string;
 
 implementation
@@ -2294,7 +2303,8 @@ end;
 
 { The end of the paragraph before, which ANext's paragraph follows: a line break; between two
   cells of a row a tab for each cell boundary (a cell merged away, or one the model left
-  without a paragraph, gives its tab); after a row's last one a line break. }
+  without a paragraph, gives its tab); after a row's last one a tab for each cell after it
+  that the model left without a paragraph, then a line break. }
 procedure TTyRichTextOut.EndPrev(ANext: TTyRichCell);
 var
   k: Integer;
@@ -2302,7 +2312,12 @@ begin
   if (Prev <> nil) and (ANext <> nil) and (ANext <> Prev) and (ANext.Row = Prev.Row) then
     for k := Prev.Index + 1 to ANext.Index do AddS(#9)
   else
+  begin
+    // (not between two paragraphs of one cell)
+    if (Prev <> nil) and ((ANext = nil) or (ANext.Row <> Prev.Row)) then
+      for k := Prev.Index + 1 to Prev.Row.CellCount - 1 do AddS(#9);
     AddS(sLineBreak);
+  end;
 end;
 
 procedure TTyRichTextOut.Para(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
@@ -2316,6 +2331,8 @@ var
   from, upto, ch: Int64;
   p, n: PtrInt;
   b: Byte;
+  code: Cardinal;
+  k: Integer;
 begin
   if AIndex > Range.LastPara then
   begin
@@ -2328,6 +2345,10 @@ begin
   if not Doc.ReadValue(AData, fmt, runs, cell) then cell := Doc.CellAt(AIndex);
   if Range.InOneCell then cell := nil;
   if HavePrev then EndPrev(cell);
+  // a row's first paragraph in a later cell: the cells before it, which the model left
+  // without a paragraph, give their tabs
+  if (cell <> nil) and ((Prev = nil) or (Prev.Row <> cell.Row)) then
+    for k := 0 to cell.Index - 1 do AddS(#9);
   from := 0;
   upto := High(Int64);
   if AIndex = Range.FirstPara then from := Range.FromChar;
@@ -2337,14 +2358,10 @@ begin
   while (p < ALen) and (ch < upto) do
   begin
     b := AText[p];
-    // a character's bytes, as the text storage counts characters
-    n := 1;
-    if b >= $80 then
-      if (b >= $C2) and (b <= $DF) and (p + 1 < ALen) and (AText[p + 1] and $C0 = $80) then n := 2
-      else if (b >= $E0) and (b <= $EF) and (p + 2 < ALen) and (AText[p + 1] and $C0 = $80) and
-        (AText[p + 2] and $C0 = $80) then n := 3
-      else if (b >= $F0) and (b <= $F4) and (p + 3 < ALen) and (AText[p + 1] and $C0 = $80) and
-        (AText[p + 2] and $C0 = $80) and (AText[p + 3] and $C0 = $80) then n := 4;
+    // a character's bytes, as the text storage counts characters (the RTF flavour cuts by
+    // the same rule)
+    code := b;
+    if b < $80 then n := 1 else n := TyRichNextChar(AText + p, ALen - p, code);
     if (n = 1) and (b >= $F8) and (b <= $FB) and (p + 1 < ALen) and (AText[p + 1] and $C0 = $80) then
     begin
       // an escaped byte: its two characters are one U+FFFD
@@ -2358,7 +2375,7 @@ begin
         AddS(sLineBreak)
       else if (n = 1) and (b >= $80) then
         Add(@Replacement[0], 3)
-      else if not ((n = 3) and (b = $EF) and (AText[p + 1] = $BF) and (AText[p + 2] = $BC)) then
+      else if code <> $FFFC then
         // (U+FFFC, an object, gives nothing)
         Add(AText + p, n);
     Inc(p, n);
@@ -2437,34 +2454,26 @@ begin
   end;
 end;
 
+{ Each flavour's bytes go to LCL's clipboard as they are (AddFormat with a buffer): no stream
+  copy of them on our side - LCL's cache and the system's clipboard make their own. }
 procedure TTyCustomRichEdit.WriteClipboard(const ARtf: RawByteString; const AText: string);
 var
-  st: TMemoryStream;
-  s: RawByteString;
+  n: Integer;
 begin
-  st := TMemoryStream.Create;
+  Clipboard.Open;
   try
-    Clipboard.Open;
-    try
-      Clipboard.Clear;
-      if ARtf <> '' then
-      begin
-        st.WriteBuffer(ARtf[1], Length(ARtf));
-        st.Position := 0;
-        Clipboard.AddFormat(RegisterClipboardFormat(TyRichClipboardRtfName), st);
-      end;
-      // the text as Clipboard.AsText puts it (which would clear the RTF put first)
-      st.Clear;
-      s := AText;
-      if s <> '' then st.WriteBuffer(s[1], Length(s));
-      if ClipboardFormatNeedsNullByte(pcfText) then st.WriteByte(0);
-      st.Position := 0;
-      Clipboard.AddFormat(PredefinedClipboardFormat(pcfText), st);
-    finally
-      Clipboard.Close;
-    end;
+    Clipboard.Clear;
+    if ARtf <> '' then
+      Clipboard.AddFormat(RegisterClipboardFormat(TyRichClipboardRtfName), PAnsiChar(ARtf)^,
+        Length(ARtf));
+    // the text as Clipboard.AsText puts it (which would clear the RTF put first); the NUL a
+    // widgetset wants after it is the one every string has after its last character
+    // (PAnsiChar of '' points at one too)
+    n := Length(AText);
+    if ClipboardFormatNeedsNullByte(pcfText) then Inc(n);
+    Clipboard.AddFormat(PredefinedClipboardFormat(pcfText), PAnsiChar(AText)^, n);
   finally
-    st.Free;
+    Clipboard.Close;
   end;
 end;
 

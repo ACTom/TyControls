@@ -157,7 +157,9 @@ function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRic
 // It runs as a save does (ADoc is Saving meanwhile, in one read scope; a paragraph written
 // from the model is parsed), but unlike TyRichSaveRtf it does not refuse a document still
 // Loading or Incomplete: what is copied is what is there - the paragraphs a lazy load has
-// appended so far (the range is the caller's, within them). An empty range writes a document
+// appended so far (the range is the caller's, within them; the last of them, which has no
+// separator in the text yet, goes out from the model, without the \par its bytes end with).
+// An empty range writes a document
 // with no paragraph. Raises ETyRichRtfWrite for a row with a nested table that would have to
 // be written from the model (as TyRichSaveRtf).
 procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom,
@@ -165,6 +167,13 @@ procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom,
 // The same, saying what went out as the file's bytes and what was written from the model.
 procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom, ALen: TTyRichPos;
   out AInfo: TTyRtfWriteInfo); overload;
+
+// The character at P, of ALeft bytes (ALeft >= 1): its code and how many bytes it is,
+// counted by the text storage's rule - strict UTF-8 (no overlong form, no surrogate, nothing
+// above U+10FFFF); a byte that starts no valid sequence is one character and reads U+FFFD.
+// For whoever walks a paragraph's bytes and has to count characters as positions count them
+// (the copy's plain text does, so that both flavours cut at the same characters).
+function TyRichNextChar(P: PByte; ALeft: PtrInt; out ACode: Cardinal): Integer;
 
 implementation
 
@@ -449,9 +458,7 @@ begin
   Move(ABytes[R.Start], Result[1], R.Stop - R.Start);
 end;
 
-// The character at P, of ALeft bytes: its code and how many bytes it is. A byte that starts
-// no valid UTF-8 sequence is one character (as the text storage counts it) and reads U+FFFD.
-function NextChar(P: PByte; ALeft: PtrInt; out ACode: Cardinal): Integer;
+function TyRichNextChar(P: PByte; ALeft: PtrInt; out ACode: Cardinal): Integer;
 var
   b: Byte;
   c: Cardinal;
@@ -521,7 +528,7 @@ begin
   p := 1;
   while p <= Length(S) do
   begin
-    n := NextChar(@S[p], Length(S) - p + 1, code);
+    n := TyRichNextChar(@S[p], Length(S) - p + 1, code);
     Classify(code, AKana, AHangul, AHan);
     Inc(p, n);
   end;
@@ -1158,8 +1165,10 @@ begin
   // A row that holds a nested table is more in the file than in the model: written from
   // the model it would lose the inner table without a word. The model lets nothing change
   // in such a row, so this is not reached through commands; it is asked here all the same,
-  // while nothing has been written yet.
-  if (FLoad <> nil) and (ACell <> nil) and ACell.Row.HoldsNestedTable then
+  // while nothing has been written yet. A range inside one cell rewrites no row (its
+  // paragraphs go out as no table's), so nothing of the row is lost there.
+  if (FLoad <> nil) and (ACell <> nil) and ACell.Row.HoldsNestedTable and
+     not (FRange and FCopy.InOneCell) then
     raise ETyRichRtfWrite.CreateFmt('RTF writer: paragraph %d is in a table row that holds ' +
       'a nested table and has changed: written from the model, the row would lose that table',
       [AIndex]);
@@ -1216,7 +1225,7 @@ begin
   while p < ALen do
   begin
     while (r < High(runs)) and (runs[r + 1].Start <= ch) do Inc(r);
-    n := NextChar(AText + p, ALen - p, code);
+    n := TyRichNextChar(AText + p, ALen - p, code);
     d := CharInfo(runs[r].Format)^.DefName;
     if d >= 0 then
       with FDefNames[d] do Classify(code, Kana, Hangul, Han);
@@ -1306,7 +1315,7 @@ begin
   p := 1;
   while p <= Length(F.Name) do
   begin
-    n := NextChar(@F.Name[p], Length(F.Name) - p + 1, code);
+    n := TyRichNextChar(@F.Name[p], Length(F.Name) - p + 1, code);
     Inc(p, n);
     if code < $80 then
     begin
@@ -1863,7 +1872,7 @@ begin
       // its one character
       if p < ALen then
       begin
-        Inc(p, NextChar(AText + p, ALen - p, code));
+        Inc(p, TyRichNextChar(AText + p, ALen - p, code));
         Inc(ch);
       end;
       Continue;
@@ -1889,7 +1898,7 @@ begin
       end
       else
       begin
-        n := NextChar(AText + p, ALen - p, code);
+        n := TyRichNextChar(AText + p, ALen - p, code);
         WriteChar(code);
         Inc(p, n);
         Inc(ch);
@@ -2439,13 +2448,13 @@ begin
   ch := 0;
   while (ch < from) and (p < ALen) do
   begin
-    Inc(p, NextChar(AText + p, ALen - p, code));
+    Inc(p, TyRichNextChar(AText + p, ALen - p, code));
     Inc(ch);
   end;
   q := p;
   while (ch < upto) and (q < ALen) do
   begin
-    Inc(q, NextChar(AText + q, ALen - q, code));
+    Inc(q, TyRichNextChar(AText + q, ALen - q, code));
     Inc(ch);
   end;
   AText := AText + p;
@@ -2460,7 +2469,10 @@ begin
     if (runEnd <= from) and (r < High(ARuns)) then Continue;
     if (ARuns[r].Start >= upto) and (n > 0) then Break;
     cut[n] := ARuns[r];
-    if cut[n].Start >= upto then cut[n].Obj := nil;
+    // an object is one character: one at or after the cut's end is not taken, nor one
+    // before its start (the last run is kept whatever it starts at: a range from the end of
+    // a paragraph that ends with a picture takes no picture)
+    if (cut[n].Start >= upto) or (cut[n].Start < from) then cut[n].Obj := nil;
     if cut[n].Start <= from then cut[n].Start := 0 else cut[n].Start := cut[n].Start - from;
     Inc(n);
     if ARuns[r].Start >= upto then Break;
@@ -2495,10 +2507,13 @@ begin
   k := AIndex - FCopy.FirstPara;
   FRangeSrc[k] := ASrcOffset;
   FRangeBytes[k] := ASrcBytes;
-  // as PlanPara asks it (a load still going on has no trailer yet: what it appended is whole)
+  // as PlanPara asks it (a load still going on has no trailer yet: what it appended is whole;
+  // the file's last paragraph without a terminator, once paragraphs follow it, is no longer
+  // whole as its bytes - written so, the next one would join it)
   FRangeOwn[k] := (ASrcOffset >= FHeaderStop) and
     (not FLoad.Done or (ASrcOffset + ASrcBytes <= FTrailer.Start)) and
-    FLoad.OwnsValue(ASrcOffset, AData);
+    FLoad.OwnsValue(ASrcOffset, AData) and
+    not (FLastOpen and (ASrcOffset + ASrcBytes = FTrailer.Start) and (AIndex < FParaCount - 1));
 end;
 
 procedure TRtfWriter.SaveRangeOfOurs;
@@ -2537,6 +2552,7 @@ begin
   n := last - first + 1;
   FHeaderStop := FLoad.Header.Stop;
   FTrailer := FLoad.Trailer;
+  FLastOpen := FLoad.LastParaOpen;
   SetLength(FRangeSrc, n);
   SetLength(FRangeBytes, n);
   SetLength(FRangeOwn, n);
@@ -2544,10 +2560,16 @@ begin
   model := nil;
   SetLength(model, n);
   for k := 0 to n - 1 do
-    // a part of a paragraph, or no table inside one cell: the model
+    // a part of a paragraph, or no table inside one cell: the model. So is the last one a
+    // load still going on (or cancelled) has appended, taken to its end: its bytes end with
+    // the file's \par, but in the text it has no separator (yet) - as the plain text has it,
+    // it is written as the document's last paragraph is, with no \par (a row taken whole
+    // ends with its separator in both flavours: its bytes stay)
     model[k] := not FRangeOwn[k] or FCopy.InOneCell or
       ((k = 0) and (FCopy.FromChar > 0)) or
-      ((k = n - 1) and not FCopy.LastWhole);
+      ((k = n - 1) and not FCopy.LastWhole) or
+      ((k = n - 1) and not FLoad.Done and (first + k = FParaCount - 1) and
+       not FCopy.LastSeparator);
   // the file's own bytes: runs of them, shrunk to clean ends
   k := 0;
   while k < n do
@@ -2665,9 +2687,10 @@ begin
   t := ADoc.Text;
   if AFrom < 0 then AFrom := 0;
   if AFrom > t.Length then AFrom := t.Length;
+  // (clamped before the sum: a length such as High(Int64) means "to the end")
+  if ALen > t.Length - AFrom then ALen := t.Length - AFrom;
+  if ALen < 0 then ALen := 0;
   stop := AFrom + ALen;
-  if (ALen <= 0) or (stop < AFrom) then stop := AFrom;
-  if stop > t.Length then stop := t.Length;
   Result.Empty := stop <= AFrom;
   if Result.Empty then Exit;
   Result.FirstPara := t.ParaOfPos(AFrom);

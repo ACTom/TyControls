@@ -38,8 +38,9 @@ type
     FEditTries, FEditRefused, FHistoryHeld, FSavingSeen: Integer;
     FStopAtEnd: Int64;        // SaveProgress says stop when the stream holds this many bytes
     // what the range checks met: kept bytes, one cell, rows, list items, objects, a part
-    // (6: refused for a nested table's row)
-    FMet: array[0..6] of Integer;
+    // (6: refused for a nested table's row; 7: inside one cell of a row that holds a nested
+    // table, written; 8: a start at a paragraph's end that holds an object)
+    FMet: array[0..8] of Integer;
     function SaveProgress(ADone, ATotal: Int64): Boolean;
     procedure CheckEdit(const AName: string; const ABytes: TBytes; AFull: TTyRichDocument;
       APara: Integer; AKind: TEditKind);
@@ -83,6 +84,11 @@ type
     procedure TestRowsAreCopiedWhole;
     procedure TestAKeptRegionGoesOutAsTheFilesBytes;
     procedure TestAnEmptyRangeAndADocumentOfOurOwn;
+    // fix wave W5
+    procedure TestARangeFromAParagraphsEndTakesNoObject;
+    procedure TestAHugeLengthCopiesToTheEnd;
+    procedure TestTheFilesOpenLastParagraphFollowedIsNotItsBytes;
+    procedure TestARangeWhileLoadingAndAfterACancel;
   end;
 
 implementation
@@ -4122,6 +4128,8 @@ var
   R: TTyRichCopyRange;
   k: Integer;
   o: TBytes;
+  src: TTyRtfRange;
+  last: RawByteString;
 begin
   R := TyRichCopyRange(ADoc, AFrom, ALen);
   try
@@ -4133,10 +4141,13 @@ begin
   except
     on E: ETyRichRtfWrite do
     begin
-      // refused as the full writer refuses it: only for a row holding a nested table
-      if not R.Empty then
+      // refused only where a row that holds a nested table would be written from the model:
+      // a range past one cell (rows whole) that meets such a row's paragraph no longer the
+      // file's own. Inside one cell no row is written, and an unchanged row goes as its bytes.
+      if not R.Empty and not R.InOneCell and (TyRichRtfLoadOf(ADoc) <> nil) then
         for k := R.FirstPara to R.LastPara do
-          if (ADoc.CellAt(k) <> nil) and ADoc.CellAt(k).Row.HoldsNestedTable then
+          if (ADoc.CellAt(k) <> nil) and ADoc.CellAt(k).Row.HoldsNestedTable and
+             not TyRichRtfLoadOf(ADoc).ParaSource(k, src) then
           begin
             Inc(FMet[6]);
             Exit;
@@ -4154,6 +4165,13 @@ begin
   if R.Empty then Exit;
   if info.VerbatimParas > 0 then Inc(FMet[0]);
   if R.InOneCell then Inc(FMet[1]);
+  if R.InOneCell and ADoc.CellAt(R.FirstPara).Row.HoldsNestedTable then Inc(FMet[7]);
+  if R.FromChar = ADoc.Text.ParaLength(R.FirstPara) then
+  begin
+    last := ParaText(ADoc, R.FirstPara);
+    if (Length(last) >= 3) and SameRaw(Copy(last, Length(last) - 2, 3), Raw(U($FFFC))) then
+      Inc(FMet[8]);
+  end;
   if not R.InOneCell and ((ADoc.CellAt(R.FirstPara) <> nil) or (ADoc.CellAt(R.LastPara) <> nil)) then
     Inc(FMet[2]);
   for k := R.FirstPara to R.LastPara do
@@ -4166,9 +4184,13 @@ end;
 
 { Every sample, lazily read as the control reads it, unchanged and with one paragraph edited:
   ranges of it - all of it, all but its ends, a third, inside a paragraph, a paragraph with its
-  separator, across two paragraphs - written and read back are what they took. Among them: a
+  separator and without it, across two paragraphs, from a paragraph's end (its separator
+  alone, and on into the next) - written and read back are what they took. Among them: a
   region that goes out as the file's own bytes, ranges inside one cell and across cells and
-  a table's edge (rows whole), list items, objects, a last paragraph without its separator. }
+  a table's edge (rows whole), inside one cell of a row that holds a nested table (written:
+  no row is), list items, objects, a start right after a paragraph's last object, a last
+  paragraph without its separator. The writer may refuse only a range that would write a
+  row holding a nested table from the model. }
 procedure TTyRtfWriteTest.TestEveryFixturesRangesReadBackAsTheirText;
 var
   sr: TSearchRec;
@@ -4193,11 +4215,18 @@ var
       ps := t.ParaStart(q);
       pl := t.ParaLength(q);
       if pl >= 3 then CheckRange(Format('%s inside paragraph %d', [AWhat, q]), d, ps + 1, pl - 2);
+      // (in a cell: inside that one cell)
+      if pl >= 1 then
+        CheckRange(Format('%s paragraph %d without its separator', [AWhat, q]), d, ps, pl);
       if q < t.ParaCount - 1 then
       begin
         CheckRange(Format('%s paragraph %d with its separator', [AWhat, q]), d, ps, pl + 1);
         CheckRange(Format('%s across %d and %d', [AWhat, q, q + 1]), d, ps + pl div 2,
           pl - pl div 2 + 1 + t.ParaLength(q + 1) div 2);
+        // from its end: its separator alone, and on into the next paragraph
+        CheckRange(Format('%s from the end of %d, its separator', [AWhat, q]), d, ps + pl, 1);
+        CheckRange(Format('%s from the end of %d into %d', [AWhat, q, q + 1]), d, ps + pl,
+          1 + (t.ParaLength(q + 1) + 1) div 2);
       end;
     end;
   end;
@@ -4231,6 +4260,8 @@ begin
   AssertTrue('list items', FMet[3] > 0);
   AssertTrue('objects', FMet[4] > 0);
   AssertTrue('a last paragraph without its separator', FMet[5] > 0);
+  AssertTrue('inside one cell of a row that holds a nested table', FMet[7] > 0);
+  AssertTrue('from the end of a paragraph that ends with an object', FMet[8] > 0);
 end;
 
 { A part of a paragraph without its separator goes out with no \par and no paragraph
@@ -4367,6 +4398,234 @@ begin
     finally
       b.Free;
     end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- fix wave W5 ---- }
+
+{ Whether the range's RTF ends with a paragraph's end - what pasting it adds after what it
+  holds: a group with a letter put in before the closing brace reads back as a paragraph of
+  its own after a \par, and joins the last paragraph without one. }
+function RtfEndsWithBreak(const AOut: TBytes): Boolean;
+var
+  s, z: RawByteString;
+  i: Integer;
+  a, b: TTyRichDocument;
+begin
+  s := StrOf(AOut, 0, Length(AOut));
+  i := Length(s);
+  while (i > 0) and (s[i] <> '}') do Dec(i);
+  z := Copy(s, 1, i - 1) + '{Z}' + Copy(s, i, MaxInt);
+  a := LoadDoc(BytesOf(s), True);
+  b := nil;
+  try
+    b := LoadDoc(BytesOf(z), True);
+    Result := b.Text.ParaCount > a.Text.ParaCount;
+  finally
+    b.Free;
+    a.Free;
+  end;
+end;
+
+{ W5 C-I1: a range that starts at the end of a paragraph whose last character is a picture
+  takes no picture - its separator alone, and on into the next paragraph. }
+procedure TTyRtfWriteTest.TestARangeFromAParagraphsEndTakesNoObject;
+const
+  Pict = '{\pict\pngblip\picwgoal300\pichgoal200 89504e470d0a1a0a}';
+var
+  d, b: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  o: TBytes;
+  runs: TTyRunArray;
+  k: Integer;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard ab' + Pict +
+    '\par\pard next\par}'), False);
+  try
+    AssertEquals('a picture last: three characters', 3, d.Text.ParaLength(0));
+    AssertTrue('the picture', SameRaw(Copy(ParaText(d, 0), 3, 3), Raw(U($FFFC))));
+    // End, Shift+Right: the separator alone
+    o := RangeOut(d, 3, 1, info);
+    AssertEquals('no picture in ' + Shown(StrOf(o, 0, Length(o))), 0,
+      PosRaw('\pict', StrOf(o, 0, Length(o))));
+    b := LoadDoc(o, True);
+    try
+      AssertEquals('one paragraph', 1, b.Text.ParaCount);
+      AssertEquals('an empty one', 0, b.Text.ParaLength(0));
+      runs := b.RunsOf(0);
+      for k := 0 to High(runs) do AssertTrue('no object', runs[k].Obj = nil);
+    finally
+      b.Free;
+    end;
+    CheckRange('the separator after a picture', d, 3, 1);
+    // End, Shift+Down: into the next paragraph
+    o := RangeOut(d, 3, 3, info);
+    AssertEquals('into the next: no picture', 0, PosRaw('\pict', StrOf(o, 0, Length(o))));
+    CheckRange('from after a picture into the next paragraph', d, 3, 3);
+    // the picture itself, from its place, is still taken
+    o := RangeOut(d, 2, 2, info);
+    AssertTrue('from the picture: the picture', PosRaw('\pict', StrOf(o, 0, Length(o))) > 0);
+    CheckRange('the picture and its separator', d, 2, 2);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W5 C-M3: a length past the end - High(Int64) the furthest - copies to the end (the sum is
+  not formed before the length is clamped). }
+procedure TTyRtfWriteTest.TestAHugeLengthCopiesToTheEnd;
+var
+  d, b: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  R: TTyRichCopyRange;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard ab\par\pard cd\par}'), False);
+  try
+    R := TyRichCopyRange(d, 1, High(Int64));
+    AssertFalse('not empty', R.Empty);
+    AssertEquals('to the last paragraph', d.Text.ParaCount - 1, R.LastPara);
+    AssertEquals('to its end', d.Text.ParaLength(R.LastPara), R.ToChar);
+    b := LoadDoc(RangeOut(d, 1, High(Int64), info), True);
+    try
+      AssertEquals('two paragraphs', 2, b.Text.ParaCount);
+      AssertRaw('the first from its second character', 'b', ParaText(b, 0));
+      AssertRaw('the second', 'cd', ParaText(b, 1));
+    finally
+      b.Free;
+    end;
+    CheckRange('to the end', d, 1, High(Int64));
+    CheckRange('all', d, 0, High(Int64));
+    AssertTrue('past the end: empty', TyRichCopyRange(d, d.Text.Length, High(Int64)).Empty);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W5 C-M4: the file's last paragraph has no terminator; once a paragraph is added after it, a
+  range that takes it with its separator writes it from the model (with its \par), as a save
+  does - its bytes alone would run into what follows on paste. Unchanged and still the last,
+  it goes as its bytes. }
+procedure TTyRtfWriteTest.TestTheFilesOpenLastParagraphFollowedIsNotItsBytes;
+var
+  d, b: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  o: TBytes;
+  src: TTyRtfRange;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard A\par\pard B}'), False);
+  try
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, #10 + 'C')));
+    AssertEquals('three paragraphs', 3, d.Text.ParaCount);
+    // (the separator typed after B is B's edit: B is no longer the file's own, so it goes
+    // from the model whatever the open-paragraph rule says - the rule guards a document
+    // the engine's commands cannot make)
+    AssertFalse('B is edited', TyRichRtfLoadOf(d).ParaSource(1, src));
+    o := RangeOut(d, d.Text.ParaStart(1), 2, info);
+    AssertTrue('B with its separator ends with a paragraph''s end: ' + Shown(StrOf(o, 0, Length(o))),
+      RtfEndsWithBreak(o));
+    CheckRange('B with its separator', d, d.Text.ParaStart(1), 2);
+    o := RangeOut(d, d.Text.ParaStart(1), 3, info);
+    b := LoadDoc(o, True);
+    try
+      AssertEquals('B and C: two paragraphs in ' + Shown(StrOf(o, 0, Length(o))), 2, b.Text.ParaCount);
+    finally
+      b.Free;
+    end;
+    CheckRange('B and C', d, d.Text.ParaStart(1), 3);
+    CheckRange('all', d, 0, d.Text.Length);
+  finally
+    d.Free;
+  end;
+  // still the last: it goes as its bytes, with no \par to add
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard A\par\pard B}'), False);
+  try
+    o := RangeOut(d, 0, d.Text.Length, info);
+    AssertEquals('unchanged: all the file''s bytes', 2, info.VerbatimParas);
+    AssertFalse('and no paragraph''s end after B', RtfEndsWithBreak(o));
+  finally
+    d.Free;
+  end;
+end;
+
+{ W5 C-M5: ranges of a document whose load is still going on, and of one whose load was
+  cancelled (Incomplete), read back as what they took. The last paragraph appended so far has
+  no separator in the text - nothing follows it yet -, so a range to its end ends with no
+  paragraph's end in the RTF either (as the plain text has none); one that takes a paragraph's
+  separator ends with one. }
+procedure TTyRtfWriteTest.TestARangeWhileLoadingAndAfterACancel;
+var
+  src: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  s: TBytesStream;
+  m: TMemoryStream;
+  k: Integer;
+  info: TTyRtfWriteInfo;
+  o: TBytes;
+  part: RawByteString;
+  first: Int64;
+
+  procedure Check(const AWhat: string);
+  var
+    t: TTyRichText;
+    n: Integer;
+  begin
+    t := d.Text;
+    n := t.ParaCount;
+    AssertTrue(AWhat + ': some paragraphs', n > 3);
+    CheckRange(AWhat + ': all', d, 0, t.Length);
+    o := RangeOut(d, 0, t.Length, info);
+    AssertTrue(AWhat + ': all - the file''s bytes for most', info.VerbatimParas > 0);
+    AssertFalse(AWhat + ': all - no paragraph''s end after the last', RtfEndsWithBreak(o));
+    o := RangeOut(d, t.ParaStart(n - 1), t.ParaLength(n - 1), info);
+    AssertFalse(AWhat + ': the last paragraph - no paragraph''s end', RtfEndsWithBreak(o));
+    CheckRange(AWhat + ': the last paragraph', d, t.ParaStart(n - 1), t.ParaLength(n - 1));
+    o := RangeOut(d, t.ParaStart(n - 2), t.ParaLength(n - 2) + 1, info);
+    AssertTrue(AWhat + ': the one before with its separator - a paragraph''s end',
+      RtfEndsWithBreak(o));
+    CheckRange(AWhat + ': a third', d, t.Length div 3, t.Length div 3);
+    CheckRange(AWhat + ': across the last two', d, t.ParaStart(n - 2) + 1,
+      t.ParaLength(n - 2) + t.ParaLength(n - 1));
+  end;
+
+begin
+  m := TMemoryStream.Create;
+  try
+    part := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0\fs20 ';
+    m.WriteBuffer(part[1], Length(part));
+    first := 0;
+    for k := 0 to 2999 do
+    begin
+      part := '\pard Paragraph ' + IntToStr(k) + ' with \b bold\b0  words in it.\par' + #13#10;
+      m.WriteBuffer(part[1], Length(part));
+      if k = 49 then first := m.Size;
+    end;
+    part := '}';
+    m.WriteBuffer(part[1], 1);
+    SetLength(src, m.Size);
+    Move(m.Memory^, src[0], m.Size);
+  finally
+    m.Free;
+  end;
+  d := TTyRichDocument.Create;
+  try
+    s := TBytesStream.Create(src);
+    try
+      // a first slice of 50 paragraphs (less reads on to the end of a file this small)
+      load := TyRichBeginLoadRtf(d, s, first);
+    finally
+      s.Free;
+    end;
+    AssertTrue('loading', d.Loading);
+    Check('the first slice');
+    load.Step(64 * 1024);
+    AssertTrue('loading still', d.Loading);
+    Check('a step later');
+    load.Cancel;
+    AssertTrue('incomplete', d.Incomplete);
+    Check('cancelled');
   finally
     d.Free;
   end;

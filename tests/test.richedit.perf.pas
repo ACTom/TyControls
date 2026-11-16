@@ -217,8 +217,28 @@ begin
   end;
 end;
 
+{ The files of a run that was killed (the gate's time limit) are left behind; a run sweeps
+  those older than a day at its start (a run going on at the same time keeps its own). }
+procedure SweepOldFiles;
+var
+  dir: string;
+  sr: TSearchRec;
+begin
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False));
+  if FindFirst(dir + 'tyrichperf-*', faAnyFile, sr) = 0 then
+  try
+    repeat
+      if (sr.Attr and faDirectory = 0) and (FileDateToDateTime(sr.Time) < Now - 1) then
+        DeleteFile(dir + sr.Name);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+end;
+
 procedure TTyRichEditPerfTest.SetUp;
 begin
+  SweepOldFiles;
   FFiles := TStringList.Create;
   FCtl := TTyStyleController.Create(nil);
   FRich := TPerfRich.Create(nil);
@@ -250,20 +270,27 @@ begin
 end;
 
 procedure TTyRichEditPerfTest.CheckRoom;
-{$IFDEF MSWINDOWS}
 var
-  avail, total, freeBytes: QWord;
+  avail: Int64;
+{$IFDEF MSWINDOWS}
+  total, freeBytes, room: QWord;
+{$ENDIF}
 begin
-  if GetDiskFreeSpaceExW(PWideChar(UnicodeString(GetTempDir(False))), avail, total, freeBytes) and
-    (avail < CRoomNeeded) then
+  avail := -1;
+  {$IFDEF MSWINDOWS}
+  if GetDiskFreeSpaceExW(PWideChar(UnicodeString(GetTempDir(False))), room, total, freeBytes) then
+    avail := room;
+  {$ELSE}
+  {$IFDEF UNIX}
+  // the RTL's DiskFree takes a "drive" number: AddDisk gives the temporary folder one
+  avail := DiskFree(AddDisk(GetTempDir(False)));
+  {$ENDIF}
+  {$ENDIF}
+  // (-1: not known - the file's own write then fails without the room)
+  if (avail >= 0) and (avail < CRoomNeeded) then
     Ignore(Format('needs %d MB free in the temporary folder, %d MB there',
       [CRoomNeeded div (1024 * 1024), avail div (1024 * 1024)]));
 end;
-{$ELSE}
-begin
-  // the room is not looked at here: the file's own write fails without it
-end;
-{$ENDIF}
 
 procedure TTyRichEditPerfTest.Report(const AWhat: string; AMs: Double);
 begin
@@ -289,7 +316,8 @@ begin
     FRich.LoadFromFile(path);
     TPerfRich(FRich).PaintInto(bmp);
     first := Clock - t0;
-    Report(Format('txt %d MB, %d paragraphs: load and first paint', [SizeOfFile(path) div (1024 * 1024),
+    Report(Format('txt %d MB, %d paragraphs: load and first paint - a warm read: the file was ' +
+      'just written and is in the system''s cache', [SizeOfFile(path) div (1024 * 1024),
       FRich.Document.Text.ParaCount]), first);
     WriteLn('TTyRichEditPerfTest: txt: peak working set after the load: ' + PeakWorkingSet);
     t0 := Clock;
@@ -316,6 +344,7 @@ var
   bmp: TBitmap;
   t0, first, middle, whole: Double;
   loading: Boolean;
+  indexed, midTop: Integer;
 begin
   CheckRoom;
   path := NewFile('.rtf');
@@ -329,13 +358,17 @@ begin
     TPerfRich(FRich).PaintInto(bmp);
     first := Clock - t0;
     loading := FRich.Loading;
-    Report(Format('rtf %d MB: load (first slice, %d paragraphs) and first paint',
+    Report(Format('rtf %d MB: load (first slice, %d paragraphs) and first paint - a warm read: ' +
+      'the file was just written and is in the system''s cache',
       [SizeOfFile(path) div (1024 * 1024), FRich.Document.Text.ParaCount]), first);
     WriteLn('TTyRichEditPerfTest: rtf: peak working set after the first slice: ' + PeakWorkingSet);
     t0 := Clock;
     FRich.ScrollY := FRich.Document.Text.TotalHeight div 2;
     TPerfRich(FRich).PaintInto(bmp);
     middle := Clock - t0;
+    // (asked before the load goes on: the paragraphs indexed when the view was set)
+    indexed := FRich.Document.Text.ParaCount;
+    midTop := FRich.TopParagraph;
     Report('rtf: the middle of what is indexed set and painted, the load going on', middle);
     t0 := Clock;
     FRich.FinishLoading;
@@ -351,6 +384,10 @@ begin
     AssertTrue(Format('the first screen in %.0f ms', [first]), first <= CFirstScreenMs);
     AssertTrue(Format('the middle in %.0f ms', [middle]), middle <= CScrollMs);
     AssertTrue(Format('the middle of the whole in %.0f ms', [whole]), whole <= CScrollMs);
+    AssertTrue(Format('the view in the middle of what was indexed (paragraph %d of %d)',
+      [midTop, indexed]), midTop > indexed div 4);
+    AssertTrue('the view in the middle of the whole',
+      FRich.TopParagraph > FRich.Document.Text.ParaCount div 4);
   finally
     bmp.Free;
   end;

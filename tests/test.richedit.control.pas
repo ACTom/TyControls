@@ -281,6 +281,14 @@ type
     procedure TestACommandFromTheLastStepsProgressIsAnEdit;
     procedure TestAPlainCopyOfALazyRtfLeavesNothingParsed;
     procedure TestARefusedRtfFlavourCopiesTheTextAlone;
+    // fix wave W5
+    procedure TestThePlainTextCountsCharactersAsTheStorage;
+    procedure TestACopyInsideACellOfANestedRowHasBothFlavours;
+    procedure TestAHugeLengthGivesTheTextToTheEnd;
+    procedure TestCellsWithoutAParagraphGiveTheirTabs;
+    procedure TestACopyWhileLoadingAndAfterACancel;
+    procedure TestTheRowBeforeIsHeldWhileTheNextIsCompared;
+    procedure TestABigTableReadInPartsCopiesAsAWhole;
   end;
 
 implementation
@@ -5254,6 +5262,505 @@ begin
   AssertTrue('no RTF flavour', FRich.ClipRtf = '');
   AssertEquals('the wait cursor', 1, FRich.Waits);
   AssertEquals('and back', 1, FRich.WaitEnds);
+  // W5: inside the one cell "b" no row is written - both flavours
+  FRich.SelStart := d.Text.ParaStart(2);
+  FRich.SelLength := 1;
+  FRich.CopyToClipboard;
+  AssertEquals('inside one cell: the text', 'b', FRich.ClipText);
+  AssertEquals('inside one cell: an RTF flavour', 1, Pos('{\rtf1', FRich.ClipRtf));
+end;
+
+{ ---- fix wave W5 ---- }
+
+{ A copy's RTF flavour read whole; nil for none. }
+function ReadClipRtf(const ARtf: RawByteString): TTyRichDocument;
+var
+  st: TBytesStream;
+begin
+  Result := nil;
+  if ARtf = '' then Exit;
+  Result := TTyRichDocument.Create;
+  st := TBytesStream.Create(BytesOf(ARtf));
+  try
+    TyRichLoadRtfFull(Result, st);
+  finally
+    st.Free;
+  end;
+end;
+
+{ The text of a document's paragraphs, parted by the line break the plain text uses. }
+function ParasText(ADoc: TTyRichDocument): string;
+var
+  k: Integer;
+  s: RawByteString;
+begin
+  s := '';
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    if k > 0 then s := s + LineEnding;
+    s := s + ADoc.Text.GetText(ADoc.Text.ParaStart(k), ADoc.Text.ParaLength(k));
+  end;
+  SetCodePage(s, CP_UTF8, False);
+  Result := s;
+end;
+
+{ Whether a copy's RTF ends with a paragraph's end - what pasting it adds after its text: a
+  group with a letter put in before its closing brace is a paragraph of its own after a \par,
+  and joins the last paragraph without one. }
+function ClipRtfEndsWithBreak(const ARtf: RawByteString): Boolean;
+var
+  i: Integer;
+  a, b: TTyRichDocument;
+begin
+  i := Length(ARtf);
+  while (i > 0) and (ARtf[i] <> '}') do Dec(i);
+  a := ReadClipRtf(ARtf);
+  b := nil;
+  try
+    b := ReadClipRtf(Copy(ARtf, 1, i - 1) + '{Z}' + Copy(ARtf, i, MaxInt));
+    Result := b.Text.ParaCount > a.Text.ParaCount;
+  finally
+    b.Free;
+    a.Free;
+  end;
+end;
+
+{ W5 C-I2: the plain text counts characters by the text storage's rule (strict UTF-8: an
+  overlong form, a surrogate written in UTF-8 as CESU-8 does, a sequence above U+10FFFF are
+  bytes of their own), so it cuts where the selection is - and where the RTF flavour cuts. }
+procedure TTyRichEditControlTest.TestThePlainTextCountsCharactersAsTheStorage;
+var
+  fffd: RawByteString;
+
+  procedure Check(const AWhat: string; const ABytes: RawByteString; AChars: Integer;
+    AValid: Boolean = False);
+  var
+    st: TBytesStream;
+    b: TTyRichDocument;
+    all: RawByteString;
+    expected: string;
+    k: Integer;
+  begin
+    // a UTF-8 file with a BOM: kept as its bytes, a byte that is no text a character
+    st := TBytesStream.Create(BytesOf(#$EF#$BB#$BF'x' + ABytes + 'yz'));
+    try
+      FRich.LoadFromStream(st, rfText);
+    finally
+      st.Free;
+    end;
+    AssertEquals(AWhat + ': characters', 1 + AChars + 2, FRich.Document.Text.Length);
+    FRich.SelStart := 1 + AChars;
+    FRich.SelLength := 2;
+    AssertEquals(AWhat + ': the selection', 'yz', FRich.SelText);
+    FRich.CopyToClipboard;
+    AssertEquals(AWhat + ': the copy''s text', 'yz', FRich.ClipText);
+    b := ReadClipRtf(FRich.ClipRtf);
+    try
+      AssertEquals(AWhat + ': the RTF''s text', 'yz', ParasText(b));
+    finally
+      b.Free;
+    end;
+    // all of it: each byte one U+FFFD, in both flavours alike
+    FRich.SelectAll;
+    FRich.CopyToClipboard;
+    all := 'x';
+    if AValid then all := all + ABytes
+    else
+      for k := 1 to AChars do all := all + fffd;
+    all := all + 'yz';
+    SetCodePage(all, CP_UTF8, False);
+    expected := all;
+    AssertEquals(AWhat + ': all', expected, FRich.ClipText);
+    b := ReadClipRtf(FRich.ClipRtf);
+    try
+      AssertEquals(AWhat + ': all, the two flavours', FRich.ClipText, ParasText(b));
+    finally
+      b.Free;
+    end;
+  end;
+
+begin
+  fffd := Utf8Of($FFFD);
+  Check('a surrogate (CESU-8)', #$ED#$A0#$80, 3);
+  Check('an overlong form', #$E0#$80#$80, 3);
+  Check('above U+10FFFF', #$F4#$90#$80#$80, 4);
+  Check('an overlong of four', #$F0#$80#$80#$80, 4);
+  // a valid one is one character still
+  Check('a valid one', Utf8Of($4E2D), 1, True);
+end;
+
+{ W5 C-M1: Word's table with a nested one, unchanged: a selection inside a cell of the row
+  that holds the nested table copies both flavours (no row is written), and the RTF reads back
+  as its text. }
+procedure TTyRichEditControlTest.TestACopyInsideACellOfANestedRowHasBothFlavours;
+var
+  st: TBytesStream;
+  d, b: TTyRichDocument;
+  k, met: Integer;
+  c: TTyRichCell;
+begin
+  st := TBytesStream.Create(ReadFixtureFile('word-table-merged.rtf'));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  d := FRich.Document;
+  met := 0;
+  for k := 0 to d.Text.ParaCount - 1 do
+  begin
+    c := d.CellAt(k);
+    if (c = nil) or not c.Row.HoldsNestedTable or (d.Text.ParaLength(k) = 0) then Continue;
+    FRich.SelStart := d.Text.ParaStart(k);
+    FRich.SelLength := d.Text.ParaLength(k);
+    FRich.CopyToClipboard;
+    AssertEquals(Format('paragraph %d: the text', [k]), FRich.SelText, FRich.ClipText);
+    AssertEquals(Format('paragraph %d: an RTF flavour', [k]), 1, Pos('{\rtf1', FRich.ClipRtf));
+    b := ReadClipRtf(FRich.ClipRtf);
+    try
+      AssertEquals(Format('paragraph %d: read back, one paragraph', [k]), 1, b.Text.ParaCount);
+      AssertEquals(Format('paragraph %d: read back, its text', [k]), FRich.ClipText, ParasText(b));
+    finally
+      b.Free;
+    end;
+    Inc(met);
+  end;
+  AssertTrue(Format('paragraphs in such a row (%d)', [met]), met >= 2);
+end;
+
+{ W5 C-M3: a length past the end - High(Int64) the furthest - gives the text to the end. }
+procedure TTyRichEditControlTest.TestAHugeLengthGivesTheTextToTheEnd;
+begin
+  FRich.Lines.Text := 'ab'#10'cd';
+  AssertEquals('from the second character', 'b' + LineEnding + 'cd', FRich.RangeText(1, High(Int64)));
+  AssertEquals('all', 'ab' + LineEnding + 'cd', FRich.RangeText(0, High(Int64)));
+  AssertEquals('from the end: nothing', '', FRich.RangeText(FRich.Document.Text.Length, High(Int64)));
+end;
+
+{ W5 C-M4: a cell the model left without a paragraph (its only one deleted) keeps its tab in
+  the plain text - before the row's first paragraph and after its last, as between two. }
+procedure TTyRichEditControlTest.TestCellsWithoutAParagraphGiveTheirTabs;
+const
+  RowDef = '\trowd\trgaph108\cellx1000\cellx2000\cellx3000 ';
+  Source = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f0\fs24 top\par ' +
+    RowDef + '\pard\intbl a\cell b\cell c\cell\row ' +
+    RowDef + '\pard\intbl d\cell e\cell f\cell\row \pard bottom\par}';
+
+  procedure Check(const AWhat: string; AFirst, ALast: Integer; const AText: string);
+  var
+    t: TTyRichText;
+  begin
+    LoadRtfText(Source);
+    t := FRich.Document.Text;
+    AssertEquals(AWhat + ': eight paragraphs', 8, t.ParaCount);
+    AssertTrue(AWhat + ': deleted', FRich.Document.Execute(TTyRichDelete.Create(t.ParaStart(AFirst),
+      t.ParaStart(ALast + 1) - t.ParaStart(AFirst))));
+    FRich.SelectAll;
+    AssertEquals(AWhat, AText, FRich.SelText);
+  end;
+
+begin
+  Check('the first cell''s paragraph gone', 1, 1, 'top' + LineEnding + #9'b'#9'c' + LineEnding +
+    'd'#9'e'#9'f' + LineEnding + 'bottom');
+  Check('the last cell''s paragraph gone', 6, 6, 'top' + LineEnding + 'a'#9'b'#9'c' + LineEnding +
+    'd'#9'e'#9 + LineEnding + 'bottom');
+  Check('the first two gone', 1, 2, 'top' + LineEnding + #9#9'c' + LineEnding +
+    'd'#9'e'#9'f' + LineEnding + 'bottom');
+  // a range that starts in the row takes it whole, its empty first cell too
+  Check('the first gone, again', 1, 1, 'top' + LineEnding + #9'b'#9'c' + LineEnding +
+    'd'#9'e'#9'f' + LineEnding + 'bottom');
+  FRich.SelStart := FRich.Document.Text.ParaStart(2);
+  FRich.SelLength := FRich.Document.Text.ParaStart(3) + 1 - FRich.SelStart;
+  AssertEquals('from c into d: the rows whole', #9'b'#9'c' + LineEnding + 'd'#9'e'#9'f' + LineEnding,
+    FRich.SelText);
+end;
+
+{ A plain RTF of ACount paragraphs; AFirstSlice: the byte after the 50th. }
+function W5PlainRtf(ACount: Integer; out AAfter50: Int64): TBytes;
+var
+  m: TMemoryStream;
+  k: Integer;
+  s: RawByteString;
+begin
+  m := TMemoryStream.Create;
+  try
+    s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0\fs20 ';
+    m.WriteBuffer(s[1], Length(s));
+    AAfter50 := 0;
+    for k := 0 to ACount - 1 do
+    begin
+      s := '\pard Paragraph ' + IntToStr(k) + ' with \b bold\b0  words in it.\par' + #13#10;
+      m.WriteBuffer(s[1], Length(s));
+      if k = 49 then AAfter50 := m.Size;
+    end;
+    s := '}';
+    m.WriteBuffer(s[1], 1);
+    Result := nil;
+    SetLength(Result, m.Size);
+    Move(m.Memory^, Result[0], m.Size);
+  finally
+    m.Free;
+  end;
+end;
+
+{ W5 C-M5: a copy while the load is still going on, and after it was cancelled (Incomplete):
+  the two flavours agree - Select All takes the last paragraph appended so far, which has no
+  separator in the text yet: the text ends without a line break and the RTF without a
+  paragraph's end; a paragraph taken with its separator ends with both. }
+procedure TTyRichEditControlTest.TestACopyWhileLoadingAndAfterACancel;
+var
+  src: TBytes;
+  first: Int64;
+  st: TBytesStream;
+
+  procedure Check(const AWhat: string);
+  var
+    t: TTyRichText;
+    n: Integer;
+    b: TTyRichDocument;
+  begin
+    t := FRich.Document.Text;
+    n := t.ParaCount;
+    AssertTrue(Format('%s: some paragraphs (%d)', [AWhat, n]), n > 3);
+    FRich.SelectAll;
+    FRich.CopyToClipboard;
+    AssertEquals(AWhat + ': the text is SelText', FRich.SelText, FRich.ClipText);
+    AssertTrue(AWhat + ': all - no line break at the end',
+      Copy(FRich.ClipText, Length(FRich.ClipText) - Length(LineEnding) + 1, MaxInt) <> LineEnding);
+    AssertFalse(AWhat + ': all - no paragraph''s end in the RTF', ClipRtfEndsWithBreak(FRich.ClipRtf));
+    b := ReadClipRtf(FRich.ClipRtf);
+    try
+      AssertEquals(AWhat + ': all - the RTF''s text', FRich.ClipText, ParasText(b));
+    finally
+      b.Free;
+    end;
+    FRich.SelStart := t.ParaStart(n - 2);
+    FRich.SelLength := t.ParaLength(n - 2) + 1;
+    FRich.CopyToClipboard;
+    AssertTrue(AWhat + ': with its separator - a line break at the end',
+      Copy(FRich.ClipText, Length(FRich.ClipText) - Length(LineEnding) + 1, MaxInt) = LineEnding);
+    AssertTrue(AWhat + ': with its separator - a paragraph''s end in the RTF',
+      ClipRtfEndsWithBreak(FRich.ClipRtf));
+  end;
+
+begin
+  src := W5PlainRtf(3000, first);
+  FRich.Slices(first, 16 * 1024);
+  st := TBytesStream.Create(src);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+  Check('the first slice');
+  AssertTrue('a step', FRich.Step);
+  AssertTrue('loading still', FRich.Loading);
+  Check('a step later');
+  FRich.CancelLoad;
+  AssertTrue('incomplete', FRich.Document.Incomplete);
+  Check('cancelled');
+end;
+
+var
+  GPoisonOld: TMemoryManager;
+  GPoisoned: Integer;
+
+{ A release with the freed block filled with $A5 first: a read of freed memory then finds no
+  pointer it held (dereferenced: an access violation), whatever the heap does with it next. }
+function PoisonFreeMem(P: Pointer): PtrUInt;
+begin
+  if P <> nil then
+  begin
+    FillChar(P^, GPoisonOld.MemSize(P), $A5);
+    InterLockedIncrement(GPoisoned);
+  end;
+  Result := GPoisonOld.FreeMem(P);
+end;
+
+function PoisonFreeMemSize(P: Pointer; ASize: PtrUInt): PtrUInt;
+begin
+  if P <> nil then
+  begin
+    FillChar(P^, GPoisonOld.MemSize(P), $A5);
+    InterLockedIncrement(GPoisoned);
+  end;
+  Result := GPoisonOld.FreeMemSize(P, ASize);
+end;
+
+procedure PoisonFreedMemory(AOn: Boolean);
+var
+  mm: TMemoryManager;
+begin
+  if AOn then
+  begin
+    GetMemoryManager(GPoisonOld);
+    mm := GPoisonOld;
+    mm.FreeMem := @PoisonFreeMem;
+    mm.FreeMemSize := @PoisonFreeMemSize;
+    GPoisoned := 0;
+    SetMemoryManager(mm);
+  end
+  else
+    SetMemoryManager(GPoisonOld);
+end;
+
+{ W5 C-X1: the plain text compares a paragraph's cell with the one before it after the walk
+  let the value of the moment of that one go - and with it, when its interval went too, the
+  table its cell is in: the copy holds that table meanwhile. Freed memory is filled with a
+  pattern during the copy (a test's release), so a cell read after its table was freed reads
+  no row it had - the text would part the row's cells by line breaks, or the read would fault.
+  The file is the R42 test's: more intervals than the load keeps, rows in all of them. }
+procedure TTyRichEditControlTest.TestTheRowBeforeIsHeldWhileTheNextIsCompared;
+var
+  b: TBytes;
+  whole, lazy: string;
+  st: TBytesStream;
+  load: TTyRtfLoad;
+  keep: Integer;
+begin
+  b := W4TablesRtf(3 * 1024 * 1024);
+  st := TBytesStream.Create(b);
+  try
+    TyRichLoadRtfFull(FRich.Document, st);
+  finally
+    st.Free;
+  end;
+  FRich.SelectAll;
+  whole := FRich.SelText;
+  st := TBytesStream.Create(b);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  load := TyRichRtfLoadOf(FRich.Document);
+  AssertTrue('read lazily', (load <> nil) and not load.Whole);
+  AssertTrue('intervals go during the copy', load.IntervalCount > 2 * load.MaxResidentIntervals + 2);
+  FRich.SelectAll;
+  // none kept: the group of the paragraph before goes as soon as the walk decodes one of
+  // the next group - and with it the table of a row that ends the group
+  keep := load.MaxResidentIntervals;
+  load.MaxResidentIntervals := 0;
+  PoisonFreedMemory(True);
+  try
+    lazy := FRich.SelText;
+  finally
+    PoisonFreedMemory(False);
+    load.MaxResidentIntervals := keep;
+  end;
+  AssertTrue(Format('the copy freed memory (%d blocks)', [GPoisoned]), GPoisoned > 0);
+  AssertSameText('the whole parse''s text, with freed memory filled', whole, lazy);
+end;
+
+{ W5 C-X2: a table of more than a megabyte read on demand is parsed in parts, a table object
+  for each interval's stretch of it (the parts are cut where the index scan took a snapshot,
+  which is never inside a row). The plain text of all of it, and of a range across the seam
+  of two parts, is the whole parse's; the range's RTF reads back as that text. Rows whose first
+  cell holds two paragraphs are among them. }
+procedure TTyRichEditControlTest.TestABigTableReadInPartsCopiesAsAWhole;
+var
+  m: TMemoryStream;
+  src: TBytes;
+  k, seams, seam: Integer;
+  st: TBytesStream;
+  d, b: TTyRichDocument;
+  c0, c1: TTyRichCell;
+  wholeAll, wholeRange: string;
+  s0, n0: TTyRichPos;
+  R: TTyRichCopyRange;
+
+  procedure Put(const S: RawByteString);
+  begin
+    if S <> '' then m.WriteBuffer(S[1], Length(S));
+  end;
+
+  procedure LoadAs(AWhole: Boolean);
+  begin
+    st := TBytesStream.Create(src);
+    try
+      if AWhole then TyRichLoadRtfFull(FRich.Document, st) else FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    FRich.FinishLoading;
+  end;
+
+begin
+  m := TMemoryStream.Create;
+  try
+    Put('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0\fs20 before\par' + #13#10);
+    k := 0;
+    while m.Size < 3 * 1024 * 1024 div 2 do
+    begin
+      if k mod 3 = 0 then
+        Put('\trowd\trgaph108\cellx2400\cellx4800\cellx7200' + #13#10 + '\pard\intbl first ' +
+          IntToStr(k) + '\par second\cell b\cell c\cell\row' + #13#10)
+      else
+        Put('\trowd\trgaph108\cellx2400\cellx4800\cellx7200' + #13#10 + '\pard\intbl a' +
+          IntToStr(k) + '\cell b\cell c\cell\row' + #13#10);
+      Inc(k);
+    end;
+    Put('\pard after\par}');
+    SetLength(src, m.Size);
+    Move(m.Memory^, src[0], m.Size);
+  finally
+    m.Free;
+  end;
+  LoadAs(True);
+  FRich.SelectAll;
+  wholeAll := FRich.SelText;
+  // (two paragraphs of one cell: a line break between them, no tab)
+  AssertTrue('a first cell of two paragraphs', Pos(LineEnding + 'first 0' + LineEnding +
+    'second'#9'b'#9'c' + LineEnding + 'a1'#9'b'#9'c' + LineEnding, wholeAll) > 0);
+  LoadAs(False);
+  d := FRich.Document;
+  // the seams: a paragraph whose cell is in another table object than the one before
+  seams := 0;
+  seam := -1;
+  c0 := nil;
+  for k := 0 to d.Text.ParaCount - 1 do
+  begin
+    c1 := d.CellAt(k);
+    if (c0 <> nil) and (c1 <> nil) and (c0.Table <> c1.Table) then
+    begin
+      Inc(seams);
+      if seam < 0 then seam := k;
+      AssertTrue(Format('paragraph %d: a part begins with a row', [k]), c1.Index = 0);
+      AssertTrue(Format('paragraph %d: the part before ends with its row', [k]),
+        c0.Index = c0.Row.CellCount - 1);
+    end;
+    c0 := c1;
+  end;
+  AssertTrue(Format('the table in parts (%d seams)', [seams]), seams >= 2);
+  FRich.SelectAll;
+  AssertSameText('all of it, read on demand', wholeAll, FRich.SelText);
+  // from inside the last row of a part into the first row of the next
+  s0 := d.Text.ParaStart(seam - 1) + 1;
+  n0 := d.Text.ParaStart(seam) + 1 - s0;
+  FRich.SelStart := s0;
+  FRich.SelLength := n0;
+  FRich.CopyToClipboard;
+  AssertEquals('the copy''s text is SelText', FRich.SelText, FRich.ClipText);
+  AssertTrue('two rows: ' + FRich.ClipText, Pos(#9'c' + LineEnding, FRich.ClipText) > 0);
+  R := TyRichCopyRange(d, s0, n0);
+  AssertTrue('the range: two rows across the seam', (R.FirstPara < seam) and (R.LastPara >= seam));
+  b := ReadClipRtf(FRich.ClipRtf);
+  try
+    AssertTrue('an RTF flavour', b <> nil);
+    AssertEquals('the RTF''s rows read back', R.LastPara - R.FirstPara + 1, b.Text.ParaCount);
+    AssertTrue('in a table', (b.CellAt(0) <> nil) and (b.CellAt(b.Text.ParaCount - 1) <> nil));
+    AssertTrue('one table', b.CellAt(0).Table = b.CellAt(b.Text.ParaCount - 1).Table);
+  finally
+    b.Free;
+  end;
+  wholeRange := FRich.ClipText;
+  LoadAs(True);
+  FRich.SelStart := s0;
+  FRich.SelLength := n0;
+  AssertSameText('the range, as the whole parse gives it', FRich.SelText, wholeRange);
 end;
 
 initialization
