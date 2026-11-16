@@ -917,6 +917,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RichEdit.Wmf.pas"/>
         <UnitName Value="tyControls.RichEdit.Wmf"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.Layout.pas"/>
+        <UnitName Value="tyControls.RichEdit.Layout"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
