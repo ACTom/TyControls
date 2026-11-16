@@ -2248,12 +2248,29 @@ type
     Size: Int64;
     Prev: TTyRichCell;
     HavePrev: Boolean;
+    destructor Destroy; override;
+    procedure SetPrev(ACell: TTyRichCell);
     procedure Add(P: PByte; ACount: PtrInt);
     procedure AddS(const S: RawByteString);
     procedure EndPrev(ANext: TTyRichCell);
     procedure Para(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
   end;
+
+destructor TTyRichTextOut.Destroy;
+begin
+  SetPrev(nil);
+  inherited Destroy;
+end;
+
+{ The cell of the paragraph before is asked about when the next one comes: the walk's value
+  (and the parsed interval that made it) may be gone by then, so its table is held. }
+procedure TTyRichTextOut.SetPrev(ACell: TTyRichCell);
+begin
+  if ACell <> nil then ACell.Table.AddRef;
+  if Prev <> nil then Prev.Table.Release;
+  Prev := ACell;
+end;
 
 procedure TTyRichTextOut.Add(P: PByte; ACount: PtrInt);
 var
@@ -2305,7 +2322,9 @@ begin
     AContinue := False;
     Exit;
   end;
-  // the cell from the walk's value (a paragraph not parsed yet: by its index)
+  { the cell from the walk's value - for a paragraph not parsed yet, the value of the moment
+    the walk makes of the parse that decoded it (nothing is left set); a paragraph the walk
+    has no value for: by its index }
   if not Doc.ReadValue(AData, fmt, runs, cell) then cell := Doc.CellAt(AIndex);
   if Range.InOneCell then cell := nil;
   if HavePrev then EndPrev(cell);
@@ -2345,7 +2364,7 @@ begin
     Inc(p, n);
     Inc(ch);
   end;
-  Prev := cell;
+  SetPrev(cell);
   HavePrev := True;
 end;
 
@@ -2362,7 +2381,7 @@ begin
     if o.Range.Empty then Exit;
     FDoc.BeginRead;
     try
-      FDoc.Text.WalkParaTexts(o.Range.FirstPara, o.Range.LastPara, @o.Para);
+      FDoc.Text.WalkParaTexts(o.Range.FirstPara, o.Range.LastPara, @o.Para, True);
     finally
       FDoc.EndRead;
     end;
@@ -2938,7 +2957,10 @@ procedure TTyCustomRichEdit.DocChanged(Sender: TObject; const AChange: TTyRichCh
 var
   was: TTyRichPos;
 begin
-  FLayouter.DocumentChanged(AChange, FInStep);
+  { The load's own change: one made while the step runs AND the document still loads. A
+    slice is appended before the last step ends the loading; a command run from the last
+    step's progress handler (the document no longer loads there) is an edit. }
+  FLayouter.DocumentChanged(AChange, FInStep and FDoc.Loading);
   if FDoc.Text <> FText then
     ContentReplaced
   else

@@ -138,6 +138,7 @@ type
     { The device scale PaintAll's bitmap is made for (the forced scale of a test). }
     FPaintScale: Integer;
     FSelChanges: Integer;
+    FLastStepEdits: Integer;
     procedure Changed(Sender: TObject);
     procedure Zoomed(Sender: TObject);
     procedure LoadCalled(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -169,6 +170,8 @@ type
     function At(APos: TTyRichPos): TPoint;
     procedure LoadRtfText(const S: string);
     procedure Click(const P: TPoint; AShift: TShiftState = []);
+    // W4
+    procedure EditInLastStep(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -274,6 +277,10 @@ type
     procedure TestAHugeCopyShowsTheWaitCursor;
     procedure TestTheMenuOfAViewer;
     procedure TestTheImeIsToldTheViewerIsReadOnly;
+    // fix wave W4
+    procedure TestACommandFromTheLastStepsProgressIsAnEdit;
+    procedure TestAPlainCopyOfALazyRtfLeavesNothingParsed;
+    procedure TestARefusedRtfFlavourCopiesTheTextAlone;
   end;
 
 implementation
@@ -4963,6 +4970,290 @@ begin
   ime.ImeReplace(0, 1, 'x');
   ime.ImeSessionEnd;
   AssertEquals('the text as it was', 'ime text', FRich.Lines[0]);
+end;
+
+{ ---- fix wave W4 ---- }
+
+type
+  // How many paragraph values a document holds.
+  TW4DocPeek = class(TTyRichDocument)
+  public
+    function Live: Integer;
+  end;
+
+  // A reader's way to set a paragraph (as the RTF reader sets one).
+  TW4Put = class(TTyRichDocBuilder)
+  public
+    class function Put(ADoc: TTyRichDocument; AIndex: Integer; ACell: TTyRichCell): Boolean;
+  end;
+
+function TW4DocPeek.Live: Integer;
+begin
+  Result := LiveParaData;
+end;
+
+class function TW4Put.Put(ADoc: TTyRichDocument; AIndex: Integer; ACell: TTyRichCell): Boolean;
+var
+  runs: TTyRunArray;
+begin
+  runs := nil;
+  SetLength(runs, 1);
+  runs[0].Start := 0;
+  runs[0].Format := ADoc.DefaultCharFormatId;
+  runs[0].Obj := nil;
+  Result := SetParagraph(ADoc, AIndex, ADoc.DefaultParaFormatId, runs, ACell);
+end;
+
+{ Two texts the same, or where they part. }
+procedure AssertSameText(const AMsg, AExpected, AActual: string);
+var
+  i, n: Integer;
+begin
+  if AExpected = AActual then Exit;
+  n := Min(Length(AExpected), Length(AActual));
+  i := 1;
+  while (i <= n) and (AExpected[i] = AActual[i]) do Inc(i);
+  raise EAssertionFailedError.CreateFmt('%s: %d and %d bytes, apart from byte %d: <%s> / <%s>',
+    [AMsg, Length(AExpected), Length(AActual), i, Copy(AExpected, Math.Max(1, i - 20), 60),
+     Copy(AActual, Math.Max(1, i - 20), 60)]);
+end;
+
+{ Plain paragraphs and two-row tables (one row with a merged cell) up to ATarget bytes - the
+  tables apart, so that intervals seldom chain through them. }
+function W4TablesRtf(ATarget: Int64): TBytes;
+var
+  m: TMemoryStream;
+  k: Integer;
+
+  procedure Put(const S: RawByteString);
+  begin
+    if S <> '' then m.WriteBuffer(S[1], Length(S));
+  end;
+
+begin
+  m := TMemoryStream.Create;
+  try
+    Put('{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}' + #13#10 +
+      '\pard\f0\fs24 ');
+    k := 0;
+    while m.Size < ATarget do
+    begin
+      Put('\pard before ' + IntToStr(k) + ' with \b bold\b0  words\par' + #13#10);
+      Put('\pard a second plain paragraph of some length, ' + IntToStr(k) + '\par' + #13#10);
+      Put('\trowd\trgaph108\cellx2400\cellx4800\cellx7200' + #13#10 + '\pard\intbl a' +
+        IntToStr(k) + '\cell b\cell c\cell\row' + #13#10);
+      Put('\trowd\trgaph108\clmgf\cellx2400\clmrg\cellx4800\cellx7200' + #13#10 +
+        '\pard\intbl m\cell\pard\intbl\cell\pard\intbl z\cell\row' + #13#10);
+      Put('\pard after ' + IntToStr(k) + '\par' + #13#10);
+      Put('\pard and one more plain paragraph after the table\par' + #13#10);
+      Inc(k);
+    end;
+    Put('\pard the end\par}');
+    Result := nil;
+    SetLength(Result, m.Size);
+    Move(m.Memory^, Result[0], m.Size);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.EditInLastStep(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+var
+  d: TTyRichDocument;
+  f: TTyCharFormat;
+begin
+  d := FRich.Document;
+  // only where the load is over: the last step
+  if d.Loading or (FLastStepEdits <> 0) then Exit;
+  f := TyDefaultCharFormat;
+  f.Style := [fsItalic];
+  if d.Execute(TTyRichSetCharFormat.Create(TyRichRange(d.Text.ParaStart(1), 1), [cffItalic], f)) then
+    FLastStepEdits := 1
+  else
+    FLastStepEdits := -1;
+end;
+
+{ W3r-M1: a change is the load's own only while a step runs AND the document still loads. A
+  command run from the progress handler of the LAST step - the document no longer loads there -
+  is an edit: a format change of the body paragraph after item "1." of Word's list lowers the
+  trust, so item "2." below it is counted (after a body paragraph: "1."), while "1." above it
+  stays the file's. The slices are still the load's: without the command, every slice keeps the
+  file's numbers. }
+procedure TTyRichEditControlTest.TestACommandFromTheLastStepsProgressIsAnEdit;
+var
+  st: TBytesStream;
+  steps: Integer;
+
+  function Marker(AIndex: Integer): string;
+  var
+    L: TTyBlockLayout;
+  begin
+    L := FRich.Layouter.LayoutBlock(FRich.Document, AIndex, 1000, 96, 1);
+    try
+      Result := string(TTyParaLayout(L).Marker.Text);
+    finally
+      L.Release;
+    end;
+  end;
+
+  procedure Load(AEdit: Boolean);
+  begin
+    if AEdit then FRich.OnLoadProgress := @EditInLastStep else FRich.OnLoadProgress := nil;
+    st := TBytesStream.Create(ReadFixtureFile('word-list.rtf'));
+    try
+      FRich.Slices(AfterPars(st.Bytes, 2), 256);
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    steps := 0;
+    while FRich.Loading do
+    begin
+      AssertTrue('a step', FRich.Step);
+      Inc(steps);
+      AssertTrue('runaway', steps < 10000);
+    end;
+    AssertTrue(Format('in slices (%d)', [steps]), steps >= 5);
+    AssertEquals('all of it', 11, FRich.Document.Text.ParaCount);
+  end;
+
+begin
+  Load(False);
+  AssertEquals('the load''s slices: item 1', '1.', Marker(0));
+  AssertEquals('the load''s slices: item 2 the file''s', '2.', Marker(2));
+  Load(True);
+  AssertEquals('the command ran in the last step''s handler', 1, FLastStepEdits);
+  AssertEquals('above the edit: the file''s', '1.', Marker(0));
+  AssertEquals('below it: counted, as after any edit', '1.', Marker(2));
+end;
+
+{ R42: the plain text of a copy of a lazily read RTF that holds tables comes from one walk: the
+  walk decodes each paragraph, and its cell comes from that decode (a value of the moment).
+  The document parses no paragraph for it - it keeps no more values after the copy than before
+  (the ends, which the copy reads to know its range, read first) - and the load parses an
+  interval at most once. The text is the whole parse's. The file has more intervals than the
+  load lets pile up, so intervals go during the walk - also the one of the row the walk is in
+  (the copy holds the table it compares the next paragraph's cell with). Then every fixture
+  read lazily copies the text it copies read whole. }
+procedure TTyRichEditControlTest.TestAPlainCopyOfALazyRtfLeavesNothingParsed;
+var
+  b: TBytes;
+  whole, lazy: string;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  live0, parses0, files: Integer;
+  sr: TSearchRec;
+
+  procedure LoadAs(const ABytes: TBytes; AWhole: Boolean);
+  var
+    st: TBytesStream;
+  begin
+    st := TBytesStream.Create(ABytes);
+    try
+      if AWhole then TyRichLoadRtfFull(FRich.Document, st) else FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    FRich.FinishLoading;
+  end;
+
+begin
+  b := W4TablesRtf(3 * 1024 * 1024);
+  LoadAs(b, True);
+  FRich.SelectAll;
+  whole := FRich.SelText;
+  AssertTrue('rows in it', Pos('m'#9#9'z' + LineEnding, whole) > 0);
+  LoadAs(b, False);
+  d := FRich.Document;
+  load := TyRichRtfLoadOf(d);
+  AssertTrue('read lazily', (load <> nil) and not load.Whole);
+  AssertTrue(Format('more intervals (%d) than the load lets pile up', [load.IntervalCount]),
+    load.IntervalCount > 2 * load.MaxResidentIntervals + 2);
+  FRich.SelectAll;
+  d.RunsOf(0);
+  d.RunsOf(d.Text.ParaCount - 1);
+  live0 := TW4DocPeek(d).Live;
+  parses0 := load.ParseCount;
+  lazy := FRich.SelText;
+  AssertSameText('the whole parse''s text', whole, lazy);
+  AssertTrue(Format('no value left behind: %d before, %d after', [live0, TW4DocPeek(d).Live]),
+    TW4DocPeek(d).Live <= live0);
+  AssertTrue(Format('an interval parsed at most once: %d parses, %d intervals',
+    [load.ParseCount - parses0, load.IntervalCount]), load.ParseCount - parses0 <= load.IntervalCount);
+  files := 0;
+  if FindFirst(FixtureDir('rtf') + '*.rtf', faAnyFile, sr) = 0 then
+  try
+    repeat
+      b := ReadFixtureFile(sr.Name);
+      LoadAs(b, True);
+      FRich.SelectAll;
+      whole := FRich.SelText;
+      LoadAs(b, False);
+      FRich.SelectAll;
+      AssertSameText(sr.Name, whole, FRich.SelText);
+      Inc(files);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue(Format('the fixtures (%d)', [files]), files >= 12);
+end;
+
+{ 9b-C6: a range the RTF writer refuses - a part of a paragraph and a changed row that holds a
+  nested table - is copied as its text with an empty RTF flavour: nothing raises out of the
+  copy, and the wait cursor it showed is taken back. (The row is set the way a reader sets one.) }
+procedure TTyRichEditControlTest.TestARefusedRtfFlavourCopiesTheTextAlone;
+const
+  Source = '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fswiss\fcharset0 Arial;}}\uc1 ' +
+    '\pard\f0\fs24 top\par \trowd\trgaph108\cellx2000\cellx4000 \pard\intbl a\cell b\cell\row ' +
+    '\pard bottom\par}';
+  RowWords = '\trowd\trgaph108\cellx2000\cellx4000';
+var
+  st: TBytesStream;
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  ms: TMemoryStream;
+  refused: Boolean;
+  text: string;
+begin
+  st := TBytesStream.Create(BytesOf(Source));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  d := FRich.Document;
+  AssertEquals('four paragraphs', 4, d.Text.ParaCount);
+  t := TTyRichTable.Create([2000, 4000]);
+  t.AddRow(2, RowWords, [2000, 4000], True);
+  AssertTrue('the first cell is set', TW4Put.Put(d, 1, t.Rows[0].Cells[0]));
+  AssertTrue('the second cell is set', TW4Put.Put(d, 2, t.Rows[0].Cells[1]));
+  // from inside "top" into "b"
+  FRich.SelStart := 1;
+  FRich.SelLength := d.Text.ParaStart(2) + 1 - 1;
+  refused := False;
+  ms := TMemoryStream.Create;
+  try
+    try
+      TyRichSaveRtfRange(d, ms, FRich.SelStart, FRich.SelLength);
+    except
+      on ETyRichRtfWrite do refused := True;
+    end;
+  finally
+    ms.Free;
+  end;
+  AssertTrue('the writer refuses the range', refused);
+  text := FRich.SelText;
+  AssertTrue('the row in the text: ' + text, Pos('a'#9'b', text) > 0);
+  FRich.SetCopyWait(1);
+  FRich.CopyToClipboard;
+  AssertEquals('one write', 1, FRich.ClipWrites);
+  AssertEquals('the text', text, FRich.ClipText);
+  AssertTrue('no RTF flavour', FRich.ClipRtf = '');
+  AssertEquals('the wait cursor', 1, FRich.Waits);
+  AssertEquals('and back', 1, FRich.WaitEnds);
 end;
 
 initialization

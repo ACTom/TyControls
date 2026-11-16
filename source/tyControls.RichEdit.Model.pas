@@ -384,6 +384,14 @@ type
     class function SetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
       AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell = nil;
       const AListText: UTF8String = ''): Boolean;
+    { The value SetParagraph would give paragraph AIndex (the same checks, the runs clipped
+      to its text alike), put in no paragraph's slot and held once for the caller, who lets
+      it go with ReleaseValue: for a reader that hands a walk what it parsed without setting
+      it (TTyRichTextProvider.WalkValue), so that a walk leaves nothing behind. A plain
+      paragraph gets the value parsed plain paragraphs share. }
+    class function MakeValue(ADoc: TTyRichDocument; AIndex: Integer;
+      AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell = nil;
+      const AListText: UTF8String = ''): Pointer;
     class procedure SetDefaultCharFormat(ADoc: TTyRichDocument; const AFormat: TTyCharFormat);
     class procedure SetPage(ADoc: TTyRichDocument; APaperWidth, APaperHeight, AMarginLeft,
       AMarginRight: Integer);
@@ -714,7 +722,11 @@ type
       reads it by its index (ParaFormatOf, RunsOf, CellAt), which parses it. ARuns is the
       value's own array, not a copy: it is not to be changed. What is returned is good
       while the value is the paragraph's: until the document is changed, and for a cell or
-      an object inside a read scope (BeginRead). }
+      an object inside a read scope (BeginRead). A walk that asks for values (WalkParaTexts
+      with AValues) hands an unparsed paragraph of a reader that parses on demand a value
+      of the moment instead of nil: True for it, and what it gives is good during that call
+      only - a cell or an object kept past it needs a reference of its own (a cell's
+      table's AddRef); the paragraph stays unparsed. }
     function ReadValue(AData: Pointer; out AFormat: TTyParaFormatId; out ARuns: TTyRunArray;
       out ACell: TTyRichCell): Boolean;
     { The marker text the file gave list paragraph AIndex - its {\listtext ...} or {\pntext ...},
@@ -1607,43 +1619,70 @@ end;
 
 { ---- TTyRichDocBuilder ---- }
 
+{ Checks a reader's runs for paragraph AIndex (raises when malformed); its length. }
+function CheckReaderRuns(ADoc: TTyRichDocument; AIndex: Integer; AParaFormat: TTyParaFormatId;
+  const ARuns: TTyRunArray): Int64;
+var
+  i: Integer;
+begin
+  ADoc.CheckParaId(AParaFormat);
+  if Length(ARuns) = 0 then
+    raise ETyRichModel.Create('A paragraph needs at least one run');
+  Result := ADoc.FText.ParaLength(AIndex);
+  for i := 0 to High(ARuns) do
+  begin
+    ADoc.CheckCharId(ARuns[i].Format);
+    if ((i = 0) and (ARuns[i].Start <> 0)) or ((i > 0) and (ARuns[i].Start <= ARuns[i - 1].Start)) or
+       ((i > 0) and (ARuns[i].Start >= Result)) or
+       ((ARuns[i].Obj <> nil) and (RunEnd(ARuns, i, Result) <> ARuns[i].Start + 1)) then
+      raise ETyRichModel.CreateFmt('Runs of paragraph %d are malformed', [AIndex]);
+  end;
+end;
+
+{ A reader's value for a paragraph of ALen characters (checked runs), not held. }
+function ReaderValue(ADoc: TTyRichDocument; ALen: Int64; AParaFormat: TTyParaFormatId;
+  const ARuns: TTyRunArray; ACell: TTyRichCell; const AListText: UTF8String): TTyRichParaData;
+var
+  runs: TTyRunArray;
+  n: Integer;
+begin
+  runs := nil;
+  n := 0;
+  if ALen = 0 then
+    AppendRun(runs, n, 0, ARuns[0].Format, ARuns[0].Obj)
+  else
+    AppendSlice(runs, n, ARuns, ALen, 0, ALen, 0);
+  SetLength(runs, n);
+  if AListText <> '' then
+  begin
+    Result := ADoc.NewData(AParaFormat, runs, ACell);
+    Result.FListText := AListText;
+  end
+  else
+    Result := ADoc.MakeData(AParaFormat, runs, ACell);
+end;
+
+class function TTyRichDocBuilder.MakeValue(ADoc: TTyRichDocument; AIndex: Integer;
+  AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell;
+  const AListText: UTF8String): Pointer;
+var
+  d: TTyRichParaData;
+begin
+  d := ReaderValue(ADoc, CheckReaderRuns(ADoc, AIndex, AParaFormat, ARuns), AParaFormat, ARuns,
+    ACell, AListText);
+  ADoc.AcquireData(d);
+  Result := d;
+end;
+
 class function TTyRichDocBuilder.SetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
   AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell;
   const AListText: UTF8String): Boolean;
 var
   len: Int64;
-  runs: TTyRunArray;
-  n, i: Integer;
-  d: TTyRichParaData;
 begin
-  ADoc.CheckParaId(AParaFormat);
-  if Length(ARuns) = 0 then
-    raise ETyRichModel.Create('A paragraph needs at least one run');
-  len := ADoc.FText.ParaLength(AIndex);
-  for i := 0 to High(ARuns) do
-  begin
-    ADoc.CheckCharId(ARuns[i].Format);
-    if ((i = 0) and (ARuns[i].Start <> 0)) or ((i > 0) and (ARuns[i].Start <= ARuns[i - 1].Start)) or
-       ((i > 0) and (ARuns[i].Start >= len)) or
-       ((ARuns[i].Obj <> nil) and (RunEnd(ARuns, i, len) <> ARuns[i].Start + 1)) then
-      raise ETyRichModel.CreateFmt('Runs of paragraph %d are malformed', [AIndex]);
-  end;
+  len := CheckReaderRuns(ADoc, AIndex, AParaFormat, ARuns);
   if ADoc.SlotData(AIndex) <> nil then Exit(False);
-  runs := nil;
-  n := 0;
-  if len = 0 then
-    AppendRun(runs, n, 0, ARuns[0].Format, ARuns[0].Obj)
-  else
-    AppendSlice(runs, n, ARuns, len, 0, len, 0);
-  SetLength(runs, n);
-  if AListText <> '' then
-  begin
-    d := ADoc.NewData(AParaFormat, runs, ACell);
-    d.FListText := AListText;
-  end
-  else
-    d := ADoc.MakeData(AParaFormat, runs, ACell);
-  ADoc.PutData(AIndex, nil, d);
+  ADoc.PutData(AIndex, nil, ReaderValue(ADoc, len, AParaFormat, ARuns, ACell, AListText));
   Result := True;
 end;
 

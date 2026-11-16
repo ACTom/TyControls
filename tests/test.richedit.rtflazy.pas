@@ -39,6 +39,14 @@ type
     procedure CheckLazyAgainstFull(const AMsg: string; const ABytes: TBytes;
       ARandomOrder: Boolean);
     procedure CheckIndex(const AMsg: string; const ABytes: TBytes);
+    // W4: a walk that asks for values, checked against the whole parse
+    procedure CheckWalkValues(const AMsg: string; const ABytes: TBytes);
+    procedure WalkValue(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+  private
+    FWalkLazy, FWalkFull: TTyRichDocument;
+    FWalkMsg: string;
+    FWalked: Integer;
   published
     // the brief
     procedure TestLazyAndFullParseAgree;
@@ -65,6 +73,8 @@ type
     procedure TestARowWithANestedTableIsSavedAsItWas;
     procedure TestTheFullLoadIsOneParseThatStays;
     procedure TestDeletedParagraphsUndoneAfterTheirIntervalWentAreStillTheFilesOwn;
+    // fix wave W4
+    procedure TestAWalkWithValuesGivesTheParseAndSetsNothing;
   end;
 
 implementation
@@ -2209,6 +2219,127 @@ begin
     s.Free;
     d.Free;
   end;
+end;
+
+{ ---- fix wave W4 ---- }
+
+{ One step of the walk: the value the walk hands out for an unparsed paragraph is what the
+  whole parse gives it - its format, runs, cell and marker text - read from the value alone. }
+procedure TTyRtfLazyTest.WalkValue(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+  var AContinue: Boolean);
+var
+  fmt: TTyParaFormatId;
+  runs, rf: TTyRunArray;
+  cell, cf: TTyRichCell;
+  msg: string;
+  j: Integer;
+  src, n: Int64;
+begin
+  Inc(FWalked);
+  msg := Format('%s paragraph %d', [FWalkMsg, AIndex]);
+  if not FWalkLazy.ReadValue(AData, fmt, runs, cell) then
+  begin
+    // no value only where there are no bytes to parse: an empty last paragraph
+    AssertFalse(msg + ': no value, but bytes of its own',
+      FWalkLazy.Text.ParaLazySource(AIndex, src, n));
+    AssertEquals(msg + ': no value, so empty', 0, ALen);
+    AssertTrue(msg + ': no value, so in no table', FWalkFull.CellAt(AIndex) = nil);
+    Exit;
+  end;
+  AssertTrue(msg + ' paragraph format', FWalkLazy.Formats.ParaFormat(fmt).Equals(
+    FWalkFull.Formats.ParaFormat(FWalkFull.ParaFormatOf(AIndex))));
+  rf := FWalkFull.RunsOf(AIndex);
+  AssertEquals(msg + ' runs', Length(rf), Length(runs));
+  for j := 0 to High(rf) do
+  begin
+    AssertEquals(Format('%s run %d start', [msg, j]), rf[j].Start, runs[j].Start);
+    AssertTrue(Format('%s run %d format', [msg, j]), FWalkLazy.Formats.CharFormat(
+      runs[j].Format).Equals(FWalkFull.Formats.CharFormat(rf[j].Format)));
+    AssertTrue(Format('%s run %d object', [msg, j]), SameObject(runs[j].Obj, rf[j].Obj));
+  end;
+  cf := FWalkFull.CellAt(AIndex);
+  AssertEquals(msg + ' in a table', cf <> nil, cell <> nil);
+  if cf <> nil then
+  begin
+    AssertEquals(msg + ' cell', cf.Index, cell.Index);
+    AssertEquals(msg + ' row', cf.Row.Index, cell.Row.Index);
+    AssertEquals(msg + ' row''s cells', cf.Row.CellCount, cell.Row.CellCount);
+    AssertEquals(msg + ' row holds a nested table', cf.Row.HoldsNestedTable,
+      cell.Row.HoldsNestedTable);
+    AssertText(msg + ' row format', cf.Row.RawFormat, cell.Row.RawFormat);
+    AssertEquals(msg + ' rows', cf.Table.RowCount, cell.Table.RowCount);
+  end;
+  AssertText(msg + ' marker', FWalkFull.ListTextOf(AIndex), FWalkLazy.ValueListText(AData));
+end;
+
+{ A walk over every paragraph of a lazily read document that asks for values: every value is
+  the whole parse's, and afterwards no paragraph is parsed, no value is left alive, and no
+  interval was parsed twice. }
+procedure TTyRtfLazyTest.CheckWalkValues(const AMsg: string; const ABytes: TBytes);
+var
+  full: TTyRichDocument;
+  lazy: TCountingDoc;
+  s: TBytesStream;
+  load: TTyRtfLoad;
+  i, live0: Integer;
+begin
+  full := LoadWith(ABytes, True);
+  lazy := TCountingDoc.Create;
+  s := TBytesStream.Create(ABytes);
+  try
+    TyRichLoadRtf(lazy, s);
+    load := TyRichRtfLoadOf(lazy);
+    AssertEquals(AMsg + ': paragraphs', full.Text.ParaCount, lazy.Text.ParaCount);
+    live0 := lazy.Live;
+    FWalkLazy := lazy;
+    FWalkFull := full;
+    FWalkMsg := AMsg;
+    FWalked := 0;
+    lazy.BeginRead;
+    try
+      lazy.Text.WalkParaTexts(0, lazy.Text.ParaCount - 1, @WalkValue, True);
+    finally
+      lazy.EndRead;
+    end;
+    AssertEquals(AMsg + ': every paragraph walked', lazy.Text.ParaCount, FWalked);
+    AssertEquals(AMsg + ': no value left alive', live0, lazy.Live);
+    for i := 0 to lazy.Text.ParaCount - 1 do
+      if TBuilderAccess.Value(lazy, i) <> nil then
+        Fail(Format('%s: paragraph %d was parsed', [AMsg, i]));
+    AssertTrue(Format('%s: an interval parsed at most once (%d parses, %d intervals)',
+      [AMsg, load.ParseCount, load.IntervalCount]), load.ParseCount <= load.IntervalCount);
+  finally
+    FWalkLazy := nil;
+    FWalkFull := nil;
+    s.Free;
+    lazy.Free;
+    full.Free;
+  end;
+end;
+
+{ R42: WalkParaTexts with AValues hands each unparsed paragraph of a lazily read RTF the value
+  the parse that decoded it gives - for every sample, tables (some across a snapshot boundary,
+  in WordPad's writing too) and a file with more intervals than the load lets pile up, so that
+  intervals go during the walk - and leaves nothing parsed. }
+procedure TTyRtfLazyTest.TestAWalkWithValuesGivesTheParseAndSetsNothing;
+var
+  sr: TSearchRec;
+  files: Integer;
+begin
+  files := 0;
+  if FindFirst(FixtureDir + '*.rtf', faAnyFile, sr) = 0 then
+  try
+    repeat
+      Inc(files);
+      CheckWalkValues(sr.Name, Fixture(sr.Name));
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('samples', files >= 12);
+  CheckWalkValues('re-zh-table x 1 MB', Generate('re-zh-table.rtf', MB));
+  CheckWalkValues('wp-zh-table x 1 MB', Generate('wp-zh-table.rtf', MB));
+  CheckWalkValues('re-zh-mixed x 3 MB', Generate('re-zh-mixed.rtf', 3 * MB));
 end;
 
 initialization

@@ -655,6 +655,9 @@ type
     function KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
     procedure KeepValue(ASrc: Int64; AValue: Pointer);
     procedure Unkeep(AIndex: Integer);
+    procedure ValueParts(AGroup: TTyRtfGroup; AIndex: Integer; out ACell: TTyRichCell;
+      out AListText: UTF8String);
+    function WalkValue(AIndex: Integer; ASrc: Int64): Pointer;
     procedure Apply(AGroup: TTyRtfGroup);
     procedure Drop(AGroup: TTyRtfGroup; AReset: Boolean);
     procedure FreeGroup(AGroup: TTyRtfGroup);
@@ -4631,6 +4634,8 @@ type
   public
     Load: TTyRtfLoad;
     function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String; override;
+    function WalkValue(AIndex: Integer; ASrcOffset, ASrcBytes: Int64): Pointer; override;
+    procedure ReleaseWalkValue(AValue: Pointer); override;
   end;
 
   // The document's way to the load, which it owns through this.
@@ -4655,6 +4660,16 @@ const
 function TRtfProvider.DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
 begin
   Result := Load.Decode(ASrcOffset, ASrcBytes, ACharCount);
+end;
+
+function TRtfProvider.WalkValue(AIndex: Integer; ASrcOffset, ASrcBytes: Int64): Pointer;
+begin
+  Result := Load.WalkValue(AIndex, ASrcOffset);
+end;
+
+procedure TRtfProvider.ReleaseWalkValue(AValue: Pointer);
+begin
+  TRtfBuild.ReleaseValue(Load.FDoc, AValue);
 end;
 
 destructor TRtfLoader.Destroy;
@@ -5352,6 +5367,48 @@ begin
   AIndex := Result.Find(ASrc);
 end;
 
+// What record AIndex of the group gives its paragraph besides formats: its cell (nil: none),
+// and the file's marker text - for a list item only (a value of its own costs a paragraph).
+procedure TTyRtfLoad.ValueParts(AGroup: TTyRtfGroup; AIndex: Integer; out ACell: TTyRichCell;
+  out AListText: UTF8String);
+var
+  rec: ^TTyRtfParaRec;
+  t: TTyRichTable;
+begin
+  rec := @AGroup.Recs[AIndex];
+  ACell := nil;
+  if (rec^.Table >= 0) and (rec^.Table <= High(AGroup.Tables)) then
+  begin
+    t := AGroup.Tables[rec^.Table];
+    if (rec^.Row < t.RowCount) and (rec^.Cell < t.Rows[rec^.Row].CellCount) then
+      ACell := t.Rows[rec^.Row].Cells[rec^.Cell];
+  end;
+  if (rec^.ListText <> '') and (FDoc.Formats.ParaFormat(rec^.Format).List.Kind <> lkNone) then
+    AListText := rec^.ListText
+  else
+    AListText := '';
+end;
+
+// A walk that asks for values (TTyRichText.WalkParaTexts with AValues) reaches paragraph
+// AIndex, unparsed, from ASrc, right after decoding it: its value as the parse that decoded it
+// gives it, set in no slot. Nothing is applied (the paragraph stays unparsed, the group keeps
+// no value, so the decode may let it go as it lets text-only groups go) and no read is heard
+// of; the walk lets the value go after the one call.
+function TTyRtfLoad.WalkValue(AIndex: Integer; ASrc: Int64): Pointer;
+var
+  g: TTyRtfGroup;
+  i: Integer;
+  cell: TTyRichCell;
+  lt: UTF8String;
+begin
+  Result := nil;
+  // (the decode has just parsed, or found, the group)
+  g := GroupFor(ASrc, i);
+  if i < 0 then Exit;
+  ValueParts(g, i, cell, lt);
+  Result := TRtfBuild.MakeValue(FDoc, AIndex, g.Recs[i].Format, g.Recs[i].Runs, cell, lt);
+end;
+
 // Sets the formats of the group's paragraphs that are still unparsed (found through their
 // source in the text: an edit before them moves them, an undo may bring them back).
 procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
@@ -5360,7 +5417,6 @@ var
   i, j, k: Integer;
   rec: ^TTyRtfParaRec;
   cell: TTyRichCell;
-  t: TTyRichTable;
   v: Pointer;
 begin
   for i := 0 to High(AGroup.Recs) do
@@ -5380,18 +5436,7 @@ begin
       end;
       Continue;
     end;
-    cell := nil;
-    if (rec^.Table >= 0) and (rec^.Table <= High(AGroup.Tables)) then
-    begin
-      t := AGroup.Tables[rec^.Table];
-      if (rec^.Row < t.RowCount) and (rec^.Cell < t.Rows[rec^.Row].CellCount) then
-        cell := t.Rows[rec^.Row].Cells[rec^.Cell];
-    end;
-    // the file's marker text, for a list item only (a value of its own costs a paragraph)
-    if (rec^.ListText <> '') and (FDoc.Formats.ParaFormat(rec^.Format).List.Kind <> lkNone) then
-      lt := rec^.ListText
-    else
-      lt := '';
+    ValueParts(AGroup, i, cell, lt);
     if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt) then
     begin
       v := TRtfBuild.ParagraphValue(FDoc, j);

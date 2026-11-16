@@ -120,6 +120,16 @@ type
   public
     function DecodeParagraph(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
       virtual; abstract;
+    { For a walk that asks for them (WalkParaTexts with AValues): the data of lazy paragraph
+      AIndex, unedited, from ASrcOffset, that has none - made from what decoding it learned,
+      right after its text was decoded or found decoded (the empty lazy paragraph appended
+      last has no text to decode: asked for all the same). The walk hands it to its AProc
+      for that one call, never puts it in the paragraph's slot, and gives it back to
+      ReleaseWalkValue when AProc returns (also when it raises). nil: none - the walk then
+      hands out nil, as without AValues (the default). Changing the text from inside it
+      raises, as from DecodeParagraph. }
+    function WalkValue(AIndex: Integer; ASrcOffset, ASrcBytes: Int64): Pointer; virtual;
+    procedure ReleaseWalkValue(AValue: Pointer); virtual;
   end;
 
   TTyRichSum = record
@@ -421,8 +431,12 @@ type
       lazy paragraph is decoded as the walk reaches it, and its data is read after that (a
       provider may set it). AProc may read the text and set paragraph data and heights;
       changing the text raises while the walk runs. Nodes the walk moves into count in
-      NodeVisits. }
-    procedure WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk);
+      NodeVisits.
+      AValues: an unedited lazy paragraph that has no data gets, as AData, what the
+      provider's WalkValue makes of it - good only during that call of AProc, which must
+      not keep it, or anything it leads to, past the call. (Without it, nil.) }
+    procedure WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk;
+      AValues: Boolean = False);
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
@@ -1570,6 +1584,17 @@ begin
   Inc(FAddLen, ACount);
 end;
 
+{ ---- TTyRichTextProvider ---- }
+
+function TTyRichTextProvider.WalkValue(AIndex: Integer; ASrcOffset, ASrcBytes: Int64): Pointer;
+begin
+  Result := nil;
+end;
+
+procedure TTyRichTextProvider.ReleaseWalkValue(AValue: Pointer);
+begin
+end;
+
 { A lazy piece's decoded text with its separator bytes, decoding it the first time. It is
   kept apart from the add buffer, so that it can be let go of again (ForgetDecoded) while
   the paragraph is unedited; the piece itself keeps pointing at its source range, so a
@@ -2485,7 +2510,8 @@ begin
   end;
 end;
 
-procedure TTyRichText.WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk);
+procedure TTyRichText.WalkParaTexts(AFirst, ALast: Integer; AProc: TTyRichParaTextWalk;
+  AValues: Boolean);
 var
   p: TTyRichPath;
   before: TTyRichSum;
@@ -2498,6 +2524,7 @@ var
   held: RawByteString;     // a lazy piece's decoded text, kept while AProc has its bytes
   sep: Byte;
   more, go: Boolean;
+  lazySrc, lazyBytes: Int64; // the paragraph is this unedited lazy piece (-1: it is not)
 
   procedure Add(AText: PByte; ALen: PtrInt);
   begin
@@ -2522,7 +2549,7 @@ var
     Inc(pieces);
   end;
 
-  procedure Show(AData: Pointer);
+  procedure Give(AData: Pointer);
   begin
     if pieces <= 1 then
     begin
@@ -2535,7 +2562,25 @@ var
     end
     else
       AProc(i, AData, @buf[0], used, go);
+  end;
+
+  procedure Show(AData: Pointer);
+  var
+    v: Pointer;
+  begin
+    v := nil;
+    if AValues and (AData = nil) and (lazySrc >= 0) and (FProvider <> nil) then
+      v := FProvider.WalkValue(i, lazySrc, lazyBytes);
+    if v = nil then
+      Give(AData)
+    else
+      try
+        Give(v);
+      finally
+        FProvider.ReleaseWalkValue(v);
+      end;
     pieces := 0;
+    lazySrc := -1;
   end;
 
 begin
@@ -2550,6 +2595,8 @@ begin
     go := True;
     pieces := 0;
     used := 0;
+    lazySrc := -1;
+    lazyBytes := 0;
     more := FTotal.Entries > 0;
     if more then
       if i = 0 then
@@ -2569,6 +2616,8 @@ begin
         held := DecodedOf(it);
         txt := PByte(Pointer(held));
         len := System.Length(held);
+        lazySrc := POff(it^);
+        lazyBytes := it^.FBytes;
       end
       else
         txt := PieceText(it, len);
@@ -2585,7 +2634,13 @@ begin
         Add(txt, len);
       more := Advance(p, True);
     end;
-    // the last paragraph: what follows the last separator
+    // the last paragraph: what follows the last separator (the empty lazy one appended last
+    // has no piece, but bytes in the file)
+    if FLazyTail then
+    begin
+      lazySrc := FLoadLastSrc;
+      lazyBytes := FLoadLastBytes;
+    end;
     Show(FLastData);
   finally
     Dec(FWalking);
