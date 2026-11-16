@@ -764,7 +764,6 @@ type
     procedure PictureMakeReady(AEntry: TObject; AWidth, AHeight: Integer);
     procedure PaintEnter;
     procedure PaintLeave;
-    procedure ClearLayouts;
     procedure NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
     procedure ClearSkippedPictures;
     procedure WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
@@ -856,6 +855,10 @@ type
     procedure DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean = False);
     { Every layout goes (Stale) and every kept measure. }
     procedure Clear;
+    { Every layout and everything measured goes, as with Clear; the decoded pictures stay
+      (they depend on no font): what a change of the base font, the fallback fonts, the zoom
+      or the PPI calls for. }
+    procedure ClearLayouts;
     { The cached layout of the block that starts at paragraph AIndex, without a reference
       and without counting a hit; nil when there is none. Blocks are kept by their first
       paragraph only: a row is found at its FirstPara, and this is nil for its other

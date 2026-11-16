@@ -25,9 +25,12 @@ unit tyControls.RichEdit;
     anchor.
   - A change of the document is forwarded to the layouter, and invalidates only the rectangles
     of the blocks it changed - and what lies below them only when their height changed.
-    InvalidateContent is the one place every invalidation goes through (a test records them
-    there). A paint draws only the blocks that meet its clip rectangle, on the painter's bitmap
-    for that rectangle.
+  - The control keeps one bitmap of what it shows (the surface, see "the kept surface" below):
+    a paint draws on it only what is out of date and copies the clip's part to the window. Two
+    doors lead to a repaint. InvalidateContent (client pixels, clipped to the text) says what
+    is SHOWN changed there: that part of the surface is drawn again, then blitted. The plain
+    window invalidation, InvalidateArea, only asks for a blit: for what is drawn over the blit
+    after it (a caret), and for a scroll, which moves the surface's pixels itself.
   - Loading never waits on the size: a txt file is the one proportional scan (TyRichLoadText);
     an RTF file is indexed in slices (TTyRtfLoad.Step) from a timer, a few milliseconds a turn,
     the document readable meanwhile (Loading); FinishLoading runs the rest at once. Pictures are
@@ -114,9 +117,9 @@ type
     function GetCount: Integer; override;
     procedure Put(Index: Integer; const S: string); override;
     procedure SetTextStr(const Value: string); override;
-    { BeginUpdate .. EndUpdate bracket the document's (AddStrings is one undo step); around a
-      Clear (what Assign and a form file do) the lines gather here and become the content
-      once, at the end. }
+    { BeginUpdate .. EndUpdate bracket the document's (AddStrings is one undo step); after a
+      Clear (what Assign and a form file do) or a Text inside them (what LoadFromStream and
+      LoadFromFile do) the lines gather here and become the content once, at the end. }
     procedure SetUpdateState(Updating: Boolean); override;
   public
     constructor Create(AOwner: TTyCustomRichEdit);
@@ -216,11 +219,17 @@ type
     FTimer: TTimer;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
-    { The (picture, size) pairs made ready lately, with a reference each: never queued again
-      (a picture the layouter cannot make ready at a size would otherwise come back every
-      paint, H-I7). }
-    FPrepared: array of TTyRichPendingPicture;
-    FPreparedCount: Integer;
+    { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
+      access violation), with a reference each: not queued again until the content or the
+      layout parameters change. Every other outcome the layouter records itself - after
+      PreparePicture the picture is ready or known to be a placeholder (H-I7). }
+    FFailed: array of TTyRichPendingPicture;
+    FFailedCount: Integer;
+    { The PPI the frame signature was taken at (PointerStateChanged compares at it). }
+    FFrameSigPPI: Integer;
+    { Inside a window paint whose clip covers the text area: a view laid out there needs no
+      window invalidation (the same paint blits it). }
+    FPaintCoversText: Boolean;
     FFallbackListChange: TNotifyEvent;
     // events
     FOnChange: TNotifyEvent;
@@ -233,7 +242,7 @@ type
     procedure RelayStale;
     procedure ReleaseBlocks;
     procedure ClearPending;
-    procedure ClearPrepared;
+    procedure ClearFailed;
     procedure AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
       ALayout: TTyBlockLayout; ATop: Int64);
     procedure WriteHeights(AFrom, ATo: Integer);
@@ -241,8 +250,10 @@ type
     procedure QueuePicturesAhead;
     procedure QueuePicture(APicture: TTyRichPicture; AWidth, AHeight, APara, ALastPara: Integer;
       AHeld: Boolean);
-    function WasPrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
-    procedure NotePrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+    function FailedIndex(APicture: TTyRichPicture; AWidth, AHeight: Integer): Integer;
+    { The anchor block laid out at the new parameters takes the share a layout parameter
+      change recorded (H-M3): its offset becomes that share of its new height. }
+    procedure ApplyAnchorShare(ABlock: TTyBlockLayout);
     procedure InvalidatePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
     procedure LayoutParamsChanged;
     procedure FallbackListChanged(Sender: TObject);
@@ -292,7 +303,6 @@ type
     procedure ViewMoved;
     procedure LoadProgress(Sender: TObject; ADone, ATotal: Int64);
     function SaveProgress(ADone, ATotal: Int64): Boolean;
-    procedure TimerTick(Sender: TObject);
     procedure StartBackground;
     procedure StopBackground;
     procedure WriteTo(AStream: TStream; AFormat: TTyRichFormat);
@@ -328,14 +338,19 @@ type
       (TyRichEditObject), a picture that cannot be shown (TyRichEditPlaceholder); table lines in
       the text colour (a document's "auto" colour). }
     procedure FillPaintStyle(var AStyle: TTyRichPaintStyle); virtual;
-    { The one door for "what is shown changed here" (client pixels): that part of the kept
-      surface is drawn again at the next paint, and the window's part is invalidated. 9b's
-      caret and selection go through here: a caret is PositionRect (client), a selection range
-      the PositionRect / ParagraphRect bands it covers. }
+    { The one door for "what is shown changed here" (client pixels): the part of ARect inside
+      the text clip (TextWindowRect) is drawn again on the kept surface at the next paint, and
+      that part of the window is invalidated; a rectangle outside the text does nothing (what
+      lies outside it is the frame's, drawn again only when the frame changes). So a
+      PositionRect / ParagraphRect of a block cut by the view's edge, or held above or below
+      the view, costs only what is on screen of it. A selection goes through here; a caret
+      does not (it is drawn over the blit and blinks through InvalidateArea). }
     procedure InvalidateContent(const ARect: TRect); virtual;
-    { The window's part to be painted again (client pixels) - a blit from the surface. Every
-      window invalidation goes through here: InvalidateContent's, and a scroll's, which moves
-      the surface instead of dirtying it (a test records them here). }
+    { The window's part to be painted again (client pixels) - a blit from the surface, nothing
+      on the surface is drawn again. Every window invalidation goes through here:
+      InvalidateContent's, a scroll's, which moves the surface instead of dirtying it, and
+      what is drawn over the blit after it - 9b's caret blinks through here alone (a test
+      records them here). }
     procedure InvalidateArea(const ARect: TRect); virtual;
     { Everything on the surface drawn again at the next paint (frame and text). }
     procedure InvalidateSurface;
@@ -377,6 +392,17 @@ type
       there was nothing to do. What the timer runs, a few milliseconds a turn. }
     function StepBackground: Boolean;
     function HasBackgroundWork: Boolean;
+    { One turn of the timer: pieces of the background work until CRichIdleMaxSteps of them or
+      CRichIdleBudgetMs by IdleTicks, whichever comes first. }
+    procedure TimerTick(Sender: TObject);
+    { The clock a timer turn is measured by, in milliseconds (GetTickCount64; a test seam). }
+    function IdleTicks: QWord; virtual;
+    { The background work's timer: made when there is work and a window, gone with the
+      window. }
+    property BackgroundTimer: TTimer read FTimer;
+    { A press, a release, a hover or the focus changed: the control is painted again only
+      when what its frame looks like changed (FrameSignature); the text is not touched. }
+    procedure PointerStateChanged; override;
     procedure Paint; override;
     procedure Resize; override;
     procedure InitializeWnd; override;
@@ -443,6 +469,9 @@ type
       area); empty when it is not laid out in the view. }
     function ParagraphRect(AIndex: Integer): TRect;
     function VisibleBlockCount: Integer;
+    { Top and Height are client pixels (from the text area's top), rounded outward: above
+      device scale 1 two neighbouring blocks may overlap by a pixel. Everything read off
+      Layout is in raster pixels - client pixels times DeviceScale. }
     property VisibleBlocks[AIndex: Integer]: TTyRichViewBlock read GetVisibleBlock;
     property Document: TTyRichDocument read FDoc;
     property Layouter: TTyRichLayouter read FLayouter;
@@ -718,6 +747,10 @@ end;
 
 procedure TTyRichEditLines.SetTextStr(const Value: string);
 begin
+  { Inside BeginUpdate .. EndUpdate (what LoadFromStream and LoadFromFile do around it) the
+    document refuses a replacement: the text is gathered and becomes the content once, at
+    EndUpdate. }
+  if FUpdating and (FBatch = nil) then FBatch := TStringList.Create;
   if FBatch <> nil then
   begin
     FBatch.Text := Value;
@@ -789,7 +822,7 @@ begin
   FreeAndNil(FTimer);
   ReleaseBlocks;
   ClearPending;
-  ClearPrepared;
+  ClearFailed;
   FreeAndNil(FSurface);
   if FDoc <> nil then FDoc.OnChange := nil;
   if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
@@ -1020,44 +1053,30 @@ begin
   FPendingCount := 0;
 end;
 
-procedure TTyCustomRichEdit.ClearPrepared;
+procedure TTyCustomRichEdit.ClearFailed;
 var
   i: Integer;
 begin
-  for i := 0 to FPreparedCount - 1 do FPrepared[i].Picture.Release;
-  FPrepared := nil;
-  FPreparedCount := 0;
+  for i := 0 to FFailedCount - 1 do FFailed[i].Picture.Release;
+  FFailed := nil;
+  FFailedCount := 0;
 end;
 
-function TTyCustomRichEdit.WasPrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
+function TTyCustomRichEdit.FailedIndex(APicture: TTyRichPicture; AWidth, AHeight: Integer): Integer;
 var
   i: Integer;
 begin
-  for i := 0 to FPreparedCount - 1 do
-    if (FPrepared[i].Picture = APicture) and (FPrepared[i].Width = AWidth) and
-      (FPrepared[i].Height = AHeight) then Exit(True);
-  Result := False;
+  for i := 0 to FFailedCount - 1 do
+    if (FFailed[i].Picture = APicture) and (FFailed[i].Width = AWidth) and
+      (FFailed[i].Height = AHeight) then Exit(i);
+  Result := -1;
 end;
 
-const
-  { How many prepared (picture, size) pairs the control remembers; the oldest goes first. }
-  CRichPreparedKept = 64;
-
-procedure TTyCustomRichEdit.NotePrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+procedure TTyCustomRichEdit.ApplyAnchorShare(ABlock: TTyBlockLayout);
 begin
-  if WasPrepared(APicture, AWidth, AHeight) then Exit;
-  if FPreparedCount = CRichPreparedKept then
-  begin
-    FPrepared[0].Picture.Release;
-    Move(FPrepared[1], FPrepared[0], (FPreparedCount - 1) * SizeOf(FPrepared[0]));
-    Dec(FPreparedCount);
-  end;
-  if FPreparedCount = Length(FPrepared) then SetLength(FPrepared, FPreparedCount * 2 + 8);
-  APicture.AddRef;
-  FPrepared[FPreparedCount].Picture := APicture;
-  FPrepared[FPreparedCount].Width := AWidth;
-  FPrepared[FPreparedCount].Height := AHeight;
-  Inc(FPreparedCount);
+  if FAnchorShareDen <= 0 then Exit;
+  FAnchorOffset := FAnchorShareNum * ABlock.Height div FAnchorShareDen;
+  FAnchorShareDen := 0;
 end;
 
 function TTyCustomRichEdit.AnchorY: Int64;
@@ -1114,6 +1133,7 @@ var
   s: TTyStyleSet;
   size, halfPt, w, est, k, rppi: Integer;
   z: Single;
+  factor: Double;
   area: TRect;
   fontDiff: Boolean;
 begin
@@ -1162,15 +1182,29 @@ begin
           FAnchorShareDen := FBlocks[k].Height;
           Break;
         end;
-    if (rppi <> FLayoutPPI) or (z <> FLayoutZoom) then FLayouter.Clear;
+    if ((rppi <> FLayoutPPI) or (z <> FLayoutZoom)) and (FLayoutPPI > 0) and (FLayoutZoom > 0) then
+    begin
+      { Every font changes, no picture does: the layouts and measures go, the decoded pictures
+        stay. What is wide is as much wider: the horizontal position keeps its fraction of the
+        extent (the extent seen is scaled the same way until blocks are laid out again). }
+      FLayouter.ClearLayouts;
+      factor := (z * rppi) / (FLayoutZoom * FLayoutPPI);
+      FScrollX := Round(FScrollX * factor);
+      FWidestSeen := Round(FWidestSeen * factor);
+    end
+    else
+      FWidestSeen := 0;
     if FLayoutPPI <> 0 then FDoc.Text.UnmeasureAll;
     ReleaseBlocks;
+    { The pictures waiting were met at the old sizes, and one that failed there may not fail at
+      another: what the view meets next is queued afresh. }
+    ClearPending;
+    ClearFailed;
     InvalidateSurface;
     FLayoutWidth := w;
     FLayoutPPI := rppi;
     FLayoutZoom := z;
     FEstimate := est;
-    FWidestSeen := 0;
     FViewValid := False;
   end;
   if FDoc.Text.DefaultParaHeight <> FEstimate then FDoc.Text.DefaultParaHeight := FEstimate;
@@ -1221,11 +1255,7 @@ begin
         FAnchorOffset := topY;
         FAnchorPara := b.FirstPara;
       end;
-      if FAnchorShareDen > 0 then
-      begin
-        FAnchorOffset := FAnchorShareNum * b.Height div FAnchorShareDen;
-        FAnchorShareDen := 0;
-      end;
+      ApplyAnchorShare(b);
       if FAnchorOffset >= b.Height then FAnchorOffset := Math.Max(0, b.Height - 1);
       // down: the view and a screen past it
       SetLength(below, 64);
@@ -1312,7 +1342,8 @@ begin
   begin
     // the text moved: on the surface too, and what it exposed is drawn
     if FMoveKnown then MoveSurfaceText(0, FMovedBy) else MarkTextDirty;
-    InvalidateArea(TextWindowRect);
+    // (inside a paint that blits the whole text area, a second paint would only blit again)
+    if not FPaintCoversText then InvalidateArea(TextWindowRect);
   end;
   WriteHeights(0, FBlockCount - 1);
   QueuePicturesAhead;
@@ -1337,7 +1368,7 @@ begin
   FText := FDoc.Text;
   ReleaseBlocks;
   ClearPending;
-  ClearPrepared;
+  ClearFailed;
   // told, not recognised: the layouter empties everything it kept
   FLayouter.Document := FDoc;
   FAnchorPara := 0;
@@ -1349,7 +1380,9 @@ begin
   if FLines <> nil then FLines.FEmptyLine := False;
   // the new text has no heights: it gets the estimate before anything asks
   if FEstimate > 0 then FDoc.Text.DefaultParaHeight := FEstimate;
-  InvalidateContent(Rect(0, 0, Width, Height));
+  // everything: the text, and the frame (a bar may come or go with the new content)
+  InvalidateSurface;
+  InvalidateArea(Rect(0, 0, Width, Height));
   if FViewPPI > 0 then UpdateBars(False);
 end;
 
@@ -1432,7 +1465,10 @@ begin
     Inc(FAnchorPara, delta)
   else if FAnchorPara > lo then
   begin
+    // its paragraph is gone: the view starts at the top of what replaced it
     FAnchorPara := lo;
+    FAnchorOffset := 0;
+    FAnchorShareDen := 0;
     anchorMoved := True;
   end;
   // pictures waiting in changed blocks go (a row's too); the others follow their paragraphs
@@ -1639,14 +1675,68 @@ end;
 
 procedure TTyCustomRichEdit.ScrollRasterBy(ADeltaY: Int64);
 var
-  a, last: Integer;
+  a, last, nSeen: Integer;
   off, maxTop, newY: Int64;
   b: TTyBlockLayout;
   t: TTyRichText;
+  walked: array of TTyRichViewBlock;
+  h: array of Int64;
+
+  { The heights the walk measured, written once it is over (out of the read scope): the end's
+    bound below counts them, not their estimates - after a zoom every height is one. }
+  procedure NoteWalked(ABlock: TTyBlockLayout);
+  begin
+    if nSeen = Length(walked) then SetLength(walked, nSeen * 2 + 8);
+    walked[nSeen].FirstPara := ABlock.FirstPara;
+    walked[nSeen].LastPara := ABlock.LastPara;
+    walked[nSeen].Height := ABlock.Height;
+    Inc(nSeen);
+  end;
+
+  procedure WriteWalked;
+  var
+    i, j: Integer;
+  begin
+    for i := 0 to nSeen - 1 do
+    begin
+      SetLength(h, walked[i].LastPara - walked[i].FirstPara + 1);
+      for j := 0 to High(h) do h[j] := 0;
+      h[0] := walked[i].Height;
+      t.SetParaHeights(walked[i].FirstPara, h);
+    end;
+    nSeen := 0;
+  end;
+
 begin
   if ADeltaY = 0 then Exit;
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
+  walked := nil;
+  h := nil;
+  nSeen := 0;
+  if FAnchorShareDen > 0 then
+  begin
+    { A zoom (a PPI, a width) since the last layout: the anchor's offset is a share of its
+      block until it is laid out again - at the new parameters, here, before the walk starts
+      from it (H-M3's share, which the walk would otherwise drop). }
+    FDoc.BeginRead;
+    try
+      b := LayoutBlockAt(Math.Min(FAnchorPara, t.ParaCount - 1));
+      try
+        if b.FirstPara <> FAnchorPara then
+        begin
+          FAnchorOffset := t.ParaTop(FAnchorPara) - t.ParaTop(b.FirstPara) + FAnchorOffset;
+          FAnchorPara := b.FirstPara;
+        end;
+        // (its height: the walk below lays it out first and writes it)
+        ApplyAnchorShare(b);
+      finally
+        b.Release;
+      end;
+    finally
+      FDoc.EndRead;
+    end;
+  end;
   // a jump of many screens is a position, not a walk over every block between
   if Abs(ADeltaY) > 4 * Int64(Math.Max(FViewH, 1)) then
   begin
@@ -1669,6 +1759,7 @@ begin
             Inc(off, t.ParaTop(a) - t.ParaTop(b.FirstPara));
             a := b.FirstPara;
           end;
+          NoteWalked(b);
           if (off < b.Height) or (b.LastPara >= last) then Break;
           Dec(off, b.Height);
           a := b.LastPara + 1;
@@ -1687,6 +1778,7 @@ begin
         end;
         b := LayoutBlockAt(a - 1);
         try
+          NoteWalked(b);
           a := b.FirstPara;
           Inc(off, b.Height);
         finally
@@ -1696,6 +1788,7 @@ begin
   finally
     FDoc.EndRead;
   end;
+  WriteWalked;
   if ADeltaY > 0 then
   begin
     // against the end: no further than the last line at the bottom
@@ -1971,8 +2064,10 @@ begin
   if FHBar <> nil then FHBar.Visible := wantH;
   if Result then
   begin
+    // the text area changed: the frame (its bands) and the text are drawn again
     FViewValid := False;
-    InvalidateContent(Rect(0, 0, Width, Height));
+    InvalidateSurface;
+    InvalidateArea(Rect(0, 0, Width, Height));
   end;
   PlaceBars;
   FSyncingBars := True;
@@ -2080,6 +2175,17 @@ begin
   PaintArea(Canvas, Rect(0, 0, Width, Height), Canvas.ClipRect, Font.PixelsPerInch, True);
 end;
 
+procedure TTyCustomRichEdit.PointerStateChanged;
+begin
+  { The base repaints the whole control for every press, release, hover and focus change.
+    What a state changes on screen reaches FrameSignature through the style it resolves to:
+    the same signature, nothing to paint (the selection colour that follows the focus is in it
+    too). The surface itself notices a changed one at the next paint. }
+  if FFrameSigValid and SurfaceUsable(CurrentStyle) and
+    (FrameSignature(FFrameSigPPI) = FFrameSig) then Exit;
+  inherited PointerStateChanged;
+end;
+
 procedure TTyCustomRichEdit.Resize;
 begin
   inherited Resize;
@@ -2159,9 +2265,11 @@ var
   i: Integer;
 begin
   { Once is enough (a view laid out again meets the same pictures, a picture may be in two
-    places); and never again a (picture, size) just made ready: what the layouter could not
-    make ready at that size it would not make ready a second time either. }
-  if WasPrepared(APicture, AWidth, AHeight) then
+    places); and not a (picture, size) whose preparing raised. Nothing else needs keeping out:
+    after PreparePicture the layouter calls the picture ready at that size - made ready, or
+    known to be a placeholder - so a paint never meets it as not ready again unless the
+    layouter let it go (a zoom there and back, the cache's trim), and then it must be queued. }
+  if FailedIndex(APicture, AWidth, AHeight) >= 0 then
   begin
     if AHeld then APicture.Release;
     Exit;
@@ -2229,7 +2337,6 @@ type
     Owner: TTyCustomRichEdit;
     Picture: TTyRichPicture;
     Width, Height: Integer;
-    Area: TRect;
     procedure Ahead(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
     procedure Ready(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
   end;
@@ -2290,7 +2397,6 @@ begin
     walk.Picture := APicture;
     walk.Width := AWidth;
     walk.Height := AHeight;
-    walk.Area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
     for k := 0 to FBlockCount - 1 do
       if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
         VisitPictures(FBlocks[k].Layout, k, @walk.Ready);
@@ -2332,13 +2438,22 @@ begin
   try
     if not FLayouter.PictureReady(pic.Picture, pic.Width, pic.Height) then
     begin
-      FLayouter.PreparePicture(pic.Picture, pic.Width, pic.Height);
+      { Noted as failed BEFORE the call: a fatal error out of it (out of memory, an access
+        violation - the layouter lets those through) leaves the picture not ready, and a
+        paint would queue it again and again. A call that returns takes the note back. The
+        reference the queue held goes to the note. }
+      if FFailedCount = Length(FFailed) then SetLength(FFailed, FFailedCount * 2 + 4);
+      FFailed[FFailedCount] := pic;
+      Inc(FFailedCount);
+      pic.Picture := nil;
+      FLayouter.PreparePicture(FFailed[FFailedCount - 1].Picture, pic.Width, pic.Height);
+      Dec(FFailedCount);
+      pic.Picture := FFailed[FFailedCount].Picture;
       // its boxes in the view: nothing else is painted again
       InvalidatePicture(pic.Picture, pic.Width, pic.Height);
     end;
-    NotePrepared(pic.Picture, pic.Width, pic.Height);
   finally
-    pic.Picture.Release;
+    if pic.Picture <> nil then pic.Picture.Release;
   end;
   Result := True;
 end;
@@ -2371,13 +2486,18 @@ begin
   { The clock (GetTickCount64) may advance in 15.6 ms steps (Windows' default): it only ends a
     turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
     pieces: CRichIdleMaxSteps load slices or pictures. }
-  t0 := GetTickCount64;
+  t0 := IdleTicks;
   n := 0;
   repeat
     if not StepBackground then Break;
     Inc(n);
-  until (n >= CRichIdleMaxSteps) or (GetTickCount64 - t0 >= CRichIdleBudgetMs);
+  until (n >= CRichIdleMaxSteps) or (IdleTicks - t0 >= CRichIdleBudgetMs);
   if not HasBackgroundWork then StopBackground;
+end;
+
+function TTyCustomRichEdit.IdleTicks: QWord;
+begin
+  Result := GetTickCount64;
 end;
 
 procedure TTyCustomRichEdit.InitializeWnd;
@@ -2665,20 +2785,41 @@ function ReplaceFile(const ASource, ATarget: string): Boolean;
 var
   st: TStat;
 {$ENDIF}
+{$IFDEF MSWINDOWS}
+const
+  ERROR_ACCESS_DENIED = 5;
+  ERROR_SHARING_VIOLATION = 32;
+var
+  err: Integer;
+{$ENDIF}
 begin
   {$IFDEF MSWINDOWS}
   if FileExists(ATarget) then
+  begin
     Result := ReplaceFileW(PWideChar(UnicodeString(ATarget)), PWideChar(UnicodeString(ASource)),
-      nil, REPLACEFILE_IGNORE_MERGE_ERRORS, nil, nil)
+      nil, REPLACEFILE_IGNORE_MERGE_ERRORS, nil, nil);
+    if not Result then
+    begin
+      { Refused for the target's sake (no right to it, someone holds it): so it stays. Any other
+        failure may be a volume that does not do ReplaceFileW (some network shares): the plain
+        replace, which keeps less of what the target was but saves. }
+      err := GetLastOSError;
+      if (err <> ERROR_ACCESS_DENIED) and (err <> ERROR_SHARING_VIOLATION) then
+        Result := MoveFileExW(PWideChar(UnicodeString(ASource)), PWideChar(UnicodeString(ATarget)),
+          MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH);
+    end;
+  end
   else
     Result := MoveFileExW(PWideChar(UnicodeString(ASource)), PWideChar(UnicodeString(ATarget)),
       MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH);
   {$ELSE}
   if fpStat(ATarget, st) = 0 then
   begin
-    fpChmod(ASource, st.st_mode and &7777);
-    // only root may give a file away; another user's file keeps our ownership then
+    { Owner first, then mode: chown(2) clears the set-user-id and set-group-id bits, which
+      chmod then puts back. Only root may give a file away; another user's file keeps our
+      ownership then. }
     fpChown(ASource, st.st_uid, st.st_gid);
+    fpChmod(ASource, st.st_mode and &7777);
   end;
   // rename(2) replaces the target in one step
   Result := fpRename(ASource, ATarget) = 0;
@@ -2796,19 +2937,85 @@ end;
 function TTyCustomRichEdit.TextClipOf(const ARect, AArea: TRect; APPI: Integer): TRect;
 var
   s: TTyStyleSet;
+  sc, rppi, w, h, bw, ow, off, d: Integer;
+  cr: TTyCorners;
+  dTop, dBottom: Int64;
+
+  function Px(V: Integer): Integer;
+  begin
+    Result := MulDiv(V, rppi, 96);
+  end;
+
+  { How far from its side edge a point ADy from the top (or bottom) edge must be to be clear
+    of a ring of outer radius AR and width AW whose box is AX0 in from both edges (raster
+    pixels; the inner arc taken a pixel smaller for its antialiasing). }
+  function ClearOf(ADy: Int64; AX0, AR, AW: Integer): Int64;
+  var
+    c, ri, dy: Double;
+  begin
+    Result := 0;
+    if AR <= 0 then Exit;
+    c := AX0 + AR;
+    if ADy >= c then Exit;
+    ri := AR - AW - 1;
+    dy := c - ADy;
+    if (ri <= 0) or (dy >= ri) then Result := Ceil(c)
+    else Result := Ceil(c - Sqrt(ri * ri - dy * dy));
+  end;
+
+  { ... of the frame at a corner of radius ARadius (logical): its border and its ring. }
+  function CornerNeed(ADy: Int64; ARadius: Integer): Int64;
+  begin
+    Result := ClearOf(ADy, 0, TyClampRadiusPx(Px(ARadius), w, h), bw);
+    if ow > 0 then
+      Result := Math.Max(Result, ClearOf(ADy, Math.Max(0, off),
+        TyClampRadiusPx(Px(Math.Max(0, ARadius - s.OutlineOffset)), w - 2 * off, h - 2 * off), ow));
+  end;
+
 begin
   Result := AArea;
+  s := CurrentStyle;
   { Text may reach into the left padding (a table row's \trleft is usually negative: Word
-    puts its lines in the margin); never over the frame - the theme's border and the pixel its
-    antialiasing takes: the surface moves and fills what is inside this, and must not move the
-    frame's own pixels. }
+    puts its lines in the margin) - never into what the frame inks: the surface fills and
+    moves what is inside this rectangle, the frame is drawn only outside it (H2-I3). What the
+    frame inks, as the painter draws it at the device scale: the border (render-style's 2 px
+    when a 3D look gives none), the focus ring (outline offset + width), the pixel their
+    antialiasing takes, and at a rounded corner the arcs and what lies outside them (the
+    parent's fill, a shadow) - there the edge goes in as far as the arc reaches at the clip's
+    top or bottom row. }
   if not (VBarShown and IsRightToLeft) then
+    Result.Left := AArea.Left - MulDiv(s.Padding.Left, APPI, 96);
+  sc := Math.Max(1, FScale);
+  rppi := APPI * sc;
+  w := (ARect.Right - ARect.Left) * sc;
+  h := (ARect.Bottom - ARect.Top) * sc;
+  if (tpRenderStyle in s.Present) and (s.RenderStyle <> trsFlat) and
+    not (tpBorderWidth in s.Present) then
+    bw := Px(2)
+  else
+    bw := Px(Math.Max(0, s.BorderWidth));
+  ow := 0;
+  off := 0;
+  if (tpOutline in s.Present) and (s.OutlineWidth > 0) then
   begin
-    s := CurrentStyle;
-    Result.Left := Math.Max(ARect.Left + MulDiv(Math.Max(0, s.BorderWidth), APPI, 96) + 1,
-      AArea.Left - MulDiv(s.Padding.Left, APPI, 96));
+    ow := Px(s.OutlineWidth);
+    off := MulDiv(s.OutlineOffset, APPI, 96) * sc;
   end;
+  d := Math.Max(bw, Math.Max(0, off + ow));
+  d := Integer(CeilDiv(d, sc)) + 1;
+  Result.Left := Math.Max(Result.Left, ARect.Left + d);
+  Result.Top := Math.Max(Result.Top, ARect.Top + d);
+  Result.Right := Math.Min(Result.Right, ARect.Right - d);
+  Result.Bottom := Math.Min(Result.Bottom, ARect.Bottom - d);
+  cr := TyEffectiveCorners(s);
+  dTop := Int64(Result.Top - ARect.Top) * sc;
+  dBottom := Int64(ARect.Bottom - Result.Bottom) * sc;
+  Result.Left := Math.Max(Result.Left, ARect.Left +
+    Integer(CeilDiv(Math.Max(CornerNeed(dTop, cr.TL), CornerNeed(dBottom, cr.BL)), sc)));
+  Result.Right := Math.Min(Result.Right, ARect.Right -
+    Integer(CeilDiv(Math.Max(CornerNeed(dTop, cr.TR), CornerNeed(dBottom, cr.BR)), sc)));
   if Result.Left > Result.Right then Result.Left := Result.Right;
+  if Result.Top > Result.Bottom then Result.Top := Result.Bottom;
 end;
 
 function TTyCustomRichEdit.TextWindowRect: TRect;
@@ -2851,10 +3058,14 @@ end;
 procedure TTyCustomRichEdit.InvalidateContent(const ARect: TRect);
 var
   s: Integer;
+  r: TRect;
 begin
+  // clipped first, scaled after: nothing outside the text is content, and what is inside it
+  // times the scale is in range whatever ARect was
+  if not IntersectRect(r, ARect, TextWindowRect) then Exit;
   s := Math.Max(1, FScale);
-  MarkDirty(Rect(ARect.Left * s, ARect.Top * s, ARect.Right * s, ARect.Bottom * s));
-  InvalidateArea(ARect);
+  MarkDirty(Rect(r.Left * s, r.Top * s, r.Right * s, r.Bottom * s));
+  InvalidateArea(r);
 end;
 
 procedure TTyCustomRichEdit.InvalidateArea(const ARect: TRect);
@@ -3012,7 +3223,9 @@ var
   h: Cardinal;
   p: TTyProp;
   ps: TTyRichPaintStyle;
-  state: TTyState;
+  cr: TTyCorners;
+  fill: TTyFill;
+  k: Integer;
 
   procedure Mix(AValue: Cardinal);
   begin
@@ -3026,13 +3239,15 @@ var
   end;
 
 begin
-  { Everything the frame and the ground are drawn from that may change without a layout
-    change: the resolved style (theme, StyleOverride, the state - focus, hover, enabled), the
-    paint style's colours (the selection follows the focus), the bars, the PPI. }
+  { What the frame and the ground LOOK like - everything they are drawn from that may change
+    without a layout change: the resolved style values (theme, StyleOverride, and through
+    them the state: a hover or a focus that changes nothing of these changes nothing here),
+    what lies outside a rounded corner (the parent's fill, and the control's place in it when
+    it is not one colour), the paint style's colours (the selection follows the focus), the
+    bars, the PPI. Never the states themselves (H2-M2): a press that looks like the normal
+    state draws nothing. }
   st := CurrentStyle;
   h := 2166136261;
-  for state := Low(TTyState) to High(TTyState) do
-    if state in CurrentStates then Mix(Ord(state) + 1000);
   for p := Low(TTyProp) to High(TTyProp) do
     if p in st.Present then Mix(Ord(p) + 1);
   Mix(Cardinal(st.Background.Color));
@@ -3042,12 +3257,45 @@ begin
   Mix(Ord(st.BorderStyle));
   Mix(Ord(st.RenderStyle));
   Mix(Cardinal(st.BorderRadius));
+  Mix(Cardinal(st.Radius.TL));
+  Mix(Cardinal(st.Radius.TR));
+  Mix(Cardinal(st.Radius.BR));
+  Mix(Cardinal(st.Radius.BL));
   Mix(Cardinal(st.OutlineColor));
+  Mix(Cardinal(st.OutlineWidth));
+  Mix(Cardinal(st.OutlineOffset));
   Mix(Cardinal(st.ShadowColor));
+  Mix(Cardinal(st.ShadowBlur));
+  Mix(Cardinal(st.ShadowOffset.X));
+  Mix(Cardinal(st.ShadowOffset.Y));
+  if tpOpacity in st.Present then Mix(Cardinal(Round(st.Opacity * 1000)));
   Mix(Cardinal(st.Padding.Left));
   Mix(Cardinal(st.Padding.Top));
   Mix(Cardinal(st.Padding.Right));
   Mix(Cardinal(st.Padding.Bottom));
+  cr := TyEffectiveCorners(st);
+  if (cr.TL > 0) or (cr.TR > 0) or (cr.BR > 0) or (cr.BL > 0) or (tpShadow in st.Present) then
+  begin
+    if TyResolveParentBgFill(Self, Rect(0, 0, Width, Height), fill) then
+    begin
+      Mix(Ord(fill.Kind));
+      Mix(Cardinal(fill.Color));
+      if fill.Kind <> tfkSolid then
+      begin
+        Mix(Cardinal(fill.GradFrom));
+        Mix(Cardinal(fill.GradTo));
+        for k := 0 to High(fill.GradStops) do Mix(Cardinal(fill.GradStops[k].Color));
+        Mix(Cardinal(Round(fill.GradAngleDeg * 100)));
+        Mix(Cardinal(Length(fill.ImagePath)));
+        for k := 1 to Length(fill.ImagePath) do Mix(Ord(fill.ImagePath[k]));
+        // a slice of a sweep or a picture: where the control is in it
+        Mix(Cardinal(Left));
+        Mix(Cardinal(Top));
+      end;
+    end
+    else
+      Mix($FFFF);
+  end;
   ps := Default(TTyRichPaintStyle);
   FillPaintStyle(ps);
   MixPx(ps.TextColor);
@@ -3089,9 +3337,11 @@ end;
 procedure TTyCustomRichEdit.DestroyWnd;
 begin
   inherited DestroyWnd;
-  // the window is gone: what it showed is drawn again when it comes back
+  // the window is gone: what it showed is drawn again when it comes back, and the background
+  // work waits for it (InitializeWnd starts it again) or for FinishLoading
   FreeAndNil(FSurface);
   InvalidateSurface;
+  FreeAndNil(FTimer);
 end;
 
 procedure TTyCustomRichEdit.PaintSurfaceFrame(APPI: Integer);
@@ -3185,14 +3435,7 @@ begin
       (FDirty[i].Bottom > rClip.Bottom)) then full := True;
   regs := nil;
   n := 0;
-  if full then
-  begin
-    PaintSurfaceFrame(APPI);
-    SetLength(regs, 1);
-    regs[0] := rClip;
-    n := 1;
-  end
-  else
+  if not full then
   begin
     SetLength(regs, FDirtyCount);
     for i := 0 to FDirtyCount - 1 do
@@ -3202,37 +3445,56 @@ begin
         Inc(n);
       end;
   end;
+  { The marks are cleared once what they mark is drawn: a drawing that raises (a block's paint,
+    the frame's) leaves everything to be drawn again by the next paint (H2-M3) - never stale
+    pixels marked clean. }
+  try
+    if full then
+    begin
+      PaintSurfaceFrame(APPI);
+      SetLength(regs, 1);
+      regs[0] := rClip;
+      n := 1;
+    end;
+    if n > 0 then
+    begin
+      FillPaintStyle(pst);
+      pst.DeferPictures := ADefer;
+      ground := TyColorToBGRA(CurrentStyle.Background.Color);
+      { A block's ink may reach past its box (a descender, an italic, a picture frame): the
+        blocks next to a region are painted into it too (clipped), as a full redraw would leave
+        them. No block of today's layouts inks outside its box (A10: equivalent now); 9b's
+        handles of a selected picture will, and this is what keeps them whole. }
+      reach := Math.Max(1, FEstimate);
+      FLayouter.BeginPaintPass;
+      x := rArea.Left - FScrollX;
+      try
+        for i := 0 to n - 1 do
+        begin
+          R := regs[i];
+          if not full then FSurface.FillRect(R.Left, R.Top, R.Right, R.Bottom, ground, dmSet);
+          FSurface.ClipRect := R;
+          for k := 0 to FBlockCount - 1 do
+          begin
+            y := rArea.Top + FBlocks[k].Top;
+            if (y >= R.Bottom + reach) or (y + FBlocks[k].Height <= R.Top - reach) then Continue;
+            // it meets the region: its top is within a block's height of it, an Integer
+            PaintBlock(FSurface, k, x, Integer(y), R, pst);
+            if ADefer then QueueSkipped(k);
+          end;
+          FSurface.NoClip;
+        end;
+      finally
+        FSurface.NoClip;
+      end;
+    end;
+  except
+    InvalidateSurface;
+    raise;
+  end;
   FAllDirty := False;
   FDirtyCount := 0;
   FSurfScrollX := FScrollX;
-  if n = 0 then Exit;
-  FillPaintStyle(pst);
-  pst.DeferPictures := ADefer;
-  ground := TyColorToBGRA(CurrentStyle.Background.Color);
-  { A block's ink may reach past its box (a descender, an italic, a picture frame): the blocks
-    next to a region are painted into it too (clipped), as a full redraw would leave them. }
-  reach := Math.Max(1, FEstimate);
-  FLayouter.BeginPaintPass;
-  x := rArea.Left - FScrollX;
-  try
-    for i := 0 to n - 1 do
-    begin
-      R := regs[i];
-      if not full then FSurface.FillRect(R.Left, R.Top, R.Right, R.Bottom, ground, dmSet);
-      FSurface.ClipRect := R;
-      for k := 0 to FBlockCount - 1 do
-      begin
-        y := rArea.Top + FBlocks[k].Top;
-        if (y >= R.Bottom + reach) or (y + FBlocks[k].Height <= R.Top - reach) then Continue;
-        // it meets the region: its top is within a block's height of it, an Integer
-        PaintBlock(FSurface, k, x, Integer(y), R, pst);
-        if ADefer then QueueSkipped(k);
-      end;
-      FSurface.NoClip;
-    end;
-  finally
-    FSurface.NoClip;
-  end;
 end;
 
 {$IFDEF LCLWin32}
@@ -3383,7 +3645,7 @@ end;
 procedure TTyCustomRichEdit.PaintArea(ACanvas: TCanvas; const ARect, AClip: TRect;
   APPI: Integer; ADefer: Boolean);
 var
-  clip: TRect;
+  clip, tw: TRect;
   sc: TTyCanvasScale;
   sig: Cardinal;
 begin
@@ -3392,7 +3654,18 @@ begin
   if sc.Scale < 1 then sc.Scale := 1;
   // the layout follows the device: a new scale is a PPI change (CheckLayoutParams)
   FScale := sc.Scale;
-  EnsureView(APPI);
+  { A window paint (ADefer) whose clip holds the whole text area blits whatever the layout
+    does to the view: no invalidation from inside it (H2-M6). A paint of a part, or RenderTo
+    (which leaves the window as it was), still asks for the window's paint. }
+  tw := TextWindowRect;
+  FPaintCoversText := ADefer and (ARect.Left = 0) and (ARect.Top = 0) and
+    (clip.Left <= tw.Left) and (clip.Top <= tw.Top) and (clip.Right >= tw.Right) and
+    (clip.Bottom >= tw.Bottom);
+  try
+    EnsureView(APPI);
+  finally
+    FPaintCoversText := False;
+  end;
   ClampScrollX;
   if not SurfaceUsable(CurrentStyle) then
   begin
@@ -3403,9 +3676,10 @@ begin
   begin
     EnsureSurface(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top, sc.Scale);
     sig := FrameSignature(APPI);
-    if not FFrameSigValid or (sig <> FFrameSig) then
+    if not FFrameSigValid or (sig <> FFrameSig) or (APPI <> FFrameSigPPI) then
     begin
       FFrameSig := sig;
+      FFrameSigPPI := APPI;
       FFrameSigValid := True;
       InvalidateSurface;
     end;

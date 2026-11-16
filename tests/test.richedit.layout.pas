@@ -4392,6 +4392,8 @@ begin
     AssertEquals('font changes keep the pictures', 2, FLayouter.PictureCacheCount);
     FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 20, 10), 1, st);
     AssertEquals('not decoded again', dec, FLayouter.PictureDecodes);
+    FLayouter.ClearLayouts;
+    AssertEquals('ClearLayouts keeps them', 2, FLayouter.PictureCacheCount);
     FLayouter.Clear;
     AssertEquals('Clear empties them', 0, FLayouter.PictureCacheCount);
     // exceptions
