@@ -53,6 +53,15 @@ type
     property FirstDiff: Int64 read FFirstDiff;
   end;
 
+  { A stream that tries to change a document at every write - what a stream whose code lets
+    the application run might let through - and keeps what is written. }
+  TEditingStream = class(TBytesStream)
+  public
+    Doc: TTyRichDocument;
+    Writes, Saving, Refused, HistoryHeld: Integer;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
   TTyRichTextIOTest = class(TTestCase)
   private
     FChanges: array of TTyRichChange;
@@ -88,6 +97,7 @@ type
     procedure TestOtherCodePagesRoundTrip;
     procedure TestACharacterTheCodePageLacksIsAQuestionMark;
     procedure TestCodePageTablesArePinned;
+    procedure TestASaveInProgressRefusesEdits;
   end;
 
 implementation
@@ -387,6 +397,24 @@ function TTyRichTextIOTest.LoadFixture(const AName: string; AEncoding: TTyTextEn
   ACodePage: Integer): TTyRichDocument;
 begin
   Result := LoadBytes(Fixture(AName), AEncoding, ACodePage);
+end;
+
+function TEditingStream.Write(const Buffer; Count: Longint): Longint;
+var
+  undo, redo: Integer;
+begin
+  Inc(Writes);
+  if Doc.Saving then Inc(Saving);
+  if not Doc.Execute(TTyRichInsertText.Create(0, 'X')) then Inc(Refused);
+  undo := Doc.UndoDepth;
+  redo := Doc.RedoDepth;
+  if not Doc.CanUndo and not Doc.CanRedo then
+  begin
+    Doc.Undo;
+    Doc.Redo;
+    if (Doc.UndoDepth = undo) and (Doc.RedoDepth = redo) then Inc(HistoryHeld);
+  end;
+  Result := inherited Write(Buffer, Count);
 end;
 
 function TTyRichTextIOTest.SaveBytes(ADoc: TTyRichDocument): TBytes;
@@ -1164,6 +1192,52 @@ begin
     AssertText('the last of the block', U('ﾟ'), d.Text.GetText(63, 1));
     AssertSameBytes('opened and saved', original, SaveBytes(d));
   finally
+    d.Free;
+  end;
+end;
+
+{ The text goes out from inside a walk of the text, and the stream's writes are foreign
+  code: while it saves the document is Saving and refuses every change - from the BOM's
+  write on - and the bytes are those of a save nobody tried to change. Afterwards the same
+  change goes through. }
+procedure TTyRichTextIOTest.TestASaveInProgressRefusesEdits;
+var
+  d: TTyRichDocument;
+  src, plain, o: TBytes;
+  text, zh: UTF8String;
+  s: TEditingStream;
+  i: Integer;
+begin
+  text := '';
+  zh := ' 中文';
+  for i := 0 to 30000 do text := text + UTF8String('Line ' + IntToStr(i)) + zh + #13#10;
+  // a UTF-8 BOM in front
+  src := nil;
+  SetLength(src, 3 + System.Length(text));
+  src[0] := $EF;
+  src[1] := $BB;
+  src[2] := $BF;
+  Move(text[1], src[3], System.Length(text));
+  d := LoadBytes(src);
+  s := TEditingStream.Create;
+  try
+    AssertTrue('with its BOM', d.SourceHasBom);
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'Z')));
+    plain := SaveBytes(d);
+    s.Doc := d;
+    TyRichSaveText(d, s);
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertSameBytes('the bytes of a save nobody tried to change', plain, o);
+    AssertTrue(Format('several writes (%d)', [s.Writes]), s.Writes >= 4);
+    AssertEquals('saving at every write', s.Writes, s.Saving);
+    AssertEquals('every edit refused', s.Writes, s.Refused);
+    AssertEquals('no undo went through', s.Writes, s.HistoryHeld);
+    AssertFalse('saving no more', d.Saving);
+    AssertEquals('the step is still there', 1, d.UndoDepth);
+    AssertTrue('the edit goes through now', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    AssertText('it is in the text', 'X', d.Text.GetText(0, 1));
+  finally
+    s.Free;
     d.Free;
   end;
 end;

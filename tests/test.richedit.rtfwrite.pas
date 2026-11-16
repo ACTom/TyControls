@@ -33,6 +33,9 @@ type
     FTicks: array of TSaveTick;
     FTickStream: TStream;
     FCancelAt: Integer;       // the call that says stop (-1: none)
+    // a document SaveProgress tries to change at every call, and what came of it
+    FEditDoc: TTyRichDocument;
+    FEditTries, FEditRefused, FHistoryHeld, FSavingSeen: Integer;
     function SaveProgress(ADone, ATotal: Int64): Boolean;
     procedure CheckEdit(const AName: string; const ABytes: TBytes; AFull: TTyRichDocument;
       APara: Integer; AKind: TEditKind);
@@ -65,6 +68,8 @@ type
     procedure TestACellWithNoParagraphKeepsItsPlace;
     procedure TestSavingFromTheModelWalksTheParagraphs;
     procedure TestASaveReportsItsProgressAndCanBeCancelled;
+    // sweep B0
+    procedure TestASaveInProgressRefusesEdits;
   end;
 
 implementation
@@ -855,7 +860,7 @@ end;
 
 function TTyRtfWriteTest.SaveProgress(ADone, ATotal: Int64): Boolean;
 var
-  n: Integer;
+  n, undo, redo: Integer;
 begin
   n := Length(FTicks);
   SetLength(FTicks, n + 1);
@@ -863,6 +868,21 @@ begin
   FTicks[n].Total := ATotal;
   FTicks[n].Written := FTickStream.Size;
   Result := (FCancelAt < 0) or (n < FCancelAt);
+  if FEditDoc <> nil then
+  begin
+    // what a handler that lets the application run might let through
+    Inc(FEditTries);
+    if FEditDoc.Saving then Inc(FSavingSeen);
+    if not FEditDoc.Execute(TTyRichInsertText.Create(0, 'X')) then Inc(FEditRefused);
+    undo := FEditDoc.UndoDepth;
+    redo := FEditDoc.RedoDepth;
+    if not FEditDoc.CanUndo and not FEditDoc.CanRedo then
+    begin
+      FEditDoc.Undo;
+      FEditDoc.Redo;
+      if (FEditDoc.UndoDepth = undo) and (FEditDoc.RedoDepth = redo) then Inc(FHistoryHeld);
+    end;
+  end;
 end;
 
 { ---- the brief ---- }
@@ -3679,6 +3699,131 @@ begin
     end;
     AssertTrue('many paragraphs, cancelled while planning: the save raises', raised);
     AssertEquals('many paragraphs, cancelled while planning: nothing written', 0, s.Size);
+  finally
+    FTickStream := nil;
+    s.Free;
+    d.Free;
+  end;
+end;
+
+{ A save plans with the paragraphs as they are when it starts, and its progress callback may
+  let the application run. Until it is done the document is Saving and refuses every change
+  the way a loading one does - Execute returns False, Undo and Redo do nothing - while a
+  block of the file goes out as well as inside a stretch written from the model; the bytes
+  are those of a save nobody tried to change. After the save, also a cancelled one, the
+  same change goes through. }
+procedure TTyRtfWriteTest.TestASaveInProgressRefusesEdits;
+var
+  d: TTyRichDocument;
+  b, plain, o: TBytes;
+  s: TBytesStream;
+  info: TTyRtfWriteInfo;
+  f2: TTyParaFormat;
+  i, n, inBlock, inStretch: Integer;
+  raised: Boolean;
+  text: UTF8String;
+
+  procedure SaveTrying(const AMsg: string);
+  begin
+    FTickStream := s;
+    FTicks := nil;
+    FCancelAt := -1;
+    FEditTries := 0;
+    FEditRefused := 0;
+    FHistoryHeld := 0;
+    FSavingSeen := 0;
+    s.Clear;
+    FEditDoc := d;
+    try
+      TyRichSaveRtf(d, s, info, @SaveProgress);
+    finally
+      FEditDoc := nil;
+    end;
+    o := Copy(s.Bytes, 0, s.Size);
+    AssertTrue(AMsg + ': the bytes of a save nobody tried to change: ' + FirstDiff(plain, o),
+      SameBytes(plain, o));
+    AssertTrue(AMsg + ': calls', FEditTries > 0);
+    AssertEquals(AMsg + ': every call tried', Length(FTicks), FEditTries);
+    AssertEquals(AMsg + ': the document was saving at every call', FEditTries, FSavingSeen);
+    AssertEquals(AMsg + ': every edit was refused', FEditTries, FEditRefused);
+    AssertEquals(AMsg + ': no undo or redo went through', FEditTries, FHistoryHeld);
+    AssertFalse(AMsg + ': saving no more', d.Saving);
+  end;
+
+begin
+  // a file: its first half goes out as a block of its bytes, its second half (formatted) is
+  // written from the model
+  b := Generate('re-zh-mixed.rtf', 3 * MB);
+  d := LoadDoc(b, False);
+  s := TBytesStream.Create;
+  try
+    n := d.Text.ParaCount;
+    f2 := TyDefaultParaFormat;
+    f2.SpaceBefore := 77;
+    AssertTrue('half formatted', d.Execute(TTyRichSetParaFormat.Create(n div 2, n - 1,
+      [pffSpaceBefore], f2)));
+    // and a step to redo
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'Z')));
+    d.Undo;
+    AssertEquals('file: a step to undo', 1, d.UndoDepth);
+    AssertEquals('file: a step to redo', 1, d.RedoDepth);
+    plain := SaveBytes(d);
+    SaveTrying('file');
+    AssertEquals('file: one stretch', 1, Length(info.Stretches));
+    inBlock := 0;
+    inStretch := 0;
+    for i := 0 to High(FTicks) do
+      if (FTicks[i].Written > info.HeaderStop) and (FTicks[i].Written < info.Stretches[0].OutStart) then
+        Inc(inBlock)
+      else if (FTicks[i].Written > info.Stretches[0].OutStart) and
+              (FTicks[i].Written < info.Stretches[0].OutStop) then
+        Inc(inStretch);
+    AssertTrue(Format('file: calls while the block goes out (%d)', [inBlock]), inBlock >= 2);
+    AssertTrue(Format('file: calls inside the stretch (%d)', [inStretch]), inStretch >= 2);
+    AssertEquals('file: the steps are still there to undo', 1, d.UndoDepth);
+    AssertEquals('file: and to redo', 1, d.RedoDepth);
+    // the save is over: the history and the edit go through
+    AssertTrue('file: can redo now', d.CanRedo);
+    d.Redo;
+    AssertEquals('file: redone', 0, d.RedoDepth);
+    AssertTrue('file: the edit goes through now', d.Execute(TTyRichInsertText.Create(0, 'X')));
+    AssertEquals('file: it is in the text', 'X', string(d.Text.GetText(0, 1)));
+    // a cancelled save leaves the document as changeable as it was
+    s.Clear;
+    FTicks := nil;
+    FCancelAt := 2;
+    raised := False;
+    try
+      TyRichSaveRtf(d, s, @SaveProgress);
+    except
+      on E: ETyRichSaveCancelled do raised := True;
+    end;
+    AssertTrue('cancelled: the save raises', raised);
+    AssertFalse('cancelled: saving no more', d.Saving);
+    AssertTrue('cancelled: the edit goes through', d.Execute(TTyRichInsertText.Create(0, 'Y')));
+  finally
+    FTickStream := nil;
+    s.Free;
+    d.Free;
+  end;
+  // a document of our own: one stretch written from the model, and a step to undo
+  text := '';
+  for i := 0 to 40000 do text := text + 'Line ' + IntToStr(i) + ' of a text that is saved.'#10;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create;
+  try
+    AssertTrue('our own: typed', d.Execute(TTyRichInsertText.Create(0, text)));
+    plain := SaveBytes(d);
+    SaveTrying('our own');
+    inStretch := 0;
+    for i := 0 to High(FTicks) do
+      if FTicks[i].Written > info.HeaderStop then Inc(inStretch);
+    AssertTrue(Format('our own: calls inside the stretch (%d)', [inStretch]), inStretch >= 2);
+    AssertEquals('our own: the step is still there', 1, d.UndoDepth);
+    AssertTrue('our own: can undo now', d.CanUndo);
+    d.Undo;
+    AssertEquals('our own: undone', 0, d.Text.Length);
+    AssertTrue('our own: the edit goes through now', d.Execute(TTyRichInsertText.Create(0, 'X')));
   finally
     FTickStream := nil;
     s.Free;

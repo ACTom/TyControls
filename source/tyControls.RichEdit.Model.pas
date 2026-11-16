@@ -572,6 +572,8 @@ type
     FDominantLineBreak: TTyRichSeparator;
     FLoadingContent: Boolean;
     FIncomplete: Boolean;
+    FSaving: Integer;
+    function GetSaving: Boolean;
     procedure Init;
     procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
       AHasBom: Boolean; ALineBreak: TTyRichSeparator);
@@ -672,6 +674,13 @@ type
       protects: parsed paragraphs only pile up while it is open. }
     procedure BeginRead;
     procedure EndRead;
+    { A save is in progress, counted (pair them with try .. finally; the writers do it
+      themselves). A save plans with the paragraphs as they are when it starts, and its
+      progress callback or its stream may let the application run - so in between nothing
+      may change the document: Execute returns False, Undo and Redo do nothing (CanUndo and
+      CanRedo are False), as while the document is Loading. Reading is fine. }
+    procedure BeginSave;
+    procedure EndSave;
 
     function ParaFormatOf(AIndex: Integer): TTyParaFormatId;
     { A copy: the paragraph's runs. A plain paragraph has one run in DefaultCharFormatId. }
@@ -710,15 +719,16 @@ type
     function CanChange(APos, ALen: TTyRichPos): Boolean;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
-      returns False or raises. False: ACmd.CanExecute said no, or the document is Loading or
-      Incomplete, and nothing changed. A command that changed nothing is not kept.
+      returns False or raises. False: ACmd.CanExecute said no, or the document is Loading,
+      Incomplete or Saving, and nothing changed. A command that changed nothing is not kept.
       Consecutive typing merges into one step until
       BreakMerge, an Undo or Redo, or any other command. A new command drops the redo side.
       Outside BeginUpdate .. EndUpdate it raises OnChange once. Raises inside a running
       command; if ACmd raises, what it did is reverted first. }
     function Execute(ACmd: TTyRichCommand): Boolean;
-    { One step back / forward, one OnChange. Nothing to undo / redo: nothing happens. They
-      raise inside BeginUpdate .. EndUpdate or a running command. }
+    { One step back / forward, one OnChange. Nothing to undo / redo, or the document is
+      Saving: nothing happens. They raise inside BeginUpdate .. EndUpdate or a running
+      command. }
     procedure Undo;
     procedure Redo;
     function CanUndo: Boolean;
@@ -772,6 +782,8 @@ type
     { The load was cancelled: the document holds only the part of the file read before, and
       stays read-only; a writer must refuse to save it in place of that file. }
     property Incomplete: Boolean read FIncomplete;
+    { Inside BeginSave .. EndSave: the document cannot be changed. }
+    property Saving: Boolean read GetSaving;
   end;
 
 function TyDefaultCharFormat: TTyCharFormat;
@@ -2054,6 +2066,23 @@ begin
   if (FReading = 0) and (FLoader <> nil) and not FInLoad then FLoader.ReadsEnded(Self);
 end;
 
+procedure TTyRichDocument.BeginSave;
+begin
+  Inc(FSaving);
+end;
+
+procedure TTyRichDocument.EndSave;
+begin
+  if FSaving <= 0 then
+    raise ETyRichModel.Create('EndSave without BeginSave');
+  Dec(FSaving);
+end;
+
+function TTyRichDocument.GetSaving: Boolean;
+begin
+  Result := FSaving > 0;
+end;
+
 function TTyRichDocument.ParaFormatOf(AIndex: Integer): TTyParaFormatId;
 begin
   Result := FormatOfData(DataOf(AIndex));
@@ -3316,8 +3345,9 @@ begin
     raise ETyRichModel.Create('Execute needs a command');
   try
     CheckIdle('Execute');
-    // a document still loading (or cut short) is read-only
-    ok := not FLoadingContent and not FIncomplete and ACmd.CanExecute(Self);
+    // a document still loading (or cut short) is read-only, and so is one being saved: the
+    // save's plan holds paragraph indices
+    ok := not FLoadingContent and not FIncomplete and (FSaving = 0) and ACmd.CanExecute(Self);
   except
     ACmd.Free;
     raise;
@@ -3375,7 +3405,7 @@ begin
   CheckIdle('Undo');
   if FUpdateCount > 0 then
     raise ETyRichModel.Create('Undo inside BeginUpdate .. EndUpdate');
-  if FUndoCount = 0 then Exit;
+  if (FUndoCount = 0) or (FSaving > 0) then Exit;
   Dec(FUndoCount);
   cmd := FUndo[FUndoCount].Cmd;
   Dec(FHistoryBytes, FUndo[FUndoCount].Bytes);
@@ -3405,7 +3435,7 @@ begin
   CheckIdle('Redo');
   if FUpdateCount > 0 then
     raise ETyRichModel.Create('Redo inside BeginUpdate .. EndUpdate');
-  if FRedoCount = 0 then Exit;
+  if (FRedoCount = 0) or (FSaving > 0) then Exit;
   Dec(FRedoCount);
   cmd := FRedo[FRedoCount].Cmd;
   Dec(FHistoryBytes, FRedo[FRedoCount].Bytes);
@@ -3426,12 +3456,12 @@ end;
 
 function TTyRichDocument.CanUndo: Boolean;
 begin
-  Result := (FUndoCount > 0) and (FUpdateCount = 0) and (FRunning = nil);
+  Result := (FUndoCount > 0) and (FUpdateCount = 0) and (FRunning = nil) and (FSaving = 0);
 end;
 
 function TTyRichDocument.CanRedo: Boolean;
 begin
-  Result := (FRedoCount > 0) and (FUpdateCount = 0) and (FRunning = nil);
+  Result := (FRedoCount > 0) and (FUpdateCount = 0) and (FRunning = nil) and (FSaving = 0);
 end;
 
 function TTyRichDocument.UndoDescription: string;

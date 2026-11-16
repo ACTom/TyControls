@@ -68,8 +68,9 @@ type
   // 256 KB written, and every 65536 paragraphs while the save plans (it writes nothing
   // then, and ADone stays 0) - not at all for a save shorter than that. False cancels the
   // save: it raises ETyRichSaveCancelled and leaves a part of the file in the stream. The
-  // handler may let the application handle its messages; it must not change the document
-  // or put other content into it.
+  // handler may let the application handle its messages: the document is Saving meanwhile,
+  // and refuses every command, undo and redo (TTyRichDocument.BeginSave). It must not put
+  // other content into the document.
   TTyRtfSaveProgress = function(ADone, ATotal: Int64): Boolean of object;
 
   // Paragraphs written from the model: ParaCount of them from FirstPara (none where only a
@@ -2344,11 +2345,15 @@ begin
     raise ETyRichRtfWrite.Create(
       'This document is still being loaded: it cannot be saved before the load has ended');
   w := TRtfWriter.Create(ADoc, AStream);
+  // the plan holds paragraph indices, and the callback and the stream are foreign code: the
+  // document takes no change until the save is over (TTyRichDocument.BeginSave)
+  ADoc.BeginSave;
   try
     w.FOnProgress := AOnProgress;
     w.Run;
     AInfo := w.Info;
   finally
+    ADoc.EndSave;
     w.Free;
   end;
 end;

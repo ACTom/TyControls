@@ -58,7 +58,8 @@ procedure TyRichLoadText(ADoc: TTyRichDocument; AStream: TStream;
   page has no bytes for is written '?' (ANSI); a stored byte that is not UTF-8 is written as
   it is (UTF-8), '?' (ANSI) or U+FFFD (UTF-16), unless it is an escape (see the unit
   comment). Raises ETyRichTextIO, and writes nothing, when ADoc is Incomplete (a cancelled
-  load: the rest of the file is not in it) or still Loading. }
+  load: the rest of the file is not in it) or still Loading. ADoc is Saving while the text
+  goes out (the stream's code cannot change it). }
 procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream);
 
 { The code page teAnsi uses for ACodePage: ACodePage itself, or for 0 the system's ANSI code
@@ -1470,17 +1471,24 @@ begin
   if enc = teAuto then enc := teUtf8;
   table := nil;
   if enc = teAnsi then table := TableFor(TyRichAnsiCodePage(ADoc.SourceCodePage));
-  if ADoc.SourceHasBom then
-    case enc of
-      teUtf8, teUtf8Bom: AStream.WriteBuffer(Utf8Bom, 3);
-      teUtf16LE: AStream.WriteBuffer(Utf16LEBom, 2);
-      teUtf16BE: AStream.WriteBuffer(Utf16BEBom, 2);
-    end;
-  saver := TTextSaver.Create(ADoc.Text, AStream, enc, table);
+  // the stream's writes are foreign code, and most of them run inside the walk of the text:
+  // a change from there is refused (TTyRichDocument.BeginSave), as during an RTF save
+  ADoc.BeginSave;
   try
-    saver.Save;
+    if ADoc.SourceHasBom then
+      case enc of
+        teUtf8, teUtf8Bom: AStream.WriteBuffer(Utf8Bom, 3);
+        teUtf16LE: AStream.WriteBuffer(Utf16LEBom, 2);
+        teUtf16BE: AStream.WriteBuffer(Utf16BEBom, 2);
+      end;
+    saver := TTextSaver.Create(ADoc.Text, AStream, enc, table);
+    try
+      saver.Save;
+    finally
+      saver.Free;
+    end;
   finally
-    saver.Free;
+    ADoc.EndSave;
   end;
 end;
 
