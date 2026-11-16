@@ -110,6 +110,8 @@ type
     procedure TestADecimalTabFindsThePointInALaterPiece;
     procedure TestAPointAtALineEndGivesACaretThere;
     procedure TestAJustifiedLineKeepsAFewFragments;
+    procedure TestTheDocumentIsToldNotRecognisedByItsAddress;
+    procedure TestSizesFromAFileHaveCeilingsOnTheWayToPixels;
   end;
 
 implementation
@@ -2992,6 +2994,145 @@ begin
   for ln := 0 to L.LineCount - 2 do
     AssertEquals(Format('mixed line %d ends at the edge', [ln]), 400,
       L.Lines[ln].Left + L.Lines[ln].ContentWidth);
+end;
+
+{ The layouter lays out the document it was given: a second document switches it (the cache
+  emptied, each shows its own text, back and forth); and a document freed and another made
+  at the same address shows the new one's text once it is set - the review's sequence. }
+procedure TTyRichLayoutTest.TestTheDocumentIsToldNotRecognisedByItsAddress;
+var
+  x, y, a, b: TTyRichDocument;
+  lo: TTyRichLayouter;
+  L: TTyParaLayout;
+  addr: Pointer;
+begin
+  x := NewDoc('the x document');
+  y := NewDoc('the y document');
+  lo := NewLayouter;
+  try
+    lo.Document := x;
+    AssertTrue('set', lo.Document = x);
+    L := lo.LayoutPara(x, 0, 300, 96, 1);
+    AssertEquals('x', 'the x document', L.Text);
+    L.Release;
+    L := lo.LayoutPara(y, 0, 300, 96, 1);
+    AssertEquals('another document: its text', 'the y document', L.Text);
+    L.Release;
+    AssertTrue('switched to', lo.Document = y);
+    AssertEquals('the cache holds only its layout', 1, lo.CachedCount);
+    L := lo.LayoutPara(x, 0, 300, 96, 1);
+    AssertEquals('and back', 'the x document', L.Text);
+    L.Release;
+    // freed, and another made where it was
+    a := TTyRichDocument.CreateFromUtf8(BytesOf('first document'));
+    lo.Document := a;
+    L := lo.LayoutPara(a, 0, 300, 96, 1);
+    AssertEquals('first', 'first document', L.Text);
+    L.Release;
+    addr := Pointer(a);
+    a.Free;
+    b := TTyRichDocument.CreateFromUtf8(BytesOf('second document'));
+    try
+      lo.Document := b;
+      L := lo.LayoutPara(b, 0, 300, 96, 1);
+      AssertEquals('the new document''s text', 'second document', L.Text);
+      L.Release;
+      lo.Document := nil;
+      AssertEquals('let go of: nothing kept', 0, lo.CachedCount);
+    finally
+      b.Free;
+    end;
+    if Pointer(b) <> addr then Ignore('the heap did not hand the freed address out again');
+  finally
+    lo.Free;
+  end;
+end;
+
+{ Sizes a file gives become pixels under a ceiling, the document keeping what it read: a font
+  of \fs60000 is CRichMaxFontPx for measuring, metrics and drawing alike (Word's largest size
+  at 144 PPI is not cut); lengths saturate at CRichMaxLengthPx; a paragraph of lines exactly
+  2,000,000,000 twips high has a positive height, which stops at CRichMaxBlockPx. }
+procedure TTyRichLayoutTest.TestSizesFromAFileHaveCeilingsOnTheWayToPixels;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
+  fr: TTyRichFragment;
+  i: Integer;
+  bmp: TBGRABitmap;
+begin
+  AssertEquals('\fs60000', CRichMaxFontPx, TyRichHalfPointsToPx(60000, 96, 1));
+  AssertEquals('the largest half-points', CRichMaxFontPx, TyRichHalfPointsToPx(MaxInt, 144, 5));
+  AssertEquals('Word''s largest at 144 PPI', 3276, TyRichHalfPointsToPx(3276, 144, 1));
+  AssertEquals('at least a pixel', 1, TyRichHalfPointsToPx(-5, 96, 1));
+  AssertEquals('twips saturate', CRichMaxLengthPx, TyRichTwipsToPx(High(Int64) div 2, 96, 5));
+  AssertEquals('both ways', -CRichMaxLengthPx, TyRichTwipsToPx(Low(Int64) div 2, 96, 5));
+  AssertEquals('2e9 twips', CRichMaxLengthPx, TyRichTwipsToPx(2000000000, 96, 1));
+  AssertEquals('an ordinary length', 96, TyRichTwipsToPx(1440, 96, 1));
+  AssertEquals('the device''s ceiling', CRichMaxFontPx,
+    FDevice.FontPixelHeight(FDevice.ResolveFont('Any', 100000, [])));
+  d := NewDoc('ab'#10'ab'#11'cd'#10'a'#9'b'#10'xy'#10 + StringOfChar(#11, 70000));
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := 60000;
+  SetChar(d, 0, 2, [cffSize], f);
+  L := Lay(d, 0, 10000);
+  fr := FragAt(L, 0);
+  AssertEquals('the font', CRichMaxFontPx, FDevice.FontPixelHeight(fr.Font));
+  AssertEquals('measured at it', 2 * (CRichMaxFontPx div 2), fr.Width);
+  AssertEquals('its metrics', CRichMaxFontPx * 4 div 5, fr.Ascent);
+  AssertEquals('the line', CRichMaxFontPx, L.Height);
+  AssertEquals('the document keeps its size', 60000, d.Formats.CharFormat(
+    d.RunsOf(0)[0].Format).SizeHalfPt);
+  bmp := TBGRABitmap.Create(50, 50, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 50, 50), TyRichDefaultPaintStyle, 0, 0);
+    AssertEquals('drawn at it: the baseline the metrics give', 'ab|0|' +
+      IntToStr(CRichMaxFontPx * 4 div 5), FDevice.DrawLog.CommaText);
+  finally
+    bmp.Free;
+  end;
+  // exact lines of 2e9 twips, as much before and after
+  pf := TyDefaultParaFormat;
+  pf.LineSpacing := lsExact;
+  pf.LineSpacingValue := 2000000000;
+  pf.SpaceBefore := 2000000000;
+  pf.SpaceAfter := 2000000000;
+  SetPara(d, 1, [pffLineSpacing, pffSpaceBefore, pffSpaceAfter], pf);
+  L := Lay(d, 1, 1000);
+  AssertEquals('two lines', 2, L.LineCount);
+  AssertEquals('each at the ceiling', CRichMaxLengthPx, L.Lines[1].Height);
+  AssertEquals('positive, and summed', 4 * CRichMaxLengthPx, L.Height);
+  // an indent and a tab stop of 2e9 twips, a picture of 2e9 by 2e9
+  pf := TyDefaultParaFormat;
+  pf.LeftIndent := 2000000000;
+  SetLength(pf.Tabs, 1);
+  pf.Tabs[0].Position := 2000000000;
+  pf.Tabs[0].Align := ttaLeft;
+  pf.Tabs[0].Leader := ttlNone;
+  SetPara(d, 2, [pffLeftIndent, pffTabs], pf);
+  L := Lay(d, 2, CRichNoWrap);
+  AssertEquals('the indent', CRichMaxLengthPx, FragAt(L, 0).X);
+  AssertEquals('the stop (clamped) is behind the text: the next default one',
+    ((CRichMaxLengthPx + 10) div 48 + 1) * 48, FragAt(L, 2).X);
+  AssertTrue('picture', d.Execute(TTyRichInsertObject.Create(d.Text.ParaStart(3) + 1,
+    TTyRichPicture.Create(rpfPng, nil, 2000000000, 2000000000))));
+  L := Lay(d, 3, 1000);
+  fr := FragAt(L, 1);
+  AssertEquals('the box''s width', CRichMaxLengthPx, fr.Width);
+  AssertEquals('its height', CRichMaxLengthPx, fr.Ascent);
+  // 70,001 lines of the ceiling's height: the block stops at CRichMaxBlockPx
+  pf := TyDefaultParaFormat;
+  pf.LineSpacing := lsExact;
+  pf.LineSpacingValue := 2000000000;
+  SetPara(d, 4, [pffLineSpacing], pf);
+  L := Lay(d, 4, 1000);
+  AssertEquals('lines', 70001, L.LineCount);
+  AssertEquals('the height stops', CRichMaxBlockPx, L.Height);
+  for i := 1 to L.LineCount - 1 do
+    if L.Lines[i].Top < L.Lines[i - 1].Top then
+      Fail(Format('line %d goes up: %d after %d', [i, L.Lines[i].Top, L.Lines[i - 1].Top]));
 end;
 
 initialization

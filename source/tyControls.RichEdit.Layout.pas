@@ -66,6 +66,19 @@ const
   CRichNoWrap = 0;
   { The box of a picture whose size is not known, in pixels at 96 PPI and zoom 1. }
   CRichDefaultObjectPx = 32;
+  { Ceilings on the way from a file's sizes to pixels; the document keeps what it read. The
+    largest font, in pixels: Word's largest size (1638 pt, \fs3276) is 3276 px at 100 % on a
+    144 PPI screen. A larger size (a corrupt \fs, or a zoom past it) is measured, given its
+    metrics and drawn at this one - every font goes through the device's ResolveFont, which
+    applies it - since the renderer allocates a run's box and an unbounded size is
+    gigabytes. }
+  CRichMaxFontPx = 3300;
+  { The longest length a file gives that becomes pixels (TyRichTwipsToPx saturates at it,
+    either sign): indents, tab positions, space before and after, an exact or at-least line
+    height, a picture's box, a cell's edges. }
+  CRichMaxLengthPx = 32767;
+  { A block's height and its lines' tops are sums of such lengths; they stop here. }
+  CRichMaxBlockPx = MaxInt div 4;
   { A list item's number is its place among the items before it, found by looking back; the
     look goes back at most this many paragraphs. An item further down a longer list is
     numbered as if the list started at the cap (its number is too small) - the price of never
@@ -615,6 +628,7 @@ type
     procedure PictureDrop(AEntry: TObject);
     procedure PictureTrim(AKeep: TObject);
     procedure SetPictureLimit(AValue: Int64);
+    procedure SetDocument(AValue: TTyRichDocument);
     procedure SetBaseFontName(const AValue: string);
     procedure SetBaseFontSizeHalfPt(AValue: Integer);
     procedure FallbackFontsChanged(Sender: TObject);
@@ -649,17 +663,21 @@ type
   public
     constructor Create(ADevice: TTyRichTextDevice; AOwnsDevice: Boolean = True);
     destructor Destroy; override;
-    { Paragraph AIndex of ADoc laid out at AWidth pixels (CRichNoWrap: no wrapping), APPI
-      and AZoom (1.0 = 100 %). From the cache when it holds that paragraph at those values.
-      The result carries a reference for the caller: Release it when done. The layouter
-      works for one document at a time: a call with another one empties the cache first. }
+    { Paragraph AIndex of ADoc laid out at AWidth pixels, APPI and AZoom (1.0 = 100 %).
+      AWidth 0 (CRichNoWrap, what TyRichLayoutWidth gives for rwmNone) means no wrapping at
+      all - every paragraph one line, the right indent ignored - not a window 0 wide: a
+      caller with a client width of 0 passes 1 (TyRichLayoutWidth does). From the cache when
+      it holds that paragraph at those values. The result carries a reference for the
+      caller: Release it when done. The layouter works for one document at a time, Document:
+      a call with another one switches to it through that setter (which empties the caches). }
     function LayoutPara(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyParaLayout;
     { The block paragraph AIndex belongs to, with a reference for the caller: a
       TTyRowLayout when the paragraph is in a table cell - its row, whichever of the row's
       paragraphs AIndex is - else its TTyParaLayout. The entry the control uses: the next
       block starts at LastPara + 1. Finding a row's paragraphs reads the row's own and one
-      on either side (never the whole table), inside one read scope. }
+      on either side (never the whole table), inside one read scope. AWidth as LayoutPara
+      takes it (0: no wrapping; a row's cells wrap at their own widths anyway). }
     function LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyBlockLayout; virtual;
     { Paragraphs AFirst .. AFirst + ACount - 1 changed: their layouts go (Stale). }
@@ -678,7 +696,12 @@ type
     { The advance of AText in AFont, kept by (font, text). }
     function MeasureText(AFont: TTyRichFontId; const AText: UTF8String): Integer;
     property Device: TTyRichTextDevice read FDevice;
-    property Document: TTyRichDocument read FDoc;
+    { The document laid out. Setting it - the same document too - empties every cache (the
+      layouts go Stale; measures, glyph and fallback answers, list numbers and pictures go):
+      a layouter knows its document by being told, never by its address, which a new
+      document can share with a freed one. The control sets it when it makes its document
+      and whenever it replaces the document or its content; nil lets go of it. }
+    property Document: TTyRichDocument read FDoc write SetDocument;
     { The font a character format with no name / no size gets: the control's theme font. }
     property BaseFontName: string read FBaseFontName write SetBaseFontName;
     property BaseFontSizeHalfPt: Integer read FBaseFontSizeHalfPt write SetBaseFontSizeHalfPt;
@@ -724,9 +747,15 @@ type
   the document's text width at APPI and AZoom, rwmNone CRichNoWrap. }
 function TyRichLayoutWidth(AMode: TTyRichWrapMode; AAvailWidth: Integer;
   ADoc: TTyRichDocument; APPI: Integer; AZoom: Single): Integer;
+{ A length in twips as pixels at APPI and AZoom, saturating at +-CRichMaxLengthPx (never
+  wrapping). }
 function TyRichTwipsToPx(ATwips: Int64; APPI: Integer; AZoom: Single): Integer;
-{ The font size of a character format in pixels (half-points at APPI and AZoom), at least 1. }
+{ The font size of a character format in pixels (half-points at APPI and AZoom), from 1 to
+  CRichMaxFontPx. }
 function TyRichHalfPointsToPx(AHalfPt: Integer; APPI: Integer; AZoom: Single): Integer;
+{ A pixel length clamped to +-CRichMaxLengthPx: the one helper for a size that does not come
+  through TyRichTwipsToPx. }
+function TyRichClampPx(APx: Int64): Integer;
 function TyRichIsKinsokuNoLineStart(ACode: Cardinal): Boolean;
 function TyRichIsKinsokuNoLineEnd(ACode: Cardinal): Boolean;
 { A code point that belongs to the cluster before it: a combining mark, a variation
@@ -992,15 +1021,39 @@ end;
 
 { ---- units ---- }
 
-function TyRichTwipsToPx(ATwips: Int64; APPI: Integer; AZoom: Single): Integer;
+function TyRichClampPx(APx: Int64): Integer;
 begin
-  Result := Round(ATwips * Double(APPI) * Double(AZoom) / 1440);
+  if APx > CRichMaxLengthPx then Exit(CRichMaxLengthPx);
+  if APx < -CRichMaxLengthPx then Exit(-CRichMaxLengthPx);
+  Result := APx;
+end;
+
+function TyRichTwipsToPx(ATwips: Int64; APPI: Integer; AZoom: Single): Integer;
+var
+  d: Double;
+begin
+  // saturated in floating point, before Round (which would raise past Int64)
+  d := ATwips * Double(APPI) * Double(AZoom) / 1440;
+  if d >= CRichMaxLengthPx then Exit(CRichMaxLengthPx);
+  if d <= -CRichMaxLengthPx then Exit(-CRichMaxLengthPx);
+  if not (Abs(d) < CRichMaxLengthPx) then Exit(0);   // NaN
+  Result := Round(d);
 end;
 
 function TyRichHalfPointsToPx(AHalfPt: Integer; APPI: Integer; AZoom: Single): Integer;
+var
+  d: Double;
 begin
-  Result := Round(AHalfPt * Double(APPI) * Double(AZoom) / 144);
-  if Result < 1 then Result := 1;
+  d := AHalfPt * Double(APPI) * Double(AZoom) / 144;
+  if d >= CRichMaxFontPx then Exit(CRichMaxFontPx);
+  if not (d >= 1) then Exit(1);   // NaN too
+  Result := Max(1, Round(d));
+end;
+
+{ A + B, stopping at CRichMaxBlockPx (B is never negative here). }
+function SatAdd(A, B: Integer): Integer; inline;
+begin
+  Result := Integer(Min(Int64(A) + B, Int64(CRichMaxBlockPx)));
 end;
 
 function TyRichLayoutWidth(AMode: TTyRichWrapMode; AAvailWidth: Integer;
@@ -1088,6 +1141,8 @@ var
   st: TFontStyles;
 begin
   if APixelHeight < 1 then APixelHeight := 1;
+  // the one ceiling every font meets: measuring, metrics and drawing all go by this id
+  if APixelHeight > CRichMaxFontPx then APixelHeight := CRichMaxFontPx;
   st := AStyle * [fsBold, fsItalic];
   key := AName + #0 + IntToStr(APixelHeight) + #0 + IntToStr(Ord(fsBold in st)) +
     IntToStr(Ord(fsItalic in st));
@@ -3601,7 +3656,8 @@ begin
       if fr^.Obj <> nil then fr^.Obj.AddRef;
     end;
   end;
-  Inc(ATop, h);
+  // a block's height stops at CRichMaxBlockPx, it never wraps negative
+  ATop := SatAdd(ATop, h);
 end;
 
 { A list paragraph's marker, put in Layout.FMarker; returns where the first line's text
@@ -3714,7 +3770,7 @@ begin
       if (s = N) and (Kind[N - 1] = ckBreak) then
         EmitLine(N, N, k, LeftPx, top, False, True, CFmt[N - 1]);
     end;
-  Layout.FHeight := top + Layout.FSpaceAfter;
+  Layout.FHeight := SatAdd(top, Layout.FSpaceAfter);
   SetLength(Layout.FLines, Layout.FLineCount);
   SetLength(Layout.FFrags, Layout.FFragCount);
 end;
@@ -4100,6 +4156,12 @@ begin
   FFallbackFonts.Free;
   if FOwnsDevice then FDevice.Free;
   inherited Destroy;
+end;
+
+procedure TTyRichLayouter.SetDocument(AValue: TTyRichDocument);
+begin
+  Clear;
+  FDoc := AValue;
 end;
 
 procedure TTyRichLayouter.SetBaseFontName(const AValue: string);
@@ -4657,7 +4719,7 @@ begin
       if P.FNumbered then R.FNumbered := True;
       if R.FCells[ci].ItemCount = 0 then R.FCells[ci].FirstItem := j;
       Inc(R.FCells[ci].ItemCount);
-      Inc(R.FCells[ci].ContentHeight, P.Height);
+      R.FCells[ci].ContentHeight := SatAdd(R.FCells[ci].ContentHeight, P.Height);
     end;
     R.FCharCount := pos;
     // the row's height: its tallest cell, lines included, and what the format demands
@@ -4670,7 +4732,7 @@ begin
       padB := 0;
       if rcsTop in bx^.Sides then padT := bx^.LinePx[rcsTop];
       if rcsBottom in bx^.Sides then padB := bx^.LinePx[rcsBottom];
-      rowH := Max(rowH, padT + bx^.ContentHeight + padB);
+      rowH := Max(rowH, SatAdd(SatAdd(padT, bx^.ContentHeight), padB));
     end;
     if R.FDisplay.Height > 0 then rowH := Max(rowH, Px(R.FDisplay.Height))
     else if R.FDisplay.Height < 0 then rowH := Px(-Int64(R.FDisplay.Height));
@@ -4698,7 +4760,7 @@ begin
         if R.FItems[j].Cell = i then
         begin
           R.FItems[j].Y := y;
-          Inc(y, R.FItems[j].Layout.Height);
+          y := SatAdd(y, R.FItems[j].Layout.Height);
         end;
     end;
   except
@@ -4711,11 +4773,9 @@ end;
 procedure TTyRichLayouter.Prepare(ADoc: TTyRichDocument; AIndex: Integer; var AWidth,
   APPI: Integer; var AZoom: Single);
 begin
-  if ADoc <> FDoc then
-  begin
-    Clear;
-    FDoc := ADoc;
-  end;
+  // another document: switched to as the setter does (the same object at the address of a
+  // freed one is only told apart by the owner setting Document)
+  if ADoc <> FDoc then SetDocument(ADoc);
   if (AIndex < 0) or (AIndex >= ADoc.Text.ParaCount) then
     raise EArgumentOutOfRangeException.CreateFmt('no paragraph %d', [AIndex]);
   if AWidth < 0 then AWidth := CRichNoWrap;

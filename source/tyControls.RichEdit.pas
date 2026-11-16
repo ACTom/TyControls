@@ -609,6 +609,7 @@ begin
   FText := FDoc.Text;
   FDoc.OnChange := @DocChanged;
   FLayouter := CreateLayouter;
+  FLayouter.Document := FDoc;
   FLines := TTyRichEditLines.Create(Self);
   Cursor := crIBeam;
   AccessibleRole := larTextEditorMultiline;
@@ -1002,7 +1003,8 @@ begin
   FText := FDoc.Text;
   ReleaseBlocks;
   ClearPending;
-  FLayouter.Clear;
+  // told, not recognised: the layouter empties everything it kept
+  FLayouter.Document := FDoc;
   FAnchorPara := 0;
   FAnchorOffset := 0;
   FScrollX := 0;
