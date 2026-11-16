@@ -8,7 +8,8 @@ uses
   LCLVersion,                        // LCL_FULLVERSION -- per-tab hints before LCL 4.0
   BGRABitmap, BGRABitmapTypes,       // the borrowed bitmap CachedIndex hands back
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.Animation, tyControls.Accel, tyControls.ImageCollection, tyControls.ImageDraw;
+  tyControls.Animation, tyControls.Accel, tyControls.ImageCollection, tyControls.ImageDraw,
+  tyControls.Css.Parser;             // TyOverrideWith -- CloseButton writes StyleOverride (#226)
 
 const
   { Assign to TabHeight to hand the band's height back to the theme, so it follows
@@ -87,6 +88,69 @@ type
     Radius: Integer;
   end;
 
+  { #226. CloseButton.Visibility. tcvTheme: the strip's own StyleOverride does not say, so
+    the theme's --tab-close-show decides. The other three are that token's three words. }
+  TTyTabCloseVisibility = (tcvTheme, tcvAlways, tcvActive, tcvHover);
+
+  TTyCustomTabStrip = class;
+
+  { #226. The close button's tokens (#223) as properties, for the Object Inspector.
+
+    It keeps NO state. Each property reads and writes the declaration of its token in the
+    strip's own StyleOverride: Visibility := tcvActive writes '--tab-close-show: active'
+    there, and "the theme's" (tcvTheme, clDefault, -1) takes the declaration out. So the
+    property and the tycss cannot disagree, whichever of the two was edited; nothing of it
+    is streamed (the form stores StyleOverride); and what else the override holds is left
+    as its author wrote it (TyOverrideWith).
+
+    A property shows what the strip's own override resolves to -- 'var(--accent)' reads as
+    that colour -- and never the theme's value: with no declaration it says "the theme's".
+    Setting a property to the value it shows changes nothing, so a translucent colour or a
+    reference written by hand survives a round through the Object Inspector. A TColor has no
+    alpha: a translucent colour reads as its opaque one, and setting another replaces it
+    with an opaque '#RRGGBB'. clNone is 'transparent' (no chip, no mark). A system colour is
+    written as the RGB it is at that moment.
+
+    The mark itself (--glyph-tab-close) has no property: write it in StyleOverride. }
+  TTyTabCloseButton = class(TPersistent)
+  private
+    FStrip: TTyCustomTabStrip;
+    procedure Put(const AName, AValue: string);
+    function  GetVisibility: TTyTabCloseVisibility;
+    procedure SetVisibility(AValue: TTyTabCloseVisibility);
+    function  GetColorAt(AIndex: Integer): TColor;
+    procedure SetColorAt(AIndex: Integer; AValue: TColor);
+    function  GetMetricAt(AIndex: Integer): Integer;
+    procedure SetMetricAt(AIndex: Integer; AValue: Integer);
+  protected
+    function GetOwner: TPersistent; override;
+  public
+    constructor Create(AStrip: TTyCustomTabStrip);
+    { From another strip's CloseButton: its seven tokens as that strip's override writes
+      them; one it does not declare is taken out of this strip's. }
+    procedure Assign(Source: TPersistent); override;
+  published
+    { Which closable tabs show their button: --tab-close-show. }
+    property Visibility: TTyTabCloseVisibility read GetVisibility write SetVisibility
+      stored False default tcvTheme;
+    { The mark, at rest and under the pointer: --tab-close-color, --tab-close-hover-color. }
+    property Color: TColor index 0 read GetColorAt write SetColorAt
+      stored False default clDefault;
+    { The chip behind the mark: --tab-close-background, --tab-close-hover-background. }
+    property Background: TColor index 1 read GetColorAt write SetColorAt
+      stored False default clDefault;
+    property HoverColor: TColor index 2 read GetColorAt write SetColorAt
+      stored False default clDefault;
+    property HoverBackground: TColor index 3 read GetColorAt write SetColorAt
+      stored False default clDefault;
+    { The chip's corner radius, logical px; 0 is square. -1: the theme's (--tab-close-radius). }
+    property Radius: Integer index 0 read GetMetricAt write SetMetricAt
+      stored False default -1;
+    { The button's side, logical px. -1 (and 0): the theme's (--tab-close-size). }
+    property Size: Integer index 1 read GetMetricAt write SetMetricAt
+      stored False default -1;
+  end;
+
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
 
@@ -159,6 +223,7 @@ type
     FOnGetTabState: TTyTabGetStateEvent;
     FOnTabPinClick: TTyTabPinClickEvent;
     FMiddleClickClose: Boolean;
+    FCloseButton: TTyTabCloseButton;   // #226; holds no state of its own
     FMiddleTab: Integer;
     FAskingTabState: Boolean;   // TabState is on the stack -- see there
 
@@ -191,6 +256,7 @@ type
     function  GetTabHeight: Integer;
     procedure SetTabHeight(AValue: Integer);
     procedure SetTabsClosable(AValue: Boolean);
+    procedure SetCloseButton(AValue: TTyTabCloseButton);
     procedure SetTabPosition(AValue: TTabPosition);
     procedure SetMultiLine(AValue: Boolean);
     procedure SetRaggedRight(AValue: Boolean);
@@ -707,6 +773,9 @@ type
       and its veto included -- when the button comes up over the tab it went down on. Only
       where the tab can be closed at all (TabsClosable), and never a pinned tab. }
     property MiddleClickClose: Boolean read FMiddleClickClose write FMiddleClickClose default True;
+    { #226. The close button's tokens as properties: which tabs show it, its colours, its
+      radius and its size. A view of this strip's own StyleOverride -- see TTyTabCloseButton. }
+    property CloseButton: TTyTabCloseButton read FCloseButton write SetCloseButton;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
     { The state of each tab -- see TTyTabState and TabState. Called on every measure, paint
       and hit test: keep the handler cheap and free of side effects. }
@@ -747,6 +816,125 @@ end;
 
 { TTyCustomTabStrip }
 
+{ TTyTabCloseButton (#226) }
+
+const
+  TyTabCloseShowToken = '--tab-close-show';
+  TyTabCloseColorTokens: array[0..3] of string = ('--tab-close-color',
+    '--tab-close-background', '--tab-close-hover-color', '--tab-close-hover-background');
+  TyTabCloseMetricTokens: array[0..1] of string = ('--tab-close-radius', '--tab-close-size');
+
+constructor TTyTabCloseButton.Create(AStrip: TTyCustomTabStrip);
+begin
+  inherited Create;
+  FStrip := AStrip;
+end;
+
+function TTyTabCloseButton.GetOwner: TPersistent;
+begin
+  Result := FStrip;
+end;
+
+procedure TTyTabCloseButton.Put(const AName, AValue: string);
+begin
+  FStrip.StyleOverride := TyOverrideWith(FStrip.StyleOverride, AName, AValue);
+end;
+
+procedure TTyTabCloseButton.Assign(Source: TPersistent);
+var
+  theirs, mine, v: string;
+  i: Integer;
+
+  procedure Take(const AName: string);
+  begin
+    if not TyOverrideDeclared(theirs, AName, v) then v := '';
+    mine := TyOverrideWith(mine, AName, v);
+  end;
+
+begin
+  if not (Source is TTyTabCloseButton) then
+  begin
+    inherited Assign(Source);
+    Exit;
+  end;
+  if Source = Self then Exit;
+  theirs := TTyTabCloseButton(Source).FStrip.StyleOverride;
+  mine := FStrip.StyleOverride;
+  Take(TyTabCloseShowToken);
+  for i := Low(TyTabCloseColorTokens) to High(TyTabCloseColorTokens) do
+    Take(TyTabCloseColorTokens[i]);
+  for i := Low(TyTabCloseMetricTokens) to High(TyTabCloseMetricTokens) do
+    Take(TyTabCloseMetricTokens[i]);
+  FStrip.StyleOverride := mine;
+end;
+
+function TTyTabCloseButton.GetVisibility: TTyTabCloseVisibility;
+var
+  s: string;
+begin
+  if not FStrip.OwnStyleToken(TyTabCloseShowToken, s) then Exit(tcvTheme);
+  case TyTabCloseShowOf(s) of     // read as the strip reads it
+    tcsActive: Result := tcvActive;
+    tcsHover:  Result := tcvHover;
+  else
+    Result := tcvAlways;
+  end;
+end;
+
+procedure TTyTabCloseButton.SetVisibility(AValue: TTyTabCloseVisibility);
+const
+  Words: array[TTyTabCloseVisibility] of string = ('', 'always', 'active', 'hover');
+begin
+  if GetVisibility = AValue then Exit;
+  Put(TyTabCloseShowToken, Words[AValue]);
+end;
+
+function TTyTabCloseButton.GetColorAt(AIndex: Integer): TColor;
+var
+  c: TTyColor;
+begin
+  if not FStrip.OwnStyleColor(TyTabCloseColorTokens[AIndex], c) then
+    Result := clDefault
+  else if TyAlphaOf(c) = 0 then
+    Result := clNone
+  else
+    Result := TyColorToLCL(c);
+end;
+
+procedure TTyTabCloseButton.SetColorAt(AIndex: Integer; AValue: TColor);
+var
+  rgb: TColor;
+begin
+  if GetColorAt(AIndex) = AValue then Exit;
+  if AValue = clDefault then
+    Put(TyTabCloseColorTokens[AIndex], '')
+  else if AValue = clNone then
+    Put(TyTabCloseColorTokens[AIndex], 'transparent')
+  else
+  begin
+    rgb := ColorToRGB(AValue);
+    Put(TyTabCloseColorTokens[AIndex],
+      Format('#%.2X%.2X%.2X', [Red(rgb), Green(rgb), Blue(rgb)]));
+  end;
+end;
+
+function TTyTabCloseButton.GetMetricAt(AIndex: Integer): Integer;
+begin
+  if not FStrip.OwnStyleMetric(TyTabCloseMetricTokens[AIndex], Result) then Result := -1;
+end;
+
+{ Radius (index 0) takes 0 -- a square chip. Size (index 1) does not: a button of no size is
+  no button, so 0 there is "not set", like any negative number. }
+procedure TTyTabCloseButton.SetMetricAt(AIndex: Integer; AValue: Integer);
+begin
+  if (AIndex = 1) and (AValue = 0) then AValue := -1;
+  if GetMetricAt(AIndex) = AValue then Exit;
+  if AValue < 0 then
+    Put(TyTabCloseMetricTokens[AIndex], '')
+  else
+    Put(TyTabCloseMetricTokens[AIndex], IntToStr(AValue) + 'px');
+end;
+
 constructor TTyCustomTabStrip.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -782,6 +970,7 @@ begin
   Height     := 200;
   FImagesLink := TChangeLink.Create;
   FImagesLink.OnChange := @ImagesListChanged;
+  FCloseButton := TTyTabCloseButton.Create(Self);
 end;
 
 destructor TTyCustomTabStrip.Destroy;
@@ -792,7 +981,13 @@ begin
     explicitly first so the OnTimer callback can never fire mid-teardown. }
   FreeAndNil(FTimer);
   TyAccelUnregister(Self);
+  FreeAndNil(FCloseButton);
   inherited Destroy;
+end;
+
+procedure TTyCustomTabStrip.SetCloseButton(AValue: TTyTabCloseButton);
+begin
+  FCloseButton.Assign(AValue);
 end;
 
 function TTyCustomTabStrip.DialogChar(var Message: TLMKey): Boolean;

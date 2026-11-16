@@ -107,6 +107,7 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property CloseButton;
     property MiddleClickClose;
     property OnTabClose;
     { Per-tab state -- modified, preview, pinned, hint, ink -- asked of the host tab by tab.

@@ -21,7 +21,7 @@ unit test.tabstrip.close;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Controls, Forms, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.TabStrip, tyControls.TabSet, tyControls.PageControl,
   tyControls.Ribbon, tyControls.Icons.Lucide;
@@ -98,6 +98,29 @@ type
     procedure TheCloseLookIsNotThePins;
     procedure AMiddleClickClosesATabWhoseButtonIsHidden;
     procedure AButtonThatWentOffScreenUnderThePointerIsNotLit;
+    { #226: the CloseButton properties -- a view of the strip's own StyleOverride }
+    procedure WithNoOverrideEveryPropertyFollowsTheTheme;
+    procedure WhatTheThemeSetsIsNotThePropertysValue;
+    procedure VisibilityWritesTheShowToken;
+    procedure VisibilityBackToTheThemeTakesTheTokenOut;
+    procedure AlwaysIsWrittenOutAndOverrulesTheTheme;
+    procedure ThePropertiesReadAHandWrittenOverride;
+    procedure TheColoursWriteTheirTokens;
+    procedure AColourBackToDefaultTakesItsTokenOut;
+    procedure NoColourIsWrittenAsTransparent;
+    procedure ATranslucentColourReadsAsItsOpaqueOne;
+    procedure SettingTheValueAPropertyShowsChangesNothing;
+    procedure ASystemColourIsWrittenAsItsRgb;
+    procedure RadiusAndSizeWriteTheirTokens;
+    procedure ANegativeRadiusOrSizeTakesItsTokenOut;
+    procedure ASizeOfZeroFollowsTheTheme;
+    procedure OnePropertyLeavesTheRestOfTheOverrideAlone;
+    procedure AReferenceIsReadThroughToItsColour;
+    procedure ThePropertiesAreNotStreamed;
+    procedure AllThreeControlsPublishCloseButton;
+    procedure APageControlAndARibbonTakeTheProperties;
+    procedure AssigningCopiesTheCloseTokensAsWritten;
+    procedure TheSubObjectIsOwnedByItsStrip;
   end;
 
 implementation
@@ -782,6 +805,404 @@ begin
   FStrip.TabIndex := 2;
   AssertEquals('no button', 0, InSlot(0, siBlue));
   AssertEquals('and no chip left behind', 0, InSlot(0, siLime));
+end;
+
+{ ---- #226: the CloseButton properties ----
+  Each one reads and writes the declaration of its token in the strip's own StyleOverride and
+  keeps nothing itself, so what the property says and what the strip draws cannot differ. }
+
+procedure TTabStripCloseTest.WithNoOverrideEveryPropertyFollowsTheTheme;
+begin
+  AssertEquals('', FStrip.StyleOverride);
+  AssertTrue('visibility', FStrip.CloseButton.Visibility = tcvTheme);
+  AssertEquals('colour', clDefault, FStrip.CloseButton.Color);
+  AssertEquals('background', clDefault, FStrip.CloseButton.Background);
+  AssertEquals('hover colour', clDefault, FStrip.CloseButton.HoverColor);
+  AssertEquals('hover background', clDefault, FStrip.CloseButton.HoverBackground);
+  AssertEquals('radius', -1, FStrip.CloseButton.Radius);
+  AssertEquals('size', -1, FStrip.CloseButton.Size);
+end;
+
+procedure TTabStripCloseTest.WhatTheThemeSetsIsNotThePropertysValue;
+begin
+  Theme('--tab-close-show: active; --tab-close-color: #FF0000; --tab-close-background: #FFFF00; ' +
+        '--tab-close-hover-color: #000000; --tab-close-hover-background: #00FFFF; ' +
+        '--tab-close-radius: 3px; --tab-close-size: 20px;');
+  AssertEquals('the theme really hides the button', 0, InSlot(1, siRed));
+  AssertTrue('visibility still says: the theme''s', FStrip.CloseButton.Visibility = tcvTheme);
+  AssertEquals('colour', clDefault, FStrip.CloseButton.Color);
+  AssertEquals('background', clDefault, FStrip.CloseButton.Background);
+  AssertEquals('hover colour', clDefault, FStrip.CloseButton.HoverColor);
+  AssertEquals('hover background', clDefault, FStrip.CloseButton.HoverBackground);
+  AssertEquals('radius', -1, FStrip.CloseButton.Radius);
+  AssertEquals('size', -1, FStrip.CloseButton.Size);
+end;
+
+procedure TTabStripCloseTest.VisibilityWritesTheShowToken;
+begin
+  FStrip.CloseButton.Visibility := tcvActive;
+  AssertEquals('--tab-close-show: active;', FStrip.StyleOverride);
+  AssertTrue('read back', FStrip.CloseButton.Visibility = tcvActive);
+  AssertEquals('a tab that is not current has no button', 0, InSlot(1, siBlue));
+  AssertTrue('the current tab has', InSlot(0, siBlue) > 3);
+
+  FStrip.CloseButton.Visibility := tcvHover;
+  AssertEquals('--tab-close-show: hover;', FStrip.StyleOverride);
+  AssertTrue('read back', FStrip.CloseButton.Visibility = tcvHover);
+  AssertEquals('no button before the pointer comes', 0, InSlot(1, siBlue));
+  Hover(CaptionPoint(1));
+  AssertTrue('the tab under the pointer shows it', InSlot(1, siBlue) > 3);
+end;
+
+procedure TTabStripCloseTest.VisibilityBackToTheThemeTakesTheTokenOut;
+begin
+  FStrip.CloseButton.Visibility := tcvActive;
+  FStrip.CloseButton.Visibility := tcvTheme;
+  AssertEquals('', FStrip.StyleOverride);
+  AssertTrue('the theme says always', InSlot(1, siBlue) > 3);
+
+  Theme('--tab-close-show: active;');
+  AssertEquals('and now the theme says active', 0, InSlot(1, siBlue));
+  AssertTrue(FStrip.CloseButton.Visibility = tcvTheme);
+end;
+
+procedure TTabStripCloseTest.AlwaysIsWrittenOutAndOverrulesTheTheme;
+begin
+  Theme('--tab-close-show: active;');
+  AssertEquals('hidden by the theme', 0, InSlot(1, siBlue));
+  FStrip.CloseButton.Visibility := tcvAlways;
+  AssertEquals('--tab-close-show: always;', FStrip.StyleOverride);
+  AssertTrue('read back', FStrip.CloseButton.Visibility = tcvAlways);
+  AssertTrue('this strip shows every button', InSlot(1, siBlue) > 3);
+end;
+
+procedure TTabStripCloseTest.ThePropertiesReadAHandWrittenOverride;
+begin
+  FStrip.StyleOverride :=
+    '--tab-close-show: HOVER; --tab-close-color: #ff0000; --tab-close-background: #FFFF00; ' +
+    '--tab-close-hover-color: #000; --tab-close-hover-background: #00ffff; ' +
+    '--tab-close-radius: 3px; --tab-close-size: 20px;';
+  AssertTrue('visibility', FStrip.CloseButton.Visibility = tcvHover);
+  AssertEquals('colour', clRed, FStrip.CloseButton.Color);
+  AssertEquals('background', clYellow, FStrip.CloseButton.Background);
+  AssertEquals('hover colour', clBlack, FStrip.CloseButton.HoverColor);
+  AssertEquals('hover background', clAqua, FStrip.CloseButton.HoverBackground);
+  AssertEquals('radius', 3, FStrip.CloseButton.Radius);
+  AssertEquals('size', 20, FStrip.CloseButton.Size);
+
+  FStrip.StyleOverride := '--tab-close-show: banana; --tab-close-color: banana;';
+  AssertTrue('a word the strip reads as always is shown as always',
+    FStrip.CloseButton.Visibility = tcvAlways);
+  AssertEquals('a colour that is no colour is the theme''s', clDefault, FStrip.CloseButton.Color);
+end;
+
+procedure TTabStripCloseTest.TheColoursWriteTheirTokens;
+begin
+  FStrip.CloseButton.Color := clRed;
+  AssertEquals('--tab-close-color: #FF0000;', FStrip.StyleOverride);
+  AssertTrue('the mark is red', InSlot(1, siRed) > 3);
+
+  FStrip.CloseButton.Background := clYellow;
+  AssertEquals('--tab-close-color: #FF0000; --tab-close-background: #FFFF00;', FStrip.StyleOverride);
+  AssertTrue('on a yellow chip', InSlot(1, siYellow) > 60);
+
+  FStrip.CloseButton.HoverColor := clBlack;
+  FStrip.CloseButton.HoverBackground := clAqua;
+  AssertEquals('--tab-close-color: #FF0000; --tab-close-background: #FFFF00; ' +
+    '--tab-close-hover-color: #000000; --tab-close-hover-background: #00FFFF;', FStrip.StyleOverride);
+  Hover(SlotMid(1));
+  AssertTrue('the hover chip', InSlot(1, siCyan) > 60);
+  AssertTrue('the hover mark', InSlot(1, siBlack) > 3);
+
+  AssertEquals(clRed, FStrip.CloseButton.Color);
+  AssertEquals(clYellow, FStrip.CloseButton.Background);
+  AssertEquals(clBlack, FStrip.CloseButton.HoverColor);
+  AssertEquals(clAqua, FStrip.CloseButton.HoverBackground);
+end;
+
+procedure TTabStripCloseTest.AColourBackToDefaultTakesItsTokenOut;
+begin
+  Theme('--tab-close-color: #FF0000;');
+  FStrip.CloseButton.Color := clBlack;
+  AssertTrue('the strip''s own colour', InSlot(1, siBlack) > 3);
+  FStrip.CloseButton.Color := clDefault;
+  AssertEquals('', FStrip.StyleOverride);
+  AssertTrue('the theme''s colour again', InSlot(1, siRed) > 3);
+end;
+
+procedure TTabStripCloseTest.NoColourIsWrittenAsTransparent;
+begin
+  Theme('--tab-close-background: #FFFF00;');
+  AssertTrue('the theme gives every button a chip', InSlot(1, siYellow) > 60);
+  FStrip.CloseButton.Background := clNone;
+  AssertEquals('--tab-close-background: transparent;', FStrip.StyleOverride);
+  AssertEquals('this strip draws none', 0, InSlot(1, siYellow));
+  AssertEquals('read back', clNone, FStrip.CloseButton.Background);
+end;
+
+procedure TTabStripCloseTest.ATranslucentColourReadsAsItsOpaqueOne;
+begin
+  FStrip.StyleOverride := '--tab-close-color: #FF000080;';
+  AssertEquals(clRed, FStrip.CloseButton.Color);
+  AssertEquals('reading changes nothing', '--tab-close-color: #FF000080;', FStrip.StyleOverride);
+end;
+
+{ The Object Inspector, a copy and a paste all set a property to the value it already shows.
+  That must not turn a translucent colour opaque, nor reformat what the author typed. }
+procedure TTabStripCloseTest.SettingTheValueAPropertyShowsChangesNothing;
+const
+  S = '--tab-close-color: #FF000080; --tab-close-show:  ACTIVE ; --tab-close-radius:var(--round); ' +
+      '--tab-close-size : 20PX; --tab-close-background: var(--chip);';
+begin
+  Theme('--chip: #FFFF00; --round: 3px;');
+  FStrip.StyleOverride := S;
+  FStrip.CloseButton.Color := FStrip.CloseButton.Color;
+  FStrip.CloseButton.Background := FStrip.CloseButton.Background;
+  FStrip.CloseButton.Visibility := FStrip.CloseButton.Visibility;
+  FStrip.CloseButton.Radius := FStrip.CloseButton.Radius;
+  FStrip.CloseButton.Size := FStrip.CloseButton.Size;
+  FStrip.CloseButton.HoverColor := FStrip.CloseButton.HoverColor;
+  FStrip.CloseButton.HoverBackground := FStrip.CloseButton.HoverBackground;
+  AssertEquals(S, FStrip.StyleOverride);
+  AssertEquals('and what was set was really read', clRed, FStrip.CloseButton.Color);
+  AssertEquals(clYellow, FStrip.CloseButton.Background);
+  AssertTrue(FStrip.CloseButton.Visibility = tcvActive);
+  AssertEquals(3, FStrip.CloseButton.Radius);
+  AssertEquals(20, FStrip.CloseButton.Size);
+end;
+
+procedure TTabStripCloseTest.ASystemColourIsWrittenAsItsRgb;
+var
+  rgb: TColor;
+begin
+  rgb := ColorToRGB(clHighlight);
+  FStrip.CloseButton.Color := clHighlight;
+  AssertEquals(Format('--tab-close-color: #%.2X%.2X%.2X;', [Red(rgb), Green(rgb), Blue(rgb)]),
+    FStrip.StyleOverride);
+  AssertEquals('read back as the colour it was that day', rgb, FStrip.CloseButton.Color);
+end;
+
+procedure TTabStripCloseTest.RadiusAndSizeWriteTheirTokens;
+var
+  r: TRect;
+begin
+  FStrip.CloseButton.Background := clYellow;
+  AssertTrue('square, as TyTabClose says', CornerIs(1, siYellow));
+  FStrip.CloseButton.Radius := 999;
+  AssertEquals('--tab-close-background: #FFFF00; --tab-close-radius: 999px;', FStrip.StyleOverride);
+  AssertEquals(999, FStrip.CloseButton.Radius);
+  AssertFalse('a circle leaves the corner alone', CornerIs(1, siYellow));
+
+  Theme('', 'TyTabClose { background: #00FF00; border-radius: 7px; }');
+  FStrip.CloseButton.Radius := 0;
+  AssertEquals('0 is a radius, not the theme''s',
+    '--tab-close-background: #FFFF00; --tab-close-radius: 0px;', FStrip.StyleOverride);
+  AssertEquals(0, FStrip.CloseButton.Radius);
+  AssertTrue('it squares a chip the rule would round', CornerIs(1, siYellow));
+
+  FStrip.StyleOverride := '';
+  r := Slot(1);
+  AssertEquals('the theme''s size', 14, r.Right - r.Left);
+  FStrip.CloseButton.Size := 20;
+  AssertEquals('--tab-close-size: 20px;', FStrip.StyleOverride);
+  AssertEquals(20, FStrip.CloseButton.Size);
+  r := Slot(1);
+  AssertEquals('the slot is that wide', 20, r.Right - r.Left);
+  AssertEquals('and that high', 20, r.Bottom - r.Top);
+end;
+
+procedure TTabStripCloseTest.ANegativeRadiusOrSizeTakesItsTokenOut;
+var
+  r: TRect;
+begin
+  FStrip.CloseButton.Radius := 5;
+  FStrip.CloseButton.Radius := -1;
+  AssertEquals('', FStrip.StyleOverride);
+  FStrip.CloseButton.Radius := 5;
+  FStrip.CloseButton.Radius := -7;
+  AssertEquals('any negative radius', '', FStrip.StyleOverride);
+  AssertEquals(-1, FStrip.CloseButton.Radius);
+
+  FStrip.CloseButton.Size := 20;
+  FStrip.CloseButton.Size := -1;
+  AssertEquals('', FStrip.StyleOverride);
+  AssertEquals(-1, FStrip.CloseButton.Size);
+  r := Slot(1);
+  AssertEquals('the theme''s size again', 14, r.Right - r.Left);
+end;
+
+{ A button of no size is no button: 0 is not a size to ask for, it is "not set". }
+procedure TTabStripCloseTest.ASizeOfZeroFollowsTheTheme;
+var
+  r: TRect;
+begin
+  FStrip.CloseButton.Size := 20;
+  FStrip.CloseButton.Size := 0;
+  AssertEquals('', FStrip.StyleOverride);
+  AssertEquals(-1, FStrip.CloseButton.Size);
+  r := Slot(1);
+  AssertEquals(14, r.Right - r.Left);
+end;
+
+procedure TTabStripCloseTest.OnePropertyLeavesTheRestOfTheOverrideAlone;
+const
+  Mine = 'color: #0000FF;  /* mine */ --tab-close-color:#FF0000 ;'#13#10'padding : 1px';
+begin
+  FStrip.StyleOverride := Mine;
+  FStrip.CloseButton.Visibility := tcvActive;
+  AssertEquals(Mine + ';'#13#10'--tab-close-show: active;', FStrip.StyleOverride);
+  AssertEquals('the other property still reads its own', clRed, FStrip.CloseButton.Color);
+
+  FStrip.CloseButton.Color := clLime;
+  AssertEquals('color: #0000FF;  /* mine */ --tab-close-color: #00FF00;'#13#10 +
+    'padding : 1px;'#13#10'--tab-close-show: active;', FStrip.StyleOverride);
+
+  FStrip.CloseButton.Color := clDefault;
+  FStrip.CloseButton.Visibility := tcvTheme;
+  AssertEquals('color: #0000FF;  /* mine */'#13#10'padding : 1px;', FStrip.StyleOverride);
+end;
+
+procedure TTabStripCloseTest.AReferenceIsReadThroughToItsColour;
+begin
+  Theme('--mine: #FF0000;');
+  FStrip.StyleOverride := '--tab-close-color: var(--mine);';
+  AssertEquals(clRed, FStrip.CloseButton.Color);
+  AssertTrue('and that is what the strip draws', InSlot(1, siRed) > 3);
+end;
+
+{ The .lfm stores StyleOverride and nothing of CloseButton: one place holds the value, and a
+  form saved here still opens where the property does not exist. }
+procedure TTabStripCloseTest.ThePropertiesAreNotStreamed;
+var
+  bin, txt: TMemoryStream;
+  s: string;
+  back: TTyTabSet;
+begin
+  FStrip.Name := 'Tabs';
+  FStrip.CloseButton.Visibility := tcvActive;
+  FStrip.CloseButton.Color := clRed;
+  FStrip.CloseButton.Radius := 4;
+  FStrip.CloseButton.Size := 18;
+  bin := TMemoryStream.Create;
+  txt := TMemoryStream.Create;
+  back := TTyTabSet.Create(nil);
+  try
+    bin.WriteComponent(FStrip);
+    bin.Position := 0;
+    ObjectBinaryToText(bin, txt);
+    SetString(s, PChar(txt.Memory), txt.Size);
+    AssertTrue('StyleOverride is stored: ' + s, Pos('StyleOverride', s) > 0);
+    AssertTrue('with the token in it', Pos('--tab-close-show: active', s) > 0);
+    AssertEquals('nothing of CloseButton: ' + s, 0, Pos('CloseButton', s));
+
+    bin.Position := 0;
+    bin.ReadComponent(back);
+    AssertTrue('a strip read back shows the same', back.CloseButton.Visibility = tcvActive);
+    AssertEquals(clRed, back.CloseButton.Color);
+    AssertEquals(4, back.CloseButton.Radius);
+    AssertEquals(18, back.CloseButton.Size);
+  finally
+    back.Free;
+    txt.Free;
+    bin.Free;
+  end;
+end;
+
+procedure TTabStripCloseTest.AllThreeControlsPublishCloseButton;
+const
+  Names: array[0..6] of string = ('Visibility', 'Color', 'Background', 'HoverColor',
+    'HoverBackground', 'Radius', 'Size');
+var
+  i: Integer;
+  pi: PPropInfo;
+begin
+  AssertTrue('TTyTabSet', GetPropInfo(TTyTabSet, 'CloseButton') <> nil);
+  AssertTrue('TTyPageControl', GetPropInfo(TTyPageControl, 'CloseButton') <> nil);
+  AssertTrue('TTyRibbon', GetPropInfo(TTyRibbon, 'CloseButton') <> nil);
+  AssertEquals('the sub-object''s published properties', Length(Names),
+    GetTypeData(FStrip.CloseButton.ClassInfo)^.PropCount);
+  for i := 0 to High(Names) do
+  begin
+    pi := GetPropInfo(FStrip.CloseButton, Names[i]);
+    AssertTrue(Names[i] + ' is published', pi <> nil);
+    AssertFalse(Names[i] + ' is never stored', IsStoredProp(FStrip.CloseButton, pi));
+  end;
+end;
+
+procedure TTabStripCloseTest.APageControlAndARibbonTakeTheProperties;
+var
+  pc: TTyPageControl;
+  rb: TTyRibbon;
+begin
+  pc := TTyPageControl.Create(FForm);
+  pc.Parent := FForm;
+  pc.Controller := FCtl;
+  pc.Font.PixelsPerInch := 96;
+  pc.SetBounds(0, 40, STRIP_W, 120);
+  pc.TabsClosable := True;
+  pc.AddPage('Alpha');
+  pc.AddPage('Beta');
+  pc.AddPage('Gamma');
+  pc.ActivePageIndex := 0;
+  FTarget := pc;
+  AssertTrue('every page shows its button first', InSlot(1, siBlue) > 3);
+  pc.CloseButton.Visibility := tcvActive;
+  AssertEquals('--tab-close-show: active;', pc.StyleOverride);
+  AssertEquals('another page', 0, InSlot(1, siBlue));
+  AssertTrue('the current page', InSlot(0, siBlue) > 3);
+
+  rb := TTyRibbon.Create(FForm);
+  rb.Parent := FForm;
+  rb.Controller := FCtl;
+  rb.Font.PixelsPerInch := 96;
+  rb.SetBounds(0, 40, STRIP_W, 150);
+  rb.TabsClosable := True;
+  rb.AddPage('Alpha');
+  rb.AddPage('Beta');
+  rb.AddPage('Gamma');
+  rb.ActivePageIndex := 0;
+  FTarget := rb;
+  rb.CloseButton.Color := clRed;
+  rb.CloseButton.Background := clYellow;
+  AssertEquals('--tab-close-color: #FF0000; --tab-close-background: #FFFF00;', rb.StyleOverride);
+  AssertTrue('its mark', InSlot(1, siRed) > 3);
+  AssertTrue('its chip', InSlot(1, siYellow) > 60);
+  AssertEquals('the page control was not touched', '--tab-close-show: active;', pc.StyleOverride);
+end;
+
+{ CloseButton := another strip's: the seven tokens go over as that strip's override writes
+  them (a translucent colour stays translucent), one it does not declare is taken out here,
+  and everything else in this strip's override stays. }
+procedure TTabStripCloseTest.AssigningCopiesTheCloseTokensAsWritten;
+const
+  Theirs = 'color: #0000FF; --tab-close-color: #FF000080; --tab-close-show: hover;';
+var
+  other: TTyTabSet;
+begin
+  other := TTyTabSet.Create(FForm);
+  other.Parent := FForm;
+  other.Controller := FCtl;
+  other.StyleOverride := Theirs;
+  FStrip.StyleOverride := 'padding: 1px; --tab-close-radius: 3px; --tab-close-show: active;';
+
+  FStrip.CloseButton := other.CloseButton;
+  AssertEquals('padding: 1px; --tab-close-show: hover; --tab-close-color: #FF000080;',
+    FStrip.StyleOverride);
+  AssertEquals('the source is not touched', Theirs, other.StyleOverride);
+  AssertTrue(FStrip.CloseButton.Visibility = tcvHover);
+  AssertEquals(-1, FStrip.CloseButton.Radius);
+
+  FStrip.CloseButton := FStrip.CloseButton;
+  AssertEquals('assigning it to itself changes nothing',
+    'padding: 1px; --tab-close-show: hover; --tab-close-color: #FF000080;', FStrip.StyleOverride);
+end;
+
+{ The Object Inspector walks GetOwner to find the component a sub-object belongs to -- that
+  is how a change in it marks the form modified. }
+procedure TTabStripCloseTest.TheSubObjectIsOwnedByItsStrip;
+begin
+  FStrip.Name := 'Tabs';
+  AssertEquals('Tabs.TTyTabCloseButton', FStrip.CloseButton.GetNamePath);
 end;
 
 initialization

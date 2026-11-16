@@ -7283,6 +7283,7 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property CloseButton;
     property MiddleClickClose;
     property OnTabClose;
     property OnGetTabState;
@@ -8158,6 +8159,7 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property CloseButton;
     property OnTabClose;
     property OnChange;
     property OnChanging;
@@ -10003,6 +10005,7 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property CloseButton;
     property MiddleClickClose;
     property OnTabClose;
     property OnGetTabState;

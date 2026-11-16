@@ -263,6 +263,7 @@ type
     property OnGetImageIndex;
     property TabHeight;
     property TabsClosable;
+    property CloseButton;
     property OnTabClose;
     property OnChange;
     property OnChanging;
