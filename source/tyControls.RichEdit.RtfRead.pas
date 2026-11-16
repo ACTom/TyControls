@@ -98,7 +98,7 @@ type
 
   TTyRtfDest = (rdNormal, rdFontTable, rdFontEntry, rdColorTable, rdListTable, rdList,
     rdListLevel, rdOverrideTable, rdOverride, rdPict, rdShpPict, rdField, rdFieldResult, rdPn,
-    rdUpr);
+    rdUpr, rdListText);
   TTyRtfSlot = (sloNone, sloLoch, sloHich, sloDbch, sloOther);
   TTyRtfAbsorb = (absNone, absLast, absCurrent);
 
@@ -256,6 +256,7 @@ type
     Table, Row, Cell: Integer;   // Table -1: not in a table
     TextStart: PtrInt;           // building: its UTF-8 in the parser's output (no separator)
     TextLen: Integer;
+    ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
   end;
 
   TTyRtfRowRec = record
@@ -344,6 +345,12 @@ type
     FFieldText: UTF8String;
     FFieldLen: Integer;
     FFirstFont: Integer;         // the number of the font table's first entry, -1 none
+    // a list item's marker text being read (building only), and the state the group
+    // started in: the parse goes on from it as skipping the group leaves it
+    FListText: UTF8String;
+    FListSaved: TTyRtfCore;
+    FListEnded: Boolean;
+    FParaListText: UTF8String;   // read, for the paragraph that is open
     // format ids for the properties in effect
     FCharValid: array[TTyRtfCharClass] of Boolean;
     FCharId: array[TTyRtfCharClass] of TTyCharFormatId;
@@ -2087,7 +2094,8 @@ end;
 function TTyRtfParser.DoGroupEnd: Boolean;
 begin
   PopGroup;
-  Result := not FContent;
+  Result := not FContent and not FListEnded;
+  FListEnded := False;
 end;
 
 // Consumes the rest of a group whose brace is behind; returns where it ends.
@@ -2134,7 +2142,7 @@ begin
   e := FTok.Stop;
   any := False;
   case FS.Props.Dest of
-    rdNormal, rdFieldResult:
+    rdNormal, rdFieldResult, rdListText:
       while p < e do
       begin
         b := FBuf[p];
@@ -2192,7 +2200,7 @@ begin
     Exit;
   end;
   case FS.Props.Dest of
-    rdNormal, rdFieldResult: ProcessByte(FTok.Value);
+    rdNormal, rdFieldResult, rdListText: ProcessByte(FTok.Value);
     rdFontTable, rdFontEntry:
       if FS.UcSkip > 0 then Dec(FS.UcSkip)
       else if FEntryOn then FEntryRaw := FEntryRaw + AnsiChar(FTok.Value);
@@ -2241,7 +2249,7 @@ begin
     Dec(FS.UcSkip);
     Exit;
   end;
-  if not (FS.Props.Dest in [rdNormal, rdFieldResult]) then Exit;
+  if not (FS.Props.Dest in [rdNormal, rdFieldResult, rdListText]) then Exit;
   if FS.InRowDef then EndRowDef;
   case v of
     Ord('~'): EmitChar($A0);
@@ -2297,6 +2305,11 @@ begin
     rdPict: PictWord(kw);
     rdUpr:
       if kw in [kwAnsiCpg, kwUc] then BodyWord(kw);
+    rdListText:
+      case kw of
+        kwUc, kwU, kwPlain, kwF, kwAf, kwLoch, kwHich, kwDbch, kwTab, kwLdblquote..kwZwnbo:
+          BodyWord(kw);
+      end;
   end;
 end;
 
@@ -2338,7 +2351,7 @@ begin
         SkipAndPop;
         Exit;
       end;
-    rdFontEntry, rdColorTable, rdPict, rdListLevel, rdOverride:
+    rdFontEntry, rdColorTable, rdPict, rdListLevel, rdOverride, rdListText:
       begin
         SkipAndPop;
         Exit;
@@ -2442,7 +2455,20 @@ begin
     kwDListText:
       begin
         if content then EnsureBody;
-        SkipAndPop;
+        if content and not Counting then
+        begin
+          { A list item's marker as the file has it (Word's "2." after a paragraph that is no
+            item): its text read as text is - fonts, \'xx, \uN - into FListText. The index
+            scan skips the group; so that both go on alike, the state here is kept and put
+            back when the group ends, as skipping it would leave it. }
+          FListSaved := FS;
+          FListText := '';
+          BeginDest(rdListText);
+          FS.PendingLead := -1;
+          FS.PendingHigh := 0;
+        end
+        else
+          SkipAndPop;
       end;
     kwDHeaderFooter, kwDOpaque:
       if content and ((AKw = kwDOpaque) or FS.BodyStarted) then
@@ -2519,6 +2545,7 @@ end;
 
 procedure TTyRtfParser.EndDest(const AOld: TTyRtfProps);
 var
+  n: Integer;
   pic: TTyRichPicture;
   peek: TTyRtfLexer;
   t1, t2: TTyRtfToken;
@@ -2533,6 +2560,17 @@ var
 
 begin
   case AOld.Dest of
+    rdListText:
+      begin
+        n := Length(FListText);
+        while (n > 0) and (FListText[n] in [#9, ' ']) do Dec(n);
+        FParaListText := Copy(FListText, 1, n);
+        FListText := '';
+        // on as from skipping the group: its state, then its end
+        FS := FListSaved;
+        PopGroup;
+        FListEnded := True;
+      end;
     rdFontEntry: FinishFontEntry;
     rdFontTable:
       begin
@@ -3785,7 +3823,23 @@ end;
 
 // A character of the text, as it is (pending halves are the caller's).
 procedure TTyRtfParser.EmitCode(ACode: Cardinal; AFromPair: Boolean);
+var
+  b: TBytes;
+  n: PtrInt;
 begin
+  if FS.Props.Dest = rdListText then
+  begin
+    // a marker is a few characters; a file that puts more there gets its first 256 bytes
+    if ((ACode >= $20) or (ACode = 9)) and (Length(FListText) < 256) then
+    begin
+      b := nil;
+      n := 0;
+      UtfPut(b, n, ACode);
+      SetLength(FListText, Length(FListText) + n);
+      Move(b[0], FListText[Length(FListText) - n + 1], n);
+    end;
+    Exit;
+  end;
   if FS.Props.Dest = rdFieldResult then
   begin
     if ACode >= $20 then PutField(ACode);
@@ -3819,7 +3873,7 @@ end;
 
 procedure TTyRtfParser.EmitChar(ACode: Cardinal);
 begin
-  if not (FS.Props.Dest in [rdNormal, rdFieldResult]) then Exit;
+  if not (FS.Props.Dest in [rdNormal, rdFieldResult, rdListText]) then Exit;
   if FS.InRowDef then EndRowDef;
   Flush;
   EmitCode(ACode, False);
@@ -3829,7 +3883,7 @@ procedure TTyRtfParser.EmitUnicode(AValue: Integer);
 var
   c: Cardinal;
 begin
-  if not (FS.Props.Dest in [rdNormal, rdFieldResult]) then Exit;
+  if not (FS.Props.Dest in [rdNormal, rdFieldResult, rdListText]) then Exit;
   c := UnicodeOfParam(AValue);
   if FS.PendingLead >= 0 then
   begin
@@ -4015,6 +4069,8 @@ begin
     rec^.Format := ParaFormatId;
     rec^.TextStart := FParaTextStart;
     rec^.TextLen := FOutLen - FParaTextStart;
+    rec^.ListText := FParaListText;
+    FParaListText := '';
     for i := 1 to Length(FSep) do PutOut(Ord(FSep[i]));
     FParaTextStart := FOutLen;
   end
@@ -4086,6 +4142,7 @@ begin
   FS.LastWasCell := False;
   if FS.TableOpen then FinishRow;
   EndRowDef;
+  FParaListText := '';
 end;
 
 procedure TTyRtfParser.FinishRow;
@@ -5299,6 +5356,7 @@ end;
 // source in the text: an edit before them moves them, an undo may bring them back).
 procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
 var
+  lt: UTF8String;
   i, j, k: Integer;
   rec: ^TTyRtfParaRec;
   cell: TTyRichCell;
@@ -5329,7 +5387,12 @@ begin
       if (rec^.Row < t.RowCount) and (rec^.Cell < t.Rows[rec^.Row].CellCount) then
         cell := t.Rows[rec^.Row].Cells[rec^.Cell];
     end;
-    if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell) then
+    // the file's marker text, for a list item only (a value of its own costs a paragraph)
+    if (rec^.ListText <> '') and (FDoc.Formats.ParaFormat(rec^.Format).List.Kind <> lkNone) then
+      lt := rec^.ListText
+    else
+      lt := '';
+    if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt) then
     begin
       v := TRtfBuild.ParagraphValue(FDoc, j);
       TRtfBuild.HoldValue(FDoc, v);

@@ -116,11 +116,22 @@ const
     The document keeps the whole paragraph (copying and saving take all of it); positions
     past the cut show at the cut (TTyBlockLayout.Truncated, ShownChars). }
   CRichMaxParaLayoutChars = 100000;
-  { A list item's number is its place among the items before it, found by looking back; the
-    look goes back at most this many paragraphs. An item further down a longer list is
-    numbered as if the list started at the cap (its number is too small) - the price of never
-    reading thousands of paragraphs, which a document that parses on demand would parse, to
-    show one screen. }
+  { A numbered list item shows the file's own marker text (TTyRichDocument.ListTextOf: Word's
+    and WordPad's {\listtext ...}) while it can be trusted: until a change that can renumber
+    (paragraphs that came or went, a format change) happens at or before it; the document set
+    anew trusts them all again. Otherwise - and for a paragraph without one - its number is
+    its place among the items before it, found by looking back: the items of its level and
+    kind one after another, so after such an edit a Word list interrupted by ordinary
+    paragraphs restarts at 1 below each of them (list identity, \ls, is not in the model:
+    phase 2). The look goes back at most this many paragraphs. An item further down a longer
+    list that meets no number remembered on the way is numbered from the nearest number
+    remembered before the cap of the same kind and level (the paragraphs between not read:
+    taken to hold no item of that level), else as if the list started at the cap (too small).
+    What remains: in a list longer than the cap of which nothing before the cap is remembered,
+    an item's number depends on where the view came from - jumping to item 50,000 numbers it
+    4097 and remembers the items after the cap from 1, so scrolling up past the cap gives
+    another 4097 above a 1. The price of never reading thousands of paragraphs, which a
+    document that parses on demand would parse, to show one screen. }
   CRichListWalkParas = 4096;
   { Numbers found are remembered (so scrolling down a list costs one step per item) up to this
     many paragraphs; past it they are forgotten all at once. }
@@ -696,6 +707,8 @@ type
     FOrdinals: specialize TDictionary<Integer, TTyRichListOrdinal>;
     FListOfFormat: specialize TDictionary<Integer, TTyListFormat>;
     FListWalkSteps: Int64;
+    // the first paragraph whose file marker is not trusted any more (MaxInt: none)
+    FTrustFrom: Integer;
     FWalkData: array of Pointer;
     FWalkFirst, FWalkLast: Integer;
     // decoded pictures: by picture, LRU order (most recent first), bounded by bytes
@@ -1239,7 +1252,8 @@ var
 begin
   case AKind of
     lkNone: Exit('');
-    lkBullet: Exit(Bullets[Abs(ALevel) mod 3]);
+    // (any level, Low(Integer) too: Abs of it overflows)
+    lkBullet: Exit(Bullets[((ALevel mod 3) + 3) mod 3]);
   end;
   s := '';
   if (ANumber >= 1) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
@@ -2990,6 +3004,7 @@ type
     DefTab: Integer;
     FirstLine: Boolean;  // the line being laid out is the paragraph's first
     ListNumber: Int64;
+    FileMarker: UTF8String;   // the file's marker text, shown instead of ListNumber
     FullLen: Integer;    // the paragraph's length (N is what is laid out of it)
     function Px(ATwips: Integer): Integer;
     function MakeMarker: Integer;
@@ -3890,6 +3905,12 @@ begin
     if p^.Desc > maxD then maxD := p^.Desc;
     if p^.Lead > maxL then maxL := p^.Lead;
   end;
+  // the list marker sits on the first line: it is as tall as the line needs to be
+  if FirstLine and Layout.FHasMarker then
+  begin
+    if Layout.FMarker.Ascent > maxA then maxA := Layout.FMarker.Ascent;
+    if Layout.FMarker.Descent > maxD then maxD := Layout.FMarker.Descent;
+  end;
   natural := maxA + maxD + maxL;
   case Pf.LineSpacing of
     ls115: h := Round(natural * 1.15);
@@ -3915,6 +3936,8 @@ begin
     ln^.Baseline := ATop + h - maxD - maxL;
     ln^.Left := ALeft + off;
     ln^.ContentWidth := contentRight - ALeft;
+    // a centred or right-aligned first line takes its marker along (as Word and WordPad do)
+    if FirstLine and FHasMarker then Inc(FMarker.X, off);
     ln^.Forced := AForced;
     ln^.FirstFrag := FFragCount;
     ln^.FragCount := ItemCount;
@@ -3985,7 +4008,8 @@ begin
   mk^.Kind := rfkText;
   mk^.First := 0;
   mk^.Count := 0;
-  mk^.Text := TyRichListMarkerText(Pf.List.Kind, Pf.List.Level, ListNumber);
+  if FileMarker <> '' then mk^.Text := FileMarker
+  else mk^.Text := TyRichListMarkerText(Pf.List.Kind, Pf.List.Level, ListNumber);
   DecodeAt(mk^.Text, 1, code);
   if not L.GlyphIn(f, code) then f := L.FallbackFor(f, code);
   mk^.Font := f;
@@ -4802,6 +4826,7 @@ begin
   FPictureLimit := CRichPictureCacheBytes;
   FPictureDecodeBudget := CRichPictureMaxPixels;
   FPictureScaleBudget := CRichPictureMaxScaledPixels;
+  FTrustFrom := MaxInt;
   FFontPPI := -1;
 end;
 
@@ -4827,6 +4852,8 @@ procedure TTyRichLayouter.SetDocument(AValue: TTyRichDocument);
 begin
   Clear;
   FDoc := AValue;
+  // a document set anew: the file's list markers are its numbers again
+  FTrustFrom := MaxInt;
 end;
 
 procedure TTyRichLayouter.SetBaseFontName(const AValue: string);
@@ -4976,6 +5003,7 @@ begin
   Inc(FChangeGen);
   // the numbers from here on may count differently now
   DropNumbersFrom(AFirst);
+  if AFirst < FTrustFrom then FTrustFrom := AFirst;
   L := FLruFirst;
   while L <> nil do
   begin
@@ -5006,7 +5034,14 @@ begin
   { Paragraphs that came or went, or a format that changed, may change the number of every
     list item after them; typing inside paragraphs does not. }
   numbering := (AChange.Kinds * [rckStructure, rckFormat] <> []) or (delta <> 0);
-  if numbering then DropNumbersFrom(first);
+  if numbering then
+  begin
+    DropNumbersFrom(first);
+    { the file's markers from here on may be wrong now (before it they stay right; a limit
+      after the change cannot be: every change that moves indexes sets it to its own first
+      paragraph) }
+    if first < FTrustFrom then FTrustFrom := first;
+  end;
   moved := nil;
   n := 0;
   L := FLruFirst;
@@ -5150,7 +5185,7 @@ function TTyRichLayouter.ListNumber(ADoc: TTyRichDocument; AIndex: Integer;
   const AList: TTyListFormat): Int64;
 var
   found: array of Integer;
-  nFound, j, lo, k, chunk, i: Integer;
+  nFound, j, lo, k, chunk, i, best: Integer;
   startAt: Int64;
   e: TTyRichListOrdinal;
   lf: TTyListFormat;
@@ -5220,6 +5255,22 @@ begin
     end;
   finally
     ADoc.EndRead;
+  end;
+  if not known and not done and (j >= 0) and (FOrdinals.Count > 0) then
+  begin
+    // capped: the nearest number remembered before the cap, of this kind and level
+    best := -1;
+    for k in FOrdinals.Keys do
+      if (k <= j) and (k > best) then
+      begin
+        e := FOrdinals[k];
+        if (e.Kind = AList.Kind) and (e.Level = AList.Level) then best := k;
+      end;
+    if best >= 0 then
+    begin
+      Result := FOrdinals[best].Number + nFound;
+      known := True;
+    end;
   end;
   if not known then Result := startAt + nFound - 1;
   if FOrdinals.Count + nFound > CRichListOrdinalCache then FOrdinals.Clear;
@@ -5294,8 +5345,13 @@ begin
       b.Runs := ADoc.RunsOf(AIndex);
       b.Pf := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(AIndex));
       Result.FInCell := ADoc.CellAt(AIndex) <> nil;
-      // a number reads the paragraphs before this one (in this read scope)
-      b.ListNumber := ListNumber(ADoc, AIndex, b.Pf.List);
+      // the file's own marker while it is trusted; else a number reads the paragraphs before
+      // this one (in this read scope)
+      b.FileMarker := '';
+      if not (b.Pf.List.Kind in [lkNone, lkBullet]) and (AIndex < FTrustFrom) then
+        b.FileMarker := ADoc.ListTextOf(AIndex);
+      if b.FileMarker <> '' then b.ListNumber := 0
+      else b.ListNumber := ListNumber(ADoc, AIndex, b.Pf.List);
       t := ADoc.Text;
       start := t.ParaStart(AIndex);
       len := t.ParaLength(AIndex);

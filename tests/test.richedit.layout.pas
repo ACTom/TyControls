@@ -132,6 +132,11 @@ type
     procedure TestPictureSizesAreBoundedBeforeAnythingIsAllocated;
     procedure TestAPreparedPictureIsReady;
     procedure TestPictureCacheDetails;
+    // fix wave W2: lists
+    procedure TestWordListsShowTheFilesNumbers;
+    procedure TestACappedWalkAnchorsOnARememberedNumber;
+    procedure TestTheMarkerGoesWithTheFirstLine;
+    procedure TestBulletsForEveryLevel;
   end;
 
 implementation
@@ -4360,6 +4365,165 @@ begin
     junk.Release;
     pic.Release;
   end;
+end;
+
+{ ---- fix wave W2: lists ---- }
+
+{ A Word list interrupted by ordinary paragraphs: the items share \ls1 and the file says 1, 2,
+  3 in their {\listtext}; that is what is shown, loaded on demand and loaded whole. A change
+  that can renumber stops trusting the file's markers from its paragraph on (those below fall
+  back to counting items one after another, so the list restarts after each body paragraph);
+  typing does not; the document set again trusts them again. RichEdit's own lists show what
+  they showed before. }
+procedure TTyRichLayoutTest.TestWordListsShowTheFilesNumbers;
+const
+  Names: array[0..2] of string = ('re-zh-list.rtf', 'wp-zh-list.rtf', 'word-zh.rtf');
+var
+  d: TTyRichDocument;
+  st: TBytesStream;
+  lo: TTyRichLayouter;
+  i, n: Integer;
+  L2: TTyParaLayout;
+begin
+  d := LoadFixture('hand-word-list.rtf');
+  AssertEquals('on demand: 1', '1.', Lay(d, 1, 1000).Marker.Text);
+  AssertEquals('on demand: 2', '2.', Lay(d, 3, 1000).Marker.Text);
+  AssertEquals('on demand: 3', '3.', Lay(d, 5, 1000).Marker.Text);
+  d := TTyRichDocument.Create;
+  FDocs.Add(d);
+  st := TBytesStream.Create(FixtureBytes('hand-word-list.rtf'));
+  try
+    TyRichLoadRtfFull(d, st);
+  finally
+    st.Free;
+  end;
+  AssertEquals('whole: 1', '1.', Lay(d, 1, 1000).Marker.Text);
+  AssertEquals('whole: 2', '2.', Lay(d, 3, 1000).Marker.Text);
+  AssertEquals('whole: 3', '3.', Lay(d, 5, 1000).Marker.Text);
+  d.OnChange := @DocChanged;
+  // typing in an item: still the file's numbers
+  AssertTrue('typed', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(5) + 1, 'x')));
+  AssertEquals('typing: still 3', '3.', Lay(d, 5, 1000).Marker.Text);
+  // a paragraph inserted above the second item
+  AssertTrue('inserted', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(3), 'new'#10)));
+  AssertEquals('above the change: the file''s', '1.', Lay(d, 1, 1000).Marker.Text);
+  AssertEquals('at it: counted, after a body paragraph', '1.', Lay(d, 3, 1000).Marker.Text);
+  AssertEquals('the next item: counted', '2.', Lay(d, 4, 1000).Marker.Text);
+  AssertEquals('the third: counted, after a body paragraph', '1.', Lay(d, 6, 1000).Marker.Text);
+  FLayouter.Document := d;
+  AssertEquals('set again: the file''s again', '3.', Lay(d, 6, 1000).Marker.Text);
+  // RichEdit's lists: the file's markers say what counting said
+  for i := 0 to High(names) do
+  begin
+    d := LoadFixture(names[i]);
+    lo := NewLayouter;
+    try
+      lo.Document := d;
+      lo.Invalidate(0, 1);
+      for n := 0 to d.Text.ParaCount - 1 do
+      begin
+        L2 := lo.LayoutPara(d, n, 1000, 96, 1);
+        try
+          AssertEquals(Format('%s paragraph %d', [names[i], n]), L2.Marker.Text,
+            Lay(d, n, 1000).Marker.Text);
+        finally
+          L2.Release;
+        end;
+      end;
+    finally
+      lo.Free;
+    end;
+  end;
+end;
+
+{ A level-0 item after a sublist longer than the cap: the walk passes over the sublist up to
+  the cap and anchors on the number remembered for the item before the sublist. With nothing
+  remembered it counts from the cap (what remains, as the constant says). }
+procedure TTyRichLayoutTest.TestACappedWalkAnchorsOnARememberedNumber;
+const
+  N = 5002;
+var
+  d: TTyRichDocument;
+  s: RawByteString;
+  i: Integer;
+  lo: TTyRichLayouter;
+  L: TTyParaLayout;
+begin
+  SetLength(s, 2 * N - 1);
+  for i := 1 to N do
+  begin
+    s[2 * i - 1] := 'x';
+    if i < N then s[2 * i] := #10;
+  end;
+  d := NewDoc(s);
+  SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 1));
+  AssertTrue('the sublist', d.Execute(TTyRichSetParaFormat.Create(1, N - 2,
+    [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 1, 1))));
+  SetPara(d, N - 1, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 1));
+  lo := NewLayouter;
+  try
+    L := lo.LayoutPara(d, N - 1, 1000, 96, 1);
+    try
+      AssertEquals('nothing remembered: counted from the cap', '1.', L.Marker.Text);
+    finally
+      L.Release;
+    end;
+  finally
+    lo.Free;
+  end;
+  AssertEquals('the first item', '1.', Lay(d, 0, 1000).Marker.Text);
+  AssertEquals('after the long sublist: from the one remembered', '2.',
+    Lay(d, N - 1, 1000).Marker.Text);
+end;
+
+{ The marker moves with a centred or right-aligned first line (as Word and WordPad put it),
+  and it is as tall as the first line needs to be: a list item that is only a small picture
+  has its marker inside the line. }
+procedure TTyRichLayoutTest.TestTheMarkerGoesWithTheFirstLine;
+var
+  d: TTyRichDocument;
+  L0, L1, L2: TTyParaLayout;
+  pf: TTyParaFormat;
+begin
+  d := NewDoc('abc'#10'abc'#10'abc');
+  pf := ListFormat(lkBullet, 0, 0);
+  SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], pf);
+  pf.Align := paraCenter;
+  SetPara(d, 1, [pffList, pffLeftIndent, pffFirstIndent, pffAlign], pf);
+  pf.Align := paraRight;
+  SetPara(d, 2, [pffList, pffLeftIndent, pffFirstIndent, pffAlign], pf);
+  L0 := Lay(d, 0, 300);
+  L1 := Lay(d, 1, 300);
+  L2 := Lay(d, 2, 300);
+  AssertTrue('centred: the marker moved', L1.Marker.X > L0.Marker.X);
+  AssertEquals('centred: as far from the text as on the left',
+    L0.Fragments[0].X - L0.Marker.X, L1.Fragments[0].X - L1.Marker.X);
+  AssertEquals('right: as far from the text as on the left',
+    L0.Fragments[0].X - L0.Marker.X, L2.Fragments[0].X - L2.Marker.X);
+  AssertEquals('right: the text at the edge', 300, L2.Fragments[0].X + L2.Fragments[0].Width);
+  // an item that is a picture 10 px tall: the marker's ascent (16) makes the line
+  d := NewDoc('');
+  AssertTrue('a picture', d.Execute(TTyRichInsertObject.Create(0,
+    TTyRichPicture.Create(rpfPng, PngBytes(20, 10, BGRABlack), 300, 150))));
+  SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 0, 0));
+  L0 := Lay(d, 0, 300);
+  AssertEquals('the marker''s ascent', 16, L0.Marker.Ascent);
+  AssertTrue(Format('its baseline under the marker''s top: %d', [L0.Lines[0].Baseline]),
+    L0.Lines[0].Baseline >= L0.Marker.Ascent);
+  AssertTrue('and the line holds its descent', L0.Lines[0].Height >=
+    L0.Marker.Ascent + L0.Marker.Descent);
+end;
+
+{ A bullet for any level, the most negative included (Abs of it overflows). }
+procedure TTyRichLayoutTest.TestBulletsForEveryLevel;
+begin
+  AssertEquals('level 0', U($2022), TyRichListMarkerText(lkBullet, 0, 0));
+  AssertEquals('level 1', U($25E6), TyRichListMarkerText(lkBullet, 1, 0));
+  AssertEquals('level 2', U($25AA), TyRichListMarkerText(lkBullet, 2, 0));
+  AssertEquals('level 3: again', U($2022), TyRichListMarkerText(lkBullet, 3, 0));
+  AssertEquals('level -1', U($25AA), TyRichListMarkerText(lkBullet, -1, 0));
+  AssertEquals('Low(Integer)', U($25E6), TyRichListMarkerText(lkBullet, Low(Integer), 0));
+  AssertEquals('High(Integer)', U($25E6), TyRichListMarkerText(lkBullet, High(Integer), 0));
 end;
 
 initialization

@@ -103,6 +103,7 @@ type
     procedure TestAValueIsReadWithoutALookup;
     // fix wave W2
     procedure TestALoadIsRefusedWhileSavingOrReading;
+    procedure TestTheFilesListTextFollowsItsParagraph;
   end;
 
 implementation
@@ -1574,6 +1575,74 @@ begin
   finally
     ts.Free;
     s.Free;
+    d.Free;
+  end;
+end;
+
+{ The file's own marker text of a list item (ListTextOf) belongs to its paragraph's value, not
+  to the pooled format: items of one format share it whatever their numbers. An edit inside
+  the paragraph keeps it - typing, a character or paragraph format, a split (the first part),
+  a join (the first paragraph's) - an undo brings back what was, a paragraph an edit made has
+  none, and a document not read from RTF has none. }
+procedure TTyRichModelTest.TestTheFilesListTextFollowsItsParagraph;
+const
+  Item = '{\*\pn\pnlvlbody\pndec\pnstart1\pnindent0}\fi-360\li720 ';
+var
+  d: TTyRichDocument;
+  src: TBytesStream;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
+  s2: TTyRichPos;
+begin
+  d := TTyRichDocument.Create;
+  src := TBytesStream.Create(Bytes('{\rtf1\ansi\deff0{\fonttbl{\f0\fnil Arial;}}' +
+    '{\pntext\f0 1.\tab}' + Item + 'one\par\pard body\par' +
+    '{\pntext\f0 2.\tab}' + Item + 'two items\par\pard body\par' +
+    '{\pntext\f0 3.\tab}' + Item + 'three\par}'));
+  try
+    TyRichLoadRtfFull(d, src);
+    AssertEquals('five paragraphs', 5, d.Text.ParaCount);
+    AssertEquals('item 1', '1.', string(d.ListTextOf(0)));
+    AssertEquals('item 2', '2.', string(d.ListTextOf(2)));
+    AssertEquals('item 3', '3.', string(d.ListTextOf(4)));
+    AssertEquals('a body paragraph: none', '', string(d.ListTextOf(1)));
+    AssertEquals('not in the format: the items share one', d.ParaFormatOf(0), d.ParaFormatOf(2));
+    AssertEquals('through the value too', '2.', string(d.ValueListText(d.Text.ParaData[2])));
+    s2 := d.Text.ParaStart(2);
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(s2 + 1, 'x')));
+    AssertEquals('typing keeps it', '2.', string(d.ListTextOf(2)));
+    f := TyDefaultCharFormat;
+    f.Style := [fsBold];
+    AssertTrue('bold', d.Execute(TTyRichSetCharFormat.Create(TyRichRange(s2, 3), [cffBold], f)));
+    AssertEquals('a character format keeps it', '2.', string(d.ListTextOf(2)));
+    pf := d.Formats.ParaFormat(d.ParaFormatOf(2));
+    pf.SpaceBefore := 120;
+    AssertTrue('spaced', d.Execute(TTyRichSetParaFormat.Create(2, 2, [pffSpaceBefore], pf)));
+    AssertEquals('a paragraph format keeps it', '2.', string(d.ListTextOf(2)));
+    AssertTrue('split', d.Execute(TTyRichInsertText.Create(s2 + 4, #10)));
+    AssertEquals('six paragraphs', 6, d.Text.ParaCount);
+    AssertEquals('the first part keeps it', '2.', string(d.ListTextOf(2)));
+    AssertEquals('the part the split made has none', '', string(d.ListTextOf(3)));
+    d.Undo;
+    AssertEquals('undone: five', 5, d.Text.ParaCount);
+    AssertEquals('undone: its own again', '2.', string(d.ListTextOf(2)));
+    AssertEquals('and the body after it none', '', string(d.ListTextOf(3)));
+    // the first item and the body paragraph after it joined
+    AssertTrue('joined', d.Execute(TTyRichDelete.Create(d.Text.ParaLength(0), 1)));
+    AssertEquals('a join keeps the first paragraph''s', '1.', string(d.ListTextOf(0)));
+    d.Undo;
+    d.Undo;
+    d.Undo;
+    d.Undo;
+    AssertEquals('all undone', '2.', string(d.ListTextOf(2)));
+  finally
+    src.Free;
+    d.Free;
+  end;
+  d := TTyRichDocument.CreateFromUtf8(Bytes('a'#10'b'));
+  try
+    AssertEquals('a document of text: none', '', string(d.ListTextOf(0)));
+  finally
     d.Free;
   end;
 end;

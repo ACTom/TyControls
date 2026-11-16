@@ -58,6 +58,8 @@ type
     procedure TestARowThatHoldsANestedTableIsMarked;
     procedure TestThemeFontEntriesAreRead;
     procedure TestAListAsRichEditWritesItLeavesNothingBeside;
+    // fix wave W2
+    procedure TestTheFilesListMarkersAreKept;
   end;
 
 implementation
@@ -2116,6 +2118,109 @@ begin
     AssertText('the paragraph''s own words', '\keep|\s3 ', Joined(ParaFmt(d, 0).Extra));
   finally
     d.Free;
+  end;
+end;
+
+{ ---- fix wave W2 ---- }
+
+function HexOf(const S: RawByteString): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(S) do Result := Result + IntToHex(Ord(S[i]), 2);
+end;
+
+{ A list item's marker text as the file has it ({\listtext ...}, {\pntext ...}) is kept on the
+  paragraph - in the full parse and in the parse on demand alike - decoded as text is (\'xx in
+  the font's code page, \uN with its fallback skipped), its tab and spaces off the end; it is
+  not in the paragraph's text. }
+procedure TTyRtfReadTest.TestTheFilesListMarkersAreKept;
+
+  procedure CheckWordList(const AMsg: string; d: TTyRichDocument);
+  var
+    i: Integer;
+  begin
+    AssertEquals(AMsg + ': paragraphs', 7, d.Text.ParaCount);
+    AssertEquals(AMsg + ': item 1', '1.', string(d.ListTextOf(1)));
+    AssertEquals(AMsg + ': item 2', '2.', string(d.ListTextOf(3)));
+    AssertEquals(AMsg + ': item 3', '3.', string(d.ListTextOf(5)));
+    for i := 0 to 6 do
+      if not Odd(i) then
+        AssertEquals(Format('%s: body paragraph %d has none', [AMsg, i]), '',
+          string(d.ListTextOf(i)));
+    AssertEquals(AMsg + ': not in the text', 'Change what is needed.',
+      string(d.Text.GetText(d.Text.ParaStart(3), d.Text.ParaLength(3))));
+  end;
+
+var
+  d: TTyRichDocument;
+  s: TBytesStream;
+  i: Integer;
+begin
+  d := LoadBytes(Fixture('hand-word-list.rtf'));
+  try
+    AssertTrue('parsed on demand', TyRichRtfLoadOf(d) <> nil);
+    CheckWordList('on demand', d);
+  finally
+    d.Free;
+  end;
+  d := TTyRichDocument.Create;
+  s := TBytesStream.Create(Fixture('hand-word-list.rtf'));
+  try
+    TyRichLoadRtfFull(d, s);
+    CheckWordList('whole', d);
+  finally
+    s.Free;
+    d.Free;
+  end;
+  // RichEdit's \pntext: the numbers, and the bullets in their Symbol font
+  d := LoadBytes(Fixture('re-zh-list.rtf'));
+  try
+    for i := 5 to 7 do
+      AssertEquals(Format('number %d', [i]), IntToStr(i - 4) + '.', string(d.ListTextOf(i)));
+    AssertEquals('a bullet: U+F0B7 (Symbol''s B7)', 'EF82B7', HexOf(d.ListTextOf(1)));
+    AssertEquals('no list: none', '', string(d.ListTextOf(0)));
+  finally
+    d.Free;
+  end;
+  // decoded as text: GBK pairs, a \u with its fallback skipped, the tab and space dropped
+  d := LoadString('{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}' +
+    '{\pntext\f0 \''d2\''bb\''a1\''a2\tab}{\*\pn\pnlvlbody\pndec\pnstart1\pnindent0}' +
+    '\fi-360\li720 a\par' +
+    '{\pntext\f0\u20108?\''a1\''a2 \tab}{\*\pn\pnlvlbody\pndec\pnstart1\pnindent0}' +
+    '\fi-360\li720 b\par}');
+  try
+    AssertEquals('two paragraphs', 2, d.Text.ParaCount);
+    AssertEquals('GBK: one and a comma', 'E4B880E38081', HexOf(d.ListTextOf(0)));
+    AssertEquals('\u20108 then GBK', 'E4BA8CE38081', HexOf(d.ListTextOf(1)));
+    AssertEquals('the text is the paragraph''s only', 'b',
+      string(d.Text.GetText(d.Text.ParaStart(1), d.Text.ParaLength(1))));
+  finally
+    d.Free;
+  end;
+  { Reading the marker leaves the parse where skipping it (the index scan) leaves it: a lead
+    byte before the group still pairs with the byte after it, and a marker right after a
+    paragraph's end adds nothing to that paragraph's bytes - loaded whole (where the whole
+    parse is checked against the index) and on demand alike. }
+  for i := 0 to 1 do
+  begin
+    s := TBytesStream.Create(BytesOf('{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}' +
+      '\f0 a\''d6{\pntext\f0 9.\tab}\''d0 b\par' +
+      '{\pntext\f0 2.\tab}{\*\pn\pnlvlbody\pndec\pnstart1\pnindent0}\fi-360\li720 c\par' +
+      '{\pntext\f0 3.\tab}{\*\pn\pnlvlbody\pndec\pnstart1\pnindent0}\fi-360\li720 d\par}'));
+    d := TTyRichDocument.Create;
+    try
+      if i = 0 then TyRichLoadRtfFull(d, s) else TyRichLoadRtf(d, s);
+      AssertEquals(Format('load %d: paragraphs', [i]), 3, d.Text.ParaCount);
+      AssertEquals(Format('load %d: the pair joins across the marker', [i]), '61E4B8AD2062',
+        HexOf(d.Text.GetText(0, d.Text.ParaLength(0))));
+      AssertEquals(Format('load %d: the third''s marker', [i]), '3.', string(d.ListTextOf(2)));
+      AssertTrue(Format('load %d: a list item', [i]), d.Formats.ParaFormat(d.ParaFormatOf(2)).List.Kind <> lkNone);
+    finally
+      d.Free;
+      s.Free;
+    end;
   end;
 end;
 

@@ -313,6 +313,8 @@ type
     FParaFormat: TTyParaFormatId;
     FCell: TTyRichCell;
     FRuns: TTyRunArray;
+    // the file's own marker text of a list item (TTyRichDocument.ListTextOf)
+    FListText: UTF8String;
   end;
 
   TTyRichChangeKind = (rckText, rckFormat, rckStructure);
@@ -377,9 +379,11 @@ type
     { Sets the paragraph's formatting if it has none yet and returns True; leaves a paragraph
       that already has formatting (edited, or parsed before) alone and returns False. ARuns as
       RunsOf returns them: the first starts at 0, starts increase, an object run is one
-      character. }
+      character. AListText: the marker text the file gives the paragraph (ListTextOf); a
+      value of its own then, never the one plain paragraphs share. }
     class function SetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
-      AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell = nil): Boolean;
+      AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell = nil;
+      const AListText: UTF8String = ''): Boolean;
     class procedure SetDefaultCharFormat(ADoc: TTyRichDocument; const AFormat: TTyCharFormat);
     class procedure SetPage(ADoc: TTyRichDocument; APaperWidth, APaperHeight, AMarginLeft,
       AMarginRight: Integer);
@@ -591,6 +595,8 @@ type
     function PlainValue: TTyRichParaData;
     function MakeData(AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray;
       ACell: TTyRichCell): TTyRichParaData;
+    function MakeDataLike(AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray;
+      ACell: TTyRichCell; AFrom: TTyRichParaData): TTyRichParaData;
     procedure PutData(AIndex: Integer; AOld, ANew: TTyRichParaData);
     function SlotData(AIndex: Integer): TTyRichParaData;
     function DataOf(AIndex: Integer): TTyRichParaData;
@@ -711,6 +717,20 @@ type
       an object inside a read scope (BeginRead). }
     function ReadValue(AData: Pointer; out AFormat: TTyParaFormatId; out ARuns: TTyRunArray;
       out ACell: TTyRichCell): Boolean;
+    { The marker text the file gave list paragraph AIndex - its {\listtext ...} or {\pntext ...},
+      decoded as the reader decodes text, the tab and spaces at its end dropped: the number
+      Word or WordPad showed ("2.", "iii)"). '' when the file gave none, for a document not
+      read from RTF, and for a paragraph an edit made (inserted, the later parts of a split);
+      an edit inside a paragraph (typing, a format, a split's first part, a join's first
+      paragraph) keeps it, and an undo brings back what it had. Read only: it is not written
+      (a paragraph written back as its bytes has its own; one written from the model gets
+      the marker the writer generates), takes no part in format equality, and goes with the
+      paragraph's value when a document that parses on demand lets the paragraph go. Parses
+      the paragraph (as RunsOf). }
+    function ListTextOf(AIndex: Integer): UTF8String;
+    { The same from a value of a walk (AData as ReadValue takes it): no lookup, nothing
+      parsed; '' for none. }
+    function ValueListText(AData: Pointer): UTF8String;
     { May the text change here: False when inserting at APos (ALen 0) or deleting ALen
       characters from APos would be refused because of a row that holds a nested table
       (TTyRichRow.HoldsNestedTable). Inserting is refused inside a paragraph of such a row.
@@ -1586,7 +1606,8 @@ end;
 { ---- TTyRichDocBuilder ---- }
 
 class function TTyRichDocBuilder.SetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
-  AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell): Boolean;
+  AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray; ACell: TTyRichCell;
+  const AListText: UTF8String): Boolean;
 var
   len: Int64;
   runs: TTyRunArray;
@@ -1613,7 +1634,13 @@ begin
   else
     AppendSlice(runs, n, ARuns, len, 0, len, 0);
   SetLength(runs, n);
-  d := ADoc.MakeData(AParaFormat, runs, ACell);
+  if AListText <> '' then
+  begin
+    d := ADoc.NewData(AParaFormat, runs, ACell);
+    d.FListText := AListText;
+  end
+  else
+    d := ADoc.MakeData(AParaFormat, runs, ACell);
   ADoc.PutData(AIndex, nil, d);
   Result := True;
 end;
@@ -1929,6 +1956,7 @@ begin
   D.FParaFormat := -1;
   D.FCell := nil;
   D.FRuns := nil;
+  D.FListText := '';
   D.FRefCount := -1;
   D.Free;
 end;
@@ -1962,6 +1990,20 @@ begin
     Result := PlainValue
   else
     Result := NewData(AParaFormat, ARuns, ACell);
+end;
+
+{ A new value for the paragraph AFrom was the value of (the same paragraph after an edit in
+  it: typing, a format, the first part of a split): it keeps the file's marker text. }
+function TTyRichDocument.MakeDataLike(AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray;
+  ACell: TTyRichCell; AFrom: TTyRichParaData): TTyRichParaData;
+begin
+  if (AFrom <> nil) and (AFrom.FListText <> '') then
+  begin
+    Result := NewData(AParaFormat, ARuns, ACell);
+    Result.FListText := AFrom.FListText;
+  end
+  else
+    Result := MakeData(AParaFormat, ARuns, ACell);
 end;
 
 procedure TTyRichDocument.PutData(AIndex: Integer; AOld, ANew: TTyRichParaData);
@@ -2055,7 +2097,7 @@ begin
   end;
   SetLength(runs, n);
   if SameRuns(runs, d.FRuns) then Exit;
-  PutData(AIndex, d, MakeData(d.FParaFormat, runs, d.FCell));
+  PutData(AIndex, d, MakeDataLike(d.FParaFormat, runs, d.FCell, d));
 end;
 
 { ---- readers ---- }
@@ -2128,6 +2170,17 @@ begin
   AFormat := FormatOfData(d);
   ARuns := RunsOfData(d);
   ACell := CellOfData(d);
+end;
+
+function TTyRichDocument.ListTextOf(AIndex: Integer): UTF8String;
+begin
+  Result := ValueListText(DataOf(AIndex));
+end;
+
+function TTyRichDocument.ValueListText(AData: Pointer): UTF8String;
+begin
+  if AData = nil then Exit('');
+  Result := TTyRichParaData(AData).FListText;
 end;
 
 { ---- rows that hold a nested table ---- }
@@ -2434,7 +2487,7 @@ begin
       for j := 0 to High(r) do AppendRun(runs, n, r[j].Start, MapId(r[j].Format), r[j].Obj);
       SetLength(runs, n);
       if SameRuns(runs, r) then nd := d
-      else nd := Doc.MakeData(Doc.FormatOfData(d), runs, Doc.CellOfData(d));
+      else nd := Doc.MakeDataLike(Doc.FormatOfData(d), runs, Doc.CellOfData(d), d);
       PrevD := d;
       PrevNew := nd;
     end;
@@ -2483,7 +2536,7 @@ begin
       end;
     SetLength(runs, n);
     if SameRuns(runs, r) then nd := d
-    else nd := Doc.MakeData(Doc.FormatOfData(d), runs, Doc.CellOfData(d));
+    else nd := Doc.MakeDataLike(Doc.FormatOfData(d), runs, Doc.CellOfData(d), d);
   end;
   if nd <> d then
   begin
@@ -2524,7 +2577,7 @@ begin
     end;
     // the runs are immutable, so the new value shares them
     if newFmt = oldFmt then nd := d
-    else nd := Doc.MakeData(newFmt, Doc.RunsOfData(d), Doc.CellOfData(d));
+    else nd := Doc.MakeDataLike(newFmt, Doc.RunsOfData(d), Doc.CellOfData(d), d);
     PrevD := d;
     PrevNew := nd;
   end;
@@ -2611,7 +2664,7 @@ begin
       AppendRun(runs1, n1, o, f, AObj);
       AppendSlice(runs1, n1, r, len, o, len, added);
       SetLength(runs1, n1);
-      PutData(k, d, MakeData(fmt, runs1, cell));
+      PutData(k, d, MakeDataLike(fmt, runs1, cell, d));
     end
     else
     begin
@@ -2645,7 +2698,7 @@ begin
           ReleaseData(mid);
         end;
       end;
-      PutData(k, d, MakeData(fmt, runs1, cell));
+      PutData(k, d, MakeDataLike(fmt, runs1, cell, d));
       PutData(k + s, nil, MakeData(fmt, runs2, cell));
     end;
   except
@@ -2695,7 +2748,7 @@ function TTyRichDocument.DeleteCore(APos, ALen: TTyRichPos): TTyRichUndoData;
 var
   c: TTyRichChange;
   k, m, n, i: Integer;
-  dk, dm, merged: TTyRichParaData;
+  dk, dm, merged, src: TTyRichParaData;
   rk, rm, runs: TTyRunArray;
   e, psk, lenk, ok, lenm, om: Int64;
   fmt: TTyParaFormatId;
@@ -2722,7 +2775,7 @@ begin
     AppendSlice(runs, n, rk, lenk, ok + ALen, lenk, -ALen);
     if n = 0 then AppendRun(runs, n, 0, rk[RunIndexAt(rk, ok)].Format, nil);
     SetLength(runs, n);
-    merged := MakeData(FormatOfData(dk), runs, CellOfData(dk));
+    merged := MakeDataLike(FormatOfData(dk), runs, CellOfData(dk), dk);
   end
   else
   begin
@@ -2737,12 +2790,14 @@ begin
     begin
       fmt := FormatOfData(dk);
       cell := CellOfData(dk);
+      src := dk;
     end
     else
     begin
       // otherwise the paragraph the range ends in does (measured in WordPad)
       fmt := FormatOfData(dm);
       cell := CellOfData(dm);
+      src := dm;
     end;
     if (ok = 0) and (om = 0) and not join then
       merged := dm   // whole paragraphs went: the next one is untouched
@@ -2752,7 +2807,7 @@ begin
       AppendSlice(runs, n, rm, lenm, om, lenm, ok - om);
       if n = 0 then AppendRun(runs, n, 0, rk[RunIndexAt(rk, ok)].Format, nil);
       SetLength(runs, n);
-      merged := MakeData(fmt, runs, cell);
+      merged := MakeDataLike(fmt, runs, cell, src);
     end;
   end;
   Result := NewUndo(c);
@@ -2939,7 +2994,7 @@ begin
     begin
       d := DataOf(AFirstPara + i);
       Result.AddOld(d);
-      PutData(AFirstPara + i, d, NewData(FormatOfData(d), RunsOfData(d), cells[i]));
+      PutData(AFirstPara + i, d, MakeDataLike(FormatOfData(d), RunsOfData(d), cells[i], d));
     end;
     Result.SealOld;
   except

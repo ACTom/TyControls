@@ -1,0 +1,7 @@
+Steps to follow
+Open the file.
+This explains the first step; it is no list item.
+Change what is needed.
+Another paragraph between the steps.
+Save the file.
+The end.
