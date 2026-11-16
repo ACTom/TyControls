@@ -98,6 +98,8 @@ type
     procedure TestACharacterTheCodePageLacksIsAQuestionMark;
     procedure TestCodePageTablesArePinned;
     procedure TestASaveInProgressRefusesEdits;
+    // fix wave W9
+    procedure TestTheConverterIsAskedOncePerSequence;
   end;
 
 implementation
@@ -1240,6 +1242,97 @@ begin
     s.Free;
     d.Free;
   end;
+end;
+
+{ W9 (N-1): what a code page's table does not hold is asked of its converter once per table,
+  and the answer is what the converter gave. Raw UTF-8 under a GBK font is the case that made
+  a load ten times slower: U+2001 is E2 80 81 in UTF-8, GBK reads E2 80 as a pair, then 81 as
+  a lead byte whose trail, the next character '3', GBK does not map - 81 33 asked 10,000
+  times, the converter is asked once, and the answer stays "no character" (0: the reader
+  writes '?' and reads the trail byte again). A single byte the code page has no character
+  for: the same. A pair the table holds never asks.
+  Every pair the table leaves out (no character, or the second sequence of a character) is
+  asked exactly once, and asked again gives the same answer without asking; every answer
+  of the table as a whole is pinned by TestCodePageTablesArePinned. }
+procedure TTyRichTextIOTest.TestTheConverterIsAskedOncePerSequence;
+var
+  t: Pointer;
+  cls, bits: PByte;
+  i, lead, tr, missing, b, nochar: Integer;
+  n0: Int64;
+  same: Boolean;
+  first: array of Cardinal;
+begin
+  t := TyRichCodePageTable(936);
+  AssertTrue('a table for 936', t <> nil);
+  TyRichCodePageForgetAsked(t);
+  cls := TyRichCodePageClasses(t);
+  bits := TyRichCodePagePairs(t);
+  AssertTrue('81 is a lead byte', TyRichCodePageIsLead(t, $81));
+  AssertEquals('the table does not hold 81 33', 0, bits[$8133 shr 3] and (1 shl ($8133 and 7)));
+
+  n0 := TyRichCodePageAsks;
+  same := True;
+  for i := 1 to 10000 do
+    if TyRichCodePageChar(t, $81, $33) <> 0 then same := False;
+  AssertTrue('81 33 is no character, every time', same);
+  AssertEquals('81 33 asked 10,000 times: the converter once', 1, TyRichCodePageAsks - n0);
+
+  // a single byte the code page has no character for
+  b := -1;
+  for i := $80 to $FF do
+    if cls[i] = 3 then
+    begin
+      b := i;
+      Break;
+    end;
+  AssertTrue('936 has a byte that is no character', b >= 0);
+  n0 := TyRichCodePageAsks;
+  same := True;
+  for i := 1 to 10000 do
+    if TyRichCodePageChar(t, b, -1) <> 0 then same := False;
+  AssertTrue('that byte is no character, every time', same);
+  AssertEquals('that byte asked 10,000 times: the converter once', 1, TyRichCodePageAsks - n0);
+
+  // a pair the table holds (D6 D0, zhong) asks nothing
+  n0 := TyRichCodePageAsks;
+  same := True;
+  for i := 1 to 10000 do
+    if TyRichCodePageChar(t, $D6, $D0) <> $4E2D then same := False;
+  AssertTrue('D6 D0 is U+4E2D, every time', same);
+  AssertEquals('a pair the table holds asks nothing', 0, TyRichCodePageAsks - n0);
+
+  // every pair the table leaves out: asked once each, the same answer from what was kept
+  TyRichCodePageForgetAsked(t);
+  first := nil;
+  SetLength(first, 65536);
+  missing := 0;
+  nochar := 0;
+  n0 := TyRichCodePageAsks;
+  for lead := $80 to $FF do
+    if TyRichCodePageIsLead(t, lead) then
+      for tr := 0 to 255 do
+      begin
+        i := (lead shl 8) or tr;
+        first[i] := TyRichCodePageChar(t, lead, tr);
+        if bits[i shr 3] and (1 shl (i and 7)) = 0 then
+        begin
+          Inc(missing);
+          if first[i] = 0 then Inc(nochar);
+        end;
+      end;
+  AssertEquals('each pair the table leaves out asked once', Int64(missing), TyRichCodePageAsks - n0);
+  AssertTrue(Format('pairs left out: %d, of them no character: %d', [missing, nochar]),
+    nochar > 0);
+  n0 := TyRichCodePageAsks;
+  same := True;
+  for lead := $80 to $FF do
+    if TyRichCodePageIsLead(t, lead) then
+      for tr := 0 to 255 do
+        if TyRichCodePageChar(t, lead, tr) <> first[(lead shl 8) or tr] then same := False;
+  AssertTrue('asked again: the same answers', same);
+  AssertEquals('asked again: the converter not at all', 0, TyRichCodePageAsks - n0);
+  AssertEquals('81 33 is still no character', 0, Integer(TyRichCodePageChar(t, $81, $33)));
 end;
 
 initialization

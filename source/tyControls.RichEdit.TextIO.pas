@@ -98,6 +98,11 @@ function TyRichCodePageBytes(ATable: Pointer; ACode: Cardinal): Integer;
   a test compares this with a constant, so that a converter that drifts shows. 0 when the
   code page is not supported. }
 function TyRichCodePageChecksum(ACodePage: Integer): Cardinal;
+{ For tests: how many times TyRichCodePageChar has asked a code page's converter (about a byte
+  or a pair its table does not hold; the answer is kept in the table, so each is asked once),
+  and a table's kept answers forgotten (the next question about each is asked again). }
+function TyRichCodePageAsks: Int64;
+procedure TyRichCodePageForgetAsked(ATable: Pointer);
 
 implementation
 
@@ -112,6 +117,8 @@ const
   MaxGrowth = 3;
   StoreSlack = 8;
   High8 = QWord($8080808080808080);
+  // a SingleAsk / PairAsk entry not asked yet (no code point is this)
+  NotAsked = Cardinal($FFFFFFFF);
 
 type
   TCpConv = function(const s: string): string;
@@ -131,6 +138,15 @@ type
     Pair: array of Cardinal;
     Rev: array of Word;
     PairBits: array of Byte;   // bit (lead shl 8) or trail: Pair has a character (built on first use)
+    { What the converter answered about a byte (SingleAsk) or a pair (PairAsk, by lead shl 8
+      or trail) that Cls / Single / Pair do not hold: the code point, 0 for no character,
+      NotAsked until TyRichCodePageChar first asks. Raw bytes a font's code page does not map
+      (UTF-8 under a GBK font) are mostly such pairs, and a question costs a string and a
+      conversion: asked once, every later one is an array read. Shared, like the table, by
+      every reader of the code page - the UI thread's (not locked). SingleAsk is 1 KB; PairAsk
+      256 KB, made on the first pair a double-byte table does not hold. }
+    SingleAsk: array[0..255] of Cardinal;
+    PairAsk: array of Cardinal;
   end;
 
   TTextIOBuilder = class(TTyRichDocBuilder)
@@ -172,6 +188,7 @@ type
 
 var
   Tables: TFPList;
+  Asks: Int64;   // TyRichCodePageChar's questions to a converter (TyRichCodePageAsks)
 
 { ---- UTF-8 ---- }
 
@@ -397,6 +414,7 @@ begin
   dbl := IsDoubleByte(ACodePage);
   Result := TCodePageTable.Create;
   Result.CodePage := ACodePage;
+  FillDWord(Result.SingleAsk[0], Length(Result.SingleAsk), NotAsked);
   SetLength(Result.Rev, 65536);
   if dbl then SetLength(Result.Pair, 65536);
   for b := 0 to 127 do Result.Cls[b] := 0;
@@ -544,34 +562,74 @@ begin
   Result := TCodePageTable(ATable).Rev[ACode];
 end;
 
+{ The converter's answer about S: its one character, 0 when it is none. }
+function AskConverter(const S: string): Cardinal;
+var
+  code: Cardinal;
+begin
+  Inc(Asks);
+  Result := 0;
+  if PackChar(S, code) <> 0 then Result := code;
+end;
+
 function TyRichCodePageChar(ATable: Pointer; ALead: Byte; ATrail: Integer): Cardinal;
 var
   t: TCodePageTable;
-  e, code: Cardinal;
-  s: string;
+  e: Cardinal;
+  i: Integer;
 begin
   t := TCodePageTable(ATable);
   Result := 0;
+  { The table leaves out what does not write back as it was read (the second of two sequences
+    for one character) and what is no character: the converter itself is asked about those,
+    once each (SingleAsk / PairAsk). }
   if ATrail < 0 then
   begin
     case t.Cls[ALead] of
       0: Exit(ALead);
       1: Exit(CodeOf(t.Single[ALead]));
     end;
-    s := ConvByte(t.CodePage, ConvOf(t.CodePage), ALead);
+    Result := t.SingleAsk[ALead];
+    if Result = NotAsked then
+    begin
+      Result := AskConverter(ConvByte(t.CodePage, ConvOf(t.CodePage), ALead));
+      t.SingleAsk[ALead] := Result;
+    end;
   end
   else
   begin
     // only a lead byte starts a pair. (Asked about a single byte and what follows it, some
     // converters drop the second byte and answer the first one's character.)
     if (ATrail > 255) or (t.Cls[ALead] <> 2) then Exit;
-    e := t.Pair[(ALead shl 8) or ATrail];
+    i := (ALead shl 8) or ATrail;
+    e := t.Pair[i];
     if e <> 0 then Exit(CodeOf(e));
-    s := ConvOf(t.CodePage)(Chr(ALead) + Chr(ATrail));
+    if t.PairAsk = nil then
+    begin
+      SetLength(t.PairAsk, 65536);
+      FillDWord(t.PairAsk[0], Length(t.PairAsk), NotAsked);
+    end;
+    Result := t.PairAsk[i];
+    if Result = NotAsked then
+    begin
+      Result := AskConverter(ConvOf(t.CodePage)(Chr(ALead) + Chr(ATrail)));
+      t.PairAsk[i] := Result;
+    end;
   end;
-  // the table leaves out what does not write back as it was read (the second of two
-  // sequences for one character); ask the converter itself about that rare case
-  if PackChar(s, code) <> 0 then Result := code;
+end;
+
+function TyRichCodePageAsks: Int64;
+begin
+  Result := Asks;
+end;
+
+procedure TyRichCodePageForgetAsked(ATable: Pointer);
+var
+  t: TCodePageTable;
+begin
+  t := TCodePageTable(ATable);
+  FillDWord(t.SingleAsk[0], Length(t.SingleAsk), NotAsked);
+  t.PairAsk := nil;
 end;
 
 function TyRichCodePageChecksum(ACodePage: Integer): Cardinal;
