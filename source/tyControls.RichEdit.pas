@@ -66,8 +66,13 @@ const
   CRichScrollBarRange = 1 shl 30;
   { The background work (load slices, pictures) a timer turn does at most, in milliseconds. }
   CRichIdleBudgetMs = 8;
+  { ... and at most this many pieces of it (load slices, pictures): a cap that holds whatever
+    the clock's resolution is. }
+  CRichIdleMaxSteps = 3;
   { One load slice: bytes of RTF indexed per step. }
   CRichLoadStepBytes = 256 * 1024;
+  { FinishLoading's slice: the progress event fires and a cancel acts every this many bytes. }
+  CRichFinishStepBytes = 4 * 1024 * 1024;
 
 type
   ETyRichEdit = class(Exception);
@@ -92,14 +97,20 @@ type
     FOwner: TTyCustomRichEdit;
     FBatch: TStringList;
     FUpdating: Boolean;
+    { An empty document is no lines or one empty line: TStrings tells them apart, the text
+      cannot. Set by Add('') / Insert on no lines, by a delete that leaves one empty line and
+      by a replacement with one empty line; cleared by Clear, by any other replacement and
+      when the document is no longer empty. }
+    FEmptyLine: Boolean;
     procedure Run(ACmd: TTyRichCommand);
   protected
     function Get(Index: Integer): string; override;
     function GetCount: Integer; override;
     procedure Put(Index: Integer; const S: string); override;
     procedure SetTextStr(const Value: string); override;
-    { BeginUpdate .. EndUpdate around a Clear (what Assign and a form file do): the lines
-      gather here and become the content once, at the end. }
+    { BeginUpdate .. EndUpdate bracket the document's (AddStrings is one undo step); around a
+      Clear (what Assign and a form file do) the lines gather here and become the content
+      once, at the end. }
     procedure SetUpdateState(Updating: Boolean); override;
   public
     constructor Create(AOwner: TTyCustomRichEdit);
@@ -111,22 +122,22 @@ type
 
   { A block the view holds: its layout (with a reference), the paragraphs it covers as the
     document numbers them now (the layout's own indexes are those it was made with), and its top
-    in pixels from the view's top. }
+    in pixels from the view's top. Top is an Int64: a block may be CRichMaxBlockPx high, and
+    the tops of a few such blocks do not fit an Integer. }
   TTyRichViewBlock = record
     Layout: TTyBlockLayout;
     FirstPara: Integer;
     LastPara: Integer;
-    Top: Integer;
+    Top: Int64;
     Height: Integer;
   end;
 
-  { A picture waiting to be decoded or scaled: the size it is to be drawn at, the block it is in
-    (its first paragraph) and its box in that block. Holds a reference to the picture. }
+  { A picture waiting to be decoded or scaled: the size it is to be drawn at and the paragraphs
+    of the block it was met in. Holds a reference to the picture. }
   TTyRichPendingPicture = record
     Picture: TTyRichPicture;
     Width, Height: Integer;
-    Para: Integer;
-    Box: TRect;
+    Para, LastPara: Integer;
   end;
 
   TTyCustomRichEdit = class(TTyCustomControl, ITyScrollBarFrameHost)
@@ -145,7 +156,17 @@ type
     FSourceFormat: TTyRichFormat;
     // the view
     FAnchorPara: Integer;
-    FAnchorOffset: Integer;
+    FAnchorOffset: Int64;
+    { A layout parameter changed: the anchor block's offset as a share of its height then, so
+      that the same share of it is above the view once it is laid out again (H-M3). }
+    FAnchorShareNum, FAnchorShareDen: Int64;
+    { What the last LayoutView did to the view: the held blocks' tops moved (by FMovedBy when
+      FMoveKnown: the same paragraph is on top, somewhere else). }
+    FViewShifted: Boolean;
+    FMoveKnown: Boolean;
+    FMovedBy: Int64;
+    { A bar decision a layout made in this EnsureView: 0 none, 1 hidden, 2 shown. }
+    FLatchV, FLatchH: Integer;
     FScrollX: Integer;
     FWidestSeen: Integer;
     FBlocks: array of TTyRichViewBlock;
@@ -168,10 +189,17 @@ type
     FFirstSliceBytes: Int64;
     FStepBytes: Int64;
     FInStep: Boolean;
+    FSaving: Integer;
     FCancelRequested: Boolean;
     FTimer: TTimer;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
+    { The (picture, size) pairs made ready lately, with a reference each: never queued again
+      (a picture the layouter cannot make ready at a size would otherwise come back every
+      paint, H-I7). }
+    FPrepared: array of TTyRichPendingPicture;
+    FPreparedCount: Integer;
+    FFallbackListChange: TNotifyEvent;
     // events
     FOnChange: TNotifyEvent;
     FOnZoomChange: TNotifyEvent;
@@ -180,21 +208,35 @@ type
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
     procedure ContentReplaced;
     procedure ChangeInView(const AChange: TTyRichChange);
+    procedure RelayStale;
     procedure ReleaseBlocks;
     procedure ClearPending;
+    procedure ClearPrepared;
     procedure AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
-      ALayout: TTyBlockLayout; ATop: Integer);
+      ALayout: TTyBlockLayout; ATop: Int64);
     procedure WriteHeights(AFrom, ATo: Integer);
     procedure NoteExtent(ALayout: TTyBlockLayout);
     procedure QueuePicturesAhead;
-    procedure QueuePicture(APicture: TTyRichPicture; AWidth, AHeight, APara: Integer;
-      const ABox: TRect; AHeld: Boolean);
+    procedure QueuePicture(APicture: TTyRichPicture; AWidth, AHeight, APara, ALastPara: Integer;
+      AHeld: Boolean);
+    function WasPrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
+    procedure NotePrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+    procedure InvalidatePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+    procedure LayoutParamsChanged;
+    procedure FallbackListChanged(Sender: TObject);
+    procedure CheckReplaceable;
+    { The view's top in pixels of the heights, as the anchor says (no settling). }
+    function AnchorY: Int64;
+    { Lays the view out if something left it invalid: what the queries call first. }
+    procedure Settle;
+    { Rectangles handed to LCL: a block's top may be far outside an Integer's range. }
+    function ViewRect(ALeft: Integer; ATop, ABottom: Int64; ARight: Integer): TRect;
     function ScrollBarSize(APPI: Integer): Integer;
     { The PPI the view was last laid out at; the control's before that. }
     function ViewPPI: Integer;
     function VBarShown: Boolean;
     function HBarShown: Boolean;
-    function UpdateBars: Boolean;
+    function UpdateBars(AMeasured: Boolean): Boolean;
     procedure PlaceBars;
     procedure VBarChange(Sender: TObject);
     procedure HBarChange(Sender: TObject);
@@ -306,12 +348,24 @@ type
     procedure CancelLoad;
     { Lays out what the view shows now, at the control's PPI (a paint does it by itself). }
     procedure UpdateView;
-    { Paints the whole control into ACanvas at ARect, pictures decoded now (a preview, a test). }
+    { Paints the whole control into ACanvas at ARect, pictures decoded now (a preview, a test).
+      It renders the live view, laid out for the control's own size: at the control's PPI it
+      costs nothing beyond the drawing; at another PPI it is a PPI change of the view (every
+      height an estimate again) and, at the next paint, one back. }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { Scrolls by ADeltaY pixels, block by block (a jump of more than a few screens goes
+      through ScrollY). Lays out the blocks it passes; does nothing at an end. }
     procedure ScrollViewBy(ADeltaY: Integer);
     procedure ScrollToTop;
+    { Lays out the last screen's blocks (from the end up) and anchors the view so that the
+      last line is at the bottom. }
     procedure ScrollToEnd;
-    { The document position at client point (X, Y) of the view, through the visible blocks: the
+    { Which calls lay out: these queries (PositionAtPoint, PositionRect, ParagraphRect,
+      VisibleBlockCount, VisibleBlocks, ScrollY) first settle the view - a scroll, a change or a
+      resize since the last layout is laid out now, as a paint would (nothing is done when the
+      view is current). TopParagraph / TopOffset are the anchor as it is and never lay out.
+
+      The document position at client point (X, Y) of the view, through the visible blocks: the
       nearest caret place of the block under Y (the first or last visible one above or below
       them). -1 when nothing is laid out. }
     function PositionAtPoint(X, Y: Integer): TTyRichPos;
@@ -333,9 +387,13 @@ type
     property HorizontalExtent: Integer read FWidestSeen;
     { The block at the view's top, and how many of its pixels are above the view. }
     property TopParagraph: Integer read FAnchorPara;
-    property TopOffset: Integer read FAnchorOffset;
+    property TopOffset: Int64 read FAnchorOffset;
     property Loading: Boolean read GetLoading;
     property Incomplete: Boolean read GetIncomplete;
+    { Cleared by SaveToFile in a format that keeps the content (RTF; text for a text
+      document); an RTF document saved as text is an export and stays Modified, with its
+      SourceFile and SourceFormat. SaveToStream never touches Modified, SourceFile or
+      SourceFormat. }
     property Modified: Boolean read GetModified write SetModified;
     { The file the content was loaded from or last saved to ('' when none). }
     property SourceFile: string read FSourceFile;
@@ -355,12 +413,22 @@ type
       write SetScrollBarAutoHide default sbahDefault;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+    { The progress events run inside a load step or a save. Their handlers must not free the
+      control (as the memo's events must not). Replacing the content from them - a load,
+      Lines.Text, Lines.Clear - raises ETyRichEdit (the step or the save goes on); CancelLoad
+      from a load progress handler stops the load once the step has returned. }
     property OnLoadProgress: TTyRichProgressEvent read FOnLoadProgress write FOnLoadProgress;
     property OnSaveProgress: TTyRichProgressEvent read FOnSaveProgress write FOnSaveProgress;
     property OnFallbackFont: TTyRichFallbackEvent read GetOnFallbackFont write SetOnFallbackFont;
+    { The constructor's values (R31): a fresh control stores neither, and a Cursor of crDefault
+      set in the designer is stored. }
+    property TabStop default True;
     { ITyScrollBarFrameHost }
     function ScrollBarFrameStyle: TTyStyleSet;
     function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+  published
+    { TControl publishes Cursor and a redeclaration cannot unpublish it (the memo's #108). }
+    property Cursor default crIBeam;
   end;
 
   TTyRichEdit = class(TTyCustomRichEdit)
@@ -417,6 +485,7 @@ type
 implementation
 
 uses
+  {$IFDEF UNIX}BaseUnix,{$ENDIF}
   RTLConsts, tyControls.StrConsts, tyControls.FontUnits;
 
 {$IFDEF MSWINDOWS}
@@ -457,7 +526,7 @@ begin
   if FBatch <> nil then Exit(FBatch.Count);
   t := FOwner.FDoc.Text;
   Result := t.ParaCount;
-  if (Result = 1) and (t.Length = 0) then Result := 0;
+  if (Result = 1) and (t.Length = 0) then Result := Ord(FEmptyLine);
 end;
 
 function TTyRichEditLines.Get(Index: Integer): string;
@@ -511,10 +580,9 @@ begin
   if n = 0 then
   begin
     // an empty document: its one paragraph becomes the line
-    if S = '' then
-      Run(TTyRichInsertText.Create(0, #10, TyRichInheritFormat, False))
-    else
-      Run(TTyRichInsertText.Create(0, S, TyRichInheritFormat, False));
+    if S <> '' then Run(TTyRichInsertText.Create(0, S, TyRichInheritFormat, False));
+    FEmptyLine := S = '';
+    FOwner.FLinesStored := True;
   end
   else if Index = n then
     Run(TTyRichInsertText.Create(t.Length, #10 + S, TyRichInheritFormat, False))
@@ -539,17 +607,24 @@ begin
   if n = 1 then
   begin
     if t.Length > 0 then Run(TTyRichDelete.Create(0, t.Length));
-  end
-  else if Index = n - 1 then
-  begin
-    // the last line goes with the separator before it
-    start := t.ParaStart(Index) - 1;
-    Run(TTyRichDelete.Create(start, t.Length - start));
+    FEmptyLine := False;
+    FOwner.FLinesStored := True;
   end
   else
   begin
-    start := t.ParaStart(Index);
-    Run(TTyRichDelete.Create(start, t.ParaStart(Index + 1) - start));
+    if Index = n - 1 then
+    begin
+      // the last line goes with the separator before it
+      start := t.ParaStart(Index) - 1;
+      Run(TTyRichDelete.Create(start, t.Length - start));
+    end
+    else
+    begin
+      start := t.ParaStart(Index);
+      Run(TTyRichDelete.Create(start, t.ParaStart(Index + 1) - start));
+    end;
+    // a line is left: if it is an empty one, it is still a line
+    FEmptyLine := True;
   end;
 end;
 
@@ -578,7 +653,15 @@ var
   s: string;
 begin
   FUpdating := Updating;
-  if not Updating and (FBatch <> nil) then
+  if Updating then
+  begin
+    // the commands of a batch (AddStrings) are one undo step
+    FOwner.FDoc.BeginUpdate;
+    Exit;
+  end;
+  // closed before a gathered replacement: the content is not replaced inside an update
+  FOwner.FDoc.EndUpdate;
+  if FBatch <> nil then
   begin
     s := FBatch.Text;
     FreeAndNil(FBatch);
@@ -610,6 +693,9 @@ begin
   FDoc.OnChange := @DocChanged;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
+  // the layouter empties its caches when the list changes; the view must drop its blocks too
+  FFallbackListChange := FLayouter.FallbackFonts.OnChange;
+  FLayouter.FallbackFonts.OnChange := @FallbackListChanged;
   FLines := TTyRichEditLines.Create(Self);
   Cursor := crIBeam;
   AccessibleRole := larTextEditorMultiline;
@@ -623,7 +709,9 @@ begin
   FreeAndNil(FTimer);
   ReleaseBlocks;
   ClearPending;
+  ClearPrepared;
   if FDoc <> nil then FDoc.OnChange := nil;
+  if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
   FreeAndNil(FLayouter);
   FreeAndNil(FDoc);
   FreeAndNil(FLines);
@@ -719,8 +807,30 @@ begin
 end;
 
 procedure TTyCustomRichEdit.SetOnFallbackFont(AValue: TTyRichFallbackEvent);
+var
+  was: TTyRichFallbackEvent;
 begin
+  was := FLayouter.OnFallbackFont;
   FLayouter.OnFallbackFont := AValue;
+  if (TMethod(was).Code <> TMethod(AValue).Code) or (TMethod(was).Data <> TMethod(AValue).Data) then
+    LayoutParamsChanged;
+end;
+
+procedure TTyCustomRichEdit.FallbackListChanged(Sender: TObject);
+begin
+  if Assigned(FFallbackListChange) then FFallbackListChange(Sender);
+  LayoutParamsChanged;
+end;
+
+{ The fonts a block is measured with changed (as a font change does): the blocks go, every
+  height is an estimate again, the anchor stays, the text is drawn again. }
+procedure TTyCustomRichEdit.LayoutParamsChanged;
+begin
+  if FLayoutPPI = 0 then Exit;
+  FDoc.Text.UnmeasureAll;
+  ReleaseBlocks;
+  FWidestSeen := 0;
+  ViewMoved;
 end;
 
 procedure TTyCustomRichEdit.SetZoom(AValue: Integer);
@@ -760,6 +870,7 @@ end;
 
 function TTyCustomRichEdit.GetVisibleBlock(AIndex: Integer): TTyRichViewBlock;
 begin
+  Settle;
   if (AIndex < 0) or (AIndex >= FBlockCount) then
     raise ETyRichEdit.CreateFmt('Visible block %d out of range', [AIndex]);
   Result := FBlocks[AIndex];
@@ -767,11 +878,14 @@ end;
 
 function TTyCustomRichEdit.VisibleBlockCount: Integer;
 begin
+  Settle;
   Result := FBlockCount;
 end;
 
 procedure TTyCustomRichEdit.DoChange;
 begin
+  // a form file's Lines while streaming, the document going with the control: no event
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
@@ -801,8 +915,70 @@ begin
   FPendingCount := 0;
 end;
 
+procedure TTyCustomRichEdit.ClearPrepared;
+var
+  i: Integer;
+begin
+  for i := 0 to FPreparedCount - 1 do FPrepared[i].Picture.Release;
+  FPrepared := nil;
+  FPreparedCount := 0;
+end;
+
+function TTyCustomRichEdit.WasPrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to FPreparedCount - 1 do
+    if (FPrepared[i].Picture = APicture) and (FPrepared[i].Width = AWidth) and
+      (FPrepared[i].Height = AHeight) then Exit(True);
+  Result := False;
+end;
+
+const
+  { How many prepared (picture, size) pairs the control remembers; the oldest goes first. }
+  CRichPreparedKept = 64;
+
+procedure TTyCustomRichEdit.NotePrepared(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+begin
+  if WasPrepared(APicture, AWidth, AHeight) then Exit;
+  if FPreparedCount = CRichPreparedKept then
+  begin
+    FPrepared[0].Picture.Release;
+    Move(FPrepared[1], FPrepared[0], (FPreparedCount - 1) * SizeOf(FPrepared[0]));
+    Dec(FPreparedCount);
+  end;
+  if FPreparedCount = Length(FPrepared) then SetLength(FPrepared, FPreparedCount * 2 + 8);
+  APicture.AddRef;
+  FPrepared[FPreparedCount].Picture := APicture;
+  FPrepared[FPreparedCount].Width := AWidth;
+  FPrepared[FPreparedCount].Height := AHeight;
+  Inc(FPreparedCount);
+end;
+
+function TTyCustomRichEdit.AnchorY: Int64;
+begin
+  Result := FDoc.Text.ParaTop(FAnchorPara) + FAnchorOffset;
+end;
+
+procedure TTyCustomRichEdit.Settle;
+begin
+  if FViewValid then Exit;
+  EnsureView(ViewPPI);
+end;
+
+function TTyCustomRichEdit.ViewRect(ALeft: Integer; ATop, ABottom: Int64; ARight: Integer): TRect;
+const
+  Lim = MaxInt div 2;
+begin
+  if ATop < -Lim then ATop := -Lim;
+  if ATop > Lim then ATop := Lim;
+  if ABottom < -Lim then ABottom := -Lim;
+  if ABottom > Lim then ABottom := Lim;
+  Result := Rect(ALeft, Integer(ATop), ARight, Integer(ABottom));
+end;
+
 procedure TTyCustomRichEdit.AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
-  ALayout: TTyBlockLayout; ATop: Integer);
+  ALayout: TTyBlockLayout; ATop: Int64);
 begin
   AList[ACount].Layout := ALayout;
   AList[ACount].FirstPara := ALayout.FirstPara;
@@ -842,7 +1018,7 @@ end;
 procedure TTyCustomRichEdit.CheckLayoutParams(APPI: Integer);
 var
   s: TTyStyleSet;
-  size, halfPt, w, est: Integer;
+  size, halfPt, w, est, k: Integer;
   z: Single;
   area: TRect;
   fontDiff: Boolean;
@@ -878,7 +1054,17 @@ begin
     { Every height is stale: the measured ones go (no node is walked), the estimate is the
       new line's, and the anchor - a paragraph and an offset - stays where it is. A z or PPI
       change also changes every font, so the layouter starts afresh; a width change keeps the
-      measured advances (its cached layouts are replaced as they are asked for). }
+      measured advances (its cached layouts are replaced as they are asked for). The offset
+      is kept as a share of the anchor block's height: the same part of that block stays at
+      the top once it is laid out again. }
+    if FAnchorShareDen = 0 then
+      for k := 0 to FBlockCount - 1 do
+        if (FBlocks[k].FirstPara = FAnchorPara) and (FBlocks[k].Height > 0) then
+        begin
+          FAnchorShareNum := FAnchorOffset;
+          FAnchorShareDen := FBlocks[k].Height;
+          Break;
+        end;
     if (APPI <> FLayoutPPI) or (z <> FLayoutZoom) then FLayouter.Clear;
     if FLayoutPPI <> 0 then FDoc.Text.UnmeasureAll;
     ReleaseBlocks;
@@ -894,22 +1080,28 @@ end;
 
 procedure TTyCustomRichEdit.LayoutView;
 var
-  below, above: array of TTyRichViewBlock;
-  nBelow, nAbove, i, y, total, next, deficit, shift, k: Integer;
+  below, above, old: array of TTyRichViewBlock;
+  nBelow, nAbove, nOld, i, j, next, k, paraCount: Integer;
+  y, total, deficit, shift, topY: Int64;
   b: TTyBlockLayout;
-  paraCount: Integer;
   t: TTyRichText;
-  topY: Int64;
 begin
+  // what was held, to tell afterwards whether the text on screen moved
+  old := Copy(FBlocks, 0, FBlockCount);
+  nOld := FBlockCount;
   ReleaseBlocks;
   FViewValid := True;
+  FViewShifted := nOld > 0;
+  FMoveKnown := False;
+  FMovedBy := 0;
   if FViewH <= 0 then Exit;
   t := FDoc.Text;
   paraCount := t.ParaCount;
   if FAnchorPara >= paraCount then
   begin
+    // past the end (the content shrank): the last block, pulled up below to fill the view
     FAnchorPara := paraCount - 1;
-    FAnchorOffset := MaxInt div 2;
+    FAnchorOffset := 0;
   end;
   if FAnchorPara < 0 then FAnchorPara := 0;
   if FAnchorOffset < 0 then FAnchorOffset := 0;
@@ -917,45 +1109,62 @@ begin
   above := nil;
   nBelow := 0;
   nAbove := 0;
+  next := 0;
+  total := 0;
+  b := nil;
   FDoc.BeginRead;
   try
-    // the anchor's block: a paragraph inside a table row anchors the row
-    b := LayoutBlockAt(FAnchorPara);
-    if b.FirstPara <> FAnchorPara then
-    begin
-      topY := t.ParaTop(FAnchorPara) - t.ParaTop(b.FirstPara) + FAnchorOffset;
-      if topY > MaxInt div 2 then topY := MaxInt div 2;
-      FAnchorOffset := Integer(topY);
-      FAnchorPara := b.FirstPara;
-    end;
-    if FAnchorOffset >= b.Height then FAnchorOffset := Math.Max(0, b.Height - 1);
-    // down: the view and a screen past it
-    SetLength(below, 64);
-    y := -FAnchorOffset;
-    repeat
-      if nBelow = Length(below) then SetLength(below, nBelow * 2);
-      AddBlock(below, nBelow, b, y);
-      NoteExtent(b);
-      Inc(y, b.Height);
-      next := b.LastPara + 1;
-      if (y >= 2 * FViewH) or (next >= paraCount) then Break;
-      b := LayoutBlockAt(next);
-    until False;
-    // at the end of the document the last line stays at the bottom of the view
-    deficit := 0;
-    if (next >= paraCount) and (y < FViewH) then deficit := FViewH - y;
-    // up: a screen above the view (and what the end needs to fill it)
-    SetLength(above, 64);
-    total := 0;
-    i := FAnchorPara - 1;
-    while (i >= 0) and (total < FViewH + deficit) do
-    begin
-      b := LayoutBlockAt(i);
-      Inc(total, b.Height);
-      if nAbove = Length(above) then SetLength(above, nAbove * 2);
-      AddBlock(above, nAbove, b, -FAnchorOffset - total);
-      NoteExtent(b);
-      i := b.FirstPara - 1;
+    try
+      // the anchor's block: a paragraph inside a table row anchors the row
+      b := LayoutBlockAt(FAnchorPara);
+      if b.FirstPara <> FAnchorPara then
+      begin
+        topY := t.ParaTop(FAnchorPara) - t.ParaTop(b.FirstPara) + FAnchorOffset;
+        FAnchorOffset := topY;
+        FAnchorPara := b.FirstPara;
+      end;
+      if FAnchorShareDen > 0 then
+      begin
+        FAnchorOffset := FAnchorShareNum * b.Height div FAnchorShareDen;
+        FAnchorShareDen := 0;
+      end;
+      if FAnchorOffset >= b.Height then FAnchorOffset := Math.Max(0, b.Height - 1);
+      // down: the view and a screen past it
+      SetLength(below, 64);
+      y := -FAnchorOffset;
+      repeat
+        if nBelow = Length(below) then SetLength(below, nBelow * 2);
+        AddBlock(below, nBelow, b, y);
+        b := nil;
+        NoteExtent(below[nBelow - 1].Layout);
+        Inc(y, below[nBelow - 1].Height);
+        next := below[nBelow - 1].LastPara + 1;
+        if (y >= 2 * FViewH) or (next >= paraCount) then Break;
+        b := LayoutBlockAt(next);
+      until False;
+      // at the end of the document the last line stays at the bottom of the view
+      deficit := 0;
+      if (next >= paraCount) and (y < FViewH) then deficit := FViewH - y;
+      // up: a screen above the view (and what the end needs to fill it)
+      SetLength(above, 64);
+      i := FAnchorPara - 1;
+      while (i >= 0) and (total < FViewH + deficit) do
+      begin
+        b := LayoutBlockAt(i);
+        if nAbove = Length(above) then SetLength(above, nAbove * 2);
+        Inc(total, b.Height);
+        AddBlock(above, nAbove, b, -FAnchorOffset - total);
+        b := nil;
+        NoteExtent(above[nAbove - 1].Layout);
+        i := above[nAbove - 1].FirstPara - 1;
+      end;
+    except
+      // a layout that raised: none of the references taken so far is kept
+      if b <> nil then b.Release;
+      for k := 0 to nBelow - 1 do below[k].Layout.Release;
+      for k := 0 to nAbove - 1 do above[k].Layout.Release;
+      FViewValid := False;
+      raise;
     end;
   finally
     FDoc.EndRead;
@@ -981,6 +1190,25 @@ begin
         end;
     end;
   end;
+  { Did the text on screen move? The first block in the view, looked up among the blocks held
+    before: there at the same top, nothing moved; at another top, the view moved by that much
+    (a scroll, the end's pull-up); not there, it is all new. }
+  if nOld > 0 then
+    for k := 0 to FBlockCount - 1 do
+      if FBlocks[k].Top + FBlocks[k].Height > 0 then
+      begin
+        for j := 0 to nOld - 1 do
+          if (old[j].FirstPara = FBlocks[k].FirstPara) and (old[j].LastPara = FBlocks[k].LastPara) then
+          begin
+            FMoveKnown := True;
+            FMovedBy := FBlocks[k].Top - old[j].Top;
+            FViewShifted := FMovedBy <> 0;
+            Break;
+          end;
+        Break;
+      end;
+  if FViewShifted then
+    InvalidateContent(TextArea(Rect(0, 0, Width, Height), ViewPPI));
   WriteHeights(0, FBlockCount - 1);
   QueuePicturesAhead;
 end;
@@ -994,6 +1222,7 @@ begin
     ContentReplaced
   else
     ChangeInView(AChange);
+  if (FLines <> nil) and (FDoc.Text.Length > 0) then FLines.FEmptyLine := False;
   // the slices a lazy load adds are its progress, not changes of the content
   if not FInStep then DoChange;
 end;
@@ -1003,26 +1232,97 @@ begin
   FText := FDoc.Text;
   ReleaseBlocks;
   ClearPending;
+  ClearPrepared;
   // told, not recognised: the layouter empties everything it kept
   FLayouter.Document := FDoc;
   FAnchorPara := 0;
   FAnchorOffset := 0;
+  FAnchorShareDen := 0;
   FScrollX := 0;
   FWidestSeen := 0;
   FViewValid := False;
+  if FLines <> nil then FLines.FEmptyLine := False;
   // the new text has no heights: it gets the estimate before anything asks
   if FEstimate > 0 then FDoc.Text.DefaultParaHeight := FEstimate;
   InvalidateContent(Rect(0, 0, Width, Height));
-  if FViewPPI > 0 then UpdateBars;
+  if FViewPPI > 0 then UpdateBars(False);
+end;
+
+{ Held blocks the layouter dropped (a list's numbers after a change, F-M1's Stale) are laid
+  out again: the same shape, only their band is painted again; another shape, the view is laid
+  out again from there (above the view: the anchor below holds, only what is above goes). }
+procedure TTyCustomRichEdit.RelayStale;
+var
+  k, m: Integer;
+  b: TTyBlockLayout;
+  area: TRect;
+begin
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  k := 0;
+  while k < FBlockCount do
+  begin
+    if not FBlocks[k].Layout.Stale then
+    begin
+      Inc(k);
+      Continue;
+    end;
+    if not FViewValid then
+    begin
+      // the next pass lays it out again: its band is what changes on screen
+      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
+        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
+          area.Top + Math.Min(FBlocks[k].Top + FBlocks[k].Height, FViewH), area.Right));
+      Inc(k);
+      Continue;
+    end;
+    FDoc.BeginRead;
+    try
+      b := LayoutBlockAt(FBlocks[k].FirstPara);
+    finally
+      FDoc.EndRead;
+    end;
+    if (b.FirstPara = FBlocks[k].FirstPara) and (b.LastPara = FBlocks[k].LastPara) and
+      (b.Height = FBlocks[k].Height) then
+    begin
+      FBlocks[k].Layout.Release;
+      FBlocks[k].Layout := b;
+      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
+        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
+          area.Top + Math.Min(FBlocks[k].Top + FBlocks[k].Height, FViewH), area.Right));
+      Inc(k);
+      Continue;
+    end;
+    b.Release;
+    FViewValid := False;
+    if FBlocks[k].Top + FBlocks[k].Height <= 0 then
+    begin
+      // above the view: it and what is above it go, the rest is kept
+      for m := 0 to k do FBlocks[m].Layout.Release;
+      for m := k + 1 to FBlockCount - 1 do FBlocks[m - k - 1] := FBlocks[m];
+      FBlockCount := FBlockCount - k - 1;
+      SetLength(FBlocks, FBlockCount);
+      k := 0;
+    end
+    else
+    begin
+      if FBlocks[k].Top < FViewH then
+        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
+          area.Bottom, area.Right));
+      for m := k to FBlockCount - 1 do FBlocks[m].Layout.Release;
+      FBlockCount := k;
+      SetLength(FBlocks, FBlockCount);
+    end;
+  end;
 end;
 
 procedure TTyCustomRichEdit.ChangeInView(const AChange: TTyRichChange);
 var
-  lo, hiOld, delta, k, k0, k1, i, oldTop, oldBottom, y, n, p, stop: Integer;
+  lo, hiOld, delta, k, k0, k1, i, n, p, stop, m: Integer;
+  oldTop, oldBottom, y: Int64;
   fresh: array of TTyRichViewBlock;
   b: TTyBlockLayout;
-  area, r: TRect;
-  sameHeight, anchorMoved: Boolean;
+  area: TRect;
+  sameHeight, anchorMoved, cut: Boolean;
 begin
   lo := AChange.FirstPara;
   hiOld := lo + Math.Max(AChange.OldParaCount, 1) - 1;
@@ -1037,23 +1337,28 @@ begin
     FAnchorPara := lo;
     anchorMoved := True;
   end;
-  // pictures waiting in changed blocks go; the others follow their paragraphs
+  // pictures waiting in changed blocks go (a row's too); the others follow their paragraphs
   k := 0;
   for i := 0 to FPendingCount - 1 do
-    if (FPending[i].Para >= lo) and (FPending[i].Para <= hiOld) then
+    if (FPending[i].LastPara >= lo) and (FPending[i].Para <= hiOld) then
       FPending[i].Picture.Release
     else
     begin
       FPending[k] := FPending[i];
-      if FPending[k].Para > hiOld then Inc(FPending[k].Para, delta);
+      if FPending[k].Para > hiOld then
+      begin
+        Inc(FPending[k].Para, delta);
+        Inc(FPending[k].LastPara, delta);
+      end;
       Inc(k);
     end;
   FPendingCount := k;
-  if not FViewValid or (FBlockCount = 0) then
+  if FBlockCount = 0 then
   begin
-    if FViewPPI > 0 then UpdateBars;
+    if FViewPPI > 0 then UpdateBars(False);
     Exit;
   end;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   // the view's blocks the change touches
   k0 := -1;
   k1 := -1;
@@ -1063,54 +1368,107 @@ begin
       if k0 < 0 then k0 := k;
       k1 := k;
     end;
-  if k0 < 0 then
+  // the blocks after the change: their paragraphs move
+  for k := 0 to FBlockCount - 1 do
+    if FBlocks[k].FirstPara > hiOld then
+    begin
+      Inc(FBlocks[k].FirstPara, delta);
+      Inc(FBlocks[k].LastPara, delta);
+    end;
+  if not FViewValid then
   begin
-    { Not in the view: above it, the blocks keep their places (the anchor holds) and their
-      paragraphs move; below it, nothing on screen changes. }
-    for k := 0 to FBlockCount - 1 do
-      if FBlocks[k].FirstPara > hiOld then
-      begin
-        Inc(FBlocks[k].FirstPara, delta);
-        Inc(FBlocks[k].LastPara, delta);
-      end;
-    UpdateBars;
+    { Laid out again by the next pass, which repaints only what moved: what this change
+      touches on screen is painted now, from the first held block it meets down. A change
+      above every held block leaves the anchor (and the screen) where it is; one below them
+      is off screen. }
+    if (k0 >= 0) and (FBlocks[k0].Top < FViewH) then
+      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k0].Top, 0),
+        area.Bottom, area.Right))
+    else if (k0 < 0) and anchorMoved then
+      InvalidateContent(area);
+    RelayStale;
+    UpdateBars(False);
     Exit;
   end;
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  if k0 < 0 then
+  begin
+    { Not in the view: above it, the blocks keep their places (the anchor holds); below it,
+      nothing on screen changes - but numbers after it may have. }
+    RelayStale;
+    UpdateBars(False);
+    Exit;
+  end;
   if anchorMoved or (FBlocks[k0].FirstPara > lo) then
   begin
     // the change reaches above the blocks the view holds, or across its top: all again
     FViewValid := False;
     InvalidateContent(area);
-    UpdateBars;
+    UpdateBars(False);
     Exit;
   end;
   oldTop := FBlocks[k0].Top;
   oldBottom := FBlocks[k1].Top + FBlocks[k1].Height;
-  // the changed blocks laid out again, from the first one's paragraph (it did not move)
+  if oldBottom <= 0 then
+  begin
+    { Wholly above the view: the anchor below it holds, so nothing on screen moves; the
+      blocks down to the change go, and the next pass lays out what is above the view again. }
+    for m := 0 to k1 do FBlocks[m].Layout.Release;
+    for m := k1 + 1 to FBlockCount - 1 do FBlocks[m - k1 - 1] := FBlocks[m];
+    FBlockCount := FBlockCount - k1 - 1;
+    SetLength(FBlocks, FBlockCount);
+    FViewValid := False;
+    RelayStale;
+    UpdateBars(False);
+    Exit;
+  end;
+  { The changed blocks laid out again, from the first one's paragraph (it did not move) - as
+    far as a screen below the view: a change of many paragraphs lays out no more than a view
+    would. }
   p := FBlocks[k0].FirstPara;
   stop := FBlocks[k1].LastPara + delta;
   fresh := nil;
   n := 0;
   y := oldTop;
+  cut := False;
+  b := nil;
   FDoc.BeginRead;
   try
-    while (p <= stop) and (p < FDoc.Text.ParaCount) do
-    begin
-      b := LayoutBlockAt(p);
-      if n = Length(fresh) then SetLength(fresh, n * 2 + 4);
-      AddBlock(fresh, n, b, y);
-      NoteExtent(b);
-      Inc(y, b.Height);
-      p := b.LastPara + 1;
+    try
+      while (p <= stop) and (p < FDoc.Text.ParaCount) do
+      begin
+        if y >= 2 * FViewH then
+        begin
+          cut := True;
+          Break;
+        end;
+        b := LayoutBlockAt(p);
+        if n = Length(fresh) then SetLength(fresh, n * 2 + 4);
+        AddBlock(fresh, n, b, y);
+        b := nil;
+        NoteExtent(fresh[n - 1].Layout);
+        Inc(y, fresh[n - 1].Height);
+        p := fresh[n - 1].LastPara + 1;
+      end;
+    except
+      if b <> nil then b.Release;
+      for k := 0 to n - 1 do fresh[k].Layout.Release;
+      FViewValid := False;
+      raise;
     end;
   finally
     FDoc.EndRead;
   end;
-  sameHeight := (y = oldBottom) and (n > 0) and (fresh[n - 1].LastPara = stop);
-  // the view's list: the blocks before, the fresh ones, the later ones at their new indexes
+  sameHeight := not cut and (y = oldBottom) and (n > 0) and (fresh[n - 1].LastPara = stop);
+  // the view's list: the blocks before, the fresh ones, the later ones at their new places
   for k := k0 to k1 do FBlocks[k].Layout.Release;
-  if n <> k1 - k0 + 1 then
+  if cut then
+  begin
+    // the rest is below what the view keeps: it goes, and the next pass ends the view
+    for k := k1 + 1 to FBlockCount - 1 do FBlocks[k].Layout.Release;
+    FBlockCount := k0 + n;
+    SetLength(FBlocks, FBlockCount);
+  end
+  else if n <> k1 - k0 + 1 then
   begin
     if n > k1 - k0 + 1 then
     begin
@@ -1123,44 +1481,41 @@ begin
     SetLength(FBlocks, FBlockCount);
   end;
   for k := 0 to n - 1 do FBlocks[k0 + k] := fresh[k];
-  for k := k0 + n to FBlockCount - 1 do
-  begin
-    Inc(FBlocks[k].FirstPara, delta);
-    Inc(FBlocks[k].LastPara, delta);
-    Inc(FBlocks[k].Top, y - oldBottom);
-  end;
+  if not cut then
+    for k := k0 + n to FBlockCount - 1 do Inc(FBlocks[k].Top, y - oldBottom);
   if n > 0 then WriteHeights(k0, k0 + n - 1);
   if sameHeight then
   begin
     // only the changed blocks, as far as they are on screen
-    r := Rect(area.Left, area.Top + Math.Max(oldTop, 0), area.Right,
-      area.Top + Math.Min(oldBottom, FViewH));
-    if r.Bottom > r.Top then InvalidateContent(r);
+    if oldTop < FViewH then
+      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(oldTop, 0),
+        area.Top + Math.Min(oldBottom, FViewH), area.Right));
   end
   else
   begin
-    { The blocks below moved: from the change down. A change wholly above the view moves
-      nothing on screen (the anchor below it holds). }
-    if (oldBottom > 0) and (oldTop < FViewH) then
-      InvalidateContent(Rect(area.Left, area.Top + Math.Max(oldTop, 0), area.Right,
-        area.Bottom));
-    // the next pass fills what the move left (above the view nothing moves: the anchor holds)
+    // the blocks below moved: from the change down; the next pass fills what the move left
+    if oldTop < FViewH then
+      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(oldTop, 0), area.Bottom,
+        area.Right));
     FViewValid := False;
   end;
-  UpdateBars;
+  RelayStale;
+  UpdateBars(False);
 end;
 
 { ---- scrolling ---- }
 
 function TTyCustomRichEdit.GetScrollY: Int64;
 begin
-  Result := FDoc.Text.ParaTop(FAnchorPara) + FAnchorOffset;
+  Settle;
+  Result := AnchorY;
 end;
 
 procedure TTyCustomRichEdit.SetScrollY(AValue: Int64);
 var
   t: TTyRichText;
   i: Integer;
+  off: Int64;
 begin
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
@@ -1171,19 +1526,31 @@ begin
     Exit;
   end;
   i := t.ParaAtHeight(AValue);
+  off := AValue - t.ParaTop(i);
+  if (i = FAnchorPara) and (off = FAnchorOffset) then Exit;
   FAnchorPara := i;
-  FAnchorOffset := Integer(AValue - t.ParaTop(i));
+  FAnchorOffset := off;
+  FAnchorShareDen := 0;
   ViewMoved;
 end;
 
 procedure TTyCustomRichEdit.ScrollViewBy(ADeltaY: Integer);
 var
-  off, a, last: Integer;
+  a, last: Integer;
+  off, maxTop, newY: Int64;
   b: TTyBlockLayout;
+  t: TTyRichText;
 begin
   if ADeltaY = 0 then Exit;
   CheckLayoutParams(ViewPPI);
-  last := FDoc.Text.ParaCount - 1;
+  t := FDoc.Text;
+  // a jump of many screens is a position, not a walk over every block between
+  if Abs(Int64(ADeltaY)) > 4 * Int64(Math.Max(FViewH, 1)) then
+  begin
+    SetScrollY(AnchorY + ADeltaY);
+    Exit;
+  end;
+  last := t.ParaCount - 1;
   a := Math.Min(FAnchorPara, last);
   off := FAnchorOffset + ADeltaY;
   FDoc.BeginRead;
@@ -1196,7 +1563,7 @@ begin
         try
           if a <> b.FirstPara then
           begin
-            Inc(off, Integer(FDoc.Text.ParaTop(a) - FDoc.Text.ParaTop(b.FirstPara)));
+            Inc(off, t.ParaTop(a) - t.ParaTop(b.FirstPara));
             a := b.FirstPara;
           end;
           if (off < b.Height) or (b.LastPara >= last) then Break;
@@ -1226,23 +1593,100 @@ begin
   finally
     FDoc.EndRead;
   end;
+  if ADeltaY > 0 then
+  begin
+    // against the end: no further than the last line at the bottom
+    maxTop := Math.Max(Int64(0), t.TotalHeight - FViewH);
+    newY := t.ParaTop(a) + off;
+    if newY > maxTop then
+    begin
+      if AnchorY >= maxTop then Exit;
+      a := t.ParaAtHeight(maxTop);
+      off := maxTop - t.ParaTop(a);
+    end;
+  end;
+  if (a = FAnchorPara) and (off = FAnchorOffset) then Exit;
   FAnchorPara := a;
   FAnchorOffset := off;
+  FAnchorShareDen := 0;
   ViewMoved;
 end;
 
 procedure TTyCustomRichEdit.ScrollToTop;
 begin
+  if (FAnchorPara = 0) and (FAnchorOffset = 0) then Exit;
   FAnchorPara := 0;
   FAnchorOffset := 0;
+  FAnchorShareDen := 0;
   ViewMoved;
 end;
 
 procedure TTyCustomRichEdit.ScrollToEnd;
+var
+  t: TTyRichText;
+  p, n, k, a, first: Integer;
+  total, off: Int64;
+  b: TTyBlockLayout;
+  firsts, lasts, heights: array of Integer;
+  h: array of Int64;
 begin
-  // the last block at the top, past its end: the layout pass pulls the view up to fill it
-  FAnchorPara := FDoc.Text.ParaCount - 1;
-  FAnchorOffset := MaxInt div 2;
+  CheckLayoutParams(ViewPPI);
+  t := FDoc.Text;
+  { The last screen's blocks, from the end up: their heights are written, so the anchor found
+    is exact - no marker waits for the next layout to say where the end is. }
+  firsts := nil;
+  lasts := nil;
+  heights := nil;
+  n := 0;
+  total := 0;
+  p := t.ParaCount - 1;
+  FDoc.BeginRead;
+  try
+    while p >= 0 do
+    begin
+      b := LayoutBlockAt(p);
+      if n = Length(firsts) then
+      begin
+        SetLength(firsts, n * 2 + 8);
+        SetLength(lasts, n * 2 + 8);
+        SetLength(heights, n * 2 + 8);
+      end;
+      firsts[n] := b.FirstPara;
+      lasts[n] := b.LastPara;
+      heights[n] := b.Height;
+      Inc(n);
+      Inc(total, b.Height);
+      p := b.FirstPara - 1;
+      b.Release;
+      if total >= FViewH then Break;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  if n > 0 then
+  begin
+    first := firsts[n - 1];
+    SetLength(h, lasts[0] - first + 1);
+    for k := 0 to High(h) do h[k] := 0;
+    for k := 0 to n - 1 do h[firsts[k] - first] := heights[k];
+    t.SetParaHeights(first, h);
+  end;
+  if (n = 0) or (total <= FViewH) then
+  begin
+    // the whole document fits (or the view has no height): its top
+    a := 0;
+    off := 0;
+    if (n > 0) and (p >= 0) then a := firsts[n - 1];
+  end
+  else
+  begin
+    a := firsts[n - 1];
+    off := total - FViewH;
+  end;
+  if (a = FAnchorPara) and (off = FAnchorOffset) then Exit;
+  FAnchorPara := a;
+  FAnchorOffset := off;
+  FAnchorShareDen := 0;
   ViewMoved;
 end;
 
@@ -1264,21 +1708,32 @@ procedure TTyCustomRichEdit.EnsureView(APPI: Integer);
 var
   pass: Integer;
 begin
-  for pass := 1 to 4 do
-  begin
-    CheckLayoutParams(APPI);
-    { The bars first, from the heights as they are (estimates included): a bar that came
-      after the layout would change the width and have it all laid out a second time. }
-    if UpdateBars then Continue;
-    if FViewValid then Break;
-    LayoutView;
-    // what the layout found (a wide block, corrected heights) may still want a bar
-    if not UpdateBars then Break;
-  end;
-  if not FViewValid then
-  begin
-    CheckLayoutParams(APPI);
-    LayoutView;
+  { The bars are decided first from the heights as they are (estimates included): a bar that
+    came after the layout would change the width and have it all laid out a second time. A
+    decision a layout made (measured heights) holds for the rest of this call: the width it
+    changes makes the heights estimates again, and they must not take it back - a bar shown
+    because the text overflowed stays, one hidden because it fits at the narrower width stays
+    hidden (it fits wider too). So it settles in at most three layouts (H-C1). }
+  FLatchV := 0;
+  FLatchH := 0;
+  try
+    for pass := 1 to 4 do
+    begin
+      CheckLayoutParams(APPI);
+      if UpdateBars(False) then Continue;
+      if FViewValid then Break;
+      LayoutView;
+      // what the layout found (a wide block, corrected heights) may still want a bar
+      if not UpdateBars(True) then Break;
+    end;
+    if not FViewValid then
+    begin
+      CheckLayoutParams(APPI);
+      LayoutView;
+    end;
+  finally
+    FLatchV := 0;
+    FLatchH := 0;
   end;
 end;
 
@@ -1375,16 +1830,33 @@ end;
 
 { Shows or hides the bars and sets their ranges. True when a bar came or went (the text area
   changed: the view must be laid out again). }
-function TTyCustomRichEdit.UpdateBars: Boolean;
+function TTyCustomRichEdit.UpdateBars(AMeasured: Boolean): Boolean;
+
+  function Decide(ARaw: Boolean; var ALatch: Integer): Boolean;
+  begin
+    if AMeasured then
+    begin
+      // what a layout found: kept for the rest of the EnsureView (a shown bar for good)
+      if ARaw then ALatch := 2
+      else if ALatch <> 2 then ALatch := 1;
+    end;
+    case ALatch of
+      1: Result := False;
+      2: Result := True;
+    else
+      Result := ARaw;
+    end;
+  end;
+
 var
   total, topY, maxTop, scale: Int64;
   wantV, wantH: Boolean;
   page: Integer;
 begin
   total := FDoc.Text.TotalHeight;
-  topY := GetScrollY;
-  wantV := (total > FViewH) or (topY > 0);
-  wantH := FWidestSeen > FViewW;
+  topY := AnchorY;
+  wantV := Decide((total > FViewH) or (topY > 0), FLatchV);
+  wantH := Decide(FWidestSeen > FViewW, FLatchH);
   Result := (wantV <> VBarShown) or (wantH <> HBarShown);
   if wantV and (FVBar = nil) then FVBar := NewBar(Self, sbVertical, @VBarChange, FScrollBarAutoHide);
   if wantH and (FHBar = nil) then FHBar := NewBar(Self, sbHorizontal, @HBarChange, FScrollBarAutoHide);
@@ -1466,6 +1938,7 @@ var
   s, part: TTyStyleSet;
   model: TTyStyleModel;
   states: TTyStateSet;
+  c: TTyColor;
 begin
   AStyle := TyRichDefaultPaintStyle;
   s := CurrentStyle;
@@ -1485,6 +1958,12 @@ begin
     AStyle.PlaceholderFill := TyColorToBGRA(part.Background.Color);
   if tpBorderColor in part.Present then
     AStyle.PlaceholderFrame := TyColorToBGRA(part.BorderColor);
+  { #225: the parts are resolved from the theme; a '--' token the control's own StyleOverride
+    sets for what their rules read reaches them too. }
+  if OwnStyleColor('--selection', c) then AStyle.SelectionBack := TyColorToBGRA(c);
+  if OwnStyleColor('--accent', c) then AStyle.ObjectFrame := TyColorToBGRA(c);
+  if OwnStyleColor('--surface-sunk', c) then AStyle.PlaceholderFill := TyColorToBGRA(c);
+  if OwnStyleColor('--border', c) then AStyle.PlaceholderFrame := TyColorToBGRA(c);
   AStyle.TableBorder := AStyle.TextColor;
 end;
 
@@ -1533,8 +2012,10 @@ begin
         x := area.Left - FScrollX;
         for k := 0 to FBlockCount - 1 do
         begin
-          y := area.Top + FBlocks[k].Top;
-          if (y >= textClip.Bottom) or (y + FBlocks[k].Height <= textClip.Top) then Continue;
+          if (area.Top + FBlocks[k].Top >= textClip.Bottom) or
+            (area.Top + FBlocks[k].Top + FBlocks[k].Height <= textClip.Top) then Continue;
+          // it meets the clip: its top is within a block's height of the view
+          y := Integer(area.Top + FBlocks[k].Top);
           FBlocks[k].Layout.Paint(P.Bitmap, x, y, textClip, st, 0, 0);
           if ADefer and (FLayouter.SkippedPictureCount > 0) then
           begin
@@ -1542,9 +2023,8 @@ begin
             for j := 0 to High(skipped) do
             begin
               box := skipped[j].Box;
-              Types.OffsetRect(box, -x, -y);
               QueuePicture(skipped[j].Picture, box.Right - box.Left, box.Bottom - box.Top,
-                FBlocks[k].FirstPara, box, True);
+                FBlocks[k].FirstPara, FBlocks[k].LastPara, True);
             end;
           end;
         end;
@@ -1581,16 +2061,20 @@ end;
 function TTyCustomRichEdit.PositionAtPoint(X, Y: Integer): TTyRichPos;
 var
   area: TRect;
-  k, vy: Integer;
+  k: Integer;
+  vy, by: Int64;
 begin
+  Settle;
   Result := -1;
   if FBlockCount = 0 then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   vy := Y - area.Top;
   k := 0;
   while (k < FBlockCount - 1) and (vy >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
+  // inside the block (or just outside it): within its height, an Integer
+  by := Math.Max(Int64(-1), Math.Min(vy - FBlocks[k].Top, Int64(FBlocks[k].Height)));
   Result := FDoc.Text.ParaStart(FBlocks[k].FirstPara) +
-    FBlocks[k].Layout.PosAtPoint(X - area.Left + FScrollX, vy - FBlocks[k].Top);
+    FBlocks[k].Layout.PosAtPoint(X - area.Left + FScrollX, Integer(by));
 end;
 
 function TTyCustomRichEdit.PositionRect(APos: TTyRichPos): TRect;
@@ -1599,7 +2083,9 @@ var
   k: Integer;
   start, stop: TTyRichPos;
   t: TTyRichText;
+  r: TRect;
 begin
+  Settle;
   Result := Rect(0, 0, 0, 0);
   t := FDoc.Text;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
@@ -1609,8 +2095,9 @@ begin
     stop := t.ParaStart(FBlocks[k].LastPara) + t.ParaLength(FBlocks[k].LastPara);
     if (APos >= start) and (APos <= stop) then
     begin
-      Result := FBlocks[k].Layout.CaretRect(APos - start);
-      Types.OffsetRect(Result, area.Left - FScrollX, area.Top + FBlocks[k].Top);
+      r := FBlocks[k].Layout.CaretRect(APos - start);
+      Result := ViewRect(r.Left + area.Left - FScrollX, area.Top + FBlocks[k].Top + r.Top,
+        area.Top + FBlocks[k].Top + r.Bottom, r.Right + area.Left - FScrollX);
       Exit;
     end;
   end;
@@ -1621,22 +2108,30 @@ var
   area: TRect;
   k: Integer;
 begin
+  Settle;
   Result := Rect(0, 0, 0, 0);
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   for k := 0 to FBlockCount - 1 do
     if (AIndex >= FBlocks[k].FirstPara) and (AIndex <= FBlocks[k].LastPara) then
-      Exit(Rect(area.Left, area.Top + FBlocks[k].Top, area.Right,
-        area.Top + FBlocks[k].Top + FBlocks[k].Height));
+      Exit(ViewRect(area.Left, area.Top + FBlocks[k].Top,
+        area.Top + FBlocks[k].Top + FBlocks[k].Height, area.Right));
 end;
 
 { ---- pictures made ready in the background ---- }
 
-procedure TTyCustomRichEdit.QueuePicture(APicture: TTyRichPicture; AWidth, AHeight,
-  APara: Integer; const ABox: TRect; AHeld: Boolean);
+procedure TTyCustomRichEdit.QueuePicture(APicture: TTyRichPicture; AWidth, AHeight, APara,
+  ALastPara: Integer; AHeld: Boolean);
 var
   i: Integer;
 begin
-  // once is enough (a view laid out again meets the same pictures)
+  { Once is enough (a view laid out again meets the same pictures, a picture may be in two
+    places); and never again a (picture, size) just made ready: what the layouter could not
+    make ready at that size it would not make ready a second time either. }
+  if WasPrepared(APicture, AWidth, AHeight) then
+  begin
+    if AHeld then APicture.Release;
+    Exit;
+  end;
   for i := 0 to FPendingCount - 1 do
     if (FPending[i].Picture = APicture) and (FPending[i].Width = AWidth) and
       (FPending[i].Height = AHeight) then
@@ -1650,20 +2145,22 @@ begin
   FPending[FPendingCount].Width := AWidth;
   FPending[FPendingCount].Height := AHeight;
   FPending[FPendingCount].Para := APara;
-  FPending[FPendingCount].Box := ABox;
+  FPending[FPendingCount].LastPara := ALastPara;
   Inc(FPendingCount);
 end;
 
-{ The pictures of the blocks laid out off screen (a screen ahead and behind) that are not ready
-  at their size: made ready in the background, so they are when they scroll in. }
-procedure TTyCustomRichEdit.QueuePicturesAhead;
+type
+  TTyRichPictureVisit = procedure(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer)
+    of object;
 
-  procedure FromPara(L: TTyParaLayout; AX, AY, APara: Integer);
+{ Every picture box of held block k, in the block's pixels. }
+procedure VisitPictures(ALayout: TTyBlockLayout; ABlock: Integer; AVisit: TTyRichPictureVisit);
+
+  procedure FromPara(L: TTyParaLayout; AX, AY: Integer);
   var
     i, j: Integer;
     ln: TTyRichLine;
     f: TTyRichFragment;
-    box: TRect;
   begin
     for i := 0 to L.LineCount - 1 do
     begin
@@ -1672,33 +2169,102 @@ procedure TTyCustomRichEdit.QueuePicturesAhead;
       begin
         f := L.Fragments[j];
         if (f.Kind <> rfkObject) or not (f.Obj is TTyRichPicture) then Continue;
-        box := Rect(AX + f.X, AY + ln.Baseline - f.Ascent, AX + f.X + f.Width,
-          AY + ln.Baseline + f.Descent);
-        if not FLayouter.PictureReady(TTyRichPicture(f.Obj), box.Right - box.Left,
-          box.Bottom - box.Top) then
-          QueuePicture(TTyRichPicture(f.Obj), box.Right - box.Left, box.Bottom - box.Top,
-            APara, box, False);
+        AVisit(TTyRichPicture(f.Obj), Rect(AX + f.X, AY + ln.Baseline - f.Ascent,
+          AX + f.X + f.Width, AY + ln.Baseline + f.Descent), ABlock);
       end;
     end;
   end;
 
 var
-  k, i: Integer;
+  i: Integer;
   row: TTyRowLayout;
 begin
-  for k := 0 to FBlockCount - 1 do
+  if ALayout is TTyParaLayout then
+    FromPara(TTyParaLayout(ALayout), 0, 0)
+  else if ALayout is TTyRowLayout then
   begin
-    if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then Continue;
-    if FBlocks[k].Layout is TTyParaLayout then
-      FromPara(TTyParaLayout(FBlocks[k].Layout), 0, 0, FBlocks[k].FirstPara)
-    else if FBlocks[k].Layout is TTyRowLayout then
+    row := TTyRowLayout(ALayout);
+    for i := 0 to row.ItemCount - 1 do
+      FromPara(row.Items[i].Layout, row.Items[i].X, row.Items[i].Y);
+  end;
+end;
+
+type
+  { The two walks over the held blocks' pictures. }
+  TTyRichPictureWalk = class
+    Owner: TTyCustomRichEdit;
+    Picture: TTyRichPicture;
+    Width, Height: Integer;
+    Area: TRect;
+    procedure Ahead(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
+    procedure Ready(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
+  end;
+
+procedure TTyRichPictureWalk.Ahead(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
+var
+  w, h: Integer;
+begin
+  w := ABox.Right - ABox.Left;
+  h := ABox.Bottom - ABox.Top;
+  if not Owner.FLayouter.PictureReady(APicture, w, h) then
+    Owner.QueuePicture(APicture, w, h, Owner.FBlocks[ABlock].FirstPara,
+      Owner.FBlocks[ABlock].LastPara, False);
+end;
+
+procedure TTyRichPictureWalk.Ready(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
+var
+  r: TRect;
+  top: Int64;
+begin
+  if (APicture <> Picture) or (ABox.Right - ABox.Left <> Width) or
+    (ABox.Bottom - ABox.Top <> Height) then Exit;
+  top := Area.Top + Owner.FBlocks[ABlock].Top;
+  r := Owner.ViewRect(Area.Left - Owner.FScrollX + ABox.Left, top + ABox.Top, top + ABox.Bottom,
+    Area.Left - Owner.FScrollX + ABox.Right);
+  if IntersectRect(r, r, Area) then Owner.InvalidateContent(r);
+end;
+
+{ The pictures of the blocks laid out off screen (a screen ahead and behind) that are not ready
+  at their size: made ready in the background, so they are when they scroll in. }
+procedure TTyCustomRichEdit.QueuePicturesAhead;
+var
+  k: Integer;
+  walk: TTyRichPictureWalk;
+begin
+  walk := TTyRichPictureWalk.Create;
+  try
+    walk.Owner := Self;
+    for k := 0 to FBlockCount - 1 do
     begin
-      row := TTyRowLayout(FBlocks[k].Layout);
-      for i := 0 to row.ItemCount - 1 do
-        FromPara(row.Items[i].Layout, row.Items[i].X, row.Items[i].Y, FBlocks[k].FirstPara);
+      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then Continue;
+      VisitPictures(FBlocks[k].Layout, k, @walk.Ahead);
     end;
+  finally
+    walk.Free;
   end;
   if FPendingCount > 0 then StartBackground;
+end;
+
+{ A picture made ready at a size: every box it has at that size in the view is painted again
+  (a picture may be in two places), nothing else. }
+procedure TTyCustomRichEdit.InvalidatePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+var
+  k: Integer;
+  walk: TTyRichPictureWalk;
+begin
+  walk := TTyRichPictureWalk.Create;
+  try
+    walk.Owner := Self;
+    walk.Picture := APicture;
+    walk.Width := AWidth;
+    walk.Height := AHeight;
+    walk.Area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+    for k := 0 to FBlockCount - 1 do
+      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
+        VisitPictures(FBlocks[k].Layout, k, @walk.Ready);
+  finally
+    walk.Free;
+  end;
 end;
 
 function TTyCustomRichEdit.HasBackgroundWork: Boolean;
@@ -1710,10 +2276,10 @@ function TTyCustomRichEdit.StepBackground: Boolean;
 var
   load: TTyRtfLoad;
   pic: TTyRichPendingPicture;
-  k: Integer;
-  area, r: TRect;
 begin
   Result := False;
+  // re-entered from a progress handler (one that pumps messages): the step is running
+  if FInStep or (FSaving > 0) then Exit;
   load := TyRichRtfLoadOf(FDoc);
   if FDoc.Loading and (load <> nil) then
   begin
@@ -1735,17 +2301,10 @@ begin
     if not FLayouter.PictureReady(pic.Picture, pic.Width, pic.Height) then
     begin
       FLayouter.PreparePicture(pic.Picture, pic.Width, pic.Height);
-      // its box, if its block is in the view: nothing else is painted again
-      area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-      for k := 0 to FBlockCount - 1 do
-        if FBlocks[k].FirstPara = pic.Para then
-        begin
-          r := pic.Box;
-          Types.OffsetRect(r, area.Left - FScrollX, area.Top + FBlocks[k].Top);
-          if IntersectRect(r, r, area) then InvalidateContent(r);
-          Break;
-        end;
+      // its boxes in the view: nothing else is painted again
+      InvalidatePicture(pic.Picture, pic.Width, pic.Height);
     end;
+    NotePrepared(pic.Picture, pic.Width, pic.Height);
   finally
     pic.Picture.Release;
   end;
@@ -1774,11 +2333,18 @@ end;
 procedure TTyCustomRichEdit.TimerTick(Sender: TObject);
 var
   t0: QWord;
+  n: Integer;
 begin
+  if FInStep or (FSaving > 0) then Exit;
+  { The clock (GetTickCount64) may advance in 15.6 ms steps (Windows' default): it only ends a
+    turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
+    pieces: CRichIdleMaxSteps load slices or pictures. }
   t0 := GetTickCount64;
+  n := 0;
   repeat
     if not StepBackground then Break;
-  until GetTickCount64 - t0 >= CRichIdleBudgetMs;
+    Inc(n);
+  until (n >= CRichIdleMaxSteps) or (GetTickCount64 - t0 >= CRichIdleBudgetMs);
   if not HasBackgroundWork then StopBackground;
 end;
 
@@ -1832,10 +2398,17 @@ begin
   end;
 end;
 
+{ A load, a Lines replacement or Clear frees what a running step or save still uses. }
+procedure TTyCustomRichEdit.CheckReplaceable;
+begin
+  if FInStep or (FSaving > 0) then raise ETyRichEdit.Create(rsRichEditBusy);
+end;
+
 procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat);
 var
   load: TTyRtfLoad;
 begin
+  CheckReplaceable;
   FCancelRequested := False;
   if AFormat = rfRtf then
   begin
@@ -1863,7 +2436,9 @@ procedure TTyCustomRichEdit.LoadFromFile(const AFileName: string);
 var
   fs: TFileStream;
 begin
-  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
+  CheckReplaceable;
+  // the bytes are read to the end at once and nothing is kept: a writer elsewhere is no harm
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
   try
     LoadAs(fs, DetectFormat(fs));
   finally
@@ -1878,6 +2453,7 @@ var
   st: TBytesStream;
   n: Integer;
 begin
+  CheckReplaceable;
   s := AText;
   // as TStrings reads it: a line break at the end closes the last line, it adds none
   n := Length(s);
@@ -1890,6 +2466,8 @@ begin
   finally
     st.Free;
   end;
+  // a text of one line break is one empty line, no text at all is none
+  FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
   FSourceFormat := rfText;
   FSourceFile := '';
   FLinesStored := True;
@@ -1899,14 +2477,26 @@ procedure TTyCustomRichEdit.FinishLoading;
 var
   load: TTyRtfLoad;
 begin
-  load := TyRichRtfLoadOf(FDoc);
-  if (load = nil) or not FDoc.Loading then Exit;
-  load.OnLoadProgress := @LoadProgress;
-  FInStep := True;
-  try
-    while not FCancelRequested and not load.Step(High(Int64) div 4) do ;
-  finally
-    FInStep := False;
+  if FInStep then Exit;
+  { In slices, so that the progress event fires and a cancel acts; the load is asked for
+    again after every step (a handler may have cancelled it), and the loop ends when the
+    document is no longer loading. }
+  while FDoc.Loading do
+  begin
+    load := TyRichRtfLoadOf(FDoc);
+    if load = nil then Break;
+    if FCancelRequested then
+    begin
+      CancelLoad;
+      Break;
+    end;
+    load.OnLoadProgress := @LoadProgress;
+    FInStep := True;
+    try
+      load.Step(CRichFinishStepBytes);
+    finally
+      FInStep := False;
+    end;
   end;
   if FCancelRequested then CancelLoad;
   if not HasBackgroundWork then StopBackground;
@@ -1916,6 +2506,12 @@ procedure TTyCustomRichEdit.CancelLoad;
 var
   load: TTyRtfLoad;
 begin
+  // from a progress handler: the step is running, the load stops when it has returned
+  if FInStep then
+  begin
+    FCancelRequested := True;
+    Exit;
+  end;
   FCancelRequested := False;
   load := TyRichRtfLoadOf(FDoc);
   if (load = nil) or not FDoc.Loading then Exit;
@@ -1930,30 +2526,102 @@ end;
 
 procedure TTyCustomRichEdit.WriteTo(AStream: TStream; AFormat: TTyRichFormat);
 begin
+  // a save asked for from a load progress handler would save a document still loading
+  if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
   if AFormat = rfAuto then AFormat := FSourceFormat;
-  if AFormat = rfText then
-    TyRichSaveText(FDoc, AStream)
-  else
-    TyRichSaveRtf(FDoc, AStream, @SaveProgress);
+  Inc(FSaving);
+  try
+    if AFormat = rfText then
+      TyRichSaveText(FDoc, AStream)
+    else
+      TyRichSaveRtf(FDoc, AStream, @SaveProgress);
+  finally
+    Dec(FSaving);
+  end;
 end;
 
 procedure TTyCustomRichEdit.SaveToStream(AStream: TStream; AFormat: TTyRichFormat);
 begin
+  // an export: Modified, SourceFile and SourceFormat stay as they are
   WriteTo(AStream, AFormat);
-  FDoc.Modified := False;
 end;
 
-{ Puts ASource in ATarget's place (ATarget may exist). }
+{$IFDEF MSWINDOWS}
+const
+  REPLACEFILE_IGNORE_MERGE_ERRORS = 2;
+  FILE_ATTRIBUTE_READONLY = 1;
+  INVALID_FILE_ATTRIBUTES = DWord($FFFFFFFF);
+
+function ReplaceFileW(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
+  AExclude, AReserved: Pointer): LongBool; stdcall; external 'kernel32' name 'ReplaceFileW';
+function GetFileAttributesW(AName: PWideChar): DWord; stdcall;
+  external 'kernel32' name 'GetFileAttributesW';
+{$ENDIF}
+
+{ The file a save writes: a symbolic link is followed (its target is replaced, the link
+  stays), up to 32 links deep. }
+function RealTarget(const AFileName: string): string;
+var
+  n, a: Integer;
+  next: RawByteString;
+begin
+  Result := AFileName;
+  for n := 1 to 32 do
+  begin
+    a := FileGetAttr(Result);
+    if (a = -1) or ((a and faSymLink) = 0) then Exit;
+    if not FileGetSymLinkTarget(RawByteString(Result), next) or (next = '') then Exit;
+    // a relative target is relative to the link's folder
+    if (ExtractFileDrive(next) = '') and not (next[1] in AllowDirectorySeparators) then
+      next := ExtractFilePath(Result) + next;
+    Result := ExpandFileName(next);
+  end;
+end;
+
+{ The user may not write ATarget (it exists, write-protected): refused before anything is
+  written. }
+function TargetWriteProtected(const ATarget: string): Boolean;
+{$IFDEF MSWINDOWS}
+var
+  a: DWord;
+begin
+  a := GetFileAttributesW(PWideChar(UnicodeString(ATarget)));
+  Result := (a <> INVALID_FILE_ATTRIBUTES) and ((a and FILE_ATTRIBUTE_READONLY) <> 0);
+end;
+{$ELSE}
+begin
+  Result := FileExists(ATarget) and (fpAccess(ATarget, W_OK) <> 0);
+end;
+{$ENDIF}
+
+{ Puts ASource in ATarget's place (ATarget may exist). What ATarget was stays: on Windows
+  ReplaceFileW keeps its ACL, attributes, streams and creation time; elsewhere the new file is
+  given the target's mode (and owner, where the process may) before rename(2) puts it there. A
+  new target gets the defaults. }
 function ReplaceFile(const ASource, ATarget: string): Boolean;
+{$IFNDEF MSWINDOWS}
+var
+  st: TStat;
+{$ENDIF}
 begin
   {$IFDEF MSWINDOWS}
-  Result := MoveFileExW(PWideChar(UnicodeString(ASource)), PWideChar(UnicodeString(ATarget)),
-    MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH);
+  if FileExists(ATarget) then
+    Result := ReplaceFileW(PWideChar(UnicodeString(ATarget)), PWideChar(UnicodeString(ASource)),
+      nil, REPLACEFILE_IGNORE_MERGE_ERRORS, nil, nil)
+  else
+    Result := MoveFileExW(PWideChar(UnicodeString(ASource)), PWideChar(UnicodeString(ATarget)),
+      MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH);
   {$ELSE}
+  if fpStat(ATarget, st) = 0 then
+  begin
+    fpChmod(ASource, st.st_mode and &7777);
+    // only root may give a file away; another user's file keeps our ownership then
+    fpChown(ASource, st.st_uid, st.st_gid);
+  end;
   // rename(2) replaces the target in one step
-  Result := RenameFile(ASource, ATarget);
+  Result := fpRename(ASource, ATarget) = 0;
   {$ENDIF}
 end;
 
@@ -1961,9 +2629,10 @@ procedure TTyCustomRichEdit.SaveToFile(const AFileName: string; AFormat: TTyRich
 var
   full, tmp, ext: string;
   fs: TFileStream;
-  n: Integer;
+  g: TGUID;
+  keeps: Boolean;
 begin
-  full := ExpandFileName(AFileName);
+  full := RealTarget(ExpandFileName(AFileName));
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
   if AFormat = rfAuto then
@@ -1973,18 +2642,23 @@ begin
     else if ext = '.txt' then AFormat := rfText
     else AFormat := FSourceFormat;
   end;
+  if TargetWriteProtected(full) then raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
   { Beside the target, so that putting it in the target's place is a rename on one volume;
-    the target - perhaps the very file the document reads from - is untouched until then. }
-  n := 0;
-  repeat
-    tmp := ExtractFilePath(full) + '.' + ExtractFileName(full) + '.' +
-      IntToHex(Random($7FFFFFFF), 8) + '.tmp';
-    Inc(n);
-  until not FileExists(tmp) or (n > 100);
-  fs := TFileStream.Create(tmp, fmCreate);
+    the target - perhaps the very file the document reads from - is untouched until then. A
+    GUID names it: no other file has that name, nobody guesses it. }
+  CreateGUID(g);
+  tmp := ExtractFilePath(full) + '.' + ExtractFileName(full) + '.' +
+    Copy(GUIDToString(g), 2, 36) + '.tmp';
+  try
+    fs := TFileStream.Create(tmp, fmCreate or fmShareExclusive);
+  except
+    on EStreamError do raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
+  end;
   try
     try
       WriteTo(fs, AFormat);
+      // on the disk before it takes the target's place
+      FileFlush(fs.Handle);
     finally
       fs.Free;
     end;
@@ -1997,9 +2671,14 @@ begin
     SysUtils.DeleteFile(tmp);
     raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
   end;
-  FDoc.Modified := False;
-  FSourceFile := full;
-  FSourceFormat := AFormat;
+  // RTF keeps the content; text keeps a text document's: an RTF document saved as text is an export
+  keeps := (AFormat = rfRtf) or (FSourceFormat = rfText);
+  if keeps then
+  begin
+    FDoc.Modified := False;
+    FSourceFile := full;
+    FSourceFormat := AFormat;
+  end;
 end;
 
 { ---- keyboard and wheel ---- }

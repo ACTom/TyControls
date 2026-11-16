@@ -696,6 +696,14 @@ msgstr ""
 msgid "The file %s could not be replaced; it was left as it was."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditcannotwrite
+msgid "The file %s cannot be written; it was left as it was."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditbusy
+msgid "The document cannot be replaced now: it is being loaded or saved."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""

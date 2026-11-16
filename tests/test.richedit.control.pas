@@ -25,18 +25,30 @@ uses
   tyControls.RichEdit, test.richedit.layoutdevice;
 
 type
+  { A layouter whose resampling can be made to fail (a test seam of W2's). }
+  TProbeLayouter = class(TTyRichLayouter)
+  protected
+    function ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap; override;
+  public
+    FailScale: Boolean;
+  end;
+
   TRichProbe = class(TTyRichEdit)
   private
     FLaidParas: Integer;
     FLaidMin, FLaidMax: Integer;
   protected
     function CreateDevice: TTyRichTextDevice; override;
+    function CreateLayouter: TTyRichLayouter; override;
     function LayoutBlockAt(AIndex: Integer): TTyBlockLayout; override;
     procedure InvalidateContent(const ARect: TRect); override;
     function ScrollBarLimit: Integer; override;
   public
     Invalidated: array of TRect;
     BarLimit: Integer;
+    { LayoutBlockAt raises after this many more layouts (0: never); the layouts it gave. }
+    RaiseAfter: Integer;
+    Given: array of TTyBlockLayout;
     procedure ResetCounts;
     procedure PaintPart(ACanvas: TCanvas; const AClip: TRect; ADefer: Boolean);
     function Step: Boolean;
@@ -50,6 +62,7 @@ type
     procedure Press(AKey: Word; AShift: TShiftState);
     procedure Wheel(ADelta: Integer; AShift: TShiftState);
     function Device: TTyRichTestDevice;
+    function Lay: TProbeLayouter;
     property LaidParas: Integer read FLaidParas;
     property LaidMin: Integer read FLaidMin;
     property LaidMax: Integer read FLaidMax;
@@ -60,7 +73,8 @@ type
     FCtl: TTyStyleController;
     FRich: TRichProbe;
     FTemp: string;
-    FChanges, FZooms, FLoadCalls, FCancelAt: Integer;
+    FChanges, FZooms, FLoadCalls, FCancelAt, FRefused: Integer;
+    FOther: TStream;
     procedure Changed(Sender: TObject);
     procedure Zoomed(Sender: TObject);
     procedure LoadCalled(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -70,6 +84,18 @@ type
     function ScreenLines: Integer;
     function TempFile(const AName: string; const ABytes: TBytes): string;
     function InView(APara: Integer): Boolean;
+    procedure SetLinesOf(ACount: Integer; const APrefix: string);
+    function Covered(const ARect: TRect): Boolean;
+    procedure PaintAll(ADefer: Boolean);
+    procedure ReplaceInHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    procedure CancelInHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    procedure SaveReplace(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    procedure NoFallback(Sender: TObject; const ABaseFont: string; ACode: Cardinal;
+      var AFontName: string);
+    procedure PictureCase(const AWhat: string; APngW, APngH: Integer; AFail: Boolean;
+      AZoomAfter: Integer);
+    function FileCount: Integer;
+    procedure CheckClearAdd(const AList: array of string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -96,6 +122,31 @@ type
     procedure TestADeferredPaintLeavesPicturesForLater;
     procedure TestKeysAndWheelScrollAndZoom;
     procedure TestReadOnlyStaysOnAndCodeStillChanges;
+    // 9a2: the review of 9a
+    procedure TestAShortWrappedDocumentSettlesItsScrollBar;
+    procedure TestAChangeWhileTheViewIsInvalidIsPainted;
+    procedure TestALayoutThatMovesTheViewRepaintsIt;
+    procedure TestAChangeOfManyParagraphsLaysOutOnlyTheView;
+    procedure TestNumbersAfterAChangedItemAreRepainted;
+    procedure TestQueriesSettleTheViewFirst;
+    procedure TestProgressHandlersCannotReplaceTheContent;
+    procedure TestAPictureIsQueuedOnceAndEveryBoxRepainted;
+    procedure TestASaveKeepsWhatTheTargetWas;
+    procedure TestAFileOpenForWritingLoads;
+    procedure TestPublishedDefaultsAreTheConstructedValues;
+    procedure TestLinesTellNoLinesFromOneEmptyLine;
+    procedure TestFinishLoadingGoesInSlices;
+    procedure TestScrollingAgainstAnEndDoesNothing;
+    procedure TestAZoomKeepsThePartOfTheBlockAtTheTop;
+    procedure TestAFarScrollIsAJump;
+    procedure TestSavingAsTextIsAnExport;
+    procedure TestASaveThatCannotWriteNamesTheTarget;
+    procedure TestALayoutThatRaisesKeepsNoReference;
+    procedure TestStreamingRaisesNoChangeAndABatchIsOneStep;
+    procedure TestStyleOverrideTokensReachTheParts;
+    procedure TestAChangeInARowDropsItsPendingPicture;
+    procedure TestAFallbackFontChangeLaysTheViewOutAgain;
+    procedure TestHugeBlocksKeepTheArithmeticInRange;
   end;
 
 implementation
@@ -229,12 +280,35 @@ begin
   Result := TTyRichTestDevice.Create;
 end;
 
+function TProbeLayouter.ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap;
+begin
+  if FailScale then raise EInvalidOperation.Create('the test''s failing resample');
+  Result := inherited ScaleImage(AImage, AWidth, AHeight);
+end;
+
+function TRichProbe.CreateLayouter: TTyRichLayouter;
+begin
+  Result := TProbeLayouter.Create(CreateDevice, True);
+end;
+
+function TRichProbe.Lay: TProbeLayouter;
+begin
+  Result := Layouter as TProbeLayouter;
+end;
+
 function TRichProbe.LayoutBlockAt(AIndex: Integer): TTyBlockLayout;
 var
   before: Int64;
 begin
+  if RaiseAfter > 0 then
+  begin
+    Dec(RaiseAfter);
+    if RaiseAfter = 0 then raise EInvalidOperation.Create('the test''s failing layout');
+  end;
   before := Layouter.CacheMisses;
   Result := inherited LayoutBlockAt(AIndex);
+  SetLength(Given, Length(Given) + 1);
+  Given[High(Given)] := Result;
   if Layouter.CacheMisses > before then
   begin
     Inc(FLaidParas, Result.LastPara - Result.FirstPara + 1);
@@ -247,6 +321,7 @@ procedure TRichProbe.InvalidateContent(const ARect: TRect);
 begin
   SetLength(Invalidated, Length(Invalidated) + 1);
   Invalidated[High(Invalidated)] := ARect;
+  inherited InvalidateContent(ARect);
 end;
 
 function TRichProbe.ScrollBarLimit: Integer;
@@ -260,6 +335,7 @@ begin
   FLaidMin := MaxInt;
   FLaidMax := -1;
   Invalidated := nil;
+  Given := nil;
 end;
 
 procedure TRichProbe.PaintPart(ACanvas: TCanvas; const AClip: TRect; ADefer: Boolean);
@@ -335,6 +411,7 @@ begin
   FZooms := 0;
   FLoadCalls := 0;
   FCancelAt := 0;
+  FRefused := 0;
 end;
 
 procedure TTyRichEditControlTest.TearDown;
@@ -417,8 +494,9 @@ var
 begin
   if FTemp = '' then
   begin
+    // the process id: two runs of this suite at once (mutation shards) have folders of their own
     FTemp := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyrichedit9a-' +
-      IntToHex(Random($7FFFFFFF), 8) + PathDelim;
+      IntToStr(GetProcessID) + '-' + IntToHex(Random($7FFFFFFF), 8) + PathDelim;
     ForceDirectories(FTemp);
   end;
   Result := FTemp + AName;
@@ -510,7 +588,8 @@ begin
   FRich.ScrollY := Int64(200) * est;
   AssertEquals('at paragraph 200', 200, FRich.TopParagraph);
   AssertEquals('at its top', 0, FRich.TopOffset);
-  before := FRich.ScrollY;
+  // the anchor's position as the estimates put it (ScrollY would lay the view out first)
+  before := FRich.Document.Text.ParaTop(FRich.TopParagraph) + FRich.TopOffset;
   FRich.UpdateView;
   AssertTrue('the paragraphs above were laid out taller than estimated',
     FRich.ScrollY > before + 4 * est);
@@ -1311,6 +1390,1065 @@ begin
   AssertTrue('code still changes the document',
     FRich.Document.Execute(TTyRichInsertText.Create(0, 'more ')));
   AssertEquals('changed', 'more text', FRich.Lines[0]);
+end;
+
+{ ---- Task 9a2: the review of 9a (reviewB-H1) ---- }
+
+procedure TTyRichEditControlTest.SetLinesOf(ACount: Integer; const APrefix: string);
+var
+  sl: TStringList;
+  i: Integer;
+begin
+  sl := TStringList.Create;
+  try
+    for i := 0 to ACount - 1 do sl.Add(APrefix + IntToStr(i));
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+end;
+
+{ Every pixel of ARect lies in one of the rectangles invalidated since the last ResetCounts. }
+function TTyRichEditControlTest.Covered(const ARect: TRect): Boolean;
+var
+  x, y, i: Integer;
+  hit: Boolean;
+begin
+  Result := False;
+  if (ARect.Right <= ARect.Left) or (ARect.Bottom <= ARect.Top) then Exit;
+  y := ARect.Top;
+  while y < ARect.Bottom do
+  begin
+    x := ARect.Left;
+    while x < ARect.Right do
+    begin
+      hit := False;
+      for i := 0 to High(FRich.Invalidated) do
+        if PtInRect(FRich.Invalidated[i], Point(x, y)) then
+        begin
+          hit := True;
+          Break;
+        end;
+      if not hit then Exit;
+      Inc(x, Math.Max(1, (ARect.Right - ARect.Left) div 7));
+    end;
+    Inc(y);
+  end;
+  Result := True;
+end;
+
+procedure TTyRichEditControlTest.PaintAll(ADefer: Boolean);
+var
+  bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.PaintPart(bmp.Canvas, Rect(0, 0, FRich.Width, FRich.Height), ADefer);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.ReplaceInHandler(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+begin
+  Inc(FLoadCalls);
+  try
+    FRich.Lines.Text := 'another document';
+  except
+    on E: ETyRichEdit do Inc(FRefused);
+  end;
+  try
+    FRich.LoadFromStream(FOther);
+  except
+    on E: ETyRichEdit do Inc(FRefused);
+  end;
+end;
+
+procedure TTyRichEditControlTest.CancelInHandler(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+begin
+  Inc(FLoadCalls);
+  FRich.CancelLoad;
+end;
+
+procedure TTyRichEditControlTest.NoFallback(Sender: TObject; const ABaseFont: string;
+  ACode: Cardinal; var AFontName: string);
+begin
+end;
+
+{ H-C1: five paragraphs of 60 words - one line each by the estimate, taller than the view
+  laid out. The bar comes and stays; a second pass does nothing. A document that fits has
+  none; one that fits only without the bar settles without it. }
+procedure TTyRichEditControlTest.TestAShortWrappedDocumentSettlesItsScrollBar;
+var
+  sl: TStringList;
+  s, txt: string;
+  i, k, barW, wide, narrow, lineH, m: Integer;
+  lo: TTyRichLayouter;
+  d: TTyRichDocument;
+  L1, L2: TTyBlockLayout;
+  found: Boolean;
+begin
+  sl := TStringList.Create;
+  try
+    s := '';
+    for i := 1 to 60 do s := s + 'word' + IntToStr(i mod 7) + ' ';
+    for i := 0 to 4 do sl.Add(IntToStr(i) + ' ' + s);
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  AssertTrue('the estimate fits the view', 5 * FRich.Layouter.EstimatedParaHeight(96, 1) <
+    FRich.Area.Bottom - FRich.Area.Top);
+  FRich.UpdateView;
+  AssertTrue('the bar is shown', (FRich.VBar <> nil) and FRich.VBar.Visible);
+  AssertTrue('the text is taller than the view',
+    FRich.Document.Text.TotalHeight > FRich.Area.Bottom - FRich.Area.Top);
+  barW := FRich.VBar.Width;
+  FRich.ResetCounts;
+  FRich.UpdateView;
+  AssertEquals('settled: nothing invalidated', 0, Length(FRich.Invalidated));
+  AssertEquals('settled: nothing laid out', 0, FRich.LaidParas);
+  AssertTrue('the bar stays', FRich.VBar.Visible);
+  // a document that fits
+  FRich.Lines.Text := 'one'#13#10'two';
+  FRich.UpdateView;
+  AssertFalse('no bar', FRich.VBar.Visible);
+  FRich.ResetCounts;
+  FRich.UpdateView;
+  AssertEquals('nothing invalidated again', 0, Length(FRich.Invalidated));
+  AssertEquals('nothing laid out again', 0, FRich.LaidParas);
+  { One that fits only without the bar: paragraphs of one line at the full width that wrap
+    at the width the bar leaves, as many as the view holds at one line each. }
+  wide := TyRichLayoutWidth(rwmWindow, FRich.Area.Right - FRich.Area.Left, FRich.Document, 96, 1);
+  narrow := TyRichLayoutWidth(rwmWindow, FRich.Area.Right - FRich.Area.Left - barW,
+    FRich.Document, 96, 1);
+  lo := TTyRichLayouter.Create(TTyRichTestDevice.Create, True);
+  try
+    txt := '';
+    found := False;
+    lineH := 0;
+    for k := 1 to 300 do
+    begin
+      txt := txt + 'ab ';
+      d := TTyRichDocument.CreateFromUtf8(BytesOf(txt));
+      try
+        L1 := lo.LayoutBlock(d, 0, wide, 96, 1);
+        L2 := lo.LayoutBlock(d, 0, narrow, 96, 1);
+        try
+          found := (TTyParaLayout(L1).LineCount = 1) and (TTyParaLayout(L2).LineCount = 2);
+          lineH := L1.Height;
+        finally
+          L1.Release;
+          L2.Release;
+        end;
+      finally
+        lo.Document := nil;
+        d.Free;
+      end;
+      if found then Break;
+    end;
+  finally
+    lo.Free;
+  end;
+  AssertTrue('a text that wraps only at the narrower width', found);
+  m := (FRich.Area.Bottom - FRich.Area.Top) div lineH;
+  sl := TStringList.Create;
+  try
+    for i := 1 to m do sl.Add(txt);
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.UpdateView;
+  AssertFalse('it fits at the full width: it settles without the bar', FRich.VBar.Visible);
+  AssertEquals('every line on screen', m - 1, FRich.VisibleBlocks[FRich.VisibleBlockCount - 1].LastPara);
+  FRich.ResetCounts;
+  FRich.UpdateView;
+  AssertEquals('and stays so: nothing invalidated', 0, Length(FRich.Invalidated));
+  AssertEquals('nothing laid out', 0, FRich.LaidParas);
+end;
+
+{ H-I1: a change made while the view waits for its next layout is painted too. }
+procedure TTyRichEditControlTest.TestAChangeWhileTheViewIsInvalidIsPainted;
+var
+  f: TTyCharFormat;
+  t: TTyRichText;
+  r3, r5: TRect;
+begin
+  SetLinesOf(200, 'Line ');
+  FRich.UpdateView;
+  t := FRich.Document.Text;
+  r3 := FRich.ParagraphRect(3);
+  FRich.ResetCounts;
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := 48;
+  AssertTrue('a taller paragraph 7', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(7), t.ParaLength(7)), [cffSize], f)));
+  f.Color := clRed;
+  AssertTrue('then a colour in paragraph 3', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(3), t.ParaLength(3)), [cffColor], f)));
+  AssertTrue('paragraph 3 is painted again', Covered(r3));
+  { A paragraph added above while the view still waits: the held blocks below it moved down
+    (their layouts are not stale), so they are painted again too. }
+  FRich.UpdateView;
+  r5 := FRich.ParagraphRect(5);
+  FRich.ResetCounts;
+  AssertTrue('a taller paragraph 9', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(9), t.ParaLength(9)), [cffSize], f)));
+  FRich.Lines.Insert(3, 'new');
+  AssertTrue('what moved down is painted again', Covered(r5));
+end;
+
+{ H-I2: the end's pull-up moves every block: the whole text area is painted again. }
+procedure TTyRichEditControlTest.TestALayoutThatMovesTheViewRepaintsIt;
+var
+  sl: TStringList;
+  i: Integer;
+  s: string;
+  t: TTyRichText;
+  r0: TRect;
+begin
+  sl := TStringList.Create;
+  try
+    for i := 0 to 198 do sl.Add('Line ' + IntToStr(i));
+    s := '';
+    for i := 1 to 60 do s := s + 'word' + IntToStr(i mod 7) + ' ';
+    sl.Add(s);
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.UpdateView;
+  FRich.ScrollToEnd;
+  FRich.UpdateView;
+  t := FRich.Document.Text;
+  r0 := FRich.ParagraphRect(195);
+  FRich.ResetCounts;
+  AssertTrue('the last paragraph cut to a line', FRich.Document.Execute(TTyRichDelete.Create(
+    t.ParaStart(199) + 5, t.ParaLength(199) - 5)));
+  FRich.UpdateView;
+  AssertTrue('the text moved down', FRich.ParagraphRect(195).Top > r0.Top);
+  AssertTrue('the whole text area is painted again', Covered(FRich.Area));
+end;
+
+{ H-I3: one change of 20,000 paragraphs into the view, and a load step that appends many
+  below a short first slice, lay out no more than the view and two screens. }
+procedure TTyRichEditControlTest.TestAChangeOfManyParagraphsLaysOutOnlyTheView;
+var
+  s: UTF8String;
+  i, n, laid, first, paras: Integer;
+  t: TTyRichText;
+  b: TBytes;
+  st: TBytesStream;
+begin
+  FRich.Lines.Text := 'one'#10'two'#10'three';
+  FRich.UpdateView;
+  t := FRich.Document.Text;
+  s := '';
+  for i := 1 to 20000 do s := s + 'x'#10;
+  FRich.ResetCounts;
+  AssertTrue('inserted', FRich.Document.Execute(TTyRichInsertText.Create(t.ParaStart(1), s)));
+  n := ScreenLines;
+  laid := FRich.LaidParas;
+  AssertTrue(Format('laid out inside the change: %d (a screen is %d lines)', [laid, n]),
+    laid <= 3 * n + 2);
+  // (the bar the change brings narrows the text: the next pass lays the view out afresh)
+  FRich.ResetCounts;
+  AssertTrue(Format('held: %d', [FRich.VisibleBlockCount]), FRich.VisibleBlockCount <= 3 * n + 2);
+  AssertTrue(Format('and the view after: %d', [FRich.LaidParas]), FRich.LaidParas <= 3 * n + 2);
+  // a lazy load: a first slice of a few paragraphs, a step of many
+  FreeAndNil(FRich);
+  FRich := NewProbe;
+  b := GeneratedRtf(512 * 1024, paras);
+  FRich.Slices(300, 128 * 1024);
+  st := TBytesStream.Create(b);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.UpdateView;
+  first := FRich.Document.Text.ParaCount;
+  AssertTrue(Format('a short first slice (%d)', [first]), first < 10);
+  FRich.ResetCounts;
+  AssertTrue('a step', FRich.Step);
+  n := ScreenLines;
+  AssertTrue(Format('the step brought many (%d)', [FRich.Document.Text.ParaCount]),
+    FRich.Document.Text.ParaCount > first + 10 * n);
+  AssertTrue(Format('laid out in the step: %d', [FRich.LaidParas]), FRich.LaidParas <= 3 * n + 2);
+end;
+
+{ H-I4: an item of a numbered list loses its number: the items after it, numbered again by the
+  layouter, are laid out again and painted. }
+procedure TTyRichEditControlTest.TestNumbersAfterAChangedItemAreRepainted;
+var
+  pf: TTyParaFormat;
+  r: array[0..9] of TRect;
+  i, k: Integer;
+begin
+  SetLinesOf(10, 'Item ');
+  pf := TyDefaultParaFormat;
+  pf.List.Kind := lkDecimal;
+  pf.List.Level := 0;
+  pf.List.StartAt := 1;
+  AssertTrue('numbered', FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 9, [pffList], pf)));
+  FRich.UpdateView;
+  for i := 0 to 9 do r[i] := FRich.ParagraphRect(i);
+  FRich.ResetCounts;
+  pf.List.Kind := lkNone;
+  AssertTrue('item 2 unnumbered', FRich.Document.Execute(TTyRichSetParaFormat.Create(2, 2,
+    [pffList], pf)));
+  for i := 3 to 9 do
+    AssertTrue(Format('item %d painted again', [i]), Covered(r[i]));
+  for k := 0 to FRich.VisibleBlockCount - 1 do
+    AssertFalse(Format('block %d is current', [k]), FRich.VisibleBlocks[k].Layout.Stale);
+end;
+
+{ H-I5: the queries lay the view out first; ScrollToEnd puts the anchor where the end is. }
+procedure TTyRichEditControlTest.TestQueriesSettleTheViewFirst;
+var
+  a, b, c: TTyRichPos;
+  y0: Int64;
+  f: TTyCharFormat;
+  t: TTyRichText;
+  r: TRect;
+  h, i: Integer;
+  sl: TStringList;
+  s: string;
+begin
+  SetLinesOf(1000, 'Line ');
+  FRich.UpdateView;
+  h := FRich.Area.Bottom - FRich.Area.Top;
+  a := FRich.PositionAtPoint(20, 20);
+  FRich.ScrollViewBy(1000);
+  b := FRich.PositionAtPoint(20, 20);
+  FRich.UpdateView;
+  c := FRich.PositionAtPoint(20, 20);
+  AssertTrue('moved', b > a);
+  AssertEquals('right after the scroll as after a layout', c, b);
+  FRich.ScrollToEnd;
+  AssertEquals('ScrollY at the end, as the heights say', FRich.Document.Text.TotalHeight - h,
+    FRich.ScrollY);
+  FRich.ScrollToEnd;
+  y0 := FRich.ScrollY;
+  FRich.ScrollToEnd;
+  FRich.ScrollViewBy(-100);
+  AssertEquals('Ctrl+End then up before a paint moves', y0 - 100, FRich.ScrollY);
+  // a taller paragraph above the view: hit tests and rectangles follow before any paint
+  FRich.ScrollY := FRich.Document.Text.ParaTop(500);
+  FRich.UpdateView;
+  r := FRich.ParagraphRect(500);
+  t := FRich.Document.Text;
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := 48;
+  AssertTrue('above', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(495), t.ParaLength(495)), [cffSize], f)));
+  AssertTrue('the first line stays where it was', EqualRect(r, FRich.ParagraphRect(500)));
+  AssertEquals('and is what a point there hits', t.ParaStart(500),
+    FRich.PositionAtPoint(FRich.Area.Left, r.Top + 1));
+  { ScrollY after a jump into paragraphs taller than their estimates: what the laid out view
+    says at once, not the estimates' sum. }
+  sl := TStringList.Create;
+  try
+    s := '';
+    for i := 1 to 50 do s := s + 'word' + IntToStr(i mod 7) + ' ';
+    for i := 0 to 399 do sl.Add(IntToStr(i) + ' ' + s);
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.ScrollY := Int64(200) * FRich.Layouter.EstimatedParaHeight(96, 1);
+  y0 := FRich.ScrollY;
+  FRich.UpdateView;
+  AssertEquals('ScrollY is the laid out view''s', FRich.ScrollY, y0);
+end;
+
+{ H-I6: a progress handler that replaces the content is refused; one that cancels stops the
+  load cleanly; a save's handler cannot replace the content either. }
+procedure TTyRichEditControlTest.TestProgressHandlersCannotReplaceTheContent;
+var
+  b: TBytes;
+  paras: Integer;
+  st: TBytesStream;
+  ms: TMemoryStream;
+begin
+  b := GeneratedRtf(2 * 1024 * 1024, paras);
+  FOther := TBytesStream.Create(BytesOf('other'));
+  try
+    FRich.Slices(64 * 1024, 64 * 1024);
+    FRich.OnLoadProgress := @ReplaceInHandler;
+    st := TBytesStream.Create(b);
+    try
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    AssertTrue('a step', FRich.Step);
+    FRich.FinishLoading;
+    AssertTrue('the handler ran', FLoadCalls > 0);
+    AssertEquals('every replacement refused', 2 * FLoadCalls, FRefused);
+    AssertFalse('the load completed', FRich.Loading);
+    AssertFalse('complete', FRich.Incomplete);
+    AssertEquals('every paragraph of it', paras, FRich.Document.Text.ParaCount);
+    // a handler that cancels
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    FLoadCalls := 0;
+    FRich.Slices(64 * 1024, 64 * 1024);
+    FRich.OnLoadProgress := @CancelInHandler;
+    st := TBytesStream.Create(b);
+    try
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    AssertTrue('a step', FRich.Step);
+    AssertEquals('asked once', 1, FLoadCalls);
+    AssertFalse('stopped', FRich.Loading);
+    AssertTrue('incomplete', FRich.Incomplete);
+    FRich.UpdateView;
+    AssertTrue('still shown', FRich.VisibleBlockCount > 0);
+    // a save's handler
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    FRefused := 0;
+    FLoadCalls := 0;
+    // the writer asks every 256 KB
+    SetLinesOf(30000, 'kept ');
+    FRich.OnSaveProgress := @SaveReplace;
+    ms := TMemoryStream.Create;
+    try
+      FRich.SaveToStream(ms, rfRtf);
+      AssertTrue('saved', ms.Size > 0);
+    finally
+      ms.Free;
+    end;
+    AssertTrue('the handler ran', FLoadCalls > 0);
+    AssertEquals('refused', FLoadCalls, FRefused);
+    AssertEquals('the content stays', 'kept 0', FRich.Lines[0]);
+  finally
+    FreeAndNil(FOther);
+  end;
+end;
+
+procedure TTyRichEditControlTest.SaveReplace(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+begin
+  Inc(FLoadCalls);
+  try
+    FRich.Lines.Text := 'replaced';
+  except
+    on E: ETyRichEdit do Inc(FRefused);
+  end;
+end;
+
+{ One picture in the view of 'a b': painted (deferred), made ready, painted again. }
+procedure TTyRichEditControlTest.PictureCase(const AWhat: string; APngW, APngH: Integer;
+  AFail: Boolean; AZoomAfter: Integer);
+var
+  pic: TTyRichPicture;
+  steps: Integer;
+begin
+  FreeAndNil(FRich);
+  FRich := NewProbe;
+  FRich.Lay.FailScale := AFail;
+  FRich.Lines.Text := 'a b';
+  pic := TTyRichPicture.Create(rpfPng, PngBytes(APngW, APngH, BGRA(0, 0, 200, 255)), 600, 300);
+  AssertTrue(AWhat + ': a picture', FRich.Document.Execute(TTyRichInsertObject.Create(1, pic)));
+  PaintAll(True);
+  AssertEquals(AWhat + ': left for later', 1, FRich.Pending);
+  steps := 0;
+  while FRich.Step and (steps < 10) do Inc(steps);
+  AssertEquals(AWhat + ': made ready once', 1, steps);
+  PaintAll(True);
+  AssertEquals(AWhat + ': nothing waits after the paint', 0, FRich.Pending);
+  if AZoomAfter > 0 then
+  begin
+    FRich.Zoom := AZoomAfter;
+    PaintAll(True);
+    AssertTrue(AWhat + ': at the new size at most once', FRich.Pending <= 1);
+    steps := 0;
+    while FRich.Step and (steps < 10) do Inc(steps);
+    AssertTrue(AWhat + ': made ready once more at most', steps <= 1);
+    PaintAll(True);
+    AssertEquals(AWhat + ': nothing waits at the new size', 0, FRich.Pending);
+  end;
+end;
+
+{ H-I7 / H-M10: a picture that cannot be reduced, an enlargement, one reduced and then zoomed:
+  each queued at most once a size, and nothing waits afterwards. One picture in two places
+  has both its boxes painted when it is ready. }
+procedure TTyRichEditControlTest.TestAPictureIsQueuedOnceAndEveryBoxRepainted;
+var
+  pic: TTyRichPicture;
+begin
+  PictureCase('a failing reduction', 200, 100, True, 0);
+  PictureCase('an enlargement', 20, 10, False, 0);
+  PictureCase('reduced then zoomed', 200, 100, False, 500);
+  FreeAndNil(FRich);
+  FRich := NewProbe;
+  SetLinesOf(20, 'Line ');
+  pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, BGRA(0, 0, 200, 255)), 600, 300);
+  pic.AddRef;
+  AssertTrue('once', FRich.Document.Execute(TTyRichInsertObject.Create(
+    FRich.Document.Text.ParaStart(2), pic)));
+  AssertTrue('twice', FRich.Document.Execute(TTyRichInsertObject.Create(
+    FRich.Document.Text.ParaStart(5), pic)));
+  PaintAll(True);
+  AssertEquals('one picture, one size: queued once', 1, FRich.Pending);
+  FRich.ResetCounts;
+  AssertTrue('made ready', FRich.Step);
+  AssertEquals('both its boxes', 2, Length(FRich.Invalidated));
+  AssertEquals('a box each', 20, FRich.Invalidated[1].Bottom - FRich.Invalidated[1].Top);
+  AssertTrue('in two places', FRich.Invalidated[0].Top <> FRich.Invalidated[1].Top);
+end;
+
+{$IFDEF MSWINDOWS}
+function ReadStream(const APath: string): string;
+var
+  f: TFileStream;
+begin
+  Result := '';
+  f := TFileStream.Create(APath, fmOpenRead or fmShareDenyNone);
+  try
+    SetLength(Result, f.Size);
+    if f.Size > 0 then f.ReadBuffer(Result[1], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+{$ENDIF}
+
+function TTyRichEditControlTest.FileCount: Integer;
+var
+  sr: TSearchRec;
+begin
+  Result := 0;
+  if FindFirst(FTemp + '*', faAnyFile, sr) = 0 then
+  try
+    repeat
+      if (sr.Attr and faDirectory) = 0 then Inc(Result);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+end;
+
+{ H-I8: a write-protected target is refused before anything is written; a save keeps the
+  target's attributes and alternate streams (Windows: ReplaceFileW). The Unix path (mode,
+  owner, rename) is compile-checked only. }
+procedure TTyRichEditControlTest.TestASaveKeepsWhatTheTargetWas;
+{$IFDEF MSWINDOWS}
+var
+  path: string;
+  orig: TBytes;
+  raised: Boolean;
+  f: TFileStream;
+  s: string;
+begin
+  orig := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 Saved text.\par}');
+  path := TempFile('keep.rtf', orig);
+  FRich.LoadFromFile(path);
+  AssertTrue('changed', FRich.Document.Execute(TTyRichInsertText.Create(0, 'New ')));
+  FileSetAttr(path, faReadOnly);
+  try
+    raised := False;
+    try
+      FRich.SaveToFile(path);
+    except
+      on E: ETyRichEdit do raised := Pos('keep.rtf', E.Message) > 0;
+    end;
+  finally
+    FileSetAttr(path, 0);
+  end;
+  AssertTrue('a write-protected file is refused, by its name', raised);
+  AssertTrue('and is as it was', SameBytes(orig, FileBytes(path)));
+  AssertEquals('no temporary file left', 1, FileCount);
+  AssertTrue('still modified', FRich.Modified);
+  // hidden, with a stream of its own
+  f := TFileStream.Create(path + ':note', fmCreate);
+  try
+    s := 'kept';
+    f.WriteBuffer(s[1], Length(s));
+  finally
+    f.Free;
+  end;
+  FileSetAttr(path, faHidden);
+  try
+    FRich.SaveToFile(path);
+    AssertFalse('saved', FRich.Modified);
+    AssertFalse('the new content', SameBytes(orig, FileBytes(path)));
+    AssertTrue('still hidden', (FileGetAttr(path) and faHidden) <> 0);
+    AssertEquals('its stream kept', 'kept', ReadStream(path + ':note'));
+    AssertEquals('no temporary file left', 1, FileCount);
+  finally
+    FileSetAttr(path, 0);
+  end;
+end;
+{$ELSE}
+begin
+  Ignore('Windows only (ReplaceFileW); the Unix path is compile-checked');
+end;
+{$ENDIF}
+
+{ H-I9: a file another handle holds open for writing (a log being written) loads. }
+procedure TTyRichEditControlTest.TestAFileOpenForWritingLoads;
+var
+  path: string;
+  w: TFileStream;
+begin
+  path := TempFile('busy.txt', BytesOf('busy text'));
+  w := TFileStream.Create(path, fmOpenReadWrite or fmShareDenyNone);
+  try
+    FRich.LoadFromFile(path);
+    AssertEquals('loaded', 'busy text', FRich.Lines[0]);
+  finally
+    w.Free;
+  end;
+end;
+
+function FormText(AComp: TComponent): string;
+var
+  ms, txt: TMemoryStream;
+begin
+  ms := TMemoryStream.Create;
+  txt := TMemoryStream.Create;
+  try
+    ms.WriteComponent(AComp);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, txt);
+    SetString(Result, PChar(txt.Memory), txt.Size);
+  finally
+    txt.Free;
+    ms.Free;
+  end;
+end;
+
+{ H-I10: TabStop and Cursor have the constructor's values as defaults. }
+procedure TTyRichEditControlTest.TestPublishedDefaultsAreTheConstructedValues;
+var
+  a, b: TTyRichEdit;
+  ms: TMemoryStream;
+begin
+  a := TTyRichEdit.Create(nil);
+  b := TTyRichEdit.Create(nil);
+  ms := TMemoryStream.Create;
+  try
+    AssertFalse('a fresh control stores no TabStop', Pos('TabStop', FormText(a)) > 0);
+    AssertFalse('nor a Cursor', Pos('Cursor', FormText(a)) > 0);
+    a.Cursor := crDefault;
+    AssertTrue('crDefault is stored', Pos('Cursor', FormText(a)) > 0);
+    ms.WriteComponent(a);
+    ms.Position := 0;
+    ms.ReadComponent(b);
+    AssertEquals('and read back', Ord(crDefault), Ord(b.Cursor));
+  finally
+    ms.Free;
+    b.Free;
+    a.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.CheckClearAdd(const AList: array of string);
+var
+  i: Integer;
+begin
+  FRich.Lines.Clear;
+  for i := 0 to High(AList) do FRich.Lines.Add(AList[i]);
+  AssertEquals(Format('%d lines', [Length(AList)]), Length(AList), FRich.Lines.Count);
+  for i := 0 to High(AList) do AssertEquals(Format('line %d', [i]), AList[i], FRich.Lines[i]);
+end;
+
+{ H-I11: no lines and one empty line are told apart. }
+procedure TTyRichEditControlTest.TestLinesTellNoLinesFromOneEmptyLine;
+var
+  a, b: TTyRichEdit;
+  ms: TMemoryStream;
+begin
+  FRich.Lines.Add('');
+  AssertEquals('one empty line', 1, FRich.Lines.Count);
+  AssertEquals('one paragraph', 1, FRich.Document.Text.ParaCount);
+  FRich.Lines.Add('x');
+  AssertEquals('two lines', 2, FRich.Lines.Count);
+  AssertEquals('the first empty', '', FRich.Lines[0]);
+  AssertEquals('the second', 'x', FRich.Lines[1]);
+  FRich.Lines.Clear;
+  AssertEquals('none', 0, FRich.Lines.Count);
+  FRich.Lines.Add('a');
+  FRich.Lines.Add('');
+  AssertEquals('[a, '''']', 2, FRich.Lines.Count);
+  FRich.Lines.Delete(0);
+  AssertEquals('the empty line is left', 1, FRich.Lines.Count);
+  FRich.Lines.Delete(0);
+  AssertEquals('and goes', 0, FRich.Lines.Count);
+  CheckClearAdd(['', 'b']);
+  CheckClearAdd(['a', '']);
+  CheckClearAdd(['']);
+  CheckClearAdd(['', '', 'c', '']);
+  a := TTyRichEdit.Create(nil);
+  b := TTyRichEdit.Create(nil);
+  ms := TMemoryStream.Create;
+  try
+    a.Lines.Add('');
+    AssertTrue('[''''] is stored', Pos('Lines.Strings', FormText(a)) > 0);
+    ms.WriteComponent(a);
+    ms.Position := 0;
+    ms.ReadComponent(b);
+    AssertEquals('and read back as one empty line', 1, b.Lines.Count);
+    AssertEquals('empty', '', b.Lines[0]);
+  finally
+    ms.Free;
+    b.Free;
+    a.Free;
+  end;
+end;
+
+{ H-M1: FinishLoading reports its progress in slices, and a cancel there acts. }
+procedure TTyRichEditControlTest.TestFinishLoadingGoesInSlices;
+var
+  b: TBytes;
+  paras: Integer;
+  st: TBytesStream;
+begin
+  b := GeneratedRtf(10 * 1024 * 1024, paras);
+  FRich.Slices(64 * 1024, 64 * 1024);
+  FRich.OnLoadProgress := @LoadCalled;
+  st := TBytesStream.Create(b);
+  try
+    FRich.LoadFromStream(st);
+    FLoadCalls := 0;
+    FRich.FinishLoading;
+    AssertTrue(Format('progress during it (%d)', [FLoadCalls]), FLoadCalls >= 2);
+    AssertFalse('loaded', FRich.Loading);
+    AssertEquals('all', paras, FRich.Document.Text.ParaCount);
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    FRich.Slices(64 * 1024, 64 * 1024);
+    FRich.OnLoadProgress := @LoadCalled;
+    st.Position := 0;
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FLoadCalls := 0;
+  FCancelAt := 1;
+  FRich.FinishLoading;
+  AssertEquals('cancelled at the first report', 1, FLoadCalls);
+  AssertFalse('stopped', FRich.Loading);
+  AssertTrue('incomplete', FRich.Incomplete);
+end;
+
+{ H-M2: a wheel notch on a document that fits, a scroll up at the top: nothing happens. }
+procedure TTyRichEditControlTest.TestScrollingAgainstAnEndDoesNothing;
+begin
+  FRich.Lines.Text := 'one'#10'two'#10'three';
+  FRich.UpdateView;
+  FRich.ResetCounts;
+  FRich.Wheel(-120, []);
+  FRich.ScrollViewBy(-50);
+  FRich.ScrollToTop;
+  AssertEquals('nothing invalidated', 0, Length(FRich.Invalidated));
+  FRich.UpdateView;
+  AssertEquals('nothing laid out', 0, FRich.LaidParas);
+  AssertEquals('nor invalidated after', 0, Length(FRich.Invalidated));
+  AssertTrue('no bar', (FRich.VBar = nil) or not FRich.VBar.Visible);
+  AssertEquals('at the top', Int64(0), FRich.ScrollY);
+end;
+
+{ H-M3: a zoom keeps the same share of the top block above the view. }
+procedure TTyRichEditControlTest.TestAZoomKeepsThePartOfTheBlockAtTheTop;
+var
+  sl: TStringList;
+  s: string;
+  i, h, h2: Integer;
+  off: Int64;
+begin
+  sl := TStringList.Create;
+  try
+    s := '';
+    for i := 1 to 2000 do s := s + 'word' + IntToStr(i mod 7) + ' ';
+    sl.Add(s);
+    for i := 1 to 20 do sl.Add('Line ' + IntToStr(i));
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.UpdateView;
+  h := FRich.VisibleBlocks[0].Height;
+  AssertTrue('a block taller than the view', h > 3 * (FRich.Area.Bottom - FRich.Area.Top));
+  FRich.ScrollViewBy(h div 2);
+  FRich.UpdateView;
+  AssertEquals('half of it above', 0, FRich.TopParagraph);
+  off := FRich.TopOffset;
+  FRich.Zoom := 200;
+  FRich.UpdateView;
+  AssertEquals('the same block on top', 0, FRich.TopParagraph);
+  h2 := FRich.VisibleBlocks[0].Height;
+  AssertTrue(Format('the same share (%d of %d, was %d of %d)', [FRich.TopOffset, h2, off, h]),
+    Abs(FRich.TopOffset - off * h2 div h) <= 1);
+end;
+
+{ H-M4: a scroll of a hundred screens is a jump: only around its target is laid out. }
+procedure TTyRichEditControlTest.TestAFarScrollIsAJump;
+var
+  n: Integer;
+begin
+  LoadBig;
+  FRich.UpdateView;
+  FRich.ResetCounts;
+  FRich.ScrollViewBy(100 * (FRich.Area.Bottom - FRich.Area.Top));
+  FRich.UpdateView;
+  n := ScreenLines;
+  AssertTrue(Format('laid out %d', [FRich.LaidParas]), FRich.LaidParas <= 3 * n + 2);
+  AssertTrue(Format('about a hundred screens down (%d)', [FRich.TopParagraph]),
+    FRich.TopParagraph > 90 * n);
+end;
+
+{ H-M6: saving to a stream changes nothing; saving an RTF document as text is an export. }
+procedure TTyRichEditControlTest.TestSavingAsTextIsAnExport;
+var
+  path: string;
+  ms: TMemoryStream;
+begin
+  path := TempFile('doc.rtf', BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 Text.\par}'));
+  FRich.LoadFromFile(path);
+  AssertTrue('changed', FRich.Document.Execute(TTyRichInsertText.Create(0, 'New ')));
+  ms := TMemoryStream.Create;
+  try
+    FRich.SaveToStream(ms);
+    AssertTrue('written', ms.Size > 0);
+  finally
+    ms.Free;
+  end;
+  AssertTrue('a stream changes nothing', FRich.Modified);
+  FRich.SaveToFile(FTemp + 'out.txt');
+  AssertTrue('as text: still modified', FRich.Modified);
+  AssertTrue('still an RTF document', FRich.SourceFormat = rfRtf);
+  AssertEquals('from its file', ExpandFileName(path), FRich.SourceFile);
+  FRich.SaveToFile(path);
+  AssertFalse('as RTF: saved', FRich.Modified);
+end;
+
+{ H-M7: a save that cannot create its file says which file it was to write. }
+procedure TTyRichEditControlTest.TestASaveThatCannotWriteNamesTheTarget;
+var
+  msg: string;
+begin
+  TempFile('x', nil);
+  FRich.Lines.Text := 'text';
+  msg := '';
+  try
+    FRich.SaveToFile(FTemp + 'missing' + PathDelim + 'target.rtf');
+  except
+    on E: ETyRichEdit do msg := E.Message;
+  end;
+  AssertTrue('refused, by the target''s name: ' + msg, Pos('target.rtf', msg) > 0);
+  AssertFalse('no temporary name in it', Pos('.tmp', msg) > 0);
+end;
+
+{ H-M9: a layout that raises in the middle of a pass leaves no reference behind. }
+procedure TTyRichEditControlTest.TestALayoutThatRaisesKeepsNoReference;
+var
+  raised: Boolean;
+  base, i: Integer;
+  L: TTyBlockLayout;
+begin
+  SetLinesOf(400, 'Line ');
+  FRich.UpdateView;
+  L := FRich.Layouter.LayoutBlock(FRich.Document, 399, FRich.VisibleBlocks[0].Layout.LayoutWidth,
+    96, 1);
+  // what a layout the view does not hold has: the cache's own (read before letting ours go)
+  base := L.RefCount - 1;
+  L.Release;
+  FRich.ScrollY := FRich.Document.Text.ParaTop(200);
+  FRich.ResetCounts;
+  FRich.RaiseAfter := 30;
+  raised := False;
+  try
+    FRich.UpdateView;
+  except
+    on E: EInvalidOperation do raised := True;
+  end;
+  FRich.RaiseAfter := 0;
+  AssertTrue('the layout raised', raised);
+  AssertTrue('some were given', Length(FRich.Given) > 10);
+  for i := 0 to High(FRich.Given) do
+    AssertEquals(Format('layout %d is the cache''s only', [i]), base, FRich.Given[i].RefCount);
+  FRich.UpdateView;
+  AssertTrue('the view comes back', FRich.VisibleBlockCount > 0);
+end;
+
+{ H-M11: no OnChange while a form file is read; AddStrings is one undo step. }
+procedure TTyRichEditControlTest.TestStreamingRaisesNoChangeAndABatchIsOneStep;
+var
+  a, b: TTyRichEdit;
+  ms: TMemoryStream;
+  sl: TStringList;
+begin
+  a := TTyRichEdit.Create(nil);
+  b := TTyRichEdit.Create(nil);
+  ms := TMemoryStream.Create;
+  try
+    a.Lines.Text := 'first'#13#10'second';
+    ms.WriteComponent(a);
+    ms.Position := 0;
+    b.OnChange := @Changed;
+    ms.ReadComponent(b);
+    AssertEquals('read', 2, b.Lines.Count);
+    AssertEquals('no change reported while streaming', 0, FChanges);
+  finally
+    ms.Free;
+    b.Free;
+    a.Free;
+  end;
+  FRich.Lines.Text := 'a';
+  sl := TStringList.Create;
+  try
+    sl.Add('b');
+    sl.Add('c');
+    sl.Add('d');
+    FRich.Lines.AddStrings(sl);
+  finally
+    sl.Free;
+  end;
+  AssertEquals('added', 4, FRich.Lines.Count);
+  FRich.Document.Undo;
+  AssertEquals('one undo takes them all back', 1, FRich.Lines.Count);
+  AssertFalse('nothing more to undo', FRich.Document.CanUndo);
+end;
+
+{ H-M12: the control's own StyleOverride tokens reach the selection, object and placeholder. }
+procedure TTyRichEditControlTest.TestStyleOverrideTokensReachTheParts;
+var
+  st: TTyRichPaintStyle;
+begin
+  FRich.StyleOverride := '--selection: #FF0000; --accent: #00FF00; --surface-sunk: #0000FF; ' +
+    '--border: #FFFF00;';
+  st := FRich.Style;
+  AssertTrue('selection', SamePx(BGRA(255, 0, 0, 255), st.SelectionBack));
+  AssertTrue('object frame', SamePx(BGRA(0, 255, 0, 255), st.ObjectFrame));
+  AssertTrue('placeholder fill', SamePx(BGRA(0, 0, 255, 255), st.PlaceholderFill));
+  AssertTrue('placeholder frame', SamePx(BGRA(255, 255, 0, 255), st.PlaceholderFrame));
+end;
+
+function HexOf(const ABytes: TBytes): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(ABytes) do Result := Result + LowerCase(IntToHex(ABytes[i], 2));
+end;
+
+{ H-M13: a change in a row's later paragraph drops the row's waiting picture. }
+procedure TTyRichEditControlTest.TestAChangeInARowDropsItsPendingPicture;
+var
+  rtf: string;
+  st: TBytesStream;
+  f: TTyCharFormat;
+  t: TTyRichText;
+  p: Integer;
+begin
+  rtf := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' +
+    '\trowd\cellx3000\cellx6000\pard\intbl a\cell\pard\intbl b {\pict\pngblip\picw200\pich100' +
+    '\picwgoal600\pichgoal300 ' + HexOf(PngBytes(200, 100, BGRA(0, 0, 200, 255))) +
+    '}\cell\row\pard after\par}';
+  st := TBytesStream.Create(BytesOf(rtf));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  AssertTrue('a row first', FRich.VisibleBlocks[0].Layout is TTyRowLayout);
+  AssertTrue('of two paragraphs', FRich.VisibleBlocks[0].LastPara > FRich.VisibleBlocks[0].FirstPara);
+  PaintAll(True);
+  AssertEquals('its picture waits', 1, FRich.Pending);
+  t := FRich.Document.Text;
+  p := FRich.VisibleBlocks[0].LastPara;
+  f := TyDefaultCharFormat;
+  f.Color := clRed;
+  AssertTrue('the second cell''s text changed', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(p), 1), [cffColor], f)));
+  AssertEquals('the row''s picture no longer waits', 0, FRich.Pending);
+end;
+
+{ W1r-O1: another fallback font: the view is laid out again like after a font change. }
+procedure TTyRichEditControlTest.TestAFallbackFontChangeLaysTheViewOutAgain;
+begin
+  SetLinesOf(200, 'Line ');
+  FRich.UpdateView;
+  AssertTrue('measured', FRich.Document.Text.MeasuredParaCount > 0);
+  FRich.ResetCounts;
+  FRich.OnFallbackFont := @NoFallback;
+  AssertEquals('every height an estimate again', 0, FRich.Document.Text.MeasuredParaCount);
+  AssertTrue('the text painted again', Covered(FRich.Area));
+  FRich.UpdateView;
+  AssertTrue('laid out again', FRich.LaidParas > 0);
+  FRich.ResetCounts;
+  FRich.FallbackFonts.Add('Arial');
+  AssertEquals('the list too', 0, FRich.Document.Text.MeasuredParaCount);
+  AssertTrue('painted again', Covered(FRich.Area));
+  FRich.UpdateView;
+  AssertTrue('laid out again', FRich.LaidParas > 0);
+end;
+
+{ W1r-O2: blocks of CRichMaxBlockPx: tops and positions past an Integer's range. }
+procedure TTyRichEditControlTest.TestHugeBlocksKeepTheArithmeticInRange;
+var
+  sl: TStringList;
+  big: string;
+  i, k, h: Integer;
+  pf: TTyParaFormat;
+  r: TRect;
+  pos: TTyRichPos;
+  t: TTyRichText;
+begin
+  big := '';
+  for i := 1 to 16500 do big := big + 'x'#11;
+  sl := TStringList.Create;
+  try
+    sl.Add('first');
+    for i := 1 to 5 do sl.Add(big);
+    sl.Add('last');
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  pf := TyDefaultParaFormat;
+  pf.LineSpacing := lsExact;
+  pf.LineSpacingValue := 2000000000;
+  AssertTrue('exact lines', FRich.Document.Execute(TTyRichSetParaFormat.Create(1, 5,
+    [pffLineSpacing], pf)));
+  t := FRich.Document.Text;
+  h := FRich.Area.Bottom - FRich.Area.Top;
+  // each huge paragraph laid out once: their heights are measured
+  for k := 1 to 5 do
+  begin
+    FRich.ScrollY := t.ParaTop(k);
+    FRich.UpdateView;
+  end;
+  AssertEquals('measured', Int64(CRichMaxBlockPx), t.ParaHeight(3));
+  FRich.ScrollToEnd;
+  AssertEquals('ScrollY past an Integer', t.TotalHeight - h, FRich.ScrollY);
+  AssertTrue(Format('it is (%d; paragraph 1 is %d high, %d paragraphs)', [FRich.ScrollY,
+    t.ParaHeight(1), t.ParaCount]), FRich.ScrollY > MaxInt);
+  AssertTrue('the last line on screen', InView(6));
+  FRich.ScrollY := t.ParaTop(2) + 1000;
+  for k := 1 to FRich.VisibleBlockCount - 1 do
+    AssertEquals(Format('block %d follows the one before', [k]),
+      FRich.VisibleBlocks[k - 1].Top + FRich.VisibleBlocks[k - 1].Height, FRich.VisibleBlocks[k].Top);
+  AssertEquals('a huge block on top', CRichMaxBlockPx, FRich.VisibleBlocks[1].Height);
+  r := FRich.ParagraphRect(2);
+  AssertTrue('its rectangle in range', (r.Top < FRich.Area.Top) and (r.Bottom > FRich.Area.Bottom)
+    and (r.Top > -MaxInt) and (r.Bottom < MaxInt));
+  pos := FRich.PositionAtPoint(FRich.Area.Left + 2, FRich.Area.Top + 2);
+  AssertTrue(Format('a point in it is in it (%d)', [pos]), (pos >= t.ParaStart(2)) and
+    (pos <= t.ParaStart(2) + t.ParaLength(2)));
 end;
 
 initialization

@@ -858,6 +858,14 @@ msgstr "文档现在不能修改:它还在载入、没有载入完整,或者正�
 msgid "The file %s could not be replaced; it was left as it was."
 msgstr "无法替换文件 %s,原文件保持不变。"
 
+#: tycontrols.strconsts.rsricheditcannotwrite
+msgid "The file %s cannot be written; it was left as it was."
+msgstr "无法写入文件 %s,原文件保持不变。"
+
+#: tycontrols.strconsts.rsricheditbusy
+msgid "The document cannot be replaced now: it is being loaded or saved."
+msgstr "文档正在载入或保存，现在不能替换。"
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr "本段还有 %s 个字符没有显示。"
