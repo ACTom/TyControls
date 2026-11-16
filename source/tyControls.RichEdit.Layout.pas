@@ -121,6 +121,9 @@ const
   CRichListOrdinalCache = 65536;
   { A table cell whose right edge neither the row nor the table gives is this wide (twips). }
   CRichDefaultCellTwips = 1440;
+  { The widest cell border drawn (twips): Word's limit for \brdrw. A wider one in a file is
+    drawn this wide. }
+  CRichMaxBorderTwips = 75;
   { Pictures the layouter has drawn are kept decoded (and scaled to the size they were drawn
     at) up to this many bytes - their pixels, and the bytes of the pictures held for them -
     the least recently drawn going first, the one drawn last always staying: a document of
@@ -543,10 +546,13 @@ type
     box is as tall as the row. Hidden: a cell merged into the one before it - not shown, never
     hit; its paragraphs (the file's empty ones) are positions the caret shows at the end of
     the cell it went into (Owner). Its paragraphs are items FirstItem .. FirstItem +
-    ItemCount - 1 of the row. Sides: the lines drawn, each LinePx thick - its left and its top
-    (not when it continues the cell above: a vertical merge), and the right of the row's last
-    cell and the bottom of the table's last row; so a line between two cells, or two rows, is
-    drawn once, as the later one's. }
+    ItemCount - 1 of the row. Sides: the lines drawn, each LinePx thick (a file's width up to
+    CRichMaxBorderTwips) - its left and its top (not when it continues the cell above: a
+    vertical merge), the right of the row's last cell and the bottom of the table's last row;
+    so a line between two cells, or two rows, is drawn once, as the later one's. A declared
+    right (bottom) is drawn by the cell itself when the next cell (the cell below: the one of
+    the same index in the next row) does not declare the line on its side - a table that
+    declares only bottom lines, as report generators write them, keeps them. }
   TTyRichCellBox = record
     Left, Right: Integer;
     Hidden: Boolean;
@@ -575,10 +581,12 @@ type
 
     Geometry is the row format's (tyControls.RichEdit.RowFormat): the cells from their right
     edges (the row's own, else the table's), the row placed by \trleft from the layout's left
-    edge (a negative one reaches left of it, as Word puts the lines in the margin) and never
+    edge (a negative one reaches left of it, as Word puts the lines in the margin) - or, for
+    \trqc / \trqr, centred in or at the right of the layout width (when it wraps) - and never
     shrunk to the wrap width (the control scrolls); each cell's paragraphs laid out by
-    themselves at the cell's width less the half gap on either side, their indents inside the
-    cell, stacked from below its top line and placed by its vertical alignment; the row as
+    themselves at the cell's width less the half gap (at most half the cell) on either side,
+    their indents inside the cell, stacked from below its top line and placed by its vertical
+    alignment (a cell with no width left for text takes no height for it); the row as
     tall as its tallest cell, and not less than (or, for an exact height, exactly) what the
     format demands. A horizontally merged run of cells is one box with the first cell's
     content; a cell that continues the one above draws no line toward it. A row that holds a
@@ -601,7 +609,9 @@ type
     function CellAtX(AX: Integer): Integer;
   public
     destructor Destroy; override;
-    { A point and a caret pass the line-end flag through to the paragraph they are in. }
+    { A point and a caret pass the line-end flag through to the paragraph they are in. The
+      caret and the selection's rectangles stay inside the cell's box (and the row's height):
+      what an exact-height row clips is not shown, nor its caret over the next row. }
     function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload; override;
     function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
@@ -734,7 +744,11 @@ type
       caller with a client width of 0 passes 1 (TyRichLayoutWidth does). From the cache when
       it holds that paragraph at those values. The result carries a reference for the
       caller: Release it when done. The layouter works for one document at a time, Document:
-      a call with another one switches to it through that setter (which empties the caches). }
+      a call with another one switches to it through that setter (which empties the caches).
+      A paragraph in a table cell is laid out alone here, not as its row; the cache keeps one
+      block per first paragraph, so at a row's first paragraph this layout and the row's
+      (LayoutBlock) replace each other - a caller that mixes the two lays the whole row out
+      again each time. What is shown is asked of LayoutBlock. }
     function LayoutPara(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyParaLayout;
     { The block paragraph AIndex belongs to, with a reference for the caller: a
@@ -754,7 +768,9 @@ type
     { Every layout goes (Stale) and every kept measure. }
     procedure Clear;
     { The cached layout of the block that starts at paragraph AIndex, without a reference
-      and without counting a hit; nil when there is none. }
+      and without counting a hit; nil when there is none. Blocks are kept by their first
+      paragraph only: a row is found at its FirstPara, and this is nil for its other
+      paragraphs (ask LayoutBlock, which finds the row from any of them). }
     function CachedLayout(AIndex: Integer): TTyBlockLayout;
     { What a paragraph not laid out yet counts as: one line of the base font. }
     function EstimatedParaHeight(APPI: Integer; AZoom: Single): Integer;
@@ -2323,13 +2339,27 @@ begin
   else
     Result := FItems[k].Layout.CaretRect(APos - FItems[k].Pos, AAtLineEnd);
   Types.OffsetRect(Result, FItems[k].X, FItems[k].Y);
+  { Inside the cell's box: what an exact-height row (or a cell with no room) does not show,
+    its caret is not drawn over the next row either - at the box's edge instead. }
+  o := FCells[FItems[k].Cell].Owner;
+  if Result.Bottom > FHeight then Result.Bottom := FHeight;
+  if Result.Top > Result.Bottom - 1 then Result.Top := Result.Bottom - 1;
+  if Result.Top < 0 then
+  begin
+    Result.Top := 0;
+    if Result.Bottom < 1 then Result.Bottom := 1;
+  end;
+  if Result.Left > FCells[o].Right - 1 then Result.Left := FCells[o].Right - 1;
+  if Result.Left < FCells[o].Left then Result.Left := FCells[o].Left;
+  Result.Right := Result.Left + 1;
 end;
 
 function TTyRowLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
 var
-  k, i, n: Integer;
+  k, i, n, o: Integer;
   a, b: TTyRichPos;
   rs: TRectArray;
+  r, box: TRect;
 begin
   Result := nil;
   n := 0;
@@ -2340,14 +2370,20 @@ begin
     b := ATo - FItems[k].Pos;
     if (b <= 0) or (a > FItems[k].Layout.Length) then Continue;
     rs := FItems[k].Layout.SelectionRects(a, b);
+    o := FCells[FItems[k].Cell].Owner;
+    box := Rect(FCells[o].Left, 0, FCells[o].Right, FHeight);
     SetLength(Result, n + System.Length(rs));
     for i := 0 to High(rs) do
     begin
-      Result[n] := rs[i];
-      Types.OffsetRect(Result[n], FItems[k].X, FItems[k].Y);
+      r := rs[i];
+      Types.OffsetRect(r, FItems[k].X, FItems[k].Y);
+      // what the cell's box does not show is not shown selected either
+      if not Types.IntersectRect(r, r, box) then Continue;
+      Result[n] := r;
       Inc(n);
     end;
   end;
+  SetLength(Result, n);
 end;
 
 { ---- painting ---- }
@@ -4901,18 +4937,60 @@ function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
 var
   R: TTyRowLayout;
   tbl: TTyRichTable;
-  nc, i, j, k, o, ci, gap, pos, rowH, padT, padB, off, y, cut: Integer;
+  nc, i, j, k, o, ci, gap, g, inner, pos, rowH, padT, padB, off, y, cut, shift, lo, hi: Integer;
   prevTw, rightTw: Int64;
   cd: TTyRowCellDisplay;
   s: TTyRowCellSide;
-  lastRow: Boolean;
+  lastRow, haveNext: Boolean;
   bx: ^TTyRichCellBox;
   cell: TTyRichCell;
   P: TTyParaLayout;
+  nextDisp: TTyRowDisplay;
+  room: array of Boolean;
 
   function Px(ATwips: Int64): Integer;
   begin
     Result := TyRichTwipsToPx(ATwips, APPI, AZoom);
+  end;
+
+  function CellDisplay(const ADisp: TTyRowDisplay; AIndex: Integer): TTyRowCellDisplay;
+  begin
+    if (AIndex >= 0) and (AIndex < System.Length(ADisp.Cells)) then Result := ADisp.Cells[AIndex]
+    else Result := TyPlainRowCell;
+  end;
+
+  { Cell AIndex declares a right line and the next cell, which would draw it as its left, does
+    not declare one (and is not merged into the same box). }
+  function RightOpen(AIndex: Integer): Boolean;
+  var
+    nd: TTyRowCellDisplay;
+  begin
+    nd := CellDisplay(R.FDisplay, AIndex + 1);
+    Result := (nd.HMerge <> rcmContinue) and not (rcsLeft in nd.Borders);
+  end;
+
+  { The cell below cell AIndex (the one of that index in the next row - the box it was merged
+    into there) would not draw the line between them as its top: it declares none, and it does
+    not continue this cell (a vertical merge has no line inside). }
+  function BottomOpen(AIndex: Integer): Boolean;
+  var
+    nd: TTyRowCellDisplay;
+    nr: TTyRichRow;
+    m: Integer;
+  begin
+    if not haveNext then
+    begin
+      nr := tbl.Rows[ARow.Index + 1];
+      if nr.RawFormat <> '' then nextDisp := TyRtfRowDisplay(nr.RawFormat)
+      else nextDisp := TyDefaultRowDisplay(Max(1, nr.CellCount));
+      haveNext := True;
+    end;
+    m := AIndex;
+    while (m > 0) and (m < System.Length(nextDisp.Cells)) and
+      (nextDisp.Cells[m].HMerge = rcmContinue) do
+      Dec(m);
+    nd := CellDisplay(nextDisp, m);
+    Result := (nd.VMerge <> rcmContinue) and not (rcsTop in nd.Borders);
   end;
 
 begin
@@ -4931,6 +5009,7 @@ begin
     if ARow.RawFormat <> '' then R.FDisplay := TyRtfRowDisplay(ARow.RawFormat)
     else R.FDisplay := TyDefaultRowDisplay(nc);
     lastRow := ARow.Index >= tbl.RowCount - 1;
+    haveNext := False;
     // the cells' boxes, left to right
     SetLength(R.FCells, nc);
     prevTw := R.FDisplay.Left;
@@ -4938,14 +5017,13 @@ begin
     begin
       if i < ARow.BoundaryCount then rightTw := ARow.Boundaries[i]
       else if i < tbl.ColBoundaryCount then rightTw := tbl.ColBoundaries[i]
-      else if (i < System.Length(R.FDisplay.Cells)) and (R.FDisplay.Cells[i].Right >= 0) then
+      else if (i < System.Length(R.FDisplay.Cells)) and R.FDisplay.Cells[i].HasRight then
         rightTw := R.FDisplay.Cells[i].Right
       else
         rightTw := prevTw + CRichDefaultCellTwips;
       // an edge left of the one before it: an empty cell there
       if rightTw < prevTw then rightTw := prevTw;
-      if i < System.Length(R.FDisplay.Cells) then cd := R.FDisplay.Cells[i]
-      else cd := TyPlainRowCell;
+      cd := CellDisplay(R.FDisplay, i);
       bx := @R.FCells[i];
       bx^.Left := Px(prevTw);
       bx^.Right := Px(rightTw);
@@ -4954,8 +5032,9 @@ begin
       bx^.ContentHeight := 0;
       bx^.VAlign := cd.VAlign;
       bx^.VMerge := cd.VMerge;
+      // a file's width up to Word's limit
       for s := Low(TTyRowCellSide) to High(TTyRowCellSide) do
-        bx^.LinePx[s] := Max(1, Px(cd.BorderWidth[s]));
+        bx^.LinePx[s] := Max(1, Px(Min(cd.BorderWidth[s], CRichMaxBorderTwips)));
       bx^.Sides := [];
       if (cd.HMerge = rcmContinue) and (i > 0) then
       begin
@@ -4971,10 +5050,15 @@ begin
         if rcsLeft in cd.Borders then Include(bx^.Sides, rcsLeft);
         // a cell that continues the one above draws no line toward it
         if (rcsTop in cd.Borders) and (cd.VMerge <> rcmContinue) then Include(bx^.Sides, rcsTop);
-        if lastRow and (rcsBottom in cd.Borders) then Include(bx^.Sides, rcsBottom);
+        { A line between two rows is the lower one's top; the table's last row closes it, and
+          a declared bottom is drawn here too when the cell below does not draw the line. }
+        if (rcsBottom in cd.Borders) and (lastRow or BottomOpen(i)) then
+          Include(bx^.Sides, rcsBottom);
       end;
-      // the row's last cell closes it on the right (the box it is in, when merged)
-      if (i = nc - 1) and (rcsRight in cd.Borders) then
+      { A line between two cells is the later one's left; the row's last cell closes the row,
+        and a declared right is drawn here too when the next cell does not draw the line (on
+        the box the cell is in, when merged). }
+      if (rcsRight in cd.Borders) and ((i = nc - 1) or RightOpen(i)) then
       begin
         o := bx^.Owner;
         Include(R.FCells[o].Sides, rcsRight);
@@ -4982,21 +5066,44 @@ begin
       end;
       prevTw := rightTw;
     end;
+    { \trqc / \trqr: the row centred in, or at the right of, the width it is laid out at (not
+      without wrapping: there is no width to place it in). }
+    if (R.FDisplay.Align <> rraLeft) and (AWidth > 0) then
+    begin
+      lo := R.FCells[0].Left;
+      hi := R.FCells[0].Right;
+      for i := 1 to nc - 1 do hi := Max(hi, R.FCells[i].Right);
+      if R.FDisplay.Align = rraCenter then shift := (AWidth - (hi - lo)) div 2 - lo
+      else shift := AWidth - hi;
+      for i := 0 to nc - 1 do
+      begin
+        Inc(R.FCells[i].Left, shift);
+        Inc(R.FCells[i].Right, shift);
+      end;
+    end;
     // the paragraphs, each in its cell (a merged-away cell's at the box it went into)
     gap := Max(0, Px(R.FDisplay.HalfGap));
     pos := 0;
     cut := 0;
+    room := nil;
+    SetLength(room, nc);
     SetLength(R.FItems, ALast - AFirst + 1);
     for k := AFirst to ALast do
     begin
       cell := ADoc.CellAt(k);
       if cell <> nil then ci := Min(Max(cell.Index, 0), nc - 1) else ci := 0;
       o := R.FCells[ci].Owner;
-      P := BuildPara(ADoc, k, Max(1, R.FCells[o].Right - R.FCells[o].Left - 2 * gap), APPI,
-        AZoom);
+      { The text's distance from the edges is at most half the cell. A cell with no room for
+        text (no width, or an edge left of the one before) lays its paragraphs out unwrapped
+        - a line each, cheaply - and they take no height: they are positions nobody sees. }
+      g := Min(gap, Max(0, R.FCells[o].Right - R.FCells[o].Left) div 2);
+      inner := R.FCells[o].Right - R.FCells[o].Left - 2 * g;
+      room[ci] := inner > 0;
+      if inner > 0 then P := BuildPara(ADoc, k, inner, APPI, AZoom)
+      else P := BuildPara(ADoc, k, CRichNoWrap, APPI, AZoom);
       j := k - AFirst;
       R.FItems[j].Layout := P;
-      R.FItems[j].X := R.FCells[o].Left + gap;
+      R.FItems[j].X := R.FCells[o].Left + g;
       R.FItems[j].Y := 0;
       R.FItems[j].Pos := pos;
       R.FItems[j].Cell := ci;
@@ -5009,7 +5116,8 @@ begin
       end;
       if R.FCells[ci].ItemCount = 0 then R.FCells[ci].FirstItem := j;
       Inc(R.FCells[ci].ItemCount);
-      R.FCells[ci].ContentHeight := SatAdd(R.FCells[ci].ContentHeight, P.Height);
+      if inner > 0 then
+        R.FCells[ci].ContentHeight := SatAdd(R.FCells[ci].ContentHeight, P.Height);
     end;
     R.FCharCount := pos;
     R.FShownChars := pos - cut;
@@ -5051,7 +5159,7 @@ begin
         if R.FItems[j].Cell = i then
         begin
           R.FItems[j].Y := y;
-          y := SatAdd(y, R.FItems[j].Layout.Height);
+          if room[i] then y := SatAdd(y, R.FItems[j].Layout.Height);
         end;
     end;
   except

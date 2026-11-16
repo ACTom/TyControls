@@ -10,15 +10,18 @@ unit tyControls.RichEdit.RowFormat;
   back stays exactly as it was.
 
   Read: \trgaph (half the gap between cells: the text's distance from a cell's left and right
-  edges), \trleft (where the row starts), \trrh (a row height: at least, or exactly when
-  negative), and per cell, up to its \cellx: \clmgf / \clmrg (merged with the cells after it /
-  the one before), \clvmgf / \clvmrg (the same with the rows below / above), \clvertalt / c / b
-  (the content at the top, centre, bottom), \clbrdrl / t / r / b followed by a line style
-  (\brdrs, \brdrdb, \brdrdot ...; \brdrnone or \brdrnil take the side away) and \brdrwN (the
-  line's width). Every style is shown as a solid line in phase 1; border colours (\brdrcf)
-  and cell shading need the colour table and are not read; nor are row-level borders
-  (\trbrdr*), which Word and WordPad write beside the cells' own. Words inside groups are
-  passed over. }
+  edges), \trleft (where the row starts), \trqc / \trqr (the row centred / at the right),
+  \trrh (a row height: at least, or exactly when negative), and per cell, up to its \cellx:
+  \clmgf / \clmrg (merged with the cells after it / the one before), \clvmgf / \clvmrg (the
+  same with the rows below / above), \clvertalt / c / b (the content at the top, centre,
+  bottom), \clbrdrl / t / r / b followed by a line style (\brdrs, \brdrdb, \brdrdot ...;
+  \brdrnone, \brdrnil and \brdrtbl - what Word writes for every side of a cell in a table
+  without borders - take the side away) and \brdrwN (the line's width). A diagonal
+  (\cldglu, \cldgll) is no side: the words after it are not the side's. Every style is shown
+  as a solid line in phase 1; border colours (\brdrcf) and cell shading need the colour table
+  and are not read; nor are row-level borders (\trbrdr*), which Word and WordPad write beside
+  the cells' own, or diagonals. Words inside groups are passed over, and so are the bytes of
+  \binN. }
 
 {$mode objfpc}{$H+}
 
@@ -30,8 +33,11 @@ type
   TTyRowCellSide = (rcsLeft, rcsTop, rcsRight, rcsBottom);
   TTyRowCellSides = set of TTyRowCellSide;
 
+  TTyRowAlign = (rraLeft, rraCenter, rraRight);
+
   TTyRowCellDisplay = record
-    Right: Integer;                 // \cellx, twips; -1 when the cell's \cellx was not there
+    Right: Integer;                 // \cellx, twips (as written: may be negative)
+    HasRight: Boolean;              // False: the cell's \cellx had no number (Right is 0)
     HMerge: TTyRowCellMerge;        // \clmgf, \clmrg
     VMerge: TTyRowCellMerge;        // \clvmgf, \clvmrg
     VAlign: TTyRowCellVAlign;
@@ -43,6 +49,7 @@ type
   TTyRowDisplay = record
     HalfGap: Integer;    // twips; 0 when the format has no \trgaph (RTF's default)
     Left: Integer;       // twips from the layout's left edge
+    Align: TTyRowAlign;  // \trqc, \trqr; rraLeft: at Left (\trql, or nothing said)
     Height: Integer;     // twips: > 0 at least, < 0 exactly -Height, 0 as tall as the content
     Cells: TTyRowCellDisplays;   // in the order of the format's \cellx
   end;
@@ -66,7 +73,8 @@ function TyPlainRowCell: TTyRowCellDisplay;
 var
   s: TTyRowCellSide;
 begin
-  Result.Right := -1;
+  Result.Right := 0;
+  Result.HasRight := False;
   Result.HMerge := rcmNone;
   Result.VMerge := rcmNone;
   Result.VAlign := rcvTop;
@@ -81,6 +89,7 @@ var
 begin
   Result.HalfGap := CDefaultHalfGap;
   Result.Left := 0;
+  Result.Align := rraLeft;
   Result.Height := 0;
   Result.Cells := nil;
   if ACellCount < 0 then ACellCount := 0;
@@ -94,13 +103,19 @@ begin
   end;
 end;
 
+{ A word that says a side has no line: \brdrnone, \brdrnil, and \brdrtbl ("the cell has no
+  border", Word's word for every side of a borderless table's cells). }
+function IsNoBorder(const AWord: string): Boolean;
+begin
+  Result := (AWord = 'brdrnone') or (AWord = 'brdrnil') or (AWord = 'brdrtbl');
+end;
+
 { A word that sets a border's line style (\brdrs, \brdrth, \brdrdb, \brdrdot, ...): every
-  \brdr word but the width, the colour, the two that say "none", and the paragraph's own. }
+  \brdr word but the width, the colour, the ones that say "none", and the paragraph's own. }
 function IsBorderStyle(const AWord: string): Boolean;
 begin
   Result := (Copy(AWord, 1, 4) = 'brdr') and (AWord <> 'brdrw') and (AWord <> 'brdrcf') and
-    (AWord <> 'brdrnone') and (AWord <> 'brdrnil') and (AWord <> 'brdrbtw') and
-    (AWord <> 'brdrbar');
+    not IsNoBorder(AWord) and (AWord <> 'brdrbtw') and (AWord <> 'brdrbar');
 end;
 
 function TyRtfRowDisplay(const ARaw: RawByteString): TTyRowDisplay;
@@ -115,6 +130,7 @@ var
 begin
   Result.HalfGap := 0;
   Result.Left := 0;
+  Result.Align := rraLeft;
   Result.Height := 0;
   Result.Cells := nil;
   count := 0;
@@ -168,11 +184,19 @@ begin
     if param > High(Integer) then param := High(Integer);
     if neg then param := -param;
     if (i <= n) and (ARaw[i] = ' ') then Inc(i);
+    if word = 'bin' then
+    begin
+      // N bytes of data, whatever they are (braces and backslashes too), in a group or not
+      if param > n - i + 1 then param := n - i + 1;
+      if param > 0 then Inc(i, Integer(param));
+      Continue;
+    end;
     if depth > 0 then Continue;
     if word = 'trowd' then
     begin
       Result.HalfGap := 0;
       Result.Left := 0;
+      Result.Align := rraLeft;
       Result.Height := 0;
       count := 0;
       cur := TyPlainRowCell;
@@ -180,6 +204,9 @@ begin
     end
     else if word = 'trgaph' then Result.HalfGap := param
     else if word = 'trleft' then Result.Left := param
+    else if word = 'trql' then Result.Align := rraLeft
+    else if word = 'trqc' then Result.Align := rraCenter
+    else if word = 'trqr' then Result.Align := rraRight
     else if word = 'trrh' then Result.Height := param
     else if word = 'clmgf' then cur.HMerge := rcmFirst
     else if word = 'clmrg' then cur.HMerge := rcmContinue
@@ -199,21 +226,25 @@ begin
       end;
       inSide := True;
     end
-    else if Copy(word, 1, 6) = 'trbrdr' then
-      // the row's own borders: the words after it are not a cell's
+    else if (Copy(word, 1, 6) = 'trbrdr') or (word = 'cldglu') or (word = 'cldgll') then
+      // the row's own borders, a diagonal: the words after it are not a cell side's
       inSide := False
     else if inSide and (word = 'brdrw') then
     begin
       if param < 0 then param := 0;
       cur.BorderWidth[side] := param;
     end
-    else if inSide and ((word = 'brdrnone') or (word = 'brdrnil')) then
+    else if inSide and IsNoBorder(word) then
       Exclude(cur.Borders, side)
     else if inSide and IsBorderStyle(word) then
       Include(cur.Borders, side)
     else if word = 'cellx' then
     begin
-      if hasParam then cur.Right := param;
+      if hasParam then
+      begin
+        cur.Right := param;
+        cur.HasRight := True;
+      end;
       if count = Length(Result.Cells) then SetLength(Result.Cells, count * 2 + 4);
       Result.Cells[count] := cur;
       Inc(count);

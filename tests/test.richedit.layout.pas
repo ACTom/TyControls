@@ -121,6 +121,12 @@ type
     procedure TestTheCmapReaderBoundsItsCounts;
     procedure TestTheMeasureCacheIsBoundedByBytes;
     procedure TestChangesInsideAndAcrossCachedParagraphsAreFollowed;
+    // fix wave W2: rows
+    procedure TestWordsBorderlessCellsHaveNoLines;
+    procedure TestDeclaredLinesAreDrawnOnceAndNotLost;
+    procedure TestARowIsPlacedAndBoundedAsItsFormatSays;
+    procedure TestAnExactRowShowsAndAnswersOnlyItsBox;
+    procedure TestPaintLeavesTheClipAndHidesMergedAwayText;
   end;
 
 implementation
@@ -2217,14 +2223,46 @@ begin
   AssertEquals('an exact height', -400, r.Height);
   AssertEquals('the group passed over: two cells', 2, Length(r.Cells));
   AssertTrue('first of a merge', r.Cells[0].HMerge = rcmFirst);
-  AssertEquals('no number: no edge', -1, r.Cells[0].Right);
+  AssertFalse('no number: no edge', r.Cells[0].HasRight);
+  AssertTrue('a negative edge is an edge', r.Cells[1].HasRight);
   AssertEquals('a negative edge as written', -3, r.Cells[1].Right);
   AssertTrue('no \trgaph: 0', r.HalfGap = 0);
+  r := TyRtfRowDisplay('\trowd\cellx-1\cellx');
+  AssertTrue('\cellx-1 is an edge at -1', r.Cells[0].HasRight and (r.Cells[0].Right = -1));
+  AssertFalse('\cellx alone is none', r.Cells[1].HasRight);
   r := TyRtfRowDisplay('\trowd\clbrdrt\brdrs\trbrdrb\brdrw30\brdrnone \cellx100');
   AssertTrue('after \trbrdrb the words are the row''s', r.Cells[0].Borders = [rcsTop]);
   AssertEquals('and so is the width', 0, r.Cells[0].BorderWidth[rcsTop]);
   r := TyRtfRowDisplay('');
   AssertEquals('nothing: no cells', 0, Length(r.Cells));
+  // Word's cell in a table without borders: \brdrtbl on every side is no line
+  r := TyRtfRowDisplay('\trowd\trgaph108\trleft-108\clbrdrt\brdrtbl \clbrdrl\brdrtbl ' +
+    '\clbrdrb\brdrtbl \clbrdrr\brdrtbl \cltxlrtb\clftsWidth3\clwWidth4788 \cellx4680');
+  AssertEquals('Word''s borderless cell', 1, Length(r.Cells));
+  AssertTrue('\brdrtbl: no sides', r.Cells[0].Borders = []);
+  r := TyRtfRowDisplay('\trowd\clbrdrt\brdrs\brdrtbl\cellx100');
+  AssertTrue('\brdrtbl after a style takes the side away', r.Cells[0].Borders = []);
+  // a diagonal closes the side before it
+  r := TyRtfRowDisplay('\trowd\clbrdrr\brdrnone\cldglu\brdrs\brdrw10 \cellx100' +
+    '\clbrdrl\brdrs\brdrw5 \cldgll\brdrw40\brdrdb \cellx200');
+  AssertTrue('a diagonal is no right side', r.Cells[0].Borders = []);
+  AssertEquals('nor its width', 0, r.Cells[0].BorderWidth[rcsRight]);
+  AssertTrue('the left before \cldgll stays', r.Cells[1].Borders = [rcsLeft]);
+  AssertEquals('with its own width', 5, r.Cells[1].BorderWidth[rcsLeft]);
+  // \binN: its bytes are data, braces included, in a group or not
+  r := TyRtfRowDisplay('\trowd{\*\x\bin2 {{}\trleft7\bin3 a{b\cellx200');
+  AssertEquals('read past the binary data', 7, r.Left);
+  AssertEquals('and its cell', 1, Length(r.Cells));
+  AssertEquals('its edge', 200, r.Cells[0].Right);
+  r := TyRtfRowDisplay('\trowd\bin999999 ');
+  AssertEquals('data past the end: nothing', 0, Length(r.Cells));
+  // a centred, a right-aligned row
+  r := TyRtfRowDisplay('\trowd\trqc\cellx100');
+  AssertTrue('\trqc', r.Align = rraCenter);
+  r := TyRtfRowDisplay('\trowd\trqr\cellx100');
+  AssertTrue('\trqr', r.Align = rraRight);
+  r := TyRtfRowDisplay('\trowd\trqr\trql\cellx100');
+  AssertTrue('\trql', r.Align = rraLeft);
   r := TyDefaultRowDisplay(2);
   AssertEquals('a row made here: two cells', 2, Length(r.Cells));
   AssertEquals('Word''s half gap', 108, r.HalfGap);
@@ -3641,6 +3679,256 @@ begin
   AssertEquals('it is para8''s', 'para8', TTyParaLayout(FLayouter.CachedLayout(9)).Text);
   AssertEquals('and knows it', 9, FLayouter.CachedLayout(9).FirstPara);
   AssertEquals('the one before stays', 'para2', TTyParaLayout(FLayouter.CachedLayout(2)).Text);
+end;
+
+{ ---- fix wave W2: rows ---- }
+
+function CountPx(ABmp: TBGRABitmap; const APx: TBGRAPixel): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := 0 to ABmp.Height - 1 do
+    for x := 0 to ABmp.Width - 1 do
+      if SamePx(APx, ABmp.GetPixel(x, y)) then Inc(Result);
+end;
+
+{ Word writes \brdrtbl on every side of every cell of a table without borders (letterheads,
+  forms, text side by side): no line is drawn. }
+procedure TTyRichLayoutTest.TestWordsBorderlessCellsHaveNoLines;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  cellFmt: RawByteString;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.TableBorder := BGRA(0, 0, 255, 255);
+  cellFmt := '\clbrdrt\brdrtbl \clbrdrl\brdrtbl \clbrdrb\brdrtbl \clbrdrr\brdrtbl ';
+  d := NewTableDoc('a'#10'b');
+  t := TTyRichTable.Create([1440, 2880]);
+  t.AddRow(2, '\trowd\trgaph108\trleft-108' + cellFmt + '\cellx1440' + cellFmt + '\cellx2880');
+  TDocAccess(d).MarkTable(0, t, [1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertTrue('cell 0: no lines', R.Cells[0].Sides = []);
+  AssertTrue('cell 1: no lines', R.Cells[1].Sides = []);
+  AssertEquals('as tall as its text', 20, R.Height);
+  bmp := TBGRABitmap.Create(300, 40, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    R.Paint(bmp, 20, 10, Rect(0, 0, 300, 40), st, 0, 0);
+    AssertEquals('the text', 2, FDevice.DrawLog.Count);
+    AssertEquals('no line anywhere', 0, CountPx(bmp, st.TableBorder));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A line between two cells (rows) is drawn once, as the later one's left (top). A cell that
+  declares its right (bottom) line while the next cell (the cell below) declares no left (top)
+  draws it itself - a table with only bottom lines, as report generators write it, keeps
+  them; inside a vertical merge there is none. }
+procedure TTyRichLayoutTest.TestDeclaredLinesAreDrawnOnceAndNotLost;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R0, R1, R2: TTyRowLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.TableBorder := BGRA(0, 0, 255, 255);
+  d := NewTableDoc('a'#10'b'#10'c'#10'd'#10'e'#10'f');
+  t := TTyRichTable.Create([1440, 2880]);
+  t.AddRow(2, '\trowd\trgaph108\clbrdrb\brdrs\cellx1440\clbrdrb\brdrs\clbrdrr\brdrs\cellx2880');
+  t.AddRow(2, '\trowd\trgaph108\clbrdrr\brdrs\clbrdrb\brdrs\cellx1440\cellx2880');
+  t.AddRow(2, '\trowd\trgaph108\clbrdrt\brdrs\clbrdrr\brdrs\clbrdrb\brdrs\cellx1440' +
+    '\clbrdrl\brdrs\clbrdrt\brdrs\cellx2880');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1, 1, 1]).Free;
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  R1 := TTyRowLayout(Block(d, 2, 1000));
+  R2 := TTyRowLayout(Block(d, 4, 1000));
+  AssertTrue('row 0: a bottom the cell below does not draw', rcsBottom in R0.Cells[0].Sides);
+  AssertTrue('row 0, cell 1 too', rcsBottom in R0.Cells[1].Sides);
+  AssertTrue('the last cell closes the row', rcsRight in R0.Cells[1].Sides);
+  AssertEquals('the bottom line in the row''s height', 21, R0.Height);
+  AssertTrue('row 1: a right the next cell does not draw', rcsRight in R1.Cells[0].Sides);
+  AssertFalse('row 1: its bottom is the top of the cell below', rcsBottom in R1.Cells[0].Sides);
+  AssertTrue('row 1, cell 1: nothing', R1.Cells[1].Sides = []);
+  AssertFalse('row 2: its right is the next cell''s left', rcsRight in R2.Cells[0].Sides);
+  AssertTrue('which draws it', rcsLeft in R2.Cells[1].Sides);
+  AssertTrue('the last row closes the table', rcsBottom in R2.Cells[0].Sides);
+  bmp := TBGRABitmap.Create(300, 40, Sentinel);
+  try
+    R0.Paint(bmp, 20, 10, Rect(0, 0, 300, 40), st, 0, 0);
+    AssertTrue('row 0''s bottom line', SamePx(st.TableBorder, bmp.GetPixel(20 + 48, 10 + 20)));
+    AssertTrue('under cell 1 too', SamePx(st.TableBorder, bmp.GetPixel(20 + 140, 10 + 20)));
+    bmp.FillRect(0, 0, 300, 40, Sentinel, dmSet);
+    R1.Paint(bmp, 20, 10, Rect(0, 0, 300, 40), st, 0, 0);
+    AssertTrue('row 1''s line between its cells', SamePx(st.TableBorder,
+      bmp.GetPixel(20 + R1.Cells[0].Right - 1, 15)));
+  finally
+    bmp.Free;
+  end;
+  // a vertical merge: no line inside it
+  d := NewTableDoc('a'#10'b');
+  t := TTyRichTable.Create([1440]);
+  t.AddRow(1, '\trowd\clvmgf\clbrdrb\brdrs\cellx1440');
+  t.AddRow(1, '\trowd\clvmrg\cellx1440');
+  TDocAccess(d).MarkTable(0, t, [1, 1]).Free;
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  AssertFalse('no bottom toward the cell that continues it', rcsBottom in R0.Cells[0].Sides);
+end;
+
+{ \trqc and \trqr place the row in the layout width (not without wrapping); a border wider
+  than Word's 75 twips is drawn 75 twips wide; the gap is at most half the cell, and a cell
+  with no room for text takes no height for it (its paragraphs a line each, unwrapped); edges
+  at the ends of the integers stay inside the pixel range. }
+procedure TTyRichLayoutTest.TestARowIsPlacedAndBoundedAsItsFormatSays;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+  rc: TRect;
+begin
+  d := NewTableDoc('a'#10'b'#10'c'#10'd'#10'e'#10'f'#10'some words here'#10'more words'#10 +
+    'x'#10'y');
+  t := TTyRichTable.Create([]);
+  t.AddRow(2, '\trowd\trgaph108\trqc\cellx1440\cellx2880');
+  t.AddRow(2, '\trowd\trgaph108\trqr\trleft500\cellx1440\cellx2880');
+  t.AddRow(2, '\trowd\trgaph108\clbrdrt\brdrs\brdrw2000000000 \cellx1440' +
+    '\clbrdrl\brdrs\brdrw-5 \cellx2880');
+  t.AddRow(2, '\trowd\trgaph100000\cellx1440\cellx1440');
+  t.AddRow(2, '\trowd\trgaph108\trleft-2147483647\cellx2147483647\cellx-2147483647');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertEquals('\trqc: centred in 1000', 404, R.Cells[0].Left);
+  AssertEquals('its right', 596, R.Cells[1].Right);
+  AssertEquals('the text with it', 411, R.Items[0].X);
+  R := TTyRowLayout(Block(d, 0, CRichNoWrap));
+  AssertEquals('without wrapping: at \trleft', 0, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 2, 1000));
+  AssertEquals('\trqr: at the right', 1000, R.Cells[1].Right);
+  AssertEquals('its first cell', 841, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 4, 1000));
+  AssertEquals('a border of 2e9 twips: 75 twips', 5, R.Cells[0].LinePx[rcsTop]);
+  AssertEquals('a negative width: the thinnest', 1, R.Cells[1].LinePx[rcsLeft]);
+  AssertEquals('the row: the line and the text', 25, R.Height);
+  R := TTyRowLayout(Block(d, 6, 1000));
+  AssertEquals('a gap past half the cell: no room, no height', 1, R.Height);
+  AssertEquals('the text at the cell''s middle', 48, R.Items[0].X);
+  AssertEquals('its paragraph one line', 1, R.Items[0].Layout.LineCount);
+  AssertEquals('a cell with no width: one line too', 1, R.Items[1].Layout.LineCount);
+  rc := R.CaretRect(R.Items[0].Layout.Length);
+  AssertTrue(Format('the caret past the cell''s right stays in it: %d', [rc.Left]),
+    (rc.Left >= R.Cells[0].Left) and (rc.Right <= R.Cells[0].Right));
+  AssertTrue('and in the row', (rc.Top >= 0) and (rc.Bottom <= R.Height));
+  R := TTyRowLayout(Block(d, 8, 1000));
+  AssertEquals('the far left edge', -CRichMaxLengthPx, R.Cells[0].Left);
+  AssertEquals('the far right edge', CRichMaxLengthPx, R.Cells[0].Right);
+  AssertEquals('an edge left of the one before: an empty cell', R.Cells[1].Left, R.Cells[1].Right);
+  AssertEquals('the text''s row', 20, R.Height);
+end;
+
+{ An exact row (\trrh negative) shows only its box: what does not fit is not painted, and the
+  caret and the selection of a position in the part it clips stay inside the box (the caret
+  is never drawn over the next row). }
+procedure TTyRichLayoutTest.TestAnExactRowShowsAndAnswersOnlyItsBox;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+  rc: TRect;
+  rs: TRectArray;
+  p, i, x, y, o: Integer;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+begin
+  st := TyRichDefaultPaintStyle;
+  d := NewTableDoc('long long long long'#10'c');
+  t := TTyRichTable.Create([1440, 2880]);
+  t.AddRow(2, '\trowd\trgaph108\trrh-600\cellx1440\cellx2880');
+  TDocAccess(d).MarkTable(0, t, [1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertEquals('exactly 600 twips', 40, R.Height);
+  AssertEquals('four lines in it', 4, R.Items[0].Layout.LineCount);
+  rc := R.CaretRect(16);
+  AssertTrue(Format('a caret in the fourth line stays in the row: %d..%d', [rc.Top, rc.Bottom]),
+    (rc.Top >= 0) and (rc.Bottom <= 40) and (rc.Bottom > rc.Top));
+  for p := 0 to R.CharCount - 1 do
+  begin
+    rc := R.CaretRect(p);
+    o := R.Cells[R.Items[R.ItemAt(p)].Cell].Owner;
+    AssertTrue(Format('caret %d in the row', [p]), (rc.Top >= 0) and (rc.Bottom <= R.Height) and
+      (rc.Bottom > rc.Top));
+    AssertTrue(Format('caret %d in its cell', [p]), (rc.Left >= R.Cells[o].Left) and
+      (rc.Right <= R.Cells[o].Right));
+  end;
+  rs := R.SelectionRects(0, R.CharCount);
+  AssertEquals('the two lines shown of cell 0, and cell 1''s', 3, Length(rs));
+  for i := 0 to High(rs) do
+    AssertTrue(Format('rectangle %d in the row', [i]), (rs[i].Top >= 0) and
+      (rs[i].Bottom <= 40) and (rs[i].Bottom > rs[i].Top));
+  bmp := TBGRABitmap.Create(300, 80, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    R.Paint(bmp, 0, 0, Rect(0, 0, 300, 80), st, 0, 0);
+    AssertEquals('the lines in the box, no more', 'long|7|16,long|7|36,c|103|16',
+      FDevice.DrawLog.CommaText);
+    for y := 40 to 79 do
+      for x := 0 to 299 do
+        if not SamePx(Sentinel, bmp.GetPixel(x, y)) then
+          Fail(Format('ink below the row at (%d, %d)', [x, y]));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Painting leaves the target's clip as it found it - a paragraph with a fragment selected in
+  part (its parts are drawn with the clip cut), a row - and a cell merged into the one before
+  it paints nothing of its own text. }
+procedure TTyRichLayoutTest.TestPaintLeavesTheClipAndHidesMergedAwayText;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  L: TTyParaLayout;
+  R: TTyRowLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  before: TRect;
+  i: Integer;
+begin
+  st := TyRichDefaultPaintStyle;
+  before := Rect(3, 4, 250, 70);
+  bmp := TBGRABitmap.Create(300, 80, Sentinel);
+  try
+    d := NewDoc('abcdef ghi');
+    L := Lay(d, 0, 300);
+    bmp.ClipRect := before;
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 100, 30), st, 2, 4);
+    AssertTrue('a fragment selected in part: drawn in parts', FDevice.DrawLog.Count >= 3);
+    AssertTrue('the clip after a paragraph', Types.EqualRect(before, bmp.ClipRect));
+    // (long enough to reach into the merged-away cell's own box were it painted)
+    d := NewTableDoc('shown'#10'hidden hidden hidden');
+    t := TTyRichTable.Create([1440, 2880]);
+    t.AddRow(2, '\trowd\trgaph108\clmgf\cellx1440\clmrg\cellx2880');
+    TDocAccess(d).MarkTable(0, t, [1, 1]).Free;
+    R := TTyRowLayout(Block(d, 0, 1000));
+    AssertTrue('merged away', R.Cells[1].Hidden);
+    bmp.ClipRect := before;
+    FDevice.DrawLog.Clear;
+    R.Paint(bmp, 0, 0, Rect(0, 0, 300, 80), st, 1, 3);
+    AssertTrue('the clip after a row', Types.EqualRect(before, bmp.ClipRect));
+    AssertTrue('the shown cell drawn', FDevice.DrawLog.Count >= 1);
+    for i := 0 to FDevice.DrawLog.Count - 1 do
+      AssertEquals('only the shown cell''s text: ' + FDevice.DrawLog[i], 1,
+        Pos('shown|', FDevice.DrawLog[i]));
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization
