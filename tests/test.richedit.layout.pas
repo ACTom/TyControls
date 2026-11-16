@@ -31,6 +31,9 @@ type
     FDevice: TTyRichTestDevice;
     FChanges: Integer;
     FEventFont: string;
+    { DocChanged forwards changes as a lazy load's own (what the control does while it steps
+      a load). }
+    FFromLoad: Boolean;
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
     procedure FallbackEvent(Sender: TObject; const ABaseFont: string; ACode: Cardinal;
       var AFontName: string);
@@ -137,6 +140,19 @@ type
     procedure TestACappedWalkAnchorsOnARememberedNumber;
     procedure TestTheMarkerGoesWithTheFirstLine;
     procedure TestBulletsForEveryLevel;
+    // fix wave W3
+    procedure TestACutParagraphIsCachedByWhatItShows;
+    procedure TestShownCharsAndTheLastCaretPlace;
+    procedure TestPromotionsKeepTheMeasureCacheBounded;
+    procedure TestAnUnwrappedLineOfHugeObjectsStopsAtTheCeiling;
+    procedure TestASpaceCarryingAMarkStillPartsWords;
+    procedure TestTheLoadsOwnSlicesKeepTheFilesNumbers;
+    procedure TestAWideCentredRowStaysReachable;
+    procedure TestHeaderSizesPastIntegerAreNoPicture;
+    procedure TestARowFollowsTheRowBelow;
+    procedure TestACellWithAPixelLeftHasNoRoom;
+    procedure TestRowsOfTwoTableObjectsShareTheirLine;
+    procedure TestWordsOwnListShowsWordsMarkers;
   end;
 
 implementation
@@ -255,6 +271,40 @@ begin
   runs[0].Obj := nil;
   SetParagraph(ADoc, AIndex, ParaFmt, runs,
     Table.Rows[AIndex div Cells].Cells[AIndex mod Cells]);
+end;
+
+type
+  { Parses on demand: paragraph 0 is Count object characters, each one run holding Picture. }
+  TObjectsLoader = class(TTyRichParaLoader)
+  public
+    ParaFmt: TTyParaFormatId;
+    CharFmt: TTyCharFormatId;
+    Picture: TTyRichPicture;
+    Count: Integer;
+    destructor Destroy; override;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+destructor TObjectsLoader.Destroy;
+begin
+  if Picture <> nil then Picture.Release;
+  inherited Destroy;
+end;
+
+procedure TObjectsLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+var
+  runs: TTyRunArray;
+  i: Integer;
+begin
+  runs := nil;
+  SetLength(runs, Count);
+  for i := 0 to Count - 1 do
+  begin
+    runs[i].Start := i;
+    runs[i].Format := CharFmt;
+    runs[i].Obj := Picture;
+  end;
+  SetParagraph(ADoc, AIndex, ParaFmt, runs);
 end;
 
 { A ground no painting produces (magenta), so that "painted" and "not painted" are told
@@ -458,6 +508,7 @@ begin
   FLayouts := TFPList.Create;
   FChanges := 0;
   FEventFont := '';
+  FFromLoad := False;
   FDevice := TTyRichTestDevice.Create;
   FLayouter := TTyRichLayouter.Create(FDevice, True);
   FLayouter.BaseFontName := 'Test';
@@ -480,7 +531,7 @@ end;
 procedure TTyRichLayoutTest.DocChanged(Sender: TObject; const AChange: TTyRichChange);
 begin
   Inc(FChanges);
-  if FLayouter <> nil then FLayouter.DocumentChanged(AChange);
+  if FLayouter <> nil then FLayouter.DocumentChanged(AChange, FFromLoad);
 end;
 
 procedure TTyRichLayoutTest.FallbackEvent(Sender: TObject; const ABaseFont: string;
@@ -3347,34 +3398,45 @@ begin
       Fail(Format('line %d goes up: %d after %d', [i, L.Lines[i].Top, L.Lines[i - 1].Top]));
 end;
 
+{ Units of 8 characters, from AFirst on: a word no other unit has ("w" and five digits), a CJK
+  character, a space - so the measure cache cannot hide the work a longer text costs. }
+function VariedUnits(AFirst, ACount: Integer): UTF8String;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := AFirst to AFirst + ACount - 1 do
+    Result := Result + 'w' + Format('%.5d', [i]) + U($4E2D) + ' ';
+end;
+
 { R38: a paragraph of 300,000 characters is laid out as far as CRichMaxParaLayoutChars - with the
-  measure calls, the characters measured and the bytes kept of a 100,000-character one - and a
-  line under it says how many are not shown. Positions past the cut show at the cut; the notice
-  has none; a selection covers what is shown; the document keeps the whole paragraph. The cut
-  is at a cluster's start. }
+  measure calls, the characters measured and the bytes kept of a 100,000-character one, and
+  only about the cap read of it - and a line under it says how many are not shown. Positions
+  past the cut show at the cut; the notice has none; a selection covers what is shown; the
+  document keeps the whole paragraph. The cut is at a cluster's start. The text varies (no two
+  words alike), so a build that read or measured past the cut would cost more. The notice is
+  part of the block's width (W3, Minor 3). }
 procedure TTyRichLayoutTest.TestAGiantParagraphIsLaidOutUpToTheCap;
 var
-  chunk, p100, p300: UTF8String;
+  p100, p300: UTF8String;
   d: TTyRichDocument;
   lo: TTyRichLayouter;
-  L, L100: TTyParaLayout;
-  calls, chars: array[0..1] of Int64;
+  L: TTyParaLayout;
+  calls, chars, read: array[0..1] of Int64;
   mem: array[0..1] of Int64;
-  i, k: Integer;
+  lines100, height100, k: Integer;
   rs: TRectArray;
   bmp: TBGRABitmap;
   r: TRect;
 begin
-  chunk := '';
-  for i := 1 to 500 do chunk := chunk + 'word 中文 ';
-  // 8 characters a unit: 4,000 a block
-  p100 := '';
-  for i := 1 to 25 do p100 := p100 + chunk;
-  p300 := p100 + p100 + p100;
+  // 12,500 units are 100,000 characters; the 300,000 begins with the same 100,000
+  p100 := VariedUnits(0, 12500);
+  p300 := p100 + VariedUnits(12500, 25000);
   d := NewDoc(p100 + #10 + p300 + #10 + StringOfChar('a', 99999) + 'e' + U($301) + 'bbb');
   AssertEquals('100,000', 100000, d.Text.ParaLength(0));
   AssertEquals('300,000', 300000, d.Text.ParaLength(1));
-  L100 := nil;
+  lines100 := 0;
+  height100 := 0;
   for k := 0 to 1 do
   begin
     lo := NewLayouter;
@@ -3383,13 +3445,15 @@ begin
       try
         calls[k] := TTyRichTestDevice(lo.Device).MeasureCalls;
         chars[k] := TTyRichTestDevice(lo.Device).MeasuredChars;
+        read[k] := lo.ParaCharsRead;
         mem[k] := L.MemSize;
         if k = 0 then
         begin
           AssertFalse('100,000 is not cut', L.Truncated);
           AssertEquals('all shown', L.CharCount, L.ShownChars);
-          L100 := L;
-          L100.AddRef;
+          // what the next round compares with (the layout goes with its layouter)
+          lines100 := L.LineCount;
+          height100 := L.Height;
         end
         else
         begin
@@ -3397,9 +3461,11 @@ begin
           AssertEquals('shown', 100000, L.ShownChars);
           AssertEquals('its length', 300000, L.Length);
           AssertEquals('its positions', 300001, L.CharCount);
-          AssertEquals('the lines of the 100,000', L100.LineCount, L.LineCount);
+          AssertEquals('the lines of the 100,000', lines100, L.LineCount);
           AssertEquals('the notice', Format(rsRichEditParaNotShown, ['200000']), L.Notice.Text);
-          AssertEquals('under the text', L100.Height + 20, L.Height);
+          AssertEquals('under the text', height100 + 20, L.Height);
+          AssertTrue(Format('the notice is in the width (%d, notice to %d)', [L.Width,
+            L.Notice.X + L.Notice.Width]), L.Width >= L.Notice.X + L.Notice.Width);
           r := L.CaretRect(100000);
           AssertEquals('past the cut: at the cut', r.Left, L.CaretRect(150000).Left);
           AssertEquals('the end too', r.Top, L.CaretRect(300000).Top);
@@ -3425,10 +3491,12 @@ begin
       lo.Free;
     end;
   end;
-  L100.Release;
   AssertTrue(Format('measure calls %d then %d', [calls[0], calls[1]]), calls[1] <= calls[0] + 2);
   AssertTrue(Format('characters measured %d then %d', [chars[0], chars[1]]),
     chars[1] <= chars[0] + 100);
+  AssertEquals('the 100,000 read whole', 100000, read[0]);
+  AssertTrue(Format('of the 300,000 read: %d', [read[1]]),
+    read[1] <= CRichMaxParaLayoutChars + 1);
   AssertTrue(Format('bytes kept %d then %d', [mem[0], mem[1]]), mem[1] <= mem[0] + 1024);
   AssertEquals('the document keeps all of it', 300000, d.Text.ParaLength(1));
   // a mark at the cap: cut before the cluster it is in
@@ -4524,6 +4592,536 @@ begin
   AssertEquals('level -1', U($25AA), TyRichListMarkerText(lkBullet, -1, 0));
   AssertEquals('Low(Integer)', U($25E6), TyRichListMarkerText(lkBullet, Low(Integer), 0));
   AssertEquals('High(Integer)', U($25E6), TyRichListMarkerText(lkBullet, High(Integer), 0));
+end;
+
+{ ---- fix wave W3 ---- }
+
+{ ACount characters: four letters and a space, again and again. }
+function Words(ACount: Integer): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  SetLength(Result, ACount);
+  for i := 1 to ACount do
+    if i mod 5 = 0 then Result[i] := ' ' else Result[i] := Chr(Ord('a') + i mod 5);
+end;
+
+{ The byte after the ACount-th \par of an RTF file (not \pard): a first slice that ends
+  there holds the header and ACount paragraphs - a load begun with less reads on to two
+  paragraphs in chunks of a megabyte, all of a small file. }
+function AfterPars(const B: TBytes; ACount: Integer): Int64;
+var
+  i: Integer;
+begin
+  for i := 0 to High(B) - 4 do
+    if (B[i] = Ord('\')) and (B[i + 1] = Ord('p')) and (B[i + 2] = Ord('a')) and
+      (B[i + 3] = Ord('r')) and not (Chr(B[i + 4]) in ['a'..'z']) then
+    begin
+      Dec(ACount);
+      if ACount = 0 then Exit(i + 5);
+    end;
+  Result := Length(B);
+end;
+
+{ The markers Word showed for word-list.rtf (Range.ListFormat.ListString), one a paragraph. }
+function WordListMarkers: TStringArray;
+var
+  b: TBytes;
+  i, n, start: Integer;
+begin
+  b := FixtureBytes('word-list.markers.txt');
+  Result := nil;
+  n := 0;
+  start := 0;
+  // one line a paragraph, each ended by LF
+  for i := 0 to High(b) do
+    if b[i] = 10 then
+    begin
+      SetLength(Result, n + 1);
+      SetLength(Result[n], i - start);
+      if i > start then Move(b[start], Result[n][1], i - start);
+      Inc(n);
+      start := i + 1;
+    end;
+end;
+
+{ W1r-I1: a cut paragraph longer than CLayoutCacheChars counts in the cache as what it shows,
+  so it stays cached beside its neighbours: laid out alternately with them, all three are hits
+  the second time. }
+procedure TTyRichLayoutTest.TestACutParagraphIsCachedByWhatItShows;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  hits, misses: Int64;
+  k: Integer;
+begin
+  d := NewDoc('header'#10 + Words(CLayoutCacheChars + 100000) + #10'tail');
+  L := Lay(d, 1, 400);
+  AssertTrue('cut', L.Truncated);
+  AssertEquals('it shows the cap', CRichMaxParaLayoutChars, L.ShownChars);
+  AssertEquals('counted so', Int64(CRichMaxParaLayoutChars), FLayouter.CachedChars);
+  Lay(d, 0, 400);
+  Lay(d, 2, 400);
+  AssertEquals('all three counted by what they show', Int64(CRichMaxParaLayoutChars + 7 + 5),
+    FLayouter.CachedChars);
+  hits := FLayouter.CacheHits;
+  misses := FLayouter.CacheMisses;
+  for k := 0 to 2 do Lay(d, (k + 1) mod 3, 400);
+  AssertEquals('the second time: no layout made', misses, FLayouter.CacheMisses);
+  AssertEquals('three hits', hits + 3, FLayouter.CacheHits);
+end;
+
+{ W1r-M1: ShownChars is the characters laid out - a separator counts when it was - and a row
+  holding one paragraph says what the paragraph says; LastCaretPos is the last caret place: a
+  paragraph's length, a cut paragraph's cut, a row's last shown cell's last paragraph's. }
+procedure TTyRichLayoutTest.TestShownCharsAndTheLastCaretPlace;
+var
+  d: TTyRichDocument;
+  t1, t2, t3: TTyRichTable;
+  L: TTyParaLayout;
+  R: TTyRowLayout;
+begin
+  d := NewTableDoc('ab'#10'cde'#10'a'#10'bb'#10'c'#10 + Words(300000) + #10'abc'#10 +
+    Words(300000));
+  t1 := TTyRichTable.Create([]);
+  t1.AddRow(2, '\trowd\cellx1440\cellx2880');
+  TDocAccess(d).MarkTable(0, t1, [1, 1]).Free;
+  t2 := TTyRichTable.Create([]);
+  t2.AddRow(3, '\trowd\cellx1440\clmgf\cellx2880\clmrg\cellx4320');
+  TDocAccess(d).MarkTable(2, t2, [1, 1, 1]).Free;
+  t3 := TTyRichTable.Create([]);
+  t3.AddRow(1, '\trowd\cellx14400');
+  TDocAccess(d).MarkTable(5, t3, [1]).Free;
+  // paragraphs
+  L := Lay(d, 6, 400);
+  AssertFalse('"abc" is not cut', L.Truncated);
+  AssertEquals('"abc": its characters and its separator', 4, L.ShownChars);
+  AssertEquals('"abc": all of it', L.CharCount, L.ShownChars);
+  AssertEquals('"abc": the last caret place is its end', 3, L.LastCaretPos);
+  L := Lay(d, 7, 400);
+  AssertTrue('the 300,000 is cut', L.Truncated);
+  AssertEquals('cut: the characters before the cut', CRichMaxParaLayoutChars, L.ShownChars);
+  AssertEquals('cut: the last caret place is the cut', CRichMaxParaLayoutChars, L.LastCaretPos);
+  AssertEquals('cut: its positions', 300001, L.CharCount);
+  // rows
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertEquals('a row: its characters', 7, R.CharCount);
+  AssertEquals('a row: all laid out', 7, R.ShownChars);
+  AssertEquals('a row: the end of its last cell', 6, R.LastCaretPos);
+  R := TTyRowLayout(Block(d, 2, 1000));
+  AssertTrue('the last cell merged away', R.Cells[2].Hidden);
+  AssertEquals('merged: all laid out', R.CharCount, R.ShownChars);
+  AssertEquals('merged: the end of the last shown cell', 4, R.LastCaretPos);
+  R := TTyRowLayout(Block(d, 5, 1000));
+  AssertTrue('a row of a cut paragraph is cut', R.Truncated);
+  AssertEquals('it shows what the paragraph shows', R.Items[0].Layout.ShownChars, R.ShownChars);
+  AssertEquals('the cap', CRichMaxParaLayoutChars, R.ShownChars);
+  AssertEquals('its last caret place is the cut', CRichMaxParaLayoutChars, R.LastCaretPos);
+end;
+
+{ W1r-M4: an entry brought forward from the older half is checked against the bound as a miss
+  is. The newer half filled to just under its mark, then every entry of the older half used
+  again: the cache never holds more than CRichMeasureCacheBytes and two entries. }
+procedure TTyRichLayoutTest.TestPromotionsKeepTheMeasureCacheBounded;
+var
+  lo: TTyRichLayouter;
+  font: TTyRichFontId;
+  base: UTF8String;
+  i, h, w: Integer;
+  e, most: Int64;
+
+  function Key(AIndex: Integer): UTF8String;
+  begin
+    Result := Format('%.6d', [AIndex]) + base;
+  end;
+
+  procedure Measure(AIndex: Integer);
+  begin
+    AssertEquals('the same advance', w, lo.MeasureText(font, Key(AIndex)));
+    if lo.MeasureCacheBytes > most then most := lo.MeasureCacheBytes;
+  end;
+
+begin
+  base := '';
+  for i := 1 to 200 do base := base + U($4E00 + Cardinal(i));
+  lo := NewLayouter;
+  try
+    font := lo.Device.ResolveFont('Test', 20, []);
+    most := 0;
+    w := lo.MeasureText(font, Key(999999));
+    // what one entry costs (all keys are as long); the entries that fill half the budget
+    e := lo.MeasureCacheBytes;
+    h := (CRichMeasureCacheBytes div 2 + e - 1) div e;
+    AssertTrue('the bytes bound acts first', h < CRichMeasureCacheEntries div 2);
+    lo.Clear;
+    // A: h entries, the newer half at its mark; B0 turns A into the older half
+    for i := 0 to h - 1 do Measure(i);
+    Measure(h);
+    // B1 .. B(h-2): the newer half one entry under its mark
+    for i := h + 1 to 2 * h - 2 do Measure(i);
+    // and A again, all of it
+    for i := 0 to h - 1 do Measure(i);
+    AssertTrue(Format('at most %d bytes kept (an entry %d)', [most, e]),
+      most <= CRichMeasureCacheBytes + 2 * e);
+  finally
+    lo.Free;
+  end;
+end;
+
+{ W1r-M5: a line that does not wrap with more pictures of the clamped width (32,767 px) than
+  MaxInt holds - 70,000 of them - stops at CRichMaxBlockPx: no fragment goes negative or back,
+  the width stays in range. }
+procedure TTyRichLayoutTest.TestAnUnwrappedLineOfHugeObjectsStopsAtTheCeiling;
+const
+  N = 70000;
+var
+  d: TTyRichDocument;
+  ld: TObjectsLoader;
+  s: RawByteString;
+  L: TTyParaLayout;
+  i, prev: Integer;
+  fr: TTyRichFragment;
+begin
+  s := '';
+  SetLength(s, 3 * N);
+  for i := 0 to N - 1 do
+  begin
+    // U+FFFC, the object character
+    s[3 * i + 1] := #$EF;
+    s[3 * i + 2] := #$BF;
+    s[3 * i + 3] := #$BC;
+  end;
+  d := NewTableDoc(s);
+  ld := TObjectsLoader.Create;
+  ld.ParaFmt := d.Formats.InternPara(TyDefaultParaFormat);
+  ld.CharFmt := d.DefaultCharFormatId;
+  ld.Picture := TTyRichPicture.Create(rpfPng, PngHeaderBytes(10, 10), 10000000, 15);
+  ld.Picture.AddRef;
+  ld.Count := N;
+  d.InstallLoader(ld, True);
+  L := Lay(d, 0, CRichNoWrap);
+  AssertEquals('one line', 1, L.LineCount);
+  AssertEquals('a fragment a picture', N, L.FragmentCount);
+  AssertEquals('each the clamped width', CRichMaxLengthPx, L.Fragments[0].Width);
+  AssertTrue('more than MaxInt in all', Int64(N) * CRichMaxLengthPx > MaxInt);
+  prev := 0;
+  for i := 0 to L.FragmentCount - 1 do
+  begin
+    fr := L.Fragments[i];
+    if (fr.X < prev) or (fr.X > CRichMaxBlockPx) then
+      Fail(Format('fragment %d at %d after %d', [i, fr.X, prev]));
+    prev := fr.X;
+  end;
+  AssertEquals('the last stops at the ceiling', CRichMaxBlockPx, prev);
+  AssertTrue(Format('the width in range: %d', [L.Width]),
+    (L.Width >= CRichMaxBlockPx) and (L.Width <= CRichMaxBlockPx + CRichMaxLengthPx));
+  AssertTrue('the caret at the end too', L.CaretRect(N).Left >= CRichMaxBlockPx);
+end;
+
+{ W1r-M8: a space that carries a mark is text, and still parts two words: a line may break
+  after it (not before). A justified line stretched between its characters finds the same
+  places for its segments. }
+procedure TTyRichLayoutTest.TestASpaceCarryingAMarkStillPartsWords;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+begin
+  // a b: 20, the marked space 5, c..h 60: "ab" and its space fit 50, "cdefgh" does not
+  d := NewDoc('ab ' + U($301) + 'cdefgh');
+  L := Lay(d, 0, 50);
+  AssertEquals('the second line starts at c', 4, L.Lines[1].First);
+  AssertEquals('the first holds the marked space', 4, L.Lines[0].Count);
+  // justified, no plain space: stretched between its characters - after each marked space
+  d := NewDoc('ab ' + U($301) + 'cd ' + U($301) + 'ef ' + U($301) + 'gh');
+  pf := TyDefaultParaFormat;
+  pf.Align := paraJustify;
+  SetPara(d, 0, [pffAlign], pf);
+  L := Lay(d, 0, 80);
+  AssertEquals('the first line up to gh', 12, L.Lines[0].Count);
+  AssertEquals('to the right edge', 80, L.Lines[0].ContentWidth);
+  // 75 natural, 5 to spread over the two places after the marked spaces
+  AssertEquals('c: 25 and half of it', 27, L.CaretRect(4).Left);
+  AssertEquals('e: 50 and all of it', 55, L.CaretRect(8).Left);
+end;
+
+{ W2r-I1: the slices a lazy load appends (DocumentChanged with AFromLoad, as the control
+  forwards them while it steps the load) keep the file's list markers; an edit after them does
+  not. The real thing: hand-word-list.rtf begun with a first slice of two paragraphs and
+  stepped 64 bytes at a time. }
+procedure TTyRichLayoutTest.TestTheLoadsOwnSlicesKeepTheFilesNumbers;
+const
+  Want: array[0..6] of string = ('', '1.', '', '2.', '', '3.', '');
+var
+  d: TTyRichDocument;
+  st: TBytesStream;
+  load: TTyRtfLoad;
+  ch: TTyRichChange;
+  steps: Integer;
+
+  procedure Check(const AWhen: string; AUpTo: Integer);
+  var
+    k: Integer;
+  begin
+    for k := 0 to AUpTo do
+      if Want[k] <> '' then
+        AssertEquals(Format('%s: item %d', [AWhen, k]), Want[k], Lay(d, k, 1000).Marker.Text);
+  end;
+
+begin
+  d := TTyRichDocument.Create;
+  FDocs.Add(d);
+  d.OnChange := @DocChanged;
+  FFromLoad := True;
+  st := TBytesStream.Create(FixtureBytes('hand-word-list.rtf'));
+  try
+    load := TyRichBeginLoadRtf(d, st, AfterPars(st.Bytes, 2));
+    FLayouter.Document := d;
+    steps := 0;
+    while not load.Step(64) do
+    begin
+      Inc(steps);
+      // the paragraphs indexed whole so far (the last may still grow)
+      Check(Format('step %d', [steps]), d.Text.ParaCount - 2);
+      AssertTrue('runaway', steps < 1000);
+    end;
+  finally
+    st.Free;
+  end;
+  FFromLoad := False;
+  AssertTrue(Format('in slices (%d)', [steps]), steps >= 3);
+  AssertEquals('all of it', 7, d.Text.ParaCount);
+  Check('loaded', 6);
+  // a change told as the load's: still the file's
+  ch := Default(TTyRichChange);
+  ch.Kinds := [rckText, rckStructure];
+  ch.Pos := d.Text.ParaStart(2);
+  ch.FirstPara := 2;
+  ch.OldParaCount := 1;
+  ch.NewParaCount := 1;
+  FLayouter.DocumentChanged(ch, True);
+  Check('the load''s change', 6);
+  // the same change as an edit: counted from there on
+  FLayouter.DocumentChanged(ch);
+  AssertEquals('above it: the file''s', '1.', Lay(d, 1, 1000).Marker.Text);
+  AssertEquals('below it: counted after a body paragraph', '1.', Lay(d, 3, 1000).Marker.Text);
+end;
+
+{ W2r-I2: a \trqc or \trqr row wider than the layout width is not moved left of where \trleft
+  puts it: its first column stays where the control's scroll reaches it. }
+procedure TTyRichLayoutTest.TestAWideCentredRowStaysReachable;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+begin
+  d := NewTableDoc('a'#10'b'#10'c'#10'd');
+  t := TTyRichTable.Create([]);
+  t.AddRow(1, '\trowd\trgaph108\trqc\cellx14400');
+  t.AddRow(1, '\trowd\trgaph108\trqr\trleft500\cellx14400');
+  t.AddRow(1, '\trowd\trgaph108\trqc\cellx1440');
+  t.AddRow(1, '\trowd\trgaph108\trqc\trleft-1440\cellx14400');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 400));
+  AssertEquals('centred, 960 wide in 400: at \trleft', 0, R.Cells[0].Left);
+  AssertEquals('its right', 960, R.Cells[0].Right);
+  R := TTyRowLayout(Block(d, 1, 400));
+  AssertEquals('right-aligned, wider: at \trleft', 33, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 2, 400));
+  AssertEquals('one that fits is still centred', 152, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 3, 400));
+  AssertEquals('a negative \trleft is kept (Word''s margin)', -96, R.Cells[0].Left);
+end;
+
+{ W2r-M1: a header whose sizes do not fit an Integer is no picture - the product of two 32-bit
+  sizes is never formed, the decoder never sees the bytes - however large the budget. }
+procedure TTyRichLayoutTest.TestHeaderSizesPastIntegerAreNoPicture;
+var
+  lo: TSeamLayouter;
+  huge, wide, small: TTyRichPicture;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+begin
+  st := TyRichDefaultPaintStyle;
+  huge := TTyRichPicture.Create(rpfPng, PngHeaderBytes($FFFFFFFF, $FFFFFFFF), 1500, 1500);
+  wide := TTyRichPicture.Create(rpfPng, PngHeaderBytes($80000000, 1), 1500, 1500);
+  small := TTyRichPicture.Create(rpfPng, PngHeaderBytes(10, 10), 150, 150);
+  huge.AddRef;
+  wide.AddRef;
+  small.AddRef;
+  lo := TSeamLayouter.Create(TTyRichTestDevice.Create, True);
+  bmp := TBGRABitmap.Create(100, 100, Sentinel);
+  try
+    AssertFalse('FFFFFFFF x FFFFFFFF: a placeholder', lo.DrawPicture(bmp, huge,
+      Rect(0, 0, 100, 100), 1, st));
+    AssertTrue('its fill', SamePx(st.PlaceholderFill, bmp.GetPixel(50, 50)));
+    AssertEquals('nothing handed to the decoder', 0, lo.DecodeCalls);
+    lo.PictureDecodeBudget := High(Int64) div 4;
+    AssertFalse('2^31 wide, any budget: a placeholder', lo.DrawPicture(bmp, wide,
+      Rect(0, 0, 100, 100), 1, st));
+    AssertEquals('nothing handed to the decoder either', 0, lo.DecodeCalls);
+    lo.DrawPicture(bmp, small, Rect(0, 0, 10, 10), 1, st);
+    AssertEquals('a header within them is (the seam counts)', 1, lo.DecodeCalls);
+  finally
+    bmp.Free;
+    lo.Free;
+    huge.Release;
+    wide.Release;
+    small.Release;
+  end;
+end;
+
+{ W2r-M2: a row's bottom line depends on the row below, so a change there drops the cached row
+  just above too (by Invalidate as by a document change); a change further down does not. }
+procedure TTyRichLayoutTest.TestARowFollowsTheRowBelow;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R0: TTyRowLayout;
+begin
+  d := NewTableDoc('a'#10'b'#10'c'#10'd'#10'z');
+  t := TTyRichTable.Create([]);
+  t.AddRow(2, '\trowd\clbrdrb\brdrs\brdrw10 \cellx1440\clbrdrb\brdrs\brdrw10 \cellx2880');
+  t.AddRow(2, '\trowd\clbrdrt\brdrs\brdrw10 \cellx1440\clbrdrt\brdrs\brdrw10 \cellx2880');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1]).Free;
+  d.OnChange := @DocChanged;
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  AssertFalse('the row below draws the line', rcsBottom in R0.Cells[0].Sides);
+  // typing in the row below
+  AssertTrue('typed', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(2), 'x')));
+  AssertTrue('the row above went', FLayouter.CachedLayout(0) = nil);
+  AssertTrue('stale', R0.Stale);
+  // Invalidate of the row below
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  FLayouter.Invalidate(2, 1);
+  AssertTrue('Invalidate: the row above went', FLayouter.CachedLayout(0) = nil);
+  // a change below the table: the last row goes (its bottom), the one above it stays
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  Block(d, 2, 1000);
+  AssertTrue('typed below', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(4), 'y')));
+  AssertTrue('the last row went', FLayouter.CachedLayout(2) = nil);
+  AssertTrue('the first stays', FLayouter.CachedLayout(0) = TTyBlockLayout(R0));
+end;
+
+{ W2r-M3: a cell whose gaps leave less than CRichMinCellTextPx inside has no room for text,
+  whatever the parity of its width: 97 px with gaps of 48 on either side keeps one pixel, which
+  is no room - one line, no height. }
+procedure TTyRichLayoutTest.TestACellWithAPixelLeftHasNoRoom;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+begin
+  d := NewTableDoc('some words here'#10'x');
+  t := TTyRichTable.Create([]);
+  t.AddRow(1, '\trowd\trgaph100000\cellx1455');
+  TDocAccess(d).MarkTable(0, t, [1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertEquals('97 px', 97, R.Cells[0].Right - R.Cells[0].Left);
+  AssertEquals('no room: one line', 1, R.Items[0].Layout.LineCount);
+  AssertEquals('no height', 1, R.Height);
+end;
+
+{ W2r-O1: two table objects one after the other (as a long table of a document parsed on
+  demand is, one object per parsed stretch) share the line between their rows like any two
+  rows: the upper one does not close itself when a row follows, the lower one draws it. }
+procedure TTyRichLayoutTest.TestRowsOfTwoTableObjectsShareTheirLine;
+const
+  Fmt = '\trowd\clbrdrt\brdrs\brdrw10 \clbrdrb\brdrs\brdrw10 \cellx1440' +
+    '\clbrdrt\brdrs\brdrw10 \clbrdrb\brdrs\brdrw10 \cellx2880';
+var
+  d: TTyRichDocument;
+  t1, t2: TTyRichTable;
+  R0, R1: TTyRowLayout;
+begin
+  d := NewTableDoc('a'#10'b'#10'c'#10'd'#10'z');
+  t1 := TTyRichTable.Create([]);
+  t1.AddRow(2, Fmt);
+  TDocAccess(d).MarkTable(0, t1, [1, 1]).Free;
+  t2 := TTyRichTable.Create([]);
+  t2.AddRow(2, Fmt);
+  TDocAccess(d).MarkTable(2, t2, [1, 1]).Free;
+  R0 := TTyRowLayout(Block(d, 0, 1000));
+  R1 := TTyRowLayout(Block(d, 2, 1000));
+  AssertTrue('two table objects', R0.Table <> R1.Table);
+  AssertFalse('the upper does not close itself', rcsBottom in R0.Cells[0].Sides);
+  AssertTrue('the lower draws the line', rcsTop in R1.Cells[0].Sides);
+  AssertTrue('the last row closes the table', rcsBottom in R1.Cells[0].Sides);
+  AssertEquals('so one line between them: the upper is as tall as its text and top line',
+    R1.Height - 1, R0.Height);
+end;
+
+{ W2r-M5: the list Word saved (word-list.rtf: numbered headings interrupted by body paragraphs,
+  a second level, a bulleted list) shows Word's own markers on its numbered items - loaded on
+  demand, whole, and in slices as the control loads a file - and a bullet on its bullets. }
+procedure TTyRichLayoutTest.TestWordsOwnListShowsWordsMarkers;
+var
+  marks: TStringArray;
+  d: TTyRichDocument;
+  st: TBytesStream;
+  load: TTyRtfLoad;
+  steps: Integer;
+
+  procedure Check(const AWhen: string; AUpTo: Integer);
+  var
+    k: Integer;
+    L: TTyParaLayout;
+    lt: UTF8String;
+  begin
+    for k := 0 to AUpTo do
+    begin
+      // the reader keeps Word's marker, byte for byte (U+F06C for a Wingdings bullet too)
+      lt := d.ListTextOf(k);
+      if (Length(lt) <> Length(marks[k])) or
+        ((Length(lt) > 0) and not CompareMem(@lt[1], @marks[k][1], Length(lt))) then
+        Fail(Format('%s: paragraph %d''s marker is "%s", Word showed "%s"', [AWhen, k, lt,
+          marks[k]]));
+      L := Lay(d, k, 1000);
+      if (marks[k] <> '') and (marks[k][1] in ['0'..'9']) then
+        AssertEquals(Format('%s: paragraph %d', [AWhen, k]), marks[k], L.Marker.Text)
+      else
+        AssertEquals(Format('%s: paragraph %d has a marker', [AWhen, k]), marks[k] <> '',
+          L.HasMarker);
+    end;
+  end;
+
+begin
+  marks := WordListMarkers;
+  AssertEquals('eleven paragraphs', 11, Length(marks));
+  d := LoadFixture('word-list.rtf');
+  AssertEquals('on demand: eleven', 11, d.Text.ParaCount);
+  Check('on demand', 10);
+  d := TTyRichDocument.Create;
+  FDocs.Add(d);
+  st := TBytesStream.Create(FixtureBytes('word-list.rtf'));
+  try
+    TyRichLoadRtfFull(d, st);
+  finally
+    st.Free;
+  end;
+  Check('whole', 10);
+  d := TTyRichDocument.Create;
+  FDocs.Add(d);
+  d.OnChange := @DocChanged;
+  FFromLoad := True;
+  st := TBytesStream.Create(FixtureBytes('word-list.rtf'));
+  try
+    load := TyRichBeginLoadRtf(d, st, AfterPars(st.Bytes, 2));
+    FLayouter.Document := d;
+    steps := 0;
+    while not load.Step(256) do
+    begin
+      Inc(steps);
+      Check(Format('step %d', [steps]), d.Text.ParaCount - 2);
+      AssertTrue('runaway', steps < 10000);
+    end;
+  finally
+    st.Free;
+  end;
+  FFromLoad := False;
+  AssertTrue(Format('in slices (%d)', [steps]), steps >= 5);
+  Check('loaded in slices', 10);
 end;
 
 initialization

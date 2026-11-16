@@ -722,8 +722,10 @@ type
       Word or WordPad showed ("2.", "iii)"). '' when the file gave none, for a document not
       read from RTF, and for a paragraph an edit made (inserted, the later parts of a split);
       an edit inside a paragraph (typing, a format, a split's first part, a join's first
-      paragraph) keeps it, and an undo brings back what it had. Read only: it is not written
-      (a paragraph written back as its bytes has its own; one written from the model gets
+      paragraph) keeps it, and an undo brings back what it had - the value; whether a layout
+      shows it is the layout's business (TTyRichLayouter stops trusting the markers from a
+      change that can renumber on, and an undo does not bring that trust back). Read only: it
+      is not written (a paragraph written back as its bytes has its own; one written from the model gets
       the marker the writer generates), takes no part in format equality, and goes with the
       paragraph's value when a document that parses on demand lets the paragraph go. Parses
       the paragraph (as RunsOf). }

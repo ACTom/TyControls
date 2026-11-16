@@ -167,6 +167,8 @@ type
     procedure TestAScrollPaintsOnlyWhatItExposes;
     procedure TestTheSurfaceIsTheClientsSize;
     procedure TestDeviceScaleTwo;
+    // fix wave W3
+    procedure TestASlicedLoadShowsTheFilesNumbers;
   end;
 
 implementation
@@ -2897,6 +2899,105 @@ begin
     bmp1.Free;
     one.Free;
   end;
+end;
+
+{ ---- fix wave W3 ---- }
+
+function ReadFixtureFile(const AName: string): TBytes;
+var
+  f: TFileStream;
+begin
+  Result := nil;
+  f := TFileStream.Create(FixtureDir('rtf') + AName, fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, f.Size);
+    if f.Size > 0 then f.ReadBuffer(Result[0], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+
+{ The byte after the ACount-th \par of an RTF file (not \pard): a first slice that ends there
+  holds the header and ACount paragraphs (a load begun with less reads on to two paragraphs in
+  chunks of a megabyte - all of a small file). }
+function AfterPars(const B: TBytes; ACount: Integer): Int64;
+var
+  i: Integer;
+begin
+  for i := 0 to High(B) - 4 do
+    if (B[i] = Ord('\')) and (B[i + 1] = Ord('p')) and (B[i + 2] = Ord('a')) and
+      (B[i + 3] = Ord('r')) and not (Chr(B[i + 4]) in ['a'..'z']) then
+    begin
+      Dec(ACount);
+      if ACount = 0 then Exit(i + 5);
+    end;
+  Result := Length(B);
+end;
+
+{ W2r-I1: the list Word saved (word-list.rtf), loaded in small slices (a first slice of two
+  paragraphs, steps of 256 bytes): the slices the load appends are no edits, so every
+  numbered item shows the number Word showed (word-list.markers.txt) in every slice - not
+  the walk's count, which restarts after each body paragraph. }
+procedure TTyRichEditControlTest.TestASlicedLoadShowsTheFilesNumbers;
+var
+  b: TBytes;
+  st: TBytesStream;
+  marks: array of string;
+  i, n, start, steps: Integer;
+
+  procedure Check(const AWhen: string; AUpTo: Integer);
+  var
+    k: Integer;
+    L: TTyBlockLayout;
+  begin
+    for k := 0 to AUpTo do
+      if (marks[k] <> '') and (marks[k][1] in ['0'..'9']) then
+      begin
+        L := FRich.Layouter.LayoutBlock(FRich.Document, k, 1000, 96, 1);
+        try
+          AssertEquals(Format('%s: paragraph %d', [AWhen, k]), marks[k],
+            string(TTyParaLayout(L).Marker.Text));
+        finally
+          L.Release;
+        end;
+      end;
+  end;
+
+begin
+  b := ReadFixtureFile('word-list.markers.txt');
+  marks := nil;
+  n := 0;
+  start := 0;
+  for i := 0 to High(b) do
+    if b[i] = 10 then
+    begin
+      SetLength(marks, n + 1);
+      SetLength(marks[n], i - start);
+      if i > start then Move(b[start], marks[n][1], i - start);
+      Inc(n);
+      start := i + 1;
+    end;
+  AssertEquals('eleven paragraphs', 11, n);
+  st := TBytesStream.Create(ReadFixtureFile('word-list.rtf'));
+  try
+    FRich.Slices(AfterPars(st.Bytes, 2), 256);
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+  steps := 0;
+  while FRich.Loading do
+  begin
+    // the paragraphs indexed whole so far (the last may still grow)
+    Check(Format('slice %d', [steps]), FRich.Document.Text.ParaCount - 2);
+    AssertTrue('a step', FRich.Step);
+    Inc(steps);
+    AssertTrue('runaway', steps < 10000);
+  end;
+  AssertTrue(Format('in slices (%d)', [steps]), steps >= 5);
+  AssertEquals('all of it', 11, FRich.Document.Text.ParaCount);
+  Check('loaded', 10);
 end;
 
 initialization

@@ -52,7 +52,11 @@ unit tyControls.RichEdit.Layout;
     position reached by Home, an arrow, typing or a click elsewhere is shown at the start of
     the line it begins). SelectionRects takes positions only (a range has no affinity).
   - A block may be Truncated (a paragraph past CRichMaxParaLayoutChars): ShownChars of its
-    CharCount positions are laid out; the control can tell the user.
+    CharCount characters are laid out, and LastCaretPos is the last place a caret can be
+    shown at; the control can tell the user.
+  - The slices a lazy load appends are the file's own paragraphs, not edits: the control
+    forwards them as DocumentChanged(AChange, True), which keeps the file's list markers
+    trusted.
   - BeginPaintPass once per paint, before the blocks are painted: the pictures one paint
     draws never evict each other. With TTyRichPaintStyle.DeferPictures a picture that is not
     PictureReady at its box's size is reported (TakeSkippedPictures); PreparePicture makes it
@@ -90,7 +94,9 @@ const
   CRichMeasureCacheEntries = 65536;
   { ... and the bytes their keys (a font and a fragment's text, up to CRichMaxPieceChars
     characters) take, with what an entry costs besides: past half of it the older half goes
-    too, so a cache of long Chinese fragments stays a few megabytes. }
+    too, so a cache of long Chinese fragments stays a few megabytes. An entry brought forward
+    from the older half is a new entry of the newer one and is checked the same way, so the
+    two halves together hold at most this much and the one entry over each half's mark. }
   CRichMeasureCacheBytes = 8 * 1024 * 1024;
   { A layout width that means "no wrapping" (TTyRichWrapMode rwmNone). }
   CRichNoWrap = 0;
@@ -114,12 +120,15 @@ const
     (rsRichEditParaNotShown, in the paragraph's font; not selectable, no positions): a guard,
     so that a file that is one 100 MB line costs a 100,000-character paragraph, not gigabytes.
     The document keeps the whole paragraph (copying and saving take all of it); positions
-    past the cut show at the cut (TTyBlockLayout.Truncated, ShownChars). }
+    past the cut show at the cut (TTyBlockLayout.Truncated, ShownChars, LastCaretPos). The
+    layout cache counts such a paragraph by what it shows. }
   CRichMaxParaLayoutChars = 100000;
   { A numbered list item shows the file's own marker text (TTyRichDocument.ListTextOf: Word's
     and WordPad's {\listtext ...}) while it can be trusted: until a change that can renumber
-    (paragraphs that came or went, a format change) happens at or before it; the document set
-    anew trusts them all again. Otherwise - and for a paragraph without one - its number is
+    (paragraphs that came or went, a format change, Invalidate) happens at or before it - an
+    undo of it does not bring the trust back; the slices a lazy load appends are no such
+    change (DocumentChanged's AFromLoad) - and the document set anew trusts them all again.
+    Otherwise - and for a paragraph without one - its number is
     its place among the items before it, found by looking back: the items of its level and
     kind one after another, so after such an edit a Word list interrupted by ordinary
     paragraphs restarts at 1 below each of them (list identity, \ls, is not in the model:
@@ -141,6 +150,9 @@ const
   { The widest cell border drawn (twips): Word's limit for \brdrw. A wider one in a file is
     drawn this wide. }
   CRichMaxBorderTwips = 75;
+  { A cell whose width inside its gaps is less than this (pixels) has no room for text: its
+    paragraphs take no height (narrower than any glyph, whatever the width's parity). }
+  CRichMinCellTextPx = 4;
   { Pictures the layouter has drawn are kept decoded (or reduced to the size they were drawn
     at) up to this many bytes - their pixels, and the bytes of the pictures held for them -
     the least recently drawn going first, the ones of the current paint pass (and the one
@@ -476,10 +488,18 @@ type
     { The characters it covers, separators between its paragraphs included. }
     property CharCount: Integer read FCharCount;
     { A paragraph of it was longer than CRichMaxParaLayoutChars and is shown only up to the
-      cut (the control can tell the user); ShownChars: the positions laid out - CharCount when
-      nothing is cut, else CharCount less what is not shown. }
+      cut (the control can tell the user). }
     property Truncated: Boolean read FTruncated;
+    { The characters of the block that were laid out; a paragraph separator counts when it
+      was - an uncut paragraph's is (its CharCount), a cut one's is not (the cut, the
+      characters before it). A row: the sum over its paragraphs, so a row holding one
+      paragraph says what that paragraph says. What the layout cache counts the block as. }
     property ShownChars: Integer read FShownChars;
+    { The last place a caret can be shown at (block-relative): a paragraph's length, or the
+      cut for a cut paragraph (a position past it shows there); for a row the last caret place
+      of its last shown cell's last paragraph (a merged-away cell after it shows its
+      positions in the cell it went into). }
+    function LastCaretPos: TTyRichPos; virtual; abstract;
     { What it says may no longer be the document: the paragraphs it shows changed after it
       was made (the layouter dropped it), or - for a layout the cache had already let go of
       while its holder kept it (evicted for space) - the document changed in any way since:
@@ -541,6 +561,7 @@ type
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
+    function LastCaretPos: TTyRichPos; override;
     { The line a position is on (the start of a wrapped line belongs to that line - or, with
       AAtLineEnd, to the line it ends: see CaretRect), and the line at a height (above the
       first: the first; below the last: the last). }
@@ -555,7 +576,10 @@ type
     { The paragraph's text (UTF-8) as laid out, and the paragraph's length in characters. A
       Truncated paragraph's Text is what is shown, ShownChars characters; positions past
       them show at the cut, and the line under the text (Notice: its Text, Font, X, Width,
-      drawn on NoticeBaseline) says how many are not shown. }
+      drawn on NoticeBaseline) says how many are not shown. The notice is one line, not
+      wrapped: it counts in Width (a horizontal scroll reaches its end where nothing wraps),
+      and in a wrapped view narrower than it its end is clipped - the control can say it
+      its own way (Truncated). }
     property Text: RawByteString read FText;
     property Length: Integer read FLength;
     property Notice: TTyRichFragment read FNotice;
@@ -574,8 +598,11 @@ type
     the cell it went into (Owner). Its paragraphs are items FirstItem .. FirstItem +
     ItemCount - 1 of the row. Sides: the lines drawn, each LinePx thick (a file's width up to
     CRichMaxBorderTwips) - its left and its top (not when it continues the cell above: a
-    vertical merge), the right of the row's last cell and the bottom of the table's last row;
-    so a line between two cells, or two rows, is drawn once, as the later one's. A declared
+    vertical merge), the right of the row's last cell and the bottom of the table's last row
+    (one followed by another row is not the last: a long table of a document parsed on demand
+    is a table object per parsed stretch, and the rows on either side of a seam share their
+    line as any two rows do); so a line between two cells, or two rows, is drawn once, as the
+    later one's. A declared
     right (bottom) is drawn by the cell itself when the next cell (the cell below: the one of
     the same index in the next row) does not declare the line on its side - a table that
     declares only bottom lines, as report generators write them, keeps them. }
@@ -608,8 +635,10 @@ type
     Geometry is the row format's (tyControls.RichEdit.RowFormat): the cells from their right
     edges (the row's own, else the table's), the row placed by \trleft from the layout's left
     edge (a negative one reaches left of it, as Word puts the lines in the margin) - or, for
-    \trqc / \trqr, centred in or at the right of the layout width (when it wraps) - and never
-    shrunk to the wrap width (the control scrolls); each cell's paragraphs laid out by
+    \trqc / \trqr, centred in or at the right of the layout width (when it wraps; a row wider
+    than that width stays where \trleft puts it, never further left, so the control's scroll
+    reaches all of it) - and never shrunk to the wrap width (the control scrolls); each
+    cell's paragraphs laid out by
     themselves at the cell's width less the half gap (at most half the cell) on either side,
     their indents inside the cell, stacked from below its top line and placed by its vertical
     alignment (a cell with no width left for text takes no height for it); the row as
@@ -646,6 +675,7 @@ type
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
+    function LastCaretPos: TTyRichPos; override;
     { The item (paragraph) position APos is in: the last that starts at or before it. }
     function ItemAt(APos: TTyRichPos): Integer;
     function CellCount: Integer;
@@ -707,6 +737,7 @@ type
     FOrdinals: specialize TDictionary<Integer, TTyRichListOrdinal>;
     FListOfFormat: specialize TDictionary<Integer, TTyListFormat>;
     FListWalkSteps: Int64;
+    FParaCharsRead: Int64;
     // the first paragraph whose file marker is not trusted any more (MaxInt: none)
     FTrustFrom: Integer;
     FWalkData: array of Pointer;
@@ -808,12 +839,21 @@ type
       takes it (0: no wrapping; a row's cells wrap at their own widths anyway). }
     function LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyBlockLayout; virtual;
-    { Paragraphs AFirst .. AFirst + ACount - 1 changed: their layouts go (Stale). }
+    { Paragraphs AFirst .. AFirst + ACount - 1 changed: their layouts go (Stale), with a row
+      that ends just before AFirst (its bottom line depends on the row below). The file's list
+      markers from AFirst on are not trusted any more (see CRichListWalkParas). }
     procedure Invalidate(AFirst, ACount: Integer);
     { The document's change, forwarded by the owner (TTyRichDocument.OnChange): the changed
-      paragraphs' layouts go, and those after them follow the paragraphs that came or went
-      to their new indexes. }
-    procedure DocumentChanged(const AChange: TTyRichChange);
+      paragraphs' layouts go - and a row that ends just before them, whose bottom line
+      depends on the row below -, and those after them follow the paragraphs that came or
+      went to their new indexes. A change that can renumber (paragraphs came or went, a
+      format changed) stops trusting the file's list markers from its first paragraph on
+      for good (an undo brings the paragraphs' markers back, not that trust; only Document
+      set anew restores it). AFromLoad: the change is a lazy load appending what it read of
+      the file (TTyRtfLoad's slices: the owner knows them, as the control does while it
+      steps the load) - the file's own paragraphs, numbered as the file numbers them, so
+      trust stays. }
+    procedure DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean = False);
     { Every layout goes (Stale) and every kept measure. }
     procedure Clear;
     { The cached layout of the block that starts at paragraph AIndex, without a reference
@@ -830,7 +870,9 @@ type
       layouts go Stale; measures, glyph and fallback answers, list numbers and pictures go):
       a layouter knows its document by being told, never by its address, which a new
       document can share with a freed one. The control sets it when it makes its document
-      and whenever it replaces the document or its content; nil lets go of it. }
+      and whenever it replaces the document or its content; nil lets go of it. Meant for a
+      load: it trusts every file list marker again (CRichListWalkParas) - set after edits
+      that renumbered, it would show the file's markers beside numbers counted since. }
     property Document: TTyRichDocument read FDoc write SetDocument;
     { The font a character format with no name / no size gets: the control's theme font. }
     property BaseFontName: string read FBaseFontName write SetBaseFontName;
@@ -850,6 +892,9 @@ type
     function MeasureCacheBytes: Int64;
     { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
     property ListWalkSteps: Int64 read FListWalkSteps;
+    { Characters of paragraph text the layouts made so far read and decoded (a cut paragraph:
+      only up to the cap), for the tests that check what a build reads. }
+    property ParaCharsRead: Int64 read FParaCharsRead;
     { Draws APicture into ABox of ATarget (the target's pixels, its ClipRect respected): its
       image - decoded the first time the picture is drawn (never at layout); at its own size
       as it is; reduced once per size and kept (the full image then let go, decoded again
@@ -1142,12 +1187,14 @@ end;
 
 { Whether a line may break between two text clusters whose base characters are APrev and
   ACur: never before a closing mark or after an opening one (kinsoku), else beside CJK and
-  emoji. The one rule both the line breaker and a fragment cut into segments (a justified
-  line stretched between its characters) apply, so the two always find the same places. }
+  emoji, and after a space - which is a text cluster only when it carries a mark: it still
+  parts two words, as a plain space would. The one rule both the line breaker and a fragment
+  cut into segments (a justified line stretched between its characters) apply, so the two
+  always find the same places. }
 function TextBreakBetween(APrev, ACur: Cardinal): Boolean;
 begin
   Result := not TyRichIsKinsokuNoLineStart(ACur) and not TyRichIsKinsokuNoLineEnd(APrev) and
-    (IsIdeographic(APrev) or IsIdeographic(ACur));
+    (IsIdeographic(APrev) or IsIdeographic(ACur) or (APrev = $20));
 end;
 
 { The characters of S as the text storage counts them. }
@@ -1222,6 +1269,13 @@ end;
 function SatAdd(A, B: Integer): Integer; inline;
 begin
   Result := Integer(Min(Int64(A) + B, Int64(CRichMaxBlockPx)));
+end;
+
+{ A + B + C, the same way (a tab segment's place: where the tab started, the tab, what
+  follows it). }
+function SatAdd3(A, B, C: Integer): Integer; inline;
+begin
+  Result := Integer(Min(Int64(A) + B + C, Int64(CRichMaxBlockPx)));
 end;
 
 function TyRichLayoutWidth(AMode: TTyRichWrapMode; AAvailWidth: Integer;
@@ -1946,6 +2000,12 @@ begin
   for i := 0 to FFragCount - 1 do Inc(Result, System.Length(FFrags[i].Text));
 end;
 
+function TTyParaLayout.LastCaretPos: TTyRichPos;
+begin
+  // FShown is the length when nothing is cut, else the cut
+  Result := FShown;
+end;
+
 function TTyParaLayout.ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
 var
   i, stop: Integer;
@@ -2340,6 +2400,20 @@ begin
     Int64(System.Length(FItems)) * SizeOf(TTyRichRowItem) +
     Int64(System.Length(FDisplay.Cells)) * SizeOf(TTyRowCellDisplay);
   for i := 0 to High(FItems) do Inc(Result, FItems[i].Layout.MemSize);
+end;
+
+function TTyRowLayout.LastCaretPos: TTyRichPos;
+var
+  c, j: Integer;
+begin
+  // the last cell that is shown and holds paragraphs: its last one's last caret place
+  for c := High(FCells) downto 0 do
+    if not FCells[c].Hidden and (FCells[c].ItemCount > 0) then
+    begin
+      j := FCells[c].FirstItem + FCells[c].ItemCount - 1;
+      Exit(FItems[j].Pos + FItems[j].Layout.LastCaretPos);
+    end;
+  Result := 0;
 end;
 
 function TTyRowLayout.ItemAt(APos: TTyRichPos): Integer;
@@ -3518,19 +3592,20 @@ begin
           w := MeasureRange(k, p^.First + off, p^.First + p^.Count);
           if pending then
           begin
-            Inc(segW, w);
-            x := xTab + TabW(segW, decW, decFound) + segW;
+            segW := SatAdd(segW, w);
+            x := SatAdd3(xTab, TabW(segW, decW, decFound), segW);
           end
           else
-            Inc(x, w);
+            x := SatAdd(x, w);
           Inc(k);
           off := 0;
           Continue;
         end;
     end;
+    // a line's x stops at CRichMaxBlockPx (an unwrapped line of thousands of clamped pictures)
     w := MeasureRange(k, p^.First + off, p^.First + p^.Count);
-    if pending then newX := xTab + TabW(segW + w, decW, decFound) + segW + w
-    else newX := x + w;
+    if pending then newX := SatAdd3(xTab, TabW(SatAdd(segW, w), decW, decFound), SatAdd(segW, w))
+    else newX := SatAdd(x, w);
     if (RightPx >= CUnlimited) or (newX <= RightPx) then
     begin
       if pending then
@@ -3543,8 +3618,8 @@ begin
               decW := segW + MeasureRange(k, p^.First + off, j);
               Break;
             end;
-        Inc(segW, w);
-        x := xTab + TabW(segW, decW, decFound) + segW;
+        segW := SatAdd(segW, w);
+        x := SatAdd3(xTab, TabW(segW, decW, decFound), segW);
       end
       else
         x := newX;
@@ -3693,7 +3768,7 @@ var
     if tw < 0 then tw := 0;
     Items[tabItem].Width := tw;
     for k := segStart to i - 1 do Inc(Items[k].X, tw);
-    x := xTab + tw + segW;
+    x := SatAdd3(xTab, tw, segW);
     tabItem := -1;
   end;
 
@@ -3765,9 +3840,10 @@ begin
       Inc(i);
       Continue;
     end;
+    // x stops at CRichMaxBlockPx, as FindLineEnd's does
     if tabItem >= 0 then
     begin
-      it^.X := xTab + segW;
+      it^.X := SatAdd(xTab, segW);
       if (al = ttaDecimal) and not decFound and (it^.Kind = rfkText) then
         for k := it^.First to it^.First + it^.Count - 1 do
           if Cp[k] = Ord('.') then
@@ -3777,12 +3853,12 @@ begin
             decW := segW + L.MeasureText(p^.Font, RangeText(it^.First, k));
             Break;
           end;
-      Inc(segW, it^.Width);
+      segW := SatAdd(segW, it^.Width);
     end
     else
     begin
       it^.X := x;
-      Inc(x, it^.Width);
+      x := SatAdd(x, it^.Width);
     end;
     Inc(i);
   end;
@@ -4054,6 +4130,8 @@ begin
   nt^.X := LeftPx;
   nt^.Width := L.MeasureText(nt^.Font, nt^.Text);
   nt^.Natural := nt^.Width;
+  // part of the block's width: a horizontal scroll reaches its end
+  Layout.FWidth := Max(Layout.FWidth, SatAdd(nt^.X, nt^.Width));
   Layout.FNoticeTop := ATop;
   Layout.FNoticeBaseline := SatAdd(ATop, m.Ascent);
   ATop := SatAdd(ATop, Max(1, m.Ascent + m.Descent + m.Leading));
@@ -4099,7 +4177,10 @@ begin
   FindClusters;
   { A paragraph past CRichMaxParaLayoutChars: what was read of it (one character past the
     cap, so the cap's cluster is known) is cut at the start of the cluster the cap is in; one
-    cluster longer than the cap (nothing to cut at) is cut at the cap. }
+    cluster longer than the cap (nothing to cut at) is cut at the cap. Left as it is: Runs is
+    the model's copy of the whole paragraph's run array (RunsOf), which MapRuns reads only up
+    to the cut - one run for plain text; proportional to the uncut paragraph only for a file
+    with millions of format changes in one paragraph, hostile input. }
   if FullLen > CRichMaxParaLayoutChars then
   begin
     e := Min(N, CRichMaxParaLayoutChars);
@@ -4534,6 +4615,18 @@ var
   jpeg: Boolean;
   sc: Integer;
   img: TBGRABitmap;
+
+  { The image decoded at 1 / 2^AScale (sides rounded up) has more pixels than the budget. }
+  function OverBudget(AScale: Integer): Boolean;
+  var
+    sw, sh: Int64;
+  begin
+    sw := (w + (Int64(1) shl AScale) - 1) shr AScale;
+    sh := (h + (Int64(1) shl AScale) - 1) shr AScale;
+    if (sw <= 0) or (sh <= 0) then Exit(False);
+    Result := sh > FPictureDecodeBudget div sw;
+  end;
+
 begin
   e := TTyPictureEntry(AEntry);
   e.Tried := True;
@@ -4551,12 +4644,16 @@ begin
       e.Failed := True;
       Exit;
     end;
+    { A side the decoders cannot take (they hold sizes as Integer) is no picture; the budget
+      is compared by division, so no product of two header sizes is ever formed. }
+    if (w > MaxInt) or (h > MaxInt) then
+    begin
+      e.Failed := True;
+      Exit;
+    end;
     sc := 0;
-    while (sc < 3) and (((w + (Int64(1) shl sc) - 1) shr sc) * ((h + (Int64(1) shl sc) - 1) shr sc) >
-      FPictureDecodeBudget) do
-      Inc(sc);
-    if ((w + (Int64(1) shl sc) - 1) shr sc) * ((h + (Int64(1) shl sc) - 1) shr sc) >
-      FPictureDecodeBudget then
+    while (sc < 3) and OverBudget(sc) do Inc(sc);
+    if OverBudget(sc) then
     begin
       e.Failed := True;
       Exit;
@@ -4903,11 +5000,14 @@ begin
   if FLruLast = nil then FLruLast := L;
 end;
 
+{ A block is counted by the characters it keeps laid out (ShownChars): a cut paragraph by
+  what it shows, so a 100 MB line costs the cache what its 100,000 shown characters cost and
+  stays beside its neighbours. }
 procedure TTyRichLayouter.CacheDrop(L: TTyBlockLayout; AStale: Boolean);
 begin
   LruUnlink(L);
   FCache.Remove(L.FFirstPara);
-  Dec(FCachedChars, L.FCharCount);
+  Dec(FCachedChars, L.FShownChars);
   L.FInCache := False;
   if AStale then L.FStale := True;
   L.Release;
@@ -4921,7 +5021,7 @@ begin
   FCache.Add(L.FFirstPara, L);
   LruPushFront(L);
   L.FInCache := True;
-  Inc(FCachedChars, L.FCharCount);
+  Inc(FCachedChars, L.FShownChars);
 end;
 
 procedure TTyRichLayouter.CacheTrim(AKeep: TTyBlockLayout);
@@ -5008,8 +5108,10 @@ begin
   while L <> nil do
   begin
     nx := L.FLruNext;
+    // a row just above: its bottom line is the row below's business (BuildRow's BottomOpen)
     if ((L.FLastPara >= AFirst) and (L.FFirstPara < AFirst + ACount)) or
-      (L.FNumbered and (L.FFirstPara >= AFirst)) then
+      (L.FNumbered and (L.FFirstPara >= AFirst)) or
+      ((L is TTyRowLayout) and (L.FLastPara = AFirst - 1)) then
       CacheDrop(L, True)
     else
       Vouch(L, FChangeGen);
@@ -5017,7 +5119,7 @@ begin
   end;
 end;
 
-procedure TTyRichLayouter.DocumentChanged(const AChange: TTyRichChange);
+procedure TTyRichLayouter.DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean);
 var
   L, nx: TTyBlockLayout;
   first, oldEnd, delta: Integer;
@@ -5039,8 +5141,9 @@ begin
     DropNumbersFrom(first);
     { the file's markers from here on may be wrong now (before it they stay right; a limit
       after the change cannot be: every change that moves indexes sets it to its own first
-      paragraph) }
-    if first < FTrustFrom then FTrustFrom := first;
+      paragraph) - unless the change is the load appending the file's next paragraphs, which
+      the file numbers itself }
+    if not AFromLoad and (first < FTrustFrom) then FTrustFrom := first;
   end;
   moved := nil;
   n := 0;
@@ -5048,7 +5151,10 @@ begin
   while L <> nil do
   begin
     nx := L.FLruNext;
-    if (L.FLastPara >= first) and (L.FFirstPara < oldEnd) then
+    { the changed paragraphs' blocks go, and a row that ends just before them: its bottom
+      line is the row below's business (BuildRow's BottomOpen) }
+    if ((L.FLastPara >= first) and (L.FFirstPara < oldEnd)) or
+      ((L is TTyRowLayout) and (L.FLastPara = first - 1)) then
       CacheDrop(L, True)
     else if (L.FFirstPara >= oldEnd) and numbering and L.FNumbered then
       CacheDrop(L, True)
@@ -5290,14 +5396,11 @@ begin
   if AText = '' then Exit(0);
   key := IntToStr(AFont) + #1 + AText;
   if FMeasure.TryGetValue(key, Result) then Exit;
-  if (FMeasureOld <> nil) and FMeasureOld.TryGetValue(key, Result) then
-  begin
-    // brought forward: counted again in the newer half (the older one goes as a whole)
-    FMeasure.AddOrSetValue(key, Result);
-    Inc(FMeasureBytes, System.Length(key) + CMeasureEntryBytes);
-    Exit;
-  end;
-  Result := FDevice.TextWidth(AFont, AText);
+  { Brought forward from the older half: a new entry of the newer one, counted there (the
+    older half goes as a whole) and checked against the bound as a miss is - so promotions
+    cannot grow the newer half past its mark while the older is still kept. }
+  if not ((FMeasureOld <> nil) and FMeasureOld.TryGetValue(key, Result)) then
+    Result := FDevice.TextWidth(AFont, AText);
   if (FMeasure.Count >= CRichMeasureCacheEntries div 2) or
     (FMeasureBytes >= CRichMeasureCacheBytes div 2) then
   begin
@@ -5367,6 +5470,7 @@ begin
       b.Zoom := AZoom;
       b.Width := AWidth;
       b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1));
+      Inc(FParaCharsRead, b.N);
       if len > CRichMaxParaLayoutChars then b.FullLen := len else b.FullLen := b.N;
       Result.FLength := b.FullLen;
       Result.FFirstPara := AIndex;
@@ -5378,7 +5482,8 @@ begin
       b.Run;
       Result.FText := b.Txt;
       Result.FShown := b.N;
-      // the positions laid out: the paragraph's, its end and separator included, unless cut
+      // the characters laid out: the paragraph's and its separator, unless cut (then the
+      // characters before the cut; the separator is not laid out)
       if Result.FTruncated then Result.FShownChars := b.N
       else Result.FShownChars := Result.FCharCount;
       Result.TakePaintFormats(ADoc);
@@ -5398,7 +5503,7 @@ function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
 var
   R: TTyRowLayout;
   tbl: TTyRichTable;
-  nc, i, j, k, o, ci, gap, g, inner, pos, rowH, padT, padB, off, y, cut, shift, lo, hi: Integer;
+  nc, i, j, k, o, ci, gap, g, inner, pos, rowH, padT, padB, off, y, shown, shift, lo, hi: Integer;
   prevTw, rightTw: Int64;
   cd: TTyRowCellDisplay;
   s: TTyRowCellSide;
@@ -5406,6 +5511,7 @@ var
   bx: ^TTyRichCellBox;
   cell: TTyRichCell;
   P: TTyParaLayout;
+  nextRow: TTyRichRow;
   nextDisp: TTyRowDisplay;
   room: array of Boolean;
 
@@ -5436,14 +5542,12 @@ var
   function BottomOpen(AIndex: Integer): Boolean;
   var
     nd: TTyRowCellDisplay;
-    nr: TTyRichRow;
     m: Integer;
   begin
     if not haveNext then
     begin
-      nr := tbl.Rows[ARow.Index + 1];
-      if nr.RawFormat <> '' then nextDisp := TyRtfRowDisplay(nr.RawFormat)
-      else nextDisp := TyDefaultRowDisplay(Max(1, nr.CellCount));
+      if nextRow.RawFormat <> '' then nextDisp := TyRtfRowDisplay(nextRow.RawFormat)
+      else nextDisp := TyDefaultRowDisplay(Max(1, nextRow.CellCount));
       haveNext := True;
     end;
     m := AIndex;
@@ -5469,7 +5573,18 @@ begin
     nc := Max(1, ARow.CellCount);
     if ARow.RawFormat <> '' then R.FDisplay := TyRtfRowDisplay(ARow.RawFormat)
     else R.FDisplay := TyDefaultRowDisplay(nc);
-    lastRow := ARow.Index >= tbl.RowCount - 1;
+    { The row below: the table's next row, or - after the table's last - a row that the next
+      paragraph is in (a long table of a document parsed on demand is a table object per
+      parsed stretch; LayoutBlock has read that paragraph already, in this read scope). }
+    nextRow := nil;
+    if ARow.Index < tbl.RowCount - 1 then
+      nextRow := tbl.Rows[ARow.Index + 1]
+    else if ALast + 1 < ADoc.Text.ParaCount then
+    begin
+      cell := ADoc.CellAt(ALast + 1);
+      if (cell <> nil) and (cell.Row <> ARow) then nextRow := cell.Row;
+    end;
+    lastRow := nextRow = nil;
     haveNext := False;
     // the cells' boxes, left to right
     SetLength(R.FCells, nc);
@@ -5536,6 +5651,9 @@ begin
       for i := 1 to nc - 1 do hi := Max(hi, R.FCells[i].Right);
       if R.FDisplay.Align = rraCenter then shift := (AWidth - (hi - lo)) div 2 - lo
       else shift := AWidth - hi;
+      // a row wider than the width: where \trleft puts it, not further left (the control
+      // scrolls right, never left of 0)
+      if shift < 0 then shift := 0;
       for i := 0 to nc - 1 do
       begin
         Inc(R.FCells[i].Left, shift);
@@ -5545,7 +5663,7 @@ begin
     // the paragraphs, each in its cell (a merged-away cell's at the box it went into)
     gap := Max(0, Px(R.FDisplay.HalfGap));
     pos := 0;
-    cut := 0;
+    shown := 0;
     room := nil;
     SetLength(room, nc);
     SetLength(R.FItems, ALast - AFirst + 1);
@@ -5555,12 +5673,14 @@ begin
       if cell <> nil then ci := Min(Max(cell.Index, 0), nc - 1) else ci := 0;
       o := R.FCells[ci].Owner;
       { The text's distance from the edges is at most half the cell. A cell with no room for
-        text (no width, or an edge left of the one before) lays its paragraphs out unwrapped
-        - a line each, cheaply - and they take no height: they are positions nobody sees. }
+        text (narrower inside than CRichMinCellTextPx: no width, an edge left of the one
+        before, or gaps that take it all - an odd width leaves a pixel) lays its paragraphs
+        out unwrapped - a line each, cheaply - and they take no height: they are positions
+        nobody sees. }
       g := Min(gap, Max(0, R.FCells[o].Right - R.FCells[o].Left) div 2);
       inner := R.FCells[o].Right - R.FCells[o].Left - 2 * g;
-      room[ci] := inner > 0;
-      if inner > 0 then P := BuildPara(ADoc, k, inner, APPI, AZoom)
+      room[ci] := inner >= CRichMinCellTextPx;
+      if room[ci] then P := BuildPara(ADoc, k, inner, APPI, AZoom)
       else P := BuildPara(ADoc, k, CRichNoWrap, APPI, AZoom);
       j := k - AFirst;
       R.FItems[j].Layout := P;
@@ -5570,18 +5690,15 @@ begin
       R.FItems[j].Cell := ci;
       Inc(pos, P.FLength + 1);
       if P.FNumbered then R.FNumbered := True;
-      if P.FTruncated then
-      begin
-        R.FTruncated := True;
-        Inc(cut, P.FLength - P.FShown);
-      end;
+      if P.FTruncated then R.FTruncated := True;
+      Inc(shown, P.FShownChars);
       if R.FCells[ci].ItemCount = 0 then R.FCells[ci].FirstItem := j;
       Inc(R.FCells[ci].ItemCount);
-      if inner > 0 then
+      if room[ci] then
         R.FCells[ci].ContentHeight := SatAdd(R.FCells[ci].ContentHeight, P.Height);
     end;
     R.FCharCount := pos;
-    R.FShownChars := pos - cut;
+    R.FShownChars := shown;
     // the row's height: its tallest cell, lines included, and what the format demands
     rowH := 0;
     for i := 0 to nc - 1 do

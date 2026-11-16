@@ -1322,7 +1322,7 @@ end;
 
 procedure TTyCustomRichEdit.DocChanged(Sender: TObject; const AChange: TTyRichChange);
 begin
-  FLayouter.DocumentChanged(AChange);
+  FLayouter.DocumentChanged(AChange, FInStep);
   if FDoc.Text <> FText then
     ContentReplaced
   else

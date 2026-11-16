@@ -2355,7 +2355,8 @@ begin
       'This document is still being loaded: it cannot be saved before the load has ended');
   w := TRtfWriter.Create(ADoc, AStream);
   // the plan holds paragraph indices, and the callback and the stream are foreign code: the
-  // document takes no change until the save is over (TTyRichDocument.BeginSave)
+  // document takes no change until the save is over (TTyRichDocument.BeginSave) - no edit,
+  // no undo or redo, and no load into it either (a reader's ReplaceText raises meanwhile)
   ADoc.BeginSave;
   try
     w.FOnProgress := AOnProgress;
