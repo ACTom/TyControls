@@ -72,6 +72,7 @@ type
     // sweep B0
     procedure TestASaveInProgressRefusesEdits;
     procedure TestNoProgressCallAfterTheLastByte;
+    procedure TestNewFontsTakeNoNumberTheBodyUses;
   end;
 
 implementation
@@ -3100,7 +3101,8 @@ begin
     d.Free;
   end;
   // text in a font number the table lacks, rewritten: its number gets an entry with no
-  // name, and the next save numbers a new font above it
+  // name, and the next save numbers a new font above it. (The file uses \f5: every number
+  // a save adds is above it.)
   b := BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\uc1 \pard\f5\fs24 A\par \f0 B\par}');
   d := LoadDoc(b, False);
   r := nil;
@@ -3109,9 +3111,9 @@ begin
     AssertTrue('typed in it', d.Execute(TTyRichInsertText.Create(0, 'X')));
     o := SaveDoc(d, info);
     header := StrOf(o, 0, info.HeaderStop);
-    AssertRaw('the number is defined', '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}}\uc1 ', header);
+    AssertRaw('the number is defined', '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f6\fnil ;}}\uc1 ', header);
     text := StretchText(o, info);
-    AssertTrue('and written: ' + Shown(text), PosRaw('\plain\f1\fs24 XA\par', text) > 0);
+    AssertTrue('and written: ' + Shown(text), PosRaw('\plain\f6\fs24 XA\par', text) > 0);
     // the second save: a new font
     r := LoadDoc(o, False);
     AssertEquals('second save: still no font', '', FontOfPara(r, 0));
@@ -3120,8 +3122,8 @@ begin
     o2 := SaveDoc(r, info);
     // (the words the first save wrote before its paragraph are the header's now)
     AssertRaw('second save: the new font above it',
-      '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}' + Consolas + '}' +
-        Copy(header, Length('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fnil ;}}') + 1, MaxInt),
+      '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f6\fnil ;}{\f7\fnil\fcharset0 Consolas;}}' +
+        Copy(header, Length('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f6\fnil ;}}') + 1, MaxInt),
       StrOf(o2, 0, info.HeaderStop));
     FreeAndNil(r);
     r := LoadDoc(o2, True);
@@ -3137,7 +3139,7 @@ begin
     o3 := SaveDoc(r, info);
     AssertRaw('third save: the header as it is', header, StrOf(o3, 0, info.HeaderStop));
     AssertTrue('third save: the same number: ' + Shown(StretchText(o3, info)),
-      PosRaw('\plain\f1\fs24 YXA\par', StretchText(o3, info)) > 0);
+      PosRaw('\plain\f6\fs24 YXA\par', StretchText(o3, info)) > 0);
   finally
     r.Free;
     d.Free;
@@ -3936,6 +3938,85 @@ begin
     s.Free;
     d.Free;
   end;
+end;
+
+{ A paragraph that goes back as it is may use a font number its file's table has no entry
+  for (the text then has no font). A font the save adds must not take such a number - the
+  untouched text would come back in it. So new fonts are numbered above every \fN the
+  reader met anywhere: the table, the body, \afN, and groups it passed over. }
+procedure TTyRtfWriteTest.TestNewFontsTakeNoNumberTheBodyUses;
+const
+  Head = '{\rtf1\ansi\deff0{\fonttbl{\f0\fnil Arial;}{\f1\fnil Times New Roman;}}\uc1 ';
+
+  procedure Check(const AWhat, AFourth: RawByteString; ANum: Integer);
+  var
+    b, o: TBytes;
+    d, orig, r: TTyRichDocument;
+    info: TTyRtfWriteInfo;
+    header: RawByteString;
+    i: Integer;
+    cursor: Int64;
+    src: TTyRtfRange;
+  begin
+    b := BytesOf(Head + '\pard\f7\fs24 seven\par \pard\f2\fs24 two\par ' +
+      '\pard\f0\fs24 change me\par ' + AFourth + '\pard\f1\fs24 times\par}');
+    d := LoadDoc(b, False);
+    orig := LoadDoc(b, True);
+    r := nil;
+    try
+      AssertEquals(AWhat + ': five paragraphs', 5, d.Text.ParaCount);
+      AssertEquals(AWhat + ': \f2 has no entry, its text no font', '', FontOfPara(d, 1));
+      SetChars(d, d.Text.ParaStart(2), d.Text.ParaLength(2), [cffFontName, cffCharset],
+        Fmt('Consolas', 0, 0));
+      o := SaveDoc(d, info);
+      header := StrOf(o, 0, info.HeaderStop);
+      AssertTrue(Format('%s: the new font is \f%d: %s', [AWhat, ANum, Shown(header)]),
+        PosRaw('{\f1\fnil Times New Roman;}{\f' + IntToStr(ANum) + '\fnil\fcharset0 Consolas;}}',
+          header) > 0);
+      // only the changed paragraph is rewritten; the others are the file's bytes
+      AssertEquals(AWhat + ': one stretch', 1, Length(info.Stretches));
+      AssertEquals(AWhat + ': of the changed paragraph', 2, info.Stretches[0].FirstPara);
+      AssertEquals(AWhat + ': alone', 1, info.Stretches[0].ParaCount);
+      cursor := info.HeaderStop;
+      for i := 0 to 4 do
+        if i = 2 then
+          cursor := info.Stretches[0].OutStop
+        else
+        begin
+          AssertTrue(Format('%s: paragraph %d is the file''s own', [AWhat, i]),
+            TyRichRtfLoadOf(d).ParaSource(i, src));
+          AssertRaw(Format('%s: paragraph %d''s bytes as they were', [AWhat, i]),
+            StrOf(b, src.Start, src.Stop - src.Start), StrOf(o, cursor, src.Stop - src.Start));
+          Inc(cursor, src.Stop - src.Start);
+        end;
+      AssertEquals(AWhat + ': the trailer follows', info.TrailerStart, cursor);
+      // read back: the new font on the changed paragraph only
+      r := LoadDoc(o, True);
+      AssertEquals(AWhat + ': read back, five paragraphs', 5, r.Text.ParaCount);
+      AssertEquals(AWhat + ': read back, the changed paragraph', 'Consolas', FontOfPara(r, 2));
+      for i := 0 to 4 do
+        if i <> 2 then
+        begin
+          AssertEquals(Format('%s: read back, paragraph %d''s font as the file has it', [AWhat, i]),
+            FontOfPara(orig, i), FontOfPara(r, i));
+          AssertRaw(Format('%s: read back, paragraph %d''s text', [AWhat, i]), ParaText(orig, i),
+            ParaText(r, i));
+        end;
+    finally
+      r.Free;
+      orig.Free;
+      d.Free;
+    end;
+  end;
+
+begin
+  // the body's highest number is \f7 (and \f2, right above the table's \f1, is taken too)
+  Check('in the body', '\pard\f0\fs24 plain\par ', 8);
+  // an \afN is a font number as well
+  Check('an \af', '\pard\f0\af9\fs24 assoc\par ', 10);
+  // and so is one in a group the reader passes over (kept as an object of its bytes) - where
+  // \fs and \afs are no font numbers
+  Check('a passed-over group', '\pard\f0\fs24 {\*\tyunknown {\f12\fs40\afs44 hidden}}after\par ', 13);
 end;
 
 initialization

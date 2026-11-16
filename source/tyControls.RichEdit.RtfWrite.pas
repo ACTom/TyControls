@@ -853,6 +853,11 @@ begin
   // are taken all the same, so new fonts are numbered above every \fN of the table's bytes
   i := scan.FontTableHighest;
   if i >= FNextFontNum then FNextFontNum := i + 1;
+  // and above every number the rest of the file uses: a paragraph that goes back as it is
+  // may be in a number the table has no entry for, and a new font of that number would
+  // restyle it
+  i := scan.FontNumHighest;
+  if i >= FNextFontNum then FNextFontNum := i + 1;
   // a number \deff names without a font of that number must stay without one
   if scan.DefaultFont >= FNextFontNum then FNextFontNum := scan.DefaultFont + 1;
   FColorN := scan.ColorCount;

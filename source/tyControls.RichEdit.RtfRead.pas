@@ -313,6 +313,7 @@ type
     FColorAny: Boolean;
     FFontTblClose, FColorTblClose: PtrInt;   // the header's tables' closing braces, -1 none
     FFontTblOpen: PtrInt;                    // the font table's opening brace, -1 none
+    FFontNumMax: Integer;                    // the highest \fN / \afN read, -1 none
     FLastOpen: Boolean;          // the last paragraph ended without a terminator
     FLists: array of TTyRtfList;
     FListCount: Integer;
@@ -528,6 +529,13 @@ type
     // theme font's role) and of groups inside them. A writer numbers new fonts above it.
     // -1: no font table, or no \fN in it.
     function FontTableHighest: Integer;
+    // The highest N of the \fN and \afN words this parser read as formatting, and of the \fN
+    // and \afN in groups it passed over as a whole (kept as objects of their bytes or as
+    // fragments, or dropped) - -1 none; the font table's entries are FontTableHighest's.
+    // Text written back as it is may use a number the table has no entry for: a writer
+    // numbers new fonts above this too. Counted as the words are read, so the index scan's
+    // figure is the whole file's once the scan has ended.
+    property FontNumHighest: Integer read FFontNumMax;
     // After the parse: the last paragraph has no terminator (its bytes run to the trailer),
     // so nothing can be written after it as it is.
     property LastParaOpen: Boolean read FLastOpen;
@@ -1374,6 +1382,7 @@ begin
   FVersionGen := -1;
   FFontTblClose := -1;
   FFontTblOpen := -1;
+  FFontNumMax := -1;
   FColorTblClose := -1;
   FAnsiCp := 1252;
   FDeff := -1;
@@ -2096,6 +2105,13 @@ begin
           Dec(d);
           if d = 0 then Exit(t.Stop);
         end;
+      rtkWord:
+        // what a group passed over holds goes back out as it is: its font numbers are taken
+        // (\f and \af only: \fs, \fcharset, \afs are other words)
+        if t.HasParam and (t.Param > FFontNumMax) and
+           (((t.NameLen = 1) and (FBuf[t.NameStart] = Ord('f'))) or
+            ((t.NameLen = 2) and (FBuf[t.NameStart] = Ord('a')) and (FBuf[t.NameStart + 1] = Ord('f')))) then
+          FFontNumMax := t.Param;
     end;
   Result := FLen;
 end;
@@ -3471,6 +3487,7 @@ begin
     kwF:
       begin
         FS.Props.FontNum := p;
+        if p > FFontNumMax then FFontNumMax := p;
         case FS.Props.Slot of
           sloLoch: FS.Props.LochNum := p;
           sloHich: FS.Props.HichNum := p;
@@ -3479,13 +3496,16 @@ begin
         CharChanged;
       end;
     kwAf:
-      case FS.Props.Slot of
-        sloLoch: FS.Props.LochNum := p;
-        sloHich: FS.Props.HichNum := p;
-        sloDbch: FS.Props.DbchNum := p;
-      else
-        // the font of right-to-left text: not modelled
-        if normal then AddCharExtra(FTok.Start, FTok.Stop);
+      begin
+        if p > FFontNumMax then FFontNumMax := p;
+        case FS.Props.Slot of
+          sloLoch: FS.Props.LochNum := p;
+          sloHich: FS.Props.HichNum := p;
+          sloDbch: FS.Props.DbchNum := p;
+        else
+          // the font of right-to-left text: not modelled
+          if normal then AddCharExtra(FTok.Start, FTok.Stop);
+        end;
       end;
     kwFs:
       begin
