@@ -1528,6 +1528,7 @@ begin
       FillPaintStyle(st);
       st.DeferPictures := ADefer;
       P.Bitmap.ClipRect := textClip;
+      FLayouter.BeginPaintPass;
       try
         x := area.Left - FScrollX;
         for k := 0 to FBlockCount - 1 do

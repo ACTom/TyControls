@@ -53,6 +53,12 @@ unit tyControls.RichEdit.Layout;
     the line it begins). SelectionRects takes positions only (a range has no affinity).
   - A block may be Truncated (a paragraph past CRichMaxParaLayoutChars): ShownChars of its
     CharCount positions are laid out; the control can tell the user.
+  - BeginPaintPass once per paint, before the blocks are painted: the pictures one paint
+    draws never evict each other. With TTyRichPaintStyle.DeferPictures a picture that is not
+    PictureReady at its box's size is reported (TakeSkippedPictures); PreparePicture makes it
+    ready - after that PictureReady is True for that size, whatever came of it (a placeholder
+    for one that cannot be shown is ready too) - so a (picture, size) the control has just
+    prepared is never queued again for that size.
 
   Bidirectional text is not laid out (spec 6.1): logical order, left to right; RtlPar is
   kept by the model and not shown. }
@@ -124,11 +130,20 @@ const
   { The widest cell border drawn (twips): Word's limit for \brdrw. A wider one in a file is
     drawn this wide. }
   CRichMaxBorderTwips = 75;
-  { Pictures the layouter has drawn are kept decoded (and scaled to the size they were drawn
+  { Pictures the layouter has drawn are kept decoded (or reduced to the size they were drawn
     at) up to this many bytes - their pixels, and the bytes of the pictures held for them -
-    the least recently drawn going first, the one drawn last always staying: a document of
-    thousands of pictures keeps decoded only what was on screen lately. }
+    the least recently drawn going first, the ones of the current paint pass (and the one
+    drawn last) always staying: a document of thousands of pictures keeps decoded only what
+    was on screen lately, and one screen's pictures never evict each other. }
   CRichPictureCacheBytes = 64 * 1024 * 1024;
+  { The most pixels a picture is decoded to: 32 Mi (128 MB decoded). A header that says more
+    is not decoded - a placeholder - except a JPEG, which decodes at 1/2, 1/4 or 1/8 while
+    decoding to fit; nothing is allocated before the header says what it costs. }
+  CRichPictureMaxPixels = 32 * 1024 * 1024;
+  { The largest reduced copy kept of a picture: 8 Mi pixels (32 MB, a 4K screen). A reduction
+    to more is drawn from the decoded image for the part inside the clip, as an enlargement
+    always is. }
+  CRichPictureMaxScaledPixels = 8 * 1024 * 1024;
 
   { Line-breaking rules (kinsoku), after the common practice of JIS X 4051 and GB/T 15834:
     the characters a line must not start with (closing brackets and quotes, sentence and
@@ -607,6 +622,8 @@ type
     function GetCell(AIndex: Integer): TTyRichCellBox;
     function GetItem(AIndex: Integer): TTyRichRowItem;
     function CellAtX(AX: Integer): Integer;
+    procedure PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const AClip, AOld: TRect;
+      const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
   public
     destructor Destroy; override;
     { A point and a caret pass the line-end flag through to the paragraph they are in. The
@@ -690,7 +707,20 @@ type
     FPictureScales: Int64;
     FSkipped: TTyRichSkippedPictures;
     FSkippedCount: Integer;
-    function PictureEntry(APicture: TTyRichPicture; AWidth, AHeight: Integer): TObject;
+    FPicturePass: Int64;
+    FPassByCaller: Boolean;
+    FPaintDepth: Integer;
+    FPictureDecodeBudget: Int64;
+    FPictureScaleBudget: Int64;
+    FPictureDecodedPixels: Int64;
+    function PictureEntry(APicture: TTyRichPicture): TObject;
+    procedure PictureRecount(AEntry: TObject);
+    procedure PictureDecode(AEntry: TObject);
+    function PictureHow(AEntry: TObject; AWidth, AHeight: Integer): Integer;
+    procedure PictureMakeReady(AEntry: TObject; AWidth, AHeight: Integer);
+    procedure PaintEnter;
+    procedure PaintLeave;
+    procedure ClearLayouts;
     procedure NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
     procedure ClearSkippedPictures;
     procedure WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
@@ -735,6 +765,12 @@ type
       a bullet or no list. }
     function ListNumber(ADoc: TTyRichDocument; AIndex: Integer;
       const AList: TTyListFormat): Int64;
+    { Decodes an image file's bytes (AJpegScale 1..3: a JPEG at 1/2, 1/4, 1/8 while decoding);
+      raises what the decoder raises. A seam for the tests. }
+    function DecodeImage(AStream: TStream; AJpegScale: Integer): TBGRABitmap; virtual;
+    { AImage reduced to AWidth x AHeight (rfBestQuality); raises what the resampler raises. A
+      seam for the tests. }
+    function ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap; virtual;
   public
     constructor Create(ADevice: TTyRichTextDevice; AOwnsDevice: Boolean = True);
     destructor Destroy; override;
@@ -788,8 +824,9 @@ type
     property BaseFontSizeHalfPt: Integer read FBaseFontSizeHalfPt write SetBaseFontSizeHalfPt;
     { Tried in order for a character the font in effect has no glyph for; the first that
       has it is used. Starts as the platform's list; change it freely. Changing the list, or
-      naming another OnFallbackFont (asked first), empties the caches (Clear): the fonts found
-      before and the layouts made with them go. }
+      naming another OnFallbackFont (asked first), empties the caches: the fonts found before
+      and the layouts made with them go (the decoded pictures, which depend on no font, stay;
+      so they do when the base font changes). }
     property FallbackFonts: TStringList read FFallbackFonts;
     property OnFallbackFont: TTyRichFallbackEvent read FOnFallbackFont write SetOnFallbackFont;
     property CacheHits: Int64 read FHits;
@@ -801,26 +838,49 @@ type
     { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
     property ListWalkSteps: Int64 read FListWalkSteps;
     { Draws APicture into ABox of ATarget (the target's pixels, its ClipRect respected): its
-      image - decoded the first time the picture is drawn (never at layout), scaled straight
-      to the box's pixels once per size, both kept - or, for a picture that cannot be shown
-      (a metafile that is not one bitmap, an unknown format, no bytes, bytes that do not
-      decode), a placeholder: the box filled and framed ALinePx thick. Never raises for what
-      a picture's bytes are. True when the image was drawn. The kept pictures are held by a
-      counted reference until they leave the cache (Clear empties it). }
+      image - decoded the first time the picture is drawn (never at layout); at its own size
+      as it is; reduced once per size and kept (the full image then let go, decoded again
+      only for a size that needs it); enlarged - or reduced past CRichPictureMaxScaledPixels -
+      straight from the decoded image for the part inside the clip, with no copy kept - or,
+      for a picture that cannot be shown (a metafile that is not one bitmap, an unknown
+      format, no bytes, a header that says more than CRichPictureMaxPixels pixels and is not
+      a JPEG that decodes reduced within them, bytes that do not decode, a reduction that
+      failed at this size), a placeholder: the box filled and framed ALinePx thick. Never
+      raises for what a picture's bytes are (EAccessViolation and EOutOfMemory are let
+      through). True when the image was drawn. The kept pictures are held by a counted
+      reference until they leave the cache (Clear empties it). }
     function DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture; const ABox: TRect;
       ALinePx: Integer; const AStyle: TTyRichPaintStyle): Boolean;
-    { Bytes the decoded pictures may hold (CRichPictureCacheBytes to start with). }
+    { A paint of the control begins: the pictures it draws (and those prepared until the next
+      call) are one pass, and no picture used in the current pass leaves the cache for space
+      - so the pictures of one screen never evict each other, whatever they take together.
+      The control calls it once per paint. Until it is first called, each outermost Paint (a
+      DrawPicture or PreparePicture outside one) is a pass by itself. }
+    procedure BeginPaintPass;
+    { Bytes the decoded pictures may hold (CRichPictureCacheBytes to start with), past what
+      the current paint pass uses. }
     property PictureCacheLimit: Int64 read FPictureLimit write SetPictureLimit;
     property PictureCacheBytes: Int64 read FPictureBytes;
     function PictureCacheCount: Integer;
-    { Pictures decoded and images scaled, for the tests that check when that happens. }
+    { Decodes tried (a header read counts) and reductions made; pixels the decoders made. For
+      the tests that check when that happens. }
     property PictureDecodes: Int64 read FPictureDecodes;
     property PictureScales: Int64 read FPictureScales;
-    { APicture can be drawn in a box of AWidth x AHeight without decoding or scaling: it is
-      kept decoded and at that size (or as one that cannot be shown). Asking changes nothing. }
+    property PictureDecodedPixels: Int64 read FPictureDecodedPixels;
+    { The pixel budgets (CRichPictureMaxPixels, CRichPictureMaxScaledPixels to start with),
+      settable for tests. }
+    property PictureDecodeBudget: Int64 read FPictureDecodeBudget write FPictureDecodeBudget;
+    property PictureScaleBudget: Int64 read FPictureScaleBudget write FPictureScaleBudget;
+    { Drawing APicture in a box of AWidth x AHeight now would neither decode nor resample: its
+      image is kept at that size, or it is drawn from the kept decoded image (its own size, an
+      enlargement), or it has been tried and cannot be shown there (a failed decode, a failed
+      reduction, over the budget: the placeholder is what is drawn). False when a decode is
+      needed - never tried, or the full image was let go after a reduction and this size needs
+      it again - or a reduction to this size. Asking changes nothing. }
     function PictureReady(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
-    { Makes APicture ready for a box of AWidth x AHeight - decoded and scaled now, kept as
-      DrawPicture keeps it - without drawing it. }
+    { Brings APicture to what PictureReady calls ready for AWidth x AHeight - decoded,
+      reduced, or found that it cannot be (remembered) - without drawing it. Afterwards
+      PictureReady(APicture, AWidth, AHeight) is True. }
     procedure PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
     { The pictures paints with DeferPictures passed over since the last call, in the order they
       were met (each with a reference the caller releases); the list starts empty again. }
@@ -2557,6 +2617,7 @@ begin
   old := ATarget.ClipRect;
   if not Types.IntersectRect(clip, AClip, old) then Exit;
   ATarget.ClipRect := clip;
+  FLayouter.PaintEnter;
   try
     // the lines that meet the clip, and no others
     ln := LineAtY(clip.Top - AY);
@@ -2574,6 +2635,7 @@ begin
       FLayouter.Device.DrawText(ATarget, FNotice.Font, AX + FNotice.X, AY + FNoticeBaseline,
         FNotice.Text, PaintColor(PaintFormat(FNotice.Format).Color, AStyle.TextColor));
   finally
+    FLayouter.PaintLeave;
     ATarget.ClipRect := old;
   end;
 end;
@@ -2788,14 +2850,30 @@ end;
 procedure TTyRowLayout.Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
   const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
 var
+  clip, old: TRect;
+begin
+  if ATarget = nil then Exit;
+  old := ATarget.ClipRect;
+  if not Types.IntersectRect(clip, AClip, old) then Exit;
+  // one paint pass for all its cells' pictures (when the caller counts none)
+  FLayouter.PaintEnter;
+  try
+    PaintRow(ATarget, AX, AY, clip, old, AStyle, ASelFrom, ASelTo);
+  finally
+    FLayouter.PaintLeave;
+  end;
+end;
+
+procedure TTyRowLayout.PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const AClip,
+  AOld: TRect; const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
+var
   i, k, w: Integer;
   clip, old, cr, box: TRect;
   bx: ^TTyRichCellBox;
   it: ^TTyRichRowItem;
 begin
-  if ATarget = nil then Exit;
-  old := ATarget.ClipRect;
-  if not Types.IntersectRect(clip, AClip, old) then Exit;
+  clip := AClip;
+  old := AOld;
   // contents: each shown cell that meets the clip, its paragraphs clipped to its box
   for i := 0 to High(FCells) do
   begin
@@ -3236,7 +3314,7 @@ begin
             h := Px(pic.HeightTwips);
             if (w <= 0) or (h <= 0) then
             begin
-              w := Max(1, Round(CRichDefaultObjectPx * PPI * Double(Zoom) / 96));
+              w := Max(1, TyRichClampPx(Round(CRichDefaultObjectPx * PPI * Double(Zoom) / 96)));
               h := w;
             end;
             p^.Width := w;
@@ -4045,19 +4123,32 @@ end;
 { ---- pictures ---- }
 
 type
-  { A picture the layouter drew: its image decoded (nil: it cannot be shown), the image at the
-    size it was drawn last, and what it costs to keep. It holds a counted reference to the
-    picture, so the key stays this picture's for as long as the entry lives (a picture let go
-    of by everything else is not freed under it, and its address is not reused for another). }
+  { A picture the layouter drew or prepared. Tried: its decode was tried (Failed: it cannot be
+    shown - no bytes to show, a format the header reader does not know, over the decode
+    budget, bytes that do not decode - and is a placeholder at every size). ImgW x ImgH: the
+    decoded image's size, known also after Image was let go: once a reduced copy (Scaled) is
+    made, the full image is freed and decoded again only for a size that needs it. BadW x
+    BadH: a reduction that failed at that size (a placeholder there, not tried again). Pass:
+    the paint pass it was last used in (never evicted inside it). It holds a counted reference
+    to the picture, so the key stays this picture's for as long as the entry lives. }
   TTyPictureEntry = class
   public
     Pic: TTyRichPicture;
+    Tried, Failed: Boolean;
+    ImgW, ImgH: Integer;
     Image: TBGRABitmap;
     Scaled: TBGRABitmap;
+    BadW, BadH: Integer;
     Bytes: Int64;
+    Pass: Int64;
     Prev, Next: TTyPictureEntry;
     destructor Destroy; override;
   end;
+
+  { How a picture is drawn at a size: a placeholder; its decoded image as it is; its reduced
+    copy; the decoded image stretched, for the part inside the clip only (an enlargement, or a
+    reduction past the scaled-copy budget). }
+  TPictureDraw = (pdPlaceholder, pdImage, pdScaled, pdStretch);
 
 destructor TTyPictureEntry.Destroy;
 begin
@@ -4128,34 +4219,121 @@ begin
   AStream.WriteBuffer(h, SizeOf(h));
 end;
 
-{ The picture's image, decoded from what DisplayData says can be shown; nil when it says
-  nothing can, or the bytes do not decode (anything a decoder raises is taken as that). }
-function DecodePicture(APicture: TTyRichPicture): TBGRABitmap;
+{ The bytes a decoder is handed for the picture: what DisplayData says can be shown (a DIB with
+  a BITMAPFILEHEADER put in front); nil when nothing can. }
+function PictureStream(APicture: TTyRichPicture): TMemoryStream;
 var
   fmt: TTyRichPictureFormat;
   start, count: Integer;
   data: TBytes;
-  st: TMemoryStream;
 begin
   Result := nil;
   if not APicture.DisplayData(fmt, start, count) then Exit;
   data := APicture.Data;
   if (start < 0) or (count <= 0) or (Int64(start) + count > System.Length(data)) then Exit;
-  st := TMemoryStream.Create;
+  Result := TMemoryStream.Create;
   try
-    try
-      if fmt = rpfDib then WriteBmpFileHeader(st, data, start, count);
-      st.WriteBuffer(data[start], count);
-      st.Position := 0;
-      Result := TBGRABitmap.Create;
-      Result.LoadFromStream(st);
-      if (Result.Width <= 0) or (Result.Height <= 0) then FreeAndNil(Result);
-    except
-      FreeAndNil(Result);
-    end;
-  finally
-    st.Free;
+    if fmt = rpfDib then WriteBmpFileHeader(Result, data, start, count);
+    Result.WriteBuffer(data[start], count);
+    Result.Position := 0;
+  except
+    FreeAndNil(Result);
+    raise;
   end;
+end;
+
+function BE16At(P: PByte; AAt, ACount: PtrInt): Int64; inline;
+begin
+  if (AAt < 0) or (AAt + 2 > ACount) then Exit(-1);
+  Result := (Int64(P[AAt]) shl 8) or P[AAt + 1];
+end;
+
+function BE32At(P: PByte; AAt, ACount: PtrInt): Int64; inline;
+begin
+  if (AAt < 0) or (AAt + 4 > ACount) then Exit(-1);
+  Result := (Int64(P[AAt]) shl 24) or (Int64(P[AAt + 1]) shl 16) or (Int64(P[AAt + 2]) shl 8) or
+    P[AAt + 3];
+end;
+
+function LE32At(P: PByte; AAt, ACount: PtrInt): Int64; inline;
+begin
+  if (AAt < 0) or (AAt + 4 > ACount) then Exit(-1);
+  Result := Int64(P[AAt]) or (Int64(P[AAt + 1]) shl 8) or (Int64(P[AAt + 2]) shl 16) or
+    (Int64(P[AAt + 3]) shl 24);
+end;
+
+{ The size an image file says it has, read from its header before anything is decoded: PNG
+  (IHDR), JPEG (the first start-of-frame marker), BMP (its DIB header; a negative height is a
+  top-down bitmap). False for anything else, or a header cut short: such bytes are not handed
+  to a decoder, which would find its size only by allocating it. }
+function ImageHeaderSize(P: PByte; ACount: PtrInt; out AWidth, AHeight: Int64;
+  out AJpeg: Boolean): Boolean;
+var
+  i, len: Int64;
+  m: Byte;
+  hs: Int64;
+begin
+  Result := False;
+  AWidth := 0;
+  AHeight := 0;
+  AJpeg := False;
+  if ACount < 4 then Exit;
+  if (P[0] = $89) and (P[1] = $50) and (P[2] = $4E) and (P[3] = $47) then
+  begin
+    if (ACount < 24) or (P[12] <> Ord('I')) or (P[13] <> Ord('H')) or (P[14] <> Ord('D')) or
+      (P[15] <> Ord('R')) then
+      Exit;
+    AWidth := BE32At(P, 16, ACount);
+    AHeight := BE32At(P, 20, ACount);
+  end
+  else if (P[0] = $FF) and (P[1] = $D8) then
+  begin
+    AJpeg := True;
+    i := 2;
+    while i + 4 <= ACount do
+    begin
+      if P[i] <> $FF then Exit;
+      // fill bytes before a marker
+      while (i < ACount) and (P[i] = $FF) do Inc(i);
+      if i >= ACount then Exit;
+      m := P[i];
+      Inc(i);
+      if (m = $01) or ((m >= $D0) and (m <= $D7)) then Continue;   // no length
+      if (m = $D9) or (m = $DA) then Exit;   // the image ended, or its data began: no frame
+      len := BE16At(P, i, ACount);
+      if len < 2 then Exit;
+      if (m >= $C0) and (m <= $CF) and (m <> $C4) and (m <> $C8) and (m <> $CC) then
+      begin
+        AHeight := BE16At(P, i + 3, ACount);
+        AWidth := BE16At(P, i + 5, ACount);
+        Break;
+      end;
+      Inc(i, len);
+    end;
+  end
+  else if (P[0] = Ord('B')) and (P[1] = Ord('M')) then
+  begin
+    hs := LE32At(P, 14, ACount);
+    if hs = 12 then
+    begin
+      if ACount < 26 then Exit;
+      AWidth := Int64(P[18]) or (Int64(P[19]) shl 8);
+      AHeight := Int64(P[20]) or (Int64(P[21]) shl 8);
+    end
+    else if hs >= 40 then
+    begin
+      AWidth := LE32At(P, 18, ACount);
+      AHeight := LE32At(P, 22, ACount);
+      if AWidth >= $80000000 then AWidth := AWidth - $100000000;
+      if AHeight >= $80000000 then AHeight := AHeight - $100000000;
+      AHeight := Abs(AHeight);
+    end
+    else
+      Exit;
+  end
+  else
+    Exit;
+  Result := (AWidth > 0) and (AHeight > 0);
 end;
 
 function ImageBytes(AImage: TBGRABitmap): Int64; inline;
@@ -4232,7 +4410,9 @@ end;
 
 procedure TTyRichLayouter.PictureTrim(AKeep: TObject);
 begin
-  while (FPicLast <> nil) and (FPicLast <> AKeep) and (FPictureBytes > FPictureLimit) do
+  // the least recently used go first - never one used in the current paint pass
+  while (FPicLast <> nil) and (FPicLast <> AKeep) and (FPictureBytes > FPictureLimit) and
+    (TTyPictureEntry(FPicLast).Pass <> FPicturePass) do
     PictureDrop(FPicLast);
 end;
 
@@ -4248,20 +4428,172 @@ begin
   Result := FPictures.Count;
 end;
 
-{ The kept entry of APicture, made now when there is none (decoded here, never at layout),
-  moved to the front, and with an image scaled to AWidth x AHeight when the decoded one is
-  not that size already (Scaled; nil when scaling failed). }
-function TTyRichLayouter.PictureEntry(APicture: TTyRichPicture; AWidth,
-  AHeight: Integer): TObject;
+procedure TTyRichLayouter.BeginPaintPass;
+begin
+  Inc(FPicturePass);
+  FPassByCaller := True;
+end;
+
+procedure TTyRichLayouter.PaintEnter;
+begin
+  // no caller counting passes: each outermost Paint (or a DrawPicture outside one) is one
+  if (FPaintDepth = 0) and not FPassByCaller then Inc(FPicturePass);
+  Inc(FPaintDepth);
+end;
+
+procedure TTyRichLayouter.PaintLeave;
+begin
+  if FPaintDepth > 0 then Dec(FPaintDepth);
+end;
+
+{ Lets EAccessViolation and EOutOfMemory through (a decoder's bug, a process out of memory:
+  not what a picture's bytes are); anything else a decoder or the resampler raises means "this
+  picture cannot be shown (at this size)". }
+function PictureFatal(E: Exception): Boolean; inline;
+begin
+  Result := (E is EAccessViolation) or (E is EOutOfMemory);
+end;
+
+function TTyRichLayouter.DecodeImage(AStream: TStream; AJpegScale: Integer): TBGRABitmap;
+var
+  rd: TBGRAReaderJpeg;
+begin
+  Result := TBGRABitmap.Create;
+  try
+    if AJpegScale > 0 then
+    begin
+      rd := TBGRAReaderJpeg.Create;
+      try
+        rd.Scale := TJPEGScale(AJpegScale);
+        Result.LoadFromStream(AStream, rd);
+      finally
+        rd.Free;
+      end;
+    end
+    else
+      Result.LoadFromStream(AStream);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TTyRichLayouter.ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap;
+begin
+  AImage.ResampleFilter := rfBestQuality;
+  Result := AImage.Resample(AWidth, AHeight, rmFineResample) as TBGRABitmap;
+end;
+
+{ What the entry costs to keep: the entry, its images, and the picture's bytes it holds - not
+  for one that cannot be shown (a placeholder does not keep its bytes in use). }
+procedure TTyRichLayouter.PictureRecount(AEntry: TObject);
+var
+  e: TTyPictureEntry;
+  b: Int64;
+begin
+  e := TTyPictureEntry(AEntry);
+  b := e.InstanceSize + ImageBytes(e.Image) + ImageBytes(e.Scaled);
+  if not e.Failed then Inc(b, System.Length(e.Pic.Data));
+  Inc(FPictureBytes, b - e.Bytes);
+  e.Bytes := b;
+end;
+
+{ Decodes the entry's picture into Image (again, when it was let go). The size comes from the
+  file's header first: over FPictureDecodeBudget pixels a JPEG is decoded reduced (1/2, 1/4,
+  1/8, while decoding - the reader can do that cheaply), anything else is not decoded and is a
+  placeholder; a header the reader cannot read is not handed to a decoder either. }
+procedure TTyRichLayouter.PictureDecode(AEntry: TObject);
+var
+  e: TTyPictureEntry;
+  st: TMemoryStream;
+  w, h: Int64;
+  jpeg: Boolean;
+  sc: Integer;
+  img: TBGRABitmap;
+begin
+  e := TTyPictureEntry(AEntry);
+  e.Tried := True;
+  st := PictureStream(e.Pic);
+  if st = nil then
+  begin
+    e.Failed := True;
+    Exit;
+  end;
+  img := nil;
+  try
+    Inc(FPictureDecodes);
+    if not ImageHeaderSize(st.Memory, st.Size, w, h, jpeg) then
+    begin
+      e.Failed := True;
+      Exit;
+    end;
+    sc := 0;
+    while (sc < 3) and (((w + (Int64(1) shl sc) - 1) shr sc) * ((h + (Int64(1) shl sc) - 1) shr sc) >
+      FPictureDecodeBudget) do
+      Inc(sc);
+    if ((w + (Int64(1) shl sc) - 1) shr sc) * ((h + (Int64(1) shl sc) - 1) shr sc) >
+      FPictureDecodeBudget then
+    begin
+      e.Failed := True;
+      Exit;
+    end;
+    if (sc > 0) and not jpeg then
+    begin
+      e.Failed := True;
+      Exit;
+    end;
+    try
+      img := DecodeImage(st, sc);
+    except
+      on E: Exception do
+      begin
+        if PictureFatal(E) then raise;
+        img := nil;
+      end;
+    end;
+    if (img <> nil) and ((img.Width <= 0) or (img.Height <= 0)) then FreeAndNil(img);
+    if img = nil then
+    begin
+      e.Failed := True;
+      Exit;
+    end;
+    Inc(FPictureDecodedPixels, Int64(img.Width) * img.Height);
+    e.Image := img;
+    e.ImgW := img.Width;
+    e.ImgH := img.Height;
+  finally
+    st.Free;
+  end;
+end;
+
+{ How drawing the entry at AWidth x AHeight goes (it has been tried): a placeholder when it
+  cannot be shown or a reduction to that size failed; the image itself at its own size; a
+  reduced copy when the box is no larger either way and within FPictureScaleBudget pixels;
+  else the image stretched for the part inside the clip - an enlargement keeps no copy, it
+  costs what the visible area costs. }
+function TTyRichLayouter.PictureHow(AEntry: TObject; AWidth, AHeight: Integer): Integer;
+var
+  e: TTyPictureEntry;
+begin
+  e := TTyPictureEntry(AEntry);
+  if e.Failed then Exit(Ord(pdPlaceholder));
+  if (AWidth = e.ImgW) and (AHeight = e.ImgH) then Exit(Ord(pdImage));
+  if (AWidth <= e.ImgW) and (AHeight <= e.ImgH) and
+    (Int64(AWidth) * AHeight <= FPictureScaleBudget) then
+  begin
+    if (AWidth = e.BadW) and (AHeight = e.BadH) then Exit(Ord(pdPlaceholder));
+    Exit(Ord(pdScaled));
+  end;
+  Result := Ord(pdStretch);
+end;
+
+{ The kept entry of APicture, made now when there is none (nothing decoded yet), moved to the
+  front and marked used in the current paint pass. }
+function TTyRichLayouter.PictureEntry(APicture: TTyRichPicture): TObject;
 var
   o: TObject;
   e: TTyPictureEntry;
-  w, h: Integer;
-  fmt: TTyRichPictureFormat;
-  start, count: Integer;
 begin
-  w := AWidth;
-  h := AHeight;
   if FPictures.TryGetValue(APicture, o) then
   begin
     e := TTyPictureEntry(o);
@@ -4270,40 +4602,72 @@ begin
   end
   else
   begin
-    // the first time it is drawn: decoded now, never at layout
     e := TTyPictureEntry.Create;
     e.Pic := APicture;
     APicture.AddRef;
-    if APicture.DisplayData(fmt, start, count) then
-    begin
-      Inc(FPictureDecodes);
-      e.Image := DecodePicture(APicture);
-    end;
-    e.Bytes := e.InstanceSize + System.Length(APicture.Data) + ImageBytes(e.Image);
+    e.BadW := -1;
+    e.BadH := -1;
     FPictures.Add(APicture, e);
     PicturePushFront(e);
-    Inc(FPictureBytes, e.Bytes);
+    PictureRecount(e);
   end;
-  { Scaled straight from the decoded pixels to the box's device pixels (the layout is in
-    device pixels: HiDPI and zoom are in the box already), and kept for that size: a paint of
-    an unchanged size does not resample again. }
-  if (e.Image <> nil) and not ((e.Image.Width = w) and (e.Image.Height = h)) and
-    ((e.Scaled = nil) or (e.Scaled.Width <> w) or (e.Scaled.Height <> h)) then
-  begin
-    Dec(e.Bytes, ImageBytes(e.Scaled));
-    Dec(FPictureBytes, ImageBytes(e.Scaled));
-    FreeAndNil(e.Scaled);
-    try
-      e.Image.ResampleFilter := rfBestQuality;
-      e.Scaled := e.Image.Resample(w, h, rmFineResample) as TBGRABitmap;
-    except
-      FreeAndNil(e.Scaled);
-    end;
-    Inc(FPictureScales);
-    Inc(e.Bytes, ImageBytes(e.Scaled));
-    Inc(FPictureBytes, ImageBytes(e.Scaled));
-  end;
+  e.Pass := FPicturePass;
   Result := e;
+end;
+
+{ Brings the entry to the state PictureReady calls ready for AWidth x AHeight: decoded the
+  first time (never at layout), decoded again when the size needs the full image and it was
+  let go, reduced once per size - after which the full image is let go - or found that it
+  cannot be (remembered). }
+procedure TTyRichLayouter.PictureMakeReady(AEntry: TObject; AWidth, AHeight: Integer);
+var
+  e: TTyPictureEntry;
+  how: TPictureDraw;
+  s: TBGRABitmap;
+begin
+  e := TTyPictureEntry(AEntry);
+  try
+    if not e.Tried then PictureDecode(e);
+    how := TPictureDraw(PictureHow(e, AWidth, AHeight));
+    case how of
+      pdImage, pdStretch:
+        if e.Image = nil then PictureDecode(e);
+      pdScaled:
+        if (e.Scaled = nil) or (e.Scaled.Width <> AWidth) or (e.Scaled.Height <> AHeight) then
+        begin
+          FreeAndNil(e.Scaled);
+          if e.Image = nil then PictureDecode(e);
+          if e.Image <> nil then
+          begin
+            Inc(FPictureScales);
+            s := nil;
+            try
+              s := ScaleImage(e.Image, AWidth, AHeight);
+            except
+              on E: Exception do
+              begin
+                if PictureFatal(E) then raise;
+                s := nil;
+              end;
+            end;
+            if s = nil then
+            begin
+              // remembered, like a failed decode: a placeholder at this size
+              e.BadW := AWidth;
+              e.BadH := AHeight;
+            end
+            else
+            begin
+              e.Scaled := s;
+              // shown reduced: the full image goes (decoded again for a size that needs it)
+              FreeAndNil(e.Image);
+            end;
+          end;
+        end;
+    end;
+  finally
+    PictureRecount(e);
+  end;
 end;
 
 function TTyRichLayouter.DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture;
@@ -4311,30 +4675,44 @@ function TTyRichLayouter.DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPict
 var
   e: TTyPictureEntry;
   w, h: Integer;
-  img: TBGRABitmap;
+  was: Int64;
 begin
   Result := False;
   w := ABox.Right - ABox.Left;
   h := ABox.Bottom - ABox.Top;
   if (ATarget = nil) or (APicture = nil) or (w <= 0) or (h <= 0) then Exit;
-  e := TTyPictureEntry(PictureEntry(APicture, w, h));
-  if e.Image = nil then
-    DrawPlaceholder(ATarget, ABox, ALinePx, AStyle)
-  else
-  begin
-    if (e.Image.Width = w) and (e.Image.Height = h) then
-      img := e.Image
-    else
-      img := e.Scaled;
-    if img <> nil then
-    begin
-      ATarget.PutImage(ABox.Left, ABox.Top, img, dmDrawWithTransparency);
-      Result := True;
-    end
-    else
-      DrawPlaceholder(ATarget, ABox, ALinePx, AStyle);
+  PaintEnter;
+  try
+    was := FPictureBytes;
+    e := TTyPictureEntry(PictureEntry(APicture));
+    PictureMakeReady(e, w, h);
+    case TPictureDraw(PictureHow(e, w, h)) of
+      pdImage:
+        if e.Image <> nil then
+        begin
+          ATarget.PutImage(ABox.Left, ABox.Top, e.Image, dmDrawWithTransparency);
+          Result := True;
+        end;
+      pdScaled:
+        if e.Scaled <> nil then
+        begin
+          ATarget.PutImage(ABox.Left, ABox.Top, e.Scaled, dmDrawWithTransparency);
+          Result := True;
+        end;
+      pdStretch:
+        if e.Image <> nil then
+        begin
+          // the clip's part only: the target's ClipRect bounds what is computed
+          ATarget.StretchPutImage(ABox, e.Image, dmDrawWithTransparency);
+          Result := True;
+        end;
+    end;
+    if not Result then DrawPlaceholder(ATarget, ABox, ALinePx, AStyle);
+    // only what this draw added can push others out: a repaint of kept pictures evicts none
+    if FPictureBytes > was then PictureTrim(e);
+  finally
+    PaintLeave;
   end;
-  PictureTrim(e);
 end;
 
 function TTyRichLayouter.PictureReady(APicture: TTyRichPicture; AWidth,
@@ -4342,20 +4720,38 @@ function TTyRichLayouter.PictureReady(APicture: TTyRichPicture; AWidth,
 var
   o: TObject;
   e: TTyPictureEntry;
+  fmt: TTyRichPictureFormat;
+  start, count: Integer;
 begin
   if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit(True);
-  if not FPictures.TryGetValue(APicture, o) then Exit(False);
+  // never drawn: there is something to decode, unless nothing of it can be shown
+  if not FPictures.TryGetValue(APicture, o) then
+    Exit(not APicture.DisplayData(fmt, start, count));
   e := TTyPictureEntry(o);
-  // one that cannot be shown is ready: its placeholder costs nothing
-  if e.Image = nil then Exit(True);
-  Result := ((e.Image.Width = AWidth) and (e.Image.Height = AHeight)) or
-    ((e.Scaled <> nil) and (e.Scaled.Width = AWidth) and (e.Scaled.Height = AHeight));
+  if not e.Tried then Exit(False);
+  case TPictureDraw(PictureHow(e, AWidth, AHeight)) of
+    pdPlaceholder: Result := True;
+    pdImage, pdStretch: Result := e.Image <> nil;
+  else
+    Result := (e.Scaled <> nil) and (e.Scaled.Width = AWidth) and (e.Scaled.Height = AHeight);
+  end;
 end;
 
 procedure TTyRichLayouter.PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+var
+  e: TObject;
+  was: Int64;
 begin
   if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit;
-  PictureTrim(PictureEntry(APicture, AWidth, AHeight));
+  PaintEnter;
+  try
+    was := FPictureBytes;
+    e := PictureEntry(APicture);
+    PictureMakeReady(e, AWidth, AHeight);
+    if FPictureBytes > was then PictureTrim(e);
+  finally
+    PaintLeave;
+  end;
 end;
 
 procedure TTyRichLayouter.NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
@@ -4404,6 +4800,8 @@ begin
   FListOfFormat := specialize TDictionary<Integer, TTyListFormat>.Create;
   FPictures := specialize TDictionary<Pointer, TObject>.Create;
   FPictureLimit := CRichPictureCacheBytes;
+  FPictureDecodeBudget := CRichPictureMaxPixels;
+  FPictureScaleBudget := CRichPictureMaxScaledPixels;
   FFontPPI := -1;
 end;
 
@@ -4435,7 +4833,7 @@ procedure TTyRichLayouter.SetBaseFontName(const AValue: string);
 begin
   if FBaseFontName = AValue then Exit;
   FBaseFontName := AValue;
-  Clear;
+  ClearLayouts;
 end;
 
 procedure TTyRichLayouter.SetBaseFontSizeHalfPt(AValue: Integer);
@@ -4443,12 +4841,12 @@ begin
   if AValue < 1 then AValue := 1;
   if FBaseFontSizeHalfPt = AValue then Exit;
   FBaseFontSizeHalfPt := AValue;
-  Clear;
+  ClearLayouts;
 end;
 
 procedure TTyRichLayouter.FallbackFontsChanged(Sender: TObject);
 begin
-  Clear;
+  ClearLayouts;
 end;
 
 procedure TTyRichLayouter.SetOnFallbackFont(AValue: TTyRichFallbackEvent);
@@ -4458,7 +4856,7 @@ begin
     Exit;
   FOnFallbackFont := AValue;
   // the answers found without it (or with the one before) are not its answers
-  Clear;
+  ClearLayouts;
 end;
 
 procedure TTyRichLayouter.LruUnlink(L: TTyBlockLayout);
@@ -4528,6 +4926,15 @@ end;
 
 procedure TTyRichLayouter.Clear;
 begin
+  ClearLayouts;
+  // the decoded pictures, and the references held for them
+  while FPicFirst <> nil do PictureDrop(FPicFirst);
+end;
+
+{ Every layout and everything measured goes; the decoded pictures stay (they depend on no
+  font): what a change of the base font or of the fallback fonts clears. }
+procedure TTyRichLayouter.ClearLayouts;
+begin
   // what is held out of the cache cannot be found: it goes stale by the count
   Inc(FChangeGen);
   while FLruFirst <> nil do CacheDrop(FLruFirst, True);
@@ -4540,8 +4947,6 @@ begin
   FFormatFonts.Clear;
   FOrdinals.Clear;
   FListOfFormat.Clear;
-  // the decoded pictures, and the references held for them
-  while FPicFirst <> nil do PictureDrop(FPicFirst);
   FFontPPI := -1;
 end;
 

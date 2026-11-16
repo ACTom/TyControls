@@ -127,12 +127,42 @@ type
     procedure TestARowIsPlacedAndBoundedAsItsFormatSays;
     procedure TestAnExactRowShowsAndAnswersOnlyItsBox;
     procedure TestPaintLeavesTheClipAndHidesMergedAwayText;
+    // fix wave W2: pictures
+    procedure TestOneScreensPicturesNeverEvictEachOther;
+    procedure TestPictureSizesAreBoundedBeforeAnythingIsAllocated;
+    procedure TestAPreparedPictureIsReady;
+    procedure TestPictureCacheDetails;
   end;
 
 implementation
 
 uses
-  Math, tyControls.StrConsts, test.danglingrefs;
+  Math, FPWriteJPEG, tyControls.StrConsts, test.danglingrefs;
+
+type
+  { The layouter with its decoder and resampler counted, and made to raise on request. }
+  TSeamLayouter = class(TTyRichLayouter)
+  protected
+    function DecodeImage(AStream: TStream; AJpegScale: Integer): TBGRABitmap; override;
+    function ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap; override;
+  public
+    DecodeRaise, ScaleRaise: ExceptClass;
+    DecodeCalls, ScaleCalls: Integer;
+  end;
+
+function TSeamLayouter.DecodeImage(AStream: TStream; AJpegScale: Integer): TBGRABitmap;
+begin
+  Inc(DecodeCalls);
+  if DecodeRaise <> nil then raise DecodeRaise.Create('a decoder that fails');
+  Result := inherited DecodeImage(AStream, AJpegScale);
+end;
+
+function TSeamLayouter.ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap;
+begin
+  Inc(ScaleCalls);
+  if ScaleRaise <> nil then raise ScaleRaise.Create('a resample that fails');
+  Result := inherited ScaleImage(AImage, AWidth, AHeight);
+end;
 
 const
   MB = 1024 * 1024;
@@ -250,6 +280,48 @@ begin
     st.Free;
     b.Free;
   end;
+end;
+
+{ A JPEG of AW x AH pixels of one colour. }
+function JpegBytes(AW, AH: Integer; AColor: TBGRAPixel): TBytes;
+var
+  b: TBGRABitmap;
+  st: TBytesStream;
+  wr: TFPWriterJPEG;
+begin
+  b := TBGRABitmap.Create(AW, AH, AColor);
+  st := TBytesStream.Create;
+  wr := TFPWriterJPEG.Create;
+  try
+    b.SaveToStream(st, wr);
+    Result := Copy(st.Bytes, 0, st.Size);
+  finally
+    wr.Free;
+    st.Free;
+    b.Free;
+  end;
+end;
+
+{ A PNG's signature and IHDR saying AW x AH, then bytes that decode to nothing. }
+function PngHeaderBytes(AW, AH: Cardinal): TBytes;
+var
+  i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 33 + 64);
+  FillChar(Result[0], Length(Result), 0);
+  Result[0] := $89; Result[1] := $50; Result[2] := $4E; Result[3] := $47;
+  Result[4] := $0D; Result[5] := $0A; Result[6] := $1A; Result[7] := $0A;
+  Result[11] := 13;
+  Result[12] := Ord('I'); Result[13] := Ord('H'); Result[14] := Ord('D'); Result[15] := Ord('R');
+  for i := 0 to 3 do
+  begin
+    Result[16 + i] := (AW shr (24 - 8 * i)) and $FF;
+    Result[20 + i] := (AH shr (24 - 8 * i)) and $FF;
+  end;
+  Result[24] := 8;
+  Result[25] := 6;
+  for i := 33 to High(Result) do Result[i] := i * 7;
 end;
 
 function FixtureBytes(const AName: string): TBytes;
@@ -2305,13 +2377,19 @@ begin
       AssertTrue('outside its box the ground', SamePx(Sentinel, bmp.GetPixel(30, 20)));
       FLayouter.DrawPicture(bmp, pic, Rect(5, 5, 25, 15), 1, st);
       AssertEquals('kept: not decoded again', 1, FLayouter.PictureDecodes);
-      // twice the size (at 200 %): scaled once, and kept at that size
+      // twice the size (at 200 %): drawn from the decoded image, no copy made or kept
       AssertTrue('shown larger', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 40, 20), 1, st));
-      AssertEquals('scaled', 1, FLayouter.PictureScales);
-      AssertTrue('scaled pixels', SamePx(green, bmp.GetPixel(35, 18)));
+      AssertEquals('an enlargement is not scaled', 0, FLayouter.PictureScales);
+      AssertTrue('its pixels', SamePx(green, bmp.GetPixel(35, 18)));
       FLayouter.DrawPicture(bmp, pic, Rect(10, 10, 50, 30), 1, st);
-      AssertEquals('the same size again: not scaled again', 1, FLayouter.PictureScales);
       AssertEquals('still decoded once', 1, FLayouter.PictureDecodes);
+      // half the size: reduced once, and kept at that size
+      AssertTrue('shown smaller', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 10, 5), 1, st));
+      AssertEquals('scaled', 1, FLayouter.PictureScales);
+      AssertTrue('scaled pixels', SamePx(green, bmp.GetPixel(5, 2)));
+      FLayouter.DrawPicture(bmp, pic, Rect(10, 10, 20, 15), 1, st);
+      AssertEquals('the same size again: not scaled again', 1, FLayouter.PictureScales);
+      AssertEquals('and not decoded again', 1, FLayouter.PictureDecodes);
     finally
       bmp.Free;
     end;
@@ -2483,6 +2561,21 @@ begin
       end;
     AssertTrue(Format('%d of %d pixels its own', [shown, bmp.Width * bmp.Height]),
       shown >= bmp.Width * bmp.Height * 9 div 10);
+  finally
+    bmp.Free;
+  end;
+  { At the DIB's own size (96 x 64, 24-bit, bottom-up), known pixels of the fixture's bitmap,
+    read from its bits: a grey frame, a light ground, a steel-blue box at the top left, a
+    gold one at the bottom right. A wrong bits offset or rows the wrong way up misses them. }
+  bmp := TBGRABitmap.Create(96, 64, Sentinel);
+  try
+    AssertTrue('shown at its own size', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 96, 64), 1, st));
+    AssertTrue('the frame', SamePx(BGRA(105, 105, 105, 255), bmp.GetPixel(0, 0)));
+    AssertTrue('the ground', SamePx(BGRA(240, 244, 250, 255), bmp.GetPixel(4, 4)));
+    AssertTrue('the blue box, top left', SamePx(BGRA(70, 130, 180, 255), bmp.GetPixel(20, 16)));
+    AssertTrue('the gold box, bottom right', SamePx(BGRA(218, 165, 32, 255), bmp.GetPixel(70, 44)));
+    AssertTrue('the ground under the blue box', SamePx(BGRA(240, 244, 250, 255),
+      bmp.GetPixel(20, 40)));
   finally
     bmp.Free;
   end;
@@ -3928,6 +4021,344 @@ begin
         Pos('shown|', FDevice.DrawLog[i]));
   finally
     bmp.Free;
+  end;
+end;
+
+{ ---- fix wave W2: pictures ---- }
+
+procedure ReleaseSkipped(const A: TTyRichSkippedPictures);
+var
+  i: Integer;
+begin
+  for i := 0 to High(A) do A[i].Picture.Release;
+end;
+
+{ Two pictures on one screen whose decoded images together are over the cache's bound: a
+  paint pass never evicts a picture it used, and a picture shown reduced keeps only its
+  reduced copy - so after the first paint, repaints decode and scale nothing. }
+procedure TTyRichLayoutTest.TestOneScreensPicturesNeverEvictEachOther;
+var
+  d: TTyRichDocument;
+  L, L0, L1: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  i, k: Integer;
+  dec, sc: Int64;
+  pa, pb: TTyRichPicture;
+  lo: TTyRichLayouter;
+begin
+  st := TyRichDefaultPaintStyle;
+  bmp := TBGRABitmap.Create(300, 120, Sentinel);
+  try
+    // at their own size, 100 x 100 (40 KB decoded each), against a bound of 64 KB
+    FLayouter.PictureCacheLimit := 64 * 1024;
+    d := NewDoc(' ');
+    for i := 1 downto 0 do
+      AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(i,
+        TTyRichPicture.Create(rpfPng, PngBytes(100, 100, BGRA(0, i * 200, 100, 255)), 1500, 1500))));
+    L := Lay(d, 0, 1000);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 300, 120), st, 0, 0);
+    AssertEquals('both decoded', 2, FLayouter.PictureDecodes);
+    AssertEquals('both kept: one paint used them', 2, FLayouter.PictureCacheCount);
+    for k := 1 to 3 do L.Paint(bmp, 0, 0, Rect(0, 0, 300, 120), st, 0, 0);
+    AssertEquals('repaints decode nothing', 2, FLayouter.PictureDecodes);
+    AssertEquals('nor scale', 0, FLayouter.PictureScales);
+    // the control's way: two blocks, one pass a paint (BeginPaintPass)
+    d := NewDoc(' '#10' ');
+    pb := TTyRichPicture.Create(rpfPng, PngBytes(100, 100, BGRA(0, 0, 200, 255)), 1500, 1500);
+    pa := TTyRichPicture.Create(rpfPng, PngBytes(100, 100, BGRA(200, 0, 0, 255)), 1500, 1500);
+    AssertTrue('b', d.Execute(TTyRichInsertObject.Create(2, pb)));
+    AssertTrue('a', d.Execute(TTyRichInsertObject.Create(0, pa)));
+    L0 := Lay(d, 0, 1000);
+    L1 := Lay(d, 1, 1000);
+    dec := FLayouter.PictureDecodes;
+    for k := 1 to 3 do
+    begin
+      FLayouter.BeginPaintPass;
+      L0.Paint(bmp, 0, 0, Rect(0, 0, 300, 120), st, 0, 0);
+      L1.Paint(bmp, 0, 0, Rect(0, 0, 300, 120), st, 0, 0);
+    end;
+    AssertEquals('two blocks of one paint: each decoded once', dec + 2, FLayouter.PictureDecodes);
+  finally
+    bmp.Free;
+  end;
+  // shown reduced (200 x 200, 160 KB decoded, at 50 x 50): only the reduced copy stays, so
+  // both fit under 100 KB and even paints that are passes of their own decode nothing more
+  lo := NewLayouter;
+  L := nil;
+  bmp := TBGRABitmap.Create(300, 120, Sentinel);
+  try
+    lo.PictureCacheLimit := 100 * 1024;
+    d := NewDoc(' ');
+    for i := 1 downto 0 do
+      AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(i,
+        TTyRichPicture.Create(rpfPng, PngBytes(200, 200, BGRA(i * 200, 100, 0, 255)), 750, 750))));
+    L := lo.LayoutPara(d, 0, 1000, 96, 1);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 300, 120), st, 0, 0);
+    AssertEquals('both decoded', 2, lo.PictureDecodes);
+    sc := lo.PictureScales;
+    AssertEquals('both reduced', 2, sc);
+    AssertTrue(Format('the full images went: %d bytes', [lo.PictureCacheBytes]),
+      lo.PictureCacheBytes < 2 * (50 * 50 * 4 + 4096));
+    // each picture painted by itself: a pass a paint
+    for k := 1 to 3 do
+    begin
+      L.Paint(bmp, 0, 0, Rect(0, 0, 40, 120), st, 0, 0);
+      L.Paint(bmp, 0, 0, Rect(60, 0, 300, 120), st, 0, 0);
+    end;
+    AssertEquals('repaints decode nothing', 2, lo.PictureDecodes);
+    AssertEquals('nor scale', sc, lo.PictureScales);
+  finally
+    if L <> nil then L.Release;
+    bmp.Free;
+    lo.Free;
+  end;
+end;
+
+{ A picture's size is read from its header before anything is decoded: one that says
+  30000 x 30000 is a placeholder and nothing is allocated for it; over the budget a PNG is a
+  placeholder and a JPEG decodes reduced. An enlargement (a page-wide picture at 500 %), and a
+  reduction past the budget of a kept copy, are drawn from the decoded image for the part in
+  the clip: no scaled copy is made. }
+procedure TTyRichLayoutTest.TestPictureSizesAreBoundedBeforeAnythingIsAllocated;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  huge, png, jpg, big: TTyRichPicture;
+  blue: TBGRAPixel;
+  fr: TTyRichFragment;
+begin
+  st := TyRichDefaultPaintStyle;
+  blue := BGRA(0, 0, 255, 255);
+  huge := TTyRichPicture.Create(rpfPng, PngHeaderBytes(30000, 30000), 1500, 1500);
+  png := TTyRichPicture.Create(rpfPng, PngBytes(400, 300, blue), 6000, 4500);
+  jpg := TTyRichPicture.Create(rpfJpeg, JpegBytes(400, 300, blue), 6000, 4500);
+  huge.AddRef;
+  png.AddRef;
+  jpg.AddRef;
+  bmp := TBGRABitmap.Create(300, 200, Sentinel);
+  try
+    AssertFalse('30000 x 30000: a placeholder', FLayouter.DrawPicture(bmp, huge,
+      Rect(0, 0, 100, 100), 1, st));
+    AssertTrue('its fill', SamePx(st.PlaceholderFill, bmp.GetPixel(50, 50)));
+    AssertEquals('tried', 1, FLayouter.PictureDecodes);
+    AssertEquals('no pixel decoded', 0, FLayouter.PictureDecodedPixels);
+    AssertTrue('ready: the placeholder is what is drawn', FLayouter.PictureReady(huge, 100, 100));
+    FLayouter.DrawPicture(bmp, huge, Rect(0, 0, 100, 100), 1, st);
+    AssertEquals('not tried again', 1, FLayouter.PictureDecodes);
+    // a budget of 40,000 pixels: 400 x 300 is over it
+    FLayouter.PictureDecodeBudget := 40000;
+    AssertFalse('a PNG over the budget: a placeholder', FLayouter.DrawPicture(bmp, png,
+      Rect(0, 0, 200, 150), 1, st));
+    AssertEquals('nothing decoded of it', 0, FLayouter.PictureDecodedPixels);
+    AssertTrue('a JPEG over it: decoded at half its size', FLayouter.DrawPicture(bmp, jpg,
+      Rect(0, 0, 200, 150), 1, st));
+    AssertEquals('200 x 150 pixels', 30000, FLayouter.PictureDecodedPixels);
+    AssertEquals('drawn at that size: not scaled', 0, FLayouter.PictureScales);
+    // (a JPEG's blue is near blue, not exactly it)
+    AssertTrue('its pixels', (bmp.GetPixel(100, 75).blue > 200) and
+      (bmp.GetPixel(100, 75).red < 60) and (bmp.GetPixel(100, 75).green < 60));
+  finally
+    bmp.Free;
+    huge.Release;
+    png.Release;
+    jpg.Release;
+  end;
+  // a page-wide picture (6 x 4 inches, 600 x 400 pixels) at 500 %: 2880 x 1920
+  FLayouter.PictureDecodeBudget := CRichPictureMaxPixels;
+  big := TTyRichPicture.Create(rpfPng, PngBytes(600, 400, blue), 8640, 5760);
+  d := NewDoc('a');
+  AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(0, big)));
+  L := Lay(d, 0, 4000, 5);
+  fr := FragAt(L, 0);
+  AssertEquals('2880 wide', 2880, fr.Width);
+  AssertEquals('1920 tall', 1920, fr.Ascent);
+  bmp := TBGRABitmap.Create(300, 200, Sentinel);
+  try
+    L.Paint(bmp, 0, 0, Rect(0, 0, 300, 200), st, 0, 0);
+    AssertEquals('an enlargement: no scaled copy', 0, FLayouter.PictureScales);
+    AssertTrue(Format('kept: the decoded image alone (%d bytes)', [FLayouter.PictureCacheBytes]),
+      FLayouter.PictureCacheBytes <= 600 * 400 * 4 + Length(big.Data) + 1024);
+    AssertTrue('the part in the clip drawn', SamePx(blue, bmp.GetPixel(150, 100)));
+    // a reduction to more than the copy budget: drawn from the decoded image as well
+    FLayouter.PictureScaleBudget := 1000;
+    bmp.FillRect(0, 0, 300, 200, Sentinel, dmSet);
+    AssertTrue('reduced past the budget', FLayouter.DrawPicture(bmp, big, Rect(0, 0, 60, 40), 1,
+      st));
+    AssertEquals('no copy', 0, FLayouter.PictureScales);
+    AssertTrue('drawn', SamePx(blue, bmp.GetPixel(30, 20)));
+    AssertTrue('in its box only', SamePx(Sentinel, bmp.GetPixel(70, 20)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ PictureReady is the layouter's own "drawing this now would neither decode nor resample", and
+  PreparePicture makes it so: an enlargement is ready once decoded (no copy is made for it); a
+  picture reduced (its full image let go) and then zoomed in needs a decode again, and is
+  ready after one prepare; a reduction that fails is ready as its placeholder and is not tried
+  again. After one PreparePicture each, a deferred paint passes nothing over. }
+procedure TTyRichLayoutTest.TestAPreparedPictureIsReady;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  pic: TTyRichPicture;
+  green: TBGRAPixel;
+  lo: TSeamLayouter;
+  dec: Int64;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.DeferPictures := True;
+  green := BGRA(0, 200, 0, 255);
+  bmp := TBGRABitmap.Create(200, 100, Sentinel);
+  try
+    // an enlargement: 20 x 10 at 200 %
+    pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, green), 300, 150);
+    d := NewDoc('a');
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(0, pic)));
+    L := Lay(d, 0, 1000, 2);
+    AssertFalse('never drawn: not ready', FLayouter.PictureReady(pic, 40, 20));
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    AssertEquals('passed over', 1, FLayouter.SkippedPictureCount);
+    ReleaseSkipped(FLayouter.TakeSkippedPictures);
+    FLayouter.PreparePicture(pic, 40, 20);
+    AssertTrue('an enlargement is ready once decoded', FLayouter.PictureReady(pic, 40, 20));
+    AssertEquals('with no copy made', 0, FLayouter.PictureScales);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    AssertEquals('nothing passed over', 0, FLayouter.SkippedPictureCount);
+    AssertTrue('drawn', SamePx(green, bmp.GetPixel(30, L.Lines[0].Baseline - 5)));
+    // reduced (40 x 20 at 20 x 10), then zoomed in to 80 x 40
+    pic := TTyRichPicture.Create(rpfPng, PngBytes(40, 20, green), 300, 150);
+    d := NewDoc('a');
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(0, pic)));
+    L := Lay(d, 0, 1000, 1);
+    FLayouter.PreparePicture(pic, 20, 10);
+    AssertTrue('reduced: ready', FLayouter.PictureReady(pic, 20, 10));
+    AssertEquals('one reduction', 1, FLayouter.PictureScales);
+    AssertFalse('its own size needs the full image again', FLayouter.PictureReady(pic, 40, 20));
+    AssertFalse('and so does an enlargement', FLayouter.PictureReady(pic, 80, 40));
+    dec := FLayouter.PictureDecodes;
+    L := Lay(d, 0, 1000, 4);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    AssertEquals('zoomed in: passed over', 1, FLayouter.SkippedPictureCount);
+    ReleaseSkipped(FLayouter.TakeSkippedPictures);
+    FLayouter.PreparePicture(pic, 80, 40);
+    AssertEquals('decoded again', dec + 1, FLayouter.PictureDecodes);
+    AssertTrue('ready', FLayouter.PictureReady(pic, 80, 40));
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    AssertEquals('nothing passed over', 0, FLayouter.SkippedPictureCount);
+    AssertTrue('and the reduced size still is', FLayouter.PictureReady(pic, 20, 10));
+  finally
+    bmp.Free;
+  end;
+  // a reduction that fails (the resampler raises)
+  lo := TSeamLayouter.Create(TTyRichTestDevice.Create, True);
+  bmp := TBGRABitmap.Create(200, 100, Sentinel);
+  L := nil;
+  try
+    lo.BaseFontName := 'Test';
+    lo.BaseFontSizeHalfPt := 30;
+    lo.ScaleRaise := Exception;
+    pic := TTyRichPicture.Create(rpfPng, PngBytes(40, 20, green), 300, 150);
+    d := NewDoc('a');
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(0, pic)));
+    L := lo.LayoutPara(d, 0, 1000, 96, 1);
+    lo.PreparePicture(pic, 20, 10);
+    AssertEquals('tried once', 1, lo.ScaleCalls);
+    AssertTrue('ready: its placeholder is what is drawn', lo.PictureReady(pic, 20, 10));
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 100), st, 0, 0);
+    AssertEquals('nothing passed over', 0, lo.SkippedPictureCount);
+    AssertEquals('not tried again', 1, lo.ScaleCalls);
+    AssertTrue('the placeholder', SamePx(st.PlaceholderFill,
+      bmp.GetPixel(10, L.Lines[0].Baseline - 5)));
+    AssertTrue('at another size it is tried', not lo.PictureReady(pic, 30, 15));
+  finally
+    if L <> nil then L.Release;
+    bmp.Free;
+    lo.Free;
+  end;
+end;
+
+{ A placeholder does not count its file's bytes; a font or fallback change keeps the decoded
+  pictures (they depend on no font); a decoder's or the resampler's exception is a
+  placeholder, but an access violation and out-of-memory are let through. }
+procedure TTyRichLayoutTest.TestPictureCacheDetails;
+var
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  junk, pic: TTyRichPicture;
+  data: TBytes;
+  lo: TSeamLayouter;
+  raised: Boolean;
+  dec: Int64;
+begin
+  st := TyRichDefaultPaintStyle;
+  data := PngHeaderBytes(10, 10);
+  SetLength(data, 1024 * 1024);
+  junk := TTyRichPicture.Create(rpfPng, data, 300, 300);
+  pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, BGRABlack), 300, 150);
+  junk.AddRef;
+  pic.AddRef;
+  bmp := TBGRABitmap.Create(60, 40, Sentinel);
+  lo := nil;
+  try
+    AssertFalse('a megabyte that does not decode', FLayouter.DrawPicture(bmp, junk,
+      Rect(0, 0, 20, 20), 1, st));
+    AssertTrue(Format('a placeholder keeps no bytes: %d', [FLayouter.PictureCacheBytes]),
+      FLayouter.PictureCacheBytes < 1024);
+    AssertTrue('drawn', FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 20, 10), 1, st));
+    dec := FLayouter.PictureDecodes;
+    FLayouter.BaseFontName := 'Other';
+    FLayouter.BaseFontSizeHalfPt := 40;
+    FLayouter.FallbackFonts.Add('Another');
+    AssertEquals('font changes keep the pictures', 2, FLayouter.PictureCacheCount);
+    FLayouter.DrawPicture(bmp, pic, Rect(0, 0, 20, 10), 1, st);
+    AssertEquals('not decoded again', dec, FLayouter.PictureDecodes);
+    FLayouter.Clear;
+    AssertEquals('Clear empties them', 0, FLayouter.PictureCacheCount);
+    // exceptions
+    lo := TSeamLayouter.Create(TTyRichTestDevice.Create, True);
+    lo.DecodeRaise := Exception;
+    AssertFalse('a decoder that raises: a placeholder', lo.DrawPicture(bmp, pic,
+      Rect(0, 0, 20, 10), 1, st));
+    lo.Clear;
+    lo.DecodeRaise := EAccessViolation;
+    raised := False;
+    try
+      lo.DrawPicture(bmp, pic, Rect(0, 0, 20, 10), 1, st);
+    except
+      on E: EAccessViolation do raised := True;
+    end;
+    AssertTrue('an access violation goes through', raised);
+    lo.Clear;
+    lo.DecodeRaise := EOutOfMemory;
+    raised := False;
+    try
+      lo.DrawPicture(bmp, pic, Rect(0, 0, 20, 10), 1, st);
+    except
+      on E: EOutOfMemory do raised := True;
+    end;
+    AssertTrue('out of memory goes through', raised);
+    lo.Clear;
+    lo.DecodeRaise := nil;
+    lo.ScaleRaise := EOutOfMemory;
+    raised := False;
+    try
+      lo.DrawPicture(bmp, pic, Rect(0, 0, 10, 5), 1, st);
+    except
+      on E: EOutOfMemory do raised := True;
+    end;
+    AssertTrue('also from the resampler', raised);
+  finally
+    lo.Free;
+    bmp.Free;
+    junk.Release;
+    pic.Release;
   end;
 end;
 
