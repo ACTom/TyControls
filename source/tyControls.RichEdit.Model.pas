@@ -570,6 +570,7 @@ type
     FMarginRight: Integer;
     FModified: Boolean;
     FOnChange: TTyRichChangeEvent;
+    FOnUpdatingEnd: TNotifyEvent;
     FLoader: TTyRichParaLoader;
     FOwnsLoader: Boolean;
     FInLoad: Boolean;
@@ -785,6 +786,11 @@ type
       then differ from what an observer last heard of: a view must not look its blocks up by
       what it knows until the change is reported (it is False again inside that OnChange). }
     property Updating: Boolean read GetUpdating;
+    { Updating turned False: raised at the outermost EndUpdate and at the end of a command's,
+      an undo's or a redo's run (outside an update), after the OnChange that reports what
+      changed - also when nothing changed and nothing was reported. Updating is False inside
+      it. What an observer put off while the document held its changes back is done here. }
+    property OnUpdatingEnd: TNotifyEvent read FOnUpdatingEnd write FOnUpdatingEnd;
     { The caret moved: the next typing does not merge with the typing before. }
     procedure BreakMerge;
     property UndoDepth: Integer read FUndoCount;
@@ -3340,15 +3346,25 @@ begin
     raise ETyRichModel.CreateFmt('%s while a command runs', [AWhat]);
 end;
 
+{ The end of a stretch the changes were held in (a command's run, an update block): what is
+  pending is reported, then the edge (OnUpdatingEnd) - also after a report that raised. }
 procedure TTyRichDocument.Flush;
 var
   c: TTyRichChange;
 begin
-  if (FHold > 0) or (FUpdateCount > 0) or not FHasPending then Exit;
-  c := FPending;
-  FHasPending := False;
-  FPending := Default(TTyRichChange);
-  if Assigned(FOnChange) then FOnChange(Self, c);
+  if (FHold > 0) or (FUpdateCount > 0) then Exit;
+  try
+    if FHasPending then
+    begin
+      c := FPending;
+      FHasPending := False;
+      FPending := Default(TTyRichChange);
+      if Assigned(FOnChange) then FOnChange(Self, c);
+    end;
+  finally
+    // (a handler of the report may have begun an update)
+    if Assigned(FOnUpdatingEnd) and not Updating then FOnUpdatingEnd(Self);
+  end;
 end;
 
 { Runs one step of ACmd with the notifications held; a failed execute or redo is reverted
@@ -3482,6 +3498,8 @@ begin
   if not ACmd.Changed then
   begin
     ACmd.Free;
+    // nothing to report; the run's hold ended all the same
+    Flush;
     Exit;
   end;
   if FUpdateCount > 0 then

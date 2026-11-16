@@ -32,8 +32,10 @@ unit tyControls.RichEdit;
     window invalidation, InvalidateArea, only asks for a blit: for what is drawn over the blit
     after it (a caret), and for a scroll, which moves the surface's pixels itself.
   - Loading never waits on the size: a txt file is the one proportional scan (TyRichLoadText);
-    an RTF file is indexed in slices (TTyRtfLoad.Step) in turns of a few milliseconds, each a
-    call queued to the application's loop (BackgroundTurn), the document readable meanwhile (Loading); FinishLoading runs the rest at once. Pictures are
+    an RTF file is indexed in slices (TTyRtfLoad.Step) in turns of a few milliseconds
+    (BackgroundTurn), one per pass of the application's loop or a timer's tick, by widgetset
+    (TTyRichTurnDriver), the document readable meanwhile (Loading); FinishLoading runs the
+    rest at once. Pictures are
     decoded and scaled the same way, one a turn, never inside a paint that scrolls (the paint
     leaves an empty box and asks for them).
 
@@ -52,7 +54,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLIntf,
-  BGRABitmap, BGRABitmapTypes,
+  LCLPlatformDef, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
@@ -72,8 +74,11 @@ const
   { ... and at most this many pieces of it (load slices, pictures): a cap that holds whatever
     the clock's resolution is. }
   CRichIdleMaxSteps = 3;
-  { One load slice: bytes of RTF indexed per step. }
+  { One load slice: bytes of RTF indexed per step, at most. }
   CRichLoadStepBytes = 256 * 1024;
+  { ... and at least, when the file indexes slowly (L-6): a slice is sized from the rate the
+    load's turns measured, so that it takes about CRichIdleBudgetMs. }
+  CRichLoadMinStepBytes = 16 * 1024;
   { FinishLoading's slice: the progress event fires and a cancel acts every this many bytes. }
   CRichFinishStepBytes = 4 * 1024 * 1024;
   { The kept surface is made in blocks of this many raster pixels: a resize does not make it
@@ -118,6 +123,25 @@ type
     constructor Create(AOwner: TTyCustomRichEdit);
     property Queued: Boolean read FQueued;
   end;
+
+  { What drives the background work's turns (R49), chosen per widgetset by what was measured
+    or read in its LCL source (TyRichTurnDriverFor):
+    - rtdIdle (win32, gtk2, gtk3, qt5, qt6): one turn per pass of the application's loop. While
+      there is work the control has an idle handler (Application.AddOnIdleHandler); the idle
+      step queues ONE call (QueueAsyncCall) that runs a turn on the next pass, and that turn
+      queues nothing itself. The queued call is what makes the loop's wait return. A turn
+      that queued the next turn from inside itself would never let the loop go on win32: the
+      queue runs there from the application window's WM_NULL handler inside the PeekMessage
+      loop, and each queued call posts the next WM_NULL, which PeekMessage hands out before
+      input, paints and timers (measured: 150 chained turns = 1 pass of the loop, 0 timer
+      ticks, 0 idle steps). On gtk2, gtk3, qt5 and qt6 the queue runs only in the idle step
+      and ProcessMessages (read, not run).
+    - rtdTimer (every other widgetset: Cocoa, and anything not named above): a timer whose
+      handler runs a turn, as before the queued turns. On Cocoa the queue is run inside the
+      wait (lclSyncCheck) and the idle step is not reached between two queued calls, so an
+      idle-driven chain would stall there until the next event. Nobody could run Cocoa here:
+      the timer is kept because nothing else was shown to work there. }
+  TTyRichTurnDriver = (rtdIdle, rtdTimer);
 
   { The document as lines (one a paragraph), for the form file and for code that thinks in
     lines. Not a copy: Count is the paragraph count, a line is read from the text when it is
@@ -250,6 +274,15 @@ type
     // inside CancelLoad: the load's notice that it stopped is its own (no edit)
     FInCancel: Boolean;
     FStepCall, FSelCall: TTyRichQueuedCall;
+    { The driver's state (R49): the idle handler is registered (rtdIdle), the turn timer
+      (rtdTimer; made on the first start, freed with the window), a turn is running. }
+    FIdleOn: Boolean;
+    FTurnTimer: TTimer;
+    FInTurn: Boolean;
+    { The load's indexing rate as its turns measured it (L-6): bytes indexed and the
+      milliseconds that took (the progress handler's time left out), and within a turn the
+      bytes and the handler's milliseconds so far. }
+    FRateBytes, FRateMs, FTurnBytes, FHandlerMs: Int64;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
     { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
@@ -300,8 +333,13 @@ type
       blitted the old surface, or nothing): the window is asked to paint again, whole, when
       the view hears of the change (K-11). }
     FSkippedPaint: Boolean;
-    { The pointer was last seen over the padding (MouseMove; GetCursor answers the arrow). }
+    { The pointer was last seen over the padding (MouseMove; GetCursor answers the arrow);
+      cleared when it leaves the control. }
     FOverPadding: Boolean;
+    { The selection was set while the document held its changes back (L-4): the positions
+      are the text's as it was then, not moved by the update's own change; the update's end
+      clamps them to the final text and paints the selection. }
+    FSelInUpdate: Boolean;
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -309,6 +347,10 @@ type
     FOnLoadProgress: TTyRichProgressEvent;
     FOnSaveProgress: TTyRichProgressEvent;
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
+    { The document stopped holding its changes back (TTyRichDocument.OnUpdatingEnd), after
+      the change, if any, was reported: what was put off while it held them is done now - a
+      skipped paint made good (K-11 / L-3), a selection set meanwhile painted (L-4). }
+    procedure DocUpdatingEnded(Sender: TObject);
     procedure ContentReplaced;
     procedure ChangeInView(const AChange: TTyRichChange);
     procedure RelayStale;
@@ -433,8 +475,9 @@ type
       a content the view was not told of yet): the view's blocks may name paragraphs that are
       gone. The one door every entry that needs the layout asks first - the paint and the
       caret, the blink and the drag ticks, keys, the wheel, the mouse, the input method's
-      query and the public settled queries: input does nothing (a key the viewer takes is
-      still taken), a query answers "not available" (K-9). }
+      query, the public settled queries and the selection (Select, the selection setters):
+      input does nothing (a key the viewer takes is still taken), a query answers "not
+      available" (K-9), a selection is kept and painted when the update ends (L-4). }
     function ViewBehind: Boolean;
     procedure StartBlink;
     { The background work's next turn queued (StepCall) or taken off the queue; the selection
@@ -442,6 +485,8 @@ type
     procedure ScheduleCall(ACall: TTyRichQueuedCall);
     procedure CancelCall(ACall: TTyRichQueuedCall);
     procedure CallFired(ACall: TTyRichQueuedCall);
+    procedure TurnTimerTick(Sender: TObject);
+    procedure NoteRate(AStart: QWord);
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -541,22 +586,40 @@ type
     function StepBackground: Boolean;
     function HasBackgroundWork: Boolean;
     { One turn of the background work: pieces of it until CRichIdleMaxSteps of them or
-      CRichIdleBudgetMs by IdleTicks, whichever comes first; then the next turn is queued while
-      work is left (also when a piece raised), and none when it is done. Turns run as calls
-      queued to the application's loop (TApplication.QueueAsyncCall), one at a time, each
-      queuing the next: the loop handles its messages and paints and reaches its idle step
-      (OnIdle, action updates) between two turns, and a turn follows the last at once - no
-      timer period. Only while the control has a window; a turn that comes inside a load
-      step or a save does nothing, and the step's or the save's end queues it again. }
+      CRichIdleBudgetMs by IdleTicks, whichever comes first. While work is left (also when a
+      piece raised) the driver stays on, and it goes when the work is done. The turn itself
+      never queues a call: with rtdIdle the application's next idle step queues the one call
+      that runs the next turn, so the loop handles its input, paints and timers and reaches
+      its idle step (OnIdle, action updates) between two turns, and the next turn follows on
+      the next pass - no timer period; with rtdTimer the timer runs the next. Only while the
+      control has a window; a turn that comes inside a load step or a save does nothing, and
+      the step's or the save's end starts the driver again. }
     procedure BackgroundTurn;
     { The clock a turn is measured by, in milliseconds (GetTickCount64; a test seam). }
     function IdleTicks: QWord; virtual;
-    { The seam the queued calls go through: ACall onto the application's queue
-      (QueueAsyncCall), and off it (RemoveAsyncCalls). }
+    { The driver of the turns on this widgetset: TyRichTurnDriverFor(WidgetSet.LCLPlatform). }
+    function TurnDriver: TTyRichTurnDriver; virtual;
+    { The seam every scheduling goes through (a test counts it and runs what it scheduled by
+      hand): ACall onto the application's queue (QueueAsyncCall) and off it
+      (RemoveAsyncCalls); the idle handler registered (Application.AddOnIdleHandler) and
+      removed. }
     procedure PostCall(ACall: TTyRichQueuedCall); virtual;
     procedure RemovePostedCall(ACall: TTyRichQueuedCall); virtual;
+    procedure WatchIdle(AOn: Boolean); virtual;
+    { The application no longer takes scheduling (it is being destroyed; its queue raises
+      then, its idle handler lists go): nothing is queued or registered (L-2). }
+    function SchedulingClosed: Boolean; virtual;
+    { rtdIdle's idle handler: queues the one call that runs the next turn; with no work (or
+      no window) left it takes itself away. Done is left as it is (the idle step still runs
+      the actions' updates). }
+    procedure IdleStep(Sender: TObject; var Done: Boolean); virtual;
     { The background work's next turn is queued: there is work and a window. }
     property BackgroundCall: TTyRichQueuedCall read FStepCall;
+    { rtdIdle: the idle handler is registered (there is work and a window). }
+    property IdleWatched: Boolean read FIdleOn;
+    { rtdTimer: the timer that runs the turns (nil until the first start, after the window
+      went). }
+    property TurnTimer: TTimer read FTurnTimer;
     { A selection report a snap made outside a user action is queued. }
     property SelectionCall: TTyRichQueuedCall read FSelCall;
     { A press, a release, a hover or the focus changed: the control is painted again only
@@ -637,6 +700,11 @@ type
     property HorizontalBar: TTyScrollBar read FHBar;
     property FirstSliceBytes: Int64 read FFirstSliceBytes write FFirstSliceBytes;
     property StepBytes: Int64 read FStepBytes write FStepBytes;
+    { The bytes the next load slice indexes: StepBytes until the load's turns have measured
+      its rate, then what takes about CRichIdleBudgetMs / CRichIdleMaxSteps at that rate, between
+      CRichLoadMinStepBytes and StepBytes (L-6: a file that indexes slowly - such as raw bytes
+      its font's code page does not map - gets smaller slices, not longer turns). }
+    function SliceBytes: Int64;
     property PendingPictureCount: Integer read FPendingCount;
   public
     constructor Create(AOwner: TComponent); override;
@@ -895,6 +963,9 @@ type
   the system's rich-text type is the toolkit's, not LCL's - those pairs are not verified. }
 function TyRichClipboardRtfName: string;
 
+{ The driver of the background work's turns on widgetset APlatform (see TTyRichTurnDriver). }
+function TyRichTurnDriverFor(APlatform: TLCLPlatform): TTyRichTurnDriver;
+
 {$IFDEF MSWINDOWS}
 type
   TTyRichReplaceFileFunc = function(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
@@ -910,8 +981,8 @@ implementation
 
 uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
-  RTLConsts, Clipbrd, tyControls.StrConsts, tyControls.FontUnits, tyControls.PlatformWS,
-  tyControls.Animation;
+  RTLConsts, Clipbrd, InterfaceBase, tyControls.StrConsts, tyControls.FontUnits,
+  tyControls.PlatformWS, tyControls.Animation;
 
 {$IFDEF MSWINDOWS}
 const
@@ -935,6 +1006,14 @@ procedure TTyRichQueuedCall.Fire(AData: PtrInt);
 begin
   FQueued := False;
   FOwner.CallFired(Self);
+end;
+
+function TyRichTurnDriverFor(APlatform: TLCLPlatform): TTyRichTurnDriver;
+begin
+  if APlatform in [lpWin32, lpGtk2, lpGtk3, lpQt5, lpQt6] then
+    Result := rtdIdle
+  else
+    Result := rtdTimer;
 end;
 
 function FloorDiv(A: Int64; B: Integer): Int64;
@@ -1149,6 +1228,7 @@ begin
   FDoc := CreateDocument;
   FText := FDoc.Text;
   FDoc.OnChange := @DocChanged;
+  FDoc.OnUpdatingEnd := @DocUpdatingEnded;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
@@ -1165,9 +1245,10 @@ end;
 
 destructor TTyCustomRichEdit.Destroy;
 begin
-  // nothing queued may come back into a freed control
-  if FStepCall <> nil then CancelCall(FStepCall);
+  // nothing queued, registered or timed may come back into a freed control
+  StopBackground;
   if FSelCall <> nil then CancelCall(FSelCall);
+  FreeAndNil(FTurnTimer);
   FreeAndNil(FStepCall);
   FreeAndNil(FSelCall);
   FreeAndNil(FBlinkTimer);
@@ -1177,7 +1258,11 @@ begin
   ClearPending;
   ClearFailed;
   FreeAndNil(FSurface);
-  if FDoc <> nil then FDoc.OnChange := nil;
+  if FDoc <> nil then
+  begin
+    FDoc.OnChange := nil;
+    FDoc.OnUpdatingEnd := nil;
+  end;
   if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
   FreeAndNil(FLayouter);
   FreeAndNil(FDoc);
@@ -1484,9 +1569,12 @@ begin
   Result := FCaret <> FSelAnchor;
 end;
 
+{ Inside the document's update (ViewBehind) the setters ask the layout nothing (SnapPos would
+  look a block up by a paragraph index the layouter has not heard of): Select keeps the
+  positions, the update's end puts them on caret places (L-4). }
 procedure TTyCustomRichEdit.SetSelStart(AValue: TTyRichPos);
 begin
-  AValue := SnapPos(AValue);
+  if not ViewBehind then AValue := SnapPos(AValue);
   Select(AValue, AValue, False);
   Moved(False);
 end;
@@ -1500,7 +1588,10 @@ begin
   len := FDoc.Text.Length;
   if AValue > len - s then AValue := len - s
   else if AValue < -s then AValue := -s;
-  Select(s, SnapPos(s + AValue), False);
+  if ViewBehind then
+    Select(s, s + AValue, False)
+  else
+    Select(s, SnapPos(s + AValue), False);
   Moved(False);
 end;
 
@@ -1918,6 +2009,14 @@ begin
   FSelAnchor := AAnchor;
   FCaret := ACaret;
   FCaretAtEnd := AAtEnd;
+  { The door (K-9, L-4): while the document holds its changes back the held blocks may name
+    paragraphs that are gone - the positions are kept (clamped to the text as it is now) and
+    nothing is painted; the update's end paints the selection (DocUpdatingEnded). }
+  if ViewBehind then
+  begin
+    FSelInUpdate := True;
+    Exit;
+  end;
   b0 := Math.Min(AAnchor, ACaret);
   b1 := Math.Max(AAnchor, ACaret);
   // what changed its selected state: where the two stretches differ
@@ -3334,8 +3433,13 @@ begin
     begin
       was := FCaret;
       wasAnchor := FSelAnchor;
-      ShiftForChange(FCaret, AChange);
-      ShiftForChange(FSelAnchor, AChange);
+      { A selection set inside the update was set on the text as it was then: the update's
+        own change does not move it again (L-4); it is clamped to the final text. }
+      if not FSelInUpdate then
+      begin
+        ShiftForChange(FCaret, AChange);
+        ShiftForChange(FSelAnchor, AChange);
+      end;
       FCaret := Math.Max(Int64(0), Math.Min(FCaret, FDoc.Text.Length));
       FSelAnchor := Math.Max(Int64(0), Math.Min(FSelAnchor, FDoc.Text.Length));
       if FCaret <> was then FCaretAtEnd := False;
@@ -3365,6 +3469,31 @@ begin
   end;
 end;
 
+procedure TTyCustomRichEdit.DocUpdatingEnded(Sender: TObject);
+begin
+  // (raised only when Updating is False; a content not heard of yet is DocChanged's)
+  if ViewBehind then Exit;
+  if FSelInUpdate then
+  begin
+    FSelInUpdate := False;
+    FCaret := Math.Max(Int64(0), Math.Min(FCaret, FDoc.Text.Length));
+    FSelAnchor := Math.Max(Int64(0), Math.Min(FSelAnchor, FDoc.Text.Length));
+    // put on caret places by the next paint or settled query, reported after it
+    FSnapPending := True;
+    // where it was painted before is not known any more: the text window, once
+    MarkTextDirty;
+    InvalidateArea(TextWindowRect);
+    CaretMoved;
+  end;
+  { K-11 for an update that ended with nothing to report (L-3): DocChanged made a skipped
+    paint good when there was a change. }
+  if FSkippedPaint then
+  begin
+    FSkippedPaint := False;
+    InvalidateArea(Rect(0, 0, Width, Height));
+  end;
+end;
+
 procedure TTyCustomRichEdit.ContentReplaced;
 begin
   FText := FDoc.Text;
@@ -3374,9 +3503,10 @@ begin
   ReleaseBlocks;
   ClearPending;
   ClearFailed;
-  // the old content's work and report go: LoadAs queues a new load's turn after this
-  if not HasBackgroundWork then CancelCall(FStepCall);
+  // the old content's work and report go: LoadAs starts a new load's driver after this
+  if not HasBackgroundWork then StopBackground;
   CancelCall(FSelCall);
+  FSelInUpdate := False;
   // told, not recognised: the layouter empties everything it kept
   FLayouter.Document := FDoc;
   FAnchorPara := 0;
@@ -4437,7 +4567,8 @@ begin
     before := load.BytesIndexed;
     FInStep := True;
     try
-      load.Step(FStepBytes);
+      load.Step(SliceBytes);
+      if TyRichRtfLoadOf(FDoc) = load then Inc(FTurnBytes, load.BytesIndexed - before);
     except
       FInStep := False;
       { (K-4) A slice that indexed nothing would raise the same again, every turn: the load
@@ -4478,30 +4609,90 @@ begin
   Result := True;
 end;
 
+{ The driver on (R49). rtdIdle: the idle handler registered; when it was not, the first turn
+  is queued too, because a start from code the idle step itself runs after the handlers (an
+  action's update, a later idle handler) would otherwise wait for the next message - this is
+  a start, not a turn queuing the next: inside a turn nothing is queued. rtdTimer: the timer
+  enabled (made on the first start). }
 procedure TTyCustomRichEdit.StartBackground;
+var
+  first: Boolean;
 begin
   // a turn only for a control on screen: one without a window waits for FinishLoading or
-  // its first paint (InitializeWnd queues it)
-  if not HandleAllocated then Exit;
-  ScheduleCall(FStepCall);
+  // its first paint (InitializeWnd starts it)
+  if not HandleAllocated or (csDestroying in ComponentState) or SchedulingClosed then Exit;
+  try
+    if TurnDriver = rtdIdle then
+    begin
+      if FIdleOn then Exit;
+      first := not FInTurn;
+      FIdleOn := True;
+      WatchIdle(True);
+      if first then ScheduleCall(FStepCall);
+    end
+    else
+    begin
+      if FTurnTimer = nil then
+      begin
+        FTurnTimer := TTimer.Create(nil);
+        FTurnTimer.Interval := 1;
+        FTurnTimer.OnTimer := @TurnTimerTick;
+      end;
+      FTurnTimer.Enabled := True;
+    end;
+  except
+    { An application that will not schedule (it shuts down) ends the background work here,
+      quietly: the document stays as far as it was read (Loading; FinishLoading reads the
+      rest, a new window starts the driver again) (L-2). }
+    try
+      StopBackground;
+    except
+    end;
+  end;
 end;
 
 procedure TTyCustomRichEdit.StopBackground;
 begin
+  if FIdleOn then
+  begin
+    FIdleOn := False;
+    WatchIdle(False);
+  end;
   CancelCall(FStepCall);
+  if FTurnTimer <> nil then FTurnTimer.Enabled := False;
+end;
+
+function TTyCustomRichEdit.SchedulingClosed: Boolean;
+begin
+  { TApplication.Destroy sets AppDestroying first, frees its handler lists, then sets
+    AppDoNotCallAsyncQueue (QueueAsyncCall and RemoveAsyncCalls raise from there on) and runs
+    the queue one last time; a control the application does not own may get its turn there. }
+  Result := (Application = nil) or
+    ([AppDestroying, AppDoNotCallAsyncQueue] * Application.Flags <> []);
+end;
+
+function TTyCustomRichEdit.TurnDriver: TTyRichTurnDriver;
+begin
+  if WidgetSet = nil then Exit(rtdTimer);
+  Result := TyRichTurnDriverFor(WidgetSet.LCLPlatform);
 end;
 
 procedure TTyCustomRichEdit.ScheduleCall(ACall: TTyRichQueuedCall);
 begin
   // (the destructor frees the calls before the window goes)
-  if (ACall = nil) or ACall.FQueued or (csDestroying in ComponentState) then Exit;
+  if (ACall = nil) or ACall.FQueued or (csDestroying in ComponentState) or SchedulingClosed then
+    Exit;
   ACall.FQueued := True;
   try
     PostCall(ACall);
   except
-    // an application that shuts down queues nothing more: nothing is queued then
+    // nothing was queued; the error does not travel on into a paint, a turn or a step (L-2)
     ACall.FQueued := False;
-    raise;
+    if ACall = FStepCall then
+      try
+        StopBackground;
+      except
+      end;
   end;
 end;
 
@@ -4524,7 +4715,38 @@ end;
 
 procedure TTyCustomRichEdit.RemovePostedCall(ACall: TTyRichQueuedCall);
 begin
-  if Application <> nil then Application.RemoveAsyncCalls(ACall);
+  // once the queue is shut down it removes nothing (it raises), and runs no call after that
+  if (Application <> nil) and not (AppDoNotCallAsyncQueue in Application.Flags) then
+    Application.RemoveAsyncCalls(ACall);
+end;
+
+procedure TTyCustomRichEdit.WatchIdle(AOn: Boolean);
+begin
+  if Application = nil then Exit;
+  if AOn then
+    // run before the handlers registered earlier: one of them that says "not done" stops the
+    // walk over the rest
+    Application.AddOnIdleHandler(@IdleStep, False)
+  // the application frees its handler lists while it is destroyed
+  else if not (AppDestroying in Application.Flags) then
+    Application.RemoveOnIdleHandler(@IdleStep);
+end;
+
+procedure TTyCustomRichEdit.IdleStep(Sender: TObject; var Done: Boolean);
+begin
+  if not HandleAllocated or not HasBackgroundWork then
+  begin
+    StopBackground;
+    Exit;
+  end;
+  // inside a load step or a save (a handler that runs a modal loop): their end goes on
+  if FInStep or (FSaving > 0) then Exit;
+  ScheduleCall(FStepCall);
+end;
+
+procedure TTyCustomRichEdit.TurnTimerTick(Sender: TObject);
+begin
+  BackgroundTurn;
 end;
 
 procedure TTyCustomRichEdit.CallFired(ACall: TTyRichQueuedCall);
@@ -4543,11 +4765,14 @@ var
   t0: QWord;
   n: Integer;
 begin
-  // inside a load step (a handler that pumps messages) or a save: their end queues it again
-  if FInStep or (FSaving > 0) then Exit;
+  // inside a load step (a handler that pumps messages) or a save: their end starts it again
+  if FInStep or (FSaving > 0) or FInTurn then Exit;
   { The clock (GetTickCount64) may advance in 15.6 ms steps (Windows' default): it only ends a
     turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
     pieces: CRichIdleMaxSteps load slices or pictures. }
+  FInTurn := True;
+  FTurnBytes := 0;
+  FHandlerMs := 0;
   try
     t0 := IdleTicks;
     n := 0;
@@ -4555,15 +4780,53 @@ begin
       if not StepBackground then Break;
       Inc(n);
     until (n >= CRichIdleMaxSteps) or (IdleTicks - t0 >= CRichIdleBudgetMs);
+    NoteRate(t0);
   finally
-    // the next turn while work is left, also after a piece raised: the work never strands
-    if HasBackgroundWork then StartBackground else StopBackground;
+    { The driver stays on while work is left, also after a piece raised: the work never
+      strands (K-4). Nothing is queued from here (R49): still inside the turn, a start only
+      registers the idle handler, and the next idle step queues the next turn. }
+    try
+      if HasBackgroundWork then StartBackground else StopBackground;
+    finally
+      FInTurn := False;
+    end;
   end;
 end;
 
 function TTyCustomRichEdit.IdleTicks: QWord;
 begin
   Result := GetTickCount64;
+end;
+
+{ The turn that began at AStart indexed FTurnBytes: its time, less the progress handler's, goes
+  into the load's rate. The clock's steps (15.6 ms) even out over turns; older turns weigh less
+  (halved past a second measured), so a file that gets slower further on is followed. }
+procedure TTyCustomRichEdit.NoteRate(AStart: QWord);
+var
+  ms: Int64;
+begin
+  if FTurnBytes <= 0 then Exit;
+  ms := Int64(IdleTicks - AStart) - FHandlerMs;
+  if ms < 0 then ms := 0;
+  Inc(FRateBytes, FTurnBytes);
+  Inc(FRateMs, ms);
+  if FRateMs > 1000 then
+  begin
+    FRateBytes := FRateBytes div 2;
+    FRateMs := FRateMs div 2;
+  end;
+end;
+
+function TTyCustomRichEdit.SliceBytes: Int64;
+begin
+  Result := FStepBytes;
+  // (too little measured yet: one clock step is 15.6 ms)
+  if FRateMs < 4 * CRichIdleBudgetMs then Exit;
+  { A turn ends by its cap of pieces more often than by the clock (whose steps are longer than
+    the budget): a slice is a cap's share of the budget. }
+  Result := Math.Max(CRichLoadMinStepBytes,
+    FRateBytes * CRichIdleBudgetMs div (FRateMs * CRichIdleMaxSteps));
+  if Result > FStepBytes then Result := FStepBytes;
 end;
 
 procedure TTyCustomRichEdit.InitializeWnd;
@@ -4577,9 +4840,19 @@ end;
 procedure TTyCustomRichEdit.LoadProgress(Sender: TObject; ADone, ATotal: Int64);
 var
   cancel: Boolean;
+  t0: QWord;
 begin
   cancel := False;
-  if Assigned(FOnLoadProgress) then FOnLoadProgress(Self, ADone, ATotal, cancel);
+  if Assigned(FOnLoadProgress) then
+  begin
+    // the handler's time is the user's: the slices are not sized by it
+    t0 := IdleTicks;
+    try
+      FOnLoadProgress(Self, ADone, ATotal, cancel);
+    finally
+      Inc(FHandlerMs, Int64(IdleTicks - t0));
+    end;
+  end;
   // not inside the step: the load is cancelled when the step has returned
   if cancel then FCancelRequested := True;
 end;
@@ -4648,6 +4921,9 @@ var
 begin
   CheckReplaceable;
   FCancelRequested := False;
+  // a new file's rate is its own
+  FRateBytes := 0;
+  FRateMs := 0;
   if AFormat = rfRtf then
   begin
     prefix := ReadRtfPrefix(AStream);
@@ -5419,6 +5695,7 @@ begin
   FreeAndNil(FSurface);
   InvalidateSurface;
   StopBackground;
+  FreeAndNil(FTurnTimer);
   // the blink and a drag's scrolling are a window's (DoEnter starts the blink again)
   FreeAndNil(FBlinkTimer);
   StopDrag;
@@ -5968,6 +6245,9 @@ end;
 
 procedure TTyCustomRichEdit.MouseLeave;
 begin
+  { Where the pointer comes back in is not known: the arrow is not answered over the text
+    until a move over the padding says so again (L-5). }
+  FOverPadding := False;
   inherited MouseLeave;
   if FVBar <> nil then FVBar.SetHostHovered(False);
   if FHBar <> nil then FHBar.SetHostHovered(False);

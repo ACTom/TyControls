@@ -60,6 +60,24 @@ type
     procedure ShowTextMenu(const APos: TPoint); override;
     procedure PostCall(ACall: TTyRichQueuedCall); override;
     procedure RemovePostedCall(ACall: TTyRichQueuedCall); override;
+    procedure WatchIdle(AOn: Boolean); override;
+    procedure IdleStep(Sender: TObject; var Done: Boolean); override;
+    function TurnDriver: TTyRichTurnDriver; override;
+    function SchedulingClosed: Boolean; override;
+  public
+    { W8: the idle handler registered and removed, the idle step entered (every probe). }
+    class var Watches, Unwatches, IdleEntries: Integer;
+    { W8: the timer driver (what Cocoa and the unnamed widgetsets get) on this widgetset;
+      queuing raises; the application shut down for scheduling. }
+    ForceTimer, FailPost, ClosedApp: Boolean;
+    { W8 (L-6): a clock of the test's (FakeClock on), advanced by ClockStep at every reading. }
+    FakeClock: Boolean;
+    ClockNow: QWord;
+    ClockStep: Integer;
+    function NextSlice: Int64;
+    function IdleOn: Boolean;
+    function TimerOf: TTimer;
+    procedure HoverOut;
   public
     { W6: Invalidate's calls (what PointerStateChanged asks for), the temporary cursors
       MouseMove set. }
@@ -200,6 +218,9 @@ type
     function HandleForm: TForm;
     procedure LoadW7Plain;
     procedure LoadW7Table(ARows, AInRow: Integer);
+    // W8
+    procedure SlowHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    procedure LoadW8Big(AParas: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -354,12 +375,20 @@ type
     procedure TestTheExtentIsTheContentNotTheWrapWidth;
     procedure TestTheColumnSurvivesAZoomWhereItCanScroll;
     procedure TestAJumpLaysOutOnlyTheViewItArrivesAt;
+    // fix wave W8
+    procedure TestTheDriverIsChosenPerWidgetset;
+    procedure TestSchedulingThatFailsEndsTheLoadQuietly;
+    procedure TestAPaintSkippedInAnUpdateWithoutAChange;
+    procedure TestTheSelectionSettersWaitForAnUpdate;
+    procedure TestTheCursorForgetsThePaddingOnLeaving;
+    procedure TestASliceBelowTheViewLaysOutNothing;
+    procedure TestASlowFileGetsSmallerSlices;
   end;
 
 implementation
 
 uses
-  LCLIntf, tyControls.StrConsts;
+  LCLIntf, LCLPlatformDef, InterfaceBase, tyControls.StrConsts;
 
 type
   // the application's queue of asynchronous calls, run without pumping any message
@@ -371,6 +400,19 @@ type
 procedure RunQueuedCalls;
 begin
   TAppQueue(Application).ProcessAsyncCallQueue;
+end;
+
+function CoversRect(const AOuter, AInner: TRect): Boolean; forward;
+
+{ Runs the application's idle handlers (what its idle step runs after the queue) - and
+  nothing else. True when they all left Done as it was. }
+function RunIdleHandlers: Boolean;
+var
+  done: Boolean;
+begin
+  done := True;
+  TAppQueue(Application).NotifyIdleHandler(done);
+  Result := done;
 end;
 
 const
@@ -520,7 +562,17 @@ end;
 
 function TRichProbe.IdleTicks: QWord;
 begin
+  if FakeClock then
+  begin
+    Inc(ClockNow, ClockStep);
+    Exit(ClockNow);
+  end;
   if FrozenClock then Result := 0 else Result := inherited IdleTicks;
+end;
+
+function TRichProbe.NextSlice: Int64;
+begin
+  Result := SliceBytes;
 end;
 
 procedure TRichProbe.Turn;
@@ -838,7 +890,45 @@ end;
 procedure TRichProbe.PostCall(ACall: TTyRichQueuedCall);
 begin
   Inc(Posts);
+  if FailPost then raise Exception.Create('the test''s queue that will not take a call');
   inherited PostCall(ACall);
+end;
+
+procedure TRichProbe.WatchIdle(AOn: Boolean);
+begin
+  if AOn then Inc(Watches) else Inc(Unwatches);
+  inherited WatchIdle(AOn);
+end;
+
+procedure TRichProbe.IdleStep(Sender: TObject; var Done: Boolean);
+begin
+  Inc(IdleEntries);
+  inherited IdleStep(Sender, Done);
+end;
+
+function TRichProbe.TurnDriver: TTyRichTurnDriver;
+begin
+  if ForceTimer then Result := rtdTimer else Result := inherited TurnDriver;
+end;
+
+function TRichProbe.SchedulingClosed: Boolean;
+begin
+  Result := ClosedApp or inherited SchedulingClosed;
+end;
+
+function TRichProbe.IdleOn: Boolean;
+begin
+  Result := IdleWatched;
+end;
+
+function TRichProbe.TimerOf: TTimer;
+begin
+  Result := TurnTimer;
+end;
+
+procedure TRichProbe.HoverOut;
+begin
+  MouseLeave;
 end;
 
 procedure TRichProbe.RemovePostedCall(ACall: TTyRichQueuedCall);
@@ -6852,70 +6942,478 @@ begin
   AssertTrue('loading', FRich.Loading);
 end;
 
-{ K-1: the load runs in turns queued to the application's loop, one at a time: a turn with
-  work left queues exactly one next turn, the turn that finishes queues none; a cancel, a new
-  content, the handle's destruction and the destructor take a queued turn off the queue, and
-  running the queue then does not enter the control. (The loop itself - that a call queued
-  from a call runs in its next turn, after its messages and paints, with its idle step - is
-  the smoke's to see.) }
+{ K-1 / R49 (L-1): on this widgetset (win32) the load runs one turn per pass of the
+  application's loop, scheduled from its idle step. A start registers the idle handler once
+  and queues the first turn; a turn with work left queues nothing of its own and leaves the
+  one registration; the idle step queues exactly one call, and a second idle step before it
+  ran queues no second; the queued call runs one turn; with no work left the idle handler is
+  gone. A cancel, a new content, the handle's destruction and the destructor take the idle
+  handler and the queued call away: running the idle handlers and the queue by hand then
+  enters the control nowhere. (The loop itself - input, paints and timers between two turns -
+  is the real-loop probe's and the smoke's to see.) }
 procedure TTyRichEditControlTest.TestTheLoadRunsInQueuedTurns;
 var
   F: TForm;
-  posts, removes, turns, n: Integer;
+  posts, removes, watches, unwatches, idles, turns, n: Integer;
+  bytes: Int64;
+
+  procedure NothingEntered(const AWhat: string);
+  var
+    n0, i0, p0: Integer;
+  begin
+    n0 := FRich.Document.Text.ParaCount;
+    i0 := TRichProbe.IdleEntries;
+    p0 := TRichProbe.Posts;
+    RunIdleHandlers;
+    RunQueuedCalls;
+    AssertEquals(AWhat + ': the idle step does not enter it', i0, TRichProbe.IdleEntries);
+    AssertEquals(AWhat + ': nothing queued', p0, TRichProbe.Posts);
+    AssertEquals(AWhat + ': nothing indexed', n0, FRich.Document.Text.ParaCount);
+  end;
+
 begin
   F := HandleForm;
   try
+    AssertTrue('win32 is driven from the idle step',
+      TyRichTurnDriverFor(WidgetSet.LCLPlatform) = rtdIdle);
+    watches := TRichProbe.Watches;
+    posts := TRichProbe.Posts;
     LoadW7Plain;
-    AssertTrue('the first turn is queued', FRich.TurnQueued);
+    AssertEquals('a start registers the idle handler once', watches + 1, TRichProbe.Watches);
+    AssertTrue('registered', FRich.IdleOn);
+    AssertTrue('and queues the first turn', FRich.TurnQueued);
+    AssertEquals('one call', posts + 1, TRichProbe.Posts);
     turns := 0;
     while FRich.Loading do
     begin
       AssertTrue(Format('turn %d: queued', [turns]), FRich.TurnQueued);
       posts := TRichProbe.Posts;
+      bytes := TyRichRtfLoadOf(FRich.Document).BytesIndexed;
       RunQueuedCalls;
       Inc(turns);
-      if FRich.Loading then
-        AssertEquals(Format('turn %d: work left, exactly one next turn', [turns]), posts + 1,
-          TRichProbe.Posts)
-      else
-        AssertEquals('the turn that finishes queues none', posts, TRichProbe.Posts);
+      AssertEquals(Format('turn %d queues no call of its own', [turns]), posts,
+        TRichProbe.Posts);
+      AssertFalse(Format('turn %d: nothing queued after it', [turns]), FRich.TurnQueued);
+      if not FRich.Loading then Break;
+      AssertTrue(Format('turn %d indexed', [turns]),
+        TyRichRtfLoadOf(FRich.Document).BytesIndexed > bytes);
+      AssertTrue(Format('turn %d: still registered', [turns]), FRich.IdleOn);
+      AssertEquals(Format('turn %d: one registration', [turns]), watches + 1,
+        TRichProbe.Watches);
+      // the idle step queues exactly one call; a second one before it ran queues none
+      AssertTrue('the idle handlers leave Done', RunIdleHandlers);
+      AssertEquals(Format('idle step after turn %d: one call', [turns]), posts + 1,
+        TRichProbe.Posts);
+      RunIdleHandlers;
+      AssertEquals(Format('a second idle step after turn %d: no second', [turns]), posts + 1,
+        TRichProbe.Posts);
       AssertTrue('runaway', turns < 10000);
     end;
     AssertTrue(Format('in turns (%d)', [turns]), turns >= 2);
-    AssertFalse('nothing queued after the end', FRich.TurnQueued);
     AssertFalse('the whole file', FRich.Document.Incomplete);
+    AssertFalse('no work left: the idle handler is gone', FRich.IdleOn);
+    NothingEntered('after the end');
+    // a turn with the driver off (nothing registered, as the timer driver leaves it): it
+    // registers the idle handler and queues nothing of its own
+    FRich.ClosedApp := True;
+    LoadW7Plain;
+    FRich.ClosedApp := False;
+    AssertFalse('closed: not registered', FRich.IdleOn);
+    posts := TRichProbe.Posts;
+    FRich.Turn;
+    AssertTrue('the turn registers the idle handler', FRich.IdleOn);
+    AssertEquals('and queues no call of its own', posts, TRichProbe.Posts);
+    FRich.CancelLoad;
     // a cancel
     LoadW7Plain;
-    AssertTrue('queued again', FRich.TurnQueued);
+    AssertTrue('registered again', FRich.IdleOn);
     removes := TRichProbe.Removes;
+    unwatches := TRichProbe.Unwatches;
     FRich.CancelLoad;
     AssertFalse('cancelled: nothing queued', FRich.TurnQueued);
+    AssertFalse('cancelled: not registered', FRich.IdleOn);
     AssertEquals('taken off the queue', removes + 1, TRichProbe.Removes);
-    n := FRich.Document.Text.ParaCount;
-    RunQueuedCalls;
-    AssertEquals('the queue run: nothing indexed', n, FRich.Document.Text.ParaCount);
+    AssertEquals('the idle handler removed', unwatches + 1, TRichProbe.Unwatches);
+    NothingEntered('after a cancel');
     // a new content
     LoadW7Plain;
     FRich.Lines.Text := 'another';
     AssertFalse('a new content: nothing queued', FRich.TurnQueued);
+    AssertFalse('a new content: not registered', FRich.IdleOn);
+    NothingEntered('after a new content');
     // the handle's destruction
     LoadW7Plain;
+    RunQueuedCalls;
+    RunIdleHandlers;
+    AssertTrue('a turn queued by the idle step', FRich.TurnQueued);
     FRich.DropHandle;
     AssertFalse('no window: nothing queued', FRich.TurnQueued);
-    n := FRich.Document.Text.ParaCount;
-    RunQueuedCalls;
-    AssertEquals('the queue run: nothing indexed', n, FRich.Document.Text.ParaCount);
+    AssertFalse('no window: not registered', FRich.IdleOn);
+    NothingEntered('after the handle went');
     AssertTrue('the load waits', FRich.Loading);
     FRich.HandleNeeded;
+    AssertTrue('a window again: registered again', FRich.IdleOn);
     AssertTrue('a window again: queued again', FRich.TurnQueued);
     // the destructor
     removes := TRichProbe.Removes;
+    unwatches := TRichProbe.Unwatches;
+    idles := TRichProbe.IdleEntries;
+    n := TRichProbe.Posts;
     FreeAndNil(FRich);
-    AssertEquals('the destructor takes it off the queue', removes + 1, TRichProbe.Removes);
+    AssertEquals('the destructor takes the call off the queue', removes + 1, TRichProbe.Removes);
+    AssertEquals('and removes the idle handler', unwatches + 1, TRichProbe.Unwatches);
+    RunIdleHandlers;
     RunQueuedCalls;
+    AssertEquals('freed: the idle step does not enter it', idles, TRichProbe.IdleEntries);
+    AssertEquals('freed: nothing queued', n, TRichProbe.Posts);
     FRich := NewProbe;
   finally
     if FRich <> nil then FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ R49: the driver is chosen per widgetset by one function; the timer driver (Cocoa and every
+  widgetset not named) runs here when forced: a start enables the timer, a turn with work left
+  keeps it on and queues and registers nothing, the end disables it; the window's going frees
+  it. }
+procedure TTyRichEditControlTest.TestTheDriverIsChosenPerWidgetset;
+var
+  F: TForm;
+  p: TLCLPlatform;
+  posts, watches, turns: Integer;
+begin
+  for p := Low(TLCLPlatform) to High(TLCLPlatform) do
+    if p in [lpWin32, lpGtk2, lpGtk3, lpQt5, lpQt6] then
+      AssertTrue(Format('platform %d: the idle step', [Ord(p)]), TyRichTurnDriverFor(p) = rtdIdle)
+    else
+      AssertTrue(Format('platform %d: the timer', [Ord(p)]), TyRichTurnDriverFor(p) = rtdTimer);
+  AssertTrue('Cocoa: the timer', TyRichTurnDriverFor(lpCocoa) = rtdTimer);
+  F := HandleForm;
+  try
+    FRich.ForceTimer := True;
+    posts := TRichProbe.Posts;
+    watches := TRichProbe.Watches;
+    LoadW7Plain;
+    AssertTrue('a timer', FRich.TimerOf <> nil);
+    AssertTrue('running', FRich.TimerOf.Enabled);
+    AssertEquals('1 ms', 1, FRich.TimerOf.Interval);
+    turns := 0;
+    while FRich.Loading do
+    begin
+      FRich.Turn;
+      Inc(turns);
+      if FRich.Loading then AssertTrue('work left: still running', FRich.TimerOf.Enabled);
+      AssertTrue('runaway', turns < 10000);
+    end;
+    AssertFalse('done: stopped', FRich.TimerOf.Enabled);
+    AssertEquals('nothing queued', posts, TRichProbe.Posts);
+    AssertEquals('nothing registered', watches, TRichProbe.Watches);
+    LoadW7Plain;
+    AssertTrue('running again', FRich.TimerOf.Enabled);
+    FRich.CancelLoad;
+    AssertFalse('cancelled: stopped', FRich.TimerOf.Enabled);
+    LoadW7Plain;
+    FRich.DropHandle;
+    AssertTrue('the window went: freed', FRich.TimerOf = nil);
+    FRich.HandleNeeded;
+    AssertTrue('a window again: running', (FRich.TimerOf <> nil) and FRich.TimerOf.Enabled);
+    FRich.FinishLoading;
+    AssertFalse('finished: stopped', FRich.TimerOf.Enabled);
+  finally
+    FRich.ForceTimer := False;
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ L-2: a queue that will not take a call (an application being destroyed raises "QueueAsyncCall
+  already shut down") ends the background work quietly - nothing escapes from the load, a turn
+  or the idle step, nothing stays registered; an application closed for scheduling gets
+  nothing queued or registered. The document stays as far as it was read; FinishLoading reads
+  the rest. }
+procedure TTyRichEditControlTest.TestSchedulingThatFailsEndsTheLoadQuietly;
+var
+  F: TForm;
+  posts, watches: Integer;
+begin
+  F := HandleForm;
+  try
+    FRich.FailPost := True;
+    LoadW7Plain;
+    AssertTrue('still loading', FRich.Loading);
+    AssertFalse('nothing queued', FRich.TurnQueued);
+    AssertFalse('nothing registered', FRich.IdleOn);
+    FRich.Turn;
+    AssertFalse('a turn: nothing queued', FRich.TurnQueued);
+    AssertTrue('the turn registered the idle handler', FRich.IdleOn);
+    // the idle step's queuing refused: nothing escapes, the driver ends
+    RunIdleHandlers;
+    AssertFalse('the idle step: nothing queued', FRich.TurnQueued);
+    AssertFalse('the idle step: the driver ended', FRich.IdleOn);
+    FRich.FailPost := False;
+    FRich.FinishLoading;
+    AssertFalse('FinishLoading reads the rest', FRich.Document.Incomplete);
+    // closed for scheduling (TApplication.Destroy's flags)
+    FRich.ClosedApp := True;
+    posts := TRichProbe.Posts;
+    watches := TRichProbe.Watches;
+    LoadW7Plain;
+    FRich.Turn;
+    AssertEquals('closed: nothing queued', posts, TRichProbe.Posts);
+    AssertEquals('closed: nothing registered', watches, TRichProbe.Watches);
+    AssertFalse('closed: not registered', FRich.IdleOn);
+    FRich.ClosedApp := False;
+    FRich.CancelLoad;
+  finally
+    FRich.FailPost := False;
+    FRich.ClosedApp := False;
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ L-3: a window paint inside an update that ends with nothing to report (it was skipped: the
+  view was behind) is made good when the update ends - the text window is invalidated once; an
+  update with no paint inside it invalidates nothing. }
+procedure TTyRichEditControlTest.TestAPaintSkippedInAnUpdateWithoutAChange;
+var
+  i, hits: Integer;
+begin
+  SetLinesOf(10, 'Line ');
+  FRich.Lines.BeginUpdate;
+  try
+    PaintAll(True);
+    FRich.ResetCounts;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  hits := 0;
+  for i := 0 to High(FRich.Invalidated) do
+    if CoversRect(FRich.Invalidated[i], FRich.TextWindow) then Inc(hits);
+  AssertEquals('nothing changed: the text window is painted again, once', 1, hits);
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.ResetCounts;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('no paint inside: nothing invalidated', 0, Length(FRich.Invalidated));
+end;
+
+{ L-4: SelectAll, SelStart :=, SelLength := and CaretPos := between BeginUpdate and EndUpdate,
+  after paragraphs were removed, raise nothing and ask the layout nothing; after EndUpdate the
+  selection is inside the document and painted. }
+procedure TTyRichEditControlTest.TestTheSelectionSettersWaitForAnUpdate;
+var
+  i: Integer;
+  len: TTyRichPos;
+  hit: Boolean;
+begin
+  SetLinesOf(50, 'Line ');
+  PaintAll(True);
+  FRich.SelStart := FRich.Document.Text.ParaStart(40) + 2;
+  PaintAll(True);
+  FRich.Lines.BeginUpdate;
+  try
+    for i := 1 to 45 do FRich.Lines.Delete(0);
+    FRich.ResetCounts;
+    FRich.SelectAll;
+    FRich.SelStart := 3;
+    FRich.SelLength := 1000;
+    FRich.CaretPos := 7;
+    FRich.SelStart := 1;
+    FRich.SelLength := 2;
+    FRich.SelectAll;
+    AssertEquals('nothing laid out', 0, Length(FRich.Given));
+    AssertEquals('nothing painted', 0, Length(FRich.Invalidated));
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  len := FRich.Document.Text.Length;
+  AssertEquals('five lines', 5, FRich.Document.Text.ParaCount);
+  AssertEquals('the selection starts at 0', Int64(0), FRich.SelStart);
+  AssertEquals('and ends at the document''s end', len, FRich.SelLength);
+  hit := False;
+  for i := 0 to High(FRich.Invalidated) do
+    if CoversRect(FRich.Invalidated[i], FRich.TextWindow) then hit := True;
+  AssertTrue('after the update: the selection is painted', hit);
+  // a selection beyond the final text, set before more was deleted, is clamped at the end
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.SelStart := FRich.Document.Text.Length;
+    for i := 1 to 3 do FRich.Lines.Delete(0);
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertTrue('clamped to the final text',
+    FRich.SelStart + FRich.SelLength <= FRich.Document.Text.Length);
+  // an update that changes nothing: its end alone paints the selection set in it
+  PaintAll(True);
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.SelStart := 2;
+    FRich.SelLength := 3;
+    FRich.ResetCounts;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  hit := False;
+  for i := 0 to High(FRich.Invalidated) do
+    if CoversRect(FRich.Invalidated[i], FRich.TextWindow) then hit := True;
+  AssertTrue('nothing changed: the selection is painted at the update''s end', hit);
+  AssertEquals('the selection', Int64(3), FRich.SelLength);
+  PaintAll(True);
+  CheckSurface('after the selection set in an update');
+end;
+
+{ L-5: the pointer leaving the control forgets that it was over the padding: the I-beam is
+  answered until a move over the padding says otherwise. }
+procedure TTyRichEditControlTest.TestTheCursorForgetsThePaddingOnLeaving;
+var
+  F: TForm;
+begin
+  F := HandleForm;
+  try
+    SetLinesOf(10, 'Line ');
+    FRich.UpdateView;
+    FRich.MoveAt(1, 1);
+    AssertEquals('over the padding: the arrow', Ord(crArrow), Ord(FRich.Cursor));
+    FRich.HoverOut;
+    AssertEquals('left: the I-beam', Ord(crIBeam), Ord(FRich.Cursor));
+  finally
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.SlowHandler(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+begin
+  // a handler that takes 50 ms by the test's clock
+  Inc(FRich.ClockNow, 50);
+end;
+
+{ A plain RTF of AParas paragraphs, its first slice the first 50 of them, loading. }
+procedure TTyRichEditControlTest.LoadW8Big(AParas: Integer);
+var
+  src: TBytes;
+  first: Int64;
+  st: TBytesStream;
+begin
+  src := W5PlainRtf(AParas, first);
+  FRich.FirstSliceBytes := first;
+  st := TBytesStream.Create(src);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+end;
+
+{ L-6: the slices a load appends below the view cost no layout and no settled query in its
+  turns (on a handle of a form never shown); the scroll bar still follows - its range is the
+  document's at the end. }
+procedure TTyRichEditControlTest.TestASliceBelowTheViewLaysOutNothing;
+var
+  F: TForm;
+  turns, endMax: Integer;
+  v0: Int64;
+begin
+  F := HandleForm;
+  try
+    FRich.Slices(0, 16 * 1024);
+    LoadW8Big(3000);
+    PaintAll(True);
+    AssertTrue('the view holds blocks', FRich.VisibleBlockCount > 0);
+    AssertTrue('the slice ends below the view',
+      FRich.VisibleBlocks[FRich.VisibleBlockCount - 1].LastPara < FRich.Document.Text.ParaCount - 1);
+    FRich.ResetCounts;
+    v0 := FRich.Document.Text.NodeVisits;
+    turns := 0;
+    while FRich.Loading do
+    begin
+      RunQueuedCalls;
+      RunIdleHandlers;
+      Inc(turns);
+      AssertTrue('runaway', turns < 10000);
+    end;
+    AssertTrue(Format('in turns (%d)', [turns]), turns >= 2);
+    AssertEquals('the turns asked for no layout', 0, Length(FRich.Given));
+    AssertEquals('and laid out nothing', 0, FRich.LaidParas);
+    AssertEquals('nothing drawn', 0, FRich.BlockPaints);
+    WriteLn(Format('L-6: %d turns, %d tree visits', [turns, FRich.Document.Text.NodeVisits - v0]));
+    AssertTrue('a scroll bar', (FRich.VBar <> nil) and FRich.VBar.Visible);
+    endMax := FRich.VBar.Max;
+    // (a bar unit is a pixel here: the document is far below ScrollBarLimit)
+    AssertEquals('the bar''s range at the end is the whole document''s',
+      FRich.Document.Text.TotalHeight div FRich.Scale - FRich.VBar.PageSize, Int64(endMax));
+    FRich.ScrollToEnd;
+    PaintAll(True);
+    AssertEquals('scrolled to the end: the last paragraph shown',
+      FRich.Document.Text.ParaCount - 1,
+      FRich.VisibleBlocks[FRich.VisibleBlockCount - 1].LastPara);
+  finally
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ L-6: a file that indexes slowly gets smaller slices, not longer turns: after a turn measured
+  slow by the clock the next slices are CRichLoadMinStepBytes; a fast clock (or none) keeps
+  StepBytes; the progress handler's own time does not shrink them. }
+procedure TTyRichEditControlTest.TestASlowFileGetsSmallerSlices;
+var
+  F: TForm;
+  before: Int64;
+begin
+  F := HandleForm;
+  try
+    FRich.Slices(0, 256 * 1024);
+    // no clock that moves: StepBytes
+    FRich.FrozenClock := True;
+    LoadW8Big(40000);
+    FRich.Turn;
+    AssertEquals('a clock that stands: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    FRich.FrozenClock := False;
+    // every reading of the clock 40 ms on: one slice takes "40 ms"
+    FRich.FakeClock := True;
+    FRich.ClockNow := 0;
+    FRich.ClockStep := 40;
+    LoadW8Big(40000);
+    AssertEquals('a new load: the whole step first', Int64(256 * 1024), FRich.NextSlice);
+    FRich.Turn;
+    AssertEquals('measured slow: the smallest slice', Int64(CRichLoadMinStepBytes), FRich.NextSlice);
+    before := TyRichRtfLoadOf(FRich.Document).BytesIndexed;
+    FRich.Turn;
+    AssertTrue(Format('the next turn indexed %d bytes',
+      [TyRichRtfLoadOf(FRich.Document).BytesIndexed - before]),
+      TyRichRtfLoadOf(FRich.Document).BytesIndexed - before <= CRichIdleMaxSteps * (CRichLoadMinStepBytes + 1024));
+    // fast: 1 ms a reading
+    FRich.ClockStep := 1;
+    LoadW8Big(40000);
+    FRich.Turn;
+    FRich.Turn;
+    FRich.Turn;
+    FRich.Turn;
+    FRich.Turn;
+    FRich.Turn;
+    AssertEquals('measured fast: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    // a slow handler, a fast file: the handler's time is not the slices'
+    FRich.ClockStep := 0;
+    FRich.OnLoadProgress := @SlowHandler;
+    LoadW8Big(40000);
+    FRich.Turn;
+    FRich.Turn;
+    FRich.Turn;
+    AssertEquals('a slow handler: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    FRich.OnLoadProgress := nil;
+    FRich.CancelLoad;
+  finally
+    FRich.FakeClock := False;
+    FRich.OnLoadProgress := nil;
+    FRich.Parent := nil;
     F.Free;
   end;
 end;
@@ -6931,8 +7429,8 @@ begin
   end;
 end;
 
-{ K-4: a turn whose step raised (here: the load's progress handler, once) still queues the next
-  turn, and the load runs to its end. }
+{ K-4: after a turn whose step raised (here: the load's progress handler, once) the driver stays
+  on (the idle step goes on queuing turns), and the load runs to its end. }
 procedure TTyRichEditControlTest.TestAStepThatRaisesDoesNotStrandTheLoad;
 var
   F: TForm;
@@ -6952,10 +7450,11 @@ begin
     end;
     AssertTrue('the handler raised', raised);
     AssertTrue('still loading', FRich.Loading);
-    AssertTrue('the next turn is queued all the same', FRich.TurnQueued);
+    AssertTrue('the driver stays on all the same', FRich.IdleOn);
     turns := 0;
-    while FRich.Loading and FRich.TurnQueued do
+    while FRich.Loading and FRich.IdleOn do
     begin
+      RunIdleHandlers;
       RunQueuedCalls;
       Inc(turns);
       AssertTrue('runaway', turns < 10000);

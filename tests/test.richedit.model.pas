@@ -61,6 +61,8 @@ type
   private
     FChanges: array of TTyRichChange;
     FUpdatingSeen: string;   // what Updating said in the last OnChange
+    // W8: OnUpdatingEnd, one "e<changes heard so far><Updating T/F>" per edge
+    FEdges: string;
     // a document a save's callback or stream tries to load into, and what came of it
     FLoadDoc: TTyRichDocument;
     FLoadTries, FLoadRefused: Integer;
@@ -68,6 +70,7 @@ type
     function SaveTryingLoads(ADone, ATotal: Int64): Boolean;
     procedure WriteTryingLoads(Sender: TObject);
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
+    procedure UpdatingEnded(Sender: TObject);
     function NewDoc(const AText: UTF8String): TDocAccess;
     function NewSample: TDocAccess;
     function ColorId(ADoc: TTyRichDocument; AColor: TColor): TTyCharFormatId;
@@ -107,6 +110,8 @@ type
     procedure TestTheFilesListTextFollowsItsParagraph;
     // fix wave W7
     procedure TestUpdatingWhileChangesAreHeldBack;
+    // fix wave W8
+    procedure TestUpdatingEndsWithAnEdge;
   end;
 
   { An insert that notes what the document's Updating says while it runs and is undone. }
@@ -200,6 +205,12 @@ begin
   SetLength(FChanges, Length(FChanges) + 1);
   FChanges[High(FChanges)] := AChange;
   FUpdatingSeen := BoolToStr(TTyRichDocument(Sender).Updating, 'T', 'F');
+end;
+
+procedure TTyRichModelTest.UpdatingEnded(Sender: TObject);
+begin
+  FEdges := FEdges + 'e' + IntToStr(Length(FChanges)) +
+    BoolToStr(TTyRichDocument(Sender).Updating, 'T', 'F');
 end;
 
 function TTyRichModelTest.NewDoc(const AText: UTF8String): TDocAccess;
@@ -1706,6 +1717,54 @@ begin
     d.Undo;
     AssertEquals('inside the undo', 'uT', TUpdatingInsert.Seen);
     AssertFalse('after the undo', d.Updating);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W8 (L-3): Updating's edge. OnUpdatingEnd comes once where Updating turns False - the
+  outermost EndUpdate, the end of a command's, an undo's or a redo's run - after the change's
+  report, and also when there was nothing to report; never inside an update or a run. }
+procedure TTyRichModelTest.TestUpdatingEndsWithAnEdge;
+var
+  d: TTyRichDocument;
+begin
+  d := NewDoc('abc');
+  try
+    d.OnChange := @DocChanged;
+    d.OnUpdatingEnd := @UpdatingEnded;
+    FEdges := '';
+    // an update that changes nothing: no report, one edge
+    d.BeginUpdate;
+    d.BeginUpdate;
+    d.EndUpdate;
+    AssertEquals('no edge at an inner EndUpdate', '', FEdges);
+    d.EndUpdate;
+    AssertEquals('an update with nothing to report: one edge, Updating False', 'e0F', FEdges);
+    // a command: its report first, then the edge
+    FEdges := '';
+    AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'x')));
+    AssertEquals('a command: after its report', 'e1F', FEdges);
+    // a command inside an update: nothing until the outermost end, then report and edge
+    FEdges := '';
+    d.BeginUpdate;
+    AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'y')));
+    AssertEquals('none inside the update', '', FEdges);
+    d.EndUpdate;
+    AssertEquals('the update''s end: after its one report', 'e2F', FEdges);
+    // a command that changes nothing: its run ended
+    FEdges := '';
+    d.Execute(TTyRichInsertText.Create(0, ''));
+    AssertEquals('a command with nothing to report', 2, Length(FChanges));
+    AssertEquals('a command with nothing to report: one edge', 'e2F', FEdges);
+    // undo and redo
+    FEdges := '';
+    d.Undo;
+    AssertEquals('an undo', 'e3F', FEdges);
+    FEdges := '';
+    d.Redo;
+    AssertEquals('a redo', 'e4F', FEdges);
+    d.OnUpdatingEnd := nil;
   finally
     d.Free;
   end;
