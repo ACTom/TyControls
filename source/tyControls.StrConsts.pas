@@ -300,6 +300,9 @@ resourcestring
   rsRichEditIncomplete    = 'The document was not loaded completely, so it cannot be saved.';
   rsRichEditCannotChange  = 'The document cannot be changed now: it is still loading, incomplete or being saved.';
   rsRichEditCannotReplace = 'The file %s could not be replaced; it was left as it was.';
+  { The line under a paragraph too long to lay out whole (more than
+    CRichMaxParaLayoutChars characters). %s is how many characters are not shown. }
+  rsRichEditParaNotShown  = '%s more characters of this paragraph are not shown.';
 
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is

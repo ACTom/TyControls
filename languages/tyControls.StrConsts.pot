@@ -696,6 +696,10 @@ msgstr ""
 msgid "The file %s could not be replaced; it was left as it was."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditparanotshown
+msgid "%s more characters of this paragraph are not shown."
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinserttext
 msgid "Insert text"
 msgstr ""

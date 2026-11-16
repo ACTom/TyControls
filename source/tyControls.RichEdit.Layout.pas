@@ -79,6 +79,13 @@ const
   CRichMaxLengthPx = 32767;
   { A block's height and its lines' tops are sums of such lengths; they stop here. }
   CRichMaxBlockPx = MaxInt div 4;
+  { A paragraph longer than this many characters is laid out only up to them (cut at a
+    cluster's start), with one line under it that says how many are not shown
+    (rsRichEditParaNotShown, in the paragraph's font; not selectable, no positions): a guard,
+    so that a file that is one 100 MB line costs a 100,000-character paragraph, not gigabytes.
+    The document keeps the whole paragraph (copying and saving take all of it); positions
+    past the cut show at the cut (TTyBlockLayout.Truncated, ShownChars). }
+  CRichMaxParaLayoutChars = 100000;
   { A list item's number is its place among the items before it, found by looking back; the
     look goes back at most this many paragraphs. An item further down a longer list is
     numbered as if the list started at the cap (its number is too small) - the price of never
@@ -349,6 +356,8 @@ type
     FPPI: Integer;
     FZoom: Single;
     FCharCount: Integer;
+    FShownChars: Integer;
+    FTruncated: Boolean;
     FStale: Boolean;
     { It shows a list number, which depends on the paragraphs before it: a change of
       paragraphs or formats above it drops it too. }
@@ -404,6 +413,11 @@ type
     property Zoom: Single read FZoom;
     { The characters it covers, separators between its paragraphs included. }
     property CharCount: Integer read FCharCount;
+    { A paragraph of it was longer than CRichMaxParaLayoutChars and is shown only up to the
+      cut (the control can tell the user); ShownChars: the positions laid out - CharCount when
+      nothing is cut, else CharCount less what is not shown. }
+    property Truncated: Boolean read FTruncated;
+    property ShownChars: Integer read FShownChars;
     { The paragraphs it shows changed after it was made (the layouter dropped it): what it
       says is what they were. }
     property Stale: Boolean read FStale;
@@ -423,6 +437,9 @@ type
   private
     FText: RawByteString;
     FLength: Integer;
+    FShown: Integer;
+    FNotice: TTyRichFragment;
+    FNoticeTop, FNoticeBaseline: Integer;
     FHasMarker: Boolean;
     FMarker: TTyRichFragment;
     FInCell: Boolean;
@@ -468,9 +485,14 @@ type
     property Lines[AIndex: Integer]: TTyRichLine read GetLine;
     property FragmentCount: Integer read FFragCount;
     property Fragments[AIndex: Integer]: TTyRichFragment read GetFragment;
-    { The paragraph's text (UTF-8) and its length in characters. }
+    { The paragraph's text (UTF-8) as laid out, and the paragraph's length in characters. A
+      Truncated paragraph's Text is what is shown, ShownChars characters; positions past
+      them show at the cut, and the line under the text (Notice: its Text, Font, X, Width,
+      drawn on NoticeBaseline) says how many are not shown. }
     property Text: RawByteString read FText;
     property Length: Integer read FLength;
+    property Notice: TTyRichFragment read FNotice;
+    property NoticeBaseline: Integer read FNoticeBaseline;
     property SpaceBefore: Integer read FSpaceBefore;
     property SpaceAfter: Integer read FSpaceAfter;
     property HasMarker: Boolean read FHasMarker;
@@ -776,7 +798,7 @@ implementation
 
 uses
   Math, LCLType, LCLIntf, BGRAReadPng, BGRAReadJpeg, BGRAReadBMP, tyControls.Types,
-  tyControls.FontUnits, tyControls.Painter;
+  tyControls.FontUnits, tyControls.Painter, tyControls.StrConsts;
 
 const
   ckText = 0;
@@ -2016,6 +2038,12 @@ function TTyParaLayout.PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTy
 var
   ln: Integer;
 begin
+  // the line saying what a cut paragraph does not show has no positions: the cut
+  if FTruncated and (AY >= FNoticeTop) then
+  begin
+    AAtLineEnd := False;
+    Exit(FShown);
+  end;
   ln := LineAtY(AY);
   Result := PointInLine(ln, AX);
   // the end of a line that wraps is also the next line's start: say which one was meant
@@ -2028,7 +2056,8 @@ var
   ln, x: Integer;
 begin
   if APos < 0 then APos := 0;
-  if APos > FLength then APos := FLength;
+  // past a cut paragraph's cut: at the cut
+  if APos > FShown then APos := FShown;
   ln := LineOfPos(APos, AAtLineEnd);
   x := XInLine(ln, APos);
   Result := Rect(x, FLines[ln].Top, x + 1, FLines[ln].Top + FLines[ln].Height);
@@ -2043,7 +2072,7 @@ begin
   if ATo > FLength + 1 then ATo := FLength + 1;
   if ATo <= AFrom then Exit;
   n := 0;
-  for ln := LineOfPos(Min(AFrom, FLength)) to FLineCount - 1 do
+  for ln := LineOfPos(Min(AFrom, FShown)) to FLineCount - 1 do
   begin
     if FLines[ln].First >= ATo then Break;
     if not LineSelection(ln, AFrom, ATo, xa, xb) then Continue;
@@ -2295,6 +2324,7 @@ begin
   n := 0;
   for i := 0 to FFragCount - 1 do AddId(FFrags[i].Format);
   if FHasMarker then AddId(FMarker.Format);
+  if FTruncated then AddId(FNotice.Format);
   // sorted (they are few)
   for i := 1 to n - 1 do
   begin
@@ -2377,6 +2407,11 @@ begin
         PaintLine(ATarget, ln, AX, AY, clip, AStyle, ASelFrom, ASelTo);
       Inc(ln);
     end;
+    // a cut paragraph's notice, under its text, never selected
+    if FTruncated and (AY + FNoticeTop < clip.Bottom) and
+      (AY + FNoticeBaseline + FNotice.Descent > clip.Top) then
+      FLayouter.Device.DrawText(ATarget, FNotice.Font, AX + FNotice.X, AY + FNoticeBaseline,
+        FNotice.Text, PaintColor(PaintFormat(FNotice.Format).Color, AStyle.TextColor));
   finally
     ATarget.ClipRect := old;
   end;
@@ -2715,6 +2750,7 @@ type
     TabLeader: array of TTyTabLeader;
     DefTab: Integer;
     ListNumber: Int64;
+    FullLen: Integer;    // the paragraph's length (N is what is laid out of it)
     function Px(ATwips: Integer): Integer;
     function MakeMarker: Integer;
     procedure Decode(const AText: RawByteString; AExpected: Integer);
@@ -2735,6 +2771,7 @@ type
     function PieceAt(AChar, AHint: Integer): Integer;
     procedure EmitLine(AStart, AEnd, AK: Integer; ALeft: Integer; var ATop: Integer;
       AForced, ALast: Boolean; AEmptyFormat: TTyCharFormatId);
+    procedure MakeNotice(var ATop: Integer; AFormat: TTyCharFormatId);
     procedure Run;
   end;
 
@@ -2828,6 +2865,8 @@ begin
   end;
   for r := 0 to High(Runs) do
   begin
+    // a cut paragraph: the runs past what was read are not looked at
+    if Runs[r].Start >= N then Break;
     if r < High(Runs) then stop := Runs[r + 1].Start else stop := N;
     if stop > N then stop := N;
     for i := Max(0, Runs[r].Start) to stop - 1 do
@@ -3708,6 +3747,33 @@ begin
   Result := stop;
 end;
 
+{ The line under a cut paragraph: how many characters are not shown, in the paragraph's (its
+  first run's) font, at the left indent; no positions, so never hit or selected. }
+procedure TParaBuilder.MakeNotice(var ATop: Integer; AFormat: TTyCharFormatId);
+var
+  nt: ^TTyRichFragment;
+  m: TTyRichFontMetrics;
+begin
+  nt := @Layout.FNotice;
+  nt^.Kind := rfkText;
+  nt^.First := N;
+  nt^.Count := 0;
+  nt^.Text := Format(rsRichEditParaNotShown, [IntToStr(Int64(FullLen) - N)]);
+  nt^.Font := L.FormatFont(AFormat, PPI, Zoom).Font;
+  nt^.Format := AFormat;
+  nt^.Shift := 0;
+  m := Dev.Metrics(nt^.Font);
+  nt^.Ascent := m.Ascent;
+  nt^.Descent := m.Descent;
+  nt^.X := LeftPx;
+  nt^.Width := L.MeasureText(nt^.Font, nt^.Text);
+  nt^.Natural := nt^.Width;
+  Layout.FNoticeTop := ATop;
+  Layout.FNoticeBaseline := SatAdd(ATop, m.Ascent);
+  ATop := SatAdd(ATop, Max(1, m.Ascent + m.Descent + m.Leading));
+  Layout.FTruncated := True;
+end;
+
 procedure TParaBuilder.Run;
 var
   s, e, k, top, left, firstLeft: Integer;
@@ -3745,6 +3811,17 @@ begin
       end;
   MapRuns;
   FindClusters;
+  { A paragraph past CRichMaxParaLayoutChars: what was read of it (one character past the
+    cap, so the cap's cluster is known) is cut at the start of the cluster the cap is in; one
+    cluster longer than the cap (nothing to cut at) is cut at the cap. }
+  if FullLen > CRichMaxParaLayoutChars then
+  begin
+    e := Min(N, CRichMaxParaLayoutChars);
+    while (e > 0) and not ClStart[e] do Dec(e);
+    if e = 0 then e := Min(N, CRichMaxParaLayoutChars);
+    N := e;
+    Txt := Copy(Txt, 1, Bo[N]);
+  end;
   FindBreaks;
   ResolveFonts;
   MakePieces;
@@ -3770,6 +3847,7 @@ begin
       if (s = N) and (Kind[N - 1] = ckBreak) then
         EmitLine(N, N, k, LeftPx, top, False, True, CFmt[N - 1]);
     end;
+  if N < FullLen then MakeNotice(top, emptyFmt);
   Layout.FHeight := SatAdd(top, Layout.FSpaceAfter);
   SetLength(Layout.FLines, Layout.FLineCount);
   SetLength(Layout.FFrags, Layout.FFragCount);
@@ -4583,23 +4661,32 @@ begin
       t := ADoc.Text;
       start := t.ParaStart(AIndex);
       len := t.ParaLength(AIndex);
-      text := t.GetText(start, len);
+      // a paragraph past the cap: only what is laid out is read (and one character more)
+      if len > CRichMaxParaLayoutChars then
+        text := t.GetText(start, CRichMaxParaLayoutChars + 1)
+      else
+        text := t.GetText(start, len);
       b.L := Self;
       b.Dev := FDevice;
       b.Layout := Result;
       b.PPI := APPI;
       b.Zoom := AZoom;
       b.Width := AWidth;
-      b.Decode(text, len);
-      Result.FText := b.Txt;
-      Result.FLength := b.N;
+      b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1));
+      if len > CRichMaxParaLayoutChars then b.FullLen := len else b.FullLen := b.N;
+      Result.FLength := b.FullLen;
       Result.FFirstPara := AIndex;
       Result.FLastPara := AIndex;
       Result.FLayoutWidth := AWidth;
       Result.FPPI := APPI;
       Result.FZoom := AZoom;
-      Result.FCharCount := b.N + 1;
+      Result.FCharCount := b.FullLen + 1;
       b.Run;
+      Result.FText := b.Txt;
+      Result.FShown := b.N;
+      // the positions laid out: the paragraph's, its end and separator included, unless cut
+      if Result.FTruncated then Result.FShownChars := b.N
+      else Result.FShownChars := Result.FCharCount;
       Result.TakePaintFormats(ADoc);
     finally
       ADoc.EndRead;
@@ -4617,7 +4704,7 @@ function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
 var
   R: TTyRowLayout;
   tbl: TTyRichTable;
-  nc, i, j, k, o, ci, gap, pos, rowH, padT, padB, off, y: Integer;
+  nc, i, j, k, o, ci, gap, pos, rowH, padT, padB, off, y, cut: Integer;
   prevTw, rightTw: Int64;
   cd: TTyRowCellDisplay;
   s: TTyRowCellSide;
@@ -4701,6 +4788,7 @@ begin
     // the paragraphs, each in its cell (a merged-away cell's at the box it went into)
     gap := Max(0, Px(R.FDisplay.HalfGap));
     pos := 0;
+    cut := 0;
     SetLength(R.FItems, ALast - AFirst + 1);
     for k := AFirst to ALast do
     begin
@@ -4717,11 +4805,17 @@ begin
       R.FItems[j].Cell := ci;
       Inc(pos, P.FLength + 1);
       if P.FNumbered then R.FNumbered := True;
+      if P.FTruncated then
+      begin
+        R.FTruncated := True;
+        Inc(cut, P.FLength - P.FShown);
+      end;
       if R.FCells[ci].ItemCount = 0 then R.FCells[ci].FirstItem := j;
       Inc(R.FCells[ci].ItemCount);
       R.FCells[ci].ContentHeight := SatAdd(R.FCells[ci].ContentHeight, P.Height);
     end;
     R.FCharCount := pos;
+    R.FShownChars := pos - cut;
     // the row's height: its tallest cell, lines included, and what the format demands
     rowH := 0;
     for i := 0 to nc - 1 do

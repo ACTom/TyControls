@@ -112,12 +112,13 @@ type
     procedure TestAJustifiedLineKeepsAFewFragments;
     procedure TestTheDocumentIsToldNotRecognisedByItsAddress;
     procedure TestSizesFromAFileHaveCeilingsOnTheWayToPixels;
+    procedure TestAGiantParagraphIsLaidOutUpToTheCap;
   end;
 
 implementation
 
 uses
-  Math, test.danglingrefs;
+  Math, tyControls.StrConsts, test.danglingrefs;
 
 const
   MB = 1024 * 1024;
@@ -3133,6 +3134,97 @@ begin
   for i := 1 to L.LineCount - 1 do
     if L.Lines[i].Top < L.Lines[i - 1].Top then
       Fail(Format('line %d goes up: %d after %d', [i, L.Lines[i].Top, L.Lines[i - 1].Top]));
+end;
+
+{ R38: a paragraph of 300,000 characters is laid out as far as CRichMaxParaLayoutChars - with the
+  measure calls, the characters measured and the bytes kept of a 100,000-character one - and a
+  line under it says how many are not shown. Positions past the cut show at the cut; the notice
+  has none; a selection covers what is shown; the document keeps the whole paragraph. The cut
+  is at a cluster's start. }
+procedure TTyRichLayoutTest.TestAGiantParagraphIsLaidOutUpToTheCap;
+var
+  chunk, p100, p300: UTF8String;
+  d: TTyRichDocument;
+  lo: TTyRichLayouter;
+  L, L100: TTyParaLayout;
+  calls, chars: array[0..1] of Int64;
+  mem: array[0..1] of Int64;
+  i, k: Integer;
+  rs: TRectArray;
+  bmp: TBGRABitmap;
+  r: TRect;
+begin
+  chunk := '';
+  for i := 1 to 500 do chunk := chunk + 'word 中文 ';
+  // 8 characters a unit: 4,000 a block
+  p100 := '';
+  for i := 1 to 25 do p100 := p100 + chunk;
+  p300 := p100 + p100 + p100;
+  d := NewDoc(p100 + #10 + p300 + #10 + StringOfChar('a', 99999) + 'e' + U($301) + 'bbb');
+  AssertEquals('100,000', 100000, d.Text.ParaLength(0));
+  AssertEquals('300,000', 300000, d.Text.ParaLength(1));
+  L100 := nil;
+  for k := 0 to 1 do
+  begin
+    lo := NewLayouter;
+    try
+      L := lo.LayoutPara(d, k, 400, 96, 1);
+      try
+        calls[k] := TTyRichTestDevice(lo.Device).MeasureCalls;
+        chars[k] := TTyRichTestDevice(lo.Device).MeasuredChars;
+        mem[k] := L.MemSize;
+        if k = 0 then
+        begin
+          AssertFalse('100,000 is not cut', L.Truncated);
+          AssertEquals('all shown', L.CharCount, L.ShownChars);
+          L100 := L;
+          L100.AddRef;
+        end
+        else
+        begin
+          AssertTrue('300,000 is cut', L.Truncated);
+          AssertEquals('shown', 100000, L.ShownChars);
+          AssertEquals('its length', 300000, L.Length);
+          AssertEquals('its positions', 300001, L.CharCount);
+          AssertEquals('the lines of the 100,000', L100.LineCount, L.LineCount);
+          AssertEquals('the notice', Format(rsRichEditParaNotShown, ['200000']), L.Notice.Text);
+          AssertEquals('under the text', L100.Height + 20, L.Height);
+          r := L.CaretRect(100000);
+          AssertEquals('past the cut: at the cut', r.Left, L.CaretRect(150000).Left);
+          AssertEquals('the end too', r.Top, L.CaretRect(300000).Top);
+          AssertEquals('a click on the notice', 100000, L.PosAtPoint(5, L.NoticeBaseline - 2));
+          AssertEquals('a click below it', 100000, L.PosAtPoint(5000, L.Height + 50));
+          rs := L.SelectionRects(0, 300001);
+          AssertEquals('a rectangle a shown line', L.LineCount, Length(rs));
+          AssertTrue('none on the notice', rs[High(rs)].Bottom <= L.NoticeBaseline - L.Notice.Ascent);
+          bmp := TBGRABitmap.Create(400, 40, Sentinel);
+          try
+            TTyRichTestDevice(lo.Device).DrawLog.Clear;
+            L.Paint(bmp, 0, -(L.Height - 30), Rect(0, 0, 400, 40), TyRichDefaultPaintStyle, 0, 0);
+            AssertTrue('the notice is drawn', Pos(L.Notice.Text + '|0|',
+              TTyRichTestDevice(lo.Device).DrawLog.Text) > 0);
+          finally
+            bmp.Free;
+          end;
+        end;
+      finally
+        L.Release;
+      end;
+    finally
+      lo.Free;
+    end;
+  end;
+  L100.Release;
+  AssertTrue(Format('measure calls %d then %d', [calls[0], calls[1]]), calls[1] <= calls[0] + 2);
+  AssertTrue(Format('characters measured %d then %d', [chars[0], chars[1]]),
+    chars[1] <= chars[0] + 100);
+  AssertTrue(Format('bytes kept %d then %d', [mem[0], mem[1]]), mem[1] <= mem[0] + 1024);
+  AssertEquals('the document keeps all of it', 300000, d.Text.ParaLength(1));
+  // a mark at the cap: cut before the cluster it is in
+  L := Lay(d, 2, 400);
+  AssertTrue('cut', L.Truncated);
+  AssertEquals('at the cluster''s start', 99999, L.ShownChars);
+  AssertEquals('the rest', Format(rsRichEditParaNotShown, ['5']), L.Notice.Text);
 end;
 
 initialization
