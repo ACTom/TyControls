@@ -21,8 +21,8 @@ unit tyControls.RichEdit.Layout;
   for them (one prefix measure each, kept the same way). Nothing here walks the document:
   laying out paragraph i reads paragraph i.
 
-  The unit of layout is a block (TTyBlockLayout): a paragraph here (TTyParaLayout); a table
-  row - the paragraphs of all its cells - is a block of its own kind later. Positions in a
+  The unit of layout is a block (TTyBlockLayout): a paragraph (TTyParaLayout), or a table
+  row - the paragraphs of all its cells (TTyRowLayout). Positions in a
   block's queries count characters from the block's first character (a paragraph separator
   is one), so a block stays valid while the paragraphs before it are edited; the document
   position is TTyRichText.ParaStart(FirstPara) plus that.
@@ -45,7 +45,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Graphics, Generics.Collections, BGRABitmap, BGRABitmapTypes,
-  tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.RowFormat;
 
 const
   { The layout cache: at most this many blocks ... }
@@ -75,6 +75,8 @@ const
   { Numbers found are remembered (so scrolling down a list costs one step per item) up to this
     many paragraphs; past it they are forgotten all at once. }
   CRichListOrdinalCache = 65536;
+  { A table cell whose right edge neither the row nor the table gives is this wide (twips). }
+  CRichDefaultCellTwips = 1440;
 
   { Line-breaking rules (kinsoku), after the common practice of JIS X 4051 and GB/T 15834:
     the characters a line must not start with (closing brackets and quotes, sentence and
@@ -369,6 +371,86 @@ type
     property Marker: TTyRichFragment read FMarker;
   end;
 
+  { One cell of a laid-out row as it is shown. Left/Right: its box (block-relative pixels; a
+    run of horizontally merged cells: the first cell's box reaches across all of them); the
+    box is as tall as the row. Hidden: a cell merged into the one before it - not shown, never
+    hit; its paragraphs (the file's empty ones) are positions the caret shows at the end of
+    the cell it went into (Owner). Its paragraphs are items FirstItem .. FirstItem +
+    ItemCount - 1 of the row. Sides: the lines drawn, each LinePx thick - its left and its top
+    (not when it continues the cell above: a vertical merge), and the right of the row's last
+    cell and the bottom of the table's last row; so a line between two cells, or two rows, is
+    drawn once, as the later one's. }
+  TTyRichCellBox = record
+    Left, Right: Integer;
+    Hidden: Boolean;
+    Owner: Integer;
+    FirstItem, ItemCount: Integer;
+    ContentHeight: Integer;
+    VAlign: TTyRowCellVAlign;
+    VMerge: TTyRowCellMerge;
+    Sides: TTyRowCellSides;
+    LinePx: array[TTyRowCellSide] of Integer;
+  end;
+
+  { One paragraph of a row: its layout (the row holds the reference; it follows the row to
+    new paragraph indexes), where that layout's top-left is in the row, its first position in
+    the row, its cell. }
+  TTyRichRowItem = record
+    Layout: TTyParaLayout;
+    X, Y: Integer;
+    Pos: Integer;
+    Cell: Integer;
+  end;
+
+  { One table row laid out (a block): all the paragraphs of all its cells, in text order -
+    cell after cell, paragraph after paragraph - and its positions count through them as the
+    document's text does, each paragraph's end one character.
+
+    Geometry is the row format's (tyControls.RichEdit.RowFormat): the cells from their right
+    edges (the row's own, else the table's), the row placed by \trleft from the layout's left
+    edge (a negative one reaches left of it, as Word puts the lines in the margin) and never
+    shrunk to the wrap width (the control scrolls); each cell's paragraphs laid out by
+    themselves at the cell's width less the half gap on either side, their indents inside the
+    cell, stacked from below its top line and placed by its vertical alignment; the row as
+    tall as its tallest cell, and not less than (or, for an exact height, exactly) what the
+    format demands. A horizontally merged run of cells is one box with the first cell's
+    content; a cell that continues the one above draws no line toward it. A row that holds a
+    nested table shows its paragraphs stacked in the outer cell (the model has no inner
+    structure; that is phase 2). Not in phase 1: cell shading and border colours (they need
+    the colour table), border styles other than a solid line, row-level borders, the content
+    of a vertically merged cell centred over all its rows, dragging column edges.
+
+    The row holds a counted reference to its table (so Table and Table.Rows[RowIndex] stay
+    readable when the document lets the table go) and one to each paragraph's layout. }
+  TTyRowLayout = class(TTyBlockLayout)
+  private
+    FTable: TTyRichTable;
+    FRowIndex: Integer;
+    FDisplay: TTyRowDisplay;
+    FCells: array of TTyRichCellBox;
+    FItems: array of TTyRichRowItem;
+    function GetCell(AIndex: Integer): TTyRichCellBox;
+    function GetItem(AIndex: Integer): TTyRichRowItem;
+    function CellAtX(AX: Integer): Integer;
+  public
+    destructor Destroy; override;
+    function PosAtPoint(AX, AY: Integer): TTyRichPos; override;
+    function CaretRect(APos: TTyRichPos): TRect; override;
+    function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
+    function MemSize: Int64; override;
+    { The item (paragraph) position APos is in: the last that starts at or before it. }
+    function ItemAt(APos: TTyRichPos): Integer;
+    function CellCount: Integer;
+    property Cells[AIndex: Integer]: TTyRichCellBox read GetCell;
+    function ItemCount: Integer;
+    property Items[AIndex: Integer]: TTyRichRowItem read GetItem;
+    property Table: TTyRichTable read FTable;
+    property RowIndex: Integer read FRowIndex;
+    { What the row's format says (TyRtfRowDisplay of its RawFormat; TyDefaultRowDisplay for a
+      row with none). }
+    property Display: TTyRowDisplay read FDisplay;
+  end;
+
   { A character the font in effect has no glyph for: name a font for it in AFontName (left
     '' the layouter tries its FallbackFonts). }
   TTyRichFallbackEvent = procedure(Sender: TObject; const ABaseFont: string; ACode: Cardinal;
@@ -430,6 +512,12 @@ type
     procedure FontsFor(APPI: Integer; AZoom: Single);
     function BuildPara(ADoc: TTyRichDocument; AIndex, AWidth, APPI: Integer;
       AZoom: Single): TTyParaLayout;
+    function BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer; ARow: TTyRichRow;
+      AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
+    procedure Prepare(ADoc: TTyRichDocument; AIndex: Integer; var AWidth, APPI: Integer;
+      var AZoom: Single);
+    function CacheHit(AIndex, AWidth, APPI: Integer; AZoom: Single;
+      ARow: Boolean): TTyBlockLayout;
   protected
     { Fonts and measuring, for the layouts this layouter makes. }
     function FormatFont(AFormat: TTyCharFormatId; APPI: Integer; AZoom: Single): TTyRichFormatFont;
@@ -453,8 +541,11 @@ type
       works for one document at a time: a call with another one empties the cache first. }
     function LayoutPara(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyParaLayout;
-    { The block paragraph AIndex belongs to (a paragraph, for now; a table row later), with
-      a reference for the caller. The entry the control uses. }
+    { The block paragraph AIndex belongs to, with a reference for the caller: a
+      TTyRowLayout when the paragraph is in a table cell - its row, whichever of the row's
+      paragraphs AIndex is - else its TTyParaLayout. The entry the control uses: the next
+      block starts at LastPara + 1. Finding a row's paragraphs reads the row's own and one
+      on either side (never the whole table), inside one read scope. }
     function LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
       APPI: Integer; AZoom: Single): TTyBlockLayout; virtual;
     { Paragraphs AFirst .. AFirst + ACount - 1 changed: their layouts go (Stale). }
@@ -1661,6 +1752,147 @@ begin
       if xb <= xa then Continue;
       SetLength(Result, n + 1);
       Result[n] := Rect(xa, Top, xb, Top + Height);
+      Inc(n);
+    end;
+  end;
+end;
+
+{ ---- table rows ---- }
+
+destructor TTyRowLayout.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FItems) do FItems[i].Layout.Release;
+  if FTable <> nil then FTable.Release;
+  inherited Destroy;
+end;
+
+function TTyRowLayout.GetCell(AIndex: Integer): TTyRichCellBox;
+begin
+  if (AIndex < 0) or (AIndex > High(FCells)) then
+    raise EArgumentOutOfRangeException.CreateFmt('no cell %d', [AIndex]);
+  Result := FCells[AIndex];
+end;
+
+function TTyRowLayout.GetItem(AIndex: Integer): TTyRichRowItem;
+begin
+  if (AIndex < 0) or (AIndex > High(FItems)) then
+    raise EArgumentOutOfRangeException.CreateFmt('no item %d', [AIndex]);
+  Result := FItems[AIndex];
+end;
+
+function TTyRowLayout.CellCount: Integer;
+begin
+  Result := System.Length(FCells);
+end;
+
+function TTyRowLayout.ItemCount: Integer;
+begin
+  Result := System.Length(FItems);
+end;
+
+function TTyRowLayout.MemSize: Int64;
+var
+  i: Integer;
+begin
+  Result := inherited MemSize + Int64(System.Length(FCells)) * SizeOf(TTyRichCellBox) +
+    Int64(System.Length(FItems)) * SizeOf(TTyRichRowItem) +
+    Int64(System.Length(FDisplay.Cells)) * SizeOf(TTyRowCellDisplay);
+  for i := 0 to High(FItems) do Inc(Result, FItems[i].Layout.MemSize);
+end;
+
+function TTyRowLayout.ItemAt(APos: TTyRichPos): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := High(FItems);
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if FItems[mid].Pos <= APos then lo := mid else hi := mid - 1;
+  end;
+  Result := lo;
+end;
+
+{ The shown cell at AX, or the nearest one: a point left of the row is in its first cell,
+  one right of it in its last. -1 when no cell is shown. }
+function TTyRowLayout.CellAtX(AX: Integer): Integer;
+var
+  i, d, best: Integer;
+begin
+  Result := -1;
+  best := MaxInt;
+  for i := 0 to High(FCells) do
+  begin
+    if FCells[i].Hidden or (FCells[i].ItemCount = 0) then Continue;
+    if AX < FCells[i].Left then d := FCells[i].Left - AX
+    else if AX >= FCells[i].Right then d := AX - FCells[i].Right + 1
+    else d := 0;
+    if d < best then
+    begin
+      best := d;
+      Result := i;
+    end;
+  end;
+end;
+
+function TTyRowLayout.PosAtPoint(AX, AY: Integer): TTyRichPos;
+var
+  c, k, last: Integer;
+begin
+  c := CellAtX(AX);
+  if c < 0 then Exit(0);
+  // the cell's paragraph at AY: above the first, the first; below the last, the last
+  k := FCells[c].FirstItem;
+  last := k + FCells[c].ItemCount - 1;
+  while (k < last) and ((FItems[k].Cell <> c) or
+    (FItems[k].Y + FItems[k].Layout.Height <= AY)) do
+    Inc(k);
+  Result := FItems[k].Pos + FItems[k].Layout.PosAtPoint(AX - FItems[k].X, AY - FItems[k].Y);
+end;
+
+function TTyRowLayout.CaretRect(APos: TTyRichPos): TRect;
+var
+  k, o: Integer;
+begin
+  if System.Length(FItems) = 0 then Exit(Rect(0, 0, 1, 1));
+  if APos < 0 then APos := 0;
+  if APos > FCharCount - 1 then APos := FCharCount - 1;
+  k := ItemAt(APos);
+  o := FCells[FItems[k].Cell].Owner;
+  if FCells[FItems[k].Cell].Hidden and (FCells[o].ItemCount > 0) then
+  begin
+    // a paragraph of a cell merged away: at the end of the cell it went into
+    k := FCells[o].FirstItem + FCells[o].ItemCount - 1;
+    Result := FItems[k].Layout.CaretRect(FItems[k].Layout.Length);
+  end
+  else
+    Result := FItems[k].Layout.CaretRect(APos - FItems[k].Pos);
+  OffsetRect(Result, FItems[k].X, FItems[k].Y);
+end;
+
+function TTyRowLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
+var
+  k, i, n: Integer;
+  a, b: TTyRichPos;
+  rs: TRectArray;
+begin
+  Result := nil;
+  n := 0;
+  for k := 0 to High(FItems) do
+  begin
+    if FCells[FItems[k].Cell].Hidden then Continue;
+    a := AFrom - FItems[k].Pos;
+    b := ATo - FItems[k].Pos;
+    if (b <= 0) or (a > FItems[k].Layout.Length) then Continue;
+    rs := FItems[k].Layout.SelectionRects(a, b);
+    SetLength(Result, n + System.Length(rs));
+    for i := 0 to High(rs) do
+    begin
+      Result[n] := rs[i];
+      OffsetRect(Result[n], FItems[k].X, FItems[k].Y);
       Inc(n);
     end;
   end;
@@ -2875,6 +3107,13 @@ begin
       FCache.Remove(L.FFirstPara);
       Inc(L.FFirstPara, delta);
       Inc(L.FLastPara, delta);
+      if L is TTyRowLayout then
+        for i := 0 to High(TTyRowLayout(L).FItems) do
+          with TTyRowLayout(L).FItems[i].Layout do
+          begin
+            Inc(FFirstPara, delta);
+            Inc(FLastPara, delta);
+          end;
       if n = System.Length(moved) then SetLength(moved, n * 2 + 8);
       moved[n] := L;
       Inc(n);
@@ -3158,10 +3397,166 @@ begin
   b.Free;
 end;
 
-function TTyRichLayouter.LayoutPara(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
-  APPI: Integer; AZoom: Single): TTyParaLayout;
+function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
+  ARow: TTyRichRow; AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
 var
-  L: TTyBlockLayout;
+  R: TTyRowLayout;
+  tbl: TTyRichTable;
+  nc, i, j, k, o, ci, gap, pos, rowH, padT, padB, off, y: Integer;
+  prevTw, rightTw: Int64;
+  cd: TTyRowCellDisplay;
+  s: TTyRowCellSide;
+  lastRow: Boolean;
+  bx: ^TTyRichCellBox;
+  cell: TTyRichCell;
+  P: TTyParaLayout;
+
+  function Px(ATwips: Int64): Integer;
+  begin
+    Result := TyRichTwipsToPx(ATwips, APPI, AZoom);
+  end;
+
+begin
+  R := TTyRowLayout.Create(Self);
+  try
+    tbl := ARow.Table;
+    tbl.AddRef;
+    R.FTable := tbl;
+    R.FRowIndex := ARow.Index;
+    R.FFirstPara := AFirst;
+    R.FLastPara := ALast;
+    R.FLayoutWidth := AWidth;
+    R.FPPI := APPI;
+    R.FZoom := AZoom;
+    nc := Max(1, ARow.CellCount);
+    if ARow.RawFormat <> '' then R.FDisplay := TyRtfRowDisplay(ARow.RawFormat)
+    else R.FDisplay := TyDefaultRowDisplay(nc);
+    lastRow := ARow.Index >= tbl.RowCount - 1;
+    // the cells' boxes, left to right
+    SetLength(R.FCells, nc);
+    prevTw := R.FDisplay.Left;
+    for i := 0 to nc - 1 do
+    begin
+      if i < ARow.BoundaryCount then rightTw := ARow.Boundaries[i]
+      else if i < tbl.ColBoundaryCount then rightTw := tbl.ColBoundaries[i]
+      else if (i < System.Length(R.FDisplay.Cells)) and (R.FDisplay.Cells[i].Right >= 0) then
+        rightTw := R.FDisplay.Cells[i].Right
+      else
+        rightTw := prevTw + CRichDefaultCellTwips;
+      // an edge left of the one before it: an empty cell there
+      if rightTw < prevTw then rightTw := prevTw;
+      if i < System.Length(R.FDisplay.Cells) then cd := R.FDisplay.Cells[i]
+      else cd := TyPlainRowCell;
+      bx := @R.FCells[i];
+      bx^.Left := Px(prevTw);
+      bx^.Right := Px(rightTw);
+      bx^.FirstItem := 0;
+      bx^.ItemCount := 0;
+      bx^.ContentHeight := 0;
+      bx^.VAlign := cd.VAlign;
+      bx^.VMerge := cd.VMerge;
+      for s := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+        bx^.LinePx[s] := Max(1, Px(cd.BorderWidth[s]));
+      bx^.Sides := [];
+      if (cd.HMerge = rcmContinue) and (i > 0) then
+      begin
+        // merged into the cell before: that one's box reaches over this one
+        bx^.Hidden := True;
+        bx^.Owner := R.FCells[i - 1].Owner;
+        R.FCells[bx^.Owner].Right := bx^.Right;
+      end
+      else
+      begin
+        bx^.Hidden := False;
+        bx^.Owner := i;
+        if rcsLeft in cd.Borders then Include(bx^.Sides, rcsLeft);
+        // a cell that continues the one above draws no line toward it
+        if (rcsTop in cd.Borders) and (cd.VMerge <> rcmContinue) then Include(bx^.Sides, rcsTop);
+        if lastRow and (rcsBottom in cd.Borders) then Include(bx^.Sides, rcsBottom);
+      end;
+      // the row's last cell closes it on the right (the box it is in, when merged)
+      if (i = nc - 1) and (rcsRight in cd.Borders) then
+      begin
+        o := bx^.Owner;
+        Include(R.FCells[o].Sides, rcsRight);
+        R.FCells[o].LinePx[rcsRight] := bx^.LinePx[rcsRight];
+      end;
+      prevTw := rightTw;
+    end;
+    // the paragraphs, each in its cell (a merged-away cell's at the box it went into)
+    gap := Max(0, Px(R.FDisplay.HalfGap));
+    pos := 0;
+    SetLength(R.FItems, ALast - AFirst + 1);
+    for k := AFirst to ALast do
+    begin
+      cell := ADoc.CellAt(k);
+      if cell <> nil then ci := Min(Max(cell.Index, 0), nc - 1) else ci := 0;
+      o := R.FCells[ci].Owner;
+      P := BuildPara(ADoc, k, Max(1, R.FCells[o].Right - R.FCells[o].Left - 2 * gap), APPI,
+        AZoom);
+      j := k - AFirst;
+      R.FItems[j].Layout := P;
+      R.FItems[j].X := R.FCells[o].Left + gap;
+      R.FItems[j].Y := 0;
+      R.FItems[j].Pos := pos;
+      R.FItems[j].Cell := ci;
+      Inc(pos, P.FLength + 1);
+      if P.FNumbered then R.FNumbered := True;
+      if R.FCells[ci].ItemCount = 0 then R.FCells[ci].FirstItem := j;
+      Inc(R.FCells[ci].ItemCount);
+      Inc(R.FCells[ci].ContentHeight, P.Height);
+    end;
+    R.FCharCount := pos;
+    // the row's height: its tallest cell, lines included, and what the format demands
+    rowH := 0;
+    for i := 0 to nc - 1 do
+    begin
+      bx := @R.FCells[i];
+      if bx^.Hidden then Continue;
+      padT := 0;
+      padB := 0;
+      if rcsTop in bx^.Sides then padT := bx^.LinePx[rcsTop];
+      if rcsBottom in bx^.Sides then padB := bx^.LinePx[rcsBottom];
+      rowH := Max(rowH, padT + bx^.ContentHeight + padB);
+    end;
+    if R.FDisplay.Height > 0 then rowH := Max(rowH, Px(R.FDisplay.Height))
+    else if R.FDisplay.Height < 0 then rowH := Px(-Int64(R.FDisplay.Height));
+    rowH := Max(1, rowH);
+    R.FHeight := rowH;
+    R.FWidth := 0;
+    for i := 0 to nc - 1 do
+    begin
+      bx := @R.FCells[i];
+      if bx^.Hidden then Continue;
+      if bx^.Right > R.FWidth then R.FWidth := bx^.Right;
+      padT := 0;
+      padB := 0;
+      if rcsTop in bx^.Sides then padT := bx^.LinePx[rcsTop];
+      if rcsBottom in bx^.Sides then padB := bx^.LinePx[rcsBottom];
+      off := Max(0, rowH - padT - padB - bx^.ContentHeight);
+      case bx^.VAlign of
+        rcvCenter: off := off div 2;
+        rcvBottom: ;
+      else
+        off := 0;
+      end;
+      y := padT + off;
+      for j := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
+        if R.FItems[j].Cell = i then
+        begin
+          R.FItems[j].Y := y;
+          Inc(y, R.FItems[j].Layout.Height);
+        end;
+    end;
+  except
+    R.Release;
+    raise;
+  end;
+  Result := R;
+end;
+
+procedure TTyRichLayouter.Prepare(ADoc: TTyRichDocument; AIndex: Integer; var AWidth,
+  APPI: Integer; var AZoom: Single);
 begin
   if ADoc <> FDoc then
   begin
@@ -3173,21 +3568,36 @@ begin
   if AWidth < 0 then AWidth := CRichNoWrap;
   if APPI <= 0 then APPI := 96;
   if not (AZoom > 0) then AZoom := 1;
-  if FCache.TryGetValue(AIndex, L) then
-  begin
-    if (L is TTyParaLayout) and (L.FLayoutWidth = AWidth) and (L.FPPI = APPI) and
-      (L.FZoom = AZoom) then
-    begin
-      Inc(FHits);
-      LruUnlink(L);
-      LruPushFront(L);
-      L.AddRef;
-      Exit(TTyParaLayout(L));
-    end;
-    CacheDrop(L, False);
-  end;
+end;
+
+{ The cached block that starts at AIndex, of the kind asked for (a row, or a paragraph) and
+  laid out for these values, with a reference for the caller; nil when there is none. }
+function TTyRichLayouter.CacheHit(AIndex, AWidth, APPI: Integer; AZoom: Single;
+  ARow: Boolean): TTyBlockLayout;
+var
+  L: TTyBlockLayout;
+begin
+  Result := nil;
+  if not FCache.TryGetValue(AIndex, L) then Exit;
+  if (ARow <> (L is TTyRowLayout)) or (L.FLayoutWidth <> AWidth) or (L.FPPI <> APPI) or
+    (L.FZoom <> AZoom) then
+    Exit;
+  Inc(FHits);
+  LruUnlink(L);
+  LruPushFront(L);
+  L.AddRef;
+  Result := L;
+end;
+
+function TTyRichLayouter.LayoutPara(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
+  APPI: Integer; AZoom: Single): TTyParaLayout;
+begin
+  Prepare(ADoc, AIndex, AWidth, APPI, AZoom);
+  Result := TTyParaLayout(CacheHit(AIndex, AWidth, APPI, AZoom, False));
+  if Result <> nil then Exit;
   Inc(FMisses);
   Result := BuildPara(ADoc, AIndex, AWidth, APPI, AZoom);
+  // in place of what the cache held there for other values (CacheInsert)
   CacheInsert(Result);
   CacheTrim(Result);
   Result.AddRef;
@@ -3195,8 +3605,51 @@ end;
 
 function TTyRichLayouter.LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
   APPI: Integer; AZoom: Single): TTyBlockLayout;
+var
+  L: TTyBlockLayout;
+  cell, c: TTyRichCell;
+  row: TTyRichRow;
+  first, last, n: Integer;
 begin
-  Result := LayoutPara(ADoc, AIndex, AWidth, APPI, AZoom);
+  Prepare(ADoc, AIndex, AWidth, APPI, AZoom);
+  // the usual call: the block that starts here (a paragraph laid out by itself while it sits
+  // in a cell - LayoutPara's - is not one)
+  if FCache.TryGetValue(AIndex, L) and not ((L is TTyParaLayout) and TTyParaLayout(L).FInCell) then
+  begin
+    Result := CacheHit(AIndex, AWidth, APPI, AZoom, L is TTyRowLayout);
+    if Result <> nil then Exit;
+  end;
+  ADoc.BeginRead;
+  try
+    cell := ADoc.CellAt(AIndex);
+    if cell = nil then Exit(LayoutPara(ADoc, AIndex, AWidth, APPI, AZoom));
+    // the row's paragraphs: the ones around AIndex in the same row, and no others
+    row := cell.Row;
+    first := AIndex;
+    while first > 0 do
+    begin
+      c := ADoc.CellAt(first - 1);
+      if (c = nil) or (c.Row <> row) then Break;
+      Dec(first);
+    end;
+    n := ADoc.Text.ParaCount;
+    last := AIndex;
+    while last < n - 1 do
+    begin
+      c := ADoc.CellAt(last + 1);
+      if (c = nil) or (c.Row <> row) then Break;
+      Inc(last);
+    end;
+    Result := CacheHit(first, AWidth, APPI, AZoom, True);
+    if Result <> nil then Exit;
+    Inc(FMisses);
+    Result := BuildRow(ADoc, first, last, row, AWidth, APPI, AZoom);
+    CacheInsert(Result);
+    CacheTrim(Result);
+    Result.AddRef;
+  finally
+    ADoc.EndRead;
+  end;
 end;
 
 end.

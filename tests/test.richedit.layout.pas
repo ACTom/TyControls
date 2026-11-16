@@ -19,7 +19,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Layout, test.richedit.layoutdevice;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.RowFormat, tyControls.RichEdit.Layout,
+  test.richedit.layoutdevice;
 
 type
   TTyRichLayoutTest = class(TTestCase)
@@ -36,6 +37,10 @@ type
     function NewDoc(const AText: UTF8String): TTyRichDocument;
     function NewLayouter: TTyRichLayouter;
     function LoadFixture(const AName: string): TTyRichDocument;
+    function NewTableDoc(const AText: RawByteString): TTyRichDocument;
+    function Block(ADoc: TTyRichDocument; AIndex, AWidth: Integer): TTyBlockLayout;
+    { The sample's paragraphs repeated to a megabyte, loaded lazily, one interval resident. }
+    function LoadLazyRepeated(const AName: string): TTyRichDocument;
     function Lay(ADoc: TTyRichDocument; AIndex, AWidth: Integer; AZoom: Single = 1): TTyParaLayout;
     procedure SetPara(ADoc: TTyRichDocument; AIndex: Integer; AMask: TTyParaFormatMask;
       const AValue: TTyParaFormat);
@@ -80,6 +85,14 @@ type
     procedure TestListNumbersCountTheItemsOfOneLevel;
     procedure TestAlphaAndRomanNumbersPastTheirRanges;
     procedure TestTheNumberingWalkIsCappedAndRemembered;
+    // 8b: table rows
+    procedure TestTableCellsLayOutAndRowHeightIsTheTallest;
+    procedure TestARowIsAsTallAsItsFormatDemands;
+    procedure TestPositionsRunAcrossTheCellsOfARow;
+    procedure TestARowIsFoundFromItsOwnParagraphs;
+    procedure TestMergedCellsAreShownMerged;
+    procedure TestARowInALazyDocumentSurvivesEviction;
+    procedure TestTheRowFormatIsRead;
   end;
 
 implementation
@@ -123,6 +136,56 @@ begin
   runs[0].Format := CharFmt;
   runs[0].Obj := nil;
   SetParagraph(ADoc, AIndex, ParaFmt, runs);
+end;
+
+type
+  { MarkTable, which only a command may call otherwise. }
+  TDocAccess = class(TTyRichDocument)
+  end;
+
+  { Parses on demand: paragraph i is cell i mod Cells of row i div Cells of its table; counts
+    what it was asked. }
+  TTableLoader = class(TTyRichParaLoader)
+  public
+    Calls: Integer;
+    ParaFmt: TTyParaFormatId;
+    CharFmt: TTyCharFormatId;
+    Table: TTyRichTable;
+    Cells: Integer;
+    constructor Create(ARows, ACells: Integer);
+    destructor Destroy; override;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+constructor TTableLoader.Create(ARows, ACells: Integer);
+var
+  i: Integer;
+begin
+  inherited Create;
+  Cells := ACells;
+  Table := TTyRichTable.Create([1440, 2880]);
+  Table.AddRef;
+  for i := 1 to ARows do Table.AddRow(ACells);
+end;
+
+destructor TTableLoader.Destroy;
+begin
+  Table.Release;
+  inherited Destroy;
+end;
+
+procedure TTableLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+var
+  runs: TTyRunArray;
+begin
+  Inc(Calls);
+  runs := nil;
+  SetLength(runs, 1);
+  runs[0].Start := 0;
+  runs[0].Format := CharFmt;
+  runs[0].Obj := nil;
+  SetParagraph(ADoc, AIndex, ParaFmt, runs,
+    Table.Rows[AIndex div Cells].Cells[AIndex mod Cells]);
 end;
 
 function FixtureBytes(const AName: string): TBytes;
@@ -259,6 +322,63 @@ begin
   finally
     st.Free;
   end;
+end;
+
+function TTyRichLayoutTest.NewTableDoc(const AText: RawByteString): TTyRichDocument;
+begin
+  Result := TDocAccess.CreateFromUtf8(BytesOf(AText));
+  FDocs.Add(Result);
+end;
+
+function TTyRichLayoutTest.Block(ADoc: TTyRichDocument; AIndex, AWidth: Integer): TTyBlockLayout;
+begin
+  Result := FLayouter.LayoutBlock(ADoc, AIndex, AWidth, 96, 1);
+  FLayouts.Add(Result);
+end;
+
+function TTyRichLayoutTest.LoadLazyRepeated(const AName: string): TTyRichDocument;
+var
+  sample: TBytes;
+  m: TTyRtfSourceMap;
+  full: TTyRichDocument;
+  st: TBytesStream;
+  header, body, trailer, bb: RawByteString;
+
+  function Part(AFrom, ACount: Int64): RawByteString;
+  begin
+    Result := '';
+    SetLength(Result, ACount);
+    if ACount > 0 then Move(sample[AFrom], Result[1], ACount);
+  end;
+
+begin
+  sample := FixtureBytes(AName);
+  m := TTyRtfSourceMap.Create;
+  full := TTyRichDocument.Create;
+  st := TBytesStream.Create(sample);
+  try
+    TyRichLoadRtfFull(full, st, m);
+    header := Part(0, m.Header.Stop);
+    body := Part(m.Header.Stop, m.Trailer.Start - m.Header.Stop);
+    trailer := Part(m.Trailer.Start, Length(sample) - m.Trailer.Start);
+  finally
+    st.Free;
+    full.Free;
+    m.Free;
+  end;
+  bb := header;
+  while Length(bb) < MB do bb := bb + body;
+  bb := bb + trailer;
+  Result := TTyRichDocument.Create;
+  FDocs.Add(Result);
+  st := TBytesStream.Create(BytesOf(bb));
+  try
+    TyRichLoadRtf(Result, st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loaded lazily', TyRichRtfLoadOf(Result) <> nil);
+  TyRichRtfLoadOf(Result).MaxResidentIntervals := 1;
 end;
 
 function TTyRichLayoutTest.NewLayouter: TTyRichLayouter;
@@ -1635,6 +1755,339 @@ begin
   AssertEquals('back to the plain paragraph', 11, FLayouter.ListWalkSteps - steps);
   L := Lay(d, 50000, 300);
   AssertEquals('and 50,000', '10.', L.Marker.Text);
+end;
+
+{ ---- 8b: table rows ---- }
+
+{ A row is one block: the paragraphs of all its cells, each cell's laid out by itself at the
+  cell's width less the half gap on either side (a table made here: 108 twips, 7 px; a line of
+  10 twips, 1 px, on every side), stacked in the cell; the row as tall as its tallest cell
+  (its four lines, 80 px, and the top and bottom lines). Any paragraph of the row gives it. }
+procedure TTyRichLayoutTest.TestTableCellsLayOutAndRowHeightIsTheTallest;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  B: TTyBlockLayout;
+  R: TTyRowLayout;
+begin
+  d := NewTableDoc('before'#10'a'#10'long long long long'#10'c1'#10'c2'#10'after');
+  t := TTyRichTable.Create([1440, 2880, 4320]);
+  t.AddRow(3);
+  TDocAccess(d).MarkTable(1, t, [1, 1, 2]).Free;
+  B := Block(d, 2, 1000);
+  AssertTrue('a row', B is TTyRowLayout);
+  R := TTyRowLayout(B);
+  AssertEquals('its first paragraph', 1, R.FirstPara);
+  AssertEquals('its last', 4, R.LastPara);
+  AssertEquals('three cells', 3, R.CellCount);
+  AssertEquals('four paragraphs', 4, R.ItemCount);
+  AssertEquals('cell 1 from 1440 twips', 96, R.Cells[1].Left);
+  AssertEquals('to 2880', 192, R.Cells[1].Right);
+  AssertEquals('the text inside the half gap', 103, R.Items[1].X);
+  AssertEquals('below the top line', 1, R.Items[1].Y);
+  AssertEquals('laid out at the cell''s width', 82, R.Items[1].Layout.LayoutWidth);
+  AssertEquals('four lines there', 4, R.Items[1].Layout.LineCount);
+  AssertEquals('the tallest cell, and its lines', 82, R.Height);
+  AssertEquals('the second paragraph of cell 2 below the first', 21, R.Items[3].Y);
+  AssertEquals('in cell 2', 2, R.Items[3].Cell);
+  AssertEquals('characters of the row, separators included', 28, R.CharCount);
+  AssertEquals('positions in text order', 22, R.Items[2].Pos);
+  AssertTrue('the same block from its first paragraph', Block(d, 1, 1000) = B);
+  AssertTrue('and from its last', Block(d, 4, 1000) = B);
+  AssertTrue('a paragraph before it is a paragraph', Block(d, 0, 1000) is TTyParaLayout);
+  AssertTrue('and one after it', Block(d, 5, 1000) is TTyParaLayout);
+  AssertEquals('the widest cell''s right edge', 288, R.Width);
+  // a paragraph inserted before the table: the cached row and its paragraphs follow
+  d.OnChange := @DocChanged;
+  AssertTrue('inserted', d.Execute(TTyRichInsertText.Create(0, 'x'#10)));
+  AssertTrue('the row moved on', FLayouter.CachedLayout(2) = B);
+  AssertEquals('its first paragraph', 2, R.FirstPara);
+  AssertEquals('and its items''', 2, R.Items[0].Layout.FirstPara);
+  AssertEquals('the last', 5, R.Items[3].Layout.LastPara);
+end;
+
+{ \trrh: at least so tall (600 twips, 40 px, over one line of text), or exactly (a negative
+  height: 600 twips, under four lines); a cell's content placed by its vertical alignment. }
+procedure TTyRichLayoutTest.TestARowIsAsTallAsItsFormatDemands;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+begin
+  d := NewTableDoc('a'#10'b'#10'long long long long'#10'c');
+  t := TTyRichTable.Create([1440, 2880]);
+  t.AddRow(2, '\trowd\trgaph108\trrh600\cellx1440\clvertalc\cellx2880');
+  t.AddRow(2, '\trowd\trgaph108\trrh-600\cellx1440\clvertalb\cellx2880');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  AssertEquals('at least 600 twips', 40, R.Height);
+  AssertEquals('no line declared: the text at the top', 0, R.Items[0].Y);
+  AssertEquals('the centred cell''s line in the middle', 10, R.Items[1].Y);
+  R := TTyRowLayout(Block(d, 2, 1000));
+  AssertEquals('four lines in it', 4, R.Items[0].Layout.LineCount);
+  AssertEquals('exactly 600 twips', 40, R.Height);
+  AssertEquals('the cell at the bottom: its line at the row''s', 20, R.Items[1].Y);
+end;
+
+{ Positions run cell after cell, paragraph after paragraph, each paragraph end one character;
+  the caret, hit tests and selections take them across the cells. A point in a cell's
+  padding or below its text goes to the nearest place in that cell. }
+procedure TTyRichLayoutTest.TestPositionsRunAcrossTheCellsOfARow;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+  rc: TRect;
+  rs: TRectArray;
+  p: Integer;
+begin
+  d := NewTableDoc('a'#10'long long long long'#10'c1'#10'c2');
+  t := TTyRichTable.Create([1440, 2880, 4320]);
+  t.AddRow(3);
+  TDocAccess(d).MarkTable(0, t, [1, 1, 2]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  rc := R.CaretRect(0);
+  AssertEquals('cell 0 starts at its text', 7, rc.Left);
+  AssertEquals('below the top line', 1, rc.Top);
+  rc := R.CaretRect(2);
+  AssertEquals('cell 1''s first position', 103, rc.Left);
+  rc := R.CaretRect(21);
+  AssertEquals('cell 1''s end: on its last line', 61, rc.Top);
+  AssertEquals('after "long"', 143, rc.Left);
+  rc := R.CaretRect(25);
+  AssertEquals('cell 2''s second paragraph', 21, rc.Top);
+  AssertEquals('at cell 2''s text', 199, rc.Left);
+  AssertEquals('a click in cell 1''s text', 4, R.PosAtPoint(103 + 22, 6));
+  AssertEquals('in its left padding', 2, R.PosAtPoint(98, 6));
+  AssertEquals('below cell 0''s text: the end of its last line', 1, R.PosAtPoint(20, 70));
+  AssertEquals('below cell 2''s text: in its last paragraph', 25, R.PosAtPoint(200, 75));
+  AssertEquals('left of the row: cell 0', 0, R.PosAtPoint(-30, 5));
+  AssertEquals('right of the row: the last cell', 25 + 2, R.PosAtPoint(900, 30));
+  for p := 0 to R.CharCount - 1 do
+  begin
+    rc := R.CaretRect(p);
+    AssertEquals(Format('the caret at %d and the point agree', [p]), p,
+      R.PosAtPoint(rc.Left, (rc.Top + rc.Bottom) div 2));
+  end;
+  // from after "a" (its end selected) to after the "c" of c1
+  rs := R.SelectionRects(1, 23);
+  AssertEquals('cell 0''s line, cell 1''s four, c1''s', 6, Length(rs));
+  AssertTrue('cell 0''s end marked past it', rs[0].Right > 17);
+  AssertEquals('c1 from its start', 199, rs[5].Left);
+  AssertEquals('to after c', 209, rs[5].Right);
+  AssertEquals('in its line', 1, rs[5].Top);
+end;
+
+{ The finding of a row's paragraphs reads the row and one paragraph on either side, never the
+  table: a table of 2000 one-paragraph cells in a document that parses on demand, a row in
+  its middle. }
+procedure TTyRichLayoutTest.TestARowIsFoundFromItsOwnParagraphs;
+const
+  Rows = 1000;
+var
+  d: TTyRichDocument;
+  ld: TTableLoader;
+  s: RawByteString;
+  i: Integer;
+  R: TTyRowLayout;
+begin
+  SetLength(s, 4 * Rows - 1);
+  for i := 1 to 2 * Rows do
+  begin
+    s[2 * i - 1] := 'x';
+    if i < 2 * Rows then s[2 * i] := #10;
+  end;
+  d := NewTableDoc(s);
+  ld := TTableLoader.Create(Rows, 2);
+  ld.ParaFmt := d.Formats.InternPara(TyDefaultParaFormat);
+  ld.CharFmt := d.DefaultCharFormatId;
+  d.InstallLoader(ld, True);
+  R := TTyRowLayout(Block(d, 1001, 1000));
+  AssertEquals('row 500', 500, R.RowIndex);
+  AssertEquals('from paragraph 1000', 1000, R.FirstPara);
+  AssertEquals('to 1001', 1001, R.LastPara);
+  AssertTrue(Format('parsed %d paragraphs', [ld.Calls]), ld.Calls <= 4);
+end;
+
+{ The two merged samples. Word's way written by hand (\clmgf/\clmrg, \clvmgf/\clvmrg, a nested
+  table in the last cell of the last row): the first row's first two cells are one box with
+  the first cell's text, which no point hits the other's empty paragraph in; the cell that
+  continues the one above has no line on top, its neighbours have; the last row closes the
+  table; the nested table's paragraphs are stacked in the outer cell. Word's own way (a cell
+  across two columns is one wider cell) is a wide box. }
+procedure TTyRichLayoutTest.TestMergedCellsAreShownMerged;
+var
+  d: TTyRichDocument;
+  R0, R1, R2: TTyRowLayout;
+  f, x, k, hid: Integer;
+  p: TTyRichPos;
+  rc, er: TRect;
+
+  function FirstCellPara: Integer;
+  begin
+    Result := 0;
+    while d.CellAt(Result) = nil do Inc(Result);
+  end;
+
+begin
+  d := LoadFixture('hand-word-table-merged.rtf');
+  f := FirstCellPara;
+  AssertEquals('the table starts at paragraph 1', 1, f);
+  R0 := TTyRowLayout(Block(d, f, 1000));
+  AssertEquals('row 0', 0, R0.RowIndex);
+  AssertEquals('three cells', 3, R0.CellCount);
+  AssertEquals('three paragraphs', 3, R0.ItemCount);
+  AssertTrue('the second merged into the first', R0.Cells[1].Hidden);
+  AssertEquals('into the first', 0, R0.Cells[1].Owner);
+  AssertEquals('from \trleft', TyRichTwipsToPx(-108, 96, 1), R0.Cells[0].Left);
+  AssertEquals('one box over both columns', TyRichTwipsToPx(5572, 96, 1), R0.Cells[0].Right);
+  AssertEquals('the third after them', TyRichTwipsToPx(5572, 96, 1), R0.Cells[2].Left);
+  AssertEquals('the first cell''s text laid out across the box',
+    TyRichTwipsToPx(5572, 96, 1) - TyRichTwipsToPx(-108, 96, 1) - 2 * TyRichTwipsToPx(108, 96, 1),
+    R0.Items[0].Layout.LayoutWidth);
+  for x := -20 to R0.Width + 20 do
+  begin
+    p := R0.PosAtPoint(x, R0.Height div 2);
+    AssertFalse(Format('a point at %d lands in a shown cell', [x]),
+      R0.Cells[R0.Items[R0.ItemAt(p)].Cell].Hidden);
+  end;
+  hid := -1;
+  for k := 0 to R0.ItemCount - 1 do
+    if R0.Items[k].Cell = 1 then hid := k;
+  AssertTrue('the merged cell''s paragraph', hid >= 0);
+  rc := R0.CaretRect(R0.Items[hid].Pos);
+  er := R0.CaretRect(R0.Items[0].Pos + R0.Items[0].Layout.Length);
+  AssertEquals('its caret at the end of the box''s text', er.Left, rc.Left);
+  AssertEquals('on its line', er.Top, rc.Top);
+  AssertEquals('it selects nothing', 0, Length(R0.SelectionRects(R0.Items[hid].Pos,
+    R0.Items[hid].Pos + 1)));
+  R1 := TTyRowLayout(Block(d, R0.LastPara + 1, 1000));
+  AssertEquals('row 1', 1, R1.RowIndex);
+  AssertTrue('a vertical merge''s first cell has its top line', rcsTop in R1.Cells[0].Sides);
+  AssertFalse('a row above the last does not close the table', rcsBottom in R1.Cells[1].Sides);
+  R2 := TTyRowLayout(Block(d, R1.LastPara + 1, 1000));
+  AssertEquals('row 2', 2, R2.RowIndex);
+  AssertFalse('the cell that continues it: no line toward the cell above',
+    rcsTop in R2.Cells[0].Sides);
+  AssertTrue('its neighbour has one', rcsTop in R2.Cells[1].Sides);
+  AssertTrue('the last row closes the table', rcsBottom in R2.Cells[1].Sides);
+  AssertTrue('the last cell closes the row', rcsRight in R2.Cells[2].Sides);
+  AssertFalse('a cell before it does not', rcsRight in R2.Cells[1].Sides);
+  AssertTrue('a row with a nested table', R2.Table.Rows[R2.RowIndex].HoldsNestedTable);
+  AssertEquals('its paragraphs stacked in the outer cell', 3, R2.Cells[2].ItemCount);
+  k := R2.Cells[2].FirstItem;
+  AssertTrue('one below the other', R2.Items[k + 1].Y > R2.Items[k].Y);
+  AssertEquals('in one column', R2.Items[k].X, R2.Items[k + 2].X);
+  AssertTrue('the paragraph after the table is a paragraph',
+    Block(d, R2.LastPara + 1, 1000) is TTyParaLayout);
+  // Word's own merge: the first row has two cells, the first one wider
+  d := LoadFixture('word-table-merged.rtf');
+  f := FirstCellPara;
+  R0 := TTyRowLayout(Block(d, f, 1000));
+  AssertEquals('two cells', 2, R0.CellCount);
+  AssertFalse('none merged away', R0.Cells[1].Hidden);
+  AssertEquals('from \trleft', TyRichTwipsToPx(5, 96, 1), R0.Cells[0].Left);
+  AssertEquals('across two columns', TyRichTwipsToPx(5542, 96, 1), R0.Cells[0].Right);
+  R1 := TTyRowLayout(Block(d, R0.LastPara + 1, 1000));
+  R2 := TTyRowLayout(Block(d, R1.LastPara + 1, 1000));
+  AssertTrue('Word''s vertical merge starts with a line', rcsTop in R1.Cells[0].Sides);
+  AssertFalse('and continues without one', rcsTop in R2.Cells[0].Sides);
+end;
+
+{ A row read from a document that parses on demand keeps its table: after the interval it
+  came from was sent back to unparsed (and its table let go of by the document), the row,
+  its table and its paragraphs' layouts still answer. Freed memory is poisoned meanwhile. }
+procedure TTyRichLayoutTest.TestARowInALazyDocumentSurvivesEviction;
+var
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  q, i, rows, cells, h: Integer;
+  R: TTyRowLayout;
+  text0: RawByteString;
+begin
+  d := LoadLazyRepeated('re-zh-table.rtf');
+  load := TyRichRtfLoadOf(d);
+  AssertTrue('intervals', load.IntervalCount >= 6);
+  q := -1;
+  for i := load.IntervalFirstPara(2) to load.IntervalFirstPara(2) + 20 do
+    if d.CellAt(i) <> nil then
+    begin
+      q := i;
+      Break;
+    end;
+  AssertTrue('a table paragraph', q >= 0);
+  R := TTyRowLayout(FLayouter.LayoutBlock(d, q, 1000, 96, 1));
+  try
+    AssertTrue('a row', TTyBlockLayout(R) is TTyRowLayout);
+    rows := R.Table.RowCount;
+    cells := R.Table.Rows[R.RowIndex].CellCount;
+    text0 := R.Items[0].Layout.Text;
+    h := R.Height;
+    AssertEquals('three by three', 3, rows);
+    AssertEquals('three cells', 3, cells);
+    BeginPoison;
+    try
+      for i := 3 to 5 do d.EnsureParsed(load.IntervalFirstPara(i) + 1);
+      AssertTrue('the row''s paragraph went back to unparsed',
+        TBuilderAccess.Value(d, R.FirstPara) = nil);
+      AssertEquals('its table, still', rows, R.Table.RowCount);
+      AssertEquals('its row', cells, R.Table.Rows[R.RowIndex].CellCount);
+      AssertEquals('its first paragraph', text0, R.Items[0].Layout.Text);
+      AssertEquals('its height', h, R.Height);
+      AssertEquals('it answers', R.Items[1].Pos, R.PosAtPoint(R.Items[1].X, 3));
+    finally
+      EndPoison;
+    end;
+  finally
+    R.Release;
+  end;
+end;
+
+{ The row-format function on WordPad's row, on Word's merged ones and on the edges: words in
+  groups passed over, a width before or after the style, \brdrnone taking a side away, a
+  border word after \trbrdr* not a cell's, a missing \cellx number. }
+procedure TTyRichLayoutTest.TestTheRowFormatIsRead;
+var
+  r: TTyRowDisplay;
+begin
+  r := TyRtfRowDisplay('\trowd\trgaph108\trleft5\trbrdrl\brdrs\brdrw10 \trpaddl108' +
+    '\clbrdrl\brdrw10\brdrs\clbrdrt\brdrw15\brdrs\clbrdrr\brdrw10\brdrs\clbrdrb\brdrw10\brdrs ' +
+    '\cellx2773\clvmgf\clvertalc\clbrdrt\brdrs\brdrw20 \cellx5542 \clmrg\clvmrg\clvertalb' +
+    '\clbrdrl\brdrs\brdrnone\clbrdrb\brdrdb\cellx8311');
+  AssertEquals('half gap', 108, r.HalfGap);
+  AssertEquals('left', 5, r.Left);
+  AssertEquals('no height', 0, r.Height);
+  AssertEquals('three cells', 3, Length(r.Cells));
+  AssertEquals('right edge', 2773, r.Cells[0].Right);
+  AssertTrue('all four sides', r.Cells[0].Borders = [rcsLeft, rcsTop, rcsRight, rcsBottom]);
+  AssertEquals('a width before the style', 15, r.Cells[0].BorderWidth[rcsTop]);
+  AssertEquals('the left one''s width', 10, r.Cells[0].BorderWidth[rcsLeft]);
+  AssertTrue('no merge', (r.Cells[0].VMerge = rcmNone) and (r.Cells[0].HMerge = rcmNone));
+  AssertTrue('starts a vertical merge', r.Cells[1].VMerge = rcmFirst);
+  AssertTrue('centred', r.Cells[1].VAlign = rcvCenter);
+  AssertTrue('only its top', r.Cells[1].Borders = [rcsTop]);
+  AssertEquals('a width after the style', 20, r.Cells[1].BorderWidth[rcsTop]);
+  AssertTrue('merged into the one before', r.Cells[2].HMerge = rcmContinue);
+  AssertTrue('continues the one above', r.Cells[2].VMerge = rcmContinue);
+  AssertTrue('at the bottom', r.Cells[2].VAlign = rcvBottom);
+  AssertTrue('none on the left, a double line below', r.Cells[2].Borders = [rcsBottom]);
+  r := TyRtfRowDisplay('\trowd\trrh-400{\*\x\clmgf\cellx1}\clmgf\cellx\cellx-3');
+  AssertEquals('an exact height', -400, r.Height);
+  AssertEquals('the group passed over: two cells', 2, Length(r.Cells));
+  AssertTrue('first of a merge', r.Cells[0].HMerge = rcmFirst);
+  AssertEquals('no number: no edge', -1, r.Cells[0].Right);
+  AssertEquals('a negative edge as written', -3, r.Cells[1].Right);
+  AssertTrue('no \trgaph: 0', r.HalfGap = 0);
+  r := TyRtfRowDisplay('\trowd\clbrdrt\brdrs\trbrdrb\brdrw30\brdrnone \cellx100');
+  AssertTrue('after \trbrdrb the words are the row''s', r.Cells[0].Borders = [rcsTop]);
+  AssertEquals('and so is the width', 0, r.Cells[0].BorderWidth[rcsTop]);
+  r := TyRtfRowDisplay('');
+  AssertEquals('nothing: no cells', 0, Length(r.Cells));
+  r := TyDefaultRowDisplay(2);
+  AssertEquals('a row made here: two cells', 2, Length(r.Cells));
+  AssertEquals('Word''s half gap', 108, r.HalfGap);
+  AssertTrue('a line on every side', r.Cells[1].Borders = [rcsLeft, rcsTop, rcsRight, rcsBottom]);
+  AssertEquals('a thin one', 10, r.Cells[1].BorderWidth[rcsLeft]);
 end;
 
 initialization
