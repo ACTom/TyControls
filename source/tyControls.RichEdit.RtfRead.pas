@@ -475,8 +475,6 @@ type
     procedure Resume(const AState: TTyRtfState);
     procedure CopyTablesFrom(AOther: TTyRtfParser);
     function DefaultCharFormat: TTyCharFormat;
-    // The UTF-8 text read, paragraphs separated by the platform's line break.
-    function TextBytes: TBytes;
     // Paragraph AIndex's text (building only), without its separator.
     function ParaText(AIndex: Integer): RawByteString;
     // The paragraphs this parser read (after a Resume: ParaRec(0) is the first after the
@@ -4421,16 +4419,6 @@ end;
 
 // ---- results ----
 
-function TTyRtfParser.TextBytes: TBytes;
-var
-  n: PtrInt;
-begin
-  // every paragraph was written with a separator after it; the last one has none
-  n := FOutLen - Length(FSep);
-  if n < 0 then n := 0;
-  Result := Copy(FOut, 0, n);
-end;
-
 function TTyRtfParser.ParaText(AIndex: Integer): RawByteString;
 var
   r: ^TTyRtfParaRec;
@@ -5133,7 +5121,10 @@ end;
 // The whole file parsed in one go, from its first byte: every paragraph gets its formats
 // from that one parse, and its text when it is read. The index (the scan that found the
 // paragraphs' bytes) and this parse are two readings of the file by the same rules; they
-// must find the same paragraphs, and are compared. The one group this makes holds every
+// must find the same paragraphs, and are compared. (No input is known that makes them
+// differ - the scan's only way of its own is the counting fast path, FastRun - so no test
+// reaches the two raises: they keep a reader defect from showing up later, as paragraphs
+// with the formats of other bytes.) The one group this makes holds every
 // interval and is the only one, so it is never the least recently used: it stays.
 procedure TTyRtfLoad.ParseWhole;
 var
