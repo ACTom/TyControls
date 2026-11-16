@@ -1233,6 +1233,10 @@ States: `:disabled` only (`opacity`).
 | `TyDateTimePicker` | Date-time field | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
 | `TyTextSelection` | Text selection highlight band, reads `background` only | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | none |
 | `TyTextHint` | Placeholder / hint text, reads `color` only | `TTyEdit` / `TTyTreeSelect` | none |
+| `TyRichEdit` | Rich text box; registered in code under `TyMemo` (frame, padding, background and font are the memo's) and has no rule of its own in light.tycss: one you write is used | `TTyRichEdit` | `:hover` `:focus` `:disabled` |
+| `TyRichEditSelection` | The rich text selection's ground, reads `background`; a `color`, when written, is the selected text's; by default the memo's `--selection` | `TTyRichEdit` | `:focus` is the selection while the control has focus, the stateless one after it lost focus (the same by default) |
+| `TyRichEditObject` | A selected picture's frame (`border-color`) and handles (`background`) | `TTyRichEdit` | none |
+| `TyRichEditPlaceholder` | A picture that cannot be shown (WMF/EMF and the like): `background` fills it, `border-color` frames it | `TTyRichEdit` | none |
 
 #### 8.2.5 Checks, switches, sliders, progress
 

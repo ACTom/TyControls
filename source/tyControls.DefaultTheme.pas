@@ -963,6 +963,16 @@ begin
     '' + LineEnding +
     'TyTextSelection { background: var(--selection); }' + LineEnding +
     'TyTextHint      { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* 富文本(TTyRichEdit)。它的类型键 TyRichEdit 在代码里挂到 TyMemo 下面,外框、内边距、底色、字体、' + LineEnding +
+    '   :focus 都是 Memo 的,这里只有它自己的三个部件。选区:就是 Memo 的选区(--selection);:focus 那份' + LineEnding +
+    '   是有焦点时用的,无状态那份是失去焦点以后的,默认两份一样(像 Memo),皮肤想让失焦的淡一些就改' + LineEnding +
+    '   无状态那份。对象:选中图片的框和手柄(border-color 画框,background 填手柄)。占位:显示不了的' + LineEnding +
+    '   图片(WMF/EMF 等)那块底和框。 */' + LineEnding +
+    'TyRichEditSelection       { background: var(--selection); }' + LineEnding +
+    'TyRichEditSelection:focus { background: var(--selection); }' + LineEnding +
+    'TyRichEditObject          { background: var(--surface); border-color: var(--accent); }' + LineEnding +
+    'TyRichEditPlaceholder     { background: var(--surface-sunk); border-color: var(--border); }' + LineEnding +
     'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding +
     '' + LineEnding +
     'TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }' + LineEnding +

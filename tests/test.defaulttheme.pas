@@ -129,6 +129,10 @@ begin
     AssertBg('TyTerminalCursor', []);
     AssertBg('TyTerminalSelection', []);
     AssertBg('TyTerminalPreedit', []);
+    AssertBg('TyRichEditSelection', []);
+    AssertBg('TyRichEditSelection', [tysFocused]);
+    AssertBg('TyRichEditObject', []);
+    AssertBg('TyRichEditPlaceholder', []);
   finally
     m.Free;
   end;

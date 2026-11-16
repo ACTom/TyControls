@@ -1199,6 +1199,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyDateTimePicker` | 日期时间字段 | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
 | `TyTextSelection` | 文本选区高亮带,只读 `background` | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | 无状态 |
 | `TyTextHint` | 占位符 / 提示文字,只读 `color` | `TTyEdit` / `TTyTreeSelect` | 无状态 |
+| `TyRichEdit` | 富文本框;在代码里挂到 `TyMemo` 下面(外框、内边距、底色、字体都是 Memo 的),light.tycss 里没有它自己的规则,写了才用 | `TTyRichEdit` | `:hover` `:focus` `:disabled` |
+| `TyRichEditSelection` | 富文本的选区底色,读 `background`,写了 `color` 时选中的字用它;默认是 Memo 的 `--selection` | `TTyRichEdit` | `:focus` 是有焦点时的选区,无状态那份是失去焦点后的(默认一样) |
+| `TyRichEditObject` | 选中图片的框(`border-color`)和手柄(`background`) | `TTyRichEdit` | 无状态 |
+| `TyRichEditPlaceholder` | 显示不了的图片(WMF/EMF 等)的占位:`background` 填底,`border-color` 画框 | `TTyRichEdit` | 无状态 |
 
 #### 8.2.5 勾选、开关、滑杆、进度
 
