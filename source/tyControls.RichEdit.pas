@@ -85,6 +85,11 @@ const
     reaches the idle handlers (an Application.OnIdle that sets Done := False, a flood of
     messages). In the normal case a tick costs one comparison. }
   CRichBackstopMs = 50;
+  { While a load runs, what its own turns change of the scroll bars reaches the bars at most
+    once in this many milliseconds (by the turns' clock), and always when the load ends (P-1):
+    a bar repaints itself whole on every change of its range (about 8 ms), more than a turn's
+    work, while its thumb, at its smallest size, does not move. }
+  CRichLoadBarsMs = 100;
   { FinishLoading's slice: the progress event fires and a cancel acts every this many bytes. }
   CRichFinishStepBytes = 4 * 1024 * 1024;
   { The kept surface is made in blocks of this many raster pixels: a resize does not make it
@@ -294,6 +299,14 @@ type
     { The size of a turn's load slices (N-3, N-4: see SliceBytes), and within a turn the bytes
       it indexed and the progress handler's milliseconds so far. }
     FSlice, FTurnBytes, FHandlerMs: Int64;
+    { P-1: inside a load's own change made in a turn (DocChanged); the bars' widgets are behind
+      the control's values; the turn clock at which a turn last gave them its range (valid:
+      since the load began). }
+    FBarsLazy, FBarsBehind, FBarsAtValid: Boolean;
+    FBarsAt: QWord;
+    { P-2: a load whose next turn could not be scheduled ends at the next entry point of the
+      loop (see SchedulingFailed). }
+    FLoadEndOwed: Boolean;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
     { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
@@ -499,6 +512,8 @@ type
     procedure TurnTimerTick(Sender: TObject);
     procedure NoteTurn(AMs: Int64);
     procedure SchedulingFailed;
+    procedure EndOwedLoad;
+    procedure CatchUpBars;
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -2158,6 +2173,8 @@ begin
   FScrollX := AValue;
   ClampScrollX;
   if FScrollX = was then Exit;
+  // a range a load's turns held back first: the position is in the range the bar has (P-1)
+  CatchUpBars;
   if HBarShown then
   begin
     FSyncingBars := True;
@@ -2388,6 +2405,8 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
+  // a user action is an entry point of the loop (P-2: see SchedulingFailed)
+  EndOwedLoad;
   if (Button <> mbLeft) and (Button <> mbRight) then Exit;
   try
     if CanFocus and not Focused then SetFocus;
@@ -3481,7 +3500,14 @@ begin
         FSnapPending := True;
       FWishValid := False;
     end;
-    ChangeInView(AChange);
+    { A slice a turn appends: its change of the bars may wait (UpdateBars, P-1). The end of a
+      load (Loading False there) and anything that is not a slice reach them at once. }
+    FBarsLazy := loadOwn and FInTurn and FDoc.Loading;
+    try
+      ChangeInView(AChange);
+    finally
+      FBarsLazy := False;
+    end;
     { A paint that came while the document held this change back showed nothing new and left
       the window painted: the change's own bands are not all it missed (with no block held
       they are nothing). The window is painted again, whole, once (K-11). }
@@ -4238,6 +4264,22 @@ begin
   topY := AnchorY div FScale;
   viewH := FViewH div FScale;
   Result := (wantV <> VBarShown) or (wantH <> HBarShown);
+  { A load's own slice (FBarsLazy) that brings no bar and takes none away: the widgets get its
+    range at the end of a turn, at most once per CRichLoadBarsMs of the turns' clock
+    (BackgroundTurn); CatchUpBars gives them the rest when the load ends, and any call of this
+    that is not such a slice gives them everything at once. What the control works with - the
+    document's height, the anchor, the clamps - is read from the document, never from a bar;
+    FBarScale is the scale the vertical bar was last given, the one its positions are in
+    (P-1). }
+  if FBarsLazy and not Result then
+  begin
+    // the turn decides at its end (BackgroundTurn)
+    FBarsBehind := True;
+    // (the control's own value, as below)
+    if wantH then ClampScrollX else FScrollX := 0;
+    Exit;
+  end;
+  FBarsBehind := False;
   if wantV and (FVBar = nil) then FVBar := NewBar(Self, sbVertical, @VBarChange, FScrollBarAutoHide);
   if wantH and (FHBar = nil) then FHBar := NewBar(Self, sbHorizontal, @HBarChange, FScrollBarAutoHide);
   if FVBar <> nil then FVBar.Visible := wantV;
@@ -4610,6 +4652,8 @@ begin
       raise;
     end;
     FInStep := False;
+    // the load's end: the bars get what its last turns held back (P-1)
+    if not FDoc.Loading then CatchUpBars;
     if FCancelRequested then CancelLoad;
     Exit(True);
   end;
@@ -4689,14 +4733,44 @@ end;
   or the idle step that asked. An application that shuts down: quietly, the document as far as
   it was read (Loading; FinishLoading reads the rest, a new window starts the driver again)
   (L-2). Anything else (in practice: out of memory) would leave the load Loading with nothing to
-  drive it: it ends as a cancel ends it - Incomplete, with the load's own notice (N-5). }
+  drive it: it ends as a cancel ends it - Incomplete, with the load's own notice (N-5).
+  That cancel is not run here: this is reached from the end of a paint, the tail of a layout
+  pass (QueuePicturesAhead) and InitializeWnd, where the view must not hear a document notice.
+  It is owed (FLoadEndOwed), and EndOwedLoad runs it at the next entry point of the loop: the
+  idle step (rtdIdle: the handler is registered again for it - a registration is no queued
+  call), a turn, a key or a mouse press; LoadAs and the idle step, which are such entry points
+  themselves, run it before they return. It runs under no handler of ours: an exception from a
+  user's change handler reaches the caller as from a user's own cancel (P-2). }
 procedure TTyCustomRichEdit.SchedulingFailed;
 begin
+  // the driver's own calls only (no user code): what fails here was failing already
   try
     StopBackground;
-    if not SchedulingClosed and FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil) then CancelLoad;
   except
   end;
+  if SchedulingClosed or not FDoc.Loading or (TyRichRtfLoadOf(FDoc) = nil) then Exit;
+  FLoadEndOwed := True;
+  if (TurnDriver = rtdIdle) and not FIdleOn then
+  try
+    WatchIdle(True);
+    FIdleOn := True;
+  except
+  end;
+end;
+
+procedure TTyCustomRichEdit.EndOwedLoad;
+begin
+  if not FLoadEndOwed then Exit;
+  FLoadEndOwed := False;
+  if FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil) then CancelLoad;
+end;
+
+{ The bars get the range the load's turns held back (P-1). }
+procedure TTyCustomRichEdit.CatchUpBars;
+begin
+  if not FBarsBehind then Exit;
+  FBarsBehind := False;
+  if FViewPPI > 0 then UpdateBars(False);
 end;
 
 procedure TTyCustomRichEdit.StopBackground;
@@ -4782,6 +4856,12 @@ end;
 
 procedure TTyCustomRichEdit.IdleStep(Sender: TObject; var Done: Boolean);
 begin
+  if FLoadEndOwed and not FInStep and (FSaving = 0) then
+  begin
+    // (P-2) its own driver stays on only for pictures left (CancelLoad's tail)
+    EndOwedLoad;
+    Exit;
+  end;
   if not HandleAllocated or not HasBackgroundWork then
   begin
     StopBackground;
@@ -4790,6 +4870,8 @@ begin
   // inside a load step or a save (a handler that runs a modal loop): their end goes on
   if FInStep or (FSaving > 0) then Exit;
   ScheduleCall(FStepCall);
+  // a call that could not be queued: the load ends now (P-2)
+  EndOwedLoad;
 end;
 
 procedure TTyCustomRichEdit.TurnTimerTick(Sender: TObject);
@@ -4833,12 +4915,17 @@ end;
 
 procedure TTyCustomRichEdit.BackgroundTurn;
 var
-  t0: QWord;
+  t0, tEnd: QWord;
   n: Integer;
   ms: Int64;
 begin
   // inside a load step (a handler that pumps messages) or a save: their end starts it again
   if FInStep or (FSaving > 0) or FInTurn then Exit;
+  if FLoadEndOwed then
+  begin
+    EndOwedLoad;
+    Exit;
+  end;
   { The clock (GetTickCount64) may advance in 15.6 ms steps (Windows' default): it only ends a
     turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
     pieces: CRichIdleMaxSteps load slices or pictures. }
@@ -4856,6 +4943,17 @@ begin
       ms := Int64(IdleTicks - t0);
     until (n >= CRichIdleMaxSteps) or (ms >= CRichIdleBudgetMs);
     NoteTurn(ms);
+    { The range the turn's slices held back reaches the bars, the turn's whole work at once,
+      when none did for CRichLoadBarsMs (by the clock's last reading); the first turn of a load
+      always (P-1). }
+    tEnd := t0 + QWord(Math.Max(Int64(0), ms));
+    if FBarsBehind and (not FBarsAtValid or (tEnd < FBarsAt) or
+      (tEnd - FBarsAt >= CRichLoadBarsMs)) then
+    begin
+      FBarsAt := tEnd;
+      FBarsAtValid := True;
+      CatchUpBars;
+    end;
   finally
     { The driver stays on while work is left, also after a piece raised: the work never
       strands (K-4). Nothing is queued from here (R49): still inside the turn, a start only
@@ -4866,6 +4964,8 @@ begin
       FInTurn := False;
     end;
   end;
+  // (P-2) the next turn could not be scheduled: the load ends here, out of the turn
+  EndOwedLoad;
 end;
 
 function TTyCustomRichEdit.IdleTicks: QWord;
@@ -4999,6 +5099,9 @@ begin
   FCancelRequested := False;
   // a new file's turns start small and find their size (N-3); its first slice is not a turn
   FSlice := CRichLoadMinStepBytes;
+  // its first turn's range reaches the bars at once (P-1); an end owed to the last is moot
+  FBarsAtValid := False;
+  FLoadEndOwed := False;
   if AFormat = rfRtf then
   begin
     prefix := ReadRtfPrefix(AStream);
@@ -5016,6 +5119,8 @@ begin
   FLinesStored := False;
   FSourceFile := '';
   if HasBackgroundWork then StartBackground;
+  // a first turn that could not be queued: the load ends before this returns (P-2)
+  EndOwedLoad;
 end;
 
 procedure TTyCustomRichEdit.LoadFromStream(AStream: TStream; AFormat: TTyRichFormat);
@@ -5117,6 +5222,8 @@ begin
     FInCancel := False;
     FInStep := False;
   end;
+  // (its notice reached them already when it changed a view: then this does nothing; P-1)
+  CatchUpBars;
   if HasBackgroundWork then StartBackground else StopBackground;
 end;
 
@@ -6175,6 +6282,8 @@ var
   q: TTyRichPos;
 begin
   inherited KeyDown(Key, Shift);
+  // a user action is an entry point of the loop (P-2: see SchedulingFailed)
+  EndOwedLoad;
   if (Key = 0) or not IsEnabled then Exit;
   { Inside the document's update a key that moves or copies does nothing: the view does not
     know the text yet (K-9). The viewer's keys are still taken - they never go on to the form. }
@@ -6299,6 +6408,8 @@ begin
   FScrollX := FScrollX + notches * 3 * Math.Max(1, FEstimate);
   ClampScrollX;
   if FScrollX = was then Exit;
+  // a range a load's turns held back first: the position is in the range the bar has (P-1)
+  CatchUpBars;
   if HBarShown then
   begin
     FSyncingBars := True;

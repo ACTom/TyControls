@@ -242,6 +242,9 @@ type
     FDocNotice: TTyRichChangeEvent;
     procedure CountLoadEnds(Sender: TObject; const AChange: TTyRichChange);
     function TurnSizes: string;
+    // W10
+    procedure RaiseOnLoadEnd(Sender: TObject; const AChange: TTyRichChange);
+    function BarMaxWanted: Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -408,6 +411,9 @@ type
     procedure TestAStallCostsOneHalving;
     procedure TestTheBackstopRunsATurnOnlyWhenTheIdleStepIsStarved;
     procedure TestASlicesCostDoesNotGrowWithTheDocument;
+    // fix wave W10
+    procedure TestTheLoadsTurnsSetTheBarOncePerInterval;
+    procedure TestAnOwedLoadEndRaisesFromItsEntryPoint;
   end;
 
 implementation
@@ -7674,8 +7680,8 @@ end;
 
 { N-7 (L-6): a slice appended below the view asks the view nothing (no layout, no settle) and
   walks the height tree a bounded number of times, the same at 10,000 paragraphs as at 800,000:
-  nothing per slice is proportional to the document (bound: 16 visits a slice; measured 5 and
-  8 when this was written). Each document is read in its synchronous
+  nothing per slice is proportional to the document (bound: 16 visits a slice, an empirical
+  one - see CRichSliceVisitBound). Each document is read in its synchronous
   first slice but the last 100 KB, which come in turns of 16 KB slices. }
 procedure TTyRichEditControlTest.TestASlicesCostDoesNotGrowWithTheDocument;
 
@@ -7730,7 +7736,11 @@ procedure TTyRichEditControlTest.TestASlicesCostDoesNotGrowWithTheDocument;
   end;
 
 const
-  // a few walks from the root of the height tree (its depth is about log2 of the paragraphs)
+  { Empirical, not derived: twice the larger of the counts measured when it was written (5 and
+    8). A full walk from the root would not fit under it (log2 of 800,000 is about 20): the
+    appends do not walk the tree's whole depth. NodeVisits counts only the walks of Text.pas
+    that increment it; a cost per slice that goes through another accessor would not show
+    here. }
   CRichSliceVisitBound = 16;
 var
   small, big: Int64;
@@ -8286,6 +8296,162 @@ begin
   Measure('PgDn 2', VK_NEXT, []);
   Measure('Ctrl+End again', VK_END, [ssCtrl]);
   Measure('PgUp at the end', VK_PRIOR, []);
+end;
+
+{ W10: the range the vertical bar ought to have now: the document's height less a page (a bar
+  unit is a pixel here: the document is far below ScrollBarLimit). }
+function TTyRichEditControlTest.BarMaxWanted: Integer;
+begin
+  Result := FRich.Document.Text.TotalHeight div FRich.Scale - FRich.VBar.PageSize;
+end;
+
+{ P-1: while a load runs, the range its own turns give the vertical bar reaches the bar at most
+  once per CRichLoadBarsMs (100) of the turns' clock: the first turn's at once; the next turns'
+  within the interval not (the document grows, the bar's Max stands); the first turn after it
+  again, and the interval runs from there. What is not the load's own slice reaches the bar at
+  once: a scroll by the user in the middle of the load, an edit after it. The load's end gives
+  the bar the whole document's range, though its turns came within one interval. }
+procedure TTyRichEditControlTest.TestTheLoadsTurnsSetTheBarOncePerInterval;
+var
+  F: TForm;
+  m, i, turns: Integer;
+  h: Int64;
+begin
+  F := HandleForm;
+  try
+    FRich.Slices(0, 16 * 1024);
+    LoadW8Big(40000);
+    PaintAll(True);
+    // a clock of the test's that stands between the turns
+    FRich.FakeClock := True;
+    FRich.ClockStep := 0;
+    FRich.ClockNow := 1000;
+    FRich.Turn;
+    AssertTrue('loading', FRich.Loading);
+    AssertTrue('a scroll bar', (FRich.VBar <> nil) and FRich.VBar.Visible);
+    AssertEquals('the load''s first turn: its range reaches the bar', BarMaxWanted, FRich.VBar.Max);
+    m := FRich.VBar.Max;
+    for i := 1 to 3 do
+    begin
+      Inc(FRich.ClockNow, 30);
+      h := FRich.Document.Text.TotalHeight;
+      FRich.Turn;
+      AssertTrue(Format('turn %d: the document grew', [i]), FRich.Document.Text.TotalHeight > h);
+      AssertEquals(Format('turn %d, %d ms after: the bar as it was', [i, 30 * i]), m,
+        FRich.VBar.Max);
+    end;
+    AssertTrue('still loading', FRich.Loading);
+    Inc(FRich.ClockNow, 10);
+    FRich.Turn;
+    AssertEquals('100 ms after: the range reaches the bar', BarMaxWanted, FRich.VBar.Max);
+    m := FRich.VBar.Max;
+    Inc(FRich.ClockNow, 50);
+    FRich.Turn;
+    AssertEquals('the interval runs from the last time: the bar as it was', m, FRich.VBar.Max);
+    AssertTrue('behind the document', BarMaxWanted <> m);
+    // a scroll by the user in the middle of the load: at once, no turn between
+    FRich.Wheel(-120, []);
+    FRich.UpdateView;
+    AssertEquals('a scroll: the range at once', BarMaxWanted, FRich.VBar.Max);
+    AssertTrue('and the position', FRich.VBar.Position > 0);
+    // the rest within the interval (the clock stands): the end gives the whole range
+    m := FRich.VBar.Max;
+    turns := 0;
+    while FRich.Loading do
+    begin
+      FRich.Turn;
+      Inc(turns);
+      AssertTrue('runaway', turns < 10000);
+    end;
+    AssertTrue(Format('turns to the end (%d)', [turns]), turns >= 2);
+    AssertFalse('read whole', FRich.Document.Incomplete);
+    AssertTrue('the turns held the bar back', BarMaxWanted <> m);
+    AssertEquals('the load''s end: the whole document''s range', BarMaxWanted, FRich.VBar.Max);
+    // no load: an edit reaches the bar at once, the clock standing still
+    m := FRich.VBar.Max;
+    AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(0, 20000)));
+    AssertTrue('the edit took paragraphs away', BarMaxWanted <> m);
+    AssertEquals('an edit: the range at once', BarMaxWanted, FRich.VBar.Max);
+  finally
+    FRich.FakeClock := False;
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.RaiseOnLoadEnd(Sender: TObject; const AChange: TTyRichChange);
+begin
+  if not FRich.Document.Loading and FRich.Document.Incomplete then
+  begin
+    Inc(FLoadEnds);
+    raise Exception.Create('W10: the user''s change handler');
+  end;
+end;
+
+{ P-2: a load whose next turn cannot be scheduled ends as a cancel ends it, under no handler of
+  the control's: an exception from a user's change handler in that end reaches the caller of
+  the entry point that ran it - LoadFromStream, when the load's first turn could not be queued;
+  the idle step, when the end was owed from InitializeWnd (a window made for a load running
+  without one), where nothing is heard: the load runs until then. Either way the load has
+  ended, Incomplete, and the next idle step stops the driver. }
+procedure TTyRichEditControlTest.TestAnOwedLoadEndRaisesFromItsEntryPoint;
+const
+  Msg = 'W10: the user''s change handler';
+var
+  F: TForm;
+  raised: string;
+begin
+  F := HandleForm;
+  FDocNotice := FRich.Document.OnChange;
+  try
+    FRich.Document.OnChange := @RaiseOnLoadEnd;
+    FLoadEnds := 0;
+    FRich.FailPost := True;
+    raised := '';
+    try
+      LoadW7Plain(False);
+    except
+      on E: Exception do raised := E.Message;
+    end;
+    FRich.FailPost := False;
+    AssertEquals('the load''s start: the handler''s exception reached the caller', Msg, raised);
+    AssertEquals('the load''s end, once', 1, FLoadEnds);
+    AssertFalse('not loading', FRich.Loading);
+    AssertTrue('incomplete', FRich.Document.Incomplete);
+    FRich.Document.OnChange := FDocNotice;
+    RunIdleHandlers;
+    AssertFalse('the next idle step: nothing registered', FRich.IdleOn);
+    // owed from InitializeWnd
+    LoadW7Plain;
+    FRich.DropHandle;
+    AssertTrue('loading without a window', FRich.Loading);
+    FRich.Document.OnChange := @RaiseOnLoadEnd;
+    FLoadEnds := 0;
+    FRich.FailPost := True;
+    FRich.HandleNeeded;
+    FRich.FailPost := False;
+    AssertEquals('InitializeWnd: nothing heard', 0, FLoadEnds);
+    AssertTrue('the load runs until the next entry point', FRich.Loading);
+    AssertTrue('the idle step is registered for it', FRich.IdleOn);
+    raised := '';
+    try
+      RunIdleHandlers;
+    except
+      on E: Exception do raised := E.Message;
+    end;
+    AssertEquals('the idle step: the handler''s exception reached its caller', Msg, raised);
+    AssertEquals('the load''s end, once', 1, FLoadEnds);
+    AssertFalse('not loading after the idle step', FRich.Loading);
+    AssertTrue('incomplete after the idle step', FRich.Document.Incomplete);
+    FRich.Document.OnChange := FDocNotice;
+    RunIdleHandlers;
+    AssertFalse('then: nothing registered', FRich.IdleOn);
+  finally
+    FRich.Document.OnChange := FDocNotice;
+    FRich.FailPost := False;
+    FRich.Parent := nil;
+    F.Free;
+  end;
 end;
 
 initialization
