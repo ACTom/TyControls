@@ -76,9 +76,15 @@ const
   CRichIdleMaxSteps = 3;
   { One load slice: bytes of RTF indexed per step, at most. }
   CRichLoadStepBytes = 256 * 1024;
-  { ... and at least, when the file indexes slowly (L-6): a slice is sized from the rate the
-    load's turns measured, so that it takes about CRichIdleBudgetMs. }
+  { ... and at least: a load's turns start their slices at this size and double them while
+    turns are fast, halve them while they are slow (TTyCustomRichEdit.SliceBytes; L-6, N-3,
+    N-4). }
   CRichLoadMinStepBytes = 16 * 1024;
+  { rtdIdle's backstop (N-2): while there is work, a timer of this period runs one turn when no
+    turn ran since its last tick - for an application whose idle step never comes or never
+    reaches the idle handlers (an Application.OnIdle that sets Done := False, a flood of
+    messages). In the normal case a tick costs one comparison. }
+  CRichBackstopMs = 50;
   { FinishLoading's slice: the progress event fires and a cancel acts every this many bytes. }
   CRichFinishStepBytes = 4 * 1024 * 1024;
   { The kept surface is made in blocks of this many raster pixels: a resize does not make it
@@ -135,7 +141,9 @@ type
       loop, and each queued call posts the next WM_NULL, which PeekMessage hands out before
       input, paints and timers (measured: 150 chained turns = 1 pass of the loop, 0 timer
       ticks, 0 idle steps). On gtk2, gtk3, qt5 and qt6 the queue runs only in the idle step
-      and ProcessMessages (read, not run).
+      and ProcessMessages (read, not run). Beside the idle handler a slow backstop timer
+      (CRichBackstopMs, BackstopTick) runs one turn when no turn ran since its last tick: an
+      application whose idle step is starved still loads, throttled.
     - rtdTimer (every other widgetset: Cocoa, and anything not named above): a timer whose
       handler runs a turn, as before the queued turns. On Cocoa the queue is run inside the
       wait (lclSyncCheck) and the idle step is not reached between two queued calls, so an
@@ -279,10 +287,13 @@ type
     FIdleOn: Boolean;
     FTurnTimer: TTimer;
     FInTurn: Boolean;
-    { The load's indexing rate as its turns measured it (L-6): bytes indexed and the
-      milliseconds that took (the progress handler's time left out), and within a turn the
-      bytes and the handler's milliseconds so far. }
-    FRateBytes, FRateMs, FTurnBytes, FHandlerMs: Int64;
+    { rtdIdle's backstop timer (N-2; made on the first start, freed with the window), the
+      turns run so far and how many of them its last tick had seen. }
+    FBackstop: TTimer;
+    FTurnsRun, FBackstopSeen: Int64;
+    { The size of a turn's load slices (N-3, N-4: see SliceBytes), and within a turn the bytes
+      it indexed and the progress handler's milliseconds so far. }
+    FSlice, FTurnBytes, FHandlerMs: Int64;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
     { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
@@ -486,7 +497,8 @@ type
     procedure CancelCall(ACall: TTyRichQueuedCall);
     procedure CallFired(ACall: TTyRichQueuedCall);
     procedure TurnTimerTick(Sender: TObject);
-    procedure NoteRate(AStart: QWord);
+    procedure NoteTurn(AMs: Int64);
+    procedure SchedulingFailed;
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -613,6 +625,11 @@ type
       no window) left it takes itself away. Done is left as it is (the idle step still runs
       the actions' updates). }
     procedure IdleStep(Sender: TObject; var Done: Boolean); virtual;
+    { rtdIdle's backstop tick (N-2): when no turn ran since the last tick (the idle step is
+      starved), one turn - the queued call, if one waits, taken off the queue first, so that it
+      does not follow this turn; otherwise nothing. With no work (or no window) left it stops
+      the driver. }
+    procedure BackstopTick(Sender: TObject); virtual;
     { The background work's next turn is queued: there is work and a window. }
     property BackgroundCall: TTyRichQueuedCall read FStepCall;
     { rtdIdle: the idle handler is registered (there is work and a window). }
@@ -620,6 +637,10 @@ type
     { rtdTimer: the timer that runs the turns (nil until the first start, after the window
       went). }
     property TurnTimer: TTimer read FTurnTimer;
+    { rtdIdle: the backstop timer (nil until the first start, after the window went; enabled
+      while the idle handler is registered); the turns run so far. }
+    property BackstopTimer: TTimer read FBackstop;
+    property TurnsRun: Int64 read FTurnsRun;
     { A selection report a snap made outside a user action is queued. }
     property SelectionCall: TTyRichQueuedCall read FSelCall;
     { A press, a release, a hover or the focus changed: the control is painted again only
@@ -700,11 +721,14 @@ type
     property HorizontalBar: TTyScrollBar read FHBar;
     property FirstSliceBytes: Int64 read FFirstSliceBytes write FFirstSliceBytes;
     property StepBytes: Int64 read FStepBytes write FStepBytes;
-    { The bytes the next load slice indexes: StepBytes until the load's turns have measured
-      its rate, then what takes about CRichIdleBudgetMs / CRichIdleMaxSteps at that rate, between
-      CRichLoadMinStepBytes and StepBytes (L-6: a file that indexes slowly - such as raw bytes
-      its font's code page does not map - gets smaller slices, not longer turns). }
-    function SliceBytes: Int64;
+    { The bytes the next load slice indexes. In a turn (BackgroundTurn): the turns' slice size,
+      which starts at CRichLoadMinStepBytes with each load and changes after every turn that
+      indexed - halved when the turn took longer than CRichIdleBudgetMs, doubled when it took
+      less than a quarter of it, kept in between - within CRichLoadMinStepBytes .. StepBytes
+      (see NoteTurn). A file that indexes slowly gets smaller slices, not longer turns (L-6),
+      its first turn too (N-3); one stalled turn costs one halving (N-4). Outside a turn (a
+      step by hand): StepBytes. A test seam (it records what the loader was asked). }
+    function SliceBytes: Int64; virtual;
     property PendingPictureCount: Integer read FPendingCount;
   public
     constructor Create(AOwner: TComponent); override;
@@ -772,19 +796,24 @@ type
       SelStart collapses the selection there, writing SelLength extends it from SelStart; both
       clamp to the document and to a caret place (as a click does), forget the affinity and
       scroll the caret into view. A place past a cut paragraph's cut (CRichMaxParaLayoutChars)
-      is kept and shown at the cut. Not to be written while the document is inside
-      BeginUpdate .. EndUpdate (the view hears of the changes only at the end). }
+      is kept and shown at the cut.
+      Written inside the document's BeginUpdate .. EndUpdate (and so CaretPos, SelectAll,
+      ClearSelection): the positions are stored, clamped to the text as it is at that moment,
+      and nothing is laid out, scrolled or painted. Edits made later in the same update do not
+      move them; when the update ends they are clamped to the final text (and to a caret place)
+      and the selection is painted. }
     property SelStart: TTyRichPos read GetSelStart write SetSelStart;
     property SelLength: TTyRichPos read GetSelLength write SetSelLength;
     { The caret: SelStart's end or the other (the end a Shift move moves); writing it collapses
-      the selection there. }
+      the selection there. Inside an update: as SelStart. }
     property CaretPos: TTyRichPos read FCaret write SetCaretPos;
     { The caret's affinity: it stands at the end of a wrapped line rather than at the start of
       the line below (End, a click past a line's end). }
     property CaretAtLineEnd: Boolean read FCaretAtEnd;
     function HasSelection: Boolean;
     { Everything, the last paragraph's whole text (a cut paragraph too); the view does not
-      move. Nothing is laid out or walked: only what is on screen is painted again. }
+      move. Nothing is laid out or walked: only what is on screen is painted again. Inside an
+      update: as SelStart (the end is the text's end at that moment, clamped when it ends). }
     procedure SelectAll;
     { The selection collapses onto the caret. }
     procedure ClearSelection;
@@ -1218,6 +1247,7 @@ begin
   FSourceFormat := rfRtf;
   FFirstSliceBytes := CRtfFirstSliceBytes;
   FStepBytes := CRichLoadStepBytes;
+  FSlice := CRichLoadMinStepBytes;
   FBarScale := 1;
   FScale := 1;
   FSurfScale := 1;
@@ -1249,6 +1279,7 @@ begin
   StopBackground;
   if FSelCall <> nil then CancelCall(FSelCall);
   FreeAndNil(FTurnTimer);
+  FreeAndNil(FBackstop);
   FreeAndNil(FStepCall);
   FreeAndNil(FSelCall);
   FreeAndNil(FBlinkTimer);
@@ -4628,6 +4659,15 @@ begin
       first := not FInTurn;
       FIdleOn := True;
       WatchIdle(True);
+      if FBackstop = nil then
+      begin
+        FBackstop := TTimer.Create(nil);
+        FBackstop.Enabled := False;
+        FBackstop.Interval := CRichBackstopMs;
+        FBackstop.OnTimer := @BackstopTick;
+      end;
+      FBackstopSeen := FTurnsRun;
+      FBackstop.Enabled := True;
       if first then ScheduleCall(FStepCall);
     end
     else
@@ -4641,13 +4681,21 @@ begin
       FTurnTimer.Enabled := True;
     end;
   except
-    { An application that will not schedule (it shuts down) ends the background work here,
-      quietly: the document stays as far as it was read (Loading; FinishLoading reads the
-      rest, a new window starts the driver again) (L-2). }
-    try
-      StopBackground;
-    except
-    end;
+    SchedulingFailed;
+  end;
+end;
+
+{ What will not schedule ends the background work here; nothing escapes into the load, the turn
+  or the idle step that asked. An application that shuts down: quietly, the document as far as
+  it was read (Loading; FinishLoading reads the rest, a new window starts the driver again)
+  (L-2). Anything else (in practice: out of memory) would leave the load Loading with nothing to
+  drive it: it ends as a cancel ends it - Incomplete, with the load's own notice (N-5). }
+procedure TTyCustomRichEdit.SchedulingFailed;
+begin
+  try
+    StopBackground;
+    if not SchedulingClosed and FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil) then CancelLoad;
+  except
   end;
 end;
 
@@ -4660,6 +4708,7 @@ begin
   end;
   CancelCall(FStepCall);
   if FTurnTimer <> nil then FTurnTimer.Enabled := False;
+  if FBackstop <> nil then FBackstop.Enabled := False;
 end;
 
 function TTyCustomRichEdit.SchedulingClosed: Boolean;
@@ -4686,13 +4735,12 @@ begin
   try
     PostCall(ACall);
   except
-    // nothing was queued; the error does not travel on into a paint, a turn or a step (L-2)
+    { Nothing was queued; the error does not travel on into a paint, a turn or a step (L-2). The
+      background work: see SchedulingFailed. A selection report: the next user action reports
+      the move with its own report at its end (DoSelectionChange compares with what was last
+      reported), as when no loop runs the queue. }
     ACall.FQueued := False;
-    if ACall = FStepCall then
-      try
-        StopBackground;
-      except
-      end;
+    if ACall = FStepCall then SchedulingFailed;
   end;
 end;
 
@@ -4749,6 +4797,29 @@ begin
   BackgroundTurn;
 end;
 
+procedure TTyCustomRichEdit.BackstopTick(Sender: TObject);
+begin
+  // a turn ran since the last tick: the idle step drives the work
+  if FTurnsRun <> FBackstopSeen then
+  begin
+    FBackstopSeen := FTurnsRun;
+    Exit;
+  end;
+  if not HandleAllocated or not HasBackgroundWork then
+  begin
+    StopBackground;
+    Exit;
+  end;
+  // inside a load step, a save or a turn (a handler that pumps messages): their end goes on
+  if FInStep or (FSaving > 0) or FInTurn then Exit;
+  { The one queued call, if it waits, is this turn: taken off, it does not run right after it.
+    (Not run through the queue: in a flood of messages on gtk and qt the queue is run only by
+    the idle step and ProcessMessages, which is what is starved.) }
+  CancelCall(FStepCall);
+  BackgroundTurn;
+  FBackstopSeen := FTurnsRun;
+end;
+
 procedure TTyCustomRichEdit.CallFired(ACall: TTyRichQueuedCall);
 begin
   if ACall = FStepCall then
@@ -4764,6 +4835,7 @@ procedure TTyCustomRichEdit.BackgroundTurn;
 var
   t0: QWord;
   n: Integer;
+  ms: Int64;
 begin
   // inside a load step (a handler that pumps messages) or a save: their end starts it again
   if FInStep or (FSaving > 0) or FInTurn then Exit;
@@ -4771,16 +4843,19 @@ begin
     turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
     pieces: CRichIdleMaxSteps load slices or pictures. }
   FInTurn := True;
+  Inc(FTurnsRun);
   FTurnBytes := 0;
   FHandlerMs := 0;
   try
     t0 := IdleTicks;
     n := 0;
+    ms := 0;
     repeat
       if not StepBackground then Break;
       Inc(n);
-    until (n >= CRichIdleMaxSteps) or (IdleTicks - t0 >= CRichIdleBudgetMs);
-    NoteRate(t0);
+      ms := Int64(IdleTicks - t0);
+    until (n >= CRichIdleMaxSteps) or (ms >= CRichIdleBudgetMs);
+    NoteTurn(ms);
   finally
     { The driver stays on while work is left, also after a piece raised: the work never
       strands (K-4). Nothing is queued from here (R49): still inside the turn, a start only
@@ -4798,34 +4873,35 @@ begin
   Result := GetTickCount64;
 end;
 
-{ The turn that began at AStart indexed FTurnBytes: its time, less the progress handler's, goes
-  into the load's rate. The clock's steps (15.6 ms) even out over turns; older turns weigh less
-  (halved past a second measured), so a file that gets slower further on is followed. }
-procedure TTyCustomRichEdit.NoteRate(AStart: QWord);
+{ A turn that indexed took AMs, of which the progress handler's time is not the file's. Its slice
+  size is halved when the turn went over the budget (> CRichIdleBudgetMs), doubled when it was
+  fast (< CRichIdleBudgetMs / 4), and kept in between. The last turn alone decides, one step at
+  a time: a stall (a page fault, a debugger, the machine busy) costs one halving, and a few fast
+  turns bring the size back (N-4). The band between the two thresholds is four times wide, so a
+  steady rate settles rather than flips: a size doubled from a fast turn gives a turn of at
+  most twice that time, still under the budget (a turn of three slices under 2 ms becomes one
+  under 4 ms), and a size halved from a slow turn gives a turn no faster than the band's floor
+  (a turn ends when it reaches the budget, so the halved one still takes 4 ms or more). On a
+  clock that steps by 15.6 ms (Windows) the readings are 0 or 16: a turn is then judged fast
+  or slow at random in proportion to its length, which holds turns around the budget. }
+procedure TTyCustomRichEdit.NoteTurn(AMs: Int64);
 var
-  ms: Int64;
+  floor: Int64;
 begin
   if FTurnBytes <= 0 then Exit;
-  ms := Int64(IdleTicks - AStart) - FHandlerMs;
-  if ms < 0 then ms := 0;
-  Inc(FRateBytes, FTurnBytes);
-  Inc(FRateMs, ms);
-  if FRateMs > 1000 then
-  begin
-    FRateBytes := FRateBytes div 2;
-    FRateMs := FRateMs div 2;
-  end;
+  Dec(AMs, FHandlerMs);
+  floor := Math.Min(CRichLoadMinStepBytes, FStepBytes);
+  if AMs > CRichIdleBudgetMs then
+    FSlice := Math.Max(floor, FSlice div 2)
+  else if AMs < CRichIdleBudgetMs div 4 then
+    FSlice := Math.Min(FStepBytes, FSlice * 2);
 end;
 
 function TTyCustomRichEdit.SliceBytes: Int64;
 begin
-  Result := FStepBytes;
-  // (too little measured yet: one clock step is 15.6 ms)
-  if FRateMs < 4 * CRichIdleBudgetMs then Exit;
-  { A turn ends by its cap of pieces more often than by the clock (whose steps are longer than
-    the budget): a slice is a cap's share of the budget. }
-  Result := Math.Max(CRichLoadMinStepBytes,
-    FRateBytes * CRichIdleBudgetMs div (FRateMs * CRichIdleMaxSteps));
+  // a step by hand (not a turn) is not held to the budget
+  if not FInTurn then Exit(FStepBytes);
+  Result := Math.Max(FSlice, Math.Min(CRichLoadMinStepBytes, FStepBytes));
   if Result > FStepBytes then Result := FStepBytes;
 end;
 
@@ -4921,9 +4997,8 @@ var
 begin
   CheckReplaceable;
   FCancelRequested := False;
-  // a new file's rate is its own
-  FRateBytes := 0;
-  FRateMs := 0;
+  // a new file's turns start small and find their size (N-3); its first slice is not a turn
+  FSlice := CRichLoadMinStepBytes;
   if AFormat = rfRtf then
   begin
     prefix := ReadRtfPrefix(AStream);
@@ -5696,6 +5771,7 @@ begin
   InvalidateSurface;
   StopBackground;
   FreeAndNil(FTurnTimer);
+  FreeAndNil(FBackstop);
   // the blink and a drag's scrolling are a window's (DoEnter starts the blink again)
   FreeAndNil(FBlinkTimer);
   StopDrag;

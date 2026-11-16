@@ -78,6 +78,21 @@ type
     function IdleOn: Boolean;
     function TimerOf: TTimer;
     procedure HoverOut;
+  protected
+    function SliceBytes: Int64; override;
+  public
+    { W9: the slice sizes asked of the loader while LogSlices is on. }
+    LogSlices: Boolean;
+    SliceLog: array of Int64;
+    { W9: a clock of a file that indexes FakeRate bytes a millisecond (0: off): it reads
+      ClockNow plus the load's bytes indexed over FakeRate; StallMs is added to ClockNow at
+      the StallReadings-th reading from now (0: never). }
+    FakeRate: Int64;
+    StallMs, StallReadings: Integer;
+    { W9: the backstop timer, its tick run by hand, the turns run. }
+    function BackstopOf: TTimer;
+    procedure BackstopNow;
+    function Turns: Int64;
   public
     { W6: Invalidate's calls (what PointerStateChanged asks for), the temporary cursors
       MouseMove set. }
@@ -216,11 +231,17 @@ type
     // W7
     procedure RaiseOnce(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function HandleForm: TForm;
-    procedure LoadW7Plain;
+    procedure LoadW7Plain(AExpectLoading: Boolean = True);
     procedure LoadW7Table(ARows, AInRow: Integer);
     // W8
     procedure SlowHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure LoadW8Big(AParas: Integer);
+  private
+    // W9
+    FLoadEnds: Integer;
+    FDocNotice: TTyRichChangeEvent;
+    procedure CountLoadEnds(Sender: TObject; const AChange: TTyRichChange);
+    function TurnSizes: string;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -383,6 +404,10 @@ type
     procedure TestTheCursorForgetsThePaddingOnLeaving;
     procedure TestASliceBelowTheViewLaysOutNothing;
     procedure TestASlowFileGetsSmallerSlices;
+    // fix wave W9
+    procedure TestAStallCostsOneHalving;
+    procedure TestTheBackstopRunsATurnOnlyWhenTheIdleStepIsStarved;
+    procedure TestASlicesCostDoesNotGrowWithTheDocument;
   end;
 
 implementation
@@ -561,7 +586,21 @@ begin
 end;
 
 function TRichProbe.IdleTicks: QWord;
+var
+  load: TTyRtfLoad;
+  done: Int64;
 begin
+  if FakeRate > 0 then
+  begin
+    if StallReadings > 0 then
+    begin
+      Dec(StallReadings);
+      if StallReadings = 0 then Inc(ClockNow, StallMs);
+    end;
+    load := TyRichRtfLoadOf(Document);
+    if load <> nil then done := load.BytesIndexed else done := 0;
+    Exit(ClockNow + QWord(done div FakeRate));
+  end;
   if FakeClock then
   begin
     Inc(ClockNow, ClockStep);
@@ -572,7 +611,32 @@ end;
 
 function TRichProbe.NextSlice: Int64;
 begin
-  Result := SliceBytes;
+  Result := inherited SliceBytes;
+end;
+
+function TRichProbe.SliceBytes: Int64;
+begin
+  Result := inherited SliceBytes;
+  if LogSlices then
+  begin
+    SetLength(SliceLog, Length(SliceLog) + 1);
+    SliceLog[High(SliceLog)] := Result;
+  end;
+end;
+
+function TRichProbe.BackstopOf: TTimer;
+begin
+  Result := BackstopTimer;
+end;
+
+procedure TRichProbe.BackstopNow;
+begin
+  BackstopTick(nil);
+end;
+
+function TRichProbe.Turns: Int64;
+begin
+  Result := TurnsRun;
 end;
 
 procedure TRichProbe.Turn;
@@ -6925,7 +6989,7 @@ begin
   AssertFalse('the form is not shown', Result.Visible);
 end;
 
-procedure TTyRichEditControlTest.LoadW7Plain;
+procedure TTyRichEditControlTest.LoadW7Plain(AExpectLoading: Boolean);
 var
   src: TBytes;
   first: Int64;
@@ -6939,7 +7003,7 @@ begin
   finally
     st.Free;
   end;
-  AssertTrue('loading', FRich.Loading);
+  if AExpectLoading then AssertTrue('loading', FRich.Loading);
 end;
 
 { K-1 / R49 (L-1): on this widgetset (win32) the load runs one turn per pass of the
@@ -7127,11 +7191,18 @@ begin
   end;
 end;
 
-{ L-2: a queue that will not take a call (an application being destroyed raises "QueueAsyncCall
-  already shut down") ends the background work quietly - nothing escapes from the load, a turn
-  or the idle step, nothing stays registered; an application closed for scheduling gets
-  nothing queued or registered. The document stays as far as it was read; FinishLoading reads
-  the rest. }
+procedure TTyRichEditControlTest.CountLoadEnds(Sender: TObject; const AChange: TTyRichChange);
+begin
+  if not FRich.Document.Loading and FRich.Document.Incomplete then Inc(FLoadEnds);
+  if Assigned(FDocNotice) then FDocNotice(Sender, AChange);
+end;
+
+{ L-2, N-5: a queue that will not take a call raises nothing out of the load, a turn or the idle
+  step, and leaves nothing registered. Outside a shutdown (in practice: out of memory) the load
+  then ends as a cancel ends it - not Loading, Incomplete, the load's own notice once - rather
+  than staying Loading with nothing to drive it. An application closed for scheduling (being
+  destroyed) gets nothing queued or registered, quietly: the document stays as far as it was
+  read. A selection report that cannot be queued is made by the next user action. }
 procedure TTyRichEditControlTest.TestSchedulingThatFailsEndsTheLoadQuietly;
 var
   F: TForm;
@@ -7139,21 +7210,32 @@ var
 begin
   F := HandleForm;
   try
+    FDocNotice := FRich.Document.OnChange;
+    FRich.Document.OnChange := @CountLoadEnds;
+    // the load's own start cannot queue its first turn
     FRich.FailPost := True;
-    LoadW7Plain;
-    AssertTrue('still loading', FRich.Loading);
+    FLoadEnds := 0;
+    LoadW7Plain(False);
+    AssertFalse('the start could not queue: the load ended', FRich.Loading);
+    AssertTrue('incomplete', FRich.Document.Incomplete);
+    AssertEquals('the load''s notice, once', 1, FLoadEnds);
     AssertFalse('nothing queued', FRich.TurnQueued);
     AssertFalse('nothing registered', FRich.IdleOn);
-    FRich.Turn;
-    AssertFalse('a turn: nothing queued', FRich.TurnQueued);
-    AssertTrue('the turn registered the idle handler', FRich.IdleOn);
-    // the idle step's queuing refused: nothing escapes, the driver ends
+    AssertTrue('no backstop', (FRich.BackstopOf = nil) or not FRich.BackstopOf.Enabled);
+    // the idle step's queuing refused: nothing escapes, the load ends the same way
+    FRich.FailPost := False;
+    LoadW7Plain;
+    RunQueuedCalls;
+    AssertTrue('loading', FRich.Loading);
+    FRich.FailPost := True;
+    FLoadEnds := 0;
     RunIdleHandlers;
     AssertFalse('the idle step: nothing queued', FRich.TurnQueued);
     AssertFalse('the idle step: the driver ended', FRich.IdleOn);
+    AssertFalse('the idle step could not queue: the load ended', FRich.Loading);
+    AssertTrue('incomplete too', FRich.Document.Incomplete);
+    AssertEquals('the load''s notice, once', 1, FLoadEnds);
     FRich.FailPost := False;
-    FRich.FinishLoading;
-    AssertFalse('FinishLoading reads the rest', FRich.Document.Incomplete);
     // closed for scheduling (TApplication.Destroy's flags)
     FRich.ClosedApp := True;
     posts := TRichProbe.Posts;
@@ -7163,9 +7245,29 @@ begin
     AssertEquals('closed: nothing queued', posts, TRichProbe.Posts);
     AssertEquals('closed: nothing registered', watches, TRichProbe.Watches);
     AssertFalse('closed: not registered', FRich.IdleOn);
+    AssertTrue('closed: the load waits, quietly', FRich.Loading);
     FRich.ClosedApp := False;
     FRich.CancelLoad;
+    FRich.Document.OnChange := FDocNotice;
+    // a selection report that cannot be queued: the next user action reports it
+    FRich.OnSelectionChange := nil;
+    FRich.Lines.Text := 'aXY' + Utf8Of($301) + 'z';
+    FRich.UpdateView;
+    FRich.SelStart := 2;
+    RunQueuedCalls;
+    FRich.OnSelectionChange := @SelChanged;
+    AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(1, 2)));
+    FSelChanges := 0;
+    FRich.FailPost := True;
+    PaintAll(True);
+    AssertEquals('snapped by the paint', Int64(0), FRich.CaretPos);
+    AssertFalse('the report could not be queued', FRich.ReportQueued);
+    AssertEquals('and was not made in the paint', 0, FSelChanges);
+    FRich.FailPost := False;
+    FRich.Press(VK_LEFT, []);
+    AssertEquals('the next key reports it', 1, FSelChanges);
   finally
+    if Assigned(FDocNotice) then FRich.Document.OnChange := FDocNotice;
     FRich.FailPost := False;
     FRich.ClosedApp := False;
     FRich.Parent := nil;
@@ -7319,7 +7421,6 @@ procedure TTyRichEditControlTest.TestASliceBelowTheViewLaysOutNothing;
 var
   F: TForm;
   turns, endMax: Integer;
-  v0: Int64;
 begin
   F := HandleForm;
   try
@@ -7330,7 +7431,6 @@ begin
     AssertTrue('the slice ends below the view',
       FRich.VisibleBlocks[FRich.VisibleBlockCount - 1].LastPara < FRich.Document.Text.ParaCount - 1);
     FRich.ResetCounts;
-    v0 := FRich.Document.Text.NodeVisits;
     turns := 0;
     while FRich.Loading do
     begin
@@ -7343,7 +7443,6 @@ begin
     AssertEquals('the turns asked for no layout', 0, Length(FRich.Given));
     AssertEquals('and laid out nothing', 0, FRich.LaidParas);
     AssertEquals('nothing drawn', 0, FRich.BlockPaints);
-    WriteLn(Format('L-6: %d turns, %d tree visits', [turns, FRich.Document.Text.NodeVisits - v0]));
     AssertTrue('a scroll bar', (FRich.VBar <> nil) and FRich.VBar.Visible);
     endMax := FRich.VBar.Max;
     // (a bar unit is a pixel here: the document is far below ScrollBarLimit)
@@ -7360,62 +7459,286 @@ begin
   end;
 end;
 
-{ L-6: a file that indexes slowly gets smaller slices, not longer turns: after a turn measured
-  slow by the clock the next slices are CRichLoadMinStepBytes; a fast clock (or none) keeps
-  StepBytes; the progress handler's own time does not shrink them. }
+{ The slice sizes the loader is asked for in the next turn (one a slice). }
+function TTyRichEditControlTest.TurnSizes: string;
+var
+  i: Integer;
+begin
+  FRich.SliceLog := nil;
+  FRich.LogSlices := True;
+  try
+    FRich.Turn;
+  finally
+    FRich.LogSlices := False;
+  end;
+  Result := '';
+  for i := 0 to High(FRich.SliceLog) do
+  begin
+    if Result <> '' then Result := Result + ' ';
+    Result := Result + IntToStr(FRich.SliceLog[i] div 1024);
+  end;
+end;
+
+{ L-6, N-3: a load's turns start at the smallest slice and double it while they are fast (a
+  clock that stands); a step by hand is not a turn (StepBytes), the synchronous first slice of
+  the load asks no size; a file that indexes slowly keeps the small slices, its first turn
+  too, and the turn stays under the budget; the progress handler's time is not the file's. }
 procedure TTyRichEditControlTest.TestASlowFileGetsSmallerSlices;
 var
   F: TForm;
-  before: Int64;
 begin
   F := HandleForm;
   try
     FRich.Slices(0, 256 * 1024);
-    // no clock that moves: StepBytes
+    // no clock that moves: fast
     FRich.FrozenClock := True;
+    FRich.LogSlices := True;
     LoadW8Big(40000);
-    FRich.Turn;
-    AssertEquals('a clock that stands: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    FRich.LogSlices := False;
+    AssertEquals('the load''s own first slice asks no size', 0, Length(FRich.SliceLog));
+    AssertEquals('turn 1 starts small', '16 16 16', TurnSizes);
+    AssertEquals('turn 2', '32 32 32', TurnSizes);
+    AssertEquals('turn 3', '64 64 64', TurnSizes);
+    AssertEquals('turn 4', '128 128 128', TurnSizes);
+    AssertEquals('turn 5: the whole step', '256 256 256', TurnSizes);
+    AssertEquals('turn 6', '256 256 256', TurnSizes);
+    AssertEquals('a step by hand: the whole step', Int64(256 * 1024), FRich.NextSlice);
     FRich.FrozenClock := False;
-    // every reading of the clock 40 ms on: one slice takes "40 ms"
-    FRich.FakeClock := True;
+    // 4 KB a millisecond: a 16 KB slice takes 4 ms, the turn ends at the budget after two
+    FRich.FakeRate := 4096;
     FRich.ClockNow := 0;
-    FRich.ClockStep := 40;
     LoadW8Big(40000);
-    AssertEquals('a new load: the whole step first', Int64(256 * 1024), FRich.NextSlice);
-    FRich.Turn;
-    AssertEquals('measured slow: the smallest slice', Int64(CRichLoadMinStepBytes), FRich.NextSlice);
-    before := TyRichRtfLoadOf(FRich.Document).BytesIndexed;
-    FRich.Turn;
-    AssertTrue(Format('the next turn indexed %d bytes',
-      [TyRichRtfLoadOf(FRich.Document).BytesIndexed - before]),
-      TyRichRtfLoadOf(FRich.Document).BytesIndexed - before <= CRichIdleMaxSteps * (CRichLoadMinStepBytes + 1024));
-    // fast: 1 ms a reading
-    FRich.ClockStep := 1;
-    LoadW8Big(40000);
-    FRich.Turn;
-    FRich.Turn;
-    FRich.Turn;
-    FRich.Turn;
-    FRich.Turn;
-    FRich.Turn;
-    AssertEquals('measured fast: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    AssertEquals('a slow file: its first turn small too', '16 16', TurnSizes);
+    AssertEquals('and the next', '16 16', TurnSizes);
     // a slow handler, a fast file: the handler's time is not the slices'
+    FRich.FakeRate := 0;
+    FRich.FakeClock := True;
     FRich.ClockStep := 0;
     FRich.OnLoadProgress := @SlowHandler;
     LoadW8Big(40000);
-    FRich.Turn;
-    FRich.Turn;
-    FRich.Turn;
-    AssertEquals('a slow handler: the whole step', Int64(256 * 1024), FRich.NextSlice);
+    // (the handler's 50 ms end each turn after its first slice, but do not size the slices)
+    AssertEquals('a slow handler: turn 1', '16', TurnSizes);
+    AssertEquals('a slow handler: turn 2 doubles', '32', TurnSizes);
+    AssertEquals('a slow handler: turn 3 doubles', '64', TurnSizes);
     FRich.OnLoadProgress := nil;
     FRich.CancelLoad;
   finally
     FRich.FakeClock := False;
+    FRich.FrozenClock := False;
+    FRich.FakeRate := 0;
     FRich.OnLoadProgress := nil;
     FRich.Parent := nil;
     F.Free;
   end;
+end;
+
+{ N-4: one stalled turn (500 ms by the clock) halves the slice once, and fast turns bring it back
+  to StepBytes; a steady slow rate settles - the size goes down a step a turn until its turns
+  sit under the budget, and stays there (no flip-flop). }
+procedure TTyRichEditControlTest.TestAStallCostsOneHalving;
+var
+  F: TForm;
+  i: Integer;
+  seq: string;
+  load: TTyRtfLoad;
+  b0, t0: Int64;
+begin
+  F := HandleForm;
+  try
+    FRich.Slices(0, 256 * 1024);
+    // a fast file: 1 MB a millisecond
+    FRich.FakeRate := 1024 * 1024;
+    FRich.ClockNow := 0;
+    LoadW8Big(200000);
+    for i := 1 to 5 do TurnSizes;
+    AssertEquals('fast: the whole step', '256 256 256', TurnSizes);
+    // the next turn stalls 500 ms after its first slice
+    FRich.StallMs := 500;
+    FRich.StallReadings := 2;
+    AssertEquals('the stalled turn: one slice (it went over the budget)', '256', TurnSizes);
+    AssertEquals('after the stall: half', '128 128 128', TurnSizes);
+    AssertEquals('one fast turn later: the whole step again', '256 256 256', TurnSizes);
+    AssertEquals('and stays', '256 256 256', TurnSizes);
+    // the file turns slow and steady: 20 KB a millisecond (a 256 KB slice takes 12.8 ms)
+    FRich.FakeRate := 20 * 1024;
+    seq := '';
+    for i := 1 to 8 do
+    begin
+      if seq <> '' then seq := seq + ' | ';
+      seq := seq + TurnSizes;
+    end;
+    AssertEquals('down a step a turn, then settled',
+      '256 | 128 128 | 64 64 64 | 32 32 32 | 32 32 32 | 32 32 32 | 32 32 32 | 32 32 32', seq);
+    // the settled turns sit under the budget
+    load := TyRichRtfLoadOf(FRich.Document);
+    b0 := load.BytesIndexed;
+    TurnSizes;
+    t0 := (load.BytesIndexed - b0) * 1000 div FRich.FakeRate;
+    AssertTrue(Format('a settled turn is under the budget (%d us)', [t0]),
+      t0 <= CRichIdleBudgetMs * 1000);
+    FRich.CancelLoad;
+  finally
+    FRich.FakeRate := 0;
+    FRich.StallReadings := 0;
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ N-2: on the idle-driven widgetsets a slow timer runs beside the idle handler while there is
+  work (CRichBackstopMs, made with the first start). Its tick (run by hand) runs no turn when a
+  turn ran since its last tick; when none did (the idle step starved: an Application.OnIdle
+  that sets Done := False) it runs exactly one, taking the queued call off first so that the
+  two never follow each other; no work - no timer; a cancel, a new content, the window's going
+  and the destructor take it away; the timer driver has none. }
+procedure TTyRichEditControlTest.TestTheBackstopRunsATurnOnlyWhenTheIdleStepIsStarved;
+var
+  F: TForm;
+  t, removes, posts: Int64;
+begin
+  F := HandleForm;
+  try
+    FRich.Slices(0, 16 * 1024);
+    LoadW8Big(40000);
+    AssertTrue('a backstop', FRich.BackstopOf <> nil);
+    AssertTrue('running beside the idle handler', FRich.BackstopOf.Enabled and FRich.IdleOn);
+    AssertEquals('its period', CRichBackstopMs, Integer(FRich.BackstopOf.Interval));
+    // the idle path runs turns: the tick runs none
+    t := FRich.Turns;
+    RunQueuedCalls;
+    AssertEquals('the queued turn ran', t + 1, FRich.Turns);
+    t := FRich.Turns;
+    FRich.BackstopNow;
+    AssertEquals('a turn since the last tick: none', t, FRich.Turns);
+    RunIdleHandlers;
+    RunQueuedCalls;
+    t := FRich.Turns;
+    FRich.BackstopNow;
+    AssertEquals('again: none', t, FRich.Turns);
+    // starved: no turn since the last tick - exactly one a tick
+    FRich.BackstopNow;
+    AssertEquals('starved: one turn', t + 1, FRich.Turns);
+    FRich.BackstopNow;
+    AssertEquals('starved: one more a tick', t + 2, FRich.Turns);
+    // a call queued by the idle step and not run: the tick's turn takes it off
+    RunIdleHandlers;
+    AssertTrue('a call waits', FRich.TurnQueued);
+    removes := TRichProbe.Removes;
+    posts := TRichProbe.Posts;
+    FRich.BackstopNow;
+    AssertEquals('starved again: one turn', t + 3, FRich.Turns);
+    AssertFalse('the waiting call was taken off', FRich.TurnQueued);
+    AssertEquals('off the queue', removes + 1, Int64(TRichProbe.Removes));
+    AssertEquals('and nothing queued by the tick', posts, Int64(TRichProbe.Posts));
+    RunQueuedCalls;
+    AssertEquals('no turn follows it', t + 3, FRich.Turns);
+    // no work: no timer, and a tick does nothing
+    while FRich.Loading do FRich.BackstopNow;
+    AssertFalse('no work left: the timer stops', FRich.BackstopOf.Enabled);
+    t := FRich.Turns;
+    FRich.BackstopNow;
+    FRich.BackstopNow;
+    AssertEquals('no work: no turn', t, FRich.Turns);
+    // the removal paths
+    LoadW7Plain;
+    AssertTrue('running again', FRich.BackstopOf.Enabled);
+    FRich.CancelLoad;
+    AssertFalse('cancelled: stopped', FRich.BackstopOf.Enabled);
+    LoadW7Plain;
+    FRich.Lines.Text := 'another';
+    AssertFalse('a new content: stopped', FRich.BackstopOf.Enabled);
+    LoadW7Plain;
+    FRich.DropHandle;
+    AssertTrue('the window went: freed', FRich.BackstopOf = nil);
+    FRich.HandleNeeded;
+    AssertTrue('a window again: running', (FRich.BackstopOf <> nil) and FRich.BackstopOf.Enabled);
+    // (the destructor frees it with the window and again itself: FreeAndNil below)
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    FRich.Parent := F;
+    FRich.HandleNeeded;
+    // the timer driver has no backstop
+    FRich.ForceTimer := True;
+    LoadW7Plain;
+    AssertTrue('the timer driver: no backstop', FRich.BackstopOf = nil);
+    FRich.CancelLoad;
+  finally
+    if FRich <> nil then
+    begin
+      FRich.ForceTimer := False;
+      FRich.Parent := nil;
+    end;
+    F.Free;
+  end;
+end;
+
+{ N-7 (L-6): a slice appended below the view asks the view nothing (no layout, no settle) and
+  walks the height tree a bounded number of times, the same at 10,000 paragraphs as at 800,000:
+  nothing per slice is proportional to the document (bound: 16 visits a slice; measured 5 and
+  8 when this was written). Each document is read in its synchronous
+  first slice but the last 100 KB, which come in turns of 16 KB slices. }
+procedure TTyRichEditControlTest.TestASlicesCostDoesNotGrowWithTheDocument;
+
+  function VisitsPerSlice(AParas: Integer): Int64;
+  var
+    F: TForm;
+    src: TBytes;
+    dummy: Int64;
+    st: TBytesStream;
+    v0, slices: Int64;
+    turns: Integer;
+  begin
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    F := HandleForm;
+    try
+      src := W5PlainRtf(AParas, dummy);
+      FRich.Slices(Length(src) - 100 * 1024, 16 * 1024);
+      st := TBytesStream.Create(src);
+      try
+        FRich.LoadFromStream(st);
+      finally
+        st.Free;
+      end;
+      src := nil;
+      AssertTrue('loading', FRich.Loading);
+      FRich.FrozenClock := True;
+      PaintAll(True);
+      FRich.ResetCounts;
+      FRich.SliceLog := nil;
+      FRich.LogSlices := True;
+      v0 := FRich.Document.Text.NodeVisits;
+      turns := 0;
+      while FRich.Loading do
+      begin
+        FRich.Turn;
+        Inc(turns);
+        AssertTrue('runaway', turns < 1000);
+      end;
+      FRich.LogSlices := False;
+      slices := Length(FRich.SliceLog);
+      AssertTrue(Format('%d paragraphs: in slices (%d)', [AParas, slices]), slices >= 5);
+      AssertEquals(Format('%d paragraphs: the slices asked for no layout', [AParas]), 0,
+        Length(FRich.Given));
+      AssertEquals(Format('%d paragraphs: laid out nothing', [AParas]), 0, FRich.LaidParas);
+      AssertEquals(Format('%d paragraphs: drew nothing', [AParas]), 0, FRich.BlockPaints);
+      Result := (FRich.Document.Text.NodeVisits - v0) div slices;
+    finally
+      FRich.Parent := nil;
+      F.Free;
+    end;
+  end;
+
+const
+  // a few walks from the root of the height tree (its depth is about log2 of the paragraphs)
+  CRichSliceVisitBound = 16;
+var
+  small, big: Int64;
+begin
+  small := VisitsPerSlice(10000);
+  big := VisitsPerSlice(800000);
+  AssertTrue(Format('tree visits a slice: %d at 10,000 paragraphs, %d at 800,000', [small, big]),
+    (small <= CRichSliceVisitBound) and (big <= CRichSliceVisitBound));
 end;
 
 procedure TTyRichEditControlTest.RaiseOnce(Sender: TObject; ADone, ATotal: Int64;
