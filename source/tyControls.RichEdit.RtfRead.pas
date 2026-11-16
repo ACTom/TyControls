@@ -659,6 +659,8 @@ type
       out AListText: UTF8String);
     function WalkValue(AIndex: Integer; ASrc: Int64): Pointer;
     procedure Apply(AGroup: TTyRtfGroup);
+    procedure ApplyRec(AGroup: TTyRtfGroup; AIndex: Integer);
+    procedure CompleteRows(AGroup: TTyRtfGroup);
     procedure Drop(AGroup: TTyRtfGroup; AReset: Boolean);
     procedure FreeGroup(AGroup: TTyRtfGroup);
     function Decode(ASrcOffset, ASrcBytes, ACharCount: Int64): UTF8String;
@@ -5413,65 +5415,111 @@ end;
 // source in the text: an edit before them moves them, an undo may bring them back).
 procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
 var
+  i: Integer;
+begin
+  for i := 0 to High(AGroup.Recs) do
+    if AGroup.States[i] = StateNew then ApplyRec(AGroup, i);
+end;
+
+// Apply for record AIndex of the group, which is StateNew.
+procedure TTyRtfLoad.ApplyRec(AGroup: TTyRtfGroup; AIndex: Integer);
+var
   lt: UTF8String;
-  i, j, k: Integer;
+  j, k: Integer;
   rec: ^TTyRtfParaRec;
   cell: TTyRichCell;
   v: Pointer;
 begin
-  for i := 0 to High(AGroup.Recs) do
+  rec := @AGroup.Recs[AIndex];
+  j := FDoc.Text.ParaOfLazySource(rec^.Src.Start);
+  if j < 0 then
   begin
-    if AGroup.States[i] <> StateNew then Continue;
-    rec := @AGroup.Recs[i];
-    j := FDoc.Text.ParaOfLazySource(rec^.Src.Start);
-    if j < 0 then
+    // Not in the text: deleted, or its text was edited (or, while the file loads, not
+    // appended yet). A record kept of it (see Drop) is of use only while an undo can still
+    // bring the paragraph back with that value; when the record alone keeps the value
+    // alive, both go.
+    if KeptAt(rec^.Src.Start, k) and not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
     begin
-      // Not in the text: deleted, or its text was edited. A record kept of it (see Drop)
-      // is of use only while an undo can still bring the paragraph back with that value;
-      // when the record alone keeps the value alive, both go.
-      if KeptAt(rec^.Src.Start, k) and not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
-      begin
-        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
-        Unkeep(k);
-      end;
-      Continue;
-    end;
-    ValueParts(AGroup, i, cell, lt);
-    if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt) then
-    begin
-      v := TRtfBuild.ParagraphValue(FDoc, j);
-      TRtfBuild.HoldValue(FDoc, v);
-      AGroup.Values[i] := v;
-      AGroup.States[i] := StateOurs;
-      // (a record of an earlier value stays while an undo can still give that one back)
-      if (FKeptN > 0) and KeptAt(rec^.Src.Start, k) and
-         not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
-      begin
-        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
-        Unkeep(k);
-      end;
-    end
-    else if KeptAt(rec^.Src.Start, k) then
-    begin
-      // set already, by this load: the group that set it went and it stayed. While it has
-      // that value it is this group's again (the record's hold comes with it)
-      if FKept[k].Value = TRtfBuild.ParagraphValue(FDoc, j) then
-      begin
-        AGroup.Values[i] := FKept[k].Value;
-        AGroup.States[i] := StateOurs;
-      end
-      else
-      begin
-        // another value now: changed - unless an undo can still give the recorded one
-        // back (something else holds it), and then the record stays for that day
-        AGroup.States[i] := StateSkipped;
-        if TRtfBuild.ValueShared(FDoc, FKept[k].Value) then Continue;
-        TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
-      end;
+      TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
       Unkeep(k);
+    end;
+    Exit;
+  end;
+  ValueParts(AGroup, AIndex, cell, lt);
+  if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt) then
+  begin
+    v := TRtfBuild.ParagraphValue(FDoc, j);
+    TRtfBuild.HoldValue(FDoc, v);
+    AGroup.Values[AIndex] := v;
+    AGroup.States[AIndex] := StateOurs;
+    // (a record of an earlier value stays while an undo can still give that one back)
+    if (FKeptN > 0) and KeptAt(rec^.Src.Start, k) and
+       not TRtfBuild.ValueShared(FDoc, FKept[k].Value) then
+    begin
+      TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+      Unkeep(k);
+    end;
+  end
+  else if KeptAt(rec^.Src.Start, k) then
+  begin
+    // set already, by this load: the group that set it went and it stayed. While it has
+    // that value it is this group's again (the record's hold comes with it)
+    if FKept[k].Value = TRtfBuild.ParagraphValue(FDoc, j) then
+    begin
+      AGroup.Values[AIndex] := FKept[k].Value;
+      AGroup.States[AIndex] := StateOurs;
     end
     else
-      AGroup.States[i] := StateSkipped;
+    begin
+      // another value now: changed - unless an undo can still give the recorded one
+      // back (something else holds it), and then the record stays for that day
+      AGroup.States[AIndex] := StateSkipped;
+      if TRtfBuild.ValueShared(FDoc, FKept[k].Value) then Exit;
+      TRtfBuild.ReleaseValue(FDoc, FKept[k].Value);
+    end;
+    Unkeep(k);
+  end
+  else
+    AGroup.States[AIndex] := StateSkipped;
+end;
+
+// A row is never split across two table objects. While the file loads, a step can stop
+// inside a row: the text then ends with some of its cells, a read sets those from this
+// group's table, and the row's other cells are records the text does not hold yet. Once they
+// are appended, a read in order sets them from this group too; but if the group goes first
+// (a later paragraph of its intervals is read and they are parsed again, or it is trimmed),
+// what it set stays only as long as the row's other paragraphs are let go of together with
+// it. So, before the group goes: a row of which it set some paragraphs gets its others that
+// the text holds by now set from it as well (the whole row is then one group's, and goes or
+// stays as one); and a record the text does not hold because it is not appended yet is not
+// an edit - it does not make its table stay (see Drop).
+procedure TTyRtfLoad.CompleteRows(AGroup: TTyRtfGroup);
+var
+  i, k, m: Integer;
+  ours, open: Boolean;
+begin
+  i := 0;
+  while i <= High(AGroup.Recs) do
+  begin
+    if AGroup.Recs[i].Table < 0 then
+    begin
+      Inc(i);
+      Continue;
+    end;
+    k := i;
+    ours := False;
+    open := False;
+    while (k <= High(AGroup.Recs)) and (AGroup.Recs[k].Table = AGroup.Recs[i].Table) and
+      (AGroup.Recs[k].Row = AGroup.Recs[i].Row) do
+    begin
+      if AGroup.States[k] = StateOurs then ours := True
+      else if AGroup.States[k] = StateNew then open := True;
+      Inc(k);
+    end;
+    if ours and open then
+      for m := i to k - 1 do
+        if AGroup.States[m] = StateNew then ApplyRec(AGroup, m);
+    i := k;
   end;
 end;
 
@@ -5493,6 +5541,7 @@ var
 begin
   text := FDoc.Text;
   if AReset and TRtfBuild.DocumentBusy(FDoc) then AReset := False;
+  if AGroup.HasValues then CompleteRows(AGroup);
   keep := nil;
   SetLength(keep, Length(AGroup.Tables));
   idx := nil;
@@ -5503,8 +5552,11 @@ begin
     if AGroup.States[i] <> StateOurs then
     begin
       // not set by this group: changed before it was parsed (its text - then it is not
-      // found by its source and was never asked about - or its formats)
-      if AGroup.Recs[i].Table >= 0 then keep[AGroup.Recs[i].Table] := True;
+      // found by its source and was never asked about - or its formats); but not a
+      // paragraph the load has not appended yet (see CompleteRows)
+      if (AGroup.Recs[i].Table >= 0) and
+         (FIntervalPara[AGroup.FirstSnap] + i < FAppended) then
+        keep[AGroup.Recs[i].Table] := True;
       Continue;
     end;
     if AReset then

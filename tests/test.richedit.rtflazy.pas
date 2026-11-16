@@ -75,6 +75,8 @@ type
     procedure TestDeletedParagraphsUndoneAfterTheirIntervalWentAreStillTheFilesOwn;
     // fix wave W4
     procedure TestAWalkWithValuesGivesTheParseAndSetsNothing;
+    // fix wave W7
+    procedure TestARowReadWhileItLoadsStaysOneRow;
   end;
 
 implementation
@@ -2340,6 +2342,112 @@ begin
   CheckWalkValues('re-zh-table x 1 MB', Generate('re-zh-table.rtf', MB));
   CheckWalkValues('wp-zh-table x 1 MB', Generate('wp-zh-table.rtf', MB));
   CheckWalkValues('re-zh-mixed x 3 MB', Generate('re-zh-mixed.rtf', 3 * MB));
+end;
+
+{ W7 (K-5): the first slice ends inside a row, so the text ends with the row's first cell and
+  its other cells are not appended yet. That cell is read (its interval is parsed: the row's
+  other cells are records the text does not hold), the load goes on, and then a paragraph
+  after the row in the same interval is read, which parses the interval again. The row's
+  cells must still be cells of one row of one table - the first cell must not keep the table
+  of the parse that saw it alone. Once outside a read scope, once inside one (where nothing
+  read may be let go of until the scope ends), and once with the row's interval sent back to
+  unparsed (trimmed) before the row's other cells come. }
+procedure TTyRtfLazyTest.TestARowReadWhileItLoadsStaysOneRow;
+var
+  b: TBytes;
+  s: TBytesStream;
+  d, full: TTyRichDocument;
+  load: TTyRtfLoad;
+  at, last, pass, i: Integer;
+  msg: string;
+  r: TTyRtfRange;
+begin
+  full := nil;
+  try
+    for pass := 0 to 2 do
+    begin
+      case pass of
+        0: msg := 'outside a scope';
+        1: msg := 'inside a read scope';
+      else
+        msg := 'trimmed before the row is whole';
+      end;
+      // pass 2: the table begins the second interval
+      if pass < 2 then b := TableDocument(0, 20)
+      else b := TableDocument(CRtfSnapshotBytes + 2, 20);
+      // inside row 10, after its second cell's end and before its third's
+      at := Pos('\cell r10 \''d6', StrOf(b, 0, Length(b)));
+      AssertTrue('row 10 is there', at > 0);
+      at := at - 1 + Length('\cell r1');
+      FreeAndNil(full);
+      full := LoadWith(b, True);
+      d := TTyRichDocument.Create;
+      s := TBytesStream.Create(b);
+      try
+        load := TyRichBeginLoadRtf(d, s, at);
+        AssertTrue(msg + ': still loading', d.Loading);
+        if pass < 2 then AssertEquals(msg + ': one interval', 1, load.IntervalCount)
+        else AssertEquals(msg + ': two intervals', 2, load.IntervalCount);
+        last := d.Text.ParaCount - 1;
+        // the text ends with the row's first cell
+        AssertText(msg + ': the last paragraph', 'r10 a', ParaText(d, last));
+        AssertTrue(msg + ': it is a cell', d.CellAt(last) <> nil);
+        AssertEquals(msg + ': the row''s first', 0, d.CellAt(last).Index);
+        if pass = 2 then
+        begin
+          // a read of the first interval sends the row's back to unparsed
+          load.MaxResidentIntervals := 1;
+          d.EnsureParsed(0);
+          AssertEquals(msg + ': one interval stays', 1, load.ResidentIntervals);
+        end;
+        if pass = 1 then d.BeginRead;
+        try
+          while not load.Step(64 * MB) do ;
+          // a paragraph after the row, in the same interval: parsed again
+          AssertText(msg + ': the paragraph after the table', 'after the table',
+            ParaText(d, d.Text.ParaCount - 1));
+          d.EnsureParsed(d.Text.ParaCount - 1);
+          for i := last to last + 2 do
+          begin
+            AssertTrue(Format('%s: paragraph %d is a cell', [msg, i]), d.CellAt(i) <> nil);
+            AssertEquals(Format('%s: paragraph %d cell', [msg, i]), i - last, d.CellAt(i).Index);
+          end;
+          AssertTrue(msg + ': cells 0 and 1 in one row', d.CellAt(last).Row = d.CellAt(last + 1).Row);
+          AssertTrue(msg + ': cells 1 and 2 in one row', d.CellAt(last + 1).Row = d.CellAt(last + 2).Row);
+          AssertTrue(msg + ': the row before in the same table',
+            d.CellAt(last - 1).Table = d.CellAt(last).Table);
+          // (inside a scope what was read stays as it was returned: the rows read before
+          // the parse keep the table part they had, so only outside one is it the whole)
+          if pass <> 1 then
+            AssertEquals(msg + ': the table''s rows', full.CellAt(last).Table.RowCount,
+              d.CellAt(last).Table.RowCount);
+        finally
+          if pass = 1 then d.EndRead;
+        end;
+        // after the scope, too, and every paragraph as the whole parse has it
+        AssertTrue(msg + ': after: one row', (d.CellAt(last).Row = d.CellAt(last + 1).Row) and
+          (d.CellAt(last + 1).Row = d.CellAt(last + 2).Row));
+        AssertEquals(msg + ': paragraphs', full.Text.ParaCount, d.Text.ParaCount);
+        for i := 0 to full.Text.ParaCount - 1 do
+        begin
+          AssertEquals(Format('%s: paragraph %d in a table', [msg, i]), full.CellAt(i) <> nil,
+            d.CellAt(i) <> nil);
+          if full.CellAt(i) = nil then Continue;
+          AssertEquals(Format('%s: paragraph %d cell', [msg, i]), full.CellAt(i).Index,
+            d.CellAt(i).Index);
+          AssertEquals(Format('%s: paragraph %d row', [msg, i]), full.CellAt(i).Row.Index,
+            d.CellAt(i).Row.Index);
+        end;
+        AssertTrue(msg + ': the row''s first cell is the file''s own', load.ParaSource(last, r));
+        AssertEquals(msg + ': integrity', '', d.Text.CheckIntegrity);
+      finally
+        d.Free;
+        s.Free;
+      end;
+    end;
+  finally
+    full.Free;
+  end;
 end;
 
 initialization
