@@ -113,6 +113,14 @@ type
     procedure TestTheDocumentIsToldNotRecognisedByItsAddress;
     procedure TestSizesFromAFileHaveCeilingsOnTheWayToPixels;
     procedure TestAGiantParagraphIsLaidOutUpToTheCap;
+    procedure TestAHeldLayoutTheCacheLetGoOfIsStaleAfterAChange;
+    procedure TestASpaceCarryingAMarkIsText;
+    procedure TestATabPastTheRightEdgeGoesToTheNextLine;
+    procedure TestTheHangingIndentIsATabStopOfTheFirstLine;
+    procedure TestTheFallbackEventAndListDropWhatWasFound;
+    procedure TestTheCmapReaderBoundsItsCounts;
+    procedure TestTheMeasureCacheIsBoundedByBytes;
+    procedure TestChangesInsideAndAcrossCachedParagraphsAreFollowed;
   end;
 
 implementation
@@ -314,6 +322,50 @@ begin
   SetLength(Result, n);
   for i := 0 to n - 1 do Result[i + 1] := AnsiChar(b[i]);
 end;
+
+{$IFDEF MSWINDOWS}
+type
+  // GDI's LOGFONTW
+  TFontQuery = record
+    Height, Width, Escapement, Orientation, Weight: LongInt;
+    Italic, Underline, StrikeOut, CharSet, OutPrecision, ClipPrecision, Quality,
+      PitchAndFamily: Byte;
+    FaceName: array[0..31] of WideChar;
+  end;
+
+function TyGetDC(AWnd: PtrUInt): PtrUInt; stdcall; external 'user32' name 'GetDC';
+function TyReleaseDC(AWnd, ADC: PtrUInt): LongInt; stdcall; external 'user32' name 'ReleaseDC';
+function TyEnumFontFamiliesExW(ADC: PtrUInt; var AFont: TFontQuery; AProc: Pointer;
+  AData: PtrInt; AFlags: LongWord): LongInt; stdcall; external 'gdi32' name 'EnumFontFamiliesExW';
+
+function FontFound(AFont, AMetric: Pointer; AType: LongWord; AData: PtrInt): LongInt; stdcall;
+begin
+  PBoolean(AData)^ := True;
+  Result := 0;
+end;
+
+{ A font family GDI has, by its English or its local name (no window: the screen's DC). }
+function FontInstalled(const AName: string): Boolean;
+var
+  q: TFontQuery;
+  dc: PtrUInt;
+  w: UnicodeString;
+  found: Boolean;
+begin
+  FillChar(q, SizeOf(q), 0);
+  q.CharSet := 1;   // DEFAULT_CHARSET
+  w := UnicodeString(AName);
+  Move(PWideChar(w)^, q.FaceName[0], Min(Length(w), 31) * SizeOf(WideChar));
+  found := False;
+  dc := TyGetDC(0);
+  try
+    TyEnumFontFamiliesExW(dc, q, @FontFound, PtrInt(@found), 0);
+  finally
+    TyReleaseDC(0, dc);
+  end;
+  Result := found;
+end;
+{$ENDIF}
 
 { ---- fixtures ---- }
 
@@ -1342,7 +1394,9 @@ end;
 { The real device: each fragment of a laid-out line drawn on its own on a sentinel ground,
   through the device, at the X and baseline the layout gave it - its ink must stay inside the
   box the layout measured for it (a pixel or two of overhang allowed), and there must be ink.
-  So what is measured is what is drawn, where it was measured. }
+  So what is measured is what is drawn, where it was measured. The ink also reaches into the
+  box from both ends (within half the font size), so measuring far too wide fails too. Needs
+  Arial and a CJK fallback font on Windows: skipped, saying so, without them. }
 procedure TTyRichLayoutTest.TestRenderedInkStaysInsideTheMeasuredBoxes;
 const
   Pad = 20;
@@ -1355,12 +1409,17 @@ var
   ln: TTyRichLine;
   fr: TTyRichFragment;
   bmp: TBGRABitmap;
-  k, i, x, y, ink, outside: Integer;
+  k, i, x, y, ink, outside, inkL, inkR, inner: Integer;
   p: PBGRAPixel;
   sentinel: TBGRAPixel;
   text: UTF8String;
 begin
   sentinel := BGRA(255, 0, 255, 255);
+  {$IFDEF MSWINDOWS}
+  if not FontInstalled('Arial') or (not FontInstalled('Microsoft YaHei') and
+    not FontInstalled('SimSun')) then
+    Ignore('needs Arial and Microsoft YaHei or SimSun installed');
+  {$ENDIF}
   dev := TTyRichBgraDevice.Create;
   lo := TTyRichLayouter.Create(dev, True);
   try
@@ -1386,6 +1445,8 @@ begin
             dev.DrawText(bmp, fr.Font, fr.X + Pad, ln.Baseline + fr.Shift + Pad, text, BGRABlack);
             ink := 0;
             outside := 0;
+            inkL := MaxInt;
+            inkR := -1;
             for y := 0 to bmp.Height - 1 do
             begin
               p := bmp.ScanLine[y];
@@ -1394,6 +1455,8 @@ begin
                 if (p^.red <> 255) or (p^.green <> 0) or (p^.blue <> 255) then
                 begin
                   Inc(ink);
+                  inkL := Min(inkL, x);
+                  inkR := Max(inkR, x);
                   if (x < fr.X + Pad - Slack) or (x >= fr.X + fr.Width + Pad + Slack) or
                     (y < ln.Top + Pad - Slack) or (y >= ln.Top + ln.Height + Pad + Slack) then
                     Inc(outside);
@@ -1404,6 +1467,13 @@ begin
             AssertTrue(Format('"%s" has ink', [text]), ink > 20);
             AssertEquals(Format('"%s": ink outside its box [%d, %d) x [%d, %d)', [text, fr.X,
               fr.X + fr.Width, ln.Top, ln.Top + ln.Height]), 0, outside);
+            // and from inside: the box is not much wider than the ink (no trailing space in
+            // a drawn text fragment: the spaces after a line's content are a fragment apart)
+            inner := dev.FontPixelHeight(fr.Font) div 2 + Slack;
+            AssertTrue(Format('"%s": ink from %d, the box from %d', [text, inkL - Pad, fr.X]),
+              inkL - Pad <= fr.X + inner);
+            AssertTrue(Format('"%s": ink to %d, the box to %d', [text, inkR - Pad + 1,
+              fr.X + fr.Width]), inkR - Pad + 1 >= fr.X + fr.Width - inner);
           finally
             bmp.Free;
           end;
@@ -1424,6 +1494,11 @@ procedure TTyRichLayoutTest.TestTheRealDeviceKnowsWhichGlyphsAFontHas;
 var
   dev: TTyRichBgraDevice;
 begin
+  {$IFDEF MSWINDOWS}
+  if not FontInstalled('Arial') or not FontInstalled('SimSun') or
+    not FontInstalled('Segoe UI Emoji') then
+    Ignore('needs Arial, SimSun and Segoe UI Emoji installed');
+  {$ENDIF}
   dev := TTyRichBgraDevice.Create;
   try
     {$IFDEF MSWINDOWS}
@@ -3225,6 +3300,347 @@ begin
   AssertTrue('cut', L.Truncated);
   AssertEquals('at the cluster''s start', 99999, L.ShownChars);
   AssertEquals('the rest', Format(rsRichEditParaNotShown, ['5']), L.Notice.Text);
+end;
+
+{ A layout the cache let go of while it was held (the count bound evicted it) cannot follow its
+  paragraph to a new index: after a change it says it is stale, so its holder asks again. One
+  the cache kept follows, and is not stale. }
+procedure TTyRichLayoutTest.TestAHeldLayoutTheCacheLetGoOfIsStaleAfterAChange;
+var
+  d: TTyRichDocument;
+  s: UTF8String;
+  i: Integer;
+  held, kept: TTyParaLayout;
+begin
+  s := '';
+  for i := 0 to 2399 do s := s + 'p' + IntToStr(i) + #10;
+  d := NewDoc(s);
+  d.OnChange := @DocChanged;
+  held := Lay(d, 100, 300);
+  for i := 200 to 200 + CLayoutCacheParas do FLayouter.LayoutPara(d, i, 300, 96, 1).Release;
+  AssertTrue('it left the cache', FLayouter.CachedLayout(100) = nil);
+  kept := Lay(d, 2300, 300);
+  AssertFalse('no change yet: not stale', held.Stale);
+  AssertTrue('inserted', d.Execute(TTyRichInsertText.Create(0, 'x'#10)));
+  AssertEquals('it says what it was', 'p100', held.Text);
+  AssertEquals('which is no longer paragraph 100', 'p99',
+    d.Text.GetText(d.Text.ParaStart(100), d.Text.ParaLength(100)));
+  AssertTrue('so it is stale', held.Stale);
+  AssertFalse('the kept one is not', kept.Stale);
+  AssertEquals('and followed its paragraph', 2301, kept.FirstPara);
+  // a change after it (typing in the last paragraph) leaves it where it is, and good
+  AssertTrue('typed at the end', d.Execute(TTyRichInsertText.Create(d.Text.Length, 'z')));
+  AssertFalse('a change after it: not stale', kept.Stale);
+  // evicted after the changes, with none since: it was good at them, it still is
+  for i := 0 to CLayoutCacheParas do FLayouter.LayoutPara(d, i, 300, 96, 1).Release;
+  AssertTrue('the kept one left the cache too', FLayouter.CachedLayout(2301) = nil);
+  AssertFalse('no change since: not stale', kept.Stale);
+end;
+
+{ A space with a combining mark is one cluster that is text: drawn (a space is not), measured
+  as the characters it has. }
+procedure TTyRichLayoutTest.TestASpaceCarryingAMarkIsText;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  fr: TTyRichFragment;
+  bmp: TBGRABitmap;
+begin
+  d := NewDoc(' ' + U($301) + #9'x');
+  L := Lay(d, 0, 400);
+  fr := FragAt(L, 0);
+  AssertEquals('text', Ord(rfkText), Ord(fr.Kind));
+  AssertEquals('both characters', 2, fr.Count);
+  AssertEquals('a space''s advance', 5, fr.Width);
+  AssertEquals('the tab after it to the stop', 48, FragAt(L, 3).X);
+  bmp := TBGRABitmap.Create(100, 30, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 100, 30), TyRichDefaultPaintStyle, 0, 0);
+    AssertEquals('drawn: two strings', 2, FDevice.DrawLog.Count);
+    AssertEquals('the space with its mark', ' ' + U($301) + '|0|16', FDevice.DrawLog[0]);
+    AssertEquals('then the x', 'x|48|16', FDevice.DrawLog[1]);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A tab whose stop lies past the right edge goes to the next line, as Word puts it, unless it is
+  the line's first item - then it reaches to the edge. No line is wider than the layout. }
+procedure TTyRichLayoutTest.TestATabPastTheRightEdgeGoesToTheNextLine;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+  i: Integer;
+begin
+  d := NewDoc(StringOfChar(#9, 50) + 'x'#10'abc'#9'd');
+  // default stops at 48, 96, 144, 192: four tabs a line at 200 px
+  L := Lay(d, 0, 200);
+  AssertEquals('thirteen lines', 13, L.LineCount);
+  AssertEquals('four tabs on the first', 4, L.Lines[0].Count);
+  for i := 0 to L.LineCount - 1 do
+    AssertTrue(Format('line %d is %d wide', [i, L.Lines[i].ContentWidth]),
+      L.Lines[i].Left + L.Lines[i].ContentWidth <= 200);
+  AssertTrue(Format('the block is %d wide', [L.Width]), L.Width <= 200);
+  // an explicit stop at 333 px
+  pf := TyDefaultParaFormat;
+  SetLength(pf.Tabs, 1);
+  pf.Tabs[0].Position := 5000;
+  pf.Tabs[0].Align := ttaLeft;
+  pf.Tabs[0].Leader := ttlNone;
+  SetPara(d, 1, [pffTabs], pf);
+  L := Lay(d, 1, 200);
+  AssertEquals('the tab leaves the first line', 3, L.Lines[0].Count);
+  AssertEquals('the second line starts with it', 3, L.Lines[1].First);
+  AssertTrue(Format('the block is %d wide', [L.Width]), L.Width <= 200);
+end;
+
+{ With a hanging indent the left indent is a stop for the first line's text (Word and RichEdit
+  put a hand-numbered item's text there): "1.<tab>text" starts the text at the indent, default
+  stops before it passed over; an explicit stop before it still comes first. }
+procedure TTyRichLayoutTest.TestTheHangingIndentIsATabStopOfTheFirstLine;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+begin
+  d := NewDoc('1.'#9'text'#10'1.'#9'text'#10'1.'#9'text'#10'1.'#9'text');
+  pf := TyDefaultParaFormat;
+  pf.FirstIndent := -360;
+  pf.LeftIndent := 360;
+  SetPara(d, 0, [pffFirstIndent, pffLeftIndent], pf);
+  L := Lay(d, 0, 400);
+  AssertEquals('at the indent (24 px)', 24, FragAt(L, 3).X);
+  // indent 72 px, the first line at 24: the default stop at 48 is passed over
+  pf.FirstIndent := -720;
+  pf.LeftIndent := 1080;
+  SetPara(d, 1, [pffFirstIndent, pffLeftIndent], pf);
+  L := Lay(d, 1, 400);
+  AssertEquals('the item starts at the first line''s indent', 24, FragAt(L, 0).X);
+  AssertEquals('its text at the indent (72 px)', 72, FragAt(L, 3).X);
+  // an explicit stop at 60 px comes before the indent
+  SetLength(pf.Tabs, 1);
+  pf.Tabs[0].Position := 900;
+  pf.Tabs[0].Align := ttaLeft;
+  pf.Tabs[0].Leader := ttlNone;
+  SetPara(d, 2, [pffFirstIndent, pffLeftIndent, pffTabs], pf);
+  L := Lay(d, 2, 400);
+  AssertEquals('the explicit stop first', 60, FragAt(L, 3).X);
+  // an explicit stop past the indent (96 px): the indent comes first
+  pf.FirstIndent := -360;
+  pf.LeftIndent := 360;
+  pf.Tabs[0].Position := 1440;
+  SetPara(d, 3, [pffFirstIndent, pffLeftIndent, pffTabs], pf);
+  L := Lay(d, 3, 400);
+  AssertEquals('the indent before a later stop', 24, FragAt(L, 3).X);
+end;
+
+{ Naming a fallback event, or changing the candidate list, forgets the fonts found for missing
+  glyphs and the layouts made with them: the next layout asks again. }
+procedure TTyRichLayoutTest.TestTheFallbackEventAndListDropWhatWasFound;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  f: TTyCharFormat;
+begin
+  d := NewDoc('ab中文');
+  f := TyDefaultCharFormat;
+  f.FontName := 'Arial';
+  SetChar(d, 0, d.Text.Length, [cffFontName], f);
+  FDevice.SetRepertoire('Arial', [$20, $7E]);
+  L := Lay(d, 0, 1000);
+  AssertEquals('the first candidate', FLayouter.FallbackFonts[0], FDevice.FontName(FragAt(L, 2).Font));
+  FEventFont := 'Event Font';
+  FLayouter.OnFallbackFont := @FallbackEvent;
+  L := Lay(d, 0, 1000);
+  AssertEquals('the event is asked', 'Event Font', FDevice.FontName(FragAt(L, 2).Font));
+  FLayouter.OnFallbackFont := nil;
+  L := Lay(d, 0, 1000);
+  AssertEquals('no event: the list again', FLayouter.FallbackFonts[0],
+    FDevice.FontName(FragAt(L, 2).Font));
+  FLayouter.FallbackFonts.Insert(0, 'Other Font');
+  L := Lay(d, 0, 1000);
+  AssertEquals('a changed list', 'Other Font', FDevice.FontName(FragAt(L, 2).Font));
+end;
+
+{ A cmap table read as the real device reads it (Windows): a well-formed format 4 table gives
+  its ranges; a malformed one costs what its size holds - no count in it is trusted past what
+  the table can contain (no tables, more tables or segments or groups than bytes, segments
+  that each claim the whole BMP). }
+procedure TTyRichLayoutTest.TestTheCmapReaderBoundsItsCounts;
+var
+  b: TBytes;
+  r: TTyRichCodeRanges;
+  sym: Boolean;
+  steps: Int64;
+  i: Integer;
+
+  procedure W16(AAt: Integer; AValue: Cardinal);
+  begin
+    b[AAt] := (AValue shr 8) and $FF;
+    b[AAt + 1] := AValue and $FF;
+  end;
+
+  procedure W32(AAt: Integer; AValue: Cardinal);
+  begin
+    W16(AAt, AValue shr 16);
+    W16(AAt + 2, AValue and $FFFF);
+  end;
+
+  // a header with one record (3, AEnc) pointing at 12
+  procedure Header(ASize, ATables: Integer; AEnc: Cardinal);
+  begin
+    b := nil;
+    SetLength(b, ASize);
+    W16(2, ATables);
+    W16(4, 3);
+    W16(6, AEnc);
+    W32(8, 12);
+  end;
+
+begin
+  // A..Z: two segments, the second the closing $FFFF one
+  Header(44, 1, 1);
+  W16(12, 4);
+  W16(18, 4);
+  W16(26, $5A); W16(28, $FFFF);
+  W16(32, $41); W16(34, $FFFF);
+  W16(36, 1); W16(38, 1);
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertEquals('one range', 1, Length(r));
+  AssertEquals('from A', $41, r[0].First);
+  AssertEquals('to Z', $5A, r[0].Last);
+  AssertFalse('not a symbol font', sym);
+  AssertTrue(Format('%d steps', [steps]), steps <= 2 + 26 + 1);
+  // no tables
+  Header(12, 0, 1);
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertEquals('no tables: nothing', 0, Length(r));
+  AssertEquals('and nothing looked at', 0, steps);
+  // 65,535 tables in a table with room for one
+  Header(12, 65535, 1);
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertTrue(Format('records: %d steps', [steps]), steps <= 1);
+  // 32,767 segments claimed in 64 bytes
+  Header(64, 1, 1);
+  W16(12, 4);
+  W16(18, 65534);
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertTrue(Format('segments: %d steps', [steps]), steps <= 64);
+  // 4,294,967,295 groups claimed in 40 bytes
+  Header(40, 1, 10);
+  W16(12, 12);
+  W32(24, $FFFFFFFF);
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertTrue(Format('groups: %d steps', [steps]), steps <= 40);
+  // a hundred segments that each claim the whole BMP
+  Header(12 + 16 + 100 * 8, 1, 1);
+  W16(12, 4);
+  W16(18, 200);
+  for i := 0 to 99 do
+  begin
+    W16(26 + i * 2, $FFFE);
+    W16(26 + 200 + 2 + i * 2, 0);
+    W16(26 + 400 + 2 + i * 2, 1);
+  end;
+  r := TyRichReadCmapTable(b, sym, steps);
+  AssertTrue(Format('codes: %d steps', [steps]), steps <= 65536 + 100 + 1);
+end;
+
+{ The kept advances are bounded by bytes as well as by count: 30,000 measures of distinct
+  600-byte Chinese fragments (fewer entries than the count bound lets through) keep at most
+  CRichMeasureCacheBytes, and what went is measured again when asked. }
+procedure TTyRichLayoutTest.TestTheMeasureCacheIsBoundedByBytes;
+var
+  lo: TTyRichLayouter;
+  font: TTyRichFontId;
+  base: UTF8String;
+  i: Integer;
+  most, calls: Int64;
+begin
+  base := '';
+  for i := 1 to 200 do base := base + U($4E00 + Cardinal(i));
+  lo := NewLayouter;
+  try
+    font := lo.Device.ResolveFont('Test', 20, []);
+    most := 0;
+    for i := 0 to 29999 do
+    begin
+      lo.MeasureText(font, IntToStr(i) + base);
+      if lo.MeasureCacheBytes > most then most := lo.MeasureCacheBytes;
+    end;
+    AssertTrue('fewer than the count bound lets through', 30000 < CRichMeasureCacheEntries div 2);
+    AssertTrue(Format('at most %d bytes kept', [most]), most <= CRichMeasureCacheBytes + 1024);
+    calls := lo.Device.MeasureCalls;
+    lo.MeasureText(font, '0' + base);
+    AssertEquals('the first went: measured again', calls + 1, lo.Device.MeasureCalls);
+    lo.MeasureText(font, '29999' + base);
+    AssertEquals('the last stayed', calls + 1, lo.Device.MeasureCalls);
+  finally
+    lo.Free;
+  end;
+end;
+
+{ A change inside a cached paragraph that splits it, one across cached paragraphs that joins
+  them, and a change of no old paragraphs (paragraphs put in before one, as a load slice
+  reports): the paragraphs the change met lose their layouts (stale), the others follow to
+  their new indexes and are hits there, the ones before stay. }
+procedure TTyRichLayoutTest.TestChangesInsideAndAcrossCachedParagraphsAreFollowed;
+var
+  d: TTyRichDocument;
+  s: UTF8String;
+  i: Integer;
+  met: TTyParaLayout;
+  ch: TTyRichChange;
+  hits: Int64;
+begin
+  s := '';
+  for i := 0 to 9 do s := s + 'para' + IntToStr(i) + #10;
+  d := NewDoc(s);
+  d.OnChange := @DocChanged;
+  for i := 2 to 8 do Lay(d, i, 300);
+  met := TTyParaLayout(FLayouter.CachedLayout(3));
+  // inside paragraph 3: it splits in two, 4..8 move one down
+  AssertTrue('split', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(3) + 2, 'x'#10)));
+  AssertTrue('the split one is stale', met.Stale);
+  AssertTrue('and gone', FLayouter.CachedLayout(3) = nil);
+  AssertEquals('the one before stays', 'para2', TTyParaLayout(FLayouter.CachedLayout(2)).Text);
+  for i := 5 to 9 do
+  begin
+    AssertTrue(Format('a layout at %d', [i]), FLayouter.CachedLayout(i) <> nil);
+    AssertEquals(Format('at %d', [i]), 'para' + IntToStr(i - 1),
+      TTyParaLayout(FLayouter.CachedLayout(i)).Text);
+    AssertFalse('not stale', FLayouter.CachedLayout(i).Stale);
+  end;
+  // across 5..7, from inside 5 to inside 7: they join, 8 and 9 move up two
+  met := TTyParaLayout(FLayouter.CachedLayout(6));
+  AssertTrue('joined', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(5) + 2,
+    d.Text.ParaStart(7) - d.Text.ParaStart(5))));
+  AssertEquals('the joined text', 'para6', d.Text.GetText(d.Text.ParaStart(5),
+    d.Text.ParaLength(5)));
+  AssertTrue('a joined one is stale', met.Stale);
+  AssertTrue('gone', FLayouter.CachedLayout(5) = nil);
+  hits := FLayouter.CacheHits;
+  AssertEquals('para7 at 6', 'para7', Lay(d, 6, 300).Text);
+  AssertEquals('para8 at 7', 'para8', Lay(d, 7, 300).Text);
+  AssertEquals('both hits', hits + 2, FLayouter.CacheHits);
+  // no old paragraphs, two new ones at 6: the one there goes (conservatively), the next moves
+  met := TTyParaLayout(FLayouter.CachedLayout(6));
+  ch.Kinds := [rckStructure];
+  ch.Pos := d.Text.ParaStart(6);
+  ch.OldLen := 0;
+  ch.NewLen := 0;
+  ch.FirstPara := 6;
+  ch.OldParaCount := 0;
+  ch.NewParaCount := 2;
+  FLayouter.DocumentChanged(ch);
+  AssertTrue('the one at its paragraph goes', FLayouter.CachedLayout(6) = nil);
+  AssertTrue('stale', met.Stale);
+  AssertTrue('the next moved two', FLayouter.CachedLayout(9) <> nil);
+  AssertEquals('it is para8''s', 'para8', TTyParaLayout(FLayouter.CachedLayout(9)).Text);
+  AssertEquals('and knows it', 9, FLayouter.CachedLayout(9).FirstPara);
+  AssertEquals('the one before stays', 'para2', TTyParaLayout(FLayouter.CachedLayout(2)).Text);
 end;
 
 initialization

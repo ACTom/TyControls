@@ -34,6 +34,26 @@ unit tyControls.RichEdit.Layout;
   parses on demand is good only until the next read otherwise) and lets go when it is freed.
   A layout must not outlive the layouter that made it (its queries measure through it).
 
+  How the control uses it (TTyCustomRichEdit, and the caret and selection built on it):
+  - One layouter per control. Document := its document when it makes it and whenever it
+    replaces the document or the document's content (a load): the layouter knows its
+    document by being told, never by its address. Forward the document's OnChange to
+    DocumentChanged.
+  - LayoutBlock(Doc, i, Width, PPI, Zoom) per block on screen, Width from TyRichLayoutWidth
+    (0 = CRichNoWrap is "no wrapping", never "a window 0 wide"). Keep the result (it carries
+    a reference) while the block is shown; Release it after. After a change ask again for
+    the blocks the change met (the cache answers at once for the others). A held layout the
+    change did not touch still paints as it is; one the cache had let go of reports Stale
+    after any change (it cannot follow its paragraph to a new index) - its holder takes the
+    paragraph indexes from its own records or asks again.
+  - A caret is a position and a flag: PosAtPoint(X, Y, AtLineEnd) gives both, and CaretRect
+    takes both. The control keeps both with its caret: True where the caret sits at the end
+    of a wrapped line (a click past it; End on such a line), False after any other move (a
+    position reached by Home, an arrow, typing or a click elsewhere is shown at the start of
+    the line it begins). SelectionRects takes positions only (a range has no affinity).
+  - A block may be Truncated (a paragraph past CRichMaxParaLayoutChars): ShownChars of its
+    CharCount positions are laid out; the control can tell the user.
+
   Bidirectional text is not laid out (spec 6.1): logical order, left to right; RtlPar is
   kept by the model and not shown. }
 
@@ -60,8 +80,12 @@ const
     a cluster is never cut, so one may run a little over). A long word is measured in such
     pieces, so that breaking it costs what its length costs, not its length squared. }
   CRichMaxPieceChars = 256;
-  { Advances kept per layouter; past it the older half is dropped. }
+  { Advances kept per layouter; past it the older half is dropped ... }
   CRichMeasureCacheEntries = 65536;
+  { ... and the bytes their keys (a font and a fragment's text, up to CRichMaxPieceChars
+    characters) take, with what an entry costs besides: past half of it the older half goes
+    too, so a cache of long Chinese fragments stays a few megabytes. }
+  CRichMeasureCacheBytes = 8 * 1024 * 1024;
   { A layout width that means "no wrapping" (TTyRichWrapMode rwmNone). }
   CRichNoWrap = 0;
   { The box of a picture whose size is not known, in pixels at 96 PPI and zoom 1. }
@@ -127,6 +151,12 @@ const
 
 type
   TRectArray = array of TRect;
+
+  { Code points First..Last (inclusive). }
+  TTyRichCodeRange = record
+    First, Last: Cardinal;
+  end;
+  TTyRichCodeRanges = array of TTyRichCodeRange;
 
   { rwmWindow: lines wrap at the width the owner passes (the window's, in pixels);
     rwmPage: at the page's text width (PaperWidth - MarginLeft - MarginRight, in pixels at
@@ -362,6 +392,9 @@ type
     { It shows a list number, which depends on the paragraphs before it: a change of
       paragraphs or formats above it drops it too. }
     FNumbered: Boolean;
+    { The layouter's change count when the cache last vouched for it (see Stale). }
+    FGen: Int64;
+    function GetStale: Boolean;
   public
     constructor Create(ALayouter: TTyRichLayouter);
     procedure AddRef;
@@ -418,9 +451,14 @@ type
       nothing is cut, else CharCount less what is not shown. }
     property Truncated: Boolean read FTruncated;
     property ShownChars: Integer read FShownChars;
-    { The paragraphs it shows changed after it was made (the layouter dropped it): what it
-      says is what they were. }
-    property Stale: Boolean read FStale;
+    { What it says may no longer be the document: the paragraphs it shows changed after it
+      was made (the layouter dropped it), or - for a layout the cache had already let go of
+      while its holder kept it (evicted for space) - the document changed in any way since:
+      such a layout cannot follow its paragraphs to new indexes, so after any change it is
+      stale whatever the change touched. A holder asks for the block again after a change
+      (LayoutBlock; the cache answers for the ones it kept, which follow their paragraphs and
+      are not stale). A stale layout still paints and answers as it was made. }
+    property Stale: Boolean read GetStale;
     property RefCount: Integer read FRefCount;
   end;
 
@@ -614,8 +652,12 @@ type
     FLruFirst, FLruLast: TTyBlockLayout;
     FCachedChars: Int64;
     FHits, FMisses: Int64;
+    // changes seen (DocumentChanged, Invalidate, Clear): what a layout out of the cache
+    // compares its FGen with
+    FChangeGen: Int64;
     // measuring
     FMeasure, FMeasureOld: specialize TDictionary<string, Integer>;
+    FMeasureBytes, FMeasureOldBytes: Int64;
     FGlyphs: specialize TDictionary<Int64, Boolean>;
     FFallback: specialize TDictionary<Int64, Integer>;
     FFormatFonts: specialize TDictionary<Integer, TTyRichFormatFont>;
@@ -654,6 +696,7 @@ type
     procedure SetBaseFontName(const AValue: string);
     procedure SetBaseFontSizeHalfPt(AValue: Integer);
     procedure FallbackFontsChanged(Sender: TObject);
+    procedure SetOnFallbackFont(AValue: TTyRichFallbackEvent);
     procedure LruUnlink(L: TTyBlockLayout);
     procedure LruPushFront(L: TTyBlockLayout);
     procedure CacheDrop(L: TTyBlockLayout; AStale: Boolean);
@@ -728,13 +771,17 @@ type
     property BaseFontName: string read FBaseFontName write SetBaseFontName;
     property BaseFontSizeHalfPt: Integer read FBaseFontSizeHalfPt write SetBaseFontSizeHalfPt;
     { Tried in order for a character the font in effect has no glyph for; the first that
-      has it is used. Starts as the platform's list; change it freely. }
+      has it is used. Starts as the platform's list; change it freely. Changing the list, or
+      naming another OnFallbackFont (asked first), empties the caches (Clear): the fonts found
+      before and the layouts made with them go. }
     property FallbackFonts: TStringList read FFallbackFonts;
-    property OnFallbackFont: TTyRichFallbackEvent read FOnFallbackFont write FOnFallbackFont;
+    property OnFallbackFont: TTyRichFallbackEvent read FOnFallbackFont write SetOnFallbackFont;
     property CacheHits: Int64 read FHits;
     property CacheMisses: Int64 read FMisses;
     function CachedCount: Integer;
     property CachedChars: Int64 read FCachedChars;
+    { What the kept advances take (counted as CRichMeasureCacheBytes counts them). }
+    function MeasureCacheBytes: Int64;
     { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
     property ListWalkSteps: Int64 read FListWalkSteps;
     { Draws APicture into ABox of ATarget (the target's pixels, its ClipRect respected): its
@@ -785,6 +832,13 @@ function TyRichIsKinsokuNoLineEnd(ACode: Cardinal): Boolean;
 function TyRichIsClusterExtend(ACode: Cardinal): Boolean;
 { The platform's fallback candidates (the plan's lists). }
 procedure TyRichDefaultFallbackFonts(AList: TStrings);
+{ The code points a font's cmap table (its bytes, as GetFontData gives them) maps to glyphs -
+  what the real device reads on Windows: the format 12 subtable, else format 4, else the
+  symbol one (ASymbol: codes sit at U+F000 + byte). Every count in the table is bounded by
+  what the table can hold, so a malformed one costs what its size costs: ASteps counts the
+  records and codes looked at. }
+function TyRichReadCmapTable(const ATable: TBytes; out ASymbol: Boolean;
+  out ASteps: Int64): TTyRichCodeRanges;
 { What a list item's marker reads: a bullet by level (U+2022, U+25E6, U+25AA, over again from
   level 3), or ANumber followed by a full stop - 1, 2, 3; a, b, ... z, aa, ab (letters go on
   in base 26 with no zero); i, ii, ... (roman up to 3999). A number the kind cannot write
@@ -810,6 +864,9 @@ const
   ckInvalid2 = 6;
 
   CUnlimited = MaxInt div 4;
+  { What a kept advance costs besides its key's characters: the key's string header and the
+    dictionary's slot (hash, key, value). }
+  CMeasureEntryBytes = 48;
   // U+FFFD in UTF-8
   CReplacement: UTF8String = #$EF#$BF#$BD;
 
@@ -1350,6 +1407,8 @@ function TyDeleteObject(AObject: PtrUInt): LongBool; stdcall;
 function TyGetFontData(ADC: PtrUInt; ATable, AOffset: LongWord; ABuffer: Pointer;
   ALength: LongWord): LongWord; stdcall; external 'gdi32' name 'GetFontData';
 
+{$ENDIF}
+
 function BE16(const B: TBytes; AAt: PtrInt): Cardinal; inline;
 begin
   if (AAt < 0) or (AAt + 2 > System.Length(B)) then Exit(0);
@@ -1364,26 +1423,35 @@ begin
 end;
 
 { The ranges of a cmap subtable in format 4 (BMP: segments, a glyph per code - a code whose
-  glyph is 0 has none) or 12 (all planes: groups). }
-procedure ReadCmapSubtable(const B: TBytes; AAt: PtrInt; R: TTyGlyphRanges);
+  glyph is 0 has none) or 12 (all planes: groups). Every count is bounded by what the table
+  can hold (no read leaves it either: BE16/BE32), and format 4's codes by the 65,536 the BMP
+  has, so a malformed font costs what its size costs; ASteps counts what was looked at. }
+procedure ReadCmapSubtable(const B: TBytes; AAt: PtrInt; R: TTyGlyphRanges; var ASteps: Int64);
 var
-  fmt, segX2, i, nGroups: Cardinal;
+  fmt, segX2, i, nGroups, room: Cardinal;
   endAt, startAt, deltaAt, rangeAt: PtrInt;
   s, e, d, ro, c, g, runStart: Cardinal;
   inRun: Boolean;
   gs, ge, g0: Cardinal;
+  budget: Int64;
 begin
   fmt := BE16(B, AAt);
+  if System.Length(B) - AAt < 16 then Exit;
+  room := System.Length(B) - AAt - 16;
   if fmt = 4 then
   begin
+    // four arrays of segX2 bytes after a 14-byte header and a pad
     segX2 := BE16(B, AAt + 6);
+    if segX2 > room div 4 then segX2 := room div 4;
     endAt := AAt + 14;
     startAt := endAt + segX2 + 2;
     deltaAt := startAt + segX2;
     rangeAt := deltaAt + segX2;
+    budget := 65536;
     i := 0;
-    while i < segX2 div 2 do
+    while (i < segX2 div 2) and (budget > 0) do
     begin
+      Inc(ASteps);
       e := BE16(B, endAt + i * 2);
       s := BE16(B, startAt + i * 2);
       d := BE16(B, deltaAt + i * 2);
@@ -1391,8 +1459,10 @@ begin
       inRun := False;
       runStart := 0;
       c := s;
-      while (c <= e) and (c < $FFFF) do
+      while (c <= e) and (c < $FFFF) and (budget > 0) do
       begin
+        Inc(ASteps);
+        Dec(budget);
         if ro = 0 then
           g := (c + d) and $FFFF
         else
@@ -1421,10 +1491,13 @@ begin
   end
   else if fmt = 12 then
   begin
+    // 12 bytes a group after a 16-byte header
     nGroups := BE32(B, AAt + 12);
+    if nGroups > room div 12 then nGroups := room div 12;
     i := 0;
     while i < nGroups do
     begin
+      Inc(ASteps);
       gs := BE32(B, AAt + 16 + i * 12);
       ge := BE32(B, AAt + 20 + i * 12);
       g0 := BE32(B, AAt + 24 + i * 12);
@@ -1435,8 +1508,74 @@ begin
   end;
 end;
 
-{ The font's cmap, read through GDI: the Unicode subtable in format 12 when there is one,
-  else the BMP one in format 4, else the symbol one. nil when the font has no cmap (not a
+{ A font's cmap table: the Unicode subtable in format 12 when there is one, else the BMP one
+  in format 4, else the symbol one. nil when it has none of them. The number of encoding
+  records is bounded by the table's size. }
+function ParseCmap(const B: TBytes; var ASteps: Int64): TTyGlyphRanges;
+var
+  n, i, plat, enc, off: Cardinal;
+  best12, best4, sym: PtrInt;
+begin
+  Result := nil;
+  if System.Length(B) < 4 then Exit;
+  n := BE16(B, 2);
+  if n > Cardinal(System.Length(B) - 4) div 8 then n := Cardinal(System.Length(B) - 4) div 8;
+  best12 := -1;
+  best4 := -1;
+  sym := -1;
+  i := 0;
+  while i < n do
+  begin
+    Inc(ASteps);
+    plat := BE16(B, 4 + i * 8);
+    enc := BE16(B, 6 + i * 8);
+    off := BE32(B, 8 + i * 8);
+    Inc(i);
+    if off >= Cardinal(System.Length(B)) then Continue;
+    case BE16(B, off) of
+      12: if ((plat = 3) and (enc = 10)) or (plat = 0) then best12 := off;
+      4: if ((plat = 3) and (enc = 1)) or (plat = 0) then best4 := off
+         else if (plat = 3) and (enc = 0) then sym := off;
+    end;
+  end;
+  Result := TTyGlyphRanges.Create;
+  if best12 >= 0 then ReadCmapSubtable(B, best12, Result, ASteps)
+  else if best4 >= 0 then ReadCmapSubtable(B, best4, Result, ASteps)
+  else if sym >= 0 then
+  begin
+    ReadCmapSubtable(B, sym, Result, ASteps);
+    Result.Symbol := True;
+  end
+  else
+    FreeAndNil(Result);
+end;
+
+function TyRichReadCmapTable(const ATable: TBytes; out ASymbol: Boolean;
+  out ASteps: Int64): TTyRichCodeRanges;
+var
+  r: TTyGlyphRanges;
+  i: Integer;
+begin
+  Result := nil;
+  ASymbol := False;
+  ASteps := 0;
+  r := ParseCmap(ATable, ASteps);
+  if r = nil then Exit;
+  try
+    ASymbol := r.Symbol;
+    SetLength(Result, r.Count);
+    for i := 0 to r.Count - 1 do
+    begin
+      Result[i].First := r.Starts[i];
+      Result[i].Last := r.Ends[i];
+    end;
+  finally
+    r.Free;
+  end;
+end;
+
+{$IFDEF MSWINDOWS}
+{ The font's cmap, read through GDI (ParseCmap). nil when the font has no cmap (not a
   TrueType or OpenType font). }
 function ReadCmap(ADC: PtrUInt): TTyGlyphRanges;
 const
@@ -1445,9 +1584,7 @@ const
 var
   size: LongWord;
   b: TBytes;
-  n, i, plat, enc: Cardinal;
-  off: Cardinal;
-  best12, best4, sym: PtrInt;
+  steps: Int64;
 begin
   Result := nil;
   size := TyGetFontData(ADC, TagCmap, 0, nil, 0);
@@ -1455,32 +1592,8 @@ begin
   b := nil;
   SetLength(b, size);
   if TyGetFontData(ADC, TagCmap, 0, @b[0], size) = GdiError then Exit;
-  n := BE16(b, 2);
-  best12 := -1;
-  best4 := -1;
-  sym := -1;
-  for i := 0 to n - 1 do
-  begin
-    plat := BE16(b, 4 + i * 8);
-    enc := BE16(b, 6 + i * 8);
-    off := BE32(b, 8 + i * 8);
-    if off >= size then Continue;
-    case BE16(b, off) of
-      12: if ((plat = 3) and (enc = 10)) or (plat = 0) then best12 := off;
-      4: if ((plat = 3) and (enc = 1)) or (plat = 0) then best4 := off
-         else if (plat = 3) and (enc = 0) then sym := off;
-    end;
-  end;
-  Result := TTyGlyphRanges.Create;
-  if best12 >= 0 then ReadCmapSubtable(b, best12, Result)
-  else if best4 >= 0 then ReadCmapSubtable(b, best4, Result)
-  else if sym >= 0 then
-  begin
-    ReadCmapSubtable(b, sym, Result);
-    Result.Symbol := True;
-  end
-  else
-    FreeAndNil(Result);
+  steps := 0;
+  Result := ParseCmap(b, steps);
 end;
 {$ENDIF}
 
@@ -1592,6 +1705,11 @@ begin
   Result := FMeasure.TextSize(AText).cx;
 end;
 
+{ Windows: the cmap of the face GDI realises for the font's name. Not verified (left from the
+  layout review): for a font that is not installed, CreateFontW with DEFAULT_CHARSET realises
+  a substitute, and that face's cmap is read - which need not be the face the renderer picks
+  for the same name, so a fallback may be taken (or not) for a glyph the drawn face has (or
+  lacks). }
 function TTyRichBgraDevice.DoHasGlyph(AFont: TTyRichFontId; ACode: Cardinal): Boolean;
 {$IFDEF MSWINDOWS}
 var
@@ -1659,6 +1777,13 @@ begin
   inherited Create;
   FLayouter := ALayouter;
   FRefCount := 1;
+  if ALayouter <> nil then FGen := ALayouter.FChangeGen;
+end;
+
+function TTyBlockLayout.GetStale: Boolean;
+begin
+  Result := FStale or (not FInCache and (FLayouter <> nil) and
+    (FGen <> FLayouter.FChangeGen));
 end;
 
 procedure TTyBlockLayout.AddRef;
@@ -1865,7 +1990,7 @@ begin
         Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, ByteOfChar(F, AChars)));
     rfkSpace:
       if F.Width = F.Natural then
-        Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, AChars))
+        Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, ByteOfChar(F, AChars)))
       else
         Result := Int64(F.Width) * AChars div F.Count;
   else
@@ -2749,6 +2874,7 @@ type
     TabAlign: array of TTyTabAlign;
     TabLeader: array of TTyTabLeader;
     DefTab: Integer;
+    FirstLine: Boolean;  // the line being laid out is the paragraph's first
     ListNumber: Int64;
     FullLen: Integer;    // the paragraph's length (N is what is laid out of it)
     function Px(ATwips: Integer): Integer;
@@ -2890,12 +3016,13 @@ end;
 
 procedure TParaBuilder.FindClusters;
 var
-  i: Integer;
+  i, cs: Integer;
   join, riOdd: Boolean;
 begin
   SetLength(ClStart, N + 1);
   if N = 0 then Exit;
   ClStart[0] := True;
+  cs := 0;
   riOdd := IsRegional(Cp[0]) and (Kind[0] = ckText);
   for i := 1 to N - 1 do
   begin
@@ -2907,7 +3034,13 @@ begin
         (IsRegional(Cp[i]) and IsRegional(Cp[i - 1]) and riOdd);
     ClStart[i] := not join;
     if join then
+    begin
       CFmt[i] := CFmt[i - 1];
+      // a space carrying a mark is text: drawn, measured, broken as a letter
+      if Kind[cs] = ckSpace then Kind[cs] := ckText;
+    end
+    else
+      cs := i;
     if (Kind[i] = ckText) and IsRegional(Cp[i]) then riOdd := not join else riOdd := False;
   end;
 end;
@@ -3111,15 +3244,20 @@ begin
 end;
 
 { The first explicit stop right of AX; past the last one (AX is then at or past it) the next
-  multiple of the default interval. }
+  multiple of the default interval. On the first line of a paragraph with a hanging indent
+  the left indent is a stop too, as Word and RichEdit have it (a hand-numbered item's text
+  goes there): before it only explicit stops count, the default ones are passed over. }
 procedure TParaBuilder.NextStop(AX: Integer; out AStop: Integer; out AAlign: TTyTabAlign;
   out ALeader: TTyTabLeader);
 var
   i: Integer;
+  hang: Boolean;
 begin
+  hang := FirstLine and (FirstPx < 0) and (AX < LeftPx);
   for i := 0 to High(TabPos) do
     if TabPos[i] > AX then
     begin
+      if hang and (TabPos[i] > LeftPx) then Break;
       AStop := TabPos[i];
       AAlign := TabAlign[i];
       ALeader := TabLeader[i];
@@ -3127,7 +3265,8 @@ begin
     end;
   AAlign := ttaLeft;
   ALeader := ttlNone;
-  AStop := (Max(AX, 0) div DefTab + 1) * DefTab;
+  if hang then AStop := LeftPx
+  else AStop := (Max(AX, 0) div DefTab + 1) * DefTab;
 end;
 
 { How many characters of piece APiece from AFrom fit in AAvail pixels, whole clusters only;
@@ -3218,6 +3357,13 @@ begin
       rfkTab:
         begin
           NextStop(x, stop, al, ld);
+          { a stop past the right edge: the tab goes to the next line, as Word puts it -
+            unless it is the line's first item, which then reaches to the edge }
+          if (RightPx < CUnlimited) and (stop > RightPx) then
+          begin
+            if p^.First > AStart then Exit(p^.First);
+            stop := Max(x, RightPx);
+          end;
           if al = ttaLeft then
           begin
             x := stop;
@@ -3468,6 +3614,8 @@ begin
       CloseTab;
       lastTab := i;
       NextStop(x, stop, al, ld);
+      // as FindLineEnd: only the line's first item meets a stop past the edge, and stops there
+      if (RightPx < CUnlimited) and (stop > RightPx) then stop := Max(x, RightPx);
       leaders[i] := ld;
       it^.X := x;
       if al = ttaLeft then
@@ -3825,6 +3973,7 @@ begin
   FindBreaks;
   ResolveFonts;
   MakePieces;
+  FirstLine := True;
   firstLeft := MakeMarker;
   if System.Length(Runs) > 0 then emptyFmt := Runs[0].Format else emptyFmt := 0;
   Layout.FSpaceBefore := Max(0, Px(Pf.SpaceBefore));
@@ -3838,6 +3987,7 @@ begin
     while s < N do
     begin
       if s = 0 then left := firstLeft else left := LeftPx;
+      FirstLine := s = 0;
       k0 := k;
       e := FindLineEnd(s, k, left);
       if e <= s then e := ClusterEnd(s);
@@ -3845,7 +3995,10 @@ begin
       s := e;
       // a paragraph that ends with U+000B has an empty line after it, for the caret
       if (s = N) and (Kind[N - 1] = ckBreak) then
+      begin
+        FirstLine := False;
         EmitLine(N, N, k, LeftPx, top, False, True, CFmt[N - 1]);
+      end;
     end;
   if N < FullLen then MakeNotice(top, emptyFmt);
   Layout.FHeight := SatAdd(top, Layout.FSpaceAfter);
@@ -4262,6 +4415,16 @@ begin
   Clear;
 end;
 
+procedure TTyRichLayouter.SetOnFallbackFont(AValue: TTyRichFallbackEvent);
+begin
+  if (TMethod(AValue).Code = TMethod(FOnFallbackFont).Code) and
+    (TMethod(AValue).Data = TMethod(FOnFallbackFont).Data) then
+    Exit;
+  FOnFallbackFont := AValue;
+  // the answers found without it (or with the one before) are not its answers
+  Clear;
+end;
+
 procedure TTyRichLayouter.LruUnlink(L: TTyBlockLayout);
 begin
   if L.FLruPrev <> nil then L.FLruPrev.FLruNext := L.FLruNext else FLruFirst := L.FLruNext;
@@ -4317,11 +4480,25 @@ begin
   if not FCache.TryGetValue(AIndex, Result) then Result := nil;
 end;
 
+{ L stays in the cache across a change: it (and a row's paragraphs) is good at the new count. }
+procedure Vouch(L: TTyBlockLayout; AGen: Int64);
+var
+  i: Integer;
+begin
+  L.FGen := AGen;
+  if L is TTyRowLayout then
+    for i := 0 to High(TTyRowLayout(L).FItems) do TTyRowLayout(L).FItems[i].Layout.FGen := AGen;
+end;
+
 procedure TTyRichLayouter.Clear;
 begin
+  // what is held out of the cache cannot be found: it goes stale by the count
+  Inc(FChangeGen);
   while FLruFirst <> nil do CacheDrop(FLruFirst, True);
   FMeasure.Clear;
   FreeAndNil(FMeasureOld);
+  FMeasureBytes := 0;
+  FMeasureOldBytes := 0;
   FGlyphs.Clear;
   FFallback.Clear;
   FFormatFonts.Clear;
@@ -4355,6 +4532,7 @@ var
   L, nx: TTyBlockLayout;
 begin
   if ACount <= 0 then Exit;
+  Inc(FChangeGen);
   // the numbers from here on may count differently now
   DropNumbersFrom(AFirst);
   L := FLruFirst;
@@ -4363,7 +4541,9 @@ begin
     nx := L.FLruNext;
     if ((L.FLastPara >= AFirst) and (L.FFirstPara < AFirst + ACount)) or
       (L.FNumbered and (L.FFirstPara >= AFirst)) then
-      CacheDrop(L, True);
+      CacheDrop(L, True)
+    else
+      Vouch(L, FChangeGen);
     L := nx;
   end;
 end;
@@ -4376,6 +4556,9 @@ var
   n, i: Integer;
   numbering: Boolean;
 begin
+  { Any change: a layout held out of the cache (evicted while held) cannot follow, so it goes
+    stale by the count; the cached ones that stay are vouched for below. }
+  Inc(FChangeGen);
   first := AChange.FirstPara;
   oldEnd := first + Max(AChange.OldParaCount, 1);
   delta := AChange.NewParaCount - AChange.OldParaCount;
@@ -4409,7 +4592,10 @@ begin
       if n = System.Length(moved) then SetLength(moved, n * 2 + 8);
       moved[n] := L;
       Inc(n);
-    end;
+      Vouch(L, FChangeGen);
+    end
+    else
+      Vouch(L, FChangeGen);
     L := nx;
   end;
   for i := 0 to n - 1 do FCache.AddOrSetValue(moved[i].FFirstPara, moved[i]);
@@ -4614,18 +4800,29 @@ begin
   if FMeasure.TryGetValue(key, Result) then Exit;
   if (FMeasureOld <> nil) and FMeasureOld.TryGetValue(key, Result) then
   begin
+    // brought forward: counted again in the newer half (the older one goes as a whole)
     FMeasure.AddOrSetValue(key, Result);
+    Inc(FMeasureBytes, System.Length(key) + CMeasureEntryBytes);
     Exit;
   end;
   Result := FDevice.TextWidth(AFont, AText);
-  if FMeasure.Count >= CRichMeasureCacheEntries div 2 then
+  if (FMeasure.Count >= CRichMeasureCacheEntries div 2) or
+    (FMeasureBytes >= CRichMeasureCacheBytes div 2) then
   begin
     // the older half goes; what was used since it became the older half came forward
     FMeasureOld.Free;
     FMeasureOld := FMeasure;
+    FMeasureOldBytes := FMeasureBytes;
     FMeasure := specialize TDictionary<string, Integer>.Create;
+    FMeasureBytes := 0;
   end;
   FMeasure.AddOrSetValue(key, Result);
+  Inc(FMeasureBytes, System.Length(key) + CMeasureEntryBytes);
+end;
+
+function TTyRichLayouter.MeasureCacheBytes: Int64;
+begin
+  Result := FMeasureBytes + FMeasureOldBytes;
 end;
 
 function TTyRichLayouter.EstimatedParaHeight(APPI: Integer; AZoom: Single): Integer;
