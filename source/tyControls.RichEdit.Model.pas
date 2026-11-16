@@ -587,6 +587,7 @@ type
     FIncomplete: Boolean;
     FSaving: Integer;
     function GetSaving: Boolean;
+    function GetUpdating: Boolean;
     procedure Init;
     procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
       AHasBom: Boolean; ALineBreak: TTyRichSeparator);
@@ -779,6 +780,11 @@ type
       it. A block that changed nothing keeps nothing and raises nothing. }
     procedure BeginUpdate(const ADescription: string = '');
     procedure EndUpdate;
+    { True while the document holds its changes back from OnChange: from BeginUpdate to the
+      outermost EndUpdate, and while a command (or an undo or redo step) runs. The text may
+      then differ from what an observer last heard of: a view must not look its blocks up by
+      what it knows until the change is reported (it is False again inside that OnChange). }
+    property Updating: Boolean read GetUpdating;
     { The caret moved: the next typing does not merge with the typing before. }
     procedure BreakMerge;
     property UndoDepth: Integer read FUndoCount;
@@ -3615,6 +3621,11 @@ begin
   end;
   FBlockDescription := '';
   Flush;
+end;
+
+function TTyRichDocument.GetUpdating: Boolean;
+begin
+  Result := (FUpdateCount > 0) or (FHold > 0);
 end;
 
 procedure TTyRichDocument.BreakMerge;

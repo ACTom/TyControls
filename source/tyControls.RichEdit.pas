@@ -32,8 +32,8 @@ unit tyControls.RichEdit;
     window invalidation, InvalidateArea, only asks for a blit: for what is drawn over the blit
     after it (a caret), and for a scroll, which moves the surface's pixels itself.
   - Loading never waits on the size: a txt file is the one proportional scan (TyRichLoadText);
-    an RTF file is indexed in slices (TTyRtfLoad.Step) from a timer, a few milliseconds a turn,
-    the document readable meanwhile (Loading); FinishLoading runs the rest at once. Pictures are
+    an RTF file is indexed in slices (TTyRtfLoad.Step) in turns of a few milliseconds, each a
+    call queued to the application's loop (BackgroundTurn), the document readable meanwhile (Loading); FinishLoading runs the rest at once. Pictures are
     decoded and scaled the same way, one a turn, never inside a paint that scrolls (the paint
     leaves an empty box and asks for them).
 
@@ -67,7 +67,7 @@ const
   { The most a scroll bar is given as its range: a document taller than this (in pixels) is
     scrolled in steps of more than one pixel per bar unit (see TTyCustomRichEdit.ScrollBarLimit). }
   CRichScrollBarRange = 1 shl 30;
-  { The background work (load slices, pictures) a timer turn does at most, in milliseconds. }
+  { The background work (load slices, pictures) a turn does at most, in milliseconds. }
   CRichIdleBudgetMs = 8;
   { ... and at most this many pieces of it (load slices, pictures): a cap that holds whatever
     the clock's resolution is. }
@@ -104,6 +104,20 @@ type
     var ACancel: Boolean) of object;
 
   TTyCustomRichEdit = class;
+
+  { A call the control queues to the application's message loop (TApplication.QueueAsyncCall):
+    the next turn of the background work, a selection report a snap made outside a user
+    action. One object per kind, so that one kind is taken off the queue without the other
+    (RemoveAsyncCalls removes by object); at most one of each is queued (Queued). }
+  TTyRichQueuedCall = class
+  private
+    FOwner: TTyCustomRichEdit;
+    FQueued: Boolean;
+    procedure Fire(AData: PtrInt);
+  public
+    constructor Create(AOwner: TTyCustomRichEdit);
+    property Queued: Boolean read FQueued;
+  end;
 
   { The document as lines (one a paragraph), for the form file and for code that thinks in
     lines. Not a copy: Count is the paragraph count, a line is read from the text when it is
@@ -229,7 +243,9 @@ type
     FInStep: Boolean;
     FSaving: Integer;
     FCancelRequested: Boolean;
-    FTimer: TTimer;
+    // inside CancelLoad: the load's notice that it stopped is its own (no edit)
+    FInCancel: Boolean;
+    FStepCall, FSelCall: TTyRichQueuedCall;
     FPending: array of TTyRichPendingPicture;
     FPendingCount: Integer;
     { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
@@ -276,15 +292,12 @@ type
     { A document change moved the caret or the anchor by arithmetic alone: the next paint or
       settled query puts them on caret places (S-M10). }
     FSnapPending: Boolean;
-    { The text's length and paragraph count when the view last heard of a change: the text
-      differs from them only while the document holds back its changes (inside BeginUpdate ..
-      EndUpdate, inside a running command), when the view's blocks may name paragraphs that
-      are gone. }
-    FKnownLength: Int64;
-    FKnownParas: Integer;
-    {$IFDEF LCLWin32}
-    FOldWndProc: Pointer;
-    {$ENDIF}
+    { A window paint came while the document held its changes back and drew nothing new (it
+      blitted the old surface, or nothing): the window is asked to paint again, whole, when
+      the view hears of the change (K-11). }
+    FSkippedPaint: Boolean;
+    { The pointer was last seen over the padding (MouseMove; GetCursor answers the arrow). }
+    FOverPadding: Boolean;
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -408,15 +421,23 @@ type
     function SnapPos(APos: TTyRichPos): TTyRichPos;
     { The user's moves never leave the caret or the anchor in a cut paragraph's hidden tail. }
     function OutOfTail(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
-    { The caret and the anchor a document change moved, put on caret places (S-M10). }
+    { The caret and the anchor a document change moved, put on caret places (S-M10). It calls
+      no user code: a move is reported by the user action it runs in (its one report at its
+      end), else by a queued call after it (K-10). }
     procedure SnapAfterChange;
-    { The text changed and the view has not heard of it yet (FKnownLength). }
+    { The document holds back changes the view has not heard of (TTyRichDocument.Updating, or
+      a content the view was not told of yet): the view's blocks may name paragraphs that are
+      gone. The one door every entry that needs the layout asks first - the paint and the
+      caret, the blink and the drag ticks, keys, the wheel, the mouse, the input method's
+      query and the public settled queries: input does nothing (a key the viewer takes is
+      still taken), a query answers "not available" (K-9). }
     function ViewBehind: Boolean;
     procedure StartBlink;
-    {$IFDEF LCLWin32}
-    procedure HookWindow;
-    procedure UnhookWindow;
-    {$ENDIF}
+    { The background work's next turn queued (StepCall) or taken off the queue; the selection
+      report queued. }
+    procedure ScheduleCall(ACall: TTyRichQueuedCall);
+    procedure CancelCall(ACall: TTyRichQueuedCall);
+    procedure CallFired(ACall: TTyRichQueuedCall);
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
@@ -509,17 +530,31 @@ type
     { What the stream holds, by its first bytes (the position is left where it was). }
     function DetectFormat(AStream: TStream): TTyRichFormat;
     { One piece of the background work: a load slice, else one picture made ready. False when
-      there was nothing to do. What the timer runs, a few milliseconds a turn. }
+      there was nothing to do. What a turn runs, a few milliseconds a turn. A load slice that
+      raises without having indexed a byte would raise again: the load is cancelled (the
+      document keeps what was read, Incomplete) and the error goes on; one that got further
+      (a handler of its progress or change raised) leaves the load to go on (K-4). }
     function StepBackground: Boolean;
     function HasBackgroundWork: Boolean;
-    { One turn of the timer: pieces of the background work until CRichIdleMaxSteps of them or
-      CRichIdleBudgetMs by IdleTicks, whichever comes first. }
-    procedure TimerTick(Sender: TObject);
-    { The clock a timer turn is measured by, in milliseconds (GetTickCount64; a test seam). }
+    { One turn of the background work: pieces of it until CRichIdleMaxSteps of them or
+      CRichIdleBudgetMs by IdleTicks, whichever comes first; then the next turn is queued while
+      work is left (also when a piece raised), and none when it is done. Turns run as calls
+      queued to the application's loop (TApplication.QueueAsyncCall), one at a time, each
+      queuing the next: the loop handles its messages and paints and reaches its idle step
+      (OnIdle, action updates) between two turns, and a turn follows the last at once - no
+      timer period. Only while the control has a window; a turn that comes inside a load
+      step or a save does nothing, and the step's or the save's end queues it again. }
+    procedure BackgroundTurn;
+    { The clock a turn is measured by, in milliseconds (GetTickCount64; a test seam). }
     function IdleTicks: QWord; virtual;
-    { The background work's timer: made when there is work and a window, gone with the
-      window. }
-    property BackgroundTimer: TTimer read FTimer;
+    { The seam the queued calls go through: ACall onto the application's queue
+      (QueueAsyncCall), and off it (RemoveAsyncCalls). }
+    procedure PostCall(ACall: TTyRichQueuedCall); virtual;
+    procedure RemovePostedCall(ACall: TTyRichQueuedCall); virtual;
+    { The background work's next turn is queued: there is work and a window. }
+    property BackgroundCall: TTyRichQueuedCall read FStepCall;
+    { A selection report a snap made outside a user action is queued. }
+    property SelectionCall: TTyRichQueuedCall read FSelCall;
     { A press, a release, a hover or the focus changed: the control is painted again only
       when what its frame looks like changed (FrameSignature); the text is not touched. }
     procedure PointerStateChanged; override;
@@ -564,16 +599,11 @@ type
     property DragTimer: TTimer read FDragTimer;
     { The caret's blink: made on entering with a window, gone with the window. }
     property BlinkTimer: TTimer read FBlinkTimer;
-    { Windows: the set-cursor message for the client area is answered here (LCL's own answer
-      shows the control's Cursor everywhere, the I-beam over the padding too): over the
-      padding, while the published Cursor is the I-beam and not in the designer, the arrow is
-      shown and True returned; otherwise LCL goes on. Elsewhere SetTempCursor does it (from
-      MouseMove). }
-    function AnswerSetCursor: Boolean;
-    { Where the pointer is, in client pixels (the system's cursor position; a test seam). }
-    function PointerClientPos: TPoint; virtual;
-    { Shows the arrow now (LCLIntf.SetCursor; a test seam). }
-    procedure ShowArrowCursor; virtual;
+    { Cursor as the window shows it: the arrow while the pointer was last seen over the
+      padding (MouseMove) and the Cursor set is the I-beam; otherwise, at design time and while
+      the component is written, the Cursor set (it streams as it was set). LCL-Win32 answers
+      the window's set-cursor message with it (the control does not hear that message). }
+    function GetCursor: TCursor; override;
     property Dragging: Boolean read FDragging;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -641,6 +671,11 @@ type
       VisibleBlockCount, VisibleBlocks, ScrollY) first settle the view - a scroll, a change or a
       resize since the last layout is laid out now, as a paint would (nothing is done when the
       view is current). TopParagraph / TopOffset are the anchor as it is and never lay out.
+      Inside the document's update (Document.Updating: the view has not heard of the change
+      yet) they answer "not available", as for a block that is not laid out: PositionAtPoint
+      -1, PositionRect / ParagraphRect / CaretClientRect an empty rectangle, VisibleBlockCount
+      0, ScrollY -1; and the scrolls (ScrollY :=, ScrollViewBy, ScrollToEnd, UpdateView,
+      ScrollCaretIntoView) do nothing.
 
       The document position at client point (X, Y) of the view, through the visible blocks: the
       nearest caret place of the block under Y (the first or last visible one above or below
@@ -740,7 +775,8 @@ type
     procedure ImeReplace(AStart, ALen: Integer; const AText: string);
     property Document: TTyRichDocument read FDoc;
     property Layouter: TTyRichLayouter read FLayouter;
-    { The view's top in pixels of the document's heights (measured and estimated). }
+    { The view's top in pixels of the document's heights (measured and estimated); -1 inside
+      the document's update. }
     property ScrollY: Int64 read GetScrollY write SetScrollY;
     property ScrollX: Integer read GetScrollX;
     { The widest block laid out so far: the horizontal extent (never measured over the
@@ -883,17 +919,19 @@ function MoveFileExW(AExisting, ANew: PWideChar; AFlags: DWord): LongBool; stdca
   external 'kernel32' name 'MoveFileExW';
 {$ENDIF}
 
-{$IFDEF LCLWin32}
-const
-  GWLP_WNDPROC = -4;
-  CRichHTClient = 1;
-  CRichWmSetCursor = $0020;
+{ ---- TTyRichQueuedCall ---- }
 
-function TyRichSetWndProc(AWnd: HWND; AIndex: Integer; AValue: PtrInt): PtrInt; stdcall;
-  external 'user32' name {$IFDEF CPU64}'SetWindowLongPtrW'{$ELSE}'SetWindowLongW'{$ENDIF};
-function TyRichCallWndProc(AProc: Pointer; AWnd: HWND; AMsg: Cardinal; AW: WPARAM;
-  AL: LPARAM): LRESULT; stdcall; external 'user32' name 'CallWindowProcW';
-{$ENDIF}
+constructor TTyRichQueuedCall.Create(AOwner: TTyCustomRichEdit);
+begin
+  inherited Create;
+  FOwner := AOwner;
+end;
+
+procedure TTyRichQueuedCall.Fire(AData: PtrInt);
+begin
+  FQueued := False;
+  FOwner.CallFired(Self);
+end;
 
 function FloorDiv(A: Int64; B: Integer): Int64;
 begin
@@ -1102,10 +1140,10 @@ begin
   FSurfScale := 1;
   FLayoutPPI := 0;
   FViewPPI := 0;
+  FStepCall := TTyRichQueuedCall.Create(Self);
+  FSelCall := TTyRichQueuedCall.Create(Self);
   FDoc := CreateDocument;
   FText := FDoc.Text;
-  FKnownLength := FText.Length;
-  FKnownParas := FText.ParaCount;
   FDoc.OnChange := @DocChanged;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
@@ -1123,8 +1161,11 @@ end;
 
 destructor TTyCustomRichEdit.Destroy;
 begin
-  StopBackground;
-  FreeAndNil(FTimer);
+  // nothing queued may come back into a freed control
+  if FStepCall <> nil then CancelCall(FStepCall);
+  if FSelCall <> nil then CancelCall(FSelCall);
+  FreeAndNil(FStepCall);
+  FreeAndNil(FSelCall);
   FreeAndNil(FBlinkTimer);
   FreeAndNil(FDragTimer);
   FreeAndNil(FTextMenu);
@@ -1294,8 +1335,9 @@ end;
 
 function TTyCustomRichEdit.GetVisibleBlock(AIndex: Integer): TTyRichViewBlock;
 begin
-  Settle;
-  if (AIndex < 0) or (AIndex >= FBlockCount) then
+  // inside the document's update there is none (VisibleBlockCount is 0)
+  if not ViewBehind then Settle;
+  if (AIndex < 0) or (AIndex >= FBlockCount) or ViewBehind then
     raise ETyRichEdit.CreateFmt('Visible block %d out of range', [AIndex]);
   Result := FBlocks[AIndex];
   // client pixels, rounded outward (the layout's own numbers are raster pixels)
@@ -1324,6 +1366,7 @@ end;
 
 function TTyCustomRichEdit.VisibleBlockCount: Integer;
 begin
+  if ViewBehind then Exit(0);
   Settle;
   Result := FBlockCount;
 end;
@@ -2000,6 +2043,7 @@ var
   p, margin: Integer;
   below: Boolean;
 begin
+  if ViewBehind then Exit;
   Settle;
   if (FViewH <= 0) or (FBlockCount = 0) then Exit;
   if not CaretRaster(FCaret, FCaretAtEnd, r) then
@@ -2194,68 +2238,13 @@ begin
     Result := crDefault;
 end;
 
-function TTyCustomRichEdit.AnswerSetCursor: Boolean;
-var
-  p: TPoint;
+function TTyCustomRichEdit.GetCursor: TCursor;
 begin
-  Result := False;
-  if (Cursor <> crIBeam) or (csDesigning in ComponentState) then Exit;
-  p := PointerClientPos;
-  if CursorAt(p.X, p.Y) = crIBeam then Exit;
-  ShowArrowCursor;
-  Result := True;
+  Result := inherited GetCursor;
+  if FOverPadding and (Result = crIBeam) and
+    ([csDesigning, csWriting] * ComponentState = []) then
+    Result := crArrow;
 end;
-
-function TTyCustomRichEdit.PointerClientPos: TPoint;
-begin
-  Result := ScreenToClient(Mouse.CursorPos);
-end;
-
-procedure TTyCustomRichEdit.ShowArrowCursor;
-begin
-  LCLIntf.SetCursor(Screen.Cursors[crArrow]);
-end;
-
-{$IFDEF LCLWin32}
-{ LCL-Win32 answers WM_SETCURSOR itself before the control hears of it (the control's Cursor,
-  the I-beam, over the whole client area; TWin32WSWinControl.SetCursor ignores a temporary
-  cursor and sends that message too): the window is subclassed, and the client area's
-  set-cursor message is the control's first (AnswerSetCursor); the rest goes on to LCL. }
-var
-  // LCL's window procedure, the one every control window has (what a hook replaced)
-  GRichLclWndProc: Pointer = nil;
-
-function TyRichWndProc(AWnd: HWND; AMsg: Cardinal; AW: WPARAM; AL: LPARAM): LRESULT; stdcall;
-var
-  c: TWinControl;
-  old: Pointer;
-begin
-  c := FindControl(AWnd);
-  old := GRichLclWndProc;
-  if c is TTyCustomRichEdit then
-  begin
-    if TTyCustomRichEdit(c).FOldWndProc <> nil then old := TTyCustomRichEdit(c).FOldWndProc;
-    if (AMsg = CRichWmSetCursor) and (HWND(AW) = AWnd) and ((AL and $FFFF) = CRichHTClient) and
-      TTyCustomRichEdit(c).AnswerSetCursor then
-      Exit(1);
-  end;
-  Result := TyRichCallWndProc(old, AWnd, AMsg, AW, AL);
-end;
-
-procedure TTyCustomRichEdit.HookWindow;
-begin
-  if FOldWndProc <> nil then Exit;
-  FOldWndProc := Pointer(TyRichSetWndProc(Handle, GWLP_WNDPROC, PtrInt(@TyRichWndProc)));
-  if GRichLclWndProc = nil then GRichLclWndProc := FOldWndProc;
-end;
-
-procedure TTyCustomRichEdit.UnhookWindow;
-begin
-  if FOldWndProc = nil then Exit;
-  if HandleAllocated then TyRichSetWndProc(Handle, GWLP_WNDPROC, PtrInt(FOldWndProc));
-  FOldWndProc := nil;
-end;
-{$ENDIF}
 
 procedure TTyCustomRichEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
@@ -2271,6 +2260,8 @@ begin
   except
     // no focus to be had (a form not shown): the caret is placed all the same
   end;
+  // inside the document's update a press places nothing (K-9)
+  if ViewBehind then Exit;
   q := HitClient(X, Y, atEnd);
   if q < 0 then Exit;
   if Button = mbRight then
@@ -2375,9 +2366,11 @@ begin
       end;
     4:
       begin
-        // from the object pressed: on it (either half) it stays selected
-        if q >= FDragTo then Select(FDragFrom, q, atEnd)
-        else if q <= FDragFrom then Select(FDragTo, q, atEnd)
+        { From the object pressed: on it (either half: its start or its end) it stays
+          selected with the anchor at its start; past it rightwards the anchor stays at its
+          start, leftwards it goes to its end - as a word's does (K-12). }
+        if q > FDragTo then Select(FDragFrom, q, atEnd)
+        else if q < FDragFrom then Select(FDragTo, q, atEnd)
         else Select(FDragFrom, FDragTo, False);
         Exit;
       end;
@@ -2417,9 +2410,16 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
-  // the arrow over the padding (a cursor set by the user is left alone)
-  if Cursor = crIBeam then SetTempCursor(CursorAt(X, Y));
+  { The arrow over the padding (a cursor set by the user is left alone): GetCursor answers it
+    from where the pointer was last seen, which is what LCL-Win32 shows on the window's
+    set-cursor message. GTK, Qt and Cocoa set a window's cursor only when told: the
+    temporary cursor tells them now (on Windows it sends that message, which asks GetCursor
+    again). }
+  FOverPadding := CursorAt(X, Y) <> crIBeam;
+  if inherited GetCursor = crIBeam then SetTempCursor(Cursor);
   if not FDragging then Exit;
+  // inside the document's update the drag waits (K-9)
+  if ViewBehind then Exit;
   FDragPoint := Point(X, Y);
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   if (Y < area.Top) or (Y >= area.Bottom) or
@@ -2996,15 +2996,17 @@ begin
   if (c = FCaret) and (a = FSelAnchor) then Exit;
   Select(a, c, False);
   CaretMoved;
-  DoSelectionChange;
+  { Not reported here: this runs inside a paint, a blink, the input method's query, a public
+    query or at the start of a key or a click, and a handler (one that loads a file, changes
+    the document or frees the control) must not run in any of them. A user action reports
+    the move with its own one report at its end; otherwise the queued call does, after
+    (it reports nothing when that report came first). }
+  ScheduleCall(FSelCall);
 end;
 
 function TTyCustomRichEdit.ViewBehind: Boolean;
-var
-  t: TTyRichText;
 begin
-  t := FDoc.Text;
-  Result := (t <> FText) or (t.Length <> FKnownLength) or (t.ParaCount <> FKnownParas);
+  Result := FDoc.Updating or (FDoc.Text <> FText);
 end;
 
 procedure TTyCustomRichEdit.AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
@@ -3294,8 +3296,10 @@ begin
   { The load's own change: one made while the step runs AND the document still loads. A
     slice is appended before the last step ends the loading; a command run from the last
     step's progress handler (the document no longer loads there) is an edit - for the
-    layouter's trust, the caret and the anchor, and the change report alike (S-X1). }
-  loadOwn := FInStep and FDoc.Loading;
+    layouter's trust, the caret and the anchor, and the change report alike (S-X1). The
+    notice a cancelled load gives that it stopped comes after the load state ended, and is
+    the load's own all the same: it changes no text of the file (K-6). }
+  loadOwn := (FInStep and FDoc.Loading) or FInCancel;
   FLayouter.DocumentChanged(AChange, loadOwn);
   if FDoc.Text <> FText then
     ContentReplaced
@@ -3310,8 +3314,6 @@ begin
       goes to the first edit's start, and a format change joined with an inserted character
       moves a caret anywhere in that range. Right for a viewer; editing commands place the
       caret themselves (S-M9). }
-    FKnownLength := FDoc.Text.Length;
-    FKnownParas := FDoc.Text.ParaCount;
     if (rckText in AChange.Kinds) and not loadOwn then
     begin
       was := FCaret;
@@ -3329,6 +3331,14 @@ begin
       FWishValid := False;
     end;
     ChangeInView(AChange);
+    { A paint that came while the document held this change back showed nothing new and left
+      the window painted: the change's own bands are not all it missed (with no block held
+      they are nothing). The window is painted again, whole, once (K-11). }
+    if FSkippedPaint then
+    begin
+      FSkippedPaint := False;
+      InvalidateArea(Rect(0, 0, Width, Height));
+    end;
   end;
   if (FLines <> nil) and (FDoc.Text.Length > 0) then FLines.FEmptyLine := False;
   // the slices a lazy load adds are its progress, not changes of the content
@@ -3342,12 +3352,15 @@ end;
 procedure TTyCustomRichEdit.ContentReplaced;
 begin
   FText := FDoc.Text;
-  FKnownLength := FText.Length;
-  FKnownParas := FText.ParaCount;
   FSnapPending := False;
+  // (the whole window is invalidated below)
+  FSkippedPaint := False;
   ReleaseBlocks;
   ClearPending;
   ClearFailed;
+  // the old content's work and report go: LoadAs queues a new load's turn after this
+  if not HasBackgroundWork then CancelCall(FStepCall);
+  CancelCall(FSelCall);
   // told, not recognised: the layouter empties everything it kept
   FLayouter.Document := FDoc;
   FAnchorPara := 0;
@@ -3621,6 +3634,7 @@ end;
 
 function TTyCustomRichEdit.GetScrollY: Int64;
 begin
+  if ViewBehind then Exit(-1);
   Settle;
   Result := AnchorY div FScale;
 end;
@@ -3641,6 +3655,8 @@ var
   i: Integer;
   off: Int64;
 begin
+  // inside the document's update: no scroll (the heights may be of paragraphs that went)
+  if ViewBehind then Exit;
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
   if AValue < 0 then AValue := 0;
@@ -3693,7 +3709,7 @@ var
   end;
 
 begin
-  if ADeltaY = 0 then Exit;
+  if (ADeltaY = 0) or ViewBehind then Exit;
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
   walked := nil;
@@ -3811,6 +3827,7 @@ var
   firsts, lasts, heights: array of Integer;
   h: array of Int64;
 begin
+  if ViewBehind then Exit;
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
   { The last screen's blocks, from the end up: their heights are written, so the anchor found
@@ -3884,6 +3901,7 @@ end;
 
 procedure TTyCustomRichEdit.UpdateView;
 begin
+  if ViewBehind then Exit;
   EnsureView(Font.PixelsPerInch);
 end;
 
@@ -4195,6 +4213,8 @@ function TTyCustomRichEdit.PositionAtPoint(X, Y: Integer; out AAtLineEnd: Boolea
 var
   area: TRect;
 begin
+  AAtLineEnd := False;
+  if ViewBehind then Exit(-1);
   Settle;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   Result := HitRaster((Int64(X) - area.Left) * FScale + FScrollX, (Int64(Y) - area.Top) * FScale,
@@ -4205,8 +4225,9 @@ function TTyCustomRichEdit.PositionRect(APos: TTyRichPos; AAtLineEnd: Boolean): 
 var
   area, r: TRect;
 begin
-  Settle;
   Result := Rect(0, 0, 0, 0);
+  if ViewBehind then Exit;
+  Settle;
   if (APos < 0) or (APos > FDoc.Text.Length) then Exit;
   if not CaretRaster(APos, AAtLineEnd, r) then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
@@ -4218,8 +4239,9 @@ var
   area: TRect;
   k: Integer;
 begin
-  Settle;
   Result := Rect(0, 0, 0, 0);
+  if ViewBehind then Exit;
+  Settle;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   for k := 0 to FBlockCount - 1 do
     if (AIndex >= FBlocks[k].FirstPara) and (AIndex <= FBlocks[k].LastPara) then
@@ -4387,6 +4409,7 @@ function TTyCustomRichEdit.StepBackground: Boolean;
 var
   load: TTyRtfLoad;
   pic: TTyRichPendingPicture;
+  before: Int64;
 begin
   Result := False;
   // re-entered from a progress handler (one that pumps messages): the step is running
@@ -4395,12 +4418,20 @@ begin
   if FDoc.Loading and (load <> nil) then
   begin
     load.OnLoadProgress := @LoadProgress;
+    before := load.BytesIndexed;
     FInStep := True;
     try
       load.Step(FStepBytes);
-    finally
+    except
       FInStep := False;
+      { (K-4) A slice that indexed nothing would raise the same again, every turn: the load
+        stops there. One that got further raised in a handler of its progress or its change
+        (the load's state is whole: what was indexed is appended first): it goes on. }
+      if (TyRichRtfLoadOf(FDoc) = load) and FDoc.Loading and (load.BytesIndexed = before) then
+        CancelLoad;
+      raise;
     end;
+    FInStep := False;
     if FCancelRequested then CancelLoad;
     Exit(True);
   end;
@@ -4433,39 +4464,85 @@ end;
 
 procedure TTyCustomRichEdit.StartBackground;
 begin
-  // a timer only for a control on screen: one without a window waits for FinishLoading or
-  // its first paint
+  // a turn only for a control on screen: one without a window waits for FinishLoading or
+  // its first paint (InitializeWnd queues it)
   if not HandleAllocated then Exit;
-  if FTimer = nil then
-  begin
-    FTimer := TTimer.Create(nil);
-    FTimer.Interval := 1;
-    FTimer.OnTimer := @TimerTick;
-  end;
-  FTimer.Enabled := True;
+  ScheduleCall(FStepCall);
 end;
 
 procedure TTyCustomRichEdit.StopBackground;
 begin
-  if FTimer <> nil then FTimer.Enabled := False;
+  CancelCall(FStepCall);
 end;
 
-procedure TTyCustomRichEdit.TimerTick(Sender: TObject);
+procedure TTyCustomRichEdit.ScheduleCall(ACall: TTyRichQueuedCall);
+begin
+  // (the destructor frees the calls before the window goes)
+  if (ACall = nil) or ACall.FQueued or (csDestroying in ComponentState) then Exit;
+  ACall.FQueued := True;
+  try
+    PostCall(ACall);
+  except
+    // an application that shuts down queues nothing more: nothing is queued then
+    ACall.FQueued := False;
+    raise;
+  end;
+end;
+
+procedure TTyCustomRichEdit.CancelCall(ACall: TTyRichQueuedCall);
+begin
+  if (ACall = nil) or not ACall.FQueued then Exit;
+  ACall.FQueued := False;
+  RemovePostedCall(ACall);
+end;
+
+procedure TTyCustomRichEdit.PostCall(ACall: TTyRichQueuedCall);
+begin
+  if Application = nil then
+  begin
+    ACall.FQueued := False;
+    Exit;
+  end;
+  Application.QueueAsyncCall(@ACall.Fire, 0);
+end;
+
+procedure TTyCustomRichEdit.RemovePostedCall(ACall: TTyRichQueuedCall);
+begin
+  if Application <> nil then Application.RemoveAsyncCalls(ACall);
+end;
+
+procedure TTyCustomRichEdit.CallFired(ACall: TTyRichQueuedCall);
+begin
+  if ACall = FStepCall then
+  begin
+    // the window went meanwhile (DestroyWnd takes the call off; this is the guard)
+    if HandleAllocated then BackgroundTurn;
+  end
+  else if ACall = FSelCall then
+    DoSelectionChange;
+end;
+
+procedure TTyCustomRichEdit.BackgroundTurn;
 var
   t0: QWord;
   n: Integer;
 begin
+  // inside a load step (a handler that pumps messages) or a save: their end queues it again
   if FInStep or (FSaving > 0) then Exit;
   { The clock (GetTickCount64) may advance in 15.6 ms steps (Windows' default): it only ends a
     turn early. What holds a turn near CRichIdleBudgetMs whatever the clock is the cap on its
     pieces: CRichIdleMaxSteps load slices or pictures. }
-  t0 := IdleTicks;
-  n := 0;
-  repeat
-    if not StepBackground then Break;
-    Inc(n);
-  until (n >= CRichIdleMaxSteps) or (IdleTicks - t0 >= CRichIdleBudgetMs);
-  if not HasBackgroundWork then StopBackground;
+  try
+    t0 := IdleTicks;
+    n := 0;
+    repeat
+      if not StepBackground then Break;
+      Inc(n);
+    until (n >= CRichIdleMaxSteps) or (IdleTicks - t0 >= CRichIdleBudgetMs);
+  finally
+    // the next turn while work is left, also after a piece raised: the work never strands
+    if HasBackgroundWork then StartBackground else StopBackground;
+  end;
 end;
 
 function TTyCustomRichEdit.IdleTicks: QWord;
@@ -4476,9 +4553,6 @@ end;
 procedure TTyCustomRichEdit.InitializeWnd;
 begin
   inherited InitializeWnd;
-  {$IFDEF LCLWin32}
-  HookWindow;
-  {$ENDIF}
   if HasBackgroundWork then StartBackground;
 end;
 
@@ -4651,7 +4725,8 @@ begin
     end;
   end;
   if FCancelRequested then CancelLoad;
-  if not HasBackgroundWork then StopBackground;
+  // (pictures may be left; a turn that came inside the step did nothing)
+  if HasBackgroundWork then StartBackground else StopBackground;
 end;
 
 procedure TTyCustomRichEdit.CancelLoad;
@@ -4668,12 +4743,14 @@ begin
   load := TyRichRtfLoadOf(FDoc);
   if (load = nil) or not FDoc.Loading then Exit;
   FInStep := True;
+  FInCancel := True;
   try
     load.Cancel;
   finally
+    FInCancel := False;
     FInStep := False;
   end;
-  if not HasBackgroundWork then StopBackground;
+  if HasBackgroundWork then StartBackground else StopBackground;
 end;
 
 procedure TTyCustomRichEdit.WriteTo(AStream: TStream; AFormat: TTyRichFormat);
@@ -4695,6 +4772,8 @@ begin
     end;
   finally
     Dec(FSaving);
+    // a turn that came during the save did nothing
+    if (FSaving = 0) and HasBackgroundWork then StartBackground;
   end;
 end;
 
@@ -5318,15 +5397,12 @@ end;
 
 procedure TTyCustomRichEdit.DestroyWnd;
 begin
-  {$IFDEF LCLWin32}
-  UnhookWindow;
-  {$ENDIF}
   inherited DestroyWnd;
   // the window is gone: what it showed is drawn again when it comes back, and the background
   // work waits for it (InitializeWnd starts it again) or for FinishLoading
   FreeAndNil(FSurface);
   InvalidateSurface;
-  FreeAndNil(FTimer);
+  StopBackground;
   // the blink and a drag's scrolling are a window's (DoEnter starts the blink again)
   FreeAndNil(FBlinkTimer);
   StopDrag;
@@ -5667,6 +5743,8 @@ begin
     date. With no surface yet (or one of another scale) it shows nothing (S-M11). }
   if ViewBehind then
   begin
+    // the window counts this paint as done: it is asked for again when the view hears (K-11)
+    if ADefer then FSkippedPaint := True;
     if (FSurface <> nil) and (FSurfScale = sc.Scale) and
       IntersectRect(clip, clip, Rect(ARect.Left, ARect.Top, ARect.Left + FSurfW,
       ARect.Top + FSurfH)) then
@@ -5729,6 +5807,16 @@ var
 begin
   inherited KeyDown(Key, Shift);
   if (Key = 0) or not IsEnabled then Exit;
+  { Inside the document's update a key that moves or copies does nothing: the view does not
+    know the text yet (K-9). The viewer's keys are still taken - they never go on to the form. }
+  if ViewBehind then
+  begin
+    if (Key in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) or
+      (TyIsShortcutShift(Shift) and (Key in [VK_A, VK_C])) or
+      ((Key = VK_INSERT) and (Shift = [ssCtrl])) then
+      Key := 0;
+    Exit;
+  end;
   ext := ssShift in Shift;
   // Ctrl a word (Option on a Mac, as its text views); Ctrl or Cmd the document's ends
   byWord := (ssCtrl in Shift) {$IFDEF DARWIN}or (ssAlt in Shift){$ENDIF};
@@ -5803,6 +5891,8 @@ begin
   if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   Result := True;
+  // inside the document's update: taken, nothing done (K-9)
+  if ViewBehind then Exit;
   if ssCtrl in Shift then
   begin
     // Ctrl + wheel zooms, a notch at a time
@@ -5831,6 +5921,7 @@ begin
   if not IsEnabled then Exit(False);
   if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
   Result := True;
+  if ViewBehind then Exit;
   Inc(FWheelHRest, WheelDelta);
   notches := FWheelHRest div 120;
   Dec(FWheelHRest, notches * 120);

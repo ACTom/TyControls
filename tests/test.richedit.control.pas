@@ -58,23 +58,24 @@ type
     procedure BeginWait; override;
     procedure EndWait; override;
     procedure ShowTextMenu(const APos: TPoint); override;
-    function PointerClientPos: TPoint; override;
-    procedure ShowArrowCursor; override;
+    procedure PostCall(ACall: TTyRichQueuedCall); override;
+    procedure RemovePostedCall(ACall: TTyRichQueuedCall); override;
   public
     { W6: Invalidate's calls (what PointerStateChanged asks for), the temporary cursors
-      MouseMove set, the arrows the set-cursor answer showed (never the system's), and the
-      pointer's place it is told (UsePointer). }
+      MouseMove set. }
     Invalidates: Integer;
     TempCursors: array of TCursor;
-    Arrows: Integer;
-    UsePointer: Boolean;
-    PointerAt: TPoint;
+    { W7: the calls queued to the application (the background turn, the selection report) and
+      taken off it; counted for every probe, also one already freed. }
+    class var Posts, Removes: Integer;
     procedure Invalidate; override;
     procedure SetTempCursor(Value: TCursor); override;
     procedure Enter;
     function BlinkTimerOf: TTimer;
     function DragTimerOf: TTimer;
-    function Answer: Boolean;
+    function TurnQueued: Boolean;
+    function ReportQueued: Boolean;
+    function ImeRect: TRect;
   public
     { The caret is drawn as for a focused control (a test cannot give the focus). }
     ForceFocus: Boolean;
@@ -115,7 +116,6 @@ type
     { The whole frame as the painter draws it with no text clip (the ground under it), into
       ABitmap at the device scale. }
     procedure FullFrame(ABitmap: TBGRABitmap; APPI: Integer);
-    function Timer: TTimer;
     procedure DropHandle;
     function Ground: TBGRAPixel;
     procedure ResetCounts;
@@ -156,6 +156,7 @@ type
     FPaintScale: Integer;
     FSelChanges: Integer;
     FLastStepEdits: Integer;
+    FRaiseOnce: Boolean;
     procedure Changed(Sender: TObject);
     procedure Zoomed(Sender: TObject);
     procedure LoadCalled(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -194,6 +195,11 @@ type
     procedure CheckCaretInside(const AWhat: string);
     procedure EndAndClickCase(AScale: Integer; ARtl: Boolean);
     procedure RunAtScaleTwo(const AWhat: string; ACase: TRunMethod);
+    // W7
+    procedure RaiseOnce(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    function HandleForm: TForm;
+    procedure LoadW7Plain;
+    procedure LoadW7Table(ARows, AInRow: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -335,12 +341,34 @@ type
     procedure TestAStateLeavingTheLayerPathRepaints;
     procedure TestAStateFontIsALayoutChange;
     procedure TestAHoverAsksForARepaint;
+    // fix wave W7: what the real window found, the re-reviews' items
+    procedure TestTheLoadRunsInQueuedTurns;
+    procedure TestAStepThatRaisesDoesNotStrandTheLoad;
+    procedure TestASnapReportsOutsideThePaintAndTheQuery;
+    procedure TestInputAndQueriesWaitForAnUpdate;
+    procedure TestAPaintSkippedInAnUpdateIsMadeGood;
+    procedure TestACancelNoticeIsTheLoadsOwn;
+    procedure TestAPartialRowCopiesAsTheFilesRow;
+    procedure TestARowShownWhileLoadingIsLaidOutWhole;
+    procedure TestAPressedObjectKeepsItsAnchor;
   end;
 
 implementation
 
 uses
   LCLIntf, tyControls.StrConsts;
+
+type
+  // the application's queue of asynchronous calls, run without pumping any message
+  TAppQueue = class(TApplication)
+  end;
+
+{ Runs the calls queued to the application (QueueAsyncCall) - and nothing else: no message is
+  pumped, no window shown. What the loop does between two of its turns. }
+procedure RunQueuedCalls;
+begin
+  TAppQueue(Application).ProcessAsyncCallQueue;
+end;
 
 const
   BigLines = 2000000;
@@ -494,7 +522,7 @@ end;
 
 procedure TRichProbe.Turn;
 begin
-  TimerTick(nil);
+  BackgroundTurn;
 end;
 
 procedure TRichProbe.Down;
@@ -530,11 +558,6 @@ begin
   finally
     P.Free;
   end;
-end;
-
-function TRichProbe.Timer: TTimer;
-begin
-  Result := BackgroundTimer;
 end;
 
 procedure TRichProbe.DropHandle;
@@ -809,15 +832,31 @@ begin
   Result := TextWindowRect;
 end;
 
-function TRichProbe.PointerClientPos: TPoint;
+procedure TRichProbe.PostCall(ACall: TTyRichQueuedCall);
 begin
-  if UsePointer then Result := PointerAt else Result := inherited PointerClientPos;
+  Inc(Posts);
+  inherited PostCall(ACall);
 end;
 
-procedure TRichProbe.ShowArrowCursor;
+procedure TRichProbe.RemovePostedCall(ACall: TTyRichQueuedCall);
 begin
-  // counted, never shown: the system's cursor is not touched
-  Inc(Arrows);
+  Inc(Removes);
+  inherited RemovePostedCall(ACall);
+end;
+
+function TRichProbe.TurnQueued: Boolean;
+begin
+  Result := BackgroundCall.Queued;
+end;
+
+function TRichProbe.ReportQueued: Boolean;
+begin
+  Result := SelectionCall.Queued;
+end;
+
+function TRichProbe.ImeRect: TRect;
+begin
+  Result := ImeCaretBoundClient;
 end;
 
 procedure TRichProbe.Invalidate;
@@ -846,11 +885,6 @@ end;
 function TRichProbe.DragTimerOf: TTimer;
 begin
   Result := DragTimer;
-end;
-
-function TRichProbe.Answer: Boolean;
-begin
-  Result := AnswerSetCursor;
 end;
 
 { ---- the suite ---- }
@@ -3889,10 +3923,10 @@ begin
   GWidgetSetReady := True;
 end;
 
-{ H2-M11: a real handle, on a form that is never shown (made as test.base makes one): the timer
-  exists only with it, InvalidateContent reaches the window's invalidation, the handle's
-  destruction releases the surface and the timer, and the next paint draws the surface again
-  in full. The timer's firing needs a message loop: not run. }
+{ H2-M11: a real handle, on a form that is never shown (made as test.base makes one): a turn of
+  the background work is queued only with it, InvalidateContent reaches the window's
+  invalidation, the handle's destruction releases the surface and takes the turn off the
+  queue, and the next paint draws the surface again in full. }
 procedure TTyRichEditControlTest.TestAHandleOnAFormNeverShown;
 var
   F: TForm;
@@ -3900,7 +3934,7 @@ begin
   PictureDoc(1);
   PaintAll(True);
   AssertEquals('a picture waits', 1, FRich.Pending);
-  AssertTrue('no handle, no timer', FRich.Timer = nil);
+  AssertFalse('no handle, no turn', FRich.TurnQueued);
   FreeAndNil(FRich);
   FRich := NewProbe;
   NeedWidgetSet;
@@ -3915,8 +3949,7 @@ begin
     PaintAll(True);
     AssertTrue('a surface', FRich.Surf <> nil);
     AssertEquals('a picture waits', 1, FRich.Pending);
-    AssertTrue('with a handle, a timer', FRich.Timer <> nil);
-    AssertTrue('running', FRich.Timer.Enabled);
+    AssertTrue('with a handle, a turn queued', FRich.TurnQueued);
     { What InvalidateContent hands the window: the rectangle, through the real InvalidateArea
       (LCLIntf.InvalidateRect on the handle). Windows keeps no update region for a window that
       is not visible, so what the window makes of it is not observed here. }
@@ -3927,7 +3960,7 @@ begin
     FRich.DropHandle;
     AssertFalse('the handle went', FRich.HandleAllocated);
     AssertTrue('the surface with it', FRich.Surf = nil);
-    AssertTrue('and the timer', FRich.Timer = nil);
+    AssertFalse('and the turn', FRich.TurnQueued);
     FRich.ResetCounts;
     PaintAll(True);
     AssertTrue('the next paint makes it again', FRich.Surf <> nil);
@@ -6330,16 +6363,13 @@ end;
 { S-I5 / S-M2, on a handle of a form never shown: a drag's move outside the text starts the
   drag timer (its firing is not run); the blink timer is made on entering and goes with the
   window; MouseMove sets the temporary cursor (the arrow over the padding, the I-beam over the
-  text); on Windows the window's set-cursor message over the padding is answered with the
-  arrow, while the published Cursor is the I-beam. }
+  text), and the control's Cursor - what LCL-Win32 shows on the window's set-cursor message -
+  answers the same (W7 K-8: GetCursor), while the Cursor set is the I-beam; it streams as set. }
 procedure TTyRichEditControlTest.TestTheTimersAndTheCursorOnAHandle;
 var
   F: TForm;
   p: TPoint;
   a: TRect;
-  {$IFDEF LCLWin32}
-  res: PtrInt;
-  {$ENDIF}
 begin
   NeedWidgetSet;
   F := TForm.CreateNew(nil);
@@ -6373,25 +6403,22 @@ begin
     FRich.MoveAt(1, 1);
     FRich.MoveAt((a.Left + a.Right) div 2, (a.Top + a.Bottom) div 2);
     AssertEquals('two moves, two cursors', 2, Length(FRich.TempCursors));
-    AssertEquals('over the padding: the arrow', Ord(crDefault), Ord(FRich.TempCursors[0]));
+    AssertEquals('over the padding: the arrow', Ord(crArrow), Ord(FRich.TempCursors[0]));
     AssertEquals('over the text: the I-beam', Ord(crIBeam), Ord(FRich.TempCursors[1]));
-    {$IFDEF LCLWin32}
-    // the window's own set-cursor message (HTCLIENT, a mouse move)
-    FRich.UsePointer := True;
-    FRich.PointerAt := Point(1, 1);
-    FRich.Arrows := 0;
-    res := SendMessage(FRich.Handle, $0020, WPARAM(FRich.Handle), LPARAM(1 or ($0200 shl 16)));
-    AssertEquals('over the padding: the control answers', 1, res);
-    AssertEquals('with the arrow', 1, FRich.Arrows);
-    FRich.PointerAt := Point((a.Left + a.Right) div 2, (a.Top + a.Bottom) div 2);
-    AssertFalse('over the text: left to LCL (the I-beam)', FRich.Answer);
-    FRich.PointerAt := Point(1, 1);
+    // the control's Cursor (what LCL-Win32 answers the set-cursor message with)
+    FRich.MoveAt(1, 1);
+    AssertEquals('Cursor over the padding: the arrow', Ord(crArrow), Ord(FRich.Cursor));
+    AssertFalse('streamed after a move over the padding: no Cursor (the default)',
+      Pos('Cursor', FormText(FRich)) > 0);
+    FRich.MoveAt((a.Left + a.Right) div 2, (a.Top + a.Bottom) div 2);
+    AssertEquals('Cursor over the text: the I-beam', Ord(crIBeam), Ord(FRich.Cursor));
     FRich.Cursor := crHandPoint;
-    AssertFalse('a cursor of the user''s: left to LCL', FRich.Answer);
+    FRich.MoveAt(1, 1);
+    AssertEquals('a cursor of the user''s, over the padding', Ord(crHandPoint), Ord(FRich.Cursor));
+    AssertTrue('and streamed as set', Pos('crHandPoint', FormText(FRich)) > 0);
+    FRich.MoveAt((a.Left + a.Right) div 2, (a.Top + a.Bottom) div 2);
+    AssertEquals('a cursor of the user''s, over the text', Ord(crHandPoint), Ord(FRich.Cursor));
     FRich.Cursor := crIBeam;
-    AssertEquals('no other arrow', 1, FRich.Arrows);
-    FRich.UsePointer := False;
-    {$ENDIF}
     FRich.DropHandle;
     AssertTrue('the blink goes with the window', FRich.BlinkTimerOf = nil);
     AssertTrue('so does the drag''s timer', FRich.DragTimerOf = nil);
@@ -6512,8 +6539,12 @@ begin
   AssertEquals('the change moved it: reported', 1, FSelChanges);
   PaintAll(True);
   AssertEquals('after the paint: the cluster''s start', Int64(0), FRich.CaretPos);
+  // W7 K-10: not from inside the paint - by the queued call, after it
+  AssertEquals('no handler inside the paint', 1, FSelChanges);
+  RunQueuedCalls;
   AssertEquals('reported once more', 2, FSelChanges);
   PaintAll(True);
+  RunQueuedCalls;
   AssertEquals('and no more', 2, FSelChanges);
   // the same, put right by a settled query instead of a paint
   FRich.Lines.Text := 'aXY' + Utf8Of($301) + 'z';
@@ -6747,6 +6778,525 @@ begin
   FRich.ResetCounts;
   FRich.Hover(False);
   AssertTrue('leaving: a repaint asked for', FRich.Invalidates > 0);
+end;
+
+{ ---- fix wave W7 ---- }
+
+{ A small RTF table: a paragraph, ARows rows of three cells (rN a, rN b in bold, rN c), a
+  paragraph after it. AInRow: the offset inside row AInRow after its second cell's end and
+  before its third's (where a first slice leaves the row's first cell last in the text). }
+function W7TableRtf(ARows, AInRow: Integer; out AInside: Int64): TBytes;
+var
+  s, row: RawByteString;
+  k: Integer;
+begin
+  s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0\fs20 before the table\par' + #13#10;
+  AInside := 0;
+  for k := 0 to ARows - 1 do
+  begin
+    row := '\trowd\trgaph108\cellx2400\cellx4800\cellx7200' + #13#10 +
+      '\pard\intbl r' + IntToStr(k) + ' a\cell r' + IntToStr(k) + ' \b b\b0\cell ';
+    if k = AInRow then AInside := Length(s) + Length(row);
+    s := s + row + 'r' + IntToStr(k) + ' c\cell\row' + #13#10;
+  end;
+  s := s + '\pard after the table\par' + #13#10 + '}';
+  Result := BytesOf(s);
+end;
+
+procedure TTyRichEditControlTest.LoadW7Table(ARows, AInRow: Integer);
+var
+  b: TBytes;
+  inside: Int64;
+  st: TBytesStream;
+begin
+  b := W7TableRtf(ARows, AInRow, inside);
+  FRich.Slices(inside, 64);
+  st := TBytesStream.Create(b);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+end;
+
+{ A form never shown with FRich on it, its handle made (the turns of the background work are
+  queued only for a control with a window). }
+function TTyRichEditControlTest.HandleForm: TForm;
+begin
+  NeedWidgetSet;
+  Result := TForm.CreateNew(nil);
+  FRich.Parent := Result;
+  Result.HandleNeeded;
+  FRich.HandleNeeded;
+  AssertTrue('a handle', FRich.HandleAllocated);
+  AssertFalse('the form is not shown', Result.Visible);
+end;
+
+procedure TTyRichEditControlTest.LoadW7Plain;
+var
+  src: TBytes;
+  first: Int64;
+  st: TBytesStream;
+begin
+  src := W5PlainRtf(3000, first);
+  FRich.Slices(first, 16 * 1024);
+  st := TBytesStream.Create(src);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+end;
+
+{ K-1: the load runs in turns queued to the application's loop, one at a time: a turn with
+  work left queues exactly one next turn, the turn that finishes queues none; a cancel, a new
+  content, the handle's destruction and the destructor take a queued turn off the queue, and
+  running the queue then does not enter the control. (The loop itself - that a call queued
+  from a call runs in its next turn, after its messages and paints, with its idle step - is
+  the smoke's to see.) }
+procedure TTyRichEditControlTest.TestTheLoadRunsInQueuedTurns;
+var
+  F: TForm;
+  posts, removes, turns, n: Integer;
+begin
+  F := HandleForm;
+  try
+    LoadW7Plain;
+    AssertTrue('the first turn is queued', FRich.TurnQueued);
+    turns := 0;
+    while FRich.Loading do
+    begin
+      AssertTrue(Format('turn %d: queued', [turns]), FRich.TurnQueued);
+      posts := TRichProbe.Posts;
+      RunQueuedCalls;
+      Inc(turns);
+      if FRich.Loading then
+        AssertEquals(Format('turn %d: work left, exactly one next turn', [turns]), posts + 1,
+          TRichProbe.Posts)
+      else
+        AssertEquals('the turn that finishes queues none', posts, TRichProbe.Posts);
+      AssertTrue('runaway', turns < 10000);
+    end;
+    AssertTrue(Format('in turns (%d)', [turns]), turns >= 2);
+    AssertFalse('nothing queued after the end', FRich.TurnQueued);
+    AssertFalse('the whole file', FRich.Document.Incomplete);
+    // a cancel
+    LoadW7Plain;
+    AssertTrue('queued again', FRich.TurnQueued);
+    removes := TRichProbe.Removes;
+    FRich.CancelLoad;
+    AssertFalse('cancelled: nothing queued', FRich.TurnQueued);
+    AssertEquals('taken off the queue', removes + 1, TRichProbe.Removes);
+    n := FRich.Document.Text.ParaCount;
+    RunQueuedCalls;
+    AssertEquals('the queue run: nothing indexed', n, FRich.Document.Text.ParaCount);
+    // a new content
+    LoadW7Plain;
+    FRich.Lines.Text := 'another';
+    AssertFalse('a new content: nothing queued', FRich.TurnQueued);
+    // the handle's destruction
+    LoadW7Plain;
+    FRich.DropHandle;
+    AssertFalse('no window: nothing queued', FRich.TurnQueued);
+    n := FRich.Document.Text.ParaCount;
+    RunQueuedCalls;
+    AssertEquals('the queue run: nothing indexed', n, FRich.Document.Text.ParaCount);
+    AssertTrue('the load waits', FRich.Loading);
+    FRich.HandleNeeded;
+    AssertTrue('a window again: queued again', FRich.TurnQueued);
+    // the destructor
+    removes := TRichProbe.Removes;
+    FreeAndNil(FRich);
+    AssertEquals('the destructor takes it off the queue', removes + 1, TRichProbe.Removes);
+    RunQueuedCalls;
+    FRich := NewProbe;
+  finally
+    if FRich <> nil then FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+procedure TTyRichEditControlTest.RaiseOnce(Sender: TObject; ADone, ATotal: Int64;
+  var ACancel: Boolean);
+begin
+  Inc(FLoadCalls);
+  if FRaiseOnce then
+  begin
+    FRaiseOnce := False;
+    raise EInvalidOperation.Create('the test''s failing progress handler');
+  end;
+end;
+
+{ K-4: a turn whose step raised (here: the load's progress handler, once) still queues the next
+  turn, and the load runs to its end. }
+procedure TTyRichEditControlTest.TestAStepThatRaisesDoesNotStrandTheLoad;
+var
+  F: TForm;
+  raised: Boolean;
+  turns: Integer;
+begin
+  F := HandleForm;
+  try
+    FRich.OnLoadProgress := @RaiseOnce;
+    LoadW7Plain;
+    FRaiseOnce := True;
+    raised := False;
+    try
+      FRich.Turn;
+    except
+      on EInvalidOperation do raised := True;
+    end;
+    AssertTrue('the handler raised', raised);
+    AssertTrue('still loading', FRich.Loading);
+    AssertTrue('the next turn is queued all the same', FRich.TurnQueued);
+    turns := 0;
+    while FRich.Loading and FRich.TurnQueued do
+    begin
+      RunQueuedCalls;
+      Inc(turns);
+      AssertTrue('runaway', turns < 10000);
+    end;
+    AssertFalse('loaded to the end', FRich.Loading);
+    AssertFalse('the whole file', FRich.Document.Incomplete);
+  finally
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ K-10: a snap (a change left the caret inside a cluster) calls no handler where it runs: a
+  paint and a public query only queue the report, which the queued call makes once; a key
+  reports once, at its end; the destructor with the report queued reports nothing. }
+procedure TTyRichEditControlTest.TestASnapReportsOutsideThePaintAndTheQuery;
+var
+  raised: Boolean;
+  removes: Integer;
+
+  procedure Prepare;
+  begin
+    FRich.OnSelectionChange := nil;
+    FRich.Lines.Text := 'aXY' + Utf8Of($301) + 'z';
+    FRich.UpdateView;
+    FRich.SelStart := 2;
+    RunQueuedCalls;
+    FRich.OnSelectionChange := @SelChanged;
+    AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(1, 2)));
+    FSelChanges := 0;
+  end;
+
+begin
+  Prepare;
+  PaintAll(True);
+  AssertEquals('snapped by the paint', Int64(0), FRich.CaretPos);
+  AssertEquals('no handler inside the paint', 0, FSelChanges);
+  AssertTrue('the report is queued', FRich.ReportQueued);
+  RunQueuedCalls;
+  AssertEquals('the queued call reports it', 1, FSelChanges);
+  RunQueuedCalls;
+  AssertEquals('once', 1, FSelChanges);
+  // a public query
+  Prepare;
+  FRich.PositionRect(0);
+  AssertEquals('snapped by the query', Int64(0), FRich.CaretPos);
+  AssertEquals('no handler inside the query', 0, FSelChanges);
+  RunQueuedCalls;
+  AssertEquals('reported after it', 1, FSelChanges);
+  // a key: the snap at its start and its move are one action, one report at its end
+  Prepare;
+  FRich.Press(VK_RIGHT, []);
+  AssertEquals('a key: one report', 1, FSelChanges);
+  RunQueuedCalls;
+  AssertEquals('and the queued call adds none', 1, FSelChanges);
+  // the destructor with the report queued
+  Prepare;
+  FRich.CaretClientRect;
+  AssertTrue('queued', FRich.ReportQueued);
+  { freed memory is filled with a pattern meanwhile: a call left on the queue would read the
+    freed control (its state, its handler) as that pattern - a fault, never a quiet skip }
+  raised := False;
+  removes := TRichProbe.Removes;
+  PoisonFreedMemory(True);
+  try
+    FreeAndNil(FRich);
+    try
+      RunQueuedCalls;
+    except
+      raised := True;
+    end;
+  finally
+    PoisonFreedMemory(False);
+  end;
+  AssertEquals('the destructor takes the report off the queue', removes + 1, TRichProbe.Removes);
+  AssertFalse('freed: no call into it', raised);
+  AssertEquals('freed: nothing reported', 0, FSelChanges);
+  FRich := NewProbe;
+end;
+
+{ K-9: between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, input that needs
+  the layout does nothing (a viewer's key is still taken), the queries answer "not available",
+  nothing raises and nothing is laid out; a replacement that keeps the length and the
+  paragraph count (what a heuristic on those missed) is held back as well. }
+procedure TTyRichEditControlTest.TestInputAndQueriesWaitForAnUpdate;
+var
+  i: Integer;
+  c: TTyRichPos;
+  top: Integer;
+begin
+  SetLinesOf(50, 'Line ');
+  FRich.ForceFocus := True;
+  PaintAll(True);
+  FRich.SelStart := FRich.Document.Text.ParaStart(40) + 2;
+  PaintAll(True);
+  c := FRich.CaretPos;
+  top := FRich.TopParagraph;
+  FRich.Lines.BeginUpdate;
+  try
+    for i := 1 to 45 do FRich.Lines.Delete(0);
+    FRich.ResetCounts;
+    AssertEquals('Down is taken', 0, FRich.KeyResult(VK_DOWN, []));
+    AssertEquals('Ctrl+End is taken', 0, FRich.KeyResult(VK_END, [ssCtrl]));
+    AssertEquals('Ctrl+A is taken', 0, FRich.KeyResult(VK_A, [ssCtrl]));
+    AssertEquals('Tab is still the form''s', VK_TAB, FRich.KeyResult(VK_TAB, []));
+    AssertEquals('the keys moved nothing', c, FRich.CaretPos);
+    FRich.Wheel(-120, []);
+    FRich.WheelH(120);
+    AssertEquals('the wheel scrolled nothing', top, FRich.TopParagraph);
+    FRich.PressAt(20, 20);
+    AssertFalse('a press starts no drag', FRich.DragOn);
+    AssertEquals('and places nothing', c, FRich.CaretPos);
+    FRich.MoveAt(30, 30);
+    FRich.ReleaseAt(30, 30);
+    AssertEquals('PositionAtPoint: not available', -1, FRich.PositionAtPoint(20, 20));
+    AssertTrue('PositionRect: empty', IsRectEmpty(FRich.PositionRect(0)));
+    AssertTrue('ParagraphRect: empty', IsRectEmpty(FRich.ParagraphRect(0)));
+    AssertTrue('the caret''s rectangle: empty', IsRectEmpty(FRich.CaretClientRect));
+    AssertTrue('the input method''s caret: empty', IsRectEmpty(FRich.ImeRect));
+    AssertEquals('no visible block', 0, FRich.VisibleBlockCount);
+    AssertEquals('ScrollY: not available', -1, FRich.ScrollY);
+    FRich.ScrollViewBy(100);
+    FRich.ScrollToEnd;
+    FRich.ScrollY := 50;
+    FRich.UpdateView;
+    AssertEquals('the scrolls did nothing', top, FRich.TopParagraph);
+    AssertEquals('nothing laid out', 0, Length(FRich.Given));
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('five lines', 5, FRich.Document.Text.ParaCount);
+  AssertTrue('blocks again', FRich.VisibleBlockCount > 0);
+  AssertTrue('a caret rectangle again', not IsRectEmpty(FRich.CaretClientRect));
+  // the same length, the same paragraphs
+  PaintAll(True);
+  FRich.Document.BeginUpdate;
+  try
+    AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(0, 3)));
+    AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(0, 'XYZ')));
+    FRich.ResetCounts;
+    PaintAll(True);
+    AssertEquals('a same-length change: no block drawn', 0, FRich.BlockPaints);
+    AssertEquals('nothing laid out', 0, Length(FRich.Given));
+    AssertEquals('the input method''s query: nothing', -1, FRich.PositionAtPoint(20, 20));
+  finally
+    FRich.Document.EndUpdate;
+  end;
+  CheckSurface('after the same-length update');
+end;
+
+function CoversRect(const AOuter, AInner: TRect): Boolean;
+begin
+  Result := (AOuter.Left <= AInner.Left) and (AOuter.Top <= AInner.Top) and
+    (AOuter.Right >= AInner.Right) and (AOuter.Bottom >= AInner.Bottom);
+end;
+
+{ K-11: a window paint inside the document's update draws nothing new, and the window counts it
+  as done: when the update ends, the window is asked to paint the text window again - here
+  with no block held before (a control first painted inside an update). An update with no
+  paint inside it asks for nothing more than its change. }
+procedure TTyRichEditControlTest.TestAPaintSkippedInAnUpdateIsMadeGood;
+var
+  i: Integer;
+  hit: Boolean;
+begin
+  FRich.Lines.BeginUpdate;
+  try
+    for i := 0 to 9 do FRich.Lines.Add('Line ' + IntToStr(i));
+    PaintAll(True);
+    FRich.ResetCounts;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  hit := False;
+  for i := 0 to High(FRich.Invalidated) do
+    if CoversRect(FRich.Invalidated[i], FRich.TextWindow) then hit := True;
+  AssertTrue('after the update: the text window is painted again', hit);
+  // no paint inside: nothing more (no block is held - the change asks for nothing)
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.Lines.Add('one more');
+    FRich.ResetCounts;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('no skipped paint: no extra invalidation', 0, Length(FRich.Invalidated));
+end;
+
+{ K-6: Word's list (word-list.rtf) cancelled after its first slice, whose last paragraph is the
+  item "2." after a body paragraph: the cancel's notice is the load's own - the item keeps the
+  file's number (the walk would count "1."), no OnChange, the caret stays. }
+procedure TTyRichEditControlTest.TestACancelNoticeIsTheLoadsOwn;
+var
+  st: TBytesStream;
+  L: TTyBlockLayout;
+begin
+  st := TBytesStream.Create(ReadFixtureFile('word-list.rtf'));
+  try
+    FRich.Slices(AfterPars(st.Bytes, 3), 256);
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+  FRich.SelStart := 1;
+  FRich.OnChange := @Changed;
+  FChanges := 0;
+  FRich.CancelLoad;
+  AssertTrue('cancelled', FRich.Document.Incomplete);
+  AssertEquals('three paragraphs: the last the item', 3, FRich.Document.Text.ParaCount);
+  AssertEquals('no OnChange for a cancel', 0, FChanges);
+  AssertEquals('the caret stays', Int64(1), FRich.CaretPos);
+  L := FRich.Layouter.LayoutBlock(FRich.Document, 2, 1000, 96, 1);
+  try
+    AssertEquals('the item''s number is the file''s', '2.', string(TTyParaLayout(L).Marker.Text));
+  finally
+    L.Release;
+  end;
+end;
+
+{ K-7 (with K-5): a partial row at the end of a loading and of a cancelled document. What a user
+  gets from a copy is the file's whole row, the cells not in the text yet empty: the text has
+  a tab for each of them, the RTF the row with those cells empty - the two flavours agree. }
+procedure TTyRichEditControlTest.TestAPartialRowCopiesAsTheFilesRow;
+
+  procedure Check(const AWhat: string; const ATail: string; const ACells: array of string);
+  var
+    b: TTyRichDocument;
+    n, k: Integer;
+    c: TTyRichCell;
+  begin
+    FRich.SelectAll;
+    FRich.CopyToClipboard;
+    AssertEquals(AWhat + ': the text is SelText', FRich.SelText, FRich.ClipText);
+    AssertEquals(AWhat + ': the text ends with the row',
+      ATail, Copy(FRich.ClipText, Length(FRich.ClipText) - Length(ATail) + 1, MaxInt));
+    b := ReadClipRtf(FRich.ClipRtf);
+    try
+      n := b.Text.ParaCount;
+      AssertTrue(AWhat + ': the RTF has the row', n >= 3);
+      c := b.CellAt(n - 1);
+      AssertTrue(AWhat + ': the RTF ends in a cell', c <> nil);
+      AssertEquals(AWhat + ': the row''s cells', 3, c.Row.CellCount);
+      for k := 0 to 2 do
+      begin
+        AssertTrue(Format('%s: RTF cell %d in the row', [AWhat, k]),
+          (b.CellAt(n - 3 + k) <> nil) and (b.CellAt(n - 3 + k).Row = c.Row));
+        AssertEquals(Format('%s: RTF cell %d', [AWhat, k]), ACells[k],
+          string(b.Text.GetText(b.Text.ParaStart(n - 3 + k), b.Text.ParaLength(n - 3 + k))));
+      end;
+    finally
+      b.Free;
+    end;
+  end;
+
+begin
+  LoadW7Table(6, 3);
+  AssertTrue('loading', FRich.Loading);
+  AssertEquals('the row''s first cell is last', 'r3 a',
+    FRich.Lines[FRich.Lines.Count - 1]);
+  // (a row's line ends it in the text, as every row's does)
+  Check('loading', 'r3 a'#9#9 + LineEnding, ['r3 a', '', '']);
+  FRich.CancelLoad;
+  AssertTrue('cancelled', FRich.Document.Incomplete);
+  Check('cancelled', 'r3 a'#9'r3 b'#9 + LineEnding, ['r3 a', 'r3 b', '']);
+end;
+
+{ K-5, the control: a row shown at the end of a loading document with only its first cell is
+  laid out again, whole, when its other cells arrive - the slice's change starts at the
+  paragraph that was last (the row's first cell), which the view hears. }
+procedure TTyRichEditControlTest.TestARowShownWhileLoadingIsLaidOutWhole;
+var
+  last, k, steps: Integer;
+  found: Boolean;
+  blk: TTyRichViewBlock;
+begin
+  LoadW7Table(6, 3);
+  AssertTrue('loading', FRich.Loading);
+  last := FRich.Document.Text.ParaCount - 1;
+  PaintAll(True);
+  found := False;
+  for k := 0 to FRich.VisibleBlockCount - 1 do
+  begin
+    blk := FRich.VisibleBlocks[k];
+    if blk.LastPara = last then
+    begin
+      found := True;
+      AssertEquals('shown with its first cell alone', last, blk.FirstPara);
+    end;
+  end;
+  AssertTrue('the row is shown', found);
+  steps := 0;
+  while FRich.Loading do
+  begin
+    AssertTrue('a step', FRich.Step);
+    Inc(steps);
+    AssertTrue('runaway', steps < 10000);
+  end;
+  PaintAll(True);
+  found := False;
+  for k := 0 to FRich.VisibleBlockCount - 1 do
+  begin
+    blk := FRich.VisibleBlocks[k];
+    if blk.FirstPara = last then
+    begin
+      found := True;
+      AssertEquals('the whole row: one block', last + 2, blk.LastPara);
+    end;
+  end;
+  AssertTrue('the row is shown again', found);
+  for k := last to last + 2 do
+    AssertTrue(Format('cell %d in the row', [k - last]),
+      FRich.Document.CellAt(k).Row = FRich.Document.CellAt(last).Row);
+  CheckSurface('the row laid out again');
+end;
+
+{ K-12: a press on either half of a picture and a 1 px move keep the anchor at the picture's
+  start: a Shift+click after it then keeps the picture in the selection. }
+procedure TTyRichEditControlTest.TestAPressedObjectKeepsItsAnchor;
+var
+  r1, r2: TRect;
+  y, x, half: Integer;
+  p: TPoint;
+begin
+  PictureDoc(1);
+  PaintAll(True);
+  r1 := FRich.PositionRect(1);
+  r2 := FRich.PositionRect(2);
+  y := (r1.Top + r1.Bottom) div 2;
+  for half := 0 to 1 do
+  begin
+    if half = 0 then x := r1.Left + 3 else x := r2.Left - 3;
+    Click(At(0));
+    FRich.PressAt(x, y);
+    FRich.MoveAt(x + 1, y);
+    FRich.ReleaseAt(x + 1, y);
+    AssertEquals(Format('half %d: the picture', [half]), Int64(1), FRich.SelStart);
+    AssertEquals(Format('half %d: its character', [half]), Int64(1), FRich.SelLength);
+    p := At(3);
+    FRich.PressAt(p.X, p.Y, [ssShift]);
+    FRich.ReleaseAt(p.X, p.Y);
+    AssertEquals(Format('half %d: a Shift+click after it keeps it', [half]), Int64(1), FRich.SelStart);
+    AssertEquals(Format('half %d: to the click', [half]), Int64(2), FRich.SelLength);
+  end;
 end;
 
 initialization

@@ -60,6 +60,7 @@ type
   TTyRichModelTest = class(TTestCase)
   private
     FChanges: array of TTyRichChange;
+    FUpdatingSeen: string;   // what Updating said in the last OnChange
     // a document a save's callback or stream tries to load into, and what came of it
     FLoadDoc: TTyRichDocument;
     FLoadTries, FLoadRefused: Integer;
@@ -104,6 +105,17 @@ type
     // fix wave W2
     procedure TestALoadIsRefusedWhileSavingOrReading;
     procedure TestTheFilesListTextFollowsItsParagraph;
+    // fix wave W7
+    procedure TestUpdatingWhileChangesAreHeldBack;
+  end;
+
+  { An insert that notes what the document's Updating says while it runs and is undone. }
+  TUpdatingInsert = class(TTyRichInsertText)
+  public
+    class var Seen: string;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+    procedure DoUndo(ADoc: TTyRichDocument); override;
   end;
 
 implementation
@@ -187,6 +199,7 @@ procedure TTyRichModelTest.DocChanged(Sender: TObject; const AChange: TTyRichCha
 begin
   SetLength(FChanges, Length(FChanges) + 1);
   FChanges[High(FChanges)] := AChange;
+  FUpdatingSeen := BoolToStr(TTyRichDocument(Sender).Updating, 'T', 'F');
 end;
 
 function TTyRichModelTest.NewDoc(const AText: UTF8String): TDocAccess;
@@ -1642,6 +1655,57 @@ begin
   d := TTyRichDocument.CreateFromUtf8(Bytes('a'#10'b'));
   try
     AssertEquals('a document of text: none', '', string(d.ListTextOf(0)));
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TUpdatingInsert.DoExecute(ADoc: TTyRichDocument);
+begin
+  Seen := Seen + 'x' + BoolToStr(ADoc.Updating, 'T', 'F');
+  inherited DoExecute(ADoc);
+end;
+
+procedure TUpdatingInsert.DoUndo(ADoc: TTyRichDocument);
+begin
+  Seen := Seen + 'u' + BoolToStr(ADoc.Updating, 'T', 'F');
+  inherited DoUndo(ADoc);
+end;
+
+{ W7 (K-9): Updating is True exactly while the document holds its changes back - inside
+  BeginUpdate .. the outermost EndUpdate and while a command or its undo runs - and False
+  again in the OnChange that reports them. }
+procedure TTyRichModelTest.TestUpdatingWhileChangesAreHeldBack;
+var
+  d: TTyRichDocument;
+  n: Integer;
+begin
+  d := NewDoc('abc');
+  try
+    d.OnChange := @DocChanged;
+    TUpdatingInsert.Seen := '';
+    n := Length(FChanges);
+    AssertFalse('a new document', d.Updating);
+    AssertTrue('typed', d.Execute(TUpdatingInsert.Create(0, 'x')));
+    AssertEquals('inside the command', 'xT', TUpdatingInsert.Seen);
+    AssertFalse('after it', d.Updating);
+    AssertEquals('one change', n + 1, Length(FChanges));
+    d.BeginUpdate;
+    AssertTrue('in an update', d.Updating);
+    d.BeginUpdate;
+    d.EndUpdate;
+    AssertTrue('an inner EndUpdate', d.Updating);
+    AssertTrue('typed in the update', d.Execute(TUpdatingInsert.Create(0, 'y')));
+    AssertTrue('after a command inside the update', d.Updating);
+    AssertEquals('nothing heard yet', n + 1, Length(FChanges));
+    d.EndUpdate;
+    AssertFalse('the outermost EndUpdate', d.Updating);
+    AssertEquals('heard once', n + 2, Length(FChanges));
+    AssertEquals('the change was reported with Updating False', 'F', FUpdatingSeen);
+    TUpdatingInsert.Seen := '';
+    d.Undo;
+    AssertEquals('inside the undo', 'uT', TUpdatingInsert.Seen);
+    AssertFalse('after the undo', d.Updating);
   finally
     d.Free;
   end;
