@@ -115,6 +115,57 @@ procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream;
 procedure TyRichSaveRtf(ADoc: TTyRichDocument; AStream: TStream; out AInfo: TTyRtfWriteInfo;
   AOnProgress: TTyRtfSaveProgress = nil); overload;
 
+type
+  // What a copy of characters [From, From + Len) takes, paragraph by paragraph (both the RTF
+  // and the plain text of a copy go by it). Paragraphs FirstPara .. LastPara; of the first,
+  // the characters from FromChar on; of the last, its first ToChar characters, and its
+  // separator when LastSeparator. A table: a range inside one cell (InOneCell) is plain
+  // paragraphs; one that reaches into more than one cell, or across a row's edge, takes every
+  // row it meets whole, as Word copies them (FromChar 0 at a row's first paragraph, all of a
+  // row's last paragraph and its separator). LastWhole: the last paragraph is taken as a
+  // paragraph, with its properties - with its separator, or the document's last paragraph
+  // taken to its end (it has no separator; written with its properties and without \par, it
+  // reads back as itself and pastes without a line break). Empty: nothing to copy.
+  TTyRichCopyRange = record
+    FirstPara, LastPara: Integer;
+    FromChar, ToChar: TTyRichPos;
+    LastSeparator: Boolean;
+    LastWhole: Boolean;
+    InOneCell: Boolean;
+    Empty: Boolean;
+  end;
+
+// The paragraphs a copy of [AFrom, AFrom + ALen) of ADoc takes (clamped to the document). In
+// a document that parses on demand it reads the cells at the range's ends.
+function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRichCopyRange;
+
+// Writes the characters [AFrom, AFrom + ALen) of ADoc to AStream as an RTF document of its own
+// (a copy's RTF flavour), which any reader opens: the header and its tables as TyRichSaveRtf
+// writes them (a document read from a file: the file's header, its tables whole - the
+// paragraphs that go out as the file's bytes refer to them - and added to as the save adds
+// to them), then the paragraphs TyRichCopyRange gives, then the closing brace. A paragraph
+// wholly in the range goes out as TyRichSaveRtf would write it: as the file's own bytes where
+// it is still the file's and starts a stretch of them at a clean place (the reader's state
+// there put back first, the groups the bytes leave open closed after them), else from the
+// model. A paragraph the range takes in part is written from the model, the characters it
+// takes: with its paragraph's properties and its \par when the range takes its separator;
+// the last one without them when the range ends before its separator (pasted, it adds no
+// line break and takes the paragraph it lands in). Rows are whole (TyRichCopyRange); inside
+// one cell the paragraphs are written as no table's. Objects go out as TyRichSaveRtf writes
+// them. An escaped byte of a text file goes out as TyRichSaveRtf writes it (two U+FFFD).
+//
+// It runs as a save does (ADoc is Saving meanwhile, in one read scope; a paragraph written
+// from the model is parsed), but unlike TyRichSaveRtf it does not refuse a document still
+// Loading or Incomplete: what is copied is what is there - the paragraphs a lazy load has
+// appended so far (the range is the caller's, within them). An empty range writes a document
+// with no paragraph. Raises ETyRichRtfWrite for a row with a nested table that would have to
+// be written from the model (as TyRichSaveRtf).
+procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom,
+  ALen: TTyRichPos); overload;
+// The same, saying what went out as the file's bytes and what was written from the model.
+procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom, ALen: TTyRichPos;
+  out AInfo: TTyRtfWriteInfo); overload;
+
 implementation
 
 uses
@@ -255,6 +306,12 @@ type
     FUc: Integer;            // the \uc the file has in effect where the stretch begins
     FHavePrev: Boolean;      // a paragraph of the stretch is written and not yet ended
     FPrevCell: TTyRichCell;  // its cell
+    // a range (TyRichSaveRtfRange): its paragraphs, what of its end paragraphs goes out
+    FRange: Boolean;
+    FCopy: TTyRichCopyRange;
+    FLastWritten: Integer;
+    FRangeSrc, FRangeBytes: array of Int64;
+    FRangeOwn: array of Boolean;
     // output
     procedure Flush;
     procedure Tick;
@@ -335,10 +392,20 @@ type
     procedure AddStretchInfo(AFirst, ACount: Integer; AOutStart: Int64);
     procedure SaveFile;
     procedure SaveOurs;
+    // a range
+    procedure CutPara(AIndex: Integer; var ARuns: TTyRunArray; var AText: PByte;
+      var ALen: PtrInt);
+    procedure RangeNote(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    procedure RangeSources(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    procedure SaveRangeOfOurs;
+    procedure SaveRangeOfFile;
   public
     constructor Create(ADoc: TTyRichDocument; AStream: TStream);
     destructor Destroy; override;
     procedure Run;
+    procedure RunRange(const ARange: TTyRichCopyRange);
     property Info: TTyRtfWriteInfo read FInfo;
   end;
 
@@ -1634,6 +1701,8 @@ begin
   FHavePrev := False;
   FPrevCell := nil;
   FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
+  // a range's last paragraph without its separator: no \par (pasted, it adds no line break)
+  if FRange and not FCopy.LastSeparator and (FLastWritten = FCopy.LastPara) then Exit;
   EndPara(FPrevCell, nil);
 end;
 
@@ -1648,6 +1717,15 @@ var
   cell: TTyRichCell;
 begin
   ReadPara(AIndex, AData, pf, runs, cell);
+  if FRange then
+  begin
+    // inside one cell: no row; the range's end paragraphs: the characters it takes
+    if FCopy.InOneCell then cell := nil;
+    CutPara(AIndex, runs, AText, ALen);
+    // a part of the last one, without its separator: no paragraph properties either
+    if not FCopy.LastWhole and (AIndex = FCopy.LastPara) then pf := FDoc.DefaultParaFormatId;
+    FLastWritten := AIndex;
+  end;
   if FHavePrev then EndPara(FPrevCell, cell);
   if (cell <> nil) and (not FHavePrev or (FPrevCell = nil) or (FPrevCell.Row <> cell.Row)) then
     StartRow(cell);
@@ -2337,6 +2415,333 @@ begin
     FDoc.EndRead;
   end;
   SetLength(FInfo.Stretches, FStretchN);
+end;
+
+// ---- a range (a copy) ----
+
+// Of paragraph AIndex, the characters the range takes: its text and runs cut to them (the run
+// in effect at the cut starts at 0; one run is kept for an empty part, its object dropped).
+procedure TRtfWriter.CutPara(AIndex: Integer; var ARuns: TTyRunArray; var AText: PByte;
+  var ALen: PtrInt);
+var
+  from, upto, ch, runEnd: Int64;
+  p, q: PtrInt;
+  code: Cardinal;
+  r, n: Integer;
+  cut: TTyRunArray;
+begin
+  from := 0;
+  upto := High(Int64);
+  if AIndex = FCopy.FirstPara then from := FCopy.FromChar;
+  if AIndex = FCopy.LastPara then upto := FCopy.ToChar;
+  if (from = 0) and (upto = High(Int64)) then Exit;
+  p := 0;
+  ch := 0;
+  while (ch < from) and (p < ALen) do
+  begin
+    Inc(p, NextChar(AText + p, ALen - p, code));
+    Inc(ch);
+  end;
+  q := p;
+  while (ch < upto) and (q < ALen) do
+  begin
+    Inc(q, NextChar(AText + q, ALen - q, code));
+    Inc(ch);
+  end;
+  AText := AText + p;
+  ALen := q - p;
+  // (the array a value hands out is its own: a copy is changed)
+  cut := nil;
+  SetLength(cut, Length(ARuns));
+  n := 0;
+  for r := 0 to High(ARuns) do
+  begin
+    if r < High(ARuns) then runEnd := ARuns[r + 1].Start else runEnd := High(Int64);
+    if (runEnd <= from) and (r < High(ARuns)) then Continue;
+    if (ARuns[r].Start >= upto) and (n > 0) then Break;
+    cut[n] := ARuns[r];
+    if cut[n].Start >= upto then cut[n].Obj := nil;
+    if cut[n].Start <= from then cut[n].Start := 0 else cut[n].Start := cut[n].Start - from;
+    Inc(n);
+    if ARuns[r].Start >= upto then Break;
+  end;
+  SetLength(cut, n);
+  ARuns := cut;
+end;
+
+// The range's paragraphs that a document of our own writes: noted as SaveOurs notes them.
+procedure TRtfWriter.RangeNote(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+  var AContinue: Boolean);
+begin
+  if AIndex > FCopy.LastPara then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  if AData <> nil then NotePara(AIndex, AData);
+end;
+
+// The range's paragraphs of a file: which are still the file's own, and their bytes.
+procedure TRtfWriter.RangeSources(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+  var AContinue: Boolean);
+var
+  k: Integer;
+begin
+  if AIndex > FCopy.LastPara then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  k := AIndex - FCopy.FirstPara;
+  FRangeSrc[k] := ASrcOffset;
+  FRangeBytes[k] := ASrcBytes;
+  // as PlanPara asks it (a load still going on has no trailer yet: what it appended is whole)
+  FRangeOwn[k] := (ASrcOffset >= FHeaderStop) and
+    (not FLoad.Done or (ASrcOffset + ASrcBytes <= FTrailer.Start)) and
+    FLoad.OwnsValue(ASrcOffset, AData);
+end;
+
+procedure TRtfWriter.SaveRangeOfOurs;
+begin
+  EnsureTables;
+  CharInfo(FDoc.DefaultCharFormatId);
+  FStretchLook := False;
+  FDoc.Text.WalkParas(FCopy.FirstPara, @RangeNote);
+  if FStretchLook then FDoc.Text.WalkParaTexts(FCopy.FirstPara, FCopy.LastPara, @LookPara);
+  FinishTables;
+  WriteHeaderOfOurs;
+  FInfo.HeaderStop := OutPos;
+  WriteStretch(FCopy.FirstPara, FCopy.LastPara - FCopy.FirstPara + 1);
+  AddStretchInfo(FCopy.FirstPara, FCopy.LastPara - FCopy.FirstPara + 1, FInfo.HeaderStop);
+  FInfo.TrailerStart := OutPos;
+  Sym('}');
+  NewLine;
+end;
+
+{ A file's range: the paragraphs that are the file's own, whole in the range and contiguous in
+  it, go out as their bytes - a stretch of them from the first that starts at a clean place and
+  a row's start, to the last after which the file is clean again and no row goes on; the rest
+  are written from the model. A stretch of bytes not right after the header (or the stretch of
+  bytes before it) has the reader's state of its first byte put back before it (RestoreAt); the
+  groups the file leaves open where such bytes end are closed (LeaveGroupsAt) - before what the
+  model writes, before the next such stretch, and at the end. }
+procedure TRtfWriter.SaveRangeOfFile;
+var
+  first, last, n, k, a, b, e: Integer;
+  pos: Int64;
+  bytes: TBytes;
+  model: array of Boolean;
+begin
+  first := FCopy.FirstPara;
+  last := FCopy.LastPara;
+  n := last - first + 1;
+  FHeaderStop := FLoad.Header.Stop;
+  FTrailer := FLoad.Trailer;
+  SetLength(FRangeSrc, n);
+  SetLength(FRangeBytes, n);
+  SetLength(FRangeOwn, n);
+  FDoc.Text.WalkParas(first, @RangeSources);
+  model := nil;
+  SetLength(model, n);
+  for k := 0 to n - 1 do
+    // a part of a paragraph, or no table inside one cell: the model
+    model[k] := not FRangeOwn[k] or FCopy.InOneCell or
+      ((k = 0) and (FCopy.FromChar > 0)) or
+      ((k = n - 1) and not FCopy.LastWhole);
+  // the file's own bytes: runs of them, shrunk to clean ends
+  k := 0;
+  while k < n do
+  begin
+    if model[k] then
+    begin
+      Inc(k);
+      Continue;
+    end;
+    e := k;
+    while (e + 1 < n) and not model[e + 1] and
+      (FRangeSrc[e + 1] = FRangeSrc[e] + FRangeBytes[e]) do Inc(e);
+    a := k;
+    while (a <= e) and not (CleanAt(FRangeSrc[a]) and RowStartsAt(first + a, False)) do
+    begin
+      model[a] := True;
+      Inc(a);
+    end;
+    b := e;
+    while (b >= a) and not (CleanAt(FRangeSrc[b] + FRangeBytes[b]) and
+      RowStartsAt(first + b + 1, False)) do
+    begin
+      model[b] := True;
+      Dec(b);
+    end;
+    k := e + 1;
+  end;
+  // the fonts and colours what the model writes needs
+  for k := 0 to n - 1 do
+    if model[k] then NotePara(first + k, nil);
+  if FStretchLook then
+    for k := 0 to n - 1 do
+      if model[k] then FDoc.Text.WalkParaTexts(first + k, first + k, @LookPara);
+  FinishTables;
+  WriteHeaderOfFile;
+  FInfo.HeaderStop := OutPos;
+  bytes := FLoad.Bytes;
+  // the file's place whose reader state the output is in (-1: ours, after the model's)
+  pos := FHeaderStop;
+  k := 0;
+  while k < n do
+  begin
+    e := k;
+    if model[k] then
+    begin
+      while (e + 1 < n) and model[e + 1] do Inc(e);
+      if pos >= 0 then LeaveGroupsAt(pos);
+      a := OutPos;
+      WriteStretch(first + k, e - k + 1);
+      AddStretchInfo(first + k, e - k + 1, a);
+      pos := -1;
+    end
+    else
+    begin
+      while (e + 1 < n) and not model[e + 1] and
+        (FRangeSrc[e + 1] = FRangeSrc[e] + FRangeBytes[e]) do Inc(e);
+      if pos <> FRangeSrc[k] then
+      begin
+        if pos >= 0 then LeaveGroupsAt(pos);
+        RestoreAt(FRangeSrc[k], first + k);
+      end;
+      Put(@bytes[FRangeSrc[k]], FRangeSrc[e] + FRangeBytes[e] - FRangeSrc[k]);
+      Inc(FInfo.VerbatimParas, e - k + 1);
+      FNeedDelim := False;
+      FRawOpen := False;
+      pos := FRangeSrc[e] + FRangeBytes[e];
+    end;
+    k := e + 1;
+  end;
+  // the groups the file's bytes left open, then the document's own
+  if pos >= 0 then LeaveGroupsAt(pos);
+  FInfo.TrailerStart := OutPos;
+  Sym('}');
+  NewLine;
+end;
+
+procedure TRtfWriter.RunRange(const ARange: TTyRichCopyRange);
+begin
+  FParaCount := FDoc.Text.ParaCount;
+  FRange := True;
+  FCopy := ARange;
+  FLastWritten := -1;
+  FDoc.BeginRead;
+  try
+    if ARange.Empty then
+    begin
+      // a document with no paragraph: the header and the closing brace
+      FCopy.FirstPara := 0;
+      FCopy.LastPara := -1;
+      EnsureTables;
+      CharInfo(FDoc.DefaultCharFormatId);
+      FinishTables;
+      WriteHeaderOfOurs;
+      Sym('}');
+      NewLine;
+    end
+    else if FLoad <> nil then
+      SaveRangeOfFile
+    else
+      SaveRangeOfOurs;
+    Flush;
+  finally
+    FDoc.EndRead;
+  end;
+  SetLength(FInfo.Stretches, FStretchN);
+end;
+
+function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRichCopyRange;
+var
+  t: TTyRichText;
+  stop: TTyRichPos;
+  c0, c1, c: TTyRichCell;
+begin
+  Result := Default(TTyRichCopyRange);
+  t := ADoc.Text;
+  if AFrom < 0 then AFrom := 0;
+  if AFrom > t.Length then AFrom := t.Length;
+  stop := AFrom + ALen;
+  if (ALen <= 0) or (stop < AFrom) then stop := AFrom;
+  if stop > t.Length then stop := t.Length;
+  Result.Empty := stop <= AFrom;
+  if Result.Empty then Exit;
+  Result.FirstPara := t.ParaOfPos(AFrom);
+  Result.LastPara := t.ParaOfPos(stop - 1);
+  Result.FromChar := AFrom - t.ParaStart(Result.FirstPara);
+  // the last character taken is its paragraph's separator (the paragraph's end)
+  Result.LastSeparator := stop - 1 >= t.ParaStart(Result.LastPara) + t.ParaLength(Result.LastPara);
+  if Result.LastSeparator then Result.ToChar := t.ParaLength(Result.LastPara)
+  else Result.ToChar := stop - t.ParaStart(Result.LastPara);
+  Result.LastWhole := Result.LastSeparator or ((Result.LastPara = t.ParaCount - 1) and
+    (Result.ToChar = t.ParaLength(Result.LastPara)) and
+    ((Result.FirstPara < Result.LastPara) or (Result.FromChar = 0)));
+  ADoc.BeginRead;
+  try
+    c0 := ADoc.CellAt(Result.FirstPara);
+    c1 := ADoc.CellAt(Result.LastPara);
+    if (c0 <> nil) and (c0 = c1) then
+    begin
+      Result.InOneCell := True;
+      Exit;
+    end;
+    // more than one cell, or across a row's edge: every row met whole
+    if c0 <> nil then
+    begin
+      while Result.FirstPara > 0 do
+      begin
+        c := ADoc.CellAt(Result.FirstPara - 1);
+        if (c = nil) or (c.Row <> c0.Row) then Break;
+        Dec(Result.FirstPara);
+      end;
+      Result.FromChar := 0;
+    end;
+    if c1 <> nil then
+    begin
+      while Result.LastPara < t.ParaCount - 1 do
+      begin
+        c := ADoc.CellAt(Result.LastPara + 1);
+        if (c = nil) or (c.Row <> c1.Row) then Break;
+        Inc(Result.LastPara);
+      end;
+      Result.ToChar := t.ParaLength(Result.LastPara);
+      Result.LastSeparator := True;
+      Result.LastWhole := True;
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom, ALen: TTyRichPos;
+  out AInfo: TTyRtfWriteInfo);
+var
+  w: TRtfWriter;
+  r: TTyRichCopyRange;
+begin
+  AInfo := Default(TTyRtfWriteInfo);
+  r := TyRichCopyRange(ADoc, AFrom, ALen);
+  w := TRtfWriter.Create(ADoc, AStream);
+  // as a save: the document takes no change while the writer reads it
+  ADoc.BeginSave;
+  try
+    w.RunRange(r);
+    AInfo := w.Info;
+  finally
+    ADoc.EndSave;
+    w.Free;
+  end;
+end;
+
+procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom, ALen: TTyRichPos);
+var
+  info: TTyRtfWriteInfo;
+begin
+  TyRichSaveRtfRange(ADoc, AStream, AFrom, ALen, info);
 end;
 
 // ---- the entry points ----

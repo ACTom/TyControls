@@ -17,9 +17,9 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
-  ExtCtrls, BGRABitmap, BGRABitmapTypes,
+  ExtCtrls, Menus, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.BuiltinThemes,
-  tyControls.ScrollBar, tyControls.Painter,
+  tyControls.ScrollBar, tyControls.Painter, tyControls.TextMenu,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit, test.richedit.layoutdevice, test.devicescale.support;
@@ -54,9 +54,21 @@ type
     function ScrollBarLimit: Integer; override;
     function IdleTicks: QWord; override;
     function HasCaretFocus: Boolean; override;
+    procedure WriteClipboard(const ARtf: RawByteString; const AText: string); override;
+    procedure BeginWait; override;
+    procedure EndWait; override;
+    procedure ShowTextMenu(const APos: TPoint); override;
   public
     { The caret is drawn as for a focused control (a test cannot give the focus). }
     ForceFocus: Boolean;
+    { The clipboard the copy writes to: what it put and how often (never the system's). }
+    ClipRtf: RawByteString;
+    ClipText: string;
+    ClipWrites, Waits, WaitEnds, MenuShows: Integer;
+    FailClip: Boolean;
+    procedure SetCopyWait(AChars: Int64);
+    { DoContextPopup's answer: Handled. }
+    function PopupAt(X, Y: Integer): Boolean;
     procedure PressAt(X, Y: Integer; AShift: TShiftState = []);
     procedure MoveAt(X, Y: Integer);
     procedure ReleaseAt(X, Y: Integer);
@@ -255,6 +267,13 @@ type
     procedure TestAClickOnAnObjectSelectsIt;
     procedure TestTheCursorAndARightClick;
     procedure TestOneSelectionEventPerAction;
+    // 9b: copying, the menu, the input method
+    procedure TestCopyPutsRtfAndPlainText;
+    procedure TestThePlainTextRules;
+    procedure TestAnEmptySelectionCopiesNothing;
+    procedure TestAHugeCopyShowsTheWaitCursor;
+    procedure TestTheMenuOfAViewer;
+    procedure TestTheImeIsToldTheViewerIsReadOnly;
   end;
 
 implementation
@@ -635,6 +654,40 @@ end;
 function TRichProbe.HasCaretFocus: Boolean;
 begin
   Result := ForceFocus or inherited HasCaretFocus;
+end;
+
+procedure TRichProbe.WriteClipboard(const ARtf: RawByteString; const AText: string);
+begin
+  Inc(ClipWrites);
+  if FailClip then raise EInvalidOperation.Create('the test''s failing clipboard');
+  ClipRtf := ARtf;
+  ClipText := AText;
+end;
+
+procedure TRichProbe.BeginWait;
+begin
+  Inc(Waits);
+end;
+
+procedure TRichProbe.EndWait;
+begin
+  Inc(WaitEnds);
+end;
+
+procedure TRichProbe.ShowTextMenu(const APos: TPoint);
+begin
+  Inc(MenuShows);
+end;
+
+procedure TRichProbe.SetCopyWait(AChars: Int64);
+begin
+  CopyWaitChars := AChars;
+end;
+
+function TRichProbe.PopupAt(X, Y: Integer): Boolean;
+begin
+  Result := False;
+  DoContextPopup(Point(X, Y), Result);
 end;
 
 procedure TRichProbe.PressAt(X, Y: Integer; AShift: TShiftState);
@@ -4713,6 +4766,203 @@ begin
   FRich.ReleaseAt(p.X, p.Y);
   FRich.SelectAll;
   AssertEquals('Select All', 5, FSelChanges);
+end;
+
+{ The plan's: a copy puts both flavours through the clipboard seam (never the system's); the
+  RTF read back is the range - its paragraphs, their text, the formats of their characters (a
+  bold run, a Chinese font), the last paragraph taken without its separator plain. }
+procedure TTyRichEditControlTest.TestCopyPutsRtfAndPlainText;
+var
+  t: TTyRichText;
+  b: TTyRichDocument;
+  st: TBytesStream;
+  runs: TTyRunArray;
+  k: Integer;
+  zh: RawByteString;
+begin
+  zh := Utf8Of($4E2D);
+  LoadRtfText('{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0 Arial;}{\f1\fcharset134 SimSun;}}' +
+    '\pard\b Bold\b0  plain \f1\' + 'u20013?\f0  end\par\pard\qc second line\par\pard third\par}');
+  t := FRich.Document.Text;
+  FRich.SelStart := 2;
+  FRich.SelLength := t.ParaStart(1) + 6 - 2;
+  FRich.CopyToClipboard;
+  AssertEquals('one write', 1, FRich.ClipWrites);
+  AssertEquals('the text', 'ld plain ' + zh + ' end' + LineEnding + 'second', FRich.ClipText);
+  AssertEquals('the text is SelText', FRich.SelText, FRich.ClipText);
+  AssertEquals('RTF', 1, Pos('{\rtf1', FRich.ClipRtf));
+  b := TTyRichDocument.Create;
+  st := TBytesStream.Create(BytesOf(FRich.ClipRtf));
+  try
+    TyRichLoadRtfFull(b, st);
+    AssertEquals('two paragraphs', 2, b.Text.ParaCount);
+    AssertEquals('the first, from its third character', 'ld plain ' + zh + ' end',
+      b.Text.GetText(0, b.Text.ParaLength(0)));
+    AssertEquals('the second, its first word', 'second', b.Text.GetText(b.Text.ParaStart(1), 6));
+    runs := b.RunsOf(0);
+    AssertTrue('bold', fsBold in b.Formats.CharFormat(runs[0].Format).Style);
+    k := 0;
+    while (k < High(runs)) and (runs[k + 1].Start <= 9) do Inc(k);
+    AssertEquals('the Chinese character''s font', 'SimSun', b.Formats.CharFormat(runs[k].Format).FontName);
+    AssertTrue('a part without its separator takes no centring',
+      b.Formats.ParaFormat(b.ParaFormatOf(1)).Align = paraLeft);
+  finally
+    st.Free;
+    b.Free;
+  end;
+end;
+
+{ The plain text, rule by rule: a paragraph's end and U+000B the platform's line break, an
+  object nothing, an escaped byte one U+FFFD; rows whole, cells parted by tabs (a cell merged
+  away a tab and nothing else), a row ended by a line break; inside one cell just its text.
+  SelText says the same as the copy. }
+procedure TTyRichEditControlTest.TestThePlainTextRules;
+var
+  t: TTyRichText;
+  st: TBytesStream;
+  fffd: RawByteString;
+begin
+  fffd := Utf8Of($FFFD);
+  FRich.Lines.Text := 'ab'#10'cd';
+  FRich.SelectAll;
+  AssertEquals('a separator', 'ab' + LineEnding + 'cd', FRich.SelText);
+  AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(1, #11)));
+  FRich.SelectAll;
+  AssertEquals('a line break inside a paragraph', 'a' + LineEnding + 'b' + LineEnding + 'cd',
+    FRich.SelText);
+  PictureDoc(1);
+  FRich.SelectAll;
+  AssertEquals('an object gives nothing', 'a b', FRich.SelText);
+  st := TBytesStream.Create(BytesOf(#$FF#$FE'a'#0#0#$D8'b'#0));
+  try
+    FRich.LoadFromStream(st, rfText);
+  finally
+    st.Free;
+  end;
+  FRich.SelectAll;
+  AssertEquals('an escaped byte each one replacement', 'a' + fffd + fffd + 'b', FRich.SelText);
+  LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\cellx1500\cellx3000\pard\intbl one\cell\pard\intbl two\cell\row' +
+    '\trowd\clmgf\cellx1500\clmrg\cellx3000\cellx4500\pard\intbl m\cell\pard\intbl\cell' +
+    '\pard\intbl c\cell\row\pard after\par}');
+  t := FRich.Document.Text;
+  AssertEquals('seven paragraphs', 7, t.ParaCount);
+  FRich.SelStart := t.ParaStart(1) + 1;
+  FRich.SelLength := 4;
+  AssertEquals('two cells: the row', 'one'#9'two' + LineEnding, FRich.SelText);
+  FRich.SelStart := 3;
+  FRich.SelLength := t.ParaStart(3) + 1 - 3;
+  AssertEquals('across the table''s top: rows whole, a merged cell its tab',
+    'ore' + LineEnding + 'one'#9'two' + LineEnding + 'm'#9#9'c' + LineEnding, FRich.SelText);
+  FRich.SelStart := t.ParaStart(2) + 1;
+  FRich.SelLength := 2;
+  AssertEquals('inside one cell: its text', 'wo', FRich.SelText);
+  FRich.CopyToClipboard;
+  AssertEquals('the copy''s text is SelText', 'wo', FRich.ClipText);
+end;
+
+{ Nothing selected: a copy puts nothing on the clipboard (it keeps what it had). }
+procedure TTyRichEditControlTest.TestAnEmptySelectionCopiesNothing;
+begin
+  FRich.Lines.Text := 'some text';
+  FRich.SelStart := 3;
+  FRich.CopyToClipboard;
+  FRich.Press(VK_C, [ssCtrl]);
+  AssertEquals('nothing written', 0, FRich.ClipWrites);
+  FRich.SelLength := 2;
+  FRich.Press(VK_C, [ssCtrl]);
+  AssertEquals('Ctrl+C', 1, FRich.ClipWrites);
+  AssertEquals('what was selected', 'e ', FRich.ClipText);
+  FRich.Press(VK_INSERT, [ssCtrl]);
+  AssertEquals('Ctrl+Insert', 2, FRich.ClipWrites);
+end;
+
+{ A copy past the wait threshold shows the wait cursor around it, and puts it back also when
+  the clipboard raises; a smaller one does not. }
+procedure TTyRichEditControlTest.TestAHugeCopyShowsTheWaitCursor;
+var
+  raised: Boolean;
+begin
+  FRich.Lines.Text := 'a text of some twenty characters';
+  FRich.SetCopyWait(10);
+  FRich.SelStart := 0;
+  FRich.SelLength := 3;
+  FRich.CopyToClipboard;
+  AssertEquals('small: no wait', 0, FRich.Waits);
+  FRich.SelLength := 20;
+  FRich.CopyToClipboard;
+  AssertEquals('big: the wait cursor', 1, FRich.Waits);
+  AssertEquals('and back', 1, FRich.WaitEnds);
+  FRich.FailClip := True;
+  raised := False;
+  try
+    FRich.CopyToClipboard;
+  except
+    raised := True;
+  end;
+  AssertTrue('the clipboard raised', raised);
+  AssertEquals('back after a failure too', 2, FRich.WaitEnds);
+end;
+
+{ The menu's states for a viewer: Copy with a selection, Select All with text, the editing
+  items not available; Copy and Select All act; a user's PopupMenu is shown instead. }
+procedure TTyRichEditControlTest.TestTheMenuOfAViewer;
+var
+  acts: ITyTextEditActions;
+  pm: TPopupMenu;
+begin
+  FRich.Lines.Text := 'menu text';
+  acts := FRich as ITyTextEditActions;
+  AssertTrue('read-only', acts.TeIsReadOnly);
+  AssertFalse('no undo', acts.TeCanUndo);
+  AssertFalse('no redo', acts.TeCanRedo);
+  AssertFalse('no paste', acts.TeCanPaste);
+  AssertTrue('text', acts.TeHasText);
+  AssertFalse('no selection', acts.TeHasSelection);
+  acts.TeSelectAll;
+  AssertTrue('Select All', FRich.HasSelection);
+  AssertTrue('a selection', acts.TeHasSelection);
+  acts.TeCopy;
+  AssertEquals('Copy', 'menu text', FRich.ClipText);
+  acts.TeCut;
+  acts.TePaste;
+  acts.TeUndo;
+  AssertEquals('the editing items change nothing', 'menu text', FRich.Lines[0]);
+  AssertTrue('ours when there is none', FRich.PopupAt(5, 5));
+  AssertEquals('shown', 1, FRich.MenuShows);
+  pm := TPopupMenu.Create(nil);
+  try
+    FRich.PopupMenu := pm;
+    AssertFalse('a user''s menu: left to LCL', FRich.PopupAt(5, 5));
+    AssertEquals('ours not shown', 1, FRich.MenuShows);
+    FRich.PopupMenu := nil;
+  finally
+    pm.Free;
+  end;
+  FRich.Lines.Text := '';
+  AssertFalse('no text', acts.TeHasText);
+end;
+
+{ The input method is told the viewer is read-only, where the caret is (while focused) and its
+  index; nothing it sends changes the text. }
+procedure TTyRichEditControlTest.TestTheImeIsToldTheViewerIsReadOnly;
+var
+  ime: ITyImeEditable;
+begin
+  FRich.Lines.Text := 'ime text';
+  FRich.UpdateView;
+  ime := FRich as ITyImeEditable;
+  AssertTrue('read-only', ime.ImeIsReadOnly);
+  AssertTrue('the control', ime.ImeTargetControl = FRich);
+  FRich.SelStart := 2;
+  AssertEquals('the caret''s index', 2, ime.ImeCaretIndex);
+  AssertTrue('not focused: no rectangle', IsRectEmpty(ime.ImeCaretBoundClient));
+  FRich.ForceFocus := True;
+  AssertTrue('focused: the caret''s', EqualRect(FRich.CaretClientRect, ime.ImeCaretBoundClient));
+  ime.ImeSessionBegin;
+  ime.ImeReplace(0, 1, 'x');
+  ime.ImeSessionEnd;
+  AssertEquals('the text as it was', 'ime text', FRich.Lines[0]);
 end;
 
 initialization

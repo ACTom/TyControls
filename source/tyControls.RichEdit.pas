@@ -54,7 +54,7 @@ uses
   Classes, SysUtils, Types, Math, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter, tyControls.Base,
-  tyControls.ScrollBar, tyControls.TextMenu,
+  tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout;
@@ -88,6 +88,8 @@ const
   { Characters on either side of a position that a word is looked for in: a "word" longer
     than this (a line of 100,000 letters) is cut there. }
   CRichWordWindow = 4096;
+  { A copy of more characters than this shows the wait cursor while it is made. }
+  CRichCopyWaitChars = 1000000;
 
 type
   ETyRichEdit = class(Exception);
@@ -156,7 +158,11 @@ type
     Para, LastPara: Integer;
   end;
 
-  TTyCustomRichEdit = class(TTyCustomControl, ITyScrollBarFrameHost)
+  { The viewer. ITyTextEditActions: the package's text menu (Copy, Select All; the editing
+    items answer "not available" while ReadOnly). ITyImeEditable: an input method is told
+    the caret's place and that nothing can be typed (no composition in a viewer). }
+  TTyCustomRichEdit = class(TTyCustomControl, ITyScrollBarFrameHost, ITyTextEditActions,
+    ITyImeEditable)
   private
     FDoc: TTyRichDocument;
     FText: TTyRichText;              // the text the view was made for (a load replaces it)
@@ -263,6 +269,9 @@ type
     FDragTimer: TTimer;
     FLastClickX, FLastClickY, FClickCount: Integer;
     FLastClickTick: QWord;
+    FTextMenu: TTyTextEditMenu;
+    FCopyWaitChars: Int64;
+    FSavedCursor: TCursor;
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -400,6 +409,7 @@ type
     procedure StopDrag;
     procedure StartDragTimer;
     procedure SetScrollXRaster(AValue: Integer);
+    function GetSelText: string;
   protected
     function GetStyleTypeKey: string; override;
     { The parts a descendant may make its own: the document (called once, from the
@@ -501,6 +511,23 @@ type
     function CursorAt(X, Y: Integer): TCursor;
     { OnSelectionChange, when the caret or the anchor moved since it was last raised. }
     procedure DoSelectionChange; virtual;
+    { A copy's two flavours to the clipboard, in one Open .. Close of LCL's Clipboard: the RTF
+      under the platform's name for it (TyRichClipboardRtfName; left out when ARtf is ''),
+      then the text. The seam a test stands in for: no test reaches the system's clipboard. }
+    procedure WriteClipboard(const ARtf: RawByteString; const AText: string); virtual;
+    { What the clipboard holds as RTF and as text ('' for a flavour it does not hold); False
+      when it holds neither. For pasting (editing comes with Task 10). }
+    function ReadClipboard(out ARtf: RawByteString; out AText: string): Boolean; virtual;
+    { Around a copy of more than CopyWaitChars characters: the wait cursor (Screen.Cursor),
+      put back after it whatever happened. }
+    procedure BeginWait; virtual;
+    procedure EndWait; virtual;
+    property CopyWaitChars: Int64 read FCopyWaitChars write FCopyWaitChars;
+    { The default menu at client point APos (TTyTextEditMenu, made the first time); a user's
+      PopupMenu is shown by LCL instead. }
+    procedure ShowTextMenu(const APos: TPoint); virtual;
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    property TextMenu: TTyTextEditMenu read FTextMenu;
     property DragTimer: TTimer read FDragTimer;
     property Dragging: Boolean read FDragging;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -611,6 +638,50 @@ type
     { The caret's rectangle in client pixels (empty when its block is not laid out in the view):
       where it is drawn, what an input method is told. }
     function CaretClientRect: TRect;
+    { The selection as plain text: RangeText(SelStart, SelLength). Read only in this version
+      (replacing the selection is editing, Task 10). }
+    property SelText: string read GetSelText;
+    { Characters [AFrom, AFrom + ALen) as plain text, as a copy puts them on the clipboard: what
+      TyRichCopyRange takes (rows whole once the range reaches past a cell); a paragraph's end
+      and a line break inside one (U+000B) become sLineBreak - the line break the memo's
+      SelText has, CR LF on Windows, LF elsewhere -, an object (U+FFFC) nothing, an escaped
+      byte of a text file (its two characters) one U+FFFD and any other byte that is no text
+      one U+FFFD; the cells of a row are parted by a tab - a cell merged away gives its tab
+      and nothing else - and a row ends with a line break, as Word copies them. }
+    function RangeText(AFrom, ALen: TTyRichPos): string;
+    { The selection to the clipboard as RTF (TyRichSaveRtfRange) and as plain text
+      (RangeText), through WriteClipboard. Nothing selected: nothing is put there (what the
+      clipboard held stays). More than CopyWaitChars characters: the wait cursor meanwhile;
+      the copy runs at once and lets no message in. A range the RTF writer refuses (a
+      changed row holding a nested table) goes as text alone. }
+    procedure CopyToClipboard;
+    { ITyTextEditActions: Copy and Select All; Undo, Redo, Cut and Paste are not available in
+      the viewer (TeIsReadOnly, TeCanUndo False ...). }
+    function TeControl: TControl;
+    function TeController: TTyCustomStyleController;
+    procedure TeUndo;
+    procedure TeRedo;
+    procedure TeCut;
+    procedure TeCopy;
+    procedure TePaste;
+    procedure TeSelectAll;
+    function TeCanUndo: Boolean;
+    function TeCanRedo: Boolean;
+    function TeHasSelection: Boolean;
+    function TeCanPaste: Boolean;
+    function TeHasText: Boolean;
+    function TeIsReadOnly: Boolean;
+    { ITyImeEditable, answered as a read-only control: no composition (the session methods do
+      nothing), the caret's client rectangle while focused, its index - an Integer: a caret
+      past High(Integer) characters is told High(Integer). The control creates no input
+      method handler of its own, so the Cocoa bridge (tyControls.CocoaWS) never drives it. }
+    function ImeTargetControl: TWinControl;
+    function ImeIsReadOnly: Boolean;
+    function ImeCaretBoundClient: TRect;
+    function ImeCaretIndex: Integer;
+    procedure ImeSessionBegin;
+    procedure ImeSessionEnd;
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string);
     property Document: TTyRichDocument read FDoc;
     property Layouter: TTyRichLayouter read FLayouter;
     { The view's top in pixels of the document's heights (measured and estimated). }
@@ -720,11 +791,16 @@ type
     property OnResize;
   end;
 
+{ The name a copy's RTF goes to the clipboard under: Windows' registered "Rich Text Format";
+  on a Mac (LCL's Cocoa clipboard keeps a name it has no mapping of as the pasteboard type
+  itself) the type public.rtf, NSPasteboardTypeRTF's; elsewhere the MIME type text/rtf. }
+function TyRichClipboardRtfName: string;
+
 implementation
 
 uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
-  RTLConsts, tyControls.StrConsts, tyControls.FontUnits, tyControls.PlatformWS,
+  RTLConsts, Clipbrd, tyControls.StrConsts, tyControls.FontUnits, tyControls.PlatformWS,
   tyControls.Animation;
 
 {$IFDEF MSWINDOWS}
@@ -954,6 +1030,7 @@ begin
   FLayouter.FallbackFonts.OnChange := @FallbackListChanged;
   FLines := TTyRichEditLines.Create(Self);
   FCaretShown := True;
+  FCopyWaitChars := CRichCopyWaitChars;
   Cursor := crIBeam;
   AccessibleRole := larTextEditorMultiline;
   Width := 320;
@@ -966,6 +1043,7 @@ begin
   FreeAndNil(FTimer);
   FreeAndNil(FBlinkTimer);
   FreeAndNil(FDragTimer);
+  FreeAndNil(FTextMenu);
   ReleaseBlocks;
   ClearPending;
   ClearFailed;
@@ -2100,6 +2178,426 @@ procedure TTyCustomRichEdit.VisibleChanged;
 begin
   inherited VisibleChanged;
   StopDrag;
+end;
+
+{ ---- copying, the menu, the input method ---- }
+
+function TyRichClipboardRtfName: string;
+begin
+  {$IFDEF MSWINDOWS}
+  Result := 'Rich Text Format';
+  {$ELSE}
+  {$IFDEF LCLCocoa}
+  Result := 'public.rtf';
+  {$ELSE}
+  Result := 'text/rtf';
+  {$ENDIF}
+  {$ENDIF}
+end;
+
+type
+  { A stream that gathers what is written into a string: a copy's RTF of a big range is made
+    once, not once in a stream and again as a string. }
+  TTyRichStringOut = class(TStream)
+  private
+    FData: RawByteString;
+    FSize: Int64;
+  public
+    function Write(const Buffer; Count: LongInt): LongInt; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    function Take: RawByteString;
+  end;
+
+function TTyRichStringOut.Write(const Buffer; Count: LongInt): LongInt;
+var
+  cap: Int64;
+begin
+  if Count <= 0 then Exit(0);
+  if FSize + Count > Length(FData) then
+  begin
+    cap := Length(FData) * 2;
+    if cap < FSize + Count then cap := FSize + Count + 65536;
+    SetLength(FData, cap);
+  end;
+  Move(Buffer, FData[FSize + 1], Count);
+  Inc(FSize, Count);
+  Result := Count;
+end;
+
+function TTyRichStringOut.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  // written front to back: where it is, and its size, are the same
+  Result := FSize;
+end;
+
+function TTyRichStringOut.Take: RawByteString;
+begin
+  SetLength(FData, FSize);
+  Result := FData;
+  FData := '';
+  FSize := 0;
+end;
+
+type
+  { The plain text of a copy, gathered paragraph by paragraph from one walk of the text. }
+  TTyRichTextOut = class
+  public
+    Doc: TTyRichDocument;
+    Range: TTyRichCopyRange;
+    Data: RawByteString;
+    Size: Int64;
+    Prev: TTyRichCell;
+    HavePrev: Boolean;
+    procedure Add(P: PByte; ACount: PtrInt);
+    procedure AddS(const S: RawByteString);
+    procedure EndPrev(ANext: TTyRichCell);
+    procedure Para(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+  end;
+
+procedure TTyRichTextOut.Add(P: PByte; ACount: PtrInt);
+var
+  cap: Int64;
+begin
+  if ACount <= 0 then Exit;
+  if Size + ACount > Length(Data) then
+  begin
+    cap := Length(Data) * 2;
+    if cap < Size + ACount then cap := Size + ACount + 4096;
+    SetLength(Data, cap);
+  end;
+  Move(P^, Data[Size + 1], ACount);
+  Inc(Size, ACount);
+end;
+
+procedure TTyRichTextOut.AddS(const S: RawByteString);
+begin
+  if S <> '' then Add(PByte(@S[1]), Length(S));
+end;
+
+{ The end of the paragraph before, which ANext's paragraph follows: a line break; between two
+  cells of a row a tab for each cell boundary (a cell merged away, or one the model left
+  without a paragraph, gives its tab); after a row's last one a line break. }
+procedure TTyRichTextOut.EndPrev(ANext: TTyRichCell);
+var
+  k: Integer;
+begin
+  if (Prev <> nil) and (ANext <> nil) and (ANext <> Prev) and (ANext.Row = Prev.Row) then
+    for k := Prev.Index + 1 to ANext.Index do AddS(#9)
+  else
+    AddS(sLineBreak);
+end;
+
+procedure TTyRichTextOut.Para(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+  var AContinue: Boolean);
+const
+  Replacement: array[0..2] of Byte = ($EF, $BF, $BD);
+var
+  fmt: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  from, upto, ch: Int64;
+  p, n: PtrInt;
+  b: Byte;
+begin
+  if AIndex > Range.LastPara then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  // the cell from the walk's value (a paragraph not parsed yet: by its index)
+  if not Doc.ReadValue(AData, fmt, runs, cell) then cell := Doc.CellAt(AIndex);
+  if Range.InOneCell then cell := nil;
+  if HavePrev then EndPrev(cell);
+  from := 0;
+  upto := High(Int64);
+  if AIndex = Range.FirstPara then from := Range.FromChar;
+  if AIndex = Range.LastPara then upto := Range.ToChar;
+  p := 0;
+  ch := 0;
+  while (p < ALen) and (ch < upto) do
+  begin
+    b := AText[p];
+    // a character's bytes, as the text storage counts characters
+    n := 1;
+    if b >= $80 then
+      if (b >= $C2) and (b <= $DF) and (p + 1 < ALen) and (AText[p + 1] and $C0 = $80) then n := 2
+      else if (b >= $E0) and (b <= $EF) and (p + 2 < ALen) and (AText[p + 1] and $C0 = $80) and
+        (AText[p + 2] and $C0 = $80) then n := 3
+      else if (b >= $F0) and (b <= $F4) and (p + 3 < ALen) and (AText[p + 1] and $C0 = $80) and
+        (AText[p + 2] and $C0 = $80) and (AText[p + 3] and $C0 = $80) then n := 4;
+    if (n = 1) and (b >= $F8) and (b <= $FB) and (p + 1 < ALen) and (AText[p + 1] and $C0 = $80) then
+    begin
+      // an escaped byte: its two characters are one U+FFFD
+      if ch >= from then Add(@Replacement[0], 3);
+      Inc(p, 2);
+      Inc(ch, 2);
+      Continue;
+    end;
+    if ch >= from then
+      if b = $0B then
+        AddS(sLineBreak)
+      else if (n = 1) and (b >= $80) then
+        Add(@Replacement[0], 3)
+      else if not ((n = 3) and (b = $EF) and (AText[p + 1] = $BF) and (AText[p + 2] = $BC)) then
+        // (U+FFFC, an object, gives nothing)
+        Add(AText + p, n);
+    Inc(p, n);
+    Inc(ch);
+  end;
+  Prev := cell;
+  HavePrev := True;
+end;
+
+function TTyCustomRichEdit.RangeText(AFrom, ALen: TTyRichPos): string;
+var
+  o: TTyRichTextOut;
+  s: RawByteString;
+begin
+  Result := '';
+  o := TTyRichTextOut.Create;
+  try
+    o.Doc := FDoc;
+    o.Range := TyRichCopyRange(FDoc, AFrom, ALen);
+    if o.Range.Empty then Exit;
+    FDoc.BeginRead;
+    try
+      FDoc.Text.WalkParaTexts(o.Range.FirstPara, o.Range.LastPara, @o.Para);
+    finally
+      FDoc.EndRead;
+    end;
+    // the last paragraph's separator, when the range takes it
+    if o.Range.LastSeparator then o.EndPrev(nil);
+    SetLength(o.Data, o.Size);
+    s := o.Data;
+    o.Data := '';
+    SetCodePage(s, CP_UTF8, False);
+    Result := s;
+  finally
+    o.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.GetSelText: string;
+begin
+  Result := RangeText(GetSelStart, GetSelLength);
+end;
+
+procedure TTyCustomRichEdit.CopyToClipboard;
+var
+  s, n: TTyRichPos;
+  rtf: RawByteString;
+  txt: string;
+  st: TTyRichStringOut;
+  wait: Boolean;
+begin
+  // nothing selected: nothing put there, the clipboard keeps what it had
+  if not HasSelection then Exit;
+  s := GetSelStart;
+  n := GetSelLength;
+  wait := n > FCopyWaitChars;
+  if wait then BeginWait;
+  try
+    txt := RangeText(s, n);
+    rtf := '';
+    st := TTyRichStringOut.Create;
+    try
+      try
+        TyRichSaveRtfRange(FDoc, st, s, n);
+        rtf := st.Take;
+      except
+        // a range the RTF writer refuses (a changed row holding a nested table): the text alone
+        on ETyRichRtfWrite do rtf := '';
+      end;
+    finally
+      st.Free;
+    end;
+    WriteClipboard(rtf, txt);
+  finally
+    if wait then EndWait;
+  end;
+end;
+
+procedure TTyCustomRichEdit.WriteClipboard(const ARtf: RawByteString; const AText: string);
+var
+  st: TMemoryStream;
+  s: RawByteString;
+begin
+  st := TMemoryStream.Create;
+  try
+    Clipboard.Open;
+    try
+      Clipboard.Clear;
+      if ARtf <> '' then
+      begin
+        st.WriteBuffer(ARtf[1], Length(ARtf));
+        st.Position := 0;
+        Clipboard.AddFormat(RegisterClipboardFormat(TyRichClipboardRtfName), st);
+      end;
+      // the text as Clipboard.AsText puts it (which would clear the RTF put first)
+      st.Clear;
+      s := AText;
+      if s <> '' then st.WriteBuffer(s[1], Length(s));
+      if ClipboardFormatNeedsNullByte(pcfText) then st.WriteByte(0);
+      st.Position := 0;
+      Clipboard.AddFormat(PredefinedClipboardFormat(pcfText), st);
+    finally
+      Clipboard.Close;
+    end;
+  finally
+    st.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.ReadClipboard(out ARtf: RawByteString; out AText: string): Boolean;
+var
+  fmt: TClipboardFormat;
+  st: TMemoryStream;
+begin
+  ARtf := '';
+  AText := '';
+  fmt := RegisterClipboardFormat(TyRichClipboardRtfName);
+  if Clipboard.HasFormat(fmt) then
+  begin
+    st := TMemoryStream.Create;
+    try
+      if Clipboard.GetFormat(fmt, st) and (st.Size > 0) then
+      begin
+        SetLength(ARtf, st.Size);
+        Move(st.Memory^, ARtf[1], st.Size);
+      end;
+    finally
+      st.Free;
+    end;
+  end;
+  AText := Clipboard.AsText;
+  Result := (ARtf <> '') or (AText <> '');
+end;
+
+procedure TTyCustomRichEdit.BeginWait;
+begin
+  FSavedCursor := Screen.Cursor;
+  Screen.Cursor := crHourGlass;
+end;
+
+procedure TTyCustomRichEdit.EndWait;
+begin
+  Screen.Cursor := FSavedCursor;
+end;
+
+procedure TTyCustomRichEdit.ShowTextMenu(const APos: TPoint);
+begin
+  if FTextMenu = nil then FTextMenu := TTyTextEditMenu.Create(Self);
+  FTextMenu.Popup(APos);
+end;
+
+procedure TTyCustomRichEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+begin
+  // as the memo: OnContextPopup first, then a user's PopupMenu (LCL shows it), else ours
+  inherited DoContextPopup(MousePos, Handled);
+  if Handled or (PopupMenu <> nil) then Exit;
+  ShowTextMenu(MousePos);
+  Handled := True;
+end;
+
+function TTyCustomRichEdit.TeControl: TControl;
+begin
+  Result := Self;
+end;
+
+function TTyCustomRichEdit.TeController: TTyCustomStyleController;
+begin
+  Result := ActiveController;
+end;
+
+procedure TTyCustomRichEdit.TeUndo;
+begin
+  // editing comes with Task 10
+end;
+
+procedure TTyCustomRichEdit.TeRedo;
+begin
+end;
+
+procedure TTyCustomRichEdit.TeCut;
+begin
+end;
+
+procedure TTyCustomRichEdit.TeCopy;
+begin
+  CopyToClipboard;
+end;
+
+procedure TTyCustomRichEdit.TePaste;
+begin
+end;
+
+procedure TTyCustomRichEdit.TeSelectAll;
+begin
+  SelectAll;
+end;
+
+function TTyCustomRichEdit.TeCanUndo: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomRichEdit.TeCanRedo: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomRichEdit.TeHasSelection: Boolean;
+begin
+  Result := HasSelection;
+end;
+
+function TTyCustomRichEdit.TeCanPaste: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomRichEdit.TeHasText: Boolean;
+begin
+  Result := FDoc.Text.Length > 0;
+end;
+
+function TTyCustomRichEdit.TeIsReadOnly: Boolean;
+begin
+  Result := FReadOnly;
+end;
+
+function TTyCustomRichEdit.ImeTargetControl: TWinControl;
+begin
+  Result := Self;
+end;
+
+function TTyCustomRichEdit.ImeIsReadOnly: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomRichEdit.ImeCaretBoundClient: TRect;
+begin
+  if HasCaretFocus then Result := CaretClientRect else Result := Rect(0, 0, 0, 0);
+end;
+
+function TTyCustomRichEdit.ImeCaretIndex: Integer;
+begin
+  if FCaret > High(Integer) then Result := High(Integer) else Result := Integer(FCaret);
+end;
+
+procedure TTyCustomRichEdit.ImeSessionBegin;
+begin
+  // read-only: no composition
+end;
+
+procedure TTyCustomRichEdit.ImeSessionEnd;
+begin
+end;
+
+procedure TTyCustomRichEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
+begin
 end;
 
 { ---- the view: blocks and heights ---- }
@@ -4846,6 +5344,13 @@ begin
   if TyIsShortcutShift(Shift) and (Key = VK_A) then
   begin
     SelectAll;
+    Key := 0;
+    Exit;
+  end;
+  // as the memo: Ctrl+C (Cmd+C), and Ctrl+Insert
+  if (TyIsShortcutShift(Shift) and (Key = VK_C)) or ((Key = VK_INSERT) and (Shift = [ssCtrl])) then
+  begin
+    CopyToClipboard;
     Key := 0;
     Exit;
   end;

@@ -37,12 +37,16 @@ type
     FEditDoc: TTyRichDocument;
     FEditTries, FEditRefused, FHistoryHeld, FSavingSeen: Integer;
     FStopAtEnd: Int64;        // SaveProgress says stop when the stream holds this many bytes
+    // what the range checks met: kept bytes, one cell, rows, list items, objects, a part
+    // (6: refused for a nested table's row)
+    FMet: array[0..6] of Integer;
     function SaveProgress(ADone, ATotal: Int64): Boolean;
     procedure CheckEdit(const AName: string; const ABytes: TBytes; AFull: TTyRichDocument;
       APara: Integer; AKind: TEditKind);
     procedure CheckVerbatim(const AMsg: string; ADoc: TTyRichDocument; const ABytes,
       AOut: TBytes; const AInfo: TTyRtfWriteInfo);
     procedure CheckRichEditReads(const AMsg: string; ADoc: TTyRichDocument);
+    procedure CheckRange(const AMsg: string; ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos);
   published
     // the brief
     procedure TestOpenSaveIsByteIdentical;
@@ -73,6 +77,12 @@ type
     procedure TestASaveInProgressRefusesEdits;
     procedure TestNoProgressCallAfterTheLastByte;
     procedure TestNewFontsTakeNoNumberTheBodyUses;
+    // 9b: a range (a copy's RTF)
+    procedure TestEveryFixturesRangesReadBackAsTheirText;
+    procedure TestARangeWithoutItsSeparatorWritesNoPar;
+    procedure TestRowsAreCopiedWhole;
+    procedure TestAKeptRegionGoesOutAsTheFilesBytes;
+    procedure TestAnEmptyRangeAndADocumentOfOurOwn;
   end;
 
 implementation
@@ -4017,6 +4027,349 @@ begin
   // and so is one in a group the reader passes over (kept as an object of its bytes) - where
   // \fs and \afs are no font numbers
   Check('a passed-over group', '\pard\f0\fs24 {\*\tyunknown {\f12\fs40\afs44 hidden}}after\par ', 13);
+end;
+
+{ ---- 9b: a range, the RTF a copy puts on the clipboard ---- }
+
+function RangeOut(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos;
+  out AInfo: TTyRtfWriteInfo): TBytes;
+var
+  s: TBytesStream;
+begin
+  s := TBytesStream.Create;
+  try
+    TyRichSaveRtfRange(ADoc, s, AFrom, ALen, AInfo);
+    Result := Copy(s.Bytes, 0, s.Size);
+  finally
+    s.Free;
+  end;
+end;
+
+{ '' when B - a range of A written and read back - is that range: its paragraphs' text (the
+  first and last cut where the range cuts them), every character's format and object, the
+  format of every paragraph taken as a paragraph (all but a last one taken without its
+  separator), and the cells of a range that takes rows. }
+function RangeDiff(A: TTyRichDocument; AFrom, ALen: TTyRichPos; B: TTyRichDocument): string;
+var
+  R: TTyRichCopyRange;
+  k, j, i: Integer;
+  c0, c1: TTyRichPos;
+  ta, tb: RawByteString;
+  sa, sb: TCharSpots;
+  ca, cb: TTyRichCell;
+begin
+  R := TyRichCopyRange(A, AFrom, ALen);
+  if R.Empty then
+  begin
+    if B.Text.Length <> 0 then Exit('an empty range read back as text');
+    Exit('');
+  end;
+  if B.Text.ParaCount <> R.LastPara - R.FirstPara + 1 then
+    Exit(Format('%d paragraphs read back, %d taken', [B.Text.ParaCount,
+      R.LastPara - R.FirstPara + 1]));
+  for k := R.FirstPara to R.LastPara do
+  begin
+    j := k - R.FirstPara;
+    c0 := 0;
+    c1 := A.Text.ParaLength(k);
+    if k = R.FirstPara then c0 := R.FromChar;
+    if k = R.LastPara then c1 := R.ToChar;
+    ta := ParaText(A, k);
+    ta := Copy(ta, CharOffset(ta, c0) + 1, CharOffset(ta, c1) - CharOffset(ta, c0));
+    tb := ParaText(B, j);
+    if not SameRaw(ta, tb) then
+      Exit(Format('paragraph %d: text <%s> / <%s>', [k, Shown(ta), Shown(tb)]));
+    if c1 > c0 then
+    begin
+      sa := SpotsOf(A, k);
+      sb := SpotsOf(B, j);
+      for i := c0 to c1 - 1 do
+      begin
+        if not sa[i].Format.Equals(sb[i - c0].Format) then
+          Exit(Format('paragraph %d character %d: %s / %s', [k, i, DescribeChar(sa[i].Format),
+            DescribeChar(sb[i - c0].Format)]));
+        // (by content: a picture of a document of our own is read back with the bytes we wrote)
+        if not SameObject(sa[i].Obj, sb[i - c0].Obj, False) then
+          Exit(Format('paragraph %d character %d: the object', [k, i]));
+      end;
+    end;
+    if (k < R.LastPara) or R.LastWhole then
+      if not A.Formats.ParaFormat(A.ParaFormatOf(k)).Equals(B.Formats.ParaFormat(B.ParaFormatOf(j))) then
+        Exit(Format('paragraph %d: format %s / %s', [k,
+          DescribePara(A.Formats.ParaFormat(A.ParaFormatOf(k))),
+          DescribePara(B.Formats.ParaFormat(B.ParaFormatOf(j)))]));
+    ca := A.CellAt(k);
+    cb := B.CellAt(j);
+    if R.InOneCell then
+    begin
+      if cb <> nil then Exit(Format('paragraph %d: in a table, copied from inside one cell', [k]));
+    end
+    else if (ca = nil) <> (cb = nil) then
+      Exit(Format('paragraph %d: a cell / none', [k]))
+    else if (ca <> nil) and ((ca.Index <> cb.Index) or (ca.Row.CellCount <> cb.Row.CellCount)) then
+      Exit(Format('paragraph %d: cell %d of %d / %d of %d', [k, ca.Index, ca.Row.CellCount,
+        cb.Index, cb.Row.CellCount]));
+  end;
+  Result := '';
+end;
+
+procedure TTyRtfWriteTest.CheckRange(const AMsg: string; ADoc: TTyRichDocument; AFrom,
+  ALen: TTyRichPos);
+var
+  info: TTyRtfWriteInfo;
+  b: TTyRichDocument;
+  d: string;
+  R: TTyRichCopyRange;
+  k: Integer;
+  o: TBytes;
+begin
+  R := TyRichCopyRange(ADoc, AFrom, ALen);
+  try
+    o := RangeOut(ADoc, AFrom, ALen, info);
+    // a document of its own: every group it opens closed (a lenient reader would not tell)
+    if OpenGroups(o) <> 0 then
+      Fail(Format('%s [%d, +%d): %d groups left open', [AMsg, AFrom, ALen, OpenGroups(o)]));
+    b := LoadDoc(o, True);
+  except
+    on E: ETyRichRtfWrite do
+    begin
+      // refused as the full writer refuses it: only for a row holding a nested table
+      if not R.Empty then
+        for k := R.FirstPara to R.LastPara do
+          if (ADoc.CellAt(k) <> nil) and ADoc.CellAt(k).Row.HoldsNestedTable then
+          begin
+            Inc(FMet[6]);
+            Exit;
+          end;
+      raise;
+    end;
+  end;
+  try
+    d := RangeDiff(ADoc, AFrom, ALen, b);
+  finally
+    b.Free;
+  end;
+  if d <> '' then Fail(Format('%s [%d, +%d): %s', [AMsg, AFrom, ALen, d]));
+  // what the ranges met, for the suite to see every case was there
+  if R.Empty then Exit;
+  if info.VerbatimParas > 0 then Inc(FMet[0]);
+  if R.InOneCell then Inc(FMet[1]);
+  if not R.InOneCell and ((ADoc.CellAt(R.FirstPara) <> nil) or (ADoc.CellAt(R.LastPara) <> nil)) then
+    Inc(FMet[2]);
+  for k := R.FirstPara to R.LastPara do
+  begin
+    if ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(k)).List.Kind <> lkNone then Inc(FMet[3]);
+    if PosRaw(Raw(U($FFFC)), ParaText(ADoc, k)) > 0 then Inc(FMet[4]);
+  end;
+  if not R.LastWhole then Inc(FMet[5]);
+end;
+
+{ Every sample, lazily read as the control reads it, unchanged and with one paragraph edited:
+  ranges of it - all of it, all but its ends, a third, inside a paragraph, a paragraph with its
+  separator, across two paragraphs - written and read back are what they took. Among them: a
+  region that goes out as the file's own bytes, ranges inside one cell and across cells and
+  a table's edge (rows whole), list items, objects, a last paragraph without its separator. }
+procedure TTyRtfWriteTest.TestEveryFixturesRangesReadBackAsTheirText;
+var
+  sr: TSearchRec;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  L, ps, pl: TTyRichPos;
+  k, n, files: Integer;
+  name: string;
+
+  procedure Ranges(const AWhat: string);
+  var
+    q: Integer;
+  begin
+    L := t.Length;
+    CheckRange(AWhat + ' all', d, 0, L);
+    CheckRange(AWhat + ' all but its ends', d, 1, L - 2);
+    CheckRange(AWhat + ' a third', d, L div 3, L div 3);
+    n := t.ParaCount;
+    if n > 40 then n := 40;
+    for q := 0 to n - 1 do
+    begin
+      ps := t.ParaStart(q);
+      pl := t.ParaLength(q);
+      if pl >= 3 then CheckRange(Format('%s inside paragraph %d', [AWhat, q]), d, ps + 1, pl - 2);
+      if q < t.ParaCount - 1 then
+      begin
+        CheckRange(Format('%s paragraph %d with its separator', [AWhat, q]), d, ps, pl + 1);
+        CheckRange(Format('%s across %d and %d', [AWhat, q, q + 1]), d, ps + pl div 2,
+          pl - pl div 2 + 1 + t.ParaLength(q + 1) div 2);
+      end;
+    end;
+  end;
+
+begin
+  FillChar(FMet, SizeOf(FMet), 0);
+  files := 0;
+  if FindFirst(FixtureDir + '*.rtf', faAnyFile, sr) = 0 then
+  try
+    repeat
+      name := sr.Name;
+      d := LoadDoc(ReadFileBytes(FixtureDir + name), False);
+      try
+        t := d.Text;
+        Ranges(name);
+        // an edit in the middle: stretches from the model between the file's bytes
+        k := t.ParaCount div 2;
+        if d.Execute(TTyRichInsertText.Create(t.ParaStart(k), 'X')) then Ranges(name + ' edited');
+      finally
+        d.Free;
+      end;
+      Inc(files);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('the samples', files >= 20);
+  AssertTrue('a region of the file''s own bytes', FMet[0] > 0);
+  AssertTrue('inside one cell', FMet[1] > 0);
+  AssertTrue('rows', FMet[2] > 0);
+  AssertTrue('list items', FMet[3] > 0);
+  AssertTrue('objects', FMet[4] > 0);
+  AssertTrue('a last paragraph without its separator', FMet[5] > 0);
+end;
+
+{ A part of a paragraph without its separator goes out with no \par and no paragraph
+  properties (pasted, it joins the paragraph it lands in); with its separator, with both. }
+procedure TTyRtfWriteTest.TestARangeWithoutItsSeparatorWritesNoPar;
+var
+  d: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  o: TBytes;
+  body: RawByteString;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' +
+    '\pard\qc\b bold\b0  text\par\pard plain\par}'), False);
+  try
+    o := RangeOut(d, 0, 4, info);
+    body := StrOf(o, info.HeaderStop, Length(o) - info.HeaderStop);
+    AssertEquals('no \par: ' + Shown(body), 0, PosRaw('\par' + #13#10, body));
+    AssertEquals('no centring: ' + Shown(body), 0, PosRaw('\qc', body));
+    CheckRange('a part', d, 0, 4);
+    o := RangeOut(d, 0, d.Text.ParaLength(0) + 1, info);
+    body := StrOf(o, info.HeaderStop, Length(o) - info.HeaderStop);
+    AssertTrue('with its separator: \par', PosRaw('\par', body) > 0);
+    AssertTrue('and centred', PosRaw('\qc', body) > 0);
+    CheckRange('with its separator', d, 0, d.Text.ParaLength(0) + 1);
+    // the document's last paragraph taken to its end: as a paragraph, no line break after it
+    o := RangeOut(d, d.Text.ParaStart(1), d.Text.ParaLength(1), info);
+    CheckRange('the last paragraph whole', d, d.Text.ParaStart(1), d.Text.ParaLength(1));
+  finally
+    d.Free;
+  end;
+end;
+
+{ A range in one cell is that cell's text, no table; one that reaches into a second cell or past
+  a row's edge takes the rows whole. }
+procedure TTyRtfWriteTest.TestRowsAreCopiedWhole;
+var
+  d, b: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  t: TTyRichText;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\cellx1500\cellx3000\pard\intbl one\cell\pard\intbl two\cell\row' +
+    '\trowd\cellx1500\cellx3000\pard\intbl three\cell\pard\intbl four\cell\row' +
+    '\pard after\par}'), False);
+  try
+    t := d.Text;
+    AssertEquals('six paragraphs', 6, t.ParaCount);
+    // inside "two"
+    b := LoadDoc(RangeOut(d, t.ParaStart(2) + 1, 2, info), True);
+    try
+      AssertEquals('one cell: a paragraph', 1, b.Text.ParaCount);
+      AssertTrue('in no table', b.CellAt(0) = nil);
+      AssertEquals('its text', 'wo', ParaText(b, 0));
+    finally
+      b.Free;
+    end;
+    // from "one" into "two": the first row whole
+    b := LoadDoc(RangeOut(d, t.ParaStart(1) + 1, 4, info), True);
+    try
+      AssertEquals('two cells: the row', 2, b.Text.ParaCount);
+      AssertEquals('its first cell whole', 'one', ParaText(b, 0));
+      AssertTrue('a table', b.CellAt(1) <> nil);
+    finally
+      b.Free;
+    end;
+    // from "before" into "one": that paragraph's part and the row whole
+    b := LoadDoc(RangeOut(d, 3, t.ParaStart(1) - 3 + 1, info), True);
+    try
+      AssertEquals('across the edge: the part and the row', 3, b.Text.ParaCount);
+      AssertEquals('the part', 'ore', ParaText(b, 0));
+      AssertEquals('the row''s last cell', 'two', ParaText(b, 2));
+    finally
+      b.Free;
+    end;
+    CheckRange('inside a cell', d, t.ParaStart(2) + 1, 2);
+    CheckRange('across two cells', d, t.ParaStart(1) + 1, 4);
+    CheckRange('across the table''s top', d, 3, t.ParaStart(1) - 2);
+    CheckRange('across the table''s bottom', d, t.ParaStart(4) + 1, t.ParaStart(5) - t.ParaStart(4) + 1);
+  finally
+    d.Free;
+  end;
+end;
+
+{ All of an unchanged file goes out as its own bytes between its header and the brace; an
+  edited paragraph in the middle is written from the model and the bytes after it go on
+  from the reader's state put back. }
+procedure TTyRtfWriteTest.TestAKeptRegionGoesOutAsTheFilesBytes;
+var
+  d: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  src, o: TBytes;
+  head: Int64;
+begin
+  src := ReadFileBytes(FixtureDir + 'wp-zh-mixed.rtf');
+  d := LoadDoc(src, False);
+  try
+    o := RangeOut(d, 0, d.Text.Length, info);
+    AssertEquals('every paragraph the file''s bytes', d.Text.ParaCount, info.VerbatimParas);
+    AssertEquals('none from the model', 0, info.RewrittenParas);
+    head := TyRichRtfLoadOf(d).Header.Stop;
+    AssertTrue('the file up to its trailer, as it is', CompareMem(@o[0], @src[0],
+      TyRichRtfLoadOf(d).Trailer.Start));
+    AssertTrue('the header', head > 0);
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(1), 'X')));
+    o := RangeOut(d, 0, d.Text.Length, info);
+    AssertEquals('one rewritten', 1, info.RewrittenParas);
+    AssertEquals('the others the file''s', d.Text.ParaCount - 1, info.VerbatimParas);
+    CheckRange('with a rewritten paragraph', d, 0, d.Text.Length);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A document with no file: the header of our own, the range from the model; an empty range is
+  a document with no text. }
+procedure TTyRtfWriteTest.TestAnEmptyRangeAndADocumentOfOurOwn;
+var
+  d, b: TTyRichDocument;
+  info: TTyRtfWriteInfo;
+  t: TTyRichText;
+  k: Integer;
+begin
+  d := BuildOwnDocument;
+  try
+    t := d.Text;
+    CheckRange('ours, all', d, 0, t.Length);
+    CheckRange('ours, inside', d, 1, 3);
+    for k := 0 to t.ParaCount - 2 do
+      CheckRange(Format('ours, across %d and %d', [k, k + 1]), d, t.ParaStart(k) + 1,
+        t.ParaLength(k) + 1);
+    b := LoadDoc(RangeOut(d, 5, 0, info), True);
+    try
+      AssertEquals('empty: no text', Int64(0), b.Text.Length);
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
+  end;
 end;
 
 initialization
