@@ -369,7 +369,9 @@ type
     { Paragraphs AFirst..ALast lose their measured height. }
     procedure UnmeasureParas(AFirst, ALast: Integer);
     { Every paragraph loses its measured height (the width or the zoom changed). Nothing is
-      walked: each node drops its heights when a lookup next enters it. }
+      walked: each node drops its heights when a lookup next enters it. A walk's callback
+      may call it, as the other height calls: no node changes, so the walk's place in the
+      tree stays good, and the walk itself reads no heights. }
     procedure UnmeasureAll;
     function ParaMeasured(AIndex: Integer): Boolean;
     function MeasuredParaCount: Integer;

@@ -47,6 +47,11 @@ type
       var AContinue: Boolean);
     procedure CollectPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
+    procedure HeightsInWalk(AIndex: Integer);
+    procedure HeightsInTextWalk(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+    procedure HeightsInParaWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
     function NextRandom(AMax: Integer): Integer;
     function RandomText(AMaxUnits: Integer): UTF8String;
     procedure ParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
@@ -75,6 +80,7 @@ type
     procedure TestHeightIndexAgainstAReference;
     procedure TestSettingHeightsRecomputesNothing;
     procedure TestUnmeasureAllHoldsThroughAMerge;
+    procedure TestUnmeasureAllFromAWalk;
     procedure TestManyEditsKeepTheTreeConsistent;
     procedure TestDeepTreeStaysConsistent;
     procedure TestSmallInsertsDoNotMakeALeafEach;
@@ -1336,6 +1342,68 @@ begin
   end;
 end;
 
+{ UnmeasureAll changes no node - it moves the text's height epoch on - so a walk's place in
+  the tree stays good when a callback calls it, as with the other height calls: the walk
+  goes on through every paragraph, the nodes it enters afterwards drop their old heights
+  (or keep the ones set since), and the totals count only what was measured after it. }
+procedure TTyRichTextTest.TestUnmeasureAllFromAWalk;
+var
+  t: TTyRichText;
+  hs: array of Int64;
+  i, walk: Integer;
+  what: string;
+begin
+  for walk := 0 to 1 do
+  begin
+    if walk = 0 then what := 'WalkParaTexts' else what := 'WalkParas';
+    // one piece per paragraph, 128 to a leaf; the last paragraph is the empty one after the
+    // last line break
+    t := TTyRichText.CreateFromUtf8(LinesOf(1000));
+    try
+      FWalkText := t;
+      hs := nil;
+      SetLength(hs, t.ParaCount);
+      for i := 0 to High(hs) do hs[i] := 10;
+      t.SetParaHeights(0, hs);
+      t.DefaultParaHeight := 3;
+      AssertEquals(what + ': all measured', 10010, t.TotalHeight);
+      FSeenIndex := nil;
+      FSeenText := nil;
+      if walk = 0 then
+        t.WalkParaTexts(0, t.ParaCount - 1, @HeightsInTextWalk)
+      else
+        t.WalkParas(0, @HeightsInParaWalk);
+      // the walk's own results, after the reset as before it
+      AssertEquals(what + ': every paragraph shown', 1001, System.Length(FSeenIndex));
+      for i := 0 to 1000 do
+      begin
+        AssertEquals(Format('%s: paragraph %d in its place', [what, i]), i, FSeenIndex[i]);
+        if i < 1000 then
+          AssertBytesEqual(Format('%s: paragraph %d''s text', [what, i]), 'ab', FSeenText[i])
+        else
+          AssertBytesEqual(what + ': the last paragraph''s text', '', FSeenText[i]);
+      end;
+      // only the heights set after the reset count
+      AssertEquals(what + ': measured', 6, t.MeasuredParaCount);
+      AssertEquals(what + ': total', 5 + 7 + 60 + 9 + 3 * (1001 - 6), t.TotalHeight);
+      AssertEquals(what + ': behind the walk, set later', 5, t.ParaHeight(100));
+      AssertEquals(what + ': where the walk stood', 7, t.ParaHeight(300));
+      AssertEquals(what + ': its neighbour in that leaf', 3, t.ParaHeight(301));
+      AssertEquals(what + ': before it in that leaf', 3, t.ParaHeight(299));
+      for i := 600 to 602 do
+        AssertEquals(Format('%s: ahead of the walk, %d', [what, i]), 20, t.ParaHeight(i));
+      AssertEquals(what + ': a leaf the walk entered after the reset', 3, t.ParaHeight(700));
+      AssertEquals(what + ': the last', 9, t.ParaHeight(1000));
+      AssertEquals(what + ': top behind the heights ahead', 5 + 7 + 20 + 3 * 598, t.ParaTop(601));
+      AssertEquals(what + ': the paragraph at that row', 601, t.ParaAtHeight(5 + 7 + 20 + 3 * 598));
+      AssertEquals(what + ': integrity', '', t.CheckIntegrity);
+    finally
+      FWalkText := nil;
+      t.Free;
+    end;
+  end;
+end;
+
 procedure TTyRichTextTest.TestManyEditsKeepTheTreeConsistent;
 var
   t: TTyRichText;
@@ -1651,6 +1719,57 @@ begin
     FWalkText.ParaData[AIndex] := AData;
   end;
   if AIndex = FSeenStop then AContinue := False;
+end;
+
+{ For TestUnmeasureAllFromAWalk: notes the paragraph, and at paragraph 300 (in the leaf the
+  walk stands in) resets every height and measures paragraphs here, ahead and behind. }
+procedure TTyRichTextTest.HeightsInWalk(AIndex: Integer);
+var
+  n: Integer;
+begin
+  n := System.Length(FSeenIndex);
+  SetLength(FSeenIndex, n + 1);
+  FSeenIndex[n] := AIndex;
+  case AIndex of
+    300:
+      begin
+        FWalkText.UnmeasureAll;
+        // the leaf the walk stands in, which UnmeasureAll left behind
+        FWalkText.SetParaHeight(300, 7);
+        // a leaf the walk has not entered yet: it must find these heights when it gets there
+        FWalkText.SetParaHeights(600, [20, 20, 20]);
+      end;
+    700:
+      // a leaf behind the walk, which no lookup entered since the reset
+      FWalkText.SetParaHeight(100, 5);
+    1000:
+      // the last paragraph, after the last separator
+      FWalkText.SetParaHeight(1000, 9);
+  end;
+end;
+
+procedure TTyRichTextTest.HeightsInTextWalk(AIndex: Integer; AData: Pointer; AText: PByte;
+  ALen: PtrInt; var AContinue: Boolean);
+var
+  n: Integer;
+begin
+  HeightsInWalk(AIndex);
+  n := System.Length(FSeenText);
+  SetLength(FSeenText, n + 1);
+  FSeenText[n] := '';
+  SetLength(FSeenText[n], ALen);
+  if ALen > 0 then Move(AText^, FSeenText[n][1], ALen);
+end;
+
+procedure TTyRichTextTest.HeightsInParaWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+var
+  n: Integer;
+begin
+  HeightsInWalk(AIndex);
+  n := System.Length(FSeenText);
+  SetLength(FSeenText, n + 1);
+  FSeenText[n] := FWalkText.GetText(FWalkText.ParaStart(AIndex), FWalkText.ParaLength(AIndex));
 end;
 
 { WalkParaTexts is ParaData and GetText of each paragraph, in order: over paragraphs of one
