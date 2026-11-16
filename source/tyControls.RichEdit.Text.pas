@@ -2715,10 +2715,14 @@ end;
 procedure TTyRichText.SetParaHeights(AFirst: Integer; const AHeights: array of Int64);
 var
   i: Integer;
+  last: Int64;
 begin
   CheckPara(AFirst);
   if System.Length(AHeights) = 0 then Exit;
-  CheckPara(AFirst + High(AHeights));
+  // in Int64: an Integer sum (or one cut to Integer for CheckPara) could wrap into range
+  last := Int64(AFirst) + High(AHeights);
+  if last > FTotal.Seps then
+    raise ETyRichText.CreateFmt('Paragraph index %d out of range', [last]);
   // all of them before the first is stored: a refused call changes nothing
   for i := 0 to High(AHeights) do
     if (AHeights[i] < 0) or (AHeights[i] > TyRichMaxParaHeight) then
