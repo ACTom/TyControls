@@ -45,6 +45,7 @@
 | `RaggedRight` | `Boolean`（published, 默认 False） | `MultiLine` 打开时，一行内的页签是否保持自然宽度、行尾留白。**默认 False = 拉伸铺满整行**——这是 LCL 的极性（`TCS_RAGGEDRIGHT` 这个样式位是属性为 **True** 时才设的，不设它 comctl32 才拉伸）。`MultiLine` 关着时无效 |
 | `RowCount` | `Integer`（public, **只读**） | 折出来的行数：无页签时 0，`MultiLine` 关着时恒 1。行数是布局的**结果**不是输入，所以没有 setter；也正因为没有 setter 才不能 published（`TWriter.WriteProperty` 会跳过无 setter 的属性，对象检查器则报"无法读取"） |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
+| `CloseButton` | `TTyTabCloseButton`（published） | 关闭 × 显示在哪些页签上，以及它的颜色、圆角和大小。读写的是本控件 `StyleOverride` 里的 `--tab-close-*` 令牌，自己不存值。见 [`tabset.md` §5「关闭按钮」](tabset.md)。4.0 起 |
 | `MiddleClickClose` | `Boolean`（published, 默认 True） | 鼠标中键点页签即关闭它，与点关闭 × 走同一条路（`OnTabClose` 照样可以否决）。只在 `TabsClosable = True` 时生效；固定的页签不会被中键关掉。见 §6「逐页签状态」 |
 | `OnGetTabState` | `procedure(Sender; AIndex; var AState: TTyTabState)` | 逐个页签提供状态：未保存、预览、固定、提示文字、文字颜色。见 §6「逐页签状态」 |
 | `OnTabPinClick` | `procedure(Sender; AIndex)` | 点了固定页签上的图钉。控件自己什么都不做，要不要取消固定由宿主决定 |

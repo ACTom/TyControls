@@ -460,6 +460,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 3.0.5 以前只有 `--tab-close-size` 和 `TyTabClose` 规则,`--tab-close-size` 只认主题里的值,页签上的关闭符号
 也不认 `--glyph-close`。
 
+4.0 起,`TTyTabSet`、`TTyPageControl`、`TTyRibbon` 有一个 `CloseButton` 属性,在对象检查器里就能改这些令牌
+(`--glyph-tab-close` 除外)。它读写的是控件自己 `StyleOverride` 里的声明,见 `controls/tabset.md` §5。
+
 ---
 
 ## 4. 选择器与样式解析

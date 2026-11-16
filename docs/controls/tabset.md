@@ -71,7 +71,8 @@ uses tyControls.TabSet;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
-| `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。只让当前页签显示、换颜色或换图标，用 `--tab-close-*` 令牌，见 §5「关闭按钮」。 |
+| `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。只让当前页签显示、换颜色或换图标，用 `CloseButton` 属性或 `--tab-close-*` 令牌，见 §5「关闭按钮」。 |
+| `CloseButton` | `TTyTabCloseButton` | 全部跟随主题 | 关闭按钮显示在哪些页签上，以及它的颜色、圆角和大小，在对象检查器里展开来改。读写的是本控件 `StyleOverride` 里的 `--tab-close-*` 令牌，自己不存值。见 §5「关闭按钮」。4.0 起。 |
 | `MiddleClickClose` | `Boolean` | `True` | 鼠标中键点页签即关闭它，走的是关闭 × 的同一条路（`OnTabClose` 照样可以否决）。只在 `TabsClosable = True` 时生效，固定（Pinned）的页签不会被中键关掉。见 §6。 |
 | `Images` | `TCustomImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
 | `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
@@ -221,6 +222,37 @@ Bar.StyleOverride := '--glyph-tab-close: "lucide" "\e084";';
 ```
 
 3.0.5 以前只有 `--tab-close-size` 和 `TyTabClose` 规则，`--tab-close-size` 只认主题里的值，页签上的关闭符号也不认 `--glyph-close`。
+
+#### 在对象检查器里改：`CloseButton`
+
+4.0 起，不想手写 tycss 的话，在对象检查器里展开 `CloseButton` 就行。`TTyTabSet`、`TTyPageControl`、`TTyRibbon` 都有这个属性。
+
+| 子属性 | 类型 | 表示「跟随主题」的值 | 对应的令牌 |
+|--------|------|----------------------|------------|
+| `Visibility` | `tcvTheme` / `tcvAlways` / `tcvActive` / `tcvHover` | `tcvTheme` | `--tab-close-show` |
+| `Color` | `TColor` | `clDefault` | `--tab-close-color` |
+| `Background` | `TColor` | `clDefault` | `--tab-close-background` |
+| `HoverColor` | `TColor` | `clDefault` | `--tab-close-hover-color` |
+| `HoverBackground` | `TColor` | `clDefault` | `--tab-close-hover-background` |
+| `Radius` | `Integer` | `-1` | `--tab-close-radius` |
+| `Size` | `Integer` | `-1` | `--tab-close-size` |
+
+这些属性自己不存值，读写的就是本控件 `StyleOverride` 里对应的那条声明：
+
+```pascal
+Bar.CloseButton.Visibility := tcvActive;   // StyleOverride 里多了一条 --tab-close-show: active;
+Bar.CloseButton.Color := clRed;            // 又多了一条 --tab-close-color: #FF0000;
+Bar.CloseButton.Visibility := tcvTheme;    // --tab-close-show 那条删掉了，回到主题的值
+```
+
+- 属性和 `StyleOverride` 是同一份数据。在 `StyleOverride` 里手写令牌，属性跟着变；改属性，`StyleOverride` 跟着变。`StyleOverride` 里的其他内容原样不动。
+- 窗体文件里只存 `StyleOverride`，不存 `CloseButton`。
+- 属性显示的是本控件自己设的值，不是主题的值。主题里写了 `--tab-close-show: active` 而本控件没写，`Visibility` 仍然是 `tcvTheme`。
+- `tcvAlways` 会写出 `--tab-close-show: always`。主题只让当前页签显示按钮、而这个控件要全部显示时用它。
+- `TColor` 不带透明度。手写的半透明色（`#FF000080`）或 `var(--accent)` 照常生效，属性里看到的是它的不透明色；在属性里换成别的颜色，写进去的就是不透明的 `#RRGGBB`。
+- `clNone` 写成 `transparent`，也就是不画。`clHighlight` 这类系统颜色，按设置那一刻的实际颜色写入。
+- `Radius` 的 `0` 是直角。`Size` 的 `0` 和负数一样，表示跟随主题。
+- 换图标（`--glyph-tab-close`）没有对应的属性，仍然写在 `StyleOverride` 里。
 
 **渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabSet` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 默认用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片，都可以用上面「关闭按钮」的令牌改。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
 

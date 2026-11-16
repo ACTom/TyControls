@@ -477,6 +477,12 @@ Lucide component: a `TTyLucideImageList` or a `TTyLucideIconFont` on a form, or 
 Before 3.0.5 there were only `--tab-close-size` and the `TyTabClose` rule, `--tab-close-size` was
 read from the theme only, and the close mark on tabs did not follow `--glyph-close`.
 
+From 4.0, `TTyTabSet`, `TTyPageControl` and `TTyRibbon` have a `CloseButton` property that sets these
+tokens (all but `--glyph-tab-close`) from the Object Inspector. It reads and writes the declarations in
+the control's own `StyleOverride` and stores nothing itself: `Visibility` (`tcvTheme`, `tcvAlways`,
+`tcvActive`, `tcvHover`), `Color`, `Background`, `HoverColor`, `HoverBackground` (`clDefault` follows the
+theme, `clNone` is `transparent`), `Radius` and `Size` (`-1` follows the theme).
+
 ---
 
 ## 4. Selectors and Style Resolution
