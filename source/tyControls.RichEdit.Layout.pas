@@ -228,7 +228,17 @@ type
     block-relative pixels. Format: the character format (colour, highlight, underline,
     strike-through for the painter). Ascent/Descent: what it needs above and below the
     line's baseline, its shift included. Natural: its measured width (Width less what
-    justification added). }
+    justification added).
+
+    A justified line with no spaces to stretch is stretched between its characters, where a
+    line may break, and keeps its text in few fragments: such a fragment is cut into segments
+    at its break opportunities (StretchGaps > 0) - each segment one string, measured and drawn
+    by itself, the fragment's natural width their sum - and the gap before its k-th break
+    opportunity (k = 1, 2, ...) is the line's Stretch spread over its StretchGaps gaps: the
+    caret, hit tests, selections and painting all put segment k at
+    Stretch * (StretchFirst + k) div StretchGaps - Stretch * StretchFirst div StretchGaps past
+    its natural place, StretchFirst being the gaps of the line before the fragment. Only such
+    lines are drawn a segment (for Chinese, a character) a call. }
   TTyRichFragment = record
     Kind: TTyRichFragKind;
     First: Integer;
@@ -246,6 +256,9 @@ type
     Text: UTF8String;        // rfkObject's display text, rfkReplacement's U+FFFD
     Obj: TTyRichObject;      // rfkObject: a counted reference the layout holds
     Leader: TTyTabLeader;    // rfkTab
+    Stretch: Integer;        // rfkText cut into segments (StretchGaps > 0), see above
+    StretchGaps: Integer;
+    StretchFirst: Integer;
   end;
 
   { One line. First/Count: its characters (block-relative; trailing spaces and a U+000B
@@ -331,10 +344,21 @@ type
     constructor Create(ALayouter: TTyRichLayouter);
     procedure AddRef;
     procedure Release;
-    { The nearest caret place to (AX, AY): a position in [0, CharCount]. }
-    function PosAtPoint(AX, AY: Integer): TTyRichPos; virtual; abstract;
-    { The caret at APos: one pixel wide, as tall as its line. }
-    function CaretRect(APos: TTyRichPos): TRect; virtual; abstract;
+    { The nearest caret place to (AX, AY): a position in [0, CharCount]. AAtLineEnd: the place
+      is the end of a line that wraps inside its paragraph - the point is past that line's
+      end, or on the spaces that hang past it - which is the same position as the start of
+      the line below; the caret belongs at the end of the line the point is on, so pass the
+      flag on to CaretRect with the position. False everywhere else (a line that U+000B ends
+      has its end before the U+000B, a position of its own; a paragraph's end is no line's
+      start). }
+    function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload;
+      virtual; abstract;
+    { The same without the flag: a caret shown at the position goes to the next line's start. }
+    function PosAtPoint(AX, AY: Integer): TTyRichPos; overload;
+    { The caret at APos: one pixel wide, as tall as its line. AAtLineEnd (from PosAtPoint, or
+      kept with a caret the keyboard moved to a line's end): at a position where a wrapped line
+      ends and the next begins, the end of the earlier line; elsewhere it changes nothing. }
+    function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; virtual; abstract;
     { The rectangles that show [AFrom, ATo) selected, one per line it touches; a range that
       takes in the block's last separator (ATo > its last position) gets a mark past the
       end of its last line. }
@@ -401,8 +425,12 @@ type
     function ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
     function SnapToCluster(const F: TTyRichFragment; AChars: Integer): Integer;
     function PrefixWidth(const F: TTyRichFragment; AChars: Integer): Integer;
+    function SegmentStarts(const F: TTyRichFragment; out ABytes: TIntegerDynArray): TIntegerDynArray;
+    function SegmentWidth(const F: TTyRichFragment; const ABytes: TIntegerDynArray;
+      ASeg: Integer): Integer;
     function XInLine(ALine: Integer; APos: Integer): Integer;
     function NearestInFragment(const F: TTyRichFragment; AX: Integer): Integer;
+    function PointInLine(ALine, AX: Integer): Integer;
     function PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
     procedure TakePaintFormats(ADoc: TTyRichDocument);
     function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
@@ -410,15 +438,16 @@ type
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
   public
     destructor Destroy; override;
-    function PosAtPoint(AX, AY: Integer): TTyRichPos; override;
-    function CaretRect(APos: TTyRichPos): TRect; override;
+    function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload; override;
+    function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
-    { The line a position is on (the start of a wrapped line belongs to that line), and the
-      line at a height (above the first: the first; below the last: the last). }
-    function LineOfPos(APos: TTyRichPos): Integer;
+    { The line a position is on (the start of a wrapped line belongs to that line - or, with
+      AAtLineEnd, to the line it ends: see CaretRect), and the line at a height (above the
+      first: the first; below the last: the last). }
+    function LineOfPos(APos: TTyRichPos; AAtLineEnd: Boolean = False): Integer;
     function LineAtY(AY: Integer): Integer;
     { What fragment AIndex draws (its Text for an object or a replacement). }
     function FragmentText(AIndex: Integer): UTF8String;
@@ -499,8 +528,9 @@ type
     function CellAtX(AX: Integer): Integer;
   public
     destructor Destroy; override;
-    function PosAtPoint(AX, AY: Integer): TTyRichPos; override;
-    function CaretRect(APos: TTyRichPos): TRect; override;
+    { A point and a caret pass the line-end flag through to the paragraph they are in. }
+    function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload; override;
+    function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
@@ -911,6 +941,16 @@ function TyRichIsKinsokuNoLineEnd(ACode: Cardinal): Boolean;
 begin
   KinsokuReady;
   Result := InCodes(GNoEnd, ACode);
+end;
+
+{ Whether a line may break between two text clusters whose base characters are APrev and
+  ACur: never before a closing mark or after an opening one (kinsoku), else beside CJK and
+  emoji. The one rule both the line breaker and a fragment cut into segments (a justified
+  line stretched between its characters) apply, so the two always find the same places. }
+function TextBreakBetween(APrev, ACur: Cardinal): Boolean;
+begin
+  Result := not TyRichIsKinsokuNoLineStart(ACur) and not TyRichIsKinsokuNoLineEnd(APrev) and
+    (IsIdeographic(APrev) or IsIdeographic(ACur));
 end;
 
 { The characters of S as the text storage counts them. }
@@ -1561,6 +1601,13 @@ begin
   Result := InstanceSize;
 end;
 
+function TTyBlockLayout.PosAtPoint(AX, AY: Integer): TTyRichPos;
+var
+  atEnd: Boolean;
+begin
+  Result := PosAtPoint(AX, AY, atEnd);
+end;
+
 destructor TTyParaLayout.Destroy;
 var
   i: Integer;
@@ -1650,13 +1697,95 @@ begin
   Result := lastStart;
 end;
 
+{ Where the segments of a fragment cut at its break opportunities (StretchGaps > 0) start, as
+  characters from its first, the fragment's end last (so segment s is [Result[s],
+  Result[s + 1])); ABytes the same as bytes from its ByteStart. A segment starts at a cluster
+  start where TextBreakBetween allows a break - the line breaker's rule for two text
+  characters, which is what made the pieces the line was built of. }
+function TTyParaLayout.SegmentStarts(const F: TTyRichFragment;
+  out ABytes: TIntegerDynArray): TIntegerDynArray;
+var
+  i, k, n, len: Integer;
+  c, prev, base: Cardinal;
+  riOdd, start: Boolean;
+begin
+  Result := nil;
+  ABytes := nil;
+  SetLength(Result, F.Count + 1);
+  SetLength(ABytes, F.Count + 1);
+  n := 0;
+  i := F.ByteStart + 1;
+  prev := 0;
+  base := 0;
+  riOdd := False;
+  for k := 0 to F.Count - 1 do
+  begin
+    len := DecodeAt(FText, i, c);
+    if k = 0 then start := True
+    else start := not (TyRichIsClusterExtend(c) or (prev = $200D) or
+      (IsRegional(c) and IsRegional(prev) and riOdd));
+    if IsRegional(c) then riOdd := start else riOdd := False;
+    if start then
+    begin
+      if (k = 0) or TextBreakBetween(base, c) then
+      begin
+        Result[n] := k;
+        ABytes[n] := i - 1 - F.ByteStart;
+        Inc(n);
+      end;
+      base := c;
+    end;
+    prev := c;
+    Inc(i, len);
+  end;
+  Result[n] := F.Count;
+  ABytes[n] := F.ByteLen;
+  SetLength(Result, n + 1);
+  SetLength(ABytes, n + 1);
+end;
+
+function TTyParaLayout.SegmentWidth(const F: TTyRichFragment; const ABytes: TIntegerDynArray;
+  ASeg: Integer): Integer;
+begin
+  Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1 + ABytes[ASeg],
+    ABytes[ASeg + 1] - ABytes[ASeg]));
+end;
+
+{ What the stretch of a fragment cut into segments adds before its segment ASeg. }
+function StretchBefore(const F: TTyRichFragment; ASeg: Integer): Integer; inline;
+begin
+  if (F.StretchGaps <= 0) or (ASeg <= 0) then Exit(0);
+  Result := Int64(F.Stretch) * (F.StretchFirst + ASeg) div F.StretchGaps -
+    Int64(F.Stretch) * F.StretchFirst div F.StretchGaps;
+end;
+
 function TTyParaLayout.PrefixWidth(const F: TTyRichFragment; AChars: Integer): Integer;
+var
+  starts, bytes: TIntegerDynArray;
+  s: Integer;
 begin
   if AChars <= 0 then Exit(0);
   if AChars >= F.Count then Exit(F.Width);
   case F.Kind of
     rfkText:
-      Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, ByteOfChar(F, AChars)));
+      if F.StretchGaps > 0 then
+      begin
+        // the whole segments before AChars, then a prefix of the one it is in, then the gaps
+        starts := SegmentStarts(F, bytes);
+        Result := 0;
+        s := 0;
+        while starts[s + 1] <= AChars do
+        begin
+          Inc(Result, SegmentWidth(F, bytes, s));
+          Inc(s);
+        end;
+        if AChars > starts[s] then
+          Inc(Result, FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1 + bytes[s],
+            ByteOfChar(F, AChars) - bytes[s])));
+        Inc(Result, StretchBefore(F, s));
+      end
+      else
+        Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, ByteOfChar(F, AChars)));
     rfkSpace:
       if F.Width = F.Natural then
         Result := FLayouter.MeasureText(F.Font, Copy(FText, F.ByteStart + 1, AChars))
@@ -1668,7 +1797,7 @@ begin
   end;
 end;
 
-function TTyParaLayout.LineOfPos(APos: TTyRichPos): Integer;
+function TTyParaLayout.LineOfPos(APos: TTyRichPos; AAtLineEnd: Boolean): Integer;
 var
   lo, hi, mid: Integer;
 begin
@@ -1680,6 +1809,9 @@ begin
     mid := (lo + hi + 1) div 2;
     if FLines[mid].First <= APos then lo := mid else hi := mid - 1;
   end;
+  // the end of the line before, which wrapped here (a U+000B before is a character of its own)
+  if AAtLineEnd and (lo > 0) and (FLines[lo].First = APos) and not FLines[lo - 1].Forced then
+    Dec(lo);
   Result := lo;
 end;
 
@@ -1794,17 +1926,14 @@ begin
   if wh < wl then Result := offs[hi] else Result := offs[lo];
 end;
 
-function TTyParaLayout.PosAtPoint(AX, AY: Integer): TTyRichPos;
+{ The caret place on line ALine nearest to AX. }
+function TTyParaLayout.PointInLine(ALine, AX: Integer): Integer;
 var
-  ln, i, lastPos, x0, x1: Integer;
+  i, x0, x1: Integer;
   f: ^TTyRichFragment;
 begin
-  ln := LineAtY(AY);
-  with FLines[ln] do
+  with FLines[ALine] do
   begin
-    // past the end of a line that U+000B ended: before the U+000B, which is still this
-    // line's; past a wrapped line: where the next line starts
-    lastPos := First + Count - Ord(Forced);
     if FragCount = 0 then Exit(First);
     for i := FirstFrag to FirstFrag + FragCount - 1 do
     begin
@@ -1822,17 +1951,30 @@ begin
       end;
       if AX <= x1 then Exit(f^.First + NearestInFragment(f^, AX));
     end;
-    Result := lastPos;
+    // past the end of a line that U+000B ended: before the U+000B, which is still this
+    // line's; past a wrapped line: its end, which is where the next line starts
+    Result := First + Count - Ord(Forced);
   end;
 end;
 
-function TTyParaLayout.CaretRect(APos: TTyRichPos): TRect;
+function TTyParaLayout.PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
+var
+  ln: Integer;
+begin
+  ln := LineAtY(AY);
+  Result := PointInLine(ln, AX);
+  // the end of a line that wraps is also the next line's start: say which one was meant
+  with FLines[ln] do
+    AAtLineEnd := (ln < FLineCount - 1) and not Forced and (Result = First + Count);
+end;
+
+function TTyParaLayout.CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
 var
   ln, x: Integer;
 begin
   if APos < 0 then APos := 0;
   if APos > FLength then APos := FLength;
-  ln := LineOfPos(APos);
+  ln := LineOfPos(APos, AAtLineEnd);
   x := XInLine(ln, APos);
   Result := Rect(x, FLines[ln].Top, x + 1, FLines[ln].Top + FLines[ln].Height);
 end;
@@ -1937,10 +2079,11 @@ begin
   end;
 end;
 
-function TTyRowLayout.PosAtPoint(AX, AY: Integer): TTyRichPos;
+function TTyRowLayout.PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
 var
   c, k, last: Integer;
 begin
+  AAtLineEnd := False;
   c := CellAtX(AX);
   if c < 0 then Exit(0);
   // the cell's paragraph at AY: above the first, the first; below the last, the last
@@ -1949,10 +2092,11 @@ begin
   while (k < last) and ((FItems[k].Cell <> c) or
     (FItems[k].Y + FItems[k].Layout.Height <= AY)) do
     Inc(k);
-  Result := FItems[k].Pos + FItems[k].Layout.PosAtPoint(AX - FItems[k].X, AY - FItems[k].Y);
+  Result := FItems[k].Pos + FItems[k].Layout.PosAtPoint(AX - FItems[k].X, AY - FItems[k].Y,
+    AAtLineEnd);
 end;
 
-function TTyRowLayout.CaretRect(APos: TTyRichPos): TRect;
+function TTyRowLayout.CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
 var
   k, o: Integer;
 begin
@@ -1968,7 +2112,7 @@ begin
     Result := FItems[k].Layout.CaretRect(FItems[k].Layout.Length);
   end
   else
-    Result := FItems[k].Layout.CaretRect(APos - FItems[k].Pos);
+    Result := FItems[k].Layout.CaretRect(APos - FItems[k].Pos, AAtLineEnd);
   Types.OffsetRect(Result, FItems[k].X, FItems[k].Y);
 end;
 
@@ -2192,7 +2336,7 @@ var
   i, k, n, y0, y1, base, xa, xb, x0, x1, px, th, slack, contentRight, lineY, linePx: Integer;
   hasSel, sel: Boolean;
   parts: TTyInkParts;
-  ink: TBGRAPixel;
+  ink, col: TBGRAPixel;
   drawn: UTF8String;
   box: TRect;
 
@@ -2209,6 +2353,27 @@ var
   function SelectedChars(const F: TTyRichFragment): Boolean;
   begin
     Result := (F.Count > 0) and (F.First >= ASelFrom) and (F.First + F.Count <= ASelTo);
+  end;
+
+  // a fragment cut into segments (a line stretched between its characters): each segment as
+  // it was measured, at its stretched place - where its caret place is - the ones the clip
+  // meets
+  procedure DrawSegments(const F: TTyRichFragment; const AInClip: TRect; AColor: TBGRAPixel);
+  var
+    starts, bytes: TIntegerDynArray;
+    s, x, xs, w: Integer;
+  begin
+    starts := SegmentStarts(F, bytes);
+    x := x0;
+    for s := 0 to High(starts) - 1 do
+    begin
+      w := SegmentWidth(F, bytes, s);
+      xs := x + StretchBefore(F, s);
+      if (xs + w + slack > AInClip.Left) and (xs - slack < AInClip.Right) then
+        FLayouter.Device.DrawText(ATarget, F.Font, xs, base + F.Shift,
+          Copy(FText, F.ByteStart + 1 + bytes[s], bytes[s + 1] - bytes[s]), AColor);
+      Inc(x, w);
+    end;
   end;
 
   // a horizontal line [AL, AR) x [AT, AT + AH) in the fragment's colours, cut at the selection
@@ -2298,10 +2463,11 @@ begin
     for k := 0 to n - 1 do
     begin
       if n > 1 then ATarget.ClipRect := parts[k].Clip;
-      if parts[k].Selected then
-        FLayouter.Device.DrawText(ATarget, f^.Font, x0, base + f^.Shift, drawn, AStyle.SelectionText)
+      if parts[k].Selected then col := AStyle.SelectionText else col := ink;
+      if f^.StretchGaps > 0 then
+        DrawSegments(f^, parts[k].Clip, col)
       else
-        FLayouter.Device.DrawText(ATarget, f^.Font, x0, base + f^.Shift, drawn, ink);
+        FLayouter.Device.DrawText(ATarget, f^.Font, x0, base + f^.Shift, drawn, col);
     end;
     if n > 1 then ATarget.ClipRect := AClip;
   end;
@@ -2453,7 +2619,16 @@ type
     First, Count: Integer;
     Width: Integer;
     X: Integer;
+    Natural: Integer;
+    Stretch, StretchGaps, StretchFirst: Integer;
   end;
+
+  { How a line's pieces are joined into fragments: jmAll - neighbours of one font and format,
+    words and the spaces between them (a line that is not justified); jmWords - text with
+    text only, the spaces apart, for they take a justified line's stretch; jmChars - text with
+    text, measured as the sum of the segments between its break opportunities, for a
+    justified line with no spaces is stretched there. }
+  TJoinMode = (jmAll, jmWords, jmChars);
 
   TParaBuilder = class
   public
@@ -2500,7 +2675,8 @@ type
       out ALeader: TTyTabLeader);
     function FitClusters(APiece, AFrom, AAvail: Integer): Integer;
     function FindLineEnd(AStart: Integer; var AK: Integer; ALeft: Integer): Integer;
-    procedure LayLine(AStart, AEnd, AK: Integer; AJustify: Boolean);
+    procedure LayLine(AStart, AEnd, AK: Integer; AMode: TJoinMode);
+    function SegmentsWidth(AFont: TTyRichFontId; AFrom, ATo: Integer): Integer;
     function PieceAt(AChar, AHint: Integer): Integer;
     procedure EmitLine(AStart, AEnd, AK: Integer; ALeft: Integer; var ATop: Integer;
       AForced, ALast: Boolean; AEmptyFormat: TTyCharFormatId);
@@ -2665,6 +2841,8 @@ begin
     ck := Kind[i];
     cc := Cp[i];
     if pk = ckBreak then b := 1
+    // between two text clusters: the rule a fragment cut into segments applies too
+    else if (pk = ckText) and (ck = ckText) then b := Ord(TextBreakBetween(pc, cc))
     else if ck in [ckSpace, ckBreak, ckTab] then b := 0
     else if (ck = ckText) and TyRichIsKinsokuNoLineStart(cc) then b := 0
     else if (pk = ckText) and TyRichIsKinsokuNoLineEnd(pc) then b := 0
@@ -3021,11 +3199,28 @@ begin
   Result := N;
 end;
 
-{ The items (unpositioned yet) of the line [AStart, AEnd): pieces, cut at the line's ends;
-  unless the line is to be justified, the neighbours of one font and format - words and the
-  spaces between them - joined into one item, measured again as the one string that will be
-  drawn. The spaces after the line's content stay an item of their own: they hang. }
-procedure TParaBuilder.LayLine(AStart, AEnd, AK: Integer; AJustify: Boolean);
+{ The width of [AFrom, ATo) (text of one font) as the segments between its break
+  opportunities, each measured by itself - what a fragment cut into segments draws. }
+function TParaBuilder.SegmentsWidth(AFont: TTyRichFontId; AFrom, ATo: Integer): Integer;
+var
+  c, s: Integer;
+begin
+  Result := 0;
+  s := AFrom;
+  for c := AFrom + 1 to ATo - 1 do
+    if Brk[c] <> 0 then
+    begin
+      Inc(Result, L.MeasureText(AFont, RangeText(s, c)));
+      s := c;
+    end;
+  Inc(Result, L.MeasureText(AFont, RangeText(s, ATo)));
+end;
+
+{ The items (unpositioned yet) of the line [AStart, AEnd): pieces, cut at the line's ends, and
+  neighbours of one font and format joined into one item (AMode says which), measured again
+  as what will be drawn - the one string, or for jmChars its segments. The spaces after the
+  line's content stay an item of their own: they hang. }
+procedure TParaBuilder.LayLine(AStart, AEnd, AK: Integer; AMode: TJoinMode);
 var
   k, a, b, contentEnd: Integer;
   it: ^TItem;
@@ -3045,13 +3240,13 @@ begin
     if b > a then
     begin
       joined := False;
-      if (not AJustify) and (ItemCount > 0) and (p^.Kind in [rfkText, rfkSpace]) and
-        (b <= contentEnd) then
+      if (ItemCount > 0) and (b <= contentEnd) and ((p^.Kind = rfkText) or
+        ((AMode = jmAll) and (p^.Kind = rfkSpace))) then
       begin
         it := @Items[ItemCount - 1];
         q := @Pieces[it^.Piece];
-        if (it^.Kind in [rfkText, rfkSpace]) and (q^.Font = p^.Font) and
-          (q^.Format = p^.Format) and (it^.First + it^.Count = a) and
+        if ((it^.Kind = rfkText) or ((AMode = jmAll) and (it^.Kind = rfkSpace))) and
+          (q^.Font = p^.Font) and (q^.Format = p^.Format) and (it^.First + it^.Count = a) and
           (it^.Count + (b - a) <= CRichMaxPieceChars) then
         begin
           Inc(it^.Count, b - a);
@@ -3071,14 +3266,26 @@ begin
         it^.Count := b - a;
         it^.Width := MeasureRange(k, a, b);
         it^.X := 0;
+        it^.Stretch := 0;
+        it^.StretchGaps := 0;
+        it^.StretchFirst := 0;
       end;
     end;
     Inc(k);
   end;
   for a := 0 to ItemCount - 1 do
+  begin
     if Items[a].Width < 0 then
-      Items[a].Width := L.MeasureText(Pieces[Items[a].Piece].Font,
-        RangeText(Items[a].First, Items[a].First + Items[a].Count));
+    begin
+      if AMode = jmChars then
+        Items[a].Width := SegmentsWidth(Pieces[Items[a].Piece].Font, Items[a].First,
+          Items[a].First + Items[a].Count)
+      else
+        Items[a].Width := L.MeasureText(Pieces[Items[a].Piece].Font,
+          RangeText(Items[a].First, Items[a].First + Items[a].Count));
+    end;
+    Items[a].Natural := Items[a].Width;
+  end;
 end;
 
 { Lays out [AStart, AEnd) as one line at ATop and moves ATop below it. }
@@ -3092,6 +3299,8 @@ var
   ld: TTyTabLeader;
   decFound: Boolean;
   justify: Boolean;
+  mode: TJoinMode;
+  c, j, j0: Integer;
   p: ^TPiece;
   it: ^TItem;
   ln: ^TTyRichLine;
@@ -3121,7 +3330,25 @@ var
 
 begin
   justify := (Pf.Align = paraJustify) and not ALast and not AForced and (RightPx < CUnlimited);
-  if AEnd > AStart then LayLine(AStart, AEnd, PieceAt(AStart, AK), justify)
+  { A justified line is stretched at its spaces after the last tab - then its words stay
+    whole fragments - or, with none there, between its characters, where it may break: then
+    its text is joined into fragments cut into segments. Either way a fragment per word or
+    per run, not per character. }
+  mode := jmAll;
+  if justify then
+  begin
+    k := AEnd;
+    while (k > AStart) and (Kind[k - 1] in [ckSpace, ckBreak]) do Dec(k);
+    mode := jmChars;
+    for i := k - 1 downto AStart do
+      if Kind[i] = ckTab then Break
+      else if Kind[i] = ckSpace then
+      begin
+        mode := jmWords;
+        Break;
+      end;
+  end;
+  if AEnd > AStart then LayLine(AStart, AEnd, PieceAt(AStart, AK), mode)
   else ItemCount := 0;
   leaders := nil;
   SetLength(leaders, ItemCount);
@@ -3175,7 +3402,8 @@ begin
           if Cp[k] = Ord('.') then
           begin
             decFound := True;
-            decW := segW + MeasureRange(it^.Piece, it^.First, k);
+            // the item may be several pieces joined: measured up to the point as one string
+            decW := segW + L.MeasureText(p^.Font, RangeText(it^.First, k));
             Break;
           end;
       Inc(segW, it^.Width);
@@ -3213,6 +3441,7 @@ begin
       // the spaces between the last tab and the content's end take it, by their characters;
       // a line with none (CJK) takes it between its characters, where it may break
       spaces := 0;
+      gaps := 0;
       for i := lastTab + 1 to contentEnd do
         if Items[i].Kind = rfkSpace then Inc(spaces, Items[i].Count);
       done := 0;
@@ -3233,22 +3462,59 @@ begin
       end
       else
       begin
+        { the break opportunities after the last tab: between items, and inside the text
+          items (their segments); the k-th gets extra * k div gaps - extra * (k - 1) div gaps }
         gaps := 0;
-        for i := lastTab + 2 to contentEnd do
-          if Brk[Items[i].First] <> 0 then Inc(gaps);
+        for i := lastTab + 1 to contentEnd do
+        begin
+          if (i >= lastTab + 2) and (Brk[Items[i].First] <> 0) then Inc(gaps);
+          if Items[i].Kind = rfkText then
+            for c := Items[i].First + 1 to Items[i].First + Items[i].Count - 1 do
+              if Brk[c] <> 0 then Inc(gaps);
+        end;
         if gaps > 0 then
-          for i := lastTab + 2 to ItemCount - 1 do
+        begin
+          j := 0;
+          for i := lastTab + 1 to ItemCount - 1 do
           begin
-            if (i <= contentEnd) and (Brk[Items[i].First] <> 0) then
+            it := @Items[i];
+            if i > contentEnd then
             begin
-              Inc(cum);
-              done := Int64(extra) * cum div gaps;
+              Inc(it^.X, extra);
+              Continue;
             end;
-            Inc(Items[i].X, done);
+            if (i >= lastTab + 2) and (Brk[it^.First] <> 0) then Inc(j);
+            j0 := j;
+            Inc(it^.X, Int64(extra) * j div gaps);
+            if it^.Kind = rfkText then
+            begin
+              for c := it^.First + 1 to it^.First + it^.Count - 1 do
+                if Brk[c] <> 0 then Inc(j);
+              if j > j0 then
+              begin
+                it^.Stretch := extra;
+                it^.StretchGaps := gaps;
+                it^.StretchFirst := j0;
+                Inc(it^.Width, Int64(extra) * j div gaps - Int64(extra) * j0 div gaps);
+              end;
+            end;
           end;
+        end;
       end;
+      // the content reaches the right edge now
+      if (spaces > 0) or (gaps > 0) then contentRight := RightPx;
     end;
   end;
+  if mode = jmChars then
+    for i := 0 to ItemCount - 1 do
+      if (Items[i].Kind = rfkText) and (Items[i].StretchGaps = 0) then
+        for c := Items[i].First + 1 to Items[i].First + Items[i].Count - 1 do
+          if Brk[c] <> 0 then
+          begin
+            // measured as its segments: drawn so too, with nothing between them
+            Items[i].StretchGaps := 1;
+            Break;
+          end;
   // metrics
   maxA := 0;
   maxD := 0;
@@ -3314,9 +3580,14 @@ begin
       fr^.Width := it^.Width;
       if it^.Kind = rfkSpace then
         fr^.Natural := MeasureRange(it^.Piece, it^.First, it^.First + it^.Count)
+      else if it^.Kind = rfkText then
+        fr^.Natural := it^.Natural
       else
         fr^.Natural := it^.Width;
       if (it^.Kind = rfkSpace) and not justify then fr^.Natural := fr^.Width;
+      fr^.Stretch := it^.Stretch;
+      fr^.StretchGaps := it^.StretchGaps;
+      fr^.StretchFirst := it^.StretchFirst;
       fr^.Font := p^.Font;
       fr^.Format := p^.Format;
       fr^.Shift := p^.Shift;

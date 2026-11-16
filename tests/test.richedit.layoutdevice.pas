@@ -18,6 +18,7 @@ type
   private
     FRepertoires: specialize TDictionary<string, TObject>;
     FDrawLog: TStringList;
+    FBaseFitCount: Boolean;
   protected
     function DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics; override;
     function DoTextWidth(AFont: TTyRichFontId; const AText: UTF8String): Integer; override;
@@ -38,6 +39,9 @@ type
     class function Advance(ACode: Cardinal; APx: Integer): Integer;
     { "text|x|baseline" per DrawText call. }
     property DrawLog: TStringList read FDrawLog;
+    { True: FitCount is the base device's binary search over TextWidth - the path the real
+      device takes, each probe counted - instead of this device's one counted pass. }
+    property BaseFitCount: Boolean read FBaseFitCount write FBaseFitCount;
   end;
 
 type
@@ -176,6 +180,7 @@ var
   codes: TCardinalDynArray;
   i, px, w: Integer;
 begin
+  if FBaseFitCount then Exit(inherited DoFitCount(AFont, AText, AMaxWidth));
   px := FontPixelHeight(AFont);
   codes := TestCodes(AText);
   CountMeasure(Length(codes));

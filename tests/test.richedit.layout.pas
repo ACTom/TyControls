@@ -106,6 +106,10 @@ type
     procedure TestPaintTabLeadersAndTheMarker;
     procedure TestPaintARowsContentsThenItsLines;
     procedure TestPaintDecodesOnlyThePicturesItDraws;
+    // the review's findings (fix wave W1)
+    procedure TestADecimalTabFindsThePointInALaterPiece;
+    procedure TestAPointAtALineEndGivesACaretThere;
+    procedure TestAJustifiedLineKeepsAFewFragments;
   end;
 
 implementation
@@ -1014,24 +1018,30 @@ begin
   AssertEquals('after it', L.CaretRect(6).Left + 60, L.CaretRect(11).Left);
 end;
 
-{ A paragraph of 100,000 and one of 200,000 characters - words, Chinese, and long words that
-  have to be cut on every line: the measure calls and the characters handed to the device
-  grow with the length (no prefix-by-prefix measuring of long stretches), and what the layout
-  keeps is per line, not per character. }
+{ A paragraph of 50,000 and one of 100,000 characters (both under the cut a paragraph is laid
+  out to, CRichMaxParaLayoutChars) - words, Chinese, and long words that have to be cut on
+  every line: the measure calls and the characters handed to the device grow with the length
+  (no prefix-by-prefix measuring of long stretches), and what the layout keeps is per line, not
+  per character. Left aligned, justified (a justified line keeps a fragment per word, not per
+  character), and left aligned with the base device's own fit - the binary search the real
+  device runs, each probe counted. }
 procedure TTyRichLayoutTest.TestALongParagraphLaysOutInLinearCalls;
 var
   calls, chars, mem: array[0..1] of Int64;
   lines: array[0..1] of Integer;
-  k, i, n: Integer;
+  k, i, n, mode: Integer;
   s: UTF8String;
   d: TTyRichDocument;
   lo: TTyRichLayouter;
   L: TTyParaLayout;
   cp: Int64;
+  pf: TTyParaFormat;
 begin
+  for mode := 0 to 2 do
+  begin
   for k := 0 to 1 do
   begin
-    n := 100000 * (k + 1);
+    n := 50000 * (k + 1);
     s := '';
     cp := 0;
     i := 0;
@@ -1055,17 +1065,25 @@ begin
       Inc(i);
     end;
     d := NewDoc(s);
+    if mode = 1 then
+    begin
+      pf := TyDefaultParaFormat;
+      pf.Align := paraJustify;
+      SetPara(d, 0, [pffAlign], pf);
+    end;
     lo := NewLayouter;
     try
+      TTyRichTestDevice(lo.Device).BaseFitCount := mode = 2;
       L := lo.LayoutPara(d, 0, 400, 96, 1);
       try
         calls[k] := TTyRichTestDevice(lo.Device).MeasureCalls;
         chars[k] := TTyRichTestDevice(lo.Device).MeasuredChars;
         mem[k] := L.MemSize;
         lines[k] := L.LineCount;
-        AssertTrue(Format('%d: measured %d characters in %d calls, %d lines, keeps %d bytes',
-          [cp, chars[k], calls[k], lines[k], mem[k]]),
-          (chars[k] <= 20 * cp) and (calls[k] <= cp div 2) and (mem[k] <= 16 * cp));
+        AssertTrue(Format('mode %d, %d: measured %d characters in %d calls, %d lines, keeps %d bytes',
+          [mode, cp, chars[k], calls[k], lines[k], mem[k]]),
+          ((mode = 2) or (chars[k] <= 20 * cp)) and (chars[k] <= 100 * cp) and
+          (calls[k] <= cp div 2) and (mem[k] <= 16 * cp));
       finally
         L.Release;
       end;
@@ -1073,10 +1091,13 @@ begin
       lo.Free;
     end;
   end;
-  AssertTrue(Format('calls %d then %d', [calls[0], calls[1]]), calls[1] <= 2 * calls[0] + 100);
-  AssertTrue(Format('characters %d then %d', [chars[0], chars[1]]),
+  AssertTrue(Format('mode %d: calls %d then %d', [mode, calls[0], calls[1]]),
+    calls[1] <= 2 * calls[0] + 100);
+  AssertTrue(Format('mode %d: characters %d then %d', [mode, chars[0], chars[1]]),
     chars[1] <= 2 * chars[0] + 10000);
-  AssertTrue(Format('kept %d then %d', [mem[0], mem[1]]), mem[1] <= 2 * mem[0] + 65536);
+  AssertTrue(Format('mode %d: kept %d then %d', [mode, mem[0], mem[1]]),
+    mem[1] <= 2 * mem[0] + 65536);
+  end;
 end;
 
 { At most CLayoutCacheParas layouts, the least recently used going first; and at most
@@ -2725,6 +2746,252 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ ---- the review's findings (fix wave W1) ---- }
+
+{ A decimal tab puts the point at its stop also when the point is not in the number's first
+  piece: after a space ("1 234.5", a thousands separator) and after a break opportunity
+  ("中12.5"). The line's merged fragment is measured up to the point as one string. }
+procedure TTyRichLayoutTest.TestADecimalTabFindsThePointInALaterPiece;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+  i: Integer;
+begin
+  d := NewDoc('a'#9'1 234.5'#10'a'#9'中12.5'#10'a'#9'12.5');
+  pf := TyDefaultParaFormat;
+  SetLength(pf.Tabs, 1);
+  pf.Tabs[0].Position := 2880;
+  pf.Tabs[0].Align := ttaDecimal;
+  pf.Tabs[0].Leader := ttlNone;
+  for i := 0 to 2 do SetPara(d, i, [pffTabs], pf);
+  // "1 234" is 45 px: the text starts 45 px left of the stop (192 px)
+  L := Lay(d, 0, 400);
+  AssertEquals('a space before the point: where the text starts', 147, FragAt(L, 2).X);
+  AssertEquals('the point at the stop', 192, L.CaretRect(7).Left);
+  // "中12" is 40 px
+  L := Lay(d, 1, 400);
+  AssertEquals('the point in a later piece: where the text starts', 152, FragAt(L, 2).X);
+  AssertEquals('its point at the stop', 192, L.CaretRect(5).Left);
+  L := Lay(d, 2, 400);
+  AssertEquals('one piece: the point at the stop', 192, L.CaretRect(4).Left);
+end;
+
+{ A point on a line, handed to PosAtPoint, gives a position and a flag whose caret is on that
+  line, at the caret place nearest the point - every pixel across every line, past their ends
+  included: wrapped Latin, wrapped Chinese (the place after a line's last character is one),
+  justified lines of both, lines that U+000B ends (no flag there: the U+000B is a character)
+  and the paragraph's end; the flag is set exactly at the end of a wrapped line. A row passes
+  it through to its cell's paragraph. }
+procedure TTyRichLayoutTest.TestAPointAtALineEndGivesACaretThere;
+var
+  d, td: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+  t: TTyRichTable;
+  row: TTyRowLayout;
+  para, ln, x, y, p, q, best, places, lastPos: Integer;
+  atEnd: Boolean;
+  r: TRect;
+  xs: array of Integer;
+  s: UTF8String;
+begin
+  s := '';
+  for p := 1 to 30 do s := s + U($4E00 + Cardinal(p));
+  d := NewDoc('hello world foo bar baz qux'#10'中文中文中文中文'#10 +
+    'The quick 中文字 brown fox jumps over the lazy dog again and again'#10 + s + #10 +
+    'ab'#11'cd'#11'ef'#10'hello   world   x');
+  pf := TyDefaultParaFormat;
+  pf.Align := paraJustify;
+  SetPara(d, 2, [pffAlign], pf);
+  SetPara(d, 3, [pffAlign], pf);
+  // the review's two cases
+  L := Lay(d, 0, 120);
+  q := L.PosAtPoint(119, 5, atEnd);
+  AssertEquals('past "hello world ": its end', 12, q);
+  AssertTrue('at the line''s end', atEnd);
+  r := L.CaretRect(q, atEnd);
+  AssertEquals('the caret on the first line', 0, r.Top);
+  AssertEquals('after its space', 110, r.Left);
+  AssertEquals('without the flag: the next line''s start', 20, L.CaretRect(q).Top);
+  L := Lay(d, 1, 70);
+  q := L.PosAtPoint(55, 5, atEnd);
+  AssertEquals('the right half of the third character: after it', 3, q);
+  AssertTrue('the end of the first line', atEnd);
+  r := L.CaretRect(q, atEnd);
+  AssertEquals('shown there', 0, r.Top);
+  AssertEquals('after the character', 60, r.Left);
+  for para := 0 to 5 do
+  begin
+    case para of
+      0: L := Lay(d, 0, 120);
+      1: L := Lay(d, 1, 70);
+      2: L := Lay(d, 2, 150);
+      3: L := Lay(d, 3, 150);
+      4: L := Lay(d, 4, 1000);
+    else
+      L := Lay(d, 5, 60);
+    end;
+    AssertTrue(Format('paragraph %d has lines', [para]), (para = 4) or (L.LineCount > 1));
+    for ln := 0 to L.LineCount - 1 do
+    begin
+      // the line's caret places, its end with the flag (a wrapped line) or before its U+000B
+      lastPos := L.Lines[ln].First + L.Lines[ln].Count - Ord(L.Lines[ln].Forced);
+      places := lastPos - L.Lines[ln].First + 1;
+      SetLength(xs, places);
+      for p := 0 to places - 1 do
+      begin
+        r := L.CaretRect(L.Lines[ln].First + p, (p = places - 1) and not L.Lines[ln].Forced);
+        AssertEquals(Format('paragraph %d line %d: place %d is on it', [para, ln, p]),
+          L.Lines[ln].Top, r.Top);
+        xs[p] := r.Left;
+      end;
+      y := L.Lines[ln].Top + L.Lines[ln].Height div 2;
+      for x := L.Lines[ln].Left - 5 to Max(L.Lines[ln].EndX, L.LayoutWidth) + 10 do
+      begin
+        q := L.PosAtPoint(x, y, atEnd);
+        r := L.CaretRect(q, atEnd);
+        AssertEquals(Format('paragraph %d line %d x %d: the caret on the line (position %d)',
+          [para, ln, x, q]), L.Lines[ln].Top, r.Top);
+        best := MaxInt;
+        for p := 0 to places - 1 do best := Min(best, Abs(xs[p] - x));
+        AssertTrue(Format('paragraph %d line %d x %d: caret at %d, a place %d away',
+          [para, ln, x, r.Left, best]), Abs(r.Left - x) <= best + 1);
+        AssertEquals(Format('paragraph %d line %d x %d: the flag', [para, ln, x]),
+          (ln < L.LineCount - 1) and not L.Lines[ln].Forced and
+          (q = L.Lines[ln].First + L.Lines[ln].Count), atEnd);
+      end;
+    end;
+  end;
+  // after a U+000B the next line's start is no other line's end: the flag changes nothing
+  L := Lay(d, 4, 1000);
+  AssertEquals('after the U+000B, flag or not', 20, L.CaretRect(3, True).Top);
+  AssertEquals('the paragraph''s end, flag or not', L.CaretRect(8).Left, L.CaretRect(8, True).Left);
+  // a row: the flag goes to the cell's paragraph and back
+  td := NewTableDoc('a'#10'long long long long'#10'c1'#10'c2');
+  t := TTyRichTable.Create([1440, 2880, 4320]);
+  t.AddRow(3);
+  TDocAccess(td).MarkTable(0, t, [1, 1, 2]).Free;
+  row := TTyRowLayout(Block(td, 0, 1000));
+  q := row.PosAtPoint(103 + 70, 6, atEnd);
+  AssertEquals('past cell 1''s first line', 7, q);
+  AssertTrue('its end', atEnd);
+  AssertEquals('the caret on that line', row.CaretRect(2).Top, row.CaretRect(q, atEnd).Top);
+  AssertTrue('without the flag: the line below', row.CaretRect(q).Top > row.CaretRect(2).Top);
+end;
+
+{ A justified paragraph of 20,000 ideographs keeps a fragment a line, not one a character:
+  the stretch between the characters is the fragment's (an advance added at each break
+  opportunity), and caret places, hit tests and painting all apply it - each character drawn
+  where its caret place is. A justified line with spaces keeps a fragment per word: the
+  spaces take the stretch, the Chinese between them is one fragment. }
+procedure TTyRichLayoutTest.TestAJustifiedLineKeepsAFewFragments;
+var
+  d, d2: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+  s: UTF8String;
+  i, k, ln: Integer;
+  r: TRect;
+  bmp: TBGRABitmap;
+  parts: TStringList;
+begin
+  s := '';
+  for i := 0 to 19999 do s := s + U($4E00 + Cardinal(i mod 2000));
+  s := s + #10;
+  for i := 0 to 199 do s := s + 'word 中文字中文 ';
+  d := NewDoc(s);
+  pf := TyDefaultParaFormat;
+  pf.Align := paraJustify;
+  SetPara(d, 0, [pffAlign], pf);
+  SetPara(d, 1, [pffAlign], pf);
+  // 810 px: forty ideographs a line (800 px), 10 px over the 39 gaps
+  L := Lay(d, 0, 810);
+  AssertEquals('lines', 500, L.LineCount);
+  AssertTrue(Format('%d fragments for %d lines', [L.FragmentCount, L.LineCount]),
+    L.FragmentCount <= L.LineCount);
+  AssertTrue(Format('%d bytes kept for 20000 characters', [L.MemSize]), L.MemSize <= 16 * 20000);
+  for ln := 0 to L.LineCount - 2 do
+    AssertEquals(Format('line %d ends at the edge', [ln]), 810, L.Lines[ln].EndX);
+  AssertEquals('the last line is not stretched', 800, L.Lines[L.LineCount - 1].EndX);
+  // the gaps: 10 px spread over 39 the way the line spreads them
+  for k := 0 to 39 do
+  begin
+    AssertEquals(Format('caret %d', [k]), 20 * k + 10 * k div 39, L.CaretRect(k).Left);
+    AssertEquals(Format('caret %d of line 7', [k]), 20 * k + 10 * k div 39,
+      L.CaretRect(280 + k).Left);
+  end;
+  for k := 0 to 120 do
+  begin
+    r := L.CaretRect(k);
+    AssertEquals(Format('point to position %d', [k]), k,
+      L.PosAtPoint((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+  end;
+  // painted: each character where its caret place is
+  bmp := TBGRABitmap.Create(820, 60, Sentinel);
+  parts := TStringList.Create;
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 820, 40), TyRichDefaultPaintStyle, 0, 0);
+    AssertEquals('two lines, a call a character', 80, FDevice.DrawLog.Count);
+    for k := 0 to 79 do
+    begin
+      parts.Delimiter := '|';
+      parts.StrictDelimiter := True;
+      parts.DelimitedText := FDevice.DrawLog[k];
+      AssertEquals(Format('draw %d: one character', [k]), U($4E00 + Cardinal(k)), parts[0]);
+      AssertEquals(Format('draw %d: at its caret place', [k]), L.CaretRect(k).Left,
+        StrToInt(parts[1]));
+    end;
+  finally
+    parts.Free;
+    bmp.Free;
+  end;
+  // Latin inside a line stretched between characters: "ab" is one segment (no break between
+  // two letters), drawn as one string where its caret place is
+  d2 := NewDoc('中文ab中文ab中文ab中文ab中文ab中文ab中文ab中文ab');
+  SetPara(d2, 0, [pffAlign], pf);
+  L := Lay(d2, 0, 150);
+  AssertTrue('wrapped', L.LineCount > 1);
+  AssertEquals('one fragment on the first line', 1, L.Lines[0].FragCount);
+  AssertEquals('it reaches the edge', 150, L.Lines[0].EndX);
+  bmp := TBGRABitmap.Create(160, 30, Sentinel);
+  parts := TStringList.Create;
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 160, 20), TyRichDefaultPaintStyle, 0, 0);
+    parts.Delimiter := '|';
+    parts.StrictDelimiter := True;
+    k := 0;
+    for i := 0 to FDevice.DrawLog.Count - 1 do
+    begin
+      parts.DelimitedText := FDevice.DrawLog[i];
+      AssertEquals(Format('draw %d at its caret place', [i]), L.CaretRect(k).Left, StrToInt(parts[1]));
+      if parts[0] = 'ab' then Inc(k, 2)
+      else
+      begin
+        AssertEquals(Format('draw %d: a character or "ab"', [i]), 3, Length(parts[0]));
+        Inc(k);
+      end;
+    end;
+    AssertEquals('the first line drawn', L.Lines[0].Count, k);
+  finally
+    parts.Free;
+    bmp.Free;
+  end;
+  for k := 0 to L.Lines[0].Count - 1 do
+    AssertTrue(Format('caret %d before %d', [k, k + 1]),
+      L.CaretRect(k).Left < L.CaretRect(k + 1, True).Left);
+  // spaces on every line: a fragment a word, a space, a run of Chinese
+  L := Lay(d, 1, 400);
+  AssertTrue(Format('%d fragments for 200 groups on %d lines', [L.FragmentCount, L.LineCount]),
+    L.FragmentCount <= 4 * 200 + 2 * L.LineCount);
+  // the content (the spaces that hang past it left out) reaches the edge
+  for ln := 0 to L.LineCount - 2 do
+    AssertEquals(Format('mixed line %d ends at the edge', [ln]), 400,
+      L.Lines[ln].Left + L.Lines[ln].ContentWidth);
 end;
 
 initialization
