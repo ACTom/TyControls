@@ -66,6 +66,15 @@ const
   CRichNoWrap = 0;
   { The box of a picture whose size is not known, in pixels at 96 PPI and zoom 1. }
   CRichDefaultObjectPx = 32;
+  { A list item's number is its place among the items before it, found by looking back; the
+    look goes back at most this many paragraphs. An item further down a longer list is
+    numbered as if the list started at the cap (its number is too small) - the price of never
+    reading thousands of paragraphs, which a document that parses on demand would parse, to
+    show one screen. }
+  CRichListWalkParas = 4096;
+  { Numbers found are remembered (so scrolling down a list costs one step per item) up to this
+    many paragraphs; past it they are forgotten all at once. }
+  CRichListOrdinalCache = 65536;
 
   { Line-breaking rules (kinsoku), after the common practice of JIS X 4051 and GB/T 15834:
     the characters a line must not start with (closing brackets and quotes, sentence and
@@ -271,6 +280,9 @@ type
     FZoom: Single;
     FCharCount: Integer;
     FStale: Boolean;
+    { It shows a list number, which depends on the paragraphs before it: a change of
+      paragraphs or formats above it drops it too. }
+    FNumbered: Boolean;
   public
     constructor Create(ALayouter: TTyRichLayouter);
     procedure AddRef;
@@ -303,11 +315,21 @@ type
   end;
 
   { One paragraph laid out. Positions are characters from the paragraph's start; the
-    paragraph's end (Length) is a caret place at the end of its last line. }
+    paragraph's end (Length) is a caret place at the end of its last line.
+
+    A list paragraph has a marker (HasMarker): its bullet or number, which layout makes - it
+    is not in the text. It sits in the first line, on that line's baseline, at the first
+    line's indent, as WordPad puts it: the text then starts at the left indent when the
+    marker ends before it, else at the next tab stop after the marker. It is in the first
+    run's font and size, has no characters (First and Count 0) and is not one of the line's
+    fragments, so the caret, hit tests and selections never meet it. }
   TTyParaLayout = class(TTyBlockLayout)
   private
     FText: RawByteString;
     FLength: Integer;
+    FHasMarker: Boolean;
+    FMarker: TTyRichFragment;
+    FInCell: Boolean;
     FLines: array of TTyRichLine;
     FLineCount: Integer;
     FFrags: array of TTyRichFragment;
@@ -342,6 +364,9 @@ type
     property Length: Integer read FLength;
     property SpaceBefore: Integer read FSpaceBefore;
     property SpaceAfter: Integer read FSpaceAfter;
+    property HasMarker: Boolean read FHasMarker;
+    { Text, Font, Format, X, Width, Ascent, Descent; drawn on Lines[0].Baseline. }
+    property Marker: TTyRichFragment read FMarker;
   end;
 
   { A character the font in effect has no glyph for: name a font for it in AFontName (left
@@ -352,6 +377,13 @@ type
   TTyRichFormatFont = record
     Font: TTyRichFontId;
     Shift: Integer;
+  end;
+
+  { A list item's number, remembered with the kind and level it was counted for. }
+  TTyRichListOrdinal = record
+    Kind: TTyListKind;
+    Level: Integer;
+    Number: Int64;
   end;
 
   TTyRichLayouter = class
@@ -377,6 +409,16 @@ type
     FFontZoom: Single;
     FFontName: string;
     FFontSize: Integer;
+    // list numbers: by paragraph index; the list format of each paragraph format id
+    FOrdinals: specialize TDictionary<Integer, TTyRichListOrdinal>;
+    FListOfFormat: specialize TDictionary<Integer, TTyListFormat>;
+    FListWalkSteps: Int64;
+    FWalkData: array of Pointer;
+    FWalkFirst, FWalkLast: Integer;
+    procedure WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    function ListOfFormat(ADoc: TTyRichDocument; AFormat: TTyParaFormatId): TTyListFormat;
+    procedure DropNumbersFrom(AFirst: Integer);
     procedure SetBaseFontName(const AValue: string);
     procedure SetBaseFontSizeHalfPt(AValue: Integer);
     procedure FallbackFontsChanged(Sender: TObject);
@@ -393,6 +435,15 @@ type
     function FormatFont(AFormat: TTyCharFormatId; APPI: Integer; AZoom: Single): TTyRichFormatFont;
     function GlyphIn(AFont: TTyRichFontId; ACode: Cardinal): Boolean;
     function FallbackFor(AFont: TTyRichFontId; ACode: Cardinal): TTyRichFontId;
+    { The number list item AIndex (in AList, its own list format) shows: its place among the
+      consecutive items of its level and kind before it - an item of a deeper level is passed
+      over; a shallower one, another kind on the level or a paragraph that is no list item
+      ends the list - counted from the StartAt of the list's first item. Looks back at most
+      CRichListWalkParas paragraphs (see there), inside one read scope, each paragraph's
+      value read without a parse when it is parsed already; remembers what it found. 0 for
+      a bullet or no list. }
+    function ListNumber(ADoc: TTyRichDocument; AIndex: Integer;
+      const AList: TTyListFormat): Int64;
   public
     constructor Create(ADevice: TTyRichTextDevice; AOwnsDevice: Boolean = True);
     destructor Destroy; override;
@@ -434,6 +485,8 @@ type
     property CacheMisses: Int64 read FMisses;
     function CachedCount: Integer;
     property CachedChars: Int64 read FCachedChars;
+    { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
+    property ListWalkSteps: Int64 read FListWalkSteps;
   end;
 
 { The width LayoutPara takes for a wrap mode: rwmWindow AAvailWidth (at least 1), rwmPage
@@ -450,6 +503,11 @@ function TyRichIsKinsokuNoLineEnd(ACode: Cardinal): Boolean;
 function TyRichIsClusterExtend(ACode: Cardinal): Boolean;
 { The platform's fallback candidates (the plan's lists). }
 procedure TyRichDefaultFallbackFonts(AList: TStrings);
+{ What a list item's marker reads: a bullet by level (U+2022, U+25E6, U+25AA, over again from
+  level 3), or ANumber followed by a full stop - 1, 2, 3; a, b, ... z, aa, ab (letters go on
+  in base 26 with no zero); i, ii, ... (roman up to 3999). A number the kind cannot write
+  (below 1, or past 3999 in roman) is written in digits. '' for no list. }
+function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int64): UTF8String;
 
 implementation
 
@@ -710,6 +768,52 @@ begin
   else
     Result := CRichNoWrap;
   end;
+end;
+
+{ ---- list markers ---- }
+
+function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int64): UTF8String;
+const
+  // U+2022, U+25E6, U+25AA in UTF-8 (the library keeps no non-ASCII literal in source/)
+  Bullets: array[0..2] of UTF8String = (#$E2#$80#$A2, #$E2#$97#$A6, #$E2#$96#$AA);
+  RomanValue: array[0..12] of Integer = (1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1);
+  RomanText: array[0..12] of string = ('m', 'cm', 'd', 'cd', 'c', 'xc', 'l', 'xl', 'x', 'ix',
+    'v', 'iv', 'i');
+var
+  n: QWord;
+  i: Integer;
+  s: string;
+begin
+  case AKind of
+    lkNone: Exit('');
+    lkBullet: Exit(Bullets[Abs(ALevel) mod 3]);
+  end;
+  s := '';
+  if (ANumber >= 1) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
+  begin
+    // base 26 with no zero: 26 is z, 27 aa - at most 14 letters for the largest Int64
+    n := QWord(ANumber);
+    while n > 0 do
+    begin
+      Dec(n);
+      s := Chr(Ord('a') + Integer(n mod 26)) + s;
+      n := n div 26;
+    end;
+  end
+  else if (ANumber >= 1) and (ANumber <= 3999) and (AKind in [lkLowerRoman, lkUpperRoman]) then
+  begin
+    n := QWord(ANumber);
+    for i := 0 to High(RomanValue) do
+      while n >= QWord(RomanValue[i]) do
+      begin
+        s := s + RomanText[i];
+        Dec(n, RomanValue[i]);
+      end;
+  end
+  else
+    s := IntToStr(ANumber);
+  if AKind in [lkUpperAlpha, lkUpperRoman] then s := UpperCase(s);
+  Result := s + '.';
 end;
 
 { ---- the device ---- }
@@ -1615,7 +1719,9 @@ type
     TabAlign: array of TTyTabAlign;
     TabLeader: array of TTyTabLeader;
     DefTab: Integer;
+    ListNumber: Int64;
     function Px(ATwips: Integer): Integer;
+    function MakeMarker: Integer;
     procedure Decode(const AText: RawByteString; AExpected: Integer);
     procedure MapRuns;
     procedure FindClusters;
@@ -2462,9 +2568,57 @@ begin
   Inc(ATop, h);
 end;
 
+{ A list paragraph's marker, put in Layout.FMarker; returns where the first line's text
+  starts. The marker goes where WordPad (RichEdit) puts it - at the first line's indent - and
+  is followed by what RichEdit's own tab after it does: to the left indent when that is
+  further right, else to the next tab stop. In the first run's font (its size included, a
+  super- or subscript's shift not), a missing bullet glyph from the fallback fonts. }
+function TParaBuilder.MakeMarker: Integer;
+var
+  fmt: TTyCharFormatId;
+  f: TTyRichFontId;
+  m: TTyRichFontMetrics;
+  xEnd, stop: Integer;
+  al: TTyTabAlign;
+  ld: TTyTabLeader;
+  code: Cardinal;
+  mk: ^TTyRichFragment;
+begin
+  Result := Max(0, LeftPx + FirstPx);
+  if Pf.List.Kind = lkNone then Exit;
+  if System.Length(Runs) > 0 then fmt := Runs[0].Format else fmt := 0;
+  f := L.FormatFont(fmt, PPI, Zoom).Font;
+  mk := @Layout.FMarker;
+  mk^.Kind := rfkText;
+  mk^.First := 0;
+  mk^.Count := 0;
+  mk^.Text := TyRichListMarkerText(Pf.List.Kind, Pf.List.Level, ListNumber);
+  DecodeAt(mk^.Text, 1, code);
+  if not L.GlyphIn(f, code) then f := L.FallbackFor(f, code);
+  mk^.Font := f;
+  mk^.Format := fmt;
+  mk^.Shift := 0;
+  m := Dev.Metrics(f);
+  mk^.Ascent := m.Ascent;
+  mk^.Descent := m.Descent;
+  mk^.X := Result;
+  mk^.Width := L.MeasureText(f, mk^.Text);
+  mk^.Natural := mk^.Width;
+  mk^.ByteStart := 0;
+  mk^.ByteLen := 0;
+  mk^.Obj := nil;
+  mk^.Leader := ttlNone;
+  Layout.FHasMarker := True;
+  Layout.FNumbered := not (Pf.List.Kind in [lkNone, lkBullet]);
+  xEnd := mk^.X + mk^.Width;
+  if xEnd < LeftPx then Exit(LeftPx);
+  NextStop(xEnd, stop, al, ld);
+  Result := stop;
+end;
+
 procedure TParaBuilder.Run;
 var
-  s, e, k, top, left: Integer;
+  s, e, k, top, left, firstLeft: Integer;
   i, k0: Integer;
   tabs: TTyTabStops;
   ta: TTyTabAlign;
@@ -2502,6 +2656,7 @@ begin
   FindBreaks;
   ResolveFonts;
   MakePieces;
+  firstLeft := MakeMarker;
   if System.Length(Runs) > 0 then emptyFmt := Runs[0].Format else emptyFmt := 0;
   Layout.FSpaceBefore := Max(0, Px(Pf.SpaceBefore));
   Layout.FSpaceAfter := Max(0, Px(Pf.SpaceAfter));
@@ -2509,11 +2664,11 @@ begin
   s := 0;
   k := 0;
   if N = 0 then
-    EmitLine(0, 0, 0, Max(0, LeftPx + FirstPx), top, False, True, emptyFmt)
+    EmitLine(0, 0, 0, firstLeft, top, False, True, emptyFmt)
   else
     while s < N do
     begin
-      if s = 0 then left := Max(0, LeftPx + FirstPx) else left := LeftPx;
+      if s = 0 then left := firstLeft else left := LeftPx;
       k0 := k;
       e := FindLineEnd(s, k, left);
       if e <= s then e := ClusterEnd(s);
@@ -2544,12 +2699,16 @@ begin
   FGlyphs := specialize TDictionary<Int64, Boolean>.Create;
   FFallback := specialize TDictionary<Int64, Integer>.Create;
   FFormatFonts := specialize TDictionary<Integer, TTyRichFormatFont>.Create;
+  FOrdinals := specialize TDictionary<Integer, TTyRichListOrdinal>.Create;
+  FListOfFormat := specialize TDictionary<Integer, TTyListFormat>.Create;
   FFontPPI := -1;
 end;
 
 destructor TTyRichLayouter.Destroy;
 begin
   Clear;
+  FListOfFormat.Free;
+  FOrdinals.Free;
   FFormatFonts.Free;
   FFallback.Free;
   FGlyphs.Free;
@@ -2644,7 +2803,27 @@ begin
   FGlyphs.Clear;
   FFallback.Clear;
   FFormatFonts.Clear;
+  FOrdinals.Clear;
+  FListOfFormat.Clear;
   FFontPPI := -1;
+end;
+
+procedure TTyRichLayouter.DropNumbersFrom(AFirst: Integer);
+var
+  gone: array of Integer;
+  k, n, i: Integer;
+begin
+  if FOrdinals.Count = 0 then Exit;
+  gone := nil;
+  SetLength(gone, FOrdinals.Count);
+  n := 0;
+  for k in FOrdinals.Keys do
+    if k >= AFirst then
+    begin
+      gone[n] := k;
+      Inc(n);
+    end;
+  for i := 0 to n - 1 do FOrdinals.Remove(gone[i]);
 end;
 
 procedure TTyRichLayouter.Invalidate(AFirst, ACount: Integer);
@@ -2652,11 +2831,15 @@ var
   L, nx: TTyBlockLayout;
 begin
   if ACount <= 0 then Exit;
+  // the numbers from here on may count differently now
+  DropNumbersFrom(AFirst);
   L := FLruFirst;
   while L <> nil do
   begin
     nx := L.FLruNext;
-    if (L.FLastPara >= AFirst) and (L.FFirstPara < AFirst + ACount) then CacheDrop(L, True);
+    if ((L.FLastPara >= AFirst) and (L.FFirstPara < AFirst + ACount)) or
+      (L.FNumbered and (L.FFirstPara >= AFirst)) then
+      CacheDrop(L, True);
     L := nx;
   end;
 end;
@@ -2667,10 +2850,15 @@ var
   first, oldEnd, delta: Integer;
   moved: array of TTyBlockLayout;
   n, i: Integer;
+  numbering: Boolean;
 begin
   first := AChange.FirstPara;
   oldEnd := first + Max(AChange.OldParaCount, 1);
   delta := AChange.NewParaCount - AChange.OldParaCount;
+  { Paragraphs that came or went, or a format that changed, may change the number of every
+    list item after them; typing inside paragraphs does not. }
+  numbering := (AChange.Kinds * [rckStructure, rckFormat] <> []) or (delta <> 0);
+  if numbering then DropNumbersFrom(first);
   moved := nil;
   n := 0;
   L := FLruFirst;
@@ -2678,6 +2866,8 @@ begin
   begin
     nx := L.FLruNext;
     if (L.FLastPara >= first) and (L.FFirstPara < oldEnd) then
+      CacheDrop(L, True)
+    else if (L.FFirstPara >= oldEnd) and numbering and L.FNumbered then
       CacheDrop(L, True)
     else if (L.FFirstPara >= oldEnd) and (delta <> 0) then
     begin
@@ -2783,6 +2973,107 @@ begin
   FFallback.Add(key, Result);
 end;
 
+procedure TTyRichLayouter.WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+begin
+  FWalkData[AIndex - FWalkFirst] := AData;
+  AContinue := AIndex < FWalkLast;
+end;
+
+function TTyRichLayouter.ListOfFormat(ADoc: TTyRichDocument;
+  AFormat: TTyParaFormatId): TTyListFormat;
+begin
+  if FListOfFormat.TryGetValue(AFormat, Result) then Exit;
+  Result := ADoc.Formats.ParaFormat(AFormat).List;
+  FListOfFormat.Add(AFormat, Result);
+end;
+
+function TTyRichLayouter.ListNumber(ADoc: TTyRichDocument; AIndex: Integer;
+  const AList: TTyListFormat): Int64;
+var
+  found: array of Integer;
+  nFound, j, lo, k, chunk, i: Integer;
+  startAt: Int64;
+  e: TTyRichListOrdinal;
+  lf: TTyListFormat;
+  fmt: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  done, known: Boolean;
+begin
+  if AList.Kind in [lkNone, lkBullet] then Exit(0);
+  if FOrdinals.TryGetValue(AIndex, e) and (e.Kind = AList.Kind) and (e.Level = AList.Level) then
+    Exit(e.Number);
+  found := nil;
+  SetLength(found, 16);
+  found[0] := AIndex;
+  nFound := 1;
+  startAt := AList.StartAt;
+  known := False;
+  Result := 0;
+  done := False;
+  j := AIndex - 1;
+  chunk := 16;
+  ADoc.BeginRead;
+  try
+    { Back in chunks, each read in one walk of the text (one descent, not a lookup per
+      paragraph), growing so that a long list costs a few walks and a short one reads little
+      past its start. }
+    while (not done) and (j >= 0) do
+    begin
+      lo := Max(Max(0, j - chunk + 1), AIndex - CRichListWalkParas);
+      if lo > j then Break;   // the cap
+      FWalkFirst := lo;
+      FWalkLast := j;
+      SetLength(FWalkData, j - lo + 1);
+      ADoc.Text.WalkParas(lo, @WalkCollect);
+      for k := j downto lo do
+      begin
+        Inc(FListWalkSteps);
+        // the value as it is when it is parsed; a paragraph not parsed yet is read (parsed)
+        if not ADoc.ReadValue(FWalkData[k - lo], fmt, runs, cell) then
+          fmt := ADoc.ParaFormatOf(k);
+        lf := ListOfFormat(ADoc, fmt);
+        if (lf.Kind = lkNone) or (lf.Level < AList.Level) then
+        begin
+          done := True;
+          Break;
+        end;
+        if lf.Level > AList.Level then Continue;
+        if lf.Kind <> AList.Kind then
+        begin
+          done := True;
+          Break;
+        end;
+        if FOrdinals.TryGetValue(k, e) and (e.Kind = lf.Kind) and (e.Level = lf.Level) then
+        begin
+          Result := e.Number + nFound;
+          known := True;
+          done := True;
+          Break;
+        end;
+        if nFound = System.Length(found) then SetLength(found, nFound * 2);
+        found[nFound] := k;
+        Inc(nFound);
+        startAt := lf.StartAt;
+      end;
+      j := lo - 1;
+      chunk := chunk * 2;
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+  if not known then Result := startAt + nFound - 1;
+  if FOrdinals.Count + nFound > CRichListOrdinalCache then FOrdinals.Clear;
+  e.Kind := AList.Kind;
+  e.Level := AList.Level;
+  for i := 0 to nFound - 1 do
+  begin
+    e.Number := Result - i;
+    FOrdinals.AddOrSetValue(found[i], e);
+  end;
+end;
+
 function TTyRichLayouter.MeasureText(AFont: TTyRichFontId; const AText: UTF8String): Integer;
 var
   key: string;
@@ -2833,6 +3124,9 @@ begin
         references to the objects before that }
       b.Runs := ADoc.RunsOf(AIndex);
       b.Pf := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(AIndex));
+      Result.FInCell := ADoc.CellAt(AIndex) <> nil;
+      // a number reads the paragraphs before this one (in this read scope)
+      b.ListNumber := ListNumber(ADoc, AIndex, b.Pf.List);
       t := ADoc.Text;
       start := t.ParaStart(AIndex);
       len := t.ParaLength(AIndex);

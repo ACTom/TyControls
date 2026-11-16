@@ -35,6 +35,7 @@ type
       var AFontName: string);
     function NewDoc(const AText: UTF8String): TTyRichDocument;
     function NewLayouter: TTyRichLayouter;
+    function LoadFixture(const AName: string): TTyRichDocument;
     function Lay(ADoc: TTyRichDocument; AIndex, AWidth: Integer; AZoom: Single = 1): TTyParaLayout;
     procedure SetPara(ADoc: TTyRichDocument; AIndex: Integer; AMask: TTyParaFormatMask;
       const AValue: TTyParaFormat);
@@ -74,6 +75,11 @@ type
     procedure TestSuperscriptShiftsWithoutGrowingTheLineMoreThanItNeeds;
     procedure TestObjectsAreBoxes;
     procedure TestSelectionRectsCoverTheRangeLineByLine;
+    // 8b: list markers
+    procedure TestListMarkersAreLaidOutAheadOfTheFirstLine;
+    procedure TestListNumbersCountTheItemsOfOneLevel;
+    procedure TestAlphaAndRomanNumbersPastTheirRanges;
+    procedure TestTheNumberingWalkIsCappedAndRemembered;
   end;
 
 implementation
@@ -93,6 +99,55 @@ type
 class function TBuilderAccess.Value(ADoc: TTyRichDocument; AIndex: Integer): Pointer;
 begin
   Result := ParagraphValue(ADoc, AIndex);
+end;
+
+type
+  { Parses on demand: every paragraph it is asked for becomes a list item in ParaFmt; counts
+    what it was asked (a read that had to parse). }
+  TListLoader = class(TTyRichParaLoader)
+  public
+    Calls: Integer;
+    ParaFmt: TTyParaFormatId;
+    CharFmt: TTyCharFormatId;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+procedure TListLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+var
+  runs: TTyRunArray;
+begin
+  Inc(Calls);
+  runs := nil;
+  SetLength(runs, 1);
+  runs[0].Start := 0;
+  runs[0].Format := CharFmt;
+  runs[0].Obj := nil;
+  SetParagraph(ADoc, AIndex, ParaFmt, runs);
+end;
+
+function FixtureBytes(const AName: string): TBytes;
+var
+  f: TFileStream;
+begin
+  Result := nil;
+  f := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+    'fixtures' + PathDelim + 'rtf' + PathDelim + AName, fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, f.Size);
+    if f.Size > 0 then f.ReadBuffer(Result[0], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+
+function ListFormat(AKind: TTyListKind; ALevel, AStartAt: Integer): TTyParaFormat;
+begin
+  Result := TyDefaultParaFormat;
+  Result.List.Kind := AKind;
+  Result.List.Level := ALevel;
+  Result.List.StartAt := AStartAt;
+  Result.LeftIndent := 720;
+  Result.FirstIndent := -360;
 end;
 
 function ByteArray(const A: array of Byte): TBytes;
@@ -190,6 +245,20 @@ function TTyRichLayoutTest.NewDoc(const AText: UTF8String): TTyRichDocument;
 begin
   Result := TTyRichDocument.CreateFromUtf8(BytesOf(AText));
   FDocs.Add(Result);
+end;
+
+function TTyRichLayoutTest.LoadFixture(const AName: string): TTyRichDocument;
+var
+  st: TBytesStream;
+begin
+  Result := TTyRichDocument.Create;
+  FDocs.Add(Result);
+  st := TBytesStream.Create(FixtureBytes(AName));
+  try
+    TyRichLoadRtf(Result, st);
+  finally
+    st.Free;
+  end;
 end;
 
 function TTyRichLayoutTest.NewLayouter: TTyRichLayouter;
@@ -1338,6 +1407,234 @@ begin
   AssertEquals('one line', 1, Length(r));
   AssertTrue('the separator''s mark', r[0].Right > 30);
   AssertEquals('nothing selected', 0, Length(L.SelectionRects(5, 5)));
+end;
+
+{ ---- 8b: list markers ---- }
+
+{ A list paragraph gets a marker the layout makes - not in the text, no position - as WordPad
+  places it: at the first line's indent (left 720 + first -360 twips = 24 px), the text at the
+  left indent (48 px) when the marker ends before it, else at the next tab stop after the
+  marker. In the first run's font; a bullet per level. }
+procedure TTyRichLayoutTest.TestListMarkersAreLaidOutAheadOfTheFirstLine;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+  f: TTyCharFormat;
+  m: TTyRichFragment;
+begin
+  d := NewDoc('one'#10'two'#10'three'#10'four four four four four four'#10'five'#10'six');
+  SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 0, 0));
+  SetPara(d, 1, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 1, 0));
+  SetPara(d, 2, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 5));
+  pf := ListFormat(lkDecimal, 0, 5);
+  pf.FirstIndent := -150;
+  SetPara(d, 3, [pffList, pffLeftIndent, pffFirstIndent], pf);
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := 60;
+  SetChar(d, d.Text.ParaStart(4), 4, [cffSize], f);
+  SetPara(d, 4, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 0, 0));
+  L := Lay(d, 0, 1000);
+  AssertTrue('a marker', L.HasMarker);
+  m := L.Marker;
+  AssertEquals('a bullet', U($2022), m.Text);
+  AssertEquals('at the first line''s indent', 24, m.X);
+  AssertEquals('its width', 10, m.Width);
+  AssertEquals('no characters', 0, m.Count);
+  AssertEquals('the text at the left indent', 48, L.CaretRect(0).Left);
+  AssertEquals('the line starts there', 48, L.Lines[0].Left);
+  AssertEquals('a click on the marker: the first position', 0, L.PosAtPoint(28, 5));
+  AssertEquals('the text is the text', 'one', L.Text);
+  AssertEquals('three characters and the separator', 4, L.CharCount);
+  AssertEquals('the base font', 20, FDevice.FontPixelHeight(m.Font));
+  L := Lay(d, 1, 1000);
+  AssertEquals('level 1: a white bullet', U($25E6), L.Marker.Text);
+  // a number that does not fit before the left indent: the text goes to the next tab stop
+  L := Lay(d, 2, 1000);
+  AssertEquals('a number from StartAt', '5.', L.Marker.Text);
+  AssertEquals('it fits', 48, L.CaretRect(0).Left);
+  L := Lay(d, 3, 100);
+  AssertEquals('the next item', '6.', L.Marker.Text);
+  AssertEquals('at 720 - 150 twips', 38, L.Marker.X);
+  AssertEquals('ends at 58, past the indent: the default stop at 96', 96, L.CaretRect(0).Left);
+  AssertTrue('wrapped', L.LineCount >= 2);
+  AssertEquals('the second line at the left indent', 48, L.Lines[1].Left);
+  L := Lay(d, 4, 1000);
+  AssertEquals('the first run''s size', 40, FDevice.FontPixelHeight(L.Marker.Font));
+  L := Lay(d, 5, 1000);
+  AssertFalse('no list, no marker', L.HasMarker);
+  AssertEquals('no marker: the text at the indent', 0, L.CaretRect(0).Left);
+  // WordPad's own lists (\fi-360\li720, 12 pt): bullets and 1. 2. 3., the text at 48 px
+  d := LoadFixture('wp-zh-list.rtf');
+  L := Lay(d, 2, 1000);
+  AssertEquals('WordPad''s bullet', U($2022), L.Marker.Text);
+  AssertEquals('its place', 24, L.Marker.X);
+  AssertEquals('WordPad''s text', 48, L.CaretRect(0).Left);
+  AssertEquals('in the run''s 12 points', 16, FDevice.FontPixelHeight(L.Marker.Font));
+  AssertEquals('WordPad''s second number', '2.', Lay(d, 6, 1000).Marker.Text);
+  AssertEquals('and third', '3.', Lay(d, 7, 1000).Marker.Text);
+  AssertEquals('the first', '1.', Lay(d, 5, 1000).Marker.Text);
+  AssertFalse('the paragraph after the list', Lay(d, 8, 1000).HasMarker);
+end;
+
+{ The number is the paragraph's place among the consecutive items of its level and kind: a
+  deeper level in between is passed over, a shallower one, another kind on the level or a
+  plain paragraph ends the list; StartAt of the list's first item starts it. Laid out last to
+  first, so that no number comes from one remembered before. }
+procedure TTyRichLayoutTest.TestListNumbersCountTheItemsOfOneLevel;
+const
+  Want: array[0..16] of string = ('', '1.', '2.', 'a.', 'b.', '3.', 'i.', 'I.', '', '1.',
+    'C.', 'D.', '1.', '1.', '2.', '2.', '1.');
+var
+  d: TTyRichDocument;
+  s: UTF8String;
+  i: Integer;
+  L: TTyParaLayout;
+
+  procedure Item(AIndex: Integer; AKind: TTyListKind; ALevel, AStart: Integer);
+  begin
+    SetPara(d, AIndex, [pffList, pffLeftIndent, pffFirstIndent],
+      ListFormat(AKind, ALevel, AStart));
+  end;
+
+begin
+  s := '';
+  for i := 0 to 16 do s := s + 'p' + IntToStr(i) + #10;
+  d := NewDoc(s);
+  Item(1, lkDecimal, 0, 1);
+  Item(2, lkDecimal, 0, 1);
+  Item(3, lkLowerAlpha, 1, 1);
+  Item(4, lkLowerAlpha, 1, 1);
+  Item(5, lkDecimal, 0, 1);
+  Item(6, lkLowerRoman, 1, 1);
+  Item(7, lkUpperRoman, 0, 1);
+  Item(9, lkDecimal, 0, 1);
+  Item(10, lkUpperAlpha, 0, 3);
+  Item(11, lkUpperAlpha, 0, 9);
+  // one kind on two levels: the outer item ends the inner list, the inner ones are passed
+  Item(12, lkDecimal, 0, 1);
+  Item(13, lkDecimal, 1, 1);
+  Item(14, lkDecimal, 1, 1);
+  Item(15, lkDecimal, 0, 1);
+  Item(16, lkDecimal, 1, 1);
+  for i := 16 downto 0 do
+  begin
+    L := Lay(d, i, 1000);
+    if Want[i] = '' then
+      AssertFalse(Format('%d: no marker', [i]), L.HasMarker)
+    else
+      AssertEquals(Format('%d', [i]), Want[i], L.Marker.Text);
+  end;
+  FLayouter.Clear;
+  for i := 0 to 16 do
+  begin
+    L := Lay(d, i, 1000);
+    if Want[i] <> '' then AssertEquals(Format('%d, first to last', [i]), Want[i], L.Marker.Text);
+  end;
+end;
+
+{ Letters go on past z as aa, ab, ... (bijective base 26), roman numerals stop at 3999 and
+  a number past them, or one below 1, is written as a decimal; nothing loops or raises,
+  whatever the number. }
+procedure TTyRichLayoutTest.TestAlphaAndRomanNumbersPastTheirRanges;
+var
+  s: UTF8String;
+  i: Integer;
+begin
+  AssertEquals('a.', TyRichListMarkerText(lkLowerAlpha, 0, 1));
+  AssertEquals('z.', TyRichListMarkerText(lkLowerAlpha, 0, 26));
+  AssertEquals('aa.', TyRichListMarkerText(lkLowerAlpha, 0, 27));
+  AssertEquals('ab.', TyRichListMarkerText(lkLowerAlpha, 0, 28));
+  AssertEquals('az.', TyRichListMarkerText(lkLowerAlpha, 0, 52));
+  AssertEquals('ba.', TyRichListMarkerText(lkLowerAlpha, 0, 53));
+  AssertEquals('zz.', TyRichListMarkerText(lkLowerAlpha, 0, 702));
+  AssertEquals('aaa.', TyRichListMarkerText(lkLowerAlpha, 0, 703));
+  AssertEquals('AB.', TyRichListMarkerText(lkUpperAlpha, 0, 28));
+  AssertEquals('alpha 0', '0.', TyRichListMarkerText(lkLowerAlpha, 0, 0));
+  s := TyRichListMarkerText(lkUpperAlpha, 0, High(Int64));
+  AssertTrue('the largest: ' + s, (Length(s) >= 2) and (Length(s) <= 15));
+  for i := 1 to Length(s) - 1 do AssertTrue('letters', s[i] in ['A'..'Z']);
+  AssertEquals('i.', TyRichListMarkerText(lkLowerRoman, 0, 1));
+  AssertEquals('iv.', TyRichListMarkerText(lkLowerRoman, 0, 4));
+  AssertEquals('ix.', TyRichListMarkerText(lkLowerRoman, 0, 9));
+  AssertEquals('xiv.', TyRichListMarkerText(lkLowerRoman, 0, 14));
+  AssertEquals('xl.', TyRichListMarkerText(lkLowerRoman, 0, 40));
+  AssertEquals('xc.', TyRichListMarkerText(lkLowerRoman, 0, 90));
+  AssertEquals('cd.', TyRichListMarkerText(lkLowerRoman, 0, 400));
+  AssertEquals('mcmxciv.', TyRichListMarkerText(lkLowerRoman, 0, 1994));
+  AssertEquals('MMMCMXCIX.', TyRichListMarkerText(lkUpperRoman, 0, 3999));
+  AssertEquals('4000.', TyRichListMarkerText(lkUpperRoman, 0, 4000));
+  AssertEquals('roman 0', '0.', TyRichListMarkerText(lkLowerRoman, 0, 0));
+  AssertEquals('-2.', TyRichListMarkerText(lkLowerRoman, 0, -2));
+  AssertEquals('9223372036854775807.', TyRichListMarkerText(lkUpperRoman, 0, High(Int64)));
+  AssertEquals('-5.', TyRichListMarkerText(lkDecimal, 0, -5));
+  AssertEquals('a bullet whatever the number', U($2022), TyRichListMarkerText(lkBullet, 0, 77));
+  AssertEquals('level 2', U($25AA), TyRichListMarkerText(lkBullet, 2, 0));
+  AssertEquals('level 3 starts over', U($2022), TyRichListMarkerText(lkBullet, 3, 0));
+  AssertEquals('no list', '', TyRichListMarkerText(lkNone, 0, 1));
+end;
+
+{ A list of 100,000 items in a document that parses on demand. Item 50,000 is numbered by
+  looking back at most CRichListWalkParas paragraphs - the count starts at the cap - and the
+  paragraphs parsed for it are no more than that; the numbers found are remembered, so the
+  next item costs one step and one already seen none. An edit above (an item made plain)
+  drops the numbers at and after it, and the layouts that showed them: the items after it
+  count again from there. }
+procedure TTyRichLayoutTest.TestTheNumberingWalkIsCappedAndRemembered;
+const
+  N = 100000;
+var
+  d: TTyRichDocument;
+  ld: TListLoader;
+  s: RawByteString;
+  i: Integer;
+  steps: Int64;
+  L: TTyParaLayout;
+  pf: TTyParaFormat;
+begin
+  SetLength(s, 2 * N - 1);
+  for i := 1 to N do
+  begin
+    s[2 * i - 1] := 'x';
+    if i < N then s[2 * i] := #10;
+  end;
+  d := NewDoc(s);
+  ld := TListLoader.Create;
+  ld.ParaFmt := d.Formats.InternPara(ListFormat(lkDecimal, 0, 1));
+  ld.CharFmt := d.DefaultCharFormatId;
+  d.InstallLoader(ld, True);
+  d.OnChange := @DocChanged;
+  ld.Calls := 0;
+  steps := FLayouter.ListWalkSteps;
+  L := Lay(d, 50000, 300);
+  AssertEquals('50,000: counted from the cap', IntToStr(CRichListWalkParas + 1) + '.',
+    L.Marker.Text);
+  AssertEquals('it looked back as far as the cap', CRichListWalkParas,
+    FLayouter.ListWalkSteps - steps);
+  AssertTrue(Format('parsed %d paragraphs', [ld.Calls]), ld.Calls <= CRichListWalkParas + 1);
+  steps := FLayouter.ListWalkSteps;
+  L := Lay(d, 50001, 300);
+  AssertEquals('the next', IntToStr(CRichListWalkParas + 2) + '.', L.Marker.Text);
+  AssertEquals('one step', 1, FLayouter.ListWalkSteps - steps);
+  steps := FLayouter.ListWalkSteps;
+  L := Lay(d, 49990, 300);
+  AssertEquals('one seen on the way', IntToStr(CRichListWalkParas - 9) + '.', L.Marker.Text);
+  AssertEquals('no step', 0, FLayouter.ListWalkSteps - steps);
+  L := Lay(d, 49000, 300);
+  AssertEquals('another', IntToStr(CRichListWalkParas + 1 - 1000) + '.', L.Marker.Text);
+  AssertEquals('no step either', 0, FLayouter.ListWalkSteps - steps);
+  // item 49,990 becomes a plain paragraph
+  pf := TyDefaultParaFormat;
+  SetPara(d, 49990, [pffList], pf);
+  AssertTrue('the numbered layouts after it went', FLayouter.CachedLayout(50001) = nil);
+  AssertTrue('and that of 50,000', FLayouter.CachedLayout(50000) = nil);
+  AssertTrue('one before it stays', FLayouter.CachedLayout(49000) <> nil);
+  steps := FLayouter.ListWalkSteps;
+  L := Lay(d, 50001, 300);
+  AssertEquals('counted from 49,991', '11.', L.Marker.Text);
+  AssertEquals('back to the plain paragraph', 11, FLayouter.ListWalkSteps - steps);
+  L := Lay(d, 50000, 300);
+  AssertEquals('and 50,000', '10.', L.Marker.Text);
 end;
 
 initialization
