@@ -3422,7 +3422,7 @@ var
   d: TTyRichDocument;
   lo: TTyRichLayouter;
   L: TTyParaLayout;
-  calls, chars, read: array[0..1] of Int64;
+  calls, chars, read, fetched: array[0..1] of Int64;
   mem: array[0..1] of Int64;
   lines100, height100, k: Integer;
   rs: TRectArray;
@@ -3445,7 +3445,8 @@ begin
       try
         calls[k] := TTyRichTestDevice(lo.Device).MeasureCalls;
         chars[k] := TTyRichTestDevice(lo.Device).MeasuredChars;
-        read[k] := lo.ParaCharsRead;
+        read[k] := lo.ParaCharsDecoded;
+        fetched[k] := lo.ParaBytesFetched;
         mem[k] := L.MemSize;
         if k = 0 then
         begin
@@ -3495,8 +3496,13 @@ begin
   AssertTrue(Format('characters measured %d then %d', [chars[0], chars[1]]),
     chars[1] <= chars[0] + 100);
   AssertEquals('the 100,000 read whole', 100000, read[0]);
-  AssertTrue(Format('of the 300,000 read: %d', [read[1]]),
+  AssertTrue(Format('of the 300,000 decoded: %d', [read[1]]),
     read[1] <= CRichMaxParaLayoutChars + 1);
+  { W3r-M3: and fetched - the bytes copied out of the document are those of the first cap + 1
+    characters (the 300,000 begins with the 100,000: their bytes, and one character more) }
+  AssertEquals('the 100,000 fetched whole', Length(p100), fetched[0]);
+  AssertTrue(Format('of the 300,000 fetched: %d bytes, the first 100,000 characters %d',
+    [fetched[1], Length(p100)]), fetched[1] <= Length(p100) + 4);
   AssertTrue(Format('bytes kept %d then %d', [mem[0], mem[1]]), mem[1] <= mem[0] + 1024);
   AssertEquals('the document keeps all of it', 300000, d.Text.ParaLength(1));
   // a mark at the cap: cut before the cluster it is in
@@ -4910,30 +4916,46 @@ begin
   AssertEquals('below it: counted after a body paragraph', '1.', Lay(d, 3, 1000).Marker.Text);
 end;
 
-{ W2r-I2: a \trqc or \trqr row wider than the layout width is not moved left of where \trleft
-  puts it: its first column stays where the control's scroll reaches it. }
+{ W2r-I2, W3r-M2: a \trqc or \trqr row is placed by its alignment alone - Word ignores \trleft
+  for it - and never left of 0: one wider than the layout width starts at 0, where the control's
+  scroll reaches its first column, and its right end is in the block's width; a narrow one whose
+  \trleft lies right of its centred place is centred all the same, one whose \trleft would put
+  its right end past the width is at the right. A left-aligned row keeps \trleft. }
 procedure TTyRichLayoutTest.TestAWideCentredRowStaysReachable;
 var
   d: TTyRichDocument;
   t: TTyRichTable;
   R: TTyRowLayout;
 begin
-  d := NewTableDoc('a'#10'b'#10'c'#10'd');
+  d := NewTableDoc('a'#10'b'#10'c'#10'd'#10'e'#10'f'#10'g');
   t := TTyRichTable.Create([]);
   t.AddRow(1, '\trowd\trgaph108\trqc\cellx14400');
   t.AddRow(1, '\trowd\trgaph108\trqr\trleft500\cellx14400');
   t.AddRow(1, '\trowd\trgaph108\trqc\cellx1440');
   t.AddRow(1, '\trowd\trgaph108\trqc\trleft-1440\cellx14400');
-  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1]).Free;
+  t.AddRow(1, '\trowd\trgaph108\trleft4500\trqc\cellx5940');
+  t.AddRow(1, '\trowd\trgaph108\trleft4500\trqr\cellx6900');
+  t.AddRow(1, '\trowd\trgaph108\trleft4500\cellx5940');
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1, 1, 1, 1, 1]).Free;
   R := TTyRowLayout(Block(d, 0, 400));
-  AssertEquals('centred, 960 wide in 400: at \trleft', 0, R.Cells[0].Left);
+  AssertEquals('centred, 960 wide in 400: at 0', 0, R.Cells[0].Left);
   AssertEquals('its right', 960, R.Cells[0].Right);
+  AssertTrue(Format('the block reaches it (%d)', [R.Width]), R.Width >= 960);
   R := TTyRowLayout(Block(d, 1, 400));
-  AssertEquals('right-aligned, wider: at \trleft', 33, R.Cells[0].Left);
+  AssertEquals('right-aligned, wider: at 0', 0, R.Cells[0].Left);
+  AssertEquals('its width kept', 960 - 33, R.Cells[0].Right);
   R := TTyRowLayout(Block(d, 2, 400));
   AssertEquals('one that fits is still centred', 152, R.Cells[0].Left);
   R := TTyRowLayout(Block(d, 3, 400));
-  AssertEquals('a negative \trleft is kept (Word''s margin)', -96, R.Cells[0].Left);
+  AssertEquals('a negative \trleft, wider: at 0', 0, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 4, 400));
+  AssertEquals('\trleft right of the centred place: centred', 152, R.Cells[0].Left);
+  AssertEquals('its right', 248, R.Cells[0].Right);
+  R := TTyRowLayout(Block(d, 5, 400));
+  AssertEquals('\trleft past the width: at the right', 400, R.Cells[0].Right);
+  AssertEquals('its left', 240, R.Cells[0].Left);
+  R := TTyRowLayout(Block(d, 6, 400));
+  AssertEquals('left-aligned: at \trleft', 300, R.Cells[0].Left);
 end;
 
 { W2r-M1: a header whose sizes do not fit an Integer is no picture - the product of two 32-bit

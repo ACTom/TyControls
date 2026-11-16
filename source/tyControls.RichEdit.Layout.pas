@@ -593,9 +593,9 @@ type
       Truncated paragraph's Text is what is shown, ShownChars characters; positions past
       them show at the cut, and the line under the text (Notice: its Text, Font, X, Width,
       drawn on NoticeBaseline) says how many are not shown. The notice is one line, not
-      wrapped: it counts in Width (a horizontal scroll reaches its end where nothing wraps),
-      and in a wrapped view narrower than it its end is clipped - the control can say it
-      its own way (Truncated). }
+      wrapped: it counts in Width, and the control's horizontal scroll range takes a block's
+      Width in every mode, so a view narrower than the notice - wrapped or not - scrolls to
+      its end. (A control may also say it its own way: Truncated.) }
     property Text: RawByteString read FText;
     property Length: Integer read FLength;
     property Notice: TTyRichFragment read FNotice;
@@ -756,7 +756,8 @@ type
     FOrdinals: specialize TDictionary<Integer, TTyRichListOrdinal>;
     FListOfFormat: specialize TDictionary<Integer, TTyListFormat>;
     FListWalkSteps: Int64;
-    FParaCharsRead: Int64;
+    FParaCharsDecoded: Int64;
+    FParaBytesFetched: Int64;
     // the first paragraph whose file marker is not trusted any more (MaxInt: none)
     FTrustFrom: Integer;
     FWalkData: array of Pointer;
@@ -914,9 +915,12 @@ type
     function MeasureCacheBytes: Int64;
     { Paragraphs list numbering looked at, for the tests that check it stays bounded. }
     property ListWalkSteps: Int64 read FListWalkSteps;
-    { Characters of paragraph text the layouts made so far read and decoded (a cut paragraph:
-      only up to the cap), for the tests that check what a build reads. }
-    property ParaCharsRead: Int64 read FParaCharsRead;
+    { Characters of paragraph text the layouts made so far decoded (a cut paragraph: only up
+      to the cap), and the bytes of paragraph text they fetched from the document to do it
+      (GetText's copies: a cut paragraph's no more than its first cap + 1 characters), for
+      the tests that check what a build reads. }
+    property ParaCharsDecoded: Int64 read FParaCharsDecoded;
+    property ParaBytesFetched: Int64 read FParaBytesFetched;
     { Draws APicture into ABox of ATarget (the target's pixels, its ClipRect respected): its
       image - decoded the first time the picture is drawn (never at layout); at its own size
       as it is; reduced once per size and kept (the full image then let go, decoded again
@@ -5646,8 +5650,9 @@ begin
       b.PPI := APPI;
       b.Zoom := AZoom;
       b.Width := AWidth;
+      Inc(FParaBytesFetched, System.Length(text));
       b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1));
-      Inc(FParaCharsRead, b.N);
+      Inc(FParaCharsDecoded, b.N);
       if len > CRichMaxParaLayoutChars then b.FullLen := len else b.FullLen := b.N;
       Result.FLength := b.FullLen;
       Result.FFirstPara := AIndex;
@@ -5820,17 +5825,19 @@ begin
       prevTw := rightTw;
     end;
     { \trqc / \trqr: the row centred in, or at the right of, the width it is laid out at (not
-      without wrapping: there is no width to place it in). }
+      without wrapping: there is no width to place it in) - by its alignment alone, as Word
+      places it: \trleft does not move an aligned row. A row wider than the width starts at
+      0, never left of it (the control scrolls right, never left of 0). }
     if (R.FDisplay.Align <> rraLeft) and (AWidth > 0) then
     begin
       lo := R.FCells[0].Left;
       hi := R.FCells[0].Right;
       for i := 1 to nc - 1 do hi := Max(hi, R.FCells[i].Right);
-      if R.FDisplay.Align = rraCenter then shift := (AWidth - (hi - lo)) div 2 - lo
-      else shift := AWidth - hi;
-      // a row wider than the width: where \trleft puts it, not further left (the control
-      // scrolls right, never left of 0)
+      if R.FDisplay.Align = rraCenter then shift := (AWidth - (hi - lo)) div 2
+      else shift := AWidth - (hi - lo);
       if shift < 0 then shift := 0;
+      // (from where \trleft put it to that left edge)
+      shift := shift - lo;
       for i := 0 to nc - 1 do
       begin
         Inc(R.FCells[i].Left, shift);
