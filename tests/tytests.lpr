@@ -292,7 +292,8 @@ uses
   test.richedit.wmf,
   test.richedit.layoutdevice,
   test.richedit.layout,
-  test.richedit.control;
+  test.richedit.control,
+  test.richedit.perf;
 
 type
   TTyTestRunner = class(TTestRunner)
