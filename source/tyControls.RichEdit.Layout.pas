@@ -266,6 +266,28 @@ type
     Forced: Boolean;
   end;
 
+  { The colours painting takes from the control's theme - the layouter never looks at a theme;
+    the control fills this in, a test by hand. A run's own colour and highlight are the
+    document's, not these. }
+  TTyRichPaintStyle = record
+    TextColor: TBGRAPixel;          // text in clDefault (the theme's text colour)
+    SelectionBack: TBGRAPixel;
+    SelectionText: TBGRAPixel;
+    PlaceholderFill: TBGRAPixel;    // a picture that cannot be shown
+    PlaceholderFrame: TBGRAPixel;
+    ObjectFrame: TBGRAPixel;        // around a selected picture
+    TableBorder: TBGRAPixel;
+  end;
+
+  { What painting needs of a character format, taken when the layout is made. }
+  TTyRichPaintFormat = record
+    Format: TTyCharFormatId;
+    Color: TColor;
+    Highlight: TColor;
+    Underline: Boolean;
+    Strike: Boolean;
+  end;
+
   TTyRichLayouter = class;
 
   { A laid-out block: one paragraph, or (later) one table row. Coordinates are pixels from
@@ -302,6 +324,21 @@ type
       takes in the block's last separator (ATo > its last position) gets a mark past the
       end of its last line. }
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; virtual; abstract;
+    { Draws the block with its top-left at (AX, AY) of ATarget. Only what meets AClip (the
+      target's pixels; the target's own ClipRect is kept to as well) is drawn: lines,
+      fragments, cells and pictures outside it cost nothing - a partial repaint is cheap.
+      The ground is the caller's: it has painted the background and prepared the target for
+      text (TTyPainter.PrepareTextGround). [ASelFrom, ASelTo) is the selection, block-relative
+      as SelectionRects takes it (past the last position: the last separator too); an empty
+      range selects nothing. A line is drawn in this order: highlights, the selection's
+      ground, the text - each fragment exactly the string measured for it, at its measured
+      place; a fragment selected in part is drawn whole once a part, the clip cut at the
+      selection's edges, so no glyph moves - underline and strike-through (their thickness and
+      place from the font's size), tab leaders, pictures and placeholders (a selected picture
+      framed), the list marker. A row draws its cells' paragraphs, each clipped to its cell,
+      then its lines. }
+    procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); virtual; abstract;
     { Bytes the layout keeps (for the tests that check it stays linear). }
     function MemSize: Int64; virtual;
     property FirstPara: Integer read FFirstPara;
@@ -343,6 +380,7 @@ type
     FFragCount: Integer;
     FSpaceBefore: Integer;
     FSpaceAfter: Integer;
+    FPaintFormats: array of TTyRichPaintFormat;
     function GetLine(AIndex: Integer): TTyRichLine;
     function GetFragment(AIndex: Integer): TTyRichFragment;
     function ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
@@ -350,11 +388,18 @@ type
     function PrefixWidth(const F: TTyRichFragment; AChars: Integer): Integer;
     function XInLine(ALine: Integer; APos: Integer): Integer;
     function NearestInFragment(const F: TTyRichFragment; AX: Integer): Integer;
+    function PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
+    procedure TakePaintFormats(ADoc: TTyRichDocument);
+    function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
+    procedure PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
   public
     destructor Destroy; override;
     function PosAtPoint(AX, AY: Integer): TTyRichPos; override;
     function CaretRect(APos: TTyRichPos): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
+    procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
     { The line a position is on (the start of a wrapped line belongs to that line), and the
       line at a height (above the first: the first; below the last: the last). }
@@ -442,6 +487,8 @@ type
     function PosAtPoint(AX, AY: Integer): TTyRichPos; override;
     function CaretRect(APos: TTyRichPos): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
+    procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
     { The item (paragraph) position APos is in: the last that starts at or before it. }
     function ItemAt(APos: TTyRichPos): Integer;
@@ -464,19 +511,6 @@ type
   TTyRichFormatFont = record
     Font: TTyRichFontId;
     Shift: Integer;
-  end;
-
-  { The colours painting takes from the control's theme - the layouter never looks at a theme;
-    the control fills this in, a test by hand. A run's own colour and highlight are the
-    document's, not these. }
-  TTyRichPaintStyle = record
-    TextColor: TBGRAPixel;          // text in clDefault (the theme's text colour)
-    SelectionBack: TBGRAPixel;
-    SelectionText: TBGRAPixel;
-    PlaceholderFill: TBGRAPixel;    // a picture that cannot be shown
-    PlaceholderFrame: TBGRAPixel;
-    ObjectFrame: TBGRAPixel;        // around a selected picture
-    TableBorder: TBGRAPixel;
   end;
 
   { A list item's number, remembered with the kind and level it was counted for. }
@@ -1775,8 +1809,7 @@ end;
 
 function TTyParaLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
 var
-  n, ln, a, b, xa, xb, stop, mark: Integer;
-  isLast: Boolean;
+  n, ln, xa, xb: Integer;
 begin
   Result := nil;
   if AFrom < 0 then AFrom := 0;
@@ -1785,25 +1818,11 @@ begin
   n := 0;
   for ln := LineOfPos(Min(AFrom, FLength)) to FLineCount - 1 do
   begin
-    isLast := ln = FLineCount - 1;
-    with FLines[ln] do
-    begin
-      if First >= ATo then Break;
-      stop := First + Count;
-      a := Max(AFrom, First);
-      b := Min(ATo, stop);
-      if b < a then Continue;
-      xa := XInLine(ln, a);
-      if (b >= stop) and not isLast then xb := EndX else xb := XInLine(ln, b);
-      mark := Max(2, Height div 4);
-      // a selected U+000B, or the paragraph's separator: a mark past the line's end
-      if (Forced and (ATo >= stop) and (AFrom < stop)) or (isLast and (ATo > FLength)) then
-        xb := Max(xb, EndX) + mark;
-      if xb <= xa then Continue;
-      SetLength(Result, n + 1);
-      Result[n] := Rect(xa, Top, xb, Top + Height);
-      Inc(n);
-    end;
+    if FLines[ln].First >= ATo then Break;
+    if not LineSelection(ln, AFrom, ATo, xa, xb) then Continue;
+    SetLength(Result, n + 1);
+    Result[n] := Rect(xa, FLines[ln].Top, xb, FLines[ln].Top + FLines[ln].Height);
+    Inc(n);
   end;
 end;
 
@@ -1945,6 +1964,431 @@ begin
       Types.OffsetRect(Result[n], FItems[k].X, FItems[k].Y);
       Inc(n);
     end;
+  end;
+end;
+
+{ ---- painting ---- }
+
+function PaintColor(AColor: TColor; const ADefault: TBGRAPixel): TBGRAPixel;
+begin
+  if (AColor = clDefault) or (AColor = clNone) then Exit(ADefault);
+  Result := ColorToBGRA(ColorToRGB(AColor));
+end;
+
+{ The selected stretch [ASelX0, ASelX1) cut out of what is drawn of a fragment: the parts
+  left and right of it in the normal colour, the stretch in the selection's - each the whole
+  fragment drawn with the clip narrowed to its part, so that no glyph moves between them. }
+type
+  TTyInkPart = record
+    Clip: TRect;
+    Selected: Boolean;
+  end;
+  TTyInkParts = array[0..2] of TTyInkPart;
+
+function InkParts(const AClip: TRect; AX0, AX1, ASelX0, ASelX1: Integer;
+  out AParts: TTyInkParts): Integer;
+var
+  s0, s1, n: Integer;
+
+  procedure Add(ALeft, ARight: Integer; ASel: Boolean);
+  begin
+    if ARight <= ALeft then Exit;
+    AParts[n].Clip := Rect(ALeft, AClip.Top, ARight, AClip.Bottom);
+    AParts[n].Selected := ASel;
+    Inc(n);
+  end;
+
+begin
+  n := 0;
+  s0 := Max(Max(AX0, ASelX0), AClip.Left);
+  s1 := Min(Min(AX1, ASelX1), AClip.Right);
+  if s1 <= s0 then
+  begin
+    // not selected: drawn once, in the caller's clip
+    AParts[0].Clip := AClip;
+    AParts[0].Selected := False;
+    Exit(1);
+  end;
+  if (s0 <= Max(AX0, AClip.Left)) and (s1 >= Min(AX1, AClip.Right)) then
+  begin
+    // all of it that is drawn is selected
+    AParts[0].Clip := AClip;
+    AParts[0].Selected := True;
+    Exit(1);
+  end;
+  Add(AClip.Left, s0, False);
+  Add(s0, s1, True);
+  Add(s1, AClip.Right, False);
+  Result := n;
+end;
+
+function TTyParaLayout.PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := High(FPaintFormats);
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if FPaintFormats[mid].Format = AFormat then Exit(FPaintFormats[mid]);
+    if FPaintFormats[mid].Format < AFormat then lo := mid + 1 else hi := mid - 1;
+  end;
+  Result.Format := AFormat;
+  Result.Color := clDefault;
+  Result.Highlight := clNone;
+  Result.Underline := False;
+  Result.Strike := False;
+end;
+
+{ What painting needs of each character format the fragments use, taken from the document
+  when the layout is made (a layout outlives a document switch of its layouter): sorted by
+  format id. }
+procedure TTyParaLayout.TakePaintFormats(ADoc: TTyRichDocument);
+var
+  ids: array of Integer;
+  n, i, j, k: Integer;
+  f: TTyCharFormat;
+
+  procedure AddId(AId: Integer);
+  var
+    m: Integer;
+  begin
+    for m := 0 to n - 1 do
+      if ids[m] = AId then Exit;
+    if n = System.Length(ids) then SetLength(ids, n * 2 + 4);
+    ids[n] := AId;
+    Inc(n);
+  end;
+
+begin
+  ids := nil;
+  n := 0;
+  for i := 0 to FFragCount - 1 do AddId(FFrags[i].Format);
+  if FHasMarker then AddId(FMarker.Format);
+  // sorted (they are few)
+  for i := 1 to n - 1 do
+  begin
+    k := ids[i];
+    j := i - 1;
+    while (j >= 0) and (ids[j] > k) do
+    begin
+      ids[j + 1] := ids[j];
+      Dec(j);
+    end;
+    ids[j + 1] := k;
+  end;
+  SetLength(FPaintFormats, n);
+  for i := 0 to n - 1 do
+  begin
+    if (ids[i] >= 0) and (ids[i] < ADoc.Formats.CharCount) then
+      f := ADoc.Formats.CharFormat(ids[i])
+    else
+      f := TyDefaultCharFormat;
+    FPaintFormats[i].Format := ids[i];
+    FPaintFormats[i].Color := f.Color;
+    FPaintFormats[i].Highlight := f.HighlightColor;
+    FPaintFormats[i].Underline := fsUnderline in f.Style;
+    FPaintFormats[i].Strike := f.Strike or (fsStrikeOut in f.Style);
+  end;
+end;
+
+{ The selected stretch of line ALine for [AFrom, ATo) (block pixels): from the start's caret
+  to the end's, a whole line that the selection goes on past to its end with its hanging
+  spaces, and a mark past the end for a selected U+000B or the paragraph's separator. False
+  when nothing of the line is selected. }
+function TTyParaLayout.LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos;
+  out AXa, AXb: Integer): Boolean;
+var
+  a, b, stop, mark: Integer;
+  isLast: Boolean;
+begin
+  Result := False;
+  AXa := 0;
+  AXb := 0;
+  if AFrom < 0 then AFrom := 0;
+  if ATo > FLength + 1 then ATo := FLength + 1;
+  if ATo <= AFrom then Exit;
+  isLast := ALine = FLineCount - 1;
+  with FLines[ALine] do
+  begin
+    if First >= ATo then Exit;
+    stop := First + Count;
+    a := Max(AFrom, First);
+    b := Min(ATo, stop);
+    if b < a then Exit;
+    AXa := XInLine(ALine, a);
+    if (b >= stop) and not isLast then AXb := EndX else AXb := XInLine(ALine, b);
+    mark := Max(2, Height div 4);
+    // a selected U+000B, or the paragraph's separator: a mark past the line's end
+    if (Forced and (ATo >= stop) and (AFrom < stop)) or (isLast and (ATo > FLength)) then
+      AXb := Max(AXb, EndX) + mark;
+    Result := AXb > AXa;
+  end;
+end;
+
+procedure TTyParaLayout.Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+  const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
+var
+  clip, old: TRect;
+  ln, top: Integer;
+begin
+  if ATarget = nil then Exit;
+  old := ATarget.ClipRect;
+  if not Types.IntersectRect(clip, AClip, old) then Exit;
+  ATarget.ClipRect := clip;
+  try
+    // the lines that meet the clip, and no others
+    ln := LineAtY(clip.Top - AY);
+    while ln < FLineCount do
+    begin
+      top := AY + FLines[ln].Top;
+      if top >= clip.Bottom then Break;
+      if top + FLines[ln].Height > clip.Top then
+        PaintLine(ATarget, ln, AX, AY, clip, AStyle, ASelFrom, ASelTo);
+      Inc(ln);
+    end;
+  finally
+    ATarget.ClipRect := old;
+  end;
+end;
+
+procedure TTyParaLayout.PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer;
+  const AClip: TRect; const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
+var
+  ln: ^TTyRichLine;
+  f: ^TTyRichFragment;
+  pf: TTyRichPaintFormat;
+  i, k, n, y0, y1, base, xa, xb, x0, x1, px, th, slack, contentRight, lineY, linePx: Integer;
+  hasSel, sel: Boolean;
+  parts: TTyInkParts;
+  ink: TBGRAPixel;
+  drawn: UTF8String;
+  box: TRect;
+
+  // the fragment's place and some room for glyphs that reach past it; False: nothing of it
+  // is in the clip
+  function Visible(const F: TTyRichFragment): Boolean;
+  begin
+    x0 := AX + F.X;
+    x1 := x0 + F.Width;
+    slack := Max(2, FLayouter.Device.FontPixelHeight(F.Font) div 2);
+    Result := (x1 + slack > AClip.Left) and (x0 - slack < AClip.Right);
+  end;
+
+  function SelectedChars(const F: TTyRichFragment): Boolean;
+  begin
+    Result := (F.Count > 0) and (F.First >= ASelFrom) and (F.First + F.Count <= ASelTo);
+  end;
+
+  // a horizontal line [AL, AR) x [AT, AT + AH) in the fragment's colours, cut at the selection
+  procedure Bar(AL, AR, AT, AH: Integer; ANormal, ASel: TBGRAPixel);
+  var
+    m, j: Integer;
+    pp: TTyInkParts;
+    r: TRect;
+  begin
+    if hasSel then m := InkParts(AClip, AL, AR, AX + xa, AX + xb, pp)
+    else m := InkParts(AClip, AL, AR, 0, 0, pp);
+    for j := 0 to m - 1 do
+    begin
+      if not Types.IntersectRect(r, Rect(AL, AT, AR, AT + AH), pp[j].Clip) then Continue;
+      if pp[j].Selected then ATarget.FillRect(r.Left, r.Top, r.Right, r.Bottom, ASel, dmSet)
+      else ATarget.FillRect(r.Left, r.Top, r.Right, r.Bottom, ANormal, dmSet);
+    end;
+  end;
+
+  procedure Leader(const F: TTyRichFragment; AColor: TBGRAPixel);
+  var
+    step, dot, x, xs, xe: Integer;
+  begin
+    xs := AX + F.X;
+    xe := xs + F.Width;
+    step := Max(3, px div 4);
+    dot := Max(1, px div 12);
+    case F.Leader of
+      ttlDot, ttlHyphen:
+        begin
+          // on a grid of the block, so leaders on lines above one another line up
+          x := AX + ((F.X + step - 1) div step) * step;
+          while x + dot <= xe do
+          begin
+            if F.Leader = ttlDot then
+              ATarget.FillRect(x, base - dot, x + dot, base, AColor, dmSet)
+            else
+              ATarget.FillRect(x, base - px div 4 - th, x + Max(dot, step * 2 div 3), base - px div 4,
+                AColor, dmSet);
+            Inc(x, step);
+          end;
+        end;
+      ttlUnderline:
+        ATarget.FillRect(xs, lineY, xe, lineY + th, AColor, dmSet);
+      ttlThick:
+        ATarget.FillRect(xs, lineY, xe, lineY + 2 * th, AColor, dmSet);
+      ttlEqual:
+        begin
+          ATarget.FillRect(xs, base - px div 4 - 2 * th, xe, base - px div 4 - th, AColor, dmSet);
+          ATarget.FillRect(xs, base - px div 4 + th, xe, base - px div 4 + 2 * th, AColor, dmSet);
+        end;
+    end;
+  end;
+
+begin
+  ln := @FLines[ALine];
+  y0 := AY + ln^.Top;
+  y1 := y0 + ln^.Height;
+  base := AY + ln^.Baseline;
+  hasSel := LineSelection(ALine, ASelFrom, ASelTo, xa, xb);
+  contentRight := AX + ln^.Left + ln^.ContentWidth;
+  linePx := Max(1, Round(FPPI * Double(FZoom) / 96));
+  // highlights
+  for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+  begin
+    f := @FFrags[i];
+    if not Visible(f^) then Continue;
+    pf := PaintFormat(f^.Format);
+    if pf.Highlight <> clNone then
+      ATarget.FillRect(x0, y0, x1, y1, PaintColor(pf.Highlight, AStyle.SelectionBack), dmSet);
+  end;
+  // the selection
+  if hasSel then
+    ATarget.FillRect(AX + xa, y0, AX + xb, y1, AStyle.SelectionBack, dmDrawWithTransparency);
+  // text: each fragment as it was measured, where it was measured
+  for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+  begin
+    f := @FFrags[i];
+    if not (f^.Kind in [rfkText, rfkReplacement, rfkObject]) then Continue;
+    if (f^.Kind = rfkObject) and (f^.Text = '') then Continue;
+    if not Visible(f^) then Continue;
+    drawn := FragmentText(i);
+    if drawn = '' then Continue;
+    ink := PaintColor(PaintFormat(f^.Format).Color, AStyle.TextColor);
+    if hasSel then n := InkParts(AClip, x0, x1, AX + xa, AX + xb, parts)
+    else n := InkParts(AClip, x0, x1, 0, 0, parts);
+    for k := 0 to n - 1 do
+    begin
+      if n > 1 then ATarget.ClipRect := parts[k].Clip;
+      if parts[k].Selected then
+        FLayouter.Device.DrawText(ATarget, f^.Font, x0, base + f^.Shift, drawn, AStyle.SelectionText)
+      else
+        FLayouter.Device.DrawText(ATarget, f^.Font, x0, base + f^.Shift, drawn, ink);
+    end;
+    if n > 1 then ATarget.ClipRect := AClip;
+  end;
+  // underline and strike-through, tab leaders: thickness and place from the font's size
+  for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+  begin
+    f := @FFrags[i];
+    if f^.Kind = rfkBreak then Continue;
+    if not Visible(f^) then Continue;
+    pf := PaintFormat(f^.Format);
+    px := FLayouter.Device.FontPixelHeight(f^.Font);
+    th := Max(1, Round(px / 16));
+    lineY := base + f^.Shift + Max(1, Round(px / 10));
+    ink := PaintColor(pf.Color, AStyle.TextColor);
+    if (f^.Kind = rfkTab) and (f^.Leader <> ttlNone) then
+    begin
+      if hasSel and SelectedChars(f^) then Leader(f^, AStyle.SelectionText)
+      else Leader(f^, ink);
+    end;
+    // not under the spaces that hang past the line's content
+    if (pf.Underline or pf.Strike) and (x0 < contentRight) and
+      not ((f^.Kind = rfkObject) and (f^.Text = '')) then
+    begin
+      if pf.Underline then
+        Bar(x0, Min(x1, contentRight), lineY, th, ink, AStyle.SelectionText);
+      if pf.Strike then
+        Bar(x0, Min(x1, contentRight), base + f^.Shift - Round(px * 0.28), th, ink,
+          AStyle.SelectionText);
+    end;
+  end;
+  // pictures and placeholders, decoded when one is first drawn
+  for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+  begin
+    f := @FFrags[i];
+    if (f^.Kind <> rfkObject) or not (f^.Obj is TTyRichPicture) then Continue;
+    box := Rect(AX + f^.X, base - f^.Ascent, AX + f^.X + f^.Width, base + f^.Descent);
+    if (box.Right <= AClip.Left) or (box.Left >= AClip.Right) or (box.Bottom <= AClip.Top) or
+      (box.Top >= AClip.Bottom) then
+      Continue;
+    FLayouter.DrawPicture(ATarget, TTyRichPicture(f^.Obj), box, linePx, AStyle);
+    sel := (f^.First >= ASelFrom) and (f^.First < ASelTo);
+    if sel then
+    begin
+      ATarget.FillRect(box.Left, box.Top, box.Right, box.Top + linePx, AStyle.ObjectFrame, dmSet);
+      ATarget.FillRect(box.Left, box.Bottom - linePx, box.Right, box.Bottom, AStyle.ObjectFrame,
+        dmSet);
+      ATarget.FillRect(box.Left, box.Top, box.Left + linePx, box.Bottom, AStyle.ObjectFrame, dmSet);
+      ATarget.FillRect(box.Right - linePx, box.Top, box.Right, box.Bottom, AStyle.ObjectFrame,
+        dmSet);
+    end;
+  end;
+  // the list marker, never selected
+  if (ALine = 0) and FHasMarker and Visible(FMarker) then
+    FLayouter.Device.DrawText(ATarget, FMarker.Font, x0, base, FMarker.Text,
+      PaintColor(PaintFormat(FMarker.Format).Color, AStyle.TextColor));
+end;
+
+procedure TTyRowLayout.Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+  const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
+var
+  i, k, w: Integer;
+  clip, old, cr, box: TRect;
+  bx: ^TTyRichCellBox;
+  it: ^TTyRichRowItem;
+begin
+  if ATarget = nil then Exit;
+  old := ATarget.ClipRect;
+  if not Types.IntersectRect(clip, AClip, old) then Exit;
+  // contents: each shown cell that meets the clip, its paragraphs clipped to its box
+  for i := 0 to High(FCells) do
+  begin
+    bx := @FCells[i];
+    if bx^.Hidden then Continue;
+    box := Rect(AX + bx^.Left, AY, AX + bx^.Right, AY + FHeight);
+    if not Types.IntersectRect(cr, clip, box) then Continue;
+    for k := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
+    begin
+      it := @FItems[k];
+      if it^.Cell <> i then Continue;
+      if (AY + it^.Y >= cr.Bottom) or (AY + it^.Y + it^.Layout.Height <= cr.Top) then Continue;
+      it^.Layout.Paint(ATarget, AX + it^.X, AY + it^.Y, cr, AStyle, ASelFrom - it^.Pos,
+        ASelTo - it^.Pos);
+    end;
+  end;
+  // then the lines, over them
+  ATarget.ClipRect := clip;
+  try
+    for i := 0 to High(FCells) do
+    begin
+      bx := @FCells[i];
+      if bx^.Hidden or (bx^.Sides = []) then Continue;
+      box := Rect(AX + bx^.Left, AY, AX + bx^.Right, AY + FHeight);
+      if not Types.IntersectRect(cr, clip, box) then Continue;
+      if rcsLeft in bx^.Sides then
+      begin
+        w := bx^.LinePx[rcsLeft];
+        ATarget.FillRect(box.Left, box.Top, box.Left + w, box.Bottom, AStyle.TableBorder, dmSet);
+      end;
+      if rcsTop in bx^.Sides then
+      begin
+        w := bx^.LinePx[rcsTop];
+        ATarget.FillRect(box.Left, box.Top, box.Right, box.Top + w, AStyle.TableBorder, dmSet);
+      end;
+      if rcsRight in bx^.Sides then
+      begin
+        w := bx^.LinePx[rcsRight];
+        ATarget.FillRect(box.Right - w, box.Top, box.Right, box.Bottom, AStyle.TableBorder, dmSet);
+      end;
+      if rcsBottom in bx^.Sides then
+      begin
+        w := bx^.LinePx[rcsBottom];
+        ATarget.FillRect(box.Left, box.Bottom - w, box.Right, box.Bottom, AStyle.TableBorder,
+          dmSet);
+      end;
+    end;
+  finally
+    ATarget.ClipRect := old;
   end;
 end;
 
@@ -3721,6 +4165,7 @@ begin
       Result.FZoom := AZoom;
       Result.FCharCount := b.N + 1;
       b.Run;
+      Result.TakePaintFormats(ADoc);
     finally
       ADoc.EndRead;
     end;

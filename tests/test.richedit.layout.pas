@@ -98,6 +98,14 @@ type
     procedure TestThePictureCacheIsBoundedByBytes;
     procedure TestPicturesThatCannotBeShownArePlaceholders;
     procedure TestTheWordPadPictureShowsItsBitmap;
+    // 8b: painting
+    procedure TestPaintDrawsOnlyWhatMeetsTheClip;
+    procedure TestPaintSelectionKeepsTheGlyphsInPlace;
+    procedure TestPaintedSelectionDoesNotMoveGlyphsOnTheRealDevice;
+    procedure TestPaintHighlightUnderlineAndStrike;
+    procedure TestPaintTabLeadersAndTheMarker;
+    procedure TestPaintARowsContentsThenItsLines;
+    procedure TestPaintDecodesOnlyThePicturesItDraws;
   end;
 
 implementation
@@ -2338,6 +2346,382 @@ begin
       end;
     AssertTrue(Format('%d of %d pixels its own', [shown, bmp.Width * bmp.Height]),
       shown >= bmp.Width * bmp.Height * 9 div 10);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ ---- 8b: painting ---- }
+
+{ Each text fragment is drawn once, as measured, at its measured place (the device's draw log:
+  text, X, baseline); only the lines a clip meets are drawn, and on a line only the fragments
+  it meets. }
+procedure TTyRichLayoutTest.TestPaintDrawsOnlyWhatMeetsTheClip;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+begin
+  st := TyRichDefaultPaintStyle;
+  d := NewDoc('one two three four five six seven eight nine ten eleven twelve'#10 +
+    'a'#9'b'#9'c'#9'd'#9'e'#9'f');
+  L := Lay(d, 0, 60);
+  AssertEquals('a word a line', 12, L.LineCount);
+  bmp := TBGRABitmap.Create(100, 300, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 10, 5, Rect(0, 0, 100, 300), st, 0, 0);
+    AssertEquals('every line''s word, its spaces not drawn', 12, FDevice.DrawLog.Count);
+    AssertEquals('at its measured place', 'one|10|21', FDevice.DrawLog[0]);
+    AssertEquals('the last', 'twelve|10|241', FDevice.DrawLog[11]);
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 10, 5, Rect(0, 65, 100, 105), st, 0, 0);
+    AssertEquals('the clip meets lines 3 and 4', 'four|10|81,five|10|101',
+      FDevice.DrawLog.CommaText);
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 10, 5, Rect(0, 64, 100, 65), st, 0, 0);
+    AssertEquals('one pixel of line 2', 'three|10|61', FDevice.DrawLog.CommaText);
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 10, 5, Rect(0, 250, 100, 300), st, 0, 0);
+    AssertEquals('below the text: nothing', 0, FDevice.DrawLog.Count);
+  finally
+    bmp.Free;
+  end;
+  L := Lay(d, 1, 1000);
+  bmp := TBGRABitmap.Create(400, 40, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 60, 40), st, 0, 0);
+    AssertEquals('the fragments the clip meets', 'a|0|16,b|48|16', FDevice.DrawLog.CommaText);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Selected text in the selection's text colour over its background; a fragment selected in
+  part is drawn whole, once a part, each clipped to its part - no glyph moves (the ink columns
+  are the columns unselected), and the parts left and right of the selection stay as they
+  were. A fully selected fragment is drawn once. }
+procedure TTyRichLayoutTest.TestPaintSelectionKeepsTheGlyphsInPlace;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  b1, b2: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  x: Integer;
+  p1, p2: TBGRAPixel;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.TextColor := BGRA(0, 0, 200, 255);
+  st.SelectionText := BGRA(200, 0, 0, 255);
+  st.SelectionBack := BGRA(0, 200, 0, 255);
+  d := NewDoc('abcdef');
+  L := Lay(d, 0, 300);
+  b1 := TBGRABitmap.Create(80, 30, Sentinel);
+  b2 := TBGRABitmap.Create(80, 30, Sentinel);
+  try
+    L.Paint(b1, 0, 0, Rect(0, 0, 80, 30), st, 0, 0);
+    FDevice.ResetCounters;
+    L.Paint(b2, 0, 0, Rect(0, 0, 80, 30), st, 2, 4);
+    AssertEquals('drawn in three parts', 3, FDevice.DrawCalls);
+    AssertTrue('a: the text colour', SamePx(st.TextColor, b2.GetPixel(5, 8)));
+    AssertTrue('c: selected', SamePx(st.SelectionText, b2.GetPixel(25, 8)));
+    AssertTrue('d: selected', SamePx(st.SelectionText, b2.GetPixel(35, 8)));
+    AssertTrue('e: not', SamePx(st.TextColor, b2.GetPixel(45, 8)));
+    AssertTrue('between c and d: the selection''s ground', SamePx(st.SelectionBack,
+      b2.GetPixel(30, 8)));
+    AssertTrue('between b and c: still the selection', SamePx(st.SelectionBack, b2.GetPixel(20, 8)));
+    AssertTrue('between a and b: the ground', SamePx(Sentinel, b2.GetPixel(10, 8)));
+    for x := 0 to 79 do
+    begin
+      p1 := b1.GetPixel(x, 8);
+      p2 := b2.GetPixel(x, 8);
+      AssertEquals(Format('ink at column %d where it was', [x]), SamePx(st.TextColor, p1),
+        SamePx(st.TextColor, p2) or SamePx(st.SelectionText, p2));
+    end;
+    FDevice.ResetCounters;
+    L.Paint(b2, 0, 0, Rect(0, 0, 80, 30), st, 0, 7);
+    AssertEquals('all of it: drawn once', 1, FDevice.DrawCalls);
+    AssertTrue('in the selection''s colour', SamePx(st.SelectionText, b2.GetPixel(5, 8)));
+    AssertTrue('the separator''s mark', SamePx(st.SelectionBack, b2.GetPixel(61, 8)));
+  finally
+    b1.Free;
+    b2.Free;
+  end;
+end;
+
+{ The real device: a line painted with part of it selected, in the same colours as unselected
+  (the selection's ground the ground, its text colour the text's), is the same pixels - the
+  parts are the same glyphs at the same places, cut by the clip, not text measured and drawn
+  again; in a selection colour of its own the selected glyphs change colour and the rest
+  does not. }
+procedure TTyRichLayoutTest.TestPaintedSelectionDoesNotMoveGlyphsOnTheRealDevice;
+var
+  dev: TTyRichBgraDevice;
+  lo: TTyRichLayouter;
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  b1, b2: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  x, y, diff, xa, xb, redIn, redOut: Integer;
+  p: TBGRAPixel;
+  rc: TRect;
+begin
+  dev := TTyRichBgraDevice.Create;
+  lo := TTyRichLayouter.Create(dev, True);
+  b1 := nil;
+  b2 := nil;
+  try
+    {$IFDEF MSWINDOWS}
+    lo.BaseFontName := 'Arial';
+    {$ENDIF}
+    lo.BaseFontSizeHalfPt := 24;
+    d := NewDoc('Wavy AVATAR Typography, kerned: To WA 中文字');
+    L := lo.LayoutPara(d, 0, 2000, 96, 1);
+    try
+      st := TyRichDefaultPaintStyle;
+      st.TextColor := BGRABlack;
+      st.SelectionText := BGRABlack;
+      st.SelectionBack := Sentinel;
+      b1 := TBGRABitmap.Create(L.Width + 20, L.Height + 10, Sentinel);
+      b2 := TBGRABitmap.Create(L.Width + 20, L.Height + 10, Sentinel);
+      L.Paint(b1, 5, 5, Rect(0, 0, b1.Width, b1.Height), st, 0, 0);
+      L.Paint(b2, 5, 5, Rect(0, 0, b2.Width, b2.Height), st, 7, 30);
+      diff := 0;
+      for y := 0 to b1.Height - 1 do
+        for x := 0 to b1.Width - 1 do
+          if not SamePx(b1.GetPixel(x, y), b2.GetPixel(x, y)) then Inc(diff);
+      AssertEquals('the same pixels', 0, diff);
+      // a red selection: the selected stretch changes, nothing outside it
+      st.SelectionText := BGRA(255, 0, 0, 255);
+      b2.FillRect(0, 0, b2.Width, b2.Height, Sentinel, dmSet);
+      L.Paint(b2, 5, 5, Rect(0, 0, b2.Width, b2.Height), st, 7, 30);
+      rc := L.CaretRect(7);
+      xa := rc.Left + 5;
+      rc := L.CaretRect(30);
+      xb := rc.Left + 5;
+      redIn := 0;
+      redOut := 0;
+      for y := 0 to b2.Height - 1 do
+        for x := 0 to b2.Width - 1 do
+        begin
+          p := b2.GetPixel(x, y);
+          if not SamePx(b1.GetPixel(x, y), p) then
+            if (x >= xa) and (x < xb) then Inc(redIn) else Inc(redOut);
+        end;
+      AssertTrue(Format('the selected glyphs change colour: %d pixels', [redIn]), redIn > 50);
+      AssertEquals('nothing outside the selection changes', 0, redOut);
+    finally
+      L.Release;
+    end;
+  finally
+    b1.Free;
+    b2.Free;
+    lo.Free;
+  end;
+end;
+
+{ A highlight fills its fragments' line box, under the text; underline and strike-through
+  are drawn across their fragments (their thickness and place from the font's size: at
+  20 px a line of 1 pixel 2 below the baseline, and 6 above it), not across the others. }
+procedure TTyRichLayoutTest.TestPaintHighlightUnderlineAndStrike;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  f: TTyCharFormat;
+  yellow: TBGRAPixel;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.TextColor := BGRA(0, 0, 200, 255);
+  yellow := ColorToBGRA(ColorToRGB(clYellow));
+  d := NewDoc('abc def');
+  f := TyDefaultCharFormat;
+  f.HighlightColor := clYellow;
+  f.Style := [fsUnderline];
+  SetChar(d, 0, 3, [cffHighlight, cffUnderline], f);
+  f := TyDefaultCharFormat;
+  f.Strike := True;
+  SetChar(d, 4, 3, [cffStrike], f);
+  L := Lay(d, 0, 300);
+  bmp := TBGRABitmap.Create(100, 30, Sentinel);
+  try
+    L.Paint(bmp, 0, 0, Rect(0, 0, 100, 30), st, 0, 0);
+    AssertTrue('the highlight between glyphs', SamePx(yellow, bmp.GetPixel(0, 2)));
+    AssertTrue('to the bottom of the line', SamePx(yellow, bmp.GetPixel(10, 19)));
+    AssertTrue('a glyph over it', SamePx(st.TextColor, bmp.GetPixel(5, 8)));
+    AssertTrue('the space after it: no highlight', SamePx(Sentinel, bmp.GetPixel(32, 2)));
+    AssertTrue('underlined: 2 below the baseline', SamePx(st.TextColor, bmp.GetPixel(0, 18)));
+    AssertTrue('one pixel thick', SamePx(yellow, bmp.GetPixel(0, 19)));
+    AssertTrue('the space is not underlined', SamePx(Sentinel, bmp.GetPixel(32, 18)));
+    AssertTrue('struck: 6 above the baseline', SamePx(st.TextColor, bmp.GetPixel(35, 10)));
+    AssertTrue('not above that', SamePx(Sentinel, bmp.GetPixel(35, 9)));
+    AssertTrue('nor under the struck word', SamePx(Sentinel, bmp.GetPixel(35, 18)));
+    AssertTrue('nothing struck in the first word', SamePx(yellow, bmp.GetPixel(10, 10)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A tab's leader across the tab (dots every quarter of the font, a line), and a list item's
+  marker where the layout put it, on the first line's baseline. }
+procedure TTyRichLayoutTest.TestPaintTabLeadersAndTheMarker;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  pf: TTyParaFormat;
+  x, ink: Integer;
+begin
+  st := TyRichDefaultPaintStyle;
+  d := NewDoc('a'#9'b'#10'a'#9'b'#10'x');
+  pf := TyDefaultParaFormat;
+  SetLength(pf.Tabs, 1);
+  pf.Tabs[0].Position := 1440;
+  pf.Tabs[0].Align := ttaLeft;
+  pf.Tabs[0].Leader := ttlDot;
+  SetPara(d, 0, [pffTabs], pf);
+  pf.Tabs[0].Leader := ttlUnderline;
+  SetPara(d, 1, [pffTabs], pf);
+  SetPara(d, 2, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 0, 0));
+  bmp := TBGRABitmap.Create(200, 30, Sentinel);
+  try
+    L := Lay(d, 0, 1000);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 30), st, 0, 0);
+    ink := 0;
+    for x := 10 to 95 do
+      if SamePx(st.TextColor, bmp.GetPixel(x, 15)) then Inc(ink);
+    AssertEquals('dots every 5 pixels from 10 to 95', 18, ink);
+    AssertTrue('a gap between them', SamePx(Sentinel, bmp.GetPixel(11, 15)));
+    AssertTrue('not after the tab', SamePx(Sentinel, bmp.GetPixel(96, 15)));
+    bmp.FillRect(0, 0, 200, 30, Sentinel, dmSet);
+    L := Lay(d, 1, 1000);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 200, 30), st, 0, 0);
+    ink := 0;
+    for x := 10 to 95 do
+      if SamePx(st.TextColor, bmp.GetPixel(x, 18)) then Inc(ink);
+    AssertEquals('a line across the tab', 86, ink);
+    L := Lay(d, 2, 1000);
+    FDevice.DrawLog.Clear;
+    L.Paint(bmp, 3, 4, Rect(0, 0, 200, 30), st, 0, 0);
+    AssertEquals('the marker, then nothing else but the text', 'x|51|20,' + U($2022) + '|27|20',
+      FDevice.DrawLog.CommaText);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A row paints its cells' paragraphs, each where the row put it and clipped to its cell's box,
+  and then its lines over them; a clip that meets one cell paints that cell. The hand-written
+  Word merge: the cell that continues the one above has no line on top. }
+procedure TTyRichLayoutTest.TestPaintARowsContentsThenItsLines;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  R: TTyRowLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  x0: Integer;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.TableBorder := BGRA(0, 0, 255, 255);
+  d := NewTableDoc('a'#10'b'#10'c');
+  t := TTyRichTable.Create([1440, 2880, 4320]);
+  t.AddRow(3);
+  TDocAccess(d).MarkTable(0, t, [1, 1, 1]).Free;
+  R := TTyRowLayout(Block(d, 0, 1000));
+  bmp := TBGRABitmap.Create(400, 60, Sentinel);
+  try
+    FDevice.DrawLog.Clear;
+    R.Paint(bmp, 10, 10, Rect(0, 0, 400, 60), st, 0, 0);
+    AssertEquals('the cells'' text', 'a|17|27,b|113|27,c|209|27', FDevice.DrawLog.CommaText);
+    AssertTrue('the top line', SamePx(st.TableBorder, bmp.GetPixel(60, 10)));
+    AssertTrue('a cell''s left line', SamePx(st.TableBorder, bmp.GetPixel(106, 20)));
+    AssertTrue('drawn once: the cell before has no right line', SamePx(Sentinel,
+      bmp.GetPixel(105, 20)));
+    AssertTrue('the last cell''s right line', SamePx(st.TableBorder, bmp.GetPixel(297, 20)));
+    AssertTrue('the bottom line', SamePx(st.TableBorder, bmp.GetPixel(60, 10 + R.Height - 1)));
+    AssertTrue('inside: the ground', SamePx(Sentinel, bmp.GetPixel(60, 30)));
+    FDevice.DrawLog.Clear;
+    R.Paint(bmp, 10, 10, Rect(110, 0, 200, 60), st, 0, 0);
+    AssertEquals('a clip in cell 1: its text only', 'b|113|27', FDevice.DrawLog.CommaText);
+  finally
+    bmp.Free;
+  end;
+  d := LoadFixture('hand-word-table-merged.rtf');
+  R := TTyRowLayout(Block(d, 1, 1000));
+  R := TTyRowLayout(Block(d, R.LastPara + 1, 1000));
+  R := TTyRowLayout(Block(d, R.LastPara + 1, 1000));
+  AssertEquals('the last row', 2, R.RowIndex);
+  bmp := TBGRABitmap.Create(R.Width + 40, R.Height + 20, Sentinel);
+  try
+    R.Paint(bmp, 20, 10, Rect(0, 0, bmp.Width, bmp.Height), st, 0, 0);
+    x0 := 20 + (R.Cells[0].Left + R.Cells[0].Right) div 2;
+    AssertTrue('no line on top of the continued cell', SamePx(Sentinel, bmp.GetPixel(x0, 10)));
+    x0 := 20 + (R.Cells[1].Left + R.Cells[1].Right) div 2;
+    AssertTrue('its neighbour''s', SamePx(st.TableBorder, bmp.GetPixel(x0, 10)));
+    AssertTrue('the continued cell''s left line', SamePx(st.TableBorder,
+      bmp.GetPixel(20 + R.Cells[0].Left, 15)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Pictures drawn in a paint are decoded then, and only those the clip meets; a selected
+  picture gets the object frame. }
+procedure TTyRichLayoutTest.TestPaintDecodesOnlyThePicturesItDraws;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  i: Integer;
+  pic: TTyRichPicture;
+  fr: TTyRichFragment;
+begin
+  st := TyRichDefaultPaintStyle;
+  st.ObjectFrame := BGRA(0, 255, 0, 255);
+  d := NewDoc('          ');
+  for i := 9 downto 0 do
+  begin
+    pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, BGRA(i * 20, 0, 100, 255)), 300, 150);
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(i, pic)));
+  end;
+  L := Lay(d, 0, 25);
+  AssertEquals('a picture a line', 10, L.LineCount);
+  AssertEquals('not decoded at layout', 0, FLayouter.PictureDecodes);
+  bmp := TBGRABitmap.Create(60, 220, Sentinel);
+  try
+    L.Paint(bmp, 0, 0, Rect(0, 0, 60, 40), st, 0, 0);
+    AssertEquals('the two lines the clip meets', 2, FLayouter.PictureDecodes);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 60, 220), st, 0, 0);
+    AssertEquals('then all of them', 10, FLayouter.PictureDecodes);
+    fr := FragAt(L, 2);
+    L.Paint(bmp, 0, 0, Rect(0, 0, 60, 220), st, 2, 3);
+    AssertTrue('the selected one framed', SamePx(st.ObjectFrame,
+      bmp.GetPixel(fr.X, L.Lines[1].Baseline - fr.Ascent)));
+    AssertFalse('the others not', SamePx(st.ObjectFrame,
+      bmp.GetPixel(fr.X, L.Lines[0].Baseline - fr.Ascent)));
+  finally
+    bmp.Free;
+  end;
+  // two on one line, a clip that meets the first
+  d := NewDoc(' ');
+  for i := 1 downto 0 do
+  begin
+    pic := TTyRichPicture.Create(rpfPng, PngBytes(20, 10, BGRA(0, i * 200, 100, 255)), 300, 150);
+    AssertTrue('inserted', d.Execute(TTyRichInsertObject.Create(i, pic)));
+  end;
+  L := Lay(d, 0, 1000);
+  AssertEquals('on one line', 1, L.LineCount);
+  bmp := TBGRABitmap.Create(60, 30, Sentinel);
+  try
+    FLayouter.Clear;
+    L.Paint(bmp, 0, 0, Rect(0, 0, 15, 30), st, 0, 0);
+    AssertEquals('the one the clip meets', 11, FLayouter.PictureDecodes);
   finally
     bmp.Free;
   end;
