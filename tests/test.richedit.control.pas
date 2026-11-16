@@ -53,6 +53,22 @@ type
     procedure PaintSurfaceFrame(APPI: Integer); override;
     function ScrollBarLimit: Integer; override;
     function IdleTicks: QWord; override;
+    function HasCaretFocus: Boolean; override;
+  public
+    { The caret is drawn as for a focused control (a test cannot give the focus). }
+    ForceFocus: Boolean;
+    procedure PressAt(X, Y: Integer; AShift: TShiftState = []);
+    procedure MoveAt(X, Y: Integer);
+    procedure ReleaseAt(X, Y: Integer);
+    procedure RightAt(X, Y: Integer);
+    { KeyDown's answer: the key left for the form, 0 when the control took it. }
+    function KeyResult(AKey: Word; AShift: TShiftState): Word;
+    procedure DragTick;
+    procedure Blink;
+    procedure CaretOn(ACanvas: TCanvas);
+    function CursorFor(X, Y: Integer): TCursor;
+    function DragOn: Boolean;
+    function TextWindow: TRect;
   public
     Invalidated: array of TRect;
     BarLimit: Integer;
@@ -109,6 +125,7 @@ type
     FOther: TStream;
     { The device scale PaintAll's bitmap is made for (the forced scale of a test). }
     FPaintScale: Integer;
+    FSelChanges: Integer;
     procedure Changed(Sender: TObject);
     procedure Zoomed(Sender: TObject);
     procedure LoadCalled(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -134,6 +151,12 @@ type
     procedure SurfaceSequence(AScale: Integer);
     function PictureDoc(ACount: Integer): Integer;
     function SurfaceCount(const AColor: TBGRAPixel): Integer;
+    // 9b
+    procedure SelChanged(Sender: TObject);
+    { A client point inside the character at APos (on its line, left of its middle). }
+    function At(APos: TTyRichPos): TPoint;
+    procedure LoadRtfText(const S: string);
+    procedure Click(const P: TPoint; AShift: TShiftState = []);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -214,6 +237,24 @@ type
     procedure TestAParagraphInsertedAndRemovedOnScreen;
     procedure TestDetectFormatOnShortInput;
     procedure TestALoadThatRaisesKeepsTheOldDocument;
+    // 9b: the caret and the selection
+    procedure TestEndAndAClickPastALineEndStayOnThatLine;
+    procedure TestLeftAndRightStepOverWhatIsOneUnit;
+    procedure TestUpAndDownKeepTheWishedXAndCrossATable;
+    procedure TestShiftSelectionAndItsCollapse;
+    procedure TestWordAndParagraphSelectionAndTheirDrags;
+    procedure TestADragOutsideScrollsAndSelects;
+    procedure TestTheCaretIsScrolledIntoViewByTheLeastAmount;
+    procedure TestASelectionChangeRepaintsOnlyItsLines;
+    procedure TestSelectAllInAHugeDocumentLaysOutNothing;
+    procedure TestDocumentChangesMoveTheCaretAndTheSelection;
+    procedure TestTheViewerTakesItsKeysAndLeavesTheRest;
+    procedure TestAClickAndABlinkDrawNoText;
+    procedure TestTheSelectionIsPainted;
+    procedure TestSelStartAndSelLengthClampToCaretPlaces;
+    procedure TestAClickOnAnObjectSelectsIt;
+    procedure TestTheCursorAndARightClick;
+    procedure TestOneSelectionEventPerAction;
   end;
 
 implementation
@@ -589,6 +630,68 @@ end;
 function TRichProbe.Device: TTyRichTestDevice;
 begin
   Result := Layouter.Device as TTyRichTestDevice;
+end;
+
+function TRichProbe.HasCaretFocus: Boolean;
+begin
+  Result := ForceFocus or inherited HasCaretFocus;
+end;
+
+procedure TRichProbe.PressAt(X, Y: Integer; AShift: TShiftState);
+begin
+  MouseDown(mbLeft, AShift + [ssLeft], X, Y);
+end;
+
+procedure TRichProbe.MoveAt(X, Y: Integer);
+begin
+  MouseMove([ssLeft], X, Y);
+end;
+
+procedure TRichProbe.ReleaseAt(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TRichProbe.RightAt(X, Y: Integer);
+begin
+  MouseDown(mbRight, [ssRight], X, Y);
+  MouseUp(mbRight, [], X, Y);
+end;
+
+function TRichProbe.KeyResult(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, AShift);
+end;
+
+procedure TRichProbe.DragTick;
+begin
+  DragScrollTick(nil);
+end;
+
+procedure TRichProbe.Blink;
+begin
+  BlinkTick(nil);
+end;
+
+procedure TRichProbe.CaretOn(ACanvas: TCanvas);
+begin
+  DrawCaret(ACanvas);
+end;
+
+function TRichProbe.CursorFor(X, Y: Integer): TCursor;
+begin
+  Result := CursorAt(X, Y);
+end;
+
+function TRichProbe.DragOn: Boolean;
+begin
+  Result := Dragging;
+end;
+
+function TRichProbe.TextWindow: TRect;
+begin
+  Result := TextWindowRect;
 end;
 
 { ---- the suite ---- }
@@ -3953,6 +4056,663 @@ begin
       FRich.Area.Top + 1));
     PaintAll(True);
   end;
+end;
+
+{ ---- 9b: the caret and the selection ---- }
+
+{ A character as UTF-8, from its number (this file stays ASCII). }
+function Utf8Of(ACode: Cardinal): RawByteString;
+begin
+  if ACode < $80 then Result := AnsiChar(ACode)
+  else if ACode < $800 then
+    Result := AnsiChar($C0 or (ACode shr 6)) + AnsiChar($80 or (ACode and $3F))
+  else if ACode < $10000 then
+    Result := AnsiChar($E0 or (ACode shr 12)) + AnsiChar($80 or ((ACode shr 6) and $3F)) +
+      AnsiChar($80 or (ACode and $3F))
+  else
+    Result := AnsiChar($F0 or (ACode shr 18)) + AnsiChar($80 or ((ACode shr 12) and $3F)) +
+      AnsiChar($80 or ((ACode shr 6) and $3F)) + AnsiChar($80 or (ACode and $3F));
+end;
+
+procedure TTyRichEditControlTest.SelChanged(Sender: TObject);
+begin
+  Inc(FSelChanges);
+end;
+
+function TTyRichEditControlTest.At(APos: TTyRichPos): TPoint;
+var
+  r, r2: TRect;
+begin
+  r := FRich.PositionRect(APos);
+  r2 := FRich.PositionRect(APos + 1);
+  if (r2.Top = r.Top) and (r2.Left > r.Left + 2) then Result.X := r.Left + (r2.Left - r.Left) div 3
+  else Result.X := r.Left + 1;
+  Result.Y := (r.Top + r.Bottom) div 2;
+end;
+
+procedure TTyRichEditControlTest.LoadRtfText(const S: string);
+var
+  st: TBytesStream;
+begin
+  st := TBytesStream.Create(BytesOf(S));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.UpdateView;
+end;
+
+procedure TTyRichEditControlTest.Click(const P: TPoint; AShift: TShiftState);
+begin
+  FRich.PressAt(P.X, P.Y, AShift);
+  FRich.ReleaseAt(P.X, P.Y);
+end;
+
+{ W1's affinity carried by the control: End puts the caret at the end of the line it is on (a
+  wrapped line's end is also the next line's start), a click past a line's end does too, and
+  Home after End stays on that line - Latin, Chinese and justified text. }
+procedure TTyRichEditControlTest.TestEndAndAClickPastALineEndStayOnThatLine;
+
+  procedure Check(const AWhat: string);
+  var
+    L: TTyParaLayout;
+    ln, lineTop, y: Integer;
+    s, e: TTyRichPos;
+    a: TRect;
+  begin
+    FRich.UpdateView;
+    a := FRich.Area;
+    L := FRich.VisibleBlocks[0].Layout as TTyParaLayout;
+    AssertTrue(AWhat + ': it wraps', L.LineCount >= 3);
+    for ln := 0 to L.LineCount - 2 do
+    begin
+      s := L.Lines[ln].First;
+      e := L.Lines[ln].First + L.Lines[ln].Count;
+      lineTop := a.Top + Integer(FRich.VisibleBlocks[0].Top) + L.Lines[ln].Top;
+      FRich.SelStart := s;
+      FRich.Press(VK_END, []);
+      AssertEquals(Format('%s line %d: End', [AWhat, ln]), e, FRich.CaretPos);
+      AssertTrue(Format('%s line %d: End is the line''s end', [AWhat, ln]), FRich.CaretAtLineEnd);
+      AssertEquals(Format('%s line %d: End shows on that line', [AWhat, ln]), lineTop,
+        FRich.CaretClientRect.Top);
+      FRich.Press(VK_HOME, []);
+      AssertEquals(Format('%s line %d: Home after End', [AWhat, ln]), s, FRich.CaretPos);
+      y := lineTop + L.Lines[ln].Height div 2;
+      // in the right padding: past every line's end, also a justified one's
+      Click(Point(FRich.Width - 1, y));
+      AssertEquals(Format('%s line %d: a click past the end', [AWhat, ln]), e, FRich.CaretPos);
+      AssertEquals(Format('%s line %d: the click shows on that line', [AWhat, ln]), lineTop,
+        FRich.CaretClientRect.Top);
+      FRich.Press(VK_HOME, []);
+      AssertEquals(Format('%s line %d: Home after the click', [AWhat, ln]), s, FRich.CaretPos);
+    end;
+  end;
+
+var
+  s: RawByteString;
+  i: Integer;
+begin
+  s := '';
+  for i := 1 to 40 do s := s + 'word ';
+  FRich.Lines.Text := s;
+  Check('Latin');
+  s := '';
+  for i := 1 to 80 do s := s + Utf8Of($4E2D);
+  FRich.Lines.Text := s;
+  Check('Chinese');
+  s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\qj ';
+  for i := 1 to 25 do s := s + 'alpha beta ';
+  LoadRtfText(s + '}');
+  Check('justified');
+end;
+
+{ A step is what the layout shows as one: a cluster (a letter and its mark), an escaped byte's
+  two characters, an object; a paragraph's separator is one step; a cell merged away is
+  passed over (its empty paragraph is a position, but nothing is drawn there). }
+procedure TTyRichEditControlTest.TestLeftAndRightStepOverWhatIsOneUnit;
+var
+  st: TBytesStream;
+  t: TTyRichText;
+
+  procedure Step(const AWhat: string; AFrom: TTyRichPos; AKey: Word; AWant: TTyRichPos);
+  begin
+    FRich.SelStart := AFrom;
+    FRich.Press(AKey, []);
+    AssertEquals(AWhat, AWant, FRich.CaretPos);
+  end;
+
+begin
+  FRich.Lines.Text := 'ae' + Utf8Of($301) + 'x' + #10 + 'cd';
+  FRich.UpdateView;
+  Step('over a combining mark', 1, VK_RIGHT, 3);
+  Step('back over it', 3, VK_LEFT, 1);
+  Step('across the separator', 4, VK_RIGHT, 5);
+  Step('back across it', 5, VK_LEFT, 4);
+  { UTF-16 with a lone surrogate: its two bytes are no text and are escaped, each two
+    characters shown as one replacement - a step each }
+  st := TBytesStream.Create(BytesOf(#$FF#$FE'a'#0#0#$D8'b'#0));
+  try
+    FRich.LoadFromStream(st, rfText);
+  finally
+    st.Free;
+  end;
+  FRich.UpdateView;
+  AssertEquals('two escaped bytes, two characters each', Int64(6), FRich.Document.Text.Length);
+  Step('over an escaped byte', 1, VK_RIGHT, 3);
+  Step('over the next', 3, VK_RIGHT, 5);
+  Step('back over it', 5, VK_LEFT, 3);
+  Step('back over the first', 3, VK_LEFT, 1);
+  // an object
+  PictureDoc(1);
+  FRich.UpdateView;
+  Step('over an object', 1, VK_RIGHT, 2);
+  Step('back over it', 2, VK_LEFT, 1);
+  // a row whose second cell is merged into the first
+  LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\trowd\clmgf\cellx1500\clmrg\cellx3000' +
+    '\cellx4500\pard\intbl m\cell\pard\intbl\cell\pard\intbl c\cell\row\pard after\par}');
+  t := FRich.Document.Text;
+  AssertEquals('four paragraphs', 4, t.ParaCount);
+  AssertEquals('the merged-away cell''s paragraph', Int64(2), t.ParaStart(1));
+  AssertEquals('the third cell', Int64(3), t.ParaStart(2));
+  Step('past the cell merged away', 1, VK_RIGHT, 3);
+  Step('back past it', 3, VK_LEFT, 1);
+  Step('out of the row', 4, VK_RIGHT, 5);
+  Step('into the row', 5, VK_LEFT, 4);
+end;
+
+{ Up and Down keep the x of the first of them through a short line; they go down a column of
+  cells, into a cell merged into the one beside it, and out of the table. }
+procedure TTyRichEditControlTest.TestUpAndDownKeepTheWishedXAndCrossATable;
+var
+  t: TTyRichText;
+  i: Integer;
+const
+  // the second column: b1, its second paragraph, b2, the merged cell, after; back up
+  Want: array[0..6] of Integer = (2, 3, 5, 6, 8, 6, 5);
+  // the first column: a1, a2 (below a cell shorter than its row), the merged cell, after
+  WantFirst: array[0..3] of Integer = (1, 4, 6, 8);
+begin
+  FRich.Lines.Text := 'a long first line of text'#10'ab'#10'a long third line of text';
+  FRich.UpdateView;
+  FRich.SelStart := 20;
+  FRich.Press(VK_DOWN, []);
+  AssertEquals('down to the short line''s end', Int64(28), FRich.CaretPos);
+  FRich.Press(VK_DOWN, []);
+  AssertEquals('down again: the x of the start', Int64(49), FRich.CaretPos);
+  FRich.Press(VK_UP, []);
+  FRich.Press(VK_UP, []);
+  AssertEquals('and back up', Int64(20), FRich.CaretPos);
+  // a table: two cells a row, the last row merged into one cell
+  LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard top text that is long enough here\par' +
+    '\trowd\cellx1500\cellx3000\pard\intbl a1\cell\pard\intbl b1\par\pard\intbl b1x\cell\row' +
+    '\trowd\cellx1500\cellx3000\pard\intbl a2\cell\pard\intbl b2\cell\row' +
+    '\trowd\clmgf\cellx1500\clmrg\cellx3000\pard\intbl m\cell\pard\intbl\cell\row' +
+    '\pard after\par}');
+  t := FRich.Document.Text;
+  AssertEquals('paragraphs', 9, t.ParaCount);
+  // x in the second column (1500 twips = 100 px)
+  FRich.SelStart := 20;
+  AssertTrue('the start is right of the first column',
+    FRich.CaretClientRect.Left - FRich.Area.Left > 100);
+  for i := 0 to 4 do
+  begin
+    FRich.Press(VK_DOWN, []);
+    AssertEquals(Format('down %d', [i + 1]), Want[i], t.ParaOfPos(FRich.CaretPos));
+  end;
+  FRich.Press(VK_UP, []);
+  AssertEquals('up into the merged cell', Want[5], t.ParaOfPos(FRich.CaretPos));
+  FRich.Press(VK_UP, []);
+  AssertEquals('up the column', Want[6], t.ParaOfPos(FRich.CaretPos));
+  // the first column: out of a cell whose row is taller than it
+  FRich.SelStart := 1;
+  for i := 0 to 3 do
+  begin
+    FRich.Press(VK_DOWN, []);
+    AssertEquals(Format('first column, down %d', [i + 1]), WantFirst[i],
+      t.ParaOfPos(FRich.CaretPos));
+  end;
+end;
+
+{ Shift moves the caret and keeps the anchor, either way; an arrow without it collapses the
+  selection to its side; Ctrl steps by words, Home / End by the line. }
+procedure TTyRichEditControlTest.TestShiftSelectionAndItsCollapse;
+begin
+  FRich.Lines.Text := 'hello world';
+  FRich.UpdateView;
+  FRich.SelStart := 5;
+  FRich.Press(VK_RIGHT, [ssShift]);
+  FRich.Press(VK_RIGHT, [ssShift]);
+  AssertEquals('right: start', Int64(5), FRich.SelStart);
+  AssertEquals('right: length', Int64(2), FRich.SelLength);
+  FRich.Press(VK_LEFT, [ssShift]);
+  FRich.Press(VK_LEFT, [ssShift]);
+  FRich.Press(VK_LEFT, [ssShift]);
+  FRich.Press(VK_LEFT, [ssShift]);
+  AssertEquals('back past the anchor: start', Int64(3), FRich.SelStart);
+  AssertEquals('back past the anchor: length', Int64(2), FRich.SelLength);
+  AssertEquals('the caret is the start', Int64(3), FRich.CaretPos);
+  FRich.Press(VK_RIGHT, []);
+  AssertEquals('Right collapses to the right side', Int64(5), FRich.CaretPos);
+  AssertFalse('nothing selected', FRich.HasSelection);
+  FRich.Press(VK_LEFT, [ssShift]);
+  FRich.Press(VK_LEFT, []);
+  AssertEquals('Left collapses to the left side', Int64(4), FRich.CaretPos);
+  FRich.SelStart := 0;
+  FRich.Press(VK_RIGHT, [ssCtrl]);
+  AssertEquals('Ctrl+Right: the next word', Int64(6), FRich.CaretPos);
+  FRich.Press(VK_END, []);
+  FRich.Press(VK_LEFT, [ssCtrl]);
+  AssertEquals('Ctrl+Left: the word''s start', Int64(6), FRich.CaretPos);
+  FRich.Press(VK_HOME, [ssShift]);
+  AssertEquals('Shift+Home: from the start', Int64(0), FRich.SelStart);
+  AssertEquals('Shift+Home: to the anchor', Int64(6), FRich.SelLength);
+  FRich.Press(VK_END, [ssShift, ssCtrl]);
+  AssertEquals('Ctrl+Shift+End: from the anchor', Int64(6), FRich.SelStart);
+  AssertEquals('Ctrl+Shift+End: to the end', Int64(5), FRich.SelLength);
+end;
+
+{ A double click selects the word and a drag after it goes by words, the word clicked staying
+  selected; a triple click the paragraph with its separator, a drag after it by paragraphs;
+  Shift+click extends from the anchor. }
+procedure TTyRichEditControlTest.TestWordAndParagraphSelectionAndTheirDrags;
+var
+  p: TPoint;
+begin
+  FRich.Lines.Text := 'alpha beta gamma'#10'second line here';
+  FRich.UpdateView;
+  p := At(7);
+  Click(p);
+  FRich.PressAt(p.X, p.Y, [ssDouble]);
+  AssertEquals('double click: the word''s start', Int64(6), FRich.SelStart);
+  AssertEquals('double click: the word', Int64(4), FRich.SelLength);
+  FRich.MoveAt(At(13).X, At(13).Y);
+  AssertEquals('dragged on: from the word', Int64(6), FRich.SelStart);
+  AssertEquals('dragged on: to the end of the word reached', Int64(10), FRich.SelLength);
+  FRich.MoveAt(At(2).X, At(2).Y);
+  AssertEquals('dragged back: from the word reached', Int64(0), FRich.SelStart);
+  AssertEquals('dragged back: the word clicked stays', Int64(10), FRich.SelLength);
+  FRich.ReleaseAt(p.X, p.Y);
+  // a triple click
+  p := At(8);
+  Click(p);
+  Click(p, [ssDouble]);
+  FRich.PressAt(p.X, p.Y);
+  AssertEquals('triple click: the paragraph''s start', Int64(0), FRich.SelStart);
+  AssertEquals('triple click: with its separator', Int64(17), FRich.SelLength);
+  FRich.MoveAt(At(20).X, At(20).Y);
+  AssertEquals('dragged into the next: the last has no separator', Int64(33), FRich.SelLength);
+  FRich.ReleaseAt(p.X, p.Y);
+  // Shift+click
+  Click(At(2));
+  Click(At(8), [ssShift]);
+  AssertEquals('Shift+click: from the anchor', Int64(2), FRich.SelStart);
+  AssertEquals('Shift+click: to the click', Int64(6), FRich.SelLength);
+end;
+
+{ A drag held below the text scrolls (the drag timer's handler, driven here) and the selection
+  follows; further out it scrolls faster; the button let go, it stops. Disabling the control
+  ends a drag. }
+procedure TTyRichEditControlTest.TestADragOutsideScrollsAndSelects;
+var
+  p: TPoint;
+  y0, y1, d1, d2: Int64;
+  c0, anchor: TTyRichPos;
+begin
+  SetLinesOf(300, 'Line ');
+  FRich.UpdateView;
+  anchor := FRich.Document.Text.ParaStart(1);
+  p := At(anchor);
+  FRich.PressAt(p.X, p.Y);
+  AssertTrue('a drag', FRich.DragOn);
+  FRich.MoveAt(p.X, FRich.Height + 5);
+  y0 := FRich.ScrollY;
+  c0 := FRich.CaretPos;
+  FRich.DragTick;
+  d1 := FRich.ScrollY - y0;
+  AssertTrue('it scrolled', d1 > 0);
+  AssertTrue('the selection followed', FRich.CaretPos > c0);
+  AssertEquals('from the anchor', anchor, FRich.SelStart);
+  FRich.MoveAt(p.X, FRich.Height + 100);
+  y1 := FRich.ScrollY;
+  FRich.DragTick;
+  d2 := FRich.ScrollY - y1;
+  AssertTrue(Format('further out, faster (%d, %d)', [d1, d2]), d2 > d1);
+  FRich.ReleaseAt(p.X, FRich.Height + 100);
+  AssertFalse('let go', FRich.DragOn);
+  y1 := FRich.ScrollY;
+  FRich.DragTick;
+  AssertEquals('no more scrolling', y1, FRich.ScrollY);
+  FRich.PressAt(p.X, p.Y);
+  FRich.Enabled := False;
+  AssertFalse('disabled: no drag', FRich.DragOn);
+  FRich.Enabled := True;
+end;
+
+{ After a move the view scrolls by the least that shows the caret's line whole: a line down
+  past the bottom puts it at the bottom, one up past the top at the top, a far jump from above
+  at the bottom. The wheel scrolls without moving the caret. }
+procedure TTyRichEditControlTest.TestTheCaretIsScrolledIntoViewByTheLeastAmount;
+var
+  a, r: TRect;
+  i: Integer;
+  y, est: Int64;
+  c: TTyRichPos;
+begin
+  SetLinesOf(300, 'Line ');
+  FRich.UpdateView;
+  a := FRich.Area;
+  est := FRich.Layouter.EstimatedParaHeight(96, 1);
+  i := 0;
+  while (FRich.ScrollY = 0) and (i < 100) do
+  begin
+    FRich.Press(VK_DOWN, []);
+    Inc(i);
+  end;
+  r := FRich.CaretClientRect;
+  AssertEquals('down past the bottom: the line at the bottom', a.Bottom, r.Bottom);
+  AssertTrue('by less than a line', FRich.ScrollY <= est);
+  y := FRich.ScrollY;
+  i := 0;
+  while (FRich.ScrollY = y) and (i < 100) do
+  begin
+    FRich.Press(VK_UP, []);
+    Inc(i);
+  end;
+  AssertEquals('up past the top: the line at the top', a.Top, FRich.CaretClientRect.Top);
+  c := FRich.CaretPos;
+  y := FRich.ScrollY;
+  FRich.Wheel(-120, []);
+  FRich.UpdateView;
+  AssertTrue('the wheel scrolls', FRich.ScrollY <> y);
+  AssertEquals('and leaves the caret', c, FRich.CaretPos);
+  FRich.SelStart := FRich.Document.Text.ParaStart(200);
+  AssertEquals('a jump from above: at the bottom', a.Bottom, FRich.CaretClientRect.Bottom);
+end;
+
+{ One Shift+Down repaints that line's band and nothing else: the invalidated rectangles are in
+  its rows, and the paint draws only the blocks next to it. }
+procedure TTyRichEditControlTest.TestASelectionChangeRepaintsOnlyItsLines;
+var
+  t: TTyRichText;
+  band: TRect;
+  i: Integer;
+begin
+  SetLinesOf(300, 'Line ');
+  t := FRich.Document.Text;
+  FRich.SelStart := t.ParaStart(3);
+  PaintAll(True);
+  band := FRich.ParagraphRect(3);
+  FRich.ResetCounts;
+  FRich.Press(VK_DOWN, [ssShift]);
+  AssertEquals('a line selected', t.ParaStart(4) - t.ParaStart(3), FRich.SelLength);
+  AssertTrue('something invalidated', Length(FRich.Invalidated) > 0);
+  for i := 0 to High(FRich.Invalidated) do
+    AssertTrue(Format('rectangle %d in the line''s band', [i]),
+      (FRich.Invalidated[i].Top >= band.Top) and (FRich.Invalidated[i].Bottom <= band.Bottom));
+  AssertEquals('nothing laid out', 0, FRich.LaidParas);
+  PaintAll(True);
+  AssertTrue(Format('only the blocks next to it drawn (%d)', [FRich.BlockPaints]),
+    FRich.BlockPaints <= 3);
+  AssertEquals('no frame', 0, FRich.FramePaints);
+end;
+
+{ Select All in a 2,000,000-line document: no layout, no walk over the paragraphs (a few
+  lookups of the held blocks), the view painted once. }
+procedure TTyRichEditControlTest.TestSelectAllInAHugeDocumentLaysOutNothing;
+var
+  t: TTyRichText;
+  visits: Int64;
+  n: Integer;
+begin
+  LoadBig;
+  t := FRich.Document.Text;
+  PaintAll(True);
+  n := FRich.VisibleBlockCount;
+  FRich.ResetCounts;
+  visits := t.NodeVisits;
+  FRich.SelectAll;
+  AssertEquals('all of it', t.Length, FRich.SelLength);
+  AssertEquals('no layout asked for', 0, Length(FRich.Given));
+  AssertTrue(Format('a few lookups (%d)', [t.NodeVisits - visits]), t.NodeVisits - visits < 5000);
+  PaintAll(True);
+  AssertTrue(Format('the view painted once (%d of %d)', [FRich.BlockPaints, n]),
+    FRich.BlockPaints <= n);
+  AssertEquals('still nothing laid out', 0, FRich.LaidParas);
+end;
+
+{ The caret and the anchor follow the document's changes: a change before them shifts them, an
+  insertion at the caret leaves it, a deletion around it puts it at the deletion's start, a
+  format change leaves them, a new content puts both at 0, a lazy load's slices leave them. }
+procedure TTyRichEditControlTest.TestDocumentChangesMoveTheCaretAndTheSelection;
+var
+  f: TTyCharFormat;
+  st: TBytesStream;
+  paras, k: Integer;
+begin
+  FRich.Lines.Text := 'abcdef';
+  FRich.UpdateView;
+  FRich.SelStart := 4;
+  AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(1, 'XY')));
+  AssertEquals('an insertion before', Int64(6), FRich.CaretPos);
+  AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(6, 'Q')));
+  AssertEquals('an insertion at the caret', Int64(6), FRich.CaretPos);
+  AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(0, 2)));
+  AssertEquals('a deletion before', Int64(4), FRich.CaretPos);
+  AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(3, 3)));
+  AssertEquals('a deletion around it', Int64(3), FRich.CaretPos);
+  FRich.SelStart := 1;
+  FRich.SelLength := 2;
+  AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(0, 'zz')));
+  AssertEquals('the selection moved: start', Int64(3), FRich.SelStart);
+  AssertEquals('the selection moved: length', Int64(2), FRich.SelLength);
+  f := TyDefaultCharFormat;
+  f.Style := [fsBold];
+  AssertTrue(FRich.Document.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 5), [cffBold], f)));
+  AssertEquals('a format change: start', Int64(3), FRich.SelStart);
+  AssertEquals('a format change: length', Int64(2), FRich.SelLength);
+  FRich.Lines.Text := 'new';
+  AssertEquals('a new content: the caret', Int64(0), FRich.CaretPos);
+  AssertFalse('a new content: nothing selected', FRich.HasSelection);
+  // a lazy load's slices
+  FRich.Slices(4096, 4096);
+  st := TBytesStream.Create(GeneratedRtf(200000, paras));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('loading', FRich.Loading);
+  FRich.SelStart := 10;
+  k := 0;
+  while FRich.Loading and (k < 1000) do
+  begin
+    FRich.Step;
+    Inc(k);
+  end;
+  AssertFalse('loaded', FRich.Loading);
+  AssertEquals('the slices left the caret', Int64(10), FRich.CaretPos);
+end;
+
+{ Every arrow is the viewer's - also where the caret cannot move (it never reaches the
+  parent's focus navigation); Tab, Enter, Esc go on to the form. }
+procedure TTyRichEditControlTest.TestTheViewerTakesItsKeysAndLeavesTheRest;
+begin
+  FRich.Lines.Text := 'abc';
+  FRich.UpdateView;
+  FRich.SelStart := 0;
+  AssertEquals('Left at the start', 0, FRich.KeyResult(VK_LEFT, []));
+  AssertEquals('Up on the first line', 0, FRich.KeyResult(VK_UP, []));
+  FRich.SelStart := 3;
+  AssertEquals('Right at the end', 0, FRich.KeyResult(VK_RIGHT, []));
+  AssertEquals('Down on the last line', 0, FRich.KeyResult(VK_DOWN, []));
+  AssertEquals('Shift+Right at the end', 0, FRich.KeyResult(VK_RIGHT, [ssShift]));
+  AssertEquals('Ctrl+A', 0, FRich.KeyResult(VK_A, [ssCtrl]));
+  AssertEquals('Tab goes on', VK_TAB, FRich.KeyResult(VK_TAB, []));
+  AssertEquals('Shift+Tab goes on', VK_TAB, FRich.KeyResult(VK_TAB, [ssShift]));
+  AssertEquals('Enter goes on', VK_RETURN, FRich.KeyResult(VK_RETURN, []));
+  AssertEquals('Esc goes on', VK_ESCAPE, FRich.KeyResult(VK_ESCAPE, []));
+  AssertEquals('a letter goes on', VK_X, FRich.KeyResult(VK_X, []));
+end;
+
+{ A click that only places the caret, and the caret's blink, draw no block and no frame: the
+  window is invalidated where the caret was and is (the caret is drawn over the blit), never
+  the surface. }
+procedure TTyRichEditControlTest.TestAClickAndABlinkDrawNoText;
+var
+  t: TTyRichText;
+  i: Integer;
+  r: TRect;
+  bmp: TBitmap;
+begin
+  SetLinesOf(50, 'Line ');
+  t := FRich.Document.Text;
+  FRich.ForceFocus := True;
+  PaintAll(True);
+  FRich.ResetCounts;
+  Click(At(t.ParaStart(2) + 1));
+  AssertEquals('the caret placed', t.ParaStart(2) + 1, FRich.CaretPos);
+  AssertTrue('the caret''s rectangle invalidated', Length(FRich.Invalidated) > 0);
+  for i := 0 to High(FRich.Invalidated) do
+    AssertTrue(Format('only a caret''s width (%d)', [i]),
+      FRich.Invalidated[i].Right - FRich.Invalidated[i].Left <= 2);
+  PaintAll(True);
+  AssertEquals('the click drew no block', 0, FRich.BlockPaints);
+  AssertEquals('nor the frame', 0, FRich.FramePaints);
+  // the caret over the blit
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.PaintPart(bmp.Canvas, Rect(0, 0, FRich.Width, FRich.Height), True);
+    FRich.CaretOn(bmp.Canvas);
+    r := FRich.CaretClientRect;
+    AssertEquals('drawn in the text colour', TyColorToLCL(FRich.CurrentStyle.TextColor),
+      bmp.Canvas.Pixels[r.Left, (r.Top + r.Bottom) div 2]);
+  finally
+    bmp.Free;
+  end;
+  FRich.ResetCounts;
+  FRich.Blink;
+  AssertEquals('the blink: one rectangle', 1, Length(FRich.Invalidated));
+  AssertTrue('the caret''s', EqualRect(r, FRich.Invalidated[0]));
+  FRich.Blink;
+  AssertEquals('and back: one rectangle', 2, Length(FRich.Invalidated));
+  AssertTrue('the caret''s again', EqualRect(r, FRich.Invalidated[1]));
+  PaintAll(True);
+  AssertEquals('the blinks drew no block', 0, FRich.BlockPaints);
+end;
+
+{ The blocks paint the selection: its colour is on the surface where text is selected, as much
+  more as more is selected. }
+procedure TTyRichEditControlTest.TestTheSelectionIsPainted;
+var
+  sel: TBGRAPixel;
+  part: Integer;
+begin
+  // a solid colour of its own: the theme's may be translucent (blended with the ground)
+  FRich.StyleOverride := '--selection: #FF0000;';
+  FRich.Lines.Text := 'abc def ghi';
+  PaintAll(True);
+  sel := FRich.Style.SelectionBack;
+  AssertEquals('nothing selected', 0, SurfaceCount(sel));
+  FRich.SelStart := 4;
+  FRich.SelLength := 3;
+  PaintAll(True);
+  part := SurfaceCount(sel);
+  AssertTrue('a part selected', part > 0);
+  FRich.SelectAll;
+  PaintAll(True);
+  AssertTrue('all selected: more', SurfaceCount(sel) > part);
+  FRich.ClearSelection;
+  PaintAll(True);
+  AssertEquals('none again', 0, SurfaceCount(sel));
+end;
+
+{ SelStart and SelLength clamp to the document and to caret places (a cluster's start). }
+procedure TTyRichEditControlTest.TestSelStartAndSelLengthClampToCaretPlaces;
+begin
+  FRich.Lines.Text := 'ae' + Utf8Of($301) + 'x';
+  FRich.SelStart := -3;
+  AssertEquals('below 0', Int64(0), FRich.SelStart);
+  FRich.SelStart := 99;
+  AssertEquals('past the end', Int64(4), FRich.SelStart);
+  FRich.SelStart := 2;
+  AssertEquals('inside a cluster: its start', Int64(1), FRich.SelStart);
+  FRich.SelStart := 0;
+  FRich.SelLength := 2;
+  AssertEquals('an end inside a cluster', Int64(1), FRich.SelLength);
+  FRich.SelLength := 99;
+  AssertEquals('a length past the end', Int64(4), FRich.SelLength);
+  AssertEquals('the caret at the end', Int64(4), FRich.CaretPos);
+end;
+
+{ A click on a picture selects it: the selection is its one character. }
+procedure TTyRichEditControlTest.TestAClickOnAnObjectSelectsIt;
+var
+  r1, r2: TRect;
+begin
+  PictureDoc(1);
+  FRich.UpdateView;
+  r1 := FRich.PositionRect(1);
+  r2 := FRich.PositionRect(2);
+  AssertTrue('the picture is wide', r2.Left - r1.Left > 10);
+  Click(Point((r1.Left + r2.Left) div 2, (r1.Top + r1.Bottom) div 2));
+  AssertEquals('the picture: start', Int64(1), FRich.SelStart);
+  AssertEquals('the picture: its character', Int64(1), FRich.SelLength);
+  Click(At(0));
+  AssertFalse('a letter: the caret only', FRich.HasSelection);
+end;
+
+{ The I-beam over the text, the arrow over the padding; a right click outside the selection
+  moves the caret there, inside it keeps the selection. }
+procedure TTyRichEditControlTest.TestTheCursorAndARightClick;
+var
+  a: TRect;
+  p: TPoint;
+begin
+  FRich.Lines.Text := 'alpha beta';
+  FRich.UpdateView;
+  a := FRich.Area;
+  AssertEquals('over the text', Ord(crIBeam), Ord(FRich.CursorFor((a.Left + a.Right) div 2,
+    (a.Top + a.Bottom) div 2)));
+  AssertEquals('over the padding', Ord(crDefault), Ord(FRich.CursorFor(1, 1)));
+  FRich.SelStart := 6;
+  FRich.SelLength := 4;
+  p := At(7);
+  FRich.RightAt(p.X, p.Y);
+  AssertEquals('inside: kept', Int64(4), FRich.SelLength);
+  p := At(1);
+  FRich.RightAt(p.X, p.Y);
+  AssertFalse('outside: collapsed', FRich.HasSelection);
+  AssertEquals('at the click', Int64(1), FRich.CaretPos);
+end;
+
+{ OnSelectionChange once per action that moves an end, never for one that moves none. }
+procedure TTyRichEditControlTest.TestOneSelectionEventPerAction;
+var
+  p: TPoint;
+begin
+  FRich.Lines.Text := 'alpha beta gamma';
+  FRich.UpdateView;
+  FRich.OnSelectionChange := @SelChanged;
+  FSelChanges := 0;
+  FRich.Press(VK_LEFT, []);
+  AssertEquals('a key that moves nothing', 0, FSelChanges);
+  FRich.Press(VK_RIGHT, [ssShift]);
+  AssertEquals('a key', 1, FSelChanges);
+  FRich.Press(VK_END, []);
+  AssertEquals('another key', 2, FSelChanges);
+  p := At(2);
+  FRich.PressAt(p.X, p.Y);
+  AssertEquals('a press', 3, FSelChanges);
+  FRich.MoveAt(At(8).X, At(8).Y);
+  AssertEquals('a move of the drag', 4, FSelChanges);
+  FRich.MoveAt(At(8).X, At(8).Y);
+  AssertEquals('a move that changes nothing', 4, FSelChanges);
+  FRich.ReleaseAt(p.X, p.Y);
+  FRich.SelectAll;
+  AssertEquals('Select All', 5, FSelChanges);
 end;
 
 initialization

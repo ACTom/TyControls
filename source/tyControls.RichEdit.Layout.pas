@@ -500,6 +500,19 @@ type
       of its last shown cell's last paragraph (a merged-away cell after it shows its
       positions in the cell it went into). }
     function LastCaretPos: TTyRichPos; virtual; abstract;
+    { The caret place one step from APos (block-relative) - a step is a cluster, an object, an
+      escaped byte's pair, a space, a tab -, forward or back; -1 when there is none in the
+      block that way (the caller goes on in the next or the previous block). A place past
+      LastCaretPos (a cut paragraph's hidden tail) steps back to LastCaretPos and forward out
+      of the block; a row never stops in a cell merged away. From a place that is not a caret
+      place (inside a cluster) a step back gives the start of that cluster. }
+    function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; virtual; abstract;
+    { The visual line the caret at APos (with its affinity) is on: its first caret place and
+      its last - the end of a wrapped line with AEndAtLineEnd True (the caret belongs at that
+      line's end, not the next line's start), before the U+000B that ends a line, the cut of a
+      cut paragraph. In a row, the line of the cell paragraph APos is in. }
+    procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
+      out AEndAtLineEnd: Boolean); virtual; abstract;
     { What it says may no longer be the document: the paragraphs it shows changed after it
       was made (the layouter dropped it), or - for a layout the cache had already let go of
       while its holder kept it (evicted for space) - the document changed in any way since:
@@ -562,6 +575,9 @@ type
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
     function LastCaretPos: TTyRichPos; override;
+    function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
+    procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
+      out AEndAtLineEnd: Boolean); override;
     { The line a position is on (the start of a wrapped line belongs to that line - or, with
       AAtLineEnd, to the line it ends: see CaretRect), and the line at a height (above the
       first: the first; below the last: the last). }
@@ -676,6 +692,9 @@ type
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
     function LastCaretPos: TTyRichPos; override;
+    function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
+    procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
+      out AEndAtLineEnd: Boolean); override;
     { The item (paragraph) position APos is in: the last that starts at or before it. }
     function ItemAt(APos: TTyRichPos): Integer;
     function CellCount: Integer;
@@ -2360,6 +2379,99 @@ begin
   end;
 end;
 
+function TTyParaLayout.NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+
+  { The fragment holding character APos: on the line it starts, else -1. }
+  function FragAt(AChar: TTyRichPos): Integer;
+  var
+    i: Integer;
+  begin
+    with FLines[LineOfPos(AChar)] do
+      for i := FirstFrag to FirstFrag + FragCount - 1 do
+        if (AChar >= FFrags[i].First) and (AChar < FFrags[i].First + FFrags[i].Count) then
+          Exit(i);
+    Result := -1;
+  end;
+
+  { The first cluster start of text fragment F after its character AChars (F.Count when none):
+    the same cluster rule as SnapToCluster. }
+  function NextCluster(const F: TTyRichFragment; AChars: Integer): Integer;
+  var
+    i, k, len: Integer;
+    c, prev: Cardinal;
+    riOdd, start: Boolean;
+  begin
+    i := F.ByteStart + 1;
+    prev := 0;
+    riOdd := False;
+    for k := 0 to F.Count - 1 do
+    begin
+      len := DecodeAt(FText, i, c);
+      if k = 0 then start := True
+      else start := not (TyRichIsClusterExtend(c) or (prev = $200D) or
+        (IsRegional(c) and IsRegional(prev) and riOdd));
+      if IsRegional(c) then riOdd := start else riOdd := False;
+      if start and (k > AChars) then Exit(k);
+      prev := c;
+      Inc(i, len);
+    end;
+    Result := F.Count;
+  end;
+
+var
+  k: Integer;
+begin
+  if AForward then
+  begin
+    // the cut and what is past it: the next block
+    if APos >= FShown then Exit(-1);
+    if APos < 0 then Exit(0);
+    k := FragAt(APos);
+    if k < 0 then Exit(APos + 1);
+    case FFrags[k].Kind of
+      rfkText: Result := FFrags[k].First + NextCluster(FFrags[k], Integer(APos - FFrags[k].First));
+      // atomic: an object, an escaped byte's two characters
+      rfkObject, rfkReplacement: Result := FFrags[k].First + FFrags[k].Count;
+    else
+      Result := APos + 1;
+    end;
+    if Result > FShown then Result := FShown;
+  end
+  else
+  begin
+    if APos > FShown then Exit(FShown);
+    if APos <= 0 then Exit(-1);
+    k := FragAt(APos - 1);
+    if k < 0 then Exit(APos - 1);
+    case FFrags[k].Kind of
+      rfkText: Result := FFrags[k].First +
+        SnapToCluster(FFrags[k], Integer(APos - 1 - FFrags[k].First));
+      rfkObject, rfkReplacement: Result := FFrags[k].First;
+    else
+      Result := APos - 1;
+    end;
+  end;
+end;
+
+procedure TTyParaLayout.LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart,
+  AEnd: TTyRichPos; out AEndAtLineEnd: Boolean);
+var
+  ln: Integer;
+begin
+  if APos < 0 then APos := 0;
+  if APos > FShown then APos := FShown;
+  ln := LineOfPos(APos, AAtLineEnd);
+  with FLines[ln] do
+  begin
+    AStart := First;
+    // as a click past the line's end: after its hanging spaces, before a U+000B that ends it
+    AEnd := First + Count - Ord(Forced);
+    AEndAtLineEnd := (ln < FLineCount - 1) and not Forced;
+  end;
+  if AEnd > FShown then AEnd := FShown;
+  if AStart > AEnd then AStart := AEnd;
+end;
+
 { ---- table rows ---- }
 
 destructor TTyRowLayout.Destroy;
@@ -2535,6 +2647,68 @@ begin
     end;
   end;
   SetLength(Result, n);
+end;
+
+function TTyRowLayout.NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+
+  // a paragraph of a cell merged away is no caret place: nothing is drawn there
+  function Shown(AItem: Integer): Boolean;
+  begin
+    Result := not FCells[FItems[AItem].Cell].Hidden;
+  end;
+
+var
+  k, j: Integer;
+  r: TTyRichPos;
+begin
+  if System.Length(FItems) = 0 then Exit(-1);
+  if APos < 0 then APos := 0;
+  k := ItemAt(APos);
+  if AForward then
+  begin
+    if Shown(k) then
+    begin
+      r := FItems[k].Layout.NextCaretPos(APos - FItems[k].Pos, True);
+      if r >= 0 then Exit(FItems[k].Pos + r);
+    end;
+    for j := k + 1 to High(FItems) do
+      if Shown(j) then Exit(FItems[j].Pos);
+  end
+  else
+  begin
+    if Shown(k) then
+    begin
+      r := FItems[k].Layout.NextCaretPos(APos - FItems[k].Pos, False);
+      if r >= 0 then Exit(FItems[k].Pos + r);
+    end;
+    for j := k - 1 downto 0 do
+      if Shown(j) then Exit(FItems[j].Pos + FItems[j].Layout.LastCaretPos);
+  end;
+  Result := -1;
+end;
+
+procedure TTyRowLayout.LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart,
+  AEnd: TTyRichPos; out AEndAtLineEnd: Boolean);
+var
+  k, o: Integer;
+begin
+  AStart := 0;
+  AEnd := 0;
+  AEndAtLineEnd := False;
+  if System.Length(FItems) = 0 then Exit;
+  if APos < 0 then APos := 0;
+  k := ItemAt(APos);
+  o := FCells[FItems[k].Cell].Owner;
+  if FCells[FItems[k].Cell].Hidden and (FCells[o].ItemCount > 0) then
+  begin
+    // shown at the end of the cell it went into (CaretRect): that line
+    k := FCells[o].FirstItem + FCells[o].ItemCount - 1;
+    APos := FItems[k].Pos + FItems[k].Layout.Length;
+    AAtLineEnd := False;
+  end;
+  FItems[k].Layout.LineBounds(APos - FItems[k].Pos, AAtLineEnd, AStart, AEnd, AEndAtLineEnd);
+  Inc(AStart, FItems[k].Pos);
+  Inc(AEnd, FItems[k].Pos);
 end;
 
 { ---- painting ---- }
