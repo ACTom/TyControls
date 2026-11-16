@@ -684,6 +684,18 @@ msgstr ""
 msgid "Insert object"
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditincomplete
+msgid "The document was not loaded completely, so it cannot be saved."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditcannotchange
+msgid "The document cannot be changed now: it is still loading, incomplete or being saved."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditcannotreplace
+msgid "The file %s could not be replaced; it was left as it was."
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinserttext
 msgid "Insert text"
 msgstr ""

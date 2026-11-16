@@ -846,6 +846,18 @@ msgstr "设置段落格式"
 msgid "Insert object"
 msgstr "插入对象"
 
+#: tycontrols.strconsts.rsricheditincomplete
+msgid "The document was not loaded completely, so it cannot be saved."
+msgstr "文档没有完整载入,不能保存。"
+
+#: tycontrols.strconsts.rsricheditcannotchange
+msgid "The document cannot be changed now: it is still loading, incomplete or being saved."
+msgstr "文档现在不能修改:它还在载入、没有载入完整,或者正在保存。"
+
+#: tycontrols.strconsts.rsricheditcannotreplace
+msgid "The file %s could not be replaced; it was left as it was."
+msgstr "无法替换文件 %s,原文件保持不变。"
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"

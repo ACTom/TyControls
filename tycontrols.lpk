@@ -925,6 +925,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RichEdit.RowFormat.pas"/>
         <UnitName Value="tyControls.RichEdit.RowFormat"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.pas"/>
+        <UnitName Value="tyControls.RichEdit"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

@@ -295,6 +295,12 @@ resourcestring
   rsRichUndoParaFormat   = 'Paragraph formatting';
   rsRichUndoInsertObject = 'Insert object';
 
+  { --- TTyRichEdit loading and saving -----------------------------------------
+    What a refused save or change says (ETyRichEdit). %s is the file. }
+  rsRichEditIncomplete    = 'The document was not loaded completely, so it cannot be saved.';
+  rsRichEditCannotChange  = 'The document cannot be changed now: it is still loading, incomplete or being saved.';
+  rsRichEditCannotReplace = 'The file %s could not be replaced; it was left as it was.';
+
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
     its fourth item, which clears the scrollback. }

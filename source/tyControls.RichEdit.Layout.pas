@@ -277,7 +277,22 @@ type
     PlaceholderFrame: TBGRAPixel;
     ObjectFrame: TBGRAPixel;        // around a selected picture
     TableBorder: TBGRAPixel;
+    { A picture not ready to be drawn at its box's size (not decoded, or not scaled to it) is
+      not made ready by this paint: its box is filled PlaceholderFill (no frame, which would
+      flash) and the layouter notes it (TakeSkippedPictures), for the owner to prepare later
+      (PreparePicture) and repaint that box - so a paint while scrolling never waits for a
+      decoder. False: every picture is decoded and drawn now (a preview, a test). }
+    DeferPictures: Boolean;
   end;
+
+  { A picture a paint passed over (TTyRichPaintStyle.DeferPictures): the box it was to be drawn
+    in (the target's pixels, as that paint placed the block). The record holds a reference to
+    the picture, which whoever takes it releases. }
+  TTyRichSkippedPicture = record
+    Picture: TTyRichPicture;
+    Box: TRect;
+  end;
+  TTyRichSkippedPictures = array of TTyRichSkippedPicture;
 
   { What painting needs of a character format, taken when the layout is made. }
   TTyRichPaintFormat = record
@@ -556,6 +571,11 @@ type
     FPictureLimit: Int64;
     FPictureDecodes: Int64;
     FPictureScales: Int64;
+    FSkipped: TTyRichSkippedPictures;
+    FSkippedCount: Integer;
+    function PictureEntry(APicture: TTyRichPicture; AWidth, AHeight: Integer): TObject;
+    procedure NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
+    procedure ClearSkippedPictures;
     procedure WalkCollect(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
     function ListOfFormat(ADoc: TTyRichDocument; AFormat: TTyParaFormatId): TTyListFormat;
@@ -658,6 +678,16 @@ type
     { Pictures decoded and images scaled, for the tests that check when that happens. }
     property PictureDecodes: Int64 read FPictureDecodes;
     property PictureScales: Int64 read FPictureScales;
+    { APicture can be drawn in a box of AWidth x AHeight without decoding or scaling: it is
+      kept decoded and at that size (or as one that cannot be shown). Asking changes nothing. }
+    function PictureReady(APicture: TTyRichPicture; AWidth, AHeight: Integer): Boolean;
+    { Makes APicture ready for a box of AWidth x AHeight - decoded and scaled now, kept as
+      DrawPicture keeps it - without drawing it. }
+    procedure PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+    { The pictures paints with DeferPictures passed over since the last call, in the order they
+      were met (each with a reference the caller releases); the list starts empty again. }
+    function TakeSkippedPictures: TTyRichSkippedPictures;
+    property SkippedPictureCount: Integer read FSkippedCount;
   end;
 
 { The width LayoutPara takes for a wrap mode: rwmWindow AAvailWidth (at least 1), rwmPage
@@ -2311,7 +2341,16 @@ begin
     if (box.Right <= AClip.Left) or (box.Left >= AClip.Right) or (box.Bottom <= AClip.Top) or
       (box.Top >= AClip.Bottom) then
       Continue;
-    FLayouter.DrawPicture(ATarget, TTyRichPicture(f^.Obj), box, linePx, AStyle);
+    if AStyle.DeferPictures and not FLayouter.PictureReady(TTyRichPicture(f^.Obj),
+      box.Right - box.Left, box.Bottom - box.Top) then
+    begin
+      // not decoded here: an empty box now, the picture when its owner has prepared it
+      ATarget.FillRect(box.Left, box.Top, box.Right, box.Bottom, AStyle.PlaceholderFill,
+        dmDrawWithTransparency);
+      FLayouter.NoteSkippedPicture(TTyRichPicture(f^.Obj), box);
+    end
+    else
+      FLayouter.DrawPicture(ATarget, TTyRichPicture(f^.Obj), box, linePx, AStyle);
     sel := (f^.First >= ASelFrom) and (f^.First < ASelTo);
     if sel then
     begin
@@ -3558,6 +3597,7 @@ begin
   Result.PlaceholderFrame := BGRA(160, 160, 160, 255);
   Result.ObjectFrame := BGRA(51, 153, 255, 255);
   Result.TableBorder := BGRA(128, 128, 128, 255);
+  Result.DeferPictures := False;
 end;
 
 { ---- layouter: pictures ---- }
@@ -3614,20 +3654,20 @@ begin
   Result := FPictures.Count;
 end;
 
-function TTyRichLayouter.DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture;
-  const ABox: TRect; ALinePx: Integer; const AStyle: TTyRichPaintStyle): Boolean;
+{ The kept entry of APicture, made now when there is none (decoded here, never at layout),
+  moved to the front, and with an image scaled to AWidth x AHeight when the decoded one is
+  not that size already (Scaled; nil when scaling failed). }
+function TTyRichLayouter.PictureEntry(APicture: TTyRichPicture; AWidth,
+  AHeight: Integer): TObject;
 var
   o: TObject;
   e: TTyPictureEntry;
   w, h: Integer;
   fmt: TTyRichPictureFormat;
   start, count: Integer;
-  img: TBGRABitmap;
 begin
-  Result := False;
-  w := ABox.Right - ABox.Left;
-  h := ABox.Bottom - ABox.Top;
-  if (ATarget = nil) or (APicture = nil) or (w <= 0) or (h <= 0) then Exit;
+  w := AWidth;
+  h := AHeight;
   if FPictures.TryGetValue(APicture, o) then
   begin
     e := TTyPictureEntry(o);
@@ -3650,6 +3690,40 @@ begin
     PicturePushFront(e);
     Inc(FPictureBytes, e.Bytes);
   end;
+  { Scaled straight from the decoded pixels to the box's device pixels (the layout is in
+    device pixels: HiDPI and zoom are in the box already), and kept for that size: a paint of
+    an unchanged size does not resample again. }
+  if (e.Image <> nil) and not ((e.Image.Width = w) and (e.Image.Height = h)) and
+    ((e.Scaled = nil) or (e.Scaled.Width <> w) or (e.Scaled.Height <> h)) then
+  begin
+    Dec(e.Bytes, ImageBytes(e.Scaled));
+    Dec(FPictureBytes, ImageBytes(e.Scaled));
+    FreeAndNil(e.Scaled);
+    try
+      e.Image.ResampleFilter := rfBestQuality;
+      e.Scaled := e.Image.Resample(w, h, rmFineResample) as TBGRABitmap;
+    except
+      FreeAndNil(e.Scaled);
+    end;
+    Inc(FPictureScales);
+    Inc(e.Bytes, ImageBytes(e.Scaled));
+    Inc(FPictureBytes, ImageBytes(e.Scaled));
+  end;
+  Result := e;
+end;
+
+function TTyRichLayouter.DrawPicture(ATarget: TBGRABitmap; APicture: TTyRichPicture;
+  const ABox: TRect; ALinePx: Integer; const AStyle: TTyRichPaintStyle): Boolean;
+var
+  e: TTyPictureEntry;
+  w, h: Integer;
+  img: TBGRABitmap;
+begin
+  Result := False;
+  w := ABox.Right - ABox.Left;
+  h := ABox.Bottom - ABox.Top;
+  if (ATarget = nil) or (APicture = nil) or (w <= 0) or (h <= 0) then Exit;
+  e := TTyPictureEntry(PictureEntry(APicture, w, h));
   if e.Image = nil then
     DrawPlaceholder(ATarget, ABox, ALinePx, AStyle)
   else
@@ -3657,27 +3731,7 @@ begin
     if (e.Image.Width = w) and (e.Image.Height = h) then
       img := e.Image
     else
-    begin
-      { Scaled straight from the decoded pixels to the box's device pixels (the layout is in
-        device pixels: HiDPI and zoom are in the box already), and kept for that size: a
-        paint of an unchanged size does not resample again. }
-      if (e.Scaled = nil) or (e.Scaled.Width <> w) or (e.Scaled.Height <> h) then
-      begin
-        Dec(e.Bytes, ImageBytes(e.Scaled));
-        Dec(FPictureBytes, ImageBytes(e.Scaled));
-        FreeAndNil(e.Scaled);
-        try
-          e.Image.ResampleFilter := rfBestQuality;
-          e.Scaled := e.Image.Resample(w, h, rmFineResample) as TBGRABitmap;
-        except
-          FreeAndNil(e.Scaled);
-        end;
-        Inc(FPictureScales);
-        Inc(e.Bytes, ImageBytes(e.Scaled));
-        Inc(FPictureBytes, ImageBytes(e.Scaled));
-      end;
       img := e.Scaled;
-    end;
     if img <> nil then
     begin
       ATarget.PutImage(ABox.Left, ABox.Top, img, dmDrawWithTransparency);
@@ -3687,6 +3741,53 @@ begin
       DrawPlaceholder(ATarget, ABox, ALinePx, AStyle);
   end;
   PictureTrim(e);
+end;
+
+function TTyRichLayouter.PictureReady(APicture: TTyRichPicture; AWidth,
+  AHeight: Integer): Boolean;
+var
+  o: TObject;
+  e: TTyPictureEntry;
+begin
+  if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit(True);
+  if not FPictures.TryGetValue(APicture, o) then Exit(False);
+  e := TTyPictureEntry(o);
+  // one that cannot be shown is ready: its placeholder costs nothing
+  if e.Image = nil then Exit(True);
+  Result := ((e.Image.Width = AWidth) and (e.Image.Height = AHeight)) or
+    ((e.Scaled <> nil) and (e.Scaled.Width = AWidth) and (e.Scaled.Height = AHeight));
+end;
+
+procedure TTyRichLayouter.PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+begin
+  if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit;
+  PictureTrim(PictureEntry(APicture, AWidth, AHeight));
+end;
+
+procedure TTyRichLayouter.NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
+begin
+  if FSkippedCount = System.Length(FSkipped) then
+    SetLength(FSkipped, FSkippedCount * 2 + 8);
+  APicture.AddRef;
+  FSkipped[FSkippedCount].Picture := APicture;
+  FSkipped[FSkippedCount].Box := ABox;
+  Inc(FSkippedCount);
+end;
+
+procedure TTyRichLayouter.ClearSkippedPictures;
+var
+  i: Integer;
+begin
+  for i := 0 to FSkippedCount - 1 do FSkipped[i].Picture.Release;
+  FSkipped := nil;
+  FSkippedCount := 0;
+end;
+
+function TTyRichLayouter.TakeSkippedPictures: TTyRichSkippedPictures;
+begin
+  Result := Copy(FSkipped, 0, FSkippedCount);
+  FSkipped := nil;
+  FSkippedCount := 0;
 end;
 
 { ---- the layouter ---- }
@@ -3715,6 +3816,7 @@ end;
 destructor TTyRichLayouter.Destroy;
 begin
   Clear;
+  ClearSkippedPictures;
   FPictures.Free;
   FListOfFormat.Free;
   FOrdinals.Free;
