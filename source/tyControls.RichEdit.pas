@@ -221,6 +221,10 @@ type
     { The device scale the view is laid out at: the last paint's canvas's (1 before any). }
     FScale: Integer;
     FWidestSeen: Integer;
+    { A zoom or a PPI change scaled FWidestSeen as a stand-in until the view is laid out again
+      (the bars are decided with it before that): the next LayoutView builds it again from what
+      it lays out (K-2). }
+    FExtentStale: Boolean;
     FBlocks: array of TTyRichViewBlock;
     FBlockCount: Integer;
     FViewValid: Boolean;
@@ -3024,9 +3028,12 @@ procedure TTyCustomRichEdit.NoteExtent(ALayout: TTyBlockLayout);
 var
   w: Integer;
 begin
+  { The widest content that does not wrap (a line, an object, a table row: the block's Width),
+    never the wrap width itself - text that wraps to the window fits it at any zoom (K-2). A
+    page wider than the window scrolls over the page's width. }
   w := ALayout.Width;
-  // a page narrower or wider than the window scrolls over the page's width
-  if (ALayout.LayoutWidth <> CRichNoWrap) and (ALayout.LayoutWidth > w) then
+  if (FWrapMode = rwmPage) and (ALayout.LayoutWidth <> CRichNoWrap) and
+    (ALayout.LayoutWidth > w) then
     w := ALayout.LayoutWidth;
   if w > FWidestSeen then FWidestSeen := w;
 end;
@@ -3105,11 +3112,14 @@ begin
     begin
       { Every font changes, no picture does: the layouts and measures go, the decoded pictures
         stay. What is wide is as much wider: the horizontal position keeps its fraction of the
-        extent (the extent seen is scaled the same way until blocks are laid out again). }
+        extent where there is still something to scroll (clamped to the new extent, 0 where
+        there is none). The scaled extent only stands in for the bars' first decision: the
+        next layout builds the extent again from what it lays out, so it can shrink (K-2). }
       FLayouter.ClearLayouts;
       factor := (z * rppi) / (FLayoutZoom * FLayoutPPI);
       FScrollX := Round(FScrollX * factor);
       FWidestSeen := Round(FWidestSeen * factor);
+      FExtentStale := True;
     end
     else
       FWidestSeen := 0;
@@ -3144,6 +3154,12 @@ begin
   old := Copy(FBlocks, 0, FBlockCount);
   nOld := FBlockCount;
   ReleaseBlocks;
+  // the extent from what is laid out now (a zoom's stand-in goes)
+  if FExtentStale then
+  begin
+    FWidestSeen := 0;
+    FExtentStale := False;
+  end;
   FViewValid := True;
   FViewShifted := nOld > 0;
   FMoveKnown := False;

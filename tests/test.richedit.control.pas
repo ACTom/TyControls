@@ -351,6 +351,9 @@ type
     procedure TestAPartialRowCopiesAsTheFilesRow;
     procedure TestARowShownWhileLoadingIsLaidOutWhole;
     procedure TestAPressedObjectKeepsItsAnchor;
+    procedure TestTheExtentIsTheContentNotTheWrapWidth;
+    procedure TestTheColumnSurvivesAZoomWhereItCanScroll;
+    procedure TestAJumpLaysOutOnlyTheViewItArrivesAt;
   end;
 
 implementation
@@ -7297,6 +7300,170 @@ begin
     AssertEquals(Format('half %d: a Shift+click after it keeps it', [half]), Int64(1), FRich.SelStart);
     AssertEquals(Format('half %d: to the click', [half]), Int64(2), FRich.SelLength);
   end;
+end;
+
+{ K-2: in window-wrap mode the horizontal extent is the widest content that does not wrap, never
+  the wrap width: text that wraps to the window shows no horizontal bar at any zoom, also after
+  200 -> 50 -> 100 (the smoke's sequence); a row wider than the window brings the bar, its
+  extent follows the zoom up and down and comes back to its first value; page mode scrolls over
+  the page's width. }
+procedure TTyRichEditControlTest.TestTheExtentIsTheContentNotTheWrapWidth;
+var
+  s: string;
+  i, tw, e1, e: Integer;
+
+  procedure NoBar(const AWhat: string);
+  begin
+    FRich.UpdateView;
+    tw := FRich.Area.Right - FRich.Area.Left;
+    AssertTrue(Format('%s: the extent (%d) within the text width (%d)',
+      [AWhat, FRich.HorizontalExtent, tw]), FRich.HorizontalExtent <= tw);
+    AssertTrue(AWhat + ': no horizontal bar', (FRich.HBar = nil) or not FRich.HBar.Visible);
+  end;
+
+  function Near(A, B, ATol: Integer): Boolean;
+  begin
+    Result := Abs(A - B) <= ATol;
+  end;
+
+begin
+  // the content's width, not the window's
+  FRich.Lines.Text := 'short';
+  NoBar('a short line');
+  AssertTrue(Format('the extent is the line''s (%d of %d)', [FRich.HorizontalExtent, tw]),
+    FRich.HorizontalExtent < tw div 2);
+  s := '';
+  for i := 1 to 80 do s := s + 'word ';
+  FRich.Lines.Text := s + #10 + s + #10 + s;
+  NoBar('100%');
+  FRich.Zoom := 150;
+  NoBar('150%');
+  FRich.Zoom := 200;
+  NoBar('200%');
+  FRich.Zoom := 50;
+  NoBar('200 -> 50%');
+  FRich.Zoom := 100;
+  NoBar('200 -> 50 -> 100%');
+  // a row of 800 px (12000 twips) in the same window
+  LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0\fs20 before\par' +
+    '\trowd\cellx3000\cellx12000\pard\intbl a\cell b\cell\row\pard after\par}');
+  FRich.Zoom := 100;
+  FRich.UpdateView;
+  tw := FRich.Area.Right - FRich.Area.Left;
+  e1 := FRich.HorizontalExtent;
+  AssertTrue(Format('the row is wider than the window (%d, %d)', [e1, tw]), e1 > tw);
+  AssertTrue('a horizontal bar', (FRich.HBar <> nil) and FRich.HBar.Visible);
+  FRich.Zoom := 200;
+  FRich.UpdateView;
+  e := FRich.HorizontalExtent;
+  AssertTrue(Format('200%%: twice as wide (%d, was %d)', [e, e1]), Near(e, 2 * e1, 4));
+  AssertTrue('200%: the bar', (FRich.HBar <> nil) and FRich.HBar.Visible);
+  FRich.Zoom := 70;
+  FRich.UpdateView;
+  e := FRich.HorizontalExtent;
+  AssertTrue(Format('70%%: narrower (%d, was %d)', [e, e1]), Near(e, Round(0.7 * e1), 4));
+  FRich.Zoom := 100;
+  FRich.UpdateView;
+  AssertTrue(Format('100%% again: the first extent (%d, was %d)', [FRich.HorizontalExtent, e1]),
+    Near(FRich.HorizontalExtent, e1, 1));
+  // the page: its text width, wider than this window
+  FRich.Lines.Text := 'short';
+  FRich.WrapMode := rwmPage;
+  FRich.UpdateView;
+  e := TyRichLayoutWidth(rwmPage, 1, FRich.Document, 96, 1);
+  AssertTrue(Format('page mode: the page''s width (%d, page %d)', [FRich.HorizontalExtent, e]),
+    Near(FRich.HorizontalExtent, e, 1));
+  FRich.WrapMode := rwmWindow;
+end;
+
+{ K-2 / H2-M8: a horizontal position survives a zoom at the same fraction (of the extent: the
+  same column stays at the left edge) where there is still something to scroll, and is 0
+  where there is not. }
+procedure TTyRichEditControlTest.TestTheColumnSurvivesAZoomWhereItCanScroll;
+var
+  e1, x1, tw: Integer;
+begin
+  LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0\fs20 before\par' +
+    '\trowd\cellx3000\cellx12000\pard\intbl a\cell b\cell\row\pard after\par}');
+  FRich.UpdateView;
+  tw := FRich.Area.Right - FRich.Area.Left;
+  e1 := FRich.HorizontalExtent;
+  FRich.HBar.Position := (e1 - tw) div 2;
+  x1 := FRich.ScrollX;
+  AssertTrue('scrolled across', x1 > 0);
+  FRich.Zoom := 200;
+  FRich.UpdateView;
+  // the same column at the left edge: the same fraction of the extent
+  AssertTrue(Format('200%%: the same fraction (%d of %d, was %d of %d)',
+    [FRich.ScrollX, FRich.HorizontalExtent, x1, e1]),
+    Abs(FRich.ScrollX / FRich.HorizontalExtent - x1 / e1) < 0.02);
+  // wrapped text only: nothing to scroll, the position is 0
+  FRich.Lines.Text := 'short';
+  FRich.UpdateView;
+  AssertEquals('nothing to scroll: 0', 0, FRich.ScrollX);
+end;
+
+{ K-3: what a jump costs in a document of 1,000,000 lines, by counters (no clock): block
+  layouts asked for (and new ones), tree node visits, for Ctrl+End, Ctrl+Home and PgDn, the key
+  and the paint after it. A jump lays out the screen it arrives at with the screen the view holds
+  above and below it (what LayoutView holds); the counts are written out for the report. }
+procedure TTyRichEditControlTest.TestAJumpLaysOutOnlyTheViewItArrivesAt;
+var
+  ms: TMemoryStream;
+  line: RawByteString;
+  i: Integer;
+
+  procedure Measure(const AWhat: string; AKey: Word; AShift: TShiftState);
+  var
+    v0, kv, pv: Int64;
+    kGiven, kNew, pGiven, pNew, held: Integer;
+  begin
+    PaintAll(True);
+    FRich.ResetCounts;
+    v0 := FRich.Document.Text.NodeVisits;
+    FRich.Press(AKey, AShift);
+    kGiven := Length(FRich.Given);
+    kNew := FRich.LaidParas;
+    kv := FRich.Document.Text.NodeVisits - v0;
+    FRich.ResetCounts;
+    v0 := FRich.Document.Text.NodeVisits;
+    PaintAll(True);
+    pGiven := Length(FRich.Given);
+    pNew := FRich.LaidParas;
+    pv := FRich.Document.Text.NodeVisits - v0;
+    held := FRich.VisibleBlockCount;
+    WriteLn(Format('K-3 %s: key: %d layouts asked, %d new, %d tree visits; paint: %d asked, ' +
+      '%d new, %d tree visits; the view holds %d blocks', [AWhat, kGiven, kNew, kv, pGiven, pNew,
+      pv, held]));
+    // the key lays out at most the view it arrives at (a screen above and below included),
+    // and the paint after it nothing new
+    AssertTrue(Format('%s: the key laid out %d new blocks, the view holds %d', [AWhat, kNew, held]),
+      kNew <= held + 2);
+    AssertEquals(AWhat + ': the paint lays out nothing new', 0, pNew);
+  end;
+
+begin
+  FRich.SetBounds(0, 0, 1200, 800);
+  ms := TMemoryStream.Create;
+  try
+    for i := 0 to 999999 do
+    begin
+      line := 'Line ' + IntToStr(i) + ' of the counted document, with some words in it.' + #10;
+      ms.WriteBuffer(line[1], Length(line));
+    end;
+    ms.Position := 0;
+    FRich.LoadFromStream(ms, rfText);
+  finally
+    ms.Free;
+  end;
+  AssertTrue('a million lines', FRich.Document.Text.ParaCount >= 1000000);
+  FRich.UpdateView;
+  Measure('Ctrl+End', VK_END, [ssCtrl]);
+  Measure('Ctrl+Home', VK_HOME, [ssCtrl]);
+  Measure('PgDn 1', VK_NEXT, []);
+  Measure('PgDn 2', VK_NEXT, []);
+  Measure('Ctrl+End again', VK_END, [ssCtrl]);
+  Measure('PgUp at the end', VK_PRIOR, []);
 end;
 
 initialization
