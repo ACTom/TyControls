@@ -22,7 +22,7 @@ uses
   tyControls.ScrollBar, tyControls.Painter,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
-  tyControls.RichEdit, test.richedit.layoutdevice;
+  tyControls.RichEdit, test.richedit.layoutdevice, test.devicescale.support;
 
 type
   { A layouter whose resampling can be made to fail (a test seam of W2's). }
@@ -37,11 +37,15 @@ type
   private
     FLaidParas: Integer;
     FLaidMin, FLaidMax: Integer;
+    FBlockPaints, FFramePaints: Integer;
   protected
     function CreateDevice: TTyRichTextDevice; override;
     function CreateLayouter: TTyRichLayouter; override;
     function LayoutBlockAt(AIndex: Integer): TTyBlockLayout; override;
-    procedure InvalidateContent(const ARect: TRect); override;
+    procedure InvalidateArea(const ARect: TRect); override;
+    procedure PaintBlock(ABitmap: TBGRABitmap; AIndex, AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle); override;
+    procedure PaintSurfaceFrame(APPI: Integer); override;
     function ScrollBarLimit: Integer; override;
   public
     Invalidated: array of TRect;
@@ -63,6 +67,14 @@ type
     procedure Wheel(ADelta: Integer; AShift: TShiftState);
     function Device: TTyRichTestDevice;
     function Lay: TProbeLayouter;
+    function Surf: TBGRABitmap;
+    function Scale: Integer;
+    procedure RedrawAll;
+    procedure InvalidatePart(const ARect: TRect);
+    procedure WheelH(ADelta: Integer);
+    procedure Hover(AOn: Boolean);
+    property BlockPaints: Integer read FBlockPaints;
+    property FramePaints: Integer read FFramePaints;
     property LaidParas: Integer read FLaidParas;
     property LaidMin: Integer read FLaidMin;
     property LaidMax: Integer read FLaidMax;
@@ -96,6 +108,7 @@ type
       AZoomAfter: Integer);
     function FileCount: Integer;
     procedure CheckClearAdd(const AList: array of string);
+    procedure CheckSurface(const AWhat: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -149,6 +162,11 @@ type
     procedure TestHugeBlocksKeepTheArithmeticInRange;
     // R40
     procedure TestTheBytesBeforeTheRtfAreKept;
+    // R39
+    procedure TestTheSurfaceEqualsAFullRedraw;
+    procedure TestAScrollPaintsOnlyWhatItExposes;
+    procedure TestTheSurfaceIsTheClientsSize;
+    procedure TestDeviceScaleTwo;
   end;
 
 implementation
@@ -319,11 +337,54 @@ begin
   end;
 end;
 
-procedure TRichProbe.InvalidateContent(const ARect: TRect);
+procedure TRichProbe.InvalidateArea(const ARect: TRect);
 begin
   SetLength(Invalidated, Length(Invalidated) + 1);
   Invalidated[High(Invalidated)] := ARect;
-  inherited InvalidateContent(ARect);
+  inherited InvalidateArea(ARect);
+end;
+
+procedure TRichProbe.PaintBlock(ABitmap: TBGRABitmap; AIndex, AX, AY: Integer;
+  const AClip: TRect; const AStyle: TTyRichPaintStyle);
+begin
+  Inc(FBlockPaints);
+  inherited PaintBlock(ABitmap, AIndex, AX, AY, AClip, AStyle);
+end;
+
+procedure TRichProbe.PaintSurfaceFrame(APPI: Integer);
+begin
+  Inc(FFramePaints);
+  inherited PaintSurfaceFrame(APPI);
+end;
+
+function TRichProbe.Surf: TBGRABitmap;
+begin
+  Result := Surface;
+end;
+
+function TRichProbe.Scale: Integer;
+begin
+  Result := DeviceScale;
+end;
+
+procedure TRichProbe.RedrawAll;
+begin
+  InvalidateSurface;
+end;
+
+procedure TRichProbe.InvalidatePart(const ARect: TRect);
+begin
+  InvalidateContent(ARect);
+end;
+
+procedure TRichProbe.WheelH(ADelta: Integer);
+begin
+  DoMouseWheelHorz([], ADelta, Point(10, 10));
+end;
+
+procedure TRichProbe.Hover(AOn: Boolean);
+begin
+  if AOn then MouseEnter else MouseLeave;
 end;
 
 function TRichProbe.ScrollBarLimit: Integer;
@@ -338,6 +399,9 @@ begin
   FLaidMax := -1;
   Invalidated := nil;
   Given := nil;
+  FBlockPaints := 0;
+  FFramePaints := 0;
+  if Layouter <> nil then Device.ResetCounters;
 end;
 
 procedure TRichProbe.PaintPart(ACanvas: TCanvas; const AClip: TRect; ADefer: Boolean);
@@ -420,6 +484,7 @@ procedure TTyRichEditControlTest.TearDown;
 var
   sr: TSearchRec;
 begin
+  TyForceDeviceScaleForTest(0, False);
   FreeAndNil(FRich);
   FreeAndNil(FCtl);
   if (FTemp <> '') and DirectoryExists(FTemp) then
@@ -508,6 +573,13 @@ begin
   finally
     f.Free;
   end;
+end;
+
+{ ABand is AWant's rows, as wide as the text and reaching into its left padding. }
+function SameBand(const AWant, ABand: TRect): Boolean;
+begin
+  Result := (ABand.Top = AWant.Top) and (ABand.Bottom = AWant.Bottom) and
+    (ABand.Right = AWant.Right) and (ABand.Left <= AWant.Left) and (ABand.Left >= 0);
 end;
 
 function TTyRichEditControlTest.InView(APara: Integer): Boolean;
@@ -634,7 +706,7 @@ begin
   AssertTrue('a colour from code', FRich.Document.Execute(TTyRichSetCharFormat.Create(
     TyRichRange(t.ParaStart(5), t.ParaLength(5)), [cffColor], f)));
   AssertEquals('one rectangle', 1, Length(FRich.Invalidated));
-  AssertTrue('the paragraph''s', EqualRect(r5, FRich.Invalidated[0]));
+  AssertTrue('the paragraph''s', SameBand(r5, FRich.Invalidated[0]));
   AssertEquals('one block laid out again', 1, FRich.LaidParas);
   // a taller paragraph moves what is below it
   r7 := FRich.ParagraphRect(7);
@@ -644,7 +716,7 @@ begin
   AssertTrue('a size from code', FRich.Document.Execute(TTyRichSetCharFormat.Create(
     TyRichRange(t.ParaStart(7), t.ParaLength(7)), [cffSize], f)));
   AssertEquals('one rectangle', 1, Length(FRich.Invalidated));
-  AssertTrue('from the paragraph to the bottom', EqualRect(Rect(a.Left, r7.Top, a.Right,
+  AssertTrue('from the paragraph to the bottom', SameBand(Rect(a.Left, r7.Top, a.Right,
     a.Bottom), FRich.Invalidated[0]));
   // a change below the view and the blocks it holds invalidates nothing
   FRich.UpdateView;
@@ -1231,8 +1303,11 @@ begin
     all := FRich.Device.DrawCalls;
     AssertTrue(Format('a screen of lines (%d)', [all]), all >= ScreenLines - 2);
     FRich.Device.ResetCounters;
-    FRich.PaintPart(bmp.Canvas, FRich.ParagraphRect(5), False);
-    AssertEquals('one paragraph''s clip draws its one line', 1, FRich.Device.DrawCalls);
+    FRich.PaintPart(bmp.Canvas, Rect(0, 0, 400, 300), True);
+    AssertEquals('nothing dirty draws nothing', 0, FRich.Device.DrawCalls);
+    FRich.InvalidatePart(FRich.ParagraphRect(5));
+    FRich.PaintPart(bmp.Canvas, Rect(0, 0, 400, 300), True);
+    AssertEquals('one paragraph dirty draws its one line', 1, FRich.Device.DrawCalls);
   finally
     bmp.Free;
   end;
@@ -2545,6 +2620,282 @@ begin
     AssertEquals('the RTF before it is forgotten', Ord('{'), PByte(ms.Memory)^);
   finally
     ms.Free;
+  end;
+end;
+
+{ ---- R39: the kept surface ---- }
+
+{ The surface as it is, drawn again from nothing at the same position: the same pixels. }
+procedure TTyRichEditControlTest.CheckSurface(const AWhat: string);
+var
+  kept: TBGRABitmap;
+  x, y, diff, dx0, dy0, dx1, dy1: Integer;
+  a, b: PBGRAPixel;
+begin
+  PaintAll(True);
+  AssertTrue(AWhat + ': a surface', FRich.Surf <> nil);
+  kept := FRich.Surf.Duplicate as TBGRABitmap;
+  try
+    FRich.RedrawAll;
+    PaintAll(True);
+    diff := 0;
+    dx0 := 0; dy0 := 0; dx1 := 0; dy1 := 0;
+    for y := 0 to FRich.Height * FRich.Scale - 1 do
+    begin
+      a := kept.ScanLine[y];
+      b := FRich.Surf.ScanLine[y];
+      for x := 0 to FRich.Width * FRich.Scale - 1 do
+      begin
+        if (a^.red <> b^.red) or (a^.green <> b^.green) or (a^.blue <> b^.blue) or
+          (a^.alpha <> b^.alpha) then
+        begin
+          if diff = 0 then
+          begin
+            dx0 := x; dy0 := y; dx1 := x; dy1 := y;
+          end;
+          Inc(diff);
+          dx0 := Math.Min(dx0, x); dx1 := Math.Max(dx1, x);
+          dy0 := Math.Min(dy0, y); dy1 := Math.Max(dy1, y);
+        end;
+        Inc(a);
+        Inc(b);
+      end;
+    end;
+    AssertEquals(Format('%s: pixels that differ from a full redraw (in %d,%d..%d,%d; area %d,%d,%d,%d)',
+      [AWhat + Format(' kept %x new %x / kept %x new %x', [PCardinal(kept.ScanLine[dy0] + dx0)^,
+      PCardinal(FRich.Surf.ScanLine[dy0] + dx0)^, PCardinal(kept.ScanLine[dy1] + dx1)^,
+      PCardinal(FRich.Surf.ScanLine[dy1] + dx1)^]), dx0, dy0, dx1, dy1, FRich.Area.Left, FRich.Area.Top, FRich.Area.Right,
+      FRich.Area.Bottom]), 0, diff);
+  finally
+    kept.Free;
+  end;
+end;
+
+{ A document of lines, wrapped paragraphs, one paragraph taller than the view, a table row and
+  a picture, as RTF. }
+function MixedRtf: string;
+var
+  i, k: Integer;
+  s: string;
+begin
+  Result := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}';
+  for i := 0 to 59 do
+  begin
+    s := 'Line ' + IntToStr(i);
+    if i mod 7 = 3 then
+      for k := 1 to 40 do s := s + ' word' + IntToStr(k mod 5);
+    if i = 20 then
+      for k := 1 to 1500 do s := s + ' tall' + IntToStr(k mod 9);
+    Result := Result + '\pard ' + s + '\par' + #13#10;
+    if i = 12 then
+      Result := Result + '\trowd\cellx2500\cellx5000\pard\intbl cell one\cell\pard\intbl cell two' +
+        ' with more words in it\cell\row' + #13#10;
+    if i = 30 then
+      Result := Result + '\pard {\pict\pngblip\picw40\pich20\picwgoal900\pichgoal450 ' +
+        HexOf(PngBytes(40, 20, BGRA(30, 160, 60, 255))) + '}\par' + #13#10;
+  end;
+  Result := Result + '\pard The last line.\par}';
+end;
+
+{ After scrolls by a line, a part of a line, a page, to the end and back, a horizontal scroll,
+  invalidations and changes of the document, the kept surface is what a full redraw at the
+  same position draws, pixel for pixel. }
+procedure TTyRichEditControlTest.TestTheSurfaceEqualsAFullRedraw;
+var
+  st: TBytesStream;
+  est, i: Integer;
+  f: TTyCharFormat;
+  t: TTyRichText;
+begin
+  st := TBytesStream.Create(BytesOf(MixedRtf));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  est := FRich.Layouter.EstimatedParaHeight(96, 1);
+  CheckSurface('first');
+  FRich.ScrollViewBy(est);
+  CheckSurface('a line down');
+  FRich.ScrollViewBy(-est);
+  CheckSurface('a line up');
+  FRich.ScrollViewBy(est div 2 + 1);
+  CheckSurface('part of a line');
+  for i := 1 to 12 do
+  begin
+    FRich.ScrollViewBy(est * 3);
+    CheckSurface(Format('a notch %d (rows, a picture, the tall paragraph)', [i]));
+  end;
+  FRich.ScrollViewBy(FRich.Area.Bottom - FRich.Area.Top - est);
+  CheckSurface('a page');
+  FRich.ScrollViewBy(-7);
+  CheckSurface('seven pixels up inside the tall paragraph');
+  FRich.ScrollToEnd;
+  CheckSurface('the end');
+  FRich.ScrollViewBy(-est);
+  CheckSurface('a line above the end');
+  FRich.ScrollViewBy(est * 5);
+  CheckSurface('against the end');
+  FRich.ScrollToTop;
+  CheckSurface('the top');
+  FRich.ScrollViewBy(est * 2);
+  FRich.ScrollViewBy(est);
+  CheckSurface('two scrolls before a paint');
+  // a part invalidated, nothing changed
+  FRich.InvalidatePart(Rect(10, 20, 200, 41));
+  CheckSurface('an invalidated part');
+  // the document changes: a colour, a height, a paragraph added on screen
+  t := FRich.Document.Text;
+  f := TyDefaultCharFormat;
+  f.Color := clRed;
+  AssertTrue('a colour', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(FRich.TopParagraph + 2), 4), [cffColor], f)));
+  CheckSurface('a colour');
+  f.SizeHalfPt := 40;
+  AssertTrue('a size', FRich.Document.Execute(TTyRichSetCharFormat.Create(
+    TyRichRange(t.ParaStart(FRich.TopParagraph + 3), 4), [cffSize], f)));
+  FRich.ScrollViewBy(est);
+  CheckSurface('a size and a scroll');
+  AssertTrue('a paragraph', FRich.Document.Execute(TTyRichInsertText.Create(
+    t.ParaStart(FRich.TopParagraph + 1), 'new line'#10)));
+  CheckSurface('a paragraph');
+  // no wrap: a horizontal scroll moves columns
+  FRich.WrapMode := rwmNone;
+  CheckSurface('no wrap');
+  FRich.WheelH(120);
+  CheckSurface('a horizontal notch');
+  FRich.WheelH(-120);
+  CheckSurface('and back');
+end;
+
+{ A scroll by a line paints only the blocks the exposed band meets, and lays out nothing that
+  was held; a paint with nothing dirty paints no block and no frame; a hover (a state that
+  changes the frame) paints the frame and lays out nothing. }
+procedure TTyRichEditControlTest.TestAScrollPaintsOnlyWhatItExposes;
+var
+  est: Integer;
+begin
+  SetLinesOf(1000, 'Line ');
+  FCtl.LoadThemeCss('TyRichEdit:hover { border-color: #FF0000; }');
+  PaintAll(True);
+  est := FRich.Layouter.EstimatedParaHeight(96, 1);
+  FRich.ResetCounts;
+  FRich.ScrollViewBy(est);
+  PaintAll(True);
+  AssertTrue(Format('blocks painted for a line: %d', [FRich.BlockPaints]),
+    (FRich.BlockPaints >= 1) and (FRich.BlockPaints <= 4));
+  AssertEquals('no frame', 0, FRich.FramePaints);
+  AssertTrue(Format('laid out: %d', [FRich.LaidParas]), FRich.LaidParas <= 1);
+  FRich.ScrollViewBy(5 * est);
+  PaintAll(True);
+  FRich.ResetCounts;
+  FRich.ScrollViewBy(-3 * est);
+  PaintAll(True);
+  AssertTrue(Format('blocks painted for three lines up: %d', [FRich.BlockPaints]),
+    (FRich.BlockPaints >= 3) and (FRich.BlockPaints <= 6));
+  AssertEquals('nothing laid out going back', 0, FRich.LaidParas);
+  FRich.ResetCounts;
+  PaintAll(True);
+  AssertEquals('nothing dirty: no block', 0, FRich.BlockPaints);
+  AssertEquals('nothing dirty: no frame', 0, FRich.FramePaints);
+  FRich.Hover(True);
+  PaintAll(True);
+  AssertEquals('a hover: the frame', 1, FRich.FramePaints);
+  AssertEquals('a hover lays out nothing', 0, FRich.LaidParas);
+  // one paragraph changed: its block only
+  FRich.ResetCounts;
+  FRich.InvalidatePart(FRich.ParagraphRect(FRich.TopParagraph + 5));
+  PaintAll(True);
+  // its block, and its neighbours for their ink that may reach into it (clipped)
+  AssertTrue(Format('one paragraph: %d blocks', [FRich.BlockPaints]),
+    (FRich.BlockPaints >= 1) and (FRich.BlockPaints <= 3));
+  AssertEquals('one paragraph: one line drawn', 1, FRich.Device.DrawCalls);
+end;
+
+{ The surface follows the client: in blocks, never more than a block past it, made again
+  when the size changes by more. }
+procedure TTyRichEditControlTest.TestTheSurfaceIsTheClientsSize;
+begin
+  SetLinesOf(50, 'Line ');
+  PaintAll(True);
+  AssertEquals('wide', 448, FRich.Surf.Width);
+  AssertEquals('high', 320, FRich.Surf.Height);
+  // the frame is on it all round: its left border as its top one (the text never covers it)
+  AssertTrue('a left border', SamePx(FRich.Surf.GetPixel(0, 150), FRich.Surf.GetPixel(200, 0)));
+  AssertFalse('not the ground', SamePx(FRich.Surf.GetPixel(0, 150), FRich.Surf.GetPixel(200, 150)));
+  FRich.SetBounds(0, 0, 200, 100);
+  PaintAll(True);
+  AssertEquals('narrower', 256, FRich.Surf.Width);
+  AssertEquals('lower', 128, FRich.Surf.Height);
+end;
+
+{ At device scale 2 the surface is twice the client, the text is laid out at twice the PPI,
+  and what is public stays in client pixels; the picture averaged down is the scale 1 one. }
+procedure TTyRichEditControlTest.TestDeviceScaleTwo;
+var
+  one: TRichProbe;
+  bmp1, bmp2: TBitmap;
+  b1, b2, half: TBGRABitmap;
+  p1, p2: TTyRichPos;
+  h1, h2, mismatch: Integer;
+  y1, y2: Int64;
+begin
+  one := NewProbe;
+  bmp1 := TBitmap.Create;
+  bmp2 := TBitmap.Create;
+  try
+    SetLinesOf(300, 'Line of text ');
+    one.Lines := FRich.Lines;
+    bmp1.PixelFormat := pf32bit;
+    bmp1.SetSize(400, 300);
+    one.PaintPart(bmp1.Canvas, Rect(0, 0, 400, 300), True);
+    h1 := one.VisibleBlocks[0].Layout.Height;
+    TyForceDeviceScaleForTest(2, True, False);
+    try
+      bmp2.PixelFormat := pf32bit;
+      bmp2.SetSize(800, 600);
+      FRich.PaintPart(bmp2.Canvas, Rect(0, 0, 400, 300), True);
+      AssertEquals('laid out at scale 2', 2, FRich.Scale);
+      AssertTrue('the surface twice the client', (FRich.Surf.Width >= 800) and
+        (FRich.Surf.Height >= 600) and (FRich.Surf.Width < 800 + 64) and
+        (FRich.Surf.Height < 600 + 64));
+      h2 := FRich.VisibleBlocks[0].Layout.Height;
+      AssertEquals('a line laid out twice as tall', 2 * h1, h2);
+      AssertEquals('in client pixels the same', one.VisibleBlocks[0].Height,
+        FRich.VisibleBlocks[0].Height);
+      p1 := one.PositionAtPoint(60, 50);
+      p2 := FRich.PositionAtPoint(60, 50);
+      AssertEquals('a client point hits the same position', p1, p2);
+      one.ScrollY := one.Document.Text.ParaTop(100);
+      FRich.ScrollY := one.ScrollY;
+      AssertEquals('the same paragraph on top', one.TopParagraph, FRich.TopParagraph);
+      y1 := one.ScrollY;
+      y2 := FRich.ScrollY;
+      AssertTrue(Format('ScrollY in client pixels (%d, %d)', [y1, y2]), Abs(y1 - y2) <= 1);
+      AssertTrue('the paragraph''s rectangle', EqualRect(one.ParagraphRect(101),
+        FRich.ParagraphRect(101)));
+      FRich.PaintPart(bmp2.Canvas, Rect(0, 0, 400, 300), True);
+    finally
+      TyForceDeviceScaleForTest(0, False);
+    end;
+    one.PaintPart(bmp1.Canvas, Rect(0, 0, 400, 300), True);
+    b1 := TBGRABitmap.Create(bmp1);
+    b2 := TBGRABitmap.Create(bmp2);
+    half := TyHalve(b2);
+    try
+      mismatch := TyInkMismatch(half, b1);
+      AssertTrue(Format('averaged down, it is the scale 1 picture (%d)', [mismatch]),
+        mismatch <= CMaxMismatch);
+    finally
+      half.Free;
+      b2.Free;
+      b1.Free;
+    end;
+  finally
+    bmp2.Free;
+    bmp1.Free;
+    one.Free;
   end;
 end;
 

@@ -73,6 +73,11 @@ const
   CRichLoadStepBytes = 256 * 1024;
   { FinishLoading's slice: the progress event fires and a cancel acts every this many bytes. }
   CRichFinishStepBytes = 4 * 1024 * 1024;
+  { The kept surface is made in blocks of this many raster pixels: a resize does not make it
+    again at every pixel. }
+  CRichSurfaceBlock = 64;
+  { The most rectangles the surface keeps as dirty; more are merged (see MarkDirty). }
+  CRichDirtyMax = 8;
 
 type
   ETyRichEdit = class(Exception);
@@ -172,7 +177,19 @@ type
     FMovedBy: Int64;
     { A bar decision a layout made in this EnsureView: 0 none, 1 hidden, 2 shown. }
     FLatchV, FLatchH: Integer;
-    FScrollX: Integer;
+    FScrollX: Integer;              // raster pixels
+    { The kept surface (R39): what the control shows, frame and text, at FSurfScale device
+      pixels per client pixel; FSurfW x FSurfH client pixels of it are in use. }
+    FSurface: TBGRABitmap;
+    FSurfW, FSurfH, FSurfScale: Integer;
+    FSurfScrollX: Integer;          // the horizontal scroll the text on it was drawn at
+    FDirty: array[0..CRichDirtyMax - 1] of TRect;   // raster pixels of the surface
+    FDirtyCount: Integer;
+    FAllDirty: Boolean;
+    FFrameSig: Cardinal;
+    FFrameSigValid: Boolean;
+    { The device scale the view is laid out at: the last paint's canvas's (1 before any). }
+    FScale: Integer;
     FWidestSeen: Integer;
     FBlocks: array of TTyRichViewBlock;
     FBlockCount: Integer;
@@ -230,12 +247,38 @@ type
     procedure LayoutParamsChanged;
     procedure FallbackListChanged(Sender: TObject);
     procedure CheckReplaceable;
-    { The view's top in pixels of the heights, as the anchor says (no settling). }
+    { The view's top in raster pixels of the heights, as the anchor says (no settling). }
     function AnchorY: Int64;
+    procedure ScrollRasterTo(AValue: Int64);
+    procedure ScrollRasterBy(ADeltaY: Int64);
+    function GetTopOffset: Int64;
+    function GetScrollX: Integer;
+    function GetHorizontalExtent: Integer;
+    { Raster pixels relative to the text area's top left (as blocks' tops are) to client
+      pixels, rounded outward and kept within an Integer's half range. }
+    function ClientOf(const AArea: TRect; AL, AT, AR, AB: Int64): TRect;
+    { The text area reaching into the left padding (where a row's lines may be drawn), never
+      over the frame: what the text is drawn and clipped in. Client pixels of ARect. }
+    function TextClipOf(const ARect, AArea: TRect; APPI: Integer): TRect;
+    { The text changed in AL..AR x AT..AB (raster, relative to the text area): that part of the
+      surface is dirty and its client rectangle (outward) is invalidated. }
+    procedure InvalidateTextRect(AL, AT, AR, AB: Int64);
+    procedure InvalidateBand(ATop, ABottom: Int64);
+    function TextWindowRect: TRect;
+    procedure MarkDirty(const ARect: TRect);
+    procedure MarkTextDirty;
+    procedure MoveSurfaceText(ADX, ADY: Int64);
+    procedure EnsureSurface(AW, AH, AScale: Integer);
+    procedure RedrawSurface(APPI: Integer; ADefer: Boolean);
+    procedure BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer;
+      const AScale: TTyCanvasScale);
+    procedure PaintLayer(ACanvas: TCanvas; const ARect, AClip: TRect; APPI: Integer;
+      ADefer: Boolean; const AScale: TTyCanvasScale);
+    procedure QueueSkipped(ABlock: Integer);
+    function SurfaceUsable(const AStyle: TTyStyleSet): Boolean;
+    function FrameSignature(APPI: Integer): Cardinal;
     { Lays the view out if something left it invalid: what the queries call first. }
     procedure Settle;
-    { Rectangles handed to LCL: a block's top may be far outside an Integer's range. }
-    function ViewRect(ALeft: Integer; ATop, ABottom: Int64; ARight: Integer): TRect;
     function ScrollBarSize(APPI: Integer): Integer;
     { The PPI the view was last laid out at; the control's before that. }
     function ViewPPI: Integer;
@@ -285,8 +328,28 @@ type
       (TyRichEditObject), a picture that cannot be shown (TyRichEditPlaceholder); table lines in
       the text colour (a document's "auto" colour). }
     procedure FillPaintStyle(var AStyle: TTyRichPaintStyle); virtual;
-    { Every invalidation of the control's text goes through here (client pixels). }
+    { The one door for "what is shown changed here" (client pixels): that part of the kept
+      surface is drawn again at the next paint, and the window's part is invalidated. 9b's
+      caret and selection go through here: a caret is PositionRect (client), a selection range
+      the PositionRect / ParagraphRect bands it covers. }
     procedure InvalidateContent(const ARect: TRect); virtual;
+    { The window's part to be painted again (client pixels) - a blit from the surface. Every
+      window invalidation goes through here: InvalidateContent's, and a scroll's, which moves
+      the surface instead of dirtying it (a test records them here). }
+    procedure InvalidateArea(const ARect: TRect); virtual;
+    { Everything on the surface drawn again at the next paint (frame and text). }
+    procedure InvalidateSurface;
+    { Paints held block AIndex onto ABitmap at AX, AY within AClip (raster pixels). Every
+      block a paint draws goes through here. }
+    procedure PaintBlock(ABitmap: TBGRABitmap; AIndex, AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle); virtual;
+    { Draws the frame over the whole surface (a full redraw). }
+    procedure PaintSurfaceFrame(APPI: Integer); virtual;
+    procedure DestroyWnd; override;
+    { The kept surface (nil before the first paint, after the handle went). }
+    property Surface: TBGRABitmap read FSurface;
+    { The device scale the view is laid out at (raster pixels per client pixel). }
+    property DeviceScale: Integer read FScale;
     { The highest range a scroll bar is given (CRichScrollBarRange): past it, one bar unit is
       more than one pixel. }
     function ScrollBarLimit: Integer; virtual;
@@ -385,13 +448,13 @@ type
     property Layouter: TTyRichLayouter read FLayouter;
     { The view's top in pixels of the document's heights (measured and estimated). }
     property ScrollY: Int64 read GetScrollY write SetScrollY;
-    property ScrollX: Integer read FScrollX;
+    property ScrollX: Integer read GetScrollX;
     { The widest block laid out so far: the horizontal extent (never measured over the
       document). }
-    property HorizontalExtent: Integer read FWidestSeen;
-    { The block at the view's top, and how many of its pixels are above the view. }
+    property HorizontalExtent: Integer read GetHorizontalExtent;
+    { The block at the view's top, and how many of its (client) pixels are above the view. }
     property TopParagraph: Integer read FAnchorPara;
-    property TopOffset: Int64 read FAnchorOffset;
+    property TopOffset: Int64 read GetTopOffset;
     property Loading: Boolean read GetLoading;
     property Incomplete: Boolean read GetIncomplete;
     { Cleared by SaveToFile in a format that keeps the content (RTF; text for a text
@@ -490,7 +553,7 @@ implementation
 
 uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
-  RTLConsts, tyControls.StrConsts, tyControls.FontUnits;
+  RTLConsts, tyControls.StrConsts, tyControls.FontUnits, tyControls.PlatformWS;
 
 {$IFDEF MSWINDOWS}
 const
@@ -501,6 +564,17 @@ const
 function MoveFileExW(AExisting, ANew: PWideChar; AFlags: DWord): LongBool; stdcall;
   external 'kernel32' name 'MoveFileExW';
 {$ENDIF}
+
+function FloorDiv(A: Int64; B: Integer): Int64;
+begin
+  Result := A div B;
+  if (A mod B <> 0) and (A < 0) then Dec(Result);
+end;
+
+function CeilDiv(A: Int64; B: Integer): Int64;
+begin
+  Result := -FloorDiv(-A, B);
+end;
 
 { ---- lines ---- }
 
@@ -690,6 +764,8 @@ begin
   FFirstSliceBytes := CRtfFirstSliceBytes;
   FStepBytes := CRichLoadStepBytes;
   FBarScale := 1;
+  FScale := 1;
+  FSurfScale := 1;
   FLayoutPPI := 0;
   FViewPPI := 0;
   FDoc := CreateDocument;
@@ -714,6 +790,7 @@ begin
   ReleaseBlocks;
   ClearPending;
   ClearPrepared;
+  FreeAndNil(FSurface);
   if FDoc <> nil then FDoc.OnChange := nil;
   if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
   FreeAndNil(FLayouter);
@@ -834,7 +911,9 @@ begin
   FDoc.Text.UnmeasureAll;
   ReleaseBlocks;
   FWidestSeen := 0;
+  InvalidateSurface;
   ViewMoved;
+  MarkTextDirty;
 end;
 
 procedure TTyCustomRichEdit.SetZoom(AValue: Integer);
@@ -878,6 +957,28 @@ begin
   if (AIndex < 0) or (AIndex >= FBlockCount) then
     raise ETyRichEdit.CreateFmt('Visible block %d out of range', [AIndex]);
   Result := FBlocks[AIndex];
+  // client pixels, rounded outward (the layout's own numbers are raster pixels)
+  if FScale > 1 then
+  begin
+    Result.Top := FloorDiv(FBlocks[AIndex].Top, FScale);
+    Result.Height := Integer(CeilDiv(FBlocks[AIndex].Top + FBlocks[AIndex].Height, FScale) -
+      Result.Top);
+  end;
+end;
+
+function TTyCustomRichEdit.GetTopOffset: Int64;
+begin
+  Result := FAnchorOffset div FScale;
+end;
+
+function TTyCustomRichEdit.GetScrollX: Integer;
+begin
+  Result := FScrollX div FScale;
+end;
+
+function TTyCustomRichEdit.GetHorizontalExtent: Integer;
+begin
+  Result := Integer(CeilDiv(FWidestSeen, FScale));
 end;
 
 function TTyCustomRichEdit.VisibleBlockCount: Integer;
@@ -970,17 +1071,6 @@ begin
   EnsureView(ViewPPI);
 end;
 
-function TTyCustomRichEdit.ViewRect(ALeft: Integer; ATop, ABottom: Int64; ARight: Integer): TRect;
-const
-  Lim = MaxInt div 2;
-begin
-  if ATop < -Lim then ATop := -Lim;
-  if ATop > Lim then ATop := Lim;
-  if ABottom < -Lim then ABottom := -Lim;
-  if ABottom > Lim then ABottom := Lim;
-  Result := Rect(ALeft, Integer(ATop), ARight, Integer(ABottom));
-end;
-
 procedure TTyCustomRichEdit.AddBlock(var AList: array of TTyRichViewBlock; var ACount: Integer;
   ALayout: TTyBlockLayout; ATop: Int64);
 begin
@@ -1022,7 +1112,7 @@ end;
 procedure TTyCustomRichEdit.CheckLayoutParams(APPI: Integer);
 var
   s: TTyStyleSet;
-  size, halfPt, w, est, k: Integer;
+  size, halfPt, w, est, k, rppi: Integer;
   z: Single;
   area: TRect;
   fontDiff: Boolean;
@@ -1045,14 +1135,17 @@ begin
     FLayouter.BaseFontName := s.FontName;
     FLayouter.BaseFontSizeHalfPt := halfPt;
   end;
+  // the view in raster pixels: the layout is made for the device (PPI x scale)
+  if FScale < 1 then FScale := 1;
+  rppi := APPI * FScale;
   area := TextArea(Rect(0, 0, Width, Height), APPI);
-  FViewW := Math.Max(0, area.Right - area.Left);
-  FViewH := Math.Max(0, area.Bottom - area.Top);
+  FViewW := Math.Max(0, area.Right - area.Left) * FScale;
+  FViewH := Math.Max(0, area.Bottom - area.Top) * FScale;
   z := FZoom / 100;
-  w := TyRichLayoutWidth(FWrapMode, Math.Max(1, FViewW), FDoc, APPI, z);
-  est := FLayouter.EstimatedParaHeight(APPI, z);
+  w := TyRichLayoutWidth(FWrapMode, Math.Max(1, FViewW), FDoc, rppi, z);
+  est := FLayouter.EstimatedParaHeight(rppi, z);
   if est < 1 then est := 1;
-  if fontDiff or (w <> FLayoutWidth) or (APPI <> FLayoutPPI) or (z <> FLayoutZoom) or
+  if fontDiff or (w <> FLayoutWidth) or (rppi <> FLayoutPPI) or (z <> FLayoutZoom) or
     (est <> FEstimate) then
   begin
     { Every height is stale: the measured ones go (no node is walked), the estimate is the
@@ -1069,11 +1162,12 @@ begin
           FAnchorShareDen := FBlocks[k].Height;
           Break;
         end;
-    if (APPI <> FLayoutPPI) or (z <> FLayoutZoom) then FLayouter.Clear;
+    if (rppi <> FLayoutPPI) or (z <> FLayoutZoom) then FLayouter.Clear;
     if FLayoutPPI <> 0 then FDoc.Text.UnmeasureAll;
     ReleaseBlocks;
+    InvalidateSurface;
     FLayoutWidth := w;
-    FLayoutPPI := APPI;
+    FLayoutPPI := rppi;
     FLayoutZoom := z;
     FEstimate := est;
     FWidestSeen := 0;
@@ -1211,8 +1305,15 @@ begin
           end;
         Break;
       end;
-  if FViewShifted then
-    InvalidateContent(TextArea(Rect(0, 0, Width, Height), ViewPPI));
+  if nOld = 0 then
+    // all new (the blocks were let go: whoever did invalidated the window)
+    MarkTextDirty
+  else if FViewShifted then
+  begin
+    // the text moved: on the surface too, and what it exposed is drawn
+    if FMoveKnown then MoveSurfaceText(0, FMovedBy) else MarkTextDirty;
+    InvalidateArea(TextWindowRect);
+  end;
   WriteHeights(0, FBlockCount - 1);
   QueuePicturesAhead;
 end;
@@ -1259,9 +1360,7 @@ procedure TTyCustomRichEdit.RelayStale;
 var
   k, m: Integer;
   b: TTyBlockLayout;
-  area: TRect;
 begin
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   k := 0;
   while k < FBlockCount do
   begin
@@ -1273,9 +1372,7 @@ begin
     if not FViewValid then
     begin
       // the next pass lays it out again: its band is what changes on screen
-      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
-        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
-          area.Top + Math.Min(FBlocks[k].Top + FBlocks[k].Height, FViewH), area.Right));
+      InvalidateBand(FBlocks[k].Top, FBlocks[k].Top + FBlocks[k].Height);
       Inc(k);
       Continue;
     end;
@@ -1290,9 +1387,7 @@ begin
     begin
       FBlocks[k].Layout.Release;
       FBlocks[k].Layout := b;
-      if (FBlocks[k].Top < FViewH) and (FBlocks[k].Top + FBlocks[k].Height > 0) then
-        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
-          area.Top + Math.Min(FBlocks[k].Top + FBlocks[k].Height, FViewH), area.Right));
+      InvalidateBand(FBlocks[k].Top, FBlocks[k].Top + FBlocks[k].Height);
       Inc(k);
       Continue;
     end;
@@ -1309,9 +1404,7 @@ begin
     end
     else
     begin
-      if FBlocks[k].Top < FViewH then
-        InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k].Top, 0),
-          area.Bottom, area.Right));
+      InvalidateBand(FBlocks[k].Top, FViewH);
       for m := k to FBlockCount - 1 do FBlocks[m].Layout.Release;
       FBlockCount := k;
       SetLength(FBlocks, FBlockCount);
@@ -1328,6 +1421,7 @@ var
   area: TRect;
   sameHeight, anchorMoved, cut: Boolean;
 begin
+  area := Rect(0, 0, 0, 0);
   lo := AChange.FirstPara;
   hiOld := lo + Math.Max(AChange.OldParaCount, 1) - 1;
   delta := AChange.NewParaCount - AChange.OldParaCount;
@@ -1385,11 +1479,10 @@ begin
       touches on screen is painted now, from the first held block it meets down. A change
       above every held block leaves the anchor (and the screen) where it is; one below them
       is off screen. }
-    if (k0 >= 0) and (FBlocks[k0].Top < FViewH) then
-      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(FBlocks[k0].Top, 0),
-        area.Bottom, area.Right))
-    else if (k0 < 0) and anchorMoved then
-      InvalidateContent(area);
+    if k0 >= 0 then
+      InvalidateBand(FBlocks[k0].Top, FViewH)
+    else if anchorMoved then
+      InvalidateBand(0, FViewH);
     RelayStale;
     UpdateBars(False);
     Exit;
@@ -1406,7 +1499,7 @@ begin
   begin
     // the change reaches above the blocks the view holds, or across its top: all again
     FViewValid := False;
-    InvalidateContent(area);
+    InvalidateBand(0, FViewH);
     UpdateBars(False);
     Exit;
   end;
@@ -1491,16 +1584,12 @@ begin
   if sameHeight then
   begin
     // only the changed blocks, as far as they are on screen
-    if oldTop < FViewH then
-      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(oldTop, 0),
-        area.Top + Math.Min(oldBottom, FViewH), area.Right));
+    InvalidateBand(oldTop, oldBottom);
   end
   else
   begin
     // the blocks below moved: from the change down; the next pass fills what the move left
-    if oldTop < FViewH then
-      InvalidateContent(ViewRect(area.Left, area.Top + Math.Max(oldTop, 0), area.Bottom,
-        area.Right));
+    InvalidateBand(oldTop, FViewH);
     FViewValid := False;
   end;
   RelayStale;
@@ -1512,10 +1601,20 @@ end;
 function TTyCustomRichEdit.GetScrollY: Int64;
 begin
   Settle;
-  Result := AnchorY;
+  Result := AnchorY div FScale;
 end;
 
 procedure TTyCustomRichEdit.SetScrollY(AValue: Int64);
+begin
+  ScrollRasterTo(AValue * FScale);
+end;
+
+procedure TTyCustomRichEdit.ScrollViewBy(ADeltaY: Integer);
+begin
+  ScrollRasterBy(Int64(ADeltaY) * FScale);
+end;
+
+procedure TTyCustomRichEdit.ScrollRasterTo(AValue: Int64);
 var
   t: TTyRichText;
   i: Integer;
@@ -1538,7 +1637,7 @@ begin
   ViewMoved;
 end;
 
-procedure TTyCustomRichEdit.ScrollViewBy(ADeltaY: Integer);
+procedure TTyCustomRichEdit.ScrollRasterBy(ADeltaY: Int64);
 var
   a, last: Integer;
   off, maxTop, newY: Int64;
@@ -1549,9 +1648,9 @@ begin
   CheckLayoutParams(ViewPPI);
   t := FDoc.Text;
   // a jump of many screens is a position, not a walk over every block between
-  if Abs(Int64(ADeltaY)) > 4 * Int64(Math.Max(FViewH, 1)) then
+  if Abs(ADeltaY) > 4 * Int64(Math.Max(FViewH, 1)) then
   begin
-    SetScrollY(AnchorY + ADeltaY);
+    ScrollRasterTo(AnchorY + ADeltaY);
     Exit;
   end;
   last := t.ParaCount - 1;
@@ -1694,13 +1793,15 @@ begin
   ViewMoved;
 end;
 
+{ The view moves: the window's text is painted again; the surface is moved (or dirtied) by
+  the layout pass, which knows by how much. }
 procedure TTyCustomRichEdit.ViewMoved;
 begin
   FViewValid := False;
   if FViewPPI > 0 then
-    InvalidateContent(TextArea(Rect(0, 0, Width, Height), ViewPPI))
+    InvalidateArea(TextWindowRect)
   else
-    InvalidateContent(Rect(0, 0, Width, Height));
+    InvalidateArea(Rect(0, 0, Width, Height));
 end;
 
 procedure TTyCustomRichEdit.UpdateView;
@@ -1855,12 +1956,14 @@ function TTyCustomRichEdit.UpdateBars(AMeasured: Boolean): Boolean;
 var
   total, topY, maxTop, scale: Int64;
   wantV, wantH: Boolean;
-  page: Integer;
+  page, viewH: Integer;
 begin
-  total := FDoc.Text.TotalHeight;
-  topY := AnchorY;
-  wantV := Decide((total > FViewH) or (topY > 0), FLatchV);
+  wantV := Decide((FDoc.Text.TotalHeight > FViewH) or (AnchorY > 0), FLatchV);
   wantH := Decide(FWidestSeen > FViewW, FLatchH);
+  // the bars count client pixels
+  total := FDoc.Text.TotalHeight div FScale;
+  topY := AnchorY div FScale;
+  viewH := FViewH div FScale;
   Result := (wantV <> VBarShown) or (wantH <> HBarShown);
   if wantV and (FVBar = nil) then FVBar := NewBar(Self, sbVertical, @VBarChange, FScrollBarAutoHide);
   if wantH and (FHBar = nil) then FHBar := NewBar(Self, sbHorizontal, @HBarChange, FScrollBarAutoHide);
@@ -1877,17 +1980,17 @@ begin
     if wantV then
     begin
       FVBar.Controller := Controller;
-      maxTop := Math.Max(Int64(0), total - FViewH);
+      maxTop := Math.Max(Int64(0), total - viewH);
       { The bar's range is an Integer: a taller document is scrolled ScrollBarLimit units for
         its whole height, each unit FBarScale pixels; the last unit is the end, whatever the
         rounding. }
-      scale := 1 + (maxTop + FViewH) div ScrollBarLimit;
+      scale := 1 + (maxTop + viewH) div ScrollBarLimit;
       FBarScale := scale;
-      page := Math.Max(1, FViewH div scale);
+      page := Math.Max(1, viewH div scale);
       FVBar.Min := 0;
       FVBar.Max := maxTop div scale;
       FVBar.PageSize := page;
-      FVBar.SmallChange := Math.Max(1, FEstimate div scale);
+      FVBar.SmallChange := Math.Max(1, FEstimate div FScale div scale);
       FVBar.LargeChange := page;
       if topY >= maxTop then FVBar.Position := FVBar.Max
       else FVBar.Position := topY div scale;
@@ -1897,10 +2000,10 @@ begin
       FHBar.Controller := Controller;
       ClampScrollX;
       FHBar.Min := 0;
-      FHBar.Max := Math.Max(0, FWidestSeen - FViewW);
-      FHBar.PageSize := Math.Max(1, FViewW);
-      FHBar.SmallChange := Math.Max(1, FEstimate);
-      FHBar.Position := FScrollX;
+      FHBar.Max := Math.Max(0, FWidestSeen - FViewW) div FScale;
+      FHBar.PageSize := Math.Max(1, FViewW div FScale);
+      FHBar.SmallChange := Math.Max(1, FEstimate div FScale);
+      FHBar.Position := FScrollX div FScale;
     end
     else
       FScrollX := 0;
@@ -1919,23 +2022,19 @@ begin
 end;
 
 procedure TTyCustomRichEdit.HBarChange(Sender: TObject);
+var
+  was: Integer;
 begin
   if FSyncingBars then Exit;
-  FScrollX := FHBar.Position;
+  was := FScrollX;
+  FScrollX := FHBar.Position * FScale;
   ClampScrollX;
-  InvalidateContent(TextArea(Rect(0, 0, Width, Height), ViewPPI));
+  if FScrollX = was then Exit;
+  MoveSurfaceText(was - FScrollX, 0);
+  InvalidateArea(TextWindowRect);
 end;
 
 { ---- painting ---- }
-
-procedure TTyCustomRichEdit.InvalidateContent(const ARect: TRect);
-var
-  r: TRect;
-begin
-  if not HandleAllocated then Exit;
-  r := ARect;
-  LCLIntf.InvalidateRect(Handle, @r, False);
-end;
 
 procedure TTyCustomRichEdit.FillPaintStyle(var AStyle: TTyRichPaintStyle);
 var
@@ -1971,78 +2070,6 @@ begin
   AStyle.TableBorder := AStyle.TextColor;
 end;
 
-procedure TTyCustomRichEdit.PaintArea(ACanvas: TCanvas; const ARect, AClip: TRect;
-  APPI: Integer; ADefer: Boolean);
-var
-  P: TTyPainter;
-  sc: TTyCanvasScale;
-  clip, R, area, textClip, box: TRect;
-  st: TTyRichPaintStyle;
-  s: TTyStyleSet;
-  k, j, x, y, padLeft: Integer;
-  skipped: TTyRichSkippedPictures;
-begin
-  if not IntersectRect(clip, AClip, ARect) then Exit;
-  EnsureView(APPI);
-  ClampScrollX;
-  { One layer for the clip: what the paint does not ask for costs nothing. The layout is in
-    layout pixels at APPI, so the layer is drawn at one device pixel per layout pixel (on a
-    scaled window the system stretches it; sharp text there is a later step). }
-  sc := TyCanvasDeviceScale(ACanvas);
-  if not sc.DeviceUnits then sc.Scale := 1;
-  P := TTyPainter.Create;
-  try
-    P.BeginPaintScaled(ACanvas, clip, APPI, sc);
-    R := Rect(ARect.Left - clip.Left, ARect.Top - clip.Top, ARect.Right - clip.Left,
-      ARect.Bottom - clip.Top);
-    s := CurrentStyle;
-    DrawFrame(P, R, s);
-    area := TextArea(R, APPI);
-    { Text may reach into the left padding (a table row's \trleft is usually negative: Word
-      puts its lines in the margin); never over the frame. }
-    padLeft := MulDiv(s.Padding.Left, APPI, 96);
-    textClip := area;
-    if not (VBarShown and IsRightToLeft) then
-      textClip.Left := Math.Max(R.Left + BorderInsetPx, area.Left - padLeft);
-    if IntersectRect(textClip, textClip, Rect(0, 0, clip.Right - clip.Left,
-      clip.Bottom - clip.Top)) then
-    begin
-      P.PrepareTextGround(textClip);
-      FillPaintStyle(st);
-      st.DeferPictures := ADefer;
-      P.Bitmap.ClipRect := textClip;
-      FLayouter.BeginPaintPass;
-      try
-        x := area.Left - FScrollX;
-        for k := 0 to FBlockCount - 1 do
-        begin
-          if (area.Top + FBlocks[k].Top >= textClip.Bottom) or
-            (area.Top + FBlocks[k].Top + FBlocks[k].Height <= textClip.Top) then Continue;
-          // it meets the clip: its top is within a block's height of the view
-          y := Integer(area.Top + FBlocks[k].Top);
-          FBlocks[k].Layout.Paint(P.Bitmap, x, y, textClip, st, 0, 0);
-          if ADefer and (FLayouter.SkippedPictureCount > 0) then
-          begin
-            skipped := FLayouter.TakeSkippedPictures;
-            for j := 0 to High(skipped) do
-            begin
-              box := skipped[j].Box;
-              QueuePicture(skipped[j].Picture, box.Right - box.Left, box.Bottom - box.Top,
-                FBlocks[k].FirstPara, FBlocks[k].LastPara, True);
-            end;
-          end;
-        end;
-      finally
-        P.Bitmap.NoClip;
-      end;
-    end;
-    P.EndPaint;
-  finally
-    P.Free;
-  end;
-  if FPendingCount > 0 then StartBackground;
-end;
-
 procedure TTyCustomRichEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   PaintArea(ACanvas, ARect, ARect, APPI, False);
@@ -2072,13 +2099,13 @@ begin
   Result := -1;
   if FBlockCount = 0 then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  vy := Y - area.Top;
+  vy := (Int64(Y) - area.Top) * FScale;
   k := 0;
   while (k < FBlockCount - 1) and (vy >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
   // inside the block (or just outside it): within its height, an Integer
   by := Math.Max(Int64(-1), Math.Min(vy - FBlocks[k].Top, Int64(FBlocks[k].Height)));
   Result := FDoc.Text.ParaStart(FBlocks[k].FirstPara) +
-    FBlocks[k].Layout.PosAtPoint(X - area.Left + FScrollX, Integer(by));
+    FBlocks[k].Layout.PosAtPoint((X - area.Left) * FScale + FScrollX, Integer(by));
 end;
 
 function TTyCustomRichEdit.PositionRect(APos: TTyRichPos): TRect;
@@ -2100,8 +2127,8 @@ begin
     if (APos >= start) and (APos <= stop) then
     begin
       r := FBlocks[k].Layout.CaretRect(APos - start);
-      Result := ViewRect(r.Left + area.Left - FScrollX, area.Top + FBlocks[k].Top + r.Top,
-        area.Top + FBlocks[k].Top + r.Bottom, r.Right + area.Left - FScrollX);
+      Result := ClientOf(area, r.Left - FScrollX, FBlocks[k].Top + r.Top, r.Right - FScrollX,
+        FBlocks[k].Top + r.Bottom);
       Exit;
     end;
   end;
@@ -2117,8 +2144,11 @@ begin
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   for k := 0 to FBlockCount - 1 do
     if (AIndex >= FBlocks[k].FirstPara) and (AIndex <= FBlocks[k].LastPara) then
-      Exit(ViewRect(area.Left, area.Top + FBlocks[k].Top,
-        area.Top + FBlocks[k].Top + FBlocks[k].Height, area.Right));
+    begin
+      Result := ClientOf(area, 0, FBlocks[k].Top, 0, FBlocks[k].Top + FBlocks[k].Height);
+      Result.Right := area.Right;
+      Exit;
+    end;
 end;
 
 { ---- pictures made ready in the background ---- }
@@ -2217,15 +2247,13 @@ end;
 
 procedure TTyRichPictureWalk.Ready(APicture: TTyRichPicture; const ABox: TRect; ABlock: Integer);
 var
-  r: TRect;
   top: Int64;
 begin
   if (APicture <> Picture) or (ABox.Right - ABox.Left <> Width) or
     (ABox.Bottom - ABox.Top <> Height) then Exit;
-  top := Area.Top + Owner.FBlocks[ABlock].Top;
-  r := Owner.ViewRect(Area.Left - Owner.FScrollX + ABox.Left, top + ABox.Top, top + ABox.Bottom,
-    Area.Left - Owner.FScrollX + ABox.Right);
-  if IntersectRect(r, r, Area) then Owner.InvalidateContent(r);
+  top := Owner.FBlocks[ABlock].Top;
+  Owner.InvalidateTextRect(ABox.Left - Owner.FScrollX, top + ABox.Top,
+    ABox.Right - Owner.FScrollX, top + ABox.Bottom);
 end;
 
 { The pictures of the blocks laid out off screen (a screen ahead and behind) that are not ready
@@ -2713,6 +2741,683 @@ begin
   end;
 end;
 
+{ ---- the kept surface (R39) ----
+
+  The control keeps one bitmap of what it shows, frame and text, at the canvas's device scale
+  (FSurfScale raster pixels per client pixel; the view is laid out at that scale too, so the
+  text is drawn for the device, not stretched). A paint brings the surface up to date and
+  copies the clip's part of it to the canvas.
+
+  What is out of date is a small set of rectangles (FDirty, raster pixels; at most
+  CRichDirtyMax: a rectangle that touches another joins it, and past the bound the new one
+  joins the one it grows least - two far-apart lines stay two rectangles), or everything
+  (FAllDirty: the frame and the text). Within the text, a dirty rectangle is filled with the
+  theme's ground and the blocks that meet it are painted into it, clipped; anything outside the
+  text (a bar came, the content was replaced) or a change of what the frame looks like (theme,
+  state, size, scale) draws everything.
+
+  A scroll moves the text's rows (or columns) inside the surface by what the layout pass found
+  the view moved by (LayoutView: the same block on top, elsewhere) and dirties only the band
+  it exposed; a move of the view's height or more, or with a layout change, draws everything.
+  The window is invalidated for the text area and the paint blits it (no window scroll: the
+  blit of the text area is a copy of memory, and the frame, the bars and RTL stay out of it).
+
+  Units: the view's geometry (anchor offset, block tops and heights, the height index, the
+  layout width, picture boxes, FScrollX) is in raster pixels; everything public or LCL-facing
+  (ScrollY, TopOffset, ScrollX, HorizontalExtent, PositionAtPoint, PositionRect, ParagraphRect,
+  VisibleBlocks, bar positions, invalidation rectangles) is in client pixels, rounded outward
+  for rectangles. A scale change is a PPI change of the layout (heights unmeasured, anchor
+  kept); it is known from the canvas when a paint comes, 1 before.
+
+  The surface is made when the first paint needs it and released when the window goes
+  (DestroyWnd): client size x scale squared x 4 bytes, rounded up to CRichSurfaceBlock. A theme
+  ground that is not an opaque colour, or an opacity (a disabled control dims), is painted the
+  9a way instead - the painter's layer over the canvas, everything each paint. }
+
+function TTyCustomRichEdit.ClientOf(const AArea: TRect; AL, AT, AR, AB: Int64): TRect;
+const
+  Lim = MaxInt div 2;
+
+  function Fit(V: Int64): Integer;
+  begin
+    if V < -Lim then V := -Lim;
+    if V > Lim then V := Lim;
+    Result := Integer(V);
+  end;
+
+var
+  s: Integer;
+begin
+  s := Math.Max(1, FScale);
+  Result := Rect(Fit(AArea.Left + FloorDiv(AL, s)), Fit(AArea.Top + FloorDiv(AT, s)),
+    Fit(AArea.Left + CeilDiv(AR, s)), Fit(AArea.Top + CeilDiv(AB, s)));
+end;
+
+function TTyCustomRichEdit.TextClipOf(const ARect, AArea: TRect; APPI: Integer): TRect;
+var
+  s: TTyStyleSet;
+begin
+  Result := AArea;
+  { Text may reach into the left padding (a table row's \trleft is usually negative: Word
+    puts its lines in the margin); never over the frame - the theme's border and the pixel its
+    antialiasing takes: the surface moves and fills what is inside this, and must not move the
+    frame's own pixels. }
+  if not (VBarShown and IsRightToLeft) then
+  begin
+    s := CurrentStyle;
+    Result.Left := Math.Max(ARect.Left + MulDiv(Math.Max(0, s.BorderWidth), APPI, 96) + 1,
+      AArea.Left - MulDiv(s.Padding.Left, APPI, 96));
+  end;
+  if Result.Left > Result.Right then Result.Left := Result.Right;
+end;
+
+function TTyCustomRichEdit.TextWindowRect: TRect;
+var
+  area: TRect;
+begin
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  Result := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+end;
+
+procedure TTyCustomRichEdit.InvalidateTextRect(AL, AT, AR, AB: Int64);
+var
+  area, clip, r: TRect;
+  s: Integer;
+  cl, cr: Int64;
+begin
+  s := Math.Max(1, FScale);
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+  // within the text clip and the view
+  cl := Int64(clip.Left - area.Left) * s;
+  cr := Int64(clip.Right - area.Left) * s;
+  if AL < cl then AL := cl;
+  if AR > cr then AR := cr;
+  if AT < 0 then AT := 0;
+  if AB > FViewH then AB := FViewH;
+  if (AR <= AL) or (AB <= AT) then Exit;
+  MarkDirty(Rect(Integer(area.Left * s + AL), Integer(area.Top * s + AT),
+    Integer(area.Left * s + AR), Integer(area.Top * s + AB)));
+  r := ClientOf(area, AL, AT, AR, AB);
+  InvalidateArea(r);
+end;
+
+{ A band of the view, across the text (raster, relative to the text area's top). }
+procedure TTyCustomRichEdit.InvalidateBand(ATop, ABottom: Int64);
+begin
+  InvalidateTextRect(-High(Integer), ATop, High(Integer), ABottom);
+end;
+
+procedure TTyCustomRichEdit.InvalidateContent(const ARect: TRect);
+var
+  s: Integer;
+begin
+  s := Math.Max(1, FScale);
+  MarkDirty(Rect(ARect.Left * s, ARect.Top * s, ARect.Right * s, ARect.Bottom * s));
+  InvalidateArea(ARect);
+end;
+
+procedure TTyCustomRichEdit.InvalidateArea(const ARect: TRect);
+var
+  r: TRect;
+begin
+  if not HandleAllocated then Exit;
+  r := ARect;
+  LCLIntf.InvalidateRect(Handle, @r, False);
+end;
+
+procedure TTyCustomRichEdit.InvalidateSurface;
+begin
+  FAllDirty := True;
+  FDirtyCount := 0;
+end;
+
+procedure TTyCustomRichEdit.MarkDirty(const ARect: TRect);
+
+  function Area(const R: TRect): Int64;
+  begin
+    Result := Int64(R.Right - R.Left) * (R.Bottom - R.Top);
+  end;
+
+var
+  r, u: TRect;
+  i, best: Integer;
+  grow, bestGrow: Int64;
+begin
+  // no surface yet, or everything to draw anyway
+  if (FSurface = nil) or FAllDirty then Exit;
+  r := ARect;
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  // a rectangle that touches or overlaps the new one joins it (and so on, as it grows)
+  i := 0;
+  while i < FDirtyCount do
+    if (r.Left <= FDirty[i].Right) and (FDirty[i].Left <= r.Right) and
+      (r.Top <= FDirty[i].Bottom) and (FDirty[i].Top <= r.Bottom) then
+    begin
+      UnionRect(r, r, FDirty[i]);
+      FDirty[i] := FDirty[FDirtyCount - 1];
+      Dec(FDirtyCount);
+      i := 0;
+    end
+    else
+      Inc(i);
+  if FDirtyCount = CRichDirtyMax then
+  begin
+    // full: the new one joins the rectangle it grows least
+    best := 0;
+    bestGrow := High(Int64);
+    for i := 0 to FDirtyCount - 1 do
+    begin
+      UnionRect(u, r, FDirty[i]);
+      grow := Area(u) - Area(FDirty[i]) - Area(r);
+      if grow < bestGrow then
+      begin
+        bestGrow := grow;
+        best := i;
+      end;
+    end;
+    UnionRect(r, r, FDirty[best]);
+    FDirty[best] := FDirty[FDirtyCount - 1];
+    Dec(FDirtyCount);
+  end;
+  FDirty[FDirtyCount] := r;
+  Inc(FDirtyCount);
+end;
+
+procedure TTyCustomRichEdit.MarkTextDirty;
+var
+  area, clip: TRect;
+  s: Integer;
+begin
+  s := Math.Max(1, FScale);
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+  MarkDirty(Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s));
+end;
+
+{ The text on the surface moved by ADX, ADY raster pixels (the content goes right / down for
+  positive values): its rows or columns are moved inside the text clip and only the band it
+  exposed is dirty. }
+procedure TTyCustomRichEdit.MoveSurfaceText(ADX, ADY: Int64);
+var
+  area, clip, R: TRect;
+  s, y, w, i: Integer;
+  dx, dy: Integer;
+  pix: PBGRAPixel;
+begin
+  if (FSurface = nil) or FAllDirty then Exit;
+  s := Math.Max(1, FScale);
+  if (FSurfW <> Width) or (FSurfH <> Height) or (FSurfScale <> s) then
+  begin
+    InvalidateSurface;
+    Exit;
+  end;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+  R := Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s);
+  if ((ADX <> 0) and (ADY <> 0)) or (Abs(ADY) >= R.Bottom - R.Top) or
+    (Abs(ADX) >= R.Right - R.Left) then
+  begin
+    MarkDirty(R);
+    Exit;
+  end;
+  dx := Integer(ADX);
+  dy := Integer(ADY);
+  w := R.Right - R.Left;
+  if dy > 0 then
+  begin
+    // down: from the bottom up, each row from dy above it
+    for y := R.Bottom - 1 downto R.Top + dy do
+      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+        w * SizeOf(TBGRAPixel));
+  end
+  else if dy < 0 then
+  begin
+    for y := R.Top to R.Bottom - 1 + dy do
+      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+        w * SizeOf(TBGRAPixel));
+  end
+  else if dx <> 0 then
+    for y := R.Top to R.Bottom - 1 do
+    begin
+      pix := FSurface.ScanLine[y] + R.Left;
+      // Move copies overlapping ranges as memmove does
+      if dx > 0 then Move(pix^, (pix + dx)^, (w - dx) * SizeOf(TBGRAPixel))
+      else Move((pix - dx)^, pix^, (w + dx) * SizeOf(TBGRAPixel));
+    end;
+  FSurface.InvalidateBitmap;
+  // what was dirty moved with the text
+  for i := 0 to FDirtyCount - 1 do
+  begin
+    Types.OffsetRect(FDirty[i], dx, dy);
+    if not IntersectRect(FDirty[i], FDirty[i], R) then FDirty[i] := Rect(0, 0, 0, 0);
+  end;
+  FSurfScrollX := FScrollX;
+  if dy > 0 then MarkDirty(Rect(R.Left, R.Top, R.Right, R.Top + dy))
+  else if dy < 0 then MarkDirty(Rect(R.Left, R.Bottom + dy, R.Right, R.Bottom))
+  else if dx > 0 then MarkDirty(Rect(R.Left, R.Top, R.Left + dx, R.Bottom))
+  else if dx < 0 then MarkDirty(Rect(R.Right + dx, R.Top, R.Right, R.Bottom));
+end;
+
+function TTyCustomRichEdit.SurfaceUsable(const AStyle: TTyStyleSet): Boolean;
+begin
+  // the ground the text is drawn on, and what a dirty rectangle is filled with
+  Result := (tpBackground in AStyle.Present) and (AStyle.Background.Kind = tfkSolid) and
+    (TyAlphaOf(AStyle.Background.Color) = 255) and not (tpOpacity in AStyle.Present);
+end;
+
+function TTyCustomRichEdit.FrameSignature(APPI: Integer): Cardinal;
+var
+  st: TTyStyleSet;
+  h: Cardinal;
+  p: TTyProp;
+  ps: TTyRichPaintStyle;
+  state: TTyState;
+
+  procedure Mix(AValue: Cardinal);
+  begin
+    h := (h xor AValue) * 16777619;
+  end;
+
+  procedure MixPx(const APx: TBGRAPixel);
+  begin
+    Mix(Cardinal(APx.red) or (Cardinal(APx.green) shl 8) or (Cardinal(APx.blue) shl 16) or
+      (Cardinal(APx.alpha) shl 24));
+  end;
+
+begin
+  { Everything the frame and the ground are drawn from that may change without a layout
+    change: the resolved style (theme, StyleOverride, the state - focus, hover, enabled), the
+    paint style's colours (the selection follows the focus), the bars, the PPI. }
+  st := CurrentStyle;
+  h := 2166136261;
+  for state := Low(TTyState) to High(TTyState) do
+    if state in CurrentStates then Mix(Ord(state) + 1000);
+  for p := Low(TTyProp) to High(TTyProp) do
+    if p in st.Present then Mix(Ord(p) + 1);
+  Mix(Cardinal(st.Background.Color));
+  Mix(Ord(st.Background.Kind));
+  Mix(Cardinal(st.BorderColor));
+  Mix(Cardinal(st.BorderWidth));
+  Mix(Ord(st.BorderStyle));
+  Mix(Ord(st.RenderStyle));
+  Mix(Cardinal(st.BorderRadius));
+  Mix(Cardinal(st.OutlineColor));
+  Mix(Cardinal(st.ShadowColor));
+  Mix(Cardinal(st.Padding.Left));
+  Mix(Cardinal(st.Padding.Top));
+  Mix(Cardinal(st.Padding.Right));
+  Mix(Cardinal(st.Padding.Bottom));
+  ps := Default(TTyRichPaintStyle);
+  FillPaintStyle(ps);
+  MixPx(ps.TextColor);
+  MixPx(ps.SelectionBack);
+  MixPx(ps.SelectionText);
+  MixPx(ps.ObjectFrame);
+  MixPx(ps.PlaceholderFill);
+  MixPx(ps.PlaceholderFrame);
+  Mix(Ord(VBarShown));
+  Mix(Ord(HBarShown));
+  Mix(Ord(IsRightToLeft));
+  Mix(Cardinal(APPI));
+  Result := h;
+end;
+
+procedure TTyCustomRichEdit.EnsureSurface(AW, AH, AScale: Integer);
+var
+  bw, bh: Integer;
+begin
+  // in blocks: a resize by a few pixels keeps the bitmap; never larger than a block past it
+  bw := (Math.Max(1, AW) * AScale + CRichSurfaceBlock - 1) div CRichSurfaceBlock * CRichSurfaceBlock;
+  bh := (Math.Max(1, AH) * AScale + CRichSurfaceBlock - 1) div CRichSurfaceBlock * CRichSurfaceBlock;
+  if (FSurface = nil) or (FSurface.Width <> bw) or (FSurface.Height <> bh) or
+    (AScale <> FSurfScale) then
+  begin
+    FreeAndNil(FSurface);
+    FSurface := TBGRABitmap.Create(bw, bh);
+    FSurfScale := AScale;
+    InvalidateSurface;
+  end;
+  if (AW <> FSurfW) or (AH <> FSurfH) then
+  begin
+    FSurfW := AW;
+    FSurfH := AH;
+    InvalidateSurface;
+  end;
+end;
+
+procedure TTyCustomRichEdit.DestroyWnd;
+begin
+  inherited DestroyWnd;
+  // the window is gone: what it showed is drawn again when it comes back
+  FreeAndNil(FSurface);
+  InvalidateSurface;
+end;
+
+procedure TTyCustomRichEdit.PaintSurfaceFrame(APPI: Integer);
+var
+  P: TTyPainter;
+  sc: TTyCanvasScale;
+  s: TTyStyleSet;
+  area, clip: TRect;
+  bands: array[0..3] of TRect;
+  i, k: Integer;
+begin
+  s := CurrentStyle;
+  k := FSurfScale;
+  area := TextArea(Rect(0, 0, FSurfW, FSurfH), APPI);
+  clip := TextClipOf(Rect(0, 0, FSurfW, FSurfH), area, APPI);
+  clip := Rect(clip.Left * k, clip.Top * k, clip.Right * k, clip.Bottom * k);
+  { Inside the text clip the frame is its ground and nothing else (SurfaceUsable): filled at
+    once. The frame itself is drawn only in the four bands around it - the painter fills
+    the whole rectangle, and most of a full redraw's time went there. }
+  FSurface.FillRect(clip.Left, clip.Top, clip.Right, clip.Bottom,
+    TyColorToBGRA(s.Background.Color), dmSet);
+  bands[0] := Rect(0, 0, FSurface.Width, clip.Top);
+  bands[1] := Rect(0, clip.Bottom, FSurface.Width, FSurface.Height);
+  bands[2] := Rect(0, clip.Top, clip.Left, clip.Bottom);
+  bands[3] := Rect(clip.Right, clip.Top, FSurface.Width, clip.Bottom);
+  for i := 0 to 3 do
+  begin
+    if (bands[i].Right <= bands[i].Left) or (bands[i].Bottom <= bands[i].Top) then Continue;
+    FSurface.ClipRect := bands[i];
+    FSurface.FillRect(bands[i], TyColorToBGRA(s.Background.Color), dmSet);
+    P := TTyPainter.Create;
+    try
+      // no canvas: the frame is drawn on the surface at its scale, nothing is blitted
+      sc.Scale := FSurfScale;
+      sc.DeviceUnits := False;
+      P.BeginPaintOnScaled(nil, Rect(0, 0, FSurfW, FSurfH), APPI, FSurface, sc);
+      DrawFrame(P, Rect(0, 0, FSurfW, FSurfH), s);
+      P.EndPaint;
+    finally
+      P.Free;
+      FSurface.NoClip;
+    end;
+  end;
+end;
+
+procedure TTyCustomRichEdit.PaintBlock(ABitmap: TBGRABitmap; AIndex, AX, AY: Integer;
+  const AClip: TRect; const AStyle: TTyRichPaintStyle);
+begin
+  FBlocks[AIndex].Layout.Paint(ABitmap, AX, AY, AClip, AStyle, 0, 0);
+end;
+
+{ The pictures the last block painted passed over (a deferred paint): left for the background
+  work. }
+procedure TTyCustomRichEdit.QueueSkipped(ABlock: Integer);
+var
+  skipped: TTyRichSkippedPictures;
+  j: Integer;
+  box: TRect;
+begin
+  if FLayouter.SkippedPictureCount = 0 then Exit;
+  skipped := FLayouter.TakeSkippedPictures;
+  for j := 0 to High(skipped) do
+  begin
+    box := skipped[j].Box;
+    QueuePicture(skipped[j].Picture, box.Right - box.Left, box.Bottom - box.Top,
+      FBlocks[ABlock].FirstPara, FBlocks[ABlock].LastPara, True);
+  end;
+end;
+
+procedure TTyCustomRichEdit.RedrawSurface(APPI: Integer; ADefer: Boolean);
+var
+  area, clip, rArea, rClip, R: TRect;
+  regs: array of TRect;
+  n, i, k, s, x, reach: Integer;
+  y: Int64;
+  full: Boolean;
+  pst: TTyRichPaintStyle;
+  ground: TBGRAPixel;
+begin
+  s := FSurfScale;
+  area := TextArea(Rect(0, 0, FSurfW, FSurfH), APPI);
+  clip := TextClipOf(Rect(0, 0, FSurfW, FSurfH), area, APPI);
+  rArea := Rect(area.Left * s, area.Top * s, area.Right * s, area.Bottom * s);
+  rClip := Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s);
+  if FSurfScrollX <> FScrollX then MarkDirty(rClip);
+  full := FAllDirty;
+  // a dirty part outside the text: the frame is drawn again, so is everything
+  for i := 0 to FDirtyCount - 1 do
+    if (FDirty[i].Right > FDirty[i].Left) and ((FDirty[i].Left < rClip.Left) or
+      (FDirty[i].Top < rClip.Top) or (FDirty[i].Right > rClip.Right) or
+      (FDirty[i].Bottom > rClip.Bottom)) then full := True;
+  regs := nil;
+  n := 0;
+  if full then
+  begin
+    PaintSurfaceFrame(APPI);
+    SetLength(regs, 1);
+    regs[0] := rClip;
+    n := 1;
+  end
+  else
+  begin
+    SetLength(regs, FDirtyCount);
+    for i := 0 to FDirtyCount - 1 do
+      if IntersectRect(R, FDirty[i], rClip) then
+      begin
+        regs[n] := R;
+        Inc(n);
+      end;
+  end;
+  FAllDirty := False;
+  FDirtyCount := 0;
+  FSurfScrollX := FScrollX;
+  if n = 0 then Exit;
+  FillPaintStyle(pst);
+  pst.DeferPictures := ADefer;
+  ground := TyColorToBGRA(CurrentStyle.Background.Color);
+  { A block's ink may reach past its box (a descender, an italic, a picture frame): the blocks
+    next to a region are painted into it too (clipped), as a full redraw would leave them. }
+  reach := Math.Max(1, FEstimate);
+  FLayouter.BeginPaintPass;
+  x := rArea.Left - FScrollX;
+  try
+    for i := 0 to n - 1 do
+    begin
+      R := regs[i];
+      if not full then FSurface.FillRect(R.Left, R.Top, R.Right, R.Bottom, ground, dmSet);
+      FSurface.ClipRect := R;
+      for k := 0 to FBlockCount - 1 do
+      begin
+        y := rArea.Top + FBlocks[k].Top;
+        if (y >= R.Bottom + reach) or (y + FBlocks[k].Height <= R.Top - reach) then Continue;
+        // it meets the region: its top is within a block's height of it, an Integer
+        PaintBlock(FSurface, k, x, Integer(y), R, pst);
+        if ADefer then QueueSkipped(k);
+      end;
+      FSurface.NoClip;
+    end;
+  finally
+    FSurface.NoClip;
+  end;
+end;
+
+{$IFDEF LCLWin32}
+type
+  TTyRichDibHeader = packed record
+    biSize: LongWord;
+    biWidth, biHeight: LongInt;
+    biPlanes, biBitCount: Word;
+    biCompression, biSizeImage: LongWord;
+    biXPelsPerMeter, biYPelsPerMeter: LongInt;
+    biClrUsed, biClrImportant: LongWord;
+  end;
+
+function TyRichStretchDIBits(ADC: HDC; AXDest, AYDest, ADestW, ADestH, AXSrc, AYSrc, ASrcW,
+  ASrcH: LongInt; ABits: Pointer; const AInfo: TTyRichDibHeader; AUsage, ARop: LongWord): LongInt;
+  stdcall; external 'gdi32' name 'StretchDIBits';
+function TyRichSetDIBitsToDevice(ADC: HDC; AXDest, AYDest: LongInt; AW, AH: LongWord;
+  AXSrc, AYSrc: LongInt; AStartScan, AScanLines: LongWord; ABits: Pointer;
+  const AInfo: TTyRichDibHeader; AUsage: LongWord): LongInt;
+  stdcall; external 'gdi32' name 'SetDIBitsToDevice';
+{$ENDIF}
+
+{ The surface's APart (client pixels) to the canvas at (ADstX, ADstY), the Terminal's way: Win32
+  straight from the bitmap's DIB with a source offset (no copy); elsewhere TyDrawOpaquePart (a
+  Cocoa window: one copy handed to CG) or BGRA's DrawPart. 1:1 at scale 1 or on a canvas in
+  device units; into the client rectangle on one in client units (a Retina window: the system
+  puts each client pixel back on S device pixels). }
+procedure TTyCustomRichEdit.BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX,
+  ADstY: Integer; const AScale: TTyCanvasScale);
+{$IFDEF LCLWin32}
+const
+  BI_RGB = 0;
+  DIB_RGB_COLORS = 0;
+  SRCCOPY = $00CC0020;
+var
+  info: TTyRichDibHeader;
+  w, h, ySrc: Integer;
+{$ELSE}
+var
+  piece: TBGRACustomBitmap;
+{$ENDIF}
+var
+  s: Integer;
+  src, dst: TRect;
+begin
+  s := Math.Max(1, FSurfScale);
+  src := Rect(APart.Left * s, APart.Top * s, APart.Right * s, APart.Bottom * s);
+  if (s = 1) or AScale.DeviceUnits then
+    dst := Rect(ADstX * s, ADstY * s, ADstX * s + (src.Right - src.Left),
+      ADstY * s + (src.Bottom - src.Top))
+  else
+    dst := Rect(ADstX, ADstY, ADstX + (APart.Right - APart.Left),
+      ADstY + (APart.Bottom - APart.Top));
+  {$IFDEF LCLWin32}
+  w := src.Right - src.Left;
+  h := src.Bottom - src.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  FillChar(info, SizeOf(info), 0);
+  info.biSize := SizeOf(info);
+  info.biWidth := FSurface.Width;
+  info.biPlanes := 1;
+  info.biBitCount := 32;
+  info.biCompression := BI_RGB;
+  if FSurface.LineOrder = riloBottomToTop then
+  begin
+    // a bottom-up DIB: the source rectangle's origin is its bottom left
+    info.biHeight := FSurface.Height;
+    ySrc := FSurface.Height - src.Bottom;
+  end
+  else
+  begin
+    info.biHeight := -FSurface.Height;
+    ySrc := src.Top;
+  end;
+  if (dst.Right - dst.Left = w) and (dst.Bottom - dst.Top = h) then
+    // 1:1: no stretch (measured faster than StretchDIBits for a whole screen)
+    TyRichSetDIBitsToDevice(ACanvas.Handle, dst.Left, dst.Top, w, h, src.Left, ySrc, 0,
+      FSurface.Height, FSurface.Data, info, DIB_RGB_COLORS)
+  else
+    TyRichStretchDIBits(ACanvas.Handle, dst.Left, dst.Top, dst.Right - dst.Left,
+      dst.Bottom - dst.Top, src.Left, ySrc, w, h, FSurface.Data, info, DIB_RGB_COLORS, SRCCOPY);
+  {$ELSE}
+  if TyDrawOpaquePart(ACanvas, FSurface, src, dst) then Exit;
+  if (dst.Right - dst.Left = src.Right - src.Left) and
+    (dst.Bottom - dst.Top = src.Bottom - src.Top) then
+    FSurface.DrawPart(src, ACanvas, dst.Left, dst.Top, True)
+  else
+  begin
+    piece := FSurface.GetPart(src);
+    try
+      piece.Draw(ACanvas, dst, True);
+    finally
+      piece.Free;
+    end;
+  end;
+  {$ENDIF}
+end;
+
+{ The 9a way, for a ground that is not an opaque colour or an opacity: the painter's layer for
+  the clip, frame and text, everything each paint, laid over the canvas by EndPaint (which
+  dims and blends). At the device scale too. }
+procedure TTyCustomRichEdit.PaintLayer(ACanvas: TCanvas; const ARect, AClip: TRect;
+  APPI: Integer; ADefer: Boolean; const AScale: TTyCanvasScale);
+var
+  P: TTyPainter;
+  R, area, textClip, rClip: TRect;
+  st: TTyRichPaintStyle;
+  s, k, x: Integer;
+  y: Int64;
+begin
+  s := Math.Max(1, AScale.Scale);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintScaled(ACanvas, AClip, APPI, AScale);
+    R := Rect(ARect.Left - AClip.Left, ARect.Top - AClip.Top, ARect.Right - AClip.Left,
+      ARect.Bottom - AClip.Top);
+    DrawFrame(P, R, CurrentStyle);
+    area := TextArea(R, APPI);
+    textClip := TextClipOf(R, area, APPI);
+    if IntersectRect(textClip, textClip, Rect(0, 0, AClip.Right - AClip.Left,
+      AClip.Bottom - AClip.Top)) then
+    begin
+      rClip := Rect(textClip.Left * s, textClip.Top * s, textClip.Right * s, textClip.Bottom * s);
+      P.PrepareTextGround(rClip);
+      FillPaintStyle(st);
+      st.DeferPictures := ADefer;
+      P.Bitmap.ClipRect := rClip;
+      FLayouter.BeginPaintPass;
+      try
+        x := area.Left * s - FScrollX;
+        for k := 0 to FBlockCount - 1 do
+        begin
+          y := Int64(area.Top) * s + FBlocks[k].Top;
+          if (y >= rClip.Bottom) or (y + FBlocks[k].Height <= rClip.Top) then Continue;
+          PaintBlock(P.Bitmap, k, x, Integer(y), rClip, st);
+          if ADefer then QueueSkipped(k);
+        end;
+      finally
+        P.Bitmap.NoClip;
+      end;
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyCustomRichEdit.PaintArea(ACanvas: TCanvas; const ARect, AClip: TRect;
+  APPI: Integer; ADefer: Boolean);
+var
+  clip: TRect;
+  sc: TTyCanvasScale;
+  sig: Cardinal;
+begin
+  if not IntersectRect(clip, AClip, ARect) then Exit;
+  sc := TyCanvasDeviceScale(ACanvas);
+  if sc.Scale < 1 then sc.Scale := 1;
+  // the layout follows the device: a new scale is a PPI change (CheckLayoutParams)
+  FScale := sc.Scale;
+  EnsureView(APPI);
+  ClampScrollX;
+  if not SurfaceUsable(CurrentStyle) then
+  begin
+    PaintLayer(ACanvas, ARect, clip, APPI, ADefer, sc);
+    InvalidateSurface;
+  end
+  else
+  begin
+    EnsureSurface(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top, sc.Scale);
+    sig := FrameSignature(APPI);
+    if not FFrameSigValid or (sig <> FFrameSig) then
+    begin
+      FFrameSig := sig;
+      FFrameSigValid := True;
+      InvalidateSurface;
+    end;
+    // RenderTo: a whole picture, its pictures decoded now
+    if not ADefer then InvalidateSurface;
+    RedrawSurface(APPI, ADefer);
+    BlitSurface(ACanvas, Rect(clip.Left - ARect.Left, clip.Top - ARect.Top,
+      clip.Right - ARect.Left, clip.Bottom - ARect.Top), clip.Left, clip.Top, sc);
+  end;
+  if FPendingCount > 0 then StartBackground;
+end;
+
 { ---- keyboard and wheel ---- }
 
 procedure TTyCustomRichEdit.KeyDown(var Key: Word; Shift: TShiftState);
@@ -2725,12 +3430,12 @@ begin
   case Key of
     VK_NEXT:
       begin
-        ScrollViewBy(page);
+        ScrollRasterBy(page);
         Key := 0;
       end;
     VK_PRIOR:
       begin
-        ScrollViewBy(-page);
+        ScrollRasterBy(-page);
         Key := 0;
       end;
     VK_HOME:
@@ -2771,15 +3476,15 @@ begin
   if notches = 0 then Exit;
   perNotch := Mouse.WheelScrollLines;
   if perNotch <= 0 then
-    ScrollViewBy(-notches * Math.Max(FEstimate, FViewH - FEstimate))
+    ScrollRasterBy(-notches * Int64(Math.Max(FEstimate, FViewH - FEstimate)))
   else
-    ScrollViewBy(-notches * perNotch * Math.Max(1, FEstimate));
+    ScrollRasterBy(-notches * Int64(perNotch) * Math.Max(1, FEstimate));
 end;
 
 function TTyCustomRichEdit.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  notches: Integer;
+  notches, was: Integer;
 begin
   if not IsEnabled then Exit(False);
   if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
@@ -2788,18 +3493,21 @@ begin
   notches := FWheelHRest div 120;
   Dec(FWheelHRest, notches * 120);
   if notches = 0 then Exit;
+  was := FScrollX;
   FScrollX := FScrollX + notches * 3 * Math.Max(1, FEstimate);
   ClampScrollX;
+  if FScrollX = was then Exit;
   if HBarShown then
   begin
     FSyncingBars := True;
     try
-      FHBar.Position := FScrollX;
+      FHBar.Position := FScrollX div FScale;
     finally
       FSyncingBars := False;
     end;
   end;
-  InvalidateContent(TextArea(Rect(0, 0, Width, Height), ViewPPI));
+  MoveSurfaceText(was - FScrollX, 0);
+  InvalidateArea(TextWindowRect);
 end;
 
 procedure TTyCustomRichEdit.MouseEnter;
