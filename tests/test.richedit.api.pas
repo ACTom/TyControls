@@ -101,10 +101,32 @@ type
     procedure TestAStyleInBothSetsGoes;
     procedure TestTheSmallerRichMemoMethods;
     procedure TestConsistentAttributesIsBoundedAndRemembered;
+    procedure TestAWriteOfWhatIsThereIsNoStep;
+    procedure TestOnModifiedChangeAfterTheEdit;
+    procedure TestBeginEditMakesOneStep;
+    procedure TestCanUndoAnswersForTheUser;
+    procedure TestADescendantsApiDoor;
   end;
 
-  // the control's protected test seams (the consistency budget)
+  // the control's protected test seams (the consistency budget, the API's door)
   TConsAccess = class(TTyCustomRichEdit)
+  end;
+
+  // OnModifiedChange's witness (TestOnModifiedChangeAfterTheEdit)
+  TModWitness = class
+  public
+    Rich: TTyCustomRichEdit;
+    Changes: ^Integer;
+    SeenChanges, SeenCaret, Calls: Integer;
+    Load: Boolean;
+    procedure ModChanged(Sender: TObject);
+  end;
+
+  // a toolbar that writes back what it read (TestAWriteOfWhatIsThereIsNoStep, the review's B11)
+  TToolbarEcho = class
+  public
+    Rich: TTyCustomRichEdit;
+    procedure SelChanged(Sender: TObject);
   end;
 
 implementation
@@ -2608,6 +2630,216 @@ begin
   FRich.SelectAll;
   AssertFalse('after a write: mixed', caBold in FRich.SelAttributes.ConsistentAttributes);
   AssertEquals('two walks', walks + 2, acc.ConsistencyWalks);
+end;
+
+procedure TModWitness.ModChanged(Sender: TObject);
+var
+  st: TBytesStream;
+begin
+  Inc(Calls);
+  SeenChanges := Changes^;
+  SeenCaret := Rich.CaretPos;
+  if Load then
+  begin
+    Load := False;
+    st := TBytesStream.Create(RawBytes('loaded'));
+    try
+      Rich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+  end;
+end;
+
+procedure TToolbarEcho.SelChanged(Sender: TObject);
+begin
+  // a spin edit and a check box set from what they show (mixed: the box is greyed, no write)
+  Rich.SelAttributes.Size := Rich.SelAttributes.Size;
+  Rich.SelAttributes.Name := Rich.SelAttributes.Name;
+  if caBold in Rich.SelAttributes.ConsistentAttributes then
+    Rich.SelAttributes.Bold := Rich.SelAttributes.Bold;
+end;
+
+{ F-M2: a write of the value the text already has is no undo step, no OnChange, not
+  Modified (the review's B3 and B11); a range wholly inside a nested-table row is none
+  either. }
+procedure TTyRichEditApiTest.TestAWriteOfWhatIsThereIsNoStep;
+var
+  depth, i: Integer;
+  echo: TToolbarEcho;
+begin
+  SetText('abc def'#10'ghi');
+  Sel(0, 3);
+  FRich.SelAttributes.Bold := True;
+  FRich.Modified := False;
+  depth := FRich.Document.UndoDepth;
+  ResetEvents;
+  // B3: bold over bold
+  FRich.SelAttributes.Bold := True;
+  FRich.SelAttributes.Style := [fsBold];
+  FRich.Paragraph.Alignment := taLeftJustify;
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertFalse('not Modified', FRich.Modified);
+  AssertEquals('no OnModifiedChange', 0, FModChanges);
+  // B11: a toolbar that writes back in OnSelectionChange; three selection changes
+  echo := TToolbarEcho.Create;
+  try
+    echo.Rich := FRich;
+    FRich.OnSelectionChange := @echo.SelChanged;
+    for i := 0 to 2 do Sel(i * 2, 3);
+  finally
+    FRich.OnSelectionChange := @SelChanged;
+    echo.Free;
+  end;
+  AssertEquals('B11: no step', depth, FRich.Document.UndoDepth);
+  AssertFalse('B11: not Modified', FRich.Modified);
+  // the redo steps stay
+  FRich.Undo;
+  AssertTrue('a redo step', FRich.Document.RedoDepth = 1);
+  Sel(0, 3);
+  FRich.SelAttributes.Bold := False;
+  AssertEquals('the redo step is still there', 1, FRich.Document.RedoDepth);
+  // a range wholly inside a row that holds a nested table: nothing changes, no step
+  LoadBytes(FixtureFile('word-table-merged.rtf'));
+  for i := 0 to FRich.Document.Text.ParaCount - 1 do
+    if (FRich.Document.CellAt(i) <> nil) and FRich.Document.CellAt(i).Row.HoldsNestedTable and
+      (FRich.Document.Text.ParaLength(i) > 0) then
+    begin
+      Sel(FRich.Document.Text.ParaStart(i), 1);
+      depth := FRich.Document.UndoDepth;
+      ResetEvents;
+      FRich.SelAttributes.Color := clRed;
+      AssertEquals('inside a nested row: no step', depth, FRich.Document.UndoDepth);
+      AssertEquals('...no OnChange', 0, FChanges);
+      AssertFalse('...not Modified', FRich.Modified);
+      Exit;
+    end;
+  Fail('the fixture has a nested row');
+end;
+
+{ F-M7: OnModifiedChange comes after the edit's own reports - the caret placed, OnChange made;
+  a handler that loads a document is not taken for the edit. }
+procedure TTyRichEditApiTest.TestOnModifiedChangeAfterTheEdit;
+var
+  w: TModWitness;
+begin
+  SetText('abc');
+  w := TModWitness.Create;
+  try
+    w.Rich := FRich;
+    w.Changes := @FChanges;
+    FRich.OnModifiedChange := @w.ModChanged;
+    FRich.SelStart := 3;
+    ResetEvents;
+    Chars('x');
+    AssertEquals('told once', 1, w.Calls);
+    AssertEquals('after the caret was placed', 4, w.SeenCaret);
+    AssertEquals('after OnChange', 1, w.SeenChanges);
+    // a format write and an undo: the same order
+    FRich.Modified := False;
+    w.Calls := 0;
+    Sel(0, 2);
+    ResetEvents;
+    FRich.SelAttributes.Bold := True;
+    AssertEquals('a write: told after its OnChange', 1, w.SeenChanges);
+    // a handler that loads a document
+    FRich.Modified := False;
+    w.Load := True;
+    Sel(1, 0);
+    Chars('y');
+    AssertEquals('the load the handler made stands', 'loaded', FRich.Lines[0]);
+    AssertEquals('one line', 1, FRich.Lines.Count);
+  finally
+    FRich.OnModifiedChange := @ModChanged;
+    w.Free;
+  end;
+end;
+
+{ F-M9: BeginEdit .. EndEdit make several writes one undo step, whose undo puts back the
+  selection there was at BeginEdit; one OnChange. }
+procedure TTyRichEditApiTest.TestBeginEditMakesOneStep;
+var
+  depth: Integer;
+begin
+  SetText('one two'#10'three');
+  FRich.SelStart := 5;
+  depth := FRich.Document.UndoDepth;
+  ResetEvents;
+  FRich.BeginEdit;
+  try
+    FRich.Paragraph.Alignment := taCenter;
+    FRich.Paragraph.SpaceAfter := 6;
+    Sel(0, 3);
+    FRich.SelAttributes.Bold := True;
+    FRich.BeginEdit;
+    FRich.SelAttributes.Size := 15;
+    FRich.EndEdit;
+    AssertEquals('nothing reported inside', 0, FChanges);
+  finally
+    FRich.EndEdit;
+  end;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('one OnChange', 1, FChanges);
+  AssertTrue('written', fsBold in Fmt(1).Style);
+  AssertTrue('...all of it', PFmt(0).Align = paraCenter);
+  AssertEquals('the selection stays', 0, FRich.SelStart);
+  AssertEquals('...as it was set', 3, FRich.SelLength);
+  FRich.Undo;
+  AssertTrue('undone at once', PFmt(0).Align = paraLeft);
+  AssertFalse('...the bold too', fsBold in Fmt(1).Style);
+  AssertEquals('the caret back where BeginEdit found it', 5, FRich.SelStart);
+  AssertEquals('...nothing selected', 0, FRich.SelLength);
+  // nothing written: no step
+  FRich.BeginEdit;
+  FRich.EndEdit;
+  AssertEquals('an empty block: no step', depth, FRich.Document.UndoDepth);
+  try
+    FRich.EndEdit;
+    Fail('EndEdit without BeginEdit');
+  except
+    on ETyRichEdit do ;
+  end;
+end;
+
+{ F-M11: CanUndo / CanRedo answer for the user, as CanPaste. }
+procedure TTyRichEditApiTest.TestCanUndoAnswersForTheUser;
+begin
+  SetText('abc');
+  FRich.SelStart := 3;
+  Chars('x');
+  AssertTrue('a step', FRich.CanUndo);
+  FRich.ReadOnly := True;
+  AssertFalse('ReadOnly: the user cannot undo', FRich.CanUndo);
+  AssertTrue('...the document can', FRich.Document.CanUndo);
+  FRich.ReadOnly := False;
+  FRich.Undo;
+  AssertTrue('a redo', FRich.CanRedo);
+  FRich.ReadOnly := True;
+  AssertFalse('ReadOnly: no redo for the user', FRich.CanRedo);
+  FRich.ReadOnly := False;
+end;
+
+{ F-M16: a descendant's door of the API kind - not refused by ReadOnly, the selection kept. }
+procedure TTyRichEditApiTest.TestADescendantsApiDoor;
+var
+  f: TTyCharFormat;
+  depth: Integer;
+begin
+  SetText('abcdef');
+  Sel(1, 2);
+  FRich.ReadOnly := True;
+  depth := FRich.Document.UndoDepth;
+  ResetEvents;
+  f := TyDefaultCharFormat;
+  f.Color := clRed;
+  TConsAccess(FRich).RunApiCommand(TTyRichSetCharFormat.Create(TyRichRange(3, 2), [cffColor], f), 2);
+  FRich.ReadOnly := False;
+  AssertEquals('written regardless of ReadOnly', clRed, Fmt(3).Color);
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('one OnChange', 1, FChanges);
+  AssertEquals('the selection kept', 1, FRich.SelStart);
+  AssertEquals('...its length', 2, FRich.SelLength);
 end;
 
 initialization

@@ -98,8 +98,9 @@ type
     destructor Destroy; override;
     function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
-    { With the object's data: the step keeps the object alive. }
-    function MemSize: Int64; override;
+    { The step keeps the object alive: GatherObjects names it (the history counts its data
+      once, R72). }
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     property RichObject: TTyRichObject read FObject;
   end;
 
@@ -135,6 +136,7 @@ type
     function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
     function MemSize: Int64; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     { After the first run: what went in (nil before). }
     property Fragment: TTyRichFragment read FFragment;
   end;
@@ -164,6 +166,7 @@ type
     { ADescription, else the only part's, else a generic one. }
     function Description: string; override;
     function MemSize: Int64; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     property Items[AIndex: Integer]: TTyRichCommand read GetItem;
   end;
 
@@ -358,9 +361,12 @@ begin
   Result := rsRichUndoInsertObject;
 end;
 
-function TTyRichInsertObject.MemSize: Int64;
+procedure TTyRichInsertObject.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
 begin
-  Result := inherited MemSize + FObject.DataBytes;
+  inherited GatherObjects(AList, ACount);
+  if ACount = Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := FObject;
+  Inc(ACount);
 end;
 
 { ---- TTyRichInsertFragment ---- }
@@ -416,6 +422,12 @@ function TTyRichInsertFragment.MemSize: Int64;
 begin
   Result := inherited MemSize;
   if FFragment <> nil then Inc(Result, FFragment.MemSize);
+end;
+
+procedure TTyRichInsertFragment.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  if FFragment <> nil then FFragment.GatherObjects(AList, ACount);
 end;
 
 { ---- TTyRichCompositeCommand ---- }
@@ -531,6 +543,15 @@ var
 begin
   Result := inherited MemSize + FItems.Count * SizeOf(Pointer);
   for i := 0 to FItems.Count - 1 do Inc(Result, TTyRichCommand(FItems[i]).MemSize);
+end;
+
+procedure TTyRichCompositeCommand.GatherObjects(var AList: TTyRichObjectList;
+  var ACount: Integer);
+var
+  i: Integer;
+begin
+  inherited GatherObjects(AList, ACount);
+  for i := 0 to FItems.Count - 1 do TTyRichCommand(FItems[i]).GatherObjects(AList, ACount);
 end;
 
 end.

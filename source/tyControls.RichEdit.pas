@@ -551,7 +551,14 @@ type
     FParaConsBase: TTyParaFormat;
     FParaConsMask: TTyRichConsistentParaAttributes;
     FOnModifiedChange: TNotifyEvent;
+    { OnModifiedChange owed by a turn heard inside the control's own edit (F-M7): raised when
+      the edit has made its own reports (PayModifiedOwed). }
+    FModifiedOwed: Boolean;
+    // BeginEdit .. EndEdit (F-M9): the depth and the selection the block began with
+    FEditBlock: Integer;
+    FEditBlockMarks: TTyRichStepMarks;
     procedure DocModifiedChanged(Sender: TObject);
+    procedure PayModifiedOwed;
     procedure SetSelAttributes(AValue: TTyRichTextAttributes);
     procedure SetDefAttributes(AValue: TTyRichTextAttributes);
     procedure SetParagraph(AValue: TTyRichParaAttributes);
@@ -1241,6 +1248,12 @@ type
     property ConsistencyBudgetParas: Integer read FConsBudgetParas write FConsBudgetParas;
     property ConsistencyBudgetBytes: Int64 read FConsBudgetBytes write FConsBudgetBytes;
     property ConsistencyWalks: Integer read FConsWalks;
+    { The door of the format API for a descendant (F-M16): runs ACmd as the façades' writes
+      run theirs (RunApiEdit) - not refused by ReadOnly, an open composition ended first,
+      the selection kept with the step and left where it is, no scroll, one OnChange;
+      a refusal of the document raised (ETyRichEdit). AChars: how many characters it changes
+      (the wait cursor's threshold). RunUserEdit is the user's door (it asks ReadOnly). }
+    procedure RunApiCommand(ACmd: TTyRichCommand; AChars: TTyRichPos);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1313,7 +1326,7 @@ type
       scroll the caret into view. A place past a cut paragraph's cut (CRichMaxParaLayoutChars)
       is kept and shown at the cut.
       Written inside the document's BeginUpdate .. EndUpdate (and so CaretPos, SelectAll,
-      ClearSelection): the positions are stored, clamped to the text as it is at that moment,
+      CollapseSelection): the positions are stored, clamped to the text as it is at that moment,
       and nothing is laid out, scrolled or painted. Edits made later in the same update do not
       move them; when the update ends they are clamped to the final text (and to a caret place)
       and the selection is painted. }
@@ -1432,9 +1445,22 @@ type
       a read-only control calls Document.Undo. }
     procedure Undo;
     procedure Redo;
-    { The document's: there is a step to undo / redo now. }
+    { The user's (F-M11), as CanPaste: Undo / Redo would do something now - there is a step,
+      the control is not ReadOnly, it is enabled and the document is in no update. Code that
+      undoes regardless of ReadOnly asks Document.CanUndo / CanRedo. }
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    { Several writes as ONE undo step (F-M9): the format and edit writes of the document API
+      between BeginEdit and EndEdit (SelAttributes, Paragraph, the RichMemo-style methods,
+      SelText, Lines) are one step whose undo puts back the selection there was at BeginEdit;
+      one OnChange and one repaint at EndEdit, the view not scrolled. What a font dialog's
+      result or the ruler's drag writes. They nest (the outermost pair counts); an open
+      composition ends at BeginEdit. Inside, the document is in its update
+      (Document.BeginUpdate): the user's actions (Undo, a key) do nothing until EndEdit, and
+      the selection set meanwhile is stored as inside any update. Not Lines.BeginUpdate,
+      which gathers a replacement of the lines. EndEdit without BeginEdit raises. }
+    procedure BeginEdit;
+    procedure EndEdit;
     { The history goes (TTyRichDocument.ClearUndo); the text stays. }
     procedure ClearUndo;
     { ITyTextEditActions: Undo, Redo, Cut, Copy, Paste (PasteFromClipboard; offered when
@@ -1530,7 +1556,8 @@ type
       what SelAttributes reads. No command, no undo step, no OnChange. It lasts until the
       selection is set again (even to the same place: msftedit's way, fact 6 - the caret then
       takes its neighbour's format again), an edit other than typing, a change from code, an
-      undo or a redo, or a new content; typing, an input method's commit and a paste of plain
+      undo or a redo, or a new content - application code that sets the selection again,
+      even to the same place (SelStart := SelStart), drops it, as on Windows; typing, an input method's commit and a paste of plain
       text use it once, and the text they put in carries it. A paragraph write with nothing
       selected changes the caret's paragraph at once (a command). }
 
@@ -4633,16 +4660,19 @@ begin
   if refusal <> '' then
   begin
     EditRefused(refusal);
+    PayModifiedOwed;
     Exit;
   end;
   if not ok then
   begin
+    PayModifiedOwed;
     // CanExecute said no: the reason that holds for that command
     Refuse(cannot, AUser);
     Exit;
   end;
   // (a command that changed nothing is not kept and reported nothing: the caret stays)
   Result := FEditHeard;
+  if not Result then PayModifiedOwed;
   { The step it became - its own, or the run of typing it merged into: the newest of the
     history (inside the document's update it went into the update's block: no step yet). }
   if Result and not FDoc.Updating then FEditStep := FDoc.UndoStep;
@@ -4701,9 +4731,12 @@ begin
   // (nor for a façade's format write: the selection stays where it is, and so does the view)
   if not FNoEditScroll and not FEditQuiet and (FApiWrite = 0) then ScrollCaretIntoView;
   CaretMoved;
-  if FEditQuiet then Exit;
-  DoChange;
-  DoSelectionChange;
+  if not FEditQuiet then
+  begin
+    DoChange;
+    DoSelectionChange;
+  end;
+  PayModifiedOwed;
 end;
 
 function TTyCustomRichEdit.EditWith(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
@@ -5664,9 +5697,14 @@ begin
   if reason <> '' then
   begin
     EditRefused(reason);
+    PayModifiedOwed;
     Exit;
   end;
-  if not FEditHeard then Exit;
+  if not FEditHeard then
+  begin
+    PayModifiedOwed;
+    Exit;
+  end;
   { An undo puts the caret and the selection back as they were before the action, a redo
     leaves a plain caret where the action left it (measured in msftedit, R55: a deleted or
     typed-over selection comes back selected, an undone Backspace has the caret after the
@@ -5703,12 +5741,12 @@ end;
 
 function TTyCustomRichEdit.CanUndo: Boolean;
 begin
-  Result := FDoc.CanUndo;
+  Result := not FReadOnly and IsEnabled and FDoc.CanUndo;
 end;
 
 function TTyCustomRichEdit.CanRedo: Boolean;
 begin
-  Result := FDoc.CanRedo;
+  Result := not FReadOnly and IsEnabled and FDoc.CanRedo;
 end;
 
 procedure TTyCustomRichEdit.ClearUndo;
@@ -5735,7 +5773,83 @@ end;
 procedure TTyCustomRichEdit.DocModifiedChanged(Sender: TObject);
 begin
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  { Inside the control's own edit (a key, a façade's write, an undo): raised once the edit
+    has placed the caret and made its OnChange - a handler that changes or loads the
+    document there is not taken for this edit (F-M7, as W11 did for EditRefused). }
+  if FEditing > 0 then
+  begin
+    FModifiedOwed := True;
+    Exit;
+  end;
   if Assigned(FOnModifiedChange) then FOnModifiedChange(Self);
+end;
+
+procedure TTyCustomRichEdit.PayModifiedOwed;
+begin
+  if not FModifiedOwed or (FEditing > 0) then Exit;
+  FModifiedOwed := False;
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  if Assigned(FOnModifiedChange) then FOnModifiedChange(Self);
+end;
+
+procedure TTyCustomRichEdit.RunApiCommand(ACmd: TTyRichCommand; AChars: TTyRichPos);
+begin
+  RunApiEdit(ACmd, AChars);
+end;
+
+procedure TTyCustomRichEdit.BeginEdit;
+begin
+  if FEditBlock = 0 then
+  begin
+    EndCompositionForUser;
+    FEditBlockMarks := Default(TTyRichStepMarks);
+    FEditBlockMarks.HasBefore := True;
+    FEditBlockMarks.Before.Anchor := FSelAnchor;
+    FEditBlockMarks.Before.Caret := FCaret;
+    FEditBlockMarks.Before.AtLineEnd := FCaretAtEnd;
+    FDoc.BeginUpdate;
+  end;
+  Inc(FEditBlock);
+end;
+
+procedure TTyCustomRichEdit.EndEdit;
+var
+  wasTop, step: TTyRichCommand;
+  marks: TTyRichStepMarks;
+begin
+  if FEditBlock = 0 then raise ETyRichEdit.Create('EndEdit without BeginEdit');
+  Dec(FEditBlock);
+  if FEditBlock > 0 then Exit;
+  wasTop := FDoc.UndoStep;
+  FEditHeard := False;
+  FEditStep := nil;
+  // the block's one change is this edit's: the control reports it below, once
+  Inc(FEditing);
+  try
+    FDoc.EndUpdate;
+  finally
+    Dec(FEditing);
+  end;
+  if not FEditHeard then
+  begin
+    PayModifiedOwed;
+    Exit;
+  end;
+  step := FDoc.UndoStep;
+  if (step <> nil) and (step <> wasTop) then
+  begin
+    // the step puts back the selection there was at BeginEdit
+    marks := FEditBlockMarks;
+    step.Marks := marks;
+    FEditStep := step;
+  end;
+  // the selection stays where it is (as a façade's write leaves it), the view too
+  Inc(FApiWrite);
+  try
+    FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
+  finally
+    Dec(FApiWrite);
+  end;
 end;
 
 procedure TTyCustomRichEdit.SetSelAttributes(AValue: TTyRichTextAttributes);

@@ -550,6 +550,8 @@ procedure TTyRichTextAttributes.SetName(const AValue: TFontName);
 var
   f: TTyCharFormat;
 begin
+  // what the text shows already (a toolbar writing back what it read): nothing to write
+  if not IsBase and (AValue = GetName) and (caFace in GetConsistentAttributes) then Exit;
   f := TyDefaultCharFormat;
   f.FontName := TyRichFontNameIn(AValue);
   SetFormat([cffFontName], f);
@@ -566,6 +568,11 @@ var
 begin
   f := TyDefaultCharFormat;
   if AValue < 0 then AValue := 0;
+  { Name and Size read what the text is shown in: written back unchanged over text that all
+    shows it (a toolbar echoing OnSelectionChange), they would freeze the base's value into
+    text that has none of its own - the text shows it already: nothing to write (F-M2). }
+  if not IsBase and (AValue = GetSize) and (GetFormat.SizeHalfPt = AValue * 2) and
+    (caSize in GetConsistentAttributes) then Exit;
   f.SizeHalfPt := AValue * 2;
   SetFormat([cffSize], f);
 end;

@@ -28,7 +28,7 @@ unit tyControls.RichEdit.Model;
 interface
 
 uses
-  Classes, SysUtils, Graphics, LCLType, tyControls.RichEdit.Text;
+  Classes, SysUtils, Graphics, LCLType, Generics.Collections, tyControls.RichEdit.Text;
 
 const
   { Insert without a format: the text takes the format of the character before it in the same
@@ -335,6 +335,10 @@ type
   end;
   TTyRunArray = array of TTyRichRun;
 
+  { Objects a history step holds (GatherObjects): duplicates allowed, the history counts
+    each distinct one once. }
+  TTyRichObjectList = array of TTyRichObject;
+
   { One paragraph's formatting, immutable once made (internal; see the unit comment). FRuns
     nil means one run in the document's default character format. }
   TTyRichParaData = class
@@ -402,8 +406,11 @@ type
   public
     destructor Destroy; override;
     { Bytes this record keeps alive, for the history's memory limit (the paragraph values
-      themselves are shared and not counted). }
+      themselves are shared and not counted, nor the objects they hold: GatherObjects). }
     function MemSize: Int64;
+    { Appends the objects the values this record keeps hold (a deleted picture, a paragraph's
+      old value with its picture) to AList (ACount used). }
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
     property Change: TTyRichChange read FChange;
   end;
 
@@ -613,7 +620,9 @@ type
     property Flattened: Boolean read FFlat;
     { Characters inserted (separators counted). }
     function CharCount: Int64;
+    { Its text and values (the objects they bring: GatherObjects). }
     function MemSize: Int64;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
   end;
 
   { A change to a document, and the one way to make one: TTyRichDocument.Execute runs it and
@@ -684,8 +693,14 @@ type
     function Description: string; virtual;
     { The characters the command changed, in the document as it left it. }
     function ChangedRange: TTyRichRange;
-    { Bytes the history keeps for it (MaxUndoBytes). }
+    { Bytes the history keeps for it (MaxUndoBytes): its own - records, texts -, without the
+      objects it holds, which GatherObjects names and the history counts once each however
+      many steps hold them (R72). }
     function MemSize: Int64; virtual;
+    { Appends the objects this step keeps alive to AList (ACount used): those of its records;
+      a command that holds an object itself adds it (TTyRichInsertObject, a fragment's, a
+      composite's parts'). }
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); virtual;
     { Its last run changed something; one that did not is not kept in the history. }
     property Changed: Boolean read FChanged;
     { The selection of the view that made this step, before it and after it (see
@@ -696,8 +711,13 @@ type
 
   TTyRichHistoryEntry = record
     Cmd: TTyRichCommand;
-    Bytes: Int64;
+    Bytes: Int64;                 // the step's own (MemSize)
+    Objs: TTyRichObjectList;      // the distinct objects it holds, each counted in FObjHolds
   end;
+
+  { How many steps of the history hold each object (R72): an object counts toward the
+    history's bytes once, while at least one step holds it. }
+  TTyRichObjHolds = specialize TDictionary<Pointer, Integer>;
 
   TTyRichDocument = class
   private
@@ -708,6 +728,7 @@ type
     FRedoCount: Integer;
     FHistoryBytes: Int64;
     FHistoryObjectVisits: Int64;
+    FObjHolds: TTyRichObjHolds;
     FMaxUndoBytes: Int64;
     FMergeBroken: Boolean;
     FRunning: TTyRichCommand;
@@ -736,6 +757,8 @@ type
     procedure RunStep(ACmd: TTyRichCommand; AStep: Integer);
     procedure Flush;
     procedure PushUndo(ACmd: TTyRichCommand);
+    procedure HoldObjects(var AEntry: TTyRichHistoryEntry);
+    procedure LetGoObjects(var AEntry: TTyRichHistoryEntry);
     procedure DropOldestUndo;
     procedure ClearRedo;
     procedure ClearHistory;
@@ -1819,9 +1842,56 @@ begin
 end;
 
 function TTyRichUndoData.MemSize: Int64;
+begin
+  Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
+    Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
+end;
+
+procedure AddObject(var AList: TTyRichObjectList; var ACount: Integer; AObj: TTyRichObject);
+begin
+  if ACount = Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := AObj;
+  Inc(ACount);
+end;
+
+procedure SortObjects(var AList: TTyRichObjectList; ALo, AHi: Integer);
+var
+  i, j: Integer;
+  p, t: TTyRichObject;
+begin
+  while ALo < AHi do
+  begin
+    i := ALo;
+    j := AHi;
+    p := AList[(ALo + AHi) div 2];
+    repeat
+      while PtrUInt(AList[i]) < PtrUInt(p) do Inc(i);
+      while PtrUInt(AList[j]) > PtrUInt(p) do Dec(j);
+      if i <= j then
+      begin
+        t := AList[i];
+        AList[i] := AList[j];
+        AList[j] := t;
+        Inc(i);
+        Dec(j);
+      end;
+    until i > j;
+    if j - ALo < AHi - i then
+    begin
+      if ALo < j then SortObjects(AList, ALo, j);
+      ALo := i;
+    end
+    else
+    begin
+      if i < AHi then SortObjects(AList, i, AHi);
+      AHi := j;
+    end;
+  end;
+end;
+
+procedure TTyRichUndoData.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
 var
   i: Integer;
-  objBytes: Int64;
 
   // the objects of a value this record holds
   procedure Take(D: TTyRichParaData);
@@ -1833,24 +1903,18 @@ var
       if D.FRuns[j].Obj <> nil then
       begin
         Inc(FDoc.FHistoryObjectVisits);
-        Inc(objBytes, D.FRuns[j].Obj.DataBytes);
+        AddObject(AList, ACount, D.FRuns[j].Obj);
       end;
   end;
 
 begin
-  Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
-    Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
-  { An object a value this record keeps holds (a deleted picture, a paragraph's old value with
-    its picture): its data counts in this record - in each record that holds it, also while
-    the document, a reader's resident values or another step hold it too. Counted twice is
-    the safe side: whichever of them goes first, the history's bound still holds for what the
-    history alone keeps alive (a picture two steps held was counted by neither). And so it
-    takes one pass over the values, no lookup per object. }
-  objBytes := 0;
+  { Every object a value this record keeps holds - also while the document or a reader's
+    resident values hold it too: the history counts it once however many steps hold it
+    (R72), which over-counts one the document still shows (the safe side, bounded by the
+    document's own pictures). One pass over the values, no lookup per object. }
   for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
     if FRemoved.Pieces[i].Separator <> rsNone then Take(TTyRichParaData(FRemoved.Pieces[i].Data));
-  Inc(Result, objBytes);
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -2228,6 +2292,7 @@ var
 begin
   // the history first: its records hold references to the values disposed below
   ClearHistory;
+  FreeAndNil(FObjHolds);
   if FText <> nil then
   begin
     FText.OnParasChanged := nil;
@@ -2807,6 +2872,7 @@ type
     Value: TTyCharFormat;
     FromIds, ToIds: array of TTyCharFormatId;
     PrevD, PrevNew: TTyRichParaData;
+    Changed: Boolean;     // a value changed (F-M2: a write of what is there is no step)
     function MapId(AId: TTyCharFormatId): TTyCharFormatId;
     function Map(AIndex: Integer; AData: Pointer): Pointer;
   end;
@@ -2820,6 +2886,7 @@ type
     Value: TTyParaFormat;
     FromIds, ToIds: array of TTyParaFormatId;
     PrevD, PrevNew: TTyRichParaData;
+    Changed: Boolean;
     function Map(AIndex: Integer; AData: Pointer): Pointer;
   end;
 
@@ -2931,6 +2998,7 @@ begin
     // the slot's reference moves to the new value; the record keeps d alive
     Doc.AcquireData(nd);
     Doc.ReleaseData(d);
+    Changed := True;
   end;
   Result := nd;
 end;
@@ -2973,6 +3041,7 @@ begin
   begin
     Doc.AcquireData(nd);
     Doc.ReleaseData(d);
+    Changed := True;
   end;
   Result := nd;
 end;
@@ -3307,6 +3376,13 @@ begin
       Result.FFirstPara := k;
       FText.MapParaData(k, last, @w.Map);
       Result.SealOld;
+      { No value changed (a write of what the text has, or a range wholly inside a row
+        that holds a nested table): no change - the command is then not kept (F-M2). }
+      if not w.Changed then
+      begin
+        Result.FChange := c;
+        Exit;
+      end;
     except
       Result.Free;
       raise;
@@ -3348,6 +3424,12 @@ begin
       Result.FFirstPara := AFirstPara;
       FText.MapParaData(AFirstPara, ALastPara, @w.Map);
       Result.SealOld;
+      // no value changed: no change, the command is not kept (F-M2)
+      if not w.Changed then
+      begin
+        Result.FChange := c;
+        Exit;
+      end;
     except
       Result.Free;
       raise;
@@ -3538,21 +3620,31 @@ end;
 
 function TTyRichFragment.MemSize: Int64;
 var
-  i, j: Integer;
+  i: Integer;
 begin
   // the text: as it is, or what its first insert keeps alive in the add buffer
   Result := InstanceSize + Length(FText) + FTextBytes +
     Length(FPieces.Pieces) * SizeOf(TTyRichPiece) +
     Length(FParts) * (SizeOf(Pointer) + SizeOf(Int64) + 1);
-  // the values are this fragment's own (made for it), with their runs and the objects they
-  // bring (each is in one run of one part)
+  // the values are this fragment's own (made for it), with their runs (the objects they
+  // bring: GatherObjects)
   for i := 0 to FCount - 1 do
     if FParts[i] <> nil then
-    begin
       Inc(Result, FParts[i].InstanceSize + Length(FParts[i].FRuns) * SizeOf(TTyRichRun));
+end;
+
+procedure TTyRichFragment.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+var
+  i, j: Integer;
+begin
+  for i := 0 to FCount - 1 do
+    if FParts[i] <> nil then
       for j := 0 to High(FParts[i].FRuns) do
-        if FParts[i].FRuns[j].Obj <> nil then Inc(Result, FParts[i].FRuns[j].Obj.DataBytes);
-    end;
+        if FParts[i].FRuns[j].Obj <> nil then
+        begin
+          Inc(FDoc.FHistoryObjectVisits);
+          AddObject(AList, ACount, FParts[i].FRuns[j].Obj);
+        end;
 end;
 
 function TTyRichFragment.PartCell(AIndex: Integer): TTyRichCell;
@@ -4324,6 +4416,85 @@ begin
   for i := 0 to FRecordCount - 1 do Inc(Result, FRecords[i].MemSize);
 end;
 
+procedure TTyRichCommand.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+var
+  i: Integer;
+begin
+  for i := 0 to FRecordCount - 1 do FRecords[i].GatherObjects(AList, ACount);
+end;
+
+{ ---- the history's objects (R72) ---- }
+
+{ AEntry's command's objects, each distinct one held once by this step; an object no other
+  step held yet adds its bytes to the history's. Sorted by address to find the distinct ones:
+  no walk of the other steps. }
+procedure TTyRichDocument.HoldObjects(var AEntry: TTyRichHistoryEntry);
+var
+  list: TTyRichObjectList;
+  n, i, j, k, c: Integer;
+  t: TTyRichObject;
+begin
+  list := nil;
+  n := 0;
+  AEntry.Cmd.GatherObjects(list, n);
+  // insertion sort of the few, merge-free: steps hold few objects as a rule
+  if n > 1 then
+    if n <= 32 then
+    begin
+      for i := 1 to n - 1 do
+      begin
+        t := list[i];
+        j := i;
+        while (j > 0) and (PtrUInt(list[j - 1]) > PtrUInt(t)) do
+        begin
+          list[j] := list[j - 1];
+          Dec(j);
+        end;
+        list[j] := t;
+      end;
+    end
+    else
+      SortObjects(list, 0, n - 1);
+  k := 0;
+  for i := 0 to n - 1 do
+    if (k = 0) or (list[k - 1] <> list[i]) then
+    begin
+      list[k] := list[i];
+      Inc(k);
+    end;
+  SetLength(list, k);
+  AEntry.Objs := list;
+  if FObjHolds = nil then FObjHolds := TTyRichObjHolds.Create;
+  for i := 0 to k - 1 do
+  begin
+    if FObjHolds.TryGetValue(list[i], c) then
+      FObjHolds[list[i]] := c + 1
+    else
+    begin
+      FObjHolds.Add(list[i], 1);
+      Inc(FHistoryBytes, list[i].DataBytes);
+    end;
+  end;
+end;
+
+{ The step lets go of its objects: one no step holds any more leaves the history's bytes.
+  Before the step's command is freed (the address must still be that object). }
+procedure TTyRichDocument.LetGoObjects(var AEntry: TTyRichHistoryEntry);
+var
+  i, c: Integer;
+begin
+  for i := 0 to High(AEntry.Objs) do
+    if (FObjHolds <> nil) and FObjHolds.TryGetValue(AEntry.Objs[i], c) then
+      if c > 1 then
+        FObjHolds[AEntry.Objs[i]] := c - 1
+      else
+      begin
+        FObjHolds.Remove(AEntry.Objs[i]);
+        Dec(FHistoryBytes, AEntry.Objs[i].DataBytes);
+      end;
+  AEntry.Objs := nil;
+end;
+
 { ---- TTyRichDocument: commands and the history ---- }
 
 function TTyRichDocument.NewState: Int64;
@@ -4432,8 +4603,10 @@ procedure TTyRichDocument.PushUndo(ACmd: TTyRichCommand);
 var
   e: TTyRichHistoryEntry;
 begin
+  e := Default(TTyRichHistoryEntry);
   e.Cmd := ACmd;
   e.Bytes := ACmd.MemSize;
+  HoldObjects(e);
   if FUndoCount = Length(FUndo) then SetLength(FUndo, FUndoCount * 2 + 8);
   FUndo[FUndoCount] := e;
   Inc(FUndoCount);
@@ -4445,6 +4618,7 @@ var
   i: Integer;
 begin
   Dec(FHistoryBytes, FUndo[0].Bytes);
+  LetGoObjects(FUndo[0]);
   FUndo[0].Cmd.Free;
   for i := 1 to FUndoCount - 1 do FUndo[i - 1] := FUndo[i];
   Dec(FUndoCount);
@@ -4456,6 +4630,7 @@ begin
   begin
     Dec(FRedoCount);
     Dec(FHistoryBytes, FRedo[FRedoCount].Bytes);
+    LetGoObjects(FRedo[FRedoCount]);
     FRedo[FRedoCount].Cmd.Free;
   end;
 end;
@@ -4467,6 +4642,7 @@ begin
   begin
     Dec(FUndoCount);
     Dec(FHistoryBytes, FUndo[FUndoCount].Bytes);
+    LetGoObjects(FUndo[FUndoCount]);
     FUndo[FUndoCount].Cmd.Free;
   end;
   while FBlockCount > 0 do
@@ -4478,6 +4654,7 @@ begin
   FRedo := nil;
   FBlock := nil;
   FHistoryBytes := 0;
+  if FObjHolds <> nil then FObjHolds.Clear;
 end;
 
 procedure TTyRichDocument.TrimHistory;
@@ -4545,6 +4722,8 @@ begin
   if (not FMergeBroken) and (FUndoCount > 0) then
   begin
     top := FUndo[FUndoCount - 1].Cmd;
+    // (its objects let go first: the merged step holds them again, with ANext's)
+    LetGoObjects(FUndo[FUndoCount - 1]);
     if top.TryMerge(ACmd) then
     begin
       top.FStateAfter := ACmd.FStateAfter;
@@ -4554,6 +4733,7 @@ begin
       Inc(FHistoryBytes, FUndo[FUndoCount - 1].Bytes);
       ACmd := nil;
     end;
+    HoldObjects(FUndo[FUndoCount - 1]);
   end;
   if ACmd <> nil then PushUndo(ACmd);
   FMergeBroken := False;
@@ -4574,6 +4754,8 @@ begin
   Dec(FUndoCount);
   cmd := FUndo[FUndoCount].Cmd;
   Dec(FHistoryBytes, FUndo[FUndoCount].Bytes);
+  // (before the undo frees its records: the objects' addresses are still theirs)
+  LetGoObjects(FUndo[FUndoCount]);
   FMergeBroken := True;
   try
     RunStep(cmd, StepUndo);
@@ -4587,8 +4769,10 @@ begin
     raise;
   end;
   FState := cmd.FStateBefore;
+  e := Default(TTyRichHistoryEntry);
   e.Cmd := cmd;
   e.Bytes := cmd.MemSize;
+  HoldObjects(e);
   if FRedoCount = Length(FRedo) then SetLength(FRedo, FRedoCount * 2 + 8);
   FRedo[FRedoCount] := e;
   Inc(FRedoCount);
@@ -4608,6 +4792,7 @@ begin
   Dec(FRedoCount);
   cmd := FRedo[FRedoCount].Cmd;
   Dec(FHistoryBytes, FRedo[FRedoCount].Bytes);
+  LetGoObjects(FRedo[FRedoCount]);
   FMergeBroken := True;
   try
     RunStep(cmd, StepRedo);

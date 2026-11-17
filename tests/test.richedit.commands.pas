@@ -115,6 +115,8 @@ type
     procedure TestATableMadeAgainIsLetGoWhenItsRowsFail;
     // fix wave W17
     procedure TestTheRelativeIndentFields;
+    procedure TestEachObjectCountsOnce;
+    procedure TestAFormatWriteThatChangesNothingIsNoStep;
   end;
 
 implementation
@@ -1533,11 +1535,11 @@ begin
   try
     AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
     AssertTrue(Format('an inserted picture counts (%d)', [d.HistoryBytes]), d.HistoryBytes >= MB);
-    // deleted: the insert's step keeps it, and the deletion's record holds it too - counted
-    // in each (W16 X-M5: twice is the safe side), not more
+    // deleted: the insert's step keeps it, and the deletion's record holds it too - one
+    // object, counted once (R72)
     AssertTrue(d.Execute(TTyRichDelete.Create(1, 1)));
-    AssertTrue(Format('counted in each step (%d)', [d.HistoryBytes]),
-      (d.HistoryBytes >= 2 * MB) and (d.HistoryBytes < 3 * MB));
+    AssertTrue(Format('counted once for both steps (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= MB) and (d.HistoryBytes < 2 * MB));
     d.ClearUndo;
     // a fragment's picture
     src := TTyRichDocument.Create;
@@ -1872,11 +1874,11 @@ begin
   end;
 end;
 
-{ W16 X-M5: a picture of the document (its insert's step gone), a letter typed in its
-  paragraph (that record keeps the paragraph's old value, which holds the picture), then the
-  picture deleted (that record holds it too): each record counts it, so twenty such 1 MB
-  pictures under a 3 MB bound drop old steps - before, neither counted it and 40 steps kept
-  20 MB. }
+{ W16 X-M5, as R72 counts: a picture of the document (its insert's step gone), a letter typed
+  in its paragraph (that record keeps the paragraph's old value, which holds the picture),
+  then the picture deleted (that record holds it too): the history counts it - once for the
+  two steps -, so twenty such 1 MB pictures under a 3 MB bound drop old steps - before W16,
+  neither counted it and 40 steps kept 20 MB. }
 procedure TTyRichCommandsTest.TestAPictureTwoStepsHoldCountsInEach;
 const
   MB = 1024 * 1024;
@@ -2104,6 +2106,125 @@ begin
     d.Undo;
     AssertEquals('undone 0', before0, d.ParaFormatOf(0));
     AssertEquals('undone 1', before1, d.ParaFormatOf(1));
+  finally
+    d.Free;
+  end;
+end;
+
+{ R72 (F-X1): each distinct object counts once toward the history's bytes, however many steps
+  hold it; it leaves the sum when the last step holding it goes. }
+procedure TTyRichCommandsTest.TestEachObjectCountsOnce;
+const
+  MB = 1024 * 1024;
+var
+  d: TTyRichDocument;
+  i: Integer;
+  b0, bytes: Int64;
+begin
+  // twenty 1 MB pictures pasted and deleted: 40 steps, 20 objects - 20 MB
+  d := NewDoc('ab');
+  try
+    d.MaxUndoBytes := 0;
+    for i := 1 to 20 do
+    begin
+      AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
+      AssertTrue(d.Execute(TTyRichDelete.Create(1, 1)));
+    end;
+    AssertEquals('every step kept', 40, d.UndoDepth);
+    AssertTrue(Format('20 MB and the steps'' own bytes (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 20 * MB) and (d.HistoryBytes < 21 * MB));
+    // the bound drops old steps
+    d.MaxUndoBytes := 3 * MB;
+    AssertTrue(Format('old steps dropped (%d left)', [d.UndoDepth]),
+      (d.UndoDepth >= 4) and (d.UndoDepth <= 6));
+    AssertTrue(Format('within the bound (%d)', [d.HistoryBytes]), d.HistoryBytes <= 3 * MB);
+    // undone and redone, the objects move with their steps: counted once still
+    d.Undo;
+    d.Undo;
+    bytes := d.HistoryBytes;
+    d.Redo;
+    d.Redo;
+    // (the steps' own bytes change a little with their records; no picture is counted twice)
+  AssertTrue(Format('undo and redo: the objects counted as before (%d, %d)', [bytes, d.HistoryBytes]),
+    Abs(d.HistoryBytes - bytes) < 64 * 1024);
+    d.ClearUndo;
+    AssertEquals('ClearUndo: nothing', 0, d.HistoryBytes);
+  finally
+    d.Free;
+  end;
+  // typing 100 separate runs next to one 5 MB picture counts it once
+  d := NewDoc('ab'#10'cd');
+  try
+    AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(5 * MB))));
+    d.ClearUndo;
+    for i := 1 to 100 do
+    begin
+      d.BreakMerge;
+      AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'x')));
+    end;
+    AssertEquals('a hundred steps', 100, d.UndoDepth);
+    AssertTrue(Format('the picture once (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 5 * MB) and (d.HistoryBytes < 6 * MB));
+    // one step that holds it many times (a merged run of typing): once, and let go once
+    d.ClearUndo;
+    for i := 1 to 10 do AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'y')));
+    AssertEquals('one merged step', 1, d.UndoDepth);
+    AssertTrue(Format('merged: once (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 5 * MB) and (d.HistoryBytes < 6 * MB));
+    d.Undo;
+    // a new step drops the redo step, and the picture leaves the count with it
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'z')));
+    AssertTrue(Format('let go with its step (%d)', [d.HistoryBytes]), d.HistoryBytes < 64 * 1024);
+    // the count goes back to the text's bytes once no step holds it
+    d.ClearUndo;
+    AssertEquals('ClearUndo', 0, d.HistoryBytes);
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, #10'new paragraph')));
+    b0 := d.HistoryBytes;
+    AssertTrue(Format('a step that holds no picture: its own bytes (%d)', [b0]),
+      (b0 > 0) and (b0 < 64 * 1024));
+  finally
+    d.Free;
+  end;
+end;
+
+{ F-M2 (W17): a format command that changed no value is not kept - no undo step, no change
+  reported, Modified and the redo steps untouched (a range wholly inside a row that holds a
+  nested table: the API suite). }
+procedure TTyRichCommandsTest.TestAFormatWriteThatChangesNothingIsNoStep;
+var
+  d: TTyRichDocument;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
+  depth: Integer;
+begin
+  d := NewDoc('abc'#10'def');
+  try
+    FChanges := nil;
+    d.OnChange := @DocChanged;
+    f := TyDefaultCharFormat;
+    f.Style := [fsBold];
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffBold], f)));
+    AssertEquals('the first write: a step', 1, d.UndoDepth);
+    AssertEquals('...a change', 1, Length(FChanges));
+    d.Modified := False;
+    AssertTrue('ran', d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffBold], f)));
+    AssertEquals('bold over bold: no step', 1, d.UndoDepth);
+    AssertEquals('...no change', 1, Length(FChanges));
+    AssertFalse('...not Modified', d.Modified);
+    pf := TyDefaultParaFormat;
+    AssertTrue(d.Execute(TTyRichSetParaFormat.Create(0, 1, [pffAlign], pf)));
+    AssertEquals('left over left: no step', 1, d.UndoDepth);
+    // the redo steps stay
+    d.Undo;
+    depth := d.RedoDepth;
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(4, 3), [cffBold], TyDefaultCharFormat)));
+    AssertEquals('the redo step is still there', depth, d.RedoDepth);
+    // a part of a block that changes nothing is no part of it
+    d.BeginUpdate;
+    d.Execute(TTyRichSetCharFormat.Create(TyRichRange(4, 3), [cffItalic], TyDefaultCharFormat));
+    d.EndUpdate;
+    AssertEquals('an empty block: no step', 0, d.UndoDepth);
+    AssertEquals('...and redo still there', depth, d.RedoDepth);
   finally
     d.Free;
   end;
