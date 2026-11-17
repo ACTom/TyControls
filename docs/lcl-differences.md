@@ -83,10 +83,32 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 `TTyRichEdit` 由本库自己绘制，不是 Windows 的富文本控件。Delphi `TRichEdit` 的大部分成员和 RichMemo 的方法都在，名字不变，但有一些能编译、做的事却不一样。下面逐条列出。
 
+### `uses` 里要写什么
+
+Delphi 的 `uses ComCtrls`(或 RichMemo 的 `RichMemo`)换成 `tyControls.RichEdit`,再加上声明它的成员所用类型和取值的那些单元。`tyControls.RichEdit` 不转出它们，就像 `tyControls.Memo` 不转出 `tyControls.ScrollBar` 一样：没写上这些单元之前，移植过来的代码第一次编译就会停在 `TTyRichPos`、`nsBullet` 或 `stMatchCase` 上。IDE 生成的事件处理方法不受影响：它会自己加上参数所需的单元。
+
+```pascal
+uses
+  tyControls.RichEdit, tyControls.RichEdit.Text, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Model, tyControls.RichEdit.Layout, tyControls.RichEdit.Find,
+  tyControls.ScrollBar;
+```
+
+| 单元 | 提供的名字 |
+|------|-----------|
+| `tyControls.RichEdit` | `TTyRichEdit`、`ETyRichEdit`、`TTyRichFormat`(`rfAuto`、`rfRtf`、`rfText`)、各个事件类型、`TTyRichFindEnd`(`rfeFound` ……)、`TTyRichReplaceEnd`(`rreDone` ……)、`TTyRichReplaceResult`、`TTyRichFindTask`(`rftFind`、`rftReplace`) |
+| `tyControls.RichEdit.Text` | `TTyRichPos` |
+| `tyControls.RichEdit.Attrs` | `TTyRichTextAttributes`、`TTyRichParaAttributes`、`TNumberingStyle` 及 `nsNone`、`nsBullet`,`TTySearchTypes`(`stWholeWord`、`stMatchCase`)、`TTySearchOptions`(`soMatchCase`、`soWholeWord`、`soBackward`)、`TTyRichConsistentAttributes`(`caBold` ……)、`TTyRichConsistentParaAttributes`(`cpaAlignment` ……)、`TTySubscriptType`(`sstNone` ……);RichMemo 的记录、集合和辅助过程:`TTyFontParams`、`InitFontParams`、`TTyParaMetric`、`TTyParaNumbering`(`pnBullet` ……)、`TTyParaAlignment`(`paLeft` ……)、`TTyTabStopList`、`TTyTextModifyMask`(`tmm_Styles` ……)、`TTyParaModifyMask`、`TTyParaRange` |
+| `tyControls.RichEdit.Model` | 各种编号列表(`lkDecimal` …… `lkUpperRoman`)、`ParaAlign` 用的 `TTyParaAlign`(`paraLeft`、`paraCenter`、`paraRight`、`paraJustify`)、`LineSpacingRule` 用的 `TTyLineSpacing`(`lsSingle` ……)、`TTyTextEncoding`(`teAuto`、`teUtf8` ……)、`TTyRichDocument` |
+| `tyControls.RichEdit.Layout` | `TTyRichWrapMode`(`rwmWindow`、`rwmPage`、`rwmNone`) |
+| `tyControls.RichEdit.Find` | `TTyRichFindOptions`(`rfoMatchCase`、`rfoWholeWord`、`rfoBackward`、`rfoWrap`) |
+| `tyControls.RichEdit.Commands` | 给 `Document.Execute` 用的命令(`TTyRichInsertText` ……) |
+| `tyControls.ScrollBar` | `TTyScrollBarAutoHide`(`sbahDefault`、`sbahNever`、`sbahAuto`) |
+
 ### 位置、行和文字
 
 - **位置按字符(码点)计，不按 UTF-16 单元。** BMP 以外的字符(表情、生僻字)在这里占一个位置，在 Delphi 和 Windows 上的 RichMemo 里占两个;段落结束占一个位置。
-- **位置和长度是 `TTyRichPos`(`Int64`)。** `SelStart`、`SelLength`、`FindText` 的结果和 RichMemo 风格的方法都用它;赋给 `Integer` 变量能编译，FPC 会给出提示。
+- **位置和长度是 `TTyRichPos`(`Int64`)。** `SelStart`、`SelLength`、`FindText` 的结果和 RichMemo 风格的方法都用它。赋给 `Integer` 变量能编译，没有任何警告，超过 `High(Integer)` 的位置会被截断;类型是 64 位的，就是为了这么大的文档，所以要声明为 `TTyRichPos`。
 - **`Lines` 的一行是一个段落**,不是 Delphi 那样屏幕上折行后的一行:`Lines.Count` 是段落数,`Lines[i]` 是一个段落的文字。大文档从不整篇排版,`Lines` 必须不排版就能回答。
 - **`CaretPos` 和 Delphi 一样是选区末端的 `TPoint`**:`Y` 是段落,`X` 是段内第几个字符。RichMemo 的 `CaretPos`(即 LCL 多行文本框的)读的是选区起点。
 - **给 `CaretPos` 赋值时 `X` 限制在段落之内。** Delphi 直接把 `X` 加到行首，超出行尾的列会落到后面的行里。
@@ -108,8 +130,9 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **`ReadOnly` 只拦用户。** 代码照样能通过 `SelText`、`Lines`、`Text`、格式接口和替换方法修改内容，和 Delphi 的 `SelAttributes` 一样;剪切、粘贴、`ClearSelection`、`Undo`、`Redo` 在只读控件上什么也不做，也和 Delphi 一样。
 - **`ClearSelection` 删除选区**,和 Delphi 一样;只想取消选区用 `CollapseSelection`。
 - **没选中文字时选好的格式(先点粗体再输入)遇到任何一次设置选区就作废**,哪怕是 `SelStart := SelStart`,和 Windows 一样。
-- **在 `Lines.BeginUpdate … EndUpdate`、`Document.BeginUpdate … EndUpdate` 和 `BeginEdit … EndEdit` 之间，每次写入的效果和在外面一样**:光标和选区跟着 `SelText`、`Lines`、`InDelText` 走。这些括号只把重画和通知压到结尾:最后触发一次 `OnChange` 和一次 `OnSelectionChange`。
-- **在这些括号之间用户的操作不起作用**:剪切、粘贴、`ClearSelection`、`Undo`、`Redo` 和按键都被忽略，不报错，也不触发 `OnEditRefused`。在里面直接用 `Document.Execute` 做的修改不移动选区。
+- **在 `Lines.BeginUpdate … EndUpdate`、`Document.BeginUpdate … EndUpdate` 和 `BeginEdit … EndEdit` 之间，每次写入的效果和在外面一样**:光标和选区跟着 `SelText`、`Lines`、`InDelText` 走。`BeginEdit … EndEdit` 把重画和两种通知都压到结尾：最后触发一次 `OnChange` 和一次 `OnSelectionChange`。`Lines.BeginUpdate` 和 `Document.BeginUpdate` 只压住 `OnChange` 和重画;在里面设置选区(`SelStart`、`SelLength`、`CaretPos`、`CaretIndex`)会立即通知，和 Delphi 一样。
+- **在这些括号之间用户的操作不起作用**:剪切、粘贴、`ClearSelection`、`Undo`、`Redo` 和按键都被忽略，不报错，也不触发 `OnEditRefused`。
+- **在括号之间直接用 `Document.Execute` 做的修改**:同一个括号里还设置过选区或经控件写过文字时，它不移动选区。两样都没有时，选区只在结尾按整个括号合并成的一次修改移动：夹在两处这样的修改之间的光标会落到第一处的开头。
 - **`BeginEdit … EndEdit` 算一步撤销**:撤销恢复 `BeginEdit` 时的选区，重做后是一个光标，停在 `EndEdit` 时光标所在的位置。
 - **文件还在载入、载入被取消之后、或正在保存时，写格式会抛 `ETyRichEdit`**,Delphi 的控件没有这些状态。含有嵌套表格的表格行会被跳过，保持文件里的样子。
 - **写格式之前先结束正在进行的输入法组字。**
@@ -118,7 +141,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 ### 字符和段落格式
 
 - **`TNumberingStyle` 有七个成员**(`nsNone`、`nsBullet` 和直到 `lkUpperRoman` 的各种编号),所以 `Paragraph.Numbering := TNumberingStyle(Button.Down)` 照常可用，但 `for … in TNumberingStyle`、带 `else` 的 `case`、以它为下标的数组看到的是七个值。
-- **`Numbering := nsBullet`(或某种编号)给没有缩进的段落加上写字板的悬挂缩进**(首行 18 磅，其余行 36 磅);`nsNone` 把缩进还原为 0。Delphi 只设置偏移。
+- **`Numbering := nsBullet`(或某种编号)给没有缩进的段落加上写字板的悬挂缩进**(首行 18 磅，其余行 36 磅);`nsNone` 把缩进还原为 0。Delphi 的 `nsBullet` 把 `LeftIndent` 至少提到 10 磅,`nsNone` 把 `LeftIndent` 设为 0。
 - **两端对齐的段落在 `Paragraph.Alignment` 里读出 `taLeftJustify`**,因为 `TAlignment` 没有两端对齐;`ParaAlign` 能读出全部四种。
 - **从右到左的 `BiDiMode` 下 `Paragraph.Alignment` 不左右互换**:控件没有从右到左的排版。RTF 文件里从右到左的段落原样保留，保存时写回。
 - **自动文字颜色读出 `clDefault`(Delphi 是 `clWindowText`),没有突出显示读出 `clNone`(Delphi 是 `clWindow`)**,因为自动颜色跟着主题走。写入 `clWindowText`、`clWindow` 或 `clDefault` 表示自动或无，和 Delphi 一样。
@@ -138,13 +161,17 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 ### 查找和替换
 
 - **`FindText` 的选项是 `stWholeWord` 和 `stMatchCase`(类型 `TTySearchTypes`)**;RichMemo 风格的 `Search` 用 `soMatchCase`、`soWholeWord`、`soBackward`(类型 `TTySearchOptions`)。FPC 的 `StrUtils` 也有 `soMatchCase` 和 `soWholeWord`:同时用到两者的单元里要加限定名。
-- **`Length`(`Len`)为负数时一直找到末尾。** Delphi 只有从 0 开始、长度为 -1 时才是找到末尾。超出末尾的范围会被截到末尾。
+- **`Length`(`Len`)为负数时一直找到末尾。** Delphi 只有 `StartPos + Length` 等于 -1 时才是找到末尾。超出末尾的范围会被截到末尾。
 - **RichMemo 风格的反向 `Search` 从 `Start` 往前找 `Len` 个字符**(`Len` 为负数时找到 0),返回离 `Start` 最近的匹配，和 Windows 上的 RichMemo 一样。
 - **带 `var` 结果的 `Search` 报告的是匹配在本控件里的字符长度**;RichMemo 报告的是要找的文字的长度。CR LF 匹配一个段落结尾时，这里给 1,RichMemo 给 2。也有 `Integer` 版本的重载，位置超过 `High(Integer)` 的匹配按没找到处理。
 - **整词匹配按光标的分词规则**:每个中文、日文、韩文字符两侧都算词的边界。大小写按码点逐个折叠(`ß` 不匹配 `ss`,没有土耳其语规则),不做规范化。
 - **要找的文字里 CR LF、LF、CR 各匹配一个段落结尾。** Delphi 会把 CR LF 变成 CR。
 - **图片永远不会被匹配**,链接的文字和合并掉的表格单元格里的文字也不会。
-- **文件还在载入时,`FindText` 和 `Search` 只找已经载入的部分**,其余部分返回 -1;`FindNextAsync` 会等载入完成。
+- **文件还在载入时,`FindText` 和 `Search` 只找已经载入的部分**,其余部分返回 -1;`FindNextAsync` 先找已经载入的部分，随着载入继续往下找。
+- **`ReplaceAll` 有三种形式**:最简单的返回替换的个数;带 `out ASkipped` 的还数出没动的匹配;带范围(`AStart`、`ALength`,长度为负数表示到末尾，和 `FindText` 的取法一样)的填一个 `TTyRichReplaceResult`。`ReplaceAllAsync` 取同样的范围(默认整篇),把同样的记录交给 `OnReplaceDone`。文档不允许用户编辑改动的匹配(在含有嵌套表格的表格行里，或删掉它会把文字跨过表格单元格或行的边界连起来),以及文件正在载入、载入被取消之后或正在保存时的所有匹配，都保持原样，计入 `Skipped`。
+- **一次替换算一步撤销，这一步有上限**,是 `Document.MaxUndoBytes` 的四倍。`TTyRichReplaceResult.Ending` 说明它怎么结束:`rreDone`(走完了范围)、`rreLimit`(这一步满了)、`rreCancelled`(被 `CancelFind`、进度事件、再次开始、不是它自己做的编辑或撤销、换了内容或保存停下;只有后台替换会这样)或 `rreFailed`(无法继续);`Replaced` 和 `Skipped` 是它做了多少。已经替换的保留，算一步撤销。
+- **遇到 `rreLimit` 或 `rreCancelled` 后要接着替换，就从它报告的位置再调用一次**:`ReplaceAll(AFind, AReplace, AOptions, R.ResumeAt, R.ResumeLength, R)`,一直重复到 `R.Ending` 为 `rreDone`。`ResumeAt` 紧跟在它处理的最后一个匹配后面，按报告时的文字计算(后台替换停下以后做的编辑也算进去);不会有地方被替换两次，替换文字里含有要找的文字时也一样。没有剩下的或者内容已经换掉时,`ResumeAt` 是 -1。停下的那一次已经计入的被拒绝的匹配，再调用时可能又计入一次 `Skipped`。
+- **`OnFindDone` 给出 `AEnd`(`rfeFound`、`rfeNotFound`、`rfeCancelled`)和匹配的 `APos`、`ALen`**(没找到时是 -1 和 0);`OnReplaceDone` 给出 `TTyRichReplaceResult`。每次开始的后台查找或替换都恰好触发一次，控件被销毁时除外。`OnFindProgress` 用 `ATask` 说明在跑的是查找(`rftFind`)还是替换(`rftReplace`),并给出所查范围里已经完成的字符数;`ACancel` 让它停下。
 
 ### 没有的东西
 
@@ -152,11 +179,29 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **RichMemo 的类型名**:记录、枚举和集合都带本库的前缀(`TTyFontParams`、`TTyParaMetric`、`TTyParaNumbering`、`TTyTabStopList`、`TTyTextModifyMask` ……),`TTabStop` 是 `TTyRichTabStop`。成员保留 RichMemo 的名字(`paLeft`、`tmm_Styles` ……);在同时用了 `RichMemo` 或 `Menus` 的单元里要加限定名。
 - **把 `Integer` 变量传给 `GetStyleRange` 或 `GetParaRange`** 编译不过：改声明为 `TTyRichPos`。
 - **控件不保存的属性**:`Protected`、`Disabled`、`Hidden`、`Link`、`Offset`、`Pitch`、`RevAuthor`、`UseForAllText` 以及 `ConsistentAttributes` 里对应的成员(`caProtected` ……)。RTF 文件里的这些内容按原字节保留，保存时写回。
-- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`ScrollBars`(需要时自动出现;`ScrollBarAutoHide`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它。右键菜单是本库的文本菜单。
-- **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnLinkClick`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`Transparent`、`ActiveLineNo`、`Print`、`PageRect`、`DefaultConverter` 和 `RegisterConversionFormat`。
+- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`ScrollBars`(需要时自动出现;`ScrollBarAutoHide`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`、`SetSelTextToFriendlyURL`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它。右键菜单是本库的文本菜单。
+- **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnLinkClick`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter` 和 `RegisterConversionFormat`。
 - **RichMemo 的其他成员**:`SetLink`、`isLink`、`OnLinkAction`、`Print`、`OnPrintAction`、`InDelInline`、`InitParaNumber`、`InitParaBullet`、第二个 `InitTabStopList`、`GetFontParams`、`InitPrintParams` 和 `InitTextUIParams`。
 - **替换当前匹配**:用 `SelText :=` 或 `InDelText`。
-- **窗体文件里的 `Lines`。** 富文本不能脱离格式按行保存，所以 `Lines` 不发布。从 Delphi 转换来的窗体如果给富文本控件存了 `Lines.Strings`,载入时会报属性不存在：把这几行从窗体里删掉，在运行时设置文字或载入文件。
+- **窗体文件里的 `Lines`。** 富文本不能脱离格式按行保存，所以 `Lines` 不发布：在运行时设置文字或载入文件。
+- **从 Delphi 转换来的窗体**,对下表里 Delphi 的 `TRichEdit` 存过、本控件不发布的每个属性都会报属性不存在。把它们删掉(在出错对话框里选继续，或用"工具 → 在编辑器中检查 LFM 文件 → 移除所有无效属性")就够了，除非表里写了要改设什么。
+
+| Delphi 的属性 | 改用 |
+|--------------|------|
+| `Lines.Strings` | 在运行时设置文字或载入文件 |
+| `WordWrap` | `WrapMode`(`False` 对应 `rwmNone`) |
+| `ScrollBars`、`HideScrollBars` | 不用设：滚动条需要时自动出现;`ScrollBarAutoHide` |
+| `HideSelection` | 不用设：没有焦点时选区照样显示，颜色是主题给的 |
+| `Alignment` | 在运行时按段落设 `Paragraph.Alignment` 或 `ParaAlign` |
+| `MaxLength` | 不用设：没有长度上限 |
+| `WantReturns` | 不用设：回车总是新起一段 |
+| `Color`、`ParentColor`、`BorderStyle`、`BorderWidth`、`BevelEdges`、`BevelInner`、`BevelOuter`、`BevelKind`、`BevelWidth`、`Ctl3D`、`ParentCtl3D`、`StyleElements`、`StyleName` | 主题;用 `StyleOverride` 或 `StyleClass` |
+| `ParentFont` | 不用设:`Font` 是控件自己叠在主题上的基础字体 |
+| `BiDiMode`、`ParentBiDiMode` | 不用设：没有从右到左的排版 |
+| `ImeMode`、`ImeName` | 不用设：输入法由系统决定 |
+| `EditMargins` | 主题的内边距;用 `StyleOverride` |
+| `EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`Transparent`、`Touch` | 没有对应 |
+| `OnLinkClick`、`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnGesture`、`OnMouseActivate`、`OnStartDock`、`OnEndDock` | 没有对应;处理方法留在单元里，不再挂上 |
 - **RichMemo 的 `TTyParaNumbering` 只保留 `Style` 和 `NumberStart`**:`pnCustomChar` 变成项目符号,`Indent`、`CustomChar`、`SepChar`、`ForceNewNum` 读出 0、`#0` 或 `False`。
 - **竖线制表位**:`tabWordBar` 按左对齐制表位写入。
 
@@ -177,6 +222,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **段落**:`ParaAlign`(含两端对齐)、`NumberingStart`、`SpaceBefore`、`SpaceAfter`、`LineSpacingRule`、`LineSpacing`(单位是磅);每次写入只改每个段落里自己那一项。
 - **选区和编辑**:`CaretIndex`(光标所在的那一端)、`CollapseSelection`、`BeginEdit` / `EndEdit`(多次写入合成一步撤销)、`RangeText`。
 - **查找和替换**:`FindNext`、`FindNextAsync`、`ReplaceAll`(三种形式)、`ReplaceAllAsync`、`CancelFind`、`FindRunning`、`OnFindProgress`、`OnFindDone`、`OnReplaceDone`。一次替换算一步撤销，不受 `ReadOnly` 限制。
+- **`Action` 是发布的**,和 `TTyMemo` 一样(Delphi 的 `TRichEdit` 和 LCL 的 `TMemo` 不发布它):关联了动作时，点击编辑区会执行它;它的 `Caption` 不会进入文字。
 - **大文件**:RTF 文件在后台读入(`Loading`、`FinishLoading`、`CancelLoad`、`OnLoadProgress`);`OnSaveProgress` 报告保存进度。
 - **事件和设置**:`OnModifiedChange`、`OnEditRefused`(用户的编辑被文档拒绝)、`OnZoomChange`、`OnFallbackFont`、`WrapMode`、`TextEncoding`、`TextCodePage`、`ScrollBarAutoHide`。
-- **文档本身**:`Document`(命令、撤销历史、格式),给需要的不只是外层接口的代码用。
+- **文档本身**:`Document`(命令、撤销历史、格式),给需要的不只是控件成员的代码用。
