@@ -1,49 +1,73 @@
-H1.rtf	6162	m	a hex LF inside a word
-H2.rtf	68656C6C6F	-	a hex CR inside a word
-H3.rtf	68656C6C6F	-	a hex NUL inside a word
-H4.rtf	68656C6C6F	-	a hex control byte (01) inside a word
-H5.rtf	E4B8ADE69687	-	a hex LF between a lead and a trail byte
-H6.rtf	68656C6C6F	-	a raw control byte (01) inside a word
-H7.rtf	68656C6C6F	-	a raw line break of the source inside a word
-H8.rtf	610962	-	a hex tab
-U1.rtf	6162	-	|u without a number skips what follows
-U2.rtf	61E2809462	-	|uc0
-U3.rtf	61E2809462	-	|uc2 with a hex pair as the fallback
-U4.rtf	61E280943F62	-	a control word ends the skip
-U5.rtf	61E280943F62	-	a group start ends the skip
-U6.rtf	61E2809462	-	a control symbol as the fallback
-U7.rtf	61E280947862	-	the optional hyphen as the fallback
-U8.rtf	61E9808162	-	negative |u
-U9.rtf	6162	-	|u65 |u66 any case
-U10.rtf	61F09F988062	-	a surrogate pair (not filtered)
-U11.rtf	6263	-	text after a lone high surrogate
-U12.rtf	6364	-	|u above 65535 next to text
-U13.rtf	61E280947A62	-	a bin as the fallback
-U14.rtf	61E280947862	-	a raw control byte as the fallback
-U15.rtf	61E2809462	-	a raw control byte as the fallback, then text
-C1.rtf	D0BFD180D0B8D0B2D0B5D182	-	upper case as hex in 1251, searched in lower case
-C2.rtf	D09FD1806162E4B8AD	-	a font switch in the middle of a word
-C3.rtf	EFBD81EFBD82	-	full-width Latin in GBK, any case
-C4.rtf	E8A1A8E7A4BA	-	Shift-JIS trail byte 5C as hex
-C5.rtf	E4B8AD	-	a lead byte at a group's end, the trail after it
-C6.rtf	E6968778	-	two lead bytes waiting
-C7.rtf	D09FD180D0B8D0B2D0B5D182	m	the font table given again in the body with another charset
-C8.rtf	D09FD180D0B8	m	|ansicpg given again in the body
-C9.rtf	E4B8AD	-	a font added by a second table in the body
-C10.rtf	EF81A1EF81A2	-	Symbol charset
-C11.rtf	636166C3A9	-	|mac
-C12.rtf	D0BFD180	-	a font whose number is not in the table
-S1.rtf	636F6F706572617465	-	the optional hyphen inside a word
-S2.rtf	61C2A062	-	the non-breaking space
-S3.rtf	610B62	-	a line break inside a paragraph
-S4.rtf	E2809C61E2809DE28093E2809862E28099E280A2	-	quotes and dashes
-S5.rtf	68656C6C6F	-	a word split by a line break of the source after a control word
-S6.rtf	68656C6C6F20776F726C64	-	a word split by an unknown group
-S7.rtf	6162	-	a bin outside a picture
-S8.rtf	61787862	-	hidden text
-S9.rtf	616161616161616161616161616161616161616161616161616161616161616161616161616161616262626262626262626262626262626262626262626262626262626262626262626262626262626263	-	a needle longer than 64
-S10.rtf	6974656D	-	a list marker is no text of the paragraph
-S11.rtf	6162	-	a star symbol in the middle
-S12.rtf	615C7B627D	-	an escaped backslash and braces
-F1.rtf	6D616E75616C	-	the display text of a hyperlink
-F2.rtf	63686170746572	-	a word with a bookmark inside
+H1.rtf	6162	m	7	a hex LF inside a word
+H2.rtf	68656C6C6F	-	7	a hex CR inside a word
+H3.rtf	68656C6C6F	-	7	a hex NUL inside a word
+H4.rtf	68656C6C6F	-	7	a hex control byte (01) inside a word
+H5.rtf	E4B8ADE69687	-	7	a hex LF between a lead and a trail byte
+H6.rtf	68656C6C6F	-	7	a raw control byte (01) inside a word
+H7.rtf	68656C6C6F	-	7	a raw line break of the source inside a word
+H8.rtf	610962	-	7	a hex tab
+U1.rtf	6162	-	7	|u without a number skips what follows
+U2.rtf	61E2809462	-	7	|uc0
+U3.rtf	61E2809462	-	7	|uc2 with a hex pair as the fallback
+U4.rtf	61E280943F62	-	7	a control word ends the skip
+U5.rtf	61E280943F62	-	7	a group start ends the skip
+U6.rtf	61E2809462	-	7	a control symbol as the fallback
+U7.rtf	61E280947862	-	7	the optional hyphen as the fallback
+U8.rtf	61E9808162	-	7	negative |u
+U9.rtf	6162	-	7	|u65 |u66 any case
+U10.rtf	61F09F988062	-	7	a surrogate pair (not filtered)
+U11.rtf	6263	-	9	text after a lone high surrogate
+U12.rtf	6364	-	10	|u above 65535 next to text
+U13.rtf	61E280947A62	-	-	a bin as the fallback
+U14.rtf	61E280947862	-	7	a raw control byte as the fallback
+U15.rtf	61E2809462	-	7	a raw control byte as the fallback, then text
+C1.rtf	D0BFD180D0B8D0B2D0B5D182	-	7	upper case as hex in 1251, searched in lower case
+C2.rtf	D09FD1806162E4B8AD	-	7	a font switch in the middle of a word
+C3.rtf	EFBD81EFBD82	-	7	full-width Latin in GBK, any case
+C4.rtf	E8A1A8E7A4BA	-	7	Shift-JIS trail byte 5C as hex
+C5.rtf	E4B8AD	-	7	a lead byte at a group's end, the trail after it
+C6.rtf	E6968778	-	-	two lead bytes waiting
+C7.rtf	D09FD180D0B8D0B2D0B5D182	m	0	the font table given again in the body with another charset
+C8.rtf	D09FD180D0B8	m	0	|ansicpg given again in the body
+C9.rtf	E4B8AD	-	4	a font added by a second table in the body
+C10.rtf	EF81A1EF81A2	-	7	Symbol charset
+C11.rtf	636166C3A9	-	7	|mac
+C12.rtf	D0BFD180	-	7	a font whose number is not in the table
+S1.rtf	636F6F706572617465	-	7	the optional hyphen inside a word
+S2.rtf	61C2A062	-	7	the non-breaking space
+S3.rtf	610B62	-	7	a line break inside a paragraph
+S4.rtf	E2809C61E2809DE28093E2809862E28099E280A2	-	7	quotes and dashes
+S5.rtf	68656C6C6F	-	7	a word split by a line break of the source after a control word
+S6.rtf	68656C6C6F20776F726C64	-	7	a word split by an unknown group
+S7.rtf	6162	-	7	a bin outside a picture
+S8.rtf	61787862	-	7	hidden text
+S9.rtf	616161616161616161616161616161616161616161616161616161616161616161616161616161616262626262626262626262626262626262626262626262626262626262626262626262626262626263	-	7	a needle longer than 64
+S10.rtf	6974656D	-	7	a list marker is no text of the paragraph
+S11.rtf	6162	-	7	a star symbol in the middle
+S12.rtf	615C7B627D	-	7	an escaped backslash and braces
+F1.rtf	6D616E75616C	-	-	the display text of a hyperlink
+F2.rtf	63686170746572	-	-	a word with a bookmark inside
+V1.rtf	F09F9880	-	8	a surrogate pair split by a skipped pntext group holding a |u
+V2.rtf	F09F9880	-	-	a surrogate pair split by an upr whose ud holds a |u
+V3.rtf	F09F9880	-	8	a surrogate pair split by a lone fldinst holding a |u
+V4.rtf	F09F9880	-	8	a surrogate pair split by an info group holding a |u
+V5.rtf	F09F9880	-	8	a surrogate pair split by a listtext group without a |u
+V6.rtf	F09F9880	-	8	a surrogate pair split by a listtext group holding another high half
+V6.rtf	F09F8880	-	-	the same file: the pair the other high half would make
+V7.rtf	61F09F988062	-	7	a pair split by listtext, the needle with the letters around it
+V8.rtf	F09F9880	-	-	a high half before the paragraph end, listtext, a low half
+V9.rtf	F09F9880	-	8	a pair split by listtext holding a picture
+V10.rtf	66666438	-	-	a picture inside listtext is no text
+V11.rtf	66666438	-	-	a picture inside a field result is no text
+V12.rtf	66666438	-	-	a picture inside upr is no text
+V13.rtf	F09F98800D0A62	-	8	a needle with a paragraph end and a pair split by listtext
+V14.rtf	E4B8AD	-	7	a lead byte, listtext with bytes, the trail byte
+V15.rtf	61E2809462	-	-	a |uc skip across a listtext group
+V15.rtf	61E280943F62	-	7	the same file: the fallback is text after the group
+V16.rtf	F09F9880	-	-	a pair split by a nonshppict group holding a |u
+V17.rtf	F09F9880	-	-	a pair split by a header group holding a |u
+V18.rtf	F09F9880	-	-	a pair split by a footnote holding a |u
+V19.rtf	F09F9880	-	8	a pair split by a stylesheet holding a |u
+V20.rtf	F09F9880	-	8	a pair split by a pn group with pntxtb holding a |u
+B13.rtf	66666438	-	8	a picture below 4100 groups: the reader reads its hex as text
+B13b.rtf	66666438	-	8	text below 4100 groups

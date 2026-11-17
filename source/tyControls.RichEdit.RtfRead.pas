@@ -303,6 +303,7 @@ type
     FAnsiCpSet: Boolean;
     FCodePages: array of Integer;  // every code page this parser decoded or could decode with
     FCodePageN: Integer;
+    FOverflowed: Boolean;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
     FFonts: array of TTyRtfFont;
@@ -536,6 +537,10 @@ type
     // unparsed bytes reads them in all of these (CpSymbol for a Symbol charset font).
     function CodePageCount: Integer;
     function CodePageSeen(AIndex: Integer): Integer;
+    // Groups went deeper than MaxDepth somewhere in what this parser read: past it a group is
+    // only counted, so no destination begins there (a \pict's hex is text). Of the index scan:
+    // a finder looking at unparsed bytes then reads a picture's group as it reads any other.
+    property GroupsOverflowed: Boolean read FOverflowed;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
     // position of their closing brace), -1 when the header has none.
@@ -2220,6 +2225,7 @@ begin
   if (FS.Overflow > 0) or (FS.Depth >= MaxDepth) then
   begin
     Inc(FS.Overflow);
+    FOverflowed := True;
     Exit;
   end;
   if not FS.BodyStarted and (FS.Depth >= 1) and (FS.PendingGroup < 0) then

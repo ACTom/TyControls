@@ -692,10 +692,12 @@ begin
   end;
 end;
 
-{ The review's 49 adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle
-  as hex of its UTF-8, m for match case): read whole, lazily with the filter and without it,
-  the finder gives the same places (H-I1: hex control bytes, a \u without a number, a font
-  table and an \ansicpg given again in the body lost a hit before). }
+{ The adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle as hex of
+  its UTF-8, m for match case, the places it is found - "-" none): read whole, lazily with the
+  filter and without it, the finder gives those places. Hex control bytes, a \u without a
+  number, a font table and an \ansicpg given again in the body, a surrogate pair split by a
+  group the reader passes over, a picture below the reader's group stack lost a hit before;
+  the places pin the reader as well, not only the filter against it. }
 procedure TTyRichFindTest.TestTheAdversarialFiles;
 var
   lines: TStringList;
@@ -715,34 +717,38 @@ begin
     begin
       if Trim(lines[i]) = '' then Continue;
       parts := lines[i].Split([#9]);
-      AssertTrue('a case line', Length(parts) >= 3);
+      AssertEquals('a case line has five columns', 5, Length(parts));
       needle := '';
       SetLength(needle, Length(parts[1]) div 2);
       for k := 1 to Length(needle) do
         needle[k] := Chr(StrToInt('$' + Copy(parts[1], 2 * k - 1, 2)));
       if parts[2] = 'm' then opts := [rfoMatchCase] else opts := [];
+      want := parts[3];
+      if want = '-' then want := '';
       bytes := ReadFileBytes(FixtureDir('rtf') + 'find' + PathDelim + parts[0]);
       full := LoadRtf(bytes, True);
       try
-        want := Positions(full, needle, opts);
+        AssertEquals(parts[0] + ' ' + parts[1] + ': read whole', want, Positions(full, needle, opts));
       finally
         full.Free;
       end;
       lazy := LoadRtf(bytes, False);
       try
-        AssertEquals(parts[0] + ': lazily, filtered', want, Positions(lazy, needle, opts, True));
+        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily, filtered', want,
+          Positions(lazy, needle, opts, True));
       finally
         lazy.Free;
       end;
       lazy := LoadRtf(bytes, False);
       try
-        AssertEquals(parts[0] + ': lazily, not filtered', want, Positions(lazy, needle, opts, False));
+        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily, not filtered', want,
+          Positions(lazy, needle, opts, False));
       finally
         lazy.Free;
       end;
       Inc(n);
     end;
-    AssertEquals('the review''s cases', 49, n);
+    AssertEquals('the cases', 73, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +

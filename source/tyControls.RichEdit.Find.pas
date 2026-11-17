@@ -119,9 +119,11 @@ type
     FLeadByte: Integer;
     FHigh: Boolean;                       // a high surrogate \uN may be waiting for its pair
     FHighVal: Cardinal;
+    FAstral: Boolean;                     // a character the needle looks for is above U+FFFF
     FStack: array of TTyRichFilterSave;
     FDepth: Integer;
     FHide: Integer;                       // > 0: inside a group passed over unread (a picture)
+    FHidePictures: Boolean;
     FLooked, FHidden: Int64;
     function MaskOf(C: Cardinal): QWord;
   public
@@ -130,14 +132,17 @@ type
       TTyRtfParser.CodePageSeen; 1252 is added). }
     constructor Create(const ANeedle: array of Cardinal; AMatchCase: Boolean;
       const ACodePages: array of Integer);
-    { The bytes [AStart, AStop) of ABuf - a paragraph of the file - are read next. }
-    procedure Start(ABuf: PByte; AStart, AStop: PtrInt);
+    { The bytes [AStart, AStop) of ABuf - a paragraph of the file - are read next.
+      AHidePictures False: a picture's group is read like any other (the reader's group stack
+      overflowed somewhere in the file: below its limit a \pict opens no picture, and its hex
+      is text). }
+    procedure Start(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True);
     { Reads on for about ABudget units (a byte lexed is one; a byte of a picture passed over is
       one sixteenth: it is only looked at for the braces), taken from ABudget. }
     function Run(var ABudget: Int64): TTyRichFilterVerdict;
     { Start and Run to the end: False only when the RTF bytes [AStart, AStop) of ABuf cannot
       read as text that holds the needle's first characters (see the unit comment). }
-    function MayHold(ABuf: PByte; AStart, AStop: PtrInt): Boolean;
+    function MayHold(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True): Boolean;
     { Bytes lexed, and bytes of pictures passed over without being lexed, since it was made. }
     property Looked: Int64 read FLooked;
     property Hidden: Int64 read FHidden;
@@ -166,6 +171,7 @@ type
     FFilter: TTyRichRawFilter;
     FUseFilter, FFilterTried, FFilterable, FFiltersMade: Boolean;
     FFilterCps: Integer;              // the scan's code pages the filter was made with
+    FHidePictures: Boolean;           // the scan's group stack never overflowed
     // counts
     FParasFiltered, FParasRejected, FParasDecoded, FParasRead, FSteps: Int64;
     FRawBytes, FTextBytes: Int64;
@@ -585,6 +591,7 @@ begin
   for k := 0 to FCount - 1 do
   begin
     c := ANeedle[k];
+    if (c >= $10000) and (c < TyRichFindRawByte) then FAstral := True;
     if c <= $FF then
       FLow[c] := FLow[c] or (QWord(1) shl k)
     else
@@ -681,9 +688,10 @@ begin
   Result := 0;
 end;
 
-procedure TTyRichRawFilter.Start(ABuf: PByte; AStart, AStop: PtrInt);
+procedure TTyRichRawFilter.Start(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean);
 begin
   FBuf := ABuf;
+  FHidePictures := AHidePictures;
   FLex.Init(ABuf, AStart, AStop);
   FStop := AStop;
   FD := 0;
@@ -715,7 +723,12 @@ end;
     other control word and symbol is nothing;
   - every group is read through or passed over as if it were not there - whatever the reader
     does with a destination (a field, a list's marker are no text of the paragraph; \upr's
-    \ud is); a picture's group (\pict) is passed over unread, by its braces alone;
+    \ud is); a picture's group (\pict) is passed over unread, by its braces alone - unless
+    the reader's group stack overflowed in the file (Start's AHidePictures), where it reads
+    such a group as text;
+  - the one state the reader carries through a group without keeping it per group, a high
+    surrogate waiting for its pair: where one waits at a group's start and the needle
+    has a character above U+FFFF, the bytes may hold it (fvMay);
   - a word that changes how the file decodes (a font table, an \ansicpg) inside the bytes:
     the bytes may hold anything (fvMay).
   So the answer is fvCannot only where no reading the reader can make holds the characters. }
@@ -821,10 +834,18 @@ begin
           begin
             Inc(used);
             Inc(FLooked);
+            { A high surrogate waiting where a group begins: whether its pair is made depends
+              on what the reader does with the group (one it passes over leaves the half
+              waiting, one it reads may end the wait) - the single flag here cannot follow both
+              ways, so the bytes may hold the needle. (At a group's end nothing is needed: a
+              reading that passed over the group has the state of its start, where nothing
+              waited; one that read it has the filter's own.) }
+            if FHigh and FAstral then Exit(fvMay);
             peek := FLex;
             got := peek.Next(w);
             if got and (w.Kind = rtkSymbol) and (w.Value = Ord('*')) then got := peek.Next(w);
-            if got and (w.Kind = rtkWord) and TyRtfWordHidesGroup(buf, w.NameStart, w.NameLen) then
+            if FHidePictures and got and (w.Kind = rtkWord) and
+              TyRtfWordHidesGroup(buf, w.NameStart, w.NameLen) then
               FHide := 1
             else
             begin
@@ -945,11 +966,12 @@ begin
   end;
 end;
 
-function TTyRichRawFilter.MayHold(ABuf: PByte; AStart, AStop: PtrInt): Boolean;
+function TTyRichRawFilter.MayHold(ABuf: PByte; AStart, AStop: PtrInt;
+  AHidePictures: Boolean): Boolean;
 var
   budget: Int64;
 begin
-  Start(ABuf, AStart, AStop);
+  Start(ABuf, AStart, AStop, AHidePictures);
   budget := High(Int64) div 4;
   Result := Run(budget) <> fvCannot;
 end;
@@ -1092,6 +1114,7 @@ begin
   end;
   { Made with every code page the scan has met so far, and made again when it met another (a
     file still loading, a font table given again in the body). }
+  if FFilterable then FHidePictures := not FLoad.Scan.GroupsOverflowed;
   if FFilterable and (not FFiltersMade or (FFilterCps <> FLoad.Scan.CodePageCount)) then
   begin
     FreeAndNil(FFilter);
@@ -1402,7 +1425,7 @@ begin
           Inc(FParasFiltered);
           Inc(FRawBytes, FSrcBytes[FNext - FSrcFirst]);
           FFilter.Start(PByte(Pointer(FLoad.Bytes)), FSrc[FNext - FSrcFirst],
-            FSrc[FNext - FSrcFirst] + FSrcBytes[FNext - FSrcFirst]);
+            FSrc[FNext - FSrcFirst] + FSrcBytes[FNext - FSrcFirst], FHidePictures);
           FPhase := 1;
         end;
       end;
@@ -1570,7 +1593,8 @@ begin
     Inc(FParasFiltered);
     Inc(FRawBytes, FWinBytes[I]);
   end;
-  Result := FSegFilter[ASeg].MayHold(PByte(Pointer(FLoad.Bytes)), FWinSrc[I], FWinSrc[I] + FWinBytes[I]);
+  Result := FSegFilter[ASeg].MayHold(PByte(Pointer(FLoad.Bytes)), FWinSrc[I],
+    FWinSrc[I] + FWinBytes[I], FHidePictures);
 end;
 
 { The roles: 1 it plays it (known from its text, or from its length alone), 0 it cannot, 2 it
