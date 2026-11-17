@@ -298,6 +298,7 @@ uses
   test.richedit.paste,
   test.richedit.api,
   test.richedit.find,
+  test.richedit.findctl,
   test.richedit.perf;
 
 type

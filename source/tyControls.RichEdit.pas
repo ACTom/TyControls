@@ -67,7 +67,7 @@ uses
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
-  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs;
+  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find;
 
 const
   CRichZoomMin = 10;
@@ -114,6 +114,14 @@ const
   CRichWordWindow = 4096;
   { A copy of more characters than this shows the wait cursor while it is made. }
   CRichCopyWaitChars = 1000000;
+  { A background find's piece: characters of text searched (and as many bytes of a file's
+    unparsed paragraphs) at most, and at least - a find's turns start at the least and double
+    their pieces while turns are fast, halve them while slow, as a load's slices do. }
+  CRichFindStepChars = 1024 * 1024;
+  CRichFindMinStepChars = 16 * 1024;
+  { A background replace's piece: matches replaced at most, and at least (the same rule). }
+  CRichReplaceBatch = 4096;
+  CRichReplaceMinBatch = 16;
   { The budget of one read of ConsistentAttributes (SelAttributes' and Paragraph's, F-I1):
     at most this many paragraphs walked, and at most this many bytes of a lazily read file
     parsed for it (a parse already begun is finished; the first paragraph is always read),
@@ -167,6 +175,19 @@ type
 
   { An edit the user asked for (a key, the menu) was not made; AReason says why. }
   TTyRichEditRefusedEvent = procedure(Sender: TObject; const AReason: string) of object;
+
+  { A find in the background ended (FindNextAsync): AFound - the match is selected and in
+    view; ACancelled - it was stopped before its end (CancelFind, the progress handler, a
+    second start, an edit). }
+  TTyRichFindDoneEvent = procedure(Sender: TObject; AFound, ACancelled: Boolean) of object;
+  { A replace in the background ended (ReplaceAllAsync): AReplaced matches replaced (one undo
+    step, also when ACancelled), ASkipped left as they were because the document refused to
+    change them there. }
+  TTyRichReplaceDoneEvent = procedure(Sender: TObject; AReplaced, ASkipped: Integer;
+    ACancelled: Boolean) of object;
+
+  // what runs in the background besides the load and the pictures (internal)
+  TTyRichFindKind = (rfkNone, rfkFind, rfkReplace);
 
   { The clipboard's flavours a paste takes, in the order it takes them. HTML is none of them:
     a clipboard with HTML and text pastes the text (spec goal 10). }
@@ -611,6 +632,49 @@ type
     procedure ApiParaFormat(AStart, ALen: TTyRichPos; AMask: TTyParaFormatMask;
       const AValue: TTyParaFormat);
     function ParaFormatAt(APos: TTyRichPos; out AFormat: TTyParaFormat): Boolean;
+  private
+    // find and replace in the background (Task 11b)
+    FFindKind: TTyRichFindKind;
+    FFinder: TTyRichFinder;
+    FFindText, FReplaceText: UTF8String;
+    FFindOpts: TTyRichFindOptions;
+    FFindWrapLeft: Boolean;           // FindNextAsync with rfoWrap: the second leg is to come
+    FFindState: Int64;                // the content the find runs on (ContentState)
+    FFindDone, FFindTotal: Int64;     // progress, as last reported
+    FFindLegFrom, FFindLegTo: TTyRichPos;
+    FFindLegBase: Int64;              // what the legs before this one searched
+    FFindSlice: Int64;
+    FFindTurnWork: Int64;             // what this turn's find pieces searched or replaced
+    FReplacing: Boolean;              // the replace's second phase: its steps go in
+    FReplaceNext, FReplaced, FReplaceSkipped, FReplaceCount: Integer;
+    FReplaceBatch: Integer;
+    FReplaceSession: Int64;
+    FReplaceStep: TTyRichCommand;
+    FReplaceBefore: TTyRichSelectionMark;
+    FReplaceL0: Int64;
+    FBreakOwed: Boolean;
+    // a replace's batch is being executed: the first change heard is its own, any other is not
+    FReplaceExec, FReplaceHeard, FFindForeign: Boolean;
+    FOnFindProgress: TTyRichProgressEvent;
+    FOnFindDone: TTyRichFindDoneEvent;
+    FOnReplaceDone: TTyRichReplaceDoneEvent;
+    { The run of typing ends (TTyRichDocument.BreakMerge) - but while a replace's steps go in,
+      the history's top is the replace's step, which typing never merges with: the break is
+      owed until the replace ends, so that its next step still merges into its first. }
+    procedure EndTypingRun;
+    function FindReady: Boolean;
+    function GetFindRunning: Boolean;
+    procedure FindPiece;
+    procedure ReplacePiece;
+    procedure FindProgress;
+    procedure StartFindLeg(AFrom, ATo: TTyRichPos);
+    { The background find or replace ends: its finder goes; AEvent: OnFindDone or
+      OnReplaceDone is raised (not from the destructor, DestroyWnd or a new content). }
+    procedure EndFind(AFound, ACancelled, AEvent: Boolean);
+    procedure SelectFound(APos, ALen: TTyRichPos);
+    procedure NoteFindTurn(AMs: Int64);
+    function SyncFind(const AText: string; AStart, ALen: TTyRichPos;
+      AOptions: TTyRichFindOptions; out AFoundLen: TTyRichPos): TTyRichPos;
   private
     // events
     FOnSelectionChange: TNotifyEvent;
@@ -1252,6 +1316,12 @@ type
     property ConsistencyBudgetParas: Integer read FConsBudgetParas write FConsBudgetParas;
     property ConsistencyBudgetBytes: Int64 read FConsBudgetBytes write FConsBudgetBytes;
     property ConsistencyWalks: Integer read FConsWalks;
+    { The background find's piece (characters, see CRichFindStepChars) and the background
+      replace's batch (matches), as the turns sized them; the finder at work (nil: none).
+      Test seams. }
+    property FindSlice: Int64 read FFindSlice write FFindSlice;
+    property ReplaceBatch: Integer read FReplaceBatch write FReplaceBatch;
+    property Finder: TTyRichFinder read FFinder;
     { The door of the format API for a descendant (F-M16): runs ACmd as the façades' writes
       run theirs (RunApiEdit) - not refused by ReadOnly, an open composition ended first,
       the selection kept with the step and left where it is, no scroll, one OnChange;
@@ -1654,6 +1724,81 @@ type
     function InDelText(const AText: string; AStart, AReplaceLen: TTyRichPos): TTyRichPos;
     { RichMemo's CharAtPos: the position at client point (X, Y) (PositionAtPoint). }
     function CharAtPos(X, Y: Integer): TTyRichPos;
+
+    { ---- finding and replacing (Task 11b) ----
+      What a match is (tyControls.RichEdit.Find): the needle against the text as it is shown -
+      CR LF, LF or CR in it is a paragraph's end, U+000B a line break; an object is matched by
+      nothing; the cells merged away are not there; case folded per code point unless asked;
+      whole word by the caret's word rule. Positions are this control's characters.
+
+      Delphi's FindText: the first match inside [StartPos, StartPos + Length) - the whole
+      match inside -, -1 for none; a Length below 0 searches to the end. stMatchCase,
+      stWholeWord. Synchronous, to the end of the range, with the wait cursor (BeginWait)
+      when the range is longer than CopyWaitChars; it neither selects nor scrolls, and never
+      parses a paragraph of a lazily read file only to learn that it cannot match. A document
+      still loading is searched as far as it is loaded (-1: not in what is loaded yet). }
+    function FindText(const SearchStr: string; StartPos, Length: TTyRichPos;
+      Options: TTySearchTypes): TTyRichPos;
+    { RichMemo's Search: as FindText; soBackward finds the last match in the range. The second
+      form gives the match's start and length (characters) and says whether there was one. }
+    function Search(const ANiddle: string; Start, Len: TTyRichPos;
+      const SearchOpt: TTySearchOptions): TTyRichPos; overload;
+    function Search(const ANiddle: string; Start, Len: TTyRichPos;
+      const SearchOpt: TTySearchOptions; var ATextStart, ATextLength: TTyRichPos): Boolean; overload;
+    { The user's Find Next (R66: a user's action - an open composition ends first; it edits
+      nothing, so ReadOnly does not stop it): the next match after the selection (rfoBackward:
+      the one before it); with rfoWrap the search goes on from the document's other end. Found:
+      it is selected, in view (as SelStart / SelLength place a selection: a match in a cut
+      paragraph's hidden tail stays selected there and shows at the cut), one OnSelectionChange;
+      True. Synchronous: the wait cursor over a document longer than CopyWaitChars. Stops a
+      background find or replace (as a new start does). }
+    function FindNext(const AText: string; AOptions: TTyRichFindOptions = [rfoWrap]): Boolean;
+    { FindNext in the background: the search runs in the turns of the background work (one
+      piece of CRichFindMinStepChars .. CRichFindStepChars characters at a time, sized by the
+      turns' time as a load's slices are), OnFindProgress after each piece (ACancel stops it),
+      and OnFindDone at its end - found: selected and in view. A second start, CancelFind, a
+      new content, the window going and the control's end stop it (OnFindDone with ACancelled,
+      but for the last three, where no event is raised); so does any change of the document
+      (an edit, an undo, a load), noticed at its next piece: a position found before it could
+      be stale. A document still loading is searched as far as it is loaded, and on as the
+      load goes on. Only while the control has a window (as the load's turns). }
+    procedure FindNextAsync(const AText: string; AOptions: TTyRichFindOptions = [rfoWrap]);
+    { Every match of AFind replaced by AReplace (line breaks make paragraphs), in the format of
+      the first character each replaces, as ONE undo step (never merged with typing; an undo
+      puts the selection back); a document-API write (R53: not refused by ReadOnly). Matches
+      are found on the text as it was before the first replacement - leftmost, never
+      overlapping ("a" by "aa" replaces each "a" once); rfoBackward and rfoWrap are not
+      looked at. A match the document refuses to change is left as it is and counted in
+      ASkipped: one in a row that holds a nested table, one across a cell's or a row's edge
+      (R57), and every match of a document that is loading, incomplete or being saved (then
+      nothing is replaced). Nothing is raised for a refusal. Returns the number replaced.
+      Synchronous, the wait cursor over a document longer than CopyWaitChars; stops a
+      background find or replace first. }
+    function ReplaceAll(const AFind, AReplace: string;
+      AOptions: TTyRichFindOptions = []): Integer; overload;
+    function ReplaceAll(const AFind, AReplace: string; AOptions: TTyRichFindOptions;
+      out ASkipped: Integer): Integer; overload;
+    { ReplaceAll in the background: first every match is found (pieces as FindNextAsync's),
+      then they are replaced from the last one back, a batch a piece, each batch merged into
+      the replace's one undo step; OnFindProgress after each piece over both halves, and
+      OnReplaceDone at the end. Stopped as FindNextAsync is - by CancelFind, the progress
+      handler, a new start, any change of the document that is not its own (an edit, an
+      undo), and a save (SaveToFile, SaveToStream: its saved point would keep the next batch
+      out of the step) -: what was replaced until then stays, as one undo step. While an
+      input method composes, or the document holds its changes back (an update), no batch
+      goes in. }
+    procedure ReplaceAllAsync(const AFind, AReplace: string; AOptions: TTyRichFindOptions = []);
+    { Stops a background find or replace (OnFindDone / OnReplaceDone with ACancelled); a
+      replace keeps what it replaced, as one undo step. Nothing runs: nothing happens. }
+    procedure CancelFind;
+    { A background find or replace runs. }
+    property FindRunning: Boolean read GetFindRunning;
+    { After each piece of a background find or replace: ADone of ATotal characters searched
+      (a replace: the search is the first half of ATotal, the replacing the second). ACancel
+      stops it. }
+    property OnFindProgress: TTyRichProgressEvent read FOnFindProgress write FOnFindProgress;
+    property OnFindDone: TTyRichFindDoneEvent read FOnFindDone write FOnFindDone;
+    property OnReplaceDone: TTyRichReplaceDoneEvent read FOnReplaceDone write FOnReplaceDone;
     { RichMemo's SetSelLengthFor: SelLength := the number of characters of AText. }
     procedure SetSelLengthFor(const AText: string);
     { RichMemo's ZoomFactor: Zoom / 100 (written: rounded to Zoom's whole percent). }
@@ -1793,6 +1938,9 @@ type
     property OnEditRefused;
     property OnLoadProgress;
     property OnSaveProgress;
+    property OnFindProgress;
+    property OnFindDone;
+    property OnReplaceDone;
     property OnFallbackFont;
     property OnClick;
     property OnDblClick;
@@ -2416,6 +2564,8 @@ begin
   FCopyWaitChars := CRichCopyWaitChars;
   FConsBudgetParas := CRichConsistParas;
   FConsBudgetBytes := CRichConsistParseBytes;
+  FFindSlice := CRichFindMinStepChars;
+  FReplaceBatch := CRichReplaceMinBatch;
   {$IFDEF LCLCocoa}
   { Before the handle: LCL-Cocoa asks for it (LM_IM_COMPOSITION) inside CreateHandle. It holds
     the control as an ITyImeEditable whose _AddRef does nothing (the memo's way). }
@@ -2446,6 +2596,8 @@ begin
   FreeAndNil(FCocoaIme);
   // nothing queued, registered or timed may come back into a freed control
   StopBackground;
+  // a find or a replace in the background stops quietly (a replace keeps its one step)
+  EndFind(False, True, False);
   if FSelCall <> nil then CancelCall(FSelCall);
   FreeAndNil(FTurnTimer);
   FreeAndNil(FBackstop);
@@ -2616,7 +2768,7 @@ begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   // the run of typing ends: what is typed after it being editable again is a step of its own
-  FDoc.BreakMerge;
+  EndTypingRun;
   // what is being composed cannot go in any more: it goes, and the input method drops it
   if AValue then EndComposition(False);
   { A focused control's input context was told at the window's activation whether the
@@ -2760,12 +2912,8 @@ end;
   inside a paragraph (U+000B) is no word. }
 function WordClass(C: Cardinal): Integer;
 begin
-  case C of
-    $FFFC: Result := 2;
-    9, 11, 32, $A0, 33..47, 58..64, 91..94, 96, 123..126: Result := 0;
-  else
-    Result := 1;
-  end;
+  // one rule, the find's whole word too (tyControls.RichEdit.Find)
+  Result := TyRichWordClass(C);
 end;
 
 function TTyCustomRichEdit.GetSelStart: TTyRichPos;
@@ -3231,7 +3379,7 @@ begin
   { The caret or the anchor moved by anything but an edit of the control's own (a key, a
     click, a setter, a change from elsewhere): the next typing is an undo step of its own, as
     the memo's caret moves end its run (S-M9's place: the edits place the caret themselves). }
-  if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then FDoc.BreakMerge;
+  if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then EndTypingRun;
   { The selection set again - also to the same place, and by an edit's own placing - ends a
     pending format (msftedit, fact 6); a façade's write keeps the selection and it. }
   if FApiWrite = 0 then FHasPendingFmt := False;
@@ -3596,7 +3744,7 @@ begin
   inherited DoExit;
   TyImeSetFocus(FImeHook, False);
   // the focus left: the run of typing ends (as the memo's)
-  FDoc.BreakMerge;
+  EndTypingRun;
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretShown := True;
   StopDrag;
@@ -8184,6 +8332,12 @@ begin
     notice a cancelled load gives that it stopped comes after the load state ended, and is
     the load's own all the same: it changes no text of the file (K-6). }
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
+  // a replace's batch reports its one change; any other while it runs is someone else's
+  if FReplaceExec then
+  begin
+    if FReplaceHeard then FFindForeign := True;
+    FReplaceHeard := True;
+  end;
   { A composition shown while the document changes elsewhere (code, an undo from a handler)
     follows the text as the caret does; the layouter is told where before it hears of the
     change, which drops the block or moves it with what it laid out. So does the place of a
@@ -8321,6 +8475,8 @@ procedure TTyCustomRichEdit.ContentReplaced;
 var
   composed: Boolean;
 begin
+  // a find of the old content stops, quietly: its finder read the old text
+  EndFind(False, True, False);
   { A composition has no text to go into any more: it goes (the whole view is drawn again
     below), and the input method is told to drop it. }
   composed := FComposing or FImeRefused;
@@ -9421,7 +9577,8 @@ end;
 
 function TTyCustomRichEdit.HasBackgroundWork: Boolean;
 begin
-  Result := (FPendingCount > 0) or (FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil));
+  Result := (FPendingCount > 0) or (FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil)) or
+    (FFindKind <> rfkNone);
 end;
 
 function TTyCustomRichEdit.StepBackground: Boolean;
@@ -9433,6 +9590,13 @@ begin
   Result := False;
   // re-entered from a progress handler (one that pumps messages): the step is running
   if FInStep or (FSaving > 0) then Exit;
+  { A find goes before the load's slices: it searches what is indexed, and when it has reached
+    that while the file still loads it waits (FindReady False), and the slices go on. }
+  if FindReady then
+  begin
+    FindPiece;
+    Exit(True);
+  end;
   load := TyRichRtfLoadOf(FDoc);
   if FDoc.Loading and (load <> nil) then
   begin
@@ -9732,6 +9896,7 @@ begin
   FInTurn := True;
   Inc(FTurnsRun);
   FTurnBytes := 0;
+  FFindTurnWork := 0;
   FHandlerMs := 0;
   try
     t0 := IdleTicks;
@@ -9743,6 +9908,7 @@ begin
       ms := Int64(IdleTicks - t0);
     until (n >= CRichIdleMaxSteps) or (ms >= CRichIdleBudgetMs);
     NoteTurn(ms);
+    NoteFindTurn(ms);
     { The range the turn's slices held back reaches the bars, the turn's whole work at once,
       when none did for CRichLoadBarsMs (by the clock's last reading); the first turn of a load
       always (P-1). }
@@ -9813,6 +9979,541 @@ begin
     candidate window's place), GTK2 (an input context of its own); nil elsewhere. }
   TyImeUninstall(FImeHook);
   FImeHook := TyImeInstall(Self, @HookCommit, @HookCaretRect);
+end;
+
+{ ---- finding and replacing (Task 11b) ----
+
+  The engine's finder (tyControls.RichEdit.Find) searches; here are the two façades, the
+  user's Find Next and the find and the replace in the background, which run as pieces of the
+  background work's turns beside the load's slices and the pictures (StepBackground). A
+  background find stops at any change of the document it did not make itself: a position it
+  found could be stale, and a finder keeps no place that follows an edit. }
+
+var
+  // replaces in the background are told apart by this (TTyRichReplaceCommand's session)
+  GRichReplaceSessions: Int64 = 0;
+
+procedure TTyCustomRichEdit.EndTypingRun;
+begin
+  if FReplacing and (FReplaceStep <> nil) then FBreakOwed := True
+  else FDoc.BreakMerge;
+end;
+
+function TTyCustomRichEdit.GetFindRunning: Boolean;
+begin
+  Result := FFindKind <> rfkNone;
+end;
+
+function TTyCustomRichEdit.FindReady: Boolean;
+begin
+  Result := FFindKind <> rfkNone;
+  // a find that has searched what is indexed waits while the load goes on
+  if Result and (FFinder <> nil) and FFinder.Waiting and FDoc.Loading and
+    (TyRichRtfLoadOf(FDoc) <> nil) then
+    Result := False;
+end;
+
+function TTyCustomRichEdit.SyncFind(const AText: string; AStart, ALen: TTyRichPos;
+  AOptions: TTyRichFindOptions; out AFoundLen: TTyRichPos): TTyRichPos;
+var
+  f: TTyRichFinder;
+  len, stop, span: TTyRichPos;
+  wait: Boolean;
+begin
+  Result := -1;
+  AFoundLen := 0;
+  len := FDoc.Text.Length;
+  if AStart < 0 then AStart := 0;
+  if AStart > len then Exit;
+  // (a range past the end: to the end - and of a document still loading, what is loaded)
+  if (ALen < 0) or (ALen > len - AStart) then stop := -1 else stop := AStart + ALen;
+  if stop < 0 then span := len - AStart else span := stop - AStart;
+  wait := span > FCopyWaitChars;
+  if wait then BeginWait;
+  try
+    f := TTyRichFinder.Create(FDoc, AText, AOptions - [rfoWrap], AStart, stop);
+    try
+      if f.Run = rfrFound then
+      begin
+        Result := f.MatchPos;
+        AFoundLen := f.MatchLen;
+      end;
+    finally
+      f.Free;
+    end;
+  finally
+    if wait then EndWait;
+  end;
+end;
+
+function TTyCustomRichEdit.FindText(const SearchStr: string; StartPos, Length: TTyRichPos;
+  Options: TTySearchTypes): TTyRichPos;
+var
+  o: TTyRichFindOptions;
+  n: TTyRichPos;
+begin
+  o := [];
+  if stMatchCase in Options then Include(o, rfoMatchCase);
+  if stWholeWord in Options then Include(o, rfoWholeWord);
+  Result := SyncFind(SearchStr, StartPos, Length, o, n);
+end;
+
+function TTyCustomRichEdit.Search(const ANiddle: string; Start, Len: TTyRichPos;
+  const SearchOpt: TTySearchOptions): TTyRichPos;
+var
+  s, n: TTyRichPos;
+begin
+  s := -1;
+  n := 0;
+  if not Search(ANiddle, Start, Len, SearchOpt, s, n) then s := -1;
+  Result := s;
+end;
+
+function TTyCustomRichEdit.Search(const ANiddle: string; Start, Len: TTyRichPos;
+  const SearchOpt: TTySearchOptions; var ATextStart, ATextLength: TTyRichPos): Boolean;
+var
+  o: TTyRichFindOptions;
+  p, n: TTyRichPos;
+begin
+  o := [];
+  if soMatchCase in SearchOpt then Include(o, rfoMatchCase);
+  if soWholeWord in SearchOpt then Include(o, rfoWholeWord);
+  if soBackward in SearchOpt then Include(o, rfoBackward);
+  p := SyncFind(ANiddle, Start, Len, o, n);
+  Result := p >= 0;
+  if not Result then Exit;
+  ATextStart := p;
+  ATextLength := n;
+end;
+
+{ A match found: selected as SelStart and SelLength place a selection (caret places; a place
+  in a cut paragraph's hidden tail kept), the caret at its end, in view, one report. }
+procedure TTyCustomRichEdit.SelectFound(APos, ALen: TTyRichPos);
+begin
+  if ViewBehind then Select(APos, APos + ALen, False)
+  else Select(SnapPos(APos), SnapPos(APos + ALen), False);
+  Moved(False);
+end;
+
+function TTyCustomRichEdit.FindNext(const AText: string; AOptions: TTyRichFindOptions): Boolean;
+var
+  p, n: TTyRichPos;
+  o: TTyRichFindOptions;
+begin
+  Result := False;
+  // a user's action (R66): what is being composed goes in first; it edits nothing
+  EndCompositionForUser;
+  if FFindKind <> rfkNone then EndFind(False, True, True);
+  o := AOptions - [rfoWrap];
+  if rfoBackward in AOptions then
+    p := SyncFind(AText, 0, GetSelStart, o, n)
+  else
+    p := SyncFind(AText, GetSelStart + GetSelLength, -1, o, n);
+  if (p < 0) and (rfoWrap in AOptions) then p := SyncFind(AText, 0, -1, o, n);
+  if p < 0 then Exit;
+  SelectFound(p, n);
+  Result := True;
+end;
+
+procedure TTyCustomRichEdit.StartFindLeg(AFrom, ATo: TTyRichPos);
+begin
+  FreeAndNil(FFinder);
+  FFinder := TTyRichFinder.Create(FDoc, FFindText, FFindOpts - [rfoWrap], AFrom, ATo);
+  FFindLegFrom := AFrom;
+  FFindLegTo := ATo;
+end;
+
+procedure TTyCustomRichEdit.FindNextAsync(const AText: string; AOptions: TTyRichFindOptions);
+var
+  len: TTyRichPos;
+begin
+  if FFindKind <> rfkNone then EndFind(False, True, True);
+  EndCompositionForUser;
+  FFindKind := rfkFind;
+  FFindText := AText;
+  FFindOpts := AOptions;
+  FFindState := FDoc.ContentState;
+  // its turns start small and find their size, as a load's do
+  FFindSlice := CRichFindMinStepChars;
+  FFindDone := 0;
+  FFindLegBase := 0;
+  FFindWrapLeft := rfoWrap in AOptions;
+  len := FDoc.Text.Length;
+  if rfoBackward in AOptions then
+  begin
+    StartFindLeg(0, GetSelStart);
+    FFindTotal := GetSelStart;
+  end
+  else
+  begin
+    StartFindLeg(GetSelStart + GetSelLength, -1);
+    FFindTotal := len - (GetSelStart + GetSelLength);
+  end;
+  // a wrapped search goes over the whole text at most once more
+  if FFindWrapLeft then Inc(FFindTotal, len);
+  if HasBackgroundWork then StartBackground;
+end;
+
+function TTyCustomRichEdit.ReplaceAll(const AFind, AReplace: string;
+  AOptions: TTyRichFindOptions): Integer;
+var
+  skipped: Integer;
+begin
+  Result := ReplaceAll(AFind, AReplace, AOptions, skipped);
+end;
+
+function TTyCustomRichEdit.ReplaceAll(const AFind, AReplace: string; AOptions: TTyRichFindOptions;
+  out ASkipped: Integer): Integer;
+var
+  f: TTyRichFinder;
+  pos: array of TTyRichPos;
+  i, k, len: Integer;
+  wait: Boolean;
+  cmd: TTyRichReplaceCommand;
+begin
+  Result := 0;
+  ASkipped := 0;
+  if FFindKind <> rfkNone then EndFind(False, True, True);
+  EndCompositionForUser;
+  cmd := nil;
+  wait := FDoc.Text.Length > FCopyWaitChars;
+  if wait then BeginWait;
+  try
+    f := TTyRichFinder.Create(FDoc, AFind, AOptions - [rfoBackward, rfoWrap]);
+    try
+      f.Collect := True;
+      f.Run;
+      if f.MatchCount = 0 then Exit;
+      // a document that takes no change: every match is left (and counted), nothing raised
+      if FDoc.Loading or FDoc.Incomplete or FDoc.Saving then
+      begin
+        ASkipped := f.MatchCount;
+        Exit;
+      end;
+      len := f.MatchLen;
+      pos := nil;
+      SetLength(pos, f.MatchCount);
+      k := 0;
+      // the last first: no replacement moves a match not replaced yet
+      for i := f.MatchCount - 1 downto 0 do
+        if FDoc.CanChange(f.Match(i), len) and not TyRichCrossesCells(FDoc, f.Match(i), len) then
+        begin
+          pos[k] := f.Match(i);
+          Inc(k);
+        end
+        else
+          Inc(ASkipped);
+      if k = 0 then Exit;
+      SetLength(pos, k);
+      cmd := TTyRichReplaceCommand.Create(0, pos, len, AReplace);
+    finally
+      f.Free;
+    end;
+    // the document API's door: one step that puts the selection back, one OnChange
+    RunApiCommand(cmd, 0);
+    Result := k;
+  finally
+    if wait then EndWait;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ReplaceAllAsync(const AFind, AReplace: string;
+  AOptions: TTyRichFindOptions);
+begin
+  if FFindKind <> rfkNone then EndFind(False, True, True);
+  EndCompositionForUser;
+  FFindKind := rfkReplace;
+  FFindText := AFind;
+  FReplaceText := AReplace;
+  FFindOpts := AOptions - [rfoBackward, rfoWrap];
+  FFindState := FDoc.ContentState;
+  FFindSlice := CRichFindMinStepChars;
+  FReplaceBatch := CRichReplaceMinBatch;
+  FFindDone := 0;
+  FFindLegBase := 0;
+  FFindWrapLeft := False;
+  FReplacing := False;
+  FReplaced := 0;
+  FReplaceSkipped := 0;
+  FReplaceCount := 0;
+  FReplaceNext := -1;
+  FReplaceStep := nil;
+  FBreakOwed := False;
+  Inc(GRichReplaceSessions);
+  FReplaceSession := GRichReplaceSessions;
+  FReplaceBefore.Anchor := FSelAnchor;
+  FReplaceBefore.Caret := FCaret;
+  FReplaceBefore.AtLineEnd := FCaretAtEnd;
+  FReplaceL0 := FDoc.Text.Length;
+  StartFindLeg(0, -1);
+  FFinder.Collect := True;
+  if HasBackgroundWork then StartBackground;
+end;
+
+procedure TTyCustomRichEdit.CancelFind;
+begin
+  if FFindKind <> rfkNone then EndFind(False, True, True);
+end;
+
+procedure TTyCustomRichEdit.EndFind(AFound, ACancelled, AEvent: Boolean);
+var
+  kind: TTyRichFindKind;
+  replaced, skipped: Integer;
+begin
+  kind := FFindKind;
+  if kind = rfkNone then Exit;
+  replaced := FReplaced;
+  skipped := FReplaceSkipped;
+  FFindKind := rfkNone;
+  FReplacing := False;
+  FReplaceStep := nil;
+  FReplaceExec := False;
+  FreeAndNil(FFinder);
+  // the run of typing a user's move ended while the replace went in
+  if FBreakOwed then
+  begin
+    FBreakOwed := False;
+    if FDoc <> nil then FDoc.BreakMerge;
+  end;
+  if not AEvent or ([csDestroying, csLoading] * ComponentState <> []) then Exit;
+  if kind = rfkFind then
+  begin
+    if Assigned(FOnFindDone) then FOnFindDone(Self, AFound, ACancelled);
+  end
+  else if Assigned(FOnReplaceDone) then
+    FOnReplaceDone(Self, replaced, skipped, ACancelled);
+end;
+
+procedure TTyCustomRichEdit.FindProgress;
+var
+  done, total, legEnd: Int64;
+  cancel: Boolean;
+  t0: QWord;
+begin
+  if FFindKind = rfkNone then Exit;
+  if FFindKind = rfkReplace then
+  begin
+    // the search is the first half, the replacing the second
+    total := 2 * Math.Max(Int64(1), FReplaceL0);
+    if FReplacing then
+    begin
+      if FReplaceCount > 0 then
+        done := FReplaceL0 + FReplaceL0 * (FReplaceCount - 1 - FReplaceNext) div FReplaceCount
+      else
+        done := total;
+    end
+    else
+      done := Math.Min(FFinder.Reached, FReplaceL0);
+  end
+  else
+  begin
+    if rfoBackward in FFindOpts then
+    begin
+      legEnd := FFindLegTo;
+      if legEnd < 0 then legEnd := FDoc.Text.Length;
+      done := FFindLegBase + legEnd - FFinder.Reached;
+    end
+    else
+      done := FFindLegBase + FFinder.Reached - FFindLegFrom;
+    total := FFindTotal;
+  end;
+  // never back (a load may make a total grow)
+  if done < FFindDone then done := FFindDone;
+  if total < done then total := done;
+  FFindDone := done;
+  if not Assigned(FOnFindProgress) then Exit;
+  cancel := False;
+  // the handler's time is the user's: the pieces are not sized by it
+  t0 := IdleTicks;
+  try
+    FOnFindProgress(Self, done, total, cancel);
+  finally
+    Inc(FHandlerMs, Int64(IdleTicks - t0));
+  end;
+  if cancel and (FFindKind <> rfkNone) then EndFind(False, True, True);
+end;
+
+procedure TTyCustomRichEdit.FindPiece;
+var
+  r: TTyRichFindResult;
+  budget, len: TTyRichPos;
+  p, n: TTyRichPos;
+  f: TTyRichFinder;
+begin
+  { A change the find did not make (an edit, an undo, a new content): what it found, and
+    where it stands, may be stale. }
+  if (FDoc.ContentState <> FFindState) or (FDoc.Text <> FText) then
+  begin
+    EndFind(False, True, True);
+    Exit;
+  end;
+  if FReplacing then
+  begin
+    ReplacePiece;
+    Exit;
+  end;
+  budget := FFindSlice;
+  if budget < 1 then budget := 1;
+  f := FFinder;
+  r := f.Step(budget);
+  Inc(FFindTurnWork, budget);
+  FindProgress;
+  // (stopped from the progress handler, or another started there)
+  if FFinder <> f then Exit;
+  case r of
+    rfrFound:
+      if FFindKind = rfkFind then
+      begin
+        p := f.MatchPos;
+        n := f.MatchLen;
+        EndFind(True, False, False);
+        SelectFound(p, n);
+        if Assigned(FOnFindDone) and not (csDestroying in ComponentState) then
+          FOnFindDone(Self, True, False);
+      end;
+    rfrNotFound:
+      if FFindKind = rfkFind then
+      begin
+        if FFindWrapLeft then
+        begin
+          // on from the other end, over the whole text
+          FFindWrapLeft := False;
+          len := FDoc.Text.Length;
+          if rfoBackward in FFindOpts then
+          begin
+            if FFindLegTo >= 0 then Inc(FFindLegBase, FFindLegTo - FFindLegFrom);
+            StartFindLeg(0, -1);
+          end
+          else
+          begin
+            Inc(FFindLegBase, len - FFindLegFrom);
+            StartFindLeg(0, -1);
+          end;
+        end
+        else
+          EndFind(False, False, True);
+      end
+      else
+      begin
+        // the replace: every match is found; they are replaced from the last one back
+        FReplacing := True;
+        FReplaceCount := f.MatchCount;
+        FReplaceNext := FReplaceCount - 1;
+        if FReplaceNext < 0 then EndFind(False, False, True);
+      end;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ReplacePiece;
+var
+  n, i, k, len: Integer;
+  pos: array of TTyRichPos;
+  p: TTyRichPos;
+  cmd: TTyRichReplaceCommand;
+  step: TTyRichCommand;
+  marks: TTyRichStepMarks;
+  ok: Boolean;
+begin
+  if FDoc.Incomplete or FDoc.Loading then
+  begin
+    // a document that takes no change: every match left is left, and counted
+    Inc(FReplaceSkipped, FReplaceNext + 1);
+    FReplaceNext := -1;
+  end
+  // while an input method composes, or the document holds its changes back, it waits
+  else if FComposing or FDoc.Updating or FDoc.Saving then
+    Exit
+  else
+  begin
+    n := FReplaceBatch;
+    if n < 1 then n := 1;
+    if n > FReplaceNext + 1 then n := FReplaceNext + 1;
+    len := FFinder.MatchLen;
+    pos := nil;
+    SetLength(pos, n);
+    k := 0;
+    for i := 0 to n - 1 do
+    begin
+      p := FFinder.Match(FReplaceNext - i);
+      if FDoc.CanChange(p, len) and not TyRichCrossesCells(FDoc, p, len) then
+      begin
+        pos[k] := p;
+        Inc(k);
+      end
+      else
+        Inc(FReplaceSkipped);
+    end;
+    Dec(FReplaceNext, n);
+    Inc(FFindTurnWork, n);
+    if k > 0 then
+    begin
+      SetLength(pos, k);
+      cmd := TTyRichReplaceCommand.Create(FReplaceSession, pos, len, FReplaceText);
+      FReplaceExec := True;
+      FReplaceHeard := False;
+      FFindForeign := False;
+      try
+        ok := FDoc.Execute(cmd);
+      finally
+        FReplaceExec := False;
+      end;
+      // (a handler of the batch's change may have stopped the replace, or started another)
+      if FFindKind <> rfkReplace then Exit;
+      if not ok or FFindForeign then
+      begin
+        // refused, or the document changed under its handlers: what was done stays
+        if ok then Inc(FReplaced, k);
+        EndFind(False, True, True);
+        Exit;
+      end;
+      step := FDoc.UndoStep;
+      if FReplaceStep = nil then
+        FReplaceStep := step
+      else if step <> FReplaceStep then
+      begin
+        { The history did not take this batch into the replace's step: something broke the
+          run between two batches (a BreakMerge from code, a saved point set). The batch goes
+          back out and the replace ends: what it did before is its one step. }
+        FDoc.Undo;
+        EndFind(False, True, True);
+        Exit;
+      end;
+      Inc(FReplaced, k);
+      // undone, the step puts back the selection there was when the replace began
+      marks := step.Marks;
+      marks.HasBefore := True;
+      marks.Before := FReplaceBefore;
+      marks.HasAfter := True;
+      marks.After.Anchor := FSelAnchor;
+      marks.After.Caret := FCaret;
+      marks.After.AtLineEnd := FCaretAtEnd;
+      step.Marks := marks;
+      FFindState := FDoc.ContentState;
+    end;
+  end;
+  FindProgress;
+  if FFindKind <> rfkReplace then Exit;
+  if FReplaceNext < 0 then EndFind(False, False, True);
+end;
+
+{ A turn that found or replaced: its pieces are sized as the load's slices are (NoteTurn) - the
+  find's characters, the replace's batch of matches - halved when the turn went over the budget,
+  doubled when it was fast, kept in between. }
+procedure TTyCustomRichEdit.NoteFindTurn(AMs: Int64);
+begin
+  if FFindTurnWork <= 0 then Exit;
+  Dec(AMs, FHandlerMs);
+  if FReplacing then
+  begin
+    if AMs > CRichIdleBudgetMs then
+      FReplaceBatch := Math.Max(CRichReplaceMinBatch, FReplaceBatch div 2)
+    else if AMs < CRichIdleBudgetMs div 4 then
+      FReplaceBatch := Math.Min(CRichReplaceBatch, FReplaceBatch * 2);
+  end
+  else if AMs > CRichIdleBudgetMs then
+    FFindSlice := Math.Max(Int64(CRichFindMinStepChars), FFindSlice div 2)
+  else if AMs < CRichIdleBudgetMs div 4 then
+    FFindSlice := Math.Min(Int64(CRichFindStepChars), FFindSlice * 2);
 end;
 
 { ---- loading and saving ---- }
@@ -10044,6 +10745,9 @@ procedure TTyCustomRichEdit.WriteTo(AStream: TStream; AFormat: TTyRichFormat);
 begin
   // a save asked for from a load progress handler would save a document still loading
   if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
+  { A replace in the background stops (with its event): the saved point a save may set would
+    keep its next batch out of its one undo step. }
+  if FFindKind = rfkReplace then EndFind(False, True, True);
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
   // the document's state decides, not where the content came from (R69)
@@ -10775,6 +11479,9 @@ begin
   FreeAndNil(FSurface);
   InvalidateSurface;
   StopBackground;
+  { A find or a replace in the background stops with its driver, quietly (no event while the
+    window is torn down); a replace keeps what it replaced, as its one step. }
+  EndFind(False, True, False);
   FreeAndNil(FTurnTimer);
   FreeAndNil(FBackstop);
   // the blink and a drag's scrolling are a window's (DoEnter starts the blink again)

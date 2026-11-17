@@ -253,6 +253,16 @@ type
   { RichMemo's TParaAlignment, its order. }
   TTyParaAlignment = (paLeft, paRight, paCenter, paJustify);
 
+  { Delphi's TSearchType (TCustomRichEdit.FindText), its names and order. }
+  TTySearchType = (stWholeWord, stMatchCase);
+  TTySearchTypes = set of TTySearchType;
+
+  { RichMemo's TSearchOption (TCustomRichMemo.Search), its names and order. FPC's StrUtils has
+    a TStringSearchOption with soMatchCase and soWholeWord too: in a unit that uses both, the
+    unit used last decides what a bare soMatchCase means - qualify the name there. }
+  TTySearchOption = (soMatchCase, soWholeWord, soBackward);
+  TTySearchOptions = set of TTySearchOption;
+
   { RichMemo's TParaMetric, points: FirstLine where the first line starts, HeadIndent where
     the other lines start (both from the left margin), TailIndent from the right margin;
     LineSpacing RichMemo's multiplier, on its scale: SingleLineSpacing (DefLineSpacing, 1.2)

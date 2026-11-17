@@ -57,7 +57,9 @@ const
 type
   TTyRichCodeArray = array of Cardinal;
 
-  TTyRichFindOption = (rfoMatchCase, rfoWholeWord, rfoBackward);
+  { rfoWrap is the control's (TTyCustomRichEdit.FindNext: past the end, on from the other
+    end); a finder searches its range and does not look at it. }
+  TTyRichFindOption = (rfoMatchCase, rfoWholeWord, rfoBackward, rfoWrap);
   TTyRichFindOptions = set of TTyRichFindOption;
 
   { What a step of a finder ended with. rfrMore: its budget is spent (or, Waiting, the text it
