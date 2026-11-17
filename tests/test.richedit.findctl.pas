@@ -66,6 +66,7 @@ type
     procedure TestABackgroundFindWhileLoading;
     procedure TestABackgroundReplaceIsOneStepThroughTheUsersMoves;
     procedure TestABackgroundReplaceStopsAtAnEditAndASave;
+    procedure TestABackgroundReplaceTrimsALazyFile;
     procedure TestTheWindowGoingStopsIt;
     procedure TestTheEventsArePublished;
   end;
@@ -893,6 +894,44 @@ begin
   end;
   TurnUntilDone;
   AssertTrue('then it went on', Pos('stood', Text) > 0);
+end;
+
+{ A background replace over a lazily read RTF parses what it changes, and between its batches
+  lets the parsed intervals go back to the loader's bound; undone, the file saves as it was. }
+procedure TTyRichEditFindTest.TestABackgroundReplaceTrimsALazyFile;
+var
+  s: RawByteString;
+  b, saved: TBytes;
+  k, parsed0: Integer;
+  load: TTyRtfLoad;
+  m: TBytesStream;
+begin
+  s := Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard ');
+  for k := 0 to 149999 do
+    if k mod 100 = 0 then s := s + 'line ' + IntToStr(k) + Rtf(' with a {|b word}|par') + #13#10
+    else s := s + 'line ' + IntToStr(k) + Rtf(' of filler|par') + #13#10;
+  s := s + '}';
+  b := BytesOf(s);
+  LoadBytes(b);
+  load := TyRichRtfLoadOf(FRich.Document);
+  AssertTrue('more intervals than stay parsed', load.IntervalCount > 2 * load.MaxResidentIntervals);
+  parsed0 := load.ParseCount;
+  FRich.ReplaceAllAsync('word', 'term');
+  TurnUntilDone;
+  AssertEquals('done', 'replace 1500 0 ended', FDone[0]);
+  AssertTrue('parsed what it changed', load.ParseCount - parsed0 >= load.IntervalCount div 2);
+  AssertTrue(Format('the parsed intervals back to the bound (%d of %d)',
+    [load.ResidentIntervals, load.MaxResidentIntervals]),
+    load.ResidentIntervals <= load.MaxResidentIntervals + 1);
+  FRich.Undo;
+  m := TBytesStream.Create;
+  try
+    FRich.SaveToStream(m, rfRtf);
+    saved := Copy(m.Bytes, 0, m.Size);
+  finally
+    m.Free;
+  end;
+  AssertTrue('undone and saved: the file', SameBytes(b, saved));
 end;
 
 procedure TTyRichEditFindTest.TestTheWindowGoingStopsIt;
