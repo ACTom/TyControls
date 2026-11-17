@@ -611,6 +611,9 @@ type
     FChanged: Boolean;
     FDoc: TTyRichDocument;    // the document running this command, nil otherwise
     FMarks: TTyRichStepMarks;
+    { The document's states (TTyRichDocument's saved point) before this step ran and after
+      it: an undo goes back to the one, a redo forward to the other. }
+    FStateBefore, FStateAfter: Int64;
     procedure CheckRunning(ADoc: TTyRichDocument);
     function Keep(AUndo: TTyRichUndoData): TTyRichChange;
     procedure AddSummary(const AChange: TTyRichChange);
@@ -695,6 +698,21 @@ type
     FHold: Integer;
     FPending: TTyRichChange;
     FHasPending: Boolean;
+    { The saved point (R59): every content the document goes through has a number of its own
+      (FState), never given twice (FNextState); FSavedState is the number of the content last
+      loaded or saved (-1: none it can come back to). A step remembers the numbers before and
+      after it, so an undo or a redo brings back the number with the content. }
+    FState, FSavedState, FNextState: Int64;
+    FModifiedSeen: Boolean;
+    FOnModifiedChange: TNotifyEvent;
+    function NewState: Int64;
+    function GetModified: Boolean;
+    procedure SetModified(AValue: Boolean);
+    { The content changed outside the history (a primitive outside a command, an edit straight
+      on Text, an undo that failed): a number of its own, and the saved point is gone. }
+    procedure LeftHistory;
+    { OnModifiedChange when Modified is not what it was when it was last raised. }
+    procedure NoteModified;
     procedure RunStep(ACmd: TTyRichCommand; AStep: Integer);
     procedure Flush;
     procedure PushUndo(ACmd: TTyRichCommand);
@@ -715,7 +733,6 @@ type
     FPaperHeight: Integer;
     FMarginLeft: Integer;
     FMarginRight: Integer;
-    FModified: Boolean;
     FOnChange: TTyRichChangeEvent;
     FOnUpdatingEnd: TNotifyEvent;
     FLoader: TTyRichParaLoader;
@@ -988,7 +1005,21 @@ type
     property MarginLeft: Integer read FMarginLeft;
     property MarginRight: Integer read FMarginRight;
     property Loader: TTyRichParaLoader read FLoader;
-    property Modified: Boolean read FModified write FModified;
+    { The content differs from the one last loaded or saved (R59). The history remembers the
+      saved point: Modified is False exactly when the document is at that content again - an
+      undo back to it, a redo forward to it - and True otherwise; True for good (until the next
+      Modified := False or load) once the step that led back to it is gone (the history's
+      memory bound dropped it, ClearUndo, a new step after an undo past it) or the content was
+      changed outside the history (a primitive outside a command, an edit straight on Text, an
+      undo that failed). ClearUndo at the saved point keeps it: the content is still that one.
+      A load (ReplaceText) sets the saved point. Modified := False sets it here (and the next
+      typing does not merge into the step before: an undo can come back here);
+      Modified := True forces True until the next saved point. Not a change: no OnChange. }
+    property Modified: Boolean read GetModified write SetModified;
+    { Modified turned (raised at the end of the step, the undo, the redo, the update block,
+      the load or the assignment that turned it; an edit straight on Text is noticed at the
+      next of these). }
+    property OnModifiedChange: TNotifyEvent read FOnModifiedChange write FOnModifiedChange;
     property OnChange: TTyRichChangeEvent read FOnChange write FOnChange;
 
     { Where the content came from, so a text file goes back out as it came in; set by the
@@ -2058,6 +2089,9 @@ begin
   SetDefaults(TyDefaultCharFormat);
   SetDefaultPage;
   FMaxUndoBytes := DefaultMaxUndoBytes;
+  FState := 0;
+  FSavedState := 0;
+  FNextState := 1;
   FText.OnParasChanged := @TextParasChanged;
   FText.OnParaDataDropped := @TextDataDropped;
   FSourceEncoding := teUtf8;
@@ -2124,12 +2158,15 @@ begin
   FSourceHasBom := AHasBom;
   if ALineBreak = rsNone then ALineBreak := TyRichPlatformLineBreak;
   FDominantLineBreak := ALineBreak;
-  FModified := False;
+  // the content as loaded is the saved point
+  FState := NewState;
+  FSavedState := FState;
   FLoadingContent := False;
   FIncomplete := False;
   c.NewLen := FText.Length;
   c.NewParaCount := FText.ParaCount;
   if Assigned(FOnChange) then FOnChange(Self, c);
+  NoteModified;
 end;
 
 destructor TTyRichDocument.Destroy;
@@ -2364,7 +2401,7 @@ procedure TTyRichDocument.TextParasChanged(Sender: TObject; AFirst, AOldCount,
 begin
   if FEditing > 0 then Exit;
   // an edit made straight on Text: no undo, no notification; keep the runs inside the text
-  FModified := True;
+  LeftHistory;
   ClipRuns(AFirst);
 end;
 
@@ -2691,7 +2728,8 @@ end;
 
 procedure TTyRichDocument.Notify(const AChange: TTyRichChange);
 begin
-  FModified := True;
+  // inside a command the history numbers the content (Execute, Undo, Redo)
+  if FRunning = nil then LeftHistory;
   // inside a command the observers hear one change at the end (Flush; in an update block,
   // at the outermost EndUpdate)
   if FHold > 0 then
@@ -4228,6 +4266,47 @@ end;
 
 { ---- TTyRichDocument: commands and the history ---- }
 
+function TTyRichDocument.NewState: Int64;
+begin
+  Result := FNextState;
+  Inc(FNextState);
+end;
+
+function TTyRichDocument.GetModified: Boolean;
+begin
+  Result := FState <> FSavedState;
+end;
+
+procedure TTyRichDocument.SetModified(AValue: Boolean);
+begin
+  if AValue then
+    FSavedState := -1
+  else
+  begin
+    FSavedState := FState;
+    { Typing merged into the step that led here would carry the step's "after" past this
+      content: an undo could not come back to it. }
+    FMergeBroken := True;
+  end;
+  NoteModified;
+end;
+
+procedure TTyRichDocument.LeftHistory;
+begin
+  FState := NewState;
+  FSavedState := -1;
+end;
+
+procedure TTyRichDocument.NoteModified;
+var
+  m: Boolean;
+begin
+  m := GetModified;
+  if m = FModifiedSeen then Exit;
+  FModifiedSeen := m;
+  if Assigned(FOnModifiedChange) then FOnModifiedChange(Self);
+end;
+
 procedure TTyRichDocument.CheckIdle(const AWhat: string);
 begin
   if FRunning <> nil then
@@ -4390,6 +4469,10 @@ begin
     Flush;
     Exit;
   end;
+  // a content of its own; a merged step takes the new "after" (below)
+  ACmd.FStateBefore := FState;
+  FState := NewState;
+  ACmd.FStateAfter := FState;
   if FUpdateCount > 0 then
   begin
     if FBlockCount = Length(FBlock) then SetLength(FBlock, FBlockCount * 2 + 4);
@@ -4404,6 +4487,7 @@ begin
     top := FUndo[FUndoCount - 1].Cmd;
     if top.TryMerge(ACmd) then
     begin
+      top.FStateAfter := ACmd.FStateAfter;
       ACmd.Free;
       Dec(FHistoryBytes, FUndo[FUndoCount - 1].Bytes);
       FUndo[FUndoCount - 1].Bytes := top.MemSize;
@@ -4415,6 +4499,7 @@ begin
   FMergeBroken := False;
   TrimHistory;
   Flush;
+  NoteModified;
 end;
 
 procedure TTyRichDocument.Undo;
@@ -4436,9 +4521,12 @@ begin
     // the document no longer matches the history: drop it all
     cmd.Free;
     ClearHistory;
+    LeftHistory;
     Flush;
+    NoteModified;
     raise;
   end;
+  FState := cmd.FStateBefore;
   e.Cmd := cmd;
   e.Bytes := cmd.MemSize;
   if FRedoCount = Length(FRedo) then SetLength(FRedo, FRedoCount * 2 + 8);
@@ -4446,6 +4534,7 @@ begin
   Inc(FRedoCount);
   Inc(FHistoryBytes, e.Bytes);
   Flush;
+  NoteModified;
 end;
 
 procedure TTyRichDocument.Redo;
@@ -4469,9 +4558,11 @@ begin
     Flush;
     raise;
   end;
+  FState := cmd.FStateAfter;
   PushUndo(cmd);
   TrimHistory;
   Flush;
+  NoteModified;
 end;
 
 function TTyRichDocument.CanUndo: Boolean;
@@ -4539,6 +4630,8 @@ begin
     FBlockCount := 0;
     FBlock := nil;
     comp := TTyRichCompositeCommand.CreateExecuted(FBlockDescription, cmds);
+    comp.FStateBefore := cmds[0].FStateBefore;
+    comp.FStateAfter := cmds[High(cmds)].FStateAfter;
     ClearRedo;
     PushUndo(comp);
     FMergeBroken := False;
@@ -4546,6 +4639,7 @@ begin
   end;
   FBlockDescription := '';
   Flush;
+  NoteModified;
 end;
 
 function TTyRichDocument.GetUpdating: Boolean;

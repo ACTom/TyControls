@@ -73,6 +73,9 @@ type
     procedure CheckChange(const AWhat: string; AIndex: Integer; AKinds: TTyRichChangeKinds;
       APos, AOldLen, ANewLen: TTyRichPos; AFirstPara, AOldCount, ANewCount: Integer);
     procedure HistoryScenario;
+  private
+    FModEvents: Integer;
+    procedure ModChanged(Sender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -102,6 +105,10 @@ type
     procedure TestAFragmentReadsTheTargetInOneScope;
     procedure TestAPastedFirstParagraphTakesNoMarker;
     procedure TestReadingAFragmentOfUntrustedBytes;
+    // Task 11a: the saved point (R59)
+    procedure TestTheSavedPointFollowsUndoAndRedo;
+    procedure TestTheSavedPointGoesWithItsStep;
+    procedure TestModifiedSetFromCodeAndAnEditOutsideTheHistory;
   end;
 
 implementation
@@ -1699,6 +1706,159 @@ begin
     PasteRtf(d, 1, '{\rtf1 ' + s + '}');
     AssertEquals('megabytes of one paragraph', 1, d.Text.ParaCount);
     AssertEquals('all of it', Int64(2 + Length(s)), d.Text.Length);
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- Task 11a: the saved point (R59) ---- }
+
+procedure TTyRichCommandsTest.ModChanged(Sender: TObject);
+begin
+  Inc(FModEvents);
+end;
+
+{ Modified is False exactly at the content last saved: an undo back to it, a redo forward to
+  it; a typing run after the saved point does not merge into the step before it; an update
+  block is one step; OnModifiedChange only when Modified turns, never OnChange alone. }
+procedure TTyRichCommandsTest.TestTheSavedPointFollowsUndoAndRedo;
+var
+  d: TTyRichDocument;
+  f: TTyCharFormat;
+  n: Integer;
+begin
+  d := NewDoc('abc');
+  try
+    d.OnModifiedChange := @ModChanged;
+    FModEvents := 0;
+    AssertFalse('a new document', d.Modified);
+    Type_(d, 'x');
+    AssertTrue('typed', d.Modified);
+    AssertEquals('turned once', 1, FModEvents);
+    Type_(d, 'y');
+    AssertEquals('stays: no event', 1, FModEvents);
+    d.Modified := False;
+    AssertEquals('saved: turned', 2, FModEvents);
+    d.OnChange := @DocChanged;
+    n := Length(FChanges);
+    Type_(d, 'z');
+    AssertEquals('the typing after the save is a step of its own', 2, d.UndoDepth);
+    AssertTrue('typed after the save', d.Modified);
+    d.Undo;
+    AssertFalse('undone to the saved point', d.Modified);
+    AssertEquals('the text saved', 'abcxy', AllText(d));
+    d.Undo;
+    AssertTrue('undone past it', d.Modified);
+    d.Redo;
+    AssertFalse('redone to it', d.Modified);
+    d.Redo;
+    AssertTrue('redone past it', d.Modified);
+    d.Undo;
+    // a format step and an update block, each one step
+    f := TyDefaultCharFormat;
+    f.Style := [fsBold];
+    d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 2), [cffBold], f));
+    AssertTrue('a format', d.Modified);
+    d.Undo;
+    AssertFalse('the format undone', d.Modified);
+    d.BeginUpdate;
+    try
+      Type_(d, '1');
+      d.Execute(TTyRichDelete.Create(0, 1));
+      AssertTrue('inside the block', d.Modified);
+    finally
+      d.EndUpdate;
+    end;
+    d.Undo;
+    AssertFalse('the block undone', d.Modified);
+    d.Redo;
+    AssertTrue('the block redone', d.Modified);
+    // ClearUndo at the saved point keeps it
+    d.Undo;
+    d.ClearUndo;
+    AssertFalse('cleared at the saved point', d.Modified);
+    AssertTrue('OnChange was raised by edits only', Length(FChanges) > n);
+  finally
+    d.Free;
+  end;
+end;
+
+{ The saved point is gone for good once the way back to it is gone: a new step after an undo
+  past it (its redo dropped), the memory bound dropping the step that led back, ClearUndo
+  away from it. }
+procedure TTyRichCommandsTest.TestTheSavedPointGoesWithItsStep;
+var
+  d: TTyRichDocument;
+  i: Integer;
+begin
+  d := NewDoc('abc');
+  try
+    Type_(d, 'x');
+    d.BreakMerge;
+    Type_(d, 'y');
+    d.Modified := False;
+    d.Undo;
+    Type_(d, 'q');
+    AssertTrue('a new step', d.Modified);
+    d.Undo;
+    AssertTrue('the saved point''s redo went with it', d.Modified);
+    // the memory bound
+    d.Modified := False;
+    d.MaxUndoBytes := 0;
+    for i := 1 to 5 do
+    begin
+      d.BreakMerge;
+      Type_(d, 'k');
+    end;
+    d.MaxUndoBytes := 1;
+    AssertEquals('one step kept', 1, d.UndoDepth);
+    d.Undo;
+    AssertFalse('as far back as it goes', d.CanUndo);
+    AssertTrue('the steps back to the saved point were dropped', d.Modified);
+    d.Redo;
+    // ClearUndo away from the saved point
+    d.Modified := False;
+    d.MaxUndoBytes := 0;
+    Type_(d, 'm');
+    d.ClearUndo;
+    AssertTrue('cleared away from it', d.Modified);
+    Type_(d, 'n');
+    d.Undo;
+    AssertTrue('for good', d.Modified);
+  finally
+    d.Free;
+  end;
+end;
+
+{ Modified := True forces it until the next saved point; an edit straight on the text (outside
+  the history) makes it True for good, even if an undo then gets back to the saved step's
+  number; a load sets the saved point. }
+procedure TTyRichCommandsTest.TestModifiedSetFromCodeAndAnEditOutsideTheHistory;
+var
+  d: TTyRichDocument;
+begin
+  d := NewDoc('abc');
+  try
+    d.OnModifiedChange := @ModChanged;
+    FModEvents := 0;
+    Type_(d, 'x');
+    d.Modified := False;
+    d.Modified := True;
+    AssertTrue('forced', d.Modified);
+    d.BreakMerge;
+    Type_(d, 'y');
+    d.Undo;
+    AssertTrue('forced: not the saved point', d.Modified);
+    d.Modified := False;
+    AssertFalse('saved here', d.Modified);
+    d.Text.Insert(0, 'Z');
+    AssertTrue('an edit outside the history', d.Modified);
+    Type_(d, 'w');
+    d.Undo;
+    AssertTrue('for good', d.Modified);
+    TCmdTestBuilder.ReplaceText(d, TTyRichText.CreateFromUtf8(Bytes('new')));
+    AssertFalse('a load is the saved point', d.Modified);
+    AssertTrue('each turn told', FModEvents >= 4);
   finally
     d.Free;
   end;

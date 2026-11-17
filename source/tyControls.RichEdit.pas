@@ -3991,8 +3991,8 @@ var
 begin
   reason := RefusalReason;
   { Asked before the command is made: a composite (a selection typed over) that the engine
-    refused half way would be reverted, but would have reported a change and set Modified on
-    the way (RunEdit puts Modified back, as a backstop). }
+    refused half way would be reverted, but would have reported a change on the way (Modified
+    stays: the history numbers only a content it kept). }
   if (reason = '') and (((ALen > 0) and not FDoc.CanChange(APos, ALen)) or
     (AInsert and not FDoc.CanChange(APos, 0))) then
     reason := rsRichEditRefusedFixedRow;
@@ -4003,7 +4003,7 @@ end;
 function TTyCustomRichEdit.RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
 var
   c, a: TTyRichPos;
-  atEnd, wasModified, ok: Boolean;
+  atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
 begin
@@ -4014,7 +4014,6 @@ begin
   c := FCaret;
   a := FSelAnchor;
   atEnd := FCaretAtEnd;
-  wasModified := FDoc.Modified;
   FEditHeard := False;
   FEditStep := nil;
   ok := False;
@@ -4032,11 +4031,11 @@ begin
     except
       on E: ETyRichModel do
       begin
-        // the engine reverted what the command did: as if it had not run
+        // the engine reverted what the command did: as if it had not run (and the history
+        // numbers no content it did not keep: Modified is as it was)
         FCaret := c;
         FSelAnchor := a;
         FCaretAtEnd := atEnd;
-        FDoc.Modified := wasModified;
         if not AUser then raise;
         refusal := EngineRefusal(E);
       end;
@@ -4046,7 +4045,6 @@ begin
         FCaret := c;
         FSelAnchor := a;
         FCaretAtEnd := atEnd;
-        FDoc.Modified := wasModified;
         if not AUser then raise;
         refusal := rsRichEditRefusedMemory;
       end;
