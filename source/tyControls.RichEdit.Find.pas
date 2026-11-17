@@ -197,8 +197,10 @@ type
     a position not used yet) the characters go and AText comes in, in the format of the first
     character replaced (a paragraph's end: the format typing there gets). A match the
     document refuses to change is left as it is and counted (Skipped): one in a row that
-    holds a nested table (TTyRichDocument.CanChange), one that reaches across a cell's or a
-    row's edge (R57: TyRichCrossesCells). So the command never fails halfway for a refusal.
+    holds a nested table (TTyRichDocument.CanChange), one whose deletion would join across a
+    cell's or a row's edge (R57: TTyRichDocument.UserRangeAllowed - also one that ends with a
+    cell's last paragraph end, or with the one before a table). So the command never fails
+    halfway for a refusal.
     Commands of the same ASession (any value but 0) merge into one undo step: the history
     keeps one step of a replace that ran in several turns. }
   TTyRichReplaceCommand = class(TTyRichCommand)
@@ -238,11 +240,6 @@ type
     property SkipCounter: PInteger read FSkipCounter write FSkipCounter;
     property Session: Int64 read FSession;
   end;
-
-{ The characters [APos, APos + ALen) of ADoc reach across a table cell's or a row's edge:
-  their paragraphs are not all in the same cell (or all in none). Reads the paragraphs' cells
-  (parses them in a document read on demand). }
-function TyRichCrossesCells(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): Boolean;
 
 { The caret's word rule (what a double click and Ctrl+Left / Right take): white space (a space,
   a tab, U+00A0, U+000B) and ASCII punctuation are no word (0), an object (U+FFFC) is a word by
@@ -1320,24 +1317,21 @@ end;
 
 { ---- TTyRichReplaceCommand ---- }
 
-function TyRichCrossesCells(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): Boolean;
+{ A match the document lets a user's edit replace: no row that holds a nested table in the way
+  (CanChange) and R57 as the keys have it (TTyRichDocument.UserRangeAllowed) - the paragraph
+  the deletion joins with counts, so a match that ends with a cell's or a row's last
+  paragraph end, or with the one before a table, is refused. A range the rule would shorten
+  (to keep the separator before a table) is refused too: the replacement would not mean what
+  the needle said. }
+function MatchAllowed(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): Boolean;
 var
-  first, last, i: Integer;
-  cell: TTyRichCell;
+  s, n: TTyRichPos;
 begin
-  Result := False;
-  if ALen <= 0 then Exit;
-  first := ADoc.Text.ParaOfPos(APos);
-  last := ADoc.Text.ParaOfPos(APos + ALen - 1);
-  if first = last then Exit;
-  ADoc.BeginRead;
-  try
-    cell := ADoc.CellAt(first);
-    for i := first + 1 to last do
-      if ADoc.CellAt(i) <> cell then Exit(True);
-  finally
-    ADoc.EndRead;
-  end;
+  Result := ADoc.CanChange(APos, ALen);
+  if not Result then Exit;
+  s := APos;
+  n := ALen;
+  Result := ADoc.UserRangeAllowed(s, n) and (s = APos) and (n = ALen);
 end;
 
 constructor TTyRichReplaceCommand.Create(ASession: Int64; const APositions: array of TTyRichPos;
@@ -1380,7 +1374,7 @@ begin
   begin
     k := 0;
     for i := 0 to FCount - 1 do
-      if ADoc.CanChange(FPos[i], FLen) and not TyRichCrossesCells(ADoc, FPos[i], FLen) then
+      if MatchAllowed(ADoc, FPos[i], FLen) then
       begin
         FPos[k] := FPos[i];
         Inc(k);

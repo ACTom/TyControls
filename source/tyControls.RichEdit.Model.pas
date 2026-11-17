@@ -1025,6 +1025,18 @@ type
       paragraphs at the range's ends. A command asks this in CanExecute; the insert and
       delete commands do. }
     function CanChange(APos, ALen: TTyRichPos): Boolean;
+    { R57, the one place of the rule (until table editing): may [AStart, AStart + ALen) be
+      deleted or replaced as a user's edit - a key, the menu, a find's replace? The paragraph
+      the deletion then joins with counts: the range INCLUDING the paragraph after it must not
+      cross a cell's or a row's edge, unless it is whole rows (WholeRows). A range that begins
+      outside a table and ends exactly where the table's first row starts keeps its last
+      separator (ALen one less: the paragraph before the table stays, Word's way) - a caller
+      that cannot take a shorter range treats that as a refusal. False: refused. Reads the
+      cells inside a read scope of its own. }
+    function UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
+    { [AFrom, ATo) is whole rows of one table: from a row's first paragraph's start to the
+      start of the paragraph after a row (never the text's end). Call it inside a read scope. }
+    function WholeRows(AFrom, ATo: TTyRichPos): Boolean;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
       returns False or raises. False: ACmd.CanExecute said no, or the document is Loading,
@@ -2805,6 +2817,75 @@ end;
 function TTyRichDocument.CanChange(APos, ALen: TTyRichPos): Boolean;
 begin
   Result := not ChangeRefused(APos, ALen);
+end;
+
+function TTyRichDocument.WholeRows(AFrom, ATo: TTyRichPos): Boolean;
+var
+  k, m: Integer;
+  ck, cl, cn: TTyRichCell;
+begin
+  Result := False;
+  k := FText.ParaOfPos(AFrom);
+  ck := CellAt(k);
+  if (ck = nil) or (AFrom <> FText.ParaStart(k)) then Exit;
+  // from a row's first paragraph
+  if (k > 0) and (CellAt(k - 1) <> nil) and (CellAt(k - 1).Row = ck.Row) then Exit;
+  { To the start of the paragraph after a row of the same table. Not to the text's end: a
+    range that ends there ends inside a table that ends the text (only code makes one: a
+    file read from RTF ends after its last row), whose last paragraph has no separator to
+    go with it - the engine would leave it in its cell and the row's other cells with no
+    paragraph. Refused, until table editing. }
+  if ATo >= FText.Length then Exit;
+  m := FText.ParaOfPos(ATo);
+  if (m = 0) or (ATo <> FText.ParaStart(m)) then Exit;
+  cl := CellAt(m - 1);
+  if (cl = nil) or (cl.Row.Table <> ck.Row.Table) then Exit;
+  if m < FText.ParaCount then
+  begin
+    cn := CellAt(m);
+    if (cn <> nil) and (cn.Row = cl.Row) then Exit;
+  end;
+  Result := True;
+end;
+
+function TTyRichDocument.UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
+var
+  k, m: Integer;
+  ck, cm, cp: TTyRichCell;
+begin
+  Result := True;
+  if ALen <= 0 then Exit;
+  // (the cells are compared inside one read: a document that parses on demand keeps them)
+  BeginRead;
+  try
+    k := FText.ParaOfPos(AStart);
+    // the paragraph the deletion joins with: the one its end lies in (after a separator, the next)
+    m := FText.ParaOfPos(AStart + ALen);
+    if m = k then Exit;
+    ck := CellAt(k);
+    cm := CellAt(m);
+    { A range that begins outside a table and ends exactly where its first row starts keeps
+      its last separator: the text goes, the paragraph before the table stays (Word's way) -
+      the engine would merge it into the first cell. }
+    if (cm <> nil) and (AStart + ALen = FText.ParaStart(m)) and
+      ((ck = nil) or (ck.Row.Table <> cm.Row.Table)) then
+    begin
+      cp := CellAt(m - 1);
+      if (cp = nil) or (cp.Row.Table <> cm.Row.Table) then
+      begin
+        Dec(ALen);
+        m := FText.ParaOfPos(AStart + ALen);
+        if m = k then Exit;
+        cm := CellAt(m);
+      end;
+    end;
+    { One that crosses a cell's or a row's edge is refused: the engine would merge paragraphs
+      of two cells and leave a cell with no paragraph, no place for the caret. Whole rows,
+      from a row's start to a row's end, the engine deletes cleanly. }
+    if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then Result := False;
+  finally
+    EndRead;
+  end;
 end;
 
 function TTyRichDocument.TableAt(AIndex: Integer): TTyRichTable;

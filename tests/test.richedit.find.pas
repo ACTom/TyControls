@@ -56,6 +56,7 @@ type
     procedure TestReplaceCountsItsStepOnce;
     procedure TestReplaceTakesTheFormatOfWhatItReplaces;
     procedure TestReplaceUndoneSavesTheFile;
+    procedure TestReplaceKeepsR57AtATablesEdges;
   end;
 
 implementation
@@ -1199,6 +1200,152 @@ begin
   finally
     ADoc.EndRead;
   end;
+end;
+
+{ Every paragraph's text and where it is (a row's number and the cell's, or none), for a
+  comparison of the model with the file it saves. }
+function Layout(ADoc: TTyRichDocument): string;
+var
+  i: Integer;
+  c: TTyRichCell;
+  rows: TFPList;
+begin
+  Result := '';
+  rows := TFPList.Create;
+  ADoc.BeginRead;
+  try
+    for i := 0 to ADoc.Text.ParaCount - 1 do
+    begin
+      c := ADoc.CellAt(i);
+      Result := Result + '"' + ADoc.Text.GetText(ADoc.Text.ParaStart(i), ADoc.Text.ParaLength(i)) + '"';
+      if c = nil then
+        Result := Result + '[-] '
+      else
+      begin
+        if rows.IndexOf(c.Row) < 0 then rows.Add(c.Row);
+        Result := Result + Format('[r%d c%d] ', [rows.IndexOf(c.Row), c.Index]);
+      end;
+    end;
+  finally
+    ADoc.EndRead;
+    rows.Free;
+  end;
+end;
+
+{ Every match of ANeedle replaced by ARepl in one command, as the control's ReplaceAll does it;
+  the number replaced, ASkipped the matches the document refused. }
+function ReplaceIn(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; out ASkipped: Integer): Integer;
+var
+  f: TTyRichFinder;
+  pos: array of TTyRichPos;
+  i, k, len: Integer;
+  cmd: TTyRichReplaceCommand;
+begin
+  ASkipped := 0;
+  f := TTyRichFinder.Create(ADoc, ANeedle, AOptions);
+  try
+    f.Collect := True;
+    f.Run;
+    k := f.MatchCount;
+    len := f.MatchLen;
+    pos := nil;
+    SetLength(pos, k);
+    for i := 0 to k - 1 do pos[i] := f.Match(k - 1 - i);
+  finally
+    f.Free;
+  end;
+  if k = 0 then Exit(0);
+  cmd := TTyRichReplaceCommand.Create(0, pos, len, ARepl);
+  cmd.SkipCounter := @ASkipped;
+  ADoc.Execute(cmd);
+  Result := k - ASkipped;
+end;
+
+{ R57 at a table's edges (H-C1): a match whose deletion would join a paragraph with one in
+  another cell, another row, or a table it was not in - one that ends with a cell's or a row's
+  last paragraph end, or with the paragraph end before a table, or between two tables - is left
+  and counted; what the document holds is what its file says (saved and read again, the same
+  paragraphs in the same cells), and undone it is the file. Read whole and lazily. }
+procedure TTyRichFindTest.TestReplaceKeepsR57AtATablesEdges;
+const
+  Head = '{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ';
+  Row = '|trowd|cellx2000|cellx4000|intbl ';
+  Two = Row + 'a|cell b|cell|row |pard mid|par ' + Row + 'c|cell d|cell|row |pard after|par}';
+type
+  TCase = record
+    Name, Body, Needle, Repl: RawByteString;
+    Replaced, Skipped: Integer;
+  end;
+var
+  cases: array[0..9] of TCase;
+  i, lazy, n, skipped: Integer;
+  bytes: TBytes;
+  doc, again: TTyRichDocument;
+  before: string;
+
+  procedure Put(AIndex: Integer; const AName, ABody, ANeedle, ARepl: RawByteString;
+    AReplaced, ASkipped: Integer);
+  begin
+    cases[AIndex].Name := AName;
+    cases[AIndex].Body := ABody;
+    cases[AIndex].Needle := ANeedle;
+    cases[AIndex].Repl := ARepl;
+    cases[AIndex].Replaced := AReplaced;
+    cases[AIndex].Skipped := ASkipped;
+  end;
+
+begin
+  // the review's two
+  Put(0, 'empty paragraphs removed before a table', 'before|par |par ' + Row +
+    'a|cell b|cell|row |pard after|par}', #10#10, #10, 0, 1);
+  Put(1, 'a cell''s last paragraph end', 'before|par ' + Row + 'ax|cell b|cell|row |pard after|par}',
+    'x'#10, 'y', 0, 1);
+  // a cell's empty last paragraph, a row's end, the end before a table
+  Put(2, 'a cell''s empty last paragraph', 'before|par ' + Row + 'a|par |cell b|cell|row |pard after|par}',
+    #10#10, #10, 0, 1);
+  Put(3, 'a row''s last paragraph end', 'before|par ' + Row + 'a|cell bx|cell|row |pard after|par}',
+    'x'#10, 'y', 0, 1);
+  Put(4, 'the paragraph end before a table', 'before|par ' + Row + 'a|cell b|cell|row |pard after|par}',
+    'before'#10, 'B ', 0, 1);
+  // between two tables: into the second, out of the first
+  Put(5, 'between two tables, into the second', Two, 'mid'#10, 'M', 0, 1);
+  Put(6, 'between two tables, out of the first', Two, 'b'#10'mid', 'B', 0, 1);
+  // every paragraph end by a space: the one between two plain paragraphs only
+  Put(7, 'every paragraph end', 'before|par ' + Row + 'a|cell b|cell|row ' + Row +
+    'c|cell d|cell|row |pard after|par last|par}', #10, ' ', 1, 5);
+  // inside a cell, and whole rows: allowed
+  Put(8, 'inside a cell', 'before|par ' + Row + 'a|par x|cell b|cell|row |pard after|par}',
+    'a'#10'x', 'A', 1, 0);
+  Put(9, 'a word in a cell', 'before|par ' + Row + 'ax|cell b|cell|row |pard after|par}', 'x', 'y', 1, 0);
+  for i := 0 to High(cases) do
+    for lazy := 0 to 1 do
+    begin
+      bytes := BytesOf(Rtf(Head + cases[i].Body));
+      doc := LoadRtf(bytes, lazy = 0);
+      try
+        before := Layout(doc);
+        n := ReplaceIn(doc, cases[i].Needle, cases[i].Repl, [], skipped);
+        AssertEquals(cases[i].Name + ': replaced', cases[i].Replaced, n);
+        AssertEquals(cases[i].Name + ': left and counted', cases[i].Skipped, skipped);
+        if n = 0 then
+          AssertEquals(cases[i].Name + ': nothing moved', before, Layout(doc));
+        // what is saved is what the model holds
+        again := LoadRtf(SaveRtf(doc), True);
+        try
+          AssertEquals(cases[i].Name + ': saved and read again', Layout(doc), Layout(again));
+        finally
+          again.Free;
+        end;
+        if n > 0 then
+        begin
+          doc.Undo;
+          AssertTrue(cases[i].Name + ': undone, the file', SameBytes(bytes, SaveRtf(doc)));
+        end;
+      finally
+        doc.Free;
+      end;
+    end;
 end;
 
 procedure TTyRichFindTest.TestReplaceUndoneSavesTheFile;

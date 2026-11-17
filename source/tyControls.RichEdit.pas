@@ -5433,75 +5433,14 @@ begin
 end;
 
 function TTyCustomRichEdit.WholeRows(AFrom, ATo: TTyRichPos): Boolean;
-var
-  t: TTyRichText;
-  k, m: Integer;
-  ck, cl, cn: TTyRichCell;
 begin
-  t := FDoc.Text;
-  Result := False;
-  k := t.ParaOfPos(AFrom);
-  ck := FDoc.CellAt(k);
-  if (ck = nil) or (AFrom <> t.ParaStart(k)) then Exit;
-  // from a row's first paragraph
-  if (k > 0) and (FDoc.CellAt(k - 1) <> nil) and (FDoc.CellAt(k - 1).Row = ck.Row) then Exit;
-  { To the start of the paragraph after a row of the same table. Not to the text's end: a
-    range that ends there ends inside a table that ends the text (only code makes one: a
-    file read from RTF ends after its last row), whose last paragraph has no separator to
-    go with it - the engine would leave it in its cell and the row's other cells with no
-    paragraph. Refused, until Task 12's table editing. }
-  if ATo >= t.Length then Exit;
-  m := t.ParaOfPos(ATo);
-  if (m = 0) or (ATo <> t.ParaStart(m)) then Exit;
-  cl := FDoc.CellAt(m - 1);
-  if (cl = nil) or (cl.Row.Table <> ck.Row.Table) then Exit;
-  if m < t.ParaCount then
-  begin
-    cn := FDoc.CellAt(m);
-    if (cn <> nil) and (cn.Row = cl.Row) then Exit;
-  end;
-  Result := True;
+  Result := FDoc.WholeRows(AFrom, ATo);
 end;
 
 function TTyCustomRichEdit.UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
-var
-  t: TTyRichText;
-  k, m: Integer;
-  ck, cm, cp: TTyRichCell;
 begin
-  Result := True;
-  if ALen <= 0 then Exit;
-  t := FDoc.Text;
-  // (the cells are compared inside one read: a document that parses on demand keeps them)
-  FDoc.BeginRead;
-  try
-    k := t.ParaOfPos(AStart);
-    m := t.ParaOfPos(AStart + ALen);
-    if m = k then Exit;
-    ck := FDoc.CellAt(k);
-    cm := FDoc.CellAt(m);
-    { Until Task 12 (R57). A selection that begins outside a table and ends exactly where its
-      first row starts keeps its last separator: the text goes, the paragraph before the
-      table stays (Word's way) - the engine would merge it into the first cell. }
-    if (cm <> nil) and (AStart + ALen = t.ParaStart(m)) and
-      ((ck = nil) or (ck.Row.Table <> cm.Row.Table)) then
-    begin
-      cp := FDoc.CellAt(m - 1);
-      if (cp = nil) or (cp.Row.Table <> cm.Row.Table) then
-      begin
-        Dec(ALen);
-        m := t.ParaOfPos(AStart + ALen);
-        if m = k then Exit;
-        cm := FDoc.CellAt(m);
-      end;
-    end;
-    { One that crosses a cell's or a row's edge is refused: the engine would merge paragraphs
-      of two cells and leave a cell with no paragraph, no place for the caret. Whole rows,
-      from a row's start to a row's end, the engine deletes cleanly. }
-    if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then Result := False;
-  finally
-    FDoc.EndRead;
-  end;
+  // the document's rule (R57), the one a find's replace asks too
+  Result := FDoc.UserRangeAllowed(AStart, ALen);
   { Told once the read scope is closed: a handler that loads a document (or waits on a
     dialog) must not meet it open. }
   if not Result then Refuse(rsRichEditRefusedCells, True);
