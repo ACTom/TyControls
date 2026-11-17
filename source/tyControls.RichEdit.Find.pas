@@ -175,7 +175,7 @@ type
     FHidePictures: Boolean;           // the scan's group stack never overflowed
     // counts
     FParasFiltered, FParasRejected, FParasDecoded, FParasRead, FSteps: Int64;
-    FRawBytes, FTextBytes, FPassedBytes: Int64;
+    FRawBytes, FTextBytes, FPassedBytes, FPieces: Int64;
     // the scan in progress
     FMode: Integer;                   // 0 first, 1 all, 2 last
     FScanEnd: TTyRichPos;             // matches end at or before it
@@ -331,6 +331,8 @@ type
       paragraph, in bytes (never matched; a step passes at most eight times its budget). }
     property FetchedBytes: Int64 read FFetchedBytes;
     property PassedBytes: Int64 read FPassedBytes;
+    { The pieces paragraphs were read in (a paragraph read in one go is one). }
+    property Pieces: Int64 read FPieces;
   end;
 
   { What a replace of every match has done so far, written by TTyRichReplaceAllCommand as its
@@ -1311,6 +1313,7 @@ var
 
 begin
   FPhase := 2;
+  Inc(FPieces);
   if Pointer(AText) <> Pointer(FKeep) then Inc(FFetchedBytes, ALen);
   if (FCurOff = 0) and (FCurByte = 0) then
   begin
@@ -1335,7 +1338,8 @@ begin
       an eighth of a unit a byte, and in pieces like any reading. }
     p := AText + FCurByte;
     first := p;
-    if FBudget * 8 < stop - p then
+    // (an unbounded step's budget is near High(Int64): eight times it would not fit)
+    if FBudget < (stop - p) div 8 then
     begin
       lim := p + FBudget * 8;
       if lim <= p then lim := p + 1;

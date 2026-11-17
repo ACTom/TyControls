@@ -3350,11 +3350,13 @@ begin
         Inc(b);
       end;
     end;
-    AssertEquals(Format('%s: pixels that differ from a full redraw (in %d,%d..%d,%d; area %d,%d,%d,%d)',
-      [AWhat + Format(' kept %x new %x / kept %x new %x', [PCardinal(kept.ScanLine[dy0] + dx0)^,
-      PCardinal(FRich.Surf.ScanLine[dy0] + dx0)^, PCardinal(kept.ScanLine[dy1] + dx1)^,
-      PCardinal(FRich.Surf.ScanLine[dy1] + dx1)^]), dx0, dy0, dx1, dy1, FRich.Area.Left, FRich.Area.Top, FRich.Area.Right,
-      FRich.Area.Bottom]), 0, diff);
+    // (the message only when there is a difference: its pixels are read where it was found)
+    if diff > 0 then
+      Fail(Format('%s: %d pixels that differ from a full redraw (in %d,%d..%d,%d; area %d,%d,%d,%d)',
+        [AWhat + Format(' kept %x new %x / kept %x new %x', [Int64(PCardinal(kept.ScanLine[dy0] + dx0)^),
+        Int64(PCardinal(FRich.Surf.ScanLine[dy0] + dx0)^), Int64(PCardinal(kept.ScanLine[dy1] + dx1)^),
+        Int64(PCardinal(FRich.Surf.ScanLine[dy1] + dx1)^)]), diff, dx0, dy0, dx1, dy1, FRich.Area.Left,
+        FRich.Area.Top, FRich.Area.Right, FRich.Area.Bottom]));
   finally
     kept.Free;
   end;

@@ -349,7 +349,10 @@ end;
 
 function TTyRtfLazyTest.NextRandom(AMax: Integer): Integer;
 begin
+  // (a linear congruential step: it wraps around by design)
+  {$PUSH}{$Q-}{$R-}
   FSeed := FSeed * 1103515245 + 12345;
+  {$POP}
   Result := (FSeed shr 8) mod Cardinal(AMax);
 end;
 
@@ -2656,7 +2659,10 @@ var
 
   function Rnd(AMax: Integer): Integer;
   begin
+    // (a linear congruential step: it wraps around by design)
+    {$PUSH}{$Q-}{$R-}
     seed := seed * 1103515245 + 12345;
+    {$POP}
     if AMax <= 0 then Exit(0);
     Result := Integer((seed shr 8) mod Cardinal(AMax));
   end;

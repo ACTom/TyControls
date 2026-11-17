@@ -5511,11 +5511,14 @@ begin
   FUsedLength := text.Length;
 end;
 
-// The slot of a source offset in the kept values' table (a power of two long).
+// The slot of a source offset in the kept values' table (a power of two long). The product
+// wraps around by design.
+{$PUSH}{$Q-}{$R-}
 function KeptSlot(ASrc: Int64; AMask: Integer): Integer; inline;
 begin
   Result := Integer((QWord(ASrc) * QWord($9E3779B97F4A7C15)) shr 33) and AMask;
 end;
+{$POP}
 
 // The record of the paragraph at ASrc; False: none (AIndex is then the empty slot a record of
 // it would take).

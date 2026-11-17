@@ -374,7 +374,7 @@ begin
   end;
   Result[24] := 8;
   Result[25] := 6;
-  for i := 33 to High(Result) do Result[i] := i * 7;
+  for i := 33 to High(Result) do Result[i] := (i * 7) and $FF;
 end;
 
 function FixtureBytes(const AName: string): TBytes;

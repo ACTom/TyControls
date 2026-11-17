@@ -12134,7 +12134,10 @@ var
 
   procedure Mix(AValue: Cardinal);
   begin
+    // (FNV-1a: the product wraps around by design)
+    {$PUSH}{$Q-}{$R-}
     h := (h xor AValue) * 16777619;
+    {$POP}
   end;
 
   procedure MixPx(const APx: TBGRAPixel);

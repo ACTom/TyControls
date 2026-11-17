@@ -485,7 +485,9 @@ begin
       s := '';
       for k := 0 to 11 do
       begin
+        {$PUSH}{$Q-}{$R-}
         seed := seed * 1103515245 + 12345;
+        {$POP}
         s := s + Vocab[(seed shr 16) mod 10] + ' ';
       end;
       s := Rtf('{|f1 ') + s + Rtf('}|u20013?|u25991?{|b ') + IntToStr(n) + Rtf('}|par') + #13#10;
@@ -2432,6 +2434,18 @@ begin
       AssertEquals('found from the middle', want, f.MatchPos);
       AssertEquals('everything before the start passed once', size div 2, f.PassedBytes);
       AssertTrue(Format('...the line fetched once (%d)', [f.FetchedBytes]), f.FetchedBytes <= 2 * size);
+    finally
+      f.Free;
+    end;
+    // the same unbounded (as a replace's search in one go): one piece, not a character at a time
+    f := TTyRichFinder.Create(doc, 'zebra', []);
+    try
+      f.Collect := True;
+      r := f.CollectRange(0, 0, size div 2, -1, -1);
+      AssertTrue('unbounded: read through', r = rfrFound);
+      AssertEquals('...the match', want, f.Match(0));
+      AssertEquals('...everything before the start passed', size div 2, f.PassedBytes);
+      AssertTrue(Format('...in a piece or two (%d)', [f.Pieces]), f.Pieces <= 2);
     finally
       f.Free;
     end;
