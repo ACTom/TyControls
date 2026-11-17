@@ -197,6 +197,15 @@ type
   { Decoded lazy paragraphs by source offset: their text and separator bytes. }
   TTyRichDecodedMap = specialize TDictionary<Int64, RawByteString>;
 
+  { Where the add buffer already holds the text of a lazy paragraph an edit decoded (by its
+    source offset): its bytes there, separator included, and that separator. }
+  TTyRichCopied = record
+    Off: Int64;
+    Bytes: LongInt;
+    Sep: Byte;
+  end;
+  TTyRichCopiedMap = specialize TDictionary<Int64, TTyRichCopied>;
+
   TTyRichText = class
   private
     FOrig: TBytes;
@@ -215,6 +224,11 @@ type
     FOwnsProvider: Boolean;
     FDecoded: TTyRichDecodedMap;
     FDecodedBytes: Int64;
+    { The lazy paragraphs whose text an edit copied into the add buffer (CopyOfLazy): the
+      buffer only grows, so that copy stays good while the text lives, and the next edit of
+      the same paragraph - after an undo made it lazy again (RestoreSpan), a redo, the same
+      mistake typed again - takes it instead of copying the paragraph once more. }
+    FCopied: TTyRichCopiedMap;
     FLoading: Boolean;
     FLoadLeaf: PTyRichLeaf;
     FLoadLeaves: TFPList;
@@ -269,6 +283,7 @@ type
     procedure LazySlice(AItem: PTyRichPiece; AFrom, ATo: LongInt; out AText: RawByteString;
       out AByte0, AByte1: PtrInt);
     function PieceText(AItem: PTyRichPiece; out ALen: LongInt): PByte;
+    function CopyOfLazy(AItem: PTyRichPiece; out ALen: LongInt): Int64;
     procedure ConvertToAdded(var APath: TTyRichPath);
     function SplitAt(APos: TTyRichPos): LongInt;
     procedure CheckJunction(APos: TTyRichPos);
@@ -379,7 +394,9 @@ type
       span's again - a lazy piece an edit decoded is lazy again (ParaLazySource answers for
       it, a writer copies its bytes), the paragraphs keep their data and heights, nothing is
       reported. Pieces that are the span's already are left. Raises ETyRichText when the text
-      there does not have the span's characters and separators. }
+      there does not have the span's characters and separators. The characters themselves
+      are not compared: a change made on the text directly (bypassing the document's
+      commands) that kept the count and the separators is replaced by the span's text. }
     procedure RestoreSpan(const ASpan: TTyRichSpan);
 
     { The height index. A paragraph is measured - it has a height the layout gave it,
@@ -1585,6 +1602,7 @@ begin
   end;
   if FLoadLeaf <> nil then FreeMem(FLoadLeaf);
   FDecoded.Free;
+  FCopied.Free;
   if FOwnsProvider then FProvider.Free;
   inherited Destroy;
 end;
@@ -1711,19 +1729,44 @@ begin
   end;
 end;
 
+{ The add-buffer copy of a lazy piece's text (separator bytes included): its offset there and
+  ALen, its bytes. Made once for a paragraph (FCopied): the same lazy paragraph edited again
+  - an undo gave it back its lazy piece - takes the copy already there, so a cycle of undo
+  and redo, or a mistake typed and undone again and again, costs what the edit costs, not a
+  copy of the paragraph each time. }
+function TTyRichText.CopyOfLazy(AItem: PTyRichPiece; out ALen: LongInt): Int64;
+var
+  s: RawByteString;
+  c: TTyRichCopied;
+begin
+  if (FCopied <> nil) and FCopied.TryGetValue(POff(AItem^), c) and (c.Sep = PSep(AItem^)) then
+  begin
+    ALen := c.Bytes;
+    Exit(c.Off);
+  end;
+  s := DecodedOf(AItem);
+  ALen := System.Length(s);
+  Result := AppendAdd(Pointer(s), ALen);
+  if FCopied = nil then FCopied := TTyRichCopiedMap.Create;
+  c.Off := Result;
+  c.Bytes := ALen;
+  c.Sep := PSep(AItem^);
+  FCopied.AddOrSetValue(POff(AItem^), c);
+end;
+
 { A lazy piece about to be edited becomes an ordinary add-buffer piece. }
 procedure TTyRichText.ConvertToAdded(var APath: TTyRichPath);
 var
   it: PTyRichPiece;
-  s: RawByteString;
-  src: Int64;
+  src, off: Int64;
+  len: LongInt;
 begin
   it := ItemAt(APath);
   if not IsLazy(it^) then Exit;
-  s := DecodedOf(it);
   src := POff(it^);
-  it^.FSrc := MakeSrc(AppendAdd(Pointer(s), System.Length(s)), kAdded, PSep(it^));
-  it^.FBytes := System.Length(s);
+  off := CopyOfLazy(it, len);
+  it^.FSrc := MakeSrc(off, kAdded, PSep(it^));
+  it^.FBytes := len;
   ForgetDecoded(src);
   FixUp(APath, FDepth);
 end;
@@ -1806,7 +1849,6 @@ var
   content, b0, b1: PtrInt;
   sep, kind: Byte;
   src: Int64;
-  s: RawByteString;
 begin
   APiece := AItem^;
   APiece.FHeight := 0;
@@ -1815,9 +1857,7 @@ begin
   sep := PSep(AItem^);
   if IsLazy(AItem^) then
   begin
-    s := DecodedOf(AItem);
-    len := System.Length(s);
-    src := AppendAdd(Pointer(s), len);
+    src := CopyOfLazy(AItem, len);
     text := @FAdd[src];
     kind := kAdded;
   end

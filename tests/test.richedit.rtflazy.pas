@@ -80,6 +80,9 @@ type
     // fix wave W11
     procedure TestAnEditUndoneInsideAParagraphGivesTheFileBack;
     procedure TestAnUndoneInsertKeepsTheEditNotTheParagraph;
+    // fix wave W13
+    procedure TestUndoAndRedoCopyAParagraphOnce;
+    procedure TestRandomEditsUndoneAndRedone;
   end;
 
 implementation
@@ -2594,6 +2597,257 @@ begin
   finally
     d.Free;
   end;
+end;
+
+{ Q-M7 (fix wave W13): an undo gives a paragraph its lazy piece back (W11), and the next edit of
+  it - a redo, or the same character typed again - takes the copy of its text the add buffer
+  already holds, not a new one: a thousand cycles of each in a paragraph of 100,000 characters
+  cost what the edits cost (a few bytes each; the copy alone is 100,003), and the file comes
+  back when all is undone. }
+procedure TTyRtfLazyTest.TestUndoAndRedoCopyAParagraphOnce;
+const
+  Cycles = 1000;
+  PerCycle = 16;   // bytes a cycle may add: the typed character and slack
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  s: RawByteString;
+  a0, a1, a2, a3: Int64;
+  i: Integer;
+begin
+  s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0 ' +
+    StringOfChar('a', 100000) + '\par' + #13#10 + '\pard tail\par' + #13#10 + '}';
+  b := BytesOf(s);
+  d := LoadWith(b, False);
+  try
+    a0 := d.Text.AddedBytes;
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(50000, 'x')));
+    a1 := d.Text.AddedBytes;
+    AssertTrue(Format('the first edit copies the paragraph (%d bytes)', [a1 - a0]),
+      a1 - a0 >= 100000);
+    d.Undo;
+    for i := 1 to Cycles do
+    begin
+      d.Redo;
+      d.Undo;
+    end;
+    a2 := d.Text.AddedBytes;
+    AssertTrue(Format('%d redo / undo cycles add %d bytes', [Cycles, a2 - a1]),
+      a2 - a1 <= Cycles * PerCycle);
+    for i := 1 to Cycles do
+    begin
+      d.BreakMerge;
+      AssertTrue('typed again', d.Execute(TTyRichInsertText.Create(50000, 'x')));
+      d.Undo;
+    end;
+    a3 := d.Text.AddedBytes;
+    AssertTrue(Format('%d type / undo cycles add %d bytes', [Cycles, a3 - a2]),
+      a3 - a2 <= Cycles * PerCycle);
+    AssertEquals('the text', '', d.Text.CheckIntegrity);
+    AssertEquals('the paragraph as it was', Int64(100000), d.Text.ParaLength(0));
+    AssertTrue('all undone: saved as the file', SameBytes(SaveOf(d), b));
+    // and the copy taken again still reads as the paragraph (a redo, then a read across it)
+    d.Redo;
+    AssertEquals('redone: the character in', 'aax', d.Text.GetText(49998, 3));
+    AssertEquals('redone: the paragraph''s end', 'aa', d.Text.GetText(100000 - 1, 2));
+  finally
+    d.Free;
+  end;
+end;
+
+{ Q-M7: random commands - typing that merges, Enter and pastes with breaks, deletions across
+  paragraphs and cells, paragraph formats, update blocks, the run broken, reads that churn the
+  loader, undo and redo, some runs with a small MaxUndoBytes and ClearUndo - on fixtures with
+  and without tables and on a file of plain paragraphs that ends with the empty lazy one
+  (the re-review's probe, smaller; a fixed seed). After every undo the text is the one before
+  the step, after every redo the one after it, the index is whole after every command, and
+  with everything undone (no step dropped) the save is the file. }
+procedure TTyRtfLazyTest.TestRandomEditsUndoneAndRedone;
+var
+  seed: Cardinal;
+
+  function Rnd(AMax: Integer): Integer;
+  begin
+    seed := seed * 1103515245 + 12345;
+    if AMax <= 0 then Exit(0);
+    Result := Integer((seed shr 8) mod Cardinal(AMax));
+  end;
+
+  function AllText(ADoc: TTyRichDocument): RawByteString;
+  begin
+    Result := ADoc.Text.GetText(0, ADoc.Text.Length);
+    SetCodePage(Result, CP_NONE, False);
+  end;
+
+  procedure Stress(const AName: string; const B: TBytes; ASeed: Cardinal; AOps: Integer;
+    AMaxUndo: Int64);
+  var
+    d: TTyRichDocument;
+    t: TTyRichText;
+    undoT, redoT: TStringList;
+    i, op, k: Integer;
+    pos, len: Int64;
+    before, orig: RawByteString;
+    ok, dropped: Boolean;
+    pf: TTyParaFormat;
+    ins: UTF8String;
+    top: TTyRichCommand;
+    what: string;
+
+    procedure AfterExec(AOk: Boolean);
+    begin
+      if not AOk then Exit;
+      if d.UndoStep <> top then
+      begin
+        undoT.Add(before);
+        redoT.Clear;
+      end
+      else if AllText(d) <> before then
+        // merged into the step before
+        redoT.Clear;
+    end;
+
+  begin
+    seed := ASeed;
+    d := LoadWith(B, False);
+    undoT := TStringList.Create;
+    redoT := TStringList.Create;
+    try
+      t := d.Text;
+      dropped := False;
+      if AMaxUndo > 0 then d.MaxUndoBytes := AMaxUndo;
+      orig := AllText(d);
+      AssertTrue(AName + ': untouched, saved as the file', SameBytes(SaveOf(d), B));
+      for i := 1 to AOps do
+      begin
+        what := Format('%s seed %d op %d', [AName, ASeed, i]);
+        op := Rnd(100);
+        top := d.UndoStep;
+        before := AllText(d);
+        try
+          if op < 30 then
+          begin
+            pos := Rnd(t.Length + 1);
+            case Rnd(4) of
+              0: ins := 'x';
+              1: ins := 'yz';
+              2: ins := #$E4#$B8#$AD;
+            else
+              ins := ' ';
+            end;
+            AfterExec(d.Execute(TTyRichInsertText.Create(pos, ins)));
+          end
+          else if op < 40 then
+          begin
+            pos := Rnd(t.Length + 1);
+            if Rnd(2) = 0 then ins := #10 else ins := 'p' + #10 + 'q' + #10;
+            AfterExec(d.Execute(TTyRichInsertText.Create(pos, ins, TyRichInheritFormat, False)));
+          end
+          else if op < 60 then
+          begin
+            if t.Length = 0 then Continue;
+            pos := Rnd(t.Length);
+            if Rnd(3) = 0 then len := 1 + Rnd(60) else len := 1 + Rnd(3);
+            if pos + len > t.Length then len := t.Length - pos;
+            AfterExec(d.Execute(TTyRichDelete.Create(pos, len)));
+          end
+          else if op < 65 then
+          begin
+            k := Rnd(t.ParaCount);
+            pf := TyDefaultParaFormat;
+            pf.SpaceBefore := 10 + Rnd(50);
+            AfterExec(d.Execute(TTyRichSetParaFormat.Create(k, k, [pffSpaceBefore], pf)));
+          end
+          else if op < 70 then
+          begin
+            if t.Length < 4 then Continue;
+            pos := Rnd(t.Length - 2);
+            d.BeginUpdate('block');
+            try
+              ok := d.Execute(TTyRichDelete.Create(pos, 1 + Rnd(2)));
+              if ok then d.Execute(TTyRichInsertText.Create(pos, 'B', TyRichInheritFormat, False));
+            finally
+              d.EndUpdate;
+            end;
+            AfterExec(ok);
+          end
+          else if op < 73 then
+            d.BreakMerge
+          else if (op < 74) and (AMaxUndo > 0) and (Rnd(8) = 0) then
+          begin
+            d.ClearUndo;
+            undoT.Clear;
+            redoT.Clear;
+            dropped := True;
+          end
+          else if op < 78 then
+            d.EnsureParsed(Rnd(t.ParaCount))
+          else if op < 92 then
+          begin
+            if d.UndoDepth = 0 then Continue;
+            d.Undo;
+            AssertTrue(what + ': after an undo, the text before the step',
+              AllText(d) = undoT[undoT.Count - 1]);
+            redoT.Add(before);
+            undoT.Delete(undoT.Count - 1);
+          end
+          else
+          begin
+            if d.RedoDepth = 0 then Continue;
+            d.Redo;
+            AssertTrue(what + ': after a redo, the text the step left',
+              AllText(d) = redoT[redoT.Count - 1]);
+            undoT.Add(before);
+            redoT.Delete(redoT.Count - 1);
+          end;
+        except
+          // a command the engine refuses (a row that holds a nested table) changes nothing
+          on E: ETyRichRefused do ;
+        end;
+        while (AMaxUndo > 0) and (undoT.Count > d.UndoDepth) do
+        begin
+          undoT.Delete(0);
+          dropped := True;
+        end;
+        AssertEquals(what + ': the history''s depth', undoT.Count, d.UndoDepth);
+        AssertEquals(what + ': the index', '', t.CheckIntegrity);
+      end;
+      while d.UndoDepth > 0 do d.Undo;
+      AssertEquals(AName + ': all undone, the index', '', t.CheckIntegrity);
+      if not dropped then
+      begin
+        AssertTrue(AName + ': all undone, the text', AllText(d) = orig);
+        AssertTrue(AName + ': all undone, saved as the file', SameBytes(SaveOf(d), B));
+      end;
+    finally
+      undoT.Free;
+      redoT.Free;
+      d.Free;
+    end;
+  end;
+
+const
+  Names: array[0..7] of string = ('hand-word-list.rtf', 'wp-zh-plain.rtf', 're-zh-plain.rtf',
+    'word-list.rtf', 're-zh-table.rtf', 're-styles.rtf', 'hand-word-table-merged.rtf',
+    'word-table-merged.rtf');
+var
+  i: Integer;
+  b: TBytes;
+  text: RawByteString;
+begin
+  for i := 0 to High(Names) do
+  begin
+    b := Fixture(Names[i]);
+    Stress(Names[i], b, 1000 * (i + 1) + 1, 600, 0);
+    Stress(Names[i], b, 1000 * (i + 1) + 2, 600, 0);
+    Stress(Names[i], b, 1000 * (i + 1) + 3, 600, 0);
+    Stress(Names[i], b, 5000 * (i + 1) + 1, 600, 900 + 100 * i);
+  end;
+  // plain paragraphs, the last the empty lazy one the load appends
+  text := '{\rtf1 ';
+  for i := 1 to 300 do text := text + 'abc def\par ';
+  text := text + '}';
+  for i := 1 to 4 do Stress('plain-300', BytesOf(text), 9000 + i, 600, 0);
 end;
 
 initialization

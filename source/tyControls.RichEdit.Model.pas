@@ -924,7 +924,10 @@ type
     property MaxUndoBytes: Int64 read FMaxUndoBytes write SetMaxUndoBytes;
 
     { Read it; changing it directly bypasses the model (no undo, no OnChange: the touched
-      paragraph's runs are only clipped to its text, new paragraphs are plain). }
+      paragraph's runs are only clipped to its text, new paragraphs are plain). Such a change
+      also loses to a later undo of a step whose range it overlaps: the undo gives back the
+      pieces the step's edit split (TTyRichText.RestoreSpan), which holds the text from
+      before the bypass where it has the same length. }
     property Text: TTyRichText read FText;
     property Formats: TTyFormatPool read FFormats;
     property DefaultCharFormat: TTyCharFormat read FDefaultCharFormat;
