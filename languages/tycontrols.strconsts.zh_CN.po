@@ -850,6 +850,10 @@ msgstr "插入对象"
 msgid "Paste"
 msgstr "粘贴"
 
+#: tycontrols.strconsts.rsrichundoreplace
+msgid "Replace"
+msgstr "替换"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"

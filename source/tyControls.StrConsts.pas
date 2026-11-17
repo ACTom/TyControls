@@ -295,6 +295,7 @@ resourcestring
   rsRichUndoParaFormat   = 'Paragraph formatting';
   rsRichUndoInsertObject = 'Insert object';
   rsRichUndoPaste        = 'Paste';
+  rsRichUndoReplace      = 'Replace';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }

@@ -688,6 +688,11 @@ msgstr ""
 msgid "Paste"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoreplace
+msgctxt "tycontrols.strconsts.rsrichundoreplace"
+msgid "Replace"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""
