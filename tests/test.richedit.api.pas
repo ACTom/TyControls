@@ -83,6 +83,7 @@ type
     procedure TestTheRepaintAfterAHeightChange;
     procedure TestTheEventsArePublished;
     procedure TestTheWaitCursorOverTheThreshold;
+    procedure TestAWriteLeavesTheViewWhereItIs;
   end;
 
 implementation
@@ -549,6 +550,14 @@ begin
   FRich.Document.Execute(TTyRichSetCharFormat.Create(TyRichRange(4, 2), [cffBold],
     TyDefaultCharFormat));
   AssertFalse('the last paragraph regular', caBold in FRich.SelAttributes.ConsistentAttributes);
+  // a paragraph between the selection's ends differs (the walk between them)
+  SetText('ab'#10'cd'#10'ef'#10'gh');
+  f := TyDefaultCharFormat;
+  f.Style := [fsItalic];
+  FRich.Document.Execute(TTyRichSetCharFormat.Create(TyRichRange(4, 1), [cffItalic], f));
+  Sel(1, 9);
+  ca := FRich.SelAttributes.ConsistentAttributes;
+  AssertTrue('a middle paragraph''s italic', ca = All - [caItalic]);
 end;
 
 { ---- the character façades ---- }
@@ -1191,6 +1200,8 @@ begin
   Pend;
   FRich.Undo;
   AssertFalse('an undo', fsBold in FRich.SelAttributes.Style);
+  // (at the caret a new content puts the caret at: 0)
+  FRich.SelStart := 0;
   Pend;
   FRich.Lines.Text := 'new';
   AssertFalse('a new content', fsBold in FRich.SelAttributes.Style);
@@ -1756,6 +1767,34 @@ begin
   AssertEquals('and its end', 1, FRich.WaitEnds);
   FRich.SetParaAlignment(0, 10, paraCenter);
   AssertEquals('RichMemo''s too', 2, FRich.Waits);
+end;
+
+{ A format write does not scroll: the view stays where the application's user left it (a
+  toolbar's Bold with the caret scrolled out of view). }
+procedure TTyRichEditApiTest.TestAWriteLeavesTheViewWhereItIs;
+var
+  sl: TStringList;
+  i: Integer;
+begin
+  sl := TStringList.Create;
+  try
+    for i := 0 to 199 do sl.Add('Line ' + IntToStr(i));
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.UpdateView;
+  Sel(FRich.Document.Text.ParaStart(150), 3);
+  FRich.ScrollToTop;
+  FRich.UpdateView;
+  AssertEquals('at the top', 0, FRich.TopParagraph);
+  FRich.SelAttributes.Style := [fsBold];
+  FRich.UpdateView;
+  AssertEquals('a character write: the view stays', 0, FRich.TopParagraph);
+  FRich.Paragraph.Alignment := paraCenter;
+  FRich.UpdateView;
+  AssertEquals('a paragraph write: the view stays', 0, FRich.TopParagraph);
+  AssertTrue('written', fsBold in Fmt(FRich.Document.Text.ParaStart(150)).Style);
 end;
 
 initialization
