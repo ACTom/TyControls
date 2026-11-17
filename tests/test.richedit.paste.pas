@@ -84,6 +84,7 @@ type
     procedure TestTheControlPastesAcrossDocumentsThroughTheFilter;
     procedure TestTheTablesAgreeOnlyWhereEveryTableDoes;
     procedure TestTheNestedSamplesPasteAsParagraphsThatSave;
+    procedure TestEverythingPastedIntoAnEmptyDocumentKeepsTheLastFormat;
   end;
 
 implementation
@@ -419,8 +420,9 @@ begin
           Exit(Format('paragraph %d character %d: the object', [k, i]));
       end;
     end;
-    // a paragraph pasted with its mark has its own format (Word's rule)
-    if (k < R.LastPara) or R.LastSeparator then
+    // a paragraph pasted with its mark has its own format (Word's rule) - the document's last
+    // paragraph taken whole too: the copy ends it with \par (R64)
+    if (k < R.LastPara) or R.LastWhole then
       if not SamePara(A.Formats.ParaFormat(A.ParaFormatOf(k)), B.Formats.ParaFormat(B.ParaFormatOf(bk)),
         ASaved) then
         Exit(Format('paragraph %d: its format', [k]));
@@ -949,6 +951,73 @@ begin
     FindClose(sr);
   end;
   AssertTrue('samples with a nested table', found >= 2);
+end;
+
+{ W14 V-I2 (R64, the review's probe L): Ctrl+A, Ctrl+C, a new document, Ctrl+V gives the
+  document back - the last paragraph with its format (a right-aligned signature with its
+  indent, a last list item, a one-paragraph centred document) and one empty paragraph after
+  it, as Word and WordPad do. Made here, and read from a file without a last \par. }
+procedure TTyRichEditPasteTest.TestEverythingPastedIntoAnEmptyDocumentKeepsTheLastFormat;
+var
+  a, d: TTyRichDocument;
+  pf: TTyParaFormat;
+  filtered: Boolean;
+
+  function Fmt(ADoc: TTyRichDocument; K: Integer): TTyParaFormat;
+  begin
+    Result := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(K));
+  end;
+
+begin
+  // made in the control: typed, then formatted
+  a := TTyRichDocument.Create;
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue(a.Execute(TTyRichInsertText.Create(0, 'Title'#10'body'#10'Signature')));
+    pf := TyDefaultParaFormat;
+    pf.Align := paraCenter;
+    AssertTrue(a.Execute(TTyRichSetParaFormat.Create(0, 0, [pffAlign], pf)));
+    pf.Align := paraRight;
+    pf.LeftIndent := 720;
+    AssertTrue(a.Execute(TTyRichSetParaFormat.Create(2, 2, [pffAlign, pffLeftIndent], pf)));
+    AssertTrue(PasteAcross(d, 0, RangeOut(a, 0, a.Text.Length), filtered));
+    AssertEquals('the three and an empty one', 4, d.Text.ParaCount);
+    AssertTrue('the title centred', Fmt(d, 0).Align = paraCenter);
+    AssertEquals('the signature', 'Signature', ParaText(d, 2));
+    AssertTrue('right-aligned', Fmt(d, 2).Align = paraRight);
+    AssertEquals('indented', 720, Fmt(d, 2).LeftIndent);
+    AssertEquals('then an empty paragraph', 0, d.Text.ParaLength(3));
+  finally
+    d.Free;
+    a.Free;
+  end;
+  // read from a file whose last paragraph has no \par: a centred one-paragraph document
+  a := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}' + BS +
+    'pard' + BS + 'qc Only}'), False);
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue('read centred', Fmt(a, 0).Align = paraCenter);
+    AssertTrue(PasteAcross(d, 0, RangeOut(a, 0, a.Text.Length), filtered));
+    AssertTrue('pasted centred', Fmt(d, 0).Align = paraCenter);
+    AssertEquals('and an empty paragraph after it', 2, d.Text.ParaCount);
+  finally
+    d.Free;
+    a.Free;
+  end;
+  // a last list item
+  a := LoadDoc(FileBytes(FixtureDir + 'wp-zh-list.rtf'), False);
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue(PasteAcross(d, 0, RangeOut(a, 0, a.Text.Length), filtered));
+    AssertTrue('the last paragraph''s list',
+      Fmt(d, a.Text.ParaCount - 1).List.Kind = Fmt(a, a.Text.ParaCount - 1).List.Kind);
+    AssertEquals('its indent', Fmt(a, a.Text.ParaCount - 1).LeftIndent,
+      Fmt(d, a.Text.ParaCount - 1).LeftIndent);
+    AssertTrue('its alignment', Fmt(d, a.Text.ParaCount - 1).Align = Fmt(a, a.Text.ParaCount - 1).Align);
+  finally
+    d.Free;
+    a.Free;
+  end;
 end;
 
 { A 32-bit bottom-up DIB of AW x AH pixels in AColor (B, G, R, A), AXppm pixels a metre. }

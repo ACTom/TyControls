@@ -60,6 +60,8 @@ type
     procedure TestAListAsRichEditWritesItLeavesNothingBeside;
     // fix wave W2
     procedure TestTheFilesListMarkersAreKept;
+    // fix wave W14
+    procedure TestALastParagraphWithoutParHasItsProperties;
   end;
 
 implementation
@@ -2220,6 +2222,92 @@ begin
     finally
       d.Free;
       s.Free;
+    end;
+  end;
+end;
+
+{ W14 V-I2 (R64): a last paragraph that the document's closing brace ends (no \par after it)
+  has the paragraph and character properties in effect before that brace - as Word and
+  WordPad read it -, read whole and read on demand alike: alignment and indent, a list item,
+  a paragraph after a table, a cell of a row the file never ends; an empty document's one
+  paragraph too. }
+procedure TTyRtfReadTest.TestALastParagraphWithoutParHasItsProperties;
+var
+  full: Boolean;
+  d: TTyRichDocument;
+  s: TBytesStream;
+  w: string;
+
+  function Load(const ASource: RawByteString): TTyRichDocument;
+  begin
+    Result := TTyRichDocument.Create;
+    s := TBytesStream.Create(BytesOf(ASource));
+    try
+      if full then TyRichLoadRtfFull(Result, s) else TyRichLoadRtf(Result, s);
+    finally
+      s.Free;
+    end;
+  end;
+
+begin
+  for full := False to True do
+  begin
+    if full then w := 'whole: ' else w := 'on demand: ';
+    d := Load('{\rtf1\ansi\pard\qc A\par\pard\qr\li720 B}');
+    try
+      CheckParas(w + 'two', d, ['A', 'B']);
+      AssertTrue(w + 'A centred', ParaFmt(d, 0).Align = paraCenter);
+      AssertTrue(w + 'B right-aligned', ParaFmt(d, 1).Align = paraRight);
+      AssertEquals(w + 'B indented', 720, ParaFmt(d, 1).LeftIndent);
+    finally
+      d.Free;
+    end;
+    d := Load('{\rtf1\ansi\pard\qc\b Only}');
+    try
+      AssertTrue(w + 'one centred paragraph', ParaFmt(d, 0).Align = paraCenter);
+      AssertTrue(w + 'bold', fsBold in CharAt(d, 0, 0).Style);
+    finally
+      d.Free;
+    end;
+    d := Load('{\rtf1\ansi{\fonttbl{\f0 Arial;}{\f1\fcharset2 Symbol;}}\pard A\par' +
+      '\pard{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\''B7}}\fi-360\li720 B}');
+    try
+      AssertTrue(w + 'a last list item', ParaFmt(d, 1).List.Kind = lkBullet);
+      AssertEquals(w + 'its indent', 720, ParaFmt(d, 1).LeftIndent);
+    finally
+      d.Free;
+    end;
+    d := Load('{\rtf1\ansi\trowd\cellx1000\pard\intbl a\cell\row\pard\qr after}');
+    try
+      CheckParas(w + 'after a table', d, ['a', 'after']);
+      AssertTrue(w + 'after the table: in none', d.CellAt(1) = nil);
+      AssertTrue(w + 'right-aligned', ParaFmt(d, 1).Align = paraRight);
+    finally
+      d.Free;
+    end;
+    d := Load('{\rtf1\ansi\trowd\cellx1000\cellx2000\pard\intbl\qc a\cell\pard\intbl\qr b}');
+    try
+      CheckParas(w + 'a row never ended', d, ['a', 'b']);
+      AssertTrue(w + 'b in its cell', (d.CellAt(1) <> nil) and (d.CellAt(1).Index = 1));
+      AssertTrue(w + 'the same row', d.CellAt(0).Row = d.CellAt(1).Row);
+      AssertTrue(w + 'b right-aligned', ParaFmt(d, 1).Align = paraRight);
+    finally
+      d.Free;
+    end;
+    d := Load('{\rtf1\ansi\qc}');
+    try
+      CheckParas(w + 'empty', d, ['']);
+      AssertTrue(w + 'its paragraph centred', ParaFmt(d, 0).Align = paraCenter);
+    finally
+      d.Free;
+    end;
+    // with a \par it was already so; and after it, formatting alone makes nothing
+    d := Load('{\rtf1\ansi\pard\qr B\par\pard\qc }');
+    try
+      CheckParas(w + 'with its \par', d, ['B']);
+      AssertTrue(w + 'right-aligned', ParaFmt(d, 0).Align = paraRight);
+    finally
+      d.Free;
     end;
   end;
 end;

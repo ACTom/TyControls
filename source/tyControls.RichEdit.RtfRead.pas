@@ -2123,10 +2123,16 @@ begin
   if FS.Depth <= 0 then Exit;
   owner := FS.Props.DestOwner;
   if owner then old := FS.Props;
-  FS.Props := FStack[FS.Depth - 1];
+  { The document's own closing brace: nothing is read after it, but a last paragraph it ends
+    (no \par after it) is still to be made, in Finish - with the properties that were in
+    effect before the brace, as Word and WordPad read it (R64). So they stay. }
+  if (FS.Depth > 1) or owner then
+  begin
+    FS.Props := FStack[FS.Depth - 1];
+    CharChanged;
+    ParaChanged;
+  end;
   Dec(FS.Depth);
-  CharChanged;
-  ParaChanged;
   if not FS.BodyStarted and (FS.PendingGroup >= 0) and (FS.Depth <= FS.PendingGroupDepth) then
     FS.PendingGroup := -1;
   if FS.Depth = 0 then

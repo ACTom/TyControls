@@ -4266,6 +4266,14 @@ begin
   AssertTrue('from the end of a paragraph that ends with an object', FMet[8] > 0);
 end;
 
+function RtfEndsWithBreak(const AOut: TBytes): Boolean; forward;
+
+function RightAligned: TTyParaFormat;
+begin
+  Result := TyDefaultParaFormat;
+  Result.Align := paraRight;
+end;
+
 { A part of a paragraph without its separator goes out with no \par and no paragraph
   properties (pasted, it joins the paragraph it lands in); with its separator, with both. }
 procedure TTyRtfWriteTest.TestARangeWithoutItsSeparatorWritesNoPar;
@@ -4288,9 +4296,15 @@ begin
     AssertTrue('with its separator: \par', PosRaw('\par', body) > 0);
     AssertTrue('and centred', PosRaw('\qc', body) > 0);
     CheckRange('with its separator', d, 0, d.Text.ParaLength(0) + 1);
-    // the document's last paragraph taken to its end: as a paragraph, no line break after it
+    // the document's last paragraph taken to its end: as a paragraph, with its \par (R64)
     o := RangeOut(d, d.Text.ParaStart(1), d.Text.ParaLength(1), info);
+    AssertTrue('the last paragraph whole: a paragraph''s end', RtfEndsWithBreak(o));
     CheckRange('the last paragraph whole', d, d.Text.ParaStart(1), d.Text.ParaLength(1));
+    // and from the model, a paragraph with its format: right-aligned it reads back so
+    AssertTrue(d.Execute(TTyRichSetParaFormat.Create(1, 1, [pffAlign], RightAligned)));
+    o := RangeOut(d, 0, d.Text.Length, info);
+    AssertTrue('all of it: a paragraph''s end', RtfEndsWithBreak(o));
+    CheckRange('all of it, the last right-aligned', d, 0, d.Text.Length);
   finally
     d.Free;
   end;
@@ -4540,12 +4554,14 @@ begin
   finally
     d.Free;
   end;
-  // still the last: it goes as its bytes, with no \par to add
+  // still the last and taken whole: its bytes have no \par, so it goes from the model with
+  // one (R64: a range that takes the document's last paragraph whole ends it with \par)
   d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard A\par\pard B}'), False);
   try
     o := RangeOut(d, 0, d.Text.Length, info);
-    AssertEquals('unchanged: all the file''s bytes', 2, info.VerbatimParas);
-    AssertFalse('and no paragraph''s end after B', RtfEndsWithBreak(o));
+    AssertEquals('unchanged: A the file''s bytes', 1, info.VerbatimParas);
+    AssertTrue('and a paragraph''s end after B', RtfEndsWithBreak(o));
+    CheckRange('all', d, 0, d.Text.Length);
   finally
     d.Free;
   end;
@@ -4580,9 +4596,10 @@ var
     CheckRange(AWhat + ': all', d, 0, t.Length);
     o := RangeOut(d, 0, t.Length, info);
     AssertTrue(AWhat + ': all - the file''s bytes for most', info.VerbatimParas > 0);
-    AssertFalse(AWhat + ': all - no paragraph''s end after the last', RtfEndsWithBreak(o));
+    // (the last appended so far taken whole: ended with its \par, R64)
+    AssertTrue(AWhat + ': all - a paragraph''s end after the last', RtfEndsWithBreak(o));
     o := RangeOut(d, t.ParaStart(n - 1), t.ParaLength(n - 1), info);
-    AssertFalse(AWhat + ': the last paragraph - no paragraph''s end', RtfEndsWithBreak(o));
+    AssertTrue(AWhat + ': the last paragraph - a paragraph''s end', RtfEndsWithBreak(o));
     CheckRange(AWhat + ': the last paragraph', d, t.ParaStart(n - 1), t.ParaLength(n - 1));
     o := RangeOut(d, t.ParaStart(n - 2), t.ParaLength(n - 2) + 1, info);
     AssertTrue(AWhat + ': the one before with its separator - a paragraph''s end',

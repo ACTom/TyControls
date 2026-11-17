@@ -5945,9 +5945,10 @@ begin
 end;
 
 { W5 C-M5: a copy while the load is still going on, and after it was cancelled (Incomplete):
-  the two flavours agree - Select All takes the last paragraph appended so far, which has no
-  separator in the text yet: the text ends without a line break and the RTF without a
-  paragraph's end; a paragraph taken with its separator ends with both. }
+  Select All takes the last paragraph appended so far, which has no separator in the text yet:
+  the text ends without a line break (R45), the RTF with that paragraph's \par (R64, fix wave
+  W14: a last paragraph taken whole is a paragraph with its format); a paragraph taken with its
+  separator ends with both. }
 procedure TTyRichEditControlTest.TestACopyWhileLoadingAndAfterACancel;
 var
   src: TBytes;
@@ -5968,7 +5969,8 @@ var
     AssertEquals(AWhat + ': the text is SelText', FRich.SelText, FRich.ClipText);
     AssertTrue(AWhat + ': all - no line break at the end',
       Copy(FRich.ClipText, Length(FRich.ClipText) - Length(LineEnding) + 1, MaxInt) <> LineEnding);
-    AssertFalse(AWhat + ': all - no paragraph''s end in the RTF', ClipRtfEndsWithBreak(FRich.ClipRtf));
+    // (the last paragraph taken whole: the RTF ends it with \par all the same - R64)
+    AssertTrue(AWhat + ': all - a paragraph''s end in the RTF', ClipRtfEndsWithBreak(FRich.ClipRtf));
     b := ReadClipRtf(FRich.ClipRtf);
     try
       AssertEquals(AWhat + ': all - the RTF''s text', FRich.ClipText, ParasText(b));

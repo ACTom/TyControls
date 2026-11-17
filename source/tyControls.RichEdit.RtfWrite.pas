@@ -126,8 +126,9 @@ type
   // row it meets whole, as Word copies them (FromChar 0 at a row's first paragraph, all of a
   // row's last paragraph and its separator). LastWhole: the last paragraph is taken as a
   // paragraph, with its properties - with its separator, or the document's last paragraph
-  // taken to its end (it has no separator; written with its properties and without \par, it
-  // reads back as itself and pastes without a line break). Empty: nothing to copy.
+  // taken to its end (it has no separator in the text; the RTF ends it with \par all the
+  // same, so that it reads back with its format and pastes as a paragraph - R64; the plain
+  // text has no line break after it - R45). Empty: nothing to copy.
   TTyRichCopyRange = record
     FirstPara, LastPara: Integer;
     FromChar, ToChar: TTyRichPos;
@@ -150,9 +151,10 @@ function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRic
 // it is still the file's and starts a stretch of them at a clean place (the reader's state
 // there put back first, the groups the bytes leave open closed after them), else from the
 // model. A paragraph the range takes in part is written from the model, the characters it
-// takes: with its paragraph's properties and its \par when the range takes its separator;
-// the last one without them when the range ends before its separator (pasted, it adds no
-// line break and takes the paragraph it lands in). Rows are whole (TyRichCopyRange); inside
+// takes: with its paragraph's properties and its \par when the range takes its separator
+// (or is the document's last paragraph taken to its end: R64); the last one without them
+// when the range ends before its separator (pasted, it adds no line break and takes the
+// paragraph it lands in). Rows are whole (TyRichCopyRange); inside
 // one cell the paragraphs are written as no table's. Objects go out as TyRichSaveRtf writes
 // them. An escaped byte of a text file goes out as TyRichSaveRtf writes it (two U+FFFD).
 //
@@ -160,7 +162,7 @@ function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRic
 // from the model is parsed), but unlike TyRichSaveRtf it does not refuse a document still
 // Loading or Incomplete: what is copied is what is there - the paragraphs a lazy load has
 // appended so far (the range is the caller's, within them; the last of them, which has no
-// separator in the text yet, goes out from the model, without the \par its bytes end with).
+// separator in the text yet, goes out from the model, with its \par when taken whole).
 // An empty range writes a document
 // with no paragraph. Raises ETyRichRtfWrite for a row with a nested table that would have to
 // be written from the model (as TyRichSaveRtf).
@@ -1739,8 +1741,12 @@ begin
   FHavePrev := False;
   FPrevCell := nil;
   FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
-  // a range's last paragraph without its separator: no \par (pasted, it adds no line break)
-  if FRange and not FCopy.LastSeparator and (FLastWritten = FCopy.LastPara) then Exit;
+  { A range's last paragraph taken in part, without its separator: no \par (pasted, it adds
+    no line break and takes the paragraph it lands in). One taken whole - also the document's
+    last paragraph, which has no separator - ends with its \par: a paragraph with its
+    format for every reader, and content that ends with a paragraph's end for a paste (R64,
+    as Word's and WordPad's Select All copies the last paragraph mark). }
+  if FRange and not FCopy.LastWhole and (FLastWritten = FCopy.LastPara) then Exit;
   EndPara(FPrevCell, nil);
 end;
 
@@ -2592,15 +2598,18 @@ begin
   SetLength(model, n);
   for k := 0 to n - 1 do
     // a part of a paragraph, or no table inside one cell: the model. So is the last one a
-    // load still going on (or cancelled) has appended, taken to its end: its bytes end with
-    // the file's \par, but in the text it has no separator (yet) - as the plain text has it,
-    // it is written as the document's last paragraph is, with no \par (a row taken whole
-    // ends with its separator in both flavours: its bytes stay)
+    // load still going on (or cancelled) has appended, taken to its end (in the text it has
+    // no separator yet): it is written as the document's last paragraph taken whole is, from
+    // the model with its \par (a row taken whole ends with its separator in both flavours:
+    // its bytes stay). And the file's own last paragraph that has no terminator, taken whole:
+    // its bytes have no \par, and a range that takes the last paragraph whole ends it with
+    // one (R64)
     model[k] := not FRangeOwn[k] or FCopy.InOneCell or
       ((k = 0) and (FCopy.FromChar > 0)) or
       ((k = n - 1) and not FCopy.LastWhole) or
       ((k = n - 1) and not FLoad.Done and (first + k = FParaCount - 1) and
-       not FCopy.LastSeparator);
+       not FCopy.LastSeparator) or
+      ((k = n - 1) and FLoad.Done and FLastOpen and (first + k = FParaCount - 1) and not FCopy.LastSeparator);
   // the file's own bytes: runs of them, shrunk to clean ends
   k := 0;
   while k < n do
