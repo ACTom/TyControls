@@ -52,6 +52,9 @@ type
       way win32's does (its result through WM_IME_COMPOSITION, then WM_IME_ENDCOMPOSITION). }
     Ends, EndCommits: Integer;
     Answer: Boolean;
+    { Fix wave W13: what the input method answers, when not what was shown (pinyin shown,
+      hanzi committed); '' - what was shown. }
+    AnswerWith: UnicodeString;
     { ImePlaceCandidates: how often, the last rectangle. }
     Places: Integer;
     LastPlace: TRect;
@@ -83,6 +86,9 @@ type
     // fix wave W11: key-press handlers that clear characters
     procedure ClearUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure ClearKey(Sender: TObject; var Key: Char);
+    // fix wave W13: key-press events counted (none may come while the control goes)
+    procedure CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+    procedure CountKey(Sender: TObject; var Key: Char);
     procedure CommitWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function NewProbe: TImeProbe;
     procedure SetText(const S: string);
@@ -145,6 +151,9 @@ type
     procedure TestTheCaretToldFollowsAZoomAndAWrapChange;
     procedure TestACompositionBelowTheBottomEdgeIsScrolledTo;
     procedure TestACompositionInATableCell;
+    // fix wave W13
+    procedure TestAPressIsPlacedOnWhatTheUserSaw;
+    procedure TestAPressAfterScrollingAwayStaysThere;
   end;
 
 implementation
@@ -168,6 +177,7 @@ const
 
 var
   GBig: TBytes;
+  GKeyPresses: Integer;   // the key-press events counted (CountUtf8, CountKey)
 
 { A character as UTF-8, from its number (this file stays ASCII). }
 function U(ACode: Cardinal): RawByteString;
@@ -289,7 +299,8 @@ begin
   if Answer and ACommit and Composing then
   begin
     // what win32's input method does on CPS_COMPLETE: its result, then its end
-    ResultStr := UTF8Decode(CompositionText);
+    if AnswerWith <> '' then ResultStr := AnswerWith
+    else ResultStr := UTF8Decode(CompositionText);
     CompStr := '';
     Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
     Msg(WM_IME_ENDCOMPOSITION, 0);
@@ -1050,7 +1061,13 @@ begin
     TImeProbe.AllCommits := 0;
     TImeProbe.TearDownTalks := 0;
     FRich.TearDownTalk := True;
+    { Q-M2 (fix wave W13): a result the window gets while the control goes raises no key-press
+      event - the handlers would read a control whose document is gone. }
+    FRich.OnUTF8KeyPress := @CountUtf8;
+    FRich.OnKeyPress := @CountKey;
+    GKeyPresses := 0;
     FreeAndNil(FRich);
+    AssertEquals('no key-press event while it went', 0, GKeyPresses);
     AssertEquals('the control''s end: the input method told to drop it, once', 1,
       TImeProbe.AllEnds);
     AssertEquals('not to commit it', 0, TImeProbe.AllCommits);
@@ -1490,6 +1507,16 @@ end;
 procedure TTyRichEditImeTest.ClearKey(Sender: TObject; var Key: Char);
 begin
   if Key = 'q' then Key := #0;
+end;
+
+procedure TTyRichEditImeTest.CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  Inc(GKeyPresses);
+end;
+
+procedure TTyRichEditImeTest.CountKey(Sender: TObject; var Key: Char);
+begin
+  Inc(GKeyPresses);
 end;
 
 { E-X2: on win32 a committed composition passes the key-press events a typed character passes,
@@ -1995,11 +2022,11 @@ begin
   d := FRich.Document;
   d.BreakMerge;
   depth := d.UndoDepth;
-  // (where the press goes, measured before the composition moves the text after it)
-  r := FRich.PositionRect(5);
   FRich.SelStart := 2;
   FRich.Late := True;
   ComposeByMessages(FRich, 'XY');
+  // (where the press goes: on 'f' as it is shown - behind the composition, Q-I1)
+  r := FRich.PositionRect(5);
   FRich.PressAt(r.Left, (r.Top + r.Bottom) div 2);
   FRich.ReleaseAt(r.Left, (r.Top + r.Bottom) div 2);
   AssertFalse('the press ended it', FRich.Composing);
@@ -2014,9 +2041,9 @@ begin
   AssertEquals('the caret where the press put it, moved with the text', Int64(7), FRich.CaretPos);
   AssertEquals('one step', depth + 1, d.UndoDepth);
   // a result after the next start belongs to that composition
-  r := FRich.PositionRect(6);
   FRich.SelStart := 1;
   ComposeByMessages(FRich, 'Q');
+  r := FRich.PositionRect(6);
   FRich.PressAt(r.Left, (r.Top + r.Bottom) div 2);
   FRich.ReleaseAt(r.Left, (r.Top + r.Bottom) div 2);
   FRich.Late := False;
@@ -2366,6 +2393,159 @@ begin
     r.Left > cell1.Left);
   AssertEquals('in its line', cell1.Top, r.Top);
   FRich.CancelComposition;
+end;
+
+{ Q-I1 (fix wave W13): a press while composing is placed on what the user saw - the text with
+  the composition in it - and its place goes through the commit the press causes: the caret
+  ends before the character that was clicked, in the text as it is after the commit; a press on
+  the composition ends behind what went in, one before it before what went in. So with an
+  input method that answers at once and with one that answers late, with a result as wide as
+  what was shown and with one that is not (pinyin shown, hanzi committed), for a left and a
+  right press. A late result changes the text and puts the press's caret back: one OnChange,
+  one OnSelectionChange (Q-M1). }
+procedure TTyRichEditImeTest.TestAPressIsPlacedOnWhatTheUserSaw;
+
+  procedure Away;
+  begin
+    // a press far from the next one: that one is a single click, never a double
+    FRich.PressAt(FRich.Width - 4, FRich.Height - 4);
+    FRich.ReleaseAt(FRich.Width - 4, FRich.Height - 4);
+  end;
+
+  { 'abcdef', the caret at 2, AShown composed; a press at AWhere - 0: on the left part of 'e'
+    (behind the composition), 1: on the composition's middle, 2: just before it (on 'b's right
+    part) - measured while composing; the input method answering with AResult at once or late. }
+  procedure PressCase(const AShown, AResult: UnicodeString; AWhere: Integer; ALate, ARight: Boolean);
+  var
+    what: string;
+    r, s: TRect;
+    x, y: Integer;
+    want: TTyRichPos;
+    n: Integer;
+  begin
+    what := Format('%s -> %s, where %d, late %s, right %s', [UTF8Encode(AShown),
+      UTF8Encode(AResult), AWhere, BoolToStr(ALate, True), BoolToStr(ARight, True)]);
+    SetText('abcdef');
+    Away;
+    FRich.SelStart := 2;
+    FRich.Answer := not ALate;
+    FRich.Late := ALate;
+    FRich.AnswerWith := AResult;
+    ComposeByMessages(FRich, AShown);
+    AssertTrue(what + ': composing', FRich.Composing);
+    n := Length(AResult);
+    case AWhere of
+      0:
+        begin
+          // 'e' is document position 4, shown one composition further right
+          r := FRich.PositionRect(4);
+          x := r.Left + 2;
+          want := 2 + n + 2;
+        end;
+      1:
+        begin
+          s := FRich.PositionRect(2);
+          r := FRich.ImeRect;
+          x := (s.Left + r.Left) div 2;
+          want := 2 + n;
+        end;
+    else
+      begin
+        r := FRich.PositionRect(2);
+        x := r.Left - 2;
+        want := 2;
+      end;
+    end;
+    y := (r.Top + r.Bottom) div 2;
+    if ARight then
+      FRich.RightAt(x, y)
+    else
+    begin
+      FRich.PressAt(x, y);
+      FRich.ReleaseAt(x, y);
+    end;
+    AssertFalse(what + ': the press ended it', FRich.Composing);
+    if ALate then
+    begin
+      AssertEquals(what + ': nothing in yet', 'abcdef', FRich.Lines[0]);
+      ResetEvents;
+      FRich.ResultStr := AResult;
+      FRich.CompStr := '';
+      FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+      FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+      AssertEquals(what + ': one OnChange', 1, FChanges);
+      // (the caret moved with the text - but not when it stayed before what went in)
+      AssertEquals(what + ': one OnSelectionChange', Ord(AWhere <> 2), FSelChanges);
+    end;
+    AssertEquals(what + ': the text', 'ab' + UTF8Encode(AResult) + 'cdef', FRich.Lines[0]);
+    AssertEquals(what + ': the caret where the press was', want, FRich.CaretPos);
+    AssertEquals(what + ': no selection', 0, FRich.SelLength);
+    FRich.Late := False;
+    FRich.Answer := False;
+    FRich.AnswerWith := '';
+  end;
+
+var
+  where: Integer;
+  late, right: Boolean;
+begin
+  for late := False to True do
+    for right := False to True do
+      for where := 0 to 2 do
+      begin
+        PressCase('XY', 'XY', where, late, right);
+        PressCase('nihao', UTF8Decode(Han(2)), where, late, right);
+      end;
+end;
+
+{ Q-I1: compose, scroll the composition far out of view, press in the text shown: the caret is
+  where the press was (the commit went in far above) and the view stays where it is - the
+  commit a press causes does not scroll, nor does a late result. }
+procedure TTyRichEditImeTest.TestAPressAfterScrollingAwayStaysThere;
+var
+  way, k: Integer;
+  t: TTyRichText;
+  y0: Int64;
+  r: TRect;
+begin
+  for way := 0 to 1 do
+  begin
+    SetLinesOf(200);
+    t := FRich.Document.Text;
+    FRich.PressAt(FRich.Width - 4, 2 + way);
+    FRich.ReleaseAt(FRich.Width - 4, 2 + way);
+    FRich.SelStart := 2;
+    FRich.Answer := way = 0;
+    FRich.Late := way = 1;
+    FRich.AnswerWith := UTF8Decode(Han(2));
+    ComposeByMessages(FRich, 'nihao');
+    FRich.ScrollY := t.TotalHeight div 2;
+    y0 := FRich.ScrollY;
+    k := 100;
+    r := FRich.PositionRect(t.ParaStart(k) + 3);
+    AssertTrue(Format('way %d: paragraph %d in view', [way, k]),
+      (r.Bottom > r.Top) and (r.Top >= 0) and (r.Bottom <= FRich.Height));
+    AssertTrue(Format('way %d: the composition out of view', [way]),
+      FRich.PositionRect(2).Bottom <= FRich.PositionRect(2).Top);
+    FRich.PressAt(r.Left + 2, (r.Top + r.Bottom) div 2);
+    FRich.ReleaseAt(r.Left + 2, (r.Top + r.Bottom) div 2);
+    if way = 1 then
+    begin
+      AssertEquals('late: the caret where the press was', t.ParaStart(k) + 3, FRich.CaretPos);
+      FRich.ResultStr := UTF8Decode(Han(2));
+      FRich.CompStr := '';
+      FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+      FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+    end;
+    AssertEquals(Format('way %d: committed far above', [way]), 'Li' + Han(2) + 'ne 0',
+      FRich.Lines[0]);
+    AssertEquals(Format('way %d: the caret where the press was', [way]), t.ParaStart(k) + 3,
+      FRich.CaretPos);
+    AssertEquals(Format('way %d: the view did not jump back', [way]), y0, FRich.ScrollY);
+    FRich.Answer := False;
+    FRich.Late := False;
+    FRich.AnswerWith := '';
+  end;
 end;
 
 initialization

@@ -437,6 +437,18 @@ type
       FCompFormat kept). }
     FCompAnchor: TTyRichPos;
     FCompPending: Boolean;
+    { Fix wave W13. A press made while composing is placed on what the user saw - the text
+      with the composition in it: FPressPos (its position; FPressAfter: on the composition or
+      behind it, not before it) and FPressObj (the object under it, or -1) are taken before
+      the composition ends, and carried through the commit that ends it as any position is
+      (FPressCarry: while it runs; cleared when the content is replaced). FCompBefore: such a
+      press at the composition's own place but before it, when the input method's result is
+      still owed - the late result goes in behind the caret, not before it. FNoEditScroll:
+      the commit a press causes leaves the view where the user clicked; FEditQuiet: a late
+      result's edit reports nothing itself (the selection it puts back is reported once). }
+    FPressPos, FPressObj: TTyRichPos;
+    FPressAfter, FPressCarry, FCompBefore: Boolean;
+    FNoEditScroll, FEditQuiet: Boolean;
     { Cocoa's bridge: its session is open (ImeSessionBegin .. ImeSessionEnd), one of its calls
       runs (FInBridge), the control ended the session's composition itself (FCocoaSwallow:
       Cocoa keeps its marked text, so what the bridge sends until the session's end goes
@@ -730,6 +742,10 @@ type
     { The one door of a user's edit and action (fix wave W12): a composition open in the text
       ends first, committed as a press commits it - see the body for who comes through it. }
     procedure EndCompositionForUser;
+    { A press at client (X, Y) that the hit test put at the composition's own place (FCompPos):
+      True when it is before the composition (left of its start on its first line, or above
+      that line), False on it or behind it. }
+    function PressBeforeComposition(X, Y: Integer): Boolean;
     { An input method's text made fit to insert: whole UTF-8, CR LF and CR as LF, no control
       character (TypeKey's filter, ControlCodeLen) but tab, LF and U+000B. }
     function ImeText(const AText: string): UTF8String;
@@ -1746,6 +1762,7 @@ begin
     bridge; the timers, the queued calls and the idle handler are taken off below. }
   EndComposition(False);
   FCompPending := False;
+  FCompBefore := False;
   FCocoaSession := False;
   FCocoaSwallow := False;
   TyImeUninstall(FImeHook);
@@ -2905,16 +2922,55 @@ end;
 
 procedure TTyCustomRichEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  q, a, b, o: TTyRichPos;
-  atEnd: Boolean;
+  q, a, b, o, q0: TTyRichPos;
+  atEnd, pre: Boolean;
   clicks: Integer;
 begin
   if not IsEnabled then Exit;
+  { A press while composing is placed on what the user saw: the text with the composition in
+    it (the hit test answers the document's positions behind it), taken before the
+    composition ends. A point on the composition is its place, behind it. }
+  pre := False;
+  q := -1;
+  o := -1;
+  atEnd := False;
+  if FComposing and (FCompText <> '') and ((Button = mbLeft) or (Button = mbRight)) and
+    not ViewBehind then
+  begin
+    q := HitClient(X, Y, atEnd);
+    if q >= 0 then
+    begin
+      pre := True;
+      FPressPos := q;
+      FPressObj := ObjectAt(X, Y, q);
+      FPressAfter := (q > FCompPos) or ((q = FCompPos) and not PressBeforeComposition(X, Y));
+      FPressCarry := True;
+    end;
+  end;
   { A press in the text ends a composition first: it goes in where it was shown, then the
     press places the caret (Cocoa's input method commits on the press before it gets here).
-    An input method that answers later sends its result to where the composition was
-    (FCompPending), the caret staying where the press put it. }
-  EndCompositionForUser;
+    The press's place goes through the commit as any position does (DocChanged), and the
+    commit does not scroll: the view stays where the user clicked. An input method that
+    answers later sends its result to where the composition was (FCompPending), the caret
+    staying where the press put it. }
+  FNoEditScroll := True;
+  try
+    EndCompositionForUser;
+  finally
+    FNoEditScroll := False;
+  end;
+  if pre then
+  begin
+    // (a content replaced meanwhile: the press is hit-tested again below)
+    pre := FPressCarry;
+    FPressCarry := False;
+    q0 := q;
+    q := FPressPos;
+    o := FPressObj;
+    if q <> q0 then atEnd := False;
+    // at the composition's place, before it: an owed result goes in behind the caret
+    FCompBefore := FCompPending and (q = FCompPos) and not FPressAfter;
+  end;
   inherited MouseDown(Button, Shift, X, Y);
   // a user action is an entry point of the loop (P-2: see SchedulingFailed)
   EndOwedLoad;
@@ -2926,7 +2982,12 @@ begin
   end;
   // inside the document's update a press places nothing (K-9)
   if ViewBehind then Exit;
-  q := HitClient(X, Y, atEnd);
+  if not pre then
+  begin
+    q := HitClient(X, Y, atEnd);
+    o := -2;
+  end;
+  q := Math.Min(q, FDoc.Text.Length);
   if q < 0 then Exit;
   if Button = mbRight then
   begin
@@ -2952,7 +3013,7 @@ begin
     if clicks = 2 then
     begin
       // the object under the pointer is the word (on its right half too: S-M3)
-      o := ObjectAt(X, Y, q);
+      if o = -2 then o := ObjectAt(X, Y, q);
       if o >= 0 then
       begin
         a := o;
@@ -2978,7 +3039,7 @@ begin
       { A click on an object selects it (its handles come with editing). The object is the
         pressed unit, as a word is after a double click: it stays selected while the pointer
         moves on it, and a drag extends from it (S-I2). }
-      o := ObjectAt(X, Y, q);
+      if o = -2 then o := ObjectAt(X, Y, q);
       if o >= 0 then
       begin
         Select(o, o + 1, False);
@@ -3800,8 +3861,11 @@ begin
     FEditStep := nil;
   end;
   FWishValid := False;
-  ScrollCaretIntoView;
+  { Not for a commit a press caused (the view stays where the user clicked) nor for a late
+    result (the selection it puts back is not at the commit; it reports once itself). }
+  if not FNoEditScroll and not FEditQuiet then ScrollCaretIntoView;
   CaretMoved;
+  if FEditQuiet then Exit;
   DoChange;
   DoSelectionChange;
 end;
@@ -4991,6 +5055,7 @@ begin
   { A composition begins: a result still owed for the one the control ended (FCompPending) is
     not waited for any more - an input method sends it before its next start. }
   FCompPending := False;
+  FCompBefore := False;
   // as a key: ReadOnly or disabled takes it and says nothing; inside the update it is dropped
   if (csDestroying in ComponentState) or ImeIsReadOnly or ViewBehind then Exit;
   EndOwedLoad;
@@ -5110,16 +5175,18 @@ end;
 procedure TTyCustomRichEdit.CommitComposition(const AText: string);
 var
   s: UTF8String;
-  was, late: Boolean;
+  was, late, before: Boolean;
   p: Integer;
   fmt: TTyCharFormatId;
   t: TTyRichText;
-  ua, uc, st, len0, delta, removed, n: TTyRichPos;
+  ua, uc, st, len0, delta, removed, n, cp: TTyRichPos;
 
   // a position of before the commit, where it is after it
   function Mapped(APos: TTyRichPos): TTyRichPos;
   begin
-    if APos < st then Result := APos
+    // a press at the composition's place, before it (FCompBefore): before what goes in
+    if before and (APos = cp) then Result := st
+    else if APos < st then Result := APos
     else if APos >= st + removed then Result := APos + delta
     else Result := st + n;
   end;
@@ -5132,6 +5199,9 @@ begin
     composition was shown - not to where the press has put the caret since. }
   late := not was and FCompPending;
   FCompPending := False;
+  before := late and FCompBefore;
+  FCompBefore := False;
+  cp := -1;
   p := -1;
   if was then
   begin
@@ -5167,6 +5237,7 @@ begin
         replace everything), and in the format it was shown in. }
       FCompPos := Math.Max(Int64(0), Math.Min(FCompPos, t.Length));
       FCompAnchor := Math.Max(Int64(0), Math.Min(FCompAnchor, t.Length));
+      cp := FCompPos;
       if (FSelAnchor <> FCompAnchor) or (FCaret <> FCompPos) then
         Select(FCompAnchor, FCompPos, False);
       fmt := FCompFormat;
@@ -5174,6 +5245,8 @@ begin
     st := GetSelStart;
     len0 := t.Length;
     n := UTF8Length(s);
+    // (Mapped's before: the press's place, the selection start when it was the selection's end)
+    if before and (cp <> st) and (cp <> st + GetSelLength) then before := False;
     { The one routine of typing (TypeText): the same refusals (a cell's edge, the paragraph
       kept before a table, a cut paragraph's cut) and the same command. Deliberately merged
       as typing: the memo commits as typing (uskTyping), which merges with the typing next to
@@ -5181,14 +5254,25 @@ begin
       it and the typing after it are one undo step, as in the memo. A commit with a line
       break makes a paragraph: a step of its own, as Enter is. Over a selection: one
       composite, a fresh step (as typing over one). The caret behind it, counted. }
-    TypeText(s, (Pos(#10, s) = 0) and (Pos(#11, s) = 0), True, fmt, n);
-    if late and FEditHeard and (FDoc.Text = t) and not ViewBehind then
+    { A late result: the edit reports nothing itself and does not scroll (FEditQuiet) - the
+      selection the user made meanwhile (the press's) stays, moved with the text, and the
+      change and that selection are reported once, after it is put back. }
+    FEditQuiet := late;
+    try
+      TypeText(s, (Pos(#10, s) = 0) and (Pos(#11, s) = 0), True, fmt, n);
+    finally
+      FEditQuiet := False;
+    end;
+    if late and FEditHeard then
     begin
-      // the selection the user made meanwhile (the press's) stays, moved with the text
-      delta := t.Length - len0;
-      removed := n - delta;
-      Select(Mapped(ua), Mapped(uc), False);
-      CaretMoved;
+      if (FDoc.Text = t) and not ViewBehind then
+      begin
+        delta := t.Length - len0;
+        removed := n - delta;
+        Select(Mapped(ua), Mapped(uc), False);
+        CaretMoved;
+      end;
+      DoChange;
       DoSelectionChange;
     end;
   end;
@@ -5206,13 +5290,18 @@ begin
   if (FComposing or FImeRefused) and FCocoaSession and (FInBridge = 0) then FCocoaSwallow := True;
   FImeRefused := False;
   FCompPending := False;
+  FCompBefore := False;
   DropComposition;
 end;
 
 procedure TTyCustomRichEdit.EndComposition(ACommit: Boolean);
 begin
   // a cancel (a content reset, ReadOnly, disabled, the window going) drops an owed result too
-  if not ACommit then FCompPending := False;
+  if not ACommit then
+  begin
+    FCompPending := False;
+    FCompBefore := False;
+  end;
   if not FComposing and not FImeRefused then Exit;
   { Cocoa: the control cannot make the input context drop its marked text - the session goes
     on, and what it sends until its end is swallowed (it went in, or was dropped, here). }
@@ -5259,6 +5348,17 @@ end;
 procedure TTyCustomRichEdit.EndCompositionForUser;
 begin
   if FComposing or FImeRefused then EndComposition(True);
+end;
+
+function TTyCustomRichEdit.PressBeforeComposition(X, Y: Integer): Boolean;
+var
+  r: TRect;
+begin
+  { The hit test gives the composition's place for a point just before it, on it and just
+    behind it alike; the composition's start (the caret before it) tells them apart. }
+  r := PositionRect(FCompPos, False);
+  if r.Bottom <= r.Top then Exit(False);
+  Result := (Y < r.Top) or ((Y < r.Bottom) and (X < r.Left));
 end;
 
 procedure TTyCustomRichEdit.PlaceImeWindows;
@@ -5968,6 +6068,19 @@ begin
     APos := AChange.Pos;
 end;
 
+{ A place a press chose, through a change: before the change's start, or at it and not
+  AAfter (the press was before what goes in there), it stays; past what the change replaced
+  it moves by the difference; at the start with AAfter, or inside what was replaced, it goes
+  behind what replaced it. }
+procedure CarryForChange(var APos: TTyRichPos; AAfter: Boolean; const AChange: TTyRichChange);
+begin
+  if (APos < AChange.Pos) or ((APos = AChange.Pos) and not AAfter) then Exit;
+  if APos >= AChange.Pos + AChange.OldLen then
+    Inc(APos, AChange.NewLen - AChange.OldLen)
+  else
+    APos := AChange.Pos + AChange.NewLen;
+end;
+
 procedure TTyCustomRichEdit.DocChanged(Sender: TObject; const AChange: TTyRichChange);
 var
   was, wasAnchor: TTyRichPos;
@@ -5994,6 +6107,20 @@ begin
     if FComposing and (FLayouter.Composition.Para >= 0) then
       FLayouter.MoveComposition(FDoc.Text.ParaOfPos(FCompPos),
         Integer(FCompPos - FDoc.Text.ParaStart(FDoc.Text.ParaOfPos(FCompPos))));
+  end;
+  { A press made while composing (MouseDown): its place goes through the commit that ends the
+    composition - text inserted at it goes after it when the press was before the
+    composition, before it when on it or behind it; inside a range replaced: behind what
+    replaced it. The object under it is a character behind its place. }
+  if FPressCarry and (rckText in AChange.Kinds) then
+  begin
+    if FDoc.Text <> FText then
+      FPressCarry := False
+    else
+    begin
+      CarryForChange(FPressPos, FPressAfter, AChange);
+      if FPressObj >= 0 then CarryForChange(FPressObj, True, AChange);
+    end;
   end;
   FLayouter.DocumentChanged(AChange, loadOwn);
   if FDoc.Text <> FText then
@@ -6102,6 +6229,7 @@ begin
   FCompText := '';
   FImeRefused := False;
   FCompPending := False;
+  FCompBefore := False;
   FLayouter.ClearComposition;
   FText := FDoc.Text;
   FSnapPending := False;
