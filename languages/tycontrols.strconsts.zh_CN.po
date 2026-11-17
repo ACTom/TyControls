@@ -874,6 +874,10 @@ msgstr "无法写入文件 %s,原文件保持不变。"
 msgid "The document cannot be replaced now: it is being loaded or saved."
 msgstr "文档正在载入或保存，现在不能替换。"
 
+#: tycontrols.strconsts.rsricheditreplaceinedit
+msgid "The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo."
+msgstr "在 BeginEdit 与 EndEdit 之间不能替换文档：这一段是一个撤销步骤，而新内容无法撤销。"
+
 #: tycontrols.strconsts.rsricheditrefusedloading
 msgid "The document is still being loaded: it cannot be changed yet."
 msgstr "文档还在载入，现在还不能修改。"

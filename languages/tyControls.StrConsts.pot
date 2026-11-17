@@ -713,6 +713,10 @@ msgstr ""
 msgid "The document cannot be replaced now: it is being loaded or saved."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditreplaceinedit
+msgid "The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedloading
 msgid "The document is still being loaded: it cannot be changed yet."
 msgstr ""

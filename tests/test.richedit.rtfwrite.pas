@@ -91,6 +91,8 @@ type
     procedure TestARangeWhileLoadingAndAfterACancel;
     // fix wave W17 (F-Y5)
     procedure TestAnEmptyLastParagraphIsTakenWhole;
+    // fix wave W18 (G-M4)
+    procedure TestANegativeTabStopIsWrittenBack;
     // Task 10a
     procedure TestADocumentOfOursNamesItsFontAndPage;
   end;
@@ -4795,6 +4797,52 @@ begin
     AssertFalse('...in part', r.LastWhole);
     o := RangeOut(d, 0, 3, info);
     AssertFalse('before the separator: no paragraph''s end', RtfEndsWithBreak(o));
+  finally
+    d.Free;
+  end;
+end;
+
+{ G-M4: a file's stop left of the margin (\tx-300, legal with a negative indent) is written
+  when its paragraph is rewritten from the model; only a stop at exactly 0 (TabCount's
+  placeholder) is left out. The stops go in position order. }
+procedure TTyRtfWriteTest.TestANegativeTabStopIsWrittenBack;
+const
+  F = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' +
+    '\pard\li720\fi-360\tx-300\tx1440 a\tab b\par}';
+var
+  d, b: TTyRichDocument;
+  o: TBytes;
+  s: RawByteString;
+  pf: TTyParaFormat;
+  tabs: TTyTabStops;
+begin
+  d := LoadDoc(BytesOf(F), True);
+  try
+    // changed elsewhere in the paragraph: it is written from the model
+    AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'x')));
+    // and a placeholder stop at 0 beside them
+    pf := d.Formats.ParaFormat(d.ParaFormatOf(0));
+    tabs := Copy(pf.Tabs);
+    SetLength(tabs, Length(tabs) + 1);
+    tabs[High(tabs)].Position := 0;
+    tabs[High(tabs)].Align := ttaLeft;
+    tabs[High(tabs)].Leader := ttlNone;
+    pf.Tabs := tabs;
+    AssertTrue(d.Execute(TTyRichSetParaFormat.Create(0, 0, [pffTabs], pf)));
+    o := SaveBytes(d);
+    s := StrOf(o, 0, Length(o));
+    AssertTrue('the negative stop, before the other: ' + Shown(s),
+      (PosRaw('\tx-300', s) > 0) and (PosRaw('\tx-300', s) < PosRaw('\tx1440', s)));
+    AssertTrue('no stop at 0: ' + Shown(s), PosRaw('\tx0', s) = 0);
+    b := LoadDoc(o, True);
+    try
+      tabs := b.Formats.ParaFormat(b.ParaFormatOf(0)).Tabs;
+      AssertEquals('read back: both stops', 2, Length(tabs));
+      AssertEquals('...-300', -300, tabs[0].Position);
+      AssertEquals('...1440', 1440, tabs[1].Position);
+    finally
+      b.Free;
+    end;
   finally
     d.Free;
   end;

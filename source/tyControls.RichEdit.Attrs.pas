@@ -141,8 +141,8 @@ type
     { The attributes that are the same over the whole selection (everything for an empty
       selection; DefAttributes: none, as Delphi's). Remembered for the selection and the
       content (a repeated read is free) and BOUNDED: the walk reads at most the control's
-      budget (CRichConsistParas paragraphs and CRichConsistParseBytes bytes of a lazily read
-      file not parsed yet, about 30 ms); over a larger selection the answer is a lower bound -
+      budget (CRichConsistWork runs - a paragraph at least one - and CRichConsistParseBytes
+      bytes of a lazily read file not parsed yet, about 30 ms); over a larger selection the answer is a lower bound -
       every attribute not proven the same within the budget is reported as not consistent
       ("mixed", the safe answer for a toolbar). }
     property ConsistentAttributes: TTyRichConsistentAttributes read GetConsistentAttributes;
@@ -213,12 +213,16 @@ type
     { The number the list starts at. }
     property NumberingStart: Integer read GetNumberingStart write SetNumberingStart;
     { Tab stop AIndex (0-based), points from the left indent's origin. A read past the count
-      gives 0 (as Delphi's); a write past the last adds left-aligned stops at 0 up to it
-      (Delphi's needs TabCount first). TabCount := N sets the count as Delphi's: a larger
-      count appends stops at 0, to be set next (at most CTyMaxTabStops); a smaller one
-      removes the last. The stops stay as written in the paragraph's format; where they are
-      used - the layout and a file written - they are taken in order of position, and a stop
-      at 0 or less is none (a stop at 0 is not written into a file). }
+      gives 0 (as Delphi's); a write past the last adds left-aligned stops at 0 up to it, so
+      the stop written counts (Delphi's sets the count to AIndex: the stop written counts
+      only once TabCount is raised); an index of CTyMaxTabStops or more is ignored (Delphi's
+      record has 32 stops). TabCount := N sets the count as Delphi's: a larger count
+      appends stops at 0, to be set next (at most CTyMaxTabStops); a smaller one removes the
+      last. The stops stay as written in the paragraph's format; where they are used they
+      are taken in order of position: the layout takes the first stop right of the pen (a
+      stop at 0 or left of the margin only serves a first line that starts left of it, with
+      a negative indent), and a file written gets every stop but one at exactly 0 (the
+      TabCount placeholder). }
     property Tab[AIndex: Byte]: Integer read GetTab write SetTab;
     property TabCount: Integer read GetTabCount write SetTabCount;
     property SpaceBefore: Integer read GetSpaceBefore write SetSpaceBefore;
@@ -858,16 +862,11 @@ procedure TTyRichParaAttributes.SetNumbering(AValue: TTyListKind);
 var
   l: TTyListFormat;
 begin
-  if AValue = lkNone then
-    // the list record at its default: a paragraph that was plain is plain again
-    l := TyDefaultParaFormat.List
-  else
-  begin
-    l := GetFormat.List;
-    l.Kind := AValue;
-    if l.StartAt <= 0 then l.StartAt := 1;
-  end;
-  SetFormat(CTyListMask, TyRichListValue(l));
+  { The kind only: each paragraph keeps its own start (F-M1's rule, G-M6); lkNone takes the
+    list record back to its default - a paragraph that was plain is plain again. }
+  l := TyDefaultParaFormat.List;
+  l.Kind := AValue;
+  SetFormat([pffListKind, pffListIndents], TyRichListValue(l));
 end;
 
 function TTyRichParaAttributes.GetNumberingStart: Integer;
@@ -879,10 +878,10 @@ procedure TTyRichParaAttributes.SetNumberingStart(AValue: Integer);
 var
   f: TTyParaFormat;
 begin
+  // the start only: a plain paragraph stays plain, an item keeps its kind (G-M6)
   f := TyDefaultParaFormat;
-  f.List := GetFormat.List;
   f.List.StartAt := AValue;
-  SetFormat([pffList], f);
+  SetFormat([pffListStart], f);
 end;
 
 function TTyRichParaAttributes.GetTab(AIndex: Byte): Integer;
@@ -900,6 +899,10 @@ var
   f: TTyParaFormat;
   i, n: Integer;
 begin
+  { At or past Delphi's MAX_TAB_STOPS: ignored. The VCL checks nothing - its record holds 32
+    stops and a larger index writes past them, with no error raised (range checks off) -
+    and the system's rich edit keeps at most 32 (G-M8). }
+  if AIndex >= CTyMaxTabStops then Exit;
   f := TyDefaultParaFormat;
   f.Tabs := Copy(GetFormat.Tabs);
   n := Length(f.Tabs);
@@ -983,10 +986,11 @@ begin
   cur := GetFormat;
   f := TyDefaultParaFormat;
   f.LineSpacing := AValue;
-  // a height only means something for exactly and at least: kept from the first paragraph
+  { The rule only: a height (exactly, at least) stays each paragraph's own; one without a
+    height takes the first paragraph's (G-M6). }
   if AValue in [lsExact, lsAtLeast] then f.LineSpacingValue := cur.LineSpacingValue
   else f.LineSpacingValue := 0;
-  SetFormat([pffLineSpacing], f);
+  SetFormat([pffSpacingRule], f);
 end;
 
 function TTyRichParaAttributes.GetLineSpacing: Integer;
@@ -1000,15 +1004,13 @@ end;
 
 procedure TTyRichParaAttributes.SetLineSpacing(AValue: Integer);
 var
-  f, cur: TTyParaFormat;
+  f: TTyParaFormat;
 begin
-  cur := GetFormat;
+  { The height only, each paragraph keeping its rule where it is exactly or at least; one
+    with a multiple gets at least that height (Word's way) - per paragraph (G-M6). }
   f := TyDefaultParaFormat;
-  // a height given to a paragraph with a multiple: at least that height (Word's way)
-  if cur.LineSpacing in [lsExact, lsAtLeast] then f.LineSpacing := cur.LineSpacing
-  else f.LineSpacing := lsAtLeast;
   f.LineSpacingValue := TyRichPtToTwips(AValue);
-  SetFormat([pffLineSpacing], f);
+  SetFormat([pffSpacingHeight], f);
 end;
 
 function TTyRichParaAttributes.GetConsistentAttributes: TTyRichConsistentParaAttributes;

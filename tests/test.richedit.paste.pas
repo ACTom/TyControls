@@ -37,6 +37,8 @@ type
     procedure SelChanged(Sender: TObject);
     procedure PasteWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure ResetEvents;
+    // G-M5: TestATiffChainThatLoopsIsReadOnce's overlapping directories at distinct offsets
+    procedure OverlappingDirectories;
     procedure LoadRtf(const S: RawByteString);
     procedure LoadBytes(const B: TBytes);
     { A document typed in (set as lines: rich, R65); APlain - a plain text document (R60). }
@@ -3214,6 +3216,63 @@ begin
   e0 := TyRichTiffEntriesRead;
   AssertTrue('overlapping: no image', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
   AssertTrue(Format('a few entries (%d)', [TyRichTiffEntriesRead - e0]), TyRichTiffEntriesRead - e0 <= 6);
+  OverlappingDirectories;
+end;
+
+{ G-M5 (rereviewC-W17 Minor 5): directories that overlap at DISTINCT offsets are never
+  "visited twice" - only the bound on the entries read in all ends them. Directory k lies at
+  8 + 12k with 60,000 + k entries (one 12-byte grid), its next pointer in the cell after its
+  last entry pointing at directory k + 1; 5,000 of them in about 840 KB would read 312
+  million entries without the bound. }
+procedure TTyRichEditPasteTest.OverlappingDirectories;
+const
+  M = 5000;
+  C = 60000;
+var
+  b: TBytes;
+  len, at: Int64;
+  k: Integer;
+  pic: TTyRichPicture;
+  e0: Int64;
+
+  procedure Put16(APos: Int64; AValue: Integer);
+  begin
+    b[APos] := AValue and $FF;
+    b[APos + 1] := (AValue shr 8) and $FF;
+  end;
+
+  procedure Put32(APos, AValue: Int64);
+  begin
+    Put16(APos, AValue and $FFFF);
+    Put16(APos + 2, (AValue shr 16) and $FFFF);
+  end;
+
+begin
+  len := 10 + 12 * Int64(C + 2 * (M - 1)) + 12;
+  b := nil;
+  SetLength(b, len);
+  FillChar(b[0], len, 0);
+  b[0] := Ord('I');
+  b[1] := Ord('I');
+  Put16(2, 42);
+  Put32(4, 8);
+  for k := 0 to M - 1 do
+  begin
+    // directory k: C + k entries; the cell after them holds its next directory's offset
+    Put16(8 + 12 * k, C + k);
+    at := 10 + 12 * Int64(C + 2 * k);
+    if k < M - 1 then Put32(at, 8 + 12 * (k + 1)) else Put32(at, 0);
+  end;
+  // the width and length entries in cells every directory covers
+  at := 10 + 12 * M;
+  Put16(at, 256); Put16(at + 2, 4); Put32(at + 4, 1); Put32(at + 8, 16);
+  Put16(at + 12, 257); Put16(at + 14, 4); Put32(at + 16, 1); Put32(at + 20, 12);
+  e0 := TyRichTiffEntriesRead;
+  pic := nil;
+  TyRichMakePicture(b, rikTiff, 0, pic);
+  pic.Free;
+  AssertTrue(Format('overlapping at distinct offsets: bounded by the bytes (%d entries, %d bytes)',
+    [TyRichTiffEntriesRead - e0, len]), TyRichTiffEntriesRead - e0 <= len div 12 + 2);
 end;
 
 { F-Y2: a copy inside one file that has no colour table keeps a field holding \cf0 or

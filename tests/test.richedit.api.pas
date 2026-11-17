@@ -113,6 +113,11 @@ type
     procedure TestABlockDoesNotChangeWhatAWriteDoes;
     procedure TestABlockLeftByAnException;
     procedure TestTheShownSizeWrittenBackIsExact;
+    procedure TestListAndSpacingWritesKeepEachParagraphsOwn;
+    procedure TestATabPastTheLimitIsIgnored;
+    procedure TestANewContentInsideABlockIsRefused;
+    procedure TestALinesFileLoadReadsAtTheUpdatesEnd;
+    procedure TestTheConsistencyBudgetCountsRuns;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -2628,14 +2633,14 @@ begin
   finally
     FRich.Lines.EndUpdate;
   end;
-  acc.ConsistencyBudgetParas := 10;
+  acc.ConsistencyBudgetWork := 10;
   FRich.SelectAll;
   AssertTrue('past the paragraphs'' budget: a lower bound', FRich.SelAttributes.ConsistentAttributes = []);
   AssertTrue('Paragraph too', FRich.Paragraph.ConsistentAttributes = []);
   Sel(0, 30);
   AssertTrue('within it: exact', caBold in FRich.SelAttributes.ConsistentAttributes);
   // a change of the content asks again
-  acc.ConsistencyBudgetParas := CRichConsistParas;
+  acc.ConsistencyBudgetWork := CRichConsistWork;
   FRich.SelectAll;
   walks := acc.ConsistencyWalks;
   AssertTrue('all the same', caBold in FRich.SelAttributes.ConsistentAttributes);
@@ -3207,6 +3212,211 @@ begin
   FRich.SelAttributes.Size := base;
   Chars('x');
   AssertEquals('typed: no size of its own', 0, Fmt(6).SizeHalfPt);
+end;
+
+{ G-M6: NumberingStart, the start Numbering writes, LineSpacingRule and LineSpacing change
+  the one thing written and leave the others as each paragraph has them (F-M1's rule). }
+procedure TTyRichEditApiTest.TestListAndSpacingWritesKeepEachParagraphsOwn;
+var
+  f: TTyParaFormat;
+begin
+  SetText('one'#10'two');
+  // a bullet item and a plain paragraph
+  f := TyDefaultParaFormat;
+  f.List.Kind := lkBullet;
+  f.List.StartAt := 1;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 0, [pffList], f));
+  Sel(0, 5);
+  FRich.Paragraph.NumberingStart := 5;
+  AssertTrue('the item stays a bullet', PFmt(0).List.Kind = lkBullet);
+  AssertEquals('...starting at 5', 5, PFmt(0).List.StartAt);
+  AssertTrue('the plain paragraph stays plain', PFmt(1).List.Kind = lkNone);
+  // items that start at 1 and at 7: the kind changes, each start stays
+  f.List.Kind := lkDecimal;
+  f.List.StartAt := 1;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 0, [pffList], f));
+  f.List.StartAt := 7;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(1, 1, [pffList], f));
+  FRich.Paragraph.Numbering := lkUpperRoman;
+  AssertTrue('0: upper roman', PFmt(0).List.Kind = lkUpperRoman);
+  AssertEquals('0: from 1', 1, PFmt(0).List.StartAt);
+  AssertTrue('1: upper roman', PFmt(1).List.Kind = lkUpperRoman);
+  AssertEquals('1: from 7 still', 7, PFmt(1).List.StartAt);
+  FRich.Paragraph.Numbering := nsNone;
+  AssertTrue('off: plain', PFmt(1).List.Kind = lkNone);
+  AssertEquals('off: the record at its default', TyDefaultParaFormat.List.StartAt, PFmt(1).List.StartAt);
+  // "exactly 20 pt" and "double": a height keeps each rule
+  f := TyDefaultParaFormat;
+  f.LineSpacing := lsExact;
+  f.LineSpacingValue := 400;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 0, [pffLineSpacing], f));
+  f.LineSpacing := lsDouble;
+  f.LineSpacingValue := 0;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(1, 1, [pffLineSpacing], f));
+  FRich.Paragraph.LineSpacing := 30;
+  AssertTrue('0: exactly still', PFmt(0).LineSpacing = lsExact);
+  AssertEquals('0: 30 pt', 600, PFmt(0).LineSpacingValue);
+  AssertTrue('1: a multiple becomes at least', PFmt(1).LineSpacing = lsAtLeast);
+  AssertEquals('1: 30 pt', 600, PFmt(1).LineSpacingValue);
+  // a rule keeps each paragraph's height; a multiple has none
+  f.LineSpacing := lsAtLeast;
+  f.LineSpacingValue := 300;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(1, 1, [pffLineSpacing], f));
+  FRich.Paragraph.LineSpacingRule := lsExact;
+  AssertEquals('0: its own 30 pt', 600, PFmt(0).LineSpacingValue);
+  AssertEquals('1: its own 15 pt', 300, PFmt(1).LineSpacingValue);
+  AssertTrue('1: exactly', PFmt(1).LineSpacing = lsExact);
+  FRich.Paragraph.LineSpacingRule := lsDouble;
+  AssertTrue('double', PFmt(1).LineSpacing = lsDouble);
+  AssertEquals('...no height', 0, PFmt(1).LineSpacingValue);
+end;
+
+{ G-M8: Tab[i] := at or past CTyMaxTabStops (Delphi's MAX_TAB_STOPS, 32) is ignored, as the
+  VCL raises nothing for it; below the limit it writes as before. }
+procedure TTyRichEditApiTest.TestATabPastTheLimitIsIgnored;
+var
+  depth: Integer;
+begin
+  SetText('abc');
+  FRich.Paragraph.Tab[31] := 10;
+  AssertEquals('the last of 32', 32, FRich.Paragraph.TabCount);
+  AssertEquals('...set', 10, FRich.Paragraph.Tab[31]);
+  depth := FRich.Document.UndoDepth;
+  FRich.Paragraph.Tab[32] := 20;
+  FRich.Paragraph.Tab[40] := 20;
+  AssertEquals('past it: no stop added', 32, FRich.Paragraph.TabCount);
+  AssertEquals('...no step', depth, FRich.Document.UndoDepth);
+end;
+
+{ G-M9: a new content inside BeginEdit .. EndEdit is refused with the control's exception and
+  a message that says why, before anything changes (a missing file is not even opened); the
+  block goes on and ends as it would. }
+procedure TTyRichEditApiTest.TestANewContentInsideABlockIsRefused;
+var
+  kind, refused: Integer;
+  st: TBytesStream;
+  msg: string;
+begin
+  SetText('before');
+  refused := 0;
+  FRich.BeginEdit;
+  try
+    FRich.SelStart := 6;
+    FRich.SelText := '!';
+    for kind := 0 to 3 do
+      try
+        case kind of
+          0: begin
+               st := TBytesStream.Create(PlainRtf(2));
+               try
+                 FRich.LoadFromStream(st);
+               finally
+                 st.Free;
+               end;
+             end;
+          1: FRich.LoadFromFile(TempDir + 'no such file.rtf');
+          2: FRich.Lines.Text := 'other';
+          3: FRich.Lines.Clear;
+        end;
+        Fail('a new content inside a block: refused (' + IntToStr(kind) + ')');
+      except
+        on E: ETyRichEdit do
+        begin
+          Inc(refused);
+          msg := E.Message;
+        end;
+      end;
+  finally
+    FRich.EndEdit;
+  end;
+  AssertEquals('all four refused by the control', 4, refused);
+  AssertEquals('...saying why', rsRichEditReplaceInEdit, msg);
+  AssertEquals('the content as the block left it', 'before!', FRich.Lines[0]);
+  FRich.Undo;
+  AssertEquals('the block one step', 'before', FRich.Lines[0]);
+end;
+
+{ G-M10: Lines.LoadFromFile inside Lines.BeginUpdate .. EndUpdate reads nothing before
+  EndUpdate: the file as it is then is loaded (changed meanwhile: the new bytes; gone
+  meanwhile: the load raises there, as LoadFromFile would). A stream is read at once. }
+procedure TTyRichEditApiTest.TestALinesFileLoadReadsAtTheUpdatesEnd;
+var
+  path: string;
+  raised: Boolean;
+begin
+  path := TempDir + 'later.rtf';
+  WriteFileBytes(path, PlainRtf(3));
+  SetText('before');
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.Lines.LoadFromFile(path);
+    // what the file holds when the update ends is what is loaded
+    WriteFileBytes(path, RawBytes('changed meanwhile'));
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  FRich.FinishLoading;
+  AssertEquals('read at the end, not before', 'changed meanwhile', FRich.Lines[0]);
+  AssertEquals('its file', ExpandFileName(path), FRich.SourceFile);
+  // gone by then: the load raises at EndUpdate, the content stays
+  SetText('before');
+  raised := False;
+  try
+    FRich.Lines.BeginUpdate;
+    try
+      FRich.Lines.LoadFromFile(path);
+      DeleteFile(path);
+    finally
+      FRich.Lines.EndUpdate;
+    end;
+  except
+    on EStreamError do raised := True;
+  end;
+  AssertTrue('a file gone by the end raises there', raised);
+  AssertEquals('...the content stays', 'before', FRich.Lines[0]);
+end;
+
+{ G-M1: the consistency walk's budget is in units of work - runs looked at, a paragraph at
+  least one: 40 resident paragraphs of 20 runs each are 800 units, past a budget of 100 (a
+  lower bound), though only 40 paragraphs; the walk does no more than the budget. The
+  paragraphs' walk counts a paragraph a unit. }
+procedure TTyRichEditApiTest.TestTheConsistencyBudgetCountsRuns;
+var
+  s: RawByteString;
+  i, j: Integer;
+  acc: TConsAccess;
+  a: TTyRichConsistentAttributes;
+begin
+  s := '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'deff0{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}';
+  for i := 1 to 40 do
+  begin
+    s := s + BS + 'pard' + BS + 'f0 ';
+    for j := 1 to 10 do s := s + BS + 'b ab' + BS + 'b0 cd';
+    s := s + BS + 'par' + #13#10;
+  end;
+  s := s + '}';
+  LoadBytes(RawBytes(s));
+  // every paragraph resident (a whole-document write), as a paste or a log viewer leaves it
+  FRich.SelectAll;
+  FRich.SelAttributes.Color := clRed;
+  acc := TConsAccess(FRich);
+  acc.ConsistencyBudgetWork := 100;
+  Sel(0, FRich.Document.Text.Length);
+  a := FRich.SelAttributes.ConsistentAttributes;
+  AssertTrue('800 runs past a budget of 100: a lower bound', a = []);
+  AssertTrue(Format('the walk within the budget (%d units)', [acc.ConsistencyWork]),
+    acc.ConsistencyWork <= 101);
+  AssertTrue('the paragraphs: 40 units, within it - exact',
+    cpaAlignment in FRich.Paragraph.ConsistentAttributes);
+  acc.ConsistencyBudgetWork := 1000;
+  // (another selection: the remembered answer is not asked)
+  Sel(0, FRich.Document.Text.ParaStart(39) + 2);
+  a := FRich.SelAttributes.ConsistentAttributes;
+  AssertTrue('within a budget of 1000: exact (the italic the same)', caItalic in a);
+  AssertFalse('...the bold not', caBold in a);
+  AssertTrue(Format('...781 runs walked (%d)', [acc.ConsistencyWork]),
+    (acc.ConsistencyWork >= 780) and (acc.ConsistencyWork <= 782));
+  acc.ConsistencyBudgetWork := CRichConsistWork;
 end;
 
 initialization

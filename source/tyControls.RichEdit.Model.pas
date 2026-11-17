@@ -139,14 +139,23 @@ type
                     staying (RichMemo's FirstLine);
     pffHeadIndent   the other lines at AValue.LeftIndent, the first line staying (RichMemo's
                     HeadIndent);
-    pffListIndents  with pffList: a paragraph that becomes a list item and has no indent
+    pffListIndents  with pffList (or pffListKind): a paragraph that becomes a list item and has no indent
                     (both 0) takes AValue's LeftIndent and FirstIndent - the default hanging
                     indent; one that stops being a list item gets both back to 0 (msftedit's
                     and WordPad's rule, fact 4); others keep theirs.
-    They are applied after the absolute fields, in this order. }
+    They are applied after the absolute fields, in this order. Four more set one part of a
+    record each paragraph keeps the rest of (G-M6), applied with the absolute fields:
+    pffListKind     the list kind (lkNone: the list record at its default; another kind:
+                    the paragraph's own start, 1 where it has none);
+    pffListStart    the list's start number, the kind staying;
+    pffSpacingRule  the line spacing rule; a height stays where the rule is exactly or at
+                    least (a paragraph without one takes AValue's), else it is 0;
+    pffSpacingHeight the height (LineSpacingValue), the rule staying where it is exactly or
+                    at least, else at least (Word's way). }
   TTyParaFormatField = (pffAlign, pffLeftIndent, pffRightIndent, pffFirstIndent,
     pffSpaceBefore, pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra,
-    pffStartIndent, pffOffset, pffFirstLine, pffHeadIndent, pffListIndents);
+    pffStartIndent, pffOffset, pffFirstLine, pffHeadIndent, pffListIndents,
+    pffListKind, pffListStart, pffSpacingRule, pffSpacingHeight);
   TTyParaFormatMask = set of TTyParaFormatField;
 
   { Equal formats get the same id; ids are never reused, so an id an undo record keeps stays
@@ -1460,6 +1469,29 @@ begin
   end;
   if pffTabs in AMask then Result.Tabs := Copy(AValue.Tabs);
   if pffList in AMask then Result.List := AValue.List;
+  // one part of the list record and of the spacing, each paragraph keeping the rest (G-M6)
+  if pffListKind in AMask then
+    if AValue.List.Kind = lkNone then
+      Result.List := TyDefaultParaFormat.List
+    else
+    begin
+      Result.List.Kind := AValue.List.Kind;
+      if Result.List.StartAt <= 0 then Result.List.StartAt := 1;
+    end;
+  if pffListStart in AMask then Result.List.StartAt := AValue.List.StartAt;
+  if pffSpacingRule in AMask then
+  begin
+    Result.LineSpacing := AValue.LineSpacing;
+    if not (AValue.LineSpacing in [lsExact, lsAtLeast]) then
+      Result.LineSpacingValue := 0
+    else if Result.LineSpacingValue <= 0 then
+      Result.LineSpacingValue := AValue.LineSpacingValue;
+  end;
+  if pffSpacingHeight in AMask then
+  begin
+    if not (Result.LineSpacing in [lsExact, lsAtLeast]) then Result.LineSpacing := lsAtLeast;
+    Result.LineSpacingValue := AValue.LineSpacingValue;
+  end;
   if pffRtlPar in AMask then Result.RtlPar := AValue.RtlPar;
   if pffExtra in AMask then Result.Extra := AValue.Extra;
   // the relative indent fields (see TTyParaFormatField), each from this paragraph's values

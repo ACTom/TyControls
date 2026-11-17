@@ -123,11 +123,17 @@ const
   CRichReplaceBatch = 4096;
   CRichReplaceMinBatch = 16;
   { The budget of one read of ConsistentAttributes (SelAttributes' and Paragraph's, F-I1):
-    at most this many paragraphs walked, and at most this many bytes of a lazily read file
-    parsed for it (a parse already begun is finished; the first paragraph is always read),
-    about 30 ms on a 100 MB file. A selection larger than that is answered with a lower
-    bound: every attribute not proven the same within the budget is "not consistent". }
-  CRichConsistParas = 130000;
+    at most this many units of work - a run looked at, or a paragraph whose format alone is
+    (a paragraph counts at least one; G-M1: runs, not paragraphs, so that resident
+    paragraphs of many runs cost what plain ones cost) -, and at most this many bytes of a
+    lazily read file parsed for it (a parse already begun is finished; the first paragraph
+    is always read). Measured (Select All + the first read, -O2): 21-23 ms over 20,000
+    resident paragraphs of 50 runs each, 23-24 ms on the 100 MB txt, 31 ms on the 100 MB
+    RTF read lazily (its 192 KB of parsing) - a run costs about what a plain paragraph
+    costs, 0.17 us. A selection larger than that is answered with a
+    lower bound: every attribute not proven the same within the budget is "not
+    consistent". }
+  CRichConsistWork = 130000;
   CRichConsistParseBytes = 192 * 1024;
   { The most bytes of image a picture is made from (a paste, TyRichMakePicture): 128 MB. With
     CRichPictureMaxPixels (32 Mi pixels: the most the layouter decodes - a bigger picture
@@ -250,11 +256,13 @@ type
   private
     FOwner: TTyCustomRichEdit;
     FBatch: TStringList;
-    { A load asked for inside the update (Lines.LoadFromFile / LoadFromStream): its bytes,
-      read at once, and the file they came from ('' for a stream); the control loads them
-      when the update ends (F-M8). }
+    { A load asked for inside the update, done by the control when the update ends (F-M8):
+      a stream's bytes, read at once (Lines.LoadFromStream), or a file's name
+      (Lines.LoadFromFile), read only then (G-M10). }
     FBatchLoad: TMemoryStream;
     FBatchFile: string;
+    // FBatchFile is a file to load at the update's end, not yet read (G-M10)
+    FBatchLoadFile: Boolean;
     FUpdating: Boolean;
     { An empty document is no lines or one empty line: TStrings tells them apart, the text
       cannot. Set by Add('') / Insert on no lines, by a delete that leaves one empty line and
@@ -555,8 +563,8 @@ type
     FConsBase: TTyCharFormat;
     FConsMask: TTyCharFormatMask;
     FConsLast: Integer;
-    // the walks' budget (F-I1): paragraphs seen, the loader's parsed bytes at the start, cut
-    FConsBudgetParas: Integer;
+    // the walks' budget (F-I1): units of work done, the loader's parsed bytes at the start, cut
+    FConsBudgetWork: Integer;
     FConsBudgetBytes: Int64;
     FConsSeen: Integer;
     FConsParsed0: Int64;
@@ -608,11 +616,13 @@ type
     procedure ConsistencyAdd(AFormat: TTyCharFormatId);
     procedure ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
-    { The budget of a consistency walk (F-I1): ConsistencyBegin starts one; ConsistencyGo
-      counts a paragraph (AUnparsed: reading it parses) and says whether the walk may read
-      it - False once the budget is spent (FConsCut). }
+    { The budget of a consistency walk (F-I1, G-M1): ConsistencyBegin starts one;
+      ConsistencyGo says whether the walk may read a paragraph (AUnparsed: reading it
+      parses) - False once the budget is spent (FConsCut); ConsistencyUnit counts one unit
+      of work (a run looked at, a paragraph's format) and says whether it was within it. }
     procedure ConsistencyBegin;
     function ConsistencyGo(AUnparsed: Boolean): Boolean;
+    function ConsistencyUnit: Boolean;
     function ParsedSoFar: Int64;
     { Delphi's Paragraph.ConsistentAttributes over the paragraphs [AStart, AStart + ALen)
       touches: bounded and remembered as RangeConsistency. }
@@ -1325,9 +1335,11 @@ type
       step by hand): StepBytes. A test seam (it records what the loader was asked). }
     function SliceBytes: Int64; virtual;
     property PendingPictureCount: Integer read FPendingCount;
-    { The budget of a ConsistentAttributes read (CRichConsistParas, CRichConsistParseBytes;
-      a test seam) and the walks made so far (a remembered answer makes none). }
-    property ConsistencyBudgetParas: Integer read FConsBudgetParas write FConsBudgetParas;
+    { The budget of a ConsistentAttributes read (CRichConsistWork, CRichConsistParseBytes;
+      a test seam), the walks made so far (a remembered answer makes none) and the units of
+      work the last walk did. }
+    property ConsistencyBudgetWork: Integer read FConsBudgetWork write FConsBudgetWork;
+    property ConsistencyWork: Integer read FConsSeen;
     property ConsistencyBudgetBytes: Int64 read FConsBudgetBytes write FConsBudgetBytes;
     property ConsistencyWalks: Integer read FConsWalks;
     { The background find's piece (characters, see CRichFindStepChars) and the background
@@ -1551,7 +1563,9 @@ type
       (the outermost pair counts); an open composition ends at BeginEdit. Inside, the
       document is in its update (Document.BeginUpdate): the user's actions (Undo, a key) do
       nothing until EndEdit; a change made by code straight through Document.Execute is heard
-      at EndEdit, as inside any update, and does not move the selection. Not
+      at EndEdit, as inside any update, and does not move the selection. A new content - a
+      load, Lines.Text :=, Lines.Clear, Text :=, Clear - is refused inside (ETyRichEdit,
+      before anything changes): the block is one undo step and a new content has none. Not
       Lines.BeginUpdate, which gathers a replacement of the lines. EndEdit without BeginEdit
       raises. }
     procedure BeginEdit;
@@ -2162,7 +2176,7 @@ end;
   load is about to replace: refused rather than lost. }
 procedure TTyRichEditLines.CheckNoLoad;
 begin
-  if FBatchLoad <> nil then
+  if (FBatchLoad <> nil) or FBatchLoadFile then
     raise ETyRichEdit.Create('Lines: a load inside BeginUpdate waits for EndUpdate');
 end;
 
@@ -2320,6 +2334,7 @@ begin
   begin
     // a replacement: a load put off before it is replaced too
     FreeAndNil(FBatchLoad);
+    FBatchLoadFile := False;
     if FBatch = nil then FBatch := TStringList.Create else FBatch.Clear;
     Exit;
   end;
@@ -2335,6 +2350,7 @@ begin
   if FBatch <> nil then
   begin
     FreeAndNil(FBatchLoad);
+    FBatchLoadFile := False;
     FBatch.Text := Value;
     Exit;
   end;
@@ -2355,7 +2371,15 @@ begin
   end;
   // closed before a gathered replacement: the content is not replaced inside an update
   FOwner.FDoc.EndUpdate;
-  if FBatchLoad <> nil then
+  if FBatchLoadFile then
+  begin
+    // the file is read now, as a load outside an update reads it (one gone by now raises)
+    s := FBatchFile;
+    FBatchLoadFile := False;
+    FBatchFile := '';
+    FOwner.LoadFromFile(s);
+  end
+  else if FBatchLoad <> nil then
   begin
     ld := FBatchLoad;
     FBatchLoad := nil;
@@ -2376,24 +2400,23 @@ begin
 end;
 
 { As Delphi's TRichEdit.Lines: the control's load and save (see the declaration). Inside the
-  lines' update the document takes no new content: the bytes are read now (a missing file
-  raises here) and loaded by the control at the update's end, as the file says (F-M8). }
+  lines' update the document takes no new content: it is loaded by the control at the
+  update's end, as the file says (F-M8). A FILE is only named here and read then, lazily as
+  any load of the control (G-M10: no copy of a 100 MB file held through the update; one gone
+  by then raises at EndUpdate, as LoadFromFile would). A STREAM is read at once (below): it
+  may not live until the update ends. }
 procedure TTyRichEditLines.LoadFromFile(const FileName: string);
-var
-  fs: TFileStream;
 begin
   if not FUpdating then
   begin
     FOwner.LoadFromFile(FileName);
     Exit;
   end;
-  fs := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
-  try
-    LoadFromStream(fs);
-  finally
-    fs.Free;
-  end;
+  // the latest replacement wins: a gathered text or an earlier load goes
+  FreeAndNil(FBatch);
+  FreeAndNil(FBatchLoad);
   FBatchFile := ExpandFileName(FileName);
+  FBatchLoadFile := True;
 end;
 
 procedure TTyRichEditLines.LoadFromStream(Stream: TStream);
@@ -2418,6 +2441,7 @@ begin
   FBatchLoad.Free;
   FBatchLoad := ms;
   FBatchFile := '';
+  FBatchLoadFile := False;
 end;
 
 procedure TTyRichEditLines.SaveToFile(const FileName: string);
@@ -2606,7 +2630,7 @@ begin
   FLines := TTyRichEditLines.Create(Self);
   FCaretShown := True;
   FCopyWaitChars := CRichCopyWaitChars;
-  FConsBudgetParas := CRichConsistParas;
+  FConsBudgetWork := CRichConsistWork;
   FConsBudgetBytes := CRichConsistParseBytes;
   FFindSlice := CRichFindMinStepChars;
   FReplaceBatch := CRichReplaceMinBatch;
@@ -6256,9 +6280,16 @@ end;
 
 function TTyCustomRichEdit.ConsistencyGo(AUnparsed: Boolean): Boolean;
 begin
-  Inc(FConsSeen);
-  if FConsSeen > FConsBudgetParas then FConsCut := True
+  // (no unit left: the paragraph's first run would be past the budget)
+  if FConsSeen >= FConsBudgetWork then FConsCut := True
   else if AUnparsed and (ParsedSoFar - FConsParsed0 >= FConsBudgetBytes) then FConsCut := True;
+  Result := not FConsCut;
+end;
+
+function TTyCustomRichEdit.ConsistencyUnit: Boolean;
+begin
+  Inc(FConsSeen);
+  if FConsSeen > FConsBudgetWork then FConsCut := True;
   Result := not FConsCut;
 end;
 
@@ -6287,6 +6318,12 @@ begin
   if not parsed then runs := FDoc.RunsOf(AIndex);
   for i := 0 to High(runs) do
   begin
+    // each run a unit of the budget (G-M1)
+    if not ConsistencyUnit then
+    begin
+      AContinue := False;
+      Exit;
+    end;
     ConsistencyAdd(runs[i].Format);
     if FConsMask = [] then Break;
   end;
@@ -6323,6 +6360,7 @@ var
       end
       else if (re <= a) or (rs >= b) or (re <= rs) then
         Continue;
+      if not ConsistencyUnit then Exit;
       ConsistencyAdd(runs[i].Format);
       if FConsMask = [] then Exit;
     end;
@@ -6377,8 +6415,9 @@ begin
     Exit;
   end;
   parsed := FDoc.ReadValue(AData, pf, runs, cell);
-  // the first paragraph is always read; past the budget the walk stops (F-I1)
-  if FParaConsHave and not ConsistencyGo(not parsed) then
+  // the first paragraph is always read; past the budget the walk stops (F-I1), a paragraph
+  // a unit (its format alone is looked at)
+  if FParaConsHave and (not ConsistencyGo(not parsed) or not ConsistencyUnit) then
   begin
     AContinue := False;
     Exit;
@@ -10707,6 +10746,9 @@ end;
 procedure TTyCustomRichEdit.CheckReplaceable;
 begin
   if FInStep or (FSaving > 0) then raise ETyRichEdit.Create(rsRichEditBusy);
+  { Inside BeginEdit .. EndEdit: the block is one undo step and a new content has none -
+    refused before anything changes, with the control's own exception (G-M9). }
+  if FEditBlock > 0 then raise ETyRichEdit.Create(rsRichEditReplaceInEdit);
 end;
 
 procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat;

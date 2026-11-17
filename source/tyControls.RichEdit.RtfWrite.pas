@@ -2153,14 +2153,16 @@ begin
           Word('slmult0');
         end;
     end;
-    { The stops as the layout takes them (F-I4): in order of position, none at 0 or less -
-      a stop at 0 is Delphi's TabCount's "to be set next", no stop at all. The format keeps
-      them as written. }
+    { The stops as the layout takes them (F-I4): in order of position, every one the format
+      holds but a stop at exactly 0 - Delphi's TabCount's placeholder, "to be set next", no
+      stop at all. A negative one is a file's stop left of the margin (a line that starts
+      there with a negative indent uses it): written (G-M4). The format keeps them as
+      written. }
     stops := nil;
     SetLength(stops, Length(Tabs));
     n := 0;
     for i := 0 to High(Tabs) do
-      if Tabs[i].Position > 0 then
+      if Tabs[i].Position <> 0 then
       begin
         t := Tabs[i];
         j := n;
@@ -2777,7 +2779,11 @@ begin
     the document's end takes the separator before it - and with it all of that paragraph's
     zero characters. It is taken whole (R67's rule), so that its format comes along (F-Y5:
     a document ending with an empty centred line or list item). The plain text is the same:
-    the separator before it already ends with a line break. }
+    the separator before it already ends with a line break. So such a copy pastes one
+    paragraph end more than it has separators - the document given back plus one empty
+    paragraph (R64, R67): the last line with its break, or that break alone, is the same
+    range as "to the document's end" and cannot be told apart from it (WordPad tells them
+    apart by its final mark; G-M7, as ruled). }
   if Result.LastSeparator and (stop = t.Length) and (Result.LastPara = t.ParaCount - 2) and
     (t.ParaLength(t.ParaCount - 1) = 0) then
   begin

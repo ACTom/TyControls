@@ -304,6 +304,7 @@ resourcestring
   rsRichEditCannotReplace = 'The file %s could not be replaced; it was left as it was.';
   rsRichEditCannotWrite   = 'The file %s cannot be written; it was left as it was.';
   rsRichEditBusy          = 'The document cannot be replaced now: it is being loaded or saved.';
+  rsRichEditReplaceInEdit = 'The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo.';
   { Why an edit the user asked for (a key, the menu) was not made: what
     TTyCustomRichEdit.EditRefused and OnEditRefused are told, and what the editing methods
     raise. }
