@@ -83,6 +83,7 @@ type
     // fix wave W13
     procedure TestUndoAndRedoCopyAParagraphOnce;
     procedure TestRandomEditsUndoneAndRedone;
+    procedure TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
   end;
 
 implementation
@@ -2848,6 +2849,120 @@ begin
   for i := 1 to 300 do text := text + 'abc def\par ';
   text := text + '}';
   for i := 1 to 4 do Stress('plain-300', BytesOf(text), 9000 + i, 600, 0);
+end;
+
+type
+  // the builder's questions a reader asks (protected)
+  TBuildAccess = class(TTyRichDocBuilder)
+  end;
+
+{ Q-O1 (fix wave W13): R56 in a big file. A plain paragraph (the value all plain parsed
+  paragraphs share) typed in, or deleted, whose interval the loader let go before the undo, is
+  the file's own again after it: saved byte for byte as the file - at the start, in the middle
+  and at the end of a file of several megabytes read with a small residency; saved at once
+  (no group knows the paragraph: the file's paragraph is parsed again to tell) and after the
+  paragraph is read again (its group takes it as its own). }
+procedure TTyRtfLazyTest.TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
+var
+  b: TBytes;
+  text: TByteBuilder;
+  i, p, way, where, n, k, pc: Integer;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  r: TTyRtfRange;
+  what: string;
+begin
+  text := Default(TByteBuilder);
+  text.Add('{\rtf1 ');
+  for i := 1 to 400000 do text.Add('abc\par ');
+  text.Add('}');
+  b := text.Done;
+  AssertTrue('several megabytes', Length(b) > 3 * 1000 * 1000);
+  for where := 0 to 2 do
+    for way := 0 to 3 do
+    begin
+      d := LoadWith(b, False);
+      try
+        load := TyRichRtfLoadOf(d);
+        load.MaxResidentIntervals := 2;
+        n := load.IntervalCount;
+        AssertTrue('many intervals', n > 8);
+        case where of
+          0: p := 5;
+          1: p := d.Text.ParaCount div 2;
+        else
+          p := d.Text.ParaCount - 3;
+        end;
+        what := Format('paragraph %d, %s, %s', [p, BoolToStr(way and 1 = 0, 'typed in',
+          'deleted'), BoolToStr(way and 2 = 0, 'saved at once', 'read again')]);
+        d.EnsureParsed(p);
+        AssertTrue(what + ': the file''s own before', load.ParaSource(p, r));
+        if way and 1 = 0 then
+          AssertTrue(what + ': typed', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(p) + 1,
+            'x')))
+        else
+          AssertTrue(what + ': deleted', d.Execute(TTyRichDelete.Create(d.Text.ParaStart(p),
+            d.Text.ParaStart(p + 1) - d.Text.ParaStart(p))));
+        // elsewhere: intervals far from it read, so that its own goes
+        k := 0;
+        while (k < n - 1) and (load.IntervalFirstPara(k + 1) <= p) do Inc(k);
+        d.EnsureParsed(load.IntervalFirstPara((k + n div 2) mod n) + 1);
+        d.EnsureParsed(load.IntervalFirstPara((k + n div 3) mod n) + 1);
+        d.EnsureParsed(load.IntervalFirstPara((k + n div 4) mod n) + 1);
+        d.Undo;
+        if way and 2 <> 0 then
+        begin
+          { Its interval read again (a paragraph near it, unparsed, is read - a deletion's
+            undo gave the paragraph after it a value too -: its group sets what is
+            unparsed and takes the paragraph, which has a value already, as its own): when that
+            group goes too the paragraph is unparsed again, as any untouched one, and a save
+            parses nothing for it. }
+          d.EnsureParsed(p + 2);
+          d.EnsureParsed(load.IntervalFirstPara((k + n div 2) mod n) + 1);
+          d.EnsureParsed(load.IntervalFirstPara((k + n div 3) mod n) + 1);
+          d.EnsureParsed(load.IntervalFirstPara((k + n div 4) mod n) + 1);
+          pc := load.ParseCount;
+          AssertTrue(what + ': saved as the file', SameBytes(SaveOf(d), b));
+          AssertEquals(what + ': the save parsed nothing', pc, load.ParseCount);
+        end;
+        AssertTrue(what + ': the file''s own after the undo', load.ParaSource(p, r));
+        AssertTrue(what + ': saved as the file', SameBytes(SaveOf(d), b));
+      finally
+        d.Free;
+      end;
+    end;
+  { And the other way: a centred paragraph of the file made plain by a command has that same
+    shared value, with its text the file's - it is not the file's own (the file makes it
+    centred), after its interval went too: saved as it is now. }
+  text := Default(TByteBuilder);
+  text.Add('{\rtf1 ');
+  for i := 1 to 200000 do
+    if i = 100000 then text.Add('\qc xyz\par\pard ') else text.Add('abc\par ');
+  text.Add('}');
+  b := text.Done;
+  d := LoadWith(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 2;
+    n := load.IntervalCount;
+    p := 99999;
+    d.EnsureParsed(p);
+    AssertEquals('the centred paragraph', 'xyz', d.Text.GetText(d.Text.ParaStart(p), 3));
+    AssertTrue('made plain', d.Execute(TTyRichSetParaFormat.Create(p, p, [pffAlign],
+      TyDefaultParaFormat)));
+    AssertTrue('its value is the shared plain one',
+      TBuildAccess.IsPlainValue(d, TBuildAccess.ParagraphValue(d, p)));
+    k := 0;
+    while (k < n - 1) and (load.IntervalFirstPara(k + 1) <= p) do Inc(k);
+    d.EnsureParsed(load.IntervalFirstPara((k + n div 2) mod n) + 1);
+    d.EnsureParsed(load.IntervalFirstPara((k + n div 3) mod n) + 1);
+    AssertFalse('not the file''s own', load.ParaSource(p, r));
+    AssertFalse('saved as it is now, not as the file', SameBytes(SaveOf(d), b));
+    d.EnsureParsed(p);
+    AssertFalse('read again: still not the file''s own', load.ParaSource(p, r));
+  finally
+    d.Free;
+  end;
 end;
 
 initialization

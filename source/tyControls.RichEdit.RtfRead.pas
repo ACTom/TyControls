@@ -654,6 +654,7 @@ type
     procedure Used(AIndex: Integer);
     function KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
     procedure KeepValue(ASrc: Int64; AValue: Pointer);
+    function FileMakes(AGroup: TTyRtfGroup; AIndex, APara: Integer; AValue: Pointer): Boolean;
     procedure Unkeep(AIndex: Integer);
     procedure ValueParts(AGroup: TTyRtfGroup; AIndex: Integer; out ACell: TTyRichCell;
       out AListText: UTF8String);
@@ -702,7 +703,8 @@ type
     // The second half of ParaSource, for a writer that walks the paragraphs itself: the
     // unedited lazy paragraph from ASrcOffset, whose value is AValue, still has the formats
     // the file gives it (AValue nil - never parsed - or the very value this load set,
-    // whether its interval is parsed at the moment or not).
+    // whether its interval is parsed at the moment or not - or the one value all plain
+    // parsed paragraphs share, when the file makes the paragraph plain: FileMakes).
     function OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
     // For a writer: the reader's state at byte APos of the file - a paragraph's start, or the
     // trailer's - scanned from the snapshot before it (no paragraph is parsed, nothing is
@@ -5488,6 +5490,18 @@ begin
     end;
     Unkeep(k);
   end
+  else if TRtfBuild.IsPlainValue(FDoc, TRtfBuild.ParagraphValue(FDoc, j)) and
+    FileMakes(AGroup, AIndex, j, TRtfBuild.ParagraphValue(FDoc, j)) then
+  begin
+    { The shared plain value, which no record keeps (ValueShared is never True for it): a
+      plain paragraph an undo gave back after its group went (an edit in it, or its
+      deletion, undone). It is the file's own again, as the paragraph the file makes, and
+      this group's (held, as the value it sets) - it goes back to unparsed with it. }
+    v := TRtfBuild.ParagraphValue(FDoc, j);
+    TRtfBuild.HoldValue(FDoc, v);
+    AGroup.Values[AIndex] := v;
+    AGroup.States[AIndex] := StateOurs;
+  end
   else
     AGroup.States[AIndex] := StateSkipped;
 end;
@@ -5680,7 +5694,7 @@ end;
 function TTyRtfLoad.OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
 var
   g: TTyRtfGroup;
-  i: Integer;
+  i, j: Integer;
 begin
   if AValue = nil then Exit(True);
   // parsed: untouched while it still has the value this load gave it - which a group
@@ -5692,6 +5706,31 @@ begin
     if (i >= 0) and (g.States[i] = StateOurs) and (g.Values[i] = AValue) then Exit(True);
   end;
   Result := KeptAt(ASrcOffset, i) and (FKept[i].Value = AValue);
+  if Result or not TRtfBuild.IsPlainValue(FDoc, AValue) then Exit;
+  { The plain value all plain parsed paragraphs share: no group or record says whose it is
+    (a plain paragraph an undo gave back after its group went). It is the file's own when
+    the file makes the paragraph plain: its interval parsed again, as for a read. }
+  j := FDoc.Text.ParaOfLazySource(ASrcOffset);
+  if j < 0 then Exit;
+  g := GroupFor(ASrcOffset, i);
+  if i < 0 then Exit;
+  Result := FileMakes(g, i, j, AValue);
+end;
+
+// The value record AIndex of the group makes for paragraph APara is AValue (only a value the
+// document shares - the plain one - can be: any other is made anew).
+function TTyRtfLoad.FileMakes(AGroup: TTyRtfGroup; AIndex, APara: Integer;
+  AValue: Pointer): Boolean;
+var
+  cell: TTyRichCell;
+  lt: UTF8String;
+  v: Pointer;
+begin
+  ValueParts(AGroup, AIndex, cell, lt);
+  v := TRtfBuild.MakeValue(FDoc, APara, AGroup.Recs[AIndex].Format, AGroup.Recs[AIndex].Runs,
+    cell, lt);
+  Result := v = AValue;
+  TRtfBuild.ReleaseValue(FDoc, v);
 end;
 
 function TTyRtfLoad.LastParaOpen: Boolean;

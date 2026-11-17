@@ -441,6 +441,9 @@ type
       undo record that can put it back. Never True for the one value all plain parsed
       paragraphs share: it says nothing about any one of them. }
     class function ValueShared(ADoc: TTyRichDocument; AValue: Pointer): Boolean;
+    { AValue is that one shared value: whether a paragraph that has it is the file's own
+      cannot be told from the value - only from what the file makes of the paragraph. }
+    class function IsPlainValue(ADoc: TTyRichDocument; AValue: Pointer): Boolean;
     class function UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
       AValue: Pointer): Boolean;
     { A command is running, the text is being changed, or a read scope is open
@@ -1891,6 +1894,11 @@ class function TTyRichDocBuilder.ValueShared(ADoc: TTyRichDocument; AValue: Poin
 begin
   Result := (AValue <> nil) and (AValue <> Pointer(ADoc.FPlainParsed)) and
     (TTyRichParaData(AValue).FRefCount > 1);
+end;
+
+class function TTyRichDocBuilder.IsPlainValue(ADoc: TTyRichDocument; AValue: Pointer): Boolean;
+begin
+  Result := (AValue <> nil) and (AValue = Pointer(ADoc.FPlainParsed));
 end;
 
 class function TTyRichDocBuilder.UnsetParagraph(ADoc: TTyRichDocument; AIndex: Integer;
