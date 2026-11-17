@@ -83,6 +83,7 @@ type
     procedure TestPastedListItemsDoNotJoinTheTargetsList;
     procedure TestTheControlPastesAcrossDocumentsThroughTheFilter;
     procedure TestTheTablesAgreeOnlyWhereEveryTableDoes;
+    procedure TestTheNestedSamplesPasteAsParagraphsThatSave;
   end;
 
 implementation
@@ -339,6 +340,22 @@ begin
   Result := Stripped(A).Equals(Stripped(B));
 end;
 
+{ The cell of A's paragraph AK, unless a row of its table that the copy R takes holds a nested
+  table: such a table is pasted as its paragraphs (R63). }
+function PastedCell(A: TTyRichDocument; const R: TTyRichCopyRange; AK: Integer): TTyRichCell;
+var
+  i: Integer;
+  c: TTyRichCell;
+begin
+  Result := A.CellAt(AK);
+  if Result = nil then Exit;
+  for i := R.FirstPara to R.LastPara do
+  begin
+    c := A.CellAt(i);
+    if (c <> nil) and (c.Table = Result.Table) and c.Row.HoldsNestedTable then Exit(nil);
+  end;
+end;
+
 { What a paste of [AFrom, AFrom + ALen) of A left in B, which had AHead characters before the
   place in its paragraph AK (the paragraph the paste went into): '' when B holds the range -
   every paragraph's text, every character's format and object, the format of every paragraph
@@ -357,7 +374,7 @@ begin
   R := TyRichCopyRange(A, AFrom, ALen);
   if R.Empty then Exit('');
   // rows pasted after text: the text kept a paragraph of its own
-  if (AHead > 0) and not R.InOneCell and (A.CellAt(R.FirstPara) <> nil) then
+  if (AHead > 0) and not R.InOneCell and (PastedCell(A, R, R.FirstPara) <> nil) then
   begin
     Inc(AK);
     AHead := 0;
@@ -407,7 +424,7 @@ begin
       if not SamePara(A.Formats.ParaFormat(A.ParaFormatOf(k)), B.Formats.ParaFormat(B.ParaFormatOf(bk)),
         ASaved) then
         Exit(Format('paragraph %d: its format', [k]));
-    ca := A.CellAt(k);
+    ca := PastedCell(A, R, k);
     cb := B.CellAt(bk);
     if R.InOneCell then
     begin
@@ -860,6 +877,78 @@ begin
     b.Free;
     a.Free;
   end;
+end;
+
+{ W14 V-I1 (R63): every sample that holds a row with a nested table, copied whole and pasted
+  into a document read from RTF and into a new one: the table goes in as paragraphs that can
+  be edited, the document saves, and read back holds all the text. }
+procedure TTyRichEditPasteTest.TestTheNestedSamplesPasteAsParagraphsThatSave;
+var
+  sr: TSearchRec;
+  a, d, c: TTyRichDocument;
+  rtf: TBytes;
+  k, n, found: Integer;
+  nested: Boolean;
+  filtered: Boolean;
+
+  procedure Check(const AWhat: string; AFirst: Integer);
+  var
+    i: Integer;
+    all: RawByteString;
+  begin
+    for i := AFirst to AFirst + n - 1 do
+    begin
+      if (a.CellAt(i - AFirst) <> nil) and
+        (PastedCell(a, TyRichCopyRange(a, 0, a.Text.Length), i - AFirst) = nil) then
+        AssertTrue(Format('%s: paragraph %d in no table', [AWhat, i]), d.CellAt(i) = nil);
+      AssertTrue(Format('%s: paragraph %d can be edited', [AWhat, i]),
+        d.CanChange(d.Text.ParaStart(i), 0));
+    end;
+    c := LoadDoc(SaveOut(d), True);
+    try
+      all := d.Text.GetText(0, d.Text.Length);
+      AssertTrue(AWhat + ': all the text read back', SameRaw(all, c.Text.GetText(0, c.Text.Length)));
+    finally
+      c.Free;
+    end;
+  end;
+
+begin
+  found := 0;
+  if FindFirst(FixtureDir + '*.rtf', faAnyFile, sr) = 0 then
+  try
+    repeat
+      a := LoadDoc(FileBytes(FixtureDir + sr.Name), True);
+      try
+        nested := False;
+        for k := 0 to a.Text.ParaCount - 1 do
+          if (a.CellAt(k) <> nil) and a.CellAt(k).Row.HoldsNestedTable then nested := True;
+        if not nested then Continue;
+        Inc(found);
+        n := a.Text.ParaCount;
+        rtf := RangeOut(a, 0, a.Text.Length);
+        d := LoadDoc(RawBytes(TgtIdx), False);
+        try
+          AssertTrue(sr.Name + ': pasted', PasteAcross(d, d.Text.ParaStart(1), rtf, filtered));
+          Check(sr.Name + ' into a file', 1);
+        finally
+          d.Free;
+        end;
+        d := TTyRichDocument.Create;
+        try
+          AssertTrue(sr.Name + ': pasted', PasteAcross(d, 0, rtf, filtered));
+          Check(sr.Name + ' into a new document', 0);
+        finally
+          d.Free;
+        end;
+      finally
+        a.Free;
+      end;
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('samples with a nested table', found >= 2);
 end;
 
 { A 32-bit bottom-up DIB of AW x AH pixels in AColor (B, G, R, A), AXppm pixels a metre. }
@@ -1596,6 +1685,8 @@ var
       dd := PasteDiff(a, AFrom, ALen, b, 1, 5);
       if dd <> '' then Fail(Format('%s [%d +%d] into a paragraph: %s', [AWhat, AFrom, ALen, dd]));
       AssertEquals(AWhat + ': the paragraph before stays', 'before', ParaText(b, 0));
+      // a file with a paste in it saves (R63: never a row it cannot write)
+      SaveOut(b);
     finally
       b.Free;
     end;
@@ -1656,11 +1747,9 @@ begin
       b := TTyRichDocument.Create;
       c := nil;
       try
-        try
-          PasteInto(b, 0, RangeOut(a, 0, a.Text.Length));
-        except
-          on ETyRichRtfWrite do Continue;
-        end;
+        // (an unchanged sample is copied as its bytes: the writer never refuses it, and the
+        // paste's own save never raises - a row holding a nested table goes in as text)
+        PasteInto(b, 0, RangeOut(a, 0, a.Text.Length));
         c := LoadDoc(SaveOut(b), True);
         // (the last paragraph of the paste is the new document's own one)
         last := a.Text.ParaCount - 1;

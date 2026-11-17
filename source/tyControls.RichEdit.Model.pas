@@ -532,7 +532,10 @@ type
     when APos is in no table and AFlatten is False - the paragraph at APos is split before the
     first row when text stands before APos, and after a last row always (no row is ever joined
     with text, no row is left half); otherwise (APos in a cell, or AFlatten) every paragraph
-    is a plain paragraph of the cell (or of no table) APos is in: never a nested table. The
+    is a plain paragraph of the cell (or of no table) APos is in: never a nested table. A
+    source table one of whose rows holds a nested table (TTyRichRow.HoldsNestedTable) goes in
+    as its paragraphs, plain, in no table - the model's own view of the inner table: what made
+    it a table is only in the source file's bytes. The
     list markers a file gave are not taken: the numbers are counted, as after any edit.
 
     AFilter (nil: everything goes as the source has it - what a paste inside one document,
@@ -3516,7 +3519,12 @@ begin
   if i < 0 then
   begin
     nt := src;
-    if FFilter <> nil then
+    { A table with a row that holds a nested table goes in as its paragraphs (R63): what
+      made the inner table one is only in the bytes of the source's file, and in this
+      document such a row could neither be saved nor edited. }
+    for i := 0 to High(src.FRows) do
+      if src.FRows[i].FHoldsNestedTable then nt := nil;
+    if (nt <> nil) and (FFilter <> nil) then
     begin
       nt := TTyRichTable.Create(src.FColBoundaries, src.FStructureLocked);
       // held while the fragment is made (Create lets go of it at its end)
@@ -3551,7 +3559,7 @@ begin
   end;
   nt := FTabNew[i];
   if nt = nil then Exit(nil);
-  if nt = src then Exit;
+  if nt = ACell.Table then Exit;
   Result := nt.FRows[ACell.FRow.FIndex].FCells[ACell.FIndex];
 end;
 

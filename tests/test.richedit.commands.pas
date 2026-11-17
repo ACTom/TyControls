@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Graphics, fpcunit, testregistry,
   tyControls.StrConsts, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Commands, tyControls.RichEdit.RtfRead;
+  tyControls.RichEdit.Commands, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
 
 type
   TCmdCountedOpaque = class(TTyRichOpaque)
@@ -96,6 +96,7 @@ type
     procedure TestAFragmentBringsNoDocumentLevelThing;
     procedure TestAFragmentSharesItsObjectsAndKeepsOneStep;
     procedure TestAFragmentIsRefusedInARowWithANestedTable;
+    procedure TestATableWithANestedRowGoesInAsParagraphs;
     procedure TestReadingAFragmentOfUntrustedBytes;
   end;
 
@@ -1419,6 +1420,73 @@ begin
     end;
     AssertTrue('a composite: refused for the row', raised);
     AssertEquals('reverted', before, AllText(d));
+  finally
+    d.Free;
+  end;
+end;
+
+{ W14 V-I1 (R63): a table one of whose rows holds a nested table is pasted as its paragraphs,
+  plain: into a document read from RTF and into a new one, the pasted text can be edited, the
+  document saved, and read back it holds all the text. }
+procedure TTyRichCommandsTest.TestATableWithANestedRowGoesInAsParagraphs;
+const
+  Nested = '{\rtf1 \trowd\cellx1000\cellx2000\pard\intbl a\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell' +
+    '\row\pard b\par}';
+  PlainFile = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard one\par two\par three\par}';
+var
+  d, b: TTyRichDocument;
+  k, n: Integer;
+  st: TBytesStream;
+
+  procedure Check(const AWhat: string; AFirst: Integer);
+  var
+    i: Integer;
+  begin
+    for i := AFirst to AFirst + n - 1 do
+    begin
+      AssertTrue(Format('%s: paragraph %d in no table', [AWhat, i]), d.CellAt(i) = nil);
+      AssertTrue(Format('%s: paragraph %d can be edited', [AWhat, i]),
+        d.CanChange(d.Text.ParaStart(i), 0));
+    end;
+    st := TBytesStream.Create;
+    try
+      TyRichSaveRtf(d, st);
+      b := TTyRichDocument.Create;
+      try
+        st.Position := 0;
+        TyRichLoadRtfFull(b, st);
+        AssertEquals(AWhat + ': all the text read back', AllText(d), AllText(b));
+      finally
+        b.Free;
+      end;
+    finally
+      st.Free;
+    end;
+    AssertTrue(AWhat + ': typed into', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(AFirst), 'Z')));
+  end;
+
+begin
+  b := RtfDoc(Nested);
+  try
+    n := b.Text.ParaCount - 1;   // the rows' paragraphs (b after them)
+    AssertTrue('(a nested row)', b.CellAt(0).Row.HoldsNestedTable);
+  finally
+    b.Free;
+  end;
+  d := RtfDoc(PlainFile);
+  try
+    AssertTrue(PasteRtf(d, d.Text.ParaStart(1), Nested));
+    AssertTrue('the text in', (Pos('a', AllText(d)) > 0) and (Pos('x', AllText(d)) > 0));
+    Check('a file', 1);
+  finally
+    d.Free;
+  end;
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue(PasteRtf(d, 0, Nested));
+    Check('a new document', 0);
+    for k := 0 to d.Text.ParaCount - 1 do AssertTrue('no table at all', d.CellAt(k) = nil);
   finally
     d.Free;
   end;
