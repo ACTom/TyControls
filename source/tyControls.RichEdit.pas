@@ -119,7 +119,7 @@ const
     parsed for it (a parse already begun is finished; the first paragraph is always read),
     about 30 ms on a 100 MB file. A selection larger than that is answered with a lower
     bound: every attribute not proven the same within the budget is "not consistent". }
-  CRichConsistParas = 200000;
+  CRichConsistParas = 130000;
   CRichConsistParseBytes = 192 * 1024;
   { The most bytes of image a picture is made from (a paste, TyRichMakePicture): 128 MB. With
     CRichPictureMaxPixels (32 Mi pixels: the most the layouter decodes - a bigger picture
