@@ -119,6 +119,9 @@ type
     procedure TestALinesFileLoadReadsAtTheUpdatesEnd;
     procedure TestTheConsistencyBudgetCountsRuns;
     procedure TestTextClearAndCaretPosAsDelphis;
+    // the selection in the other brackets; an explicit text load
+    procedure TestAnUpdateDoesNotChangeWhatAWriteDoes;
+    procedure TestAnExplicitTextLoadKeepsTheAsking;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -3128,6 +3131,188 @@ begin
   end;
   AssertEquals('...reported at EndEdit', 1, FSelChanges);
   AssertEquals('...no step', depth, FRich.Document.UndoDepth);
+end;
+
+{ Delphi code brackets its writes with Lines.BeginUpdate against flicker. Inside it, inside
+  the document's own update and inside both with BeginEdit nested, the control's own writes
+  move the selection as they do outside: the same lines of code give the same document,
+  formats and selection; the update reports at its end. }
+procedure TTyRichEditApiTest.TestAnUpdateDoesNotChangeWhatAWriteDoes;
+const
+  Cases = 6;
+  // 1 Lines.BeginUpdate, 2 Document.BeginUpdate, 3 Lines.BeginUpdate with BeginEdit inside,
+  // 4 BeginEdit with Document.BeginUpdate inside
+  Modes = 4;
+
+  procedure Writes(ACase: Integer);
+  begin
+    case ACase of
+      0: begin
+           FRich.SelStart := 1;
+           FRich.SelText := 'Hello';
+           FRich.SelText := ' World';
+         end;
+      1: begin
+           Sel(0, 3);
+           FRich.SelText := 'A longer text';
+           FRich.SelAttributes.Bold := True;
+           FRich.SelText := '!';
+         end;
+      2: begin
+           Sel(5, 2);
+           FRich.Lines.Insert(0, 'new line');
+           FRich.SelText := 'X';
+         end;
+      3: begin
+           Sel(5, 2);
+           FRich.Lines[1] := 'DEFGH';
+           FRich.SelAttributes.Italic := True;
+           Sel(7, 0);
+           FRich.Lines[1] := 'de';
+           FRich.SelText := 'Q';
+         end;
+      4: begin
+           Sel(0, 2);
+           FRich.SelAttributes.Bold := True;
+           FRich.SelText := 'Z';
+           FRich.Lines.Add('end');
+           FRich.SelText := 'Y';
+           FRich.Lines.Delete(0);
+           FRich.SelText := 'W';
+         end;
+      5: begin
+           Sel(5, 1);
+           FRich.InDelText('12345', 0, 2);
+           FRich.SelText := 'R';
+         end;
+    end;
+  end;
+
+  function RunCase(ACase, AMode: Integer): string;
+  begin
+    SetText('abc'#10'def'#10'ghi');
+    FRich.SelStart := 2;
+    case AMode of
+      1: FRich.Lines.BeginUpdate;
+      2: FRich.Document.BeginUpdate;
+      3: begin
+           FRich.Lines.BeginUpdate;
+           FRich.BeginEdit;
+         end;
+      4: begin
+           FRich.BeginEdit;
+           FRich.Document.BeginUpdate;
+         end;
+    end;
+    try
+      Writes(ACase);
+    finally
+      case AMode of
+        1: FRich.Lines.EndUpdate;
+        2: FRich.Document.EndUpdate;
+        3: begin
+             FRich.EndEdit;
+             FRich.Lines.EndUpdate;
+           end;
+        4: begin
+             FRich.Document.EndUpdate;
+             FRich.EndEdit;
+           end;
+      end;
+    end;
+    Result := Dump + ' sel ' + IntToStr(FRich.SelStart) + '/' + IntToStr(FRich.SelLength);
+  end;
+
+var
+  k, m: Integer;
+  outside: string;
+begin
+  for k := 0 to Cases - 1 do
+  begin
+    outside := RunCase(k, 0);
+    for m := 1 to Modes do
+      AssertEquals('case ' + IntToStr(k) + ', bracket ' + IntToStr(m) + ': as outside',
+        outside, RunCase(k, m));
+  end;
+  // the two sequences in words
+  SetText('abc');
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.SelStart := 1;
+    FRich.SelText := 'Hello';
+    FRich.SelText := ' World';
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('Lines.BeginUpdate: the two writes in order', 'aHello Worldbc', FRich.Lines[0]);
+  AssertEquals('...the caret behind the text', 12, FRich.SelStart);
+  SetText('abcdef');
+  FRich.Document.BeginUpdate;
+  try
+    Sel(0, 3);
+    FRich.SelText := 'A longer text';
+    FRich.SelAttributes.Bold := True;
+  finally
+    FRich.Document.EndUpdate;
+  end;
+  AssertEquals('Document.BeginUpdate: the text', 'A longer textdef', FRich.Lines[0]);
+  AssertEquals('...the caret behind it', 13, FRich.SelStart);
+  AssertEquals('...nothing selected', 0, FRich.SelLength);
+  AssertFalse('...and no character made bold', fsBold in Fmt(0).Style);
+  AssertFalse('...not the stale third either', fsBold in Fmt(2).Style);
+  // reported once, at the update's end
+  SetText('abc');
+  ResetEvents;
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.SelStart := 1;
+    FRich.SelText := 'Hello';
+    FRich.SelText := ' World';
+    AssertEquals('nothing reported inside: OnChange', 0, FChanges);
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('one OnChange at the end', 1, FChanges);
+end;
+
+{ An explicit text load agrees with an asked PlainText: the asking stays, and the next load
+  without a format still reads its file as text. }
+procedure TTyRichEditApiTest.TestAnExplicitTextLoadKeepsTheAsking;
+var
+  path: string;
+  st: TBytesStream;
+begin
+  path := TempDir + 'explicit.rtf';
+  WriteFileBytes(path, PlainRtf(2));
+  FRich.PlainText := True;
+  st := TBytesStream.Create(PlainRtf(2));
+  try
+    FRich.LoadFromStream(st, rfText);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  AssertTrue('an explicit rfText: plain', FRich.PlainText);
+  FRich.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('the RTF file after it: read as text', '{' + BS + 'rtf1',
+    Copy(FRich.Lines[0], 1, 6));
+  AssertTrue('still plain', FRich.PlainText);
+  // a text load without the asking asks nothing: the next load goes by its file
+  FRich.PlainText := False;
+  st := TBytesStream.Create(PlainRtf(2));
+  try
+    FRich.LoadFromStream(st, rfText);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  AssertTrue('a text load: plain', FRich.PlainText);
+  FRich.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('not asked: the RTF file by its content', 'Paragraph 0 of the file.',
+    FRich.Lines[0]);
+  AssertFalse('rich', FRich.PlainText);
 end;
 
 { G-I2: a block an exception leaves through try .. finally EndEdit is one step with what was

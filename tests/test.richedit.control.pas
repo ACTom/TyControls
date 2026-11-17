@@ -7982,11 +7982,12 @@ begin
   PaintAll(True);
   FRich.SelStart := FRich.Document.Text.ParaStart(40) + 2;
   PaintAll(True);
-  c := FRich.CaretIndex;
   top := FRich.TopParagraph;
   FRich.Lines.BeginUpdate;
   try
     for i := 1 to 45 do FRich.Lines.Delete(0);
+    // (the deletes moved the caret with its text, as they do outside an update)
+    c := FRich.CaretIndex;
     FRich.ResetCounts;
     AssertEquals('Down is taken', 0, FRich.KeyResult(VK_DOWN, []));
     AssertEquals('Ctrl+End is taken', 0, FRich.KeyResult(VK_END, [ssCtrl]));

@@ -969,14 +969,17 @@ type
       else raised (ETyRichEdit). The half of an edit both RunEdit's callers share: a user's
       edit (RunUserEdit) and an edit from code (EditWith). }
     function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
-    { Inside BeginEdit .. EndEdit the document holds its reports until the block ends: after a
-      write of the control's own (ACmd run through Execute; AStateBefore the content's state
-      number before it) this hears its change itself - FEditChange set, the caret and the
-      anchor moved over a text change as DocChanged moves them outside a block - and keeps
-      the positions out of the block's one change at its end (FSelInUpdate). False when
-      outside a block or when ACmd changed nothing (and is gone). }
+    { Inside any update of the document (BeginEdit .. EndEdit, Lines.BeginUpdate .. EndUpdate,
+      Document.BeginUpdate .. EndUpdate) the document holds its reports until the update
+      ends: after a write of the control's own (ACmd run through Execute; AStateBefore the
+      content's state number before it) this hears its change itself - FEditChange set, the
+      caret and the anchor moved over a text change as DocChanged moves them outside an
+      update - and keeps the positions out of the update's one change at its end
+      (FSelInUpdate). So Delphi's anti-flicker bracket around SelText writes gives what the
+      same writes give without it. False when outside an update or when ACmd changed nothing
+      (and is gone). }
     function FollowBlockWrite(ACmd: TTyRichCommand; AStateBefore: Int64): Boolean;
-    { FollowBlockWrite's moving of the caret and the anchor over AChange (inside a block). }
+    { FollowBlockWrite's moving of the caret and the anchor over AChange (inside an update). }
     procedure FollowBlockChange(const AChange: TTyRichChange);
     { The command AMake makes, run (RunEdit) and finished (FinishEdit, at the place it says):
       what a user's edit (RunUserEdit, AUser True) and an edit from code (AUser False: refusals
@@ -1175,8 +1178,9 @@ type
     { The text area: the control's rectangle ARect inside its padding and scroll bars. }
     function TextArea(const ARect: TRect; APPI: Integer): TRect;
     { Lays the document's bytes from the stream into it as AFormat (rfRtf / rfText).
-      AByAsked: the format was the asked PlainText's, not the file's or the caller's; such a
-      load keeps the asking (R69: only a load whose format came from elsewhere ends it). }
+      AByAsked: the format was not decided from the file and agrees with an asked PlainText
+      (the asking chose text, or the caller asked for rfText); such a load keeps the asking:
+      only a load whose format came from the file, or an RTF load, ends it. }
     procedure LoadAs(AStream: TStream; AFormat: TTyRichFormat; AByAsked: Boolean = False);
     { The content replaced with AText as plain text (Lines); not refused by ReadOnly. }
     procedure SetPlainText(const AText: string);
@@ -1480,9 +1484,11 @@ type
       is kept and shown at the cut.
       Written inside the document's BeginUpdate .. EndUpdate (and so CaretIndex, SelectAll,
       CollapseSelection): the positions are stored, clamped to the text as it is at that moment,
-      and nothing is laid out, scrolled or painted. Edits made later in the same update do not
-      move them; when the update ends they are clamped to the final text (and to a caret place)
-      and the selection is painted. }
+      and nothing is laid out, scrolled or painted. The control's own writes made later in the
+      same update (SelText, Lines, the format writes, InDelText) move them exactly as outside
+      an update; a change made straight through Document.Execute does not. When the update
+      ends they are clamped to the final text (and to a caret place) and the selection is
+      painted. }
     property SelStart: TTyRichPos read GetSelStart write SetSelStart;
     property SelLength: TTyRichPos read GetSelLength write SetSelLength;
     { The caret: SelStart's end or the other (the end a Shift move moves); writing it collapses
@@ -1633,8 +1639,9 @@ type
       at EndEdit, as inside any update, and does not move the selection. A new content - a
       load, Lines.Text :=, Lines.Clear, Text :=, Clear - is refused inside (ETyRichEdit,
       before anything changes): the block is one undo step and a new content has none. Not
-      Lines.BeginUpdate, which gathers a replacement of the lines. EndEdit without BeginEdit
-      raises. }
+      Lines.BeginUpdate, which gathers a replacement of the lines; inside it (and inside
+      Document.BeginUpdate) the control's own writes move the selection as they do here.
+      EndEdit without BeginEdit raises. }
     procedure BeginEdit;
     procedure EndEdit;
     { The history goes (TTyRichDocument.ClearUndo); the text stays. }
@@ -1941,9 +1948,10 @@ type
       Set True by code or the Object Inspector (asked) it also decides the loads and the
       file saves without a format, as Delphi's: LoadFromFile, LoadFromStream and
       Lines.LoadFromFile read plain text whatever the file is, SaveToFile writes text whatever
-      the extension, until PlainText := False or a load whose format came from its file or
-      from the caller (an explicit format: LoadRichText, LoadFromStream(S, rfRtf)) - a load
-      the asked True read as text keeps it. Made True by a load it does not: SaveToFile then
+      the extension, until PlainText := False, a load whose format came from its file, or an
+      RTF load the caller asked for (LoadRichText, LoadFromStream(S, rfRtf)) - a load read as
+      text, by the asking or by the caller's rfText, keeps it. Made True by a load it does
+      not: SaveToFile then
       goes by the extension (a text file opened, formatted and saved as notes.rtf is RTF),
       else by the state.
       Setting it changes no content: a document with formats keeps them, and a save as text
@@ -2277,7 +2285,7 @@ begin
   state := FOwner.FDoc.ContentState;
   if not FOwner.FDoc.Execute(ACmd) then
     raise ETyRichEdit.Create(rsRichEditCannotChange);
-  // inside BeginEdit .. EndEdit the selection moves with the line as it does outside
+  // inside an update of the document the selection moves with the line as it does outside
   if not FNoFollow then FOwner.FollowBlockWrite(ACmd, state);
   FOwner.FLinesStored := True;
 end;
@@ -2339,8 +2347,8 @@ begin
     FNoFollow := False;
     d.EndUpdate;
   end;
-  { Inside BeginEdit the selection follows the line's one change, as the update's one report
-    moves it outside a block. }
+  { Inside an outer update (BeginEdit, Lines.BeginUpdate) the selection follows the line's
+    one change, as this update's one report moves it outside one. }
   if d.ContentState <> state then
   begin
     c := Default(TTyRichChange);
@@ -5045,7 +5053,7 @@ begin
   try
     try
       ok := FDoc.Execute(ACmd);
-      // (a write inside BeginEdit .. EndEdit: no report comes until the block ends)
+      // (a write inside an update of the document: no report comes until the update ends)
       if ok and not FEditHeard then FollowBlockWrite(ACmd, state);
     except
       on E: ETyRichModel do
@@ -5114,10 +5122,11 @@ begin
     paragraph's hidden tail (back to the cut). A selection an undo puts back is taken as it was,
     and so is the one a façade's format write keeps. }
   if FApiWrite > 0 then ARestore := True;
-  { Inside BeginEdit .. EndEdit the view has not heard of the text yet: positions only (the
-    layout is asked nothing, Select keeps them for the update's end, which puts them on caret
-    places); the scroll and the reports are the block's, at EndEdit. }
-  if (FEditBlock > 0) and ViewBehind then
+  { Inside an update of the document (BeginEdit .. EndEdit, Lines.BeginUpdate, the
+    document's own) the view has not heard of the text yet: positions only (the layout is
+    asked nothing, Select keeps them for the update's end, which puts them on caret places);
+    the scroll and the reports are the update's, at its end. }
+  if FDoc.Updating then
   begin
     Inc(FEditing);
     try
@@ -6641,7 +6650,7 @@ begin
         if reason = '' then reason := rsRichEditRefusedRange;
         raise ETyRichEdit.Create(reason);
       end;
-      // (inside BeginEdit: an edit among them - InDelText - moves the selection as outside)
+      // (an edit among them - InDelText - moves the selection as outside an update)
       FollowBlockWrite(cmd, state);
       Exit;
     end;
@@ -8563,7 +8572,7 @@ var
 begin
   Result := False;
   // (an unchanged command was freed by Execute and took no state number)
-  if (FEditBlock = 0) or not FDoc.Updating or (FDoc.ContentState = AStateBefore) then Exit;
+  if not FDoc.Updating or (FDoc.ContentState = AStateBefore) then Exit;
   Result := True;
   c := ACmd.Change;
   if FEditing > 0 then
@@ -8578,8 +8587,13 @@ procedure TTyCustomRichEdit.FollowBlockChange(const AChange: TTyRichChange);
 var
   was: TTyRichPos;
 begin
-  if (FEditBlock = 0) or not (rckText in AChange.Kinds) then Exit;
-  // DocChanged's arithmetic, for this one write (the block's change will not move them again)
+  // (outside an update DocChanged has already moved them over this change)
+  if not FDoc.Updating or not (rckText in AChange.Kinds) then Exit;
+  { A write wholly behind the selection moves neither end, and the update's one change - the
+    union of such writes - will not either: the selection is left to it, and an update that
+    only appended (Lines.Add) costs no repaint of the text window at its end. }
+  if AChange.Pos > Math.Max(FCaret, FSelAnchor) then Exit;
+  // DocChanged's arithmetic, for this one write (the update's change will not move them again)
   was := FCaret;
   ShiftForChange(FCaret, AChange);
   ShiftForChange(FSelAnchor, AChange);
@@ -11100,11 +11114,11 @@ begin
     FSourceFormat := rfText;
     FRtfPrefix := nil;
   end;
-  { The document follows the file (R65): one of the two things that set PlainText. A state
-    the file (or the caller's format) made is not one the application asked for (R69): the
-    next load without a format goes by its file again. A load the asked True itself read as
-    text decided nothing from its file: the asking stays, and the next load is text too, as
-    Delphi's PlainText, which never changes by itself. }
+  { The document follows the file: one of the two things that set PlainText. A state the
+    file (or the caller's rfRtf) made is not one the application asked for: the next load
+    without a format goes by its file again. A load read as text by the asked True itself or
+    by the caller's rfText decided nothing from its file: the asking stays, and the next load
+    is text too, as Delphi's PlainText, which never changes by itself. }
   FPlainText := AFormat <> rfRtf;
   if not AByAsked then FPlainTextAsked := False;
   FLinesStored := False;
@@ -11119,7 +11133,9 @@ procedure TTyCustomRichEdit.LoadFromStream(AStream: TStream; AFormat: TTyRichFor
 var
   byAsked: Boolean;
 begin
-  byAsked := False;
+  { An explicit text load agrees with an asked PlainText and keeps the asking: only a load
+    whose format came from the file, or one that makes the document rich, ends it. }
+  byAsked := AFormat = rfText;
   if AFormat = rfAuto then
     if FPlainText and FPlainTextAsked then
     begin
