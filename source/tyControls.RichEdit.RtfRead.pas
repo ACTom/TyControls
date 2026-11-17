@@ -633,8 +633,13 @@ type
     FResident: Integer;              // intervals the groups hold
     FMaxResident: Integer;
     FStamp: Int64;
-    FKept: array of TTyRtfKept;      // by Src
+    { By Src, in a hash table (open addressing, linear probing; Src -1 an empty slot): what
+      reads it are lookups of one paragraph's record, never a walk in order, and records come
+      in any order - an edit walked from a large file's end gave each one the front of a
+      sorted list, moving all the others behind it. }
+    FKept: array of TTyRtfKept;
     FKeptN: Integer;
+    FKeptWork, FKeptOps: Int64;
     // the group the last read used, and the paragraphs that are its own while the text has
     // FUsedParas paragraphs and FUsedLength characters
     FUsedGroup: TTyRtfGroup;
@@ -669,6 +674,7 @@ type
     procedure Used(AIndex: Integer);
     function KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
     procedure KeepValue(ASrc: Int64; AValue: Pointer);
+    procedure GrowKept;
     function FileMakes(AGroup: TTyRtfGroup; AIndex, APara: Integer; AValue: Pointer): Boolean;
     procedure Unkeep(AIndex: Integer);
     procedure ValueParts(AGroup: TTyRtfGroup; AIndex: Integer; out ACell: TTyRichCell;
@@ -755,6 +761,12 @@ type
     property SnapshotBytes: Int64 read FSnapBytes;
     // Paragraph values recorded as the file's own though their group went (see Trim).
     property KeptValues: Integer read FKeptN;
+    // The kept values' table's work, for a test: records moved (its growth, a deletion closing
+    // its gap) and slots looked at past a record's own - a few per record, whatever the order
+    // records come in.
+    property KeptWork: Int64 read FKeptWork;
+    // ... and the lookups, insertions and deletions it served.
+    property KeptOps: Int64 read FKeptOps;
     property ResidentIntervals: Integer read FResident;
     property MaxResidentIntervals: Integer read FMaxResident write FMaxResident;
   end;
@@ -5499,25 +5511,56 @@ begin
   FUsedLength := text.Length;
 end;
 
-// The record of the paragraph at ASrc; False: none, and AIndex is where it would go.
+// The slot of a source offset in the kept values' table (a power of two long).
+function KeptSlot(ASrc: Int64; AMask: Integer): Integer; inline;
+begin
+  Result := Integer((QWord(ASrc) * QWord($9E3779B97F4A7C15)) shr 33) and AMask;
+end;
+
+// The record of the paragraph at ASrc; False: none (AIndex is then the empty slot a record of
+// it would take).
 function TTyRtfLoad.KeptAt(ASrc: Int64; out AIndex: Integer): Boolean;
 var
-  lo, hi, mid: Integer;
+  i, mask: Integer;
 begin
-  lo := 0;
-  hi := FKeptN - 1;
-  while lo <= hi do
+  AIndex := -1;
+  Inc(FKeptOps);
+  if Length(FKept) = 0 then Exit(False);
+  mask := High(FKept);
+  i := KeptSlot(ASrc, mask);
+  while FKept[i].Src >= 0 do
   begin
-    mid := (lo + hi) div 2;
-    if FKept[mid].Src = ASrc then
+    if FKept[i].Src = ASrc then
     begin
-      AIndex := mid;
+      AIndex := i;
       Exit(True);
     end;
-    if FKept[mid].Src < ASrc then lo := mid + 1 else hi := mid - 1;
+    i := (i + 1) and mask;
+    Inc(FKeptWork);
   end;
-  AIndex := lo;
+  AIndex := i;
   Result := False;
+end;
+
+// The table twice as long (at most half full afterwards), every record in its new slot.
+procedure TTyRtfLoad.GrowKept;
+var
+  old: array of TTyRtfKept;
+  i, k, n: Integer;
+begin
+  old := FKept;
+  n := Length(old) * 2;
+  if n < 64 then n := 64;
+  FKept := nil;
+  SetLength(FKept, n);
+  for i := 0 to n - 1 do FKept[i].Src := -1;
+  for i := 0 to High(old) do
+    if old[i].Src >= 0 then
+    begin
+      KeptAt(old[i].Src, k);
+      FKept[k] := old[i];
+      Inc(FKeptWork);
+    end;
 end;
 
 // Records that the paragraph at ASrc keeps AValue though its group goes. The group's hold
@@ -5533,19 +5576,45 @@ begin
     FKept[k].Value := AValue;
     Exit;
   end;
-  if FKeptN = Length(FKept) then SetLength(FKept, FKeptN * 2 + 16);
-  if k < FKeptN then Move(FKept[k], FKept[k + 1], (FKeptN - k) * SizeOf(TTyRtfKept));
+  // (at most three quarters full: a probe stays short)
+  if (FKeptN + 1) * 4 > Length(FKept) * 3 then
+  begin
+    GrowKept;
+    KeptAt(ASrc, k);
+  end;
   FKept[k].Src := ASrc;
   FKept[k].Value := AValue;
   Inc(FKeptN);
 end;
 
-// Takes record AIndex out (its hold is the caller's now).
+// Takes record AIndex out (its hold is the caller's now). The records after it in its probe
+// run that would no longer be found move back into the gap.
 procedure TTyRtfLoad.Unkeep(AIndex: Integer);
+var
+  mask, i, j, home: Integer;
 begin
+  mask := High(FKept);
+  i := AIndex;
+  j := i;
+  while True do
+  begin
+    j := (j + 1) and mask;
+    if FKept[j].Src < 0 then Break;
+    home := KeptSlot(FKept[j].Src, mask);
+    // (j may stay where it is when its home lies cyclically in (i, j])
+    if i <= j then
+    begin
+      if (i < home) and (home <= j) then Continue;
+    end
+    else if (i < home) or (home <= j) then
+      Continue;
+    FKept[i] := FKept[j];
+    Inc(FKeptWork);
+    i := j;
+  end;
+  FKept[i].Src := -1;
+  FKept[i].Value := nil;
   Dec(FKeptN);
-  if AIndex < FKeptN then
-    Move(FKept[AIndex + 1], FKept[AIndex], (FKeptN - AIndex) * SizeOf(TTyRtfKept));
 end;
 
 // The group that has paragraph ASrc, parsed if need be.

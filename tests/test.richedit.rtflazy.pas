@@ -84,6 +84,7 @@ type
     procedure TestUndoAndRedoCopyAParagraphOnce;
     procedure TestRandomEditsUndoneAndRedone;
     procedure TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
+    procedure TestKeptValuesCostLittleInAnyOrder;
   end;
 
 implementation
@@ -2962,6 +2963,62 @@ begin
     AssertFalse('read again: still not the file''s own', load.ParaSource(p, r));
   finally
     d.Free;
+  end;
+end;
+
+{ The values the loader records as the file's own when their group goes (undo records still
+  hold them) are kept in a table where a record costs a few moves and looks, whatever the
+  order they come in: edits walked from a large file's end gave each record the front of a
+  sorted list (a replace walked from the end of a 100 MB RTF took 56 s). Both directions. }
+procedure TTyRtfLazyTest.TestKeptValuesCostLittleInAnyOrder;
+var
+  text: string;
+  sb: TStringBuilder;
+  d: TCountingDoc;
+  s: TBytesStream;
+  load: TTyRtfLoad;
+  i, k, dir, n: Integer;
+  most: Integer;
+begin
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{' + #92 + 'rtf1 ');
+    for i := 1 to 40000 do
+    begin
+      sb.Append('{' + #92 + 'b w}');
+      sb.Append(IntToStr(i));
+      sb.Append(#92 + 'par ');
+    end;
+    sb.Append('}');
+    text := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  for dir := 0 to 1 do
+  begin
+    d := TCountingDoc.Create;
+    s := TBytesStream.Create(BytesOf(text));
+    try
+      TyRichLoadRtf(d, s);
+      load := TyRichRtfLoadOf(d);
+      load.MaxResidentIntervals := 1;
+      AssertTrue('several intervals', load.IntervalCount > 4);
+      n := d.Text.ParaCount;
+      most := 0;
+      for i := 0 to (n - 2) div 4 do
+      begin
+        if dir = 0 then k := 4 * i else k := n - 2 - 4 * i;
+        AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(k), 'x')));
+        load.Trim;
+        if load.KeptValues > most then most := load.KeptValues;
+      end;
+      AssertTrue(Format('%d: many records (%d)', [dir, most]), most > 1000);
+      AssertTrue(Format('%d: a few moves and looks a use (%d for %d uses, %d records at most)',
+        [dir, load.KeptWork, load.KeptOps, most]), load.KeptWork <= 4 * load.KeptOps);
+    finally
+      s.Free;
+      d.Free;
+    end;
   end;
 end;
 
