@@ -386,6 +386,10 @@ type
     FEditing: Integer;
     FEditHeard: Boolean;
     FEditChange: TTyRichChange;
+    { The history step the running edit of the control's own became (or merged into): its
+      marks get where the edit leaves the selection (FinishEdit). nil: none - the edit was
+      kept inside the document's update, or none runs. }
+    FEditStep: TTyRichCommand;
     FOnEditRefused: TTyRichEditRefusedEvent;
     { The input method (Task 10b). A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
@@ -462,16 +466,17 @@ type
       AWindow, the window's part is invalidated (a blit). }
     procedure TextRectChanged(AL, AT, AR, AB: Int64; ADirty, AWindow: Boolean);
     procedure InvalidateBand(ATop, ABottom: Int64);
-    { The text below row ABoundary of the view (raster, relative to the text area's top) moved
-      ADY raster pixels down (up when negative) because a block above it changed its height:
-      its rows are moved on the surface, what was dirty there moves along, and the band a
-      move up exposes at the bottom is dirty. Nothing is invalidated. False when the surface
-      cannot be moved so (none yet, all of it to be drawn, another size or column, a move
-      past what is shown): the caller marks the band dirty instead. }
-    function MoveSurfaceBelow(ABoundary, ADY: Int64): Boolean;
     procedure MarkDirty(const ARect: TRect);
     procedure MarkTextDirty;
-    procedure MoveSurfaceText(ADX, ADY: Int64);
+    { The text on the surface moved ADX, ADY raster pixels (right / down when positive): all
+      of it (a scroll), or - AFrom, a row of the view (raster, relative to the text area's
+      top) - only what lies from that row down, vertically (the blocks below an edit that
+      changed their height). Its rows or columns are moved inside the text clip and what was
+      dirty there moves along; every row of the clip from where the moving part was or now
+      begins down that gets no valid pixels from the move is dirty (the band a scroll
+      exposes, the bottom a shorter edit leaves, all of it when nothing of the moving part is
+      shown). Nothing is invalidated. }
+    procedure MoveSurfaceText(ADX, ADY: Int64; AFrom: Int64 = Low(Int64));
     procedure EnsureSurface(AW, AH, AScale: Integer);
     procedure RedrawSurface(APPI: Integer; ADefer: Boolean);
     procedure BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer;
@@ -606,13 +611,17 @@ type
     function EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
     { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
       and changed something - FEditChange is what it changed, the caret has not been placed.
-      Refused by the engine (CanExecute, an ETyRichModel the command reverted): the caret,
-      the selection and Modified stay as they were, and Refuse. }
+      The step it became carries the selection before it (its marks; the selection after it
+      is FinishEdit's). Refused by the engine (CanExecute, an ETyRichModel the command
+      reverted): the caret, the selection and Modified stay as they were, and Refuse. }
     function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
     { After an edit of the control's own: the selection AAnchor .. ACaret (put on caret places,
-      no affinity, the wished x forgotten), scrolled into view, the caret shown, then the one
-      OnChange and the one OnSelectionChange of the action. }
-    procedure FinishEdit(AAnchor, ACaret: TTyRichPos);
+      never in a cut paragraph's hidden tail, AAtEnd the caret's affinity where it stays put,
+      the wished x forgotten), scrolled into view, the caret shown, then the one OnChange and
+      the one OnSelectionChange of the action. ARestore: a selection an undo puts back as it
+      was before its step, taken as it is (a hidden tail too - Select All had it). }
+    procedure FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean = False;
+      ARestore: Boolean = False);
     { AText in place of the selection (one undo step: delete and insert), else at the caret -
       AMergeable: typing, which merges with the typing before it. The caret behind it. }
     procedure TypeText(const AText: UTF8String; AMergeable, AUser: Boolean);
@@ -3284,6 +3293,7 @@ function TTyCustomRichEdit.RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolea
 var
   c, a: TTyRichPos;
   atEnd, wasModified, ok: Boolean;
+  marks: TTyRichStepMarks;
 begin
   Result := False;
   c := FCaret;
@@ -3291,7 +3301,15 @@ begin
   atEnd := FCaretAtEnd;
   wasModified := FDoc.Modified;
   FEditHeard := False;
+  FEditStep := nil;
   ok := False;
+  // the selection the step starts from: what its undo puts back (a merged run keeps its first)
+  marks := Default(TTyRichStepMarks);
+  marks.HasBefore := True;
+  marks.Before.Anchor := a;
+  marks.Before.Caret := c;
+  marks.Before.AtLineEnd := atEnd;
+  ACmd.Marks := marks;
   Inc(FEditing);
   try
     try
@@ -3320,17 +3338,38 @@ begin
   end;
   // (a command that changed nothing is not kept and reported nothing: the caret stays)
   Result := FEditHeard;
+  { The step it became - its own, or the run of typing it merged into: the newest of the
+    history (inside the document's update it went into the update's block: no step yet). }
+  if Result and not FDoc.Updating then FEditStep := FDoc.UndoStep;
 end;
 
-procedure TTyCustomRichEdit.FinishEdit(AAnchor, ACaret: TTyRichPos);
+procedure TTyCustomRichEdit.FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean;
+  ARestore: Boolean);
+var
+  q: TTyRichPos;
+  marks: TTyRichStepMarks;
 begin
   Inc(FEditing);
   try
-    ACaret := SnapPos(ACaret);
+    q := SnapPos(ACaret);
+    // the affinity only where the caret stays put (a line's end is that place)
+    AAtEnd := AAtEnd and (q = ACaret);
+    ACaret := q;
     if AAnchor <> ACaret then AAnchor := SnapPos(AAnchor) else AAnchor := ACaret;
-    Select(AAnchor, ACaret, False);
+    Select(AAnchor, ACaret, AAtEnd);
   finally
     Dec(FEditing);
+  end;
+  // where the edit leaves the selection: what a redo of its step puts back
+  if FEditStep <> nil then
+  begin
+    marks := FEditStep.Marks;
+    marks.HasAfter := True;
+    marks.After.Anchor := FSelAnchor;
+    marks.After.Caret := FCaret;
+    marks.After.AtLineEnd := FCaretAtEnd;
+    FEditStep.Marks := marks;
+    FEditStep := nil;
   end;
   FWishValid := False;
   ScrollCaretIntoView;
@@ -3538,13 +3577,17 @@ procedure TTyCustomRichEdit.RunHistory(ARedo, AUser: Boolean);
 var
   reason: string;
   c: TTyRichChange;
+  marks: TTyRichStepMarks;
 begin
   if ARedo then
   begin
     if FDoc.RedoDepth = 0 then Exit;
+    marks := FDoc.RedoStep.Marks;
   end
   else if FDoc.UndoDepth = 0 then
-    Exit;
+    Exit
+  else
+    marks := FDoc.UndoStep.Marks;
   reason := RefusalReason;
   if reason <> '' then
   begin
@@ -3552,6 +3595,7 @@ begin
     Exit;
   end;
   FEditHeard := False;
+  FEditStep := nil;
   Inc(FEditing);
   try
     try
@@ -3568,13 +3612,23 @@ begin
     Dec(FEditing);
   end;
   if not FEditHeard then Exit;
-  c := FEditChange;
-  { After an undo, what it put back is selected - an undone deletion, a typing over a
-    selection: the user sees what came back; one that put nothing back (an undone insertion)
-    leaves the caret where the text was. After a redo the caret is at the end of what it
-    changed. }
-  if not ARedo and (c.NewLen > 0) then FinishEdit(c.Pos, c.Pos + c.NewLen)
-  else FinishEdit(c.Pos + c.NewLen, c.Pos + c.NewLen);
+  { An undo puts the caret and the selection back as they were before the action, a redo
+    leaves a plain caret where the action left it (measured in msftedit, R55: a deleted or
+    typed-over selection comes back selected, an undone Backspace has the caret after the
+    character, an undone Delete before it, undone typing at its start) - from the marks the
+    control kept with the step, never from the change's extent, which cannot tell a deleted
+    selection from a character a key took. A step made by code has none: what it put back is
+    selected after an undo, the caret at the end of what it changed after a redo. }
+  if not ARedo and marks.HasBefore then
+    FinishEdit(marks.Before.Anchor, marks.Before.Caret, marks.Before.AtLineEnd, True)
+  else if ARedo and marks.HasAfter then
+    FinishEdit(marks.After.Caret, marks.After.Caret, marks.After.AtLineEnd)
+  else
+  begin
+    c := FEditChange;
+    if not ARedo and (c.NewLen > 0) then FinishEdit(c.Pos, c.Pos + c.NewLen)
+    else FinishEdit(c.Pos + c.NewLen, c.Pos + c.NewLen);
+  end;
 end;
 
 procedure TTyCustomRichEdit.Undo;
@@ -5202,10 +5256,15 @@ begin
   begin
     { The blocks below moved: the window from the change down; on the surface the changed
       blocks are drawn again and what lies below them is moved (rule 10 of 10a: a keystroke
-      that makes its paragraph a line taller draws that paragraph, not every block under it).
-      The next pass fills what a move up exposed. }
-    if not cut and MoveSurfaceBelow(oldBottom, y - oldBottom) then
+      that makes its paragraph a line taller draws that paragraph, not every block under it) -
+      and whatever the move does not fill from valid pixels is drawn (MoveSurfaceText's one
+      rule: a shorter edit at the view's bottom edge too; a change that reached past the held
+      blocks, whose old bottom is two screens down, has nothing on screen to move, and all
+      from its new bottom down is drawn). One cut at two screens laid out only part: from the
+      change's top down all is drawn again. The next pass lays out what comes. }
+    if not cut then
     begin
+      MoveSurfaceText(0, y - oldBottom, oldBottom);
       TextRectChanged(-High(Integer), oldTop, High(Integer), y, True, False);
       TextRectChanged(-High(Integer), oldTop, High(Integer), FViewH, False, True);
     end
@@ -6982,69 +7041,6 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.MoveSurfaceBelow(ABoundary, ADY: Int64): Boolean;
-var
-  area, clip, R, d: TRect;
-  shifted: array[0..CRichDirtyMax - 1] of TRect;
-  s, y, y0, w, i, n, dy: Integer;
-begin
-  Result := False;
-  if (FSurface = nil) or FAllDirty then Exit;
-  s := Math.Max(1, FScale);
-  // the surface shows what the window shows, at this column: else it is drawn whole anyway
-  if (FSurfW <> Width) or (FSurfH <> Height) or (FSurfScale <> s) or
-    (FSurfScrollX <> FScrollX) then Exit;
-  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
-  R := Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s);
-  if ABoundary < 0 then Exit;
-  // below what is shown: nothing of it is on the surface
-  if area.Top * s + ABoundary >= R.Bottom then Exit(True);
-  y0 := Integer(area.Top * s + ABoundary);
-  if y0 < R.Top then Exit;
-  if ADY = 0 then Exit(True);
-  if Abs(ADY) >= R.Bottom - y0 then Exit;
-  dy := Integer(ADY);
-  // (up: the rows land below the changed blocks' new bottom, which is in the clip)
-  if y0 + dy < R.Top then Exit;
-  w := R.Right - R.Left;
-  { The rows from y0 to the clip's bottom go dy rows down (up when negative); what lands past
-    the clip's bottom is gone. }
-  if dy > 0 then
-  begin
-    // down: from the bottom up, each row from dy above it
-    for y := R.Bottom - 1 downto y0 + dy do
-      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
-        w * SizeOf(TBGRAPixel));
-  end
-  else
-    // up: from the top down, each row from -dy below it
-    for y := y0 + dy to R.Bottom - 1 + dy do
-      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
-        w * SizeOf(TBGRAPixel));
-  FSurface.InvalidateBitmap;
-  { What was to be drawn below the boundary shifted with the text: it is to be drawn where it
-    is now too (where it was stays marked, which costs at most a band drawn twice). }
-  n := 0;
-  for i := 0 to FDirtyCount - 1 do
-    if FDirty[i].Bottom > y0 then
-    begin
-      d := FDirty[i];
-      if d.Top < y0 then d.Top := y0;
-      Types.OffsetRect(d, 0, dy);
-      if IntersectRect(d, d, Rect(R.Left, Math.Max(R.Top, y0 + dy), R.Right,
-        Math.Min(R.Bottom, R.Bottom + dy))) then
-      begin
-        shifted[n] := d;
-        Inc(n);
-      end;
-    end;
-  for i := 0 to n - 1 do MarkDirty(shifted[i]);
-  // a move up exposes the bottom: the next pass lays out what comes there
-  if dy < 0 then MarkDirty(Rect(R.Left, R.Bottom + dy, R.Right, R.Bottom));
-  Result := True;
-end;
-
 { A band of the view, across the text (raster, relative to the text area's top). }
 procedure TTyCustomRichEdit.InvalidateBand(ATop, ABottom: Int64);
 begin
@@ -7142,14 +7138,12 @@ begin
   MarkDirty(Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s));
 end;
 
-{ The text on the surface moved by ADX, ADY raster pixels (the content goes right / down for
-  positive values): its rows or columns are moved inside the text clip and only the band it
-  exposed is dirty. }
-procedure TTyCustomRichEdit.MoveSurfaceText(ADX, ADY: Int64);
+procedure TTyCustomRichEdit.MoveSurfaceText(ADX, ADY: Int64; AFrom: Int64);
 var
-  area, clip, R: TRect;
-  s, y, w, i: Integer;
-  dx, dy: Integer;
+  area, clip, R, d: TRect;
+  kept: array[0..2 * CRichDirtyMax - 1] of TRect;
+  s, y, w, i, n, dx, dy, lo, hi, first, row0: Integer;
+  top64, lo64, hi64, first64: Int64;
   pix: PBGRAPixel;
 begin
   if (FSurface = nil) or FAllDirty then Exit;
@@ -7162,29 +7156,16 @@ begin
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
   R := Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s);
-  if ((ADX <> 0) and (ADY <> 0)) or (Abs(ADY) >= R.Bottom - R.Top) or
-    (Abs(ADX) >= R.Right - R.Left) then
+  if ADX <> 0 then
   begin
-    MarkDirty(R);
-    Exit;
-  end;
-  dx := Integer(ADX);
-  dy := Integer(ADY);
-  w := R.Right - R.Left;
-  if dy > 0 then
-  begin
-    // down: from the bottom up, each row from dy above it
-    for y := R.Bottom - 1 downto R.Top + dy do
-      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
-        w * SizeOf(TBGRAPixel));
-  end
-  else if dy < 0 then
-  begin
-    for y := R.Top to R.Bottom - 1 + dy do
-      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
-        w * SizeOf(TBGRAPixel));
-  end
-  else if dx <> 0 then
+    // across: the whole text alone (a move both ways, or of a part of it, is drawn again)
+    if (ADY <> 0) or (AFrom <> Low(Int64)) or (Abs(ADX) >= R.Right - R.Left) then
+    begin
+      MarkDirty(R);
+      Exit;
+    end;
+    dx := Integer(ADX);
+    w := R.Right - R.Left;
     for y := R.Top to R.Bottom - 1 do
     begin
       pix := FSurface.ScanLine[y] + R.Left;
@@ -7192,18 +7173,91 @@ begin
       if dx > 0 then Move(pix^, (pix + dx)^, (w - dx) * SizeOf(TBGRAPixel))
       else Move((pix - dx)^, pix^, (w + dx) * SizeOf(TBGRAPixel));
     end;
-  FSurface.InvalidateBitmap;
-  // what was dirty moved with the text
+    FSurface.InvalidateBitmap;
+    for i := 0 to FDirtyCount - 1 do
+    begin
+      Types.OffsetRect(FDirty[i], dx, 0);
+      if not IntersectRect(FDirty[i], FDirty[i], R) then FDirty[i] := Rect(0, 0, 0, 0);
+    end;
+    FSurfScrollX := FScrollX;
+    if dx > 0 then MarkDirty(Rect(R.Left, R.Top, R.Left + dx, R.Bottom))
+    else MarkDirty(Rect(R.Right + dx, R.Top, R.Right, R.Bottom));
+    Exit;
+  end;
+  if ADY = 0 then Exit;
+  // the first surface row that moves (the clip's top for the whole text)
+  if AFrom = Low(Int64) then top64 := R.Top else top64 := Int64(area.Top) * s + AFrom;
+  { What may be stale from the move on: from where the moving part was or now begins, down.
+    Above it nothing changes. Nothing of it in the clip: nothing on screen moves. }
+  first64 := Math.Max(Int64(R.Top), Math.Min(top64, top64 + ADY));
+  if first64 >= R.Bottom then Exit;
+  first := Integer(first64);
+  row0 := Integer(Math.Max(Int64(R.Top) - 1, Math.Min(top64, Int64(R.Bottom))));
+  { The rows that get valid pixels: the moving part's rows that are in the clip, where they
+    land in it. }
+  lo64 := Math.Max(Math.Max(top64, Int64(R.Top)) + ADY, Int64(R.Top));
+  hi64 := Math.Min(Int64(R.Bottom) + ADY, Int64(R.Bottom));
+  if lo64 >= hi64 then
+  begin
+    // nothing of it lands in the clip: all is stale from first down
+    lo := R.Bottom;
+    hi := R.Bottom;
+    dy := 0;
+  end
+  else
+  begin
+    lo := Integer(lo64);
+    hi := Integer(hi64);
+    dy := Integer(ADY);
+    w := R.Right - R.Left;
+    if dy > 0 then
+      // down: from the bottom up, each row from dy above it
+      for y := hi - 1 downto lo do
+        Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+          w * SizeOf(TBGRAPixel))
+    else
+      // up: from the top down, each row from -dy below it
+      for y := lo to hi - 1 do
+        Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+          w * SizeOf(TBGRAPixel));
+    FSurface.InvalidateBitmap;
+  end;
+  { The marks: above the moving part they stay; from it down they go where its pixels went
+    (what lands outside the moved rows is in a stale band, marked below). A mark outside the
+    text clip (the frame) is not the text's: it stays. }
+  n := 0;
   for i := 0 to FDirtyCount - 1 do
   begin
-    Types.OffsetRect(FDirty[i], dx, dy);
-    if not IntersectRect(FDirty[i], FDirty[i], R) then FDirty[i] := Rect(0, 0, 0, 0);
+    d := FDirty[i];
+    if (d.Right <= d.Left) or (d.Bottom <= d.Top) then Continue;
+    if (d.Left < R.Left) or (d.Right > R.Right) or (d.Top < R.Top) or (d.Bottom > R.Bottom) then
+    begin
+      kept[n] := d;
+      Inc(n);
+      Continue;
+    end;
+    if d.Top < row0 then
+    begin
+      kept[n] := d;
+      if kept[n].Bottom > row0 then kept[n].Bottom := row0;
+      Inc(n);
+    end;
+    if (d.Bottom > row0) and (lo < hi) then
+    begin
+      if d.Top < row0 then d.Top := row0;
+      Types.OffsetRect(d, 0, dy);
+      if IntersectRect(d, d, Rect(R.Left, lo, R.Right, hi)) then
+      begin
+        kept[n] := d;
+        Inc(n);
+      end;
+    end;
   end;
-  FSurfScrollX := FScrollX;
-  if dy > 0 then MarkDirty(Rect(R.Left, R.Top, R.Right, R.Top + dy))
-  else if dy < 0 then MarkDirty(Rect(R.Left, R.Bottom + dy, R.Right, R.Bottom))
-  else if dx > 0 then MarkDirty(Rect(R.Left, R.Top, R.Left + dx, R.Bottom))
-  else if dx < 0 then MarkDirty(Rect(R.Right + dx, R.Top, R.Right, R.Bottom));
+  FDirtyCount := 0;
+  for i := 0 to n - 1 do MarkDirty(kept[i]);
+  // the rows the move left stale: above what it filled, and below it
+  if lo > first then MarkDirty(Rect(R.Left, first, R.Right, lo));
+  if hi < R.Bottom then MarkDirty(Rect(R.Left, Math.Max(hi, first), R.Right, R.Bottom));
 end;
 
 function TTyCustomRichEdit.SurfaceUsable(const AStyle: TTyStyleSet): Boolean;

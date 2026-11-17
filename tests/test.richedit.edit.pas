@@ -71,6 +71,10 @@ type
     function CharFormatAt(APos: TTyRichPos): TTyCharFormat;
     function TempDir: string;
     procedure KeystrokeCase(AScale: Integer);
+    // fix wave W11
+    procedure ScaledProbe(AScale: Integer);
+    procedure SetVariedLines(ACount: Integer; const ALong: string = ''; ALongAt: Integer = -1);
+    procedure EdgeCases(AScale: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -105,6 +109,9 @@ type
     procedure TestTheControlsFontStyleReachesTheText;
     procedure TestANewDocumentIsSavedWithItsFontAndPage;
     procedure TestATextSaveReportsProgressAndCanBeCancelled;
+    // fix wave W11
+    procedure TestTheSurfaceAfterAnEditAtTheViewsBottomIsAFullRedraw;
+    procedure TestUndoPutsTheSelectionBackAsItWas;
   end;
 
 implementation
@@ -1692,6 +1699,301 @@ begin
   end;
   AssertEquals('no temporary file left', 1, files);
   FRich.OnSaveProgress := nil;
+end;
+
+{ ---- fix wave W11 ---- }
+
+procedure TTyRichEditEditTest.ScaledProbe(AScale: Integer);
+begin
+  FreeAndNil(FRich);
+  if AScale > 1 then TyForceDeviceScaleForTest(AScale, True, False)
+  else TyForceDeviceScaleForTest(0, False);
+  FPaintScale := AScale;
+  FRich := NewProbe;
+  ResetEvents;
+end;
+
+{ Lines of different lengths ('Line i' and up to twelve x): the test device draws every
+  character as the same box, so a line left on the surface where another one belongs differs
+  from it only when their lengths do (review C-10a, Important 1). ALong in place of line
+  ALongAt. }
+procedure TTyRichEditEditTest.SetVariedLines(ACount: Integer; const ALong: string;
+  ALongAt: Integer);
+var
+  sl: TStringList;
+  i: Integer;
+begin
+  sl := TStringList.Create;
+  try
+    for i := 0 to ACount - 1 do
+      if i = ALongAt then sl.Add(ALong)
+      else sl.Add('Line ' + IntToStr(i) + StringOfChar('x', (i * 5) mod 13));
+    FRich.Lines := sl;
+  finally
+    sl.Free;
+  end;
+  FRich.UpdateView;
+  ResetEvents;
+end;
+
+procedure TTyRichEditEditTest.EdgeCases(AScale: Integer);
+var
+  t: TTyRichText;
+  p, i, h0: Integer;
+  r, a: TRect;
+  what, long: string;
+begin
+  what := Format('scale %d', [AScale]);
+  // Backspace at the start of the line on the view's bottom (brought there by the least scroll)
+  ScaledProbe(AScale);
+  SetVariedLines(200);
+  t := FRich.Document.Text;
+  PaintAll;
+  FRich.SelStart := t.ParaStart(60);
+  PaintAll;
+  r := FRich.ParagraphRect(60);
+  AssertEquals(what + ': the bottom line ends at the view''s bottom', FRich.Area.Bottom, r.Bottom);
+  AssertTrue(what + ': scrolled', FRich.ScrollY > 0);
+  Press(VK_BACK);
+  AssertEquals(what + ': joined', 199, t.ParaCount);
+  CheckSurface(what + ': Backspace at the start of the bottom line');
+  // the same not scrolled: Delete at the end of the line above the one the view's bottom cuts
+  ScaledProbe(AScale);
+  SetVariedLines(200);
+  t := FRich.Document.Text;
+  PaintAll;
+  a := FRich.Area;
+  p := 0;
+  repeat
+    Inc(p);
+    r := FRich.ParagraphRect(p);
+  until r.Bottom >= a.Bottom;
+  FRich.SelStart := t.ParaStart(p - 1) + t.ParaLength(p - 1);
+  PaintAll;
+  AssertEquals(what + ': not scrolled', Int64(0), FRich.ScrollY);
+  Press(VK_DELETE);
+  CheckSurface(what + ': Delete that joins the line the view''s bottom cuts');
+  // a wrapped paragraph on the view's bottom: growing a line, then losing it
+  ScaledProbe(AScale);
+  SetVariedLines(200, 'w', 60);
+  t := FRich.Document.Text;
+  r := FRich.ParagraphRect(5);
+  h0 := r.Bottom - r.Top;
+  FRich.SelStart := t.ParaStart(60) + 1;
+  PaintAll;
+  i := 0;
+  repeat
+    Chars('w');
+    PaintAll;
+    r := FRich.ParagraphRect(60);
+    Inc(i);
+  until (r.Bottom - r.Top > h0) or (i > 400);
+  AssertTrue(what + ': it wrapped', r.Bottom - r.Top > h0);
+  CheckSurface(what + ': a bottom paragraph a line taller');
+  Press(VK_BACK);
+  r := FRich.ParagraphRect(60);
+  AssertEquals(what + ': one line again', h0, r.Bottom - r.Top);
+  CheckSurface(what + ': a bottom paragraph a line shorter');
+  // Enter on the bottom line (taller), and its Ctrl+Z (shorter)
+  ScaledProbe(AScale);
+  SetVariedLines(200);
+  t := FRich.Document.Text;
+  PaintAll;
+  FRich.SelStart := t.ParaStart(60) + 2;
+  PaintAll;
+  Press(VK_RETURN);
+  CheckSurface(what + ': Enter on the bottom line');
+  Press(VK_Z, [ssCtrl]);
+  AssertEquals(what + ': undone', 200, t.ParaCount);
+  CheckSurface(what + ': Ctrl+Z of an Enter on the bottom line');
+  // a selection that ends far below what the view holds, deleted
+  ScaledProbe(AScale);
+  SetVariedLines(400);
+  t := FRich.Document.Text;
+  PaintAll;
+  FRich.SelStart := t.ParaStart(300) + 2;
+  PaintAll;
+  FRich.SelLength := t.ParaStart(5) + 2 - (t.ParaStart(300) + 2);
+  PaintAll;
+  FRich.ScrollY := FRich.ScrollY - 36;
+  PaintAll;
+  Press(VK_DELETE);
+  AssertEquals(what + ': deleted to paragraph 300', 105, t.ParaCount);
+  CheckSurface(what + ': Delete of a selection that ends below the held blocks');
+  // a paragraph taller than the view: shorter by a selection deleted in it, taller by typing
+  ScaledProbe(AScale);
+  long := '';
+  for i := 1 to 600 do long := long + 'word ';
+  SetVariedLines(60, long, 10);
+  t := FRich.Document.Text;
+  FRich.SelStart := t.ParaStart(10) + 1500;
+  PaintAll;
+  r := FRich.ParagraphRect(10);
+  AssertTrue(what + ': taller than the view', r.Bottom - r.Top > FRich.Area.Bottom - FRich.Area.Top);
+  FRich.SelStart := t.ParaStart(10) + 1400;
+  FRich.SelLength := 200;
+  PaintAll;
+  Press(VK_DELETE);
+  CheckSurface(what + ': a paragraph taller than the view made shorter');
+  for i := 1 to 70 do Chars('w');
+  CheckSurface(what + ': a paragraph taller than the view made taller');
+  // the document's last paragraph, the view at the end
+  ScaledProbe(AScale);
+  SetVariedLines(200);
+  t := FRich.Document.Text;
+  PaintAll;
+  FRich.SelStart := t.ParaStart(199);
+  PaintAll;
+  Press(VK_BACK);
+  CheckSurface(what + ': Backspace at the start of the last line');
+  Press(VK_Z, [ssCtrl]);
+  CheckSurface(what + ': and its undo');
+  // the scroll range made shorter than the view's position: the view is pulled up
+  ScaledProbe(AScale);
+  SetVariedLines(200);
+  t := FRich.Document.Text;
+  PaintAll;
+  FRich.SelStart := t.Length;
+  PaintAll;
+  FRich.SelStart := t.ParaStart(185);
+  FRich.SelLength := t.Length - t.ParaStart(185);
+  PaintAll;
+  i := FRich.TopParagraph;
+  Press(VK_DELETE);
+  PaintAll;
+  AssertTrue(Format('%s: pulled up (top paragraph %d, was %d)', [what, FRich.TopParagraph, i]),
+    FRich.TopParagraph < i);
+  CheckSurface(what + ': the end deleted, the view pulled up');
+  Press(VK_Z, [ssCtrl]);
+  CheckSurface(what + ': and its undo');
+end;
+
+{ E-I1: whatever an edit's surface move leaves without valid pixels is drawn - nothing below
+  the changed blocks is taken for good unless it was moved from valid pixels or drawn again:
+  the review's four cases (Backspace at the start of the bottom line; a wrapped bottom
+  paragraph losing a line; Ctrl+Z of an Enter on the bottom line; Delete of a selection that
+  ends beyond the held blocks), the growing direction at the bottom edge, a paragraph taller
+  than the view, the last paragraph, the view pulled up - each the surface of a full redraw,
+  at device scale 1 and 2, scrolled and not. }
+procedure TTyRichEditEditTest.TestTheSurfaceAfterAnEditAtTheViewsBottomIsAFullRedraw;
+begin
+  EdgeCases(1);
+  EdgeCases(2);
+end;
+
+{ E-I2 (R55 a, measured in msftedit): undo puts the caret and the selection back as they were
+  before the action, redo leaves a plain caret where the action left it - an undone Backspace
+  has the caret after the character, an undone Delete before it, undone typing (a merged run
+  too) where it began, an undone deletion or typing over a selection the selection again; an
+  edit made by code has no marks, and the change's extent decides. }
+procedure TTyRichEditEditTest.TestUndoPutsTheSelectionBackAsItWas;
+var
+  d: TTyRichDocument;
+
+  procedure CheckSel(const AWhat: string; AStart, ALength, ACaret: TTyRichPos);
+  begin
+    AssertEquals(AWhat + ': from', AStart, FRich.SelStart);
+    AssertEquals(AWhat + ': length', ALength, FRich.SelLength);
+    AssertEquals(AWhat + ': the caret', ACaret, FRich.CaretPos);
+  end;
+
+begin
+  SetText('hello world');
+  d := FRich.Document;
+  // Backspace
+  FRich.SelStart := 5;
+  Press(VK_BACK);
+  FRich.SelStart := 0;
+  FRich.Undo;
+  AssertEquals('Backspace undone', 'hello world', FRich.Lines[0]);
+  CheckSel('Backspace undone: the caret after the character', 5, 0, 5);
+  FRich.SelStart := 0;
+  FRich.Redo;
+  CheckSel('Backspace redone: a plain caret where it left it', 4, 0, 4);
+  FRich.Undo;
+  // Delete
+  FRich.SelStart := 5;
+  Press(VK_DELETE);
+  FRich.SelStart := 0;
+  FRich.Undo;
+  CheckSel('Delete undone: the caret before the character', 5, 0, 5);
+  FRich.Redo;
+  CheckSel('Delete redone', 5, 0, 5);
+  FRich.Undo;
+  // a selection deleted
+  FRich.SelStart := 6;
+  FRich.SelLength := 5;
+  Press(VK_BACK);
+  AssertEquals('deleted', 'hello ', FRich.Lines[0]);
+  FRich.SelStart := 0;
+  FRich.Undo;
+  CheckSel('a deleted selection undone: selected as it was', 6, 5, 11);
+  FRich.Redo;
+  CheckSel('redone: a plain caret', 6, 0, 6);
+  FRich.Undo;
+  // typed over
+  FRich.SelStart := 0;
+  FRich.SelLength := 5;
+  Chars('Q');
+  FRich.Undo;
+  AssertEquals('typed over, undone', 'hello world', FRich.Lines[0]);
+  CheckSel('typed over, undone: selected again', 0, 5, 5);
+  FRich.Redo;
+  CheckSel('typed over, redone: behind the character', 1, 0, 1);
+  FRich.Undo;
+  // a merged run of typing
+  FRich.SelStart := 5;
+  Chars('a');
+  Chars('bc');
+  AssertEquals('one run', 1, d.UndoDepth);
+  FRich.SelStart := 0;
+  FRich.Undo;
+  CheckSel('a run of typing undone: where it began', 5, 0, 5);
+  FRich.Redo;
+  CheckSel('redone: behind its last character', 8, 0, 8);
+  FRich.Undo;
+  // the review's sequence: Enter, Backspace, Ctrl+Z, a character - two paragraphs
+  SetText('hello world');
+  d := FRich.Document;
+  FRich.SelStart := 5;
+  Press(VK_RETURN);
+  AssertEquals('Enter', 2, d.Text.ParaCount);
+  Press(VK_BACK);
+  AssertEquals('Backspace joined them', 1, d.Text.ParaCount);
+  Press(VK_Z, [ssCtrl]);
+  AssertEquals('undone: two paragraphs', 2, d.Text.ParaCount);
+  CheckSel('undone: the caret at the second''s start, nothing selected', d.Text.ParaStart(1), 0,
+    d.Text.ParaStart(1));
+  Chars('Q');
+  AssertEquals('still two paragraphs', 2, d.Text.ParaCount);
+  AssertEquals('the first', 'hello', FRich.Lines[0]);
+  AssertEquals('the second', 'Q world', FRich.Lines[1]);
+  // an edit from code: no marks - what it put back is selected, a redo at its end
+  SetText('hello world');
+  d := FRich.Document;
+  FRich.SelStart := 0;
+  AssertTrue('deleted by code', d.Execute(TTyRichDelete.Create(2, 3)));
+  FRich.Undo;
+  CheckSel('code''s deletion undone: what came back selected', 2, 3, 5);
+  FRich.Redo;
+  CheckSel('redone: at its end', 2, 0, 2);
+  AssertTrue('inserted by code', d.Execute(TTyRichInsertText.Create(0, 'ab', TyRichInheritFormat,
+    False)));
+  FRich.Undo;
+  CheckSel('code''s insertion undone: where it was', 0, 0, 0);
+  { typing from code that merges into the user's run: the step begins where the user's run
+    began; where it ends, the view never saw - a redo goes by the change's extent }
+  SetText('hello');
+  d := FRich.Document;
+  FRich.SelStart := 5;
+  Chars('ab');
+  AssertTrue('code types on', d.Execute(TTyRichInsertText.Create(7, 'cd')));
+  AssertEquals('merged into the run', 1, d.UndoDepth);
+  FRich.SelStart := 0;
+  FRich.Undo;
+  CheckSel('the merged run undone: where the user''s typing began', 5, 0, 5);
+  FRich.Redo;
+  CheckSel('redone: at the end of all of it', 9, 0, 9);
 end;
 
 initialization

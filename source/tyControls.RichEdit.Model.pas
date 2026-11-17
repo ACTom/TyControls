@@ -457,6 +457,28 @@ type
     Len: TTyRichPos;
   end;
 
+  { A view's selection: its anchor, its caret, and whether the caret stands at the end of a
+    wrapped line (its affinity). }
+  TTyRichSelectionMark = record
+    Anchor: TTyRichPos;
+    Caret: TTyRichPos;
+    AtLineEnd: Boolean;
+  end;
+
+  { Where the view that made a step had its selection before the step and after it
+    (TTyRichCommand.Marks): the view's, not the document's - the document only keeps it with
+    the step, so that an undo can put the selection back as it was and a redo where the step
+    left it, which the change's extent cannot tell (a deleted selection and a character taken
+    by Backspace report the same range). A step made by code has none (HasBefore and HasAfter
+    False). A merged run of typing keeps the Before of its first insert and the After of its
+    last; the marks go with the step when the history lets it go. }
+  TTyRichStepMarks = record
+    HasBefore: Boolean;
+    HasAfter: Boolean;
+    Before: TTyRichSelectionMark;
+    After: TTyRichSelectionMark;
+  end;
+
   { A change to a document, and the one way to make one: TTyRichDocument.Execute runs it and
     keeps it for undo. A subclass changes the document in DoExecute through the protected
     InsertText .. MarkTable below - they work only while the document runs this command, and
@@ -470,6 +492,7 @@ type
     FSummary: TTyRichChange;
     FChanged: Boolean;
     FDoc: TTyRichDocument;    // the document running this command, nil otherwise
+    FMarks: TTyRichStepMarks;
     procedure CheckRunning(ADoc: TTyRichDocument);
     function Keep(AUndo: TTyRichUndoData): TTyRichChange;
     procedure AddSummary(const AChange: TTyRichChange);
@@ -523,6 +546,10 @@ type
     function MemSize: Int64; virtual;
     { Its last run changed something; one that did not is not kept in the history. }
     property Changed: Boolean read FChanged;
+    { The selection of the view that made this step, before it and after it (see
+      TTyRichStepMarks). The document never reads or changes them; TakeOver (a merge) keeps
+      this command's Before and takes ANext's After. }
+    property Marks: TTyRichStepMarks read FMarks write FMarks;
   end;
 
   TTyRichHistoryEntry = record
@@ -783,6 +810,11 @@ type
     procedure ClearUndo;
     function UndoDescription: string;    // '' when there is nothing
     function RedoDescription: string;
+    { The step Undo takes back next / Redo puts in next (nil: none), for a view that keeps its
+      selection with the step it made (TTyRichCommand.Marks). The history owns it: it is
+      good until the history changes. }
+    function UndoStep: TTyRichCommand;
+    function RedoStep: TTyRichCommand;
     { Nested. The commands executed until the outermost EndUpdate become one undo step
       (TTyRichCompositeCommand, described by ADescription of the outermost BeginUpdate, or by
       its only command), and that EndUpdate raises the block's one OnChange covering all of
@@ -3349,6 +3381,9 @@ begin
   end;
   ANext.FRecordCount := 0;
   AdoptChange(ANext);
+  // the merged step ends where ANext left the view (it begins where this one began)
+  FMarks.HasAfter := ANext.FMarks.HasAfter;
+  FMarks.After := ANext.FMarks.After;
 end;
 
 function TTyRichCommand.CanExecute(ADoc: TTyRichDocument): Boolean;
@@ -3655,6 +3690,16 @@ end;
 function TTyRichDocument.RedoDescription: string;
 begin
   if FRedoCount = 0 then Result := '' else Result := FRedo[FRedoCount - 1].Cmd.Description;
+end;
+
+function TTyRichDocument.UndoStep: TTyRichCommand;
+begin
+  if FUndoCount = 0 then Result := nil else Result := FUndo[FUndoCount - 1].Cmd;
+end;
+
+function TTyRichDocument.RedoStep: TTyRichCommand;
+begin
+  if FRedoCount = 0 then Result := nil else Result := FRedo[FRedoCount - 1].Cmd;
 end;
 
 procedure TTyRichDocument.BeginUpdate(const ADescription: string);
