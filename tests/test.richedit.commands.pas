@@ -1868,7 +1868,8 @@ begin
     AssertTrue('for good', d.Modified);
     TCmdTestBuilder.ReplaceText(d, TTyRichText.CreateFromUtf8(Bytes('new')));
     AssertFalse('a load is the saved point', d.Modified);
-    AssertTrue('each turn told', FModEvents >= 4);
+    // the step x, := False, := True, := False, the step w, the load
+    AssertEquals('each turn told, once', 6, FModEvents);
   finally
     d.Free;
   end;

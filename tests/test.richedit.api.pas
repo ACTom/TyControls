@@ -15,7 +15,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, TypInfo, fpcunit, testregistry, Controls, Graphics, LCLType,
-  Forms, BGRABitmap, BGRABitmapTypes,
+  Forms, BGRABitmap, BGRABitmapTypes, BGRAWritePNG,
   tyControls.Controller, tyControls.BuiltinThemes, tyControls.Painter, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.Layout, tyControls.RichEdit.RtfRead, tyControls.RichEdit.Attrs,
@@ -106,6 +106,7 @@ type
     procedure TestBeginEditMakesOneStep;
     procedure TestCanUndoAnswersForTheUser;
     procedure TestADescendantsApiDoor;
+    procedure TestThePendingFormatWithAPastedPicture;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -806,6 +807,8 @@ end;
 
 { Size in points of the engine's half points; Height in pixels at the control's PPI. }
 procedure TTyRichEditApiTest.TestHeightAndSizeUnits;
+var
+  f: TTyCharFormat;
 begin
   SetText('abc');
   Sel(0, 3);
@@ -818,6 +821,10 @@ begin
   FRich.Font.PixelsPerInch := 192;
   AssertEquals('Height at 192 PPI', 64, FRich.SelAttributes.Height);
   // 10.5 pt reads 10, as Delphi's
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := 21;
+  FRich.Document.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffSize], f));
+  AssertEquals('10.5 pt reads 10', 10, FRich.SelAttributes.Size);
   FRich.Document.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffSize],
     TyRichCharFormatOf(Default(TTyFontParams))));
   AssertTrue('a size of none: the base''s', FRich.SelAttributes.Size > 0);
@@ -2840,6 +2847,38 @@ begin
   AssertEquals('one OnChange', 1, FChanges);
   AssertEquals('the selection kept', 1, FRich.SelStart);
   AssertEquals('...its length', 2, FRich.SelLength);
+end;
+
+{ F-M15: a picture pasted with a pending format takes it, once. }
+procedure TTyRichEditApiTest.TestThePendingFormatWithAPastedPicture;
+var
+  pic: TBGRABitmap;
+  st: TBytesStream;
+  w: TBGRAWriterPNG;
+begin
+  SetText('ab');
+  FRich.SelStart := 1;
+  FRich.SelAttributes.Bold := True;
+  FRich.SelAttributes.Color := clRed;
+  pic := TBGRABitmap.Create(20, 10, BGRA(10, 120, 200, 255));
+  st := TBytesStream.Create;
+  w := TBGRAWriterPNG.Create;
+  try
+    pic.SaveToStream(st, w);
+    FRich.ClipReset;
+    FRich.ClipPicture := Copy(st.Bytes, 0, st.Size);
+    FRich.ClipPictureKind := rikPng;
+  finally
+    w.Free;
+    st.Free;
+    pic.Free;
+  end;
+  FRich.PasteFromClipboard;
+  FRich.ClipPicture := nil;
+  AssertEquals('a picture went in', 3, FRich.Document.Text.Length);
+  AssertTrue('the picture in the pending format: bold', fsBold in Fmt(1).Style);
+  AssertEquals('...red', clRed, Fmt(1).Color);
+  AssertFalse('the text before it is not', fsBold in Fmt(0).Style);
 end;
 
 initialization
