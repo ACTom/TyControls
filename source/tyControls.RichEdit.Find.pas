@@ -362,6 +362,8 @@ type
     FReadyCount: Integer;
     FReadyState: Int64;               // the content they were found in
     FReadyFresh: Boolean;             // none of them replaced yet
+    FAskedFrom, FAskedTo: TTyRichPos; // the paragraph Allowed asked last, and its answer
+    FAskedAnswer: Boolean;
     FAll: array of TTyRichPos;        // the simple way: every match
     FAllCount, FAllNext: Integer;     // ... and the next to replace
     FCollected: Boolean;
@@ -2055,10 +2057,20 @@ begin
 end;
 
 function TTyRichReplaceAllCommand.Allowed(APos: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k: Integer;
 begin
-  // (a match inside one paragraph never reaches across an edge: only the rows are asked)
-  if FSimple then Result := MatchAllowed(FTarget, APos, FLen)
-  else Result := FTarget.CanChange(APos, FLen);
+  if FSimple then Exit(MatchAllowed(FTarget, APos, FLen));
+  { A match inside one paragraph never reaches across an edge: only its paragraph's row is
+    asked, once a paragraph (a paragraph of megabytes may hold millions of matches). }
+  if (APos >= FAskedFrom) and (APos < FAskedTo) then Exit(FAskedAnswer);
+  t := FTarget.Text;
+  k := t.ParaOfPos(APos);
+  FAskedFrom := t.ParaStart(k);
+  FAskedTo := FAskedFrom + t.ParaLength(k);
+  FAskedAnswer := FTarget.CanChange(APos, FLen);
+  Result := FAskedAnswer;
 end;
 
 procedure TTyRichReplaceAllCommand.Take(APos: TTyRichPos);
@@ -2095,6 +2107,9 @@ begin
   Result := True;
   if (FReadyCount > 0) or FWalkDone or FLimited then Exit;
   t := FTarget.Text;
+  // (what Allowed knew was of the text before the last part)
+  FAskedFrom := 0;
+  FAskedTo := 0;
   if not FStarted then
   begin
     FStarted := True;
