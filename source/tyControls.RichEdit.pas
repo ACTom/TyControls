@@ -231,6 +231,17 @@ type
   TTyRichFindKind = (rfkNone, rfkFind, rfkReplace);
   // how a find or a replace stops (internal: told as a TTyRichFindEnd or TTyRichReplaceEnd)
   TTyRichFindStop = (rfsFound, rfsNotFound, rfsDone, rfsCancelled);
+  { (internal) A frame on the stack that wants to know whether the control was freed meanwhile
+    - by a handler of its find or replace events: the destructor marks every one Gone. }
+  PTyRichLife = ^TTyRichLife;
+  TTyRichLife = record
+    Gone: Boolean;
+    Next: PTyRichLife;
+  end;
+  { (internal) Raised where a handler freed the control, so that nothing of it is touched any
+    more; the turns swallow it, a public call lets it go (an EAbort: the application's loop
+    shows nothing). }
+  ETyRichGone = class(EAbort);
 
   { The clipboard's flavours a paste takes, in the order it takes them. HTML is none of them:
     a clipboard with HTML and text pastes the text (spec goal 10). }
@@ -685,10 +696,10 @@ type
       const AValue: TTyParaFormat);
     function ParaFormatAt(APos: TTyRichPos; out AFormat: TTyParaFormat): Boolean;
   private
-    // find and replace in the background (Task 11b)
+    // find and replace in the background
     FFindKind: TTyRichFindKind;
     { Raised by every start and every end of a find or a replace: a turn, a handler's return,
-      an event of an older one is never taken for the one running (H-I6). }
+      an event of an older one is never taken for the one running. }
     FFindGen: Int64;
     FFinder: TTyRichFinder;
     FFindText: UTF8String;
@@ -718,14 +729,18 @@ type
     FOwedStop: TTyRichFindStop;
     FOwedTally: TTyRichReplaceTally;
     FInReplacePart: Boolean;          // the replace's own part runs (DocChanged: not an edit)
+    FLife: PTyRichLife;               // the frames that would know of the control being freed
     FFindCall: TTyRichQueuedCall;
     FOnFindProgress: TTyRichFindProgressEvent;
     FOnFindDone: TTyRichFindDoneEvent;
     FOnReplaceDone: TTyRichReplaceDoneEvent;
+    procedure LifeEnter(var ALife: TTyRichLife);
+    procedure LifeLeave(var ALife: TTyRichLife);
+    procedure TurnBody(var ALife: TTyRichLife);
     // the run of typing ends (TTyRichDocument.BreakMerge)
     procedure EndTypingRun;
     { The find or replace running waits for something - the load, an input method's
-      composition, the document's update or save -: it asks for no turn meanwhile (H-M9), and
+      composition, the document's update or save -: it asks for no turn meanwhile, and
       what it waits for wakes it (FindWake). }
     function FindBlocked: Boolean;
     procedure FindWake;
@@ -1228,7 +1243,7 @@ type
       the next pass - no timer period; with rtdTimer the timer runs the next. Only while the
       control has a window; a turn that comes inside a load step or a save does nothing, and
       the step's or the save's end starts the driver again. }
-    procedure BackgroundTurn;
+    function BackgroundTurn: Boolean;
     { The clock a turn is measured by, in milliseconds (GetTickCount64; a test seam). }
     function IdleTicks: QWord; virtual;
     { The driver of the turns on this widgetset: TyRichTurnDriverFor(WidgetSet.LCLPlatform). }
@@ -1887,7 +1902,7 @@ type
       const SearchOpt: TTySearchOptions; var ATextStart, ATextLength: TTyRichPos): Boolean; overload;
     function Search(const ANiddle: string; Start, Len: TTyRichPos;
       const SearchOpt: TTySearchOptions; var ATextStart, ATextLength: Integer): Boolean; overload;
-    { The user's Find Next (R66: a user's action - an open composition ends first; it edits
+    { The user's Find Next (a user's action - an open composition ends first; it edits
       nothing, so ReadOnly does not stop it): the next match after the selection (rfoBackward:
       the one before it); with rfoWrap the search goes on from the document's other end, to
       where it began (the text is read once). Found: it is selected, in view (as SelStart /
@@ -2798,7 +2813,17 @@ begin
 end;
 
 destructor TTyCustomRichEdit.Destroy;
+var
+  life: PTyRichLife;
 begin
+  // a handler of a find or a replace frees it: the frames below it touch nothing more of it
+  life := FLife;
+  while life <> nil do
+  begin
+    life^.Gone := True;
+    life := life^.Next;
+  end;
+  FLife := nil;
   { A composition ends first, while the window and the document are still there: dropped,
     and the input method told so (what it answers inside that finds none) - otherwise it
     stays open in the thread's input context for whatever gets the focus next. After this
@@ -10188,6 +10213,23 @@ begin
   BackgroundTurn;
 end;
 
+procedure TTyCustomRichEdit.LifeEnter(var ALife: TTyRichLife);
+begin
+  ALife.Gone := False;
+  ALife.Next := FLife;
+  FLife := @ALife;
+end;
+
+procedure TTyCustomRichEdit.LifeLeave(var ALife: TTyRichLife);
+var
+  p: ^PTyRichLife;
+begin
+  // (taken out wherever it is in the chain)
+  p := @FLife;
+  while (p^ <> nil) and (p^ <> @ALife) do p := @(p^^.Next);
+  if p^ <> nil then p^ := ALife.Next;
+end;
+
 procedure TTyCustomRichEdit.BackstopTick(Sender: TObject);
 begin
   // a turn ran since the last tick: the idle step drives the work
@@ -10207,7 +10249,7 @@ begin
     (Not run through the queue: in a flood of messages on gtk and qt the queue is run only by
     the idle step and ProcessMessages, which is what is starved.) }
   CancelCall(FStepCall);
-  BackgroundTurn;
+  if not BackgroundTurn then Exit;
   FBackstopSeen := FTurnsRun;
 end;
 
@@ -10221,10 +10263,36 @@ begin
   else if ACall = FSelCall then
     DoSelectionChange
   else if ACall = FFindCall then
-    PayFindOwed;
+    try
+      PayFindOwed;
+    except
+      // (its handler freed the control: nothing more of it)
+      on ETyRichGone do ;
+    end;
 end;
 
-procedure TTyCustomRichEdit.BackgroundTurn;
+{ A turn; False when a handler of the find's or the replace's events freed the control in it
+  (nothing of it is touched after that). }
+function TTyCustomRichEdit.BackgroundTurn: Boolean;
+var
+  life: TTyRichLife;
+begin
+  LifeEnter(life);
+  try
+    try
+      TurnBody(life);
+    except
+      on ETyRichGone do
+        if not life.Gone then raise;
+    end;
+  finally
+    // (also when the turn raised: no frame of a turn that ended stays in the chain)
+    if not life.Gone then LifeLeave(life);
+  end;
+  Result := not life.Gone;
+end;
+
+procedure TTyCustomRichEdit.TurnBody(var ALife: TTyRichLife);
 var
   t0, tEnd: QWord;
   n: Integer;
@@ -10270,12 +10338,14 @@ begin
   finally
     { The driver stays on while work is left, also after a piece raised: the work never
       strands (K-4). Nothing is queued from here (R49): still inside the turn, a start only
-      registers the idle handler, and the next idle step queues the next turn. }
-    try
-      if HasBackgroundWork then StartBackground else StopBackground;
-    finally
-      FInTurn := False;
-    end;
+      registers the idle handler, and the next idle step queues the next turn. A control a
+      handler freed is not touched. }
+    if not ALife.Gone then
+      try
+        if HasBackgroundWork then StartBackground else StopBackground;
+      finally
+        FInTurn := False;
+      end;
   end;
   // (P-2) the next turn could not be scheduled: the load ends here, out of the turn
   EndOwedLoad;
@@ -10330,7 +10400,7 @@ begin
     FImeHook := TyImeInstall(Self, @HookCommit, @HookCaretRect);
 end;
 
-{ ---- finding and replacing (Task 11b, fix wave W19) ----
+{ ---- finding and replacing ----
 
   The engine's finder (tyControls.RichEdit.Find) searches and its replace command replaces;
   here are the façades, the user's Find Next, and the find and the replace in the background,
@@ -10363,7 +10433,7 @@ begin
       (TyRichRtfLoadOf(FDoc) <> nil);
     Exit;
   end;
-  { A replace walks from the text's end: it waits for the load to have one. Its next part
+  { A replace waits for the load to have the whole text (a range to its end included). Its next part
     waits while an input method composes or the document holds its changes back (an update,
     a save) - and asks for no turn meanwhile: what it waits for wakes it (FindWake). }
   Result := FDoc.Loading or ((FReplaceCmd <> nil) and FReplaceCmd.Ready and
@@ -10540,7 +10610,7 @@ var
   o: TTyRichFindOptions;
 begin
   Result := False;
-  // a user's action (R66): what is being composed goes in first; it edits nothing
+  // a user's action: what is being composed goes in first; it edits nothing
   EndCompositionForUser;
   if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
   o := AOptions - [rfoWrap];
@@ -10887,25 +10957,35 @@ procedure TTyCustomRichEdit.RaiseFindEnd(AKind: TTyRichFindKind; AStop: TTyRichF
   APos, ALen: TTyRichPos; const ATally: TTyRichReplaceTally);
 var
   fin: TTyRichFindEnd;
+  life: TTyRichLife;
 begin
   if [csDestroying, csLoading] * ComponentState <> [] then Exit;
-  if AKind = rfkFind then
-  begin
-    case AStop of
-      rfsFound: fin := rfeFound;
-      rfsCancelled: fin := rfeCancelled;
-    else
-      fin := rfeNotFound;
-    end;
-    if fin <> rfeFound then
+  { A handler may free the control (from any of these events): then nothing of it is touched
+    after the handler - ETyRichGone goes up to the turn, which ends quietly, or out of the
+    public call that ended the find, as an EAbort. }
+  LifeEnter(life);
+  try
+    if AKind = rfkFind then
     begin
-      APos := -1;
-      ALen := 0;
-    end;
-    if Assigned(FOnFindDone) then FOnFindDone(Self, fin, APos, ALen);
-  end
-  else if Assigned(FOnReplaceDone) then
-    FOnReplaceDone(Self, ReplaceResultOf(AStop, ATally));
+      case AStop of
+        rfsFound: fin := rfeFound;
+        rfsCancelled: fin := rfeCancelled;
+      else
+        fin := rfeNotFound;
+      end;
+      if fin <> rfeFound then
+      begin
+        APos := -1;
+        ALen := 0;
+      end;
+      if Assigned(FOnFindDone) then FOnFindDone(Self, fin, APos, ALen);
+    end
+    else if Assigned(FOnReplaceDone) then
+      FOnReplaceDone(Self, ReplaceResultOf(AStop, ATally));
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  if life.Gone then raise ETyRichGone.Create('The control was freed by its handler');
 end;
 
 procedure TTyCustomRichEdit.PayFindOwed;
@@ -10945,6 +11025,7 @@ end;
 
 procedure TTyCustomRichEdit.ReportFindProgress(AKind: TTyRichFindKind; ADone, ATotal: Int64);
 var
+  life: TTyRichLife;
   cancel: Boolean;
   t0: QWord;
   task: TTyRichFindTask;
@@ -10955,11 +11036,17 @@ begin
   if AKind = rfkReplace then task := rftReplace else task := rftFind;
   // the handler's time is the user's: the pieces are not sized by it
   t0 := IdleTicks;
+  LifeEnter(life);
   try
     FOnFindProgress(Self, task, ADone, ATotal, cancel);
   finally
-    Inc(FHandlerMs, Int64(IdleTicks - t0));
+    if not life.Gone then
+    begin
+      LifeLeave(life);
+      Inc(FHandlerMs, Int64(IdleTicks - t0));
+    end;
   end;
+  if life.Gone then raise ETyRichGone.Create('The control was freed by its handler');
   FFindCancel := cancel;
 end;
 
@@ -11058,14 +11145,25 @@ var
   step: TTyRichCommand;
   marks: TTyRichStepMarks;
   load: TTyRtfLoad;
-  skipped: Integer;
+  stop: TTyRichPos;
+  r: TTyRichFindResult;
 begin
   gen := FFindGen;
-  // a document that takes no change: every match is left, and counted
+  { A document that takes no change (a load cancelled): every match is left, and counted - a
+    piece of the find's size a turn, as a find reads. }
   if FDoc.Incomplete then
   begin
-    skipped := CountMatches(FFindText, FFindOpts, FReplaceFrom, FReplaceLength);
-    Inc(FReplaceTally.Skipped, skipped);
+    if FFinder = nil then
+    begin
+      if FReplaceLength < 0 then stop := -1 else stop := FReplaceFrom + FReplaceLength;
+      FFinder := TTyRichFinder.Create(FDoc, FFindText, FFindOpts, FReplaceFrom, stop);
+      FFinder.Collect := True;
+    end;
+    r := FFinder.Step(Math.Max(Int64(1), FFindSlice));
+    Inc(FFindTurnWork, FFindSlice);
+    Inc(FReplaceTally.Skipped, FFinder.MatchCount);
+    FFinder.ClearMatches;
+    if r <> rfrNotFound then Exit;
     EndFind(rfsDone, True);
     Exit;
   end;

@@ -19,10 +19,11 @@ unit tyControls.RichEdit.Find;
   Cyrillic, Armenian, Georgian, full-width Latin, and the other ranges that function covers),
   final sigma as sigma. A code point at a time, as the text is read: no lowered copy of the
   text is made. Whole word (rfoWholeWord): the match does not cut a word of the caret's word
-  rule (tyControls.RichEdit.Model's TyRichWordClass) in two - at each end, the character outside and the needle's own
-  character there are not both word characters. Chinese, like Latin letters, is word
-  characters, so a Chinese needle matches as a whole word only where a run of word characters
-  begins and ends with it (the run that a double click selects).
+  rule (tyControls.RichEdit.Model's TyRichWordClass) in two - at each end, the character
+  outside and the needle's own character there are not both word characters of one word. A
+  character of a script written without spaces (Chinese, kana, Hangul, full-width forms - the
+  line breaker's set) bounds a word on both of its sides: a Chinese needle is a whole word
+  between two ideographs, and a Latin word inside Chinese text is bounded by them (Joins).
 
   Text that was never parsed (a lazily read RTF): a paragraph that is still its bytes in the
   file is first looked for in those bytes (TTyRichRawFilter: every form the reader
@@ -40,9 +41,9 @@ unit tyControls.RichEdit.Find;
   An object never matches text - and a field (a link) is an object: its display text is not
   found. When field results become text the control shows, the finder must see them.
 
-  Replacing: TTyRichReplaceCommand replaces a list of matches, the last one first, so that no
-  position moves before it is used; consecutive commands of one replace (the same session)
-  merge into one undo step. }
+  Replacing: TTyRichReplaceAllCommand replaces every match of a range, walking it from its
+  start a range of paragraphs at a time, as ONE undo step that merges with no other (see its
+  declaration). }
 
 {$mode objfpc}{$H+}
 {$inline on}
@@ -216,6 +217,14 @@ type
     FKeep: RawByteString;
     FKeepPara: Integer;
     FKeepState: Int64;
+    FKeepBase: TTyRichPos;            // where the kept paragraph starts
+    FKeepShift: TTyRichPos;           // what changed before the scan since it was kept (Moved)
+    { Moved: the content's number changes when the part's run is over, after Moved - the next
+      step takes it as the kept text's (a caller that changed the text otherwise between them
+      would find its part refused by the document: TTyRichDocument.ExecutePart). }
+    FKeepMoved: Boolean;
+    FCap: Integer;                    // CollectRange: the most matches it collects (0: all)
+    FCapped: Boolean;
     FFetchedBytes: Int64;
     FRangeLo, FRangeHi: Integer;
     procedure ParseNeedle(const ANeedle: UTF8String);
@@ -271,7 +280,14 @@ type
       call again with the same range; rfrFound / rfrNotFound: the range is read and its
       matches are Matches. }
     function CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-      ABudget: Int64): TTyRichFindResult;
+      ABudget: Int64; ACap: Integer = 0): TTyRichFindResult;
+    { CollectRange stopped at ACap matches (rfrFound), the range not read through: the next
+      call with the same range goes on right after the last one. }
+    property Capped: Boolean read FCapped;
+    { The text before where the scan stands changed by ADelta characters and AParas paragraphs
+      (a replace's own part, of the matches it collected): the scan goes on where it stood, in
+      the paragraph's text it keeps, its places moved by the change. }
+    procedure Moved(ADelta: TTyRichPos; AParas: Integer);
     { A count that grows with everything a step does (text read, bytes lexed or passed,
       paragraphs begun, the paragraph it stands in): a step that leaves it as it was did
       nothing. }
@@ -344,11 +360,8 @@ type
     moved by what the part changed). So no position is used after the text changed before
     it, an interval of a lazily read RTF is parsed once (found and replaced while it is
     resident), no list of every match is kept, and a replacement is never searched again.
-    The walk goes from the text's start to its end, not from the end back: what it holds of
-    a lazily read file's paragraphs (their values before) the loader then records in the
-    order of the file - from the end back each record goes to the front of the loader's
-    sorted list, and a replace of 100,000 paragraphs of a 100 MB RTF spent most of its time
-    moving that list. A needle with a paragraph end is the simple way: every match is found
+    The walk goes from the range's start to its end, a replacement never searched again. A
+    needle with a paragraph end is the simple way: every match is found
     first (a position each, 8 bytes), then they are replaced from the first on in ranges of
     the same size, each moved by what the ones before it changed.
 
@@ -357,14 +370,14 @@ type
     and its value before (references, no text: a few dozen bytes a paragraph, however many
     matches it holds); otherwise the ordinary records of a delete and an insert for each
     match. The promises of any command hold: an undo puts back the text, the formats and the
-    objects exactly (a lazily read paragraph is its file's bytes again, R56) and the step's
+    objects exactly (a lazily read paragraph is its file's bytes again) and the step's
     selection marks; one OnChange for each run (Execute or ExecutePart).
 
     Which matches: leftmost, never overlapping, as a forward find has them; a replacement is
     never searched again ("a" by "aa" replaces each "a" once). Each takes the format of the
     first character it replaces (a paragraph's end: what typing there gets). A match the
     document will not let a user's edit change - a row that holds a nested table
-    (CanChange), a cell's or a row's edge (R57, TTyRichDocument.UserRangeAllowed) - is left
+    (CanChange), a cell's or a row's edge (TTyRichDocument.UserRangeAllowed) - is left
     and counted (Skipped).
 
     The limit: when the step keeps CRichReplaceLimitFactor times the document's MaxUndoBytes
@@ -391,6 +404,7 @@ type
     FTotal: TTyRichPos;               // the text's length when the walk began
     // the walk: the next range begins with FNextPara; the one being read; the paragraphs then
     FNextPara, FRangeLo, FRangeHi, FRangeParas: Integer;
+    FRangeOpen: Boolean;              // its finder stopped at a part's matches inside it
     FCharDelta: TTyRichPos;           // what the replacements so far changed the length by
     FHighPos: TTyRichPos;             // where what was replaced ends, in the text it began on (-1)
     FRedoTo: TTyRichPos;              // a redo replaces the matches before here (-1: no redo)
@@ -477,7 +491,7 @@ function TyRichFindCodes(const S: RawByteString): TTyRichCodeArray;
 implementation
 
 uses
-  LazUTF16, tyControls.Painter, tyControls.RichEdit.TextIO, tyControls.RichEdit.RowFormat,
+  LazUTF16, tyControls.RichEdit.TextIO, tyControls.RichEdit.RowFormat,
   tyControls.StrConsts;
 
 const
@@ -589,14 +603,14 @@ end;
 { Whole word: the character outside a match and the needle's own at that end make one word -
   both are word characters of the caret's rule (TyRichWordClass), and neither is of a script
   written without spaces, which bounds a word on both of its sides: the line breaker's set
-  (TyIsCJKCodepoint - Hangul Jamo and syllables, the CJK radicals, punctuation, kana, Bopomofo,
+  (TyRichNoSpaceScript - Hangul Jamo and syllables, the CJK radicals, punctuation, kana, Bopomofo,
   the ideographs of every extension, Yi, the compatibility ideographs and forms, and the
   full-width forms). So a Chinese needle is a whole word between two ideographs, and a Latin
   word inside Chinese text is bounded by them. }
 function Joins(AOutside, AEdge: Cardinal): Boolean; inline;
 begin
   Result := (TyRichWordClass(AOutside) = 1) and (TyRichWordClass(AEdge) = 1) and
-    not TyIsCJKCodepoint(AOutside) and not TyIsCJKCodepoint(AEdge);
+    not TyRichNoSpaceScript(AOutside) and not TyRichNoSpaceScript(AEdge);
 end;
 
 { ---- the raw-byte filter ---- }
@@ -1229,6 +1243,12 @@ begin
         Inc(FMatchCount);
         // the next one begins after this one
         FMin := AStart + FLen;
+        if (FCap > 0) and (FMatchCount >= FCap) then
+        begin
+          // as many as a caller takes at a time: the scan stands right after this one
+          FStop := True;
+          Result := True;
+        end;
       end;
   else
     if AStart > FBest then FBest := AStart;
@@ -1248,6 +1268,7 @@ begin
   // (the scan has left the paragraph: its text goes)
   FKeep := '';
   FKeepPara := -1;
+  FKeepMoved := False;
 end;
 
 { Paragraph AIndex's text, read from where the scan stands in it (FCurOff characters, FCurByte
@@ -1272,6 +1293,8 @@ var
     if ALen > 0 then Move(AText^, Pointer(FKeep)^, ALen);
     FKeepPara := AIndex;
     FKeepState := FDoc.ContentState;
+    FKeepBase := FRunPos;
+    FKeepShift := 0;
   end;
 
   procedure Leave(AAt: PByte; AOff: Int64; AK: Integer; APending: Int64);
@@ -1526,11 +1549,17 @@ begin
     end;
     { Inside the paragraph since an earlier step, its text kept and the content as it was:
       read on in the kept text (not fetched again). }
+    if FKeepMoved then
+    begin
+      FKeepMoved := False;
+      FKeepState := FDoc.ContentState;
+    end;
     if (FKeepPara = FNext) and (FKeepState = FDoc.ContentState) and
       ((FCurByte > 0) or (FCurOff > 0)) then
     begin
       cont := True;
-      FRunPos := FText.ParaStart(FNext);
+      // (the kept text's places: where it began, and what changed before the scan since)
+      FRunPos := FKeepBase + FKeepShift;
       ExactPara(FNext, nil, PByte(Pointer(FKeep)), Length(FKeep), cont);
       Continue;
     end;
@@ -2071,7 +2100,7 @@ begin
 end;
 
 function TTyRichFinder.CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-  ABudget: Int64): TTyRichFindResult;
+  ABudget: Int64; ACap: Integer): TTyRichFindResult;
 begin
   Inc(FSteps);
   if FNever then Exit(rfrNotFound);
@@ -2098,11 +2127,39 @@ begin
   FMode := 1;
   FStop := False;
   if ABudget < 0 then FBudget := High(Int64) div 4 else FBudget := Max64(ABudget, 1);
-  ScanRange(AHi);
+  FCap := ACap;
+  FCapped := False;
+  try
+    ScanRange(AHi);
+  finally
+    FCap := 0;
+  end;
+  if FStop then
+  begin
+    // (the range stays: the next call goes on after the last match)
+    FCapped := True;
+    Exit(rfrFound);
+  end;
   if FNext <= AHi then Exit(rfrMore);
   FRangeLo := -1;
   FRangeHi := -1;
   if FMatchCount > 0 then Result := rfrFound else Result := rfrNotFound;
+end;
+
+procedure TTyRichFinder.Moved(ADelta: TTyRichPos; AParas: Integer);
+begin
+  Inc(FMin, ADelta);
+  Inc(FNext, AParas);
+  if FRangeHi >= 0 then Inc(FRangeHi, AParas);
+  if FKeepPara >= 0 then
+  begin
+    Inc(FKeepPara, AParas);
+    Inc(FKeepShift, ADelta);
+    FKeepMoved := True;
+  end;
+  // (the walk's batch of sources is of the text before)
+  SetLength(FSrc, 0);
+  SetLength(FSrcBytes, 0);
 end;
 
 function TTyRichFinder.WorkDone: Int64;
@@ -2129,7 +2186,7 @@ var
   GRichReplaceIds: Int64 = 0;
 
 { A match the document lets a user's edit replace: no row that holds a nested table in the way
-  (CanChange) and R57 as the keys have it (TTyRichDocument.UserRangeAllowed) - the paragraph
+  (CanChange) and the table-edge rule as the keys have it (TTyRichDocument.UserRangeAllowed) - the paragraph
   the deletion joins with counts, so a match that ends with a cell's or a row's last
   paragraph end, or with the one before a table, is refused. A range the rule would shorten
   (to keep the separator before a table) is refused too: the replacement would not mean what
@@ -2383,7 +2440,11 @@ begin
       if hi < FRangeLo then hi := FRangeLo;
       FRangeHi := hi;
     end;
-    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget);
+    { At most a part's matches at a time: a range is at least a paragraph, and one paragraph
+      may hold millions (a one-line file) - a list of all of them would cost what the step's
+      record saves. The finder then stands after the last one, in the paragraph's text it
+      keeps, and goes on from there after the part (Moved). }
+    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches);
     if r = rfrMore then Exit(False);
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
@@ -2394,15 +2455,16 @@ begin
     end;
     FFinder.ClearMatches;
     FRangeParas := t.ParaCount;
-    FRangeLo := -1;
+    FRangeOpen := FFinder.Capped;
+    if not FRangeOpen then FRangeLo := -1;
     if FReadyCount > 0 then
     begin
       FReadyState := FTarget.ContentState;
       FReadyFresh := True;
       Exit;
     end;
-    // a range with nothing to replace: the walk goes on after it
-    FNextPara := FRangeHi + 1;
+    // a range with nothing to replace: the walk goes on after it (or in it, after its last)
+    if not FRangeOpen then FNextPara := FRangeHi + 1;
     // (a bounded search goes on in the next call: the range read was its piece)
   until ABudget >= 0;
   Result := False;
@@ -2469,7 +2531,15 @@ begin
   Dec(FReadyCount, n);
   // the range done: the walk goes on after it (and after the paragraphs a replacement made)
   if (FReadyCount = 0) and not FSimple then
-    FNextPara := FRangeHi + 1 + (t.ParaCount - FRangeParas);
+    if FRangeOpen and (FFinder <> nil) then
+    begin
+      // not read through: its finder goes on where it stood, moved by what the part changed
+      FFinder.Moved(d, t.ParaCount - FRangeParas);
+      Inc(FRangeHi, t.ParaCount - FRangeParas);
+      FRangeParas := t.ParaCount;
+    end
+    else
+      FNextPara := FRangeHi + 1 + (t.ParaCount - FRangeParas);
   Inc(FRecBytes, RecordsSize(n0));
   // the limit (not for a redo: it replays what the first run did)
   if (FRedoTo < 0) and (ADoc.MaxUndoBytes > 0) and
@@ -2551,6 +2621,7 @@ begin
   FAllCount := 0;
   FAll := nil;
   FRangeLo := -1;
+  FRangeOpen := False;
   FCharDelta := 0;
   FReplaced := 0;
   FSkipped := 0;
@@ -2618,6 +2689,7 @@ begin
   else
   begin
     if FReadyCount > 0 then at := FReady[0]
+    else if FRangeOpen and (FFinder <> nil) then at := FFinder.Reached
     else if FRangeLo >= 0 then at := t.ParaStart(FRangeLo)
     else if FNextPara < t.ParaCount then at := t.ParaStart(FNextPara)
     else at := t.Length;

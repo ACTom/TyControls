@@ -1232,6 +1232,12 @@ function TyRichMajorityLineBreak(ACR, ALF, ACRLF: Int64): TTyRichSeparator;
   letters, digits, ideographs, marks, a byte that is no text. A paragraph's end (a find's
   $FFFFFFFF) and "no character" ($FFFFFFFE, before the text's start) are no word. }
 function TyRichWordClass(C: Cardinal): Integer;
+{ A character of a script written without spaces - Hangul Jamo and syllables, the CJK
+  radicals, punctuation, kana, Bopomofo, the ideographs of every extension, Yi, the
+  compatibility ideographs and forms, the full-width forms: a word ends on both of its sides
+  (a find's whole word). The line breaker's set (tyControls.Painter's TyIsCJKCodepoint, a unit
+  of the controls this one does not use; a test holds the two equal). }
+function TyRichNoSpaceScript(C: Cardinal): Boolean;
 
 implementation
 
@@ -1276,6 +1282,19 @@ begin
   // byte compare: comparing with = could convert between code pages
   Result := (Length(A) = Length(B)) and
     ((Length(A) = 0) or (CompareByte(A[1], B[1], Length(A)) = 0));
+end;
+
+function TyRichNoSpaceScript(C: Cardinal): Boolean;
+begin
+  Result :=
+    ((C >= $1100) and (C <= $11FF)) or     // Hangul Jamo
+    ((C >= $2E80) and (C <= $A4CF)) or     // radicals .. CJK punctuation .. kana .. Ext-A .. Yi
+    ((C >= $AC00) and (C <= $D7A3)) or     // Hangul syllables
+    ((C >= $F900) and (C <= $FAFF)) or     // CJK compatibility ideographs
+    ((C >= $FE30) and (C <= $FE4F)) or     // CJK compatibility forms
+    ((C >= $FF00) and (C <= $FF60)) or     // full-width forms
+    ((C >= $FFE0) and (C <= $FFE6)) or     // full-width signs
+    ((C >= $20000) and (C <= $2FA1F));     // CJK Ext B-F
 end;
 
 function TyRichWordClass(C: Cardinal): Integer;

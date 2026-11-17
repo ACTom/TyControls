@@ -1,6 +1,6 @@
 unit test.richedit.find;
 
-{ Finding and replacing in the engine (tyControls.RichEdit.Find, Task 11b): what a match is,
+{ Finding and replacing in the engine (tyControls.RichEdit.Find): what a match is,
   rule by rule; the options alone and together; text that was never parsed - the raw-byte
   filter looked through first, never losing a match (every fixture, every word at every
   place, lazily and fully read, with and without the filter) and parsing only near what it
@@ -67,6 +67,7 @@ type
     procedure TestALongNeedleWithAParagraphEndEnds;
     procedure TestARerunGoesOnWhereItStopped;
     procedure TestAParagraphIsFetchedOnce;
+    procedure TestOneHugeParagraphKeepsNoListOfItsMatches;
   end;
 
 implementation
@@ -807,7 +808,7 @@ begin
   end;
 end;
 
-{ H-I1, by a generator: every word of every RTF fixture, written in each byte form the reader
+{ By a generator: every word of every RTF fixture, written in each byte form the reader
   takes - \uN with a fallback of none, one and two bytes, \'xx and raw bytes in each code page
   of the fixture that has its characters, a control word and a group between any two of its
   letters - in a paragraph after another: the filtered find finds it there (and the whole
@@ -977,7 +978,7 @@ begin
   end;
 end;
 
-{ H-M3: what the filter takes now, through the same comparison - a character outside the BMP
+{ What the filter takes, through the same comparison - a character outside the BMP
   (only \uN pairs make one), a needle that is only paragraph ends (the lengths in the
   paragraph tree say where; nothing is read but what a table holds), and one of text and
   paragraph ends (each side's text filtered in its paragraph). U+FFFD is not filtered. }
@@ -1123,7 +1124,7 @@ procedure TTyRichFindTest.TestWholeWordAndChinese;
 var
   doc: TTyRichDocument;
 begin
-  { H-M5: an ideograph (kana, Hangul - the scripts written without spaces) bounds a word on
+  { An ideograph (kana, Hangul - the scripts written without spaces) bounds a word on
     both of its sides, as Windows' rich edit finds it: a Chinese needle is whole between
     ideographs, and a Latin word inside Chinese text is bounded by them. }
   doc := TextDoc(U([$4E2D, $6587, 32, $4E2D, $6587, $5B57, 32, $4E2D, $6587, Ord(','), Ord('a'),
@@ -1354,7 +1355,7 @@ begin
   end;
 end;
 
-{ H-I3: a step is bounded in bytes, whatever the paragraphs are - one line of megabytes of
+{ A step is bounded in bytes, whatever the paragraphs are - one line of megabytes of
   text is read in pieces (a match that straddles two steps is found, and so is the next one),
   forward and backward, match case or not, whole word; a file of paragraphs that are each a
   large picture is passed by the pictures' braces, its bytes not lexed. Counts, not times. }
@@ -1671,8 +1672,8 @@ begin
   Inc(Count);
 end;
 
-{ H-I4 (R74): a replace of every match is ONE command - its parts (a range of paragraphs from
-  the end toward the start each) one undo step, never merged with another step, one OnChange
+{ A replace of every match is ONE command - its parts (a range of paragraphs from
+  the start on each) one undo step, never merged with another step, one OnChange
   a part; an undo puts the text back at once, a redo replays it; and what the step keeps is a
   few bytes a match (one record a range: a paragraph's pieces and value before). }
 procedure TTyRichFindTest.TestReplaceIsOneStepOfParts;
@@ -1826,7 +1827,7 @@ begin
   end;
 end;
 
-{ H-I4: the limit - a replace whose step reaches four times MaxUndoBytes ends there, says so,
+{ The limit - a replace whose step reaches four times MaxUndoBytes ends there, says so,
   and what it replaced is one step; run again it goes on. }
 procedure TTyRichFindTest.TestReplaceStopsAtTheLimit;
 var
@@ -1881,7 +1882,7 @@ begin
   end;
 end;
 
-{ H-M1: a part runs only on the content the step left - BreakMerge does not stop it (the step
+{ A part runs only on the content the step left - BreakMerge does not stop it (the step
   merges with nothing), a saved point does (Modified := False), and then nothing of it runs:
   nothing is on the redo side. }
 procedure TTyRichFindTest.TestAStoppedReplaceLeavesNothingToRedo;
@@ -1926,7 +1927,7 @@ begin
   end;
 end;
 
-{ H-I4 with M2: in a lazily read RTF the walk from the end parses each interval about once - the
+{ In a lazily read RTF the walk parses each interval about once - the
   range's matches are found and replaced while its intervals are resident - and between its
   parts the residency goes back to the loader's bound; undone, the file saves as it was. }
 procedure TTyRichFindTest.TestReplaceParsesEachIntervalOnce;
@@ -2038,7 +2039,7 @@ begin
   end;
 end;
 
-{ R57 at a table's edges (H-C1): a match whose deletion would join a paragraph with one in
+{ The table-edge rule: a match whose deletion would join a paragraph with one in
   another cell, another row, or a table it was not in - one that ends with a cell's or a row's
   last paragraph end, or with the paragraph end before a table, or between two tables - is left
   and counted; what the document holds is what its file says (saved and read again, the same
@@ -2072,7 +2073,7 @@ var
   end;
 
 begin
-  // the review's two
+  // empty paragraphs before a table, and a paragraph end after an x
   Put(0, 'empty paragraphs removed before a table', 'before|par |par ' + Row +
     'a|cell b|cell|row |pard after|par}', #10#10, #10, 0, 1);
   Put(1, 'a cell''s last paragraph end', 'before|par ' + Row + 'ax|cell b|cell|row |pard after|par}',
@@ -2484,6 +2485,56 @@ begin
     finally
       f.Free;
     end;
+  finally
+    doc.Free;
+  end;
+end;
+
+{ One paragraph with matches all through it (a one-line file): the replace takes them a part's
+  worth at a time - its finder stops after them, and goes on in the paragraph's text after the
+  part - so it lists no more than a part's matches, and what the step keeps stays a few bytes
+  a match however long the paragraph (a list of every match counted toward the limit). Also
+  with a replacement that splits the paragraph, and undone. }
+procedure TTyRichFindTest.TestOneHugeParagraphKeepsNoListOfItsMatches;
+var
+  doc: TTyRichDocument;
+  s, before: RawByteString;
+  sb: TStringBuilder;
+  i, n, skipped, parts: Integer;
+  limited: Boolean;
+begin
+  sb := TStringBuilder.Create;
+  try
+    for i := 0 to 199999 do sb.Append('a,');
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  doc := TextDoc(s);
+  try
+    n := ReplaceInParts(doc, ',', ';', [], 1 shl 20, skipped, parts, limited);
+    AssertEquals('every comma', 200000, n);
+    AssertTrue(Format('in parts (%d)', [parts]), parts >= 200000 div CRichReplacePartMatches);
+    AssertEquals('none left', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+    AssertTrue(Format('the step: no list of every match (%d bytes)', [doc.HistoryBytes]),
+      doc.HistoryBytes < 400 * 1024);
+    doc.Undo;
+    AssertEquals('undone', s, doc.Text.GetText(0, doc.Text.Length));
+  finally
+    doc.Free;
+  end;
+  // a replacement with a paragraph end: the paragraph splits under the finder's feet
+  s := Copy(s, 1, 2 * 30000);
+  doc := TextDoc(s);
+  try
+    before := doc.Text.GetText(0, doc.Text.Length);
+    n := ReplaceInParts(doc, ',', ';' + #10, [], 1 shl 20, skipped, parts, limited);
+    AssertEquals('split: every comma', 30000, n);
+    AssertEquals('...a paragraph each', 30001, doc.Text.ParaCount);
+    AssertEquals('...the text', StringReplace(s, ',', ';' + #10, [rfReplaceAll]),
+      Unix(doc.Text.GetText(0, doc.Text.Length)));
+    doc.Undo;
+    AssertEquals('...undone', before, doc.Text.GetText(0, doc.Text.Length));
   finally
     doc.Free;
   end;
