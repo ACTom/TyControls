@@ -107,6 +107,11 @@ type
     procedure TestCanUndoAnswersForTheUser;
     procedure TestADescendantsApiDoor;
     procedure TestThePendingFormatWithAPastedPicture;
+    // fix wave W18
+    procedure TestAnAskedPlainTextHoldsForEveryLoad;
+    procedure TestAStoredPlainTextHoldsForEveryLoad;
+    procedure TestABlockDoesNotChangeWhatAWriteDoes;
+    procedure TestABlockLeftByAnException;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -2879,6 +2884,274 @@ begin
   AssertTrue('the picture in the pending format: bold', fsBold in Fmt(1).Style);
   AssertEquals('...red', clRed, Fmt(1).Color);
   AssertFalse('the text before it is not', fsBold in Fmt(0).Style);
+end;
+
+{ ---- fix wave W18 ---- }
+
+{ G-I1: PlainText := True asked by code holds for every load after it, not for the first only
+  (R65 / R69): a load the asked True read as text decided nothing from its file. It ends with
+  PlainText := False or with a load whose format came from elsewhere (an explicit format). }
+procedure TTyRichEditApiTest.TestAnAskedPlainTextHoldsForEveryLoad;
+var
+  path, saved: string;
+  i: Integer;
+  st: TBytesStream;
+begin
+  path := TempDir + 'asked.rtf';
+  WriteFileBytes(path, PlainRtf(2));
+  FRich.PlainText := True;
+  for i := 1 to 3 do
+  begin
+    FRich.LoadFromFile(path);
+    FRich.FinishLoading;
+    AssertTrue('load ' + IntToStr(i) + ': still plain', FRich.PlainText);
+    AssertEquals('load ' + IntToStr(i) + ': read as text', '{' + BS + 'rtf1', Copy(FRich.Lines[0], 1, 6));
+  end;
+  // the other two loads without a format, after those
+  FRich.Lines.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('Lines.LoadFromFile: text', '{' + BS + 'rtf1', Copy(FRich.Lines[0], 1, 6));
+  st := TBytesStream.Create(PlainRtf(2));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  AssertEquals('LoadFromStream: text', '{' + BS + 'rtf1', Copy(FRich.Lines[0], 1, 6));
+  AssertTrue('after five loads: plain', FRich.PlainText);
+  // a save without a format still writes text, whatever the extension
+  saved := TempDir + 'x.rtf';
+  FRich.SaveToFile(saved);
+  // (the text is the file's source: saved as text it is the file again, as RTF it is not)
+  AssertTrue('SaveToFile(x.rtf): text, the file byte for byte',
+    SameBytes(PlainRtf(2), FileBytes(saved)));
+  // an explicit format ends the asking: the next load goes by its file
+  st := TBytesStream.Create(PlainRtf(2));
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  AssertFalse('an explicit rfRtf: rich', FRich.PlainText);
+  FRich.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('then by its file: RTF', 'Paragraph 0 of the file.', FRich.Lines[0]);
+  // PlainText := False ends it too
+  FRich.PlainText := True;
+  FRich.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('asked again: text', '{' + BS + 'rtf1', Copy(FRich.Lines[0], 1, 6));
+  FRich.PlainText := False;
+  FRich.LoadFromFile(path);
+  FRich.FinishLoading;
+  AssertEquals('PlainText := False: by its file again', 'Paragraph 0 of the file.', FRich.Lines[0]);
+  AssertFalse('rich', FRich.PlainText);
+end;
+
+{ G-I1 through the form file: a control whose PlainText was stored True loads two files in a
+  row as text. }
+procedure TTyRichEditApiTest.TestAStoredPlainTextHoldsForEveryLoad;
+var
+  ws: TMemoryStream;
+  r2: TEditProbe;
+  path: string;
+begin
+  path := TempDir + 'stored.rtf';
+  WriteFileBytes(path, PlainRtf(2));
+  FRich.PlainText := True;
+  ws := TMemoryStream.Create;
+  r2 := NewProbe;
+  try
+    ws.WriteComponent(FRich);
+    ws.Position := 0;
+    ws.ReadComponent(r2);
+    AssertTrue('read back: plain', r2.PlainText);
+    r2.LoadFromFile(path);
+    r2.FinishLoading;
+    AssertEquals('the first file: text', '{' + BS + 'rtf1', Copy(r2.Lines[0], 1, 6));
+    r2.LoadFromFile(path);
+    r2.FinishLoading;
+    AssertEquals('the second file: text', '{' + BS + 'rtf1', Copy(r2.Lines[0], 1, 6));
+    AssertTrue('still plain', r2.PlainText);
+  finally
+    r2.Free;
+    ws.Free;
+  end;
+end;
+
+{ G-I2: a block groups writes into one undo step; it does not change what each write does.
+  The same lines of code, run outside a block, inside one and inside nested ones, give the
+  same document and the same selection; the block reports once and puts the selection back
+  (before: the outermost BeginEdit's; after: the outermost EndEdit's). }
+procedure TTyRichEditApiTest.TestABlockDoesNotChangeWhatAWriteDoes;
+const
+  Cases = 6;
+
+  procedure Writes(ACase, AMode: Integer);
+  begin
+    case ACase of
+      0: begin
+           // the re-review's first sequence
+           FRich.SelStart := 1;
+           FRich.SelText := 'Hello';
+           if AMode = 2 then FRich.BeginEdit;
+           FRich.SelText := ' World';
+           if AMode = 2 then FRich.EndEdit;
+         end;
+      1: begin
+           // its second: the caret behind the text, so the bold is the typing format
+           Sel(0, 3);
+           FRich.SelText := 'A longer text';
+           FRich.SelAttributes.Bold := True;
+           FRich.SelText := '!';
+         end;
+      2: begin
+           // a line inserted before the selection moves it; what replaces it goes there
+           Sel(5, 2);
+           FRich.Lines.Insert(0, 'new line');
+           FRich.SelText := 'X';
+         end;
+      3: begin
+           // a line rewritten under the selection and at its end
+           Sel(5, 2);
+           FRich.Lines[1] := 'DEFGH';
+           FRich.SelAttributes.Italic := True;
+           Sel(7, 0);
+           FRich.Lines[1] := 'de';
+           FRich.SelText := 'Q';
+         end;
+      4: begin
+           // a format write keeps the selection; edits and lines after it
+           Sel(0, 2);
+           FRich.SelAttributes.Bold := True;
+           FRich.SelText := 'Z';
+           FRich.Lines.Add('end');
+           if AMode = 2 then FRich.BeginEdit;
+           FRich.SelText := 'Y';
+           FRich.Lines.Delete(0);
+           if AMode = 2 then FRich.EndEdit;
+           FRich.SelText := 'W';
+         end;
+      5: begin
+           // the RichMemo replacement before the selection, then typing over it
+           Sel(5, 1);
+           FRich.InDelText('12345', 0, 2);
+           FRich.SelText := 'R';
+         end;
+    end;
+  end;
+
+  function RunCase(ACase, AMode: Integer): string;
+  begin
+    SetText('abc'#10'def'#10'ghi');
+    FRich.SelStart := 2;
+    if AMode > 0 then FRich.BeginEdit;
+    try
+      Writes(ACase, AMode);
+    finally
+      if AMode > 0 then FRich.EndEdit;
+    end;
+    Result := Dump + ' sel ' + IntToStr(FRich.SelStart) + '/' + IntToStr(FRich.SelLength);
+  end;
+
+var
+  k, depth: Integer;
+  outside, inside, nested, after: string;
+  s0, l0: TTyRichPos;
+begin
+  for k := 0 to Cases - 1 do
+  begin
+    outside := RunCase(k, 0);
+    inside := RunCase(k, 1);
+    AssertEquals('case ' + IntToStr(k) + ': inside a block as outside', outside, inside);
+    nested := RunCase(k, 2);
+    AssertEquals('case ' + IntToStr(k) + ': nested blocks as outside', outside, nested);
+  end;
+  // the re-review's words, exactly
+  SetText('abc');
+  FRich.BeginEdit;
+  try
+    FRich.SelStart := 1;
+    FRich.SelText := 'Hello';
+    FRich.SelText := ' World';
+  finally
+    FRich.EndEdit;
+  end;
+  AssertEquals('aHello Worldbc', FRich.Lines[0]);
+  AssertEquals('the caret behind the text', 12, FRich.SelStart);
+  // one step, reported once; its undo and redo put back the selections of the block's ends
+  SetText('abc'#10'def'#10'ghi');
+  FRich.SelStart := 2;
+  depth := FRich.Document.UndoDepth;
+  ResetEvents;
+  FRich.BeginEdit;
+  try
+    Writes(4, 1);
+    AssertEquals('nothing reported inside: OnChange', 0, FChanges);
+    AssertEquals('...OnSelectionChange', 0, FSelChanges);
+  finally
+    FRich.EndEdit;
+  end;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('one OnChange', 1, FChanges);
+  AssertEquals('one OnSelectionChange', 1, FSelChanges);
+  after := Dump;
+  s0 := FRich.SelStart;
+  l0 := FRich.SelLength;
+  FRich.Undo;
+  AssertEquals('undone whole', 'abc', FRich.Lines[0]);
+  AssertEquals('the selection at BeginEdit', 2, FRich.SelStart);
+  AssertEquals('...nothing selected', 0, FRich.SelLength);
+  FRich.Redo;
+  AssertEquals('redone', after, Dump);
+  AssertEquals('the selection at EndEdit', s0, FRich.SelStart);
+  AssertEquals('...its length', l0, FRich.SelLength);
+  // a block that only selects: no step, its one OnSelectionChange at EndEdit
+  ResetEvents;
+  depth := FRich.Document.UndoDepth;
+  FRich.BeginEdit;
+  try
+    Sel(1, 1);
+    AssertEquals('a selection inside: not reported yet', 0, FSelChanges);
+  finally
+    FRich.EndEdit;
+  end;
+  AssertEquals('...reported at EndEdit', 1, FSelChanges);
+  AssertEquals('...no step', depth, FRich.Document.UndoDepth);
+end;
+
+{ G-I2: a block an exception leaves through try .. finally EndEdit is one step with what was
+  done before it, and the selection is where those writes left it. }
+procedure TTyRichEditApiTest.TestABlockLeftByAnException;
+var
+  depth: Integer;
+  raised: Boolean;
+begin
+  SetText('abc');
+  FRich.SelStart := 3;
+  depth := FRich.Document.UndoDepth;
+  raised := False;
+  try
+    FRich.BeginEdit;
+    try
+      FRich.SelText := 'de';
+      FRich.SelText := 'f';
+      raise EAbort.Create('stop');
+    finally
+      FRich.EndEdit;
+    end;
+  except
+    on EAbort do raised := True;
+  end;
+  AssertTrue('raised', raised);
+  AssertEquals('what was done', 'abcdef', FRich.Lines[0]);
+  AssertEquals('the caret behind it', 6, FRich.SelStart);
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  FRich.Undo;
+  AssertEquals('undone at once', 'abc', FRich.Lines[0]);
+  AssertEquals('the caret at BeginEdit', 3, FRich.SelStart);
 end;
 
 initialization

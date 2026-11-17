@@ -261,6 +261,9 @@ type
       by a replacement with one empty line; cleared by Clear, by any other replacement and
       when the document is no longer empty. }
     FEmptyLine: Boolean;
+    { Put's two commands are one change to the selection (outside a block they are one
+      change through their update): Run does not follow them one by one. }
+    FNoFollow: Boolean;
     procedure Run(ACmd: TTyRichCommand);
     procedure CheckNoLoad;
   protected
@@ -911,6 +914,15 @@ type
       else raised (ETyRichEdit). The half of an edit both RunEdit's callers share: a user's
       edit (RunUserEdit) and an edit from code (EditWith). }
     function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+    { Inside BeginEdit .. EndEdit the document holds its reports until the block ends: after a
+      write of the control's own (ACmd run through Execute; AStateBefore the content's state
+      number before it) this hears its change itself - FEditChange set, the caret and the
+      anchor moved over a text change as DocChanged moves them outside a block - and keeps
+      the positions out of the block's one change at its end (FSelInUpdate). False when
+      outside a block or when ACmd changed nothing (and is gone). }
+    function FollowBlockWrite(ACmd: TTyRichCommand; AStateBefore: Int64): Boolean;
+    { FollowBlockWrite's moving of the caret and the anchor over AChange (inside a block). }
+    procedure FollowBlockChange(const AChange: TTyRichChange);
     { The command AMake makes, run (RunEdit) and finished (FinishEdit, at the place it says):
       what a user's edit (RunUserEdit, AUser True) and an edit from code (AUser False: refusals
       raised, ReadOnly not asked) share. AEnded: TTyRichEditPlace.CompositionEnded. }
@@ -1101,8 +1113,10 @@ type
       ADefer: Boolean);
     { The text area: the control's rectangle ARect inside its padding and scroll bars. }
     function TextArea(const ARect: TRect; APPI: Integer): TRect;
-    { Lays the document's bytes from the stream into it as AFormat (rfRtf / rfText). }
-    procedure LoadAs(AStream: TStream; AFormat: TTyRichFormat);
+    { Lays the document's bytes from the stream into it as AFormat (rfRtf / rfText).
+      AByAsked: the format was the asked PlainText's, not the file's or the caller's; such a
+      load keeps the asking (R69: only a load whose format came from elsewhere ends it). }
+    procedure LoadAs(AStream: TStream; AFormat: TTyRichFormat; AByAsked: Boolean = False);
     { The content replaced with AText as plain text (Lines); not refused by ReadOnly. }
     procedure SetPlainText(const AText: string);
     { What the stream holds, by its first bytes (the position is left where it was). }
@@ -1526,13 +1540,20 @@ type
     function CanRedo: Boolean;
     { Several writes as ONE undo step (F-M9): the format and edit writes of the document API
       between BeginEdit and EndEdit (SelAttributes, Paragraph, the RichMemo-style methods,
-      SelText, Lines) are one step whose undo puts back the selection there was at BeginEdit;
-      one OnChange and one repaint at EndEdit, the view not scrolled. What a font dialog's
-      result or the ruler's drag writes. They nest (the outermost pair counts); an open
-      composition ends at BeginEdit. Inside, the document is in its update
-      (Document.BeginUpdate): the user's actions (Undo, a key) do nothing until EndEdit, and
-      the selection set meanwhile is stored as inside any update. Not Lines.BeginUpdate,
-      which gathers a replacement of the lines. EndEdit without BeginEdit raises. }
+      SelText, Lines) are one step whose undo puts back the selection there was at BeginEdit
+      and whose redo the one there is at EndEdit. A block groups; it does not change what
+      each write does: the caret and the selection follow each of these writes exactly as
+      outside a block (after SelText := the caret is behind the text put in, a format write
+      keeps the selection, a Lines write moves it as the text moves), so the same lines of
+      code give the same document inside and outside a block. What it holds back is the
+      reporting (one OnChange and one OnSelectionChange at EndEdit), the repaint and the
+      scroll into view. What a font dialog's result or the ruler's drag writes. They nest
+      (the outermost pair counts); an open composition ends at BeginEdit. Inside, the
+      document is in its update (Document.BeginUpdate): the user's actions (Undo, a key) do
+      nothing until EndEdit; a change made by code straight through Document.Execute is heard
+      at EndEdit, as inside any update, and does not move the selection. Not
+      Lines.BeginUpdate, which gathers a replacement of the lines. EndEdit without BeginEdit
+      raises. }
     procedure BeginEdit;
     procedure EndEdit;
     { The history goes (TTyRichDocument.ClearUndo); the text stays. }
@@ -1816,8 +1837,9 @@ type
       Set True by code or the Object Inspector (asked) it also decides the loads and the
       file saves without a format, as Delphi's: LoadFromFile, LoadFromStream and
       Lines.LoadFromFile read plain text whatever the file is, SaveToFile writes text whatever
-      the extension. A load through the control ends that (its file sets the state, and the
-      next load goes by its file again). Made True by a load it does not: SaveToFile then
+      the extension, until PlainText := False or a load whose format came from its file or
+      from the caller (an explicit format: LoadRichText, LoadFromStream(S, rfRtf)) - a load
+      the asked True read as text keeps it. Made True by a load it does not: SaveToFile then
       goes by the extension (a text file opened, formatted and saved as notes.rtf is RTF),
       else by the state.
       Setting it changes no content: a document with formats keeps them, and a save as text
@@ -2145,9 +2167,14 @@ begin
 end;
 
 procedure TTyRichEditLines.Run(ACmd: TTyRichCommand);
+var
+  state: Int64;
 begin
+  state := FOwner.FDoc.ContentState;
   if not FOwner.FDoc.Execute(ACmd) then
     raise ETyRichEdit.Create(rsRichEditCannotChange);
+  // inside BeginEdit .. EndEdit the selection moves with the line as it does outside
+  if not FNoFollow then FOwner.FollowBlockWrite(ACmd, state);
   FOwner.FLinesStored := True;
 end;
 
@@ -2175,7 +2202,9 @@ procedure TTyRichEditLines.Put(Index: Integer; const S: string);
 var
   t: TTyRichText;
   d: TTyRichDocument;
-  start, len: TTyRichPos;
+  start, len, total: TTyRichPos;
+  state: Int64;
+  c: TTyRichChange;
 begin
   if FBatch <> nil then
   begin
@@ -2194,13 +2223,28 @@ begin
     ends inside a UTF-8 sequence) leaves the line, the history and OnChange as they were. }
   if not d.CanChange(start, len) or not d.CanChange(start + len, 0) then
     raise ETyRichEdit.Create(rsRichEditCannotChange);
+  state := d.ContentState;
+  total := t.Length;
+  FNoFollow := True;
   d.BeginUpdate;
   try
     if S <> '' then
       Run(TTyRichInsertText.Create(start + len, S, d.TypingFormatAt(start), False));
     if len > 0 then Run(TTyRichDelete.Create(start, len));
   finally
+    FNoFollow := False;
     d.EndUpdate;
+  end;
+  { Inside BeginEdit the selection follows the line's one change, as the update's one report
+    moves it outside a block. }
+  if d.ContentState <> state then
+  begin
+    c := Default(TTyRichChange);
+    c.Pos := start;
+    c.OldLen := len;
+    c.NewLen := len + d.Text.Length - total;
+    c.Kinds := [rckText];
+    FOwner.FollowBlockChange(c);
   end;
 end;
 
@@ -2990,6 +3034,8 @@ end;
 
 procedure TTyCustomRichEdit.DoSelectionChange;
 begin
+  // inside BeginEdit .. EndEdit: reported once, at EndEdit
+  if FEditBlock > 0 then Exit;
   if (FCaret = FReportedCaret) and (FSelAnchor = FReportedAnchor) then Exit;
   FReportedCaret := FCaret;
   FReportedAnchor := FSelAnchor;
@@ -4781,6 +4827,7 @@ end;
 function TTyCustomRichEdit.RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
 var
   c, a: TTyRichPos;
+  state: Int64;
   atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
@@ -4802,10 +4849,13 @@ begin
   marks.Before.Caret := c;
   marks.Before.AtLineEnd := atEnd;
   ACmd.Marks := marks;
+  state := FDoc.ContentState;
   Inc(FEditing);
   try
     try
       ok := FDoc.Execute(ACmd);
+      // (a write inside BeginEdit .. EndEdit: no report comes until the block ends)
+      if ok and not FEditHeard then FollowBlockWrite(ACmd, state);
     except
       on E: ETyRichModel do
       begin
@@ -4873,6 +4923,21 @@ begin
     paragraph's hidden tail (back to the cut). A selection an undo puts back is taken as it was,
     and so is the one a façade's format write keeps. }
   if FApiWrite > 0 then ARestore := True;
+  { Inside BeginEdit .. EndEdit the view has not heard of the text yet: positions only (the
+    layout is asked nothing, Select keeps them for the update's end, which puts them on caret
+    places); the scroll and the reports are the block's, at EndEdit. }
+  if (FEditBlock > 0) and ViewBehind then
+  begin
+    Inc(FEditing);
+    try
+      Select(AAnchor, ACaret, AAtEnd);
+    finally
+      Dec(FEditing);
+    end;
+    FEditStep := nil;
+    FWishValid := False;
+    Exit;
+  end;
   if not ARestore then
   begin
     ACaret := OutOfTail(ACaret, False);
@@ -6016,6 +6081,8 @@ begin
   end;
   if not FEditHeard then
   begin
+    // no change, but a selection set inside the block is reported now
+    DoSelectionChange;
     PayModifiedOwed;
     Exit;
   end;
@@ -6408,6 +6475,7 @@ end;
   (the wait cursor's threshold). }
 procedure TTyCustomRichEdit.RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
 var
+  state: Int64;
   reason: string;
   cmd: TTyRichCommand;
   place: TTyRichEditPlace;
@@ -6421,12 +6489,15 @@ begin
       // a command of the document's own update: reported when the update ends, as code's
       cmd := ACmd;
       ACmd := nil;
+      state := FDoc.ContentState;
       if not FDoc.Execute(cmd) then
       begin
         reason := RefusalReason;
         if reason = '' then reason := rsRichEditRefusedRange;
         raise ETyRichEdit.Create(reason);
       end;
+      // (inside BeginEdit: an edit among them - InDelText - moves the selection as outside)
+      FollowBlockWrite(cmd, state);
       Exit;
     end;
     reason := RefusalReason;
@@ -8318,6 +8389,39 @@ begin
     Inc(APos, AChange.NewLen - AChange.OldLen)
   else
     APos := AChange.Pos + AChange.NewLen;
+end;
+
+function TTyCustomRichEdit.FollowBlockWrite(ACmd: TTyRichCommand; AStateBefore: Int64): Boolean;
+var
+  c: TTyRichChange;
+begin
+  Result := False;
+  // (an unchanged command was freed by Execute and took no state number)
+  if (FEditBlock = 0) or not FDoc.Updating or (FDoc.ContentState = AStateBefore) then Exit;
+  Result := True;
+  c := ACmd.Change;
+  if FEditing > 0 then
+  begin
+    FEditHeard := True;
+    FEditChange := c;
+  end;
+  FollowBlockChange(c);
+end;
+
+procedure TTyCustomRichEdit.FollowBlockChange(const AChange: TTyRichChange);
+var
+  was: TTyRichPos;
+begin
+  if (FEditBlock = 0) or not (rckText in AChange.Kinds) then Exit;
+  // DocChanged's arithmetic, for this one write (the block's change will not move them again)
+  was := FCaret;
+  ShiftForChange(FCaret, AChange);
+  ShiftForChange(FSelAnchor, AChange);
+  FCaret := Math.Max(Int64(0), Math.Min(FCaret, FDoc.Text.Length));
+  FSelAnchor := Math.Max(Int64(0), Math.Min(FSelAnchor, FDoc.Text.Length));
+  if FCaret <> was then FCaretAtEnd := False;
+  FSelInUpdate := True;
+  FWishValid := False;
 end;
 
 procedure TTyCustomRichEdit.DocChanged(Sender: TObject; const AChange: TTyRichChange);
@@ -10586,7 +10690,8 @@ begin
   if FInStep or (FSaving > 0) then raise ETyRichEdit.Create(rsRichEditBusy);
 end;
 
-procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat);
+procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat;
+  AByAsked: Boolean);
 var
   load: TTyRtfLoad;
   prefix: TBytes;
@@ -10613,10 +10718,12 @@ begin
     FRtfPrefix := nil;
   end;
   { The document follows the file (R65): one of the two things that set PlainText. A state
-    the file made is not one the application asked for (R69): the next load without a
-    format goes by its file again, whatever an earlier PlainText := True said. }
+    the file (or the caller's format) made is not one the application asked for (R69): the
+    next load without a format goes by its file again. A load the asked True itself read as
+    text decided nothing from its file: the asking stays, and the next load is text too, as
+    Delphi's PlainText, which never changes by itself. }
   FPlainText := AFormat <> rfRtf;
-  FPlainTextAsked := False;
+  if not AByAsked then FPlainTextAsked := False;
   FLinesStored := False;
   FSourceFile := '';
   if HasBackgroundWork then StartBackground;
@@ -10625,11 +10732,18 @@ begin
 end;
 
 procedure TTyCustomRichEdit.LoadFromStream(AStream: TStream; AFormat: TTyRichFormat);
+var
+  byAsked: Boolean;
 begin
+  byAsked := False;
   if AFormat = rfAuto then
-    if FPlainText and FPlainTextAsked then AFormat := rfText
+    if FPlainText and FPlainTextAsked then
+    begin
+      AFormat := rfText;
+      byAsked := True;
+    end
     else AFormat := DetectFormat(AStream);
-  LoadAs(AStream, AFormat);
+  LoadAs(AStream, AFormat, byAsked);
 end;
 
 procedure TTyCustomRichEdit.LoadFromFile(const AFileName: string);

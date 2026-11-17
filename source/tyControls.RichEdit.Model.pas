@@ -703,6 +703,10 @@ type
     procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); virtual;
     { Its last run changed something; one that did not is not kept in the history. }
     property Changed: Boolean read FChanged;
+    { What its last execute or redo changed, composed as the document reports it (inside the
+      document's update the observers hear it only as part of the block's one change, so a
+      view that places its own edits there reads it here). Meaningful when Changed. }
+    property Change: TTyRichChange read FSummary;
     { The selection of the view that made this step, before it and after it (see
       TTyRichStepMarks). The document never reads or changes them; TakeOver (a merge) keeps
       this command's Before and takes ANext's After. }
