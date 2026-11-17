@@ -4633,22 +4633,22 @@ var
       lineTop := a.Top + Integer(FRich.VisibleBlocks[0].Top) + L.Lines[ln].Top div sc;
       FRich.SelStart := s;
       FRich.Press(VK_END, []);
-      AssertEquals(Format('%s line %d: End', [AWhat, ln]), e, FRich.CaretPos);
+      AssertEquals(Format('%s line %d: End', [AWhat, ln]), e, FRich.CaretIndex);
       AssertTrue(Format('%s line %d: End is the line''s end', [AWhat, ln]), FRich.CaretAtLineEnd);
       AssertEquals(Format('%s line %d: End shows on that line', [AWhat, ln]), lineTop,
         FRich.CaretClientRect.Top);
       CheckCaretInside(Format('%s line %d: End', [AWhat, ln]));
       FRich.Press(VK_HOME, []);
-      AssertEquals(Format('%s line %d: Home after End', [AWhat, ln]), s, FRich.CaretPos);
+      AssertEquals(Format('%s line %d: Home after End', [AWhat, ln]), s, FRich.CaretIndex);
       y := lineTop + (L.Lines[ln].Height div sc) div 2;
       // in the right padding: past every line's end, also a justified one's
       Click(Point(FRich.Width - 1, y));
-      AssertEquals(Format('%s line %d: a click past the end', [AWhat, ln]), e, FRich.CaretPos);
+      AssertEquals(Format('%s line %d: a click past the end', [AWhat, ln]), e, FRich.CaretIndex);
       AssertEquals(Format('%s line %d: the click shows on that line', [AWhat, ln]), lineTop,
         FRich.CaretClientRect.Top);
       CheckCaretInside(Format('%s line %d: the click', [AWhat, ln]));
       FRich.Press(VK_HOME, []);
-      AssertEquals(Format('%s line %d: Home after the click', [AWhat, ln]), s, FRich.CaretPos);
+      AssertEquals(Format('%s line %d: Home after the click', [AWhat, ln]), s, FRich.CaretIndex);
     end;
   end;
 
@@ -4691,11 +4691,11 @@ begin
   Prepare;
   FRich.SelStart := 0;
   FRich.Press(VK_END, []);
-  AssertEquals('right-aligned: End', Int64(10), FRich.CaretPos);
+  AssertEquals('right-aligned: End', Int64(10), FRich.CaretIndex);
   CheckCaretInside('right-aligned: End');
   r := FRich.CaretClientRect;
   Click(Point(FRich.Width - 1, (r.Top + r.Bottom) div 2));
-  AssertEquals('right-aligned: a click past the end', Int64(10), FRich.CaretPos);
+  AssertEquals('right-aligned: a click past the end', Int64(10), FRich.CaretIndex);
   CheckCaretInside('right-aligned: the click');
 end;
 
@@ -4721,7 +4721,7 @@ var
   begin
     FRich.SelStart := AFrom;
     FRich.Press(AKey, []);
-    AssertEquals(AWhat, AWant, FRich.CaretPos);
+    AssertEquals(AWhat, AWant, FRich.CaretIndex);
   end;
 
 begin
@@ -4779,12 +4779,12 @@ begin
   FRich.UpdateView;
   FRich.SelStart := 20;
   FRich.Press(VK_DOWN, []);
-  AssertEquals('down to the short line''s end', Int64(28), FRich.CaretPos);
+  AssertEquals('down to the short line''s end', Int64(28), FRich.CaretIndex);
   FRich.Press(VK_DOWN, []);
-  AssertEquals('down again: the x of the start', Int64(49), FRich.CaretPos);
+  AssertEquals('down again: the x of the start', Int64(49), FRich.CaretIndex);
   FRich.Press(VK_UP, []);
   FRich.Press(VK_UP, []);
-  AssertEquals('and back up', Int64(20), FRich.CaretPos);
+  AssertEquals('and back up', Int64(20), FRich.CaretIndex);
   // a table: two cells a row, the last row merged into one cell
   LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard top text that is long enough here\par' +
     '\trowd\cellx1500\cellx3000\pard\intbl a1\cell\pard\intbl b1\par\pard\intbl b1x\cell\row' +
@@ -4800,19 +4800,19 @@ begin
   for i := 0 to 4 do
   begin
     FRich.Press(VK_DOWN, []);
-    AssertEquals(Format('down %d', [i + 1]), Want[i], t.ParaOfPos(FRich.CaretPos));
+    AssertEquals(Format('down %d', [i + 1]), Want[i], t.ParaOfPos(FRich.CaretIndex));
   end;
   FRich.Press(VK_UP, []);
-  AssertEquals('up into the merged cell', Want[5], t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('up into the merged cell', Want[5], t.ParaOfPos(FRich.CaretIndex));
   FRich.Press(VK_UP, []);
-  AssertEquals('up the column', Want[6], t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('up the column', Want[6], t.ParaOfPos(FRich.CaretIndex));
   // the first column: out of a cell whose row is taller than it
   FRich.SelStart := 1;
   for i := 0 to 3 do
   begin
     FRich.Press(VK_DOWN, []);
     AssertEquals(Format('first column, down %d', [i + 1]), WantFirst[i],
-      t.ParaOfPos(FRich.CaretPos));
+      t.ParaOfPos(FRich.CaretIndex));
   end;
 end;
 
@@ -4833,19 +4833,19 @@ begin
   FRich.Press(VK_LEFT, [ssShift]);
   AssertEquals('back past the anchor: start', Int64(3), FRich.SelStart);
   AssertEquals('back past the anchor: length', Int64(2), FRich.SelLength);
-  AssertEquals('the caret is the start', Int64(3), FRich.CaretPos);
+  AssertEquals('the caret is the start', Int64(3), FRich.CaretIndex);
   FRich.Press(VK_RIGHT, []);
-  AssertEquals('Right collapses to the right side', Int64(5), FRich.CaretPos);
+  AssertEquals('Right collapses to the right side', Int64(5), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   FRich.Press(VK_LEFT, [ssShift]);
   FRich.Press(VK_LEFT, []);
-  AssertEquals('Left collapses to the left side', Int64(4), FRich.CaretPos);
+  AssertEquals('Left collapses to the left side', Int64(4), FRich.CaretIndex);
   FRich.SelStart := 0;
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('Ctrl+Right: the next word', Int64(6), FRich.CaretPos);
+  AssertEquals('Ctrl+Right: the next word', Int64(6), FRich.CaretIndex);
   FRich.Press(VK_END, []);
   FRich.Press(VK_LEFT, [ssCtrl]);
-  AssertEquals('Ctrl+Left: the word''s start', Int64(6), FRich.CaretPos);
+  AssertEquals('Ctrl+Left: the word''s start', Int64(6), FRich.CaretIndex);
   FRich.Press(VK_HOME, [ssShift]);
   AssertEquals('Shift+Home: from the start', Int64(0), FRich.SelStart);
   AssertEquals('Shift+Home: to the anchor', Int64(6), FRich.SelLength);
@@ -4909,11 +4909,11 @@ begin
   AssertTrue('a drag', FRich.DragOn);
   FRich.MoveAt(p.X, FRich.Height + 5);
   y0 := FRich.ScrollY;
-  c0 := FRich.CaretPos;
+  c0 := FRich.CaretIndex;
   FRich.DragTick;
   d1 := FRich.ScrollY - y0;
   AssertTrue('it scrolled', d1 > 0);
-  AssertTrue('the selection followed', FRich.CaretPos > c0);
+  AssertTrue('the selection followed', FRich.CaretIndex > c0);
   AssertEquals('from the anchor', anchor, FRich.SelStart);
   FRich.MoveAt(p.X, FRich.Height + 100);
   y1 := FRich.ScrollY;
@@ -4962,12 +4962,12 @@ begin
     Inc(i);
   end;
   AssertEquals('up past the top: the line at the top', a.Top, FRich.CaretClientRect.Top);
-  c := FRich.CaretPos;
+  c := FRich.CaretIndex;
   y := FRich.ScrollY;
   FRich.Wheel(-120, []);
   FRich.UpdateView;
   AssertTrue('the wheel scrolls', FRich.ScrollY <> y);
-  AssertEquals('and leaves the caret', c, FRich.CaretPos);
+  AssertEquals('and leaves the caret', c, FRich.CaretIndex);
   FRich.SelStart := FRich.Document.Text.ParaStart(200);
   AssertEquals('a jump from above: at the bottom', a.Bottom, FRich.CaretClientRect.Bottom);
 end;
@@ -5036,13 +5036,13 @@ begin
   FRich.UpdateView;
   FRich.SelStart := 4;
   AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(1, 'XY')));
-  AssertEquals('an insertion before', Int64(6), FRich.CaretPos);
+  AssertEquals('an insertion before', Int64(6), FRich.CaretIndex);
   AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(6, 'Q')));
-  AssertEquals('an insertion at the caret', Int64(6), FRich.CaretPos);
+  AssertEquals('an insertion at the caret', Int64(6), FRich.CaretIndex);
   AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(0, 2)));
-  AssertEquals('a deletion before', Int64(4), FRich.CaretPos);
+  AssertEquals('a deletion before', Int64(4), FRich.CaretIndex);
   AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(3, 3)));
-  AssertEquals('a deletion around it', Int64(3), FRich.CaretPos);
+  AssertEquals('a deletion around it', Int64(3), FRich.CaretIndex);
   FRich.SelStart := 1;
   FRich.SelLength := 2;
   AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(0, 'zz')));
@@ -5054,7 +5054,7 @@ begin
   AssertEquals('a format change: start', Int64(3), FRich.SelStart);
   AssertEquals('a format change: length', Int64(2), FRich.SelLength);
   FRich.Lines.Text := 'new';
-  AssertEquals('a new content: the caret', Int64(0), FRich.CaretPos);
+  AssertEquals('a new content: the caret', Int64(0), FRich.CaretIndex);
   AssertFalse('a new content: nothing selected', FRich.HasSelection);
   // a lazy load's slices
   FRich.Slices(4096, 4096);
@@ -5073,7 +5073,7 @@ begin
     Inc(k);
   end;
   AssertFalse('loaded', FRich.Loading);
-  AssertEquals('the slices left the caret', Int64(10), FRich.CaretPos);
+  AssertEquals('the slices left the caret', Int64(10), FRich.CaretIndex);
 end;
 
 { Every arrow is the viewer's - also where the caret cannot move (it never reaches the
@@ -5115,7 +5115,7 @@ begin
   PaintAll(True);
   FRich.ResetCounts;
   Click(At(t.ParaStart(2) + 1));
-  AssertEquals('the caret placed', t.ParaStart(2) + 1, FRich.CaretPos);
+  AssertEquals('the caret placed', t.ParaStart(2) + 1, FRich.CaretIndex);
   AssertTrue('the caret''s rectangle invalidated', Length(FRich.Invalidated) > 0);
   for i := 0 to High(FRich.Invalidated) do
     AssertTrue(Format('only a caret''s width (%d)', [i]),
@@ -5187,7 +5187,7 @@ begin
   AssertEquals('an end inside a cluster', Int64(1), FRich.SelLength);
   FRich.SelLength := 99;
   AssertEquals('a length past the end', Int64(4), FRich.SelLength);
-  AssertEquals('the caret at the end', Int64(4), FRich.CaretPos);
+  AssertEquals('the caret at the end', Int64(4), FRich.CaretIndex);
 end;
 
 { A click on a picture selects it: the selection is its one character. }
@@ -5228,7 +5228,7 @@ begin
   p := At(1);
   FRich.RightAt(p.X, p.Y);
   AssertFalse('outside: collapsed', FRich.HasSelection);
-  AssertEquals('at the click', Int64(1), FRich.CaretPos);
+  AssertEquals('at the click', Int64(1), FRich.CaretIndex);
 end;
 
 { OnSelectionChange once per action that moves an end, never for one that moves none. }
@@ -6324,19 +6324,19 @@ begin
   AssertEquals('only its block held', 1, FRich.VisibleBlockCount);
   FRich.SelStart := 0;
   FRich.Press(VK_DOWN, []);
-  AssertEquals('Down leaves the picture''s paragraph', 1, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('Down leaves the picture''s paragraph', 1, t.ParaOfPos(FRich.CaretIndex));
   r := FRich.CaretClientRect;
   AssertTrue('and shows the caret', (r.Bottom > r.Top) and (r.Top >= a.Top) and (r.Bottom <= a.Bottom));
   FRich.Press(VK_UP, []);
-  AssertEquals('Up comes back into it', 0, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('Up comes back into it', 0, t.ParaOfPos(FRich.CaretIndex));
   FRich.SelStart := 0;
   i := 0;
-  while (t.ParaOfPos(FRich.CaretPos) = 0) and (i < 5) do
+  while (t.ParaOfPos(FRich.CaretIndex) = 0) and (i < 5) do
   begin
     FRich.Press(VK_NEXT, []);
     Inc(i);
   end;
-  AssertEquals('PgDn crosses it', 1, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('PgDn crosses it', 1, t.ParaOfPos(FRich.CaretIndex));
   // a short cell beside two screens of text
   s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\trowd\cellx1500\cellx4000\pard\intbl label\cell';
   for i := 1 to 40 do s := s + '\pard\intbl line ' + IntToStr(i) + '\par';
@@ -6347,7 +6347,7 @@ begin
   FRich.SelStart := 1;
   FRich.Press(VK_DOWN, []);
   AssertEquals('Down from the short cell leaves the row', t.ParaCount - 1,
-    t.ParaOfPos(FRich.CaretPos));
+    t.ParaOfPos(FRich.CaretIndex));
   r := FRich.CaretClientRect;
   a := FRich.Area;
   AssertTrue('and shows the caret', (r.Bottom > r.Top) and (r.Top >= a.Top) and (r.Bottom <= a.Bottom));
@@ -6378,41 +6378,41 @@ begin
   next := t.ParaStart(1);
   FRich.SelStart := cut;
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('Ctrl+Right at the cut: the next paragraph', next, FRich.CaretPos);
+  AssertEquals('Ctrl+Right at the cut: the next paragraph', next, FRich.CaretIndex);
   FRich.Press(VK_LEFT, [ssCtrl]);
-  AssertEquals('Ctrl+Left from there: the cut', cut, FRich.CaretPos);
+  AssertEquals('Ctrl+Left from there: the cut', cut, FRich.CaretIndex);
   FRich.SelStart := cut - 20;
   start := FRich.SelStart;
   i := 0;
-  while (FRich.CaretPos < cut) and (i < 20) do
+  while (FRich.CaretIndex < cut) and (i < 20) do
   begin
     FRich.Press(VK_RIGHT, [ssShift, ssCtrl]);
     Inc(i);
   end;
-  AssertEquals('Shift+Ctrl+Right stops at the cut', cut, FRich.CaretPos);
+  AssertEquals('Shift+Ctrl+Right stops at the cut', cut, FRich.CaretIndex);
   FRich.CopyToClipboard;
   AssertEquals('a copy takes no tail', cut - start, Int64(Length(FRich.ClipText)));
   FRich.Press(VK_RIGHT, [ssShift, ssCtrl]);
-  AssertEquals('one more: the next paragraph''s start', next, FRich.CaretPos);
+  AssertEquals('one more: the next paragraph''s start', next, FRich.CaretIndex);
   FRich.SelStart := cut - 3;
   FRich.Press(VK_END, []);
-  AssertEquals('End: the cut', cut, FRich.CaretPos);
+  AssertEquals('End: the cut', cut, FRich.CaretIndex);
   r := FRich.CaretClientRect;
   Click(Point(FRich.Width - 1, (r.Top + r.Bottom) div 2));
-  AssertEquals('a click past the end: the cut', cut, FRich.CaretPos);
+  AssertEquals('a click past the end: the cut', cut, FRich.CaretIndex);
   // a document that ends with a cut paragraph
   FRich.Lines.Text := big;
   FRich.UpdateView;
   t := FRich.Document.Text;
   cut := FRich.VisibleBlocks[0].Layout.LastCaretPos;
   FRich.Press(VK_END, [ssCtrl]);
-  AssertEquals('Ctrl+End: the cut', cut, FRich.CaretPos);
+  AssertEquals('Ctrl+End: the cut', cut, FRich.CaretIndex);
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('Ctrl+Right at the document''s cut: stays', cut, FRich.CaretPos);
+  AssertEquals('Ctrl+Right at the document''s cut: stays', cut, FRich.CaretIndex);
   FRich.SelectAll;
   AssertEquals('Select All takes the tail', t.Length, FRich.SelLength);
   FRich.Press(VK_RIGHT, []);
-  AssertEquals('Right collapses at the cut', cut, FRich.CaretPos);
+  AssertEquals('Right collapses at the cut', cut, FRich.CaretIndex);
 end;
 
 procedure TTyRichEditControlTest.RunAtScaleTwo(const AWhat: string; ACase: TRunMethod);
@@ -6472,11 +6472,11 @@ begin
   AssertTrue(Format('the caret keeps its place in the view (%d, %d)', [r0.Top, r1.Top]),
     Abs(r1.Top - r0.Top) < est);
   AssertEquals('and its x', r0.Left, r1.Left);
-  AssertTrue(Format('a page further (%d)', [t.ParaOfPos(FRich.CaretPos)]),
-    t.ParaOfPos(FRich.CaretPos) >= 2 + ScreenLines - 3);
+  AssertTrue(Format('a page further (%d)', [t.ParaOfPos(FRich.CaretIndex)]),
+    t.ParaOfPos(FRich.CaretIndex) >= 2 + ScreenLines - 3);
   FRich.Press(VK_PRIOR, []);
-  AssertEquals('PgUp: back', Int64(t.ParaStart(2) + 3), FRich.CaretPos);
-  a := FRich.CaretPos;
+  AssertEquals('PgUp: back', Int64(t.ParaStart(2) + 3), FRich.CaretIndex);
+  a := FRich.CaretIndex;
   FRich.Press(VK_NEXT, [ssShift]);
   AssertEquals('Shift+PgDn: from the anchor', a, FRich.SelStart);
   AssertTrue('Shift+PgDn: a page of it', FRich.SelLength > 0);
@@ -6485,15 +6485,15 @@ begin
   FRich.Press(VK_UP, []);
   FRich.Press(VK_UP, []);
   FRich.Press(VK_UP, []);
-  AssertEquals('three lines up', 296, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('three lines up', 296, t.ParaOfPos(FRich.CaretIndex));
   FRich.Press(VK_NEXT, []);
-  AssertEquals('PgDn at the end: the last line', 299, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('PgDn at the end: the last line', 299, t.ParaOfPos(FRich.CaretIndex));
   // at the top: the first line
   FRich.Press(VK_HOME, [ssCtrl]);
   FRich.Press(VK_DOWN, []);
   FRich.Press(VK_DOWN, []);
   FRich.Press(VK_PRIOR, []);
-  AssertEquals('PgUp at the top: the first line', 0, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('PgUp at the top: the first line', 0, t.ParaOfPos(FRich.CaretIndex));
 end;
 
 { S-I5: the caret is scrolled into view across, with no wrapping and in page mode. }
@@ -6568,7 +6568,7 @@ begin
   FRich.OnSelectionChange := @SelChanged;
   FSelChanges := 0;
   AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(0, 'xy')));
-  AssertEquals('moved', Int64(5), FRich.CaretPos);
+  AssertEquals('moved', Int64(5), FRich.CaretIndex);
   AssertEquals('an insertion before the caret: reported', 1, FSelChanges);
   AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(7, 'z')));
   AssertEquals('an insertion after it: not', 1, FSelChanges);
@@ -6588,20 +6588,20 @@ begin
   FRich.UpdateView;
   FRich.SelStart := 5;
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('Ctrl+Right at the end: the next paragraph', Int64(6), FRich.CaretPos);
+  AssertEquals('Ctrl+Right at the end: the next paragraph', Int64(6), FRich.CaretIndex);
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('then its next word', Int64(9), FRich.CaretPos);
+  AssertEquals('then its next word', Int64(9), FRich.CaretIndex);
   FRich.Press(VK_LEFT, [ssCtrl]);
-  AssertEquals('Ctrl+Left to the paragraph''s start', Int64(6), FRich.CaretPos);
+  AssertEquals('Ctrl+Left to the paragraph''s start', Int64(6), FRich.CaretIndex);
   FRich.Press(VK_LEFT, [ssCtrl]);
-  AssertEquals('Ctrl+Left from it: the last word before', Int64(3), FRich.CaretPos);
+  AssertEquals('Ctrl+Left from it: the last word before', Int64(3), FRich.CaretIndex);
   LoadRtfText('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\trowd\clmgf\cellx1500\clmrg\cellx3000' +
     '\cellx4500\pard\intbl m\cell\pard\intbl\cell\pard\intbl c\cell\row\pard after\par}');
   FRich.SelStart := 1;
   FRich.Press(VK_RIGHT, [ssCtrl]);
-  AssertEquals('Ctrl+Right at a cell''s end: past the cell merged away', Int64(3), FRich.CaretPos);
+  AssertEquals('Ctrl+Right at a cell''s end: past the cell merged away', Int64(3), FRich.CaretIndex);
   FRich.Press(VK_LEFT, [ssCtrl]);
-  AssertEquals('and back', Int64(0), FRich.CaretPos);
+  AssertEquals('and back', Int64(0), FRich.CaretIndex);
 end;
 
 { S-I5: a line ended by U+000B ends before it: End stops there (no affinity), Home on the
@@ -6613,13 +6613,13 @@ begin
   FRich.UpdateView;
   FRich.SelStart := 1;
   FRich.Press(VK_END, []);
-  AssertEquals('End: before the line break', Int64(3), FRich.CaretPos);
+  AssertEquals('End: before the line break', Int64(3), FRich.CaretIndex);
   AssertFalse('a place of its own', FRich.CaretAtLineEnd);
   FRich.SelStart := 6;
   FRich.Press(VK_HOME, []);
-  AssertEquals('Home: after it', Int64(4), FRich.CaretPos);
+  AssertEquals('Home: after it', Int64(4), FRich.CaretIndex);
   FRich.Press(VK_END, []);
-  AssertEquals('End of the last line', Int64(7), FRich.CaretPos);
+  AssertEquals('End of the last line', Int64(7), FRich.CaretIndex);
 end;
 
 { S-I5 / S-M2, on a handle of a form never shown: a drag's move outside the text starts the
@@ -6708,12 +6708,12 @@ begin
   e := L.Lines[0].First + L.Lines[0].Count;
   FRich.SelStart := 0;
   FRich.Press(VK_END, [ssShift]);
-  AssertEquals('Shift+End', e, FRich.CaretPos);
+  AssertEquals('Shift+End', e, FRich.CaretIndex);
   AssertTrue('at the line''s end', FRich.CaretAtLineEnd);
   top := FRich.CaretClientRect.Top;
   FRich.Press(VK_RIGHT, []);
   AssertFalse('collapsed', FRich.HasSelection);
-  AssertEquals('onto the caret', e, FRich.CaretPos);
+  AssertEquals('onto the caret', e, FRich.CaretIndex);
   AssertTrue('still the line''s end', FRich.CaretAtLineEnd);
   AssertEquals('on that line', top, FRich.CaretClientRect.Top);
 end;
@@ -6729,13 +6729,13 @@ begin
   t := FRich.Document.Text;
   FRich.SelStart := 20;
   FRich.Press(VK_DOWN, []);
-  AssertEquals('down to the short line''s end', t.ParaStart(1) + 5, FRich.CaretPos);
+  AssertEquals('down to the short line''s end', t.ParaStart(1) + 5, FRich.CaretIndex);
   FRich.Zoom := 200;
   FRich.UpdateView;
   x := FRich.CaretClientRect.Left;
   cw := FRich.PositionRect(t.ParaStart(2) + 4).Left - FRich.PositionRect(t.ParaStart(2) + 3).Left;
   FRich.Press(VK_DOWN, []);
-  AssertEquals('down again', 2, t.ParaOfPos(FRich.CaretPos));
+  AssertEquals('down again', 2, t.ParaOfPos(FRich.CaretIndex));
   AssertTrue(Format('under the caret''s x after the zoom (%d, was %d, a letter %d)',
     [FRich.CaretClientRect.Left, x, cw]), Abs(FRich.CaretClientRect.Left - x) <= cw);
 end;
@@ -6748,7 +6748,7 @@ begin
   FRich.SelLength := High(Int64);
   AssertEquals('from the start', Int64(2), FRich.SelStart);
   AssertEquals('to the end', Int64(4), FRich.SelLength);
-  AssertEquals('the caret at the end', Int64(6), FRich.CaretPos);
+  AssertEquals('the caret at the end', Int64(6), FRich.CaretIndex);
   FRich.SelStart := 3;
   FRich.SelLength := -High(Int64);
   AssertEquals('back to the start', Int64(0), FRich.SelStart);
@@ -6794,13 +6794,13 @@ begin
   FRich.Lines.Text := 'aXY' + Utf8Of($301) + 'z';
   FRich.UpdateView;
   FRich.SelStart := 2;
-  AssertEquals('between X and Y', Int64(2), FRich.CaretPos);
+  AssertEquals('between X and Y', Int64(2), FRich.CaretIndex);
   FRich.OnSelectionChange := @SelChanged;
   FSelChanges := 0;
   AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(1, 2)));
   AssertEquals('the change moved it: reported', 1, FSelChanges);
   PaintAll(True);
-  AssertEquals('after the paint: the cluster''s start', Int64(0), FRich.CaretPos);
+  AssertEquals('after the paint: the cluster''s start', Int64(0), FRich.CaretIndex);
   // W7 K-10: not from inside the paint - by the queued call, after it
   AssertEquals('no handler inside the paint', 1, FSelChanges);
   RunQueuedCalls;
@@ -6814,7 +6814,7 @@ begin
   FRich.SelStart := 2;
   AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(1, 2)));
   FRich.CaretClientRect;
-  AssertEquals('after a query: the cluster''s start', Int64(0), FRich.CaretPos);
+  AssertEquals('after a query: the cluster''s start', Int64(0), FRich.CaretIndex);
 end;
 
 { S-M11: between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, a paint shows
@@ -6901,7 +6901,7 @@ begin
   end;
   AssertTrue(Format('in slices (%d)', [steps]), steps >= 5);
   AssertEquals('the command ran in the last step''s handler', 1, FLastStepEdits);
-  AssertEquals('the caret moved as for any edit', Int64(8), FRich.CaretPos);
+  AssertEquals('the caret moved as for any edit', Int64(8), FRich.CaretIndex);
   AssertEquals('the edit was reported, the slices were not', 1, FChanges);
 end;
 
@@ -7365,7 +7365,7 @@ begin
     FSelChanges := 0;
     FRich.FailPost := True;
     PaintAll(True);
-    AssertEquals('snapped by the paint', Int64(0), FRich.CaretPos);
+    AssertEquals('snapped by the paint', Int64(0), FRich.CaretIndex);
     AssertFalse('the report could not be queued', FRich.ReportQueued);
     AssertEquals('and was not made in the paint', 0, FSelChanges);
     FRich.FailPost := False;
@@ -7408,7 +7408,7 @@ begin
   AssertEquals('no paint inside: nothing invalidated', 0, Length(FRich.Invalidated));
 end;
 
-{ L-4: SelectAll, SelStart :=, SelLength := and CaretPos := between BeginUpdate and EndUpdate,
+{ L-4: SelectAll, SelStart :=, SelLength := and CaretIndex := between BeginUpdate and EndUpdate,
   after paragraphs were removed, raise nothing and ask the layout nothing; after EndUpdate the
   selection is inside the document and painted. }
 procedure TTyRichEditControlTest.TestTheSelectionSettersWaitForAnUpdate;
@@ -7428,7 +7428,7 @@ begin
     FRich.SelectAll;
     FRich.SelStart := 3;
     FRich.SelLength := 1000;
-    FRich.CaretPos := 7;
+    FRich.CaretIndex := 7;
     FRich.SelStart := 1;
     FRich.SelLength := 2;
     FRich.SelectAll;
@@ -7922,7 +7922,7 @@ var
 begin
   Prepare;
   PaintAll(True);
-  AssertEquals('snapped by the paint', Int64(0), FRich.CaretPos);
+  AssertEquals('snapped by the paint', Int64(0), FRich.CaretIndex);
   AssertEquals('no handler inside the paint', 0, FSelChanges);
   AssertTrue('the report is queued', FRich.ReportQueued);
   RunQueuedCalls;
@@ -7932,7 +7932,7 @@ begin
   // a public query
   Prepare;
   FRich.PositionRect(0);
-  AssertEquals('snapped by the query', Int64(0), FRich.CaretPos);
+  AssertEquals('snapped by the query', Int64(0), FRich.CaretIndex);
   AssertEquals('no handler inside the query', 0, FSelChanges);
   RunQueuedCalls;
   AssertEquals('reported after it', 1, FSelChanges);
@@ -7982,7 +7982,7 @@ begin
   PaintAll(True);
   FRich.SelStart := FRich.Document.Text.ParaStart(40) + 2;
   PaintAll(True);
-  c := FRich.CaretPos;
+  c := FRich.CaretIndex;
   top := FRich.TopParagraph;
   FRich.Lines.BeginUpdate;
   try
@@ -7992,13 +7992,13 @@ begin
     AssertEquals('Ctrl+End is taken', 0, FRich.KeyResult(VK_END, [ssCtrl]));
     AssertEquals('Ctrl+A is taken', 0, FRich.KeyResult(VK_A, [ssCtrl]));
     AssertEquals('Tab is still the form''s', VK_TAB, FRich.KeyResult(VK_TAB, []));
-    AssertEquals('the keys moved nothing', c, FRich.CaretPos);
+    AssertEquals('the keys moved nothing', c, FRich.CaretIndex);
     FRich.Wheel(-120, []);
     FRich.WheelH(120);
     AssertEquals('the wheel scrolled nothing', top, FRich.TopParagraph);
     FRich.PressAt(20, 20);
     AssertFalse('a press starts no drag', FRich.DragOn);
-    AssertEquals('and places nothing', c, FRich.CaretPos);
+    AssertEquals('and places nothing', c, FRich.CaretIndex);
     FRich.MoveAt(30, 30);
     FRich.ReleaseAt(30, 30);
     AssertEquals('PositionAtPoint: not available', -1, FRich.PositionAtPoint(20, 20));
@@ -8098,7 +8098,7 @@ begin
   AssertTrue('cancelled', FRich.Document.Incomplete);
   AssertEquals('three paragraphs: the last the item', 3, FRich.Document.Text.ParaCount);
   AssertEquals('no OnChange for a cancel', 0, FChanges);
-  AssertEquals('the caret stays', Int64(1), FRich.CaretPos);
+  AssertEquals('the caret stays', Int64(1), FRich.CaretIndex);
   L := FRich.Layouter.LayoutBlock(FRich.Document, 2, 1000, 96, 1);
   try
     AssertEquals('the item''s number is the file''s', '2.', string(TTyParaLayout(L).Marker.Text));

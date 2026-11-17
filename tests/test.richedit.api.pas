@@ -1331,17 +1331,17 @@ begin
   FRich.SelAttributes.Style := [fsBold];
   AssertEquals('the selection stays: start', Int64(1), FRich.SelStart);
   AssertEquals('the selection stays: length', Int64(3), FRich.SelLength);
-  AssertEquals('the caret stays where it was', Int64(1), FRich.CaretPos);
+  AssertEquals('the caret stays where it was', Int64(1), FRich.CaretIndex);
   FRich.SelStart := 0;
   FRich.Undo;
   AssertFalse('undone', fsBold in Fmt(2).Style);
   AssertEquals('the selection back: start', Int64(1), FRich.SelStart);
   AssertEquals('the selection back: length', Int64(3), FRich.SelLength);
-  AssertEquals('its caret', Int64(1), FRich.CaretPos);
+  AssertEquals('its caret', Int64(1), FRich.CaretIndex);
   FRich.SelStart := 6;
   FRich.Redo;
   AssertTrue('redone', fsBold in Fmt(2).Style);
-  AssertEquals('the caret where the write left it', Int64(1), FRich.CaretPos);
+  AssertEquals('the caret where the write left it', Int64(1), FRich.CaretIndex);
   // a merged run of typing does not take the format write in
   FRich.SelStart := 6;
   Chars('x');
@@ -1729,7 +1729,7 @@ begin
   FRich.ClearSelection;
   AssertEquals('deleted', 'adef', FRich.Lines[0]);
   AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
-  AssertEquals('the caret at the join', Int64(1), FRich.CaretPos);
+  AssertEquals('the caret at the join', Int64(1), FRich.CaretIndex);
   FRich.ClearSelection;
   AssertEquals('nothing selected: nothing', 'adef', FRich.Lines[0]);
   Sel(1, 2);
@@ -2657,7 +2657,7 @@ var
 begin
   Inc(Calls);
   SeenChanges := Changes^;
-  SeenCaret := Rich.CaretPos;
+  SeenCaret := Rich.CaretIndex;
   if Load then
   begin
     Load := False;

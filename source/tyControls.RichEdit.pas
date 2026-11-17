@@ -806,7 +806,7 @@ type
     function GetSelLength: TTyRichPos;
     procedure SetSelStart(AValue: TTyRichPos);
     procedure SetSelLength(AValue: TTyRichPos);
-    procedure SetCaretPos(AValue: TTyRichPos);
+    procedure SetCaretIndex(AValue: TTyRichPos);
     { The layout parameters are known (a control never laid out takes the theme's now): what
       a query of a block's layout needs, without laying out the view. }
     procedure EnsureParams;
@@ -1425,7 +1425,7 @@ type
       clamp to the document and to a caret place (as a click does), forget the affinity and
       scroll the caret into view. A place past a cut paragraph's cut (CRichMaxParaLayoutChars)
       is kept and shown at the cut.
-      Written inside the document's BeginUpdate .. EndUpdate (and so CaretPos, SelectAll,
+      Written inside the document's BeginUpdate .. EndUpdate (and so CaretIndex, SelectAll,
       CollapseSelection): the positions are stored, clamped to the text as it is at that moment,
       and nothing is laid out, scrolled or painted. Edits made later in the same update do not
       move them; when the update ends they are clamped to the final text (and to a caret place)
@@ -1434,7 +1434,7 @@ type
     property SelLength: TTyRichPos read GetSelLength write SetSelLength;
     { The caret: SelStart's end or the other (the end a Shift move moves); writing it collapses
       the selection there. Inside an update: as SelStart. }
-    property CaretPos: TTyRichPos read FCaret write SetCaretPos;
+    property CaretIndex: TTyRichPos read FCaret write SetCaretIndex;
     { The caret's affinity: it stands at the end of a wrapped line rather than at the start of
       the line below (End, a click past a line's end). }
     property CaretAtLineEnd: Boolean read FCaretAtEnd;
@@ -3025,7 +3025,7 @@ begin
   Moved(False);
 end;
 
-procedure TTyCustomRichEdit.SetCaretPos(AValue: TTyRichPos);
+procedure TTyCustomRichEdit.SetCaretIndex(AValue: TTyRichPos);
 begin
   SetSelStart(AValue);
 end;
@@ -3227,7 +3227,7 @@ end;
   place there goes forward to the next block's start (the cut when there is none) or back to
   the cut. The steps (CaretStep, NextCaretPos), Home / End (LineBounds) and the hit test keep
   to it by themselves; word steps, Ctrl+Home / Ctrl+End, a collapse and a word's or a
-  paragraph's end go through here. SelectAll and the setters (SelStart, SelLength, CaretPos)
+  paragraph's end go through here. SelectAll and the setters (SelStart, SelLength, CaretIndex)
   keep such a place: it shows at the cut, and copying takes the tail. }
 function TTyCustomRichEdit.OutOfTail(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
 var

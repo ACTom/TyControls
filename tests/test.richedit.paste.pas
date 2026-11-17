@@ -1812,7 +1812,7 @@ begin
   AssertEquals('named', rsRichUndoPaste, d.UndoDescription);
   AssertEquals('one change', 1, FChanges);
   AssertEquals('one selection change', 1, FSelChanges);
-  AssertEquals('the caret behind it', Int64(3), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(3), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   AssertTrue('modified', FRich.Modified);
   ResetEvents;
@@ -1820,10 +1820,10 @@ begin
   AssertEquals('undone', 'abcd', Para(0));
   AssertEquals('the selection back: its start', Int64(1), FRich.SelStart);
   AssertEquals('its length', Int64(2), FRich.SelLength);
-  AssertEquals('its caret where it was', Int64(1), FRich.CaretPos);
+  AssertEquals('its caret where it was', Int64(1), FRich.CaretIndex);
   FRich.Redo;
   AssertEquals('redone', 'aRTd', Para(0));
-  AssertEquals('redo: a plain caret behind it', Int64(3), FRich.CaretPos);
+  AssertEquals('redo: a plain caret behind it', Int64(3), FRich.CaretIndex);
   AssertFalse('redo: nothing selected', FRich.HasSelection);
   // several paragraphs selected and replaced: still one step
   FRich.SelStart := 2;
@@ -2040,7 +2040,7 @@ begin
     end;
     AssertFalse(Names[i] + ': the composition ended', FRich.Composing);
     AssertEquals(Names[i] + ': it went in first, the paste after it', 'aniXYb', Para(0));
-    AssertEquals(Names[i] + ': the caret behind the paste', Int64(5), FRich.CaretPos);
+    AssertEquals(Names[i] + ': the caret behind the paste', Int64(5), FRich.CaretIndex);
     AssertEquals(Names[i] + ': two steps (the commit, the paste)', 2, FRich.Document.UndoDepth);
   end;
 end;
@@ -2065,7 +2065,7 @@ begin
   AssertTrue('in the first pasted one''s format', d.Formats.ParaFormat(d.ParaFormatOf(0)).Align = paraCenter);
   AssertEquals('the last', 'Bgh', Para(1));
   AssertTrue('in the format of the one it ends', d.Formats.ParaFormat(d.ParaFormatOf(1)).Align = paraJustify);
-  AssertEquals('the caret behind B', d.Text.ParaStart(1) + 1, FRich.CaretPos);
+  AssertEquals('the caret behind B', d.Text.ParaStart(1) + 1, FRich.CaretIndex);
   // everything
   FRich.SelectAll;
   FRich.PasteFromClipboard;
@@ -2546,7 +2546,7 @@ begin
   finally
     img.Free;
   end;
-  AssertEquals('the caret behind it', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(2), FRich.CaretIndex);
   // no alpha in any pixel: opaque
   SetText('ab');
   FRich.SelStart := 1;
@@ -2662,7 +2662,7 @@ begin
   for i := 0 to 5 do
     AssertTrue(Format('paragraph %d centred', [i]), d.Formats.ParaFormat(d.ParaFormatOf(i)).Align = paraCenter);
   AssertTrue('in the typing format (bold)', fsBold in CharFormatAt(d.Text.ParaStart(2)).Style);
-  AssertEquals('the caret behind it', d.Text.ParaStart(5) + 7, FRich.CaretPos);
+  AssertEquals('the caret behind it', d.Text.ParaStart(5) + 7, FRich.CaretIndex);
   AssertEquals('one step', 1, d.UndoDepth);
   // a plain-text document: U+000B a paragraph
   SetText('ab', True);

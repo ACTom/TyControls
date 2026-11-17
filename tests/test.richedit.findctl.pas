@@ -401,7 +401,7 @@ begin
   AssertEquals('the next after the caret', 0, FRich.SelStart);
   AssertEquals('selected', 3, FRich.SelLength);
   AssertEquals('one selection report', 1, FSelChanges);
-  AssertEquals('the caret at its end', 3, FRich.CaretPos);
+  AssertEquals('the caret at its end', 3, FRich.CaretIndex);
   AssertTrue('again', FRich.FindNext('red'));
   AssertEquals('after the selection', 10, FRich.SelStart);
   AssertTrue(FRich.FindNext('red'));

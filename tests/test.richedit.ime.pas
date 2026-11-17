@@ -685,7 +685,7 @@ begin
   AssertEquals('committed: one step more', depth + 1, d.UndoDepth);
   AssertEquals('committed: as typing', rsRichUndoTyping, d.UndoDescription);
   AssertEquals('the text', 'a' + U($4F60) + U($597D) + 'b', FRich.Lines[0]);
-  AssertEquals('the caret behind it', Int64(3), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(3), FRich.CaretIndex);
   FRich.Undo;
   AssertEquals('undone whole', 'ab', FRich.Lines[0]);
   FRich.Redo;
@@ -969,7 +969,7 @@ begin
   FRich.CommitComposition(U($4E16) + U($754C));
   AssertEquals('replaced', 'Hello ' + U($4E16) + U($754C), FRich.Lines[0]);
   AssertEquals('one undo step', depth + 1, d.UndoDepth);
-  AssertEquals('the caret behind it', Int64(8), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(8), FRich.CaretIndex);
   FRich.Undo;
   AssertEquals('undone whole', 'Hello world', FRich.Lines[0]);
   AssertEquals('the selection back', 'world', FRich.SelText);
@@ -1066,7 +1066,7 @@ begin
   FRich.ReleaseAt(r.Left, (r.Top + r.Bottom) div 2);
   AssertFalse('ended', FRich.Composing);
   AssertEquals('committed where it was', 'abXYcdef', FRich.Lines[0]);
-  AssertEquals('then the press placed the caret', Int64(0), FRich.CaretPos);
+  AssertEquals('then the press placed the caret', Int64(0), FRich.CaretIndex);
 end;
 
 { A content reset (Lines.Text, a load) and ReadOnly set cancel a composition: nothing goes in,
@@ -1397,11 +1397,11 @@ begin
   FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
   AssertEquals('the emoji', U($4E2D) + U($6587) + U($5B57) + U($1F600), FRich.Lines[0]);
   AssertEquals('one position', Int64(4), d.Text.Length);
-  AssertEquals('the caret behind it', Int64(4), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(4), FRich.CaretIndex);
   FRich.CommitComposition('a' + #13#10 + 'b');
   AssertEquals('two paragraphs', 2, d.Text.ParaCount);
   AssertEquals('the second', 'b', FRich.Lines[1]);
-  AssertEquals('the caret behind it', d.Text.ParaStart(1) + 1, FRich.CaretPos);
+  AssertEquals('the caret behind it', d.Text.ParaStart(1) + 1, FRich.CaretIndex);
 end;
 
 { win32's messages run the composition: the start (taken: no system window), the composition
@@ -2111,13 +2111,13 @@ begin
   AssertFalse('the press ended it', FRich.Composing);
   AssertEquals('told to commit', 1, FRich.EndCommits);
   AssertEquals('nothing in yet', 'abcdef', FRich.Lines[0]);
-  AssertEquals('the caret where the press put it', Int64(5), FRich.CaretPos);
+  AssertEquals('the caret where the press put it', Int64(5), FRich.CaretIndex);
   FRich.ResultStr := 'XY';
   FRich.CompStr := '';
   FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
   FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
   AssertEquals('the late result where the composition was', 'abXYcdef', FRich.Lines[0]);
-  AssertEquals('the caret where the press put it, moved with the text', Int64(7), FRich.CaretPos);
+  AssertEquals('the caret where the press put it, moved with the text', Int64(7), FRich.CaretIndex);
   AssertEquals('one step', depth + 1, d.UndoDepth);
   // a result after the next start belongs to that composition
   FRich.SelStart := 1;
@@ -2257,7 +2257,7 @@ begin
   FRich.ResultStr := W($4F60);
   FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR);
   AssertEquals('then the result: where it was', 'a' + U($4F60) + 'b', FRich.Lines[0]);
-  AssertEquals('the caret behind it', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(2), FRich.CaretIndex);
   // at a paragraph's start
   SetText('one' + LineEnding + 'two');
   t := FRich.Document.Text;
@@ -2461,7 +2461,7 @@ begin
   FRich.CommitComposition('XY');
   AssertEquals('committed in the cell', 'abcdXY efgh', FRich.Lines[0]);
   AssertTrue('still in it', d.CellAt(0) <> nil);
-  AssertEquals('the caret behind it', Int64(6), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(6), FRich.CaretIndex);
   // in the second cell: the rectangle told is that cell's (its offset in the row applied)
   c2 := t.ParaStart(1);
   cell1 := FRich.PositionRect(c2 + 2);
@@ -2557,7 +2557,7 @@ procedure TTyRichEditImeTest.TestAPressIsPlacedOnWhatTheUserSaw;
       AssertEquals(what + ': one OnSelectionChange', Ord(AWhere <> 2), FSelChanges);
     end;
     AssertEquals(what + ': the text', 'ab' + UTF8Encode(AResult) + 'cdef', FRich.Lines[0]);
-    AssertEquals(what + ': the caret where the press was', want, FRich.CaretPos);
+    AssertEquals(what + ': the caret where the press was', want, FRich.CaretIndex);
     AssertEquals(what + ': no selection', 0, FRich.SelLength);
     FRich.Late := False;
     FRich.Answer := False;
@@ -2610,7 +2610,7 @@ begin
     FRich.ReleaseAt(r.Left + 2, (r.Top + r.Bottom) div 2);
     if way = 1 then
     begin
-      AssertEquals('late: the caret where the press was', t.ParaStart(k) + 3, FRich.CaretPos);
+      AssertEquals('late: the caret where the press was', t.ParaStart(k) + 3, FRich.CaretIndex);
       FRich.ResultStr := UTF8Decode(Han(2));
       FRich.CompStr := '';
       FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
@@ -2619,7 +2619,7 @@ begin
     AssertEquals(Format('way %d: committed far above', [way]), 'Li' + Han(2) + 'ne 0',
       FRich.Lines[0]);
     AssertEquals(Format('way %d: the caret where the press was', [way]), t.ParaStart(k) + 3,
-      FRich.CaretPos);
+      FRich.CaretIndex);
     AssertEquals(Format('way %d: the view did not jump back', [way]), y0, FRich.ScrollY);
     FRich.Answer := False;
     FRich.Late := False;

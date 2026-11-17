@@ -549,14 +549,14 @@ begin
   AssertEquals('the text', string(typed), FRich.Lines[0]);
   AssertEquals('one undo step', 1, FRich.Document.UndoDepth);
   AssertEquals('described as typing', rsRichUndoTyping, FRich.Document.UndoDescription);
-  AssertEquals('the caret behind it', Int64(15), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(15), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   FRich.Undo;
   AssertEquals('undone: empty', Int64(0), FRich.Document.Text.Length);
-  AssertEquals('undone: the caret where it was', Int64(0), FRich.CaretPos);
+  AssertEquals('undone: the caret where it was', Int64(0), FRich.CaretIndex);
   FRich.Redo;
   AssertEquals('redone', string(typed), FRich.Lines[0]);
-  AssertEquals('redone: the caret behind it', Int64(15), FRich.CaretPos);
+  AssertEquals('redone: the caret behind it', Int64(15), FRich.CaretIndex);
   // control characters are no typing: DEL (Ctrl+Backspace on Windows), a C1 control
   FRich.Key8(#127);
   FRich.Key8(#8);
@@ -583,21 +583,21 @@ begin
   AssertEquals('Enter is taken', 0, FRich.KeyResult(VK_RETURN, []));
   AssertEquals('a new paragraph', 3, d.Text.ParaCount);
   AssertEquals('empty', '', FRich.Lines[1]);
-  AssertEquals('the caret at its start', d.Text.ParaStart(1), FRich.CaretPos);
+  AssertEquals('the caret at its start', d.Text.ParaStart(1), FRich.CaretIndex);
   pf0 := d.Formats.ParaFormat(d.ParaFormatOf(0));
   pf1 := d.Formats.ParaFormat(d.ParaFormatOf(1));
   AssertTrue('the first kept its own', pf0.Align = paraCenter);
   AssertTrue('centred like it', pf1.Align = paraCenter);
   AssertEquals('indented like it', 720, pf1.LeftIndent);
   Chars('x');
-  AssertTrue('typed bold (the typing format)', fsBold in CharFormatAt(FRich.CaretPos - 1).Style);
+  AssertTrue('typed bold (the typing format)', fsBold in CharFormatAt(FRich.CaretIndex - 1).Style);
   // in the middle: both parts centred
   FRich.SelStart := 2;
   Press(VK_RETURN);
   AssertEquals('split', 'Ti', FRich.Lines[0]);
   AssertEquals('split, the rest', 'tle', FRich.Lines[1]);
   AssertTrue('both centred', d.Formats.ParaFormat(d.ParaFormatOf(1)).Align = paraCenter);
-  AssertEquals('the caret at the second part''s start', d.Text.ParaStart(1), FRich.CaretPos);
+  AssertEquals('the caret at the second part''s start', d.Text.ParaStart(1), FRich.CaretIndex);
 end;
 
 { Enter on an EMPTY list item leaves the list: the item becomes a plain paragraph where it is,
@@ -619,14 +619,14 @@ begin
   Press(VK_RETURN);
   AssertEquals('a new item', 3, d.Text.ParaCount);
   AssertTrue('in the list', d.Formats.ParaFormat(d.ParaFormatOf(1)).List.Kind = lkBullet);
-  AssertEquals('the caret on it', d.Text.ParaStart(1), FRich.CaretPos);
+  AssertEquals('the caret on it', d.Text.ParaStart(1), FRich.CaretIndex);
   depth := d.UndoDepth;
   ResetEvents;
   Press(VK_RETURN);
   AssertEquals('no paragraph added', 3, d.Text.ParaCount);
   AssertTrue('out of the list', d.Formats.ParaFormat(d.ParaFormatOf(1)).List.Kind = lkNone);
   AssertTrue('the first item stays one', d.Formats.ParaFormat(d.ParaFormatOf(0)).List.Kind = lkBullet);
-  AssertEquals('the caret stays', d.Text.ParaStart(1), FRich.CaretPos);
+  AssertEquals('the caret stays', d.Text.ParaStart(1), FRich.CaretIndex);
   AssertEquals('one undo step', depth + 1, d.UndoDepth);
   AssertEquals('one change', 1, FChanges);
   Chars('x');
@@ -819,7 +819,7 @@ begin
   Chars('X');
   AssertEquals('replaced', 'aXd', FRich.Lines[0]);
   AssertEquals('one step', 1, d.UndoDepth);
-  AssertEquals('the caret behind it', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(2), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   Chars('Y');
   AssertEquals('typed on', 'aXYd', FRich.Lines[0]);
@@ -881,7 +881,7 @@ begin
   FRich.SelStart := 2;
   Press(VK_BACK);
   AssertEquals('Backspace: the accent only', 'ex', FRich.Lines[0]);
-  AssertEquals('the caret after the letter', Int64(1), FRich.CaretPos);
+  AssertEquals('the caret after the letter', Int64(1), FRich.CaretIndex);
   SetText('e' + U($301) + 'x');
   FRich.SelStart := 0;
   Press(VK_DELETE);
@@ -918,12 +918,12 @@ begin
   FRich.SelStart := 3;
   Press(VK_BACK);
   AssertEquals('Backspace: both characters of one', Int64(4), d.Text.Length);
-  AssertEquals('Backspace: the caret', Int64(1), FRich.CaretPos);
+  AssertEquals('Backspace: the caret', Int64(1), FRich.CaretIndex);
   FRich.Undo;
   FRich.SelStart := 3;
   Press(VK_DELETE);
   AssertEquals('Delete: both characters of the other', Int64(4), d.Text.Length);
-  AssertEquals('Delete: the caret stays', Int64(3), FRich.CaretPos);
+  AssertEquals('Delete: the caret stays', Int64(3), FRich.CaretIndex);
   // a separator
   SetText('ab' + LineEnding + 'cd');
   d := FRich.Document;
@@ -931,12 +931,12 @@ begin
   Press(VK_BACK);
   AssertEquals('Backspace at a start: joined', 'abcd', FRich.Lines[0]);
   AssertEquals('one paragraph', 1, d.Text.ParaCount);
-  AssertEquals('the caret at the join', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret at the join', Int64(2), FRich.CaretIndex);
   FRich.Undo;
   FRich.SelStart := 2;
   Press(VK_DELETE);
   AssertEquals('Delete at an end: joined', 'abcd', FRich.Lines[0]);
-  AssertEquals('the caret at the join', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret at the join', Int64(2), FRich.CaretIndex);
 end;
 
 { At the document's ends Backspace and Delete (Ctrl too) do nothing: no change, nothing on the
@@ -976,14 +976,14 @@ begin
   FRich.SelStart := 13;
   Press(VK_BACK, [ssCtrl]);
   AssertEquals('a word back', 'one two ', FRich.Lines[0]);
-  AssertEquals('the caret', Int64(8), FRich.CaretPos);
+  AssertEquals('the caret', Int64(8), FRich.CaretIndex);
   Press(VK_BACK, [ssCtrl]);
   AssertEquals('and the space before it with the next', 'one ', FRich.Lines[0]);
   SetText('one two three');
   FRich.SelStart := 0;
   Press(VK_DELETE, [ssCtrl]);
   AssertEquals('a word forward, with its space', 'two three', FRich.Lines[0]);
-  AssertEquals('the caret stays', Int64(0), FRich.CaretPos);
+  AssertEquals('the caret stays', Int64(0), FRich.CaretIndex);
   SetText('ab' + LineEnding + 'cd');
   d := FRich.Document;
   FRich.SelStart := d.Text.ParaStart(1);
@@ -1008,7 +1008,7 @@ begin
   AssertEquals('taken', 0, FRich.KeyResult(VK_RETURN, [ssShift]));
   AssertEquals('one paragraph', 1, d.Text.ParaCount);
   AssertEquals('a line break in it', 'a' + #11 + 'b', FRich.Lines[0]);
-  AssertEquals('the caret behind it', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(2), FRich.CaretIndex);
   Chars('c');
   AssertEquals('typing after it: its own step', 2, d.UndoDepth);
   AssertEquals('Ctrl+Enter is the form''s', VK_RETURN, FRich.KeyResult(VK_RETURN, [ssCtrl]));
@@ -1030,7 +1030,7 @@ begin
   FRich.WantTabs := True;
   AssertEquals('Tab taken', 0, FRich.KeyResult(VK_TAB, []));
   AssertEquals('a tab typed', 'a' + #9 + 'b', FRich.Lines[0]);
-  AssertEquals('the caret behind it', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(2), FRich.CaretIndex);
   Chars('c');
   AssertEquals('Shift+Tab taken', 0, FRich.KeyResult(VK_TAB, [ssShift]));
   AssertEquals('typed on', 'a' + #9 + 'c' + #9 + 'b', FRich.Lines[0]);
@@ -1053,26 +1053,26 @@ begin
   FRich.SelStart := 0;
   FRich.Undo;
   AssertEquals('undone', 'hello world', FRich.Lines[0]);
-  AssertEquals('the caret where it went in', Int64(5), FRich.CaretPos);
+  AssertEquals('the caret where it went in', Int64(5), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   FRich.Redo;
   AssertEquals('redone', 'helloXY world', FRich.Lines[0]);
-  AssertEquals('the caret behind it', Int64(7), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(7), FRich.CaretIndex);
   SetText('hello world');
   FRich.SelStart := 6;
   FRich.SelLength := 5;
   Press(VK_DELETE);
   AssertEquals('deleted', 'hello ', FRich.Lines[0]);
-  AssertEquals('the caret at the join', Int64(6), FRich.CaretPos);
+  AssertEquals('the caret at the join', Int64(6), FRich.CaretIndex);
   FRich.SelStart := 0;
   AssertEquals('Ctrl+Z taken', 0, FRich.KeyResult(VK_Z, [ssCtrl]));
   AssertEquals('undone', 'hello world', FRich.Lines[0]);
   AssertEquals('put back and selected: from', Int64(6), FRich.SelStart);
   AssertEquals('put back and selected: all of it', Int64(5), FRich.SelLength);
-  AssertEquals('the caret at its end', Int64(11), FRich.CaretPos);
+  AssertEquals('the caret at its end', Int64(11), FRich.CaretIndex);
   AssertEquals('Ctrl+Y taken', 0, FRich.KeyResult(VK_Y, [ssCtrl]));
   AssertEquals('redone', 'hello ', FRich.Lines[0]);
-  AssertEquals('at the join', Int64(6), FRich.CaretPos);
+  AssertEquals('at the join', Int64(6), FRich.CaretIndex);
   AssertFalse('nothing selected', FRich.HasSelection);
   AssertEquals('Ctrl+Z again', 0, FRich.KeyResult(VK_Z, [ssCtrl]));
   AssertEquals('Ctrl+Shift+Z taken', 0, FRich.KeyResult(VK_Z, [ssCtrl, ssShift]));
@@ -1111,7 +1111,7 @@ begin
   AssertEquals('the RTF flavour', 1, Pos('{' + BS + 'rtf1', FRich.ClipRtf));
   AssertEquals('one write', 1, FRich.ClipWrites);
   AssertEquals('one step', 1, d.UndoDepth);
-  AssertEquals('the caret at the join', Int64(4), FRich.CaretPos);
+  AssertEquals('the caret at the join', Int64(4), FRich.CaretIndex);
   FRich.Undo;
   AssertEquals('undone', 'cut this text', FRich.Lines[0]);
   FRich.SelStart := 0;
@@ -1237,7 +1237,7 @@ var
     Chars('x');
     AssertEquals(AWhat + ': a character refused once', 1, FRich.Refused);
     AssertEquals(AWhat + ': why', AReason, FRich.LastReason);
-    AssertEquals(AWhat + ': the caret stays', Int64(1), FRich.CaretPos);
+    AssertEquals(AWhat + ': the caret stays', Int64(1), FRich.CaretIndex);
     Press(VK_BACK);
     Press(VK_DELETE);
     Press(VK_RETURN);
@@ -1353,7 +1353,7 @@ begin
   AssertEquals('at the caret: refused once', 1, FRich.Refused);
   // E-M3: the control's own reason, never the engine's sentence
   AssertEquals('this range cannot be edited', rsRichEditRefusedRange, FRich.LastReason);
-  AssertEquals('the caret stays', Int64(2), FRich.CaretPos);
+  AssertEquals('the caret stays', Int64(2), FRich.CaretIndex);
   FRich.SelStart := 1;
   FRich.SelLength := 2;
   ResetEvents;
@@ -1573,7 +1573,7 @@ begin
   AssertEquals('two paragraphs', 2, d.Text.ParaCount);
   AssertEquals('the first', 'aX', FRich.Lines[0]);
   AssertEquals('the second', 'Yc', FRich.Lines[1]);
-  AssertEquals('the caret behind it', d.Text.ParaStart(1) + 1, FRich.CaretPos);
+  AssertEquals('the caret behind it', d.Text.ParaStart(1) + 1, FRich.CaretIndex);
   AssertEquals('one step', 1, d.UndoDepth);
   Chars('z');
   AssertEquals('typing does not join it', 2, d.UndoDepth);
@@ -1949,7 +1949,7 @@ var
   begin
     AssertEquals(AWhat + ': from', AStart, FRich.SelStart);
     AssertEquals(AWhat + ': length', ALength, FRich.SelLength);
-    AssertEquals(AWhat + ': the caret', ACaret, FRich.CaretPos);
+    AssertEquals(AWhat + ': the caret', ACaret, FRich.CaretIndex);
   end;
 
 begin
@@ -2349,12 +2349,12 @@ begin
   FRich.SelStart := 50000;
   Chars('y');
   AssertEquals('before the cut it goes in', Int64(CRichMaxParaLayoutChars + 1), t.ParaLength(0));
-  AssertEquals('the caret behind it', Int64(50001), FRich.CaretPos);
+  AssertEquals('the caret behind it', Int64(50001), FRich.CaretIndex);
   // the paragraph is cut now; code inserts in its hidden tail: the caret goes to the cut
   FRich.SelStart := t.ParaLength(0);
   FRich.SelText := 'z';
   AssertEquals('code put it in', Int64(CRichMaxParaLayoutChars + 2), t.ParaLength(0));
-  AssertEquals('the caret at the cut, not in the tail', Int64(CRichMaxParaLayoutChars), FRich.CaretPos);
+  AssertEquals('the caret at the cut, not in the tail', Int64(CRichMaxParaLayoutChars), FRich.CaretIndex);
   // Delete at the cut, Backspace after the cut paragraph: nothing, nothing told
   ResetEvents;
   FRich.SelStart := CRichMaxParaLayoutChars;
@@ -2490,12 +2490,12 @@ begin
     AssertEquals(what + ': indent reset', 0, f.LeftIndent);
     AssertEquals(what + ': offset reset', 0, f.FirstIndent);
     AssertEquals(what + ': the right indent kept', 144, f.RightIndent);
-    AssertEquals(what + ': the caret stays', t.ParaStart(1), FRich.CaretPos);
+    AssertEquals(what + ': the caret stays', t.ParaStart(1), FRich.CaretIndex);
     FRich.Undo;
     AssertTrue(what + ': undone', FormatOf(1).List.Kind = kind);
     FRich.SelStart := 0;
     FRich.Redo;
-    AssertEquals(what + ': redone: the caret where the key left it', t.ParaStart(1), FRich.CaretPos);
+    AssertEquals(what + ': redone: the caret where the key left it', t.ParaStart(1), FRich.CaretIndex);
     AssertFalse(what + ': nothing selected', FRich.HasSelection);
     // the next Backspace joins; the paragraph before keeps its own format
     Press(VK_BACK);
