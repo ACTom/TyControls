@@ -98,6 +98,9 @@ type
     procedure TestAPasteInsideOneEditedFileAndAWordNamingAnAddedFont;
     procedure TestEveryTablesIndexWordIsLeftBehind;
     procedure TestAFieldMadeAgainKeepsItsResultsPictures;
+    procedure TestTheLastLinesTextAlonePastesInline;
+    procedure TestATiffsEveryDirectoryAndADibsColourTable;
+    procedure TestEveryFixturesRangesPasteAcrossDocuments;
   end;
 
 implementation
@@ -1246,6 +1249,70 @@ begin
   end;
 end;
 
+{ W16 X-M2 (R67): the text of a document's last line copied alone (Home, Shift+End) pastes
+  inline into the middle of a line, as the text of any other line does - no paragraph break,
+  the target's paragraph keeps its format; a copy that begins in the line before, or all of a
+  one-paragraph document, ends with the last paragraph's mark and brings its format. }
+procedure TTyRichEditPasteTest.TestTheLastLinesTextAlonePastesInline;
+var
+  a, d: TTyRichDocument;
+  filtered: Boolean;
+
+  function Into(const ARtf: TBytes): TTyRichDocument;
+  begin
+    Result := LoadDoc(RawBytes(Esc('{`rtf1`ansi`deff0{`fonttbl{`f0 Arial;}}`pard abcdef`par}')), False);
+    AssertTrue('pasted', PasteAcross(Result, 3, ARtf, filtered));
+  end;
+
+begin
+  a := LoadDoc(RawBytes(Esc('{`rtf1`ansi`deff0{`fonttbl{`f0 Arial;}}`pard first`par`pard uvwxyz`par' +
+    '`pard`qr ghi`par}')), False);
+  try
+    AssertEquals('three paragraphs', 3, a.Text.ParaCount);
+    // the middle line's text: inline
+    d := Into(RangeOut(a, a.Text.ParaStart(1), a.Text.ParaLength(1)));
+    try
+      AssertEquals('the middle line inline', 'abcuvwxyzdef', ParaText(d, 0));
+    finally
+      d.Free;
+    end;
+    // the last line's text: inline too, the target's paragraph not right-aligned
+    d := Into(RangeOut(a, a.Text.ParaStart(2), a.Text.ParaLength(2)));
+    try
+      AssertEquals('the last line inline', 'abcghidef', ParaText(d, 0));
+      AssertTrue('in the target''s alignment', d.Formats.ParaFormat(d.ParaFormatOf(0)).Align <> paraRight);
+    finally
+      d.Free;
+    end;
+    // begun in the line before: the last paragraph with its mark and its format
+    d := Into(RangeOut(a, a.Text.ParaStart(1), a.Text.Length - a.Text.ParaStart(1)));
+    try
+      AssertEquals('the line before joins', 'abcuvwxyz', ParaText(d, 0));
+      AssertEquals('the last line a paragraph', 'ghi', ParaText(d, 1));
+      AssertTrue('right-aligned', d.Formats.ParaFormat(d.ParaFormatOf(1)).Align = paraRight);
+      AssertEquals('then the rest of the target''s line', 'def', ParaText(d, 2));
+    finally
+      d.Free;
+    end;
+  finally
+    a.Free;
+  end;
+  // all of a one-paragraph document: its paragraph with its mark and its format
+  a := LoadDoc(RawBytes(Esc('{`rtf1`ansi`deff0{`fonttbl{`f0 Arial;}}`pard`qr ghi}')), False);
+  try
+    d := Into(RangeOut(a, 0, a.Text.Length));
+    try
+      AssertEquals('a paragraph', 'abcghi', ParaText(d, 0));
+      AssertTrue('right-aligned', d.Formats.ParaFormat(d.ParaFormatOf(0)).Align = paraRight);
+      AssertEquals('then the rest', 'def', ParaText(d, 1));
+    finally
+      d.Free;
+    end;
+  finally
+    a.Free;
+  end;
+end;
+
 { W14 V-I1 (R63): every sample that holds a row with a nested table, copied whole and pasted
   into a document read from RTF and into a new one: the table goes in as paragraphs that can
   be edited, the document saves, and read back holds all the text. }
@@ -2172,6 +2239,199 @@ begin
   AssertTrue(Format('pastes checked (%d)', [pastes]), pastes >= PasteFloor);
 end;
 
+{ Any object of ADoc whose bytes (an opaque object's, a picture's kept RTF) name a header
+  table's entry. }
+function AnyObjectTableNumber(ADoc: TTyRichDocument; out AWhat: string): Boolean;
+var
+  k, i: Integer;
+  runs: TTyRunArray;
+  o: TTyRichObject;
+begin
+  Result := True;
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+    begin
+      o := runs[i].Obj;
+      if (o is TTyRichOpaque) and TyRtfNamesTableEntry(TTyRichOpaque(o).Bytes) then
+      begin
+        AWhat := Format('paragraph %d: %s', [k, Shown(TTyRichOpaque(o).Bytes)]);
+        Exit;
+      end;
+      if (o is TTyRichPicture) and TyRtfNamesTableEntry(TTyRichPicture(o).RawRtf) then
+      begin
+        AWhat := Format('paragraph %d: a picture''s %s', [k, Shown(TTyRichPicture(o).RawRtf)]);
+        Exit;
+      end;
+    end;
+  end;
+  Result := False;
+end;
+
+{ What B holds that A does not, objects and Extra apart: '' when every paragraph has A's text
+  (its object characters left out), every other character A's format (its Extra left out),
+  A's paragraph format (likewise) and A's place in a table. }
+function UnderstoodDiff(A, B: TTyRichDocument): string;
+
+  // the text without its object characters (U+FFFC, EF BF BC)
+  function NoObj(const S: RawByteString): RawByteString;
+  var
+    i: Integer;
+  begin
+    Result := '';
+    i := 1;
+    while i <= Length(S) do
+      if (i + 2 <= Length(S)) and (S[i] = #$EF) and (S[i + 1] = #$BF) and (S[i + 2] = #$BC) then
+        Inc(i, 3)
+      else
+      begin
+        Result := Result + S[i];
+        Inc(i);
+      end;
+  end;
+
+var
+  k, i, j: Integer;
+  sa, sb: TCharSpots;
+  fa, fb: TTyCharFormat;
+  pa, pb: TTyParaFormat;
+  ca, cb: TTyRichCell;
+begin
+  if A.Text.ParaCount <> B.Text.ParaCount then
+    Exit(Format('paragraphs %d / %d', [A.Text.ParaCount, B.Text.ParaCount]));
+  for k := 0 to A.Text.ParaCount - 1 do
+  begin
+    if not SameRaw(NoObj(ParaText(A, k)), NoObj(ParaText(B, k))) then
+      Exit(Format('paragraph %d: text <%s> / <%s>', [k, Shown(ParaText(A, k)), Shown(ParaText(B, k))]));
+    sa := SpotsOf(A, k);
+    sb := SpotsOf(B, k);
+    i := 0;
+    j := 0;
+    while True do
+    begin
+      while (i <= High(sa)) and (sa[i].Obj <> nil) do Inc(i);
+      while (j <= High(sb)) and (sb[j].Obj <> nil) do Inc(j);
+      if (i > High(sa)) or (j > High(sb)) then Break;
+      fa := sa[i].Format;
+      fb := sb[j].Format;
+      fa.Extra.Clear;
+      fb.Extra.Clear;
+      if not fa.Equals(fb) then
+        Exit(Format('paragraph %d character %d: %s / %s', [k, i, Describe(fa), Describe(fb)]));
+      Inc(i);
+      Inc(j);
+    end;
+    pa := A.Formats.ParaFormat(A.ParaFormatOf(k));
+    pb := B.Formats.ParaFormat(B.ParaFormatOf(k));
+    pa.Extra.Clear;
+    pb.Extra.Clear;
+    if not pa.Equals(pb) then Exit(Format('paragraph %d: its format', [k]));
+    ca := A.CellAt(k);
+    cb := B.CellAt(k);
+    if (ca = nil) <> (cb = nil) then Exit(Format('paragraph %d: a cell / none', [k]));
+    if (ca <> nil) and ((ca.Index <> cb.Index) or (ca.Row.BoundaryCount <> cb.Row.BoundaryCount)) then
+      Exit(Format('paragraph %d: its cell', [k]));
+  end;
+  Result := '';
+end;
+
+{ W16 X-M8: every sample's ranges pasted the way the control pastes between documents -
+  through TyRichFragmentFilterFor - both ways. Into a second document read from the same file
+  (two windows on one file): nothing is left out, the document saves byte for byte as the
+  paste without a filter. Into a file of other tables: a filter; the text and what is
+  understood are the unfiltered paste's (objects apart), nothing pasted names a table entry,
+  nor does anything of the saved file read back; undone, the save is the file. }
+procedure TTyRichEditPasteTest.TestEveryFixturesRangesPasteAcrossDocuments;
+var
+  sr: TSearchRec;
+  a: TTyRichDocument;
+  file_: TBytes;
+  t: TTyRichText;
+  files, q, n, pastes: Integer;
+  L: TTyRichPos;
+
+  procedure Check(const AWhat: string; AFrom, ALen: TTyRichPos);
+  var
+    rtf, saved: TBytes;
+    plain, b, c: TTyRichDocument;
+    filtered: Boolean;
+    dd, what: string;
+  begin
+    rtf := RangeOut(a, AFrom, ALen);
+    // a second window on the same file
+    plain := LoadDoc(file_, False);
+    b := LoadDoc(file_, False);
+    try
+      AssertTrue(AWhat + ': pasted', PasteInto(plain, 0, rtf));
+      AssertTrue(AWhat + ': pasted across', PasteAcross(b, 0, rtf, filtered));
+      if not SameRaw(StrOfBytes(SaveOut(plain)), StrOfBytes(SaveOut(b))) then
+        Fail(AWhat + ' into its own file: something was left out');
+      Inc(pastes);
+    finally
+      b.Free;
+      plain.Free;
+    end;
+    // a file of other tables
+    plain := LoadDoc(RawBytes(TgtIdx), False);
+    b := LoadDoc(RawBytes(TgtIdx), False);
+    try
+      AssertTrue(AWhat + ': pasted', PasteInto(plain, plain.Text.ParaStart(1), rtf));
+      AssertTrue(AWhat + ': pasted across', PasteAcross(b, b.Text.ParaStart(1), rtf, filtered));
+      AssertTrue(AWhat + ': through a filter', filtered);
+      dd := UnderstoodDiff(plain, b);
+      if dd <> '' then Fail(AWhat + ' into another file: ' + dd);
+      if AnyTableNumber(b, what) or AnyObjectTableNumber(b, what) then
+        Fail(AWhat + ' into another file, pasted: ' + what);
+      saved := SaveOut(b);
+      c := LoadDoc(saved, True);
+      try
+        if AnyTableNumber(c, what) or AnyObjectTableNumber(c, what) then
+          Fail(AWhat + ' into another file, saved and read back: ' + what);
+        AssertEquals(AWhat + ': read back, its paragraphs', b.Text.ParaCount, c.Text.ParaCount);
+      finally
+        c.Free;
+      end;
+      b.Undo;
+      if not SameRaw(StrOfBytes(SaveOut(b)), TgtIdx) then Fail(AWhat + ': undone, not the file');
+      Inc(pastes);
+    finally
+      b.Free;
+      plain.Free;
+    end;
+  end;
+
+begin
+  files := 0;
+  pastes := 0;
+  if FindFirst(FixtureDir + '*.rtf', faAnyFile, sr) = 0 then
+  try
+    repeat
+      file_ := FileBytes(FixtureDir + sr.Name);
+      a := LoadDoc(file_, False);
+      try
+        t := a.Text;
+        L := t.Length;
+        Check(sr.Name + ' all', 0, L);
+        Check(sr.Name + ' a third', L div 3, L div 3);
+        n := t.ParaCount;
+        if n > 4 then n := 4;
+        for q := 0 to n - 1 do
+          if q < t.ParaCount - 1 then
+            Check(Format('%s paragraph %d with its separator', [sr.Name, q]), t.ParaStart(q),
+              t.ParaLength(q) + 1);
+      finally
+        a.Free;
+      end;
+      Inc(files);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('the samples', files >= 20);
+  AssertTrue(Format('pastes checked (%d)', [pastes]), pastes >= 4 * files);
+end;
+
 { A whole sample pasted into an empty new document and saved reads back as the sample's
   content: its paragraphs, their text, formats and cells. }
 procedure TTyRichEditPasteTest.TestAWholeFixturePastedAndSavedReadsBack;
@@ -2681,6 +2941,66 @@ begin
   AssertTrue('made', TyRichMakePicture(b, rikPng, 0, pic) = rpmMade);
   try
     AssertEquals('kept to its IEND', Length(png), Length(pic.Data));
+  finally
+    pic.Free;
+  end;
+end;
+
+function Bytes32LE(V: Int64): RawByteString;
+begin
+  Result := AnsiChar(V and $FF) + AnsiChar((V shr 8) and $FF) + AnsiChar((V shr 16) and $FF) +
+    AnsiChar((V shr 24) and $FF);
+end;
+
+{ A TIFF directory of AW x AH (LONG values) whose next directory is at ANext (0: none). }
+function TiffDir(AW, AH, ANext: Int64): RawByteString;
+begin
+  Result := #2#0 + Bytes16LE(256) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(AW) +
+    Bytes16LE(257) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(AH) + Bytes32LE(ANext);
+end;
+
+{ A BI_RGB DIB of AW x AH at ABits with AUsed colour table entries (biClrUsed), then APayload. }
+function DibHeader(AW, AH, ABits, AUsed: Integer): RawByteString;
+begin
+  Result := Bytes32LE(40) + Bytes32LE(AW) + Bytes32LE(AH) + Bytes16LE(1) + Bytes16LE(ABits) +
+    Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(AUsed) + Bytes32LE(0);
+end;
+
+{ W16 X-M7, X-M9: a TIFF's size is asked of every directory the decoder may take (it decodes
+  the largest): a second one of 65535 x 65535, or of 8000 x 8000, is too large before anything
+  is decoded; a chain that goes round, or points past the bytes, does not decode. A DIB of more
+  than 8 bits whose biClrUsed says a colour table is there needs its bytes too, and its pixels
+  are read after it. }
+procedure TTyRichEditPasteTest.TestATiffsEveryDirectoryAndADibsColourTable;
+var
+  pic: TTyRichPicture;
+  s: RawByteString;
+  bmp: TBGRABitmap;
+begin
+  // the header's 8 bytes and a directory of two entries (30): the second at 38
+  s := 'II'#42#0 + Bytes32LE(8) + TiffDir(16, 12, 38) + TiffDir(65535, 65535, 0);
+  AssertTrue('a second directory of 65535 x 65535', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmTooLarge);
+  s := 'II'#42#0 + Bytes32LE(8) + TiffDir(16, 12, 38) + TiffDir(8000, 8000, 0);
+  AssertTrue('a second directory of 8000 x 8000', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmTooLarge);
+  s := 'II'#42#0 + Bytes32LE(8) + TiffDir(16, 12, 8);
+  AssertTrue('a chain that goes round', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
+  s := 'II'#42#0 + Bytes32LE(8) + TiffDir(16, 12, 4000);
+  AssertTrue('a next directory past the bytes', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
+  // 4 x 4 at 24 bits, 16 colours "used": 64 bytes of table, then 48 of pixels - only 64 there
+  s := DibHeader(4, 4, 24, 16) + StringOfChar(#0, 64);
+  AssertTrue('the colour table counted', TyRichMakePicture(RawBytes(s), rikDib, 0, pic) = rpmNoImage);
+  // 2 x 1 at 24 bits with one colour table entry: blue, red - read after the table
+  s := DibHeader(2, 1, 24, 1) + #9#9#9#0 + #255#0#0 + #0#0#255 + #0#0;
+  AssertTrue('made', TyRichMakePicture(RawBytes(s), rikDib, 0, pic) = rpmMade);
+  try
+    bmp := DecodePng(pic.Data);
+    try
+      AssertEquals('two pixels', 2, bmp.Width);
+      AssertTrue('the first blue', (bmp.GetPixel(0, 0).blue = 255) and (bmp.GetPixel(0, 0).red = 0));
+      AssertTrue('the second red', (bmp.GetPixel(1, 0).red = 255) and (bmp.GetPixel(1, 0).blue = 0));
+    finally
+      bmp.Free;
+    end;
   finally
     pic.Free;
   end;

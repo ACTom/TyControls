@@ -4296,15 +4296,37 @@ begin
     AssertTrue('with its separator: \par', PosRaw('\par', body) > 0);
     AssertTrue('and centred', PosRaw('\qc', body) > 0);
     CheckRange('with its separator', d, 0, d.Text.ParaLength(0) + 1);
-    // the document's last paragraph taken to its end: as a paragraph, with its \par (R64)
+    { the document's last paragraph's text alone, in a document of two: a part, as the text
+      of any other line (R67) }
     o := RangeOut(d, d.Text.ParaStart(1), d.Text.ParaLength(1), info);
-    AssertTrue('the last paragraph whole: a paragraph''s end', RtfEndsWithBreak(o));
-    CheckRange('the last paragraph whole', d, d.Text.ParaStart(1), d.Text.ParaLength(1));
+    AssertFalse('the last line''s text alone: no paragraph''s end', RtfEndsWithBreak(o));
+    CheckRange('the last line''s text alone', d, d.Text.ParaStart(1), d.Text.ParaLength(1));
+    // begun in the line before: the last paragraph whole, with its \par (R64)
+    o := RangeOut(d, d.Text.ParaStart(1) - 2, d.Text.ParaLength(1) + 2, info);
+    AssertTrue('begun before it: a paragraph''s end', RtfEndsWithBreak(o));
+    CheckRange('begun before it', d, d.Text.ParaStart(1) - 2, d.Text.ParaLength(1) + 2);
     // and from the model, a paragraph with its format: right-aligned it reads back so
     AssertTrue(d.Execute(TTyRichSetParaFormat.Create(1, 1, [pffAlign], RightAligned)));
     o := RangeOut(d, 0, d.Text.Length, info);
     AssertTrue('all of it: a paragraph''s end', RtfEndsWithBreak(o));
     CheckRange('all of it, the last right-aligned', d, 0, d.Text.Length);
+    o := RangeOut(d, d.Text.ParaStart(1), d.Text.ParaLength(1), info);
+    body := StrOf(o, info.HeaderStop, Length(o) - info.HeaderStop);
+    AssertEquals('the last line''s text alone: not right-aligned: ' + Shown(body), 0, PosRaw('\qr', body));
+    AssertFalse('nor a paragraph''s end', RtfEndsWithBreak(o));
+  finally
+    d.Free;
+  end;
+  // a document of one paragraph, all of it (Select All): a paragraph with its format
+  d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\qc only}'), False);
+  try
+    o := RangeOut(d, 0, d.Text.Length, info);
+    body := StrOf(o, info.HeaderStop, Length(o) - info.HeaderStop);
+    AssertTrue('the one paragraph whole: a paragraph''s end', RtfEndsWithBreak(o));
+    AssertTrue('centred', PosRaw('\qc', body) > 0);
+    CheckRange('the one paragraph', d, 0, d.Text.Length);
+    o := RangeOut(d, 1, d.Text.Length - 1, info);
+    AssertFalse('from its middle: a part', RtfEndsWithBreak(o));
   finally
     d.Free;
   end;
@@ -4598,9 +4620,13 @@ var
     AssertTrue(AWhat + ': all - the file''s bytes for most', info.VerbatimParas > 0);
     // (the last appended so far taken whole: ended with its \par, R64)
     AssertTrue(AWhat + ': all - a paragraph''s end after the last', RtfEndsWithBreak(o));
+    // (the last one's text alone: a part, R67; begun in the one before: whole, R64)
     o := RangeOut(d, t.ParaStart(n - 1), t.ParaLength(n - 1), info);
+    AssertFalse(AWhat + ': the last paragraph''s text - no paragraph''s end', RtfEndsWithBreak(o));
+    CheckRange(AWhat + ': the last paragraph''s text', d, t.ParaStart(n - 1), t.ParaLength(n - 1));
+    o := RangeOut(d, t.ParaStart(n - 1) - 1, t.ParaLength(n - 1) + 1, info);
     AssertTrue(AWhat + ': the last paragraph - a paragraph''s end', RtfEndsWithBreak(o));
-    CheckRange(AWhat + ': the last paragraph', d, t.ParaStart(n - 1), t.ParaLength(n - 1));
+    CheckRange(AWhat + ': the last paragraph', d, t.ParaStart(n - 1) - 1, t.ParaLength(n - 1) + 1);
     o := RangeOut(d, t.ParaStart(n - 2), t.ParaLength(n - 2) + 1, info);
     AssertTrue(AWhat + ': the one before with its separator - a paragraph''s end',
       RtfEndsWithBreak(o));

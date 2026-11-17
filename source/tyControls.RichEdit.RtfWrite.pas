@@ -126,9 +126,12 @@ type
   // row it meets whole, as Word copies them (FromChar 0 at a row's first paragraph, all of a
   // row's last paragraph and its separator). LastWhole: the last paragraph is taken as a
   // paragraph, with its properties - with its separator, or the document's last paragraph
-  // taken to its end (it has no separator in the text; the RTF ends it with \par all the
-  // same, so that it reads back with its format and pastes as a paragraph - R64; the plain
-  // text has no line break after it - R45). Empty: nothing to copy.
+  // taken to its end by a range that begins before it or that is the whole of a document of
+  // one paragraph (it has no separator in the text; the RTF ends it with \par all the same,
+  // so that it reads back with its format and pastes as a paragraph - R64, R67; the plain
+  // text has no line break after it - R45). The last paragraph's text alone, in a document
+  // of more paragraphs, is taken in part, as any other line's text without its separator.
+  // Empty: nothing to copy.
   TTyRichCopyRange = record
     FirstPara, LastPara: Integer;
     FromChar, ToChar: TTyRichPos;
@@ -152,7 +155,7 @@ function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRic
 // there put back first, the groups the bytes leave open closed after them), else from the
 // model. A paragraph the range takes in part is written from the model, the characters it
 // takes: with its paragraph's properties and its \par when the range takes its separator
-// (or is the document's last paragraph taken to its end: R64); the last one without them
+// (or the document's last paragraph to its end, LastWhole: R64, R67); the last one without them
 // when the range ends before its separator (pasted, it adds no line break and takes the
 // paragraph it lands in). Rows are whole (TyRichCopyRange); inside
 // one cell the paragraphs are written as no table's. Objects go out as TyRichSaveRtf writes
@@ -1743,9 +1746,10 @@ begin
   FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
   { A range's last paragraph taken in part, without its separator: no \par (pasted, it adds
     no line break and takes the paragraph it lands in). One taken whole - also the document's
-    last paragraph, which has no separator - ends with its \par: a paragraph with its
-    format for every reader, and content that ends with a paragraph's end for a paste (R64,
-    as Word's and WordPad's Select All copies the last paragraph mark). }
+    last paragraph, which has no separator, when LastWhole says so - ends with its \par: a
+    paragraph with its format for every reader, and content that ends with a paragraph's end
+    for a paste (R64, as Word's and WordPad's Select All copies the last paragraph mark; R67:
+    the last line's text alone is a part). }
   if FRange and not FCopy.LastWhole and (FLastWritten = FCopy.LastPara) then Exit;
   EndPara(FPrevCell, nil);
 end;
@@ -2740,9 +2744,12 @@ begin
   Result.LastSeparator := stop - 1 >= t.ParaStart(Result.LastPara) + t.ParaLength(Result.LastPara);
   if Result.LastSeparator then Result.ToChar := t.ParaLength(Result.LastPara)
   else Result.ToChar := stop - t.ParaStart(Result.LastPara);
+  { The document's last paragraph to its end is whole when the range holds more than it, or
+    it is the document's one paragraph (Select All): the text of the last line alone pastes
+    inline, as the text of any other line does (R67). }
   Result.LastWhole := Result.LastSeparator or ((Result.LastPara = t.ParaCount - 1) and
     (Result.ToChar = t.ParaLength(Result.LastPara)) and
-    ((Result.FirstPara < Result.LastPara) or (Result.FromChar = 0)));
+    ((Result.FirstPara < Result.LastPara) or ((Result.FromChar = 0) and (t.ParaCount = 1))));
   ADoc.BeginRead;
   try
     c0 := ADoc.CellAt(Result.FirstPara);

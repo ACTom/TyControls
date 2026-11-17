@@ -688,6 +688,7 @@ type
     FRedo: array of TTyRichHistoryEntry;
     FRedoCount: Integer;
     FHistoryBytes: Int64;
+    FHistoryObjectVisits: Int64;
     FMaxUndoBytes: Int64;
     FMergeBroken: Boolean;
     FRunning: TTyRichCommand;
@@ -986,6 +987,9 @@ type
     property RedoDepth: Integer read FRedoCount;
     { What the undo and redo steps keep, as their MemSize when they were stored. }
     property HistoryBytes: Int64 read FHistoryBytes;
+    { Object references the history's byte count looked at (for tests that check it takes
+      one pass: a step's count is done when the step is stored). }
+    property HistoryObjectVisits: Int64 read FHistoryObjectVisits write FHistoryObjectVisits;
     { The history's limit: past it the oldest undo steps go, never the newest. 0 or less: no
       limit. }
     property MaxUndoBytes: Int64 read FMaxUndoBytes write SetMaxUndoBytes;
@@ -1757,47 +1761,37 @@ end;
 
 function TTyRichUndoData.MemSize: Int64;
 var
-  objs: TFPList;
-  counts: array of Integer;
   i: Integer;
+  objBytes: Int64;
 
-  // the objects of a value only this record holds, each counted per reference
+  // the objects of a value this record holds
   procedure Take(D: TTyRichParaData);
   var
-    j, k: Integer;
+    j: Integer;
   begin
-    if (D = nil) or (D.FRefCount <> 1) then Exit;
+    if D = nil then Exit;
     for j := 0 to High(D.FRuns) do
       if D.FRuns[j].Obj <> nil then
       begin
-        k := objs.IndexOf(D.FRuns[j].Obj);
-        if k < 0 then
-        begin
-          k := objs.Add(D.FRuns[j].Obj);
-          if k >= Length(counts) then SetLength(counts, k * 2 + 4);
-          counts[k] := 0;
-        end;
-        Inc(counts[k]);
+        Inc(FDoc.FHistoryObjectVisits);
+        Inc(objBytes, D.FRuns[j].Obj.DataBytes);
       end;
   end;
 
 begin
   Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
     Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
-  { An object that only the values this record keeps hold (a deleted picture of the file, or
-    one whose step went from the history): this record keeps it alive, and its data counts. }
-  objs := TFPList.Create;
-  try
-    counts := nil;
-    for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
-    for i := 0 to High(FRemoved.Pieces) do
-      if FRemoved.Pieces[i].Separator <> rsNone then Take(TTyRichParaData(FRemoved.Pieces[i].Data));
-    for i := 0 to objs.Count - 1 do
-      if counts[i] >= TTyRichObject(objs[i]).RefCount then
-        Inc(Result, TTyRichObject(objs[i]).DataBytes);
-  finally
-    objs.Free;
-  end;
+  { An object a value this record keeps holds (a deleted picture, a paragraph's old value with
+    its picture): its data counts in this record - in each record that holds it, also while
+    the document, a reader's resident values or another step hold it too. Counted twice is
+    the safe side: whichever of them goes first, the history's bound still holds for what the
+    history alone keeps alive (a picture two steps held was counted by neither). And so it
+    takes one pass over the values, no lookup per object. }
+  objBytes := 0;
+  for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
+  for i := 0 to High(FRemoved.Pieces) do
+    if FRemoved.Pieces[i].Separator <> rsNone then Take(TTyRichParaData(FRemoved.Pieces[i].Data));
+  Inc(Result, objBytes);
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -3636,26 +3630,33 @@ begin
       document such a row could neither be saved nor edited. }
     for i := 0 to High(src.FRows) do
       if src.FRows[i].FHoldsNestedTable then nt := nil;
+    if FTabCount = Length(FTabSrc) then
+    begin
+      SetLength(FTabSrc, FTabCount * 2 + 4);
+      SetLength(FTabNew, FTabCount * 2 + 4);
+    end;
     if (nt <> nil) and (FFilter <> nil) then
     begin
       nt := TTyRichTable.Create(src.FColBoundaries, src.FStructureLocked);
-      // held while the fragment is made (Create lets go of it at its end)
+      { held while the fragment is made (Create lets go of it at its end) - entered first, so
+        that a failure while its rows are made (out of memory, the filter's) lets go of it too }
       nt.AddRef;
+      FTabSrc[FTabCount] := src;
+      FTabNew[FTabCount] := nt;
+      Inc(FTabCount);
       for i := 0 to High(src.FRows) do
       begin
         r := src.FRows[i];
         nt.AddRow(Length(r.FCells), FFilter.RowFormat(r.FRawFormat), r.FBoundaries,
           r.FHoldsNestedTable);
       end;
-    end;
-    if FTabCount = Length(FTabSrc) then
+    end
+    else
     begin
-      SetLength(FTabSrc, FTabCount * 2 + 4);
-      SetLength(FTabNew, FTabCount * 2 + 4);
+      FTabSrc[FTabCount] := src;
+      FTabNew[FTabCount] := nt;
+      Inc(FTabCount);
     end;
-    FTabSrc[FTabCount] := src;
-    FTabNew[FTabCount] := nt;
-    Inc(FTabCount);
     i := FTabCount - 1;
   end
   else if i < FTabCount - 1 then

@@ -109,6 +109,10 @@ type
     procedure TestTheSavedPointFollowsUndoAndRedo;
     procedure TestTheSavedPointGoesWithItsStep;
     procedure TestModifiedSetFromCodeAndAnEditOutsideTheHistory;
+    // fix wave W16
+    procedure TestAPictureTwoStepsHoldCountsInEach;
+    procedure TestTheObjectCountTakesOnePass;
+    procedure TestATableMadeAgainIsLetGoWhenItsRowsFail;
   end;
 
 implementation
@@ -1527,9 +1531,11 @@ begin
   try
     AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
     AssertTrue(Format('an inserted picture counts (%d)', [d.HistoryBytes]), d.HistoryBytes >= MB);
-    // deleted: the insert's step keeps it, the deletion does not count it again
+    // deleted: the insert's step keeps it, and the deletion's record holds it too - counted
+    // in each (W16 X-M5: twice is the safe side), not more
     AssertTrue(d.Execute(TTyRichDelete.Create(1, 1)));
-    AssertTrue(Format('counted once (%d)', [d.HistoryBytes]), d.HistoryBytes < 2 * MB);
+    AssertTrue(Format('counted in each step (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 2 * MB) and (d.HistoryBytes < 3 * MB));
     d.ClearUndo;
     // a fragment's picture
     src := TTyRichDocument.Create;
@@ -1859,6 +1865,155 @@ begin
     TCmdTestBuilder.ReplaceText(d, TTyRichText.CreateFromUtf8(Bytes('new')));
     AssertFalse('a load is the saved point', d.Modified);
     AssertTrue('each turn told', FModEvents >= 4);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W16 X-M5: a picture of the document (its insert's step gone), a letter typed in its
+  paragraph (that record keeps the paragraph's old value, which holds the picture), then the
+  picture deleted (that record holds it too): each record counts it, so twenty such 1 MB
+  pictures under a 3 MB bound drop old steps - before, neither counted it and 40 steps kept
+  20 MB. }
+procedure TTyRichCommandsTest.TestAPictureTwoStepsHoldCountsInEach;
+const
+  MB = 1024 * 1024;
+  N = 20;
+var
+  d: TTyRichDocument;
+  i: Integer;
+  s: UTF8String;
+begin
+  s := 'ab';
+  for i := 2 to N do s := s + #10'ab';
+  d := NewDoc(s);
+  try
+    AssertEquals(N, d.Text.ParaCount);
+    for i := 0 to N - 1 do
+      AssertTrue(d.Execute(TTyRichInsertObject.Create(d.Text.ParaStart(i) + 1, BigPicture(MB))));
+    d.ClearUndo;
+    d.MaxUndoBytes := 3 * MB;
+    for i := 0 to N - 1 do
+    begin
+      AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(i), 'x')));
+      d.BreakMerge;
+      // x a <picture> b
+      AssertTrue(d.Execute(TTyRichDelete.Create(d.Text.ParaStart(i) + 2, 1)));
+    end;
+    AssertTrue(Format('old steps dropped (%d left, %d bytes)', [d.UndoDepth, d.HistoryBytes]),
+      d.UndoDepth <= 6);
+    AssertTrue(Format('the bound holds (%d bytes)', [d.HistoryBytes]), d.HistoryBytes <= 3 * MB + MB);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W16 X-M6: the history's count of the objects a step keeps takes one pass - a document of N
+  fields deleted whole looks at each of them once (HistoryObjectVisits), 2N fields twice as
+  many: no lookup per object. }
+procedure TTyRichCommandsTest.TestTheObjectCountTakesOnePass;
+
+  function Visits(N: Integer): Int64;
+  var
+    d: TTyRichDocument;
+    s: UTF8String;
+    i: Integer;
+  begin
+    s := '{\rtf1\ansi ';
+    for i := 1 to N do s := s + 'f{\field{\*\fldinst PAGE}{\fldrslt 1}}\par ';
+    s := s + 'end}';
+    d := RtfDoc(s);
+    try
+      d.HistoryObjectVisits := 0;
+      AssertTrue(d.Execute(TTyRichDelete.Create(0, d.Text.Length)));
+      Result := d.HistoryObjectVisits;
+      AssertTrue(Format('every object looked at (%d of %d)', [Result, N]), Result >= N);
+    finally
+      d.Free;
+    end;
+  end;
+
+var
+  v1, v2: Int64;
+begin
+  v1 := Visits(2000);
+  v2 := Visits(4000);
+  AssertTrue(Format('once each: %d for 2000', [v1]), v1 <= 2000 + 2);
+  AssertTrue(Format('linear: %d for 2000, %d for 4000', [v1, v2]), v2 <= 2 * v1 + 4);
+end;
+
+type
+  { a filter whose second row fails (the seam for a failure while a table is made - out of
+    memory in a program; an EOutOfMemory made here would be kept by the RTL, never freed) }
+  ERowFails = class(Exception);
+  TFailingRowFilter = class(TTyRichFragmentFilter)
+  public
+    Calls: Integer;
+    function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
+    function RowFormat(const ARaw: RawByteString): RawByteString; override;
+    function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
+  end;
+
+function TFailingRowFilter.KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean;
+begin
+  Result := True;
+end;
+
+function TFailingRowFilter.RowFormat(const ARaw: RawByteString): RawByteString;
+begin
+  Inc(Calls);
+  if Calls >= 2 then raise ERowFails.Create('a row too many');
+  Result := ARaw;
+end;
+
+function TFailingRowFilter.MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject;
+begin
+  AText := '';
+  Result := AObj;
+end;
+
+{ W16 X-M9: a table the fragment makes again for its target is let go when making its rows
+  fails (its second row's format raises): a hundred such pastes leave no memory behind,
+  and the document is what it was. }
+procedure TTyRichCommandsTest.TestATableMadeAgainIsLetGoWhenItsRowsFail;
+const
+  Rows = '{\rtf1\ansi\trowd\cellx1000\cellx2000\pard\intbl a\cell b\cell\row' +
+    '\trowd\cellx1000\cellx2000\pard\intbl c\cell d\cell\row\pard e\par}';
+
+  procedure Fail1(d: TTyRichDocument);
+  var
+    src: TTyRichDocument;
+    ends: Boolean;
+    raised: Boolean;
+  begin
+    src := TyRichReadRtfFragment(Bytes(Rows), ends);
+    raised := False;
+    try
+      d.Execute(TTyRichInsertFragment.Create(0, src, ends, False, TFailingRowFilter.Create));
+    except
+      on ERowFails do raised := True;
+    end;
+    AssertTrue('the failure reached the caller', raised);
+  end;
+
+var
+  d: TTyRichDocument;
+  before, after: PtrUInt;
+  i: Integer;
+  text: UTF8String;
+begin
+  d := NewDoc('one');
+  try
+    text := AllText(d);
+    // the first one interns what the paste brings in the document's pools
+    Fail1(d);
+    before := GetFPCHeapStatus.CurrHeapUsed;
+    for i := 1 to 100 do Fail1(d);
+    after := GetFPCHeapStatus.CurrHeapUsed;
+    AssertTrue(Format('nothing left behind (%d bytes more)', [after - before]),
+      (after <= before) or (after - before < 2048));
+    AssertEquals('the document as it was', text, AllText(d));
+    AssertEquals('no step', 0, d.UndoDepth);
   finally
     d.Free;
   end;

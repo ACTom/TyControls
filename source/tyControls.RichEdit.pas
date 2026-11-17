@@ -3765,7 +3765,10 @@ begin
   else if (hs = 40) and (comp = 6) then masks := 16;
   pal := 0;
   if (bits >= 1) and (bits <= 8) then
-    if (used > 0) and (used <= 256) then pal := used else pal := Int64(1) shl bits;
+    if (used > 0) and (used <= 256) then pal := used else pal := Int64(1) shl bits
+  // more bits: a colour table only when biClrUsed says one is there (an optimisation hint)
+  else if (bits > 8) and (used > 0) then
+    pal := used;
   off := 14 + hs + masks + pal * entry;
   FillChar(hdr, SizeOf(hdr), 0);
   hdr[0] := Ord('B');
@@ -3779,7 +3782,7 @@ function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
   AMaxWidthTwips: Integer; out APicture: TTyRichPicture): TTyRichPictureMade;
 var
   w, h, xppm, yppm, base, hs, i, len, bits, comp, used, entry, masks, pal, need, off: Int64;
-  tag, typ, cnt, ifd, e: Int64;
+  tag, typ, cnt, ifd, e, dirs, dw, dh: Int64;
   le: Boolean;
   st: TMemoryStream;
   outSt: TBytesStream;
@@ -3864,7 +3867,10 @@ begin
           else if (hs = 40) and (comp = 6) then masks := 16;
           pal := 0;
           if bits <= 8 then
-            if (used > 0) and (used <= 256) then pal := used else pal := Int64(1) shl bits;
+            if (used > 0) and (used <= 256) then pal := used else pal := Int64(1) shl bits
+          // more bits with biClrUsed: a colour table before the pixels all the same
+          else if used > 0 then
+            pal := used;
           need := base + hs + masks + pal * entry;
           if AKind = rikBmp then
           begin
@@ -3902,31 +3908,53 @@ begin
       end;
     rikTiff:
       begin
-        // the first directory's width and length
+        { Every directory's width and length: the decoder reads every image of the file and
+          takes the largest. The chain is followed a bounded number of steps; one that loops,
+          points outside the bytes, or holds a directory with no size does not decode. The
+          largest image is the one judged. }
         if (Length(ABytes) >= 8) and (ABytes[0] = Ord('I')) and (ABytes[1] = Ord('I')) then le := True
         else if (Length(ABytes) >= 8) and (ABytes[0] = Ord('M')) and (ABytes[1] = Ord('M')) then le := False
         else Exit;
         if le then ifd := Cardinal(PicLE32(ABytes, 4)) else ifd := PicBE32(ABytes, 4);
-        if le then cnt := PicLE16(ABytes, ifd) else cnt := PicBE16(ABytes, ifd);
-        if cnt <= 0 then Exit;
-        for e := 0 to cnt - 1 do
+        dirs := 0;
+        while ifd <> 0 do
         begin
-          i := ifd + 2 + e * 12;
-          if i + 12 > Length(ABytes) then Break;
-          if le then
+          // a directory takes at least 18 bytes: a chain longer than the bytes could hold
+          // distinct ones goes round
+          Inc(dirs);
+          if (dirs > Length(ABytes) div 18 + 1) or (ifd < 8) or (ifd + 2 > Length(ABytes)) then Exit;
+          if le then cnt := PicLE16(ABytes, ifd) else cnt := PicBE16(ABytes, ifd);
+          if (cnt <= 0) or (ifd + 2 + cnt * 12 + 4 > Length(ABytes)) then Exit;
+          dw := -1;
+          dh := -1;
+          for e := 0 to cnt - 1 do
           begin
-            tag := PicLE16(ABytes, i);
-            typ := PicLE16(ABytes, i + 2);
-            if typ = 3 then len := PicLE16(ABytes, i + 8) else len := Cardinal(PicLE32(ABytes, i + 8));
-          end
-          else
-          begin
-            tag := PicBE16(ABytes, i);
-            typ := PicBE16(ABytes, i + 2);
-            if typ = 3 then len := PicBE16(ABytes, i + 8) else len := PicBE32(ABytes, i + 8);
+            i := ifd + 2 + e * 12;
+            if le then
+            begin
+              tag := PicLE16(ABytes, i);
+              typ := PicLE16(ABytes, i + 2);
+              if typ = 3 then len := PicLE16(ABytes, i + 8) else len := Cardinal(PicLE32(ABytes, i + 8));
+            end
+            else
+            begin
+              tag := PicBE16(ABytes, i);
+              typ := PicBE16(ABytes, i + 2);
+              if typ = 3 then len := PicBE16(ABytes, i + 8) else len := PicBE32(ABytes, i + 8);
+            end;
+            if tag = 256 then dw := len
+            else if tag = 257 then dh := len;
           end;
-          if tag = 256 then w := len
-          else if tag = 257 then h := len;
+          if (dw <= 0) or (dh <= 0) then Exit;
+          // (the decoder would take this one or a larger one)
+          if dw > CRichPictureMaxPixels div dh then Exit(rpmTooLarge);
+          if (w < 0) or (dw * dh > w * h) then
+          begin
+            w := dw;
+            h := dh;
+          end;
+          i := ifd + 2 + cnt * 12;
+          if le then ifd := Cardinal(PicLE32(ABytes, i)) else ifd := PicBE32(ABytes, i);
         end;
         if (w <= 0) or (h <= 0) then Exit;
       end;
