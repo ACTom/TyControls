@@ -55,6 +55,10 @@ type
     function IdleTicks: QWord; override;
     function HasCaretFocus: Boolean; override;
     procedure WriteClipboard(const ARtf: RawByteString; const AText: string); override;
+    function ClipboardFlavours: TTyRichClipFlavours; override;
+    function ReadClipboardRtf: RawByteString; override;
+    function ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes; override;
+    function ReadClipboardText: string; override;
     procedure BeginWait; override;
     procedure EndWait; override;
     procedure ShowTextMenu(const APos: TPoint); override;
@@ -117,6 +121,13 @@ type
     ClipText: string;
     ClipWrites, Waits, WaitEnds, MenuShows: Integer;
     FailClip: Boolean;
+    { Task 10c: what a paste reads - the copy's two flavours above, a picture and an HTML
+      flavour (which the control never asks for) - and how often each was asked for. }
+    ClipPicture: TBytes;
+    ClipPictureKind: TTyRichImageKind;
+    ClipHtml: string;
+    FlavourAsks, RtfReads, PictureReads, TextReads, HtmlReads: Integer;
+    procedure ClipReset;
     procedure SetCopyWait(AChars: Int64);
     { DoContextPopup's answer: Handled. }
     function PopupAt(X, Y: Integer): Boolean;
@@ -872,6 +883,45 @@ begin
   if FailClip then raise EInvalidOperation.Create('the test''s failing clipboard');
   ClipRtf := ARtf;
   ClipText := AText;
+end;
+
+function TRichProbe.ClipboardFlavours: TTyRichClipFlavours;
+begin
+  Inc(FlavourAsks);
+  Result := [];
+  if ClipRtf <> '' then Include(Result, rcfRtf);
+  if Length(ClipPicture) > 0 then Include(Result, rcfPicture);
+  if ClipText <> '' then Include(Result, rcfText);
+end;
+
+function TRichProbe.ReadClipboardRtf: RawByteString;
+begin
+  Inc(RtfReads);
+  Result := ClipRtf;
+end;
+
+function TRichProbe.ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes;
+begin
+  Inc(PictureReads);
+  AKind := ClipPictureKind;
+  Result := ClipPicture;
+end;
+
+function TRichProbe.ReadClipboardText: string;
+begin
+  Inc(TextReads);
+  Result := ClipText;
+end;
+
+procedure TRichProbe.ClipReset;
+begin
+  FlavourAsks := 0;
+  RtfReads := 0;
+  PictureReads := 0;
+  TextReads := 0;
+  HtmlReads := 0;
+  Waits := 0;
+  WaitEnds := 0;
 end;
 
 procedure TRichProbe.BeginWait;

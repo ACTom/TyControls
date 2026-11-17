@@ -3,7 +3,7 @@ unit tyControls.RichEdit;
 { TTyRichEdit: a rich text editor, drawn by the package itself on every platform. It shows a
   document - txt or RTF, of any size - scrolls, zooms and wraps it, and edits it by keyboard:
   typing, Backspace, Delete, Enter, Tab, undo and redo, cut (Task 10a), an input method's
-  composition shown in the text and committed as typing (10b; paste comes with 10c). Every
+  composition shown in the text and committed as typing (10b), paste (10c). Every
   edit is a command of the document (Document.Execute),
   so all of it can be undone; ReadOnly turns the user's editing off and leaves a viewer, while
   code still changes the document through its commands, Lines and the editing methods.
@@ -114,6 +114,12 @@ const
   CRichWordWindow = 4096;
   { A copy of more characters than this shows the wait cursor while it is made. }
   CRichCopyWaitChars = 1000000;
+  { The most bytes of image a picture is made from (a paste, TyRichMakePicture): 128 MB. With
+    CRichPictureMaxPixels (32 Mi pixels: the most the layouter decodes - a bigger picture
+    would only ever show as a placeholder - and 128 MB once decoded) it bounds what one paste
+    makes the process hold: the bytes, their decoded pixels while a PNG is made of them, and
+    the picture the document and its undo step keep. }
+  CRichPictureMaxBytes = 128 * 1024 * 1024;
 
 type
   ETyRichEdit = class(Exception);
@@ -130,6 +136,20 @@ type
 
   { An edit the user asked for (a key, the menu) was not made; AReason says why. }
   TTyRichEditRefusedEvent = procedure(Sender: TObject; const AReason: string) of object;
+
+  { The clipboard's flavours a paste takes, in the order it takes them. HTML is none of them:
+    a clipboard with HTML and text pastes the text (spec goal 10). }
+  TTyRichClipFlavour = (rcfRtf, rcfPicture, rcfText);
+  TTyRichClipFlavours = set of TTyRichClipFlavour;
+  { What PasteFromClipboard takes: rpaBest the first flavour there that can be used (RTF, a
+    picture, text); the others that one alone ("paste as plain text"). }
+  TTyRichPasteAs = (rpaBest, rpaRtf, rpaPicture, rpaText);
+  { The bytes of an image as they come: a PNG, JPEG or TIFF file, a BMP file, a DIB (a BMP
+    without its file header, Windows' CF_DIB). }
+  TTyRichImageKind = (rikPng, rikDib, rikBmp, rikTiff, rikJpeg);
+  { TyRichMakePicture's answer: made; the bytes are no image it can decode; the image is over
+    the bounds (CRichPictureMaxBytes, CRichPictureMaxPixels). }
+  TTyRichPictureMade = (rpmMade, rpmNoImage, rpmTooLarge);
 
   TTyCustomRichEdit = class;
 
@@ -679,6 +699,11 @@ type
     { Enter: a new paragraph, or on an empty list item the item out of the list. }
     procedure ParagraphKey;
     procedure CutSelection(AUser: Boolean);
+    { A clipboard's text made fit to insert (see PasteFromClipboard). }
+    function PastedText(const AText: RawByteString): UTF8String;
+    { The width a picture pasted at APos may take, in twips: the view's text width (0 when
+      nothing wraps) less the paragraph's indents, or its cell's width. }
+    function PictureRoom(APos: TTyRichPos): Integer;
     { An undo (ARedo False) or a redo step and where it leaves the caret. }
     procedure RunHistory(ARedo, AUser: Boolean);
     { A key the editor takes (it edits, or would: ReadOnly takes it and does nothing, as the
@@ -880,9 +905,19 @@ type
       under the platform's name for it (TyRichClipboardRtfName; left out when ARtf is ''),
       then the text. The seam a test stands in for: no test reaches the system's clipboard. }
     procedure WriteClipboard(const ARtf: RawByteString; const AText: string); virtual;
-    { What the clipboard holds as RTF and as text ('' for a flavour it does not hold); False
-      when it holds neither. For pasting (editing comes with Task 10). }
-    function ReadClipboard(out ARtf: RawByteString; out AText: string): Boolean; virtual;
+    { The paste's side of the clipboard, the seam a test stands in for. ClipboardFlavours: the
+      flavours there, asked of LCL's Clipboard by format (HasFormat) - nothing is read, so the
+      menu can ask on every popup. The reads: the RTF's bytes ('' none), the picture's bytes
+      and their kind (nil none), the text (UTF-8 as LCL gives it, '' none). By widgetset (the
+      names LCL hands the system): RTF under TyRichClipboardRtfName; a picture - LCL-Win32
+      the registered "PNG" first, then CF_DIB (a raw format id: LCL-Win32 passes it to the
+      system as it is); LCL-Cocoa public.png, then public.tiff (LCL's Cocoa clipboard maps no
+      such name, so each is the pasteboard type of that very name); elsewhere (GTK, Qt)
+      image/png, the MIME type those toolkits offer an image as; the text LCL's own. }
+    function ClipboardFlavours: TTyRichClipFlavours; virtual;
+    function ReadClipboardRtf: RawByteString; virtual;
+    function ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes; virtual;
+    function ReadClipboardText: string; virtual;
     { Around a copy of more than CopyWaitChars characters: the wait cursor (Screen.Cursor),
       put back after it whatever happened. On Windows LCL sets the cursor at once; whether
       GTK or Cocoa show it before their event loop turns again - the copy lets no message in
@@ -920,7 +955,7 @@ type
       Ctrl+Insert copy. Every arrow is taken, also where the caret cannot move (it never goes
       to the parent's focus navigation). Editing: Backspace and Delete (Ctrl: by a word),
       Enter (a paragraph) and Shift+Enter (a line break, U+000B), Tab when WantTabs, Ctrl+X
-      and Shift+Delete cut, Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (Cmd on a Mac); with
+      and Shift+Delete cut, Ctrl+V and Shift+Insert paste, Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (Cmd on a Mac); with
       ReadOnly they are taken and do nothing, Enter is left to the form. Esc, Enter with Ctrl
       or Alt, and Tab without WantTabs are left to the form. }
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -1105,6 +1140,33 @@ type
       code (ReadOnly does not stop it; a refusal raises ETyRichEdit, before anything is
       copied). }
     procedure CutToClipboard;
+    { Ctrl+V, Shift+Insert and the menu's Paste: the user's paste, and an application's (its
+      own menu item, "paste as plain text" with rpaText). A user's action from any of them:
+      an open composition ends first (EndCompositionForUser); with ReadOnly nothing happens
+      (the clipboard is not read); a refusal - the document loading, incomplete or being
+      saved, a row that holds a nested table, a selection across cells (R57), the caret at
+      a cut paragraph's cut, a picture too large - is told once (EditRefused), never raised,
+      and nothing changes.
+      AAs rpaBest takes the first flavour there that can be used, in this order:
+      - RTF, read by the engine's reader (TyRichReadRtfFragment) and inserted as it is
+        (TTyRichInsertFragment): formats, objects, tables. It cannot be used when it is no
+        RTF (no signature), reading it raised, or it holds no character and no paragraph
+        mark;
+      - a picture: one picture object (TyRichMakePicture) at most as wide as the paragraph's
+        room. It cannot be used when its bytes do not decode; one too large is refused;
+      - text: line ends (CR LF, CR, LF, U+2028, U+2029) make paragraphs in the caret
+        paragraph's format, U+000B stays a line break (in a plain-text document: a
+        paragraph), tabs stay, other control characters go, bytes that are not UTF-8 are read
+        as a text file is (TyRichLoadText's rule: the ANSI code page); the typing format.
+      The paste replaces the selection: one undo step (named rsRichUndoPaste), never merged
+      with typing, one OnChange and one OnSelectionChange, the caret behind what went in; an
+      undo puts the selection back. A selection or the caret in a table: the pasted rows go in
+      as the text of the cell, never as a nested table. More than CopyWaitChars bytes: the
+      wait cursor meanwhile (BeginWait); the paste runs at once and lets no message in. }
+    procedure PasteFromClipboard(AAs: TTyRichPasteAs = rpaBest);
+    { The control can be edited by the user now (not ReadOnly, enabled, the document taking
+      edits) and the clipboard holds a flavour it takes. Reads nothing (ClipboardFlavours). }
+    function CanPaste: Boolean;
     { One step of the document's history back / forward (Ctrl+Z, Ctrl+Y). After an undo the
       text the step put back is selected (an undone deletion, a typing over a selection) or,
       when it put back none (an undone insertion), the caret is where that text was; after a
@@ -1118,9 +1180,9 @@ type
     function CanRedo: Boolean;
     { The history goes (TTyRichDocument.ClearUndo); the text stays. }
     procedure ClearUndo;
-    { ITyTextEditActions: Undo, Redo, Cut, Copy and Select All; Paste is not available yet
-      (Task 10c). With ReadOnly the menu shows the editing items unavailable and they do
-      nothing. }
+    { ITyTextEditActions: Undo, Redo, Cut, Copy, Paste (PasteFromClipboard; offered when
+      CanPaste) and Select All. With ReadOnly the menu shows the editing items unavailable and
+      they do nothing. }
     function TeControl: TControl;
     function TeController: TTyCustomStyleController;
     procedure TeUndo;
@@ -1204,10 +1266,9 @@ type
     property FallbackFonts: TStrings read GetFallbackFonts;
     property WrapMode: TTyRichWrapMode read FWrapMode write SetWrapMode default rwmWindow;
     property Zoom: Integer read FZoom write SetZoom default 100;
-    { The user's editing, only: with True no key, no menu item, no input method (and, from
-      Task 10c on, no paste) changes the document - setting it cancels a composition; the
-      caret, the selection and
-      copying work as in a viewer. Code is not stopped by it, as TMemo.ReadOnly does not stop
+    { The user's editing, only: with True no key, no menu item, no input method and no paste
+      (PasteFromClipboard, as TTyMemo's) changes the document - setting it cancels a
+      composition; the caret, the selection and copying work as in a viewer. Code is not stopped by it, as TMemo.ReadOnly does not stop
       Lines.Add: the document's commands (Document.Execute), Lines, SelText, CutToClipboard,
       Undo and Redo change the document with ReadOnly True. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
@@ -1307,6 +1368,19 @@ type
   the system's rich-text type is the toolkit's, not LCL's - those pairs are not verified. }
 function TyRichClipboardRtfName: string;
 
+{ A picture object made from an image's bytes (what a paste makes of a clipboard's picture;
+  inserting a picture from a file can make its own the same way). PNG and JPEG keep their
+  bytes; a DIB, a BMP or a TIFF is decoded and stored as PNG (with its alpha when a pixel is
+  not opaque; a 32-bit bitmap whose alpha is 0 everywhere is opaque, as Windows' bitmaps
+  without alpha are). The image is decoded in any case: bytes that do not decode are no
+  image (rpmNoImage). Its size: its pixels at its own resolution (a PNG's pHYs, a bitmap's
+  pixels per metre) or at 96 dpi, scaled down keeping the ratio to AMaxWidthTwips when wider
+  (0: no bound). Over CRichPictureMaxBytes bytes or CRichPictureMaxPixels pixels (asked of the
+  header before anything is decoded where the format says it there - PNG, BMP, DIB):
+  rpmTooLarge. APicture is the caller's (no reference taken) when rpmMade, else nil. }
+function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
+  AMaxWidthTwips: Integer; out APicture: TTyRichPicture): TTyRichPictureMade;
+
 { The driver of the background work's turns on widgetset APlatform (see TTyRichTurnDriver). }
 function TyRichTurnDriverFor(APlatform: TLCLPlatform): TTyRichTurnDriver;
 
@@ -1325,7 +1399,8 @@ implementation
 
 uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
-  RTLConsts, Clipbrd, InterfaceBase, LazUTF8, tyControls.StrConsts, tyControls.FontUnits,
+  RTLConsts, Clipbrd, InterfaceBase, LazUTF8, FPImage, BGRAReadPng, BGRAReadBMP, BGRAReadTiff,
+  BGRAReadJpeg, BGRAWritePNG, tyControls.StrConsts, tyControls.FontUnits,
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF};
 
@@ -3095,6 +3170,230 @@ begin
   {$ENDIF}
 end;
 
+{ ---- a picture from an image's bytes ---- }
+
+function PicBE32(const B: TBytes; AAt: Int64): Int64;
+begin
+  if (AAt < 0) or (AAt + 4 > Length(B)) then Exit(-1);
+  Result := (Int64(B[AAt]) shl 24) or (Int64(B[AAt + 1]) shl 16) or (Int64(B[AAt + 2]) shl 8) or
+    B[AAt + 3];
+end;
+
+function PicLE16(const B: TBytes; AAt: Int64): Int64;
+begin
+  if (AAt < 0) or (AAt + 2 > Length(B)) then Exit(-1);
+  Result := Int64(B[AAt]) or (Int64(B[AAt + 1]) shl 8);
+end;
+
+// a signed 32-bit little-endian number; Low(Int64) when the bytes are not there
+function PicLE32(const B: TBytes; AAt: Int64): Int64;
+begin
+  if (AAt < 0) or (AAt + 4 > Length(B)) then Exit(Low(Int64));
+  Result := LongInt(Cardinal(B[AAt]) or (Cardinal(B[AAt + 1]) shl 8) or
+    (Cardinal(B[AAt + 2]) shl 16) or (Cardinal(B[AAt + 3]) shl 24));
+end;
+
+{ A DIB's file header: where its pixels start after the header, the bit masks and the
+  palette - what makes a DIB a BMP file a decoder reads. }
+procedure WriteDibFileHeader(AStream: TStream; const B: TBytes);
+var
+  hs, bits, comp, used, entry, masks, pal, off: Int64;
+  hdr: array[0..13] of Byte;
+
+  procedure Put32(AAt: Integer; V: Int64);
+  begin
+    hdr[AAt] := V and $FF;
+    hdr[AAt + 1] := (V shr 8) and $FF;
+    hdr[AAt + 2] := (V shr 16) and $FF;
+    hdr[AAt + 3] := (V shr 24) and $FF;
+  end;
+
+begin
+  hs := PicLE32(B, 0);
+  comp := 0;
+  used := 0;
+  if hs = 12 then
+  begin
+    bits := PicLE16(B, 10);
+    entry := 3;
+  end
+  else
+  begin
+    bits := PicLE16(B, 14);
+    comp := PicLE32(B, 16);
+    used := PicLE32(B, 32);
+    entry := 4;
+  end;
+  masks := 0;
+  // BI_BITFIELDS, BI_ALPHABITFIELDS: the masks follow a plain BITMAPINFOHEADER
+  if (hs = 40) and (comp = 3) then masks := 12
+  else if (hs = 40) and (comp = 6) then masks := 16;
+  pal := 0;
+  if (bits >= 1) and (bits <= 8) then
+    if (used > 0) and (used <= 256) then pal := used else pal := Int64(1) shl bits;
+  off := 14 + hs + masks + pal * entry;
+  FillChar(hdr, SizeOf(hdr), 0);
+  hdr[0] := Ord('B');
+  hdr[1] := Ord('M');
+  Put32(2, 14 + Length(B));
+  Put32(10, off);
+  AStream.WriteBuffer(hdr, SizeOf(hdr));
+end;
+
+function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
+  AMaxWidthTwips: Integer; out APicture: TTyRichPicture): TTyRichPictureMade;
+var
+  w, h, xppm, yppm, base, hs, i, len: Int64;
+  st: TMemoryStream;
+  outSt: TBytesStream;
+  bmp: TBGRABitmap;
+  rd: TFPCustomImageReader;
+  wr: TBGRAWriterPNG;
+  data: TBytes;
+  fmt: TTyRichPictureFormat;
+  tw, th: Int64;
+  dx, dy: Double;
+begin
+  APicture := nil;
+  Result := rpmNoImage;
+  if Length(ABytes) = 0 then Exit;
+  if Length(ABytes) > CRichPictureMaxBytes then Exit(rpmTooLarge);
+  { The size the header says, before anything is decoded (a decoder finds it by allocating
+    it), and the resolution: -1 where the format does not say it up front. }
+  w := -1;
+  h := -1;
+  xppm := 0;
+  yppm := 0;
+  case AKind of
+    rikPng:
+      begin
+        if (PicBE32(ABytes, 0) <> $89504E47) or (PicBE32(ABytes, 12) <> $49484452) then Exit;
+        w := PicBE32(ABytes, 16);
+        h := PicBE32(ABytes, 20);
+        // pHYs (unit 1: per metre) comes before the image data
+        i := 8;
+        while i + 8 <= Length(ABytes) do
+        begin
+          len := PicBE32(ABytes, i);
+          if (len < 0) or (PicBE32(ABytes, i + 4) = $49444154) then Break;   // IDAT
+          if (PicBE32(ABytes, i + 4) = $70485973) and (len >= 9) and (i + 17 <= Length(ABytes)) and
+            (ABytes[i + 16] = 1) then
+          begin
+            xppm := PicBE32(ABytes, i + 8);
+            yppm := PicBE32(ABytes, i + 12);
+          end;
+          Inc(i, 12 + len);
+        end;
+      end;
+    rikDib, rikBmp:
+      begin
+        base := 0;
+        if AKind = rikBmp then
+        begin
+          if (Length(ABytes) < 14) or (ABytes[0] <> Ord('B')) or (ABytes[1] <> Ord('M')) then Exit;
+          base := 14;
+        end;
+        hs := PicLE32(ABytes, base);
+        if hs = 12 then
+        begin
+          w := PicLE16(ABytes, base + 4);
+          h := PicLE16(ABytes, base + 6);
+        end
+        else if (hs >= 40) and (hs <= 1024) then
+        begin
+          w := PicLE32(ABytes, base + 4);
+          h := Abs(PicLE32(ABytes, base + 8));
+          xppm := PicLE32(ABytes, base + 24);
+          yppm := PicLE32(ABytes, base + 28);
+        end
+        else
+          Exit;
+      end;
+  end;
+  if (w = 0) or (h = 0) or (w < -1) or (h < -1) then Exit;
+  if (w > 0) and (h > 0) and (w > CRichPictureMaxPixels div h) then Exit(rpmTooLarge);
+  st := TMemoryStream.Create;
+  bmp := TBGRABitmap.Create;
+  rd := nil;
+  try
+    if AKind = rikDib then WriteDibFileHeader(st, ABytes);
+    st.WriteBuffer(ABytes[0], Length(ABytes));
+    st.Position := 0;
+    case AKind of
+      rikPng: rd := TBGRAReaderPNG.Create;
+      rikDib, rikBmp:
+        begin
+          rd := TBGRAReaderBMP.Create;
+          // a 32-bit bitmap whose alpha is 0 everywhere has no alpha: opaque
+          TBGRAReaderBMP(rd).TransparencyOption := toAuto;
+        end;
+      rikTiff: rd := TBGRAReaderTiff.Create;
+      rikJpeg: rd := TBGRAReaderJpeg.Create;
+    end;
+    try
+      bmp.LoadFromStream(st, rd);
+    except
+      on E: Exception do
+      begin
+        // a decoder's or the memory's refusal of these bytes: no image we can show
+        if E is EOutOfMemory then Exit(rpmTooLarge);
+        Exit(rpmNoImage);
+      end;
+    end;
+    if (bmp.Width <= 0) or (bmp.Height <= 0) then Exit(rpmNoImage);
+    if Int64(bmp.Width) > CRichPictureMaxPixels div bmp.Height then Exit(rpmTooLarge);
+    w := bmp.Width;
+    h := bmp.Height;
+    case AKind of
+      rikPng:
+        begin
+          data := ABytes;
+          fmt := rpfPng;
+        end;
+      rikJpeg:
+        begin
+          data := ABytes;
+          fmt := rpfJpeg;
+        end;
+    else
+      outSt := TBytesStream.Create;
+      wr := TBGRAWriterPNG.Create;
+      try
+        wr.UseAlpha := bmp.HasTransparentPixels;
+        bmp.SaveToStream(outSt, wr);
+        data := Copy(outSt.Bytes, 0, outSt.Size);
+      finally
+        wr.Free;
+        outSt.Free;
+      end;
+      fmt := rpfPng;
+    end;
+  finally
+    rd.Free;
+    bmp.Free;
+    st.Free;
+  end;
+  // its own resolution where it is a believable one, else 96 dpi
+  dx := xppm * 0.0254;
+  if not ((dx >= 10) and (dx <= 10000)) then dx := 96;
+  dy := yppm * 0.0254;
+  if not ((dy >= 10) and (dy <= 10000)) then dy := dx;
+  tw := Round(w * 1440 / dx);
+  th := Round(h * 1440 / dy);
+  if tw < 1 then tw := 1;
+  if th < 1 then th := 1;
+  if (AMaxWidthTwips > 0) and (tw > AMaxWidthTwips) then
+  begin
+    th := Round(th * (AMaxWidthTwips / tw));
+    if th < 1 then th := 1;
+    tw := AMaxWidthTwips;
+  end;
+  if tw > High(Integer) then tw := High(Integer);
+  if th > High(Integer) then th := High(Integer);
+  APicture := TTyRichPicture.Create(fmt, data, tw, th);
+  Result := rpmMade;
+end;
+
 type
   { A stream that gathers what is written into a string: a copy's RTF of a big range is made
     once, not once in a stream and again as a string. }
@@ -3876,6 +4175,265 @@ begin
   CutSelection(False);
 end;
 
+{ ---- pasting (Task 10c) ---- }
+
+function TTyCustomRichEdit.PastedText(const AText: RawByteString): UTF8String;
+var
+  src: RawByteString;
+  d: TTyRichDocument;
+  st: TBytesStream;
+  b: TBytes;
+  i, j, n, cl: PtrInt;
+  plain: Boolean;
+begin
+  Result := '';
+  src := AText;
+  if src = '' then Exit;
+  if not TyRichIsUtf8(PByte(src), Length(src)) then
+  begin
+    { Read as a text file is read (TyRichLoadText's rule): bytes that are not UTF-8 are the
+      ANSI code page's, and what is no character there an escape - so no insert ends inside
+      a sequence, which the engine would refuse. }
+    b := nil;
+    SetLength(b, Length(src));
+    Move(src[1], b[0], Length(src));
+    src := '';
+    d := TTyRichDocument.Create;
+    try
+      st := TBytesStream.Create(b);
+      try
+        TyRichLoadText(d, st);
+      finally
+        st.Free;
+      end;
+      src := d.Text.GetText(0, d.Text.Length);
+    finally
+      d.Free;
+    end;
+  end;
+  plain := PlainTextDocument;
+  n := Length(src);
+  SetLength(Result, n);
+  j := 0;
+  i := 1;
+  while i <= n do
+  begin
+    case src[i] of
+      #13, #10:
+        begin
+          // CR LF, CR, LF: a paragraph
+          Inc(j);
+          Result[j] := #10;
+          if (src[i] = #13) and (i < n) and (src[i + 1] = #10) then Inc(i);
+          Inc(i);
+          Continue;
+        end;
+      #11:
+        begin
+          // a line break; a text document has none inside a line (W11's Shift+Enter)
+          Inc(j);
+          if plain then Result[j] := #10 else Result[j] := #11;
+          Inc(i);
+          Continue;
+        end;
+      #9:
+        begin
+          Inc(j);
+          Result[j] := #9;
+          Inc(i);
+          Continue;
+        end;
+      #$E2:
+        // U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR: a paragraph
+        if (i + 2 <= n) and (src[i + 1] = #$80) and (src[i + 2] in [#$A8, #$A9]) then
+        begin
+          Inc(j);
+          Result[j] := #10;
+          Inc(i, 3);
+          Continue;
+        end;
+    end;
+    // what typing rejects: C0, DEL, C1
+    cl := ControlCodeLen(src, i);
+    if cl > 0 then
+    begin
+      Inc(i, cl);
+      Continue;
+    end;
+    Inc(j);
+    Result[j] := src[i];
+    Inc(i);
+  end;
+  SetLength(Result, j);
+end;
+
+function TTyCustomRichEdit.PictureRoom(APos: TTyRichPos): Integer;
+var
+  k: Integer;
+  w, l, r: Int64;
+  c: TTyRichCell;
+  pf: TTyParaFormat;
+begin
+  Result := 0;
+  k := FDoc.Text.ParaOfPos(APos);
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if c <> nil then
+    begin
+      // a cell: its own width, from the row's edges (else the table's)
+      l := -1;
+      r := -1;
+      if c.Row.BoundaryCount > c.Index then
+      begin
+        r := c.Row.Boundaries[c.Index];
+        if c.Index > 0 then l := c.Row.Boundaries[c.Index - 1] else l := 0;
+      end
+      else if c.Table.ColBoundaryCount > c.Index then
+      begin
+        r := c.Table.ColBoundaries[c.Index];
+        if c.Index > 0 then l := c.Table.ColBoundaries[c.Index - 1] else l := 0;
+      end;
+      if (l >= 0) and (r > l) then Exit(Integer(Min(r - l, Int64(High(Integer)))));
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  EnsureParams;
+  // nothing wraps (CRichNoWrap): no bound
+  if (FLayoutWidth <= 0) or (FLayoutPPI <= 0) or not (FLayoutZoom > 0) then Exit;
+  w := Round(FLayoutWidth * 1440 / (FLayoutPPI * Double(FLayoutZoom)));
+  pf := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(k));
+  w := w - pf.LeftIndent - pf.RightIndent - Math.Max(0, pf.FirstIndent);
+  if w < 15 then w := 15;
+  Result := Integer(Min(w, Int64(High(Integer))));
+end;
+
+function TTyCustomRichEdit.CanPaste: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and (RefusalReason = '') and (ClipboardFlavours <> []);
+end;
+
+procedure TTyCustomRichEdit.PasteFromClipboard(AAs: TTyRichPasteAs);
+var
+  have: TTyRichClipFlavours;
+  s, n, q, lenBefore: TTyRichPos;
+  rtf: RawByteString;
+  raw: string;
+  txt: UTF8String;
+  bytes: TBytes;
+  kind: TTyRichImageKind;
+  picture: TTyRichPicture;
+  src: TTyRichDocument;
+  ends, flat, waiting: Boolean;
+  cmd: TTyRichCommand;
+  comp: TTyRichCompositeCommand;
+  fmt: TTyCharFormatId;
+
+  function Wanted(AFlavour: TTyRichClipFlavour): Boolean;
+  begin
+    Result := (AFlavour in have) and ((AAs = rpaBest) or (Ord(AAs) = Ord(AFlavour) + 1));
+  end;
+
+  // the wait cursor once what was read is over the threshold (the copy's)
+  procedure Wait(ASize: Int64);
+  begin
+    if waiting or (ASize <= FCopyWaitChars) then Exit;
+    BeginWait;
+    waiting := True;
+  end;
+
+begin
+  EndOwedLoad;
+  // the door of a user's edit: a composition goes in first (W12)
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  have := ClipboardFlavours;
+  if not (Wanted(rcfRtf) or Wanted(rcfPicture) or Wanted(rcfText)) then Exit;
+  s := GetSelStart;
+  n := GetSelLength;
+  { As typing over the selection asks: the document takes edits, no row that holds a nested
+    table is in the way, the cells (R57: may keep a selection's last separator), the cut of a
+    paragraph too long to lay out (nothing goes in past what is shown). }
+  if not EditAllowed(s, n, True, True) then Exit;
+  if not UserRangeAllowed(s, n) then Exit;
+  if LongParaRefused(s, 'x') then Exit;
+  Settle;
+  // a table goes into a table, or over a selection in one, as its text (no nested tables)
+  FDoc.BeginRead;
+  try
+    flat := (FDoc.CellAt(FDoc.Text.ParaOfPos(s)) <> nil) or
+      ((n > 0) and (FDoc.CellAt(FDoc.Text.ParaOfPos(s + n)) <> nil));
+  finally
+    FDoc.EndRead;
+  end;
+  fmt := TypingFormat;
+  waiting := False;
+  cmd := nil;
+  try
+    { RTF cannot be used when it is no RTF (no signature), reading it raised, or it holds no
+      character and no paragraph mark: the next flavour then. }
+    if Wanted(rcfRtf) then
+    begin
+      rtf := ReadClipboardRtf;
+      Wait(Length(rtf));
+      if rtf <> '' then
+      begin
+        bytes := nil;
+        SetLength(bytes, Length(rtf));
+        Move(rtf[1], bytes[0], Length(rtf));
+        rtf := '';
+        src := TyRichReadRtfFragment(bytes, ends);
+        bytes := nil;
+        if (src <> nil) and ((src.Text.Length > 0) or ends) then
+          cmd := TTyRichInsertFragment.Create(s, src, ends, flat)
+        else
+          src.Free;
+      end;
+    end;
+    { A picture cannot be used when its bytes do not decode; one too large is refused. }
+    if (cmd = nil) and Wanted(rcfPicture) then
+    begin
+      bytes := ReadClipboardPicture(kind);
+      Wait(Length(bytes));
+      if bytes <> nil then
+        case TyRichMakePicture(bytes, kind, PictureRoom(s), picture) of
+          rpmMade: cmd := TTyRichInsertObject.Create(s, picture, fmt);
+          rpmTooLarge:
+            begin
+              EditRefused(rsRichEditRefusedPicture);
+              Exit;
+            end;
+        end;
+      bytes := nil;
+    end;
+    if (cmd = nil) and Wanted(rcfText) then
+    begin
+      raw := ReadClipboardText;
+      Wait(Length(raw));
+      txt := PastedText(raw);
+      raw := '';
+      if txt <> '' then cmd := TTyRichInsertText.Create(s, txt, fmt, False);
+    end;
+    if cmd = nil then Exit;
+    // one step: the selection's deletion and the paste, never merged with typing
+    comp := TTyRichCompositeCommand.Create(rsRichUndoPaste);
+    if n > 0 then comp.Add(TTyRichDelete.Create(s, n));
+    comp.Add(cmd);
+    cmd := nil;
+    lenBefore := FDoc.Text.Length;
+    if RunEdit(comp, True) then
+    begin
+      // behind what went in
+      q := s + FDoc.Text.Length - (lenBefore - n);
+      FinishEdit(q, q);
+    end;
+  finally
+    cmd.Free;
+    if waiting then EndWait;
+  end;
+end;
+
 procedure TTyCustomRichEdit.RunHistory(ARedo, AUser: Boolean);
 var
   reason: string;
@@ -4056,29 +4614,103 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.ReadClipboard(out ARtf: RawByteString; out AText: string): Boolean;
+{ The clipboard's picture formats, by widgetset, the most faithful first, and the kind of
+  bytes each gives (see ClipboardFlavours). }
+type
+  TTyRichClipPicture = record
+    Format: TClipboardFormat;
+    Kind: TTyRichImageKind;
+  end;
+  TTyRichClipPictures = array of TTyRichClipPicture;
+
+function ClipPictureFormats: TTyRichClipPictures;
+begin
+  Result := nil;
+  {$IFDEF LCLWin32}
+  SetLength(Result, 2);
+  Result[0].Format := RegisterClipboardFormat('PNG');
+  Result[0].Kind := rikPng;
+  // CF_DIB: LCL-Win32 takes a format id as the system's own
+  Result[1].Format := 8;
+  Result[1].Kind := rikDib;
+  {$ELSE}
+  {$IFDEF LCLCocoa}
+  SetLength(Result, 2);
+  Result[0].Format := RegisterClipboardFormat('public.png');
+  Result[0].Kind := rikPng;
+  Result[1].Format := RegisterClipboardFormat('public.tiff');
+  Result[1].Kind := rikTiff;
+  {$ELSE}
+  SetLength(Result, 1);
+  Result[0].Format := RegisterClipboardFormat('image/png');
+  Result[0].Kind := rikPng;
+  {$ENDIF}
+  {$ENDIF}
+end;
+
+function ReadClipFormat(AFormat: TClipboardFormat): RawByteString;
 var
-  fmt: TClipboardFormat;
   st: TMemoryStream;
 begin
-  ARtf := '';
-  AText := '';
-  fmt := RegisterClipboardFormat(TyRichClipboardRtfName);
-  if Clipboard.HasFormat(fmt) then
-  begin
-    st := TMemoryStream.Create;
-    try
-      if Clipboard.GetFormat(fmt, st) and (st.Size > 0) then
-      begin
-        SetLength(ARtf, st.Size);
-        Move(st.Memory^, ARtf[1], st.Size);
-      end;
-    finally
-      st.Free;
+  Result := '';
+  st := TMemoryStream.Create;
+  try
+    if Clipboard.GetFormat(AFormat, st) and (st.Size > 0) then
+    begin
+      SetLength(Result, st.Size);
+      Move(st.Memory^, Result[1], st.Size);
     end;
+  finally
+    st.Free;
   end;
-  AText := Clipboard.AsText;
-  Result := (ARtf <> '') or (AText <> '');
+end;
+
+function TTyCustomRichEdit.ClipboardFlavours: TTyRichClipFlavours;
+var
+  pics: TTyRichClipPictures;
+  i: Integer;
+begin
+  Result := [];
+  if Clipboard.HasFormat(RegisterClipboardFormat(TyRichClipboardRtfName)) then Include(Result, rcfRtf);
+  pics := ClipPictureFormats;
+  for i := 0 to High(pics) do
+    if Clipboard.HasFormat(pics[i].Format) then
+    begin
+      Include(Result, rcfPicture);
+      Break;
+    end;
+  if Clipboard.HasFormat(PredefinedClipboardFormat(pcfText)) then Include(Result, rcfText);
+end;
+
+function TTyCustomRichEdit.ReadClipboardRtf: RawByteString;
+begin
+  Result := ReadClipFormat(RegisterClipboardFormat(TyRichClipboardRtfName));
+end;
+
+function TTyCustomRichEdit.ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes;
+var
+  pics: TTyRichClipPictures;
+  i: Integer;
+  s: RawByteString;
+begin
+  Result := nil;
+  AKind := rikPng;
+  pics := ClipPictureFormats;
+  for i := 0 to High(pics) do
+    if Clipboard.HasFormat(pics[i].Format) then
+    begin
+      s := ReadClipFormat(pics[i].Format);
+      if s = '' then Continue;
+      AKind := pics[i].Kind;
+      SetLength(Result, Length(s));
+      Move(s[1], Result[0], Length(s));
+      Exit;
+    end;
+end;
+
+function TTyCustomRichEdit.ReadClipboardText: string;
+begin
+  Result := Clipboard.AsText;
 end;
 
 procedure TTyCustomRichEdit.BeginWait;
@@ -4143,8 +4775,9 @@ end;
 
 procedure TTyCustomRichEdit.TePaste;
 begin
-  // pasting comes with Task 10c - through the door first, as every user's edit
+  // (the door is PasteFromClipboard's first step as well)
   EndCompositionForUser;
+  PasteFromClipboard;
 end;
 
 procedure TTyCustomRichEdit.TeSelectAll;
@@ -4170,7 +4803,7 @@ end;
 
 function TTyCustomRichEdit.TeCanPaste: Boolean;
 begin
-  Result := False;
+  Result := CanPaste;
 end;
 
 function TTyCustomRichEdit.TeHasText: Boolean;
@@ -8306,8 +8939,9 @@ begin
   if ViewBehind then
   begin
     if (Key in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) or
-      (TyIsShortcutShift(Shift) and (Key in [VK_A, VK_C])) or
-      ((Key = VK_INSERT) and (Shift = [ssCtrl])) or IsEditKey(Key, Shift) then
+      (TyIsShortcutShift(Shift) and (Key in [VK_A, VK_C, VK_V])) or
+      ((Key = VK_INSERT) and ((Shift = [ssCtrl]) or (Shift = [ssShift]))) or
+      IsEditKey(Key, Shift) then
       Key := 0;
     Exit;
   end;
@@ -8329,6 +8963,14 @@ begin
   if (TyIsShortcutShift(Shift) and (Key = VK_C)) or ((Key = VK_INSERT) and (Shift = [ssCtrl])) then
   begin
     CopyToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  { Ctrl+V (Cmd+V), and Shift+Insert as the memo: a paste, which ends a composition first
+    and does nothing with ReadOnly (both inside it); taken either way. }
+  if (TyIsShortcutShift(Shift) and (Key = VK_V)) or ((Key = VK_INSERT) and (Shift = [ssShift])) then
+  begin
+    PasteFromClipboard;
     Key := 0;
     Exit;
   end;

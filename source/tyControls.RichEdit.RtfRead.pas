@@ -5901,10 +5901,9 @@ begin
     end;
     load := TyRichRtfLoadOf(doc);
     { The reader gives a document no empty paragraph after a last \par: whether there was one
-      is LastParaOpen's (the last paragraph ran to the trailer with no terminator). A body
-      with no paragraph at all ends with none. }
-    AEndsWithParagraph := (load <> nil) and not load.LastParaOpen and
-      ((doc.Text.Length > 0) or (load.FScan.FS.Paras > 0));
+      is LastParaOpen's (the last paragraph ran to the trailer with no terminator - also the
+      empty one of a body with no paragraph at all). }
+    AEndsWithParagraph := (load <> nil) and not load.LastParaOpen;
     Result := doc;
     doc := nil;
   except
