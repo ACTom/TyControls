@@ -153,6 +153,9 @@ type
     procedure TestACellWithAPixelLeftHasNoRoom;
     procedure TestRowsOfTwoTableObjectsShareTheirLine;
     procedure TestWordsOwnListShowsWordsMarkers;
+    // fix wave W12
+    procedure TestPositionsBehindACompositionAreTheDocuments;
+    procedure TestACompositionInARowKeepsTheRowsPositions;
   end;
 
 implementation
@@ -5150,6 +5153,178 @@ begin
   FFromLoad := False;
   AssertTrue(Format('in slices (%d)', [steps]), steps >= 5);
   Check('loaded in slices', 10);
+end;
+
+{ ---- fix wave W12 ---- }
+
+{ The two layouts' answers for document position APos of the composed one (ALayout, the
+  composition of ALen characters at document position AAt) and the same place of the typed
+  one (ARef, the text with the composition typed in): equal once the typed one's positions
+  are taken back by the composition's length - CaretRect, PosAtPoint at that caret,
+  NextCaretPos both ways, LineBounds. }
+procedure CheckBehind(const AWhat: string; ALayout, ARef: TTyBlockLayout; AAt, ALen: Integer;
+  APos: TTyRichPos);
+
+  function Back(AValue: TTyRichPos): TTyRichPos;
+  begin
+    if AValue <= AAt then Result := AValue
+    else if AValue < AAt + ALen then Result := AAt
+    else Result := AValue - ALen;
+  end;
+
+  function Fwd(AValue: TTyRichPos; AAfter: Boolean): TTyRichPos;
+  begin
+    if (AValue > AAt) or (AAfter and (AValue = AAt)) then Result := AValue + ALen
+    else Result := AValue;
+  end;
+
+var
+  a, b: TRect;
+  s0, e0, s1, e1: TTyRichPos;
+  at0, at1, atEnd: Boolean;
+  w: string;
+begin
+  w := Format('%s, position %d', [AWhat, APos]);
+  a := ALayout.CaretRect(APos);
+  b := ARef.CaretRect(Fwd(APos, False));
+  TAssert.AssertTrue(Format('%s: the caret (%d,%d,%d,%d) as the typed text''s (%d,%d,%d,%d)',
+    [w, a.Left, a.Top, a.Right, a.Bottom, b.Left, b.Top, b.Right, b.Bottom]), EqualRect(a, b));
+  TAssert.AssertEquals(w + ': the point at it', Back(ARef.PosAtPoint(b.Left, (b.Top + b.Bottom)
+    div 2, atEnd)), ALayout.PosAtPoint(b.Left, (b.Top + b.Bottom) div 2, atEnd));
+  TAssert.AssertEquals(w + ': the next caret place', Back(ARef.NextCaretPos(Fwd(APos, True),
+    True)), ALayout.NextCaretPos(APos, True));
+  TAssert.AssertEquals(w + ': the one before', Back(ARef.NextCaretPos(Fwd(APos, False), False)),
+    ALayout.NextCaretPos(APos, False));
+  ALayout.LineBounds(APos, False, s0, e0, at0);
+  ARef.LineBounds(Fwd(APos, False), False, s1, e1, at1);
+  TAssert.AssertEquals(w + ': its line''s start', Back(s1), s0);
+  TAssert.AssertEquals(w + ': its line''s end', Back(e1), e0);
+  TAssert.AssertEquals(w + ': the end''s affinity', at1, at0);
+end;
+
+procedure CheckSameRects(const AWhat: string; const A, B: TRectArray);
+var
+  i: Integer;
+begin
+  TAssert.AssertEquals(AWhat + ': as many', Length(B), Length(A));
+  for i := 0 to High(A) do
+    TAssert.AssertTrue(Format('%s: rectangle %d', [AWhat, i]), EqualRect(A[i], B[i]));
+end;
+
+{ J-I3: a composition shown in a paragraph (TTyRichLayouter.SetComposition): the paragraph
+  layout's public position API speaks the document's positions both ways - behind the
+  composition CaretRect, PosAtPoint, NextCaretPos, LineBounds and SelectionRects answer as the
+  same places of the text with the composition typed in (laid out by a layouter of its own),
+  taken back by its length; before it, as they are. On one line and wrapped. }
+procedure TTyRichLayoutTest.TestPositionsBehindACompositionAreTheDocuments;
+const
+  Widths: array[0..1] of Integer = (1000, 70);
+var
+  d, e: TTyRichDocument;
+  lo: TTyRichLayouter;
+  L, R: TTyBlockLayout;
+  i, len: Integer;
+  p: TTyRichPos;
+  rc: TRect;
+begin
+  d := NewDoc('Hello wide world of words');
+  e := NewDoc('HelloXYZ wide world of words');
+  len := d.Text.ParaLength(0);
+  lo := NewLayouter;
+  try
+    for i := 0 to High(Widths) do
+    begin
+      FLayouter.SetComposition(0, 5, 'XYZ', d.RunsOf(0)[0].Format, 3, 0, 0);
+      L := Lay(d, 0, Widths[i], 1);
+      R := lo.LayoutPara(e, 0, Widths[i], 96, 1);
+      try
+        AssertEquals(Format('width %d: the lines', [Widths[i]]), TTyParaLayout(R).LineCount,
+          TTyParaLayout(L).LineCount);
+        AssertEquals(Format('width %d: the document''s length', [Widths[i]]), Int64(len),
+          TTyParaLayout(L).Length);
+        for p := 0 to len do
+          CheckBehind(Format('width %d', [Widths[i]]), L, R, 5, 3, p);
+        CheckSameRects(Format('width %d: the selection behind it', [Widths[i]]),
+          L.SelectionRects(6, len), R.SelectionRects(9, len + 3));
+        CheckSameRects(Format('width %d: the selection before it', [Widths[i]]),
+          L.SelectionRects(0, 5), R.SelectionRects(0, 5));
+        AssertTrue('its caret', L.CompositionCaret(rc));
+        AssertTrue(Format('width %d: the composition''s caret at its end', [Widths[i]]),
+          EqualRect(rc, R.CaretRect(8, True)));
+      finally
+        R.Release;
+      end;
+      FLayouter.ClearComposition;
+    end;
+  finally
+    lo.Free;
+  end;
+end;
+
+{ J-I3: a composition in a cell of a row - the row adds its cells' paragraphs by the
+  document's length, so every position in that cell behind the composition and in the cells
+  after it answers as the same place of the row with the composition typed in, taken back;
+  the composition's caret is in its cell (the cell's offset applied); a composition that wraps
+  makes the row as tall as the typed text does. }
+procedure TTyRichLayoutTest.TestACompositionInARowKeepsTheRowsPositions;
+var
+  d, e, e2: TTyRichDocument;
+  lo: TTyRichLayouter;
+  RR, RE, RR2, RE2: TTyBlockLayout;
+  p: TTyRichPos;
+  rc: TRect;
+  h0: Integer;
+
+  function TableDoc(const AText: RawByteString): TTyRichDocument;
+  var
+    tt: TTyRichTable;
+  begin
+    Result := NewTableDoc(AText);
+    tt := TTyRichTable.Create([1440, 2880, 4320]);
+    tt.AddRow(3);
+    TDocAccess(Result).MarkTable(0, tt, [1, 1, 2]).Free;
+  end;
+
+begin
+  d := TableDoc('a'#10'long long long long'#10'c1'#10'c2');
+  e := TableDoc('a'#10'longXYZ long long long'#10'c1'#10'c2');
+  e2 := TableDoc('a'#10'longXYZXYZXYZXYZXYZXYZ long long long'#10'c1'#10'c2');
+  lo := NewLayouter;
+  try
+    h0 := Block(d, 0, 1000).Height;
+    FLayouter.SetComposition(1, 4, 'XYZ', d.RunsOf(1)[0].Format, 3, 0, 0);
+    RR := Block(d, 0, 1000);
+    AssertTrue('a row', RR is TTyRowLayout);
+    RE := lo.LayoutBlock(e, 0, 1000, 96, 1);
+    try
+      AssertEquals('as tall as the typed row', RE.Height, RR.Height);
+      for p := 0 to d.Text.Length do
+        CheckBehind('in a row', RR, RE, 6, 3, p);
+      CheckSameRects('the selection behind it, into the next cells', RR.SelectionRects(8, 27),
+        RE.SelectionRects(11, 30));
+      AssertTrue('its caret', RR.CompositionCaret(rc));
+      AssertTrue(Format('the composition''s caret (%d,%d,%d,%d) in its cell, as the typed one',
+        [rc.Left, rc.Top, rc.Right, rc.Bottom]), EqualRect(rc, RE.CaretRect(9, True)));
+      AssertTrue('right of the first cell', rc.Left > RR.CaretRect(1).Left);
+    finally
+      RE.Release;
+    end;
+    // one that wraps: the row taller, as tall as the typed text makes it
+    FLayouter.SetComposition(1, 4, 'XYZXYZXYZXYZXYZXYZ', d.RunsOf(1)[0].Format, 18, 0, 0);
+    RR2 := Block(d, 0, 1000);
+    RE2 := lo.LayoutBlock(e2, 0, 1000, 96, 1);
+    try
+      AssertTrue(Format('the row taller (%d, was %d)', [RR2.Height, h0]), RR2.Height > h0);
+      AssertEquals('as tall as the typed one', RE2.Height, RR2.Height);
+      CheckBehind('in a taller row', RR2, RE2, 6, 18, 25);
+    finally
+      RE2.Release;
+    end;
+    FLayouter.ClearComposition;
+    AssertEquals('cleared: as tall as before', h0, Block(d, 0, 1000).Height);
+  finally
+    lo.Free;
+  end;
 end;
 
 initialization

@@ -409,6 +409,20 @@ type
     FImeHook: TObject;
     FCocoaIme: TObject;
     FImePlaced: TRect;
+    { Fix wave W12. FCompAnchor: the selection's anchor when the composition began (FCompPos
+      its caret) - the commit replaces that selection, the one the user saw, not one made
+      meanwhile; both follow the text as the caret does. FCompPending: the control ended the
+      composition and told the input method to commit, and it had not answered while told -
+      a result it sends before its next start goes in there (FCompPos, FCompAnchor,
+      FCompFormat kept). }
+    FCompAnchor: TTyRichPos;
+    FCompPending: Boolean;
+    { Cocoa's bridge: its session is open (ImeSessionBegin .. ImeSessionEnd), one of its calls
+      runs (FInBridge), the control ended the session's composition itself (FCocoaSwallow:
+      Cocoa keeps its marked text, so what the bridge sends until the session's end goes
+      nowhere - it went in, or was dropped, when the control ended it). }
+    FCocoaSession, FCocoaSwallow: Boolean;
+    FInBridge: Integer;
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -641,9 +655,19 @@ type
       was before its step, taken as it is (a hidden tail too - Select All had it). }
     procedure FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean = False;
       ARestore: Boolean = False);
-    { AText in place of the selection (one undo step: delete and insert), else at the caret -
-      AMergeable: typing, which merges with the typing before it. The caret behind it. }
-    procedure TypeText(const AText: UTF8String; AMergeable, AUser: Boolean);
+    { What typing AText over [AStart, AStart + ALen) asks before anything is made (EditAllowed,
+      and for a user UserRangeAllowed - which may shrink ALen - and LongParaRefused): refused
+      (told), False. A composition begins only where this says yes (one character for it). }
+    function TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
+      AUser: Boolean): Boolean;
+    { The one routine of typing - a key's character, Enter, Tab, SelText from code and an input
+      method's commit: AText in place of the selection (one undo step: delete and insert),
+      else at the caret - AMergeable: typing, which merges with the typing before it - in
+      AFormat (left at Low(TTyCharFormatId): TypingFormat asked now; a commit passes the
+      format its composition was shown in). The caret behind it: ACaretChars characters from the start
+      when >= 0 (a commit's own count), else the end of what the document reports changed. }
+    procedure TypeText(const AText: UTF8String; AMergeable, AUser: Boolean;
+      AFormat: TTyCharFormatId = Low(TTyCharFormatId); ACaretChars: Int64 = -1);
     { Characters [AFrom, ATo) go; the caret at the join. }
     procedure DeleteText(AFrom, ATo: TTyRichPos; AUser: Boolean);
     { Backspace (AForward False) or Delete, by a character place or (AWord) by a word: the
@@ -673,16 +697,17 @@ type
     function CompositionRaster(out ARect: TRect): Boolean;
     { The composition put away without a trace (nothing is told to the input method). }
     procedure DropComposition;
-    { The control ends the composition (the focus left, a press, the content replaced,
-      ReadOnly set, the window going): committed or cancelled. The input method is told first
-      (ImeEndOnWidgetset); what it does not answer here is done here. }
+    { The control ends the composition (the focus left, a user's edit or action, a press, the
+      content replaced, ReadOnly set, disabled, the window or the control going): committed
+      or cancelled. The input method is told first (ImeEndOnWidgetset); what it does not
+      answer here is done here, or (a commit it was told of) when its result comes. }
     procedure EndComposition(ACommit: Boolean);
+    { The one door of a user's edit and action (fix wave W12): a composition open in the text
+      ends first, committed as a press commits it - see the body for who comes through it. }
+    procedure EndCompositionForUser;
     { An input method's text made fit to insert: whole UTF-8, CR LF and CR as LF, no control
-      character but tab, LF and U+000B. }
+      character (TypeKey's filter, ControlCodeLen) but tab, LF and U+000B. }
     function ImeText(const AText: string): UTF8String;
-    { A commit's text in place of the selection, else at the caret (see the body for how it
-      merges); the caret behind it. }
-    procedure InsertCommitted(const AText: UTF8String);
     { The candidate window put at the composition's caret (when it moved since). }
     procedure PlaceImeWindows;
     { What the widgetset's own hook (Qt, GTK2) calls: a whole commit, and the caret's place. }
@@ -696,6 +721,13 @@ type
     procedure WMImeEndComposition(var Message: TLMessage); message $010E;
     procedure WMImeComposition(var Message: TLMessage); message $010F;
     procedure WMImeRequest(var Message: TLMessage); message $0288;
+    { win32 (fix wave W12): the system's composition window kept away when the window gets the
+      input context (WM_IME_SETCONTEXT); the composition ended where the window loses the
+      focus, while it still has the thread's input context; the candidate window put again
+      when the focus comes back from another window. }
+    procedure WMImeSetContext(var Message: TLMessage); message $0281;
+    procedure WMKillFocus(var Message: TLMKillFocus); message LM_KILLFOCUS;
+    procedure WMSetFocus(var Message: TLMSetFocus); message LM_SETFOCUS;
     {$ENDIF}
     {$IFDEF LCLCocoa}
     { Cocoa: LCL-Cocoa asks at the handle's creation for the input method handler (the memo's
@@ -921,10 +953,12 @@ type
       (client pixels) - win32: the composition and candidate forms; Qt: asked again
       (TyImeUpdateCaret); GTK2 asks on each key itself; Cocoa asks (ImeCaretBoundClient).
       ImeReadComposition (win32): ImmGetCompositionStringW's result for AIndex (GCS_*), the
-      bytes it wrote in AData. }
+      bytes it wrote in AData. ImeSetContextDefault (win32): the default handling of
+      WM_IME_SETCONTEXT (DefWindowProc) with the parameters given, its answer. }
     function ImeEndOnWidgetset(ACommit: Boolean): Boolean; virtual;
     procedure ImePlaceCandidates(const ARect: TRect); virtual;
     function ImeReadComposition(AIndex: LongWord; out AData: RawByteString): LongInt; virtual;
+    function ImeSetContextDefault(AWParam, ALParam: PtrInt): PtrInt; virtual;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
@@ -1108,15 +1142,21 @@ type
       command, no undo step, no OnChange, not Modified, not in the text, SelText, Lines, a copy
       or a save. A selection stays shown and is replaced at the commit.
       BeginComposition: False when none can begin - ReadOnly or disabled (nothing is told, as
-      for a key), the document taking no edit there (EditRefused once; what the input method
-      sends then goes nowhere until its session ends), inside the document's update.
+      for a key), where typing would be refused (the document taking no edit, a row that holds
+      a nested table, a selection across cells, a cut paragraph's cut: EditRefused once; what
+      the input method sends then goes nowhere until its session ends), inside the
+      document's update.
       UpdateComposition: the composition's text now (begun when it was not), ACaret its caret
       (characters of AText; -1: at its end), the clause the input method works on.
       CommitComposition: the text goes in as typing does (TypeText: one command, the selection
       replaced in one undo step, merged with the typing before it as the memo's, the caret
-      behind it, one OnChange and one OnSelectionChange) - also with no composition (a commit
-      straight from the input method); '' commits nothing. A refused one: EditRefused once.
-      CancelComposition: nothing of it is left. }
+      behind it, one OnChange and one OnSelectionChange) - where the composition was shown,
+      over the selection there was when it began, in the format it was shown in; also with no
+      composition (a commit straight from the input method: at the caret, in the typing
+      format); '' commits nothing. A refused one: EditRefused once.
+      CancelComposition: nothing of it is left.
+      A user's edit or action (a key that edits, Ctrl+A, a press, the menu) commits an open
+      composition first; disabling the control or setting ReadOnly cancels it. }
     function BeginComposition: Boolean;
     procedure UpdateComposition(const AText: string; ACaret: Integer = -1;
       AClauseStart: Integer = 0; AClauseLength: Integer = 0);
@@ -1305,6 +1345,8 @@ const
   CFS_POINT = $0002;
   CFS_EXCLUDE = $0080;
   IMR_QUERYCHARPOSITION = $0006;
+  WM_IME_SETCONTEXT = $0281;
+  ISC_SHOWUICOMPOSITIONWINDOW = PtrInt($80000000);
 
 type
   TTyImmCompositionForm = record
@@ -1338,6 +1380,10 @@ function ImmSetCompositionWindow(AImc: THandle; AForm: Pointer): LongBool; stdca
   external 'imm32.dll' name 'ImmSetCompositionWindow';
 function ImmSetCandidateWindow(AImc: THandle; AForm: Pointer): LongBool; stdcall;
   external 'imm32.dll' name 'ImmSetCandidateWindow';
+{ The default window procedure, which LCL-win32 calls for a control of its own window class
+  (CallDefaultWindowProc with no subclassed procedure). }
+function DefWindowProcW(AWnd: THandle; AMsg: LongWord; AWParam, ALParam: PtrInt): PtrInt;
+  stdcall; external 'user32.dll' name 'DefWindowProcW';
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
@@ -1615,12 +1661,18 @@ end;
 
 destructor TTyCustomRichEdit.Destroy;
 begin
-  { A composition goes with the control, drawn nowhere and told to nobody: the window's own
-    going (DestroyWnd, from the inherited destructor) then finds none to end. The input
-    method's hook and handler go before anything they could call into. }
-  FComposing := False;
-  FCompText := '';
-  FImeRefused := False;
+  { A composition ends first, while the window and the document are still there: dropped,
+    and the input method told so (what it answers inside that finds none) - otherwise it
+    stays open in the thread's input context for whatever gets the focus next. After this
+    body LCL takes the focus away and destroys the window (TWinControl.Destroy), and its
+    messages and CM_EXIT still come here, with the document freed: from here on csDestroying
+    (set before this body) turns every entry they reach away at the door - the input
+    method's messages, the focus messages, DoExit, the composition's methods and Cocoa's
+    bridge; the timers, the queued calls and the idle handler are taken off below. }
+  EndComposition(False);
+  FCompPending := False;
+  FCocoaSession := False;
+  FCocoaSwallow := False;
   TyImeUninstall(FImeHook);
   FreeAndNil(FCocoaIme);
   // nothing queued, registered or timed may come back into a freed control
@@ -2548,12 +2600,13 @@ begin
   if (FViewH <= 0) or (FBlockCount = 0) then Exit;
   if not ShownCaretRaster(r) then
   begin
-    // not laid out: to its paragraph by the height index, then to its line
-    p := FDoc.Text.ParaOfPos(FCaret);
+    { not laid out: to its paragraph by the height index, then to its line (while composing
+      the composition's, whose caret may be lines below where it began) }
+    if FComposing then p := FDoc.Text.ParaOfPos(FCompPos) else p := FDoc.Text.ParaOfPos(FCaret);
     below := p > FBlocks[FBlockCount - 1].LastPara;
     ScrollRasterTo(FDoc.Text.ParaTop(p));
     Settle;
-    if not CaretRaster(FCaret, FCaretAtEnd, r) then Exit;
+    if not ShownCaretRaster(r) then Exit;
     // as if it had been scrolled to from where the view was: at the bottom, or at the top
     if below then ScrollRasterBy(r.Bottom - FViewH) else ScrollRasterBy(r.Top);
   end
@@ -2719,6 +2772,7 @@ end;
 procedure TTyCustomRichEdit.DoEnter;
 begin
   inherited DoEnter;
+  if csDestroying in ComponentState then Exit;
   FCaretShown := True;
   FBlinkMs := 0;
   StartBlink;
@@ -2730,10 +2784,24 @@ end;
 
 procedure TTyCustomRichEdit.DoExit;
 begin
-  { The focus left: a composition goes in (the input method commits what it composed - win32
-    asked to, as SynEdit does; elsewhere the text shown). Before the inherited OnExit, so
-    that it sees the text. }
+  { Freed while focused: LCL sends CM_EXIT after the destructor's body freed the document -
+    only the exit's own event then (as every LCL control has it). }
+  if csDestroying in ComponentState then
+  begin
+    inherited DoExit;
+    Exit;
+  end;
+  { The focus left: a composition goes in (the input method commits what it composed),
+    before the inherited OnExit, so that it sees the text. Not on win32: there it ended when
+    the window lost the focus (WMKillFocus) - CM_EXIT comes from inside the new control's
+    set-focus, when the thread's one input context already serves that window, and never
+    when the focus goes to another form or program. Cocoa: LCL-Cocoa lets the input context
+    commit before the first responder changes (the bridge's session end), so this ends only
+    what a focus change made by code leaves; Qt5 / Qt6 / GTK2 / GTK3: the text shown goes in
+    (their input methods show the composition themselves, ImeEndOnWidgetset tells none). }
+  {$IFNDEF LCLWin32}
   EndComposition(True);
+  {$ENDIF}
   inherited DoExit;
   TyImeSetFocus(FImeHook, False);
   // the focus left: the run of typing ends (as the memo's)
@@ -2768,8 +2836,10 @@ var
 begin
   if not IsEnabled then Exit;
   { A press in the text ends a composition first: it goes in where it was shown, then the
-    press places the caret (Cocoa's input method commits on the press before it gets here). }
-  EndComposition(True);
+    press places the caret (Cocoa's input method commits on the press before it gets here).
+    An input method that answers later sends its result to where the composition was
+    (FCompPending), the caret staying where the press put it. }
+  EndCompositionForUser;
   inherited MouseDown(Button, Shift, X, Y);
   // a user action is an entry point of the loop (P-2: see SchedulingFailed)
   EndOwedLoad;
@@ -3000,6 +3070,8 @@ procedure TTyCustomRichEdit.EnabledChanged;
 begin
   inherited EnabledChanged;
   StopDrag;
+  // disabled: what is being composed cannot go in any more - as ReadOnly set, it is dropped
+  if not IsEnabled then EndComposition(False);
 end;
 
 procedure TTyCustomRichEdit.VisibleChanged;
@@ -3453,7 +3525,15 @@ begin
   Result := FDoc.TypingFormatAt(s);
 end;
 
-procedure TTyCustomRichEdit.TypeText(const AText: UTF8String; AMergeable, AUser: Boolean);
+function TTyCustomRichEdit.TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
+  AUser: Boolean): Boolean;
+begin
+  Result := EditAllowed(AStart, ALen, AText <> '', AUser) and
+    (not AUser or (UserRangeAllowed(AStart, ALen) and not LongParaRefused(AStart, AText)));
+end;
+
+procedure TTyCustomRichEdit.TypeText(const AText: UTF8String; AMergeable, AUser: Boolean;
+  AFormat: TTyCharFormatId; ACaretChars: Int64);
 var
   s, n, q: TTyRichPos;
   fmt: TTyCharFormatId;
@@ -3463,11 +3543,9 @@ begin
   s := GetSelStart;
   n := GetSelLength;
   if (AText = '') and (n = 0) then Exit;
-  if not EditAllowed(s, n, AText <> '', AUser) then Exit;
-  if AUser and not UserRangeAllowed(s, n) then Exit;
+  if not TypingAllowed(s, n, AText, AUser) then Exit;
   if (AText = '') and (n = 0) then Exit;
-  if AUser and LongParaRefused(s, AText) then Exit;
-  fmt := TypingFormat;
+  if AFormat = Low(TTyCharFormatId) then fmt := TypingFormat else fmt := AFormat;
   if n = 0 then
     cmd := TTyRichInsertText.Create(s, AText, fmt, AMergeable)
   else if AText = '' then
@@ -3485,8 +3563,9 @@ begin
   if RunEdit(cmd, AUser) then
   begin
     // behind what went in (a paragraph separator is one character: after Enter, the new
-    // paragraph's start)
-    q := FEditChange.Pos + FEditChange.NewLen;
+    // paragraph's start) - a commit counts its own text (its change may be a composite's)
+    if ACaretChars >= 0 then q := s + ACaretChars
+    else q := FEditChange.Pos + FEditChange.NewLen;
     FinishEdit(q, q);
   end;
 end;
@@ -3497,6 +3576,18 @@ begin
   if not EditAllowed(AFrom, ATo - AFrom, False, AUser) then Exit;
   if RunEdit(TTyRichDelete.Create(AFrom, ATo - AFrom), AUser) then
     FinishEdit(FEditChange.Pos, FEditChange.Pos);
+end;
+
+{ The bytes of the control character at S[I] - C0, DEL, C1 (U+0080 .. U+009F, C2 80 .. C2 9F
+  in UTF-8) - else 0: what is never typed, by a key (TypeKey) or by an input method's commit
+  (ImeText, which keeps tab, LF and U+000B as its line breaks). }
+function ControlCodeLen(const S: RawByteString; I: Integer): Integer;
+begin
+  Result := 0;
+  if (I < 1) or (I > Length(S)) then Exit;
+  if (S[I] < #32) or (S[I] = #127) then Result := 1
+  else if (S[I] = #$C2) and (I < Length(S)) and (S[I + 1] >= #$80) and (S[I + 1] < #$A0) then
+    Result := 2;
 end;
 
 { The one code point Backspace takes when it is the last of a cluster and not its start: a
@@ -3906,11 +3997,13 @@ begin
   SetLength(s, Length(AKey));
   if Length(AKey) > 0 then Move(AKey[1], s[1], Length(AKey));
   SetCodePage(s, CP_UTF8, False);
-  { Printable: no control character - C0, DEL (Ctrl+Backspace types one on Windows), C1 -
-    and whole characters only: a key never puts half a sequence in the text. }
-  if (s = '') or (s[1] < #32) or (s[1] = #127) or
-    ((Length(s) >= 2) and (s[1] = #$C2) and (s[2] < #$A0)) or
-    not TyRichIsUtf8(PByte(s), Length(s)) then Exit;
+  { Printable: no control character - C0, DEL (Ctrl+Backspace types one on Windows), C1 (the
+    one filter an input method's commit passes too, ImeText) - and whole characters only: a
+    key never puts half a sequence in the text. }
+  if (s = '') or (ControlCodeLen(s, 1) > 0) or not TyRichIsUtf8(PByte(s), Length(s)) then Exit;
+  // a key an input method let through while composing: the composition goes in first
+  EndCompositionForUser;
+  if FReadOnly or ViewBehind then Exit;
   Settle;
   TypeText(s, True, True);
 end;
@@ -4024,18 +4117,22 @@ begin
   Result := ActiveController;
 end;
 
+// (the menu's actions are a user's: through EndCompositionForUser first)
 procedure TTyCustomRichEdit.TeUndo;
 begin
+  EndCompositionForUser;
   if not FReadOnly then RunHistory(False, True);
 end;
 
 procedure TTyCustomRichEdit.TeRedo;
 begin
+  EndCompositionForUser;
   if not FReadOnly then RunHistory(True, True);
 end;
 
 procedure TTyCustomRichEdit.TeCut;
 begin
+  EndCompositionForUser;
   if not FReadOnly then CutSelection(True);
 end;
 
@@ -4046,11 +4143,13 @@ end;
 
 procedure TTyCustomRichEdit.TePaste;
 begin
-  // pasting comes with Task 10c
+  // pasting comes with Task 10c - through the door first, as every user's edit
+  EndCompositionForUser;
 end;
 
 procedure TTyCustomRichEdit.TeSelectAll;
 begin
+  EndCompositionForUser;
   SelectAll;
 end;
 
@@ -4106,22 +4205,45 @@ end;
 
 procedure TTyCustomRichEdit.ImeSessionBegin;
 begin
-  // the bridge counts from here (ImeCaretIndex, which it asks next)
-  FCocoaBase := ImeCaretIndex;
-  FImeRefused := False;
-  BeginComposition;
+  if csDestroying in ComponentState then Exit;
+  Inc(FInBridge);
+  try
+    FCocoaSession := True;
+    FCocoaSwallow := False;
+    FImeRefused := False;
+    BeginComposition;
+    { The bridge counts from here (ImeCaretIndex, which it asks next): taken after the
+      composition began, whose settle may have put the caret on a caret place. }
+    FCocoaBase := ImeCaretIndex;
+  finally
+    Dec(FInBridge);
+  end;
 end;
 
 procedure TTyCustomRichEdit.ImeSessionEnd;
 begin
-  // a cancel replaced the text with '' first; a commit replaced it with the final text
-  if FImeRefused then
-  begin
-    FImeRefused := False;
-    DropComposition;
-    Exit;
+  if csDestroying in ComponentState then Exit;
+  Inc(FInBridge);
+  try
+    FCocoaSession := False;
+    { The control ended this session's composition itself (it went in, or was dropped, then):
+      what Cocoa still had marked goes nowhere. }
+    if FCocoaSwallow then
+    begin
+      FCocoaSwallow := False;
+      Exit;
+    end;
+    // a cancel replaced the text with '' first; a commit replaced it with the final text
+    if FImeRefused then
+    begin
+      FImeRefused := False;
+      DropComposition;
+      Exit;
+    end;
+    if FComposing then CommitComposition(FCompText);
+  finally
+    Dec(FInBridge);
   end;
-  if FComposing then CommitComposition(FCompText);
 end;
 
 procedure TTyCustomRichEdit.ImeReplace(AStart, ALen: Integer; const AText: string);
@@ -4129,27 +4251,31 @@ var
   s, cur: UTF8String;
   n: Integer;
 begin
-  if FImeRefused then Exit;
-  if not FComposing then
-  begin
-    { No session: a dead key's text (Cocoa's insertText with a replacement and no marked text,
-      which no session end follows) is a commit at once (the terminal's way); a marked text
-      the bridge still has after the control ended the composition starts one again. }
-    if ALen = 0 then
+  if (csDestroying in ComponentState) or FImeRefused or FCocoaSwallow then Exit;
+  Inc(FInBridge);
+  try
+    if not FComposing then
     begin
-      CommitComposition(AText);
-      Exit;
+      { No session: a dead key's text (Cocoa's insertText with a replacement and no marked
+        text, which no session end follows) is a commit at once (the terminal's way). }
+      if ALen = 0 then
+      begin
+        CommitComposition(AText);
+        Exit;
+      end;
+      FCocoaBase := AStart;
+      if not BeginComposition then Exit;
     end;
-    FCocoaBase := AStart;
-    if not BeginComposition then Exit;
+    // the bridge's positions: characters from where the session began
+    cur := FCompText;
+    n := UTF8Length(cur);
+    AStart := Math.EnsureRange(AStart - FCocoaBase, 0, n);
+    ALen := Math.EnsureRange(ALen, 0, n - AStart);
+    s := UTF8Copy(cur, 1, AStart) + ImeText(AText) + UTF8Copy(cur, AStart + ALen + 1, MaxInt);
+    UpdateComposition(s);
+  finally
+    Dec(FInBridge);
   end;
-  // the bridge's positions: characters from where the session began
-  cur := FCompText;
-  n := UTF8Length(cur);
-  AStart := Math.EnsureRange(AStart - FCocoaBase, 0, n);
-  ALen := Math.EnsureRange(ALen, 0, n - AStart);
-  s := UTF8Copy(cur, 1, AStart) + ImeText(AText) + UTF8Copy(cur, AStart + ALen + 1, MaxInt);
-  UpdateComposition(s);
 end;
 
 {$IFDEF LCLCocoa}
@@ -4185,7 +4311,7 @@ end;
 
 function TTyCustomRichEdit.ImeText(const AText: string): UTF8String;
 var
-  i, n: Integer;
+  i, n, k: Integer;
   b: Char;
   s: RawByteString;
 begin
@@ -4204,34 +4330,54 @@ begin
       Inc(n);
       Result[n] := #10;
       if (i < Length(s)) and (s[i + 1] = #10) then Inc(i);
-    end
-    else if (b >= #32) or (b = #9) or (b = #10) or (b = #11) then
-    begin
-      Inc(n);
-      Result[n] := b;
+      Inc(i);
+      Continue;
     end;
+    // tab, LF and U+000B are an input method's line breaks; no other control character goes in
+    k := 0;
+    if (b <> #9) and (b <> #10) and (b <> #11) then k := ControlCodeLen(s, i);
+    if k > 0 then
+    begin
+      Inc(i, k);
+      Continue;
+    end;
+    Inc(n);
+    Result[n] := b;
     Inc(i);
   end;
   SetLength(Result, n);
 end;
 
 function TTyCustomRichEdit.BeginComposition: Boolean;
+var
+  s, n: TTyRichPos;
 begin
   if FComposing then Exit(True);
   Result := False;
   FImeRefused := False;
+  { A composition begins: a result still owed for the one the control ended (FCompPending) is
+    not waited for any more - an input method sends it before its next start. }
+  FCompPending := False;
   // as a key: ReadOnly or disabled takes it and says nothing; inside the update it is dropped
-  if ImeIsReadOnly or ViewBehind then Exit;
+  if (csDestroying in ComponentState) or ImeIsReadOnly or ViewBehind then Exit;
   EndOwedLoad;
-  if not EditAllowed(GetSelStart, GetSelLength, True, True) then
+  Settle;
+  { Only where a character typed may go in, asked as typing asks it (TypingAllowed: the
+    document takes edits, no row that holds a nested table, not across cells, not at a cut
+    paragraph's cut) - one character stands for the composition, which itself counts toward
+    no limit while it is shown. }
+  s := GetSelStart;
+  n := GetSelLength;
+  if not TypingAllowed(s, n, 'x', True) then
   begin
     // told once; the rest of the input method's session goes nowhere
     FImeRefused := True;
     Exit;
   end;
-  Settle;
   FComposing := True;
+  // the selection now is the one its commit replaces (FCompAnchor .. FCompPos)
   FCompPos := FCaret;
+  FCompAnchor := FSelAnchor;
   FCompText := '';
   FCompCaret := 0;
   FCompClauseFrom := 0;
@@ -4247,7 +4393,7 @@ var
   s: UTF8String;
   n: Integer;
 begin
-  if FImeRefused then Exit;
+  if (csDestroying in ComponentState) or FImeRefused then Exit;
   if not FComposing and not BeginComposition then Exit;
   s := ImeText(AText);
   n := UTF8Length(s);
@@ -4290,7 +4436,9 @@ begin
       FCompCaret, FCompClauseFrom, FCompClauseTo);
   if (was >= 0) and (was <> p) then RefreshComposed(was);
   RefreshComposed(p);
-  // its caret kept in view as the caret is (the least scroll; across too, with no wrapping)
+  { Its caret kept in view as the caret is, on every update - down (a composition that wraps
+    below the view's bottom edge) as across (no wrapping, past the right edge) - so that the
+    rectangle the input method is told is on screen. }
   ScrollCaretIntoView;
   CaretMoved;
   PlaceImeWindows;
@@ -4329,10 +4477,28 @@ end;
 procedure TTyCustomRichEdit.CommitComposition(const AText: string);
 var
   s: UTF8String;
-  was: Boolean;
+  was, late: Boolean;
   p: Integer;
+  fmt: TTyCharFormatId;
+  t: TTyRichText;
+  ua, uc, st, len0, delta, removed, n: TTyRichPos;
+
+  // a position of before the commit, where it is after it
+  function Mapped(APos: TTyRichPos): TTyRichPos;
+  begin
+    if APos < st then Result := APos
+    else if APos >= st + removed then Result := APos + delta
+    else Result := st + n;
+  end;
+
 begin
+  if csDestroying in ComponentState then Exit;
   was := FComposing;
+  { A result the input method owed for the composition the control ended (a press, a user's
+    action, the focus leaving: told to commit, it had not answered then) goes where that
+    composition was shown - not to where the press has put the caret since. }
+  late := not was and FCompPending;
+  FCompPending := False;
   p := -1;
   if was then
   begin
@@ -4341,6 +4507,8 @@ begin
     FComposing := False;
     FCompText := '';
     FLayouter.ClearComposition;
+    // committed from outside Cocoa's bridge: what it still has marked goes nowhere
+    if FCocoaSession and (FInBridge = 0) then FCocoaSwallow := True;
   end;
   if FImeRefused then
   begin
@@ -4355,9 +4523,41 @@ begin
   begin
     EndOwedLoad;
     Settle;
-    // where it was shown: a caret code moved meanwhile goes back there
-    if was and (FCaret <> FCompPos) then Select(FCompPos, FCompPos, False);
-    InsertCommitted(s);
+    t := FDoc.Text;
+    ua := FSelAnchor;
+    uc := FCaret;
+    fmt := Low(TTyCharFormatId);
+    if was or late then
+    begin
+      { Over the selection there was when it began, not one made meanwhile (code, or a
+        user's action the composition ended before: Ctrl+A then the late result must not
+        replace everything), and in the format it was shown in. }
+      FCompPos := Math.Max(Int64(0), Math.Min(FCompPos, t.Length));
+      FCompAnchor := Math.Max(Int64(0), Math.Min(FCompAnchor, t.Length));
+      if (FSelAnchor <> FCompAnchor) or (FCaret <> FCompPos) then
+        Select(FCompAnchor, FCompPos, False);
+      fmt := FCompFormat;
+    end;
+    st := GetSelStart;
+    len0 := t.Length;
+    n := UTF8Length(s);
+    { The one routine of typing (TypeText): the same refusals (a cell's edge, the paragraph
+      kept before a table, a cut paragraph's cut) and the same command. Deliberately merged
+      as typing: the memo commits as typing (uskTyping), which merges with the typing next to
+      it - the engine merges mergeable inserts by their kind, so a commit, the typing before
+      it and the typing after it are one undo step, as in the memo. A commit with a line
+      break makes a paragraph: a step of its own, as Enter is. Over a selection: one
+      composite, a fresh step (as typing over one). The caret behind it, counted. }
+    TypeText(s, (Pos(#10, s) = 0) and (Pos(#11, s) = 0), True, fmt, n);
+    if late and FEditHeard and (FDoc.Text = t) and not ViewBehind then
+    begin
+      // the selection the user made meanwhile (the press's) stays, moved with the text
+      delta := t.Length - len0;
+      removed := n - delta;
+      Select(Mapped(ua), Mapped(uc), False);
+      CaretMoved;
+      DoSelectionChange;
+    end;
   end;
   // nothing went in (refused, empty, read-only): the paragraph shows what it has
   if was and not FEditHeard then
@@ -4367,52 +4567,23 @@ begin
   end;
 end;
 
-procedure TTyCustomRichEdit.InsertCommitted(const AText: UTF8String);
-var
-  s, n, q: TTyRichPos;
-  merge: Boolean;
-  fmt: TTyCharFormatId;
-  cmd: TTyRichCommand;
-  comp: TTyRichCompositeCommand;
-begin
-  s := GetSelStart;
-  n := GetSelLength;
-  if not EditAllowed(s, n, True, True) or not UserRangeAllowed(s, n) or
-    LongParaRefused(s, AText) then Exit;
-  { Deliberately as typing: the memo commits as typing (uskTyping), which merges with the typing
-    next to it - the engine merges mergeable inserts by their kind, so a commit, the typing
-    before it and the typing after it are one undo step, as in the memo. A commit with a line
-    break makes a paragraph: a step of its own, as Enter is. Over a selection: one composite,
-    a fresh step (as typing over one). }
-  merge := (Pos(#10, AText) = 0) and (Pos(#11, AText) = 0);
-  fmt := TypingFormat;
-  if n = 0 then
-    cmd := TTyRichInsertText.Create(s, AText, fmt, merge)
-  else
-  begin
-    if merge then comp := TTyRichCompositeCommand.Create(rsRichUndoTyping)
-    else comp := TTyRichCompositeCommand.Create(rsRichUndoInsertText);
-    comp.Add(TTyRichDelete.Create(s, n));
-    comp.Add(TTyRichInsertText.Create(s, AText, fmt, False));
-    cmd := comp;
-  end;
-  if RunEdit(cmd, True) then
-  begin
-    // behind the committed text, counted here (not from the change's extent: a composite)
-    q := s + UTF8Length(AText);
-    FinishEdit(q, q);
-  end;
-end;
-
 procedure TTyCustomRichEdit.CancelComposition;
 begin
+  // ended by code while Cocoa's session goes on: what it still has marked goes nowhere
+  if (FComposing or FImeRefused) and FCocoaSession and (FInBridge = 0) then FCocoaSwallow := True;
   FImeRefused := False;
+  FCompPending := False;
   DropComposition;
 end;
 
 procedure TTyCustomRichEdit.EndComposition(ACommit: Boolean);
 begin
+  // a cancel (a content reset, ReadOnly, disabled, the window going) drops an owed result too
+  if not ACommit then FCompPending := False;
   if not FComposing and not FImeRefused then Exit;
+  { Cocoa: the control cannot make the input context drop its marked text - the session goes
+    on, and what it sends until its end is swallowed (it went in, or was dropped, here). }
+  if FCocoaSession and (FInBridge = 0) then FCocoaSwallow := True;
   if not ACommit then
   begin
     // put away first: what the input method sends while it drops it finds nothing
@@ -4428,13 +4599,33 @@ begin
     ImeEndOnWidgetset(False);
     Exit;
   end;
-  { The input method commits (its result comes back through its messages while it is told);
-    one that was told but did not answer leaves nothing drawn - what it sends later comes as a
-    commit of its own - and with none to tell, the text shown goes in. }
+  { The input method commits: its result comes back through its messages while it is told
+    (win32's CPS_COMPLETE, as SynEdit's FocusKilled). One that was told and had not answered
+    when the call returns sends it later: the composition leaves the screen, and a result
+    that comes before the input method's next start goes in where it was shown
+    (FCompPending). With none to tell, the text shown goes in. }
   if ImeEndOnWidgetset(True) then
-    DropComposition
+  begin
+    if FComposing then
+    begin
+      FCompPending := True;
+      DropComposition;
+    end;
+  end
   else if FComposing then
     CommitComposition(FCompText);
+end;
+
+{ The one door of a user's edit and action: a key's edit (KeyDown's edit keys, a character
+  typed, Ctrl+A), a press, the menu's actions - and paste (Task 10c), the format actions and
+  table editing (Tasks 11, 12) must come in through it as well. A composition open in the text
+  ends first, committed as a press commits it (what the input method has goes in where it was
+  shown), so that the action works on the document the user sees: never on the text under a
+  composition, nor a commit on a selection the action made (Ctrl+A, then a commit replacing
+  everything). Copying, moving the caret, scrolling and zooming do not end it. }
+procedure TTyCustomRichEdit.EndCompositionForUser;
+begin
+  if FComposing or FImeRefused then EndComposition(True);
 end;
 
 procedure TTyCustomRichEdit.PlaceImeWindows;
@@ -4545,6 +4736,14 @@ begin
   {$ENDIF}
 end;
 
+function TTyCustomRichEdit.ImeSetContextDefault(AWParam, ALParam: PtrInt): PtrInt;
+begin
+  Result := 0;
+  {$IFDEF LCLWin32}
+  if HandleAllocated then Result := DefWindowProcW(Handle, WM_IME_SETCONTEXT, AWParam, ALParam);
+  {$ENDIF}
+end;
+
 {$IFDEF LCLWin32}
 { UTF-16 bytes as UTF-8, and how many code points the first AUnits UTF-16 units of them make
   (a surrogate pair is one). }
@@ -4578,6 +4777,12 @@ end;
 
 procedure TTyCustomRichEdit.WMImeStartComposition(var Message: TLMessage);
 begin
+  // the control going (its document freed): taken, nothing done
+  if csDestroying in ComponentState then
+  begin
+    Message.Result := 1;
+    Exit;
+  end;
   // read-only: the system's composition window, its text dropped as typing is (batch B's)
   if ImeIsReadOnly then
   begin
@@ -4598,6 +4803,11 @@ var
   s: UTF8String;
   caret, cf, ct: Integer;
 begin
+  if csDestroying in ComponentState then
+  begin
+    Message.Result := 1;
+    Exit;
+  end;
   if ImeIsReadOnly then
   begin
     inherited;
@@ -4617,35 +4827,35 @@ begin
       and Cocoa's bridge hand the whole commit over): the difference between widgetsets is
       the memo's and LCL's, kept on purpose. }
     CommitComposition(AskCommitKeys(ImmUtf8(data)));
-    if FImeRefused then Exit;
+    if FImeRefused or (csDestroying in ComponentState) then Exit;
   end;
-  if (flags and GCS_COMPSTR) <> 0 then
+  { The composition, its caret and its clause are read together whenever any of the three
+    is said to have changed: an input method may move its caret or its target clause alone
+    (SynEdit reads each on its own flag), and what is drawn follows all three. lParam 0
+    (some input methods' way to say the composition was emptied): what the context holds
+    now is read as well - empty, or as it was. }
+  if ((flags and (GCS_COMPSTR or GCS_CURSORPOS or GCS_COMPATTR)) <> 0) or (flags = 0) then
   begin
     ImeReadComposition(GCS_COMPSTR, data);
     s := ImmUtf8(data);
     units := Length(data) div 2;
-    caret := -1;
-    if (flags and GCS_CURSORPOS) <> 0 then
-      caret := ImmCodePoints(data, ImeReadComposition(GCS_CURSORPOS, attr) and $FFFF);
+    caret := ImmCodePoints(data, ImeReadComposition(GCS_CURSORPOS, attr) and $FFFF);
     // the clause the input method converts: its target characters
     cf := 0;
     ct := 0;
-    if (flags and GCS_COMPATTR) <> 0 then
-    begin
-      ImeReadComposition(GCS_COMPATTR, attr);
-      a := -1;
-      b := -1;
-      for i := 0 to Math.Min(Length(attr), units) - 1 do
-        if Byte(attr[i + 1]) in [ATTR_TARGET_CONVERTED, ATTR_TARGET_NOTCONVERTED] then
-        begin
-          if a < 0 then a := i;
-          b := i + 1;
-        end;
-      if a >= 0 then
+    ImeReadComposition(GCS_COMPATTR, attr);
+    a := -1;
+    b := -1;
+    for i := 0 to Math.Min(Length(attr), units) - 1 do
+      if Byte(attr[i + 1]) in [ATTR_TARGET_CONVERTED, ATTR_TARGET_NOTCONVERTED] then
       begin
-        cf := ImmCodePoints(data, a);
-        ct := ImmCodePoints(data, b);
+        if a < 0 then a := i;
+        b := i + 1;
       end;
+    if a >= 0 then
+    begin
+      cf := ImmCodePoints(data, a);
+      ct := ImmCodePoints(data, b);
     end;
     if s = '' then
     begin
@@ -4659,15 +4869,59 @@ end;
 
 procedure TTyCustomRichEdit.WMImeEndComposition(var Message: TLMessage);
 begin
+  if csDestroying in ComponentState then
+  begin
+    Message.Result := 1;
+    Exit;
+  end;
+  { What the input method did not commit is dropped (its cancel, Esc) - always, read-only
+    and disabled too: nothing of the control's composition outlives the input method's. }
+  FImeRefused := False;
+  DropComposition;
   if ImeIsReadOnly then
   begin
     inherited;
     Exit;
   end;
   Message.Result := 1;
-  // what the input method did not commit is dropped (its cancel, Esc)
-  FImeRefused := False;
-  DropComposition;
+end;
+
+procedure TTyCustomRichEdit.WMImeSetContext(var Message: TLMessage);
+begin
+  if (csDestroying in ComponentState) or (Message.WParam = 0) or ImeIsReadOnly then
+  begin
+    // as it came (read-only: the system's window shows the composition, as the memo's does)
+    inherited;
+    Exit;
+  end;
+  { The window gets the input context. The composition is shown in the text, so the system's
+    composition window is not wanted: also when the focus comes with a composition already
+    open in the thread's context, or the input method opens its window here. LCL-win32 hands
+    DefWindowProc the message's own parameters when Result stays 0 (win32callback.inc), not
+    changed ones: the default handling runs here with ISC_SHOWUICOMPOSITIONWINDOW cleared
+    (the candidate window's bits stay), and Result 1 keeps LCL from running it again. }
+  ImeSetContextDefault(Message.WParam, Message.LParam and not ISC_SHOWUICOMPOSITIONWINDOW);
+  Message.Result := 1;
+end;
+
+procedure TTyCustomRichEdit.WMKillFocus(var Message: TLMKillFocus);
+begin
+  { The composition ends here, while this window still has the thread's input context (one
+    context serves every window of the thread: nothing in LCL or the package gives a window
+    its own), so that the input method's result comes back to this window - as SynEdit
+    (WMKillFocus) and the system's edit controls do. CM_EXIT (DoExit) comes from inside the
+    new control's set-focus, after the context moved on, and never when the focus goes to
+    another form or program. }
+  if not (csDestroying in ComponentState) then EndComposition(True);
+  inherited;
+end;
+
+procedure TTyCustomRichEdit.WMSetFocus(var Message: TLMSetFocus);
+begin
+  { Back from another window of the thread (another form, which DoEnter does not hear of):
+    the candidate window was put there for its control - put again at the next paint. }
+  FImePlaced := Rect(0, 0, 0, 0);
+  inherited;
 end;
 
 procedure TTyCustomRichEdit.WMImeRequest(var Message: TLMessage);
@@ -4675,7 +4929,8 @@ var
   cp: PTyImmCharPosition;
   r: TRect;
 begin
-  if (Message.WParam <> IMR_QUERYCHARPOSITION) or (Message.LParam = 0) or not HandleAllocated then
+  if (Message.WParam <> IMR_QUERYCHARPOSITION) or (Message.LParam = 0) or not HandleAllocated or
+    (csDestroying in ComponentState) then
   begin
     inherited;
     Exit;
@@ -5094,12 +5349,16 @@ begin
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
   { A composition shown while the document changes elsewhere (code, an undo from a handler)
     follows the text as the caret does; the layouter is told where before it hears of the
-    change, which drops the block or moves it with what it laid out. }
-  if FComposing and (FDoc.Text = FText) and (rckText in AChange.Kinds) and not loadOwn then
+    change, which drops the block or moves it with what it laid out. So does the place of a
+    result still owed (FCompPending), and the selection the commit replaces. }
+  if (FComposing or FCompPending) and (FDoc.Text = FText) and (rckText in AChange.Kinds) and
+    not loadOwn then
   begin
     ShiftForChange(FCompPos, AChange);
+    ShiftForChange(FCompAnchor, AChange);
     FCompPos := Math.Max(Int64(0), Math.Min(FCompPos, FDoc.Text.Length));
-    if FLayouter.Composition.Para >= 0 then
+    FCompAnchor := Math.Max(Int64(0), Math.Min(FCompAnchor, FDoc.Text.Length));
+    if FComposing and (FLayouter.Composition.Para >= 0) then
       FLayouter.MoveComposition(FDoc.Text.ParaOfPos(FCompPos),
         Integer(FCompPos - FDoc.Text.ParaStart(FDoc.Text.ParaOfPos(FCompPos))));
   end;
@@ -5204,9 +5463,12 @@ begin
   { A composition has no text to go into any more: it goes (the whole view is drawn again
     below), and the input method is told to drop it. }
   composed := FComposing or FImeRefused;
+  // (Cocoa's session goes on: what it still has marked goes nowhere)
+  if composed and FCocoaSession and (FInBridge = 0) then FCocoaSwallow := True;
   FComposing := False;
   FCompText := '';
   FImeRefused := False;
+  FCompPending := False;
   FLayouter.ClearComposition;
   FText := FDoc.Text;
   FSnapPending := False;
@@ -8053,8 +8315,12 @@ begin
   // Ctrl a word (Option on a Mac, as its text views); Ctrl or Cmd the document's ends
   byWord := (ssCtrl in Shift) {$IFDEF DARWIN}or (ssAlt in Shift){$ENDIF};
   toDoc := (ssCtrl in Shift) or (ssMeta in Shift);
+  { A key an input method lets through while composing that edits or selects all: the
+    composition goes in first (EndCompositionForUser, the one door) - never the action under
+    it, nor the commit over what Ctrl+A selected. }
   if TyIsShortcutShift(Shift) and (Key = VK_A) then
   begin
+    EndCompositionForUser;
     SelectAll;
     Key := 0;
     Exit;
@@ -8068,8 +8334,9 @@ begin
   end;
   if IsEditKey(Key, Shift) then
   begin
+    EndCompositionForUser;
     // with ReadOnly taken, and nothing changes (the memo's way)
-    if not FReadOnly then
+    if not FReadOnly and not ViewBehind then
     begin
       Settle;
       case Key of

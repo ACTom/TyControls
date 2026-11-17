@@ -17,7 +17,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
-  BGRABitmap, BGRABitmapTypes,
+  LMessages, BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Painter, tyControls.TextMenu, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
@@ -268,8 +268,12 @@ begin
   UTF8KeyPress(k);
 end;
 
+{ The focus leaving as LCL delivers it: the window loses the focus (LM_KILLFOCUS, which
+  win32 sends first, while the window still has the input context), then CM_EXIT's DoExit
+  from inside the new control's set-focus. }
 procedure TEditProbe.Leave;
 begin
+  Perform(LM_KILLFOCUS, 0, 0);
   DoExit;
 end;
 

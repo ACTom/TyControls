@@ -3457,6 +3457,11 @@ type
     ListNumber: Int64;
     FileMarker: UTF8String;   // the file's marker text, shown instead of ListNumber
     FullLen: Integer;    // the paragraph's length (N is what is laid out of it)
+    { An input method's composition spliced in (TTyRichLayouter.SetComposition): its length,
+      and the paragraph's own first format - the marker's and an empty line's, never the
+      composition's, which Runs[0] is when it sits at the paragraph's start. }
+    CompLen: Integer;
+    FirstFormat: TTyCharFormatId;
     function Px(ATwips: Integer): Integer;
     function MakeMarker: Integer;
     procedure Decode(const AText: RawByteString; AExpected: Integer);
@@ -4455,7 +4460,7 @@ var
 begin
   Result := Max(0, LeftPx + FirstPx);
   if Pf.List.Kind = lkNone then Exit;
-  if System.Length(Runs) > 0 then fmt := Runs[0].Format else fmt := 0;
+  fmt := FirstFormat;
   f := L.FormatFont(fmt, PPI, Zoom).Font;
   mk := @Layout.FMarker;
   mk^.Kind := rfkText;
@@ -4557,12 +4562,14 @@ begin
     cluster longer than the cap (nothing to cut at) is cut at the cap. Left as it is: Runs is
     the model's copy of the whole paragraph's run array (RunsOf), which MapRuns reads only up
     to the cut - one run for plain text; proportional to the uncut paragraph only for a file
-    with millions of format changes in one paragraph, hostile input. }
-  if FullLen > CRichMaxParaLayoutChars then
+    with millions of format changes in one paragraph, hostile input. A composition counts
+    toward none of it: it is laid out whole, and the cap stays where the paragraph's own
+    characters reach it (a paragraph at the cap takes no typing there, so none begins). }
+  if FullLen - CompLen > CRichMaxParaLayoutChars then
   begin
-    e := Min(N, CRichMaxParaLayoutChars);
+    e := Min(N, CRichMaxParaLayoutChars + CompLen);
     while (e > 0) and not ClStart[e] do Dec(e);
-    if e = 0 then e := Min(N, CRichMaxParaLayoutChars);
+    if e = 0 then e := Min(N, CRichMaxParaLayoutChars + CompLen);
     N := e;
     Txt := Copy(Txt, 1, Bo[N]);
   end;
@@ -4571,7 +4578,7 @@ begin
   MakePieces;
   FirstLine := True;
   firstLeft := MakeMarker;
-  if System.Length(Runs) > 0 then emptyFmt := Runs[0].Format else emptyFmt := 0;
+  emptyFmt := FirstFormat;
   Layout.FSpaceBefore := Max(0, Px(Pf.SpaceBefore));
   Layout.FSpaceAfter := Max(0, Px(Pf.SpaceAfter));
   top := Layout.FSpaceBefore;
@@ -5984,8 +5991,10 @@ begin
       b.Width := AWidth;
       Inc(FParaBytesFetched, System.Length(text));
       compLen := 0;
+      if System.Length(b.Runs) > 0 then b.FirstFormat := b.Runs[0].Format else b.FirstFormat := 0;
       if (FComp.Para = AIndex) and (FComp.Text <> '') then
         compLen := SpliceComposition(text, b.Runs);
+      b.CompLen := compLen;
       b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1) + compLen);
       Inc(FParaCharsDecoded, b.N - compLen);
       if len > CRichMaxParaLayoutChars then b.FullLen := len + compLen else b.FullLen := b.N;
