@@ -35,6 +35,7 @@ type
     FEditInHandler: Boolean;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
+    procedure ChangedEdit(Sender: TObject);
     procedure Progress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure FindDone(Sender: TObject; AFound, ACancelled: Boolean);
     procedure ReplaceDone(Sender: TObject; AReplaced, ASkipped: Integer; ACancelled: Boolean);
@@ -164,6 +165,14 @@ end;
 procedure TTyRichEditFindTest.SelChanged(Sender: TObject);
 begin
   Inc(FSelChanges);
+end;
+
+procedure TTyRichEditFindTest.ChangedEdit(Sender: TObject);
+begin
+  Inc(FChanges);
+  if not FEditInHandler then Exit;
+  FEditInHandler := False;
+  FRich.Document.Execute(TTyRichInsertText.Create(0, 'Q'));
 end;
 
 procedure TTyRichEditFindTest.Progress(Sender: TObject; ADone, ATotal: Int64;
@@ -863,6 +872,22 @@ begin
   AssertFalse('an edit stops it', FRich.FindRunning);
   AssertTrue('told: ' + FDone[0], Pos('cancelled', FDone[0]) > 0);
   AssertEquals('the replace and the typing', 2, FRich.Document.UndoDepth);
+  // an edit made in the change handler of one of its batches: it stops, the edit stays
+  ResetEvents;
+  FRich.ReplaceAllAsync('sat', 'sits');
+  turns := 0;
+  while FRich.FindRunning and (Pos('sits', Text) = 0) and (turns < 10000) do
+  begin
+    FRich.Turn;
+    Inc(turns);
+  end;
+  FRich.OnChange := @ChangedEdit;
+  FEditInHandler := True;
+  FRich.Turn;
+  FRich.OnChange := @Changed;
+  AssertFalse('an edit in its change handler stops it', FRich.FindRunning);
+  AssertTrue('told', Pos('cancelled', FDone[0]) > 0);
+  AssertEquals('the edit stays', 'Q', Copy(Text, 1, 1));
   // a save
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');
@@ -902,7 +927,7 @@ procedure TTyRichEditFindTest.TestABackgroundReplaceTrimsALazyFile;
 var
   s: RawByteString;
   b, saved: TBytes;
-  k, parsed0: Integer;
+  k, parsed0, most: Integer;
   load: TTyRtfLoad;
   m: TBytesStream;
 begin
@@ -917,7 +942,15 @@ begin
   AssertTrue('more intervals than stay parsed', load.IntervalCount > 2 * load.MaxResidentIntervals);
   parsed0 := load.ParseCount;
   FRich.ReplaceAllAsync('word', 'term');
-  TurnUntilDone;
+  most := 0;
+  while FRich.FindRunning do
+  begin
+    FRich.Turn;
+    if load.ResidentIntervals > most then most := load.ResidentIntervals;
+  end;
+  // (the loader's bound for what is only read is twice its bound and one: the find's half)
+  AssertTrue(Format('between its turns no more than the bound stays parsed (%d of %d)',
+    [most, load.MaxResidentIntervals]), most <= 2 * load.MaxResidentIntervals + 1);
   AssertEquals('done', 'replace 1500 0 ended', FDone[0]);
   AssertTrue('parsed what it changed', load.ParseCount - parsed0 >= load.IntervalCount div 2);
   AssertTrue(Format('the parsed intervals back to the bound (%d of %d)',

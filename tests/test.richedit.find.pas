@@ -634,6 +634,20 @@ begin
     finally
       lazy.Free;
     end;
+    // a font whose code page is not the file's: \ansicpg1252, the text in a GBK font
+    full.Free;
+    full := nil;
+    bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}' +
+      '{|f1|fnil|fcharset134 SimSun;}}|pard |f1 |''d6|''d0|''ce|''c4|f0  font|par}'));
+    full := LoadRtf(bytes, True);
+    AssertEquals('the GBK font''s text', '0', Naive(full, U([$4E2D, $6587]), []));
+    lazy := LoadRtf(bytes, False);
+    try
+      AssertEquals('found through the font''s code page', '0',
+        Positions(lazy, U([$4E2D, $6587]), [], True));
+    finally
+      lazy.Free;
+    end;
   finally
     full.Free;
   end;
@@ -650,6 +664,7 @@ begin
     AssertEquals('none', '0 4 8 15 19 24', Positions(doc, 'cat', []));
     AssertEquals('match case', '4 15 19 24', Positions(doc, 'cat', [rfoMatchCase]));
     AssertEquals('whole word', '0 4 8 19 24', Positions(doc, 'cat', [rfoWholeWord]));
+    AssertEquals('whole word: not the start of a longer one', '', Positions(doc, 'ca', [rfoWholeWord]));
     AssertEquals('both', '4 19 24', Positions(doc, 'cat', [rfoMatchCase, rfoWholeWord]));
     AssertEquals('backward', 24, First(doc, 'cat', [rfoBackward]));
     AssertEquals('backward, match case, whole word, before 24', 19,
@@ -693,6 +708,8 @@ begin
     AssertEquals('full-width Latin', '19', Positions(doc, U([$FF41, $FF42]), []));
     AssertEquals('full-width Latin, case', '', Positions(doc, U([$FF41, $FF42]), [rfoMatchCase]));
     AssertEquals('the fold table', $3C3, TyRichFoldChar($3A3));
+    // nothing is normalised: a and a combining diaeresis are not U+00E4
+    AssertEquals('no normalisation', '', Positions(doc, U([Ord('a'), $308]), []));
     AssertEquals('...a full-width capital', $FF41, TyRichFoldChar($FF21));
     AssertEquals('...a byte that is no text is itself', TyRichFindRawByte + $C3,
       TyRichFoldChar(TyRichFindRawByte + $C3));
