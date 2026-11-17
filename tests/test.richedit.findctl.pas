@@ -32,13 +32,18 @@ type
     FProgressTotal: Int64;
     FCancelAt: Integer;
     FDone: array of string;
-    FEditInHandler: Boolean;
+    FDonePos, FDoneLen: TTyRichPos;
+    FDoneProgress: Int64;           // the last progress before the done-event
+    FProgressLast: Int64;
+    FRestartFrom: Integer;          // 1: the progress handler starts FRestartWith, 2: the done one
+    FRestartWith: string;
+    FEditInHandler, FEditInChange: Boolean;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
     procedure ChangedEdit(Sender: TObject);
     procedure Progress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
-    procedure FindDone(Sender: TObject; AFound, ACancelled: Boolean);
-    procedure ReplaceDone(Sender: TObject; AReplaced, ASkipped: Integer; ACancelled: Boolean);
+    procedure FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
+    procedure ReplaceDone(Sender: TObject; AEnd: TTyRichFindEnd; AReplaced, ASkipped: Integer);
     procedure ResetEvents;
     procedure SetText(const S: string);
     procedure LoadBytes(const B: TBytes; AFinish: Boolean = True);
@@ -68,7 +73,12 @@ type
     procedure TestABackgroundReplaceIsOneStepThroughTheUsersMoves;
     procedure TestABackgroundReplaceStopsAtAnEditAndASave;
     procedure TestABackgroundReplaceTrimsALazyFile;
-    procedure TestTheWindowGoingStopsIt;
+    procedure TestTheWindowMadeAgainDoesNotStopIt;
+    procedure TestANewContentTellsTheFindItEnded;
+    procedure TestFindNextNeverStandsStill;
+    procedure TestAFindStartedFromItsHandler;
+    procedure TestWrapReadsOnceAndIntegersCompile;
+    procedure TestTheProgressEndsAtItsTotal;
     procedure TestTheEventsArePublished;
   end;
 
@@ -170,8 +180,8 @@ end;
 procedure TTyRichEditFindTest.ChangedEdit(Sender: TObject);
 begin
   Inc(FChanges);
-  if not FEditInHandler then Exit;
-  FEditInHandler := False;
+  if not FEditInChange then Exit;
+  FEditInChange := False;
   FRich.Document.Execute(TTyRichInsertText.Create(0, 'Q'));
 end;
 
@@ -181,6 +191,13 @@ begin
   SetLength(FProgress, Length(FProgress) + 1);
   FProgress[High(FProgress)] := ADone;
   FProgressTotal := ATotal;
+  FProgressLast := ADone;
+  if FRestartFrom = 1 then
+  begin
+    FRestartFrom := 0;
+    if FRestartWith = '' then FRich.ReplaceAllAsync('beta', 'BETA')
+    else FRich.FindNextAsync(FRestartWith, []);
+  end;
   if (FCancelAt > 0) and (Length(FProgress) >= FCancelAt) then ACancel := True;
   if FEditInHandler then
   begin
@@ -189,19 +206,41 @@ begin
   end;
 end;
 
-procedure TTyRichEditFindTest.FindDone(Sender: TObject; AFound, ACancelled: Boolean);
+procedure TTyRichEditFindTest.FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
 begin
   SetLength(FDone, Length(FDone) + 1);
-  FDone[High(FDone)] := Format('find %s %s', [BoolToStr(AFound, 'found', 'none'),
-    BoolToStr(ACancelled, 'cancelled', 'ended')]);
+  case AEnd of
+    rfeFound: FDone[High(FDone)] := 'find found ended';
+    rfeNotFound: FDone[High(FDone)] := 'find none ended';
+    rfeCancelled: FDone[High(FDone)] := 'find none cancelled';
+  else
+    FDone[High(FDone)] := 'find ?';
+  end;
+  FDonePos := APos;
+  FDoneLen := ALen;
+  FDoneProgress := FProgressLast;
+  if FRestartFrom = 2 then
+  begin
+    FRestartFrom := 0;
+    FRich.FindNextAsync(FRestartWith, []);
+  end;
 end;
 
-procedure TTyRichEditFindTest.ReplaceDone(Sender: TObject; AReplaced, ASkipped: Integer;
-  ACancelled: Boolean);
+procedure TTyRichEditFindTest.ReplaceDone(Sender: TObject; AEnd: TTyRichFindEnd; AReplaced,
+  ASkipped: Integer);
+var
+  s: string;
 begin
+  case AEnd of
+    rfeReplaced: s := 'ended';
+    rfeCancelled: s := 'cancelled';
+    rfeLimit: s := 'limit';
+  else
+    s := '?';
+  end;
   SetLength(FDone, Length(FDone) + 1);
-  FDone[High(FDone)] := Format('replace %d %d %s', [AReplaced, ASkipped,
-    BoolToStr(ACancelled, 'cancelled', 'ended')]);
+  FDone[High(FDone)] := Format('replace %d %d %s', [AReplaced, ASkipped, s]);
+  FDoneProgress := FProgressLast;
 end;
 
 procedure TTyRichEditFindTest.ResetEvents;
@@ -212,6 +251,13 @@ begin
   FProgressTotal := 0;
   FCancelAt := 0;
   FDone := nil;
+  FDonePos := -2;
+  FDoneLen := -2;
+  FDoneProgress := -1;
+  FEditInChange := False;
+  FProgressLast := -1;
+  FRestartFrom := 0;
+  FRestartWith := '';
   FEditInHandler := False;
   FRich.ResetCounts;
   FRich.Waits := 0;
@@ -291,9 +337,9 @@ begin
   FRich.SelLength := 3;
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');
-  TFindAccess(FRich).ReplaceBatch := 100;
+  TFindAccess(FRich).FindSlice := 1024;
   turns := 0;
-  // through the find, and some batches in
+  // through the find, and some parts in
   while FRich.FindRunning and (Pos('dog', Text) = 0) and (turns < 10000) do
   begin
     FRich.Turn;
@@ -355,9 +401,16 @@ var
 begin
   SetText('one two' + #10 + 'One two');
   AssertEquals('forward', 0, FRich.Search('one', 0, -1, []));
-  AssertEquals('backward: the last', 8, FRich.Search('one', 0, -1, [soBackward]));
-  AssertEquals('backward in a range', 0, FRich.Search('one', 0, 8, [soBackward]));
-  AssertEquals('match case, backward', 0, FRich.Search('one', 0, -1, [soBackward, soMatchCase]));
+  { H-I7, RichMemo's facts (its win32 back end): backward the search begins at Start and goes
+    toward the text's beginning over Len characters - [Start - Len, Start], a Len below 0 down
+    to 0 - the match nearest Start, whole inside. }
+  AssertEquals('backward from the end', 8, FRich.Search('one', 15, -1, [soBackward]));
+  AssertEquals('backward from 0: nothing before it', -1, FRich.Search('one', 0, -1, [soBackward]));
+  AssertEquals('backward from 8: the one before', 0, FRich.Search('one', 8, -1, [soBackward]));
+  AssertEquals('backward over 4 from 11: the one at 8', 8, FRich.Search('one', 11, 4, [soBackward]));
+  AssertEquals('backward over 4 from 10: none whole inside', -1, FRich.Search('one', 10, 4, [soBackward]));
+  AssertEquals('backward over 20 from 15: not below 0', 8, FRich.Search('one', 15, 20, [soBackward]));
+  AssertEquals('match case, backward', 0, FRich.Search('one', 15, -1, [soBackward, soMatchCase]));
   AssertEquals('whole word', -1, FRich.Search('on', 0, -1, [soWholeWord]));
   AssertEquals('across the paragraph end', 4, FRich.Search('two' + #13#10 + 'One', 0, -1, []));
   s := -1;
@@ -643,7 +696,8 @@ begin
     before := Length(FProgress);
     FRich.Turn;
     Inc(turns);
-    AssertTrue('at most the cap of pieces a turn', Length(FProgress) - before <= CRichIdleMaxSteps);
+    // (and the end's progress, at its total)
+    AssertTrue('at most the cap of pieces a turn', Length(FProgress) - before <= CRichIdleMaxSteps + 1);
     Inc(steps, Length(FProgress) - before);
   end;
   AssertTrue(Format('in several turns (%d)', [turns]), turns > 3);
@@ -721,7 +775,9 @@ begin
   FRich.FindNextAsync('needle');
   TurnUntilDone;
   AssertEquals('ACancel', 'find none cancelled', FDone[0]);
-  AssertEquals('...at its second piece', 2, Length(FProgress));
+  // (its second piece's, then the end's: at its total)
+  AssertEquals('...at its second piece', 3, Length(FProgress));
+  AssertEquals('...the last at its total', FProgressTotal, FProgress[2]);
   // a second start stops the first
   ResetEvents;
   FRich.FindNextAsync('needle');
@@ -755,13 +811,14 @@ begin
   FRich.Turn;
   FRich.Turn;
   AssertFalse('an edit in the handler stops it', FRich.FindRunning);
-  // a new content: quietly
+  // a new content: told, by the call that replaced the content (H-I5)
   ResetEvents;
   FRich.FindNextAsync('needle');
   FRich.Turn;
   FRich.Lines.Text := 'other';
   AssertFalse('a new content stops it', FRich.FindRunning);
-  AssertEquals('...quietly', 0, Length(FDone));
+  AssertEquals('...told, once', 1, Length(FDone));
+  AssertEquals('...cancelled', 'find none cancelled', FDone[0]);
   // the control's end: quietly, nothing left
   SetText(Lines(2000, 'filler words '));
   FRich.FindNextAsync('needle');
@@ -812,7 +869,7 @@ begin
   before := Text;
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');
-  TFindAccess(FRich).ReplaceBatch := 50;
+  TFindAccess(FRich).FindSlice := 1024;
   turns := 0;
   while FRich.FindRunning and (Pos('dog', Text) = 0) and (turns < 10000) do
   begin
@@ -832,23 +889,42 @@ begin
   FRich.Undo;
   FRich.Undo;
   AssertEquals('both undone', before, Text);
-  // a break of the run from code between two batches: that batch goes back out, it ends
+  { H-M1: a break of the run from code between two parts does not touch the step (it merges
+    with nothing): the replace goes on, one step, nothing on the redo side. }
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');
+  TFindAccess(FRich).FindSlice := 1024;
   turns := 0;
   while FRich.FindRunning and (Pos('dog', Text) = 0) and (turns < 10000) do
   begin
     FRich.Turn;
     Inc(turns);
   end;
-  TFindAccess(FRich).ReplaceBatch := 50;
   FRich.Document.BreakMerge;
-  FRich.Turn;
-  AssertFalse('it ended', FRich.FindRunning);
-  AssertTrue('cancelled', Pos('cancelled', FDone[0]) > 0);
+  TurnUntilDone;
+  AssertEquals('BreakMerge: it went on', 'replace 1000 0 ended', FDone[0]);
   AssertEquals('still one step', 1, FRich.Document.UndoDepth);
+  AssertFalse('nothing to redo', FRich.CanRedo);
   FRich.Undo;
   AssertEquals('undone at once', before, Text);
+  // a saved point between two parts ends it: nothing of the next part is anywhere
+  ResetEvents;
+  FRich.ReplaceAllAsync('cat', 'dog');
+  TFindAccess(FRich).FindSlice := 1024;
+  turns := 0;
+  while FRich.FindRunning and (Pos('dog', Text) = 0) and (turns < 10000) do
+  begin
+    FRich.Turn;
+    Inc(turns);
+  end;
+  turns := Length(Text);
+  FRich.Modified := False;
+  TurnUntilDone;
+  AssertTrue('a saved point: cancelled - ' + FDone[0], Pos('cancelled', FDone[0]) > 0);
+  AssertEquals('...one step', 1, FRich.Document.UndoDepth);
+  AssertFalse('...nothing to redo', FRich.CanRedo);
+  AssertFalse('...the content saved', FRich.Modified);
+  AssertEquals('...nothing more replaced', turns, Length(Text));
 end;
 
 procedure TTyRichEditFindTest.TestABackgroundReplaceStopsAtAnEditAndASave;
@@ -860,7 +936,7 @@ begin
   // an edit
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');
-  TFindAccess(FRich).ReplaceBatch := 50;
+  TFindAccess(FRich).FindSlice := 1024;
   turns := 0;
   while FRich.FindRunning and (Pos('dog', Text) = 0) and (turns < 10000) do
   begin
@@ -882,8 +958,14 @@ begin
     Inc(turns);
   end;
   FRich.OnChange := @ChangedEdit;
-  FEditInHandler := True;
-  FRich.Turn;
+  FEditInChange := True;
+  // (the turns until a part is replaced: its change is heard)
+  turns := 0;
+  while FRich.FindRunning and FEditInChange and (turns < 10000) do
+  begin
+    FRich.Turn;
+    Inc(turns);
+  end;
   FRich.OnChange := @Changed;
   AssertFalse('an edit in its change handler stops it', FRich.FindRunning);
   AssertTrue('told', Pos('cancelled', FDone[0]) > 0);
@@ -903,7 +985,7 @@ begin
   // the composition: no batch goes in while it composes (the seam: CommitComposition's
   // counterpart is a test of the IME suite; here the document's update holds it)
   ResetEvents;
-  FRich.ReplaceAllAsync('sat', 'stood');
+  FRich.ReplaceAllAsync('here', 'HERE');
   FRich.Document.BeginUpdate;
   try
     turns := 0;
@@ -912,13 +994,16 @@ begin
       FRich.Turn;
       Inc(turns);
     end;
+    if Length(FDone) > 0 then Fail('it ended: ' + FDone[0]);
     AssertTrue('waits while the document holds its changes back', FRich.FindRunning);
-    AssertTrue('nothing replaced meanwhile', Pos('stood', Text) = 0);
+    AssertTrue('nothing replaced meanwhile', Pos('HERE', Text) = 0);
+    // (H-M9) and asks for no turn while it waits
+    AssertFalse('no work while it waits', TFindAccess(FRich).HasBackgroundWork);
   finally
     FRich.Document.EndUpdate;
   end;
   TurnUntilDone;
-  AssertTrue('then it went on', Pos('stood', Text) > 0);
+  AssertTrue('then it went on', Pos('HERE', Text) > 0);
 end;
 
 { A background replace over a lazily read RTF parses what it changes, and between its batches
@@ -967,7 +1052,9 @@ begin
   AssertTrue('undone and saved: the file', SameBytes(b, saved));
 end;
 
-procedure TTyRichEditFindTest.TestTheWindowGoingStopsIt;
+{ H-I5: the window made again (what RecreateWnd does for a border style, a parent, BiDi) does
+  not end a background find: it waits for the window, as the load does, and goes on. }
+procedure TTyRichEditFindTest.TestTheWindowMadeAgainDoesNotStopIt;
 var
   F: TForm;
 begin
@@ -978,17 +1065,236 @@ begin
     F.HandleNeeded;
     FRich.HandleNeeded;
     AssertTrue('a handle', FRich.HandleAllocated);
-    SetText(Lines(5000, 'filler words '));
+    SetText(Lines(5000, 'filler words ') + 'the needle');
+    FRich.SelStart := 0;
+    ResetEvents;
     FRich.FindNextAsync('needle');
     AssertTrue('the driver is on', FRich.IdleOn or FRich.TurnQueued or (FRich.TimerOf <> nil));
     FRich.DropHandle;
-    AssertFalse('the window going stops it', FRich.FindRunning);
-    AssertEquals('...quietly', 0, Length(FDone));
-    AssertFalse('and its driver', FRich.IdleOn);
+    AssertTrue('the window going does not stop it', FRich.FindRunning);
+    AssertEquals('...no event', 0, Length(FDone));
+    FRich.HandleNeeded;
+    AssertTrue('the driver on again', FRich.IdleOn or FRich.TurnQueued or (FRich.TimerOf <> nil));
+    TurnUntilDone;
+    AssertEquals('found, once', 1, Length(FDone));
+    AssertEquals('found', 'find found ended', FDone[0]);
   finally
     FRich.Parent := nil;
     F.Free;
   end;
+end;
+
+{ H-I5: every content replacement ends a running find or replace with its done-event
+  (cancelled), raised from the public call that replaced the content, before it returns -
+  Lines.Text, Clear, LoadFromStream; one started from that event's handler is told too; the
+  destructor raises none. }
+procedure TTyRichEditFindTest.TestANewContentTellsTheFindItEnded;
+var
+  st: TBytesStream;
+begin
+  SetText(Lines(5000, 'filler words '));
+  FRich.FindNextAsync('needle');
+  FRich.Turn;
+  FRich.Clear;
+  AssertEquals('Clear: told once', 1, Length(FDone));
+  AssertEquals('...cancelled', 'find none cancelled', FDone[0]);
+  SetText(Lines(5000, 'a cat here '));
+  FRich.ReplaceAllAsync('cat', 'dog');
+  FRich.Turn;
+  st := TBytesStream.Create(BytesOf(Rtf('{|rtf1|ansi a cat|par}')));
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertEquals('a load: told once', 1, Length(FDone));
+  AssertTrue('...cancelled: ' + FDone[0], Pos('cancelled', FDone[0]) > 0);
+  // a find started from that event's handler ends with the content - and is told too
+  SetText(Lines(5000, 'filler words '));
+  FRich.FindNextAsync('needle');
+  FRestartFrom := 2;
+  FRestartWith := 'words';
+  FRich.Lines.Text := 'other words';
+  AssertFalse('nothing runs', FRich.FindRunning);
+  AssertEquals('both told, before the call returned', 2, Length(FDone));
+  // the destructor: none
+  ResetEvents;
+  FRich.FindNextAsync('needle');
+  FreeAndNil(FRich);
+  AssertEquals('the end: no event', 0, Length(FDone));
+  FRich := TEditProbe.Create(nil);
+  FRich.Controller := FCtl;
+end;
+
+{ H-I2: a match inside a cluster (e of e with a combining mark; a thumbs-up of one with a skin
+  tone) is selected with its whole cluster, never as nothing, and the next call goes on after
+  it: a while loop of FindNext ends - forward, backward, with wrapping it goes round. }
+procedure TTyRichEditFindTest.TestFindNextNeverStandsStill;
+const
+  E = #$65;
+var
+  n, last: Integer;
+  thumbs, mod5: string;
+begin
+  SetText('x' + E + #$CC#$81 + ' y' + E + #$CC#$81 + ' z' + E);
+  FRich.SelStart := 0;
+  n := 0;
+  while FRich.FindNext('e', []) and (n < 20) do
+  begin
+    AssertTrue('never empty', FRich.SelLength > 0);
+    Inc(n);
+  end;
+  AssertEquals('three, and the loop ends', 3, n);
+  AssertEquals('FindText: the match''s own place', 1, FRich.FindText('e', 0, -1, []));
+  // backward
+  FRich.SelStart := FRich.Document.Text.Length;
+  n := 0;
+  while FRich.FindNext('e', [rfoBackward]) and (n < 20) do
+  begin
+    AssertTrue('backward: never empty', FRich.SelLength > 0);
+    Inc(n);
+  end;
+  AssertEquals('backward: three, the loop ends', 3, n);
+  // with wrapping it goes round, never standing still
+  FRich.SelStart := 0;
+  last := -1;
+  for n := 1 to 7 do
+  begin
+    AssertTrue(FRich.FindNext('e', [rfoWrap]));
+    AssertTrue('it moved', FRich.SelStart <> last);
+    last := FRich.SelStart;
+  end;
+  // a thumbs-up with a skin tone
+  thumbs := #$F0#$9F#$91#$8D;
+  mod5 := #$F0#$9F#$8F#$BD;
+  SetText('a ' + thumbs + mod5 + ' b ' + thumbs + mod5 + ' c');
+  FRich.SelStart := 0;
+  n := 0;
+  while FRich.FindNext(thumbs, []) and (n < 20) do Inc(n);
+  AssertEquals('two thumbs, and the loop ends', 2, n);
+  // in the background: the same
+  FRich.SelStart := 0;
+  ResetEvents;
+  FRich.FindNextAsync(thumbs, []);
+  TurnUntilDone;
+  AssertEquals('found', 'find found ended', FDone[0]);
+  AssertEquals('the event: the match''s own place', 2, FDonePos);
+  AssertEquals('...its own length', 1, FDoneLen);
+  AssertEquals('the selection: the whole cluster', 2, FRich.SelLength);
+  FRich.FindNextAsync(thumbs, []);
+  TurnUntilDone;
+  AssertEquals('the next one', 7, FDonePos);
+end;
+
+{ H-I6: a find or a replace started from a handler of the one running (its progress, its end)
+  is that one, not the old: it finds what it looks for, where it is. }
+procedure TTyRichEditFindTest.TestAFindStartedFromItsHandler;
+begin
+  SetText('alpha beta gamma delta');
+  FRich.SelStart := 0;
+  ResetEvents;
+  FRestartFrom := 1;
+  FRestartWith := 'delta';
+  FRich.FindNextAsync('beta', []);
+  TurnUntilDone;
+  AssertEquals('the first told, cancelled', 'find none cancelled', FDone[0]);
+  AssertEquals('the second found', 'find found ended', FDone[High(FDone)]);
+  AssertEquals('...delta, where it is', 17, FRich.SelStart);
+  AssertEquals(5, FRich.SelLength);
+  // from the done handler
+  FRich.SelStart := 0;
+  ResetEvents;
+  FRestartFrom := 2;
+  FRestartWith := 'gamma';
+  FRich.FindNextAsync('absent', []);
+  TurnUntilDone;
+  AssertEquals('two events', 2, Length(FDone));
+  AssertEquals('the first: not found', 'find none ended', FDone[0]);
+  AssertEquals('the second: found', 'find found ended', FDone[1]);
+  AssertEquals('...gamma', 11, FRich.SelStart);
+  // a replace started from a find's progress handler is a replace of its own
+  FRich.SelStart := 0;
+  ResetEvents;
+  FRestartFrom := 1;
+  FRestartWith := '';
+  FRich.FindNextAsync('delta', []);
+  TurnUntilDone;
+  AssertEquals('the find cancelled, the replace done', 'replace 1 0 ended', FDone[High(FDone)]);
+  AssertEquals('alpha BETA gamma delta', Text);
+end;
+
+{ H-M6: a wrapped search that finds nothing reads the text once (the second leg ends where the
+  first began, a needle's length into it). H-M7: RichMemo's and Delphi's calls with Integer
+  variables compile and run. }
+procedure TTyRichEditFindTest.TestWrapReadsOnceAndIntegersCompile;
+var
+  len: Int64;
+  i, s, n: Integer;
+  ok: Boolean;
+begin
+  SetText(Lines(5000, 'filler words '));
+  len := FRich.Document.Text.Length;
+  FRich.SelStart := len div 2;
+  TFindAccess(FRich).FindBytesRead := 0;
+  AssertFalse(FRich.FindNext('absent', [rfoWrap]));
+  AssertTrue(Format('read once (%d of %d)', [TFindAccess(FRich).FindBytesRead, len]),
+    TFindAccess(FRich).FindBytesRead <= len + 64);
+  // Integer variables, as RichMemo and Delphi code has them
+  i := FRich.FindText('words 10', 0, -1, []);
+  AssertTrue('Delphi''s FindText into an Integer', i > 0);
+  s := -1;
+  n := -1;
+  ok := FRich.Search('words 10', 0, -1, [], s, n);
+  AssertTrue('RichMemo''s second Search with Integer variables', ok);
+  AssertEquals(i, s);
+  AssertEquals(8, n);
+  i := FRich.Search('words 10', 0, -1, []);
+  AssertEquals(s, i);
+end;
+
+{ H-M8: the progress always ends at its total, before the done-event - also for a find that
+  found nothing, one cancelled, a replace with no match, one at the limit; the replace at the
+  limit says so (the synchronous one in its result too). }
+procedure TTyRichEditFindTest.TestTheProgressEndsAtItsTotal;
+var
+  skipped, n: Integer;
+  fin: TTyRichFindEnd;
+begin
+  SetText(Lines(3000, 'filler words '));
+  FRich.SelStart := 0;
+  ResetEvents;
+  FRich.FindNextAsync('absent', []);
+  TurnUntilDone;
+  AssertEquals('not found', 'find none ended', FDone[0]);
+  AssertEquals('...at its total', FProgressTotal, FDoneProgress);
+  ResetEvents;
+  FCancelAt := 1;
+  FRich.FindNextAsync('absent', []);
+  TurnUntilDone;
+  AssertEquals('cancelled', 'find none cancelled', FDone[0]);
+  AssertEquals('...at its total', FProgressTotal, FDoneProgress);
+  ResetEvents;
+  FRich.ReplaceAllAsync('absent', 'x');
+  TurnUntilDone;
+  AssertEquals('no match', 'replace 0 0 ended', FDone[0]);
+  AssertEquals('...at its total', FProgressTotal, FDoneProgress);
+  // the limit
+  FRich.Document.MaxUndoBytes := 4096;
+  ResetEvents;
+  FRich.ReplaceAllAsync('filler', 'f');
+  TurnUntilDone;
+  AssertTrue('at the limit: ' + FDone[0], Pos(' limit', FDone[0]) > 0);
+  AssertEquals('...at its total', FProgressTotal, FDoneProgress);
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  ResetEvents;
+  n := FRich.ReplaceAll('filler', 'f', [], skipped, fin);
+  AssertTrue('the synchronous one: some', n > 0);
+  AssertEquals('...at the limit', Ord(rfeLimit), Ord(fin));
+  AssertEquals('...one change', 1, FChanges);
+  FRich.Document.MaxUndoBytes := 0;
+  n := FRich.ReplaceAll('filler', 'f', [], skipped, fin);
+  AssertEquals('...and the rest', Ord(rfeReplaced), Ord(fin));
+  AssertEquals('none left', 0, Pos('filler', Text));
 end;
 
 procedure TTyRichEditFindTest.TestTheEventsArePublished;

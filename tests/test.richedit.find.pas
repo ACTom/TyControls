@@ -56,9 +56,11 @@ type
     procedure TestAFindWhileLoading;
     procedure TestAFindChangesNothing;
     // replacing
-    procedure TestReplaceIsOneStepAcrossTurns;
-    procedure TestReplaceCountsItsStepOnce;
-    procedure TestReplaceTakesTheFormatOfWhatItReplaces;
+    procedure TestReplaceIsOneStepOfParts;
+    procedure TestReplaceKeepsFormatsAndObjects;
+    procedure TestReplaceStopsAtTheLimit;
+    procedure TestAStoppedReplaceLeavesNothingToRedo;
+    procedure TestReplaceParsesEachIntervalOnce;
     procedure TestReplaceUndoneSavesTheFile;
     procedure TestReplaceKeepsR57AtATablesEdges;
   end;
@@ -1556,131 +1558,354 @@ end;
 
 { ---- replacing ---- }
 
-procedure TTyRichFindTest.TestReplaceIsOneStepAcrossTurns;
+{ Every match of ANeedle replaced by ARepl in one command, run whole (AllAtOnce: the way inside
+  an update block, and a redo's); the number replaced, ASkipped the matches the document
+  refused. }
+function ReplaceIn(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; out ASkipped: Integer): Integer;
 var
-  doc: TTyRichDocument;
+  cmd: TTyRichReplaceAllCommand;
+  tally: TTyRichReplaceTally;
 begin
-  doc := TextDoc('a cat, a cat, a cat, a cat');
+  tally := Default(TTyRichReplaceTally);
+  cmd := TTyRichReplaceAllCommand.Create(ADoc, ANeedle, ARepl, AOptions);
+  cmd.AllAtOnce := True;
+  cmd.Tally := @tally;
+  ADoc.Execute(cmd);
+  ASkipped := tally.Skipped;
+  Result := tally.Replaced;
+end;
+
+{ The same in parts, as the control runs it: a range of paragraphs found, then replaced
+  (Execute, then ExecutePart: one step), a lazily read file's intervals let go between two. }
+function ReplaceInParts(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; ARange: Int64; out ASkipped, AParts: Integer;
+  out ALimited: Boolean): Integer;
+var
+  cmd: TTyRichReplaceAllCommand;
+  tally: TTyRichReplaceTally;
+  ran: Boolean;
+  load: TTyRtfLoad;
+begin
+  tally := Default(TTyRichReplaceTally);
+  cmd := TTyRichReplaceAllCommand.Create(ADoc, ANeedle, ARepl, AOptions);
+  cmd.Tally := @tally;
+  cmd.RangeChars := ARange;
+  ran := False;
+  AParts := 0;
   try
-    // two turns of the same replace: one step
-    AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(7, [23, 16], 3, 'dog')));
-    AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(7, [9, 2], 3, 'dog')));
-    AssertEquals('replaced', 'a dog, a dog, a dog, a dog', doc.Text.GetText(0, doc.Text.Length));
-    AssertEquals('one step', 1, doc.UndoDepth);
-    // typing after it is a step of its own, and so is another replace
-    AssertTrue(doc.Execute(TTyRichInsertText.Create(0, 'x')));
-    AssertEquals('typing', 2, doc.UndoDepth);
-    AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(8, [1], 1, 'y')));
-    AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(7, [2], 1, 'z')));
-    AssertEquals('another session', 4, doc.UndoDepth);
-    doc.Undo;
-    doc.Undo;
-    doc.Undo;
-    AssertEquals('the first replace again', 'a dog, a dog, a dog, a dog',
-      doc.Text.GetText(0, doc.Text.Length));
-    doc.Undo;
-    AssertEquals('undone at once', 'a cat, a cat, a cat, a cat', doc.Text.GetText(0, doc.Text.Length));
-    doc.Redo;
-    AssertEquals('redone at once', 'a dog, a dog, a dog, a dog', doc.Text.GetText(0, doc.Text.Length));
-    AssertEquals('the name', rsRichUndoReplace, doc.UndoDescription);
+    repeat
+      cmd.Prepare(-1);
+      if not cmd.Ready then Break;
+      if not ran then
+      begin
+        ran := True;
+        if not ADoc.Execute(cmd) then Break;
+      end
+      else if not ADoc.ExecutePart(cmd) then
+        Break;
+      Inc(AParts);
+      load := TyRichRtfLoadOf(ADoc);
+      if load <> nil then load.Trim;
+    until cmd.Finished;
   finally
-    doc.Free;
+    if not ran then cmd.Free;
+  end;
+  ASkipped := tally.Skipped;
+  ALimited := tally.Limited;
+  Result := tally.Replaced;
+end;
+
+function CountOf(const ASub, AText: RawByteString): Integer;
+var
+  p: Integer;
+begin
+  Result := 0;
+  p := Pos(ASub, AText);
+  while p > 0 do
+  begin
+    Inc(Result);
+    p := Pos(ASub, AText, p + Length(ASub));
   end;
 end;
 
-{ What the history counts of a step that batches merged into is what it counts of the same
-  step run whole (a redo counts its records anew); the merges count only what they add. And
-  what the document refuses is left, and counted where the caller asked. }
-procedure TTyRichFindTest.TestReplaceCountsItsStepOnce;
+type
+  // counts a document's OnChange
+  TChangeCounter = class
+  public
+    Count: Integer;
+    procedure Changed(Sender: TObject; const AChange: TTyRichChange);
+  end;
+
+procedure TChangeCounter.Changed(Sender: TObject; const AChange: TTyRichChange);
+begin
+  Inc(Count);
+end;
+
+{ H-I4 (R74): a replace of every match is ONE command - its parts (a range of paragraphs from
+  the end toward the start each) one undo step, never merged with another step, one OnChange
+  a part; an undo puts the text back at once, a redo replays it; and what the step keeps is a
+  few bytes a match (one record a range: a paragraph's pieces and value before). }
+procedure TTyRichFindTest.TestReplaceIsOneStepOfParts;
 var
   doc: TTyRichDocument;
-  merged, whole: Int64;
-  skipped: Integer;
-  cmd: TTyRichReplaceCommand;
-  f: TTyRichFinder;
-  s: RawByteString;
-  i: Integer;
-  places: array of TTyRichPos;
+  s, before: RawByteString;
+  i, n, skipped, parts: Integer;
+  limited: Boolean;
+  counter: TChangeCounter;
+  bytes, redone: Int64;
 begin
   s := '';
-  for i := 0 to 99 do s := s + 'one cat here' + #10;
+  for i := 0 to 1999 do s := s + 'alpha,bravo,charlie,delta,echo,foxtrot,golf,hotel,india,juliet' + #10;
   doc := TextDoc(s);
+  counter := TChangeCounter.Create;
   try
-    // 100 matches, the last first, in four batches
-    places := nil;
-    SetLength(places, 100);
-    for i := 0 to 99 do places[i] := (99 - i) * 13 + 4;
-    for i := 0 to 3 do
-      AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(3, Copy(places, i * 25, 25), 3, 'tiger')));
+    before := doc.Text.GetText(0, doc.Text.Length);
+    doc.OnChange := @counter.Changed;
+    n := ReplaceInParts(doc, ',', ';', [], 4096, skipped, parts, limited);
+    AssertEquals('every comma', 18000, n);
+    AssertEquals('none skipped', 0, skipped);
+    AssertFalse('no limit', limited);
+    AssertTrue(Format('in parts (%d)', [parts]), parts > 10);
+    AssertEquals('one OnChange a part', parts, counter.Count);
+    AssertEquals('none left', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
     AssertEquals('one step', 1, doc.UndoDepth);
-    merged := doc.HistoryBytes;
+    AssertEquals('the name', rsRichUndoReplace, doc.UndoDescription);
+    bytes := doc.HistoryBytes;
+    AssertTrue(Format('a few bytes a match (%d for %d)', [bytes, n]), bytes < 16 * n);
     doc.Undo;
-    // undone, its records are reverted and go: the redo side keeps next to nothing of them
-    AssertTrue(Format('undone: %d of %d bytes kept', [doc.HistoryBytes, merged]),
-      doc.HistoryBytes * 4 < merged);
+    AssertEquals('undone at once', before, doc.Text.GetText(0, doc.Text.Length));
+    AssertEquals('...one OnChange', parts + 1, counter.Count);
     doc.Redo;
-    whole := doc.HistoryBytes;
-    // (the arrays' spare room differs, the records do not)
-    AssertTrue(Format('merged (%d), counted as the step run whole (%d)', [merged, whole]),
-      Abs(whole - merged) * 100 < whole);
-    AssertTrue('records counted', merged > 100 * 8);
-    AssertEquals('all replaced', 0, Pos('cat', doc.Text.GetText(0, doc.Text.Length)));
+    AssertEquals('redone at once', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+    AssertEquals('...as one step', 1, doc.UndoDepth);
+    redone := doc.HistoryBytes;
+    AssertTrue(Format('counted as before (%d, %d)', [bytes, redone]), Abs(redone - bytes) * 10 < bytes);
+    doc.Undo;
+    AssertEquals('undone again', before, doc.Text.GetText(0, doc.Text.Length));
+    // typing before it, and another replace after it: steps of their own (never merged)
+    doc.OnChange := nil;
+    doc.Redo;
+    AssertTrue(doc.Execute(TTyRichInsertText.Create(0, 'x')));
+    AssertEquals('typing', 2, doc.UndoDepth);
+    ReplaceInParts(doc, ';', ',', [], 4096, skipped, parts, limited);
+    AssertEquals('another replace: a step of its own', 3, doc.UndoDepth);
+    ReplaceInParts(doc, 'alpha', 'A', [], 4096, skipped, parts, limited);
+    AssertEquals('and another', 4, doc.UndoDepth);
   finally
     doc.Free;
-  end;
-  // a row with a nested table: its match is left, and counted
-  doc := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard word one|par' +
-    '|trowd|cellx2000|cellx4000|pard|intbl word two|cell' +
-    '|pard|intbl|itap2 word nested|nestcell{|*|nesttableprops|trowd|cellx1000|nestrow}{|nonesttables|par}' +
-    '|pard|intbl|cell|row|pard word three|par}')), False);
-  try
-    skipped := 0;
-    f := TTyRichFinder.Create(doc, 'word', []);
-    try
-      f.Collect := True;
-      f.Run;
-      places := nil;
-      SetLength(places, f.MatchCount);
-      for i := 0 to f.MatchCount - 1 do places[i] := f.Match(f.MatchCount - 1 - i);
-    finally
-      f.Free;
-    end;
-    AssertEquals('four', 4, Length(places));
-    cmd := TTyRichReplaceCommand.Create(0, places, 4, 'w');
-    cmd.SkipCounter := @skipped;
-    AssertTrue(doc.Execute(cmd));
-    // the row that holds the nested table: its two paragraphs ("two", "nested")
-    AssertEquals('the nested row''s left, and counted', 2, skipped);
-    AssertEquals('what is left', 2, Length(Naive(doc, 'word', [])) -
-      Length(StringReplace(Naive(doc, 'word', []), ' ', '', [rfReplaceAll])) + 1);
-    AssertEquals('the others replaced, one step', 1, doc.UndoDepth);
-  finally
-    doc.Free;
+    counter.Free;
   end;
 end;
 
-procedure TTyRichFindTest.TestReplaceTakesTheFormatOfWhatItReplaces;
+{ What a replace leaves is what was there: the formats of what it did not replace, the objects,
+  a paragraph's format and cell; each replacement in the format of the first character it
+  replaces; an undo gives every paragraph its runs back exactly. Whole, in parts, and with
+  paragraph ends in the needle (the simple way: every match first) or in the replacement. }
+procedure TTyRichFindTest.TestReplaceKeepsFormatsAndObjects;
 var
   doc: TTyRichDocument;
   bytes: TBytes;
-  runs: TTyRunArray;
-  p: Integer;
-  r: Integer;
+  runs, before: array of TTyRunArray;
+  r, i, k, n, skipped, parts: Integer;
+  limited: Boolean;
+  text0: RawByteString;
 begin
-  bytes := BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard one {|b cat} two {|i cat}|par}'));
+  bytes := BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard one {|b cat} two {|i cAt}|par ' +
+    'a {|field{|*|fldinst HYPERLINK "x"}{|fldrslt link}} cat{|b cat}cat|par |qc centred cat|par}'));
+  for k := 0 to 1 do
+  begin
+    doc := LoadRtf(bytes, k = 0);
+    try
+      text0 := doc.Text.GetText(0, doc.Text.Length);
+      before := nil;
+      SetLength(before, doc.Text.ParaCount);
+      for i := 0 to doc.Text.ParaCount - 1 do before[i] := doc.RunsOf(i);
+      if k = 0 then n := ReplaceIn(doc, 'cat', 'tiger', [], skipped)
+      else n := ReplaceInParts(doc, 'cat', 'tiger', [], 8, skipped, parts, limited);
+      AssertEquals('all of them', 6, n);
+      runs := nil;
+      SetLength(runs, 1);
+      runs[0] := doc.RunsOf(0);
+      r := High(runs[0]);
+      while runs[0][r].Start > 4 do Dec(r);
+      AssertTrue('the bold one bold', fsBold in doc.Formats.CharFormat(runs[0][r].Format).Style);
+      r := High(runs[0]);
+      while runs[0][r].Start > 14 do Dec(r);
+      AssertTrue('the italic one italic', fsItalic in doc.Formats.CharFormat(runs[0][r].Format).Style);
+      AssertFalse('...not bold', fsBold in doc.Formats.CharFormat(runs[0][r].Format).Style);
+      // the link is an object that stays, at its place
+      runs[0] := doc.RunsOf(1);
+      AssertTrue('the object stays', (Length(runs[0]) > 1) and (runs[0][1].Obj <> nil));
+      AssertEquals('the centred paragraph keeps its format', Ord(paraCenter),
+        Ord(doc.Formats.ParaFormat(doc.ParaFormatOf(2)).Align));
+      doc.Undo;
+      AssertEquals('the text back', text0, doc.Text.GetText(0, doc.Text.Length));
+      for i := 0 to doc.Text.ParaCount - 1 do
+      begin
+        runs[0] := doc.RunsOf(i);
+        AssertEquals(Format('paragraph %d: as many runs', [i]), Length(before[i]), Length(runs[0]));
+        for r := 0 to High(runs[0]) do
+        begin
+          AssertEquals(Format('paragraph %d run %d: its start', [i, r]), before[i][r].Start, runs[0][r].Start);
+          AssertEquals(Format('paragraph %d run %d: its format', [i, r]), before[i][r].Format, runs[0][r].Format);
+          AssertTrue(Format('paragraph %d run %d: its object', [i, r]), before[i][r].Obj = runs[0][r].Obj);
+        end;
+      end;
+    finally
+      doc.Free;
+    end;
+  end;
+  // paragraph ends: in the needle (every match first), and in the replacement
+  doc := TextDoc('one' + #10 + #10 + 'two' + #10 + #10 + #10 + 'three' + #10 + 'four');
+  try
+    text0 := doc.Text.GetText(0, doc.Text.Length);
+    n := ReplaceInParts(doc, #10#10, #10, [], 4, skipped, parts, limited);
+    AssertEquals('the empty paragraphs go', 2, n);
+    AssertEquals('one' + #10 + 'two' + #10 + #10 + 'three' + #10 + 'four',
+      StringReplace(doc.Text.GetText(0, doc.Text.Length), #13#10, #10, [rfReplaceAll]));
+    AssertEquals('one step', 1, doc.UndoDepth);
+    doc.Undo;
+    AssertEquals('undone', text0, doc.Text.GetText(0, doc.Text.Length));
+    n := ReplaceInParts(doc, 'o', 'o' + #10, [], 4, skipped, parts, limited);
+    AssertEquals('every o', 3, n);
+    AssertEquals('...a paragraph end after each', 10, doc.Text.ParaCount);
+    doc.Undo;
+    AssertEquals('undone again', text0, doc.Text.GetText(0, doc.Text.Length));
+    doc.Redo;
+    AssertEquals('redone', 10, doc.Text.ParaCount);
+  finally
+    doc.Free;
+  end;
+end;
+
+{ H-I4: the limit - a replace whose step reaches four times MaxUndoBytes ends there, says so,
+  and what it replaced is one step; run again it goes on. }
+procedure TTyRichFindTest.TestReplaceStopsAtTheLimit;
+var
+  doc: TTyRichDocument;
+  s: RawByteString;
+  i, n, n2, skipped, parts: Integer;
+  limited: Boolean;
+begin
+  s := '';
+  for i := 0 to 19999 do s := s + 'one,two,three' + #10;
+  doc := TextDoc(s);
+  try
+    doc.MaxUndoBytes := 16 * 1024;
+    n := ReplaceInParts(doc, ',', ';', [], 1024, skipped, parts, limited);
+    AssertTrue('stopped at the limit', limited);
+    AssertTrue(Format('some replaced (%d)', [n]), (n > 0) and (n < 40000));
+    AssertEquals('as many as are gone', 40000 - n, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+    AssertEquals('one step', 1, doc.UndoDepth);
+    AssertTrue(Format('the step at its limit (%d)', [doc.HistoryBytes]),
+      doc.HistoryBytes >= CRichReplaceLimitFactor * doc.MaxUndoBytes);
+    n2 := ReplaceInParts(doc, ',', ';', [], 1024, skipped, parts, limited);
+    AssertTrue(Format('again: more (%d)', [n2]), n2 > 0);
+    // (a step of its own: the history's bound may have let the first go)
+    AssertTrue('a step of its own', doc.UndoDepth >= 1);
+    doc.MaxUndoBytes := 0;
+    ReplaceInParts(doc, ',', ';', [], 1024, skipped, parts, limited);
+    AssertFalse('no limit: to the start', limited);
+    AssertEquals('all of them', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+  finally
+    doc.Free;
+  end;
+end;
+
+{ H-M1: a part runs only on the content the step left - BreakMerge does not stop it (the step
+  merges with nothing), a saved point does (Modified := False), and then nothing of it runs:
+  nothing is on the redo side. }
+procedure TTyRichFindTest.TestAStoppedReplaceLeavesNothingToRedo;
+var
+  doc: TTyRichDocument;
+  s: RawByteString;
+  i: Integer;
+  cmd: TTyRichReplaceAllCommand;
+  tally: TTyRichReplaceTally;
+  replaced: Integer;
+begin
+  s := '';
+  for i := 0 to 999 do s := s + 'a cat here' + #10;
+  doc := TextDoc(s);
+  try
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(doc, 'cat', 'dog', []);
+    cmd.Tally := @tally;
+    cmd.RangeChars := 512;
+    AssertTrue('a part found', cmd.Prepare(-1) and cmd.Ready);
+    AssertTrue('the first part', doc.Execute(cmd));
+    doc.BreakMerge;
+    AssertTrue(cmd.Prepare(-1) and cmd.Ready);
+    AssertTrue('BreakMerge does not stop it', doc.ExecutePart(cmd));
+    AssertEquals('one step', 1, doc.UndoDepth);
+    replaced := tally.Replaced;
+    doc.Modified := False;
+    AssertTrue(cmd.Prepare(-1) and cmd.Ready);
+    AssertFalse('a saved point does', doc.ExecutePart(cmd));
+    AssertEquals('nothing of it ran', replaced, tally.Replaced);
+    AssertEquals('nothing of it ran: the text', replaced, CountOf('dog', doc.Text.GetText(0, doc.Text.Length)));
+    AssertFalse('nothing on the redo side', doc.CanRedo);
+    AssertEquals('still one step', 1, doc.UndoDepth);
+    AssertFalse('not modified', doc.Modified);
+    // an edit since: refused too
+    doc.Modified := True;
+    AssertTrue(doc.Execute(TTyRichInsertText.Create(0, 'x')));
+    AssertFalse('not the newest step', doc.ExecutePart(cmd));
+    AssertFalse('nothing to redo', doc.CanRedo);
+  finally
+    doc.Free;
+  end;
+end;
+
+{ H-I4 with M2: in a lazily read RTF the walk from the end parses each interval about once - the
+  range's matches are found and replaced while its intervals are resident - and between its
+  parts the residency goes back to the loader's bound; undone, the file saves as it was. }
+procedure TTyRichFindTest.TestReplaceParsesEachIntervalOnce;
+var
+  m: TMemoryStream;
+  s: RawByteString;
+  doc: TTyRichDocument;
+  load: TTyRtfLoad;
+  k, n, skipped, parts, parsed0: Integer;
+  limited: Boolean;
+  bytes: TBytes;
+begin
+  m := TMemoryStream.Create;
+  try
+    s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ');
+    m.WriteBuffer(s[1], Length(s));
+    k := 0;
+    while m.Size < 3 * MB do
+    begin
+      if k mod 7 = 0 then s := Rtf('line ') + IntToStr(k) + Rtf(' with a {|b zebra} in it|par') + #13#10
+      else s := Rtf('line ') + IntToStr(k) + Rtf(' of some {|i filler} words|par') + #13#10;
+      m.WriteBuffer(s[1], Length(s));
+      Inc(k);
+    end;
+    s := '}';
+    m.WriteBuffer(s[1], 1);
+    bytes := nil;
+    SetLength(bytes, m.Size);
+    Move(m.Memory^, bytes[0], m.Size);
+  finally
+    m.Free;
+  end;
   doc := LoadRtf(bytes, False);
   try
-    AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(1, [12, 4], 3, 'tiger')));
-    AssertEquals('replaced', 'one tiger two tiger', doc.Text.GetText(0, 19));
-    p := 0;
-    runs := doc.RunsOf(p);
-    r := High(runs);
-    while runs[r].Start > 4 do Dec(r);
-    AssertTrue('bold', fsBold in doc.Formats.CharFormat(runs[r].Format).Style);
-    r := High(runs);
-    while runs[r].Start > 14 do Dec(r);
-    AssertTrue('italic', fsItalic in doc.Formats.CharFormat(runs[r].Format).Style);
-    AssertFalse('...not bold', fsBold in doc.Formats.CharFormat(runs[r].Format).Style);
+    load := TyRichRtfLoadOf(doc);
+    AssertTrue('more intervals than stay parsed', load.IntervalCount > 2 * load.MaxResidentIntervals);
+    parsed0 := load.ParseCount;
+    n := ReplaceInParts(doc, 'zebra', 'giraffe', [rfoMatchCase], 64 * 1024, skipped, parts, limited);
+    AssertEquals('every one', (k + 6) div 7, n);
+    AssertTrue(Format('each interval parsed about once (%d for %d)',
+      [load.ParseCount - parsed0, load.IntervalCount]),
+      load.ParseCount - parsed0 <= load.IntervalCount + 2);
+    AssertTrue(Format('the residency back to the bound (%d of %d)',
+      [load.ResidentIntervals, load.MaxResidentIntervals]),
+      load.ResidentIntervals <= load.MaxResidentIntervals + 1);
+    doc.Undo;
+    AssertTrue('undone and saved: the file', SameBytes(bytes, SaveRtf(doc)));
   finally
     doc.Free;
   end;
@@ -1743,36 +1968,6 @@ begin
     ADoc.EndRead;
     rows.Free;
   end;
-end;
-
-{ Every match of ANeedle replaced by ARepl in one command, as the control's ReplaceAll does it;
-  the number replaced, ASkipped the matches the document refused. }
-function ReplaceIn(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
-  AOptions: TTyRichFindOptions; out ASkipped: Integer): Integer;
-var
-  f: TTyRichFinder;
-  pos: array of TTyRichPos;
-  i, k, len: Integer;
-  cmd: TTyRichReplaceCommand;
-begin
-  ASkipped := 0;
-  f := TTyRichFinder.Create(ADoc, ANeedle, AOptions);
-  try
-    f.Collect := True;
-    f.Run;
-    k := f.MatchCount;
-    len := f.MatchLen;
-    pos := nil;
-    SetLength(pos, k);
-    for i := 0 to k - 1 do pos[i] := f.Match(k - 1 - i);
-  finally
-    f.Free;
-  end;
-  if k = 0 then Exit(0);
-  cmd := TTyRichReplaceCommand.Create(0, pos, len, ARepl);
-  cmd.SkipCounter := @ASkipped;
-  ADoc.Execute(cmd);
-  Result := k - ASkipped;
 end;
 
 { R57 at a table's edges (H-C1): a match whose deletion would join a paragraph with one in
@@ -1876,6 +2071,8 @@ var
   info: TTyRtfWriteInfo;
   m: TBytesStream;
   hitParas: TStringList;
+  skipped, parts: Integer;
+  limited: Boolean;
 begin
   for n := 0 to High(Names) do
   begin
@@ -1904,7 +2101,8 @@ begin
         f.Free;
       end;
       AssertTrue(name + ': matches', Length(pos) > 0);
-      AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(1, pos, 1, 'EE')));
+      AssertEquals(name + ': replaced', Length(pos), ReplaceInParts(doc, 'e', 'EE', [], 256, skipped,
+        parts, limited));
       m := TBytesStream.Create;
       try
         TyRichSaveRtf(doc, m, info);

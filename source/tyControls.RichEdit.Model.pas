@@ -397,6 +397,15 @@ type
     Count: Integer;
   end;
 
+  { A paragraph ReplaceInParas changed: its index (that edit keeps every paragraph where it
+    was), its pieces before - whole, its separator with them (First, Count in
+    TTyRichUndoData's swap pieces) - and its value before. }
+  TTyRichParaSwap = record
+    Para: Integer;
+    First, Count: Integer;
+    Old: TTyRichParaData;
+  end;
+
   { What a primitive took away, kept so that Revert can put it back: the removed text's pieces
     (with the data of the paragraphs that followed their separators) and the old data of the
     paragraphs that survived. It holds references, no text. Free it when the command that made
@@ -415,8 +424,15 @@ type
     FFirstPara: Integer;
     FOldData: array of TTyRichOldData;   // run-length: one reference per entry
     FOldCount: Integer;
+    // ReplaceInParas: the paragraphs it changed, in the order it changed them
+    FSwaps: array of TTyRichParaSwap;
+    FSwapCount: Integer;
+    FSwapPieces: TTyRichPieceArray;
+    FSwapPieceCount: Integer;
     procedure AddOld(D: TTyRichParaData);
     procedure SealOld;
+    procedure AddSwap(APara: Integer; AOld: TTyRichParaData; const APieces: TTyRichPieces);
+    procedure SealSwaps;
   public
     destructor Destroy; override;
     { Bytes this record keeps alive, for the history's memory limit (the paragraph values
@@ -684,6 +700,17 @@ type
       const ACellParas: array of Integer): TTyRichChange;
     function InsertFragment(ADoc: TTyRichDocument; APos: TTyRichPos;
       AFragment: TTyRichFragment): TTyRichChange;
+    function ReplaceInParas(ADoc: TTyRichDocument; const APos: array of TTyRichPos;
+      AFrom, ACount: Integer; ALen: TTyRichPos; const AText: UTF8String;
+      out ASkipped: Integer): TTyRichChange;
+    { One more part of this command's work, as part of the step it is
+      (TTyRichDocument.ExecutePart): it changes the document through the primitives as DoExecute
+      does; its records join the step's. The default raises: a command goes on only when it
+      says how. }
+    procedure DoContinue(ADoc: TTyRichDocument); virtual;
+    { What the records from AFrom on keep (their MemSize), for a command that counts its own
+      size as it goes. }
+    function RecordsSize(AFrom: Integer): Int64;
 
     { For a command made of commands: runs, undoes or redoes AChild as part of this one, and
       counts its change as this command's. A child whose execute or redo raises is reverted
@@ -876,6 +903,7 @@ type
     function FixedRowAt(AIndex: Integer): TTyRichRow;
     function RowAt(AIndex: Integer): TTyRichRow;
     function ChangeRefused(APos, ALen: TTyRichPos): Boolean;
+    procedure RevertSwaps(AUndo: TTyRichUndoData);
   protected
     { The modification primitives. Each changes the document, raises OnChange, sets Modified
       and returns what Revert needs to undo it exactly (never nil; a no-op returns an empty
@@ -930,6 +958,22 @@ type
       revert deletes the inserted characters and gives the paragraph at APos its value back.
       Refused (ETyRichModel, before anything changes) inside a row that holds a nested table. }
     function InsertFragment(APos: TTyRichPos; AFragment: TTyRichFragment): TTyRichUndoData;
+    { Replaces the matches APos[AFrom .. AFrom + ACount - 1] - rising, none overlapping, each
+      inside one paragraph (no separator in it) - of ALen characters each by AText (no
+      separator either), each in the format of the first character it replaces; the
+      paragraphs' formats, cells and objects stay. A paragraph of a row that holds a nested
+      table keeps its matches (ASkipped counts them). One record for all of them, small:
+      for each paragraph changed its pieces before and its value before - references, no
+      text: a few dozen bytes a paragraph however many matches it holds. Matches closer
+      than a few hundred characters are one stretch of the text: what lies between them is
+      copied with the replacements, so the text keeps few pieces. Revert gives each
+      paragraph its pieces and its value back (a lazily read one is its file's bytes again,
+      R56; the paragraph after it the value it had). For a replace of every match
+      (tyControls.RichEdit.Find's TTyRichReplaceAllCommand). Raises ETyRichModel for
+      matches out of order or range, a separator in them or in AText, before anything
+      changes. }
+    function ReplaceInParas(const APos: array of TTyRichPos; AFrom, ACount: Integer;
+      ALen: TTyRichPos; const AText: UTF8String; out ASkipped: Integer): TTyRichUndoData;
     { Puts back what the primitive that returned AUndo changed, frees AUndo and sets it nil. }
     procedure Revert(var AUndo: TTyRichUndoData);
     { The paragraph's data value (an opaque identity, for tests and the history). }
@@ -1049,6 +1093,19 @@ type
     { One step back / forward, one OnChange. Nothing to undo / redo, or the document is
       Saving: nothing happens. They raise inside BeginUpdate .. EndUpdate or a running
       command. }
+    { Runs one more part of ACmd (TTyRichCommand.DoContinue) as part of the step it is: the
+      work of a command that runs in parts - a replace of every match, range by range - is
+      one undo step, never merged with another, the document consistent and reported
+      between two parts. ACmd must be the newest undo step and the content the one it left:
+      nothing changed since (no edit, undo or redo; the redo side empty), no saved point set
+      on it since (Modified := False, a save: the step would carry its "after" past it), no
+      update block open, the document not loading, incomplete or saving. Otherwise False,
+      and nothing ran - nothing of the part is anywhere, the redo side included. True: the
+      part ran; what it changed is reported (one OnChange) and joins the step (its bytes,
+      its objects; the history trimmed as after any step). If the part raises, what it did
+      is reverted and the step is as it was (were the revert to fail, the history goes, as
+      for a failed undo). BreakMerge does not stop it: the step merges with nothing. }
+    function ExecutePart(ACmd: TTyRichCommand): Boolean;
     procedure Undo;
     procedure Redo;
     function CanUndo: Boolean;
@@ -1917,13 +1974,18 @@ begin
   for i := 0 to High(FRemoved.Pieces) do
     if (FRemoved.Pieces[i].Separator <> rsNone) and (FRemoved.Pieces[i].Data <> nil) then
       FDoc.ReleaseData(TTyRichParaData(FRemoved.Pieces[i].Data));
+  for i := 0 to FSwapCount - 1 do FDoc.ReleaseData(FSwaps[i].Old);
+  for i := 0 to FSwapPieceCount - 1 do
+    if (FSwapPieces[i].Separator <> rsNone) and (FSwapPieces[i].Data <> nil) then
+      FDoc.ReleaseData(TTyRichParaData(FSwapPieces[i].Data));
   inherited Destroy;
 end;
 
 function TTyRichUndoData.MemSize: Int64;
 begin
   Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
-    Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
+    Length(FSpan2.Pieces.Pieces) + Length(FSwapPieces)) * SizeOf(TTyRichPiece) +
+    Length(FOldData) * SizeOf(TTyRichOldData) + Length(FSwaps) * SizeOf(TTyRichParaSwap);
 end;
 
 procedure AddObject(var AList: TTyRichObjectList; var ACount: Integer; AObj: TTyRichObject);
@@ -1997,6 +2059,9 @@ begin
   for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
     if FRemoved.Pieces[i].Separator <> rsNone then Take(TTyRichParaData(FRemoved.Pieces[i].Data));
+  for i := 0 to FSwapCount - 1 do Take(FSwaps[i].Old);
+  for i := 0 to FSwapPieceCount - 1 do
+    if FSwapPieces[i].Separator <> rsNone then Take(TTyRichParaData(FSwapPieces[i].Data));
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -2016,6 +2081,36 @@ end;
 procedure TTyRichUndoData.SealOld;
 begin
   SetLength(FOldData, FOldCount);
+end;
+
+procedure TTyRichUndoData.AddSwap(APara: Integer; AOld: TTyRichParaData;
+  const APieces: TTyRichPieces);
+var
+  i: Integer;
+begin
+  if FSwapCount = Length(FSwaps) then SetLength(FSwaps, FSwapCount * 2 + 4);
+  FSwaps[FSwapCount].Para := APara;
+  FSwaps[FSwapCount].Old := AOld;
+  FSwaps[FSwapCount].First := FSwapPieceCount;
+  FSwaps[FSwapCount].Count := Length(APieces.Pieces);
+  Inc(FSwapCount);
+  FDoc.AcquireData(AOld);
+  for i := 0 to High(APieces.Pieces) do
+  begin
+    if FSwapPieceCount = Length(FSwapPieces) then
+      SetLength(FSwapPieces, FSwapPieceCount * 2 + 4);
+    FSwapPieces[FSwapPieceCount] := APieces.Pieces[i];
+    Inc(FSwapPieceCount);
+    // (the value after its separator: the one the paragraph after it gets back)
+    if (APieces.Pieces[i].Separator <> rsNone) and (APieces.Pieces[i].Data <> nil) then
+      FDoc.AcquireData(TTyRichParaData(APieces.Pieces[i].Data));
+  end;
+end;
+
+procedure TTyRichUndoData.SealSwaps;
+begin
+  SetLength(FSwaps, FSwapCount);
+  SetLength(FSwapPieces, FSwapPieceCount);
 end;
 
 { ---- runs ---- }
@@ -3535,6 +3630,277 @@ begin
   Notify(c);
 end;
 
+{ The text storage's sequence rule (tyControls.RichEdit.Text's SeqLen): the length of the valid
+  UTF-8 sequence at P, 1 for a byte that starts none (a character of its own). }
+function StoredSeqLen(P: PByte; AAvail: PtrInt): Integer; inline;
+var
+  b0, b1: Byte;
+begin
+  b0 := P^;
+  if b0 < $C2 then Exit(1);
+  if b0 < $E0 then
+  begin
+    if (AAvail >= 2) and (P[1] and $C0 = $80) then Exit(2);
+    Exit(1);
+  end;
+  if b0 < $F0 then
+  begin
+    if AAvail < 3 then Exit(1);
+    b1 := P[1];
+    if (b1 and $C0 <> $80) or (P[2] and $C0 <> $80) then Exit(1);
+    if (b0 = $E0) and (b1 < $A0) then Exit(1);
+    if (b0 = $ED) and (b1 > $9F) then Exit(1);
+    Exit(3);
+  end;
+  if b0 < $F5 then
+  begin
+    if AAvail < 4 then Exit(1);
+    b1 := P[1];
+    if (b1 and $C0 <> $80) or (P[2] and $C0 <> $80) or (P[3] and $C0 <> $80) then Exit(1);
+    if (b0 = $F0) and (b1 < $90) then Exit(1);
+    if (b0 = $F4) and (b1 > $8F) then Exit(1);
+    Exit(4);
+  end;
+  Result := 1;
+end;
+
+function StoredChars(const S: RawByteString): Int64;
+var
+  p, stop: PByte;
+begin
+  Result := 0;
+  if S = '' then Exit;
+  p := PByte(Pointer(S));
+  stop := p + Length(S);
+  while p < stop do
+  begin
+    if p^ < $80 then Inc(p) else Inc(p, StoredSeqLen(p, stop - p));
+    Inc(Result);
+  end;
+end;
+
+{ A growing buffer of bytes: a stretch's new text, built once. }
+type
+  TReplaceBuf = record
+    S: RawByteString;
+    N: PtrInt;
+  end;
+
+procedure BufAdd(var B: TReplaceBuf; P: PByte; ACount: PtrInt);
+var
+  cap: PtrInt;
+begin
+  if ACount <= 0 then Exit;
+  if B.N + ACount > Length(B.S) then
+  begin
+    cap := Length(B.S) * 2;
+    if cap < B.N + ACount then cap := B.N + ACount;
+    if cap < 256 then cap := 256;
+    SetLength(B.S, cap);
+  end;
+  Move(P^, B.S[B.N + 1], ACount);
+  Inc(B.N, ACount);
+end;
+
+function TTyRichDocument.ReplaceInParas(const APos: array of TTyRichPos; AFrom, ACount: Integer;
+  ALen: TTyRichPos; const AText: UTF8String; out ASkipped: Integer): TTyRichUndoData;
+const
+  // two matches this close are one stretch of the text: what lies between them is copied
+  CGap = 256;
+var
+  c: TTyRichChange;
+  i, j, x, y, z, para, nr, lowPara, highPara: Integer;
+  d: TTyRichParaData;
+  runs, nruns: TTyRunArray;
+  ps, len, off, shift, prevEnd, rlen, a, b, total, grow, oldLo, oldHi, at: TTyRichPos;
+  snap: TTyRichPieces;
+  seg: UTF8String;
+  buf: TReplaceBuf;
+  p, stop, gapFrom: PByte;
+  k: Integer;
+begin
+  ASkipped := 0;
+  c := Default(TTyRichChange);
+  Result := nil;
+  if ACount <= 0 then Exit(NewUndo(c));
+  if CutSequence(AText) then
+    raise ETyRichModel.Create('The text to insert starts or ends inside a UTF-8 sequence');
+  for k := 1 to Length(AText) do
+    if AText[k] in [#10, #13] then
+      raise ETyRichModel.Create('ReplaceInParas takes no paragraph separator');
+  if ALen <= 0 then raise ETyRichModel.Create('ReplaceInParas needs matches of a length');
+  for i := AFrom to AFrom + ACount - 1 do
+    if (APos[i] < 0) or (APos[i] + ALen > FText.Length) or
+      ((i > AFrom) and (APos[i] < APos[i - 1] + ALen)) then
+      raise ETyRichModel.Create('ReplaceInParas: matches out of range or out of order');
+  rlen := StoredChars(AText);
+  Result := NewUndo(c);
+  lowPara := -1;
+  highPara := -1;
+  grow := 0;
+  oldLo := 0;
+  oldHi := 0;
+  buf.S := '';
+  buf.N := 0;
+  // (the values read are held while the others are: one read scope)
+  BeginRead;
+  try
+    try
+      // paragraph by paragraph, the last first: positions before stay where they are
+      i := AFrom + ACount - 1;
+      while i >= AFrom do
+      begin
+        para := FText.ParaOfPos(APos[i]);
+        ps := FText.ParaStart(para);
+        len := FText.ParaLength(para);
+        j := i;
+        while (j > AFrom) and (APos[j - 1] >= ps) do Dec(j);
+        if APos[i] + ALen > ps + len then
+          raise ETyRichModel.Create('ReplaceInParas: a match takes a paragraph separator');
+        d := DataOf(para);
+        // a row that holds a nested table stays as the file has it
+        if FixedData(d) then
+        begin
+          Inc(ASkipped, i - j + 1);
+          i := j - 1;
+          Continue;
+        end;
+        runs := RunsOfData(d);
+        // its runs after: each replacement in the format of the first character it replaces
+        nruns := nil;
+        nr := 0;
+        shift := 0;
+        prevEnd := 0;
+        for x := j to i do
+        begin
+          off := APos[x] - ps;
+          AppendSlice(nruns, nr, runs, len, prevEnd, off, shift);
+          if rlen > 0 then AppendRun(nruns, nr, off + shift, runs[RunIndexAt(runs, off)].Format, nil);
+          Inc(shift, rlen - ALen);
+          prevEnd := off + ALen;
+        end;
+        AppendSlice(nruns, nr, runs, len, prevEnd, len, shift);
+        if nr = 0 then AppendRun(nruns, nr, 0, runs[RunIndexAt(runs, APos[j] - ps)].Format, nil);
+        SetLength(nruns, nr);
+        // its pieces as they are, whole, with its separator (a lazy paragraph: one, the file's)
+        total := len;
+        if para < FText.ParaCount - 1 then Inc(total);
+        snap := FText.PieceSnapshot(ps, total);
+        Result.AddSwap(para, d, snap);
+        // the text: stretch by stretch, the last first
+        Inc(FEditing);
+        try
+          x := i;
+          while x >= j do
+          begin
+            y := x;
+            while (y > j) and (APos[y] - (APos[y - 1] + ALen) <= CGap) do Dec(y);
+            a := APos[y];
+            b := APos[x] + ALen;
+            buf.N := 0;
+            if y = x then
+              BufAdd(buf, PByte(Pointer(AText)), Length(AText))
+            else
+            begin
+              // the stretch once, and what lies between its matches out of it
+              seg := FText.GetText(a, b - a);
+              p := PByte(Pointer(seg));
+              stop := p + Length(seg);
+              at := a;
+              for z := y to x do
+              begin
+                // at the match z: its characters go, the text comes
+                gapFrom := nil;
+                while at < APos[z] + ALen do
+                begin
+                  if at = APos[z] then
+                    BufAdd(buf, PByte(Pointer(AText)), Length(AText));
+                  if p^ < $80 then Inc(p) else Inc(p, StoredSeqLen(p, stop - p));
+                  Inc(at);
+                end;
+                if z < x then
+                begin
+                  gapFrom := p;
+                  while at < APos[z + 1] do
+                  begin
+                    if p^ < $80 then Inc(p) else Inc(p, StoredSeqLen(p, stop - p));
+                    Inc(at);
+                  end;
+                  BufAdd(buf, gapFrom, p - gapFrom);
+                end;
+              end;
+            end;
+            FText.Delete(a, b - a);
+            if buf.N > 0 then FText.Insert(a, Copy(buf.S, 1, buf.N));
+            x := y - 1;
+          end;
+        finally
+          Dec(FEditing);
+        end;
+        PutData(para, d, MakeDataLike(FormatOfData(d), nruns, CellOfData(d), d));
+        Inc(grow, shift);
+        if highPara < 0 then
+        begin
+          highPara := para;
+          oldHi := ps + len;
+        end;
+        lowPara := para;
+        oldLo := ps;
+        i := j - 1;
+      end;
+      Result.SealSwaps;
+    except
+      // what was changed goes back before the error travels on
+      try
+        Revert(Result);
+      except
+      end;
+      Result.Free;
+      raise;
+    end;
+  finally
+    EndRead;
+  end;
+  // (all of them in rows the document keeps: nothing changed, an empty record)
+  if lowPara < 0 then Exit;
+  c.Kinds := [rckText];
+  c.Pos := oldLo;
+  c.OldLen := oldHi - oldLo;
+  c.NewLen := c.OldLen + grow;
+  c.FirstPara := lowPara;
+  c.OldParaCount := highPara - lowPara + 1;
+  c.NewParaCount := c.OldParaCount;
+  Result.FChange := c;
+  Notify(c);
+end;
+
+{ Undoes what ReplaceInParas did, the paragraph changed last first: each paragraph's text goes
+  whole, with its separator, and its pieces come back (a lazy one: the file's bytes again,
+  R56; the paragraph after it gets the value it had then), then its value. }
+procedure TTyRichDocument.RevertSwaps(AUndo: TTyRichUndoData);
+var
+  e, i: Integer;
+  ps, n: TTyRichPos;
+  p: TTyRichPieces;
+begin
+  for e := AUndo.FSwapCount - 1 downto 0 do
+  begin
+    ps := FText.ParaStart(AUndo.FSwaps[e].Para);
+    n := FText.ParaLength(AUndo.FSwaps[e].Para);
+    if AUndo.FSwaps[e].Para < FText.ParaCount - 1 then Inc(n);
+    p.Pieces := Copy(AUndo.FSwapPieces, AUndo.FSwaps[e].First, AUndo.FSwaps[e].Count);
+    p.CharCount := 0;
+    for i := 0 to High(p.Pieces) do Inc(p.CharCount, p.Pieces[i].CharCount);
+    // the restored separator puts its value back in a slot: the slot's reference
+    for i := 0 to High(p.Pieces) do
+      if (p.Pieces[i].Separator <> rsNone) and (p.Pieces[i].Data <> nil) then
+        AcquireData(TTyRichParaData(p.Pieces[i].Data));
+    FText.Delete(ps, n);
+    FText.RestorePieces(ps, p);
+    PutData(AUndo.FSwaps[e].Para, SlotData(AUndo.FSwaps[e].Para), AUndo.FSwaps[e].Old);
+  end;
+end;
+
 function TTyRichDocument.ApplyCharFormat(APos, ALen: TTyRichPos; AMask: TTyCharFormatMask;
   const AValue: TTyCharFormat; AKeepNone: TTyCharFormatMask): TTyRichUndoData;
 var
@@ -4338,6 +4704,7 @@ begin
   try
     Inc(FEditing);
     try
+      if u.FSwapCount > 0 then RevertSwaps(u);
       if u.FInserted > 0 then
         FText.Delete(u.FChange.Pos, u.FInserted);
       if u.FRemoved.CharCount > 0 then
@@ -4500,6 +4867,28 @@ function TTyRichCommand.InsertFragment(ADoc: TTyRichDocument; APos: TTyRichPos;
 begin
   CheckRunning(ADoc);
   Result := Keep(ADoc.InsertFragment(APos, AFragment));
+end;
+
+function TTyRichCommand.ReplaceInParas(ADoc: TTyRichDocument; const APos: array of TTyRichPos;
+  AFrom, ACount: Integer; ALen: TTyRichPos; const AText: UTF8String;
+  out ASkipped: Integer): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.ReplaceInParas(APos, AFrom, ACount, ALen, AText, ASkipped));
+end;
+
+procedure TTyRichCommand.DoContinue(ADoc: TTyRichDocument);
+begin
+  raise ETyRichModel.CreateFmt('%s does not go on in parts', [ClassName]);
+end;
+
+function TTyRichCommand.RecordsSize(AFrom: Integer): Int64;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if AFrom < 0 then AFrom := 0;
+  for i := AFrom to FRecordCount - 1 do Inc(Result, FRecords[i].MemSize);
 end;
 
 procedure TTyRichCommand.AdoptChange(AChild: TTyRichCommand);
@@ -5057,6 +5446,81 @@ begin
   if ACmd <> nil then PushUndo(ACmd);
   FMergeBroken := False;
   TrimHistory;
+  Flush;
+  NoteModified;
+end;
+
+function TTyRichDocument.ExecutePart(ACmd: TTyRichCommand): Boolean;
+var
+  top, n0, cnt, i: Integer;
+  list: TTyRichObjectList;
+  keys: TTyRichKeyList;
+  ok, lost: Boolean;
+begin
+  Result := False;
+  if ACmd = nil then raise ETyRichModel.Create('ExecutePart needs a command');
+  CheckIdle('ExecutePart');
+  if (FUpdateCount > 0) or FLoadingContent or FIncomplete or (FSaving > 0) then Exit;
+  if (FUndoCount = 0) or (FUndo[FUndoCount - 1].Cmd <> ACmd) or (FRedoCount > 0) then Exit;
+  // the content it left, and no saved point set on it since
+  if (FState <> ACmd.FStateAfter) or (FSavedState = FState) then Exit;
+  top := FUndoCount - 1;
+  n0 := ACmd.FRecordCount;
+  ok := False;
+  lost := False;
+  Inc(FHold);
+  FRunning := ACmd;
+  ACmd.FDoc := Self;
+  try
+    ACmd.DoContinue(Self);
+    ok := True;
+  finally
+    if not ok then
+      // what the part did goes back, newest first: the step is as it was
+      try
+        while ACmd.FRecordCount > n0 do
+        begin
+          Dec(ACmd.FRecordCount);
+          Revert(ACmd.FRecords[ACmd.FRecordCount]);
+        end;
+      except
+        lost := True;
+      end;
+    ACmd.FDoc := nil;
+    FRunning := nil;
+    Dec(FHold);
+    if not ok then
+    begin
+      if lost then
+      begin
+        // the document no longer matches the history: drop it all
+        ClearHistory;
+        LeftHistory;
+      end;
+      Flush;
+      NoteModified;
+    end;
+  end;
+  Result := True;
+  if ACmd.FRecordCount > n0 then
+  begin
+    FState := NewState;
+    ACmd.FStateAfter := FState;
+    // what the part brought joins the step: its bytes, the objects its records hold
+    Dec(FHistoryBytes, FUndo[top].Bytes);
+    FUndo[top].Bytes := ACmd.MemSize;
+    Inc(FHistoryBytes, FUndo[top].Bytes);
+    list := nil;
+    cnt := 0;
+    BeginGather(FUndo[top].Keys);
+    try
+      for i := n0 to ACmd.FRecordCount - 1 do ACmd.FRecords[i].GatherObjects(list, cnt);
+    finally
+      keys := EndGather;
+    end;
+    HoldMore(FUndo[top], list, cnt, keys);
+    TrimHistory;
+  end;
   Flush;
   NoteModified;
 end;
