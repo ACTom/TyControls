@@ -796,34 +796,50 @@ function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
 // (the caller decides that it holds nothing).
 function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument;
 
-// Whether what ASource (a document TyRichReadRtfFragment read) keeps of its file's bytes
-// means the same in ATarget's file: both were read from RTF, and their header tables agree -
-// every font the target's file defines has the same number, name and charset in the
-// source's; every colour of the target's table is the source's entry of the same number;
-// the style sheet, the list table, the list override table and the revision table are the
-// same bytes (or both missing); the ANSI code page and the default font are the same. What a
-// copy out of that very file carries (the range writer writes the file's header, its font
-// and colour tables only added to at their ends). A document with no file behind it never
-// agrees.
+// Whether ASource (a document TyRichReadRtfFragment read) and ATarget were read from files
+// whose header tables agree, as far as what is kept of ASource's bytes may go into ATarget
+// at all (R62): every font the target's file defines has the same number, name and charset
+// in the source's; every colour of the target's table is the source's entry of the same
+// number; the style sheet, the list table, the list override table, the revision table, the
+// file table, the paragraph group table, the XML namespace table, the page description
+// table and the protection user table are the same bytes (or both missing); and what bytes
+// are decoded by where no index says it is the same - the ANSI code page, the \deff number
+// and the default font's name and charset. The source may define more fonts and colours
+// than the target (a copy out of the target's own document: the range writer writes the
+// file's header, its font and colour tables only added to at their ends) - which is why
+// agreeing is not enough to keep everything (TyRichFragmentFilterFor). A document with no
+// file behind it never agrees.
 function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
-// The filter a fragment of ASource needs to go into ATarget (TTyRichInsertFragment's AFilter):
-// nil when the two agree (TyRichRtfTablesAgree) - everything goes as it is -, else a new
-// filter, the caller's, that leaves out of what goes along every control word that is an
-// index into a header table (TyRtfNamesTableEntry): a format's Extra fragment that holds one
-// goes; a row's RawFormat loses those words (the row is made again); an object whose bytes
-// hold one: a field is made again from its instruction and its result's text
-// ({\field{\*\fldinst ...}{\fldrslt ...}}, the text as \uN - the field works, the formatting
-// inside its result goes), a picture is made again from its image (its \pict's other words
-// go), and any other object (a footnote, a comment, a shape, an embedded object, an
-// equation) is left out - with its display text in its place where it has one (only a
-// field's result has one, and a field is made again).
+// The filter a fragment of ASource needs to go into ATarget (TTyRichInsertFragment's AFilter),
+// a new one, the caller's (R62: what is kept must mean the same in the TARGET's file). When
+// the two agree (TyRichRtfTablesAgree) a light one: a reference to a font number the
+// target's file does not define, or to a colour number past the end of the target file's
+// colour table, is treated as below - only what the target's own header defines the same is
+// kept (a copy out of the target's own document loses nothing by it: what is read from the
+// file names only the file's entries; the fonts and colours the range writer added for
+// paragraphs written from the model are named by the formats the reader understands, never
+// by kept bytes; a kept word that does name one of them - the target's file does not define
+// it, and the model may give its number to another font at the next save - goes as in the
+// next case). Otherwise every control word that is an index into a header table
+// (TyRtfNamesTableEntry) goes, and so does an object's text that is decoded by the source's
+// code page or default font (a \'xx byte of 80 or more, a \plain): a format's Extra fragment
+// that holds one goes; a row's RawFormat loses those words (the row is made again); an
+// object whose bytes hold one: a field is made again from its instruction and its result's
+// text, followed by its result's pictures ({\field{\*\fldinst ...}{\fldrslt ...}}, the text
+// as \uN - the field works, the formatting inside its result goes), a picture is made again
+// from its image (its \pict's other words go), and any other object (a footnote, a comment,
+// a shape, an embedded object, an equation) is left out - with its display text in its
+// place where it has one (only a field's result has one, and a field is made again).
 function TyRichFragmentFilterFor(ASource, ATarget: TTyRichDocument): TTyRichFragmentFilter;
 // ABytes (a fragment of a format's Extra, a row's definition, an object's bytes) hold a
 // control word whose number is an index into a table of the file's header: a font (\f, \af,
 // \pnf), a colour (\cf, \cb, \highlight, \ulc, \brdrcf, \chcbpat, \chcfpat, \cbpat, \cfpat,
-// \clcbpat, \clcfpat, \clcbpatraw, \clcfpatraw, \trcbpat, \trcfpat, \pncf), a style (\s, \cs,
-// \ds, \ts), a list override (\ls) or a revision author (\revauth, \revauthdel, \crauth,
-// \pnrauth). \lang, \kerning, \fcs and the rsid words are numbers of their own, not indices.
+// \clcbpat, \clcfpat, \clcbpatraw, \clcfpatraw, \trcbpat, \trcfpat, \trbrdrcf, \tscellcbpat,
+// \tscellcfpat, \pncf), a style (\s, \cs, \ds, \ts, \yts), a list override (\ls), a revision
+// author (\revauth, \revauthdel, \crauth, \pnrauth, \prauth, \trauth, \mvauth, \dfrauth,
+// \clinsauth, \cldelauth, \clmrgdauth), a file (\subdocument), a paragraph group (\ipgp), an
+// XML namespace (\xmlns), a page description (\pgdscno) or a protection user (\protstart,
+// \protend). \lang, \kerning, \fcs and the rsid words are numbers of their own, not indices.
 function TyRtfNamesTableEntry(const ABytes: RawByteString): Boolean;
 
 type
@@ -5994,21 +6010,56 @@ end;
 
 // ---- a fragment that goes into another document ----
 
+type
+  // which header table an index word's number is an entry of: the font and the colour tables
+  // (a source may define more of them than a target it agrees with), or one of the others
+  // (agreeing means the same bytes)
+  TTyRtfIndexKind = (ikFont, ikColor, ikOther);
+  TTyRtfIndexWord = record
+    Name: string;
+    Kind: TTyRtfIndexKind;
+  end;
+
 const
   BS = #92;
-  // the control words whose number is an index into a table of the header
-  IndexWords: array[0..30] of string = ('f', 'af', 'pnf', 'cf', 'cb', 'highlight', 'ulc',
-    'brdrcf', 'chcbpat', 'chcfpat', 'cbpat', 'cfpat', 'clcbpat', 'clcfpat', 'clcbpatraw',
-    'clcfpatraw', 'trcbpat', 'trcfpat', 'pncf', 's', 'cs', 'ds', 'ts', 'ls', 'revauth',
-    'revauthdel', 'crauth', 'pnrauth', 'tscellcbpat', 'tscellcfpat', 'trbrdrcf');
+  { The control words whose number is an index into a table of the header (checked against
+    the RTF specification 1.9.1's font, colour, style sheet, list, list override, revision
+    author, file, paragraph group, XML namespace, page description and protection user
+    tables; the words only those tables themselves hold - \sbasedon, \listid, \levelpicture
+    ... - are not met outside the header). }
+  IndexWords: array[0..44] of TTyRtfIndexWord = (
+    (Name: 'f'; Kind: ikFont), (Name: 'af'; Kind: ikFont), (Name: 'pnf'; Kind: ikFont),
+    (Name: 'cf'; Kind: ikColor), (Name: 'cb'; Kind: ikColor), (Name: 'highlight'; Kind: ikColor),
+    (Name: 'ulc'; Kind: ikColor), (Name: 'brdrcf'; Kind: ikColor), (Name: 'chcbpat'; Kind: ikColor),
+    (Name: 'chcfpat'; Kind: ikColor), (Name: 'cbpat'; Kind: ikColor), (Name: 'cfpat'; Kind: ikColor),
+    (Name: 'clcbpat'; Kind: ikColor), (Name: 'clcfpat'; Kind: ikColor),
+    (Name: 'clcbpatraw'; Kind: ikColor), (Name: 'clcfpatraw'; Kind: ikColor),
+    (Name: 'trcbpat'; Kind: ikColor), (Name: 'trcfpat'; Kind: ikColor), (Name: 'pncf'; Kind: ikColor),
+    (Name: 'tscellcbpat'; Kind: ikColor), (Name: 'tscellcfpat'; Kind: ikColor),
+    (Name: 'trbrdrcf'; Kind: ikColor),
+    (Name: 's'; Kind: ikOther), (Name: 'cs'; Kind: ikOther), (Name: 'ds'; Kind: ikOther),
+    (Name: 'ts'; Kind: ikOther), (Name: 'yts'; Kind: ikOther), (Name: 'ls'; Kind: ikOther),
+    (Name: 'revauth'; Kind: ikOther), (Name: 'revauthdel'; Kind: ikOther),
+    (Name: 'crauth'; Kind: ikOther), (Name: 'pnrauth'; Kind: ikOther),
+    (Name: 'prauth'; Kind: ikOther), (Name: 'trauth'; Kind: ikOther),
+    (Name: 'mvauth'; Kind: ikOther), (Name: 'dfrauth'; Kind: ikOther),
+    (Name: 'clinsauth'; Kind: ikOther), (Name: 'cldelauth'; Kind: ikOther),
+    (Name: 'clmrgdauth'; Kind: ikOther),
+    (Name: 'subdocument'; Kind: ikOther), (Name: 'ipgp'; Kind: ikOther),
+    (Name: 'xmlns'; Kind: ikOther), (Name: 'pgdscno'; Kind: ikOther),
+    (Name: 'protstart'; Kind: ikOther), (Name: 'protend'; Kind: ikOther));
 
-function IsIndexWord(P: PByte; ALen: Integer): Boolean;
+function IsIndexWord(P: PByte; ALen: Integer; out AKind: TTyRtfIndexKind): Boolean;
 var
   i: Integer;
 begin
   for i := 0 to High(IndexWords) do
-    if (Length(IndexWords[i]) = ALen) and CompareMem(P, PChar(IndexWords[i]), ALen) then
+    if (Length(IndexWords[i].Name) = ALen) and CompareMem(P, PChar(IndexWords[i].Name), ALen) then
+    begin
+      AKind := IndexWords[i].Kind;
       Exit(True);
+    end;
+  AKind := ikOther;
   Result := False;
 end;
 
@@ -6016,37 +6067,14 @@ function TyRtfNamesTableEntry(const ABytes: RawByteString): Boolean;
 var
   lex: TTyRtfLexer;
   t: TTyRtfToken;
+  k: TTyRtfIndexKind;
 begin
   Result := False;
   if ABytes = '' then Exit;
   lex.Init(PByte(PAnsiChar(ABytes)), 0, Length(ABytes));
   while lex.Next(t) do
-    if (t.Kind = rtkWord) and IsIndexWord(@PByte(PAnsiChar(ABytes))[t.NameStart], t.NameLen) then
+    if (t.Kind = rtkWord) and IsIndexWord(@PByte(PAnsiChar(ABytes))[t.NameStart], t.NameLen, k) then
       Exit(True);
-end;
-
-// ABytes without the index words (TyRtfNamesTableEntry): a row's definition for another
-// document. A word dropped between a word and text leaves the space that delimits them.
-function WithoutIndexWords(const ABytes: RawByteString): RawByteString;
-var
-  lex: TTyRtfLexer;
-  t: TTyRtfToken;
-  buf: PByte;
-  openWord: Boolean;
-begin
-  Result := '';
-  if ABytes = '' then Exit;
-  buf := PByte(PAnsiChar(ABytes));
-  lex.Init(buf, 0, Length(ABytes));
-  // the output ends with a control word and no delimiter
-  openWord := False;
-  while lex.Next(t) do
-  begin
-    if (t.Kind = rtkWord) and IsIndexWord(@buf[t.NameStart], t.NameLen) then Continue;
-    if openWord and (t.Kind = rtkText) and (buf[t.Start] <> Ord(' ')) then Result := Result + ' ';
-    Result := Result + Copy(ABytes, t.Start + 1, t.Stop - t.Start);
-    openWord := (t.Kind = rtkWord) and (buf[t.Stop - 1] <> Ord(' '));
-  end;
 end;
 
 // The bytes of the group the header's top level holds whose destination is AName (after a
@@ -6091,7 +6119,8 @@ end;
 
 function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
 const
-  Tables: array[0..3] of string = ('stylesheet', 'listtable', 'listoverridetable', 'revtbl');
+  Tables: array[0..8] of string = ('stylesheet', 'listtable', 'listoverridetable', 'revtbl',
+    'filetbl', 'pgptbl', 'xmlnstbl', 'pgdsctbl', 'protusertbl');
 var
   s, t: TTyRtfLoad;
   ss, ts: TTyRtfParser;
@@ -6107,6 +6136,19 @@ begin
   ss := s.Scan;
   ts := t.Scan;
   if (ss.AnsiCodePage <> ts.AnsiCodePage) or (ss.DefaultFont <> ts.DefaultFont) then Exit;
+  { The default font decodes what names no font (\plain, a run before any \f): the same entry
+    in both - or none in both. }
+  i := ss.FontOfNum(-1);
+  k := ts.FontOfNum(-1);
+  if (i < 0) <> (k < 0) then Exit;
+  if i >= 0 then
+  begin
+    fa := ss.Font(i);
+    fb := ts.Font(k);
+    if (fa.Num <> fb.Num) or (fa.Name <> fb.Name) or (fa.Charset <> fb.Charset) or
+       (fa.Cpg <> fb.Cpg) then
+      Exit;
+  end;
   for i := 0 to ts.FontCount - 1 do
   begin
     fb := ts.Font(i);
@@ -6126,25 +6168,120 @@ begin
 end;
 
 type
-  // TyRichFragmentFilterFor's filter: the index words stay behind.
+  // TyRichFragmentFilterFor's filter: what would not mean the same in the target stays behind.
   TTyRtfForeignFilter = class(TTyRichFragmentFilter)
   private
     FScan: TTyRtfParser;     // the source's header tables (the fragment's text is decoded by them)
+    { Light (the tables agree): only a font number the target's file does not define
+      (FFonts, its numbers sorted) and a colour number at or past its colour table's end
+      (FColorCount) are foreign. Else every index word is, and an object's text decoded by the
+      code page or the default font. }
+    FLight: Boolean;
+    FFonts: array of Integer;
+    FColorCount: Integer;
+    function HasFont(ANum: Integer): Boolean;
+    function ForeignWord(ABuf: PByte; const T: TTyRtfToken): Boolean;
+    function Foreign(const ABytes: RawByteString; AText: Boolean): Boolean;
+    function WithoutForeignWords(const ABytes: RawByteString): RawByteString;
     function FieldInstruction(const ABytes: RawByteString; AUc: Integer): UTF8String;
+    function ResultPictures(const ABytes: RawByteString): RawByteString;
   public
     function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
     function RowFormat(const ARaw: RawByteString): RawByteString; override;
     function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
   end;
 
+function TTyRtfForeignFilter.HasFont(ANum: Integer): Boolean;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := High(FFonts);
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if FFonts[mid] = ANum then Exit(True);
+    if FFonts[mid] < ANum then lo := mid + 1 else hi := mid - 1;
+  end;
+  Result := False;
+end;
+
+function TTyRtfForeignFilter.ForeignWord(ABuf: PByte; const T: TTyRtfToken): Boolean;
+var
+  k: TTyRtfIndexKind;
+  n: Integer;
+begin
+  if (T.Kind <> rtkWord) or not IsIndexWord(@ABuf[T.NameStart], T.NameLen, k) then Exit(False);
+  if not FLight then Exit(True);
+  if T.HasParam then n := T.Param else n := 0;
+  case k of
+    ikFont: Result := not HasFont(n);
+    ikColor: Result := (n < 0) or (n >= FColorCount);
+  else
+    // the same bytes in both files
+    Result := False;
+  end;
+end;
+
+{ ABytes name what the target's file does not have the same: a foreign index word, and with
+  AText (an object's bytes: text a reader decodes) in a filter that is not light a \'xx of 80
+  or more or a \plain - decoded by the source's code page or default font, which the target
+  need not share. }
+function TTyRtfForeignFilter.Foreign(const ABytes: RawByteString; AText: Boolean): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+begin
+  Result := False;
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  while lex.Next(t) do
+    case t.Kind of
+      rtkWord:
+        begin
+          if ForeignWord(buf, t) then Exit(True);
+          if AText and not FLight and (t.NameLen = 5) and CompareMem(@buf[t.NameStart], PChar('plain'), 5) then
+            Exit(True);
+        end;
+      rtkHex:
+        if AText and not FLight and (t.Value >= $80) then Exit(True);
+    end;
+end;
+
+// ABytes without the foreign words: a row's definition for another document. A word dropped
+// between a word and text leaves the space that delimits them.
+function TTyRtfForeignFilter.WithoutForeignWords(const ABytes: RawByteString): RawByteString;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+  openWord: Boolean;
+begin
+  Result := '';
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  // the output ends with a control word and no delimiter
+  openWord := False;
+  while lex.Next(t) do
+  begin
+    if ForeignWord(buf, t) then Continue;
+    if openWord and (t.Kind = rtkText) and (buf[t.Start] <> Ord(' ')) then Result := Result + ' ';
+    Result := Result + Copy(ABytes, t.Start + 1, t.Stop - t.Start);
+    openWord := (t.Kind = rtkWord) and (buf[t.Stop - 1] <> Ord(' '));
+  end;
+end;
+
 function TTyRtfForeignFilter.KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean;
 begin
-  Result := not TyRtfNamesTableEntry(AFragment);
+  Result := not Foreign(AFragment, False);
 end;
 
 function TTyRtfForeignFilter.RowFormat(const ARaw: RawByteString): RawByteString;
 begin
-  if TyRtfNamesTableEntry(ARaw) then Result := WithoutIndexWords(ARaw) else Result := ARaw;
+  if Foreign(ARaw, False) then Result := WithoutForeignWords(ARaw) else Result := ARaw;
 end;
 
 // The text of a field's {\*\fldinst ...}: its characters as a reader takes them - \'xx in
@@ -6383,6 +6520,62 @@ begin
   Result := (t.Kind = rtkWord) and (t.NameLen = 5) and CompareMem(@buf[t.NameStart], PChar('field'), 5);
 end;
 
+{ The picture groups of a field's result ({\pict ...}, {\*\shppict ...}, {\nonshppict ...} -
+  the outermost of each), one after another: pictures are images with no table entry of
+  their own, so they go as they are (a foreign word inside one, none expected, left out). }
+function TTyRtfForeignFilter.ResultPictures(const ABytes: RawByteString): RawByteString;
+var
+  lex, peek: TTyRtfLexer;
+  t, w: TTyRtfToken;
+  buf: PByte;
+  depth, rsltAt, d: Integer;
+  start: PtrInt;
+  g: RawByteString;
+begin
+  Result := '';
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  depth := 0;
+  rsltAt := -1;     // the depth of the result's group, -1 not in it
+  while lex.Next(t) do
+    case t.Kind of
+      rtkGroupStart:
+        begin
+          Inc(depth);
+          if rsltAt < 0 then Continue;
+          peek := lex;
+          if not peek.Next(w) then Exit;
+          if (w.Kind = rtkSymbol) and (w.Value = Ord('*')) and not peek.Next(w) then Exit;
+          if (w.Kind <> rtkWord) or not (
+             ((w.NameLen = 4) and CompareMem(@buf[w.NameStart], PChar('pict'), 4)) or
+             ((w.NameLen = 7) and CompareMem(@buf[w.NameStart], PChar('shppict'), 7)) or
+             ((w.NameLen = 10) and CompareMem(@buf[w.NameStart], PChar('nonshppict'), 10))) then
+            Continue;
+          start := t.Start;
+          d := 1;
+          while (d > 0) and lex.Next(t) do
+            if t.Kind = rtkGroupStart then Inc(d)
+            else if t.Kind = rtkGroupEnd then Dec(d);
+          g := Copy(ABytes, start + 1, lex.Position - start);
+          if Foreign(g, False) then g := WithoutForeignWords(g);
+          Result := Result + g;
+          Dec(depth);
+        end;
+      rtkGroupEnd:
+        begin
+          if depth = rsltAt then Exit;
+          Dec(depth);
+        end;
+      rtkWord:
+        // the field's own result (a group of the field's group), not one of a field inside
+        // its instruction
+        if (rsltAt < 0) and (depth = 2) and (t.NameLen = 7) and
+           CompareMem(@buf[t.NameStart], PChar('fldrslt'), 7) then
+          rsltAt := depth;
+    end;
+end;
+
 function TTyRtfForeignFilter.MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject;
 var
   o: TTyRichOpaque;
@@ -6394,13 +6587,14 @@ begin
   if AObj is TTyRichOpaque then
   begin
     o := TTyRichOpaque(AObj);
-    if not TyRtfNamesTableEntry(o.Bytes) then Exit;
+    if not Foreign(o.Bytes, True) then Exit;
     if IsFieldBytes(o.Bytes) then
     begin
-      // made again: what it does and what it shows, nothing that names the source's tables
+      { made again: what it does and what it shows - its text, then its result's pictures (a
+        linked or hyperlinked image) -, nothing that names the source's tables }
       b := '{' + BS + 'field{' + BS + '*' + BS + 'fldinst ' +
         RtfTextOf(FieldInstruction(o.Bytes, o.RawUc)) + '}{' + BS + 'fldrslt ' +
-        RtfTextOf(o.DisplayText) + '}}';
+        RtfTextOf(o.DisplayText) + ResultPictures(o.Bytes) + '}}';
       SetCodePage(b, CP_NONE, False);
       Exit(TTyRichOpaque.Create(b, o.DisplayText, 1));
     end;
@@ -6410,7 +6604,7 @@ begin
   if AObj is TTyRichPicture then
   begin
     p := TTyRichPicture(AObj);
-    if (p.RawRtf = '') or not TyRtfNamesTableEntry(p.RawRtf) then Exit;
+    if (p.RawRtf = '') or not Foreign(p.RawRtf, False) then Exit;
     // its image, as a picture made here is written
     Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
   end;
@@ -6420,13 +6614,37 @@ function TyRichFragmentFilterFor(ASource, ATarget: TTyRichDocument): TTyRichFrag
 var
   f: TTyRtfForeignFilter;
   load: TTyRtfLoad;
+  ts: TTyRtfParser;
+  i, j, n: Integer;
 begin
-  Result := nil;
-  if TyRichRtfTablesAgree(ASource, ATarget) then Exit;
   f := TTyRtfForeignFilter.Create;
-  load := nil;
-  if ASource <> nil then load := TyRichRtfLoadOf(ASource);
-  if load <> nil then f.FScan := load.Scan;
+  try
+    load := nil;
+    if ASource <> nil then load := TyRichRtfLoadOf(ASource);
+    if load <> nil then f.FScan := load.Scan;
+    if TyRichRtfTablesAgree(ASource, ATarget) then
+    begin
+      // what the target's own file defines, kept apart from the target's later life
+      f.FLight := True;
+      ts := TyRichRtfLoadOf(ATarget).Scan;
+      SetLength(f.FFonts, ts.FontCount);
+      for i := 0 to ts.FontCount - 1 do
+      begin
+        n := ts.Font(i).Num;
+        j := i;
+        while (j > 0) and (f.FFonts[j - 1] > n) do
+        begin
+          f.FFonts[j] := f.FFonts[j - 1];
+          Dec(j);
+        end;
+        f.FFonts[j] := n;
+      end;
+      f.FColorCount := ts.ColorCount;
+    end;
+  except
+    f.Free;
+    raise;
+  end;
   Result := f;
 end;
 

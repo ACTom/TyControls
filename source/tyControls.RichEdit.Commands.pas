@@ -116,8 +116,8 @@ type
     holds a nested table). Nothing to insert (an empty source that does not end with a
     paragraph mark): it changes nothing and is not kept. AFilter (nil: none) is the
     fragment's (TTyRichFragment): what of the source's kept bytes may go into this target -
-    for a source whose header tables are not the target file's (RtfRead's
-    TyRichFragmentFilterFor says which). The command takes it over too, and frees it with
+    what means the same in the target's file (RtfRead's TyRichFragmentFilterFor says
+    which). The command takes it over too, and frees it with
     the source. }
   TTyRichInsertFragment = class(TTyRichCommand)
   private

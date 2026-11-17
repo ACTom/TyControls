@@ -504,8 +504,8 @@ type
     RawFormat and an opaque object's bytes may name fonts, colours, styles and lists by the
     numbers of the source's tables; in another document those numbers mean the target's
     entries. Who reads such bytes implements it (tyControls.RichEdit.RtfRead's
-    TyRichFragmentFilterFor, which also says when the tables agree and no filter is needed);
-    the model only asks it. It never changes the source. }
+    TyRichFragmentFilterFor, which also says what is kept where the tables agree); the model
+    only asks it. It never changes the source. }
   TTyRichFragmentFilter = class
   public
     { A fragment of a format's Extra (APara: a paragraph format's) goes along. }

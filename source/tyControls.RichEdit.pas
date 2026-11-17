@@ -1359,7 +1359,7 @@ type
       names, shading, border and underline colours, the font of right-to-left text,
       tracked-change authors, the formatting inside a field's result, footnotes, comments,
       shapes and embedded objects; RTF copied out of this document's own file keeps all of
-      it. A paste is one undo step however large: one larger than MaxUndoBytes stays the
+      it (what the file's own header defines the same). A paste is one undo step however large: one larger than MaxUndoBytes stays the
       only step - every earlier one is dropped (the history keeps the newest step). }
     procedure PasteFromClipboard(AAs: TTyRichPasteAs = rpaBest);
     { The control can be edited by the user now (not ReadOnly, enabled, the document taking
@@ -5323,9 +5323,10 @@ begin
             Exit;
           end;
           { What the reader kept of the clipboard's file by number (styles, colours, fonts,
-            lists inside formats, rows and objects) goes in as it is only where this
-            document's file has the same header tables - a copy out of this very file;
-            elsewhere it is left out or made again (R62, TyRichFragmentFilterFor). }
+            lists inside formats, rows and objects) goes in as it is only where it means the
+            same in this document's file - the entries its header defines the same (a copy
+            out of this very file); the rest is left out or made again (R62,
+            TyRichFragmentFilterFor). }
           if (src <> nil) and ((src.Text.Length > 0) or ends) then
             cmd := TTyRichInsertFragment.Create(s, src, ends, flat,
               TyRichFragmentFilterFor(src, FDoc))

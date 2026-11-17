@@ -92,6 +92,12 @@ type
     procedure TestRowsOverWholeRowsAreRefused;
     procedure TestAReaderThatFailsOrRunsOutOfMemory;
     procedure TestAPasteIntoAFileAddsToItsHeaderWhatItNeeds;
+    // fix wave W16
+    procedure TestTwoWordPadFilesWhoseTablesArePrefixesKeepAFieldsChinese;
+    procedure TestAFieldsBareBytesBetweenCodePagesAndDefaultFonts;
+    procedure TestAPasteInsideOneEditedFileAndAWordNamingAnAddedFont;
+    procedure TestEveryTablesIndexWordIsLeftBehind;
+    procedure TestAFieldMadeAgainKeepsItsResultsPictures;
   end;
 
 implementation
@@ -695,8 +701,9 @@ begin
   end;
 end;
 
-{ A copy out of the very file pasted back into it: the tables agree, nothing is filtered - the
-  style, the shading and the field's own bytes go in and out as they are. }
+{ A copy out of the very file pasted back into it: the tables agree, and what the copy keeps
+  names only the file's own entries - the style, the shading and the field's own bytes go in
+  and out as they are (W16: the filter runs, light, and leaves all of it). }
 procedure TTyRichEditPasteTest.TestAPasteInsideOneFileKeepsEverything;
 const
   Field = '{' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "http://x"}{' + BS + 'fldrslt' +
@@ -714,7 +721,6 @@ begin
     // the first paragraph with its mark, as the control copies it
     rtf := RangeOut(d, 0, d.Text.ParaLength(0) + 1);
     AssertTrue('pasted', PasteAcross(d, 0, rtf, filtered));
-    AssertFalse('the same file: no filter', filtered);
     body := SavedBody(d, all);
     AssertEquals('the style twice: ' + Shown(body), 2, CountRaw(BS + 's3', body));
     AssertEquals('the shading twice', 2, CountRaw(BS + 'cbpat2', body));
@@ -836,7 +842,10 @@ end;
 
 { TyRichRtfTablesAgree: the same header (and one whose font and colour tables were added to at
   their ends, as a copy's) agrees; a font's name or charset, a colour, the style sheet, a list
-  table, the ANSI code page told apart - and a document with no file agrees with nothing. }
+  table, the ANSI code page, the default font told apart - and a document with no file agrees
+  with nothing. Agreeing one-way is no licence to keep everything (W16, R62 corrected): the
+  filter still runs, and leaves behind a font and a colour the target's file does not
+  define. }
 procedure TTyRichEditPasteTest.TestTheTablesAgreeOnlyWhereEveryTableDoes;
 const
   Fonts = '{' + BS + 'fonttbl{' + BS + 'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}{' + BS + 'f1' +
@@ -868,10 +877,52 @@ const
 
 var
   a, b: TTyRichDocument;
+  f: TTyRichFragmentFilter;
+  o: TTyRichOpaque;
+  txt: UTF8String;
 begin
   Check('the same', True, Fonts + '}' + Colors + '}' + Styles, Fonts + '}' + Colors + '}' + Styles);
   Check('a copy''s added font and colour', True, Fonts + '{' + BS + 'f2 Courier;}}' + Colors + BS +
     'red1' + BS + 'green1' + BS + 'blue1;}' + Styles, Fonts + '}' + Colors + '}' + Styles);
+  // ... and still filtered: what the target's file defines the same stays, the rest goes
+  a := Doc(Fonts + '{' + BS + 'f2 Courier;}}' + Colors + BS + 'red1' + BS + 'green1' + BS +
+    'blue1;}' + Styles);
+  b := Doc(Fonts + '}' + Colors + '}' + Styles);
+  f := TyRichFragmentFilterFor(a, b);
+  try
+    AssertNotNull('agreeing one-way: a filter all the same', f);
+    AssertTrue('the target''s font kept', f.KeepFragment(BS + 'pnf1', True));
+    AssertFalse('the source''s added font left behind', f.KeepFragment(BS + 'pnf2', True));
+    AssertFalse('... as \af', f.KeepFragment(BS + 'af2', False));
+    AssertTrue('the target''s last colour kept', f.KeepFragment(BS + 'cbpat2', True));
+    AssertFalse('the source''s added colour left behind', f.KeepFragment(BS + 'cbpat3', True));
+    AssertTrue('the style sheet is the same: the style kept', f.KeepFragment(BS + 's3', True));
+    AssertEquals('a row''s added colour goes, its own stays',
+      BS + 'trowd' + BS + 'clcbpat2' + BS + 'cellx100', f.RowFormat(BS + 'trowd' + BS + 'clcbpat2' +
+      BS + 'clcfpat3' + BS + 'cellx100'));
+    o := TTyRichOpaque.Create('{' + BS + 'footnote' + BS + 'f1 x}');
+    try
+      AssertTrue('an object naming the file''s font kept', f.MapObject(o, txt) = o);
+    finally
+      o.Free;
+    end;
+  finally
+    f.Free;
+    a.Free;
+    b.Free;
+  end;
+  { \deff1: the source's is SimSun, the target's file has none - its \plain text is decoded
+    otherwise (W16 X-M1) }
+  a := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff1' + Fonts +
+    '}' + Colors + '}' + Styles + Body), True);
+  b := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff1{' + BS +
+    'fonttbl{' + BS + 'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}}' + Colors + '}' + Styles + Body), True);
+  try
+    AssertFalse('the default font', TyRichRtfTablesAgree(a, b));
+  finally
+    b.Free;
+    a.Free;
+  end;
   Check('the target has a font the source lacks', False, Fonts + '}' + Colors + '}' + Styles,
     Fonts + '{' + BS + 'f2 Courier;}}' + Colors + '}' + Styles);
   Check('a font''s charset', False, Fonts + '}' + Colors + '}' + Styles, StringReplace(Fonts,
@@ -899,6 +950,299 @@ begin
   finally
     b.Free;
     a.Free;
+  end;
+end;
+
+{ RTF written with ` for each backslash (the sources of the W16 tests read as RTF). }
+function Esc(const S: RawByteString): RawByteString;
+var
+  i: Integer;
+begin
+  Result := S;
+  UniqueString(Result);
+  for i := 1 to Length(Result) do
+    if Result[i] = '`' then Result[i] := BS;
+end;
+
+const
+  // the re-review's probe P (W16 X-C1): two WordPad-like files, no style sheet, no list table;
+  // the target's font table a prefix of the source's; the source's link reads 中文 in its f1
+  WpTgtP = '{`rtf1`ansi`ansicpg936`deff0`nouicompat`deflang1033{`fonttbl{`f0`fnil`fcharset0 Calibri;}}' +
+    '{`*`generator Riched20 10.0.19041}`viewkind4`uc1 ' +
+    '`pard`sa200`sl276`slmult1`f0`fs22`lang9 first`par second`par}';
+  WpSrcP = '{`rtf1`ansi`ansicpg936`deff0`nouicompat`deflang1033{`fonttbl{`f0`fnil`fcharset0 Calibri;}' +
+    '{`f1`fnil`fcharset134 `''cb`''ce`''cc`''e5;}}{`colortbl ;`red0`green0`blue255;}' +
+    '{`*`generator Riched20 10.0.19041}`viewkind4`uc1 ' +
+    '`pard`sa200`sl276`slmult1`f0`fs22`lang9 see {{`field{`*`fldinst{HYPERLINK "http://x"}}' +
+    '{`fldrslt{`ul`cf1`cf1`ul`f1`''d6`''d0`''ce`''c4}}}}`f0`fs22  here`par}';
+  // the source's header of probe C (SrcIdx's): f1 SimSun, two colours, s3 and cs5
+  SrcHeadC = '{`rtf1`ansi`ansicpg1252`deff0{`fonttbl{`f0`fswiss`fcharset0 Arial;}' +
+    '{`f1`fnil`fcharset134 SimSun;}}{`colortbl;`red255`green0`blue0;`red0`green0`blue255;}' +
+    '{`stylesheet{`s3 Quote;}{`*`cs5 Emph;}}';
+
+{ Pasted into ATgt's second paragraph, through the filter; saved (after AEdit when set); the
+  field the paste brought reads back as 中文 and the saved bytes hold its text as Unicode, not
+  as the source's \'xx in a numbered font. Undone, the save is the file. }
+procedure CheckChineseField(ATest: TTestCase; const AWhat: string; const ASrc, ATgt: RawByteString;
+  AWingdings: Boolean);
+var
+  d, b: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+  o: TTyRichOpaque;
+  cf: TTyCharFormat;
+begin
+  d := LoadDoc(RawBytes(ATgt), False);
+  try
+    ATest.AssertTrue(AWhat + ': pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(ASrc), filtered));
+    ATest.AssertTrue(AWhat + ': through a filter', filtered);
+    if AWingdings then
+    begin
+      // the user gives a word of the target another font: the save adds it to the table
+      cf := TyDefaultCharFormat;
+      cf.FontName := 'Wingdings';
+      cf.Charset := 2;
+      ATest.AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 5),
+        [cffFontName, cffCharset], cf)));
+    end;
+    body := SavedBody(d, all);
+    if AWingdings then
+      ATest.AssertTrue(AWhat + ': Wingdings in the header', PosRaw('Wingdings', StrOfBytes(all)) > 0);
+    ATest.AssertEquals(AWhat + ': no \''xx of the source''s font: ' + Shown(body), 0,
+      PosRaw(Esc('`''d6`''d0'), body));
+    ATest.AssertTrue(AWhat + ': the field''s text as Unicode: ' + Shown(body),
+      PosRaw(Esc('`fldrslt `u20013?`u25991?'), body) > 0);
+    b := LoadDoc(all, True);
+    try
+      o := FirstOpaque(b);
+      ATest.AssertNotNull(AWhat + ': the field read back', o);
+      ATest.AssertTrue(AWhat + ': its text is Chinese, not "' + Shown(o.DisplayText) + '"',
+        SameRaw(o.DisplayText, U($4E2D) + U($6587)));
+    finally
+      b.Free;
+    end;
+    if AWingdings then d.Undo;
+    d.Undo;
+    ATest.AssertTrue(AWhat + ': undone, the file', SameRaw(StrOfBytes(SaveOut(d)), ATgt));
+  finally
+    d.Free;
+  end;
+end;
+
+{ W16 X-C1 (R62 corrected; the re-review's P2 and P3): two different WordPad files whose
+  tables "agree" one-way - the target's font table is a prefix of the source's - are not one
+  file: the source's link in its \f1 is made again, and reads back as 中文 - on a Western
+  system (P3: the target's f1 would be nothing, its text ÖÐÎÄ) and after the user gave a
+  word of the target Wingdings, which the save adds as f1 (P2: four Wingdings glyphs). }
+procedure TTyRichEditPasteTest.TestTwoWordPadFilesWhoseTablesArePrefixesKeepAFieldsChinese;
+var
+  tgt2: RawByteString;
+begin
+  CheckChineseField(Self, 'P1', Esc(WpSrcP), Esc(WpTgtP), False);
+  CheckChineseField(Self, 'P3', StringReplace(Esc(WpSrcP), 'ansicpg936', 'ansicpg1252', []),
+    StringReplace(Esc(WpTgtP), 'ansicpg936', 'ansicpg1252', []), False);
+  // P2: the target has the source's colour table too (so that only the font tells them apart)
+  tgt2 := StringReplace(Esc(WpTgtP), Esc('}}{`*`generator'), Esc('}}{`colortbl ;`red0`green0`blue255;}{`*`generator'), []);
+  CheckChineseField(Self, 'P2', Esc(WpSrcP), tgt2, True);
+end;
+
+{ W16 X-M1: a field's result of bare \'xx bytes - no index word in the field - is decoded by
+  the source's code page (its font has no charset), or after \plain by its default font. Into
+  a file of another code page or default font such bytes are another text: the field is made
+  again from what it showed. }
+procedure TTyRichEditPasteTest.TestAFieldsBareBytesBetweenCodePagesAndDefaultFonts;
+var
+  d, b: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+  o: TTyRichOpaque;
+begin
+  { \plain over ASCII in a symbol font: the default font Wingdings shows J as U+F04A; in the
+    target's Times it would be a J }
+  d := LoadDoc(RawBytes(TgtIdx), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc('{`rtf1`ansi`ansicpg1252`deff1' +
+      '{`fonttbl{`f0`fnil`fcharset0 Arial;}{`f1`fnil`fcharset2 Wingdings;}}`pard`f0 a {`field' +
+      '{`*`fldinst HYPERLINK "http://w"}{`fldrslt`plain J}} c`par}')), filtered));
+    body := SavedBody(d, all);
+    AssertEquals('not the bare J: ' + Shown(body), 0, PosRaw(Esc('`plain J'), body));
+    b := LoadDoc(all, True);
+    try
+      o := FirstOpaque(b);
+      AssertNotNull('the field read back', o);
+      AssertTrue('the symbol it showed, not "' + Shown(o.DisplayText) + '"', SameRaw(o.DisplayText, U($F04A)));
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
+  end;
+  CheckChineseField(Self, 'by the code page', Esc('{`rtf1`ansi`ansicpg936`deff0{`fonttbl{`f0`fnil SimSun;}}' +
+    '`pard`f0 a {`field{`*`fldinst HYPERLINK "http://z"}{`fldrslt `''d6`''d0`''ce`''c4}} c`par}'),
+    TgtIdx, False);
+  CheckChineseField(Self, 'by the default font', Esc('{`rtf1`ansi`ansicpg1252`deff1{`fonttbl' +
+    '{`f0`fnil`fcharset0 Arial;}{`f1`fnil`fcharset134 SimSun;}}`pard`f0 a {`field{`*`fldinst ' +
+    'HYPERLINK "http://z"}{`fldrslt`plain `''d6`''d0`''ce`''c4}} c`par}'), TgtIdx, False);
+end;
+
+{ W16 X-C1 (2): a copy out of the file's own document after an edit gave a paragraph a font
+  and a colour the file's header does not have (the copy's header adds them at the ends of
+  its tables, and that paragraph is written from the model): pasted back, everything that
+  names the file's own entries stays - the style, the shading, a field's bytes - and the new
+  font is the formats' (Georgia read back). A kept word that names one of those added fonts
+  (a copy made by hand: the range writer writes none) is not the file's: its field is made
+  again. }
+procedure TTyRichEditPasteTest.TestAPasteInsideOneEditedFileAndAWordNamingAnAddedFont;
+const
+  F = '{`rtf1`ansi`ansicpg1252`deff0{`fonttbl{`f0`fswiss`fcharset0 Arial;}' +
+    '{`f1`fnil`fcharset134 SimSun;}}{`colortbl;`red255`green0`blue0;`red0`green0`blue255;}' +
+    '{`stylesheet{`s3 Quote;}{`*`cs5 Emph;}}' +
+    '`pard`s3`cbpat2`brdrb`brdrs`brdrw10`brdrcf1 `f0`cs5`cb2`chcbpat1`ulc2`ul plain ' +
+    '{`field{`*`fldinst HYPERLINK "http://x"}{`fldrslt`f1`cf1 `''d6`''d0`''ce`''c4}} end`par' +
+    '`pard last`par}';
+  Field = '{`field{`*`fldinst HYPERLINK "http://x"}{`fldrslt`f1`cf1 `''d6`''d0`''ce`''c4}}';
+var
+  d, b: TTyRichDocument;
+  cf: TTyCharFormat;
+  rtf, all: TBytes;
+  body, s: RawByteString;
+  filtered: Boolean;
+  k, n, i: Integer;
+  runs: TTyRunArray;
+begin
+  d := LoadDoc(RawBytes(Esc(F)), False);
+  try
+    cf := TyDefaultCharFormat;
+    cf.FontName := 'Georgia';
+    cf.Color := $0000FF00;
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(d.Text.ParaStart(1), 4),
+      [cffFontName, cffColor], cf)));
+    rtf := RangeOut(d, 0, d.Text.Length);
+    AssertTrue('the copy adds Georgia', PosRaw('Georgia', StrOfBytes(rtf)) > 0);
+    AssertTrue('pasted', PasteAcross(d, d.Text.Length, rtf, filtered));
+    body := SavedBody(d, all);
+    AssertEquals('the style twice: ' + Shown(body), 2, CountRaw(Esc('`s3'), body));
+    AssertEquals('the shading twice', 2, CountRaw(Esc('`cbpat2'), body));
+    AssertEquals('the field''s bytes twice', 2, CountRaw(Esc(Field), body));
+    b := LoadDoc(all, True);
+    try
+      n := 0;
+      for k := 0 to b.Text.ParaCount - 1 do
+      begin
+        runs := b.RunsOf(k);
+        for i := 0 to High(runs) do
+          if runs[i].Obj is TTyRichOpaque then
+          begin
+            Inc(n);
+            AssertTrue('its text', SameRaw(TTyRichOpaque(runs[i].Obj).DisplayText, U($4E2D) + U($6587)));
+          end;
+        if ParaText(b, k) = 'last' then
+          AssertEquals('the added font read back', 'Georgia',
+            b.Formats.CharFormat(b.RunsOf(k)[0].Format).FontName);
+      end;
+      AssertEquals('two fields', 2, n);
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
+  end;
+  // a copy by hand: the file's header with f2 added, a field naming f2 and one naming f1
+  d := LoadDoc(RawBytes(Esc(F)), False);
+  try
+    s := StringReplace(Esc(F), 'SimSun;}}', 'SimSun;}{' + BS + 'f2' + BS + 'fnil Courier New;}}', []);
+    s := StringReplace(s, Esc('`pard last`par}'), Esc('`pard g {`field{`*`fldinst HYPERLINK "http://g"}' +
+      '{`fldrslt`f2 g}} h`par}'), []);
+    AssertTrue('pasted', PasteAcross(d, d.Text.Length, RawBytes(s), filtered));
+    AssertTrue('a filter', filtered);
+    body := SavedBody(d, all);
+    AssertEquals('the file''s field kept: ' + Shown(body), 2, CountRaw(Esc(Field), body));
+    AssertEquals('the field naming the added font made again', 0, PosRaw(Esc('`fldrslt`f2'), body));
+    AssertTrue('... from its text', PosRaw(Esc('`fldinst HYPERLINK "http://g"}{`fldrslt g}'), body) > 0);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W16 X-M3: one index word of each header table the reader keeps words of - font, colour,
+  style (a cell paragraph's table style \yts), list override, revision author (a paragraph's,
+  a row's, a move's, a cell's), file, paragraph group, XML namespace, page description,
+  protection user - names a table entry; numbers of their own do not. Pasted into another
+  file, none of them is in the saved bytes. }
+procedure TTyRichEditPasteTest.TestEveryTablesIndexWordIsLeftBehind;
+const
+  Words: array[0..17] of string = ('f1', 'cf1', 'yts3', 'ls1', 'prauth1', 'trauth1', 'mvauth1',
+    'dfrauth1', 'clinsauth1', 'cldelauth1', 'clmrgdauth1', 'subdocument1', 'ipgp2', 'xmlns1',
+    'pgdscno1', 'protstart1', 'protend1', 'trbrdrcf1');
+  NotWords: array[0..5] of string = ('lang1033', 'kerning2', 'fcs1', 'insrsid5', 'ilvl0', 'fs24');
+var
+  i: Integer;
+  d: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+begin
+  for i := 0 to High(Words) do
+    AssertTrue(Words[i], TyRtfNamesTableEntry(BS + Words[i] + ' x'));
+  for i := 0 to High(NotWords) do
+    AssertFalse(NotWords[i], TyRtfNamesTableEntry(BS + NotWords[i] + ' x'));
+  d := LoadDoc(RawBytes(TgtIdx), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(SrcHeadC +
+      '`pard`s3`yts3`prauth1{`*`oldpprops`pard`s3`qc}`f0{`*`oldcprops`f1`cf1}`mvauth1`ipgp2' +
+      '`subdocument1`revised`revauth1 text`par' +
+      '`trowd`ts3`trauth1`trcbpat1`clcbpat2`clbrdrb`brdrs`brdrw15`brdrcf2`cellx2000`clmrg`cellx4000' +
+      '`pard`intbl`yts3 c1`cell c2`cell`row}')), filtered));
+    body := SavedBody(d, all);
+    for i := 0 to 7 do
+      AssertEquals(Words[i] + ' left behind: ' + Shown(body), 0, PosRaw(BS + Words[i], body));
+    AssertEquals('\ipgp', 0, PosRaw(Esc('`ipgp'), body));
+    AssertEquals('\subdocument', 0, PosRaw(Esc('`subdocument'), body));
+    AssertEquals('\oldpprops', 0, PosRaw(Esc('`oldpprops'), body));
+    AssertTrue('the text', PosRaw('text', body) > 0);
+    AssertTrue('the cells', (PosRaw('c1', body) > 0) and (PosRaw('c2', body) > 0));
+  finally
+    d.Free;
+  end;
+end;
+
+{ W16 X-M4: a field made again keeps the pictures of its result (a linked image, a picture
+  with a hyperlink): after its text, as they are - one that is the whole result, and one
+  after text with its shape and non-shape forms. }
+procedure TTyRichEditPasteTest.TestAFieldMadeAgainKeepsItsResultsPictures;
+const
+  Pic = '{`pict`pngblip`picwgoal1000`pichgoal1000 89504e470d0a1a0a}';
+  Shp = '{`*`shppict{`pict`pngblip`picwgoal500`pichgoal500 89504e47}}{`nonshppict{`pict`wmetafile8 0100}}';
+var
+  d, b: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+  o: TTyRichOpaque;
+begin
+  d := LoadDoc(RawBytes(TgtIdx), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(SrcHeadC +
+      '`pard`f0 a {`field{`*`fldinst`f0 INCLUDEPICTURE "http://x/y.png"}{`fldrslt ' + Pic + '}} b ' +
+      '{`field{`*`fldinst HYPERLINK "http://z"}{`fldrslt`f1`cf1 go' + Shp + '}} c`par}')), filtered));
+    body := SavedBody(d, all);
+    AssertTrue('the picture that is the result: ' + Shown(body),
+      PosRaw(Esc('`fldinst INCLUDEPICTURE "http://x/y.png"}{`fldrslt ' + Pic + '}}'), body) > 0);
+    AssertTrue('the pictures after the text',
+      PosRaw(Esc('`fldinst HYPERLINK "http://z"}{`fldrslt go' + Shp + '}}'), body) > 0);
+    AssertEquals('no \f1 in a result', 0, PosRaw(Esc('`fldrslt`f1'), body));
+    b := LoadDoc(all, True);
+    try
+      o := FirstOpaque(b);
+      AssertNotNull('read back', o);
+      AssertTrue('a picture in it', PosRaw(Esc('`pngblip'), o.Bytes) > 0);
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
   end;
 end;
 
