@@ -52,6 +52,7 @@ type
     procedure TestARangeHoldsTheWholeMatch;
     // the steps
     procedure TestAStepIsBounded;
+    procedure TestAStepIsBoundedInBytes;
     procedure TestAFindWhileLoading;
     procedure TestAFindChangesNothing;
     // replacing
@@ -1319,6 +1320,136 @@ begin
     end;
   finally
     doc.Free;
+  end;
+end;
+
+{ H-I3: a step is bounded in bytes, whatever the paragraphs are - one line of megabytes of
+  text is read in pieces (a match that straddles two steps is found, and so is the next one),
+  forward and backward, match case or not, whole word; a file of paragraphs that are each a
+  large picture is passed by the pictures' braces, its bytes not lexed. Counts, not times. }
+procedure TTyRichFindTest.TestAStepIsBoundedInBytes;
+const
+  Budget = 64 * 1024;
+  Slack = 4096;
+var
+  line, s, hex: RawByteString;
+  doc: TTyRichDocument;
+  f: TTyRichFinder;
+  r: TTyRichFindResult;
+  i, steps: Integer;
+  before, beforeL, beforeH, worst, d: Int64;
+  opts: TTyRichFindOptions;
+  k: Integer;
+  m: TMemoryStream;
+  total, second: Int64;
+begin
+  line := '';
+  while Length(line) < 4 * MB do line := line + 'lorem ipsum dolor sit amet ';
+  // straddling the first step's end, and once more near the end
+  Insert('quixotic', line, Budget - 3);
+  second := Length(line) - 100;
+  Insert(' quixotic ', line, second);
+  doc := TextDoc(line);
+  try
+    AssertEquals('one paragraph', 1, doc.Text.ParaCount);
+    for k := 0 to 3 do
+    begin
+      case k of
+        0: opts := [rfoMatchCase];
+        1: opts := [];
+        2: opts := [rfoWholeWord];
+      else
+        opts := [rfoBackward];
+      end;
+      f := TTyRichFinder.Create(doc, 'quixotic', opts);
+      try
+        worst := 0;
+        steps := 0;
+        repeat
+          before := f.TextBytes;
+          r := f.Step(Budget);
+          Inc(steps);
+          d := f.TextBytes - before;
+          if d > worst then worst := d;
+        until r <> rfrMore;
+        AssertTrue(Format('%d: found', [k]), r = rfrFound);
+        if k = 2 then
+          // (the first one is inside "lorem...quixoticlorem": no whole word)
+          AssertEquals(Format('%d: the whole word', [k]), second, f.MatchPos)
+        else if k = 3 then
+          AssertEquals(Format('%d: the last first', [k]), second, f.MatchPos)
+        else
+          AssertEquals(Format('%d: where two steps meet', [k]), Int64(Budget - 4), f.MatchPos);
+        AssertTrue(Format('%d: no step read more than its budget (%d)', [k, worst]), worst <= Budget + Slack);
+        AssertTrue(Format('%d: in pieces (%d steps)', [k, steps]), (k = 3) or (steps >= 1));
+        if k in [0, 1] then
+        begin
+          // and on: the next one, from right after it - not from the paragraph's start
+          before := f.TextBytes;
+          repeat
+            r := f.Step(Budget);
+          until r <> rfrMore;
+          AssertTrue(Format('%d: the next one', [k]), r = rfrFound);
+          AssertEquals(Format('%d: there', [k]), second, f.MatchPos);
+          AssertTrue(Format('%d: read on, not again (%d)', [k, f.TextBytes - before]),
+            f.TextBytes - before <= Length(line) - Budget + Slack);
+        end;
+      finally
+        f.Free;
+      end;
+    end;
+    // a find that begins inside the paragraph passes what lies before
+    AssertEquals('from inside', second, First(doc, 'quixotic', [rfoMatchCase], Budget));
+  finally
+    doc.Free;
+  end;
+  // a file of pictures with a word after them
+  m := TMemoryStream.Create;
+  try
+    s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard first|par ');
+    m.WriteBuffer(s[1], Length(s));
+    SetLength(hex, MB);
+    for i := 1 to Length(hex) do hex[i] := Chr(Ord('0') + (i mod 10));
+    for i := 1 to 8 do
+    begin
+      s := Rtf('{|pict|pngblip|picw100|pich100 ');
+      m.WriteBuffer(s[1], Length(s));
+      m.WriteBuffer(hex[1], Length(hex));
+      s := Rtf('}|par ');
+      m.WriteBuffer(s[1], Length(s));
+    end;
+    s := Rtf('the end: quixotic|par}');
+    m.WriteBuffer(s[1], Length(s));
+    total := m.Size;
+    doc := TTyRichDocument.Create;
+    try
+      m.Position := 0;
+      TyRichLoadRtf(doc, m);
+      f := TTyRichFinder.Create(doc, 'quixotic', []);
+      try
+        worst := 0;
+        repeat
+          before := f.TextBytes;
+          beforeL := f.FilterLooked;
+          beforeH := f.FilterHidden;
+          r := f.Step(Budget);
+          d := (f.TextBytes - before) + (f.FilterLooked - beforeL) + (f.FilterHidden - beforeH) div 16;
+          if d > worst then worst := d;
+        until r <> rfrMore;
+        AssertTrue('found after the pictures', r = rfrFound);
+        AssertTrue(Format('no step over its budget (%d)', [worst]), worst <= Budget + Slack);
+        AssertTrue(Format('the pictures passed by their braces (%d of %d bytes)',
+          [f.FilterHidden, total]), f.FilterHidden > total - MB);
+        AssertTrue(Format('their bytes not lexed (%d of %d)', [f.FilterLooked, total]),
+          f.FilterLooked * 100 < total);
+      finally
+        f.Free;
+      end;
+    finally
+      doc.Free;
+    end;
+  finally
+    m.Free;
   end;
 end;
 

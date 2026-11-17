@@ -114,9 +114,11 @@ const
   CRichWordWindow = 4096;
   { A copy of more characters than this shows the wait cursor while it is made. }
   CRichCopyWaitChars = 1000000;
-  { A background find's piece: characters of text searched (and as many bytes of a file's
-    unparsed paragraphs) at most, and at least - a find's turns start at the least and double
-    their pieces while turns are fast, halve them while slow, as a load's slices do. }
+  { A background find's piece: units of a finder's step at most, and at least (bytes of text
+    read, bytes of a file's unparsed paragraph lexed, a picture's bytes passed over at a
+    sixteenth: TTyRichFinder.Step - a paragraph larger than a piece is read in pieces) - a
+    find's turns start at the least and double their pieces while turns are fast, halve them
+    while slow, as a load's slices do. }
   CRichFindStepChars = 1024 * 1024;
   CRichFindMinStepChars = 16 * 1024;
   { A background replace's piece: matches replaced at most, and at least (the same rule). }
