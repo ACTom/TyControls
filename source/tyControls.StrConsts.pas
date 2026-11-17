@@ -294,6 +294,7 @@ resourcestring
   rsRichUndoCharFormat   = 'Font formatting';
   rsRichUndoParaFormat   = 'Paragraph formatting';
   rsRichUndoInsertObject = 'Insert object';
+  rsRichUndoPaste        = 'Paste';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }
@@ -312,6 +313,7 @@ resourcestring
   rsRichEditRefusedRange      = 'This part of the document cannot be edited.';
   rsRichEditRefusedCells      = 'A selection across table cells cannot be deleted or typed over (whole rows can).';
   rsRichEditRefusedLongPara   = 'This paragraph is too long to edit here: what is typed past the part shown would not be seen.';
+  rsRichEditRefusedPicture    = 'The picture on the clipboard is too large to paste.';
   { What the document's engine raises when a command cannot be carried out (an edit made
     from code sees them; the control tells the user its own reasons above). }
   rsRichModelNestedRow        = 'This row holds a nested table and is kept as the file has it: its text cannot be changed';

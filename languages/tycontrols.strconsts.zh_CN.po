@@ -846,6 +846,10 @@ msgstr "设置段落格式"
 msgid "Insert object"
 msgstr "插入对象"
 
+#: tycontrols.strconsts.rsrichundopaste
+msgid "Paste"
+msgstr "粘贴"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"
@@ -889,6 +893,10 @@ msgstr "文档的这一部分不能编辑。"
 #: tycontrols.strconsts.rsricheditrefusedcells
 msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
 msgstr "跨越表格单元格的选区不能删除或改写（整行可以）。"
+
+#: tycontrols.strconsts.rsricheditrefusedpicture
+msgid "The picture on the clipboard is too large to paste."
+msgstr "剪贴板上的图片太大，不能粘贴。"
 
 #: tycontrols.strconsts.rsricheditrefusedlongpara
 msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."

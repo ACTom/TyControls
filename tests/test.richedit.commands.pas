@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Graphics, fpcunit, testregistry,
   tyControls.StrConsts, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Commands;
+  tyControls.RichEdit.Commands, tyControls.RichEdit.RtfRead;
 
 type
   TCmdCountedOpaque = class(TTyRichOpaque)
@@ -90,6 +90,13 @@ type
     // Task 10a
     procedure TestAnInsertThatCutsASequenceIsRefused;
     procedure TestClearUndoDropsTheHistory;
+    // Task 10c: a fragment of another document
+    procedure TestAFragmentMeetsTheParagraphAtItsPlace;
+    procedure TestAFragmentsRowsAreRowsOutsideATableAndTextInOne;
+    procedure TestAFragmentBringsNoDocumentLevelThing;
+    procedure TestAFragmentSharesItsObjectsAndKeepsOneStep;
+    procedure TestAFragmentIsRefusedInARowWithANestedTable;
+    procedure TestReadingAFragmentOfUntrustedBytes;
   end;
 
 implementation
@@ -1007,6 +1014,470 @@ begin
       d.EndUpdate;
     end;
     AssertTrue('refused inside an update', raised);
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- Task 10c: a fragment of another document ---- }
+
+function RtfDoc(const S: UTF8String): TTyRichDocument;
+var
+  st: TBytesStream;
+begin
+  Result := TTyRichDocument.Create;
+  st := TBytesStream.Create(Bytes(S));
+  try
+    TyRichLoadRtfFull(Result, st);
+  finally
+    st.Free;
+  end;
+end;
+
+{ S read as a clipboard's RTF and inserted at APos: what Execute answered. }
+function PasteRtf(ADoc: TTyRichDocument; APos: TTyRichPos; const S: UTF8String;
+  AFlatten: Boolean = False): Boolean;
+var
+  src: TTyRichDocument;
+  ends: Boolean;
+begin
+  src := TyRichReadRtfFragment(Bytes(S), ends);
+  if src = nil then raise Exception.Create('no fragment read');
+  Result := ADoc.Execute(TTyRichInsertFragment.Create(APos, src, ends, AFlatten));
+end;
+
+function AlignOf(ADoc: TTyRichDocument; AIndex: Integer): TTyParaAlign;
+begin
+  Result := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(AIndex)).Align;
+end;
+
+function CharAt(ADoc: TTyRichDocument; APos: TTyRichPos): TTyCharFormat;
+var
+  p, i, k: Integer;
+  runs: TTyRunArray;
+begin
+  p := ADoc.Text.ParaOfPos(APos);
+  runs := ADoc.RunsOf(p);
+  k := 0;
+  for i := 0 to High(runs) do
+    if runs[i].Start <= APos - ADoc.Text.ParaStart(p) then k := i;
+  Result := ADoc.Formats.CharFormat(runs[k].Format);
+end;
+
+const
+  // a right-aligned paragraph in Arial, then a justified one
+  FragTarget = '{\rtf1\ansi{\fonttbl{\f0 Arial;}{\f1 Times;}}\pard\qr\f0 abcd\par\pard\qj efgh\par}';
+  // one part: inline, bold Times
+  FragInline = '{\rtf1\ansi{\fonttbl{\f0 Times;}}\f0\b XY}';
+  // two paragraphs, centred then left; the last without its paragraph mark
+  FragOpen = '{\rtf1\ansi{\fonttbl{\f0 Times;}}\pard\qc\f0 A\par\pard\ql B}';
+  // the same with its mark
+  FragEnded = '{\rtf1\ansi{\fonttbl{\f0 Times;}}\pard\qc\f0 A\par\pard\ql B\par}';
+
+{ How the pasted paragraphs meet the one they land in (Word's rule: a paragraph's format goes
+  with its mark): inline - the paragraph keeps its own format, the text after the place follows;
+  several - the first joins the text before (and takes the first pasted paragraph's format,
+  whose mark ends it), the last joins the text after (and keeps the paragraph's own); ending
+  with a mark - the text after stays a paragraph of its own. At a paragraph's start, middle and
+  end, in an empty paragraph, in an empty document; one undo step each, undone and redone. }
+procedure TTyRichCommandsTest.TestAFragmentMeetsTheParagraphAtItsPlace;
+var
+  d: TTyRichDocument;
+  before: string;
+
+  procedure Paras(const AWhat: string; const ATexts: array of UTF8String;
+    const AAligns: array of TTyParaAlign);
+  var
+    i: Integer;
+  begin
+    AssertEquals(AWhat + ': paragraphs', Length(ATexts), d.Text.ParaCount);
+    for i := 0 to High(ATexts) do
+    begin
+      AssertEquals(Format('%s: paragraph %d', [AWhat, i]), ATexts[i], ParaText(d, i));
+      AssertTrue(Format('%s: paragraph %d format', [AWhat, i]), AlignOf(d, i) = AAligns[i]);
+    end;
+  end;
+
+  procedure Round(const AWhat: string);
+  var
+    after: string;
+  begin
+    AssertEquals(AWhat + ': one undo step', 1, d.UndoDepth);
+    AssertEquals(AWhat + ': its name', rsRichUndoPaste, d.UndoDescription);
+    after := Dump(d);
+    d.Undo;
+    AssertEquals(AWhat + ': undone', before, Dump(d));
+    d.Redo;
+    AssertEquals(AWhat + ': redone', after, Dump(d));
+    AssertEquals(AWhat + ': redo leaves it one step', 1, d.UndoDepth);
+  end;
+
+begin
+  // inline, in the middle
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    SetLength(FChanges, 0);
+    d.OnChange := @DocChanged;
+    AssertTrue('inline: ran', PasteRtf(d, 2, FragInline));
+    AssertEquals('inline: one change', 1, Length(FChanges));
+    Paras('inline', ['abXYcd', 'efgh'], [paraRight, paraJustify]);
+    AssertTrue('inline: bold', fsBold in CharAt(d, 2).Style);
+    AssertEquals('inline: its font', 'Times', CharAt(d, 3).FontName);
+    AssertFalse('inline: the text after keeps its own', fsBold in CharAt(d, 4).Style);
+    AssertEquals('inline: in its own font', 'Arial', CharAt(d, 4).FontName);
+    Round('inline');
+  finally
+    d.Free;
+  end;
+  // several, the last without its mark, in the middle
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    PasteRtf(d, 2, FragOpen);
+    Paras('several', ['abA', 'Bcd', 'efgh'], [paraCenter, paraRight, paraJustify]);
+    AssertEquals('several: the text before keeps its font', 'Arial', CharAt(d, 0).FontName);
+    AssertEquals('several: the pasted keeps its', 'Times', CharAt(d, 2).FontName);
+    AssertEquals('several: the text after keeps its', 'Arial', CharAt(d, d.Text.ParaStart(1) + 1).FontName);
+    Round('several');
+  finally
+    d.Free;
+  end;
+  // ending with a mark: middle, start, end
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    PasteRtf(d, 2, FragEnded);
+    Paras('ended, middle', ['abA', 'B', 'cd', 'efgh'], [paraCenter, paraLeft, paraRight, paraJustify]);
+    Round('ended, middle');
+  finally
+    d.Free;
+  end;
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    PasteRtf(d, 0, FragEnded);
+    Paras('ended, at the start', ['A', 'B', 'abcd', 'efgh'], [paraCenter, paraLeft, paraRight,
+      paraJustify]);
+    Round('ended, at the start');
+  finally
+    d.Free;
+  end;
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    PasteRtf(d, 4, FragOpen);
+    Paras('several, at the end', ['abcdA', 'B', 'efgh'], [paraCenter, paraRight, paraJustify]);
+    Round('several, at the end');
+  finally
+    d.Free;
+  end;
+  // an empty paragraph
+  d := RtfDoc('{\rtf1\ansi\pard\qr\par\pard x}');
+  try
+    before := Dump(d);
+    PasteRtf(d, 0, FragEnded);
+    Paras('an empty paragraph', ['A', 'B', '', 'x'], [paraCenter, paraLeft, paraRight, paraLeft]);
+    Round('an empty paragraph');
+  finally
+    d.Free;
+  end;
+  // an empty document: ended, and inline
+  d := TTyRichDocument.Create;
+  try
+    before := Dump(d);
+    PasteRtf(d, 0, FragEnded);
+    Paras('an empty document', ['A', 'B', ''], [paraCenter, paraLeft, paraLeft]);
+    Round('an empty document');
+  finally
+    d.Free;
+  end;
+  d := TTyRichDocument.Create;
+  try
+    before := Dump(d);
+    PasteRtf(d, 0, FragInline);
+    Paras('inline into an empty document', ['XY'], [paraLeft]);
+    AssertTrue('bold', fsBold in CharAt(d, 1).Style);
+    Round('inline into an empty document');
+  finally
+    d.Free;
+  end;
+end;
+
+{ Rows go in as rows outside a table - the paragraph split before them when text stands before
+  the place, never a row joined with text - and as the text of the cell the place is in (or
+  of no table, flattened on request): never a nested table. }
+procedure TTyRichCommandsTest.TestAFragmentsRowsAreRowsOutsideATableAndTextInOne;
+const
+  Rows = '{\rtf1\ansi\trowd\cellx1000\cellx2000\pard\intbl a\cell b\cell\row}';
+var
+  d: TTyRichDocument;
+  c: TTyRichCell;
+  before: string;
+  i: Integer;
+begin
+  d := RtfDoc(FragTarget);
+  try
+    before := Dump(d);
+    PasteRtf(d, 2, Rows);
+    AssertEquals('split around the row', 'ab|a|b|cd|efgh', ParaText(d, 0) + '|' + ParaText(d, 1) +
+      '|' + ParaText(d, 2) + '|' + ParaText(d, 3) + '|' + ParaText(d, 4));
+    AssertTrue('the text before: no cell', d.CellAt(0) = nil);
+    AssertTrue('and its own format', AlignOf(d, 0) = paraRight);
+    c := d.CellAt(1);
+    AssertTrue('a row', (c <> nil) and (c.Index = 0) and (c.Row.CellCount = 2));
+    AssertTrue('its second cell', (d.CellAt(2) <> nil) and (d.CellAt(2).Row = c.Row) and
+      (d.CellAt(2).Index = 1));
+    AssertTrue('the text after: no cell', d.CellAt(3) = nil);
+    AssertTrue('and its own format', AlignOf(d, 3) = paraRight);
+    d.Undo;
+    AssertEquals('undone', before, Dump(d));
+    d.Redo;
+    AssertTrue('redone: the row', (d.CellAt(1) <> nil) and (d.CellAt(2).Index = 1));
+  finally
+    d.Free;
+  end;
+  // at a paragraph's start: nothing to split before
+  d := RtfDoc(FragTarget);
+  try
+    PasteRtf(d, 0, Rows);
+    AssertEquals('at the start: paragraphs', 4, d.Text.ParaCount);
+    AssertEquals('the row first', 'a', ParaText(d, 0));
+    AssertTrue('a cell', d.CellAt(0) <> nil);
+    AssertEquals('then the paragraph', 'abcd', ParaText(d, 2));
+    AssertTrue('in no table', d.CellAt(2) = nil);
+  finally
+    d.Free;
+  end;
+  // inside a cell: the cells' paragraphs as paragraphs of that cell
+  d := RtfDoc('{\rtf1\ansi\trowd\cellx1000\pard\intbl xy\cell\row\pard z\par}');
+  try
+    c := d.CellAt(0);
+    PasteRtf(d, 1, Rows);
+    AssertEquals('in a cell: paragraphs', 4, d.Text.ParaCount);
+    AssertEquals('flattened', 'xa|b|y|z', ParaText(d, 0) + '|' + ParaText(d, 1) + '|' +
+      ParaText(d, 2) + '|' + ParaText(d, 3));
+    for i := 0 to 2 do
+      AssertTrue(Format('paragraph %d in the cell it went in', [i]), d.CellAt(i) = c);
+    AssertEquals('the table keeps its row', 1, c.Table.RowCount);
+    AssertTrue('after it, none', d.CellAt(3) = nil);
+  finally
+    d.Free;
+  end;
+  // flattened on request outside a table
+  d := RtfDoc(FragTarget);
+  try
+    PasteRtf(d, 2, Rows, True);
+    AssertEquals('flat: paragraphs', 4, d.Text.ParaCount);
+    for i := 0 to d.Text.ParaCount - 1 do
+      AssertTrue(Format('flat: paragraph %d in no table', [i]), d.CellAt(i) = nil);
+    AssertEquals('flat: text', 'aba|b|cd|efgh', ParaText(d, 0) + '|' + ParaText(d, 1) + '|' +
+      ParaText(d, 2) + '|' + ParaText(d, 3));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The source's page, margins, default tab, \info and default font do not come along; a run
+  that had no font of its own in the source gets the source's default font by name (and its
+  size), so it looks as it looked there. }
+procedure TTyRichCommandsTest.TestAFragmentBringsNoDocumentLevelThing;
+var
+  d, src: TTyRichDocument;
+  pw, ml: Integer;
+  def: TTyCharFormat;
+  f: TTyCharFormat;
+begin
+  d := RtfDoc(FragTarget);
+  try
+    pw := d.PaperWidth;
+    ml := d.MarginLeft;
+    def := d.DefaultCharFormat;
+    PasteRtf(d, 2, '{\rtf1\ansi\deff0{\fonttbl{\f0 Courier New;}}\paperw5000\margl100' +
+      '\deftab100{\info{\title T}}\fs40 xy}');
+    AssertEquals('the text', 'abxycd', ParaText(d, 0));
+    AssertEquals('the page stays', pw, d.PaperWidth);
+    AssertEquals('the margin stays', ml, d.MarginLeft);
+    AssertTrue('the default font stays', def.Equals(d.DefaultCharFormat));
+    AssertEquals('the run in the source''s default font, named', 'Courier New', CharAt(d, 2).FontName);
+    AssertEquals('its size', 40, CharAt(d, 2).SizeHalfPt);
+  finally
+    d.Free;
+  end;
+  // a source whose runs name no font: the source's default is named on them
+  src := TTyRichDocument.Create;
+  d := TTyRichDocument.Create;
+  try
+    f := TyDefaultCharFormat;
+    f.FontName := 'SimSun';
+    f.SizeHalfPt := 21;
+    TCmdTestBuilder.SetDefaultCharFormat(src, f);
+    src.Execute(TTyRichInsertText.Create(0, 'xy'));
+    src.ClearUndo;
+    f := TyDefaultCharFormat;
+    f.Style := [fsBold];
+    // (a run as a reader leaves one with no font word: no name, no size)
+    src.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 2), [cffFontName, cffCharset, cffSize,
+      cffBold], f));
+    AssertEquals('(the source''s run names no font)', '', src.Formats.CharFormat(src.RunsOf(0)[0].Format).FontName);
+    AssertTrue(d.Execute(TTyRichInsertFragment.Create(0, src, False)));
+    src := nil;
+    f := CharAt(d, 0);
+    AssertEquals('named', 'SimSun', f.FontName);
+    AssertEquals('sized', 21, f.SizeHalfPt);
+    AssertTrue('and its own', fsBold in f.Style);
+    AssertEquals('the target''s default untouched', '', d.DefaultCharFormat.FontName);
+  finally
+    src.Free;
+    d.Free;
+  end;
+end;
+
+{ An object goes in as the same object (shared, counted: it lives while the target or its
+  history holds it, and goes with them); the history keeps one step that holds the fragment -
+  its text and its paragraphs - and nothing of the source. }
+procedure TTyRichCommandsTest.TestAFragmentSharesItsObjectsAndKeepsOneStep;
+var
+  d, src: TTyRichDocument;
+  obj: TCmdCountedOpaque;
+  i: Integer;
+  big: UTF8String;
+  runs: TTyRunArray;
+begin
+  src := TTyRichDocument.Create;
+  d := NewDoc('ab');
+  try
+    obj := TCmdCountedOpaque.Create('{\*\x}');
+    src.Execute(TTyRichInsertText.Create(0, 'p q'));
+    src.Execute(TTyRichInsertObject.Create(1, obj));
+    AssertEquals('one object', 1, TCmdCountedOpaque.Live);
+    AssertTrue(d.Execute(TTyRichInsertFragment.Create(1, src, False)));
+    src := nil;
+    AssertEquals('the source went, the object stays', 1, TCmdCountedOpaque.Live);
+    runs := d.RunsOf(0);
+    AssertTrue('the same object', (Length(runs) >= 2) and (runs[1].Obj = obj));
+    d.Undo;
+    AssertEquals('undone: the history holds it', 1, TCmdCountedOpaque.Live);
+    d.Redo;
+    AssertTrue('redone: the same object', d.RunsOf(0)[1].Obj = obj);
+    d.Execute(TTyRichDelete.Create(0, d.Text.Length));
+    d.ClearUndo;
+    AssertEquals('gone with the last holder', 0, TCmdCountedOpaque.Live);
+  finally
+    src.Free;
+    d.Free;
+  end;
+  // a fragment of 2000 paragraphs: one step, holding about its text and its paragraphs
+  big := '{\rtf1\ansi ';
+  for i := 1 to 2000 do big := big + '\b para ' + IntToStr(i) + '\b0  plain\par ';
+  big := big + '}';
+  d := NewDoc('xy');
+  try
+    PasteRtf(d, 1, big);
+    AssertEquals('paragraphs', 2001, d.Text.ParaCount);
+    AssertEquals('one step', 1, d.UndoDepth);
+    AssertTrue(Format('what the step keeps (%d bytes)', [d.HistoryBytes]),
+      (d.HistoryBytes >= d.Text.Length - 2) and (d.HistoryBytes < d.Text.Length + 2001 * 160));
+    d.Undo;
+    AssertEquals('undone', 'xy', AllText(d));
+    AssertEquals('one paragraph', 1, d.Text.ParaCount);
+  finally
+    d.Free;
+  end;
+end;
+
+{ Where the text cannot change (a row that holds a nested table), the command does not run
+  (CanExecute), and inside a composite the refusal says FixedRow. }
+procedure TTyRichCommandsTest.TestAFragmentIsRefusedInARowWithANestedTable;
+const
+  Nested = '{\rtf1 \trowd\cellx1000\cellx2000\pard\intbl a\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell' +
+    '\row\pard b\par}';
+var
+  d, src: TTyRichDocument;
+  ends, raised: Boolean;
+  comp: TTyRichCompositeCommand;
+  before: UTF8String;
+begin
+  d := RtfDoc(Nested);
+  try
+    AssertTrue('(a row with a nested table)', d.CellAt(0).Row.HoldsNestedTable);
+    before := AllText(d);
+    src := TyRichReadRtfFragment(Bytes(FragEnded), ends);
+    AssertFalse('refused', d.Execute(TTyRichInsertFragment.Create(1, src, ends)));
+    AssertEquals('nothing changed', before, AllText(d));
+    AssertEquals('nothing kept', 0, d.UndoDepth);
+    comp := TTyRichCompositeCommand.Create;
+    comp.Add(TTyRichInsertText.Create(d.Text.Length, 'z'));
+    src := TyRichReadRtfFragment(Bytes(FragEnded), ends);
+    comp.Add(TTyRichInsertFragment.Create(1, src, ends));
+    raised := False;
+    try
+      d.Execute(comp);
+    except
+      on E: ETyRichRefused do raised := E.FixedRow;
+    end;
+    AssertTrue('a composite: refused for the row', raised);
+    AssertEquals('reverted', before, AllText(d));
+  finally
+    d.Free;
+  end;
+end;
+
+{ What another program may put there: no signature - nothing; only a header, an empty body -
+  no character and no paragraph mark (nothing to insert: the command changes nothing and is
+  not kept); a paragraph mark alone - one paragraph break; an unterminated group - what was
+  read; megabytes of one paragraph - one paragraph. }
+procedure TTyRichCommandsTest.TestReadingAFragmentOfUntrustedBytes;
+var
+  src, d: TTyRichDocument;
+  ends: Boolean;
+  s: UTF8String;
+begin
+  AssertTrue('no RTF', TyRichReadRtfFragment(Bytes('hello'), ends) = nil);
+  AssertTrue('nothing', TyRichReadRtfFragment(nil, ends) = nil);
+  src := TyRichReadRtfFragment(Bytes('{\rtf1\ansi{\fonttbl{\f0 Arial;}}}'), ends);
+  try
+    AssertTrue('a header: read', src <> nil);
+    AssertEquals('a header: no character', 0, src.Text.Length);
+    AssertFalse('a header: no paragraph mark', ends);
+  finally
+    src.Free;
+  end;
+  src := TyRichReadRtfFragment(Bytes('{\rtf1}'), ends);
+  try
+    AssertFalse('an empty body: no paragraph mark', ends);
+  finally
+    src.Free;
+  end;
+  src := TyRichReadRtfFragment(Bytes('{\rtf1\par}'), ends);
+  try
+    AssertTrue('a mark alone: a mark', ends);
+  finally
+    src.Free;
+  end;
+  src := TyRichReadRtfFragment(Bytes('{\rtf1 abc{\b def'), ends);
+  try
+    AssertTrue('unterminated: read', src <> nil);
+    AssertEquals('unterminated: the text', 'abcdef', AllText(src));
+  finally
+    src.Free;
+  end;
+  d := NewDoc('xy');
+  try
+    src := TyRichReadRtfFragment(Bytes('{\rtf1\ansi{\fonttbl{\f0 Arial;}}}'), ends);
+    d.Execute(TTyRichInsertFragment.Create(1, src, ends));
+    AssertEquals('nothing inserted', 'xy', AllText(d));
+    AssertEquals('nothing kept', 0, d.UndoDepth);
+    src := TyRichReadRtfFragment(Bytes('{\rtf1\par}'), ends);
+    d.Execute(TTyRichInsertFragment.Create(1, src, ends));
+    AssertEquals('a mark: a paragraph break', 2, d.Text.ParaCount);
+    SetLength(s, 3 * 1024 * 1024);
+    FillChar(s[1], Length(s), 'w');
+    d.Undo;
+    PasteRtf(d, 1, '{\rtf1 ' + s + '}');
+    AssertEquals('megabytes of one paragraph', 1, d.Text.ParaCount);
+    AssertEquals('all of it', Int64(2 + Length(s)), d.Text.Length);
   finally
     d.Free;
   end;

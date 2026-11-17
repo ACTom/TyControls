@@ -491,6 +491,62 @@ type
     After: TTyRichSelectionMark;
   end;
 
+  { Content of a document of its own (what a reader made of a clipboard's RTF) made ready to
+    go into another document at one place - what TTyRichDocument's InsertFragment inserts.
+    Made by the target document's terms: the source's character and paragraph formats are
+    interned in the target's pool (a run with no font of its own gets the source's default
+    font, and the source's default size where it has none: it is shown as it was where it was
+    copied, whatever the target's defaults are); objects and tables are shared, each with the
+    references the target's paragraph values take (they are immutable, so a second document
+    may hold them); the source's document-level things (its page, its default character
+    format, its loader) do not come along. The source is only read: the caller frees it, and
+    may do so as soon as this is made.
+
+    The paragraphs are "parts": part 0 joins the text before APos, the last part the text after
+    it, the ones between are paragraphs of their own, each a value of the target held here (so
+    a redo puts the very same values back). AEndsWithParagraph: the source's last paragraph
+    ended with a paragraph mark (in RTF, a \par after it): the text after APos then stays a
+    paragraph of its own (a last part that is the target's own). Tables: rows go in as rows
+    when APos is in no table and AFlatten is False - the paragraph at APos is split before the
+    first row when text stands before APos, and after a last row always (no row is ever joined
+    with text, no row is left half); otherwise (APos in a cell, or AFlatten) every paragraph
+    is a plain paragraph of the cell (or of no table) APos is in: never a nested table. The
+    list markers a file gave are not taken: the numbers are counted, as after any edit.
+    The values hold references into the target document: free a fragment before its target. }
+  TTyRichFragment = class
+  private
+    FDoc, FSrc: TTyRichDocument;
+    FText: UTF8String;
+    FTextLen: PtrInt;
+    FParts: array of TTyRichParaData;   // per part (nil: plain), one reference each
+    FLens: array of Int64;              // its characters
+    FOwn: array of Boolean;             // the target's own: no content, the target's format
+    FCount: Integer;
+    FFlat: Boolean;
+    FFlatCell: TTyRichCell;
+    FCharMap, FParaMap: array of Integer;
+    FSrcDefault: TTyCharFormat;
+    procedure AddPart(AValue: TTyRichParaData; ALen: Int64; AOwn: Boolean);
+    procedure InsertOwnFirst;
+    procedure AddText(P: PByte; ALen: PtrInt);
+    function MapChar(AId: TTyCharFormatId): TTyCharFormatId;
+    function MapPara(AId: TTyParaFormatId): TTyParaFormatId;
+    procedure TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+      var AContinue: Boolean);
+    function PartCell(AIndex: Integer): TTyRichCell;
+  public
+    constructor Create(ATarget: TTyRichDocument; APos: TTyRichPos; ASource: TTyRichDocument;
+      AEndsWithParagraph: Boolean; AFlatten: Boolean = False);
+    destructor Destroy; override;
+    { Parts (paragraph separators inserted + 1); 0: nothing to insert. }
+    property PartCount: Integer read FCount;
+    { The tables went in as plain paragraphs. }
+    property Flattened: Boolean read FFlat;
+    { Characters inserted (separators counted). }
+    function CharCount: Int64;
+    function MemSize: Int64;
+  end;
+
   { A change to a document, and the one way to make one: TTyRichDocument.Execute runs it and
     keeps it for undo. A subclass changes the document in DoExecute through the protected
     InsertText .. MarkTable below - they work only while the document runs this command, and
@@ -530,6 +586,8 @@ type
       AMask: TTyParaFormatMask; const AValue: TTyParaFormat): TTyRichChange;
     function MarkTable(ADoc: TTyRichDocument; AFirstPara: Integer; ATable: TTyRichTable;
       const ACellParas: array of Integer): TTyRichChange;
+    function InsertFragment(ADoc: TTyRichDocument; APos: TTyRichPos;
+      AFragment: TTyRichFragment): TTyRichChange;
 
     { For a command made of commands: runs, undoes or redoes AChild as part of this one, and
       counts its change as this command's. A child whose execute or redo raises is reverted
@@ -706,6 +764,18 @@ type
       row by row. ATable must not be in use; the paragraphs must not be in a table. }
     function MarkTable(AFirstPara: Integer; ATable: TTyRichTable;
       const ACellParas: array of Integer): TTyRichUndoData;
+    { Inserts AFragment (made for this document at APos) at APos: its text in one insert, then
+      its parts' values in the paragraphs it made. How a part meets the paragraph at APos - the
+      paragraph format goes with the paragraph's end, as in Word: a paragraph that ends with a
+      paragraph mark of the fragment has that paragraph's format, one that ends with a mark of
+      this document has its own. So part 0 joined with the text before APos takes part 0's
+      format (unless the fragment is one part: inline, the paragraph keeps its own), the last
+      part joined with the text after APos keeps the paragraph's format and cell, and the
+      parts between are the fragment's paragraphs. Runs: the text before APos keeps its runs,
+      each part's follow, then the text after APos. One undo record, of an insert's size: a
+      revert deletes the inserted characters and gives the paragraph at APos its value back.
+      Refused (ETyRichModel, before anything changes) inside a row that holds a nested table. }
+    function InsertFragment(APos: TTyRichPos; AFragment: TTyRichFragment): TTyRichUndoData;
     { Puts back what the primitive that returned AUndo changed, frees AUndo and sets it nil. }
     procedure Revert(var AUndo: TTyRichUndoData);
     { The paragraph's data value (an opaque identity, for tests and the history). }
@@ -3164,6 +3234,376 @@ begin
   Notify(c);
 end;
 
+{ ---- a fragment of another document ---- }
+
+constructor TTyRichFragment.Create(ATarget: TTyRichDocument; APos: TTyRichPos;
+  ASource: TTyRichDocument; AEndsWithParagraph: Boolean; AFlatten: Boolean);
+var
+  t: TTyRichText;
+  k, n, i: Integer;
+  o: Int64;
+  cell: TTyRichCell;
+begin
+  inherited Create;
+  if (ATarget = nil) or (ASource = nil) or (ATarget = ASource) then
+    raise ETyRichModel.Create('A fragment needs a target and a source of its own');
+  FDoc := ATarget;
+  FSrc := ASource;
+  t := ATarget.FText;
+  k := t.ParaOfPos(APos);   // range check
+  o := APos - t.ParaStart(k);
+  ATarget.BeginRead;
+  try
+    cell := ATarget.CellOfData(ATarget.DataOf(k));
+  finally
+    ATarget.EndRead;
+  end;
+  // a table goes into a table only as its text: there are no nested tables
+  FFlat := AFlatten or (cell <> nil);
+  FFlatCell := cell;
+  FSrcDefault := ASource.DefaultCharFormat;
+  n := ASource.FText.ParaCount;
+  try
+    if (ASource.FText.Length = 0) and not AEndsWithParagraph then Exit;
+    SetLength(FCharMap, ASource.FFormats.CharCount);
+    for i := 0 to High(FCharMap) do FCharMap[i] := -1;
+    SetLength(FParaMap, ASource.FFormats.ParaCount);
+    for i := 0 to High(FParaMap) do FParaMap[i] := -1;
+    SetLength(FParts, n + 3);
+    SetLength(FLens, n + 3);
+    SetLength(FOwn, n + 3);
+    // tables, cells and objects of a document that parses on demand stay as read meanwhile
+    ASource.BeginRead;
+    try
+      ASource.FText.WalkParaTexts(0, n - 1, @TakePara, True);
+    finally
+      ASource.EndRead;
+    end;
+    if AEndsWithParagraph then
+    begin
+      AddText(nil, 0);
+      AddPart(nil, 0, True);
+    end;
+    if not FFlat then
+    begin
+      // rows stay rows: the text before APos keeps its own paragraph, and a last row is
+      // never joined with the text after APos
+      if (o > 0) and (PartCell(0) <> nil) then InsertOwnFirst;
+      if PartCell(FCount - 1) <> nil then
+      begin
+        AddText(nil, 0);
+        AddPart(nil, 0, True);
+      end;
+    end;
+    SetLength(FText, FTextLen);
+  finally
+    FSrc := nil;
+    FCharMap := nil;
+    FParaMap := nil;
+  end;
+end;
+
+destructor TTyRichFragment.Destroy;
+var
+  i: Integer;
+begin
+  if FDoc <> nil then
+    for i := 0 to FCount - 1 do FDoc.ReleaseData(FParts[i]);
+  inherited Destroy;
+end;
+
+function TTyRichFragment.CharCount: Int64;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if FCount = 0 then Exit;
+  Result := FCount - 1;
+  for i := 0 to FCount - 1 do Inc(Result, FLens[i]);
+end;
+
+function TTyRichFragment.MemSize: Int64;
+var
+  i: Integer;
+begin
+  Result := InstanceSize + Length(FText) + Length(FParts) * (SizeOf(Pointer) + SizeOf(Int64) + 1);
+  // the values are this fragment's own (made for it), with their runs
+  for i := 0 to FCount - 1 do
+    if FParts[i] <> nil then
+      Inc(Result, FParts[i].InstanceSize + Length(FParts[i].FRuns) * SizeOf(TTyRichRun));
+end;
+
+function TTyRichFragment.PartCell(AIndex: Integer): TTyRichCell;
+begin
+  if (AIndex < 0) or (AIndex >= FCount) or FOwn[AIndex] or (FParts[AIndex] = nil) then
+    Result := nil
+  else
+    Result := FParts[AIndex].FCell;
+end;
+
+procedure TTyRichFragment.AddPart(AValue: TTyRichParaData; ALen: Int64; AOwn: Boolean);
+begin
+  if FCount = Length(FParts) then
+  begin
+    SetLength(FParts, FCount * 2 + 4);
+    SetLength(FLens, FCount * 2 + 4);
+    SetLength(FOwn, FCount * 2 + 4);
+  end;
+  FDoc.AcquireData(AValue);
+  FParts[FCount] := AValue;
+  FLens[FCount] := ALen;
+  FOwn[FCount] := AOwn;
+  Inc(FCount);
+end;
+
+procedure TTyRichFragment.InsertOwnFirst;
+var
+  i: Integer;
+  s: UTF8String;
+begin
+  AddPart(nil, 0, True);
+  for i := FCount - 1 downto 1 do
+  begin
+    FParts[i] := FParts[i - 1];
+    FLens[i] := FLens[i - 1];
+    FOwn[i] := FOwn[i - 1];
+  end;
+  FParts[0] := nil;
+  FLens[0] := 0;
+  FOwn[0] := True;
+  s := #10;
+  SetLength(FText, FTextLen);
+  FText := s + FText;
+  Inc(FTextLen);
+end;
+
+{ ALen bytes at P, after a separator when a part came before. }
+procedure TTyRichFragment.AddText(P: PByte; ALen: PtrInt);
+var
+  need, i: PtrInt;
+  q: PAnsiChar;
+begin
+  need := FTextLen + ALen + 1;
+  if need > Length(FText) then
+  begin
+    if need < 2 * Length(FText) then need := 2 * Length(FText);
+    SetLength(FText, need + 16);
+  end;
+  if FCount > 0 then
+  begin
+    FText[FTextLen + 1] := #10;
+    Inc(FTextLen);
+  end;
+  if ALen > 0 then
+  begin
+    Move(P^, FText[FTextLen + 1], ALen);
+    { A paragraph's text holds no separator; one a source should never give (a CR inside a
+      paragraph) is a space here, so that the insert makes the parts it was counted to make. }
+    q := @FText[FTextLen + 1];
+    for i := 0 to ALen - 1 do
+      if q[i] in [#10, #13] then q[i] := ' ';
+    Inc(FTextLen, ALen);
+  end;
+end;
+
+function TTyRichFragment.MapChar(AId: TTyCharFormatId): TTyCharFormatId;
+var
+  f: TTyCharFormat;
+begin
+  if (AId >= 0) and (AId < Length(FCharMap)) and (FCharMap[AId] >= 0) then Exit(FCharMap[AId]);
+  f := FSrc.FFormats.CharFormat(AId);
+  { What the source showed in its default font (no font of its own) keeps that font here,
+    named: the target's defaults are not the source's. }
+  if (f.FontName = '') and (FSrcDefault.FontName <> '') then
+  begin
+    f.FontName := FSrcDefault.FontName;
+    f.Charset := FSrcDefault.Charset;
+  end;
+  if (f.SizeHalfPt = 0) and (FSrcDefault.SizeHalfPt <> 0) then f.SizeHalfPt := FSrcDefault.SizeHalfPt;
+  Result := FDoc.FFormats.InternChar(f);
+  if (AId >= 0) and (AId < Length(FCharMap)) then FCharMap[AId] := Result;
+end;
+
+function TTyRichFragment.MapPara(AId: TTyParaFormatId): TTyParaFormatId;
+begin
+  if (AId >= 0) and (AId < Length(FParaMap)) and (FParaMap[AId] >= 0) then Exit(FParaMap[AId]);
+  Result := FDoc.FFormats.InternPara(FSrc.FFormats.ParaFormat(AId));
+  if (AId >= 0) and (AId < Length(FParaMap)) then FParaMap[AId] := Result;
+end;
+
+procedure TTyRichFragment.TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
+  var AContinue: Boolean);
+var
+  fmt: TTyParaFormatId;
+  runs, mapped: TTyRunArray;
+  cell: TTyRichCell;
+  n, j: Integer;
+  chars: Int64;
+begin
+  // a paragraph of a reader that parses on demand with no value of the moment: parse it
+  if not FSrc.ReadValue(AData, fmt, runs, cell) then
+    FSrc.ReadValue(FSrc.DataOf(AIndex), fmt, runs, cell);
+  chars := FSrc.FText.ParaLength(AIndex);
+  mapped := nil;
+  n := 0;
+  SetLength(mapped, Length(runs));
+  for j := 0 to High(runs) do
+    AppendRun(mapped, n, runs[j].Start, MapChar(runs[j].Format), runs[j].Obj);
+  SetLength(mapped, n);
+  if FFlat then cell := FFlatCell;
+  AddText(AText, ALen);
+  AddPart(FDoc.MakeData(MapPara(fmt), mapped, cell), chars, False);
+end;
+
+type
+  // the fragment's parts between its first and last into the paragraphs the insert made
+  TTyRichFragmentWalk = class
+  public
+    Doc: TTyRichDocument;
+    Fragment: TTyRichFragment;
+    First: Integer;
+    function Map(AIndex: Integer; AData: Pointer): Pointer;
+  end;
+
+function TTyRichFragmentWalk.Map(AIndex: Integer; AData: Pointer): Pointer;
+var
+  v: TTyRichParaData;
+begin
+  v := Fragment.FParts[AIndex - First];
+  if Pointer(v) <> AData then
+  begin
+    Doc.AcquireData(v);
+    Doc.ReleaseData(TTyRichParaData(AData));
+  end;
+  Result := v;
+end;
+
+function TTyRichDocument.InsertFragment(APos: TTyRichPos;
+  AFragment: TTyRichFragment): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  k, s, n1, n2, last: Integer;
+  d, part: TTyRichParaData;
+  r, pr, runs1, runs2: TTyRunArray;
+  ps, o, len, plen, added, oldChars: Int64;
+  f: TTyCharFormatId;
+  fmt: TTyParaFormatId;
+  cell: TTyRichCell;
+  oldCount: Integer;
+  txt: UTF8String;
+  w: TTyRichFragmentWalk;
+begin
+  if AFragment = nil then
+    raise ETyRichModel.Create('InsertFragment needs a fragment');
+  if AFragment.FDoc <> Self then
+    raise ETyRichModel.Create('The fragment was made for another document');
+  c := Default(TTyRichChange);
+  c.Pos := APos;
+  FText.ParaOfPos(APos);   // range check before anything changes
+  if AFragment.FCount = 0 then Exit(NewUndo(c));
+  if ChangeRefused(APos, 0) then raise NestedRowRefused;
+  txt := WithBreaks(AFragment.FText, FDominantLineBreak);
+  k := FText.ParaOfPos(APos);
+  d := DataOf(k);
+  r := RunsOfData(d);
+  ps := FText.ParaStart(k);
+  o := APos - ps;
+  len := FText.ParaLength(k);
+  f := InheritedFormat(r, o);
+  fmt := FormatOfData(d);
+  cell := CellOfData(d);
+  last := AFragment.FCount - 1;
+  oldChars := FText.Length;
+  oldCount := FText.ParaCount;
+  Result := NewUndo(c);
+  try
+    Result.FFirstPara := k;
+    Result.AddOld(d);
+    Result.SealOld;
+    Result.FSpan := FText.PieceSpan(APos, APos);
+    if txt <> '' then
+    begin
+      Inc(FEditing);
+      try
+        FText.Insert(APos, txt);
+      finally
+        Dec(FEditing);
+      end;
+    end;
+    added := FText.Length - oldChars;
+    s := FText.ParaCount - oldCount;
+    if s <> last then
+      raise ETyRichModel.CreateFmt('A fragment of %d parts made %d paragraphs', [last + 1, s + 1]);
+    runs1 := nil;
+    n1 := 0;
+    // the text before APos keeps its runs
+    AppendSlice(runs1, n1, r, len, 0, o, 0);
+    part := AFragment.FParts[0];
+    plen := AFragment.FLens[0];
+    if not AFragment.FOwn[0] then
+    begin
+      pr := RunsOfData(part);
+      AppendSlice(runs1, n1, pr, plen, 0, plen, o);
+      if n1 = 0 then AppendRun(runs1, n1, 0, pr[0].Format, nil);
+    end;
+    if last = 0 then
+    begin
+      // inline: one paragraph, its own format and cell, the text after APos follows
+      AppendSlice(runs1, n1, r, len, o, len, plen);
+      if n1 = 0 then AppendRun(runs1, n1, 0, f, nil);
+      SetLength(runs1, n1);
+      PutData(k, d, MakeDataLike(fmt, runs1, cell, d));
+    end
+    else
+    begin
+      if n1 = 0 then AppendRun(runs1, n1, 0, f, nil);
+      SetLength(runs1, n1);
+      // the paragraph that ends with the fragment's first mark has that paragraph's format
+      if AFragment.FOwn[0] then PutData(k, d, MakeDataLike(fmt, runs1, cell, d))
+      else PutData(k, d, MakeDataLike(FormatOfData(part), runs1, CellOfData(part), d));
+      if last > 1 then
+      begin
+        w := TTyRichFragmentWalk.Create;
+        try
+          w.Doc := Self;
+          w.Fragment := AFragment;
+          w.First := k;
+          FText.MapParaData(k + 1, k + last - 1, @w.Map);
+        finally
+          w.Free;
+        end;
+      end;
+      // the last part and the text after APos: this document's mark, its format and cell
+      runs2 := nil;
+      n2 := 0;
+      part := AFragment.FParts[last];
+      plen := AFragment.FLens[last];
+      if not AFragment.FOwn[last] then
+        AppendSlice(runs2, n2, RunsOfData(part), plen, 0, plen, 0);
+      AppendSlice(runs2, n2, r, len, o, len, plen - o);
+      if n2 = 0 then
+      begin
+        if AFragment.FOwn[last] then AppendRun(runs2, n2, 0, f, nil)
+        else AppendRun(runs2, n2, 0, RunsOfData(part)[0].Format, nil);
+      end;
+      SetLength(runs2, n2);
+      PutData(k + last, SlotData(k + last), MakeData(fmt, runs2, cell));
+    end;
+  except
+    Result.Free;
+    raise;
+  end;
+  c.Kinds := [rckText];
+  if s > 0 then c.Kinds := c.Kinds + [rckStructure, rckFormat];
+  c.NewLen := added;
+  Result.FInserted := added;
+  c.FirstPara := k;
+  c.OldParaCount := 1;
+  c.NewParaCount := 1 + s;
+  Result.FChange := c;
+  Notify(c);
+end;
+
 procedure TTyRichDocument.Revert(var AUndo: TTyRichUndoData);
 var
   u: TTyRichUndoData;
@@ -3333,6 +3773,13 @@ function TTyRichCommand.MarkTable(ADoc: TTyRichDocument; AFirstPara: Integer;
 begin
   CheckRunning(ADoc);
   Result := Keep(ADoc.MarkTable(AFirstPara, ATable, ACellParas));
+end;
+
+function TTyRichCommand.InsertFragment(ADoc: TTyRichDocument; APos: TTyRichPos;
+  AFragment: TTyRichFragment): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.InsertFragment(APos, AFragment));
 end;
 
 procedure TTyRichCommand.AdoptChange(AChild: TTyRichCommand);

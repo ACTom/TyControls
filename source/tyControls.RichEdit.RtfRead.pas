@@ -784,6 +784,15 @@ procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRt
 // The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
 // TyRichBeginLoadRtf), or after it was replaced.
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
+// RTF that came from somewhere else (a clipboard) read as content to insert into a document
+// (TTyRichInsertFragment): a new document of its own, read whole (TyRichLoadRtfFull; when the
+// whole parse and the index disagree - malformed bytes - as TyRichLoadRtf reads it, as far as
+// it goes). AEndsWithParagraph: its last paragraph ended with a paragraph mark (a \par, a
+// \row) - the text after the place it goes in then stays a paragraph of its own. nil when the
+// bytes are no RTF (no signature) or reading them raised: there is nothing to insert. A
+// document that holds no character and ends with no paragraph mark is returned as it is
+// (the caller decides that it holds nothing).
+function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument;
 
 type
   // Where the reader finds a fragment of TTyParaFormat.Extra: among a paragraph's own words
@@ -5861,6 +5870,52 @@ end;
 procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRtfSourceMap);
 begin
   LoadAll(ADoc, AStream, AMap, True);
+end;
+
+function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument;
+var
+  doc: TTyRichDocument;
+  st: TBytesStream;
+  load: TTyRtfLoad;
+begin
+  Result := nil;
+  AEndsWithParagraph := False;
+  if Length(ABytes) = 0 then Exit;
+  doc := TTyRichDocument.Create;
+  try
+    st := TBytesStream.Create(ABytes);
+    try
+      try
+        TyRichLoadRtfFull(doc, st);
+      except
+        on ETyRichRtf do
+        begin
+          // no signature raises again here; a parse that disagrees with the index is read on
+          // demand, as a file would be
+          st.Position := 0;
+          TyRichLoadRtf(doc, st);
+        end;
+      end;
+    finally
+      st.Free;
+    end;
+    load := TyRichRtfLoadOf(doc);
+    { The reader gives a document no empty paragraph after a last \par: whether there was one
+      is LastParaOpen's (the last paragraph ran to the trailer with no terminator). A body
+      with no paragraph at all ends with none. }
+    AEndsWithParagraph := (load <> nil) and not load.LastParaOpen and
+      ((doc.Text.Length > 0) or (load.FScan.FS.Paras > 0));
+    Result := doc;
+    doc := nil;
+  except
+    // whatever another program put there: what cannot be read is no RTF to insert
+    on Exception do
+    begin
+      doc.Free;
+      Result := nil;
+      AEndsWithParagraph := False;
+    end;
+  end;
 end;
 
 // ---- for the writer ----

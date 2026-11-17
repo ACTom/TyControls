@@ -101,6 +101,37 @@ type
     property RichObject: TTyRichObject read FObject;
   end;
 
+  { Inserts the content of ASource - a document of its own, what a reader made of a
+    clipboard's RTF (TyRichReadRtfFragment) - at APos, as one command: its text with its
+    characters' formats and objects, its paragraphs with their formats, its tables as rows
+    (TTyRichFragment says how it meets the paragraph at APos, how tables go in and what does
+    not come along; AEndsWithParagraph and AFlatten are its). The command takes ASource over:
+    at its first run it makes the fragment (values of the target, held here, so redo puts the
+    same ones back) and frees ASource; one never run frees ASource with itself. Undo is one
+    insert's record (the characters inserted go, the paragraph at APos gets its value back);
+    what the history keeps is the fragment - its text and its paragraph values (MemSize).
+    Not mergeable. Refused (CanExecute) where the text cannot change (CanChange: a row that
+    holds a nested table). Nothing to insert (an empty source that does not end with a
+    paragraph mark): it changes nothing and is not kept. }
+  TTyRichInsertFragment = class(TTyRichCommand)
+  private
+    FPos: TTyRichPos;
+    FSource: TTyRichDocument;
+    FFragment: TTyRichFragment;
+    FEnds, FFlatten: Boolean;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(APos: TTyRichPos; ASource: TTyRichDocument; AEndsWithParagraph: Boolean;
+      AFlatten: Boolean = False);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    function MemSize: Int64; override;
+    { After the first run: what went in (nil before). }
+    property Fragment: TTyRichFragment read FFragment;
+  end;
+
   { Commands run as one: executed in order, undone newest first, one undo step. A part that
     cannot execute (CanExecute False) at its turn makes the whole raise, and what the parts
     before it did is reverted. The document builds one from an update block. }
@@ -320,6 +351,55 @@ begin
   Result := rsRichUndoInsertObject;
 end;
 
+{ ---- TTyRichInsertFragment ---- }
+
+constructor TTyRichInsertFragment.Create(APos: TTyRichPos; ASource: TTyRichDocument;
+  AEndsWithParagraph: Boolean; AFlatten: Boolean);
+begin
+  inherited Create;
+  if ASource = nil then
+    raise ETyRichModel.Create('TTyRichInsertFragment needs a source');
+  FPos := APos;
+  FSource := ASource;
+  FEnds := AEndsWithParagraph;
+  FFlatten := AFlatten;
+end;
+
+destructor TTyRichInsertFragment.Destroy;
+begin
+  // the fragment's values are the target's: the history frees this before its document
+  FFragment.Free;
+  FSource.Free;
+  inherited Destroy;
+end;
+
+function TTyRichInsertFragment.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := ADoc.CanChange(FPos, 0);
+end;
+
+procedure TTyRichInsertFragment.DoExecute(ADoc: TTyRichDocument);
+begin
+  if FFragment = nil then
+  begin
+    FFragment := TTyRichFragment.Create(ADoc, FPos, FSource, FEnds, FFlatten);
+    // what was read is in the fragment now: the source (and the bytes it was read from) go
+    FreeAndNil(FSource);
+  end;
+  InsertFragment(ADoc, FPos, FFragment);
+end;
+
+function TTyRichInsertFragment.Description: string;
+begin
+  Result := rsRichUndoPaste;
+end;
+
+function TTyRichInsertFragment.MemSize: Int64;
+begin
+  Result := inherited MemSize;
+  if FFragment <> nil then Inc(Result, FFragment.MemSize);
+end;
+
 { ---- TTyRichCompositeCommand ---- }
 
 constructor TTyRichCompositeCommand.Create(const ADescription: string);
@@ -389,7 +469,8 @@ begin
     begin
       e := ETyRichRefused.CreateFmt(rsRichModelPartRefused, [FDone, c.ClassName]);
       // the built-in text commands ask only CanChange: a row that holds a nested table
-      e.FixedRow := (c is TTyRichInsertText) or (c is TTyRichDelete) or (c is TTyRichInsertObject);
+      e.FixedRow := (c is TTyRichInsertText) or (c is TTyRichDelete) or
+        (c is TTyRichInsertObject) or (c is TTyRichInsertFragment);
       raise e;
     end;
     ExecuteChild(ADoc, c);

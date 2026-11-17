@@ -684,6 +684,10 @@ msgstr ""
 msgid "Insert object"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundopaste
+msgid "Paste"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""
@@ -730,6 +734,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedlongpara
 msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpicture
+msgid "The picture on the clipboard is too large to paste."
 msgstr ""
 
 #: tycontrols.strconsts.rsrichmodelnestedrow
