@@ -10191,27 +10191,21 @@ begin
         Exit;
       end;
       len := f.MatchLen;
+      k := f.MatchCount;
       pos := nil;
-      SetLength(pos, f.MatchCount);
-      k := 0;
-      // the last first: no replacement moves a match not replaced yet
-      for i := f.MatchCount - 1 downto 0 do
-        if FDoc.CanChange(f.Match(i), len) and not TyRichCrossesCells(FDoc, f.Match(i), len) then
-        begin
-          pos[k] := f.Match(i);
-          Inc(k);
-        end
-        else
-          Inc(ASkipped);
-      if k = 0 then Exit;
       SetLength(pos, k);
+      // the last first: no replacement moves a match not replaced yet
+      for i := 0 to k - 1 do pos[i] := f.Match(k - 1 - i);
+      { The command leaves, and counts here, what the document refuses (it reads those
+        paragraphs once, as it changes them: a lazily read file is not parsed twice). }
       cmd := TTyRichReplaceCommand.Create(0, pos, len, AReplace);
+      cmd.SkipCounter := @ASkipped;
     finally
       f.Free;
     end;
     // the document API's door: one step that puts the selection back, one OnChange
     RunApiCommand(cmd, 0);
-    Result := k;
+    Result := k - ASkipped;
   finally
     if wait then EndWait;
   end;
@@ -10406,9 +10400,8 @@ end;
 
 procedure TTyCustomRichEdit.ReplacePiece;
 var
-  n, i, k, len: Integer;
+  n, i, k, len, skipped: Integer;
   pos: array of TTyRichPos;
-  p: TTyRichPos;
   cmd: TTyRichReplaceCommand;
   step: TTyRichCommand;
   marks: TTyRichStepMarks;
@@ -10431,41 +10424,39 @@ begin
     len := FFinder.MatchLen;
     pos := nil;
     SetLength(pos, n);
-    k := 0;
-    for i := 0 to n - 1 do
-    begin
-      p := FFinder.Match(FReplaceNext - i);
-      if FDoc.CanChange(p, len) and not TyRichCrossesCells(FDoc, p, len) then
-      begin
-        pos[k] := p;
-        Inc(k);
-      end
-      else
-        Inc(FReplaceSkipped);
-    end;
+    for i := 0 to n - 1 do pos[i] := FFinder.Match(FReplaceNext - i);
     Dec(FReplaceNext, n);
     Inc(FFindTurnWork, n);
+    // the command leaves, and counts, what the document refuses
+    skipped := 0;
+    cmd := TTyRichReplaceCommand.Create(FReplaceSession, pos, len, FReplaceText);
+    cmd.SkipCounter := @skipped;
+    FReplaceExec := True;
+    FReplaceHeard := False;
+    FFindForeign := False;
+    try
+      ok := FDoc.Execute(cmd);
+    finally
+      FReplaceExec := False;
+    end;
+    Inc(FReplaceSkipped, skipped);
+    k := n - skipped;
+    { A lazily read file: what the batch parsed was kept while its command ran (a command is a
+      read scope); out of it, the intervals beyond the loader's bound go back to unparsed, as
+      at the end of any read - or a replace over the whole file would end holding all of it. }
+    if TyRichRtfLoadOf(FDoc) <> nil then TyRichRtfLoadOf(FDoc).Trim;
+    // (a handler of the batch's change may have stopped the replace, or started another)
+    if FFindKind <> rfkReplace then Exit;
+    if not ok or FFindForeign then
+    begin
+      // refused, or the document changed under its handlers: what was done stays
+      if ok then Inc(FReplaced, k);
+      EndFind(False, True, True);
+      Exit;
+    end;
+    // (a batch the document refused whole changed nothing and is no step)
     if k > 0 then
     begin
-      SetLength(pos, k);
-      cmd := TTyRichReplaceCommand.Create(FReplaceSession, pos, len, FReplaceText);
-      FReplaceExec := True;
-      FReplaceHeard := False;
-      FFindForeign := False;
-      try
-        ok := FDoc.Execute(cmd);
-      finally
-        FReplaceExec := False;
-      end;
-      // (a handler of the batch's change may have stopped the replace, or started another)
-      if FFindKind <> rfkReplace then Exit;
-      if not ok or FFindForeign then
-      begin
-        // refused, or the document changed under its handlers: what was done stays
-        if ok then Inc(FReplaced, k);
-        EndFind(False, True, True);
-        Exit;
-      end;
       step := FDoc.UndoStep;
       if FReplaceStep = nil then
         FReplaceStep := step

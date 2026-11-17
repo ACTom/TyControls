@@ -204,23 +204,38 @@ type
   TTyRichReplaceCommand = class(TTyRichCommand)
   private
     FSession: Int64;
-    FPos: array of TTyRichPos;
+    FPos: array of TTyRichPos;         // FCount of them (the arrays grow by doubling)
     FFormats: array of TTyCharFormatId;
+    FCount: Integer;
     FHasFormats: Boolean;
     FLen: TTyRichPos;
     FText: UTF8String;
     FSkipped: Integer;
+    FSkipCounter: PInteger;
+    { What the records keep (TTyRichCommand.MemSize's part for them) and the objects they hold
+      (GatherObjects'), counted once when they were made and added up as batches merge: the
+      history asks both of the step at every merge, and a count over all the step's records
+      each time would make a replace of n batches cost n times its size. }
+    FRecBytes: Int64;
+    FObjs: TTyRichObjectList;
+    FObjCount: Integer;
+    procedure CountRecords;
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
+    procedure DoUndo(ADoc: TTyRichDocument); override;
   public
     constructor Create(ASession: Int64; const APositions: array of TTyRichPos;
       ALen: TTyRichPos; const AText: UTF8String);
     function TryMerge(ANext: TTyRichCommand): Boolean; override;
     function Description: string; override;
     function MemSize: Int64; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     { The replacements made (after the first run: the matches not skipped). }
     function Count: Integer;
     property Skipped: Integer read FSkipped;
+    { Where the first run adds the matches it leaves (also when the command then changes
+      nothing and the history does not keep it): the caller's count, good until that run. }
+    property SkipCounter: PInteger read FSkipCounter write FSkipCounter;
     property Session: Int64 read FSession;
   end;
 
@@ -1305,24 +1320,6 @@ end;
 
 { ---- TTyRichReplaceCommand ---- }
 
-constructor TTyRichReplaceCommand.Create(ASession: Int64; const APositions: array of TTyRichPos;
-  ALen: TTyRichPos; const AText: UTF8String);
-var
-  i: Integer;
-begin
-  inherited Create;
-  FSession := ASession;
-  SetLength(FPos, Length(APositions));
-  for i := 0 to High(APositions) do FPos[i] := APositions[i];
-  FLen := ALen;
-  FText := AText;
-end;
-
-function TTyRichReplaceCommand.Count: Integer;
-begin
-  Result := Length(FPos);
-end;
-
 function TyRichCrossesCells(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): Boolean;
 var
   first, last, i: Integer;
@@ -1343,6 +1340,32 @@ begin
   end;
 end;
 
+constructor TTyRichReplaceCommand.Create(ASession: Int64; const APositions: array of TTyRichPos;
+  ALen: TTyRichPos; const AText: UTF8String);
+var
+  i: Integer;
+begin
+  inherited Create;
+  FSession := ASession;
+  FCount := Length(APositions);
+  SetLength(FPos, FCount);
+  for i := 0 to FCount - 1 do FPos[i] := APositions[i];
+  FLen := ALen;
+  FText := AText;
+end;
+
+function TTyRichReplaceCommand.Count: Integer;
+begin
+  Result := FCount;
+end;
+
+procedure TTyRichReplaceCommand.CountRecords;
+begin
+  FRecBytes := inherited MemSize - InstanceSize;
+  FObjCount := 0;
+  inherited GatherObjects(FObjs, FObjCount);
+end;
+
 procedure TTyRichReplaceCommand.DoExecute(ADoc: TTyRichDocument);
 var
   i, k, para, r: Integer;
@@ -1356,7 +1379,7 @@ begin
   if not FHasFormats then
   begin
     k := 0;
-    for i := 0 to High(FPos) do
+    for i := 0 to FCount - 1 do
       if ADoc.CanChange(FPos[i], FLen) and not TyRichCrossesCells(ADoc, FPos[i], FLen) then
       begin
         FPos[k] := FPos[i];
@@ -1364,12 +1387,15 @@ begin
       end
       else
         Inc(FSkipped);
+    if FSkipCounter <> nil then Inc(FSkipCounter^, FCount - k);
+    FSkipCounter := nil;
+    FCount := k;
     SetLength(FPos, k);
     SetLength(FFormats, k);
     FHasFormats := True;
-    for i := 0 to High(FPos) do FFormats[i] := TyRichInheritFormat;
+    for i := 0 to FCount - 1 do FFormats[i] := TyRichInheritFormat;
   end;
-  for i := 0 to High(FPos) do
+  for i := 0 to FCount - 1 do
   begin
     if FFormats[i] = TyRichInheritFormat then
     begin
@@ -1391,28 +1417,51 @@ begin
     DeleteRange(ADoc, FPos[i], FLen);
     if FText <> '' then InsertText(ADoc, FPos[i], FText, FFormats[i]);
   end;
+  // (a redo of a merged step runs every batch again: its records are counted anew)
+  CountRecords;
+end;
+
+procedure TTyRichReplaceCommand.DoUndo(ADoc: TTyRichDocument);
+begin
+  inherited DoUndo(ADoc);
+  // the records are reverted and go: nothing is kept for them any more
+  FRecBytes := 0;
+  FObjCount := 0;
+  FObjs := nil;
 end;
 
 function TTyRichReplaceCommand.TryMerge(ANext: TTyRichCommand): Boolean;
 var
   n: TTyRichReplaceCommand;
-  k, i: Integer;
+  i, cap: Integer;
 begin
   Result := (FSession <> 0) and (ANext is TTyRichReplaceCommand) and
     (TTyRichReplaceCommand(ANext).FSession = FSession);
   if not Result then Exit;
   n := TTyRichReplaceCommand(ANext);
   Inc(FSkipped, n.FSkipped);
-  k := Length(FPos);
-  SetLength(FPos, k + Length(n.FPos));
-  SetLength(FFormats, k + Length(n.FPos));
-  for i := 0 to High(n.FPos) do
+  // the arrays grow by doubling: a merge costs the batch it takes, not the step it joins
+  if FCount + n.FCount > Length(FPos) then
   begin
-    FPos[k + i] := n.FPos[i];
-    if n.FHasFormats then FFormats[k + i] := n.FFormats[i]
-    else FFormats[k + i] := TyRichInheritFormat;
+    cap := Length(FPos) * 2;
+    if cap < FCount + n.FCount then cap := FCount + n.FCount;
+    SetLength(FPos, cap);
+    SetLength(FFormats, cap);
   end;
+  for i := 0 to n.FCount - 1 do
+  begin
+    FPos[FCount + i] := n.FPos[i];
+    if n.FHasFormats then FFormats[FCount + i] := n.FFormats[i]
+    else FFormats[FCount + i] := TyRichInheritFormat;
+  end;
+  Inc(FCount, n.FCount);
   FHasFormats := True;
+  // the records come over with what was counted of them
+  Inc(FRecBytes, n.FRecBytes);
+  if FObjCount + n.FObjCount > Length(FObjs) then
+    SetLength(FObjs, (FObjCount + n.FObjCount) * 2 + 4);
+  for i := 0 to n.FObjCount - 1 do FObjs[FObjCount + i] := n.FObjs[i];
+  Inc(FObjCount, n.FObjCount);
   TakeOver(ANext);
 end;
 
@@ -1423,8 +1472,17 @@ end;
 
 function TTyRichReplaceCommand.MemSize: Int64;
 begin
-  Result := inherited MemSize + Length(FPos) * (SizeOf(TTyRichPos) + SizeOf(TTyCharFormatId)) +
-    Length(FText);
+  Result := InstanceSize + FRecBytes + Length(FPos) * (SizeOf(TTyRichPos) + SizeOf(TTyCharFormatId)) +
+    Length(FText) + Length(FObjs) * SizeOf(Pointer);
+end;
+
+procedure TTyRichReplaceCommand.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount + FObjCount > Length(AList) then SetLength(AList, (ACount + FObjCount) * 2 + 4);
+  for i := 0 to FObjCount - 1 do AList[ACount + i] := FObjs[i];
+  Inc(ACount, FObjCount);
 end;
 
 end.

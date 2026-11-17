@@ -53,6 +53,7 @@ type
     procedure TestAFindChangesNothing;
     // replacing
     procedure TestReplaceIsOneStepAcrossTurns;
+    procedure TestReplaceCountsItsStepOnce;
     procedure TestReplaceTakesTheFormatOfWhatItReplaces;
     procedure TestReplaceUndoneSavesTheFile;
   end;
@@ -735,6 +736,9 @@ begin
     AssertEquals('CR', '1', Positions(doc, 'b' + #13 + 'c', []));
     AssertEquals('two ends and an empty paragraph', '4', Positions(doc, 'd' + #10#10 + 'e', []));
     AssertEquals('three paragraphs', '1', Positions(doc, 'b' + #10 + 'cd' + #10#10 + 'ef', []));
+    AssertEquals('...whose middle one is another', '',
+      Positions(doc, 'b' + #10 + 'cx' + #10#10 + 'ef', []));
+    AssertEquals('...or longer', '', Positions(doc, 'b' + #10 + 'cdd' + #10#10 + 'ef', []));
     AssertEquals('a needle that ends with one', '3', Positions(doc, 'cd' + #10, []));
     AssertEquals('one that begins with one', '5', Positions(doc, #10#10 + 'e', []));
     AssertEquals('U+000B is its own character', '8', Positions(doc, 'f' + #11 + 'a', []));
@@ -1048,6 +1052,77 @@ begin
     doc.Redo;
     AssertEquals('redone at once', 'a dog, a dog, a dog, a dog', doc.Text.GetText(0, doc.Text.Length));
     AssertEquals('the name', rsRichUndoReplace, doc.UndoDescription);
+  finally
+    doc.Free;
+  end;
+end;
+
+{ What the history counts of a step that batches merged into is what it counts of the same
+  step run whole (a redo counts its records anew); the merges count only what they add. And
+  what the document refuses is left, and counted where the caller asked. }
+procedure TTyRichFindTest.TestReplaceCountsItsStepOnce;
+var
+  doc: TTyRichDocument;
+  merged, whole: Int64;
+  skipped: Integer;
+  cmd: TTyRichReplaceCommand;
+  f: TTyRichFinder;
+  s: RawByteString;
+  i: Integer;
+  places: array of TTyRichPos;
+begin
+  s := '';
+  for i := 0 to 99 do s := s + 'one cat here' + #10;
+  doc := TextDoc(s);
+  try
+    // 100 matches, the last first, in four batches
+    places := nil;
+    SetLength(places, 100);
+    for i := 0 to 99 do places[i] := (99 - i) * 13 + 4;
+    for i := 0 to 3 do
+      AssertTrue(doc.Execute(TTyRichReplaceCommand.Create(3, Copy(places, i * 25, 25), 3, 'tiger')));
+    AssertEquals('one step', 1, doc.UndoDepth);
+    merged := doc.HistoryBytes;
+    doc.Undo;
+    // undone, its records are reverted and go: the redo side keeps next to nothing of them
+    AssertTrue(Format('undone: %d of %d bytes kept', [doc.HistoryBytes, merged]),
+      doc.HistoryBytes * 4 < merged);
+    doc.Redo;
+    whole := doc.HistoryBytes;
+    // (the arrays' spare room differs, the records do not)
+    AssertTrue(Format('merged (%d), counted as the step run whole (%d)', [merged, whole]),
+      Abs(whole - merged) * 100 < whole);
+    AssertTrue('records counted', merged > 100 * 8);
+    AssertEquals('all replaced', 0, Pos('cat', doc.Text.GetText(0, doc.Text.Length)));
+  finally
+    doc.Free;
+  end;
+  // a row with a nested table: its match is left, and counted
+  doc := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard word one|par' +
+    '|trowd|cellx2000|cellx4000|pard|intbl word two|cell' +
+    '|pard|intbl|itap2 word nested|nestcell{|*|nesttableprops|trowd|cellx1000|nestrow}{|nonesttables|par}' +
+    '|pard|intbl|cell|row|pard word three|par}')), False);
+  try
+    skipped := 0;
+    f := TTyRichFinder.Create(doc, 'word', []);
+    try
+      f.Collect := True;
+      f.Run;
+      places := nil;
+      SetLength(places, f.MatchCount);
+      for i := 0 to f.MatchCount - 1 do places[i] := f.Match(f.MatchCount - 1 - i);
+    finally
+      f.Free;
+    end;
+    AssertEquals('four', 4, Length(places));
+    cmd := TTyRichReplaceCommand.Create(0, places, 4, 'w');
+    cmd.SkipCounter := @skipped;
+    AssertTrue(doc.Execute(cmd));
+    // the row that holds the nested table: its two paragraphs ("two", "nested")
+    AssertEquals('the nested row''s left, and counted', 2, skipped);
+    AssertEquals('what is left', 2, Length(Naive(doc, 'word', [])) -
+      Length(StringReplace(Naive(doc, 'word', []), ' ', '', [rfReplaceAll])) + 1);
+    AssertEquals('the others replaced, one step', 1, doc.UndoDepth);
   finally
     doc.Free;
   end;
